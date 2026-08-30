@@ -42,7 +42,15 @@ readonly CLI_VERSION="0.2.1"
 # record source (PROV-COVERAGE / PROV-PRESENCE / PROV-GRAMMAR / PROV-DELTA), for
 # the same reason. No verdict value is added and no record field is renamed, so
 # the Gate-6 verification-evidence grep contract is preserved across the bump.
-readonly SCHEMA_VERSION="3"
+# 3 -> 4: the verdict roll-up gains its DENOMINATOR. The `**Verdict roll-up:**`
+# line now carries the per-issue row count the four verdict counters were
+# computed over, and the JSON `rollup` object gains `per_issue_rows` +
+# `declared_deferred`. Without it, `0 ERROR` over a plan carrying NO per-issue
+# table is byte-identical to `0 ERROR` over a plan whose rows all classified
+# cleanly. The `fcm-delivery` coverage record additionally gains `prose_led=`.
+# Both are ADDITIVE: no verdict value is added and no record field is renamed,
+# so the Gate-6 verification-evidence grep contract survives this bump too.
+readonly SCHEMA_VERSION="4"
 
 # ---------------------------------------------------------------------------
 # Pinned PATH for tool discipline (per bypass-mode-readiness.md posture).
@@ -65,6 +73,14 @@ readonly VERDICT_PASS="PASS"
 readonly VERDICT_FAIL="FAIL"
 readonly VERDICT_SKIP="SKIP"
 readonly VERDICT_ERROR="ERROR"
+
+# ---------------------------------------------------------------------------
+# PER_ISSUE_ROWS — the roll-up denominator: how many rows
+# parse_verification_plan actually indexed. Set by main() at the parser
+# boundary and read by emit_md / emit_json. Deliberately NOT `local`: the
+# emitters run on the right-hand side of a pipeline, which inherits globals.
+# ---------------------------------------------------------------------------
+PER_ISSUE_ROWS=0
 
 # ---------------------------------------------------------------------------
 # Argument-parsing state
@@ -334,8 +350,30 @@ classify_family() {
           *regression*|*unchanged*|*byte-diff*|*byte-equivalent*|*intact*) echo "regression"; return ;;
           *) echo "sync"; return ;;
         esac ;;
-    *runtime*suite*|*test-run*|*dispatch*the*runtime*|*suite-*|*exercise*) echo "runtime-suite"; return ;;
     *grep*|*"test -f"*|*anchor*|*present*|*"≥"*|*">="*)                     echo "per-issue";     return ;;
+    # RUNTIME-SUITE IS REACHED BY DECLARATION, NEVER BY PROSE, AND NEVER
+    # AHEAD OF AN EXECUTABLE ROW.
+    #
+    # This arm used to read
+    #   *runtime*suite*|*test-run*|*dispatch*the*runtime*|*suite-*|*exercise*
+    # and it sat ABOVE the executable arm, so a bash `case` took it first.
+    # Two consequences, both measured over the whole indexed corpus, in which
+    # 2 of 2 runtime-suite rows were hijacked executable assertions:
+    #   - a runnable method that merely SAID "exercise" was routed away from
+    #     the family that would have run it, and
+    #   - the family it landed in returned PASS having executed nothing.
+    # The same `grep -c` command earned a real PASS bare and a fabricated one
+    # prefixed "Exercise the register:". The family had never once graded a
+    # legitimate runtime declaration.
+    #
+    # The surviving tokens are the test-run SUBTYPES themselves - the event
+    # schema vocabulary an author writes to DECLARE an outcome, not words that
+    # occur in ordinary English about a check. The arm also sits BELOW the
+    # executable arm, so a method carrying a runnable probe is executed even
+    # when it also names a subtype. A method with neither reaches
+    # `unclassified` and is an ERROR, which is honest: this executor cannot
+    # tell what such a row is asking for.
+    *suite-skip*|*suite-fail*)                                              echo "runtime-suite"; return ;;
   esac
 
   # 3) Unclassifiable → the caller emits ERROR (fail loud; never drop a check).
@@ -979,14 +1017,39 @@ resolve_plan_release_key() {
 # Under the map, a check whose deliverable path is unmapped is an honest
 # suite-skip. We do not run suites in a novel way; we invoke the same event
 # path Engineering self-verification + Dev Testing already use.
+#
+# THIS FAMILY CANNOT RETURN PASS, AND THAT IS THE CONTRACT.
+#
+# It performs NO execution. Its only bash invocation is the
+# append-pipeline-event emit. It used to take its verdict from a `case` over
+# the METHOD TEXT whose catch-all arm assigned `suite-pass` -> VERDICT_PASS,
+# so any method not literally carrying a fail-word was reported PASS having
+# run nothing. A plan author writing "exercise the suite" earned a green
+# verdict for free, and the same words also STOLE the row from the per-issue
+# family that would have executed it (see classify_family above).
+#
+# Giving it a real execution path was considered and REJECTED on two
+# independent grounds:
+#   (1) it would need `bash` / `python3` in RUNNABLE_VERBS, which breaches the
+#       trust boundary stated at that constant - a verification harness driven
+#       by an authored artifact must not acquire a code-execution channel; and
+#   (2) runtime-suite-selection-map.md keys suite selection on the CHANGED
+#       PATH, not on method text, so a method string is structurally the wrong
+#       selector, and every runner in that map is a verb this executor refuses
+#       by design.
+#
+# So the verdict is FLOORED. An author recording a KNOWN failure can still
+# fail; every other route is a named SKIP citing the map and the gate that
+# does own execution. VERDICT_PASS does not appear in this function body, and
+# that absence is the mechanically checkable form of "cannot return PASS
+# without an executed check".
 # $1 = method string, $2 = release join key (slug, for the event --version).
 handle_runtime_suite() {
   local method="$1" version="$2" subtype outcome
-  # An unmapped / no-match method → suite-skip (honest no-op).
+  # A declared failure stays failable; every other route is an honest no-op.
   case "$method" in
-    *suite-skip*|*no-match*|*unmapped*|*no\ runtime*) subtype="suite-skip"; outcome="resolved" ;;
-    *suite-fail*|*FAIL*)                              subtype="suite-fail"; outcome="escalated" ;;
-    *)                                                subtype="suite-pass"; outcome="resolved" ;;
+    *suite-fail*|*FAIL*) subtype="suite-fail"; outcome="escalated" ;;
+    *)                   subtype="suite-skip"; outcome="resolved" ;;
   esac
   if [ "$ARG_EMIT_EVENTS" -eq 1 ]; then
     if [ ! -x "$EVENT_WRITER" ] && [ ! -f "$EVENT_WRITER" ]; then
@@ -1004,9 +1067,11 @@ handle_runtime_suite() {
     if [ "$rc" -ne 0 ]; then printf '%s\t%s\n' "$VERDICT_ERROR" "test-run emit failed (exit $rc)"; return; fi
   fi
   case "$subtype" in
-    suite-skip) printf '%s\t%s\n' "$VERDICT_SKIP" "test-run/$subtype (map no-match)" ;;
     suite-fail) printf '%s\t%s\n' "$VERDICT_FAIL" "test-run/$subtype" ;;
-    *)          printf '%s\t%s\n' "$VERDICT_PASS" "test-run/$subtype" ;;
+    # KEPT ON ONE LINE ON PURPOSE: the suite mutation arm raises this floor
+    # by a single anchored substitution, and a line-based mutator cannot
+    # reach a verdict split across a continuation.
+    *)          printf '%s\t%s\n' "$VERDICT_SKIP" "test-run/$subtype (not executed here: runtime-suite selection is keyed on changed path, not method text; execution belongs to Stage 6 C4 / Stage 7 Phase A8)" ;;
   esac
 }
 
@@ -1233,6 +1298,10 @@ _fcm_body_truncated() {
 # intent        add | edit | delete | rename | read | excluded | unknown | malformed
 # conditionality  uncond | cond
 # source_form   fence-verb-first | fence-path-first | fence-bare | table | table-pathless
+#               A row whose winning verb token is not the FIRST token of its
+#               declaration carries the suffix ` prose-led`. It is a
+#               DISCLOSURE, not a verdict: the intent is still believed, and
+#               the coverage record counts how many rows were read that way.
 #
 # `unknown` is the deliberate divergence from `bundle-issues-parser.py:218`, which
 # defaults a marker-less path to `edit`. That default is safe on an issue body (a
@@ -1248,7 +1317,6 @@ parse_fcm_declarations() {
   printf '%s\n' "$body" | awk '
     function trim(s){ gsub(/^[ \t]+|[ \t]+$/,"",s); return s }
     function lc(s){ return tolower(s) }
-    function hasw(u, w) { return match(u, "(^|[^A-Z])" w "([^A-Z]|$)") }
     function pathof(s,   t) {
       if (!match(s, /(core|release|docs|packages|projects|roadmaps|\.github|\.claude)\/[^ \t`|,;()]+/)) return ""
       t = substr(s, RSTART, RLENGTH)
@@ -1269,14 +1337,87 @@ parse_fcm_declarations() {
       if (p ~ /[;&$()]/) return 1
       return 0
     }
-    function verbof(u) {
-      if (index(u, "NOT EDITED") || index(u, "NOT TOUCHED")) return "excluded"
-      if (hasw(u,"READ"))                                    return "read"
-      if (hasw(u,"RENAME") || hasw(u,"RENAMED") || hasw(u,"MOVE")) return "rename"
-      if (hasw(u,"ADD") || hasw(u,"NEW") || hasw(u,"CREATE")) return "add"
-      if (hasw(u,"DELETE") || hasw(u,"REMOVE"))              return "delete"
-      if (hasw(u,"EDIT") || hasw(u,"MODIFY"))                return "edit"
+    # INTENT IS DECLARED, NOT INFERRED.
+    #
+    # verbof used to ask "which of these words appears ANYWHERE in the row",
+    # resolved by a fixed enum order, and BOTH failure directions were live in
+    # the corpus. They are opposites:
+    #
+    #   EDIT  release/tools/verify-release-plan.sh  # add a new dispatch arm
+    #     ADD was tested before EDIT, so a declared EDIT became an
+    #     unconditional ADD obligation. The file pre-exists, so the family
+    #     emitted FAIL "declared-add-delivered-as-edit ... the ADD declaration
+    #     was wrong" and blamed the author for a parser decision. 113 rows.
+    #
+    #   ADD (engineering commit 0; renamed from the earlier name)
+    #     RENAME was tested before ADD, so a declared ADD was classified
+    #     rename, counted excluded, and the obligation VANISHED with no
+    #     record. That is the vacuity class this tool exists to close,
+    #     occurring inside it. 18 rows.
+    #
+    # THE FIX is the one 94dcadb7 applied to the header detector in this file:
+    # identify by WHERE IT IS, not by which keyword is present.
+    #   (1) SCOPE. The declared path is removed first. A path segment is not a
+    #       declaration: block-skill-direct-edit.sh is not an EDIT, and
+    #       ADR-094-extend-before-create.md is not an ADD. This is the same
+    #       narrowing isconditional() below already applies, for the reason
+    #       recorded there.
+    #   (2) POSITION. The FIRST verb token in the remaining declaration wins.
+    #       The marker is the token the author put first; every later verb is
+    #       annotation prose describing what the change DOES.
+    #
+    # The recognised vocabulary is UNCHANGED. A token split on /[^A-Z]+/ is
+    # presence-equivalent to the retired hasw() helper on this corpus (2568 of
+    # 2568 rows), so the only behavioural difference is which of several
+    # present verbs is believed.
+    #
+    # REJECTED, each measured over the 2652-row corpus rather than argued:
+    #   - Reorder EDIT ahead of ADD: 123 rows move but 115 obligations are
+    #     DELETED, and neither the read/rename vacuity nor the path pollution
+    #     is touched. It relocates the loser; it does not stop guessing.
+    #   - ERROR on any multi-verb row: 144 rows across 55 plans become ERROR,
+    #     including "EDIT (add sourcing step)", which is not ambiguous to a
+    #     reader and not ambiguous positionally.
+    #
+    # 95.3 percent of verb-bearing fence rows and 97.4 percent of table intent
+    # cells are marker-led. The residual - a row whose winning verb is NOT its
+    # first token - is 7 rows in 2652, and it is DISCLOSED rather than
+    # errored: firstverb sets prose_led, which rides the source_form field and
+    # is counted in the always-emitted coverage record.
+    #
+    # EDITOR NOTE: this awk program is a SINGLE-QUOTED shell string. Keep
+    # every line above and below apostrophe-free, per the note at
+    # isconditional().
+    function classof(t) {
+      if (t == "READ")                                     return "read"
+      if (t == "RENAME" || t == "RENAMED" || t == "MOVE")  return "rename"
+      if (t == "ADD" || t == "NEW" || t == "CREATE")       return "add"
+      if (t == "DELETE" || t == "REMOVE")                  return "delete"
+      if (t == "EDIT" || t == "MODIFY")                    return "edit"
       return ""
+    }
+    # Sets the program-global prose_led to 1 when the winning verb token is
+    # NOT the first non-empty token of the declaration. split() on /[^A-Z]+/
+    # yields a leading EMPTY element whenever the string does not start with
+    # A-Z, so the ordinal is counted over non-empty tokens only; counting raw
+    # indices would mark every indented row prose-led and make the disclosure
+    # meaningless.
+    function firstverb(u,   n, i, k, a, c) {
+      prose_led = 0
+      n = split(u, a, /[^A-Z]+/)
+      k = 0
+      for (i = 1; i <= n; i++) {
+        if (a[i] == "") continue
+        k++
+        c = classof(a[i])
+        if (c != "") { if (k > 1) prose_led = 1; return c }
+      }
+      return ""
+    }
+    function verbof(u) {
+      prose_led = 0
+      if (index(u, "NOT EDITED") || index(u, "NOT TOUCHED")) return "excluded"
+      return firstverb(u)
     }
     function stripfirst(s, p,   i) {
       i = index(s, p); if (i == 0) return s
@@ -1349,6 +1490,7 @@ parse_fcm_declarations() {
       if (s ~ /^\|[ \t:|-]+$/) next
       if (col_intent == 0) next
       iv = verbof(toupper(trim(cell[col_intent])))
+      tpl = prose_led
       if (iv == "") next
       # FMF-5(c): a MARKED row whose declared path column holds a human label
       # rather than a repository path is a NAMED error, not a silent zero. This is
@@ -1359,19 +1501,21 @@ parse_fcm_declarations() {
       cond = (isconditional(s, p) || label ~ /conditional/) ? "cond" : "uncond"
       if (labelexcludes(label)) iv = "excluded"
       if (malformed(p)) iv = "malformed"
-      printf "%s\t%s\t%s\t%s\t%s\n", p, iv, cond, "table", s
+      printf "%s\t%s\t%s\t%s\t%s\n", p, iv, cond, (tpl ? "table prose-led" : "table"), s
       next
     }
     # ---- fenced declaration row ----
     infence {
       p = pathof(s)
       if (p == "") next
-      u  = toupper(s)
+      u  = toupper(stripfirst(s, p))
       iv = verbof(u)
+      fpl = prose_led
       lead = toupper(trim(substr(s, 1, index(s " ", " "))))
       form = "fence-path-first"
       if (iv != "" && (lead ~ /^(ADD|EDIT|NEW|MODIFY|DELETE|REMOVE|READ|CREATE|RENAME)$/)) form = "fence-verb-first"
       if (iv == "") { iv = "unknown"; form = "fence-bare" }
+      if (fpl) form = form " prose-led"
       cond = (isconditional(s, p) || label ~ /conditional/) ? "cond" : "uncond"
       if (labelexcludes(label)) iv = "excluded"
       if (malformed(p)) iv = "malformed"
@@ -1627,10 +1771,15 @@ handle_fcm_delivery() {
 
   local devlog; devlog="$(parse_deviation_log "$plan" || true)"
 
-  local excluded conditional unknown pathless obligations
+  local excluded conditional unknown pathless obligations prose_led
   excluded="$(   printf '%s\n' "$records" | awk -F'\t' '$2=="excluded"||$2=="read"||$2=="rename"{c++} END{print c+0}')"
   unknown="$(    printf '%s\n' "$records" | awk -F'\t' '$2=="unknown"{c++}  END{print c+0}')"
   pathless="$(   printf '%s\n' "$records" | awk -F'\t' '$2=="pathless"{c++} END{print c+0}')"
+  # prose_led rides the source_form field (see parse_fcm_declarations). It is
+  # a disclosure counter, NOT a verdict input: a row read from a weaker signal
+  # says so in the record instead of being converted to an ERROR. Converting
+  # the 7-row corpus residual to ERROR would redden 55 readable plans.
+  prose_led="$( printf '%s\n' "$records" | awk -F'\t' '$4 ~ /prose-led/{c++} END{print c+0}')"
   conditional="$(printf '%s\n' "$records" | awk -F'\t' '$2=="add"&&$3=="cond"{c++} END{print c+0}')"
   obligations="$(printf '%s\n' "$records" | awk -F'\t' '$2=="add"&&$3=="uncond"{c++} END{print c+0}')"
   local interpreted=$(( declared - unknown - pathless ))
@@ -1646,7 +1795,7 @@ handle_fcm_delivery() {
     cov_verdict="$VERDICT_SKIP";  cov_note=" fcm-no-unconditional-adds (matrix fully interpreted; nothing for this family to assert)"
   fi
   emit_fcm "FCM-COVERAGE" "full row coverage" "$cov_verdict" \
-    "declared=$declared interpreted=$interpreted obligations=$obligations excluded=$excluded conditional=$conditional uninterpreted=$unknown pathless=$pathless${cov_note}"
+    "declared=$declared interpreted=$interpreted obligations=$obligations excluded=$excluded conditional=$conditional uninterpreted=$unknown pathless=$pathless prose_led=$prose_led${cov_note}"
 
   # (5) One record per ADD row. Conditional and unconditional both reported.
   local n=0 path intent cond form _raw
@@ -1994,7 +2143,22 @@ emit_md() {
   f="$(printf '%s\n' "$records" | awk -F'\t' '$6=="FAIL"{c++} END{print c+0}')"
   s="$(printf '%s\n' "$records" | awk -F'\t' '$6=="SKIP"{c++} END{print c+0}')"
   e="$(printf '%s\n' "$records" | awk -F'\t' '$6=="ERROR"{c++} END{print c+0}')"
-  printf '**Verdict roll-up:** %s PASS / %s FAIL / %s SKIP / %s ERROR\n' "$p" "$f" "$s" "$e"
+  # THE ROLL-UP CARRIES ITS DENOMINATOR.
+  #
+  # `0 ERROR` alone is uninterpretable. A plan carrying NO per-issue
+  # verification table scores 0 ERROR and exits 0, byte-identical on this line
+  # to a plan whose 26 rows all classified cleanly. Any consumer asserting
+  # `error == 0` is therefore asserting nothing unless it also knows the row
+  # count. PER_ISSUE_ROWS is set by main() at the parser boundary - it cannot
+  # be recovered from the stream here, because several families are reachable
+  # both from a per-issue row and from a source that is not one.
+  local d
+  d="$(printf '%s\n' "$records" | awk -F'\t' '$3=="deferred"{c++} END{print c+0}')"
+  if [ "${PER_ISSUE_ROWS:-0}" -eq 0 ]; then
+    printf '**Verdict roll-up:** %s PASS / %s FAIL / %s SKIP / %s ERROR — **no per-issue verification table found** (0 rows indexed; the verdict counts above are over a ZERO denominator)\n' "$p" "$f" "$s" "$e"
+  else
+    printf '**Verdict roll-up:** %s PASS / %s FAIL / %s SKIP / %s ERROR — over %s per-issue row(s); %s declared-deferred\n' "$p" "$f" "$s" "$e" "$PER_ISSUE_ROWS" "$d"
+  fi
 }
 
 emit_json() {
@@ -2011,7 +2175,13 @@ emit_json() {
   f="$(printf '%s\n' "$records" | awk -F'\t' '$6=="FAIL"{c++} END{print c+0}')"
   s="$(printf '%s\n' "$records" | awk -F'\t' '$6=="SKIP"{c++} END{print c+0}')"
   e="$(printf '%s\n' "$records" | awk -F'\t' '$6=="ERROR"{c++} END{print c+0}')"
-  printf '  "rollup": {"pass": %s, "fail": %s, "skip": %s, "error": %s}\n}\n' "$p" "$f" "$s" "$e"
+  # Same denominator contract as emit_md. `declared_deferred` is reported but
+  # is NOT an invariant: it moves every time a card renders a deferred AC row
+  # executable. `per_issue_rows` is the stable one; bind regression arms to it.
+  local d
+  d="$(printf '%s\n' "$records" | awk -F'\t' '$3=="deferred"{c++} END{print c+0}')"
+  printf '  "rollup": {"pass": %s, "fail": %s, "skip": %s, "error": %s, "per_issue_rows": %s, "declared_deferred": %s}\n}\n' \
+    "$p" "$f" "$s" "$e" "${PER_ISSUE_ROWS:-0}" "$d"
 }
 
 emit_table() {
@@ -2071,6 +2241,12 @@ main() {
   # 1) Parse per-issue verification-plan check records + CIAC integration records.
   local per_issue_records ciac_records
   per_issue_records="$(parse_verification_plan "$PLAN_ABS" || true)"
+  # THE DENOMINATOR IS COUNTED HERE, at the parser boundary, because this is
+  # the only point at which the indexed-row population is known. Downstream,
+  # every record has been relabelled with a FAMILY, and several families
+  # (integration, sync, regression, deferred) are reachable both from a
+  # per-issue row and from a source that is not a per-issue row at all.
+  PER_ISSUE_ROWS="$(printf '%s' "$per_issue_records" | grep -c . || true)"
   ciac_records="$(parse_ciac "$PLAN_ABS" || true)"
 
   # 2) Dispatch each record → verdict, building the emit stream:
@@ -2149,9 +2325,16 @@ main() {
 "
   fi
 
-  # No checks parsed at all → not an error, but say so honestly on stderr.
-  if [ -z "$stream" ]; then
-    err "no verification checks parsed from $(basename "$PLAN_ABS") — is the Verification Plan / CIAC section present and table-shaped?"
+  # NO PER-ISSUE ROWS PARSED → not an error, but say so honestly on stderr.
+  #
+  # This guard used to test `-z "$stream"` and was STRUCTURALLY DEAD.
+  # fcm-delivery and provenance-survival are always-on and EVERY code path in
+  # both emits a *-COVERAGE record, so the stream is never empty and this
+  # warning could never fire. A guard that cannot fire is precisely the defect
+  # class this tool exists to name, sitting inside the tool. Re-pointed onto
+  # the population it was actually written about.
+  if [ "$PER_ISSUE_ROWS" -eq 0 ]; then
+    err "no per-issue verification checks parsed from $(basename "$PLAN_ABS") — is the Verification Plan section present and table-shaped? 0 rows were indexed, so the verdict roll-up below has a ZERO denominator and its ERROR count is vacuous."
   fi
 
   # 3) Emit in the requested format.

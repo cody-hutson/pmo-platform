@@ -16,6 +16,12 @@ set -euo pipefail
 #        grouping is well-formed under both.
 #   (G3) EXIT-CODE + SCHEMA — a fixture carrying a FAIL exits 3; --version prints
 #        the SCHEMA_VERSION; a clean all-PASS/SKIP synthetic exits 0.
+#  (G10) #6383 — the header-trap regression arm the landed positional fix
+#        shipped without; the runtime-suite verdict floor (PASS unreachable,
+#        prose route retired, executable rows no longer stolen); the roll-up
+#        denominator; and FCM intent read as a DECLARATION rather than
+#        inferred from annotation prose or a filename segment. Six mutation
+#        arms, one per property limb.
 #   (G4) CIAC EXECUTION — the integration handler runs CIAC-1's grep method
 #        (quote-aware; a pattern with a `|` alternation and spaces stays one arg)
 #        and grades it on the co-occurrence threshold.
@@ -1244,6 +1250,246 @@ esac
 
 rm -rf "$PMUTD"
 rm -rf "$PROVD"
+
+# ---------------------------------------------------------------------------
+# G10 — #6383: the header-trap regression arm, the runtime-suite verdict floor,
+#       the roll-up denominator, and declared-not-inferred FCM intent.
+#
+# Four properties, each with a seeded failure that MUST flip it:
+#   (H)  a data row carrying schema vocabulary is indexed as DATA — the arm the
+#        already-landed positional header fix shipped WITHOUT.
+#   (R)  handle_runtime_suite cannot return PASS, and the retired keyword route
+#        can no longer steal an executable row from the family that runs it.
+#   (D)  the verdict roll-up carries the denominator its counts were taken over.
+#   (V)  FCM intent is the FIRST verb token of the path-stripped declaration;
+#        annotation prose and filename segments decide nothing.
+# ---------------------------------------------------------------------------
+echo
+echo "G10 — #6383: header trap · runtime floor · roll-up denominator · declared intent"
+
+FIX_TRAP="release/tools/tests/fixtures/verify-plan-header-trap.md"
+FIX_TRAPCTL="release/tools/tests/fixtures/verify-plan-header-trap-control.md"
+FIX_HIJACK="release/tools/tests/fixtures/verify-plan-runtime-hijack.md"
+FIX_NOTABLE="release/tools/tests/fixtures/verify-plan-no-table.md"
+
+# rows_of <json> — the roll-up denominator. acs_of <json> — emitted AC-N records.
+rows_of() { sed -n 's/.*"per_issue_rows": \([0-9]*\).*/\1/p' <<<"$1" | head -1; }
+acs_of()  { grep -c '"id":"AC-' <<<"$1" || true; }
+
+MUTD3="$(mktemp -d -t verify-plan-6383-mut.XXXXXX)"
+m6383() {
+  local name="$1"; shift
+  local dst="$MUTD3/$name.sh" e
+  cp "$VERIFY" "$dst"
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  if cmp -s "$VERIFY" "$dst"; then
+    bad "$name — MUTATION DID NOT TAKE (mutant is byte-identical); the paired arm would pass vacuously"
+  else
+    ok "$name — mutation applied (mutant bytes differ from the shipped tool)"
+  fi
+}
+
+# --- H: the header trap. THE ARM 94dcadb7 SHIPPED WITHOUT. -------------------
+vrp_run "$VERIFY" "$FIX_TRAP";    J_TRAP="$VRP_JSON"
+vrp_run "$VERIFY" "$FIX_TRAPCTL"; J_TRAPC="$VRP_JSON"
+R_TRAP="$(rows_of "$J_TRAP")"; R_TRAPC="$(rows_of "$J_TRAPC")"
+A_TRAP="$(acs_of "$J_TRAP")";  A_TRAPC="$(acs_of "$J_TRAPC")"
+
+# H-0 is the arm that stops H-1 from being 0 == 0. Two files that both parsed to
+# nothing would "agree" perfectly, which is the vacuity this group exists to
+# refuse. Assert the population is non-empty BEFORE asserting the pair matches.
+[ "${R_TRAP:-0}" -eq 4 ] \
+  && ok "H-0 SENSITIVITY — the trap fixture indexes all 4 of its data rows (the pair below is not 0 == 0)" \
+  || bad "H-0 expected 4 indexed rows in the trap fixture, got '${R_TRAP:-<none>}'"
+[ "$R_TRAP" = "$R_TRAPC" ] \
+  && ok "H-1 a data cell carrying predicate / expected / verification method is indexed as DATA (trap $R_TRAP == control $R_TRAPC)" \
+  || bad "H-1 trap indexed $R_TRAP rows, control indexed $R_TRAPC — a trap row was consumed as a header"
+[ "$A_TRAP" = "$A_TRAPC" ] && [ "${A_TRAP:-0}" -eq 4 ] \
+  && ok "H-2 every indexed trap row also EMITS a record ($A_TRAP == $A_TRAPC) — nothing vanished after indexing" \
+  || bad "H-2 emitted AC records differ: trap $A_TRAP vs control $A_TRAPC (expected 4 each)"
+
+# H-M — SEEDED FAILURE. Revert the positional anchor so every row is header
+# eligible again. Only the TRAP fixture loses rows, so the PAIR separates; that
+# separation is what proves H-1 observes the fix rather than the fixture.
+m6383 g10-m1-header-not-positional 's/if \(block_row == 1\) \{/if (block_row >= 1) {/'
+vrp_run "$MUT_PATH" "$FIX_TRAP";    JM_TRAP="$VRP_JSON"
+vrp_run "$MUT_PATH" "$FIX_TRAPCTL"; JM_TRAPC="$VRP_JSON"
+MR_TRAP="$(rows_of "$JM_TRAP")"; MR_TRAPC="$(rows_of "$JM_TRAPC")"
+[ "$MR_TRAP" != "$MR_TRAPC" ] \
+  && ok "H-M mutation detected — with the positional anchor reverted the pair separates (trap $MR_TRAP vs control $MR_TRAPC)" \
+  || bad "H-M SURVIVED — trap and control still agree at $MR_TRAP with the anchor reverted; H-1 observes nothing"
+[ "${MR_TRAPC:-0}" -eq 4 ] \
+  && ok "H-M CONTROL — the mutation costs the control fixture nothing (still 4); the loss is attributable to the trap vocabulary" \
+  || bad "H-M control — the control fixture also moved to '${MR_TRAPC:-<none>}'; the mutation is not isolating the trap"
+
+# --- R: the runtime-suite verdict floor + the retired keyword route ----------
+vrp_run "$VERIFY" "$FIX_HIJACK"; J_HJ="$VRP_JSON"; RC_HJ="$VRP_RC"
+
+# R-0 STRUCTURAL. "Cannot return PASS without an executed check" is checkable at
+# the source: the function performs no execution, so PASS must not be reachable
+# from its body at all. The sensitivity arm runs the SAME extractor over
+# handle_per_issue, which does return PASS — without it, a broken extractor
+# would report a clean zero.
+RS_BODY="$(awk '/^handle_runtime_suite\(\) \{/,/^\}/' "$VERIFY")"
+PI_BODY="$(awk '/^handle_per_issue\(\) \{/,/^\}/' "$VERIFY")"
+RS_HITS="$(grep -c 'VERDICT_PASS' <<<"$RS_BODY" || true)"
+PI_HITS="$(grep -c 'VERDICT_PASS' <<<"$PI_BODY" || true)"
+[ "${PI_HITS:-0}" -gt 0 ] \
+  && ok "R-0 SENSITIVITY — the body extractor finds VERDICT_PASS in handle_per_issue ($PI_HITS); a zero below is a real absence" \
+  || bad "R-0 the extractor found no VERDICT_PASS in handle_per_issue either — it is broken, and R-0 would pass vacuously"
+[ "${RS_HITS:-0}" -eq 0 ] \
+  && ok "R-0 handle_runtime_suite cannot return PASS — VERDICT_PASS does not appear in its body" \
+  || bad "R-0 VERDICT_PASS appears $RS_HITS time(s) in handle_runtime_suite; the family can fabricate a pass again"
+
+# R-1 THE HIJACK. AC-1 and AC-2 carry the SAME grep command; AC-2 merely says
+# "Exercise the register" first. Before the fix AC-1 executed and AC-2 did not.
+[ "$(family_of "$J_HJ" AC-1)" = "per-issue" ] && [ "$(family_of "$J_HJ" AC-2)" = "per-issue" ] \
+  && ok "R-1 an executable row is not stolen by prose — bare and Exercise-prefixed both classify per-issue" \
+  || bad "R-1 families differ: AC-1 '$(family_of "$J_HJ" AC-1)' vs AC-2 '$(family_of "$J_HJ" AC-2)'"
+[ "$(verdict_of "$J_HJ" AC-1)" = "PASS" ] && [ "$(verdict_of "$J_HJ" AC-2)" = "PASS" ] \
+  && ok "R-1b both rows EXECUTE and agree (PASS / PASS) — the earned verdict and the once-fabricated one now coincide honestly" \
+  || bad "R-1b verdicts differ: AC-1 '$(verdict_of "$J_HJ" AC-1)' vs AC-2 '$(verdict_of "$J_HJ" AC-2)'"
+
+# R-2 THE CARD AC. A method carrying `exercise`, no fail-word and no executable
+# probe must not report PASS. It reaches `unclassified`, which is an ERROR: this
+# executor genuinely cannot tell what the row is asking for, and saying so is
+# the honest answer. Never a fabricated green.
+[ "$(verdict_of "$J_HJ" AC-3)" != "PASS" ] \
+  && ok "R-2 an 'exercise' method with no fail-word and no probe is NOT PASS (got '$(verdict_of "$J_HJ" AC-3)')" \
+  || bad "R-2 an 'exercise' method still reports PASS — the fabricated-verdict path is open"
+
+# R-3 THE SURVIVING ROUTE. A declared test-run subtype still reaches the family,
+# floored at SKIP; a declared failure still FAILs. Without R-3 the retirement
+# would have silently orphaned the handler, which is the same vacuity one level
+# over: a floor on a family nothing can reach holds nothing down.
+[ "$(family_of "$J_HJ" AC-4)" = "runtime-suite" ] && [ "$(verdict_of "$J_HJ" AC-4)" = "SKIP" ] \
+  && ok "R-3 a declared suite-skip still reaches the family and is floored at SKIP" \
+  || bad "R-3 AC-4 expected runtime-suite/SKIP, got '$(family_of "$J_HJ" AC-4)'/'$(verdict_of "$J_HJ" AC-4)'"
+[ "$(family_of "$J_HJ" AC-5)" = "runtime-suite" ] && [ "$(verdict_of "$J_HJ" AC-5)" = "FAIL" ] \
+  && ok "R-3b a declared suite-fail still FAILs — the floor does not swallow a recorded failure" \
+  || bad "R-3b AC-5 expected runtime-suite/FAIL, got '$(family_of "$J_HJ" AC-5)'/'$(verdict_of "$J_HJ" AC-5)'"
+[ "$RC_HJ" -eq 3 ] \
+  && ok "R-3c the FAIL and the ERROR reach the exit predicate (exit 3)" \
+  || bad "R-3c expected exit 3 from the hijack fixture, got $RC_HJ"
+
+# R-M1 — SEEDED FAILURE on the floor. Raise it and R-2 must flip.
+m6383 g10-m2-floor-raised 's|"\$VERDICT_SKIP" "test-run/\$subtype \(not executed|"$VERDICT_PASS" "test-run/$subtype (not executed|'
+vrp_run "$MUT_PATH" "$FIX_HIJACK"; JM_HJ="$VRP_JSON"
+[ "$(verdict_of "$JM_HJ" AC-4)" = "PASS" ] \
+  && ok "R-M1 mutation detected — with the floor raised the declared suite-skip fabricates a PASS again" \
+  || bad "R-M1 SURVIVED — AC-4 is '$(verdict_of "$JM_HJ" AC-4)' with the floor raised; R-3 observes nothing"
+
+# R-M2 — SEEDED FAILURE on the retired route. Re-insert the prose keyword arm
+# ABOVE the executable arm, which is exactly the shape that stole the row, and
+# R-1 must flip. Position is the defect, so the mutation restores the position.
+m6383 g10-m3-keyword-route-restored 's#^    \*grep\*#    *runtime*suite*|*test-run*|*dispatch*the*runtime*|*suite-*|*exercise*) echo "runtime-suite"; return ;;\
+    *grep*#'
+vrp_run "$MUT_PATH" "$FIX_HIJACK"; JM_HJ2="$VRP_JSON"
+[ "$(family_of "$JM_HJ2" AC-1)" = "per-issue" ] && [ "$(family_of "$JM_HJ2" AC-2)" = "runtime-suite" ] \
+  && ok "R-M2 mutation detected — with the keyword route restored above the executable arm, AC-2 is stolen again while AC-1 is not" \
+  || bad "R-M2 SURVIVED — AC-1 '$(family_of "$JM_HJ2" AC-1)' / AC-2 '$(family_of "$JM_HJ2" AC-2)'; R-1 observes nothing"
+
+# --- D: the roll-up denominator ---------------------------------------------
+vrp_run "$VERIFY" "$FIX_NOTABLE"; J_NT="$VRP_JSON"; RC_NT="$VRP_RC"
+R_NT="$(rows_of "$J_NT")"
+
+# THE CARD AC: run against a plan WITH a per-issue table and one WITHOUT, and
+# observe DIFFERENT denominators. Both report 0 ERROR, which is precisely why
+# the error count alone was never interpretable.
+[ "${R_NT:-x}" = "0" ] && [ "${R_TRAP:-0}" -gt 0 ] && [ "$R_NT" != "$R_TRAP" ] \
+  && ok "D-1 a plan with a per-issue table and one without report DIFFERENT denominators ($R_TRAP vs $R_NT)" \
+  || bad "D-1 denominators did not separate: with-table '$R_TRAP', without-table '${R_NT:-<none>}'"
+E_NT="$(sed -n 's/.*"error": \([0-9]*\).*/\1/p' <<<"$J_NT" | head -1)"
+E_TRAP="$(sed -n 's/.*"error": \([0-9]*\).*/\1/p' <<<"$J_TRAP" | head -1)"
+[ "$E_NT" = "0" ] && [ "$E_TRAP" = "0" ] \
+  && ok "D-1b BOTH report 0 ERROR — which is exactly why 0 ERROR alone was uninterpretable, and why the denominator is the fix" \
+  || bad "D-1b expected 0 ERROR from both; got no-table '$E_NT', trap '$E_TRAP'"
+
+# D-2 the markdown render must SAY it found nothing, not merely report a zero.
+set +e
+MD_NT="$("$VERIFY" --no-color --format=md --root "$REPO_ROOT" "$REPO_ROOT/$FIX_NOTABLE" 2>/dev/null)"
+set -e
+grep -q 'no per-issue verification table found' <<<"$MD_NT" \
+  && ok "D-2 the md roll-up STATES the empty denominator rather than rendering a clean-looking zero" \
+  || bad "D-2 the md roll-up does not name the empty denominator: '$(tail -1 <<<"$MD_NT")'"
+grep -qE 'over 4 per-issue row\(s\)' <<<"$("$VERIFY" --no-color --format=md --root "$REPO_ROOT" "$REPO_ROOT/$FIX_TRAP" 2>/dev/null)" \
+  && ok "D-2b CONTROL — a plan that DOES carry a table renders its row count instead of the empty-denominator statement" \
+  || bad "D-2b the with-table md roll-up does not carry its row count"
+
+# D-M — SEEDED FAILURE. Zero the denominator at its source. D-1 must flip.
+m6383 g10-m4-denominator-zeroed 's/PER_ISSUE_ROWS="\$\(printf .%s. "\$per_issue_records" \| grep -c \. \|\| true\)"/PER_ISSUE_ROWS=0/'
+vrp_run "$MUT_PATH" "$FIX_TRAP"; JM_TRAP2="$VRP_JSON"
+[ "$(rows_of "$JM_TRAP2")" = "0" ] \
+  && ok "D-M mutation detected — with the counter zeroed the with-table plan reports the empty-denominator statement too" \
+  || bad "D-M SURVIVED — the mutant still reports '$(rows_of "$JM_TRAP2")' rows; D-1 observes nothing"
+
+# --- V: FCM intent is DECLARED, not inferred --------------------------------
+fcm_run "$VERIFY" fcm-verbof-trap.md "$DIFF_PRESENT";    J_VTRAP="$FCM_JSON"
+fcm_run "$VERIFY" fcm-verbof-control.md "$DIFF_PRESENT"; J_VCTL="$FCM_JSON"
+
+# V-1 THE PAIR. The only variable across these two fixtures is annotation prose.
+# Before the fix it moved the assertion onto a DIFFERENT FILE: row 1 (a declared
+# EDIT whose note says "add") became an ADD obligation and FAILed, while row 2
+# (a declared ADD whose note says "renamed") was classified rename, counted
+# excluded, and its obligation vanished with no record at all. Both directions,
+# one fixture.
+[ "$(observed_of "$J_VTRAP" FCM-1)" = "$(observed_of "$J_VCTL" FCM-1)" ] \
+  && ok "V-1 annotation prose cannot move the assertion — trap and control grade the SAME file identically ('$(observed_of "$J_VTRAP" FCM-1)')" \
+  || bad "V-1 records diverge: trap '$(observed_of "$J_VTRAP" FCM-1)' vs control '$(observed_of "$J_VCTL" FCM-1)'"
+[ "$(verdict_of "$J_VTRAP" FCM-1)" = "PASS" ] && [ "$(verdict_of "$J_VCTL" FCM-1)" = "PASS" ] \
+  && ok "V-1b both PASS — the declared EDIT raises no false obligation and the declared ADD is delivered" \
+  || bad "V-1b verdicts differ: trap '$(verdict_of "$J_VTRAP" FCM-1)' vs control '$(verdict_of "$J_VCTL" FCM-1)'"
+
+# V-2 THE VACUITY HALF. A declared ADD carrying a rename annotation must be
+# COUNTED, never dropped into `excluded`. excluded=0 is the whole assertion:
+# an ADD in `excluded` is a declared obligation the gate can never fail on.
+case "$(observed_of "$J_VTRAP" FCM-COVERAGE)" in
+  *"obligations=1 excluded=0"*) ok "V-2 a declared ADD annotated 'renamed from …' is an OBLIGATION, not an exclusion (obligations=1 excluded=0)" ;;
+  *) bad "V-2 coverage expected 'obligations=1 excluded=0', got '$(observed_of "$J_VTRAP" FCM-COVERAGE)'" ;;
+esac
+
+# V-3 THE DISCLOSURE. The residual — a row whose winning verb is not its first
+# token — is reported rather than errored. The control arm is what makes the
+# counter meaningful: it must read 0 on the same two paths and intents.
+case "$(observed_of "$J_VTRAP" FCM-COVERAGE)" in
+  *prose_led=1*) ok "V-3 the prose-led row is DISCLOSED in the coverage record (prose_led=1), not converted to an ERROR" ;;
+  *) bad "V-3 expected prose_led=1 in the trap coverage record, got '$(observed_of "$J_VTRAP" FCM-COVERAGE)'" ;;
+esac
+case "$(observed_of "$J_VCTL" FCM-COVERAGE)" in
+  *prose_led=0*) ok "V-3b CONTROL — the annotation-free twin reads prose_led=0, so the counter tracks prose and not the paths" ;;
+  *) bad "V-3b expected prose_led=0 in the control coverage record, got '$(observed_of "$J_VCTL" FCM-COVERAGE)'" ;;
+esac
+
+# V-4 SCOPE. A path segment is not a declaration: a bare path whose own slug
+# carries the word `edit` is intent-UNDECLARED, and undeclared is counted and
+# reported — never silently promoted to an intent the author never wrote.
+fcm_run "$VERIFY" fcm-verbof-pathword.md "$DIFF_ABSENT"; J_VPW="$FCM_JSON"
+case "$(observed_of "$J_VPW" FCM-COVERAGE)" in
+  *"declared=2 interpreted=1"*uninterpreted:1*) ok "V-4 a filename containing 'edit' does not declare an EDIT (declared=2 interpreted=1)" ;;
+  *) bad "V-4 coverage expected declared=2 interpreted=1 with uninterpreted:1, got '$(observed_of "$J_VPW" FCM-COVERAGE)'" ;;
+esac
+
+# V-M1 — SEEDED FAILURE on POSITION. Restore the enum cascade so ADD is tested
+# before EDIT again. V-1 must flip: the assertion moves back onto the wrong file.
+m6383 g10-m5-enum-cascade-restored 's/      return firstverb\(u\)/      if (index(u,"ADD")) return "add"; return firstverb(u)/'
+fcm_run "$MUT_PATH" fcm-verbof-trap.md "$DIFF_PRESENT"; JM_VTRAP="$FCM_JSON"
+[ "$(observed_of "$JM_VTRAP" FCM-1)" != "$(observed_of "$J_VCTL" FCM-1)" ] \
+  && ok "V-M1 mutation detected — with ADD tested ahead of position the trap grades a different file ('$(observed_of "$JM_VTRAP" FCM-1)')" \
+  || bad "V-M1 SURVIVED — the trap still grades '$(observed_of "$JM_VTRAP" FCM-1)' with the cascade restored; V-1 observes nothing"
+
+# V-M2 — SEEDED FAILURE on SCOPE. Stop stripping the declared path and V-4 must
+# flip: the filename segment starts declaring an intent again.
+m6383 g10-m6-path-not-stripped 's/      u  = toupper\(stripfirst\(s, p\)\)/      u  = toupper(s)/'
+fcm_run "$MUT_PATH" fcm-verbof-pathword.md "$DIFF_ABSENT"; JM_VPW="$FCM_JSON"
+case "$(observed_of "$JM_VPW" FCM-COVERAGE)" in
+  *"declared=2 interpreted=2"*) ok "V-M2 mutation detected — unstripped, the filename segment declares an intent (interpreted 1 -> 2)" ;;
+  *) bad "V-M2 SURVIVED — coverage is still '$(observed_of "$JM_VPW" FCM-COVERAGE)' with the path strip removed; V-4 observes nothing" ;;
+esac
+
+rm -rf "$MUTD3"
 
 # ---------------------------------------------------------------------------
 # Summary
