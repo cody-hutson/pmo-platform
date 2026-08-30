@@ -266,8 +266,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib-template-sync-source.sh"
 
 # Echo the whole warn-log family in SEGMENT-INDEX order, one absolute path per
 # line. The order is CHRONOLOGICAL FROM THE ANCHOR FORWARD -- not a global
-# oldest -> newest claim; see the pre-anchor note below for why that distinction
-# is load-bearing rather than pedantic.
+# oldest -> newest claim; see the ordering-exception note below for why that
+# distinction is load-bearing rather than pedantic.
 #
 #   <instance>/deploy-check-warn-log.00000.jsonl   <- the ANCHOR: the segment
 #                                                     this lifecycle rotated
@@ -278,15 +278,18 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib-template-sync-source.sh"
 #
 # THE ANCHOR IS NOT NECESSARILY THE OLDEST RECORD, AND AN INDEX IS NOT AN AGE.
 # warn_log_path() assigns `highest existing index + 1`, so indices only ever
-# increase. A log that PREDATES the anchor -- an orphaned pre-relocation log
-# adopted into the family -- therefore cannot be given an index below the anchor
-# without renumbering live instance state, which this design does not do. Such a
-# PRE-ANCHOR PREDECESSOR claims the next free index ABOVE the current maximum
-# while holding the OLDEST records in the family. That is a deliberate,
-# documented exception to index-equals-chronology, and it is the reason this
-# block states the order from the anchor forward: a consumer that needs true
-# chronology reads the rows' own timestamps and must never infer age from the
-# index.
+# increase. An orphaned pre-relocation log adopted into the family cannot be
+# given an index below the anchor without renumbering live instance state,
+# which this design does not do; it claims the next free index ABOVE the
+# current maximum whenever its records were written. That is TWO deliberate,
+# documented exceptions to index-equals-chronology, not one. A PRE-ANCHOR
+# PREDECESSOR holds the OLDEST records in the family at the HIGHEST index. An
+# INTRA-ANCHOR ADOPTED SEGMENT has its whole span fall INSIDE a lower-indexed
+# segment's span, so its rows interleave in time instead of following it;
+# verified byte-disjoint, so nothing is double-counted. Both are the reason
+# this block states the order from the anchor forward: a consumer that needs
+# true chronology reads the rows' own timestamps and must never infer age from
+# the index.
 #
 # AN ADOPTION RESOLVES ITS TARGET INDEX AT RUN TIME AND NEVER ASSUMES `00000` IS
 # FREE. After the first rotation `00000` is a live segment holding real records,
