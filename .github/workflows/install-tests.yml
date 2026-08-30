@@ -549,7 +549,7 @@ jobs:
         # defect fails the test rather than passing it vacuously.
         run: bash core/deploy/tests/test_check31_marker_probe_determinism.sh
 
-      - name: Run Check 73 bundle-metrics discrimination fixtures (test_check73_bundle_metrics_discrimination.sh)
+      - name: Run Check 73 bundle-metrics discrimination fixtures — G3-14 / G3-15 (test_check73_bundle_metrics_discrimination.sh)
         # #6298: G3-14 (Mode-A combined-clean parse-rate floor) and G3-15
         # (per-milestone risk-weighted size bound) shipped as prose-declared
         # predicates with NO RUNNER ON ANY SURFACE — zero executable artifacts
