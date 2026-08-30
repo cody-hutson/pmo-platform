@@ -494,7 +494,70 @@ A deviation is flagged, never silently taken. Recorded per spoke as deviations a
 
 ## Change Description
 
-(Authored by the Stage 6 spoke at PR-creation time — operator-facing, pre-merge, six sub-sections. Distinct from the user-facing release note authored at Stage 13 per [`release-notes-standard.md`](/release/references/standards/release-notes-standard.md).)
+### Outcome
+
+A skill's authored source, its shipped `.skill` package, and the governance surfaces that
+describe both now tell one consistent story — and the checks that claim to verify that story
+either resolve or say plainly that they do not. Six surfaces that had drifted apart are
+re-synchronised: a skill's instructions no longer cite check IDs and sections that do not
+exist, a skill named as sole maintainer of a state machine now actually references it, two
+domain guides that were promised but never authored exist, post-merge deployment is
+mechanised rather than documented-as-manual, and the chained-invocation arg contract accepts
+both encodings its consumers already emit.
+
+### Issues resolved
+
+| Issue | What it closes |
+|---|---|
+| **#5236** | `pmo-skill-editor` Mode C cited six `RC-NN` IDs resolving to nothing and a "Check Application Matrix" that did not exist |
+| **#5056** | `delivery-engine` was named sole maintainer of the Axis-1 work-state machine while referencing that field in 0 of its 12 files |
+| **#4975** | `pmo-architect` carried two live `UNSOURCED-DOMAIN` residuals; the security and data domain guides are now authored and catalogued |
+| **#192** | Post-merge skill deployment was manual-by-documentation, so source and installed copy drifted silently |
+| **#196** | The chained-invocation arg contract was `key=value` only, with no JSON form |
+| **#4442** | Runner declarations in the gate-efficacy standard had no check that they resolve |
+
+### Key decisions
+
+- **Release Class re-classified `routine` → `novel`** at Stage 4, raising Stage 9 review depth to Deep.
+- **`security.md` ships under §5.7 SHIP-WITH-FLAG with no ADR** — it does not clear ADR-057's
+  peer-consumer bar (1 design-time consumer, not ≥2). The flag is carried deliberately; the
+  absent ADR is not a defect.
+- **#5056 reduced to a READ refit**, not a state-WRITE binding — `work-item-type-schema.md`
+  L536 names the write-side generalisation as a separate propagation slice, explicitly out of
+  this document's scope.
+- **#4442 resequenced to last** once its only sequencing constraint — a shared-file edge to
+  #196 — dissolved.
+- **ADR-165** records post-merge skill deploy as a local git hook. Main now carries ADR-164,
+  so 165 is `anchor+1` and policy-correct.
+
+### Reversibility
+
+**MODERATE overall, HIGH confidence.** Five of six cards are corpus and governance edits that
+revert with the merge commit — **CHEAP**. #192 is the exception: it installs a local
+`post-merge` git hook, which is machine-local state a revert of this branch does not remove.
+Backing it out means deleting the hook on each installed instance. No data is destroyed and
+no external system is touched.
+
+### Downstream impact
+
+- **Check 62 is warn-mode and deploy-time only.** It has no pre-merge surface, so a runner
+  declaration that stops resolving after this release is caught at deploy, not at review.
+- **The `post-merge` hook changes local behaviour on install.** Operators who deploy skills by
+  hand will find that step now happens for them.
+- **The C7 carriers accept both `chained` encodings.** The legacy `chained=true` limb remains
+  required by AC-4a; `tracker-manager` now carries a margin of 1 on that literal, so a future
+  edit that removes it silently breaks the criterion. Tracked as AI-016.
+- **Seven grading instruments were found broken during this release** — four fail good work,
+  three pass bad work, and every one passed its own control arm. They are recorded in the
+  action-item ledger; none is fixed by this release.
+
+### Cross-references
+
+- `core/ADRs/ADR-165-post-merge-skill-deploy-is-a-local-git-hook.md`
+- Deviation Log DEV-0..DEV-19 in this plan (DEV-13..17 corrected at Stage 8 per QA-F1)
+- Sibling **#6357** claims ADR-165/166/167 while unmerged; whoever merges second must re-run
+  `renumber-adr.py`. Different basenames merge cleanly and Check 58 is advisory-only, so this
+  needs a human at merge time.
 
 ## Issue References
 
