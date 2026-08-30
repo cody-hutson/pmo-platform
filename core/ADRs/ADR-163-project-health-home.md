@@ -2,7 +2,7 @@
 <!-- repo-integrity: allow-issue-ref -->
 ---
 title: ADR-163 — The Project entity masters health RAG as a derived projection
-status: Proposed — flips to Accepted when the operator ratifies it at this release's Stage 9 Plan Review gate. The flip is recorded in this file's own `status:` field, which is where it must be verified — never inferred from milestone closure, from a merged pull request, or from a review comment.
+status: Accepted — ratified by the operator at this release's Stage 9 Plan Review gate (determination D-14 GO, 2026-08-29, milestone one-system-of-record-per-element), and the flip landed here at Stage 13 Close. The flip is recorded in this file's own `status:` field, which is where it must be verified — never inferred from milestone closure, from a merged pull request, or from a review comment.
 date: 2026-08-29
 release: one-system-of-record-per-element
 deciders: "Stage 5 Solutioning spoke on the decision card (options analysis, evidence-grounding, blast radius) + Stage 5 Solutioning spoke on the delivery child (provenance-chain correction, enforceability correction) + release hub (carried constraints on roster count and on the concurrent-file non-scope) + operator (Stage 4 plan-review determination that the entity surface is reopened once, not twice) + Stage 6 Engineering spoke (authorship)"
@@ -24,7 +24,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Flips to **Accepted** at this release's Stage 9 Plan Review gate; per the established precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure or from a merged pull request.
+**Accepted.** Ratified at this release's Stage 9 Plan Review gate (operator determination D-14 GO, 2026-08-29); the flip landed at Stage 13 Close. Per the established precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure or from a merged pull request.
 
 **Supersedes nothing.** [ADR-065](ADR-065-health-rag-band-canonical-home.md) remains the canonical home of the health-RAG bands and of the transparent worst-component roll-up rule, unchanged and undisturbed by this record. This record decides *where the composed value is mastered*; that record decides *what the thresholds are*. They answer different questions and neither displaces the other.
 
