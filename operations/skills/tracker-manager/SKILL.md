@@ -104,7 +104,8 @@ object with `"chained": true`:
 
 **Backward compatibility.** When `chained` is absent (direct user invocation), this skill
 operates per its normal modes with AskUserQuestion enabled for approval-required Tier 1
-updates. The skip applies only when `chained=true` is explicitly present.
+updates. The skip applies only when an explicit `chained` marker is present, in either
+accepted encoding.
 
 **Relationship to the Mode Selection Protocol.** The Mode Selection Protocol owns the
 AskUserQuestion suppression semantics and per-skill three-tier classification
