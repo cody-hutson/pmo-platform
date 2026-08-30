@@ -343,6 +343,24 @@ Each stage below carries the fixed 4-field block: **Phase**, **Intent**, **Entry
 
 ---
 
+## 3.1 Stage→Axis-1 Seam (references [`../../../../core/standards/entity-lifecycle-protocol.md`](../../../../core/standards/entity-lifecycle-protocol.md) §3.10 — does NOT define the machine)
+
+[`../../../../core/standards/entity-lifecycle-protocol.md`](../../../../core/standards/entity-lifecycle-protocol.md) **§3.10** establishes the Work Item **Axis-1 base machine** and names `delivery-engine` the maintaining agent on every transition it assigns. This table records only **which gate / `T(n→n+1)` anchor each assigned edge fires at**; the machine, the qualifying evidence for each edge, and the forbidden transitions are defined in §3.10, **not here**.
+
+| §3.10 edge assigned to this skill | Fires at | Anchor |
+|---|---|---|
+| `WorkItem-backlog → WorkItem-ready` | **LG-4** exit (SKILL.md Mode C) | `T(6→7)` — exit `PASS` / `CONDITIONAL PASS` |
+| `WorkItem-ready → WorkItem-in-progress` | sprint commitment (Mode D) **or** observed Stage 7 Build / Develop (Mode E) — whichever observes the start first, **once** | committed sprint scope / observed Stage-7 position |
+| `WorkItem-in-progress → WorkItem-in-review` | **LG-5** gate-open (Mode F) | `[LG-5-EN-2]` met |
+| `WorkItem-in-review → WorkItem-done` | **LG-5** exit (Mode F) | `T(8→9)` — exit `PASS` / `CONDITIONAL PASS` |
+| `WorkItem-backlog → WorkItem-cancelled` · `WorkItem-ready → WorkItem-cancelled` · `WorkItem-in-progress → WorkItem-cancelled` | a descope of record (Mode G) | the recorded descope decision |
+
+**The intake edge is not this skill's.** §3.10 assigns the creating transition into the intake state to `intake-desk`, so it has **no** beat here and its absence is a contract, not a gap.
+
+**Open-set boundary (do not enumerate type sub-states).** This seam maps the **base** machine only. Per §3.10's extension point, per-type sub-states live in the declarative **C2 type-pack layer — an EXTERNAL, OPEN registry**; they are **not** enumerated here, and no beat in this skill resolves a work-item type in order to advance the base machine.
+
+---
+
 ## 4. Five-Model Terminology Mapping
 
 The grid below maps the 15 universal stages onto the **five methodology archetypes named in the originating requirement** (Scrum / Kanban / Waterfall / Hybrid / SAFe), showing how each stage expresses under that archetype (compress / rename / map-to-ceremony). The SAFe and Hybrid columns use the semantic anchors defined in [`methodology-parameterization-v1.md §3`](../../../../release/references/specs/methodology-parameterization-v1.md) (SAFe = Essential 5.0+ with PI cadence + ART; Hybrid = a user-configurable two-archetype combination, `delivery_approach: [A, B]`, with each constituent track in its native methodology and status reported in both constituent framings). §4.1 below defines **how the skill resolves which column to use** from the project's methodology field, and what it does when that field is absent or names an archetype outside this grid.

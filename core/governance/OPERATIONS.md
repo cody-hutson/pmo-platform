@@ -142,6 +142,23 @@ Terminating the cascade is always safe — the pending work falls back to a manu
 
 **4-skill cascade allowlist (per C7).** The four auto-cascade target skills are: **comms-writer**, **delivery-engine**, **tracker-manager**, **artifact-generator**. Each target carries a "Chained Invocation Contract" section in its SKILL.md documenting upstream invokers, chained-context pre-fill from the Handoff Manifest, and `chained=true` argument semantics. All other skills remain manual-invocation and do not participate in auto-cascade. Adding a new target requires a GitHub issue + release.
 
+**Chained-invocation arg encoding.** The Skill-tool `args` string carries the **signal** channel of a chained invocation — which skill-side branch the receiver takes. The **data** channel is the Handoff Manifest (below). Two encodings are valid; a receiver MUST accept both.
+
+| Form | Shape | Status |
+|---|---|---|
+| **Legacy — `key=value`** | whitespace-separated tokens: `chained=true mode=<value>` | Valid. **Emitted by default.** |
+| **Structured — JSON** | one JSON object: `{"chained": true, "mode": "<value>"}` | Valid. **Accepted; not currently emitted.** |
+
+**Form discrimination.** The receiver selects the form from the **first non-whitespace character** of `args`: `{` means parse as JSON; anything else means parse as `key=value` tokens. The legacy key charset is `[a-z_]`, which cannot yield a leading `{`, so the two forms are disjoint by construction.
+
+**Field mapping.** JSON keys are the legacy key names **verbatim**: `chained` (JSON boolean `true`, not the string `"true"`) and `mode` (string). A JSON object is semantically identical to the token string bearing the same keys.
+
+**Unknown keys.** A receiver ignores keys it does not recognize — forward-compat for fields added ahead of receiver support.
+
+**Malformed structured form.** An `args` string that begins with `{` but does not parse as JSON is a **hard error**: the receiver reports the parse failure and does **not** fall back to `key=value`. Silent fallback would mask an emitter defect as a mode-resolution miss.
+
+**Scope boundary — `args` vs. Manifest.** Rich, nested, or structured chained context travels in the **Handoff Manifest**, never in `args`. Do not migrate manifest fields into the `args` string; the JSON form exists to make the signal channel extensible, not to duplicate the data channel.
+
 **Relationship to the Handoff Manifest.** The Handoff Manifest schema (`operations/skills/ppm-agent/SKILL.md` Section 10) carries the cascade metadata fields (`target_skill`, `cascade_scope`, `auto_invoke`, `chain_skip_askuserquestion`, `evidence_quality`, `dependencies`, `deadline`). Rules C1–C7 consume those fields to compute whether auto-invocation fires. The Manifest defines the contract; this protocol defines the enforcement.
 
 **Alternative design (not active).** If Cowork could not chain skills programmatically, the fallback would be AD-1 "tag bundle": PPM emits a copy/paste block listing all qualifying tags; the user clicks once to expand into parallel invocations. AD-1 preserves the breadth/depth bounds but loses the push-to-resolve latency benefit. Documented here for portability to environments without Skill-tool chaining; not active in the current platform.
@@ -166,7 +183,7 @@ Governs how multi-mode skills select which mode to run on a given invocation. Pa
 
 **Three-step pattern (applied in every `## Mode Selection` section of multi-mode SKILL.md).**
 
-1. **Step 1 — Chain-skip check.** Detect `chained=true` token in the Skill-tool `args` string (see Skill Chaining Protocol above for arg semantics). When present, read the `mode=<value>` token from the same string (pre-filled from the Handoff Manifest action entry per `operations/skills/ppm-agent/SKILL.md` Section 10) and skip AUQ entirely.
+1. **Step 1 — Chain-skip check.** Detect a chained invocation in the Skill-tool `args` string in **either** encoding per Skill Chaining Protocol above, § Chained-invocation arg encoding: the legacy token `chained=true`, **or** a JSON object whose `chained` key is `true`. When present, read `mode` from the same string (pre-filled from the Handoff Manifest action entry per `operations/skills/ppm-agent/SKILL.md` Section 10) and skip AUQ entirely.
 2. **Step 2 — Tier-conditional default.** Always-ask tier invokes AUQ unconditionally; ask-when-ambiguous tier applies a per-skill trigger-match heuristic first and invokes AUQ only on ambiguous or no-match; never-ask tier has no Step 2 (no `## Mode Selection` section at all).
 3. **Step 3 — Execute.** Once the mode is resolved (via Step 1, heuristic, or AUQ), proceed to the corresponding mode section in the skill body.
 

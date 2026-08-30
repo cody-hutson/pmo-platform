@@ -140,8 +140,8 @@ For each edit (prioritized P1 → P2 → P3):
    - For suite-wide guardrails: apply to all 6 operational skills' § Guardrails.
 
 4. **Verify internal consistency**: After editing, check that the edited skill's
-   SKILL.md and reference docs don't contradict each other (RC-01 from regression
-   checks).
+   SKILL.md and reference docs don't contradict each other (verified by Mode B —
+   coherence check — in step 5 below).
 
 5. **Run Mode B** (coherence check) on the edited skill + any consuming skills
    identified in step 2. This is automatic — do not skip.
@@ -272,19 +272,43 @@ Run friction-based regression checks for edited skills and their consumers.
 
 ### Process
 
-1. **Identify applicable checks**: Read `references/regression-checks.md` Check
-   Application Matrix. Based on the edit type (guardrails edit, output format edit,
-   reference doc edit, etc.), select the applicable RC-## checks.
+1. **Identify applicable checks**: Read `references/regression-checks.md`. Select the
+   applicable checks two ways, and run both: (a) the **`## Skill-to-Check Mapping`**
+   table, keyed on the edited skill; and (b) **§ Category 7 (Registered Corpus
+   Predicates)**, whose trigger table is keyed on the **edited file**, not on a skill.
 
 2. **Run each check**: For each applicable check:
    - Read the trigger condition — does it match the edit?
    - If yes, verify the "What to Verify" item.
    - Report [SOURCE] (verified, no issue) or [INFERRED] (verification failed, describe what).
 
-3. **Always run**: RC-20 (gate compliance — don't self-assess), RC-26 (line counts).
+3. **Always run:** the **Guardrails** category (`GR-01`–`GR-07`) and the **Cross-Skill
+   Contracts** category (`XC-01`–`XC-08`). Do **not** self-assess the result — per
+   `core/disciplines/review-discipline-principles.md` Rule 10, a reviewer cannot
+   validate its own conclusions. Size conformance is asserted mechanically by
+   `deploy.sh --check` **Check 6** (`check-canonical-structure.sh`; `> 400` lines /
+   `> 25600` bytes triggers the `references/` requirement) — read its verdict, do not
+   re-derive a line count.
 
-4. **Pre-packaging checks**: If the edit is complete and the skill is being packaged,
-   run RC-27 (description < 1024), RC-31 (packaging process), RC-32 (validation).
+4. **Registered corpus predicates (fail-closed).** When the edit touched a file named
+   in § Category 7's trigger table, run the named predicate(s) and report a verdict per
+   check with the evidence that produced it:
+   - `core/schemas/tracker-schemas.md`, its `tracker-manager` skill-local half, or
+     `operations/templates/sprint-tracker-template.md` → **RCP-01**
+   - `operations/skills/delivery-engine/references/estimation-standards.md` →
+     **RCP-02**, **RCP-03**
+
+   A check that was **not run is a FAIL, not a pass.** Never report "no issues found"
+   without naming what was compared. These three predicates are the ones
+   `core/standards/gate-efficacy-standard.md` names this mode the **Runner** for;
+   `deploy.sh --check` Check 62 recomputes that resolution on every run.
+
+5. **Pre-packaging.** These are asserted mechanically; read their verdicts rather than
+   re-deriving them. Frontmatter `description:` ≤ **1024** characters (see § Domain-
+   Specific Failure Modes → *Packaging past 1024-character description limit*); package
+   build via `bash core/deploy/tools/build-skill-packages.sh <skill>`; validation via
+   `./core/deploy/deploy.sh --check` (Check 7 asserts package freshness; CI mirror
+   `skill-package-freshness.yml` runs with no path filter).
 
 ### Output
 
@@ -295,13 +319,16 @@ Run friction-based regression checks for edited skills and their consumers.
 [What was changed, from Mode A manifest]
 
 ### Applicable Checks
-| RC-## | Category | Trigger | Verdict | Evidence |
+| Check ID | Category | Trigger | Verdict | Evidence |
+
+### Registered Corpus Predicates (if § Category 7 triggered)
+| Check ID | Edited file that triggered it | Verdict | What was compared |
 
 ### Pre-Packaging (if applicable)
-| Check | Verdict |
-| RC-27 Description length | [X chars — PASS/FAIL] |
-| RC-31 Packaging process | [PASS/FAIL] |
-| RC-32 Validation | [PASS/FAIL] |
+| Assertion | Enforcer | Verdict |
+| Description length ≤ 1024 | frontmatter inspection | [X chars — PASS/FAIL] |
+| Package rebuilt | build-skill-packages.sh | [PASS/FAIL] |
+| Validation | deploy.sh --check | [PASS/FAIL] |
 
 ### Overall: PASS / FAIL
 [If FAIL: which checks failed and what to fix]
@@ -554,19 +581,22 @@ structural conformance and content quality.
 ### Packaging past 1024-character description limit — OUT
 
 - **Signature (observable signal):** A `.skill` file is packaged when the SKILL.md
-  frontmatter `description:` field exceeds 1024 characters, without the RC-27
-  pre-packaging check producing a FAIL verdict that blocks packaging.
+  frontmatter `description:` field exceeds 1024 characters, without the
+  description-length pre-packaging check producing a FAIL verdict that blocks packaging.
 - **Conditional:** do NOT package a `.skill` file when the description length exceeds
   1024 characters, because the 1024 limit is enforced by the `.skill` format parser —
   descriptions over the limit produce install failures (a documented
-  real Phase 4 packaging failure per the friction-log entry) — and the pre-packaging check (RC-27) exists
+  real Phase 4 packaging failure per the friction-log entry) — and the description-length
+  pre-packaging check exists
   precisely to catch this before a broken package reaches the user.
 - **Root cause:** Description edits creep over the limit incrementally — a few words
   added for clarity in one edit, a few more in another. The character-count check feels
   redundant on "small" revisions that did not touch the description.
-- **Mitigation:** Run the full pre-packaging gate (RC-27 description length, RC-31
-  packaging process, RC-32 validation) as a mandatory step before producing any
-  `.skill` file; on RC-27 FAIL, halt with the specific character count and request a
+- **Mitigation:** Run the full pre-packaging gate as a mandatory step before producing
+  any `.skill` file — description length ≤ 1024 by frontmatter inspection, package build
+  via `bash core/deploy/tools/build-skill-packages.sh <skill>`, and validation via
+  `./core/deploy/deploy.sh --check` (Check 7 asserts package freshness); on a
+  description-length FAIL, halt with the specific character count and request a
   description edit before proceeding; do not produce the package with a known
   violation.
 - **Principal response vs. junior response:** Principal runs the gate, halts on FAIL,
@@ -734,7 +764,7 @@ Read these before operating in any mode. Each doc serves a specific purpose:
 | File | When to Read | Purpose |
 |------|-------------|---------|
 | `../../../core/skills/registry.md` | Before every Mode A edit, during Mode B | Maps every skill-to-skill dependency, tag taxonomy, proven edges, RAID prefixes |
-| `references/regression-checks.md` | During Mode C, after every Mode A edit | 35 friction-based checks organized by category with trigger conditions |
+| `references/regression-checks.md` | During Mode C, after every Mode A edit | 49 checks across 8 categories, with a Skill-to-Check Mapping table and a Category 7 file-keyed trigger table |
 | `references/quality-standard.md` | During Mode D, when auditing quality | Phase 8 baselines per dimension, anti-patterns, behavioral invariants (H1–H10) |
 | `references/suite-contracts.md` | During Mode B, when checking coherence | Verbatim output contracts, shared rules, guardrails, section registry |
-| `../../reference/review-discipline-principles.md` | During Mode D for review-class skills | 10 anti-laziness rules and 6-deliverable output structure |
+| `../../../core/disciplines/review-discipline-principles.md` | During Mode D for review-class skills | 10 anti-laziness rules and 6-deliverable output structure |

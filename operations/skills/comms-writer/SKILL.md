@@ -92,7 +92,7 @@ This skill produces **6 primary PMO-unique communication types** (below). Two fu
 
 ### Step 1 — Check for chained invocation
 
-If this invocation was chained from ppm-agent (detected when the Skill-tool `args` string contains the token `chained=true`), read the `mode=<value>` token from the same `args` string (pre-filled from the Handoff Manifest action entry per [OPERATIONS.md § Skill Chaining Protocol](../../OPERATIONS.md)) and skip directly to Step 4.
+If this invocation was chained from ppm-agent — detected when the Skill-tool `args` string carries a chained-invocation signal in **either** encoding defined at [OPERATIONS.md § Skill Chaining Protocol](../../OPERATIONS.md) → *Chained-invocation arg encoding*: the legacy token `chained=true`, or a JSON object whose `chained` key is `true` — read the `mode` value from the same `args` string (`mode=<value>` in the legacy form; pre-filled from the Handoff Manifest action entry) and skip directly to Step 4.
 
 > **Live chain-skip.** comms-writer IS on the 4-skill cascade allowlist (per Skill Chaining Protocol rule C7 — PPM `[COMMS]` + complete context → comms-writer (Tier 2 draft)). See [§ Chained Invocation Contract](#chained-invocation-contract) below for the full integration: upstream invokers, chained-context pre-fill from the Handoff Manifest, and `chained=true` arg semantics. When chained, AUQ is suppressed per the Contract's suppress-opening-AskUserQuestion clause; the draft is produced per the Handoff Manifest's `what` field and stays Tier 2 (draft) until the user approves the send per rule C4.
 
@@ -507,8 +507,11 @@ schema):
 | `cascade_depth_remaining` | Depth budget (C1); decrement on invocation |
 | `deadline` | Send deadline or recommended-send date |
 
-**`chained=true` arg semantics.** When ppm-agent invokes via the Skill tool with arg
-`chained=true`:
+**Chained-arg semantics.** When ppm-agent invokes via the Skill tool with a
+chained-invocation `args` string in **either** encoding defined at
+[OPERATIONS.md § Skill Chaining Protocol](../../OPERATIONS.md) →
+*Chained-invocation arg encoding* — the legacy token `chained=true`, or a JSON
+object with `"chained": true`:
 
 1. **Suppress opening AskUserQuestion** — do not open a clarifying dialog before producing
    output. Contract owned by the Mode Selection Protocol.
@@ -523,8 +526,8 @@ schema):
    tracker-manager to log the draft).
 
 **Backward compatibility.** When `chained` is absent (direct user invocation), this skill
-operates per its normal modes with AskUserQuestion enabled. The skip applies only when
-`chained=true` is explicitly present.
+operates per its normal modes with AskUserQuestion enabled. The skip applies only when an explicit `chained` marker is present, in either
+accepted encoding.
 
 **Relationship to the Mode Selection Protocol.** The Mode Selection Protocol owns the
 AskUserQuestion suppression semantics and per-skill three-tier classification

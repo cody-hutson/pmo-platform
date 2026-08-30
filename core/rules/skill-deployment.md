@@ -134,6 +134,14 @@ Every SKILL.md frontmatter carries a `version:` field per `core/standards/versio
 docx, pdf, pptx, xlsx, schedule — managed by Anthropic, not version-controlled.
 
 ## Deployment Steps (Post-Merge)
+
+**Step 1 runs automatically on the primary checkout.** A `post-merge` git hook
+redeploys the skills a merge brought in, so a merge to `main` no longer depends on
+the operator remembering to deploy. The hook is described under *Automatic
+post-merge deploy* below; the numbered steps here remain the authoritative
+description of what a deploy does, the path to use on any machine where the hook
+is not installed, and — for steps 2 and 3 — work the hook does not do at all.
+
 1. Deploy changed skills and packages: `./deploy.sh --deploy`
    - Auto-detects changed skills via tag-based git diff
    - Copies SKILL.md files to Cowork install path (S-2 mechanism)
@@ -143,6 +151,47 @@ docx, pdf, pptx, xlsx, schedule — managed by Anthropic, not version-controlled
    - To deploy specific skills: `./deploy.sh --deploy daily-status comms-writer`
 2. Verify deployment: open Cowork, invoke the changed skill, confirm expected behavior. In Claude Code, type `/` and confirm the skill appears as a plain entry (e.g., `/daily-status`).
 3. **Rebuild .skill package — MANDATORY for every modified skill** via `python3 -m scripts.package_skill <skill-dir> packages/` from `release/skills/pmo-skill-refiner/`. Every skill in `{core,operations,release}/skills/` has a corresponding `.skill` package in `packages/` — no exceptions. Source-vs-package staleness is a release-blocking compliance gap, structurally enforced by `deploy.sh --check` Check 7 (package-freshness). Check 7 asserts freshness **by content, not by mtime** (per the gate-efficacy standard): each build emits a committed content-baseline sidecar `packages/<skill>.skill.sha256` (the rebuild-stable content-manifest hash), and Check 7 stages a rebuild of source and compares its content hash against that baseline — so a stale package fails even on a fresh checkout where every file mtime is equal, while a mere `touch` of a current package does not. Use `bash core/deploy/tools/build-skill-packages.sh <skill>` (which injects `TEMPLATE_SYNC_MAP` canonicals and writes the sidecar) rather than calling the packager directly when a skill consumes injected templates, so the committed package and its sidecar both reflect current canonical content.
+
+### Automatic post-merge deploy
+
+`core/hooks/git-post-merge-deploy.sh` is installed as the repository's `post-merge`
+git hook by `docs/scripts/setup-workspace.sh`, and re-installed by `./update.sh`,
+which delegates to the same install pass. It is not a manual step.
+
+When a merge completes, the hook derives the skills that merge brought in and runs
+`deploy.sh --deploy <names>` for them — the same targeted form documented in step 1.
+It computes its own change set from `ORIG_HEAD` rather than reusing the tag-based
+detection, because the tag diff answers "what changed since the last release" while
+the question after a merge is "what did this merge bring in". Where no diff base
+resolves, or where the merge deleted a skill, it falls back to the no-argument
+`deploy.sh --deploy`, which is exactly the manual step-1 behaviour.
+
+Three conditions gate it, and all three must hold:
+
+- **Primary checkout only.** A linked worktree has no hooks directory of its own —
+  git reads hooks from the primary checkout — so without this gate a merge inside a
+  release worktree would install unmerged branch content over the live copies.
+- **`main` only.** A merge on any other branch installs work that is not yet the
+  mainline.
+- **Not suppressed.** Setting `PMO_SKIP_POST_MERGE_DEPLOY=1` for a single merge
+  skips the deploy.
+
+The hook never fails a merge: the merge has already completed by the time it runs,
+so every path exits successfully and it reports what it did on standard error.
+
+**The hook deploys; it does not rebuild.** It refreshes installed source and package
+copies, and it does not rebuild a stale `.skill` package — that remains step 3, an
+obligation of the change that edited the skill, enforced by the package-freshness
+gate. A merge whose package was never rebuilt still carries a stale package
+afterwards, and the hook is not a substitute for that step.
+
+**The hook is inert until it is installed, and it only repairs merges it observes.**
+Drift from a merge that predates the install, or on a machine where the install has
+not been run, is not closed by it; the manual step-1 deploy remains the repair.
+
+An operator whose repository is cloned outside the workspace root is told how to
+install the hook at setup time rather than having it installed automatically, and
+can force the automatic install by setting `PMO_INSTALL_GIT_HOOKS=1`.
 
 ## References-only change propagation
 A release that touches any `skills/<skill>/references/**` file (a reference doc,

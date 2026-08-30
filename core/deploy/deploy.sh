@@ -1958,11 +1958,19 @@ _cc_compute_verdict() {
 # whole difference between an obligation that fires and one that must be remembered.
 #
 # WHAT IT ASSERTS, AND WHAT IT DOES NOT. It asserts R1 — CARRIED: the named
-# runner-definition file exists and contains the declared anchor. It does NOT assert R2
-# (reached), does NOT read the anchor's body, and cannot distinguish a well-written
-# predicate from a stub carrying the right heading. Naming that bound is the difference
-# between a gate and gate theatre — a control that reads as enforcement while functioning
-# as a no-op is worse than no control, which is this milestone's whole thesis.
+# runner-definition file exists and contains the declared anchor. It ALSO asserts R2 —
+# REACHED, in the one form a static check can: a row may declare `runner-src:
+# <path>::<anchor>`, and that file's own BODY must name the anchor, so a runner named for
+# a predicate it never mentions is caught. Alongside that, every check id the runner's
+# body cites must resolve in the check bank's registered namespace, and any id in the
+# UNREGISTERED `RC-NN` namespace is a failure by construction.
+#
+# The remaining bound, stated honestly rather than left to be assumed: R2 here means the
+# runner's body NAMES the anchor. It does NOT prove the runner is invoked at the right
+# time, does NOT read the anchor's body, and cannot distinguish a well-written predicate
+# from a stub carrying the right heading. Naming that bound is the difference between a
+# gate and gate theatre — a control that reads as enforcement while functioning as a
+# no-op is worse than no control, which is this milestone's whole thesis.
 #
 # ANTI-VACUITY. A register carrying zero resolution pointers verdicts NOSET, never CLEAN,
 # and an unreadable standard verdicts NOSET too: a check whose input set is empty must SAY
@@ -1970,11 +1978,21 @@ _cc_compute_verdict() {
 # pointer COUNT, so a parser that silently stopped matching surfaces as a count change
 # rather than as a quiet pass.
 #
-# PARSING. Pointers are read as `runner-def: <path>::<anchor>` with path and anchor
-# restricted to a conservative character class, so the standard's own PROSE mentions of
-# the bare token (e.g. "declaring a `runner-def:` resolution pointer") cannot parse as
-# declarations — a backtick is outside the class, so the match fails rather than
-# half-succeeding.
+# PARSING. Pointers are read as `runner-def: <path>::<anchor>` and `runner-src:
+# <path>::<anchor>` with path and anchor restricted to a conservative character class, so
+# the standard's own PROSE mentions of the bare token (e.g. "declaring a `runner-def:`
+# resolution pointer") cannot parse as declarations — a backtick is outside the class, so
+# the match fails rather than half-succeeding. Both keywords share one grammar, so the
+# R2 arm inherits that parser guarantee rather than re-earning it.
+#
+# NAMESPACE CLOSURE, AND WHY THE TOKEN EDGES ARE LOAD-BEARING. Check ids are extracted by
+# tokenising the runner's body into maximal runs of [A-Za-z0-9_-] and matching each run
+# WHOLE (grep -x). That is exactly a two-sided word boundary over the `[\w-]` alphabet,
+# and it is the reason two live `RC-` namespaces can never be conflated: the register's
+# own `RC-<stage>-<slug>` ids (RC-1-intake-readiness, RC-13-post-deploy-verification —
+# 17 of them in review-composition-framework.md) tokenise as ONE run each and therefore
+# cannot match `RC-[0-9]{2}`. A naive substring or single-edge \b probe matches them and
+# would fail the register against its own vocabulary. Asserted directly by RR-8.
 _rr_compute_verdict() {
   local std="${RR_STANDARD:-core/standards/gate-efficacy-standard.md}"
   local root="${RR_ROOT:-.}"
@@ -1984,11 +2002,12 @@ _rr_compute_verdict() {
     return 0
   fi
 
-  local decls
+  local decls src_decls
   decls="$(/usr/bin/grep -o 'runner-def:[[:space:]]*[A-Za-z0-9._/-]\{1,\}::[A-Za-z0-9._-]\{1,\}' "$std" 2>/dev/null || true)"
+  src_decls="$(/usr/bin/grep -o 'runner-src:[[:space:]]*[A-Za-z0-9._/-]\{1,\}::[A-Za-z0-9._-]\{1,\}' "$std" 2>/dev/null || true)"
 
-  if [[ -z "$decls" ]]; then
-    printf 'NOSET|register at %s declares zero runner-def resolution pointers — the check would assert nothing\n' "$std"
+  if [[ -z "$decls" && -z "$src_decls" ]]; then
+    printf 'NOSET|register at %s declares zero runner-def/runner-src resolution pointers — the check would assert nothing\n' "$std"
     return 0
   fi
 
@@ -2011,6 +2030,57 @@ _rr_compute_verdict() {
       detail="${detail}    runner-def ${p}::${a} — file exists but does NOT carry anchor '${a}' (R1 fails: named runner cannot surface this predicate)"$'\n'
     fi
   done <<< "$decls"
+
+  # ── R2 arm — runner-src: the named runner's OWN BODY must reach the predicate ──
+  # Arm A (below): the source file exists and names the declared anchor.
+  # Arm B (below): every check id that body cites resolves in the bank's registered
+  # namespace, and no id sits in the unregistered RC-NN namespace.
+  # A row failing either arm counts ONCE, so `bad` stays <= `total` and the verdict
+  # vocabulary (NOSET / CLEAN|<n> / UNRESOLVED|<bad>|<total>) is unchanged — the call
+  # site needs no edit.
+  local bank="$root/core/standards/regression-checks.md"
+  local bank_ids=""
+  if [[ -f "$bank" ]]; then
+    bank_ids="$(/usr/bin/tr -c 'A-Za-z0-9_-' '\n' < "$bank" 2>/dev/null \
+      | /usr/bin/grep -xE '(EQ|PTR|OS|XC|GR|SS|RCP|ANC)-[0-9]{2}' \
+      | /usr/bin/sort -u || true)"
+  fi
+
+  local row_bad body_toks unreg bankrefs tok
+  while IFS= read -r d; do
+    [[ -n "$d" ]] || continue
+    total=$((total + 1))
+    body="${d#*runner-src:}"
+    body="${body#"${body%%[![:space:]]*}"}"   # strip leading whitespace
+    p="${body%%::*}"
+    a="${body#*::}"
+    if [[ ! -f "$root/$p" ]]; then
+      bad=$((bad + 1))
+      detail="${detail}    runner-src ${p}::${a} — runner-source file not found"$'\n'
+      continue
+    fi
+    row_bad=0
+    if ! /usr/bin/grep -qF -- "$a" "$root/$p"; then
+      row_bad=1
+      detail="${detail}    runner-src ${p}::${a} — file exists but its BODY does NOT name anchor '${a}' (R2 fails: the named runner never reaches this predicate)"$'\n'
+    fi
+    # Whole-token extraction == two-sided [\w-] boundary. See NAMESPACE CLOSURE above.
+    body_toks="$(/usr/bin/tr -c 'A-Za-z0-9_-' '\n' < "$root/$p" 2>/dev/null | /usr/bin/sort -u || true)"
+    unreg="$(printf '%s\n' "$body_toks" | /usr/bin/grep -xE 'RC-[0-9]{2}' || true)"
+    if [[ -n "$unreg" ]]; then
+      row_bad=1
+      detail="${detail}    runner-src ${p} — cites UNREGISTERED namespace id(s) [$(printf '%s' "$unreg" | /usr/bin/tr '\n' ' ')] — RC-NN resolves to no definition anywhere in the corpus"$'\n'
+    fi
+    bankrefs="$(printf '%s\n' "$body_toks" | /usr/bin/grep -xE '(EQ|PTR|OS|XC|GR|SS|RCP|ANC)-[0-9]{2}' || true)"
+    while IFS= read -r tok; do
+      [[ -n "$tok" ]] || continue
+      if ! /usr/bin/grep -qxF -- "$tok" <<<"$bank_ids"; then
+        row_bad=1
+        detail="${detail}    runner-src ${p} — cites '${tok}', which does not resolve in the check bank at core/standards/regression-checks.md"$'\n'
+      fi
+    done <<< "$bankrefs"
+    [[ $row_bad -eq 1 ]] && bad=$((bad + 1))
+  done <<< "$src_decls"
 
   if [[ $bad -eq 0 ]]; then
     printf 'CLEAN|%s\n' "$total"
@@ -11891,14 +11961,16 @@ sys.stdout.write("".join(out) + "|")
   # than reviewed — the reviewer-instruction form of this same obligation failed on its
   # own first application, which is why it is a computation here.
   #
-  # HONEST GUARANTEE: R1 only. It does not assert R2 (reached), does not read the
-  # anchor's body, and is deploy-time-only with NO pre-merge surface — so a PR can merge
+  # HONEST GUARANTEE: R1, plus R2 in its static form — a `runner-src:` row asserts that
+  # the named runner's own body reaches the anchor and cites no unregistered check id. It
+  # does not prove the runner is invoked at the right time, does not read the anchor's
+  # body, and is deploy-time-only with NO pre-merge surface — so a PR can merge
   # with an unresolvable row and this check catches it at the next deploy-time run. The
   # flip to `enforce` is an OPERATOR DECISION recorded in gate-efficacy-standard.md's
   # flip ledger, and Requirement (b′) blocks `required` until a CI mirror exists.
   REGISTER_RUNNER_MODE="$(resolve_check_mode "register-runner-resolution" "warn")"
   if [[ "$REGISTER_RUNNER_MODE" != "off" ]]; then
-    log "Check 62: Register runner-resolution (every runner-def pointer resolves to a runner that carries the predicate; advisory / deploy-time-only; warn-mode initial)"
+    log "Check 62: Register runner-resolution (every runner-def pointer resolves to a runner that CARRIES the predicate, and every runner-src pointer to a runner that REACHES it; advisory / deploy-time-only; warn-mode initial)"
     local c62_verdict c62_tok
     c62_verdict="$(_rr_compute_verdict)"
     c62_tok="${c62_verdict%%|*}"
@@ -11909,21 +11981,21 @@ sys.stdout.write("".join(out) + "|")
         flag_warn_or_issue "register-runner-resolution" "${c62_verdict#NOSET|}"
         ;;
       CLEAN)
-        log "  OK:    all ${c62_verdict#CLEAN|} gate-coverage register runner-def pointer(s) resolve (R1: named runner carries the predicate)"
+        log "  OK:    all ${c62_verdict#CLEAN|} gate-coverage register resolution pointer(s) resolve (R1: named runner carries the predicate; R2: it reaches it and cites no unregistered check id)"
         ;;
       UNRESOLVED)
         local _c62_rest="${c62_verdict#UNRESOLVED|}"
         local _c62_bad="${_c62_rest%%|*}" _c62_tot="${_c62_rest##*|}"
         case "$REGISTER_RUNNER_MODE" in
           enforce)
-            log "  FAIL:  register-runner-resolution — $_c62_bad of $_c62_tot register runner-def pointer(s) do not resolve (see stderr detail); the remedy is to encode the predicate in the named runner or re-point the row, never to delete the pointer"
+            log "  FAIL:  register-runner-resolution — $_c62_bad of $_c62_tot register resolution pointer(s) do not resolve (see stderr detail); the remedy is to encode the predicate in the named runner or re-point the row, never to delete the pointer"
             ISSUES=$((ISSUES + 1))
             ;;
           warn)
-            log "  WARN:  register-runner-resolution — $_c62_bad of $_c62_tot register runner-def pointer(s) do not resolve — a row naming a runner that does not carry its predicate asserts nothing (warn-mode; the flip to enforce is an operator decision recorded in gate-efficacy-standard.md, never auto-promoted by hit count)"
+            log "  WARN:  register-runner-resolution — $_c62_bad of $_c62_tot register resolution pointer(s) do not resolve — a row naming a runner that does not carry or does not reach its predicate asserts nothing (warn-mode; the flip to enforce is an operator decision recorded in gate-efficacy-standard.md, never auto-promoted by hit count)"
             local _c62_ts
             _c62_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            printf '{"ts":"%s","check":"%s","detail":"%s of %s runner-def pointer(s) unresolved"}\n' \
+            printf '{"ts":"%s","check":"%s","detail":"%s of %s resolution pointer(s) unresolved"}\n' \
               "$_c62_ts" "register-runner-resolution" "$_c62_bad" "$_c62_tot" >> "$WARN_LOG" 2>/dev/null || true
             ;;
         esac
@@ -14309,6 +14381,69 @@ EOF
   _v="$(_rr_selftest_verdict "$_r/core/standards/prose-only.md")"; _tok="${_v%%|*}"
   [[ "$_tok" == "NOSET" ]] || { echo "FAIL: RR-6 prose-only mentions of the runner-def token must parse to zero declarations (NOSET), got '$_v'"; failures=$((failures+1)); }
 
+  # ── RR-7 / RR-8 — the R2 arm (`runner-src:`), #4442 ────────────────────────
+  # RR-7 is the MUST-FLAG (sensitivity) arm and RR-8 the MUST-NOT-FLAG (specificity)
+  # arm. The pair is what makes RR-8's CLEAN meaningful: without RR-7 a guard that
+  # never fires would pass RR-8, and without RR-8 a guard that flags everything would
+  # pass RR-7. RR-8 is specifically the NAMESPACE-COLLISION arm — it seeds the live
+  # `RC-<stage>-<slug>` ids the register itself uses, which a single-edge word-boundary
+  # probe matches and this one must not.
+  _rr_seed_standard; _rr_seed_def
+  /bin/mkdir -p "$_r/release/skills/pmo-skill-editor"
+  local _rsrc="$_r/release/skills/pmo-skill-editor/SKILL.md"
+  # Seed a bank so the namespace-closure arm resolves against a real registered set.
+  /bin/cat > "$_r/core/standards/regression-checks.md" <<'EOF'
+# Fixture check bank
+**GR-01** guardrail check. **XC-01** cross-skill check. **RCP-01** registered predicate.
+EOF
+  _rr_seed_src_standard() {
+    /bin/cat > "$_rstd" <<'EOF'
+# Fixture standard
+
+| Invariant | Enforcing gate |
+|---|---|
+| first invariant | **Runner:** fixture, `runner-src: release/skills/pmo-skill-editor/SKILL.md::RCP-01` |
+EOF
+  }
+
+  # RR-7 — the runner's body does NOT name the declared anchor ⇒ UNRESOLVED.
+  _rr_seed_src_standard
+  /bin/cat > "$_rsrc" <<'EOF'
+# Fixture runner body
+This runner names GR-01 and XC-01 but never mentions the predicate it is named for.
+EOF
+  _v="$(_rr_selftest_verdict)"
+  [[ "$_v" == "UNRESOLVED|1|1" ]] || { echo "FAIL: RR-7 a runner-src whose body does not name its anchor must verdict UNRESOLVED|1|1, got '$_v'"; failures=$((failures+1)); }
+
+  # RR-7b — an UNREGISTERED RC-NN id in the runner's body ⇒ UNRESOLVED, even though the
+  # anchor itself is present. This is the #4442 defect in fixture form.
+  /bin/cat > "$_rsrc" <<'EOF'
+# Fixture runner body
+Runs RCP-01. Also instructs the reader to run RC-20 and RC-26, which resolve nowhere.
+EOF
+  _v="$(_rr_selftest_verdict)"
+  [[ "$_v" == "UNRESOLVED|1|1" ]] || { echo "FAIL: RR-7b an unregistered RC-NN id in the runner body must verdict UNRESOLVED|1|1, got '$_v'"; failures=$((failures+1)); }
+
+  # RR-8 — SPECIFICITY / namespace collision. The body names its anchor, cites only
+  # resolvable bank ids, and carries the live `RC-<stage>-<slug>` identifiers. Those
+  # must NOT match the RC-NN unregistered pattern ⇒ CLEAN.
+  /bin/cat > "$_rsrc" <<'EOF'
+# Fixture runner body
+Runs RCP-01, GR-01 and XC-01. Composes RC-1-intake-readiness and
+RC-13-post-deploy-verification from the review-composition register, and V-XRC-01.
+EOF
+  _v="$(_rr_selftest_verdict)"
+  [[ "$_v" == "CLEAN|1" ]] || { echo "FAIL: RR-8 RC-<stage>-<slug> ids must NOT match the RC-NN unregistered namespace (expected CLEAN|1), got '$_v'"; failures=$((failures+1)); }
+
+  # RR-9 — a bank id the bank does not define ⇒ UNRESOLVED. Without this, the closure
+  # arm could accept any well-shaped id and assert nothing about the bank.
+  /bin/cat > "$_rsrc" <<'EOF'
+# Fixture runner body
+Runs RCP-01 and SS-99, the latter defined in no bank category.
+EOF
+  _v="$(_rr_selftest_verdict)"
+  [[ "$_v" == "UNRESOLVED|1|1" ]] || { echo "FAIL: RR-9 a bank-shaped id absent from the bank must verdict UNRESOLVED|1|1, got '$_v'"; failures=$((failures+1)); }
+
   /bin/rm -rf "$_r" 2>/dev/null || true
 
   # ─── Assertion group DS — deployment-status emitter (#4215) ─────────────────
@@ -14663,7 +14798,7 @@ EOF
   echo "  complementary-pair ownership validated (#4178, group CP):" >&2
   echo "    CP-4 absent registry NOSET / CP-1 intact pair PASS / CP-2 leaked owned-section OWNERSHIP-DRIFT / CP-5 missing shared-section OWNERSHIP-DRIFT / CP-6 divergent shared-section SHARED-DIVERGENCE / CP-3 unregistered cross-tree pair UNREGISTERED-PAIR / CP-3b named README.md exclusion holds / CP-7 malformed record MALFORMED" >&2
   echo "  register runner-resolution validated (#4208, group RR):" >&2
-  echo "    RR-5 absent standard NOSET / RR-1 all pointers resolve CLEAN|2 / RR-2 runner no longer carries its anchor UNRESOLVED|1|2 (the shipped defect, in fixture form) / RR-3 absent runner-definition file UNRESOLVED|2|2 / RR-4 zero pointers NOSET / RR-6 prose-only token mentions parse to zero (parser control)" >&2
+  echo "    RR-5 absent standard NOSET / RR-1 all pointers resolve CLEAN|2 / RR-2 runner no longer carries its anchor UNRESOLVED|1|2 (the shipped defect, in fixture form) / RR-3 absent runner-definition file UNRESOLVED|2|2 / RR-4 zero pointers NOSET / RR-6 prose-only token mentions parse to zero (parser control) / RR-7 runner-src body does not name its anchor UNRESOLVED|1|1 / RR-7b unregistered RC-NN id in the runner body UNRESOLVED|1|1 (the #4442 defect, in fixture form) / RR-8 RC-<stage>-<slug> ids do NOT match RC-NN, CLEAN|1 (namespace-collision specificity arm) / RR-9 bank-shaped id absent from the bank UNRESOLVED|1|1" >&2
   echo "  deployment-status emitter validated (#4215, group DS):" >&2
   echo "    DS-1 well-formed slug OK / DS-2 empty + pipe-bearing + whitespace-bearing slugs rejected / DS-3 outcome derivation incl. DS-3c the degraded-but-not-in-FAILURES union term (FAILURES is the exit-code oracle, not the deploy-health oracle) / DS-4 SILENCE DEFAULT — absent --release emits ZERO rows, DS-4b malformed slug likewise / DS-5 CONTROL — the same call WITH a slug emits exactly 1 row carrying the fixed 10-column contract / DS-6 escalated row survives with result:FAIL + DS-6c payload pipe-forging guard + DS-6d 300-char bound / DS-7 THE OBSERVING STEP — targets-with-no-flag WARNs, zero-targets does NOT (honest no-op), release-stamped does NOT / DS-8 exactly 3 emitting subtypes, producer-less subtypes never emitted, with a firing control arm / DS-9 a failing event writer must not fail the deploy / DS-10 the CANONICAL writer accepts all three subtypes via --dry-run, and rejects an out-of-enum subtype and a version-shaped release key (two control arms). Every write in this group routes through the DS_WRITER stub seam — no assertion can append to the real append-only log." >&2
   echo "  G1-03 evidence shapes validated (#4923, group EV):" >&2
