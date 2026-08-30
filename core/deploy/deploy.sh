@@ -264,12 +264,35 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib-template-sync-source.sh"
 # its resolver is what makes the ordering readable instead of load-bearing by
 # accident.
 
-# Echo the whole warn-log family, oldest -> newest, one absolute path per line:
+# Echo the whole warn-log family in SEGMENT-INDEX order, one absolute path per
+# line. The order is CHRONOLOGICAL FROM THE ANCHOR FORWARD -- not a global
+# oldest -> newest claim; see the pre-anchor note below for why that distinction
+# is load-bearing rather than pedantic.
 #
-#   <instance>/deploy-check-warn-log.00000.jsonl   <- oldest segment
+#   <instance>/deploy-check-warn-log.00000.jsonl   <- the ANCHOR: the segment
+#                                                     this lifecycle rotated
+#                                                     first
 #   ...
 #   <instance>/deploy-check-warn-log.NNNNN.jsonl
 #   <instance>/deploy-check-warn-log.jsonl         <- hot file, ALWAYS last
+#
+# THE ANCHOR IS NOT NECESSARILY THE OLDEST RECORD, AND AN INDEX IS NOT AN AGE.
+# warn_log_path() assigns `highest existing index + 1`, so indices only ever
+# increase. A log that PREDATES the anchor -- an orphaned pre-relocation log
+# adopted into the family -- therefore cannot be given an index below the anchor
+# without renumbering live instance state, which this design does not do. Such a
+# PRE-ANCHOR PREDECESSOR claims the next free index ABOVE the current maximum
+# while holding the OLDEST records in the family. That is a deliberate,
+# documented exception to index-equals-chronology, and it is the reason this
+# block states the order from the anchor forward: a consumer that needs true
+# chronology reads the rows' own timestamps and must never infer age from the
+# index.
+#
+# AN ADOPTION RESOLVES ITS TARGET INDEX AT RUN TIME AND NEVER ASSUMES `00000` IS
+# FREE. After the first rotation `00000` is a live segment holding real records,
+# and `mv` onto an occupied name overwrites them silently and irrecoverably. The
+# free index is the one above the family's current maximum, read from
+# warn_log_segment_set() at the moment of the move.
 #
 # EVERY DRAIN MUST READ THROUGH HERE AND MUST NOT OPEN THE HOT PATH DIRECTLY.
 # That is a correctness rule, not a style one: after the first rotation a
