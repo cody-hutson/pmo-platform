@@ -24,7 +24,7 @@ source_observations:
 
 **Numbering.** `168` was derived at Engineering time, immediately before this file was authored, via `release/tools/renumber-adr.py --detect`. The oracle reported `ANCHOR 165 origin/main` and `NEXT-FREE 166`; `--detect` additionally reported `CLAIMED-SET-BRANCH-ONLY 166,167 (detection only — never binds)`, both `BINDS`, and computed `next=168`. `--next-free` alone is **mainline-anchored and under-reports** on a branch that already carries claims, which is why the union of the mainline anchor and this branch's own claims is the operative input. The number was deliberately **not** reserved at design time — the oracle is a *read*, not a reservation. A duplicate is mechanically renumberable by this same tool at merge time, whereas a **gap blocks the repo**, because the next release's `anchor + 1` lands under a hole. That asymmetry is the whole rule.
 
-**A pre-existing collision on this branch is recorded, not silently stepped over.** `--detect` reports `core/ADRs/ADR-165-bounded-by-relocation-not-by-discard.md` as `DUPLICATE MAINLINE` — mainline already carries `ADR-165-post-merge-skill-deploy-is-a-local-git-hook.md`. That record belongs to another card and is **not** touched here; it is surfaced so the collision is resolved deliberately at merge rather than discovered there.
+**A pre-existing collision on this branch is recorded, not silently stepped over.** `--detect` reports `core/ADRs/ADR-169-bounded-by-relocation-not-by-discard.md` as `DUPLICATE MAINLINE` — mainline already carries `ADR-169-post-merge-skill-deploy-is-a-local-git-hook.md`. That record belongs to another card and is **not** touched here; it is surfaced so the collision is resolved deliberately at merge rather than discovered there.
 
 ## Context
 

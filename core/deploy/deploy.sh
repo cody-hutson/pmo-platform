@@ -191,7 +191,7 @@ FORCE_ALL=false
 # The warn-log lifecycle decision this block's WARN_LOG_* half implements — why
 # the hot file is bounded by relocation rather than by discard, and where the
 # 16 MiB magnitude comes from — is recorded in
-# core/ADRs/ADR-165-bounded-by-relocation-not-by-discard.md.
+# core/ADRs/ADR-169-bounded-by-relocation-not-by-discard.md.
 #
 # WHERE THE FUNCTIONS LIVE, AND WHY THEY ARE NOT HERE. The two warn-log helpers
 # — warn_log_segment_set() (the drain's ONLY read surface) and warn_log_path()

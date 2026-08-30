@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-165 — An append-only log whose consumer needs its history is bounded by relocation, not by discard"
+title: "ADR-169 — An append-only log whose consumer needs its history is bounded by relocation, not by discard"
 status: Proposed — flips to Accepted when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
 date: 2026-08-29
 release: warn-mode-gate-graduation
@@ -16,7 +16,7 @@ source_observations:
   - "A rotation boundary implemented as a same-directory rename cannot lose a record: an append whose file descriptor is already open follows the inode into the segment, and the next append re-opens by path and creates a fresh hot file. Copy-then-truncate has a window in which appended records are destroyed."
 ---
 
-# ADR-165 — Bounded by relocation, not by discard
+# ADR-169 — Bounded by relocation, not by discard
 
 ## Status
 
@@ -25,6 +25,8 @@ source_observations:
 **Numbering provenance.** Allocated at this Engineering commit as the next number above the **union** of the mainline anchor and this branch's own in-flight claims. `renumber-adr.py --detect` reported `ANCHOR 162 origin/main`, `NEXT-FREE 163`, and `CLAIMED-SET-BRANCH-ONLY 163,164 (detection only — never binds)`. The oracle anchors on mainline and cannot see a sibling's unmerged claim, so `--next-free` alone would have collided **twice** on this same branch. 165 was taken against the union and re-verified to report `BINDS`.
 
 A concurrent release independently claims 163 and 164 against the same mainline anchor. That is correct behaviour by both sides — unmerged sibling claims are advisory — and whoever merges second renumbers. Taking the union number rather than jumping ahead to dodge the collision is deliberate: a gap blocks the repo, a duplicate is tooled.
+
+**Numbering provenance — `165 → 169`.** Held **ADR-165** branch-local; renumbered to **ADR-169** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 165. In-release citations that read "ADR-165" denote this record.
 
 ## Context
 
