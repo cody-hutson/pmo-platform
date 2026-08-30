@@ -291,8 +291,13 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib-template-sync-source.sh"
 # AN ADOPTION RESOLVES ITS TARGET INDEX AT RUN TIME AND NEVER ASSUMES `00000` IS
 # FREE. After the first rotation `00000` is a live segment holding real records,
 # and `mv` onto an occupied name overwrites them silently and irrecoverably. The
-# free index is the one above the family's current maximum, read from
-# warn_log_segment_set() at the moment of the move.
+# free index is the one above the family's current maximum, resolved at the
+# moment of the move from the NUMBERED-SEGMENT GLOB ALONE -- the same
+# `[0-9][0-9][0-9][0-9][0-9]` scan warn_log_path() performs below, whose LAST
+# entry is the highest index by the lexical-equals-numeric property noted under
+# SEGMENT KEY. NOT from warn_log_segment_set(): that set appends the HOT FILE
+# LAST and the hot file carries no index, so a tail-style read of it yields a
+# path with no index to increment rather than the family's maximum.
 #
 # EVERY DRAIN MUST READ THROUGH HERE AND MUST NOT OPEN THE HOT PATH DIRECTLY.
 # That is a correctness rule, not a style one: after the first rotation a
