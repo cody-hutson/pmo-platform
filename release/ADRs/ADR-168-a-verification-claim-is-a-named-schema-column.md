@@ -16,7 +16,7 @@ source_observations:
   - "`command` is matched by full-cell EQUALITY while the two long forms take containment. The split is not stylistic: containment on the long forms is load-bearing for 20 live rows, and `command` is a short common English word on which containment is the false-positive risk. Measured, the combination swallows 0 correct-skip blocks."
 ---
 
-# ADR-168 — A verification claim is a NAMED SCHEMA COLUMN, not a shared word; and the method-column match stays containment
+# ADR-168 — An unindexable verification table ERRORs only when it names a verification-schema column; sharing the word `Issue` is not a verification claim — and the method-column match stays CONTAINMENT, because equality silently de-indexes twenty live rows
 
 ## Status
 
