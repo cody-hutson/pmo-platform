@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-164 — A warn-mode declaration carries two axes; only the repo-derivable one can end a shakedown"
+title: "ADR-167 — A warn-mode declaration carries two axes; only the repo-derivable one can end a shakedown"
 status: Proposed — flips to Accepted when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
 date: 2026-08-29
 release: warn-mode-gate-graduation
@@ -14,13 +14,15 @@ source_observations:
   - "The corpus had already solved this once, for a different subject. The `BLOCK-DESTRUCTIVE-022` exec arm is recorded as DEFERRED WITH A DEADLINE, splitting its criterion into a repo-derivable deadline arm and an operator-local evidence arm, and the flip-decision register states the generalization in prose immediately below it: *make the forcing function repo-derivable and let the evidence stay operator-local*. It had exactly one instance and no binding force."
 ---
 
-# ADR-164 — Written is not repo-derivable
+# ADR-167 — Written is not repo-derivable
 
 ## Status
 
 **Proposed** — flips to **Accepted** when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified.
 
 **Numbering provenance.** Allocated at this Engineering commit as the next number above the union of the mainline anchor and this branch's own in-flight claim. `renumber-adr.py --detect` reported `ANCHOR 162 origin/main`, `NEXT-FREE 163`, and `CLAIMED-SET-BRANCH-ONLY 163 (detection only — never binds)` — the oracle is anchored on mainline and cannot see a sibling's unmerged claim, so `--next-free` alone would have collided with [ADR-166](ADR-166-split-predicate-gate-graduation.md) on this same branch. 164 was taken against the union and re-verified to report `BINDS`. A gap blocks the repo; a duplicate is tooled at merge, so the union is the safe side to err on.
+
+**Numbering provenance — `164 → 167`.** Held **ADR-164** branch-local; renumbered to **ADR-167** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 164. In-release citations that read "ADR-164" denote this record.
 
 ## Context
 
