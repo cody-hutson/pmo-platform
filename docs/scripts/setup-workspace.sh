@@ -2396,6 +2396,72 @@ install_hooks() {
     info "INSTALLED: dep-resolve.sh (shared hook jq/dependency resolver)"
   fi
 
+  # Install the post-merge deploy git hook into the SOURCE REPO's own hooks dir,
+  # so a merge landing on main in the primary checkout redeploys changed skills
+  # without the operator remembering to. The hook itself carries the guards that
+  # keep it from firing in a worktree or off main.
+  #
+  # THIS BLOCK IS SCOPED, AND THE SCOPE IS LOAD-BEARING. Every co-deploy above
+  # writes into ${WORKSPACE_ROOT}/.claude/hooks — a path the install test suites
+  # sandbox by passing --workspace-root <mktemp>. This block is the only one that
+  # writes into the SOURCE REPO, which those same suites pass as the REAL
+  # repository (--source-repo "${REPO_ROOT}", in roughly ten test files). Firing
+  # unconditionally therefore installs a live git hook into the operator's own
+  # checkout every time the install regression runs — measured, not hypothesised.
+  #
+  # So the install is scoped to the case where this repo is demonstrably the one
+  # this workspace was built from: the source repo resolves INSIDE the workspace
+  # root, which is the documented default layout (workspace ~/Claude, repo
+  # ~/Claude/pmo-platform). A sandbox workspace never contains the real repo, so
+  # every test skips it. A repo cloned outside the workspace is a legitimate but
+  # non-default layout: it is told how to install the hook rather than silently
+  # skipped, and PMO_INSTALL_GIT_HOOKS=1 forces the install for it.
+  local gh_src="${SOURCE_REPO}/core/hooks/git-post-merge-deploy.sh"
+  local gh_dir gh_dst gh_repo_abs gh_ws_abs gh_scoped=0
+  gh_repo_abs="$(cd "${SOURCE_REPO}" 2>/dev/null && pwd -P || true)"
+  gh_ws_abs="$(cd "${WORKSPACE_ROOT}" 2>/dev/null && pwd -P || true)"
+  if [ -n "${gh_repo_abs}" ] && [ -n "${gh_ws_abs}" ]; then
+    case "${gh_repo_abs}/" in
+      "${gh_ws_abs}"/*) gh_scoped=1 ;;
+      *) gh_scoped=0 ;;
+    esac
+  fi
+  [ "${PMO_INSTALL_GIT_HOOKS:-0}" = "1" ] && gh_scoped=1
+
+  # Resolve the hooks dir through rev-parse, never a "${SOURCE_REPO}/.git/hooks"
+  # literal: in a linked worktree .git is a FILE and the literal names nothing,
+  # and a repo may set core.hooksPath, which only --git-path honours. The
+  # ABSOLUTE form is requested explicitly, because plain `--git-path hooks`
+  # returns a repo-relative path when core.hooksPath is unset — the ordinary case
+  # for a fresh clone — and a relative destination would resolve against THIS
+  # script's cwd rather than the repo. The fallback absolutizes by hand so an
+  # older git predating --path-format is still correct rather than silently wrong.
+  gh_dir="$(git -C "${SOURCE_REPO}" rev-parse --path-format=absolute --git-path hooks 2>/dev/null || true)"
+  if [ -z "${gh_dir}" ]; then
+    gh_dir="$(git -C "${SOURCE_REPO}" rev-parse --git-path hooks 2>/dev/null || true)"
+    case "${gh_dir}" in
+      "" | /*) : ;;
+      *) gh_dir="${SOURCE_REPO}/${gh_dir}" ;;
+    esac
+  fi
+  gh_dst="${gh_dir}/post-merge"
+  if [ "${gh_scoped}" -eq 0 ]; then
+    info "NOTE: post-merge deploy git hook not auto-installed (source repo is outside this workspace root)."
+    info "      To enable automatic redeploy on merge, run from the repo root:"
+    info "        ln -sf ../../core/hooks/git-post-merge-deploy.sh \"$(git rev-parse --git-path hooks)/post-merge\""
+  elif [ ! -r "${gh_src}" ] || [ -z "${gh_dir}" ]; then
+    # Never fatal. A SOURCE_REPO that is not a git checkout is a legitimate
+    # install shape; the operator simply does not get the automatic redeploy.
+    warn "post-merge deploy hook not installed (source or hooks dir unresolved); skill deploys stay manual"
+  elif [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would install post-merge git hook → ${gh_dst}"
+  else
+    mkdir -p "${gh_dir}"
+    record_write_rollback "${gh_dst}"
+    ln -sf "${gh_src}" "${gh_dst}"
+    info "INSTALLED: post-merge deploy git hook (auto-redeploy on merge to main)"
+  fi
+
   # Co-deploy the shared positional-issue-ref classifier into .claude/hooks/lib/.
   # block-fragile-refs.sh sources it from ${HOOK_DIR}/lib/positional-issueref.awk at
   # runtime; the source lib lives at core/hooks/lib/ (shared with the fixture-runner and

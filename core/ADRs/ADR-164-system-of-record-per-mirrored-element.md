@@ -2,7 +2,7 @@
 <!-- repo-integrity: allow-issue-ref -->
 ---
 title: ADR-164 — System of record per mirrored data element — authority follows authorship
-status: Proposed — flips to Accepted when the operator ratifies it at this release's Stage 9 Plan Review gate. The flip is recorded in this file's own `status:` field, which is where it must be verified — never inferred from milestone closure, from a merged pull request, or from a review comment.
+status: Accepted — ratified by the operator at this release's Stage 9 Plan Review gate (determination D-14 GO, 2026-08-29, milestone one-system-of-record-per-element), and the flip landed here at Stage 13 Close. The flip is recorded in this file's own `status:` field, which is where it must be verified — never inferred from milestone closure, from a merged pull request, or from a review comment.
 date: 2026-08-29
 release: one-system-of-record-per-element
 deciders: "Stage 5 Solutioning spoke (options analysis, evidence-grounding, blast radius) + release hub (carried constraint on the supersession scope) + operator (Stage 4 plan-review determination that ADR-051 is superseded in part, never in full) + Stage 6 Engineering spoke (authorship)"
@@ -23,7 +23,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Flips to **Accepted** at this release's Stage 9 Plan Review gate; per the established precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure or from a merged pull request.
+**Accepted.** Ratified at this release's Stage 9 Plan Review gate (operator determination D-14 GO, 2026-08-29); the flip landed at Stage 13 Close. Per the established precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure or from a merged pull request.
 
 **Supersedes in part [ADR-051](ADR-051-health-check-mcp-primary-source-set.md)** (Decision 1 only). ADR-051 remains `Accepted`, editable, and in force for its other decisions; the disposition is stated in full under `## Decision` below.
 

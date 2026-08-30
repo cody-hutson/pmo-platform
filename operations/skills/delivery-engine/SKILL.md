@@ -55,7 +55,7 @@ This skill has 7 modes. **Trigger-match heuristic auto-routes when the request c
 
 ### Step 1 — Check for chained invocation
 
-If this invocation was chained from ppm-agent (detected when the Skill-tool `args` string contains the token `chained=true`), read the `mode=<value>` token from the same `args` string (pre-filled from the Handoff Manifest action entry per [OPERATIONS.md § Skill Chaining Protocol](../../OPERATIONS.md)) and skip directly to Step 4.
+If this invocation was chained from ppm-agent — detected when the Skill-tool `args` string carries a chained-invocation signal in **either** encoding defined at [OPERATIONS.md § Skill Chaining Protocol](../../OPERATIONS.md) → *Chained-invocation arg encoding*: the legacy token `chained=true`, or a JSON object whose `chained` key is `true` — read the `mode` value from the same `args` string (`mode=<value>` in the legacy form; pre-filled from the Handoff Manifest action entry) and skip directly to Step 4.
 
 > **Live chain-skip.** delivery-engine IS on the 4-skill cascade allowlist (per Skill Chaining Protocol rule C7 — PPM `[DELIVERY]` + complete context → delivery-engine (Tier 2 tracker)). See [§ Chained Invocation Contract](#chained-invocation-contract) below for the full integration: upstream invokers, chained-context pre-fill from the Handoff Manifest, and `chained=true` arg semantics. When chained, AUQ is suppressed per the Contract's suppress-opening-AskUserQuestion clause.
 
@@ -127,6 +127,7 @@ any [DELIVERY] tag referencing backlog health.
 3. For each finding, produce the remediation — not just the observation:
    - Missing AC → draft suggested AC based on the ticket summary (labeled DRAFT)
    - Stale items → recommended disposition (close, re-scope, or escalate) with reasoning
+     A recommended disposition of **close** is a `WorkItem-cancelled` **candidate only** — it is recommended, **never emitted from a scan**. It routes to Mode G, where the descope decision of record is what fires the emission.
    - Priority misalignment → recommended re-prioritization with justification
    - Sprint cycling → escalation recommendation with impact statement
 4. Produce a RAID entry for any systemic issue (e.g., "42% of tickets lack AC" is a
@@ -179,6 +180,16 @@ tag referencing DoR or readiness.
    - **One `ADD` per signal family, and only for a family with an estimate of record.** `F1` carries the committed story-point figure (the §5 range **midpoint**); `F2` carries the §2 committed-horizon budget in **business days**. Emit both when both exist, one when one exists, **and none for a family that has neither** — never a zero-filled `Estimate`, never a defaulted `Estimate Phase`, never a partial row. A family admitted without a figure is not lost: its absence surfaces at close as a Mode F `## Capture Exceptions` row with `no-estimate-of-record`, which is what makes the gap **countable instead of silent**.
    - **This step is what makes the close executable.** Mode F's close is a `MODIFY` against a row this step created; without the `ADD` there is no `entry_id` to modify, Tracker Manager rejects the instruction, and the loop's input is empty for a reason no downstream consumer can see. **A DoR exit PASS that emits no admission instruction and no stated reason is a defect this mode surfaces**, not a quiet skip — report the item, the family, and which required field could not be populated.
 
+7. **Axis-1 state advance at DoR exit.** This gate is the beat that [`../../../core/standards/entity-lifecycle-protocol.md`](../../../core/standards/entity-lifecycle-protocol.md) **§3.10** assigns to this skill for the first advance out of the intake state. §3.10 owns the base machine, the qualifying evidence for each edge, and the forbidden edges — **cite it; never restate it here.**
+   - **On an LG-4 DoR exit `PASS` or `CONDITIONAL PASS`** at `T(6→7)`, emit a second `TRACKER_UPDATE` instruction alongside step 6's admission `ADD`:
+     `action: MODIFY` · `entry_id: <the work item's row/record id>` · `fields: lifecycle_transition: WorkItem-backlog → WorkItem-ready` · `evidence:` the DoR verdict of record · `reason:` the LG-4 exit verdict that fired it. **Emit the transition, never the field value.**
+   - **Tracker Manager writes it — this skill never does.** [`../../../core/schemas/work-item-type-schema.md`](../../../core/schemas/work-item-type-schema.md) **§5.2** names Tracker Manager the **single enforcement point** for any work-item write, and Tracker Manager already implements §3.10's legal-edge check (an undeclared edge raises `[INVALID-TRANSITION]`, never a silent write). Writing the field here would create a second writer for one field and bypass that check.
+   - **Name the projection, never apply it.** The label row projecting this target state is `work-status: ready` ([`../../../core/packs/_common/pack.toml`](../../../core/packs/_common/pack.toml)). **Applying** it is the adapter/materialization path, not this skill's write — reconciliation DETECTS the projection; it does not MATERIALIZE it.
+   - **Adapter duality** ([`../../../core/schemas/work-item-type-schema.md`](../../../core/schemas/work-item-type-schema.md) §1.2.2): when a platform adapter is **configured**, resolve the item's Axis-1 state **through the adapter** and state no host field and no host vocabulary; when it is **unconfigured**, emit against the entity's own `lifecycle_state` **and emit the explicit caveat naming the unresolved binding**. Never infer a state, never substitute host vocabulary, and **never read *no adapter configured* as *no status***.
+   - **Evidence gate (load-bearing).** No transition is emitted without its qualifying evidence. `[SOURCE]` or `[INFERRED]` authorizes; **`[ASSUMPTION – CONFIRM]` blocks** — the candidate transition surfaces as a Section-7 Next-Action line instead of being emitted.
+   - **On `FAIL` or `NO-EVIDENCE`, emit nothing** — the item was not admitted, so no advance is owed.
+   - **Autonomy: Tier 1 — recommend.** This skill drafts the advance; the write is gated downstream. Label the emission `[CHEAP · confidence: HIGH]`.
+
 **Output**: Gate results table, per-ticket findings, drafted remediations, overall
 gate verdict, recommended actions for any FAIL items, and — on every PASS /
 CONDITIONAL PASS — the **estimate-admission `TRACKER_UPDATE` block** (one `ADD` per
@@ -225,6 +236,7 @@ discussion, any [DELIVERY] tag referencing sprint planning.
    - **Tech-debt capacity floor**: compute the tech-debt **allocation ratio** (tech-debt-allocated ÷ sprint capacity) and render the 🟢/🟡/🔴 **floor-RAG** per `tech-debt-capacity.md` §1 (the floor *value* is owned by `sprint-defaults.md` §1.2 — referenced by role, never restated). On **🔴 RED (allocation < the floor)**, emit the **"tech debt under floor — capacity over-committed to new features"** warning and require an explicit PM override (**declared and RAID-logged**, per `tech-debt-capacity.md` §1) or re-scope to restore the slice — never silently absorb an under-floor plan. Calibrate the methodology-upper (🟡) edge from the existing `delivery_approach` enum; on absent `delivery_approach`, default to the canonical 15% floor and label the methodology `[ASSUMPTION – CONFIRM]`. When no tech-debt allocation is stated, flag that the floor cannot be verified, default to requiring ≥ the floor, and cite the canonical source — do not default the band to GREEN. Name it "tech-debt floor / allocation ratio" — never "debt budget overage" / "debt RAG"; this floor-RAG is orthogonal to the §4.1 buffer-consumption band and the `capacity-model.md` §9 demand-supply band.
    - **Proposed sprint scope**: prioritized list of items with story points (as ranges per step 3), assignees,
      and rationale for inclusion/exclusion
+   - **Axis-1 state advance on sprint commitment**: when sprint scope is **committed** (not merely proposed), emit `lifecycle_transition: WorkItem-ready → WorkItem-in-progress` per the Mode C step-7 emission contract, evidence = the committed sprint scope; name the `work-status: in-progress` projection row without applying it. **Negative rule — a deferral is not a cancellation:** an item deferred under step 5 Option B stays where it is and emits **nothing**; it is never a `WorkItem-cancelled` candidate.
    - **Tech-debt classification + ranking**: for every tech-debt item in scope, apply `tech-debt-classification.md` —
      **(a) classify** into a Fowler quadrant (§1: Reckless/Prudent × Deliberate/Inadvertent); when intent/awareness is not determinable, emit `quadrant: unclassified — intent/awareness not determinable; classify before prioritizing` and **exclude it from the ranked fill** (never default-to-a-quadrant), and route a Reckless/Inadvertent *pattern* to RAID; **(b) quantify CoD** with a confidence tier (§2: score the canonical CoD components — Value / Time-Criticality / RR\|OE — referenced by role from `intake-governance.md` §2, **never re-derived**; attach HIGH/MEDIUM/LOW — when inputs are not measurable, score at LOW from context, **never fabricate a HIGH number and never skip CoD**); **(c) sort the tech-debt slice by (quadrant × CoD)** (§3 lexicographic rule: CoD descending primary, quadrant urgency as the tie-break within a CoD band — Reckless/Deliberate surfaces first when CoD is high); name it "tech-debt rank / (quadrant × CoD) sort" — **never "debt score"**; and **(d) fill the under-floor deficit** with the top-ranked items up to the floor, consuming `tech-debt-capacity.md`'s floor → ranking contract (floor % / allocation ratio / under-floor deficit / aged-item set) **by role — do NOT re-derive the floor**; an aged item (>90d, from the §2 aged-item set) ranks by its (quadrant × CoD) like any item (aging raises Time-Criticality → CoD, no separate aging-weight). When `tech-debt-capacity.md`'s floor/deficit have not been computed, still produce the ranking but state the fill target is unknown and recommend running the capacity-floor check first.
    - **Milestone variance + RAG**: when a milestone schedule baseline exists, compute milestone variance as SPI and assign its 🟢/🟡/🔴 RAG per `estimation-standards.md` §7, **citing the threshold**. Name it "milestone variance (SPI)" / "milestone slip" — never "Schedule Variance". When no baseline exists, emit `variance: not computable — no schedule baseline` and flag the missing baseline as a planning gap; do not fabricate a RAG.
@@ -269,6 +281,7 @@ standup synthesis, any [DELIVERY] tag referencing execution tracking.
    **Stage-Tracking sub-protocol (15-stage lifecycle position + per-transition validation + per-stage variance).** When a work item's lifecycle position is in scope (invoked from step 1):
    - **Resolve the model column.** Read `delivery_approach` from PROJECT.md at invocation (per the OPERATIONS.md Methodology Awareness Protocol — do not cache across invocations) and select the matching `references/lifecycle-stages.md` §4 grid column. On an absent or out-of-grid field, default per the §4.1 negative-path table — position the item on the **canonical stage names** with a caveat (`[ASSUMPTION – CONFIRM] delivery_approach absent — using canonical stage names`); **never silently assume Scrum**. **When `delivery_approach` is a 2-element array `[A, B]` (the Hybrid-Two array form per project-schema §6.5)**, resolve the §4 grid column for **each** constituent A and B and render one stage-tracking section per constituent (the phased constituent governs milestone/gate naming, the timeboxed/continuous constituent governs stage/flow naming), taking the union per `core/disciplines/work-organization-mapping-framework.md` §2.5 — never collapse to one column. For `Hybrid` (or any array) + `dual_framing_enabled: true`, render the resolved column(s) AND the dual-framing per the Dual output rule.
    - **Name the current stage** under the resolved column (e.g., universal Stage 5 Plan & Sequence → Scrum "Sprint Planning", Waterfall "Planning phase + WBS"). If the current stage is not asserted, infer the **earliest** stage whose §2 entry criteria are met and label it `[ASSUMPTION – CONFIRM] inferred stage`; never guess a late stage.
+   - **Axis-1 state advance on observed start.** When the item is observed at **Stage 7 Build / Develop** and its Axis-1 state is still `WorkItem-ready`, emit `lifecycle_transition: WorkItem-ready → WorkItem-in-progress` per the Mode C step-7 emission contract, evidence = the observed Stage-7 position; name the `work-status: in-progress` projection row without applying it. **Emit once — this beat is idempotent with Mode D's commitment beat:** whichever observes the start first emits, and the other does **not** re-emit. **Negative rule:** a scope-change flag (step 3) is **not** a cancellation and is never a `WorkItem-cancelled` candidate.
    - **Validate the transition predicate** at a requested advance across `T(n→n+1)`. Apply `lifecycle-stages.md` §5.2: ALL of stage n's exit criteria AND stage n+1's entry criteria (both in §2) must hold. On a violation, **BLOCK** with the §5.1-style evidence format citing the transition `T(n→n+1)`, the specific unmet exit/entry criterion, and the remediation. Do not advance the item; do not round up (the gate-washing guardrail).
    - **Enforce no-skip-ahead.** A request to jump from stage n to stage n+k (k > 1) is **BLOCKED**; name every intermediate transition `T(n→n+1) … T(n+k−1→n+k)` whose predicate is unmet, in order, and advance only one legal transition at a time.
    - **Compute per-stage variance + RAG** when a per-stage schedule baseline exists: per-stage milestone variance (SPI) over the stage's planned window, banded with the canonical Milestone-Variance RAG **owned by `references/estimation-standards.md` §7** — cite the threshold by role (do not restate the band values); name the active 🟢/🟡/🔴 zone via §7's `WHEN…THEN…` decision-rule format. Name it "per-stage milestone variance (SPI)" / "stage slip" — **never "Schedule Variance"**. When no per-stage baseline exists, emit `per-stage variance: not computable — no stage baseline` and flag the missing baseline as a planning gap — never fabricate a RAG.
@@ -335,6 +348,12 @@ any [DELIVERY] tag referencing DoD or release.
      - **Exactly one record per (close × family), and no silent skips.** The unit is the **`(close × signal family)` cell**, not the close: for **each** of F1 and F2, every LG-5 exit PASS produces **either** an `## Estimate-Actual Pairs` row in that family **or** a `## Capture Exceptions` row **naming that family** — never zero in a cell, never two in the same cell. Two records in **different** families at one close is the specified outcome. When a family has no estimate of record (or the estimate falls outside the window, or the item was descoped at close, or the unit is pending a re-anchor), emit the **exception** with the matching closed-set reason **and its `Signal Family`** — an unfamilied exception cannot be counted against a per-family coverage denominator, so the gap disappears from the population it exists to make visible. **Never zero-fill `Estimate` or `Actual`, and never write a partial row.** A close that produces neither record is a **defect this mode surfaces** — the absence is reported, not passed over.
      - **Reopen never resets the clock, and no path re-sends `Start Date`.** On a `REACTIVATE` → reclose, supersede the prior rows **in every family** and emit a new one per admitted family at the next `Close Ordinal`. **Never send `Start Date` on any instruction after admission** — not on a reclose, and not on a plain corrective `MODIFY` (the one used to set `Excluded Reason`), which is where this leaks if the rule is attached to `REACTIVATE` rather than to the field. `Elapsed` is business days from the item's *first* `Start Date` to the final DoD, so it accumulates across passes; resetting it would let close-early / reopen / reclose manufacture two short cycle times from one long item.
      - **Surface a `Start Date` that does not match the gate record.** Per Tracker 10 § Start-Date Immutability, validate every row's `Start Date` against the **LG-4 DoR exit-PASS date of record** — an anchor outside the tracker — and surface any mismatch as a defect. The within-item checks are **not** sufficient on their own: a shift applied **uniformly across every ordinal** leaves all rows agreeing with each other and every `Elapsed` shrunk by the same amount, so it passes both of them while reducing total elapsed on every item. **No downstream consumer can detect that** — so it is caught here or not at all.
+   - **Axis-1 state advance across LG-5.** LG-5's exit criteria contain the review, so **one Mode F run on an item at `WorkItem-in-progress` emits two sequential transitions** — gate-open, then exit. Both follow the Mode C step-7 emission contract (`TRACKER_UPDATE` · `action: MODIFY` · Tracker Manager writes it · projection named, never applied · adapter duality · evidence gate). §3.10 is cited for every edge and restated for none.
+     - **At gate-open**, when `[LG-5-EN-2]` is met and the item is at `WorkItem-in-progress`: emit `lifecycle_transition: WorkItem-in-progress → WorkItem-in-review`, evidence = the raised completion claim of record; name `work-status: in-review`.
+     - **At exit `PASS` or `CONDITIONAL PASS`** at `T(8→9)`: emit `lifecycle_transition: WorkItem-in-review → WorkItem-done`, evidence = the LG-5 exit verdict; name `work-status: done`. **Two emissions from one gate run is the specification, not a double-write** — the same shape this mode already declares for its own close.
+     - **On `FAIL` or `NO-EVIDENCE`: emit nothing** — the item has not advanced, and this gate will fire again.
+     - **Terminal guard.** `WorkItem-done` and `WorkItem-cancelled` are terminal in §3.10. A Tracker-10 `REACTIVATE` → reclose is a **tracker-row lifecycle, not an Axis-1 edge**: it emits new rows at the next `Close Ordinal` and emits **no** Axis-1 transition. A genuine reopen of a terminal item surfaces as `[INVALID-TRANSITION]` with its remediation (a new work item, or an operator decision) — **never written**.
+     - **No-skip.** Emit one legal edge at a time; never `WorkItem-backlog → WorkItem-in-progress`.
 2. Evaluate deliverables against DoD criteria:
    - Code/config complete and committed
    - Peer review completed
@@ -367,6 +386,7 @@ any [DELIVERY] tag referencing RAID, decisions, or milestones.
 
 **What you do**:
 1. Read `references/raid-templates.md` for the artifact templates. When the update logs a gate decision (a go/kill/hold/recycle or pass/fail rendered at a lifecycle gate), also read `references/gate-definitions.md` to attribute the decision to the correct lifecycle gate (LG-N) and authority holder, and record the verdict in the canonical `references/gate-definitions.md §4.1` `PASS / CONDITIONAL PASS / FAIL` vocabulary (a CONDITIONAL PASS logs its open condition as a tracked RAID item with an owner + due date).
+   - **Axis-1 state advance on a descope of record.** When the update records an explicit **descope of record**, emit `lifecycle_transition: WorkItem-<current> → WorkItem-cancelled` per the Mode C step-7 emission contract — from `WorkItem-backlog`, `WorkItem-ready`, or `WorkItem-in-progress` only — with evidence = the recorded descope decision; name the `work-status: cancelled` projection row without applying it. This edge is terminal, so it carries the same evidence bar as a CLOSE action. **Never emit it on a deferral, a re-prioritization, or a removal from a sprint** — none of those is a descope, and treating one as a cancellation silently destroys the item's remaining lifecycle.
 2. Process the input (new information, transcript extract, status change)
 3. Produce the updated artifact with:
    - New entries fully populated (all fields, evidence-tagged)
@@ -407,6 +427,8 @@ a busy TPM reads this and knows the situation.
 ### 3. Gate Results (when running a gate)
 PASS / CONDITIONAL PASS / FAIL for each item and overall. Each result includes
 evidence and reasoning.
+When a gate run emits an Axis-1 advance, the rendered result carries the
+`lifecycle_transition` emitted — or the named reason none was — alongside the verdict.
 
 ### 4. Findings & Remediations
 The core of push-to-resolve. Each finding includes the observation, evidence,
@@ -481,8 +503,11 @@ schema):
 | `cascade_depth_remaining` | Depth budget (C1); decrement on invocation |
 | `deadline` | Action deadline (sprint end, gate date, escalation deadline) |
 
-**`chained=true` arg semantics.** When ppm-agent invokes via the Skill tool with arg
-`chained=true`:
+**Chained-arg semantics.** When ppm-agent invokes via the Skill tool with a
+chained-invocation `args` string in **either** encoding defined at
+[OPERATIONS.md § Skill Chaining Protocol](../../OPERATIONS.md) →
+*Chained-invocation arg encoding* — the legacy token `chained=true`, or a JSON
+object with `"chained": true`:
 
 1. **Suppress opening AskUserQuestion** — do not open a clarifying dialog before producing
    output. Contract owned by the Mode Selection Protocol.
@@ -499,8 +524,8 @@ schema):
    comms-writer to draft escalations).
 
 **Backward compatibility.** When `chained` is absent (direct user invocation), this skill
-operates per its normal modes with AskUserQuestion enabled. The skip applies only when
-`chained=true` is explicitly present.
+operates per its normal modes with AskUserQuestion enabled. The skip applies only when an explicit `chained` marker is present, in either
+accepted encoding.
 
 **Relationship to the Mode Selection Protocol.** The Mode Selection Protocol owns the
 AskUserQuestion suppression semantics and per-skill three-tier classification
@@ -524,6 +549,7 @@ with a **confidence level** per `core/specs/reversibility-protocol.md`.
 - Mode F (DoD / Release Readiness → canonical **G3 Release Readiness**, `gate-criteria-spec.md` § Gate 3) — PASS / CONDITIONAL PASS / FAIL per item and overall, go / no-go recommendation, remediation plan for failures.
 - Mode G (RAID / Decision / Milestone Updates) — new or updated RAID entries (R-DE-### / A-DE-### / I-DE-### / D-DE-###), downstream-impact identifications.
 - Section 7 (Next Actions) — items requiring TPM execution (sends, schedules, approvals, Jira updates).
+- Modes C / D / E / F / G (Axis-1 state advance) — the `lifecycle_transition` emissions that advance a work item through the base machine `entity-lifecycle-protocol.md` §3.10 assigns to this skill. The **emission** is **CHEAP** — it is a recommendation nobody has acted on until Tracker Manager writes it. The resulting **write** is **MODERATE** on a Tier-2 tracker row, **with one exception stated rather than assumed**: an advance into `WorkItem-done` or `WorkItem-cancelled` is terminal in §3.10 and has no reverse edge, so it carries the evidence bar and the process weight of a terminal action.
 
 **Tier vocabulary (undo threshold + stakeholder impact):**
 
@@ -1040,6 +1066,29 @@ structural conformance and content quality.
   the **OUT** entry above (a Mode D emission omitting its prior→adjusted basis, or omitting the
   block entirely) and from the **INPUT** entry (a figure consumed without its window
   qualifiers). All entries stay; do not merge.
+
+### Axis-1 advance emitted for an item the base machine cannot advance — PROC
+
+- **Signature (observable signal):** a `lifecycle_transition` is emitted out of
+  `WorkItem-done` or `WorkItem-cancelled`, or an emitted edge skips a base intermediate
+  (for example `WorkItem-backlog → WorkItem-in-progress`).
+- **Conditional:** do NOT emit an Axis-1 transition when the item's current state is
+  terminal, or when the requested edge skips an intermediate — **even when a Tracker-10
+  `REACTIVATE` has fired** — because `core/standards/entity-lifecycle-protocol.md` §3.10
+  marks both `[INVALID-TRANSITION]`, and a `REACTIVATE` is a tracker-row lifecycle, not an
+  Axis-1 edge.
+- **Root cause:** the two lifecycles are conflated because both are reached through the
+  same `TRACKER_UPDATE` channel, so a reopen that is legitimate on the tracker row reads
+  as though it were legitimate on the state machine.
+- **Mitigation:** condition every emission on the item's current Axis-1 state. On a
+  terminal state, surface `[INVALID-TRANSITION]` plus the remediation (a new work item, or
+  an operator decision) and **emit nothing**; on a skip request, emit only the one legal
+  edge that is next in sequence.
+- **Principal response vs. junior response:** Principal names the two lifecycles and asks
+  which one actually moved, then emits the tracker rows and withholds the Axis-1 edge.
+  Junior emits the reopen because the tracker reopened — and Tracker Manager's legal-edge
+  check raises a validation error that reads, to the operator, as a tooling fault rather
+  than the modelling error it is.
 
 ## Shared Behavioral Rules
 
