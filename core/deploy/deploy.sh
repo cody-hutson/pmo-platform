@@ -2074,7 +2074,7 @@ _rr_compute_verdict() {
     bankrefs="$(printf '%s\n' "$body_toks" | /usr/bin/grep -xE '(EQ|PTR|OS|XC|GR|SS|RCP|ANC)-[0-9]{2}' || true)"
     while IFS= read -r tok; do
       [[ -n "$tok" ]] || continue
-      if ! printf '%s\n' "$bank_ids" | /usr/bin/grep -qxF -- "$tok"; then
+      if ! /usr/bin/grep -qxF -- "$tok" <<<"$bank_ids"; then
         row_bad=1
         detail="${detail}    runner-src ${p} — cites '${tok}', which does not resolve in the check bank at core/standards/regression-checks.md"$'\n'
       fi
