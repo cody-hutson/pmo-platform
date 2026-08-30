@@ -344,7 +344,41 @@ Revert the merge commit. **Reversibility MODERATE · confidence HIGH.** The one 
 
 ## Verification Evidence
 
-*Populated by the plan-verification executor at Stage 6 self-verification and re-run at Stage 7.*
+*Stage 6/7 rows were carried in the stage sub-task comments; this section records the **Stage 13 Close** re-verification against post-deploy `main` at merge SHA `d7dc7898d106324714dfcae5bca04873bb936a22`.*
+
+### Cross-Issue Acceptance Criteria — re-verified at close
+
+Each method below was re-executed against post-deploy `main`, not carried forward from the Stage-9 grading. Counting used `python3`, not the shell `grep` (the local `grep` is ugrep-shimmed and a rejected pattern yields a plausible zero rather than an error).
+
+| ID | Method | Threshold | Measured | Verdict |
+|---|---|---|---|---|
+| CIAC-1 | files citing the source-of-record decision record across the three governance surfaces | ≥ 3 | 3 (operations governance 1 · tracker schema 1 · ADR-051 3) | **PASS** |
+| CIAC-2 | `superseded in part` on ADR-051 | ≥ 1 | 1 | **PASS** |
+| CIAC-3 | `SCOPE CHANGE — RESOLVED` notes in the entity model | ≤ 8 (baseline 7 + 1) | 8 | **PASS** (at ceiling, as Stage 9 flagged) |
+| CIAC-4 | `V-CORE-02` in the portfolio writeback contract | ≥ 1 | 1 | **PASS** |
+| CIAC-5 | external-identifier carriage form recorded for the sibling key-scheme card | recorded, not gated | recorded — `source_system` / `external_id` / `mirrored_date`, optional in whole, adopted by Work Item and RAID Item | **RECORDED** |
+
+**Probe validity.** A negative control (`system-of-record-per-UNICORN-element`) was measured over the same three-file population and returned **0**, so the CIAC-1 count reflects content rather than a pattern that matches everything. CIAC-3 sits exactly at its ceiling: the threshold is baseline-derived (7 measured on the Commit-0 base, +1 for this release's single batched amendment), so "at ceiling" is the expected PASS, and a 9 would have been the failure.
+
+### Gate dispositions
+
+| Gate | Verdict | Basis |
+|---|---|---|
+| **QC4-05** (AV-N invariant re-verification) | **N/A** | the plan declares **0** `AV-N` invariants — nothing to re-execute |
+| **G-CL6** (Tier-A design-artifact refresh) | **N/A** | the plan declares **0** Tier-A activated design artifacts |
+| **A7.5 close class** | **DEPLOYABLE** | resolved via **rung 1** — the plan's `domain_practice.domain` reads `governance`, a guide-backed deliverable class and not `task-artifact`. Not a fall-through |
+| **A8.1** §3.2 note-content lint | **PASS** | `lint_release_corpus.py --check note-content` exits **0** with **zero** `NOTE-*` findings corpus-wide. Probe proven live by a disposable control note carrying a banned term and a beat-less bullet, which produced exit 1 and two findings; control removed |
+| **A8.3** ADR-092 plan-identity lint | **N/A** | structurally inapplicable to a version-less release — there is no concrete Version cell for a filename to disagree with. Recorded as an explicit N/A rather than a silent absence |
+| **A8.2** decision-emission (Check 61) | **INCOMPLETE (advisory, non-blocking)** | 14 missing classes across 46 checked releases; **none names this release**. Pre-existing findings for other releases do not block this close (audit-baseline discipline). This release emits all three MUST classes — `decision/d-class` ×15, `decision/scope-lock` ×2, `gate-outcome/plan-review-go` ×1 — so it enters the population clean once its row reads `VERIFIED` |
+| **G-CL9** (promised ADR flips) | **REPAIRED IN THIS PR** | both ADR-163 and ADR-164 still read `Proposed` on `main` despite the Stage-9 review closing GO. Flipped to `Accepted` here with provenance naming the ratifying review, per-ADR, touching only the status field and its provenance clause |
+| **§2.8 sample block** | **PRESENT** | this release changes shape contracts (an external-identity field group and a Project health field), so a fenced sample block is owed. It is carried in Section 6b of the note, verified positionally to sit outside the Section 6a span. The lint's `--sample-block-advisory` limb could not evaluate it — the flag resolves a *version key* and returns `NOTE-SAMPLE-BLOCK-UNRESOLVED` for a slug — so placement was asserted directly rather than taken from a green advisory |
+| **Procedure 7a** action-item ledger | **CLEAR** | 4 `action-item-opened` rows, 4 `action-item-resolved` rows, **0** open |
+| **B-OPS5** absorption reconciliation | **N/A** | no membership issue carries memory ties; stranded set empty |
+| **A12** audit-recommendation badges | **N/A** | not audit-class — 0 files in the analysis path |
+
+### Operational deployment (Phase B-OPS / B4)
+
+Install propagation verified by **SHA-256 of file content at the install surface** against `origin/main`, never by deploy exit code. At the live install root `3ad19e63` all **5** release-touched skill-surface files read **FRESH**, and an untouched control (`comms-writer/SKILL.md`, absent from this release's diff) also reads FRESH — so the probe compares real content rather than passing trivially. The second root `0989ef14` reads 3 STALE and `health-check` **absent entirely**; the discriminating evidence that this is a pre-existing orphaned install rather than a propagation failure of this release is that the **untouched control is also STALE there**, so that root lags wholesale. Out of scope for this release and recorded rather than omitted.
 
 ## Issue References
 

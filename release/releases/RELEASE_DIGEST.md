@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### one-system-of-record-per-element (2026-08-29, version-less) — Every shared value now has one system of record
+
 ### declarations-have-a-firing-surface (2026-08-29, version-less) — Governed rules now name what enforces them, or record that nothing does
 
 ### v4.43 (2026-08-29) — Release plans now show when they're done, and reports count every release
