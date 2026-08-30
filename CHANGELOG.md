@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.44] - 2026-08-30
+
+Skill instructions stopped pointing at checks and sections that do not exist, two promised guides now exist, and installed skills update themselves after a merge instead of drifting quietly.
+
+[Full notes](release/releases/notes/v4.44_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.44)
+
 ## [v4.43] - 2026-08-29
 
 A release plan now shows whether its work is finished and keeps one name from draft to close, and the counters that report on releases stopped skipping unversioned ones.
