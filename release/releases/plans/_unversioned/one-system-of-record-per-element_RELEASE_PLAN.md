@@ -4,11 +4,11 @@
 version: one-system-of-record-per-element
 date: 2026-08-28
 type: plan
-status: ACTIVE
+status: CLOSED
 issues: ["#5837", "#5839", "#5844", "#5846"]
-pr: null
+pr: "#6393"
 links:
-  note: null
+  note: release/releases/notes/_unversioned/one-system-of-record-per-element_RELEASE_NOTES.md
   log_anchor: "#one-system-of-record-per-element"
 reversibility-tier: MODERATE
 themes: ["cluster:templates-schemas", "cluster:knowledge-architecture"]
