@@ -5936,9 +5936,19 @@ cmd_check() {
   # Decoupling contract (per the g1-enforcement mode-decoupling scope): the
   # g1-enforcement check (Check 22) resolves its mode via this helper from a
   # dedicated `g1-enforcement.mode` file; with no such file present it falls back
-  # to the shared mode → warn (the current default). The warn→enforce flip is
-  # DEFERRED to a follow-on after the ≥3-day shakedown; this release ships warn.
-  # Mode files are operator-instance runtime state and are NOT committed.
+  # to the shared mode → warn (the current default). The warn→enforce flip stays
+  # DEFERRED; this release ships warn. The floor is NOT the check-level ">=3-day
+  # shakedown" this comment used to name — scored at check level it reads 45 days
+  # and passes trivially, because the G1 detectors were revised DURING the window.
+  # It is per EMIT SITE, counting only days since that site's own most recent
+  # revision. Authority is the g1-enforcement row in
+  # core/standards/gate-efficacy-standard.md § Flip-decision status (axes W2-a /
+  # W2-b); do not restate the criterion here, and do not read a day count forward.
+  # NOTE the asymmetry this block previously blurred: a `.mode` file is the
+  # RUNTIME OVERRIDE and is operator-instance state that is NOT committed, but the
+  # GRADUATION is a committed default — resolve_check_mode "<id>" "enforce" — and
+  # that is the only form the flip may take. Flipping via the mode file would arm
+  # a blocking gate with no repo record of the arming.
   resolve_check_mode() {
     local _check_id="$1"
     local _default="${2:-$DEPLOY_CHECK_MODE}"
@@ -7374,9 +7384,14 @@ cmd_check() {
   # INDEPENDENTLY of the ~12-check shared-mode cohort. Every OTHER check still
   # reads $DEPLOY_CHECK_MODE directly and is byte-for-byte unchanged. With no
   # `g1-enforcement.mode` file present, this check falls back to the shared
-  # mode → warn (the current default). The warn→enforce flip is DEFERRED to a
-  # follow-on (after the ≥3-day shakedown); this release ships WARN. Mode
-  # files are operator-instance runtime state and are NOT committed.
+  # mode → warn (the current default). The warn→enforce flip stays DEFERRED and
+  # this release ships WARN; the criterion is the per-emit-site, since-revision
+  # floor recorded in the g1-enforcement row of
+  # core/standards/gate-efficacy-standard.md § Flip-decision status, NOT the
+  # check-level ">=3-day shakedown" this comment used to name. Mode files are
+  # operator-instance runtime state and are NOT committed — which is why the
+  # graduation itself is the COMMITTED default resolve_check_mode "<id>"
+  # "enforce" and never a mode file.
   #
   # Template Detection Logic — unique-textarea-marker variant:
   #   GitHub Issue Forms renders EVERY field — dropdown and textarea alike —
@@ -7419,11 +7434,24 @@ cmd_check() {
   # The check runs whenever AUDIT_REPO resolves to a tracker; with no tracker
   # configured the bundled-issue query returns an empty set and it no-ops.
   #
-  # Warn-mode initial per bypass-mode-readiness.md §Shakedown (Checks
-  # 8/9/10/14/15/18/19/20/21 precedent); flip-to-enforce DEFERRED to a follow-on
-  # after ≥3-day warn-log review with zero false positives — flipped via
-  # the dedicated `g1-enforcement.mode` file (NOT the shared deploy-check.mode),
-  # so this check graduates independently of the shared-mode cohort. Operator
+  # Warn-mode initial follows bypass-mode-readiness.md § Shakedown → Enforce as
+  # PRECEDENT for the posture (Checks 8/9/10/14/15/18/19/20/21), never as a
+  # checklist governing this dial: that checklist enumerates hook drains under
+  # the shared .claude/hooks/.mode, does not list this gate's sink, and its own
+  # text forbids harmonizing the two mode-precedence models. This gate graduates
+  # on its own dial, exactly as BLOCK-DESTRUCTIVE-022 graduates on its own
+  # constant. Flip-to-enforce stays DEFERRED. The criterion is NOT the check-level
+  # ">=3-day warn-log review" this comment used to name — the G1 detectors were
+  # revised during that window, so a check-level day count measures a moving
+  # predicate. It is the per-emit-site, since-revision floor plus the ADR-120
+  # ratification precondition recorded in the g1-enforcement row of
+  # core/standards/gate-efficacy-standard.md § Flip-decision status; that row is
+  # the authority and this comment does not restate it. When the flip lands it is
+  # the COMMITTED default resolve_check_mode "g1-enforcement" "enforce" at the
+  # mode-resolution site below — NOT the `g1-enforcement.mode` file, which is an
+  # operator-instance runtime override, git-ignored and invisible to CI. Either
+  # form still graduates this check independently of the shared-mode cohort.
+  # Operator
   # may consider adding Layers (a) intake-time hook and (c) scheduled cadence
   # after a 2-3 release calibration window: "keep in mind the right time to
   # perform this work and the tools/processes available currently."
