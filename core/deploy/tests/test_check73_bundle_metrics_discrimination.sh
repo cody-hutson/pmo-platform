@@ -243,11 +243,23 @@ assert_arms_ran() {
     fail "anti-vacuity: ${ARMS_RUN} of 4 discrimination arms executed — a suite that skipped an arm certifies coverage it never demonstrated"
     _ok=0
   fi
-  local _g
+  local _g _list
   for _g in 14 15; do
-    local -n _ref="G3_${_g}_VERDICTS"
+    # Bash 3.2.57-safe indirect ledger read. `local -n` is a bash >= 4.3 nameref,
+    # and the only runner for this suite is `shell-tests` on macos-latest, where
+    # bash is 3.2.57 and `local -n` aborts with "invalid option" — taking down the
+    # whole job (and every suite queued after it) and turning this anti-vacuity
+    # control into a FALSE failure on a healthy tree. Explicit per-gate arms rather
+    # than eval, matching the source + case + local idiom that
+    # test_resolve_canonical_source.sh documents for this same constraint.
+    case "$_g" in
+      14) _list="$(printf '%s\n' "${G3_14_VERDICTS[@]+"${G3_14_VERDICTS[@]}"}")" ;;
+      15) _list="$(printf '%s\n' "${G3_15_VERDICTS[@]+"${G3_15_VERDICTS[@]}"}")" ;;
+      *)  fail "anti-vacuity: g3-${_g} has no verdict ledger wired — the control cannot read an arm it claims to check"
+          _ok=0; continue ;;
+    esac
     local _uniq
-    _uniq="$(printf '%s\n' "${_ref[@]+"${_ref[@]}"}" | /usr/bin/sort -u | /usr/bin/grep -c . || true)"
+    _uniq="$(printf '%s\n' "$_list" | /usr/bin/sort -u | /usr/bin/grep -c . || true)"
     if [[ "${_uniq:-0}" -ne 2 ]]; then
       fail "anti-vacuity: g3-${_g} produced ${_uniq:-0} distinct verdict(s) across its arms, not an opposite-verdict pair — the gate answers the same way to a breaching and a conforming population"
       _ok=0
