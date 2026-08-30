@@ -360,7 +360,7 @@ fcm_run() {
 observed_of() {
   local json="$1" id="$2" obj
   obj="$(grep -oE "\{[^{}]*\"id\":\"$id\"[^{}]*\}" <<<"$json" || true)"
-  # sigpipe-idiom: allow — here-string writer, no upstream producer to signal.
+  # sigpipe-idiom: allow — `sed`, not the here-string, is the signallable producer: the here-string feeds `sed`, and `sed` writes into the pipe `head -1` closes. Safe on SIZE, not on shape — the extracted field list is a few short lines, far under the pipe buffer, so `sed` writes it all and exits before `head` closes the read end.
   sed -n 's/.*"observed":"\([^"]*\)".*/\1/p' <<<"$obj" | head -1
 }
 
@@ -1273,7 +1273,7 @@ FIX_HIJACK="release/tools/tests/fixtures/verify-plan-runtime-hijack.md"
 FIX_NOTABLE="release/tools/tests/fixtures/verify-plan-no-table.md"
 
 # rows_of <json> — the roll-up denominator. acs_of <json> — emitted AC-N records.
-# sigpipe-idiom: allow — here-string writer, no upstream producer to signal.
+# sigpipe-idiom: allow — `sed`, not the here-string, is the signallable producer: the here-string feeds `sed`, and `sed` writes into the pipe `head -1` closes. Safe on SIZE, not on shape — the extracted field list is a few short lines, far under the pipe buffer, so `sed` writes it all and exits before `head` closes the read end.
 rows_of() { sed -n 's/.*"per_issue_rows": \([0-9]*\).*/\1/p' <<<"$1" | head -1; }
 acs_of()  { grep -c '"id":"AC-' <<<"$1" || true; }
 
@@ -1403,9 +1403,9 @@ R_NT="$(rows_of "$J_NT")"
 [ "${R_NT:-x}" = "0" ] && [ "${R_TRAP:-0}" -gt 0 ] && [ "$R_NT" != "$R_TRAP" ] \
   && ok "D-1 a plan with a per-issue table and one without report DIFFERENT denominators ($R_TRAP vs $R_NT)" \
   || bad "D-1 denominators did not separate: with-table '$R_TRAP', without-table '${R_NT:-<none>}'"
-# sigpipe-idiom: allow — here-string writer, no upstream producer to signal.
+# sigpipe-idiom: allow — `sed`, not the here-string, is the signallable producer: the here-string feeds `sed`, and `sed` writes into the pipe `head -1` closes. Safe on SIZE, not on shape — the extracted field list is a few short lines, far under the pipe buffer, so `sed` writes it all and exits before `head` closes the read end.
 E_NT="$(sed -n 's/.*"error": \([0-9]*\).*/\1/p' <<<"$J_NT" | head -1)"
-# sigpipe-idiom: allow — here-string writer, no upstream producer to signal.
+# sigpipe-idiom: allow — `sed`, not the here-string, is the signallable producer: the here-string feeds `sed`, and `sed` writes into the pipe `head -1` closes. Safe on SIZE, not on shape — the extracted field list is a few short lines, far under the pipe buffer, so `sed` writes it all and exits before `head` closes the read end.
 E_TRAP="$(sed -n 's/.*"error": \([0-9]*\).*/\1/p' <<<"$J_TRAP" | head -1)"
 [ "$E_NT" = "0" ] && [ "$E_TRAP" = "0" ] \
   && ok "D-1b BOTH report 0 ERROR — which is exactly why 0 ERROR alone was uninterpretable, and why the denominator is the fix" \
@@ -1535,7 +1535,7 @@ FIX_CIACPAR="release/tools/tests/fixtures/verify-plan-ciac-parity.md"
 field_by_issue() {
   local json="$1" iss="$2" fld="$3" obj
   obj="$(grep -oE "\{[^{}]*\"issue\":\"$iss\"[^{}]*\}" <<<"$json" || true)"
-  # sigpipe-idiom: allow — here-string writer, no upstream producer to signal.
+  # sigpipe-idiom: allow — `sed`, not the here-string, is the signallable producer: the here-string feeds `sed`, and `sed` writes into the pipe `head -1` closes. Safe on SIZE, not on shape — the extracted field list is a few short lines, far under the pipe buffer, so `sed` writes it all and exits before `head` closes the read end.
   sed -n "s/.*\"$fld\":\"\([^\"]*\)\".*/\1/p" <<<"$obj" | head -1
 }
 pending_ids() { grep -c '"id":"PENDING"' <<<"$1" || true; }
@@ -1546,7 +1546,7 @@ pending_ids() { grep -c '"id":"PENDING"' <<<"$1" || true; }
 field_by_id() {
   local json="$1" the_id="$2" fld="$3" obj
   obj="$(grep -oE "\{[^{}]*\"id\":\"$the_id\"[^{}]*\}" <<<"$json" || true)"
-  # sigpipe-idiom: allow — here-string writer, no upstream producer to signal.
+  # sigpipe-idiom: allow — `sed`, not the here-string, is the signallable producer: the here-string feeds `sed`, and `sed` writes into the pipe `head -1` closes. Safe on SIZE, not on shape — the extracted field list is a few short lines, far under the pipe buffer, so `sed` writes it all and exits before `head` closes the read end.
   sed -n "s/.*\"$fld\":\"\([^\"]*\)\".*/\1/p" <<<"$obj" | head -1
 }
 
