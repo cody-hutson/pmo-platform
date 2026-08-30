@@ -1420,7 +1420,11 @@ grep -qE 'over 4 per-issue row\(s\)' <<<"$("$VERIFY" --no-color --format=md --ro
   || bad "D-2b the with-table md roll-up does not carry its row count"
 
 # D-M — SEEDED FAILURE. Zero the denominator at its source. D-1 must flip.
-m6383 g10-m4-denominator-zeroed 's/PER_ISSUE_ROWS="\$\(printf .%s. "\$per_issue_records" \| grep -c \. \|\| true\)"/PER_ISSUE_ROWS=0/'
+# ANCHORED ON THE ASSIGNMENT, NOT ITS BODY. The previous form pinned the exact
+# pipeline text and silently stopped matching the moment #6234 changed the
+# counter — the mutant went byte-identical and the paired arm would have passed
+# vacuously. It was caught only because the harness asserts the mutant differs.
+m6383 g10-m4-denominator-zeroed 's/^  PER_ISSUE_ROWS=.*$/  PER_ISSUE_ROWS=0/'
 vrp_run "$MUT_PATH" "$FIX_TRAP"; JM_TRAP2="$VRP_JSON"
 [ "$(rows_of "$JM_TRAP2")" = "0" ] \
   && ok "D-M mutation detected — with the counter zeroed the with-table plan reports the empty-denominator statement too" \
@@ -1490,6 +1494,232 @@ case "$(observed_of "$JM_VPW" FCM-COVERAGE)" in
 esac
 
 rm -rf "$MUTD3"
+
+# ===========================================================================
+# G11 — #6234: the record format, the header dialects, and the residual ERROR
+#
+# WHY THIS GROUP EXISTS, AND WHY THE OLD SUITE COULD NOT HAVE CAUGHT IT.
+# All five pre-existing verify-plan fixtures carry a literal `AC` column — 10 of
+# 10 indexed blocks — so the entire fixture corpus was drawn from the population
+# that is IMMUNE to the empty-field collapse. Worse, the suite's only row-
+# addressing primitives (verdict_of / family_of) key on `"id":"AC-N"`, which is
+# the exact field the collapse destroys: under it every row reads `id` as the
+# literal `PENDING`, so the helpers cannot address a collapsed row even in
+# principle. 146 green assertions were structurally blind to this class.
+#
+# Every fixture below is drawn from the AFFECTED population, and every arm is
+# paired with either a control that must NOT move or a seeded failure that must
+# flip it.
+# ===========================================================================
+echo
+echo "G11 — #6234: record format, header dialects, and the unindexable residual"
+
+FIX_NOAC="release/tools/tests/fixtures/verify-plan-no-ac.md"
+FIX_NOACCTL="release/tools/tests/fixtures/verify-plan-no-ac-control.md"
+FIX_NOACNOEXP="release/tools/tests/fixtures/verify-plan-no-ac-no-expected.md"
+FIX_MCLASS="release/tools/tests/fixtures/verify-plan-method-class.md"
+FIX_CMDCOL="release/tools/tests/fixtures/verify-plan-command-col.md"
+FIX_LONGFORM="release/tools/tests/fixtures/verify-plan-longform-method.md"
+FIX_UNIDX="release/tools/tests/fixtures/verify-plan-unindexable.md"
+FIX_NONVERIF="release/tools/tests/fixtures/verify-plan-nonverif-table.md"
+FIX_EMPTYM="release/tools/tests/fixtures/verify-plan-empty-method-cell.md"
+FIX_CIACPAR="release/tools/tests/fixtures/verify-plan-ciac-parity.md"
+
+# field_by_issue <json> <issue> <field> — address a record by its ISSUE rather
+# than by its id. Required here and not a convenience: a plan with no AC column
+# has no AC identifier to key on, and inventing one would be the placeholder fix
+# the acceptance criterion explicitly disqualifies.
+field_by_issue() {
+  local json="$1" iss="$2" fld="$3" obj
+  obj="$(grep -oE "\{[^{}]*\"issue\":\"$iss\"[^{}]*\}" <<<"$json" || true)"
+  # sigpipe-idiom: allow — here-string writer, no upstream producer to signal.
+  sed -n "s/.*\"$fld\":\"\([^\"]*\)\".*/\1/p" <<<"$obj" | head -1
+}
+pending_ids() { grep -c '"id":"PENDING"' <<<"$1" || true; }
+# field_by_id <json> <id> <field> — the id-keyed twin. Used for the block-level
+# diagnostic, whose ISSUE label is the literal `(plan)`: those parentheses are
+# ERE metacharacters, so keying on the issue silently matches nothing and the
+# arm reads an empty string. Caught by the arm failing rather than passing.
+field_by_id() {
+  local json="$1" the_id="$2" fld="$3" obj
+  obj="$(grep -oE "\{[^{}]*\"id\":\"$the_id\"[^{}]*\}" <<<"$json" || true)"
+  # sigpipe-idiom: allow — here-string writer, no upstream producer to signal.
+  sed -n "s/.*\"$fld\":\"\([^\"]*\)\".*/\1/p" <<<"$obj" | head -1
+}
+
+# --- G11-A: THE CARD AC — per-row cell attribution, byte-compared -----------
+vrp_run "$VERIFY" "$FIX_NOAC";    J_NOAC="$VRP_JSON"
+vrp_run "$VERIFY" "$FIX_NOACCTL"; J_NOACC="$VRP_JSON"
+
+M_NOAC="$(field_by_issue "$J_NOAC" '#811' method)"
+E_NOAC="$(field_by_issue "$J_NOAC" '#811' expected)"
+M_CTL="$(field_by_issue "$J_NOACC" '#811' method)"
+E_CTL="$(field_by_issue "$J_NOACC" '#811' expected)"
+
+# THE byte comparison that surfaced the defect: the emitted Method must equal the
+# row's Verification-method cell and must DIFFER from its Expected-result cell.
+[ "$M_NOAC" = '`test -f release/tools/verify-release-plan.sh`' ] && [ "$M_NOAC" != "$E_NOAC" ] \
+  && ok "G11-A1 no-AC plan: the emitted Method is the METHOD cell and differs from the Expected cell ('$M_NOAC')" \
+  || bad "G11-A1 cell attribution wrong on a no-AC plan: method='$M_NOAC' expected='$E_NOAC'"
+
+# THE CONTROL. The AC column is the ONLY variable between the pair, and the two
+# Method cells are byte-identical in the fixtures, so the emitted methods must be
+# byte-identical too. This is what separates "the parser read the right column"
+# from "the parser happened to produce a plausible string".
+[ "$M_NOAC" = "$M_CTL" ] && [ "$E_NOAC" = "$E_CTL" ] \
+  && ok "G11-A2 CONTROL — trap and control emit BYTE-IDENTICAL method and expected; the AC column changes nothing but the id" \
+  || bad "G11-A2 the pair separated: trap method='$M_NOAC' vs control method='$M_CTL'"
+
+[ "$(field_by_issue "$J_NOAC" '#811' id)" = "" ] && [ "$(field_by_issue "$J_NOACC" '#811' id)" = "AC-1" ] \
+  && ok "G11-A3 the id field reports what the plan DECLARED — empty when there is no AC column, AC-1 when there is" \
+  || bad "G11-A3 id fields wrong: trap '$(field_by_issue "$J_NOAC" '#811' id)', control '$(field_by_issue "$J_NOACC" '#811' id)'"
+
+[ "$(pending_ids "$J_NOAC")" = "0" ] \
+  && ok "G11-A4 zero records carry the collapse signature 'id:PENDING' — the marker stays in the position it was written to" \
+  || bad "G11-A4 $(pending_ids "$J_NOAC") record(s) leaked the PENDING marker into the id field"
+
+# --- G11-B: TWO empty interior fields (no AC and no Expected) ---------------
+vrp_run "$VERIFY" "$FIX_NOACNOEXP"; J_NN="$VRP_JSON"
+[ "$(field_by_issue "$J_NN" '#813' method)" = '`test -f release/tools/verify-release-plan.sh`' ] \
+  && [ "$(pending_ids "$J_NN")" = "0" ] \
+  && ok "G11-B1 a record with TWO empty interior fields still reads its method at the method position" \
+  || bad "G11-B1 double-empty record mis-read: method='$(field_by_issue "$J_NN" '#813' method)'"
+
+# --- G11-C: the CIAC parity record survives the read ------------------------
+vrp_run "$VERIFY" "$FIX_CIACPAR"; J_CP="$VRP_JSON"
+[ "$(family_of "$J_CP" CIAC-2)" = "parity-error" ] && [ "$(verdict_of "$J_CP" CIAC-2)" = "ERROR" ] \
+  && ok "G11-C1 the CIAC parity record — whose field 2 is a literal empty string — keeps its family marker and ERRORs" \
+  || bad "G11-C1 CIAC-2 family='$(family_of "$J_CP" CIAC-2)' verdict='$(verdict_of "$J_CP" CIAC-2)'; expected parity-error/ERROR"
+[ "$(family_of "$J_CP" CIAC-1)" = "integration" ] && [ "$(verdict_of "$J_CP" CIAC-1)" = "PASS" ] \
+  && ok "G11-C2 CONTROL — the conformant CIAC row in the same fixture still dispatches as integration and PASSes" \
+  || bad "G11-C2 the conformant control row moved: family='$(family_of "$J_CP" CIAC-1)'"
+
+# --- G11-D: the widened header dialects index -------------------------------
+vrp_run "$VERIFY" "$FIX_MCLASS";   J_MC="$VRP_JSON"
+vrp_run "$VERIFY" "$FIX_CMDCOL";   J_CC="$VRP_JSON"
+vrp_run "$VERIFY" "$FIX_LONGFORM"; J_LF="$VRP_JSON"
+[ "$(rows_of "$J_MC")" = "2" ] && [ "$(rows_of "$J_CC")" = "2" ] \
+  && ok "G11-D1 the two unrecognised dialects index: 'Method class' 2 rows, 'Command' 2 rows (both were 0 before)" \
+  || bad "G11-D1 dialects did not index: method-class '$(rows_of "$J_MC")', command '$(rows_of "$J_CC")'"
+[ "$(rows_of "$J_LF")" = "2" ] \
+  && ok "G11-D2 the long-form header 'Verification method (FMF-1-scoped)' still indexes — containment is preserved" \
+  || bad "G11-D2 the long-form header stopped indexing: '$(rows_of "$J_LF")' rows"
+
+# --- G11-E: the residual ERRORs, and does NOT false-positive ----------------
+vrp_run "$VERIFY" "$FIX_UNIDX";    J_UI="$VRP_JSON"; RC_UI="$VRP_RC"
+vrp_run "$VERIFY" "$FIX_NONVERIF"; J_NV="$VRP_JSON"; RC_NV="$VRP_RC"
+U_N="$(grep -c '"family":"table-unindexable"' <<<"$J_UI" || true)"
+[ "$U_N" = "1" ] && [ "$(field_by_id "$J_UI" TABLE expected)" = "rows=2" ] && [ "$RC_UI" = "3" ] \
+  && ok "G11-E1 an unindexable table ERRORs ONCE per block carrying rows=2, and the run exits 3" \
+  || bad "G11-E1 expected 1 block record/rows=2/exit 3; got n=$U_N rows='$(field_by_id "$J_UI" TABLE expected)' rc=$RC_UI"
+case "$(field_by_id "$J_UI" TABLE method)" in
+  *"| Issue | AC | Expected result |"*) ok "G11-E2 the ERROR carries the offending header VERBATIM, so the author can see which column is missing" ;;
+  *) bad "G11-E2 the ERROR does not carry the header: '$(field_by_id "$J_UI" TABLE method)'" ;;
+esac
+# THE FALSE-POSITIVE CONTROL, and the reason the discriminator is not the looser
+# rule. This table shares only the word `Issue` with the schema. ERROR means exit
+# 3, so a rule that fires here turns a correct, shipped, unchangeable plan red.
+[ "$(grep -c '"family":"table-unindexable"' <<<"$J_NV" || true)" = "0" ] && [ "$RC_NV" = "0" ] \
+  && ok "G11-E3 CONTROL — a table naming only 'Issue' is NOT a verification claim: 0 records, exit 0" \
+  || bad "G11-E3 FALSE POSITIVE — the non-verification table produced a record or a non-zero exit (rc=$RC_NV)"
+# --- G11-F: an empty Method cell inside an indexed table --------------------
+vrp_run "$VERIFY" "$FIX_EMPTYM"; J_EM="$VRP_JSON"; RC_EM="$VRP_RC"
+[ "$(family_of "$J_EM" AC-2)" = "method-cell-empty" ] && [ "$(verdict_of "$J_EM" AC-2)" = "ERROR" ] && [ "$RC_EM" = "3" ] \
+  && ok "G11-F1 a row declaring a check with no method to run it is a NAMED ERROR, not a silent drop" \
+  || bad "G11-F1 AC-2 family='$(family_of "$J_EM" AC-2)' verdict='$(verdict_of "$J_EM" AC-2)' rc=$RC_EM"
+[ "$(verdict_of "$J_EM" AC-1)" = "PASS" ] \
+  && ok "G11-F2 CONTROL — the populated row in the SAME table grades normally, so the ERROR is attributable to the empty cell" \
+  || bad "G11-F2 the in-fixture control row moved: '$(verdict_of "$J_EM" AC-1)'"
+
+# ===========================================================================
+# G11-M — SEEDED FAILURES. Each mutation must FLIP the arm it is paired with.
+# Without these the group is a set of control-shaped assertions, which is the
+# defect class this milestone exists to eliminate.
+# ===========================================================================
+MUTD4="$(mktemp -d -t verify-plan-6234-mut.XXXXXX)"
+m6234() {
+  local name="$1"; shift
+  local dst="$MUTD4/$name.sh" e
+  cp "$VERIFY" "$dst"
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  if cmp -s "$VERIFY" "$dst"; then
+    bad "$name — MUTATION DID NOT TAKE (mutant is byte-identical); the paired arm would pass vacuously"
+  else
+    ok "$name — mutation applied (mutant bytes differ from the shipped tool)"
+  fi
+}
+
+# M1 — REVERT THE DELIMITER TO A TAB. The replacement builds the tab through
+# `printf %b` rather than a shell quote, so this expression carries no invisible
+# literal tab that an editor could silently convert to spaces.
+m6234 g11-m1-delimiter-reverted-to-tab 's/^readonly REC_FS=.*$/readonly REC_FS="$(printf %b \\\\011)"/'
+vrp_run "$MUT_PATH" "$FIX_NOAC"; JM_NOAC="$VRP_JSON"
+MM="$(field_by_issue "$JM_NOAC" '#811' method)"
+[ "$(pending_ids "$JM_NOAC")" -gt 0 ] && [ "$MM" != "$M_NOAC" ] \
+  && ok "G11-M1 mutation detected — under a whitespace delimiter the record shifts: ids read PENDING and the Method becomes '$MM'" \
+  || bad "G11-M1 SURVIVED — pending=$(pending_ids "$JM_NOAC") method='$MM'; G11-A observes nothing"
+vrp_run "$MUT_PATH" "$FIX_NOACCTL"; JM_NOACC="$VRP_JSON"
+[ "$(field_by_issue "$JM_NOACC" '#811' method)" = "$M_CTL" ] \
+  && ok "G11-M1b the SAME mutant leaves the AC-bearing control UNMOVED — which is why a fixture corpus drawn only from that population saw nothing" \
+  || bad "G11-M1b the mutant moved the control too, so G11-M1 is not attributable to the empty field"
+
+# M2 — REVERT THE WIDENING. The two dialects must stop indexing.
+m6234 g11-m2-widening-reverted 's@else if \(c ~ /verification method/ \|\| c ~ /method class/ \|\|@else if (c ~ /verification method/ ||@; s@ *c == "method" \|\| c == "command"\) *\{ h_method = i;   h_hits\+\+ \}@                   c == "method")                              { h_method = i;   h_hits++ }@'
+vrp_run "$MUT_PATH" "$FIX_MCLASS"; JM_MC="$VRP_JSON"
+vrp_run "$MUT_PATH" "$FIX_CMDCOL"; JM_CC="$VRP_JSON"
+[ "$(rows_of "$JM_MC")" = "0" ] && [ "$(rows_of "$JM_CC")" = "0" ] \
+  && ok "G11-M2 mutation detected — with the widening reverted both dialects index 0 rows; G11-D1 flips" \
+  || bad "G11-M2 SURVIVED — method-class '$(rows_of "$JM_MC")', command '$(rows_of "$JM_CC")'"
+# AND the residual now fires on them, which is the whole point of pairing the
+# widening with the ERROR: the rows do not vanish, they are named.
+[ "$(grep -c '"family":"table-unindexable"' <<<"$JM_MC" || true)" -ge 1 ] \
+  && ok "G11-M2b the reverted rows are NAMED, not lost — the residual ERROR fires on the same table" \
+  || bad "G11-M2b the reverted rows vanished silently, which is the defect this card exists to close"
+
+# M3 — THE EQUALITY REGRESSION, MADE EXECUTABLE. This is the amendment that was
+# carried on a single measurement; here it is a test. Tightening containment to
+# full-cell equality must de-index the long-form header.
+m6234 g11-m3-method-match-tightened-to-equality 's@c ~ /verification method/ \|\| c ~ /method class/ \|\|@c == "verification method" || c == "method class" ||@'
+vrp_run "$MUT_PATH" "$FIX_LONGFORM"; JM_LF="$VRP_JSON"
+[ "$(rows_of "$JM_LF")" = "0" ] \
+  && ok "G11-M3 mutation detected — full-cell equality silently de-indexes a header that works today; containment is load-bearing, not stylistic" \
+  || bad "G11-M3 SURVIVED — the long-form header still indexes '$(rows_of "$JM_LF")' rows under equality"
+
+# M4 — REMOVE THE RESIDUAL ERROR. The unindexable table must go silent again.
+m6234 g11-m4-residual-error-removed 's@if \(h_method == 0 && \(h_ac > 0 \|\| h_expected > 0 \|\| h_pred > 0\)\) \{@if (0) {@'
+vrp_run "$MUT_PATH" "$FIX_UNIDX"; JM_UI="$VRP_JSON"; RCM_UI="$VRP_RC"
+[ "$(grep -c '"family":"table-unindexable"' <<<"$JM_UI" || true)" = "0" ] && [ "$RCM_UI" = "0" ] \
+  && ok "G11-M4 mutation detected — without the residual arm the table suppresses its rows silently and the run exits 0" \
+  || bad "G11-M4 SURVIVED — records still emitted (rc=$RCM_UI); G11-E1 observes nothing"
+
+# M5 — WIDEN THE DISCRIMINATOR TO THE LOOSER RULE. The false-positive control
+# must go red. This is the arm that would have caught the briefed predicate.
+m6234 g11-m5-discriminator-loosened 's@if \(h_method == 0 && \(h_ac > 0 \|\| h_expected > 0 \|\| h_pred > 0\)\) \{@if (h_method == 0 \&\& h_hits >= 1) {@'
+vrp_run "$MUT_PATH" "$FIX_NONVERIF"; JM_NV="$VRP_JSON"; RCM_NV="$VRP_RC"
+[ "$(grep -c '"family":"table-unindexable"' <<<"$JM_NV" || true)" -ge 1 ] && [ "$RCM_NV" = "3" ] \
+  && ok "G11-M5 mutation detected — the looser predicate ERRORs on a table making no verification claim and exits 3; G11-E3 flips" \
+  || bad "G11-M5 SURVIVED — the looser predicate did not fire (rc=$RCM_NV), so G11-E3 proves nothing"
+
+# M6 — REMOVE THE method-cell-empty ARM. The row must vanish silently.
+m6234 g11-m6-empty-method-silent 's@^      if \(method == ""\) \{$@      if (method == "") { next } if (0) {@'
+vrp_run "$MUT_PATH" "$FIX_EMPTYM"; JM_EM="$VRP_JSON"; RCM_EM="$VRP_RC"
+[ "$(family_of "$JM_EM" AC-2)" = "" ] && [ "$RCM_EM" = "0" ] \
+  && ok "G11-M6 mutation detected — without the arm the empty-method row vanishes with no record and the run exits 0" \
+  || bad "G11-M6 SURVIVED — AC-2 family '$(family_of "$JM_EM" AC-2)' rc=$RCM_EM"
+
+# M7 — DROP THE -F FROM THE CIAC DE-DUPE. The cascade the delimiter change
+# creates: `!seen[$1]++` keyed on awk default whitespace no longer isolates the
+# id, so the de-dupe silently stops de-duplicating.
+m6234 g11-m7-dedupe-fs-dropped 's@awk -F"\$REC_FS" .!seen\[\$1\]\+\+.@awk "!seen[\$1]++"@'
+vrp_run "$MUT_PATH" "$FIX_CIACPAR"; JM_CP="$VRP_JSON"
+[ "$(grep -c '"id":"CIAC-' <<<"$JM_CP" || true)" != "$(grep -c '"id":"CIAC-' <<<"$J_CP" || true)" ] \
+  && ok "G11-M7 mutation detected — without -F the de-dupe key runs past the id and the CIAC record count changes" \
+  || bad "G11-M7 SURVIVED — CIAC record count unchanged ($(grep -c '"id":"CIAC-' <<<"$JM_CP" || true)); the -F cascade is untested"
+
+rm -rf "$MUTD4"
 
 # ---------------------------------------------------------------------------
 # Summary

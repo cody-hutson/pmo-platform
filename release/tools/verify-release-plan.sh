@@ -50,7 +50,49 @@ readonly CLI_VERSION="0.2.1"
 # cleanly. The `fcm-delivery` coverage record additionally gains `prose_led=`.
 # Both are ADDITIVE: no verdict value is added and no record field is renamed,
 # so the Gate-6 verification-evidence grep contract survives this bump too.
+# 3 -> 4 (SECOND CONTRIBUTOR TO THE SAME BUMP -- no further bump is owed):
+# the per-issue record gains two PARSER-ASSIGNED families, `table-unindexable`
+# and `method-cell-empty`, both dispatched as ERROR. A family VALUE is neither
+# a new record field nor a new verdict value, and `parity-error` already
+# established the parser-assigned-family idiom, so the emitted contract is
+# unchanged. Recorded here so the addition is traceable rather than silent.
+# The parser->dispatcher record DELIMITER also changed (see REC_FS below);
+# that boundary is internal and the emitted `stream` remains TAB-separated,
+# so it is likewise invisible to every downstream consumer.
 readonly SCHEMA_VERSION="4"
+
+# ---------------------------------------------------------------------------
+# REC_FS -- the parser->dispatcher record field separator. ASCII 0x1F (UNIT
+# SEPARATOR), the byte whose defined meaning is exactly "separator between
+# fields within a record".
+#
+# DO NOT REVERT THIS TO A TAB, and the reason is not style. Tab is an IFS
+# *whitespace* character by POSIX definition, so under `IFS=$'\t' read`
+# consecutive tabs COLLAPSE and a leading empty field is stripped. Both states
+# are reachable here: `parse_verification_plan` emits an empty `ac` whenever a
+# table header carries no `AC` column -- 24 of 42 indexed tables in the plan
+# corpus -- and `parse_ciac` writes a literal empty field 2 on its parity-error
+# record. Under a tab the record then SHIFTS one position left and the consumer
+# reads the *Expected result* cell as the Method: the row is graded on the
+# wrong cell while every tally stays arithmetically correct, which is why the
+# suite carried 146 green assertions over it. There is no shell switch to
+# disable the collapse -- the delimiter itself is the only fix, and populating
+# the field instead leaves the format positionally ambiguous for the next
+# nullable field.
+#
+# Verified absent from the corpus this parser reads: 0 occurrences of 0x1F in
+# 6,321,036 bytes across 187 plan files (sensitivity arm LF = 47,654).
+#
+# SCOPE -- parser -> dispatcher ONLY. The emitted `stream` stays TAB-separated
+# because `awk -F'\t'` does NOT collapse empty fields and every downstream
+# consumer reads it with awk. `parse_fcm_declarations` is deliberately NOT
+# converted: all three of its emit sites guard field 2 non-empty (an unreadable
+# intent is `next`-ed at the table site and becomes the literal `unknown` at
+# the fence site), so that stream carries none of this defect, and six
+# `-F'\t'` readers plus a same-path reconciliation would have to move for no
+# measured gain.
+# ---------------------------------------------------------------------------
+readonly REC_FS=$'\037'
 
 # ---------------------------------------------------------------------------
 # Pinned PATH for tool discipline (per bypass-mode-readiness.md posture).
@@ -446,10 +488,32 @@ parse_verification_plan() {
   body="$(_extract_section "$file" "Verification Plan")"
   if [ -z "$body" ]; then return 0; fi
 
-  printf '%s\n' "$body" | awk "$AWK_HEAL_FIELDS"'
+  printf '%s\n' "$body" | awk -v RFS="$REC_FS" "$AWK_HEAL_FIELDS"'
     function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
     function lc(s)   { return tolower(s) }
+    # THE RECORD SHAPE IS SINGLE-SOURCED HERE. Every emit goes through rec(),
+    # so the field count and the separator cannot drift between emit sites --
+    # which is how the five-field record acquired a positionally ambiguous
+    # member in the first place. RFS is supplied by -v (never as an escape
+    # inside a printf format string: BSD and GNU awk differ on octal-escape
+    # handling there, and -v has no such variance).
+    function rec(a, b, c, d, e) {
+      printf "%s%s%s%s%s%s%s%s%s\n", a, RFS, b, RFS, c, RFS, d, RFS, e
+    }
+    # A table whose header DECLARES verification content but resolves no method
+    # column is latched at its header and flushed as ONE record per block --
+    # per block, not per row, because the operator needs "this table suppressed
+    # N rows", not N identical errors. cur_issue is captured at LATCH time:
+    # the flush fires from a rule that may already have moved to the next
+    # issue, so reading cur_issue at flush time would misattribute the block.
+    function flush_unindexable() {
+      if (pend_hdr != "") {
+        rec(pend_iss, "TABLE", "table-unindexable", pend_hdr, ("rows=" pend_n))
+        pend_hdr = ""; pend_n = 0; pend_iss = ""
+      }
+    }
     function reset_cols() {
+      flush_unindexable()
       have_issue_col = 0; col_issue = 0
       col_ac = 0; col_pred = 0; col_method = 0; col_expected = 0; hdr_n = 0
       block_row = 0
@@ -527,7 +591,19 @@ parse_verification_plan() {
           c = lc(trim(F[i]))
           if (c == "issue")                                   { h_issue = i;    h_hits++ }
           else if (c == "ac")                                 { h_ac = i;       h_hits++ }
-          else if (c ~ /verification method/ || c == "method") { h_method = i;   h_hits++ }
+          # WIDENED, AND DELIBERATELY BY CONTAINMENT FOR THE LONG FORMS. Two
+          # further spellings account for the entire droppable population --
+          # `Method class` (4 plans) and `Command` (3 plans). Tightening the two
+          # long forms to full-cell EQUALITY was measured and REJECTED: it gains
+          # the same 59 rows but silently de-indexes 20 rows that index today
+          # (`Verification method (FMF-1-scoped)` and `Verification method
+          # class`), which would ship a fresh instance of the defect this change
+          # exists to close. `command` takes EQUALITY instead, because it is a
+          # short common English word and containment on it is a false-positive
+          # risk. Measured over all 77 corpus blocks: gains 59, loses 0, and
+          # swallows 0 of the 27 correct-skip blocks.
+          else if (c ~ /verification method/ || c ~ /method class/ ||
+                   c == "method" || c == "command")           { h_method = i;   h_hits++ }
           else if (c ~ /expected/)                            { h_expected = i; h_hits++ }
           else if (c ~ /predicate/)                           { h_pred = i;     h_hits++ }
         }
@@ -537,6 +613,23 @@ parse_verification_plan() {
           col_issue = h_issue; col_ac = h_ac; col_pred = h_pred
           col_method = h_method; col_expected = h_expected
           hdr_n = n
+          # THE RESIDUAL, AND ITS DISCRIMINATOR. This header declares
+          # verification content -- it names AC, Expected or Predicate -- yet
+          # resolves no method column, so every row beneath it is about to be
+          # dropped by the `col_method == 0` guard below. Latch it and ERROR.
+          #
+          # A header naming ONLY `issue` is deliberately NOT latched, and that
+          # is the whole discriminator: sharing one word with the schema is not
+          # a verification claim. The looser rule `h_hits >= 1 && col_method ==
+          # 0` was measured and REJECTED -- it fires on a live AC-BASELINE table
+          # whose own prose reads "the baseline is a pinned measurement and
+          # carries no verdict", and ERROR means exit 3, so it would turn a
+          # correct shipped plan red. Sensitivity 7 blocks / 59 rows against the
+          # pre-widening rule; specificity 0 after it.
+          if (h_method == 0 && (h_ac > 0 || h_expected > 0 || h_pred > 0)) {
+            pend_hdr = trim(substr($0, 1, 160)); pend_n = 0
+            pend_iss = (cur_issue == "" ? "(plan)" : cur_issue)
+          }
         }
       }
       if (is_header) next
@@ -545,8 +638,11 @@ parse_verification_plan() {
         stripped = $0; gsub(/[ \t|:-]/, "", stripped)
         if (stripped == "") next
       }
-      # Data row — only emit when we know where method + expected live.
-      if (col_method == 0) next
+      # Data row — only emit when we know where method + expected live. A drop
+      # under a LATCHED header is counted, so the flush can name its size; a
+      # drop under an unlatched one stays silent, which is the correct reading
+      # of "this is not a per-issue table at all".
+      if (col_method == 0) { if (pend_hdr != "") pend_n++; next }
       # HEADER/ROW FIELD-PARITY GUARD. A row that still does not carry its
       # header field count after healing carries an UNESCAPED bare pipe, which
       # is malformed GFM. Parsing it anyway reads every cell past the break at a
@@ -554,9 +650,8 @@ parse_verification_plan() {
       # which is how this parser produced a silent false FAIL. Emit an
       # attributable ERROR naming the row instead. Fail loud; never mis-index.
       if (hdr_n > 0 && n != hdr_n) {
-        printf "%s\t%s\tparity-error\t%s\t%s\n", \
-          (cur_issue == "" ? "(plan)" : cur_issue), "ROW", \
-          trim(substr($0, 1, 160)), ("fields=" n " header=" hdr_n)
+        rec((cur_issue == "" ? "(plan)" : cur_issue), "ROW", "parity-error", \
+            trim(substr($0, 1, 160)), ("fields=" n " header=" hdr_n))
         next
       }
       method   = (col_method   <= n) ? trim(F[col_method])   : ""
@@ -573,11 +668,24 @@ parse_verification_plan() {
       ac       = (col_ac       <= n && col_ac       > 0) ? trim(F[col_ac])       : ""
       issue    = have_issue_col && (col_issue <= n) ? trim(F[col_issue]) : cur_issue
       if (issue == "") issue = cur_issue
-      if (method == "") next
+      # An empty Method cell inside an INDEXED table is an unreadable
+      # declaration, not an absence: the row asserts a check and names no way
+      # to run it. Dropping it silently is the same defect as the unindexable
+      # table above, one row down, and the doctrine this file states for both
+      # is that an unparseable input must NEVER read as "nothing declared,
+      # therefore no violations". ERROR, named, carrying the row text.
+      if (method == "") {
+        rec((issue == "" ? "(plan)" : issue), (ac == "" ? "ROW" : ac), \
+            "method-cell-empty", trim(substr($0, 1, 160)), ("method-col=" col_method))
+        next
+      }
       # Skip a row whose AC cell is itself the word "AC" (defensive).
-      printf "%s\t%s\t%s\t%s\t%s\n", issue, ac, "PENDING", method, expected
+      rec(issue, ac, "PENDING", method, expected)
       # family filled in by the shell classifier (awk cannot call it); marker.
     }
+    # A table block that runs to end-of-section is flushed here; reset_cols()
+    # covers every block that ends at a non-table line.
+    END { flush_unindexable() }
   '
 }
 
@@ -1085,6 +1193,18 @@ dispatch_check() {
     # cannot be read. Carrying the field counts makes it attributable.
     parity-error)   printf '%s\t%s\n' "$VERDICT_ERROR" \
                       "table-row-field-parity ($expected) — row does not carry its header's field count after escape healing; an unescaped bare pipe makes every cell past the break read at a shifted index" ;;
+    # A TABLE the parser refused to index: its header declares verification
+    # content (it names AC, Expected or Predicate) but resolves no method
+    # column, so every row beneath it was dropped. ONE record per block,
+    # carrying the header verbatim so the author sees which column is missing.
+    table-unindexable)
+                    printf '%s\t%s\n' "$VERDICT_ERROR" \
+                      "verification-table-unindexable ($expected) — the header declares verification content but names no method column, so its rows cannot be graded: $method" ;;
+    # A ROW inside an indexed table whose Method cell is empty. Same doctrine,
+    # one level down: a check with no method to run is unreadable, not absent.
+    method-cell-empty)
+                    printf '%s\t%s\n' "$VERDICT_ERROR" \
+                      "method-cell-empty ($expected) — the row declares a check and names no method to run it: $method" ;;
     per-issue)      handle_per_issue "$method" "$expected" ;;
     integration)    handle_integration "$method" ;;
     sync)           handle_deploy_check "sync" ;;
@@ -1113,8 +1233,11 @@ parse_ciac() {
   if [ -z "$body" ]; then return 0; fi
 
   # (i) scaffold-bullet form.
-  printf '%s\n' "$body" | awk '
+  printf '%s\n' "$body" | awk -v RFS="$REC_FS" '
     function trim(s){ gsub(/^[ \t]+|[ \t]+$/,"",s); return s }
+    function rec(a, b, c, d, e) {
+      printf "%s%s%s%s%s%s%s%s%s\n", a, RFS, b, RFS, c, RFS, d, RFS, e
+    }
     /\*\*CIAC-[0-9]+/ {
       line = $0
       # id
@@ -1171,14 +1294,17 @@ parse_ciac() {
       # predicate: strip the leading list-marker for a short text.
       pred = line
       sub(/^[-*[ \]]*/, "", pred)
-      printf "%s\t%s\tintegration\t%s\t%s\n", id, issues, method, trim(pred)
+      rec(id, issues, "integration", method, trim(pred))
     }
   '
 
   # (ii) table-row form: rows whose first cell contains CIAC-N with a Method cell.
-  printf '%s\n' "$body" | awk "$AWK_HEAL_FIELDS"'
+  printf '%s\n' "$body" | awk -v RFS="$REC_FS" "$AWK_HEAL_FIELDS"'
     function trim(s){ gsub(/^[ \t]+|[ \t]+$/,"",s); return s }
     function lc(s){ return tolower(s) }
+    function rec(a, b, c, d, e) {
+      printf "%s%s%s%s%s%s%s%s%s\n", a, RFS, b, RFS, c, RFS, d, RFS, e
+    }
     BEGIN { col_method = 0; col_pred = 0; have_header = 0; hdr_n = 0 }
     # Per-table-block reset, for the same reason as parse_verification_plan: a
     # column map that outlives its table indexes later rows against a header
@@ -1202,7 +1328,7 @@ parse_ciac() {
       # fragment landed in the method slot and report the result as a
       # cross-issue verdict. Name the row and ERROR instead.
       if (hdr_n > 0 && n != hdr_n) {
-        printf "%s\t%s\tparity-error\t%s\t%s\n", id, "", trim(substr(rowline, 1, 160)), ("fields=" n " header=" hdr_n)
+        rec(id, "", "parity-error", trim(substr(rowline, 1, 160)), ("fields=" n " header=" hdr_n))
         next
       }
       issues = ""
@@ -1213,9 +1339,13 @@ parse_ciac() {
       # Pull a backticked command out of the method cell if present.
       m2 = method
       if (match(method, /`[^`]*`/)) { m2 = substr(method, RSTART+1, RLENGTH-2) }
-      printf "%s\t%s\tintegration\t%s\t%s\n", id, issues, m2, pred
+      rec(id, issues, "integration", m2, pred)
     }
-  ' | awk '!seen[$1]++'   # de-dupe: bullet form wins if both matched an id.
+  ' | awk -F"$REC_FS" '!seen[$1]++'   # de-dupe: bullet form wins if both matched an id.
+  # The -F is LOAD-BEARING, not decoration. This de-dupe keys on $1, and with a
+  # tab delimiter it worked only because tab is awk default whitespace. 0x1F is
+  # not whitespace, so without -F the key would run to the first SPACE inside
+  # the record and the de-dupe would silently stop de-duplicating.
 }
 
 # ===========================================================================
@@ -2246,7 +2376,15 @@ main() {
   # every record has been relabelled with a FAMILY, and several families
   # (integration, sync, regression, deferred) are reachable both from a
   # per-issue row and from a source that is not a per-issue row at all.
-  PER_ISSUE_ROWS="$(printf '%s' "$per_issue_records" | grep -c . || true)"
+  # `table-unindexable` is a BLOCK-level diagnostic, not a per-issue row: it
+  # grades no row and reports how many a table suppressed. Counting it here would
+  # inflate the very denominator the roll-up exists to make honest, so it is
+  # excluded. `parity-error` and `method-cell-empty` ARE per-row records and stay
+  # counted.
+  # KEPT ON ONE LINE ON PURPOSE, for the same reason handle_runtime_suite is:
+  # the suite zeroes this counter with a single anchored substitution, and a
+  # line-based mutator cannot reach a statement split across a continuation.
+  PER_ISSUE_ROWS="$(printf '%s' "$per_issue_records" | awk -F"$REC_FS" 'NF && $3 != "table-unindexable" { n++ } END { print n+0 }')"
   ciac_records="$(parse_ciac "$PLAN_ABS" || true)"
 
   # 2) Dispatch each record → verdict, building the emit stream:
@@ -2256,16 +2394,17 @@ main() {
 
   # Per-issue records: fields = issue \t ac \t PENDING \t method \t expected
   if [ -n "$per_issue_records" ]; then
-    while IFS=$'\t' read -r issue id _pending method expected; do
+    while IFS="$REC_FS" read -r issue id _pending method expected; do
       [ -z "$issue$method" ] && continue
       # The parser marks a row it refused to index with an explicit family rather
       # than the PENDING marker, so the shell classifier is never handed cells it
-      # would be reading at shifted column indices.
-      if [ "$_pending" = "parity-error" ]; then
-        family="parity-error"
-      else
-        family="$(classify_family "" "$method")"
-      fi
+      # would be reading at shifted column indices. That guarantee is now
+      # STRUCTURAL rather than aspirational: under REC_FS an empty field no longer
+      # collapses, so the marker is read at the position it was written to.
+      case "$_pending" in
+        parity-error|table-unindexable|method-cell-empty) family="$_pending" ;;
+        *) family="$(classify_family "" "$method")" ;;
+      esac
       verdict_observed="$(dispatch_check "$family" "$method" "$expected" "$plan_version")"
       verdict="$(printf '%s' "$verdict_observed" | cut -f1)"
       observed="$(printf '%s' "$verdict_observed" | cut -f2)"
@@ -2276,7 +2415,7 @@ main() {
 
   # CIAC records: fields = id \t issues \t integration \t method \t predicate
   if [ -n "$ciac_records" ]; then
-    while IFS=$'\t' read -r id issue family method expected; do
+    while IFS="$REC_FS" read -r id issue family method expected; do
       [ -z "$id" ] && continue
       # family is "integration", or "parity-error" for a row the parser refused
       # to index; group CIAC rows under an "integration" pseudo-issue label
