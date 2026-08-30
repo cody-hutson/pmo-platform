@@ -1,0 +1,24 @@
+# G3-14 SENSITIVITY fixture — the combined-clean parse rate falls BELOW the
+# configured floor, so the gate must return BREACH.
+#
+# Grammar is identical to at-floor.tsv (see that file's header for the partition
+# and parse_status semantics). The two files differ ONLY in the clean/failed split
+# of the group-1 rows, so an opposite-verdict pair here is attributable to the
+# rate and to nothing else.
+#
+# Determinate denominator = 8 clean + 2 failed = 10 -> rate 0.80 < floor 0.90.
+1001	1	clean
+1002	1	clean
+1003	1	clean
+1004	1	clean
+1005	1	clean
+1006	1	clean
+1007	1	clean
+1008	1	clean
+1009	1	failed
+1010	1	failed
+1011	1	deferred
+2001	2	clean
+2002	2	failed
+3001	3	failed
+3002	3	failed

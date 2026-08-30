@@ -1,0 +1,13 @@
+# G3-15 SENSITIVITY fixture — effective_pts exceeds the band upper bound, so the
+# gate must return BREACH.
+#
+# Grammar is identical to in-band.tsv (see that file's header). The two files
+# differ by ONE member's size label (XS -> S), so an opposite-verdict pair here is
+# attributable to the size sum and to nothing else.
+#
+# raw_sum = 16 + 8 + 2 = 26; class routine -> weight 1.0;
+# effective_pts = round_half_up(26 * 1.0) = 26 > bound 25.
+class	routine
+member	5001	XL
+member	5002	L
+member	5003	S

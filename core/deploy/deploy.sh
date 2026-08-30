@@ -126,6 +126,97 @@ STRICT=true
 # should_full_roster(). Initialized here so it is always defined under set -u.
 FORCE_ALL=false
 
+# ─── Warn-log lifecycle + gate-rollout constants ─────────────────────────────
+# THE SINGLE DECLARATION SITE for the warn-log retention window and the
+# gate-rollout deadline. Declared HERE and nowhere else; every
+# consumer reads the symbol, never a copy of the number. The two are coupled,
+# and the coupling is the point:
+#
+#   INVARIANT:  WARN_LOG_RETENTION_DAYS >= GATE_ROLLOUT_ESCALATE_DAYS
+#
+# The escalation horizon is when the deadline arm FORCES the decision that reads
+# the drain. A retention ceiling below it would discard the rows that decision is
+# about to read — a rotation policy that fixes log growth by breaking the
+# graduation it was meant to enable.
+#
+# THE INVARIANT IS HELD BY DERIVATION, NOT BY TWO HAND-MAINTAINED NUMBERS.
+# WARN_LOG_RETENTION_DAYS is assigned FROM the floor symbol below rather than
+# from a literal, so no edit can put the two out of order and no runtime
+# assertion is owed. That is deliberate: the previous shape declared a number
+# that nothing read and nothing enforced — a declaration with no firing surface,
+# which is the exact defect class this release exists to close.
+#
+# WHAT THE RETENTION WINDOW ACTUALLY IS. It is a declared LOWER BOUND that the
+# implementation exceeds without limit, NOT a disposition clock. The warn-log
+# lifecycle bounds the HOT FILE by relocating it whole into a numbered
+# same-directory segment; nothing is ever discarded, so effective retention is
+# permanent and no age-out path exists for a warn record. Nothing in this script
+# deletes a warn-log byte, and a reader must not infer from the day count that
+# something does.
+#
+# THEREFORE A ROTATION BOUNDARY IS RECOVERABLE, NOT IRREVERSIBLE. The boundary is
+# a rename: an in-flight append follows the INODE into the segment, and the whole
+# family is reconstituted by `cat`-ing warn_log_segment_set() in order. The
+# rotation change is MODERATE / HIGH, and the earlier IRREVERSIBLE reading —
+# written here when a DISCARDING rotation was still the expected design — is
+# superseded rather than merely qualified.
+#
+# WHY `readonly` IN A TRACKED SCRIPT AND NOT OPERATOR CONFIG. The deadline arm's
+# whole purpose is to be repo-derivable — evaluable in CI and in a fresh clone,
+# where no operator config and no drain exist. A locally-overridable value makes
+# CI and the operator disagree about whether the deadline has passed, the one
+# thing this mechanism must never do. Same reasoning as the Check-71 constants.
+#
+# THE SPLIT IS THE DESIGN, AND IT IS NOT SYMMETRIC.
+#   DEADLINE ARM (repo-derivable, ENFORCING): committed constants + today's date.
+#   EVIDENCE ARM (operator-local, ADVISORY):  drain rows; SKIPs when absent and
+#   never touches ISSUES, so CI observes no behaviour change from it at all.
+#
+# WHAT THE DEADLINE IS ARMED AGAINST — stated so it is not widened by accident.
+# The subject is the G3-14 / G3-15 SPLIT DISPOSITION's integrity limb (limb (i)):
+# its residual `warn -> enforce` flip is one committed .enforce sentinel token
+# plus one branch-protection registration, and it was recorded with no date. The
+# live-rate limb (ii) is advisory PERMANENTLY on architectural grounds
+# (core/ADRs/ADR-166-split-predicate-gate-graduation.md) and is NOT a shakedown,
+# so it is deliberately outside this arm's subject. Arming a deadline against a
+# declined flip would manufacture the inverse defect this constant exists to
+# close: a permanent advisory wearing the shape of a temporary one.
+#
+# Turn a GRADUATION-OVERDUE finding green by RECORDING A DECISION: advance
+# GATE_ROLLOUT_PHASE, retreat it, or re-date GATE_ROLLOUT_ARMED — the
+# edited line IS the audit record. Advance is an operator decision, never
+# auto-promoted by row count (core/standards/progressive-rollout-convention.md
+# owns the ladder and this phase enum).
+#
+# The warn-log lifecycle decision this block's WARN_LOG_* half implements — why
+# the hot file is bounded by relocation rather than by discard, and where the
+# 16 MiB magnitude comes from — is recorded in
+# core/ADRs/ADR-169-bounded-by-relocation-not-by-discard.md.
+#
+# WHERE THE FUNCTIONS LIVE, AND WHY THEY ARE NOT HERE. The two warn-log helpers
+# — warn_log_segment_set() (the drain's ONLY read surface) and warn_log_path()
+# (the rotating choke point both writer variables assign from) — are defined
+# immediately after lib-instance-path.sh is sourced further down, because both
+# call pmo_instance_path() and that resolver does not exist until that line.
+# Only the CONSTANTS are declared here, which is what keeps this the single
+# declaration site.
+readonly GATE_ROLLOUT_PHASE="warn"       # shadow|warn|enforce
+readonly GATE_ROLLOUT_ARMED="2026-08-29"
+readonly GATE_ROLLOUT_REVIEW_DAYS=60
+readonly GATE_ROLLOUT_ESCALATE_DAYS=90
+# Basename of the whole warn-log family — the hot file and every segment share
+# it. Stated once so a consumer pattern cannot drift from the writer's spelling.
+readonly WARN_LOG_BASENAME="deploy-check-warn-log"
+# 16 MiB. The rule SHAPE is byte-denominated and the retained segment count is an
+# OUTPUT of the rule, never an input — adopted from the shipped precedent this
+# extends (release/tools/sweep-release-corpus.py, read by Check 65). The
+# MAGNITUDE is set from the measured append rate so rotation fires on roughly a
+# fortnightly cadence, and above the worst observed single day so even a peak day
+# rotates at most once. Derivation and its measurements: see the ADR named above.
+readonly WARN_LOG_HOT_BUDGET_BYTES=16777216
+# Assigned FROM the floor symbol, never from a literal — see the invariant above.
+readonly WARN_LOG_RETENTION_DAYS=$GATE_ROLLOUT_ESCALATE_DAYS
+
 # ─── Governance-audit tracker repo ──────────────────────────────────────────
 # Checks 14/15/21/22 (+ their --report reruns) query the issue tracker for
 # pipeline invariants. The repo is resolved per-clone, never hardcoded:
@@ -164,6 +255,153 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib-instance-path.sh"
 # script's own dir so it resolves regardless of the caller's cwd.
 # shellcheck source=lib-template-sync-source.sh disable=SC1091
 source "$(dirname "${BASH_SOURCE[0]}")/lib-template-sync-source.sh"
+
+# ─── Warn-log family: the read surface and the bounded-append choke point ────
+# The constants these two read, and the invariant binding them to the
+# gate-rollout deadline, are declared ONCE at the single declaration site above.
+# The FUNCTIONS live here because both call pmo_instance_path(), which the
+# lib-instance-path.sh source line above defines; keeping the call adjacent to
+# its resolver is what makes the ordering readable instead of load-bearing by
+# accident.
+
+# Echo the whole warn-log family in SEGMENT-INDEX order, one absolute path per
+# line. The order is CHRONOLOGICAL FROM THE ANCHOR FORWARD -- not a global
+# oldest -> newest claim; see the ordering-exception note below for why that
+# distinction is load-bearing rather than pedantic.
+#
+#   <instance>/deploy-check-warn-log.00000.jsonl   <- the ANCHOR: the segment
+#                                                     this lifecycle rotated
+#                                                     first
+#   ...
+#   <instance>/deploy-check-warn-log.NNNNN.jsonl
+#   <instance>/deploy-check-warn-log.jsonl         <- hot file, ALWAYS last
+#
+# THE ANCHOR IS NOT NECESSARILY THE OLDEST RECORD, AND AN INDEX IS NOT AN AGE.
+# warn_log_path() assigns `highest existing index + 1`, so indices only ever
+# increase. An orphaned pre-relocation log adopted into the family cannot be
+# given an index below the anchor without renumbering live instance state,
+# which this design does not do; it claims the next free index ABOVE the
+# current maximum whenever its records were written. That is TWO deliberate,
+# documented exceptions to index-equals-chronology, not one. A PRE-ANCHOR
+# PREDECESSOR holds the OLDEST records in the family at the HIGHEST index. An
+# INTRA-ANCHOR ADOPTED SEGMENT has its whole span fall INSIDE a lower-indexed
+# segment's span, so its rows interleave in time instead of following it;
+# verified byte-disjoint, so nothing is double-counted. Both are the reason
+# this block states the order from the anchor forward: a consumer that needs
+# true chronology reads the rows' own timestamps and must never infer age from
+# the index.
+#
+# AN ADOPTION RESOLVES ITS TARGET INDEX AT RUN TIME AND NEVER ASSUMES `00000` IS
+# FREE. After the first rotation `00000` is a live segment holding real records,
+# and `mv` onto an occupied name overwrites them silently and irrecoverably. The
+# free index is the one above the family's current maximum, resolved at the
+# moment of the move from the NUMBERED-SEGMENT GLOB ALONE -- the same
+# `[0-9][0-9][0-9][0-9][0-9]` scan warn_log_path() performs below, whose LAST
+# entry is the highest index by the lexical-equals-numeric property noted under
+# SEGMENT KEY. NOT from warn_log_segment_set(): that set appends the HOT FILE
+# LAST and the hot file carries no index, so a tail-style read of it yields a
+# path with no index to increment rather than the family's maximum.
+#
+# EVERY DRAIN MUST READ THROUGH HERE AND MUST NOT OPEN THE HOT PATH DIRECTLY.
+# That is a correctness rule, not a style one: after the first rotation a
+# hot-only read returns a PLAUSIBLE WRONG ANSWER rather than an error, because
+# the rows it is counting have moved into a segment. ADR-106 measured exactly
+# that failure on the release ledger — a control returning 2 against a true
+# population-wide count of 10, because an archival sweep had moved 8 rows into
+# segments. A drain that under-counts this way reports "drain drained" when the
+# log has merely rotated, which arms a gate on evidence nobody reviewed.
+#
+# SEGMENT KEY: a zero-padded 5-digit monotonic sequence, so lexical order EQUALS
+# numeric order and a plain glob sorts correctly without `sort -n` (whose
+# interaction with `comm` produces silently wrong set differences on this host).
+# Residual, stated rather than left to be discovered: at 100,000 segments the
+# lexical-equals-numeric property breaks. At the measured append rate that is
+# roughly 26-52 segments a year.
+#
+# CONSUMER PATTERNS MUST ADMIT DIGITS. Segment filenames carry digits, and a
+# character class of [a-z-] is blind to every one of them. Any pattern written
+# against this family uses a digit-admitting class.
+#
+# Only files that EXIST are echoed, so a fresh instance with no log emits
+# nothing and a consumer's read loop is a clean no-op rather than an error.
+warn_log_segment_set() {
+  local _wl_dir _wl_seg _wl_hot
+  _wl_dir="$(pmo_instance_path)"
+  for _wl_seg in "${_wl_dir}/${WARN_LOG_BASENAME}".[0-9][0-9][0-9][0-9][0-9].jsonl; do
+    if [[ -f "$_wl_seg" ]]; then printf '%s\n' "$_wl_seg"; fi
+  done
+  _wl_hot="${_wl_dir}/${WARN_LOG_BASENAME}.jsonl"
+  if [[ -f "$_wl_hot" ]]; then printf '%s\n' "$_wl_hot"; fi
+  return 0
+}
+
+# Echo the hot warn-log path, rotating it FIRST if it is over budget. Both
+# writer variables in cmd_check assign from here, so all 12 append sites are
+# bounded by one choke point and none of them changed.
+#
+# ROTATION IS A MOVE, NEVER A DELETION. The hot file is renamed whole into the
+# next numbered segment in the SAME directory. Nothing is discarded; retention
+# is permanent. Four properties carry that, and each is load-bearing:
+#
+#   1. `mv` within one directory is atomic and CANNOT LOSE A RECORD. An append
+#      whose file descriptor is already open follows the INODE into the segment;
+#      the next `>>` re-opens by path and creates a fresh hot file.
+#      Copy-then-truncate has a window in which appended records are destroyed.
+#      This is the single property that makes the boundary recoverable by `cat`
+#      — and therefore the property that makes this change MODERATE rather than
+#      IRREVERSIBLE.
+#   2. Idempotent with NO process-global flag. This runs inside `$(...)`, i.e. a
+#      SUBSHELL, so an "already rotated this run" variable would not propagate to
+#      the parent and a flag-based guard would be silently broken. None is
+#      needed: after the mv the hot file is absent, the size test fails, and a
+#      second call is a natural no-op.
+#   3. Concurrency-safe by the same property. Two concurrent runs may both
+#      observe over-budget; one mv wins and the other fails on a missing source.
+#      No record is lost in either ordering.
+#   4. No headroom/hysteresis constant, and the divergence from the precedent is
+#      reasoned rather than careless. sweep-release-corpus.py needs a floor
+#      because it moves PART of a file and would otherwise re-breach on the next
+#      append. This moves the WHOLE file, so post-rotation size is 0 by
+#      construction and hysteresis is structurally unnecessary.
+#
+# THE FAILURE NOTICE GOES TO STDERR, DELIBERATELY. This function is consumed via
+# command substitution, so anything written to stdout is captured into the
+# caller's variable — a stdout emit would corrupt the very path it is warning
+# about. The notice does not touch ISSUES on any path, so `--check --strict`
+# cannot newly exit 1 because of it: the aggregate is computed solely from the
+# ISSUES counter.
+warn_log_path() {
+  local _wl_dir _wl_hot _wl_bytes _wl_seg _wl_last _wl_idx _wl_next
+  _wl_dir="$(pmo_instance_path)"
+  _wl_hot="${_wl_dir}/${WARN_LOG_BASENAME}.jsonl"
+  if [[ -f "$_wl_hot" ]]; then
+    _wl_bytes="$(/usr/bin/wc -c < "$_wl_hot" 2>/dev/null | /usr/bin/tr -d '[:space:]' || printf '')"
+    if [[ -n "$_wl_bytes" && "$_wl_bytes" -gt "$WARN_LOG_HOT_BUDGET_BYTES" ]]; then
+      # Highest existing index + 1. Lexical order equals numeric order (see the
+      # zero-padding note above), so the LAST matching glob entry is the highest.
+      _wl_last=""
+      for _wl_seg in "${_wl_dir}/${WARN_LOG_BASENAME}".[0-9][0-9][0-9][0-9][0-9].jsonl; do
+        if [[ -f "$_wl_seg" ]]; then _wl_last="$_wl_seg"; fi
+      done
+      if [[ -z "$_wl_last" ]]; then
+        _wl_idx=0
+      else
+        _wl_last="${_wl_last##*/}"
+        _wl_last="${_wl_last#"${WARN_LOG_BASENAME}."}"
+        _wl_last="${_wl_last%.jsonl}"
+        # 10# forces base 10 — without it a zero-padded 00008 parses as octal.
+        _wl_idx=$((10#${_wl_last} + 1))
+      fi
+      _wl_next="$(printf '%s/%s.%05d.jsonl' "$_wl_dir" "$WARN_LOG_BASENAME" "$_wl_idx")"
+      if ! mv "$_wl_hot" "$_wl_next" 2>/dev/null; then
+        if [[ -f "$_wl_hot" ]]; then
+          log "  WARN:  warn-log rotation failed — ${_wl_hot} is ${_wl_bytes} B, over its ${WARN_LOG_HOT_BUDGET_BYTES} B budget, and could not be moved to ${_wl_next}. Appends continue and no record is lost, but the file is unbounded until this is resolved. Check the instance directory's permissions and free space." >&2
+        fi
+      fi
+    fi
+  fi
+  printf '%s\n' "$_wl_hot"
+}
 
 # User-local skills mirror — exposes every PMO skill as a plain /skill-name
 # slash command in Claude Code (matching prompt-builder's pre-existing presence).
@@ -2338,6 +2576,365 @@ _c38_compute_verdict() {
     *) /usr/bin/head -10 <<<"$out" | /usr/bin/sed 's/^/         /' >&2 || true
        printf 'ERROR generator-exit-%s (source-resolution failure or error)\n' "$rc" ;;
   esac
+}
+
+# ─── Bundle-metrics gate integrity (Check 73 / --check-required-subset) — #6298 ──
+#
+# G3-14 (Mode-A combined-clean parse-rate floor) and G3-15 (per-milestone
+# risk-weighted size bound) were shipped as PROSE-DECLARED normative predicates
+# with NO RUNNER ON ANY SURFACE — measured at introduction of this check: zero
+# executable artifacts implemented either predicate and zero computed
+# effective_pts. Their declared `warn -> enforce` ladder therefore had no rung to
+# stand on, and Requirement (b') blocked `posture: required` permanently.
+#
+# WHAT THIS CHECK ASSERTS, AND WHAT IT DELIBERATELY DOES NOT.
+# Both gates' SUBJECT is out-of-tree GitHub state — issue bodies for G3-14, a
+# milestone's bundled membership for G3-15. Under § Verdict-Input Closure, VIC(W)
+# is defined over REPO PATHS, so that subject class is empty in-tree: a merge gate
+# on the LIVE evaluation would go red for reasons no PR author can see or fix, and
+# G3-15 has no PR-time subject at all ("which milestone?" is undefined outside a
+# Stage-3 Bundle event). The predicate is therefore SPLIT BY LOCUS OF INPUT:
+#
+#   TREE-RESIDENT half (this check)  — the gate MACHINERY, as committed on this
+#       branch, computes its declared predicate and FIRES on a breach. Every input
+#       is a committed file. `posture: required (warn-mode-initial)`.
+#   BACKLOG-RESIDENT half (NOT here) — the live parse rate / the live
+#       effective_pts. Stays advisory PERMANENTLY on architectural grounds, at its
+#       declared Stage-3 -> 4 boundary runner. That is a recorded residual, not an
+#       open gap. See core/ADRs/ADR-166-split-predicate-gate-graduation.md.
+#
+# NOT A PROXY (Requirement (a)). This check does NOT claim "the backlog parse rate
+# >= 0.90". It claims the narrower, fully tree-resident thing its id names: the
+# G3-14/G3-15 gate machinery discriminates. The committed fixtures ARE the content
+# embodying that invariant — the test_version_freeness_injection.sh shape, where
+# the gate's sensitivity is tested on every run rather than assumed.
+#
+# NO MEASUREMENT-OUTAGE CLASS, BY CONSTRUCTION. Every input is a committed file:
+# two fixture pairs, core/schemas/gate-criteria-spec.md, the platform-config
+# template, and the doctrine's definitional home. There is no network read, no gh,
+# no detect_install_path dependency, and no python3 dependency. An unreadable input
+# is therefore a REPO DEFECT and fail-closes as FAIL — it is never degraded to a
+# not-evaluated arm, because there is no outage this check can suffer that is not
+# also a defect. That is what admits it to the --check-required-subset allowlist
+# under that runner's own selection predicate { network-free AND
+# install-independent AND posture:required AND NOT already covered by a dedicated
+# CI mirror }, and it is why the verdict enum below is drawn ONLY from tokens the
+# runner's aggregation rule already recognises: a bespoke token would fall to that
+# rule's `*)` arm and fail-close on a healthy tree.
+#
+# Echoes ONE protocol line on stdout (the CALLER maps it to a FAIL or an exit code):
+#   PASS <detail>          all three conjuncts hold for BOTH gates
+#   FAIL <gate> <conjunct> <detail>   a conjunct failed, or an input is unreadable
+
+# _bm_src_root — repo root, BASH_SOURCE-derived with a cwd-relative fallback.
+# Same locator shape as resolve_platform_config, so this family and the config
+# resolver agree on where the tree is.
+_bm_src_root() {
+  # PMO_BM_SRC_ROOT re-points the whole input set at a sandbox, which is what lets
+  # the fixture suite drive THIS body rather than a re-encoded copy of it (the
+  # CC_*/C32_*/RR_*/CP_* fixture-override convention already in this file). CI sets
+  # none of these, so the shipped verdict reads the shipped tree.
+  if [[ -n "${PMO_BM_SRC_ROOT:-}" ]]; then printf '%s' "$PMO_BM_SRC_ROOT"; return 0; fi
+  local _sr
+  _sr="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd || echo "")"
+  if [[ -n "$_sr" && -r "${_sr}/core/deploy/deploy.sh" ]]; then
+    printf '%s' "$_sr"
+  else
+    printf '%s' "."
+  fi
+}
+
+# _bm_config_template — the COMMITTED platform-config template, rung 1 only.
+#
+# Deliberately NOT resolve_platform_config. That resolver walks five rungs and
+# rung 5 is the operator's own ~/.config copy, so its answer varies by machine. A
+# pre-merge gate must assert the CONFIG THIS PR SHIPS, not the config the reviewer
+# happens to have installed — an operator-local override is not the pull request's
+# subject, and letting one move this verdict would make the gate install-dependent
+# and disqualify it from the required subset. Rung 1 is also the only rung that
+# exists on a CI runner, so this is what the gate reads there regardless.
+_bm_config_template() {
+  if [[ -n "${C73_CONFIG_TEMPLATE:-}" ]]; then printf '%s' "$C73_CONFIG_TEMPLATE"; return 0; fi
+  local _sr; _sr="$(_bm_src_root)"
+  if [[ -r "${_sr}/core/config/platform-config.toml.template" ]]; then
+    printf '%s' "${_sr}/core/config/platform-config.toml.template"
+  elif [[ -r "core/config/platform-config.toml.template" ]]; then
+    printf '%s' "core/config/platform-config.toml.template"
+  fi
+}
+
+# _bm_config_line <key> — the raw committed `key = value` right-hand side, with a
+# trailing comment stripped. Returns empty on a miss or an unreadable template.
+# Handles the inline-table values resolve_platform_config's _toml_field cannot:
+# its greedy `.*=` matches the LAST `=` on the line, so on
+# `release_class_capacity_weights = { routine = 1.0, ... hotfix = 0.9 }` it returns
+# `0.9 }`. This reader takes the first `=` instead and leaves the value intact.
+_bm_config_line() {
+  local _k="$1" _tmpl _raw
+  _tmpl="$(_bm_config_template)"
+  [[ -n "$_tmpl" ]] || { printf ''; return 0; }
+  _raw="$(/usr/bin/grep -m1 -E "^[[:space:]]*${_k}[[:space:]]*=" "$_tmpl" 2>/dev/null || true)"
+  [[ -n "$_raw" ]] || { printf ''; return 0; }
+  printf '%s' "$_raw" | /usr/bin/sed -E -e 's/^[^=]*=[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"//' -e 's/"$//'
+}
+
+# _bm_dec_scale <decimal> <digits> — fixed-point scale, integer-only.
+# "0.90" 4 -> 9000 · "1.15" 2 -> 115 · "1" 2 -> 100. Empty on a non-numeric input,
+# which every caller treats as UNRESOLVED rather than as zero (a zero would silently
+# satisfy a >= comparison; an empty string cannot).
+_bm_dec_scale() {
+  local _v="${1//[[:space:]]/}" _d="$2" _int _frac
+  case "$_v" in ''|*[!0-9.]*) printf ''; return 0 ;; esac
+  _int="${_v%%.*}"
+  if [[ "$_v" == *.* ]]; then _frac="${_v#*.}"; else _frac=""; fi
+  case "$_frac" in *.*) printf ''; return 0 ;; esac
+  [[ -z "$_int" ]] && _int=0
+  while [[ ${#_frac} -lt $_d ]]; do _frac="${_frac}0"; done
+  _frac="${_frac:0:$_d}"
+  printf '%s' "$(( 10#${_int} * (10 ** _d) + 10#${_frac} ))"
+}
+
+# _bm_class_weight <release_class> — the capacity multiplier in HUNDREDTHS, read
+# by key from the committed inline table. Empty when the class has no key, which
+# the caller renders as the DEGRADED path (weight 1.0 + a loud unweighted marker),
+# never as a silent pass.
+_bm_class_weight() {
+  local _cls="$1" _tbl _raw
+  case "$_cls" in ''|*[!A-Za-z0-9_-]*) printf ''; return 0 ;; esac
+  _tbl="$(_bm_config_line release_class_capacity_weights)"
+  [[ -n "$_tbl" ]] || { printf ''; return 0; }
+  _raw="$(printf '%s' "$_tbl" | /usr/bin/sed -E "s/.*[{,][[:space:]]*${_cls}[[:space:]]*=[[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/")"
+  [[ "$_raw" == "$_tbl" ]] && { printf ''; return 0; }
+  _bm_dec_scale "$_raw" 2
+}
+
+# _bm_size_pts <size_label> — the size-check point scale, pinned at G3-15's own
+# declaration (XS=1 / S=2 / M=4 / L=8 / XL=16). Empty on an unrecognised label.
+_bm_size_pts() {
+  case "$1" in
+    XS) printf '1'  ;; S)  printf '2'  ;; M) printf '4' ;;
+    L)  printf '8'  ;; XL) printf '16' ;;
+    *)  printf ''   ;;
+  esac
+}
+
+# ── G3-14 evaluator ─────────────────────────────────────────────────────────────
+# combined_clean_parse_rate = |{group-1 : clean}| / |{group-1 : clean or failed}|
+# asserted >= [bundling].mode_a_parse_rate_floor. `deferred` bodies are EXCLUDED
+# from the denominator (set aside, not failed) so a deferral-marker can neither
+# inflate nor deflate the rate; groups 2 (type-excluded) and 3 (needs-body-repair)
+# are excluded from BOTH numerator and denominator per the Step-1.5 partition.
+# Trivial-PASS on an empty determinate denominator — that is G3-14's own declared
+# divide-by-zero guard, not a shortcut.
+#
+# Fixture grammar (TSV, `#` starts a comment):  <id> \t <partition_group> \t <parse_status>
+#
+#   PASS   <rate4> >= <floor4> ... | BREACH <rate4> < <floor4> ... | ERROR <reason>
+_g3_14_compute_verdict() {
+  local _fx="$1"
+  [[ -r "$_fx" ]] || { printf 'ERROR fixture-unreadable:%s\n' "$_fx"; return 0; }
+  local _floor4; _floor4="$(_bm_dec_scale "$(_bm_config_line mode_a_parse_rate_floor)" 4)"
+  [[ -n "$_floor4" ]] || { printf 'ERROR floor-unresolved:[bundling].mode_a_parse_rate_floor\n'; return 0; }
+  local _clean=0 _failed=0 _deferred=0 _repair=0 _excluded=0
+  local _id _grp _st
+  while IFS=$'\t' read -r _id _grp _st || [[ -n "$_id" ]]; do
+    case "$_id" in ''|'#'*) continue ;; esac
+    case "$_grp" in
+      1) case "$_st" in
+           clean)    _clean=$((_clean + 1)) ;;
+           failed)   _failed=$((_failed + 1)) ;;
+           deferred) _deferred=$((_deferred + 1)) ;;
+           *) printf 'ERROR fixture-bad-parse-status:%s (row %s)\n' "$_st" "$_id"; return 0 ;;
+         esac ;;
+      2) _excluded=$((_excluded + 1)) ;;
+      3) _repair=$((_repair + 1)) ;;
+      *) printf 'ERROR fixture-bad-partition-group:%s (row %s)\n' "$_grp" "$_id"; return 0 ;;
+    esac
+  done < "$_fx"
+  local _den=$((_clean + _failed))
+  local _tail
+  _tail="clean=${_clean} failed=${_failed} deferred-excluded=${_deferred} type-excluded=${_excluded} needs-body-repair=${_repair} floor=${_floor4}/10000"
+  if [[ $_den -eq 0 ]]; then
+    printf 'PASS trivial-empty-determinate-denominator %s\n' "$_tail"
+    return 0
+  fi
+  local _rate4=$(( _clean * 10000 / _den ))
+  # >= is the declared comparator. Mutating it to > flips the at-floor fixture to
+  # BREACH, which is this gate's seeded-failure arm.
+  if [[ $_rate4 -ge $_floor4 ]]; then
+    printf 'PASS rate=%s/10000 den=%s %s\n' "$_rate4" "$_den" "$_tail"
+  else
+    printf 'BREACH rate=%s/10000 den=%s %s\n' "$_rate4" "$_den" "$_tail"
+  fi
+}
+
+# ── G3-15 evaluator ─────────────────────────────────────────────────────────────
+# effective_pts = round_half_up(SUM(member.pts) * class_weight) asserted <= the
+# UPPER bound of [bundling].release_size_target_pts. The rounding mode is taken BY
+# REFERENCE from bundle-composition-doctrine.md § 3 Step 5 Risk-Weighting (that
+# anchor's resolvability is conjunct C73-c), not re-derived here; the integer form
+# (x*w + 50)/100 IS round-half-up on hundredths.
+#
+# DEGRADED PATH (G3-15's own safety contract): an unresolved weight does not
+# silently pass. It computes raw SUM with class_weight = 1.0 and carries a loud
+# `unweighted-degraded` marker in the detail, so a cross-cutting bundle can never
+# quiet-pass as routine.
+#
+# Fixture grammar (TSV, `#` starts a comment):
+#   class  \t <release_class>
+#   member \t <id> \t <size_label>
+#
+#   PASS <eff> <= <bound> ... | BREACH <eff> > <bound> ... | ERROR <reason>
+_g3_15_compute_verdict() {
+  local _fx="$1"
+  [[ -r "$_fx" ]] || { printf 'ERROR fixture-unreadable:%s\n' "$_fx"; return 0; }
+  local _band; _band="$(_bm_config_line release_size_target_pts)"
+  local _bound; _bound="$(printf '%s' "$_band" | /usr/bin/sed -E 's/^[0-9]+[[:space:]]*-[[:space:]]*([0-9]+)$/\1/')"
+  case "$_bound" in ''|*[!0-9]*) printf 'ERROR band-unresolved:[bundling].release_size_target_pts=[%s]\n' "$_band"; return 0 ;; esac
+  local _cls="" _sum=0 _members=0
+  local _kind _a _b _pts
+  while IFS=$'\t' read -r _kind _a _b || [[ -n "$_kind" ]]; do
+    case "$_kind" in ''|'#'*) continue ;; esac
+    case "$_kind" in
+      class)  _cls="$_a" ;;
+      member)
+        _pts="$(_bm_size_pts "$_b")"
+        [[ -n "$_pts" ]] || { printf 'ERROR fixture-bad-size-label:%s (member %s)\n' "$_b" "$_a"; return 0; }
+        _sum=$((_sum + _pts)); _members=$((_members + 1)) ;;
+      *) printf 'ERROR fixture-bad-row-kind:%s\n' "$_kind"; return 0 ;;
+    esac
+  done < "$_fx"
+  [[ -n "$_cls" ]] || { printf 'ERROR fixture-no-class-row\n'; return 0; }
+  local _w _degraded=""
+  _w="$(_bm_class_weight "$_cls")"
+  if [[ -z "$_w" ]]; then
+    _w=100
+    _degraded=" unweighted-degraded=YES(class '${_cls}' has no capacity weight; raw sum asserted at class_weight=1.0 — operator confirmation required, never a silent pass)"
+  fi
+  local _eff=$(( (_sum * _w + 50) / 100 ))
+  local _tail
+  _tail="members=${_members} raw_sum=${_sum} class=${_cls} weight=${_w}/100 bound=${_bound}${_degraded}"
+  # <= is the declared comparator. Mutating it to < flips the at-bound fixture to
+  # BREACH, which is this gate's seeded-failure arm.
+  if [[ $_eff -le $_bound ]]; then
+    printf 'PASS effective_pts=%s %s\n' "$_eff" "$_tail"
+  else
+    printf 'BREACH effective_pts=%s %s\n' "$_eff" "$_tail"
+  fi
+}
+
+# ── Check 73 — the three-conjunct integrity verdict ─────────────────────────────
+# C73-a  DISCRIMINATION.  For each gate, the evaluator returns BREACH on the
+#        committed out-of-threshold fixture and PASS on the committed
+#        within-threshold fixture. An evaluator that answers the same way to both
+#        has lost sensitivity or specificity and is not a gate.
+# C73-b  SINK COHERENCE.  For each gate, every sink declaration in
+#        gate-criteria-spec.md agrees byte-for-byte, AND every in-tree emitter
+#        writing that sink's basename writes that identical path. The emitter
+#        population is REPORTED on every run, so a zero-emitter tree renders as
+#        `emitters=0` rather than as an anonymous pass — the declaration-agreement
+#        limb is what carries this conjunct today, and the emitter limb arms
+#        itself the moment a warn-log emit for either gate lands.
+# C73-c  CONFIG RESOLVABILITY.  The three [bundling] fields resolve to enum-valid
+#        values from the COMMITTED template, and G3-15's rounding mode resolves at
+#        its declared definitional home.
+_c73_compute_verdict() {
+  local surface="${1:-lifecycle}"   # accepted for signature parity; verdict is surface-invariant
+  local _sr; _sr="$(_bm_src_root)"
+  local _fxr="${_sr}/core/deploy/tests/fixtures/bundle-metrics"
+  local _spec="${_sr}/core/schemas/gate-criteria-spec.md"
+  local _doct="${_sr}/release/references/standards/bundle-composition-doctrine.md"
+  local _self="${_sr}/core/deploy/deploy.sh"
+  # Fixture/spec overrides exist for the hermetic fixture suite ONLY. They are read
+  # here rather than in the suite so the suite drives the SHIPPED body instead of a
+  # re-encoded copy of it (single-engine discipline).
+  [[ -n "${C73_FIXTURE_ROOT:-}"  ]] && _fxr="$C73_FIXTURE_ROOT"
+  [[ -n "${C73_SPEC_FILE:-}"     ]] && _spec="$C73_SPEC_FILE"
+  [[ -n "${C73_EMITTER_FILE:-}"  ]] && _self="$C73_EMITTER_FILE"
+  [[ -n "${C73_DOCTRINE_FILE:-}" ]] && _doct="$C73_DOCTRINE_FILE"
+
+  # ---- C73-a — discrimination, 4 arms, 2 opposite-verdict pairs ----------------
+  local _arms=0 _v
+  local _pair
+  for _pair in "g3-14:below-floor.tsv:BREACH" "g3-14:at-floor.tsv:PASS" \
+               "g3-15:above-band.tsv:BREACH" "g3-15:in-band.tsv:PASS"; do
+    local _g="${_pair%%:*}" _rest="${_pair#*:}"
+    local _file="${_rest%%:*}" _want="${_rest#*:}"
+    case "$_g" in
+      g3-14) _v="$(_g3_14_compute_verdict "${_fxr}/g3-14/${_file}")" ;;
+      g3-15) _v="$(_g3_15_compute_verdict "${_fxr}/g3-15/${_file}")" ;;
+    esac
+    if [[ "${_v%% *}" != "$_want" ]]; then
+      printf 'FAIL %s C73-a expected %s on %s, got: %s\n' "$_g" "$_want" "$_file" "$_v"
+      return 0
+    fi
+    _arms=$((_arms + 1))
+  done
+
+  # ---- C73-b — sink coherence -------------------------------------------------
+  [[ -r "$_spec" ]] || { printf 'FAIL both C73-b gate-criteria-spec unreadable:%s\n' "$_spec"; return 0; }
+  local _emitters_total=0 _decls_total=0 _g _base _base_re _decls _n _uniq _sink
+  for _g in g3-14 g3-15; do
+    _base="gate-${_g}-warn-log.jsonl"
+    # The literal dot is escaped: an unescaped `.` in ERE matches any character,
+    # which would let `gate-g3-14-warn-logXjsonl` satisfy a coherence assertion.
+    _base_re="gate-${_g}-warn-log\\.jsonl"
+    # Every declared path carrying this basename, prefix included.
+    _decls="$(/usr/bin/grep -oE "[A-Za-z0-9_./\$()-]*${_base_re}" "$_spec" 2>/dev/null || true)"
+    _n="$(printf '%s\n' "$_decls" | /usr/bin/grep -c . || true)"; _n="${_n:-0}"
+    if [[ "$_n" -eq 0 ]]; then
+      printf 'FAIL %s C73-b no sink declaration for %s in %s (a warn-mode gate that names no sink cannot be advanced by anything)\n' "$_g" "$_base" "$_spec"
+      return 0
+    fi
+    _uniq="$(printf '%s\n' "$_decls" | /usr/bin/sort -u | /usr/bin/grep -c . || true)"; _uniq="${_uniq:-0}"
+    if [[ "$_uniq" -ne 1 ]]; then
+      printf 'FAIL %s C73-b %s sink declarations disagree across %s distinct paths: %s\n' \
+        "$_g" "$_uniq" "$_n" "$(printf '%s\n' "$_decls" | /usr/bin/sort -u | /usr/bin/tr '\n' ' ')"
+      return 0
+    fi
+    _decls_total=$((_decls_total + _n))
+    _sink="$(printf '%s\n' "$_decls" | /usr/bin/sort -u)"
+    # Emitter limb: every in-tree write of this basename must write the SAME path.
+    if [[ -r "$_self" ]]; then
+      local _emits _ebad
+      _emits="$(/usr/bin/grep -oE "[A-Za-z0-9_./\$(){}-]*${_base_re}" "$_self" 2>/dev/null || true)"
+      _ebad="$(printf '%s\n' "$_emits" | /usr/bin/grep -c . || true)"; _ebad="${_ebad:-0}"
+      if [[ "$_ebad" -gt 0 ]]; then
+        _emitters_total=$((_emitters_total + _ebad))
+        local _emit_uniq
+        _emit_uniq="$(printf '%s\n' "$_emits" | /usr/bin/sort -u)"
+        if [[ "$_emit_uniq" != "$_sink" ]]; then
+          printf 'FAIL %s C73-b declaration/emitter disagree — declared [%s], emitted [%s]\n' \
+            "$_g" "$_sink" "$(printf '%s' "$_emit_uniq" | /usr/bin/tr '\n' ' ')"
+          return 0
+        fi
+      fi
+    fi
+  done
+
+  # ---- C73-c — config resolvability + the rounding-mode definitional home ------
+  local _f4 _band _bound _w
+  _f4="$(_bm_dec_scale "$(_bm_config_line mode_a_parse_rate_floor)" 4)"
+  if [[ -z "$_f4" || "$_f4" -le 0 || "$_f4" -gt 10000 ]]; then
+    printf 'FAIL g3-14 C73-c [bundling].mode_a_parse_rate_floor does not resolve to a rate in (0,1]: [%s]\n' "$(_bm_config_line mode_a_parse_rate_floor)"
+    return 0
+  fi
+  _band="$(_bm_config_line release_size_target_pts)"
+  _bound="$(printf '%s' "$_band" | /usr/bin/sed -E 's/^[0-9]+[[:space:]]*-[[:space:]]*([0-9]+)$/\1/')"
+  case "$_bound" in ''|*[!0-9]*) printf 'FAIL g3-15 C73-c [bundling].release_size_target_pts is not an N-M band: [%s]\n' "$_band"; return 0 ;; esac
+  local _dc; _dc="$(_bm_config_line default_release_class)"
+  _w="$(_bm_class_weight "${_dc:-routine}")"
+  if [[ -z "$_w" || "$_w" -le 0 ]]; then
+    printf 'FAIL g3-15 C73-c [bundling].release_class_capacity_weights carries no positive weight for the default class [%s]\n' "${_dc:-routine}"
+    return 0
+  fi
+  if [[ ! -r "$_doct" ]] || ! /usr/bin/grep -qE '^#+[[:space:]]*Step 5 — Risk-Weighting' "$_doct" 2>/dev/null; then
+    printf "FAIL g3-15 C73-c the round-half-up definitional home is unresolvable — %s carries no 'Step 5 — Risk-Weighting' heading, so effective_pts is defined nowhere this gate can cite\n" "$_doct"
+    return 0
+  fi
+
+  printf 'PASS c73a=%s/4-arms c73b=%s-declarations/%s-emitters c73c=floor+band+weights+rounding-home surface=%s\n' \
+    "$_arms" "$_decls_total" "$_emitters_total" "$surface"
 }
 
 # ─── Release-corpus completeness (Check 32 / --check-release-corpus) — #1484 ─────
@@ -4886,7 +5483,7 @@ cmd_check() {
         enforce|warn|off) REGISTRY_FIELD_MODE="$_rfc_mode" ;;
       esac
     fi
-    local _rfc_warn_log="$(pmo_instance_path)/deploy-check-warn-log.jsonl"
+    local _rfc_warn_log="$(warn_log_path)"
     # flag_registry_field — field-layer gating emit (clone of flag_g1_enforcement
     # semantics). enforce → FAIL + ISSUES; warn → WARN + jsonl, no increment;
     # off → silent (parity with the cohort helpers).
@@ -5292,7 +5889,7 @@ cmd_check() {
       enforce|warn|off) DEPLOY_CHECK_MODE="$_mode" ;;
     esac
   fi
-  local WARN_LOG="$(pmo_instance_path)/deploy-check-warn-log.jsonl"
+  local WARN_LOG="$(warn_log_path)"
 
   # flag_warn_or_issue — Checks 8-10 helper. In enforce-mode, acts like a normal
   # FAIL (increments ISSUES). In warn-mode, logs a WARN + appends to jsonl but
@@ -5440,9 +6037,19 @@ cmd_check() {
   # Decoupling contract (per the g1-enforcement mode-decoupling scope): the
   # g1-enforcement check (Check 22) resolves its mode via this helper from a
   # dedicated `g1-enforcement.mode` file; with no such file present it falls back
-  # to the shared mode → warn (the current default). The warn→enforce flip is
-  # DEFERRED to a follow-on after the ≥3-day shakedown; this release ships warn.
-  # Mode files are operator-instance runtime state and are NOT committed.
+  # to the shared mode → warn (the current default). The warn→enforce flip stays
+  # DEFERRED; this release ships warn. The floor is NOT the check-level ">=3-day
+  # shakedown" this comment used to name — scored at check level it reads 45 days
+  # and passes trivially, because the G1 detectors were revised DURING the window.
+  # It is per EMIT SITE, counting only days since that site's own most recent
+  # revision. Authority is the g1-enforcement row in
+  # core/standards/gate-efficacy-standard.md § Flip-decision status (axes W2-a /
+  # W2-b); do not restate the criterion here, and do not read a day count forward.
+  # NOTE the asymmetry this block previously blurred: a `.mode` file is the
+  # RUNTIME OVERRIDE and is operator-instance state that is NOT committed, but the
+  # GRADUATION is a committed default — resolve_check_mode "<id>" "enforce" — and
+  # that is the only form the flip may take. Flipping via the mode file would arm
+  # a blocking gate with no repo record of the arming.
   resolve_check_mode() {
     local _check_id="$1"
     local _default="${2:-$DEPLOY_CHECK_MODE}"
@@ -6878,9 +7485,14 @@ cmd_check() {
   # INDEPENDENTLY of the ~12-check shared-mode cohort. Every OTHER check still
   # reads $DEPLOY_CHECK_MODE directly and is byte-for-byte unchanged. With no
   # `g1-enforcement.mode` file present, this check falls back to the shared
-  # mode → warn (the current default). The warn→enforce flip is DEFERRED to a
-  # follow-on (after the ≥3-day shakedown); this release ships WARN. Mode
-  # files are operator-instance runtime state and are NOT committed.
+  # mode → warn (the current default). The warn→enforce flip stays DEFERRED and
+  # this release ships WARN; the criterion is the per-emit-site, since-revision
+  # floor recorded in the g1-enforcement row of
+  # core/standards/gate-efficacy-standard.md § Flip-decision status, NOT the
+  # check-level ">=3-day shakedown" this comment used to name. Mode files are
+  # operator-instance runtime state and are NOT committed — which is why the
+  # graduation itself is the COMMITTED default resolve_check_mode "<id>"
+  # "enforce" and never a mode file.
   #
   # Template Detection Logic — unique-textarea-marker variant:
   #   GitHub Issue Forms renders EVERY field — dropdown and textarea alike —
@@ -6923,11 +7535,24 @@ cmd_check() {
   # The check runs whenever AUDIT_REPO resolves to a tracker; with no tracker
   # configured the bundled-issue query returns an empty set and it no-ops.
   #
-  # Warn-mode initial per bypass-mode-readiness.md §Shakedown (Checks
-  # 8/9/10/14/15/18/19/20/21 precedent); flip-to-enforce DEFERRED to a follow-on
-  # after ≥3-day warn-log review with zero false positives — flipped via
-  # the dedicated `g1-enforcement.mode` file (NOT the shared deploy-check.mode),
-  # so this check graduates independently of the shared-mode cohort. Operator
+  # Warn-mode initial follows bypass-mode-readiness.md § Shakedown → Enforce as
+  # PRECEDENT for the posture (Checks 8/9/10/14/15/18/19/20/21), never as a
+  # checklist governing this dial: that checklist enumerates hook drains under
+  # the shared .claude/hooks/.mode, does not list this gate's sink, and its own
+  # text forbids harmonizing the two mode-precedence models. This gate graduates
+  # on its own dial, exactly as BLOCK-DESTRUCTIVE-022 graduates on its own
+  # constant. Flip-to-enforce stays DEFERRED. The criterion is NOT the check-level
+  # ">=3-day warn-log review" this comment used to name — the G1 detectors were
+  # revised during that window, so a check-level day count measures a moving
+  # predicate. It is the per-emit-site, since-revision floor plus the ADR-120
+  # ratification precondition recorded in the g1-enforcement row of
+  # core/standards/gate-efficacy-standard.md § Flip-decision status; that row is
+  # the authority and this comment does not restate it. When the flip lands it is
+  # the COMMITTED default resolve_check_mode "g1-enforcement" "enforce" at the
+  # mode-resolution site below — NOT the `g1-enforcement.mode` file, which is an
+  # operator-instance runtime override, git-ignored and invisible to CI. Either
+  # form still graduates this check independently of the shared-mode cohort.
+  # Operator
   # may consider adding Layers (a) intake-time hook and (c) scheduled cadence
   # after a 2-3 release calibration window: "keep in mind the right time to
   # perform this work and the tools/processes available currently."
@@ -12097,7 +12722,7 @@ sys.stdout.write("".join(out) + "|")
   # coverage claim can never be read as larger than its delivery.
   #
   # NOT ON THE REQUIRED-SUBSET ROSTER. Check 63 is deliberately absent from
-  # --check-required-subset. That roster is seeded with Check 38 alone; joining it is a
+  # --check-required-subset. That roster carries Checks 38 and 73; joining it is a
   # separate, later, evidence-gated decision, and staying off it is what makes shipping
   # enforcing safe today (no CI workflow runs the full --check suite).
   #
@@ -12421,10 +13046,25 @@ sys.stdout.write("".join(out) + "|")
   # relying on it.
   #
   # WARN-MODE INITIAL via resolve_check_mode "citation-anchor" — the Check 51-65
-  # deploy-check precedent, NOT the PreToolUse-hook .mode surface. Flip to enforce with
-  # a `citation-anchor.mode` file after the >=3-day warn-log review. The reintroduction
+  # deploy-check precedent, NOT the PreToolUse-hook .mode surface. The reintroduction
   # of a line anchor is a signal to correct a citation, never a reason to block a
   # deploy, so the first posture is a report.
+  #
+  # FLIP SURFACE — the COMMITTED default, NOT a `.mode` file. This block previously
+  # named "a `citation-anchor.mode` file" as the flip mechanism. That names something
+  # a reviewer, CI and a fresh clone cannot see: all three rungs resolve_check_mode
+  # reads are operator-local or deployment-target surfaces ($(pmo_instance_path), its
+  # legacy twin, and .claude/hooks/, which carries zero tracked files), and ZERO .mode
+  # files are tracked anywhere in the repo. Naming a git-invisible surface as the exit
+  # criterion is the same not-repo-derivable defect the warn-mode-gate-graduation
+  # milestone exists to close, reproduced inside this gate's own declaration. The flip
+  # is instead the one-token COMMITTED default — resolve_check_mode "citation-anchor"
+  # "enforce" — the shape live at Check 47 (`_c47_default="enforce"`), which a pull
+  # request shows and a reviewer can approve. The flip DECISION itself is recorded in
+  # core/standards/gate-efficacy-standard.md § Flip-decision status, which holds this
+  # check DEFERRED — precondition-blocked, NOT evidence-blocked; read that row before
+  # changing the posture here. Advance is an operator decision, never auto-promoted by
+  # hit count (core/standards/progressive-rollout-convention.md owns the ladder).
   #
   # THE CHECK CARRIES ITS OWN RECORD (PV-6). Its denominator and BOTH control arms are
   # fields of its own emitted output, so a reader can distinguish "zero found" from
@@ -12504,7 +13144,23 @@ sys.stdout.write("".join(out) + "|")
   # "reconcile" them to a single number.
   #
   # WARN-MODE INITIAL via resolve_check_mode "trigger-collision", per the Check 51-66
-  # precedent; enforce-flip deferred to bypass-mode-readiness.md § Warn-Mode Initial.
+  # deploy-check precedent, NOT the PreToolUse-hook .mode surface — the same boundary
+  # Check 66 states explicitly.
+  #
+  # FLIP DEFERRAL — re-pointed to a reference that resolves. This block previously
+  # deferred the flip to "bypass-mode-readiness.md § Warn-Mode Initial". No such
+  # section exists: a heading census of that file returns 0 of 44 headings matching,
+  # and all 5 occurrences of the phrase are prose or table cells, 4 of which point at
+  # a DIFFERENT section (§ Shakedown -> Enforce Transition Checklist) governing the
+  # PreToolUse-hook `.mode` layer rather than deploy-check modes. So the citation was
+  # dangling AND cross-layer, and this check disagreed with its own sibling about its
+  # own flip surface. The flip decision is recorded in
+  # core/standards/gate-efficacy-standard.md § Flip-decision status, which holds this
+  # check DEFERRED — precondition-blocked, NOT evidence-blocked; the flip mechanism
+  # when unblocked is the one-token COMMITTED default resolve_check_mode
+  # "trigger-collision" "enforce" (the Check 47 shape), never a `.mode` file, which is
+  # not repo-derivable. Advance is an operator decision, never auto-promoted by hit
+  # count (core/standards/progressive-rollout-convention.md owns the ladder).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 67: Composition-aware cross-skill trigger collision (registry-linked pairs exempt from WATCH, never from ESCALATE; warn-mode initial; enforce-flip deferred)"
     local c67_script="release/skills/pmo-skill-refiner/scripts/run_eval_audit.py"
@@ -13088,6 +13744,183 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
 
 
 
+
+  # Check 73 — bundle-metrics gate integrity (G3-14 / G3-15) [#6298]
+  #
+  # The DEPLOY-TIME half of the DD1 pair. The predicate body _c73_compute_verdict
+  # is TOP-LEVEL and shared verbatim with the --check-required-subset runner, so no
+  # predicate is re-encoded on either surface (single-engine, CIAC-2) and the CI
+  # gate and this lifecycle surface can never disagree about what the gate asserts.
+  #
+  # This block asserts the TREE-RESIDENT half only — that the G3-14/G3-15 machinery
+  # discriminates, that their sink declarations cohere, and that their config
+  # resolves. It does NOT assert the live backlog parse rate or a live milestone's
+  # effective_pts: that half's subject is out-of-tree GitHub state, has no repo-path
+  # Verdict-Input Closure, and stays advisory at its Stage-3 -> 4 boundary runner
+  # PERMANENTLY, on architectural grounds (ADR-166). Reading a green here as
+  # evidence about the live backlog would be exactly the proxy Requirement (a)
+  # forbids, which is why the id is `-gate-integrity` and not `bundle-metrics`.
+  #
+  # Warn-mode initial via flag_warn_or_issue: the per-check knob is
+  # resolve_check_mode "bundle-metrics-gate-integrity", the proven one-token
+  # decouple. The CI surface's warn-vs-enforce is a SEPARATE sentinel
+  # (.github/deploy-check-ci.enforce), and neither is flipped by this release.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 73: Bundle-metrics gate integrity (G3-14 / G3-15 machinery discriminates, sinks cohere, config resolves; tree-resident half only)"
+    local c73_verdict c73_tok
+    c73_verdict="$(_c73_compute_verdict "lifecycle")"
+    c73_tok="${c73_verdict%% *}"
+    case "$c73_tok" in
+      PASS)
+        log "  OK:    bundle-metrics-gate-integrity — ${c73_verdict#PASS }"
+        ;;
+      FAIL)
+        flag_warn_or_issue "bundle-metrics-gate-integrity" "${c73_verdict#FAIL }"
+        ;;
+      *)
+        # No not-evaluated arm exists by construction, so an unrecognised token is
+        # a tooling defect rather than an outage — report it loudly rather than
+        # letting an unreadable verdict read as clean.
+        flag_warn_or_issue "bundle-metrics-gate-integrity" \
+          "unexpected verdict token '$c73_tok' from _c73_compute_verdict (this check has no measurement-outage class; an unrecognised token is a defect in the verdict body): $c73_verdict"
+        ;;
+    esac
+  fi
+
+  # Check 74 — gate-rollout graduation (MIXED MODE) [#4214]
+  # gate-efficacy: posture=advisory  enforcement-surface=deploy-time-only
+  #   invariant: the G3-14/G3-15 SPLIT DISPOSITION's INTEGRITY limb (limb (i)) has a
+  #              repo-derivable exit criterion, and that criterion has not elapsed
+  #              unaddressed (W2 of gate-efficacy-standard.md § Written sink and
+  #              terminable shakedown).
+  #   falsification: re-date GATE_ROLLOUT_ARMED more than
+  #                  GATE_ROLLOUT_ESCALATE_DAYS into the past -> GRADUATION-OVERDUE
+  #                  and `--check --strict` exits 1; restore -> OK.
+  #
+  # WHAT IT ASSERTS. That limb (i)'s residual `warn -> enforce` flip — one committed
+  # .github/deploy-check-ci.enforce token plus one branch-protection registration — is
+  # DECIDED rather than left running. It reads four committed constants and today's
+  # date and, past the review window, forces a verdict: advance the phase, retreat it,
+  # or re-date the arming constant. Each is a one-line edit, and the edited line IS the
+  # audit record of the decision.
+  #
+  # WHAT IT DELIBERATELY DOES NOT ASSERT — the scope boundary is the whole defence
+  # against widening this into something it must not be:
+  #   * NOT the LIVE limb (ii). That limb declines the flip on architectural grounds
+  #     (ADR-166) and is advisory PERMANENTLY, so it is not a shakedown. Arming a
+  #     deadline against a declined flip would produce a permanent advisory wearing the
+  #     shape of a temporary one — the exact defect #4214 exists to close, inverted.
+  #   * NOT whether the gate machinery works. Check 73 owns that and is the required
+  #     pre-merge subset member; this check reads no fixture and evaluates no predicate.
+  #   * NOT drain CONTENT. The evidence arm counts rows and classifies the count. It
+  #     never grades what is in them.
+  #
+  # THE SPLIT IS THE DESIGN, AND IT IS NOT SYMMETRIC (the Check 71 shape, reused).
+  #   DEADLINE ARM (repo-derivable, ENFORCING): committed constants + today's date. It
+  #   needs no drain, so it works in CI and in a fresh clone — which is precisely the
+  #   blocker the flip-decision register names for every undated row.
+  #   EVIDENCE ARM (operator-local, ADVISORY): the drain row count for Check 73's own
+  #   warn id. It SKIPs when the drain is unreadable and touches ISSUES on NO PATH, so
+  #   a fresh clone and CI observe no behaviour change from it at all. The absence of an
+  #   increment below is a STRUCTURAL guarantee, not a default a later edit may flip.
+  #
+  # A ZERO DRAIN IS A FINDING, NOT A REASON TO WAIT. The three-way verdict is emitted
+  # WITH the due notice so the reading cannot default to "no evidence yet": zero rows
+  # reads as INSTRUMENTATION-SUSPECT, because a zero whose instrument was never
+  # connected measures the wiring and not the behaviour.
+  #
+  # THE DRAIN IS READ THROUGH THE SEGMENT SET, NEVER THE HOT FILE. Once the warn-log
+  # lifecycle card lands its rotation, the hot path holds only the CURRENT segment, so
+  # opening it directly returns a PLAUSIBLE WRONG ANSWER rather than an error — the
+  # failure ADR-106 measured, where a control returned 2 where the true count was 10.
+  # warn_log_segment_set() is that card's symbol and does not exist yet, so the arm is
+  # guarded and SKIPs until it lands. That SKIP is honest; opening the hot file to avoid
+  # it would not be.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 74: gate-rollout graduation (deadline arm repo-derivable + enforcing; evidence arm operator-local + advisory)"
+
+    # ── control arm FIRST: a probe that cannot be shown to discriminate proves
+    # nothing. Both arms exercise the SAME indirect-expansion path the verdict below
+    # uses, so a resolution path that silently returned empty — which would read as
+    # "no finding" on every run — cannot pass this pair.
+    local c74_ref c74_ctrl_hit c74_ctrl_miss
+    c74_ref="GATE_ROLLOUT_PHASE";           c74_ctrl_hit="${!c74_ref:-}"
+    c74_ref="GATE_ROLLOUT_ZZZ_FABRICATED";  c74_ctrl_miss="${!c74_ref:-}"
+    log "  CTRL:  gate-rollout-graduation — constant sensitivity='${c74_ctrl_hit}' (want non-empty), specificity='${c74_ctrl_miss}' (want empty)"
+
+    if [[ -z "$c74_ctrl_hit" || -n "$c74_ctrl_miss" ]]; then
+      log "  FAIL:  gate-rollout-graduation — the constant resolution path no longer discriminates; every verdict below would be unattributable"
+      ISSUES=$((ISSUES + 1))
+    elif [[ -z "${GATE_ROLLOUT_ARMED:-}" || -z "${GATE_ROLLOUT_REVIEW_DAYS:-}" || -z "${GATE_ROLLOUT_ESCALATE_DAYS:-}" ]]; then
+      log "  FAIL:  gate-rollout-graduation — one or more rollout constants are unreadable (phase='${GATE_ROLLOUT_PHASE:-}' armed='${GATE_ROLLOUT_ARMED:-}' review='${GATE_ROLLOUT_REVIEW_DAYS:-}' escalate='${GATE_ROLLOUT_ESCALATE_DAYS:-}'). A gate that cannot read its own input must not pass."
+      ISSUES=$((ISSUES + 1))
+    else
+      case "$GATE_ROLLOUT_PHASE" in
+        shadow|warn|enforce) ;;
+        *)
+          log "  FAIL:  gate-rollout-graduation — GATE_ROLLOUT_PHASE='${GATE_ROLLOUT_PHASE}' is not one of shadow|warn|enforce (the ladder core/standards/progressive-rollout-convention.md owns). An unrecognised value has no defined rung, so the rollout state is undefined rather than merely wrong."
+          ISSUES=$((ISSUES + 1))
+          ;;
+      esac
+
+      local c74_elapsed
+      c74_elapsed="$(python3 -c 'import datetime,sys
+a=datetime.date.fromisoformat(sys.argv[1])
+print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/null || printf '')"
+
+      # EVIDENCE ARM. Segment-set read only. No path below touches ISSUES.
+      #
+      # `/bin/cat`, NOT `/usr/bin/cat`. On macOS there is no /usr/bin/cat, so the
+      # original absolute path resolved to nothing on the one platform the drain
+      # actually lives on: every member of the family failed to open, the `|| true`
+      # swallowed the pipeline status, and `grep -c` counted 0 over an empty
+      # stream. That reported `drain_rows=0`, which this gate's own verdict prose
+      # then explains as INSTRUMENTATION-SUSPECT — a broken probe wearing the
+      # exact shape of a real measurement. It was unobservable until the warn-log
+      # lifecycle card landed warn_log_segment_set() and made this arm reachable
+      # at all; before that the arm SKIPped and the path was never executed.
+      # /bin/cat resolves on macOS and on Linux (where /bin is a usr/bin symlink),
+      # so the absolute-path convention is kept rather than traded away.
+      local c74_rows="SKIP"
+      if declare -f warn_log_segment_set >/dev/null 2>&1; then
+        c74_rows="$(warn_log_segment_set 2>/dev/null \
+          | while IFS= read -r _c74_seg; do [[ -n "$_c74_seg" && -f "$_c74_seg" ]] && /bin/cat "$_c74_seg"; done \
+          | /usr/bin/grep -c 'bundle-metrics-gate-integrity' || true)"
+        c74_rows="$(printf '%s' "$c74_rows" | /usr/bin/tr -d '[:space:]')"
+        [[ -n "$c74_rows" ]] || c74_rows=0
+      fi
+
+      log "  DENOM: gate-rollout-graduation — subject=g3-14/g3-15-integrity-limb phase=${GATE_ROLLOUT_PHASE} armed=${GATE_ROLLOUT_ARMED} elapsed=${c74_elapsed}d thresholds=${GATE_ROLLOUT_REVIEW_DAYS}d/${GATE_ROLLOUT_ESCALATE_DAYS}d drain_rows=${c74_rows}"
+
+      if [[ "$GATE_ROLLOUT_PHASE" == "enforce" ]]; then
+        log "  OK:    gate-rollout-graduation — the integrity limb has GRADUATED to enforce; the rollout is decided and this gate is discharged"
+      elif [[ -z "$c74_elapsed" ]]; then
+        log "  FAIL:  gate-rollout-graduation — GATE_ROLLOUT_ARMED='${GATE_ROLLOUT_ARMED}' is not a resolvable ISO date, so the deadline arm cannot be evaluated. This is the failure mode a placeholder arming stamp produces."
+        ISSUES=$((ISSUES + 1))
+      else
+        # Three-way evidence verdict, emitted WITH any due notice so a zero drain is
+        # read as a finding rather than as an absence of one.
+        local c74_verdict
+        if [[ "$c74_rows" == "SKIP" ]]; then
+          c74_verdict="drain unreadable here — warn_log_segment_set() is not defined on this tree, so the evidence arm SKIPs rather than opening the hot warn log (a direct read returns a plausible wrong answer after the first rotation, per ADR-106). It informs the decision; it never triggers it."
+        elif [[ "$c74_rows" -eq 0 ]]; then
+          c74_verdict="0 rows -> INSTRUMENTATION-SUSPECT, not 'no evidence'. Check 73 emits under this id via flag_warn_or_issue, so a genuine zero means the gate has not fired since the drain was cut. Confirm by running the Check 73 seeded-failure arm (core/deploy/tests/test_check73_bundle_metrics_discrimination.sh); if that writes no row, the drain is BROKEN and that is a defect."
+        else
+          c74_verdict="${c74_rows} rows -> classify the sample with its denominator (true-positive vs fixture-churn), then FLIP the .github/deploy-check-ci.enforce sentinel and register the job context, or NARROW the predicate. Never auto-promoted by count."
+        fi
+
+        if [[ "$c74_elapsed" -ge "$GATE_ROLLOUT_ESCALATE_DAYS" ]]; then
+          log "  FAIL:  gate-rollout-graduation — GRADUATION-OVERDUE: ${c74_elapsed} days at phase='${GATE_ROLLOUT_PHASE}', past the ${GATE_ROLLOUT_ESCALATE_DAYS}-day escalation. ${c74_verdict}"
+          log "         Turn this green by RECORDING A DECISION in core/deploy/deploy.sh: advance GATE_ROLLOUT_PHASE, retreat it, or re-date GATE_ROLLOUT_ARMED. Doing nothing is the one option this gate removes."
+          ISSUES=$((ISSUES + 1))
+        elif [[ "$c74_elapsed" -ge "$GATE_ROLLOUT_REVIEW_DAYS" ]]; then
+          log "  WARN:  gate-rollout-graduation — GRADUATION-DUE (deadline): ${c74_elapsed} days since arming (threshold ${GATE_ROLLOUT_REVIEW_DAYS}d; escalates to a finding at ${GATE_ROLLOUT_ESCALATE_DAYS}d). ${c74_verdict}"
+        else
+          log "  OK:    gate-rollout-graduation — within the review window (${c74_elapsed}d of ${GATE_ROLLOUT_REVIEW_DAYS}d, drain=${c74_rows})"
+        fi
+      fi
+    fi
+  fi
 
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
@@ -14958,10 +15791,12 @@ cmd_check_decision_emission() {
 # Check 7 (skill-package-freshness.yml #2656), Check 32 (release-corpus-completeness.yml
 # #1484), Check 41 (version-freeness.yml), Check 48 (close-completeness.yml).
 #
-# TODAY the predicate resolves to exactly ONE member — Check 38
-# (hook-registry-index-freshness), the only explicit posture:required check lacking
-# a dedicated mirror. New members are appended here as future posture:required
-# checks are back-filled (#1036 / #313).
+# TODAY the predicate resolves to TWO members — Check 38
+# (hook-registry-index-freshness) and Check 73 (bundle-metrics-gate-integrity).
+# New members are appended here as future posture:required checks are back-filled
+# (#1036 / #313). Check 73 is the first back-fill against that declaration: #313 is
+# the milestone this runner's own header named as its back-fill vehicle, so the
+# roster grew through the mechanism it declared rather than around it.
 #
 # Surface = "gate": fail-closed. Warn-vs-enforce at the CI surface is decided by the
 # committed .github/deploy-check-ci.enforce sentinel — during the warn-mode window an
@@ -14988,10 +15823,17 @@ cmd_check_required_subset() {
     [[ "$_rs_tok_line" == "enforce" ]] && rs_enforce="enforce"
   fi
 
-  # Enumerated allowlist: "check-id:verdict-body". TODAY: Check 38 only. Append a
-  # row per future posture:required check that lacks a dedicated CI mirror.
+  # Enumerated allowlist: "check-id:verdict-body". TODAY: Checks 38 and 73. Append
+  # a row per future posture:required check that lacks a dedicated CI mirror.
+  #
+  # Every member's verdict enum MUST be drawn from the tokens the case below
+  # recognises. A bespoke token falls to the `*)` arm and fail-closes on a healthy
+  # tree regardless of the sentinel, which is why Check 73 emits only PASS/FAIL and
+  # carries no not-evaluated arm (it has no measurement-outage class — every input
+  # is a committed file).
   local -a rs_checks=(
     "hook-registry-index-freshness:_c38_compute_verdict"
+    "bundle-metrics-gate-integrity:_c73_compute_verdict"
   )
 
   local rs_fail=0 rs_err=0 rs_pass=0 _entry _id _fn _verdict _tok
@@ -15678,7 +16520,7 @@ main() {
       echo "  --check-lifecycle            List retired/dormant checks + dispositions + reactivation anchors"
       echo "  --check-version-freeness     Pre-merge version-freeness probe (Check 41 only; exits 1 on a claimed/undecidable candidate) (#1677)"
       echo "  --check-close-completeness   Close-completeness probe (Check 48 only; exits 1 on a VERIFIED row missing a Stage-13 output) (#1290)"
-      echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (seeded: Check 38); honors .github/deploy-check-ci.enforce (#1485)"
+      echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; exits 1 on an INCOMPLETE row set when enforce) (#1484)"
       echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; advisory/deploy-time-only; exits 1 on INCOMPLETE/NOSET when enforce) (#4026)"
       echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, unexpected=1) (#2656)"

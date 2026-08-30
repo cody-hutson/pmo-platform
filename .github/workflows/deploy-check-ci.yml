@@ -7,22 +7,31 @@ name: Deploy-check required subset (pre-merge load-bearing gate)
 #              asserted as a blocking status check BEFORE the change lands, closing
 #              the gap that the whole --check battery ran only at deploy time
 #              (operator machine, post-merge) and was therefore skippable. Today the
-#              subset resolves to exactly one member: Check 38
-#              (hook-registry-index-freshness); it grows as posture:required checks
-#              lacking a mirror are back-filled (#1036 / #313).
+#              subset resolves to TWO members: Check 38
+#              (hook-registry-index-freshness) and Check 73
+#              (bundle-metrics-gate-integrity); it grows as posture:required checks
+#              lacking a mirror are back-filled (#1036 / #313). Check 73 is the
+#              first back-fill against that declaration — #313 is the milestone
+#              named above as this runner's back-fill vehicle, so the roster grew
+#              through the mechanism it declared rather than around it.
 #   falsification: edit a per-hook source (e.g. add a rule row) under
 #                  core/rules/bypass-mode-readiness/ without regenerating the index
 #                  -> this gate reports STALE (warn-mode: summary + exit 0; enforce:
-#                  red + exit 1). A fresh index -> green.
+#                  red + exit 1). A fresh index -> green. Independently, mutate
+#                  _g3_14_compute_verdict's floor comparison from `>=` to `>` (or
+#                  _g3_15_compute_verdict's band comparison from `<=` to `<`) ->
+#                  Check 73 reports FAIL on the at-threshold fixture; restore ->
+#                  PASS. That opposite-verdict pair on one unchanged fixture is the
+#                  whole discrimination claim for the new member.
 # NO PATH FILTER, BY DESIGN — and for this gate the reason is TEMPORAL, which is what
 # separates it from its three path-filtered siblings.
 #
 # A paths: roster is only ever an approximation of a verdict's real input surface, and
 # under skip-semantics=absent-is-pass an under-approximation turns the miss into a
 # false statement. Measured at conversion time, this gate's roster did NOT
-# under-approximate: the single subset member is Check 38, whose only engine dependency
-# is build-hook-registry.py, and both the sources and the generated index sat inside
-# the roster. Verdict-Input Closure HELD on that day. The gap is that it cannot be
+# under-approximate: the sole subset member then was Check 38, whose only engine
+# dependency is build-hook-registry.py, and both the sources and the generated index sat
+# inside the roster. Verdict-Input Closure HELD on that day. The gap is that it cannot be
 # relied on to keep holding: the subset is declared to GROW as posture:required checks
 # lacking a mirror are back-filled, and the roster's own annotation said it grows with
 # it. Two rosters obliged to widen together with NOTHING binding them is the exact
@@ -30,6 +39,18 @@ name: Deploy-check required subset (pre-merge load-bearing gate)
 # without anyone noticing. A roster bound to a roster designed to grow reproduces the
 # defect on a delay, so binding was rejected and the filter deleted instead. Adding a
 # subset member now costs nothing and can silently cost nothing.
+#
+# THAT PREDICTION HAS NOW BEEN EXERCISED, AND THE DELETED FILTER IS WHY IT COST
+# NOTHING. Check 73 (bundle-metrics-gate-integrity) joined the subset, and its verdict
+# inputs are a set NO roster written for Check 38 would have contained: the two
+# committed fixture pairs under core/deploy/tests/fixtures/bundle-metrics/, the verdict
+# bodies in core/deploy/deploy.sh, the sink declarations in
+# core/schemas/gate-criteria-spec.md, core/config/platform-config.toml.template, and
+# the round-half-up definitional home in
+# release/references/standards/bundle-composition-doctrine.md. Under the old filter this
+# gate would have reported nothing on a PR touching only the doctrine or the config
+# template, while still claiming to assert a predicate that reads both. No filter, no
+# gap — which is the whole reason this workflow carries none.
 #
 # ALWAYS-REPORTS IS A PREREQUISITE OF THE DECLARED FLIP, NOT A COST DECISION.
 # This gate declares posture=required and its graduation clause names

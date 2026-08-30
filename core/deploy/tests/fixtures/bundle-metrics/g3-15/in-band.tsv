@@ -1,0 +1,17 @@
+# G3-15 SPECIFICITY fixture — effective_pts sits EXACTLY AT the band upper bound,
+# so the declared `<=` comparator must return PASS.
+#
+# The at-bound boundary is deliberate, for the same reason G3-14's specificity
+# fixture sits at the floor: only an at-bound population makes a `<=` -> `<`
+# mutation observable, and that mutation is G3-15's seeded-failure arm.
+#
+# Grammar (TSV):
+#   class  \t <release_class>            resolves the capacity multiplier
+#   member \t <id> \t <size_label>       XS=1 S=2 M=4 L=8 XL=16
+#
+# raw_sum = 16 + 8 + 1 = 25; class routine -> weight 1.0;
+# effective_pts = round_half_up(25 * 1.0) = 25 == bound 25.
+class	routine
+member	5001	XL
+member	5002	L
+member	5003	XS
