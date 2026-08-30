@@ -190,7 +190,7 @@ Sourcing-exempt — every matrix path is an internal pmo-platform artifact — a
 | `core/standards/progressive-rollout-convention.md` | **VOID** (was single) | none — #4751 determined at D-14 that a register disposition is not a ladder rung, so the file stays a read-only input |
 | `core/rules/bypass-mode-readiness.md` | single, **CONDITIONAL** | #1686 |
 | `core/deploy/tools/` | **VOID** (was single, CONDITIONAL) | none — the #5588 branch that would have claimed it was not selected at D-10 |
-| `core/ADRs/` | single | #5588 (ADR-165), alongside #6298's ADR-163 and #4214's ADR-164 — three distinct files, no cell contention |
+| `core/ADRs/` | single | #5588 (ADR-165), alongside #6298's ADR-166 and #4214's ADR-164 — three distinct files, no cell contention |
 
 **The sharpest contention is the table, not the file.** Four cards write rows into the same markdown register in `gate-efficacy-standard.md`. Serial commits resolve the mechanical conflict; CIAC-2 is what makes the resulting table coherent rather than merely conflict-free.
 
@@ -276,8 +276,8 @@ Release-level rollback = revert the single merge commit. Instance-level warn-log
 
 | Scope | Author | Allocation |
 |---|---|---|
-| A stage gate whose subject is out-of-tree GitHub state is made (b′)-`required` by splitting its predicate and CI-gating only the tree-resident half | **#6298** (D-11 as revised by D-16 — #4751's ADR folds into this one record, covering both altitudes) | `python3 release/tools/renumber-adr.py --next-free`; never hand-reserved. Mainline anchor is ADR-161 across both ADR directories. PR #6353's ADR-163 claim is **unmerged and advisory only**. |
-| A warn-mode declaration carries two axes — W1 the sink is written, W2 the shakedown is terminable from committed state — and only the repo-derivable axis can end a shakedown | **#4214** (D-11, restored by D-23: the release ships **three** authorized ADRs, not two; D-16's count rested on a hub arithmetic error) | Allocated at this card's Engineering commit as the next number above the **union** of the mainline anchor and this branch's own in-flight claim. `renumber-adr.py --detect` reports `ANCHOR 162 origin/main` / `NEXT-FREE 163` / `CLAIMED-SET-BRANCH-ONLY 163 (detection only — never binds)`, so `--next-free` alone would have collided with ADR-163 on this same branch. **ADR-164** re-verified to report `BINDS`; never hand-reserved. |
+| A stage gate whose subject is out-of-tree GitHub state is made (b′)-`required` by splitting its predicate and CI-gating only the tree-resident half | **#6298** (D-11 as revised by D-16 — #4751's ADR folds into this one record, covering both altitudes) | `python3 release/tools/renumber-adr.py --next-free`; never hand-reserved. Mainline anchor is ADR-161 across both ADR directories. PR #6353's ADR-166 claim is **unmerged and advisory only**. |
+| A warn-mode declaration carries two axes — W1 the sink is written, W2 the shakedown is terminable from committed state — and only the repo-derivable axis can end a shakedown | **#4214** (D-11, restored by D-23: the release ships **three** authorized ADRs, not two; D-16's count rested on a hub arithmetic error) | Allocated at this card's Engineering commit as the next number above the **union** of the mainline anchor and this branch's own in-flight claim. `renumber-adr.py --detect` reports `ANCHOR 162 origin/main` / `NEXT-FREE 163` / `CLAIMED-SET-BRANCH-ONLY 163 (detection only — never binds)`, so `--next-free` alone would have collided with ADR-166 on this same branch. **ADR-164** re-verified to report `BINDS`; never hand-reserved. |
 | An append-only operator-instance log whose consumer needs its full history is bounded by **relocation into numbered segments, not by discard** — and the choice rests on measured feasibility and cost, never on a never-delete doctrine | **#5588** (D-11, restored by D-23 — the third of the release's three authorized ADRs). Grounds are the strongest of the set: this is the **third pass at one question class** (#3715 bounded the release logs → #3387 / ADR-106 declined the purge → #5588), and ADR-106 exists precisely because an earlier adjudication of that class left no durable record. | Allocated at this card's Engineering commit as the next number above the **union** of the mainline anchor and this branch's own two in-flight claims. `renumber-adr.py --detect` reports `ANCHOR 162 origin/main` / `NEXT-FREE 163` / `CLAIMED-SET-BRANCH-ONLY 163,164`, so `--next-free` alone would have collided **twice** on this same branch. **ADR-165** re-verified to report `BINDS`; never hand-reserved. A concurrent release (PR #6393, draft) independently claims 163 and 164 against the same anchor — correct behaviour by both sides, since unmerged sibling claims are advisory. Whoever merges second renumbers; a gap blocks the repo, a duplicate is tooled. |
 
 ## Baseline Pin
@@ -315,7 +315,7 @@ All five are marked as closed at Stage 13 by the automated close-out. The releas
 ### Key decisions
 
 - **D-8 — evaluator ownership.** Two specs each assumed the other would build the G3-14 / G3-15 evaluator, so under both as written nobody built it. Ownership resolved to #6298, which therefore lands **first** rather than second.
-- **The predicate is split by locus of input** (ADR-163). Both gates' subject is out-of-tree GitHub state, so a merge gate on the live evaluation would go red for reasons no PR author can see or repair. The tree-resident machinery is gated at `required`; the backlog-resident half is recorded as a **permanent** advisory residual on architectural grounds — not deferred, not awaiting evidence.
+- **The predicate is split by locus of input** (ADR-166). Both gates' subject is out-of-tree GitHub state, so a merge gate on the live evaluation would go red for reasons no PR author can see or repair. The tree-resident machinery is gated at `required`; the backlog-resident half is recorded as a **permanent** advisory residual on architectural grounds — not deferred, not awaiting evidence.
 - **Extend, do not create.** Two existing filter-free workflows absorbed the new check. Zero new workflows, sentinels, branch-protection contexts, or macOS jobs.
 - **A disposition must name its blocker, not its schedule.** The register's `shakedown continues` shape names a schedule and is unfalsifiable; the replacement rows name conditions a reader can check.
 
@@ -334,7 +334,7 @@ The **expensive** half of this release is #5588's rotation, still pending: recor
 
 ### Cross-references
 
-- `core/ADRs/ADR-163-split-predicate-gate-graduation.md` — the reusable decision, both altitudes
+- `core/ADRs/ADR-166-split-predicate-gate-graduation.md` — the reusable decision, both altitudes
 - `core/standards/gate-efficacy-standard.md` — Requirements (a) / (b) / (b′), § Verdict-Input Closure, and both registers this release writes into
 - `core/schemas/gate-criteria-spec.md` — G3-14 / G3-15 definitional home (read-only for #6298; edited by #4214)
 - `core/standards/progressive-rollout-convention.md` — owns the `warn → enforce → removed` ladder; advance is an operator decision, never auto-promoted by hit count

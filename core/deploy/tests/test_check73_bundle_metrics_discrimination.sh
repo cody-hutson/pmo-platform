@@ -46,7 +46,7 @@
 # SCOPE BOUNDARY. This suite asserts the INSTRUMENT, not the posture, and not the
 # live backlog. It says nothing about the real Mode-A parse rate or any real
 # milestone's effective_pts: that half of the predicate is backlog-resident, has
-# no repo-path Verdict-Input Closure, and stays advisory permanently (ADR-163).
+# no repo-path Verdict-Input Closure, and stays advisory permanently (ADR-166).
 
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

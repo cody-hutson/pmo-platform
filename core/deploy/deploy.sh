@@ -177,7 +177,7 @@ FORCE_ALL=false
 # its residual `warn -> enforce` flip is one committed .enforce sentinel token
 # plus one branch-protection registration, and it was recorded with no date. The
 # live-rate limb (ii) is advisory PERMANENTLY on architectural grounds
-# (core/ADRs/ADR-163-split-predicate-gate-graduation.md) and is NOT a shakedown,
+# (core/ADRs/ADR-166-split-predicate-gate-graduation.md) and is NOT a shakedown,
 # so it is deliberately outside this arm's subject. Arming a deadline against a
 # declined flip would manufacture the inverse defect this constant exists to
 # close: a permanent advisory wearing the shape of a temporary one.
@@ -2500,7 +2500,7 @@ _c38_compute_verdict() {
 #   BACKLOG-RESIDENT half (NOT here) — the live parse rate / the live
 #       effective_pts. Stays advisory PERMANENTLY on architectural grounds, at its
 #       declared Stage-3 -> 4 boundary runner. That is a recorded residual, not an
-#       open gap. See core/ADRs/ADR-163-split-predicate-gate-graduation.md.
+#       open gap. See core/ADRs/ADR-166-split-predicate-gate-graduation.md.
 #
 # NOT A PROXY (Requirement (a)). This check does NOT claim "the backlog parse rate
 # >= 0.90". It claims the narrower, fully tree-resident thing its id names: the
@@ -13626,7 +13626,7 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
   # resolves. It does NOT assert the live backlog parse rate or a live milestone's
   # effective_pts: that half's subject is out-of-tree GitHub state, has no repo-path
   # Verdict-Input Closure, and stays advisory at its Stage-3 -> 4 boundary runner
-  # PERMANENTLY, on architectural grounds (ADR-163). Reading a green here as
+  # PERMANENTLY, on architectural grounds (ADR-166). Reading a green here as
   # evidence about the live backlog would be exactly the proxy Requirement (a)
   # forbids, which is why the id is `-gate-integrity` and not `bundle-metrics`.
   #
@@ -13676,7 +13676,7 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
   # WHAT IT DELIBERATELY DOES NOT ASSERT — the scope boundary is the whole defence
   # against widening this into something it must not be:
   #   * NOT the LIVE limb (ii). That limb declines the flip on architectural grounds
-  #     (ADR-163) and is advisory PERMANENTLY, so it is not a shakedown. Arming a
+  #     (ADR-166) and is advisory PERMANENTLY, so it is not a shakedown. Arming a
   #     deadline against a declined flip would produce a permanent advisory wearing the
   #     shape of a temporary one — the exact defect #4214 exists to close, inverted.
   #   * NOT whether the gate machinery works. Check 73 owns that and is the required
