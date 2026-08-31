@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.45 (2026-08-31) — Checks now report what they actually measured
+
 ### v4.44 (2026-08-30) — Skills stopped citing things that were never there
 
 ### one-system-of-record-per-element (2026-08-29, version-less) — Every shared value now has one system of record

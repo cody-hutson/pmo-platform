@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.45] - 2026-08-31
+
+A check that could report PASS without running anything now says so, two bundle checks finally run in CI, and no gate started blocking.
+
+[Full notes](release/releases/notes/v4.45_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.45)
+
 ## [v4.44] - 2026-08-30
 
 Skill instructions stopped pointing at checks and sections that do not exist, two promised guides now exist, and installed skills update themselves after a merge instead of drifting quietly.
