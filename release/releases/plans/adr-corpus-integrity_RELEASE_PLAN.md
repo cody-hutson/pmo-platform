@@ -169,9 +169,13 @@ release/references/pipeline/stage-06-engineering.md                             
 core/skills/adr-helper/SKILL.md                                                     edit
 core/schemas/gate-criteria-spec.md                                                  edit
 core/schemas/per-skill-output-contracts.md                                          edit
+packages/adr-helper.skill                                                           edit
+packages/adr-helper.skill.sha256                                                    edit
 release/ADRs/ADR-170-adr-citations-bind-at-the-claim-not-at-authorship.md           add
 release/releases/plans/adr-corpus-integrity_RELEASE_PLAN.md                         add
 ```
+
+**Skill-package companion rows (declared at Engineering Commit 0 + 4, not at Stage 4).** `core/skills/adr-helper/SKILL.md` is a rostered skill, so editing it obliges rebuilding its `.skill` package and committing the archive plus its `.sha256` content baseline in the **same** pull request — a beat the `skill-package-freshness` gate enforces pre-merge. Those two files are a derived consequence of a declared row rather than new scope, but they are **delivered files**, and a delivered file absent from the matrix is precisely the defect corrected three times above (AI-003 / AI-005 / AI-009). Declaring them rather than leaving a fourth instance of the same class. Surfaced by a structured delivered-vs-declared probe over the matrix, not by reading it: sensitivity — a known-declared path resolved declared; specificity — a fabricated path resolved in neither the declared nor the delivered set.
 
 **Three Stage-4 matrix corrections, applied at Commit 0 and recorded rather than silently absorbed.** Each was measured against source by the hub before this transcription.
 
