@@ -1,0 +1,110 @@
+<!-- reference-durability: allow-link -->
+---
+title: "ADR-170 — The portfolio-framework axis lands as a framework-keyed template-registry subtree, not a core/packs manifest"
+status: Proposed — flips to Accepted when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
+date: 2026-09-01
+release: portfolio-tier-framework-pack
+deciders: "Stage 5 Solutioning spoke (design, evidence-grounding) + operator ratification (D-Q4(i) the record's form; D-S5-1(C) the axis-mechanism routing; D-S5-2 the AC-5 restatement; D-S5-3(α) the unsliced-umbrella engineering shape; D-S5-4 the selector's resolution scope) + Stage 6 Engineering spoke (authorship, independent re-grounding of every load-bearing claim)"
+tags: [methodology-packs, portfolio-framework, parameterization-axis, template-registry, pack-grammar-boundary, thin-delta, orthogonal-axes, reversibility-cheap, ADR-050, ADR-069, ADR-070, ADR-018]
+source_observations:
+  - "The pack header's join key is bound to the project-tier archetype set. `core/schemas/work-item-type-schema.md` §1.1 defines `applies_to` as 'a `delivery_approach` archetype name (the byte-identical, case-sensitive set Scrum Kanban XP Waterfall PRINCE2 SAFe Hybrid Custom) OR `*` for a methodology-neutral pack. This is the join key into the work-organization mapping framework's Layer-2 row.' A portfolio governance framework is not a delivery approach; it is a different altitude, and the same schema line states that a `role = base` pack MUST set `applies_to = \"*\"`, carries no kinds, and MUST NOT set `extends`."
+  - "A PMI pack therefore fits neither value of the `role` discriminator. It cannot be `archetype` (its `applies_to` value does not exist in the bound set) and it cannot be `base` (a base is a non-kind-bearing root beside `_common`, and a second root is not what a framework pack is). Expressing one requires a net-new grammar construct — an `axis` or `family` key that the meta-schema does not carry."
+  - "The cheap window on that grammar is shut, and the conjunction that shuts it is fully satisfied. ADR-070's own Reversibility section states the crossing to EXPENSIVE fires 'once packs declare role/extends/[[labels]]/work-status projections AND the consumer read-refit resolves against them.' Conjunct A: all three live packs declare those facets — `_common` carries `role = base` plus 43 `[[labels]]` blocks; `scrum` carries `role = archetype`, `extends = _common`, `applies_to = Scrum` plus 3 `[[labels]]`; `kanban` the same shape. Conjunct B: the consumer read-refit ticket reached CLOSED state on 2026-07-24, and the consumers are live — measured independently at this commit, `core/packs` appears 7 times across 3 skill files over a walked 258-file denominator, with a sensitivity arm (`delivery_approach`, 58 files) that fires and a specificity arm (a fabricated token, 0 files) that does not."
+  - "The neutral-core template registry has no selection seam. Over a 76-entry recursive walk of `operations/templates/`, exactly 1 file carries any selector-shaped token, and it is a `{{DELIVERY_APPROACH}}` content placeholder inside a rendered PROJECT.md body rather than a template-level selector. The sensitivity arm (`template_family|entity_type|plan_type`) fires at 71 occurrences across 43 files, so the near-zero is a real absence, not an extraction failure."
+  - "The keyed-subdirectory form is already shipped twice inside the target folder. `operations/templates/plan-templates/` is keyed by plan type and `operations/templates/project-bins/` by bin taxonomy, so selecting a framework-keyed subdirectory adopts an in-folder existing convention rather than inventing one."
+  - "The third candidate home is disqualified by its own installer. `scaffold_operations_tiers()` in `docs/scripts/setup-workspace.sh` enumerates the tree with `find -type f -name '*.md'`, skips any target that already exists (create-once), and then performs a verbatim `cp` — no token substitution, no rendering, and no selector anywhere in the function. Placing selectable framework content there would ship one framework to every operator unconditionally."
+  - "The premise this decision had to correct is in the requesting ticket's own body. Its Evidence reads that `operations/templates/` 'already ships PMBOK project templates … the pattern to follow for portfolio templates.' The registry README classifies those as project-domain templates that anchor to PMBOK canon in a 'Canon source' column — neutral-core templates anchored to a canon, not a selected PMBOK pack. There is no selection mechanism there to follow, and following the reading literally would ship exactly the neutral-core hardcoding the same ticket's Description forbids two paragraphs earlier."
+---
+
+# ADR-170 — The portfolio-framework axis lands as a framework-keyed template-registry subtree, not a core/packs manifest
+
+## Status
+
+**Proposed** — flips to **Accepted** when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified.
+
+This record deliberately does **not** take the accept-at-authoring posture ADR-069 and ADR-070 took. Those flipped at authoring because their deciding gates had already run. No prior scope-lock has ratified *this* decision, so Stage 9 is its first ratification gate. The frontmatter `status:` and this section state the **same** value, on purpose: a sibling record in this lineage carries `status: Accepted` in frontmatter while its body still reads *"Proposed — flips to Accepted at the Stage 9 review"*, and that split is a defect this record does not reproduce.
+
+**Numbering provenance.** Allocated at this Engineering commit. `release/tools/renumber-adr.py --next-free` returned **170** against the mainline anchor at this release's pinned baseline (the baseline SHA is recorded once, in the release plan's Baseline Pin section, rather than copied here). ADR numbering spans **both** `core/ADRs/` and `release/ADRs/`, so the oracle — not the visibly-highest filename in either directory — is the authority. The number **claims at merge**, never here: a sibling release that merges ahead of this branch forces a renumber, and `check-adr-numbers.py` gates the result in CI. In-release citations that read "ADR-170" denote this record whatever number it lands on.
+
+## Context
+
+The platform is methodology-aware at the **project tier** and blind at the **portfolio tier**. The methodology-pack architecture is scoped to `delivery_approach` archetypes — Scrum, Kanban, XP, Waterfall, PRINCE2, SAFe, Hybrid, Custom. A **portfolio governance framework** (the PMI Standard for Portfolio Management; SAFe Lean Portfolio Management) is a different altitude entirely: you run Scrum projects *under* a PMI-governed portfolio, so the two compose rather than substitute. Today a portfolio framework has no home — no selector, no altitude declaration, and no place for its artifact shapes.
+
+The requesting work carried an **unresolved contradiction in its own body**. Its Description says the portfolio artifacts are *"content of the pack, not hardcoded files in the neutral core"*; its Affected Files list places them in `operations/templates/` — the neutral core. The body names this explicitly as an *"Open design conflict"* and defers it to the spike this ADR records. The two halves point at two different homes, and the honest finding is that **both horns are wrong**.
+
+Three candidate homes were on the table when the design began, and enumerating three rather than two was itself a correction: the third shipped on 2026-08-23, thirty-seven days after the requesting spike was filed, and a design that weighed only the original two would have decided wrongly by omission.
+
+Two design forks had to be settled. **(1) Placement:** where does selectable portfolio-framework content live? **(2) Generality:** is this altitude a one-off extension, or the first instance of a general axis mechanism the platform should codify now?
+
+## Decision
+
+**The portfolio-framework axis lands as a framework-keyed subdirectory under the existing canonical template registry — `operations/templates/portfolio-frameworks/<framework_id>/` — and introduces NO new pack-grammar construct. `core/packs/` is not extended, not edited, and not the home.**
+
+Four limbs.
+
+**D1 — Placement.** Artifact shapes live at `operations/templates/portfolio-frameworks/<framework_id>/`, where `<framework_id>` is lowercase-kebab per the canonical artifact-naming authority. This is the neutral-core registry **extended with a framework-keyed subdirectory**, not the registry's flat root and not a pack directory. The registry already owns every property the artifact shapes need — markdown/CSV template-body carriage, `template_family` typing, canon-source anchoring, and a propagation seam — and the *only* property it lacks is a selection seam, which one directory level supplies. That is a strictly smaller delta than a net-new registry, and the keyed-subdirectory form is already shipped twice inside the same folder.
+
+**D2 — Selector.** The axis is selected by `[methodology].portfolio_framework` in the operator-environment config surface, with an **OPEN** (shape-validated) value domain rather than a closed enum — mirroring `delivery_approach: Custom` and the deliverable-domain axis that settled the identical fork before it. The selector is **deployment-global at v1**: a portfolio framework governs a portfolio, per-project override has no stated use case, and tightening later is additive. No project-schema validation rule is owed.
+
+**D3 — Compose with the methodology axis, never absorb it.** The portfolio-framework altitude is declared as an **additive sibling section** in the methodology-parameterization spec, not as an amendment to the existing `delivery_approach` section. This is forced by measurement, not by taste: that spec carries 43 first-order inbound references (Structural tier), so changing the existing section's semantics is a structural change across all 43, whereas appending a sibling touches **zero** of them. Folding a portfolio-governance framework into the `delivery_approach` pack axis would destroy the orthogonality that makes "Scrum projects under a PMI portfolio" expressible at all.
+
+**D4 — Thin delta.** The framework directory carries **only** framework-specific artifact shapes; anything framework-invariant stays at the registry root — the same delta-inheritance mental model the pack layer uses, on a different carrier. A second framework adds **only** its own delta directory: no root edit, no grammar edit, no consumer edit. A fourth framework costs exactly one directory, so the axis scales linearly in N rather than combinatorially.
+
+**Deliberately out of scope: the general axis mechanism.** The platform now has **three** orthogonal parameterization axes, each with a different bespoke carrier — `delivery_approach` → pack manifests; `deliverable_type` → per-domain best-practice files; `portfolio_framework` → this decision. Three instances of one shape is past the platform's own codified promotion trigger, and this record does **not** codify the shared mechanism. That is a decision, not an omission: the general question is routed to a **discovery pass** that asks what the three axes actually share *before* any mechanism is designed. Choosing the one-off here forecloses nothing — this design touches zero consumed grammar, so a later axis mechanism can absorb the framework-keyed subtree as its first instance.
+
+## Alternatives Considered
+
+Three candidate homes were weighed and **all three were rejected**, each on a distinct verified disqualifier. The selected home is a fourth, reached by extending the second rather than adopting it as framed.
+
+| # | Candidate home | Why it fails |
+|---|---|---|
+| **(i)** | `core/packs/<framework_id>/` — a pack directory | **Grammatically unreachable.** The pack header's `applies_to` is bound to the `delivery_approach` set OR `*`; a portfolio framework is neither. `applies_to = "*"` forces `role = "base"`, and a base pack is non-kind-bearing, may not set `extends`, and would be a second root beside `_common`. A framework pack fits **neither** `role` value, so expressing one requires a net-new grammar construct — which the requesting work's own acceptance criteria forbid, and which is now EXPENSIVE to introduce (see Consequences). |
+| **(ii)** | `operations/templates/` — the neutral-core registry, flat root | **Rejected as framed.** The flat root has **no selection mechanism**: exactly one entry carries any selector-shaped token and it is a content placeholder, not a template-level selector (derive with a recursive walk of `operations/templates/` scanned for `delivery_approach\|portfolio_framework\|applies_to\|archetype`, against a `template_family\|entity_type\|plan_type` sensitivity arm that fires). Registering one framework's templates at an unselected root privileges that framework in the methodology-neutral public corpus — the exact outcome ADR-069's neutrality limb forbids. |
+| **(iii)** | `operations/templates/operations-tiers/_config/` — the operations-tier seed tree | **Disqualified by its own installer.** Its consumer enumerates the tree, skips existing targets (create-once), and performs a **verbatim `cp`** — no token substitution, no rendering, **no selector**. Placing selectable framework content there ships PMI to *every* operator unconditionally. The tree's own cards declare themselves orientation, never authority; treating one as a content source inverts its stated contract. |
+| **(iv)** | **`operations/templates/portfolio-frameworks/<framework_id>/`** | **SELECTED** — home (ii) extended with a framework-keyed subdirectory. Reuses the registry's template-body carriage, family typing, canon anchoring, and add-protocol, and supplies the one missing property (selection) at the cost of one directory level. |
+
+**A net-new top-level registry was also weighed and rejected** under the extend-before-create test: `operations/templates/` covers every required property except selection, so extending it is a strictly smaller delta than standing up a parallel registry with its own conventions, its own add-protocol, and its own drift surface.
+
+**On generality, two options were weighed.** Authoring the axis construct now — an `axis`/`family` key with union-across-axes resolution — remains fully available and is **not** foreclosed by this record. It was declined for this release because it would have to land in a now-EXPENSIVE, live-consumer grammar, which deserves its own release with its own blast-radius budget rather than riding on a small design spike.
+
+## Consequences
+
+**Positive.**
+
+- **No grammar change, so no consumer rework.** The decision edits no file with live pack consumers. A deployment with no `portfolio_framework` set resolves byte-identically to today — a property that holds *by construction*, not by test.
+- **Linear scaling.** A fourth framework adds one directory and zero edits to the registry root, the pack grammar, or any consumer.
+- **The neutrality invariant is preserved.** No single framework is privileged at the unselected registry root; selection is expressed structurally, by the key in the path.
+- **The orthogonality is preserved and made explicit.** Portfolio framework and delivery approach compose; neither absorbs the other, and the additive sibling section says so at the spec surface.
+
+**Negative, and named rather than absorbed.**
+
+- **A third axis ships with no shared axis mechanism.** This is real debt. Three bespoke carriers for one recurring shape means a fourth axis will face the same decision from scratch. The debt is accepted deliberately and routed to a discovery pass; it is not silently absorbed.
+- **The pack grammar's cheap window is confirmed shut, and this record is where that is written down.** ADR-070's Reversibility clause makes the crossing conditional on a conjunction, and **both conjuncts now hold** — the live packs declare `role` / `extends` / `[[labels]]`, and the consumer read-refit reached `CLOSED` state on 2026-07-24 with consumers live across three skill files. Any future decision to widen the pack grammar starts from EXPENSIVE, not from the cheap founding moment. This corrects a live premise elsewhere in the requesting work, which argued the generalization is *"cheap to decide now and expensive later"*: for the pack-grammar carrier specifically, that window shut five and a half weeks before this release.
+- **The registry's add-protocol assumes flat placement.** A keyed subdirectory has no documented add-path today, so the protocol is extended as part of the delivering work rather than left to be rediscovered.
+- **One naming inconsistency is inherited, not introduced.** The governed naming convention is `<artifact-family>-template.<ext>`, and the shipped sibling keyed subdirectory `plan-templates/` uses bare names instead. This record follows the governed convention; the pre-existing divergence is noted, not resolved here.
+
+## Reversibility
+
+**CHEAP / Confidence HIGH pre-consumption.** The decision is a net-new subtree plus an additive spec section plus an additive selector — every element is `git revert`-complete, no existing file changes meaning, and no data migration exists to unwind. A deployment that never sets the selector cannot observe the change at all.
+
+**Crosses to MODERATE** once a consumer skill declares a runtime read-path against the framework subtree, or once the subtree is registered in the template propagation map — at that point the directory pattern is a contract and undo means unwinding the consumer alongside it. Neither has happened in this release, deliberately: registration follows the first consumer with a runtime read-path, and none exists yet.
+
+**Not EXPENSIVE, and the contrast is the point.** The pack grammar this decision declined to extend *is* EXPENSIVE today. Choosing a carrier that is still cheap is the substance of the decision, not a side effect of it.
+
+## Related ADRs
+
+- [ADR-018 — Work-Item Type Layer (WITL)](ADR-018-work-item-type-layer.md) — the kernel this decision is subordinate to. The placement limb is forced by the kernel's boundary in the same way the deliverable-domain axis was: variability that is not work-item-type variability does not belong in the type layer.
+- [ADR-050 — The deliverable-domain axis lands on PROJECT.md frontmatter, not the type-pack](ADR-050-deliverable-domain-axis.md) — **the decisive precedent and the direct sibling.** It settled the *identical* two forks for the platform's second orthogonal axis: placement outside the type-pack (forced by the ADR-018 kernel), an OPEN enum, and compose-with-the-methodology-axis-never-absorb-it. This record applies the same three resolutions to the third axis, on a different carrier.
+- [ADR-069 — Methodology-pack composing unit](ADR-069-methodology-pack-composing-unit.md) — supplies the methodology-neutrality constraint that rejects candidate home (ii)-as-framed, and the thin-delta pattern D4 lifts to the template surface.
+- [ADR-070 — Methodology-pack composition grammar](ADR-070-methodology-pack-composition-grammar.md) — supplies the `role` / `extends` / `applies_to` grammar that makes candidate home (i) unreachable, and the Reversibility conjunction whose satisfaction is recorded in Consequences.
+- [ADR-077 — Cross-cutting control-field layer](ADR-077-cross-cutting-control-field-layer.md) — the overlay mechanism a future axis-intersection design would compose with; named as the natural seam for the deferred discovery pass, and not exercised here.
+- [ADR-092 — Plan-file claim-time stamping](ADR-092-plan-file-claim-time-stamping.md) — why this record's `release:` field carries a slug rather than a version number: release identity binds at the Stage-12 atomic claim, not at authoring.
+
+## References
+
+- Portfolio-tier methodology framework pack (PMI reference) — the umbrella deliverable this decision unblocks, whose body carried the *"Open design conflict"* between pack-content and neutral-core placement: **#2577**
+- Define the portfolio-tier methodology framework pack shape + absorption set — the design spike this record is the deliverable of: **#3616**
+- Methodology-pack foundation (composing unit / grammar / control-field layer) — the project-tier architecture this decision extends to a second altitude without modifying: **#1962**
+- Consumer read-refit propagating the methodology type-pack read to the operational skills — the ticket whose closure satisfies the second conjunct of the EXPENSIVE crossing: **#2021**
+- Neutral structural layer paired with the portfolio-framework work at triage — the tier scaffolding the artifact shapes are read against: **#2578**
+- PMI program-tier artifact shapes — the superseded card whose shapes were absorbed into the umbrella on 2026-07-01: **#374**
