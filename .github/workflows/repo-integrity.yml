@@ -607,7 +607,7 @@ jobs:
             exit 1
           fi
 
-          echo ":white_check_mark: ADR renumber — six-step move verified end-to-end" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo ":white_check_mark: ADR renumber — seven-step move (R1..R7) verified end-to-end" | tee -a "$GITHUB_STEP_SUMMARY"
 
   draft-file:
     name: Draft-file gate
