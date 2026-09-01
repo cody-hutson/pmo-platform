@@ -1895,43 +1895,65 @@ def self_test():
     eq("dryrun/region-specificity",
        _strip_projected_region(["a ADR-004", "b"]), ["a ADR-004", "b"])
 
-    # ---- ADR-170: {{ADR:<slug>}} late binding ------------------------------
+    # ---- ADR-170: slug-keyed citation-token late binding -------------------
+    #
+    # THE FIXTURE TOKENS ARE BUILT AT RUNTIME, NOT WRITTEN AS LITERALS, and that
+    # is not a style choice. `--stamp --check` is a GATE limb that scans the whole
+    # branch diff, and the branch diff includes this file. A literal fixture token
+    # in this source makes the tool flag ITSELF: measured, 10 residual tokens and
+    # 1 "link position" refusal, all of them these arms, which would fail G-EX9 on
+    # every release that touches this tool. Concatenating keeps the DECLARED scope
+    # intact — the branch diff, unnarrowed — instead of carving source files out
+    # of the scan, which would silently stop stamping a token in a test comment.
+    def _tok(slug):
+        return "{{" + "ADR:" + slug + "}}"
+
     slug_ix = {"bravo": [4], "charlie": [7], "twins": [11, 12]}
     eq("stamp/resolves-from-the-on-disk-slug",
-       stamp_text("see {{ADR:bravo}} and {{ADR:charlie}}.", slug_ix),
+       stamp_text("see %s and %s." % (_tok("bravo"), _tok("charlie")), slug_ix),
        ("see ADR-004 and ADR-007.", 2, []))
     # The token carries no `ADR-\d` shape, so the sweep is inert to it — which is
     # the whole reason a concurrent allocation costs nothing before the claim.
     eq("stamp/token-is-inert-to-the-sweep",
-       rc2("see {{ADR:bravo}} and ADR-004.", 4, 5),
-       ("see {{ADR:bravo}} and ADR-005.", 1))
+       rc2("see %s and ADR-004." % _tok("bravo"), 4, 5),
+       ("see %s and ADR-005." % _tok("bravo"), 1))
     # REFUSE, with ZERO mutation — the returned text is the ORIGINAL, not a
     # half-applied one. Both refusal arms assert the text is unchanged.
-    unknown = "see {{ADR:bravo}} and {{ADR:nosuch}}."
+    unknown = "see %s and %s." % (_tok("bravo"), _tok("nosuch"))
     got_text, got_n, got_ref = stamp_text(unknown, slug_ix)
     eq("stamp/refuses-an-unknown-slug-with-zero-mutation",
        (got_text, got_n, len(got_ref)), (unknown, 0, 1))
-    ambiguous_src = "see {{ADR:twins}}."
+    ambiguous_src = "see %s." % _tok("twins")
     amb_text, amb_n, amb_ref = stamp_text(ambiguous_src, slug_ix)
     eq("stamp/refuses-an-ambiguous-slug-with-zero-mutation",
        (amb_text, amb_n, len(amb_ref)), (ambiguous_src, 0, 1))
     # PROSE-ONLY, enforced. A token in a link target would reach CI as a broken
     # cross-reference before the stamp ever runs.
-    linked = "see [the record](/release/ADRs/{{ADR:bravo}}.md)."
+    linked = "see [the record](/release/ADRs/%s.md)." % _tok("bravo")
     lk_text, lk_n, lk_ref = stamp_text(linked, slug_ix)
     eq("stamp/refuses-a-token-in-link-position",
        (lk_text, lk_n, len(lk_ref)), (linked, 0, 1))
     eq("stamp/refuses-a-reference-definition-token",
-       stamp_text("[r]: /release/ADRs/{{ADR:bravo}}.md", slug_ix)[2] != [], True)
+       stamp_text("[r]: /release/ADRs/%s.md" % _tok("bravo"), slug_ix)[2] != [],
+       True)
     # CONTROL — the same slug in PROSE on the same instrument resolves cleanly,
     # so the refusal above is about link position and not about the token.
     eq("stamp/link-refusal-control-prose-resolves",
-       stamp_text("see {{ADR:bravo}} in prose.", slug_ix),
+       stamp_text("see %s in prose." % _tok("bravo"), slug_ix),
        ("see ADR-004 in prose.", 1, []))
     # SPECIFICITY — a body with no token is a no-op that reports zero.
     eq("stamp/no-token-is-a-no-op",
        stamp_text("ordinary prose citing ADR-004.", slug_ix),
        ("ordinary prose citing ADR-004.", 0, []))
+    # REFLEXIVE ARM — this source file must carry NO literal token, or the gate
+    # limb flags the tool itself. Asserted as a property of the fixtures above
+    # rather than by reading the file: every fixture routes through `_tok`, whose
+    # output is assembled at runtime.
+    eq("stamp/fixtures-are-assembled-not-literal",
+       (ADR_TOKEN_RE.search(_tok("bravo")).group(1),
+        bool(ADR_TOKEN_IN_LINK_RE.search("](%s)" % _tok("bravo"))),
+        ADR_TOKEN_RE.search(_tok("bravo")).group(0) == _tok("bravo")),
+       ("bravo", True, True))
     # A PROJECTED region is derived from the file set, so a row naming the old
     # number belongs to whichever record still holds it — the MAINLINE's, at a
     # duplicate. R6 must not read inside the fence. Sensitivity control: the

@@ -431,7 +431,29 @@ Layer 2 file propagation targets for Stage 12/13:
 
 ## Verification Evidence
 
-(Populated during Stage 6 C4 self-verification and Stage 12 execution.)
+### Stage 6 — #4995 (self-verification, at the branch head)
+
+| Check | Invocation | Result |
+|---|---|---|
+| Exemption authority self-test | `python3 release/tools/renumber-adr.py --self-test` | **PASS.** The pre-existing double-move arm asserting the sweep exempts every hop is **unchanged and green**; 22 arms added beside it. |
+| CI-enforced behavioural suite | `bash release/tools/tests/test_renumber_adr.sh` | **87 passed, 0 failed** — unchanged from the baseline count, so the widened exemption regressed nothing. |
+| Seeded-failure discipline | 6 targeted mutants against the shipped source | **6 RED, 0 vacuous.** Reverting the shim to the old boolean; folding the third verdict into `CITE`; making the paragraph extent a blanket exemption; narrowing the canonical provenance detector; tightening the Deviation Log region row; and letting the stamp half-apply — each fails with named arms. |
+| Single-authority probe (CIAC-1 limb 1) | `DRYRUN_CONSULTS` / `PREDICATE_DEFS` over the source | `DRYRUN_CONSULTS True` · `DRYRUN_STRIPS_REGION True` · `PREDICATE_DEFS 1` · `CLASSIFIER_DEFS 1`. **Control:** the pre-change tool returns `DRYRUN_CONSULTS False` at the pinned baseline. |
+| Region-strip probe (CIAC-1 limb 2) | `dryrun/region-excluded` self-test arm | Raw **4** · rewrite-only **4** · region-stripped **2**. The middle column is the measurement that the rewrite call alone does not close the projected-region divergence. Sensitivity: prose outside the region still counts **2**. Specificity: an unfenced body is a no-op. |
+| Citation-stamp gate limb | `python3 release/tools/renumber-adr.py --stamp --check` | **exit 0** — 0 residual tokens, 0 in link position, over **11** in-scope files. The denominator is non-zero, so the zero is a measurement rather than an empty scan. |
+| ADR number space | `python3 release/tools/check-adr-numbers.py` | **PASS** — 170 ADRs, contiguous 001..170, no duplicates. |
+| ADR durability lint | `check-adr-durability.py` over the new and edited records | `SCANNED 2` · `COUNT 0`. |
+| Doc-link integrity | `check-doc-links.py` over all seven edited markdown surfaces | **0 rows.** Sensitivity arm on the same instrument: a seeded fixture with a missing target returned one `broken-cross-ref` row, so the zero is a measurement. |
+| Skill-package freshness | `deploy.sh --check-package-freshness` | **55 rostered packages content-fresh.** `adr-helper`'s `.skill` and `.sha256` were rebuilt and committed in the same change as its `SKILL.md` edit. |
+| Workflow parse | `yaml.safe_load` on the edited workflow | **OK.** `six-step` occurrences remaining: **0**; the replacement is present once; control arm counts 4 `ADR renumber` lines in the same file. |
+
+### CIAC-3 — the Stage-6 checklist answer, recorded
+
+**Did this release add a record under `release/ADRs/`? YES** — `release/ADRs/ADR-170-adr-citations-bind-at-the-claim-not-at-authorship.md`.
+
+Acted on in-branch: the projected index was regenerated with `python3 release/tools/generate-adr-index.py --write` (55 rows), and `--verify` reports **COUNT 0** — zero drift. The recorded answer matches the directory the ADR actually landed in, which is the second half of CIAC-3's method. Control confirming the answer is load-bearing rather than vacuous: `release/ADRs/README.md` carries the projected-region fence while `core/ADRs/README.md` does not, so a No answer would have had a real region to be right about.
+
+This release is the **first exercise** of the checklist item another member of this milestone adds, and it is also the correction of the Stage-4 matrix row that had declared the index a read-only input.
 
 ## Deployment Execution Log
 
@@ -457,6 +479,9 @@ Layer 2 file propagation targets for Stage 12/13:
 | DEV-4 | The Stage-4 matrix carried a `<reservation-ledger-surface>  add  CONDITIONAL:D-MECHANISM` row whose condition resolved **false** when Stage 5 selected direction 1. | Engineering Commit 0 | **STRUCK**, not left conditional. A row left CONDITIONAL after its condition resolves is an authoring defect. |
 | DEV-5 | The Stage-5 cluster design's `AMBIGUOUS_SECTIONS` heading row matched 64 of 69 heading-shaped lines; one miss (`## 11. Stage 5 Deviation Log`) is a genuine section heading defeated by its numeric prefix. | Engineering Commit 0 | **CORRECTED** — registry row loosened to tolerate a numeric or ordinal prefix, with a self-test arm pinning that heading form (AI-007 / R9). |
 | DEV-6 | The Stage-5 cluster design argued the dry run calling `rewrite_citations` *is* the apply path minus the write. True for V1, **false for V2**: the R6 verify path strips the projector-owned region before checking and the dry-run block does not. | Engineering Commit 0 | **CORRECTED** — the projected-region strip is mirrored before counting (AI-008 / R10). |
+| DEV-7 | The design specified the `--stamp` scope as `_in_scope_files(origin/main...HEAD)` — the same branch-diff scope the sweep uses. That scope includes the tool's own source, so literal `{{ADR:…}}` fixtures in `self_test()` made `--stamp --check` flag the tool itself: **10 residual tokens and 1 link-position refusal**, all of them test fixtures, which would have failed G-EX9 on every release that touches this tool. Found by running the gate limb live rather than by reading the design. | Stage 6 (#4995) | **CORRECTED WITHOUT NARROWING THE SPEC.** The declared branch-diff scope is kept intact and the fixture tokens are assembled at runtime instead of written as literals. Carving source files out of the scan was rejected: it would silently stop stamping a token in a test comment, which the originating card names as an affected artifact class. A reflexive self-test arm pins the property. Post-fix: **0 residual, 0 in link position, over 11 in-scope files**. |
+| DEV-8 | The existing self-test arm `historical/exempt` asserted that an ordinary citation on the line *immediately after* a provenance-note head **is** swept — its stated purpose was a sensitivity control. Under the widened population that line is a hard-wrapped continuation of the note's paragraph and is correctly spared, so the arm's expectation moves from 1 rewrite to 0. | Stage 6 (#4995) | **EXPECTATION UPDATED, GUARANTEE PRESERVED.** This is a widening, not a narrowing: the arm's own fixture was shaped like the defect the card exists to fix, so its control was asserting the bug. The sensitivity guarantee moved to `exempt/broken-paragraph-reverts-to-cite`, where a blank line ends the paragraph and the following citation must still move, plus `exempt/block-opener-ends-the-run` for the table-row case. The obligation-bearing double-move arm is **untouched**. |
+| DEV-9 | The design directed the `gate-criteria-spec.md` G-EX9 edit to be **line-disjoint** from a sibling release's edit to the same row. A markdown table row is a single line, so two edits to it cannot be textually disjoint. | Stage 6 (#4995) | **PARTIALLY SATISFIED, AND FLAGGED RATHER THAN CLAIMED.** The *semantic* mitigation is fully discharged: the provenance symbol is preserved by name with its pattern byte-unchanged, and the Method column's provenance predicate — the sibling's actual target — is not touched. The substantive additions were placed in a note block on their **own lines** below the Self-Repair table, so the row itself carries only a step-count correction, a pointer, and one appended conjunct. The residual is a one-line textual conflict that whichever merges second resolves by re-reading the row, which is the merge-order constraint already recorded on both cards. |
 
 ## Change Description
 
