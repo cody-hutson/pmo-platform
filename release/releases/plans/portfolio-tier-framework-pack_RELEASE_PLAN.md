@@ -94,7 +94,7 @@ The serialization spans the **entire pipeline**, not a wave boundary: #2577's St
 Path-first columnar form; verbs per the `add | edit | delete` enum.
 
 ```
-# ── #3616 — the shape record (D-Q4(i) ratified; CONDITIONAL row PROMOTED here) ──
+# ── #3616 — the shape record (D-Q4(i) ratified at Stage 4; the gated row is PROMOTED here to a firm obligation) ──
 core/ADRs/ADR-170-portfolio-framework-axis-lands-as-template-registry-subtree.md   add
 release/releases/plans/portfolio-tier-framework-pack_RELEASE_PLAN.md               add
 
@@ -130,6 +130,10 @@ core/standards/template-taxonomy.md                                             
 - **The 7 artifact-shape rows are literal, not glob.** They conform to the governed naming convention `<artifact-family>-template.<ext>` (`template-storage.md` §2.2), and their set is grounded in #2577's own body — AC-4 names the four portfolio-tier shapes, and the Description adds the program-tier set (PROGRAM.md / program charter / benefits realization). A shape that legitimately does not ship requires a `## Deviation Log` row carrying the literal `NOT DELIVERED` and its declared path.
 - **New-executable companion obligation: N/A** — the matrix carries no `*.sh` add, so no `core/config/allowlists/script-execution-allowlist.txt` row is owed.
 - **`TEMPLATE_SYNC_MAP` registration is deliberately NOT in the matrix.** The registry's own rule is that sync-map registration follows the first consumer skill with a runtime read-path; no skill in this release declares one against the framework subtree, so registering now would create a mirror with no consumer.
+
+> ⚠️ **G-PR11 CANNOT SEE THIS RELEASE'S PRIMARY DELIVERABLE — a tooling gap found by running the checker, not by reading it.** `release/tools/verify-release-plan.sh`'s FCM path recognizer matches only paths whose first segment is `core` · `release` · `docs` · `packages` · `projects` · `roadmaps` · `.github` · `.claude`. **`operations/` is absent from that set**, so every `operations/**` row in the matrix above returns no path and is **dropped before classification**. Measured against this matrix: **31 declaration rows authored → 21 recognized → 10 silently dropped**, and the dropped set includes **all 7 artifact-shape ADDs** — the exact files AC-4, INT-1 and CIAC-1 all assert on. The checker's own counters reconcile to this reading precisely (`declared=21`, `excluded=12`, `obligations=2`), and the drop is invisible in its report: it emits `uninterpreted=0 pathless=0` and FCM-COVERAGE reads **PASS**.
+>
+> **Consequence for Stage 9:** G-PR11's verdict on this release is **PASS-over-a-partial-population, not a clean delivery assertion.** It asserts 2 obligations (the ADR and this plan) out of 9 declared ADDs. The remaining 7 must be graded from AC-4's own named-set probe, which does resolve them. This is recorded here rather than left for Stage 9 to discover, and it compounds **R1** — the matrix is both authored late *and* only partially machine-readable. Tracked as **R10**; the fix belongs to the checker's own card, not to this release.
 
 ### Read-only inputs
 
@@ -183,7 +187,7 @@ Sourcing-exempt — every matrix path is an internal pmo-platform artifact, so n
 
 - [ ] **CIAC-1 (#3616 × #2577 on the pack content-location path):** the filesystem location #3616 records as its shape decision is the same location at which #2577's portfolio-tier artifact shapes ship — the two issues do not disagree about where pack content lives. *Method:* extract the decided directory-pattern token from the merged ADR's § Decision D1 limb, then assert every #2577-delivered artifact-shape file resolves beneath it. *Control arm (so a zero cannot be produced by an unresolvable path):* run the same containment probe against a framework directory the decision did **not** select and observe a non-zero mismatch. *Graded at Stage 9 QC3.5 on the merged PR.*
 
-**CIAC-1 is owed because scope (a) was chosen.** It was pre-authored at Stage 4 for exactly this branch — under (b) zero cross-issue criteria were constructible, because one member yields zero issue-pairs.
+The criterion above is owed **because scope (a) was chosen**. It was pre-authored at Stage 4 for exactly this branch — under (b) zero cross-issue criteria were constructible, because one member yields zero issue-pairs. *(This paragraph deliberately does not open with a `CIAC-N` token: the section parser reads a leading bolded `CIAC-N` as the start of another entry, and an earlier draft of this note produced a phantom second CIAC row with empty method and expected cells.)*
 
 ## Verification Plan
 
@@ -193,17 +197,17 @@ Sourcing-exempt — every matrix path is an internal pmo-platform artifact, so n
 
 | Issue | AC | Verification Method | Expected Result |
 |-------|----|---------------------|-----------------|
-| #3616 | AC-1 | named read of the ADR's § Decision — pack shape stated as file groups + thin-delta pattern, citing ADR-069 D2 and ADR-070 D1 | shape stated as four file groups; both ADRs cited |
-| #3616 | AC-2 | named read of the ADR's § Alternatives Considered; assert **all three** rejected candidate homes are enumerated (`core/packs/<pmi>/`, the `operations/templates/` flat root, `operations/templates/operations-tiers/_config/`) each with its verified disqualifier, and one home selected | three enumerated + one selected (the fourth, `operations/templates/portfolio-frameworks/<framework_id>/`) |
+| #3616 | AC-1 | `grep -cE 'ADR-069\|ADR-070' core/ADRs/ADR-170-portfolio-framework-axis-lands-as-template-registry-subtree.md` — both grammar ADRs cited — plus `grep -cE '^\*\*D[1-4] ' ` on the same file for the four decision limbs | ≥2 ADR citations; **4** decision limbs |
+| #3616 | AC-2 | `grep -cE 'core/packs/<framework_id>/\|flat root\|operations-tiers/_config' core/ADRs/ADR-170-portfolio-framework-axis-lands-as-template-registry-subtree.md` — all three rejected homes enumerated in § Alternatives Considered, each with its disqualifier — plus `grep -c 'SELECTED'` on the same file | ≥3 rejected homes; exactly **1** SELECTED |
 | #3616 | AC-3 | **MET-by-citation per D-Q3(ii).** Named read of #374 live state (`state CLOSED` · `stateReason NOT_PLANNED` · label `status: rejected` · `closedAt 2026-07-01T00:28:08Z`) and of #2577's Description § Absorbs, which independently carries *"the PMI artifact shapes of #374"* | absorption recorded on both cards; scope question answered 2026-07-01, not re-decided |
 | #3616 | AC-4 | named read of #2577's comment stream for the posted slice plan | slice plan present on #2577, framed as commit sequencing under D-S5-3(α) |
-| #2577 | AC-1 | read `release/references/specs/methodology-parameterization-v1.md` §5B; verify the portfolio-framework altitude is declared distinct from the project-tier `delivery_approach` altitude and the two are stated orthogonal | §5B present; both axes declared; composition rule stated |
+| #2577 | AC-1 | `grep -cE 'portfolio_framework\|portfolio-framework' release/references/specs/methodology-parameterization-v1.md` — the altitude is declared — plus `grep -cE 'orthogonal\|compose' ` on the same file, asserting the two axes are stated orthogonal rather than nested | non-zero for both; the new section is an additive sibling, not an edit to the existing one |
 | #2577 | AC-2 | `grep -c 'PMI' release/references/specs/methodology-archetype-matrix.md` plus a named read of the matched row | non-zero; the row is a portfolio-framework row, not a `delivery_approach` row |
 | #2577 | AC-3 | `grep -c 'portfolio_framework' core/config/operator.toml.template core/schemas/platform-config-schema.md core/config/operator-toml-schema.json` | non-zero for all three. **BEFORE state re-verified at `539c4440`: 0 / 0 / 0** — the capability is genuinely unshipped |
-| #2577 | AC-4 | `python3 -c "import glob,sys; f=glob.glob('operations/templates/portfolio-frameworks/pmi/*.md'); print(len(f)); sys.exit(0 if f else 1)"` | **7**, exit 0. *Control arm:* the same probe against a framework directory the decision did **not** select (`operations/templates/portfolio-frameworks/zzz-not-selected/`) must return **0** while the selected one returns non-zero — so a zero cannot be produced by an unresolvable path |
-| #2577 | AC-5 | `git diff --stat core/packs/` on the merged PR | **empty**. *Control arm:* `git diff --stat operations/templates/` on the same merged PR must be non-empty, proving the instrument reports changes when changes exist |
+| #2577 | AC-4 | `ls operations/templates/portfolio-frameworks/pmi/ \| grep -cE '^(portfolio-charter\|strategic-alignment-matrix\|portfolio-roadmap\|risk-profile\|program-charter\|benefits-realization\|program-md)-template\.md$'` — asserts the **named** set, strengthened from the slice plan's bare glob count, because a count of 7 passes even when the wrong 7 files exist whereas a named-set match cannot | **7**. *Control arm:* the same instrument against a framework directory the decision did **not** select (`operations/templates/portfolio-frameworks/zzz-not-selected/`) returns **0** while the selected one returns 7 — so a zero cannot be produced by an unresolvable path |
+| #2577 | AC-5 | `git diff --name-only <base>..<merge> -- core/packs/ \| grep -c .` — the count form of the criterion's own `git diff --stat core/packs/`, stated so the assertion is a number rather than an eyeballed empty string | **0**. *Control arm:* the same instrument against `operations/templates/` on the same merged PR must return non-zero, proving it reports changes when changes exist — so the required zero is a measurement, not a silent no-op |
 | #2577 | AC-6 | worked example: resolve a project configured with `delivery_approach` only and no `portfolio_framework`; diff the resolved output against the same resolution at `539c4440` | byte-identical. Holds by construction — no existing template, pack, or selector is edited |
-| #2577 | AC-7 | duplicate-source-discipline check: assert the portfolio selector's schema text **cites** the existing methodology-resolution precedence rather than restating it | one resolution definition; the selector cites, never re-defines |
+| #2577 | AC-7 | duplicate-source-discipline: `grep -rc 'global default → portfolio → program → project → individual' core/ release/` — the resolution-precedence chain must appear at its existing single home and **not** be restated beside the new selector | the chain's occurrence count is **unchanged** from its pre-release value; the selector cites the precedence, never re-defines it |
 | #2577 | INT-1 | *integration criterion (Stage-5 Phase A4.2).* Extract the directory-pattern token from the merged ADR § Decision D1, then enumerate #2577's added artifact-shape files and confirm containment; assert **zero** artifact-shape files under `core/packs/` or at the `operations/templates/` flat root | all 7 contained; zero outside |
 | #2577 | INT-2 | *integration criterion (Stage-5 Phase A4.2).* Confirm #2577's diff touches no file under `core/packs/**`, and that no `pack.toml` declares a `portfolio_framework`, `axis`, or `family` key | zero `core/packs/**` files in the diff; zero new keys |
 
@@ -234,7 +238,9 @@ Sourcing-exempt — every matrix path is an internal pmo-platform artifact, so n
 | **R8** | **A third orthogonal axis ships with no shared axis mechanism.** `delivery_approach` → `core/packs/`; `deliverable_type` → `core/standards/domain-best-practices/`; `portfolio_framework` → this decision. Three instances of one shape is past the platform's own N=2-within-180-days governance-promotion trigger. | **MEDIUM** | operator (D-S5-1) | **D-S5-1(C)** — ship the one-off design; route the general axis-mechanism question to a **discovery pass** (AI-005) asking what the three axes actually share **before** any mechanism is designed. Deliberately out of scope for this release; the ADR records the exclusion rather than leaving it silent. Choosing the one-off forecloses nothing — the design touches zero consumed grammar. | CHEAP for this release; the deferred mechanism is EXPENSIVE (see R9) |
 | **R9** | **The cheap window on the `core/packs/` grammar is CLOSED.** ADR-069/070 each declare reversibility crosses to **EXPENSIVE** once the consumer read-refit (#2021) wires the pack consumers. #2021 closed **2026-07-24** (Friday) and the consumers are live. | **MEDIUM** | recorded, not mitigated | This is a **premise correction**, not an open risk: #2577's third comment argues the generalization is *"cheap to decide now and expensive later."* For the pack-grammar carrier that stopped being true five and a half weeks before this release. The design's response is to touch **no** pack grammar at all. | n/a — a recorded fact |
 
-**Severity counts:** HIGH 1 · MEDIUM 5 · LOW 2 (total 8).
+| **R10** | **The FCM delivery checker is blind to the entire `operations/` module.** `verify-release-plan.sh`'s path recognizer omits `operations/` from its first-segment set, so 10 of this matrix's 31 declaration rows — including **all 7 artifact-shape ADDs** — are dropped before classification, while the report reads `uninterpreted=0 pathless=0` and FCM-COVERAGE **PASS**. A silent drop that reports clean is worse than a loud failure. | **MEDIUM** | checker's own card (not this release) | **Recorded, not fixed** — the checker is another card's surface and repairing it here would widen this release's scope. Mitigated *within* this release by AC-4's named-set probe, which resolves all 7 files independently of the FCM family. Stage 9 must read G-PR11 as **PASS over 2 of 9 declared ADDs**, not as a clean delivery assertion. | CHEAP to fix (one alternation in one regex) |
+
+**Severity counts:** HIGH 1 · MEDIUM 6 · LOW 2 (total 9).
 
 ## Delivery Strategy
 
@@ -321,7 +327,24 @@ Checkpoint A is a plan-time estimate and advisory. The load-bearing gate is Chec
 
 ## Verification Evidence
 
-(Populated at Stage 6 C4 self-verification and Stage 12 execution.)
+**Stage 6 C4 self-verification** — run at Engineering Commit 2 via `bash release/tools/verify-release-plan.sh release/releases/plans/portfolio-tier-framework-pack_RELEASE_PLAN.md`.
+
+**Roll-up: 9 PASS / 4 FAIL / 5 SKIP / 3 ERROR** over 13 per-issue rows; 0 declared-deferred. Every non-PASS is accounted for below — none is unexplained, and none is presented as clean.
+
+| Verdict class | Rows | Reading |
+|---|---|---|
+| **PASS (9)** | #3616 AC-1, AC-2 · #2577 AC-7 · FCM-COVERAGE, FCM-1, FCM-2 · PROV-COVERAGE, PROV-PRESENCE, PROV-GRAMMAR | #3616's two criteria are verified against the delivered ADR. Both declared ADDs are confirmed `declared-add-delivered` against the diff. The `domain_practice` label is present and grammar-conformant (form X, 2026-09-01). |
+| **FAIL (4)** | #2577 AC-1, AC-2, AC-3, AC-4 | **Expected, and correct.** These read the BEFORE state: #2577's engineering has not run, so the altitude section, the PMI matrix row, the selector, and the artifact shapes are all genuinely absent. A PASS here at this instant would be the defect. They convert to PASS as #2577's slices land. |
+| **SKIP (5)** | #2577 AC-5 (`git` outside the executor's closed verb allowlist) · INT-1, INT-2, CIAC-1 (documented-decision / tool outside allowlist) · PROV-DELTA (no Stage-4 comment supplied as a producer surface) | Honest non-executions, each naming its reason. The executor declining to run a verb is a statement about the executor, not a defect in the method. |
+| **ERROR (3)** | #3616 AC-3, AC-4 · #2577 AC-6 | `unclassified-method (no family match)`. All three are genuine documented-decision methods with no local runnable command — two are network reads of live GitHub state, one is a worked-example resolution. The classifier is keyword-driven with no declaration column, so a prose method cannot route to a family. **Not padded with keywords to make the ERROR disappear** — that would buy a verdict rather than earn one. |
+
+**A false PASS was found and removed during this run.** An earlier draft of AC-4's method carried the backticked fragment `` `test -f` `` intending "test each named path". The executor extracts the first backticked span whose leading token is an allowlisted verb, so it ran `test -f` **with no operand** — which evaluates the non-empty string `-f` and exits 0. AC-4 reported **PASS while all seven files were absent.** The method was rewritten as a complete `ls | grep -cE` assertion over the *named* set, and AC-4 now correctly reports FAIL. Recorded because the failure mode generalizes: a command fragment quoted for readability becomes a runnable command that always succeeds.
+
+**Two further authoring defects were found by running the checker and are fixed:** a phantom `CIAC-1` row with empty method and expected cells, caused by a following paragraph opening with a bolded `CIAC-N` token that the section parser read as a second entry; and both #3616 ADD rows classifying as *conditional* because an in-fence block label contained the word "un**conditional**", which the block-level `/CONDITIONAL/i` test matches case-insensitively. With both fixed, `conditional=0` and the two obligations assert as real unconditional deliveries.
+
+**Release-level checks:** `python3 release/tools/check-adr-numbers.py` → **PASS** (170 ADRs, contiguous 001..170, no duplicates). `python3 release/tools/check-adr-durability.py` → exit 0, **zero findings on ADR-170** (two were found on first authoring — a hardcoded SHA and a live corpus count — and both were repaired rather than shipped). `release/tools/check-release-links.py` → 0 broken links; the plan carries **zero markdown links** (every path is in backticks), so the workspace-rooted-link obligation cannot be violated at the Stage-12 rename.
+
+**Runtime suite:** `test-run` / **`suite-skip`** — the change surface is doc / governance / spec / config-schema only and matches the runtime-suite selection map's explicit no-match row. The honest no-op, not a fabricated suite pass.
 
 ## Deployment Execution Log
 
@@ -343,14 +366,21 @@ Checkpoint A is a plan-time estimate and advisory. The load-bearing gate is Chec
 
 ### Outcome
 
-*(To be authored at PR assembly.)*
+A portfolio governance framework gets an altitude of its own. The release records **where portfolio-tier pack content lives** — a framework-keyed subdirectory under the existing template registry — and settles the contradiction #2577 carried in its own body between "content of the pack" and "the neutral core". Both horns were wrong, and the record says why, with each rejected home carrying its verified disqualifier. For the operator at Stage 9, the reviewable substance is one decision record plus the umbrella built against it; the project-tier pack grammar is provably untouched, which is what makes the decision cheap to reverse.
 
 ### Issues delivered
 
 | # | Outcome (one line) | Status |
 |---|--------------------|--------|
-| #3616 | *(to be authored at PR assembly)* | |
-| #2577 | *(to be authored at PR assembly)* | |
+| #3616 | The pack shape and content location are decided and recorded durably as ADR-170; the slice plan is posted, and #2577's File Change Matrix and AC-4 probe are authored | **DONE** |
+| #2577 | The portfolio-framework altitude, selector, PMI artifact shapes, and registry wiring — engineered as one unsliced umbrella in the S1→S4 commit sequence | *pending its Engineering; this row is filled at PR assembly, not predicted here* |
+
+### Key decisions
+
+- **D-Q1 (a):** both cards ship together, diverging from both the spoke's and the hub's recommendation of spike-only. The consequences are carried as R1/R2, not re-litigated.
+- **D-Q4 (i):** the shape decision lands as a core-scope ADR rather than a GitHub comment, so a later slice has something citable.
+- **D-S5-1 (C):** the general axis-mechanism question is routed to a discovery pass rather than designed inline — the platform's third orthogonal axis ships as a one-off, and says so.
+- **D-S5-3 (α):** #2577 is one unsliced umbrella; its slices are commit sequencing, so the Composition Lock stays intact.
 
 ### Reversibility
 
