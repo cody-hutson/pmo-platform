@@ -2684,6 +2684,130 @@ sandbox_case "helper-missing: fails CLOSED (exit 2, LIB-MISSING)" \
 
 /bin/rm -rf "$DESTRUCTIVE_SANDBOX" "$DESTRUCTIVE_NOLIB"
 
+# ==========================================================================
+# PARSE-* — parse-only (noexec) exemption + the two admitted allowlist paths
+# ==========================================================================
+#
+# Subject: BLOCK-DESTRUCTIVE-022 refused `bash -n <script>` — an invocation that
+# PARSES AND EXITS, executing nothing — while permitting several forms that do
+# execute. It also refused two named platform scripts the corpus tells agents to
+# run. Both are refusals outside any arm's declared scope.
+#
+# EVERY "ALLOW" ARM BELOW IS PAIRED WITH A CONTROL THAT MUST BLOCK. An exemption
+# suite in which nothing blocks cannot distinguish a working exemption from a
+# dead allowlist or an inert hook, and would read green either way.
+
+echo ""
+echo "PARSE-*: parse-only exemption + allowlist admission (#6172)"
+echo "---"
+
+# The non-allowlisted fixture path. Deliberately reused across the AC-3/4/5 arms
+# so each ALLOW and its BLOCK control differ ONLY by the flag under test.
+PARSE_UNLISTED="core/deploy/tools/no-such-tool-xyz.sh"
+
+# --- AC-1: the two named paths execute, in both repository-relative spellings ---
+test_case "PARSE-01: bash core/deploy/tools/check-convention.sh allowed (bare-relative)" \
+  "$(bash_payload 'bash core/deploy/tools/check-convention.sh')" 0
+test_case "PARSE-02: bash ./core/deploy/tools/check-convention.sh allowed (dot-relative)" \
+  "$(bash_payload 'bash ./core/deploy/tools/check-convention.sh')" 0
+test_case "PARSE-03: bash core/deploy/tests/test_check49_mode_identifier_unification.sh allowed (bare-relative)" \
+  "$(bash_payload 'bash core/deploy/tests/test_check49_mode_identifier_unification.sh')" 0
+test_case "PARSE-04: bash ./core/deploy/tests/test_check49_mode_identifier_unification.sh allowed (dot-relative)" \
+  "$(bash_payload 'bash ./core/deploy/tests/test_check49_mode_identifier_unification.sh')" 0
+
+# AC-1 control arm THAT MUST FIRE: a sibling-shaped path that was never admitted
+# still blocks. Without it, PARSE-01..04 would read green against an allowlist
+# that had stopped being consulted at all.
+test_case "PARSE-05 [ctl]: bash <unlisted>.sh still blocks (AC-1 is not a dead allowlist)" \
+  "$(bash_payload "bash $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- AC-2 / CIAC-1: the widening is FORM-SCOPED, not path-scoped ---
+# The rows added for these two scripts are repository-relative ONLY. The absolute
+# spelling of the SAME script must still be refused — that is what makes the -022
+# hint's "retry the allowlisted relative form" truthful rather than decorative,
+# and it is why the added allowlist block carries a do-not-complete-to-four-forms
+# guard. If someone adds the absolute form, this arm goes red and says why.
+test_case "PARSE-06 [ctl]: ABSOLUTE spelling of check-convention.sh still blocks (CIAC-1 form-scoping)" \
+  "$(bash_payload 'bash /srv/pmo-platform/core/deploy/tools/check-convention.sh')" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- AC-3: parse-only is not execution ---
+test_case "PARSE-07: bash -n <unlisted>.sh allowed (parses and exits; executes nothing)" \
+  "$(bash_payload "bash -n $PARSE_UNLISTED")" 0
+
+# --- AC-4 / CIAC-2: the exemption is keyed on the INTERPRETER, not on the token ---
+test_case "PARSE-08: sh -n <unlisted>.sh allowed" \
+  "$(bash_payload "sh -n $PARSE_UNLISTED")" 0
+test_case "PARSE-09: zsh -n <unlisted>.sh allowed" \
+  "$(bash_payload "zsh -n $PARSE_UNLISTED")" 0
+# Control arms that MUST fire: `source`/`.` are builtins taking no options, so a
+# `-n` there is an OPERAND, not a parse-only flag. They reach the table's explicit
+# null and keep blocking. A flag-keyed exemption would wrongly allow both.
+test_case "PARSE-10 [ctl]: source -n <unlisted>.sh still blocks (per-interpreter null)" \
+  "$(bash_payload "source -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "PARSE-11 [ctl]: . -n <unlisted>.sh still blocks (per-interpreter null)" \
+  "$(bash_payload ". -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- AC-5: executing forms stay refused (per-flag fixture table) ---
+# The `-c` pair is the load-bearing entry. `bash -c '<prog>' -n <p>` GENUINELY
+# EXECUTES: the walk breaks at `-c`, so the trailing `-n` is never seen as a flag.
+# `bash -n -c '<prog>'` is declined by the explicit no-`-c` conjunct instead.
+test_case "PARSE-12a [ctl]: bash <unlisted>.sh blocks (no flag)" \
+  "$(bash_payload "bash $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "PARSE-12b [ctl]: bash -x <unlisted>.sh blocks (executing flag)" \
+  "$(bash_payload "bash -x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "PARSE-12c [ctl]: bash -s <unlisted>.sh blocks (executing flag)" \
+  "$(bash_payload "bash -s $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "PARSE-12d [ctl]: bash -- <unlisted>.sh blocks (end-of-options)" \
+  "$(bash_payload "bash -- $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "PARSE-12e [ctl]: bash -c '<prog>' -n <unlisted>.sh blocks (TRAILING -n; this form executes)" \
+  "$(bash_payload "bash -c 'echo hi' -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "PARSE-12f [ctl]: bash -n -c '<prog>' blocks (cmode conjunct declines the exemption)" \
+  "$(bash_payload "bash -n -c 'echo hi' $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# A cluster is a DECLARED RESIDUAL, not an admitted spelling: unchanged behaviour.
+test_case "PARSE-12g [ctl]: bash -nx <unlisted>.sh still blocks (cluster is a declared residual)" \
+  "$(bash_payload "bash -nx $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- AC-7: an already-permitted path must not change verdict ---
+test_case "PARSE-13: bash -n core/deploy/deploy.sh still allowed (was ALLOW at baseline)" \
+  "$(bash_payload 'bash -n core/deploy/deploy.sh')" 0
+
+# --- AC-6: PAIRED MUTATION ARM — proves PARSE-07's detector is LIVE ---
+#
+# Three arms in this milestone's prior release read green while their mutation was
+# INERT, so this harness asserts the mutation actually changed the file before it
+# believes anything the mutant reports. The mutant is written as a SIBLING of the
+# real hook so HOOK_DIR — and therefore every lib and the allowlist — resolves
+# identically; the mutant differs from the shipped hook in exactly one predicate.
+PARSE_MUTANT="$(dirname "$HOOK")/block-destructive.PARSE-mutant.sh"
+/usr/bin/sed 's#\[ "\$script_noexec" -eq 1 \]#[ "$script_noexec" -eq 99 ]#' \
+  "$HOOK" > "$PARSE_MUTANT"
+
+# (a) NON-INERTNESS GATE. If the substitution matched nothing the mutant is a byte
+#     copy, the "mutant blocks" arm below would be measuring the shipped hook, and
+#     a green result would mean nothing. Fail loudly instead.
+if /usr/bin/cmp -s "$HOOK" "$PARSE_MUTANT"; then
+  /usr/bin/printf 'FAIL: PARSE-14a mutation is INERT — mutant is byte-identical to the shipped hook\n'
+  FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: PARSE-14a mutation is live (mutant differs from the shipped hook)\n'
+  PASS=$((PASS + 1))
+fi
+
+# (b) The mutant — exemption reverted — must BLOCK the very payload the shipped
+#     hook allows at PARSE-07. This is what proves PARSE-07 measures the exemption
+#     rather than a permissive hook.
+sandbox_case "PARSE-14b: mutant (exemption reverted) BLOCKS bash -n <unlisted>.sh" \
+  "$PARSE_MUTANT" \
+  "$(bash_payload "bash -n $PARSE_UNLISTED")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (c) The shipped hook allows the identical payload in the same run — the pair is
+#     the evidence, not either arm alone.
+test_case "PARSE-14c: shipped hook ALLOWS the identical payload (mutation pair closes)" \
+  "$(bash_payload "bash -n $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$PARSE_MUTANT"
+
 # --- Summary ---
 echo ""
 echo "================================"

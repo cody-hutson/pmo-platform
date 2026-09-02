@@ -781,3 +781,37 @@ core/deploy/tests/test_check36_drift_classes.sh
 ./core/deploy/tools/start-skill-editor-session.sh
 core/deploy/tools/start-skill-editor-session.sh
 */core/deploy/tools/start-skill-editor-session.sh
+
+# ---------------------------------------------------------------------------
+# check-convention.sh — the naming/convention drift guard. Allowlisted because the
+# corpus already instructs agents to run it and BLOCK-DESTRUCTIVE-022 then refuses:
+# the tool's OWN usage block spells `bash core/deploy/tools/check-convention.sh`,
+# the pipeline-event-log schema cites that exact command as a "Reproducible probe",
+# and a shipped release plan records it as a verification step. Every one of those
+# named an invocation no agent could take. Its sibling suites in this directory are
+# already listed; the absence was an omission, not a policy.
+#
+# FORM SET IS REPOSITORY-RELATIVE ONLY, AND THE DIVERGENCE FROM THE FILE'S
+# FOUR-FORM PER-TOOL CONVENTION IS DELIBERATE. DO NOT "COMPLETE" IT.
+# The absolute and worktree-glob forms are omitted on purpose. This release's
+# CIAC-1 asserts that the -022 hint's first-named retry — the repository-relative
+# form — is truthful for the paths the same release admits, and its control arm is
+# that the ABSOLUTE spelling of these same scripts is still refused. Adding forms 1
+# and 2 would make that control arm green-by-construction and unfalsifiable, which
+# is to say it would delete the check while appearing to satisfy it. Matching is on
+# the literal string as written, so cwd is irrelevant: a worktree spoke invoking
+# from the repository root matches these rows exactly as the primary checkout does.
+# If you are here to make this block "consistent", read CIAC-1 first.
+./core/deploy/tools/check-convention.sh
+core/deploy/tools/check-convention.sh
+
+# test_check49_mode_identifier_unification.sh — check-convention.sh's drift-guard
+# test. CI runs this file directly, so the agent expected to verify the guard could
+# not run what CI runs. Named row rather than a core/deploy/tests/* glob, per the
+# entries above: a pattern would auto-admit any future file dropped into that
+# directory.
+#
+# SAME DELIBERATE FORM-SET DIVERGENCE AS THE BLOCK ABOVE — repository-relative
+# only, for the same CIAC-1 control-arm reason. DO NOT "COMPLETE" IT to four forms.
+./core/deploy/tests/test_check49_mode_identifier_unification.sh
+core/deploy/tests/test_check49_mode_identifier_unification.sh

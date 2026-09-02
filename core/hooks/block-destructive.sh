@@ -574,6 +574,48 @@ script_exempt_system_bin() {   # $1 = normalized token  $2 = script_norm_ok
   return 1
 }
 
+# THE PARSE-ONLY (noexec) TABLE, KEYED ON THE INTERPRETER — NEVER ON THE FLAG.
+#
+# `-n` is not a parse-only flag; it is a parse-only flag FOR A POSIX SHELL.
+# `perl -n` and `ruby -n` are implicit input loops that EXECUTE, `python3` has no
+# `-n` at all, and `source`/`.` are builtins taking no options — a `-n` there is
+# an operand, not a flag. A flag-keyed exemption would therefore turn into a hole
+# the moment the adjudicated interpreter set widens. A table keyed on the
+# interpreter cannot: every interpreter not named below reaches the EXPLICIT NULL
+# and its behaviour is unchanged.
+#
+# WHERE THIS FUNCTION LIVES IS PART OF THE DESIGN. It sits with the other
+# `script_*` predicates and DELIBERATELY apart from both the verb classifier and
+# script_operand_implicated, because widening the interpreter set edits those two
+# and must not have to move this. Widening means ADDING A `case` LABEL HERE —
+# with a measured row for the new interpreter, or leaving it on the documented
+# null — and nothing in the flag walk changes.
+#
+# RECOGNISED SPELLINGS ARE DELIBERATELY MINIMAL — the bare token `-n` only.
+# Everything else falls through to today's adjudication, which is the fail-safe
+# direction (still refused, never newly permitted):
+#   - A CLUSTER (`-nx`) IS NOT ADMITTED. Admitting one requires proving that no
+#     letter in it takes an argument; a letter that does would consume the
+#     following token and change which token is the operand. `bash -nx <path>`
+#     keeps blocking exactly as today. Declared residual, not an oversight.
+#   - `-o noexec` IS NOT ADMITTED, and it is UNREACHABLE rather than merely
+#     omitted: the walk skips `-o` and then stops on `noexec` as the operand, so
+#     this table can never be asked about it. Listing it would ship a dead branch
+#     on a security surface. It is recorded as listed-but-unreachable in
+#     core/rules/bypass-mode-readiness/block-destructive.md, pointing at the
+#     flag-walk defect that makes it so, rather than half-closed here.
+#
+# Bash 3.2-safe: `case` only, no associative arrays (the file-wide constraint).
+script_interp_noexec_flag() {   # $1 = interpreter basename  $2 = normalized flag token
+  case "$1" in
+    bash|sh|zsh)
+      case "$2" in -n) return 0 ;; esac
+      ;;
+    *) : ;;   # EXPLICIT NULL — see the table note above. Not an omission.
+  esac
+  return 1
+}
+
 # Adjudicate one candidate script path against the allowlist. Blocks (exit 2) on
 # a non-allowlisted target, and blocks on an UNRESOLVABLE one: this hook sees
 # unexpanded argv, so a variable-bearing path cannot be resolved here. Denying is
@@ -1473,8 +1515,15 @@ case "$TOOL_NAME" in
       # both arms (arm F1-QVERB-abs).
       script_verb=""
       script_word=""
+      # THE INTERPRETER BASENAME THE CLASSIFIER DECIDED ON, captured at the two
+      # points below that already compute one, so script_interp_noexec_flag is
+      # asked about the same token this `case` matched rather than re-deriving it
+      # downstream from a view the classifier did not use. Reset per segment,
+      # beside script_verb, so a previous segment's interpreter cannot leak into
+      # this one's parse-only decision.
+      script_interp_base=""
       case "${script_tokens[$script_hidx]##*/}" in
-        bash|sh|zsh) script_verb="interp" ;;
+        bash|sh|zsh) script_verb="interp"; script_interp_base="${script_tokens[$script_hidx]##*/}" ;;
         source|.)    script_verb="source" ;;
       esac
       if [ -z "$script_verb" ]; then
@@ -1488,7 +1537,7 @@ case "$TOOL_NAME" in
         # core/rules/bypass-mode-readiness/block-destructive.md rather than half-closed.
         if [ "$script_norm_ok" -eq 1 ]; then
           case "${script_norm_out##*/}" in
-            bash|sh|zsh) script_verb="interp" ;;
+            bash|sh|zsh) script_verb="interp"; script_interp_base="${script_norm_out##*/}" ;;
             source|.)    script_verb="source" ;;
           esac
         fi
@@ -1693,6 +1742,9 @@ case "$TOOL_NAME" in
       # BLOCK, never the reverse.
       script_idx=$(( script_hidx + 1 ))
       script_cmode=0
+      # Did this segment declare a parse-only interpreter mode? Reset per segment
+      # beside script_cmode; read once, after the walk, together with it.
+      script_noexec=0
       while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
         script_ftok="${script_tokens[$script_idx]}"
         case "$script_ftok" in
@@ -1715,11 +1767,44 @@ case "$TOOL_NAME" in
           -c)
             if [ "$script_verb" = "interp" ]; then script_cmode=1; fi
             script_idx=$(( script_idx + 1 )); break ;;
-          -*) script_idx=$(( script_idx + 1 )) ;;
+          -*)
+            # PARSE-ONLY DETECTION. Asked of the INTERPRETER, about the same
+            # token the walk is about to skip (raw when the raw view decided,
+            # normalized when it did not — script_ftok already carries whichever
+            # view won above). The skip itself is UNCHANGED: this records that an
+            # inert-mode flag was seen and adjudicates nothing on its own.
+            if [ "$script_verb" = "interp" ] \
+               && script_interp_noexec_flag "$script_interp_base" "$script_ftok"; then
+              script_noexec=1
+            fi
+            script_idx=$(( script_idx + 1 )) ;;
           *) break ;;
         esac
       done
       [ "$script_idx" -lt "${#script_tokens[@]}" ] || continue
+
+      # PARSE-ONLY EXEMPTION. Under `bash -n` (and `sh`/`zsh`) the interpreter
+      # PARSES and exits — it executes nothing, whatever the operand is. Inertness
+      # is a property of the interpreter's MODE, fully determined by argv, so this
+      # needs no path resolution and correctly covers the non-allowlisted,
+      # variable-bearing and quote-unresolvable operands that otherwise hard-block.
+      # The refused-but-inert case is what this rule was blocking that no arm
+      # declares: a syntax check runs nothing.
+      #
+      # THE `-c` EXCLUSION IS BELT AND BRACES, because the two orders fail
+      # differently and only one of them is closed structurally:
+      #   - `bash -c 'echo hi' -n <path>` — the walk BREAKS at `-c`, so the
+      #     trailing `-n` is never examined as a flag and script_noexec stays 0.
+      #     That invocation genuinely executes, and the break is what keeps it
+      #     refused. Structural, not asserted.
+      #   - `bash -n -c '…'` — here `-n` IS seen first and does set the flag, so
+      #     the structure alone would exempt it. The script_cmode conjunct below
+      #     declines it. Reasoning about whether an arbitrary program string is
+      #     inert under noexec is a second-order argument a security control
+      #     should not carry.
+      if [ "$script_noexec" -eq 1 ] && [ "$script_cmode" -eq 0 ]; then
+        continue
+      fi
 
       if [ "$script_cmode" -eq 1 ]; then
         while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
