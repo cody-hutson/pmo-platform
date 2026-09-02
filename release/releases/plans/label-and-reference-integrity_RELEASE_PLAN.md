@@ -3,7 +3,7 @@ title: Release Plan — label-and-reference-integrity
 purpose: Stage-4 release plan for the eight-member label-and-reference-integrity cohort — the label and issue-reference taxonomies are internally consistent and their gates evaluate them correctly.
 type: release-plan
 plan_type: release
-status: EXECUTING
+status: ACTIVE
 reversibility: MODERATE / Confidence HIGH
 consumers: Stage 5-9 spokes; the release hub; Stage 9 Plan Review
 ---
