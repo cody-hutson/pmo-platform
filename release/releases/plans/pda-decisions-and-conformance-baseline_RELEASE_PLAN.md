@@ -301,6 +301,8 @@ Departures from the Stage-4 plan of record, ratified at the **Collective Review 
 | **ADR anchor movement** (recorded delta) | Context | The scope-lock recorded anchor **172** / next-free **173** (moved 170 → 172 during the Stage-5 wave as sibling releases merged). At Engineering Commit 0, `--detect` reads ANCHOR 172 / NEXT-FREE 173 / branch-only claims 173,174,175,176 / CLAIM NONE (this plan adds no ADR). Allocation stays at each ADR slice's commit moment and is re-derived there — never inherited from this row. |
 | **Sibling-roster delta** (recorded) | Context | Stage-4 roster pinned n=6 sibling `release/*` heads; at Commit 0 the remote holds 5 — `adr-corpus-status-integrity` merged during the session window. Pinned measurement stands; Stage 9 A6.6 re-measures fresh. |
 | **Systemic pattern** (scope-lock, recorded for Stage 13) | Context | Nearly every Major finding is one defect class: **a zero that cannot distinguish "measured and empty" from "never measured"** (an equality test against an ungoverned free-text field; a flip criterion reading a failure-only instrument; a read-only claim resting on an unexamined engine contract). For a release whose subject IS conformance measurement, this is a systemic finding, not four coincidences. |
+| **#5840 SUMMARY.md not spoke-authored** (Stage 6 execution note) | Minor | The measurement run completed in full (runs/ + evidence/ + scripts/ in the analysis home; all ACs discharged), but a harness control (subagent report-file guard) refused the spoke's SUMMARY.md write. Disposition: the summary prose (method, coverage, validity threats, consumption notes, reproduction) is carried on the #6651 Stage-6 comment and in `evidence/run-manifest.json`; the operator may materialize SUMMARY.md from it. No content was lost; no control was bypassed. |
+| **#5840 analysis-home landing** (Stage 6 execution note) | Minor | `block-destructive.sh` rule BLOCK-DESTRUCTIVE-019 blocks primary-checkout `analysis/` writes from a non-worktree session cwd, so the run landed in the release worktree's git-ignored `analysis/conformance-baseline-2026-09-02/` (same repo-relative home). A user-side copy step into the primary checkout's analysis workspace is handed off on #6651. |
 
 ---
 
@@ -345,3 +347,27 @@ CHEAP — single additive PR; revert restores prior state fully. Instance-side: 
 ### Cross-references
 
 Stage-4 plan source: hub sub-task #6647. Stage-5 designs: #6650 (#5840) + sibling sub-tasks. Scope-lock: release-thread decision comment (2026-09-02). Baseline engine: #158 (health-check `structure` mode).
+
+---
+
+## Verification Evidence
+
+Populated per slice as it lands (stage-06 Phase C4 self-verification); the PR-assembly slice consolidates.
+
+### #5840 slice (Engineering spoke #6651, 2026-09-02)
+
+| Check | Evidence | Verdict |
+|---|---|---|
+| AC-1 (≥6 classes, denominators, engine attribution) | 9-class table machine-composed at `evidence/public-body.md` (posted verbatim on #6651): C1–C4 engine-attributed, C5–C9 spike-predicate-attributed, denominator per class | PASS |
+| AC-2 (reproducible method, engine named per class) | `evidence/run-manifest.json` — repo pin, skill version, invocation form, per-script reproduction sequence; scripts byte-reproducible; engine-class delta-adjudication rule recorded | PASS |
+| AC-3 (3 residual classes measured or unmeasurable-with-why) | C5 209/68 rows · C6 7 of 9 present slots divergent (18-slot frame) · C7 1 unknown / 24 dirs — all three MEASURED | PASS |
+| AC-4 (envelope carried; UNMEASURED never a zero) | Per-project envelope rows verbatim in public body; measured-only sums; no composite score; fixture-proven UNMEASURED propagation (malformed punch list renders UNMEASURED) | PASS |
+| AC-5 (control arm per class) | `evidence/fixture-controls.json` — 15/15 arms green; engine-layer sensitivity = live non-zero findings in all four C1–C4 families + live PASS rows | PASS |
+| AC-6 (no instance file modified) | Pre/post metadata manifests over the projects tree: 3,598 files, sha256 `bd54eee5…89a86` byte-equal; declared engine-staging envelope delta EMPTY; invocation form pinned interactive (B1) | PASS |
+| Entry conditions B1–B5 | B1 invocation pinned + Rollup-Diffs handled (banked-punch-list construction, envelope armed, zero arose) · B2 BLOCK-AUTONOMY-004 cited mode-gated, verified at source · B3 C8/C9 built + measured · B4 casefold/inode dedup + root ground truth (13=9+4) + shadow-count corrected · B5 machine-composed public body, lint self-test FIRES, clean render | DISCHARGED |
+
+**Artifact-Acceptance Record (deliverable_state: `artifact-accepted`):**
+
+| Deliverable | Declared canonical path | Acceptance evidence |
+|---|---|---|
+| Instance conformance baseline (#5840, task-class, operator-local by design) | `analysis/conformance-baseline-2026-09-02/` in the git-ignored analysis workspace (landed in the release worktree per the Deviation Log; user-side copy to the primary checkout handed off on #6651) | #6651 Stage-6 comment (counts-only public body, verbatim) + `evidence/run-manifest.json` + `evidence/fixture-controls.json` + banked punch lists `runs/P1..P3-structure.md` |
