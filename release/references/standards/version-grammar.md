@@ -115,7 +115,7 @@ This boundary is stated so the grammar and the allocation rule do not overlap or
 
 The grammar lives in **one** place and is consumed, never re-encoded:
 
-1. **Source the SSOT library.** Freeness checks, deploy-path version comparisons, and the claim mechanism `source` `release/tools/version-grammar.sh` and call `version_canonical` / `version_parse` / `version_cmp`. Resolve the library's path relative to the repository root (for example via the repo-root path) or relative to the consumer's own script location.
+1. **Source the SSOT library.** Freeness checks, deploy-path version comparisons, and the claim mechanism `source` `release/tools/version-grammar.sh` and call `version_canonical` / `version_parse` / `version_cmp` / `version_stamp_state` / `version_badge_latest`. Resolve the library's path relative to the repository root (for example via the repo-root path) or relative to the consumer's own script location.
 2. **Never copy the regex inline.** A copied-inline "fallback" regex is a divergence defect — it re-creates the grammar drift this document exists to eliminate. A call site that cannot source the library is a bug to fix at the sourcing path, not a license to inline.
 3. **Canonical-first call order.** `version_canonical` is the sole input gate. `version_parse` and `version_cmp` run that gate first and return a non-success exit (no output) on a non-canonical argument; their behavior on input that bypassed the gate is undefined. Always let the gate run.
 
@@ -126,8 +126,12 @@ The grammar lives in **one** place and is consumed, never re-encoded:
 | `version_canonical <string>` | Exit 0 if `<string>` is canonical, 1 otherwise. No output. The sole input gate. |
 | `version_parse <string>` | Echo `MAJOR MINOR PATCH` (three base-10 integers; absent PATCH is 0; leading zeros stripped). Exit 1, no output, if `<string>` is non-canonical. |
 | `version_cmp <a> <b>` | Echo `-1` / `0` / `1` for `a<b` / `a==b` / `a>b` on the triple order. Exit 1 if either argument is non-canonical. |
+| `version_stamp_state <current> <target>` | Echo `PASS` / `MISSING` / `UNVERIFIED` — the verdict for "is `<current>` stamped at or above `<target>`?". `PASS` when equal **or higher** (monotonicity, not equality); `MISSING` when strictly lower; `UNVERIFIED` when **either** argument is non-canonical, so an unorderable value is never read as `PASS`. Always exits 0 — the verdict travels on stdout. |
+| `version_badge_latest <anchor> <target>` | Echo `ADVANCE` / `WITHHOLD_HIGHER` / `WITHHOLD_UNORDERABLE` / `WITHHOLD_NO_ANCHOR` — the fail-closed verdict for "may the published-Latest badge move to `<target>`, given `<anchor>` is the current Latest?". `ADVANCE` only when the anchor is not higher (equality advances — one slot); **every** other verdict withholds. Both operands are gated. Always exits 0 — the verdict travels on stdout. |
 
-The library ships a `--self-test` (`bash release/tools/version-grammar.sh --self-test`) whose fixtures cover the two-component / three-component / leading-zero / suffix-reject / malformed cases, the hotfix-vs-minor and numeric-not-lexical comparisons, the parse/compare exit-on-non-canonical contract, and the freeness path including a non-canonical existing tag.
+The last two are **verdict maps over the total order**, not new grammar and not a second comparator: each gates its operands with `version_canonical` and then reads `version_cmp`. They exist because the *mapping* — which outcome name attaches to which comparison result, and whether the canonicality gate runs at all — is what drifted when consumers re-rendered the predicate by hand. Both echo a token from a closed set and **always exit 0**, so a consumer never has to distinguish "not higher" from "could not tell" by exit status; that collapse is the defect they close.
+
+The library ships a `--self-test` (`bash release/tools/version-grammar.sh --self-test`) whose fixtures cover the two-component / three-component / leading-zero / suffix-reject / malformed cases, the hotfix-vs-minor and numeric-not-lexical comparisons, the parse/compare exit-on-non-canonical contract, the freeness path including a non-canonical existing tag, and the two verdict maps — each with arms that kill both degenerate implementations (always-`PASS` and always-`MISSING`; always-`ADVANCE` and always-withhold) and a leading-zero arm that kills a string-equality shortcut.
 
 ## 7. Provenance
 
