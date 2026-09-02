@@ -73,6 +73,30 @@ Consumer skills reading `delivery_approach: Custom` do NOT read the Custom **mat
 
 **Cadence** informs scheduling defaults. Weekly-status-rollup runs weekly regardless of archetype, but the status-section content varies: sprint-end summary for Scrum on sprint-end weeks; throughput delta for Kanban; PI-midpoint check for SAFe at weeks 4-6 of a 12-week PI.
 
+## 3A. Portfolio-Framework Matrix
+
+**The rows below are portfolio-framework rows, not `delivery_approach` rows.** §3's 8-row grid is unchanged and remains the sole enumeration of the `delivery_approach` enum; a value in this table is never valid in `delivery_approach`, and a value there is never valid in `portfolio_framework`. This section is an **additive sibling of §3**, not an extension of it — §3's declared cardinality (8 rows matching the 8-value enum) and its `Archetype` column semantics are untouched. Placement is forced, not stylistic: §3 declares *"8 rows … matching the 8-value `delivery_approach` enum"* and types its first column as one of those values, so a ninth row there would be the **HAND-5 Enum-drift** anti-pattern (§5.2 below; canonical entry in the methodology-parameterization spec § 6.5) committed by the document that names it.
+
+A **portfolio framework** is a different altitude from a delivery approach: it governs the **portfolio** a project runs *under*, so the two compose rather than substitute. The selector is `[methodology].portfolio_framework` in `operator.toml`; the consumer branch is § 5B of the methodology-parameterization spec. The value domain is **OPEN** (a lowercase-kebab `framework_id`), so this table enumerates the frameworks with shipped artifact shapes rather than closing the domain — an unlisted but well-formed value takes the §5B CASE P-2 caveat branch, and its expansion path is authoring a shape directory rather than amending this table.
+
+| Framework | `framework_id` | Tier | Governance primitives | Artifacts | Primary consumers | Distinguishing constraint |
+|---|---|---|---|---|---|---|
+| **PMI** | `pmi` | portfolio + program | portfolio governance board, component-inclusion / prioritization review, benefits review | Portfolio Charter, Strategic Alignment Matrix, Portfolio Roadmap, Portfolio Risk Profile, Program Charter, Benefits Realization Plan, PROGRAM.md | ppm-agent, weekly-status-rollup, pmo-portfolio-manager | Governs the **portfolio** a project runs *under*; composes with, and never substitutes for, the project's `delivery_approach` |
+
+### 3A.1 Column semantics
+
+| Column | Type | Semantics |
+|---|---|---|
+| **Framework** | display name | The framework's human-readable name. **Not** a `delivery_approach` enum value |
+| **`framework_id`** | string (OPEN, shape-validated) | The lowercase-kebab id the operator sets in `[methodology].portfolio_framework`, and the directory key its artifact shapes ship under |
+| **Tier** | list | Which operational tiers the framework's artifact shapes govern — portfolio, program, or both. Never the project tier: that tier is the `delivery_approach` axis's |
+| **Governance primitives** | comma-separated list | Named recurring decision forums and reviews the framework prescribes at its tiers |
+| **Artifacts** | comma-separated list | Named portfolio-/program-tier work-products the framework prescribes; their shipped template shapes live under `operations/templates/portfolio-frameworks/<framework_id>/` |
+| **Primary consumers** | list | Which PMO skills read this row when the deployment selects the framework |
+| **Distinguishing constraint** | one-line | The test that distinguishes this framework from a delivery approach and from its sibling frameworks |
+
+**Row conventions.** `framework_id` values are lowercase-kebab per the artifact-naming standard — deliberately unlike §3's Title-case archetype names, because the two columns are joined on different keys and the casing difference makes a cross-table mix-up visible. A framework row is added when its artifact shapes ship, not before: a row here with no shape directory would advertise a capability the registry cannot serve, and §5B CASE P-2 already handles the unshipped case without one.
+
 ## 4. Custom Row — Schema + Worked Examples
 
 The Custom row is special: it does not have fixed lifecycle/ceremonies/artifacts/cadence values. Instead, each Custom-using project populates the `custom_methodology_definition` block in its PROJECT.md, and consumer skills read the block directly. This section documents the block schema and provides **3 worked examples** (operationalizes **AC-R1**).
