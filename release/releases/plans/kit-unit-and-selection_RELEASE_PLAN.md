@@ -101,7 +101,7 @@ These are operator-rendered decisions and independently-verified findings that c
 
 **D-ReadmeSplit + CR-1** — section ownership on `core/packs/README.md`, which three cards name in their acceptance criteria. #6361 owns `## The role and extends model` **plus** the head matter, the H1 and `## Layout`; #6362 owns a new `## Kit selection and precedence`; #6381 owns `## What lives where`. Waves are serial and the release ships as one PR, so this is sequencing, not conflict — but the last writer would otherwise inherit all three obligations blind.
 
-**D-Instrument** — the `SCANNED_TYPES` fix adding `py` to `release/tools/blast-radius.sh` lands as Stage-6 scope on #6377. Two action items are hard-gated at close: the fix MUST ship with a self-test arm exercising at least one `.py` reference under a RED→GREEN assertion (the current suite passes identically patched and unpatched, so shipping the one-line fix alone would re-create the gate-that-cannot-fail class this card exists to document); and `core/deploy/tools/domain-blast-radius.sh` MUST NOT be extended — it already carries `py` and its blindness is architectural, not a type-list omission.
+**D-Instrument** — the `SCANNED_TYPES` fix adding `py` to `release/tools/blast-radius.sh` lands as Stage-6 scope on #6377. Two action items are hard-gated at close: the fix MUST ship with a self-test arm exercising at least one `.py` reference under a RED→GREEN assertion (the current suite passes identically patched and unpatched, so shipping the one-line fix alone would re-create the gate-that-cannot-fail class this card exists to document); and `release/tools/domain-blast-radius.sh` MUST NOT be extended — it already carries `py` and its blindness is architectural, not a type-list omission.
 
 **CR-2 — D-KitFieldShape: RENDERED at Stage 6 by #6362. The selection field is a flat scalar, `operator.toml [methodology].default_work_item_kit`.**
 
@@ -275,7 +275,7 @@ core/packs/_common/pack.toml                                              NOT ED
 core/packs/scrum/pack.toml                                                NOT EDITED
 core/packs/kanban/pack.toml                                               NOT EDITED
 core/ADRs/README.md                                                       NOT EDITED
-core/deploy/tools/domain-blast-radius.sh                                  NOT EDITED
+release/tools/domain-blast-radius.sh                                      NOT EDITED
 ```
 
 ### Read-only inputs
@@ -296,7 +296,7 @@ core/governance/OPERATIONS.md                                             READ
 - **Both Stage-4 CONDITIONAL blocks are PROMOTED at this commit**, carrying their concrete paths. `CONDITIONAL:map-placement-d-decision` resolved to `core/references/reference/work-item-type-consumer-map.md` (D-MapHome). `CONDITIONAL:fixture-home-d-decision` resolved to `core/deploy/tests/fixtures/packs/` (D-FixtureHome), and the three placeholder fixture rows the Stage-4 matrix carried under `core/packs/tests/fixtures/` are superseded by the twelve concrete fixture rows above. Leaving a row CONDITIONAL after its condition has fired is an authoring defect, so the promotion happens here rather than being deferred.
 - **The three shipped-pack `NOT EDITED` rows are load-bearing, not decoration.** #6361's byte-identity criterion asserts them; the widened role enum leaves each pack's existing `role` value correct and its kinds archetype-keyed by design.
 - **`core/ADRs/README.md` is NOT EDITED, and that is a determination rather than a drop.** The Stage-5 design listed an index-row edit there. That file states in its own text that it is a curated thematic document and **not** an index, that it has never enumerated the module's full record set, and that it must not be converted to a generated index — the authoritative complete list is the file set itself, whose contiguity CI enforces. The Stage-4 plan reached the same conclusion independently from the index generator's scope block. Adding an enumeration row would create the second hand-maintained surface that file exists to refuse.
-- **`core/deploy/tools/domain-blast-radius.sh` is NOT EDITED** (D-Instrument / AI-002). It already carries `py` as the first element of its scanned-type list; its blindness is architectural — a shell subprocess is never an import edge — so no type-list edit reaches it.
+- **`release/tools/domain-blast-radius.sh` is NOT EDITED** (D-Instrument / AI-002). It already carries `py` as the first element of its scanned-type list; its blindness is architectural — a shell subprocess is never an import edge — so no type-list edit reaches it.
 - **`core/governance/OPERATIONS.md` is READ, not edited, by design.** #6362's criterion requires resolution through the *existing* five-rung cascade and asserts no parallel resolution path is introduced, so the resolver is consumed and never modified. An edit appearing here at Engineering would be evidence the criterion was violated.
 - **No new executable script is added**, so the script-execution allowlist companion obligation does not fire. The new deploy check is registered inside the existing script; the validator modes extend an existing tool, adding no new advertiser to the self-test coverage manifest.
 
