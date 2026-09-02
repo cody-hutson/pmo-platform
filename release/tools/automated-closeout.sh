@@ -4701,7 +4701,11 @@ EOF
 #   directly. Full rationale in the REACHABILITY note above is_version_less —
 #   cited by name rather than by line number, which rots (this pointer read
 #   "line ~1501" against a file that has since more than quintupled).
-# Idempotent: no-op if .version already == $VERSION (re-run safe; satisfies AC-2).
+# Monotone: no-op if .version already names a version >= $VERSION (equality is a
+# limb; re-run safe; satisfies AC-2). Degrade path (no-regression): with the grammar
+# library absent, equality still SKIPs via the unconditional (3a) string test and
+# every non-equal value stamps — byte-identical to the prior behaviour on every
+# input class, not merely on the non-equal ones.
 # Write mechanism: printf to a temp file + mv (atomic; single trailing-newline
 # line — the exact shape the hook's `head -1 | tr -d '[:space:]'` expects).
 # Staging: this phase WRITES but does not `git add`; staging happens in
@@ -4723,24 +4727,66 @@ phase_bump_version() {
     return 0
   fi
 
-  # (3) Idempotency guard — already at target.
-  local current
-  current="$(/usr/bin/head -1 "$version_file" 2>/dev/null | /usr/bin/tr -d '[:space:]')"
+  # (3) Monotonicity guard — the stamp never regresses .version.
+  # Supersedes the prior string-EQUALITY guard: equality let a file already at a
+  # HIGHER version fall through and be written DOWN on an out-of-order close (v4.17
+  # closing after v4.18 landed). Equality survives as a LIMB (cmp == 0 still SKIPs),
+  # so idempotency is preserved by construction.
+  # Comparison is version_cmp, the version-grammar SSOT total order already sourced
+  # above for validate_version. Do NOT hand-roll one: a lexical ">" ranks v4.9 above
+  # v4.10 and a minor-only compare mis-decides v4.99 -> v5.0. (SSOT consumer contract:
+  # a copied-inline comparison is a divergence defect.)
+  # NOTE this phase deliberately does NOT call version_stamp_state: that helper
+  # collapses "equal" and "higher" into one PASS, and this guard must tell them apart
+  # to emit its two distinct mark_phase messages. The three DOC verification sites do
+  # use it — they only need the three-outcome verdict.
+  local current cmp _bv_note=""
+  current="$(/usr/bin/head -1 "$version_file" 2>/dev/null | /usr/bin/tr -d '[:space:]' || echo "")"
+  # (3a) UNCONDITIONAL equal-limb SKIP. Today's shipped guard is a pure STRING test that
+  # needs no library, so idempotency must NOT sit behind _ACO_HAVE_GRAMMAR: with the
+  # grammar absent, gating it would make a re-run at target WRITE where it previously
+  # SKIPped — a regression on the very path labelled "no-regression". Keep it above.
   if [[ "$current" == "$VERSION" ]]; then
-    mark_phase "bump_version" "SKIPPED" ".version already == $VERSION (idempotency guard)"
+    mark_phase "bump_version" "SKIPPED" \
+      ".version already == $VERSION (monotonicity guard, equal limb)"
     return 0
+  fi
+  # $VERSION is canonical here — step (1)'s gate passed — so only $current can be
+  # non-canonical (empty, slug-shaped, corrupted). Gate it EXPLICITLY: version_cmp
+  # exits 1 with NO stdout on a non-canonical argument, so an unguarded
+  # "$(version_cmp ...)" is the EMPTY STRING, which a naive test reads as "not higher"
+  # and stamps by accident. An accidental right answer is the class this guard closes.
+  # An unorderable current value is a corrupt source-of-truth: stamp as recovery, and
+  # record that we did.
+  if [[ "${_ACO_HAVE_GRAMMAR:-0}" == "1" ]] && version_canonical "$current"; then
+    cmp="$(version_cmp "$current" "$VERSION")"
+    # The cmp == 0 limb is NOT redundant with (3a): v2.6 and v2.06 are string-UNEQUAL
+    # and version-EQUAL, so (3a) misses that pair and this limb catches it. Fixture arm
+    # M-8 exercises exactly that pair and fails if this limb is removed.
+    if [[ "$cmp" == "0" ]]; then
+      mark_phase "bump_version" "SKIPPED" \
+        ".version already == $VERSION (monotonicity guard, equal limb)"
+      return 0
+    fi
+    if [[ "$cmp" == "1" ]]; then
+      mark_phase "bump_version" "SKIPPED" \
+        ".version already names $current, HIGHER than $VERSION — monotonicity guard: refusing to regress a version a later release already advanced (out-of-order close)"
+      return 0
+    fi
+  else
+    _bv_note="current value '$current' is not orderable under the version grammar (non-canonical, or grammar lib absent) — stamped as recovery; "
   fi
 
   # (4) Dry-run preview.
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "bump_version" "DRY-RUN" "would write .version: '$current' -> '$VERSION' (staged in commit_chore_pr)"
+    mark_phase "bump_version" "DRY-RUN" "${_bv_note}would write .version: '$current' -> '$VERSION' (staged in commit_chore_pr)"
     return 0
   fi
 
   # (5) Apply — write atomically (printf to temp + mv keeps a single clean line).
   if /usr/bin/printf '%s\n' "$VERSION" > "${version_file}.tmp" 2>/dev/null \
      && /bin/mv "${version_file}.tmp" "$version_file" 2>/dev/null; then
-    mark_phase "bump_version" "PASS" "wrote .version: '$current' -> '$VERSION' (staged by commit_chore_pr files[])"
+    mark_phase "bump_version" "PASS" "${_bv_note}wrote .version: '$current' -> '$VERSION' (staged by commit_chore_pr files[])"
     return 0
   fi
   /bin/rm -f "${version_file}.tmp" 2>/dev/null || true
