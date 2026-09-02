@@ -26,8 +26,8 @@ aliasing adds keys, never values.
 
 | Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
 |---|---|---|---|---|---|---|---|
-| v9.94 | v9.94-alpha-slug | #9001 | #9101 | aaaa111 | v9.94 | shipped | 2020-01-01 |
-| gamma-slug (version-less) | v9.90 | #9002 | #9102 | bbbb222 | — | shipped | 2020-01-02 |
+| v9.94 | v9.94-alpha-slug | SYN-9001 | SYN-9101 | aaaa111 | v9.94 | shipped | 2020-01-01 |
+| gamma-slug (version-less) | v9.90 | SYN-9002 | SYN-9102 | bbbb222 | — | shipped | 2020-01-02 |
 
 ## Deployment Log
 

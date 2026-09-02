@@ -19,11 +19,11 @@ shape below can survive it.
 
 ## Shape 1 — pipe table, no `session_id` header
 
-| Sub-task | Issue | Wave 1 | Action |
+| Sub-task | Ticket | Wave 1 | Action |
 |---|---|---|---|
-| S-01 | #9001 | scaffolded | consumed |
-| S-02 | #9002 | scaffolded | re-spawned |
-| S-03 | #9003 | held | consumed |
+| S-01 | SYN-9001 | scaffolded | consumed |
+| S-02 | SYN-9002 | scaffolded | re-spawned |
+| S-03 | SYN-9003 | held | consumed |
 
 ## Shape 2 — conforming header, width-mismatched data row
 
