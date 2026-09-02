@@ -375,7 +375,7 @@ Bare references are confined here with an inline summary, per the reference-dura
 standard.
 
 - The founding architecture decision for the work-item kit as a first-class,
-  archetype-neutral, kind-bearing pack role — recorded as `ADR-170` in `core/ADRs/`.
+  archetype-neutral, kind-bearing pack role — recorded as `ADR-171` in `core/ADRs/`.
 - The pack composition grammar and the composing-unit record this map's grammar rows sit
   under — `ADR-070` and `ADR-069` respectively, both in `core/ADRs/`.
 - The parity-gate hardening that measures the pack-undeclared `type:*` label population

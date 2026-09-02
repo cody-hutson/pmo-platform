@@ -347,7 +347,7 @@ portfolio_framework = ""
 # NOT set its own `work_item_kit`. A kit is a `role = "kit"` type pack: a kind set
 # selected INDEPENDENTLY of the methodology archetype above. These are two separate
 # axes and neither lookup reads the other's field, so changing one leaves the other
-# resolved value unchanged (ADR-170; core/packs/README.md § Kit selection and
+# resolved value unchanged (ADR-171; core/packs/README.md § Kit selection and
 # precedence).
 #
 # This is ONLY the global default + the resolver fallback. Which kinds a selected
@@ -359,7 +359,7 @@ portfolio_framework = ""
 #
 # Valid: the `pack_id` of a pack this deployment authored with `role = "kit"`.
 #        Deliberately NOT enumerated here — which kits exist is deployment data,
-#        and ADR-170 declares the kit set OPEN, so nothing may enumerate it.
+#        and ADR-171 declares the kit set OPEN, so nothing may enumerate it.
 # Default: "" — selecting NO kit is an ordinary state, not a degraded one. It is
 #          the pre-kit arrangement every existing deployment already runs, which
 #          is what keeps the kit axis additive.

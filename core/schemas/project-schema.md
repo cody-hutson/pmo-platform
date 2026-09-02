@@ -299,7 +299,7 @@ property of two independent lookups, not a behaviour each consumer must remember
 preserve.
 
 The kit unit, its neutrality mechanism and its composition position are decided in
-[ADR-170](../ADRs/ADR-170-work-item-kit-first-class-unit.md); the grammar a kit conforms to
+[ADR-171](../ADRs/ADR-171-work-item-kit-first-class-unit.md); the grammar a kit conforms to
 is [`work-item-type-schema.md`](work-item-type-schema.md); selection and precedence are
 documented in [`core/packs/README.md`](../packs/README.md) § Kit selection and precedence.
 This field does not re-list or re-validate any of them.
