@@ -31,6 +31,7 @@ This document is the **normative vocabulary source** for methodology-aware skill
 - Custom Extension Protocol — when to use `Custom`, how to populate `custom_methodology_definition`, governance-promotion rule.
 - Skill Consumption Pattern — the authoritative 3-branch logic methodology-aware role skills use to parameterize on `delivery_approach` + `custom_methodology_definition`.
 - Space-Scoped Resolution (Step 0) — the per-space `operational_methodology` / `release_methodology` resolution that precedes the 3-branch logic, and the per-space consumer audit.
+- Portfolio-Framework Axis Consumption Pattern (§5B) — the `portfolio_framework` altitude, its 3-branch consumer logic, and its orthogonality to the project-tier `delivery_approach` axis.
 - Failure modes the parameterization creates (per `failure-mode-standard.md`).
 - Relationship to the orthogonal dual-framing co-management capability (the `dual_framing_enabled` trigger and its bridge artifact), which is independent of the `delivery_approach` methodology classification.
 
@@ -312,6 +313,61 @@ read PROJECT.md → parse deliverable_type field:
 **Reconciliation with the Stage-4 `domain:` label.** Where PROJECT.md carries `deliverable_type`, it is the **authoritative source** the Stage-4 Planning `domain:` class field reads (`release/references/pipeline/stage-04-planning.md` §5.7). The consumer chain — the A3.1 impact-analysis selector, the domain-best-practice review criterion, and the §5.7 guide index — is **unchanged**: `deliverable_type` feeds the abstract `domain:` class without reworking any consumer, exactly the forward-reference contract that field declared. This branch **references** the §5.7 guide index; it does not re-found guide resolution.
 
 **Composition with §5.** A consumer reads `delivery_approach` (§5) AND `deliverable_type` (§5A) independently and combines them: e.g., a `delivery_approach: Scrum` + `deliverable_type: web` project gets Scrum-native methodology framing (§5 CASE 1) AND web-domain-aware design/review parameterization (§5A CASE D-1). Neither axis implies the other; both are read when present.
+
+## 5B. Portfolio-Framework Axis Consumption Pattern
+
+This section is the **portfolio-framework-axis sibling of §5** (the methodology consumption pattern) and of §5A (the domain axis). Where §5 branches consumer behavior on `delivery_approach` (*how a project's work is governed*), §5B branches it on `[methodology].portfolio_framework` (*which portfolio-tier governance framework the deployment's portfolio and program tiers run under*). The two axes are orthogonal and compose: a consumer reads **both** fields independently, and neither implies the other. A portfolio framework governs the portfolio a project runs **under**, so "Scrum projects inside a PMI-governed portfolio" is an ordinary configuration rather than a contradiction.
+
+**The branch.**
+
+```
+read the resolved portfolio_framework value (see Resolution below):
+
+  CASE P-1: portfolio_framework names a framework with a shipped shape directory
+            (operations/templates/portfolio-frameworks/<framework_id>/ exists):
+    → resolve that directory; use its artifact shapes for portfolio-tier and
+      program-tier output
+    → anything the directory does not carry falls through to the registry root
+      (the thin-delta rule: framework-invariant content stays at the root)
+
+  CASE P-2: portfolio_framework is set to a well-formed value with NO shipped
+            shape directory (the OPEN value domain's escape case):
+    → the absence IS the shape-authoring demand signal
+    → emit portfolio-framework-agnostic output WITH an explicit caveat naming
+      the unshipped framework_id
+    → DO NOT silently fall back to another framework's shapes
+
+  CASE P-3: portfolio_framework absent or empty (the default, and today's state
+            for every deployment):
+    → no portfolio-framework branch; resolve exactly as today
+    → the project-tier delivery_approach axis (§5) is unaffected in every case
+```
+
+**No silent default (the §5 CASE-3 analog).** CASE P-2 is the exact structural analog of §5 CASE 3 (`base_archetype: null`) and of §5A CASE D-2: when the platform cannot parameterize the portfolio tier from a shipped shape directory, it emits **portfolio-framework-agnostic output with an explicit caveat** naming the unshipped `framework_id` — never a silent fallback to another framework's shapes. A silent framework-default is the portfolio-framework-axis counterpart of the base-archetype-blind-fallback failure mode (§6.3), and it is worse at this altitude: a portfolio charter rendered in the wrong framework's shape reads as authoritative governance rather than as a missing capability.
+
+**Resolution.** `portfolio_framework` is an `operator.toml` field. Its rungs, precedence and default-fallback are those of every other platform-config field and are defined once in [`OPERATIONS.md § Platform-Config Resolution Protocol`](../../../core/governance/OPERATIONS.md), with the field's schema row and its rung narrowing recorded at [`platform-config-schema.md` §3.1 / §4](../../../core/schemas/platform-config-schema.md). This section **references** that resolver; it does not restate it. The field is **deployment-global at v1** — it resolves on the global and individual rungs only, and the narrowing plus its reason live at the schema row, not here.
+
+**Composition with §5 and §5A.** A consumer reads `delivery_approach` (§5), `deliverable_type` (§5A) and `portfolio_framework` (§5B) independently and combines them. A project declaring `delivery_approach: Scrum` inside a deployment declaring `portfolio_framework: pmi` gets Scrum-native project framing (§5 CASE 1) **and** PMI portfolio- and program-tier artifact shapes (§5B CASE P-1) — the project's sprints are unaffected by the portfolio framework, and the portfolio's charter is unaffected by the delivery approach. Neither axis implies the other; each is read when present. Where the three axes are all present they parameterize three different questions — how the work is governed, what kind of work it is, and which framework governs the portfolio above it.
+
+**Value domain.** `portfolio_framework` is **OPEN**, not a closed enum: a well-formed value is a lowercase-kebab `framework_id` per [`artifact-naming-standard.md`](../../../core/standards/artifact-naming-standard.md). Shipped at v1: `pmi`. An unrecognized-but-well-formed value takes CASE P-2 rather than failing — the same open-escape posture `delivery_approach: Custom` (§5 CASE 3) and `deliverable_type` (§5A CASE D-2) already take, so the axis's expansion path is authoring a shape directory rather than amending an enum. Per-framework definitions live in the [`methodology-archetype-matrix.md` §3A Portfolio-Framework Matrix](methodology-archetype-matrix.md); this section does not enumerate them.
+
+### 5B.1 Worked example — a `delivery_approach`-only project is unaffected
+
+Authored on the shape of §5.2's test vectors, and stated here because the no-change property is the axis's whole safety argument.
+
+**Given** a project with `delivery_approach: Scrum` and **no** `portfolio_framework` set anywhere in its resolution set — which is every existing project, on every existing deployment:
+
+- The consumer takes §5 **CASE 1** on the Scrum matrix row, exactly as before, and produces sprint-native output.
+- The consumer takes §5B **CASE P-3** — the no-branch case. No portfolio-framework resolution runs, no shape directory is opened, and no caveat is emitted.
+- The resulting output is **byte-identical** to the same project's output before the portfolio-framework axis existed.
+
+**The property holds by construction, not by test.** Three separate facts each make it true independently:
+
+1. `portfolio_framework` is declared `opt-in` (`operator-toml-schema.json`), so the generator never writes it into a live `operator.toml` and the reconciler never touches it. A deployment that did not select a framework has no such key **in the file at all** — the resolution input set for such a project is unchanged, not merely unchanged-in-effect.
+2. Nothing this axis introduces edits an existing consumer surface. §3's 8-row `delivery_approach` grid, the flat-root templates, the pack manifests, and `default_delivery_approach` are all untouched; every change is an append or a net-new file.
+3. CASE P-3 is a documented no-op branch rather than an unhandled path, so a consumer that implements §5B correctly cannot reach changed behavior from an absent value.
+
+**The converse, stated so the composition is unambiguous.** A deployment that *does* set `portfolio_framework: pmi` changes nothing about that same Scrum project's sprint framing either — it changes which portfolio- and program-tier artifact shapes the portfolio above it renders. The two axes remain orthogonal in both directions.
 
 ## 6. Failure Modes (domain-specific)
 
