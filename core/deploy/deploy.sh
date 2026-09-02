@@ -11633,6 +11633,24 @@ sys.stdout.write("".join(out) + "|")
     for c51_pack in core/packs/*/pack.toml; do
       [[ -f "$c51_pack" ]] && c51_source_args+=(--source "$c51_pack")
     done
+    # ...and the OPERATOR-LOCAL (K4) packs [#5291]. Corpus packs alone were the whole
+    # canonical set, which was harmless while `type:*` resolved by prefix and becomes
+    # a defect the moment it resolves against declared kinds: a deployment declaring
+    # `bug` in its own K4 pack would see `type:bug` reported as an orphan, because the
+    # gate cannot see the pack that declares it. Kinds are K4 operator-local by
+    # grammar (work-item-type-schema.md §1.1.1 — never authored into this corpus), so
+    # the packs that declare them are legitimately outside the tree and the source
+    # list is the surface that must reach them. Deliberately reuses the already-
+    # sourced pmo_instance_path() resolver rather than introducing a token or a config
+    # key: an unregistered path token orphans silently. Guarded exactly like the
+    # corpus loop, so a deployment with no instance packs directory is a no-op.
+    local c51_instance_packs
+    c51_instance_packs="$(pmo_instance_path)/packs"
+    if [[ -d "$c51_instance_packs" ]]; then
+      for c51_pack in "$c51_instance_packs"/*/pack.toml; do
+        [[ -f "$c51_pack" ]] && c51_source_args+=(--source "$c51_pack")
+      done
+    fi
     if [[ ! -f "$c51_script" ]]; then
       flag_warn_or_issue "label-parity" "primitive script missing: $c51_script"
     elif ! command -v gh >/dev/null 2>&1; then

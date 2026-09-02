@@ -28,17 +28,47 @@ and namespace PATTERNS) into the per-pack `[[labels]]` facets under core/packs/*
 deploy.sh Check 51 passes `--source label-taxonomy.md` plus the `core/packs/*/pack.toml`
 set so a relocated-but-still-live label resolves in the pack union and does not
 false-orphan. Two per-source formats are auto-detected by extension: `.md` reads
-label-definition table rows; `.toml` reads `[[labels]]` `name = "..."` entries.
+label-definition table rows; `.toml` reads `[[labels]]` `name = "..."` entries PLUS
+the `type:<kind_id>` projection of each `[[kinds]]` declaration (#5291).
+
+`--list-declared-kinds` exposes that kind projection as a read-only listing mode, one
+`type:<kind_id>` per line on stdout. It exists so a second consumer needing the same
+resolution — release/tools/compute-release-velocity.sh's work-class map (#4223) —
+CONSUMES this resolver instead of forking a parallel one, which is the drift surface
+a second derivation would create. Two properties are load-bearing on that consumer
+and are asserted in the self-test: the mode is entirely OFFLINE (it returns before
+the repo-slug derivation and the live-label read, so it runs inside a CI step
+declared offline + stdlib-only), and an empty result EXITS 0 (a deployment selecting
+packs that declare no kinds is a legitimate empty set, not a failure).
 
 Concrete-enum vs namespace-pattern (the R4 nuance): most labels are a concrete
-enumerated set (category, `status:*`, `cluster:*`, `triage:*`, disposition); a few
-are a namespace PATTERN with examples (`project:*`, `epic:*`, `type:*`). A live
-label is an ORPHAN only if it matches neither a concrete registered label nor a
-registered namespace prefix. The markdown parser keys on label-definition table
-rows (col-2 is a backticked hex color), which structurally excludes the
-`## Excluded Labels` table (col-2 is prose) and header/separator rows. Title-prefix
-parity (the #74 `[Observation]:` invariant) is a SEPARATE concern, NOT evaluated
-here.
+enumerated set (category, `status:*`, `cluster:*`, `triage:*`, disposition); two are
+a namespace PATTERN with examples (`project:*`, `epic:*`). A live label is an ORPHAN
+only if it matches neither a concrete registered label nor a registered namespace
+prefix. The markdown parser keys on label-definition table rows (col-2 is a
+backticked hex color), which structurally excludes the `## Excluded Labels` table
+(col-2 is prose) and header/separator rows. Title-prefix parity (the #74
+`[Observation]:` invariant) is a SEPARATE concern, NOT evaluated here.
+
+`type:*` is NOT a resolution pattern (#5291), and the distinction from `project:*` /
+`epic:*` is the point. It was registered as a prefix, which made the whole
+work-item-kind family unfalsifiable — a prefix match accepts any live `type:X`
+whether or not a selected pack declares kind X, so the gate believed it reconciled
+that family while verifying only that the string began with `type:`. It now resolves
+against the union of each source's concrete `[[labels]]` rows and the
+`type:<kind_id>` projection of each source's `[[kinds]]` declarations (see
+parse_toml_kind_ids). Both arms of the union are needed: `work-item-type-schema.md`
+§1.1.1 requires `projects_kind` ON a `type:*` row but never requires a row PER
+declared kind, so a K4 operator-local pack may declare `kind_id = "bug"` with no row
+at all and the kind is still legitimately declared. `type:*` stays a namespace
+pattern in the GRAMMAR — core/specs/label-taxonomy.md § Work-Item-Kind Labels still
+declines to enumerate the kinds, because they belong to the packs.
+
+Tolerated legacy alias: `type:subtask` (TOLERATED_TYPE_ALIASES) resolves to no
+declared kind and is nonetheless correct — a frozen alias of the `sub-task` category
+row that core/specs/label-taxonomy.md § Tolerated Legacy Alias states must not be
+deleted, because three consumers read it. It is filtered out of ORPHAN and appears in
+no arm; see diff_parity for why it is filtered rather than declared canonical.
 
 Excluded labels (#5054): `label-taxonomy.md` § Excluded Labels states, in the
 PRESENT tense, which default GitHub labels this platform's canonical set excludes.
@@ -110,11 +140,38 @@ import sys
 import tempfile
 
 # Namespaces registered as a PATTERN (examples, not an exhaustive enum). A live
-# label under one of these prefixes is NOT an orphan. `type:*` is the work-item-kind
-# category family: the grammar doc documents it as a namespace pattern (like
-# project:*/epic:*) and the packs contribute concrete `type:<kind_id>` rows via
-# `projects_kind` — so any live `type:*` resolves as a pattern match (#1970 FM-2).
-REGISTERED_NAMESPACES = ("project:", "epic:", "type:")
+# label under one of these prefixes is NOT an orphan.
+#
+# `type:` is DELIBERATELY NOT a member (#5291). It was, and that made the entire
+# work-item-kind family unfalsifiable: a prefix match accepts any live `type:X`
+# whether or not a selected pack declares kind X, so five undeclared labels sat in
+# the live set with no gate complaint. `type:*` remains a namespace pattern in the
+# GRAMMAR (core/specs/label-taxonomy.md § Work-Item-Kind Labels still declines to
+# enumerate the kinds — they live in the packs) but it is no longer a RESOLUTION
+# pattern here: a live `type:X` now resolves only against the union of each source's
+# concrete `[[labels]]` rows and its `[[kinds]]` `kind_id` projections (see
+# parse_toml_kind_ids / parse_source), or against TOLERATED_TYPE_ALIASES below.
+REGISTERED_NAMESPACES = ("project:", "epic:")
+
+# `type:*` rows that resolve to NO declared kind and are nonetheless correct.
+#
+# `type:subtask` is a tolerated legacy alias of the `sub-task` category row: it joins
+# no pack's `kinds[]`, projects no `work_item_type`, and predates the canonical row it
+# aliases. The authority is core/specs/label-taxonomy.md § Tolerated Legacy Alias,
+# which freezes it and states outright that it MUST NOT be deleted —
+# check-milestone-epic-membership.py admits it in the wide sub-task predicate its
+# counting legs use, release/tools/automated-closeout.sh accepts it in the Stage-13
+# auto-close exclusion filter, and release/skills/release-executor/SKILL.md documents
+# that filter. Reporting it as an orphan forever would invite exactly the deletion
+# those three consumers cannot survive.
+#
+# It lives HERE, as a corpus-side module constant, rather than as a pack `[[labels]]`
+# row or an operator-local allowlist entry. A `[[labels]]` row would be schema-invalid
+# — work-item-type-schema.md §1.1.1 makes `projects_kind` REQUIRED on a `type:*` row
+# and this alias joins no `kinds[]` — and an allowlist entry is the K4 operator-local
+# surface, which would let a deployment silently drop a corpus-governed tolerance and
+# shrink the census check-milestone-epic-membership.py reports on.
+TOLERATED_TYPE_ALIASES = ("type:subtask",)
 
 # The ONLY place the § Excluded Labels anchor string appears (#5054). Single-sourced
 # so a heading rename has exactly one place to change — and a rename that misses it
@@ -146,6 +203,13 @@ _MD_H2_RE = re.compile(r"^\s*##\s")
 _TOML_LABELS_HDR_RE = re.compile(r"^\s*\[\[labels\]\]\s*$")
 _TOML_TABLE_HDR_RE = re.compile(r"^\s*\[")
 _TOML_NAME_RE = re.compile(r'^\s*name\s*=\s*"([^"]+)"')
+
+# A pack.toml `[[kinds]]` kind_id assignment — the SIBLING scan to the two above,
+# and the reason `type:` could be dropped from REGISTERED_NAMESPACES (#5291). Same
+# dependency-free shape, keyed to the `[[kinds]]` array-of-tables so that a
+# `kind_id`-like key under `[meta]` or a `[kinds.*]` sub-table is not miscollected.
+_TOML_KINDS_HDR_RE = re.compile(r"^\s*\[\[kinds\]\]\s*$")
+_TOML_KIND_ID_RE = re.compile(r'^\s*kind_id\s*=\s*"([^"]+)"')
 
 # The keys parse_toml_label_rows collects from a `[[labels]]` entry. Deliberately
 # narrower than the row's full key set: `group`, `applied_at` and `removed_at` are
@@ -228,6 +292,43 @@ def parse_toml_labels(source_text):
     return concrete
 
 
+def parse_toml_kind_ids(source_text):
+    """Declared `kind_id`s from a pack.toml `[[kinds]]` array-of-tables (#5291).
+
+    SIBLING of parse_toml_labels, and the two answer genuinely different questions —
+    which is the whole reason this function exists. `work-item-type-schema.md` §1.1.1
+    requires `projects_kind` ON a `type:*` label row, but nowhere requires a label row
+    PER declared kind. So "declared kinds" and "declared `type:*` rows" are two
+    different sets. They coincide in the shipped corpus packs and DIVERGE in exactly
+    the case that matters: a K4 operator-local pack declaring `kind_id = "bug"` with
+    no `[[labels]]` row. A label-row-only predicate cannot see that pack, so it would
+    report `type:bug` as an orphan on a deployment that legitimately declares it —
+    with and without the pack, identically, which is a degenerate probe rather than a
+    check.
+
+    Dependency-free line-scan (no tomllib on py3.9), identical in shape to
+    parse_toml_labels: any other table header closes the context, so `[kinds.fields]`
+    and `[kinds.criteria.readiness]` sub-tables correctly end collection and a
+    `kind_id` key elsewhere is not miscollected. Returns a set of BARE kind ids
+    (`{"epic", "story"}`), not `type:`-prefixed — the caller owns the projection.
+    """
+    kinds = set()
+    in_kinds = False
+    for line in source_text.splitlines():
+        if _TOML_KINDS_HDR_RE.match(line):
+            in_kinds = True
+            continue
+        if _TOML_TABLE_HDR_RE.match(line):
+            # some other table header ([meta], [[labels]], [kinds.fields], ...)
+            in_kinds = False
+            continue
+        if in_kinds:
+            km = _TOML_KIND_ID_RE.match(line)
+            if km:
+                kinds.add(km.group(1).strip())
+    return kinds
+
+
 def parse_toml_label_rows(source_text):
     """SIBLING of parse_toml_labels: full `[[labels]]` ROWS, not just names.
 
@@ -268,9 +369,18 @@ def parse_toml_label_rows(source_text):
 
 
 def parse_source(path, source_text):
-    """Dispatch by extension: .toml -> [[labels]] names; else -> md table rows."""
+    """Dispatch by extension: .toml -> [[labels]] names + kind projections; else -> md.
+
+    The `.toml` arm is a UNION, not a replacement (#5291): a pack contributes both its
+    concrete `[[labels]]` names AND the `type:<kind_id>` projection of every kind it
+    declares. Union rather than either alone because §1.1.1 binds the two only in one
+    direction — every `type:*` row must name a kind, but a declared kind need not have
+    a row — so taking only the rows blinds the gate to a kind-only K4 pack, and taking
+    only the kinds drops every non-`type:` label the pack contributes.
+    """
     if path.lower().endswith(".toml"):
-        return parse_toml_labels(source_text)
+        return (parse_toml_labels(source_text)
+                | {f"type:{k}" for k in parse_toml_kind_ids(source_text)})
     return parse_md_labels(source_text)
 
 
@@ -554,7 +664,7 @@ def diff_parity(concrete, namespaces, live, excluded=frozenset()):
 
     missing       canonical, absent from live
     orphan        live, in neither the canonical set nor a registered namespace,
-                  and NOT declared excluded
+                  not a tolerated legacy alias, and NOT declared excluded
     excluded_live live and declared EXCLUDED by the grammar
 
     The orphan and excluded_live arms are MUTUALLY EXCLUSIVE by construction. That
@@ -563,6 +673,14 @@ def diff_parity(concrete, namespaces, live, excluded=frozenset()):
     defaults to an empty frozenset so every existing caller and fixture stays valid
     and a pure-`.toml` invocation (no `.md` source, hence no excluded declaration)
     behaves exactly as before.
+
+    TOLERATED_TYPE_ALIASES is filtered out of the orphan arm and contributes to NO
+    arm at all (#5291) — it is inert, not reclassified. That inertness is what bounds
+    the `type:*` hardening: `type:subtask` is corpus-governed as permanently correct,
+    so a class that merely renamed its report would keep inviting the deletion its
+    three consumers cannot survive. It is filtered rather than added to `concrete`
+    deliberately: `concrete` feeds the enforce-capable MISSING arm, and an alias that
+    is tolerated-if-present must not become required-if-absent.
     """
     missing = sorted(c for c in concrete if c not in live)
     excluded_live = sorted(l for l in live if l in excluded)
@@ -570,6 +688,7 @@ def diff_parity(concrete, namespaces, live, excluded=frozenset()):
         l for l in live
         if l not in concrete
         and l not in excluded
+        and l not in TOLERATED_TYPE_ALIASES
         and not any(l.startswith(ns) for ns in namespaces)
     )
     return missing, orphan, excluded_live
@@ -643,31 +762,122 @@ def _self_test():
         'group = "cluster"\n'
         'name = "cluster: security"\n'
         "\n"
+        "[[labels]]\n"
+        'group = "category"\n'
+        'name = "type:task"\n'                 # a kind with BOTH a row and a kind_id
+        'projects_kind = "task"\n'
+        "\n"
         "[[kinds]]\n"
-        'kind_id = "story"\n'
+        'kind_id = "story"\n'                  # a kind declared with NO label row
         'name = "also-not-a-label"\n'          # a name key under [[kinds]]
+        "\n"
+        "[kinds.fields]\n"
+        'kind_id = "not-a-declared-kind"\n'    # a kind_id key under a SUB-table
     )
     toml_concrete = parse_toml_labels(toml_fixture)
-    want_toml = {"status: rejected", "cluster: security"}
+    want_toml = {"status: rejected", "cluster: security", "type:task"}
     if toml_concrete != want_toml:
         print(f"FAIL toml parse: got {sorted(toml_concrete)} want {sorted(want_toml)}")
         ok = False
 
-    # --- Union + diff. Concrete = md ∪ toml; a live `type:bug`/`project:foo`
-    #     resolves via a registered namespace (NOT orphan); `zz-orphan` orphans;
-    #     a canonical row absent from live (`cluster: security`) is MISSING.
-    concrete = md_concrete | toml_concrete
+    # --- `[[kinds]]` parse (#5291). `story` is collected; the `[kinds.fields]`
+    #     sub-table closes the context, so its decoy `kind_id` is NOT — the
+    #     specificity control that distinguishes a section-scoped scan from a
+    #     whole-file grep for `kind_id`.
+    toml_kinds = parse_toml_kind_ids(toml_fixture)
+    if toml_kinds != {"story"}:
+        print(f"FAIL kinds parse: got {sorted(toml_kinds)} want ['story']")
+        ok = False
+
+    # --- parse_source unions the two for a .toml (#5291): the pack contributes its
+    #     `[[labels]]` names AND `type:<kind_id>` for every declared kind. `type:task`
+    #     arrives by BOTH paths (row + kind) and `type:story` by the kind path alone.
+    toml_union = parse_source("fixture-pack.toml", toml_fixture)
+    want_union = {"status: rejected", "cluster: security", "type:task", "type:story"}
+    if toml_union != want_union:
+        print(f"FAIL parse_source union: got {sorted(toml_union)} want {sorted(want_union)}")
+        ok = False
+
+    # --- Union + diff. Concrete = md ∪ parse_source(toml). `type:bug` and `type:adr`
+    #     are live and declared by NOTHING, so both now ORPHAN — before #5291 the
+    #     registered `type:` prefix accepted them and the whole family was
+    #     unfalsifiable. `type:task` (label row) and `type:story` (kind projection)
+    #     resolve; `type:subtask` is the tolerated alias and appears in no arm;
+    #     `project:foo` still resolves by namespace; `zz-orphan` orphans; a canonical
+    #     row absent from live (`cluster: security`) is MISSING.
+    concrete = md_concrete | toml_union
     ns = REGISTERED_NAMESPACES
-    live = {"improvement", "status: rejected", "project:foo", "type:bug", "zz-orphan",
-            "good first issue"}
+    live = {"improvement", "status: rejected", "project:foo", "zz-orphan",
+            "good first issue", "type:task", "type:story", "type:subtask",
+            "type:bug", "type:adr"}
     missing, orphan, excluded_live = diff_parity(concrete, ns, live, md_excluded)
     if missing != ["cluster: security"]:
         print(f"FAIL missing: {missing}")
         ok = False
-    # type:bug now resolves under the registered `type:` namespace (#1970 FM-2) —
-    # only zz-orphan is a true orphan.
-    if orphan != ["zz-orphan"]:
+    if orphan != ["type:adr", "type:bug", "zz-orphan"]:
         print(f"FAIL orphan: {orphan}")
+        ok = False
+
+    # --- THE AC-5 PAIR (#5291), and BOTH arms are required. The subject: a K4
+    #     operator-local pack declaring `kind_id = "bug"` with NO `[[labels]]` row.
+    #     With it selected, `type:bug` must NOT be reported; without it, it MUST be.
+    #     A one-armed assertion is the degenerate probe this card exists to close —
+    #     the label-row-only predicate reports `type:bug` identically with and
+    #     without the pack, so it satisfies "absent when selected" never, and
+    #     "reported when absent" always, while proving nothing about K4 resolution.
+    k4_fixture = "[[kinds]]\n" 'kind_id = "bug"\n'
+    # The discriminating fact, asserted directly: this pack declares a kind and NO
+    # label row, so a rows-only parse sees an empty set and cannot resolve `type:bug`.
+    if parse_toml_labels(k4_fixture) != set():
+        print("FAIL k4 fixture: the kind-only pack must contribute no [[labels]] rows")
+        ok = False
+    k4_union = parse_source("k4-pack.toml", k4_fixture)
+    if k4_union != {"type:bug"}:
+        print(f"FAIL k4 fixture union: got {sorted(k4_union)} want ['type:bug']")
+        ok = False
+    _m4, orphan_with_k4, _x4 = diff_parity(concrete | k4_union, ns, live, md_excluded)
+    if "type:bug" in orphan_with_k4:
+        print(f"FAIL AC-5 subject: type:bug reported with the K4 pack selected: {orphan_with_k4}")
+        ok = False
+    # CONTROL for the arm above (already computed): without the K4 pack it IS
+    # reported. Restated as its own assertion so the pair fails loudly rather than
+    # degrading to a subject-only check if the set above is ever edited.
+    if "type:bug" not in orphan:
+        print("FAIL AC-5 control: type:bug NOT reported without the K4 pack — "
+              "the probe cannot distinguish reading the pack from ignoring type:*")
+        ok = False
+    # The K4 projection must not leak into the ENFORCE-capable arm for a kind whose
+    # label IS live: declaring `bug` locally makes `type:bug` resolvable, never required.
+    if "type:bug" in _m4:
+        print(f"FAIL AC-5: type:bug entered the MISSING arm while live: {_m4}")
+        ok = False
+
+    # --- The TOLERATED alias (#5291), asserted in both directions. `type:subtask`
+    #     appears in NO arm — not ORPHAN, and specifically not MISSING, because it is
+    #     tolerated-if-present and must never become required-if-absent. Its control
+    #     is `type:adr`: still undeclared and untolerated, and still reported — without
+    #     that arm a blanket `type:` suppression would pass this assertion.
+    if "type:subtask" in missing + orphan + excluded_live:
+        print("FAIL tolerated alias: type:subtask surfaced in an arm")
+        ok = False
+    if "type:adr" not in orphan:
+        print("FAIL tolerated-alias control: type:adr (undeclared, untolerated) "
+              f"not reported — suppression is over-broad: {orphan}")
+        ok = False
+    # SIBLING-NAMESPACE control: narrowing `type:*` must not collapse the surviving
+    # namespace patterns into concrete matching. `project:foo` is declared by nothing
+    # and must still resolve by prefix.
+    if "project:foo" in orphan:
+        print(f"FAIL sibling namespace: project:foo reported as ORPHAN: {orphan}")
+        ok = False
+
+    # --- PARAMETER COMBINATION: the check reads the SELECTED source scope, not a
+    #     hardcoded union. Drop the pack from the selection and its kinds stop
+    #     resolving — `type:task` and `type:story` both report.
+    _m5, orphan_md_only, _x5 = diff_parity(md_concrete, ns, live, md_excluded)
+    if not {"type:task", "type:story"} <= set(orphan_md_only):
+        print(f"FAIL source-scope arm: pack kinds still resolved with the pack "
+              f"deselected: {orphan_md_only}")
         ok = False
 
     # --- The EXCLUDED_LIVE class, asserted in BOTH halves (#5054). A subject-only
@@ -699,6 +909,7 @@ def _self_test():
     ok = _self_test_emit_fix() and ok
     ok = _self_test_rest_transport() and ok
     ok = _self_test_excluded_live() and ok
+    ok = _self_test_list_declared_kinds() and ok
 
     print("self-test: PASS" if ok else "self-test: FAIL")
     return 0 if ok else 1
@@ -1111,6 +1322,98 @@ def _self_test_excluded_live():
     return ok
 
 
+def _self_test_list_declared_kinds():
+    """Fixture suite for `--list-declared-kinds` (#5291), the #4223 extend-seam.
+
+    Driven through main() because the two properties #4223 depends on are properties
+    of the MODE, not of the parser: that it is OFFLINE, and that an empty result exits
+    0. Both are contractual — #4223's self-test is discovered by
+    check-selftest-coverage.py --run inside a CI step declared offline + stdlib-only,
+    and this module carries a live-label read on its normal path.
+    """
+    ok = True
+
+    def _w(d, nm, text):
+        p = os.path.join(d, nm)
+        with open(p, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return p
+
+    with tempfile.TemporaryDirectory() as td:
+        pack = _w(td, "pack.toml",
+                  '[meta]\nkind_id = "not-a-declared-kind"\n\n'   # outside [[kinds]]
+                  "[[kinds]]\n" 'kind_id = "story"\n\n'
+                  "[[kinds]]\n" 'kind_id = "epic"\n\n'
+                  "[[labels]]\n" 'name = "improvement"\ncolor = "0E8A16"\n')
+        nokinds = _w(td, "nokinds.toml",
+                     "[[labels]]\n" 'name = "improvement"\ncolor = "0E8A16"\n')
+        doc = _w(td, "taxonomy.md", "## Excluded Labels\n| `question` | prose |\n")
+
+        # --- SUBJECT: the declared kinds are listed, `type:`-prefixed and sorted, and
+        #     the `[meta]` decoy is not collected.
+        rc, out = _run_main_captured(["--source", pack, "--list-declared-kinds"])
+        lines = [r for r in out.splitlines() if r.strip()]
+        if rc != 0:
+            print(f"FAIL list-kinds: exit {rc} want 0")
+            ok = False
+        if lines != ["type:epic", "type:story"]:
+            print(f"FAIL list-kinds: got {lines} want ['type:epic', 'type:story']")
+            ok = False
+
+        # --- EMPTY-RESULT EXIT CONTRACT: a source set declaring no kinds is a
+        #     legitimate empty result, NOT a failure. This is the arm #4223 needs —
+        #     a nonzero exit here would red its CI step on a correct deployment.
+        #     Paired with the subject above, so "exit 0" cannot pass merely because
+        #     every invocation exits 0 for an unrelated reason.
+        rc, out = _run_main_captured(["--source", nokinds, "--list-declared-kinds"])
+        if rc != 0 or [r for r in out.splitlines() if r.strip()]:
+            print(f"FAIL list-kinds empty: exit {rc} out {out!r} want 0 + no output")
+            ok = False
+        # A `.md`-only source set is the same empty case by a different route: the
+        # mode reads `.toml` sources only, so the grammar doc contributes nothing.
+        rc, out = _run_main_captured(["--source", doc, "--list-declared-kinds"])
+        if rc != 0 or [r for r in out.splitlines() if r.strip()]:
+            print(f"FAIL list-kinds md-only: exit {rc} out {out!r} want 0 + no output")
+            ok = False
+
+        # --- OFFLINE, proven rather than asserted. The network leg is replaced with a
+        #     function that raises; if the mode reached it, the run would fail. Note
+        #     the invocation passes NEITHER --repo NOR --fixture-labels, so on the
+        #     normal path it would derive a slug and fetch. Restored in `finally` so a
+        #     failure here cannot corrupt the suites that follow.
+        global _gh_labels_stdout
+        _real = _gh_labels_stdout
+
+        def _explode(_repo):
+            raise AssertionError("--list-declared-kinds reached the network leg")
+
+        try:
+            _gh_labels_stdout = _explode
+            rc, out = _run_main_captured(["--source", pack, "--list-declared-kinds"])
+        finally:
+            _gh_labels_stdout = _real
+        if rc != 0 or [r for r in out.splitlines() if r.strip()] != ["type:epic",
+                                                                    "type:story"]:
+            print(f"FAIL list-kinds offline: exit {rc} out {out!r} — the mode must "
+                  f"return before the repo-slug derivation and the live read")
+            ok = False
+        # SENSITIVITY control for the arm above: with the same stub installed, the
+        # NORMAL path must fail — otherwise the offline result proves nothing, because
+        # the stub was never reachable in the first place.
+        try:
+            _gh_labels_stdout = _explode
+            rc_norm, _ = _run_main_captured(["--source", pack, "--output-format", "tsv"])
+        finally:
+            _gh_labels_stdout = _real
+        if rc_norm != 3:
+            print(f"FAIL list-kinds offline control: the normal path exited {rc_norm} "
+                  f"want 3 with the network leg stubbed — the stub is not reachable, "
+                  f"so the offline arm above is a broken probe")
+            ok = False
+
+    return ok
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description="label-taxonomy <-> GitHub label-set parity [#749]"
@@ -1165,6 +1468,18 @@ def main(argv=None):
         ),
     )
     ap.add_argument(
+        "--list-declared-kinds",
+        action="store_true",
+        help=(
+            "READ-ONLY listing mode: print `type:<kind_id>` for every kind the .toml "
+            "--source set declares, one per line, sorted. OFFLINE — no gh call and no "
+            "repo-slug derivation — and exit 0 on an empty result. Both properties are "
+            "contractual: the velocity instrument (#4223) consumes this rather than "
+            "forking a second kind resolver, and its self-test runs in a CI step "
+            "declared offline + stdlib-only."
+        ),
+    )
+    ap.add_argument(
         "--self-test", action="store_true", help="run the fixture suite; no gh/source needed"
     )
     args = ap.parse_args(argv)
@@ -1173,6 +1488,26 @@ def main(argv=None):
         return _self_test()
 
     sources = args.source or ["core/specs/label-taxonomy.md"]
+
+    # LISTING MODE — returns BEFORE _derive_repo and before any live read, which is
+    # what makes the offline property structural rather than incidental. An
+    # unreadable --source is still fail-loud on the shared exit-3 contract; an empty
+    # result is NOT a failure (a deployment whose selected packs declare no kinds is
+    # a legitimate empty set), so it exits 0 with no output.
+    if args.list_declared_kinds:
+        kinds = set()
+        for src in sources:
+            if not src.lower().endswith(".toml"):
+                continue
+            try:
+                with open(src, encoding="utf-8") as fh:
+                    kinds |= parse_toml_kind_ids(fh.read())
+            except OSError as e:
+                print(f"source unreadable: {src}: {e}", file=sys.stderr)
+                return 3
+        for k in sorted(kinds):
+            print(f"type:{k}")
+        return 0
 
     # The live read needs a repo slug unless a fixture stands in for the network leg.
     # Unresolvable is fail-loud on the existing exit-3 contract, never a silent pass.
