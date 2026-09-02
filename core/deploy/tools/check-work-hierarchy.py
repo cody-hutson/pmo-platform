@@ -479,7 +479,14 @@ KIND_REQUIRED_FIELDS = ("kind_id", "display_name", "base", "methodology_projecti
 # and a looser one would stop catching a genuine malformed id.
 PACK_ID_RE = re.compile(r'^_?[a-z0-9][a-z0-9_-]*$')
 KIND_SLUG_RE = re.compile(r'^[a-z0-9][a-z0-9_-]*$')
-SEMVER_RE = re.compile(r'^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.\-]+)*$')
+# ReDoS-safe by construction, and the shape is deliberate. The obvious spelling —
+# `(?:[-+][0-9A-Za-z.-]+)*` — is exponential: the leading `[-+]` and the inner class
+# BOTH match `-`, so an input like `0.0.0+` followed by many `--` splits ambiguously
+# across the outer `*` and backtracks combinatorially. Semver has at most ONE
+# pre-release segment and at most ONE build segment, so the two are written as separate
+# OPTIONAL groups rather than as a starred alternation, which removes the outer
+# repetition and with it the ambiguity.
+SEMVER_RE = re.compile(r'^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$')
 
 # The label-group value domain is READ from the label grammar, never restated here.
 # §1.1.1 says the grammar owns the group set and a pack only fills it; a copy in this
@@ -735,7 +742,7 @@ def _validate_one_pack(rel, pack, packs_by_id, label_groups):
     if not role_ok:
         f.append(("ERROR", "PACK-P04",
                   "role %r is outside {%s}; every role-branching rule (P05-P08 and "
-                  "PACK-K05's neutral-sentinel limb) is NOT EVALUATED for this pack, "
+                  "PACK-K05's neutral-sentinel limb) is NOT-EVALUATED for this pack, "
                   "because their input is undefined"
                   % (role, ", ".join(PACK_ROLES))))
 

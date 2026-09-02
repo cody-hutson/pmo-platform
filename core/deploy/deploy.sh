@@ -14143,6 +14143,93 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
     fi
   fi
 
+  # Check 75 — pack-grammar conformance (WARN-MODE INITIAL) [#6361]
+  #
+  # Runs the work-item type-pack meta-schema over the live pack corpus. Before this
+  # check the meta-schema was a grammar NO executable validated: it could say anything
+  # and nothing in the tree would notice, so "this pack conforms" was ungradable by
+  # construction and every conformance claim was read by eye.
+  #
+  # WARN-MODE INITIAL, per the progressive-rollout convention the sibling checks follow
+  # (14/18/42/43/50/51/52/53/54/55). Two reasons, both specific rather than ceremonial:
+  # this is a brand-new detector with no shakedown history, and the population it binds
+  # is not fully visible from here — type-pack INSTANCES are operator-local user config
+  # by design, so an operator tree can hold packs this repo has never seen. The
+  # graduation to enforce is a committed default (resolve_check_mode "<id>" "enforce"),
+  # never a mode file, so the flip leaves a repo record.
+  #
+  # The primitive carries --self-test and a per-rule id on every finding, so a finding
+  # here names the rule that produced it rather than handing the operator an exit code.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 75: Pack-grammar conformance (work-item type-pack meta-schema; warn-mode initial; enforce-flip deferred)"
+    local c75_script="core/deploy/tools/check-work-hierarchy.py"
+    local c75_packs="core/packs"
+    if [[ ! -f "$c75_script" ]]; then
+      flag_warn_or_issue "pack-conformance" "primitive script missing: $c75_script"
+    elif [[ ! -d "$c75_packs" ]]; then
+      flag_warn_or_issue "pack-conformance" "pack corpus missing: $c75_packs"
+    else
+      local c75_mode
+      c75_mode=$(resolve_check_mode "pack-conformance")
+
+      # ── CONTROL ARM FIRST: a probe that cannot be shown to discriminate proves
+      # nothing. The SAME binary, the SAME mode, over a fixture whose single planted
+      # nonconformance is the capability-bearing rule. If the sensitivity arm does not
+      # reject and the specificity arm does not accept, the verdict below is
+      # unattributable and this check FAILS rather than reporting a clean corpus —
+      # which is exactly the shape a green-because-dead gate takes.
+      local c75_fx="core/deploy/tests/fixtures/packs"
+      local c75_sens_rc=0 c75_spec_rc=0 c75_sens_out="" c75_sens_rule=""
+      if [[ -d "$c75_fx/nonconforming-kit" && -d "$c75_fx/conforming-kit" ]]; then
+        c75_sens_out=$(/usr/bin/python3 "$c75_script" --validate-packs --pack-root "$c75_fx/nonconforming-kit" 2>&1) || c75_sens_rc=$?
+        /usr/bin/python3 "$c75_script" --validate-packs --pack-root "$c75_fx/conforming-kit" >/dev/null 2>&1 || c75_spec_rc=$?
+        c75_sens_rule=$(echo "$c75_sens_out" | awk -F'\t' '$1=="FINDING"{print $2}' | paste -sd, -)
+        log "  CTRL:  pack-conformance — sensitivity(nonconforming fixture) exit=${c75_sens_rc} rule='${c75_sens_rule}' (want exit 1 + PACK-K05), specificity(conforming fixture) exit=${c75_spec_rc} (want 0)"
+      else
+        log "  CTRL:  pack-conformance — discrimination fixtures absent at $c75_fx; the arms below cannot be shown to discriminate"
+        c75_sens_rc=-1
+      fi
+
+      if [[ "$c75_sens_rc" -ne 1 || "$c75_sens_rule" != "PACK-K05" || "$c75_spec_rc" -ne 0 ]]; then
+        log "  FAIL:  pack-conformance — the validator no longer discriminates (sensitivity exit=${c75_sens_rc} rule='${c75_sens_rule}', specificity exit=${c75_spec_rc}). A conformance verdict over the live corpus would be unattributable, so the corpus is NOT reported clean."
+        ISSUES=$((ISSUES + 1))
+      else
+        local c75_out c75_exit=0
+        c75_out=$(/usr/bin/python3 "$c75_script" --validate-packs --pack-root "$c75_packs" 2>&1) || c75_exit=$?
+        if [[ $c75_exit -eq 3 ]]; then
+          flag_warn_or_issue "pack-conformance" "input failure (exit 3): $(head -1 <<<"$c75_out") — the pack corpus was unreadable or resolved to zero packs; a zero-pack root finds no violation BY CONSTRUCTION and must never read clean"
+        elif [[ $c75_exit -eq 0 ]]; then
+          local c75_read
+          c75_read=$(echo "$c75_out" | awk -F'\t' '$1=="PACKS"{print $2" "$3" "$4}')
+          local c75_caveats
+          c75_caveats=$(echo "$c75_out" | awk -F'\t' '$1=="CAVEAT"{print $2"@"$3}' | paste -sd, -)
+          log "  OK:    pack-conformance — 0 findings (${c75_read:-packs_read=?})"
+          # A caveat is NEVER a finding — an unregistered kit class is the OPEN-domain
+          # decision working as designed. It is surfaced anyway, because a caveat
+          # nobody sees is worse than the error it replaces: a mistyped kit class
+          # reaches this line and silently relieves a work-item kit of its obligation.
+          [[ -n "$c75_caveats" ]] && log "  NOTE:  pack-conformance — caveat(s), not findings: $c75_caveats"
+          # A SKIP is a rule that was NOT-EVALUATED. Reported so a narrower rule set is
+          # never mistaken for a clean corpus.
+          local c75_skips
+          c75_skips=$(echo "$c75_out" | awk -F'\t' '$1=="SKIP"{print $2}' | paste -sd, -)
+          [[ -n "$c75_skips" ]] && log "  NOTE:  pack-conformance — rule(s) NOT evaluated: $c75_skips"
+        elif [[ $c75_exit -eq 1 ]]; then
+          local c75_findings
+          c75_findings=$(echo "$c75_out" | awk -F'\t' '$1=="FINDING"{print $2"@"$3}' | paste -sd, -)
+          if [[ "$c75_mode" == "enforce" ]]; then
+            log "  FAIL:  pack-conformance — pack(s) violate the meta-schema: $c75_findings"
+            ISSUES=$((ISSUES + 1))
+          else
+            flag_warn_or_issue "pack-conformance" "meta-schema violation(s): $c75_findings (warn-mode; graduate by recording resolve_check_mode \"pack-conformance\" \"enforce\" after the shakedown)"
+          fi
+        else
+          flag_warn_or_issue "pack-conformance" "check errored (exit $c75_exit): $(head -1 <<<"$c75_out")"
+        fi
+      fi
+    fi
+  fi
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
