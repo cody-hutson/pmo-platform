@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-151 — Issue-body anchor resolution is a numeric-only surfacing instrument, not a gate"
-status: Proposed
+status: Accepted
 date: 2026-08-25
 release: checks-see-whole-subject
 deciders: "operator (Stage-5 Collective Review acceptance + the D-20 ruling on the shakedown prose) + Stage 5 Solutioning spoke (design) + two independent adversarial reviewers + Stage 6 Engineering spoke (implementation)"
@@ -19,7 +19,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Engineering for the `checks-see-whole-subject` release; ratified at that release's plan-review gate.
+**Accepted.** Authored at Engineering for the `checks-see-whole-subject` release; ratified at that release's plan-review gate.
 
 **Numbering provenance — `145 → 151`.** Held **ADR-145** branch-local; renumbered to **ADR-151** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 145. In-release citations that read "ADR-145" denote this record.
 

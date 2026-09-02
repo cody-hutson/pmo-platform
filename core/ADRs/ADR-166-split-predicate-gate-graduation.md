@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-166 — A gate whose subject is out-of-tree state graduates by splitting its predicate, CI-gating only the tree-resident half"
-status: Proposed — flips to Accepted when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
+status: Accepted
 date: 2026-08-29
 release: warn-mode-gate-graduation
 deciders: "Stage 5 Solutioning spoke (design, evidence-grounding) + hub Procedure 4 adversarial evaluation (D-8 ownership resolution, D-11/D-16 authorization) + Stage 6 Engineering spoke (build, seeded-failure verification)"
@@ -19,7 +19,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — flips to **Accepted** when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified.
+**Accepted.** Ratified at the `warn-mode-gate-graduation` release's plan-review gate.
 
 **Numbering provenance.** Allocated at Engineering Commit 0 by `release/tools/renumber-adr.py --next-free`, which returned **162** against a mainline anchor of ADR-161 across both ADR directories. A concurrent unmerged branch (`release/declarations-have-a-firing-surface`) also claims 162; that claim is advisory until it merges, and the platform's rule is that a duplicate is tooled at merge time by `renumber-adr.py` while a gap blocks the repo. If this record renumbers at merge, the provenance note is appended here rather than rewritten.
 

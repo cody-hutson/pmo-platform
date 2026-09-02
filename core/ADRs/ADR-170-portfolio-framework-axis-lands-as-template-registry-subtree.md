@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-170 — The portfolio-framework axis lands as a framework-keyed template-registry subtree, not a core/packs manifest"
-status: Proposed — flips to Accepted when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
+status: Accepted
 date: 2026-09-01
 release: portfolio-tier-framework-pack
 deciders: "Stage 5 Solutioning spoke (design, evidence-grounding) + operator ratification (D-Q4(i) the record's form; D-S5-1(C) the axis-mechanism routing; D-S5-2 the AC-5 restatement; D-S5-3(α) the unsliced-umbrella engineering shape; D-S5-4 the selector's resolution scope) + Stage 6 Engineering spoke (authorship, independent re-grounding of every load-bearing claim)"
@@ -20,7 +20,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — flips to **Accepted** when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified.
+**Accepted.** Ratified at the `portfolio-tier-framework-pack` release's plan-review gate.
 
 This record deliberately does **not** take the accept-at-authoring posture ADR-069 and ADR-070 took. Those flipped at authoring because their deciding gates had already run. No prior scope-lock has ratified *this* decision, so Stage 9 is its first ratification gate. The frontmatter `status:` and this section state the **same** value, on purpose: a sibling record in this lineage carries `status: Accepted` in frontmatter while its body still reads *"Proposed — flips to Accepted at the Stage 9 review"*, and that split is a defect this record does not reproduce.
 

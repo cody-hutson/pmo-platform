@@ -3,7 +3,7 @@
 <!-- repo-integrity: allow-issue-ref -->
 ---
 title: ADR-102 — The quota-budget gate's per-spoke cost successor is the FinOps store's cumulative per-spoke draw, not ADR-026's `spoke-launch` startup reservation
-status: Proposed
+status: Accepted
 date: 2026-07-28
 release: agent-finops-intelligence (v4.0)
 deciders: "Workspace owner — D-Substrate ADOPTED at Collective Review. Framed (not rendered) by the Stage-5 Solutioning design for the estimation-engine slice; authored at Stage 6."
@@ -21,7 +21,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent (ADR-096 / ADR-097 / ADR-101). The decision was rendered by the workspace owner as **D-Substrate**, **ADOPTED at Collective Review** for this release. It flips to **Accepted** at this release's Stage-9 plan-review gate; per ADR-098's precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure.
+**Accepted.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent (ADR-096 / ADR-097 / ADR-101). The decision was rendered by the workspace owner as **D-Substrate**, **ADOPTED at Collective Review** for this release.
 
 **Numbering — a contention that materialized, and was resolved by renumbering.** ADR numbers are platform-global monotonic across **both** homes (`core/ADRs/` + `release/ADRs/`), and the claimed set includes **in-flight pull-request claims**, not just what is on `origin/main`.
 
