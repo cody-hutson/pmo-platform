@@ -15,6 +15,60 @@ consumers: pmo-qa-auditor (structural compliance per skill per mode); every skil
 ## Purpose
 Defines the exact output structure each skill must produce for each mode. Used by the QA Auditor to validate structural compliance. Each skill has its own contract evaluated against its own specification.
 
+## Ownership Declarations (ADR-044 I3)
+
+ADR-044 classifies every declared output in this file as **PRODUCE by default**: a skill that emits an entity record is a *producer*, and "many producers, one maintainer" is the governed pattern. A skill claims **maintainer-write** — a durable mutation of an entity's stored record *after* create-commit — only by carrying an explicit marker inside its own section below. An unmarked declared output escalates nothing.
+
+The reconciliation primitive `core/deploy/tools/check-ownership-collision.py` (wired as `deploy.sh` Check 54) reads those markers and escalates when one contradicts the `Maintains` column of `core/disciplines/project-entity-model.md` § 6 (invariant I3), or when one lands on an ownerless read-time projection (invariant I4).
+
+### Canonical marker form
+
+Declare markers in a `### Maintained Entities (ADR-044 I3)` subsection at the end of the skill's own section — one bullet per entity, in this form:
+
+```
+- Maintains-entity: <Entity> (declared at: <where this skill declares the write>)
+```
+
+Worked example, as adopted by Skill 2 below:
+
+```
+- Maintains-entity: Milestone (declared at: Modes row (G))
+```
+
+The entity name must byte-match the `Entity` cell of § 6 exactly. The parenthetical is provenance only: `(` terminates the parser's capture, so everything after it is free prose.
+
+### Three authoring rules, each a verified failure mode
+
+1. **Plain bullet label — never bold, never a backticked value, never an HTML comment.** The consuming pattern matches a bare `Maintains-entity:` label followed by an unquoted entity name. A bold label, a backticked value, or an HTML-comment wrapper each parse to nothing, or to a value that joins no § 6 entity. The result is a marker that reads as adopted and enforces nothing — strictly worse than no marker, because it also reads as coverage.
+2. **Terminate the provenance with `(`, never with a dash.** An em-dash terminates the capture safely, but an author typing an ASCII hyphen instead swallows the whole tail into the captured entity name and silently voids the marker. A parenthetical cannot be mistyped into that hazard.
+3. **Markers live inside a skill's own section; worked examples do not.** The parser discards every line preceding the first skill header, so the example above is inert where it sits. That identical text placed inside a skill section becomes a **live declaration** and fires I3 against whatever skill owns that section. Do not relocate it.
+
+Forms that are silently inert — do not write any of these:
+
+| Form | Parser result |
+|---|---|
+| `- **Maintains-entity:** Milestone` | no match — the bold label breaks the pattern |
+| `` - Maintains-entity: `Milestone` `` | no match — the backticked value breaks the pattern |
+| `<!-- Maintains-entity: Milestone -->` | captures `Milestone --`, which joins no § 6 entity |
+| `- Maintains-entity: Milestone - <prose>` | the ASCII hyphen swallows the tail into the entity name |
+
+### Reconciliation register
+
+**Adopted marker set — 1 of the 19 entities in § 6.**
+
+| Entity | § 6 Maintainer | Declared at |
+|---|---|---|
+| Milestone | delivery-engine | Skill 2 — Modes row (G), whose Output Focus cell reads "Update to shared RAID/decision/milestone log" |
+
+**Unreconciled — 18 of 19, recorded as findings rather than passes.** A § 6 entity with no corresponding declared output here is a *surface-coverage finding*, not a defect in either surface: this file is a response-structure schema, not an entity-write ledger, and ADR-044 § Consequences deliberately binds no skill to an ownership document. Two causes:
+
+| Cause | Entities | n |
+|---|---|---|
+| **A — the § 6 Maintainer has no section in this file.** Not reachable by marker adoption; closing it means adding an output contract for the skill. | `Decision`, `RAID Item` (tracker-manager) · `Portfolio`, `Program`, `Strategic Initiative` (weekly-status-rollup) · `Finding` (pmo-qa-lead) | 6 |
+| **B — the § 6 Maintainer has a section, but no declared output both names the entity and declares a post-create-commit write.** Every touching row is a read-time projection or a routed producer, consistent with this file's own reversibility classification of the corresponding sections as reports. | `Project`, `Workstream`, `Plan`, `Meeting`, `Artifact`, `Person`, `System`, `Vendor`, `Cross-Project Dependency` (ppm-agent) · `Resource`, `Cross-Project Resource Conflict`, `Work Item` (delivery-engine) | 12 |
+
+Re-derive this register rather than trusting the counts: partition the § 6 entity set by whether its Maintainer resolves to a skill token in some skill section of this file (cause A versus cause B), then by whether that section carries a marker for the entity. Regression coverage for the two invariants lives in `core/deploy/tests/test_check54_ownership_collision_teeth.sh`.
+
 ---
 
 ## Skill 1: PPM Agent (Tier 1 — Strategic Brain)
@@ -165,6 +219,12 @@ All factual claims carry one of the 5 evidence labels per CLAUDE.md § Universal
 - [ ] Dual-Framing Bridge present (if milestone context available)
 - [ ] Change Summary appended
 - [ ] Follow-up tags properly formatted (max depth 2)
+
+### Maintained Entities (ADR-044 I3)
+
+- Maintains-entity: Milestone (declared at: Modes row (G) — post-create update to the shared milestone log)
+
+Every other output this skill declares is a producer or a read-time projection, and carries no marker by design. See § Ownership Declarations for the marker form and the authoring rules.
 
 ---
 
