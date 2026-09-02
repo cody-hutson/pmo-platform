@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-126 — The sub-task status mirror stays a point-in-time snapshot, and label materialization gets a read-only emit path rather than an automated one
-status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
+status: Accepted
 date: 2026-08-07
 release: methodology-fields-and-statuses
 deciders: "Workspace owner (the non-resync decision ratified at the Stage-5 wave-1 gate; the extended apply-set ratified at the wave-2 gate); designed at Stage 5 Solutioning, authored at Stage 6 Engineering"
@@ -20,7 +20,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — flips to **Accepted** when the operator ratifies it at the release close gate. Authored at Stage 6 per the Stage-6 ADR-authoring precedent. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
+**Accepted.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent.
 
 **Numbering.** This record's number is the mainline anchor plus one, where the anchor already includes this release's two earlier records, derived at build time per the rule the numbering ADR ratifies. At that moment **four** sibling branches held unmerged claims on a number below this one and two of them also held the number directly below it; **no branch held this one**. Those claims are *advisory* and do not bind the sequence. A reservation strictly above every sibling claim was considered and rejected on that ADR's own ground — a gap blocks the repository where a duplicate merely inconveniences one branch — and the rejection was verified against the enforcing predicate rather than argued from the document, with three arms: this number returns **PASS** on a contiguous `001..122` with no gaps and no duplicates; the reserved slot one higher returns **FAIL — GAP**, naming the number it skipped; and a deliberate collision on an already-taken number is **detected**, which is what makes the PASS meaningful rather than blind. An earlier hub ruling directed allocation from one number higher on the premise that three siblings needed three reserved slots; that premise was falsified at build time — the two numbers below this one were taken by *this release's own* earlier cards, not by siblings, and the siblings pile on a single lower number that no reservation strategy resolves. If a sibling merges first, this record renumbers at merge time by the sanctioned tool and this section gains a numbering-provenance note.
 

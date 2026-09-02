@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-152 — Whole-token matching under `git grep` is an engine-parity problem, not a syntax problem"
-status: Proposed — flips to Accepted at this release's operator gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
+status: Accepted
 date: 2026-08-24
 release: checks-see-whole-subject
 deciders: "Stage 5 Solutioning spoke (design) + two independent adversarial design-review passes (one Blocker each) + operator (ADR authorization; canonical-idiom gate) + Stage 6 Engineering spoke (build)"
@@ -21,7 +21,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Stage 6 Engineering for the `checks-see-whole-subject` release. It flips to Accepted when the operator ratifies it at the release gate; the flip is recorded in this file's `status:` field.
+**Accepted.** Authored at Stage 6 Engineering for the `checks-see-whole-subject` release.
 
 **Numbering provenance — `142 → 146`.** Held **ADR-142** branch-local; renumbered to **ADR-146** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 142. In-release citations that read "ADR-142" denote this record.
 

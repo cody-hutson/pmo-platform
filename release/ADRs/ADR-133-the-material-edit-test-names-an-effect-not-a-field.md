@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-133 — The material-edit test names an effect, not a field
-status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
+status: Accepted
 date: 2026-08-15
 release: skill-suite-conformance
 deciders: "Workspace owner (D-1 rendered at the Stage-5 design gate, Option C elected); designed at Stage 5 Solutioning, authored at Stage 13 after the gap was surfaced at the close gate"
@@ -20,7 +20,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — flips to **Accepted** when the operator ratifies it at the release close gate. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
+**Accepted.** Ratified at the `skill-suite-conformance` release's plan-review gate.
 
 **Numbering.** This record's number is the mainline anchor plus one, derived at authoring time through the sanctioned allocator across **both** record directories rather than pre-allocated. Stage 5 explicitly declined to reserve a number, on the grounds that a reservation above a sibling's unmerged claim blocks the repository while a duplicate is merely tooled. Three concurrent pipelines were live at design time.
 

@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-135 — A gate ships armed by a committed default; arming is never deferred to a later step that can be forgotten
-status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
+status: Accepted
 date: 2026-08-14
 release: stage9-gate-integrity
 deciders: "Workspace owner (disposition ③d rendered at the v4.03 Collective Review scope-lock; D-ADR-Disposition re-affirmed at the stage9-gate-integrity Stage-5 design gate and again at its Collective Review). Owed by release closeout-output-set-integrity (v4.03); authored retroactively at Stage 6 Engineering of stage9-gate-integrity."
@@ -21,7 +21,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — flips to **Accepted** when the operator ratifies it at the release close gate. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
+**Accepted.** Ratified at the `stage9-gate-integrity` release's plan-review gate.
 
 **Retroactive authorship, stated plainly.** This record was owed by release `closeout-output-set-integrity` (shipped as v4.03, merge `2adf533e`). It was declared as an unconditional ADD in that release's operator-approved File Change Matrix, it did not ship, and no Deviation-Log entry recorded the omission. It is authored here, in `stage9-gate-integrity`, as the AC5 obligation of the work item that found the gap. The content is transcription rather than reconstruction: the posture is stated in v4.03's own plan (§ File Change Matrix, amendment 4) and is verifiable in the artifacts that release shipped, both cited above.
 

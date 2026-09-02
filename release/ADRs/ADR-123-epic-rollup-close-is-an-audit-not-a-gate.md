@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-123 — The epic rollup-close surface is an audit, not a gate, and its two undecidable gates are annotated rather than adjudicated
-status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
+status: Accepted
 date: 2026-08-07
 release: methodology-fields-and-statuses
 deciders: "Workspace owner (mechanism ratified at the Stage-5 wave-1 gate, together with the suppression design and the acceptance-criteria refinement); designed at Stage 5 Solutioning, authored at Stage 6 Engineering"
@@ -22,7 +22,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — flips to **Accepted** when the operator ratifies it at the release close gate. Authored at Stage 6 per the Stage-6 ADR-authoring precedent. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
+**Accepted.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent.
 
 **Numbering.** This record's number is the mainline anchor plus one, where the anchor already includes this release's three earlier records, derived at build time per the rule the numbering ADR ratifies. Sibling branches hold unmerged claims on lower numbers; those claims are *advisory* and do not bind the sequence. A reservation strictly above every sibling claim was considered and rejected on that ADR's own ground — a gap blocks the repository where a duplicate merely inconveniences one branch. The allocation was verified against the enforcing predicate rather than argued from the document: the union of both record directories is contiguous at `001..122` with no gaps and no duplicates, making this number the next free slot. If a sibling merges first, this record renumbers at merge time by the sanctioned tool and this section gains a numbering-provenance note.
 
