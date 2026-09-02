@@ -5,6 +5,7 @@ status: Accepted
 date: 2026-08-15
 release: hooks-enforce-under-adversity
 deciders: "operator (Stage-4 plan gate; Collective Review scope-lock) + Stage 5 Solutioning spoke (design, D1-D7) + hub adversarial evaluation (R1/R2 verified rather than accepted)"
+supersedes: ADR-130 in-part (D5 residual)
 tags: [security-hooks, PreToolUse, fail-closed, dependency-resolution, integrity, attestation, immutability, GHSA-9cjm, supersedes-in-part]
 source_observations:
   - "A dep-resolve.sh containing only `exit 0` is syntactically valid, so a `bash -n` precheck passes it; the top-level exit then terminates the hook from inside the guard's own condition, so the guard never reaches its deny branch and the hook exits 0. Reproduced against all three always-enforce hooks."
@@ -21,7 +22,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Solutioning for the `hooks-enforce-under-adversity` release; ratified at that release's plan-review gate.
+**Accepted.** Authored at Solutioning for the `hooks-enforce-under-adversity` release; ratified at that release's plan-review gate.
 
 **Supersedes in part:** D5 of [ADR-130](ADR-130-lib-missing-guard-is-mode-coupled.md), which stated the always-enforce floor's guarantee at its true — narrower — scope and named the valid-syntax `exit 0` residual as pre-existing and tracked separately. That residual is closed here. D5's *reasoning* stands unchanged and is not rewritten in place: it was correct when written, and the mode-coupling it justified was argued on independent grounds. ADR-130's D1-D4 and D6-D8 are unaffected, and the mode-capable cohort is not touched.
 

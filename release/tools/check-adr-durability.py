@@ -34,10 +34,42 @@ RULES
                        base. Delta-scoped and requires `--diff-base`. See the SCOPE
                        block below for exactly what it does and does not assert.
 
+  R6  RECIPROCITY      a supersession edge landed on one side only, or a supersession
+                       field entry that does not match the `adr-schema.md` §5 grammar.
+                       The schema defines `supersedes:` / `superseded_by:` as an
+                       inverse pair: a WHOLE edge's reciprocal is the target's
+                       `status: Superseded by ADR-NNN` transition, a PARTIAL edge's is
+                       a `superseded_by: ADR-NNN in-part` entry on the target while its
+                       status stays `Accepted`. R6 asserts both directions, and asserts
+                       hard rule 1 — `superseded_by:` NEVER carries `whole`. Cross-
+                       record by nature (an edge has two ends), delta-scoped on the
+                       same `--diff-base` machinery as R5, and warn-mode at the CI
+                       surface. An edge that genuinely cannot be landed declares
+                       itself with the `adr-supersession: reciprocity-exempt` marker
+                       on the superseder; R6 REPORTS the exemption with its reason and
+                       never suppresses the count.
+
+  R7  STATUS-AGREEMENT a record's two statements of one field disagree: the
+                       frontmatter `status:` leading token and the token its
+                       `## Status` body restates. `adr-schema.md` §3 row 1 defines the
+                       body section as RESTATING `status:`, so the frontmatter is the
+                       value-bearing surface and the body is a projection of it — a
+                       divergence is a defect in the body, and the reconciliation runs
+                       body → frontmatter, NEVER the inverse (editing the frontmatter
+                       value is the authoring guide's closed forbidden list, and
+                       editing it toward `Proposed` would silently de-ratify). Unlike
+                       R5/R6 this rule is NOT delta-only: its population was reconciled
+                       to zero when it shipped, so it can be a standing invariant over
+                       whatever the caller scanned — `--files` at the CI surface,
+                       whole-corpus at release verification. One mechanism, two
+                       invocations. Frozen records are exempt on the R2/R4/R5 ground:
+                       they can never be edited to conform.
+
 SCOPE — WHAT THIS LINT CHECKS STRUCTURALLY, AND WHAT IT STILL DOES NOT
 ----------------------------------------------------------------------
-This lint governs ADR *durability* (R1-R4). It additionally carries ONE structural
-rule, R5, and that rule is deliberately narrow. The canonical section set is DEFINED
+This lint governs ADR *durability* (R1-R4). It additionally carries three rules that
+are not durability rules: R5 (structural), R6 (supersession-edge reciprocity) and R7
+(status-surface agreement). R5 is deliberately narrow. The canonical section set is DEFINED
 once, in `core/schemas/adr-schema.md` §3; this file only CITES it (see DOC_SECTION_SET
 below) and R5 asserts against the cited copy, which `--self-test` pins to the schema.
 
@@ -77,6 +109,19 @@ WHAT R5 DOES NOT ASSERT, AND WHY — each measured, not assumed:
     `CONFIG` row saying R5 scanned nothing, rather than reading green — the same
     "never read green on a scan that examined nothing" discipline R3 applies to an
     unresolved handle.
+
+R6 INHERITS THAT POSTURE, for the same reason and by the same mechanism. It reuses R5's
+`--diff-base` machinery and adds NO new cutover constant: an edge is reported only when
+its superseder or its target changed in the diff, so the rule sees exactly the edges a
+PR touched and never the pre-existing ones. Without a diff base R6 emits its own visible
+`CONFIG` skip rather than reading green. Frozen records are exempt on the same ground as
+R2/R4/R5 — a `Superseded` record cannot be edited to conform — which is what keeps R6
+off the corpus's one whole-supersession target without a special case.
+
+R6's population is genuinely empty on the current corpus, and that is a MEASUREMENT: no
+record carries a `superseded_by:` field yet, so no reciprocal obligation exists to
+violate until a release starts landing edges. The rule is admissible because it is born
+inert, not because it is warn-mode.
 
 The consequence, stated so that no reader has to infer it: a GREEN run of this lint
 does NOT mean the scanned ADRs are structurally conformant. It means they carry no
@@ -413,6 +458,21 @@ HISTORICAL_ANCHORS = (
 OVERRIDE_MARKER = "adr-durability: allow-anchor"
 FROZEN_STATUSES = ("Superseded", "Deprecated")
 
+# ── R6 ───────────────────────────────────────────────────────────────────────
+# The supersession inverse pair, DEFINED in `adr-schema.md` §5 and CITED here. The
+# entry grammar is
+#     ADR-NNN SP (whole|in-part) [SP "(" label ")"] [SP "—" SP free rationale]
+# and only the two leading tokens are load-bearing: free rationale after an em-dash
+# is preserved on the record and ignored by the parser, so the explanatory prose the
+# corpus already writes survives a machine read.
+SUPERSESSION_ENTRY_RE = re.compile(
+    r"^ADR-(?P<n>\d{3})\s+(?P<scope>whole|in-part)(?:\s+\((?P<label>[^)]+)\))?")
+SUPERSEDES_FIELD = "supersedes"
+SUPERSEDED_BY_FIELD = "superseded_by"
+# Mirrors the OVERRIDE_MARKER declaration pattern rather than inventing a second one.
+# Declared, never silent: the finding is still reported, with its reason attached.
+RECIPROCITY_EXEMPT_MARKER = "adr-supersession: reciprocity-exempt"
+
 # ── R4 ───────────────────────────────────────────────────────────────────────
 # Identity fields per `adr-schema.md` §2. The schema's own split is what makes this
 # set principled rather than chosen: it defines these as the record's identity /
@@ -580,6 +640,243 @@ def identity_field_findings(raw, body):
             continue
         for tok in IDENT_ISSUE_RE.finditer(body[i]):
             out.append((i + 1, key, tok.group(0)))
+    return out
+
+
+def _frontmatter_scalar(raw, field):
+    """The raw string value of a top-level frontmatter `field:`, or None.
+
+    Resolves through the SHARED `frontmatter_bounds()` so R6 cannot disagree with R4
+    or the index projector about where an ADR's frontmatter begins.
+    """
+    bounds = frontmatter_bounds(raw)
+    if bounds is None:
+        return None
+    start, end = bounds
+    for i in range(start + 1, end):
+        m = FM_KEY_RE.match(raw[i])
+        if m and m.group(1) == field:
+            return raw[i][m.end():].strip()
+    return None
+
+
+def parse_supersession_entries(value):
+    """Split a supersession field value into (entries, malformed).
+
+    `entries` — list of (target_number:int, scope:str, label:str|None).
+    `malformed` — list of the raw comma-separated chunks the grammar did not match.
+
+    A `none` value is an explicit "supersedes nothing" and yields no entries and no
+    malformed chunks. Splitting on commas is safe against the optional parenthesized
+    label because the grammar forbids a comma inside it — the label is a structural
+    referent (a decision item, a clause, a named section), never a list.
+    """
+    if value is None:
+        return [], []
+    v = value.strip()
+    if not v or v.lower() == "none":
+        return [], []
+    entries, malformed = [], []
+    for chunk in v.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        m = SUPERSESSION_ENTRY_RE.match(chunk)
+        if m:
+            entries.append((int(m.group("n")), m.group("scope"), m.group("label")))
+        else:
+            malformed.append(chunk)
+    return entries, malformed
+
+
+def adr_number_from_path(path):
+    """The ADR number an ADR filename declares, or None."""
+    m = re.search(r"ADR-(\d{3})", os.path.basename(path))
+    return int(m.group(1)) if m else None
+
+
+def reciprocity_findings(records, scoped):
+    """R6 RECIPROCITY — cross-record supersession-edge conformance.
+
+    `records` — {adr_number: {"rel", "text", "raw", "frozen", "status", "supersedes",
+                              "superseded_by", "exempt_reason"}} over the WHOLE scan
+                population. The whole corpus is needed to resolve an edge's far end
+                even when only one end changed.
+    `scoped`  — the set of ADR numbers whose file changed since the diff base. Only
+                edges with a changed endpoint are reported; this is what keeps R6 off
+                the pre-existing corpus.
+
+    Returns a list of (rule, adr_number, detail). Frozen records never yield a
+    finding against themselves — a `Superseded` / `Deprecated` record can never be
+    edited to conform, which is the same ground R2/R4/R5 are keyed on.
+    """
+    out = []
+
+    def in_scope(*nums):
+        return any(n in scoped for n in nums)
+
+    for num in sorted(records):
+        rec = records[num]
+        sup_entries, sup_bad = parse_supersession_entries(rec["supersedes"])
+        by_entries, by_bad = parse_supersession_entries(rec["superseded_by"])
+
+        # --- grammar conformance on this record's own fields ---------------------
+        if num in scoped and not rec["frozen"]:
+            for chunk in sup_bad:
+                out.append(("R6", num,
+                            "`%s:` entry %r does not match the schema grammar "
+                            "(ADR-NNN whole|in-part [(label)])" % (SUPERSEDES_FIELD, chunk)))
+            for chunk in by_bad:
+                out.append(("R6", num,
+                            "`%s:` entry %r does not match the schema grammar "
+                            "(ADR-NNN whole|in-part [(label)])" % (SUPERSEDED_BY_FIELD, chunk)))
+            # Hard rule 1 — `superseded_by:` NEVER carries `whole`.
+            for tgt, scope, _label in by_entries:
+                if scope == "whole":
+                    out.append(("R6", num,
+                                "`%s:` names ADR-%03d with scope `whole`; a whole "
+                                "supersession's reciprocal is the `status: Superseded "
+                                "by ADR-NNN` transition, never this field "
+                                "(adr-schema.md §5)" % (SUPERSEDED_BY_FIELD, tgt)))
+
+        # --- superseder side: every entry needs its reciprocal -------------------
+        for tgt, scope, _label in sup_entries:
+            if not in_scope(num, tgt):
+                continue
+            if rec["exempt_reason"] is not None:
+                out.append(("R6", num,
+                            "edge ADR-%03d -> ADR-%03d (%s) is reciprocity-exempt: %s"
+                            % (num, tgt, scope, rec["exempt_reason"])))
+                continue
+            target = records.get(tgt)
+            if target is None:
+                # A superseded decision with no ADR record of its own is legitimate
+                # and is named in prose; the field is never forced to invent one.
+                continue
+            if target["frozen"]:
+                continue
+            if scope == "whole":
+                tok = _leading_status_token(target["status"] or "")
+                if tok != "Superseded":
+                    out.append(("R6", num,
+                                "ADR-%03d supersedes ADR-%03d whole, but ADR-%03d's "
+                                "`status:` leads %r rather than `Superseded`"
+                                % (num, tgt, tgt, tok)))
+                elif ("ADR-%03d" % num) not in (target["status"] or ""):
+                    out.append(("R6", num,
+                                "ADR-%03d supersedes ADR-%03d whole, but ADR-%03d's "
+                                "`status:` does not cite ADR-%03d"
+                                % (num, tgt, tgt, num)))
+            else:
+                back, _bad = parse_supersession_entries(target["superseded_by"])
+                if not any(b == num and s == "in-part" for b, s, _l in back):
+                    out.append(("R6", num,
+                                "ADR-%03d supersedes ADR-%03d in-part, but ADR-%03d "
+                                "carries no `%s:` entry naming ADR-%03d in-part"
+                                % (num, tgt, tgt, SUPERSEDED_BY_FIELD, num)))
+
+        # --- target side: the converse -------------------------------------------
+        if rec["frozen"]:
+            continue
+        for src, scope, _label in by_entries:
+            if scope != "in-part" or not in_scope(num, src):
+                continue
+            superseder = records.get(src)
+            if superseder is None:
+                out.append(("R6", num,
+                            "`%s:` names ADR-%03d, which resolves to no ADR record"
+                            % (SUPERSEDED_BY_FIELD, src)))
+                continue
+            if superseder["exempt_reason"] is not None:
+                continue
+            fwd, _bad = parse_supersession_entries(superseder["supersedes"])
+            if not any(f == num and s == "in-part" for f, s, _l in fwd):
+                out.append(("R6", num,
+                            "ADR-%03d carries `%s: ADR-%03d in-part`, but ADR-%03d "
+                            "carries no matching `%s:` entry"
+                            % (num, SUPERSEDED_BY_FIELD, src, src, SUPERSEDES_FIELD)))
+    return out
+
+
+# ── R7 ───────────────────────────────────────────────────────────────────────
+# The `## Status` body section RESTATES the frontmatter `status:` field
+# (`adr-schema.md` §3 row 1): the frontmatter is the value-bearing surface and the
+# body is a projection of it. R7 reports a record whose two statements of one field
+# disagree. It is the standing detector for the class that produced the corpus-wide
+# reconciliation this rule ships with.
+#
+# SCOPE is the SCAN POPULATION, not a diff. With `--files` (the CI invocation) R7
+# sees only the changed records and so prevents recurrence; with no `--files` (the
+# whole-corpus verification invocation) it sees the whole corpus. One mechanism, two
+# invocations — no second parser and no cutover constant.
+#
+# FROZEN-GATED DIRECTLY, on the same ground R2/R4/R5 are keyed on: a `Superseded` /
+# `Deprecated` record can never be edited to conform, so a finding against it is one
+# no one is permitted to resolve. Deliberately NOT gated on OVERRIDE_MARKER or on
+# RECIPROCITY_EXEMPT_MARKER — the first is a durability-anchor override and the
+# second a supersession-edge exemption, and neither says anything about whether a
+# record's two status surfaces agree.
+STATUS_H2_RE = re.compile(r"^##\s+Status\s*$")
+# Exactly-H2: `### ` does NOT match, so an H3 inside the section (a supersession
+# note) does not truncate the scan the way a shared `^#{2,3}` heading regex would.
+SECTION_H2_RE = re.compile(r"^##\s")
+
+
+def body_status_token(text):
+    """(token, section_found) — the status token the `## Status` body restates.
+
+    `token` is "" when the section exists but carries no recognizable enum token;
+    that is REPORTED by R7, never silently read as agreement. Fence-stripped, so a
+    fenced example can never supply the token.
+    """
+    lines = strip_fences(text.splitlines())
+    start = None
+    for i, line in enumerate(lines):
+        if STATUS_H2_RE.match(line.strip()):
+            start = i
+            break
+    if start is None:
+        return ("", False)
+    for j in range(start + 1, len(lines)):
+        if SECTION_H2_RE.match(lines[j]):
+            break
+        if not lines[j].strip():
+            continue
+        tok = _leading_status_token(lines[j])
+        if tok in STATUS_ENUM:
+            return (tok, True)
+    return ("", True)
+
+
+def status_agreement_findings(records):
+    """R7 STATUS-AGREEMENT — the frontmatter `status:` and its body restatement agree.
+
+    `records` — the same map R6 consumes, plus `text`. Per-record, so the whole map
+    is evaluated; the caller's scan population is the scope.
+    """
+    out = []
+    for num in sorted(records):
+        rec = records[num]
+        if rec.get("frozen"):
+            continue
+        fm_tok = _leading_status_token(rec.get("status") or "")
+        body_tok, found = body_status_token(rec.get("text") or "")
+        if not found:
+            # A missing `## Status` section is the section-set rule's finding, not
+            # this one. R7 asks whether two statements agree, not whether both exist.
+            continue
+        if not body_tok:
+            out.append(("R7", num,
+                        "`## Status` restates no recognizable status token, so the "
+                        "section does not discharge its `adr-schema.md` §3 contract "
+                        "(frontmatter `status:` leads %r)" % fm_tok))
+            continue
+        if body_tok != fm_tok:
+            out.append(("R7", num,
+                        "frontmatter `status:` leads %r but the `## Status` body "
+                        "restates %r — two statements of one field disagree. The "
+                        "frontmatter is authoritative; reconcile the BODY to it, "
+                        "never the inverse (adr-schema.md §3)" % (fm_tok, body_tok)))
     return out
 
 
@@ -1501,6 +1798,143 @@ def self_test():
                                      "<!-- " + OVERRIDE_MARKER + " -->\n# ADR-999 — Fixture"),
                        FULL, False) == ["R5-LOST"])
 
+    # ── R6 RECIPROCITY ───────────────────────────────────────────────────────────
+    # Cross-record, so these drive `reciprocity_findings()` directly with a synthetic
+    # record map rather than through `scan_text` (which is per-file by construction).
+    def rec(status="Accepted", supersedes=None, superseded_by=None, exempt=None):
+        return {"rel": "fixture.md", "status": status,
+                "frozen": _leading_status_token(status) in FROZEN_STATUSES,
+                "supersedes": supersedes, "superseded_by": superseded_by,
+                "exempt_reason": exempt}
+
+    def r6(records, scoped=None):
+        scoped = set(records) if scoped is None else scoped
+        return sorted(d for _r, _n, d in reciprocity_findings(records, scoped))
+
+    # Grammar parser, both directions.
+    check("R6 grammar parses a whole entry",
+          parse_supersession_entries("ADR-029 whole") == ([(29, "whole", None)], []))
+    check("R6 grammar parses a labelled in-part entry",
+          parse_supersession_entries("ADR-012 in-part (location clause)")
+          == ([(12, "in-part", "location clause")], []))
+    check("R6 grammar parses a comma-separated pair",
+          len(parse_supersession_entries(
+              "ADR-012 in-part (location clause), ADR-017 in-part (roadmaps)")[0]) == 2)
+    check("R6 grammar PRESERVES-and-IGNORES free rationale after an em-dash",
+          parse_supersession_entries(
+              "ADR-051 in-part (Decision 1) — Decisions 2-5 stand")
+          == ([(51, "in-part", "Decision 1")], []))
+    check("R6 grammar treats `none` as supersedes-nothing, not as malformed",
+          parse_supersession_entries("none") == ([], []))
+    check("R6 grammar reports an ungrammatical entry as malformed, never as absent",
+          parse_supersession_entries("ADR-012 (location clause)") == ([], ["ADR-012 (location clause)"]))
+
+    # 1 — a conformant WHOLE pair: reciprocal is the status transition, NOT a field.
+    check("R6 passes a conformant whole pair (status transition is the reciprocal)",
+          r6({45: rec(supersedes="ADR-029 whole"),
+              29: rec(status="Superseded by ADR-045")}) == [])
+    # 2 — a conformant PARTIAL pair: both sides carry the field, target stays Accepted.
+    check("R6 passes a conformant partial pair with the target still Accepted",
+          r6({46: rec(supersedes="ADR-012 in-part (location clause)"),
+              12: rec(superseded_by="ADR-046 in-part (location clause)")}) == [])
+    # 3 — a ONE-SIDED partial edge MUST fail. This is the defect the rule exists for.
+    check("R6 FIRES on a one-sided partial edge (superseder side only)",
+          len(r6({46: rec(supersedes="ADR-012 in-part (location clause)"),
+                  12: rec()})) == 1)
+    check("R6 FIRES on a one-sided partial edge (target side only)",
+          len(r6({46: rec(),
+                  12: rec(superseded_by="ADR-046 in-part (location clause)")})) == 1)
+    # 4 — a DECLARED exemption is reported with its reason, and is not a silent pass.
+    exempt_out = r6({46: rec(supersedes="ADR-012 in-part (location clause)",
+                             exempt="target predates the ADR corpus"),
+                     12: rec()})
+    check("R6 REPORTS a declared reciprocity exemption rather than suppressing it",
+          len(exempt_out) == 1 and "reciprocity-exempt" in exempt_out[0]
+          and "predates the ADR corpus" in exempt_out[0])
+    # 5 — hard rule 1: `superseded_by:` NEVER carries `whole`.
+    whole_out = r6({29: rec(superseded_by="ADR-045 whole")})
+    check("R6 FIRES on `superseded_by: … whole` (hard rule 1)",
+          len(whole_out) >= 1 and "scope `whole`" in whole_out[0])
+    # 6 — DELTA SCOPING is what keeps R6 off the pre-existing corpus (AC3).
+    check("R6 is INERT on a one-sided edge whose endpoints are both out of scope",
+          r6({46: rec(supersedes="ADR-012 in-part (location clause)"), 12: rec()},
+             scoped=set()) == [])
+    check("R6 fires on that SAME edge once an endpoint enters scope (so the silence "
+          "above is scoping, not a broken probe)",
+          len(r6({46: rec(supersedes="ADR-012 in-part (location clause)"), 12: rec()},
+                 scoped={12})) == 1)
+    # 7 — frozen records are exempt on the same ground as R2/R4/R5.
+    check("R6 is inert on a FROZEN target — it can never be edited to conform",
+          r6({46: rec(supersedes="ADR-012 in-part (location clause)"),
+              12: rec(status="Superseded by ADR-999")}) == [])
+    # 8 — a target with no ADR record is legitimate and must not be forced.
+    check("R6 does NOT force a target that has no ADR record (supersedes stays optional)",
+          r6({95: rec(supersedes="ADR-777 in-part (a pre-renumber decision)")}) == [])
+
+    # ── R7 STATUS-AGREEMENT ──────────────────────────────────────────────────────
+    # Per-record, so these drive `status_agreement_findings()` directly with a
+    # synthetic record map, the same way the R6 arms drive `reciprocity_findings()`.
+    def r7rec(fm, body):
+        return {"rel": "fixture.md", "status": fm,
+                "frozen": _leading_status_token(fm) in FROZEN_STATUSES,
+                "text": "---\nstatus: %s\n---\n\n# ADR-999 — Fixture\n\n"
+                        "## Status\n\n%s\n" % (fm, body)}
+
+    def r7(fm, body):
+        return sorted(d for _r, _n, d in
+                      status_agreement_findings({999: r7rec(fm, body)}))
+
+    # SENSITIVITY — the four body token shapes the live corpus actually writes, plus
+    # a long-form frontmatter tail. Each MUST fire; a silent arm here means the rule
+    # is blind to a shape the corpus contains.
+    check("R7 fires on `**Proposed.**`",
+          len(r7("Accepted", "**Proposed.** Drafted at Stage 5.")) == 1)
+    check("R7 fires on unbolded `Proposed.`",
+          len(r7("Accepted", "Proposed. Drafted at Stage 5.")) == 1)
+    check("R7 fires on unbolded `Proposed — …`",
+          len(r7("Accepted", "Proposed — flips to Accepted at the review.")) == 1)
+    check("R7 fires with prose INSIDE the bold (`**Proposed — supersedes …**`)",
+          len(r7("Accepted", "**Proposed — supersedes ADR-029.** It generalizes it.")) == 1)
+    check("R7 fires when the frontmatter carries a long-form ratification tail",
+          len(r7("Accepted — ratified by the workspace owner at the close gate.",
+                 "**Proposed** — flips at the close gate.")) == 1)
+
+    # SPECIFICITY — each MUST be silent, and the token must be READ rather than
+    # defaulted, so a silence is agreement and never a failed extraction.
+    check("R7 silent when both surfaces agree (bold)",
+          r7("Accepted", "**Accepted.**") == [])
+    check("R7 silent when a long-form tail sits on BOTH sides",
+          r7("Accepted — ratified at the close gate.",
+             "**Accepted** — ratified at the close gate.") == [])
+    check("R7 silent on an agreeing `Proposed`/`Proposed` record",
+          r7("Proposed", "**Proposed.** Flips at the review.") == [])
+    check("R7 is inert on a FROZEN record — it can never be edited to conform",
+          r7("Superseded by ADR-045", "**Proposed.**") == [])
+    check("R7 extraction is NON-EMPTY on the specificity arms (the token is read, "
+          "not defaulted to a match)",
+          body_status_token("## Status\n\n**Accepted.**\n") == ("Accepted", True)
+          and body_status_token("## Status\n\nProposed — x\n") == ("Proposed", True))
+
+    # Boundary arms.
+    check("R7 fence-strips: a token inside a fenced block is NOT read as the "
+          "restatement",
+          body_status_token("## Status\n\n```\nAccepted.\n```\n") == ("", True))
+    check("R7 reads THROUGH an H3 inside the Status section (the supersession-note "
+          "shape) rather than truncating at it",
+          r7("Accepted", "**Accepted.**\n\n### Supersession note\n\nPartial.") == [])
+    check("R7 STOPS at the next H2 — a later section's prose cannot supply the token",
+          body_status_token("## Status\n\nSee below.\n\n## Context\n\nAccepted.\n")
+          == ("", True))
+    check("R7 stays silent when the record has no `## Status` section at all "
+          "(section-set conformance owns that, not this rule)",
+          sorted(d for _r, _n, d in status_agreement_findings(
+              {999: {"rel": "f.md", "status": "Accepted", "frozen": False,
+                     "text": "---\nstatus: Accepted\n---\n\n## Context\n\nx\n"}}))
+          == [])
+    check("R7 REPORTS a Status section that restates no recognizable token, rather "
+          "than reading the absence as agreement",
+          len(r7("Accepted", "See the frontmatter for the current value.")) == 1)
+
     # ── REFERENCE_PREFIX_RE word boundary ────────────────────────────────────────
     # The measured recall defect: an unanchored single-letter alternative matched the
     # TAIL of a longer word, silently demoting a live count to an ordinal reference.
@@ -1607,7 +2041,16 @@ def main():
                    "structural rule would fire on records the conformance sweep "
                    "deliberately did not reach.")
 
+    if base_blobs is None:
+        out.append("CONFIG\tR6 SKIPPED — no --diff-base, so the reciprocity rule has "
+                   "no delta to scope to; the supersession-edge dimension scanned "
+                   "nothing. R6 is delta-only BY DESIGN: a whole-corpus reciprocity "
+                   "rule would fire on every pre-existing one-sided edge, and a rule "
+                   "that is born failing is not a gate. Same 'never read green on a "
+                   "scan that examined nothing' discipline R3 and R5 apply.")
+
     findings = []
+    records = {}
     for p in paths:
         try:
             with open(p, "r", encoding="utf-8", errors="replace") as fh:
@@ -1626,6 +2069,50 @@ def main():
             out.append("EXEMPT\t%s\t%s" % (rel, exempt))
         for rule, lineno, detail in f:
             findings.append((rule, rel, lineno, detail))
+
+        # R6 substrate — collected for every scanned record, evaluated once below.
+        num = adr_number_from_path(p)
+        if num is not None:
+            raw = text.splitlines()
+            status_value = _frontmatter_scalar(raw, "status")
+            exempt_reason = None
+            if RECIPROCITY_EXEMPT_MARKER in text:
+                tail = text.split(RECIPROCITY_EXEMPT_MARKER, 1)[1]
+                tail = tail.split("-->", 1)[0].strip().lstrip("—-").strip()
+                exempt_reason = tail or "no reason given"
+            records[num] = {
+                "rel": rel,
+                "status": status_value,
+                "frozen": _leading_status_token(status_value or "") in FROZEN_STATUSES,
+                "supersedes": _frontmatter_scalar(raw, SUPERSEDES_FIELD),
+                "superseded_by": _frontmatter_scalar(raw, SUPERSEDED_BY_FIELD),
+                "exempt_reason": exempt_reason,
+                # R7 substrate — the body restatement is read from the full text.
+                "text": text,
+            }
+
+    # --- R6 RECIPROCITY (cross-record, delta-scoped) ------------------------------
+    if base_blobs is not None:
+        scoped = set()
+        for p, (is_new, base_text) in base_blobs.items():
+            num = adr_number_from_path(p)
+            if num is None:
+                continue
+            try:
+                with open(p, "r", encoding="utf-8", errors="replace") as fh:
+                    head_text = fh.read()
+            except OSError:
+                continue
+            if is_new or base_text != head_text:
+                scoped.add(num)
+        for rule, num, detail in reciprocity_findings(records, scoped):
+            rec = records.get(num)
+            findings.append((rule, rec["rel"] if rec else "ADR-%03d" % num, 1, detail))
+
+    # --- R7 STATUS-AGREEMENT (per-record; the scan population IS the scope) ------
+    for rule, num, detail in status_agreement_findings(records):
+        rec = records.get(num)
+        findings.append((rule, rec["rel"] if rec else "ADR-%03d" % num, 1, detail))
 
     out.insert(0, "SCANNED\t%d" % len(paths))
     for rule, rel, lineno, detail in findings:

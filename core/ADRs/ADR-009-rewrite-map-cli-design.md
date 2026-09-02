@@ -3,6 +3,7 @@ title: ADR-009 — Rewrite-map CLI design (--from-path/--to-path mode for check-
 status: Accepted (architectural intent at the module restructure; implementation followed). Rule 2 (V1/V2 workspace-rooted prefix tables driving the resolver's bare-prefix workspace-root fallback) superseded-in-part by ADR-085 — that fallback is retired; the rewrite-map CLI (Rules 1/3/4/5) remains in force.
 date: 2026-05-27
 deciders: "operator + Stage 5 Solutioning spoke + adversarial review"
+superseded_by: ADR-085 in-part (Rule 2)
 tags: [architecture, tooling, doc-link-maintenance, check-14-15, emit-only, fail-safe]
 source_observations:
   - Stage 5 spec (Check 14/15 + reference inventory tooling extension)

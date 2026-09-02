@@ -13,9 +13,18 @@ tags: [project-schema, composed-index, wiki-link, shared-entity-layout, gated-mi
 
 ## Status
 
-**Proposed** — flips to Accepted at the Stage 9 review.
+**Accepted.**
 
 Number **060** — the originating release plan and the Stage-5 decision record (#2635) named **052**, but the global ADR sequence spans both `core/ADRs/` and `release/ADRs/` (one sequence; `check-adr-numbers.py` enforces it), and 052–057 were all claimed by concurrent releases by the time this milestone reached Engineering (052/054/055 in `release/ADRs/`; 053 in `core/ADRs/`; 056 in `release/ADRs/`; 057 in `core/ADRs/` — the v3.36 change-domain ADR). Reassigned to the next gap-free slot **060** at Engineering time (058/059 taken by this same milestone's #362/#159 ADRs). Binds atomically at Stage 12.
+
+<!-- adr-supersession: reciprocity-exempt — superseded in part by `core/schemas/project-schema.md`
+     § "Snapshot destination — why the workspace root" (scope: snapshot destination only).
+     The counterparty is not an ADR: it carries the platform-doc lifecycle status vocabulary
+     rather than a Nygard status, and has no `## Status` section, so there is no surface on it
+     that a reciprocal carrier could occupy. The edge is one-sided by construction and sits
+     outside R6's population entirely. Homed on the TARGET rather than the superseder — the
+     schema doc is not an ADR record, so it is the only placement available. The relation
+     itself is recorded in the `### Supersession note` immediately below. -->
 
 ### Supersession note — snapshot destination only
 

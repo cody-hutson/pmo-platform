@@ -9,7 +9,7 @@ tags: [staleness-confidence, representation-standard, ordinal-scale, cross-mecha
 
 ## Status
 
-Proposed — ratified at the ticket-information-architecture Stage 9 GO. Authored at Stage 6 alongside the canonical spec it records, per the core-ADR convention (a decision captured as a committed ADR document written in the same release as the artifact it governs).
+**Accepted** — ratified at the ticket-information-architecture Stage 9 GO. Authored at Stage 6 alongside the canonical spec it records, per the core-ADR convention (a decision captured as a committed ADR document written in the same release as the artifact it governs).
 
 ## Context
 

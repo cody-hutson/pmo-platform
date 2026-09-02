@@ -8,7 +8,7 @@ date: 2026-07-28
 release: agent-finops-intelligence (v4.0)
 deciders: "Workspace owner — D-Substrate ADOPTED at Collective Review. Framed (not rendered) by the Stage-5 Solutioning design for the estimation-engine slice; authored at Stage 6."
 tags: [architecture, quota-budget, telemetry, finops, token-spend, pipeline-event-log, supersession, estimation]
-supersedes: ADR-026 (substrate choice only — the event definition stands)
+supersedes: ADR-026 in-part (substrate choice for the cost-estimate section) — the event definition stands
 source_observations:
   - "quota-budget-protocol.md § 5 declares its own successor: once the `spoke-launch` / `quota-reservation` event has accumulated per-spoke startup-token observations, the ordinal size-bucket band is replaced by observed medians per size bucket."
   - "That declared substrate has NO producer. A structured probe over the whole corpus, controlling for the historical release corpus and the ADR record, finds `spoke-launch` in exactly four live sites — the schema enum row, two quota-budget-protocol citations, and the writer's static-fallback enum — and zero emitters. release-hub's own references/spoke-launch.md never mentions quota-reservation, tokens_used, or startup cost."

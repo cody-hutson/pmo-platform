@@ -135,11 +135,15 @@ Every section BODY stays an author-fill placeholder. Never draft decision-prose 
 ## 6. Immutable-numbering + supersession walkthrough
 
 - **Allocate the next free number, never reuse.** A number is never re-issued, even for a superseded ADR.
-- **Never renumber an existing ADR.** Supersession is a `Status:` transition on the OLD ADR (`Superseded by ADR-NNN`) plus a NEW monotonic ADR — not a renumber or in-place overwrite (`core/ADRs/README.md` § Status enum; `adr-authoring-guide.md` § Supersession + immutability). The body below `## Status` on the old ADR stays byte-frozen for the audit trail.
+- **Never renumber an existing ADR.** Supersession is a reciprocal edge on the OLD ADR plus a NEW monotonic ADR — not a renumber or in-place overwrite (`core/ADRs/README.md` § Status enum; `adr-authoring-guide.md` § Supersession + immutability). For a **whole** supersession the reciprocal is the `Status:` transition (`Superseded by ADR-NNN`); for a **partial** one it is a `superseded_by:` frontmatter entry and the status stays `Accepted` (step 3 below; `adr-schema.md` §5). The body below `## Status` on the old ADR stays byte-frozen for the audit trail either way.
 - **Supersession scaffold flow:**
   1. Allocate `max(global)+1` for the NEW (superseding) ADR.
   2. Scaffold the new ADR; in its `## Status` note it supersedes ADR-MMM; in `## Related ADRs` link ADR-MMM.
-  3. Emit a one-line reminder for the operator to stamp the OLD ADR's `## Status` with `Superseded by ADR-NNN`. **Do NOT auto-edit the superseded ADR** — that crosses into governed-change territory on an immutable `core/` record; the operator makes that edit.
+  3. Emit a one-line reminder for the operator to land the reciprocal on the OLD ADR. **Which reciprocal depends on the scope, and the two are not interchangeable** (`adr-schema.md` §5):
+     - **Whole supersession** — stamp the OLD ADR's `## Status` with `Superseded by ADR-NNN`.
+     - **Partial supersession** (a clause, rule, decision item, or substrate choice — the common case) — add `superseded_by: ADR-NNN in-part (<scope label>)` to the OLD ADR's frontmatter and **leave its `status:` reading `Accepted`**. Stamping `Superseded` here asserts a retirement the new ADR does not claim, and freezes a record that still binds.
+
+     **Do NOT auto-edit the superseded ADR** in either case — that crosses into governed-change territory on an immutable `core/` record; the operator makes that edit.
 - **Collision resolution at merge is the one mechanical exception** — if two branches claim the same `NNN`, the later claimant is renumbered to the next free slot with a `## Status` "Numbering provenance" note. **The skill does not perform this, and neither does the merge-time checker: the checker DETECTS a duplicate or a gap, it has never renumbered anything.** The move is performed by `release/tools/renumber-adr.py` at Stage-12 Phase A.5.7, which writes the provenance note as part of the move rather than leaving it to discipline. The skill's job is upstream of that: allocate against the mainline anchor (§ 2.1) so the number is correct under every merge order, and name any visible unmerged sibling claims in the hand-off so the operator can expect the renumber.
 
 ## 7. Hand-off summary (what to report)
