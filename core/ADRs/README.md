@@ -87,7 +87,7 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 
 ### ADR-046 — Roadmap-instance in-repo home — shipped /roadmaps/ folder + token-as-override
 
-**Status:** Proposed (supersedes-in-part ADR-012's location clause + ADR-017's roadmaps placement in the operator-instance path family; flips to Accepted at the Stage 9 review).
+**Status:** Accepted (supersedes-in-part ADR-012's location clause + ADR-017's roadmaps placement in the operator-instance path family).
 **Decision:** Roadmap instances get a single canonical in-repo home at repo-root `/roadmaps/` (folder + `README` tracked, instances git-ignored — the `analysis/` workspace pattern); the `<OPERATOR_INSTANCE_ROADMAPS_PATH>` token default moves to `${CLAUDE_WORKSPACE_ROOT}/pmo-platform/roadmaps` across the SSOT surfaces (depersonalization-spec registry + operator.toml.template) and remains the per-deployment override. Roadmaps leave the `personal/pmo-instance/` family by design (authored content ships in-repo like `analysis/`; runtime state stays operator-local). Preserves ADR-012's "instances not tracked" decision; includes a copy-migration for existing instances.
 **Reversibility:** MODERATE.
 **File:** [ADR-046-roadmap-instance-in-repo-home.md](ADR-046-roadmap-instance-in-repo-home.md)
@@ -117,7 +117,7 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 
 ### ADR-018 — Work-Item Type Layer (WITL): thin generic Work Item entity + declarative type layer
 
-**Status:** Proposed (flips to Accepted at the declarative-workitem-type-model Stage 9 GO — that GO renders the Tier-2 SCOPE CHANGE).
+**Status:** Accepted (the declarative-workitem-type-model GO rendered the Tier-2 SCOPE CHANGE).
 **Decision:** Resolve the work-item modeling tension as a HYBRID (D1): add ONE thin generic `Work Item` entity (roster no. 18) carrying Entity Core 7 + a `work_item_type` discriminator + a polymorphic `parent_ref` (Milestone or Workstream) + the built 7 MVP relationships by reference; externalize ALL type variability to a separate declarative type-pack layer (the C2 type meta-schema). Vocabulary is methodology-projected (D2 — canonical kind `Work Item`; Story/Bug/Test/Task are projections; no glossary amendment). Now-scope (D4) = this ADR + the C2 type meta-schema + the C1 authorization; roster RE-FROZEN at 18 via a scoped Tier-2 (RAID-2026-05-16-precedented).
 **Reversibility:** EXPENSIVE (once the C2 type layer + downstream consume the entity it is a contract; pre-consumption MODERATE).
 **File:** [ADR-018-work-item-type-layer.md](ADR-018-work-item-type-layer.md)
@@ -151,7 +151,7 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 
 ### ADR-023 — Skill sourcing-coupling posture: own-with-harvest default; guarded-wrap exception
 
-**Status:** Proposed (flips to Accepted at the comms-writer/artifact-generator-anthropic-offload-refactor Collective Review scope-lock — the Stage 5 N-way-consistency gate per § Status enum).
+**Status:** Accepted (ratified at the comms-writer/artifact-generator-anthropic-offload-refactor Collective Review scope-lock — the Stage 5 N-way-consistency gate per § Status enum).
 **Decision:** A PMO skill is `independent` (own) by default — authored first-party and *harvesting* upstream Anthropic structure/patterns at design time via the upstream-reference catalog, not at runtime. A runtime dependency (`extends` / `pass-through`) is the exception, permitted only when all three hold: the upstream contract is commodity-stable, a silent upstream change has low blast radius, and the coupling is guarded by a drift canary. Stakeholder-facing generation and any PMO-judgment or governance-binding skill never take a runtime Anthropic dependency. Maps onto the registry's existing four-value enum (no new vocabulary); the registry update trigger and the Stage-4 D-Gate cite this ADR rather than restating it.
 **Reversibility:** MODERATE (CHEAP pre-application; crosses to MODERATE once skills are re-classified or re-pointed under the rule).
 **File:** [ADR-023-skill-sourcing-coupling-posture.md](ADR-023-skill-sourcing-coupling-posture.md)
@@ -206,7 +206,7 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 
 ### ADR-049 — Canonical initiative / roadmap / milestone vocabulary + initiative→epic/project label mapping
 
-**Status:** Proposed (flips to Accepted at the Stage 9 review).
+**Status:** Accepted.
 **Decision:** Canonicalize `Initiative` (cross-milestone grouping theme, NOT a hierarchy level) and `Roadmap` (architected path across one-or-more initiatives; one-per-initiative is the default) as glossary terms; correct Appendix B's "Initiative not modeled"; reconcile the framework's "one initiative" scope to the canonical default-not-limit meaning; map the retired `initiative:*` label namespace to the live `epic:*` / `project:*` grouping labels. The glossary is SSOT for the wording; the framework + label-taxonomy cite, never re-define.
 **Reversibility:** MODERATE (governance-vocabulary ripple into framework + label-taxonomy; runtime = none — no code consumes the terms).
 **File:** [ADR-049-canonical-initiative-roadmap-vocabulary.md](ADR-049-canonical-initiative-roadmap-vocabulary.md)
@@ -334,7 +334,7 @@ ADR `status:` follows the [Nygard convention](https://cognitect.com/blog/2011/11
 | Status | Meaning |
 |---|---|
 | Proposed | Decision drafted, not yet operator-ratified |
-| Accepted | Operator-ratified at Collective Review or equivalent gate |
+| Accepted | Operator-ratified at the **Stage 13 Close ratification beat** (Phase A13), which is where the `Proposed → Accepted` transition is performed; for releases predating that beat, at the release's Collective Review or equivalent gate |
 | Deprecated | Superseded by a later ADR; remains for audit trail |
 | Superseded | Replaced; cite the superseding ADR in `## Status` block |
 

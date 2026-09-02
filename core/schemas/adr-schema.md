@@ -34,7 +34,7 @@ Canonical data contract for ADR files under `core/ADRs/` and `release/ADRs/`. Ow
 
 | # | Section | Required | Contract |
 |---|---|---|---|
-| 1 | `## Status` | Yes | Restates `status`; when Superseded, **cites the superseding ADR here** (supersession *representation* — see §5). |
+| 1 | `## Status` | Yes | Restates `status`; when Superseded, **cites the superseding ADR here** (supersession *representation* — see §5). **Direction is normative:** the frontmatter `status:` field is the value-bearing surface and this section is a projection of it, so the two are reconciled body → frontmatter, never the inverse. The body carries no independent status authority; a disagreement between them is a defect in the body. |
 | 2 | `## Context` | Yes | The forces/problem the decision addresses. |
 | 3 | `## Decision` | Yes | The decision, stated actively. |
 | 4 | `## Alternatives Considered` | Yes | **Required — content conditional** (see §3.1). Records the options weighed and why each was rejected; where a single forced approach existed, declares that explicitly. |

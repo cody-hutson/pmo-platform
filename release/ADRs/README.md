@@ -119,7 +119,7 @@ ADR `status:` follows the [Nygard convention](https://cognitect.com/blog/2011/11
 | Status | Meaning |
 |---|---|
 | Proposed | Decision drafted, not yet operator-ratified |
-| Accepted | Operator-ratified at Collective Review or equivalent gate |
+| Accepted | Operator-ratified at the **Stage 13 Close ratification beat** (Phase A13), which is where the `Proposed → Accepted` transition is performed; for releases predating that beat, at the release's Collective Review or equivalent gate |
 | Deprecated | Superseded by a later ADR; remains for audit trail |
 | Superseded | Replaced; cite the superseding ADR in `## Status` block |
 
