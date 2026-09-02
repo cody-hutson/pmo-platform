@@ -1143,8 +1143,8 @@ assert_eq "A15e AC5 the SECOND hop exits 0" "$AP15B_RC" "0"
 # DEV-45's `ADR-004` is inert at hop 2 (the sweep is keyed on old=6). `ADR-006` is
 # the hazard: it is the record's CURRENT number at the moment of hop 2, so a naive
 # sweep advances it and the row becomes "ADR-004 was renumbered to ADR-007" —
-# syntactically valid, internally consistent, and false. That is #6244's defect at
-# its exact trigger, and it exists only at hop 2.
+# syntactically valid, internally consistent, and false. That is this act's defect
+# at its exact trigger, and it exists only at hop 2.
 assert_eq "A15e AC5 >=2-PRIOR-HOP — the row recording hop 1 survives hop 2 verbatim" \
   "$(grep -cF '| DEV-45 | hop 1 recorded | ADR-004 was renumbered to ADR-006 |' "$PLAN15")" "1"
 assert_eq "A15e AC5 …the record's CURRENT number was not silently advanced to 007" \
