@@ -1,6 +1,6 @@
 ---
 title: "ADR-093 — Scoped, conditional-binding acceptance-fit gate at Stage 2 with phased rollout"
-status: Proposed — ratified at the operator's Stage 9 plan-review gate; the flip to Accepted is verified against this file's `status:` field, never assumed from milestone closure.
+status: Accepted
 date: 2026-07-25
 release: intake-and-gate-protocol-hardening (version bound at Stage 12)
 deciders: "operator (plan approval / Stage 9 ratification gate) + Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment) + Phase A6.5 adversarial design reviewer"
@@ -16,7 +16,7 @@ source_observations:
 
 ## Status
 
-Proposed — to be ratified at the operator's Stage 9 plan-review gate for the intake-and-gate-protocol-hardening release. The flip to Accepted is verified against this file's `status:` field, never assumed from milestone closure.
+Accepted — ratified at the operator's Stage 9 plan-review gate for the intake-and-gate-protocol-hardening release.
 
 **Stage-9 ratification recorded (2026-07-25):** at the v3.94 Stage 9 plan-review GO gate the operator ratified this decision AND exercised the Automation-posture lever straight to **enforce** (see Decision § 4) — G2-13 ships enforce from v3.94, not a shadow shakedown. Per the ADR ratification-flip convention (Stage-13 G-CL9), the `status:` enum remains **Proposed** until the release's Stage-13 Close flips it to Accepted; this note records the ratification event without pre-empting that flip.
 

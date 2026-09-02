@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-129 — The close class is a declared deliverable-type value that conditions one gate spec, never a parallel close path
-status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
+status: Accepted
 date: 2026-08-07
 release: 58-task-artifact-lifecycle-and-knowledge
 deciders: "Workspace owner (D-A, D-A.1, D-A.2, D-A.3 ratified at the Stage-5 design gate; scope re-affirmed at Collective Review); designed at Stage 5 Solutioning, authored at Stage 6 Engineering"
@@ -22,7 +22,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — flips to **Accepted** when the operator ratifies it at the release close gate. Authored at Stage 6 per the Stage-6 ADR-authoring precedent. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
+**Accepted.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent.
 
 **Numbering.** This record's number is the mainline anchor plus one, re-derived at authoring rather than pre-allocated, and verified against the enforcing predicate rather than argued: the union of both record directories was contiguous with no gaps and no duplicates up to the anchor, making the claimed slot the next genuinely free one rather than merely an unused one. The number-checking tool reads the *worktree* and would pass on a number already taken on the mainline, so it was not used as the allocator.
 

@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-124 — The Axis-1 delivery work-status label surface is its own grammar group with its own name prefix, homed in the shared base pack, and blocked is not one of its values
-status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
+status: Accepted
 date: 2026-08-07
 release: methodology-fields-and-statuses
 deciders: "Workspace owner (premise rejection and row home ratified at the Stage-5 wave-2 gate; group and prefix ratified at the same gate); designed at Stage 5 Solutioning, authored at Stage 6 Engineering"
@@ -21,7 +21,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — flips to **Accepted** when the operator ratifies it at the release close gate. Authored at Stage 6 per the Stage-6 ADR-authoring precedent. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
+**Accepted.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent.
 
 **Numbering.** This record's number is `anchor(mainline) + 1`, derived at Engineering Commit 0 against the mainline anchor, per the rule ADR-115 ratifies. At that instant three sibling branches held unmerged claims on this same number and one of them also held the next. Those claims are **advisory** and do not bind the sequence. A reservation strictly above them was considered and rejected: it lands a multi-number hole, and the contiguity gate fails a gap exactly as readily as a duplicate — a duplicate inconveniences one branch, a gap blocks the repository. The rejection is not theoretical here; the gate was run against both candidates at Commit 0 and returned FAIL-on-gap for the reserved number and PASS for this one, with a duplicate control arm confirming the gate is not gap-only. If a sibling merges first, this record renumbers at merge time by the sanctioned tool, and this section gains a numbering-provenance note.
 

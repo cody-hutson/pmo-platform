@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-153 — A schema gains a measurement state through one optional merged object, and the library enforces the absence rule"
-status: Proposed — flips to Accepted at this release's operator gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
+status: Accepted
 date: 2026-08-25
 release: checks-see-whole-subject
 deciders: "Stage 5 Solutioning spoke (design) + two independent adversarial design-review passes per card (one counter-design adopted at each) + operator (D-4 build-coupling; D-7 CIAC-1 scope; D-8 ADR authorization; D-10 counter-retention) + Stage 6 Engineering spoke (build)"
@@ -22,7 +22,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Stage 6 Engineering for the `checks-see-whole-subject` release, under the ADR authorization recorded at that release's wave-1 operator gate. It flips to Accepted when the operator ratifies it at the release gate; the flip is recorded in this file's `status:` field.
+**Accepted.** Authored at Stage 6 Engineering for the `checks-see-whole-subject` release, under the ADR authorization recorded at that release's wave-1 operator gate.
 
 **Numbering provenance — `143 → 149`.** Held **ADR-143** branch-local; renumbered to **ADR-149** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 143. In-release citations that read "ADR-143" denote this record.
 

@@ -1,6 +1,6 @@
 ---
 title: "ADR-099 — Milestone-readiness disposition set: closed as a vocabulary, not a cardinality"
-status: Proposed
+status: Accepted
 date: 2026-07-27
 release: release-hub-mode-r-depth (v3.98 provisional; bound at Stage 12)
 deciders: "Stage 5 Solutioning spoke surfaced the enum question and recommended the fit test; the operator ratified at the Stage-5 scope gate; Stage 6 Engineering authored this record; the operator ratifies the Accepted flip at the Stage 9 plan-review gate"
@@ -17,7 +17,7 @@ source_observations:
 
 ## Status
 
-Proposed — authored at Stage 6 Engineering; ratified at the operator's Stage 9 plan-review gate. The Accepted flip is verified against this file's `status:` field, never assumed from milestone closure.
+Accepted — authored at Stage 6 Engineering; ratified at the operator's Stage 9 plan-review gate.
 
 Renumbered from a branch-local ADR-100 → **ADR-099** at Stage 12 — 099 read as claimed when this record was authored, two sibling release branches having each allocated it, so the author stepped past to 100. An unmerged claim does not bind the sequence: `origin/main` topped out at ADR-098, making 099 the true next-free slot. `check-adr-numbers.py` fails a **gap** as readily as a duplicate, and the gate guards main's contiguity rather than any one branch's — merging at 100 would have landed the 099 hole on main and failed every subsequent PR until someone filled it. Merge order decides the number, and this release holds the only open PR among the three claimants; the sibling branches renumber when they merge.
 

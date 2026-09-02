@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-131 — A precision obligation binds to the check's declared parameter surface, never to the ACs' self-reported scopes
-status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure.
+status: Accepted
 date: 2026-08-09
 release: triage-and-backlog-instrumentation
 deciders: "Workspace owner (D-1, D-2, D-3 rendered at the Stage-5 design gate; premise finding D-6 classified C2 and recorded); designed at Stage 5 Solutioning, authored at Stage 6 Engineering"
@@ -22,7 +22,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — flips to **Accepted** when the operator ratifies it at the release close gate. Authored at Stage 6 per the Stage-6 ADR-authoring precedent. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
+**Accepted.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent.
 
 **Numbering.** This record's number is the mainline anchor plus one, re-derived against the mainline at Engineering Commit 0 rather than pre-allocated. The union of both record directories was contiguous through the tail with no gaps and no duplicates up to the anchor, so the claimed slot is the next genuinely free one rather than merely an unused one, and a fabricated control number returned zero. The number-checking tool reads the *worktree* and would pass on a number already taken on the mainline, so it was deliberately not used as the allocator.
 
