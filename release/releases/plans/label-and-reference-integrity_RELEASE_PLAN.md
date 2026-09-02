@@ -352,3 +352,51 @@ One, on #5291 (its Stage-5 decision D5). This is the `novel` trigger (c) that ca
 | PLAN CORRECTION 2 | 2026-09-02 (Wednesday) | File Change Matrix gains `release/references/standards/release-velocity-tracking.md` — the third undeclared-edit instance, same root cause. #4223's write-set established at 2 files. Revised Stage-6 order recorded (D-N, Tier 2): #5258 leads. | Operator, D-N |
 | Commit 0 | 2026-09-02 (Wednesday) | Transcribed to this file as Engineering Commit 0, corrections applied. Release Class re-classified `novel` out of band, effective points 25. Version re-verified: next-free `v4.46`, anchor `v4.45`, free on all five surfaces. Verification Plan re-baselined 44 → 45 criteria for #4223's Stage-5 addition. R-2 recorded at its downgraded LOW. | Stage-6 Engineering spoke (#6466) |
 | Commit 0 (probe correction) | 2026-09-02 (Wednesday) | #5258's four Verification-Plan rows re-authored after running `release/tools/verify-release-plan.sh` exposed two authoring defects in them: AC-3's prose routed to the sync/regression family on the word "unchanged" and was graded by a full `deploy.sh --check` — an instrument grading something else entirely — and AC-1's first probe token also appears in the hook's own `ALLOWLIST` declaration, so it returns 1 pre-change and 2 post-change and a `≥ 1` threshold would have passed against the defect. Replaced with a token measured at 0 pre-change / 1 post-change. The other 41 rows are untouched: they carry each card's own declared method and belong to that card's spoke. | Stage-6 Engineering spoke (#6466) |
+
+## Change Description
+
+### Outcome
+
+The platform's label and reference gates now resolve against **declarations** rather than inferring from string shape, and the four places where a gate's own instrument was the thing that was wrong are repaired. The release ships one through-line defect class found in four unrelated gates — a predicate whose scope is narrower than the population it is believed to cover, reporting green because nothing it could catch was ever in front of it. Eight delivery slices, one branch, 23 files, four ADRs.
+
+### Issues resolved
+
+| # | Outcome | Status |
+|---|---|---|
+| #5258 | The fragile-reference hook resolves its per-file override marker against the **target file** rather than the editing buffer, so an Edit can see a marker the file already carries; the scope gate now matches its own documentation. | DONE |
+| #5058 | The label-parity check reads the live label set over **REST**, so an exhausted GraphQL quota is no longer reported as an error verdict when the data is available. | DONE |
+| #5054 | Label exclusions are stated as **standing policy** rather than past-tense history, and an unrecognized verdict class is treated as a finding instead of being dropped by a value filter — the bug that let the gate report parity while holding a finding. | DONE |
+| #5291 | `type:*` resolves against the **selected packs' declared kinds** unioned with their declared label rows, never by namespace prefix; the source list reaches a deployment's operator-local packs, which is what makes the fix testable at all. | DONE |
+| #5057 | Label attribute divergence is reported as its own **advisory class** with a per-row disposition registry, so cosmetic drift is visible without being conflated with a registry defect. | DONE |
+| #5259 | The issue-reference gate's override regex accepts the rationale-carrying marker form its own failure message mandates; the message and the matcher can no longer disagree. | DONE |
+| #5254 | The same gate's self-documentation exemption is **discovered from the marker** instead of enumerated, so a new self-documenting file exempts itself by declaring the marker rather than by an edit to the gate. | DONE |
+| #4223 | The release-velocity allocation map resolves in **three stated tiers** — declared category/cluster, then declared work-item kind as a residual feature signal, then a stated default — consuming #5291's resolver rather than forking a second one. Three phantom tokens retired; no issue changes bucket. | DONE |
+
+### Key decisions
+
+- **D-A..D-D (Stage-4 gate)** — plan approved; quota band stated; branch topology **SINGLE** with **P0 fully-serial** dispatch; five milestone-description edits authorized. Recorded in § Change Log.
+- **D-K (PLAN CORRECTION)** — CIAC-1 regraded to value rather than shape; CIAC-2's control value corrected 15 → 10; CIAC-6 regraded to the behaviour rather than a ratified-false literal string. Recorded in § Change Log.
+- **D-N (PLAN CORRECTION 2)** — File Change Matrix gains `release/references/standards/release-velocity-tracking.md`, the third undeclared-edit instance from one root cause; revised Stage-6 order with #5258 leading. Recorded in § Change Log.
+- **Release Class re-classified `novel` out of band** — trigger (c) fires on the Stage-5 ADR declared for #5291; `effective_pts = 25` at the band ceiling, so no split disposition fires. Recorded in § Release Class.
+- **ADRs authorized beyond the plan's one.** § Authorized ADRs anticipated a single ADR on #5291. Four landed: **ADR-170** (a verdict class exists to separate conditions whose remedies differ), **ADR-171** (a kind projection of a declared category row is one classification at two altitudes), **ADR-172** (arm posture is carried by the emitter, not the mode dial), and **ADR-173** (a declared work-item kind is a residual feature signal, never a co-equal one). Each was rendered at its own Stage-5 or Stage-6 spoke on a decision the plan did not foresee. The class is unaffected — trigger (c) had already fired.
+
+### Reversibility
+
+**CHEAP / Confidence HIGH** for every content change on this branch — all are repository files, reversed by `git revert -m 1` on the merge commit; no gate in the changed set is in the CI-required blocking subset for its own findings, so a revert is not time-pressured. **IRREVERSIBLE / Confidence HIGH** for the label retirements #5291's findings authorize but do **not** execute: label state is not in version control, and re-creating a deleted label restores its name, colour and description but never its issue associations. Those retirements carry a separate explicit sign-off gate with a rollback-infeasibility statement at Stage 9 and are not performed by this branch.
+
+### Downstream impact
+
+- **One resolver, two consumers, and a named follow-on.** `check-label-parity.py --list-declared-kinds` is now consumed by both the parity gate and the velocity instrument. The two construct their pack source lists independently and identically; lifting that construction into `core/deploy/lib-instance-path.sh` is deliberately deferred so it does not collide with #5291's in-flight change.
+- **The velocity calibration series is non-homogeneous across this release.** Most written rows record a zero feature bucket under the retired map, and the recalibration consumer reads the allocation actuals without distinguishing pre-fix from post-fix derivations. Backfilling is forbidden by the standard's own FM1 and is not done. A successor should add a derivation-epoch marker to the § 6 population rule.
+- **The 188-issue category/kind cardinality population is bounded, not resolved.** #5291's new clause states which pairs are conformant; it relabels nothing. The residual population is routed forward, and a downstream grader must not read this release's criteria as covering it.
+- **Two velocity category rows stay unmapped.** `observation` and `sub-task` reach the stated default. Named here so the gap is deliberate rather than discovered.
+- **The cardinality rule remains unenforced by any check.** It is a prose-declared predicate with no runner. Whether to build the enforcer is a separate decision with its own cost.
+
+### Cross-references
+
+- Release plan: [`release/releases/plans/label-and-reference-integrity_RELEASE_PLAN.md`](label-and-reference-integrity_RELEASE_PLAN.md) (this file) — § Scope, § Implementation Sequence, § File Change Matrix, § Verification Plan, § Change Log.
+- Milestone: https://github.com/cody-hutson/pmo-platform/milestone/337
+- User-facing release notes (authored at Stage 13): `release/releases/notes/{{RELEASE_VERSION}}_RELEASE_NOTES.md`
+- ADRs: [`core/ADRs/ADR-170-governance-states-standing-policy-not-past-tense-state.md`](../../../core/ADRs/ADR-170-governance-states-standing-policy-not-past-tense-state.md) · [`core/ADRs/ADR-171-kind-projection-of-a-declared-category-row-is-one-classification.md`](../../../core/ADRs/ADR-171-kind-projection-of-a-declared-category-row-is-one-classification.md) · [`core/ADRs/ADR-172-arm-posture-is-carried-by-the-emitter-not-the-mode-dial.md`](../../../core/ADRs/ADR-172-arm-posture-is-carried-by-the-emitter-not-the-mode-dial.md) · [`release/ADRs/ADR-173-declared-kind-is-a-residual-feature-signal.md`](../../ADRs/ADR-173-declared-kind-is-a-residual-feature-signal.md)
+
+Every member above is marked as closed at Stage 13 through the normal close path.
