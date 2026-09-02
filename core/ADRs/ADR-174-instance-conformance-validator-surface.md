@@ -1,0 +1,155 @@
+<!-- reference-durability: allow-link -->
+<!-- repo-integrity: allow-issue-ref -->
+---
+title: "ADR-174 — The recurring instance-conformance validator is a deploy-check family member with a single-emitter dispatcher arm and run-grain flip evidence"
+status: Proposed — flips to Accepted at Stage 13 Close (Phase A13, the ratification beat; gate row G-CL9 verifies). The flip is recorded in this file's `status:` field, which is where it must be verified — the automated ratification-flip check is advisory-only and structurally cannot fail, so this line is the authority, never a milestone state or a review comment.
+date: 2026-09-02
+release: pda-decisions-and-conformance-baseline
+deciders: "Stage 5 Solutioning spoke (dual-frame candidate enumeration, trade-off matrix, evidence-grounding) + adversarial design review (flip-evidence, emitter-seam, root-resolution, and baseline-comparability findings) + operator at Collective Review scope-lock (two binding entry conditions: run-grain flip evidence; scheduled-path emitter unification) + Stage 6 Engineering spoke (authorship, entry-condition discharge, cadence-band selection from the measured baseline)"
+tags: [architecture, deploy-check, instance-conformance, operator-instance, warn-to-enforce, gate-efficacy, named-runner, run-grain-evidence, scheduled-dispatch, cadence, health-check, read-only, governance]
+source_observations:
+  - "The shared deploy-check warn emitter appends a sink row only when a violation fires: the warn leg of the WARN-vs-FAIL decision point writes `{ts, check, detail}` on a finding and nothing on a clean pass, so a clean run leaves the sink byte-identical to a run that never happened. The sink's realized row classes already include two non-violation shapes — `advisory:true` (measured, cannot gate) and `evaluated:false` (did not measure) — so run-state rows are sink-conventional; what was missing for a drain-history criterion was a run-grain row class, not a new sink."
+  - "The single-check dispatcher pattern is realized five times in the deploy script (version-freeness, close-completeness, decision-emission, required-subset, package-freshness arms), and the coverage register already records a member in exactly the composed form this record adopts: a numbered check plus its own single-check probe sharing one check identity."
+  - "The instance-wide conformance baseline measured, on 2026-09-02 across 3 live projects with zero UNMEASURED cells: entity presence 1; required-field population 593 itemized findings on 132 violating records of 151; value validity 2; typed-reference resolution 60 of 151; RAID-row conformance 209 findings across 68 rows; tracker header parity 7 divergent of 18 slots; folder-taxonomy violations 1 (with 16 of 24 top-level dirs on the deprecated legacy taxonomy as migration-sizing context)."
+  - "The baseline's engine attribution splits by instrument: the entity/field/value/reference classes were produced by the LLM-executed health-check structure engine at entity grain; the RAID/tracker/taxonomy classes by throwaway deterministic spike predicates. The deterministic-spike subset alone sums past the cadence band threshold, so the band selection is robust to the instrument swap the validator introduces."
+  - "The operations-root resolver carries no env tier and no operator.toml tier — deliberately, per the invent-no-new-variable rule — takes the workspace root as a caller-supplied argument, and is a bash function a directly-invoked python engine cannot call without a shim; and the resolver family has an open P2 defect in which a default-miss made consumers silently read nothing rather than erroring. A subject-absent SKIP and a resolver miss are therefore observably identical unless the check distinguishes them."
+  - "The platform's own measured warn-mode base rate is the cautionary precedent: a cohort of implemented checks whose sink was written continuously was held at an undated shakedown throughout — flip-evidence design failure, not detection failure, is how a warn-mode gate becomes permanent here."
+  - "The operator bound two entry conditions at the Collective Review scope-lock: the drafted flip criterion (consecutive clean runs read from a findings-only sink) must not ship as drafted, because an empty warn log cannot distinguish clean runs from zero runs; and the scheduled-path emitter bifurcation must be closed, because direct engine invocation bypasses the mode resolver and the warn emitter."
+supersedes: none
+---
+
+# ADR-174 — The recurring instance-conformance validator is a deploy-check family member with a single-emitter dispatcher arm and run-grain flip evidence
+
+## Status
+
+**Proposed** — flips to **Accepted** at Stage 13 Close (Phase A13, which owns the `Proposed → Accepted` performing beat; gate row G-CL9 verifies the flip). The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — the automated ratification-flip check is advisory-only and structurally cannot fail, so the field is the authority.
+
+**Numbering provenance.** Allocated at this Engineering commit as the next number above the union of the mainline anchor and this branch's own in-flight claims — never `max(claimed)+1`. `renumber-adr.py --detect` at the commit instant reported `ANCHOR 172 origin/main`, `NEXT-FREE 173`, `CLAIMED-SET-BRANCH-ONLY 173,174,175,176 (detection only — never binds)`, and `CLAIM ADR-173 … BINDS BRANCH-CLAIM` — this branch already carries the sibling lifecycle-carrier record at 173, so the union is `{…172} ∪ {173}` and **174** binds here. The branch-only claims on 174–176 belong to other in-flight branches and never bind; a cross-branch collision is governed — resolved by the renumber tool at merge time — and is never a reason to skip ahead.
+
+## Context
+
+The platform's remediation arc needs a **recurring instance-conformance validator**: a control that repeatedly evaluates the operator's live project records — a non-repo sibling tree the operator owns — against the governed rule classes, and that can eventually graduate from warning to enforcement. Every existing automated-assertion gate is repo-scoped and CI-runnable; this one's subject lives outside the repo, so no existing pattern fits without adaptation, and the surface choice determines the warn-to-enforce path.
+
+Two vocabulary hazards are pinned once. **"Operator instance"** in the decision card means the operations tree (the live project records — the read subject). The **platform state container** (`$(pmo_instance_path)`) is the deploy-provisioned home of warn logs and mode files. The no-write constraint binds the former; the report sink lives in the latter — the design is not self-contradictory. Second, **two predicates travel under one name**: the *live-data predicate* ("the operator's records conform") is evaluable only where the data lives — the operator machine — and can never be a pre-merge status check; the *engine-integrity predicate* ("the validator discriminates: seeded violations fire, a conformant fixture stays clean") is CI-reachable. Conflating them either overstates enforceability or understates it.
+
+Three constraints bound the design at entry. The class-3 named-runner obligation (gate-efficacy standard § Runner resolution): the schemas' verdict-bearing conformance predicates currently resolve to no runner, and the surface chosen must make them class-2 — wired, with a resolvable `runner-def:` — or leave honest named-gap rows. The operator's two binding entry conditions from the Collective Review scope-lock: the flip-evidence criterion as drafted (K consecutive clean runs read from the warn log) was **unreadable** — the sink records only findings, so an empty log is consistent with K clean runs and with zero runs, the exact `INSTRUMENTATION-SUSPECT` shape the gate-efficacy standard names — and the **scheduled-path emitter bifurcation** had to be closed, because a schedule that invokes the engine directly bypasses the mode resolver and the warn emitter, feeding no drain evidence and ignoring an enforce flip. And the decision card's own hard exclusions: a hook cannot be the surface, and the validator is read-only regardless of any write-guard's direction.
+
+The cadence parameter waited on measurement. The instance-wide baseline (measured 2026-09-02, in-release) closed it: violation volume as of that baseline was **873 at itemized grain**, **412 at record grain** for the dominant field class, and **217 across the deterministic-instrument classes alone** — every grain clears the band threshold, so the band selection below is not sensitive to grain choice or to the instrument split.
+
+## Decision
+
+### 1. The surface is a deploy-check family member
+
+The recurring instance-conformance validator is a **`deploy.sh --check` family check** — check id `instance-conformance`, number allocated at its build's commit instant (append-only registry discipline) — whose predicate body is a standalone read-only engine `core/deploy/tools/check-instance-conformance.py` (python3 stdlib, inside the family's own `check-*` tool naming convention). It ships **warn-mode initial** through the shared WARN-vs-FAIL emitter and the per-check mode resolver.
+
+The family is the only candidate surface where all three of the needed mechanisms already exist rather than needing invention: the realized shared warn sink, the committed-default graduation form (`resolve_check_mode "<id>" "enforce"` — the only permitted flip shape, because a mode-file flip would arm a blocking gate with no repo record of the arming), and the out-of-repo-subject precedent (the memory-store check's SKIP-with-named-reason semantics when the subject is absent in CI or a fresh install). Building the validator anywhere else re-creates at least one of these from scratch.
+
+### 2. One emitter, two cadences — the dispatcher arm is the scheduled entry point
+
+The check has two sanctioned invocation paths, and **both route through the same deploy-script block** — the same engine call, the same `resolve_check_mode` resolution, the same `flag_warn_or_issue` emission, the same shared sink and its rotation:
+
+1. **Deploy-time:** the numbered check inside the full `--check` battery.
+2. **Scheduled:** a new **single-check dispatcher arm `--check-instance-conformance`**, the family's realized pattern (five live dispatcher arms; the coverage register already records the composed form — a numbered check plus its single-check probe sharing one identity). The cadence recipe is `/schedule "<period> instance conformance" "./deploy.sh --check-instance-conformance"`.
+
+Direct engine invocation (`python3 core/deploy/tools/check-instance-conformance.py --report`) remains available as a **diagnostic view only**: stdout, no sink write, no mode resolution. It is declared **evidence-invisible and mode-blind**, and it is never the scheduled recipe — a schedule built on it would feed no drain evidence and would silently ignore an enforce flip, fracturing the single-runner identity (the rejected shape in Alternatives).
+
+Consequence: a committed enforce flip binds **both** cadences at once, because both resolve mode through the one precedence model. The check id is the single runner identity in every surface — register row, sink `check:` field, dispatcher arm, schedule recipe.
+
+### 3. Flip evidence is run-grain — the unconditional per-run summary row
+
+The check appends **one unconditional per-run summary row** to the shared sink on every completed run, from either invocation path, in warn mode and enforce mode alike:
+
+```json
+{"ts":"<iso8601>","check":"instance-conformance","run_summary":true,"mode":"<warn|enforce>","warns":<total-findings-this-run>}
+```
+
+A skipped run appends the summary row with a `skipped` field naming the reason **and the resolved subject root** instead of a findings count. This extends the sink's existing row-class convention (`advisory:true`, `evaluated:false` are the realized non-violation row shapes) rather than inventing a sink; a per-gate sink file remains against convention.
+
+**The flip criterion reads run-summary rows, never row-absence.** Restated form: *K consecutive run-summary rows with `warns: 0` and no `skipped` field, K = 3, where the run denominator is the count of run-summary rows in the window.* Zero run-summary rows in the window is `INSTRUMENTATION-SUSPECT` — the check did not run — and is never evidence of conformance. This discharges the binding entry condition by **both** of its permitted routes composed: a run-grain record is specified (route a), and the criterion is restated against that now-readable instrument (route b). Route b alone was unavailable: no governed surface records run-grain state (stdout is unpersisted; deploy logs are ungoverned), so restatement without the new row class had no instrument to land on.
+
+**W1 disclosure, carried until the delivery child ships:** *specified, not yet emitting — no check emits this gate's rows today.* No drain-history criterion is armed before the emitter lands. **W2:** the flip-decision register row is authored **with the emitter**, at the delivery child's release, and must carry a repo-derivable arm; per the blocker-not-schedule rule its blocker is named now: *the conformance-remediation children of the consuming milestone merged, and burn-down re-entered band B1.* **The flip form** is the committed default `resolve_check_mode "instance-conformance" "enforce"` landed by PR — never the operator-instance mode file.
+
+### 4. Cadence band B2, selected from the measured baseline
+
+The surface choice is volume-independent — every criterion that decided §1 is structural. Volume sets the dial, and the baseline set it. As of the 2026-09-02 baseline the violation volume was 873 (itemized grain), 412 (record grain for the field class), and 217 (deterministic-instrument classes alone) — every grain exceeds the band threshold of 200, so **band B2 is selected**, and the selection is invariant to grain choice and to the instrument split:
+
+| Band (V = total violations at selection time) | Deploy-time reporting grain | Scheduled top-up | Flip posture |
+|---|---|---|---|
+| B0: V = 0 | per-record (vacuously) | none | candidate after runner labels land + K=3 clean run-summary rows |
+| B1: 1–200 | per-record WARN rows (bounded) | weekly dispatcher run | after remediation of the found set + K=3 clean run-summary rows |
+| **B2: above 200 — SELECTED** | **per-class count rows only** (one WARN row per violating class per project per run — the shared-sink guard: one check must not flood the drain evidence every other warn-mode gate reads); per-record listing via on-demand `--report` only | weekly dispatcher run | **flip deferred until burn-down re-enters B1**, then the B1 arm applies (K=3) |
+
+The threshold constant 200 is operator-ratifiable [RECOMMENDED], as at design time. The honest cadence floor is stated with the band: **no governed ritual invokes the full `--check` battery** — the close-out mandate binds an output set verified by the completion table and CI single-check lanes, and the completeness checks evaluate *whenever* `--check` runs rather than causing it to run — so deploy-time coverage rests on operator habit (empirically frequent, per the sink's accretion) and the **scheduled dispatcher run is load-bearing for cadence**. That is precisely why §2 makes the scheduled path share the emitter instead of treating it as a top-up.
+
+**Instrument swap, declared.** The baseline's entity/field/value/reference counts were produced by the LLM structure engine at entity grain; the validator is a deterministic engine. Denominator-model inheritance (§6) does not make the two instruments' counts commensurable. The band survives this threat — the deterministic-spike subset alone (217) clears the threshold — but the **validator's first run is the re-baseline**: the delivery child carries an instrument-parity arm in which first-run per-class counts are reconciled against the baseline, deltas dispositioned, and the band re-selected from the deterministic counts if the reconciliation moves V across a band boundary. B2's grain guard is the conservative default in the interim.
+
+### 5. Root resolution is caller-supplied; a SKIP is never silent
+
+The engine's `--root` argument is **required — no default, no env read**. Root derivation stays at the single bash resolution site: the check block and the dispatcher arm both pass `pmo_operations_path_for "$WORKSPACE_ROOT"`. (This corrects the design-time mis-statement that the engine could inherit that resolver's "env/sandbox precedence": the resolver deliberately carries **no env tier and no toml tier** per the invent-no-new-variable rule, takes the workspace root as a caller argument, and is bash — a python engine defaulting its own root would create a second resolution site, the exact seam the convergence decision closed.) An absent or nonexistent `--root` is a **usage error with a distinct exit code**, never a silent skip and never an empty-clean result.
+
+SKIP semantics split by cause, because a fresh install and a resolver miss are opposite states with identical naive observables:
+
+- **Subject root absent in a rootless context** (CI, fresh install): `SKIP` with the resolved path named in the message — the out-of-repo-subject precedent. SKIP is a coverage statement, never a conformance claim.
+- **Workspace root present but subject directory absent on an operator machine:** a **`resolver-miss-suspect` WARN row** naming the resolved path — not a silent SKIP. The resolver family's open default-miss defect is the live precedent that consumers otherwise read nothing and stay green.
+
+A fixture arm asserts the root-derivation seam (wrong root → usage error; fixture root → findings fire).
+
+### 6. Partition against health-check `structure` mode
+
+The shipped health-check `structure` mode is **rejected as the home** for the recurring instance-wide validator on five limbs: (1) its invocation grammar is per-project only — instance-wide aggregation is outside its parse contract; (2) it is LLM-executed and cannot satisfy deterministic fixture acceptance (a seeded-violation tree mechanically producing named WARN classes); (3) its scheduled form writes output inside the project tree — correct for its per-project charter, disqualifying for a recurring sweep bound to zero instance writes; (4) as a runner it admits only advisory review-step posture with reviewer-detected runtime skips, and it feeds no sink — no drain evidence, no evidence-based flip path; (5) its token cost scales per-project per-run for work that is deterministic rule evaluation.
+
+It is simultaneously **adopted in two capacities**: (a) its contract is the **spec baseline for the shared rule classes** — the validator inherits the derived-denominator model (expected ∪ referenced ∪ present), the coverage envelope, and the UNMEASURED-never-zero state, so the baseline and all future validator runs measure the same population; (b) it **remains the per-project operator-facing judgment surface** — score, punch list, decision routing. **Partition rule: deterministic rule classes → the validator (the named Runner); entity-completeness judgment, scoring, and per-project decisions → `structure` mode.**
+
+Engine attribution stays consistent with the baseline report: the baseline's entity/field/value/reference classes were measured by the structure engine (spoke-executed), and its RAID/tracker/taxonomy classes by deliberately-throwaway spike predicates. The validator **succeeds the spikes** as the durable deterministic home and takes over the deterministic subset of the shared classes under the §4 instrument-swap declaration. No rule class is attributed to a different engine here than in the baseline report.
+
+### 7. Class-3 satisfaction — wire it, and label only what the engine carries
+
+The class-3 obligation is satisfied by **Disposition 1 (wire it)**: the verdict-bearing conformance predicates in the entity-field schemas and the project schema become **class 2** with this check as their named Runner. Register rows carry `runner-def: core/deploy/tools/check-instance-conformance.py::<function-name>` (anchors by function name, never line number), recomputed on every run by the register-recomputation check, with the register posture cell reading `advisory (warn-mode initial; required unavailable per Requirement (b′) while the live scan is deploy-time-only)`.
+
+**The Runner-label sweep is bound to the engine's implemented rule-id list, never to schema sections.** A predicate the engine does not carry keeps an honest named-gap row (or a verdict-shaped downgrade) rather than a `**Runner:**` label — anchor-presence is not predicate-completeness, and a section-keyed sweep would mint claimed class-2 coverage the engine does not execute, the recorded failure mode of a prior labeling round.
+
+### 8. Reporting containment
+
+The engine opens subject files read-only; its contract is zero write syscalls into the subject root, asserted by a fixture arm (tree metadata invariant across a run). **No run mode writes anything under the operations tree.** WARN payloads and stdout carry **counts and rule classes only — never record content, never person-grain values.** The sinks are stdout and the shared warn log in the platform's own state container.
+
+### 9. What the delivery child executes
+
+This record decides; the validator delivery child builds. Its build obligations, bound here so the record and the build cannot drift: the engine with the six governed rule classes (frontmatter required-set + sidecar presence; core + per-entity L1 rules; RAID rows against the machine schema; tracker header↔schema parity; folder-taxonomy membership; L2 cross-reference rules via the index builder's resolution — the single-resolver coupling chosen deliberately); the numbered check block conforming to the registry extraction contract; the `--check-instance-conformance` dispatcher arm (§2); the unconditional run-summary row from both paths (§3); the committed fixture tree with an opposite-verdict pair per rule class plus an anti-vacuity arm asserting both arms ran; **mandatory CI wiring of the fixture self-test** — the install-tests shell-tests job (which carries no paths filter) plus the deploy self-test group — because the CI-reachable engine-integrity predicate was a scored differentiator of this surface decision and an optional mirror would un-earn it; the register rows and Runner labels per §7; the structure-mode seam pointer at the shared-class boundary; the root-derivation and resolver-miss fixture arms (§5); the instrument-parity arm and band re-selection trigger (§4); and the flip-decision register row with its repo-derivable W2 arm, authored with the emitter (§3).
+
+## Alternatives Considered
+
+- **`doctor.sh` mode** — rejected. Its own contract declares zero check bodies and a stdout-only report; a warn-sink write would violate the stdout guarantee, and it has no per-check graduation machinery. Its trigger model (operator suspects breakage) is also the wrong cadence for silent data drift.
+- **health-check `structure` mode as the recurring home** — rejected on the five limbs in Decision §6; adopted as shared-class contract baseline and per-project judgment surface. This is the partitioned-sibling disposition, not a silent parallel surface.
+- **A scheduled task as the surface itself** — rejected. An invoker is not a runner: a schedule entry is not a repo file, so `runner-def:` has no anchor to resolve against, and the class-3 obligation would remain undischarged. The cloud-executed variant additionally cannot read the local subject tree at all. The schedule survives only as the cadence layer over the dispatcher arm.
+- **A hook** — excluded by the decision card, and independently disqualified: a tool-call-time surface fires only on writes, so it can reach neither silent drift nor already-non-conformant stock, and no hook can distinguish compliance from bypass on a byte-identical call.
+- **Direct engine invocation as the scheduled entry** (the design-time recipe) — rejected, discharging the second binding entry condition. It bypasses the mode resolver and the warn emitter: the scheduled cadence would feed no drain evidence, and a committed enforce flip would bind the deploy cadence while the scheduled one silently kept warning — or worse, kept printing to nobody. The dispatcher arm reuses strictly more of the family machinery (emitter, resolver, sink, rotation) and wins the design's own reuse-first tie-break.
+- **A per-gate sink file** — rejected; the realized convention is one shared sink discriminated by the row's `check:` field, and drain-readability for every warn-mode gate depends on not fragmenting it.
+- **The flip criterion as drafted** ("K consecutive runs with zero WARNs" read from the findings-only sink) — rejected as unreadable, per the binding entry condition. Absence of rows conflates clean runs, zero runs, a disabled check, and a dead emitter; the standard brands exactly this zero `INSTRUMENTATION-SUSPECT`, and the platform's own held-at-warn cohort shows the failure mode is real, not theoretical.
+- **Restating the criterion against a different existing instrument, without new emission** — rejected for want of an instrument: no governed surface records run-grain state (stdout is unpersisted; deploy logs are ungoverned; a new sink is against convention). The composed resolution in Decision §3 — specify the run-grain row, then restate the criterion onto it — is the minimal repair that makes the criterion readable.
+
+## Consequences
+
+**Positive.** The named-runner obligation is discharged by wiring, not by registering a gap: the schema predicates route to class 2 with a computed, recomputable `runner-def:`. Both cadences share one emitter, one mode resolution, and one sink, so evidence and enforcement cannot bifurcate, and a committed flip binds the whole cadence surface at once. The flip criterion becomes readable the day the emitter lands, with its blocker named now. The engine-integrity predicate gains a mandatory pre-merge CI path while the live-data predicate's ceiling is stated honestly. Reporting containment is structural: read-only engine, counts-only payloads, zero instance writes.
+
+**Negative, accepted with mitigations.** The deploy script grows one check block and one dispatcher arm (registry-extraction contract keeps the shape safe). The engine is a second statement of the schema rules — parity is test-enforced by the fixture pairs and the register recomputation, not structural; this is recorded debt, chosen over an LLM runner that cannot be fixture-tested. Sink accretion is bounded by the B2 count-grain guard while volume is high. The live-data predicate is `advisory` under Requirement (b′) for as long as the scan is deploy-time-only — the register row says so rather than implying enforcement that does not exist; the CI-requireable predicate is fixture integrity, a different assertion. Until the delivery child ships, nothing emits (the W1 disclosure travels with this record), and the band selection is provisional against the declared instrument swap — the first deterministic run re-baselines, with re-selection a named trigger rather than a surprise. Cadence rests on operator habit plus the scheduled dispatcher run — stated so the scheduled path's load-bearing role is a chosen fact, not a discovered one.
+
+## Reversibility
+
+**CHEAP / Confidence HIGH.** This record is additive; reverting it restores the prior state fully. The recommended build lands with the delivery child and reverts by reverting that child's changes. The check ships warn-mode, so even once built it cannot move an exit code before a committed, PR-visible enforce flip — and the flip itself is a one-line committed-default revert. The cadence band and threshold are table rows re-selectable without touching the surface decision.
+
+## Related ADRs
+
+- **ADR-017** — operator-instance surface convergence: the single resolution site Decision §5 keeps the root derivation inside.
+- **ADR-032** — invent-no-new-variable: why the engine gains no env tier and `--root` is caller-supplied.
+- **ADR-080** — the folder-taxonomy rule class the validator enforces.
+- **ADR-166** — a disposition names its blocker, not its schedule: the shape of the flip arm in Decision §3.
+- **ADR-167** — written-is-not-repo-derivable: why the W2 exit arm must be repo-derivable while the drain evidence stays operator-local.
+- **ADR-173** — sibling record in this release: the governed approval-class trigger vocabulary and last-transition lifecycle state its restated predicate defines are exactly the shape of frontmatter rule the validator's field classes enforce; the two records compose without overlap.
+
+### Provenance
+
+- Decision card: #5841 — this record is its deliverable. Designed at Stage 5 (sub-task #6654) with adversarial review; the two binding entry conditions (run-grain flip evidence; emitter unification) were set by the operator at the Collective Review scope-lock; authored at Stage 6 (sub-task #6655).
+- Baseline datum: #5840's instance-wide conformance baseline (Stage 6, sub-task #6651) — the per-class violation volumes and engine attribution Decision §§4 and 6 consume.
+- Delivery child: #5842 (milestone #360, verified open at authoring) executes the Decision §9 enumeration; its acceptance criteria are amended per §§3, 5, and 9 (run-summary row, dispatcher arm, mandatory CI fixture wiring, resolver-miss semantics, instrument-parity arm).
+- Resolver-miss precedent: #6435 (open, P2) — the default-miss defect Decision §5's `resolver-miss-suspect` semantics exist to catch.
+- Health-check `structure` mode: shipped by #158 — REJECTED as the recurring instance-wide home and ADOPTED as shared-class contract baseline plus per-project judgment surface (Decision §6).

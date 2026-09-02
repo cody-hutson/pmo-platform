@@ -141,9 +141,11 @@ release/releases/plans/pda-decisions-and-conformance-baseline_RELEASE_PLAN.md  A
 core/ADRs/ADR-NNN-cross-boundary-key-form-for-entity-and-tracker-identifiers.md  ADD
 core/ADRs/ADR-NNN-lifecycle-audit-trail-carrier-or-retirement.md  ADD
 
-# ── CONDITIONAL rows ──
-core/ADRs/ADR-NNN-instance-conformance-validator-surface.md  ADD  CONDITIONAL:5841-implies-architectural-decision
-core/ADRs/README.md  EDIT  CONDITIONAL:adr-index-registration-required
+# ── CONDITIONAL rows ── (both resolved at the #5841 slice: the validator-surface row PROMOTED —
+#    the recommendation implies an architectural decision, ADR authored; the README row DROPPED —
+#    core/ADRs/README.md declares itself a curated thematic document, NOT an index, so no
+#    registration is required and no edit is made)
+core/ADRs/ADR-174-instance-conformance-validator-surface.md  ADD
 
 #### Read-only inputs
 operations/skills/health-check/SKILL.md  READ
@@ -167,7 +169,7 @@ core/standards/gate-efficacy-standard.md  NOT EDITED
 
 - [ ] **CIAC-1 (#5836 × #5838 × #5841-conditional on `core/ADRs/` numbering namespace):** every ADR this release adds carries a distinct number, sequentially allocated from the merge-time anchor, with zero duplicate claims inside the merged PR. *Method:* `python3 release/tools/renumber-adr.py --detect` on the merged tree → CLAIM rows show this release's ADRs with no duplicate number; null-arm control per AC-Binding Limb 2: the same instrument at plan time already returned a non-zero claims set (`CLAIMED-SET-BRANCH-ONLY 171,172,173` at the Stage-4 pin; `173,174,175,176` at Commit 0), so a clean post-merge zero-duplicate read is distinguishable from a dead detector. *Graded at Stage 9 QC3.5 on the merged PR.*
 - [ ] **CIAC-2 (#5840 × #5836 on the #5836 ADR's Evidence/Decision sections):** the key-form ADR cites the conformance baseline's measured re-key touch-count (or an explicit UNMEASURED disposition from the baseline report) — its bare-slug-resolution `[ASSUMPTION – CONFIRM]` is discharged with #5840's datum, not left open and not silently dropped. Per the operator's D-CIAC2 scope extension, the datum is the **bare-slug cross-boundary census + instance-wide id-collision count** measured by #5840's instance-grain classes (C8/C9), not a form-blind proxy. *Method:* `grep -iE "baseline|conformance|re-key|bare-slug" core/ADRs/ADR-*key-form*.md` → non-empty, and the matched line carries a count or an UNMEASURED token. *Graded at Stage 9 QC3.5 on the merged PR.*
-- [ ] **CIAC-3 (#5840 × #5841 on the health-check `structure` engine):** the two artifacts agree on the same measurement engine — #5840's report attributes its covered classes to `health-check structure` mode, and #5841's recommendation names and dispositions that same engine (adopt-as-home or reject-with-reason), never a silently parallel surface. *Method:* `grep -c "structure" <#5841 deliverable>` → non-zero AND the #5841 deliverable names #158's engine in its disposition section; co-occurrence check against #5840's report's engine-attribution section. The `<#5841 deliverable>` placeholder resolves to the concrete path when the #5841 slice lands (the promoting slice updates this method line per the same-commit promotion rule). *Graded at Stage 9 QC3.5 on the merged PR.*
+- [ ] **CIAC-3 (#5840 × #5841 on the health-check `structure` engine):** the two artifacts agree on the same measurement engine — #5840's report attributes its covered classes to `health-check structure` mode, and #5841's recommendation names and dispositions that same engine (adopt-as-home or reject-with-reason), never a silently parallel surface. *Method:* `grep -c "structure" core/ADRs/ADR-174-instance-conformance-validator-surface.md` → non-zero AND the #5841 deliverable names #158's engine in its disposition section (ADR-174 Decision §6 partition + § Provenance disposition line); co-occurrence check against #5840's report's engine-attribution section. (Placeholder resolved to the concrete path at the #5841 slice per the same-commit promotion rule.) *Graded at Stage 9 QC3.5 on the merged PR.*
 
 ---
 
