@@ -1,6 +1,7 @@
 ---
 title: health-check MCP-primary / local-fallback canonical source set + graceful-degradation contract
 status: Accepted — Decision 1 (the system-level MCP-canonical source-set assignment) superseded in part by ADR-164 (system-of-record-per-mirrored-element), which assigns source authority per data element rather than per system; for every element an external system authors, MCP remains authoritative and the outcome is unchanged. Decisions 2, 3, 4 and 5 — drift-resolution by recency, both-stale-to-operator, the unreachable-MCP degradation envelope including its MEDIUM auto-action cap, and SharePoint degradation — remain in force and are unchanged.
+superseded_by: ADR-164 in-part (Decision 1)
 tags: [health-check, mcp-source-set, graceful-degradation, drift-resolution, integration-boundary]
 ---
 <!-- reference-durability: allow-link -->

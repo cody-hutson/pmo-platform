@@ -5,6 +5,7 @@ status: Accepted
 date: 2026-08-23
 release: operator-instance-home-and-install-scaffold
 deciders: "operator (home-class ratification; isolation-key scope; slice-9 retention) + Stage 5 Solutioning spoke (design) + independent adversarial review (Blocker) + Collective Review (scope-lock) + Stage 6 Engineering spoke (build, re-derivation)"
+supersedes: ADR-096 in-part (stated store default)
 tags: [operator-instance, path-resolution, workspace-layout, migration, supersession, ADR-017, ADR-046, ADR-096, runtime-state, path-leak-detector]
 source_observations:
   - "The canonical default nested platform-written runtime state inside the operator's personal area, while the workspace's other non-repo members sat at the workspace root as first-class siblings. The nested member was the only one a level deeper, and it was the only one the platform wrote to on its own schedule."

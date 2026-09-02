@@ -4,6 +4,7 @@ status: Accepted
 date: 2026-06-13
 release: parallel-launch-quota-budget-gate
 deciders: "Stage 5 Solutioning (Principal Engineer — Architecture Assessment) D-EventTelemetrySurface; rendered at Collective Review scope-lock"
+superseded_by: ADR-102 in-part (substrate choice for the cost-estimate section)
 tags: [architecture, telemetry, pipeline-event-log, quota-budget, schema-governance]
 source_observations:
   - "The quota-budget gate's per-spoke cost estimate (Checkpoint A input + Checkpoint B refinement) consumes per-spoke startup-token telemetry, but the event-log schema § 3 enum has no spoke-completion or spoke-launch event_type — the term `spoke-completion` is Procedure-4 prose only."

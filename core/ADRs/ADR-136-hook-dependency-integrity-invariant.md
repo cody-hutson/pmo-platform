@@ -5,6 +5,7 @@ status: Accepted
 date: 2026-08-15
 release: hooks-enforce-under-adversity
 deciders: "operator (Stage-4 plan gate; Collective Review scope-lock) + Stage 5 Solutioning spoke (design, D1-D7) + hub adversarial evaluation (R1/R2 verified rather than accepted)"
+supersedes: ADR-130 in-part (D5 residual)
 tags: [security-hooks, PreToolUse, fail-closed, dependency-resolution, integrity, attestation, immutability, GHSA-9cjm, supersedes-in-part]
 source_observations:
   - "A dep-resolve.sh containing only `exit 0` is syntactically valid, so a `bash -n` precheck passes it; the top-level exit then terminates the hook from inside the guard's own condition, so the guard never reaches its deny branch and the hook exits 0. Reproduced against all three always-enforce hooks."

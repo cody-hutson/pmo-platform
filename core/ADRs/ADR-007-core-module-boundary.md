@@ -3,6 +3,7 @@ title: ADR-007 — Core module boundary lock-in (file-placement decisions for th
 status: Accepted
 date: 2026-05-27
 deciders: "operator + Stage 5 Solutioning spoke + adversarial review"
+superseded_by: ADR-012 in-part (roadmaps-split clause)
 tags: [architecture, module-boundary, file-placement, cycle-prevention]
 source_observations:
   - Stage 5 spec (sub-task — core migration spec) — file-placement decisions for 8 sub-units

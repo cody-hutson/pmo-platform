@@ -3,6 +3,7 @@ title: ADR-006 — Skill-to-module map (canonical 3-module decomposition for pmo
 status: Accepted
 date: 2026-05-27
 deciders: "operator + Stage 5 Solutioning spoke + adversarial review"
+superseded_by: ADR-012 in-part (core-module roadmap count)
 tags: [architecture, module-boundary, skill-classification, extraction-readiness]
 source_observations:
   - pmo-platform/skills/ at HEAD d849255 — 21 SKILL_LIST skills + 1 canary = 22 active skill directories

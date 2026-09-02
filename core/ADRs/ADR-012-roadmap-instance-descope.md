@@ -3,6 +3,7 @@ title: ADR-012 — Initiative-roadmap instances de-scoped from the tracked tree 
 status: Accepted
 date: 2026-06-02
 deciders: "operator (directive) + roadmap-instance-descope enhancement intake"
+supersedes: ADR-006 in-part (core-module roadmap count), ADR-007 in-part (roadmaps-split clause)
 superseded_by: ADR-046 in-part (location clause)
 tags: [architecture, governance, artifact-class, file-placement, public-repo-boundary]
 source_observations:

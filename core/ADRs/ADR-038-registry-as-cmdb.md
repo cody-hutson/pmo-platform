@@ -5,6 +5,7 @@ status: Accepted
 date: 2026-06-23
 release: 13-field-lifecycle-and-cmdb-automation (v2.20)
 deciders: "operator + Stage 5 Solutioning spoke"
+supersedes: ADR-035 in-part (Decision part 4)
 tags: [architecture, skills, cmdb, configuration-management, registry, single-catalog, routing-view, kind-discriminator, lifecycle-state, supersedes-adr-035, duplicate-source-discipline, core-module, reversibility]
 source_observations:
   - "The skill-CMDB work item (operator ruling on the approved Stage 4 plan) restored full scope — Artifact Register AND skill-CMDB — under the HARD CONSTRAINT 'a SINGLE skill registry/catalog; no second registry.' A prior Stage-5 spoke recommended Option B (CMDB as a separate core/schemas/ reference-schema). The operator OVERRODE that and selected Option A — evolve the single registry.md INTO the CMDB — on the rationale 'I don't want two skill registries': Option A yields ONE catalog (registry.md), Option B leaves two (registry.md + the new schema)."

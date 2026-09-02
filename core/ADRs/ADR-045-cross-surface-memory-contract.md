@@ -6,7 +6,7 @@ status: Accepted
 date: 2026-06-26
 release: 16-knowledge-management-discipline
 deciders: "Workspace owner (architecture refined + ratified at the Stage 9 review); design authored at Stage 5 Solutioning"
-supersedes: ADR-029
+supersedes: ADR-029 whole
 tags: [architecture, knowledge-management, memory, ssot, cross-surface, four-type-memory, no-shadow-ssot, contract, reversibility]
 ---
 
