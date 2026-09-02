@@ -16,7 +16,7 @@ source_observations:
 
 ## Status
 
-Proposed — authored at Stage 6 Engineering; ratified at the operator's Stage 9 plan-review gate. The Accepted flip is verified against this file's `status:` field, never assumed from milestone closure.
+**Accepted** — authored at Stage 6 Engineering; ratified at the operator's Stage 9 plan-review gate. The Accepted flip is verified against this file's `status:` field, never assumed from milestone closure.
 
 ## Context
 

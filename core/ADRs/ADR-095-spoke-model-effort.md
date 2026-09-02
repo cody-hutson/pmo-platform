@@ -83,6 +83,13 @@ The change is **additive**: it introduces a canonical entry point plus a pointer
 ## Related ADRs
 
 - **ADR-022** (platform-config.toml vs operator.toml split) — establishes that `platform-config.toml` is the no-PII platform-behavior surface. `[spoke_runtime]` is a new behavior category on that surface; this ADR applies ADR-022's boundary (behavior-dominated, no-PII → platform-config) to the spoke model/effort decision (alternative B rejected on exactly that boundary).
+<!-- adr-supersession: reciprocity-exempt — supersedes in part the prior
+     "two surfaces by design" model-config decision (scope: its discoverability half).
+     That decision was carried by a merged pre-renumber pull request and has no ADR record,
+     so there is no counterparty record to carry the reciprocal and the edge is one-sided by
+     construction. Recorded in prose deliberately; the bullet immediately below is the
+     relation. -->
+
 - **The prior "two surfaces by design" model-config decision** (a merged pre-renumber PR, not an ADR; its derived text lives in the `agents-model-overrides.txt` header and `hub-spoke-bridge.md` § Per-Stage Override) — **superseded-in-part**: its discoverability half ("no single global-override surface") is reversed by this canonical entry point; its runtime-carrier explicitness and its detection composite are preserved and strengthened. Because that decision has no ADR record, this ADR is the first ADR-tier record of the surface and records the supersession in prose here rather than via a Nygard `Superseded`-of-an-ADR pointer.
 
 ## References

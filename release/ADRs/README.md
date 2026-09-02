@@ -120,7 +120,7 @@ ADR `status:` follows the [Nygard convention](https://cognitect.com/blog/2011/11
 | Status | Meaning |
 |---|---|
 | Proposed | Decision drafted, not yet operator-ratified |
-| Accepted | Operator-ratified at Collective Review or equivalent gate |
+| Accepted | Operator-ratified at the **Stage 13 Close ratification beat** (Phase A13), which is where the `Proposed → Accepted` transition is performed; for releases predating that beat, at the release's Collective Review or equivalent gate |
 | Deprecated | Superseded by a later ADR; remains for audit trail |
 | Superseded | Replaced; cite the superseding ADR in `## Status` block |
 
@@ -131,6 +131,7 @@ The schema permits an optional prose tail after the leading token (a ratificatio
 - [`../../core/standards/adr-authoring-guide.md`](../../core/standards/adr-authoring-guide.md) — when to write an ADR (trigger/non-trigger rubric), copy-paste template + worked example, supersede-not-edit policy
 - [`../../core/schemas/adr-schema.md`](../../core/schemas/adr-schema.md) — canonical ADR frontmatter + body-section schema (field/section contract)
 - [`../../core/ADRs/README.md`](../../core/ADRs/README.md) — core-module curated thematic document (NOT an index — see its own § Format note)
+- [`../../core/ADRs/README.md` § Cross-cutting pattern index](../../core/ADRs/README.md#cross-cutting-pattern-index) — hand-authored index of design questions answered by records in BOTH modules. Curated, not projected: cluster membership derives from neither filename nor frontmatter, and the clusters span modules, so a release-side projection would render partial clusters. Determination registered in [`../references/standards/release-corpus-schema.md`](../references/standards/release-corpus-schema.md) § Derived-Surface Contract
 - [`../references/standards/release-corpus-schema.md`](../references/standards/release-corpus-schema.md) — § Derived-Surface Contract, which governs the generated table above
 - [`../../core/disciplines/decision-discipline.md`](../../core/disciplines/decision-discipline.md) — decision-class briefing discipline (the sibling; does NOT govern ADR authoring)
 - [`../references/pipeline/stage-05-solutioning.md`](../references/pipeline/stage-05-solutioning.md) — Stage 5 ADR materialization process

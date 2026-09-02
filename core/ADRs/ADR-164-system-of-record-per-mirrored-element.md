@@ -7,7 +7,7 @@ date: 2026-08-29
 release: one-system-of-record-per-element
 deciders: "Stage 5 Solutioning spoke (options analysis, evidence-grounding, blast radius) + release hub (carried constraint on the supersession scope) + operator (Stage 4 plan-review determination that ADR-051 is superseded in part, never in full) + Stage 6 Engineering spoke (authorship)"
 tags: [architecture, source-of-record, external-mirror, data-authority, reconciliation, supersedes-in-part, health-check, raid, dual-format]
-supersedes: ADR-051 (Decision 1 only — the system-level canonical assignment; Decisions 2-5 stand)
+supersedes: ADR-051 in-part (Decision 1) — the system-level canonical assignment; Decisions 2-5 stand
 source_observations:
   - "Three governance surfaces declared incompatible systems of record for the same externally-mirrored data, with zero cross-citations reconciling them. A reconciliation probe found that none of the three referenced either of the others' claim, so a consumer could resolve the same disagreement in opposite directions depending on which surface it happened to read."
   - "The three claims are not three answers to one question. The operations-governance claim is a WRITE-DIRECTION claim (an un-pushed local edit is held locally until sync completes). The tracker-schema claim is a RENDER-SOURCE claim (the local register file is the source of a one-way projection). The health-check ADR's claim is an AUTHORITY claim (whose value wins on disagreement). Each is true on its own axis, which is why picking a single system-level winner would have broken something true in each."

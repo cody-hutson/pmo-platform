@@ -5,6 +5,7 @@ status: Accepted
 date: 2026-08-24
 release: hooks-block-their-declared-subject
 deciders: "operator (Collective Review scope-lock) + Stage 5 Solutioning spoke (design verification, defect set, empirical placement spec) + Stage 6 Engineering spoke (build, measurement)"
+supersedes: ADR-031 in-part (cross-domain bridge writes member)
 tags: [block-autonomy-ceiling, autonomy-tiers, irreducible-human-tasks, layer-separation, tier-0, mode-gating, master-activation, operations-bridge, security-control-scope]
 source_observations:
   - "The two domains are SIBLING directories, not nested. `${PRIMARY_ROOT}/pmo-platform` is a git repository and is public; `${PRIMARY_ROOT}/projects` is not a git repository and is not in the platform repo's path space at all — `git check-ignore ../projects` reports it as outside repository. Only one of the two directions can therefore put content anywhere it becomes committable."

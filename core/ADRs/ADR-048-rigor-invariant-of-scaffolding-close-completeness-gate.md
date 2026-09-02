@@ -13,7 +13,7 @@ tags: [pipeline, release, governance, close-out, invariant, rigor-invariance, sc
 
 ## Status
 
-**Proposed** — flips to Accepted at the Stage 9 review.
+**Accepted.**
 
 Number **048** — next gap-free after 047; binds atomically at Stage 12.
 

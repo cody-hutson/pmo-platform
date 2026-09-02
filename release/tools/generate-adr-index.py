@@ -47,7 +47,7 @@ repair to the bound lands here for free.
 SCOPE — release module only
 ---------------------------
 The population is `release/ADRs/ADR-*.md`. `core/ADRs/README.md` is deliberately
-NOT projected: it is a curated thematic document, not an index (26 of 82 core
+NOT projected: it is a curated thematic document, not an index (26 of 115 core
 records are file-linked there; it was never an index), and that determination is
 operator-ratified. Do not extend this projector to it.
 
@@ -69,6 +69,19 @@ DERIVATION RULES — one line per column, all five derived
            is a version-binding annotation (`(v3.80 provisional; bound at Stage 12)`),
            not part of the release identity. Same shape as the Status rule: leading
            value, prose tail dropped.
+
+  Partial-supersession state is NOT projected, and the reason is a measurement
+  rather than a preference. `adr-schema.md` §5 carries a `superseded_by:` field
+  recording partial supersession on the target side. A sixth column rendering it
+  would be derived from the release-side population only — but the partial edges
+  live overwhelmingly in `core/ADRs/`, which this projector deliberately does not
+  read (see SCOPE above). The column would therefore render the two release-side
+  edges and silently omit the rest, reproducing at a sixth column exactly the
+  "several enumerations, several different maxima" defect the derived-surface
+  contract exists to prevent. A partial column that is right about a minority of
+  its subject is worse than no column, because a derived surface is read as
+  complete. Partial-supersession state is read from the records themselves and
+  policed by the durability lint's reciprocity rule; it is not an index concern.
 
   Row order: ascending by number — the corpus's own convention, and the order
   `renumber-adr.py`'s `resort_adr_table()` independently produces.

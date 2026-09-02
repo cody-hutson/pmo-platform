@@ -18,7 +18,7 @@ source_observations:
 
 ## Status
 
-Proposed — flips to Accepted at this milestone's Collective Review scope-lock (the same Status-enum gate the release-ADR README names: "Operator-ratified at Collective Review or equivalent gate"; the same pattern ADR-024 and ADR-036 followed).
+**Accepted.**
 
 Numbered as the next-free slot across `release/ADRs/` and `core/ADRs/`, resolved at the authoring commit of this release with the platform-wide gap-free/unique check (`release/tools/check-adr-numbers.py`, the `adr-number-integrity` CI job) as the backstop — confirmed contiguous `001..036` at authoring, so this ADR is `037`. The ADR is referenced downstream **by slug**, never by its number — the number is an authoring-time assignment, not a stable cross-reference handle. This is the same slug-primary identity principle the parent capability rests on, applied to ADR identity.
 

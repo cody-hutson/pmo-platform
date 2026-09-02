@@ -5,6 +5,7 @@ status: Accepted
 date: 2026-07-11
 release: unbound (bound at Stage 12)
 deciders: "operator (remediation-scope approval + warn-vs-enforce posture decision, this session) + adversarial security review (GHSA-9cjm intake)"
+superseded_by: ADR-130 in-part (D4)
 tags: [security-hooks, PreToolUse, fail-closed, dependency-resolution, jq, GHSA-9cjm, GHSA-g9g6, internal-primitive, fail-open, defense-in-depth]
 source_observations:
   - "The PreToolUse security hooks pinned PATH=/usr/bin:/bin (anti-hijack) and hard-coded JQ=/usr/bin/jq, then exited 0 (fail-OPEN) when jq was unresolvable — silently disabling the perimeter on the documented `brew install jq` macOS install, where jq lands at /opt/homebrew/bin/jq and /usr/bin/jq does not exist."

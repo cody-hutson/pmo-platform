@@ -8,7 +8,7 @@ tags: [entity-model, people-graph, leadership-owner, tier-2-scope-change, person
 
 ## Status
 
-Proposed — ratified at the functional-people-graph Stage 9 GO. That operator GO renders
+**Accepted** — ratified at the functional-people-graph Stage 9 GO. That operator GO renders
 the **Tier-2 SCOPE CHANGE** authorization required by the FROZEN-roster / frozen-field
 clause of [`project-entity-model.md` §4](../disciplines/project-entity-model.md#4-entity-definitions-19)
 ("any change requires reopening the establishing issue via a Tier-2 SCOPE CHANGE") and
