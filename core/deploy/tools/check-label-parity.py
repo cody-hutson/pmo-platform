@@ -1361,6 +1361,37 @@ def _self_test_emit_fix():
     if "gh label list" in text:
         print("FAIL: DELETE-block capture still rides GraphQL (`gh label list`)")
         ok = False
+
+    # The RENDERED capture above is asserted; the LIVE READ was not, so reverting
+    # _gh_labels_stdout to `gh label list` passed the whole suite (#5058 Stage 8 M-2).
+    # Assert the argv the live read actually builds, on the same two arms.
+    _captured_argv = []
+
+    class _FakeCompleted:
+        returncode = 0
+        stdout = "[]"
+        stderr = ""
+
+    _real_run = subprocess.run
+    try:
+        subprocess.run = lambda cmd, *a, **k: (_captured_argv.append(list(cmd)), _FakeCompleted())[1]
+        _gh_labels_stdout("fixture-owner/fixture-repo")
+    finally:
+        subprocess.run = _real_run
+
+    if not _captured_argv:
+        print("FAIL: live-read transport arm captured no argv — the probe cannot answer")
+        ok = False
+    else:
+        _argv = _captured_argv[0]
+        if _argv[:2] != ["gh", "api"] or not any(
+            a.startswith("repos/") and "/labels?per_page=" in a for a in _argv
+        ):
+            print(f"FAIL: live read is not the REST labels path: {_argv}")
+            ok = False
+        if "label" in _argv and "list" in _argv:
+            print(f"FAIL: live read reverted to GraphQL (`gh label list`): {_argv}")
+            ok = False
     # With no slug the block must name the flag, never emit a command against "None".
     no_slug = "\n".join(render_emit_fix(rows, live)[0])
     if "repos/None/labels" in no_slug or "--repo owner/name" not in no_slug:
