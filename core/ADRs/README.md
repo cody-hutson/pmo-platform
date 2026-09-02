@@ -312,8 +312,8 @@ Each entry states its question, its anchor record, and one ≤15-word quote per 
 | [ADR-105](../../release/ADRs/ADR-105-release-corpus-normalization.md) | the release ledgers | *"The projector emits ENTRIES, never FILES"* |
 | [ADR-117](../../release/ADRs/ADR-117-adr-index-derived-surface-and-scoped-conformance-claim.md) | the release ADR index | *"Nothing in the table is hand-typed, and a hand-edited cell fails `--verify`"* |
 | [ADR-119](../../release/ADRs/ADR-119-selftest-coverage-is-discovered-with-a-committed-manifest-floor.md) | a CI coverage set | *"The covered set is DISCOVERED from a declared scope, never enumerated."* |
-| [ADR-175](ADR-175-status-surface-authority-and-flip-ownership.md) | an ADR's own `## Status` body | *"The `## Status` body is a projection of it."* |
-| [ADR-176](ADR-176-partial-supersession-is-a-reciprocal-frontmatter-edge.md) | a candidate new index column | *"Partial-supersession state is NOT projected into the derived index"* |
+| [ADR-171](ADR-171-status-surface-authority-and-flip-ownership.md) | an ADR's own `## Status` body | *"The `## Status` body is a projection of it."* |
+| [ADR-172](ADR-172-partial-supersession-is-a-reciprocal-frontmatter-edge.md) | a candidate new index column | *"Partial-supersession state is NOT projected into the derived index"* |
 
 #### Does this predicate range over the subject it claims to judge?
 
