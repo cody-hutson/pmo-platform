@@ -642,20 +642,33 @@ mutant_differs "M8 Deviation-Log read removed" \
 M14="$(mutate m14-enum-narrowed 's/\(core\|operations\|release\|docs/(core|release|docs/')"
 mutant_differs "M14 first-segment enum narrowed (operations removed again)" \
       "$M14" fcm-operations-module.md "$DIFF_OPS" FCM-1 "declared-add-delivered:operations/"
-# THE ARM THAT MATTERS, and it is why M14 is not just a spelling test. Narrowing
-# the enum is a stand-in for the NEXT top-level module nobody adds. Under the
-# shipped tool that omission was invisible — the rows left the denominator and
-# coverage read PASS. It must now be a DISCLOSED non-PASS instead: all three
-# fixture rows become unreadable, and the record has to say so.
+# THE TWO ARMS THAT KILL THIS MUTANT are the FCM-1 arm above (the observed value
+# stops reading `declared-add-delivered:operations/`) and the coverage-COUNT arm
+# immediately below (uninterpreted moves 1 -> 3). Between them M14 is not a
+# spelling test. Narrowing the enum is a stand-in for the NEXT top-level module
+# nobody adds; under the shipped tool that omission was invisible — the rows left
+# the denominator and coverage read PASS. It must now be DISCLOSED instead: all
+# three fixture rows become unreadable, and the COUNT is what has to say so.
 fcm_run "$M14" fcm-operations-module.md "$DIFF_OPS"; J_M14="$FCM_JSON"
 case "$(observed_of "$J_M14" FCM-COVERAGE)" in
   *declared=3*uninterpreted=3*)
-    ok "M14 NEXT-OMISSION VISIBILITY — an unknown module is COUNTED (declared=3 uninterpreted=3), not silently dropped" ;;
+    ok "M14 NEXT-OMISSION VISIBILITY (discriminating arm) — an unknown module is COUNTED (declared=3 uninterpreted=3, up from 1 live), not silently dropped" ;;
   *) bad "M14 expected declared=3 uninterpreted=3 under the narrowed enum, got '$(observed_of "$J_M14" FCM-COVERAGE)'" ;;
 esac
+# NON-DISCRIMINATING INVARIANT — kept deliberately, and labelled so no reader
+# mistakes it for the arm doing the work. This comment previously read "THE ARM
+# THAT MATTERS", and that was false: fcm-operations-module.md's third row
+# (`ops-runbook.md`) carries no directory segment, so coverage is pinned non-PASS
+# by the FIXTURE regardless of the enum — A13 above asserts exactly that SKIP on
+# the UNMUTATED tool, which is the same measurement this arm makes. It therefore
+# holds identically with and without the mutation and cannot fail here, so it
+# proves nothing about the enum. Retained as a standing invariant (coverage must
+# never reach a clean PASS while a module is unreadable) rather than deleted,
+# because the invariant is still worth asserting — it is simply not the kill.
+# Demoted at Stage 6; the kill belongs to the two arms above.
 [ "$(verdict_of "$J_M14" FCM-COVERAGE)" != PASS ] \
-  && ok "M14 the narrowed enum can no longer reach a clean PASS (this is the whole fix)" \
-  || bad "M14 SURVIVED — coverage still PASSes with an entire module unreadable"
+  && ok "M14 INVARIANT (not discriminating — see note) — the narrowed enum still cannot reach a clean PASS" \
+  || bad "M14 coverage reached a clean PASS with an entire module unreadable"
 
 # M15 RESTORES THE DROP. The enum arm above only proves one word is present; this
 # proves the drop-to-nowhere behaviour itself is observed. With the discard back,
