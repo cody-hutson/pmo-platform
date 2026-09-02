@@ -48,7 +48,7 @@ Every release-corpus surface is **S1 (Package/capability → PUBLIC)** or **S3 (
 
 | Surface | Class | Home |
 |---|---|---|
-| `RELEASE_LOG.md`, `RELEASE_DIGEST.md`, `notes/`, `plans/`, `logs/` | **S3 → instance** | `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/...` |
+| `RELEASE_LOG.md`, `RELEASE_DIGEST.md`, `notes/`, `plans/`, `logs/` | **S3 → instance** | `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance/releases/...` |
 | `RELEASE_INDEX.md` | **SPLIT** — empty seed S1-public; filled content S3-instance | seed tracked; filled instance |
 | `CHANGELOG.md` (root) | **S1 → public** | tracked (the concise public release surface) |
 | `release/references/templates/*`, `standards/*` (incl. `release-corpus-schema.md`, `release-notes-standard.md`), `pipeline/*`, `release/tools/*`, `core/deploy/` checks + `generate_release_index.py`, `release/releases/README.md` + `hub-state/*.template` | **S1 → public** | tracked (the mechanism + scaffolding) |
@@ -71,11 +71,11 @@ The migration removes content **HEAD-only**: `.gitignore` + `git rm --cached` + 
 
 ### Decision 5 — Register placement: template public, filled content instance (Q5)
 
-The combined close-out register **TEMPLATE** ships PUBLIC at `release/references/templates/release-learnings-register-template.md`. The **FILLED per-release register CONTENT** writes to `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/...`, never the tracked tree. This is the rule #360/#361 build on; their `stage-13-close.md` §6 schema edit points filled output at the instance path.
+The combined close-out register **TEMPLATE** ships PUBLIC at `release/references/templates/release-learnings-register-template.md`. The **FILLED per-release register CONTENT** writes to `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance/releases/...`, never the tracked tree. This is the rule #360/#361 build on; their `stage-13-close.md` §6 schema edit points filled output at the instance path.
 
 ### Bootstrap (Q3)
 
-`install.sh` lays down the empty instance corpus skeleton (`${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/{plans,notes}/` + empty LOG/INDEX/DIGEST seeds, idempotent); the first local release's Stage 13 populates it; `generate_release_index.py` self-heals (writes a fresh INDEX when none exists).
+`install.sh` lays down the empty instance corpus skeleton (`${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance/releases/{plans,notes}/` + empty LOG/INDEX/DIGEST seeds, idempotent); the first local release's Stage 13 populates it; `generate_release_index.py` self-heals (writes a fresh INDEX when none exists).
 
 ### Canonicalization note — `CLAUDE_WORKSPACE_ROOT`, not `PMO_INSTANCE_PATH`
 
@@ -101,7 +101,7 @@ The operator-instance corpus root resolves via **`${CLAUDE_WORKSPACE_ROOT:-$HOME
 
 ## Deferred-migration plan
 
-The execution issue (filed post-review per D-1412-Scope) carries: `.gitignore` block + negations; `git rm --cached` + move of LOG/DIGEST/notes/plans to `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/personal/pmo-instance/releases/`; `RELEASE_INDEX.md` → empty public seed; re-point Check 32 + `generate_release_index.py` + `automated-closeout.sh` + `stage-13-close.md` §5 Phase B + `release-corpus-schema.md` (and converge the 21 `deploy.sh` `PMO_INSTANCE_PATH` fallthroughs onto `CLAUDE_WORKSPACE_ROOT`); AUDIT `check-doc-links.py`; `install.sh` bootstrap; cross-PR overlap re-audit at its Stage 9/12. AC: fresh clone shows no maintainer content; generator self-test PASS against instance; Check 32 resolves to instance; second-install produces its own corpus. Reversibility MODERATE / MEDIUM.
+The execution issue (filed post-review per D-1412-Scope) carries: `.gitignore` block + negations; `git rm --cached` + move of LOG/DIGEST/notes/plans to `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance/releases/`; `RELEASE_INDEX.md` → empty public seed; re-point Check 32 + `generate_release_index.py` + `automated-closeout.sh` + `stage-13-close.md` §5 Phase B + `release-corpus-schema.md` (and converge the 21 `deploy.sh` `PMO_INSTANCE_PATH` fallthroughs onto `CLAUDE_WORKSPACE_ROOT`); AUDIT `check-doc-links.py`; `install.sh` bootstrap; cross-PR overlap re-audit at its Stage 9/12. AC: fresh clone shows no maintainer content; generator self-test PASS against instance; Check 32 resolves to instance; second-install produces its own corpus. Reversibility MODERATE / MEDIUM.
 
 ## Related ADRs
 
