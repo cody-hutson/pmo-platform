@@ -10461,7 +10461,17 @@ STUB
     ( cd "$_ms_work" \
       && $GIT -c user.email=t@t -c user.name=t tag -a -m slug some-milestone-slug v9.89 >/dev/null 2>&1 \
       && $GIT push -q origin some-milestone-slug >/dev/null 2>&1 ) || true
-    if git_net -C "$_ms_work" ls-remote --tags origin "some-milestone-slug" 2>/dev/null | /usr/bin/grep -q "some-milestone-slug"; then
+    # `grep` reads a HERE-STRING, never `producer | grep -q`: under `set -euo
+    # pipefail` grep -q exits at the first match and SIGPIPEs the writer, so
+    # pipefail promotes a SUCCESSFUL match to a non-zero status and this
+    # reachability test silently inverts — L-7 would be skipped as "unreachable"
+    # on the very fixture where the tag DID land. `|| true` is load-bearing, not
+    # defensive noise: capturing moves the network call out of the `if` condition
+    # where `set -e` did not see its status, so the tolerance the pipeline had
+    # must be restored explicitly or an offline run aborts the whole self-test.
+    local _l7_lsr
+    _l7_lsr="$(git_net -C "$_ms_work" ls-remote --tags origin "some-milestone-slug" 2>/dev/null || true)"
+    if /usr/bin/grep -q "some-milestone-slug" <<<"$_l7_lsr"; then
       # The note must land where notes_abs_path() RESOLVES it, not where a flat
       # naming guess would put it: a version-less $VERSION resolves under
       # notes/_unversioned/. Writing it flat aborts the phase at the notes preflight
