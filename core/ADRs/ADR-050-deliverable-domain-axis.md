@@ -13,7 +13,7 @@ tags: [project-schema, deliverable-type, domain-axis, methodology-orthogonal, ty
 
 ## Status
 
-**Proposed** — flips to Accepted at the Stage 9 review.
+**Accepted.**
 
 Number **050** — next gap-free after 049; binds atomically at Stage 12.
 

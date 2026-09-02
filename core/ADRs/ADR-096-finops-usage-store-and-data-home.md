@@ -6,6 +6,7 @@ status: Accepted
 date: 2026-07-25
 release: agent-finops-foundation (v3.96)
 deciders: "Workspace owner (ratified D-DataHome option A at the Stage-4 D-Gate, 2026-07-25; carried unchanged through the r2 Collective Review scope-lock, 2026-07-25). Design resolved at the FinOps data-foundation Stage-5 Solutioning (r1 + r2 revision)."
+superseded_by: ADR-141 in-part (stated store default)
 tags: [architecture, finops, token-spend, data-store, schema, git-ignore, operator-instance, security, reversibility, derived-cache]
 source_observations:
   - "#3909 (C1) establishes the FinOps data foundation: extract per-session/per-subagent token counts from local Claude Code session data into an operator-local, git-ignored store, path resolved from config, no hardcoded operator path. On a flat-rate Max plan the local data is authoritative; a provider connector is optional plan-gated enrichment only."

@@ -18,7 +18,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent. It flips to **Accepted** at this release's Stage-9 plan-review gate; per the established precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure.
+**Accepted.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent. Per the established precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure.
 
 **Numbering.** ADR numbers are platform-global monotonic across **both** homes (`core/ADRs/` and `release/ADRs/`), and the claimed set includes in-flight pull-request claims. Allocated at commit time: the union of both directories reported a contiguous `001..107` with no gaps and no duplicates, and the only open pull request is this release's own, so this ADR takes **108**. Referenced by **slug** (`template-provenance-sidecar-form`), never by integer.
 

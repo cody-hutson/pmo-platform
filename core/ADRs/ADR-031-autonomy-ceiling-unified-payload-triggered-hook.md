@@ -6,6 +6,7 @@ status: Accepted (operator-adopted at the v2.07 / 10-ambient-intake-automation C
 date: 2026-06-19
 release: 10-ambient-intake-automation (v2.07)
 deciders: "Workspace owner (R-C5RECON resolution ratified at the v2.07 Stage 9 review); design resolved at Stage 5 Solutioning"
+superseded_by: ADR-149 in-part (cross-domain bridge writes member)
 tags: [architecture, security, hooks, autonomy-tiers, pretooluse, enforcement, supersession, ambient-intake, reversibility]
 source_observations:
   - "core/standards/subagent-security-posture.md § 4 proposed block-subagent-tier-violation.sh triggered on 'any tool call from a subagent session (detected via session context)'; § 3 Mechanism 2 of the SAME document states the hooks 'do NOT read session-context fields (no session_id, no parent_session, no subagent_type)'. The §4 trigger is internally contradicted by §3."

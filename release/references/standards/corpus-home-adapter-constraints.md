@@ -3,16 +3,16 @@ title: Corpus-Home Adapter — Path-Resolution Constraints
 purpose: Records the constraints any future corpus-home adapter MUST honour when it makes release/tools/automated-closeout.sh --check-paths instance-aware — chiefly that instance-absence resolves to N/A (exit 0), never HARD-FAIL, because --check-paths is a required CI smoke gate that would otherwise redden on every PR from a fresh clone or CI runner. Constraint record only — defines no adapter, no config selector, and no resolution logic.
 type: standard
 status: ACTIVE
-consumers: "the corpus-home adapter design (the future seam that makes corpus-path resolution instance-aware); release/tools/automated-closeout.sh check_paths() (the function the seam must edit); release/tools/tests/test_corpus_home_tolerance.sh (the executable assertion of CH-1..CH-4); .github/workflows/release-tooling-smoke.yml closeout-smoke (the gate that reddens on violation)"
+consumers: "the corpus-home adapter design (the still-owed decision on where the corpus lives; the instance-aware resolution seam itself has landed); release/tools/automated-closeout.sh check_paths() (the function the seam must edit); release/tools/tests/test_corpus_home_tolerance.sh (the executable assertion of CH-1..CH-4); .github/workflows/release-tooling-smoke.yml closeout-smoke (the gate that reddens on violation)"
 composes_with: [release-corpus-schema.md, ../../../core/standards/repo-host-adapter-versioning.md, ../../../core/standards/public-repo-vs-operator-instance-taxonomy.md, ../../../core/standards/gate-efficacy-standard.md]
-reversibility: CHEAP / Confidence HIGH — a constraint record plus its executable assertion; git revert restores prior state. The document adds no runtime surface of its own, and no adapter implements it yet, so there is no migration to unwind.
+reversibility: CHEAP / Confidence HIGH — a constraint record plus its executable assertion; git revert restores prior state. The document adds no runtime surface of its own, and the seam it constrains is reversible by its own change's revert, so there is no migration to unwind.
 ---
 <!-- reference-durability: allow-link -->
 
 # Corpus-Home Adapter — Path-Resolution Constraints
 
 > Reversibility: CHEAP / Confidence: HIGH.
-> **Status: anticipatory.** No corpus-home adapter exists. `operator.toml [adapters]` ships four selectors (`repo_host`, `ticketing`, `kb`, `ai_tool`) and **no `corpus_home`** — and this document creates none. It records the constraints the seam must honour *when someone builds it*, so the constraint does not have to be rediscovered by a reddened required gate.
+> **Status: the seam has landed; the selector has not.** Instance-aware corpus-path resolution exists in `automated-closeout.sh`, the committed arming sentinel reads `armed`, and the suite in §5 reports `PASS-SEAM-LANDED` — so CH-1..CH-4 are graded on every qualifying PR rather than merely anticipated. What has **not** landed is the adapter selector: `operator.toml [adapters]` ships four selectors (`repo_host`, `ticketing`, `kb`, `ai_tool`) and **no `corpus_home`** — and this document creates none. §6 names the one design still owed.
 
 ## 1. Why this exists
 
@@ -145,4 +145,4 @@ This standard owns **the constraint** and nothing else. It restates none of the 
 
 ## 7. Cutover
 
-Applies **from this release forward**. There is no retroactive obligation and no backfill: no seam exists, so nothing is currently non-conformant. The first change that makes corpus-path resolution instance-aware is the first change this document binds — and the suite in §5 will tell that change's author, on their own PR, whether they got it right.
+Applies **from this release forward**. There is no retroactive obligation and no backfill. The first change that made corpus-path resolution instance-aware has since landed and is graded conformant — §5's suite reaches `PASS-SEAM-LANDED` on the current tree — so the constraints are asserted, not merely stated. Every subsequent change to corpus-path resolution is bound the same way, and the suite will tell that change's author, on their own PR, whether they got it right.
