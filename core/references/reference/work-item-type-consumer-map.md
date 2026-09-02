@@ -232,8 +232,10 @@ pack corpus. Measured before and after at one commit, on the same target:
 | without the Python type | 1555 | 25 | **0** |
 | with it | 1627 | 27 | **2** — the two pack-reading executables |
 
-The +72 scan-population delta equals the tracked `.py` executable count exactly (72 of 244
-executables), which is the cross-check that the delta is the Python corpus and not drift.
+The +72 scan-population delta equals the **tracked `.py` file count** exactly (72 of the
+244 tracked `.py` / `.sh` / `.ps1` files) — the cross-check that the delta is the Python
+corpus and not drift. That it matches exactly, rather than falling short, additionally
+shows no tracked `.py` file sits under a default exclusion.
 The fix ships with a discriminating self-test arm: the suite previously returned an
 identical result patched and unpatched because its fixture region contained no `.py` file
 at all, so the one-line change alone would have landed behind a gate that could not fail.
