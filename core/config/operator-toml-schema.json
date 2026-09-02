@@ -329,7 +329,7 @@
     {
       "name": "methodology",
       "delivery": "delivered",
-      "description": "Global delivery-approach default. ADR-022 §1 / ADR-017 §S2 name methodology an operator.toml concern.",
+      "description": "Global delivery-approach default plus the opt-in portfolio-framework selector. ADR-022 §1 / ADR-017 §S2 name methodology an operator.toml concern. The two keys are different altitudes, not variants: default_delivery_approach governs a project, portfolio_framework governs the portfolio above it.",
       "keys": [
         {
           "key": "default_delivery_approach",
@@ -340,6 +340,16 @@
           "required": false,
           "description": "The methodology archetype an install starts from when a project does not set its own delivery_approach. ONLY the global default plus the resolver fallback — the enum and its validation stay canonical in core/schemas/project-schema.md.",
           "since": "4.0"
+        },
+        {
+          "key": "portfolio_framework",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Portfolio-tier governance framework whose portfolio- and program-tier artifact shapes this deployment uses. OPEN value domain (no enum) — a lowercase-kebab framework id resolving to a shape directory under operations/templates/portfolio-frameworks/. Deployment-global at v1: global and individual rungs only, narrowing recorded at core/schemas/platform-config-schema.md §3.1. Empty resolves exactly as today. A DIFFERENT ALTITUDE from default_delivery_approach, not a variant of it. Consumer branch: release/references/specs/methodology-parameterization-v1.md §5B.",
+          "since": "4.46"
         }
       ]
     },

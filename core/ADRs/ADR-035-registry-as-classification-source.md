@@ -6,6 +6,7 @@ status: Proposed
 date: 2026-06-20
 release: 05-ROLE-sustain-coverage-router (v2.15)
 deciders: "operator + Stage 5 Solutioning spoke"
+superseded_by: ADR-038 in-part (Decision part 4)
 tags: [architecture, skills, registry, classification-source, role-specialist, router, central-index, core-module, parameterization, carry-forward, reversibility]
 source_observations:
   - "The role-Specialist suite (ADR-019) needs an addressable entry point: a router that classifies a role-shaped request to the correct role-Specialist without enumerating a hardcoded skill list. Every role-Specialist's acceptance criteria say it 'registers into the core/ logical skill registry', and that registry did not exist at v2.11 (verified: core/skills/ held only eval-writer/, pmo-qa-auditor/, prompt-builder/, README.md). The Stage 4 plan flagged the registry schema as novel with no precedent file to copy (Risk R6) and recommended a thin ADR to make the schema and the registration contract durable."

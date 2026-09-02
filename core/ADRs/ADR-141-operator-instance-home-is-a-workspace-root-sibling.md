@@ -5,6 +5,7 @@ status: Accepted
 date: 2026-08-23
 release: operator-instance-home-and-install-scaffold
 deciders: "operator (home-class ratification; isolation-key scope; slice-9 retention) + Stage 5 Solutioning spoke (design) + independent adversarial review (Blocker) + Collective Review (scope-lock) + Stage 6 Engineering spoke (build, re-derivation)"
+supersedes: ADR-096 in-part (stated store default), ADR-032 in-part (Decision 1's operator-instance home path)
 tags: [operator-instance, path-resolution, workspace-layout, migration, supersession, ADR-017, ADR-046, ADR-096, runtime-state, path-leak-detector]
 source_observations:
   - "The canonical default nested platform-written runtime state inside the operator's personal area, while the workspace's other non-repo members sat at the workspace root as first-class siblings. The nested member was the only one a level deeper, and it was the only one the platform wrote to on its own schedule."
@@ -95,4 +96,4 @@ Platform-written runtime state is a peer of the operator's content, never a tena
 - The distribution-architecture ADR — realigned with, not superseded.
 - The roadmap-instance in-repo home ADR — the executed precedent for relocating one family member's canonical default across the SSOT surfaces, and the origin of the authored-content-versus-runtime-state distinction this decision applies.
 - The FinOps usage-store ADR — superseded in part, on its stated store default only.
-- The release-corpus public-versus-instance split ADR — its deferred corpus migration targets this family's home; sequencing was assessed and found moot, as no migration is scheduled.
+- The release-corpus public-versus-instance split ADR — superseded in part, on its Decision 1 operator-instance home path only. Its deferred corpus migration targets this family's home; that migration remains unscheduled, so the relocation raises no sequencing obligation against it.

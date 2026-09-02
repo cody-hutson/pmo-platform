@@ -59,6 +59,16 @@ readonly CLI_VERSION="0.2.1"
 # The parser->dispatcher record DELIMITER also changed (see REC_FS below);
 # that boundary is internal and the emitted `stream` remains TAB-separated,
 # so it is likewise invisible to every downstream consumer.
+# NO BUMP IS OWED for the FCM path-recognizer repair (`operations` added to the
+# first-segment enum; an unrecognized fenced row now reported as `uninterpreted`
+# rather than discarded). It adds one `source_form` VALUE,
+# `fence-unrecognized-path`, and by the precedent recorded immediately above a
+# value in an existing enum field is neither a new record field nor a new verdict
+# value. What DOES change is the NUMBERS the coverage record carries on affected
+# plans — `declared`, `interpreted` and `uninterpreted` were previously computed
+# over a denominator that had silently lost rows. That is the counters becoming
+# correct, not the contract changing: every field name, verdict value and record
+# shape a consumer reads is untouched.
 readonly SCHEMA_VERSION="4"
 
 # ---------------------------------------------------------------------------
@@ -1447,8 +1457,27 @@ parse_fcm_declarations() {
   printf '%s\n' "$body" | awk '
     function trim(s){ gsub(/^[ \t]+|[ \t]+$/,"",s); return s }
     function lc(s){ return tolower(s) }
+    # FIRST-SEGMENT ENUM. This is a CLOSED list of top-level repository segments,
+    # and every omission from it used to be invisible: a row whose first segment is
+    # absent here returned "" and left the population BEFORE classification, so it
+    # was counted as neither interpreted nor uninterpreted and the coverage record
+    # reported full coverage over a short denominator.
+    #
+    # `operations` was the omission that surfaced it. It is a top-level MODULE of
+    # this repository, peer to core / release / docs / packages, and it was never in
+    # the list: measured over the 189-plan corpus, 286 declaration rows across 47
+    # plans were dropped for that single missing word, including all 7 artifact-shape
+    # ADDs of the release whose checker run exposed it (which reported
+    # `uninterpreted=0 pathless=0` and FCM-COVERAGE PASS while asserting 2 of 9
+    # declared ADDs).
+    #
+    # ADDING THE WORD IS THE SMALLER HALF OF THE FIX. The drop-to-nowhere behaviour
+    # is the reusable defect, and it is closed at the fence arm below, which now
+    # routes an unrecognised row into the uninterpreted count instead of discarding
+    # it. That is what makes the NEXT omission from this enum a visible non-PASS
+    # rather than a silent one, so this list no longer has to be complete to be safe.
     function pathof(s,   t) {
-      if (!match(s, /(core|release|docs|packages|projects|roadmaps|\.github|\.claude)\/[^ \t`|,;()]+/)) return ""
+      if (!match(s, /(core|operations|release|docs|packages|projects|roadmaps|\.github|\.claude)\/[^ \t`|,;()]+/)) return ""
       t = substr(s, RSTART, RLENGTH)
       sub(/\*\*$/, "", t); sub(/[.,;:]+$/, "", t); sub(/`+$/, "", t)
       return t
@@ -1635,9 +1664,50 @@ parse_fcm_declarations() {
       next
     }
     # ---- fenced declaration row ----
+    #
+    # AN UNRECOGNISED PATH IS REPORTED, NOT DISCARDED.
+    #
+    # `if (p == "") next` used to sit here, and it is the reusable form of the
+    # defect the `operations` omission above merely instantiated. A row it dropped
+    # left the population BEFORE classification, so it was counted as neither
+    # interpreted nor uninterpreted: `declared` shrank to match, `interpreted`
+    # equalled `declared`, and FCM-COVERAGE reported PASS over a denominator that
+    # had silently lost rows. That is a coverage verdict about the rows the parser
+    # happened to understand, presented as a verdict about the declared population
+    # — the exact vacuity this family exists to close, occurring inside it, and it
+    # is why the table arm five lines above already reports its own no-path case
+    # instead of taking a `next`.
+    #
+    # The row is emitted as `unknown` (SKIP, a disclosure) rather than `pathless`
+    # (ERROR). The table arm can afford ERROR because its row is MARKED: an intent
+    # column names a declaration, so a path cell holding a label is an authoring
+    # defect. A fenced line carries no such structure, and ERROR over it would
+    # redden readable plans for prose.
+    #
+    # NO PREDICATE IS GUESSED HERE, and that is deliberate: every line reaching
+    # this arm has already survived the blank, fence-marker, label and comment
+    # tests above, so the control flow has ALREADY decided it is a candidate
+    # declaration. Measured over the 189-plan corpus after the enum fix above, the
+    # residual is 54 rows across 37 plans, and 52 of the 54 are real declarations
+    # the recogniser cannot read — repository-root files carrying no directory
+    # segment at all (CHANGELOG.md, install.sh, CLAUDE.md, .gitignore, .version),
+    # bare directory rows like `roadmaps/`, and non-file targets such as
+    # `required_status_checks (branch protection)`. Two are annotation prose. A
+    # disclosure counter that is 96 percent real declarations is worth its noise;
+    # a silent drop of the same rows is not.
+    #
+    # The KEY is the raw row, not a shared sentinel. A single sentinel would let
+    # the same-path reconciliation upstream collapse every unrecognised row as soon
+    # as ONE of them carried a verb, which would rebuild this blind spot in a new
+    # costume. It is emitted before malformed() and labelexcludes() for the same
+    # reason: either would reclassify these rows back into `interpreted`.
     infence {
       p = pathof(s)
-      if (p == "") next
+      if (p == "") {
+        key = s; gsub(/\t/, " ", key)
+        printf "%s\t%s\t%s\t%s\t%s\n", key, "unknown", "uncond", "fence-unrecognized-path", s
+        next
+      }
       u  = toupper(stripfirst(s, p))
       iv = verbof(u)
       fpl = prose_led

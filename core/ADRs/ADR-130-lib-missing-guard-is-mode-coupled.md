@@ -5,6 +5,8 @@ status: Proposed
 date: 2026-08-08
 release: hook-precision-and-boundaries
 deciders: "operator (Collective Review scope-lock — adopt the readonly-snapshot counter-design; ship the uniform coupling and file the invariant defect separately) + Stage 5 Solutioning spoke (design) + independent adversarial design review (three parallel reviewers)"
+supersedes: ADR-078 in-part (D4)
+superseded_by: ADR-136 in-part (D5 residual)
 tags: [security-hooks, PreToolUse, fail-closed, mode-coupling, dependency-resolution, degradation, GHSA-9cjm, GHSA-g9g6, supersedes-in-part]
 source_observations:
   - "The prior posture left the shared dependency-lib guard fail-closed UNCONDITIONALLY: it runs before the mode read, before the bypass check, and before the action-scope short-circuit. A version-skewed install (new hooks plus a valid-but-stale dep-resolve.sh) therefore hard-blocked every Bash and Write in warn as well as enforce, with no mode or bypass escape, until the operator re-ran the installer."

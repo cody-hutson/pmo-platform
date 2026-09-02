@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.46] - 2026-09-02
+
+Portfolio governance frameworks now have a home and a setting to select one, and a release-plan check stops silently skipping files.
+
+[Full notes](release/releases/notes/v4.46_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.46)
+
 ## [v4.45] - 2026-08-31
 
 A check that could report PASS without running anything now says so, two bundle checks finally run in CI, and no gate started blocking.

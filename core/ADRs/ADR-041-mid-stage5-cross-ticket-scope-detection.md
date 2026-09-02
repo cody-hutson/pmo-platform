@@ -10,7 +10,7 @@ tags: [hub-spoke, solutioning, stage-05, cross-ticket-scope, contention-map, esc
 
 ## Status
 
-**Proposed.** Drafted at Solutioning for the cross-ticket scope-detection rule and materialized alongside the Stage 5 protocol section it governs. Flips to **Accepted** at the Collective Review scope-lock that ratifies the bundle.
+**Accepted.** Drafted at Solutioning for the cross-ticket scope-detection rule and materialized alongside the Stage 5 protocol section it governs.
 
 ## Context
 

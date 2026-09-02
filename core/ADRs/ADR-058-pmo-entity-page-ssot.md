@@ -13,7 +13,7 @@ tags: [pmo-entity-store, person-id-ssot, compose-not-fork, shared-entity-layout,
 
 ## Status
 
-**Proposed** — flips to Accepted at the Stage 9 review.
+**Accepted.**
 
 Number **058** — the Stage-5 decision record (#2631) named **054** (the spoke first proposed 041, taken, reassigned to 054), but the global ADR sequence spans both `core/ADRs/` and `release/ADRs/` (one sequence; `check-adr-numbers.py` enforces it) and 054 was already claimed in `release/ADRs/`. Reassigned to the next gap-free slot **058** at Engineering time. Binds atomically at Stage 12.
 

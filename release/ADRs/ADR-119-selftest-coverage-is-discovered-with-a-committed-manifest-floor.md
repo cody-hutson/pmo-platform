@@ -21,7 +21,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — authored at Stage 6 Engineering for the `ci-selftest-and-check-hardening` release, per the Stage-6 ADR-authoring precedent. It flips to **Accepted** when the operator ratifies it at the release's close gate, and the flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
+**Accepted** — ratified by the workspace owner at the `ci-selftest-and-check-hardening` (v4.13) close gate, 2026-08-07. Authored at Stage 6 Engineering for that release, per the Stage-6 ADR-authoring precedent. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
 
 **Numbering.** Allocated as the next free slot over the union of both ADR directories, which are a single numbering space, verified by the corpus checker rather than by reading the highest filename. As with every ADR, the number is allocated at authorship and bound at merge; if a sibling merges ahead of this record, the reconciliation is tooled and this Status block will carry the provenance note.
 

@@ -5,6 +5,7 @@ status: Accepted
 date: 2026-07-17
 release: v3.76 deploy-tooling-resolver-and-test-parity
 deciders: "Stage-5 Solutioning (Principal-Engineer spoke; the premise-overturning grounding that the bare fallback is the GitHub-UNfaithful mechanism, HIGH confidence) + hub R1 + Collective Review scope-lock (operator elected Option (b) — retire the fallback)"
+supersedes: ADR-009 in-part (Rule 2)
 tags: [tooling, doc-link-maintenance, link-resolution, gate-efficacy, check-doc-links, check-release-links, github-rendering, supersedes-adr-009]
 source_observations:
   - "The platform ran TWO markdown-link resolvers with different rules over one corpus: check-doc-links.py (deploy Check 14 + link-check.yml) resolved relative-first THEN fell back to a workspace-root anchor for bare module-prefixed paths, while release/tools/check-release-links.py (the Dead-file-reference gate's delegate) resolved relative-only and skipped leading-`/` entirely. A single link form could therefore get opposite verdicts across two required branch-protection gates — a gate-trustworthiness gap, the theme of the gate-efficacy standard this issue was filed under."

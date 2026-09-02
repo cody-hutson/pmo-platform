@@ -19,7 +19,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** **Extends** — does **not** supersede — [ADR-045](ADR-045-cross-surface-memory-contract.md), which generalized [ADR-029](ADR-029-memory-corpus-ssot-boundary.md)'s Knowledge cut into the cross-surface contract. Both prior records are left byte-unchanged; this scope reaches them by reference, the same posture ADR-045 adopted toward ADR-029. It flips to **Accepted** at this release's Stage-9 plan-review gate; per the established precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure.
+**Accepted.** **Extends** — does **not** supersede — [ADR-045](ADR-045-cross-surface-memory-contract.md), which generalized [ADR-029](ADR-029-memory-corpus-ssot-boundary.md)'s Knowledge cut into the cross-surface contract. Both prior records are left byte-unchanged; this scope reaches them by reference, the same posture ADR-045 adopted toward ADR-029. Per the established precedent the flip is verified against this file's own `status:` field and never assumed from milestone closure.
 
 **Numbering.** ADR numbers are platform-global monotonic across **both** homes (`core/ADRs/` and `release/ADRs/`), and the claimed set includes in-flight pull-request claims. Allocated at commit time: the union of both directories reported a contiguous `001..108` with no gaps and no duplicates, and the only open pull request is this release's own, so this ADR takes **109**.
 

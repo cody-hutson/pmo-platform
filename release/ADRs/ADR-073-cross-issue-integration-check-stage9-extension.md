@@ -14,7 +14,7 @@ source_observations:
 # ADR-073 — Cross-issue release-integration check: Stage-9 extension over new Stage 7.5
 
 ## Status
-Proposed. Drafted at Stage 5 Solutioning for the Cross-Issue AC + release-integration-check card in the 70-verification-execution-surface release. Flips to Accepted at this release's Collective Review scope-lock (the ratification surface the release-ADR README names), consistent with how in-repo release ADRs set their own status. Recorded Proposed because that gate has not yet run. Sibling to ADR-072 (region-scoped AV verification) in the same release. (Originating-issue provenance is carried in the `source_observations` frontmatter.)
+**Accepted.** Drafted at Stage 5 Solutioning for the Cross-Issue AC + release-integration-check card in the 70-verification-execution-surface release. Sibling to ADR-072 (region-scoped AV verification) in the same release. (Originating-issue provenance is carried in the `source_observations` frontmatter.)
 
 ## Context
 The card has two threads. **Thread 1** codifies a release-scoped **Cross-Issue Acceptance Criteria (CIAC)** section in the Stage-4 release plan — each entry a testable predicate spanning ≥2 issues with a verification method (grep / anchor-resolution / runtime-dispatch). **Thread 2** decides how the release exercises those predicates as an integrated artifact between Stage-6 close and the Stage-9 GO. This ADR records the Thread-2 architecture decision (Option A vs Option B) and the single-runner correction the Collective Review scope-lock imposed on it.
