@@ -137,6 +137,15 @@ declare -a DEFAULT_EXCLUSIONS=(
 )
 
 # Default scanned file types
+#
+# `py` is a scanned type. It was absent until the work-item-kit release, and its absence
+# was not a neutral omission: the two executables that read the pack corpus
+# (core/deploy/tools/check-work-hierarchy.py and core/deploy/tools/check-label-parity.py)
+# are Python, so a change to that corpus reported a smaller blast radius than it had and
+# the structural mode — which reuses this array verbatim — could not surface them at all.
+# A gate that never sees a class of consumer returns its clean value because the consumer
+# never entered the denominator, not because it was dispositioned. The T6 group and T5l
+# are the discriminating arms: both fail if this entry is removed.
 declare -a SCANNED_TYPES=(
   "md"
   "sh"
@@ -144,6 +153,7 @@ declare -a SCANNED_TYPES=(
   "yml"
   "yaml"
   "toml"
+  "py"
 )
 
 # ---------------------------------------------------------------------------
@@ -1605,7 +1615,7 @@ selftest_cleanup() {
 # ---------------------------------------------------------------------------
 # Built-in regression suite (--self-test)
 #
-# 36 assertions in 5 groups. HERMETIC: every fixture lives in an isolated mktemp tree
+# 39 assertions in 6 groups. HERMETIC: every fixture lives in an isolated mktemp tree
 # scanned via --root, so counts never depend on the surrounding repo. No network, no gh.
 # The T5 group creates its OWN throwaway git repo under mktemp — it never reads the
 # surrounding checkout — and is skipped, visibly, when git is absent.
@@ -1627,6 +1637,12 @@ selftest_cleanup() {
 # defect assertion with a SPECIFICITY arm on the same fixture, because the whole point
 # of both groups is that a degraded state and a clean state must not be confusable — an
 # assertion that only ever sees the degraded arm cannot prove that.
+#
+# T6 (scanned-type coverage) follows the same rule for the type filter: T6a is the defect
+# arm and T6z is its control, a .md sibling referrer to the same target that fires under
+# every type list. T5l is the tracked-source twin of T6a, on its own git fixture. The two
+# arms are NOT redundant — build_scan_list reaches its type filter by two routes, `find`
+# -name predicates on the all-files path and path_has_scanned_type on the tracked path.
 #
 # A SKIP is a DISTINCT OUTCOME, never a PASS. Two arms carry preconditions that a root
 # shell silently defeats (`chmod 000` does not block a uid-0 read), and the T5 group
@@ -1692,13 +1708,32 @@ run_self_test() {
   SELFTEST_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/blast-radius-selftest.XXXXXX")"
   trap 'selftest_cleanup' EXIT
   fx="$SELFTEST_TMPDIR"
-  mkdir -p "$fx/docs" "$fx/refs" "$fx/so" "$fx/iso"
+  mkdir -p "$fx/docs" "$fx/refs" "$fx/so" "$fx/iso" "$fx/pyfx"
   printf 'the target; it references nothing\n' > "$fx/docs/target.md"
   # T4e's measured-empty control surface. Deliberately isolated: neither file mentions
   # docs/target.md, refs/r01.md or refs/r12.md, and neither basename collides with an
   # existing one, so T2c (fo=12) and T2d (so=7) are unaffected by construction.
   printf 'isolated base; it references nothing\n' > "$fx/iso/base.md"
   printf 'isolated referrer -> iso/base.md\n'     > "$fx/iso/ref.md"
+  # T6's surface. Isolated on the same terms as iso/ above: no file here mentions
+  # docs/target.md, refs/r01.md, refs/r12.md or iso/base.md, so T2c (fo=12), T2d (so=7)
+  # and T4e (so=0) are unaffected by construction.
+  #
+  # Basename SUBSTRING-disjointness, not merely basename inequality, is the binding
+  # constraint and it is easy to get wrong. Referrer matching fires on the target's
+  # basename as a substring, so a fixture named `pytarget.md` CONTAINS `target.md` and
+  # silently enrols itself as a referrer of docs/target.md — T2c reads 14, not 12. That
+  # was observed, not theorised. `pyanchor.md` shares no substring with any other
+  # basename in this tree, in either direction.
+  #
+  # TWO referrers to one anchor, differing ONLY in file type. That is the whole design:
+  # the .md arm fires under every SCANNED_TYPES value and is therefore the control, and
+  # the .py arm fires only when `py` is in the list. A suite that shipped the .py fixture
+  # WITHOUT the .md sibling could not tell type-blindness apart from an unresolvable
+  # anchor, which is the failure this group exists to make impossible.
+  printf 'the isolated python anchor; it references nothing\n' > "$fx/pyfx/pyanchor.md"
+  printf 'markdown referrer -> pyfx/pyanchor.md\n'             > "$fx/pyfx/pydoc.md"
+  printf '# python referrer -> pyfx/pyanchor.md\n'             > "$fx/pyfx/pyconsumer.py"
   for i in 01 02 03 04 05 06 07 08 09 10 11 12; do
     printf 'first-order referrer %s -> docs/target.md\n' "$i" > "$fx/refs/r${i}.md"
   done
@@ -2039,7 +2074,76 @@ run_self_test() {
     { [ "$g_scope_status" = "fetched" ] && [ "$g_reason" = "false" ] \
       && [ "$g_tfs" = "$((g2_undamaged - 2))" ]; } || rc2=1
     st_true "$rc2" "T5k EXPECTED-DROP SPECIFICITY: an ordinary deletion of a tracked FILE and a tracked DIRECTORY leaves fetched (status=$g_scope_status, has_reason=$g_reason, tfs=$g_tfs of $g2_undamaged)"
+
+    # T5l — the SCANNED_TYPES Python arm on the TRACKED candidate source, with a
+    # genuinely git-tracked .py file. Its own fixture, so the T5z-T5k constants above are
+    # untouched — the same discipline repo2 follows.
+    #
+    # This is not a duplicate of T6a. build_scan_list has two candidate sources and the
+    # type filter reaches them by two different routes: `find`'s -name predicates on the
+    # all-files path (T6a) and path_has_scanned_type on the shared filter, which is the
+    # ONLY type gate the tracked path passes through (here). Both are generated from the
+    # one array, so one entry fixes both — but an arm covering only one route would leave
+    # the other's regression undetected.
+    local g3 g3_fo g3_has_py g3_scope g3_tracked_py
+    g3="$SELFTEST_GIT_TMPDIR/repo3"
+    mkdir -p "$g3/docs"
+    printf 'the tracked target; it references nothing\n'      > "$g3/docs/pytracked.md"
+    printf 'tracked markdown referrer -> docs/pytracked.md\n' > "$g3/mdreader.md"
+    printf '# tracked python referrer -> docs/pytracked.md\n' > "$g3/pyreader.py"
+    env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+        HOME="$g3" XDG_CONFIG_HOME="$g3/.config" git -C "$g3" init -q >/dev/null 2>&1 || true
+    env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+        HOME="$g3" XDG_CONFIG_HOME="$g3/.config" git -C "$g3" add -A >/dev/null 2>&1 || true
+
+    # Pathspec rather than a grep pattern: this count is load-bearing for the arm's
+    # "tracked" limb, and a pattern the local matcher rejects would return a plausible 0.
+    g3_tracked_py="$(git -C "$g3" ls-files -- '*.py' 2>/dev/null | wc -l | tr -d ' ')"
+
+    rc=0
+    bash "$self" --root "$g3" --format=json --depth=1 docs/pytracked.md > "$gout" 2>"$err_out" || rc=$?
+    g3_scope="$(jq -r '.stats.scan_scope' "$gout" 2>/dev/null || echo ERR)"
+    g3_fo="$(jq -r '.stats.first_order_count' "$gout" 2>/dev/null || echo ERR)"
+    g3_has_py="$(jq -r '[.first_order[].path] | map(endswith("pyreader.py")) | any' "$gout" 2>/dev/null || echo ERR)"
+    rc2=0
+    { [ "$rc" = "0" ] && [ "$g3_scope" = "tracked" ] && [ "${g3_tracked_py:-0}" -eq 1 ] \
+      && [ "$g3_fo" = "2" ] && [ "$g3_has_py" = "true" ]; } || rc2=1
+    st_true "$rc2" "T5l TRACKED-SOURCE Python arm: git tracks ${g3_tracked_py:-0} .py file and the tracked scan enumerates it (scope=$g3_scope, first_order_count=$g3_fo of 2, has_py=$g3_has_py) — RED when py is absent from SCANNED_TYPES"
   fi
+
+  # -------------------------------------------------------------------------
+  # T6 — SCANNED_TYPES coverage of Python. The defect: `py` was absent from the array,
+  # so a .py referrer was invisible to every scan. That is not a missing row in a report;
+  # it is a consumer class that never enters the denominator, so any rule computing a
+  # verdict over "flagged consumers" returns its clean value on a change whose only
+  # consumer is Python — clean because unseen, not because dispositioned.
+  #
+  # This group runs UNCONDITIONALLY. It needs no git, no chmod and no non-root uid, so
+  # unlike T4i/T4j and the whole T5 block it carries no precondition that can turn the
+  # discriminating arm into a SKIP. An arm that can silently not-run is exactly the shape
+  # this fix exists to remove, and placing the fix's own guard behind one would be
+  # self-refuting.
+  #
+  # T6z is the CONTROL and passes in BOTH states by construction — the .md sibling is
+  # found whether or not `py` is scanned. Its job is to prove the target resolves and the
+  # fixture is live, so T6a's shortfall reads as type-blindness rather than as an
+  # unresolvable path or an empty haystack.
+  # -------------------------------------------------------------------------
+  local py_fo py_has_py py_has_md py_src_bytes
+  rc=0
+  bash "$self" --root "$fx" --format=json --depth=1 pyfx/pyanchor.md > "$out" 2>"$err_out" || rc=$?
+  py_fo="$(jq -r '.stats.first_order_count' "$out" 2>/dev/null || echo ERR)"
+  py_has_md="$(jq -r '[.first_order[].path] | map(endswith("pyfx/pydoc.md")) | any' "$out" 2>/dev/null || echo ERR)"
+  py_has_py="$(jq -r '[.first_order[].path] | map(endswith("pyfx/pyconsumer.py")) | any' "$out" 2>/dev/null || echo ERR)"
+  py_src_bytes="$(wc -c < "$fx/pyfx/pyconsumer.py" | tr -d ' ')"
+
+  rc2=0
+  { [ "$rc" = "0" ] && [ "$py_has_md" = "true" ] && [ "${py_src_bytes:-0}" -gt 0 ]; } || rc2=1
+  st_true "$rc2" "T6z CONTROL (fires in BOTH states): the .md sibling referrer to the same target IS found (has_md=$py_has_md) and the .py fixture is ${py_src_bytes:-0} non-zero bytes — so T6a measures type coverage, not a dead target"
+
+  rc2=0
+  { [ "$py_fo" = "2" ] && [ "$py_has_py" = "true" ]; } || rc2=1
+  st_true "$rc2" "T6a THE DEFECT ASSERTION: a .py referrer is enumerated — first_order_count=$py_fo (expect 2: one .md sibling + one .py) and the .py path is named (has_py=$py_has_py) — RED when py is absent from SCANNED_TYPES"
 
   printf '\n%s/%s assertions passed, %s skipped\n' "$pass" "$((pass + fail))" "$skipped"
   if [ "$skipped" -gt 0 ]; then
