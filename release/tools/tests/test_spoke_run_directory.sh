@@ -158,15 +158,21 @@ clause_arms() {
   # A8 — it binds the hub's WRITE side to ONE location. Fixed-string match:
   #      the path carries `<`, `>` and `/`, which are regex-live under -E and
   #      would silently mis-match.
-  if printf '%s' "$hub_section" \
-     | grep -qF '<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/staging/'
+  #      Here-string, not `printf | grep -q`: this file runs under `pipefail`,
+  #      where a short-circuiting reader breaks the writer's pipe and the
+  #      writer's non-zero status becomes the pipeline's — so a MATCH can
+  #      report failure. A here-string has no writer to signal. The needle is
+  #      a non-empty fixed string, so the `<<<""` empty-line case cannot match
+  #      it and an absent section still reads FAIL, as A-NEG requires.
+  if grep -qF -- '<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/staging/' <<<"$hub_section"
   then echo "A8 PASS"; else echo "A8 FAIL"; fi
 
   # A9 — it states an end anchor tied to a NAMED release event, not a duration.
   #      Scoped to $hub_section, never the whole doc: this literal occurs
   #      several times elsewhere in the bridge, so a whole-doc grep would pass
   #      with the clause deleted and then survive the A-NEG excision.
-  if printf '%s' "$hub_section" | grep -qF 'Procedure 7 Step 6'
+  #      Here-string for the same pipefail reason as A8.
+  if grep -qF -- 'Procedure 7 Step 6' <<<"$hub_section"
   then echo "A9 PASS"; else echo "A9 FAIL"; fi
 }
 
