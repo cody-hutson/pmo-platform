@@ -105,6 +105,7 @@ The execution issue (filed post-review per D-1412-Scope) carries: `.gitignore` b
 
 ## Related ADRs
 
+- **ADR-141** (operator-instance home is a workspace-root sibling) — **supersedes this record in part**, on Decision 1's operator-instance home path only. The rest of this record still binds and its `status:` stays `Accepted`; the frontmatter `superseded_by:` field above is the authoritative half of the pair, and this bullet is the `## Related ADRs` limb the partial-supersession form requires on both sides.
 - **ADR-017** (distribution architecture — S1/S3 surfaces + the canonical `CLAUDE_WORKSPACE_ROOT` resolver; the model this applies)
 - **ADR-012** (instance-content de-scope to operator-local)
 - **ADR-013** (install-path resolution via operator.toml)

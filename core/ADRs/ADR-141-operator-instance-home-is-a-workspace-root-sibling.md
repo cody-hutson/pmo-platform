@@ -96,4 +96,4 @@ Platform-written runtime state is a peer of the operator's content, never a tena
 - The distribution-architecture ADR — realigned with, not superseded.
 - The roadmap-instance in-repo home ADR — the executed precedent for relocating one family member's canonical default across the SSOT surfaces, and the origin of the authored-content-versus-runtime-state distinction this decision applies.
 - The FinOps usage-store ADR — superseded in part, on its stated store default only.
-- The release-corpus public-versus-instance split ADR — its deferred corpus migration targets this family's home; sequencing was assessed and found moot, as no migration is scheduled.
+- The release-corpus public-versus-instance split ADR — superseded in part, on its Decision 1 operator-instance home path only. Its deferred corpus migration targets this family's home; that migration remains unscheduled, so the relocation raises no sequencing obligation against it.
