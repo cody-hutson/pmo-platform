@@ -304,8 +304,13 @@ which is `ugrep` and can reject a pattern into a plausible zero. Every count bel
 paired with a sensitivity arm that must fire and a specificity arm that must return zero.
 
 ```bash
-# 0 — the stamp
-git rev-parse --short=8 HEAD                 # must equal frontmatter verified_at
+# 0 — the stamp. verified_at is the head the MEASUREMENT was taken at; this file
+#     lands as the NEXT commit, so the stamp equals this map's own PARENT, never
+#     the commit that writes it. An inequality here is expected on any later
+#     commit and is NOT drift on its own — what makes it drift is a row below
+#     failing to re-derive.
+git rev-parse --short=8 HEAD                 # note the delta; re-derive rows 1-6
+git log -1 --format=%h --abbrev=8 <verified_at>   # the tree every anchor is read at
 
 # 1 — instrument self-test (39 assertions, 0 skipped, exit 0)
 bash release/tools/blast-radius.sh --self-test
