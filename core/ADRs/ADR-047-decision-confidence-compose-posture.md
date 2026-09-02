@@ -13,7 +13,7 @@ tags: [architecture, decision-confidence, compose, extend, decision-quality-laye
 
 ## Status
 
-**Proposed** — flips to Accepted at the Stage 9 review.
+**Accepted.**
 
 Number **047** — next gap-free after 046; binds atomically at Stage 12.
 

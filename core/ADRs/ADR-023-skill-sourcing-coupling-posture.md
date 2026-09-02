@@ -17,9 +17,7 @@ source_observations:
 
 ## Status
 
-Proposed. Flips to Accepted at the comms-writer/artifact-generator-offload release's
-Collective Review scope-lock (convention-consistent with ADR-019's operator-adopted →
-ratified-at-gate pattern). The operator adopted the decision on 2026-06-13; this ADR is the
+**Accepted.** The operator adopted the decision on 2026-06-13; this ADR is the
 committed record of that adopted decision.
 
 ## Context

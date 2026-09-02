@@ -13,7 +13,7 @@ tags: [entity-field-schemas, plan-type, open-discriminator, lifecycle-extension,
 
 ## Status
 
-**Proposed** — flips to Accepted at the Stage 9 review.
+**Accepted.**
 
 Number **059** — the originating release plan and the Stage-5 decision record (#2627) named **053**, but the global ADR sequence spans both `core/ADRs/` and `release/ADRs/` (one sequence; `check-adr-numbers.py` enforces it): `ADR-053` was taken in `core/ADRs/` (`ADR-053-pre-gate-eligibility-forcing-function.md`, v3.31), and 054/055/056 were already claimed in `release/ADRs/`. Reassigned to the next gap-free slot **059** at Engineering time (the same collision-reassignment the #362 ADR used). Binds atomically at Stage 12.
 

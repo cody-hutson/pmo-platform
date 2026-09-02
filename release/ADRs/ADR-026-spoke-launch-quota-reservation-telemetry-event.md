@@ -15,7 +15,7 @@ source_observations:
 # ADR-026 — Per-spoke quota telemetry: a new `spoke-launch` event_type, not a `test-run` payload key
 
 ## Status
-Proposed — rendered at the D-EventTelemetrySurface gate during Stage 5 Solutioning
+**Accepted** — rendered at the D-EventTelemetrySurface gate during Stage 5 Solutioning
 for the parallel-launch-quota-budget-gate release; carried to Collective Review
 scope-lock for operator render. (Numbering: platform-global monotonic. Renumbered
 from the draft ADR-024 to ADR-026 at merge time — the concurrent

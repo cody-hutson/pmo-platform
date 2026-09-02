@@ -14,7 +14,7 @@ source_observations:
 # ADR-072 — Region-scoped AV invariant verification
 
 ## Status
-Proposed. Drafted at Stage 5 Solutioning for the QC4-05 soundness card — the foundation card of the 70-verification-execution-surface release. Flips to Accepted at this release's Collective Review scope-lock (the ratification surface the release-ADR README names), consistent with how in-repo release ADRs set their own status. Recorded Proposed because that gate has not yet run. (Originating-issue provenance is carried in the `source_observations` frontmatter.)
+**Accepted.** Drafted at Stage 5 Solutioning for the QC4-05 soundness card — the foundation card of the 70-verification-execution-surface release. (Originating-issue provenance is carried in the `source_observations` frontmatter.)
 
 ## Context
 QC4-05 (Post-Deploy Verification, `release/governance/release-process.md` Checkpoint 4) re-executes each release-plan AV-N invariant against post-deploy main at Stage-13 Phase A4. The mechanism string read `structural (AV-1 grep mechanism)`. A bare grep matches its pattern anywhere in the file — including inside comments and negation contexts — so it returns an incorrect verdict when the asserted token appears only in a disclaiming comment (false-FAIL, proven in the originating website trace) and can miss a violating token the pattern does not lexically reach (false-PASS, reachable). Because QC4-05 is the substrate every gate's post-deploy verdict relies on, this is a verification-integrity defect (P1), not a cosmetic one.

@@ -14,7 +14,7 @@ source_observations:
 # ADR-074 — Stage 8 consumes Stage-7 runtime evidence for behavioral-AC acceptance (does not re-execute)
 
 ## Status
-Proposed. Drafted at Stage 5 Solutioning for the Stage-8 verification-execution-surface card — the surface card of the 70-verification-execution-surface release (foundation → schema → surface → executor). Flips to Accepted at this release's Collective Review scope-lock (the ratification surface the release-ADR README names), consistent with how in-repo release ADRs set their own status. Recorded Proposed because that gate has not yet run. (Originating-issue provenance is carried in the `source_observations` frontmatter.)
+**Accepted.** Drafted at Stage 5 Solutioning for the Stage-8 verification-execution-surface card — the surface card of the 70-verification-execution-surface release (foundation → schema → surface → executor). (Originating-issue provenance is carried in the `source_observations` frontmatter.)
 
 ## Context
 Stage 8 QA (`release/references/pipeline/stage-08-qa-testing.md`) validates the built result against acceptance criteria — the "does this meet needs?" gate, distinct from Stage 7's "does this meet specs?". Its acceptance review was **LLM-graded evaluation of PR content only** (§2 "No formal test execution environment"; Phase B "evaluate each criterion against PR content"). There was no deliverable-exercising execution path at acceptance altitude: a behavioral acceptance criterion ("the component renders and the dismiss persists for the session") was graded by reading the source and opining, never by exercising the deliverable.

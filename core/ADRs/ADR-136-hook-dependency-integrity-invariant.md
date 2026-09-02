@@ -22,7 +22,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Solutioning for the `hooks-enforce-under-adversity` release; ratified at that release's plan-review gate.
+**Accepted.** Authored at Solutioning for the `hooks-enforce-under-adversity` release; ratified at that release's plan-review gate.
 
 **Supersedes in part:** D5 of [ADR-130](ADR-130-lib-missing-guard-is-mode-coupled.md), which stated the always-enforce floor's guarantee at its true — narrower — scope and named the valid-syntax `exit 0` residual as pre-existing and tracked separately. That residual is closed here. D5's *reasoning* stands unchanged and is not rewritten in place: it was correct when written, and the mode-coupling it justified was argued on independent grounds. ADR-130's D1-D4 and D6-D8 are unaffected, and the mode-capable cohort is not touched.
 

@@ -14,7 +14,7 @@ tags: [architecture, knowledge-management, memory, ssot, cross-surface, four-typ
 
 ## Status
 
-**Proposed — supersedes [ADR-029](ADR-029-memory-corpus-ssot-boundary.md).** ADR-029 resolved one boundary — the SSOT cut between codified *Knowledge* and the operator memory store — as a deliberate first slice of a four-type memory architecture, and named its own revisit trigger: *"When the unified read/write contract is ratified, re-open this ADR to reconcile the Knowledge cut into it."* This ADR is that reconciliation. It generalizes ADR-029's Knowledge cut into a single cross-surface contract spanning all four memory types (Work / Knowledge / People / Learning). Flips to Accepted at the Stage 9 review.
+**Accepted — supersedes [ADR-029](ADR-029-memory-corpus-ssot-boundary.md).** ADR-029 resolved one boundary — the SSOT cut between codified *Knowledge* and the operator memory store — as a deliberate first slice of a four-type memory architecture, and named its own revisit trigger: *"When the unified read/write contract is ratified, re-open this ADR to reconcile the Knowledge cut into it."* This ADR is that reconciliation. It generalizes ADR-029's Knowledge cut into a single cross-surface contract spanning all four memory types (Work / Knowledge / People / Learning).
 
 ## Context
 

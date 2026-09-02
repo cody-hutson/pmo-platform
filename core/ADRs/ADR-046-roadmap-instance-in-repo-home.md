@@ -13,7 +13,7 @@ tags: [architecture, roadmaps, plug-and-play, in-repo-home, git-ignored, token-o
 
 ## Status
 
-**Proposed — supersedes-in-part [ADR-012](ADR-012-roadmap-instance-descope.md) (its *location* clause) and ADR-017 (the roadmaps member of the operator-instance path family).** ADR-012 de-scoped roadmap *instances* from the tracked tree to operator-local authoring at the `<OPERATOR_INSTANCE_ROADMAPS_PATH>` token; ADR-017 then centralized that token under the `personal/pmo-instance/` operator-instance path family. Between them, roadmaps resolved to `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/roadmaps` — operator-local, outside the repo, with no folder shipped on install. This ADR moves the *location* in-repo; ADR-012's "instances are **not tracked**" decision is preserved unchanged (instances stay git-ignored). Flips to Accepted at the Stage 9 review.
+**Accepted — supersedes-in-part [ADR-012](ADR-012-roadmap-instance-descope.md) (its *location* clause) and ADR-017 (the roadmaps member of the operator-instance path family).** ADR-012 de-scoped roadmap *instances* from the tracked tree to operator-local authoring at the `<OPERATOR_INSTANCE_ROADMAPS_PATH>` token; ADR-017 then centralized that token under the `personal/pmo-instance/` operator-instance path family. Between them, roadmaps resolved to `${CLAUDE_WORKSPACE_ROOT}/personal/pmo-instance/roadmaps` — operator-local, outside the repo, with no folder shipped on install. This ADR moves the *location* in-repo; ADR-012's "instances are **not tracked**" decision is preserved unchanged (instances stay git-ignored).
 
 ## Context
 

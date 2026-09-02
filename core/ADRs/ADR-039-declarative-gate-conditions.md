@@ -15,7 +15,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Drafted at Solutioning for the relationship-conditioned-status / set-aggregate gating work item and materialized alongside the meta-schema grammar it governs. Flips to **Accepted** at the declarative-gating-model Collective Review scope-lock — that gate is the ratification surface, consistent with how the establishing Work-Item Type Layer decision set its own status. Recorded as Proposed (not Accepted) at authoring time because that ratification gate has not yet run.
+**Accepted.** Drafted at Solutioning for the relationship-conditioned-status / set-aggregate gating work item and materialized alongside the meta-schema grammar it governs.
 
 ## Subordinate to
 

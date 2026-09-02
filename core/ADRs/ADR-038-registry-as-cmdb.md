@@ -16,14 +16,10 @@ source_observations:
 
 ## Status
 
-Proposed. Drafted at Stage 5 Solutioning for the skill-CMDB work item of the
+**Accepted.** Drafted at Stage 5 Solutioning for the skill-CMDB work item of the
 `13-field-lifecycle-and-cmdb-automation` (v2.20) release; materialized at Stage 6
-alongside the registry.md evolution it governs. Flips to Accepted at this release's
-Collective Review scope-lock — the release activates Stage 5 with two or more Solutioning
-issues, so Collective Review is the ratification gate, consistent with ADR-035 and ADR-019.
-Recorded as Proposed (not Accepted) at authoring because that gate has not yet run. On
-acceptance, ADR-035 receives an in-place "Superseded-in-part by ADR-038" note scoping the
-supersede to its §Decision part 4.
+alongside the registry.md evolution it governs. ADR-035 carries the reciprocal
+"Superseded-in-part by ADR-038" record scoping the supersede to its §Decision part 4.
 
 ## Context
 

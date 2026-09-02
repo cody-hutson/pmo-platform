@@ -14,7 +14,7 @@ source_observations:
 # ADR-011 — Analysis-class methodology-design treatment: Stage 5 persona variant (not a new stage)
 
 ## Status
-Proposed. Promotes to Accepted at the Collective Review scope-lock per the ADR governance convention (status enum in release/ADRs/README.md). An independent Adversarial Design Review interrogated this ADR's Option-A-rejection premise before scope-lock; its findings were advisory to the operator.
+**Accepted.** An independent Adversarial Design Review interrogated this ADR's Option-A-rejection premise before scope-lock; its findings were advisory to the operator.
 
 ## Context
 Analysis-class releases — releases whose primary deliverable is a research artifact (audit, gap analysis, methodology design) rather than code or governance edits — route through Stage 5 Solutioning. Stage 5's persona is Principal Engineer — Architecture Assessment, whose behavioral markers are architecture-decision framed (evaluates structural decisions; validates feasibility against current architecture; identifies blast radius). When the deliverable is a research methodology (sampling frame, evidence-grading rubric, coding scheme, analysis plan), those markers fit awkwardly. A prior release-process fitness audit recorded this as a persona-stretch.

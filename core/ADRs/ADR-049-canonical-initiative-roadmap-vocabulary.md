@@ -14,7 +14,7 @@ source_observations: "2026-06-29 live corpus survey (baseline e0286d9): glossary
 
 ## Status
 
-**Proposed** — flips to Accepted at the Stage 9 review.
+**Accepted.**
 
 Number **049** — next gap-free after 048; binds atomically at Stage 12.
 
