@@ -329,7 +329,7 @@
     {
       "name": "methodology",
       "delivery": "delivered",
-      "description": "Global delivery-approach default plus the opt-in portfolio-framework selector. ADR-022 §1 / ADR-017 §S2 name methodology an operator.toml concern. The two keys are different altitudes, not variants: default_delivery_approach governs a project, portfolio_framework governs the portfolio above it.",
+      "description": "Global delivery-approach default, the opt-in portfolio-framework selector, and the work-item-kit default — three independent selection axes. ADR-022 §1 / ADR-017 §S2 name methodology an operator.toml concern. The keys are different altitudes and axes, not variants: default_delivery_approach governs a project, portfolio_framework governs the portfolio above it, and ADR-170 places the kit axis beside them rather than on a second surface.",
       "keys": [
         {
           "key": "default_delivery_approach",
@@ -350,6 +350,15 @@
           "required": false,
           "description": "Portfolio-tier governance framework whose portfolio- and program-tier artifact shapes this deployment uses. OPEN value domain (no enum) — a lowercase-kebab framework id resolving to a shape directory under operations/templates/portfolio-frameworks/. Deployment-global at v1: global and individual rungs only, narrowing recorded at core/schemas/platform-config-schema.md §3.1. Empty resolves exactly as today. A DIFFERENT ALTITUDE from default_delivery_approach, not a variant of it. Consumer branch: release/references/specs/methodology-parameterization-v1.md §5B.",
           "since": "4.46"
+        },
+        {
+          "key": "default_work_item_kit",
+          "type": "string",
+          "source": "operator-or-default",
+          "default": "",
+          "required": false,
+          "description": "The work-item kit a deployment tracks when a project does not set its own work_item_kit. A role=\"kit\" pack's pack_id, or empty for no kit selected — the pre-kit status quo and a valid state at both rungs. Orthogonal to default_delivery_approach: two independent lookups, neither reading the other's field. NO enum is declared: which kits exist is deployment data and ADR-170 declares the kit set OPEN, so enumerating it here would re-create the frozen-roster anti-pattern one altitude up.",
+          "since": "4.47"
         }
       ]
     },

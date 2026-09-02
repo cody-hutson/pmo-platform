@@ -56,6 +56,9 @@ These four are the seam onboarding writes operator choices into. Finer-grained p
 | Field | What it sets | Allowed values | Default |
 |---|---|---|---|
 | `default_delivery_approach` | the methodology a project starts from when it sets no `delivery_approach` of its own | the 8 archetypes: `Scrum` · `Kanban` · `XP` · `Waterfall` · `PRINCE2` · `SAFe` · `Hybrid` · `Custom` | `Scrum` |
+| `default_work_item_kit` | the work-item kit a deployment tracks when a project sets no `work_item_kit` of its own | the `pack_id` of a pack authored with `role = "kit"` — not enumerated here, because which kits exist is deployment data | `""` (no kit selected) |
+
+**The two fields are independent axes.** A deployment picks a methodology and a work-item kit separately; neither lookup reads the other's field, so changing one leaves the other's resolved value unchanged. Selecting no kit is an ordinary state — it is the arrangement that predates kits. The kit unit and its composition position are decided in [ADR-170](../core/ADRs/ADR-170-work-item-kit-first-class-unit.md), and selection and precedence are documented in [`core/packs/README.md`](../core/packs/README.md).
 
 This is only the global default + resolver fallback. The enum, validation, and Custom block are canonical in [`core/schemas/project-schema.md`](../core/schemas/project-schema.md) and [`release/references/specs/methodology-parameterization-v1.md`](../release/references/specs/methodology-parameterization-v1.md). A project's own `delivery_approach` overrides this.
 
@@ -178,11 +181,12 @@ Capability switches for git-native release automation. **All three default OFF**
 
 ## 5. Consumer examples (how the platform reads these)
 
-Three wired examples ship with the adapter-config-foundation release:
+The wired examples, enumerated rather than totalled — the list grows as fields are added, and a stated count goes stale on the day a release adds one:
 
 1. **`bundle_doctrine_frame` → release-planner.** release-planner Mode A resolves `bundle_doctrine_frame` at session start and anchors bundle-composition to that frame; Mode B persists the resolved frame into the release plan's `## Summary`.
 2. **`default_release_class` → release hub.** The hub resolves `default_release_class` as the fallback when a milestone description carries no `## Release Class` H2.
 3. **`default_delivery_approach` → methodology fallback.** A project with no `delivery_approach` set resolves to the global `default_delivery_approach` (instead of the old implicit "sprint-centric Agile" default).
+4. **`default_work_item_kit` → work-item-kit fallback.** A project with no `work_item_kit` set resolves to the global `default_work_item_kit`; when neither rung sets it, no kit is selected and the deployment tracks exactly the kinds its archetype pack declares.
 
 ## 6. See also
 
