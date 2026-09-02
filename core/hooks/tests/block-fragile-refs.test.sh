@@ -73,6 +73,37 @@ MARKEDEOF
 This standard defines durable reference rules; summarize sources inline rather than linking.
 UNMARKEDEOF
 
+# Fence-awareness fixtures (#6743). A marker inside a fenced code block ILLUSTRATES the
+# syntax; it does not DECLARE the override. FENCED carries the marker ONLY inside a fence
+# and must NOT be exempt; FENCED_PLUS declares it outside a fence and additionally shows a
+# fenced example, so it must still be exempt. Without the second fixture the first cannot
+# distinguish "fenced markers stopped counting" from "markers stopped working".
+FENCED="${FIXTURE_ROOT}/core/standards/__marker-resolution-fenced__.md"
+FENCED_PLUS="${FIXTURE_ROOT}/core/standards/__marker-resolution-fenced-plus__.md"
+/bin/cat > "$FENCED" <<'FENCEDEOF'
+# Fence-illustration fixture
+
+The override marker syntax is shown here as an example, not declared:
+
+```
+<!-- reference-durability: allow-link -->
+```
+
+This standard defines durable reference rules; summarize sources inline rather than linking.
+FENCEDEOF
+/bin/cat > "$FENCED_PLUS" <<'FENCEDPLUSEOF'
+<!-- reference-durability: allow-link -->
+# Declaration-plus-illustration fixture
+
+Declared above, outside any fence. The same syntax is illustrated below, inside one:
+
+```
+<!-- reference-durability: allow-link -->
+```
+
+This standard defines durable reference rules; summarize sources inline rather than linking.
+FENCEDPLUSEOF
+
 # Preserve + restore the shared .mode file so the suite is hermetic regardless of the
 # deployed mode; and remove the marker-resolution corpus on the same exit.
 ORIGINAL_MODE=""; [ -f "$MODE_FILE" ] && ORIGINAL_MODE="$(/bin/cat "$MODE_FILE")"
@@ -200,6 +231,18 @@ test_case "enforce: Edit of a MARKER-BEARING file on a link-bearing line ALLOWED
 test_case "enforce: Edit of a MARKER-FREE file, identical fragment, still BLOCKED (the marker is not a hook-wide off switch)" \
   "$(edit_payload "$UNMARKED" 'summarize sources inline rather than linking.' "$EDIT_LINK_FRAGMENT")" \
   2 "BLOCK-FRAGILE-REF-001"
+
+# L2-4 / L2-5 — fence awareness (#6743), read as a pair.
+# L2-4 is the falsification arm: it exits 0 against the pre-change hook (which resolved a
+# fenced marker as a declaration) and 2 after. L2-5 is the control WITHOUT which L2-4 cannot
+# distinguish "fenced markers no longer count" from "the fence strip ate every marker".
+test_case "enforce: Edit of a file whose ONLY marker is INSIDE a fence is BLOCKED (illustration is not declaration)" \
+  "$(edit_payload "$FENCED" 'summarize sources inline rather than linking.' "$EDIT_LINK_FRAGMENT")" \
+  2 "BLOCK-FRAGILE-REF-001"
+
+test_case "enforce: Edit of a file declaring the marker OUTSIDE a fence is ALLOWED even though it also shows a fenced example" \
+  "$(edit_payload "$FENCED_PLUS" 'summarize sources inline rather than linking.' "$EDIT_LINK_FRAGMENT")" \
+  0
 
 test_case "enforce: Edit of a MARKER-BEARING file, bare issue-ref fragment, still BLOCKED (marker does not leak to the positional rule)" \
   "$(edit_payload "$MARKED" 'summarize sources inline rather than linking.' 'This behavior was corrected in #9999 during the last release.')" \

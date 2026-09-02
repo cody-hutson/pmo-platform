@@ -386,8 +386,9 @@ CONTENT="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.content // .tool_inpu
 # complete. An Edit carries only the replacement fragment, so a file that
 # correctly declares its marker at the top is unwritable on any line that does not
 # repeat the declaration. Union the on-disk file in for Edit only, so the hook and
-# the CI answer one question one way. No fence strip: the CI does not strip, and
-# the marker greps below already read unstripped content.
+# the CI answer one question one way. Fence strip: BOTH surfaces strip fenced blocks
+# before resolving a marker, so an illustration of the syntax is never a declaration of
+# it. Changing one without the other re-opens the divergence this line exists to close.
 #
 # Five properties, each load-bearing:
 #   1. `[ -f ]`, never `[ -e ]` — excludes directories, FIFOs and character devices,
@@ -420,16 +421,26 @@ fi
 # Read from $MARKER_SRC, not from $CONTENT: for a Write those are the same bytes, and
 # for an Edit $MARKER_SRC additionally carries the target file from disk so a file-scoped
 # declaration is visible to a fragment that does not repeat it. See MARKER SOURCE above.
+# A marker inside a fenced code block ILLUSTRATES the syntax; it does not DECLARE it.
+# Resolving markers whole-file cannot tell those apart, so a file that merely documents
+# the marker exempts itself from the gate that governs it. Strip fences first, with the
+# same awk the detectors use below, so one rule governs both reads. The CI marker read
+# strips identically — neither surface may change without the other.
+MARKER_SCAN="$("$PRINTF" '%s\n' "$MARKER_SRC" | "$AWK" '
+  /^[[:space:]]*```/ { infence = !infence; next }
+  !infence { print }
+')"
+
 ALLOW_LINK=0
 ALLOW_VERSION=0
 ALLOW_URL=0
-if "$PRINTF" '%s\n' "$MARKER_SRC" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->'; then
+if "$PRINTF" '%s\n' "$MARKER_SCAN" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->'; then
   ALLOW_LINK=1
 fi
-if "$PRINTF" '%s\n' "$MARKER_SRC" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->'; then
+if "$PRINTF" '%s\n' "$MARKER_SCAN" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->'; then
   ALLOW_VERSION=1
 fi
-if "$PRINTF" '%s\n' "$MARKER_SRC" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-url[[:space:]]*-->'; then
+if "$PRINTF" '%s\n' "$MARKER_SCAN" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-url[[:space:]]*-->'; then
   ALLOW_URL=1
 fi
 
