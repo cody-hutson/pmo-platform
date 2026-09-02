@@ -173,9 +173,9 @@ Five candidates were generated across three altitude bands and narrowed on hard-
 
 ### Cross-D upstream-compat
 
-The widened grammar inherits the kernel's open-value-domain discipline, and this record adds two members to the set of things no consumer may treat as closed:
+The widened grammar inherits the kernel's open-value-domain discipline. The set of things no consumer may treat as closed is enumerated below rather than totalled, because the members differ in provenance — one is inherited and restated here, the others are established here — and a single number cannot carry that distinction:
 
-- **The `role` set is OPEN.** It has just been widened from two members to three, which is itself the proof. A consumer branching exhaustively on role values will be wrong at the next widening.
+- **The `role` set is OPEN — inherited, not founded here.** ADR-070's own cross-compatibility clause already forbade treating it as closed; this record is the first widening to exercise that clause, from two members to three, which is what makes the openness observable rather than merely asserted. A consumer branching exhaustively on role values will be wrong at the next widening.
 - **The `kit_class` set is OPEN.** Its v1 value is `work-item` and it will grow. A consumer that branches on the literal `work-item` re-creates, one altitude up, the frozen-roster anti-pattern the kernel forbids for the work-item type set. An unrecognized class is handled generically with an explicit caveat, never a silent default and never an error.
 - **The kit set itself is OPEN.** Which kits a deployment authors is its own data; nothing may enumerate them.
 
