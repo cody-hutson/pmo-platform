@@ -4,13 +4,19 @@
 deploy.sh Check 51's scan engine. Parses the canonical label registry from one or
 more --source files and compares the UNION to the live GitHub label set (the REST
 labels endpoint, read via `gh api "repos/<slug>/labels?per_page=100" --paginate`),
-emitting two asymmetric-severity directions:
+emitting three asymmetric-severity directions:
 
-  MISSING  a canonical label is absent from GitHub  -> ENFORCE-capable (the #457
-           `status: rejected` defect class: a gate referencing a non-existent
-           label fails silently).
-  ORPHAN   a live GitHub label is not registered in the taxonomy  -> WARN only
-           (some are legitimately operator-local or pending registration).
+  MISSING        a canonical label is absent from GitHub  -> ENFORCE-capable (the
+                 #457 `status: rejected` defect class: a gate referencing a
+                 non-existent label fails silently).
+  ORPHAN         a live GitHub label is not registered in the taxonomy  -> WARN
+                 (some are legitimately operator-local or pending registration).
+  EXCLUDED_LIVE  a live GitHub label the grammar declares EXCLUDED  -> WARN. A
+                 distinct class from ORPHAN because the remedies are OPPOSITE: an
+                 orphan may simply need registering, whereas an excluded-but-live
+                 row means one of the two surfaces must change (delete the label,
+                 or withdraw the exclusion). Folding it into ORPHAN made the
+                 contradiction invisible to the gate that reads both surfaces.
 
 Source-agnostic + multi-source (the #1970 per-pack restructure): --source is
 repeatable. After #1970 the concrete label ROWS moved out of
@@ -30,17 +36,32 @@ are a namespace PATTERN with examples (`project:*`, `epic:*`, `type:*`). A live
 label is an ORPHAN only if it matches neither a concrete registered label nor a
 registered namespace prefix. The markdown parser keys on label-definition table
 rows (col-2 is a backticked hex color), which structurally excludes the
-`## Removed Labels` table (col-2 is prose) and header/separator rows. Title-prefix
+`## Excluded Labels` table (col-2 is prose) and header/separator rows. Title-prefix
 parity (the #74 `[Observation]:` invariant) is a SEPARATE concern, NOT evaluated
 here.
+
+Excluded labels (#5054): `label-taxonomy.md` § Excluded Labels states, in the
+PRESENT tense, which default GitHub labels this platform's canonical set excludes.
+The section is read by a SEPARATE, section-anchored parser — not `_ROW_RE` — because
+its col-2 is prose by hard requirement: a backticked hex there would make the four
+rows canonical, and after the operator deletes the labels they would flip straight
+into the enforce-capable MISSING arm. The exclusion is declared HERE rather than in
+a pack's `[[labels]]` facet because packs are a CONTRIBUTION surface, unioned and
+overridable by K4 operator-local rows — an exclusion a pack can be added to override
+is not an exclusion. Parsing fails LOUD (exit 3) when >=1 `.md` source was supplied
+and none carries the header, reusing the "registry moved/renamed" contract: a
+renamed heading would otherwise silently empty the excluded set and read green for a
+reason nobody chose.
 
 --emit-fix (read-only repair renderer): the diff above reports that a declared row
 is absent; nothing in the corpus CREATES it, so the declared->live materialization
 step had no owner and no implementation. `--emit-fix` renders the `gh label` commands
-that would close the gap and runs none of them, in three blocks: CREATE (declared,
+that would close the gap and runs none of them, in four blocks: CREATE (declared,
 absent), RECONCILE (live but colour/description diverged), UNRESOLVABLE (declared
 with no colour — not emittable, since a colourless create takes GitHub's default grey
-and re-creates the drift). It is a separate boolean flag, NOT an --output-format
+and re-creates the drift), and DELETE (declared EXCLUDED yet live). DELETE renders
+LAST, after UNRESOLVABLE, so an operator pasting from the top never reaches a
+destructive command by momentum. It is a separate boolean flag, NOT an --output-format
 value, because deploy.sh Check 51 pins `--output-format tsv` and parses that shape.
 Note the asymmetry it exposes: the MISSING/ORPHAN diff compares NAMES ONLY, so a row
 that exists live with the wrong colour is invisible to the gate and visible only here.
@@ -60,14 +81,17 @@ which core/config/allowlists/egress-allowlist.txt denies as an unresolvable auth
 
 Exit codes (the check-doc-links.py / check-skill-count-imp.py family convention):
   0  parity clean (or, under --emit-fix, nothing to emit)
-  1  finding(s) — MISSING and/or ORPHAN (or, under --emit-fix, ≥1 emittable row)
+  1  finding(s) — MISSING and/or ORPHAN and/or EXCLUDED_LIVE (or, under --emit-fix,
+     ≥1 emittable row)
   2  argument / input error
   3  a --source was unreadable OR the union parsed to zero canonical labels OR the
      live set was unreadable OR the repo slug was unresolvable OR the live set
-     exceeded --max-labels (fail-loud: a relocated/renamed registry must not read
-     green, and an over-large population must not silently truncate). A single
+     exceeded --max-labels OR >=1 `.md` --source was supplied and none carried the
+     `## Excluded Labels` header (fail-loud: a relocated/renamed registry must not
+     read green, and an over-large population must not silently truncate). A single
      readable-but-empty source is tolerated as long as the union is non-empty
-     (e.g. a pack with no [[labels]] block yet).
+     (e.g. a pack with no [[labels]] block yet). A pure-`.toml` source set supplies
+     no `.md` at all, so its excluded set is legitimately empty and no exit-3 fires.
 
 Ships warn-mode-initial; deploy.sh Check 51 downgrades exit 1 per
 core/rules/bypass-mode-readiness.md during the shakedown window. Authored under
@@ -92,11 +116,27 @@ import tempfile
 # `projects_kind` — so any live `type:*` resolves as a pattern match (#1970 FM-2).
 REGISTERED_NAMESPACES = ("project:", "epic:", "type:")
 
+# The ONLY place the § Excluded Labels anchor string appears (#5054). Single-sourced
+# so a heading rename has exactly one place to change — and a rename that misses it
+# is caught by the fail-loud exit-3 in main() rather than silently emptying the set.
+_EXCLUDED_SECTION_HDR = "## Excluded Labels"
+
 # A label-definition table data row: | `label` | `hexcolor` (name) | ...
 # Requiring a backticked 3/6-hex in col-2 pins the match to the label tables and
-# excludes the `## Removed Labels` table (col-2 = prose reason), headers, and
-# separators.
+# excludes the `## Excluded Labels` table (col-2 = prose exclusion basis), headers,
+# and separators. That exclusion is LOAD-BEARING, not incidental: were the excluded
+# rows to become canonical, deleting the labels they name would flip them from this
+# check's WARN-only EXCLUDED_LIVE arm into its ENFORCE-capable MISSING arm.
 _ROW_RE = re.compile(r"^\s*\|\s*`([^`]+)`\s*\|\s*`[0-9a-fA-F]{3,6}`")
+
+# A § Excluded Labels data row: | `label` | <prose exclusion basis> |
+# Col-1 ONLY. Deliberately NOT _ROW_RE, which demands the hex col-2 this table must
+# never carry; and deliberately not shape-anchored, because "two-column table with a
+# backticked first cell" cannot discriminate the excluded table from any other.
+_EXCLUDED_ROW_RE = re.compile(r"^\s*\|\s*`([^`]+)`\s*\|")
+
+# Any `## ` heading — the close condition for the section scan above.
+_MD_H2_RE = re.compile(r"^\s*##\s")
 
 # A pack.toml `[[labels]]` name assignment. Minimal, dependency-free extraction
 # (no tomllib on py3.9, and this check must stay green without an optional TOML
@@ -126,6 +166,41 @@ def parse_md_labels(source_text):
             continue
         concrete.add(token)
     return concrete
+
+
+def parse_md_excluded_labels(source_text):
+    """Names declared under `## Excluded Labels`. Returns (names:set, header_found:bool).
+
+    SECTION-anchored, not shape-anchored, and the distinction is the whole design.
+    `_ROW_RE` is shape-anchored (backticked hex in col-2) and therefore robust to a
+    heading rename — but that shape cannot discriminate an excluded table from any
+    other two-column table with a backticked first cell, and the excluded table's
+    col-2 is prose by hard requirement (see `_ROW_RE`). So this parser keys on the
+    heading, and `header_found` is returned alongside the names so the caller can
+    fail LOUD when the anchor is gone: a rename would otherwise empty the set, the
+    new class would report clean, and the gate would be green for a reason nobody
+    chose — the same defect one layer up from the one this class exists to close.
+
+    Same dependency-free line-scan shape as parse_toml_labels (no tomllib on py3.9).
+    Opens on a stripped line equal to the header; closes on the next `## ` heading.
+    """
+    names = set()
+    header_found = False
+    in_section = False
+    for line in source_text.splitlines():
+        if line.strip() == _EXCLUDED_SECTION_HDR:
+            header_found = True
+            in_section = True
+            continue
+        if in_section and _MD_H2_RE.match(line):
+            in_section = False
+            continue
+        if not in_section:
+            continue
+        m = _EXCLUDED_ROW_RE.match(line)
+        if m:
+            names.add(m.group(1).strip())
+    return names, header_found
 
 
 def parse_toml_labels(source_text):
@@ -400,20 +475,27 @@ def _shq(s):
     return "'" + str(s).replace("'", "'\\''") + "'"
 
 
-def render_emit_fix(declared_rows, live_rows):
+def render_emit_fix(declared_rows, live_rows, excluded_live=()):
     """Render the READ-ONLY repair script. Returns (lines, actionable_count).
 
-    Emits commands; never runs them. The two blocks are kept separate on purpose:
-    creating an absent row is additive and safe, whereas editing a diverged row
-    OVERWRITES live metadata that a human may have set deliberately. An operator
-    must be able to run the first block without being led into the second.
+    Emits commands; never runs them. The blocks are kept separate on purpose and
+    their ORDER is part of the contract: creating an absent row is additive and safe,
+    editing a diverged row OVERWRITES live metadata a human may have set
+    deliberately, and DELETING a row destroys repository state outright. An operator
+    must be able to run the first block without being led into the later ones, so
+    severity increases monotonically down the output and DELETE renders LAST — after
+    UNRESOLVABLE — where nobody reaches it by momentum.
+
+    `excluded_live` (the rows the grammar declares excluded yet found live) defaults
+    to empty, keeping every existing call site valid.
     """
     absent, diverged, unresolvable = diff_declarations(declared_rows, live_rows)
     out = []
     out.append("# check-label-parity.py --emit-fix — READ-ONLY. Nothing below has been run.")
-    out.append("# Review, then paste the block(s) you want. Label creation is repository")
-    out.append("# STATE, not repository CONTENT: `git revert` cannot undo it (see the")
-    out.append("# release rollback protocol — deletion is a separate, manual step).")
+    out.append("# Review, then paste the block(s) you want. A label is repository STATE,")
+    out.append("# not repository CONTENT: `git revert` cannot undo any of it (see the")
+    out.append("# release rollback protocol). Blocks run in increasing severity —")
+    out.append("# CREATE (additive) then RECONCILE (overwrites) then DELETE (destroys).")
     out.append("")
     out.append(f"# --- CREATE: declared row absent from the live set ({len(absent)}) ---")
     if not absent:
@@ -448,18 +530,49 @@ def render_emit_fix(declared_rows, live_rows):
         out.append("#   (none)")
     for n in unresolvable:
         out.append(f"#   {n}")
-    return out, len(absent) + len(diverged) + len(unresolvable)
+    out.append("")
+    excluded_live = sorted(excluded_live)
+    out.append(f"# --- DELETE: declared excluded, live ({len(excluded_live)}) ---")
+    out.append("#   IRREVERSIBLE. Label DELETION is repository STATE: `git revert` cannot")
+    out.append("#   undo it, no snapshot in this repository holds it, and any issue that")
+    out.append("#   carries one of these labels LOSES it permanently — open and closed")
+    out.append("#   alike. Before running a single line, capture the current state with")
+    out.append("#   `gh label list --json name,color,description` and re-measure the")
+    out.append("#   carrier count of each row: with zero carriers that capture is the")
+    out.append("#   COMPLETE reconstruction record, and with any carrier it is not.")
+    out.append("#   The alternative remedy is the opposite one — withdraw the row from")
+    out.append("#   label-taxonomy.md § Excluded Labels, which is CHEAP and revertible.")
+    if not excluded_live:
+        out.append("#   (none)")
+    for n in excluded_live:
+        out.append(f"gh label delete {_shq(n)} --yes")
+    return out, len(absent) + len(diverged) + len(unresolvable) + len(excluded_live)
 
 
-def diff_parity(concrete, namespaces, live):
-    """(missing, orphan) sorted lists. missing = canonical absent from live;
-    orphan = live not in canonical and not under a registered namespace."""
+def diff_parity(concrete, namespaces, live, excluded=frozenset()):
+    """(missing, orphan, excluded_live) sorted lists.
+
+    missing       canonical, absent from live
+    orphan        live, in neither the canonical set nor a registered namespace,
+                  and NOT declared excluded
+    excluded_live live and declared EXCLUDED by the grammar
+
+    The orphan and excluded_live arms are MUTUALLY EXCLUSIVE by construction. That
+    is load-bearing rather than tidy: a row counted in both would double-report, and
+    any control arm reading the ORPHAN denominator would read wrong. `excluded`
+    defaults to an empty frozenset so every existing caller and fixture stays valid
+    and a pure-`.toml` invocation (no `.md` source, hence no excluded declaration)
+    behaves exactly as before.
+    """
     missing = sorted(c for c in concrete if c not in live)
+    excluded_live = sorted(l for l in live if l in excluded)
     orphan = sorted(
         l for l in live
-        if l not in concrete and not any(l.startswith(ns) for ns in namespaces)
+        if l not in concrete
+        and l not in excluded
+        and not any(l.startswith(ns) for ns in namespaces)
     )
-    return missing, orphan
+    return missing, orphan, excluded_live
 
 
 def _self_test():
@@ -477,15 +590,42 @@ def _self_test():
         "| `epic:*` | `5319e7` (purple) | x | y |\n"
         "### Work-Item-Kind Labels\n"
         "| `type:*` | per-kind | x | y |\n"
-        "## Removed Labels\n"
-        "| Label | Reason |\n"
+        "## Excluded Labels\n"
+        "| Label | Exclusion basis |\n"
+        "|---|---|\n"
         "| `good first issue` | Single-operator platform |\n"
+        "| `zz-excluded-absent` | Never created here |\n"
+        "## Rules\n"
+        "| `not-a-label` | this row is past the section close |\n"
     )
     md_concrete = parse_md_labels(md_fixture)
-    # Namespace-pattern rows (project:*/epic:*/type:*) and the Removed table are
-    # excluded; only `improvement` is a concrete row.
+    # Namespace-pattern rows (project:*/epic:*/type:*) and the Excluded table are
+    # excluded; only `improvement` is a concrete row. The Excluded table's exclusion
+    # from the CANONICAL union is the specificity control for the whole class: were
+    # it to leak in, deleting an excluded label would flip it into the MISSING arm.
     if md_concrete != {"improvement"}:
         print(f"FAIL md parse: got {sorted(md_concrete)} want ['improvement']")
+        ok = False
+
+    # --- § Excluded Labels parse. Both names collected; the `## Rules` heading closes
+    #     the section, so the row beneath it must NOT be collected (the section-scan
+    #     specificity control — without it a runaway scan would read the whole file).
+    md_excluded, hdr_found = parse_md_excluded_labels(md_fixture)
+    want_excl = {"good first issue", "zz-excluded-absent"}
+    if md_excluded != want_excl:
+        print(f"FAIL excluded parse: got {sorted(md_excluded)} want {sorted(want_excl)}")
+        ok = False
+    if not hdr_found:
+        print("FAIL excluded parse: header_found False on a fixture carrying the header")
+        ok = False
+    # SPECIFICITY control for header_found: a doc with no such section reports False
+    # and an empty set — the signal the caller's exit-3 fail-loud path keys on.
+    no_hdr_names, no_hdr_found = parse_md_excluded_labels(
+        "## Label Groups\n| `improvement` | `0E8A16` (green) | x | y |\n"
+    )
+    if no_hdr_found or no_hdr_names:
+        print(f"FAIL excluded parse control: got ({sorted(no_hdr_names)}, {no_hdr_found}) "
+              f"want (set(), False)")
         ok = False
 
     # --- TOML pack `[[labels]]` parse (the relocated concrete rows).
@@ -518,8 +658,9 @@ def _self_test():
     #     a canonical row absent from live (`cluster: security`) is MISSING.
     concrete = md_concrete | toml_concrete
     ns = REGISTERED_NAMESPACES
-    live = {"improvement", "status: rejected", "project:foo", "type:bug", "zz-orphan"}
-    missing, orphan = diff_parity(concrete, ns, live)
+    live = {"improvement", "status: rejected", "project:foo", "type:bug", "zz-orphan",
+            "good first issue"}
+    missing, orphan, excluded_live = diff_parity(concrete, ns, live, md_excluded)
     if missing != ["cluster: security"]:
         print(f"FAIL missing: {missing}")
         ok = False
@@ -529,8 +670,35 @@ def _self_test():
         print(f"FAIL orphan: {orphan}")
         ok = False
 
+    # --- The EXCLUDED_LIVE class, asserted in BOTH halves (#5054). A subject-only
+    #     assertion is the degenerate probe this whole card is about: reclassifying a
+    #     row satisfies "it is EXCLUDED_LIVE" while leaving it double-counted in
+    #     ORPHAN, so the second half is what makes the first mean anything.
+    if excluded_live != ["good first issue"]:
+        print(f"FAIL excluded_live: {excluded_live}")
+        ok = False
+    if "good first issue" in orphan:
+        print("FAIL excluded_live: an excluded-and-live row ALSO reported as ORPHAN")
+        ok = False
+    # SPECIFICITY control: an excluded row that is NOT live appears in no arm at all —
+    # and specifically NOT in MISSING, which is the enforce-capable one. This is the
+    # assertion that keeps the Excluded table out of the canonical union; it fails the
+    # moment someone gives that table a hex col-2.
+    if "zz-excluded-absent" in missing + orphan + excluded_live:
+        print("FAIL excluded control: an excluded-but-absent row surfaced in an arm")
+        ok = False
+    # DEFAULT-PARAMETER control: the same inputs with no excluded set must route the
+    # row back to ORPHAN, proving the reclassification is caused by the declaration
+    # and not by some unrelated property of the name.
+    _m, orphan_noexcl, excl_noexcl = diff_parity(concrete, ns, live)
+    if excl_noexcl or "good first issue" not in orphan_noexcl:
+        print(f"FAIL excluded default-arg control: excluded_live={excl_noexcl} "
+              f"orphan={orphan_noexcl}")
+        ok = False
+
     ok = _self_test_emit_fix() and ok
     ok = _self_test_rest_transport() and ok
+    ok = _self_test_excluded_live() and ok
 
     print("self-test: PASS" if ok else "self-test: FAIL")
     return 0 if ok else 1
@@ -785,6 +953,164 @@ def _self_test_emit_fix():
     return ok
 
 
+_EXCL_MD_BODY = (
+    "### Category Labels\n"
+    "| Label | Color | Description | Applied At |\n"
+    "|---|---|---|---|\n"
+    "| `improvement` | `0E8A16` (green) | x | y |\n"
+    "{hdr}\n"
+    "| Label | Exclusion basis |\n"
+    "|---|---|\n"
+    "| `question` | Not a valid issue category |\n"
+)
+
+
+def _self_test_excluded_live():
+    """End-to-end fixture suite for the EXCLUDED_LIVE class (#5054).
+
+    Driven through main() rather than through diff_parity, because the contract the
+    consumers depend on is the emitted TSV, the text verdict line and the EXIT CODE —
+    three separate surfaces that all carried the same fail-open shape, and two of
+    which an internal-only assertion cannot reach.
+    """
+    ok = True
+    md_ok = _EXCL_MD_BODY.format(hdr=_EXCLUDED_SECTION_HDR)
+    md_renamed = _EXCL_MD_BODY.format(hdr="## Removed Labels")
+
+    def _w(d, nm, text):
+        p = os.path.join(d, nm)
+        with open(p, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return p
+
+    with tempfile.TemporaryDirectory() as td:
+        src_md = _w(td, "taxonomy.md", md_ok)
+        src_md_renamed = _w(td, "taxonomy-renamed.md", md_renamed)
+        src_toml = _w(td, "pack.toml",
+                      '[[labels]]\nname = "improvement"\ncolor = "0E8A16"\n')
+        live_mixed = _w(td, "live-mixed.json", json.dumps([
+            {"name": "improvement", "color": "0E8A16", "description": ""},
+            {"name": "question", "color": "d876e3", "description": ""},
+            {"name": "zz-orphan", "color": "ededed", "description": ""},
+        ]))
+        live_clean = _w(td, "live-clean.json", json.dumps([
+            {"name": "improvement", "color": "0E8A16", "description": ""},
+        ]))
+        # An EXCLUDED_LIVE finding and NOTHING else — the isolating payload.
+        live_excl_only = _w(td, "live-excl-only.json", json.dumps([
+            {"name": "improvement", "color": "0E8A16", "description": ""},
+            {"name": "question", "color": "d876e3", "description": ""},
+        ]))
+
+        # --- Case 0: THE EXIT CONTRACT, isolated. A run whose ONLY finding is
+        #     EXCLUDED_LIVE must exit 1. This is the assertion that matters most:
+        #     the old predicate `1 if (missing or orphan) else 0` returned 0 here,
+        #     so every consumer reading the exit code alone — not just a human
+        #     reading a log line — was told the run was clean while the tool held a
+        #     finding. Paired with its clean control immediately below, so "exit 1"
+        #     cannot pass merely because every fixture invocation fails.
+        rc, out = _run_main_captured(["--source", src_md,
+                                      "--fixture-labels", live_excl_only,
+                                      "--output-format", "tsv"])
+        rows = [r for r in out.splitlines() if r]
+        if rc != 1:
+            print(f"FAIL excluded exit contract: excluded-only run exited {rc} want 1")
+            ok = False
+        if rows != ["EXCLUDED_LIVE\tquestion"]:
+            print(f"FAIL excluded exit contract: rows {rows} want one EXCLUDED_LIVE row")
+            ok = False
+        rc, out = _run_main_captured(["--source", src_md, "--fixture-labels", live_clean,
+                                      "--output-format", "tsv"])
+        if rc != 0 or [r for r in out.splitlines() if r]:
+            print(f"FAIL excluded exit control: clean run exited {rc} with {out!r} want 0 + no rows")
+            ok = False
+
+        # --- Case 1: TSV. The excluded-and-live row lands in EXCLUDED_LIVE and NOT
+        #     in ORPHAN (both halves), a genuine orphan still routes to ORPHAN (the
+        #     sensitivity control), and every row is exactly 2 tab-separated fields —
+        #     the shape CIAC-1 pins, unchanged by the new class.
+        rc, out = _run_main_captured(["--source", src_md, "--fixture-labels", live_mixed,
+                                      "--output-format", "tsv"])
+        rows = [r for r in out.splitlines() if r]
+        if rc != 1:
+            print(f"FAIL excluded tsv: exit {rc} want 1")
+            ok = False
+        if "EXCLUDED_LIVE\tquestion" not in rows:
+            print(f"FAIL excluded tsv: no EXCLUDED_LIVE row in {rows}")
+            ok = False
+        if "ORPHAN\tquestion" in rows:
+            print("FAIL excluded tsv: the excluded row ALSO emitted as ORPHAN")
+            ok = False
+        if "ORPHAN\tzz-orphan" not in rows:
+            print(f"FAIL excluded tsv control: genuine orphan missing from {rows}")
+            ok = False
+        widths = {len(r.split("\t")) for r in rows}
+        if widths != {2}:
+            print(f"FAIL excluded tsv shape: column widths {sorted(widths)} want {{2}}")
+            ok = False
+
+        # --- Case 2: TEXT mode. This is CIAC-2's own instrument: with an
+        #     EXCLUDED_LIVE row present it must NOT print the parity line, and must
+        #     exit 1. Before this fix it printed "in parity" and returned 0.
+        rc, out = _run_main_captured(["--source", src_md, "--fixture-labels", live_mixed,
+                                      "--output-format", "text"])
+        if rc != 1:
+            print(f"FAIL excluded text: exit {rc} want 1")
+            ok = False
+        if "are in parity" in out:
+            print("FAIL excluded text: printed the parity line while holding a finding")
+            ok = False
+        if "EXCLUDED_LIVE" not in out:
+            print(f"FAIL excluded text: no EXCLUDED_LIVE block in {out!r}")
+            ok = False
+
+        # --- Case 2b: the CLEAN CONTROL for Case 2. With nothing in any arm the
+        #     parity line still prints and the exit is still 0 — so the absence above
+        #     is caused by the finding, not by the message having been broken.
+        rc, out = _run_main_captured(["--source", src_md, "--fixture-labels", live_clean,
+                                      "--output-format", "text"])
+        if rc != 0 or "are in parity" not in out:
+            print(f"FAIL excluded text control: exit {rc} out {out!r} want 0 + parity line")
+            ok = False
+
+        # --- Case 3: the FAIL-LOUD pair. A markdown source whose § Excluded Labels
+        #     heading was renamed exits 3 rather than silently reporting an empty
+        #     excluded set; the pure-`.toml` invocation (no .md source at all) is
+        #     exempt and must NOT exit 3. One arm without the other proves nothing.
+        rc, _ = _run_main_captured(["--source", src_md_renamed,
+                                    "--fixture-labels", live_mixed,
+                                    "--output-format", "tsv"])
+        if rc != 3:
+            print(f"FAIL excluded fail-loud: renamed heading exited {rc} want 3")
+            ok = False
+        rc, _ = _run_main_captured(["--source", src_toml, "--fixture-labels", live_mixed,
+                                    "--output-format", "tsv"])
+        if rc == 3:
+            print("FAIL excluded fail-loud control: pure-.toml source set exited 3")
+            ok = False
+
+        # --- Case 4: --emit-fix renders a DELETE block for the excluded-and-live row,
+        #     LAST in the output, and renders no delete for a row that is merely
+        #     orphaned (the specificity control — deleting an orphan is the wrong
+        #     remedy and the emitter must never suggest it).
+        rc, out = _run_main_captured(["--source", src_md, "--source", src_toml,
+                                      "--fixture-labels", live_mixed, "--emit-fix"])
+        if "gh label delete 'question' --yes" not in out:
+            print("FAIL excluded emit-fix: no delete line for the excluded-and-live row")
+            ok = False
+        if "gh label delete 'zz-orphan'" in out:
+            print("FAIL excluded emit-fix: emitted a delete for a plain ORPHAN")
+            ok = False
+        if out.index("--- DELETE:") < out.index("--- UNRESOLVABLE:"):
+            print("FAIL excluded emit-fix: DELETE block rendered before UNRESOLVABLE")
+            ok = False
+        if rc != 1:
+            print(f"FAIL excluded emit-fix: exit {rc} want 1 (>=1 emittable row)")
+            ok = False
+
+    return ok
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description="label-taxonomy <-> GitHub label-set parity [#749]"
@@ -795,7 +1121,9 @@ def main(argv=None):
         default=None,
         help=(
             "canonical label registry; repeatable (#1970 multi-source union). "
-            ".md reads label-table rows; .toml reads [[labels]] name entries. "
+            ".md reads label-table rows AND the `## Excluded Labels` section; "
+            ".toml reads [[labels]] name entries. Supplying at least one .md source "
+            "whose text carries no `## Excluded Labels` header is exit-3 fail-loud. "
             "Default: core/specs/label-taxonomy.md."
         ),
     )
@@ -858,6 +1186,13 @@ def main(argv=None):
     # source is tolerated (e.g. a pack with no [[labels]] yet); the union being
     # empty is the fail-loud condition (registry moved/renamed).
     concrete = set()
+    # The EXCLUDED set is accumulated over the `.md` sources only — the grammar doc
+    # owns it, and a pack must not be able to contribute or override an exclusion
+    # (see the module docstring). `md_sources` is tracked so the fail-loud test below
+    # can tell "no .md source was supplied" (legitimately empty) from ".md sources
+    # were supplied and none carried the anchor" (the renamed-heading defect).
+    excluded = set()
+    md_sources, md_with_header = [], 0
     for src in sources:
         try:
             with open(src, encoding="utf-8") as fh:
@@ -866,6 +1201,25 @@ def main(argv=None):
             print(f"source unreadable: {src}: {e}", file=sys.stderr)
             return 3
         concrete |= parse_source(src, source_text)
+        if not src.lower().endswith(".toml"):
+            md_sources.append(src)
+            names, header_found = parse_md_excluded_labels(source_text)
+            excluded |= names
+            md_with_header += 1 if header_found else 0
+
+    # FAIL LOUD on a lost anchor, reusing the existing "registry moved/renamed"
+    # exit-3 contract rather than inventing a token or a branch. A silently-empty
+    # excluded set would report clean on exactly the condition the class exists to
+    # detect. A pure-`.toml` invocation supplies no `.md` at all and is exempt.
+    if md_sources and md_with_header == 0:
+        print(
+            f"no `{_EXCLUDED_SECTION_HDR}` section in any of the "
+            f"{len(md_sources)} markdown source(s) ({', '.join(md_sources)}) — "
+            f"registry moved/renamed? The excluded set would read empty, which is "
+            f"indistinguishable from 'nothing is excluded'.",
+            file=sys.stderr,
+        )
+        return 3
 
     # --emit-fix is a distinct read-only MODE: it reports what the live set would
     # need in order to match the declarations, which is a strictly wider question
@@ -893,7 +1247,9 @@ def main(argv=None):
         except Exception as e:  # noqa: BLE001 - fail-loud, same contract as the gate path
             print(f"cannot read live label set: {e}", file=sys.stderr)
             return 3
-        lines, actionable = render_emit_fix(declared_rows, live_rows)
+        lines, actionable = render_emit_fix(
+            declared_rows, live_rows, sorted(n for n in live_rows if n in excluded)
+        )
         print("\n".join(lines))
         return 1 if actionable else 0
 
@@ -912,13 +1268,19 @@ def main(argv=None):
         print(f"cannot read live label set: {e}", file=sys.stderr)
         return 3
 
-    missing, orphan = diff_parity(concrete, namespaces, live)
+    missing, orphan, excluded_live = diff_parity(concrete, namespaces, live, excluded)
 
     if args.output_format == "tsv":
+        # Two tab-separated fields per row, same order, same separator — the shape
+        # deploy.sh Check 51 parses is UNCHANGED by the new class. That is precisely
+        # why a shape guard cannot see this class arriving, and why the consumer was
+        # rewritten to bucket unrecognized col-1 VALUES rather than to check columns.
         for m in missing:
             print(f"MISSING\t{m}")
         for o in orphan:
             print(f"ORPHAN\t{o}")
+        for x in excluded_live:
+            print(f"EXCLUDED_LIVE\t{x}")
     else:
         if missing:
             print("MISSING (canonical label absent from GitHub):")
@@ -928,10 +1290,15 @@ def main(argv=None):
             print("ORPHAN (GitHub label not registered in the taxonomy):")
             for o in orphan:
                 print(f"  - {o}")
-        if not missing and not orphan:
+        if excluded_live:
+            print("EXCLUDED_LIVE (live label the taxonomy declares excluded — "
+                  "delete it, or withdraw the exclusion):")
+            for x in excluded_live:
+                print(f"  - {x}")
+        if not missing and not orphan and not excluded_live:
             print("label-taxonomy.md and the GitHub label set are in parity")
 
-    return 1 if (missing or orphan) else 0
+    return 1 if (missing or orphan or excluded_live) else 0
 
 
 if __name__ == "__main__":
