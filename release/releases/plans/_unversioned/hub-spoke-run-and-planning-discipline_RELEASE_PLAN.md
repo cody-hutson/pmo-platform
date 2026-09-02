@@ -13,7 +13,7 @@
 
 Seven cards on one branch, one PR. The release makes a hub session's staging bounded by the same run-directory discipline a spoke's is, gives Stage-4 planning an agent-editability dimension so a Tier-0-floored card surfaces at planning rather than at Engineering, and reconciles the Stage-13 `.version` stamp with Surface-1 publication.
 
-- **Class `novel`** — promoted at the Stage-5 exit gate by operator decision D17 on trigger **(c)** (`≥1 Stage-5 ADR`). Trigger (a) never fired: all eight designs chose extend-an-existing-seam over authoring a new artifact, and the only file adds in the release are two test fixtures on #6596.
+- **Class `novel`** — promoted at the Stage-5 exit gate by operator decision D17 on trigger **(c)** (`≥1 Stage-5 ADR`). Trigger (a) never fired: all eight designs chose extend-an-existing-seam over authoring a new artifact, and the only file adds in the release are four test fixtures on #6596.
 - **Stage 9 review depth: Deep** (was Standard). Engagement density Light. Stage-13 outcome-window 30 days. Stage-5 activation bias `SKIP-where-trivial` is spent — it reached no card.
 - **30 effective points against a 15–25 band.** The override is accepted and extended: D13 recorded 28 after the D7 scope expansion; D26 extended it to 30 when the #5505 packaging cascade surfaced. Recorded here rather than left implicit.
 - **Three original cards are gated.** #5833 (`BLOCK-SKILL-EDIT-001` + `-002`), #5084 (via D5), #5505 (via D11) each require a live `pmo-skill-editor` Mode A session with a 1800 s sentinel TTL. The `unconstrained` classification arm is carried by late-add #6597.
@@ -60,7 +60,7 @@ The Stage-4 plan comment is superseded on six points. Each correction is recorde
 
 | Trigger | Fired? | Basis |
 |---|---|---|
-| `novel` (a) — ≥1 new reference doc, schema, or skill | **No** | Never fired at any point. All eight designs (seven cards plus the E-13 addendum) chose extend-an-existing-seam. The only file adds in the release are two test fixtures on #6596, which trigger (a) does not name. The operator's D2 pre-authorization for a trigger-(a) promotion went **unexercised**. |
+| `novel` (a) — ≥1 new reference doc, schema, or skill | **No** | Never fired at any point. All eight designs (seven cards plus the E-13 addendum) chose extend-an-existing-seam. The only file adds in the release are four test fixtures on #6596, which trigger (a) does not name. The operator's D2 pre-authorization for a trigger-(a) promotion went **unexercised**. |
 | `novel` (b) — ≥1 D-class decision | Recurring only | Recurring-D entries do not fire the trigger. |
 | `novel` (c) — ≥1 Stage-5 ADR | **FIRES** | The operator elected to create the ADR recording #5505's substrate selection — tracked as **#6617**. |
 | `cross-cutting` (a)/(b)/(c) | No | Does not fire on any limb. |
@@ -142,10 +142,12 @@ The D26 rows are structural, not discretionary: Check 7 (skill-package content-f
 | **#5833** | ∅ | **2 paths** — `release/skills/release-hub/SKILL.md` (`-001`), `release/skills/release-hub/references/spoke-launch.md` (`-002`) | **sanctioned-session-required** | Agent-executed inside a live `pmo-skill-editor` Mode A session. Never `CLAUDE_HOOK_BYPASS=1`. |
 | **#5505** | ∅ | **≥1 path** under `release/skills/release-planner/` (D11) | **sanctioned-session-required** | Same. |
 | **#5084** | ∅ | **≥1 path** under `release/skills/release-executor/` (D5) | **sanctioned-session-required** | Same. |
-| **#6596** | ∅ | ∅ | **unconstrained** | Ordinary Engineering spoke. |
+| **#6596** | ∅ | **1 path** — `core/skills/finops-usage-extractor/SKILL.md` (`-001`) | **sanctioned-session-required** | Agent-executed inside a live `pmo-skill-editor` Mode A session. Never `CLAUDE_HOOK_BYPASS=1`. **Corrected at the Stage-6 commit** — see the row note below. |
 | **#6597** | ∅ | ∅ | **unconstrained** | Ordinary Engineering spoke. Supplies CIAC-2's `unconstrained` arm. |
 | **#6598** | ∅ | ∅ | **unconstrained** | Ordinary Engineering spoke. |
 | **#6599** | ∅ | ∅ | **unconstrained** | Ordinary Engineering spoke. |
+
+**#6596's row was corrected at its Stage-6 commit; the other six are unchanged.** The original row was authored against the card's scripts-only scope — the card body still reads *"Ungated — `scripts/` does not match `SKILL_SCOPE_RE`"*, which is true of `scripts/` and became incomplete when Stage 5 added `core/skills/finops-usage-extractor/SKILL.md` to the change set. Re-measured against the hook's own `SKILL_SCOPE_RE`: that one path matches (`-001`); both scripts, all fixture paths, both corpus docs and the package artefact do not. Sensitivity arm `release/skills/release-hub/SKILL.md` → matched; specificity arm `README.md` → no match. **CIAC-2 is not vacated** — its `unconstrained` witness is #6597, whose change set matches nothing.
 
 `block-skill-direct-edit.sh` is a **routing requirement, not a hard block**: every `apply_block` call is reached from a sentinel condition, and with a valid sentinel the hook falls through to `exit 0`. Contrast `BLOCK-AUTONOMY-001`, which calls `always_block` and has no sanctioned path. The two controls differ in kind, not in degree.
 
@@ -190,6 +192,17 @@ packages/release-executor.skill                                    edit
 packages/release-executor.skill.sha256                             edit
 core/specs/autonomy-tiers.md                                       edit
 core/skills/finops-usage-extractor/scripts/rollup-attribution.sh   edit
+core/skills/finops-usage-extractor/scripts/estimate-usage.sh       edit
+core/skills/finops-usage-extractor/SKILL.md                        edit
+core/standards/finops-attribution-convention.md                    edit
+core/schemas/finops-usage-store-schema.md                          edit
+core/skills/finops-usage-extractor/test-fixtures/rollup/README.md   edit
+core/skills/finops-usage-extractor/test-fixtures/rollup/rollup.expected.json  edit
+core/skills/finops-usage-extractor/test-fixtures/rollup/usage.jsonl edit
+core/skills/finops-usage-extractor/test-fixtures/estimate/RELEASE_LOG.fixture.md  edit
+packages/finops-usage-extractor.skill                              edit
+packages/finops-usage-extractor.skill.sha256                       edit
+.github/workflows/release-tooling-smoke.yml                        edit
 core/deploy/tests/test_version_stamping.sh                         edit
 .github/workflows/install-tests.yml                                edit
 release/references/standards/release-notes-standard.md             edit
@@ -211,14 +224,18 @@ release/references/standards/quota-budget-protocol.md              READ
 
 ```
 # ── CONDITIONAL ───────────────────────────────────────────────────────
-CONDITIONAL:6596-fixture-pair  release/tools/tests/fixtures/       add
+PROMOTED:6596-fixtures  core/skills/finops-usage-extractor/test-fixtures/rollup/hub-state/synthetic-slug-release/sessions.md      add
+PROMOTED:6596-fixtures  core/skills/finops-usage-extractor/test-fixtures/rollup/hub-state/synthetic-collision-peer/sessions.md   add
+PROMOTED:6596-fixtures  core/skills/finops-usage-extractor/test-fixtures/rollup/hub-state/synthetic-malformed/sessions.md        add
+PROMOTED:6596-fixtures  core/skills/finops-usage-extractor/test-fixtures/rollup/hub-state/synthetic-managed-fence/sessions.md    add
 ```
 
 **Row-set notes.**
 
 - **`core/specs/autonomy-tiers.md` moved from READ to `edit`** — correction 5. It was correctly read-only for #5505 ("referenced, not modified"), and that is the card the original row was authored against. Late-add #6597 writes it, so the release-scoped intent is `edit`.
-- **The three `packages/*.skill` + `.sha256` pairs are structural obligations, not discretionary rows.** Check 7 / the `skill-package-freshness` CI gate hashes every file in a packaged tree; editing a rostered skill's `SKILL.md` or `references/` changes the content hash by construction. Each card that edits a rostered skill rebuilds and commits its package and sidecar **in this PR**. Unrebuilt, the release merges red.
-- **The two Stage-4 CONDITIONAL `add` rows did not fire.** `CONDITIONAL:5833-distinct-staging-standard` resolved to *extend an existing seam*, not a new standard; `CONDITIONAL:5505-derivation-substrate` resolved without a new substrate file. Neither is promoted, and neither needs a Deviation-Log row. The one live conditional is #6596's fixture pair — the release's **only** file adds.
+- **The four `packages/*.skill` + `.sha256` pairs are structural obligations, not discretionary rows.** Check 7 / the `skill-package-freshness` CI gate hashes every file in a packaged tree; editing a rostered skill's `SKILL.md` or `references/` changes the content hash by construction. Each card that edits a rostered skill rebuilds and commits its package and sidecar **in this PR**. Unrebuilt, the release merges red. **The fourth pair — `packages/finops-usage-extractor.skill` — was added at #6596's Stage-6 commit.** That cascade is wider than the other three: the packaged tree contains both edited scripts, `SKILL.md` **and the whole `test-fixtures/rollup/` tree**, so seven of this card's paths cascade and the four fixture adds become new archive entries. Measured with the resolver's documented **stdin** form (`printf '%s\n' <path> | build-skill-packages.sh --skills-for-paths`); passing a path as an argument returns empty for every input including a known-cascading control, which reads as "no cascade" while measuring nothing.
+- **The two Stage-4 CONDITIONAL `add` rows did not fire.** `CONDITIONAL:5833-distinct-staging-standard` resolved to *extend an existing seam*, not a new standard; `CONDITIONAL:5505-derivation-substrate` resolved without a new substrate file. Neither is promoted, and neither needs a Deviation-Log row.
+- **`CONDITIONAL:6596-fixture-pair` fired, and was re-pointed rather than promoted as written.** It named `release/tools/tests/fixtures/` — a real directory, but not one this card touches; the design places every fixture under `core/skills/finops-usage-extractor/test-fixtures/rollup/hub-state/`. Promoting it verbatim would have declared a path the card never writes while leaving the paths it does write undeclared. It resolved to **four** fixture adds, not a pair: the slug-keyed run directory, its collision peer, a malformed-table fixture, and the managed-section-fence fixture that D39 added. These remain the release's **only** file adds.
 - **Each following card's spoke amends its own rows at its commit.** #5505 carries a second gated path under `release/skills/release-planner/` (D11/D26) whose concrete name is set by that card's spoke; it is not guessed here. A row promoted at a later commit carries its concrete path in that commit, per the contract.
 - **New-executable companion obligation: N/A.** The matrix carries zero `add` rows for `*.sh`; the only added paths are test fixtures. No `core/config/allowlists/script-execution-allowlist.txt` companion row is owed.
 
@@ -279,6 +296,8 @@ Both siblings declare no bump-class, so both render `UNRESOLVABLE` in the bump-c
 
 **AC baseline** — per-issue acceptance-criterion counts as read at plan time, taken at `539c4440`: #5833 **6** · #5505 **4** · #5084 **4** · #6596 **3** · #6597 **3** · #6598 **3** · #6599 **3**. A count that no longer matches its baseline is a mechanical signal to re-bind, not a verdict.
 
+**Re-bind recorded — #6596: 3 → 6.** Its acceptance criteria were replaced wholesale by the Phase A6.5 adversarial review (the card body opens `⚠ ACCEPTANCE CRITERIA REPLACED`), not merely extended: three of the original five were defective — one vacuous, one using the wrong denominator, and one admitting a metric that would certify the exact failure the card exists to close. Grade against **AC1–AC6**, and note that **AC1's literal wording must not gate acceptance** (correction 6 / deviation (f)).
+
 **Per-issue verification — #5833** (the card landing at this commit; each following card's spoke extends this table with its own rows).
 
 | Issue | AC | Verification Method | Expected Result |
@@ -333,7 +352,7 @@ Baseline at `539c4440`: **`NC-NS-1: 16 passed, 0 failed`** (independently reprod
 | **R-9** | **Second-order blast-radius fan-out never measured** on the three Structural-tier targets (`--depth=1` bound declared; `--depth=2` exceeded a 120 s budget). | LOW | — | Stage 7 | Under an additive-only change with no anchor removed, second-order break-surface is structurally nil — but that is an argument, not a measurement, and is labelled as such. **Accepted, explicitly.** | CHEAP |
 | **R-10** | **Domain-practice conformance not assessed** (design-review checklist 4.6, domain `governance`). | LOW | — | Stage 7 Phase C | Surfaced forward per the check's own routing; does not block Engineering. | CHEAP |
 
-**Rollback strategy.** Single branch, single PR. Zero deletes, zero renames; the only adds are two test fixtures. Rollback is `git revert` of one merge commit. No data migration, no deploy artifact, no external state. **Reversibility: CHEAP · confidence HIGH.** The one asymmetry is R-5: if the monotonicity predicate ships wrong and is not exercised until a later out-of-order close, detection is delayed even though the revert stays cheap.
+**Rollback strategy.** Single branch, single PR. Zero deletes, zero renames; the only adds are four test fixtures. Rollback is `git revert` of one merge commit. No data migration, no deploy artifact, no external state. **Reversibility: CHEAP · confidence HIGH.** The one asymmetry is R-5: if the monotonicity predicate ships wrong and is not exercised until a later out-of-order close, detection is delayed even though the revert stays cheap.
 
 ---
 
@@ -362,6 +381,10 @@ Departures from the as-filed issue bodies and the as-authored Stage 4 plan, with
 | **(e)** | **RS-5's mitigation is not carried; the risk cannot fire.** Class-L structurally cannot fire on `hub-state/README.md` (the file matches no durable-corpus glob in either enforcing surface, which share one predicate), and Class-V's `CUTOVER_RE` requires a concrete `v[0-9]+\.[0-9]+`, which `vX.Y` is not. | #6598's remediation pass, hub-confirmed on the two enforcing surfaces. | The design's H7 Constraint paragraph carries a "confirm the reference-durability check's disposition before merging" step predicated on a risk that cannot fire. Carried as a gate it would be ceremony. **Label subtlety worth stating:** the brief's "RS-5" resolves **by content** to that Constraint paragraph, not by label to the design's own RS-5 (which is "second-order fan-out never measured", already dispositioned Accepted). Act on content, not the label. |
 | **(f)** | **#6596's AC1 is dispositioned rather than executed as written.** "Fix all three `v[0-9]` sites" becomes "all three reviewed and dispositioned" — 2 updated, 1 preserved, 1 sibling arm added. | The AC's premise is wrong. | One of the three sites is a branch predicate that correctly parses 25 live `chore/vX.Y-*` refs. A uniform sweep would break working behaviour to satisfy the AC's letter while defeating its intent. |
 | **(g)** | **The Stage-5 ADR ships without a number**, cited as **#6617** throughout. | Operator decision **D27**. | Three concurrent releases collided on 170/171. Number allocation moves to Stage 12, where the claim is atomic. A number written now would be a claim this release cannot honour. |
+| **(h)** | **#6596's editability class is corrected `unconstrained` → `sanctioned-session-required`** in § Stage Applicability Matrix, and its File Change Matrix rows expand from one to twelve (including the fourth `packages/*` pair). | Stage-6 Phase A measurement against the hook's own `SKILL_SCOPE_RE`. | The original row was authored against the card's scripts-only scope, before Stage 5 added `core/skills/finops-usage-extractor/SKILL.md`. `scripts/` under a skill genuinely is ungated; `SKILL.md` is not. No other card's row changed — #6597 supplies CIAC-2's only `unconstrained` witness, so altering it would leave that criterion with no witness. |
+| **(i)** | **The D39 sticky-header-bind fixture is an added unit beyond the eight Stage-5 units**, with its own sub-issue and its own CI precision probe. | Operator decision **D39**. | The Stage-5 remediation specified a sticky per-file column bind whose failure mode is silence, but the property was unreachable from tracked artifacts: the in-repo hub-state template carries no managed-section fences — they are composed at install. The operator chose to build the fixture rather than grade the property by inspection. Carried as its own unit rather than folded into the parser unit because its acceptance is a distinct both-arms demonstration. |
+| **(j)** | **Two CI precision probes added to `release-tooling-smoke.yml`**, and the estimate fixture gains a synthetic ledger table plus three `SE-7b` arms. | AC2's "must turn red on a reorder", and the same standard applied to the other two silent-failure properties this card introduces. | AC2 requires the shadowing guard turn red on a deliberate reorder — a requirement that is unverifiable unless something performs the reorder. The probes follow the job's established mutation pattern and each asserts its anchor matches exactly once, so a probe that can no longer find what it breaks reports that rather than passing quietly. |
+| **(k)** | **`.github/workflows/release-tooling-smoke.yml` and `core/skills/finops-usage-extractor/test-fixtures/estimate/RELEASE_LOG.fixture.md` are edited beyond the Stage-5 change set.** | Deviations (i) and (j). | The workflow carries the two new precision probes; the estimate fixture carries the ledger table without which the new alias path in `release_log_velocity_map()` would ship untested — the accessor's alias branch had no fixture coverage at all, so a regression there would have been invisible. |
 
 ---
 
