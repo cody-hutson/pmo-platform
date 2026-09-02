@@ -5,7 +5,8 @@
 # Guards the 3-layer fix:
 #   L2 — release/tools/automated-closeout.sh phase_bump_version:
 #        writes + (implicitly) stages .version for a versioned $VERSION,
-#        SKIPs-with-PASS for a version-less / non-vX.Y $VERSION, is idempotent.
+#        SKIPs-with-PASS for a version-less / non-vX.Y $VERSION, is monotone
+#        (never regresses .version; equality is a limb).
 #   L3 — core/deploy/deploy.sh Check 39 comparison algorithm:
 #        anchored on the latest PUBLISHED Release, .version == anchor -> PASS,
 #        exactly 1 published-minor apart -> WARN (Stage-12->13 window),
@@ -36,6 +37,10 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 CLOSEOUT_SRC="${REPO_ROOT}/release/tools/automated-closeout.sh"
+# The Part-1 subshell REASSIGNS REPO_ROOT to its sandbox, so anything that must
+# resolve against the REAL checkout after that point (the version-grammar SSOT the
+# Part-3 arms call) has to capture the root here, before it is shadowed.
+REPO_ROOT_REAL="${REPO_ROOT}"
 
 PASS=0
 FAIL=0
@@ -162,14 +167,14 @@ bv_result=$(
     emit "phase_bump_version: versioned apply writes .version (single line)|0|got '$r' / .version='$(head -1 "${REPO_ROOT}/.version")' / lines=$lines"
   fi
 
-  # (d) idempotency — re-run at target -> SKIPPED
+  # (d) monotonicity (equal limb) — re-run at target -> SKIPPED
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   phase_bump_version >/dev/null 2>&1
   r="$(get_phase bump_version)"
   if [[ "$r" == SKIPPED\|* ]]; then
-    emit "phase_bump_version: idempotent re-run SKIP|1|"
+    emit "phase_bump_version: monotone equal-limb SKIP|1|"
   else
-    emit "phase_bump_version: idempotent re-run SKIP|0|got '$r'"
+    emit "phase_bump_version: monotone equal-limb SKIP|0|got '$r'"
   fi
 
   # (e) dry-run preview -> DRY-RUN, no write
@@ -184,6 +189,106 @@ bv_result=$(
   else
     emit "phase_bump_version: dry-run preview, no write|0|got '$r' / .version='$(head -1 "${REPO_ROOT}/.version")'"
   fi
+
+  # ── (f)..(r) MONOTONICITY ORDERED PAIRS ────────────────────────────────────
+  # The exhaustive table for the monotonicity guard. Each arm asserts BOTH the
+  # recorded phase outcome AND the resulting .version value: the outcome alone
+  # cannot distinguish "SKIPped correctly" from "SKIPped and also corrupted the
+  # file", and the value alone cannot distinguish a deliberate SKIP from a write
+  # that happened to land on the same string.
+  #
+  # ANTI-VACUITY IS THE POINT, and it is two-sided. Seven arms must be SKIPPED
+  # and six must be non-SKIPPED, so an always-SKIP implementation fails 6 and an
+  # always-WRITE implementation fails 7. Neither degenerate form passes. Arms
+  # (f) and (g) are the ordered pair for the lexical trap; (h)/(i) for the major
+  # bump; (j)/(k) for the historical incident; (p)/(q)/(r) pin the recovery paths.
+  #
+  # THE SSOT MUST BE LOADED FIRST, AND THAT IS NOT AUTOMATIC HERE. The sliced
+  # function-only copy lives in the sandbox, so the script's own SCRIPT_DIR-relative
+  # source of the version-grammar library cannot resolve and the slice sets
+  # _ACO_HAVE_GRAMMAR=0. In PRODUCTION that source always resolves — the library is a
+  # sibling of automated-closeout.sh — so leaving the slice's 0 in place grades every
+  # arm below against the DEGRADE path instead of the real one. Measured, not assumed:
+  # with the flag left at 0, M-1 reports PASS and .version is written DOWN to v4.9 —
+  # the fixture reports FAIL against CORRECT code. Load the real library and pin the
+  # flag so these arms model production.
+  . "${REPO_ROOT_REAL}/release/tools/version-grammar.sh" "" 2>/dev/null || true
+  _ACO_HAVE_GRAMMAR=0
+  if declare -F version_cmp >/dev/null 2>&1 && declare -F version_stamp_state >/dev/null 2>&1; then
+    _ACO_HAVE_GRAMMAR=1
+  fi
+  # ANTI-VACUITY FLOOR. Without this, a future break in the load path silently turns
+  # every arm below into a degrade-path arm that still reports green.
+  if [[ "$_ACO_HAVE_GRAMMAR" == "1" ]]; then
+    emit "version-grammar SSOT loaded for the monotonicity arms|1|"
+  else
+    emit "version-grammar SSOT loaded for the monotonicity arms|0|version_cmp / version_stamp_state unavailable — every arm below would grade the DEGRADE path, not the real one"
+  fi
+
+  MODE="apply"
+  _mono() {  # <before> <target> <expected-verdict-prefix> <expected-after> <label>
+    printf '%s' "$1" > "${REPO_ROOT}/.version"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    VERSION="$2"
+    phase_bump_version >/dev/null 2>&1
+    local got after
+    got="$(get_phase bump_version)"
+    after="$(head -1 "${REPO_ROOT}/.version" 2>/dev/null)"
+    if [[ "$got" == "$3"\|* && "$after" == "$4" ]]; then
+      emit "phase_bump_version: $5|1|"
+    else
+      emit "phase_bump_version: $5|0|want ${3}/.version=${4}, got '${got%%|*}'/.version='${after}'"
+    fi
+  }
+
+  #      before                target     verdict  after      label
+  _mono 'v4.10'               'v4.9'     SKIPPED 'v4.10'   "M-1 lexical trap — v4.10 is NOT below v4.9"
+  _mono 'v4.9'                'v4.10'    PASS    'v4.10'   "M-2 sens partner of M-1"
+  _mono 'v5.0'                'v4.99'    SKIPPED 'v5.0'    "M-3 major bump — a minor-only compare writes the downgrade"
+  _mono 'v4.99'               'v5.0'     PASS    'v5.0'    "M-4 sens partner of M-3"
+  _mono 'v4.18'               'v4.17'    SKIPPED 'v4.18'   "M-5 THE HISTORICAL INCIDENT — no regress on out-of-order close"
+  _mono 'v4.17'               'v4.18'    PASS    'v4.18'   "M-6 sens partner of M-5"
+  _mono 'v4.17'               'v4.17'    SKIPPED 'v4.17'   "M-7 equal limb — idempotency retained inside monotonicity"
+  _mono 'v2.6'                'v2.06'    SKIPPED 'v2.6'    "M-8 leading-zero equivalence — string-UNEQUAL, version-EQUAL"
+  _mono 'v2.06.1'             'v2.07'    PASS    'v2.07'   "M-9 hotfix < next minor (3-component limb)"
+  _mono 'v2.07'               'v2.06.1'  SKIPPED 'v2.07'   "M-10 reverse of M-9"
+  _mono 'v2.08'  'release-version-stamping' SKIPPED 'v2.08' "M-11 version-less N/A path"
+  _mono ''                    'v4.19'    PASS    'v4.19'   "M-12 empty .version recovery — empty compare must not read as higher"
+  _mono 'some-milestone-slug' 'v4.19'    PASS    'v4.19'   "M-13 slug-shaped corrupt value recovery"
+
+  # ── Part 3 — THE DOC-SITE VERIFICATION PREDICATE (V-1..V-3) ────────────────
+  # The three Procedure-7 doc sites now call version_stamp_state. Until these
+  # arms existed the only verification of that change was a REMOVAL count of the
+  # old idiom -- a specificity check with no sensitivity partner, which cannot
+  # tell "correctly replaced" from "deleted and nothing put back". These arms
+  # assert the replacement RETURNS THE RIGHT ANSWER.
+  #
+  # Hermetic by construction: each calls the helper directly against a literal,
+  # so there is no git read to parameterise and no repo state to depend on. The
+  # library is already loaded above, behind the anti-vacuity floor.
+  if declare -F version_stamp_state >/dev/null 2>&1; then
+    _docsite() {  # <current> <target> <expected> <label>
+      local got; got="$(version_stamp_state "$1" "$2")"
+      if [[ "$got" == "$3" ]]; then emit "doc-site predicate: $4|1|"
+      else emit "doc-site predicate: $4|0|expected $3 got '$got'"; fi
+    }
+    _docsite 'v4.18'               'v4.17' PASS       "V-1 a HIGHER .version is the correct out-of-order-close state"
+    _docsite 'v4.16'               'v4.17' MISSING    "V-2 sens partner — the stamp genuinely did not land"
+    _docsite 'some-milestone-slug' 'v4.17' UNVERIFIED "V-3 a non-canonical value must NEVER read as PASS"
+  else
+    emit "doc-site predicate: V-1..V-3 could not load the version-grammar SSOT|0|version_stamp_state unavailable"
+  fi
+
+  # ── (s) DEGRADE PATH — the no-regression claim, made executable ─────────────
+  # With the grammar library ABSENT the guard must still SKIP on equality. This is
+  # the arm that pins the claim "byte-identical to the prior behaviour on EVERY
+  # input class": if idempotency were gated behind _ACO_HAVE_GRAMMAR, a re-run at
+  # target would WRITE where it previously SKIPped — a regression on the very path
+  # labelled no-regression. Driven by flipping the flag, then restored.
+  _ACO_HAVE_GRAMMAR=0
+  _mono 'v4.17' 'v4.17' SKIPPED 'v4.17' "M-14 degrade path — equality SKIPs with the grammar ABSENT"
+  _mono 'v4.16' 'v4.17' PASS    'v4.17' "M-15 degrade path — a non-equal value still stamps (anti-vacuity partner)"
+  _ACO_HAVE_GRAMMAR=1
 )
 
 # Replay the subshell's assertion lines through report().
