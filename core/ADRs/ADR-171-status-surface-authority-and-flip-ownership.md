@@ -82,5 +82,5 @@ The transition is a ratification an agent may not render unilaterally. An agent 
 ## Related ADRs
 
 - **ADR-115** — an ADR number is allocated at authorship and bound at merge. This record follows that discipline for its own number.
-- **ADR-170** — partial supersession is a reciprocal frontmatter edge, not a status value. Its companion in the same release, and the same underlying principle read on a different field: the frontmatter carries the machine-readable fact, and the body restates rather than competes.
+- **ADR-172** — partial supersession is a reciprocal frontmatter edge, not a status value. Its companion in the same release, and the same underlying principle read on a different field: the frontmatter carries the machine-readable fact, and the body restates rather than competes.
 - **ADR-029** — frozen and unedited by this decision. Its two status surfaces already agree, so it never entered the reconciliation set on its own merits, independent of its frozen posture.

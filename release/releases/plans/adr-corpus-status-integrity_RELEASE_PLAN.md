@@ -470,7 +470,7 @@ A record superseded on one clause no longer has to choose between a false whole-
 
 | # | Outcome (one line) | Status |
 |---|---|---|
-| #6230 | Partial-supersession carrier as a reciprocal frontmatter pair, R6 reciprocity in `check-adr-durability.py`, index non-projection, and the ADR-170 founding record. | PARTIAL |
+| #6230 | Partial-supersession carrier as a reciprocal frontmatter pair, R6 reciprocity in `check-adr-durability.py`, index non-projection, and the ADR-172 founding record. | PARTIAL |
 | #6231 | The eleven adjudicated partial-supersession edges land on their target records, with machine-discoverable markers for non-ADR counterparties. | DONE |
 | #4761 | Stage 13 owns the ADR ratification flip; R7 `STATUS-AGREEMENT` ships as a standing two-surface detector; 30 records' `## Status` body reconciled to their frontmatter; ADR-171 records the authority. | PARTIAL |
 | #4762 | `G-EX9` resolves a hop by slug and asserts the performed move rather than the note's shape; `gate-criteria-spec.md` bumped to v2.17. | DONE |

@@ -1,5 +1,5 @@
 ---
-title: ADR-170 — Partial supersession is a reciprocal frontmatter edge, not a status value
+title: ADR-172 — Partial supersession is a reciprocal frontmatter edge, not a status value
 status: Proposed — flips to Accepted when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
 date: 2026-09-01
 release: adr-corpus-status-integrity
@@ -18,13 +18,15 @@ source_observations:
 ---
 <!-- reference-durability: allow-link -->
 
-# ADR-170 — Partial supersession is a reciprocal frontmatter edge, not a status value
+# ADR-172 — Partial supersession is a reciprocal frontmatter edge, not a status value
 
 ## Status
 
 **Proposed.** Ratification flips this field at the Stage 9 Plan Review gate.
 
 **Numbering provenance.** The number was READ from the allocation oracle at authoring, never reserved: `renumber-adr.py --next-free` reported `ANCHOR 169 (origin/main)` and `NEXT-FREE 170`, with `--detect` reporting `CLAIMED-SET-BRANCH-ONLY 170 (detection only — never binds)`. The claim binds at merge per ADR-115; if a sibling branch claims the same slot first, the merge-time renumber moves this record and writes its own provenance note.
+
+**Numbering provenance — `170 → 172`.** Held **ADR-170** branch-local; renumbered to **ADR-172** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 170. In-release citations that read "ADR-170" denote this record.
 
 ## Context
 
