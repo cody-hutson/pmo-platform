@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | **Version** | {{RELEASE_VERSION}} |
-| **Bump Class** | minor — the durable determination. Anchor `v4.45`; provisional next-free `v4.46`, re-verified at Engineering Commit 0 against a freshly-fetched claimed set. The concrete number binds only at the Stage-12 atomic claim (ADR-092). |
+| **Bump Class** | minor — the durable determination. Anchor `v4.45`; provisional next-free **`v4.47`**. The original provisional `v4.46` was verified free at Engineering Commit 0 and was **subsequently claimed by a sibling release that merged during this release's Stage-9→12 window**; re-derived against the new mainline anchor `v4.46`. The concrete number binds only at the Stage-12 atomic claim (ADR-092), which is why losing a provisional costs a label and not the work. The concrete number binds only at the Stage-12 atomic claim (ADR-092). |
 | **Date Created** | 2026-09-01 (Tuesday) |
 | **Release Manager** | Agent-assisted |
 | **Status** | Executing |
@@ -277,7 +277,7 @@ core/ADRs/ADR-078-security-hook-dependency-resolution-posture.md            NOT 
 | R3 | **Stale inventories transcribed instead of re-derived.** Every card's counts are days and records behind. A spoke that copies a figure from a body ships an under-scoped fix that passes its own AC. | All Stage 5/6 spokes | **High** | MODERATE · HIGH | Every count in this plan is labelled a pinned measurement; the two glob FCM rows carry an explicit build-time derivation obligation. | Stage 7 re-execution of each card's probe against the then-current denominator. |
 | R4 | **#4761 and #6231 collide on five ADR records' `## Status` section.** Same file, same section, two cards. | Sequence | **High** | CHEAP · HIGH | Sequence #6231 → #4761. Do not parallelize positions 2 and 3. | Merge conflict at Engineering, or a silently-reverted normalization at Stage 8. |
 | R5 | **#5823's Tier-0 decision arrives late and routes to "re-affirm",** stalling a release whose other five cards are done. | Operator | **High** | EXPENSIVE · MEDIUM | Disposition pulled forward to the Stage-4 Phase B D-Gate and **rendered there** — operator elected to render inside this release. | Phase B D-Gate — discharged. |
-| R6 | **Version collision on the provisional `v4.46` with milestone #337,** which recorded the same provisional. | Hub | Medium | CHEAP · HIGH | Expected under slug-primary planning; nothing binds until the Stage-12 ref-CAS and the loser re-versions. | **Commit-0 version re-verify** — run at this commit; PROCEED (see § Verification Evidence). |
+| R6 | **Version collision on the provisional `v4.46` with milestone #337,** which recorded the same provisional. | Hub | Medium | CHEAP · HIGH | **MATERIALIZED, and resolved as designed.** The collision was not with #337 but with `portfolio-tier-framework-pack` (PR #6644), which merged during the Stage-9→12 window and took both `v4.46` and `ADR-170`. Nothing had bound, so this release re-versioned to `v4.47` and renumbered its record to `ADR-172` via `renumber-adr.py`. The pre-merge gate caught it; merging as-is would have bound a duplicate ADR number onto the mainline. | **Commit-0 version re-verify** — run at this commit; PROCEED (see § Verification Evidence). |
 | R7 | **`core/deploy/deploy.sh` contended with #337** (my side conditional on #5823's corpus-path-binding branch). | Sequence | Medium | CHEAP · HIGH | If the conditional fires, serialize the merge on that file; #5823 is sequenced last, maximizing the chance #337 has already merged. | Stage 9 Phase A6.5 mid-pipeline divergence re-check. |
 | R8 | **`block-fragile-refs.sh` scope gate changes under this release's own plan file** (#337's #5258 edits the hook whose case arm covers `release/releases/plans/*_RELEASE_PLAN.md`). | Hub | Medium | CHEAP · MEDIUM | Author every intra-repo link in this plan in the workspace-rooted form (leading `/`, never `../`) — correct under both the current and any tightened gate. | `--plan-depth-lint` on the release PR. |
 | R9 | **#6230 designs against a falsified exemplar** (the card names an ADR-078 frontmatter tail that does not exist). | #6230 spoke | Medium | CHEAP · HIGH | Correction recorded: ADR-078 is body-only; the live exemplars are ADR-051 → ADR-164 and ADR-009 → ADR-085, carrying two different spellings. | Stage 5 Phase 0.5 Re-Review Delta — discharged. |
@@ -443,6 +443,45 @@ The `superseded_by:` field addition is **additive and optional**, so no existing
 | `RELEASE_LOG.md` `DEPLOYED` rows (read via `git show origin/main:`) | **0 rows**, header located (no HALT) | same column predicate with `VERIFIED` → **194 rows**, max `v4.45` — the zero is a real absence, not a broken probe |
 
 The sibling milestone `label-and-reference-integrity` (#337) recorded the same provisional `v4.46`. It has claimed nothing: `v4.46` is absent from every arm above. Under slug-primary planning the number binds only at the Stage-12 ref-CAS, so both releases may proceed and whichever reaches the atomic claim first wins; the loser re-versions. R6 is therefore live but non-blocking.
+
+### Re-version and renumber — 2026-09-02, after the Stage-9 GO
+
+The Commit-0 evidence above is **retained as authored**: it was true at `origin/main` `539c4440`, and its
+controls fired. What changed is the world, not the measurement.
+
+Between the Stage-9 GO and the Stage-12 attempt, sibling release `portfolio-tier-framework-pack` (PR #6644)
+merged, moving the mainline to `6d0377e1` and claiming **both** contested identifiers.
+
+| Identifier | Outcome | Evidence |
+|---|---|---|
+| `v4.46` | **lost** — tag dereferences to `6d0377e1` | tags: sensitivity `v4.45` → 1, specificity `v4.47` → 0 |
+| `ADR-170` | **lost** — mainline binds the sibling's record | `renumber-adr.py --detect`: `DUPLICATE`, `next=172` |
+
+**Stage 12 halted pre-merge rather than proceeding.** Merging as-is would have bound a duplicate `ADR-170`
+onto the mainline — breaking ADR-number integrity for every subsequent PR and unrepairable without a history
+rewrite. ADR-115's *"the number binds at merge"* is what made the pre-merge gate the right place to catch it.
+
+**Recovery, performed by the governed tool rather than by hand:** `renumber-adr.py --renumber 170 172 --apply`
+moved the record, swept 6 citations across 3 files, regenerated the derived index, and wrote the
+numbering-provenance note. A manual `git mv` would have produced the same rename **without the sweep or the
+provenance note** — which is precisely what this release's own `G-EX9` correction now asserts. `ADR-171`
+returned `BINDS` and was held fixed. Post-merge with the new mainline: **`PASS (172 ADRs, contiguous
+001..172, no duplicates)`**, zero conflicts.
+
+### Phase A13 — the ratification decision rendered at the Stage 9 gate
+
+Recorded here as its durable home, per Phase A13, rather than living only in a sub-task comment.
+
+| Class | Count | Disposition |
+|---|---|---|
+| Shipped-release records carrying an unowned ratification promise | **35** | **RATIFY** at Stage 13 |
+| `ADR-057` | **1** | **HOLD** — carries no `release:` field; proposed `hold`, not `Accepted` |
+| This release's own in-flight records (`ADR-171`, and `ADR-172` post-renumber) | **2** | **EXCLUDE** — not flipped at Stage 9; a pre-merge flip can mint a ratification for a decision that never ships |
+
+**Binding on close-out:** the ADR-032 contradiction is **NOT closed** by this release. #5823's AC-1 was graded
+`FLAG-UPSTREAM` and carried forward — the corpus artifacts remain tracked in-repo against an `Accepted`
+decision assigning them elsewhere. The location question is owned by **#6627** under epic #1184. A close-out
+reporting it resolved would be false.
 
 ## Deployment Execution Log
 
