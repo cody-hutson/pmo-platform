@@ -374,10 +374,27 @@ run_scan() {
   while IFS= read -r f || [ -n "$f" ]; do
     [ -z "$f" ] && continue
     [ -f "$f" ] || continue
-    # SCOPE: every changed .md MINUS the self-doc files that necessarily
-    # quote worked-example #N (they carry a file-top allow-issue-ref).
+    # SCOPE: every changed .md MINUS the ONE surviving PATH exemption.
+    #
+    # The release-tracking surface stays enumerated because its basis is native
+    # PROVENANCE, not a marker: issue and pull-request references are what a
+    # ledger IS, and only a minority of that surface's files carry an override
+    # marker — so there is no marker population to discover the exemption from,
+    # and deriving it would pull hundreds of ledger files into scope. Retained
+    # deliberately, not by default.
+    #
+    # The self-documentation files (this gate's own rules page and the PR
+    # template) are NOT enumerated here, and their absence is the point. They
+    # are exempt because they CARRY the whole-file override marker, which the
+    # `grep -qE "$OVERRIDE"` check a few lines below re-establishes on every
+    # single run. The enumeration that used to sit here asserted that same
+    # precondition in a trailing comment — and nothing ever evaluated it, so a
+    # marker-LESS file at either path stayed silently exempt forever. Discovered
+    # rather than enumerated, an exemption cannot outlive its own justification.
+    # Both directions are pinned corpus-free in run_self_test()'s `self-doc`
+    # block: marker present (bare OR rationale-carrying) -> zero, marker absent
+    # -> FLAG.
     case "$f" in
-      core/rules/git-workflow.md|.github/PULL_REQUEST_TEMPLATE.md) continue ;;  # self-doc (file-top allow-issue-ref)
       release/releases/*) continue ;;  # tracking surface (RELEASE_LOG/INDEX/DIGEST/NOTES/plans) — #N + PR-refs are native provenance; exempt, mirroring the reference-durability gate
     esac
     # Test data, not corpus prose — see is_test_fixture_path(). Not a `case` arm
@@ -1004,6 +1021,136 @@ run_self_test() {
     echo "    PASS  [override-form]  must-match=${om_match}  must-not-match=${om_nomatch}  e2e=${om_e2e}"
   else
     echo "    ---   [override-form]  ${om_fail} failure(s)"
+  fi
+
+  # ── Self-doc exemption: DISCOVERED from the marker, never enumerated ───────
+  # CORPUS-FREE BY CONSTRUCTION, for the same load-bearing reason the
+  # override-form block above is — and one step harder, because this change had
+  # to REMOVE two shared inputs rather than merely avoid adding one.
+  #
+  # run_equivalence asserts the report text is BYTE-IDENTICAL between this
+  # checker and the pre-extraction inline body over the SHARED fixture corpus,
+  # and that body still carries the path arm deleted from run_scan's SCOPE
+  # `case`. Two shared fixtures used to pin this class by LIVING at the two
+  # exempt paths carrying no marker. After the deletion the two implementations
+  # genuinely DISAGREE on those files — which IS the change — so keeping them
+  # fails the equivalence arm in the `gate STRENGTHENED` direction however
+  # correct the change is; and merely giving them the marker fails it too, on
+  # the two extra `::notice::` lines the oracle never emits because it hits its
+  # own path arm first. Re-pinning the oracle forward is not an escape either:
+  # extract_oracle materialises the workflow's `run:` block at
+  # PRE_EXTRACTION_SHA and dies unless it still contains REFBLOCK_RE, which a
+  # post-extraction thin caller does not.
+  #
+  # So the two fixtures were RETIRED from cases/ + manifest.txt and their class
+  # re-sited here, where it gets STRONGER rather than weaker: they asserted one
+  # direction only (zero, from an unmarked file at an enumerated path), this
+  # asserts BOTH directions and adds a third marker state. Removing the input
+  # states the boundary of the equivalence claim; suppressing the output would
+  # have asserted an agreement that no longer exists.
+  #
+  # Every file below is written under $td and NEVER under $FX_REPO.
+  #
+  # 3 marker states x 2 exempt-looking paths x 2 input modes x 2 resolvers = 24.
+  #   marked-bare      -> zero   the form the retired fixtures never carried
+  #   marked-rationale -> zero   the declared rationale-carrying form; ALSO the
+  #                              live integration assertion against the widened
+  #                              OVERRIDE regex — narrow it again and exactly
+  #                              these 8 go red while the other 16 stay green
+  #   unmarked         -> FLAG   the CONTROL, and the whole point. Without it
+  #                              the zeros are indistinguishable from a gate
+  #                              that simply stopped detecting — and it is
+  #                              precisely the drift the deleted path arm made
+  #                              unreachable: a marker-less file at either path
+  #                              was silently exempt forever.
+  local sd_dir="$td/selfdoc"
+  local sd_state sd_input sd_resolver sd_repo sd_base sd_head sd_out sd_want sd_got
+  local sd_pair sd_dest sd_num
+  local sd_marked_zero=0 sd_unmarked_flag=0 sd_fail=0
+  local sd_a='core/rules/git-workflow.md'
+  local sd_b='.github/PULL_REQUEST_TEMPLATE.md'
+  mkdir -p "$sd_dir"
+  echo "--- self-doc exemption: discovered from the marker, all three arms ---"
+
+  for sd_state in marked-bare marked-rationale unmarked; do
+    sd_repo="$sd_dir/$sd_state"
+    mkdir -p "$sd_repo/docs"
+    git -C "$sd_repo" init -q 2>/dev/null
+    git -C "$sd_repo" config user.email "fixtures@example.invalid"
+    git -C "$sd_repo" config user.name "issue-ref self-doc harness"
+    git -C "$sd_repo" config commit.gpgsign false
+    printf 'seed\n' > "$sd_repo/docs/.seed.md"
+    git -C "$sd_repo" add -A
+    git -C "$sd_repo" commit -q -m "self-doc base"
+    sd_base="$(git -C "$sd_repo" rev-parse HEAD)"
+
+    # The three bodies are byte-identical but for the marker line, so a verdict
+    # difference can only be the marker. The two synthetic numbers are the ones
+    # the retired fixtures used — one per path — so neither verdict-map row is
+    # orphaned by the retirement. Both resolve `unresolvable`.
+    for sd_pair in "${sd_a}|909601" "${sd_b}|909602"; do
+      sd_dest="${sd_pair%%|*}"
+      sd_num="${sd_pair##*|}"
+      mkdir -p "$sd_repo/$(dirname "$sd_dest")"
+      {
+        case "$sd_state" in
+          marked-bare)
+            printf '%s\n' '<!-- repo-integrity: allow-issue-ref -->' ;;
+          marked-rationale)
+            printf '%s\n' '<!-- repo-integrity: allow-issue-ref — limb 1: worked-example ids displayed as subject matter -->' ;;
+        esac
+        printf 'Self-doc exemption probe — %s.\n\n' "$sd_dest"
+        printf -- '- #%s — does not resolve, and sits above any reference block.\n' "$sd_num"
+      } > "$sd_repo/$sd_dest"
+    done
+    git -C "$sd_repo" add -A
+    git -C "$sd_repo" commit -q -m "self-doc head"
+    sd_head="$(git -C "$sd_repo" rev-parse HEAD)"
+
+    if [ "$sd_state" = "unmarked" ]; then sd_want=flag; else sd_want=zero; fi
+    for sd_input in delta path; do
+      for sd_resolver in gh fixture; do
+        sd_out="$sd_dir/out-${sd_state}-${sd_input}-${sd_resolver}.txt"
+        set +e
+        if [ "$sd_input" = "delta" ]; then
+          ( cd "$sd_repo" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA \
+              GH_TOKEN=fixture-token GITHUB_REPOSITORY=fixture-owner/fixture-repo \
+              bash "$SCRIPT_PATH" --base "$sd_base" --head "$sd_head" \
+                --resolver "$sd_resolver" --fixture-map "$FX_MAP" ) > "$sd_out" 2>&1
+        else
+          ( cd "$sd_repo" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA \
+              GH_TOKEN=fixture-token GITHUB_REPOSITORY=fixture-owner/fixture-repo \
+              bash "$SCRIPT_PATH" --resolver "$sd_resolver" --fixture-map "$FX_MAP" \
+                --path "$sd_a" "$sd_b" ) > "$sd_out" 2>&1
+        fi
+        set -e
+        for sd_dest in "$sd_a" "$sd_b"; do
+          assertions=$((assertions + 1))
+          if grep -qE "^${sd_dest}:[0-9]+: " "$sd_out" 2>/dev/null; then sd_got=flag; else sd_got=zero; fi
+          if [ "$sd_got" != "$sd_want" ]; then
+            echo "    FAIL  [self-doc] ${sd_state} ${sd_dest} (${sd_input} x --resolver ${sd_resolver}): expected ${sd_want}, got ${sd_got}"
+            sd_fail=$((sd_fail + 1)); failures=$((failures + 1))
+          elif [ "$sd_want" = "zero" ]; then
+            sd_marked_zero=$((sd_marked_zero + 1))
+          else
+            sd_unmarked_flag=$((sd_unmarked_flag + 1))
+          fi
+        done
+      done
+    done
+  done
+
+  # Suite-level control, the same one the fixture matrix carries: a zero is
+  # never reported without a non-zero from the SAME block proving the harness
+  # actually ran. Not counted as an assertion — it grades the other 24.
+  if [ "$sd_unmarked_flag" -eq 0 ]; then
+    echo "    FAIL  [self-doc] vacuity control: the unmarked arm produced ZERO findings"
+    sd_fail=$((sd_fail + 1)); failures=$((failures + 1))
+  fi
+  if [ "$sd_fail" -eq 0 ]; then
+    echo "    PASS  [self-doc]  marked-must-zero=${sd_marked_zero}  unmarked-must-flag=${sd_unmarked_flag}"
+  else
+    echo "    ---   [self-doc]  ${sd_fail} failure(s)"
   fi
 
   echo "--- fixture matrix: 2 invocation forms x 2 input modes x 2 resolvers = 8 cells ---"
