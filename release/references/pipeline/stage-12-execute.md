@@ -149,7 +149,7 @@ Empirical motivation: a prior release's Stage 12 Finding F-1 (2026-05-15) — th
 
 | State | Pre-condition | Action | Post-condition |
 |---|---|---|---|
-| **State 0 — no release for tag** | `gh release view v<X.Y>` returns "release not found" (exit code 1) | `gh release create v<X.Y> --notes "$BODY" --title "<H1-headline>" --target "$MERGE_SHA"` where `BODY="$(strip_frontmatter <canonical-note-path>)"` — the frontmatter-stripped note body per the §5.1 enforced-transform invariant, NOT `--notes-file <canonical-note-path>` (which would publish the YAML frontmatter as raw text). **Refuse an empty `$BODY`** per § 5.1 S4. On success → State 2; on transient failure (network / 5xx) → retry once (production-cap=2 per [`autonomous-execution-model.md`](../../../core/disciplines/autonomous-execution-model.md)) → on second failure → HALT and post Tier 2 [SCOPE CHANGE] per [`release/governance/release-process.md`](../../governance/release-process.md) § Inter-Stage Feedback Protocol | release present at desired content; auditable via `gh release view` |
+| **State 0 — no release for tag** | `gh release view v<X.Y>` returns "release not found" (exit code 1) | `gh release create v<X.Y> --notes "$BODY" --title "<H1-headline>" --target "$MERGE_SHA" --latest="$LATEST"` where `BODY="$(strip_frontmatter <canonical-note-path>)"` and `LATEST` is resolved before the state branch from the version-grammar SSOT per [`release-notes-standard.md § 5.5`](../standards/release-notes-standard.md) (the canonical home of the rule and its fail-closed policy) — the frontmatter-stripped note body per the §5.1 enforced-transform invariant, NOT `--notes-file <canonical-note-path>` (which would publish the YAML frontmatter as raw text). **Refuse an empty `$BODY`** per § 5.1 S4. On success → State 2; on transient failure (network / 5xx) → retry once (production-cap=2 per [`autonomous-execution-model.md`](../../../core/disciplines/autonomous-execution-model.md)) → on second failure → HALT and post Tier 2 [SCOPE CHANGE] per [`release/governance/release-process.md`](../../governance/release-process.md) § Inter-Stage Feedback Protocol | release present at desired content; auditable via `gh release view` |
 | **State 1 — release exists; content may differ** | `gh release view v<X.Y> --json body` returns body content (any value) | Compare returned body against canonical note body (excluding frontmatter). If MATCH → State 2 PASS no-op. If DIFFER → `gh release edit v<X.Y> --notes "$BODY"` where `BODY="$(strip_frontmatter <canonical-note-path>)"` — the same frontmatter-stripped body per the §5.1 invariant, NOT `--notes-file <canonical-note-path>` (idempotent) → State 2. **Refuse an empty `$BODY`**: this edit overwrites a live Release body and GitHub keeps no body history | release present at desired content |
 | **State 2 — release present with current content** | view + diff verification passes | No mutation needed; PASS; proceed to Phase C post-deploy verification | sequence complete for Surface 1 |
 
@@ -189,6 +189,15 @@ if [[ -z "$CANONICAL_BODY" ]]; then
   exit 1
 fi
 
+# Badge resolution (--latest) — computed ONCE, BEFORE the state branch, because the
+# create path reads it and the edit path must NOT. Rule + fail-closed policy live in
+# release-notes-standard.md § 5.5; this is its application, not a second statement of
+# it. version_badge_latest returns ADVANCE only when the anchor is not higher than the
+# target; every other verdict withholds. Do not re-render the comparison here.
+. "$REPO_ROOT/release/tools/version-grammar.sh" ""
+ANCHOR=$(gh api "repos/{REPO}/releases/latest" --jq '.tag_name' 2>/dev/null | tr -d '[:space:]')
+LATEST=false; [ "$(version_badge_latest "$ANCHOR" "v<X.Y>")" = ADVANCE ] && LATEST=true
+
 # View-then-create-or-edit decision (idempotency guard)
 if gh release view "v<X.Y>" --repo {REPO} >/dev/null 2>&1; then
   # State 1 or 2 — release exists; compare body
@@ -206,7 +215,8 @@ else
     --repo {REPO} \
     --title "v<X.Y> — $HEADLINE" \
     --notes "$CANONICAL_BODY" \
-    --target "$MERGE_SHA"
+    --target "$MERGE_SHA" \
+    --latest="$LATEST"
 fi
 
 # Verify Surface 1 reached State 2
