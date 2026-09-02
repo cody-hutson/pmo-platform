@@ -47,7 +47,7 @@ The per-folder-README convention is now shipped — see [core/governance/OPERATI
 
 ### Software-domain (engineering best-practice canon anchored)
 
-Canon-per-family binding per [`../standards/template-taxonomy.md` §6](../../core/standards/template-taxonomy.md) rows 1–6 + rows 9 and 12. Canonical-only — no `TEMPLATE_SYNC_MAP` mirrors registered; sync-map registration follows the first consumer skill with a runtime read-path per [`../standards/template-storage.md` §6](../../core/standards/template-storage.md).
+Canon-per-family binding per [`../standards/template-taxonomy.md` §6](../../core/standards/template-taxonomy.md) rows 1–6 + rows 9 and 12. Canonical-only — no `TEMPLATE_SYNC_MAP` mirrors registered; sync-map registration follows the first consumer skill with a runtime read-path per [`../standards/template-storage.md` §3.1](../../core/standards/template-storage.md).
 
 The **Artifact family** column below is a *discovery annotation*, not the typed binding. Several cells carry the form `<family> (<annotation>)` — the parenthetical is reader guidance and is not part of the value. The load-bearing, enum-bound `template_family` value is the one in each template's own provenance header, sourced from [`../standards/template-taxonomy.md` §3–§5](../../core/standards/template-taxonomy.md) per [`../standards/template-protocol.md` §4.2](../../core/standards/template-protocol.md). Where the two differ in spelling, the header is authoritative.
 
@@ -89,6 +89,22 @@ The entity-page and typed-plan templates from the project-data-architecture init
 | `plan-templates/change-management.md` | Plan — `plan_type: change-management` (the OCM umbrella) | §3.4a / ADR-059 |
 | `plan-templates/raid.md` | Plan — `plan_type: raid` (the RAID **Log**; ≠ RAID-Item §3.6) | §3.4a / ADR-059 |
 
+### Portfolio-framework (framework-keyed subtree — selected, not neutral-core)
+
+Framework-specific portfolio- and program-tier artifact shapes, selected by `operator.toml [methodology].portfolio_framework` and keyed by `framework_id` in the path (per [ADR-170](../../core/ADRs/ADR-170-portfolio-framework-axis-lands-as-template-registry-subtree.md)). **These are framework-selected delta content, not neutral-core registry entries** — a shape here ships only to a deployment that selected its framework, which is what keeps the unselected registry root methodology-neutral. Framework-invariant content stays at the root (ADR-170 D4 thin delta). Canon-per-family binding per [`../standards/template-taxonomy.md` §3A and §6](../../core/standards/template-taxonomy.md) rows 13–14. Canonical-only — no `TEMPLATE_SYNC_MAP` mirrors registered; sync-map registration follows the first consumer skill with a runtime read-path per [`../standards/template-storage.md` §3.1](../../core/standards/template-storage.md).
+
+Consumer branch: [`methodology-parameterization-v1.md` §5B](../../release/references/specs/methodology-parameterization-v1.md). A deployment that selects no framework reads none of these files.
+
+| Template | Artifact family | Tier | Canon source |
+|---|---|---|---|
+| `portfolio-frameworks/pmi/portfolio-charter-template.md` | Portfolio Charter | portfolio | The Standard for Portfolio Management (PMI) |
+| `portfolio-frameworks/pmi/strategic-alignment-matrix-template.md` | Strategic Alignment Matrix | portfolio | The Standard for Portfolio Management (PMI) |
+| `portfolio-frameworks/pmi/portfolio-roadmap-template.md` | Portfolio Roadmap | portfolio | The Standard for Portfolio Management (PMI) |
+| `portfolio-frameworks/pmi/risk-profile-template.md` | Portfolio Risk Profile | portfolio | The Standard for Portfolio Management (PMI) |
+| `portfolio-frameworks/pmi/program-charter-template.md` | Program Charter | program | The Standard for Program Management (PMI) |
+| `portfolio-frameworks/pmi/benefits-realization-template.md` | Benefits Realization Plan | program | The Standard for Program Management (PMI) |
+| `portfolio-frameworks/pmi/program-md-template.md` | PROGRAM.md scaffolding | program | The Standard for Program Management (PMI) |
+
 ## Related Canonical Output-Format Specs (cited, not mirrored)
 
 These are **output-format specifications** for finished communications — not fill-in
@@ -103,4 +119,10 @@ canonical home of each meeting-format spec is findable from the templates regist
 
 ## Adding a New Template
 
-See [`../standards/template-storage.md` §6 Sync-Map Registration Protocol](../../core/standards/template-storage.md). Summary: (1) place file in this folder, (2) add `TEMPLATE_SYNC_MAP` entry to `deploy.sh`, (3) document in `template-storage.md` §7, (4) `./deploy.sh --deploy <skill>` for initial sync, (5) `./deploy.sh --check` to confirm Check 13 passes, (6) commit canonical + deploy.sh + storage doc together.
+See [`../standards/template-storage.md` §6 Sync-Map Registration Protocol](../../core/standards/template-storage.md). **Two placements** — pick by whether the template ships to everyone or only to a deployment that selected it.
+
+**Flat (default).** A neutral-core template every deployment receives. (1) place the file in this folder; (2) add a `TEMPLATE_SYNC_MAP` entry to `deploy.sh`; (3) document it in [`template-storage.md` §7](../../core/standards/template-storage.md); (4) `./deploy.sh --deploy <skill>` for initial sync; (5) `./deploy.sh --check` to confirm Check 13 passes; (6) commit canonical + `deploy.sh` + storage doc together.
+
+**Keyed subdirectory.** A template selected by a config key rather than shipped to everyone — `portfolio-frameworks/<framework_id>/`, `plan-templates/`, `project-bins/<bin>/`. (1) place the file under its key directory, named per [`template-storage.md` §2.2](../../core/standards/template-storage.md) `<artifact-family>-template.<ext>`; (2) register its family in [`template-taxonomy.md`](../../core/standards/template-taxonomy.md) and add a §6 canon row where §2.1 F4 applies; (3) add a row to the matching section above; (4) **defer** `TEMPLATE_SYNC_MAP` registration until a consumer skill declares a runtime read-path — registering a mirror with no consumer creates drift surface with no reader, per [`template-storage.md` §3.1](../../core/standards/template-storage.md); (5) when that consumer arrives, register field 2 as the **repo-relative subpath**, per §6 step 2 and the §7.4 subpath-keyed precedent; (6) `./deploy.sh --check` to confirm Check 13 reports no new finding.
+
+The branch point is **selection, not location**: a template under a key directory that every deployment nonetheless receives belongs on the flat path, and a flat-root template gated by a config key is misplaced rather than merely unregistered.

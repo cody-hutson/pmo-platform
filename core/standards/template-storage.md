@@ -41,6 +41,19 @@ It exists in parallel to [`template-taxonomy.md`](template-taxonomy.md) (L1 — 
 
 The four skill-internal-standalone templates surfaced by Foundation Stage 5 — `delivery-engine/raid-templates.md`, `eval-writer/rubric-templates.md`, `pmo-skill-refiner/pmo-platform-template.md`, `release-planner/release-plan-template.md` — are **not** canonical templates currently. They are skill-internal authoring guidance (`location_class: skill-internal-standalone` per the Foundation audit). L5 Governance may evaluate canonicalization for any of these in a future release; until then, they remain platform-internal per [`template-taxonomy.md` §5](template-taxonomy.md).
 
+### §2.4 Framework-keyed subtrees
+
+A **framework-keyed subtree** is a directory under the canonical registry whose name is a config-key value, holding templates that ship only to a deployment that selected that value. The shipped instance is `operations/templates/portfolio-frameworks/<framework_id>/`, selected by `operator.toml [methodology].portfolio_framework` per [ADR-170](../ADRs/ADR-170-portfolio-framework-axis-lands-as-template-registry-subtree.md).
+
+Four rules govern the form:
+
+- **The key directory is a `framework_id`** in lowercase-kebab per [`artifact-naming-standard.md`](artifact-naming-standard.md). The key in the path *is* the selection mechanism — the registry has no other one, which is why a framework's shapes cannot live at the flat root.
+- **Files inside follow §2.2 unchanged** — `<artifact-family>-template.<ext>`. A keyed subtree changes where a template lives, never what it is called.
+- **The subtree carries only framework-specific delta content.** Anything framework-invariant stays at the registry root (ADR-170 D4). A second framework then adds one directory and edits nothing, so the axis scales linearly in the number of frameworks rather than combinatorially.
+- **Registration is deferred to the first runtime consumer.** A keyed subtree registers no `TEMPLATE_SYNC_MAP` entry until a consumer skill declares a runtime read-path against it. This is not an exemption: §3.1 already establishes that a canonical template with no consumer-skill mirror is never passed to the resolver at all, so registering a mirror ahead of its consumer would create a drift surface with no reader. When the consumer arrives, field 2 is registered as the repo-relative subpath per §6 step 2, on the §7.4 subpath-keyed precedent.
+
+**Keyed is not the same as unregistered.** `plan-templates/` and `project-bins/<bin>/` are also keyed subdirectories, and `project-bins/` *is* registered (§7.4) because it has a live consumer. The discriminator for registration is a consumer with a read-path; the discriminator for the keyed *form* is whether selection is expressed structurally by the path.
+
 ## §3 Propagation Mechanism (deploy-sync per Stage 4 D5 Option 2)
 
 ### §3.1 Authority
@@ -230,6 +243,14 @@ Two shape choices here are deliberate and differ from §7.1–§7.3:
 | `project-bins/_inbox/README.md` | 1 | `operations/templates/project-bins/_inbox/README.md` | LANDED |
 
 Consumer skill for all 11: `project-initiator`. Check 13 holds each injected copy byte-identical to its canonical at the deployed target, which is what makes the per-project copy safe to take verbatim.
+
+### §7.5 Portfolio-framework subtree (0 entries — by construction)
+
+**This subsection carries no rows, and that is the correct state rather than an omission.** The framework-keyed subtree at `operations/templates/portfolio-frameworks/<framework_id>/` (§2.4) registers **zero** `TEMPLATE_SYNC_MAP` entries, because no consumer skill declares a runtime read-path against it yet. Per §3.1 the resolver is registry-gated: a canonical template with no registered mirror is never passed to it, so the seven shipped PMI shapes are outside Check 13's population entirely — the check can neither pass nor fail on them, and reporting them as "unregistered" would misread a deliberate deferral as a gap.
+
+The subsection exists so a reader scanning §7 for the subtree finds the reason it is absent instead of concluding it was forgotten — the same "no rows, by construction" device the registry README uses for its platform-internal group.
+
+**When the first consumer lands**, register here per §6 step 2 with field 2 as the repo-relative subpath (`portfolio-frameworks/<framework_id>/<artifact-family>-template.md`), on the §7.4 precedent. At that point ADR-170's reversibility crosses from CHEAP to MODERATE, because the directory pattern becomes a contract rather than a placement.
 
 ## §8 Dedup Direction
 
