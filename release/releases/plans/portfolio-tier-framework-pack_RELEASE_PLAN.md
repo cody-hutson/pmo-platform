@@ -120,6 +120,24 @@ operations/templates/portfolio-frameworks/pmi/program-md-template.md            
 operations/templates/README.md                                                      edit
 core/standards/template-storage.md                                                  edit
 core/standards/template-taxonomy.md                                                 edit
+
+# ── #2577 S4 — propagation consequence of the two standards-doc edits above ──
+# Both are registered TEMPLATE_SYNC_MAP sources mirrored into six skills'
+# references/ (12 entries), so their package content hashes move. Rebuilt and
+# committed here per the Stage-6 C4 skill-package-freshness beat, which the
+# skill-package-freshness CI gate enforces pre-merge.
+packages/delivery-engine.skill                                                      edit
+packages/delivery-engine.skill.sha256                                               edit
+packages/eval-writer.skill                                                          edit
+packages/eval-writer.skill.sha256                                                   edit
+packages/pmo-process-designer.skill                                                 edit
+packages/pmo-process-designer.skill.sha256                                          edit
+packages/pmo-skill-refiner.skill                                                    edit
+packages/pmo-skill-refiner.skill.sha256                                             edit
+packages/project-initiator.skill                                                    edit
+packages/project-initiator.skill.sha256                                             edit
+packages/release-planner.skill                                                      edit
+packages/release-planner.skill.sha256                                               edit
 ```
 
 **Row notes, per the declared-vs-delivered authoring contract.**
@@ -133,7 +151,7 @@ core/standards/template-taxonomy.md                                             
 
 > ✅ **G-PR11 NOW SEES THIS RELEASE'S PRIMARY DELIVERABLE — the recognizer gap this block used to describe was fixed on this branch.** The original block recorded that `release/tools/verify-release-plan.sh`'s FCM path recognizer omitted `operations/` from its first-segment set, silently dropping 10 of 31 declaration rows — including all 7 artifact-shape ADDs — while reporting `uninterpreted=0 pathless=0` and FCM-COVERAGE **PASS**. **That fix landed at `6fea3536`**, before #2577's Engineering ran, so the state the block described no longer exists and is reconciled here rather than annotated.
 >
-> **Measured at the post-S4 branch state:** `declared=31 interpreted=30 obligations=9 excluded=13 conditional=0 uninterpreted=1 pathless=0`. All **9** declared ADDs are now recognized and asserted — the ADR, this plan, and the 7 artifact shapes — and all 9 report `declared-add-delivered`. The 7 that read `declared-add-not-delivered` before S3 landed were the repaired checker reporting truthfully that the shapes had not shipped yet; they converted to PASS when S3 landed, which is the checker working rather than a defect.
+> **Measured at the final branch state** (after the 12 package rows were added to the matrix): `declared=43 interpreted=42 obligations=9 excluded=13 conditional=0 uninterpreted=1 pathless=0`. All **9** declared ADDs are now recognized and asserted — the ADR, this plan, and the 7 artifact shapes — and all 9 report `declared-add-delivered`. The 7 that read `declared-add-not-delivered` before S3 landed were the repaired checker reporting truthfully that the shapes had not shipped yet; they converted to PASS when S3 landed, which is the checker working rather than a defect.
 >
 > **The one residual, named rather than left for Stage 9 to find.** `uninterpreted=1` is the `roadmaps/  NOT EDITED` row in the Release-wide explicit non-scope fence — a **bare single-segment directory row**, which the recognizer cannot resolve to a path. This is a *known and documented* residual class of the tool, not an authoring defect in this plan and not a delivery gap: the checker's own source names *"bare directory rows like `roadmaps/`"* among the 54 corpus residuals it deliberately reports as a loud disclosure rather than a silent drop. Because one row is uninterpreted, FCM-COVERAGE emits **SKIP** — the disclosure verdict — while FCM-1..FCM-9 all read PASS.
 >
@@ -222,7 +240,7 @@ The criterion above is owed **because scope (a) was chosen**. It was pre-authore
 - [ ] File Integrity
 - [ ] Content Correctness
 - [ ] Cross-Reference Validity — `core/deploy/deploy.sh --check` Check 14 (doc-link integrity) on every modified `.md`
-- [ ] Skill Invocation — **N/A**, enumerated over the skill roster: no `SKILL.md` or skill `references/` file is in the matrix, so no `.skill` package rebuild is owed and the `skill-package-freshness` gate has no subject
+- [ ] Skill Invocation — **APPLIES. This row previously read `N/A`, and that was wrong.** The original enumeration looked for a literal `SKILL.md` or `references/` path in the matrix, found none, and concluded the `skill-package-freshness` gate had no subject. It does: `core/standards/template-storage.md` and `core/standards/template-taxonomy.md` are **registered `TEMPLATE_SYNC_MAP` sources**, each mirrored into six skills' `references/` — `delivery-engine`, `eval-writer`, `pmo-process-designer`, `pmo-skill-refiner`, `project-initiator`, `release-planner` (12 entries). A skill's package content hash resolves through the canonical source, so an edit to either standards doc makes all six packages stale even though no `references/` path appears in the matrix. Measured after S4: `deploy.sh --check` Check 7 reported exactly those **6** stale packages. **Rebuilt and committed in this PR** per the Stage-6 C4 skill-package-freshness beat, with each `.skill` and its `.sha256` content-baseline sidecar; re-verified `--check-package-freshness` → *55 rostered skill package(s) content-fresh — OK*. **Generalizable:** the subject test for this gate is *"does the matrix touch a registered sync-map source?"*, not *"does the matrix contain a `references/` path?"*
 - [ ] Output Contract Compliance
 - [ ] ADR conformance — `python3 release/tools/check-adr-numbers.py` and `python3 release/tools/check-adr-durability.py`, exit 0 both
 
@@ -279,7 +297,9 @@ The criterion above is owed **because scope (a) was chosen**. It was pre-authore
 
 ## Operational Deployment Manifest
 
-**N/A — enumerated over the four Layer-1 → Layer-2 propagation classes** (skill `SKILL.md` copies, skill `references/` copies, `core/rules/` mirrors, `TEMPLATE_SYNC_MAP` registered templates); none present in this release. No `SKILL.md` or skill `references/` file appears in the matrix; no `core/rules/` file is edited; and `TEMPLATE_SYNC_MAP` registration is deliberately deferred until a consumer skill declares a runtime read-path against the framework subtree, per the registry's own registration rule.
+**APPLIES on one of the four Layer-1 → Layer-2 propagation classes**, re-enumerated at S4 after the original reading was found wrong. Class-by-class: skill `SKILL.md` copies — **none**; skill `references/` copies — **none authored directly**; `core/rules/` mirrors — **none**; **`TEMPLATE_SYNC_MAP` registered templates — PRESENT.** `core/standards/template-storage.md` and `core/standards/template-taxonomy.md` are each registered sources mirrored into six skills' `references/` (12 entries), so editing them propagates to `delivery-engine`, `eval-writer`, `pmo-process-designer`, `pmo-skill-refiner`, `project-initiator` and `release-planner` without any `references/` path appearing in the matrix. The six `.skill` packages and their `.sha256` sidecars are rebuilt and committed in this PR; `--check-package-freshness` re-verified clean across all 55 rostered packages.
+
+Separately, and still true: **`TEMPLATE_SYNC_MAP` registration for the new `portfolio-frameworks/` subtree is deliberately deferred** until a consumer skill declares a runtime read-path against it, per the registry's own registration rule (`template-storage.md` §3.1 / new §7.5). That deferral is unrelated to the rebuild above — it concerns the subtree's *own* future entries, not the six existing entries this release's standards-doc edits disturbed.
 
 ### Schema Migrations
 
@@ -403,4 +423,5 @@ A portfolio governance framework gets an altitude of its own. The release record
 | Date | Stage | Change |
 |------|-------|--------|
 | 2026-09-01 (Tuesday) | 6 — Engineering Commit 0 | Plan file authored on the release branch from the Stage-4 sub-task comment plus the hub's two follow-on comments and the Stage-5 design output. Carries the nine Commit-0 Survival Set elements. Transcription correction applied: #374's closure/absorption is dated **2026-07-01**, not the Stage-4 comment's 2026-06-29. Version re-verified: `anchor()` v4.45, next-free v4.46, free on three arms with live controls. |
+| 2026-09-01 (Tuesday) | 6 — Engineering, C4 package-freshness | **A fourth reconciliation, found by running `deploy.sh --check` rather than by reading the plan.** The Release-Level Verification row *"Skill Invocation — N/A … no `.skill` package rebuild is owed"* and the Operational Deployment Manifest's *"none present"* were both **wrong**: `core/standards/template-storage.md` and `core/standards/template-taxonomy.md` are registered `TEMPLATE_SYNC_MAP` sources mirrored into six skills' `references/`, so S4's edits made exactly those six packages stale — which the pre-merge `skill-package-freshness` CI gate would have blocked. The original enumeration tested for a literal `references/` path in the matrix instead of for a registered sync-map source. Six packages plus their `.sha256` sidecars rebuilt and committed; 12 rows added to the File Change Matrix; `--check-package-freshness` re-verified across all 55 rostered packages. |
 | 2026-09-01 (Tuesday) | 6 — Engineering, #2577 S1–S4 | #2577 built as one unsliced umbrella, one commit per slice. Three plan reconciliations landed with S4 rather than being annotated and deferred: **(1) R10 discharged** — the FCM recognizer gap it predicted was fixed at `6fea3536`, so the risk row and the ⚠️ block above the File Change Matrix were rewritten to the measured post-repair state (9 of 9 ADDs recognized and delivered; one disclosure residual on the bare `roadmaps/` row). **(2) AC-7's probe was contaminating its own population** — the Verification Plan row spelled the precedence chain verbatim inside its own pattern, making this plan a third occurrence of the string AC-7 counts (2 at the `539c4440` baseline, 3 at `6fea3536`); the pattern now parenthesizes each arrow so it matches the chain without matching itself, and the row states the baseline of 2 explicitly. **(3) Change Description** #2577 row filled from delivered state. C4 self-verification re-run: **18 PASS / 0 FAIL / 6 SKIP / 4 ERROR**, up from 9/4/5/3 at Commit 2. |
