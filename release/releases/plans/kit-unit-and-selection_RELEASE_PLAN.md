@@ -138,7 +138,7 @@ Arm C isolates the cause: **the nesting is fine, the hyphen is not.** Arms D and
 
 D-EmptyKit was retired because its predicate was false. The operator directed *retire **and replace***, so what the real constraint is had to be determined — and "there is none" was a permitted answer that still had to be **reached**, not assumed.
 
-*Method: enumerate every reachable state in which a resolution is empty, and run the shipped reader over each.* Five states, five invocations, at the branch head:
+*Method: enumerate every reachable state in which a resolution is empty, and run the shipped reader over each, every subject arm paired with a control over the same root that must return a non-zero count.* The rows are the enumeration; Q6 was added when the same method was re-run at the shipping head, which is why this is a set and not a total:
 
 | # | State | Observed | Kit-specific? |
 |---|---|---|---|
@@ -147,8 +147,9 @@ D-EmptyKit was retired because its predicate was false. The operator directed *r
 | Q3 | base pack only | COUNT 0, exit 0 | **no — pre-kit** |
 | Q4 | archetype pack present, none matching the archetype | COUNT 0, exit 0 | **no — pre-kit** |
 | Q5 | base + archetype + kit | COUNT 2, exit 0 | the normal case |
+| Q6 | a kit **welded to one archetype at its header** (`applies_to = "Scrum"`), selected under a non-matching archetype | `--resolve Kanban` → `EXCLUDED`, COUNT 0, exit 0; control `--resolve Scrum` → COUNT 1 | **yes** |
 
-*The finding.* Emptiness is reachable through three doors. **Two of them (Q3, Q4) are pre-kit shapes this release does not touch** — a deployment could reach both before kits existed, and nothing about the kit changes either. The third (Q2) is not a violated constraint but the **correct behaviour of an open class domain**: a `field` kit is not supposed to contribute work-item kinds, and the grammar already names the state — `PACK-P08` emits a caveat carrying the offending value rather than staying silent.
+*The finding.* The doors to an empty resolution are ENUMERATED, not counted — an earlier form of this paragraph read "three doors", and a fourth (Q6) was found afterwards by the same method, which is exactly what a count cannot absorb. **Q3 and Q4 are pre-kit shapes this release does not touch** — a deployment could reach both before kits existed, and nothing about the kit changes either. **Q2 and Q6 are kit-specific.** Q2 is not a violated constraint but the **correct behaviour of an open class domain**: a `field` kit is not supposed to contribute work-item kinds, and the grammar already names the state — `PACK-P08` emits a caveat carrying the offending value rather than staying silent.
 
 **Conclusion: there is no genuine joint-emptiness constraint on the selection axis, and this release asserts none.** `SEL-06` is not resurrected in any form, and no empty-vocabulary rule is added to any surface.
 

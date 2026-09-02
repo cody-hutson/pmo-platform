@@ -221,12 +221,39 @@ holds a typo would then look exactly like a deployment that deliberately selecte
 nothing, and the typo would survive indefinitely because everything downstream still
 works. Making the failure loud is what separates them.
 
-There is deliberately **no joint-emptiness rule**. Selecting a kit cannot empty a
-deployment's vocabulary — a work-item kit is mandatorily kind-bearing, so a deployment
-that selects a kit and licenses no archetype pack resolves the kit's own kinds. A
-resolution that contributes no kinds is reported as a measured zero, not an error, and
-the states that can produce one are the same ones that could produce it before kits
-existed.
+There is deliberately **no joint-emptiness rule**. A *conforming* work-item kit is
+mandatorily kind-bearing, so a deployment that selects one and licenses no archetype
+pack resolves the kit's own kinds. A resolution that contributes no kinds is reported
+as a measured zero, not an error.
+
+**The states that can produce that zero are enumerated below rather than counted, and
+the method is stated with them.** An earlier form of this paragraph asserted instead
+that the set was *unchanged from before kits existed*. That is an exhaustiveness claim,
+no enumeration backed it, and it is false: the last row below is reachable only because
+`role = "kit"` exists. *Method:* each state was constructed as a pack root and run
+against the shipped resolver, every subject arm paired with a control over the **same**
+root that must return a non-zero count — so a zero here is a measured absence and not a
+dead reader.
+
+| State producing an empty resolution | Introduced by the kit? |
+|---|---|
+| a base pack only | **no** — reachable before kits; `BASE` row, `COUNT 0` |
+| archetype packs present, none matching the resolved archetype | **no** — reachable before kits; `EXCLUDED` row, `COUNT 0` (control: the same root under the matching archetype, `COUNT 1`) |
+| a kit whose `kit_class` is **unregistered**, declaring no kinds | **yes** — the OPEN class domain working as designed; validates with a `PACK-P08` caveat naming the offending value, then resolves `ELIGIBLE` with `COUNT 0` |
+| a kit **welded to one archetype at its header**, selected under a non-matching archetype | **yes** |
+
+The last row is the one the "unchanged set" claim missed. Executed: a `role = "kit"`
+pack whose header sets `applies_to = "Scrum"`, under `--resolve Kanban`, prints its
+`EXCLUDED` row and `COUNT 0` at exit 0 — the *selection* resolves, because both
+`SEL-RESOLVE` limbs hold (the pack is present in the read root, and it is a kit) — while
+the control, the same pack under `--resolve Scrum`, prints `COUNT 1`.
+
+**The conclusion is unchanged, and the behaviour is deliberate rather than a defect.**
+The empty resolution is loud about its cause — the `EXCLUDED` row names the pack and
+states that neither eligibility limb held — and `--validate-packs` rejects that pack
+outright under `PACK-P05` (`role = "kit"` requires `applies_to = "*"`), so the state is
+unreachable in a conforming corpus. No joint-emptiness rule is added on the selection
+axis; the constraint that binds it is `SEL-RESOLVE` above.
 
 ## What lives where
 
