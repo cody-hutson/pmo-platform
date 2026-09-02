@@ -2,8 +2,9 @@
 """Label-taxonomy <-> GitHub label-set parity primitive [#749].
 
 deploy.sh Check 51's scan engine. Parses the canonical label registry from one or
-more --source files and compares the UNION to the live GitHub label set
-(`gh label list`), emitting two asymmetric-severity directions:
+more --source files and compares the UNION to the live GitHub label set (the REST
+labels endpoint, read via `gh api "repos/<slug>/labels?per_page=100" --paginate`),
+emitting two asymmetric-severity directions:
 
   MISSING  a canonical label is absent from GitHub  -> ENFORCE-capable (the #457
            `status: rejected` defect class: a gate referencing a non-existent
@@ -44,14 +45,29 @@ value, because deploy.sh Check 51 pins `--output-format tsv` and parses that sha
 Note the asymmetry it exposes: the MISSING/ORPHAN diff compares NAMES ONLY, so a row
 that exists live with the wrong colour is invisible to the gate and visible only here.
 
+Transport — REST, not GraphQL (#5058). The live set was previously read with
+`gh label list`, which issues `POST /graphql` and therefore returns nothing once the
+GraphQL quota is exhausted; the check then had to report exit 3 (indeterminate) even
+though the label data was fully obtainable. GraphQL and REST are SEPARATE quota pools,
+and quota exhaustion clusters precisely at release close-out — exactly when Check 51
+runs. `gh label list` exposes no flag that selects transport, so the call is spelled as
+`gh api` directly. This is an AVAILABILITY fix: the verdict logic, the TSV shape, and
+the exit contract are unchanged; only the set of conditions that can force exit 3
+shrinks. The repository slug is DERIVED (--repo, else `git remote origin`) and never
+hardcoded — depersonalization gate, core/rules/git-workflow.md § Repository-Integrity
+Gates — and the owner/name are spelled out rather than left as gh's placeholder form,
+which core/config/allowlists/egress-allowlist.txt denies as an unresolvable authority.
+
 Exit codes (the check-doc-links.py / check-skill-count-imp.py family convention):
   0  parity clean (or, under --emit-fix, nothing to emit)
   1  finding(s) — MISSING and/or ORPHAN (or, under --emit-fix, ≥1 emittable row)
   2  argument / input error
   3  a --source was unreadable OR the union parsed to zero canonical labels OR the
-     live set was unreadable (fail-loud: a relocated/renamed registry must not read
-     green). A single readable-but-empty source is tolerated as long as the union
-     is non-empty (e.g. a pack with no [[labels]] block yet).
+     live set was unreadable OR the repo slug was unresolvable OR the live set
+     exceeded --max-labels (fail-loud: a relocated/renamed registry must not read
+     green, and an over-large population must not silently truncate). A single
+     readable-but-empty source is tolerated as long as the union is non-empty
+     (e.g. a pack with no [[labels]] block yet).
 
 Ships warn-mode-initial; deploy.sh Check 51 downgrades exit 1 per
 core/rules/bypass-mode-readiness.md during the shakedown window. Authored under
@@ -60,10 +76,14 @@ the v3.28 Stage-5 spec (#749); multi-source union added under #1970.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
 
 # Namespaces registered as a PATTERN (examples, not an exhaustive enum). A live
 # label under one of these prefixes is NOT an orphan. `type:*` is the work-item-kind
@@ -189,35 +209,150 @@ def parse_canonical_labels(source_text):
     return parse_md_labels(source_text), REGISTERED_NAMESPACES
 
 
-def fetch_live_labels():
-    """Live GitHub label-name set via gh. Raises on gh failure (caller -> exit 3)."""
+DEFAULT_MAX_LABELS = 1000
+
+
+def _derive_repo(explicit):
+    """owner/name of the running clone's origin (fork-correct); never hardcode the
+    operator handle (depersonalization gate). Returns None if unset and unresolved.
+
+    Shape ported from check-work-hierarchy.py's sibling of the same name — the two
+    deploy.sh Python checks that need a repo slug already spell it this way.
+    """
+    if explicit:
+        return explicit
+    try:
+        url = subprocess.run(["git", "config", "--get", "remote.origin.url"],
+                             capture_output=True, text=True).stdout.strip()
+        m = re.search(r"[:/]([^/]+/[^/]+?)(?:\.git)?$", url)
+        if m:
+            return m.group(1)
+    except Exception:  # noqa: BLE001 - unresolved slug is the caller's exit-3 case
+        pass
+    return None
+
+
+def _iter_json_docs(text):
+    """Yield each JSON document from a possibly-CONCATENATED stream.
+
+    Shape ported from check-work-hierarchy.py's iter_json_docs. `gh --paginate`
+    does NOT frame multi-page output uniformly across endpoint kinds: for a REST
+    array endpoint it currently MERGES pages into one flat array, while for
+    `gh api graphql` it emits one document per page with NO separator between
+    them. Splitting on newlines therefore yields an unparseable blob the moment
+    the framing is the latter, and the result silently reads as zero rows — a
+    false-green. raw_decode walks either framing correctly.
+    """
+    decoder = json.JSONDecoder()
+    idx, n = 0, len(text)
+    while idx < n:
+        while idx < n and text[idx].isspace():
+            idx += 1
+        if idx >= n:
+            break
+        obj, end = decoder.raw_decode(text, idx)
+        yield obj
+        idx = end
+
+
+def parse_label_payload(text):
+    """PURE + offline + total: normalise a `gh api ... --paginate` label payload.
+
+    Deliberately tolerant of every framing `gh` may produce, so the check is not
+    coupled to a `gh` version's array-merging behaviour (see _iter_json_docs):
+      (a) a single merged JSON array of row objects  -> used as-is
+      (b) concatenated per-page JSON documents       -> walked with raw_decode
+      (c) a list of per-page lists (--slurp shape)   -> flattened one level
+
+    Splitting fetch into "invoke" (the thin subprocess shell below) and "parse"
+    (this function) is what makes the pagination arm testable: HTTP paging itself
+    is gh's responsibility, but silent UNDER-READING can only happen here, so this
+    is the half that carries fixture coverage. Returns a flat list of row dicts.
+    """
+    rows = []
+    for doc in _iter_json_docs(text):
+        if isinstance(doc, dict):
+            rows.append(doc)
+            continue
+        if not isinstance(doc, list):
+            raise RuntimeError(
+                f"unexpected label payload element of type {type(doc).__name__}"
+            )
+        for item in doc:
+            if isinstance(item, list):  # list-of-lists (--slurp framing)
+                rows.extend(item)
+            else:
+                rows.append(item)
+    for row in rows:
+        if not isinstance(row, dict) or "name" not in row:
+            raise RuntimeError("label payload row is not an object carrying `name`")
+    return rows
+
+
+def _enforce_label_bound(rows, max_labels):
+    """Fail LOUD when the population exceeds the bound — never truncate.
+
+    Replaces the previous `--limit 500`, which silently returned only the first 500
+    labels: every unread canonical label would then report as a spurious MISSING,
+    turning an availability guard into a correctness defect. Raising here lands on
+    the caller's existing exit-3 ("live set unreadable") contract, mirroring the
+    audit-epic-rollup-close.sh precedent of refusing rather than truncating.
+    """
+    if max_labels is not None and len(rows) > max_labels:
+        raise RuntimeError(
+            f"live label population ({len(rows)}) exceeds --max-labels ({max_labels}) "
+            f"— raise the limit rather than silently truncating"
+        )
+    return rows
+
+
+def _gh_labels_stdout(repo):
+    """INVOKE half: raw stdout of the REST labels read. No parsing happens here.
+
+    REST, not GraphQL (#5058): the GraphQL pool can be exhausted while this data is
+    still fully served. `--jq` is deliberately NOT passed — it changes `--paginate`
+    framing, which is precisely the coupling parse_label_payload exists to absorb.
+    REST returns whole label objects, so no field selector is needed either.
+    """
     res = subprocess.run(
-        ["gh", "label", "list", "--limit", "500", "--json", "name"],
+        ["gh", "api", f"repos/{repo}/labels?per_page=100", "--paginate"],
         capture_output=True,
         text=True,
     )
     if res.returncode != 0:
-        raise RuntimeError(f"gh label list failed: {res.stderr.strip()[:200]}")
-    return {row["name"] for row in json.loads(res.stdout)}
+        raise RuntimeError(f"gh api repos/<slug>/labels failed: {res.stderr.strip()[:200]}")
+    return res.stdout
 
 
-def fetch_live_label_rows():
+def _live_label_rows(repo, max_labels=DEFAULT_MAX_LABELS, fixture=None):
+    """Shared read path for both public fetchers: invoke -> parse -> bound.
+
+    `fixture` injects a canned payload in place of the network leg (--fixture-labels),
+    which is what lets the pagination arm be tested offline with no seeded labels.
+    """
+    if fixture is not None:
+        with open(fixture, encoding="utf-8") as fh:
+            text = fh.read()
+    else:
+        text = _gh_labels_stdout(repo)
+    return _enforce_label_bound(parse_label_payload(text), max_labels)
+
+
+def fetch_live_labels(repo, max_labels=DEFAULT_MAX_LABELS, fixture=None):
+    """Live GitHub label-name set. Raises on failure (caller -> exit 3)."""
+    return {row["name"] for row in _live_label_rows(repo, max_labels, fixture)}
+
+
+def fetch_live_label_rows(repo, max_labels=DEFAULT_MAX_LABELS, fixture=None):
     """SIBLING of fetch_live_labels: live rows with color + description.
 
     fetch_live_labels returns names only, which is all diff_parity consumes. The
     emit path additionally needs the live color/description to tell an ABSENT row
-    (create) from a DIVERGED one (edit). Same `gh label list` invocation and the
-    same fail-loud contract; only the requested field set widens.
+    (create) from a DIVERGED one (edit). Same REST read and the same fail-loud
+    contract; only the projected field set widens.
 
     Returns {name: {"color": str, "description": str}}.
     """
-    res = subprocess.run(
-        ["gh", "label", "list", "--limit", "500", "--json", "name,color,description"],
-        capture_output=True,
-        text=True,
-    )
-    if res.returncode != 0:
-        raise RuntimeError(f"gh label list failed: {res.stderr.strip()[:200]}")
     return {
         row["name"]: {
             "color": (row.get("color") or ""),
@@ -226,7 +361,7 @@ def fetch_live_label_rows():
             # compare equal instead of reporting a phantom divergence.
             "description": (row.get("description") or ""),
         }
-        for row in json.loads(res.stdout)
+        for row in _live_label_rows(repo, max_labels, fixture)
     }
 
 
@@ -395,9 +530,150 @@ def _self_test():
         ok = False
 
     ok = _self_test_emit_fix() and ok
+    ok = _self_test_rest_transport() and ok
 
     print("self-test: PASS" if ok else "self-test: FAIL")
     return 0 if ok else 1
+
+
+def _run_main_captured(argv):
+    """Drive main() end-to-end and capture its streams. Returns (exit_code, stdout).
+
+    The fixture cases assert on the REAL exit code and the REAL emitted TSV rather
+    than on an internal, so the self-test grades the contract deploy.sh consumes.
+    Capturing also keeps the suite's own output readable — a self-test that prints a
+    thousand fixture rows hides its own verdict.
+    """
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        rc = main(argv)
+    return rc, out.getvalue()
+
+
+def _labels_json(n, start=0):
+    """n synthetic label row objects, as a JSON array string."""
+    return json.dumps(
+        [{"name": f"lbl-{i:04d}", "color": "ededed", "description": ""}
+         for i in range(start, start + n)]
+    )
+
+
+def _self_test_rest_transport():
+    """Fixture suite for the REST transport + pagination arm (#5058).
+
+    Independent by construction of the two suites above: it exercises
+    parse_label_payload / _enforce_label_bound and the --fixture-labels wiring, and
+    asserts nothing about the taxonomy parsers. The pagination cases are the point —
+    only the PARSE half can silently under-read, and a silent under-read reports
+    every unread canonical label as a spurious MISSING.
+    """
+    ok = True
+
+    # --- Case 1: >100 rows across CONCATENATED per-page documents (the framing
+    #     `gh api graphql --paginate` is documented to emit). 3 pages: 100+100+50.
+    concatenated = _labels_json(100, 0) + _labels_json(100, 100) + _labels_json(50, 200)
+    got = len(parse_label_payload(concatenated))
+    if got != 250:
+        print(f"FAIL rest pagination (concatenated): parsed {got} want 250")
+        ok = False
+
+    # --- Case 2: the <100 CONTROL. AC-3 mandates it: a pagination fix that only
+    #     works above the page boundary would break every normal-sized repository.
+    got = len(parse_label_payload(_labels_json(80)))
+    if got != 80:
+        print(f"FAIL rest <100 control: parsed {got} want 80")
+        ok = False
+
+    # --- Case 3: single MERGED flat array (the framing gh currently emits for REST
+    #     array endpoints). Same count, different framing — neither may under-read.
+    got = len(parse_label_payload(_labels_json(250)))
+    if got != 250:
+        print(f"FAIL rest pagination (merged array): parsed {got} want 250")
+        ok = False
+
+    # --- Case 3b: list-of-lists (--slurp framing) flattens one level.
+    got = len(parse_label_payload(json.dumps(
+        [json.loads(_labels_json(100, 0)), json.loads(_labels_json(30, 100))]
+    )))
+    if got != 130:
+        print(f"FAIL rest pagination (list-of-lists): parsed {got} want 130")
+        ok = False
+
+    # --- Case 4: the truncation SENTINEL. 1001 rows against --max-labels 1000 must
+    #     exit 3, NOT return a quietly truncated pass. Driven end-to-end through
+    #     main() so the assertion is on the real exit code, not on an internal.
+    with tempfile.TemporaryDirectory() as td:
+        src = os.path.join(td, "pack.toml")
+        with open(src, "w", encoding="utf-8") as fh:
+            fh.write('[[labels]]\nname = "lbl-0000"\ncolor = "ededed"\n')
+        over = os.path.join(td, "over.json")
+        with open(over, "w", encoding="utf-8") as fh:
+            fh.write(_labels_json(1001))
+        under = os.path.join(td, "under.json")
+        with open(under, "w", encoding="utf-8") as fh:
+            fh.write(_labels_json(999))
+        empty = os.path.join(td, "empty.json")
+        with open(empty, "w", encoding="utf-8") as fh:
+            fh.write("[]")
+        empty_src = os.path.join(td, "empty.toml")
+        with open(empty_src, "w", encoding="utf-8") as fh:
+            fh.write("[meta]\n")
+
+        rc, out = _run_main_captured(["--source", src, "--fixture-labels", over,
+                                      "--max-labels", "1000", "--output-format", "tsv"])
+        if rc != 3:
+            print(f"FAIL rest bound: 1001 rows vs --max-labels 1000 exited {rc} want 3")
+            ok = False
+        if out.strip():
+            print("FAIL rest bound: emitted TSV rows instead of refusing")
+            ok = False
+
+        # SENSITIVITY control for the case above: the identical path one row UNDER
+        # the bound must NOT exit 3, and must emit the full population. Without this
+        # arm, "exit 3" would also pass if every fixture invocation failed for an
+        # unrelated reason — a zero whose control also reads zero is a broken probe.
+        rc, out = _run_main_captured(["--source", src, "--fixture-labels", under,
+                                      "--max-labels", "1000", "--output-format", "tsv"])
+        rows = [r for r in out.splitlines() if r]
+        if rc == 3:
+            print("FAIL rest bound control: 999 rows under the bound exited 3")
+            ok = False
+        # 999 fixture rows, one of which (lbl-0000) is declared -> 998 ORPHAN rows.
+        if len(rows) != 998:
+            print(f"FAIL rest bound control: emitted {len(rows)} rows want 998")
+            ok = False
+        # The TSV shape is the byte-compatibility contract deploy.sh parses: every
+        # row exactly 2 tab-separated columns, col-1 drawn only from {MISSING, ORPHAN}.
+        widths = {len(r.split("\t")) for r in rows}
+        if widths != {2}:
+            print(f"FAIL rest bound control: column widths {sorted(widths)} want {{2}}")
+            ok = False
+        classes = {r.split("\t")[0] for r in rows}
+        if not classes <= {"MISSING", "ORPHAN"}:
+            print(f"FAIL rest bound control: unexpected col-1 classes {sorted(classes)}")
+            ok = False
+
+        # --- Case 5: SPECIFICITY control. An empty live payload parses to zero rows
+        #     (not an error), and the union-empty guard still exits 3 on its own.
+        if parse_label_payload("[]") != []:
+            print("FAIL rest empty payload: expected zero rows")
+            ok = False
+        rc, out = _run_main_captured(["--source", empty_src, "--fixture-labels", empty,
+                                      "--output-format", "tsv"])
+        if rc != 3:
+            print(f"FAIL union-empty path: exited {rc} want 3")
+            ok = False
+
+    # --- A payload row that is not an object carrying `name` must raise rather than
+    #     be silently dropped — a dropped row is an invented MISSING.
+    try:
+        parse_label_payload('["not-an-object"]')
+        print("FAIL rest payload validation: malformed row did not raise")
+        ok = False
+    except RuntimeError:
+        pass
+
+    return ok
 
 
 def _self_test_emit_fix():
@@ -535,6 +811,32 @@ def main(argv=None):
         ),
     )
     ap.add_argument(
+        "--repo",
+        default=None,
+        help=(
+            "owner/name for the live label read; derived from git remote origin when "
+            "omitted. Never hardcoded (depersonalization gate)."
+        ),
+    )
+    ap.add_argument(
+        "--max-labels",
+        type=int,
+        default=DEFAULT_MAX_LABELS,
+        help=(
+            f"fail loud (exit 3) if the live label set exceeds this many rows "
+            f"(default {DEFAULT_MAX_LABELS}). Replaces the previous silent 500-row "
+            f"truncation, which reported unread canonical labels as spurious MISSING."
+        ),
+    )
+    ap.add_argument(
+        "--fixture-labels",
+        default=None,
+        help=(
+            "read the live label payload from this file instead of the network — "
+            "drives the pagination arm offline with no seeded labels."
+        ),
+    )
+    ap.add_argument(
         "--self-test", action="store_true", help="run the fixture suite; no gh/source needed"
     )
     args = ap.parse_args(argv)
@@ -543,6 +845,14 @@ def main(argv=None):
         return _self_test()
 
     sources = args.source or ["core/specs/label-taxonomy.md"]
+
+    # The live read needs a repo slug unless a fixture stands in for the network leg.
+    # Unresolvable is fail-loud on the existing exit-3 contract, never a silent pass.
+    repo = _derive_repo(args.repo)
+    if repo is None and args.fixture_labels is None:
+        print("ERROR\t--repo not supplied and git remote origin unresolved",
+              file=sys.stderr)
+        return 3
 
     # Union the concrete labels across every --source. A single readable-but-empty
     # source is tolerated (e.g. a pack with no [[labels]] yet); the union being
@@ -577,7 +887,9 @@ def main(argv=None):
             )
             return 3
         try:
-            live_rows = fetch_live_label_rows()
+            live_rows = fetch_live_label_rows(
+                repo, args.max_labels, args.fixture_labels
+            )
         except Exception as e:  # noqa: BLE001 - fail-loud, same contract as the gate path
             print(f"cannot read live label set: {e}", file=sys.stderr)
             return 3
@@ -595,7 +907,7 @@ def main(argv=None):
         return 3
 
     try:
-        live = fetch_live_labels()
+        live = fetch_live_labels(repo, args.max_labels, args.fixture_labels)
     except Exception as e:  # noqa: BLE001 - any gh/parse failure is fail-loud (exit 3)
         print(f"cannot read live label set: {e}", file=sys.stderr)
         return 3
