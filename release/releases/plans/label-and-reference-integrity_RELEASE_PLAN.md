@@ -394,9 +394,9 @@ The platform's label and reference gates now resolve against **declarations** ra
 
 ### Cross-references
 
-- Release plan: [`release/releases/plans/label-and-reference-integrity_RELEASE_PLAN.md`](label-and-reference-integrity_RELEASE_PLAN.md) (this file) — § Scope, § Implementation Sequence, § File Change Matrix, § Verification Plan, § Change Log.
+- Release plan: [`release/releases/plans/label-and-reference-integrity_RELEASE_PLAN.md`](/release/releases/plans/label-and-reference-integrity_RELEASE_PLAN.md) (this file) — § Scope, § Implementation Sequence, § File Change Matrix, § Verification Plan, § Change Log.
 - Milestone: https://github.com/cody-hutson/pmo-platform/milestone/337
 - User-facing release notes (authored at Stage 13): `release/releases/notes/{{RELEASE_VERSION}}_RELEASE_NOTES.md`
-- ADRs: [`core/ADRs/ADR-170-governance-states-standing-policy-not-past-tense-state.md`](../../../core/ADRs/ADR-170-governance-states-standing-policy-not-past-tense-state.md) · [`core/ADRs/ADR-171-kind-projection-of-a-declared-category-row-is-one-classification.md`](../../../core/ADRs/ADR-171-kind-projection-of-a-declared-category-row-is-one-classification.md) · [`core/ADRs/ADR-172-arm-posture-is-carried-by-the-emitter-not-the-mode-dial.md`](../../../core/ADRs/ADR-172-arm-posture-is-carried-by-the-emitter-not-the-mode-dial.md) · [`release/ADRs/ADR-173-declared-kind-is-a-residual-feature-signal.md`](../../ADRs/ADR-173-declared-kind-is-a-residual-feature-signal.md)
+- ADRs: [`core/ADRs/ADR-170-governance-states-standing-policy-not-past-tense-state.md`](/core/ADRs/ADR-170-governance-states-standing-policy-not-past-tense-state.md) · [`core/ADRs/ADR-171-kind-projection-of-a-declared-category-row-is-one-classification.md`](/core/ADRs/ADR-171-kind-projection-of-a-declared-category-row-is-one-classification.md) · [`core/ADRs/ADR-172-arm-posture-is-carried-by-the-emitter-not-the-mode-dial.md`](/core/ADRs/ADR-172-arm-posture-is-carried-by-the-emitter-not-the-mode-dial.md) · [`release/ADRs/ADR-173-declared-kind-is-a-residual-feature-signal.md`](/release/ADRs/ADR-173-declared-kind-is-a-residual-feature-signal.md)
 
 Every member above is marked as closed at Stage 13 through the normal close path.
