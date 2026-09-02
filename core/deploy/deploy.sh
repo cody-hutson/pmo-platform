@@ -11593,7 +11593,7 @@ sys.stdout.write("".join(out) + "|")
   # Check 51 — Label-taxonomy ↔ GitHub label-set parity (warn-mode initial) [#749]
   #
   # Asserts core/specs/label-taxonomy.md (the canonical label registry) agrees
-  # with the live GitHub label set. Two directions, asymmetric severity per the
+  # with the live GitHub label set. Four directions, asymmetric severity per the
   # #749 decision + the warn→enforce rollout:
   #   MISSING (canonical label absent from GitHub) → ENFORCE-capable: the #457
   #     `status: rejected` defect class (a gate referencing a non-existent label
@@ -11609,6 +11609,28 @@ sys.stdout.write("".join(out) + "|")
   #     up. Distinct from ORPHAN because the remedies are OPPOSITE — an orphan may
   #     simply need registering; an excluded-but-live row means one of the two
   #     surfaces must change (delete the label, or withdraw the exclusion).
+  #   DIVERGED (a row declared AND live whose colour and/or description disagrees
+  #     with the declaration, per core/config/allowlists/label-attribute-dispositions.txt)
+  #     → ADVISORY-ONLY, and structurally so [#5057]. Emitted through
+  #     flag_advisory_only, NEVER flag_warn_or_issue, and the reason is not a
+  #     posture preference: resolve_check_mode is keyed per CHECK-ID, not per arm,
+  #     so routing this arm through the escalating emitter would arm it the instant
+  #     anyone flips label-parity to enforce. That would be a defect — the gate
+  #     cannot distinguish a deliberate operator override from drift, and the
+  #     remediation (`gh label edit`) overwrites live label metadata, which is
+  #     repository STATE and not git-revertible. flag_advisory_only carries no mode
+  #     `case` and no ISSUES increment ANYWHERE in its body, so the guarantee is in
+  #     the code's shape rather than in a default value a future edit could flip.
+  #     The ORPHAN leg's "Never FAILs" comment above is the live proof that a prose
+  #     guarantee drifts: it is already false (that leg routes through
+  #     flag_warn_or_issue). This arm does not repeat that pattern.
+  #     A row registered in the disposition file is suppressed; the arm therefore
+  #     DRAINS to zero once the registry covers the population, which is what
+  #     distinguishes it from a permanent signal stream.
+  #   DIVERGED-STALE (a disposition-registry row naming a label that is no longer
+  #     divergent, or no longer live) → ADVISORY-ONLY, same emitter, same reason.
+  #     The audit affordance a suppression surface owes: a suppression that
+  #     silently stops matching is the defect class this check exists to close.
   # Multi-source union (#1970): the primitive reads the canonical set as the UNION
   # across every --source. #1970 relocated the concrete label ROWS out of the doc
   # (which keeps the GRAMMAR: group definitions, rules, namespace patterns) into the
@@ -11659,7 +11681,12 @@ sys.stdout.write("".join(out) + "|")
       local c51_mode
       c51_mode=$(resolve_check_mode "label-parity")
       local c51_out c51_exit=0
-      c51_out=$(/usr/bin/python3 "$c51_script" "${c51_source_args[@]}" --output-format tsv 2>&1) || c51_exit=$?
+      # --dispositions is passed EXPLICITLY rather than left to the primitive's
+      # default, so the wiring between this check and the operator-authored
+      # disposition registry is visible in the check body [#5057]. An absent file is
+      # tolerated by the primitive as an empty registry.
+      local c51_dispositions="core/config/allowlists/label-attribute-dispositions.txt"
+      c51_out=$(/usr/bin/python3 "$c51_script" "${c51_source_args[@]}" --dispositions "$c51_dispositions" --output-format tsv 2>&1) || c51_exit=$?
       if [[ $c51_exit -eq 3 ]]; then
         flag_warn_or_issue "label-parity" "input failure (exit 3): $(head -1 <<<"$c51_out") — --source parsed to zero labels, the live set was unreadable, or no markdown source carried the '## Excluded Labels' section (a renamed heading is fail-loud, never a silently-empty excluded set); fix the source/parser"
       elif [[ $c51_exit -eq 0 || $c51_exit -eq 1 ]]; then
@@ -11674,11 +11701,19 @@ sys.stdout.write("".join(out) + "|")
         # selects on column-1's VALUE. An unrecognized verdict is a FINDING, never
         # an absence — and the known-class set lives in ONE named local so a future
         # class is one edit, not four.
-        local c51_known_re='^(MISSING|ORPHAN|EXCLUDED_LIVE)$'
+        local c51_known_re='^(MISSING|ORPHAN|EXCLUDED_LIVE|DIVERGED|DIVERGED-STALE)$'
         local c51_missing c51_orphan c51_excluded c51_unknown c51_rows
+        local c51_diverged c51_diverged_stale
         c51_missing=$(echo "$c51_out"  | awk -F'\t' '$1=="MISSING"{print $2}')
         c51_orphan=$(echo "$c51_out"   | awk -F'\t' '$1=="ORPHAN"{print $2}')
         c51_excluded=$(echo "$c51_out" | awk -F'\t' '$1=="EXCLUDED_LIVE"{print $2}')
+        # The two attribute-divergence tokens are bound to NAMED variables, and
+        # c51_known_re names them, BEFORE the residual bucket runs [#5057]. That
+        # ordering is the whole integration contract with the catch-all: a class
+        # this caller genuinely classifies must reach its own arm, not the bucket
+        # that exists for classes nobody has ever seen.
+        c51_diverged=$(echo "$c51_out"       | awk -F'\t' '$1=="DIVERGED"{print $2}')
+        c51_diverged_stale=$(echo "$c51_out" | awk -F'\t' '$1=="DIVERGED-STALE"{print $2}')
         # Guard B — the residual bucket, carrying TOKEN and PAYLOAD so the operator
         # sees what was unclassified rather than only that something was.
         c51_unknown=$(tsv_residual_rows "$c51_out" 1 "$c51_known_re")
@@ -11691,7 +11726,12 @@ sys.stdout.write("".join(out) + "|")
         c51_rows=$(printf '%s\n' "$c51_out" | grep -cv '^[[:space:]]*$' || true)
         c51_rows=${c51_rows:-0}
         if [[ $c51_rows -eq 0 ]]; then
-          log "  OK:    label-taxonomy.md and the GitHub label set are in parity"
+          # The qualifier is load-bearing, not decoration [#5057]. This line now
+          # covers names, exclusions AND declared attributes — but a divergence the
+          # operator has registered as an accepted override is suppressed upstream
+          # and never reaches this output, so "in parity" here means "no
+          # UNACCEPTED divergence", not "the two sides are byte-equal".
+          log "  OK:    label-taxonomy.md and the GitHub label set are in parity (names, exclusions and declared attributes; registered accepted overrides excluded)"
         else
           if [[ -n "$c51_missing" ]]; then
             if [[ "$c51_mode" == "enforce" ]]; then
@@ -11707,6 +11747,23 @@ sys.stdout.write("".join(out) + "|")
           fi
           if [[ -n "$c51_excluded" ]]; then
             flag_warn_or_issue "label-parity" "live label(s) the taxonomy declares excluded — delete the label (repository STATE; not git-revertible), or withdraw the row from label-taxonomy.md § Excluded Labels: $(echo "$c51_excluded" | paste -sd, -)"
+          fi
+          # ONE AGGREGATED LINE PER ARM, not one per row [#5057] — mirroring Checks
+          # 55/56. Thirty-odd individual WARN lines is a signal stream nobody reads;
+          # a single line carrying the count and the membership is a finding an
+          # operator can act on, and it is what makes the arm's drain visible.
+          #
+          # flag_advisory_only, NOT flag_warn_or_issue, and deliberately so: see the
+          # DIVERGED entry in this check's header comment. resolve_check_mode is
+          # keyed per check-id rather than per arm, so the escalating emitter would
+          # arm this arm on any future label-parity enforce flip — for a class whose
+          # remediation overwrites non-git-revertible repository state and which the
+          # gate cannot distinguish from a deliberate override.
+          if [[ -n "$c51_diverged" ]]; then
+            flag_advisory_only "label-parity" "attribute divergence — $(echo "$c51_diverged" | grep -cv '^[[:space:]]*$') declared-and-live row(s) diverge on colour and/or description and are not registered as accepted overrides: $(echo "$c51_diverged" | paste -sd, -). Read-only: the sanctioned remediation renderer is check-label-parity.py --emit-fix (it runs nothing); the disposition record is $c51_dispositions"
+          fi
+          if [[ -n "$c51_diverged_stale" ]]; then
+            flag_advisory_only "label-parity" "stale disposition row(s) — $c51_dispositions registers label(s) that are no longer divergent, or no longer live: $(echo "$c51_diverged_stale" | paste -sd, -). Remove the row(s); a suppression that has silently stopped matching is the defect class this arm exists to close"
           fi
           if [[ -n "$c51_unknown" ]]; then
             flag_warn_or_issue "label-parity" "unrecognized verdict class in the parity TSV — the primitive emits a class this caller does not classify; treat as a finding, not an absence, and extend c51_known_re: $c51_unknown"

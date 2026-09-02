@@ -4,7 +4,7 @@
 deploy.sh Check 51's scan engine. Parses the canonical label registry from one or
 more --source files and compares the UNION to the live GitHub label set (the REST
 labels endpoint, read via `gh api "repos/<slug>/labels?per_page=100" --paginate`),
-emitting three asymmetric-severity directions:
+emitting four asymmetric-severity directions:
 
   MISSING        a canonical label is absent from GitHub  -> ENFORCE-capable (the
                  #457 `status: rejected` defect class: a gate referencing a
@@ -17,6 +17,20 @@ emitting three asymmetric-severity directions:
                  row means one of the two surfaces must change (delete the label,
                  or withdraw the exclusion). Folding it into ORPHAN made the
                  contradiction invisible to the gate that reads both surfaces.
+  DIVERGED       a row declared AND live whose colour and/or description disagrees
+                 with the declaration  -> ADVISORY, structurally non-escalating
+                 (#5057). The three arms above are all NAME-keyed and every one of
+                 them passes on such a row. Its remediation OVERWRITES live label
+                 metadata — repository STATE, not git-revertible — and the gate
+                 cannot tell a deliberate operator override from drift, so this arm
+                 is read-only by construction: it does not enter the exit
+                 expression, and deploy.sh routes it through flag_advisory_only.
+                 A row registered in the disposition file (--dispositions) is
+                 suppressed; see parse_dispositions / classify_divergence.
+  DIVERGED-STALE a disposition-registry row naming a label that is no longer
+                 divergent, or no longer live  -> ADVISORY. The audit affordance a
+                 suppression surface owes: a suppression that silently stops
+                 matching is the defect class this arm exists to close.
 
 Source-agnostic + multi-source (the #1970 per-pack restructure): --source is
 repeatable. After #1970 the concrete label ROWS moved out of
@@ -113,10 +127,16 @@ Exit codes (the check-doc-links.py / check-skill-count-imp.py family convention)
   0  parity clean (or, under --emit-fix, nothing to emit)
   1  finding(s) — MISSING and/or ORPHAN and/or EXCLUDED_LIVE (or, under --emit-fix,
      ≥1 emittable row)
-  2  argument / input error
+     DIVERGED and DIVERGED-STALE are DELIBERATELY absent from this line: the
+     divergence arms report, they never move the exit code (see the DIVERGED entry
+     above). A run whose only finding is attribute divergence still exits 0.
+  2  argument / input error, INCLUDING a malformed --dispositions record (that file
+     is an argument, not a --source, so it takes the usage class rather than 3)
   3  a --source was unreadable OR the union parsed to zero canonical labels OR the
      live set was unreadable OR the repo slug was unresolvable OR the live set
-     exceeded --max-labels OR >=1 `.md` --source was supplied and none carried the
+     exceeded --max-labels OR a PRESENT --dispositions file was unreadable (an
+     ABSENT one is tolerated as an empty registry) OR >=1 `.md` --source was
+     supplied and none carried the
      `## Excluded Labels` header (fail-loud: a relocated/renamed registry must not
      read green, and an over-large population must not silently truncate). A single
      readable-but-empty source is tolerated as long as the union is non-empty
@@ -172,6 +192,38 @@ REGISTERED_NAMESPACES = ("project:", "epic:")
 # surface, which would let a deployment silently drop a corpus-governed tolerance and
 # shrink the census check-milestone-epic-membership.py reports on.
 TOLERATED_TYPE_ALIASES = ("type:subtask",)
+
+# The per-row ATTRIBUTE-DISPOSITION registry (#5057). The MISSING/ORPHAN/EXCLUDED_LIVE
+# arms are all NAME-keyed; a row that exists on both sides with the wrong colour or
+# description passes every one of them. That class is reported here as DIVERGED, and
+# the registry is what stops a DISPOSITIONED row from re-presenting as drift forever.
+#
+# WHY A REGISTRY AND NOT A SWEEP. The gate cannot tell a deliberate operator override
+# from drift — both are "live disagrees with the declaration" — so a bulk `gh label
+# edit` would silently overwrite deliberate choices, against repository STATE that is
+# not git-revertible. The decision is irreducibly human; this file records it once so
+# the arm becomes drainable instead of a permanent signal stream.
+#
+# It lives under core/config/allowlists/ rather than core/deploy/allowlists/ because
+# the two directories split on AUTHORSHIP, read from their own headers:
+# core/config/allowlists/ holds operator-authored governance registries (its members
+# state "additions follow the 'No ungoverned changes' protocol"), while
+# core/deploy/allowlists/ holds machine-maintained/derived data ("Do NOT hand-edit the
+# path list"). A disposition IS operator judgement, so it belongs with the former.
+DISPOSITIONS_DEFAULT = "core/config/allowlists/label-attribute-dispositions.txt"
+
+# The closed disposition enum. `accept-override` additionally takes an optional AXIS
+# qualifier (`accept-override:color` / `accept-override:description`); the bare form is
+# equivalent to both. Axis scoping is load-bearing rather than a nicety: accepting a
+# deliberate colour choice must not also silently accept an unreviewed description.
+DISPOSITION_VALUES = ("reconcile-live", "reconcile-declaration", "accept-override")
+DISPOSITION_AXES = ("color", "description")
+
+# A registry line's inline rationale: the `<record>  # <rationale>` idiom shared by
+# core/config/allowlists/*.txt. Two-or-more spaces (or a tab) before the `#` is what
+# separates a rationale from a `#` inside a label name, so the split is anchored on
+# the run rather than on the bare character.
+_DISPOSITION_RATIONALE_RE = re.compile(r"(?: {2,}|\t+)#")
 
 # The ONLY place the § Excluded Labels anchor string appears (#5054). Single-sourced
 # so a heading rename has exactly one place to change — and a rename that misses it
@@ -368,6 +420,67 @@ def parse_toml_label_rows(source_text):
     return rows
 
 
+def parse_dispositions(text):
+    """Parse the attribute-disposition registry (#5057). Raises ValueError on a bad line.
+
+    Grammar: ``<disposition> <label-name>  # <rationale>`` — disposition FIRST.
+
+    The order is forced, not stylistic: a label name may contain spaces
+    (``cluster: architecture``), so a name-first space-separated record is
+    unparseable, whereas the disposition is a closed space-free enum and
+    ``split(None, 1)`` then resolves the record unambiguously with the name as the
+    free-form remainder. Blank lines and lines whose first non-space character is
+    ``#`` are ignored, matching every other registry in core/config/allowlists/.
+
+    An unknown disposition value, an unknown axis qualifier, an axis on a
+    disposition that does not take one, a duplicate label, or a line carrying no
+    second field is a HARD parse error (caller -> exit 2, the usage class: this file
+    arrives as an argument, not as a --source). It is deliberately not skipped: a
+    silently-dropped record is a suppression the operator believes is in force.
+
+    Returns ``{label_name: (base_value, axis_or_None)}``.
+    """
+    out = {}
+    for lineno, raw in enumerate(text.splitlines(), start=1):
+        line = raw.rstrip()
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        record = _DISPOSITION_RATIONALE_RE.split(line, 1)[0].strip()
+        if not record:
+            continue
+        parts = record.split(None, 1)
+        if len(parts) != 2 or not parts[1].strip():
+            raise ValueError(
+                f"line {lineno}: expected `<disposition> <label-name>`, got {record!r}"
+            )
+        token, name = parts[0], parts[1].strip()
+        base, _, axis = token.partition(":")
+        axis = axis or None
+        if base not in DISPOSITION_VALUES:
+            raise ValueError(
+                f"line {lineno}: unknown disposition {base!r} — expected one of "
+                f"{', '.join(DISPOSITION_VALUES)}"
+            )
+        if axis is not None:
+            if base != "accept-override":
+                raise ValueError(
+                    f"line {lineno}: disposition {base!r} takes no axis qualifier "
+                    f"(got {axis!r}); only accept-override does"
+                )
+            if axis not in DISPOSITION_AXES:
+                raise ValueError(
+                    f"line {lineno}: unknown axis {axis!r} — expected one of "
+                    f"{', '.join(DISPOSITION_AXES)}"
+                )
+        if name in out:
+            raise ValueError(
+                f"line {lineno}: duplicate disposition for label {name!r} — a label "
+                f"carries exactly one recorded disposition"
+            )
+        out[name] = (base, axis)
+    return out
+
+
 def parse_source(path, source_text):
     """Dispatch by extension: .toml -> [[labels]] names + kind projections; else -> md.
 
@@ -560,9 +673,15 @@ def diff_declarations(declared_rows, live_rows):
     This is DELIBERATELY NOT part of diff_parity. The MISSING/ORPHAN verdicts that
     Check 51 consumes compare NAMES ONLY, and that logic is correct for what it
     asserts — a name-level registry reconciliation. Colour/description divergence is
-    a strictly separate finding class that the gate does not (and here still does
-    not) enforce; folding it into diff_parity would change what an existing green
-    check means. The emit path reports it; the gate's verdict is unchanged.
+    a strictly separate finding class; folding it into diff_parity would change what
+    an existing green check means.
+
+    The gate now REPORTS that class and still does not ENFORCE it (#5057). Both
+    halves matter. classify_divergence CALLS this function to build the DIVERGED
+    arm, so the gate path and the --emit-fix path share one definition of
+    "diverged" and cannot drift apart; and the arm is emitted through
+    flag_advisory_only and excluded from the exit expression, so reporting it moves
+    no verdict. This function's own signature, body and callers are unchanged.
     """
     absent, diverged, unresolvable = [], [], []
     for name in sorted(declared_rows):
@@ -578,6 +697,72 @@ def diff_declarations(declared_rows, live_rows):
                 or have["description"] != want.get("description", "")):
             diverged.append(name)
     return absent, diverged, unresolvable
+
+
+def divergent_axes(want, have):
+    """The axes on which one declared row and its live counterpart disagree.
+
+    Returns a frozenset drawn from DISPOSITION_AXES. Mirrors diff_declarations'
+    comparison EXACTLY — case-insensitive on colour, exact on description — so the
+    axis attribution can never disagree with the classification that produced it.
+    """
+    axes = set()
+    if have["color"].lower() != (want.get("color") or "").lower():
+        axes.add("color")
+    if have["description"] != want.get("description", ""):
+        axes.add("description")
+    return frozenset(axes)
+
+
+def classify_divergence(declared_rows, live_rows, dispositions):
+    """Partition the attribute-divergence class by its recorded disposition (#5057).
+
+    CALLS diff_declarations; deliberately does not fork it. One classifier with two
+    consumers (the --emit-fix renderer and this gate arm) is what keeps the two from
+    drifting into disagreeing about what "diverged" means — the same reason
+    parse_toml_label_rows was authored as a SIBLING of parse_toml_labels rather than
+    as a widening of it.
+
+    undispositioned         diverged, with no registry row covering every axis on
+                            which it actually diverges -> the drainable arm.
+    dispositioned_pending   diverged, and OWNED by a `reconcile-*` row: the operator
+                            has ruled which side is right but the cascade (an
+                            operator-run `gh label edit`, outside every acceptance
+                            criterion) has not run. Still reported, because it is
+                            still divergent.
+    stale                   a registry row naming a label that is not currently
+                            divergent, or not live at all. The minimal audit
+                            affordance a suppression surface owes: a suppression
+                            that silently stops matching is the same defect class
+                            this arm exists to close.
+
+    An `accept-override` row is SUPPRESSED — it appears in no arm, which is the
+    whole point of registering it. Suppression is AXIS-SCOPED: a row registered
+    `accept-override:color` that also diverges on description reports on the
+    residual axis, because accepting a colour is not accepting a description.
+
+    Returns three sorted lists of label names.
+    """
+    _absent, diverged, _unresolvable = diff_declarations(declared_rows, live_rows)
+    diverged_set = set(diverged)
+
+    undispositioned, dispositioned_pending = [], []
+    for name in diverged:
+        entry = dispositions.get(name)
+        if entry is None:
+            undispositioned.append(name)
+            continue
+        base, axis = entry
+        if base != "accept-override":
+            dispositioned_pending.append(name)
+            continue
+        covered = frozenset(DISPOSITION_AXES) if axis is None else frozenset([axis])
+        residual = divergent_axes(declared_rows[name], live_rows[name]) - covered
+        if residual:
+            undispositioned.append(name)
+
+    stale = sorted(n for n in dispositions if n not in diverged_set)
+    return sorted(undispositioned), sorted(dispositioned_pending), stale
 
 
 def _shq(s):
@@ -910,6 +1095,7 @@ def _self_test():
     ok = _self_test_rest_transport() and ok
     ok = _self_test_excluded_live() and ok
     ok = _self_test_list_declared_kinds() and ok
+    ok = _self_test_dispositions() and ok
 
     print("self-test: PASS" if ok else "self-test: FAIL")
     return 0 if ok else 1
@@ -1322,6 +1508,237 @@ def _self_test_excluded_live():
     return ok
 
 
+_DISP_PACK = '''\
+[[labels]]
+name = "subject-color"
+color = "AABBCC"
+description = "d1"
+
+[[labels]]
+name = "subject-both"
+color = "AABBCC"
+description = "d1"
+
+[[labels]]
+name = "control-diverged"
+color = "AABBCC"
+description = "d1"
+
+[[labels]]
+name = "clean-row"
+color = "AABBCC"
+description = "d1"
+'''
+
+
+def _self_test_dispositions():
+    """End-to-end fixture suite for the DIVERGED / DIVERGED-STALE arms (#5057).
+
+    Driven through main(), not through classify_divergence, for the same reason the
+    EXCLUDED_LIVE suite is: the contract the consumers depend on is the emitted TSV,
+    the text verdict and the EXIT CODE, and an internal-only assertion reaches none
+    of the three. Every subject arm is paired with the control that makes its result
+    readable — a suppression that "works" because nothing was ever reported is the
+    degenerate probe this class exists to detect.
+
+    A pure-`.toml` source set is used deliberately: it supplies no `.md`, so the
+    § Excluded Labels fail-loud is legitimately exempt and the fixture isolates the
+    divergence arms with no MISSING and no ORPHAN rows to read around.
+    """
+    ok = True
+
+    def _w(d, nm, text):
+        p = os.path.join(d, nm)
+        with open(p, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return p
+
+    def _rows(out):
+        return [r for r in out.splitlines() if r.strip()]
+
+    with tempfile.TemporaryDirectory() as td:
+        pack = _w(td, "pack.toml", _DISP_PACK)
+        # subject-color diverges on COLOUR only; subject-both on BOTH axes;
+        # control-diverged on colour and is NEVER registered; clean-row matches.
+        live = _w(td, "live.json", json.dumps([
+            {"name": "subject-color", "color": "FFFFFF", "description": "d1"},
+            {"name": "subject-both", "color": "FFFFFF", "description": "d2"},
+            {"name": "control-diverged", "color": "FFFFFF", "description": "d1"},
+            {"name": "clean-row", "color": "AABBCC", "description": "d1"},
+        ]))
+        # Everything byte-identical — the specificity control for arm (e).
+        live_clean = _w(td, "live-clean.json", json.dumps([
+            {"name": "subject-color", "color": "AABBCC", "description": "d1"},
+            {"name": "subject-both", "color": "AABBCC", "description": "d1"},
+            {"name": "control-diverged", "color": "AABBCC", "description": "d1"},
+            {"name": "clean-row", "color": "AABBCC", "description": "d1"},
+        ]))
+        # A genuine ORPHAN alongside the divergence — the exit-code control.
+        live_orphan = _w(td, "live-orphan.json", json.dumps([
+            {"name": "subject-color", "color": "FFFFFF", "description": "d1"},
+            {"name": "subject-both", "color": "AABBCC", "description": "d1"},
+            {"name": "control-diverged", "color": "AABBCC", "description": "d1"},
+            {"name": "clean-row", "color": "AABBCC", "description": "d1"},
+            {"name": "zz-orphan", "color": "ededed", "description": ""},
+        ]))
+
+        empty_reg = _w(td, "empty.txt", "# header only, no records\n")
+        reg_accept = _w(td, "accept.txt",
+                        "# comment\naccept-override subject-color  # deliberate\n")
+        reg_axis = _w(td, "axis.txt", "accept-override:color subject-both\n")
+        reg_axis_ok = _w(td, "axis-ok.txt", "accept-override:color subject-color\n")
+        reg_stale = _w(td, "stale.txt", "accept-override clean-row  # no longer drift\n")
+        reg_pending = _w(td, "pending.txt", "reconcile-live subject-color\n")
+        reg_bad = _w(td, "bad.txt", "not-a-disposition subject-color\n")
+        reg_nofield = _w(td, "nofield.txt", "accept-override\n")
+
+        def _run(reg, fixture=live, fmt="tsv"):
+            argv = ["--source", pack, "--fixture-labels", fixture,
+                    "--output-format", fmt]
+            if reg is not None:
+                argv += ["--dispositions", reg]
+            return _run_main_captured(argv)
+
+        # --- Arm (a): AC-2's exact method. A name-matched, colour-divergent row
+        #     appears in DIVERGED and in NEITHER MISSING nor ORPHAN. The negative
+        #     halves are the assertion — a class that merely EXISTS while the row
+        #     also reports as ORPHAN has not separated anything.
+        rc, out = _run(empty_reg)
+        rows = _rows(out)
+        if "DIVERGED\tsubject-color" not in rows:
+            print(f"FAIL disp (a): subject-color not in DIVERGED: {rows}")
+            ok = False
+        if any(r.startswith("MISSING\t") or r.startswith("ORPHAN\t") for r in rows):
+            print(f"FAIL disp (a): a MISSING/ORPHAN row is present: {rows}")
+            ok = False
+        # THE EXIT CONTRACT (E8), isolated: a run whose only findings are DIVERGED
+        # exits 0. Paired with the ORPHAN control below, so "exit 0" cannot pass
+        # merely because the fixture produces nothing.
+        if rc != 0:
+            print(f"FAIL disp (a): divergence-only run exited {rc} want 0")
+            ok = False
+        rc_ctl, out_ctl = _run(empty_reg, fixture=live_orphan)
+        if rc_ctl != 1 or "ORPHAN\tzz-orphan" not in _rows(out_ctl):
+            print(f"FAIL disp (a) exit control: orphan run exited {rc_ctl}: {out_ctl!r}")
+            ok = False
+        # Shape (CIAC-1): every emitted row is exactly 2 tab-separated fields.
+        if any(r.count("\t") != 1 for r in rows):
+            print(f"FAIL disp (a): a row is not 2 tab-separated fields: {rows}")
+            ok = False
+
+        # --- Arm (b): AC-3's exact method, BOTH halves. The registered row leaves
+        #     the arm WHILE the unregistered control-diverged row remains. Half one
+        #     alone is satisfied by an arm that reports nothing at all.
+        rc, out = _run(reg_accept)
+        rows = _rows(out)
+        if "DIVERGED\tsubject-color" in rows:
+            print(f"FAIL disp (b): accept-override row still reported: {rows}")
+            ok = False
+        if "DIVERGED\tcontrol-diverged" not in rows:
+            print(f"FAIL disp (b) control: unregistered divergent row vanished: {rows}")
+            ok = False
+
+        # --- Arm (c): axis-scoped suppression. `accept-override:color` on a row that
+        #     ALSO diverges on description leaves it reported on the residual axis;
+        #     the same qualifier on a colour-only divergence DOES suppress. Without
+        #     the second half, "still reported" could just mean the qualifier is
+        #     ignored entirely.
+        rc, out = _run(reg_axis)
+        if "DIVERGED\tsubject-both" not in _rows(out):
+            print(f"FAIL disp (c): axis-scoped accept swallowed a residual axis: {_rows(out)}")
+            ok = False
+        rc, out = _run(reg_axis_ok)
+        if "DIVERGED\tsubject-color" in _rows(out):
+            print(f"FAIL disp (c) control: axis-matched accept did not suppress: {_rows(out)}")
+            ok = False
+
+        # --- Arm (d): a registry row naming a CLEAN label reports DIVERGED-STALE.
+        rc, out = _run(reg_stale)
+        rows = _rows(out)
+        if "DIVERGED-STALE\tclean-row" not in rows:
+            print(f"FAIL disp (d): stale registry row not reported: {rows}")
+            ok = False
+        if "DIVERGED\tclean-row" in rows:
+            print(f"FAIL disp (d): a clean row also emitted as DIVERGED: {rows}")
+            ok = False
+
+        # --- Arm (e): SPECIFICITY. Byte-identical declarations produce NO row of
+        #     either kind, with a non-empty declared set and a non-empty live set.
+        rc, out = _run(empty_reg, fixture=live_clean)
+        if rc != 0 or _rows(out):
+            print(f"FAIL disp (e): clean fixture emitted {out!r} (exit {rc})")
+            ok = False
+
+        # --- Arm (f): a malformed registry record is exit 2 (usage class), not a
+        #     silent skip. Two shapes: an unknown value, and a record with no
+        #     second field. Control: the same run against a VALID registry exits 0.
+        rc, _ = _run(reg_bad)
+        if rc != 2:
+            print(f"FAIL disp (f): unknown disposition value exited {rc} want 2")
+            ok = False
+        rc, _ = _run(reg_nofield)
+        if rc != 2:
+            print(f"FAIL disp (f): record with no label name exited {rc} want 2")
+            ok = False
+        rc, _ = _run(empty_reg)
+        if rc != 0:
+            print(f"FAIL disp (f) control: valid registry exited {rc} want 0")
+            ok = False
+
+        # --- A `reconcile-*` row is OWNED but still divergent, so it is still
+        #     reported. This is what keeps the arm honest between the ruling and the
+        #     operator-run cascade.
+        rc, out = _run(reg_pending)
+        if "DIVERGED\tsubject-color" not in _rows(out):
+            print(f"FAIL disp: reconcile-live row stopped reporting: {_rows(out)}")
+            ok = False
+
+        # --- Registry FILE contract. Absent -> empty registry, tolerated silently
+        #     (no exit 3). Present-but-unreadable -> exit 3. A directory stands in
+        #     for the unreadable case: it raises an OSError that is not
+        #     FileNotFoundError, which is exactly the branch under test.
+        rc, _ = _run(os.path.join(td, "no-such-registry.txt"))
+        if rc != 0:
+            print(f"FAIL disp: absent registry exited {rc} want 0 (tolerated)")
+            ok = False
+        rc, _ = _run(td)
+        if rc != 3:
+            print(f"FAIL disp: unreadable registry exited {rc} want 3")
+            ok = False
+
+        # --- The DEFAULT registry is NOT applied to a fixture run. A registry row is
+        #     a statement about one population; applied to a synthetic one, every row
+        #     names a label the fixture does not carry and reports DIVERGED-STALE.
+        #     This is the arm that keeps every OTHER fixture suite in this file
+        #     meaningful — they invoke main() with no --dispositions, and without this
+        #     guard each of them acquires one spurious stale row per registry record.
+        #     Subject: no --dispositions on a fixture run -> no stale row. Control:
+        #     the SAME fixture with an explicit registry naming a clean label DOES
+        #     produce one, so the subject's zero is a suppression and not an
+        #     unreachable arm.
+        rc, out = _run(None, fixture=live)
+        if any(r.startswith("DIVERGED-STALE") for r in _rows(out)):
+            print(f"FAIL disp: default registry applied to a fixture run: {_rows(out)}")
+            ok = False
+        rc, out = _run(reg_stale, fixture=live)
+        if not any(r.startswith("DIVERGED-STALE") for r in _rows(out)):
+            print(f"FAIL disp control: explicit registry produced no stale row: {_rows(out)}")
+            ok = False
+
+        # --- Text format carries the mirror arms, and names the disposition on an
+        #     owned row so the operator can tell "unruled" from "ruled, not yet run".
+        rc, out = _run(reg_pending, fmt="text")
+        if "DIVERGED" not in out or "[reconcile-live]" not in out:
+            print(f"FAIL disp: text mode missing the divergence arm: {out!r}")
+            ok = False
+        rc, out = _run(empty_reg, fixture=live_clean, fmt="text")
+        if "in parity" not in out:
+            print(f"FAIL disp: clean text run did not print the parity line: {out!r}")
+            ok = False
+
+    return ok
+
+
 def _self_test_list_declared_kinds():
     """Fixture suite for `--list-declared-kinds` (#5291), the #4223 extend-seam.
 
@@ -1468,6 +1885,20 @@ def main(argv=None):
         ),
     )
     ap.add_argument(
+        "--dispositions",
+        default=None,
+        help=(
+            "per-row attribute-disposition registry consumed by the DIVERGED arm "
+            f"(default {DISPOSITIONS_DEFAULT}, consulted only when the live set is "
+            "read for real — a registry describes ONE population, so it is not "
+            "applied by default to a --fixture-labels run; pass it explicitly to "
+            "apply it anyway). An ABSENT file is tolerated silently as an empty "
+            "registry (mirroring the readable-but-empty --source contract); a "
+            "present-but-unreadable file is exit-3 fail-loud; a malformed record is "
+            "exit 2 (usage class — this file is an argument, not a source)."
+        ),
+    )
+    ap.add_argument(
         "--list-declared-kinds",
         action="store_true",
         help=(
@@ -1605,6 +2036,61 @@ def main(argv=None):
 
     missing, orphan, excluded_live = diff_parity(concrete, namespaces, live, excluded)
 
+    # ATTRIBUTE DIVERGENCE (#5057) — the third question, computed ALONGSIDE the
+    # name-level diff above and never folded into it. diff_parity's verdicts are
+    # correct for what they assert (a NAME-level registry reconciliation); a row that
+    # is live with the wrong colour or description satisfies every one of them. This
+    # arm reports that class, and the registry is what makes it drainable.
+    #
+    # FAIL-SOFT, and only on the widened live read. If the attribute read fails, the
+    # divergence arms emit NOTHING and MISSING/ORPHAN/EXCLUDED_LIVE are untouched: a
+    # divergence-arm outage must never move the name-parity verdict, which is the one
+    # leg that is enforce-capable. Registry problems are NOT fail-soft — an
+    # unreadable file is exit 3 and a malformed record is exit 2, because a silently
+    # empty registry reads as "nothing is dispositioned", which is the opposite of
+    # what a missing suppression means.
+    # THE DEFAULT IS CONSULTED ONLY FOR A REAL LIVE READ. A registry row is a
+    # statement about ONE population — the labels this repository actually has — so
+    # applying it to a synthetic one is a guaranteed false alarm: every row names a
+    # label the fixture does not carry, and every row therefore reports DIVERGED-STALE.
+    # An EXPLICIT --dispositions is always honoured, because a caller who names a
+    # registry has said which population it describes. deploy.sh passes it explicitly
+    # for exactly that reason.
+    explicit_disp = args.dispositions is not None
+    disp_path = args.dispositions or DISPOSITIONS_DEFAULT
+    dispositions = {}
+    disp_text = None
+    if explicit_disp or args.fixture_labels is None:
+        try:
+            with open(disp_path, encoding="utf-8") as fh:
+                disp_text = fh.read()
+        except FileNotFoundError:
+            disp_text = None  # absent registry == empty registry, tolerated silently
+        except OSError as e:
+            print(f"dispositions unreadable: {disp_path}: {e}", file=sys.stderr)
+            return 3
+    if disp_text is not None:
+        try:
+            dispositions = parse_dispositions(disp_text)
+        except ValueError as e:
+            print(f"dispositions parse error: {disp_path}: {e}", file=sys.stderr)
+            return 2
+
+    undispositioned, disp_pending, disp_stale = [], [], []
+    try:
+        declared_rows = {}
+        for src in sources:
+            if not src.lower().endswith(".toml"):
+                continue
+            with open(src, encoding="utf-8") as fh:
+                declared_rows.update(parse_toml_label_rows(fh.read()))
+        live_rows = fetch_live_label_rows(repo, args.max_labels, args.fixture_labels)
+        undispositioned, disp_pending, disp_stale = classify_divergence(
+            declared_rows, live_rows, dispositions
+        )
+    except Exception as e:  # noqa: BLE001 - fail-SOFT: see the contract above
+        print(f"attribute-divergence arm not evaluated: {e}", file=sys.stderr)
+
     if args.output_format == "tsv":
         # Two tab-separated fields per row, same order, same separator — the shape
         # deploy.sh Check 51 parses is UNCHANGED by the new class. That is precisely
@@ -1616,6 +2102,16 @@ def main(argv=None):
             print(f"ORPHAN\t{o}")
         for x in excluded_live:
             print(f"EXCLUDED_LIVE\t{x}")
+        # APPENDED AFTER the existing arms, so column count, column order and
+        # separator are all unchanged — the new rows are additional ROWS, never a
+        # wider shape. Undispositioned first, then dispositioned-pending: both are
+        # still divergent, and the consumer aggregates them into one advisory line.
+        for d in undispositioned:
+            print(f"DIVERGED\t{d}")
+        for d in disp_pending:
+            print(f"DIVERGED\t{d}")
+        for s in disp_stale:
+            print(f"DIVERGED-STALE\t{s}")
     else:
         if missing:
             print("MISSING (canonical label absent from GitHub):")
@@ -1630,9 +2126,31 @@ def main(argv=None):
                   "delete it, or withdraw the exclusion):")
             for x in excluded_live:
                 print(f"  - {x}")
-        if not missing and not orphan and not excluded_live:
+        if undispositioned:
+            print("DIVERGED (declared and live, but colour and/or description "
+                  "differ, with no recorded disposition):")
+            for d in undispositioned:
+                print(f"  - {d}")
+        if disp_pending:
+            print("DIVERGED (dispositioned, cascade pending — the ruling is "
+                  "recorded; the operator-run reconciliation has not happened):")
+            for d in disp_pending:
+                print(f"  - {d} [{dispositions[d][0]}]")
+        if disp_stale:
+            print("DIVERGED-STALE (registry row naming a label that is no longer "
+                  "divergent, or no longer live — remove the row):")
+            for s in disp_stale:
+                print(f"  - {s}")
+        if not (missing or orphan or excluded_live
+                or undispositioned or disp_pending or disp_stale):
             print("label-taxonomy.md and the GitHub label set are in parity")
 
+    # EXIT SEMANTICS DELIBERATELY UNCHANGED (#5057). DIVERGED does NOT enter this
+    # expression. The class is advisory by construction — its remediation overwrites
+    # live label metadata that is repository STATE and not git-revertible, and the
+    # gate cannot distinguish a deliberate override from drift — so it must not be
+    # able to move an exit code that a caller may branch on. deploy.sh routes it
+    # through flag_advisory_only for the same reason, one layer up.
     return 1 if (missing or orphan or excluded_live) else 0
 
 
