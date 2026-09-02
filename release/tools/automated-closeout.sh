@@ -7198,7 +7198,7 @@ self_test() {
   ! validate_version "" || { echo "FAIL: validate_version should reject empty"; failures=$((failures+1)); }
 
   # Test 1b: phase_bump_version (#1643) — offline, hermetic. Drives the phase
-  # against a sandbox REPO_ROOT/.version and asserts the SKIP/apply/idempotency
+  # against a sandbox REPO_ROOT/.version and asserts the SKIP/apply/monotonicity
   # branches via the recorded mark_phase outcome (get_phase "bump_version").
   local _bv_saved_root="$REPO_ROOT" _bv_saved_mode="$MODE" _bv_saved_version="$VERSION"
   local _bv_tmp; _bv_tmp="$(/usr/bin/mktemp -d -t bumpver-selftest.XXXXXX)"
@@ -7219,10 +7219,47 @@ self_test() {
   [[ "$(get_phase bump_version)" == PASS\|* ]] || { echo "FAIL: phase_bump_version should PASS (apply) for versioned \$VERSION, got '$(get_phase bump_version)'"; failures=$((failures+1)); }
   [[ "$(/usr/bin/head -1 "$_bv_tmp/.version")" == "v2.11" ]] || { echo "FAIL: phase_bump_version must write .version=v2.11, got '$(/usr/bin/head -1 "$_bv_tmp/.version")'"; failures=$((failures+1)); }
 
-  # (c) idempotency — re-run at target → SKIPPED, no churn
+  # (c) monotonicity (equal limb) — re-run at target → SKIPPED, no churn
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   phase_bump_version >/dev/null 2>&1
-  [[ "$(get_phase bump_version)" == SKIPPED\|* ]] || { echo "FAIL: phase_bump_version should SKIP on idempotent re-run, got '$(get_phase bump_version)'"; failures=$((failures+1)); }
+  [[ "$(get_phase bump_version)" == SKIPPED\|* ]] || { echo "FAIL: phase_bump_version should SKIP on monotone equal-limb re-run, got '$(get_phase bump_version)'"; failures=$((failures+1)); }
+
+  # (c2) MONOTONICITY CANARY — the historical incident, colocated with the branch it
+  # guards. .version already at v4.18; closing v4.17 out of order must SKIP and must
+  # leave the file at v4.18. Under the prior string-EQUALITY guard this stamped the
+  # source-of-truth DOWN. The exhaustive ordered-pair table lives in
+  # core/deploy/tests/test_version_stamping.sh; this is the canary that the branch exists.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  /usr/bin/printf 'v4.18\n' > "$_bv_tmp/.version"
+  VERSION="v4.17"
+  phase_bump_version >/dev/null 2>&1
+  [[ "$(get_phase bump_version)" == SKIPPED\|* ]] || { echo "FAIL: phase_bump_version must SKIP when .version (v4.18) is HIGHER than \$VERSION (v4.17) — monotonicity, got '$(get_phase bump_version)'"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/head -1 "$_bv_tmp/.version")" == "v4.18" ]] || { echo "FAIL: phase_bump_version must NOT regress .version from v4.18 to v4.17 (out-of-order close), got '$(/usr/bin/head -1 "$_bv_tmp/.version")'"; failures=$((failures+1)); }
+  # (c2-sens) anti-vacuity partner: the SAME fixture one step the other way must WRITE.
+  # Without this arm, a phase that SKIPped unconditionally would satisfy (c) and (c2).
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  /usr/bin/printf 'v4.17\n' > "$_bv_tmp/.version"
+  VERSION="v4.18"
+  phase_bump_version >/dev/null 2>&1
+  [[ "$(get_phase bump_version)" == PASS\|* ]] || { echo "FAIL: phase_bump_version must PASS (apply) when .version (v4.17) is LOWER than \$VERSION (v4.18) — anti-vacuity partner of the monotonicity canary, got '$(get_phase bump_version)'"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/head -1 "$_bv_tmp/.version")" == "v4.18" ]] || { echo "FAIL: phase_bump_version must advance .version to v4.18 on the in-order close, got '$(/usr/bin/head -1 "$_bv_tmp/.version")'"; failures=$((failures+1)); }
+  # (c3) NON-CANONICAL RECOVERY — a corrupt .version is not a reason to guess. The
+  # phase stamps as recovery AND records that it did, so the path is auditable rather
+  # than silent. Asserted on the DETAIL, not just the verdict: without the detail arm a
+  # phase that stamped silently would be indistinguishable from one that recorded.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  /usr/bin/printf 'some-milestone-slug\n' > "$_bv_tmp/.version"
+  VERSION="v4.19"
+  phase_bump_version >/dev/null 2>&1
+  [[ "$(get_phase bump_version)" == PASS\|* ]] || { echo "FAIL: phase_bump_version must stamp as recovery over a non-canonical .version, got '$(get_phase bump_version)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'not orderable under the version grammar' <<<"$(get_phase bump_version)" || { echo "FAIL: phase_bump_version must RECORD the non-canonical recovery in its detail, got '$(get_phase bump_version)'"; failures=$((failures+1)); }
+  # (c3-spec) specificity: an ORDERABLE value must NOT carry the recovery note.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  /usr/bin/printf 'v4.18\n' > "$_bv_tmp/.version"
+  VERSION="v4.19"
+  phase_bump_version >/dev/null 2>&1
+  /usr/bin/grep -qF 'not orderable under the version grammar' <<<"$(get_phase bump_version)" && { echo "FAIL: phase_bump_version must NOT report a non-canonical recovery for an orderable .version — without this arm the recovery note could fire on every run"; failures=$((failures+1)); }
+  VERSION="v2.11"
 
   # (d) dry-run preview → DRY-RUN, no write
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
@@ -10348,6 +10385,99 @@ STUB
     _s1_detail="$(get_phase check_release_body_drift | /usr/bin/cut -d'|' -f1)"
     [[ "$_s1_detail" == "WARN" ]] || { echo "FAIL: 4h(i) aggregation non-regression — with the publish phase on its CREATE path, a drift-tool exit 3 must reach the WARN limb at :6224. Got '$_s1_detail'. An N/A here means pub_result is no longer PASS on create, i.e. the outcome token was changed and :6221 has been silently inverted"; failures=$((failures+1)); }
     DRIFT_CHECK_TOOL="$_s1_saved_drift"
+
+    # ── (L-1)..(L-7) SURFACE-1 --latest RESOLUTION ARMS ───────────────────────
+    # Assert the RESOLVED FLAG on the create command's argv, not the resolver's
+    # internal state: the badge is a public mutation and what reaches gh is the only
+    # thing that moves it. Extends the same $GH-stub + argfile mechanism arm (a)
+    # already uses for --target.
+    #
+    # STUB FIDELITY IS LOAD-BEARING. The anchor stub EXITS NON-ZERO on the
+    # unresolvable arm, exactly as a real 404 does. A stub that fell through with
+    # exit 0 and empty stdout would leave L-3 green while the production
+    # exit-status path was never exercised once — a fixture passing on a path the
+    # code cannot take, which is the defect class this card exists to close.
+    #
+    # The invocation is GUARDED with `|| _lat_rc=$?` rather than left bare. This
+    # arm sits under the file's `set -euo pipefail`, and a faithful non-zero-exit
+    # stub at a BARE call aborts the entire self-test — a green local run and a red
+    # CI run from one unpinned input, the failure mode this file already documents
+    # against itself. Suspending errexit for the call's dynamic extent is what lets
+    # the stub stay faithful; do NOT solve it by weakening the stub.
+    local _lat_argfile="$_ms_tmp/latest-create-args"
+    local _lat_anchorfile="$_ms_tmp/latest-anchor"
+    local _lat_stub="$_ms_tmp/gh-latest.sh"
+    local _lat_rc=0
+    /bin/cat > "$_lat_stub" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "api" ]]; then
+  _a="\$(/bin/cat "$_lat_anchorfile" 2>/dev/null)"
+  [[ "\$_a" == "__UNRESOLVABLE__" ]] && exit 1
+  printf '%s\n' "\$_a"; exit 0
+fi
+if [[ "\$1" == "release" && "\$2" == "view" ]]; then exit 1; fi
+if [[ "\$1" == "release" && "\$2" == "create" ]]; then printf '%s\n' "\$*" > "$_lat_argfile"; exit 0; fi
+exit 0
+STUB
+    /bin/chmod +x "$_lat_stub"
+
+    _lat_arm() {  # <anchor> <expected-token> <label>
+      /usr/bin/printf '%s\n' "$1" > "$_lat_anchorfile"
+      : > "$_lat_argfile"
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _lat_rc=0
+      phase_publish_github_release >/dev/null 2>&1 || _lat_rc=$?
+      /usr/bin/grep -qF -- "--latest=$2" "$_lat_argfile" 2>/dev/null || {
+        echo "FAIL: $3 — gh release create must carry --latest=$2 with releases/latest anchor '$1', got argv '$(/bin/cat "$_lat_argfile" 2>/dev/null)'"
+        failures=$((failures+1))
+      }
+    }
+
+    GH="$_lat_stub"; MERGE_SHA="$_ms_commit"; VERSION="v9.89"; MODE="apply"
+    RELEASE_NOTES_DIR="$_ms_work/release/releases/notes"
+
+    _lat_arm "v9.90"      "false" "L-1 anchor HIGHER than \$VERSION — out-of-order close; badge stays put"
+    _lat_arm "v9.88"      "true"  "L-2 anchor LOWER — normal in-order close; badge advances"
+    _lat_arm "__UNRESOLVABLE__" "false" "L-3 anchor unresolvable (gh exits non-zero, as a real 404 does) — fail-closed"
+    _lat_arm "some-slug"  "false" "L-4 anchor non-canonical — fail-closed on an unorderable anchor"
+    _lat_arm "v8.99"      "true"  "L-5 cross-major forward — MAJOR decides, not a minor delta"
+    # L-6 (anchor == $VERSION) is UNREACHABLE BY CONSTRUCTION and is deliberately not
+    # asserted: an existing release routes the state machine to State 1/2, so the
+    # State-0 create branch this arm would have to reach is never taken. Recorded here
+    # with its reason rather than omitted silently, and rather than faked with a stub
+    # that would be modelling a state the code cannot occupy.
+
+    # L-2 and L-5 must emit true; L-1, L-3 and L-4 must emit false. An
+    # always-withhold resolver fails 2 arms; an always-advance resolver fails 3.
+    # Neither degenerate form passes, so a green result here is discriminating.
+
+    # (L-7) FAIL-CLOSED ON AN UNORDERABLE $VERSION — the operand this site originally
+    # left ungated. This function carries no canonicity gate of its own, so a
+    # non-canonical $VERSION reaching the resolver previously yielded empty comparator
+    # stdout, fell through to the permissive branch, and took the badge on a comparison
+    # that never happened: fail-OPEN, on a public mutation. Reaching it needs a
+    # non-canonical tag on the sandbox origin, because the tag preflight (an ACCIDENTAL
+    # guard several hundred lines upstream, not a property of this code) would
+    # otherwise abort first.
+    ( cd "$_ms_work" \
+      && $GIT -c user.email=t@t -c user.name=t tag -a -m slug some-milestone-slug v9.89 >/dev/null 2>&1 \
+      && $GIT push -q origin some-milestone-slug >/dev/null 2>&1 ) || true
+    if git_net -C "$_ms_work" ls-remote --tags origin "some-milestone-slug" 2>/dev/null | /usr/bin/grep -q "some-milestone-slug"; then
+      # The note must land where notes_abs_path() RESOLVES it, not where a flat
+      # naming guess would put it: a version-less $VERSION resolves under
+      # notes/_unversioned/. Writing it flat aborts the phase at the notes preflight
+      # and the arm then reports FAIL against correct code — a fixture fault reading
+      # as a defect. Resolve the path with the script's OWN resolver rather than
+      # retyping the branch, which is the same rule notes_abs_path() exists to enforce.
+      VERSION="some-milestone-slug"
+      /bin/mkdir -p "$(/usr/bin/dirname "$(notes_abs_path)")"
+      /bin/cp "$_ms_work/release/releases/notes/v9.89_RELEASE_NOTES.md" \
+              "$(notes_abs_path)" 2>/dev/null || true
+      _lat_arm "v9.90" "false" "L-7 \$VERSION non-canonical — BOTH operands gated; fail-closed (was fail-OPEN)"
+      VERSION="v9.89"
+    else
+      echo "  NOTE: L-7 unreachable in this fixture (non-canonical tag not resolvable on the sandbox origin) — the both-operand gate is retained regardless, warranted by the absent precondition in phase_publish_github_release rather than by this arm" >&2
+    fi
+    GH="$_ms_pub_stub"
 
     # (c)/(d) REACHABILITY OF THE DRY-RUN LIMB (#5142 F-01; #4765 convention).
     # Phase 15.5's dry-run branch used to sit BELOW three `return 3` preflights, so
@@ -13560,7 +13690,7 @@ EOF
 
   echo "self-test: PASS" >&2
   echo "  validate_version + extract_major validated" >&2
-  echo "  phase_bump_version validated (#1643 — version-less SKIP / versioned apply / idempotency / dry-run)" >&2
+  echo "  phase_bump_version validated (#1643 — version-less SKIP / versioned apply / monotonicity (equal + higher limbs) / non-canonical recovery / dry-run)" >&2
   echo "  phase_append_reversions validated (#1679; SLIM #3109 — N/A common path / none-path SLIM gate → N/A no-row across round-trip + multi-abandoned fan-out + re-run + historical-none immutability / tag-orphaned positive → 1 row abandoned_tag_pushed=true / dry-run no-write + orphan-row idempotency); dry-run<=>apply parity validated on the GATED paths (F-01 — none-path preview 0 == apply 0; mixed orphan+none preview 1 == apply 1, orphan recorded, gated surfaced)" >&2
   echo "  phase_lint_release_notes validated (§3.2 close gate — clean PASS / this-version finding FAIL / other-version PASS / exit-3 fail-loud / missing-tool FAIL)" >&2
   echo "  extract_row_state + extract_milestone_slug validated (3 shapes: vX.Y- / NN- / pure-alpha incl. hyphen-less #2539 a4 branch; version-less end-anchor; #667 F2 bare theme-named slug → title)" >&2
