@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.46 (2026-09-02) — Portfolio frameworks get a home, and a plan check stops missing files
+
 ### v4.45 (2026-08-31) — Checks now report what they actually measured
 
 ### v4.44 (2026-08-30) — Skills stopped citing things that were never there
