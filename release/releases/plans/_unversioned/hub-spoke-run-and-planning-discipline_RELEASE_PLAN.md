@@ -190,6 +190,12 @@ packages/release-executor.skill                                    edit
 packages/release-executor.skill.sha256                             edit
 core/specs/autonomy-tiers.md                                       edit
 core/skills/finops-usage-extractor/scripts/rollup-attribution.sh   edit
+core/deploy/tests/test_version_stamping.sh                         edit
+.github/workflows/install-tests.yml                                edit
+release/references/standards/release-notes-standard.md             edit
+release/references/pipeline/stage-12-execute.md                    edit
+release/tools/version-grammar.sh                                   edit
+release/references/standards/version-grammar.md                    edit
 ```
 
 ```
