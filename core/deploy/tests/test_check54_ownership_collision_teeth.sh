@@ -180,7 +180,7 @@ note "$a1_out"
 # ── A2 — the adoption itself: exactly ONE live declaration, correctly attributed ──
 # Uses the primitive's OWN parser rather than a re-encoded regex, so the assertion
 # cannot drift away from the code it stands in for.
-a2_out="$(/usr/bin/python3 - "$PRIMITIVE" "$LIVE_CONTRACTS" <<'PYEOF' 2>&1
+a2_out="$(/usr/bin/python3 - "$PRIMITIVE" "$LIVE_CONTRACTS" 2>&1 <<'PYEOF'
 import importlib.util, sys
 spec = importlib.util.spec_from_file_location("coc", sys.argv[1])
 coc = importlib.util.module_from_spec(spec); spec.loader.exec_module(coc)
