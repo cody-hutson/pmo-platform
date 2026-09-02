@@ -377,27 +377,74 @@ fi
 CONTENT="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.content // .tool_input.new_string // empty')"
 [ -z "$CONTENT" ] && exit 0
 
+# --- MARKER SOURCE (file-scoped by specification) ---------------------------
+# The override markers are FILE-scoped: core/standards/reference-durability-standard.md
+# § Per-file override marker declares them "once, as an HTML comment anywhere in
+# the file", and the CI resolves them that way already (whole-file, head version,
+# in .github/workflows/reference-durability.yml). A Write carries the whole
+# post-change file in $CONTENT, so the fragment IS the file and $CONTENT is
+# complete. An Edit carries only the replacement fragment, so a file that
+# correctly declares its marker at the top is unwritable on any line that does not
+# repeat the declaration. Union the on-disk file in for Edit only, so the hook and
+# the CI answer one question one way. No fence strip: the CI does not strip, and
+# the marker greps below already read unstripped content.
+#
+# Five properties, each load-bearing:
+#   1. `[ -f ]`, never `[ -e ]` — excludes directories, FIFOs and character devices,
+#      so a pathological file_path cannot hang a PreToolUse hook on the write hot path.
+#   2. Every branch total — this runs under `set -euo pipefail` with an ERR trap that
+#      exits 2, so a bare non-zero at statement level would block the user's write with
+#      a HOOK-ERROR. Hence `|| true` on the cat and if/elif rather than an `||` chain.
+#   3. $CWD is already extracted above for the workspace-scope guard — no new input
+#      field, no new jq call.
+#   4. Absent file => silent fallback to the fragment => today's behavior. Synthetic
+#      file_paths that do not exist on disk keep resolving exactly as before.
+#   5. `/bin/cat` literal, matching the PATH-pinned style already used by get_mode().
+# A Write deliberately does NOT read the disk: for a Write the fragment is the whole
+# post-change file, so the disk holds the PRE-change state, and reading it would let a
+# marker the author is deleting still grant.
+MARKER_SRC="$CONTENT"
+if [ "$TOOL_NAME" = "Edit" ]; then
+  _mt=""
+  if   [ -f "$FILE_PATH" ];                              then _mt="$FILE_PATH"
+  elif [ -n "$CWD" ] && [ -f "${CWD}/${FILE_PATH}" ];    then _mt="${CWD}/${FILE_PATH}"
+  fi
+  if [ -n "$_mt" ]; then
+    _mdisk="$(/bin/cat "$_mt" 2>/dev/null || true)"
+    MARKER_SRC="${CONTENT}
+${_mdisk}"
+  fi
+fi
+
 # --- PER-FILE OVERRIDE MARKERS (suppress a class for this file; matches still reported) ---
+# Read from $MARKER_SRC, not from $CONTENT: for a Write those are the same bytes, and
+# for an Edit $MARKER_SRC additionally carries the target file from disk so a file-scoped
+# declaration is visible to a fragment that does not repeat it. See MARKER SOURCE above.
 ALLOW_LINK=0
 ALLOW_VERSION=0
 ALLOW_URL=0
-if "$PRINTF" '%s\n' "$CONTENT" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->'; then
+if "$PRINTF" '%s\n' "$MARKER_SRC" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->'; then
   ALLOW_LINK=1
 fi
-if "$PRINTF" '%s\n' "$CONTENT" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->'; then
+if "$PRINTF" '%s\n' "$MARKER_SRC" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->'; then
   ALLOW_VERSION=1
 fi
-if "$PRINTF" '%s\n' "$CONTENT" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-url[[:space:]]*-->'; then
+if "$PRINTF" '%s\n' "$MARKER_SRC" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-url[[:space:]]*-->'; then
   ALLOW_URL=1
 fi
 
 # --- LEDGER-SURFACE EXEMPTION (Class U scope; mirrors the CI is_ledger_exempt predicate) ---
 # The ref-permitted ledger surfaces (the five named in the universal-vs-release-pipeline
 # split rule) are categorically exempt from the raw-URL class — a ledger URL is native
-# provenance there. The hook's durable-corpus scope gate above already excludes
-# release/releases/* and top-level CHANGELOG.md (neither matches a durable glob), so this
-# is defense-in-depth + self-documentation: if the scope gate ever widens, this stays the
-# Class-U guard. Class L / Class V / positional issue-ref are unaffected by this flag.
+# provenance there. The scope gate above excludes MOST of release/releases/* and top-level
+# CHANGELOG.md because they match no durable glob — but NOT
+# release/releases/plans/*_RELEASE_PLAN.md, which the gate deliberately INCLUDES at the
+# plans arm and which the path allowlist then exempts by directory prefix (the entry
+# release/releases/plans/ in core/config/allowlists/reference-durability-allowlist.txt,
+# whose rationale is recorded there). So a release plan never reaches this flag today —
+# the allowlist is what spares it, not the scope gate — and this guard remains
+# defense-in-depth for the surfaces the gate does reach and for any future widening.
+# Class L / Class V / positional issue-ref are unaffected by this flag.
 LEDGER_EXEMPT=0
 case "$FILE_PATH" in
   */release/releases/*|release/releases/*) LEDGER_EXEMPT=1 ;;
