@@ -268,12 +268,14 @@ A set of records is indexed here only when **all four limbs** hold. The relation
 |---|---|---|
 | **PCM-1 — Question** | The cluster is stated as one interrogative sentence, carried verbatim in the entry. | A noun-phrase label ("extend-not-create") cannot be tested against a candidate record. A question can. |
 | **PCM-2 — Answer at a distinct trigger** | Each member's own `## Decision` answers PCM-1 at a named trigger no other member occupies, and the entry quotes **≤15 words** from that section as its answer. | Converts an unverifiable semantic judgment into a checkable one. |
-| **PCM-3 — Three or more members** | The cluster holds **at least three** records. | At two, tag-similarity alone admits **106** candidate pairs corpus-wide. No rule separates a handful of those from the rest, so a two-member floor is unmaintainable by anyone but its author. |
+| **PCM-3 — Three or more members** | The cluster holds **at least three** records. | At two, mere tag-similarity — a pair sharing ≥2 tags that are not corpus-generic — admits anywhere from a couple of dozen to well over two hundred candidate pairs, the figure moving entirely with which tags one discounts as generic. No published rule fixes that cut, and none separates a handful of the resulting pairs from the rest, so a two-member floor is unmaintainable by anyone but its author. |
 | **PCM-4 — Declared anchor** | At least one member names another **in its own body** under an extends / supersedes / consumed-alongside relation. | Keeps a cluster at least partly self-declared rather than wholly inferred. |
 
 PCM-2 is what makes an entry maintainable without a tool: a reader validates one membership by reading one quoted clause against one question, with no population to re-derive and no second file to consult.
 
-**A worked exclusion, so the test is demonstrably a test.** A `canonical-home-placement` cluster of [ADR-010](ADR-010-secrets-handling-policy-substrate.md), [ADR-065](ADR-065-health-rag-band-canonical-home.md) and [ADR-067](ADR-067-stage-gate-eval-set-home.md) is topically plausible — all three decide where something lives. **ADR-010 fails PCM-2 and PCM-4**: it carries `file-location` rather than the `canonical-home` + `placement-correctness` pair *both* its proposed co-members carry, and its whole-body outbound ADR reference set is **empty**, so it can anchor nothing. Removing it leaves two records, which fails PCM-3 — so `canonical-home-placement` **is not indexed at all**. The only thing that made it a three-member cluster was an unstated judgment, which is precisely what PCM-3 exists to refuse.
+**This test currently carries no demonstrated negative, and that is a recorded limitation of it.** An earlier draft of this section excluded a `canonical-home-placement` cluster of [ADR-010](ADR-010-secrets-handling-policy-substrate.md), [ADR-065](ADR-065-health-rag-band-canonical-home.md) and [ADR-067](ADR-067-stage-gate-eval-set-home.md), and offered that exclusion as proof the test discriminates. **The exclusion was wrong on this section's own criteria.** It rested on PCM-4, but PCM-4 is a *cluster-level* limb: ADR-067 names ADR-065 in its own body, so the set clears PCM-4 whether or not ADR-010 anchors anything. Its only remaining argument was that ADR-010 carries `file-location` where the other two share `canonical-home` + `placement-correctness` — a **tag** argument, which § What this index does not claim expressly forbids as a membership rule. Read as PCM-2 actually requires, against each record's own `## Decision`, ADR-010 passes. The cluster is therefore **indexed below**, and nothing replaces it as a worked negative.
+
+**What follows from that, stated rather than hedged: PCM is demonstrated to be *necessary*, and its sufficiency is asserted rather than shown.** A membership test whose every application returns "admit" has exhibited no discrimination, so a reader should treat the four limbs as a floor every indexed cluster clears — not as evidence that some plausible cluster would fail them. Manufacturing a fresh exclusion to close this gap would reproduce exactly the defect the paragraph above records, so the gap is left open and named instead.
 
 ### The indexed clusters
 
@@ -339,15 +341,27 @@ Each entry states its question, its anchor record, and one ≤15-word quote per 
 | [ADR-070](ADR-070-methodology-pack-composition-grammar.md) | the composition grammar | *"Widen the type-pack meta-schema with a pack-composition layer — additive and backward-compatible"* |
 | [ADR-077](ADR-077-cross-cutting-control-field-layer.md) | a cross-cutting control-field layer | *"Meta-schema stays v1"* |
 
+#### Is an existing surface already this fact's home, or must one be placed?
+
+> *This fact needs exactly one canonical home — is some existing surface already that home, or does a home have to be placed for it?*
+
+**Anchor:** ADR-065, which ADR-067 names in its own `## Related ADRs` as *"the immediately-preceding placement-correctness ADR."* This is the cluster whose exclusion was falsified and then conceded — see § Membership test above. It is indexed on PCM read against each record's `## Decision`, **not** on the `canonical-home` + `placement-correctness` tag pair two of its three members happen to share; that pair is a discovery aid here exactly as § What this index does not claim describes.
+
+| Record | Trigger | Decision (verbatim, ≤15 words) |
+|---|---|---|
+| [ADR-010](ADR-010-secrets-handling-policy-substrate.md) | a net-new policy with no prior owner | *"The secrets-handling policy lives at `core/standards/secrets-handling-policy.md` as a single file"* |
+| [ADR-065](ADR-065-health-rag-band-canonical-home.md) | a metric definition whose ownership was contested | *"It is retained as the owner; the bands are NOT moved."* |
+| [ADR-067](ADR-067-stage-gate-eval-set-home.md) | a new content class under an existing skill | *"one directory per gate — and are kept OUT of eval-writer's demonstration `evals.json`"* |
+
 ### What this index does not claim
 
 **It is incomplete by construction, and that is the safe direction.** It indexes clusters that pass PCM — never *all* convergent patterns in the corpus, and never *all* members of an indexed cluster. Three consequences follow, stated rather than hedged:
 
 - **There is no automated maintenance mechanism for this section, and none can exist** — the same conclusion ADR-117 Decision (3) reached about this file. A lint requiring every new ADR to join a cluster would force a membership PCM-1 and PCM-2 may not support, manufacturing convergence to satisfy a gate. The `≥3` floor and the per-entry quote are the whole of the bound.
 - **A record merged after this section was written does not appear in it until a human adds it.** The section therefore degrades toward *incomplete-but-correct*, never toward *incorrect*: a missing member leaves an entry short, not wrong. The only edit that could make it wrong is a change to a quoted clause — and PCM-2 puts every clause beside its source, where one read settles it.
-- **Where a tag approximates a cluster it is a discovery aid, never the membership rule.** Measured: **no cluster in this index has a single tag held by all of its members** — the `work-item-type-layer` tag, for instance, is absent from ADR-018, the kernel its three carriers extend.
+- **Where a tag approximates a cluster it is a discovery aid, never the membership rule.** Measured: **no cluster in this index has a single tag held by all of its members** — the `work-item-type-layer` tag, for instance, is absent from ADR-018, the kernel its four carriers extend. The rule cuts both ways, and this section's own history is the worked case: an earlier draft *excluded* a record on a tag mismatch, and that exclusion is the one the § Membership test paragraph above records as falsified.
 
-**Baseline.** Derived by full-body read against a corpus of **171** records (`core/ADRs/` 117 + `release/ADRs/` 54) on 2026-09-01. Re-derive the denominator with `ls core/ADRs/ADR-*.md release/ADRs/ADR-*.md` rather than trusting that number after a merge.
+**Baseline.** Derived by full-body read against a corpus of **171** records (`core/ADRs/` 117 + `release/ADRs/` 54) on 2026-09-01, with the `canonical-home-placement` cluster admitted on 2026-09-02 after its exclusion was falsified at Dev Testing. Re-derive the denominator with `ls core/ADRs/ADR-*.md release/ADRs/ADR-*.md` rather than trusting that number after a merge; re-derive the roster by reading this section's own `####` entries rather than trusting any count stated elsewhere.
 
 ## Authoring new ADRs
 
