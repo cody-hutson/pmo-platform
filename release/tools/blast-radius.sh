@@ -145,7 +145,7 @@ declare -a DEFAULT_EXCLUSIONS=(
 # the structural mode — which reuses this array verbatim — could not surface them at all.
 # A gate that never sees a class of consumer returns its clean value because the consumer
 # never entered the denominator, not because it was dispositioned. The T6 group and T5l
-# are the discriminating arms: both fail if this entry is removed.
+# are the discriminating arms: both go red if the "py" entry below is removed.
 declare -a SCANNED_TYPES=(
   "md"
   "sh"
@@ -2108,12 +2108,12 @@ run_self_test() {
     rc2=0
     { [ "$rc" = "0" ] && [ "$g3_scope" = "tracked" ] && [ "${g3_tracked_py:-0}" -eq 1 ] \
       && [ "$g3_fo" = "2" ] && [ "$g3_has_py" = "true" ]; } || rc2=1
-    st_true "$rc2" "T5l TRACKED-SOURCE Python arm: git tracks ${g3_tracked_py:-0} .py file and the tracked scan enumerates it (scope=$g3_scope, first_order_count=$g3_fo of 2, has_py=$g3_has_py) — RED when py is absent from SCANNED_TYPES"
+    st_true "$rc2" "T5l TRACKED-SOURCE Python arm: git tracks ${g3_tracked_py:-0} .py file and the tracked scan enumerates it (scope=$g3_scope, first_order_count=$g3_fo of 2, has_py=$g3_has_py) — RED without the \"py\" entry in SCANNED_TYPES"
   fi
 
   # -------------------------------------------------------------------------
-  # T6 — SCANNED_TYPES coverage of Python. The defect: `py` was absent from the array,
-  # so a .py referrer was invisible to every scan. That is not a missing row in a report;
+  # T6 — SCANNED_TYPES coverage of Python. The defect: the "py" entry was absent from the
+  # array, so a .py referrer was invisible to every scan. That is not a missing row in a report;
   # it is a consumer class that never enters the denominator, so any rule computing a
   # verdict over "flagged consumers" returns its clean value on a change whose only
   # consumer is Python — clean because unseen, not because dispositioned.
@@ -2143,7 +2143,7 @@ run_self_test() {
 
   rc2=0
   { [ "$py_fo" = "2" ] && [ "$py_has_py" = "true" ]; } || rc2=1
-  st_true "$rc2" "T6a THE DEFECT ASSERTION: a .py referrer is enumerated — first_order_count=$py_fo (expect 2: one .md sibling + one .py) and the .py path is named (has_py=$py_has_py) — RED when py is absent from SCANNED_TYPES"
+  st_true "$rc2" "T6a THE DEFECT ASSERTION: a .py referrer is enumerated — first_order_count=$py_fo (expect 2: one .md sibling + one .py) and the .py path is named (has_py=$py_has_py) — RED without the \"py\" entry in SCANNED_TYPES"
 
   printf '\n%s/%s assertions passed, %s skipped\n' "$pass" "$((pass + fail))" "$skipped"
   if [ "$skipped" -gt 0 ]; then
