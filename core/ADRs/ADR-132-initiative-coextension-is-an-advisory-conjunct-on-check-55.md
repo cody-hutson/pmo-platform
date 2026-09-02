@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-132 — Initiative-coextension is an advisory conjunct on Check 55, not a second epic-tiering check"
-status: Proposed
+status: Accepted
 date: 2026-08-10
 release: triage-and-backlog-instrumentation
 deciders: "operator (Stage-5 Decision Recorded — lexical conjunct ACCEPTED with the stated containment) + Stage 5 Solutioning spoke (design) + Stage 6 Engineering spoke (implementation)"
@@ -19,7 +19,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Engineering for the `triage-and-backlog-instrumentation` release; ratified at that release's plan-review gate.
+**Accepted.** Authored at Engineering for the `triage-and-backlog-instrumentation` release; ratified at that release's plan-review gate.
 
 ## Context
 

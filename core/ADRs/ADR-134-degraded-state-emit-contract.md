@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-134 — Degraded-state emit contract: a check reports its own measurement status"
-status: Proposed
+status: Accepted
 date: 2026-08-14
 release: check-fail-open-elimination
 deciders: "operator (Stage-4 gate: Release Class + scope; Collective Review scope-lock) + Stage 5 Solutioning spoke (design, D-1 through D-4) + hub adversarial evaluation (R1, verified rather than accepted) + Stage 6 Engineering spoke (implementation)"
@@ -20,7 +20,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Engineering for the `check-fail-open-elimination` release; ratified at that release's plan-review gate.
+**Accepted.** Authored at Engineering for the `check-fail-open-elimination` release; ratified at that release's plan-review gate.
 
 **Numbering provenance — `133 → 134`.** Held **ADR-133** branch-local; renumbered to **ADR-134** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 133. In-release citations that read "ADR-133" denote this record.
 

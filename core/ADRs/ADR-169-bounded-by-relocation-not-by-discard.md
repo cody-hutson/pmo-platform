@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-169 — An append-only log whose consumer needs its history is bounded by relocation, not by discard"
-status: Proposed — flips to Accepted when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
+status: Accepted
 date: 2026-08-29
 release: warn-mode-gate-graduation
 deciders: "Stage 5 Solutioning spoke (design, evidence-grounding) + operator ratification at Collective Review (D-10 fork resolution and warrant repair, D-11/D-23 ADR authorization, D-27 constant rename) + Stage 6 Engineering spoke (build, R1 re-grounding)"
@@ -20,7 +20,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — flips to **Accepted** when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified.
+**Accepted.** Ratified at the `warn-mode-gate-graduation` release's plan-review gate.
 
 **Numbering provenance.** Allocated at this Engineering commit as the next number above the **union** of the mainline anchor and this branch's own in-flight claims. `renumber-adr.py --detect` reported `ANCHOR 162 origin/main`, `NEXT-FREE 163`, and `CLAIMED-SET-BRANCH-ONLY 163,164 (detection only — never binds)`. The oracle anchors on mainline and cannot see a sibling's unmerged claim, so `--next-free` alone would have collided **twice** on this same branch. 165 was taken against the union and re-verified to report `BINDS`.
 

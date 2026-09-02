@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.47 (2026-09-02) — Decision records can now say what replaced them — and how much
+
 ### v4.46 (2026-09-02) — Portfolio frameworks get a home, and a plan check stops missing files
 
 ### v4.45 (2026-08-31) — Checks now report what they actually measured

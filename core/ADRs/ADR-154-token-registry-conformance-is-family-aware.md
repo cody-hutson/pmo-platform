@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-154 — Token-registry conformance is family-aware: the operator-token vocabulary carries two registry contracts, not one"
-status: Proposed — flips to Accepted at this release's operator gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
+status: Accepted
 date: 2026-08-24
 release: checks-see-whole-subject
 deciders: "Stage 5 Solutioning spoke (design) + two independent adversarial design-review passes (one Blocker each) + operator (scope decisions; ADR authorization) + Stage 6 Engineering spoke (build)"
@@ -21,7 +21,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Stage 6 Engineering for the `checks-see-whole-subject` release. It flips to Accepted when the operator ratifies it at the release gate; the flip is recorded in this file's `status:` field.
+**Accepted.** Authored at Stage 6 Engineering for the `checks-see-whole-subject` release.
 
 **Numbering provenance — `144 → 150`.** Held **ADR-144** branch-local; renumbered to **ADR-150** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 144. In-release citations that read "ADR-144" denote this record.
 

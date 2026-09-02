@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.47 | adr-corpus-status-integrity | 2026-09-02 | — | #6626 | [notes/v4.47_RELEASE_NOTES.md](notes/v4.47_RELEASE_NOTES.md) |
 | v4.46 | portfolio-tier-framework-pack | 2026-09-02 | — | #6644 | [notes/v4.46_RELEASE_NOTES.md](notes/v4.46_RELEASE_NOTES.md) |
 | v4.45 | warn-mode-gate-graduation | 2026-08-30 | — | #6357 | [notes/v4.45_RELEASE_NOTES.md](notes/v4.45_RELEASE_NOTES.md) |
 | v4.44 | skill-surface-sync | 2026-08-30 | — | #6406 | [notes/v4.44_RELEASE_NOTES.md](notes/v4.44_RELEASE_NOTES.md) |

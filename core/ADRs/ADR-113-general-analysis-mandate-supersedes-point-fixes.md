@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-113 — A general analysis-mandate rule supersedes per-surface read-only point fixes
-status: Proposed
+status: Accepted
 date: 2026-08-04
 release: agent-edit-discipline-codification
 deciders: "Workspace owner (ratifies at the Stage 9 GO gate); design authored at Stage 5 Solutioning under the Principal Engineer persona; clause-file name resolved at Stage 6 Engineering after Collective Review declined to lock a shared container"
@@ -18,7 +18,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Flips to **Accepted** at this release's Stage-9 GO gate. Per the established precedent the flip is verified against this file's own `status:` field and is never assumed from milestone closure.
+**Accepted.** Ratified at the `agent-edit-discipline-codification` release's plan-review gate.
 
 **Numbering.** ADR numbers are platform-global monotonic across **both** homes (`core/ADRs/` and `release/ADRs/`), including in-flight pull-request claims. Re-verified at Engineering Commit 0: the union of both directories tops out at 112, and one open pull request holds 110 and 111. This record therefore takes **113**. The gap-free gate consequently reports the same transient, self-closing gap already documented for 112 — it names 110 and 111 as missing, not 113. That is the gate working, and it closes when the holder of 110/111 lands. Renumbering downward into a slot an open pull request holds would trade a transient gap for a permanent duplicate.
 

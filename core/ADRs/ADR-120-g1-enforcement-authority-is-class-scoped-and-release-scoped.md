@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-120 — G1 enforcement authority is class-scoped and release-scoped; the evaluated population is the deploying milestone
-status: Proposed — flips to Accepted at this release's operator gate. The flip is verified against this file's `status:` field, never inferred from milestone closure, a review comment, or a plan row.
+status: Accepted
 date: 2026-08-06
 release: release-check-enforcement-gates
 deciders: "Workspace owner (scope-lock granted at Collective Review, with one Blocker deferred into Engineering as a gating acceptance criterion); two-axis scope model designed at Stage 5 Solutioning across two design passes and two independent adversarial reviews; resolution mechanism re-designed on remand; authored at Stage 6"
@@ -21,7 +21,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — authored at Stage 6 per the Stage-6 ADR-authoring precedent, flipping to **Accepted** at this release's operator gate. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified.
+**Accepted** — authored at Stage 6 per the Stage-6 ADR-authoring precedent.
 
 **Numbering provenance — allocated `120`, and the contention is expected rather than avoided.** The Stage-4 plan named ADR-119; that number bound to a sibling release which merged mid-remand. The re-design then allocated 120 against a mainline that topped out at 119. At authorship time **two live sibling release branches each also hold an ADR-120**, and the first instinct — step past the contention to 121 — was tried and is **wrong**: the numbering gate enforces a **gap-free** global sequence, so a record merging at 121 while 120 is unclaimed on the mainline lands a gap that fails every subsequent pull request. This was not reasoned out; it was caught by running the governed checker, which rejected 121 with `GAP: the global sequence 001..121 is not contiguous`. The rule the ADR README already records is the operative one: **an unmerged claim does not bind the sequence, first-to-merge takes the number, and the other claimants renumber at merge.** This record therefore holds 120 branch-local and expects to renumber if a sibling merges first; each hop appends its own `old → new` provenance note here.
 
