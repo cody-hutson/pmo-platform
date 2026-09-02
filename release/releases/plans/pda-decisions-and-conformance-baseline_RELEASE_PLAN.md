@@ -317,7 +317,7 @@ Departures from the Stage-4 plan of record, ratified at the **Collective Review 
 
 ## Change Description
 
-(Authored per `release/governance/RELEASE_PROTOCOL.md` § Change Description Protocol; refreshed as slices land on this branch — as of Engineering Commit 0 plus the #5840 slice, the baseline measurement is the engineered portion; the two ADRs and the #5841 recommendation land in subsequent slices.)
+(Authored per `release/governance/RELEASE_PROTOCOL.md` § Change Description Protocol; refreshed as slices land on this branch — as of Engineering Commit 0 plus the #5840 and #5838 slices, the baseline measurement and the lifecycle audit-trail carrier ADR (ADR-173) are the engineered portion; the cross-boundary key-form ADR and the #5841 recommendation land in subsequent slices.)
 
 ### Outcome
 
@@ -330,7 +330,7 @@ This release converts the PDA remediation arc's biggest unknowns into decided, m
 | #5840 | Instance conformance baseline (operator-local measurement report; counts + rule classes only) | `artifact-accepted` (operator-local canonical path, declared by design; acceptance evidence = per-stage sub-task record) |
 | #5841 | Validator-surface recommendation (ADR conditional) | pending slice |
 | #5836 | Cross-boundary key-form ADR | pending slice |
-| #5838 | Lifecycle audit-trail carrier ADR | pending slice |
+| #5838 | Lifecycle audit-trail carrier ADR | `artifact-accepted` (`core/ADRs/ADR-173-lifecycle-audit-trail-carrier-or-retirement.md` on this branch) |
 
 ### Key decisions
 
@@ -371,3 +371,21 @@ Populated per slice as it lands (stage-06 Phase C4 self-verification); the PR-as
 | Deliverable | Declared canonical path | Acceptance evidence |
 |---|---|---|
 | Instance conformance baseline (#5840, task-class, operator-local by design) | `analysis/conformance-baseline-2026-09-02/` in the git-ignored analysis workspace (landed in the release worktree per the Deviation Log; user-side copy to the primary checkout handed off on #6651) | #6651 Stage-6 comment (counts-only public body, verbatim) + `evidence/run-manifest.json` + `evidence/fixture-controls.json` + banked punch lists `runs/P1..P3-structure.md` |
+
+### #5838 slice (Engineering spoke #6663, 2026-09-02)
+
+| Check | Evidence | Verdict |
+|---|---|---|
+| AC-1 (exactly one carrier option selected, with rationale) | ADR-173 Decision §§1–2 select option (b) — retire `lifecycle_events`; the frontmatter last-transition triple is the only lifecycle state. Alternatives Considered carries the full 5-candidate carrier table with kill-reasons + the 2-survivor trade-off. Method probe: `grep -cE '^#+.*Decision'` → 1 | PASS |
+| AC-2 (Check 6.2 + Domain-C checklist dispositions both named) | Decision §4 names health-check **Check 6.2** — RESTATE as a frontmatter predicate over the governed approval-class trigger vocabulary with fail-closed absent semantics — and both **Domain-C** checklist items: published-without-approval → RESTATE (identical predicate); per-transition audit-trail item → RETIRE-AND-REPLACE with the last-transition claim. Method probe: `grep -ciE 'Check 6\.2|Domain-C'` → 3 | PASS |
+| AC-3 (surviving guarantee stated explicitly) | Decision §5 "The surviving guarantee": **"rebuild is identical" survives, now unqualified; "audit trail" is retired as an index claim**, with the honest residual stated (per-transition history recorded nowhere until the re-open conditions hold). Method probe: `grep -ciE 'surviving guarantee'` → 1 | PASS |
+| Entry condition 10 (Check 6.2 predicate repair — binding, scope-lock) | Repair path **(a)** selected and recorded: closed two-member approval-class vocabulary (`human-approval`, `human-re-validation`) bound one-to-one to the protocol's exhaustive two human edges into `published`; absent value = violation pinned on BOTH evaluation substrates (frontmatter read AND SQL NULL); fixture disposition = reconcile the two committed `published`+`retroactive-backfill` fixtures in the delivery child, NO grandfather clause (affected stock closed at 2 committed files, 0 live). Rejected forms recorded in ADR-173 Alternatives (P1 predicate-as-drafted, P3 UNVERIFIED-defer, P4 grandfather) | DISCHARGED |
+| ADR numbering (CIAC-1 input) | `renumber-adr.py --detect` at the commit instant: `ANCHOR 172 origin/main / NEXT-FREE 173 / CLAIMED-SET-BRANCH-ONLY 173,174,175,176 (never binds) / CLAIM NONE` for this tree → union = mainline anchor alone → allocated **ADR-173**; post-write re-run reports `CLAIM ADR-173 … BINDS`. Numbering-provenance block recorded in the record's Status section | PASS |
+| Durability lint (governed check, with control arm) | `check-adr-durability.py --files core/ADRs/ADR-173-… --diff-base origin/main` → `COUNT 0` (R5 net-new structural rule ACTIVE); control arm — `## Reversibility` heading temporarily broken → `R5-NEW` fired, `COUNT 1`, exit 1 — instrument verified live, then restored and re-run green | PASS |
+| Consumer fan-out reproduction (probe integrity) | Independent python3 walk at this branch tip: 5 files / 28 reference lines (29 token occurrences — the schema invocation-table row carries the token twice) over denominator 1,538; sensitivity arm `lifecycle_state` → 105 files; specificity arm fabricated token → 0; ADR-home ownership probe 0/174 with control fired | PASS |
+
+**Artifact-Acceptance Record (deliverable_state: `artifact-accepted`):**
+
+| Deliverable | Declared canonical path | Acceptance evidence |
+|---|---|---|
+| Lifecycle audit-trail carrier decision record (#5838, task-class) | `core/ADRs/ADR-173-lifecycle-audit-trail-carrier-or-retirement.md` (this branch) | The record itself (durability lint COUNT 0 with fired control arm; AC method probes above; status `Proposed` pending Stage 9 ratification) + #6663 Stage-6 comment |
