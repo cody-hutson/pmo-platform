@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-171 — A kind projection of a declared category row is one classification at two altitudes, not two competing labels"
+title: "ADR-175 — A kind projection of a declared category row is one classification at two altitudes, not two competing labels"
 status: Accepted
 date: 2026-09-01
 release: label-and-reference-integrity
@@ -15,13 +15,15 @@ source_observations:
   - "One live label in the family resolves to no declared kind and is nonetheless correct: a frozen legacy alias of a category row that three named consumers read, and that the grammar states outright must not be deleted. A hardening with no tolerated arm would report it forever and invite exactly the deletion those consumers cannot survive."
 ---
 
-# ADR-171 — A kind projection of a declared category row is one classification at two altitudes, not two competing labels
+# ADR-175 — A kind projection of a declared category row is one classification at two altitudes, not two competing labels
 
 ## Status
 
 **Accepted.** Authored at Engineering for the `label-and-reference-integrity` release.
 
-**Numbering provenance.** Held **ADR-171** branch-local. The binding oracle is the highest number on the mainline plus one, which resolved to 170 at authoring time; 170 is held by the sibling record landed earlier on this same branch, so this record takes 171. Stepping higher to dodge a *visible claim on another unmerged branch* was rejected deliberately: a duplicate is the cheap failure the renumbering tool resolves at merge, whereas a gap fails the contiguity gate and blocks every subsequent record until someone fills it. If the mainline claims 171 first, the tool renumbers this record at merge and in-release citations that read "ADR-171" denote it.
+**Numbering provenance.** Held **ADR-175** branch-local. The binding oracle is the highest number on the mainline plus one, which resolved to 170 at authoring time; 170 is held by the sibling record landed earlier on this same branch, so this record takes 171. Stepping higher to dodge a *visible claim on another unmerged branch* was rejected deliberately: a duplicate is the cheap failure the renumbering tool resolves at merge, whereas a gap fails the contiguity gate and blocks every subsequent record until someone fills it. If the mainline claims 171 first, the tool renumbers this record at merge and in-release citations that read "ADR-175" denote it.
+
+**Numbering provenance — `171 → 175`.** Held **ADR-171** branch-local; renumbered to **ADR-175** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 171. In-release citations that read "ADR-171" denote this record.
 
 ## Context
 

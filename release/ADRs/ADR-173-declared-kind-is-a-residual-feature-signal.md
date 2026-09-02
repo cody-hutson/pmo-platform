@@ -5,7 +5,7 @@ status: Accepted
 date: 2026-09-02
 release: label-and-reference-integrity
 deciders: "Stage 5 Solutioning spoke (three-option analysis on the tier placement, three on which implementation the fix lands in) + Stage 6 Engineering spoke (build, simulation, re-derivation against the closed release that surfaced the defect)"
-tags: [release-velocity, allocation, work-class, label-taxonomy, work-item-kind, precedence, measurement-fidelity, plug-and-play, ADR-018, ADR-171]
+tags: [release-velocity, allocation, work-class, label-taxonomy, work-item-kind, precedence, measurement-fidelity, plug-and-play, ADR-018, ADR-175]
 source_observations:
   - "A closed release recorded its allocation as wholly debt on a membership that was half stories. The bucket was defensible on the merits; the route was not — the stories carried a provenance label the map did not recognise and a kind label the map named no arm for, so they fell to the conservative default. An issue of that shape could not register as feature allocation regardless of its content, so the metric was not measuring what it reported."
   - "The map was a hand-maintained enumeration that had drifted from the live label set on THREE independent counts, not the one the defect report named. Two further tokens were phantom — named by the map, present in no live label set and in no pack declaration — so their arms read as coverage while covering nothing."
@@ -101,5 +101,5 @@ Four obligations follow, and none substitutes for the others.
 ## Related ADRs
 
 - **ADR-018** — establishes the work-item-kind discriminator whose label projection this map now reads as a residual signal. This record governs the projection's PRECEDENCE inside one measurement instrument; it does not touch the discriminator.
-- **ADR-171** — the sibling record from this release. It establishes that a kind projection of a declared category row is one classification at two altitudes, and narrows the parity gate onto the pack declarations. This record consumes that resolver rather than forking one, and its chosen tier order reaches the same non-competition conclusion by precedence rather than by a runtime test — so the two remain consistent without either depending on the other's mechanism.
+- **ADR-175** — the sibling record from this release. It establishes that a kind projection of a declared category row is one classification at two altitudes, and narrows the parity gate onto the pack declarations. This record consumes that resolver rather than forking one, and its chosen tier order reaches the same non-competition conclusion by precedence rather than by a runtime test — so the two remain consistent without either depending on the other's mechanism.
 - **ADR-174** — the sibling record establishing that an unrecognized verdict class is a finding rather than an absence. The same instinct governs the degrade path here: an unavailable kind tier is announced, never silently absorbed into a quieter bucket.

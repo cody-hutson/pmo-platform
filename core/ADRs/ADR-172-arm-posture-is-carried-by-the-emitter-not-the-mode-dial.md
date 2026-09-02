@@ -5,7 +5,7 @@ status: Accepted
 date: 2026-09-02
 release: label-and-reference-integrity
 deciders: "Stage 5 Solutioning spoke (four-candidate design exploration on the class, four on the registry home) + Stage 6 Engineering spoke (build, mutation testing, live consumer proof) + Collective Review (the operator-run label cascade is gated separately at Stage 9)"
-tags: [deploy-check, gate-posture, advisory-only, verdict-class, label-parity, fail-open, non-escalating-arm, ADR-174, ADR-171]
+tags: [deploy-check, gate-posture, advisory-only, verdict-class, label-parity, fail-open, non-escalating-arm, ADR-174, ADR-175]
 source_observations:
   - "The mode resolver that decides whether a deploy check warns or fails is keyed on the CHECK id. A check with several finding arms therefore has exactly one dial for all of them: flipping the check to enforce arms every arm at once, including arms whose finding class must never block."
   - "A new finding class was needed whose remedy overwrites live label metadata — repository state that no revert restores — and which the gate structurally cannot distinguish from a deliberate operator override. Routing it through the escalating emitter would have made 32 such rows blocking the moment anyone flipped the shared dial, for reasons unrelated to that class."
@@ -97,4 +97,4 @@ An arm that fails any of these belongs on the shared dial with its siblings. Thi
 ## Related ADRs
 
 - **ADR-174** — established that a contradiction between two governed surfaces gets its own verdict class rather than being folded into a class with a different remedy, and that a consumer treats an unrecognised class as a finding rather than an absence. This record answers the question ADR-174 leaves open once a class exists: what *posture* the new arm carries, and where that posture lives.
-- **ADR-171** — decided how a declared kind projects into the same check's canonical set. It shares this check and this release; the two are independent, and the arm this record governs neither reads nor is read by that projection.
+- **ADR-175** — decided how a declared kind projects into the same check's canonical set. It shares this check and this release; the two are independent, and the arm this record governs neither reads nor is read by that projection.
