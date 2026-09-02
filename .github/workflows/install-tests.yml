@@ -576,6 +576,34 @@ jobs:
         # workspace files, no ${{ }} interpolation inside the run: block.
         run: bash core/deploy/tests/test_check73_bundle_metrics_discrimination.sh
 
+      - name: Run Check 54 ownership-collision teeth suite (test_check54_ownership_collision_teeth.sh)
+        # Check 54's ADR-044 I3 and I4 invariants both key on a `Maintains-entity:`
+        # marker in core/schemas/per-skill-output-contracts.md, and until this
+        # milestone the corpus carried zero of them — so the escalate predicate was
+        # zero-ESCALATE by construction and the check read as coverage while
+        # enforcing nothing. The primitive's own --self-test does not close that: it
+        # asserts I1-fires / I3-fires against three-row fixtures written inline in
+        # its own source, which shows the predicate compiles, never that it fires on
+        # the real 19-entity owning-agent matrix. This suite runs every arm against
+        # COPIES of the live corpus with one mutation each: specificity arms require
+        # the unmutated corpus to exit 0, sensitivity arms require exit 1 AND that
+        # the output names the invariant, the declaring skill, the entity, and the
+        # section-6 owner. A vacuity guard re-reads section 6 at run time, so a
+        # future ownership change fails this suite instead of letting the I3 arm
+        # pass against a marker that no longer contradicts anything. A mutation
+        # guard asserts each fixture actually differs from its source, since a
+        # transform that silently matched nothing would leave the specificity arms
+        # passing for the wrong reason. Its placement arm relocates the contracts
+        # file's own worked marker example into a skill section and requires a
+        # collision — the example is inert only because it sits above the first
+        # skill header, and an editor who tidies it into the catalogue would
+        # otherwise arm a false I3 silently.
+        #
+        # Hermetic: fixtures under mktemp -d, the durable corpus read-only, no gh,
+        # no network. Consumes no workflow event input — a static invocation
+        # against workspace files, no interpolation of any kind inside the run: block.
+        run: bash core/deploy/tests/test_check54_ownership_collision_teeth.sh
+
       - name: Run Check 22 G1-06 priority-carrier regression (test_g1_06_priority_carrier.sh)
         # Check 22's G1-06 criterion used to bind one priority carrier and was
         # therefore blind to every body the intake form renders. The fix delegates
