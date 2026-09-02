@@ -333,6 +333,106 @@ AMBIGUOUS_SECTIONS = (
 
 RECORD, AMBIGUOUS, CITE = "RECORD", "AMBIGUOUS", "CITE"
 
+# ---- the sub-line carve-out (DEV-36) --------------------------------------
+#
+# A verdict is per LINE, and a gate criterion is ONE physical table row. The
+# G-EX9 row illustrates the multi-hop defect with a `110 → 114 → 118` token — which
+# matches `PROVENANCE_FREEFORM_RE` — and, in the same row, carries a live markdown
+# link to the record it cites. The row therefore RECORDS an illustrative hop and
+# CITES a live cross-reference at once. One verdict per line cannot say both; it
+# said RECORD, and a RECORD line is neither rewritten nor scanned, so the sweep
+# stepped over a link whose target it had just renamed and R6 reported zero
+# dangling. `check-doc-links.py` then failed the merge closed.
+#
+# DT-1 governed a verdict's EXTENT — how far it propagates down a paragraph. This
+# governs its GRANULARITY, which no line-level verdict can express correctly,
+# because the line genuinely is both.
+#
+# WHY A MARKDOWN LINK IS THE CARVE-OUT. A link is a USE by construction: it binds
+# display text to a resolvable target, and resolvability is checkable. A record of
+# a number the tree no longer holds has no reason to link to the file that number
+# vacated — the target is gone, so the link is dangling the moment it is written.
+# Prose, code spans and bare tokens carry no such guarantee, which is exactly why
+# they stay under the line verdict.
+#
+# MEASURED BEFORE ADOPTION — the measurement chose the shape, and rejected the
+# other candidate. Population: the 612 `ADR-NNN` tokens sitting on a RECORD-verdict
+# line across the 1,858 UTF-8 tracked files, 210 of them inside a provenance note.
+#   · link-span carve-out (adopted): reclassifies 4 of 612 (0.65%). ZERO of them
+#     inside a provenance note; all four on the one defective row — two `ADR-170`
+#     (the dangling pair) and two `ADR-115` (a live, correct link the same row was
+#     hiding from the sweep for the same reason).
+#   · opener-match span — "everything outside the RECORD_OPENERS match is a CITE
+#     span", the literal sub-line reading: reclassifies 450 of 612 (73.5%),
+#     including 210 of 210 provenance-note tokens. A provenance note's own
+#     `Held **ADR-004** … renumbered to **ADR-005**` body sits OUTSIDE the
+#     `**Numbering provenance — `004 → 005`.**` match, so that partition rewrites
+#     every note in the corpus and revokes `provenance/sweep-exempts-every-hop`
+#     outright. It is DT-1's `^`-anchor mistake again: an obvious-looking widening
+#     whose real population is the exemption it was meant to preserve.
+#
+# SCOPED TO RECORD, DELIBERATELY. AMBIGUOUS keeps its contract whole — never
+# rewritten, always named — because AMBIGUOUS means the two readings are LEXICALLY
+# identical, and a carve-out that overrode it would decide the case the third
+# verdict exists to refuse to decide. The Deviation Log row that records this very
+# collision in prose is the live proof: it names the vacated path on purpose.
+MD_INLINE_LINK_RE = re.compile(r"\[[^\]]*\]\([^)]*\)")
+
+# A REGISTRY, on the same principle as `RECORD_OPENERS`: widening the carve-out is
+# adding a row, never editing a predicate body.
+CITE_CARVEOUTS = (
+    ("markdown-inline-link", MD_INLINE_LINK_RE),
+)
+
+
+def _cite_carveout_spans(line):
+    """The spans of ``line`` that are a CITE regardless of the line's verdict.
+
+    Returned sorted and non-overlapping, because ``_sub_in_spans`` reconstructs
+    the line by walking them once in order.
+    """
+    spans = []
+    for _name, pattern in CITE_CARVEOUTS:
+        spans.extend(m.span() for m in pattern.finditer(line))
+    spans.sort()
+    merged = []
+    for a, b in spans:
+        if merged and a <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+        else:
+            merged.append((a, b))
+    return merged
+
+
+def _sub_in_spans(pattern, repl, line, spans):
+    """``pattern`` → ``repl``, applied ONLY inside ``spans``. Returns (text, n).
+
+    An empty ``spans`` is the identity, byte for byte. That is what keeps this
+    change inert on the 608 of 612 RECORD-line tokens the measurement says must
+    not move: no carve-out, no rewrite, and the line is returned unchanged rather
+    than round-tripped through a substitution that happened to match nothing.
+    """
+    if not spans:
+        return line, 0
+    out, n, cursor = [], 0, 0
+    for a, b in spans:
+        out.append(line[cursor:a])
+        chunk, k = pattern.subn(repl, line[a:b])
+        out.append(chunk)
+        n += k
+        cursor = b
+    out.append(line[cursor:])
+    return "".join(out), n
+
+
+def _text_in_spans(line, spans):
+    """The ``spans`` of ``line``, joined by a NEWLINE so no token spans a seam.
+
+    Joining with the empty string would let the tail of one span and the head of
+    the next compose a token that is in neither — a scan reading its own splice.
+    """
+    return "\n".join(line[a:b] for a, b in spans)
+
 # ---- late-binding citations (ADR-173) -------------------------------------
 #
 # The VERSION has had a late-binding rule since ADR-092: the plan carries
@@ -668,8 +768,13 @@ def _is_paragraph_continuation(line):
     return True
 
 
-def classify_lines(text):
-    """THE single exemption authority. Returns one verdict per line.
+def _classify(text):
+    """THE single exemption authority. Returns ``(verdicts, carveouts)``.
+
+    Both public accessors — ``classify_lines`` and ``cite_carveouts`` — are thin
+    readers of this ONE traversal. Splitting the carve-out into its own pass over
+    the same rules would re-create the dry-run/apply divergence by construction,
+    which is the defect this module was rebuilt to make impossible.
 
     Three verdicts, and the third one is the whole discrimination answer:
 
@@ -700,6 +805,24 @@ def classify_lines(text):
     R-6  otherwise                                               ``CITE``
     ==== ====================================================== ============
 
+    R-1..R-6 decide the LINE. One further rule decides sub-line GRANULARITY, and
+    it applies after the verdict rather than inside the precedence order, because
+    it does not compete with the six above — it says which part of an already-
+    RECORD line the verdict does not reach:
+
+    ==== ====================================================== ============
+    R-7  a ``CITE_CARVEOUTS`` span on a ``RECORD`` line, when
+         that line is not inside a fence                        ``CITE`` span
+    ==== ====================================================== ============
+
+    R-7 is scoped to ``RECORD`` on purpose. ``AMBIGUOUS`` is the verdict that
+    declines to decide between two LEXICALLY identical readings, so a carve-out
+    that overrode it would decide exactly the case it exists to refuse. The fence
+    guard matters for the same reason ``check-doc-links.py`` skips fenced blocks:
+    a link inside a fence renders as literal text and resolves nothing, so
+    rewriting it would edit an example — the USE-versus-MENTION error in
+    miniature.
+
     EVERY consumer of the exemption calls this and only this. A second classifier
     in this module is the dry-run/apply divergence re-created by construction —
     which is precisely the defect that shipped when the reporting path counted raw
@@ -707,6 +830,7 @@ def classify_lines(text):
     """
     lines = text.split("\n")
     verdicts = []
+    fenced = []               # per-line fence state, read by R-7 after the loop
     in_fence = False
     record_run = False
     para_open = False         # the previous line left a paragraph body open
@@ -714,6 +838,12 @@ def classify_lines(text):
 
     for line in lines:
         stripped = line.strip()
+
+        # Recorded FIRST, before any branch, because every branch below
+        # `continue`s. This is `in_fence` as it stands ENTERING the line, so a
+        # fence delimiter is not itself fenced content — which is moot for the
+        # carve-out (a delimiter is CITE either way) and correct for the reader.
+        fenced.append(in_fence)
 
         # ---- paragraph position (DT-1) -----------------------------------
         # Computed BEFORE any verdict branch, because every branch below
@@ -782,7 +912,29 @@ def classify_lines(text):
             continue
         verdicts.append(CITE)
 
-    return verdicts
+    # ---- R-7, the sub-line carve-out -------------------------------------
+    # Derived from THIS traversal's own verdicts and fence state, so it cannot
+    # disagree with them. Empty for every non-RECORD line, which is what makes
+    # the carve-out impossible to misapply to AMBIGUOUS: there is nothing there
+    # to apply.
+    carveouts = [_cite_carveout_spans(ln) if (v == RECORD and not f) else []
+                 for ln, v, f in zip(lines, verdicts, fenced)]
+    return verdicts, carveouts
+
+
+def classify_lines(text):
+    """One verdict per line, from the single authority. See ``_classify``."""
+    return _classify(text)[0]
+
+
+def cite_carveouts(text):
+    """Per line, the spans a ``RECORD`` verdict does NOT cover. See ``_classify``.
+
+    The list is index-parallel to ``classify_lines(text)`` and empty on every
+    non-``RECORD`` line. Consumers pair the two: the verdict says whether to
+    sweep the line, this says which part of an exempt line is nonetheless live.
+    """
+    return _classify(text)[1]
 
 
 def is_historical_numbering_line(line):
@@ -816,12 +968,21 @@ def rewrite_citations(text, old, new, preserve_historical=True):
     """
     pattern, repl = citation_re(old), f"ADR-{new:03d}"
     lines = text.split("\n")
-    verdicts = (classify_lines(text) if preserve_historical
-                else [CITE] * len(lines))
+    if preserve_historical:
+        verdicts, carveouts = _classify(text)
+    else:
+        verdicts, carveouts = [CITE] * len(lines), [[] for _ in lines]
     out, count, review = [], 0, []
-    for i, (line, verdict) in enumerate(zip(lines, verdicts), start=1):
+    for i, (line, verdict, carve) in enumerate(
+            zip(lines, verdicts, carveouts), start=1):
         if verdict == RECORD:
-            out.append(line)
+            # R-7. The line is exempt EXCEPT its carve-out spans. With no
+            # carve-out `_sub_in_spans` is the identity, so this is the
+            # pre-DEV-36 branch byte for byte on all but 4 of the corpus's 612
+            # RECORD-line tokens.
+            rewritten, n = _sub_in_spans(pattern, repl, line, carve)
+            out.append(rewritten)
+            count += n
             continue
         if verdict == AMBIGUOUS:
             out.append(line)
@@ -1484,10 +1645,19 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
         lines = p.read_text(encoding="utf-8").split("\n")
         if rel in PROJECTED_INDEXES:
             lines = _strip_projected_region(lines)
-        verdicts = classify_lines("\n".join(lines))
+        verdicts, carveouts = _classify("\n".join(lines))
         scanned = []
-        for i, (ln, verdict) in enumerate(zip(lines, verdicts), start=1):
+        for i, (ln, verdict, carve) in enumerate(
+                zip(lines, verdicts, carveouts), start=1):
             if verdict == RECORD:
+                # R-7. "Never scanned" used to be unconditional, and that is
+                # how a dangling link on a RECORD line reached the mainline
+                # under a green zero-dangling verdict. The exempt part of the
+                # line is still not scanned; its carve-out spans are, because
+                # a link the rename just invalidated is a defect R6 exists to
+                # find. No carve-out contributes nothing, exactly as before.
+                if carve:
+                    scanned.append(_text_in_spans(ln, carve))
                 continue
             if verdict == AMBIGUOUS:
                 if citation_re(old).search(ln):
@@ -1884,6 +2054,92 @@ def self_test():
     eq("extent/a-second-pair-mid-run-does-not-close-it",
        rc2(second_pair, 4, 5), (second_pair, 0))
 
+    # ---- DEV-36: the MIXED line, where one verdict is not enough ------------
+    #
+    # The production shape, reduced: a gate-criteria table row that illustrates a
+    # multi-hop defect with a bare `NNN → NNN` pair — so `PROVENANCE_FREEFORM_RE`
+    # fires and the row is RECORD — and that ALSO carries a live markdown link to
+    # the record the criterion cites. Pre-DEV-36 the row was neither rewritten nor
+    # scanned, so the rename left a dangling link and R6 reported zero.
+    #
+    # These arms fail on the pre-DEV-36 build. Verified by running them against
+    # it, not asserted: `carveout/mixed-line-link-is-swept` returns 0 where 2 is
+    # required, and `carveout/note-keeps-its-own-numbers-but-not-its-link`
+    # returns the input unchanged.
+    mixed = ("| G-EX9 | a record that hopped twice (`110 → 114 → 118`) has "
+             "vacated 114, so the limb arrives with "
+             "[`ADR-004`](../ADRs/ADR-004-slug.md) instead. |")
+    # The verdict does NOT change, and that is the point: the row really does
+    # record a hop. An implementation that "fixed" this by demoting the line to
+    # CITE would sweep the illustrative pair and fail HERE.
+    eq("carveout/mixed-line-verdict-is-still-record",
+       classify_lines(mixed)[0], RECORD)
+    # SENSITIVITY — both tokens inside the link move: the display text and the
+    # path. Two, not one; a rewrite that reached only the visible label would
+    # leave the target dangling, which is the same defect wearing a fix.
+    eq("carveout/mixed-line-link-is-swept",
+       rc2(mixed, 4, 5),
+       ("| G-EX9 | a record that hopped twice (`110 → 114 → 118`) has "
+        "vacated 114, so the limb arrives with "
+        "[`ADR-005`](../ADRs/ADR-005-slug.md) instead. |", 2))
+    # SPECIFICITY — the illustrative hop pair is untouched. Stated as the whole
+    # returned text above, so a carve-out that leaked into the prose fails.
+    #
+    # THE INVARIANT ARM. A provenance note that also links somewhere keeps every
+    # number in its own prose — `Held **ADR-004**`, the quoted `"ADR-004"` — and
+    # moves ONLY the link. This is the arm that rejects the other candidate
+    # mechanism: partitioning on the RECORD_OPENERS match instead of on the link
+    # puts all of this note's prose outside the record span, so it rewrites the
+    # note and erases the audit trail the move exists to create. Measured over the
+    # corpus, that mechanism reclassifies 210 of 210 provenance-note tokens.
+    note_link = ('**Numbering provenance — `004 → 005`.** Held **ADR-004** '
+                 'branch-local; see [`ADR-004`](../ADRs/ADR-004-slug.md). '
+                 'In-release citations that read "ADR-004" denote this record.')
+    eq("carveout/note-keeps-its-own-numbers-but-not-its-link",
+       rc2(note_link, 4, 5),
+       ('**Numbering provenance — `004 → 005`.** Held **ADR-004** '
+        'branch-local; see [`ADR-005`](../ADRs/ADR-005-slug.md). '
+        'In-release citations that read "ADR-004" denote this record.', 2))
+    # SPECIFICITY — a RECORD line with NO link is inert under R-7, byte for byte.
+    # Its control is the arm above: same shape, one link added, two rewrites.
+    no_link = ("**Numbering provenance — `004 → 005`.** Held **ADR-004** "
+               "branch-local; the path `ADR-004-slug.md` is named in prose only.")
+    eq("carveout/record-line-without-a-link-is-inert",
+       rc2(no_link, 4, 5), (no_link, 0))
+    # FENCE GUARD — a link inside a fenced block renders as literal text and
+    # resolves nothing, so it is an example, not a citation. `check-doc-links.py`
+    # skips fenced blocks for the same reason. Its control is `mixed` above: the
+    # identical link outside a fence moves.
+    fenced_link = ("**Numbering provenance — `004 → 005`.** Held ADR-004.\n"
+                   "\n"
+                   "```\n"
+                   "**Numbering.** `004 → 005` [`ADR-004`](../ADRs/ADR-004-s.md)\n"
+                   "```\n")
+    eq("carveout/fenced-link-is-not-a-carveout",
+       rc2(fenced_link, 4, 5), (fenced_link, 0))
+    # AMBIGUOUS IS UNTOUCHED. The third verdict declines to decide between two
+    # lexically identical readings; a carve-out that overrode it would decide the
+    # case it exists to refuse. The Deviation Log row recording THIS collision is
+    # the live instance — it names a vacated path on purpose.
+    amb_link = ("## Deviation Log\n"
+                "\n"
+                "| DEV-33 | lost the race to [`ADR-004`](../ADRs/ADR-004-s.md) |\n")
+    amb_text, amb_n, amb_review = rewrite_citations(amb_link, 4, 5)
+    eq("carveout/ambiguous-link-is-named-not-swept",
+       (amb_text, amb_n, len(amb_review)), (amb_link, 0, 1))
+    # STRUCTURE — the carve-out is index-parallel to the verdicts and EMPTY on
+    # every non-RECORD line, which is what makes it impossible to misapply to
+    # AMBIGUOUS: there is nothing there to apply. Non-vacuous, because the same
+    # fixture's RECORD line carries one.
+    struct_body = mixed + "\n" + amb_link
+    struct_v = classify_lines(struct_body)
+    struct_c = cite_carveouts(struct_body)
+    eq("carveout/empty-on-every-non-record-line",
+       (len(struct_v) == len(struct_c),
+        all(c == [] for c, v in zip(struct_c, struct_v) if v != RECORD),
+        any(c for c, v in zip(struct_c, struct_v) if v == RECORD)),
+       (True, True, True))
+
     # facet (b) — a Deviation-Log row is AMBIGUOUS: not rewritten, and NAMED.
     devlog = ("## Deviation Log\n"
               "\n"
@@ -1944,8 +2200,13 @@ def self_test():
     # The `provenance-note` line below is what makes `exempt` non-zero; without
     # it the exempt limb of the partition is a zero whose control is also zero,
     # which is a broken probe rather than a passing arm.
+    # The note CARRIES A LINK since DEV-36, and that is load-bearing for the same
+    # reason the note itself is: without it the R-7 carve-out is a column of the
+    # partition that no fixture exercises, and the partition would balance for a
+    # vacuous reason. `dryrun/parity-exercises-the-carveout` below pins it.
     parity_record = ("**Numbering provenance — `004 → 005`.** Held **ADR-004** "
-                     "branch-local before the sibling merge.\n")
+                     "branch-local before the sibling merge; see "
+                     "[`ADR-004`](../ADRs/ADR-004-slug.md).\n")
     parity_body = devlog + "\n" + parity_record + "\nplain ADR-004 citation\n"
     _p_text, _p_would, _p_review = rewrite_citations(parity_body, 4, 5)
     _p_present = len(citation_re(4).findall(parity_body))
@@ -1961,8 +2222,23 @@ def self_test():
     # `amb` from `rewrite_citations`, `exempt` from the exemption authority.
     _p_lines = parity_body.split("\n")
     _p_verdicts = classify_lines(parity_body)
+    # SINCE DEV-36 the exempt term is "tokens on a RECORD line MINUS the tokens
+    # in that line's carve-out spans". Reading RECORD verdicts alone would
+    # double-count the carve-out — once here and once in `would` — and the
+    # partition would fail for a reason that is an artefact of this derivation
+    # rather than of the tool. The independence the arm needs is preserved: this
+    # still reads the exemption authority directly and never subtracts from the
+    # other two terms.
+    _p_carve = cite_carveouts(parity_body)
     _p_exempt = sum(len(citation_re(4).findall(ln))
-                    for ln, v in zip(_p_lines, _p_verdicts) if v == RECORD)
+                    - len(citation_re(4).findall(_text_in_spans(ln, c)))
+                    for ln, v, c in zip(_p_lines, _p_verdicts, _p_carve)
+                    if v == RECORD)
+    # NON-VACUITY for the carve-out column specifically. Two tokens: the link's
+    # display text and its target.
+    eq("dryrun/parity-exercises-the-carveout",
+       sum(len(citation_re(4).findall(_text_in_spans(ln, c)))
+           for ln, c in zip(_p_lines, _p_carve)), 2)
     # The three columns the dry run prints partition the tokens present, exactly.
     # A reporting path that re-derived any of them could not satisfy this.
     eq("dryrun/parity-partitions-the-tokens",
