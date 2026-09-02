@@ -254,6 +254,101 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 
 **Note:** ADR-001 / ADR-002 / ADR-005 are release-scope decisions migrated to [`../../release/ADRs/`](../../release/ADRs/) — release-pipeline-specific (Cross-PR Overlap Audit baseline policy, Modular Pipeline Stages Split, Append-pattern aware contention scoring).
 
+## Cross-cutting pattern index
+
+Records in both modules repeatedly answer **the same design question at different triggers**. They do not conflict — they converge — but convergence is invisible from inside any one of them. A reader who arrives at [ADR-127](ADR-127-domain-is-a-parameter-of-the-architect-role.md) has no way to learn that [ADR-094](../../release/ADRs/ADR-094-extend-before-create.md) already governs the general case; ADR-127 is in fact the record that says so, calling ADR-094 *"the general form of this record's default, on a different trigger."* This section is that missing edge and nothing more. It adds no decision, supersedes nothing, and no record below was edited to appear here.
+
+**It is curated, not projected — and that is a decision, not an omission.** Cluster membership derives from neither an ADR's filename nor its frontmatter: the field set carries no cluster key, so there is nothing for [`generate-adr-index.py`](../../release/tools/generate-adr-index.py) to project *from*, and sourcing one would mean editing records to add a field. The clusters also span both modules while that projector's population is `release/ADRs/` alone, so a projected pattern index would render **partial clusters** — and a reader who sees a two-member cluster concludes that is the cluster. Omission would become misinformation. This determination is registered under this file's existing row in [`release/references/standards/release-corpus-schema.md`](../../release/references/standards/release-corpus-schema.md) § Derived-Surface Contract, per [ADR-117](../../release/ADRs/ADR-117-adr-index-derived-surface-and-scoped-conformance-claim.md) Decision (2).
+
+### Membership test (PCM)
+
+A set of records is indexed here only when **all four limbs** hold. The relational vocabulary is not invented for this section: it is [`release/ADRs/README.md`](../../release/ADRs/README.md) § ADR composition's own composition-edge rule — *"only when one record actually extends, supersedes, or is consumed alongside another"* — applied at a new cardinality.
+
+| Limb | Requirement | Why it is there |
+|---|---|---|
+| **PCM-1 — Question** | The cluster is stated as one interrogative sentence, carried verbatim in the entry. | A noun-phrase label ("extend-not-create") cannot be tested against a candidate record. A question can. |
+| **PCM-2 — Answer at a distinct trigger** | Each member's own `## Decision` answers PCM-1 at a named trigger no other member occupies, and the entry quotes **≤15 words** from that section as its answer. | Converts an unverifiable semantic judgment into a checkable one. |
+| **PCM-3 — Three or more members** | The cluster holds **at least three** records. | At two, tag-similarity alone admits **106** candidate pairs corpus-wide. No rule separates a handful of those from the rest, so a two-member floor is unmaintainable by anyone but its author. |
+| **PCM-4 — Declared anchor** | At least one member names another **in its own body** under an extends / supersedes / consumed-alongside relation. | Keeps a cluster at least partly self-declared rather than wholly inferred. |
+
+PCM-2 is what makes an entry maintainable without a tool: a reader validates one membership by reading one quoted clause against one question, with no population to re-derive and no second file to consult.
+
+**A worked exclusion, so the test is demonstrably a test.** A `canonical-home-placement` cluster of [ADR-010](ADR-010-secrets-handling-policy-substrate.md), [ADR-065](ADR-065-health-rag-band-canonical-home.md) and [ADR-067](ADR-067-stage-gate-eval-set-home.md) is topically plausible — all three decide where something lives. **ADR-010 fails PCM-2 and PCM-4**: it carries `file-location` rather than the `canonical-home` + `placement-correctness` pair *both* its proposed co-members carry, and its whole-body outbound ADR reference set is **empty**, so it can anchor nothing. Removing it leaves two records, which fails PCM-3 — so `canonical-home-placement` **is not indexed at all**. The only thing that made it a three-member cluster was an unstated judgment, which is precisely what PCM-3 exists to refuse.
+
+### The indexed clusters
+
+Each entry states its question, its anchor record, and one ≤15-word quote per member taken verbatim from that member's `## Decision`.
+
+#### Extend an existing surface, or build beside it?
+
+> *Existing infrastructure plausibly covers this capability — do we extend it, or place a net-new surface beside it?*
+
+**Anchor:** ADR-094 states the general form and is named as such by ADR-127. ADR-090 supplies the discriminating test the family reuses. **The cluster is the fork being decided explicitly against a stated bar — not a standing preference for extension:** three members resolve to *net-new* or *no new surface*, with the reason recorded.
+
+| Record | Trigger | Decision (verbatim, ≤15 words) |
+|---|---|---|
+| [ADR-090](ADR-090-structural-path-move-mode-extend-vs-sibling.md) | a second query over one scanner | *"Same-scanner → extend; different-scanner → sibling."* |
+| [ADR-094](../../release/ADRs/ADR-094-extend-before-create.md) | any infrastructure surface (the gate itself) | *"a net-new surface with no recorded determination is not design-complete"* |
+| [ADR-011](../../release/ADRs/ADR-011-analysis-class-methodology-design-treatment.md) | a Stage-5 persona card | *"Extend the Stage 5 (Principal Engineer — Architecture Assessment) persona card in release-personas.md"* |
+| [ADR-057](ADR-057-change-domain-best-practice-self-bundled.md) | a shared best-practice guide | *"No shared `domain-best-practices/change.md` is created"* |
+| [ADR-103](ADR-103-decision-audit-host-qa-auditor-mode-j.md) | a new skill versus a new mode | *"The decision-audit capability hosts as `Mode J — Decision-Health Audit` in `core/skills/pmo-qa-auditor`, sibling to Mode I"* |
+| [ADR-104](ADR-104-complementary-reference-pair-registration.md) | a registration mechanism | *"net-new registry file because in-place registration is infeasible"* |
+| [ADR-127](ADR-127-domain-is-a-parameter-of-the-architect-role.md) | an architect-role axis | *"Domain is a parameter of the architect role, exactly as altitude is."* |
+| [ADR-132](ADR-132-initiative-coextension-is-an-advisory-conjunct-on-check-55.md) | a CI check | *"Extend Check 55 with a third invariant `H3`; do not create a sibling check"* |
+| [ADR-134](ADR-134-degraded-state-emit-contract.md) | an emitter family | *"Extend the existing emitter family; do not parallel it."* |
+| [ADR-151](ADR-151-anchor-resolution-is-a-surfacing-instrument-not-a-gate.md) | an issue-reference gate | *"Extend-before-create sets the bar at necessary, not plausible, and it does not reach here"* |
+
+#### Is this second surface derived from the fact's owner?
+
+> *A fact already has an owner — is the second surface carrying it derived from that owner, and where it cannot be derived completely, is it built at all?*
+
+**Anchor:** ADR-105, which ADR-117 names *"the founding record of the Derived-Surface Contract this surface registers under."*
+
+| Record | Trigger | Decision (verbatim, ≤15 words) |
+|---|---|---|
+| [ADR-105](../../release/ADRs/ADR-105-release-corpus-normalization.md) | the release ledgers | *"The projector emits ENTRIES, never FILES"* |
+| [ADR-117](../../release/ADRs/ADR-117-adr-index-derived-surface-and-scoped-conformance-claim.md) | the release ADR index | *"Nothing in the table is hand-typed, and a hand-edited cell fails `--verify`"* |
+| [ADR-119](../../release/ADRs/ADR-119-selftest-coverage-is-discovered-with-a-committed-manifest-floor.md) | a CI coverage set | *"The covered set is DISCOVERED from a declared scope, never enumerated."* |
+| [ADR-071](ADR-071-acceptance-assertion-type.md) | a Stage-8 verdict enum | *"the six-value Stage-8 verdict enum is a deterministic PROJECTION of the two judgments"* |
+| [ADR-170](ADR-170-partial-supersession-is-a-reciprocal-frontmatter-edge.md) | a candidate new index column | *"Partial-supersession state is NOT projected into the derived index"* |
+| [ADR-171](ADR-171-status-surface-authority-and-flip-ownership.md) | an ADR's own `## Status` body | *"The `## Status` body is a projection of it."* |
+
+#### Does this predicate range over the subject it claims to judge?
+
+> *Over what population does this predicate actually range, and does that population match the subject the criterion declares?*
+
+**Anchor:** ADR-154 cites ADR-144. This is the thinnest cluster in the index — it clears PCM-4 on a single edge.
+
+| Record | Trigger | Decision (verbatim, ≤15 words) |
+|---|---|---|
+| [ADR-072](../../release/ADRs/ADR-072-region-scoped-av-invariant-verification.md) | a code-versus-comment assertion | *"A `region: code` assertion never sees comment bytes"* |
+| [ADR-144](../../release/ADRs/ADR-144-g1-03-admits-a-second-evidence-shape.md) | a gate's evidence criterion | *"reads both from the `### Evidence` section only"* |
+| [ADR-154](ADR-154-token-registry-conformance-is-family-aware.md) | a token-registry conformance gate | *"Conformance over this vocabulary is family-aware, and any future gate over it must be."* |
+
+#### Extend the Work-Item kernel, or found a new machine?
+
+> *A new capability attaches to the Work-Item kernel — does it extend that kernel additively, or re-found its base machine?*
+
+**Anchor:** ADR-018. Its three grammar-altitude extensions each state the relation in their own bodies — *"ADR-018's kernel disciplines bind it."*
+
+| Record | Trigger | Decision (verbatim, ≤15 words) |
+|---|---|---|
+| [ADR-018](ADR-018-work-item-type-layer.md) | the kernel itself | *"they do not re-found the base machine"* |
+| [ADR-059](ADR-059-plan-type-open-discriminator.md) | a plan-type discriminator | *"Lifecycle is a base-machine extension, not a new machine."* |
+| [ADR-069](ADR-069-methodology-pack-composing-unit.md) | the composing unit | *"Adopt Option 1 — a methodology pack is the composing unit."* |
+| [ADR-070](ADR-070-methodology-pack-composition-grammar.md) | the composition grammar | *"Widen the type-pack meta-schema with a pack-composition layer — additive and backward-compatible"* |
+| [ADR-077](ADR-077-cross-cutting-control-field-layer.md) | a cross-cutting control-field layer | *"Meta-schema stays v1"* |
+
+### What this index does not claim
+
+**It is incomplete by construction, and that is the safe direction.** It indexes clusters that pass PCM — never *all* convergent patterns in the corpus, and never *all* members of an indexed cluster. Three consequences follow, stated rather than hedged:
+
+- **There is no automated maintenance mechanism for this section, and none can exist** — the same conclusion ADR-117 Decision (3) reached about this file. A lint requiring every new ADR to join a cluster would force a membership PCM-1 and PCM-2 may not support, manufacturing convergence to satisfy a gate. The `≥3` floor and the per-entry quote are the whole of the bound.
+- **A record merged after this section was written does not appear in it until a human adds it.** The section therefore degrades toward *incomplete-but-correct*, never toward *incorrect*: a missing member leaves an entry short, not wrong. The only edit that could make it wrong is a change to a quoted clause — and PCM-2 puts every clause beside its source, where one read settles it.
+- **Where a tag approximates a cluster it is a discovery aid, never the membership rule.** Measured: **no cluster in this index has a single tag held by all of its members** — the `work-item-type-layer` tag, for instance, is absent from ADR-018, the kernel its three carriers extend.
+
+**Baseline.** Derived by full-body read against a corpus of **171** records (`core/ADRs/` 117 + `release/ADRs/` 54) on 2026-09-01. Re-derive the denominator with `ls core/ADRs/ADR-*.md release/ADRs/ADR-*.md` rather than trusting that number after a merge.
+
 ## Authoring new ADRs
 
 New ADRs go to the ADRs/ subdirectory of the module that authored the decision:
