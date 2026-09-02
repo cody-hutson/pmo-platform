@@ -477,6 +477,46 @@ if [ "$ALLOW_URL" -eq 0 ] && [ "$LEDGER_EXEMPT" -eq 0 ]; then
 fi
 
 # Positional issue-reference detector (always on; not governed by the link/version markers).
+#
+# COORDINATE SPACE — why this reads $STRIPPED and NOT the $MARKER_SRC disk union.
+# The classifier's entire decision is `lineno >= refline`, so both numbers must live in
+# ONE space. $STRIPPED is the fence-stripped fragment and Pass 2 numbers its lines with NR
+# over that same payload, so refline and lineno are both fragment-stripped coordinates and
+# the comparison is valid by construction. For a Write the fragment IS the post-change
+# file, so that space is the file's too.
+#
+# The file-scoped marker union above deliberately does NOT extend here, and the reason is a
+# MEASURED inversion rather than an oversight. Sourcing refline from the on-disk file for an
+# Edit would put refline in FILE coordinates while lineno stayed in FRAGMENT coordinates —
+# an index into an n-line file compared against an index into a k-line fragment. That is not
+# merely imprecise, it is sign-unstable, and both of its outcomes are wrong:
+#   * Block LATE in the file (the common shape, and the very case such a change would be
+#     made to fix): every fragment lineno falls below it, every ref still reports
+#     OUTSIDE-BLOCK, and the false positive survives untouched. Measured on a 31-line
+#     fixture with its block at line 28 — verdicts identical to today for both an in-block
+#     edit and a body-prose edit. Inert.
+#   * Block EARLY in the file — `## Related` / `## Sources` are REFBLOCK_RE spellings that
+#     routinely sit near the top: every fragment line at or past that number flips to
+#     in-block, where only the self-describe word count remains, and ordinary body prose
+#     clears it. Measured on a 71-line fixture with `## Related` at line 7 against a 12-line
+#     body edit carrying one bare ref per line: 12 findings today, 6 under a disk-sourced
+#     refline. Six true positives suppressed — a fail-OPEN on BLOCK-FRAGILE-REF-003, the
+#     direction GHSA-g9g6-28c9-vrx5 hardened this hook against.
+# So where that change would do anything at all it opens the gate, and where it is safe it
+# is inert.
+#
+# Nor is there a sound repair at this surface. The rule needs the fragment's position in the
+# POST-change file. An Edit's $CONTENT is .tool_input.new_string — bytes that by definition
+# are not yet on disk — so the splice point is unrecoverable without .tool_input.old_string,
+# a NEW INPUT FIELD, which the marker-source block above lists as load-bearing property 3.
+# The CI can do this because it has a diff and therefore a real hunk->file-line mapper
+# (map_added_lines in .github/workflows/reference-durability.yml, whose own header names
+# this same two-coordinate-space comparison as the defect it was written to fix); a
+# PreToolUse hook has no diff. Today's Edit posture is consequently strictly grant-DENYING:
+# refline 0 means CONTENT-FREE-IN-BLOCK can never fire, so every Edit finding is a true
+# positive or a false positive and never a miss, and the path allowlist stays the governed
+# escape the positional rule already documents. Do not "fix" this by unioning the disk.
+#
 # Pass 1: locate the FIRST reference-block header line number (0 = none present).
 refblock_line="$("$PRINTF" '%s\n' "$STRIPPED" | "$GREP" -nE "$REFBLOCK_RE" | /usr/bin/head -1 | /usr/bin/cut -d: -f1 || true)"
 [ -z "$refblock_line" ] && refblock_line=0
