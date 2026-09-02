@@ -652,6 +652,99 @@ self_test() {
     echo "  PASS: CIAC-1 ground-truth attribution (resolver reproduces oracle, tier-by-tier)"
   fi
 
+  # ── Run-key recognition arms. Each is separately named so a CI mutation probe can assert
+  #    the SPECIFIC assertion that turned red; a bare non-zero exit would let an unrelated
+  #    failure masquerade as the property being regressed. Graded on ATTRIBUTED SESSIONS,
+  #    never on directory admission — a directory-admission metric goes green while the tier
+  #    stays dead, which is the exact failure this file's run-key handling exists to close.
+  local sid_chore="aaaaaaaa-0000-4000-8000-000000000011"
+  local sid_shadow="aaaaaaaa-0000-4000-8000-000000000012"
+  local sid_fenced="aaaaaaaa-0000-4000-8000-000000000013"
+  local sid_prose="aaaaaaaa-0000-4000-8000-000000000014"
+
+  # (L) SENSITIVITY — both run-key forms this file learned must actually resolve a session.
+  #     A green suite whose sensitivity arm never fired is a broken probe, not a filter.
+  local n_t3slug n_t2sv
+  n_t3slug="$(jq -s '[.[]|select(.work_item=="milestone:synthetic-slug-release" and .attribution_tier=="hub-state-lineage")]|length' "$res" 2>/dev/null)"
+  n_t2sv="$(jq -s '[.[]|select(.work_item=="milestone:synthetic-slug-branch" and .attribution_tier=="branch-milestone")]|length' "$res" 2>/dev/null)"
+  if [ "${n_t3slug:-0}" -ge 1 ] && [ "${n_t2sv:-0}" -ge 1 ]; then
+    echo "  PASS: run-key-sensitivity (slug hub-state dir -> $n_t3slug session(s); slug release branch -> $n_t2sv session(s))"
+  else
+    echo "FAIL: run-key-sensitivity — slug hub-state=${n_t3slug:-0}, slug release branch=${n_t2sv:-0}; both must be >=1 or the suite is certifying a tier that resolves nothing"; fail=1
+  fi
+
+  # (L2) LEGACY REGRESSION — a version-keyed hub-state dir must still resolve. It passes by
+  #      CONSTRUCTION under a name-agnostic recogniser (there is no legacy limb to rot), but
+  #      the forward guarantee is demonstrated rather than asserted.
+  local n_v99
+  n_v99="$(jq -s --arg s "aaaaaaaa-0000-4000-8000-000000000004" '[.[]|select(.session_id==$s and .work_item=="milestone:v9.9" and .attribution_tier=="hub-state-lineage")]|length' "$res" 2>/dev/null)"
+  [ "${n_v99:-0}" -eq 1 ] && echo "  PASS: legacy-run-key-regression (version-keyed hub-state dir still resolves to milestone:v9.9)" \
+    || { echo "FAIL: legacy-run-key-regression — the v9.9 hub-state session no longer resolves (got ${n_v99:-0}, want 1)"; fail=1; }
+
+  # (M) SPECIFICITY — a slug-keyed `chore/` branch has no delimiter separating slug from
+  #     suffix, so it is deliberately NOT parsed. It must produce ZERO milestone rows; a
+  #     non-zero here means the branch arm over-widened and is manufacturing keys.
+  local n_chore_ms
+  n_chore_ms="$(jq -s --arg s "$sid_chore" '[.[]|select(.session_id==$s and (.work_item|startswith("milestone:")))]|length' "$res" 2>/dev/null)"
+  [ "${n_chore_ms:-0}" -eq 0 ] && echo "  PASS: run-key-specificity (slug-keyed chore branch produced 0 milestone rows — not over-widened)" \
+    || { echo "FAIL: run-key-specificity — a slug-keyed chore branch produced ${n_chore_ms:-0} milestone row(s); the branch arm is manufacturing keys"; fail=1; }
+
+  # (N) MALFORMED-TABLE REJECTION — `find -name sessions.md` matches a FILENAME, not a
+  #     well-formed Surface-C table. The malformed fixture carries both live malformation
+  #     shapes (no `session_id` header; a width-mismatched data row) and must contribute
+  #     nothing. `Action` is the literal column label the pre-fix hardcoded-$5 read emitted
+  #     from a header-less pipe table — it must never become a work item.
+  local n_mal n_prose
+  n_mal="$(printf '%s' "$wt_map" | jq '[to_entries[]|select(.value=="synthetic-malformed")]|length' 2>/dev/null)"
+  n_prose="$(jq -s --arg s "$sid_prose" '[.[]|select(.session_id==$s and .work_item=="unattributed")]|length' "$res" 2>/dev/null)"
+  if [ "${n_mal:-1}" -eq 0 ] && [ "${n_prose:-0}" -eq 1 ]; then
+    echo "  PASS: malformed-table-rejection (malformed fixture contributed 0 map entries; a prose column label did not become a work item)"
+  else
+    echo "FAIL: malformed-table-rejection — malformed fixture contributed ${n_mal:-?} map entries and the prose-key session resolved to a work item (unattributed count ${n_prose:-0}, want 1)"; fail=1
+  fi
+
+  # (O) SHADOWING GUARD — the session's branch parses to `<slug>-suffix` while the hub-state
+  #     directory AUTHORS `<slug>`. The authored value must win, or one release splits into
+  #     two rollup rows. This arm turns red on any reorder lifting $t2sv above $t3v — which
+  #     is what makes the ladder ordering a tested property rather than a comment.
+  local shadow_wi
+  shadow_wi="$(jq -s -r --arg s "$sid_shadow" '[.[]|select(.session_id==$s)|.work_item]|first // "MISSING"' "$res" 2>/dev/null)"
+  if [ "$shadow_wi" = "milestone:synthetic-slug-release" ]; then
+    echo "  PASS: shadowing-guard (authored hub-state key beat the branch-parsed key)"
+  else
+    echo "FAIL: shadowing-guard — expected milestone:synthetic-slug-release (authored hub-state key), got '$shadow_wi'; a branch-name heuristic is overriding the authored value"; fail=1
+  fi
+
+  # (P) STICKY HEADER BIND — the column bind must survive the managed-section fences the
+  #     deploy composition interleaves between the separator row and the first data row.
+  #     A parser that unbinds on a non-pipe line emits NOTHING for such a file: no error,
+  #     no exit code, the run directory just vanishes from attribution. The in-repo
+  #     .template carries no fences, so this property is only reachable through a fixture
+  #     that reproduces the composed shape.
+  local n_fenced n_fenced_sess
+  n_fenced="$(printf '%s' "$wt_map" | jq '[to_entries[]|select(.value=="synthetic-managed-fence")]|length' 2>/dev/null)"
+  n_fenced_sess="$(jq -s --arg s "$sid_fenced" '[.[]|select(.session_id==$s and .work_item=="milestone:synthetic-managed-fence")]|length' "$res" 2>/dev/null)"
+  if [ "${n_fenced:-0}" -eq 2 ] && [ "${n_fenced_sess:-0}" -eq 1 ]; then
+    echo "  PASS: sticky-header-bind (both post-fence rows ingested; the fenced session attributed)"
+  else
+    echo "FAIL: sticky-header-bind — the fenced hub-state file yielded ${n_fenced:-0} map entries (want 2) and ${n_fenced_sess:-0} attributed session(s) (want 1); the header bind did not survive the managed-section fences"; fail=1
+  fi
+
+  # (Q) COLLISION DETERMINISM — one worktree key claimed by two milestones. `add` is
+  #     last-wins and the record it feeds asserts `reproducible: true`, so the outcome must
+  #     be stable across runs (guaranteed by the sorted `find`) and VISIBLE (one stderr
+  #     WARNING). The second grep is the specificity control: an absent key must not warn.
+  local map_a map_b n_warn n_warn_ctl
+  map_a="$(FINOPS_HUB_STATE_DIR="$fx_hub" build_worktree_milestone_map "$fx_hub" 2>/dev/null)"
+  map_b="$(FINOPS_HUB_STATE_DIR="$fx_hub" build_worktree_milestone_map "$fx_hub" 2>/dev/null)"
+  n_warn="$(FINOPS_HUB_STATE_DIR="$fx_hub" build_worktree_milestone_map "$fx_hub" 2>&1 >/dev/null | grep -c -F "worktree key 'collide-wt'")"
+  n_warn_ctl="$(FINOPS_HUB_STATE_DIR="$fx_hub" build_worktree_milestone_map "$fx_hub" 2>&1 >/dev/null | grep -c -F "worktree key 'zzznope-wt'")"
+  if [ "$map_a" = "$map_b" ] && [ "${n_warn:-0}" -eq 1 ] && [ "${n_warn_ctl:-1}" -eq 0 ]; then
+    echo "  PASS: collision-determinism (repeated builds identical; 1 warning for the colliding key, 0 for an absent one)"
+  else
+    echo "FAIL: collision-determinism — repeated builds differ, or warnings were ${n_warn:-0} for the colliding key (want 1) and ${n_warn_ctl:-?} for an absent key (want 0)"; fail=1
+  fi
+
   # Run the full roll-up (default local-only path) for the remaining checks.
   STORE="$st" FINOPS_HUB_STATE_DIR="$fx_hub" FINOPS_PIPELINE_EVENT_LOG="$fx_log" \
     do_emit "$st" 0 >/dev/null 2>&1
