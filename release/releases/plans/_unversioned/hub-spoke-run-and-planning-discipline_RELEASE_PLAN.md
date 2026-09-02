@@ -1,0 +1,375 @@
+<!-- repo-integrity: allow-issue-ref -->
+<!-- reference-durability: allow-link -->
+# Release Plan — hub-spoke-run-and-planning-discipline
+
+> **Status:** Engineering Commit 0 (release branch `release/hub-spoke-run-and-planning-discipline`).
+> **Identity:** VERSION-LESS — identity is the capability slug; no version key is claimed and no signed version tag is produced at Stage 12.
+> **Topology:** D-C SINGLE · **Concurrency posture:** P0 fully-serial · **Milestone:** `hub-spoke-run-and-planning-discipline`.
+> **Source:** Stage 4 Release Planning spoke output (working reference: the Stage 4 planning sub-task), transcribed here at Commit 0 with the six corrections recorded in § Corrections Carried Into Commit 0. From this commit the plan FILE is the durable surface every later stage reads; the sub-task comment is superseded.
+
+---
+
+### Summary (30 seconds)
+
+Seven cards on one branch, one PR. The release makes a hub session's staging bounded by the same run-directory discipline a spoke's is, gives Stage-4 planning an agent-editability dimension so a Tier-0-floored card surfaces at planning rather than at Engineering, and reconciles the Stage-13 `.version` stamp with Surface-1 publication.
+
+- **Class `novel`** — promoted at the Stage-5 exit gate by operator decision D17 on trigger **(c)** (`≥1 Stage-5 ADR`). Trigger (a) never fired: all eight designs chose extend-an-existing-seam over authoring a new artifact, and the only file adds in the release are two test fixtures on #6596.
+- **Stage 9 review depth: Deep** (was Standard). Engagement density Light. Stage-13 outcome-window 30 days. Stage-5 activation bias `SKIP-where-trivial` is spent — it reached no card.
+- **30 effective points against a 15–25 band.** The override is accepted and extended: D13 recorded 28 after the D7 scope expansion; D26 extended it to 30 when the #5505 packaging cascade surfaced. Recorded here rather than left implicit.
+- **Three original cards are gated.** #5833 (`BLOCK-SKILL-EDIT-001` + `-002`), #5084 (via D5), #5505 (via D11) each require a live `pmo-skill-editor` Mode A session with a 1800 s sentinel TTL. The `unconstrained` classification arm is carried by late-add #6597.
+- **The Stage-5 ADR carries no number.** Cite it as **#6617**. D27 deferred number allocation to Stage 12 after three concurrent releases collided on 170/171; a numbered form written now would be a claim this release cannot honour.
+
+---
+
+### Baseline pin
+
+`origin/main` @ **`539c4440`** · pinned 2026-09-01 · re-verified identical at branch creation 2026-09-02. Every count in this plan is measured against this pin and is **not durable** — re-measure at Stage 9 Phase A6.5/A6.6 and at Stage 12 pre-merge per audit-baseline discipline.
+
+### Domain-practice label
+
+```
+domain_practice: { source: N/A — pipeline-internal release, date: 2026-09-01, domain: governance }
+```
+
+Sourcing-exempt (**Form X**, verbatim): every write path is an internal pmo-platform artifact. Dominant domain **`governance`**; secondary domain **`software`** for `release/tools/automated-closeout.sh` and `release/tools/tests/test_spoke_run_directory.sh`, whose changes are executable shell and whose design-review resolves against the software guide rather than the governance one.
+
+### Stamp manifest — recorded N/A, evidenced
+
+`{{RELEASE_VERSION}}` stamp manifest: **N/A — version-less release; no version key is claimed, so `claim-version.sh --verify-stamp` has no operand.** Corroborated rather than asserted: `{{RELEASE_VERSION}}` occurs **0** times across all **8** plans in `release/releases/plans/_unversioned/`; control arm on the same instrument and the same token over the adjacent versioned plan directories (**144** files) returns **4 occurrences**. The control fires, so the zero is a real negative and not a rejected pattern.
+
+---
+
+### Corrections Carried Into Commit 0
+
+The Stage-4 plan comment is superseded on six points. Each correction is recorded with the evidence that overturned the original claim, so a reader can reproduce the reversal rather than take it on trust.
+
+| # | Original claim | Corrected record | Warrant |
+|---|---|---|---|
+| **1** | `SKILL.md` gate-armed denominator **513 files / 468 carrying the marker** | **57 tracked files / 52 carrying `skill_discipline_migrated_v10_2: true`** | The original probe walked the filesystem and swept `.claude/worktrees/` mirrors. Re-run over `git ls-files`: denominator **57**, sensitivity arm (marker present) **52** — non-zero, so the detector fires; specificity arm (a bogus `v99_9` marker) **0**; mirror control (tracked paths under `.claude/worktrees/`) **0**, which is why a filesystem walk and a tracked walk could differ by an order of magnitude. The verdict — the gate is armed on `release/skills/release-hub/SKILL.md` — is unaffected. |
+| **2** | **CIAC-2** graded against a two-value floored/unfloored classification | **CIAC-2 amended (D8).** The floored arm is supplied two ways: a real tracked path (`core/governance/OPERATIONS.md`) and a real-history arm (`2351582c^` carried `*/SKILL.md`; `main` does not). Expected verdicts: **#5833 `sanctioned-session-required`, #5084 `sanctioned-session-required`, #5505 `sanctioned-session-required`** — all three original cards are gated. The `unconstrained` arm sources from late-add **#6597**. | The original CIAC-2 expected #5084 and #5505 `unconstrained`; D5 reclassified #5084 and D11 reclassified #5505, leaving no `unconstrained` witness among the original three. A three-outcome classification graded against a population with only one outcome present is not a fixture. |
+| **3** | *(absent — no CIAC covered the #5505 × #6599 predicate collision)* | **CIAC-4 added.** The contested `hub-spoke-bridge.md` step states **one** predicate after #5505's EDIT 5 and #6599's EDIT 4 both land, with a firing control arm. | Operator decision D10 knowingly accepted a predicate collision between #5505's EDIT 5 and #6599's home (3) in one region of one branch, mitigated by design rather than by separation. An accepted collision with no grading criterion is an unmeasured mitigation. |
+| **4** | Contention Map modelled **three** cards and recorded **zero open PRs** | **Contention Map amended** to model the four D7 late adds (#6596, #6597, #6598, #6599) **and** live draft PR **#6626**, which modifies `release/references/pipeline/stage-13-close.md` (+5 −1) — #5084's primary surface. | The zero-open-PR reading was pinned to `539c4440` / 2026-09-01 and was explicitly flagged transiently-empty. Re-measured 2026-09-02: **two** open draft PRs. #6626 overlaps; #6621 (`release/kit-unit-and-selection`) was checked against every surface in this release's change set and returns no overlap. |
+| **5** | `core/specs/autonomy-tiers.md` listed under **read-only inputs** ("referenced, not modified") | **Moved to the unconditional change set as `edit`.** | Late-add **#6597** writes the file: it states the governed set twice, non-identically, one list ending in `etc.`. The read-only classification was correct for #5505, which is the card the row was authored against; it is wrong for the release. A read-only row is excluded from the delivery obligation set, so leaving it there would have made a delivered edit invisible to the matrix. |
+| **6** | **#6596 AC1** as written: *"fix all three `v[0-9]` sites"* | **All three reviewed and dispositioned — 2 updated, 1 preserved, 1 sibling arm added.** | AC1's premise is wrong. One of the three `v[0-9]` sites is a **branch predicate** that correctly parses 25 live `chore/vX.Y-*` refs; "fixing" it would break working behaviour to satisfy a uniform sweep. The AC's *intent* — no run key is silently dropped — is served by reviewing every site and recording its disposition, which is what ships. |
+
+---
+
+### Release Class declaration
+
+**Class: `novel`.** Promoted `routine → novel` at the Stage-5 exit gate, operator decision **D17**, 2026-09-01.
+
+| Trigger | Fired? | Basis |
+|---|---|---|
+| `novel` (a) — ≥1 new reference doc, schema, or skill | **No** | Never fired at any point. All eight designs (seven cards plus the E-13 addendum) chose extend-an-existing-seam. The only file adds in the release are two test fixtures on #6596, which trigger (a) does not name. The operator's D2 pre-authorization for a trigger-(a) promotion went **unexercised**. |
+| `novel` (b) — ≥1 D-class decision | Recurring only | Recurring-D entries do not fire the trigger. |
+| `novel` (c) — ≥1 Stage-5 ADR | **FIRES** | The operator elected to create the ADR recording #5505's substrate selection — tracked as **#6617**. |
+| `cross-cutting` (a)/(b)/(c) | No | Does not fire on any limb. |
+| `hotfix` | No | No P1/P2 raised against a deployed release. |
+
+**Differentiation posture, as amended:** Engagement density **Light** · Stage 9 review depth **Deep** *(was Standard)* · Stage 5 activation bias `SKIP-where-trivial` *(spent — reached no card)* · Stage 13 outcome-window **30-day**.
+
+**One ADR deliberately omitted.** #6596's spoke drafted an ADR body and then recommended against creating it: its work is conformance to the already-ratified ADR-092, not new architecture, and an ADR for conformance would set a precedent that every conformance card owes one. The body remains recorded on that card's Stage-5 sub-task as durable design rationale.
+
+**The ADR carries no number.** Operator decision D27 deferred number allocation to Stage 12 after three concurrent releases collided on 170/171. Every reference in this plan and in the PR cites **#6617**; no `ADR-17x` form is authored anywhere in this release.
+
+### Size and band override
+
+| | |
+|---|---|
+| Original bundle (#5833, #5505, #5084) | 16 pts |
+| D7 late adds (#6596 S/2, #6597 S/2, #6598 M/4, #6599 M/4) | +12 |
+| **D13 re-derivation** | **28 effective** against band **15–25** — breached, override accepted |
+| D26 — #5505 packaging cascade (+2) | +2 |
+| **D26 re-derivation** | **30 effective** against band **15–25** — override **extended** |
+
+The D26 rows are structural, not discretionary: Check 7 (skill-package content-freshness) is always-enforce, so a rostered skill's package and its `.sha256` sidecar must be rebuilt and committed the moment its `SKILL.md` is edited. Declining them would not reduce scope; it would fail CI pre-merge.
+
+**Risk carried by the override:**
+
+1. **Coupling across seven cards on one branch.** Topology is D-C SINGLE. #5505 × #6599 and #5833 × #6598 both contend on `release/references/how-to/hub-spoke-bridge.md`. Merge ordering is load-bearing — #6599's EDIT 4 depends on #5505's EDIT 5 having landed, and carries a stop-and-surface rule if the anchor string is absent.
+2. **Three of seven cards are `sanctioned-session-required`.** The deployed gate is in `warn` mode while the repo source reads `enforce`, and the hook scripts are byte-identical. This is **two switches from binding, not one**: `block-skill-direct-edit.sh` resolves precedence `bypass → master-activation → .mode → rule`, and the `workflow`-class master-activation gate runs at layer 2 *before* the `.mode` read, so syncing the sidecar is necessary but not sufficient. Treat a missing sanctioned session as a discipline violation review will catch, not one the control will.
+3. **A knowingly accepted predicate collision (D10)** between #5505's EDIT 5 and #6599's home (3), mitigated by design rather than by separation, and graded at Stage 9 by **CIAC-4**.
+4. **The late adds were absent from the Stage-4 File Change Matrix and Contention Map.** Both are amended in this file rather than read stale at Stage 9.
+
+---
+
+### Implementation Sequence
+
+**Order: #5833 → #5505 → #5084 → #6596 → #6597 → #6598 → #6599.** P0 fully-serial: the next card waits until the prior commit lands on the release branch.
+
+| Seq | Card | Pts | Why this position |
+|---|---|---|---|
+| 1 | **#5833** | 4 | The first gated card and the author of Commit 0. Leading with it pays the sanctioned-session overhead once on a branch with no prior commits to rebase, and surfaces a gate failure at the first spoke rather than the second. *(The rationale originally recorded — "it bounds the staging surface the other two write into" — was withdrawn at Stage 4: #5505 and #5084 edit corpus files and consume no hub staging at build time. The order is unchanged; only its warrant is.)* |
+| 2 | **#5505** | 8+2 | Largest card and the widest design surface. Sequencing it second gives a landed #5833 to read as a concrete fixture rather than a planned one. Carries the D26 packaging cascade. |
+| 3 | **#5084** | 4 | Fully specified. Its `hub-spoke-bridge.md` hunks sit at the file's tail, farthest from the other two, so it inherits the least anchor drift. Placing the only `bug` last keeps its regression arm adjacent to Stage 7. |
+| 4 | **#6596** | 2 | FinOps rollup attribution filters run keys to `v[0-9]*`, dropping every slug-keyed hub-state directory. Independent surface. |
+| 5 | **#6597** | 2 | `autonomy-tiers.md` states the governed set twice, non-identically, one list ending in `etc.` Supplies CIAC-2's `unconstrained` classification arm. |
+| 6 | **#6598** | 4 | Hub-state run key spelled two ways across the corpus. Owns the `hub-state/README.md` "First emit" bullet (D14/D29). |
+| 7 | **#6599** | 4 | Agent-editability remediation homes (2) and (3). **Sequenced last by dependency**: its EDIT 4 requires #5505's EDIT 5 to have landed, and carries a stop-and-surface rule if the anchor string is absent. |
+
+**Branch topology: D-C SINGLE.** One release branch, one PR, seven delivery slices. Zero hard dependency edges among the original three means no early-merge value; seven cards sharing `hub-spoke-bridge.md` makes per-issue PRs a merge-conflict generator rather than a parallelism win.
+
+---
+
+### Dependency Graph
+
+**Zero hard dependency edges among the original three cards** — native `blocked-by` empty on #5833, #5505, #5084; the body-regex predicate (`blocked by|depends on|requires|after #N`) returns zero over all three. Sensitivity arm: the same relationship reader returns a non-empty `parent` field on #5084, so it is not returning a blanket null.
+
+**One hard authoring edge among the late adds:**
+
+```
+#5505 (EDIT 5) ──[anchor-string precedence]──▶ #6599 (EDIT 4)
+```
+
+#6599's EDIT 4 depends on #5505's EDIT 5 having landed. It carries a stop-and-surface rule rather than a fallback: if the anchor string is absent at branch tip, the spoke stops. This is why #6599 is sequenced last and #5505 second.
+
+**Soft edges (real, not build-blocking):**
+
+| Edge | Direction | Kind | Consequence |
+|---|---|---|---|
+| **E1** | #5833 → #5505, #5084, #6598 | File contention on `hub-spoke-bridge.md` | Region-disjoint. Serializes automatically under D-C SINGLE + P0. |
+| **E2** | #5833 → #5505 | Fixture | #5505's AC1 requires a fixture milestone carrying one floored and one unfloored card. Satisfied by this plan's own classification. Graded as **CIAC-2**. |
+| **E3** | #5833 → #6598 | Scope boundary (D14/D29) | The `hub-state/README.md` "First emit" bullet belongs to #6598; #5833 owns the two `hub-spoke-bridge.md` run-key sites. Neither card touches the other's line. |
+
+---
+
+### Stage Applicability Matrix
+
+**Agent-editability read** — the three-outcome dimension #5505 ships, applied to this release's own cards.
+
+| Card | Tier-0 `BLOCK-AUTONOMY-001` ∩ | Skill-gate `BLOCK-SKILL-EDIT-*` ∩ | Editability class | Execution path |
+|---|---|---|---|---|
+| **#5833** | ∅ | **2 paths** — `release/skills/release-hub/SKILL.md` (`-001`), `release/skills/release-hub/references/spoke-launch.md` (`-002`) | **sanctioned-session-required** | Agent-executed inside a live `pmo-skill-editor` Mode A session. Never `CLAUDE_HOOK_BYPASS=1`. |
+| **#5505** | ∅ | **≥1 path** under `release/skills/release-planner/` (D11) | **sanctioned-session-required** | Same. |
+| **#5084** | ∅ | **≥1 path** under `release/skills/release-executor/` (D5) | **sanctioned-session-required** | Same. |
+| **#6596** | ∅ | ∅ | **unconstrained** | Ordinary Engineering spoke. |
+| **#6597** | ∅ | ∅ | **unconstrained** | Ordinary Engineering spoke. Supplies CIAC-2's `unconstrained` arm. |
+| **#6598** | ∅ | ∅ | **unconstrained** | Ordinary Engineering spoke. |
+| **#6599** | ∅ | ∅ | **unconstrained** | Ordinary Engineering spoke. |
+
+`block-skill-direct-edit.sh` is a **routing requirement, not a hard block**: every `apply_block` call is reached from a sentinel condition, and with a valid sentinel the hook falls through to `exit 0`. Contrast `BLOCK-AUTONOMY-001`, which calls `always_block` and has no sanctioned path. The two controls differ in kind, not in degree.
+
+**Stage applicability, per stage:**
+
+| Stage | Verdict | Rationale for any non-APPLY |
+|---|---|---|
+| 5 Solutioning | **APPLY** — complete | 7 designs, 8 adversarial reviews, 6 remediation passes, ~60 findings resolved, 15 disputed with evidence and upheld, no selected mechanism overturned. |
+| 6 Engineering | **APPLY** | Three cards gated. |
+| 7 Dev Testing | **APPLY (mandatory)** | No skip is available on any card. #5084's defining property is that its own verification probe confirms the bug rather than catching it. |
+| 8 QA / Acceptance | **APPLY** | Per-criterion verdicts on every card's AC set. |
+| 9 Plan Review | **APPLY — depth Deep** | Class `novel` per D17. |
+| 10 Dry Run | **COMPRESSED** | Claude Code path — the PR diff is the dry-run gate. |
+| 11 Snapshot | **COMPRESSED** | Git history is the snapshot set. |
+| 12 Execute | **APPLY** | Phase B3 atomic version-claim is **N/A by construction** — no version key is claimed, `claim-version.sh` does not run, no signed version tag is produced. Recorded as N/A rather than omitted. **The ADR number is allocated here** (D27). |
+| 13 Close | **APPLY** | Phase B5.7 `.version` stamp runs **SKIP** on a version-less release, so #5084's AC4 cannot be evidenced by this release's own close-out — it requires a constructed out-of-order fixture. |
+
+---
+
+### File Change Matrix
+
+Machine-readable per the declared-vs-delivered authoring contract — one path per line, columnar-in-fence, `add | edit | delete`.
+
+```
+# ── Unconditional change set ──────────────────────────────────────────
+release/references/how-to/hub-spoke-bridge.md                      edit
+release/releases/hub-state/README.md                               edit
+core/standards/gate-efficacy-standard.md                           edit
+release/tools/tests/test_spoke_run_directory.sh                    edit
+release/skills/release-hub/SKILL.md                                edit
+release/skills/release-hub/references/spoke-launch.md              edit
+packages/release-hub.skill                                         edit
+packages/release-hub.skill.sha256                                  edit
+release/references/pipeline/stage-04-planning.md                   edit
+release/skills/release-planner/SKILL.md                            edit
+packages/release-planner.skill                                     edit
+packages/release-planner.skill.sha256                              edit
+release/references/pipeline/stage-13-close.md                      edit
+release/tools/automated-closeout.sh                                edit
+release/skills/release-executor/SKILL.md                           edit
+packages/release-executor.skill                                    edit
+packages/release-executor.skill.sha256                             edit
+core/specs/autonomy-tiers.md                                       edit
+core/skills/finops-usage-extractor/scripts/rollup-attribution.sh   edit
+```
+
+```
+# ── Read-only inputs (excluded from the delivery obligation set) ──────
+core/hooks/block-autonomy-ceiling.sh                               READ
+core/hooks/block-skill-direct-edit.sh                              READ
+core/standards/analysis-workspace-standard.md                      READ
+core/standards/hub-session-continuity.md                           READ
+core/standards/depersonalization-spec.md                           READ
+release/references/specs/release-class-taxonomy.md                 READ
+release/references/standards/quota-budget-protocol.md              READ
+```
+
+```
+# ── CONDITIONAL ───────────────────────────────────────────────────────
+CONDITIONAL:6596-fixture-pair  release/tools/tests/fixtures/       add
+```
+
+**Row-set notes.**
+
+- **`core/specs/autonomy-tiers.md` moved from READ to `edit`** — correction 5. It was correctly read-only for #5505 ("referenced, not modified"), and that is the card the original row was authored against. Late-add #6597 writes it, so the release-scoped intent is `edit`.
+- **The three `packages/*.skill` + `.sha256` pairs are structural obligations, not discretionary rows.** Check 7 / the `skill-package-freshness` CI gate hashes every file in a packaged tree; editing a rostered skill's `SKILL.md` or `references/` changes the content hash by construction. Each card that edits a rostered skill rebuilds and commits its package and sidecar **in this PR**. Unrebuilt, the release merges red.
+- **The two Stage-4 CONDITIONAL `add` rows did not fire.** `CONDITIONAL:5833-distinct-staging-standard` resolved to *extend an existing seam*, not a new standard; `CONDITIONAL:5505-derivation-substrate` resolved without a new substrate file. Neither is promoted, and neither needs a Deviation-Log row. The one live conditional is #6596's fixture pair — the release's **only** file adds.
+- **Each following card's spoke amends its own rows at its commit.** #5505 carries a second gated path under `release/skills/release-planner/` (D11/D26) whose concrete name is set by that card's spoke; it is not guessed here. A row promoted at a later commit carries its concrete path in that commit, per the contract.
+- **New-executable companion obligation: N/A.** The matrix carries zero `add` rows for `*.sh`; the only added paths are test fixtures. No `core/config/allowlists/script-execution-allowlist.txt` companion row is owed.
+
+---
+
+### Contention Map
+
+Probed by **full path**, never basename — a basename probe on `SKILL.md` matches every skill in the repo and inflates the edge set.
+
+**Within-release contention.**
+
+| File | Cards | Regions |
+|---|---|---|
+| `release/references/how-to/hub-spoke-bridge.md` | #5833, #5505, #5084, #6598, #6599 | **#5505** Procedures 1 and 3 · **#5833** § For the Hub Agent, the temp-file idiom bullet, § Run-Directory Discipline (inside the fence), Procedure 7 Step 6, and two run-key sites · **#5084** the file tail · **#6598** run-key sweep sites · **#6599** the EDIT-4 region, downstream of #5505's EDIT 5 |
+| `release/references/pipeline/stage-04-planning.md` | #5505, #6599 | Phase-A editability dimension and its remediation homes |
+| `core/specs/autonomy-tiers.md` | #6597 | Sole writer |
+
+Under D-C SINGLE + P0 serial this resolves by sequencing. The residual is anchor drift, not conflict — which is why **CIAC-3** grades reference-anchor form rather than line stability.
+
+**Cross-milestone contention (declared-edge, full-path).**
+
+| Surface | This milestone | Sibling milestones | Class |
+|---|---|---|---|
+| `release/skills/release-hub/SKILL.md` | #5833 | `hub-emits-state-gates-read` [#5232, #5522] · `work-item-ownership-and-closure` [#5277] · `authoring-conventions-enforced-or-retired` [#4022] | Narrow — serialization-relevant |
+| `release/references/pipeline/stage-04-planning.md` | #5505, #6599 | `work-item-ownership-and-closure` [#4201] · `authoring-conventions-checkable-whole-population` [#5824] | Narrow — serialization-relevant |
+| `release/skills/release-hub/references/spoke-launch.md` | #5833 | none milestoned — 4 unmilestoned: #5899, #6185, #6237, #6425 | Adjacency only |
+| `release/references/how-to/hub-spoke-bridge.md` | 5 cards | 10 milestones | Hot-path — Tier-B soft; does not drive grouping |
+| `release/references/pipeline/stage-13-close.md` | #5084 | 11 milestones | Hot-path — Tier-B soft |
+| `release/tools/automated-closeout.sh` | #5084 | 8 milestones | Hot-path — Tier-B soft |
+
+`work-item-ownership-and-closure` remains the only sibling contending on both narrow surfaces.
+
+**Cross-PR Overlap Audit — re-measured 2026-09-02, and the Stage-4 zero no longer holds.**
+
+Stage 4 recorded **0 open PRs repo-wide**, pinned to `539c4440` / 2026-09-01 and explicitly flagged transiently-empty. Re-measured at branch creation: **2 open PRs, both draft.**
+
+| PR | Head | State | Overlap with this release's change set |
+|---|---|---|---|
+| **#6626** | `release/adr-corpus-status-integrity` | draft | **YES** — modifies `release/references/pipeline/stage-13-close.md` (**+5 −1**), which is #5084's primary surface. |
+| #6621 | `release/kit-unit-and-selection` | draft | **None.** Checked against every path in the unconditional change set; zero intersection. |
+
+**Consequence, and it is a real serialization point, not a note.** #5084 edits `stage-13-close.md`; so does #6626. Whichever merges first, the other re-baselines. Because #6626 is a **draft**, it is invisible to any settled-state probe (merged-state or claimed-set), which is precisely the population the in-flight roster exists to record. **Re-check #6626's state before #5084's spoke writes `stage-13-close.md`, and again at Stage 12 pre-merge.**
+
+**In-Flight Release Roster.**
+
+**Measured at:** `539c4440` · `2026-09-02` · **Population:** n=2 sibling(s)
+
+| Slug | PR | Head SHA | Bump-class | Carried label | Recomputed next-free | EDITSET ∩ FCM |
+|---|---|---|---|---|---|---|
+| `adr-corpus-status-integrity` | `#6626` | *(draft head)* | `UNRESOLVABLE` | — | `UNRESOLVABLE` | `release/references/pipeline/stage-13-close.md` |
+| `kit-unit-and-selection` | `#6621` | *(draft head)* | `UNRESOLVABLE` | — | `UNRESOLVABLE` | — |
+
+Both siblings declare no bump-class, so both render `UNRESOLVABLE` in the bump-class and recomputed columns rather than a blank — an unresolvable slot is an unknown, not an absence. This release claims no version slot, so it contributes no version-collision token and no Tier-S serialization edge arises from version contention; the #6626 edge is **file contention**, which the roster's `EDITSET ∩ FCM` column carries.
+
+---
+
+### Verification Plan
+
+**AC baseline** — per-issue acceptance-criterion counts as read at plan time, taken at `539c4440`: #5833 **6** · #5505 **4** · #5084 **4** · #6596 **3** · #6597 **3** · #6598 **3** · #6599 **3**. A count that no longer matches its baseline is a mechanical signal to re-bind, not a verdict.
+
+**Per-issue verification — #5833** (the card landing at this commit; each following card's spoke extends this table with its own rows).
+
+| Issue | AC | Verification Method | Expected Result |
+|---|---|---|---|
+| #5833 | AC-1 | Read § Run-Directory Discipline in `release/references/how-to/hub-spoke-bridge.md`; confirm a `**Scope —**` paragraph states whether the hub is in scope | Heading unchanged; the parenthetical is no longer the only scope signal |
+| #5833 | AC-2 | Locate the naming clause in § Hub Staging Discipline; confirm it resolves to one path, and that `hub-state/README.md` and the hub-session-continuity standard agree on the run key | One determinate location, not a choice |
+| #5833 | AC-3 | Inspect every added path literal | All `<OPERATOR_INSTANCE_HUB_STATE_PATH>`-rooted (registered-token form). No absolute path, no username segment, no bare relative operator-instance path |
+| #5833 | AC-4 | Read the lifecycle clause | End condition names **Procedure 7 Step 6, orphan-state cleanup, after Milestone close** — a stage and an event, not a duration or a judgement call |
+| #5833 | AC-5 | Read Mode O in `release/skills/release-hub/SKILL.md` | Staging location and cleanup point both present and cited to the governing reference |
+| #5833 | AC-6 | Read the deliberate-retention clause | Retained content goes to the operator's own area — a location distinct from the run staging directory · control: the same read against `539c4440` → **no such clause** (observed absence, so a "present" verdict is discriminating) |
+
+**Regression arm (release-wide, runs after every `hub-spoke-bridge.md` hunk — operator decision D6):**
+
+```
+bash release/tools/tests/test_spoke_run_directory.sh
+```
+
+Baseline at `539c4440`: **`NC-NS-1: 16 passed, 0 failed`** (independently reproduced twice). Expected after #5833's clause arms land: **`NC-NS-1: 19 passed, 0 failed`**. Any drop from the running baseline is a regression introduced by the hunk that preceded it.
+
+**Heading constraint — the one rule that reddens CI if broken.** `test_spoke_run_directory.sh` extracts its section with an **anchored exact-string** `awk` match on `## Run-Directory Discipline (all spokes)`, present in **two** matchers (`extract_section()` and the A-NEG mutation builder). Renaming that heading — the wording, the parenthetical, or one character — empties the extractor and reddens arms A1–A4. The suite is CI-wired with no `continue-on-error`.
+
+**#5084 AC4 cannot be evidenced by this release's own close-out.** Phase B5.7 runs `SKIP` on a version-less release, so the monotonicity predicate this release ships is never executed here. AC4 requires a **constructed out-of-order fixture**. Stage 8 must reject "our close-out passed" as AC4 evidence.
+
+---
+
+### Cross-Issue Acceptance Criteria
+
+**Cross-Issue Acceptance Criteria**
+
+- [ ] **CIAC-1 (#5833 × #5505 × #5084 on `release/references/how-to/hub-spoke-bridge.md`):** the merged file simultaneously carries all three cards' edits with no card's region clobbered by a later one — (a) a hub-scope statement on § Run-Directory Discipline, (b) an agent-editability read in Procedure 1 or Procedure 3, and (c) a version-comparison predicate at all three former `grep -qx` sites. *Method:* `python3 -c "import re;t=open('release/references/how-to/hub-spoke-bridge.md').read();i=t.find('## Run-Directory Discipline');print(len(re.findall(r'grep -qx',t)), bool(re.search(r'(?i)hub',t[i:i+3000])))"` — the `grep -qx` count must read **0** and the hub-scope limb **True**; *control: the same count at `539c4440` → **3** (observed non-zero).* *Graded at Stage 9 QC3.5 on the merged PR.*
+
+- [ ] **CIAC-2 (#5505 × #5833 × #5084 × #6597 on the editability classification) — AMENDED per D8:** the agent-editability read #5505 ships emits **three** outcome values, not two, and classifies this milestone's own cards correctly. Expected verdicts: **#5833, #5084 and #5505 all `sanctioned-session-required`**; the **`unconstrained`** arm is witnessed by **#6597**, which touches no gated path. The floored arm is supplied two ways so a single fixture's absence cannot vacate it: a **real tracked path** (`core/governance/OPERATIONS.md`) and a **real-history arm** (`2351582c^` carried `*/SKILL.md`; `main` does not). *Method:* read the shipped classification clause in `release/references/pipeline/stage-04-planning.md`; assert it enumerates three outcomes; hand-apply it to the seven cards and compare against § Stage Applicability Matrix above. *Control: applying the clause to `core/governance/OPERATIONS.md` must return the floored outcome, and to `#6597`'s change set the `unconstrained` outcome — a classifier returning one value for both is not discriminating.* *Graded at Stage 9 QC3.5 on the merged PR.*
+
+- [ ] **CIAC-3 (all seven cards on reference-anchor form):** no line added by this release introduces a **new** line-number-form cross-reference to `hub-spoke-bridge.md` — references use section headings or quoted predicates, so the next release's briefs do not inherit the anchor drift this plan already found. *Method:* `git diff origin/main...HEAD -U0 | grep '^+' | grep -cE 'hub-spoke-bridge\.md:[0-9]+'` must read **0**; *control, same instrument same target-class: the same regex over the tracked corpus at `539c4440` → **4 occurrences across 3 files** — observed non-zero, so a zero on the diff means "none added", not "pattern never matches".* *Graded at Stage 9 QC3.5 on the merged PR.*
+
+- [ ] **CIAC-4 (#5505 × #6599 on the contested `hub-spoke-bridge.md` step) — ADDED at Commit 0:** after **both** #5505's EDIT 5 and #6599's EDIT 4 land, the contested step states **exactly one** predicate — not two, and not a merge artefact carrying both. This is the grading criterion for the predicate collision operator decision D10 knowingly accepted and mitigated by design rather than by separation. *Method:* extract the contested step from the merged file and count its stated predicates; the count must read **1**. *Control, same instrument same target: run the same extraction-and-count against the same step at `539c4440` → **1** (observed non-zero), so a count of 1 after both edits means "collapsed correctly", not "the extractor found nothing"; a count of **2** is the failure this CIAC exists to catch.* *Graded at Stage 9 QC3.5 on the merged PR.*
+
+---
+
+### Risk Register
+
+| # | Risk | Sev | Lik | Owner | Mitigation | Reversibility |
+|---|---|---|---|---|---|---|
+| **R-1** | **Sanctioned-session TTL vs spoke budget.** `SENTINEL_TTL_SECONDS = 1800`, re-checked on every Write/Edit. Three cards edit gated paths. | HIGH | MED | Stage 6 | Invoke `pmo-skill-editor` Mode A **immediately before** the gated writes with no analysis between minting and writing; batch a card's gated edits inside one window; on expiry **re-invoke Mode A**. Never `CLAUDE_HOOK_BYPASS=1`. | CHEAP |
+| **R-2** | **The release edits the file that launches its own spokes.** Once #5833's commit lands, a later spoke reading the branch working copy could see modified launch guidance mid-release. | MED | LOW | Hub | `spoke-launch.md` changes take effect **post-merge only**. The hub constructs briefs from `main`-resolved procedure text for the remainder of this run. The same holds for § Hub Staging Discipline: the hub running this release is not bound by it until it merges. | CHEAP |
+| **R-3** | **Anchor drift across seven sequential edits to one file.** Every landed edit shifts the anchors the next card's brief cites. | LOW | HIGH | Stage 6 briefs | Cite section headings and quoted predicates only. Graded as **CIAC-3**. | CHEAP |
+| **R-4** | **Cross-milestone narrow-surface collision — and it is now live.** Draft PR #6626 modifies `stage-13-close.md`, #5084's primary surface. Stage 4's zero-open-PR reading is superseded. | MED | **HIGH** | Stage 9 / 12 | Re-check #6626 before #5084's spoke writes that file, and again at Stage 12 pre-merge. Whichever merges first, the other re-baselines. | MODERATE |
+| **R-5** | **#5084's fix is not exercised by this release's own close-out.** Version-less ⇒ Phase B5.7 `SKIP`; the monotonicity predicate ships into a path Stage 13 will not execute here. | MED | HIGH | Stage 7/8 | AC4's regression arm must be a **constructed out-of-order fixture**, never this release's own Stage 13. | CHEAP if caught at Stage 8; EXPENSIVE if it ships unverified |
+| **R-6** | **Skill-package staleness reddens the merge.** Three rostered skills are edited; each package `.sha256` hashes every file in its tree. | MED | MED | Stage 6 | Each card runs `core/deploy/tools/build-skill-packages.sh <skill>` and commits the package + sidecar in this PR. Verified at C4. | CHEAP |
+| **R-7** | **The gate is in `warn` mode, so it will not catch a missing sanctioned session.** The deployed `.mode` reads `warn`, in which `apply_block` logs and exits 0. | MED | MED | Stage 9 | Conformance is standing discipline, observable only in review. Two switches from binding, not one — the `workflow`-class master-activation gate runs before the `.mode` read. | CHEAP |
+| **R-8** | **Predicate collision (D10) between #5505 EDIT 5 and #6599 EDIT 4** on one region of one branch, mitigated by design rather than separation. | MED | MED | Stage 9 | #6599 sequenced last with a stop-and-surface rule on the anchor string. Graded by **CIAC-4**. | MODERATE |
+| **R-9** | **Second-order blast-radius fan-out never measured** on the three Structural-tier targets (`--depth=1` bound declared; `--depth=2` exceeded a 120 s budget). | LOW | — | Stage 7 | Under an additive-only change with no anchor removed, second-order break-surface is structurally nil — but that is an argument, not a measurement, and is labelled as such. **Accepted, explicitly.** | CHEAP |
+| **R-10** | **Domain-practice conformance not assessed** (design-review checklist 4.6, domain `governance`). | LOW | — | Stage 7 Phase C | Surfaced forward per the check's own routing; does not block Engineering. | CHEAP |
+
+**Rollback strategy.** Single branch, single PR. Zero deletes, zero renames; the only adds are two test fixtures. Rollback is `git revert` of one merge commit. No data migration, no deploy artifact, no external state. **Reversibility: CHEAP · confidence HIGH.** The one asymmetry is R-5: if the monotonicity predicate ships wrong and is not exercised until a later out-of-order close, detection is delayed even though the revert stays cheap.
+
+---
+
+### Quota Budget
+
+**Verdict:** **WARN** (per `quota-budget-protocol.md` Checkpoint A)
+**Parallel-eligible spokes per parallel stage (from § Stage Applicability Matrix):** Stage 5: **7** (complete) · Stage 7: **7** · Stage 8: **7**
+**Per-spoke cost estimate:** size-bucket ordinal bands — `size:S` → *low* · `size:M` → *low–moderate* · `size:L` → *moderate–high*. The § 5.1 cutover to observed medians is **not met** for any bucket (no `estimate-usage.sh` median population available), so every bucket keeps its ordinal band.
+**Assumed/stated remaining usage-window envelope:** **`UNSTATED`** — no operator quota band was relayed. The conservative default applies.
+**Estimated cumulative draw % (worst parallel batch):** **not rendered.** With basis `UNSTATED` this check does not synthesize a figure. `[ASSUMPTION – CONFIRM]`
+**Routing:** **WARN → window-aware launch timing + quota-budgeting (split batch) recommended.** WARN rather than PASS because a PASS asserts *"< 50 % of envelope"*, which has no grounding while the envelope is `UNSTATED`; WARN rather than FAIL because nothing indicates a > 80 % draw. **The batch is larger than Stage 4 modelled** — seven parallel-eligible spokes at Stages 7 and 8, not three — which is a further reason to split rather than launch a single wave.
+**Note:** Checkpoint B re-validates at every `Agent`-tool launch — wave or singleton, every stage — with PROCEED/SERIALIZE/DEFER/REDUCE-scope for a wave and PROCEED/DEFER for a singleton; STAGGER is a secondary rate-limit-only defense, not a usage-window mitigation. Checkpoint B also gates on the host-API quota axis, combined DEFER-dominant. Checkpoint A stays usage-window-only. Bands + cumulative-draw budget + the host-API floor are `[CALIBRATE-AFTER-3]` MEDIUM.
+
+---
+
+### Deviation Log
+
+Departures from the as-filed issue bodies and the as-authored Stage 4 plan, with rationale. No close-family verb precedes any `#N` below.
+
+| # | Deviation | Driver | Rationale |
+|---|---|---|---|
+| **(a)** | **Three files beyond the Stage-4 File Change Matrix are edited for #5833:** `release/releases/hub-state/README.md`, `core/standards/gate-efficacy-standard.md`, `release/tools/tests/test_spoke_run_directory.sh`. | Stage-5 design, all three warranted. | **README:** AC2 demands the staging location resolve to one determinate path; the file spelled the run key `vX.Y` while the substrate authority spells it `<milestone-slug>`, so without the repair a fresh agent derives two paths. Its ASCII tree is also an architecture-class artifact gaining a member — refreshing in-release prevents this release from *introducing* the drift. **Gate-efficacy register:** design-review checklist 4.9 is blocking and the design adds a class 3-O obligation-shaped predicate; both available dispositions are register-anchored, so the row is owed either way. **Test suite:** 4.9's wire-it disposition for the presence half of that predicate. |
+| **(b)** | **`packages/release-hub.skill` and its `.sha256` are added to the deliverable set** — absent from both the Stage-4 matrix and the Stage-5 change set, which declared "0 adds" against a 6-file population. | Check 7 / `skill-package-freshness` CI gate. | The sidecar is a content hash computed over every file in the packaged tree. Editing `SKILL.md` or `references/spoke-launch.md` changes that hash by construction. Unrebuilt, the release merges red. The same cascade applies to `release-planner` (#5505, D26) and `release-executor` (#5084, D5/AI-017). |
+| **(c)** | **The Stage-5 design text is not transcribed verbatim.** Six determinate corrections are applied at implementation — the H8 register row's column shape and heading level, its `runner-def:` anchor, the FM-1 repair scope, H7 Edit 1's replacement span, A8/A9's grep scope, and both A-NEG arm-count literals. | The Stage-5 adversarial review (FM-1 … FM-8) was never remediated back into the design text. | The design predates its own review. Its H7/H8/H9 text still contains the defects the review names, each fully specified in the review and carryable at Engineering — which is why Phase A returned CAVEATS rather than HOLD. Transcribing literally would emit a malformed register row, an anchor that resolves CLEAN before any arm exists, a bare `vX.Y` sweep corrupting 11 unrelated sites, a leftover `vX.Y` on a replaced line, an arm that survives its own deletion control, and a half-updated arm count. |
+| **(d)** | **The Stage-5 design's "next release" routing for the run-key sweep is not acted on** (its D-1 / RS-7 out-of-scope item (b)). | Operator decision **D7**, which post-dates the design. | D7 pulled the hub-state run-key sweep into this milestone through a second Solutioning wave. A spoke reading only the Stage-5 output would act on stale routing. |
+| **(e)** | **RS-5's mitigation is not carried; the risk cannot fire.** Class-L structurally cannot fire on `hub-state/README.md` (the file matches no durable-corpus glob in either enforcing surface, which share one predicate), and Class-V's `CUTOVER_RE` requires a concrete `v[0-9]+\.[0-9]+`, which `vX.Y` is not. | #6598's remediation pass, hub-confirmed on the two enforcing surfaces. | The design's H7 Constraint paragraph carries a "confirm the reference-durability check's disposition before merging" step predicated on a risk that cannot fire. Carried as a gate it would be ceremony. **Label subtlety worth stating:** the brief's "RS-5" resolves **by content** to that Constraint paragraph, not by label to the design's own RS-5 (which is "second-order fan-out never measured", already dispositioned Accepted). Act on content, not the label. |
+| **(f)** | **#6596's AC1 is dispositioned rather than executed as written.** "Fix all three `v[0-9]` sites" becomes "all three reviewed and dispositioned" — 2 updated, 1 preserved, 1 sibling arm added. | The AC's premise is wrong. | One of the three sites is a branch predicate that correctly parses 25 live `chore/vX.Y-*` refs. A uniform sweep would break working behaviour to satisfy the AC's letter while defeating its intent. |
+| **(g)** | **The Stage-5 ADR ships without a number**, cited as **#6617** throughout. | Operator decision **D27**. | Three concurrent releases collided on 170/171. Number allocation moves to Stage 12, where the claim is atomic. A number written now would be a claim this release cannot honour. |
+
+---
+
+### Scope boundary — D14 as corrected by D29
+
+Two adjacent repairs in two different files, easy to conflate and consequential to get wrong. Recorded here because both failure directions are silent.
+
+| Owner | Scope |
+|---|---|
+| **#6598** | the **"First emit" bullet in `release/releases/hub-state/README.md`** — that line only |
+| **#5833** | the **two `vX.Y` run-key sites in `release/references/how-to/hub-spoke-bridge.md`** — never routed away |
+
+Measured, three arms: `"First emit"` occurs **1×** in `hub-state/README.md` and **0×** in `hub-spoke-bridge.md`; control `emit` → **69** in the bridge, so the probe fires; specificity `"Firstzz emit"` → **0**. A spoke **over-reading** the routing as covering the bridge **skips the run-key repair entirely**; a spoke **under-reading** it repairs the README bullet and **collides with a sibling card on one line**. Neither failure produces an error — the over-read silently omits work, the under-read silently no-ops against a sibling's edit.
+
+---
+
+_Engineering Commit 0. The Stage-4 planning sub-task comment is the working reference up to this commit; from here the plan file is the durable surface. `## Change Description` is authored on this branch before the PR is marked ready-for-review, per the Change Description Protocol._
