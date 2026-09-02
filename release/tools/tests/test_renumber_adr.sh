@@ -621,6 +621,293 @@ assert_eq "A13c R7 says UNDETERMINED rather than falsely claiming 'none affected
 assert_eq "A13c the degraded notice still names what the run wrote" \
   "$(printf '%s\n' "$R7C" | grep -c 'This run wrote: .*release/ADRs/ADR-005-bravo\.md')" "1"
 
+echo "=== A14 — DRY-RUN / APPLY PARITY on a record with >=2 prior hops ==="
+# WHY THIS ACT EXISTS. The dry run used to count raw `ADR-<old>` matches while the
+# apply path consulted an exemption, so it PREDICTED rewriting the two line classes
+# a line-identity check cannot tell from a citation: this record's own earlier hop,
+# and a SIBLING release's claim history. Read literally it predicted falsifying two
+# audit records. The write was correct; the PREDICTION was the defect — on the one
+# edit class a reviewer is most likely to approve on the strength of a dry run.
+#
+# WHY >=2 PRIOR HOPS, AND WHY THIS CANNOT LIVE IN `--self-test`. The exemption
+# cannot fire on a FIRST move: there is no prior hop to spare, so a parity arm
+# pinned there is vacuously green and its control returns zero. "Two prior hops" is
+# a TOPOLOGY property — the record moved, the tree was committed, the mainline
+# advanced, it moved again — and `self_test()` is documented pure-function (no git,
+# no filesystem), so a hop count cannot be expressed there. A14e is the first-move
+# NEGATIVE CONTROL that makes every arm below a measurement rather than a tautology.
+# Measured margin, recorded so nobody optimizes it away: ONE prior hop already
+# reproduces the divergence; two is a deliberate margin that additionally exercises
+# the lineage case (the exemption firing on a non-adjacent earlier move while the
+# adjacent one is also present). Do not reduce it.
+#
+# ONE COMMIT PER HOP, asserted rather than tiptoed around: R1 refuses a dirty tree,
+# exactly as A12 already establishes for a multi-claim plan.
+
+# Local to this act on purpose — nothing above parses the dry-run report, and a
+# helper hoisted to the top of the suite would read as shared contract when it is
+# a reader for one output shape.
+#
+# The dry-run per-file line is
+#   `    would rewrite   1 × ADR-006 in core/ADRs/README.md  ·  exempt (record) 2  ·  REVIEW 0`
+# so awk's whitespace split gives $3=would, $11=exempt, $14=REVIEW. Keyed on the
+# " in <path>  " substring (two trailing spaces before the separator), which cannot
+# collide across the fixture's paths: " in release/ADRs/README.md  " does not
+# contain " in core/ADRs/README.md  ".
+dr_field() {   # $1 dry-run text · $2 path · $3 would|exempt|review
+  printf '%s\n' "$1" | awk -v p=" in ${2}  " -v w="$3" '
+    index($0, p) && $1 == "would" {
+      if (w == "would") print $3; else if (w == "exempt") print $11; else print $14; exit }'
+}
+dr_lines() { printf '%s\n' "$1" | grep -cF " in ${2}  "; }
+
+# A authors the next mainline record and pushes it, so B's held number becomes a
+# genuine DUPLICATE at every hop. A synthetic re-run against a static mainline
+# would measure the fixture's artificiality, not the tool.
+alpha14() {   # $1 worktree · $2 zero-padded number · $3 slug
+  ( cd "$ROOT/$1" && printf -- '---\ntitle: "ADR-%s — Alpha"\nstatus: Accepted\ndate: 2026-03-01\nrelease: alpha-release\n---\n\n# ADR-%s — alpha\n\n## Status\n\nAccepted.\n\n## Context\n\nAlpha.\n' "$2" "$2" > "core/ADRs/ADR-$2-$3.md"
+    G add -A >/dev/null && G commit -qm "author ADR-$2 $3" && G push -q origin main )
+}
+
+seed_origin origin14
+G clone -q "$ROOT/origin14" "$ROOT/wt-A14"
+author_B origin14 wt-B14 4
+
+# --- THE ONE HAND-SEED: a SIBLING release's renumber-log entry ----------------
+# This is the only hand-authored line in the whole act, and every constraint on it
+# is structural rather than stylistic:
+#   * it goes in `core/ADRs/README.md`, the HAND-MAINTAINED index — never inside a
+#     projected region, because a hand-edited derived cell correctly FAILS the
+#     projection check (A3d already asserts that failure);
+#   * it goes on its OWN line below the `**Renumber log.**` bold-run heading,
+#     because `append_renumber_log` writes only to the heading line itself
+#     (`lines[idx] = lines[idx].rstrip() + sentence`), so a following line is never
+#     disturbed by the tool's own appends;
+#   * it carries no comma-run of three or more `ADR-NNN`, so `resort_inline_list`'s
+#     `ADR-\d+(?:,\s*ADR-\d+){2,}` cannot match and silently reorder it;
+#   * it names ADR-006 as a number a DIFFERENT record once held, which is precisely
+#     the "another release's claim history" exclusion class the card names — and it
+#     only becomes load-bearing at hop 3, when this record's own number is 006.
+# Written through python3 so the apostrophe and the backticks need no shell
+# quoting gymnastics, the same idiom `roster_add` already uses.
+python3 - "$ROOT/wt-B14/core/ADRs/README.md" <<'PY'
+import sys
+path = sys.argv[1]
+sentence = ("ADR-006 (`sibling-record`) → **ADR-011** by "
+            "`release/tools/renumber-adr.py` at merge time, because the mainline "
+            "already claimed 006; the record's Status section carries the "
+            "provenance note.")
+lines = open(path, encoding="utf-8").read().split("\n")
+for i, line in enumerate(lines):
+    if line.startswith("**Renumber log.**"):
+        lines.insert(i + 1, sentence)
+        break
+else:
+    sys.exit("FATAL: the fixture core README carries no ** Renumber log.** heading")
+open(path, "w", encoding="utf-8").write("\n".join(lines))
+PY
+( cd "$ROOT/wt-B14" && G add -A >/dev/null && \
+  G commit -qm "seed a sibling release's renumber-log entry" )
+
+# --- the three-hop chain: 4 -> 5 -> 6 -> 7, mainline advancing between hops ---
+( cd "$ROOT/wt-A14" && G checkout -q -b feat/a
+  printf -- '---\ntitle: "ADR-004 — Alpha"\nstatus: Accepted\ndate: 2026-03-01\nrelease: alpha-release\n---\n\n# ADR-004 — alpha\n\n## Status\n\nAccepted.\n\n## Context\n\nAlpha.\n' > core/ADRs/ADR-004-alpha.md
+  G add -A >/dev/null && G commit -qm "author ADR-004 alpha" && G push -q origin feat/a && \
+  G checkout -q main && G merge -q --no-edit feat/a && G push -q origin main )
+
+cd "$ROOT/wt-B14" && G fetch -q origin
+python3 release/tools/renumber-adr.py --renumber 4 5 --apply >/dev/null 2>&1
+assert_eq "A14 HOP 1 (004 → 005) exits 0" "$?" "0"
+G commit -qm "hop 1" >/dev/null
+
+alpha14 wt-A14 005 alpha2
+cd "$ROOT/wt-B14" && G fetch -q origin
+python3 release/tools/renumber-adr.py --renumber 5 6 --apply >/dev/null 2>&1
+assert_eq "A14 HOP 2 (005 → 006) exits 0 — two prior hops now complete" "$?" "0"
+G commit -qm "hop 2" >/dev/null
+
+alpha14 wt-A14 006 alpha3
+cd "$ROOT/wt-B14" && G fetch -q origin
+
+# --- PRE-STATE, captured before the measured move ----------------------------
+PRE_CORE="$(cite_count core/ADRs/README.md 6)"
+PRE_REC="$(cite_count release/ADRs/ADR-006-bravo.md 6)"
+PRE_DESIGN="$(cite_count design-note.md 6)"
+PRE_PLAN="$(cite_count plan-note.md 6)"
+PRE_PROJ="$(cite_count release/ADRs/README.md 6)"
+
+DRY14="$(python3 release/tools/renumber-adr.py --renumber 6 7 2>&1)"
+
+# --- A14 PRECONDITION — SCOPE MEMBERSHIP, asserted before any "unchanged" claim
+# `_in_scope_files` silently drops non-UTF-8 files, and this fixture seeds one
+# (`packages/fixture-bravo.skill`). A fixture file that fell out of R3 scope for
+# ANY reason would make every parity arm below pass for the wrong reason — the
+# vacuous pass. So membership is measured first, on the same instrument.
+assert_eq "A14 PRECONDITION — the curated index is in R3 scope" \
+  "$(dr_lines "$DRY14" 'core/ADRs/README.md')" "1"
+assert_eq "A14 PRECONDITION — the record file is in R3 scope" \
+  "$(dr_lines "$DRY14" 'release/ADRs/ADR-006-bravo.md')" "1"
+assert_eq "A14 PRECONDITION — both live-citation files are in R3 scope" \
+  "$(( $(dr_lines "$DRY14" 'design-note.md') + $(dr_lines "$DRY14" 'plan-note.md') ))" "2"
+assert_eq "A14 PRECONDITION — the projected index is in the branch diff (so its absence below is the REGION, not the scope)" \
+  "$(G diff --name-only origin/main...HEAD | grep -cx 'release/ADRs/README\.md')" "1"
+
+# --- A14g ZERO MUTATION — the dry run predicted and wrote nothing -------------
+assert_eq "A14g the dry run mutates nothing (A11's idiom, re-asserted on a 2-hop record)" \
+  "$(G status --porcelain | wc -l | tr -d ' ')" "0"
+
+WOULD_CORE="$(dr_field "$DRY14" 'core/ADRs/README.md' would)"
+EXEMPT_CORE="$(dr_field "$DRY14" 'core/ADRs/README.md' exempt)"
+REVIEW_CORE="$(dr_field "$DRY14" 'core/ADRs/README.md' review)"
+WOULD_REC="$(dr_field "$DRY14" 'release/ADRs/ADR-006-bravo.md' would)"
+EXEMPT_REC="$(dr_field "$DRY14" 'release/ADRs/ADR-006-bravo.md' exempt)"
+
+# --- A14b NAMED (AC-2) — the exemption is PRINTED, not subtracted -------------
+# AC-2 is discharged by the exempt column EXISTING with a non-zero value. A file
+# reported `would rewrite 0` is indistinguishable from a file with no citations at
+# all; `would rewrite 1 · exempt (record) 2` names the exemption instead of
+# silently over-predicting it.
+assert_eq "A14b AC2 the curated index's dry-run line carries a NON-ZERO exempt (record) column" \
+  "$( [ "${EXEMPT_CORE:-0}" -gt 0 ] && echo yes || echo no )" "yes"
+assert_eq "A14b AC2 the exempt count is the two exclusion classes the card names (own prior hop + sibling claim)" \
+  "$EXEMPT_CORE" "2"
+
+python3 release/tools/renumber-adr.py --renumber 6 7 --apply >/dev/null 2>&1
+assert_eq "A14 HOP 3 (006 → 007) — THE MEASURED MOVE — exits 0" "$?" "0"
+
+POST_CORE="$(cite_count core/ADRs/README.md 6)"
+POST_REC="$(cite_count release/ADRs/ADR-007-bravo.md 6)"
+POST_DESIGN="$(cite_count design-note.md 6)"
+POST_PLAN="$(cite_count plan-note.md 6)"
+
+# APPENDED — the `ADR-<old>` tokens the apply path CREATES, measured from the
+# post-state rather than assumed. R4's § Renumber-log append and R5's provenance
+# note both name the OLD number on purpose: they ARE the audit trail this move
+# writes. So a naive `PRE - POST == would` identity is arithmetically FALSE against
+# correct behaviour, and stating it that way would encode the apply path's own
+# audit record as a defect. The parity that actually closes V1 is a PARTITION of
+# the tokens PRESENT AT PRE — `would` moved, `exempt` stayed — plus the survivor
+# identity once the created tokens are subtracted back out.
+APPENDED_CORE="$(grep -o 'ADR-006 (`bravo`) → \*\*ADR-007\*\* by `release/tools/renumber-adr\.py`' core/ADRs/README.md | grep -o 'ADR-006' | wc -l | tr -d ' ')"
+APPENDED_REC="$(grep -o '\*\*Numbering provenance — `006 → 007`\.\*\*.*' release/ADRs/ADR-007-bravo.md | grep -o 'ADR-006' | wc -l | tr -d ' ')"
+assert_eq "A14 the apply path's own audit record is MEASURED, not assumed (§ Renumber log)" \
+  "$( [ "${APPENDED_CORE:-0}" -gt 0 ] && echo yes || echo no )" "yes"
+assert_eq "A14 the apply path's own audit record is MEASURED, not assumed (provenance note)" \
+  "$( [ "${APPENDED_REC:-0}" -gt 0 ] && echo yes || echo no )" "yes"
+
+# --- A14a PARITY — the curated index (AC-1 · V1 · THE OBSERVED DEFECT) --------
+assert_eq "A14a AC1 PARTITION — would + exempt + review accounts for every ADR-006 token present at PRE (curated index)" \
+  "$(( WOULD_CORE + EXEMPT_CORE ))" "$PRE_CORE"
+assert_eq "A14a AC1 PARITY — the tokens that SURVIVED the sweep are exactly the ones the dry run called exempt (curated index)" \
+  "$(( POST_CORE - APPENDED_CORE ))" "$EXEMPT_CORE"
+assert_eq "A14a AC1 PARITY — the tokens the sweep actually MOVED are exactly the ones it predicted (curated index)" \
+  "$(( PRE_CORE - (POST_CORE - APPENDED_CORE) ))" "$WOULD_CORE"
+assert_eq "A14a the sibling release's claim history was NOT falsified" \
+  "$(grep -c 'ADR-006 (`sibling-record`) → \*\*ADR-011\*\*' core/ADRs/README.md)" "1"
+assert_eq "A14a this record's OWN prior hop was NOT falsified" \
+  "$(grep -o 'ADR-005 (`bravo`) → \*\*ADR-006\*\*' core/ADRs/README.md | wc -l | tr -d ' ')" "1"
+assert_eq "A14a SPECIFICITY — the LIVE cross-numbering row was still swept" \
+  "$(grep -cE '^\| ADR-007 \| release \|' core/ADRs/README.md)" "1"
+assert_eq "A14a no ambiguous site was silently folded into either column" \
+  "$REVIEW_CORE" "0"
+
+# --- A14c PARITY — the record file (AC-1 · lineage) ---------------------------
+assert_eq "A14c AC1 PARTITION — the record file's tokens are fully accounted for" \
+  "$(( WOULD_REC + EXEMPT_REC ))" "$PRE_REC"
+assert_eq "A14c AC1 PARITY — the record file's surviving tokens are exactly the exempt ones" \
+  "$(( POST_REC - APPENDED_REC ))" "$EXEMPT_REC"
+assert_eq "A14c the hop-2 provenance note survives byte-identical (the non-adjacent lineage case)" \
+  "$(grep -c 'renumbered to \*\*ADR-006\*\* at merge time' release/ADRs/ADR-007-bravo.md)" "1"
+
+# --- A14d SPECIFICITY (null arm) — live citations are fully predicted and swept
+# Without this arm the exemption could be a blanket suppressor and every arm above
+# would still pass. These two files carry no record-class line at all.
+assert_eq "A14d design-note.md: exempt 0 — nothing to spare in a pure citation file" \
+  "$(dr_field "$DRY14" 'design-note.md' exempt)" "0"
+assert_eq "A14d design-note.md: the dry run predicted EVERY token present" \
+  "$(dr_field "$DRY14" 'design-note.md' would)" "$PRE_DESIGN"
+assert_eq "A14d design-note.md: and the apply path swept every one" "$POST_DESIGN" "0"
+assert_eq "A14d plan-note.md: exempt 0" \
+  "$(dr_field "$DRY14" 'plan-note.md' exempt)" "0"
+assert_eq "A14d plan-note.md: the dry run predicted EVERY token present" \
+  "$(dr_field "$DRY14" 'plan-note.md' would)" "$PRE_PLAN"
+assert_eq "A14d plan-note.md: and the apply path swept every one" "$POST_PLAN" "0"
+
+# --- A14f LINEAGE — append-only, nothing overwritten --------------------------
+# COUNTED AS TOKENS, NEVER AS LINES. `append_renumber_log` writes every entry onto
+# the SAME line (`lines[idx] = lines[idx].rstrip() + sentence`), so the § Renumber
+# log is ONE accumulating line and a `grep -c` here would report 1 no matter how
+# many hops landed — a counter that cannot fail.
+assert_eq "A14f the § Renumber log carries all THREE tool entries plus the sibling's, on one accumulating line" \
+  "$(grep -o 'by `release/tools/renumber-adr\.py` at merge time' core/ADRs/README.md | wc -l | tr -d ' ')" "4"
+assert_eq "A14f the record's ## Status reads as a THREE-hop lineage, nothing overwritten" \
+  "$(grep -o '\*\*Numbering provenance — `[0-9][0-9][0-9] → [0-9][0-9][0-9]`\.\*\*' release/ADRs/ADR-007-bravo.md | wc -l | tr -d ' ')" "3"
+assert_eq "A14f the lineage is chronological (the first hop is still first)" \
+  "$(grep -n '\*\*Numbering provenance — `004 → 005`\.\*\*' release/ADRs/ADR-007-bravo.md | head -1 | cut -d: -f1)" \
+  "$(grep -n '\*\*Numbering provenance' release/ADRs/ADR-007-bravo.md | head -1 | cut -d: -f1)"
+
+# --- A14h DISCLOSURE — the six divergences that remain OPEN are NAMED ---------
+# This card's AC-1 closes ONE of eight divergence classes. The rest are converted
+# from silent to disclosed, and the wording matters: the R2 rename IS disclosed
+# (by `R1 PROCEED`, which executes before the dry-run block), so a line claiming
+# otherwise would be a new false statement in place of an old one.
+assert_eq "A14h the dry run discloses that it enumerates R3 and nothing else" \
+  "$(printf '%s\n' "$DRY14" | grep -c 'DRY-RUN enumerates R3 only')" "1"
+assert_eq "A14h the disclosure names the R2 rename as DISCLOSED, not omitted" \
+  "$(printf '%s\n' "$DRY14" | grep -c 'The R2 rename is named above by R1 PROCEED')" "1"
+# The disclosure above is only honest if the line it points at actually carries the
+# paths. `R1 PROCEED` renders `old_path`/`new_path`, which are ABSOLUTE (`root / …`),
+# so the arm matches the basenames rather than a repo-relative form that never
+# appears in the output — asserting the shape the tool really emits, not the shape
+# the design assumed.
+assert_eq "A14h SENSITIVITY — R1 PROCEED really does print the rename paths the disclosure points at" \
+  "$(printf '%s\n' "$DRY14" | grep -c 'R1 PROCEED: ADR-006 → ADR-007 (.*ADR-006-bravo\.md → .*ADR-007-bravo\.md)')" "1"
+assert_eq "A14h the ambiguous-site review block is emitted even at zero sites" \
+  "$(printf '%s\n' "$DRY14" | grep -c 'R3 REVIEW: 0 ambiguous site(s)')" "1"
+
+# --- A14i PROJECTED MECHANISM (V2) — reported by mechanism, not by count ------
+# The projector-owned region is DERIVED: a row reading `ADR-<old>` belongs to
+# whichever record still legally holds <old>, and R4 regenerates the region from
+# the post-rename file set rather than sweeping it. Counting those rows is the same
+# over-prediction class as counting an exempt record — an edit the tool would
+# itself undo. SENSITIVITY FIRST: the file must actually carry the old number on
+# disk, or "predicted zero" would be a statement about an empty file.
+assert_eq "A14i SENSITIVITY — the projected index really does carry ADR-006 on disk (there IS something to over-predict)" \
+  "$( [ "${PRE_PROJ:-0}" -gt 0 ] && echo yes || echo no )" "yes"
+assert_eq "A14i V2 — and the dry run predicts rewriting NONE of it" \
+  "$(dr_lines "$DRY14" 'release/ADRs/README.md')" "0"
+assert_eq "A14i the projected surface is REPORTED BY MECHANISM rather than left silent" \
+  "$(printf '%s\n' "$DRY14" | grep -c 'release/ADRs/README.md is regenerated by generate-adr-index.py')" "1"
+assert_eq "A14i SPECIFICITY — the same run still reports the hand-maintained index by count" \
+  "$(dr_lines "$DRY14" 'core/ADRs/README.md')" "1"
+
+# --- A14e NEGATIVE CONTROL — the FIRST move (the probe-validity arm) ----------
+# THE ARM THAT MAKES EVERY ARM ABOVE A MEASUREMENT. The exemption cannot fire on a
+# first move: there is no prior hop and no sibling entry to spare. If A14a's
+# identity also held here with a non-zero exempt column, the fixture would be
+# measuring the arithmetic and not the exemption. Run LAST so its failure cannot be
+# mistaken for a setup problem in the chain above, and so a reader sees the
+# positive arms and their control adjacent in the output.
+seed_origin origin14e
+G clone -q "$ROOT/origin14e" "$ROOT/wt-A14e"
+( cd "$ROOT/wt-A14e" && G checkout -q -b feat/a
+  printf '# ADR-004 — alpha\n\n## Status\n\nProposed.\n' > core/ADRs/ADR-004-alpha.md
+  G add -A >/dev/null && G commit -qm a && G push -q origin feat/a && \
+  G checkout -q main && G merge -q --no-edit feat/a && G push -q origin main )
+author_B origin14e wt-B14e 4
+cd "$ROOT/wt-B14e" && G fetch -q origin
+DRY14E="$(python3 release/tools/renumber-adr.py --renumber 4 5 2>&1)"
+assert_eq "A14e CONTROL SENSITIVITY — the first-move dry run is doing real work (non-zero would-rewrite on the curated index)" \
+  "$(dr_field "$DRY14E" 'core/ADRs/README.md' would)" "1"
+assert_eq "A14e NEGATIVE CONTROL — at a FIRST move the curated index reports exempt 0" \
+  "$(dr_field "$DRY14E" 'core/ADRs/README.md' exempt)" "0"
+assert_eq "A14e NEGATIVE CONTROL — at a FIRST move the record file reports exempt 0" \
+  "$(dr_field "$DRY14E" 'release/ADRs/ADR-004-bravo.md' exempt)" "0"
+assert_eq "A14e NEGATIVE CONTROL — the whole first-move run reports ZERO exempt tokens" \
+  "$(printf '%s\n' "$DRY14E" | grep -cE 'DRY-RUN: [0-9]+ citation\(s\) would move; 0 exempt \(record\);')" "1"
+assert_eq "A14e the mechanism line is emitted on a first move too (it is unconditional, not token-gated)" \
+  "$(printf '%s\n' "$DRY14E" | grep -c 'release/ADRs/README.md is regenerated by generate-adr-index.py')" "1"
+
 echo
 echo "renumber-adr fixture: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ] || exit 1
