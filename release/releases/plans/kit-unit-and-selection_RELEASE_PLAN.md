@@ -103,6 +103,61 @@ These are operator-rendered decisions and independently-verified findings that c
 
 **D-Instrument** — the `SCANNED_TYPES` fix adding `py` to `release/tools/blast-radius.sh` lands as Stage-6 scope on #6377. Two action items are hard-gated at close: the fix MUST ship with a self-test arm exercising at least one `.py` reference under a RED→GREEN assertion (the current suite passes identically patched and unpatched, so shipping the one-line fix alone would re-create the gate-that-cannot-fail class this card exists to document); and `core/deploy/tools/domain-blast-radius.sh` MUST NOT be extended — it already carries `py` and its blindness is architectural, not a type-list omission.
 
+**CR-2 — D-KitFieldShape: RENDERED at Stage 6 by #6362. The selection field is a flat scalar, `operator.toml [methodology].default_work_item_kit`.**
+
+Collective Review deferred this rather than settling it, and named the risk that a deferred decision gets settled by whoever writes first. The rationale is therefore recorded here, in its own commit, **before** either shape was implemented.
+
+*The two candidates.* **(a)** a flat scalar `default_work_item_kit` in the existing `[methodology]` table, one key per kit class named for its class; **(b)** a class-keyed map `[methodology.default_kits]` whose keys are `kit_class` values — `work-item = "<pack_id>"`.
+
+*The map's stated ground was already falsified.* #6360's D-Rec-3 preferred (b) because a flat scalar *"forces a governed Track-A config change for every future class."* Check 70 leg **C70c** asserts that the declaration's key set equals `operator.toml.template`'s key set in **both** directions, in ENFORCE mode, so a new class costs one governed declaration entry under **either** shape. Cost is not the discriminator.
+
+*What decides it is a fact neither Stage-5 design probed: the map is not expressible at its own canonical key.* C70c extracts template keys with `^([A-Za-z_][A-Za-z0-9_]*)\s*=` — a charset that **excludes the hyphen**. The `kit_class` value ADR-170 registers is `work-item`, hyphenated, and that is its sole spelling in the ADR, in the pack corpus README and in the validator. A template line `work-item = "…"` under `[methodology.default_kits]` is therefore **invisible to the gate's own extractor** while its declaration entry is visible, so C70c reports the key as declared-but-absent and **hard-fails the build**. Quoting the key does not help; the regex is anchored and a quote is not in the leading class either.
+
+Executed against the real predicate over synthetic roots, six arms:
+
+| Arm | Shape | Exit | C70c denominator |
+|---|---|---|---|
+| baseline | unmodified repo pair | **0** | 40 declared / 40 template |
+| A | flat `[methodology].default_work_item_kit`, declared | **0** | 41 / 41 |
+| **B** | **map `[methodology.default_kits].work-item`, declared** | **1 — FAIL** | 41 / **40** |
+| C | same nesting, key respelled `work_item` | **0** | 41 / 41 |
+| D | *sensitivity* — nested key in template, undeclared | **1 — FAIL** | 40 / 41 |
+| E | *sensitivity* — flat key declared, undocumented | **1 — FAIL** | 41 / 40 |
+
+Arm C isolates the cause: **the nesting is fine, the hyphen is not.** Arms D and E are the live controls that make B a real firing rather than a dead reader.
+
+*So the map has exactly one way to ship, and it is worse than the option it was preferred over.* Respelling the key `work_item` forks a second spelling of a value ADR-170 froze as `work-item` — a shadow vocabulary at precisely the seam that record declares OPEN, on the field whose whole purpose is to be extended by later classes. Every future class would inherit the fork.
+
+*Decision: **(a)**, the flat scalar.* It passes the enforcing gate at its canonical spelling; it is byte-symmetric with the sibling axis `default_delivery_approach` that AC-3 and AC-4 both reason against; and it is prefix-distinctive under the section-blind TOML readers this repo documents as such. Generality is carried by `kit_class` on the **pack** (ADR-170 D3), not by the selection field — a future `field` kit gets `default_field_kit`, re-founding nothing.
+
+*What would change my mind — either alone.* **(i)** C70c's key regex is widened to the TOML v1.0 bare-key charset (`[A-Za-z0-9_-]`), which removes the expressibility objection and returns the decision to the original cost-and-enumerability trade, where the map's real advantage — enumerating selected kits without knowing class names — is genuine. **(ii)** A consumer appears that must iterate the selected-kit set without knowing class names. Neither holds today: no such consumer exists and one class exists. If either arrives the migration is a **CHEAP** ALIAS along the path ADR-022 D3 already walks for `[platform].work_board`.
+
+**Reversibility: CHEAP / Confidence HIGH** pre-consumption — the field is optional at every rung and absent is the pre-kit status quo. Crosses to MODERATE once a deployment authors the key.
+
+**D-EmptyKitReplace — the constraint that replaces D-EmptyKit. Rendered at Stage 6 by #6362.**
+
+D-EmptyKit was retired because its predicate was false. The operator directed *retire **and replace***, so what the real constraint is had to be determined — and "there is none" was a permitted answer that still had to be **reached**, not assumed.
+
+*Method: enumerate every reachable state in which a resolution is empty, and run the shipped reader over each.* Five states, five invocations, at the branch head:
+
+| # | State | Observed | Kit-specific? |
+|---|---|---|---|
+| Q1 | conforming work-item kit, no archetype pack | `deliverable`, COUNT 1, **exit 0** | the retired premise, falsified again |
+| Q2 | kit with an **unregistered** `kit_class` and no kinds | validates (`PACK-P08` caveat, exit 0); resolves COUNT 0, exit 0 | **yes** |
+| Q3 | base pack only | COUNT 0, exit 0 | **no — pre-kit** |
+| Q4 | archetype pack present, none matching the archetype | COUNT 0, exit 0 | **no — pre-kit** |
+| Q5 | base + archetype + kit | COUNT 2, exit 0 | the normal case |
+
+*The finding.* Emptiness is reachable through three doors. **Two of them (Q3, Q4) are pre-kit shapes this release does not touch** — a deployment could reach both before kits existed, and nothing about the kit changes either. The third (Q2) is not a violated constraint but the **correct behaviour of an open class domain**: a `field` kit is not supposed to contribute work-item kinds, and the grammar already names the state — `PACK-P08` emits a caveat carrying the offending value rather than staying silent.
+
+**Conclusion: there is no genuine joint-emptiness constraint on the selection axis, and this release asserts none.** `SEL-06` is not resurrected in any form, and no empty-vocabulary rule is added to any surface.
+
+*What the replacement constraint is instead.* D-EmptyKit was reaching for a real hazard and aimed it at the wrong observable. The hazard selection genuinely introduces is that **a selection that fails to resolve is observationally identical to no selection at all** — both yield a union carrying no kit-attributed rows. That shape is new with `--kit`, it is the silent-drop class one rung above #6361's, and unlike emptiness it is executable:
+
+> **SEL-RESOLVE — a kit selection resolves, or it fails loudly. The absence of a selection and the failure of a selection must never produce the same observation.** A `--kit <pack_id>` naming a pack absent from the read root, or present but not `role = "kit"`, is **exit 3**, naming the pack and, where it exists, its actual role. It is never a fall-through to "no kit selected." The same rule binds `--k4`.
+
+*Boundary, stated rather than implied.* This constrains **selection resolvability**, not pack conformance. A pack that is malformed *as a kit* is `--validate-packs`'s business (`PACK-P05`, `PACK-K05`); `--resolve` does not duplicate validation. Two modes, two jobs.
+
 ## Backward-Compat Landing
 
 The meta-schema grammar version stays at **v1**. The change is **4 adds + 1 relaxation + 1 restriction**, and the set — not a literal count — is what the grammar's own extension note records, because the population closed one wave after the count was first written.
