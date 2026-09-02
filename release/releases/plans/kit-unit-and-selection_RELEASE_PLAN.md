@@ -354,7 +354,7 @@ A work-item kit becomes a first-class unit of the pack grammar: a third pack rol
 | Issue | Slice | State |
 |---|---|---|
 | #6360 | the founding ADR | landed at Engineering Commit 0 + 1 |
-| #6377 | the consumer map and the instrument fix | pending |
+| #6377 | the consumer map and the instrument fix | landed — instrument fix first, then the map re-derived against it |
 | #6361 | the grammar, the validator, the fixture home | pending |
 | #6362 | selection through the cascade | pending |
 | #6381 | level coverage | pending |
@@ -386,6 +386,10 @@ The founding ADR is subordinate to the work-item-type-layer kernel, extends the 
 | 3 | 6 | Four Verification-Plan rows carried an unescaped pipe inside a regex alternation, breaking table field parity so every cell past the break read at a shifted index. The plan-verification executor refused to index them. | Pipes escaped; re-measured with an independent parity probe over all 102 table rows — 4 mismatches → **0**. Authoring defect on this file, fixed at Commit 0 + 2 rather than carried. |
 | 4 | 6 | Nine Verification-Plan rows named a tool invocation with no probe the plan executor's family classifier recognizes, so each graded ERROR as an unreadable check rather than running. | Each row re-cut to lead with a tree-resident anchor the executor can run, naming the behavioral invocation as the arm executed at Stage 6 and re-run at Stage 7. Unclassified rows 9 → **0**. The assertions are unchanged; only their expression moved. |
 | 5 | 6 | One row expressed a null expectation as a negative-lookahead regex, which the extended-regex matcher cannot compile — the check could never have run. | Restated as two counts that must be equal, which is the same assertion without a negative match. |
+| 6 | 6 | The AI-001 self-test fixture ships **three** new assertions (36 → **39**), not the single arm a 37-total anticipated. | Kept at three, for two measured reasons. (a) `build_scan_list` reaches its type filter by **two** routes — `find`'s `-name` predicates on the all-files source and `path_has_scanned_type` on the tracked source — so a single arm leaves one route's regression undetected; T6a covers the first, T5l the second. (b) The suite's own stated discipline pairs every defect assertion with a control on the same fixture, and a new arm whose control did not exist would reproduce the very class this card documents; T6z is that control and passes in both states. Minor adjustment; no scope change. |
+| 7 | 6 | `core/references/reference/README.md` was edited (one `Key entries` row) and is not in the File Change Matrix. | Row added. That README enumerates **every** entry in its folder (3 of 3 before this change), so landing a fourth file unlisted would ship the index wrong on the day it is written — the same authoring-debt shape recorded at deviation 2. Verified no gate enforces the enumeration and no sibling card writes the file, so this is an authoring correction rather than a contended edit. Minor adjustment; no scope change. |
+| 8 | 6 | The consumer map's far-end table carries a **forward-declared** kit-axis row for the operator-configuration surface. | Declared at authoring time. The independent review recorded this seam as **unowned**: the selection card's integration criterion asserts the map carries the kit axis, while no card's File Change Matrix contains the map — this card's Change 2 is "none". Declaring the row here is the cheaper of the two named fixes and needs no matrix change on either card. Minor adjustment; no scope change. |
+| 9 | 6 | The Stage-5 design's line anchors for the pack-union reader had drifted (`346-369` for a function that begins at `327`). | Re-measured every cited anchor at `verified_at` and recorded the measured values in the map. The drift is why the map ships a `verified_at` stamp and a reproduction block rather than bare line citations. Minor adjustment; no scope change. |
 
 ## Issue References
 
