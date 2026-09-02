@@ -562,8 +562,23 @@ compute_next_free() {
 
   case "$bump" in
     major|minor)
-      local a aM aN _aP
-      a="$(anchor)"            # host read; returns the canonical latest-release tip
+      local a aM aN _aP _arc
+      # rc-check, same contract anchor() itself applies to claimed_set(): a FAILED
+      # read is not a greenfield EMPTY one. Without this the HALT path leaves "$a"
+      # empty, version_parse yields nothing, $((aN + 1)) evaluates an empty operand
+      # to 1, and the tool pushes a malformed-but-signed tag. U-16 asserts anchor()
+      # honours the contract; U-16c asserts this caller acts on it.
+      _arc=0; a="$(anchor)" || _arc=$?
+      [[ "$_arc" -eq 0 ]] || {
+        printf 'claim-version: HALT — compute_next_free cannot read the anchor (rc=%s); an unevaluable anchor is NOT an empty one\n' \
+          "$_arc" >&2
+        return 2
+      }
+      version_canonical "$a" || {
+        printf 'claim-version: HALT — compute_next_free read a non-canonical anchor %q; refusing to derive a version from it\n' \
+          "$a" >&2
+        return 2
+      }
       read -r aM aN _aP <<<"$(version_parse "$a")"
       if [[ "$bump" == "major" ]]; then
         fM=$((aM + 1)); fN=0; fP=0
@@ -2474,6 +2489,31 @@ PKGSTUB
   _ct_run anchor; out="$REPLY"; rc="$REPLY_RC"
   _ct_eq "$rc" "0" "U-16(d) control: healthy greenfield must answer rc 0"
   _ct_eq "$out" "v2.15" "U-16(d) control: greenfield anchor() falls back to the latest published release"
+
+  # (e) + (f) THE CALLER must act on the rc, not merely receive it. (a)-(d) prove
+  #     anchor() honours its contract; they say nothing about whether its consumer
+  #     does. That asymmetry shipped a defect: compute_next_free read anchor() in a
+  #     command substitution and discarded the rc, so on the HALT path "$a" was
+  #     empty, version_parse yielded nothing, $((aN + 1)) evaluated an empty operand
+  #     to 1, and a malformed-but-signed tag reached the remote. Every arm above was
+  #     green throughout. A callee-only contract test is not coverage of the contract.
+  _t_label="U-16 compute_next_free rc-checks anchor() (HALT -> refuse, never a derived version)"
+  _ct_setup latest="v2.15" published="v2.14 v2.15" origin="v2.14 v2.15" \
+            plan="ok" resolve_rc=0 arm_rc=0 published_rc=1 latest_rc=0
+  _ct_run anchor; rc="$REPLY_RC"
+  [[ "$rc" -ne 0 ]] || _ct_fail "U-16(e) precondition: anchor() must fail on the partial view"
+  _ct_run compute_next_free minor ""; out="$REPLY"; rc="$REPLY_RC"
+  [[ "$rc" -ne 0 ]] || _ct_fail "U-16(e) compute_next_free must return non-zero when anchor() failed (rc=0 means the caller dropped the rc and derived a version from an empty anchor)"
+  _ct_eq "$out" "" "U-16(e) compute_next_free must emit NO version on a failed anchor (any output here is the malformed-tag defect)"
+  _ct_run_err compute_next_free minor ""; err="$REPLY"
+  grep -qi 'cannot read the anchor' <<< "$err" || _ct_fail "U-16(e) compute_next_free must name the anchor read failure"
+
+  _t_label="U-16 control — healthy anchor lets compute_next_free derive the true next-free"
+  _ct_setup latest="v2.10" published="v2.14 v2.15" origin="v2.14 v2.15" \
+            plan="ok" resolve_rc=0 arm_rc=0 published_rc=0 latest_rc=0
+  _ct_run compute_next_free minor ""; out="$REPLY"; rc="$REPLY_RC"
+  _ct_eq "$rc" "0" "U-16(f) control: a healthy anchor must let compute_next_free answer rc 0"
+  _ct_eq "$out" "v2.16" "U-16(f) control: compute_next_free derives minor+1 off the true frontier — without this, (e) would pass on a function hardwired to fail"
 
   # ---- U-17: arms (2)/(3) UNAVAILABLE is not arms (2)/(3) EMPTY (#4339) --------
   # U-15 established this tri-state distinction for the published arm. U-17 extends
