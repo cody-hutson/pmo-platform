@@ -32,13 +32,17 @@ set -uo pipefail
 #   collision, not the absence of a file to collide with.
 #
 # GROUPS
-#   (A1-A6) CLAUSE ARMS — the run-directory section exists in the Spoke
+#   (A1-A6) SPOKE CLAUSE ARMS — the run-directory section exists in the Spoke
 #           Template, binds the WRITE side, binds the READ side, requires the
 #           resolved path be echoed, the read-only GitHub-write bound no longer
 #           reads as covering the filesystem, and the temp-file mandate names
 #           the run directory.
-#   (A-NEG) DELETION SENSITIVITY — the same six assertions against a copy with
-#           the section removed must ALL fail. An arm that still passes there
+#   (A7-A9) HUB CLAUSE ARMS — the hub-side counterpart subsection exists, binds
+#           the hub's write side to ONE staging location, and states an end
+#           anchor tied to a named release event. The posting mandate is
+#           universal; before these arms only the spoke's target was bounded.
+#   (A-NEG) DELETION SENSITIVITY — the same nine assertions against a copy with
+#           BOTH sections removed must ALL fail. An arm that still passes there
 #           is not grading the clause.
 #   (B1-B5) BEHAVIOURAL ARMS — serial re-run isolation, the non-conforming
 #           reader (sensitivity), concurrent distinctness with disjoint
@@ -82,11 +86,34 @@ extract_section() {
   ' "$1"
 }
 
-# Six clause assertions, evaluated against an arbitrary copy of the doc.
+# ---------------------------------------------------------------------------
+# Extract the HUB-side staging section. The spoke section above is inside the
+# Spoke Template fence; this one is hub-facing prose in `## For the Hub Agent`,
+# so it needs its own extractor rather than a widened one — widening would
+# rename the heading the extractor above matches as an exact string, which is
+# the change that empties it.
+#
+# Terminates on the next heading of level 2 OR 3, whichever comes first. That
+# is deliberately stricter than mirroring the extractor above: the end-anchor
+# literal A9 greps for occurs several times ELSEWHERE in this document, so an
+# extractor that over-ran its subsection would let A9 pass on text outside the
+# clause — and would then survive the A-NEG excision, registering as a survivor.
+# Bounding the extraction is what keeps A9 a statement about the clause.
+# ---------------------------------------------------------------------------
+extract_hub_section() {
+  awk '
+    /^### Hub Staging Discipline$/ { inside = 1; next }
+    inside && (/^## / || /^### /) { inside = 0 }
+    inside { print }
+  ' "$1"
+}
+
+# Nine clause assertions, evaluated against an arbitrary copy of the doc.
 # Emits one line per arm: "<arm-id> PASS" or "<arm-id> FAIL".
 clause_arms() {
-  local doc="$1" section
+  local doc="$1" section hub_section
   section="$(extract_section "$doc")"
+  hub_section="$(extract_hub_section "$doc")"
 
   # A1 — the section exists at all, inside the Spoke Template.
   if [ -n "$section" ]; then echo "A1 PASS"; else echo "A1 FAIL"; fi
@@ -122,6 +149,25 @@ clause_arms() {
   #      names the path discipline that bounds it.
   if grep -qF 'That temp file goes in the spoke'\''s run directory' "$doc"
   then echo "A6 PASS"; else echo "A6 FAIL"; fi
+
+  # A7 — the HUB-side counterpart clause exists at all. Its absence is what
+  #      produced this rule: the posting mandate is universal while only the
+  #      spoke's target was bounded, so hub-staged bodies had no governed home.
+  if [ -n "$hub_section" ]; then echo "A7 PASS"; else echo "A7 FAIL"; fi
+
+  # A8 — it binds the hub's WRITE side to ONE location. Fixed-string match:
+  #      the path carries `<`, `>` and `/`, which are regex-live under -E and
+  #      would silently mis-match.
+  if printf '%s' "$hub_section" \
+     | grep -qF '<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/staging/'
+  then echo "A8 PASS"; else echo "A8 FAIL"; fi
+
+  # A9 — it states an end anchor tied to a NAMED release event, not a duration.
+  #      Scoped to $hub_section, never the whole doc: this literal occurs
+  #      several times elsewhere in the bridge, so a whole-doc grep would pass
+  #      with the clause deleted and then survive the A-NEG excision.
+  if printf '%s' "$hub_section" | grep -qF 'Procedure 7 Step 6'
+  then echo "A9 PASS"; else echo "A9 FAIL"; fi
 }
 
 # ---------------------------------------------------------------------------
@@ -132,7 +178,7 @@ LIVE_RESULTS="$(clause_arms "$BRIDGE")"
 # negative arm (it passes when the absolute-path form is ABSENT), so it passes
 # legitimately against an excised section and would corrupt the deletion-
 # sensitivity count if included there.
-for arm in A1 A2 A3 A4 A4b A5 A6; do
+for arm in A1 A2 A3 A4 A4b A5 A6 A7 A8 A9; do
   if printf '%s\n' "$LIVE_RESULTS" | grep -qx "$arm PASS"; then
     ok "$arm — clause assertion holds in hub-spoke-bridge.md"
   else
@@ -144,14 +190,24 @@ echo
 # ---------------------------------------------------------------------------
 echo "(A-NEG) Deletion sensitivity — the same arms against an excised copy"
 # ---------------------------------------------------------------------------
-# Build a mutated copy with the run-directory section (and the two pointer
-# edits that depend on it) removed. Every arm above must FAIL here. An arm that
-# survives the deletion is grading something other than the contract clause.
+# Build a mutated copy with the run-directory section, the hub-side staging
+# subsection, and the two pointer edits that depend on them removed. Every arm
+# above must FAIL here. An arm that survives the deletion is grading something
+# other than the contract clause.
+#
+# The two excisions are independent flags because the sections nest at
+# different heading levels in different regions of the document: the spoke
+# section is level-2 payload inside the Spoke Template fence, the hub
+# subsection is level-3 prose in `## For the Hub Agent`. A level-2 terminator
+# does not close a level-3 section and vice versa, so one flag cannot serve
+# both without silently under- or over-excising.
 MUTATED="$WORK/bridge-clause-deleted.md"
 awk '
   /^## Run-Directory Discipline \(all spokes\)$/ { skipping = 1; next }
   skipping && /^## / { skipping = 0 }
-  skipping { next }
+  /^### Hub Staging Discipline$/ { hub_skipping = 1; next }
+  hub_skipping && (/^## / || /^### /) { hub_skipping = 0 }
+  skipping || hub_skipping { next }
   { print }
 ' "$BRIDGE" \
   | sed -e 's/\*\*On the GitHub surface\*\* you may WRITE in exactly one place/You may WRITE in exactly one place/' \
@@ -163,16 +219,16 @@ if [ ! -s "$MUTATED" ]; then
 else
   MUT_RESULTS="$(clause_arms "$MUTATED")"
   SURVIVORS=0
-  for arm in A1 A2 A3 A4 A5 A6; do
+  for arm in A1 A2 A3 A4 A5 A6 A7 A8 A9; do
     if printf '%s\n' "$MUT_RESULTS" | grep -qx "$arm PASS"; then
       SURVIVORS=$((SURVIVORS+1))
       printf '         survivor: %s still passes with the clause deleted\n' "$arm"
     fi
   done
   if [ "$SURVIVORS" -eq 0 ]; then
-    ok "A-NEG — all 6 clause arms fail when the section is excised (deletion-sensitive)"
+    ok "A-NEG — all 9 clause arms fail when the sections are excised (deletion-sensitive)"
   else
-    bad "A-NEG — $SURVIVORS of 6 clause arms survive deletion; they do not grade the clause"
+    bad "A-NEG — $SURVIVORS of 9 clause arms survive deletion; they do not grade the clause"
   fi
   # Instrument validation for the excision itself: the mutated copy must still
   # be a substantial document, or "everything failed" would be trivially true.
