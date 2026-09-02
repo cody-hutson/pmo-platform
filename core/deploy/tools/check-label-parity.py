@@ -770,7 +770,7 @@ def _shq(s):
     return "'" + str(s).replace("'", "'\\''") + "'"
 
 
-def render_emit_fix(declared_rows, live_rows, excluded_live=()):
+def render_emit_fix(declared_rows, live_rows, excluded_live=(), repo=None):
     """Render the READ-ONLY repair script. Returns (lines, actionable_count).
 
     Emits commands; never runs them. The blocks are kept separate on purpose and
@@ -783,6 +783,11 @@ def render_emit_fix(declared_rows, live_rows, excluded_live=()):
 
     `excluded_live` (the rows the grammar declares excluded yet found live) defaults
     to empty, keeping every existing call site valid.
+
+    `repo` is the DERIVED owner/name, used only to spell the DELETE block's pre-flight
+    capture command. It defaults to None so every existing call site stays valid; with
+    no slug the block names the flag that resolves one rather than emitting a command
+    that would run against a literal "None".
     """
     absent, diverged, unresolvable = diff_declarations(declared_rows, live_rows)
     out = []
@@ -832,7 +837,29 @@ def render_emit_fix(declared_rows, live_rows, excluded_live=()):
     out.append("#   undo it, no snapshot in this repository holds it, and any issue that")
     out.append("#   carries one of these labels LOSES it permanently — open and closed")
     out.append("#   alike. Before running a single line, capture the current state with")
-    out.append("#   `gh label list --json name,color,description` and re-measure the")
+    # Transport: REST, not GraphQL — the SAME substitution, for the same reason, as
+    # the live read in _gh_labels_stdout (module docstring, "Transport — REST, not
+    # GraphQL"). `gh label list` issues POST /graphql, and GraphQL quota exhaustion
+    # clusters precisely at release close-out, which is when Check 51 runs and
+    # therefore when this block is reached. The instruction guarding an IRREVERSIBLE
+    # deletion must not ride the pool most likely to be dead at the moment it is
+    # needed: a capture that cannot run is no reconstruction record at all. REST
+    # returns whole label objects, so name/color/description all come back.
+    #
+    # The slug is DERIVED, never hardcoded (depersonalization gate,
+    # core/rules/git-workflow.md § Repository-Integrity Gates) and never left as
+    # gh's placeholder form, which core/config/allowlists/egress-allowlist.txt
+    # denies as an unresolvable authority. With no slug resolvable — the
+    # --fixture-labels path, the only one that reaches here without one — name the
+    # flag that resolves it rather than emit a command that would run against a
+    # literal "None".
+    if repo:
+        out.append(
+            f'#   `gh api "repos/{repo}/labels?per_page=100" --paginate` and re-measure the'
+        )
+    else:
+        out.append("#   a REST labels read — re-run with `--repo owner/name` to have")
+        out.append("#   this block render the exact command — and re-measure the")
     out.append("#   carrier count of each row: with zero carriers that capture is the")
     out.append("#   COMPLETE reconstruction record, and with any carrier it is not.")
     out.append("#   The alternative remedy is the opposite one — withdraw the row from")
@@ -1321,8 +1348,24 @@ def _self_test_emit_fix():
         print("FAIL: absent-description declaration reported as diverged")
         ok = False
 
-    lines, actionable = render_emit_fix(rows, live)
+    lines, actionable = render_emit_fix(rows, live, repo="fixture-owner/fixture-repo")
     text = "\n".join(lines)
+
+    # The DELETE block's pre-flight capture is the ONLY reconstruction record for an
+    # IRREVERSIBLE deletion, so its transport is asserted, not commented. Both arms:
+    # the REST spelling must be present AND the GraphQL-bound one must be absent —
+    # a one-armed check would pass on a render that emitted both.
+    if 'gh api "repos/fixture-owner/fixture-repo/labels?per_page=100" --paginate' not in text:
+        print("FAIL: DELETE-block capture does not render the REST read with the derived slug")
+        ok = False
+    if "gh label list" in text:
+        print("FAIL: DELETE-block capture still rides GraphQL (`gh label list`)")
+        ok = False
+    # With no slug the block must name the flag, never emit a command against "None".
+    no_slug = "\n".join(render_emit_fix(rows, live)[0])
+    if "repos/None/labels" in no_slug or "--repo owner/name" not in no_slug:
+        print("FAIL: slugless render does not degrade to naming --repo")
+        ok = False
     if actionable != 3:
         print(f"FAIL actionable count: {actionable} want 3")
         ok = False
@@ -2014,7 +2057,8 @@ def main(argv=None):
             print(f"cannot read live label set: {e}", file=sys.stderr)
             return 3
         lines, actionable = render_emit_fix(
-            declared_rows, live_rows, sorted(n for n in live_rows if n in excluded)
+            declared_rows, live_rows, sorted(n for n in live_rows if n in excluded),
+            repo=repo,
         )
         print("\n".join(lines))
         return 1 if actionable else 0
