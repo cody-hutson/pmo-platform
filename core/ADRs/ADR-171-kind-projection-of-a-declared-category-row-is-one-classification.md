@@ -5,7 +5,7 @@ status: Accepted
 date: 2026-09-01
 release: label-and-reference-integrity
 deciders: "Stage 5 Solutioning spoke (three-option analysis on the resolution mechanism, three on the cardinality exposure) + Stage 6 Engineering spoke (build, fixture proof, re-measurement) + Collective Review (the irreversible label cascade is gated separately at Stage 9)"
-tags: [label-taxonomy, label-grammar, label-parity, work-item-kind, cardinality, escape-hatch, namespace-resolution, plug-and-play, ADR-018, ADR-070, ADR-170]
+tags: [label-taxonomy, label-grammar, label-parity, work-item-kind, cardinality, escape-hatch, namespace-resolution, plug-and-play, ADR-018, ADR-070, ADR-174]
 source_observations:
   - "A parity gate registered an entire label family as a namespace prefix, so every live label beginning with that prefix passed without any selected pack declaring the corresponding kind. The gate was believed to reconcile the family; it verified only that the string began with the prefix. Five live labels sat undeclared and unreported, spanning several hundred issues."
   - "The blind spot was encoded in the gate's own fixture suite: the suite used one of the five undeclared labels as its NON-orphan exemplar, with a comment asserting the prefix resolution. The test that would otherwise have caught the defect asserted it instead."
@@ -102,4 +102,4 @@ Four obligations follow, and none substitutes for the others.
 
 - **ADR-018** — establishes the work-item-kind discriminator this label family projects onto the label surface. This record governs how that projection RESOLVES and how it composes with category cardinality; it does not touch the discriminator itself.
 - **ADR-070** — fixes the methodology-pack composition grammar: the grammar owns groups and rules, packs contribute concrete rows. The union decision here is an application of that division — the grammar declines to enumerate the kinds, so the gate must resolve against the packs rather than against the grammar.
-- **ADR-170** — the sibling record from this release. It establishes that a verdict class exists to separate conditions whose remedies differ, and that an unrecognized class is a finding rather than an absence. Its consumer fix is what falsified this record's original ground for declining a class split, which is why the deferral above is recorded with its reasoning rather than its conclusion.
+- **ADR-174** — the sibling record from this release. It establishes that a verdict class exists to separate conditions whose remedies differ, and that an unrecognized class is a finding rather than an absence. Its consumer fix is what falsified this record's original ground for declining a class split, which is why the deferral above is recorded with its reasoning rather than its conclusion.

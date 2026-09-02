@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-170 — A governance spec states standing policy, never a past-tense claim about repository state"
+title: "ADR-174 — A governance spec states standing policy, never a past-tense claim about repository state"
 status: Accepted
 date: 2026-09-01
 release: label-and-reference-integrity
@@ -15,13 +15,15 @@ source_observations:
   - "The consuming gate's clean verdict was computed by filtering the primitive's output for the class values it already knew and testing those extractions for emptiness. A row of any other class matched no filter and was discarded, after which the emptiness test passed — so adding a verdict class would have made the gate report parity while holding a finding."
 ---
 
-# ADR-170 — A governance spec states standing policy, never a past-tense claim about repository state
+# ADR-174 — A governance spec states standing policy, never a past-tense claim about repository state
 
 ## Status
 
 **Accepted.** Authored at Engineering for the `label-and-reference-integrity` release.
 
-**Numbering provenance.** Held **ADR-170** branch-local, allocated as the next free number across both ADR directories at authoring time. If the mainline claims 170 first, `release/tools/renumber-adr.py` renumbers this record at merge and in-release citations that read "ADR-170" denote it.
+**Numbering provenance.** Held **ADR-174** branch-local, allocated as the next free number across both ADR directories at authoring time. If the mainline claims 170 first, `release/tools/renumber-adr.py` renumbers this record at merge and in-release citations that read "ADR-174" denote it.
+
+**Numbering provenance — `170 → 174`.** Held **ADR-170** branch-local; renumbered to **ADR-174** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 170. In-release citations that read "ADR-170" denote this record.
 
 ## Context
 
