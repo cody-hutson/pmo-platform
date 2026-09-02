@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-170 — ADR citations bind at the claim, not at authorship; the sweep's exemption is regions that record a number, and where it cannot decide it names rather than rewrites
+title: ADR-173 — ADR citations bind at the claim, not at authorship; the sweep's exemption is regions that record a number, and where it cannot decide it names rather than rewrites
 status: Proposed — authored at Stage 6 Engineering for the `adr-corpus-integrity` release. Ratification is rendered by the operator at the Stage 13 close gate and is recorded in this file's `status:` field, never inferred from milestone closure.
 date: 2026-09-01
 release: adr-corpus-integrity
@@ -16,7 +16,7 @@ source_observations:
   - "A reservation held against a shared surface converts the cheap failure into the expensive one: the contiguity checker fails a GAP as readily as a DUPLICATE, and an unclaimed reservation from an abandoned branch IS a gap."
 ---
 
-# ADR-170 — ADR citations bind at the claim, not at authorship; the sweep's exemption is regions that record a number, and where it cannot decide it names rather than rewrites
+# ADR-173 — ADR citations bind at the claim, not at authorship; the sweep's exemption is regions that record a number, and where it cannot decide it names rather than rewrites
 
 ## Status
 
@@ -25,6 +25,8 @@ source_observations:
 **Amends ADR-115.** This record contests nothing ADR-115 decided. ADR-115 established that an ADR number is allocated at authorship and bound at merge, that only the mainline binds, and that the reconciliation is tooled, gate-identified and lossless. All three clauses stand verbatim. This record adds the clause ADR-115 explicitly did not evaluate — *when a number may enter branch-authored prose* — and widens the reconciliation tool's exemption from a shape test to a population.
 
 **Numbering.** This record's number was derived at Engineering Commit 0 against the mainline anchor, per the rule ADR-115 ratifies and this record extends. Two independent methods agreed at that instant: an enumerate-and-parse of every path under both ADR directories on `origin/main` returned 169 records with zero duplicates and zero gaps, giving anchor 169 and next-free 170; and the governed `--next-free` oracle returned 170. Two sibling milestones were concurrently in planning, and their claims — like this one — are advisory until merge.
+
+**Numbering provenance — `170 → 173`.** Held **ADR-170** branch-local; renumbered to **ADR-173** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 170. In-release citations that read "ADR-170" denote this record.
 
 ## Context
 

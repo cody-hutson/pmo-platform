@@ -78,7 +78,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-159](ADR-159-one-frontmatter-strip-bound-to-a-conformance-fixture.md) | One frontmatter-strip transform: a shared library bound to a committed conformance fixture, over replication governed by a registry comment | Accepted | 2026-08-28 | ci-stable-under-transient-conditions |
 | [ADR-160](ADR-160-arm-e-population-is-the-directory-never-the-manifest.md) | The tool-coverage engine hosts a second invariant whose population is the directory, never the manifest | Accepted | 2026-08-28 | ci-stable-under-transient-conditions |
 | [ADR-168](ADR-168-a-verification-claim-is-a-named-schema-column.md) | An unindexable verification table ERRORs only when it names a verification-schema column; sharing the word `Issue` is not a verification claim — and the method-column match stays CONTAINMENT, because equality silently de-indexes twenty live rows | Proposed | 2026-08-30 | warn-mode-gate-graduation |
-| [ADR-170](ADR-170-adr-citations-bind-at-the-claim-not-at-authorship.md) | ADR citations bind at the claim, not at authorship; the sweep's exemption is regions that record a number, and where it cannot decide it names rather than rewrites | Proposed | 2026-09-01 | adr-corpus-integrity |
+| [ADR-173](ADR-173-adr-citations-bind-at-the-claim-not-at-authorship.md) | ADR citations bind at the claim, not at authorship; the sweep's exemption is regions that record a number, and where it cannot decide it names rather than rewrites | Proposed | 2026-09-01 | adr-corpus-integrity |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.
