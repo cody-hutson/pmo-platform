@@ -133,22 +133,68 @@ guard_store_git_ignored() {
 
 NOW_UTC() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
-# ── Surface C → {worktree: "vX.Y"} map. Scans <hub-state>/vX.Y/sessions.md tables;
-#    the milestone is the parent dir name; the worktree is table column 4. ──
+# ── Surface C → {worktree: "<run-key>"} map. Scans <hub-state>/<run-key>/sessions.md
+#    tables; the milestone is the parent dir name. Run keys are SLUG-primary (ADR-092;
+#    hub-session-continuity.md § 2) with legacy vX.Y dirs read-only
+#    (orchestration-playbook.md § 4a.3). The worktree COLUMN INDEX is bound per file from
+#    that file's declared header — it is NOT fixed at column 4. ──
 build_worktree_milestone_map() {
   local hub_dir="$1"
   [ -d "$hub_dir" ] || { printf '{}'; return 0; }
-  local f ver
-  while IFS= read -r f; do
-    ver="$(basename "$(dirname "$f")")"
-    case "$ver" in v[0-9]*) : ;; *) continue ;; esac
-    # Data rows only: start with '|', not the header ('session_id') or separator ('---').
-    awk -F'|' -v ver="$ver" '
-      /^[[:space:]]*\|/ && $0 !~ /session_id/ && $0 !~ /-{3,}/ {
-        wt=$5; gsub(/^[[:space:]]+|[[:space:]]+$/,"",wt);   # $1 empty (leading |), col4 = $5
-        if (wt != "") printf "%s\t%s\n", wt, ver
-      }' "$f"
-  done < <(find "$hub_dir" -type f -name 'sessions.md' 2>/dev/null) \
+  local f ver pairs
+  # A NAME-shaped run-key guard silently drops whichever key form it was not written for,
+  # so there is none here — only the degenerate basenames are refused. The population is
+  # constrained by TABLE SHAPE instead: bind the `worktree` COLUMN INDEX and the field
+  # count from the row that declares both `session_id` and `worktree`, and ingest only
+  # later rows of the same width. A hardcoded $5 reads narrative out of a `sessions.md`
+  # whose table is a different shape, and a `$0 !~ /session_id/` header-skip cannot skip a
+  # header that does not contain `session_id`.
+  #
+  # THE BIND IS STICKY PER FILE. The deployed hub-state file interleaves
+  # `# === END MANAGED SECTION ===` / `# === BEGIN OPERATOR ADDITIONS ...` between the
+  # separator row and the first data row (update.sh composes those fences at install; the
+  # in-repo .template carries none). A parser that unbinds on a blank or non-pipe line
+  # drops every row after the fence. Do not add such a reset — the failure is SILENT, and
+  # the `sticky-header-bind` self-test arm exists to keep it that way only if it is kept.
+  pairs="$(
+    while IFS= read -r f; do
+      ver="$(basename "$(dirname "$f")")"
+      # The leading `(` is REQUIRED: this `case` lives inside a `$( … )` command
+      # substitution, where an unbalanced pattern-closing `)` ends the substitution early
+      # and the remainder is reparsed as shell. The balanced form is portable POSIX.
+      case "$ver" in (""|.|..) continue ;; esac
+      awk -F'|' -v ver="$ver" '
+        function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
+        /^[[:space:]]*\|/ {
+          if (idx == 0) {
+            hs = 0; hw = 0
+            for (i = 2; i <= NF; i++) {
+              c = trim($i)
+              if (c == "session_id") hs = 1
+              if (c == "worktree")   hw = i
+            }
+            if (hs && hw) { idx = hw; nf = NF }
+            next
+          }
+          if ($0 ~ /^[[:space:]]*\|[-|[:space:]:]+\|[[:space:]]*$/) next
+          if (NF != nf) next
+          wt = trim($idx)
+          if (wt != "") printf "%s\t%s\n", wt, ver
+        }' "$f"
+    done < <(find "$hub_dir" -type f -name 'sessions.md' 2>/dev/null | LC_ALL=C sort)
+  )"
+  # `LC_ALL=C sort` on the find output is REQUIRED, not cosmetic: the jq reduction below is
+  # last-wins and the record it feeds asserts `reproducible: true`, so an unsorted,
+  # filesystem-dependent traversal order would make a collision's outcome irreproducible.
+  # Sorting makes it deterministic; the warning below makes it VISIBLE (the convention's
+  # stated posture is fail-visible, never a silent drop). Identical (worktree, run-key)
+  # pairs are deduped first, so only a key spanning two DIFFERENT milestones warns.
+  printf '%s\n' "$pairs" | LC_ALL=C sort -u | awk -F'\t' '
+    NF == 2 { n[$1]++; m[$1] = (n[$1] == 1 ? $2 : m[$1] ", " $2) }
+    END { for (k in n) if (n[k] > 1)
+            printf "WARNING: hub-state worktree key \047%s\047 maps to %d milestones (%s); last-wins applied\n", \
+              k, n[k], m[k] > "/dev/stderr" }'
+  printf '%s\n' "$pairs" \
     | jq -R -s 'split("\n") | map(select(length>0) | split("\t")) | map({(.[0]): .[1]}) | add // {}'
 }
 
