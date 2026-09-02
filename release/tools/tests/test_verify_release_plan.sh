@@ -502,6 +502,40 @@ else
   ok "A11 SKIP — historical-commit-unreachable (shallow clone); degraded honestly, not passed"
 fi
 
+# --- A12: the first-segment enum admits `operations`, a top-level module. ---
+# The enum omitted it, and the omission was SILENT: 286 declaration rows across 47
+# plans of the 189-plan corpus returned no path and left the population before
+# classification. This arm is the sensitivity half — it fires only if the segment
+# is recognised. M14 below is what proves the arm observes the enum rather than
+# passing for some unrelated reason.
+DIFF_OPS="$REPO_ROOT/$FIXD/fcm-diff-operations.tsv"
+fcm_run "$VERIFY" fcm-operations-module.md "$DIFF_OPS"; J_OPS="$FCM_JSON"
+case "$(observed_of "$J_OPS" FCM-1)" in
+  declared-add-delivered:operations/*)
+    ok "A12 FIRST-SEGMENT ENUM — an operations/ ADD is recognised and graded" ;;
+  *) bad "A12 expected declared-add-delivered:operations/…, got '$(observed_of "$J_OPS" FCM-1)'" ;;
+esac
+
+# --- A13: a row the recogniser CANNOT read is disclosed, never discarded. ---
+# The durable half of the same defect. `ops-runbook.md` carries no directory
+# segment, so no enum entry recognises it; it must surface in `uninterpreted`
+# instead of leaving the denominator. Paired with its specificity control below,
+# because a count that the all-recognised fixture also produces is a broken
+# harness rather than a finding.
+case "$(observed_of "$J_OPS" FCM-COVERAGE)" in
+  *uninterpreted:1*|*uninterpreted=1*)
+    ok "A13 UNRECOGNISED-PATH DISCLOSURE — an unreadable row is COUNTED, not dropped" ;;
+  *) bad "A13 expected uninterpreted=1, got '$(observed_of "$J_OPS" FCM-COVERAGE)'" ;;
+esac
+[ "$(verdict_of "$J_OPS" FCM-COVERAGE)" = SKIP ] \
+  && ok "A13 an unreadable row makes coverage NON-PASS (silence must not read as full coverage)" \
+  || bad "A13 expected coverage SKIP, got '$(verdict_of "$J_OPS" FCM-COVERAGE)'"
+case "$(observed_of "$J_PRESENT" FCM-COVERAGE)" in
+  *uninterpreted=0*)
+    ok "A13 SPECIFICITY CONTROL — a fully-recognised matrix reports uninterpreted=0 (count is not stuck-on)" ;;
+  *) bad "A13 control — fcm-conformant.md should report uninterpreted=0, got '$(observed_of "$J_PRESENT" FCM-COVERAGE)'" ;;
+esac
+
 # ---------------------------------------------------------------------------
 # G6-M — MUTATION ARMS. Each removes ONE observing step and asserts an arm moves.
 # ---------------------------------------------------------------------------
@@ -600,6 +634,65 @@ mutant_differs "M7 glob arm removed (falls to the literal arm)" \
 M8="$(mutate m8-no-devlog 's/devlog="\$\(parse_deviation_log "\$plan" \|\| true\)"/devlog=""/')"
 mutant_differs "M8 Deviation-Log read removed" \
       "$M8" fcm-deviation-recorded.md "$DIFF_ABSENT" FCM-1 "deviation-recorded"
+
+# M14 NARROWS THE ENUM BACK. This is the regression arm the family shipped
+# without: `operations` was missing for the whole life of the check and no test
+# noticed, because the rows it lost were not merely mis-graded — they were gone,
+# and a shorter denominator grades clean. Removing the word must now MOVE A12.
+M14="$(mutate m14-enum-narrowed 's/\(core\|operations\|release\|docs/(core|release|docs/')"
+mutant_differs "M14 first-segment enum narrowed (operations removed again)" \
+      "$M14" fcm-operations-module.md "$DIFF_OPS" FCM-1 "declared-add-delivered:operations/"
+# THE TWO ARMS THAT KILL THIS MUTANT are the FCM-1 arm above (the observed value
+# stops reading `declared-add-delivered:operations/`) and the coverage-COUNT arm
+# immediately below (uninterpreted moves 1 -> 3). Between them M14 is not a
+# spelling test. Narrowing the enum is a stand-in for the NEXT top-level module
+# nobody adds; under the shipped tool that omission was invisible — the rows left
+# the denominator and coverage read PASS. It must now be DISCLOSED instead: all
+# three fixture rows become unreadable, and the COUNT is what has to say so.
+fcm_run "$M14" fcm-operations-module.md "$DIFF_OPS"; J_M14="$FCM_JSON"
+case "$(observed_of "$J_M14" FCM-COVERAGE)" in
+  *declared=3*uninterpreted=3*)
+    ok "M14 NEXT-OMISSION VISIBILITY (discriminating arm) — an unknown module is COUNTED (declared=3 uninterpreted=3, up from 1 live), not silently dropped" ;;
+  *) bad "M14 expected declared=3 uninterpreted=3 under the narrowed enum, got '$(observed_of "$J_M14" FCM-COVERAGE)'" ;;
+esac
+# NON-DISCRIMINATING INVARIANT — kept deliberately, and labelled so no reader
+# mistakes it for the arm doing the work. This comment previously read "THE ARM
+# THAT MATTERS", and that was false: fcm-operations-module.md's third row
+# (`ops-runbook.md`) carries no directory segment, so coverage is pinned non-PASS
+# by the FIXTURE regardless of the enum — A13 above asserts exactly that SKIP on
+# the UNMUTATED tool, which is the same measurement this arm makes. It therefore
+# holds identically with and without the mutation and cannot fail here, so it
+# proves nothing about the enum. Retained as a standing invariant (coverage must
+# never reach a clean PASS while a module is unreadable) rather than deleted,
+# because the invariant is still worth asserting — it is simply not the kill.
+# Demoted at Stage 6; the kill belongs to the two arms above.
+[ "$(verdict_of "$J_M14" FCM-COVERAGE)" != PASS ] \
+  && ok "M14 INVARIANT (not discriminating — see note) — the narrowed enum still cannot reach a clean PASS" \
+  || bad "M14 coverage reached a clean PASS with an entire module unreadable"
+
+# M15 RESTORES THE DROP. The enum arm above only proves one word is present; this
+# proves the drop-to-nowhere behaviour itself is observed. With the discard back,
+# the unreadable row leaves the population and the coverage record reports a
+# CONFIDENT count over a denominator that lost it — no ERROR, no FAIL, just a
+# smaller true-looking number. That is the defect class, so the arm reads the
+# coverage record rather than any single row.
+M15="$(mutate m15-drop-unrecognized \
+      's/key = s; gsub\(\/\\t\/, " ", key\)/next/' \
+      's/printf "%s\\t%s\\t%s\\t%s\\t%s\\n", key, "unknown", "uncond", "fence-unrecognized-path", s/next/')"
+fcm_run "$M15" fcm-operations-module.md "$DIFF_OPS"; J_M15="$FCM_JSON"
+case "$(observed_of "$J_M15" FCM-COVERAGE)" in
+  *uninterpreted=0*)
+    ok "M15 SILENT-DROP DEMO — with the discard restored the unreadable row VANISHES and coverage reads clean" ;;
+  *) bad "M15 SURVIVED — the unreadable row is still counted: '$(observed_of "$J_M15" FCM-COVERAGE)'" ;;
+esac
+# CONTROL. An empty record satisfies the case above for the wrong reason: nothing
+# absent is more absent than a run that never happened. Assert the mutant still
+# GRADED the fixture, so M15 discriminates the drop from a broken mutation.
+case "$(observed_of "$J_M15" FCM-1)" in
+  declared-add-delivered:operations/*)
+    ok "M15 CONTROL — the mutant still grades the recognised rows (the mutation removed the drop, not the run)" ;;
+  *) bad "M15 NOT GRADEABLE — mutant emitted no operations/ row: '$(observed_of "$J_M15" FCM-1)'" ;;
+esac
 
 rm -rf "$MUTD"
 

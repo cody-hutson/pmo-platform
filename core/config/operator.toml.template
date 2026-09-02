@@ -317,6 +317,32 @@ comms_platform = ""
 #          explicit, per the methodology-parameterization keystone).
 default_delivery_approach = "Scrum"
 
+# Portfolio-tier governance framework — the framework whose portfolio- and
+# program-tier artifact shapes this deployment uses. OPT-IN: leave unset (or
+# empty) and the platform resolves exactly as it does today.
+#
+# This is a DIFFERENT ALTITUDE from default_delivery_approach above, not a
+# variant of it: a portfolio framework governs the portfolio a project runs
+# UNDER, so the two compose (Scrum projects inside a PMI-governed portfolio).
+# Neither implies the other. Consumer branch: § 5B of
+# release/references/specs/methodology-parameterization-v1.md; per-framework
+# definitions: § 3A of
+# release/references/specs/methodology-archetype-matrix.md.
+#
+# DEPLOYMENT-GLOBAL at v1 — resolves on the global and individual rungs only;
+# the portfolio, program and project rungs are not in this field's resolution
+# set, because a portfolio framework governs the deployment's portfolio rather
+# than any single project beneath it. The narrowing and its reason are recorded
+# at the field's schema row in core/schemas/platform-config-schema.md § 3.1.
+# No per-project override exists, and none is owed.
+#
+# Valid: OPEN value domain — a lowercase-kebab framework id matching a shipped
+#        shape directory at operations/templates/portfolio-frameworks/<id>/.
+#        Shipped at v1: "pmi". A well-formed value with no shipped directory
+#        takes the § 5B CASE P-2 caveat branch rather than failing.
+# Default: "" (no portfolio framework selected)
+portfolio_framework = ""
+
 [automation]
 # Ambient-intake automation governor — the single operator dial that governs how
 # much the platform does on its own during ambient intake (scheduled transcript /
