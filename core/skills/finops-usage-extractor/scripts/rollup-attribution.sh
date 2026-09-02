@@ -284,6 +284,26 @@ def parse_milestone($b):
   | if ($s | test("^(?:release|chore)/v[0-9]+\\.[0-9]+"))
     then ($s | capture("^(?:release|chore)/(?<v>v[0-9]+\\.[0-9]+)") | .v)
     else null end ;
+def parse_milestone_slug($b):
+  # Slug-primary release branches (ADR-092): `release/<milestone-slug>`, no version stem
+  # (core/rules/git-workflow.md § Branch naming). TWO deliberate properties:
+  #  1. The capture is a single PATH SEGMENT ([^/]+) — a STRUCTURAL constraint, not a
+  #     character grammar. The platform declares no milestone-slug grammar (the only two
+  #     slug-shaped rules in the corpus govern .md basenames and skill frontmatter names),
+  #     and authoring one here would be the same defect that eliminated the explicit-grammar
+  #     candidate at design. This axis uses the directory axis's posture: structure, not
+  #     name shape.
+  #  2. The legacy version form is excluded by DERIVATION from parse_milestone, not by a
+  #     second inline copy of the version regex. ONE version predicate in this file.
+  # `chore/` is deliberately excluded: `chore/<slug>-stage-13-close` carries a suffix with
+  # no delimiter separating it from the slug, so a chore-slug parse would manufacture a
+  # wrong key. Such a branch stays `unattributed` — a named, accepted residual.
+  # Test-guarded because a bare capture on a non-match yields EMPTY and would silently
+  # drop the whole session.
+  ($b // "") as $s
+  | if (parse_milestone($s) == null) and ($s | test("^release/[^/]+$"))
+    then ($s | capture("^release/(?<v>[^/]+)$") | .v)
+    else null end ;
 def is_fixfeat($b): ($b // "") | test("^(?:fix|feat)/") ;
 
 # T1: an issue-event whose worktree == session.worktree and ts within the session window.
@@ -313,6 +333,7 @@ def t1_issue($wt; $start; $end):
 # relying on condition-bound variables, which jq does not carry into `then`).
 | (t1_issue($wt; $start; $end)) as $t1
 | (parse_milestone($branch)) as $t2v
+| (parse_milestone_slug($branch)) as $t2sv
 # Null-guard the T3 object index: `{...}[null]` is a jq HARD error ("Cannot index object
 # with null"), and do_emit runs this program with 2>/dev/null and an untested exit status,
 # so an abort here would silently yield an EMPTY roll-up that the coverage record then
@@ -335,6 +356,18 @@ def t1_issue($wt; $start; $end):
       { work_item: ("milestone:" + $t3v), work_item_kind: "milestone",
         attribution_tier: "hub-state-lineage", reproducible: true,
         attribution_basis: ("hub-state worktree " + $wt + " -> milestone " + $t3v) }
+    # $t2sv sits BELOW $t3v deliberately: a branch name is a heuristic for the milestone,
+    # while the hub-state directory holds the value the hub AUTHORED. Lifting this arm
+    # above $t3v would let `release/<slug>-suffix` override the exact `<slug>`, splitting
+    # one release into two rollup rows. The `shadowing-guard` self-test arm turns red on
+    # such a reorder. NOTE the ladder is only PARTLY precision-ordered: the pre-existing
+    # $t2v arm is itself a branch-name parse sitting above the authored $t3v. That breach
+    # is pre-existing and deliberately NOT reordered here — a reorder would move the
+    # attribution of every session currently resolving through $t2v.
+    elif $t2sv != null then
+      { work_item: ("milestone:" + $t2sv), work_item_kind: "milestone",
+        attribution_tier: "branch-milestone", reproducible: true,
+        attribution_basis: ("slug-primary release branch " + $branch + " -> milestone " + $t2sv) }
     else
       { work_item: "unattributed", work_item_kind: "unattributed",
         attribution_tier: "unattributed", reproducible: true,
