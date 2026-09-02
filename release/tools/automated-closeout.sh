@@ -6457,12 +6457,42 @@ phase_publish_github_release() {
     return 3
   fi
 
+  # --latest is resolved EXPLICITLY, never defaulted. Without the flag gh sends
+  # make_latest=legacy — "automatic based on date and version" (gh 2.98 --help) — a
+  # vendor heuristic we neither pin nor test, so publishing a LOWER version after a
+  # higher one can move the repo's "Latest" badge backwards. That badge is the anchor
+  # read by core/hooks/notify-version-skew.sh AND by deploy.sh Check 39, so a regressed
+  # badge silently re-bases every workspace's version-skew comparison.
+  # The verdict comes from version_badge_latest in the version-grammar SSOT — the same
+  # library validate_version already delegates to. Do NOT re-render the comparison or
+  # the fail-closed policy here: a copied-inline comparison is a divergence defect by
+  # the library's own consumer contract, and gating one operand while the sibling sites
+  # gate two is exactly how this predicate drifted before.
+  # `|| echo ""` is load-bearing: this file sets `set -euo pipefail` above and
+  # pipefail propagates gh's status through tr. (Mode F's block sets neither and
+  # correctly carries no fallback — do not "harmonize" the two.)
+  local s1_latest="false" s1_anchor s1_badge s1_latest_why
+  s1_anchor="$($GH api "repos/${REPO_SLUG}/releases/latest" --jq '.tag_name' 2>/dev/null | /usr/bin/tr -d '[:space:]' || echo "")"
+  if [[ "${_ACO_HAVE_GRAMMAR:-0}" != "1" ]]; then
+    s1_latest_why="version-grammar SSOT unavailable — withholding the badge (fail-closed)"
+  else
+    s1_badge="$(version_badge_latest "$s1_anchor" "$VERSION")"
+    case "$s1_badge" in
+      ADVANCE)              s1_latest="true"
+                            s1_latest_why="current Latest (${s1_anchor}) is not higher than $VERSION — the badge advances" ;;
+      WITHHOLD_HIGHER)      s1_latest_why="current Latest ($s1_anchor) is HIGHER than $VERSION — out-of-order close; the badge stays where it is" ;;
+      WITHHOLD_UNORDERABLE) s1_latest_why="anchor '$s1_anchor' or target '$VERSION' is not orderable under the version grammar — withholding the badge (fail-closed)" ;;
+      *)                    s1_latest_why="no published Release anchor resolved (first release, or gh unreachable) — withholding the badge (fail-closed)" ;;
+    esac
+  fi
+
   if $GH release create "$VERSION" \
     --repo "$REPO_SLUG" \
     --title "$VERSION — $headline" \
     --notes "$notes_body" \
-    --target "$MERGE_SHA" >/dev/null 2>&1; then
-    mark_phase "publish_github_release" "${_s1_outcome_override:-PASS}" "SURFACE1-STATE=CREATED — Stage 12 Phase B5.5 did NOT emit Surface 1; this backstop created it. A Stage-12 omission, not the normal path — reported at stage-13-close.md § Phase B5.6. ${_s1_repair_note}created GitHub Release $VERSION bound to merge SHA $MERGE_SHA (Surface 1 of Layer-1 dual-write; title='$VERSION — $headline')"
+    --target "$MERGE_SHA" \
+    --latest="$s1_latest" >/dev/null 2>&1; then
+    mark_phase "publish_github_release" "${_s1_outcome_override:-PASS}" "SURFACE1-STATE=CREATED — Stage 12 Phase B5.5 did NOT emit Surface 1; this backstop created it. A Stage-12 omission, not the normal path — reported at stage-13-close.md § Phase B5.6. ${_s1_repair_note}created GitHub Release $VERSION bound to merge SHA $MERGE_SHA (Surface 1 of Layer-1 dual-write; title='$VERSION — $headline') --latest=$s1_latest ($s1_latest_why)"
     return 0
   fi
   mark_phase "publish_github_release" "FAIL" "gh release create failed for new release $VERSION (canonical recovery: re-run Phase 15.5 OR invoke release-executor Mode F standalone)"
