@@ -194,6 +194,7 @@ the operator baseline.
 """
 
 import argparse
+import inspect
 import json
 import os
 import re
@@ -970,8 +971,24 @@ def validate_packs(root, pack_root):
     return 1 if errors else 0
 
 
-def resolve_archetype(root, pack_root, archetype):
-    """`--resolve <archetype>`: the eligible pack set and the kind union, by role.
+# Composition rank. The order is a property of the pack's ROLE and of the SELECTION
+# SLOT it was named in — never of the configuration rung a pack was selected at, and
+# never of its directory name. Later in this order wins a kind_id collision.
+#
+# WHY K4 IS AN ARGUMENT AND NOT AN INFERENCE. A K4 project override is an ordinary
+# pack whose K4-ness is its LOCATION (Layer 2, projects/), and --pack-root reads one
+# flat directory that carries no location signal. A rank derived from the pack file
+# alone therefore cannot compute this position at all: it would silently rank a K4
+# override as an archetype pack and let the kit beat it, which is the inverse of the
+# documented precedence. So the caller passes the already-resolved override by name,
+# exactly as it passes the already-resolved archetype and kit. Every rank below is
+# supplied by an argument or by the role, so every rank is reachable and testable.
+COMPOSITION_RANK = {"base": 0, "archetype": 1, "kit": 2, "k4": 3}
+
+
+def resolve_archetype(root, pack_root, archetype, kit=None, k4=None):
+    """`--resolve <archetype> [--kit <pack_id>] [--k4 <pack_id>]`: the eligible pack
+    set and the kind union, by role, with per-kind provenance.
 
     This makes the grammar-side join EXECUTABLE. The kind-derivation contract the
     intake desk reads states the eligibility predicate in prose; before this mode
@@ -986,13 +1003,42 @@ def resolve_archetype(root, pack_root, archetype):
     file, with the same `applies_to = "*"`, is eligible as a kit and NOT eligible as an
     archetype pack.
 
-    SCOPE BOUNDARY, stated rather than implied: this resolves ELIGIBILITY and the
-    UNION. WHICH kit a deployment selected is resolved on the configuration axis,
-    upstream of here, and is not this mode's business — every kit in the root is
-    reported eligible. An empty union is reported as a measured zero and is NOT an
-    error: a conforming kit is mandatorily kind-bearing, so a kit-only root resolves
-    the kit's own kinds, and this mode asserts no constraint about what a deployment's
-    selection may leave empty.
+    SELECTION NARROWS ELIGIBILITY; IT NEVER GRANTS IT. Without `--kit`, EVERY kit in
+    the root is eligible for EVERY archetype — that is the point of limb (b), and it is
+    why a selection is UNOBSERVABLE over a multi-kit root until it is named. With
+    `--kit`, the eligible set is {packs whose applies_to == archetype} INTERSECTED with
+    {the archetype packs} ∪ {the named kit}: every unselected kit is EXCLUDED naming the
+    selection, and the selected kit still has to satisfy a limb on its own.
+
+    THAT DISTINCTION IS LOAD-BEARING AND WAS FOUND BY RUNNING IT. An earlier form of
+    this branch admitted the named kit unconditionally, on the reading that naming a
+    kit selects it. The consequence is that a kit welded to one archetype at its header
+    would be admitted under EVERY archetype, so the kit-eligible set would be invariant
+    by construction and an orthogonality arm built on it could never fail — the
+    gate-that-cannot-fail class, reproduced at the exact place this card was told to
+    prove it had closed. Selection chooses AMONG eligible kits; the two-limb match
+    stays the eligibility authority.
+
+    SEL-RESOLVE — A SELECTION RESOLVES, OR IT FAILS LOUDLY. A `--kit` naming a pack
+    absent from the root, or present but not role="kit", is exit 3 naming the pack and
+    its actual role. It is NEVER a fall-through to "no kit selected". This is the whole
+    replacement for the retired empty-vocabulary constraint: the hazard selection
+    introduces is not emptiness (a conforming kit is mandatorily kind-bearing, so
+    selecting one cannot empty the vocabulary) but that a FAILED selection and an
+    ABSENT selection produce the SAME observation — a union with no kit-attributed
+    rows. Making them different observations is the constraint.
+
+    SCOPE BOUNDARY, stated rather than implied. This mode resolves ELIGIBILITY, the
+    UNION and per-kind PROVENANCE. It does NOT validate pack conformance — a pack
+    malformed as a kit is `--validate-packs`'s business (PACK-P05, PACK-K05); two
+    modes, two jobs. And it asserts NO constraint about an empty union: an empty
+    resolution is reported as a measured zero at exit 0.
+
+    PROVENANCE IS DECLARATION-LEVEL, NOT FIELD-LEVEL. Each kind_id reports the pack
+    whose declaration won. It does NOT prove the two declarations merged correctly
+    field by field — record-level merge needs a real TOML parser, which the 3.9
+    operator baseline lacks. Declaration-level precedence is executable here;
+    field-level merge stays prose-governed in the meta-schema.
     """
     if archetype not in ARCHETYPE_NAMES:
         print("ERROR\t--resolve %r is not one of the archetype names (%s)"
@@ -1008,41 +1054,97 @@ def resolve_archetype(root, pack_root, archetype):
               % pack_root, file=sys.stderr)
         return 3
 
-    out = ["RESOLVE\tarchetype=%s\tpack_root=%s\tpacks_read=%d"
-           % (archetype, pack_root, len(packs))]
+    by_id = {}
+    for rel, pack in packs:
+        by_id[pack["meta"].get("pack_id") or rel] = pack
+
+    # ── SEL-RESOLVE, enforced before anything is reported ────────────────────
+    if kit is not None:
+        if kit not in by_id:
+            print("ERROR\t--kit %r names no pack under %s. A selection that cannot be "
+                  "resolved is an ERROR, never a silent fall-through to 'no kit "
+                  "selected': the legal state and the failure state must not produce "
+                  "the same observation" % (kit, pack_root), file=sys.stderr)
+            return 3
+        kit_role = pack_role(by_id[kit])
+        if kit_role != "kit":
+            print("ERROR\t--kit %r names a pack whose role is %r, not 'kit'. Selecting "
+                  "a non-kit pack as the kit is a failed selection, not an empty one, "
+                  "and is reported rather than degraded to 'no kit selected'"
+                  % (kit, kit_role), file=sys.stderr)
+            return 3
+    if k4 is not None and k4 not in by_id:
+        # No role constraint: K4-ness is POSITIONAL, so a project's own override may
+        # take any pack shape. Presence is the whole requirement, and its absence is
+        # the same failed-selection class as --kit's.
+        print("ERROR\t--k4 %r names no pack under %s. A selection that cannot be "
+              "resolved is an ERROR, never a silent fall-through to 'no override'"
+              % (k4, pack_root), file=sys.stderr)
+        return 3
+
+    # The slot column is emitted ONLY under a selection, and it earns its place
+    # exactly there: with no selection every slot is derivable from the role, while a
+    # --k4 pack's slot is NOT (its role may legitimately be `archetype`). Keeping it
+    # off the unselected path is also what makes the plain `--resolve` output
+    # byte-identical to its pre-change shape.
+    selecting = kit is not None or k4 is not None
+
+    header = ["RESOLVE", "archetype=%s" % archetype]
+    if kit is not None:
+        header.append("kit=%s" % kit)
+    if k4 is not None:
+        header.append("k4=%s" % k4)
+    header += ["pack_root=%s" % pack_root, "packs_read=%d" % len(packs)]
+    out = ["\t".join(header)]
+
     eligible = []
     for rel, pack in packs:
         role = pack_role(pack)
         applies_to = pack["meta"].get("applies_to")
         pid = pack["meta"].get("pack_id") or rel
+
+        if k4 is not None and pid == k4:
+            eligible.append((COMPOSITION_RANK["k4"], "k4", pid, role, pack))
+            out.append("ELIGIBLE\t%s\trole=%s\tapplies_to=%s\tlimb=k4-selection"
+                       % (pid, role, applies_to))
+            continue
         if role == "base":
             out.append("BASE\t%s\trole=base\tapplies_to=%s\tinheritance root; "
                        "contributes no kinds" % (pid, applies_to))
             continue
+        if role == "kit" and kit is not None and pid != kit:
+            out.append("EXCLUDED\t%s\trole=kit\tapplies_to=%s\teligible by the kit "
+                       "join, but %r is the selected kit" % (pid, applies_to, kit))
+            continue
+
         limb_a = applies_to == archetype
         limb_b = applies_to == NEUTRAL_SENTINEL and role == "kit"
         if limb_a or limb_b:
-            eligible.append((pid, role, pack))
+            slot = "kit" if role == "kit" else "archetype"
+            eligible.append((COMPOSITION_RANK[slot], slot, pid, role, pack))
             out.append("ELIGIBLE\t%s\trole=%s\tapplies_to=%s\tlimb=%s"
-                       % (pid, role, applies_to, "archetype-join" if limb_a
-                          else "kit-join"))
+                       % (pid, role, applies_to,
+                          "archetype-join" if limb_a else "kit-join"))
         else:
             out.append("EXCLUDED\t%s\trole=%s\tapplies_to=%s\tneither limb holds "
                        "for %s" % (pid, role, applies_to, archetype))
 
-    # Later in the composition order wins on a colliding kind_id: archetype packs
-    # first, then kits. Reported per kind as provenance rather than silently merged, so
-    # a collision is visible in the output instead of inferable from a shorter list.
+    # Later in the composition order wins on a colliding kind_id. `sorted` is on the
+    # RANK only and is stable, so directory order is preserved WITHIN a rank and never
+    # decides ACROSS one — a root whose directory names invert alphabetical order
+    # resolves identically, which a self-test arm asserts.
     union = {}
-    for pid, role, pack in [e for e in eligible if e[1] != "kit"] + \
-                           [e for e in eligible if e[1] == "kit"]:
+    for rank, slot, pid, role, pack in sorted(eligible, key=lambda e: e[0]):
         for kind in pack["kinds"]:
             kid = kind.get("kind_id")
             if kid:
-                union[kid] = (pid, role)
+                union[kid] = (pid, role, slot)
     for kid in sorted(union):
-        pid, role = union[kid]
-        out.append("KIND\t%s\t%s\trole=%s" % (kid, pid, role))
+        pid, role, slot = union[kid]
+        row = "KIND\t%s\t%s\trole=%s" % (kid, pid, role)
+        if selecting:
+            row += "\tslot=%s" % slot
+        out.append(row)
     out.append("COUNT\t%d" % len(union))
     if not union:
         out.append("NOTE\tthe eligible set contributed no kinds. This is a measured "
@@ -2483,6 +2585,208 @@ def self_test():
           rc == 0 and _pc_vocab and "deliverable" not in _pc_vocab
           and "story" in _pc_vocab)
 
+    # ── SEL-*: SELECTION, over the shipped two-axis fixture root ─────────────
+    # WHY A DEDICATED ROOT. These arms read `fixtures/packs/selection/`, not the
+    # shared `fixtures/packs/` parent. The parent is a denominator THREE cards write
+    # into, so an arm reading it would have a population a sibling card can change —
+    # its verdict would then move for reasons that are not this card's behaviour. The
+    # subdirectory keeps the single fixture home while giving these arms a population
+    # only this card owns.
+    _sel_root = os.path.join(_pc_repo, "core", "deploy", "tests", "fixtures",
+                             "packs", "selection")
+
+    def _sel(archetype, kit=None, k4=None, root=None):
+        args = ["--resolve", archetype, "--pack-root", root or _sel_root]
+        if kit:
+            args += ["--kit", kit]
+        if k4:
+            args += ["--k4", k4]
+        return _pc_cli(_pc_repo, tuple(args))
+
+    def _sel_elig(out, role):
+        """{pack_id} of ELIGIBLE packs with the given role — the ELIGIBILITY set.
+
+        ORTHOGONALITY IS A PROPERTY OF ELIGIBILITY, NOT OF THE UNION, and reading the
+        wrong one is a mistake this suite made before it was corrected by running it.
+        The kind UNION legitimately moves when either axis changes, because COMPOSITION
+        resolves collisions and that is a different operation from SELECTION: when the
+        selected kit stops declaring a colliding kind_id, an archetype pack's own
+        declaration of that kind stops being masked and surfaces. A union-level
+        predicate therefore reports non-orthogonality for a reason that is correct
+        precedence behaviour. What must be invariant is WHICH PACKS EACH AXIS MAKES
+        ELIGIBLE, and that is what these arms compare."""
+        return set(r[1] for r in _pc_rows(out, "ELIGIBLE") if r[2] == "role=" + role)
+
+    def _sel_slots(out, slot):
+        """{pack_id} of KIND provenance rows whose composition slot is `slot`."""
+        return set(r[2] for r in _pc_rows(out, "KIND")
+                   if len(r) > 4 and r[4] == "slot=" + slot)
+
+    def _sel_kinds(out, slot=None):
+        return set(r[1] for r in _pc_rows(out, "KIND")
+                   if slot is None or r[4] == "slot=" + slot)
+
+    # NON-VACUITY FIRST. Every arm below reads seven tracked fixture packs; a deleted
+    # or renamed fixture must fail HERE, naming the cause, rather than silently
+    # shrinking every population downstream into a set of vacuous passes.
+    _sel_expect = ("sel-common", "sel-scrum", "sel-kanban", "sel-kit-alpha",
+                   "sel-kit-beta", "sel-kit-gamma", "sel-k4-override")
+    check("SEL-00 non-vacuity: all 7 selection fixtures are present and readable",
+          os.path.isdir(_sel_root)
+          and all(os.path.isfile(os.path.join(_sel_root, d, "pack.toml"))
+                  for d in _sel_expect))
+
+    # SEL-E01/E02/E03 — SEL-RESOLVE, the constraint that REPLACES the retired
+    # empty-vocabulary rule. A selection resolves or it fails loudly; a failed
+    # selection and an absent selection must never be the same observation.
+    rc, out, err = _sel("Scrum", kit="sel-kit-nonexistent")
+    check("SEL-E01 --kit naming a pack absent from the root EXITS 3 — never a silent "
+          "fall-through to 'no kit selected'",
+          rc == 3 and "names no pack under" in err and "sel-kit-nonexistent" in err)
+
+    rc, out, err = _sel("Scrum", kit="sel-scrum")
+    check("SEL-E02 --kit naming a present pack whose role is NOT kit EXITS 3, naming "
+          "the role it actually has",
+          rc == 3 and "not 'kit'" in err and "'archetype'" in err)
+
+    rc, out, err = _sel("Scrum", k4="sel-k4-nonexistent")
+    check("SEL-E03 --k4 naming a pack absent from the root EXITS 3 — the same "
+          "failed-selection class as --kit's",
+          rc == 3 and "names no pack under" in err and "sel-k4-nonexistent" in err)
+
+    # THE DISCRIMINATING PAIR for E01/E02: the legal state must be exit 0. Without
+    # this, an unconditional exit 3 would satisfy all three arms above.
+    rc, out, _e = _sel("Scrum")
+    check("SEL-E0x NO selection at all is exit 0 with a real union — the legal state "
+          "and the failure state are different observations",
+          rc == 0 and len(_sel_kinds(out)) > 0)
+
+    # SEL-03 — the AC-3 assertion, made mechanically checkable: the selection path
+    # consumes ALREADY-RESOLVED values and reads no configuration file, so it is not a
+    # second resolver. Asserted over the function source, with a live control arm.
+    _sel_src = inspect.getsource(resolve_archetype)
+    _sel_cfg_tokens = ("operator.toml", "platform-config.toml", "PROJECT.md",
+                       "PORTFOLIO.md", "program-config.toml")
+    check("SEL-03 the --resolve/--kit/--k4 code path names NO configuration file — it "
+          "consumes resolved inputs and introduces no parallel resolver",
+          not any(t in _sel_src for t in _sel_cfg_tokens)
+          # control arm: the tokens ARE findable by this reader elsewhere in the tool,
+          # so the zero above is a measured absence and not a dead search.
+          and any(t in open(os.path.abspath(__file__), encoding="utf-8").read()
+                  for t in _sel_cfg_tokens))
+
+    # SEL-04a / SEL-04b — ORTHOGONALITY, asserted at the level where it is actually a
+    # structural property: ELIGIBILITY. The kind UNION legitimately changes when either
+    # axis moves (composition resolves collisions, and that is a different operation
+    # from selection), so a union-level predicate would fail for the wrong reason.
+    _, out_s_a, _e = _sel("Scrum", kit="sel-kit-alpha")
+    _, out_k_a, _e = _sel("Kanban", kit="sel-kit-alpha")
+    check("SEL-04a vary the ARCHETYPE with the kit fixed — the KIT-eligible set is "
+          "unchanged; the kit join does not read the archetype",
+          _sel_elig(out_s_a, "kit") == _sel_elig(out_k_a, "kit") == {"sel-kit-alpha"}
+          # control: the ARCHETYPE-eligible half must genuinely differ, or the
+          # comparison above is between two constants and proves nothing.
+          and _sel_elig(out_s_a, "archetype") != _sel_elig(out_k_a, "archetype"))
+
+    _, out_s_b, _e = _sel("Scrum", kit="sel-kit-beta")
+    check("SEL-04b vary the KIT with the archetype fixed — the ARCHETYPE-eligible set "
+          "is unchanged; the archetype join does not read the kit",
+          _sel_elig(out_s_a, "archetype") == _sel_elig(out_s_b, "archetype")
+          and len(_sel_elig(out_s_a, "archetype")) > 0
+          # control: the KIT-eligible half must genuinely differ.
+          and _sel_elig(out_s_a, "kit") != _sel_elig(out_s_b, "kit"))
+
+    # SEL-04x — THE FAIL-CAPABILITY ARM. sel-kit-gamma is a kit welded to one archetype
+    # at its HEADER, so it satisfies the kit join under Scrum only. Running SEL-04a's
+    # own predicate over it must therefore FAIL. An orthogonality check that cannot
+    # produce a non-orthogonal verdict is not a check, and this arm is what proves it
+    # can. NOTE the weld is at the header deliberately: a kit welded only at its KINDS
+    # still satisfies the kit join under every archetype, so its contribution is
+    # invariant by construction and no arm built on it could ever fail.
+    _, out_s_g, _e = _sel("Scrum", kit="sel-kit-gamma")
+    _, out_k_g, _e = _sel("Kanban", kit="sel-kit-gamma")
+    check("SEL-04x the SAME orthogonality predicate over an archetype-welded kit FAILS "
+          "— the check can render a non-orthogonal verdict",
+          _sel_elig(out_s_g, "kit") == {"sel-kit-gamma"}
+          and _sel_elig(out_k_g, "kit") == set()
+          # i.e. SEL-04a's predicate, evaluated here, is FALSE — which is the point.
+          and _sel_elig(out_s_g, "kit") != _sel_elig(out_k_g, "kit"))
+
+    # SEL-05a / SEL-05b — PRECEDENCE. Same root, same packs; ONLY the K4 naming moves,
+    # and the winner of the colliding kind_id flips with it.
+    _, out_nok4, _e = _sel("Scrum", kit="sel-kit-alpha")
+    _, out_k4, _e = _sel("Scrum", kit="sel-kit-alpha", k4="sel-k4-override")
+
+    def _owner(out, kid):
+        """(pack_id, slot) for a kind_id. The slot column is present only under a
+        selection, so it is read defensively — an arm that ran without --kit/--k4
+        must still be able to name the winning pack."""
+        for r in _pc_rows(out, "KIND"):
+            if r[1] == kid:
+                return r[2], (r[4] if len(r) > 4 else None)
+        return (None, None)
+
+    check("SEL-05a a K4 project override BEATS the selected kit on a colliding "
+          "kind_id — and the same root resolves to the kit when it is not named",
+          _owner(out_nok4, "sel-shared") == ("sel-kit-alpha", "slot=kit")
+          and _owner(out_k4, "sel-shared") == ("sel-k4-override", "slot=k4"))
+
+    check("SEL-05b precedence is per-kind, not wholesale replacement — a kind only the "
+          "kit declares still resolves to the kit under a K4 override",
+          _owner(out_k4, "sel-alpha-only") == ("sel-kit-alpha", "slot=kit"))
+
+    # SEL-05c — the slot column earns its place. The K4 pack's ROLE is `archetype`, so
+    # role alone cannot express that it composed at the K4 position; without the slot
+    # the winning row would be indistinguishable from an ordinary archetype win.
+    check("SEL-05c the K4 winner reports role=archetype AND slot=k4 — K4-ness is "
+          "positional and is not derivable from the role",
+          _owner(out_k4, "sel-shared") == ("sel-k4-override", "slot=k4")
+          and any(r[1] == "sel-k4-override" and r[2] == "role=archetype"
+                  and r[4] == "limb=k4-selection"
+                  for r in _pc_rows(out_k4, "ELIGIBLE")))
+
+    # SEL-05x — RANK, NOT NAME, decides. Two roots identical in content whose directory
+    # names INVERT the alphabetical order of their composition ranks must resolve to
+    # identical provenance. Under `sorted(os.listdir())` with no rank the winner would
+    # follow the directory name.
+    _sel_kit_txt = ('[meta]\npack_id = "z-kit"\npack_version = "0.1.0"\n'
+                    'applies_to = "*"\nrole = "kit"\nkit_class = "work-item"\n\n'
+                    '[[kinds]]\nkind_id = "collide"\n' + _PC_KIND_BODY)
+    _sel_arch_txt = ('[meta]\npack_id = "a-arch"\npack_version = "0.1.0"\n'
+                     'applies_to = "Scrum"\nrole = "archetype"\n\n'
+                     '[[kinds]]\nkind_id = "collide"\n'
+                     + _PC_KIND_BODY.replace('archetype = "*"', 'archetype = "Scrum"'))
+    with tempfile.TemporaryDirectory() as tmp:
+        # Directory names chosen so alphabetical order and rank order DISAGREE.
+        root, pack_root = _pc_root(tmp, {"zzz-the-kit": _sel_kit_txt,
+                                         "aaa-the-archetype": _sel_arch_txt})
+        _rc1, o1, _e = _pc_cli(root, ("--resolve", "Scrum", "--pack-root", pack_root))
+    with tempfile.TemporaryDirectory() as tmp:
+        root, pack_root = _pc_root(tmp, {"aaa-the-kit": _sel_kit_txt,
+                                         "zzz-the-archetype": _sel_arch_txt})
+        _rc2, o2, _e = _pc_cli(root, ("--resolve", "Scrum", "--pack-root", pack_root))
+    check("SEL-05x name-inverted roots resolve to IDENTICAL provenance — composition "
+          "rank decides a collision, never the directory name",
+          _owner(o1, "collide") == _owner(o2, "collide") == ("z-kit", None)
+          or (_owner(o1, "collide")[0] == _owner(o2, "collide")[0] == "z-kit"))
+
+    # SEL-R01 — the extension is confined to the selection invocation. `--resolve`
+    # WITHOUT a selection flag must be unchanged, and the slot column must be absent.
+    _, out_plain, _e = _sel("Scrum")
+    check("SEL-R01 --resolve without --kit/--k4 emits NO slot column — the extension "
+          "does not perturb the incumbent output shape",
+          all(len(r) == 4 for r in _pc_rows(out_plain, "KIND"))
+          # control: with a selection the column IS present, so the absence above is a
+          # measured absence rather than a reader that never finds the field.
+          and all(len(r) == 5 for r in _pc_rows(out_k4, "KIND")))
+
+    # SEL-R02 — a selection flag with no --resolve is LOUD. Dropping it silently would
+    # be the same silent-drop class SEL-RESOLVE exists to close, and worse, because the
+    # caller would believe a selection had been applied.
+    rc, _o, err = _pc_cli(_pc_repo, ("--kit", "sel-kit-alpha", "--skip-backlog"))
+    check("SEL-R02 --kit passed without --resolve EXITS 3 rather than being ignored",
+          rc == 3 and "modifiers on --resolve" in err)
+
     # ── COVERAGE META-ARM ────────────────────────────────────────────────────
     # Every rule the reader can emit is exercised by an arm that fails when its rule
     # is mutated. A rule added without an arm reddens THIS case rather than riding a
@@ -2539,6 +2843,20 @@ def main():
                          "role == 'kit'. Resolves eligibility and the union only — "
                          "WHICH kit a deployment selected is a configuration-axis "
                          "question upstream of this mode")
+    ap.add_argument("--kit", metavar="PACK_ID", default=None,
+                    help="the ALREADY-RESOLVED work-item kit selection, for --resolve. "
+                         "Narrows the eligible set to the archetype's packs plus this "
+                         "kit; every other kit is EXCLUDED naming the selection. Takes "
+                         "a resolved value and reads no configuration file, exactly as "
+                         "--resolve takes a resolved archetype. A PACK_ID absent from "
+                         "the root, or present but not role='kit', is exit 3 — never a "
+                         "silent fall-through to 'no kit selected'")
+    ap.add_argument("--k4", metavar="PACK_ID", default=None,
+                    help="the ALREADY-RESOLVED project-level (K4) override pack, for "
+                         "--resolve. Composes LAST, so it wins a kind_id collision "
+                         "against the kit. Passed by name because K4-ness is positional "
+                         "(Layer 2) and a flat pack root carries no location signal. No "
+                         "role constraint; absence from the root is exit 3")
     ap.add_argument("--pack-root", default=None,
                     help="pack tree for --validate-packs / --resolve. Accepts either a "
                          "directory holding pack.toml directly, or a directory of pack "
@@ -2567,7 +2885,17 @@ def main():
     if args.validate_packs:
         return validate_packs(root, pack_root)
     if args.resolve:
-        return resolve_archetype(root, pack_root, args.resolve)
+        return resolve_archetype(root, pack_root, args.resolve,
+                                 kit=args.kit, k4=args.k4)
+    # A selection flag with no --resolve is a caller error, and it is LOUD rather than
+    # ignored: silently dropping a selection is the exact failure class SEL-RESOLVE
+    # exists to prevent, and it would be worse here because the caller believes a
+    # selection was applied.
+    if args.kit is not None or args.k4 is not None:
+        print("ERROR\t--kit/--k4 are modifiers on --resolve and were passed without "
+              "it; a selection that reaches no resolution is dropped, never applied",
+              file=sys.stderr)
+        return 3
 
     out = []
 
