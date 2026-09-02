@@ -3,6 +3,7 @@ title: ADR-032 — Release-corpus public-vs-instance split: ship the capability,
 status: Accepted
 date: 2026-06-20
 deciders: "operator (D-1412-Scope at the 62-close-out-registers Stage 4 plan-approval gate, 2026-06-19) + the 62-close-out-registers Stage 5 Solutioning design and its design sub-task"
+superseded_by: ADR-141 in-part (Decision 1's operator-instance home path) — derived from ADR-141's identical treatment of the FinOps usage-store record whose stated default spells the same retired leaf
 tags: [architecture, distribution, release-corpus, operator-instance, public-repo-boundary, gitignore, deploy-checks]
 source_observations:
   - "#1412 — the release-corpus audit trail (RELEASE_LOG, INDEX, DIGEST, notes/, plans/) is tracked in the public install-oriented repo and ships in every clone; this is maintainer content (operational detail, not PII), not install capability."
