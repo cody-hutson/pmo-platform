@@ -456,6 +456,22 @@ NEUTRAL_SENTINEL = "*"
 PACK_ROLES = ("archetype", "base", "kit")
 GENERAL_LEVELS = ("Portfolio", "Program", "Project", "Milestone/Workstream",
                   "Work Item")
+# The Work-Item level a kind MUST occupy. Named rather than indexed off
+# GENERAL_LEVELS[-1], because the constraint is on the VALUE, not on the
+# tuple's ordering, and a reordering of the ladder must not silently move it.
+WORK_ITEM_LEVEL = "Work Item"
+# The container tiers: every level that is NOT the Work-Item level. These are
+# resolved by the FROZEN entity model, never by a kind — which is what
+# PACK-K06a enforces and what the LEVELS line measures.
+CONTAINER_LEVELS = tuple(l for l in GENERAL_LEVELS if l != WORK_ITEM_LEVEL)
+# level_role's domain is CLOSED (ADR-170 D6) — an unknown value is an ERROR,
+# deliberately unlike kit_class's OPEN domain. The distinction is binary and
+# internal to how a rollup traverses; there is no third role to discover, and
+# silently admitting one would make a traversal unanalyzable rather than
+# merely under-specified. ABSENT means `execution` — which is what keeps the
+# field additive and every shipped pack byte-identical.
+LEVEL_ROLES = ("execution", "grouping")
+LEVEL_ROLE_DEFAULT = "execution"
 MVP_RELATIONSHIP_TYPES = ("GENERATES", "DEPENDS_ON", "BLOCKS", "SUPERSEDES",
                           "BELONGS_TO", "RELATES_TO", "ASSIGNED_TO")
 
@@ -506,7 +522,7 @@ PACK_RULE_IDS = (
     "PACK-P01", "PACK-P02", "PACK-P03", "PACK-P04", "PACK-P05", "PACK-P06",
     "PACK-P07", "PACK-P08",
     "PACK-K01", "PACK-K02", "PACK-K03", "PACK-K04", "PACK-K05", "PACK-K06",
-    "PACK-K07",
+    "PACK-K06a", "PACK-K07", "PACK-K08", "PACK-K09",
     "PACK-L01", "PACK-L02",
 )
 
@@ -829,6 +845,7 @@ def _validate_one_pack(rel, pack, packs_by_id, label_groups):
 
     # ── PACK-K01..K07: the per-kind rules ───────────────────────────────────
     seen_kind_ids = set()
+    grouping_kinds = []
     for kind in kinds:
         kid = kind.get("kind_id")
         label = kid if isinstance(kid, str) else "<kind_id absent>"
@@ -891,10 +908,83 @@ def _validate_one_pack(rel, pack, packs_by_id, label_groups):
                 f.append(("ERROR", "PACK-K06",
                           "kind %s sets general_level=%r, outside the Layer-1 level "
                           "taxonomy" % (label, level)))
+            elif role == "kit" and level != WORK_ITEM_LEVEL:
+                # PACK-K06a — THE LEVEL-CLOSURE RULE, kits only.
+                # Guarded on `level in GENERAL_LEVELS` (the elif) so a garbage
+                # value fires K06 ALONE and a container-tier value fires K06a
+                # ALONE. One mutation, one id: an arm asserting "this id and no
+                # other" is what tells a live rule from a dead one, and two rules
+                # firing on one mutation would make both arms unattributable.
+                f.append(("ERROR", "PACK-K06a",
+                          "kind %s sets general_level=%r inside a role=kit pack. A "
+                          "kind's base is the const %r and the container tiers are "
+                          "separate FROZEN entities, so a kind occupying %r is a NEW "
+                          "ENTITY NODE rather than a projection. Level coverage is "
+                          "achieved by projection, not by declaration: a rollup "
+                          "resolves an entity type at each container tier and a "
+                          "kit-declared kind at %r"
+                          % (label, level, WORK_ITEM_LEVEL, level,
+                             WORK_ITEM_LEVEL)))
+            # ── PACK-K08: level_role, a CLOSED domain ────────────────────
+            # Bound to the FIELD'S PRESENCE, not to the pack role. A malformed
+            # value is equally an error in an archetype pack, and binding it to
+            # kits alone would re-create the "legal, condemned, undetected" shape
+            # this card exists to close. It still cannot invalidate a pack that
+            # pre-dates the change, because the field itself is new: no pack
+            # authored before this grammar edit can carry a value for it.
+            level_role = proj.get("level_role")
+            if level_role is not None and level_role not in LEVEL_ROLES:
+                f.append(("ERROR", "PACK-K08",
+                          "kind %s sets level_role=%r, outside the CLOSED domain "
+                          "{%s}. Absent means %r; the domain is closed (unlike "
+                          "kit_class's OPEN domain) because the distinction is "
+                          "binary and internal to a rollup traversal — admitting a "
+                          "third value silently would make the traversal "
+                          "unanalyzable rather than merely under-specified"
+                          % (label, level_role, ", ".join(LEVEL_ROLES),
+                             LEVEL_ROLE_DEFAULT)))
+            elif level_role == "grouping":
+                # Counted only when the value is VALID, so a K08 mutation cannot
+                # also perturb K09's population.
+                grouping_kinds.append(label)
             if not proj.get("projects_as"):
                 f.append(("ERROR", "PACK-K07",
                           "kind %s is missing methodology_projection.projects_as"
                           % label))
+
+    # ── PACK-K09: ONE grouping altitude per kit ─────────────────────────────
+    # THE PREDICATE THE SUBSTRATE SUPPORTS, and it is not the one the card
+    # specified. The card asks that no grouping kind be "declared as a container
+    # for another grouping kind" — but NO Kind field names another kind as its
+    # container. The whole declared field population is kind_id / display_name /
+    # base / methodology_projection / fields / criteria / relationships /
+    # lifecycle_behavior / axis1_state_machine / materialization, and the only
+    # target-bearing one points at an ENTITY (fields.kind_specific[].ref), an edge
+    # TYPE (relationships.allowed_types[], a subset of the 7 MVP types), or a state
+    # machine. A rule keyed on a containment field would be a rule that can never
+    # fire — a gate-that-cannot-fail, which is the exact class this release is
+    # paying to close.
+    #
+    # So the rule binds the shape the grammar CAN express, and it forbids the same
+    # thing: a shadow tier ladder built inside the Work Item entity. Two grouping
+    # altitudes are what a ladder needs; one grouping kind cannot form one. And
+    # with no containment carrier, two grouping kinds in one kit are not even
+    # DISTINGUISHABLE from a ladder — "sibling" is not expressible, so the
+    # ambiguous shape is refused until a carrier exists.
+    #
+    # Kits only. A methodology's own altitudes (SAFe models portfolio-epic over
+    # program-epic) are an archetype pack's to declare and are untouched. A kit is
+    # cross-methodology by definition, so nested grouping there is not a
+    # methodology's hierarchy but a shadow of the ORGANIZATIONAL one.
+    if role == "kit" and len(grouping_kinds) > 1:
+        f.append(("ERROR", "PACK-K09",
+                  "this kit declares %d kinds with level_role=grouping (%s); at "
+                  "most ONE grouping altitude is permitted inside a kit. Two "
+                  "grouping kinds are a tier ladder built inside the Work Item "
+                  "entity, parallel to the frozen entity model's real one and free "
+                  "to drift from it. A methodology's own altitudes belong to a "
+                  "role=archetype pack, which this rule does not bind"
+                  % (len(grouping_kinds), ", ".join(grouping_kinds))))
 
     # ── PACK-L01/L02: the label contribution facet ──────────────────────────
     for row in pack["labels"]:
@@ -915,6 +1005,61 @@ def _validate_one_pack(rel, pack, packs_by_id, label_groups):
                           "label %r has projects_kind=%r, which does not resolve into "
                           "this pack's kinds[]" % (name, projects_kind)))
     return f
+
+
+def level_coverage(packs):
+    """The read root's LEVEL FOOTPRINT over the frozen five-level ladder.
+
+    This is the measurement behind "every visited level resolves a type". The
+    card's own wording — "every visited level resolves a KIND" — is false under
+    any correct design: Portfolio, Program, Project and Milestone/Workstream
+    resolve an ENTITY type from the frozen entity model and must not resolve a
+    kind. Coverage is achieved by projection, not by declaration.
+
+    Reported, per run:
+      levels_visited     the ladder's depth. A DENOMINATOR, not a verdict — it
+                         states what the run could speak about, so `0 findings`
+                         is never ambiguous between clean and not-run. Its
+                         fail-loud contract is NOT duplicated here: validate_packs
+                         already returns 3 on an unreadable or empty root, and a
+                         second guard on a value derived downstream of that check
+                         could never fire. An unreachable guard is a
+                         gate-that-cannot-fail, so the existing check owns the
+                         contract and a self-test arm EXERCISES it.
+      kinds_resolved     kinds occupying the Work-Item level.
+      entities_resolved  container tiers still resolved by the entity model —
+                         i.e. NOT claimed by a kind. A tier-claiming kit lowers
+                         this, which is what makes the number falsifiable rather
+                         than a constant.
+      grouping/execution the Work-Item level's own partition, read off level_role
+                         (absent or invalid ⇒ execution, the additive default).
+      unresolved         hops that resolve no type: a claimed container tier, plus
+                         the Work-Item level itself when no kind occupies it.
+    """
+    kinds_resolved = grouping = execution = 0
+    claimed = set()
+    for _rel, pack in packs:
+        for kind in pack["kinds"]:
+            proj = kind.get("methodology_projection")
+            if not isinstance(proj, dict):
+                continue
+            level = proj.get("general_level")
+            if level == WORK_ITEM_LEVEL:
+                kinds_resolved += 1
+                if proj.get("level_role") == "grouping":
+                    grouping += 1
+                else:
+                    execution += 1
+            elif level in CONTAINER_LEVELS:
+                claimed.add(level)
+    return {
+        "levels_visited": len(GENERAL_LEVELS),
+        "kinds_resolved": kinds_resolved,
+        "entities_resolved": len(CONTAINER_LEVELS) - len(claimed),
+        "grouping": grouping,
+        "execution": execution,
+        "unresolved": len(claimed) + (0 if kinds_resolved else 1),
+    }
 
 
 def validate_packs(root, pack_root):
@@ -951,6 +1096,12 @@ def validate_packs(root, pack_root):
     rules_evaluated = len(PACK_RULE_IDS) - (1 if label_groups is None else 0)
     out.append("PACKS\tpacks_read=%d kinds_read=%d rules_evaluated=%d"
                % (len(packs), kinds_read, rules_evaluated))
+    lv = level_coverage(packs)
+    out.append("LEVELS\tlevels_visited=%(levels_visited)d "
+               "kinds_resolved=%(kinds_resolved)d "
+               "entities_resolved=%(entities_resolved)d "
+               "grouping=%(grouping)d execution=%(execution)d "
+               "unresolved=%(unresolved)d" % lv)
     if label_groups is None:
         out.append("SKIP\tPACK-L01\t" + group_note
                    + " — the rule was NOT evaluated (a hardcoded fallback list here "
@@ -2791,6 +2942,165 @@ def self_test():
     # Every rule the reader can emit is exercised by an arm that fails when its rule
     # is mutated. A rule added without an arm reddens THIS case rather than riding a
     # green suite — which is the failure mode the whole block is written against.
+    # -- LEVEL-COVERAGE ARMS (PACK-K06a / PACK-K08 / PACK-K09) ---------------
+    # Every arm below obeys the same property the block above states: it asserts THE
+    # EXPECTED RULE ID **AND THE ABSENCE OF EVERY OTHER**. Three further guards are
+    # specific to these rules, and each exists because the rule could otherwise be
+    # green while dead:
+    #   * K06a and K09 each carry a NEGATIVE arm on a role=archetype pack, because
+    #     both are deliberately kit-scoped and a rule that also fired on archetype
+    #     packs would pass every positive arm while silently migrating shipped packs;
+    #   * PACK-K06 and PACK-K06a are separated by an arm each, because they read the
+    #     SAME field and a merged implementation would fire both on one mutation;
+    #   * the LEVELS line is asserted by its NUMBERS, not its presence, because a line
+    #     whose values never move is a measurement that cannot fail.
+
+    _PC_KIT_LVL = _PC_KIT_NL          # the label-free kit: one mutation, one id
+
+    # PACK-K06a -- a kit's kind claiming a container tier.
+    _pc_arm("PC PACK-K06a fires alone when a kit's kind claims a container tier",
+            {"k": _PC_KIT_LVL.replace('general_level = "Work Item"',
+                                      'general_level = "Portfolio"')},
+            ("PACK-K06a",))
+    # THE SCOPING ARM. The same mutation on an ARCHETYPE pack must NOT fire: the
+    # schema's advisory is left as written for archetype packs, which is what makes
+    # this an ADD rather than a migration. Without this arm a rule bound to every role
+    # would pass the arm above and quietly reject shipped packs.
+    _pc_arm("PC PACK-K06a does NOT fire on an archetype pack at a container tier - "
+            "the advisory is unchanged for non-kits",
+            {"a": _PC_ARCH.replace('general_level = "Work Item"',
+                                   'general_level = "Portfolio"')}, ())
+    # THE SEPARATION ARM. A value outside the Layer-1 taxonomy is PACK-K06's, not
+    # K06a's. Two rules reading one field must not both fire on one mutation, or
+    # neither arm is attributable.
+    _pc_arm("PC PACK-K06 (not K06a) fires alone on a general_level outside the "
+            "taxonomy inside a KIT",
+            {"k": _PC_KIT_LVL.replace('general_level = "Work Item"',
+                                      'general_level = "Squad"')},
+            ("PACK-K06",))
+
+    # PACK-K08 -- the CLOSED level_role domain.
+    _pc_arm("PC PACK-K08 fires alone on a level_role outside the CLOSED domain",
+            {"k": _PC_KIT_LVL.replace('general_level = "Work Item"',
+                                      'general_level = "Work Item"\n'
+                                      'level_role = "portfolio"')},
+            ("PACK-K08",))
+    _pc_arm("PC PACK-K08 control: the closed domain's grouping member is accepted",
+            {"k": _PC_KIT_LVL.replace('general_level = "Work Item"',
+                                      'general_level = "Work Item"\n'
+                                      'level_role = "grouping"')}, ())
+    _pc_arm("PC PACK-K08 control: the closed domain's execution member is accepted",
+            {"k": _PC_KIT_LVL.replace('general_level = "Work Item"',
+                                      'general_level = "Work Item"\n'
+                                      'level_role = "execution"')}, ())
+    # PACK-K08 binds on the FIELD'S PRESENCE, not on the role -- deliberately unlike
+    # K06a and K09. A malformed value is equally an error in an archetype pack, and
+    # this arm is what makes that a tested property rather than a claim.
+    _pc_arm("PC PACK-K08 binds the FIELD not the ROLE: an archetype pack's "
+            "out-of-domain level_role is an error too",
+            {"a": _PC_ARCH.replace('general_level = "Work Item"',
+                                   'general_level = "Work Item"\n'
+                                   'level_role = "portfolio"')},
+            ("PACK-K08",))
+
+    # PACK-K09 -- one grouping altitude per kit.
+    _PC_KIT_TWO_GROUP = (_PC_KIT_LVL.replace(
+        'general_level = "Work Item"',
+        'general_level = "Work Item"\nlevel_role = "grouping"')
+        + '\n[[kinds]]\nkind_id = "second-grouping"\n'
+        + _PC_KIND_BODY.replace('general_level = "Work Item"',
+                                'general_level = "Work Item"\n'
+                                'level_role = "grouping"'))
+    _pc_arm("PC PACK-K09 fires alone when a kit declares TWO grouping altitudes",
+            {"k": _PC_KIT_TWO_GROUP}, ("PACK-K09",))
+    # THE BOUNDARY ARM. ONE grouping kind is the legitimate shape the rule exists to
+    # permit; a rule written as "no grouping kind at all" would pass the arm above.
+    _pc_arm("PC PACK-K09 control: ONE grouping altitude is accepted",
+            {"k": _PC_KIT_LVL.replace('general_level = "Work Item"',
+                                      'general_level = "Work Item"\n'
+                                      'level_role = "grouping"')}, ())
+    # THE SCOPING ARM. A methodology's own altitudes are an archetype pack's to model
+    # -- SAFe genuinely stacks Portfolio Epic over Program Epic. A kit is
+    # cross-methodology, so nested grouping THERE is a shadow of the organizational
+    # hierarchy; in an archetype pack it is the methodology.
+    _PC_ARCH_TWO_GROUP = (_PC_ARCH.replace(
+        'general_level = "Work Item"',
+        'general_level = "Work Item"\nlevel_role = "grouping"')
+        + '\n[[kinds]]\nkind_id = "portfolio-epic"\n'
+        + _PC_KIND_BODY.replace('archetype = "*"', 'archetype = "Scrum"')
+                       .replace('general_level = "Work Item"',
+                                'general_level = "Work Item"\n'
+                                'level_role = "grouping"'))
+    _pc_arm("PC PACK-K09 does NOT fire on an archetype pack with two grouping "
+            "altitudes - a methodology's own altitudes are its to model",
+            {"a": _PC_ARCH_TWO_GROUP}, ())
+
+    # -- THE LEVELS LINE, ASSERTED BY ITS NUMBERS ----------------------------
+    # A measurement whose values never move cannot fail. These arms read the numbers
+    # off roots whose footprints DIFFER, and assert the differences.
+    def _lv(stdout):
+        for ln in stdout.split("\n"):
+            if ln.startswith("LEVELS\t"):
+                return dict(kv.split("=", 1) for kv in ln.split("\t")[1].split())
+        return {}
+
+    _lvl_fx = os.path.join(_pc_repo, "core", "deploy", "tests", "fixtures", "packs")
+    for _name in ("rollup-kit", "tier-claiming-kit", "nested-grouping-kit"):
+        _p = os.path.join(_lvl_fx, _name, "pack.toml")
+        check("LVL non-vacuity: shipped fixture %s exists and is non-empty" % _name,
+              os.path.isfile(_p) and os.path.getsize(_p) > 0)
+
+    rc, out, _err = _pc_cli(_pc_repo, ("--validate-packs", "--pack-root",
+                                       os.path.join(_lvl_fx, "rollup-kit")))
+    _lv_ok = _lv(out)
+    check("LVL ACCEPTS the rollup fixture and reports the FULL traversal depth "
+          "(2 kinds at Work Item, all 4 container tiers entity-resolved, 0 "
+          "unresolved hops)",
+          rc == 0 and _pc_ids(out) == set()
+          and _lv_ok.get("levels_visited") == "5"
+          and _lv_ok.get("kinds_resolved") == "2"
+          and _lv_ok.get("entities_resolved") == "4"
+          and _lv_ok.get("unresolved") == "0")
+    check("LVL the rollup fixture exercises BOTH level_role arms - the declared "
+          "grouping value AND the absent-means-execution default",
+          _lv_ok.get("grouping") == "1" and _lv_ok.get("execution") == "1")
+
+    rc, out, _err = _pc_cli(_pc_repo, ("--validate-packs", "--pack-root",
+                                       os.path.join(_lvl_fx, "tier-claiming-kit")))
+    _lv_bad = _lv(out)
+    check("LVL REJECTS the tier-claiming fixture under PACK-K06a and no other rule",
+          rc == 1 and _pc_ids(out) == {"PACK-K06a"})
+    # THE FALSIFIABILITY ARM. entities_resolved and unresolved MOVE against the
+    # accepted fixture. If they did not, the LEVELS line would be a constant dressed
+    # as a measurement -- the gate-that-cannot-fail shape at the reporting surface
+    # rather than at the rule surface.
+    check("LVL the level footprint MOVES on the tier claim: entities_resolved "
+          "4 -> 3 and unresolved 0 -> 1 against the accepted fixture",
+          _lv_bad.get("entities_resolved") == "3"
+          and _lv_ok.get("entities_resolved") == "4"
+          and _lv_bad.get("unresolved") == "1"
+          and _lv_ok.get("unresolved") == "0")
+
+    rc, out, _err = _pc_cli(_pc_repo, ("--validate-packs", "--pack-root",
+                                       os.path.join(_lvl_fx, "nested-grouping-kit")))
+    check("LVL REJECTS the nested-grouping fixture under PACK-K09 and no other rule",
+          rc == 1 and _pc_ids(out) == {"PACK-K09"}
+          and _lv(out).get("grouping") == "2")
+
+    # The three shipped packs are untouched by all of this: no kind moves level, no
+    # kind gains level_role, and the absent-means-execution default is what makes that
+    # true rather than a coincidence.
+    rc, out, _err = _pc_cli(_pc_repo, ("--validate-packs", "--pack-root",
+                                       os.path.join(_pc_repo, "core", "packs")))
+    _lv_ship = _lv(out)
+    check("LVL the shipped corpus is unmoved: 4 kinds at Work Item, 0 grouping, "
+          "0 unresolved hops, no finding",
+          rc == 0 and _pc_ids(out) == set()
+          and _lv_ship.get("kinds_resolved") == "4"
+          and _lv_ship.get("grouping") == "0"
+          and _lv_ship.get("execution") == "4"
+          and _lv_ship.get("unresolved") == "0")
+
     check("PC coverage: every PACK-* rule id is exercised by a mutation arm",
           _pc_exercised == set(PACK_RULE_IDS))
 
