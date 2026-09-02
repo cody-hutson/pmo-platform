@@ -1939,14 +1939,53 @@ def self_test():
     # DRY-RUN PARITY, as a property. The reporting path calls `rewrite_citations`
     # and discards the text, so over identical bytes the two counts are the same
     # number by construction — this arm fails only if a caller re-derives a count.
-    parity_body = devlog + "\nplain ADR-004 citation\n"
+    #
+    # THE FIXTURE CARRIES ALL THREE COLUMNS NON-ZERO, and that is load-bearing.
+    # The `provenance-note` line below is what makes `exempt` non-zero; without
+    # it the exempt limb of the partition is a zero whose control is also zero,
+    # which is a broken probe rather than a passing arm.
+    parity_record = ("**Numbering provenance — `004 → 005`.** Held **ADR-004** "
+                     "branch-local before the sibling merge.\n")
+    parity_body = devlog + "\n" + parity_record + "\nplain ADR-004 citation\n"
     _p_text, _p_would, _p_review = rewrite_citations(parity_body, 4, 5)
     _p_present = len(citation_re(4).findall(parity_body))
     _p_amb = sum(len(citation_re(4).findall(ln)) for _, ln in _p_review)
+    # `exempt` is DERIVED FROM THE CLASSIFIER, not subtracted from the other two.
+    # The reporting path computes it as `present - would - amb_tokens` (see CALL
+    # SITE 3); reproducing that subtraction here would make the partition arm
+    # `a + b + (c - a - b) == c` — true for every integer triple, inert under
+    # every mutation, and unable to fail for the reason its own comment claims.
+    # Reading the RECORD verdicts straight off `classify_lines` gives the third
+    # term an independent source, so the equation below cross-checks FOUR
+    # separately-derived numbers: `present` from a raw token scan, `would` and
+    # `amb` from `rewrite_citations`, `exempt` from the exemption authority.
+    _p_lines = parity_body.split("\n")
+    _p_verdicts = classify_lines(parity_body)
+    _p_exempt = sum(len(citation_re(4).findall(ln))
+                    for ln, v in zip(_p_lines, _p_verdicts) if v == RECORD)
     # The three columns the dry run prints partition the tokens present, exactly.
     # A reporting path that re-derived any of them could not satisfy this.
     eq("dryrun/parity-partitions-the-tokens",
-       _p_would + _p_amb + (_p_present - _p_would - _p_amb), _p_present)
+       _p_would + _p_amb + _p_exempt, _p_present)
+    # NON-VACUITY — every column of that partition is exercised. Asserted as a
+    # shape, not as the three values, so this arm neither entails the partition
+    # nor is entailed by it: a later fixture edit that zeroes a column fails
+    # HERE, loudly, instead of quietly degrading the partition into a two-term
+    # sum that still balances.
+    eq("dryrun/parity-partition-exercises-every-column",
+       (_p_would > 0, _p_amb > 0, _p_exempt > 0), (True, True, True))
+    # SPECIFICITY / FALSIFIABILITY CONTROL — the partition is a property of the
+    # exemption authority, not an algebraic identity. Disable the exemption on
+    # the SAME bytes and the same three terms no longer balance (`would` absorbs
+    # the RECORD and AMBIGUOUS tokens while `exempt` still reports one), so the
+    # arm above has a reachable configuration in which it is FALSE. Without this
+    # limb, a partition arm that silently reverted to the subtracted form would
+    # look exactly like a passing one.
+    _np_text, _np_would, _np_review = rewrite_citations(
+        parity_body, 4, 5, preserve_historical=False)
+    _np_amb = sum(len(citation_re(4).findall(ln)) for _, ln in _np_review)
+    eq("dryrun/parity-partition-is-falsifiable",
+       _np_would + _np_amb + _p_exempt == _p_present, False)
     eq("dryrun/parity-would-equals-the-applied-count",
        _p_would, len(citation_re(4).findall(parity_body))
        - len(citation_re(4).findall(_p_text)))
@@ -2217,8 +2256,11 @@ def self_test():
           "outside-the-section discrimination limb and close-boundary arm + "
           "numbered-heading variant + fenced-comment-is-not-a-section + "
           "incoherent-range + author markers both ways / dry-run parity: "
-          "token partition + applied-count identity + region-excluded with its "
-          "sensitivity and specificity arms / stamp: resolve + refuse-unknown + "
+          "token partition over independently-derived terms with its "
+          "every-column non-vacuity arm and its exemption-disabled "
+          "falsifiability control + applied-count identity + region-excluded "
+          "with its sensitivity and specificity arms / stamp: resolve + "
+          "refuse-unknown + "
           "refuse-ambiguous + link-position refusal with its prose control)")
     return 0
 
