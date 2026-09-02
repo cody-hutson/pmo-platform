@@ -163,7 +163,7 @@ One per resolved work item, **plus** exactly one `work_item_kind:"unattributed"`
 | Field | Type | Notes |
 |---|---|---|
 | `record` | `"rollup"` | discriminator (v1.1.0, additive) |
-| `work_item` | string | `#N` (issue) \| `milestone:vX.Y` \| `"unattributed"` \| `"multi-branch"` |
+| `work_item` | string | `#N` (issue) \| `milestone:<release-key>` \| `"unattributed"` \| `"multi-branch"`. `<release-key>` is the milestone **slug** (canonical, slug-primary per ADR-092) or a `vX.Y` emitted by the post-claim version-branch tier — see [`finops-attribution-convention.md`](../standards/finops-attribution-convention.md) § Work-item key format |
 | `work_item_kind` | enum | `issue` \| `milestone` \| `unattributed` \| `multi-branch` |
 | `attribution_tier` | enum | provenance of the resolution — `branch-milestone` \| `issue-event-keyed` \| `hub-state-lineage` \| `pr-resolved` \| `unattributed` |
 | `reproducible` | bool | `true` for every local-only tier; `false` for `pr-resolved` (a network `gh` PR-resolve is time-varying and not part of a deterministic rebuild) |
@@ -172,10 +172,10 @@ One per resolved work item, **plus** exactly one `work_item_kind:"unattributed"`
 | `session_count` | int | # of `session` records rolled into this work item |
 | `session_ids` | array[string] | contributing session UUIDs — the reconciliation surface the ground-truth + conservation checks read |
 | `token_source` | enum | `exact` \| `heuristic` \| `mixed` (`mixed` if the contributing sessions differ, or any is `heuristic`) |
-| `attribution_basis` | string | human-readable resolution note (e.g. `"branch release/vX.Y-<slug> → milestone"`; for `unattributed`, the reason the session did not resolve) |
+| `attribution_basis` | string | human-readable resolution note (e.g. `"slug-primary release branch release/<milestone-slug> -> milestone <slug>"`, or `"branch release/vX.Y-<slug> → milestone"` for the version-form tier; for `unattributed`, the reason the session did not resolve) |
 | `rolled_up_utc` | ISO 8601 UTC | roll-up computation time (extraction-time metadata; excluded from idempotence comparison) |
 
-> **No `by_role` field.** A per-session hub-vs-spoke split is deliberately NOT emitted at v1.1.0: release-branch spokes share the hub's `release/vX.Y-*` branch shape, so a branch/worktree heuristic cannot separate hub from spoke with any confidence. A reliable role split needs a hub-emitted spawn-ledger marker (the hub logs each spoke's worktree / session id at spawn) and is deferred to the `agent-finops-intelligence` milestone — an unreliable split presented as data is worse than its absence.
+> **No `by_role` field.** A per-session hub-vs-spoke split is deliberately NOT emitted at v1.1.0: release-branch spokes share the hub's release-branch shape — `release/<milestone-slug>` since ADR-092, `release/vX.Y-*` before it — so a branch/worktree heuristic cannot separate hub from spoke with any confidence. A reliable role split needs a hub-emitted spawn-ledger marker (the hub logs each spoke's worktree / session id at spawn) and is deferred to the `agent-finops-intelligence` milestone — an unreliable split presented as data is worse than its absence.
 
 ## Record: `coverage` (v1.1.0, additive)
 
