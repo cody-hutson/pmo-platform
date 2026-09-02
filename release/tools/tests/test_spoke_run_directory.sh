@@ -119,12 +119,14 @@ clause_arms() {
   if [ -n "$section" ]; then echo "A1 PASS"; else echo "A1 FAIL"; fi
 
   # A2 — it binds the WRITE side to the run directory.
-  if printf '%s' "$section" | grep -qF 'inside `$SPOKE_OUT` and nowhere else'
+  #      Here-string for the same pipefail reason as A8.
+  if grep -qF -- 'inside `$SPOKE_OUT` and nowhere else' <<<"$section"
   then echo "A2 PASS"; else echo "A2 FAIL"; fi
 
   # A3 — it binds the READ side. #3211 was a READ; a write-only clause lets
   #      the AC pass with the observed defect fully reachable.
-  if printf '%s' "$section" | grep -qF 'Read** scratch input only from `$SPOKE_OUT`'
+  #      Here-string for the same pipefail reason as A8.
+  if grep -qF -- 'Read** scratch input only from `$SPOKE_OUT`' <<<"$section"
   then echo "A3 PASS"; else echo "A3 FAIL"; fi
 
   # A4 — it requires the run directory be echoed into the durable artifact,
@@ -132,12 +134,14 @@ clause_arms() {
   #      Relative form only: the output comment is a public surface, and the
   #      resolved absolute path embeds the operator's OS username on a default
   #      install.
-  if printf '%s' "$section" | grep -qF 'Echo the run directory in `${SCRATCH_BASE}`-relative form'
+  #      Here-string for the same pipefail reason as A8.
+  if grep -qF -- 'Echo the run directory in `${SCRATCH_BASE}`-relative form' <<<"$section"
   then echo "A4 PASS"; else echo "A4 FAIL"; fi
 
   # A4b — negative arm: the mandate must NOT ask for the resolved absolute path.
   #       Without this, re-adding the absolute form later passes a green build.
-  if printf '%s' "$section" | grep -qF 'Echo the resolved `$SPOKE_OUT`'
+  #       Here-string for the same pipefail reason as A8.
+  if grep -qF -- 'Echo the resolved `$SPOKE_OUT`' <<<"$section"
   then echo "A4b FAIL"; else echo "A4b PASS"; fi
 
   # A5 — the read-only spoke's GitHub-write bound is scoped to GitHub, so it no
@@ -185,7 +189,8 @@ LIVE_RESULTS="$(clause_arms "$BRIDGE")"
 # legitimately against an excised section and would corrupt the deletion-
 # sensitivity count if included there.
 for arm in A1 A2 A3 A4 A4b A5 A6 A7 A8 A9; do
-  if printf '%s\n' "$LIVE_RESULTS" | grep -qx "$arm PASS"; then
+  # Here-string for the same pipefail reason as A8.
+  if grep -qx -- "$arm PASS" <<<"$LIVE_RESULTS"; then
     ok "$arm — clause assertion holds in hub-spoke-bridge.md"
   else
     bad "$arm — clause assertion does NOT hold in hub-spoke-bridge.md"
@@ -226,7 +231,8 @@ else
   MUT_RESULTS="$(clause_arms "$MUTATED")"
   SURVIVORS=0
   for arm in A1 A2 A3 A4 A5 A6 A7 A8 A9; do
-    if printf '%s\n' "$MUT_RESULTS" | grep -qx "$arm PASS"; then
+    # Here-string for the same pipefail reason as A8.
+    if grep -qx -- "$arm PASS" <<<"$MUT_RESULTS"; then
       SURVIVORS=$((SURVIVORS+1))
       printf '         survivor: %s still passes with the clause deleted\n' "$arm"
     fi
