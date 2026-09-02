@@ -6,7 +6,7 @@ status: ACTIVE
 layer: 1
 reversibility: CHEAP / Confidence HIGH
 consumers: Any agent changing the pack grammar, the licensed-kind vocabulary, the `type:*` label surface, or the intake type-derivation contract; release-pipeline spokes performing blast-radius assessment on those surfaces.
-verified_at: 5b8e314b
+verified_at: c7c4b9bd
 ---
 <!-- reference-durability: allow-link -->
 
@@ -75,15 +75,15 @@ it. Line anchors are at `verified_at`; § Reproduction re-derives them.
 
 | # | Consumer | What it reads | Read path | Found by |
 |---|---|---|---|---|
-| R1 | `core/deploy/tools/check-work-hierarchy.py:327` `load_licensed_kinds_checked()` | `kind_id` rows | `os.listdir(core/packs)` → `<entry>/pack.toml` → `KIND_ID_RE` (`:197`) | structural tracer (post-fix) + direct read |
-| R2 | same file, `--emit-kinds` (`:394`) | the union, one id per line | stdout contract; **exit 3** on a partial parse *or* an empty set (`:407`) | structural tracer (post-fix) + direct read |
-| R3 | `core/deploy/deploy.sh:8074` Check 22 | R2's stdout | `/usr/bin/python3 <tool> --emit-kinds` subprocess → CSV membership → Gate-1 Step-0 F2 predicate | structural tracer + direct read |
-| R4 | `core/deploy/deploy.sh:11850` Check 55 | licensed kind vocabulary | hierarchy doc invariant — no banned parent tier above a licensed kind | structural tracer + direct read |
+| R1 | `core/deploy/tools/check-work-hierarchy.py:338` `load_licensed_kinds_checked()` | `kind_id` rows | `os.listdir(core/packs)` → `<entry>/pack.toml` → `KIND_ID_RE` (`:208`); the union loop is `:362`–`:380` | structural tracer (post-fix) + direct read |
+| R2 | same file, `--emit-kinds` → `emit_kinds()` (`:404`) | the union, one id per line | stdout contract; **exit 3** on a partial parse *or* an empty set (`:417`, `:421`) | structural tracer (post-fix) + direct read |
+| R3 | `core/deploy/deploy.sh:8093` Check 22 (emitter `:7726`) | R2's stdout | `/usr/bin/python3 <tool> --emit-kinds` subprocess → CSV membership → Gate-1 Step-0 F2 predicate | structural tracer + direct read |
+| R4 | `core/deploy/deploy.sh:11852` Check 55 | licensed kind vocabulary | hierarchy doc invariant — no banned parent tier above a licensed kind | structural tracer + direct read |
 | R5 | `core/deploy/tools/check-label-parity.py:94` | `[[labels]]` `name` / `color` / `description` **only** | `_TOML_ROW_KV_RE` line scan | structural tracer (post-fix) + direct read |
-| R6 | `core/deploy/deploy.sh:11579` Check 51 | R5 over the pack glob | `for c51_pack in core/packs/*/pack.toml` | structural tracer + direct read |
+| R6 | `core/deploy/deploy.sh:11571` Check 51 | R5 over the pack glob | `for c51_pack in core/packs/*/pack.toml` | structural tracer + direct read |
 | R7 | `core/deploy/tests/test_g1_form_family.sh:111` | `--emit-kinds` | test harness invoking the same subprocess | path-literal tracer |
-| **R8** | **`operations/skills/intake-desk/references/type-map.md:67`** — precedence **rung 2** | **`kinds[]` from packs whose `applies_to` equals `M`** | **agent-executed, per invocation, never cached** | structural tracer |
-| **R8b** | **same file, `:60`–`:65`** — precedence **rung 1 (K4), which WINS** | **operator/project type-pack kinds, scoped "for their archetype" (`:62`–`:63`)** | **agent-executed, per invocation** | **direct read only — carries zero occurrences of `applies_to`** |
+| **R8** | **`operations/skills/intake-desk/references/type-map.md:88`–`:100`** — precedence **rung 2** | **`kinds[]` from ELIGIBLE packs — two limbs since the grammar slice: `applies_to` equals `M` (`:93`), OR `applies_to` is `*` AND `role` is `kit` and it is the resolved `K` (`:94`–`:95`)** | **agent-executed, per invocation, never cached** | structural tracer |
+| **R8b** | **same file, `:70`–`:81`** — precedence **rung 1 (K4), which WINS** | **operator/project type-pack kinds; scope is now conditioned on the pack's `role`, not on `M` alone (`:74`–`:79`), and the prose-vs-token asymmetry is stated in-place at `:83`–`:87`** | **agent-executed, per invocation** | **direct read; the block now carries 1 occurrence of `applies_to` where it carried 0 at the previous stamp** |
 | R9 | `operations/skills/intake-desk/references/elicitation-loop.md:78` | methodology resolution + fallback rung | agent-executed | structural tracer |
 | R10 | `core/schemas/gate-criteria-spec.md:199`, `:991` | the Gate-1 Step-0 contract — *"resolved, never enumerated"* | spec | structural tracer |
 | R11 | `core/specs/label-taxonomy.md` | the `type:*` namespace grammar | spec | structural tracer |
@@ -93,9 +93,21 @@ it. Line anchors are at `verified_at`; § Reproduction re-derives them.
 
 **The union is archetype-blind by construction, and that is load-bearing.** R1 reads
 `kind_id` only. It performs no `role` join and no `applies_to` join — verified by direct
-read of the loop and by census (`applies_to` occurs in **0 of 244** tracked executables).
-That is precisely why R1–R7 absorb a methodology-neutral kind-bearing pack unchanged: the
-constraint being relaxed is not enforced in code anywhere.
+read of the loop (`:362`–`:380`), which is unchanged at this stamp. That is precisely why
+R1–R7 absorb a methodology-neutral kind-bearing pack unchanged.
+
+> **RE-DERIVED AT THIS STAMP — the census moved, and this release moved it.** At the
+> previous stamp this paragraph closed *"the constraint being relaxed is not enforced in
+> code anywhere,"* resting on `applies_to` occurring in **0 of 244** tracked executables.
+> That is now **1 of 244** — `core/deploy/tools/check-work-hierarchy.py`, whose
+> `--validate-packs` and `--resolve` branches this release ships, wired as `deploy.sh`
+> Check 75 and read by R8's own two-limb eligibility rule. Measured on both refs over the
+> same denominator: `origin/main` 0 of 244, this stamp 1 of 244; sensitivity arm `kind_id`
+> 3 files on both; specificity arm 0 on both; extraction non-empty (244 of 244 readable).
+> **R1's own archetype-blindness is untouched** — the new reader is a separate argv branch
+> that returns before the H1/H2/H3 legs and shares no state with the union. What changed
+> is the corpus-level claim, not the mechanism: the relaxation now meets a live reader,
+> which is the window-closing the grammar's own extension note records.
 
 ## Create / update / delete paths
 
@@ -136,7 +148,7 @@ why a repo-only scan cannot reach them by construction.
 |---|---|---|---|---|
 | F1 | **Live label surface** — 80 labels, **9** `type:*` vs **4** pack-declared kinds | C1–C3, U2, D1 | n/a (not a file) | 5 `type:*` labels are pack-undeclared |
 | F2 | **Live issue surface** — every open and closed issue's label set | C1–C6, U1 | n/a | unbounded; not enumerated here |
-| F3 | **Deployed skill mirror** of the intake type-map | deploy sync | **yes** | verified present **and byte-identical** to the repo copy (13577 bytes both sides) |
+| F3 | **Deployed skill mirror** of the intake type-map | deploy sync | **yes** | present, and **NO LONGER byte-identical**: repo copy **16,665** bytes, deployed mirror **13,577** bytes at this stamp. The drift window the second-order table predicts is **OPEN**, measured rather than inferred — the grammar slice edited the repo copy and no redeploy has run. It closes at deploy, not here |
 | F4 | Compiled `.skill` distribution artifacts | package build | **yes** | present |
 | F5 | Operations-tier project records carrying the delivery-approach selection input | operator authoring | **yes** | out of the measurable population |
 | F6 | Operator configuration — the methodology default, the **work-item-kit default**, and the ticketing adapter selector, the head of the configuration cascade | config cascade | n/a (template only in repo) | `[methodology].default_work_item_kit` + the `PROJECT.md` `work_item_kit:` override **landed**; see the note below |
@@ -161,8 +173,8 @@ at the pack level and at the kind level.
 
 | Consumer | Verdict | Why |
 |---|---|---|
-| **R8** (rung 2) | **BREAKS — quietly** | the join is `applies_to` **equals** `M`; a neutral value equals no concrete methodology, so the kit's kinds are dropped and derivation falls through to a lower rung. No error at any rung. |
-| **R8b** (rung 1, K4 — **higher precedence**) | **BREAKS — quietly, and first** | the same archetype scoping, expressed as *"the declared kinds ARE the registry **for their archetype**"*. An operator-authored kit is read at this rung, where the scoping drops it — **above** the rung a fix at `:67` would repair. |
+| **R8** (rung 2) | **WOULD HAVE BROKEN — quietly; REPAIRED at this stamp** | the join *was* `applies_to` **equals** `M`; a neutral value equals no concrete methodology, so the kit's kinds were dropped and derivation fell through to a lower rung, with no error at any rung. The grammar slice replaced it with the two-limb eligibility rule at `:92`–`:98`. |
+| **R8b** (rung 1, K4 — **higher precedence**) | **WOULD HAVE BROKEN — quietly, and first; REPAIRED at this stamp** | the same archetype scoping, expressed as *"the declared kinds ARE the registry **for their archetype**"*, at the rung **above** the one a fix at rung 2 alone would have repaired. The slice widened the whole block rather than one line (`:74`–`:79`), which is what this row asked for. |
 | R1 / R2 | unaffected | archetype-blind by construction — the union reads `kind_id` from any pack directory |
 | R3 / R4 | unaffected | consume R2's already-archetype-blind output |
 | R5 / R6 | unaffected in mechanism; **improved in signal** | a kit declaring label rows not live on the label surface is correctly reported missing |
@@ -181,8 +193,12 @@ at the pack level and at the kind level.
 
 ## Named breakages
 
-Consumers that would break under a decoupled, archetype-neutral kind unit. **Two rows, not
-one** — and the second was invisible to the probe that produced the original count.
+Consumers that **would have broken** under a decoupled, archetype-neutral kind unit, stated
+here as the map found them at the baseline. **Two rows, not one** — and the second was
+invisible to the probe that produced the original count. **Both are repaired at this
+stamp** by the grammar slice, which widened the derivation block rather than one clause;
+the rows are retained because the failure mode, not the defect, is what a future editor of
+that contract needs to have read.
 
 | # | Consumer | Rung | Precedence | Failure mode |
 |---|---|---|---|---|
@@ -197,11 +213,15 @@ single-axis — the grammar slice's edit must widen the block, not a line.
 **Why B2 was missed, stated as a method failure rather than an oversight.** The original
 enumeration searched the literal `applies_to` and reported the result as a population. The
 breakage class is *archetype-scoped joins*; `applies_to ==` is one spelling of that class
-and *"for their archetype"* is another. Measured at `verified_at`: the whole file contains
-**1** occurrence of `applies_to`, at `:67`; the rung-1 block at `:60`–`:65` contains **0**;
-the file contains **9** occurrences of `archetype`. The control is live — the token *is*
-present in the file — so the rung-1 zero is a real absence and not an unresolvable path.
-**A count of one was a count of one spelling.**
+and *"for their archetype"* is another. Measured **at the baseline**: the whole file
+contained **1** occurrence of `applies_to`, at `:67`; the rung-1 block at `:60`–`:65`
+contained **0**; the file contained **9** occurrences of `archetype`. The control was live
+— the token *was* present in the file — so the rung-1 zero was a real absence and not an
+unresolvable path. **A count of one was a count of one spelling.** Re-measured at this
+stamp, after the repair: the file is **228 lines / 16,554 characters**, `applies_to` occurs
+**6** times, the rung-1 block `:70`–`:81` now carries **1** of them, the rung-2 block
+`:88`–`:100` carries **3**, and `archetype` occurs **18** times. The rung-1 zero is closed
+by the repair, which is the observable that shows the fix reached the winning rung.
 
 **Everything else absorbs the relaxation unchanged.** That asymmetry is this map's single
 most decision-relevant output: the grammar change is safe in code and unsafe in prose,
@@ -214,10 +234,10 @@ is composition-locked, so these route to a later bundle.
 
 | # | Hazard | Anchor | Consequence |
 |---|---|---|---|
-| H1 | **The licensed-kind union silently widens.** The loop walks every directory under `core/packs/` holding a `pack.toml` and unions its `kind_id` rows — **no allowlist, no naming filter, no underscore-prefix skip**. | `core/deploy/tools/check-work-hierarchy.py:346`–`:369` | A fixture pack placed in that tree is absorbed into the **production** gate's vocabulary. This is why every fixture in this release lives outside `core/packs/`. |
+| H1 | **The licensed-kind union silently widens.** The loop walks every directory under `core/packs/` holding a `pack.toml` and unions its `kind_id` rows — **no allowlist, no naming filter, no underscore-prefix skip**. | `core/deploy/tools/check-work-hierarchy.py:362`–`:380` | A fixture pack placed in that tree is absorbed into the **production** gate's vocabulary. This is why every fixture in this release lives outside `core/packs/`. |
 | H2 | **The label-parity check cannot detect a pack-undeclared kind label.** `type:` is registered as a namespace *pattern*, so any live `type:*` resolves as a pattern match and is never an orphan. | `core/deploy/tools/check-label-parity.py:73` (`REGISTERED_NAMESPACES`) | 5 of 9 live `type:*` labels sit unflagged. Adjacent to, and distinct from, the parity-hardening work in a sibling milestone. |
-| H3 | **Pack removal is silently non-degrading** (D2 above). | `core/deploy/tools/check-work-hierarchy.py:327` docstring | Correct for deselection; indistinguishable from accidental deletion. A pack-count drift signal would separate the two. |
-| H4 | **A consumer map goes stale.** Nothing re-verifies these rows. | this file | Mitigated by `verified_at` plus § Reproduction — re-verification is one command set, not a re-derivation. A deploy check confirming each mapped consumer still exists would be the durable fix and is net-new infrastructure. |
+| H3 | **Pack removal is silently non-degrading** (D2 above). | `core/deploy/tools/check-work-hierarchy.py:338` docstring (the quoted clause at `:352`) | Correct for deselection; indistinguishable from accidental deletion. A pack-count drift signal would separate the two. |
+| H4 | **A consumer map goes stale, and `verified_at` cannot stop it.** | this file | The stamp is a **convention with no enforcement**: measured over the tracked corpus, `verified_at` appears in **2 of 1856** readable files — this map and one release plan — with **no schema declaring it, no gate reading it, and no runner comparing it to `HEAD`** (sensitivity arm, the schema-governed frontmatter key `reversibility:` → 296 files; specificity arm → 0; same denominator, same instrument). So nothing detects the gap between the stamp and the head, and nothing ever will until something reads it. **This was not hypothetical here**: the stamp was set at the commit that authored this map, three slices then rewrote its subject, and the map kept asserting six classes of claim that had gone false — including *"the constraint being relaxed is not enforced in code anywhere,"* which the same release falsified by shipping the first reader. Mitigated meanwhile by § Reproduction — re-verification is one command set, not a re-derivation. **The durable fix is a check that compares `verified_at` to the head and reports the delta**; it is net-new infrastructure and is recorded here rather than filed, because the owning milestone is composition-locked. |
 
 ## Instrument blind spots
 
@@ -227,17 +247,24 @@ does not say so launders staleness as evidence.**
 **The Python blind spot was closed in the release that authored this map, and every
 `Found by` value above reflects the post-fix instrument.** The doc tracer's scanned-type list
 omitted `py`, so it could never surface R1, R2 or R5 — the only executables that read the
-pack corpus. Measured before and after at one commit, on the same target:
+pack corpus. Measured before and after **at the commit that landed the fix**, on the same
+target — the counterfactual half of this table is anchored there and is deliberately not
+re-executed at later stamps, because the "without" state no longer exists in the tree:
 
 | Instrument state | Files in scan population | First-order consumers of `core/packs` | `.py` consumers surfaced |
 |---|---|---|---|
-| without the Python type | 1555 | 25 | **0** |
-| with it | 1627 | 27 | **2** — the two pack-reading executables |
+| without the Python type (at the fix commit) | 1555 | 25 | **0** |
+| with it (at the fix commit) | 1627 | 27 | **2** — the two pack-reading executables |
+| with it (**re-executed at this stamp**) | 1640 | 40 | **2** — the same two |
 
 The +72 scan-population delta equals the **tracked `.py` file count** exactly (72 of the
 244 tracked `.py` / `.sh` / `.ps1` files) — the cross-check that the delta is the Python
 corpus and not drift. That it matches exactly, rather than falling short, additionally
-shows no tracked `.py` file sits under a default exclusion.
+shows no tracked `.py` file sits under a default exclusion. **The cross-check still holds
+at this stamp and was re-derived independently of the tool**: tracked files matching the
+scanned-type set are 1640 with `py` and 1568 without, a delta of 72, and 1640 is exactly
+what the tool reports as its scan population. The first-order count moved 27 → 40 because
+the release added referrers to `core/packs`, not because the instrument changed.
 The fix ships with a discriminating self-test arm: the suite previously returned an
 identical result patched and unpatched because its fixture region contained no `.py` file
 at all, so the one-line change alone would have landed behind a gate that could not fail.
@@ -287,7 +314,7 @@ bash release/tools/blast-radius.sh --self-test
 #     T6a and T5l MUST go red; T6z MUST stay green. A run where all three stay green
 #     means the fixture no longer discriminates and every count below is unverified.
 
-# 2 — structural consumers of the pack corpus (expect 27, incl. the two .py readers)
+# 2 — structural consumers of the pack corpus (expect 40 at this stamp, incl. the two .py readers)
 bash release/tools/blast-radius.sh --mode=structural --format=json --no-color core/packs \
   | jq -c '{tfs:.stats.total_files_scanned, fo:.stats.first_order_count,
             py:[.first_order[].path|select(endswith(".py"))]}'
@@ -314,19 +341,25 @@ gh api --paginate "repos/OWNER/REPO/labels?per_page=100" --jq '.[].name'
 Both iterate `git ls-files`, read each path as UTF-8, and count with `str.count` /
 `re.findall` — no shell matcher in the path.
 
-- **Corpus census.** Denominator 1898 tracked files; 1843 readable as UTF-8; 55 binary
-  (image and archive assets, none a text consumer). Sensitivity arm `\bthe\b` →
-  1719 files / 236,569 occurrences. Specificity arm, an impossible token → 0 / 0.
-- **Executable census.** Denominator **244** executables (72 `.py`, 169 `.sh`, 3 `.ps1`).
-  Same-shape sensitivity arm — a TOML key these files *do* read, `kind_id` → **3 files /
-  28 occurrences** (`check-work-hierarchy.py` 20, `deploy.sh` 6, `check-label-parity.py` 2).
-  General sensitivity arm → 197 files / 1905. Specificity arm → 0.
-  **Subjects: `applies_to` → 0 / 0. An archetype-valued `role` → 0 / 0. `general_level` →
-  0 / 0.** A zero beside a fired same-shape arm over the same population.
-- **The two-rung probe.** Over the intake type-map (188 lines, 13,478 characters —
-  extraction non-empty): `applies_to` occurs **1** time file-wide, at `:67`; **0** times in
-  the rung-1 block `:60`–`:65`; `archetype` occurs **9** times file-wide. The file-wide 1 is
-  the control that makes the block-level 0 a real absence.
+- **Corpus census.** Denominator **1911** tracked files; **1856** readable as UTF-8; 55
+  binary (image and archive assets, none a text consumer). Sensitivity arm `\bthe\b` →
+  **1732 files / 238,166 occurrences**. Specificity arm, an impossible token → 0 / 0.
+- **Executable census.** Denominator **244** executables (72 `.py`, 169 `.sh`, 3 `.ps1`) —
+  all 244 readable, extraction non-empty. Same-shape sensitivity arm — a TOML key these
+  files *do* read, `kind_id` → **3 files / 62 occurrences**
+  (`check-work-hierarchy.py` 54, `deploy.sh` 6, `check-label-parity.py` 2).
+  General sensitivity arm → **242 files / 41,502**. Specificity arm → 0.
+  **Subjects at this stamp: `applies_to` → 1 file / 56. An archetype-valued `role` →
+  1 file / 9. `general_level` → 1 file / 37 — all three in
+  `core/deploy/tools/check-work-hierarchy.py`, and all three were 0 / 0 at the baseline
+  (`origin/main`, same denominator, same arms).** The subject moved because this release
+  shipped the first reader; the arms did not.
+- **The two-rung probe.** Over the intake type-map at this stamp (**228 lines, 16,554
+  characters** — extraction non-empty): `applies_to` occurs **6** times file-wide, **1** in
+  the rung-1 block `:70`–`:81` and **3** in the rung-2 block `:88`–`:100`; `archetype`
+  occurs **18** times file-wide. At the baseline the same probe read 1 file-wide, 0 in
+  rung 1, 9 for `archetype` over 188 lines / 13,478 characters — the rung-1 zero that made
+  B2 invisible, now closed by the repair.
 
 **A zero whose control arm also returned zero is a broken probe.** Every zero recorded in
 this map is paired with a live control in the same invocation over the same denominator.
