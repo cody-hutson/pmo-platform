@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-111 — The P-level digit is the canonical priority satisfier; the carrier is not part of the contract
-status: Proposed
+status: Accepted
 date: 2026-08-03
 release: release-bundle-and-sequence-gates
 deciders: "Workspace owner — the body-parse-vs-doc-only fork was an open two-way resolution on the originating ticket and was settled at the Stage-4 gate in favour of body-parse. The carrier-agnostic grammar was designed at Stage 5, survived an independent Stage-5 Phase-A6.5 adversarial review with no blockers, and was implemented at Stage 6 with the review's two Major constraints (the sign-convention reconciliation and the dead-acceptance-probe repair) treated as mandatory."
@@ -19,7 +19,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent. It flips to **Accepted** at this release's Stage-9 plan-review gate; per the established precedent the flip is verified against this file's own `status:` field and never assumed from Milestone closure.
+**Accepted.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent.
 
 **Numbering.** ADR numbers are platform-global monotonic across **both** homes (`core/ADRs/` and `release/ADRs/`). A number is **allocated at authorship and bound at merge, and only the mainline binds**: next-free is the highest ADR number on the mainline plus one, never `max(claimed_set) + 1`. An unmerged sibling claim is **advisory** — it predicts a merge-time renumber; it does not move the number. This record's design-time allocation was invalidated when a sibling release merged five records (one release, four core) between Stage-5 exit and Engineering start, taking the mainline anchor to ADR-109; an earlier slice of this same release then took 110, so this record takes **111**. A working-tree glob is not the authority for the *anchor* either — it cannot see what has merged to the mainline since the branch was cut.
 

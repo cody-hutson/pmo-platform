@@ -1,6 +1,6 @@
 ---
 title: "ADR-103 — Decision-audit hosts as pmo-qa-auditor Mode J (sibling to Mode I), not a standalone skill: ADR-019 conjunct-3 forecloses the net-new Specialist"
-status: Proposed — to be ratified at the operator's Stage 9 plan-review gate for the decision-audit-and-learning release. The flip to Accepted is verified against this file's `status:` field, never assumed from milestone closure.
+status: Accepted
 date: 2026-07-27
 release: decision-audit-and-learning (version bound at Stage 12)
 deciders: "operator (plan approval / Stage 9 ratification gate) + Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment) + Phase A6.5 adversarial design reviewer"
@@ -17,7 +17,7 @@ source_observations:
 
 ## Status
 
-Proposed — to be ratified at the operator's Stage 9 plan-review gate for the decision-audit-and-learning release. The flip to Accepted is verified against this file's `status:` field, never assumed from milestone closure.
+Accepted — ratified at the operator's Stage 9 plan-review gate for the decision-audit-and-learning release.
 
 **Numbering provenance — lineage `098 → 101 → 103`.** This record has renumbered twice; both moves have the same cause and neither reflects any change to the decision itself.
 

@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-112 — Decision-time adherence extends the decision-confidence gate at the trigger layer
-status: Proposed
+status: Accepted
 date: 2026-08-03
 release: agent-edit-discipline-codification
 deciders: "Workspace owner (ratifies at the Stage 9 GO gate); design authored at Stage 5 Solutioning under the Principal Engineer persona; scope confirmed at Collective Review"
@@ -19,7 +19,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Flips to **Accepted** at this release's Stage-9 GO gate. Per the established precedent the flip is verified against this file's own `status:` field and is never assumed from milestone closure.
+**Accepted.** Ratified at the `agent-edit-discipline-codification` release's plan-review gate.
 
 **Numbering.** ADR numbers are platform-global monotonic across **both** homes (`core/ADRs/` and `release/ADRs/`), and the claimed set includes in-flight pull-request claims. Re-verified at Engineering Commit 0: the union of both directories reports a contiguous `001..109` with no gaps and no duplicates, and the one open pull request claims ADR-110 and ADR-111. This ADR therefore takes **112**.
 

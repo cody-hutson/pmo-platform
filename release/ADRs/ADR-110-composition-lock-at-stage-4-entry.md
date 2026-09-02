@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-110 — A Milestone's composition is locked to additions at Stage-4 Planning entry; the lock binds the act, not the disposition, and its unmarked state is not eligibility
-status: Proposed
+status: Accepted
 date: 2026-08-03
 release: release-bundle-and-sequence-gates
 deciders: "Workspace owner — the add-only-vs-bidirectional direction was an open [ASSUMPTION – CONFIRM] on the originating ticket and was resolved at Stage 5 Solutioning; the act-typed framing and the three-valued boundary state were forced by a Stage-5 Phase-A6.5 adversarial review that returned two blockers, and were adopted in a targeted revision. The +1-file emission point was accepted by the operator at the revision's decision gate."
@@ -19,7 +19,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent. It flips to **Accepted** at this release's Stage-9 plan-review gate; per the established precedent the flip is verified against this file's own `status:` field and never assumed from Milestone closure.
+**Accepted.** Authored at Stage 6 per the Stage-6 ADR-authoring precedent.
 
 **Numbering.** ADR numbers are platform-global monotonic across **both** homes (`core/ADRs/` and `release/ADRs/`). A number is **allocated at authorship and bound at merge, and only the mainline binds**: next-free is the highest ADR number on `origin/main` plus one, never `max(claimed_set) + 1`. An unmerged sibling claim is **advisory** — it tells the author a merge-time renumber is likely, and it changes the *report*, never the *number*. The rule is the one the core ADR README's Renumber log already ratifies on the mainline ("an unmerged claim does not bind the sequence… first-to-merge takes the number and the other claimants renumber"). At Engineering Commit 0 the mainline anchor was ADR-109 — a sibling release had merged five records (one release, four core) between Stage-5 exit and Engineering start, invalidating this record's design-time allocation — so this record takes **110** and this release's later record takes **111**.
 
