@@ -139,6 +139,95 @@ each pack's header comment — a header comment would state it alongside the pac
 break the byte-identity the extension guarantees for every shipped pack. All three
 files are byte-identical to their pre-change state.
 
+## Kit selection and precedence
+
+A deployment runs **one methodology** and tracks **one work-item kit**, and it chooses
+them independently. Both choices are ordinary configuration: one field each, resolved
+by the platform's existing five-rung cascade (`OPERATIONS.md` § Platform-Config
+Resolution Protocol), and neither field is read by the other's resolution. Selecting a
+kit changes only which kinds the deployment tracks.
+
+### The two selection fields
+
+| Axis | Global default | Project override | Resolves to |
+|---|---|---|---|
+| Methodology | `operator.toml` `[methodology].default_delivery_approach` | `PROJECT.md` frontmatter `delivery_approach:` | an archetype name |
+| Work-item kit | `operator.toml` `[methodology].default_work_item_kit` | `PROJECT.md` frontmatter `work_item_kit:` | a `role = "kit"` pack's `pack_id` |
+
+Resolution is the cascade's ordinary rule: the value at the highest-precedence rung
+that sets the field, falling through to the global default. **Selecting no kit is a
+valid state**, not an error — a deployment that sets neither field behaves exactly as
+it did before kits existed, which is what keeps the kit role additive.
+
+Which kits exist is deployment data. Neither field enumerates its own value domain,
+and nothing else may either.
+
+### The axes do not interact
+
+The methodology lookup reads `delivery_approach`; the kit lookup reads
+`work_item_kit`. Neither reads the other's field, and neither field appears in the
+other's resolution. Changing the selected methodology therefore leaves the resolved
+kit unchanged, and changing the selected kit leaves the resolved methodology
+unchanged. That is a structural property of two independent lookups, not a behaviour
+each consumer must remember to preserve.
+
+What makes it hold on the pack side is that a kit is neutral at both levels — its
+header is `applies_to = "*"` and each of its kinds sets
+`methodology_projection.archetype = "*"` — which is what lets one kit be eligible
+under every archetype. A pack that claims the `kit` role while naming a concrete
+archetype defeats the property: it is eligible under that archetype only, so the set
+of kits a deployment can select would then depend on the methodology it runs. The
+grammar forbids that shape outright, and `--validate-packs` rejects it.
+
+**The property is executable, not just asserted.** `check-work-hierarchy.py --resolve
+<archetype> [--kit <pack_id>] [--k4 <pack_id>]` reports which packs are eligible and
+which pack each resolved kind came from, so "varying one axis leaves the other's
+eligible set unchanged" is a claim a reader can run rather than one they must trust.
+Both flags take values that are **already resolved**; the tool reads no configuration
+file and is not a second resolver.
+
+### Selection is not composition
+
+Selection chooses *which* packs apply. **Composition** decides *whose declaration
+wins* when two chosen packs declare the same `kind_id`. They are different operations
+and they are decided by different things.
+
+Composition order, the merge model, and the collision rule are defined once in
+[`## The role and extends model`](#the-role-and-extends-model) above and are not
+restated here.
+
+**That order is fixed by pack role. It is not derived from the configuration rung at
+which a pack was selected.** A reader who knows the five-rung cascade will expect the
+opposite — that a kit selected at the individual rung outranks a kind declared at the
+project rung. It does not. The cascade resolves *which* kit; composition resolves
+*whose declaration wins*. A project's own override beats the kit regardless of the
+rung the kit was selected at, and a kit beats an archetype pack for the same reason:
+its position in the composition order, not its position in the cascade.
+
+This is also why the resolver takes the project-level override **by name**. A pack's
+K4-ness is its *location* — Layer 2, `projects/` — and nothing inside the pack file
+marks it, so an order inferred from the file alone could not compute that position at
+all. Passing the already-resolved override as an argument is what makes the documented
+precedence executable rather than merely stated.
+
+### A selection resolves, or it fails loudly
+
+A selection naming a pack that is not there, or naming a pack that is not a kit, is an
+**error** — never a quiet fall-through to "no kit selected".
+
+The reason is that those two states are otherwise the *same observation*: both leave a
+resolution with no kit-attributed kinds. A deployment whose `default_work_item_kit`
+holds a typo would then look exactly like a deployment that deliberately selected
+nothing, and the typo would survive indefinitely because everything downstream still
+works. Making the failure loud is what separates them.
+
+There is deliberately **no joint-emptiness rule**. Selecting a kit cannot empty a
+deployment's vocabulary — a work-item kit is mandatorily kind-bearing, so a deployment
+that selects a kit and licenses no archetype pack resolves the kit's own kinds. A
+resolution that contributes no kinds is reported as a measured zero, not an error, and
+the states that can produce one are the same ones that could produce it before kits
+existed.
+
 ## What lives where
 
 - **Work-status** is owned by the entity layer (the Axis-1 base machine); a kind

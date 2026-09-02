@@ -139,16 +139,18 @@ why a repo-only scan cannot reach them by construction.
 | F3 | **Deployed skill mirror** of the intake type-map | deploy sync | **yes** | verified present **and byte-identical** to the repo copy (13577 bytes both sides) |
 | F4 | Compiled `.skill` distribution artifacts | package build | **yes** | present |
 | F5 | Operations-tier project records carrying the delivery-approach selection input | operator authoring | **yes** | out of the measurable population |
-| F6 | Operator configuration — the methodology default and the ticketing adapter selector, the head of the configuration cascade | config cascade | n/a (template only in repo) | **the kit-selection axis lands here; see the note below** |
+| F6 | Operator configuration — the methodology default, the **work-item-kit default**, and the ticketing adapter selector, the head of the configuration cascade | config cascade | n/a (template only in repo) | `[methodology].default_work_item_kit` + the `PROJECT.md` `work_item_kit:` override **landed**; see the note below |
 | F7 | The configured **ticketing adapter** — one value today, the selector admits others | adapter | n/a (outside the repo entirely) | **out of reach; named, not reported clean** |
 | F8 | The operator-instance pipeline event log | stage event emits | n/a (operator-instance) | out of the measurable population |
 
-**F6 carries a forward-declared row.** The selection slice of this release adds a
-work-item-kit key to operator configuration and to the project-level override surface. That
-key is a member of F6's enumeration the moment it lands. It is declared here at authoring
-time rather than left for a later slice to append, because the far-end enumeration is this
-map's contract and an integration criterion asserting F6's completeness would otherwise
-name a surface no change matrix owns.
+**F6's forward-declared row has been reconciled to what landed.** The selection slice of
+this release adds a work-item-kit key to operator configuration and to the project-level
+override surface, and that key is a member of F6's enumeration. It was declared here at
+authoring time rather than left for a later slice to append, because the far-end
+enumeration is this map's contract and an integration criterion asserting F6's
+completeness would otherwise name a surface no change matrix owns. The selection slice
+then named the landed keys in the row above rather than leaving the forward-looking
+phrasing standing, so the row reads as an enumeration rather than as a promise.
 
 ## First-order vs second-order impact
 
