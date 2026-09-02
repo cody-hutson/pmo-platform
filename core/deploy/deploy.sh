@@ -14160,6 +14160,12 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
   #
   # The primitive carries --self-test and a per-rule id on every finding, so a finding
   # here names the rule that produced it rather than handing the operator an exit code.
+  #
+  # WIRING, RECORDED ON BOTH SIDES. This is the THIRD deploy.sh consumer of
+  # core/deploy/tools/check-work-hierarchy.py, after Check 22 (--emit-kinds) and
+  # Check 55 (the H1/H2/H3 legs). The primitive's own consumer set is recorded in
+  # core/deploy/tools/README.md; a new invocation that is not added there leaves
+  # the tool's documented blast radius short of its real one.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 75: Pack-grammar conformance (work-item type-pack meta-schema; warn-mode initial; enforce-flip deferred)"
     local c75_script="core/deploy/tools/check-work-hierarchy.py"
