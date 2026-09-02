@@ -49,10 +49,27 @@ RULES
                        on the superseder; R6 REPORTS the exemption with its reason and
                        never suppresses the count.
 
+  R7  STATUS-AGREEMENT a record's two statements of one field disagree: the
+                       frontmatter `status:` leading token and the token its
+                       `## Status` body restates. `adr-schema.md` §3 row 1 defines the
+                       body section as RESTATING `status:`, so the frontmatter is the
+                       value-bearing surface and the body is a projection of it — a
+                       divergence is a defect in the body, and the reconciliation runs
+                       body → frontmatter, NEVER the inverse (editing the frontmatter
+                       value is the authoring guide's closed forbidden list, and
+                       editing it toward `Proposed` would silently de-ratify). Unlike
+                       R5/R6 this rule is NOT delta-only: its population was reconciled
+                       to zero when it shipped, so it can be a standing invariant over
+                       whatever the caller scanned — `--files` at the CI surface,
+                       whole-corpus at release verification. One mechanism, two
+                       invocations. Frozen records are exempt on the R2/R4/R5 ground:
+                       they can never be edited to conform.
+
 SCOPE — WHAT THIS LINT CHECKS STRUCTURALLY, AND WHAT IT STILL DOES NOT
 ----------------------------------------------------------------------
-This lint governs ADR *durability* (R1-R4). It additionally carries ONE structural
-rule, R5, and that rule is deliberately narrow. The canonical section set is DEFINED
+This lint governs ADR *durability* (R1-R4). It additionally carries three rules that
+are not durability rules: R5 (structural), R6 (supersession-edge reciprocity) and R7
+(status-surface agreement). R5 is deliberately narrow. The canonical section set is DEFINED
 once, in `core/schemas/adr-schema.md` §3; this file only CITES it (see DOC_SECTION_SET
 below) and R5 asserts against the cited copy, which `--self-test` pins to the schema.
 
@@ -778,6 +795,88 @@ def reciprocity_findings(records, scoped):
                             "ADR-%03d carries `%s: ADR-%03d in-part`, but ADR-%03d "
                             "carries no matching `%s:` entry"
                             % (num, SUPERSEDED_BY_FIELD, src, src, SUPERSEDES_FIELD)))
+    return out
+
+
+# ── R7 ───────────────────────────────────────────────────────────────────────
+# The `## Status` body section RESTATES the frontmatter `status:` field
+# (`adr-schema.md` §3 row 1): the frontmatter is the value-bearing surface and the
+# body is a projection of it. R7 reports a record whose two statements of one field
+# disagree. It is the standing detector for the class that produced the corpus-wide
+# reconciliation this rule ships with.
+#
+# SCOPE is the SCAN POPULATION, not a diff. With `--files` (the CI invocation) R7
+# sees only the changed records and so prevents recurrence; with no `--files` (the
+# whole-corpus verification invocation) it sees the whole corpus. One mechanism, two
+# invocations — no second parser and no cutover constant.
+#
+# FROZEN-GATED DIRECTLY, on the same ground R2/R4/R5 are keyed on: a `Superseded` /
+# `Deprecated` record can never be edited to conform, so a finding against it is one
+# no one is permitted to resolve. Deliberately NOT gated on OVERRIDE_MARKER or on
+# RECIPROCITY_EXEMPT_MARKER — the first is a durability-anchor override and the
+# second a supersession-edge exemption, and neither says anything about whether a
+# record's two status surfaces agree.
+STATUS_H2_RE = re.compile(r"^##\s+Status\s*$")
+# Exactly-H2: `### ` does NOT match, so an H3 inside the section (a supersession
+# note) does not truncate the scan the way a shared `^#{2,3}` heading regex would.
+SECTION_H2_RE = re.compile(r"^##\s")
+
+
+def body_status_token(text):
+    """(token, section_found) — the status token the `## Status` body restates.
+
+    `token` is "" when the section exists but carries no recognizable enum token;
+    that is REPORTED by R7, never silently read as agreement. Fence-stripped, so a
+    fenced example can never supply the token.
+    """
+    lines = strip_fences(text.splitlines())
+    start = None
+    for i, line in enumerate(lines):
+        if STATUS_H2_RE.match(line.strip()):
+            start = i
+            break
+    if start is None:
+        return ("", False)
+    for j in range(start + 1, len(lines)):
+        if SECTION_H2_RE.match(lines[j]):
+            break
+        if not lines[j].strip():
+            continue
+        tok = _leading_status_token(lines[j])
+        if tok in STATUS_ENUM:
+            return (tok, True)
+    return ("", True)
+
+
+def status_agreement_findings(records):
+    """R7 STATUS-AGREEMENT — the frontmatter `status:` and its body restatement agree.
+
+    `records` — the same map R6 consumes, plus `text`. Per-record, so the whole map
+    is evaluated; the caller's scan population is the scope.
+    """
+    out = []
+    for num in sorted(records):
+        rec = records[num]
+        if rec.get("frozen"):
+            continue
+        fm_tok = _leading_status_token(rec.get("status") or "")
+        body_tok, found = body_status_token(rec.get("text") or "")
+        if not found:
+            # A missing `## Status` section is the section-set rule's finding, not
+            # this one. R7 asks whether two statements agree, not whether both exist.
+            continue
+        if not body_tok:
+            out.append(("R7", num,
+                        "`## Status` restates no recognizable status token, so the "
+                        "section does not discharge its `adr-schema.md` §3 contract "
+                        "(frontmatter `status:` leads %r)" % fm_tok))
+            continue
+        if body_tok != fm_tok:
+            out.append(("R7", num,
+                        "frontmatter `status:` leads %r but the `## Status` body "
+                        "restates %r — two statements of one field disagree. The "
+                        "frontmatter is authoritative; reconcile the BODY to it, "
+                        "never the inverse (adr-schema.md §3)" % (fm_tok, body_tok)))
     return out
 
 
@@ -1772,6 +1871,70 @@ def self_test():
     check("R6 does NOT force a target that has no ADR record (supersedes stays optional)",
           r6({95: rec(supersedes="ADR-777 in-part (a pre-renumber decision)")}) == [])
 
+    # ── R7 STATUS-AGREEMENT ──────────────────────────────────────────────────────
+    # Per-record, so these drive `status_agreement_findings()` directly with a
+    # synthetic record map, the same way the R6 arms drive `reciprocity_findings()`.
+    def r7rec(fm, body):
+        return {"rel": "fixture.md", "status": fm,
+                "frozen": _leading_status_token(fm) in FROZEN_STATUSES,
+                "text": "---\nstatus: %s\n---\n\n# ADR-999 — Fixture\n\n"
+                        "## Status\n\n%s\n" % (fm, body)}
+
+    def r7(fm, body):
+        return sorted(d for _r, _n, d in
+                      status_agreement_findings({999: r7rec(fm, body)}))
+
+    # SENSITIVITY — the four body token shapes the live corpus actually writes, plus
+    # a long-form frontmatter tail. Each MUST fire; a silent arm here means the rule
+    # is blind to a shape the corpus contains.
+    check("R7 fires on `**Proposed.**`",
+          len(r7("Accepted", "**Proposed.** Drafted at Stage 5.")) == 1)
+    check("R7 fires on unbolded `Proposed.`",
+          len(r7("Accepted", "Proposed. Drafted at Stage 5.")) == 1)
+    check("R7 fires on unbolded `Proposed — …`",
+          len(r7("Accepted", "Proposed — flips to Accepted at the review.")) == 1)
+    check("R7 fires with prose INSIDE the bold (`**Proposed — supersedes …**`)",
+          len(r7("Accepted", "**Proposed — supersedes ADR-029.** It generalizes it.")) == 1)
+    check("R7 fires when the frontmatter carries a long-form ratification tail",
+          len(r7("Accepted — ratified by the workspace owner at the close gate.",
+                 "**Proposed** — flips at the close gate.")) == 1)
+
+    # SPECIFICITY — each MUST be silent, and the token must be READ rather than
+    # defaulted, so a silence is agreement and never a failed extraction.
+    check("R7 silent when both surfaces agree (bold)",
+          r7("Accepted", "**Accepted.**") == [])
+    check("R7 silent when a long-form tail sits on BOTH sides",
+          r7("Accepted — ratified at the close gate.",
+             "**Accepted** — ratified at the close gate.") == [])
+    check("R7 silent on an agreeing `Proposed`/`Proposed` record",
+          r7("Proposed", "**Proposed.** Flips at the review.") == [])
+    check("R7 is inert on a FROZEN record — it can never be edited to conform",
+          r7("Superseded by ADR-045", "**Proposed.**") == [])
+    check("R7 extraction is NON-EMPTY on the specificity arms (the token is read, "
+          "not defaulted to a match)",
+          body_status_token("## Status\n\n**Accepted.**\n") == ("Accepted", True)
+          and body_status_token("## Status\n\nProposed — x\n") == ("Proposed", True))
+
+    # Boundary arms.
+    check("R7 fence-strips: a token inside a fenced block is NOT read as the "
+          "restatement",
+          body_status_token("## Status\n\n```\nAccepted.\n```\n") == ("", True))
+    check("R7 reads THROUGH an H3 inside the Status section (the supersession-note "
+          "shape) rather than truncating at it",
+          r7("Accepted", "**Accepted.**\n\n### Supersession note\n\nPartial.") == [])
+    check("R7 STOPS at the next H2 — a later section's prose cannot supply the token",
+          body_status_token("## Status\n\nSee below.\n\n## Context\n\nAccepted.\n")
+          == ("", True))
+    check("R7 stays silent when the record has no `## Status` section at all "
+          "(section-set conformance owns that, not this rule)",
+          sorted(d for _r, _n, d in status_agreement_findings(
+              {999: {"rel": "f.md", "status": "Accepted", "frozen": False,
+                     "text": "---\nstatus: Accepted\n---\n\n## Context\n\nx\n"}}))
+          == [])
+    check("R7 REPORTS a Status section that restates no recognizable token, rather "
+          "than reading the absence as agreement",
+          len(r7("Accepted", "See the frontmatter for the current value.")) == 1)
+
     # ── REFERENCE_PREFIX_RE word boundary ────────────────────────────────────────
     # The measured recall defect: an unanchored single-letter alternative matched the
     # TAIL of a longer word, silently demoting a live count to an ordinal reference.
@@ -1924,6 +2087,8 @@ def main():
                 "supersedes": _frontmatter_scalar(raw, SUPERSEDES_FIELD),
                 "superseded_by": _frontmatter_scalar(raw, SUPERSEDED_BY_FIELD),
                 "exempt_reason": exempt_reason,
+                # R7 substrate — the body restatement is read from the full text.
+                "text": text,
             }
 
     # --- R6 RECIPROCITY (cross-record, delta-scoped) ------------------------------
@@ -1943,6 +2108,11 @@ def main():
         for rule, num, detail in reciprocity_findings(records, scoped):
             rec = records.get(num)
             findings.append((rule, rec["rel"] if rec else "ADR-%03d" % num, 1, detail))
+
+    # --- R7 STATUS-AGREEMENT (per-record; the scan population IS the scope) ------
+    for rule, num, detail in status_agreement_findings(records):
+        rec = records.get(num)
+        findings.append((rule, rec["rel"] if rec else "ADR-%03d" % num, 1, detail))
 
     out.insert(0, "SCANNED\t%d" % len(paths))
     for rule, rel, lineno, detail in findings:
