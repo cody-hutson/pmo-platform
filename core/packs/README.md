@@ -242,3 +242,18 @@ existed.
 - The **best-practice content** in each pack is sourced from the archetype's
   authoritative body of practice (for example the Scrum Guide, INVEST, the Kanban
   Method) — never reverse-engineered from any one deployment's issue tracker.
+- **Organizational tiers** are owned by the entity layer; a pack — a kit included —
+  types the work and never redefines them. Portfolio, Program, Project and
+  Milestone/Workstream are container entities with their own identity, lifecycle and
+  membership edges, declared in
+  [`../disciplines/project-entity-model.md`](../disciplines/project-entity-model.md).
+  That roster is cited here and deliberately not reproduced: it has consumers of its
+  own, and a second copy would drift from the one that governs. Why the boundary
+  holds by construction is stated once in [`The kit, as a unit`](#the-kit-as-a-unit)
+  above and is not re-derived here. Two consequences sit on this side of it. A kit
+  that groups work declares a **grouping kind at the Work-Item level** — a grouping
+  label, never a new level — carried declaratively by
+  `methodology_projection.level_role` rather than inferred from a label name. And a
+  rollup reaches a container tier through that tier's own `portfolio_id` /
+  `program_id` / `project_id` classifier, never through a kind declared there — which
+  is why covering every organizational level needs no kind above the Work-Item one.
