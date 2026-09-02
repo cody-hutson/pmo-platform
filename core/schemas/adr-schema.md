@@ -14,7 +14,7 @@ parallel_to: frontmatter-schema.md (disjoint population — operational K4 artif
 
 Canonical data contract for ADR files under `core/ADRs/` and `release/ADRs/`. Owns the **field + body-section contract**; it does NOT own the *when-to-write* rubric, the copy-paste template, or the supersession/immutability *policy* — those live in the ADR authoring guide (see §6 Boundary). Closes the [`platform-doc-frontmatter-standard.md`](../standards/platform-doc-frontmatter-standard.md) §9 ADR-class deferral: that standard names the ADR frontmatter set and defers its definition here; this doc is the definition.
 
-## 2. Frontmatter fields (7)
+## 2. Frontmatter fields (9)
 
 | Field | Type | Required | Allowed values | Rule |
 |---|---|---|---|---|
@@ -25,6 +25,10 @@ Canonical data contract for ADR files under `core/ADRs/` and `release/ADRs/`. Ow
 | `deciders` | string | Yes | free descriptive string | Who decided (operator + Stage 5 spoke + reviewers, in prose); NOT a closed enum — many observed forms. |
 | `tags` | list[string] | Yes | free tags | Discovery tags. |
 | `source_observations` | list[string] | Recommended | free prose entries | The grounding observations/evidence the decision rests on; may be long-form. |
+| `supersedes` | string | Optional | `none`, or a comma-separated list of supersession entries per the §5 grammar | The **superseder** side of the supersession pair. Absent means the record supersedes nothing; `none` states the same thing explicitly. A superseded target that has no ADR record of its own is named in prose instead — the field is never forced to invent a target. |
+| `superseded_by` | string | Optional | a comma-separated list of supersession entries per the §5 grammar, **every entry scoped `in-part`** | The **target** side of the supersession pair, and **partial supersessions only**. A whole supersession's reciprocal is the `status: Superseded by ADR-NNN` transition, not this field; a `whole`-scoped entry here is a conformance defect (§5). |
+
+`supersedes` and `superseded_by` are a **documented inverse pair**: an entry on one side implies the matching entry on the other, per the §5 reciprocity rule. This adopts the inverse-pair convention already governed for operational artifacts by [`frontmatter-schema.md`](frontmatter-schema.md) § Lineage Fields rather than minting a second vocabulary; the populations stay disjoint per §7.
 
 ## 3. Body sections (7, in order)
 
@@ -69,7 +73,75 @@ The section set and each section's requirement level are **defined here, once**.
 
 ## 5. Supersession — frontmatter/prose representation (policy lives in the authoring guide)
 
-This doc documents only *how supersession is expressed*: (a) `status:` begins with `Superseded` (optionally `Superseded by ADR-NNN …`); (b) the `## Status` block cites the superseding ADR; (c) `## Related ADRs` carries the link. The *supersede-not-edit / immutability rule itself* is owned by the ADR authoring guide — see §6. Specimen: ADR-029 (`status: Superseded by ADR-045`).
+This doc documents only *how supersession is expressed*. The *supersede-not-edit / immutability rule itself* is owned by the ADR authoring guide — see §6.
+
+Supersession has **two scopes**, and they are represented differently. The difference is not cosmetic: the `status:` leading token is a **permission state**, so the representation a partial edge uses determines whether its target remains editable and remains inside the durability lint's population.
+
+### 5.1 Whole supersession
+
+The superseded record is retired entirely. Representation is the Nygard transition the corpus already uses:
+
+- `status:` begins with `Superseded` (optionally `Superseded by ADR-NNN …`);
+- the `## Status` block cites the superseding ADR;
+- `## Related ADRs` carries the link;
+- the superseder carries `supersedes: ADR-NNN whole`.
+
+Specimen: ADR-029 (`status: Superseded by ADR-045`). **The target does NOT carry a `superseded_by:` entry** — the `status:` transition is the reciprocal.
+
+### 5.2 Partial supersession
+
+A clause, rule, decision item, or substrate choice is superseded while the rest of the record still binds. Representation is the frontmatter inverse pair:
+
+- the superseder carries `supersedes: ADR-NNN in-part (<scope label>)`;
+- the target carries `superseded_by: ADR-MMM in-part (<scope label>)`;
+- `## Related ADRs` carries the link on both sides.
+
+**The target's `status:` leading token does NOT change.** It stays `Accepted`.
+
+### 5.3 Entry grammar
+
+```
+<entry>        := ADR-NNN SP <scope> [ SP "(" <scope-label> ")" ] [ SP "—" SP <free rationale> ]
+<scope>        := "whole" | "in-part"
+<field-value>  := "none" | <entry> [ "," SP <entry> ]*
+```
+
+The parser reads the two leading tokens and the optional parenthesized label; free rationale after an em-dash is **preserved and ignored**, so the explanatory prose the corpus already writes survives verbatim.
+
+```yaml
+supersedes: ADR-029 whole
+supersedes: ADR-012 in-part (location clause), ADR-017 in-part (roadmaps placement in the operator-instance path family)
+supersedes: ADR-051 in-part (Decision 1) — the system-level canonical assignment; Decisions 2-5 stand
+superseded_by: ADR-164 in-part (Decision 1)
+```
+
+Canonical parser symbol, defined here once and **cited** — never restated — by every consumer:
+
+`SUPERSESSION_ENTRY_RE = ^ADR-(?P<n>\d{3})\s+(?P<scope>whole|in-part)(?:\s+\((?P<label>[^)]+)\))?`
+
+A scope label names a **structural referent** — a decision item, a clause, a rule, a named section. It never carries a commit SHA or a count: those go stale against a record that is immutable by policy, and a durability check rejects them.
+
+### 5.4 Two rules that hold without exception
+
+1. **`superseded_by:` never carries `whole`.** A whole edge's reciprocal is the §5.1 `status:` transition. A `whole`-scoped `superseded_by:` entry is a conformance defect.
+2. **A partial supersession never changes the target's `status:` leading token.** Flipping a partially-superseded record to `Superseded` asserts a retirement its own superseder denies, and — because the durability check derives its frozen-record exemption from that leading token — silently removes a still-binding record from the population that polices it.
+
+### 5.5 Relation scope
+
+These two fields carry **supersession only**. `amends-in-part` is supersession-in-part and uses the pair. *Qualifies*, *extends*, *composes* and *refines* are **not** carrier-eligible: a record that qualifies another without contradicting it has not superseded anything, and stating that relation in `## Related ADRs` prose is the correct representation.
+
+### 5.6 Reciprocity
+
+For every ADR **X** whose `supersedes:` names target **Y** with scope **S**:
+
+- **S = `whole`** → Y's `status:` leading token is `Superseded` **and** Y's `status:` value cites `ADR-X`.
+- **S = `in-part`** → Y carries a `superseded_by:` entry naming `ADR-X` with scope `in-part`.
+
+And the converse: every `superseded_by:` entry on Y naming X requires a matching `supersedes:` entry on X.
+
+**Declared exemption, never a silent skip.** An edge that cannot be landed carries `<!-- adr-supersession: reciprocity-exempt — <reason> -->` on the **superseder**, mirroring the existing declared-marker pattern. The check reports the exemption together with its reason; it never suppresses the count.
+
+Reciprocity is enforced as rule **R6 RECIPROCITY** in [`check-adr-durability.py`](../../release/tools/check-adr-durability.py), delta-scoped on that tool's existing diff-base machinery and warn-mode at the existing CI surface.
 
 ## 6. Boundary — this schema vs the ADR authoring guide
 

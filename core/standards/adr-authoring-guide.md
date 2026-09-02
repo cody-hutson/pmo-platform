@@ -222,6 +222,14 @@ baseline, ADR-005 as the 10-column enrichment.
 
 This composes with [`adr-schema.md` §5](../schemas/adr-schema.md), which owns the *representation* — how supersession is expressed in frontmatter and prose: (a) `status:` begins with `Superseded` (optionally `Superseded by ADR-NNN`); (b) the `## Status` block cites the superseding ADR; (c) `## Related ADRs` carries the link. This guide owns the *policy* (supersede-not-edit); the schema owns the representation. Live specimen: ADR-029 (`status: Superseded by ADR-045`), whose `## Status` records that the record remains unchanged for audit trail — the policy is already practiced; this guide codifies it.
 
+**Partial supersession does not retire the target, and must not be represented as though it did.** Most supersession edges in this corpus scope to a clause — a rule, a decision item, a substrate choice — while the rest of the record still binds. The policy for that case:
+
+- **Never flip a partially-superseded record's `status:` to `Superseded`.** Doing so asserts a retirement the superseding ADR itself denies, and it moves the record into the frozen state — where it can never again receive a hygiene edit, a further edge, or a missing-section backfill. The durability lint derives its whole-file exemption from that same leading token, so the flip also removes a still-binding record from the population that polices it. The damage is silent in both directions.
+- **Land the pointer instead.** The superseder carries `supersedes: ADR-NNN in-part (<scope label>)`; the target carries `superseded_by: ADR-MMM in-part (<scope label>)` and keeps `status: Accepted`. Adding that pointer is permitted hygiene on an Accepted record (see the carve-out's permitted list below).
+- **Reciprocity is required, and its exemption is declared rather than silent.** An edge that genuinely cannot be landed on both sides carries `<!-- adr-supersession: reciprocity-exempt — <reason> -->` on the superseder. The grammar, the two hard rules, and the reciprocity predicate itself are defined once in [`adr-schema.md` §5](../schemas/adr-schema.md) and enforced as rule R6 by the ADR durability lint; this guide states the policy and restates none of the mechanics.
+
+The asymmetry is the point: a **whole** supersession keeps the sanctioned Nygard `status:` transition as its reciprocal, so a fully-retired record needs no new field — and a frozen record such as ADR-029 needs no edit at all to participate.
+
 ### Durability-hygiene edits on an Accepted ADR (the immutability carve-out)
 
 Immutability protects the **decision**, not the bytes. Editability has three states, keyed on the existing `status:` field — no new field, no new vocabulary:
@@ -248,6 +256,7 @@ The **frozen edge** of this partition is the one the durability lint already imp
 | Normalizing a section heading to its canonical string, or promoting recall content from H3 to its H2 position | Pure relocation of content that is already in the record. |
 | Depersonalization — replacing an operator handle with the sanctioned literal name | The `deciders:` fact is unchanged; only its rendering is. |
 | Repointing a link or path after a corpus move | The referent is unchanged. |
+| Adding or updating a `superseded_by:` lineage pointer | It records an **external** fact — that some other record has since superseded a clause of this one. It revises no decision, no alternative, no consequence, and no status value, so it passes the record-vs-revise test cleanly. This is why the partial-supersession carrier is a separate field rather than a `status:` tail: the pointer is admissible precisely because it is not a status edit. |
 
 **Forbidden on an `Accepted` ADR.** A **closed** list. Anything here requires supersession, never an in-place edit:
 

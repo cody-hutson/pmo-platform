@@ -5,7 +5,7 @@ status: Accepted
 date: 2026-06-27
 release: 40-initiative-roadmap-vocabulary-and-home
 deciders: "Workspace owner (architecture ratified at the Stage 9 review); design authored at Stage 5 Solutioning"
-supersedes: ADR-012 (location clause) + ADR-017 (roadmaps placement in the operator-instance path family)
+supersedes: ADR-012 in-part (location clause), ADR-017 in-part (roadmaps placement in the operator-instance path family)
 tags: [architecture, roadmaps, plug-and-play, in-repo-home, git-ignored, token-override, analysis-workspace-pattern, operator-instance-path-family, migration, reversibility]
 ---
 
