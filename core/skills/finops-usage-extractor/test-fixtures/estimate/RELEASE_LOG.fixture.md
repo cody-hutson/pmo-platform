@@ -8,6 +8,27 @@
 > Parsed shape: a `#### Deployment Log <version>` heading, then the first `**Velocity:**`
 > line beneath it, from which `planned <N> pts` and `class <release-class>` are read.
 
+## Release Ledger (synthetic)
+
+The `| Version | Milestone | ... |` ledger is the **alias source**. A roll-up work item may
+be keyed on the milestone slug (canonical since ADR-092) while a Deployment-Log heading
+carries the version form, so a velocity entry reachable under only one key would drop its
+release out of the estimator basis as `P7 unkeyable`. Each entry is therefore emitted under
+both keys. The two rows below exercise the two normalizations:
+
+- `v9.94` ↔ `v9.94-alpha-slug` — a **`vX.Y-` stem is stripped** from a Milestone cell, so
+  the alias is `alpha-slug`, not `v9.94-alpha-slug`.
+- `gamma-slug (version-less)` ↔ `v9.90` — a Version cell of the form `<slug> (version-less)`
+  contributes only its **leading whitespace-delimited token**, so the alias is `gamma-slug`.
+
+Neither alias adds a Deployment-Log heading, so the comparable population is unchanged —
+aliasing adds keys, never values.
+
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.94 | v9.94-alpha-slug | #9001 | #9101 | aaaa111 | v9.94 | shipped | 2020-01-01 |
+| gamma-slug (version-less) | v9.90 | #9002 | #9102 | bbbb222 | — | shipped | 2020-01-02 |
+
 ## Deployment Log
 
 #### Deployment Log v9.94
