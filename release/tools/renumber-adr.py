@@ -301,6 +301,19 @@ ANY_ADR_TOKEN_RE = re.compile(r"(?<![0-9A-Za-z])ADR-\d{1,3}(?![0-9])")
 # ── RECORD_OPENERS — the positive population. One row per class of prose that
 #    RECORDS a number. `extent` says how far the verdict carries: `line` stops at
 #    the opener, `paragraph` carries to the end of the markdown paragraph.
+#
+#    `paragraph` is granted ONLY to an opener that HEADS its paragraph. A note is
+#    a paragraph and its head sits on that paragraph's first line, so a shape that
+#    matches on a hard-wrapped CONTINUATION line heads no note and carries no
+#    extent. Every row here is matched with `search`, not `match`, and the two
+#    provenance rows key on a bare `NNN → NNN` pair that occurs in ordinary prose
+#    — so without the position gate one incidental pair mid-sentence exempts the
+#    REST of that paragraph, live citations included, and reports nothing. That is
+#    the silent direction: no gate reads a bare `ADR-NNN` out of prose, so the
+#    over-exemption is invisible to every instrument. Measured on the corpus at
+#    this fix's baseline, ZERO of 149 pair matches begin their line — anchoring the
+#    pattern would therefore have revoked the extent from all of them, which is why
+#    the gate keys on paragraph position rather than on match offset.
 RECORD_OPENERS = (
     ("provenance-note",          PROVENANCE_RE,            "paragraph"),
     ("provenance-note-freeform", PROVENANCE_FREEFORM_RE,   "paragraph"),
@@ -681,7 +694,7 @@ def classify_lines(text):
     R-2  line carries ``<!-- adr-record -->``                    ``RECORD``
     R-3  line matches a ``RECORD_OPENERS`` regex                 ``RECORD``
     R-4  line is a paragraph continuation of a ``paragraph``-
-         extent R-3 opener                                       ``RECORD``
+         extent R-3 opener THAT HEADS ITS PARAGRAPH              ``RECORD``
     R-5  line is inside an ``AMBIGUOUS_SECTIONS`` region AND
          carries an ADR token                                    ``AMBIGUOUS``
     R-6  otherwise                                               ``CITE``
@@ -696,10 +709,21 @@ def classify_lines(text):
     verdicts = []
     in_fence = False
     record_run = False
+    para_open = False         # the previous line left a paragraph body open
     amb_level = None          # markdown level of the open AMBIGUOUS region
 
     for line in lines:
         stripped = line.strip()
+
+        # ---- paragraph position (DT-1) -----------------------------------
+        # Computed BEFORE any verdict branch, because every branch below
+        # `continue`s and each one must leave this correct for the next line.
+        # `_is_paragraph_continuation` already encodes "plain paragraph body",
+        # so a line is paragraph-INITIAL exactly when the line above it did not
+        # leave a body open, or when it opens a block of its own.
+        is_body = _is_paragraph_continuation(line)
+        para_initial = not (para_open and is_body)
+        para_open = is_body
 
         # A fence line is never a heading and never continues a paragraph.
         if MD_FENCE_RE.match(stripped):
@@ -736,7 +760,15 @@ def classify_lines(text):
 
         opener = _record_opener(line)
         if opener is not None:
-            record_run = opener[1] == "paragraph"
+            if opener[1] == "paragraph":
+                if para_initial:
+                    record_run = True
+                # ...and otherwise the shape matched MID-paragraph, where it
+                # heads no note. It GRANTS no extent — but it must not REVOKE
+                # one either, so a run already open carries through unchanged
+                # (a hard-wrapped note line may itself carry a second pair).
+            else:
+                record_run = False
             verdicts.append(RECORD)
             continue
 
@@ -1814,6 +1846,44 @@ def self_test():
     eq("exempt/hop-sentence-is-record",
        is_historical_numbering_line("ADR-028 → ADR-099 at merge time."), True)
 
+    # DT-1 — a paragraph-extent shape that matches MID-paragraph heads no note,
+    # so it must NOT exempt the rest of the paragraph. Reduced from the live
+    # site: `core/ADRs/ADR-121...md:269` carries `120 → 121` inside a running
+    # sentence, and the two `Relates to` citations below it were exempted and
+    # NOT named — a coverage regression in the silent direction, which is the
+    # direction § Decision (4) says the review block exists to catch.
+    #
+    # SENSITIVITY, and it fires: before the position gate this arm returned
+    # `(mid_para, 0)` — the citation was left in place and reported nowhere.
+    mid_para = ("Numbering derived per **ADR-115**, whose mainline-anchor\n"
+                "rule is what makes the `004 → 005` advance rule-determined "
+                "rather than discretionary. Relates to\n"
+                "**ADR-004**, which established the registry this file "
+                "embodies.\n")
+    mid_swept = mid_para.replace("**ADR-004**", "**ADR-005**")
+    eq("extent/mid-paragraph-shape-does-not-exempt-the-rest",
+       rc2(mid_para, 4, 5), (mid_swept, 1))
+    # ...and the verdict stream directly, so the arm cannot be satisfied by a
+    # rewrite path that disagrees with the classifier.
+    eq("extent/mid-paragraph-opener-carries-no-run",
+       classify_lines(mid_para)[:3], [CITE, RECORD, CITE])
+    # SPECIFICITY — the SAME shape at the head of its paragraph still carries
+    # the extent to its hard-wrapped continuation. Without this limb the fix is
+    # indistinguishable from deleting the freeform row, which would re-open the
+    # 5-of-5 ADR-103 lineage gap the row was added to close.
+    head_para = ("**Numbering.** This record moved `004 → 005`; the note runs\n"
+                 "on and still denotes ADR-004 on this wrapped line.\n")
+    eq("extent/paragraph-initial-shape-still-carries",
+       rc2(head_para, 4, 5), (head_para, 0))
+    # ...and the gate GRANTS no extent mid-paragraph but must not REVOKE one:
+    # a note whose continuation line happens to carry a second pair keeps the
+    # run open through it.
+    second_pair = ("**Numbering provenance — `004 → 005`.** Held **ADR-004**\n"
+                   "branch-local; the earlier `002 → 004` hop is recorded above\n"
+                   "and this line still denotes ADR-004.\n")
+    eq("extent/a-second-pair-mid-run-does-not-close-it",
+       rc2(second_pair, 4, 5), (second_pair, 0))
+
     # facet (b) — a Deviation-Log row is AMBIGUOUS: not rewritten, and NAMED.
     devlog = ("## Deviation Log\n"
               "\n"
@@ -2141,6 +2211,8 @@ def self_test():
           "re-sort / provenance / R1 delta predicate / minimal assignment / "
           "three-valued classifier: shim-agreement + wrapped-continuation with "
           "its broken-paragraph and block-opener negative controls + "
+          "paragraph-extent position gate with its mid-paragraph sensitivity "
+          "arm and paragraph-initial specificity arm + "
           "lineage-and-hop heads + devlog-ambiguous with its "
           "outside-the-section discrimination limb and close-boundary arm + "
           "numbered-heading variant + fenced-comment-is-not-a-section + "
