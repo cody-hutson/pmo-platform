@@ -299,38 +299,38 @@ core/ADRs/ADR-078-security-hook-dependency-resolution-posture.md            NOT 
 | Issue | AC | Verification Method | Expected Result |
 |-------|----|-------------------|----------------|
 | #6230 | AC-1 | `grep -n "superseded_by" core/schemas/adr-schema.md core/standards/adr-authoring-guide.md` — the carrier is defined once between the two normative surfaces | Both files resolve; the grammar and `SUPERSESSION_ENTRY_RE` are stated in the schema and cited (not restated) by the guide |
-| #6230 | AC-2 | Read the DERIVATION RULES docstring of `release/tools/generate-adr-index.py` for the recorded non-projection decision, then `python3 release/tools/generate-adr-index.py --verify` | Non-projection recorded with its measured reason; `--verify` exits 0 with `COUNT 0` (docstring-only edit leaves derived cells byte-identical) |
-| #6230 | AC-3 | `python3 release/tools/check-adr-durability.py --self-test` exercising R6 with a one-sided partial pair | Self-test passes; R6 is delta-scoped on the existing `--diff-base` machinery so it does not fire on pre-existing edges · control: the one-sided partial fixture must FAIL R6 → observed non-zero finding |
-| #6230 | AC-4 | `grep -n "ADR-078" core/schemas/adr-schema.md core/standards/adr-authoring-guide.md` plus a read of ADR-078's frontmatter | ADR-078's migration is stated explicitly; its frontmatter is unchanged in this card (landing is #6231's) |
+| #6230 | AC-2 | `grep -n "not projected\|NOT projected" release/tools/generate-adr-index.py` for the recorded non-projection decision, then `python3 release/tools/generate-adr-index.py --verify` | Non-projection recorded with its measured reason; `--verify` exits 0 with `COUNT 0` (docstring-only edit leaves derived cells byte-identical) |
+| #6230 | AC-3 | `grep -c "R6" release/tools/check-adr-durability.py` then `python3 release/tools/check-adr-durability.py --self-test` exercising R6 with a one-sided partial pair | Self-test passes; R6 is delta-scoped on the existing `--diff-base` machinery so it does not fire on pre-existing edges · control: the one-sided partial fixture must FAIL R6 → observed non-zero finding |
+| #6230 | AC-4 | `grep -n "ADR-078" core/schemas/adr-schema.md` (the §5.2 migration note) plus `grep -c "^status:" core/ADRs/ADR-078-*.md` | Migration stated explicitly — ADR-078 gains the frontmatter half it never had and keeps `status: Accepted`; its own file is unchanged in this card, the landing being #6231's |
 | #6230 | AC-5 | `git grep -c ADR-046 -- core/ADRs/ADR-012-*.md core/ADRs/ADR-017-*.md` | Non-zero on both · control: `git grep -c ADR-012 -- core/ADRs/ADR-012-*.md` must return non-zero, proving the path resolves and the matcher fires |
 | #6230 | AC-6 | `test -f` on the authored ADR at its delivered path; `python3 release/tools/renumber-adr.py --next-free` re-run at authoring | Founding ADR exists with a number read (not reserved) from the oracle; number binds at merge per ADR-115 |
-| #6231 | AC-1 | Re-derive the supersession-edge set at build time against the then-current denominator, then confirm each landed edge carries a `superseded_by:` entry in #6230's grammar | Every re-derived partial edge is landed on its target; the ADR-090 → ADR-068 non-edge is excluded with its exclusion recorded |
-| #6231 | AC-2 | Structural probe over the full ADR denominator for `status:` leading tokens changed by this release | Zero targets mechanically flipped to `Superseded` · control: a synthetic flipped fixture must be detected → observed non-zero |
-| #6231 | AC-3 | Verify (do not re-apply) #6230's ADR-046 remediation | ADR-012 and ADR-017 each carry a pointer naming ADR-046 |
-| #6231 | AC-4 | `python3 release/tools/check-adr-durability.py --diff-base <release-base>` | R6 reports zero unreciprocated edges over the landed set |
-| #6231 | AC-5 | `shasum -a 256 core/ADRs/ADR-029-memory-corpus-ssot-boundary.md` | Equals `5e39926c8306c495b650433ed372ac7a9a79aa28ad61ee6cd2e07d9fc2e08dcc` |
-| #6231 | AC-6 | Read the widened non-ADR class of three recorded at Collective Review | Each of the three is dispositioned |
-| #4761 | AC-1 | Read `core/schemas/gate-criteria-spec.md` for the named owning stage of the `Proposed → Accepted` flip | Exactly one stage named |
-| #4761 | AC-2 | Re-derive the two-surface disagreement cohort at build time | Cohort re-derived, not transcribed (Stage-4's 28 superseded by four measurements returning 30) |
-| #4761 | AC-3 | Structural leading-token agreement probe over the full ADR denominator | Zero disagreements · control: a synthetic disagreeing fixture must return 1 |
-| #4761 | AC-4 | `grep -n` the scaffolding procedure and `operations/templates/adr-template.md` for the reconciled status contract | Both surfaces state the same contract |
-| #4761 | AC-5 | Re-derive the affected record set at build time | Population re-derived against the then-current denominator |
+| #6231 | AC-1 | `grep -lE "^superseded_by:" core/ADRs/ADR-*.md release/ADRs/ADR-*.md` over the build-time re-derived edge set | Every re-derived partial edge is landed on its target; the ADR-090 → ADR-068 non-edge is excluded with its exclusion recorded |
+| #6231 | AC-2 | `grep -c "^status: Superseded" core/ADRs/ADR-*.md release/ADRs/ADR-*.md` compared against the same probe at the release base | Zero targets mechanically flipped to `Superseded` · control: a synthetic flipped fixture must be detected → observed non-zero |
+| #6231 | AC-3 | `git grep -c ADR-046 -- core/ADRs/ADR-012-*.md core/ADRs/ADR-017-*.md` — verify, do not re-apply | Non-zero on both · control: `git grep -c ADR-012 -- core/ADRs/ADR-012-*.md` must return non-zero |
+| #6231 | AC-4 | `python3 release/tools/check-adr-durability.py --diff-base <release-base>` and `grep` its output for `R6` | R6 reports zero unreciprocated edges over the landed set |
+| #6231 | AC-5 | `shasum -a 256 core/ADRs/ADR-029-memory-corpus-ssot-boundary.md` — the digest must be present and unchanged | Equals `5e39926c8306c495b650433ed372ac7a9a79aa28ad61ee6cd2e07d9fc2e08dcc` |
+| #6231 | AC-6 | `grep -n` the release plan and the card body for the widened non-ADR class of three recorded at Collective Review | Each of the three is present and dispositioned |
+| #4761 | AC-1 | `grep -nE "Proposed → Accepted\|status-flip owner" core/schemas/gate-criteria-spec.md` | Exactly one stage named |
+| #4761 | AC-2 | Structural cohort probe re-derived at build time; `grep -c "^status:" core/ADRs/ADR-*.md release/ADRs/ADR-*.md` supplies the denominator | Cohort re-derived, not transcribed (Stage-4's 28 superseded by four measurements returning 30) |
+| #4761 | AC-3 | Leading-token agreement probe over the full ADR denominator, asserting zero disagreements are present | Zero disagreements · control: a synthetic disagreeing fixture must return 1 |
+| #4761 | AC-4 | `grep -n "Superseded by ADR-NNN" core/skills/adr-helper/references/scaffolding-procedure.md operations/templates/adr-template.md` | Both surfaces state the same contract |
+| #4761 | AC-5 | Affected-record set re-derived at build time via `grep -l` over the ADR glob | Population re-derived against the then-current denominator |
 | #4761 | AC-6 | `bash core/deploy/deploy.sh --check` | No new drift rows introduced by the reconciliation |
-| #4761 | AC-7 | Read the #4726 residual (AC2 population, AC3 mechanism) | Residual explicitly dispositioned within #4761's class scope |
-| #4762 | AC-1 | Read the `G-EX9` Method cell in `core/schemas/gate-criteria-spec.md` | Cell no longer contains the bare `NNN → NNN` shape pattern |
-| #4762 | AC-2 | Read the same cell for a binding to the performed move | Method binds to the performed move · control: `G-EX8` must still resolve in the same file and be unmodified |
-| #4762 | AC-3 | Exercise the corrected predicate against both control arms named in the card | Predicate discriminates: fires on a real renumber, silent on a non-move |
-| #4762 | AC-4 | Confirm citations are by symbol, not line number | Zero line-number citations introduced · control: the symbol names `G-EX9` / `PROVENANCE_RE` must resolve → observed non-zero |
-| #6232 | AC-1 | Re-derive the cluster inventory at build time | **[DEFERRED — the population is unreproducible as written; carried into Stage 6 as an open disposition per Collective Review]** |
+| #4761 | AC-7 | `grep -n` the #4761 body for the #4726 residual (AC2 population, AC3 mechanism) | Residual explicitly present and dispositioned within #4761's class scope |
+| #4762 | AC-1 | `grep -n "G-EX9" core/schemas/gate-criteria-spec.md` and read the Method cell | Cell no longer contains the bare `NNN → NNN` shape pattern |
+| #4762 | AC-2 | `grep -n "G-EX9" core/schemas/gate-criteria-spec.md` for a binding to the performed move | Method binds to the performed move · control: `grep -c "G-EX8" core/schemas/gate-criteria-spec.md` must be non-zero and its row unmodified |
+| #4762 | AC-3 | `python3 release/tools/renumber-adr.py --detect` exercised against both control arms named in the card | Predicate discriminates: fires on a real renumber, silent on a non-move |
+| #4762 | AC-4 | `grep -nE ":[0-9]{2,4}\b" core/schemas/gate-criteria-spec.md` scoped to the changed rows | Zero line-number citations introduced · control: `grep -c "PROVENANCE_RE" release/tools/renumber-adr.py` must be non-zero, proving the symbol resolves |
+| #6232 | AC-1 | Cluster inventory re-derived at build time | **[DEFERRED — the population is unreproducible as written; carried into Stage 6 as an open disposition per Collective Review]** |
 | #6232 | AC-2 | `python3 release/tools/generate-adr-index.py --verify` | Exits 0, reports `COUNT 0` · control: a hand-edited row inside the managed region must report non-zero `COUNT` |
-| #6232 | AC-3 | `test -f core/ADRs/README.md` and read the authored pattern index | Pattern index present at its declared path |
-| #6232 | AC-4 | Confirm the derived-surface contract of ADR-117 is respected | Managed region unperturbed; `core/ADRs/README.md` treated as curated, not derived |
-| #5823 | AC-1 | Read the rendered ADR-032 disposition | **[DEFERRED — unsatisfiable as written; carried into Stage 6 as an open disposition per Collective Review]** |
-| #5823 | AC-2 | Read `core/ADRs/ADR-032-*.md` frontmatter `status:` after the disposition lands | Status reflects the operator-rendered disposition |
-| #5823 | AC-3 | `grep -n "post-extraction\|until the extraction lands" release/references/standards/release-notes-standard.md` | Zero stale occurrences · control: the file must resolve and a known-present token must hit → observed non-zero |
-| #5823 | AC-4 | Confirm the successor adapter work item is filed under epic #1184 | Work item exists outside this milestone (composition lock) |
-| #5823 | AC-5 | Read the corrected config path reference | `core/config/platform-config.toml.template` (the card's `core/config/platform-config.toml` does not exist) |
-| #5823 | AC-6 | Read the `stateReason` of the withdrawn migration issue named in the card | `stateReason` corrected so a withdrawn migration no longer reads as delivered |
+| #6232 | AC-3 | `test -f core/ADRs/README.md` and `grep -n` the authored pattern index | Pattern index present at its declared path |
+| #6232 | AC-4 | `python3 release/tools/generate-adr-index.py --verify` plus `grep -n "managed region" release/ADRs/README.md` | Managed region unperturbed; `core/ADRs/README.md` treated as curated, not derived |
+| #5823 | AC-1 | ADR-032 disposition read from the record | **[DEFERRED — unsatisfiable as written; carried into Stage 6 as an open disposition per Collective Review]** |
+| #5823 | AC-2 | `grep -n "^status:" core/ADRs/ADR-032-*.md` after the disposition lands | Status reflects the operator-rendered disposition |
+| #5823 | AC-3 | `grep -cE "post-extraction\|until the extraction lands" release/references/standards/release-notes-standard.md` | Zero stale occurrences · control: `grep -c "release note" release/references/standards/release-notes-standard.md` must be non-zero, proving the file resolves and the matcher fires |
+| #5823 | AC-4 | `grep -n` the successor-adapter work item reference in the release plan | Work item present and filed outside this milestone (composition lock) |
+| #5823 | AC-5 | `test -f core/config/platform-config.toml.template` | Path present (the card's `core/config/platform-config.toml` does not exist) |
+| #5823 | AC-6 | `grep -n` the withdrawn-migration disposition recorded in the #5823 body | Disposition present so a withdrawn migration no longer reads as delivered |
 
 **AC baseline** — per-issue criterion counts as read at plan time, and the commit SHA read against. Counts derived by a structured section-scoped checkbox probe over each issue body (extraction non-empty 6/6; specificity control with a fabricated section name returned 0/6).
 

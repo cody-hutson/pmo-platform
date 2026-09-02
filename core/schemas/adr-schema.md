@@ -98,6 +98,8 @@ A clause, rule, decision item, or substrate choice is superseded while the rest 
 
 **The target's `status:` leading token does NOT change.** It stays `Accepted`.
 
+**Migration of the pre-carrier records.** Before this pair existed, a partial edge was written as body prose — most fully by ADR-078, which carries a `**Supersession — D4, partial.**` block naming ADR-130 as superseding decision item D4 only. **That body prose is correct and stays.** What such a record gains is the frontmatter half it never had: ADR-078 takes `superseded_by: ADR-130 in-part (D4)` and ADR-130 takes `supersedes: ADR-078 in-part (D4)`, while ADR-078's `status:` stays `Accepted` — it was never `Superseded`, and nothing about this migration changes that. The two records that instead improvised a **frontmatter `status:` prose tail** are migrated the other way: the tail moves into the field, and the status value returns to its bare leading token. Landing these edges across the corpus is a separate slice from defining the carrier; this section states the form they migrate INTO.
+
 ### 5.3 Entry grammar
 
 ```
