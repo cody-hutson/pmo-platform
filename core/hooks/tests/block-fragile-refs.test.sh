@@ -104,6 +104,18 @@ Declared above, outside any fence. The same syntax is illustrated below, inside 
 This standard defines durable reference rules; summarize sources inline rather than linking.
 FENCEDPLUSEOF
 
+# INLINE is the limb with observed harm: a decision index exempted itself with markers in
+# backticked table cells, and two dead cross-references then passed CI. Its only marker is
+# inside an inline code span, so it must NOT be exempt.
+INLINE_MARKER="${FIXTURE_ROOT}/core/standards/__marker-resolution-inline__.md"
+/bin/cat > "$INLINE_MARKER" <<'INLINEEOF'
+# Inline-illustration fixture
+
+To override this class, add `<!-- reference-durability: allow-link -->` to the file.
+
+This standard defines durable reference rules; summarize sources inline rather than linking.
+INLINEEOF
+
 # Preserve + restore the shared .mode file so the suite is hermetic regardless of the
 # deployed mode; and remove the marker-resolution corpus on the same exit.
 ORIGINAL_MODE=""; [ -f "$MODE_FILE" ] && ORIGINAL_MODE="$(/bin/cat "$MODE_FILE")"
@@ -243,6 +255,11 @@ test_case "enforce: Edit of a file whose ONLY marker is INSIDE a fence is BLOCKE
 test_case "enforce: Edit of a file declaring the marker OUTSIDE a fence is ALLOWED even though it also shows a fenced example" \
   "$(edit_payload "$FENCED_PLUS" 'summarize sources inline rather than linking.' "$EDIT_LINK_FRAGMENT")" \
   0
+
+# L2-6 — the inline-code-span limb. Same shape as L2-4; L2-5 remains its control.
+test_case "enforce: Edit of a file whose ONLY marker is inside an INLINE CODE SPAN is BLOCKED (backticked syntax is not a declaration)" \
+  "$(edit_payload "$INLINE_MARKER" 'summarize sources inline rather than linking.' "$EDIT_LINK_FRAGMENT")" \
+  2 "BLOCK-FRAGILE-REF-001"
 
 test_case "enforce: Edit of a MARKER-BEARING file, bare issue-ref fragment, still BLOCKED (marker does not leak to the positional rule)" \
   "$(edit_payload "$MARKED" 'summarize sources inline rather than linking.' 'This behavior was corrected in #9999 during the last release.')" \

@@ -1,3 +1,5 @@
+<!-- reference-durability: allow-link -->
+<!-- reference-durability: allow-version-ref -->
 # Core Module Architecture Decision Records (ADRs)
 
 Architecture Decision Records for the `core/` module of pmo-platform-v2. Each ADR captures a structurally-load-bearing decision with status, context, decision rationale, consequences, reversibility, and cross-ADR composition.

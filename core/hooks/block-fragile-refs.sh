@@ -421,14 +421,17 @@ fi
 # Read from $MARKER_SRC, not from $CONTENT: for a Write those are the same bytes, and
 # for an Edit $MARKER_SRC additionally carries the target file from disk so a file-scoped
 # declaration is visible to a fragment that does not repeat it. See MARKER SOURCE above.
-# A marker inside a fenced code block ILLUSTRATES the syntax; it does not DECLARE it.
+# A marker inside a fenced code block OR an inline code span ILLUSTRATES the syntax;
+# it does not DECLARE it. The inline case is the one with observed harm: a decision
+# index exempted itself with markers in backticked table cells, and two dead
+# cross-references then passed CI.
 # Resolving markers whole-file cannot tell those apart, so a file that merely documents
 # the marker exempts itself from the gate that governs it. Strip fences first, with the
 # same awk the detectors use below, so one rule governs both reads. The CI marker read
 # strips identically — neither surface may change without the other.
 MARKER_SCAN="$("$PRINTF" '%s\n' "$MARKER_SRC" | "$AWK" '
   /^[[:space:]]*```/ { infence = !infence; next }
-  !infence { print }
+  !infence { gsub(/`[^`]*`/, ""); print }
 ')"
 
 ALLOW_LINK=0

@@ -183,11 +183,11 @@ jobs:
             [ -f "$f" ] || continue   # deleted file — nothing to scan
 
             # Per-file override markers — fence-stripped, on the head version.
-            # A marker inside a fenced code block ILLUSTRATES the syntax; it does not
+            # A marker in a fenced code block OR an inline code span ILLUSTRATES the syntax; not
             # DECLARE it. Resolving whole-file cannot tell those apart, so a file that
             # merely documents the marker exempts itself from the gate governing it.
             # block-fragile-refs.sh strips identically; neither surface changes alone.
-            MARKER_SCAN="$(awk '/^[[:space:]]*```/ { infence = !infence; next } !infence' "$f")"
+            MARKER_SCAN="$(awk '/^[[:space:]]*```/ { infence = !infence; next } !infence { gsub(/`[^`]*`/, ""); print }' "$f")"
             ALLOW_LINK=0; ALLOW_VERSION=0; ALLOW_URL=0
             printf '%s\n' "$MARKER_SCAN" | grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->' && ALLOW_LINK=1
             printf '%s\n' "$MARKER_SCAN" | grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->' && ALLOW_VERSION=1
