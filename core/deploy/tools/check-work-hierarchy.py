@@ -179,6 +179,16 @@ triple is an INPUT FAILURE (exit 3) with the missing fields named, never `COUNT_
 A genuinely EMPTY node set is different — a repo may legitimately have no open epics
 — and emits `SKIP H3` rather than a zero, for the same reason.
 
+PACK-GRAMMAR MODES (`--validate-packs`, `--resolve`) — the same pack corpus, read
+richer. `core/schemas/work-item-type-schema.md` is a meta-schema that NO executable
+validated: the grammar could say anything and nothing in the tree would notice, so a
+criterion asserting "a pack conforms" was ungradable by construction. `--validate-packs`
+makes conformance checkable and emits a RULE ID per finding, so a rejection is
+attributable to a rule instead of to an exit code. `--resolve` makes the archetype↔kit
+eligibility join executable, so the prose contract downstream consumers read can be
+checked by one command rather than by eye. Both are separate argv branches that return
+before the H1/H2/H3 legs run and share no mutable state with them.
+
 Python 3.9-compatible (no tomllib, no 3.10+ syntax) — matches /usr/bin/python3 on
 the operator baseline.
 """
@@ -411,6 +421,629 @@ def emit_kinds(root):
     print("\n".join(sorted(kinds)))
     return 0
 
+
+
+# ── PACK-CONFORMANCE META-SCHEMA READER (--validate-packs / --resolve) ──────
+# A second, RICHER read of the same `core/packs/*/pack.toml` corpus the licensed-kind
+# union above reads. It exists because `core/schemas/work-item-type-schema.md` is a
+# meta-schema no executable validated: the grammar could say anything and nothing in
+# the tree would notice. These two modes make it checkable.
+#
+# SECTION-SCOPED, not line-anchored, and that is load-bearing. `applies_to` appears in
+# the meta-schema in TWO unrelated senses — `[meta].applies_to` (a string: the pack's
+# archetype join key) and `[controls.applies_to]` (an object: a control's cross-cutting
+# span). A line-anchored `applies_to\s*=` scan would read a control's span as a pack
+# header field and mis-verdict the pack. The reader therefore tracks the current
+# `[section]` / `[[array]]` header and accepts each key only inside the section that
+# owns it. A self-test arm asserts exactly this (`SC` below).
+#
+# Regex-parsed rather than tomllib-parsed for the same reason the union above is: the
+# operator baseline is Python 3.9 and tomllib is 3.11+.
+PACK_SECTION_RE = re.compile(r'^[ \t]*(\[\[?)([A-Za-z0-9_.\-]+)\]\]?[ \t]*(?:#.*)?$')
+PACK_KV_RE = re.compile(r'^[ \t]*([A-Za-z0-9_\-]+)[ \t]*=[ \t]*(.*)$')
+
+# The archetype name set is §1.1's, byte-identical and case-sensitive. `Custom` is a
+# MEMBER of it — §1.3 used to read "one of the 8 names OR Custom", double-counting it,
+# which is harmless as prose and unimplementable as a rule. The grammar edit that ships
+# with this reader states the domain by reference to this set rather than re-counting.
+ARCHETYPE_NAMES = ("Scrum", "Kanban", "XP", "Waterfall", "PRINCE2", "SAFe",
+                   "Hybrid", "Custom")
+# The methodology-neutral sentinel. ONE token, deliberately: the grammar already uses
+# `*` at the pack level and in the controls facet, so minting a second neutrality token
+# would fork the sentinel vocabulary inside one grammar (ADR-170 D2).
+NEUTRAL_SENTINEL = "*"
+PACK_ROLES = ("archetype", "base", "kit")
+GENERAL_LEVELS = ("Portfolio", "Program", "Project", "Milestone/Workstream",
+                  "Work Item")
+MVP_RELATIONSHIP_TYPES = ("GENERATES", "DEPENDS_ON", "BLOCKS", "SUPERSEDES",
+                          "BELONGS_TO", "RELATES_TO", "ASSIGNED_TO")
+
+# THE CLASS→FACET REGISTRY — the second level of the two-level requiredness rule
+# (ADR-170 D3). `role` decides whether a facet requirement applies at all; `kit_class`
+# decides WHICH facet. Registering a second kit class is one entry here plus the rule
+# implementing that facet — no `role` change, no re-opening of the `kinds` rule. A
+# class ABSENT from this map asserts no facet requirement and is reported as a
+# PACK-P08 caveat naming the value, never as an error: the domain is OPEN by decision.
+KIT_CLASS_FACETS = {"work-item": "kinds"}
+
+# §1.2's required per-kind fields. `fields.kind_specific[]` and `materialization` are
+# optional and are deliberately absent from this tuple.
+KIND_REQUIRED_FIELDS = ("kind_id", "display_name", "base", "methodology_projection",
+                        "fields", "criteria", "relationships", "lifecycle_behavior",
+                        "axis1_state_machine")
+
+# `pack_id` admits ONE leading underscore beyond the plain slug form. That is an
+# accommodation, not an oversight: the shipped base pack is `_common`, and the leading
+# underscore is the corpus's own reserved-name convention for the shared root. Stated
+# here rather than left implicit, because a stricter regex would reject a shipped pack
+# and a looser one would stop catching a genuine malformed id.
+PACK_ID_RE = re.compile(r'^_?[a-z0-9][a-z0-9_-]*$')
+KIND_SLUG_RE = re.compile(r'^[a-z0-9][a-z0-9_-]*$')
+SEMVER_RE = re.compile(r'^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.\-]+)*$')
+
+# The label-group value domain is READ from the label grammar, never restated here.
+# §1.1.1 says the grammar owns the group set and a pack only fills it; a copy in this
+# file would be a duplicate source that drifts as the grammar gains groups — which is
+# exactly what happened to the meta-schema's own copy (it listed seven while the label
+# grammar declared eight, and the shipped base pack populates the eighth).
+LABEL_GROUP_HEADING_RE = re.compile(r'^###[ \t]+(.+?)[ \t]+Labels[ \t]*$', re.M)
+LABEL_TAXONOMY_REL = os.path.join("core", "specs", "label-taxonomy.md")
+
+# EVERY rule this reader can emit. Two consumers, both load-bearing: the
+# `rules_evaluated` counter (so a run reports its own denominator rather than leaving
+# "no findings" ambiguous between clean and not-run), and the self-test's coverage
+# meta-arm, which asserts that every id in this tuple is exercised by a mutation arm
+# that fails when its rule is mutated. Adding a rule without an arm reddens the suite.
+PACK_RULE_IDS = (
+    "PACK-P01", "PACK-P02", "PACK-P03", "PACK-P04", "PACK-P05", "PACK-P06",
+    "PACK-P07", "PACK-P08",
+    "PACK-K01", "PACK-K02", "PACK-K03", "PACK-K04", "PACK-K05", "PACK-K06",
+    "PACK-K07",
+    "PACK-L01", "PACK-L02",
+)
+
+
+def _scan_pack_value(rhs, lines, idx):
+    """(value, next_idx) for one TOML right-hand side. str | list | raw-string.
+
+    Arrays MAY span lines (the corpus writes them on one, but a multi-line array is
+    valid TOML and reading only the first line would silently truncate a set the
+    PACK-K04 subset rule then evaluates against). A trailing `# comment` is stripped
+    only OUTSIDE a quoted span, so a `#` inside a string survives.
+    """
+    rhs = rhs.strip()
+    if rhs[:1] in ('"', "'"):
+        q = rhs[0]
+        end = rhs.find(q, 1)
+        if end == -1:
+            return rhs, idx
+        return rhs[1:end], idx
+    if rhs.startswith("["):
+        buf = rhs
+        while buf.count("[") > buf.count("]") and idx + 1 < len(lines):
+            idx += 1
+            buf += " " + lines[idx].strip()
+        inner = buf[buf.find("[") + 1:buf.rfind("]")]
+        out = []
+        for part in inner.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if part[:1] in ('"', "'") and part[-1:] == part[:1]:
+                part = part[1:-1]
+            out.append(part)
+        return out, idx
+    cut = rhs.find("#")
+    if cut != -1:
+        rhs = rhs[:cut]
+    return rhs.strip(), idx
+
+
+def parse_pack(text):
+    """(pack, degradations) — a section-scoped read of one `pack.toml`.
+
+    `pack` = {"meta": {...}, "kinds": [...], "labels": [...], "controls": [...]}.
+
+    `degradations` is non-empty when the parse is demonstrably PARTIAL, and a partial
+    parse is an error rather than a short result — the same fail-loud-both-directions
+    contract `load_licensed_kinds_checked` carries, for the same reason: a reader that
+    silently under-reads reports "no findings" on a file it never finished.
+
+    Two structural controls, neither of which needs a TOML parser:
+      * CROSS-INSTRUMENT AGREEMENT — the `[[kinds]]` header count this reader's own
+        section regex finds must equal the count `KINDS_TABLE_RE` (the licensed-kind
+        union's independent regex) finds over the same bytes. Two regexes disagreeing
+        about how many kinds a file declares is positive evidence one of them is
+        misreading, and it is checkable without parsing either.
+      * KIND SHORTFALL — every `[[kinds]]` table must yield a `kind_id`. A table that
+        yields none is a row this reader did not manage to read.
+    """
+    lines = text.split("\n")
+    pack = {"meta": {}, "kinds": [], "labels": [], "controls": []}
+    degraded = []
+    target = pack["meta"]          # keys before any header belong to the pack header
+    current_kind = None
+    current_label = None
+    current_control = None
+    section_kind_tables = 0
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            i += 1
+            continue
+        m = PACK_SECTION_RE.match(line)
+        if m:
+            is_array = m.group(1) == "[["
+            name = m.group(2)
+            head = name.split(".")[0]
+            if is_array and name == "kinds":
+                current_kind = {}
+                pack["kinds"].append(current_kind)
+                target = current_kind
+                section_kind_tables += 1
+            elif is_array and name == "labels":
+                current_label = {}
+                pack["labels"].append(current_label)
+                target = current_label
+            elif is_array and name == "controls":
+                current_control = {}
+                pack["controls"].append(current_control)
+                target = current_control
+            elif name == "meta":
+                target = pack["meta"]
+            elif head == "kinds" and current_kind is not None:
+                node = current_kind
+                for part in name.split(".")[1:]:
+                    node = node.setdefault(part, {})
+                    if not isinstance(node, dict):
+                        break
+                target = node if isinstance(node, dict) else {}
+            elif head == "controls" and current_control is not None:
+                node = current_control
+                for part in name.split(".")[1:]:
+                    node = node.setdefault(part, {})
+                target = node if isinstance(node, dict) else {}
+            elif head == "labels" and current_label is not None:
+                node = current_label
+                for part in name.split(".")[1:]:
+                    node = node.setdefault(part, {})
+                target = node if isinstance(node, dict) else {}
+            else:
+                # An unrecognised section. Its keys belong to NOBODY — emphatically not
+                # to the pack header, which is the mis-scoping this reader exists to
+                # avoid. They are dropped into a scratch dict.
+                target = {}
+            i += 1
+            continue
+        kv = PACK_KV_RE.match(line)
+        if kv:
+            value, i = _scan_pack_value(kv.group(2), lines, i)
+            if isinstance(target, dict):
+                target[kv.group(1)] = value
+        i += 1
+
+    union_kind_tables = len(KINDS_TABLE_RE.findall(text))
+    if union_kind_tables != section_kind_tables:
+        degraded.append("kind-table count disagrees between readers "
+                        "(section reader %d, union reader %d)"
+                        % (section_kind_tables, union_kind_tables))
+    kindless = sum(1 for k in pack["kinds"] if not k.get("kind_id"))
+    if kindless:
+        degraded.append("%d [[kinds]] table(s) yielded no kind_id row" % kindless)
+    return pack, degraded
+
+
+def read_pack_root(pack_root):
+    """((rel, pack) list, degradations) — every pack under `pack_root`.
+
+    TWO shapes are accepted, and both are used by this repo's own verification rows:
+    a directory that IS one pack (holds `pack.toml` directly), and a directory OF
+    packs (each child may hold one). Accepting only the second would make a
+    single-fixture root unreadable and force every fixture to be validated together,
+    which defeats attributing a rejection to one fixture.
+    """
+    entries = []
+    if os.path.isfile(os.path.join(pack_root, "pack.toml")):
+        entries.append((os.path.basename(os.path.abspath(pack_root)),
+                        os.path.join(pack_root, "pack.toml")))
+    elif os.path.isdir(pack_root):
+        for entry in sorted(os.listdir(pack_root)):
+            candidate = os.path.join(pack_root, entry, "pack.toml")
+            if os.path.isfile(candidate):
+                entries.append((entry, candidate))
+    packs = []
+    degraded = []
+    for name, path in entries:
+        rel = os.path.join(name, "pack.toml")
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                text = fh.read()
+        except OSError as exc:
+            degraded.append("%s: unreadable (%s)" % (rel, exc.__class__.__name__))
+            continue
+        pack, pack_degraded = parse_pack(text)
+        for why in pack_degraded:
+            degraded.append("%s: %s" % (rel, why))
+        packs.append((rel, pack))
+    return packs, degraded
+
+
+def load_label_groups(root):
+    """(group set, note) read live from the label grammar; (None, reason) when absent.
+
+    An unreadable grammar makes PACK-L01 UNEVALUABLE, and this returns None so the
+    caller emits a SKIP row naming the reason. It must never fall back to a hardcoded
+    list: a copy here is the duplicate source the grammar edit just removed from the
+    meta-schema, and it would drift the same way. It must never silently pass either —
+    a rule that quietly evaluates to "no findings" because its input was missing is the
+    vacuous-zero failure this whole file is built against.
+    """
+    path = os.path.join(root, LABEL_TAXONOMY_REL)
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError:
+        return None, "label grammar unreadable at " + LABEL_TAXONOMY_REL
+    groups = set()
+    for name in LABEL_GROUP_HEADING_RE.findall(text):
+        groups.add(name.strip().lower().replace(" ", "-"))
+    if not groups:
+        return None, ("label grammar at " + LABEL_TAXONOMY_REL
+                      + " declared no `### <Name> Labels` group heading")
+    return groups, "%d group(s) read from %s" % (len(groups), LABEL_TAXONOMY_REL)
+
+
+def pack_role(pack):
+    """The effective role. Absent ⇒ `archetype` — the backward-compat guarantee."""
+    return pack["meta"].get("role", "archetype")
+
+
+def _validate_one_pack(rel, pack, packs_by_id, label_groups):
+    """[(severity, rule_id, detail)] for one pack. severity ∈ {ERROR, CAVEAT}."""
+    f = []
+    meta = pack["meta"]
+    role = pack_role(pack)
+    applies_to = meta.get("applies_to")
+    kinds = pack["kinds"]
+
+    # ── PACK-P01/P02: identity ──────────────────────────────────────────────
+    pack_id = meta.get("pack_id")
+    if not isinstance(pack_id, str) or not PACK_ID_RE.match(pack_id or ""):
+        f.append(("ERROR", "PACK-P01",
+                  "pack_id missing or not a lowercase slug: %r" % (pack_id,)))
+    pack_version = meta.get("pack_version")
+    if not isinstance(pack_version, str) or not SEMVER_RE.match(pack_version or ""):
+        f.append(("ERROR", "PACK-P02",
+                  "pack_version missing or not semver: %r" % (pack_version,)))
+
+    # ── PACK-P03: applies_to value DOMAIN (membership only) ─────────────────
+    # Layered deliberately: P03 asks whether the value is in the domain at all, P05
+    # asks whether THIS role may hold it. Collapsing them would make every
+    # out-of-domain value emit two ids and no arm could attribute a rejection.
+    applies_ok = isinstance(applies_to, str) and (
+        applies_to == NEUTRAL_SENTINEL or applies_to in ARCHETYPE_NAMES)
+    if not applies_ok:
+        f.append(("ERROR", "PACK-P03",
+                  "applies_to missing or outside the archetype-name set ∪ {%s}: %r"
+                  % (NEUTRAL_SENTINEL, applies_to)))
+
+    # ── PACK-P04: the role discriminator ────────────────────────────────────
+    role_ok = role in PACK_ROLES
+    if not role_ok:
+        f.append(("ERROR", "PACK-P04",
+                  "role %r is outside {%s}; every role-branching rule (P05-P08 and "
+                  "PACK-K05's neutral-sentinel limb) is NOT EVALUATED for this pack, "
+                  "because their input is undefined"
+                  % (role, ", ".join(PACK_ROLES))))
+
+    # Every rule below BRANCHES on the role. With an unreadable role they have no
+    # defined input, so they are not evaluated rather than evaluated against a guess —
+    # a guessed branch would emit ids the pack never earned and make P04's own arm
+    # unattributable.
+    if role_ok:
+        # ── PACK-P05: the role↔applies_to weld, total over all three roles ───
+        if applies_ok:
+            if role in ("base", "kit") and applies_to != NEUTRAL_SENTINEL:
+                f.append(("ERROR", "PACK-P05",
+                          "role=%s requires applies_to=%s (methodology-neutral), got %r"
+                          % (role, NEUTRAL_SENTINEL, applies_to)))
+            if role == "archetype" and applies_to == NEUTRAL_SENTINEL:
+                f.append(("ERROR", "PACK-P05",
+                          "role=archetype MUST NOT set applies_to=%s — an archetype "
+                          "pack claiming neutrality is the restriction axis this "
+                          "grammar closed; a neutral kind set is a role=kit pack"
+                          % NEUTRAL_SENTINEL))
+
+        # ── PACK-P06: extends, widened to {archetype, kit} ───────────────────
+        extends = meta.get("extends")
+        if extends:
+            if role == "base":
+                f.append(("ERROR", "PACK-P06",
+                          "role=base MUST NOT set extends — a base pack is the "
+                          "inheritance root"))
+            else:
+                target = packs_by_id.get(extends)
+                if target is None:
+                    f.append(("CAVEAT", "PACK-P06",
+                              "extends target %r is not present in this pack root — "
+                              "which packs a deployment licenses is a configuration "
+                              "choice, so this is reported, not failed" % extends))
+                elif pack_role(target) != "base":
+                    f.append(("ERROR", "PACK-P06",
+                              "extends target %r has role=%s; only a role=base pack "
+                              "may be an inheritance root (a kit may inherit but may "
+                              "never be inherited from)"
+                              % (extends, pack_role(target))))
+
+        # ── PACK-P08: kit_class, and the OPEN domain ─────────────────────────
+        kit_class = meta.get("kit_class")
+        if role == "kit" and not kit_class:
+            f.append(("ERROR", "PACK-P08",
+                      "role=kit requires kit_class (the facet discriminator)"))
+        elif role != "kit" and kit_class:
+            f.append(("ERROR", "PACK-P08",
+                      "kit_class is permitted only on role=kit, found on role=%s"
+                      % role))
+        elif role == "kit" and kit_class not in KIT_CLASS_FACETS:
+            f.append(("CAVEAT", "PACK-P08",
+                      "kit_class %r is not a registered class (registered: %s). The "
+                      "domain is OPEN, so this is a caveat and no facet requirement "
+                      "is asserted for it — but it is named rather than silent, "
+                      "because a mistyped class reaching this arm relieves a "
+                      "work-item kit of its kinds obligation"
+                      % (kit_class, ", ".join(sorted(KIT_CLASS_FACETS)))))
+
+        # ── PACK-P07: the TWO-LEVEL kinds requiredness rule (ADR-170 D3) ─────
+        # role decides WHETHER a facet requirement applies; kit_class decides WHICH.
+        # Conditioning the kit arm on role alone would forbid every future kit class
+        # and make P08's open domain unreachable — the same pack would fail here first.
+        if role == "base":
+            if kinds:
+                f.append(("ERROR", "PACK-P07",
+                          "role=base MUST NOT declare kinds (%d declared)"
+                          % len(kinds)))
+        elif role == "archetype":
+            if not kinds:
+                f.append(("ERROR", "PACK-P07",
+                          "role=archetype requires at least one kind"))
+        elif role == "kit":
+            facet = KIT_CLASS_FACETS.get(kit_class)
+            if facet == "kinds" and not kinds:
+                f.append(("ERROR", "PACK-P07",
+                          "kit_class=%r requires at least one kind (its facet is the "
+                          "kind set)" % kit_class))
+            # An unregistered or absent class asserts NO facet requirement. That
+            # silence is the decision, not an omission: PACK-P08 above already named
+            # the value, and requiring a facet here would re-close the open domain.
+
+    # ── PACK-K01..K07: the per-kind rules ───────────────────────────────────
+    seen_kind_ids = set()
+    for kind in kinds:
+        kid = kind.get("kind_id")
+        label = kid if isinstance(kid, str) else "<kind_id absent>"
+        missing = [name for name in KIND_REQUIRED_FIELDS if not kind.get(name)]
+        if missing:
+            f.append(("ERROR", "PACK-K01",
+                      "kind %s is missing required field(s): %s"
+                      % (label, ", ".join(missing))))
+        if isinstance(kid, str) and kid:
+            if not KIND_SLUG_RE.match(kid):
+                f.append(("ERROR", "PACK-K02",
+                          "kind_id %r is not a lowercase slug" % kid))
+            elif kid in seen_kind_ids:
+                f.append(("ERROR", "PACK-K02",
+                          "kind_id %r is declared more than once in this pack" % kid))
+            seen_kind_ids.add(kid)
+        base_value = kind.get("base")
+        if base_value is not None and base_value != "Work Item":
+            f.append(("ERROR", "PACK-K03",
+                      "kind %s declares base=%r; the base is the const \"Work Item\" "
+                      "and no other base is permitted — a kind is a projection of the "
+                      "one Work Item entity, never a new entity node"
+                      % (label, base_value)))
+        rels = kind.get("relationships")
+        if isinstance(rels, dict):
+            allowed = rels.get("allowed_types")
+            if isinstance(allowed, list):
+                stray = [a for a in allowed if a not in MVP_RELATIONSHIP_TYPES]
+                if stray:
+                    f.append(("ERROR", "PACK-K04",
+                              "kind %s names relationship type(s) outside the 7 MVP "
+                              "types: %s" % (label, ", ".join(stray))))
+        proj = kind.get("methodology_projection")
+        if isinstance(proj, dict):
+            # ── PACK-K05 — THE CAPABILITY-BEARING RULE ───────────────────────
+            # This is the rule the kit unit exists for. A grammar change that
+            # relaxed only the pack-level applies_to would leave every kind
+            # archetype-welded: the pack would validate, every gate would pass, and
+            # the capability would be absent. That is why the deliberately
+            # nonconforming fixture is a neutral kind inside a NON-kit pack rather
+            # than a trivially malformed file.
+            arch = proj.get("archetype")
+            if arch == NEUTRAL_SENTINEL and not role_ok:
+                pass
+            elif arch == NEUTRAL_SENTINEL:
+                if role != "kit":
+                    f.append(("ERROR", "PACK-K05",
+                              "kind %s sets methodology_projection.archetype=%s inside "
+                              "a role=%s pack; the neutral sentinel is permitted ONLY "
+                              "on a kind declared inside a role=kit pack"
+                              % (label, NEUTRAL_SENTINEL, role)))
+            elif arch not in ARCHETYPE_NAMES:
+                f.append(("ERROR", "PACK-K05",
+                          "kind %s sets methodology_projection.archetype=%r, which is "
+                          "outside the archetype-name set (and %s is admissible only "
+                          "inside a role=kit pack)"
+                          % (label, arch, NEUTRAL_SENTINEL)))
+            level = proj.get("general_level")
+            if level not in GENERAL_LEVELS:
+                f.append(("ERROR", "PACK-K06",
+                          "kind %s sets general_level=%r, outside the Layer-1 level "
+                          "taxonomy" % (label, level)))
+            if not proj.get("projects_as"):
+                f.append(("ERROR", "PACK-K07",
+                          "kind %s is missing methodology_projection.projects_as"
+                          % label))
+
+    # ── PACK-L01/L02: the label contribution facet ──────────────────────────
+    for row in pack["labels"]:
+        group = row.get("group")
+        if label_groups is not None and group not in label_groups:
+            f.append(("ERROR", "PACK-L01",
+                      "label group %r is not declared by the label grammar (declared: "
+                      "%s)" % (group, ", ".join(sorted(label_groups)))))
+        name = row.get("name")
+        if isinstance(name, str) and name.startswith("type:"):
+            projects_kind = row.get("projects_kind")
+            if not projects_kind:
+                f.append(("ERROR", "PACK-L02",
+                          "label %r is a type:* row and MUST carry projects_kind"
+                          % name))
+            elif projects_kind not in seen_kind_ids:
+                f.append(("ERROR", "PACK-L02",
+                          "label %r has projects_kind=%r, which does not resolve into "
+                          "this pack's kinds[]" % (name, projects_kind)))
+    return f
+
+
+def validate_packs(root, pack_root):
+    """`--validate-packs`: conformance of a pack root against the meta-schema.
+
+    Emits one row per finding, EACH CARRYING ITS RULE ID, so a rejection is
+    attributable to a rule rather than to a bare exit code. That property is the whole
+    point: a suite whose arms assert only "exit non-zero" greens on any single working
+    rule and cannot tell a live rule from a dead one.
+
+    Fail-loud in BOTH directions, inherited verbatim from the union reader above: a
+    degraded parse and an empty pack root each exit 3. `packs_read=0` is an ERROR, not
+    a clean pass — a mistyped `--pack-root` must never read as "no findings".
+    """
+    packs, degraded = read_pack_root(pack_root)
+    if degraded:
+        print("ERROR\tpack read is PARTIAL — " + "; ".join(degraded), file=sys.stderr)
+        return 3
+    if not packs:
+        print("ERROR\tno pack.toml found under %s — a pack root that resolves to zero "
+              "packs finds no violation BY CONSTRUCTION and must never read clean"
+              % pack_root, file=sys.stderr)
+        return 3
+
+    label_groups, group_note = load_label_groups(root)
+    packs_by_id = {}
+    for _rel, pack in packs:
+        pid = pack["meta"].get("pack_id")
+        if isinstance(pid, str) and pid:
+            packs_by_id[pid] = pack
+
+    out = []
+    kinds_read = sum(len(p["kinds"]) for _rel, p in packs)
+    rules_evaluated = len(PACK_RULE_IDS) - (1 if label_groups is None else 0)
+    out.append("PACKS\tpacks_read=%d kinds_read=%d rules_evaluated=%d"
+               % (len(packs), kinds_read, rules_evaluated))
+    if label_groups is None:
+        out.append("SKIP\tPACK-L01\t" + group_note
+                   + " — the rule was NOT evaluated (a hardcoded fallback list here "
+                     "would be the duplicate source the grammar removed)")
+    else:
+        out.append("CTRL\tPACK-L01\t" + group_note)
+
+    errors = 0
+    for rel, pack in packs:
+        for severity, rule_id, detail in _validate_one_pack(rel, pack, packs_by_id,
+                                                            label_groups):
+            out.append("%s\t%s\t%s\t%s" % (
+                "FINDING" if severity == "ERROR" else "CAVEAT", rule_id, rel, detail))
+            if severity == "ERROR":
+                errors += 1
+    out.append("COUNT\t%d" % errors)
+    print("\n".join(out))
+    return 1 if errors else 0
+
+
+def resolve_archetype(root, pack_root, archetype):
+    """`--resolve <archetype>`: the eligible pack set and the kind union, by role.
+
+    This makes the grammar-side join EXECUTABLE. The kind-derivation contract the
+    intake desk reads states the eligibility predicate in prose; before this mode
+    nothing could run it, so prose-vs-behaviour drift was only findable by eye.
+
+    ELIGIBILITY IS A TWO-LIMB MATCH, and both limbs are load-bearing:
+        (a) applies_to == <archetype>                        — the archetype join, OR
+        (b) applies_to == "*" AND role == "kit"              — the kit join.
+    Limb (b) without its `role` conjunct would also admit the shared base pack (which
+    bears no kinds) and a role=archetype pack claiming neutrality (a shape the grammar
+    now forbids). A self-test arm proves that conjunct does observable work: the same
+    file, with the same `applies_to = "*"`, is eligible as a kit and NOT eligible as an
+    archetype pack.
+
+    SCOPE BOUNDARY, stated rather than implied: this resolves ELIGIBILITY and the
+    UNION. WHICH kit a deployment selected is resolved on the configuration axis,
+    upstream of here, and is not this mode's business — every kit in the root is
+    reported eligible. An empty union is reported as a measured zero and is NOT an
+    error: a conforming kit is mandatorily kind-bearing, so a kit-only root resolves
+    the kit's own kinds, and this mode asserts no constraint about what a deployment's
+    selection may leave empty.
+    """
+    if archetype not in ARCHETYPE_NAMES:
+        print("ERROR\t--resolve %r is not one of the archetype names (%s)"
+              % (archetype, ", ".join(ARCHETYPE_NAMES)), file=sys.stderr)
+        return 3
+    packs, degraded = read_pack_root(pack_root)
+    if degraded:
+        print("ERROR\tpack read is PARTIAL — " + "; ".join(degraded), file=sys.stderr)
+        return 3
+    if not packs:
+        print("ERROR\tno pack.toml found under %s — an empty pack root resolves an "
+              "empty vocabulary BY CONSTRUCTION and must never read as a resolution"
+              % pack_root, file=sys.stderr)
+        return 3
+
+    out = ["RESOLVE\tarchetype=%s\tpack_root=%s\tpacks_read=%d"
+           % (archetype, pack_root, len(packs))]
+    eligible = []
+    for rel, pack in packs:
+        role = pack_role(pack)
+        applies_to = pack["meta"].get("applies_to")
+        pid = pack["meta"].get("pack_id") or rel
+        if role == "base":
+            out.append("BASE\t%s\trole=base\tapplies_to=%s\tinheritance root; "
+                       "contributes no kinds" % (pid, applies_to))
+            continue
+        limb_a = applies_to == archetype
+        limb_b = applies_to == NEUTRAL_SENTINEL and role == "kit"
+        if limb_a or limb_b:
+            eligible.append((pid, role, pack))
+            out.append("ELIGIBLE\t%s\trole=%s\tapplies_to=%s\tlimb=%s"
+                       % (pid, role, applies_to, "archetype-join" if limb_a
+                          else "kit-join"))
+        else:
+            out.append("EXCLUDED\t%s\trole=%s\tapplies_to=%s\tneither limb holds "
+                       "for %s" % (pid, role, applies_to, archetype))
+
+    # Later in the composition order wins on a colliding kind_id: archetype packs
+    # first, then kits. Reported per kind as provenance rather than silently merged, so
+    # a collision is visible in the output instead of inferable from a shorter list.
+    union = {}
+    for pid, role, pack in [e for e in eligible if e[1] != "kit"] + \
+                           [e for e in eligible if e[1] == "kit"]:
+        for kind in pack["kinds"]:
+            kid = kind.get("kind_id")
+            if kid:
+                union[kid] = (pid, role)
+    for kid in sorted(union):
+        pid, role = union[kid]
+        out.append("KIND\t%s\t%s\trole=%s" % (kid, pid, role))
+    out.append("COUNT\t%d" % len(union))
+    if not union:
+        out.append("NOTE\tthe eligible set contributed no kinds. This is a measured "
+                   "zero, not an error: this mode asserts no constraint about an "
+                   "empty vocabulary — that constraint belongs to the selection "
+                   "surface, which owns what a deployment's selection may leave empty")
+    print("\n".join(out))
+    return 0
 
 # An H2 exemption entry is `#<issue> <token>` — a '#' immediately followed by
 # digits and then whitespace. A blanket `startswith("#")` comment filter eats the
@@ -1462,6 +2095,394 @@ def self_test():
               and "root:core" not in first
               and "VOCAB" not in out_s)
 
+
+    # ── PACK-CONFORMANCE ARMS (--validate-packs / --resolve) ────────────────
+    # AUTHORED AGAINST A NAMED DEFECT, not merely alongside the feature. A sibling
+    # self-test in this repo returned an identical pass count both patched and
+    # unpatched: every arm asserted an exit code, so any one working rule greened all
+    # of them and a dead rule was indistinguishable from a live one.
+    #
+    # The property that fixes it, and the rule every arm below obeys: an arm asserts
+    # THE EXPECTED RULE ID **AND THE ABSENCE OF EVERY OTHER**. A dead rule fails its
+    # own arm (its id goes missing); a rule that fires on everything fails every other
+    # arm (its id intrudes). Neither failure is reachable by an exit-code assertion.
+    #
+    # Three further structural guards:
+    #   * each conforming template is asserted CLEAN first, so "exactly this id" can
+    #     never be satisfied by a template that was already dirty;
+    #   * `_pc_exercised` accumulates every id any arm asserts, and the coverage arm at
+    #     the end asserts it equals PACK_RULE_IDS — adding a rule without an arm
+    #     reddens the suite rather than riding it;
+    #   * the on-disk fixture arms run the SHIPPED fixtures through the SHIPPED CLI,
+    #     and assert the fixture files are non-empty first, so a deleted fixture is a
+    #     failure rather than a vacuous pass.
+
+    _PC_TAXONOMY = ("# Labels\n\n## Label Groups\n\n"
+                    "### Category Labels\nrows\n\n"
+                    "### Status Labels\nrows\n")
+
+    _PC_KIND_BODY = ('display_name = "Deliverable"\n'
+                     'base = "Work Item"\n'
+                     'axis1_state_machine = "inherit"\n'
+                     '[kinds.methodology_projection]\n'
+                     'archetype = "*"\n'
+                     'general_level = "Work Item"\n'
+                     'projects_as = "Deliverable"\n'
+                     '[kinds.fields]\n'
+                     'core = "inherit"\n'
+                     '[kinds.criteria.readiness]\n'
+                     'criteria_version = "0.1.0"\n'
+                     '[kinds.criteria.done]\n'
+                     'criteria_version = "0.1.0"\n'
+                     '[kinds.criteria.gate]\n'
+                     'criteria_version = "0.1.0"\n'
+                     '[kinds.relationships]\n'
+                     'allowed_types = ["BELONGS_TO", "RELATES_TO"]\n'
+                     '[kinds.lifecycle_behavior]\n'
+                     'timeboxed = "gate"\n')
+
+    # A conforming KIT: neutral at the pack level AND at the kind level, kit_class
+    # registered, one kind, one type:* label row joining back to it.
+    _PC_KIT = ('[meta]\n'
+               'pack_id = "t-kit"\n'
+               'pack_version = "0.1.0"\n'
+               'applies_to = "*"\n'
+               'role = "kit"\n'
+               'kit_class = "work-item"\n\n'
+               '[[kinds]]\n'
+               'kind_id = "deliverable"\n'
+               + _PC_KIND_BODY
+               + '\n[[labels]]\n'
+                 'group = "category"\n'
+                 'name = "type:deliverable"\n'
+                 'projects_kind = "deliverable"\n')
+    # The same kit with no label facet — used by the arms whose single mutation would
+    # otherwise ALSO break the label join and emit a second id.
+    _PC_KIT_NL = _PC_KIT[:_PC_KIT.index("\n[[labels]]")] + "\n"
+
+    _PC_ARCH = ('[meta]\n'
+                'pack_id = "t-arch"\n'
+                'pack_version = "0.1.0"\n'
+                'applies_to = "Scrum"\n'
+                'role = "archetype"\n\n'
+                '[[kinds]]\n'
+                'kind_id = "story"\n'
+                + _PC_KIND_BODY.replace('archetype = "*"', 'archetype = "Scrum"')
+                               .replace('"Deliverable"', '"Story"'))
+
+    _PC_BASE = ('[meta]\n'
+                'pack_id = "t-base"\n'
+                'pack_version = "0.1.0"\n'
+                'applies_to = "*"\n'
+                'role = "base"\n')
+
+    def _pc_root(tmp, packs, taxonomy=None):
+        """(root, pack_root). `--root` carries repo context (the label grammar);
+        `--pack-root` selects which pack tree to read. Separating them is what lets a
+        fixture tree be validated against the real label grammar."""
+        pack_root = os.path.join(tmp, "fixtures")
+        for name, text in packs.items():
+            d = os.path.join(pack_root, name)
+            os.makedirs(d, exist_ok=True)
+            with open(os.path.join(d, "pack.toml"), "w", encoding="utf-8") as fh:
+                fh.write(text)
+        if taxonomy is not None:
+            d = os.path.join(tmp, "core", "specs")
+            os.makedirs(d, exist_ok=True)
+            with open(os.path.join(d, "label-taxonomy.md"), "w",
+                      encoding="utf-8") as fh:
+                fh.write(taxonomy)
+        return tmp, pack_root
+
+    def _pc_cli(root, args):
+        cp = subprocess.run([sys.executable, os.path.abspath(__file__),
+                             "--root", root] + list(args),
+                            capture_output=True, text=True)
+        return cp.returncode, cp.stdout, cp.stderr
+
+    def _pc_rows(stdout, tag):
+        return [ln.split("\t") for ln in stdout.split("\n") if ln.startswith(tag + "\t")]
+
+    def _pc_ids(stdout):
+        return set(r[1] for r in _pc_rows(stdout, "FINDING"))
+
+    def _pc_caveat_ids(stdout):
+        return set(r[1] for r in _pc_rows(stdout, "CAVEAT"))
+
+    _pc_exercised = set()
+
+    def _pc_arm(name, packs, expect_ids, taxonomy=None, expect_caveats=(),
+                expect_rc=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, pack_root = _pc_root(tmp, packs, taxonomy)
+            rc, out, _err = _pc_cli(root, ("--validate-packs",
+                                           "--pack-root", pack_root))
+            got, cav = _pc_ids(out), _pc_caveat_ids(out)
+            want = set(expect_ids)
+            want_cav = set(expect_caveats)
+            want_rc = expect_rc if expect_rc is not None else (1 if want else 0)
+            check(name, got == want and cav == want_cav and rc == want_rc)
+        _pc_exercised.update(want)
+        _pc_exercised.update(want_cav)
+
+    # ── CONTROLS: each conforming template must be CLEAN ─────────────────────
+    _pc_arm("PC control: a conforming kit validates clean", {"k": _PC_KIT}, ())
+    _pc_arm("PC control: a conforming archetype pack validates clean",
+            {"a": _PC_ARCH}, ())
+    _pc_arm("PC control: a conforming base pack validates clean", {"b": _PC_BASE}, ())
+    # The RELAXATION, as an accepted shape: a kit MAY extend the base pack.
+    _pc_arm("PC control: a kit extending the base pack is accepted (the relaxation)",
+            {"b": _PC_BASE,
+             "k": _PC_KIT.replace('kit_class = "work-item"',
+                                  'kit_class = "work-item"\nextends = "t-base"')}, ())
+
+    # ── ONE SINGLE-FIELD MUTATION PER RULE ───────────────────────────────────
+    _pc_arm("PC PACK-P01 fires alone on a malformed pack_id",
+            {"k": _PC_KIT.replace('pack_id = "t-kit"', 'pack_id = "T Kit"')},
+            ("PACK-P01",))
+    _pc_arm("PC PACK-P02 fires alone on a non-semver pack_version",
+            {"k": _PC_KIT.replace('pack_version = "0.1.0"', 'pack_version = "0.1"')},
+            ("PACK-P02",))
+    # P03 is DOMAIN membership; P05 is the role weld given a legal value. Layered so
+    # each has a mutation that emits it alone.
+    _pc_arm("PC PACK-P03 fires alone on an out-of-domain applies_to",
+            {"a": _PC_ARCH.replace('applies_to = "Scrum"', 'applies_to = "Agile"')},
+            ("PACK-P03",))
+    _pc_arm("PC PACK-P04 fires alone on an unknown role, and the role-branching "
+            "rules stay silent",
+            {"k": _PC_KIT.replace('role = "kit"', 'role = "kitt"')},
+            ("PACK-P04",))
+    _pc_arm("PC PACK-P05 fires alone when an archetype pack claims neutrality "
+            "(the restriction axis)",
+            {"a": _PC_ARCH.replace('applies_to = "Scrum"', 'applies_to = "*"')},
+            ("PACK-P05",))
+    _pc_arm("PC PACK-P06 fires alone when a base pack declares extends",
+            {"b": _PC_BASE + 'extends = "t-x"\n'}, ("PACK-P06",))
+    _pc_arm("PC PACK-P06 fires alone when a kit is named as an extends target",
+            {"k": _PC_KIT,
+             "a": _PC_ARCH.replace('role = "archetype"',
+                                   'role = "archetype"\nextends = "t-kit"')},
+            ("PACK-P06",))
+    _pc_arm("PC PACK-P06 an ABSENT extends target is a caveat, never an error "
+            "(a deselected pack is configuration)",
+            {"a": _PC_ARCH.replace('role = "archetype"',
+                                   'role = "archetype"\nextends = "t-nowhere"')},
+            (), expect_caveats=("PACK-P06",), expect_rc=0)
+
+    # ── PACK-P07, THE TWO-LEVEL RULE — all four limbs ────────────────────────
+    _pc_arm("PC PACK-P07 fires alone when a base pack declares kinds (D7)",
+            {"b": _PC_BASE + '\n[[kinds]]\nkind_id = "deliverable"\n' + _PC_KIND_BODY
+                             .replace('archetype = "*"', 'archetype = "Scrum"')},
+            ("PACK-P07",))
+    _pc_arm("PC PACK-P07 fires alone when an archetype pack declares no kinds",
+            {"a": _PC_ARCH[:_PC_ARCH.index("\n[[kinds]]")] + "\n"}, ("PACK-P07",))
+    _pc_arm("PC PACK-P07 fires alone when a work-item kit declares no kinds",
+            {"k": _PC_KIT_NL[:_PC_KIT_NL.index("\n[[kinds]]")] + "\n"}, ("PACK-P07",))
+    # THE LIMB THAT PROVES THE RULE IS TWO-LEVEL, and the reason the correction was
+    # carried. Requiredness is selected by kit_class, NOT by role: an unregistered
+    # class asserts no facet requirement, so a kindless kit of that class is a CAVEAT
+    # naming the class and NOT a PACK-P07 rejection. Under a role-conditioned rule
+    # this arm would emit PACK-P07, every future kit class would be hard-rejected on
+    # that row, and PACK-P08's open domain would be unreachable.
+    _pc_arm("PC PACK-P07 does NOT fire for an unregistered kit_class with no kinds "
+            "— requiredness is selected by kit_class, not by role",
+            {"k": (_PC_KIT_NL[:_PC_KIT_NL.index("\n[[kinds]]")] + "\n")
+                  .replace('kit_class = "work-item"', 'kit_class = "field"')},
+            (), expect_caveats=("PACK-P08",), expect_rc=0)
+
+    _pc_arm("PC PACK-P08 fires alone when a kit omits kit_class",
+            {"k": _PC_KIT.replace('kit_class = "work-item"\n', "")}, ("PACK-P08",))
+    _pc_arm("PC PACK-P08 fires alone when a non-kit pack sets kit_class",
+            {"a": _PC_ARCH.replace('role = "archetype"',
+                                   'role = "archetype"\nkit_class = "work-item"')},
+            ("PACK-P08",))
+
+    # ── The per-kind rules ───────────────────────────────────────────────────
+    _pc_arm("PC PACK-K01 fires alone on a kind missing a required field",
+            {"k": _PC_KIT.replace('display_name = "Deliverable"\n', "")},
+            ("PACK-K01",))
+    _pc_arm("PC PACK-K02 fires alone on a non-slug kind_id",
+            {"k": _PC_KIT_NL.replace('kind_id = "deliverable"',
+                                     'kind_id = "Deliverable"')},
+            ("PACK-K02",))
+    _pc_arm("PC PACK-K03 fires alone on a base other than the const Work Item",
+            {"k": _PC_KIT.replace('base = "Work Item"', 'base = "Epic"')},
+            ("PACK-K03",))
+    _pc_arm("PC PACK-K04 fires alone on a relationship type outside the 7 MVP types",
+            {"k": _PC_KIT.replace('allowed_types = ["BELONGS_TO", "RELATES_TO"]',
+                                  'allowed_types = ["BELONGS_TO", "OWNS"]')},
+            ("PACK-K04",))
+    # THE CAPABILITY-BEARING RULE. This is the exact shape that would make the kit
+    # unit appear to land while delivering nothing: kind-level neutrality asserted
+    # OUTSIDE a kit pack.
+    _pc_arm("PC PACK-K05 fires alone on a neutral kind inside a non-kit pack "
+            "(the capability-bearing rule)",
+            {"a": _PC_ARCH.replace('archetype = "Scrum"\ngeneral_level',
+                                   'archetype = "*"\ngeneral_level')},
+            ("PACK-K05",))
+    _pc_arm("PC PACK-K05 fires alone on an archetype value outside the name set",
+            {"a": _PC_ARCH.replace('archetype = "Scrum"\ngeneral_level',
+                                   'archetype = "Agile"\ngeneral_level')},
+            ("PACK-K05",))
+    _pc_arm("PC PACK-K06 fires alone on a general_level outside the taxonomy",
+            {"k": _PC_KIT.replace('general_level = "Work Item"',
+                                  'general_level = "Sprint"')},
+            ("PACK-K06",))
+    _pc_arm("PC PACK-K07 fires alone on a kind missing projects_as",
+            {"k": _PC_KIT.replace('projects_as = "Deliverable"\n', "")},
+            ("PACK-K07",))
+
+    # ── The label facet ──────────────────────────────────────────────────────
+    _pc_arm("PC PACK-L01 fires alone on a group the label grammar does not declare",
+            {"k": _PC_KIT.replace('group = "category"', 'group = "colour"')},
+            ("PACK-L01",), taxonomy=_PC_TAXONOMY)
+    _pc_arm("PC PACK-L01 control: a declared group is accepted from the SAME grammar",
+            {"k": _PC_KIT}, (), taxonomy=_PC_TAXONOMY)
+    _pc_arm("PC PACK-L02 fires alone when projects_kind does not resolve",
+            {"k": _PC_KIT.replace('projects_kind = "deliverable"',
+                                  'projects_kind = "no-such-kind"')},
+            ("PACK-L02",))
+    _pc_arm("PC PACK-L02 fires alone when a type:* row omits projects_kind",
+            {"k": _PC_KIT.replace('projects_kind = "deliverable"\n', "")},
+            ("PACK-L02",))
+
+    # ── PACK-L01 is NOT-EVALUATED, not silently passed, without its grammar ──
+    with tempfile.TemporaryDirectory() as tmp:
+        root, pack_root = _pc_root(tmp, {"k": _PC_KIT.replace('group = "category"',
+                                                              'group = "colour"')})
+        rc, out, _err = _pc_cli(root, ("--validate-packs", "--pack-root", pack_root))
+        check("PC PACK-L01 emits SKIP (not a silent pass) when the label grammar is "
+              "unreadable",
+              rc == 0
+              and any(r[1] == "PACK-L01" for r in _pc_rows(out, "SKIP"))
+              and "PACK-L01" not in _pc_ids(out)
+              and "rules_evaluated=%d" % (len(PACK_RULE_IDS) - 1) in out)
+
+    # ── DK-8: SECTION SCOPING. A control's own `applies_to` must not be read as
+    # the pack header's. The mutation is chosen so a line-anchored reader would
+    # MIS-VERDICT: it would see `applies_to = "*"` on a role=archetype pack and
+    # emit PACK-P05. A section-scoped reader emits nothing.
+    _pc_arm("PC section scoping: a [[controls]] applies_to does not reach the pack "
+            "header verdict",
+            {"a": _PC_ARCH + ('\n[[controls]]\n'
+                              'control_id = "arch-review"\n'
+                              'display_name = "Architecture Review"\n'
+                              'applies_to = "*"\n'
+                              '[controls.applies_to]\n'
+                              'levels = ["Work Item"]\n'
+                              'kinds = ["*"]\n')},
+            ())
+
+    # ── NON-VACUITY: fail loud in BOTH directions ────────────────────────────
+    with tempfile.TemporaryDirectory() as tmp:
+        empty_root = os.path.join(tmp, "fixtures")
+        os.makedirs(empty_root, exist_ok=True)
+        rc, out, err = _pc_cli(tmp, ("--validate-packs", "--pack-root", empty_root))
+        check("PC an empty pack root EXITS 3 rather than reporting a clean zero",
+              rc == 3 and "no pack.toml found" in err and "COUNT" not in out)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root, pack_root = _pc_root(tmp, {"k": _PC_KIT.replace(
+            'kind_id = "deliverable"\n', "")})
+        rc, _out, err = _pc_cli(root, ("--validate-packs", "--pack-root", pack_root))
+        check("PC a [[kinds]] table yielding no kind_id is a PARTIAL read, exit 3",
+              rc == 3 and "PARTIAL" in err)
+
+    # ── --resolve: THE TWO-LIMB MATCH, with the discriminating RED arm ───────
+    _PC_NEUTRAL_ARCH = _PC_KIT_NL.replace('role = "kit"', 'role = "archetype"') \
+                                 .replace('kit_class = "work-item"\n', "")
+    with tempfile.TemporaryDirectory() as tmp:
+        root, pack_root = _pc_root(tmp, {"a": _PC_ARCH, "k": _PC_KIT_NL})
+        rc, out, _err = _pc_cli(root, ("--resolve", "Scrum", "--pack-root", pack_root))
+        kinds = set(r[1] for r in _pc_rows(out, "KIND"))
+        limbs = set(r[4] for r in _pc_rows(out, "ELIGIBLE"))
+        check("PC --resolve GREEN: the archetype join and the kit join both "
+              "contribute, and each row names its limb",
+              rc == 0 and kinds == {"story", "deliverable"}
+              and limbs == {"limb=archetype-join", "limb=kit-join"})
+
+    with tempfile.TemporaryDirectory() as tmp:
+        # THE RED ARM, and it is executed rather than hypothetical. The second pack is
+        # byte-for-byte the kit except for its `role`: same `applies_to = "*"`, same
+        # kind. Under a one-limb rule keyed on `applies_to` alone it would be eligible
+        # and `deliverable` would appear. It must not.
+        root, pack_root = _pc_root(tmp, {"a": _PC_ARCH, "k": _PC_NEUTRAL_ARCH})
+        rc, out, _err = _pc_cli(root, ("--resolve", "Scrum", "--pack-root", pack_root))
+        kinds = set(r[1] for r in _pc_rows(out, "KIND"))
+        check("PC --resolve RED: a neutral pack whose role is NOT kit is EXCLUDED — "
+              "the role conjunct does observable work",
+              rc == 0 and kinds == {"story"}
+              and any(r[1] == "t-kit" for r in _pc_rows(out, "EXCLUDED")))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root, pack_root = _pc_root(tmp, {"a": _PC_ARCH, "k": _PC_KIT_NL,
+                                         "b": _PC_BASE})
+        rc, out, _err = _pc_cli(root, ("--resolve", "Kanban",
+                                       "--pack-root", pack_root))
+        kinds = set(r[1] for r in _pc_rows(out, "KIND"))
+        check("PC --resolve SPECIFICITY: the kit joins every archetype, the Scrum "
+              "pack joins only Scrum, and the base pack contributes no kinds",
+              rc == 0 and kinds == {"deliverable"}
+              and any(r[1] == "t-base" for r in _pc_rows(out, "BASE")))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        empty_root = os.path.join(tmp, "fixtures")
+        os.makedirs(empty_root, exist_ok=True)
+        rc, _out, err = _pc_cli(tmp, ("--resolve", "Scrum", "--pack-root", empty_root))
+        check("PC --resolve over an empty pack root EXITS 3, never an empty resolution",
+              rc == 3 and "empty pack root" in err)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root, pack_root = _pc_root(tmp, {"a": _PC_ARCH})
+        rc, _out, err = _pc_cli(root, ("--resolve", "Agile", "--pack-root", pack_root))
+        check("PC --resolve rejects an archetype outside the name set, exit 3",
+              rc == 3 and "not one of the archetype names" in err)
+
+    # ── THE SHIPPED FIXTURES AND THE SHIPPED PACKS, through the shipped CLI ──
+    _pc_repo = os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__)))))
+    _pc_fx = os.path.join(_pc_repo, "core", "deploy", "tests", "fixtures", "packs")
+    _pc_ok = os.path.join(_pc_fx, "conforming-kit", "pack.toml")
+    _pc_bad = os.path.join(_pc_fx, "nonconforming-kit", "pack.toml")
+    # NON-VACUITY FIRST: a deleted or truncated fixture must fail here rather than
+    # let the two arms below pass on nothing.
+    check("PC fixture control: both shipped fixtures exist and are non-empty",
+          os.path.isfile(_pc_ok) and os.path.getsize(_pc_ok) > 0
+          and os.path.isfile(_pc_bad) and os.path.getsize(_pc_bad) > 0)
+
+    rc, out, _err = _pc_cli(_pc_repo, ("--validate-packs", "--pack-root",
+                                       os.path.join(_pc_fx, "conforming-kit")))
+    check("PC ACCEPTS the shipped conforming kit fixture (exit 0, no finding)",
+          rc == 0 and _pc_ids(out) == set() and "packs_read=1" in out)
+
+    rc, out, _err = _pc_cli(_pc_repo, ("--validate-packs", "--pack-root",
+                                       os.path.join(_pc_fx, "nonconforming-kit")))
+    check("PC REJECTS the shipped nonconforming fixture under PACK-K05 and no other "
+          "rule", rc == 1 and _pc_ids(out) == {"PACK-K05"})
+
+    rc, out, _err = _pc_cli(_pc_repo, ("--validate-packs", "--pack-root",
+                                       os.path.join(_pc_repo, "core", "packs")))
+    check("PC the three shipped packs validate clean against the widened grammar",
+          rc == 0 and _pc_ids(out) == set() and "packs_read=3" in out)
+
+    # R-6 GUARD, EXECUTED: the licensed-kind union walks every directory under
+    # core/packs/ with no allowlist and no naming filter, so a fixture placed there
+    # would silently join the live gate's vocabulary. This asserts the fixture home
+    # held — the union is exactly the shipped packs' kinds and carries none of the
+    # fixture kinds.
+    rc, out, _err = _pc_cli(_pc_repo, ("--emit-kinds",))
+    _pc_vocab = set(out.split())
+    check("PC fixture-home guard: the licensed-kind union carries no fixture kind",
+          rc == 0 and _pc_vocab and "deliverable" not in _pc_vocab
+          and "story" in _pc_vocab)
+
+    # ── COVERAGE META-ARM ────────────────────────────────────────────────────
+    # Every rule the reader can emit is exercised by an arm that fails when its rule
+    # is mutated. A rule added without an arm reddens THIS case rather than riding a
+    # green suite — which is the failure mode the whole block is written against.
+    check("PC coverage: every PACK-* rule id is exercised by a mutation arm",
+          _pc_exercised == set(PACK_RULE_IDS))
+
     failed = [n for n, ok in results if not ok]
     for name, ok in results:
         print(("  PASS  " if ok else "  FAIL  ") + name)
@@ -1499,6 +2520,22 @@ def main():
     ap.add_argument("--emit-kinds", action="store_true",
                     help="print the pack-union licensed kind vocabulary (one id per line) and "
                          "exit; exits 3 on an empty OR partially-parsed SSOT")
+    ap.add_argument("--validate-packs", action="store_true",
+                    help="validate a pack root against the work-item type-pack "
+                         "meta-schema; emits one row per finding CARRYING ITS RULE ID, "
+                         "so a rejection is attributable to a rule rather than to an "
+                         "exit code. Exits 3 on a partial read or an empty pack root")
+    ap.add_argument("--resolve", metavar="ARCHETYPE",
+                    help="print the packs eligible for ARCHETYPE and the kind union, "
+                         "each row tagged by role. Eligibility is the two-limb match: "
+                         "applies_to == ARCHETYPE, OR applies_to == '*' AND "
+                         "role == 'kit'. Resolves eligibility and the union only — "
+                         "WHICH kit a deployment selected is a configuration-axis "
+                         "question upstream of this mode")
+    ap.add_argument("--pack-root", default=None,
+                    help="pack tree for --validate-packs / --resolve. Accepts either a "
+                         "directory holding pack.toml directly, or a directory of pack "
+                         "directories. Defaults to <root>/core/packs")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
 
@@ -1511,6 +2548,19 @@ def main():
         # Vocabulary-only mode: filesystem-reading, offline, and it runs BEFORE the
         # H1/H2 legs so a consumer that needs only the kind set pays for nothing else.
         return emit_kinds(root)
+
+    # The two pack-grammar modes are SEPARATE argv branches sharing no mutable state
+    # with the H1/H2/H3 legs below, and they return before those legs run. That
+    # isolation is deliberate and is the mitigation for extending this tool rather
+    # than forking a third reader of the same corpus: `deploy.sh` Checks 22 and 55
+    # call the default path, and a defect in either mode below cannot reach it. The
+    # self-test's existing H1/H2/H3 and --emit-kinds arms are the regression guard on
+    # that claim.
+    pack_root = args.pack_root or os.path.join(root, "core", "packs")
+    if args.validate_packs:
+        return validate_packs(root, pack_root)
+    if args.resolve:
+        return resolve_archetype(root, pack_root, args.resolve)
 
     out = []
 
