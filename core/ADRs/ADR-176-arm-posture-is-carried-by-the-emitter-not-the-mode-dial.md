@@ -21,7 +21,7 @@ source_observations:
 
 **Accepted.** Authored at Engineering for the `label-and-reference-integrity` release.
 
-**Numbering provenance.** Held **ADR-176** branch-local. The allocator returns the next free number above the mainline anchor and deliberately ignores branch-local claims, so it returned a number two siblings on this same branch had already taken; 172 is the first number free in this tree. If the mainline claims 172 first, `release/tools/renumber-adr.py` renumbers this record at merge, and in-release citations that read "ADR-176" denote it.
+**Numbering provenance.** Held **ADR-172** branch-local. The allocator returns the next free number above the mainline anchor and deliberately ignores branch-local claims, so it returned a number two siblings on this same branch had already taken; 172 is the first number free in this tree. If the mainline claims 172 first, `release/tools/renumber-adr.py` renumbers this record at merge, and in-release citations that read "ADR-172" denote it.
 
 **Numbering provenance — `172 → 176`.** Held **ADR-172** branch-local; renumbered to **ADR-176** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 172. In-release citations that read "ADR-172" denote this record.
 

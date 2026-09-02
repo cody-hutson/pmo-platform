@@ -21,7 +21,7 @@ source_observations:
 
 **Accepted.** Authored at Engineering for the `label-and-reference-integrity` release.
 
-**Numbering provenance.** Held **ADR-174** branch-local, allocated as the next free number across both ADR directories at authoring time. If the mainline claims 170 first, `release/tools/renumber-adr.py` renumbers this record at merge and in-release citations that read "ADR-174" denote it.
+**Numbering provenance.** Held **ADR-170** branch-local, allocated as the next free number across both ADR directories at authoring time. If the mainline claims 170 first, `release/tools/renumber-adr.py` renumbers this record at merge and in-release citations that read "ADR-170" denote it.
 
 **Numbering provenance — `170 → 174`.** Held **ADR-170** branch-local; renumbered to **ADR-174** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 170. In-release citations that read "ADR-170" denote this record.
 
