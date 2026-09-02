@@ -71,7 +71,7 @@ Three candidate homes were weighed and **all three were rejected**, each on a di
 
 **Positive.**
 
-- **No grammar change, so no consumer rework.** The decision edits no file with live pack consumers. A deployment with no `portfolio_framework` set resolves byte-identically to today — a property that holds *by construction*, not by test.
+- **No grammar change, so no consumer rework.** The decision edits no file with live pack consumers. A deployment with no `portfolio_framework` set resolves byte-identically to today — a property that holds *by construction*, not by test, **given the selector's `opt-in` delivery class** (see Reversibility, which states what that class buys and what would break without it).
 - **Linear scaling.** A fourth framework adds one directory and zero edits to the registry root, the pack grammar, or any consumer.
 - **The neutrality invariant is preserved.** No single framework is privileged at the unselected registry root; selection is expressed structurally, by the key in the path.
 - **The orthogonality is preserved and made explicit.** Portfolio framework and delivery approach compose; neither absorbs the other, and the additive sibling section says so at the spec surface.
@@ -86,6 +86,8 @@ Three candidate homes were weighed and **all three were rejected**, each on a di
 ## Reversibility
 
 **CHEAP / Confidence HIGH pre-consumption.** The decision is a net-new subtree plus an additive spec section plus an additive selector — every element is `git revert`-complete, no existing file changes meaning, and no data migration exists to unwind. A deployment that never sets the selector cannot observe the change at all.
+
+**That last property is contingent on the selector's delivery class, and the contingency is stated rather than assumed.** It holds because `[methodology].portfolio_framework` is declared **`delivery: "opt-in"`** in `core/config/operator-toml-schema.json`. Per the declaration's own convention entry, an `opt-in` key is documented by the template, **never written by the generator, and never touched by the reconciler** — so a deployment that does not select a framework has no such key in its live `operator.toml` at all, and its resolution input set is unchanged rather than merely unchanged-in-effect. Under `delivery: "delivered"` the same sentence would be **false**: the generator derives its emit from the declaration, so `portfolio_framework = ""` would be written into every operator's live config at the next reconcile and the live-instance coverage check's population would grow by one for every install. The precedent for a key-level `opt-in` inside a `delivered` section is the eight `[paths].operator_instance_*` keys. **If a later release promotes this key to `delivered`, this Reversibility claim must be re-derived, not carried forward.**
 
 **Crosses to MODERATE** once a consumer skill declares a runtime read-path against the framework subtree, or once the subtree is registered in the template propagation map — at that point the directory pattern is a contract and undo means unwinding the consumer alongside it. Neither has happened in this release, deliberately: registration follows the first consumer with a runtime read-path, and none exists yet.
 
