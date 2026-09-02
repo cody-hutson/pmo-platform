@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.47] - 2026-09-02
+
+Decision records can now say they were only partly replaced, and one stage now owns marking a decision approved.
+
+[Full notes](release/releases/notes/v4.47_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.47)
+
 ## [v4.46] - 2026-09-02
 
 Portfolio governance frameworks now have a home and a setting to select one, and a release-plan check stops silently skipping files.
