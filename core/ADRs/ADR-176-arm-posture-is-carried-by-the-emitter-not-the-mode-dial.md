@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-172 — An arm's escalation posture is carried by its emitter, not by the check's mode dial"
+title: "ADR-176 — An arm's escalation posture is carried by its emitter, not by the check's mode dial"
 status: Accepted
 date: 2026-09-02
 release: label-and-reference-integrity
@@ -15,13 +15,15 @@ source_observations:
   - "This check's own posture had already been ratified as terminally advisory on architectural grounds — its verdict is not deterministic for a fixed tree, because it reads live state outside the repository. An arm that could escalate would contradict a ratification the corpus already carries."
 ---
 
-# ADR-172 — An arm's escalation posture is carried by its emitter, not by the check's mode dial
+# ADR-176 — An arm's escalation posture is carried by its emitter, not by the check's mode dial
 
 ## Status
 
 **Accepted.** Authored at Engineering for the `label-and-reference-integrity` release.
 
-**Numbering provenance.** Held **ADR-172** branch-local. The allocator returns the next free number above the mainline anchor and deliberately ignores branch-local claims, so it returned a number two siblings on this same branch had already taken; 172 is the first number free in this tree. If the mainline claims 172 first, `release/tools/renumber-adr.py` renumbers this record at merge, and in-release citations that read "ADR-172" denote it.
+**Numbering provenance.** Held **ADR-176** branch-local. The allocator returns the next free number above the mainline anchor and deliberately ignores branch-local claims, so it returned a number two siblings on this same branch had already taken; 172 is the first number free in this tree. If the mainline claims 172 first, `release/tools/renumber-adr.py` renumbers this record at merge, and in-release citations that read "ADR-176" denote it.
+
+**Numbering provenance — `172 → 176`.** Held **ADR-172** branch-local; renumbered to **ADR-176** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 172. In-release citations that read "ADR-172" denote this record.
 
 ## Context
 
