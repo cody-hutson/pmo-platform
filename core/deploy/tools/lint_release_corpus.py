@@ -1250,12 +1250,31 @@ def _fm_for_identity(text: str) -> dict:
     check_schema_validity() / check_type_coherence(), and widening it would newly
     expose files to those semantics in a file whose ownership is an open
     decision. This reader is private, additive, and used by one caller.
+
+    MULTI-LINE COMMENTS (#6258). The first implementation skipped lines that
+    *start with* `<!--`, which consumes a comment's OPENER but not its
+    continuation lines. A three-line marker comment therefore stopped the scan on
+    its second line, handed parse_frontmatter() text whose line 1 was mid-comment
+    prose, and returned {} — so the plan's whole frontmatter, `status:` included,
+    was invisible. Measured on the live corpus: one plan
+    (declarations-have-a-firing-surface) whose ledger row reads VERIFIED while its
+    plan reads ACTIVE — the exact terminal-coherence finding this reader exists to
+    make reachable, silently unevaluated. It joined its ledger row fine; only the
+    read failed.
+
+    So the scan consumes COMPLETE comments, keyed on the `-->` terminator rather
+    than on per-line prefixes. An UNTERMINATED comment breaks out and lets
+    parse_frontmatter() return None: unreadable is the honest answer there, and
+    guessing a fence position past an unclosed comment would be the same
+    read-something-plausible failure in a new shape.
     """
-    lines = text.splitlines()
-    i = 0
-    while i < len(lines) and (not lines[i].strip() or lines[i].lstrip().startswith("<!--")):
-        i += 1
-    return parse_frontmatter("\n".join(lines[i:])) or {}
+    s = text.lstrip()
+    while s.startswith("<!--"):
+        end = s.find("-->")
+        if end == -1:
+            break
+        s = s[end + len("-->"):].lstrip()
+    return parse_frontmatter(s) or {}
 
 
 def resolve_plan_identity(text: str, stem_slug: str, rows: list[dict]) -> tuple[dict | None, bool]:
@@ -2022,6 +2041,8 @@ def _self_test() -> int:
             ("v9.53", "widget-k-bogus", "VERIFIED"),
             ("v9.54", "widget-k-nofield", "VERIFIED"),
             ("v9.55", "widget-k-marker", "VERIFIED"),
+            ("v9.56", "widget-k-multiline", "VERIFIED"),
+            ("v9.57", "widget-k-unclosed", "VERIFIED"),
         ])
         k_ok = _write_status_plan(kp, "v9/v9.50-widget-k-closed_RELEASE_PLAN.md",
                                   "widget-k-closed", "CLOSED")
@@ -2036,11 +2057,30 @@ def _self_test() -> int:
         k_mark = _write_status_plan(kp, "v9/v9.55-widget-k-marker_RELEASE_PLAN.md",
                                     "widget-k-marker", "ACTIVE",
                                     lead="<!-- reference-durability: allow-link -->\n")
+        # The MULTI-LINE marker lead (#6258). The prior reader skipped lines that
+        # START with `<!--`, so it consumed this comment's opener and then halted on
+        # its continuation line — handing parse_frontmatter() mid-comment prose and
+        # returning {}. The live corpus carries exactly this shape on one plan whose
+        # ledger row reads VERIFIED while its plan reads ACTIVE, so the finding this
+        # scenario exists to raise was silently unevaluated on it.
+        k_multi = _write_status_plan(kp, "v9/v9.56-widget-k-multiline_RELEASE_PLAN.md",
+                                     "widget-k-multiline", "ACTIVE",
+                                     lead="<!-- reference-durability: allow-link -->\n"
+                                          "<!-- a marker comment that wraps onto\n"
+                                          "     a second line and then onto\n"
+                                          "     a third before it closes -->\n")
+        # An UNTERMINATED comment must stay unreadable rather than resolving to a
+        # guessed fence position: reading something plausible past an unclosed
+        # comment is the same failure in a new shape.
+        k_unclosed = _write_status_plan(kp, "v9/v9.57-widget-k-unclosed_RELEASE_PLAN.md",
+                                        "widget-k-unclosed", "ACTIVE",
+                                        lead="<!-- this comment never closes\n")
         fk = check_plan_identity(plans_dir=kp, log_path=klog,
                                  reversions_path=root / "none.md")
         r_ok, r_bad = _rel(k_ok), _rel(k_bad)
         r_flight, r_enum = _rel(k_flight), _rel(k_enum)
         r_none, r_mark = _rel(k_none), _rel(k_mark)
+        r_multi, r_unclosed = _rel(k_multi), _rel(k_unclosed)
         k_denom = next((f for f in fk if "PLAN-STATUS-DENOM" in f), "")
 
         arm("S-23 anti-vacuity — the marker-lead fixture really IS invisible to a strict reader",
@@ -2055,6 +2095,40 @@ def _self_test() -> int:
             fires(fk, "PLAN-STATUS-NOT-TERMINAL", r_mark) == 1,
             "the regression lock for the comment-tolerant reader: a strict reader scores 0 here "
             "while every other arm in this scenario stays green")
+
+        # ── The MULTI-LINE comment lead (#6258) ─────────────────────────────
+        # S-24b above seeds a SINGLE-LINE comment, which the per-line-prefix reader
+        # handled — so it passed on the defective code and the multi-line case went
+        # untested. These three arms are its paired completion.
+        def _prechange_fm(text: str) -> dict:
+            """The reader as it stood before #6258 — per-line prefix skipping.
+
+            Inlined rather than described, so S-24e is an executed comparison and
+            not a claim about code that no longer exists.
+            """
+            ls = text.splitlines()
+            i = 0
+            while i < len(ls) and (not ls[i].strip() or ls[i].lstrip().startswith("<!--")):
+                i += 1
+            return parse_frontmatter("\n".join(ls[i:])) or {}
+
+        arm("S-24d2 sensitivity — a VERIFIED release whose plan reads ACTIVE below a "
+            "MULTI-LINE marker comment BLOCKS",
+            fires(fk, "PLAN-STATUS-NOT-TERMINAL", r_multi) == 1,
+            f"exactly one blocking PLAN-STATUS-NOT-TERMINAL naming {r_multi}; this is the live "
+            "corpus shape that let a shipped release carry status: ACTIVE unnoticed")
+        arm("S-24e anti-vacuity — the PRE-CHANGE reader really IS blind to this fixture",
+            _prechange_fm(k_multi.read_text(encoding="utf-8")).get("status") is None
+            and _fm_for_identity(k_multi.read_text(encoding="utf-8")).get("status") == "ACTIVE",
+            "the pre-change per-line reader returns no status while the fixed reader sees "
+            "ACTIVE. Without this arm S-24d2 could pass on a reader that never regressed, "
+            "and the fix would be unfalsifiable")
+        arm("S-24f specificity — an UNTERMINATED comment stays UNREADABLE, it is not guessed",
+            _fm_for_identity(k_unclosed.read_text(encoding="utf-8")) == {}
+            and names(blocking(fk), r_unclosed) == 0,
+            f"{r_unclosed} opens a comment that never closes: the reader declines to locate a "
+            "fence past it and the plan raises no finding, rather than resolving to a plausible "
+            "guess about where the frontmatter starts")
         arm("S-24c specificity — a shipped plan reading CLOSED fires nothing",
             names(blocking(fk), r_ok) == 0,
             f"{r_ok} joins a VERIFIED row and carries the terminal value — no finding")
@@ -2077,10 +2151,14 @@ def _self_test() -> int:
         # S-27 grades the DENOMINATORS. A limb that examined nothing and a limb
         # that found nothing read identically from a finding count alone.
         arm("S-27 denominator — the tally reports the partition the fixture actually produced",
-            "5 of 6 plan file(s) carry a frontmatter status:" in k_denom
-            and "1 read CLOSED" in k_denom,
-            "6 plans walked, 5 carrying the field, 1 terminal — a counter mutated to `+= 0` "
-            "reports 0 beside five live carriers and reddens here")
+            "6 of 8 plan file(s) carry a frontmatter status:" in k_denom
+            and "1 read CLOSED" in k_denom
+            and "5 joined to a ledger row" in k_denom,
+            "8 plans walked, 6 carrying a READABLE field, 1 terminal, 5 joined — a counter "
+            "mutated to `+= 0` reports 0 beside six live carriers and reddens here. The carrier "
+            "count is 6 rather than 8 because k_none declares no status and k_unclosed's is "
+            "unreadable behind an unterminated comment, which is what makes this line a "
+            "partition rather than a headcount")
 
         # ── Scenario H — check_note_content()'s Tier-1 links.plan limb ───────
         #
