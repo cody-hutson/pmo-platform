@@ -13,10 +13,10 @@ source_observations:
   - "The operator-configuration template's adapter table carries four host-adapter selectors, each a scalar with a documented default, and its own header comment names the table the canonical onboarding seam. No scheduler axis exists on it — a measured absence over an enumerated table, not an unsearched one."
   - "core/standards/c2-intake-sweep-path-a.md carries what runs, how it fires and who governs it in one prose section: a cron cadence, a named host scheduler, a delegating entrypoint, and an automation-level clamp. The governance clamp is prose only, so nothing mechanically relates the declared ceiling to the registration — a gate could assert the routine exists but never that it declares a ceiling. The backend is additionally named in that file's frontmatter, at purpose: and consumers:, so a body-only scan reads clean while the file's machine-read contract still binds the host."
   - "core/schemas/ holds contract documents and no appendable instance data — every file there is a contract, none is a row set. core/skills/registry.md is the platform's one existing registry of this shape, and its contract lives separately in core/schemas/, which is the split this decision reuses rather than invents."
-  - "#2437 — parent epic, Automation Registry; frames the registry as a design/architecture/data gate, states the what/how/who decoupling, declares the scheduled-automation library a catalog atop this registry, and explicitly guards against building a universal scheduler abstraction up front."
-  - "#1633 — the Scheduled Automation Library catalog, which this decision makes a view of the registry rather than its owner."
-  - "#1184 — the host-adapter family this decision extends by one axis under its existing seam."
-  - "#322 — the release that shipped the automation-level dial, proving scheduled-autonomous-governed for a single routine; the WHO axis cites that dial and does not change it."
+  - "The parent epic frames the registry as a design/architecture/data gate, states the what/how/who decoupling, declares the scheduled-automation library a catalog atop this registry, and explicitly guards against building a universal scheduler abstraction up front."
+  - "The Scheduled Automation Library catalog, which this decision makes a view of the registry rather than its owner."
+  - "The host-adapter family this decision extends by one axis under its existing seam."
+  - "The prior release that shipped the automation-level dial, proving scheduled-autonomous-governed for a single routine; the WHO axis cites that dial and does not change it."
 supersedes: none
 ---
 
@@ -143,3 +143,15 @@ The strongest surviving alternative: the registry carries WHAT *and* WHO togethe
 | **ADR-062** | Composes-with — substrate versus canonical surface; why the inherited affected-files boilerplate on the source work items is left intact as historical record rather than amended |
 | **ADR-117** | Composes-with — ADR index as a derived surface with a scoped conformance claim; the authority behind the unenforced-registration consequence above |
 | **ADR-005** | Composes-with — append-pattern-aware contention scoring; why the concurrent thematic-entry appends to the core ADR README are informational rather than blocking |
+
+## References
+
+Provenance for the observations above. Each entry is the work item the
+observation was drawn from, with the noun phrase naming what it contributes.
+
+| Ref | Contribution |
+|---|---|
+| #2437 | Parent epic, Automation Registry — frames the registry as a design, architecture and data gate, states the what/how/who decoupling, and declares the Scheduled Automation Library a downstream view. |
+| #1633 | The Scheduled Automation Library catalog, which this decision makes a view of the registry rather than its owner. |
+| #1184 | The host-adapter family this decision extends by one axis under its existing seam. |
+| #322 | The release that shipped the automation-level dial, proving scheduled-autonomous-governed for a single routine. The WHO axis cites that dial and does not change it. |
