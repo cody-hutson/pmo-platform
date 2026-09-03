@@ -151,7 +151,7 @@ operator_instance_evals_results_path = ""
 operator_instance_finops_store_path = ""
 
 [adapters]
-# Host-adapter selectors — the four external surfaces the platform integrates
+# Host-adapter selectors — the five external surfaces the platform integrates
 # with (ADR-017 §S2 names operator.toml as the home for "identity, paths,
 # methodology, adapters"). This is the canonical onboarding seam: onboarding-time
 # operator choices about which host surfaces to use are written here.
@@ -191,6 +191,19 @@ kb = "markdown"
 # Valid: "claude-code" (Claude Code CLI/Desktop) — other runtimes gated on their tickets.
 # Default: "claude-code"
 ai_tool = "claude-code"
+
+# Scheduler adapter — the surface that fires a registered routine on its declared
+# cadence. Routines whose entrypoint is a repository workflow are fired by the
+# repository host and do NOT consult this selector; this key selects the backend
+# for SESSION-FIRED routines (entrypoint is a tracked spec an agent session runs).
+# v1 ships NO scheduler by default: registration is an operator step the installer
+# cannot perform, so the honest default is "none", under which every registered
+# routine stays invocable manually and says so per routine rather than falling
+# silent (see core/standards/scheduler-adapter-routine-firing.md §4, SD-1..SD-4).
+# Valid: "agent-runtime" (the scheduled-task surface of the runtime named by
+#        [adapters].ai_tool) | "none" (no scheduler on this install — manual degrade)
+# Default: "none"
+scheduler = "none"
 
 # --- Multi-destination work-tracker config (#384) -------------------------------
 # The [trackers.<id>] NAMED SUBTABLES declare N segregated work-tracker

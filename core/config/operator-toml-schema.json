@@ -284,7 +284,7 @@
     {
       "name": "adapters",
       "delivery": "delivered",
-      "description": "Host-adapter selectors — the four external surfaces the platform integrates with. ADR-022 §1/§4 names this the #703 onboarding seam and gives each selector a v1 default.",
+      "description": "Host-adapter selectors — the five external surfaces the platform integrates with. ADR-022 §1/§4 names this the #703 onboarding seam and gives each selector a v1 default.",
       "keys": [
         {
           "key": "repo_host",
@@ -323,6 +323,19 @@
           "required": false,
           "description": "AI-tool adapter — the agent runtime the platform targets.",
           "since": "4.0"
+        },
+        {
+          "key": "scheduler",
+          "type": "string",
+          "source": "operator-or-default",
+          "default": "none",
+          "enum": [
+            "agent-runtime",
+            "none"
+          ],
+          "required": false,
+          "description": "Scheduler adapter — the backend that fires a SESSION-FIRED registered routine on its declared cadence. Repo-fired routines (entrypoint is a repository workflow) are fired by the repository host and do not consult it. Defaults to \"none\" deliberately: registration is an operator step the installer cannot perform, so a working-backend default would assert a backend the install documentation states is not registered. Under \"none\" every routine stays invocable manually and the adapter says so per routine — see core/standards/scheduler-adapter-routine-firing.md §4.",
+          "since": "4.51"
         }
       ]
     },

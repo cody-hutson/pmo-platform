@@ -170,7 +170,7 @@ trigger taxonomy:
 - (d) Existing PMO skill changes its Anthropic sourcing relationship (adopts, drops, or alters an `extends` / `pass-through` runtime coupling) — re-observe the affected row: update `anthropic_overlap_status` + `anthropic_skill_ref` + `overlap_rationale` with the blast-radius × commodity-stability justification per [ADR-023](../ADRs/ADR-023-skill-sourcing-coupling-posture.md). ADR-023 holds the rule; this trigger cites it, it does not restate it.
 
 See [framework §3.5](../../release/references/protocols/platform-health-audit-framework.md) for the 5-trigger event
-taxonomy (T1-T5) consumed by a future `mcp__scheduled-tasks` registration.
+taxonomy (T1-T5) consumed by the registered `platform-health-drift-watch` routine.
 
 ---
 

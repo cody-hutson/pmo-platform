@@ -1,0 +1,201 @@
+name: Automation registry check
+
+# gate-efficacy: posture=advisory  enforcement=ci-enforce (no warn-mode — findings turn the check red)  always-reports=yes
+#   invariant: every automation the corpus declares (frontmatter or workflow-comment
+#              automation_id) has a core/automations/registry.md routine-spec row;
+#              symmetrically every row resolves to a declaring entrypoint; every row
+#              is complete against the field set PARSED from
+#              core/schemas/automation-registry-schema.md; and every scheduled
+#              workflow is registered.
+#   falsification: delete a live routine's registry row -> the coverage predicate
+#                  fires A-01 -> this gate turns RED (exit 1), naming that id and
+#                  its declaring path:line. Restore the row -> green.
+# (Posture realized per core/standards/gate-efficacy-standard.md Requirements (b) + (b').)
+#
+# CI LEG of deploy.sh Check 76. Per gate-efficacy-standard Requirement (b'), a
+# deploy-time check runs AFTER merge on the operator's machine and cannot block a
+# ship — so it cannot satisfy "caught before it ships". This workflow is that
+# surface; Check 76 is its deploy-time companion, and both invoke the SAME two
+# predicate scripts over the same scan surfaces. No policy is re-encoded in YAML.
+#
+# TWO PREDICATES, ONE ADMISSION QUESTION. Conformance judges the rows that are
+# PRESENT; coverage judges which rows EXIST AT ALL. Either alone is green in a
+# state the other exists to catch — conformance is green on an EMPTY registry,
+# which is exactly the failure the registry was created to prevent.
+#
+# NO `paths:` FILTER, and that is rule-derived rather than cautious. The verdict
+# inputs are every frontmatter-bearing document in the tree, plus the registry,
+# plus the schema, plus every workflow — effectively the whole corpus. The
+# Verdict-Input Closure gap is therefore open-ended, which the standard's
+# disposition table resolves to CONVERT: drop the filter, adopt
+# always-reports=yes, and carry no skip-semantics. Registry coverage is a
+# whole-population property, not a changed-files one.
+#
+# ADVISORY, NOT REQUIRED, AND THE DISTINCTION IS MECHANICAL. `required` means the
+# job name is registered in branch-protection required_status_checks.contexts —
+# repository settings, which no pull request can modify. Declaring `required`
+# before that registration exists would be a claim the tree cannot back. It means
+# NO PRE-MERGE BLOCKING CHECK; it does not mean unimportant. Promotion is one
+# operator-side `gh api` step after a clean window.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  automation-registry:
+    name: Automation registry-admission
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The predicates resolve tracked-ness with `git ls-files`, so the checkout
+      # must be a real repository. actions/checkout provides one; this step fails
+      # loud if that ever stops being true, rather than letting the roster scan
+      # report an empty population.
+      - name: Verify the checkout exposes a tracked-file population
+        run: |
+          set -euo pipefail
+          git rev-parse --git-dir > /dev/null
+          COUNT=$(git ls-files -- '*.md' | wc -l | tr -d ' ')
+          echo "tracked markdown files: $COUNT"
+          if [ "$COUNT" -lt 1 ]; then
+            echo "::error::git ls-files returned no markdown files; the roster scan would read empty and the gate would assert nothing."
+            exit 1
+          fi
+
+      - name: Detector precision probe — conformance predicate self-test
+        run: |
+          set -euo pipefail
+          # An enforce-mode scan cannot see a detector that is itself broken. This
+          # predicate shipped with a word-splitting defect that made it reject
+          # every well-formed cron row while still printing a SUMMARY line — an
+          # always-fires gate whose greens meant nothing. Its control arm (a
+          # well-formed row must return ZERO findings) is what catches that, and
+          # it runs here as a HARD gate before any live scan.
+          bash core/deploy/tools/check-automation-registry.sh --self-test
+
+      - name: Detector precision probe — coverage predicate self-test
+        run: |
+          set -euo pipefail
+          # Every arm mutates a copy of the LIVE population and the suite requires
+          # that population to be non-empty before any arm runs, so a probe that
+          # has stopped discriminating fails the job instead of reporting a clean
+          # it can no longer tell from a real one.
+          bash core/deploy/tools/check-automation-coverage.sh --self-test
+
+      # INT-4. The scheduler adapter resolves a routine by its registry id; the
+      # whole "an author who omits the marker ships a routine that cannot fire"
+      # bound rests on that. This step asserts the resolver still discriminates,
+      # so the two halves cannot drift apart silently.
+      #
+      # The resolver is a SEPARATE deliverable that lands later in this same
+      # release. Until it does, this step reports its absence LOUDLY and does not
+      # fail — the alternative would red-wall every PR for a file the release has
+      # not reached yet. It is NOT a silent pass: the absence is printed and
+      # written to the job summary on every run, and the moment the file exists
+      # the self-test becomes a hard gate with no further edit to this workflow.
+      - name: Scheduler-adapter binding self-test
+        run: |
+          set -uo pipefail
+          RESOLVER="core/deploy/tools/resolve-automation-binding.sh"
+          if [ ! -f "$RESOLVER" ]; then
+            {
+              echo "### :hourglass: Scheduler-adapter binding self-test — NOT YET WIRED"
+              echo ""
+              echo "\`$RESOLVER\` does not exist in this tree, so this step asserted **nothing** on this run."
+              echo "It is a separate deliverable of this same release. This step becomes a hard gate"
+              echo "automatically the moment that file lands — no edit to this workflow is required."
+              echo ""
+              echo "Recorded rather than skipped silently, so a green run of this job is never mistaken"
+              echo "for evidence that the registry-to-adapter binding was checked."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::warning::scheduler-adapter binding self-test did not run: $RESOLVER is absent (expected until it lands in this release)"
+            exit 0
+          fi
+          set -e
+          bash "$RESOLVER" --self-test
+
+      - name: Scan the registry for conformance and coverage findings
+        run: |
+          set -uo pipefail
+
+          # ── leg 1: conformance — are the rows that are PRESENT well-formed? ──
+          set +e
+          CONF_OUT=$(bash core/deploy/tools/check-automation-registry.sh 2>&1)
+          CONF_EXIT=$?
+          set -e
+          printf '%s\n' "$CONF_OUT"
+
+          # ── leg 2: coverage — do the right rows EXIST AT ALL? ────────────────
+          set +e
+          COV_OUT=$(bash core/deploy/tools/check-automation-coverage.sh 2>&1)
+          COV_EXIT=$?
+          set -e
+          printf '%s\n' "$COV_OUT"
+
+          # A scan-surface error is ALWAYS hard-fail regardless of posture: a
+          # relocated, reformatted or deleted scan surface means the gate ran
+          # against nothing and must not read green.
+          if [ "$CONF_EXIT" -eq 3 ] || [ "$COV_EXIT" -eq 3 ]; then
+            {
+              echo "## :x: Automation registry — scan-surface error"
+              echo ""
+              echo "A scan surface is absent, was reformatted, or parsed to zero. This is fail-loud:"
+              echo "the gate ran against nothing, which must never be reported as a clean registry."
+              echo ""
+              echo '```'
+              printf '%s\n' "$CONF_OUT"
+              printf '%s\n' "$COV_OUT"
+              echo '```'
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 3
+          fi
+
+          if [ "$CONF_EXIT" -eq 0 ] && [ "$COV_EXIT" -eq 0 ]; then
+            {
+              echo "## :white_check_mark: Automation registry-admission — clean"
+              echo ""
+              echo "Every declared automation has a conforming routine-spec row, every row"
+              echo "round-trips to an entrypoint that declares it, and every scheduled workflow"
+              echo "is registered."
+              echo ""
+              echo '```'
+              printf '%s\n' "$CONF_OUT" | grep '^SUMMARY:' || true
+              printf '%s\n' "$COV_OUT" | grep '^SUMMARY:' || true
+              echo '```'
+              echo ""
+              echo "The SUMMARY counts are the anti-vacuity read-out: a run reporting **0 declared"
+              echo "automations / 0 rows** would be a vacuous pass, not a clean corpus. The"
+              echo "predicates hard-fail on that rather than printing it, but the counts are"
+              echo "surfaced here so a reviewer can see the population was real."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## :x: Automation registry-admission — findings"
+            echo ""
+            echo "Each \`FAIL:\` line below names the offending automation or row by id, and the"
+            echo "A-01 line additionally names the declaring \`path:line\`."
+            echo ""
+            echo '```'
+            printf '%s\n' "$CONF_OUT"
+            printf '%s\n' "$COV_OUT"
+            echo '```'
+            echo "### Remediation"
+            echo ""
+            echo "- **\`A-01 unregistered-automation\`:** the document declares \`automation_id\` but the registry has no row for it. Add the routine-spec row to \`core/automations/registry.md\`, or drop the declaration."
+            echo "- **\`A-02 orphan-row\`:** the registry carries a row whose routine does not exist. Add \`automation_id: [<id>]\` to the entrypoint, or remove the row."
+            echo "- **\`A-03 entrypoint-mismatch\` / \`entrypoint-undeclared\`:** the row points at a document that declares a different id, or none. Fix the entrypoint or the id — a row that names the wrong spec is the failure a presence-only check reads as green."
+            echo "- **\`A-04 unregistered-schedule\`:** a workflow runs on a cadence with no registry row. It is a governed automation: add its row and a \`# automation_id:\` comment. There is no exclusion allowlist, deliberately."
+            echo "- **\`R-01\`..\`R-13\`:** a row is present but malformed. The failing field and its declared value space are named on the line; the contract is \`core/schemas/automation-registry-schema.md\`."
+            echo ""
+            echo "This gate is the PR-time leg of \`deploy.sh\` Check 76. Both invoke the same two predicates over the same scan surfaces. See \`core/standards/gate-efficacy-standard.md\`."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
