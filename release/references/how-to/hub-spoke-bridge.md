@@ -1265,25 +1265,39 @@ flowchart TD
         g0 -->|No| e0([Inform operator: stage skipped, no spoke prompt])
         g0 -->|Yes| r1[Read the stamped Editability class]
         r1 --> g1{Which value?}
-        g1 -->|absent or no plan row| rr[Run the currency resolution once, then re-read]
-        rr --> r1
-        g1 -->|unconstrained| g2{Decision moved the write set with no refresh?}
-        g2 -->|Yes| rr
+
+        g1 -->|unconstrained| g2{Decision moved the write set with no recorded refresh?}
         g2 -->|No| p1[Generate the brief]
-        g1 -->|sanctioned-session-required| p2[Generate the brief with the session obligation]
-        g1 -->|plan predates A3.5| p3[Generate the brief AND surface the unresolved stamp]
+        g2 -->|Yes| rc[Procedure 4 Editability currency — run that dimension resolution, then re-read]
+        rc --> r1
+
+        g1 -->|sanctioned-session-required| p2[Generate the brief carrying the session obligation]
+
+        g1 -->|unresolved — plan predates Phase A3.5| p3[Generate the brief AND surface the stamp as a Decision Briefing item 2 finding]
+
+        g1 -->|unresolved — no plan row| rn[Procedure 1 Late adds — re-run § 5.9 over the write set, append the plan row, refresh the stamp. ONE attempt]
+        rn --> gn{Resolution completed?}
+        gn -->|Yes| r1
+        gn -->|No| d2[/Decision Briefing item 1: no brief on this card as stamped/]
+
+        g1 -->|line absent or value not listed| ra[Procedure 1 Resolving-note — resolve the stamp. ONE attempt]
+        ra --> ga{Resolution completed?}
+        ga -->|Yes| r1
+        ga -->|No| p4[Generate the brief AND surface as a Decision Briefing item 2 finding]
+
         g1 -->|tier-0-floored| d1[/Decision Briefing item 1: operator-executed, split, or deferred/]
     end
     subgraph OP[Operator]
         d1 --> m1[[Render the disposition]]
+        d2 --> m1
     end
     m1 --> e1([No spoke prompt exists until a disposition is rendered])
     classDef automated fill:#D4EDDA,stroke:#28A745,color:#155724;
     classDef human fill:#D1ECF1,stroke:#17A2B8,color:#0C5460;
     classDef gate fill:#FFF3CD,stroke:#FFC107,color:#856404;
-    class r1,rr,p1,p2,p3 automated;
+    class r1,rc,rn,ra,p1,p2,p3,p4 automated;
     class m1 human;
-    class g0,g1,g2 gate;
+    class g0,g1,g2,gn,ga gate;
 ```
 
 **Cutover discipline:** Applies to all releases going forward.
