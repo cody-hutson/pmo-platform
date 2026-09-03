@@ -116,7 +116,7 @@ Per the declared-vs-delivered authoring contract: intent markers normalize to `a
 
 ```
 # ── #5858 — founding ADR (Wave 0) ──
-core/ADRs/ADR-182-automation-registry-is-the-gate-what-how-who-decoupled.md   add
+core/ADRs/ADR-184-automation-registry-is-the-gate-what-how-who-decoupled.md   add
 core/ADRs/README.md                                                          edit
 release/releases/plans/automation-registry-as-gate_RELEASE_PLAN.md            add
 
@@ -398,7 +398,7 @@ Populated per Engineering slice as each lands. Each entry records the slice, the
 
 | Artifact | Declared canonical path | Present on branch | Accepted |
 |---|---|---|---|
-| Founding ADR (registry-as-gate + the what/how/who decoupling) | `core/ADRs/ADR-182-automation-registry-is-the-gate-what-how-who-decoupled.md` | Yes | Yes |
+| Founding ADR (registry-as-gate + the what/how/who decoupling) | `core/ADRs/ADR-184-automation-registry-is-the-gate-what-how-who-decoupled.md` | Yes | Yes |
 | Curated thematic registration | `core/ADRs/README.md` § Automation-governance ADRs | Yes | Yes — **human-graded**, no machine gate exists |
 | Release plan (this file) | `release/releases/plans/automation-registry-as-gate_RELEASE_PLAN.md` | Yes | Yes |
 

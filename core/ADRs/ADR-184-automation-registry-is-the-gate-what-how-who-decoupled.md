@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-182 — The automation registry is the gate, and it decouples what runs from how it fires from who governs"
+title: "ADR-184 — The automation registry is the gate, and it decouples what runs from how it fires from who governs"
 status: Accepted (operator-ratified at the automation-registry-as-gate Stage 5 Collective Review scope-lock 2026-09-02)
 date: 2026-09-03
 release: automation-registry-as-gate
@@ -20,7 +20,7 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-182 — The automation registry is the gate, and it decouples what runs from how it fires from who governs
+# ADR-184 — The automation registry is the gate, and it decouples what runs from how it fires from who governs
 
 ## Status
 
@@ -29,6 +29,8 @@ supersedes: none
 **Numbering provenance.** This record was authored at the next-free number computed from the mainline anchor at Engineering Commit 0. An ADR number is *allocated at authorship but claimed at merge*, so a record on a live branch is exposed to every sibling that merges ahead of it; the detector's own branch-claim reading is explicitly non-binding, and pre-reserving a higher slot is no remedy because the contiguity gate fails a gap as readily as a duplicate. Should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note here per hop.
 
 **Numbering provenance — `181 → 182`.** Held **ADR-181** branch-local; renumbered to **ADR-182** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 181. In-release citations that read "ADR-181" denote this record.
+
+**Numbering provenance — `182 → 184`.** Held **ADR-182** branch-local; renumbered to **ADR-184** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 182. In-release citations that read "ADR-182" denote this record.
 
 ## Context
 
