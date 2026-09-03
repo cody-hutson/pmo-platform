@@ -2,6 +2,7 @@
 title: Decision-Health Audit Cadence
 purpose: When-to-re-run cadence policy for the decision-health audit axis (event-bound triggers + 90-day fallback)
 type: protocol
+automation_id: [decision-audit-sentinel]
 related: decision-audit-mode-spec.md (how-to-run machinery — core/skills/pmo-qa-auditor/references/), decision-audit-dimension-rubric.md (content SSOT — core/skills/pmo-qa-auditor/references/), architecture-conformance-cadence.md (sibling as-built architecture axis), process-fitness-cadence.md (sibling process-fitness axis), structural-audit-cadence.md (sibling structural axis), platform-health-audit-framework.md (sibling Anthropic Base-vs-Build axis — §2), analysis-workspace-standard.md (analysis-folder output convention — core/standards/)
 effective-date: 2026-07-27
 scope: The decision-health audit axis only — how the release hub and its spokes decide, scored against the hub's decision invariants and the platform's named decision failure modes. Not the as-built architecture axis (see architecture-conformance-cadence.md), not the process-fitness axis (see process-fitness-cadence.md), not the structural axis (see structural-audit-cadence.md), and not the Anthropic Base-vs-Build axis (see platform-health-audit-framework.md §2).

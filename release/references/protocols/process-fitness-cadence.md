@@ -2,6 +2,7 @@
 title: Release Process-Fitness Audit Cadence
 purpose: When-to-re-run cadence policy for the release process-fitness audit axis (event-bound triggers + 90-day fallback)
 type: protocol
+automation_id: [process-fitness-sentinel]
 related: AUDIT_FRAMEWORK.md (how-to-run methodology — core/standards/), structural-audit-cadence.md (sibling structural axis), platform-health-audit-framework.md (sibling Anthropic Base-vs-Build axis — §2), architecture-conformance-cadence.md (sibling architecture-conformance axis), analysis-workspace-standard.md (analysis-folder output convention — core/standards/)
 effective-date: 2026-06-29
 scope: The release process-fitness audit axis only — PMBOK 7 / DORA / Stage-Gate / ITIL 4 / Lean / CD frame conformance of the release pipeline. Not the structural axis (see structural-audit-cadence.md) and not the Anthropic Base-vs-Build axis (see platform-health-audit-framework.md §2).
@@ -91,14 +92,14 @@ The roster is the **continuity contract**: a run measures the same frames the pr
 The cadence runs as a **HYBRID** of manual event-triggers and an automated staleness sentinel — the same split the Anthropic axis runs (`platform-health-quarterly-audit` + `platform-health-drift-watch`, `platform-health-audit-framework.md` §2):
 
 - **Manual (event-driven).** The §2 triggers (T1–T3) fire **manually at their semantic moment** — the operator or spoke who lands a pipeline change, closes a retro with a Tier-2+ concern, or adds a methodology archetype invokes the audit. The audit executor is `pmo-qa-auditor` **Mode F** (the how-to-run home); the latest audit folder's `## Deep-Dive Queue` is the dispatch read surface for borderline-band deep-dives, and the dispatching actor (the operator/spoke here, or the §3 sentinel's routed signal) writes the queue's `dispatched` column when it dispatches — the audit run itself never does.
-- **Automated (time-driven).** The §3 90-day fallback is an [`mcp__scheduled-tasks`](../../../core/governance/OPERATIONS.md) **staleness sentinel** that checks the age of the latest `analysis/release-process-audit-*` anchor and routes a due-audit signal to an observation draft.
+- **Automated (time-driven).** The §3 90-day fallback is a scheduled **staleness sentinel** that checks the age of the latest `analysis/release-process-audit-*` anchor and routes a due-audit signal to an observation draft. The routine is registered as `process-fitness-sentinel` in [`core/automations/registry.md`](../../../core/automations/registry.md); how it fires resolves at fire time from the operator's `[adapters].scheduler`.
 
 **Inherited conventions** (from the Anthropic-axis precedent — do not unify):
 
 - The sentinel **schedule is evaluated in the user's LOCAL timezone**, while the audit-folder date stamp uses **UTC** (`date -u`). This LOCAL-schedule / UTC-folder split is intentional.
-- The sentinel's completion notification is **per-run** (`notifyOnCompletion`), so a due/overdue result self-routes to an observation issue-draft rather than relying on a conditional ping.
+- The sentinel's completion notification is **per-run**, so a due/overdue result self-routes to an observation issue-draft rather than relying on a conditional ping.
 
-**`[ASSUMPTION – CONFIRM]`** Sentinel **registration** (creating the `mcp__scheduled-tasks` job) is an **operator-instance build step** (Stage 12), not committed corpus — the registration carries an instance-local path and is not portable. This tracked doc states the **policy** (a 90-day staleness sentinel exists and behaves as above); the instance owns the registration.
+**`[ASSUMPTION – CONFIRM]`** Sentinel **registration** (creating the scheduled job) is an **operator-instance build step** (Stage 12), not committed corpus — the registration carries an instance-local path and is not portable. This tracked doc states the **policy** (a 90-day staleness sentinel exists and behaves as above); the instance owns the registration.
 
 ---
 
