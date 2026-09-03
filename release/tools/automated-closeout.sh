@@ -11398,7 +11398,7 @@ PLAN-VERSION-UNKNOWN: release/releases/plans/v2/v2.98_RELEASE_PLAN.md declares v
     echo "FAIL: PS-4 _reported_write_surfaces must NOT filter on an 'inject_*' name prefix — that prefix is a proxy for 'is a writer' and Phase 6.9 is a writer it does not name (#6258)"; failures=$((failures+1))
   fi
   if ! /usr/bin/grep -qF 'PHASE_RESULTS[$_i]}" == "PASS"' <<<"$_ps_body"; then
-    echo "FAIL: PS-4b _reported_write_surfaces must keep the PASS result filter — it is what excludes an N/A detail that names a file it did not write"; failures=$((failures+1))
+    echo "FAIL: PS-4b _reported_write_surfaces must keep the PASS result filter — it is what excludes the four SKIPPED limbs that name a resolved surface in the strict path-only form despite writing nothing (see PS-5)"; failures=$((failures+1))
   fi
   # Independence, extended to the extracted producer: it must not consult the
   # recorder whose omission is the defect.
