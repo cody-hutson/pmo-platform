@@ -1,0 +1,241 @@
+name: Behavioral-regression pass-rate gate
+
+# gate-efficacy: posture=required(warn-mode-initial)  enforcement=branch-protection:"Behavioral-regression pass-rate gate"  always-reports=yes
+#   invariant: the behavioral-regression corpus pass rate is >= [behavioral_regression].pass_rate_floor
+#              at the major-release boundary (a signed v*.00 tag)
+#   falsification: run the corpus against the committed regressed fixture -> pass rate below the
+#              floor -> this gate reports FAIL (warn: summary + exit 0; enforce: red + exit 1);
+#              the baseline fixture -> at floor -> PASS. Both arms execute on every PR.
+#
+# NOT THE RELEASE-CORPUS GATE. `release-corpus-completeness.yml` matches the word
+# "corpus" and asserts something else entirely: release-DOCUMENTATION completeness
+# (a RELEASE_LOG row implies its INDEX row, DIGEST entry and NOTES file). This gate
+# asserts BEHAVIOUR. No identifier surface here carries the token `corpus` — not the
+# filename, not the job id, not the job name, not the sentinel — because the word is
+# saturated in this repo and `release-corpus` is an established compound with its own
+# schema doc, its own lint tool and its own deploy.sh flag. Qualifying the word cannot
+# de-conflict it; not using it can. After this release the two branch-protection
+# contexts read "Pre-merge release-corpus completeness gate" and "Behavioral-regression
+# pass-rate gate", which no reader can conflate.
+#
+# TWO RUNGS, AND THE SEPARATION IS THE WHOLE POINT.
+#
+#   Rung A  on: pull_request (NO paths filter)   ADVISORY. Never blocks. EXERCISE.
+#   Rung B  on: push: tags: ['v*.00']            THE BINDING BOUNDARY.
+#
+# Measured over this repository's whole tag history: 192 tags, 4 major families, and
+# exactly ONE clean major-bump event in 89 days — a 48:1 minor-to-major ratio. A gate
+# bound EXCLUSIVELY to that boundary runs about quarterly and would ship months before
+# its first real exercise, which is the never-FAIL failure arriving through the front
+# door. So where the gate RUNS (every pull request) is deliberately separated from where
+# it BINDS (the major-release tag), and both are legible in the one `on:` block below.
+#
+# The blocking predicate, stated once:
+#     blocks  <=>  sentinel == "enforce"  AND  context == a v*.00 tag  AND  rc != 0
+# The context clause is enforced IN THIS FILE rather than left to branch-protection
+# membership. That matters: branch protection is repository settings, out of tree, and
+# no committed file states which contexts are required — so "rung A never blocks" would
+# otherwise be contingent on a fact nothing in the tree can assert. Here it is true by
+# construction. Making rung A blocking is a SEPARATE later decision that edits this
+# predicate; it is not a side effect of flipping the sentinel.
+#
+# NO PATH FILTER, BY DESIGN — and the standard's own decision table mandates it rather
+# than this being a preference. Under Verdict-Input Closure, the subject set for a
+# behavioural regression corpus is every skill and standard whose behaviour it asserts
+# about: the entire governed corpus, since a change to any skill could regress
+# behaviour. gate-efficacy-standard.md routes exactly that open-ended shape to CONVERT —
+# delete the filter, adopt always-reports=yes, drop skip-semantics. A `paths:` roster
+# here would under-approximate by construction, and `absent-is-pass` would then be a
+# FALSE statement on precisely the pull requests that break the invariant. This also
+# collapses the sibling gate's three-step graduation clause to two: there is no filter
+# left to delete at flip time.
+#
+# THIN CALLER. The threshold comparison lives in the RUNNER, not in this YAML. The
+# workflow reads the floor from platform-config and passes it as --fail-under; the
+# runner compares and sets its exit code; this gate consumes ONLY the exit code and
+# NEVER parses the report. That is what keeps exactly one definition of the report
+# contract in the tree — a consumer that never reads a field cannot restate it. Do not
+# add report-parsing here.
+#
+# Platform: ubuntu-latest — the majority convention in this directory, and sufficient:
+# every step is stdlib python3 plus git. The three macos-latest workflows are the ones
+# that invoke deploy.sh, which this gate deliberately does not.
+#
+# Security: consumes NO untrusted github.event.* input. The only event values read are
+# github.event_name and github.ref, neither of which is attacker-controlled text, and
+# both cross into the shell as env vars quoted at the point of use — no ${{ }}
+# interpolation appears inside any run: block.
+
+on:
+  pull_request:
+  push:
+    tags:
+      - 'v*.00'
+
+permissions:
+  contents: read
+
+jobs:
+  behavioral-regression:
+    name: Behavioral-regression pass-rate gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify prerequisites
+        run: |
+          set -euo pipefail
+          uname -s
+          python3 --version
+
+      # ── The gate's own inputs, asserted rather than assumed ──────────────────
+      - name: Assert the major-release tag filter against its committed boundary cases
+        # The v*.00 glob is reachable only by a remote tag push, so nothing would
+        # otherwise notice the day it stopped meaning what it says. This arm reads the
+        # glob OUT OF THIS FILE — not a copy — and grades it both directions against
+        # core/disciplines/evals/behavioral-regression/fixtures/tag-boundary-cases.json:
+        # v4.00 and v10.00 MUST match; v4.49, v4.0, v4.06.1, v4.00.1, v4.00-rc1,
+        # release/v4.00 and main MUST NOT. Same entry point an operator runs locally.
+        #
+        # This is gate MACHINERY, not a corpus verdict: it fails the job outright and is
+        # not governed by the warn sentinel. A gate that is wrong about its own trigger
+        # should be loud on day one.
+        run: python3 core/disciplines/evals/behavioral-regression/gate_inputs.py assert-tag-filter
+
+      - name: Resolve the pass-rate floor (fail-closed)
+        id: floor
+        # Section-scoped read of [behavioral_regression].pass_rate_floor. Exits 2 rather
+        # than defaulting: read as zero, a floor satisfies every >= comparison and the
+        # gate reports green forever — the never-FAIL failure through the config door
+        # rather than the threshold door.
+        run: |
+          set -euo pipefail
+          FLOOR="$(python3 core/disciplines/evals/behavioral-regression/gate_inputs.py read-floor)"
+          echo "resolved pass_rate_floor = ${FLOOR}"
+          echo "floor=${FLOOR}" >> "$GITHUB_OUTPUT"
+
+      # ── The subject, and the control arm that proves the subject can fail ────
+      - name: Score the corpus against its baseline fixture
+        id: corpus
+        env:
+          FLOOR: ${{ steps.floor.outputs.floor }}
+        run: |
+          set -uo pipefail
+          cd release/skills/pmo-skill-refiner
+          set +e
+          OUT="$(python3 -m scripts.run_scenario_eval \
+            --suite ../../../core/disciplines/evals/behavioral-regression/evals.json \
+            --fail-under "$FLOOR" \
+            --out "$RUNNER_TEMP/behavioral-regression-grading.json" 2>&1)"; RC=$?
+          set -e
+          printf '%s\n' "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "rc=$RC" >> "$GITHUB_OUTPUT"
+
+      - name: Falsification arm — the regressed fixture MUST fail
+        # Runs on every invocation, deliberately, and it is the whole reason to trust the
+        # green above. A gate whose discriminating power is demonstrated once at
+        # authoring certifies nothing thereafter: this re-proves on every pull request
+        # that the corpus scores its deliberately-regressed fixture BELOW the floor. An
+        # exit 0 here means the corpus stopped discriminating, which makes every green it
+        # reports unfalsifiable — so that is a hard failure, not a warn-mode finding.
+        env:
+          FLOOR: ${{ steps.floor.outputs.floor }}
+        run: |
+          set -uo pipefail
+          cd release/skills/pmo-skill-refiner
+          set +e
+          OUT="$(python3 -m scripts.run_scenario_eval \
+            --suite ../../../core/disciplines/evals/behavioral-regression/evals.json \
+            --fixture ../../../core/disciplines/evals/behavioral-regression/fixtures/regressed.json \
+            --fail-under "$FLOOR" \
+            --out "$RUNNER_TEMP/behavioral-regression-control.json" 2>&1)"; RC=$?
+          set -e
+          printf '%s\n' "$OUT"
+          if [ "$RC" -eq 1 ]; then
+            echo ":white_check_mark: falsification arm: the regressed fixture scores below the floor (exit 1), so this gate can fail" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## :x: falsification arm BROKEN"
+            echo ""
+            echo "The deliberately-regressed fixture returned exit ${RC}, not 1."
+            echo "The corpus is no longer discriminating, so every green this gate reports is unfalsifiable."
+            echo "Fix the corpus or the fixture before trusting any result from this gate."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+      # ── Verdict ─────────────────────────────────────────────────────────────
+      - name: Gate decision (warn-mode-initial)
+        env:
+          RC: ${{ steps.corpus.outputs.rc }}
+          FLOOR: ${{ steps.floor.outputs.floor }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+
+          # The sentinel: first non-comment, non-blank line of the committed marker.
+          SENTINEL_FILE=.github/behavioral-regression.enforce
+          MODE="$(grep -vE '^\s*(#|$)' "$SENTINEL_FILE" | head -n 1 | tr -d '[:space:]')"
+          case "$MODE" in
+            warn|enforce) ;;
+            *)
+              echo "::error::unrecognized mode token in ${SENTINEL_FILE} — fail-closed"
+              exit 1
+              ;;
+          esac
+
+          # Rung B is a tag push whose ref matches the major-release grammar. The tag
+          # filter itself is asserted above; this only distinguishes the two contexts.
+          BINDING=no
+          if [ "$EVENT" = "push" ] && [ "${REF#refs/tags/}" != "$REF" ]; then
+            BINDING=yes
+          fi
+
+          echo "mode=${MODE}  binding-context=${BINDING}  floor=${FLOOR}  runner-rc=${RC}"
+
+          if [ "$RC" -eq 0 ]; then
+            echo ":white_check_mark: behavioral regression: corpus pass rate is at or above the floor" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [ "$RC" -ne 1 ]; then
+            # 2 = usage/environment error, 3 = nothing was gradable. Neither is a
+            # measurement, and a run that did not measure must never read as a pass.
+            # Fail-closed regardless of the sentinel and regardless of the context.
+            {
+              echo "## :x: behavioral-regression gate could not measure (exit ${RC})"
+              echo ""
+              echo "Exit 2 is a usage or environment error; exit 3 means nothing in the corpus was gradable."
+              echo "Neither is a pass rate. Fail-closed — a measurement that did not happen must not be"
+              echo "representable as a measurement that succeeded."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          # RC == 1: a genuine below-floor / failing-assertion / control-failure verdict.
+          {
+            echo "## behavioral-regression: corpus BELOW the floor of ${FLOOR}"
+            echo ""
+            echo "At least one gradable assertion failed, or the pass rate fell below the floor,"
+            echo "or the non-triviality control did not hold. See the scored output above."
+            echo ""
+            echo "Mode: \`${MODE}\` · binding context: \`${BINDING}\`"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$MODE" = "enforce" ] && [ "$BINDING" = "yes" ]; then
+            echo "Blocking: the sentinel reads enforce AND this is the major-release boundary." \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          if [ "$BINDING" != "yes" ]; then
+            echo "Reported, not blocking: this is the ADVISORY pull-request rung. The gate binds at the v*.00 tag." \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Reported, not blocking: the sentinel still reads warn. Flip it to enforce to make this red." \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 0

@@ -1,0 +1,125 @@
+{
+  "suite_name": "behavioral-regression",
+  "description": "The platform's standing behavioural-regression corpus. Each assertion names the check-bank criterion it grades by ID — EQ-01, XC-03 and so on — and restates none of that criterion's text: core/standards/regression-checks.md keeps single-source ownership of the check DEFINITIONS, and this suite supplies the layer that bank never carried, which is scenarios plus fixtures plus an expected verdict. Authored in the shipped eval-harness schema plus the two optional fields the scenario runner adds (assertions[].check and assertions[].expect). Full contract: release/skills/pmo-skill-refiner/references/scenario-eval-contract.md.",
+  "fixture": "fixtures/baseline.json",
+  "control": {
+    "empty_fixture": "fixtures/empty.json"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "name": "evidence-quality-and-push-to-resolve-hold",
+      "prompt": "Score the recorded skill output against the check bank's Evidence Quality and Push-to-Resolve criteria.",
+      "expected_output": "Every factual claim carries an evidence label (EQ-01), every [SOURCE] tag carries a specific citation (EQ-02), recommended dates are distinguished from committed ones (EQ-06), every action item carries a full resolution package (PTR-01), and the clarifying-question count is within the cap (PTR-06).",
+      "files": ["fixtures/baseline.json"],
+      "assertions": [
+        {
+          "text": "EQ-01 — no factual claim in the output is left without an evidence label",
+          "type": "resolution",
+          "expected_value": "0",
+          "check": { "kind": "resolves_to", "path": "evidence_quality.unlabelled_claims" }
+        },
+        {
+          "text": "EQ-02 — every [SOURCE] tag carries a specific citation, so a reader can verify the claim immediately",
+          "type": "resolution",
+          "expected_value": "0",
+          "check": { "kind": "resolves_to", "path": "evidence_quality.source_tags_missing_citation" }
+        },
+        {
+          "text": "EQ-06 — every recommended date is marked as recommended, so a recommendation cannot read as a commitment",
+          "type": "resolution",
+          "expected_value": "0",
+          "check": { "kind": "resolves_to", "path": "evidence_quality.unmarked_recommended_dates" }
+        },
+        {
+          "text": "PTR-01 — every action item carries a full resolution package (who, what, by when, and enough context to start)",
+          "type": "resolution",
+          "expected_value": "0",
+          "check": { "kind": "resolves_to", "path": "push_to_resolve.action_items_missing_package" }
+        },
+        {
+          "text": "PTR-06 — the output poses at most five clarifying questions",
+          "type": "resolution",
+          "expected_value": "2",
+          "check": { "kind": "resolves_to", "path": "push_to_resolve.open_clarifying_questions" }
+        },
+        {
+          "text": "A reviewer reading this output can act on every item in it without first asking a follow-up question",
+          "type": "judgment"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "guardrails-and-cross-skill-contracts-hold",
+      "prompt": "Score the recorded skill output against the check bank's Guardrail and Cross-Skill Contract criteria, and confirm the bank itself is reachable and the scoring read is read-only.",
+      "expected_output": "No placeholder tokens survive (GR-03), every risk is named-owned-and-mitigated (GR-05), every date reference is day-of-week validated (GR-06), RAID identifiers use the correct skill prefix (XC-03), the check bank resolves at its repo-relative locator, and scoring does not modify the fixture.",
+      "files": ["fixtures/baseline.json"],
+      "assertions": [
+        {
+          "text": "GR-03 — no [INSERT] or [TBD] placeholder survives into the output",
+          "type": "resolution",
+          "expected_value": "0",
+          "check": { "kind": "resolves_to", "path": "guardrails.placeholder_tokens" }
+        },
+        {
+          "text": "GR-05 — no risk is stated in the passive voice: each one is named, owned, and mitigated",
+          "type": "resolution",
+          "expected_value": "0",
+          "check": { "kind": "resolves_to", "path": "guardrails.risks_missing_owner_or_mitigation" }
+        },
+        {
+          "text": "GR-06 — every date reference has had its day-of-week validated",
+          "type": "resolution",
+          "expected_value": "0",
+          "check": { "kind": "resolves_to", "path": "guardrails.dates_missing_day_of_week_validation" }
+        },
+        {
+          "text": "XC-03 — no RAID identifier carries a wrong skill prefix",
+          "type": "resolution",
+          "expected_value": "0",
+          "check": { "kind": "resolves_to", "path": "cross_skill.raid_ids_with_wrong_prefix" }
+        },
+        {
+          "text": "XC-03 — the emitted RAID identifiers are exactly the conformant set, in order",
+          "type": "resolution",
+          "expected_value": "R-PPM-001, R-PPM-002, R-PPM-003",
+          "check": { "kind": "resolves_to", "path": "cross_skill.raid_ids" }
+        },
+        {
+          "text": "The check bank this corpus grades against resolves at its repo-relative locator core/standards/regression-checks.md",
+          "type": "structural",
+          "check": {
+            "kind": "path_exists",
+            "target": "../../../standards/regression-checks.md"
+          }
+        },
+        {
+          "text": "Scoring the fixture is read-only — the fixture is byte-identical before and after the run",
+          "type": "read-only",
+          "check": { "kind": "unchanged" }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "known-open-defects-stay-named",
+      "prompt": "Record each known-open defect this corpus is deliberately carrying, as an assertion whose expected verdict is FAIL.",
+      "expected_output": "Each defect is stated as the property that SHOULD hold, marked expect: fail while it does not, and therefore counted toward the numerator without being silently forgiven. The run turns red on the day one of them starts holding, which is the reminder to retire it.",
+      "files": ["../../../standards/regression-checks.md"],
+      "assertions": [
+        {
+          "text": "The check bank's Reference section cites the output-contracts document at its repo-relative home core/schemas/per-skill-output-contracts.md, rather than at an absolute path under a root that exists nowhere in this repository",
+          "type": "structural",
+          "expect": "fail",
+          "check": {
+            "kind": "matches",
+            "target": "../../../standards/regression-checks.md",
+            "pattern": "core/schemas/per-skill-output-contracts\\.md",
+            "engine": "python-re"
+          }
+        }
+      ]
+    }
+  ]
+}
