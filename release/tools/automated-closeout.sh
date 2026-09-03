@@ -11350,10 +11350,17 @@ PLAN-VERSION-UNKNOWN: release/releases/plans/v2/v2.98_RELEASE_PLAN.md declares v
 
   # PS-1 presence — files=() must expand the RESOLVED plan path, not a retyped
   # literal. Paired with PS-2/PS-3, which are what actually observe the drop.
-  if ! declare -f phase_commit_chore_pr | /usr/bin/grep -qF '"$_plan_rel"'; then
+  #
+  # Captured into a variable and read through a HERE-STRING, never `declare -f |
+  # grep -q`: `grep -q` exits on its first match, SIGPIPEs the writer, and under
+  # `pipefail` promotes that status to the pipeline's — so a successful probe can
+  # report failure. Same disposition the AC-3 independence guard below already
+  # uses, and the CI SIGPIPE-idiom gate enforces it on added lines.
+  local _ps_cbody; _ps_cbody="$(declare -f phase_commit_chore_pr)"
+  if ! /usr/bin/grep -qF '"$_plan_rel"' <<<"$_ps_cbody"; then
     echo "FAIL: PS-1 phase_commit_chore_pr files=() must expand \"\$_plan_rel\" (the plan_rel_path-resolved release plan)"; failures=$((failures+1))
   fi
-  if ! declare -f phase_commit_chore_pr | /usr/bin/grep -qF '_plan_rel="$(plan_rel_path'; then
+  if ! /usr/bin/grep -qF '_plan_rel="$(plan_rel_path' <<<"$_ps_cbody"; then
     echo "FAIL: PS-1b the plan path must be RESOLVED through plan_rel_path(), never retyped as a layout literal"; failures=$((failures+1))
   fi
 
