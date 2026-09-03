@@ -14300,12 +14300,21 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
         case "$c76_rc" in
           0) log "  OK:    automation-registry conformance — $(echo "$c76_out" | sed -n 's/^SUMMARY: //p' | tail -1)" ;;
           1)
-            local _c76_hit
+            # The finding count is checked against the exit code. A predicate
+            # that says "findings" while emitting nothing this loop can parse
+            # would otherwise increment ISSUES zero times and read as a PASS —
+            # the silent-pass shape this whole check exists to prevent.
+            local _c76_hit _c76_n=0
             while IFS= read -r _c76_hit; do
               [[ -z "$_c76_hit" ]] && continue
               log "  FAIL:  automation-registry — ${_c76_hit#FAIL:  }"
               ISSUES=$((ISSUES + 1))
+              _c76_n=$((_c76_n + 1))
             done < <(echo "$c76_out" | grep '^FAIL:  R-' || true)
+            if [[ $_c76_n -eq 0 ]]; then
+              log "  FAIL:  automation-registry — the conformance predicate exited 1 (findings) but emitted no parseable 'FAIL:  R-' line. Its output grammar and this reader have diverged; a findings verdict must never be swallowed into a clean report."
+              ISSUES=$((ISSUES + 1))
+            fi
             ;;
           *)
             log "  FAIL:  automation-registry — conformance scan-surface error (exit ${c76_rc}): $(echo "$c76_out" | grep 'scan-surface error' | head -1)"
@@ -14319,12 +14328,17 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
         case "$c76b_rc" in
           0) log "  OK:    automation-registry coverage — $(echo "$c76b_out" | sed -n 's/^SUMMARY: //p' | tail -1)" ;;
           1)
-            local _c76b_hit
+            local _c76b_hit _c76b_n=0
             while IFS= read -r _c76b_hit; do
               [[ -z "$_c76b_hit" ]] && continue
               log "  FAIL:  automation-registry — ${_c76b_hit#FAIL:  }"
               ISSUES=$((ISSUES + 1))
+              _c76b_n=$((_c76b_n + 1))
             done < <(echo "$c76b_out" | grep '^FAIL:  A-' || true)
+            if [[ $_c76b_n -eq 0 ]]; then
+              log "  FAIL:  automation-registry — the coverage predicate exited 1 (findings) but emitted no parseable 'FAIL:  A-' line. Its output grammar and this reader have diverged; a findings verdict must never be swallowed into a clean report."
+              ISSUES=$((ISSUES + 1))
+            fi
             ;;
           *)
             log "  FAIL:  automation-registry — coverage scan-surface error (exit ${c76b_rc}): $(echo "$c76b_out" | grep 'scan-surface error' | head -1)"
