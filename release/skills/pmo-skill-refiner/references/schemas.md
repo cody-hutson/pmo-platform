@@ -35,7 +35,7 @@ Defines the evals for a skill. Located at `evals/evals.json` within the skill di
 - `evals[].expected_output`: Human-readable description of success
 - `evals[].files`: Optional list of input file paths (relative to skill root)
 - `evals[].assertions`: List of verifiable statements, each `{text, type}` with an optional `expected_value`
-- `evals[].assertions[].check`: Optional declarative predicate consumed by the output-scoring runner — see [`scenario-eval-contract.md`](scenario-eval-contract.md) § 2. An assertion with no `check` is **ungraded** by that runner and leaves both numerator and denominator, which is what keeps every existing suite valid input.
+- `evals[].assertions[].check`: Optional declarative predicate consumed by the output-scoring runner — see `scenario-eval-contract.md` § 2. An assertion with no `check` is **ungraded** by that runner and leaves both numerator and denominator, which is what keeps every existing suite valid input.
 
 **The graded-statement key is `assertions`, not `expectations`.** Every typed suite in the live corpus carries `assertions[]`; none carries `expectations[]`. This block previously prescribed `expectations`, which was doc-vs-corpus drift with zero live instances — the schema said one thing and every suite did another. **Note that the INPUT key and the OUTPUT key genuinely differ:** graded statements are read from `assertions[]` here and written to `expectations[]` in `grading.json` below, because `scripts/aggregate_benchmark.py` and `eval-viewer/generate_review.py` pin the output name in executable code. Renaming either side breaks a shipped consumer, so the asymmetry is preserved deliberately rather than reconciled.
 
@@ -97,7 +97,7 @@ Tracks version progression in Improve mode. Located at workspace root.
 | Producer | Emits | Notes |
 |---|---|---|
 | `agents/grader.md` — the grading subagent | the full object below | Model-judged. Populates `execution_metrics`, `timing`, `claims`, `user_notes_summary` and, when it has something to raise, `eval_feedback`. |
-| `scripts/run_scenario_eval.py` — the output-scoring runner | `expectations[]`, `summary`, `suite` **only** | Deterministic and offline, so its values are reproducible across runs. It adds `summary.ungraded` and the `suite` provenance block below, and deliberately emits no grader-agent-specific key — the aggregator reads each of those through a defaulted accessor, so absence is tolerated and stubs are not wanted. Its contract, predicate vocabulary, command-line signature and exit codes: [`scenario-eval-contract.md`](scenario-eval-contract.md). |
+| `scripts/run_scenario_eval.py` — the output-scoring runner | `expectations[]`, `summary`, `suite` **only** | Deterministic and offline, so its values are reproducible across runs. It adds `summary.ungraded` and the `suite` provenance block below, and deliberately emits no grader-agent-specific key — the aggregator reads each of those through a defaulted accessor, so absence is tolerated and stubs are not wanted. Its contract, predicate vocabulary, command-line signature and exit codes: `scenario-eval-contract.md`. |
 
 Located at `<run-dir>/grading.json`.
 
