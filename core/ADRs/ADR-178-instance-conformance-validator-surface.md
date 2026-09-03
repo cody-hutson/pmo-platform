@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 ---
-title: "ADR-174 — The recurring instance-conformance validator is a deploy-check family member with a single-emitter dispatcher arm and run-grain flip evidence"
+title: "ADR-178 — The recurring instance-conformance validator is a deploy-check family member with a single-emitter dispatcher arm and run-grain flip evidence"
 status: Proposed — flips to Accepted at Stage 13 Close (Phase A13, the ratification beat; gate row G-CL9 verifies). The flip is recorded in this file's `status:` field, which is where it must be verified — the automated ratification-flip check is advisory-only and structurally cannot fail, so this line is the authority, never a milestone state or a review comment.
 date: 2026-09-02
 release: pda-decisions-and-conformance-baseline
@@ -18,13 +18,15 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-174 — The recurring instance-conformance validator is a deploy-check family member with a single-emitter dispatcher arm and run-grain flip evidence
+# ADR-178 — The recurring instance-conformance validator is a deploy-check family member with a single-emitter dispatcher arm and run-grain flip evidence
 
 ## Status
 
 **Proposed** — flips to **Accepted** at Stage 13 Close (Phase A13, which owns the `Proposed → Accepted` performing beat; gate row G-CL9 verifies the flip). The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — the automated ratification-flip check is advisory-only and structurally cannot fail, so the field is the authority.
 
 **Numbering provenance.** Allocated at this Engineering commit as the next number above the union of the mainline anchor and this branch's own in-flight claims — never `max(claimed)+1`. `renumber-adr.py --detect` at the commit instant reported `ANCHOR 172 origin/main`, `NEXT-FREE 173`, `CLAIMED-SET-BRANCH-ONLY 173,174,175,176 (detection only — never binds)`, and `CLAIM ADR-177 … BINDS BRANCH-CLAIM` — this branch already carries the sibling lifecycle-carrier record at 173, so the union is `{…172} ∪ {173}` and **174** binds here. The branch-only claims on 174–176 belong to other in-flight branches and never bind; a cross-branch collision is governed — resolved by the renumber tool at merge time — and is never a reason to skip ahead.
+
+**Numbering provenance — `174 → 178`.** Held **ADR-174** branch-local; renumbered to **ADR-178** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 174. In-release citations that read "ADR-174" denote this record.
 
 ## Context
 

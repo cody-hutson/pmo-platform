@@ -24,7 +24,7 @@ supersedes: none
 
 **Proposed** — flips to **Accepted** at Stage 13 Close (Phase A13, which owns the `Proposed → Accepted` performing beat; gate row G-CL9 verifies the flip). The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — the automated ratification-flip check is advisory-only and structurally cannot fail, so the field is the authority, never a milestone state, a stage comment, or a green close-out.
 
-**Numbering provenance.** Allocated at this Engineering commit as the next number above the union of the mainline anchor and this branch's own in-flight claims — never `max(claimed)+1`. `renumber-adr.py --detect` at the commit instant reported `ANCHOR 172 origin/main`, `NEXT-FREE 173`, `CLAIMED-SET-BRANCH-ONLY 173,174,175,176 (detection only — never binds)`, and two binding branch claims: `ADR-177 … BINDS` and `ADR-174 … BINDS`. This branch already carries the sibling lifecycle-carrier record at 173 and the sibling validator-surface record at 174, so the union is `{…172} ∪ {173, 174}` and **175** binds here. The branch-only claims on 175 and 176 belong to other in-flight branches and never bind; a cross-branch collision is governed — resolved by the renumber tool at merge time — and is never a reason to skip ahead or reserve a higher slot.
+**Numbering provenance.** Allocated at this Engineering commit as the next number above the union of the mainline anchor and this branch's own in-flight claims — never `max(claimed)+1`. `renumber-adr.py --detect` at the commit instant reported `ANCHOR 172 origin/main`, `NEXT-FREE 173`, `CLAIMED-SET-BRANCH-ONLY 173,174,175,176 (detection only — never binds)`, and two binding branch claims: `ADR-177 … BINDS` and `ADR-178 … BINDS`. This branch already carries the sibling lifecycle-carrier record at 173 and the sibling validator-surface record at 174, so the union is `{…172} ∪ {173, 174}` and **175** binds here. The branch-only claims on 175 and 176 belong to other in-flight branches and never bind; a cross-branch collision is governed — resolved by the renumber tool at merge time — and is never a reason to skip ahead or reserve a higher slot.
 
 ## Context
 
@@ -145,7 +145,7 @@ The D2 re-anchoring is CHEAP in isolation and was made *before* consumption for 
 - The status-surface authority record (ADR-171) — the value-bearing-surface-versus-projection shape reused by D2 and D3, and the flip discipline this record's Status section follows.
 - The partial-supersession grammar record (ADR-172) — the defined-once-cited-everywhere canonical-regex convention that D1's single grammar home follows.
 - The system-of-record-per-mirrored-element record (ADR-164) — fixes the external-identity boundary, which is what lets this key form owe external systems nothing and answers the URI candidate's strongest argument.
-- The instance-conformance validator record (ADR-174) — the recurring validator whose rule set will enforce the X-rows this decision re-forms; sibling record in this release.
+- The instance-conformance validator record (ADR-178) — the recurring validator whose rule set will enforce the X-rows this decision re-forms; sibling record in this release.
 - Amendment-class precedents for a bounded reopening of the frozen entity surface: the work-item entity record (ADR-018), the leadership-owner type-lift (ADR-040), the finding entity (ADR-044), and the project-health home (ADR-163).
 
 ## References
