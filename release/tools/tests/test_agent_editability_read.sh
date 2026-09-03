@@ -194,7 +194,7 @@ group D "Derivation — the Tier-0 union is read out of the hook, not restated"
 # ===========================================================================
 
 DERIVE_OUT="$(PY derive "$AUTHORITY")"
-BLOCK_COUNT="$(printf '%s\n' "$DERIVE_OUT" | head -1)"
+BLOCK_COUNT="$(head -1 <<<"$DERIVE_OUT")"
 UNION="$(printf '%s\n' "$DERIVE_OUT" | tail -n +2)"
 UNION_N="$(printf '%s\n' "$UNION" | grep -c . || true)"
 
@@ -225,7 +225,7 @@ else
 fi
 
 # Specificity: a bogus basename is not admitted.
-if printf '%s\n' "$UNION" | grep -qx 'ZZOPERATIONS.md'; then
+if grep -qx 'ZZOPERATIONS.md' <<<"$UNION"; then
   bad "D4 specificity — the derived union admits the bogus basename ZZOPERATIONS.md"
 else
   ok "D4 specificity — the derived union rejects the bogus basename ZZOPERATIONS.md"
