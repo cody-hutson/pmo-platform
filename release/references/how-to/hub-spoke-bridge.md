@@ -1233,6 +1233,61 @@ The handoff follows the CLAUDE.md § "Hook-Blocked → User-Side Handoff" templa
 
 **Cutover discipline:** Applies to all releases going forward.
 
+**Engineering-Brief Editability Pre-flight:**
+
+Before the hub generates a spoke prompt for a **Stage 6 Engineering** sub-task, it reads that sub-task's stamped `**Editability class:**` line (Procedure 1 § Sub-Task Template) and branches. This is a brief-**generation** precondition, evaluated at this procedure's first step — it is **not** one of the standing pre-spawn guards, which decide whether an already-valid brief is launched. It is the sibling of the skip-closure precondition already in that step, and like it, its outcome is that no spoke prompt exists.
+
+**Scope: Stage 6 only.** Stage 6 is the sole per-issue content-modifying stage (Procedure 1: *"Stages 5–8 are per-issue, every other stage is release-scoped"*, and of those only 6 writes). The release-scoped content-modifying stages, 12 and 13, have no parent card and therefore no stamped class; they are out of scope here by construction rather than by omission, and their write surfaces are governed by the Stage 12 / Stage 13 chip patterns below.
+
+| Stamped value | Pre-flight outcome |
+|---|---|
+| `unconstrained` | **Two conjuncts, both required.** (i) Generate the brief and proceed to the remaining steps — provided (ii) no decision rendered in this release since this sub-task was created changed the card's write set without a recorded refresh (Procedure 4, **Editability currency**). If such a decision exists and no refresh is recorded, run that dimension's resolution first, then re-read the stamp and re-enter this table. A clean-reading `unconstrained` is the one value whose staleness is invisible. |
+| `sanctioned-session-required` | Generate the brief, carrying the session obligation the transport step supplies. The pre-flight does not refuse a sanctioned path — a sanctioned session is an agent path, not an operator-only one. |
+| `unresolved — plan predates Phase A3.5` | **Generate the brief**, and surface the unresolved stamp in the same turn as a Decision-Briefing item-2 finding. This state is **not resolvable here** — there is no plan section to resolve against — and refusing on it would stop every release whose plan predates Phase A3.5. |
+| `unresolved — no plan row` | **Do not brief on it as stamped.** This state **is** resolvable, and Procedure 1's **Late adds.** rule defines the resolution exactly: re-run the § 5.9 procedure over the card's write set, append the row to the plan's `### Agent-Editability Read` section, refresh the stamp — then re-read it and re-enter this table. Attempt the resolution **once**; if it cannot be completed, surface the card as a Decision-Briefing item-1 decision. Refusing here stops no pre-cutover release, because a pre-cutover release stamps the *other* reason string. The two reason strings are not interchangeable. |
+| `tier-0-floored` | **Do not generate a spoke prompt.** Surface the card to the operator as a Decision-Briefing item-1 decision (§ Operating Principle: Decision Briefing), carrying the plan's per-path rows and the three dispositions the Stage-4 spec already defines for a floored card — **operator-executed, split, or deferred** (`pipeline/stage-04-planning.md` § 5.9; the set is named here, never re-declared). |
+| **line absent, or a value not listed above** | **Do not brief on it as stamped.** A sub-task scaffolded before this rule existed, or re-scaffolded without it, carries no stamp — and an absent line is not `unconstrained`. Resolve it per Procedure 1's `**Resolving …**` note and re-enter this table; if the resolution cannot be completed, generate the brief and surface as an item-2 finding — the same posture as a pre-cutover plan, which is the same epistemic situation. Every sub-task scaffolded before this release is in this row. |
+
+**What this pre-flight cannot do.** It reads the stamp; it cannot tell a correct stamp from a confidently wrong one. Its value is therefore contingent on the currency rules — Procedure 1's **Late adds.** rule and Procedure 4's **Editability currency** dimension — actually being run: those make the stamp trustworthy, and this pre-flight then acts on a trustworthy stamp to stop a **correctly-stamped** floored card before Engineering, which nothing else does. The `unconstrained` row's second conjunct reduces the stale-stamp failure from one skipped step to two; it does not eliminate it. Elimination is a runner, not more prose.
+
+**The refusal is an existing rule, not a new one.** The pre-flight emits a decision; the hub's standing rule — *"The hub does not proceed to routing until the operator has rendered all decisions"* (§ Operating Principle: Decision Briefing) — is what holds the card. No new gate ID, no new criterion row, and no second refusal mechanism is introduced.
+
+**The predicate is the card class, not "entirely floored."** A card whose write set is one-quarter floored still carries card class `tier-0-floored` (most-constrained-wins, per the Stage-4 Phase A3.5 classification), and the pre-flight fires. Generating a brief for a partly-floored card invites the spoke to land the unblocked limb of a split the operator never decided — a scope option a blocked Engineering spoke has already, correctly, declined to take on its own authority. The split is a disposition the operator chooses at this hand-off, never one a spoke discovers mid-run.
+
+**Never the bypass.** The hook-bypass environment variable is not a disposition and must not appear in the surfaced decision under any value. The floor is an irreducible-human boundary (`core/specs/autonomy-tiers.md` § Irreducible Human Tasks, item 6); a hand-off that normalises stepping over it is worse than no pre-flight at all.
+
+<!-- design-artifact: flow-class=agent-process; name=engineering-brief-editability-pre-flight; depicts=release/references/how-to/hub-spoke-bridge.md -->
+
+```mermaid
+flowchart TD
+    subgraph HUB[Hub — Procedure 3, first step]
+        t([Operator asks for a Stage 6 spoke prompt]) --> g0{Sub-task open and not skip-closed?}
+        g0 -->|No| e0([Inform operator: stage skipped, no spoke prompt])
+        g0 -->|Yes| r1[Read the stamped Editability class]
+        r1 --> g1{Which value?}
+        g1 -->|absent or no plan row| rr[Run the currency resolution once, then re-read]
+        rr --> r1
+        g1 -->|unconstrained| g2{Decision moved the write set with no refresh?}
+        g2 -->|Yes| rr
+        g2 -->|No| p1[Generate the brief]
+        g1 -->|sanctioned-session-required| p2[Generate the brief with the session obligation]
+        g1 -->|plan predates A3.5| p3[Generate the brief AND surface the unresolved stamp]
+        g1 -->|tier-0-floored| d1[/Decision Briefing item 1: operator-executed, split, or deferred/]
+    end
+    subgraph OP[Operator]
+        d1 --> m1[[Render the disposition]]
+    end
+    m1 --> e1([No spoke prompt exists until a disposition is rendered])
+    classDef automated fill:#D4EDDA,stroke:#28A745,color:#155724;
+    classDef human fill:#D1ECF1,stroke:#17A2B8,color:#0C5460;
+    classDef gate fill:#FFF3CD,stroke:#FFC107,color:#856404;
+    class r1,rr,p1,p2,p3 automated;
+    class m1 human;
+    class g0,g1,g2 gate;
+```
+
+**Cutover discipline:** Applies to all releases going forward.
+
 **Stage 6 Chip Pattern — Concurrent-Spoke Contention Recovery:**
 
 When two or more Stage 6 Engineering spokes commit to the SAME release branch in parallel, four git races surface. Each Engineering chip launched into a shared-branch parallel wave MUST enumerate the four detection→recovery procedures so the spoke recovers in-session rather than corrupting the branch. The default push idiom for an already-checked-out branch is the detached-HEAD refspec push `git push origin HEAD:refs/heads/<branch>` (it pushes the current commit to the named branch without requiring the local branch ref to track, sidestepping the checkout-conflict race):
