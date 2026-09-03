@@ -324,6 +324,14 @@ Both siblings declare no bump-class, so both render `UNRESOLVABLE` in the bump-c
 | #5833 | AC-4 | Read the lifecycle clause | End condition names **Procedure 7 Step 6, orphan-state cleanup, after Milestone close** — a stage and an event, not a duration or a judgement call |
 | #5833 | AC-5 | Read Mode O in `release/skills/release-hub/SKILL.md` | Staging location and cleanup point both present and cited to the governing reference |
 | #5833 | AC-6 | Read the deliberate-retention clause | Retained content goes to the operator's own area — a location distinct from the run staging directory · control: the same read against `539c4440` → **no such clause** (observed absence, so a "present" verdict is discriminating) |
+| #6599 | AC1 | Read § D-3 and § D-4 of the Stage-5 design **as amended by the Stage-5 Remediation**, which supersedes the original § Output for Stage 6 | Home (2): 5 candidates / 3 bands / 3 eliminated. Home (3): 5 / 2 bands / 2 eliminated / 3 scored incl. the null candidate. The rejected-candidate warrant is the **replaced** one and the eliminated-candidate kill-reason is the **struck-limb** version |
+| #6599 | AC2 | Read § D-2 | Home (2) **composes**; home (3) **composes, with one deliberate revision** — the revision named, not implied |
+| #6599 | AC3 — **structural arm** | For EDITs 1, 3, 5, 6, assert each quoted anchor is present in `origin/main@539c4440` | **1 occurrence each** · *control: three bogus-token variants of the same anchors → 0, so the ones discriminate* |
+| #6599 | AC3 — **dynamic arm** | For EDITs 2 and 4, assert each anchor is **absent** at `origin/main@539c4440` **and** present on the release branch immediately before that edit ran | **0 at `539c4440`** (the discriminating control) and **1 at the branch tip** for both. An edit applied with its anchor absent and no stop-and-surface recorded is an AC3 failure |
+| #6599 | AC4 — token arm | Scan the merged file for editability class tokens | Exactly the three home (1) ships, plus the transport state `unresolved` with exactly the two reason strings EDIT 2 defines. **No fourth class token** |
+| #6599 | AC4 — derivation arm | Scan the merged file's added text for governance-path lists / Tier-0 path enumerations | **0** — every reference is to `§ 5.9` · *control, same instrument over `core/hooks/block-autonomy-ceiling.sh` → non-zero, so the zero discriminates* |
+| #6599 | AC4 — premise arm | Read § Decisions | Two premise rejections recorded rather than resolved silently — including the card's own home-(3) predicate |
+| #6599 | AC3-b | Scan the release diff's added lines for `Procedure\s*\d+[, ]+\s*Step\s*\d+` and bare `Step \d+`, **net of text re-emitted by a whole-line replacement** | **0 net-new.** Grade on the file's total ordinal population (tip → merged), not the raw added-line set: a whole-line replacement re-emits pre-existing ordinals as added lines and reads as a false positive · *control, same instrument on the merged file → non-zero, so the zero discriminates* |
 
 **Regression arm (release-wide, runs after every `hub-spoke-bridge.md` hunk — operator decision D6):**
 
@@ -349,7 +357,19 @@ Baseline at `539c4440`: **`NC-NS-1: 16 passed, 0 failed`** (independently reprod
 
 - [ ] **CIAC-3 (all seven cards on reference-anchor form):** no line added by this release introduces a **new** line-number-form cross-reference to `hub-spoke-bridge.md` — references use section headings or quoted predicates, so the next release's briefs do not inherit the anchor drift this plan already found. *Method:* `git diff origin/main...HEAD -U0 | grep '^+' | grep -cE 'hub-spoke-bridge\.md:[0-9]+'` must read **0**; *control, same instrument same target-class: the same regex over the tracked corpus at `539c4440` → **4 occurrences across 3 files** — observed non-zero, so a zero on the diff means "none added", not "pattern never matches".* *Graded at Stage 9 QC3.5 on the merged PR.*
 
-- [ ] **CIAC-4 (#5505 × #6599 on the contested `hub-spoke-bridge.md` step) — ADDED at Commit 0:** after **both** #5505's EDIT 5 and #6599's EDIT 4 land, the contested step states **exactly one** predicate — not two, and not a merge artefact carrying both. This is the grading criterion for the predicate collision operator decision D10 knowingly accepted and mitigated by design rather than by separation. *Method:* extract the contested step from the merged file and count its stated predicates; the count must read **1**. *Control, same instrument same target: run the same extraction-and-count against the same step at `539c4440` → **1** (observed non-zero), so a count of 1 after both edits means "collapsed correctly", not "the extractor found nothing"; a count of **2** is the failure this CIAC exists to catch.* *Graded at Stage 9 QC3.5 on the merged PR.*
+- [ ] **CIAC-4 (#5505 × #6599 on the contested `hub-spoke-bridge.md` step) — ADDED at Commit 0:** after **both** #5505's EDIT 5 and #6599's EDIT 4 land, the contested step states **exactly one** predicate — not two, and not a merge artefact carrying both. This is the grading criterion for the predicate collision operator decision D10 knowingly accepted and mitigated by design rather than by separation. *Method:* extract the contested step from the merged file and count its stated predicates; the count must read **1**. A count of **2** is the failure this CIAC exists to catch.
+
+  *Control — **RE-PINNED at Stage 6 under operator decision D44**; the authored control had decayed and is withdrawn. It named `539c4440`, but the contested step **does not exist at that revision** (measured: **0** occurrences of the step's leader) — #5505's EDIT 5 is what creates it. The prescribed extraction therefore cannot return 1 there; it can only return the "extractor found nothing" reading the control claimed to exclude. Separately, `539c4440` stopped being the pre-state once #5505 landed on this branch.*
+
+  *Re-pinned to the **operative pre-state** — the release branch tip immediately before #6599's EDIT 4 (`19174ae9`) — and graded on the two literals that **discriminate**. They move in **opposite directions**, so an edit that does nothing cannot satisfy both:*
+
+  | Literal | pre-state `19174ae9` | required post-EDIT-4 | Discriminates? |
+  |---|---|---|---|
+  | `a brief is generated for every class` | **1** | **0** | **YES** — a 1 after EDIT 4 means the retirement did not land |
+  | `renders no refusal of its own` | **0** | **1** | **YES** — a 0 after EDIT 4 means the replacement did not land |
+  | `renders no refusal` | 1 | 1 | **NO — do not grade on this limb** |
+
+  *The third limb reads **1** at the pre-state, put there by #5505's EDIT 5 — the very edit #6599 is sequenced behind — so it passes whether or not EDIT 4 runs. Grading on it measures nothing. Both graded limbs read non-zero on one side, so neither is a broken probe.* *Graded at Stage 9 QC3.5 on the merged PR.*
 
 ---
 
