@@ -815,3 +815,21 @@ core/deploy/tools/start-skill-editor-session.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-automation-registry.sh
 ./core/deploy/tools/check-automation-registry.sh
 core/deploy/tools/check-automation-registry.sh
+
+# check-automation-coverage.sh — the automation-registry COVERAGE predicate, and
+# the admission gate proper. Where the conformance predicate above judges the rows
+# that are PRESENT, this one judges which rows EXIST AT ALL: it asserts that the
+# set of automations the corpus DECLARES and the set of rows the registry CARRIES
+# are the same set in both directions, that every row's entrypoint declares that
+# row's own id, and that every scheduled workflow is registered. Executed
+# agent-side in both argument forms: `--self-test` (the falsification suite, which
+# mutates copies of the LIVE population and hard-fails on an empty one) and a bare
+# scan. Both arms are needed for the acceptance demonstration — a red without the
+# restoring green does not show the gate discriminates, and a green without the
+# deletion does not show it can fire. All four invocation forms per the per-tool
+# form convention above. (CI runs no Claude hooks, so these rows are for the
+# agent-side path, not the workflow step.)
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-automation-coverage.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-automation-coverage.sh
+./core/deploy/tools/check-automation-coverage.sh
+core/deploy/tools/check-automation-coverage.sh

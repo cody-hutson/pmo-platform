@@ -20,6 +20,7 @@ consumers: core/deploy/tools/check-automation-registry.sh (validates every row a
 | id | cadence | trigger | entrypoint | automation_level_default | reversibility |
 |---|---|---|---|---|---|
 | `ambient-intake-sweep` | `0 6 * * *` | `time-driven` | `core/standards/c2-intake-sweep-path-a.md` | `recommend` | `CHEAP` |
+| `security-scan` | `0 6 * * 1` | `time-driven` | `.github/workflows/security.yml` | `bounded_auto` | `CHEAP` |
 
 Every cell is a single backticked token. **`entrypoint` is a bare repo-relative path, never a markdown link** — the path is stated from the repository root so it resolves identically for every consumer, and a link carrying a root-relative target reads as broken to the platform's link checker, which resolves relative to the source file and has no workspace-root fallback.
 
@@ -32,6 +33,7 @@ Every cell is a single backticked token. **`entrypoint` is a bare repo-relative 
 ### Authoring notes on the rows above
 
 - `ambient-intake-sweep` — its own spec states the cadence semantically (once daily, at an early-morning local hour) rather than as a literal expression, because the cadence is an operator-configurable registration parameter. `0 6 * * *` is this registry's `[RECOMMENDED]` rendering of that statement, and an operator whose registration differs is not in drift.
+- `security-scan` — **self-firing.** Its entrypoint is a workflow path, so the host fires it on the cadence written in the workflow's own `schedule:` block and the scheduler adapter must NOT also register it; a second registration would double-fire it. That is derivable from `entrypoint` and needs no field (schema § 8). Its `cadence` is therefore not a `[RECOMMENDED]` default like the row above but a **mirror of a value the host already enforces**, and the two are asserted equal rather than left to drift. It is also the first row whose routine is not a PMO cadence, which is the point: the six fields carry a scheduled scanner with nothing widened — `trigger` is `time-driven` because the schedule is what registers, not the push and pull-request limbs the workflow also carries. `bounded_auto` records that the scan runs and reports unattended within a declared scope; it opens no pull request and merges nothing.
 
 ## Sources of truth — do not duplicate here
 
