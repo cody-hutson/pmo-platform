@@ -182,11 +182,16 @@ jobs:
             is_allowlisted "$f" && continue
             [ -f "$f" ] || continue   # deleted file — nothing to scan
 
-            # Per-file override markers (whole-file, on the head version).
+            # Per-file override markers — fence-stripped, on the head version.
+            # A marker in a fenced code block OR an inline code span ILLUSTRATES the syntax; not
+            # DECLARE it. Resolving whole-file cannot tell those apart, so a file that
+            # merely documents the marker exempts itself from the gate governing it.
+            # block-fragile-refs.sh strips identically; neither surface changes alone.
+            MARKER_SCAN="$(awk '/^[[:space:]]*```/ { infence = !infence; next } !infence { gsub(/`[^`]*`/, ""); print }' "$f")"
             ALLOW_LINK=0; ALLOW_VERSION=0; ALLOW_URL=0
-            grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->' "$f" && ALLOW_LINK=1
-            grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->' "$f" && ALLOW_VERSION=1
-            grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-url[[:space:]]*-->' "$f" && ALLOW_URL=1
+            printf '%s\n' "$MARKER_SCAN" | grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->' && ALLOW_LINK=1
+            printf '%s\n' "$MARKER_SCAN" | grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->' && ALLOW_VERSION=1
+            printf '%s\n' "$MARKER_SCAN" | grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-url[[:space:]]*-->' && ALLOW_URL=1
 
             # Added lines for this file, mapped to TRUE file-line numbers ("<line>\t<content>"),
             # fenced code excluded. ADDED_MAPPED carries the positions the positional rule needs;
@@ -263,7 +268,7 @@ jobs:
               echo ""
               echo "- Summarize the referenced content inline (durability-ladder rung 1-2) rather than linking the URL."
               echo "- The ref-permitted ledger surfaces (RELEASE_LOG / RELEASE_INDEX / RELEASE_DIGEST / RELEASE_NOTES / CHANGELOG) are categorically exempt."
-              echo "- Override for a durable file that genuinely needs a raw ledger URL: add \`<!-- reference-durability: allow-url -->\` anywhere in the file."
+              echo "- Override for a durable file that genuinely needs a raw ledger URL: add \`<!-- reference-durability: allow-url -->\` anywhere in the file outside a fenced code block."
               echo ""
               echo "This class is warn-mode-initial — reported but not blocking until flip-to-enforce. See \`core/standards/reference-durability-standard.md\`."
             } | tee -a "$GITHUB_STEP_SUMMARY"
@@ -291,7 +296,7 @@ jobs:
             echo ""
             echo "### Override (an unavoidable provenance link or version reference)"
             echo ""
-            echo "Add an HTML-comment marker anywhere in the file:"
+            echo "Add an HTML-comment marker anywhere in the file outside a fenced code block:"
             echo ""
             echo '`<!-- reference-durability: allow-link -->`, `<!-- reference-durability: allow-version-ref -->`, or `<!-- reference-durability: allow-url -->`'
           } | tee -a "$GITHUB_STEP_SUMMARY"

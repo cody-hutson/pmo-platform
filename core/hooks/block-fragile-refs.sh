@@ -377,27 +377,88 @@ fi
 CONTENT="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.content // .tool_input.new_string // empty')"
 [ -z "$CONTENT" ] && exit 0
 
+# --- MARKER SOURCE (file-scoped by specification) ---------------------------
+# The override markers are FILE-scoped: core/standards/reference-durability-standard.md
+# § Per-file override marker declares them "once, as an HTML comment anywhere in
+# the file", and the CI resolves them that way already (whole-file, head version,
+# in .github/workflows/reference-durability.yml). A Write carries the whole
+# post-change file in $CONTENT, so the fragment IS the file and $CONTENT is
+# complete. An Edit carries only the replacement fragment, so a file that
+# correctly declares its marker at the top is unwritable on any line that does not
+# repeat the declaration. Union the on-disk file in for Edit only, so the hook and
+# the CI answer one question one way. Fence strip: BOTH surfaces strip fenced blocks
+# before resolving a marker, so an illustration of the syntax is never a declaration of
+# it. Changing one without the other re-opens the divergence this line exists to close.
+#
+# Five properties, each load-bearing:
+#   1. `[ -f ]`, never `[ -e ]` — excludes directories, FIFOs and character devices,
+#      so a pathological file_path cannot hang a PreToolUse hook on the write hot path.
+#   2. Every branch total — this runs under `set -euo pipefail` with an ERR trap that
+#      exits 2, so a bare non-zero at statement level would block the user's write with
+#      a HOOK-ERROR. Hence `|| true` on the cat and if/elif rather than an `||` chain.
+#   3. $CWD is already extracted above for the workspace-scope guard — no new input
+#      field, no new jq call.
+#   4. Absent file => silent fallback to the fragment => today's behavior. Synthetic
+#      file_paths that do not exist on disk keep resolving exactly as before.
+#   5. `/bin/cat` literal, matching the PATH-pinned style already used by get_mode().
+# A Write deliberately does NOT read the disk: for a Write the fragment is the whole
+# post-change file, so the disk holds the PRE-change state, and reading it would let a
+# marker the author is deleting still grant.
+MARKER_SRC="$CONTENT"
+if [ "$TOOL_NAME" = "Edit" ]; then
+  _mt=""
+  if   [ -f "$FILE_PATH" ];                              then _mt="$FILE_PATH"
+  elif [ -n "$CWD" ] && [ -f "${CWD}/${FILE_PATH}" ];    then _mt="${CWD}/${FILE_PATH}"
+  fi
+  if [ -n "$_mt" ]; then
+    _mdisk="$(/bin/cat "$_mt" 2>/dev/null || true)"
+    MARKER_SRC="${CONTENT}
+${_mdisk}"
+  fi
+fi
+
 # --- PER-FILE OVERRIDE MARKERS (suppress a class for this file; matches still reported) ---
+# Read from $MARKER_SRC, not from $CONTENT: for a Write those are the same bytes, and
+# for an Edit $MARKER_SRC additionally carries the target file from disk so a file-scoped
+# declaration is visible to a fragment that does not repeat it. See MARKER SOURCE above.
+# A marker inside a fenced code block OR an inline code span ILLUSTRATES the syntax;
+# it does not DECLARE it. The inline case is the one with observed harm: a decision
+# index exempted itself with markers in backticked table cells, and two dead
+# cross-references then passed CI.
+# Resolving markers whole-file cannot tell those apart, so a file that merely documents
+# the marker exempts itself from the gate that governs it. Strip fences first, with the
+# same awk the detectors use below, so one rule governs both reads. The CI marker read
+# strips identically — neither surface may change without the other.
+MARKER_SCAN="$("$PRINTF" '%s\n' "$MARKER_SRC" | "$AWK" '
+  /^[[:space:]]*```/ { infence = !infence; next }
+  !infence { gsub(/`[^`]*`/, ""); print }
+')"
+
 ALLOW_LINK=0
 ALLOW_VERSION=0
 ALLOW_URL=0
-if "$PRINTF" '%s\n' "$CONTENT" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->'; then
+if "$PRINTF" '%s\n' "$MARKER_SCAN" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->'; then
   ALLOW_LINK=1
 fi
-if "$PRINTF" '%s\n' "$CONTENT" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->'; then
+if "$PRINTF" '%s\n' "$MARKER_SCAN" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->'; then
   ALLOW_VERSION=1
 fi
-if "$PRINTF" '%s\n' "$CONTENT" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-url[[:space:]]*-->'; then
+if "$PRINTF" '%s\n' "$MARKER_SCAN" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-url[[:space:]]*-->'; then
   ALLOW_URL=1
 fi
 
 # --- LEDGER-SURFACE EXEMPTION (Class U scope; mirrors the CI is_ledger_exempt predicate) ---
 # The ref-permitted ledger surfaces (the five named in the universal-vs-release-pipeline
 # split rule) are categorically exempt from the raw-URL class — a ledger URL is native
-# provenance there. The hook's durable-corpus scope gate above already excludes
-# release/releases/* and top-level CHANGELOG.md (neither matches a durable glob), so this
-# is defense-in-depth + self-documentation: if the scope gate ever widens, this stays the
-# Class-U guard. Class L / Class V / positional issue-ref are unaffected by this flag.
+# provenance there. The scope gate above excludes MOST of release/releases/* and top-level
+# CHANGELOG.md because they match no durable glob — but NOT
+# release/releases/plans/*_RELEASE_PLAN.md, which the gate deliberately INCLUDES at the
+# plans arm and which the path allowlist then exempts by directory prefix (the entry
+# release/releases/plans/ in core/config/allowlists/reference-durability-allowlist.txt,
+# whose rationale is recorded there). So a release plan never reaches this flag today —
+# the allowlist is what spares it, not the scope gate — and this guard remains
+# defense-in-depth for the surfaces the gate does reach and for any future widening.
+# Class L / Class V / positional issue-ref are unaffected by this flag.
 LEDGER_EXEMPT=0
 case "$FILE_PATH" in
   */release/releases/*|release/releases/*) LEDGER_EXEMPT=1 ;;
@@ -430,6 +491,46 @@ if [ "$ALLOW_URL" -eq 0 ] && [ "$LEDGER_EXEMPT" -eq 0 ]; then
 fi
 
 # Positional issue-reference detector (always on; not governed by the link/version markers).
+#
+# COORDINATE SPACE — why this reads $STRIPPED and NOT the $MARKER_SRC disk union.
+# The classifier's entire decision is `lineno >= refline`, so both numbers must live in
+# ONE space. $STRIPPED is the fence-stripped fragment and Pass 2 numbers its lines with NR
+# over that same payload, so refline and lineno are both fragment-stripped coordinates and
+# the comparison is valid by construction. For a Write the fragment IS the post-change
+# file, so that space is the file's too.
+#
+# The file-scoped marker union above deliberately does NOT extend here, and the reason is a
+# MEASURED inversion rather than an oversight. Sourcing refline from the on-disk file for an
+# Edit would put refline in FILE coordinates while lineno stayed in FRAGMENT coordinates —
+# an index into an n-line file compared against an index into a k-line fragment. That is not
+# merely imprecise, it is sign-unstable, and both of its outcomes are wrong:
+#   * Block LATE in the file (the common shape, and the very case such a change would be
+#     made to fix): every fragment lineno falls below it, every ref still reports
+#     OUTSIDE-BLOCK, and the false positive survives untouched. Measured on a 31-line
+#     fixture with its block at line 28 — verdicts identical to today for both an in-block
+#     edit and a body-prose edit. Inert.
+#   * Block EARLY in the file — `## Related` / `## Sources` are REFBLOCK_RE spellings that
+#     routinely sit near the top: every fragment line at or past that number flips to
+#     in-block, where only the self-describe word count remains, and ordinary body prose
+#     clears it. Measured on a 71-line fixture with `## Related` at line 7 against a 12-line
+#     body edit carrying one bare ref per line: 12 findings today, 6 under a disk-sourced
+#     refline. Six true positives suppressed — a fail-OPEN on BLOCK-FRAGILE-REF-003, the
+#     direction GHSA-g9g6-28c9-vrx5 hardened this hook against.
+# So where that change would do anything at all it opens the gate, and where it is safe it
+# is inert.
+#
+# Nor is there a sound repair at this surface. The rule needs the fragment's position in the
+# POST-change file. An Edit's $CONTENT is .tool_input.new_string — bytes that by definition
+# are not yet on disk — so the splice point is unrecoverable without .tool_input.old_string,
+# a NEW INPUT FIELD, which the marker-source block above lists as load-bearing property 3.
+# The CI can do this because it has a diff and therefore a real hunk->file-line mapper
+# (map_added_lines in .github/workflows/reference-durability.yml, whose own header names
+# this same two-coordinate-space comparison as the defect it was written to fix); a
+# PreToolUse hook has no diff. Today's Edit posture is consequently strictly grant-DENYING:
+# refline 0 means CONTENT-FREE-IN-BLOCK can never fire, so every Edit finding is a true
+# positive or a false positive and never a miss, and the path allowlist stays the governed
+# escape the positional rule already documents. Do not "fix" this by unioning the disk.
+#
 # Pass 1: locate the FIRST reference-block header line number (0 = none present).
 refblock_line="$("$PRINTF" '%s\n' "$STRIPPED" | "$GREP" -nE "$REFBLOCK_RE" | /usr/bin/head -1 | /usr/bin/cut -d: -f1 || true)"
 [ -z "$refblock_line" ] && refblock_line=0

@@ -147,6 +147,22 @@ export PATH="/usr/bin:/bin"
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
 
+# Operator-instance path resolver — the same one deploy.sh Check 51 uses to reach
+# the operator-local (K4) packs, sourced rather than re-derived so the two cannot
+# construct different pack source lists (see resolve_declared_kinds below). Five
+# other release/tools/*.sh scripts source it exactly this way.
+#
+# Guarded and NON-FATAL, unlike automated-closeout.sh's exit-2 preflight: this
+# tool must still emit a measurement from the corpus packs alone when the
+# resolver is unavailable. The absence is ANNOUNCED (resolve_declared_kinds sets
+# a degrade reason), never silently absorbed — a silently-dropped K4 leg would
+# under-report the feature bucket, which reads as a healthier mix than the truth.
+_RV_INSTANCE_LIB="$REPO_ROOT/core/deploy/lib-instance-path.sh"
+if [[ -r "$_RV_INSTANCE_LIB" ]]; then
+  # shellcheck source=/dev/null
+  source "$_RV_INSTANCE_LIB" "" || true
+fi
+
 # Anchor-resolution predicate — ONE implementation, called by BOTH self-test
 # arm 1 (the shipped anchor, which must match) and arm 3 (the known-bad anchor,
 # which must NOT match). Sharing the implementation is what makes arm 3 a real
@@ -217,20 +233,65 @@ ratio_round_half_up() {
 
 # ─── Work-class mapping (label -> feature / debt / protocol-slack) ───────────
 
-# Resolve a delivered issue's work-class from its labels per the standard's
-# label -> work-class map. Precedence: an explicit feature signal wins; then a
-# protocol/process signal; then a debt signal; default = debt (the conservative
-# bucket — un-feature, un-protocol delivery is treated as debt-paydown, never
-# silently dropped, so the three buckets always sum to delivered points).
-# Input: a space-separated lowercased label string. Echoes feature|debt|slack.
+# Resolve a delivered issue's work-class per release-velocity-tracking.md § 4.
+#
+# THREE TIERS, and the ORDER is the load-bearing part:
+#
+#   T1  declared category / cluster signal   feature -> slack -> debt
+#   T2  declared work-item kind              -> feature   (RESIDUAL, fires only
+#                                                          when T1 is silent)
+#   T3  stated conservative default          -> debt
+#
+# WHY T2 IS RESIDUAL AND NOT A FOURTH ARM OF T1. The intuitive change — add the
+# kind tokens beside `enhancement` in the feature arm — inverts every bug on any
+# deployment that declares a `bug` kind: `bug` + `type:bug` would resolve
+# FEATURE, because the feature arm wins precedence. A `type:<kind_id>` whose
+# name is co-extensive with a live category row is the SAME assertion at two
+# altitudes (core/specs/label-taxonomy.md § Work-Item-Kind Labels, and Rule 1's
+# structural exception), so the category altitude must resolve first or the
+# projection contradicts its own parent. Precedence does that work directly: no
+# runtime read of the category facet is needed, because wherever a kind name
+# collides with a category row that row is present on the issue and resolves at
+# T1. See ADR-173.
+#
+# T1's token set is the SELECTED PACKS' declared rows, not folklore. Three
+# phantom tokens were retired from this map — named by it, present in no live
+# label set and in no pack `[[labels]]` row. They are NOT re-listed here: a dead
+# token spelled in a comment is still a grep hit for every consumer looking for
+# live arms, and the map's SSOT is the standard, not this script. § 4 of
+# release-velocity-tracking.md records which three and why; § 13 FM6 names the
+# failure mode; ADR-173 carries the decision. A dead arm reads as coverage while
+# covering nothing, so self-test 4(m) asserts every SURVIVING T1 token against
+# the corpus pack set — the class cannot silently return.
+#
+# Input:  $1 = space-separated lowercased label string
+#         $2 = space-separated declared `type:<kind_id>` set (may be empty; an
+#              empty set degrades this cleanly to T1+T3, which is exactly the
+#              pre-#4223 behaviour minus the phantom tokens)
+# Echoes: feature|debt|slack
 labels_to_work_class() {
-  local labels="$1"
+  local labels="$1" declared_kinds="${2:-}" _k
+  # T1 — declared category / cluster signal. Order unchanged from § 4.
   case " $labels " in
-    *" enhancement "*|*" type:feature "*|*" feature "*) echo feature ;;
-    *" protocol "*|*" cluster: process-protocol "*|*" routing-rules "*|*" tracker-schema "*) echo slack ;;
-    *" bug "*|*" structure "*|*" cluster: architecture "*|*" cluster: tech-debt "*|*" skill-update "*|*" documentation "*) echo debt ;;
-    *) echo debt ;;
+    *" enhancement "*) echo feature; return 0 ;;
+    *" protocol "*|*" cluster: process-protocol "*|*" routing-rules "*|*" tracker-schema "*) echo slack; return 0 ;;
+    *" bug "*|*" structure "*|*" cluster: architecture "*|*" skill-update "*|*" documentation "*) echo debt; return 0 ;;
   esac
+  # T2 — declared work-item kind, as a RESIDUAL feature signal. A `type:<kind_id>`
+  # for a kind the selected pack set declares is planned capability work. The set
+  # is resolved ONCE by resolve_declared_kinds() below and handed in; this
+  # function never parses a pack itself.
+  for _k in $declared_kinds; do
+    case " $labels " in *" $_k "*) echo feature; return 0 ;; esac
+  done
+  # T3 — conservative default, reached BY RULE rather than by falling off the end
+  # of an enumeration. Authority: release-velocity-tracking.md § 4 ("Default =
+  # debt — an un-feature, un-protocol delivered issue is treated as debt-paydown,
+  # never silently dropped, so the three buckets always partition the delivered
+  # points") and § 13 FM3 (dropping an unmapped issue's points breaks the
+  # partition invariant). Defaulting to debt is the conservative direction: it
+  # never inflates the feature third.
+  echo debt
 }
 
 # ─── Delivery predicate (terminal not-delivered status markers) ──────────────
@@ -318,6 +379,199 @@ print("OK")
 PY
 }
 
+# ─── Declared work-item kinds (T2's input) ───────────────────────────────────
+#
+# Resolve the `type:<kind_id>` set the SELECTED pack set declares, and echo it
+# space-separated. This is `labels_to_work_class`'s T2 input, resolved once.
+#
+# CONSUMES, NEVER FORKS. The resolution rule lives in ONE place —
+# `check-label-parity.py --list-declared-kinds` (#5291) — and this function calls
+# it. It deliberately does NOT parse the pack `.toml` itself: a second copy of a
+# resolution rule is the drift surface the extend-seam decision exists to
+# prevent, and the parity gate and this instrument would then disagree about what
+# a "declared kind" is without either being wrong on its own terms. The mode is
+# contractually OFFLINE (it returns before the repo-slug derivation and before any
+# live read) and exits 0 writing nothing on an empty result — both properties are
+# asserted by that tool's own fixture suite, which matters because this script's
+# --self-test runs in a CI step declared "offline, stdlib-only".
+#
+# SOURCE LIST — mirrors deploy.sh Check 51 exactly (corpus glob, then the
+# operator-local K4 packs under $(pmo_instance_path)/packs, each guarded the same
+# way). Kinds are K4 operator-local by grammar (work-item-type-schema.md
+# §1.1.1 — never authored into this corpus), so a corpus-only source list would
+# make a deployment's own declared kinds invisible HERE exactly as it did to the
+# parity gate before #5291. No new path token and no new config key: an
+# unregistered token orphans silently.
+#
+# It is a FUNCTION defined ABOVE the --self-test gate for the reason recorded at
+# _rv_select_candidates: below the gate no arm can reach it, and an unreachable
+# pure-computation step ships with zero coverage.
+#
+# RESULTS ARE GLOBALS, NOT STDOUT, and that is load-bearing rather than stylistic.
+# An echoing function has to be called as `$(resolve_declared_kinds)`, which runs
+# it in a SUBSHELL — so the degrade reason it sets would be discarded at the
+# closing paren and every degrade would announce as an honest empty set. That is
+# the same trap the Phase-A2 recovery documents below for `|| _rv_src=$?`, and it
+# is the precise failure this tier must not have: a silently-dropped kind tier
+# UNDER-reports the feature bucket, which reads as a healthier mix than the truth.
+# Setting both outputs as globals keeps them in one process and makes the
+# degrade-vs-empty distinction survivable. Self-test 4(d) pins it with a firing
+# control.
+#
+# Input:  $@ = OPTIONAL explicit source paths, which REPLACE the default list
+#              (the self-test hands it a fixture pack this way).
+# Output: _RV_DECLARED_KINDS = the `type:*` tokens, space-separated; empty on a
+#         degrade AND on a legitimately kinds-free pack set.
+#         _RV_KIND_DEGRADED  = empty when the resolution completed (including an
+#         honest empty result); the reason otherwise.
+# Exit:   0 always — an unavailable optional tier degrades the measurement, it
+#         never refuses it.
+_RV_DECLARED_KINDS=""
+_RV_KIND_DEGRADED=""
+resolve_declared_kinds() {
+  local _rk_srcs=() _rk_pack _rk_instance _rk_out _rk_rc=0 _rk_partial=""
+  _RV_DECLARED_KINDS=""
+  _RV_KIND_DEGRADED=""
+  if [[ $# -gt 0 ]]; then
+    _rk_srcs=("$@")
+  else
+    for _rk_pack in "$REPO_ROOT"/core/packs/*/pack.toml; do
+      [[ -f "$_rk_pack" ]] && _rk_srcs+=("$_rk_pack")
+    done
+    # ...and the OPERATOR-LOCAL (K4) packs, guarded exactly like the corpus loop
+    # so a deployment with no instance packs directory is a no-op.
+    if declare -F pmo_instance_path >/dev/null 2>&1; then
+      _rk_instance="$(pmo_instance_path)/packs"
+      if [[ -d "$_rk_instance" ]]; then
+        for _rk_pack in "$_rk_instance"/*/pack.toml; do
+          [[ -f "$_rk_pack" ]] && _rk_srcs+=("$_rk_pack")
+        done
+      fi
+    else
+      _rk_partial="the operator-instance resolver is unavailable, so the K4 pack leg was not searched"
+    fi
+  fi
+
+  local _rk_script="$REPO_ROOT/core/deploy/tools/check-label-parity.py"
+  if [[ ! -f "$_rk_script" ]]; then
+    _RV_KIND_DEGRADED="the kind resolver is absent at $_rk_script"
+    return 0
+  fi
+  if [[ "${#_rk_srcs[@]}" -eq 0 ]]; then
+    _RV_KIND_DEGRADED="no pack source resolved from the selected pack set"
+    return 0
+  fi
+
+  local _rk_args=()
+  for _rk_pack in "${_rk_srcs[@]}"; do _rk_args+=(--source "$_rk_pack"); done
+  # `|| _rk_rc=$?` MUST sit outside the command substitution — inside it the
+  # assignment lands in the subshell and the status is lost (the same trap
+  # documented at the Phase-A2 recovery below).
+  _rk_out="$(/usr/bin/python3 "$_rk_script" "${_rk_args[@]}" --list-declared-kinds 2>/dev/null)" || _rk_rc=$?
+  if [[ "$_rk_rc" -ne 0 ]]; then
+    _RV_KIND_DEGRADED="the kind resolver exited $_rk_rc"
+    return 0
+  fi
+  # An EMPTY result is a legitimate answer (a pack set declaring no kinds), not a
+  # degrade — the exit code carries the distinction, which is why the mode's
+  # exit-0-on-empty property is contractual rather than incidental.
+  _RV_KIND_DEGRADED="$_rk_partial"
+  _RV_DECLARED_KINDS="$(/usr/bin/tr '\n' ' ' <<< "$_rk_out" | /usr/bin/sed 's/ *$//')"
+  return 0
+}
+
+# ─── AC-9 cross-implementation agreement harness ─────────────────────────────
+#
+# Grade the python EMITTER (`work_class`, in the production pass below) against
+# the bash REFERENCE (`labels_to_work_class`) over a shared fixture set. Self-test
+# 4(x) is the only caller; see the rationale block there.
+#
+# It is a FUNCTION, and not an inline heredoc at the call site, for a mechanical
+# reason worth recording: a `<<'PY'` heredoc nested inside a `$( )` command
+# substitution is NOT opaque to bash's substitution scanner — the scanner
+# tokenizes the body looking for the matching paren, so a python apostrophe
+# ("bash=%s" style output, a docstring, a contraction in a comment) makes bash
+# parse the python as shell and the whole file fails to load with an
+# unattributable error 130 lines later. `_rv_select_candidates` above is the same
+# shape for the same reason. A function body is parsed once at definition time,
+# outside any substitution, so the heredoc is genuinely quoted.
+#
+# Input:  $1 = this script's path (the emitter is read from its OWN shipped
+#              source, never a transcription)
+#         $2 = the space-separated declared-kind set
+#         $3 = path to the bash reference verdicts, one `<labels>\t<class>` row
+# Exit:   0 agree + control fired · 1 divergence · 2 control did not fire ·
+#         3 harness/extraction failure
+_rv_work_class_agreement() {
+  /usr/bin/python3 - "$@" <<'PYX'
+import importlib.util, os, re, sys, tempfile
+
+src_path, declared, ref_path = sys.argv[1], sys.argv[2], sys.argv[3]
+text = open(src_path, encoding="utf-8").read()
+
+# Extract the EMITTER source: `def work_class(` up to the next top-level `def `.
+# Fail loud if it cannot be located — a silently-empty extraction would make
+# every comparison below vacuous.
+m = re.search(r"^def work_class\(labels\):\n(?:.*\n)*?(?=^def )", text, re.M)
+if not m:
+    print("EXTRACT-FAIL: could not locate the emitter definition in the shipped source")
+    sys.exit(3)
+emitter_src = m.group(0)
+if "DECLARED_KINDS" not in emitter_src:
+    print("EXTRACT-FAIL: the extracted emitter does not reference DECLARED_KINDS -- wrong function or a stale extraction")
+    sys.exit(3)
+
+PREAMBLE = "DECLARED_KINDS = %r\n" % ({k.strip().lower() for k in declared.split() if k.strip()},)
+tmpdir = tempfile.mkdtemp(prefix="rv-selftest-emitter-")
+
+def load(tag, source_text):
+    # Load the copy as a real module rather than injecting a namespace: the
+    # emitter then runs under exactly the import semantics it ships with.
+    path = os.path.join(tmpdir, "emitter_%s.py" % tag)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(PREAMBLE + source_text)
+    spec = importlib.util.spec_from_file_location("emitter_" + tag, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.work_class
+
+rows = [l.split("\t") for l in open(ref_path, encoding="utf-8").read().splitlines() if l.strip()]
+if not rows:
+    print("HARNESS-FAIL: the reference verdict file is empty -- there is nothing to compare")
+    sys.exit(3)
+
+def diverge(fn):
+    out = []
+    for lab, ref in rows:
+        # `|` back to the LIST of label names the emitter takes in production
+        # (m.get("labels") -> [l["name"], ...]). A space-split would shred every
+        # canonically-spaced label and grade a fixture production never sees.
+        got = fn([p for p in lab.split("|") if p])
+        if got != ref:
+            out.append((lab, ref, got))
+    return out
+
+# SUBJECT -- the shipped emitter must agree with the bash reference everywhere.
+diffs = diverge(load("subject", emitter_src))
+
+# MUTATION CONTROL -- corrupt the emitter T3 default and REQUIRE a divergence.
+mutated = emitter_src.replace('    return "debt"\n', '    return "slack"\n')
+if mutated == emitter_src:
+    print("CONTROL-FAIL: the planted mutation did not change the emitter source, so the control cannot fire")
+    sys.exit(3)
+mdiffs = diverge(load("mutated", mutated))
+
+print("FIXTURES=%d DIVERGENCES=%d MUTATION-DIVERGENCES=%d" % (len(rows), len(diffs), len(mdiffs)))
+for lab, ref, got in diffs:
+    print("  DIVERGE  [%s]  bash=%s  python=%s" % (lab, ref, got))
+if diffs:
+    sys.exit(1)
+if not mdiffs:
+    print("CONTROL-FAIL: the mutated emitter still agreed with the bash reference on every fixture -- this comparison cannot detect a divergence and asserts nothing")
+    sys.exit(2)
+PYX
+}
+
 # ─── Self-test mode (no gh / no network) ─────────────────────────────────────
 
 if [[ "${1:-}" == "--self-test" ]]; then
@@ -355,18 +609,256 @@ if [[ "${1:-}" == "--self-test" ]]; then
   # no-space matcher that mis-bucketed these to debt).
   R="$(labels_to_work_class "size:m cluster: process-protocol")"; [[ "$R" == "slack" ]] || die "self-test: work-class(cluster: process-protocol only) = $R, expected slack"
   R="$(labels_to_work_class "size:l bug")"; [[ "$R" == "debt" ]] || die "self-test: work-class(bug) = $R, expected debt"
-  R="$(labels_to_work_class "size:m cluster: tech-debt")"; [[ "$R" == "debt" ]] || die "self-test: work-class(cluster: tech-debt) = $R, expected debt"
+  # `cluster: tech-debt` keeps its VALUE (debt) but no longer reaches it through a
+  # debt arm — the token is phantom (in no live label set, in no pack row) and was
+  # removed with the other two. It now resolves at T3. Both halves are pinned: a
+  # future reader must not "restore" the arm on the strength of the value.
+  R="$(labels_to_work_class "size:m cluster: tech-debt")"; [[ "$R" == "debt" ]] || die "self-test: work-class(cluster: tech-debt) = $R, expected debt (now via the T3 default — the token is phantom and its arm was retired)"
   R="$(labels_to_work_class "size:m cluster: architecture")"; [[ "$R" == "debt" ]] || die "self-test: work-class(cluster: architecture) = $R, expected debt"
   R="$(labels_to_work_class "size:m")"; [[ "$R" == "debt" ]] || die "self-test: work-class(unlabeled) = $R default expected debt"
   # feature wins over a co-present debt/protocol signal (precedence)
   R="$(labels_to_work_class "enhancement bug protocol")"; [[ "$R" == "feature" ]] || die "self-test: work-class precedence (feature wins) = $R"
+
+  # Test 4(k): the T2 KIND TIER (#4223). An `improvement`-labelled story could not
+  # register as feature allocation at all before this — `improvement` matches no
+  # arm, `type:story` matched no arm, and both fell to the default. The subject
+  # arm and its control must DISAGREE, or the arm passes on a fixture that never
+  # exercised the tier.
+  _wc_kinds="type:card type:epic type:story type:task"
+  R="$(labels_to_work_class "size:m improvement type:story status: done" "$_wc_kinds")"; [[ "$R" == "feature" ]] || die "self-test 4(k): a story carrying 'improvement' must resolve to feature via the kind tier, got '$R'"
+  R="$(labels_to_work_class "size:m status: done" "$_wc_kinds")"; [[ "$R" == "debt" ]] || die "self-test 4(k) CONTROL: the same call WITHOUT 'improvement'/'type:story' must still default to debt, got '$R' — the kind tier is over-broad"
+  # ...and the kind signal stands ALONE: `improvement` is template provenance, not
+  # a content class (improvement.yml's required Category dropdown offers 7 options
+  # and 'Improvement' is not among them), so it must contribute nothing by itself.
+  R="$(labels_to_work_class "size:m type:story" "$_wc_kinds")"; [[ "$R" == "feature" ]] || die "self-test 4(k): 'type:story' must resolve to feature independently of 'improvement', got '$R'"
+  R="$(labels_to_work_class "size:m improvement" "$_wc_kinds")"; [[ "$R" == "debt" ]] || die "self-test 4(k): 'improvement' ALONE must resolve nothing — it is template provenance, not a work-class signal — got '$R'"
+
+  # Test 4(t): TIER ORDER — the regression guard for the rejected design.
+  # If the kind tier is ever flattened into the T1 feature arm, `bug` + `type:bug`
+  # resolves FEATURE on any deployment declaring a `bug` kind, inverting every bug
+  # in the ledger. This arm is the one that fails when that happens. (ADR-173.)
+  R="$(labels_to_work_class "size:l bug type:bug" "type:bug type:story")"; [[ "$R" == "debt" ]] || die "self-test 4(t) TIER ORDER: 'bug type:bug' must resolve debt via T1 — got '$R'. The kind tier has been flattened into the feature arm and every bug on a kind-declaring deployment now reads as feature."
+  R="$(labels_to_work_class "size:m protocol type:task" "$_wc_kinds")"; [[ "$R" == "slack" ]] || die "self-test 4(t) TIER ORDER: 'protocol type:task' must resolve slack via T1 — got '$R'"
+  # ...with the SENSITIVITY arm proving the fixture reaches the kind tier at all:
+  # drop the T1 token and the same kind label must now resolve feature.
+  R="$(labels_to_work_class "size:l type:bug" "type:bug type:story")"; [[ "$R" == "feature" ]] || die "self-test 4(t) SENSITIVITY: with the 'bug' category token removed, 'type:bug' must reach T2 and resolve feature — got '$R', so the tier-order arms above are asserting nothing"
+
+  # Test 4(e): an EMPTY declared-kind set degrades cleanly to T1+T3. This is the
+  # E5 degrade path's resolution behaviour, and it must not crash or mis-resolve.
+  R="$(labels_to_work_class "size:m type:story" "")"; [[ "$R" == "debt" ]] || die "self-test 4(e): with an empty declared-kind set the resolver must degrade to T1+T3, got '$R'"
+  R="$(labels_to_work_class "size:m enhancement" "")"; [[ "$R" == "feature" ]] || die "self-test 4(e): T1 must be unaffected by an empty declared-kind set, got '$R'"
+
+  # Test 4(m): MEMBERSHIP. Every surviving T1 token must exist as a declared
+  # `name = "<token>"` row in the corpus pack set. This is the arm that makes the
+  # phantom class a pre-merge FAILURE instead of a silent drift — § 13 FM6. It is
+  # an existence check on the category axis, not a second kind resolver: it greps
+  # the pack files for a literal row, it does not re-derive the resolution rule.
+  _wc_t1_tokens=("enhancement" "protocol" "cluster: process-protocol" "routing-rules" "tracker-schema" "bug" "structure" "cluster: architecture" "skill-update" "documentation")
+  _wc_packs=("$REPO_ROOT"/core/packs/*/pack.toml)
+  [[ -f "${_wc_packs[0]}" ]] || die "self-test 4(m): no corpus pack.toml resolved under $REPO_ROOT/core/packs — the membership arm cannot run, which is a FAIL, not a skip"
+  for _wc_tok in "${_wc_t1_tokens[@]}"; do
+    /usr/bin/grep -qF -- "name = \"$_wc_tok\"" "${_wc_packs[@]}" \
+      || die "self-test 4(m): the T1 token '$_wc_tok' is declared by NO corpus pack [[labels]] row — it is a phantom arm that reads as coverage while covering nothing (release-velocity-tracking.md § 13 FM6)"
+  done
+  # CONTROL — the arm must be able to fail. A token known NOT to be a declared row
+  # (one of the three this card retired) must be rejected by the same predicate.
+  if /usr/bin/grep -qF -- 'name = "cluster: tech-debt"' "${_wc_packs[@]}"; then
+    die "self-test 4(m) CONTROL: the retired phantom 'cluster: tech-debt' resolved as a declared pack row — the membership predicate cannot distinguish live tokens from dead ones and asserts nothing"
+  fi
+
+  # Test 4(p): resolve_declared_kinds() END-TO-END, offline, against the real
+  # #5291 helper — this is the seam that makes the map derived rather than
+  # hand-maintained, so it is exercised for real rather than simulated.
+  #
+  # The AC-5 PAIR IS BOTH ARMS, and it must DISCRIMINATE. A subject-only
+  # assertion ("the fixture kind resolves") is the degenerate probe shape: it
+  # passes identically whether or not the fixture was ever read. So the same
+  # label is resolved twice — once with the fixture pack in the source list and
+  # once without — and the two must DISAGREE. Neither file is edited between the
+  # two runs, which is the actual AC-5 claim.
+  resolve_declared_kinds; _rk_corpus="$_RV_DECLARED_KINDS"
+  [[ -n "$_rk_corpus" ]] || die "self-test 4(p): resolve_declared_kinds() returned nothing over the corpus pack set — the kind tier has no input and every arm above that uses a literal set is asserting against a fiction"
+  for _rk_want in type:card type:epic type:story type:task; do
+    case " $_rk_corpus " in *" $_rk_want "*) ;; *) die "self-test 4(p): the corpus-declared kind '$_rk_want' is absent from the resolved set '$_rk_corpus'" ;; esac
+  done
+
+  _rk_fx="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rv-selftest-pack-XXXXXX")" \
+    || die "self-test 4(p): could not create the fixture-pack directory — the AC-5 control did not run, which is a FAIL, not a skip"
+  /usr/bin/printf '[[kinds]]\nkind_id = "initiative"\ndisplay_name = "Initiative"\n' > "$_rk_fx/pack.toml"
+
+  # Subject arm — fixture pack SELECTED. A newly-declared pack kind must resolve
+  # with NEITHER this script nor the standard edited.
+  resolve_declared_kinds "${_wc_packs[@]}" "$_rk_fx/pack.toml"; _rk_with="$_RV_DECLARED_KINDS"
+  # Control arm — same call, fixture pack NOT selected.
+  resolve_declared_kinds "${_wc_packs[@]}"; _rk_without="$_RV_DECLARED_KINDS"
+  R="$(labels_to_work_class "size:m type:initiative" "$_rk_with")"
+  [[ "$R" == "feature" ]] || die "self-test 4(p) AC-5 subject: a kind declared only by the fixture pack must resolve to feature with no edit to this file, got '$R' (resolved set: '$_rk_with')"
+  R="$(labels_to_work_class "size:m type:initiative" "$_rk_without")"
+  [[ "$R" == "debt" ]] || die "self-test 4(p) AC-5 CONTROL: WITHOUT the fixture pack the same label must NOT resolve to feature — got '$R'. The two arms do not discriminate, so the subject arm passes whether or not the pack was read."
+  [[ "$_rk_with" != "$_rk_without" ]] || die "self-test 4(p) AC-5: the with-fixture and without-fixture kind sets are byte-identical ('$_rk_with') — the fixture was not read and the pair is degenerate"
+
+  # ...and a kind present in NO selected pack resolves to feature in neither arm.
+  # This is the over-broadness control: the derivation must not accept any
+  # `type:*`-shaped token, only a DECLARED one.
+  R="$(labels_to_work_class "size:m type:zzfabricatedkind" "$_rk_with")"
+  [[ "$R" == "debt" ]] || die "self-test 4(p) CONTROL: a fabricated kind declared by no selected pack resolved to '$R' — the derivation is over-broad and is prefix-matching rather than resolving"
+  R="$(labels_to_work_class "size:m zz-fabricated-label" "$_rk_with")"
+  [[ "$R" == "debt" ]] || die "self-test 4(p) CONTROL: a fabricated non-kind label resolved to '$R', expected debt"
+  /bin/rm -rf "$_rk_fx"
+
+  # Test 4(d): the DEGRADE path is announced, never silent. A source set that
+  # declares no kinds is an EMPTY result and NOT a degrade (exit 0, no output);
+  # an unreadable source is a degrade. The two must be distinguishable, or an
+  # under-reported feature bucket looks identical to an honest one.
+  _rk_empty="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rv-selftest-nokinds-XXXXXX")" \
+    || die "self-test 4(d): could not create the kinds-free fixture directory — the control did not run, which is a FAIL, not a skip"
+  /usr/bin/printf '[[labels]]\nname = "zz-fixture"\n' > "$_rk_empty/pack.toml"
+  resolve_declared_kinds "$_rk_empty/pack.toml"
+  [[ -z "$_RV_DECLARED_KINDS" ]] || die "self-test 4(d): a kinds-free source must resolve to the EMPTY set, got '$_RV_DECLARED_KINDS'"
+  [[ -z "$_RV_KIND_DEGRADED" ]] || die "self-test 4(d): an empty result was reported as a DEGRADE ('$_RV_KIND_DEGRADED') — an honest empty set and an unavailable resolver are then indistinguishable"
+  # CONTROL — an unreadable source MUST set the degrade reason, or the check above
+  # is satisfied by a resolver that never reports a degrade at all.
+  resolve_declared_kinds "$_rk_empty/definitely-absent.toml"
+  [[ -n "$_RV_KIND_DEGRADED" ]] || die "self-test 4(d) CONTROL: an unreadable source produced no degrade reason — the emptiness assertion above is vacuous because this resolver can never report a degrade"
+  [[ -z "$_RV_DECLARED_KINDS" ]] || die "self-test 4(d) CONTROL: a degraded resolution must resolve to the empty set, got '$_RV_DECLARED_KINDS'"
+  /bin/rm -rf "$_rk_empty"
+  _RV_KIND_DEGRADED=""
+
+  # Test 4(x): AC-9 — THE TWO IMPLEMENTATIONS AGREE.
+  #
+  # WHY THIS ARM EXISTS. There are two work-class implementations in this file:
+  # `labels_to_work_class` (bash) is the self-tested REFERENCE and has zero call
+  # sites outside this self-test block; `work_class` (python, in the production
+  # pass below) is the EMITTER whose value reaches the ledger. Every arm above
+  # grades the reference. A change that lands only in the reference therefore
+  # turns this whole file green while the emitted allocation does not move — the
+  # exact failure this card was opened against. This arm closes that: it extracts
+  # the emitter's OWN SHIPPED SOURCE from this file, loads it as a module, and
+  # requires the two to return the same class for every fixture label-set.
+  #
+  # It reads the shipped text rather than a copy on purpose. A re-typed fixture of
+  # the emitter would agree with the reference forever while the real emitter
+  # drifted underneath it — a check that grades a transcription is not a check.
+  #
+  # The MUTATION CONTROL is required, not decorative: the same comparison is re-run
+  # against a deliberately-corrupted copy of the extracted source, and it MUST
+  # report a divergence. A cross-implementation check that cannot be shown to fail
+  # on a planted divergence is indistinguishable from a constant PASS.
+  #
+  # The fixture list lives in ONE place — the bash array below — and both sides
+  # read it, so the comparison cannot decay into two different populations.
+  #
+  # Labels are `|`-delimited because the two implementations take DIFFERENT
+  # argument shapes and the fixture has to be faithful to both: the bash
+  # reference takes one space-separated string (so the pipes are joined with
+  # spaces), the python emitter takes a LIST of label names (so the pipes are
+  # split). A space-split would shred every canonically-spaced label —
+  # `cluster: process-protocol` would reach the emitter as two labels and the
+  # comparison would grade a fixture neither implementation ever sees in
+  # production.
+  _wc_fixtures=(
+    "size:m|enhancement|status: done"
+    "size:s|protocol|cluster: process-protocol"
+    "size:m|cluster: process-protocol"
+    "size:l|bug"
+    "size:m|cluster: tech-debt"
+    "size:m|cluster: architecture"
+    "size:m"
+    "enhancement|bug|protocol"
+    "size:m|improvement|type:story|status: done"
+    "size:m|status: done"
+    "size:m|type:story"
+    "size:m|improvement"
+    "size:l|bug|type:bug"
+    "size:m|protocol|type:task"
+    "size:l|type:bug"
+    "size:m|type:zzfabricatedkind"
+    "size:m|zz-fabricated-label"
+    "size:m|routing-rules|type:epic"
+    "size:m|tracker-schema"
+    "size:m|structure|type:task"
+    "size:m|documentation|type:card"
+    "size:m|skill-update|type:story"
+    "size:m|type:card|type:epic"
+    "size:m|cluster: architecture|type:story"
+    "size:m|documentation|improvement|type:task"
+    # The two REAL label shapes from v3.100 (milestone decision-telemetry-emission),
+    # verbatim — the release whose 0/20/0 reading opened this card. Carried here so
+    # the AC-8 re-derivation is graded against the shipped implementations rather
+    # than a transcription of them.
+    "bug|project:pipeline|size:S|status: approved|type:bug"
+    "cluster: pipeline-definitions|improvement|project:pipeline|size:M|status: approved|type:story"
+  )
+  # The reference verdicts come from the bash implementation itself, so the
+  # comparison is genuinely cross-implementation and not python-against-python.
+  _wc_ref_lines=""
+  for _wc_fx in "${_wc_fixtures[@]}"; do
+    _wc_ref_lines+="${_wc_fx}"$'\t'"$(labels_to_work_class "${_wc_fx//|/ }" "$_rk_corpus")"$'\n'
+  done
+
+  _wc_ref_file="$(/usr/bin/mktemp "${TMPDIR:-/tmp}/rv-selftest-ref-XXXXXX")" \
+    || die "self-test 4(x): could not stage the reference verdicts — the AC-9 comparison did not run, which is a FAIL, not a skip"
+  /usr/bin/printf '%s' "$_wc_ref_lines" > "$_wc_ref_file"
+
+  _wc_agree_out=""; _wc_agree_rc=0
+  _wc_agree_out="$(_rv_work_class_agreement "${BASH_SOURCE[0]}" "$_rk_corpus" "$_wc_ref_file" 2>&1)" || _wc_agree_rc=$?
+  /bin/rm -f "$_wc_ref_file"
+  [[ "$_wc_agree_rc" -eq 0 ]] || die "self-test 4(x) AC-9: the bash reference and the python emitter do not agree (exit $_wc_agree_rc)
+$_wc_agree_out"
+  case "$_wc_agree_out" in
+    *"MUTATION-DIVERGENCES=0"*) die "self-test 4(x) AC-9 CONTROL: the planted divergence was not detected — $_wc_agree_out" ;;
+  esac
+  echo "  AC-9 cross-implementation agreement: $_wc_agree_out"
+
+  # Test 4(v): THE DEFECT ITSELF, as a permanent regression arm.
+  #
+  # v3.100 (milestone `decision-telemetry-emission`) recorded `allocation 0/20/0`
+  # on a membership of three bugs and three stories. The bucket was defensible;
+  # the ROUTE was not — the three stories carry `improvement` + `type:story`, and
+  # neither could register as feature allocation regardless of content. This arm
+  # replays that membership offline and pins BOTH readings: the retired map must
+  # still reproduce the ledger row (the fidelity control — without it a green run
+  # cannot distinguish "the fix works" from "the fixture never had the defect"),
+  # and the shipped map must move it.
+  #
+  # The membership is a frozen snapshot of a CLOSED release, so it is a durable
+  # fixture rather than a live value that rots.
+  _v3100_feat=0; _v3100_debt=0; _v3100_slack=0; _v3100_old_debt=0; _v3100_total=0
+  for _v3100_spec in \
+    "bug project:pipeline size:s status: approved type:bug|2" \
+    "cluster: pipeline-definitions improvement project:pipeline size:m status: approved type:story|4" \
+    "cluster: pipeline-definitions improvement project:pipeline size:m status: approved type:story|4" \
+    "improvement project:pipeline size:m status: approved type:story|4" \
+    "bug project:pipeline size:s status: approved type:bug|2" \
+    "bug project:pipeline size:m status: approved type:bug|4" ; do
+    _v3100_labels="${_v3100_spec%%|*}"; _v3100_pts="${_v3100_spec##*|}"
+    _v3100_total=$((_v3100_total + _v3100_pts))
+    # The RETIRED map, inlined as the fidelity control: `enhancement` was its only
+    # live feature token and none of these six members carries it.
+    case " $_v3100_labels " in
+      *" enhancement "*) ;;
+      *) _v3100_old_debt=$((_v3100_old_debt + _v3100_pts)) ;;
+    esac
+    case "$(labels_to_work_class "$_v3100_labels" "$_rk_corpus")" in
+      feature) _v3100_feat=$((_v3100_feat + _v3100_pts)) ;;
+      slack)   _v3100_slack=$((_v3100_slack + _v3100_pts)) ;;
+      debt)    _v3100_debt=$((_v3100_debt + _v3100_pts)) ;;
+    esac
+  done
+  [[ "$_v3100_old_debt" -eq 20 && "$_v3100_total" -eq 20 ]] \
+    || die "self-test 4(v) FIDELITY CONTROL: the retired map must reproduce the v3.100 ledger row 0/20/0 on this fixture — it read 0/$_v3100_old_debt/0 over $_v3100_total pts, so the fixture does not carry the defect and this arm asserts nothing"
+  [[ "$_v3100_feat" -eq 12 && "$_v3100_debt" -eq 8 && "$_v3100_slack" -eq 0 ]] \
+    || die "self-test 4(v): the v3.100 membership must re-derive to 12/8/0 under the shipped map (the three improvement-carrying stories register as feature allocation); got $_v3100_feat/$_v3100_debt/$_v3100_slack"
+  [[ $((_v3100_feat + _v3100_debt + _v3100_slack)) -eq "$_v3100_total" ]] \
+    || die "self-test 4(v): the three buckets no longer partition delivered on the v3.100 fixture ($_v3100_feat/$_v3100_debt/$_v3100_slack vs $_v3100_total)"
+  echo "  AC-8 v3.100 re-derivation: retired map 0/20/0 (matches the ledger) -> shipped map $_v3100_feat/$_v3100_debt/$_v3100_slack, both partitioning $_v3100_total"
 
   # Test 5: allocation sums to delivered (invariant — three buckets partition delivered points)
   #   delivered = {enhancement size:m=4, bug size:s=2, protocol size:l=8} -> feat 4 / debt 2 / slack 8 ; sum 14
   feat=0; debt=0; slack=0
   for spec in "enhancement 4" "bug 2" "protocol 8"; do
     set -- $spec
-    wc="$(labels_to_work_class "$1")"
+    wc="$(labels_to_work_class "$1" "$_rk_corpus")"
     case "$wc" in feature) feat=$((feat+$2)) ;; debt) debt=$((debt+$2)) ;; slack) slack=$((slack+$2)) ;; esac
   done
   [[ "$feat" -eq 4 && "$debt" -eq 2 && "$slack" -eq 8 ]] || die "self-test: allocation split wrong (feat=$feat debt=$debt slack=$slack)"
@@ -475,7 +967,7 @@ if [[ "${1:-}" == "--self-test" ]]; then
     _vd_labels="${_vd_spec%%|*}"; _vd_pts="${_vd_spec##*|}"
     if [[ "$(labels_to_delivered "$_vd_labels")" == "delivered" ]]; then
       _vd_delivered=$((_vd_delivered + _vd_pts))
-      case "$(labels_to_work_class "$_vd_labels")" in
+      case "$(labels_to_work_class "$_vd_labels" "$_rk_corpus")" in
         feature) feat=$((feat+_vd_pts)) ;; debt) debt=$((debt+_vd_pts)) ;; slack) slack=$((slack+_vd_pts)) ;;
       esac
     fi
@@ -576,6 +1068,7 @@ if [[ "${1:-}" == "--self-test" ]]; then
   echo "  point scale (XS/S/M/L/XL) validated; out-of-set rejection validated"
   echo "  ratio round-half-up validated (exact / below-half / at-half / above-half / planned-zero)"
   echo "  work-class mapping + precedence validated"
+  echo "  work-class 3-tier resolution (4k/4t/4e/4m/4p/4x/4v) validated offline: kind tier with its over-broadness control / tier-order regression guard with a firing sensitivity arm / empty-kind-set degrade / T1-token membership against the pack set with a firing control / AC-5 fixture-pack pair, BOTH arms, discriminating / degrade-vs-empty distinguishable with a firing control / bash-reference-vs-python-emitter agreement graded on the emitter's own shipped source with a planted-divergence mutation control / the v3.100 defect replayed with the retired map as a firing fidelity control"
   echo "  allocation-partitions-delivered invariant validated"
   echo "  delivery predicate (5.5) validated: both directions disagree / spaced-and-cased label match fidelity (5 arms, case included) / exclusion-constant shape / close-state independence WITH the pre-fix predicate as a firing sensitivity arm / non-degenerate planned-vs-delivered / allocation partitions delivered across an exclusion"
   echo "  Phase-A2 candidate selection (7) validated on the real pass, offline: sized filter / not-already-a-member filter / cross-blob dedup / sort order / OK sentinel — each with a firing control, and a vacuity control on the sentinel"
@@ -745,7 +1238,20 @@ fi
 # python re-implements the SAME three helpers (point scale, round-half-up,
 # work-class precedence) so the heavy JSON walk stays in one place; the bash
 # helpers above are the self-tested reference and the contract.
-COMPUTED="$(/usr/bin/python3 - "$MEMBERS_JSON" "$_STATUS_NOT_DELIVERED" "$RECOVERED_PTS" <<'PY' || die "membership parse failure (malformed gh JSON or out-of-set size label)" 2
+#
+# The DECLARED-KIND SET crosses on argv[4], resolved ONCE in bash by
+# resolve_declared_kinds() — exactly as _STATUS_NOT_DELIVERED crosses on argv[2],
+# and for the same reason. The tier ORDER is re-implemented on both sides (that
+# is what makes the bash half a testable reference), but the kind SET is not:
+# python never reads a pack, so the two cannot drift on the kind axis at all, and
+# self-test 4(x) asserts they cannot drift on the order axis either by grading
+# this function's own shipped source against the bash reference.
+resolve_declared_kinds
+if [[ -n "$_RV_KIND_DEGRADED" ]]; then
+  echo "NOTE: work-class kind tier degraded (${_RV_KIND_DEGRADED}) — allocation resolves from declared category/cluster signals only and may UNDER-report the feature bucket; the delivered total and the partition invariant are unaffected." >&2
+fi
+
+COMPUTED="$(/usr/bin/python3 - "$MEMBERS_JSON" "$_STATUS_NOT_DELIVERED" "$RECOVERED_PTS" "$_RV_DECLARED_KINDS" <<'PY' || die "membership parse failure (malformed gh JSON or out-of-set size label)" 2
 import json, sys, math
 
 members = json.loads(sys.argv[1])
@@ -756,6 +1262,11 @@ NOT_DELIVERED = {s.strip().lower() for s in sys.argv[2].split(",") if s.strip()}
 
 # Points for the members Phase A2 removed from this milestone on the way out.
 RECOVERED = [int(p) for p in sys.argv[3].split(",") if p.strip()]
+
+# The declared `type:<kind_id>` set, resolved ONCE in bash by
+# resolve_declared_kinds() and passed in rather than re-derived here. Empty is a
+# legitimate value: the resolution degrades to T1 + T3, which bash announces.
+DECLARED_KINDS = {k.strip().lower() for k in (sys.argv[4] if len(sys.argv) > 4 else "").split() if k.strip()}
 
 PTS = {"xs":1, "s":2, "m":4, "l":8, "xl":16}
 
@@ -770,12 +1281,30 @@ def size_points(labels):
     return 0  # unsized member contributes 0 points (recorded; surfaces as N/A when ALL unsized)
 
 def work_class(labels):
+    # THE EMITTER. Mirror of the bash reference `labels_to_work_class`, tier for
+    # tier — T1 declared category/cluster, T2 declared work-item kind as a
+    # RESIDUAL feature signal, T3 stated default. The order is load-bearing: a
+    # kind label whose name is co-extensive with a category row is one assertion
+    # at two altitudes, so the category altitude resolves first (ADR-173).
+    # Self-test 4(x) extracts THIS function from the shipped source and grades it
+    # against the bash reference over every fixture label-set, with a mutation
+    # control. NOTE for anyone editing this block: it is a quoted heredoc nested
+    # inside a command substitution, and bash still tokenizes the body looking for
+    # the matching paren -- so an APOSTROPHE here makes the whole file fail to
+    # parse, with the error reported hundreds of lines away. Write around it.
     s = set(n.lower() for n in labels)
-    if s & {"enhancement", "type:feature", "feature"}:
+    # T1 — declared category / cluster signal.
+    if s & {"enhancement"}:
         return "feature"
     if s & {"protocol", "cluster: process-protocol", "routing-rules", "tracker-schema"}:
         return "slack"
-    # bug / structure / cluster: architecture / cluster: tech-debt / skill-update / documentation -> debt; default debt
+    if s & {"bug", "structure", "cluster: architecture", "skill-update", "documentation"}:
+        return "debt"
+    # T2 — declared work-item kind, residual. The set is resolved in bash and
+    # passed on argv[4]; this side never parses a pack.
+    if s & DECLARED_KINDS:
+        return "feature"
+    # T3 — stated conservative default (release-velocity-tracking.md § 4 + FM3).
     return "debt"
 
 def delivered_member(labels):
