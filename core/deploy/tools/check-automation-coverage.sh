@@ -556,13 +556,15 @@ self_test() {
   out="$(run_check "$tmp/tree" "$tmp/tree/$REG" "$tmp/tree/$SCH" 2>&1)"; rc=$?
   if [[ $rc -ne 1 ]]; then
     echo "self-test FAIL: F1 AC-1 — deleting the row for '$victim' must yield exit 1; got $rc" >&2; echo "$out" >&2; return 1; fi
-  if ! printf '%s' "$out" | grep -q "A-01 unregistered-automation"; then
+  if ! grep -q "A-01 unregistered-automation" <<<"$out"; then
     echo "self-test FAIL: F1 AC-1 — expected an A-01 finding; got:" >&2; echo "$out" >&2; return 1; fi
   # AC-3: asserted by EQUALITY ON THE ID TOKEN, not by "a FAIL line appeared".
-  if ! printf '%s' "$out" | grep -q "automation '${victim}' declared at "; then
+  if ! grep -q "automation '${victim}' declared at " <<<"$out"; then
     echo "self-test FAIL: F3 AC-3 — the verdict must name the missing entry '$victim' and its declaring path:line, not fail generically. Got:" >&2
     echo "$out" >&2; return 1; fi
-  victim_loc="$(printf '%s' "$out" | sed -n "s/.*declared at \([^ ]*\) has no.*/\1/p" | head -1)"
+  # First match only, without a reader that closes the pipe on its writer.
+  _vl_all="$(sed -n "s/.*declared at \([^ ]*\) has no.*/\1/p" <<<"$out")"
+  victim_loc="${_vl_all%%$'\n'*}"
   if [[ "$victim_loc" != *:* ]]; then
     echo "self-test FAIL: F3 AC-3 — the A-01 verdict must carry a path:line locator; got '$victim_loc'" >&2; return 1; fi
   pass=$((pass + 3))
@@ -570,11 +572,16 @@ self_test() {
   # ── F4. An orphan row — a registration whose routine does not exist.
   _seed
   local hdr_line
-  hdr_line="$(grep -n '^| \`' "$tmp/tree/$REG" | head -1 | cut -d: -f1)"
+  # -m1 makes grep stop after the first match itself. The former form piped
+  # into a reader that closed early, so under `set -euo pipefail` grep took
+  # SIGPIPE, the pipeline reported failure, hdr_line landed EMPTY, and
+  # `awk -v n=""` matched no line — the orphan row was never injected, and F4
+  # then blamed the gate for not firing on a mutation that never happened.
+  hdr_line="$(grep -m1 -n '^| \`' "$tmp/tree/$REG" | cut -d: -f1)"
   awk -v n="$hdr_line" 'NR==n { print; print "| `qqzz-not-a-routine` | `0 6 * * *` | `time-driven` | `core/automations/registry.md` | `recommend` | `CHEAP` |"; next } { print }' \
     "$tmp/tree/$REG" > "$tmp/reg.tmp" && mv "$tmp/reg.tmp" "$tmp/tree/$REG"
   out="$(run_check "$tmp/tree" "$tmp/tree/$REG" "$tmp/tree/$SCH" 2>&1)"; rc=$?
-  if [[ $rc -eq 1 ]] && printf '%s' "$out" | grep -q "A-02 orphan-row.*qqzz-not-a-routine"; then pass=$((pass + 1)); else
+  if [[ $rc -eq 1 ]] && grep -q "A-02 orphan-row.*qqzz-not-a-routine" <<<"$out"; then pass=$((pass + 1)); else
     echo "self-test FAIL: F4 — an orphan row must fire A-02 naming it; got exit $rc" >&2; echo "$out" >&2; return 1; fi
 
   # ── F5. Repoint a row's entrypoint at a real tracked file that declares a
@@ -583,7 +590,7 @@ self_test() {
   _seed
   _set_cell "$tmp/tree/$REG" "$victim" 4 "core/schemas/automation-registry-schema.md"
   out="$(run_check "$tmp/tree" "$tmp/tree/$REG" "$tmp/tree/$SCH" 2>&1)"; rc=$?
-  if [[ $rc -eq 1 ]] && printf '%s' "$out" | grep -q "A-03 entrypoint-"; then pass=$((pass + 1)); else
+  if [[ $rc -eq 1 ]] && grep -q "A-03 entrypoint-" <<<"$out"; then pass=$((pass + 1)); else
     echo "self-test FAIL: F5 — a row repointed at a document declaring a different id must fire A-03; got exit $rc" >&2
     echo "$out" >&2; return 1; fi
 

@@ -14317,7 +14317,7 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
             fi
             ;;
           *)
-            log "  FAIL:  automation-registry — conformance scan-surface error (exit ${c76_rc}): $(echo "$c76_out" | grep 'scan-surface error' | head -1)"
+            log "  FAIL:  automation-registry — conformance scan-surface error (exit ${c76_rc}): $(grep -m1 'scan-surface error' <<<"$c76_out")"
             ISSUES=$((ISSUES + 1))
             ;;
         esac
@@ -14341,7 +14341,7 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
             fi
             ;;
           *)
-            log "  FAIL:  automation-registry — coverage scan-surface error (exit ${c76b_rc}): $(echo "$c76b_out" | grep 'scan-surface error' | head -1)"
+            log "  FAIL:  automation-registry — coverage scan-surface error (exit ${c76b_rc}): $(grep -m1 'scan-surface error' <<<"$c76b_out")"
             ISSUES=$((ISSUES + 1))
             ;;
         esac
