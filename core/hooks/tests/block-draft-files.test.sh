@@ -244,6 +244,38 @@ else
   FAIL=$((FAIL+1))
 fi
 
+# --- The relative-path trap the normalization exists for --------------------------
+# git reports --git-common-dir RELATIVE when the invocation is inside the repository, so
+# from a SUBDIRECTORY of the checkout the raw value is "../.git" rather than an absolute
+# path. A predicate that string-compared the raw values would classify the platform's own
+# subdirectories as a foreign repo and silently stop enforcing there — the exact failure
+# git-post-merge-deploy.sh's Guard A documents. Enforcement from a subdirectory is
+# therefore its own arm, not an assumed consequence of the checkout-root arm above.
+/bin/mkdir -p "${ID_PLAT}/core/rules"
+_id_raw_sub="$(cd "${ID_PLAT}/core/rules" && /usr/bin/git rev-parse --git-common-dir 2>/dev/null || echo "")"
+# Computed with a plain case rather than inside $( ), where the first ")" would close the
+# command substitution before the pattern list ended.
+_id_rel_ok=1
+case "$_id_raw_sub" in
+  /*) _id_rel_ok=1 ;;   # absolute: the trap is not reproduced on this git, so do not claim it
+  ?*) _id_rel_ok=0 ;;   # non-empty and not absolute -> relative, as the design assumes
+esac
+id_ok "relative-path premise: --git-common-dir is RELATIVE from a subdirectory" \
+  "$_id_rel_ok" "expected a relative value, got '$_id_raw_sub'"
+set_mode enforce
+id_pair "relative-path trap: enforcement from a platform SUBDIRECTORY is unchanged" \
+  "Write" 2 "${ID_PLAT}/core/rules" "core/rules/git-workflow.md" "${ID_PLAT}/core/rules" "docs/proposals/enhancement.md"
+
+# --- Nearest tree wins: a foreign repo INSIDE the checkout is still foreign ---------
+# The predicate resolves the common dir of the repository containing $CWD, and git stops at
+# the nearest .git. A repo vendored inside the platform checkout therefore resolves to its
+# OWN administrative directory and is correctly not-platform — the containing path does not
+# confer identity. Asserted because the gate's comment claims it.
+/bin/mkdir -p "${ID_PLAT}/vendor/inner-repo"
+( cd "${ID_PLAT}/vendor/inner-repo" && /usr/bin/git init -q ) >/dev/null 2>&1
+id_pair "nearest tree wins: foreign repo nested INSIDE the checkout is not the platform" \
+  "Write" 2 "${ID_PLAT}/vendor/inner-repo" "src/index.js" "$ID_PLAT" "docs/proposals/enhancement.md"
+
 # --- Anchor axis: an unresolvable anchor ABSTAINS, it never becomes a kill switch ----
 # A SECOND governed root that holds a repository but NO pmo-platform checkout. The cwd is in
 # scope, so layer 3 passes and layer 4 is what decides; the anchor cannot be resolved, so the
