@@ -83,6 +83,44 @@ CADENCE_WORDS="daily weekly monthly hourly yearly annually nightly quarterly wee
 # The declared column order. The header row must match this exactly, in order.
 EXPECTED_COLUMNS="id cadence trigger entrypoint automation_level_default reversibility"
 
+# ─── Glob-free word splitting — the ONE place an unquoted expansion is allowed ─
+# Splits $1 into the global array SPLIT_OUT: on the IFS given as $2, or on
+# whitespace when $2 is omitted, with pathname expansion DISABLED throughout.
+#
+# WHY EVERY SPLIT IN THIS FILE ROUTES THROUGH HERE. An unquoted `$var` in a
+# for-list or an array assignment undergoes word splitting AND THEN pathname
+# expansion. A cron expression is mostly `*`, so `for tok in $expr` expands
+# `0 6 * * *` against the CALLER'S WORKING DIRECTORY: five tokens become
+# 2 + 3N in a directory of N files, and the arity check then rejects a
+# well-formed expression as malformed. The defect is INVISIBLE in an empty
+# directory, which is why reading the code passed it and only running it caught
+# it — and it made the predicate fire on EVERY well-formed cron row, including
+# the seed row this registry ships.
+#
+# This is a shared primitive rather than three inline `set -f` pairs on purpose:
+# a defect class fixed only at the site where it was observed is a class that
+# returns at the next site. After this change the file contains exactly one
+# unquoted expansion and it is the one below, so the invariant is greppable.
+#
+# The prior noglob state is CAPTURED and RESTORED rather than blindly cleared,
+# so this cannot silently change a shell mode a caller was relying on.
+#
+# Callers copy SPLIT_OUT into a local IMMEDIATELY, before any nested call: the
+# array is global (bash 3.2, still the system bash on macOS where deploy-time
+# checks run, has no namerefs) and the next call overwrites it.
+SPLIT_OUT=()
+split_noglob() {
+  local _text="$1"
+  local _had_noglob=0
+  case $- in *f*) _had_noglob=1 ;; esac
+  set -f
+  local IFS
+  if [[ $# -ge 2 ]]; then IFS="$2"; else IFS=$' \t\n'; fi
+  # shellcheck disable=SC2206  # the deliberate split; pathname expansion is OFF
+  SPLIT_OUT=($_text)
+  [[ $_had_noglob -eq 1 ]] || set +f
+}
+
 # ─── PARSE arm 1: the automation-level enum ───────────────────────────────────
 # Reads the `automation_level` key object in the operator-configuration key
 # schema and prints its enum members, one per line. Anchored on the key name and
@@ -172,10 +210,10 @@ in_range() {
 cron_field_ok() {
   local field="$1" lo="$2" hi="$3" item base a b
   [[ "$field" =~ ^[0-9*/,-]+$ ]] || return 1
-  local IFS=','
-  # shellcheck disable=SC2206  # deliberate word-split on the list separator
-  local items=($field)
-  IFS=' '
+  # A bare `*` is the commonest cron field, so this split is the one most exposed
+  # to pathname expansion — see split_noglob.
+  split_noglob "$field" ','
+  local -a items=(${SPLIT_OUT[@]+"${SPLIT_OUT[@]}"})
   [[ ${#items[@]} -eq 0 ]] && return 1
   for item in "${items[@]}"; do
     [[ -z "$item" ]] && return 1
@@ -200,9 +238,8 @@ cron_field_ok() {
 # cron_ok — a 5-field cron expression with every field in its positional range.
 cron_ok() {
   local expr="$1"
-  local -a f=()
-  local tok
-  for tok in $expr; do f+=("$tok"); done
+  split_noglob "$expr"
+  local -a f=(${SPLIT_OUT[@]+"${SPLIT_OUT[@]}"})
   [[ ${#f[@]} -eq 5 ]] || return 1
   cron_field_ok "${f[0]}" 0 59 || return 1
   cron_field_ok "${f[1]}" 0 23 || return 1
@@ -213,9 +250,15 @@ cron_ok() {
 }
 
 # in_set — is $1 a member of the whitespace-separated set $2?
+# Latent rather than live at the time of writing — today's haystacks are enum
+# words with no glob metacharacter. It is fixed anyway: the haystacks are PARSED
+# from owning surfaces at run time, so "no member will ever contain a `*`" is a
+# property of today's data, not of this function.
 in_set() {
   local needle="$1" hay="$2" x
-  for x in $hay; do [[ "$x" == "$needle" ]] && return 0; done
+  split_noglob "$hay"
+  local -a members=(${SPLIT_OUT[@]+"${SPLIT_OUT[@]}"})
+  for x in ${members[@]+"${members[@]}"}; do [[ "$x" == "$needle" ]] && return 0; done
   return 1
 }
 
@@ -555,6 +598,32 @@ JSON
   # that always fires fails here, which is the half of AC-3 that makes the
   # rejection half mean anything.
   _expect 0 - "CONTROL: well-formed row returns zero findings" -- "$GOOD" || return 1
+
+  # ── The CONTROL ARM, MADE CWD-INDEPENDENT. The arm above passes or fails
+  # depending on the INVOKER'S WORKING DIRECTORY, which is not a property any
+  # assertion should rest on. The predicate shipped word-splitting cron
+  # expressions with pathname expansion ON, so `0 6 * * *` expanded to the
+  # caller's directory listing and every well-formed cron row was rejected as
+  # malformed — while an empty working directory hid it completely. That is
+  # precisely why the defect survived a structural code read: the arm above is
+  # green in an empty directory whether or not the bug is present.
+  #
+  # This arm removes the dependency. It runs the identical control row from a
+  # directory it has stocked with decoy files, so a reintroduced unquoted split
+  # fails HERE, deterministically, on any machine and in any checkout.
+  _write_levels; _write_tiers; _write_registry "$GOOD"
+  mkdir -p "$tmp/globdecoy"
+  : > "$tmp/globdecoy/decoy-a.md"
+  : > "$tmp/globdecoy/decoy-b.md"
+  : > "$tmp/globdecoy/decoy-c.md"
+  (
+    cd "$tmp/globdecoy" || exit 9
+    run_check "$tmp" "$tmp/registry.md" "$tmp/core/config/schema.json" "$tmp/core/specs/rev.md" >/dev/null 2>&1
+  )
+  rc=$?
+  if [[ $rc -eq 0 ]]; then pass=$((pass + 1)); else
+    echo "self-test FAIL: CONTROL is cwd-dependent — the well-formed row returned exit $rc when run from a NON-EMPTY directory (exit 0 when run from an empty one). An unquoted \$var split is undergoing pathname expansion; route it through split_noglob." >&2
+    return 1; fi
 
   # ── One fixture per rejection class. Each must produce EXACTLY its own finding.
   _expect 1 "R-01 empty-cell" "R-01 empty cell" -- \
