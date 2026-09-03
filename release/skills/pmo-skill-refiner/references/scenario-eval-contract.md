@@ -15,7 +15,7 @@ This document is written so a second scenario author can add a suite **without r
 
 ## 1. The scenario schema (input)
 
-A suite is the shipped eval-harness `evals.json` schema, **unmodified**, plus exactly **one optional field**: `assertions[].check`.
+A suite is the shipped eval-harness `evals.json` schema, **unmodified**, plus exactly **two optional fields**: `assertions[].check` and `assertions[].expect`.
 
 ```json
 {
@@ -35,6 +35,7 @@ A suite is the shipped eval-harness `evals.json` schema, **unmodified**, plus ex
           "text": "<the graded statement, copied verbatim into the report>",
           "type": "structural | judgment | resolution | non-triviality | read-only | acceptance",
           "expected_value": "<optional — read by the resolves_to predicate>",
+          "expect": "pass | fail",
           "check": { "kind": "<one of five>", "…": "…" }
         }
       ]
@@ -52,9 +53,29 @@ A suite is the shipped eval-harness `evals.json` schema, **unmodified**, plus ex
 | `evals[].assertions[].text` | Yes | The graded statement. Copied **verbatim** into the report. |
 | `evals[].assertions[].type` | Yes | The existing open assertion-type enum. The runner does **not** branch on it; it branches on `check.kind`. The two agree by construction — see the mapping in § 2. |
 | `evals[].assertions[].expected_value` | Conditional | Read by `resolves_to` when the check itself carries no `value`. |
-| `evals[].assertions[].check` | **Optional** | The one added field. Its absence has a defined meaning — see § 4. |
+| `evals[].assertions[].check` | **Optional** | The predicate. Its absence has a defined meaning — see § 4. |
+| `evals[].assertions[].expect` | **Optional** | Which predicate outcome the suite expects. Closed two-value set, default `"pass"` — see § 1.1. |
 
-**Every suite already in the corpus is valid input, unmodified.** `check` is optional, and an assertion without one is *ungraded* rather than failing. That is what makes this an additive extension rather than a migration.
+**Every suite already in the corpus is valid input, unmodified.** `check` is optional, and an assertion without one is *ungraded* rather than failing. `expect` is optional, and its default is the identity — an assertion without one grades exactly as it did before the field existed. That is what makes both additive extensions rather than migrations.
+
+### 1.1 `expect` — which outcome the suite expects
+
+`expect` names the predicate outcome the suite **expects to observe**. The vocabulary is closed, and the default is the identity:
+
+| `expect` | Graded outcome | Use it for |
+|---|---|---|
+| *omitted* / `"pass"` | the observed outcome, unchanged | every ordinary assertion |
+| `"fail"` | the **negation** of the observed outcome | a **known-open defect** — a statement that is true of the corpus's intent and false of the tree today |
+
+An unrecognized value is a usage error (exit 2), not a silent fallback to the default. Falling back would score a deliberately-expected failure as a real one and depress the rate with no visible cause — the opposite of what the field is for.
+
+**Why the field exists.** A regression corpus gated at a `1.00` floor has, without it, exactly two ways to carry a known-open defect: an allowlist beside the corpus, or a loosened floor. Both hide the exception inside a number. An expected-FAIL assertion keeps the pass rate at the floor **and** keeps the exception legible — one named row in the report, and a named line on stdout.
+
+**An `expect: "fail"` assertion that starts passing grades FAIL.** This is deliberate and it is the field's safety property. When the defect is fixed the predicate begins to hold, the graded outcome flips to FAIL, and the run says so in as many words: *the exception is stale, retire it in the same change that fixed it.* Without that rule an expectation is an allowlist entry that nobody ever removes.
+
+**`expect` requires a `check`.** Declaring one on an assertion with no predicate is a usage error (exit 2), because an ungraded assertion computes no outcome for the expectation to hold against — an author who writes it believes the assertion is graded when it is not.
+
+**`expect` is an input-only field.** It changes which boolean `expectations[].passed` carries; it adds **no key** to the report — see § 5.
 
 ---
 
@@ -128,6 +149,8 @@ When present, the runner re-runs **every `resolves_to` check** against that fixt
 
 Write the control fixture with its **top-level keys present and their bodies empty**. Deleting the keys makes every path miss at depth 1, which tests less: with the keys present a path must miss at the leaf, so the arm exercises the resolver's full walk rather than its first step.
 
+**This arm reads the raw predicate outcome, and `expect` is deliberately not applied to it.** The question the arm asks is *does this predicate actually read the fixture?* — a property of the predicate alone. Folding the suite's expectation in would let a suite declare `expect: "fail"` and thereby satisfy the control arm without its predicate ever touching the fixture, turning the one arm that proves a suite is falsifiable into the one place a suite could opt out of being falsifiable.
+
 ---
 
 ## 4. Ungraded assertions, and the denominator
@@ -145,6 +168,8 @@ Two consequences worth stating plainly:
 - **Adding un-predicated assertions to a suite cannot depress its pass rate.** This is what keeps every existing suite valid input, and it is what lets a suite carry a model-judged statement alongside deterministic ones without the deterministic score absorbing it.
 - **A suite whose assertions are *all* ungraded produces no measurement.** See § 6.
 
+**Ungraded is not the same thing as expected-FAIL, and the difference is the denominator.** An *ungraded* assertion leaves both sides of the quotient — nothing was measured. An *expected-FAIL* assertion stays in **both** sides: it is measured, it is graded, and while the defect it names is still open it counts toward the numerator. One says "no measurement exists here"; the other says "a measurement exists, and this is the value we expect it to have." A known-open defect encoded as ungraded would silently shrink the corpus; encoded as expected-FAIL it stays counted, stays named, and stays retirable.
+
 Ungraded assertions do **not** appear in the report's `expectations[]` array, because every member of that array carries a boolean and an ungraded assertion has no boolean to carry. Their count is in the summary, and `--verbose` names them on stdout.
 
 ---
@@ -155,9 +180,11 @@ Ungraded assertions do **not** appear in the report's `expectations[]` array, be
 
 | Emitted | Notes |
 |---|---|
-| `expectations[]` — `{text, passed, evidence}` | One row per **graded** assertion, in declaration order. `text` is the assertion's text verbatim. `evidence` describes what the check **observed**, never what it wanted. |
+| `expectations[]` — `{text, passed, evidence}` | One row per **graded** assertion, in declaration order. `text` is the assertion's text verbatim. `passed` is the **graded** outcome — the observed outcome folded through `expect` (§ 1.1). `evidence` describes what the check **observed**; on an expected-FAIL row the observation is carried verbatim inside a sentence naming the expectation, so a reader sees both what happened and why it graded the way it did. |
 | `summary` — `{passed, failed, ungraded, total, pass_rate}` | `ungraded` is this runner's addition to the summary object, alongside the existing counts. |
 | `suite` — `{suite_name, fixture, sha, run_at}` | Provenance. `sha` is the **fixture's** content hash, short form — what makes a run reproducible against a fixture rather than against a path. `run_at` is UTC, ISO-8601. |
+
+**`expect` adds no report key.** The field changes which boolean `passed` carries and appears nowhere in the emitted object. That is a constraint, not an omission: `expectations[]` rows are pinned in code by the benchmark aggregator and the eval viewer, so the runner keeps the emitted shape frozen and puts the expectation in the row's `evidence` prose plus a named stdout line. **A count of expected-FAIL assertions, with each one's text, prints to stdout when the count is non-zero** — that is where a CI reader sees the exception, without the report contract acquiring a second definition to carry it.
 
 **Not emitted:** `execution_metrics`, `timing`, `claims`, `user_notes_summary`, `eval_feedback`. Those are grader-agent-specific. The benchmark aggregator reads each through a defaulted accessor, so their absence is tolerated — **do not stub them**.
 
@@ -188,7 +215,7 @@ python3 -m scripts.run_scenario_eval \
 |---|---|
 | `0` | Every gradable assertion passed, and — if `--fail-under` was given — the pass rate is at or above it. |
 | `1` | At least one gradable assertion failed, **or** the pass rate is below `--fail-under`, **or** the non-triviality control did not hold. |
-| `2` | Usage or environment error — unreadable or malformed suite, unknown `check.kind`, missing fixture, unnamed regular-expression engine, or a missing optional dependency for the fixture format in use. |
+| `2` | Usage or environment error — unreadable or malformed suite, unknown `check.kind`, an unknown `expect` value, an `expect` declared on an assertion with no `check`, missing fixture, unnamed regular-expression engine, or a missing optional dependency for the fixture format in use. |
 | `3` | **Nothing was gradable.** No report is written — see below. |
 
 The set is closed and the codes are **distinguishable by design**: a below-floor result must never share a code with a runner error, because a gate that cannot tell "the corpus regressed" from "the runner crashed" reports the same red for both and teaches its reader to ignore it.
@@ -218,6 +245,7 @@ The last is the only faithful encoding the frozen contract admits, and it is why
 3. **Commit a deliberately-regressed fixture** — the same document with specific values degraded. Regress *some* values, not all: a fixture in which everything fails proves nothing about which assertion caught what, and the unchanged values are what make the failures attributable.
 4. **Commit a structurally-empty control fixture** and declare it under `control.empty_fixture`.
 5. **Give each assertion a `check`**, choosing the `kind` from § 2. Leave `check` off any statement that genuinely needs a human or a model to grade — it will be reported as ungraded rather than silently failing.
+5a. **Mark a known-open defect with `expect: "fail"`** (§ 1.1) rather than deleting the assertion or loosening the floor. Write the assertion's `text` as the statement you want to become true, and expect it to fail until it is. Retire the `expect` in the same change that fixes the defect — the run turns red the moment it starts passing, which is the reminder.
 6. **Run it three ways and read all three:**
    - against the baseline — expect the pass rate at ceiling and exit 0;
    - against the regressed fixture (`--fixture`) — expect a **strictly lower** pass rate and exit 1;

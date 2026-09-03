@@ -91,7 +91,7 @@ Write to `/tmp/eval_review_<skill-name>.html`; open via `open`. User edits, togg
 ## Schemas reference
 
 `references/schemas.md` — preserved from skill-creator — documents:
-- `evals.json` — eval set schema (id, name, prompt, expected_output, files, assertions). Graded statements are read from `assertions[]`; the optional `assertions[].check` predicate is what the output-scoring runner executes
+- `evals.json` — eval set schema (id, name, prompt, expected_output, files, assertions). Graded statements are read from `assertions[]`; the optional `assertions[].check` predicate is what the output-scoring runner executes, and the optional `assertions[].expect` declares which outcome that predicate is expected to produce (default `pass`; `fail` marks a known-open defect)
 - `grading.json` — per-run grading results (expectations array with `text` / `passed` / `evidence` fields — exact field names required by viewer). **Two producers:** the grader subagent writes the full object, the output-scoring runner writes the deterministic subset
 - `references/scenario-eval-contract.md` — the output-scoring runner's own contract: the scenario schema, the closed predicate vocabulary, the non-triviality control, the command-line signature and the closed exit-code set. Written so a scenario author can add a suite without reading the runner's source
 - `benchmark.json` — aggregated per-assertion pass rates with mean ± stddev

@@ -35,6 +35,24 @@ which is exactly the property that stops the one existing deterministic runner
 (`core/disciplines/evals/people-graph-consumption/run_consumption_eval.py`) from
 running a second suite.
 
+A second optional field, `assertions[].expect`, declares WHICH predicate outcome the
+suite expects. Its closed vocabulary is `pass` (the default) and `fail`:
+
+    expect: "pass"   graded outcome == observed outcome   <- the default; today's behaviour
+    expect: "fail"   graded outcome == NOT observed       <- a known-open defect
+
+`expect` is defaulted rather than required, so every suite authored before it existed
+scores byte-identically: absent `expect` means `"pass"`, and `"pass"` is the identity.
+It exists because a regression corpus gated at a 1.00 floor otherwise has only two ways
+to carry a known-open defect -- an allowlist beside the corpus, or a loosened floor -- and
+both hide the exception inside a number. An expected-FAIL assertion keeps the pass rate
+at the floor AND keeps the exception legible in the report, one row at a time.
+
+An `expect: "fail"` assertion whose predicate STARTS holding grades FAIL, not pass. That
+is the point: the exception has been fixed, so the corpus is now stale and must be updated
+in the same change that fixed it. An expectation nothing retires is an allowlist with
+extra steps.
+
 WHAT IT EMITS
 -------------
 `grading.json` per `references/schemas.md` § grading.json. This module adds no
@@ -73,8 +91,9 @@ EXIT CODES (closed four-value set)
        rate is at or above it
     1  at least one gradable assertion failed, OR the pass rate is below
        --fail-under, OR the suite-level non-triviality control did not hold
-    2  usage or environment error (unreadable suite, malformed suite, missing
-       optional dependency for the fixture format in use)
+    2  usage or environment error (unreadable suite, malformed suite, unknown
+       check.kind, unknown expect value, an expect declared on an ungraded
+       assertion, missing optional dependency for the fixture format in use)
     3  nothing was gradable -- no report written
 
 Usage:
@@ -105,6 +124,16 @@ EXIT_USAGE = 2
 EXIT_NOTHING_GRADABLE = 3
 
 CHECK_KINDS = ("path_exists", "contains", "matches", "resolves_to", "unchanged")
+
+#: The closed vocabulary of `assertions[].expect` -- WHICH predicate outcome the suite
+#: expects. Closed for the same reason `check.kind` is: a typo must be a loud usage error,
+#: never a silent fallback to the default, because falling back would score a
+#: deliberately-expected failure as a real one and depress the rate for no visible reason.
+EXPECT_VALUES = ("pass", "fail")
+
+#: The default. Absent `expect` means this, and this is the identity transform on the
+#: observed outcome -- which is what makes the field additive rather than a migration.
+EXPECT_DEFAULT = "pass"
 
 #: The one regular-expression dialect this runner implements. A `matches` check
 #: must name it in-band: an unnamed dialect is an ungradeable claim, because the
@@ -306,6 +335,44 @@ def evaluate_check(check: dict, assertion: dict, ctx: "RunContext"):
 
 
 # --------------------------------------------------------------------------- #
+# Expectation grading -- the `expect` field, applied to an OBSERVED outcome.
+#
+# Separated from evaluate_check() on purpose: the predicate layer answers "did this
+# hold?", and this layer answers "is that what the suite expected?". Keeping them apart
+# is what lets the non-triviality control arm consume the RAW predicate result while the
+# score consumes the graded one -- see run_non_triviality_control().
+# --------------------------------------------------------------------------- #
+def read_expect(assertion: dict) -> str:
+    """The assertion's declared expectation, defaulted and validated."""
+    expect = assertion.get("expect", EXPECT_DEFAULT)
+    if expect not in EXPECT_VALUES:
+        raise SuiteError(
+            f"unknown expect {expect!r} -- the vocabulary is closed: "
+            f"{', '.join(EXPECT_VALUES)}"
+        )
+    return expect
+
+
+def grade(observed: bool, expect: str, evidence: str):
+    """Fold an observed predicate outcome into a graded one.
+
+    Returns (graded, evidence). Under the default `pass` expectation BOTH values pass
+    through untouched -- byte-identical to the pre-`expect` behaviour, which is the
+    property that keeps every already-committed suite scoring exactly as before.
+    """
+    if expect == EXPECT_DEFAULT:
+        return observed, evidence
+    # expect == "fail"
+    if not observed:
+        return True, f"expected to fail, and did -- {evidence}"
+    return False, (
+        f"expected to fail, but HELD -- {evidence}. The exception is stale: retire the "
+        f"`expect: fail` (and the assertion, if the defect it tracked is fixed) in the "
+        f"same change that fixed it."
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Run context -- path anchoring, read caching, and read-only baselines.
 # --------------------------------------------------------------------------- #
 class RunContext:
@@ -399,6 +466,13 @@ def iter_assertions(suite: dict):
 #
 # This is the same layer `run_consumption_eval.py` implements as four hard-coded
 # per-skill functions. Expressed declaratively it generalizes to any suite.
+#
+# THIS ARM READS THE RAW PREDICATE OUTCOME, NOT THE GRADED ONE. `expect` is deliberately
+# NOT applied here. The question this arm asks is "does this predicate actually read the
+# fixture?", which is a property of the predicate alone; folding the suite's expectation
+# into it would let a suite declare `expect: fail` and thereby SATISFY the control arm
+# without its predicate ever touching the fixture -- turning the one arm that proves the
+# suite is falsifiable into the one place a suite could opt out of being falsifiable.
 # --------------------------------------------------------------------------- #
 def run_non_triviality_control(suite: dict, suite_path: Path, empty_fixture: Path):
     ctx = RunContext(suite_path, empty_fixture)
@@ -435,6 +509,7 @@ def score(suite: dict, suite_path: Path, fixture: Path):
 
     expectations = []
     ungraded_texts = []
+    expected_fail_texts = []
     passed = failed = 0
 
     for _entry, assertion in iter_assertions(suite):
@@ -445,9 +520,25 @@ def score(suite: dict, suite_path: Path, fixture: Path):
             # (the all-drift-out convention locked in
             # core/skills/eval-writer/references/acceptance-assertion-type.md),
             # which is precisely what keeps every existing suite valid input.
+            #
+            # An `expect` here is a USAGE ERROR rather than a silent no-op: the author
+            # declared an expectation about an outcome that will never be computed, so
+            # they believe this assertion is graded and it is not. Swallowing it would
+            # let a suite carry an expectation nothing enforces -- the fail-open this
+            # field exists to close, arriving through the door beside it.
+            if "expect" in assertion:
+                raise SuiteError(
+                    f"assertion {text!r} declares `expect` but carries no `check`. An "
+                    f"ungraded assertion has no outcome to hold an expectation against; "
+                    f"give it a `check`, or drop the `expect`."
+                )
             ungraded_texts.append(text)
             continue
-        ok, evidence = evaluate_check(check, assertion, ctx)
+        expect = read_expect(assertion)
+        if expect != EXPECT_DEFAULT:
+            expected_fail_texts.append(text)
+        observed, evidence = evaluate_check(check, assertion, ctx)
+        ok, evidence = grade(observed, expect, evidence)
         expectations.append({"text": text, "passed": ok, "evidence": evidence})
         if ok:
             passed += 1
@@ -456,7 +547,15 @@ def score(suite: dict, suite_path: Path, fixture: Path):
 
     total = passed + failed + len(ungraded_texts)
     gradable = passed + failed
-    return expectations, ungraded_texts, passed, failed, total, gradable
+    return (
+        expectations,
+        ungraded_texts,
+        expected_fail_texts,
+        passed,
+        failed,
+        total,
+        gradable,
+    )
 
 
 def build_report(suite, fixture, expectations, passed, failed, ungraded, total, pass_rate):
@@ -540,9 +639,15 @@ def main(argv=None) -> int:
         if not fixture.exists():
             raise SuiteError(f"fixture not found: {fixture}")
 
-        expectations, ungraded_texts, passed, failed, total, gradable = score(
-            suite, suite_path, fixture
-        )
+        (
+            expectations,
+            ungraded_texts,
+            expected_fail_texts,
+            passed,
+            failed,
+            total,
+            gradable,
+        ) = score(suite, suite_path, fixture)
     except SuiteError as exc:
         sys.stderr.write(f"ERROR: {exc}\n")
         return EXIT_USAGE
@@ -551,6 +656,16 @@ def main(argv=None) -> int:
     print(f"suite      : {suite_name}")
     print(f"fixture    : {fixture.name} (sha {sha256_of(fixture)[:12]})")
     print(f"assertions : {total} declared -- {gradable} gradable, {len(ungraded_texts)} ungraded")
+    # Printed only when non-zero, and printed to STDOUT rather than added to the report:
+    # a known-open defect that holds the rate at the floor must stay legible to whoever
+    # reads the run, and the report contract gains no second definition to carry it.
+    if expected_fail_texts:
+        print(
+            f"expected-FAIL: {len(expected_fail_texts)} assertion(s) declare "
+            f"`expect: fail` -- known-open defects, counted as passing while they hold"
+        )
+        for text in expected_fail_texts:
+            print(f"             - {text}")
 
     if args.verbose:
         for row in expectations:
