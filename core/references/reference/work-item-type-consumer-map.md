@@ -79,7 +79,7 @@ it. Line anchors are at `verified_at`; § Reproduction re-derives them.
 | R2 | same file, `--emit-kinds` → `emit_kinds()` (`:404`) | the union, one id per line | stdout contract; **exit 3** on a partial parse *or* an empty set (`:417`, `:421`) | structural tracer (post-fix) + direct read |
 | R3 | `core/deploy/deploy.sh:8093` Check 22 (emitter `:7726`) | R2's stdout | `/usr/bin/python3 <tool> --emit-kinds` subprocess → CSV membership → Gate-1 Step-0 F2 predicate | structural tracer + direct read |
 | R4 | `core/deploy/deploy.sh:11852` Check 55 | licensed kind vocabulary | hierarchy doc invariant — no banned parent tier above a licensed kind | structural tracer + direct read |
-| R5 | `core/deploy/tools/check-label-parity.py:94` | `[[labels]]` `name` / `color` / `description` **only** | `_TOML_ROW_KV_RE` line scan | structural tracer (post-fix) + direct read |
+| R5 | `core/deploy/tools/check-label-parity.py` | `[[labels]]` `name` / `color` / `description` **and, since the mainline's #5291 landed, the `[[kinds]]` `kind_id` rows it projects to `type:<kind_id>`.** The word *only* stood in this cell at the previous stamp and is FALSE at this one — the file resolves `type:*` against declared kinds instead of a namespace prefix, making it a `kind_id` reader in its own right | `_TOML_ROW_KV_RE` line scan + `parse_toml_kind_ids` | structural tracer (post-fix) + direct read; surfaced by the `kind_id` census arm moving 2 → 31 occurrences in this file |
 | R6 | `core/deploy/deploy.sh:11571` Check 51 | R5 over the pack glob | `for c51_pack in core/packs/*/pack.toml` | structural tracer + direct read |
 | R7 | `core/deploy/tests/test_g1_form_family.sh:111` | `--emit-kinds` | test harness invoking the same subprocess | path-literal tracer |
 | **R8** | **`operations/skills/intake-desk/references/type-map.md:88`–`:100`** — precedence **rung 2** | **`kinds[]` from ELIGIBLE packs — two limbs since the grammar slice: `applies_to` equals `M` (`:93`), OR `applies_to` is `*` AND `role` is `kit` and it is the resolved `K` (`:94`–`:95`)** | **agent-executed, per invocation, never cached** | structural tracer |
@@ -190,7 +190,7 @@ at the pack level and at the kind level.
 | **The pack-undeclared label population shrinks** | 5 of 9 live `type:*` labels are pack-undeclared today; any kit declaring one removes it from that set, which is why the sibling parity-hardening work must read the post-change definition. |
 | **Close-class telemetry widens** | R12's SSOT is the base pack's category rows; a kit contributing category rows changes the close-class denominator. |
 | **Deployed-mirror drift window opens** | R8/R8b are a *deployed* file. An edit that is not redeployed leaves the runtime reader stale. The grammar slice edits that file, so the window is **OPEN at this stamp** — F3 measures it rather than infers it: repo copy **16,665** bytes against a deployed mirror of **13,577**. It closes at deploy, not here. (This cell previously read *"in sync at `verified_at`, so the window is currently closed"* — a claim carried over from a stamp before the slice edited the file, and one its own next clause already contradicted. F3 is the measured row and governs.) |
-| **Hardcoded kind literals stay hardcoded** | **6 of 244** executables carry a bare `type:epic` literal. They do not read the pack, so they neither break nor adapt — they simply continue to assert one kind name regardless of what a deployment licenses. |
+| **Hardcoded kind literals stay hardcoded** | **8 of 244** executables carry a bare `type:epic` literal. They do not read the pack, so they neither break nor adapt — they simply continue to assert one kind name regardless of what a deployment licenses. |
 
 ## Named breakages
 
@@ -238,7 +238,7 @@ is composition-locked, so these route to a later bundle.
 | H1 | **The licensed-kind union silently widens.** The loop walks every directory under `core/packs/` holding a `pack.toml` and unions its `kind_id` rows — **no allowlist, no naming filter, no underscore-prefix skip**. | `core/deploy/tools/check-work-hierarchy.py:362`–`:380` | A fixture pack placed in that tree is absorbed into the **production** gate's vocabulary. This is why every fixture in this release lives outside `core/packs/`. |
 | H2 | **The label-parity check cannot detect a pack-undeclared kind label.** `type:` is registered as a namespace *pattern*, so any live `type:*` resolves as a pattern match and is never an orphan. | `core/deploy/tools/check-label-parity.py:73` (`REGISTERED_NAMESPACES`) | 5 of 9 live `type:*` labels sit unflagged. Adjacent to, and distinct from, the parity-hardening work in a sibling milestone. |
 | H3 | **Pack removal is silently non-degrading** (D2 above). | `core/deploy/tools/check-work-hierarchy.py:338` docstring (the quoted clause at `:352`) | Correct for deselection; indistinguishable from accidental deletion. A pack-count drift signal would separate the two. |
-| H4 | **A consumer map goes stale, and `verified_at` cannot stop it.** | this file | The stamp is a **convention with no enforcement**: measured over the tracked corpus, `verified_at` appears in **2 of 1871** readable files — this map and one release plan — with **no schema declaring it, no gate reading it, and no runner comparing it to `HEAD`** (sensitivity arm, the schema-governed frontmatter key `reversibility:` → 296 files; specificity arm → 0; same denominator, same instrument). So nothing detects the gap between the stamp and the head, and nothing ever will until something reads it. **This was not hypothetical here**: the stamp was set at the commit that authored this map, three slices then rewrote its subject, and the map kept asserting six classes of claim that had gone false — including *"the constraint being relaxed is not enforced in code anywhere,"* which the same release falsified by shipping the first reader. Mitigated meanwhile by § Reproduction — re-verification is one command set, not a re-derivation. **The durable fix is a check that compares `verified_at` to the head and reports the delta**; it is net-new infrastructure and is recorded here rather than filed, because the owning milestone is composition-locked. |
+| H4 | **A consumer map goes stale, and `verified_at` cannot stop it.** | this file | The stamp is a **convention with no enforcement**: measured over the tracked corpus, `verified_at` appears in **2 of 1876** readable files — this map and one release plan — with **no schema declaring it, no gate reading it, and no runner comparing it to `HEAD`** (sensitivity arm, the schema-governed frontmatter key `reversibility:` → 298 files; specificity arm → 0; same denominator, same instrument). So nothing detects the gap between the stamp and the head, and nothing ever will until something reads it. **This was not hypothetical here**: the stamp was set at the commit that authored this map, three slices then rewrote its subject, and the map kept asserting six classes of claim that had gone false — including *"the constraint being relaxed is not enforced in code anywhere,"* which the same release falsified by shipping the first reader. Mitigated meanwhile by § Reproduction — re-verification is one command set, not a re-derivation. **The durable fix is a check that compares `verified_at` to the head and reports the delta**; it is net-new infrastructure and is recorded here rather than filed, because the owning milestone is composition-locked. |
 
 ## Instrument blind spots
 
@@ -256,15 +256,15 @@ re-executed at later stamps, because the "without" state no longer exists in the
 |---|---|---|---|
 | without the Python type (at the fix commit) | 1555 | 25 | **0** |
 | with it (at the fix commit) | 1627 | 27 | **2** — the two pack-reading executables |
-| with it (**re-executed at this stamp**) | 1640 | 40 | **2** — the same two |
+| with it (**re-executed at this stamp**) | 1658 | 44 | **2** — the same two |
 
 The +72 scan-population delta equals the **tracked `.py` file count** exactly (72 of the
 244 tracked `.py` / `.sh` / `.ps1` files) — the cross-check that the delta is the Python
 corpus and not drift. That it matches exactly, rather than falling short, additionally
 shows no tracked `.py` file sits under a default exclusion. **The cross-check still holds
 at this stamp and was re-derived independently of the tool**: tracked files matching the
-scanned-type set are 1640 with `py` and 1568 without, a delta of 72, and 1640 is exactly
-what the tool reports as its scan population. The first-order count moved 27 → 40 because
+scanned-type set are 1658 with `py` and 1586 without, a delta of 72, and 1658 is exactly
+what the tool reports as its scan population. The first-order count moved 27 → 44 because
 the release added referrers to `core/packs`, not because the instrument changed.
 The fix ships with a discriminating self-test arm: the suite previously returned an
 identical result patched and unpatched because its fixture region contained no `.py` file
@@ -330,7 +330,7 @@ bash release/tools/blast-radius.sh --self-test
 #     T6a and T5l MUST go red; T6z MUST stay green. A run where all three stay green
 #     means the fixture no longer discriminates and every count below is unverified.
 
-# 2 — structural consumers of the pack corpus (expect 40 at this stamp, incl. the two .py readers)
+# 2 — structural consumers of the pack corpus (expect 44 at this stamp, incl. the two .py readers)
 bash release/tools/blast-radius.sh --mode=structural --format=json --no-color core/packs \
   | jq -c '{tfs:.stats.total_files_scanned, fo:.stats.first_order_count,
             py:[.first_order[].path|select(endswith(".py"))]}'
@@ -357,14 +357,17 @@ gh api --paginate "repos/OWNER/REPO/labels?per_page=100" --jq '.[].name'
 Both iterate `git ls-files`, read each path as UTF-8, and count with `str.count` /
 `re.findall` — no shell matcher in the path.
 
-- **Corpus census.** Denominator **1926** tracked files; **1871** readable as UTF-8; 55
+- **Corpus census.** Denominator **1931** tracked files; **1876** readable as UTF-8; 55
   binary (image and archive assets, none a text consumer). Sensitivity arm `\bthe\b` →
-  **1746 files / 240,928 occurrences**. Specificity arm, an impossible token → 0 / 0.
+  **1751 files / 243,831 occurrences**. Specificity arm, an impossible token → 0 / 0.
 - **Executable census.** Denominator **244** executables (72 `.py`, 169 `.sh`, 3 `.ps1`) —
   all 244 readable, extraction non-empty. Same-shape sensitivity arm — a TOML key these
-  files *do* read, `kind_id` → **3 files / 62 occurrences**
-  (`check-work-hierarchy.py` 54, `deploy.sh` 6, `check-label-parity.py` 2).
-  General sensitivity arm → **242 files / 41,759**. Specificity arm → 0.
+  files *do* read, `kind_id` → **4 files / 97 occurrences**
+  (`check-work-hierarchy.py` 54, `check-label-parity.py` 31, `deploy.sh` 6,
+  `compute-release-velocity.sh` 6). **This arm MOVED, and the move is a finding rather
+  than noise**: it read 3 files / 62 at the previous stamp, and the mainline this branch
+  rebased onto added a fourth reader and widened a third — see R5 and the rebase note.
+  General sensitivity arm → **242 files / 42,868**. Specificity arm → 0.
   **Subjects at this stamp: `applies_to` → 1 file / 56. An archetype-valued `role` →
   1 file / 9. `general_level` → 1 file / 37 — all three in
   `core/deploy/tools/check-work-hierarchy.py`, and all three were 0 / 0 at the baseline
@@ -377,7 +380,11 @@ Both iterate `git ls-files`, read each path as UTF-8, and count with `str.count`
   rung 1, 9 for `archetype` over 188 lines / 13,478 characters — the rung-1 zero that made
   B2 invisible, now closed by the repair.
 
-**The corpus figures above moved with the REBASE, not with a change of method.** The same script, the same arms and the same denominators still re-derive the previous stamp's `1911 / 1856` exactly when run at that stamp — nothing was re-measured differently, and no instrument changed. What moved is the corpus underneath the measurement: this branch was rebased onto a mainline 41 commits further along, which added **15** tracked files, all text (the binary count is unchanged at 55, so the readable count moved by the same 15). The discriminating observation is that the **executable** census did not follow it — same 244, same 72 / 169 / 3 split, and every subject count identical (`applies_to` 1 / 56, `general_level` 1 / 37, `kind_id` 3 / 62). Only that census's general-prose arm moved (41,502 → 41,759), because the mainline commits edited comments inside executables that already existed rather than adding or removing any. A corpus denominator shifting while an executable-scoped denominator holds is the signature of a rebase; an instrument change would have moved the subjects too.
+**The corpus figures above moved with the REBASE, not with a change of method.** This has now happened at three stamps, and the three together say more than any one of them. The same script, the same arms and the same denominators still re-derive each earlier stamp's figures exactly when run at that stamp — `1911 / 1856`, then `1926 / 1871` — so nothing was re-measured differently and no instrument changed at any point. What moved is the corpus underneath the measurement. The first rebase carried this branch onto a mainline 41 commits further along, adding **15** tracked files; the second, at Stage 12, carried it 8 commits further and added **1**; the third, forced when a sibling release merged during this release's own CI wait, carried it **31** commits further and added **5**. Every addition is text, so the binary count holds at 55 and the readable count moves by the same amount each time (**1926 → 1931**, **1871 → 1876**).
+
+**The discriminating observation is the executable census — and at this stamp it stopped agreeing, which is the useful part.** Across all three rebases the executable DENOMINATOR never moved: same 244, same 72 / 169 / 3 split. At the first two stamps its subjects did not move either, and the reading was clean: a corpus denominator shifting while an executable-scoped denominator holds is the signature of a rebase. At this stamp the denominator still held, but the `kind_id` arm moved **3 files / 62 → 4 files / 97**. That is NOT the rebase signature, and reporting it as one would have been the error this map exists to prevent: an unchanged aggregate hiding a real change beneath it. The arm moved because the mainline added a `kind_id` reader (`compute-release-velocity.sh`) and widened an existing one (`check-label-parity.py`, 2 → 31 occurrences, under `#5291`) — a genuine consumer-set change, recorded at **R5**, not a measurement artifact. The `applies_to` 1 / 56 and `general_level` 1 / 37 subjects did hold, which is what localises the change to the `kind_id` axis rather than to the instrument.
+
+So the rule survives in a sharper form: a moving corpus denominator with a holding executable denominator indicates a rebase, **but only while the subject arms hold too**. A subject arm that moves under a held denominator is a new consumer, and the map owes it a row.
 
 **A zero whose control arm also returned zero is a broken probe.** Every zero recorded in
 this map is paired with a live control in the same invocation over the same denominator.
