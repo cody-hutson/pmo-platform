@@ -413,11 +413,17 @@ run_check() {
   done
 
   # ── R-03 duplicate primary key, reported once per duplicated id.
+  # Every array expansion below uses the `${arr[@]+"${arr[@]}"}` guard: under
+  # `set -u`, bash 3.2 — still the system bash on macOS, where deploy-time checks
+  # run — treats "${arr[@]}" on an EMPTY array as an unbound variable and aborts.
+  # SEEN_IDS is legitimately empty whenever every row's id was empty or
+  # charset-invalid, which is exactly a malformed-registry run, so the crash would
+  # land on the input this predicate exists to report on.
   local a b dup_reported
   local -a REPORTED=()
-  for a in "${SEEN_IDS[@]}"; do
+  for a in ${SEEN_IDS[@]+"${SEEN_IDS[@]}"}; do
     local n=0
-    for b in "${SEEN_IDS[@]}"; do [[ "$a" == "$b" ]] && n=$((n + 1)); done
+    for b in ${SEEN_IDS[@]+"${SEEN_IDS[@]}"}; do [[ "$a" == "$b" ]] && n=$((n + 1)); done
     if [[ $n -gt 1 ]]; then
       dup_reported=false
       for b in ${REPORTED[@]+"${REPORTED[@]}"}; do [[ "$a" == "$b" ]] && dup_reported=true; done
