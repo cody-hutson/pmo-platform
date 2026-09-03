@@ -833,3 +833,21 @@ core/deploy/tools/check-automation-registry.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-automation-coverage.sh
 ./core/deploy/tools/check-automation-coverage.sh
 core/deploy/tools/check-automation-coverage.sh
+
+# resolve-automation-binding.sh — the SCHEDULER ADAPTER. Where the two predicates
+# above judge the registry, this one CONSUMES it: it resolves a routine's registry
+# id to the binding that fires it on THIS install, deriving the backend class from
+# the entrypoint and reading the [adapters].scheduler selector fresh at every call.
+# Executed agent-side in three argument forms: `--self-test` (the SD-1..SD-4
+# falsification suite, which mutates copies of the LIVE population and hard-fails
+# on an empty one), a bare run (every row, one binding record each — the form an
+# operator reads to find the MANUAL lines on a no-scheduler install), and a single
+# routine id. All three are needed for the acceptance demonstration: the degrade
+# arm without the populated arm cannot distinguish a working adapter from one that
+# returns zero unconditionally. All four invocation forms per the per-tool form
+# convention above. (CI runs no Claude hooks, so these rows are for the agent-side
+# path, not the workflow step.)
+[PMO_PLATFORM_ROOT]/core/deploy/tools/resolve-automation-binding.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/resolve-automation-binding.sh
+./core/deploy/tools/resolve-automation-binding.sh
+core/deploy/tools/resolve-automation-binding.sh
