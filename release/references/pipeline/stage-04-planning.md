@@ -238,13 +238,21 @@ Stage 7 Dev Testing's Domain-Practice Provenance Verification Step verifies agai
 **Derivation procedure — both authorities, in this order.**
 
 1. **Tier-0 floor — `core/hooks/block-autonomy-ceiling.sh`.** Read **every** `case "$ABS_TARGET"` block whose arms invoke `always_block "BLOCK-AUTONOMY-001"`, and record how many you found; do not assume a count, because the block structure has already changed once. Project each anchored arm into repo-relative form by stripping the platform-checkout anchor, then **discard any arm whose projected path the repository does not track** — test that against the tracked index at the read SHA rather than carrying forward a prior answer, because an arm that is unreachable today becomes reachable the moment the repository starts tracking that surface, and discarding it then would silently under-derive the floor. Union the surviving arms with the patterns of any repository-membership block. A membership block guarded by a worktree test is anchor-free and fires wherever an Engineering worktree sits, which makes it the operative arm for in-repo work; **re-derive every block each release rather than relying on that** — an arm added to an anchored block alone would not appear in a membership block.
-2. **Sanctioned-session gate — `core/hooks/block-skill-direct-edit.sh`.** Read the scope regex assigned to `SKILL_SCOPE_RE`, the frontmatter key the arming check greps for, and the path the exemption-list variable resolves to. A write-set path is gated when it matches the scope regex **and** its owning skill's `SKILL.md` carries the arming key **and** the skill is absent from the exemption list. **The exemption list and the hook's mode sidecar resolve relative to the *deployed* hook directory, not the repository** — the in-repo copy of a path is not the file the hook reads. Read the deployed location; a planner who cannot reach it records `undetermined`, never `absent`. The gate's mode changes only whether a violation is refused or logged, never whether a path is gated, so a control in warn mode still yields `sanctioned-session-required`.
+2. **Sanctioned-session gate — `core/hooks/block-skill-direct-edit.sh`.** Read the scope regex assigned to `SKILL_SCOPE_RE`, the frontmatter key the arming check greps for, and the path the exemption-list variable resolves to. A write-set path is gated when **all three** of the following hold — the determination is a conjunction, and reading only the first conjunct is the way this step is actually got wrong:
+
+| # | Conjunct | Source to read | False ⇒ |
+|---|---|---|---|
+| 1 | the path matches the scope regex | the hook line assigning `SKILL_SCOPE_RE` | not gated |
+| 2 | the owning skill's `SKILL.md` carries the arming key | the hook's own arming grep, whose failure branch reads `exit 0  # not yet gated` | not gated |
+| 3 | the skill is absent from the exemption list | the path `EXEMPTION_LIST` resolves to | not gated |
+
+A path failing **any** conjunct is not gated by this control. Record which conjunct decided — a row that states only the conjunction's result cannot distinguish a discriminating read from a lucky one. **The exemption list and the hook's mode sidecar resolve relative to the *deployed* hook directory, not the repository** — the in-repo copy of a path is not the file the hook reads. Read the deployed location; a planner who cannot reach it records `undetermined`, never `absent`. **`undetermined` fails safe, and the rule is stated rather than left to convention: conjuncts 1 and 2 true with conjunct 3 `undetermined` classifies `sanctioned-session-required`.** The Path-class enum has no `undetermined` member by design — an unresolvable conjunct resolves toward the constraint, never away from it, exactly as the Tier-0 arm's own unreachable-arm rule in step 1 does. The floor and the gate must not fail open on an unread input. The gate's mode changes only whether a violation is refused or logged, never whether a path is gated, so a control in warn mode still yields `sanctioned-session-required`.
 3. **Classify each write-set path, then the card.**
 
 | Path class | Predicate | Execution path |
 |---|---|---|
 | `tier-0-floored` | matches the Tier-0 union from step 1 | `operator-executed` |
-| `sanctioned-session-required` | not floored, and gated per step 2 | `sanctioned-session: <skill> <mode>` |
+| `sanctioned-session-required` | not floored, and gated per step 2 — scope regex ∧ arming key ∧ absent-from-exemption-list, or conjuncts 1 ∧ 2 with 3 `undetermined` | `sanctioned-session: <skill> <mode>` |
 | `unconstrained` | neither | `ordinary Engineering spoke` |
 
 **Precedence: Tier-0 first.** A path matching both is `tier-0-floored`. The floor is evaluated before every other signal and admits no sanctioned path, so no session type satisfies it.
@@ -255,7 +263,7 @@ Stage 7 Dev Testing's Domain-Practice Provenance Verification Step verifies agai
 
 **What this read does not answer.** A3.5 classifies which writes a *control mechanically floors or gates*. It does not classify which changes require operator approval under the charter's `No ungoverned changes` guardrail — that set is stated by governance and is not identical to the enforced one in either direction. An `unconstrained` row means no control refuses the write; it never means the change is ungoverned.
 
-**The output is an execution path, never a bypass.** The hook-bypass environment variable is not a member of the execution-path enum and must not appear in this section under any classification. A `tier-0-floored` card is operator-executed, split, or deferred. The floor is an irreducible-human boundary, and a planning artifact that normalises stepping over it is worse than no read at all.
+**The output is an execution path, never a bypass.** The hook-bypass environment variable is not a member of the execution-path enum and **must not appear as an execution-path value** under any classification. Naming it in order to forbid it — an `Execution path` cell reading *"…never <the bypass>"* — is the prohibition being restated, not breached, and is permitted; a rule that forbade the token outright would make a planner delete a useful prohibition in order to conform. A `tier-0-floored` card is operator-executed, split, or deferred. The floor is an irreducible-human boundary, and a planning artifact that normalises stepping over it is worse than no read at all.
 
 **Omission is not available.** Every release has a write set, so the section is authored on every plan. A release in which no card is constrained renders all-`unconstrained` rows, and that is the correct and informative output — the discriminating negative is what makes the flag mean something when it does fire.
 
@@ -267,7 +275,7 @@ Stage 7 Dev Testing's Domain-Practice Provenance Verification Step verifies agai
 ### Agent-Editability Read
 
 **Derivation** — controls read at commit `<short SHA>`:
-- Tier-0 floor: `core/hooks/block-autonomy-ceiling.sh` — `<N>` `case` block(s) invoking `always_block "BLOCK-AUTONOMY-001"`; every arm of every block quoted below, one per line.
+- Tier-0 floor: `core/hooks/block-autonomy-ceiling.sh` — every `case` block whose arms invoke `always_block "BLOCK-AUTONOMY-001"`: `<N>` block(s) observed; each block's arms quoted verbatim below, one per line.
 - Sanctioned-session gate: `core/hooks/block-skill-direct-edit.sh` — `SKILL_SCOPE_RE` = `<quoted>`; arming key = `<quoted>`; exemption list resolved at `<deployed path>` — `present (<n> entries) | absent | undetermined`.
 
 | Card | Write-set path | Tier-0 ∩ | Skill-gate ∩ | Path class | Card class | Execution path |

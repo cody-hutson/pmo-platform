@@ -341,7 +341,11 @@ esac
 # The safety claim, on the execution-path column specifically: no class may
 # recommend the bypass.
 BYPASS_IN_MAP="$(printf '%s\n' "$EXECMAP" | grep -c "$BYPASS_TOKEN" || true)"
-if [ "${BYPASS_IN_MAP:-0}" -eq 0 ]; then
+# The row-count precondition is part of the assertion, not a separate arm: a
+# zero over an EMPTY map is the vacuous pass this release exists to eliminate.
+if [ "${MAP_ROWS:-0}" -lt 1 ]; then
+  bad "X2 — BROKEN PROBE: the map is empty, so a zero here would be vacuous"
+elif [ "${BYPASS_IN_MAP:-0}" -eq 0 ]; then
   ok "X2 — no path class names $BYPASS_TOKEN as its execution path (0 of $MAP_ROWS rows)"
 else
   bad "X2 — $BYPASS_IN_MAP path class(es) name $BYPASS_TOKEN as an execution path"
