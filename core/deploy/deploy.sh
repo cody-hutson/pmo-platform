@@ -6007,6 +6007,44 @@ cmd_check() {
     printf '{"ts":"%s","check":"%s","evaluated":false,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
   }
 
+  # tsv_residual_rows — the RESIDUAL BUCKET for a TSV-emitting primitive's verdict
+  # column. Returns every non-blank output line whose class field falls OUTSIDE the
+  # set the caller classifies, joined with "; ". Empty output means "every row was
+  # recognized"; non-empty output is a FINDING.
+  #
+  # WHY THIS EXISTS (#5054 / D-J). Every check in the 50-55 cohort consumed its
+  # primitive's TSV by pulling out the classes it knew, with awk selectors of the
+  # form `$1=="KNOWN"`, and then either tested those extractions for emptiness or
+  # keyed the clean verdict off the exit code. Both shapes FAIL OPEN: a row carrying
+  # any other class value matched no selector, went to /dev/null, and the caller
+  # reported a clean result while the primitive was holding a finding.
+  #
+  # SHAPE WAS NEVER THE AXIS, and that is the part worth stating plainly. These
+  # primitives emit a fixed number of tab-separated fields, so a NEW verdict class
+  # preserves column count, column order and separator PERFECTLY while the filter
+  # selects on the column's VALUE. Every guard written against TSV shape therefore
+  # passes at the exact moment the composite goes silently false-green. The only
+  # detector that works is one keyed on the value, and specifically on the value
+  # being UNRECOGNIZED: an unrecognized class is a FINDING, never an absence.
+  #
+  # A row with fewer fields than `field` yields an empty class and lands in the
+  # bucket too — deliberate. These outputs are captured with 2>&1, so a stray
+  # one-field stderr line is exactly the kind of row that must not slip through a
+  # class filter into a green verdict.
+  #
+  #   $1  the captured primitive output
+  #   $2  1-based field number carrying the class/verdict token
+  #   $3  ERE matching the class values this caller classifies (anchor it: '^(A|B)$')
+  #   $4  leading header lines to skip (optional; default 0)
+  tsv_residual_rows() {
+    local _out="$1" _field="$2" _known="$3" _skip="${4:-0}"
+    printf '%s\n' "$_out" | awk -F'\t' -v f="$_field" -v k="$_known" -v s="$_skip" '
+      NR <= s { next }
+      /^[[:space:]]*$/ { next }
+      $f !~ k { printf "%s%s", (n++ ? "; " : ""), $0 }
+    '
+  }
+
   # resolve_check_mode — per-check mode resolver (decouples a single check from
   # the shared deploy-check.mode cohort). Reads a CHECK-SPECIFIC mode file
   # "<check_id>.mode" from the same operator-instance base (and legacy
@@ -11515,11 +11553,19 @@ sys.stdout.write("".join(out) + "|")
       elif [[ $c50_exit -eq 0 || $c50_exit -eq 1 ]]; then
         # Partition findings on the tier column (TSV row 2 is the header;
         # data rows: file<TAB>tier<TAB>field<TAB>violation<TAB>severity).
-        local c50_a c50_o c50_total
+        local c50_a c50_o c50_total c50_unknown
         c50_a=$(echo "$c50_out" | awk -F'\t' 'NR>2 && $2=="A"'     | grep -c . || true)
         c50_o=$(echo "$c50_out" | awk -F'\t' 'NR>2 && $2=="other"' | grep -c . || true)
         c50_a=${c50_a:-0}; c50_o=${c50_o:-0}
         c50_total=$((c50_a + c50_o))
+        # Residual bucket (D-J) — the tier partition above selects on the VALUE of
+        # column 2, so a row carrying any third tier value matched neither selector,
+        # contributed 0 to c50_total, and the emptiness test below then logged a
+        # clean verdict. An unrecognized tier is a FINDING, never an absence.
+        c50_unknown=$(tsv_residual_rows "$c50_out" 2 '^(A|other)$' 2)
+        if [[ -n "$c50_unknown" ]]; then
+          flag_warn_or_issue "doc-frontmatter" "unrecognized tier class in the frontmatter TSV — the primitive emits a tier this caller does not partition; treat as a finding, not an absence: $c50_unknown"
+        fi
         if [[ "$c50_total" -eq 0 ]]; then
           log "  OK:    all scanned core/ docs carry conformant frontmatter"
         elif [[ "$c50_mode" == "enforce" ]]; then
@@ -11547,7 +11593,7 @@ sys.stdout.write("".join(out) + "|")
   # Check 51 — Label-taxonomy ↔ GitHub label-set parity (warn-mode initial) [#749]
   #
   # Asserts core/specs/label-taxonomy.md (the canonical label registry) agrees
-  # with the live GitHub label set. Two directions, asymmetric severity per the
+  # with the live GitHub label set. Four directions, asymmetric severity per the
   # #749 decision + the warn→enforce rollout:
   #   MISSING (canonical label absent from GitHub) → ENFORCE-capable: the #457
   #     `status: rejected` defect class (a gate referencing a non-existent label
@@ -11555,6 +11601,36 @@ sys.stdout.write("".join(out) + "|")
   #   ORPHAN (live GitHub label absent from the taxonomy) → WARN only (some are
   #     legitimately operator-local or pending registration, e.g. the `type:*`
   #     family until #1777 documents it). Never FAILs.
+  #   EXCLUDED_LIVE (live GitHub label the grammar declares EXCLUDED, per
+  #     label-taxonomy.md § Excluded Labels) → routed through the shared resolved
+  #     mode like every other arm, and NOT through flag_advisory_only: an
+  #     excluded-but-live row is a real contradiction between two surfaces, and a
+  #     structurally non-escalating emitter would re-create the fail-open one layer
+  #     up. Distinct from ORPHAN because the remedies are OPPOSITE — an orphan may
+  #     simply need registering; an excluded-but-live row means one of the two
+  #     surfaces must change (delete the label, or withdraw the exclusion).
+  #   DIVERGED (a row declared AND live whose colour and/or description disagrees
+  #     with the declaration, per core/config/allowlists/label-attribute-dispositions.txt)
+  #     → ADVISORY-ONLY, and structurally so [#5057]. Emitted through
+  #     flag_advisory_only, NEVER flag_warn_or_issue, and the reason is not a
+  #     posture preference: resolve_check_mode is keyed per CHECK-ID, not per arm,
+  #     so routing this arm through the escalating emitter would arm it the instant
+  #     anyone flips label-parity to enforce. That would be a defect — the gate
+  #     cannot distinguish a deliberate operator override from drift, and the
+  #     remediation (`gh label edit`) overwrites live label metadata, which is
+  #     repository STATE and not git-revertible. flag_advisory_only carries no mode
+  #     `case` and no ISSUES increment ANYWHERE in its body, so the guarantee is in
+  #     the code's shape rather than in a default value a future edit could flip.
+  #     The ORPHAN leg's "Never FAILs" comment above is the live proof that a prose
+  #     guarantee drifts: it is already false (that leg routes through
+  #     flag_warn_or_issue). This arm does not repeat that pattern.
+  #     A row registered in the disposition file is suppressed; the arm therefore
+  #     DRAINS to zero once the registry covers the population, which is what
+  #     distinguishes it from a permanent signal stream.
+  #   DIVERGED-STALE (a disposition-registry row naming a label that is no longer
+  #     divergent, or no longer live) → ADVISORY-ONLY, same emitter, same reason.
+  #     The audit affordance a suppression surface owes: a suppression that
+  #     silently stops matching is the defect class this check exists to close.
   # Multi-source union (#1970): the primitive reads the canonical set as the UNION
   # across every --source. #1970 relocated the concrete label ROWS out of the doc
   # (which keeps the GRAMMAR: group definitions, rules, namespace patterns) into the
@@ -11579,6 +11655,24 @@ sys.stdout.write("".join(out) + "|")
     for c51_pack in core/packs/*/pack.toml; do
       [[ -f "$c51_pack" ]] && c51_source_args+=(--source "$c51_pack")
     done
+    # ...and the OPERATOR-LOCAL (K4) packs [#5291]. Corpus packs alone were the whole
+    # canonical set, which was harmless while `type:*` resolved by prefix and becomes
+    # a defect the moment it resolves against declared kinds: a deployment declaring
+    # `bug` in its own K4 pack would see `type:bug` reported as an orphan, because the
+    # gate cannot see the pack that declares it. Kinds are K4 operator-local by
+    # grammar (work-item-type-schema.md §1.1.1 — never authored into this corpus), so
+    # the packs that declare them are legitimately outside the tree and the source
+    # list is the surface that must reach them. Deliberately reuses the already-
+    # sourced pmo_instance_path() resolver rather than introducing a token or a config
+    # key: an unregistered path token orphans silently. Guarded exactly like the
+    # corpus loop, so a deployment with no instance packs directory is a no-op.
+    local c51_instance_packs
+    c51_instance_packs="$(pmo_instance_path)/packs"
+    if [[ -d "$c51_instance_packs" ]]; then
+      for c51_pack in "$c51_instance_packs"/*/pack.toml; do
+        [[ -f "$c51_pack" ]] && c51_source_args+=(--source "$c51_pack")
+      done
+    fi
     if [[ ! -f "$c51_script" ]]; then
       flag_warn_or_issue "label-parity" "primitive script missing: $c51_script"
     elif ! command -v gh >/dev/null 2>&1; then
@@ -11587,15 +11681,57 @@ sys.stdout.write("".join(out) + "|")
       local c51_mode
       c51_mode=$(resolve_check_mode "label-parity")
       local c51_out c51_exit=0
-      c51_out=$(/usr/bin/python3 "$c51_script" "${c51_source_args[@]}" --output-format tsv 2>&1) || c51_exit=$?
+      # --dispositions is passed EXPLICITLY rather than left to the primitive's
+      # default, so the wiring between this check and the operator-authored
+      # disposition registry is visible in the check body [#5057]. An absent file is
+      # tolerated by the primitive as an empty registry.
+      local c51_dispositions="core/config/allowlists/label-attribute-dispositions.txt"
+      c51_out=$(/usr/bin/python3 "$c51_script" "${c51_source_args[@]}" --dispositions "$c51_dispositions" --output-format tsv 2>&1) || c51_exit=$?
       if [[ $c51_exit -eq 3 ]]; then
-        flag_warn_or_issue "label-parity" "input failure (exit 3): $(head -1 <<<"$c51_out") — --source parsed to zero labels or the live set was unreadable; fix the source/parser"
+        flag_warn_or_issue "label-parity" "input failure (exit 3): $(head -1 <<<"$c51_out") — --source parsed to zero labels, the live set was unreadable, or no markdown source carried the '## Excluded Labels' section (a renamed heading is fail-loud, never a silently-empty excluded set); fix the source/parser"
       elif [[ $c51_exit -eq 0 || $c51_exit -eq 1 ]]; then
-        local c51_missing c51_orphan
-        c51_missing=$(echo "$c51_out" | awk -F'\t' '$1=="MISSING"{print $2}')
-        c51_orphan=$(echo "$c51_out"  | awk -F'\t' '$1=="ORPHAN"{print $2}')
-        if [[ -z "$c51_missing" && -z "$c51_orphan" ]]; then
-          log "  OK:    label-taxonomy.md and the GitHub label set are in parity"
+        # VERDICT PARSING — class-agnostic and fail-loud. WHY IT IS SHAPED THIS WAY:
+        # this block used to pull out MISSING and ORPHAN with two `$1=="..."` value
+        # selectors and then log "in parity" when both extractions came back empty.
+        # A row of any THIRD class matched neither selector, was discarded, and the
+        # emptiness test then passed — the check reported parity while the primitive
+        # was holding a finding. Guarding the TSV's SHAPE could never have caught
+        # that: the primitive emits exactly two tab-separated fields per row, so a
+        # new class preserves column count and order perfectly while the filter
+        # selects on column-1's VALUE. An unrecognized verdict is a FINDING, never
+        # an absence — and the known-class set lives in ONE named local so a future
+        # class is one edit, not four.
+        local c51_known_re='^(MISSING|ORPHAN|EXCLUDED_LIVE|DIVERGED|DIVERGED-STALE)$'
+        local c51_missing c51_orphan c51_excluded c51_unknown c51_rows
+        local c51_diverged c51_diverged_stale
+        c51_missing=$(echo "$c51_out"  | awk -F'\t' '$1=="MISSING"{print $2}')
+        c51_orphan=$(echo "$c51_out"   | awk -F'\t' '$1=="ORPHAN"{print $2}')
+        c51_excluded=$(echo "$c51_out" | awk -F'\t' '$1=="EXCLUDED_LIVE"{print $2}')
+        # The two attribute-divergence tokens are bound to NAMED variables, and
+        # c51_known_re names them, BEFORE the residual bucket runs [#5057]. That
+        # ordering is the whole integration contract with the catch-all: a class
+        # this caller genuinely classifies must reach its own arm, not the bucket
+        # that exists for classes nobody has ever seen.
+        c51_diverged=$(echo "$c51_out"       | awk -F'\t' '$1=="DIVERGED"{print $2}')
+        c51_diverged_stale=$(echo "$c51_out" | awk -F'\t' '$1=="DIVERGED-STALE"{print $2}')
+        # Guard B — the residual bucket, carrying TOKEN and PAYLOAD so the operator
+        # sees what was unclassified rather than only that something was.
+        c51_unknown=$(tsv_residual_rows "$c51_out" 1 "$c51_known_re")
+        # Guard A — the clean verdict is gated on the COUNT of non-blank output
+        # lines, not on the value-filtered extractions being empty. Deliberately not
+        # a field-count filter: c51_out is captured with 2>&1, so a one-field stderr
+        # line must not slip into a green verdict either. Guard A alone yields a red
+        # with no content; Guard B alone is defeated by a malformed sub-two-field
+        # row. Neither subsumes the other, so both are here.
+        c51_rows=$(printf '%s\n' "$c51_out" | grep -cv '^[[:space:]]*$' || true)
+        c51_rows=${c51_rows:-0}
+        if [[ $c51_rows -eq 0 ]]; then
+          # The qualifier is load-bearing, not decoration [#5057]. This line now
+          # covers names, exclusions AND declared attributes — but a divergence the
+          # operator has registered as an accepted override is suppressed upstream
+          # and never reaches this output, so "in parity" here means "no
+          # UNACCEPTED divergence", not "the two sides are byte-equal".
+          log "  OK:    label-taxonomy.md and the GitHub label set are in parity (names, exclusions and declared attributes; registered accepted overrides excluded)"
         else
           if [[ -n "$c51_missing" ]]; then
             if [[ "$c51_mode" == "enforce" ]]; then
@@ -11608,6 +11744,29 @@ sys.stdout.write("".join(out) + "|")
           fi
           if [[ -n "$c51_orphan" ]]; then
             flag_warn_or_issue "label-parity" "GitHub label(s) not registered in the taxonomy (warn-only — may be operator-local or pending registration): $(echo "$c51_orphan" | paste -sd, -)"
+          fi
+          if [[ -n "$c51_excluded" ]]; then
+            flag_warn_or_issue "label-parity" "live label(s) the taxonomy declares excluded — delete the label (repository STATE; not git-revertible), or withdraw the row from label-taxonomy.md § Excluded Labels: $(echo "$c51_excluded" | paste -sd, -)"
+          fi
+          # ONE AGGREGATED LINE PER ARM, not one per row [#5057] — mirroring Checks
+          # 55/56. Thirty-odd individual WARN lines is a signal stream nobody reads;
+          # a single line carrying the count and the membership is a finding an
+          # operator can act on, and it is what makes the arm's drain visible.
+          #
+          # flag_advisory_only, NOT flag_warn_or_issue, and deliberately so: see the
+          # DIVERGED entry in this check's header comment. resolve_check_mode is
+          # keyed per check-id rather than per arm, so the escalating emitter would
+          # arm this arm on any future label-parity enforce flip — for a class whose
+          # remediation overwrites non-git-revertible repository state and which the
+          # gate cannot distinguish from a deliberate override.
+          if [[ -n "$c51_diverged" ]]; then
+            flag_advisory_only "label-parity" "attribute divergence — $(echo "$c51_diverged" | grep -cv '^[[:space:]]*$') declared-and-live row(s) diverge on colour and/or description and are not registered as accepted overrides: $(echo "$c51_diverged" | paste -sd, -). Read-only: the sanctioned remediation renderer is check-label-parity.py --emit-fix (it runs nothing); the disposition record is $c51_dispositions"
+          fi
+          if [[ -n "$c51_diverged_stale" ]]; then
+            flag_advisory_only "label-parity" "stale disposition row(s) — $c51_dispositions registers label(s) that are no longer divergent, or no longer live: $(echo "$c51_diverged_stale" | paste -sd, -). Remove the row(s); a suppression that has silently stopped matching is the defect class this arm exists to close"
+          fi
+          if [[ -n "$c51_unknown" ]]; then
+            flag_warn_or_issue "label-parity" "unrecognized verdict class in the parity TSV — the primitive emits a class this caller does not classify; treat as a finding, not an absence, and extend c51_known_re: $c51_unknown"
           fi
         fi
       else
@@ -11668,6 +11827,17 @@ sys.stdout.write("".join(out) + "|")
         fi
       else
         flag_warn_or_issue "milestone-position" "check errored (exit $c52_exit): $(head -1 <<<"$c52_out")"
+      fi
+      # Residual bucket (D-J) — evaluated OUTSIDE the exit-code chain above, on both
+      # the clean and the finding exits, because a row of an unrecognized class can
+      # arrive on either and the col-1 value selectors above would discard it in
+      # silence. See tsv_residual_rows for why a TSV SHAPE guard cannot see this.
+      if [[ $c52_exit -eq 0 || $c52_exit -eq 1 ]]; then
+        local c52_unknown
+        c52_unknown=$(tsv_residual_rows "$c52_out" 1 '^(COUNT|DRIFT)$')
+        if [[ -n "$c52_unknown" ]]; then
+          flag_warn_or_issue "milestone-position" "unrecognized verdict class in the milestone-position TSV — the primitive emits a class this caller does not classify; treat as a finding, not an absence: $c52_unknown"
+        fi
       fi
     fi
   fi
@@ -11733,6 +11903,24 @@ sys.stdout.write("".join(out) + "|")
       else
         flag_warn_or_issue "approved-queue-depth" "check errored (exit $c53_exit): $(head -1 <<<"$c53_out")"
       fi
+      # Residual bucket (D-J) — see tsv_residual_rows. Evaluated on both the clean
+      # and the finding exit: the OK line above is computed from a value-filtered
+      # COUNT extraction, so an unrecognized class reached neither it nor the log.
+      if [[ $c53_exit -eq 0 || $c53_exit -eq 1 ]]; then
+        # THRESHOLD / BELOW_THRESHOLD / UNTHEMED are emitted by the primitive and
+        # deliberately NOT consumed here — the threshold is this caller's own input
+        # and the other two are already implied by the branch taken. They are named
+        # so the bucket means "a class this caller has never seen", not "a class this
+        # caller does not print"; a bucket that fires every run teaches the reader to
+        # ignore it, which is the failure mode this whole change exists to remove.
+        # `ERROR` is deliberately ABSENT: it accompanies exit 3 and routes to its own
+        # branch, so an ERROR row arriving on an exit-0/1 path IS an anomaly.
+        local c53_unknown
+        c53_unknown=$(tsv_residual_rows "$c53_out" 1 '^(COUNT|THEMES|PRIORITIES|THRESHOLD|BELOW_THRESHOLD|UNTHEMED)$')
+        if [[ -n "$c53_unknown" ]]; then
+          flag_warn_or_issue "approved-queue-depth" "unrecognized verdict class in the approved-queue-depth TSV — the primitive emits a class this caller does not classify; treat as a finding, not an absence: $c53_unknown"
+        fi
+      fi
     fi
   fi
 
@@ -11782,6 +11970,20 @@ sys.stdout.write("".join(out) + "|")
         fi
       else
         flag_warn_or_issue "ownership-collision" "check errored (exit $c54_exit): $(head -1 <<<"$c54_out")"
+      fi
+      # Residual bucket (D-J) — see tsv_residual_rows. The 0-collision OK line above
+      # is computed from a value-filtered ENTITIES_CHECKED extraction, so a row of an
+      # unrecognized class was silently dropped on the very path that reports clean.
+      if [[ $c54_exit -eq 0 || $c54_exit -eq 1 ]]; then
+        # MAINTAINER_CELLS / PRODUCERS_RECONCILED / RENDERINGS_EXEMPT /
+        # FP_ADJUDICATED are emitted denominators this caller deliberately does not
+        # print — recognized, not consumed. See the Check 53 note for why the
+        # distinction matters and why `ERROR` is deliberately not in this set.
+        local c54_unknown
+        c54_unknown=$(tsv_residual_rows "$c54_out" 1 '^(ENTITIES_CHECKED|COLLISIONS|DETAIL|MAINTAINER_CELLS|PRODUCERS_RECONCILED|RENDERINGS_EXEMPT|FP_ADJUDICATED)$')
+        if [[ -n "$c54_unknown" ]]; then
+          flag_warn_or_issue "ownership-collision" "unrecognized verdict class in the ownership-collision TSV — the primitive emits a class this caller does not classify; treat as a finding, not an absence: $c54_unknown"
+        fi
       fi
     fi
   fi
@@ -11919,6 +12121,25 @@ sys.stdout.write("".join(out) + "|")
           log "  OK:    work-hierarchy H3 coextension advisory — ${c55_h3_count} finding(s); no open epic reads as an initiative container"
         else
           log "  SKIP:  work-hierarchy H3 coextension advisory — the primitive emitted neither a COUNT_H3 nor a SKIP H3 row, so the leg was NOT evaluated (treat as unmeasured, not clean)"
+        fi
+        # Residual bucket (D-J) — see tsv_residual_rows. This check already carries
+        # the class's shape for ONE leg (the H3 "emitted neither ... treat as
+        # unmeasured" arm above); the bucket generalizes it to every class the
+        # primitive can emit, so a NEW invariant leg cannot be dropped in silence by
+        # the col-1 value selectors. Routed through flag_warn_or_issue rather than
+        # flag_advisory_only: H3's own findings are advisory, but a class this caller
+        # cannot classify is a finding about the CALLER's coverage, and a
+        # structurally non-escalating emitter would re-create the fail-open.
+        # The known set is the primitive's OWN documented OUTPUT (TSV) contract —
+        # VOCAB / SCANNED / H1 / H2 / H3 / EXEMPT / SKIP / COUNT_H3 / COUNT — read
+        # from its header docstring rather than inferred from one run, so a class
+        # that only appears on an uncommon path is still recognized. VOCAB, EXEMPT
+        # and COUNT are recognized-but-not-consumed here. `ERROR` is deliberately
+        # excluded: see the Check 53 note.
+        local c55_unknown
+        c55_unknown=$(tsv_residual_rows "$c55_out" 1 '^(VOCAB|SCANNED|H1|H2|H3|EXEMPT|SKIP|COUNT|COUNT_H3)$')
+        if [[ -n "$c55_unknown" ]]; then
+          flag_warn_or_issue "work-hierarchy-drift" "unrecognized verdict class in the work-hierarchy TSV — the primitive emits a class this caller does not classify; treat as a finding, not an absence: $c55_unknown"
         fi
       fi
     fi
@@ -13917,6 +14138,99 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
           log "  WARN:  gate-rollout-graduation — GRADUATION-DUE (deadline): ${c74_elapsed} days since arming (threshold ${GATE_ROLLOUT_REVIEW_DAYS}d; escalates to a finding at ${GATE_ROLLOUT_ESCALATE_DAYS}d). ${c74_verdict}"
         else
           log "  OK:    gate-rollout-graduation — within the review window (${c74_elapsed}d of ${GATE_ROLLOUT_REVIEW_DAYS}d, drain=${c74_rows})"
+        fi
+      fi
+    fi
+  fi
+
+  # Check 75 — pack-grammar conformance (WARN-MODE INITIAL) [#6361]
+  #
+  # Runs the work-item type-pack meta-schema over the live pack corpus. Before this
+  # check the meta-schema was a grammar NO executable validated: it could say anything
+  # and nothing in the tree would notice, so "this pack conforms" was ungradable by
+  # construction and every conformance claim was read by eye.
+  #
+  # WARN-MODE INITIAL, per the progressive-rollout convention the sibling checks follow
+  # (14/18/42/43/50/51/52/53/54/55). Two reasons, both specific rather than ceremonial:
+  # this is a brand-new detector with no shakedown history, and the population it binds
+  # is not fully visible from here — type-pack INSTANCES are operator-local user config
+  # by design, so an operator tree can hold packs this repo has never seen. The
+  # graduation to enforce is a committed default (resolve_check_mode "<id>" "enforce"),
+  # never a mode file, so the flip leaves a repo record.
+  #
+  # The primitive carries --self-test and a per-rule id on every finding, so a finding
+  # here names the rule that produced it rather than handing the operator an exit code.
+  #
+  # WIRING, RECORDED ON BOTH SIDES. This is the THIRD deploy.sh consumer of
+  # core/deploy/tools/check-work-hierarchy.py, after Check 22 (--emit-kinds) and
+  # Check 55 (the H1/H2/H3 legs). The primitive's own consumer set is recorded in
+  # core/deploy/tools/README.md; a new invocation that is not added there leaves
+  # the tool's documented blast radius short of its real one.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 75: Pack-grammar conformance (work-item type-pack meta-schema; warn-mode initial; enforce-flip deferred)"
+    local c75_script="core/deploy/tools/check-work-hierarchy.py"
+    local c75_packs="core/packs"
+    if [[ ! -f "$c75_script" ]]; then
+      flag_warn_or_issue "pack-conformance" "primitive script missing: $c75_script"
+    elif [[ ! -d "$c75_packs" ]]; then
+      flag_warn_or_issue "pack-conformance" "pack corpus missing: $c75_packs"
+    else
+      local c75_mode
+      c75_mode=$(resolve_check_mode "pack-conformance")
+
+      # ── CONTROL ARM FIRST: a probe that cannot be shown to discriminate proves
+      # nothing. The SAME binary, the SAME mode, over a fixture whose single planted
+      # nonconformance is the capability-bearing rule. If the sensitivity arm does not
+      # reject and the specificity arm does not accept, the verdict below is
+      # unattributable and this check FAILS rather than reporting a clean corpus —
+      # which is exactly the shape a green-because-dead gate takes.
+      local c75_fx="core/deploy/tests/fixtures/packs"
+      local c75_sens_rc=0 c75_spec_rc=0 c75_sens_out="" c75_sens_rule=""
+      if [[ -d "$c75_fx/nonconforming-kit" && -d "$c75_fx/conforming-kit" ]]; then
+        c75_sens_out=$(/usr/bin/python3 "$c75_script" --validate-packs --pack-root "$c75_fx/nonconforming-kit" 2>&1) || c75_sens_rc=$?
+        /usr/bin/python3 "$c75_script" --validate-packs --pack-root "$c75_fx/conforming-kit" >/dev/null 2>&1 || c75_spec_rc=$?
+        c75_sens_rule=$(echo "$c75_sens_out" | awk -F'\t' '$1=="FINDING"{print $2}' | paste -sd, -)
+        log "  CTRL:  pack-conformance — sensitivity(nonconforming fixture) exit=${c75_sens_rc} rule='${c75_sens_rule}' (want exit 1 + PACK-K05), specificity(conforming fixture) exit=${c75_spec_rc} (want 0)"
+      else
+        log "  CTRL:  pack-conformance — discrimination fixtures absent at $c75_fx; the arms below cannot be shown to discriminate"
+        c75_sens_rc=-1
+      fi
+
+      if [[ "$c75_sens_rc" -ne 1 || "$c75_sens_rule" != "PACK-K05" || "$c75_spec_rc" -ne 0 ]]; then
+        log "  FAIL:  pack-conformance — the validator no longer discriminates (sensitivity exit=${c75_sens_rc} rule='${c75_sens_rule}', specificity exit=${c75_spec_rc}). A conformance verdict over the live corpus would be unattributable, so the corpus is NOT reported clean."
+        ISSUES=$((ISSUES + 1))
+      else
+        local c75_out c75_exit=0
+        c75_out=$(/usr/bin/python3 "$c75_script" --validate-packs --pack-root "$c75_packs" 2>&1) || c75_exit=$?
+        if [[ $c75_exit -eq 3 ]]; then
+          flag_warn_or_issue "pack-conformance" "input failure (exit 3): $(head -1 <<<"$c75_out") — the pack corpus was unreadable or resolved to zero packs; a zero-pack root finds no violation BY CONSTRUCTION and must never read clean"
+        elif [[ $c75_exit -eq 0 ]]; then
+          local c75_read
+          c75_read=$(echo "$c75_out" | awk -F'\t' '$1=="PACKS"{print $2" "$3" "$4}')
+          local c75_caveats
+          c75_caveats=$(echo "$c75_out" | awk -F'\t' '$1=="CAVEAT"{print $2"@"$3}' | paste -sd, -)
+          log "  OK:    pack-conformance — 0 findings (${c75_read:-packs_read=?})"
+          # A caveat is NEVER a finding — an unregistered kit class is the OPEN-domain
+          # decision working as designed. It is surfaced anyway, because a caveat
+          # nobody sees is worse than the error it replaces: a mistyped kit class
+          # reaches this line and silently relieves a work-item kit of its obligation.
+          [[ -n "$c75_caveats" ]] && log "  NOTE:  pack-conformance — caveat(s), not findings: $c75_caveats"
+          # A SKIP is a rule that was NOT-EVALUATED. Reported so a narrower rule set is
+          # never mistaken for a clean corpus.
+          local c75_skips
+          c75_skips=$(echo "$c75_out" | awk -F'\t' '$1=="SKIP"{print $2}' | paste -sd, -)
+          [[ -n "$c75_skips" ]] && log "  NOTE:  pack-conformance — rule(s) NOT evaluated: $c75_skips"
+        elif [[ $c75_exit -eq 1 ]]; then
+          local c75_findings
+          c75_findings=$(echo "$c75_out" | awk -F'\t' '$1=="FINDING"{print $2"@"$3}' | paste -sd, -)
+          if [[ "$c75_mode" == "enforce" ]]; then
+            log "  FAIL:  pack-conformance — pack(s) violate the meta-schema: $c75_findings"
+            ISSUES=$((ISSUES + 1))
+          else
+            flag_warn_or_issue "pack-conformance" "meta-schema violation(s): $c75_findings (warn-mode; graduate by recording resolve_check_mode \"pack-conformance\" \"enforce\" after the shakedown)"
+          fi
+        else
+          flag_warn_or_issue "pack-conformance" "check errored (exit $c75_exit): $(head -1 <<<"$c75_out")"
         fi
       fi
     fi

@@ -106,6 +106,18 @@ color = "D4C5F9"
 description = "Lightweight gap-capture placeholder ticket (Observation tier; Triage promotes to a full category + strips the [Observation]: title prefix, or closes)"
 applied_at = "Intake (Stage 1) — via observation.yml"
 
+# `adr` is template-applied by .github/ISSUE_TEMPLATE/adr.yml exactly as `bug` and
+# `observation` are, and label-taxonomy.md Rule 1 already names it — but no pack
+# declared it, so it read as an ORPHAN against a rule that asserts it. `color` is the
+# LIVE value verbatim: declaring any other hex would manufacture a colour-divergence
+# row, which is a separate finding class belonging to a separate work item.
+[[labels]]
+group = "category"
+name = "adr"
+color = "F9D0C4"
+description = "Architecture Decision Record. Auto-applied by adr.yml at intake; the issue carries the decision through ratification, and the ADR file under core/ADRs or release/ADRs is the durable record."
+applied_at = "Intake (Stage 1) — via adr.yml"
+
 # --- Status (one per issue; tracks lifecycle, not priority — § Status Labels)
 [[labels]]
 group = "status"
@@ -285,30 +297,18 @@ name = "cluster: cross-cutting"
 color = "0E8A16"
 description = "Span-marker (not a domain) — items whose scope crosses multiple domain clusters; composes with one domain cluster per the orthogonality protocol"
 
-# --- Triage-flag (temporary; removed after triage decisions execute — § Triage Flag Labels)
-[[labels]]
-group = "triage-flag"
-name = "triage: stale"
-color = "FFFFFF"
-description = "Flagged as potentially addressed by later work"
-applied_at = "Run 1"
-removed_at = "Run 4 (decision)"
-
-[[labels]]
-group = "triage-flag"
-name = "triage: duplicate"
-color = "FFFFFF"
-description = "Flagged as potential duplicate/subsumption candidate"
-applied_at = "Run 1"
-removed_at = "Run 4 (decision)"
-
-[[labels]]
-group = "triage-flag"
-name = "triage: quick-win"
-color = "FFFFFF"
-description = "Low-effort, high-value — candidate for early bundling"
-applied_at = "Run 2"
-removed_at = "Run 5 (bundled)"
+# --- Triage-flag: `_common` contributes NO rows. The GROUP remains grammar-owned
+#     (label-taxonomy.md § Triage Flag Labels), and a deployment that runs labeled
+#     triage contributes its own rows into it. The three rows formerly declared here
+#     — `triage: duplicate`, `triage: quick-win`, `triage: stale` — are WITHDRAWN:
+#     nothing in this platform applies them (the Stage-2 triage skill performs no
+#     label operation at all), so each sat permanently in the parity gate's MISSING
+#     arm with no owner able to close it. Materializing them instead would have
+#     created three live labels nothing applies — the unused row a later audit
+#     proposes deleting. Their applied_at/removed_at run numbers referred to a
+#     backlog-triage-run process the current pipeline does not implement. The
+#     disposition record is in the grammar doc; this comment is the pointer, not a
+#     second copy of it.
 
 # --- Disposition (final triage decisions; persist until issue closed — § Disposition Labels)
 [[labels]]

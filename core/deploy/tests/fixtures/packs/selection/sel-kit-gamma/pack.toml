@@ -1,0 +1,76 @@
+# FIXTURE — the DELIBERATELY NON-ORTHOGONAL KIT — a kit welded to one archetype. Not a shipped pack.
+#
+# WHY IT LIVES HERE AND NOT UNDER core/packs/. The licensed-kind reader unions the
+# kinds declared by every directory under core/packs/ that holds a pack.toml — no
+# allowlist, no naming filter, no underscore-prefix skip — so a fixture placed there
+# would be silently absorbed into the live gate's kind vocabulary. Fixture packs
+# therefore live under core/deploy/tests/fixtures/packs/ and are read through the
+# conformance tool's explicit --pack-root argument. A self-test arm asserts that
+# separation held, by checking the union carries none of these files' kinds.
+#
+# THE sel-* SET IS ONE FIXTURE ROOT, READ AS A WHOLE. Its seven packs exist to make a
+# SELECTION observable: two archetypes and three kits, so that varying one axis while
+# holding the other fixed produces a difference a check can read. A one-kit root would
+# make the filtered and unfiltered unions identical and would green every selection
+# arm under a --kit that was parsed and discarded.
+#
+# THIS FIXTURE IS THE FAIL-CAPABILITY ARM FOR THE ORTHOGONALITY CHECK, and it is
+# welded at the HEADER (applies_to = "Scrum") rather than only at its kinds. That
+# choice was made by execution, not by preference, and the reason is recorded here
+# because the obvious alternative does not work:
+#
+#   A kit welded only at the KIND level (header applies_to = "*", kinds naming a
+#   concrete archetype) still satisfies the kit join under EVERY archetype, so its
+#   kind_id contribution is invariant when the archetype axis is varied. It therefore
+#   PASSES an orthogonality predicate read at the resolution level, and an arm built
+#   on it could never fail. That is the gate-that-cannot-fail class this release
+#   exists to close, so it is not used.
+#
+# Welded at the header, the pack fails the kit join under any archetype but its own,
+# so the kit-attributed half of a resolution CHANGES when the archetype varies —
+# which is exactly non-orthogonality, and exactly what the arm must be able to
+# observe.
+#
+# It is GRAMMAR-INVALID by PACK-P05 (a role = "kit" pack MUST be applies_to = "*"),
+# and that is deliberate rather than an oversight: the validator rejects it, and a
+# self-test arm asserts that rejection, so this fixture is covered from both
+# directions — --validate-packs says it is malformed, and --resolve says what its
+# malformation costs. --resolve does not validate; the two modes have two jobs.
+
+[meta]
+pack_id = "sel-kit-gamma"
+pack_version = "0.1.0"
+applies_to = "Scrum"
+role = "kit"
+kit_class = "work-item"
+
+[[kinds]]
+kind_id = "sel-gamma-welded"
+display_name = "Gamma Welded"
+base = "Work Item"
+axis1_state_machine = "inherit"
+
+[kinds.methodology_projection]
+archetype = "Scrum"
+general_level = "Work Item"
+projects_as = "Gamma Welded"
+
+[kinds.fields]
+core = "inherit"
+
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+
+[kinds.relationships]
+allowed_types = ["BELONGS_TO", "DEPENDS_ON", "RELATES_TO"]
+
+[kinds.lifecycle_behavior]
+timeboxed = "gate"
+continuous = "gate"
+phased = "gate"

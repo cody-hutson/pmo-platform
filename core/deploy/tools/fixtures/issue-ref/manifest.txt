@@ -14,8 +14,24 @@
 # at HEAD, so its pre-existing content sits outside the added-line delta. Every
 # other source is ADDED at HEAD.
 #
-# The destination path is load-bearing for Z-2: the two path-exemption arms are
-# only reachable from a file that actually LIVES at the exempt path.
+# The destination path is load-bearing for Z-2: the ONE surviving path-exemption
+# arm is only reachable from a file that actually LIVES at the exempt path, which
+# is why Z-2a is written to `release/releases/`.
+#
+# There used to be two more rows here — Z-2b and Z-2c, pinned to the gate's own
+# rules page and the PR template, the second path-exemption arm. That arm was
+# deleted: those files are exempt because they CARRY the whole-file override
+# marker, discovered on every run, not because a hand-maintained list names them.
+# The rows could not simply follow the arm into this corpus. This manifest is the
+# input to the differential equivalence oracle, which asserts BYTE-IDENTICAL
+# report text against the pre-extraction body — and that body still carries the
+# deleted arm, so any fixture at those paths makes the two implementations
+# disagree and fails a required status check ON A CORRECT CHANGE. The class now
+# lives corpus-free in run_self_test()'s `self-doc` block, where it asserts BOTH
+# directions (marker present -> zero, marker absent -> FLAG) plus the
+# rationale-carrying marker form, rather than the single zero-direction these two
+# rows asserted. Their two synthetic numbers are reused there, so no
+# verdict-map.txt row is orphaned.
 #
 # ---- MUST-FLAG (sensitivity) -------------------------------------------------
 S-1|s1-unresolvable.md|docs/s1-unresolvable.md|flag|flag
@@ -28,8 +44,6 @@ S-7|s7-related-adrs.md|docs/s7-related-adrs.md|flag|flag
 # ---- MUST-NOT-FLAG (specificity) ---------------------------------------------
 Z-1|z1-override.md|docs/z1-override.md|zero|zero
 Z-2a|z2a-releases-path.md|release/releases/z2a-releases-path.md|zero|zero
-Z-2b|z2b-self-doc-rules.md|core/rules/git-workflow.md|zero|zero
-Z-2c|z2c-self-doc-template.md|.github/PULL_REQUEST_TEMPLATE.md|zero|zero
 Z-3|z3-fenced.md|docs/z3-fenced.md|zero|zero
 Z-4|z4-inline-provenance.md|docs/z4-inline-provenance.md|zero|zero
 Z-6|z6-preexisting.md|docs/z6-preexisting.md|zero|flag

@@ -1,0 +1,65 @@
+# FIXTURE — a DELIBERATELY NONCONFORMING pack. Not a shipped pack. It must be
+# REJECTED, under PACK-K05 and under no other rule.
+#
+# THE NONCONFORMANCE IS CHOSEN, not incidental. This file is a role = "archetype" pack
+# whose kind asserts kit-shaped neutrality: methodology_projection.archetype = "*"
+# inside a pack that is not a kit. Every other field conforms.
+#
+# It is the load-bearing shape rather than a trivially-malformed file because it is the
+# only nonconformance whose ACCEPTANCE would produce a pack that validates and delivers
+# nothing. The kit capability lives at the kind level: a grammar change relaxing only
+# the pack-level applies_to would let a pack claim neutrality while every one of its
+# kinds still named an archetype — passing every gate with the capability absent. A
+# broken-TOML fixture would prove the reader can fail; this fixture proves the reader
+# can fail on the ONE thing that matters, and the arm asserts PACK-K05 specifically so
+# a rejection for any other reason is a failure rather than a pass.
+#
+# Kept deliberately clean on every other rule so the arm's "this rule and no other"
+# assertion is meaningful: the header is a well-formed archetype pack, the kind carries
+# every required field, and the label row joins back correctly.
+#
+# Lives outside core/packs/ for the reason stated in the sibling conforming fixture:
+# the licensed-kind union would otherwise absorb `smuggled-kind` into the live gate's
+# vocabulary.
+
+[meta]
+pack_id = "nonconforming-kit"
+pack_version = "0.1.0"
+applies_to = "Scrum"             # a well-formed archetype header
+role = "archetype"               # NOT a kit — which is what makes the kind below illegal
+
+[[kinds]]
+kind_id = "smuggled-kind"
+display_name = "Smuggled Kind"
+base = "Work Item"
+axis1_state_machine = "inherit"
+
+[kinds.methodology_projection]
+archetype = "*"                  # ← THE VIOLATION: the neutral sentinel is permitted
+                                 #   ONLY on a kind inside a role = "kit" pack.
+                                 #   Expected finding: PACK-K05, and nothing else.
+general_level = "Work Item"
+projects_as = "Smuggled Kind"
+
+[kinds.fields]
+core = "inherit"
+
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+
+[kinds.relationships]
+allowed_types = ["BELONGS_TO"]
+
+[kinds.lifecycle_behavior]
+timeboxed = "gate"
+
+[[labels]]
+group = "category"
+name = "type:smuggled-kind"
+projects_kind = "smuggled-kind"

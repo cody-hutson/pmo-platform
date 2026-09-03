@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-168 — An unindexable verification table ERRORs only when it names a verification-schema column; sharing the word `Issue` is not a verification claim — and the method-column match stays CONTAINMENT, because equality silently de-indexes twenty live rows
-status: Proposed — authored at Stage 6 Engineering for the record-format/silent-drop card. Ratification is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a plan row.
+status: Accepted
 date: 2026-08-30
 release: warn-mode-gate-graduation
 deciders: "Workspace owner. Design rendered at Stage 5 Solutioning for the verify-release-plan record-format card and accepted by the hub at Procedure 4; implemented and re-measured at Stage 6. Recorded because BOTH halves are decisions a future author would re-litigate from the acceptance criterion alone — the criterion says a dropped row must produce a diagnostic, and the correct implementation deliberately does NOT diagnose one unreadable-looking table."
@@ -20,7 +20,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — authored at Stage 6 Engineering. Ratification is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
+**Accepted** — authored at Stage 6 Engineering. Ratification is recorded in this file's frontmatter `status:` field, which is where it must be verified — never inferred from a review comment, a plan row, or milestone closure.
 
 **Numbering.** `168` was derived at Engineering time, immediately before this file was authored, via `release/tools/renumber-adr.py --detect`. The oracle reported `ANCHOR 165 origin/main` and `NEXT-FREE 166`; `--detect` additionally reported `CLAIMED-SET-BRANCH-ONLY 166,167 (detection only — never binds)`, both `BINDS`, and computed `next=168`. `--next-free` alone is **mainline-anchored and under-reports** on a branch that already carries claims, which is why the union of the mainline anchor and this branch's own claims is the operative input. The number was deliberately **not** reserved at design time — the oracle is a *read*, not a reservation. A duplicate is mechanically renumberable by this same tool at merge time, whereas a **gap blocks the repo**, because the next release's `anchor + 1` lands under a hole. That asymmetry is the whole rule.
 

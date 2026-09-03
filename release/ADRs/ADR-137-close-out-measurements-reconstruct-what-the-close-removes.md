@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-137 — A chore-PR-borne close-out measurement reconstructs what the close removes; it does not assume its evidence is invariant
-status: Proposed — flips to Accepted when the operator ratifies it at the release close gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
+status: Accepted
 date: 2026-08-21
 release: closeout-reports-what-shipped
 deciders: "Workspace owner. Judged warranted by the Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment) against the ADR authoring guide's when-to-write rubric; its drafted decision statement was falsified by the Phase A6.5 Independent Adversarial Design Review and restated at the Collective Review scope-lock gate. Authored at Stage 13 Close of the same release, after the version tag was claimed."
@@ -22,7 +22,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — flips to **Accepted** when the operator ratifies it at the release close gate. The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified.
+**Accepted.** Ratified at the `closeout-reports-what-shipped` release's plan-review gate.
 
 **Numbering.** `137` is the mainline anchor plus one, derived at Stage 13 across **both** record directories (`core/ADRs/` and `release/ADRs/`) via the `--next-free` oracle rather than reserved at design time. Stage 5 deliberately declined to reserve a number, because a number claimed at design and merged later is a reservation hazard against a sibling's unmerged claim.
 
