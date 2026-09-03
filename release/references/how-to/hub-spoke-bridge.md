@@ -931,7 +931,7 @@ A skipped **release-scoped** sub-task uses the same format with the milestone na
 **Note:** Stage 4 (Release Planning) uses its own template in Procedure 0. This procedure handles Stages 5-13.
 
 **Steps:**
-1. Verify the sub-task is open and not marked as skipped. If the sub-task was closed with a skip closure comment (see Procedure 1, Step 5), inform the operator that this stage was skipped — do not generate a spoke prompt.
+1. Verify the sub-task is open and not marked as skipped. If the sub-task was closed with a skip closure comment (see Procedure 1, Step 5), inform the operator that this stage was skipped — do not generate a spoke prompt. For a **Stage 6 Engineering** sub-task, also read its stamped `**Editability class:**` line and branch per the § Engineering-Brief Editability Pre-flight below — a `tier-0-floored` card yields no spoke prompt at this step and routes to the operator instead.
 2. Read the sub-task body for stage instructions
 3. Read the persona card from `release/references/specs/release-personas.md` for the matching stage
 4. Read the parent card's row in the release plan's ### Agent-Editability Read section and carry its editability class and execution path into the brief. For a sanctioned-session-required card, the brief instructs the spoke to open the named session immediately before the gated writes and to batch them inside one session window; it never offers the hook bypass. The hub copies the classification from the plan — it does not recompute it, and this step renders no refusal: a brief is generated for every class.
