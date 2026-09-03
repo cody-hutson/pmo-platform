@@ -462,29 +462,37 @@ self_test() {
   local REG="core/automations/registry.md"
   local SCH="core/schemas/automation-registry-schema.md"
 
-  # ── Materialise the live population into a scratch checkout: the registry, the
-  # schema, and every file that actually declares or schedules an automation.
+  # ── The materialisation manifest, computed ONCE: the registry, the schema,
+  # every workflow, and every markdown file that actually DECLARES an automation.
+  # A document declaring nothing contributes to neither set this predicate
+  # compares, so copying the whole 1,300-file markdown corpus would buy no
+  # coverage.
+  #
+  # Computed once and reused because _seed runs a dozen times and the roster scan
+  # over the whole markdown population is the expensive step — one awk pass over
+  # the population rather than one awk per file per seed.
+  local -a SEED_PATHS=("$REG" "$SCH")
+  local _sp
+  while IFS= read -r _sp; do [[ -n "$_sp" ]] && SEED_PATHS+=("$_sp"); done < <(
+    cd "$REPO_ROOT" || exit 0
+    git ls-files -- '.github/workflows/*.yml' '.github/workflows/*.yaml'
+    git ls-files -z -- '*.md' | xargs -0 awk '
+      FNR == 1 { fm = ($0 == "---") ? 1 : 0; next }
+      fm != 1 { next }
+      $0 == "---" { fm = 0; next }
+      /^automation_id:[[:space:]]*/ { print FILENAME; nextfile }
+    ' | sort -u
+  )
+
   _seed() {
     rm -rf "$tmp/tree"
     mkdir -p "$tmp/tree"
-    ( cd "$REPO_ROOT" && git ls-files -z -- "$REG" "$SCH" '*.md' '.github/workflows/*.yml' '.github/workflows/*.yaml' ) \
-      > "$tmp/all.z" 2>/dev/null
     local p
-    while IFS= read -r -d '' p; do
-      case "$p" in
-        "$REG"|"$SCH") ;;
-        *.md)
-          # Only markdown that actually DECLARES an automation is materialised.
-          # Copying all 1,300+ tracked documents would make every arm slow with
-          # no gain: a document with no declaration contributes nothing to either
-          # set this predicate compares.
-          roster_md_awk "$REPO_ROOT/$p" | grep -q . || continue
-          ;;
-        *) : ;;
-      esac
+    for p in ${SEED_PATHS[@]+"${SEED_PATHS[@]}"}; do
+      [[ -f "$REPO_ROOT/$p" ]] || continue
       mkdir -p "$tmp/tree/$(dirname "$p")"
       cp "$REPO_ROOT/$p" "$tmp/tree/$p"
-    done < "$tmp/all.z"
+    done
     ( cd "$tmp/tree" && git init -q . && git add -A && git -c user.email=t@t -c user.name=t commit -qm seed ) >/dev/null 2>&1
   }
 
