@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.49 | kit-unit-and-selection | 2026-09-03 | — | #6621 | [notes/v4.49_RELEASE_NOTES.md](notes/v4.49_RELEASE_NOTES.md) |
 | pda-decisions-and-conformance-baseline (version-less) | pda-decisions-and-conformance-baseline | 2026-09-02 | — | #6746 | [notes/_unversioned/pda-decisions-and-conformance-baseline_RELEASE_NOTES.md](notes/_unversioned/pda-decisions-and-conformance-baseline_RELEASE_NOTES.md) |
 | v4.48 | label-and-reference-integrity | 2026-09-02 | — | #6638 | [notes/v4.48_RELEASE_NOTES.md](notes/v4.48_RELEASE_NOTES.md) |
 | v4.47 | adr-corpus-status-integrity | 2026-09-02 | — | #6626 | [notes/v4.47_RELEASE_NOTES.md](notes/v4.47_RELEASE_NOTES.md) |
