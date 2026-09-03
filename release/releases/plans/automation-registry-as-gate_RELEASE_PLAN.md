@@ -386,9 +386,36 @@ These supersede the Stage-4 and Stage-5 originals on their specific claims.
 
 Populated per Engineering slice as each lands. Each entry records the slice, the landing commits, the checks run with their observed results, and the `deliverable_state` declaration.
 
-### #5858 slice (Wave 0, Engineering Commit 0 + the founding ADR)
+### #5858 slice (Wave 0 — Engineering Commit 0 + the founding ADR)
 
-To be completed by the Wave-0 Engineering spoke on this branch.
+**`deliverable_state`: `artifact-accepted`.** This slice produces no deployed copy and declares no propagation target — its definition of done *is* the artifact. That is a first-class terminal state, not a lapsed `(if applicable)` on the deployable path, and the Artifact-Acceptance Record below is what makes it evaluable at Stage 13.
+
+#### Artifact-Acceptance Record
+
+| Artifact | Declared canonical path | Present on branch | Accepted |
+|---|---|---|---|
+| Founding ADR (registry-as-gate + the what/how/who decoupling) | `core/ADRs/ADR-181-automation-registry-is-the-gate-what-how-who-decoupled.md` | Yes | Yes |
+| Curated thematic registration | `core/ADRs/README.md` § Automation-governance ADRs | Yes | Yes — **human-graded**, no machine gate exists |
+| Release plan (this file) | `release/releases/plans/automation-registry-as-gate_RELEASE_PLAN.md` | Yes | Yes |
+
+#### Checks run and observed results
+
+| Check | Invocation | Observed |
+|---|---|---|
+| Version re-verify | Three independent surfaces — remote tag refs, published releases, mainline ledger read via `git show origin/main:` | Subject **0** on all three; sensitivity **1** on each arm's own claimed token; specificity **0** on a fabricated token. `anchor + 1` equals the recorded determination → PROCEED |
+| Stamp manifest | `claim-version.sh --verify-stamp automation-registry-as-gate` | **exit 0** — `verify-stamp OK`, resolvable plan-only manifest |
+| ADR number | ADR-number detector re-run at Commit 0 | Anchor and next-free recomputed; the record claims the printed next-free. The Stage-5 reading was **stale by four records** — the re-detect is the reason the number is right |
+| ADR contiguity | ADR-number integrity checker | **exit 0** — contiguous `001..max`, no duplicates, no gaps |
+| ADR durability | ADR durability lint, `--diff-base` set post-commit so the structural rule activates | **0 findings** over a non-empty scan. Sensitivity arm: a deliberately-violating line on the same file reports **3** findings (one hardcoded-SHA, two live-count), so the zero discriminates |
+| ADR structure | Seven required body sections, presence and order | All seven present, in required order; H1 matches the frontmatter title; the body status restates the frontmatter status |
+| Release-index invariance | ADR index projector in verify mode | **Unchanged** — population is the release module only, confirming the core README was not projected. The projector was deliberately **not** run in write mode |
+| Reference hygiene | URL / handle / bare-issue-reference placement audit on the new record | **0** URLs, **0** handles, **0** workspace paths; every bare issue reference sits inside `source_observations:`, the corpus-sanctioned home |
+| Link integrity | Intra-repo markdown link checker over the core, release and docs roots plus top-level | **1** finding, pre-existing on `origin/main` in a file this branch does not touch (an illustrative link-syntax example). **0** introduced by this branch |
+| Runtime suite | Runtime-suite selection map evaluated over this slice's changed paths | **No row 1–5 matches** → row 6, `test-run/suite-skip` emitted. Doc/governance-only change: an honest no-op, not a gap |
+
+#### Deviations recorded this slice
+
+The ADR anchor moved between Stage 5 and Engineering Commit 0, so the number authored here is **not** the Stage-5 reading. This is the allocation rule behaving correctly under sustained contention — governed, not drift — and is exactly the standing obligation that required a re-detect rather than a transcription.
 
 ---
 
