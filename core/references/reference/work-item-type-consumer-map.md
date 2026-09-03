@@ -6,7 +6,7 @@ status: ACTIVE
 layer: 1
 reversibility: CHEAP / Confidence HIGH
 consumers: Any agent changing the pack grammar, the licensed-kind vocabulary, the `type:*` label surface, or the intake type-derivation contract; release-pipeline spokes performing blast-radius assessment on those surfaces.
-verified_at: e747f3e9
+verified_at: c24c596f
 ---
 <!-- reference-durability: allow-link -->
 
