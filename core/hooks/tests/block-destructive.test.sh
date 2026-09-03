@@ -3125,6 +3125,94 @@ RPT')" \
 
 /bin/rm -f "$HD_MUTANT"
 
+# ==========================================================================
+# HINT-* — the -022 remediation hint names the sanctioned retry FIRST (#6166)
+# ==========================================================================
+#
+# Subject: when -022 refuses, its Override line offered allowlist-widening and
+# the bypass variable, and named the retry that usually works nowhere. The
+# allowlist is matched with `case "$path" in $pattern)` — a bash glob against the
+# path AS WRITTEN on argv, with no realpath and no canonicalization — and it is
+# spelled overwhelmingly in repository-relative form. The same script is
+# therefore refused by an absolute path and permitted by its repository-relative
+# one, and the hint never said so.
+#
+# WHY THIS IS TESTED AT ALL. At the baseline NOT ONE arm in this file asserted
+# any hint text: the four -022 Override strings were emitted, agent-facing, and
+# wholly uncovered, so a reorder or a deletion of the retry would have read green.
+# Measured before these arms landed: four hint substrings, zero occurrences each,
+# against 345 `test_case` invocations.
+#
+# THE ORDERING IS ASSERTED POSITIONALLY, NOT BY PRESENCE. The pattern pins
+# `Override: ` immediately followed by the retry, then requires the widening and
+# the bypass to appear AFTER it. Presence alone would pass on the old string too,
+# because the old string also mentioned the allowlist. Anchoring on what directly
+# follows `Override: ` is what makes "first" mean first — and it is why no
+# separate must-not-match arm is needed: only one clause can follow `Override: `.
+#
+# THE BYPASS CLAUSE IS PART OF THE ASSERTION, DELIBERATELY. It is a real escape
+# hatch and must stay documented; the arms require it present and LAST, so a
+# future edit that deletes it to "clean up the hint" goes red rather than quietly
+# stranding an operator who has no other route.
+#
+# Each hint gets a PAIR: an `a` arm pinning WHICH cause class fired (the reason
+# line) and a `b` arm pinning the ordering (the Override line). They are separate
+# `test_case` calls because grep is line-oriented and the reason and the Override
+# are different lines — one pattern cannot span them. Without the `a` arm a
+# payload that silently drifted to a different cause class would still satisfy
+# `b`, and the pair would prove nothing about the string it claims to cover.
+
+echo ""
+echo "HINT-*: -022 remediation hint ordering (#6166)"
+echo "---"
+
+# Ordered across all three strings: retry → repository root → AS WRITTEN →
+# allowlist widening → bypass. One pattern, five positional claims.
+HINT_ORDER='Override: first retry the form the allowlist already permits.*repository root.*AS WRITTEN.*script-execution-allowlist\.txt.*CLAUDE_HOOK_BYPASS=1'
+
+HINT_UNLISTED="core/deploy/tools/no-such-tool-xyz.sh"
+
+# --- the not-allowlisted arm: the card's stated subject, and the common case ---
+test_case "HINT-01a: bash <unlisted>.sh reports the not-allowlisted cause" \
+  "$(bash_payload "bash $HINT_UNLISTED")" \
+  2 "subprocess script execution not in allowlist"
+test_case "HINT-01b: ... and its Override names the retry BEFORE widening and the bypass" \
+  "$(bash_payload "bash $HINT_UNLISTED")" \
+  2 "$HINT_ORDER"
+
+# --- the variable-bearing unresolvable arm ---
+test_case "HINT-02a: bash \"\$W/x.sh\" reports the variable-bearing cause" \
+  "$(bash_payload 'bash "$W/not-allowlisted.sh"')" \
+  2 "unresolvable script path \(variable-bearing\)"
+test_case "HINT-02b: ... and its Override names the retry BEFORE widening and the bypass" \
+  "$(bash_payload 'bash "$W/not-allowlisted.sh"')" \
+  2 "$HINT_ORDER"
+
+# --- the quoting unresolvable arm. The `;` splits the segment before
+# normalization sees it, so the operand arrives as an UNCLOSED `'…/deploy.sh`
+# with an in-domain `.sh` probe — the shape § F1 QUOTED already pins.
+test_case "HINT-03a: an unclosed-quote operand reports the quoting cause" \
+  "$(bash_payload "bash './core/deploy/deploy.sh;'")" \
+  2 "unresolvable script path \(quoting\)"
+test_case "HINT-03b: ... and its Override names the retry BEFORE widening and the bypass" \
+  "$(bash_payload "bash './core/deploy/deploy.sh;'")" \
+  2 "$HINT_ORDER"
+
+# --- AC3: the hint's own worked example must be TRUE, and the asymmetry it
+# asserts must be real. HINT-04 runs the exact spelling the -022 quoting hint
+# prints; HINT-05 runs the SAME script by an absolute path and must still be
+# refused. Together they are the non-broadening guard for this card: if anyone
+# "fixes" a future block by adding absolute forms to the allowlist, HINT-05 goes
+# red and the hint's central claim becomes false in the same instant.
+# Distinct from PARSE-06, which pins the same asymmetry for #6172's two admitted
+# paths; this pair pins it for the script THIS hint names.
+test_case "HINT-04: the hint's worked example (quoted bare-relative) is permitted" \
+  "$(bash_payload "bash 'core/deploy/deploy.sh'")" \
+  0
+test_case "HINT-05 [ctl]: the ABSOLUTE spelling of that same script is still refused" \
+  "$(bash_payload "bash '/srv/pmo-platform/core/deploy/deploy.sh'")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
 # --- Summary ---
 echo ""
 echo "================================"
