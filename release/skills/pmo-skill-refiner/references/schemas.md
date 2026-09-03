@@ -14,12 +14,13 @@ Defines the evals for a skill. Located at `evals/evals.json` within the skill di
   "evals": [
     {
       "id": 1,
+      "name": "example-eval",
       "prompt": "User's example prompt",
       "expected_output": "Description of expected result",
       "files": ["evals/files/sample1.pdf"],
-      "expectations": [
-        "The output includes X",
-        "The skill used script Y"
+      "assertions": [
+        { "text": "The output includes X", "type": "structural" },
+        { "text": "The skill used script Y", "type": "structural" }
       ]
     }
   ]
@@ -29,10 +30,16 @@ Defines the evals for a skill. Located at `evals/evals.json` within the skill di
 **Fields:**
 - `skill_name`: Name matching the skill's frontmatter
 - `evals[].id`: Unique integer identifier
+- `evals[].name`: Optional slug identifying the eval
 - `evals[].prompt`: The task to execute
 - `evals[].expected_output`: Human-readable description of success
 - `evals[].files`: Optional list of input file paths (relative to skill root)
-- `evals[].expectations`: List of verifiable statements
+- `evals[].assertions`: List of verifiable statements, each `{text, type}` with an optional `expected_value`
+- `evals[].assertions[].check`: Optional declarative predicate consumed by the output-scoring runner — see `scenario-eval-contract.md` § 2. An assertion with no `check` is **ungraded** by that runner and leaves both numerator and denominator, which is what keeps every existing suite valid input.
+
+**The graded-statement key is `assertions`, not `expectations`.** Every typed suite in the live corpus carries `assertions[]`; none carries `expectations[]`. This block previously prescribed `expectations`, which was doc-vs-corpus drift with zero live instances — the schema said one thing and every suite did another. **Note that the INPUT key and the OUTPUT key genuinely differ:** graded statements are read from `assertions[]` here and written to `expectations[]` in `grading.json` below, because `scripts/aggregate_benchmark.py` and `eval-viewer/generate_review.py` pin the output name in executable code. Renaming either side breaks a shipped consumer, so the asymmetry is preserved deliberately rather than reconciled.
+
+**The `type` field is an open enum with no code validator** — `structural` / `judgment` / `resolution` / `non-triviality` / `read-only` / `acceptance`. The grader honors each value's semantics in prose; `scripts/run_scenario_eval.py` executes the four deterministic values by way of the `check` predicate above and does not execute `judgment` or `acceptance`.
 
 ---
 
@@ -85,7 +92,14 @@ Tracks version progression in Improve mode. Located at workspace root.
 
 ## grading.json
 
-Output from the grader agent. Located at `<run-dir>/grading.json`.
+**Two producers write this contract, and they emit different subsets of it.**
+
+| Producer | Emits | Notes |
+|---|---|---|
+| `agents/grader.md` — the grading subagent | the full object below | Model-judged. Populates `execution_metrics`, `timing`, `claims`, `user_notes_summary` and, when it has something to raise, `eval_feedback`. |
+| `scripts/run_scenario_eval.py` — the output-scoring runner | `expectations[]`, `summary`, `suite` **only** | Deterministic and offline, so its values are reproducible across runs. It adds `summary.ungraded` and the `suite` provenance block below, and deliberately emits no grader-agent-specific key — the aggregator reads each of those through a defaulted accessor, so absence is tolerated and stubs are not wanted. Its contract, predicate vocabulary, command-line signature and exit codes: `scenario-eval-contract.md`. |
+
+Located at `<run-dir>/grading.json`.
 
 ```json
 {
@@ -104,8 +118,15 @@ Output from the grader agent. Located at `<run-dir>/grading.json`.
   "summary": {
     "passed": 2,
     "failed": 1,
+    "ungraded": 0,
     "total": 3,
     "pass_rate": 0.67
+  },
+  "suite": {
+    "suite_name": "scenario-runner",
+    "fixture": "baseline.yaml",
+    "sha": "c11e425c964f",
+    "run_at": "2026-01-15T10:33:12Z"
   },
   "execution_metrics": {
     "tool_calls": {
@@ -150,8 +171,9 @@ Output from the grader agent. Located at `<run-dir>/grading.json`.
 ```
 
 **Fields:**
-- `expectations[]`: Graded expectations with evidence
-- `summary`: Aggregate pass/fail counts
+- `expectations[]`: Graded expectations with evidence. **Read from `assertions[]` in evals.json and written under this name** — the asymmetry is inherited and is documented at the evals.json block above.
+- `summary`: Aggregate pass/fail counts. `pass_rate` is the eval-grading rate — reference it **fully qualified** as `summary.pass_rate`, never as the bare token, because the corpus carries three unrelated metrics under that name (a gate-criteria structural rate, the `expectation_pass_rate` of history.json below, and this one). `ungraded` counts assertions the output-scoring runner could not grade; they leave **both** numerator and denominator, per the all-drift-out convention in `core/skills/eval-writer/references/acceptance-assertion-type.md`, so `pass_rate = passed / (total − ungraded)`.
+- `suite`: (optional) Run provenance from the output-scoring runner — the suite's name, the fixture scored, that fixture's short content hash, and the run timestamp. Absent from grader-agent output.
 - `execution_metrics`: Tool usage and output size (from executor's metrics.json)
 - `timing`: Wall clock timing (from timing.json)
 - `claims`: Extracted and verified claims from the output

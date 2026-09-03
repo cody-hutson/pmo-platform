@@ -226,16 +226,238 @@ CAUSE_DUPLICATE = "the mainline already claimed {old:03d}"
 CAUSE_GAP = "the claim would have landed a gap beneath it on the mainline"
 
 # SHAPE detector — matches a provenance note for ANY move. Its ONE legitimate use is
-# the citation-sweep exemption (`is_historical_numbering_line`): every provenance
-# note records an old number on purpose, whichever move it describes, so the sweep
-# must leave all of them alone. It is NOT a valid idempotence guard and NOT a valid
-# verify — see `provenance_head`.
+# the citation-sweep exemption (now `classify_lines`, via RECORD_OPENERS row 1):
+# every provenance note records an old number on purpose, whichever move it
+# describes, so the sweep must leave all of them alone. It is NOT a valid
+# idempotence guard and NOT a valid verify — see `provenance_head`.
+#
+# DEMOTED, NOT RENAMED. Until ADR-181 this regex WAS the exemption; it is now one
+# row of `RECORD_OPENERS`. The name, the pattern and the module-level binding are
+# deliberately byte-unchanged: a sibling release re-targets the VERIFY side of this
+# same symbol, and a silent rename would leave it re-targeting a predicate that
+# moved. If this must ever be renamed, record the rename where that release can
+# read it.
 PROVENANCE_RE = re.compile(r"\*\*Numbering provenance — `\d{3} → \d{3}`\.\*\*")
 
 RENUMBER_LOG_HEADING_RE = re.compile(r"^\*\*Renumber log\.\*\*", re.MULTILINE)
 RENUMBER_LOG_SENTENCE_RE = re.compile(
     r"ADR-\d{3} \(`[^`]+`\) → \*\*ADR-\d{3}\*\* by `release/tools/renumber-adr\.py`"
 )
+
+# ---- the widened RECORD population (ADR-181) ------------------------------
+#
+# The exemption used to be keyed on TWO strings, both of which only this tool
+# writes. Measured against the corpus at the introducing release's baseline: of
+# 175 lines that RECORD an ADR number, that pair protected 60 — 34.3%. The 115
+# unprotected lines were not edge cases; they included 5 of 5 tokens in ADR-103's
+# own numbering-lineage block and 3 of 4 in ADR-121's, where the note's HEAD is
+# protected and its hard-wrapped continuation lines are not.
+#
+# The rows below are the hand-authored shapes that census found. They are a
+# REGISTRY on purpose: widening the population is adding a row, never editing a
+# predicate body, and a registry keyed on region and position does not require
+# predicting the next head string somebody writes by hand.
+
+# Hand-authored provenance heads that PROVENANCE_RE's canonical shape misses —
+# `**Numbering.**`, `**Number provenance:**`, `*First move, `098 → 101`.*`, and
+# ADR-103's combined `098 → 101 → 103` lineage form. Keyed on the bare-number
+# arrow pair, which is what every one of them carries.
+PROVENANCE_FREEFORM_RE = re.compile(
+    r"`?(?<!\d)\d{3}(?!\d)`?\s*→\s*`?(?<!\d)\d{3}(?!\d)`?"
+)
+
+# Hand-authored hop prose: `ADR-028 → ADR-099`, with or without bold on either
+# side. Records a move; does not cite a record.
+HOP_SENTENCE_RE = re.compile(
+    r"(?:\*\*)?ADR-\d{1,3}(?:\*\*)?\s*→\s*(?:\*\*)?ADR-\d{1,3}"
+)
+
+# Author overrides. Escape hatches in BOTH directions, because a registry that can
+# only be widened has no way to say "this one really is a citation".
+RECORD_MARKER_RE = re.compile(r"<!--\s*adr-record\s*-->")
+CITE_MARKER_RE = re.compile(r"<!--\s*adr-cite\s*-->")
+
+# The Deviation Log heading, LOOSENED to tolerate a numeric or ordinal prefix.
+# The tight form `^#{1,6}\s+Deviation Log\b` matched 64 of 69 heading-shaped lines
+# in the release-plan corpus and missed `## 11. Stage 5 Deviation Log` — a genuine
+# section heading defeated by its numeric prefix. A missed section classifies its
+# rows CITE and sweeps them silently, which is the exact defect this registry
+# exists to prevent. The trade is settled by the asymmetry: a false positive only
+# makes a region NAMED, a miss REWRITES. Heading recognition is fence-aware (see
+# `classify_lines`), so a `# ...` comment inside a fenced block is not a heading.
+DEVIATION_LOG_HEADING_RE = re.compile(r"^#{1,6}\s.*\bDeviation Log\b")
+
+# A bold-run heading — `**Renumber log.**` and its siblings. Has no `#` level, so
+# it is treated as deeper than any markdown heading and ANY heading closes it.
+BOLD_RUN_HEADING_RE = re.compile(r"^\*\*[^*]+\.\*\*")
+BOLD_RUN_LEVEL = 7
+
+MD_FENCE_RE = re.compile(r"^(?:```|~~~)")
+MD_HEADING_RE = re.compile(r"^(#{1,6})\s")
+# "carries an ADR token" for the AMBIGUOUS region rule. Deliberately number-blind:
+# the region rule keys on POSITION and INTENT, never on which number is present.
+ANY_ADR_TOKEN_RE = re.compile(r"(?<![0-9A-Za-z])ADR-\d{1,3}(?![0-9])")
+
+# ── RECORD_OPENERS — the positive population. One row per class of prose that
+#    RECORDS a number. `extent` says how far the verdict carries: `line` stops at
+#    the opener, `paragraph` carries to the end of the markdown paragraph.
+#
+#    `paragraph` is granted ONLY to an opener that HEADS its paragraph. A note is
+#    a paragraph and its head sits on that paragraph's first line, so a shape that
+#    matches on a hard-wrapped CONTINUATION line heads no note and carries no
+#    extent. Every row here is matched with `search`, not `match`, and the two
+#    provenance rows key on a bare `NNN → NNN` pair that occurs in ordinary prose
+#    — so without the position gate one incidental pair mid-sentence exempts the
+#    REST of that paragraph, live citations included, and reports nothing. That is
+#    the silent direction: no gate reads a bare `ADR-NNN` out of prose, so the
+#    over-exemption is invisible to every instrument. Measured on the corpus at
+#    this fix's baseline, ZERO of 149 pair matches begin their line — anchoring the
+#    pattern would therefore have revoked the extent from all of them, which is why
+#    the gate keys on paragraph position rather than on match offset.
+RECORD_OPENERS = (
+    ("provenance-note",          PROVENANCE_RE,            "paragraph"),
+    ("provenance-note-freeform", PROVENANCE_FREEFORM_RE,   "paragraph"),
+    ("renumber-log-sentence",    RENUMBER_LOG_SENTENCE_RE, "line"),
+    ("hop-sentence",             HOP_SENTENCE_RE,          "line"),
+    ("explicit-record-marker",   RECORD_MARKER_RE,         "paragraph"),
+)
+
+# ── AMBIGUOUS_SECTIONS — regions where a record and a citation are LEXICALLY
+#    IDENTICAL, so the sweep must NAME rather than guess. Deliberately not
+#    path-scoped: a Deviation Log records deviations wherever it appears, and
+#    AMBIGUOUS is safe by construction.
+AMBIGUOUS_SECTIONS = (
+    ("deviation-log", DEVIATION_LOG_HEADING_RE),
+    ("renumber-log",  RENUMBER_LOG_HEADING_RE),
+)
+
+RECORD, AMBIGUOUS, CITE = "RECORD", "AMBIGUOUS", "CITE"
+
+# ---- the sub-line carve-out (DEV-36) --------------------------------------
+#
+# A verdict is per LINE, and a gate criterion is ONE physical table row. The
+# G-EX9 row illustrates the multi-hop defect with a `110 → 114 → 118` token — which
+# matches `PROVENANCE_FREEFORM_RE` — and, in the same row, carries a live markdown
+# link to the record it cites. The row therefore RECORDS an illustrative hop and
+# CITES a live cross-reference at once. One verdict per line cannot say both; it
+# said RECORD, and a RECORD line is neither rewritten nor scanned, so the sweep
+# stepped over a link whose target it had just renamed and R6 reported zero
+# dangling. `check-doc-links.py` then failed the merge closed.
+#
+# DT-1 governed a verdict's EXTENT — how far it propagates down a paragraph. This
+# governs its GRANULARITY, which no line-level verdict can express correctly,
+# because the line genuinely is both.
+#
+# WHY A MARKDOWN LINK IS THE CARVE-OUT. A link is a USE by construction: it binds
+# display text to a resolvable target, and resolvability is checkable. A record of
+# a number the tree no longer holds has no reason to link to the file that number
+# vacated — the target is gone, so the link is dangling the moment it is written.
+# Prose, code spans and bare tokens carry no such guarantee, which is exactly why
+# they stay under the line verdict.
+#
+# MEASURED BEFORE ADOPTION — the measurement chose the shape, and rejected the
+# other candidate. Population: the 612 `ADR-NNN` tokens sitting on a RECORD-verdict
+# line across the 1,858 UTF-8 tracked files, 210 of them inside a provenance note.
+#   · link-span carve-out (adopted): reclassifies 4 of 612 (0.65%). ZERO of them
+#     inside a provenance note; all four on the one defective row — two `ADR-170`
+#     (the dangling pair) and two `ADR-115` (a live, correct link the same row was
+#     hiding from the sweep for the same reason).
+#   · opener-match span — "everything outside the RECORD_OPENERS match is a CITE
+#     span", the literal sub-line reading: reclassifies 450 of 612 (73.5%),
+#     including 210 of 210 provenance-note tokens. A provenance note's own
+#     `Held **ADR-004** … renumbered to **ADR-005**` body sits OUTSIDE the
+#     `**Numbering provenance — `004 → 005`.**` match, so that partition rewrites
+#     every note in the corpus and revokes `provenance/sweep-exempts-every-hop`
+#     outright. It is DT-1's `^`-anchor mistake again: an obvious-looking widening
+#     whose real population is the exemption it was meant to preserve.
+#
+# SCOPED TO RECORD, DELIBERATELY. AMBIGUOUS keeps its contract whole — never
+# rewritten, always named — because AMBIGUOUS means the two readings are LEXICALLY
+# identical, and a carve-out that overrode it would decide the case the third
+# verdict exists to refuse to decide. The Deviation Log row that records this very
+# collision in prose is the live proof: it names the vacated path on purpose.
+MD_INLINE_LINK_RE = re.compile(r"\[[^\]]*\]\([^)]*\)")
+
+# A REGISTRY, on the same principle as `RECORD_OPENERS`: widening the carve-out is
+# adding a row, never editing a predicate body.
+CITE_CARVEOUTS = (
+    ("markdown-inline-link", MD_INLINE_LINK_RE),
+)
+
+
+def _cite_carveout_spans(line):
+    """The spans of ``line`` that are a CITE regardless of the line's verdict.
+
+    Returned sorted and non-overlapping, because ``_sub_in_spans`` reconstructs
+    the line by walking them once in order.
+    """
+    spans = []
+    for _name, pattern in CITE_CARVEOUTS:
+        spans.extend(m.span() for m in pattern.finditer(line))
+    spans.sort()
+    merged = []
+    for a, b in spans:
+        if merged and a <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+        else:
+            merged.append((a, b))
+    return merged
+
+
+def _sub_in_spans(pattern, repl, line, spans):
+    """``pattern`` → ``repl``, applied ONLY inside ``spans``. Returns (text, n).
+
+    An empty ``spans`` is the identity, byte for byte. That is what keeps this
+    change inert on the 608 of 612 RECORD-line tokens the measurement says must
+    not move: no carve-out, no rewrite, and the line is returned unchanged rather
+    than round-tripped through a substitution that happened to match nothing.
+    """
+    if not spans:
+        return line, 0
+    out, n, cursor = [], 0, 0
+    for a, b in spans:
+        out.append(line[cursor:a])
+        chunk, k = pattern.subn(repl, line[a:b])
+        out.append(chunk)
+        n += k
+        cursor = b
+    out.append(line[cursor:])
+    return "".join(out), n
+
+
+def _text_in_spans(line, spans):
+    """The ``spans`` of ``line``, joined by a NEWLINE so no token spans a seam.
+
+    Joining with the empty string would let the tail of one span and the head of
+    the next compose a token that is in neither — a scan reading its own splice.
+    """
+    return "\n".join(line[a:b] for a, b in spans)
+
+# ---- late-binding citations (ADR-181) -------------------------------------
+#
+# The VERSION has had a late-binding rule since ADR-092: the plan carries
+# `{{RELEASE_VERSION}}` and the concrete number is compare-and-swap-claimed at the
+# Stage-12 merge, so a concurrent release taking the slot costs nothing. ADR
+# numbers had no equivalent: they were written literally at authorship and bound
+# only at merge, so the number was committed to prose LONG BEFORE it was decided
+# and every concurrent allocation forced a corpus-wide citation sweep.
+#
+# `{{ADR:<slug>}}` is the citation-side analogue. It carries no `ADR-\d` shape, so
+# it is inert to every ADR-reading instrument, and it is SLUG-keyed rather than
+# number-keyed because the slug already exists and is already relied on as
+# renumber-stable (`rewrite_path_exact` depends on exactly that property).
+#
+# The FILENAME is deliberately NOT deferred. ADR-115 § Portability conflict
+# falsified that: a compare-and-swap over a filename-plus-N-citations-plus-three-
+# index-surfaces is not an object any host offers, and a token in a filename
+# produced a malformed name under the contiguity checker. That evidence is
+# accepted, not re-argued. Only the CITATIONS defer.
+ADR_TOKEN_RE = re.compile(r"\{\{ADR:([A-Za-z0-9][A-Za-z0-9._-]*)\}\}")
+# PROSE-ONLY, and enforced rather than documented. A token inside a link target is
+# parsed as a path and reported as a broken cross-reference by the doc-link checks
+# on every push BEFORE the stamp runs, so the constraint has to fail loudly here.
+ADR_TOKEN_IN_LINK_RE = re.compile(r"\]\([^)\n]*\{\{ADR:")
+ADR_TOKEN_IN_REFDEF_RE = re.compile(r"^\s*\[[^\]\n]+\]:\s*\S*\{\{ADR:")
 
 
 def provenance_head(old, new):
@@ -509,35 +731,268 @@ def citation_re(old):
     return re.compile(r"(?<![0-9A-Za-z])ADR-0*%d(?![0-9])" % old)
 
 
-def is_historical_numbering_line(line):
-    """True for a line that RECORDS an old number rather than CITES a record.
+def _record_opener(line):
+    """The first RECORD_OPENERS row this line matches, or None.
 
-    The ``## Status`` provenance note and the § Renumber log both exist to say
-    "this record used to be ADR-<old>". They are the audit trail the renumber
-    creates. Sweeping them would erase exactly what the move is supposed to
-    document — and would make the tool's own R5/R4 output fail its own R6
-    verify on the next run. A record of a number is not a reference to one.
+    Returns ``(name, extent)``. Row order is precedence order.
     """
-    return bool(PROVENANCE_RE.search(line) or RENUMBER_LOG_SENTENCE_RE.search(line))
+    for name, pattern, extent in RECORD_OPENERS:
+        if pattern.search(line):
+            return name, extent
+    return None
+
+
+def _is_paragraph_continuation(line):
+    """True when ``line`` continues the markdown paragraph above it.
+
+    STRUCTURAL, not heuristic: a paragraph continues while the line is non-blank
+    AND does not open a new markdown block. The closed set of block openers is
+    the one the extent rule declares — a heading, a table row, a bullet, a block
+    quote, or a fence. Nothing else, because a wider set would silently END runs
+    that are genuinely one paragraph, and a narrower one would let a run swallow
+    the block after it.
+
+    Its negative control is mandatory and lives in ``self_test``: break the
+    paragraph with a blank line and the following line MUST revert to CITE. Without
+    that arm, an extent rule is indistinguishable from a blanket exemption.
+    """
+    s = line.strip()
+    if not s:
+        return False
+    if s.startswith("#") or s.startswith("|") or s.startswith(">"):
+        return False
+    if s.startswith("- ") or s.startswith("* "):
+        return False
+    if MD_FENCE_RE.match(s):
+        return False
+    return True
+
+
+def _classify(text):
+    """THE single exemption authority. Returns ``(verdicts, carveouts)``.
+
+    Both public accessors — ``classify_lines`` and ``cite_carveouts`` — are thin
+    readers of this ONE traversal. Splitting the carve-out into its own pass over
+    the same rules would re-create the dry-run/apply divergence by construction,
+    which is the defect this module was rebuilt to make impossible.
+
+    Three verdicts, and the third one is the whole discrimination answer:
+
+    ``RECORD``     the line RECORDS an old number. Never rewritten, never scanned.
+    ``AMBIGUOUS``  a record and a citation are LEXICALLY IDENTICAL here, so the
+                   tool cannot decide. Never rewritten — but NAMED, so a human
+                   dispositions it. Naming is the reversible error; rewriting is
+                   the irreversible one, and no gate catches either.
+    ``CITE``       an ordinary citation. Swept.
+
+    A boolean predicate is structurally forced to GUESS on a Deviation-Log row,
+    because ``| DEV-42 | ADR-151 was renumbered after the sibling merge |`` and
+    ``| DEV-43 | blocked on ADR-151 landing |`` differ in prose and not in shape.
+    Widening RECORD to cover both stops sweeping the live citation; leaving RECORD
+    narrow falsifies the historical one. The third verdict is the only shape that
+    is wrong on neither.
+
+    Verdict rules, in precedence order:
+
+    ==== ====================================================== ============
+    R-1  line carries ``<!-- adr-cite -->``                      ``CITE``
+    R-2  line carries ``<!-- adr-record -->``                    ``RECORD``
+    R-3  line matches a ``RECORD_OPENERS`` regex                 ``RECORD``
+    R-4  line is a paragraph continuation of a ``paragraph``-
+         extent R-3 opener THAT HEADS ITS PARAGRAPH              ``RECORD``
+    R-5  line is inside an ``AMBIGUOUS_SECTIONS`` region AND
+         carries an ADR token                                    ``AMBIGUOUS``
+    R-6  otherwise                                               ``CITE``
+    ==== ====================================================== ============
+
+    R-1..R-6 decide the LINE. One further rule decides sub-line GRANULARITY, and
+    it applies after the verdict rather than inside the precedence order, because
+    it does not compete with the six above — it says which part of an already-
+    RECORD line the verdict does not reach:
+
+    ==== ====================================================== ============
+    R-7  a ``CITE_CARVEOUTS`` span on a ``RECORD`` line, when
+         that line is not inside a fence                        ``CITE`` span
+    ==== ====================================================== ============
+
+    R-7 is scoped to ``RECORD`` on purpose. ``AMBIGUOUS`` is the verdict that
+    declines to decide between two LEXICALLY identical readings, so a carve-out
+    that overrode it would decide exactly the case it exists to refuse. The fence
+    guard matters for the same reason ``check-doc-links.py`` skips fenced blocks:
+    a link inside a fence renders as literal text and resolves nothing, so
+    rewriting it would edit an example — the USE-versus-MENTION error in
+    miniature.
+
+    EVERY consumer of the exemption calls this and only this. A second classifier
+    in this module is the dry-run/apply divergence re-created by construction —
+    which is precisely the defect that shipped when the reporting path counted raw
+    matches while the rewrite path consulted a predicate.
+    """
+    lines = text.split("\n")
+    verdicts = []
+    fenced = []               # per-line fence state, read by R-7 after the loop
+    in_fence = False
+    record_run = False
+    para_open = False         # the previous line left a paragraph body open
+    amb_level = None          # markdown level of the open AMBIGUOUS region
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Recorded FIRST, before any branch, because every branch below
+        # `continue`s. This is `in_fence` as it stands ENTERING the line, so a
+        # fence delimiter is not itself fenced content — which is moot for the
+        # carve-out (a delimiter is CITE either way) and correct for the reader.
+        fenced.append(in_fence)
+
+        # ---- paragraph position (DT-1) -----------------------------------
+        # Computed BEFORE any verdict branch, because every branch below
+        # `continue`s and each one must leave this correct for the next line.
+        # `_is_paragraph_continuation` already encodes "plain paragraph body",
+        # so a line is paragraph-INITIAL exactly when the line above it did not
+        # leave a body open, or when it opens a block of its own.
+        is_body = _is_paragraph_continuation(line)
+        para_initial = not (para_open and is_body)
+        para_open = is_body
+
+        # A fence line is never a heading and never continues a paragraph.
+        if MD_FENCE_RE.match(stripped):
+            in_fence = not in_fence
+            record_run = False
+            verdicts.append(CITE)
+            continue
+
+        # ---- region state (fence-aware: a `# ...` comment inside a fenced
+        # block is a comment, not a markdown heading) ----------------------
+        if not in_fence:
+            heading = MD_HEADING_RE.match(line)
+            if heading:
+                level = len(heading.group(1))
+                if amb_level is not None and level <= amb_level:
+                    amb_level = None
+                for _name, opener in AMBIGUOUS_SECTIONS:
+                    if opener.search(line):
+                        amb_level = level
+                        break
+            elif BOLD_RUN_HEADING_RE.match(stripped):
+                if amb_level == BOLD_RUN_LEVEL:
+                    amb_level = None
+                for _name, opener in AMBIGUOUS_SECTIONS:
+                    if opener.search(line):
+                        amb_level = BOLD_RUN_LEVEL
+                        break
+
+        # ---- verdict -----------------------------------------------------
+        if CITE_MARKER_RE.search(line):
+            record_run = False
+            verdicts.append(CITE)
+            continue
+
+        opener = _record_opener(line)
+        if opener is not None:
+            if opener[1] == "paragraph":
+                if para_initial:
+                    record_run = True
+                # ...and otherwise the shape matched MID-paragraph, where it
+                # heads no note. It GRANTS no extent — but it must not REVOKE
+                # one either, so a run already open carries through unchanged
+                # (a hard-wrapped note line may itself carry a second pair).
+            else:
+                record_run = False
+            verdicts.append(RECORD)
+            continue
+
+        if record_run and _is_paragraph_continuation(line):
+            verdicts.append(RECORD)
+            continue
+
+        record_run = False
+        if amb_level is not None and ANY_ADR_TOKEN_RE.search(line):
+            verdicts.append(AMBIGUOUS)
+            continue
+        verdicts.append(CITE)
+
+    # ---- R-7, the sub-line carve-out -------------------------------------
+    # Derived from THIS traversal's own verdicts and fence state, so it cannot
+    # disagree with them. Empty for every non-RECORD line, which is what makes
+    # the carve-out impossible to misapply to AMBIGUOUS: there is nothing there
+    # to apply.
+    carveouts = [_cite_carveout_spans(ln) if (v == RECORD and not f) else []
+                 for ln, v, f in zip(lines, verdicts, fenced)]
+    return verdicts, carveouts
+
+
+def classify_lines(text):
+    """One verdict per line, from the single authority. See ``_classify``."""
+    return _classify(text)[0]
+
+
+def cite_carveouts(text):
+    """Per line, the spans a ``RECORD`` verdict does NOT cover. See ``_classify``.
+
+    The list is index-parallel to ``classify_lines(text)`` and empty on every
+    non-``RECORD`` line. Consumers pair the two: the verdict says whether to
+    sweep the line, this says which part of an exempt line is nonetheless live.
+    """
+    return _classify(text)[1]
+
+
+def is_historical_numbering_line(line):
+    """Single-line RECORD test. Delegates to ``classify_lines``; never a second
+    predicate.
+
+    Retained verbatim in name, arity and return type because the self-test's
+    shape-keyed provenance arm pins it and that arm is CORRECT — it asserts the
+    sweep exempts every hop of a double move, which is the audit trail the move
+    creates. A ``paragraph`` extent evaluated on a single-line input is that line
+    and no more, so the shim's answer is the pre-ADR-181 answer wherever the input
+    is one line.
+    """
+    return classify_lines(line)[0] == RECORD
 
 
 def rewrite_citations(text, old, new, preserve_historical=True):
-    """Return (new_text, count) with every whole-token ADR-<old> → ADR-<new>.
+    """Return (new_text, count, review) — every whole-token ADR-<old> → ADR-<new>.
 
-    Lines that RECORD an old number (see ``is_historical_numbering_line``) are
-    left alone; the rewrite is line-wise so one exempt line does not exempt its
-    neighbours.
+    ``review`` is the AMBIGUOUS out-parameter: a list of ``(line_number, text)``
+    for every site the classifier could not decide. Those lines are NOT rewritten
+    and they are NOT silently dropped — the caller names them, because after
+    ADR-181 the review report is the ONLY detector for a citation the sweep left
+    behind. No gate reads a bare ``ADR-NNN`` out of prose: the ADR index checker
+    globs filenames and never opens a file, and only PATH-bearing citations are
+    covered by the doc-link checks.
+
+    ``preserve_historical=False`` disables the exemption entirely (RECORD and
+    AMBIGUOUS both fall through to a rewrite). It exists for callers that have
+    already stripped the population themselves; nothing in the seven steps uses it.
     """
     pattern, repl = citation_re(old), f"ADR-{new:03d}"
-    out, count = [], 0
-    for line in text.split("\n"):
-        if preserve_historical and is_historical_numbering_line(line):
+    lines = text.split("\n")
+    if preserve_historical:
+        verdicts, carveouts = _classify(text)
+    else:
+        verdicts, carveouts = [CITE] * len(lines), [[] for _ in lines]
+    out, count, review = [], 0, []
+    for i, (line, verdict, carve) in enumerate(
+            zip(lines, verdicts, carveouts), start=1):
+        if verdict == RECORD:
+            # R-7. The line is exempt EXCEPT its carve-out spans. With no
+            # carve-out `_sub_in_spans` is the identity, so this is the
+            # pre-DEV-36 branch byte for byte on all but 4 of the corpus's 612
+            # RECORD-line tokens.
+            rewritten, n = _sub_in_spans(pattern, repl, line, carve)
+            out.append(rewritten)
+            count += n
+            continue
+        if verdict == AMBIGUOUS:
             out.append(line)
+            if pattern.search(line):
+                review.append((i, line))
             continue
         rewritten, n = pattern.subn(repl, line)
         out.append(rewritten)
         count += n
-    return "\n".join(out), count
+    return "\n".join(out), count, review
 
 
 def rewrite_path_exact(text, old, new, slug):
@@ -656,6 +1111,29 @@ def append_renumber_log(text, old, new, slug, cause):
 # --------------------------------------------------------------------------
 # The seven steps
 # --------------------------------------------------------------------------
+
+
+def _log_review_block(log, sites):
+    """Emit the ambiguous-site review block on EVERY path, including zero sites.
+
+    Unconditional on purpose. After ADR-181 no gate reads a bare ``ADR-NNN`` out
+    of prose, so this block is the ONLY detector for a live citation the sweep
+    declined to rewrite. A step that is silent when it finds nothing is
+    indistinguishable from a step that did not run — the same disclosure failure
+    R7 exists to close, and the reason the zero-site line is not an omission.
+
+    Output shape is load-bearing and is depended on by the regression suite: one
+    summary line carrying ``R3 REVIEW:``, then one indented line per site ALSO
+    carrying ``R3 REVIEW:`` together with its ``<path>:<line>``. So a zero-site run
+    emits exactly one ``R3 REVIEW:`` line, and a site is greppable by its path.
+    """
+    log(f"R3 REVIEW: {len(sites)} ambiguous site(s) — named, never rewritten "
+        f"(a record and a citation are lexically identical here)")
+    for rel, lineno, text in sites:
+        log(f"    R3 REVIEW: {rel}:{lineno}: {text.strip()}")
+    if not sites:
+        log("    (none — this block is emitted on every path, so silence here "
+            "means zero sites and not a step that did not run)")
 
 
 def _strip_projected_region(lines):
@@ -970,14 +1448,64 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
     in_scope = _in_scope_files(ref, root, extra_paths, log, exclude_paths)
 
     if not apply_changes:
-        hits = 0
+        # CALL SITE 3 — the reporting path, wired to the SAME authority the apply
+        # path uses. Before ADR-181 this block counted `citation_re(old).findall`
+        # raw: no exemption, no region handling, so it predicted rewriting the very
+        # lines R3 correctly leaves alone and the rows R4's projector regenerates.
+        #
+        # Parity is STRUCTURAL, not asserted. The block calls `rewrite_citations`
+        # and DISCARDS the returned text, so the dry run is the apply path minus
+        # the write and a divergence is impossible without deleting a call.
+        hits = exempt_total = 0
+        review_all = []
         for rel in in_scope:
-            body = (root / rel).read_text(encoding="utf-8")
-            n = len(citation_re(old).findall(body))
-            if n:
-                hits += n
-                log(f"    would rewrite {n:>3} × ADR-{old:03d} in {rel}")
-        log(f"DRY-RUN: {hits} citation(s) would move. Re-run with --apply.")
+            lines = (root / rel).read_text(encoding="utf-8").split("\n")
+            # The projected region is DERIVED, and R4 regenerates it from the
+            # post-rename file set rather than sweeping it. R6 already mirrors
+            # this strip before its own scan; the reporting path must mirror it
+            # too, or it predicts an edit the tool will itself undo — the same
+            # over-prediction class as counting an exempt record.
+            if rel in PROJECTED_INDEXES:
+                lines = _strip_projected_region(lines)
+            body = "\n".join(lines)
+            present = len(citation_re(old).findall(body))
+            # THE MECHANISM LINE IS UNCONDITIONAL, and its placement above the
+            # `present` guard is the whole point. A projected surface is reported
+            # by MECHANISM, not by count: its region rows are derived, so they are
+            # never a citation this sweep will rewrite. Nested under the guard it
+            # went silent in exactly the case it exists to disclose — a surface
+            # whose ONLY `ADR-<old>` tokens are region rows strips to zero, skips
+            # the guard, and the reader is told nothing at all about a file that
+            # visibly carries the old number. Same doctrine as `_log_review_block`:
+            # a step that is silent when it finds nothing is indistinguishable from
+            # a step that did not run.
+            if rel in PROJECTED_INDEXES:
+                log(f"    {rel} is regenerated by {PROJECTED_INDEXES[rel]}; its "
+                    f"managed region is projected, not swept")
+            if not present:
+                continue
+            _, would, review = rewrite_citations(body, old, new)
+            amb_tokens = sum(len(citation_re(old).findall(ln)) for _, ln in review)
+            exempt = present - would - amb_tokens
+            hits += would
+            exempt_total += exempt
+            review_all.extend((rel, i, ln) for i, ln in review)
+            # THREE counts, each named. A file reported `would rewrite 0` is
+            # indistinguishable from a file with no citations at all; a file
+            # reported `would rewrite 0 · exempt (record) 2` names the exemption.
+            log(f"    would rewrite {would:>3} × ADR-{old:03d} in {rel}"
+                f"  ·  exempt (record) {exempt}"
+                f"  ·  REVIEW {len(review)}")
+        _log_review_block(log, review_all)
+        log(f"DRY-RUN: {hits} citation(s) would move; {exempt_total} exempt "
+            f"(record); {len(review_all)} ambiguous site(s) for review.")
+        # DISCLOSURE, not silence. The dry run enumerates R3 and nothing else, and
+        # a reader who is not told that reads its output as the whole edit set.
+        log("DRY-RUN enumerates R3 only (the citation sweep over the branch diff). "
+            "NOT enumerated: R4 index rewrites outside the branch diff, table/list "
+            "re-sorts, the § Renumber log append, the R5 provenance note, and R7 "
+            "package staleness. The R2 rename is named above by R1 PROCEED. "
+            "Re-run with --apply.")
         return 0
 
     head = git("rev-parse", "HEAD", root=root)
@@ -1011,18 +1539,21 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
     # ---- R3 citation sweep (branch-scoped) ------------------------------
     log(f"R3 scope: {len(in_scope)} file(s) in the branch diff vs {ref}")
     swept = 0
+    review_all = []
     for rel in in_scope:
         target = root / (new_rel if rel == old_rel else rel)
         if not target.is_file():
             continue
         body = target.read_text(encoding="utf-8")
-        updated, n = rewrite_citations(body, old, new)
+        updated, n, review = rewrite_citations(body, old, new)
+        review_all.extend((_rel(root, target), i, ln) for i, ln in review)
         if n:
             target.write_text(updated, encoding="utf-8")
             touched.add(_rel(root, target))
             swept += n
     log(f"R3 citation sweep: {swept} occurrence(s) rewritten across "
         f"{max(len(touched) - 1, 0)} file(s)")
+    _log_review_block(log, review_all)
 
     # ---- R4 index surfaces ----------------------------------------------
     # TWO surfaces, TWO mechanisms, and the split is the whole point.
@@ -1043,7 +1574,7 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
         body = target.read_text(encoding="utf-8")
         original = body
         if rel in in_scope:
-            body, _ = rewrite_citations(body, old, new)
+            body, _, _ = rewrite_citations(body, old, new)
         else:
             body, _ = rewrite_path_exact(body, old, new, slug)
         body = resort_adr_table(body)
@@ -1061,7 +1592,8 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
         # the projector then owns the region itself. Order matters: sweep, project.
         target = root / rel
         if rel in in_scope:
-            body, n = rewrite_citations(target.read_text(encoding="utf-8"), old, new)
+            body, n, _ = rewrite_citations(target.read_text(encoding="utf-8"),
+                                           old, new)
             if n:
                 target.write_text(body, encoding="utf-8")
                 touched.add(rel)
@@ -1089,7 +1621,9 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
                       "numbering-provenance note")
 
     # ---- R6 zero-dangling verify ----------------------------------------
+    # CALL SITE 2 — the same authority, consumed as a three-valued verdict.
     dangling = []
+    r6_review = []
     for rel in in_scope:
         p = root / (new_rel if rel == old_rel else rel)
         if not p.is_file():
@@ -1100,13 +1634,44 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
         # region names it on purpose too, for a different reason: it is derived
         # from the file set, so its ADR-<old> row belongs to whichever record
         # still holds <old> — see `_strip_projected_region`.
+        #
+        # AMBIGUOUS is excluded for a THIRD reason, and it is a real trade stated
+        # rather than hidden: R3 deliberately did not rewrite those lines, so
+        # scanning them here would revert a CORRECT move on every ambiguous site.
+        # The cost is that R6 correspondingly can no longer detect a genuinely
+        # stale citation there — which is exactly why the review block above is
+        # unconditional and why the Stage-12 procedure carries the obligation to
+        # disposition each named site.
         lines = p.read_text(encoding="utf-8").split("\n")
         if rel in PROJECTED_INDEXES:
             lines = _strip_projected_region(lines)
-        body = "\n".join(ln for ln in lines
-                         if not is_historical_numbering_line(ln))
-        if citation_re(old).search(body):
+        verdicts, carveouts = _classify("\n".join(lines))
+        scanned = []
+        for i, (ln, verdict, carve) in enumerate(
+                zip(lines, verdicts, carveouts), start=1):
+            if verdict == RECORD:
+                # R-7. "Never scanned" used to be unconditional, and that is
+                # how a dangling link on a RECORD line reached the mainline
+                # under a green zero-dangling verdict. The exempt part of the
+                # line is still not scanned; its carve-out spans are, because
+                # a link the rename just invalidated is a defect R6 exists to
+                # find. No carve-out contributes nothing, exactly as before.
+                if carve:
+                    scanned.append(_text_in_spans(ln, carve))
+                continue
+            if verdict == AMBIGUOUS:
+                if citation_re(old).search(ln):
+                    r6_review.append((_rel(root, p), i, ln))
+                continue
+            scanned.append(ln)
+        if citation_re(old).search("\n".join(scanned)):
             dangling.append(_rel(root, p))
+    if r6_review:
+        log(f"R6 REVIEW: {len(r6_review)} ambiguous site(s) still name "
+            f"ADR-{old:03d} and were EXCLUDED from the dangling scan — "
+            f"disposition each one:")
+        for rel, lineno, text in r6_review:
+            log(f"    R6 REVIEW: {rel}:{lineno}: {text.strip()}")
     if dangling:
         return revert(f"{len(dangling)} in-scope file(s) still cite ADR-{old:03d}: "
                       + ", ".join(dangling))
@@ -1193,6 +1758,142 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
 
 
 # --------------------------------------------------------------------------
+# --stamp — resolve {{ADR:<slug>}} at the claim (ADR-181)
+# --------------------------------------------------------------------------
+
+
+def adr_slug_index(root):
+    """slug -> [numbers], across BOTH ADR directories (one global number space).
+
+    Built from the ON-DISK file set, which is what makes the branch-scoping
+    property fall out by construction: a slug resolves to a file IN THIS TREE, so
+    a stamp can never reach whichever OTHER record holds a number on the mainline.
+    That is the property ADR-115 § Decision (2) protects, and it is the reason a
+    whole-file `--exclude-path` was needed the last time a sweep resolved
+    corpus-wide.
+    """
+    by_slug = {}
+    for d in ADR_DIRS:
+        directory = root / d
+        if not directory.is_dir():
+            continue
+        for path in sorted(directory.glob("ADR-*.md")):
+            m = re.match(r"^ADR-(\d+)-(.+)\.md$", path.name)
+            if m:
+                by_slug.setdefault(m.group(2), []).append(int(m.group(1)))
+    return by_slug
+
+
+def stamp_text(text, by_slug):
+    """Return (new_text, count, refusals).
+
+    ``refusals`` is a list of ``(line_number, slug_or_None, reason)``. A non-empty
+    refusal list means the CALLER must not write: an unresolvable slug, an
+    ambiguous one, and a token in link position are all states where guessing is
+    worse than stopping, and the whole point of late binding is that stopping is
+    free — nothing has been committed to prose yet.
+    """
+    lines = text.split("\n")
+    out, count, refusals = [], 0, []
+    for i, line in enumerate(lines, start=1):
+        if ADR_TOKEN_IN_LINK_RE.search(line) or ADR_TOKEN_IN_REFDEF_RE.search(line):
+            refusals.append((i, None, "token in link position (the token is "
+                                      "prose-only; a link target is parsed as a "
+                                      "path and reported as a broken cross-ref)"))
+            out.append(line)
+            continue
+        rewritten = line
+        for m in list(ADR_TOKEN_RE.finditer(line)):
+            slug = m.group(1)
+            numbers = sorted(set(by_slug.get(slug, [])))
+            if not numbers:
+                refusals.append((i, slug, "no ADR file on disk carries this slug"))
+                continue
+            if len(numbers) > 1:
+                refusals.append((i, slug, "ambiguous — "
+                                 + ", ".join(f"ADR-{n:03d}" for n in numbers)))
+                continue
+            rewritten = rewritten.replace(m.group(0), f"ADR-{numbers[0]:03d}")
+            count += 1
+        out.append(rewritten)
+    if refusals:
+        # ZERO MUTATION on refusal. Returning the original text (not the partially
+        # rewritten one) is what makes "refuse" mean refuse rather than
+        # "half-applied and reported".
+        return text, 0, refusals
+    return "\n".join(out), count, []
+
+
+def do_stamp(ref, root, apply_changes, check_only, extra_paths, log,
+             exclude_paths=None):
+    """Resolve every `{{ADR:<slug>}}` in the branch diff. The LAST step of a claim.
+
+    Ordering is load-bearing and belongs to the Stage-12 procedure:
+    ``detect -> reconcile (if needed) -> stamp -> --stamp --check``. Because the
+    number is written only AFTER it binds, a stamped citation cannot go stale and
+    a mid-release renumber costs nothing — nothing carries a number yet.
+
+    ``--check`` is the read-only gate limb: it asserts zero residual tokens and
+    fails on a token in link position.
+    """
+    in_scope = _in_scope_files(ref, root, extra_paths, log, exclude_paths)
+    by_slug = adr_slug_index(root)
+
+    if check_only:
+        residual, bad_links = [], []
+        for rel in in_scope:
+            for i, line in enumerate(
+                    (root / rel).read_text(encoding="utf-8").split("\n"), start=1):
+                if (ADR_TOKEN_IN_LINK_RE.search(line)
+                        or ADR_TOKEN_IN_REFDEF_RE.search(line)):
+                    bad_links.append((rel, i, line.strip()))
+                for m in ADR_TOKEN_RE.finditer(line):
+                    residual.append((rel, i, m.group(1)))
+        for rel, i, line in bad_links:
+            log(f"STAMP CHECK: {rel}:{i}: token in LINK POSITION — {line}")
+        for rel, i, slug in residual:
+            log(f"STAMP CHECK: {rel}:{i}: unresolved {{{{ADR:{slug}}}}}")
+        # Emitted on every path, zero included — a silent check is
+        # indistinguishable from a check that did not run.
+        log(f"STAMP CHECK: {len(residual)} residual token(s), "
+            f"{len(bad_links)} in link position, over {len(in_scope)} in-scope "
+            f"file(s).")
+        return 1 if (residual or bad_links) else 0
+
+    # ---- resolve (dry run unless --apply) --------------------------------
+    plan, refusals = [], []
+    for rel in in_scope:
+        body = (root / rel).read_text(encoding="utf-8")
+        if not ADR_TOKEN_RE.search(body) and not ADR_TOKEN_IN_LINK_RE.search(body):
+            continue
+        updated, n, refused = stamp_text(body, by_slug)
+        if refused:
+            refusals.extend((rel, i, slug, why) for i, slug, why in refused)
+            continue
+        if n:
+            plan.append((rel, updated, n))
+    if refusals:
+        for rel, i, slug, why in refusals:
+            name = f"{{{{ADR:{slug}}}}}" if slug else "token"
+            log(f"STAMP REFUSE: {rel}:{i}: {name} — {why}")
+        log(f"STAMP REFUSE: {len(refusals)} unresolvable site(s); "
+            f"NOTHING was written (zero mutation).")
+        return 2
+    total = sum(n for _, _, n in plan)
+    if not apply_changes:
+        for rel, _, n in plan:
+            log(f"    would stamp {n:>3} token(s) in {rel}")
+        log(f"STAMP DRY-RUN: {total} token(s) across {len(plan)} file(s) over "
+            f"{len(in_scope)} in-scope file(s). Re-run with --apply.")
+        return 0
+    for rel, updated, n in plan:
+        (root / rel).write_text(updated, encoding="utf-8")
+        log(f"STAMP: {n:>3} token(s) resolved in {rel}")
+    log(f"STAMP: {total} token(s) resolved across {len(plan)} file(s).")
+    return 0
+
+
+# --------------------------------------------------------------------------
 # self-test (pure functions; no git, no filesystem)
 # --------------------------------------------------------------------------
 
@@ -1204,16 +1905,23 @@ def self_test():
         if got != want:
             failures.append(f"[{label}] expected {want!r}, got {got!r}")
 
+    # `rewrite_citations` returns (text, count, review) since ADR-181. The arms
+    # below assert text-and-count exactly as they always did — `[:2]` keeps their
+    # right-hand sides byte-unchanged rather than restating six expectations to
+    # absorb a signature change. The review channel gets its own arms further down.
+    def rc2(*a, **kw):
+        return rewrite_citations(*a, **kw)[:2]
+
     # The right boundary is the load-bearing one: without it, renumbering
     # ADR-010 would corrupt ADR-100..ADR-109.
-    eq("boundary/right", rewrite_citations("see ADR-104 and ADR-10.", 10, 11),
+    eq("boundary/right", rc2("see ADR-104 and ADR-10.", 10, 11),
        ("see ADR-104 and ADR-011.", 1))
-    eq("boundary/left", rewrite_citations("XADR-010 vs ADR-010", 10, 11),
+    eq("boundary/left", rc2("XADR-010 vs ADR-010", 10, 11),
        ("XADR-010 vs ADR-011", 1))
-    eq("boundary/zero-pad", rewrite_citations("ADR-99 and ADR-099", 99, 100),
+    eq("boundary/zero-pad", rc2("ADR-99 and ADR-099", 99, 100),
        ("ADR-100 and ADR-100", 2))
     # Specificity: a number nobody cited must move nothing.
-    eq("boundary/specificity", rewrite_citations("ADR-104 ADR-010", 77, 78),
+    eq("boundary/specificity", rc2("ADR-104 ADR-010", 77, 78),
        ("ADR-104 ADR-010", 0))
     # Path-exact rewriting on a mainline-unchanged index: the bare number is
     # someone else's record and must NOT move; the slugged path is ours.
@@ -1223,17 +1931,424 @@ def self_test():
        ("| [ADR-005](ADR-005-bravo.md) | x |\nbare ADR-004\n", 1))
     # A record of an old number is not a citation of it: the sweep must leave
     # the provenance note and the § Renumber log alone, or it erases its own
-    # audit trail. Sensitivity control: an ordinary line on the same input DOES
-    # move, so this is not a probe that simply never fires.
+    # audit trail.
+    #
+    # WIDENED AT ADR-181, DELIBERATELY. Line 2 here is a hard-wrapped
+    # CONTINUATION of the note's paragraph, and the pre-ADR-181 line-wise
+    # exemption swept it — that is facet (a), the defect this arm's fixture
+    # happens to be shaped like. It now correctly reports 0 rewrites. The
+    # sensitivity guarantee this arm used to carry has NOT been dropped; it moved
+    # to `exempt/broken-paragraph-reverts-to-cite` below, where a blank line ends
+    # the paragraph and the following citation MUST still move. That is the
+    # structurally correct home for it: a control inside the note's own paragraph
+    # was asserting the bug.
     hist = ("**Numbering provenance — `004 → 005`.** was ADR-004.\n"
             "plain citation of ADR-004 here\n")
-    eq("historical/exempt", rewrite_citations(hist, 4, 5),
-       ("**Numbering provenance — `004 → 005`.** was ADR-004.\n"
-        "plain citation of ADR-005 here\n", 1))
+    eq("historical/exempt", rc2(hist, 4, 5), (hist, 0))
     logline = ("**Renumber log.** ADR-004 (`bravo`) → **ADR-005** by "
                "`release/tools/renumber-adr.py` at merge time.")
-    eq("historical/renumber-log-exempt", rewrite_citations(logline, 4, 5),
+    eq("historical/renumber-log-exempt", rc2(logline, 4, 5),
        (logline, 0))
+
+    # ---- ADR-181: the three-valued classifier over a region registry --------
+    # Widening the population is adding a REGISTRY ROW, never editing a predicate
+    # body — so these arms assert against rows and regions, not against a shape.
+
+    # ONE authority, asserted BEHAVIOURALLY. `self_test` is pure functions with no
+    # filesystem, so the structural limb (exactly one `def classify_lines`, the
+    # dry-run block referencing it) is graded by the release's cross-issue probe
+    # against the source file; what is gradeable here is that the shim cannot
+    # disagree with the classifier on any input. A second predicate is precisely
+    # what would make these two diverge.
+    _agree = [
+        "**Numbering provenance — `004 → 005`.** x",
+        "**Renumber log.** ADR-004 (`b`) → **ADR-005** by "
+        "`release/tools/renumber-adr.py`",
+        "plain citation of ADR-004",
+        "| DEV-1 | ADR-004 was renumbered |",
+        "",
+    ]
+    eq("classify/shim-agrees-with-the-authority",
+       [is_historical_numbering_line(ln) for ln in _agree],
+       [classify_lines(ln)[0] == RECORD for ln in _agree])
+    # ...and the shim is a RECORD test, so it must answer False on AMBIGUOUS —
+    # never fold the third verdict back into a boolean's True side.
+    eq("classify/shim-is-record-only",
+       (classify_lines("## Deviation Log\n| DEV-1 | ADR-004 was renumbered |")[1],
+        is_historical_numbering_line("| DEV-1 | ADR-004 was renumbered |")),
+       (AMBIGUOUS, False))
+
+    # facet (a) — a hard-wrapped continuation of a provenance note is a RECORD.
+    wrapped = ("**Numbering provenance — `004 → 005`.** Held **ADR-004**\n"
+               "branch-local; renumbered because the mainline already claimed\n"
+               "ADR-004 and the record now denotes ADR-004 throughout.\n")
+    eq("exempt/wrapped-continuation-is-record",
+       rc2(wrapped, 4, 5), (wrapped, 0))
+    # NEGATIVE CONTROL, and it is mandatory: break the paragraph with a blank line
+    # and line 3 MUST revert to CITE. Without this arm the extent rule is
+    # indistinguishable from a blanket exemption.
+    broken = ("**Numbering provenance — `004 → 005`.** Held **ADR-004**\n"
+              "branch-local; renumbered at merge time.\n"
+              "\n"
+              "A later paragraph cites ADR-004 for real.\n")
+    eq("exempt/broken-paragraph-reverts-to-cite",
+       rc2(broken, 4, 5),
+       ("**Numbering provenance — `004 → 005`.** Held **ADR-004**\n"
+        "branch-local; renumbered at merge time.\n"
+        "\n"
+        "A later paragraph cites ADR-005 for real.\n", 1))
+    # A block opener ends the run too, not just a blank line.
+    table_after = ("**Numbering provenance — `004 → 005`.** Held **ADR-004**.\n"
+                   "| row | cites ADR-004 |\n")
+    eq("exempt/block-opener-ends-the-run",
+       rc2(table_after, 4, 5),
+       ("**Numbering provenance — `004 → 005`.** Held **ADR-004**.\n"
+        "| row | cites ADR-005 |\n", 1))
+
+    # live-corpus regression — ADR-103's combined lineage head, which the
+    # canonical shape regex does not match and which therefore had 5 of 5 tokens
+    # unprotected before this change.
+    eq("exempt/lineage-head-is-record",
+       is_historical_numbering_line(
+           "**Numbering.** This record moved `098 → 101 → 103`; ADR-098 was its "
+           "branch-local number."),
+       True)
+    eq("exempt/hop-sentence-is-record",
+       is_historical_numbering_line("ADR-028 → ADR-099 at merge time."), True)
+
+    # DT-1 — a paragraph-extent shape that matches MID-paragraph heads no note,
+    # so it must NOT exempt the rest of the paragraph. Reduced from the live
+    # site: `core/ADRs/ADR-121...md:269` carries `120 → 121` inside a running
+    # sentence, and the two `Relates to` citations below it were exempted and
+    # NOT named — a coverage regression in the silent direction, which is the
+    # direction § Decision (4) says the review block exists to catch.
+    #
+    # SENSITIVITY, and it fires: before the position gate this arm returned
+    # `(mid_para, 0)` — the citation was left in place and reported nowhere.
+    mid_para = ("Numbering derived per **ADR-115**, whose mainline-anchor\n"
+                "rule is what makes the `004 → 005` advance rule-determined "
+                "rather than discretionary. Relates to\n"
+                "**ADR-004**, which established the registry this file "
+                "embodies.\n")
+    mid_swept = mid_para.replace("**ADR-004**", "**ADR-005**")
+    eq("extent/mid-paragraph-shape-does-not-exempt-the-rest",
+       rc2(mid_para, 4, 5), (mid_swept, 1))
+    # ...and the verdict stream directly, so the arm cannot be satisfied by a
+    # rewrite path that disagrees with the classifier.
+    eq("extent/mid-paragraph-opener-carries-no-run",
+       classify_lines(mid_para)[:3], [CITE, RECORD, CITE])
+    # SPECIFICITY — the SAME shape at the head of its paragraph still carries
+    # the extent to its hard-wrapped continuation. Without this limb the fix is
+    # indistinguishable from deleting the freeform row, which would re-open the
+    # 5-of-5 ADR-103 lineage gap the row was added to close.
+    head_para = ("**Numbering.** This record moved `004 → 005`; the note runs\n"
+                 "on and still denotes ADR-004 on this wrapped line.\n")
+    eq("extent/paragraph-initial-shape-still-carries",
+       rc2(head_para, 4, 5), (head_para, 0))
+    # ...and the gate GRANTS no extent mid-paragraph but must not REVOKE one:
+    # a note whose continuation line happens to carry a second pair keeps the
+    # run open through it.
+    second_pair = ("**Numbering provenance — `004 → 005`.** Held **ADR-004**\n"
+                   "branch-local; the earlier `002 → 004` hop is recorded above\n"
+                   "and this line still denotes ADR-004.\n")
+    eq("extent/a-second-pair-mid-run-does-not-close-it",
+       rc2(second_pair, 4, 5), (second_pair, 0))
+
+    # ---- DEV-36: the MIXED line, where one verdict is not enough ------------
+    #
+    # The production shape, reduced: a gate-criteria table row that illustrates a
+    # multi-hop defect with a bare `NNN → NNN` pair — so `PROVENANCE_FREEFORM_RE`
+    # fires and the row is RECORD — and that ALSO carries a live markdown link to
+    # the record the criterion cites. Pre-DEV-36 the row was neither rewritten nor
+    # scanned, so the rename left a dangling link and R6 reported zero.
+    #
+    # These arms fail on the pre-DEV-36 build. Verified by running them against
+    # it, not asserted: `carveout/mixed-line-link-is-swept` returns 0 where 2 is
+    # required, and `carveout/note-keeps-its-own-numbers-but-not-its-link`
+    # returns the input unchanged.
+    mixed = ("| G-EX9 | a record that hopped twice (`110 → 114 → 118`) has "
+             "vacated 114, so the limb arrives with "
+             "[`ADR-004`](../ADRs/ADR-004-slug.md) instead. |")
+    # The verdict does NOT change, and that is the point: the row really does
+    # record a hop. An implementation that "fixed" this by demoting the line to
+    # CITE would sweep the illustrative pair and fail HERE.
+    eq("carveout/mixed-line-verdict-is-still-record",
+       classify_lines(mixed)[0], RECORD)
+    # SENSITIVITY — both tokens inside the link move: the display text and the
+    # path. Two, not one; a rewrite that reached only the visible label would
+    # leave the target dangling, which is the same defect wearing a fix.
+    eq("carveout/mixed-line-link-is-swept",
+       rc2(mixed, 4, 5),
+       ("| G-EX9 | a record that hopped twice (`110 → 114 → 118`) has "
+        "vacated 114, so the limb arrives with "
+        "[`ADR-005`](../ADRs/ADR-005-slug.md) instead. |", 2))
+    # SPECIFICITY — the illustrative hop pair is untouched. Stated as the whole
+    # returned text above, so a carve-out that leaked into the prose fails.
+    #
+    # THE INVARIANT ARM. A provenance note that also links somewhere keeps every
+    # number in its own prose — `Held **ADR-004**`, the quoted `"ADR-004"` — and
+    # moves ONLY the link. This is the arm that rejects the other candidate
+    # mechanism: partitioning on the RECORD_OPENERS match instead of on the link
+    # puts all of this note's prose outside the record span, so it rewrites the
+    # note and erases the audit trail the move exists to create. Measured over the
+    # corpus, that mechanism reclassifies 210 of 210 provenance-note tokens.
+    note_link = ('**Numbering provenance — `004 → 005`.** Held **ADR-004** '
+                 'branch-local; see [`ADR-004`](../ADRs/ADR-004-slug.md). '
+                 'In-release citations that read "ADR-004" denote this record.')
+    eq("carveout/note-keeps-its-own-numbers-but-not-its-link",
+       rc2(note_link, 4, 5),
+       ('**Numbering provenance — `004 → 005`.** Held **ADR-004** '
+        'branch-local; see [`ADR-005`](../ADRs/ADR-005-slug.md). '
+        'In-release citations that read "ADR-004" denote this record.', 2))
+    # SPECIFICITY — a RECORD line with NO link is inert under R-7, byte for byte.
+    # Its control is the arm above: same shape, one link added, two rewrites.
+    no_link = ("**Numbering provenance — `004 → 005`.** Held **ADR-004** "
+               "branch-local; the path `ADR-004-slug.md` is named in prose only.")
+    eq("carveout/record-line-without-a-link-is-inert",
+       rc2(no_link, 4, 5), (no_link, 0))
+    # FENCE GUARD — a link inside a fenced block renders as literal text and
+    # resolves nothing, so it is an example, not a citation. `check-doc-links.py`
+    # skips fenced blocks for the same reason. Its control is `mixed` above: the
+    # identical link outside a fence moves.
+    fenced_link = ("**Numbering provenance — `004 → 005`.** Held ADR-004.\n"
+                   "\n"
+                   "```\n"
+                   "**Numbering.** `004 → 005` [`ADR-004`](../ADRs/ADR-004-s.md)\n"
+                   "```\n")
+    eq("carveout/fenced-link-is-not-a-carveout",
+       rc2(fenced_link, 4, 5), (fenced_link, 0))
+    # AMBIGUOUS IS UNTOUCHED. The third verdict declines to decide between two
+    # lexically identical readings; a carve-out that overrode it would decide the
+    # case it exists to refuse. The Deviation Log row recording THIS collision is
+    # the live instance — it names a vacated path on purpose.
+    amb_link = ("## Deviation Log\n"
+                "\n"
+                "| DEV-33 | lost the race to [`ADR-004`](../ADRs/ADR-004-s.md) |\n")
+    amb_text, amb_n, amb_review = rewrite_citations(amb_link, 4, 5)
+    eq("carveout/ambiguous-link-is-named-not-swept",
+       (amb_text, amb_n, len(amb_review)), (amb_link, 0, 1))
+    # STRUCTURE — the carve-out is index-parallel to the verdicts and EMPTY on
+    # every non-RECORD line, which is what makes it impossible to misapply to
+    # AMBIGUOUS: there is nothing there to apply. Non-vacuous, because the same
+    # fixture's RECORD line carries one.
+    struct_body = mixed + "\n" + amb_link
+    struct_v = classify_lines(struct_body)
+    struct_c = cite_carveouts(struct_body)
+    eq("carveout/empty-on-every-non-record-line",
+       (len(struct_v) == len(struct_c),
+        all(c == [] for c, v in zip(struct_c, struct_v) if v != RECORD),
+        any(c for c, v in zip(struct_c, struct_v) if v == RECORD)),
+       (True, True, True))
+
+    # facet (b) — a Deviation-Log row is AMBIGUOUS: not rewritten, and NAMED.
+    devlog = ("## Deviation Log\n"
+              "\n"
+              "| DEV-42 | ADR-004 was renumbered after the sibling merge |\n"
+              "| DEV-43 | blocked on ADR-004 landing |\n"
+              "\n"
+              "## Notes\n"
+              "\n"
+              "Closing prose cites ADR-004 once more.\n")
+    dev_text, dev_n, dev_review = rewrite_citations(devlog, 4, 5)
+    eq("exempt/devlog-row-is-ambiguous",
+       [ln for ln in dev_text.split("\n") if ln.startswith("| DEV-42")],
+       ["| DEV-42 | ADR-004 was renumbered after the sibling merge |"])
+    eq("exempt/devlog-ambiguous-sites-are-named", len(dev_review), 2)
+    # DISCRIMINATION — a live citation AFTER the section closes IS still swept.
+    # Without this limb the change is indistinguishable from disabling the sweep
+    # on release plans, and the region rule could be implemented as
+    # open-and-never-close with every other arm still green.
+    eq("exempt/devlog-live-citation-outside-section",
+       ("Closing prose cites ADR-005 once more." in dev_text, dev_n), (True, 1))
+    # The section CLOSE boundary, asserted on the verdict stream directly.
+    eq("exempt/devlog-section-closes-at-next-heading",
+       classify_lines(devlog)[-2:], [CITE, CITE])
+    # DR-D / AI-007 — a numbered heading is still a section opener. The tight
+    # form missed this shape and swept its rows silently.
+    numbered = ("## 11. Stage 5 Deviation Log\n"
+                "| DEV-9 | ADR-004 was renumbered |\n")
+    eq("exempt/devlog-heading-variants-are-sections",
+       classify_lines(numbered)[1], AMBIGUOUS)
+    # ...and a `#` COMMENT inside a fenced block is not a heading, so it opens
+    # no region. Fence-awareness is what keeps the loosened row from turning a
+    # code comment into an unbounded exemption.
+    fenced_comment = ("```\n"
+                      "# ── Deviation Log ──\n"
+                      "```\n"
+                      "prose cites ADR-004\n")
+    eq("exempt/fenced-comment-is-not-a-section",
+       classify_lines(fenced_comment)[3], CITE)
+
+    # facet (c) — the range case. A straddling range inside a Deviation Log is
+    # left whole, so `ADR-005–004` (low end above high end) never forms.
+    rng = ("## Deviation Log\n"
+           "| DEV-43 | the block ADR-004–005 moved as a unit |\n")
+    eq("exempt/incoherent-range-does-not-reproduce", rc2(rng, 4, 5), (rng, 0))
+
+    # Author overrides, both directions.
+    eq("exempt/marker-overrides-both-ways",
+       (rc2("<!-- adr-record --> ADR-004 stays", 4, 5)[1],
+        rc2("**Numbering provenance — `004 → 005`.** <!-- adr-cite --> ADR-004",
+            4, 5)[1]),
+       (0, 1))
+
+    # DRY-RUN PARITY, as a property. The reporting path calls `rewrite_citations`
+    # and discards the text, so over identical bytes the two counts are the same
+    # number by construction — this arm fails only if a caller re-derives a count.
+    #
+    # THE FIXTURE CARRIES ALL THREE COLUMNS NON-ZERO, and that is load-bearing.
+    # The `provenance-note` line below is what makes `exempt` non-zero; without
+    # it the exempt limb of the partition is a zero whose control is also zero,
+    # which is a broken probe rather than a passing arm.
+    # The note CARRIES A LINK since DEV-36, and that is load-bearing for the same
+    # reason the note itself is: without it the R-7 carve-out is a column of the
+    # partition that no fixture exercises, and the partition would balance for a
+    # vacuous reason. `dryrun/parity-exercises-the-carveout` below pins it.
+    parity_record = ("**Numbering provenance — `004 → 005`.** Held **ADR-004** "
+                     "branch-local before the sibling merge; see "
+                     "[`ADR-004`](../ADRs/ADR-004-slug.md).\n")
+    parity_body = devlog + "\n" + parity_record + "\nplain ADR-004 citation\n"
+    _p_text, _p_would, _p_review = rewrite_citations(parity_body, 4, 5)
+    _p_present = len(citation_re(4).findall(parity_body))
+    _p_amb = sum(len(citation_re(4).findall(ln)) for _, ln in _p_review)
+    # `exempt` is DERIVED FROM THE CLASSIFIER, not subtracted from the other two.
+    # The reporting path computes it as `present - would - amb_tokens` (see CALL
+    # SITE 3); reproducing that subtraction here would make the partition arm
+    # `a + b + (c - a - b) == c` — true for every integer triple, inert under
+    # every mutation, and unable to fail for the reason its own comment claims.
+    # Reading the RECORD verdicts straight off `classify_lines` gives the third
+    # term an independent source, so the equation below cross-checks FOUR
+    # separately-derived numbers: `present` from a raw token scan, `would` and
+    # `amb` from `rewrite_citations`, `exempt` from the exemption authority.
+    _p_lines = parity_body.split("\n")
+    _p_verdicts = classify_lines(parity_body)
+    # SINCE DEV-36 the exempt term is "tokens on a RECORD line MINUS the tokens
+    # in that line's carve-out spans". Reading RECORD verdicts alone would
+    # double-count the carve-out — once here and once in `would` — and the
+    # partition would fail for a reason that is an artefact of this derivation
+    # rather than of the tool. The independence the arm needs is preserved: this
+    # still reads the exemption authority directly and never subtracts from the
+    # other two terms.
+    _p_carve = cite_carveouts(parity_body)
+    _p_exempt = sum(len(citation_re(4).findall(ln))
+                    - len(citation_re(4).findall(_text_in_spans(ln, c)))
+                    for ln, v, c in zip(_p_lines, _p_verdicts, _p_carve)
+                    if v == RECORD)
+    # NON-VACUITY for the carve-out column specifically. Two tokens: the link's
+    # display text and its target.
+    eq("dryrun/parity-exercises-the-carveout",
+       sum(len(citation_re(4).findall(_text_in_spans(ln, c)))
+           for ln, c in zip(_p_lines, _p_carve)), 2)
+    # The three columns the dry run prints partition the tokens present, exactly.
+    # A reporting path that re-derived any of them could not satisfy this.
+    eq("dryrun/parity-partitions-the-tokens",
+       _p_would + _p_amb + _p_exempt, _p_present)
+    # NON-VACUITY — every column of that partition is exercised. Asserted as a
+    # shape, not as the three values, so this arm neither entails the partition
+    # nor is entailed by it: a later fixture edit that zeroes a column fails
+    # HERE, loudly, instead of quietly degrading the partition into a two-term
+    # sum that still balances.
+    eq("dryrun/parity-partition-exercises-every-column",
+       (_p_would > 0, _p_amb > 0, _p_exempt > 0), (True, True, True))
+    # SPECIFICITY / FALSIFIABILITY CONTROL — the partition is a property of the
+    # exemption authority, not an algebraic identity. Disable the exemption on
+    # the SAME bytes and the same three terms no longer balance (`would` absorbs
+    # the RECORD and AMBIGUOUS tokens while `exempt` still reports one), so the
+    # arm above has a reachable configuration in which it is FALSE. Without this
+    # limb, a partition arm that silently reverted to the subtracted form would
+    # look exactly like a passing one.
+    _np_text, _np_would, _np_review = rewrite_citations(
+        parity_body, 4, 5, preserve_historical=False)
+    _np_amb = sum(len(citation_re(4).findall(ln)) for _, ln in _np_review)
+    eq("dryrun/parity-partition-is-falsifiable",
+       _np_would + _np_amb + _p_exempt == _p_present, False)
+    eq("dryrun/parity-would-equals-the-applied-count",
+       _p_would, len(citation_re(4).findall(parity_body))
+       - len(citation_re(4).findall(_p_text)))
+    # V2 — the projected region must be stripped BEFORE counting, or the dry run
+    # predicts rewriting rows R4's projector regenerates. `rewrite_citations`
+    # alone does NOT close this: it has no region awareness.
+    v2_body = "\n".join([
+        "prose cites ADR-004 outside the fence",
+        PROJECTED_REGION_BEGIN,
+        "| ADR-004 | derived row |",
+        "| ADR-004 | another derived row |",
+        PROJECTED_REGION_END,
+        "tail prose cites ADR-004 too",
+    ])
+    v2_stripped = "\n".join(_strip_projected_region(v2_body.split("\n")))
+    eq("dryrun/region-excluded",
+       (len(citation_re(4).findall(v2_body)),
+        rewrite_citations(v2_body, 4, 5)[1],
+        rewrite_citations(v2_stripped, 4, 5)[1]),
+       (4, 4, 2))
+    # SENSITIVITY — authored prose OUTSIDE the region is still counted, so the
+    # strip is region-scoped and not a blanket suppressor.
+    eq("dryrun/region-sensitivity",
+       rewrite_citations(v2_stripped, 4, 5)[1], 2)
+    # SPECIFICITY — an unfenced body is a no-op under the strip.
+    eq("dryrun/region-specificity",
+       _strip_projected_region(["a ADR-004", "b"]), ["a ADR-004", "b"])
+
+    # ---- ADR-181: slug-keyed citation-token late binding -------------------
+    #
+    # THE FIXTURE TOKENS ARE BUILT AT RUNTIME, NOT WRITTEN AS LITERALS, and that
+    # is not a style choice. `--stamp --check` is a GATE limb that scans the whole
+    # branch diff, and the branch diff includes this file. A literal fixture token
+    # in this source makes the tool flag ITSELF: measured, 10 residual tokens and
+    # 1 "link position" refusal, all of them these arms, which would fail G-EX9 on
+    # every release that touches this tool. Concatenating keeps the DECLARED scope
+    # intact — the branch diff, unnarrowed — instead of carving source files out
+    # of the scan, which would silently stop stamping a token in a test comment.
+    def _tok(slug):
+        return "{{" + "ADR:" + slug + "}}"
+
+    slug_ix = {"bravo": [4], "charlie": [7], "twins": [11, 12]}
+    eq("stamp/resolves-from-the-on-disk-slug",
+       stamp_text("see %s and %s." % (_tok("bravo"), _tok("charlie")), slug_ix),
+       ("see ADR-004 and ADR-007.", 2, []))
+    # The token carries no `ADR-\d` shape, so the sweep is inert to it — which is
+    # the whole reason a concurrent allocation costs nothing before the claim.
+    eq("stamp/token-is-inert-to-the-sweep",
+       rc2("see %s and ADR-004." % _tok("bravo"), 4, 5),
+       ("see %s and ADR-005." % _tok("bravo"), 1))
+    # REFUSE, with ZERO mutation — the returned text is the ORIGINAL, not a
+    # half-applied one. Both refusal arms assert the text is unchanged.
+    unknown = "see %s and %s." % (_tok("bravo"), _tok("nosuch"))
+    got_text, got_n, got_ref = stamp_text(unknown, slug_ix)
+    eq("stamp/refuses-an-unknown-slug-with-zero-mutation",
+       (got_text, got_n, len(got_ref)), (unknown, 0, 1))
+    ambiguous_src = "see %s." % _tok("twins")
+    amb_text, amb_n, amb_ref = stamp_text(ambiguous_src, slug_ix)
+    eq("stamp/refuses-an-ambiguous-slug-with-zero-mutation",
+       (amb_text, amb_n, len(amb_ref)), (ambiguous_src, 0, 1))
+    # PROSE-ONLY, enforced. A token in a link target would reach CI as a broken
+    # cross-reference before the stamp ever runs.
+    linked = "see [the record](/release/ADRs/%s.md)." % _tok("bravo")
+    lk_text, lk_n, lk_ref = stamp_text(linked, slug_ix)
+    eq("stamp/refuses-a-token-in-link-position",
+       (lk_text, lk_n, len(lk_ref)), (linked, 0, 1))
+    eq("stamp/refuses-a-reference-definition-token",
+       stamp_text("[r]: /release/ADRs/%s.md" % _tok("bravo"), slug_ix)[2] != [],
+       True)
+    # CONTROL — the same slug in PROSE on the same instrument resolves cleanly,
+    # so the refusal above is about link position and not about the token.
+    eq("stamp/link-refusal-control-prose-resolves",
+       stamp_text("see %s in prose." % _tok("bravo"), slug_ix),
+       ("see ADR-004 in prose.", 1, []))
+    # SPECIFICITY — a body with no token is a no-op that reports zero.
+    eq("stamp/no-token-is-a-no-op",
+       stamp_text("ordinary prose citing ADR-004.", slug_ix),
+       ("ordinary prose citing ADR-004.", 0, []))
+    # REFLEXIVE ARM — this source file must carry NO literal token, or the gate
+    # limb flags the tool itself. Asserted as a property of the fixtures above
+    # rather than by reading the file: every fixture routes through `_tok`, whose
+    # output is assembled at runtime.
+    eq("stamp/fixtures-are-assembled-not-literal",
+       (ADR_TOKEN_RE.search(_tok("bravo")).group(1),
+        bool(ADR_TOKEN_IN_LINK_RE.search("](%s)" % _tok("bravo"))),
+        ADR_TOKEN_RE.search(_tok("bravo")).group(0) == _tok("bravo")),
+       ("bravo", True, True))
     # A PROJECTED region is derived from the file set, so a row naming the old
     # number belongs to whichever record still holds it — the MAINLINE's, at a
     # duplicate. R6 must not read inside the fence. Sensitivity control: the
@@ -1270,6 +2385,23 @@ def self_test():
         failures.append("[provenance] the mandatory `at merge time` anchor is absent")
     if not PROVENANCE_RE.search(note):
         failures.append("[provenance] the note does not match its own detector")
+    # PROVENANCE_RE IS PRESERVED AS A NAMED SYMBOL AND AS REGISTRY ROW 1, and both
+    # halves are asserted rather than left to a comment. A sibling release
+    # re-targets the VERIFY side of this same regex while ADR-181 widens the
+    # sweep-exemption side, so a silent rename or a silent gutting would break it.
+    #
+    # The move-agnostic arm exists because the arms above are NOT sufficient on
+    # their own: since the registry gained a freeform row that also matches the
+    # bare-number arrow, narrowing PROVENANCE_RE to one hardcoded move left every
+    # other provenance arm GREEN. Found by running the mutation, not by reading.
+    eq("provenance/RE-is-preserved-as-registry-row-1",
+       (RECORD_OPENERS[0][0], RECORD_OPENERS[0][1] is PROVENANCE_RE,
+        RECORD_OPENERS[0][2]),
+       ("provenance-note", True, "paragraph"))
+    eq("provenance/RE-shape-detector-is-move-agnostic",
+       (bool(PROVENANCE_RE.search(provenance_note(4, 5, "x"))),
+        bool(PROVENANCE_RE.search(provenance_note(151, 157, "x")))),
+       (True, True))
     # The guard is built from the string the template interpolates, so the two
     # cannot disagree. Pinned rather than assumed.
     eq("provenance/head-is-the-notes-prefix",
@@ -1391,7 +2523,21 @@ def self_test():
             print("  - " + f)
         return 1
     print("renumber-adr self-test: PASS (citation boundaries / path-exact / "
-          "re-sort / provenance / R1 delta predicate / minimal assignment)")
+          "re-sort / provenance / R1 delta predicate / minimal assignment / "
+          "three-valued classifier: shim-agreement + wrapped-continuation with "
+          "its broken-paragraph and block-opener negative controls + "
+          "paragraph-extent position gate with its mid-paragraph sensitivity "
+          "arm and paragraph-initial specificity arm + "
+          "lineage-and-hop heads + devlog-ambiguous with its "
+          "outside-the-section discrimination limb and close-boundary arm + "
+          "numbered-heading variant + fenced-comment-is-not-a-section + "
+          "incoherent-range + author markers both ways / dry-run parity: "
+          "token partition over independently-derived terms with its "
+          "every-column non-vacuity arm and its exemption-disabled "
+          "falsifiability control + applied-count identity + region-excluded "
+          "with its sensitivity and specificity arms / stamp: resolve + "
+          "refuse-unknown + "
+          "refuse-ambiguous + link-position refusal with its prose control)")
     return 0
 
 
@@ -1409,6 +2555,12 @@ def main(argv=None):
     parser.add_argument("--detect", action="store_true",
                         help="report per-claim BINDS / DUPLICATE / WOULD-GAP")
     parser.add_argument("--renumber", nargs=2, type=int, metavar=("OLD", "NEW"))
+    parser.add_argument("--stamp", action="store_true",
+                        help="resolve {{ADR:<slug>}} citations from the on-disk "
+                             "ADR file set — the LAST step of a Stage-12 claim")
+    parser.add_argument("--check", action="store_true",
+                        help="with --stamp: read-only. Assert zero residual "
+                             "{{ADR: tokens; fail on a token in link position")
     parser.add_argument("--apply", action="store_true",
                         help="perform the move (default is dry-run)")
     parser.add_argument("--extra-path", action="append", default=[],
@@ -1448,6 +2600,10 @@ def main(argv=None):
         if not rows:
             print("CLAIM\t-\t-\tNONE\t(this tree adds no ADR)")
         return 0
+
+    if args.stamp:
+        return do_stamp(ref, root, args.apply, args.check, args.extra_path,
+                        print, args.exclude_path)
 
     if args.renumber:
         old, new = args.renumber

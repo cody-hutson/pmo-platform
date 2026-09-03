@@ -20,6 +20,24 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.50] - 2026-09-03
+
+When a decision record's number has to change, the tool that changes it no longer rewrites the historical entries that record what the number used to be.
+
+[Full notes](release/releases/notes/v4.50_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.50)
+
+## [v4.49] - 2026-09-03
+
+A set of work-item types can now be shared across methodologies and chosen in configuration, instead of being tied to one methodology.
+
+[Full notes](release/releases/notes/v4.49_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.49)
+
+## [v4.48] - 2026-09-02
+
+The label check now reports the disagreements it finds instead of returning a clean result it never established.
+
+[Full notes](release/releases/notes/v4.48_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.48)
+
 ## [v4.47] - 2026-09-02
 
 Decision records can now say they were only partly replaced, and one stage now owns marking a decision approved.

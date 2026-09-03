@@ -8,6 +8,15 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.50 (2026-09-03) — Renumbering a decision record no longer rewrites its own history
+
+### governance-declarations-match-enforcement (2026-09-03, version-less) — The charter now says who performs a rule, and what backs it
+
+### v4.49 (2026-09-03) — Work-item types can now be shared across methodologies
+
+### pda-decisions-and-conformance-baseline (2026-09-02, version-less) — Three unsettled rules about project data are decided, and conformance measured
+### v4.48 (2026-09-02) — Label checks now report disagreements instead of quietly passing
+
 ### v4.47 (2026-09-02) — Decision records can now say what replaced them — and how much
 
 ### v4.46 (2026-09-02) — Portfolio frameworks get a home, and a plan check stops missing files

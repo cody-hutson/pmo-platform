@@ -1,0 +1,58 @@
+# DELIBERATELY REGRESSED fixture — the subject arm of the discrimination check.
+#
+# This is `baseline.yaml` with FOUR values degraded, each one a regression the
+# platform has actually reasoned about. Scored against the same suite, it must
+# come out strictly below the baseline. A runner that scores this at baseline is
+# not discriminating, and its baseline passes mean nothing.
+#
+# The four regressions, and why each is a real one rather than a typo:
+#
+#   1. `report_contract.pass_rate_field` drops to the BARE token. Three unrelated
+#      metrics in the corpus share it; a consumer matching the bare token silently
+#      reads the wrong one.
+#   2. The `suite` block is dropped from `emitted_keys`. A report with no suite
+#      provenance cannot be tied back to the fixture it scored.
+#   3. `runner.exit_codes` loses 2 and 3. Collapsing "environment error" and
+#      "nothing was gradable" into the pass/fail pair is exactly how a gate stops
+#      being able to tell a broken run from a failing one.
+#   4. `runner.zero_denominator` becomes `emit-zero`. That is the absence-read-as-
+#      zero anti-pattern: a measurement that did not happen, reported as a
+#      measurement that scored zero.
+#
+# NOT regressed, deliberately: the predicate vocabulary and the regex engine. A
+# fixture in which everything fails proves nothing about which assertion caught
+# what — the unchanged values are what make the failures attributable.
+
+scenario: output-scoring-runner-self-check
+
+report_contract:
+  name: grading.json
+  pass_rate_field: pass_rate
+  denominator: naive
+  emitted_keys:
+    - expectations
+    - summary
+  not_emitted:
+    - execution_metrics
+    - timing
+    - claims
+    - user_notes_summary
+    - eval_feedback
+
+runner:
+  exit_codes: "0, 1"
+  check_kinds:
+    - path_exists
+    - contains
+    - matches
+    - resolves_to
+    - unchanged
+  input_key: assertions
+  output_key: expectations
+  zero_denominator: emit-zero
+  regex_engine: python-re
+
+notes: >
+  Four values are wrong on purpose. If a change to this runner ever makes this
+  fixture score at baseline, the runner has stopped discriminating and every
+  green run it has produced is unfalsifiable.

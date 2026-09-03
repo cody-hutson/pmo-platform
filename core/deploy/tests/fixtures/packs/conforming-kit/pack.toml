@@ -1,0 +1,67 @@
+# FIXTURE — a CONFORMING work-item kit. Not a shipped pack.
+#
+# WHY IT LIVES HERE AND NOT UNDER core/packs/. The licensed-kind reader unions the
+# kinds declared by every directory under core/packs/ that holds a pack.toml — no
+# allowlist, no naming filter, no underscore-prefix skip — so a fixture placed there
+# would be silently absorbed into the live gate's kind vocabulary. Fixture packs
+# therefore live under core/deploy/tests/fixtures/packs/ and are read through the
+# conformance tool's explicit --pack-root argument. A self-test arm asserts that
+# separation held, by checking the union carries none of this file's kinds.
+#
+# LAYOUT CONVENTION for this fixture home: one directory per fixture, each holding a
+# single pack.toml, named for what the fixture IS. --pack-root accepts either one
+# fixture directory (validate this fixture alone, so a rejection is attributable) or
+# their shared parent (validate or resolve across the set).
+#
+# WHAT THIS FIXTURE ASSERTS. Neutrality at BOTH levels, which is the whole capability:
+# the header is methodology-neutral AND every kind sets
+# methodology_projection.archetype = "*". A pack neutral only in its header, whose
+# kinds each still named an archetype, would validate cleanly and deliver nothing.
+#
+# level_name_ref is deliberately ABSENT. It anchors into a Layer-2 map row for a named
+# archetype; a neutral kind has no such row, and `derive` is not a substitute because
+# `derive` resolves through a custom block's base_archetype and a neutral kind has
+# neither. The field is optional, so omission is the defined state for a kit's kinds.
+
+[meta]
+pack_id = "conforming-kit"
+pack_version = "0.1.0"
+applies_to = "*"                 # role = "kit" MUST be methodology-neutral
+role = "kit"                     # the third role
+kit_class = "work-item"          # the registered class whose facet is the kind set
+
+[[kinds]]
+kind_id = "deliverable"
+display_name = "Deliverable"
+base = "Work Item"                              # the const base; no other is permitted
+axis1_state_machine = "inherit"
+
+[kinds.methodology_projection]
+archetype = "*"                                 # THE capability-bearing value
+general_level = "Work Item"                     # a kit types work, never a tier
+projects_as = "Deliverable"
+
+[kinds.fields]
+core = "inherit"
+
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+
+[kinds.relationships]
+allowed_types = ["BELONGS_TO", "DEPENDS_ON", "RELATES_TO"]
+
+[kinds.lifecycle_behavior]
+timeboxed = "gate"
+continuous = "gate"
+phased = "gate"
+
+[[labels]]
+group = "category"
+name = "type:deliverable"
+projects_kind = "deliverable"                   # joins back into this pack's kinds[]

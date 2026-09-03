@@ -7,7 +7,7 @@
 title: Release Plan — declarations-have-a-firing-surface (a governed procedure that declares a trigger acquires a named runner or a named gap)
 type: release-plan
 plan_type: release
-status: ACTIVE
+status: CLOSED
 release: version-less (theme-named; no tag claimed)
 milestone: 368-declarations-have-a-firing-surface
 release_class: novel

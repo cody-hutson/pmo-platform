@@ -1,0 +1,51 @@
+# Baseline fixture — the UNREGRESSED reference state.
+#
+# This fixture describes the runner's own frozen contract surface, so the suite
+# that scores it is genuinely self-checking rather than scoring an arbitrary
+# document. Every value below is a property the contract document states; the
+# suite asserts that the fixture still carries it.
+#
+# Its sibling `regressed.yaml` is the same document with four values deliberately
+# degraded. `empty.yaml` is the structurally-empty control arm: every resolution
+# check must FAIL against it, which is what proves the passes here are
+# load-bearing rather than a no-op.
+
+scenario: output-scoring-runner-self-check
+
+report_contract:
+  name: grading.json
+  # Fully qualified on purpose. Three unrelated metrics in the corpus share the
+  # bare token `pass_rate`; a consumer that matches the bare token cannot tell
+  # them apart.
+  pass_rate_field: summary.pass_rate
+  denominator: all-drift-out
+  emitted_keys:
+    - expectations
+    - summary
+    - suite
+  not_emitted:
+    - execution_metrics
+    - timing
+    - claims
+    - user_notes_summary
+    - eval_feedback
+
+runner:
+  # The closed four-value exit-code set.
+  exit_codes: "0, 1, 2, 3"
+  # The closed five-value predicate vocabulary.
+  check_kinds:
+    - path_exists
+    - contains
+    - matches
+    - resolves_to
+    - unchanged
+  input_key: assertions
+  output_key: expectations
+  zero_denominator: no-report-exit-3
+  regex_engine: python-re
+
+notes: >
+  Every value in this fixture is a claim the contract document makes. A change to
+  the contract that is not mirrored here will show up as a failing assertion,
+  which is the point.

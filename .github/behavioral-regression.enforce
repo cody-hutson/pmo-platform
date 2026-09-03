@@ -1,0 +1,43 @@
+# behavioral-regression gate — enforcement sentinel (#5864)
+#
+# This committed marker governs whether the behavioural-regression pass-rate gate
+# (.github/workflows/behavioral-regression.yml) BLOCKS or merely REPORTS when the
+# corpus at core/disciplines/evals/behavioral-regression/ scores below the floor
+# recorded at [behavioral_regression].pass_rate_floor.
+#
+# The first non-comment, non-blank line is the mode token:
+#   warn      → report only (exit 0); a below-floor verdict is surfaced but does not block.
+#   enforce   → block on a below-floor verdict at the major-release boundary (exit 1).
+#
+# THE TOKEN IS ONE OF THREE CONJUNCTS, NOT THE WHOLE PREDICATE. The gate blocks iff:
+#     sentinel == "enforce"  AND  context == a v*.00 tag  AND  the runner exits non-zero
+# Flipping this token alone does NOT make the advisory pull-request rung blocking —
+# that rung is non-blocking by construction in the workflow itself, and making it block
+# is a separate, later decision that edits the workflow's predicate. Nor does flipping
+# it make the gate a required check: branch protection is repository settings, lives
+# out of tree, and no committed file can assert membership in it. Both remaining steps
+# are named below because a graduation clause that names only the token is incomplete,
+# and whoever performs the flip reads THIS file rather than the standard.
+#
+# TWO STEPS TO GRADUATE, NOT THREE. The sibling release-corpus-completeness gate carries
+# a third step — delete the paths: filter — because a path-filtered context registered
+# in branch protection leaves every non-matching pull request permanently PENDING. This
+# gate ships FILTER-FREE from day one (always-reports=yes), so that step does not exist
+# here. What remains:
+#   1. Flip the token below to `enforce`.
+#   2. Add the "Behavioral-regression pass-rate gate" job to required_status_checks.
+#
+# EXIT CRITERION FOR THE SHAKEDOWN — EVALUABLE FROM COMMITTED STATE, so the decision to
+# flip never depends on a git-ignored log nobody can read back:
+#   (a) the committed corpus carries N >= 10 scenarios, AND
+#   (b) the committed control-arm fixture pair has graded both directions on every pull
+#       request across >= 3 released versions.
+# Both are readable from the tree and the tag history. Graduation is an OPERATOR
+# decision at that point, never an automatic promotion by hit count.
+#
+# Ships DORMANT (warn) during the shakedown, per the warn-mode-initial posture. Note
+# what is NOT governed by this token: the tag-filter assertion and the falsification arm
+# fail the job outright in either mode. Those assert the gate's own machinery rather
+# than the corpus's state, and a gate that is wrong about itself should be loud on day
+# one.
+warn

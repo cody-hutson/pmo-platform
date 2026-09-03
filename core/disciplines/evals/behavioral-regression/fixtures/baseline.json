@@ -1,0 +1,31 @@
+{
+  "_comment": "BASELINE — the unregressed reference state. A structured record of one PMO skill output's graded properties, scored against the check definitions in core/standards/regression-checks.md. Fields are DEFECT COUNTS, so the criterion holds at zero: the assertion is about the property, not about a magnitude that drifts. JSON rather than YAML deliberately — the scenario runner reads .json with no optional dependency, and a gate that can fail for want of a parser is a gate that fails for the wrong reason.",
+
+  "output_under_test": {
+    "skill": "daily-status",
+    "artifact_class": "project status update",
+    "graded_against": "core/standards/regression-checks.md"
+  },
+
+  "evidence_quality": {
+    "unlabelled_claims": 0,
+    "source_tags_missing_citation": 0,
+    "unmarked_recommended_dates": 0
+  },
+
+  "push_to_resolve": {
+    "action_items_missing_package": 0,
+    "open_clarifying_questions": 2
+  },
+
+  "guardrails": {
+    "placeholder_tokens": 0,
+    "risks_missing_owner_or_mitigation": 0,
+    "dates_missing_day_of_week_validation": 0
+  },
+
+  "cross_skill": {
+    "raid_ids_with_wrong_prefix": 0,
+    "raid_ids": ["R-PPM-001", "R-PPM-002", "R-PPM-003"]
+  }
+}

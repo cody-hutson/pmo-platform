@@ -1,0 +1,31 @@
+{
+  "_comment": "REGRESSED — the same document with SPECIFIC values degraded, and the rest left exactly as the baseline has them. Five of the ten resolution assertions are made to fail: EQ-01, EQ-02, GR-03, GR-05 and both XC-03 assertions. EQ-06, PTR-01, PTR-06 and GR-06 are UNCHANGED on purpose — a fixture in which everything fails proves nothing about which assertion caught what, and the unchanged values are what make the failures attributable. Keep that property when adding a scenario.",
+
+  "output_under_test": {
+    "skill": "daily-status",
+    "artifact_class": "project status update",
+    "graded_against": "core/standards/regression-checks.md"
+  },
+
+  "evidence_quality": {
+    "unlabelled_claims": 3,
+    "source_tags_missing_citation": 2,
+    "unmarked_recommended_dates": 0
+  },
+
+  "push_to_resolve": {
+    "action_items_missing_package": 0,
+    "open_clarifying_questions": 2
+  },
+
+  "guardrails": {
+    "placeholder_tokens": 1,
+    "risks_missing_owner_or_mitigation": 2,
+    "dates_missing_day_of_week_validation": 0
+  },
+
+  "cross_skill": {
+    "raid_ids_with_wrong_prefix": 1,
+    "raid_ids": ["R-PPM-001", "R-DES-002", "R-PPM-003"]
+  }
+}

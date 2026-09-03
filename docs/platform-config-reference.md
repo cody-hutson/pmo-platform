@@ -56,6 +56,9 @@ These four are the seam onboarding writes operator choices into. Finer-grained p
 | Field | What it sets | Allowed values | Default |
 |---|---|---|---|
 | `default_delivery_approach` | the methodology a project starts from when it sets no `delivery_approach` of its own | the 8 archetypes: `Scrum` · `Kanban` · `XP` · `Waterfall` · `PRINCE2` · `SAFe` · `Hybrid` · `Custom` | `Scrum` |
+| `default_work_item_kit` | the work-item kit a deployment tracks when a project sets no `work_item_kit` of its own | the `pack_id` of a pack authored with `role = "kit"` — not enumerated here, because which kits exist is deployment data | `""` (no kit selected) |
+
+**The two fields are independent axes.** A deployment picks a methodology and a work-item kit separately; neither lookup reads the other's field, so changing one leaves the other's resolved value unchanged. Selecting no kit is an ordinary state — it is the arrangement that predates kits. The kit unit and its composition position are decided in [ADR-180](../core/ADRs/ADR-180-work-item-kit-first-class-unit.md), and selection and precedence are documented in [`core/packs/README.md`](../core/packs/README.md).
 
 This is only the global default + resolver fallback. The enum, validation, and Custom block are canonical in [`core/schemas/project-schema.md`](../core/schemas/project-schema.md) and [`release/references/specs/methodology-parameterization-v1.md`](../release/references/specs/methodology-parameterization-v1.md). A project's own `delivery_approach` overrides this.
 
@@ -176,13 +179,26 @@ Capability switches for git-native release automation. **All three default OFF**
 
 **Not related to `[automation].automation_level`.** That dial (in `operator.toml`, § 3 above) is the autonomy *ceiling*; these are capability *switches*. Turning one on never raises the ceiling — an action stays clamped by `min(automation_level, per-action max)` — so no toggle here can authorize something `automation_level` forbids. Different files, different readers, and no shared key name or key prefix.
 
+### `[behavioral_regression]`
+
+The pass-rate floor the behavioural-regression corpus must hold. This is the **single numeric home** for that floor — what the number *means* lives in `release/ADRs/ADR-183-behavioral-regression-floor-and-major-release-binding-boundary.md` and `core/standards/regression-checks.md`, which name it by role and never restate its magnitude. Change it here, in one place, and nothing else needs editing.
+
+| Field | What it tunes | Allowed values | Default | Calibration |
+|---|---|---|---|---|
+| `pass_rate_floor` | the pass rate the corpus at `core/disciplines/evals/behavioral-regression/` must hold for the gate to report green | a decimal in `[0.0, 1.0]` | `1.00` | CALIBRATE-AFTER-3 |
+
+**Why the default is `1.00` rather than the `0.90` of the other rate floor.** A regression corpus's members are must-hold assertions — any failing scenario *is* a regression, by the corpus's own definition — so a sub-1.0 floor is a standing regression budget you may draw on forever while staying green. A genuinely known-open defect is carried instead as an expected-FAIL assertion in the corpus, which holds the rate at the floor while keeping the exception named in every run and retirable when it is fixed.
+
+**How the value reaches the gate.** The workflow reads this field and passes it to the scenario runner as `--fail-under`; the runner performs the comparison and sets its exit code; the gate consumes **only** that exit code and never parses the report. A consumer that cannot resolve the field must fail closed — read as zero, a floor satisfies every comparison and the gate would report green forever.
+
 ## 5. Consumer examples (how the platform reads these)
 
-Three wired examples ship with the adapter-config-foundation release:
+The wired examples, enumerated rather than totalled — the list grows as fields are added, and a stated count goes stale on the day a release adds one:
 
 1. **`bundle_doctrine_frame` → release-planner.** release-planner Mode A resolves `bundle_doctrine_frame` at session start and anchors bundle-composition to that frame; Mode B persists the resolved frame into the release plan's `## Summary`.
 2. **`default_release_class` → release hub.** The hub resolves `default_release_class` as the fallback when a milestone description carries no `## Release Class` H2.
 3. **`default_delivery_approach` → methodology fallback.** A project with no `delivery_approach` set resolves to the global `default_delivery_approach` (instead of the old implicit "sprint-centric Agile" default).
+4. **`default_work_item_kit` → work-item-kit fallback.** A project with no `work_item_kit` set resolves to the global `default_work_item_kit`; when neither rung sets it, no kit is selected and the deployment tracks exactly the kinds its archetype pack declares.
 
 ## 6. See also
 

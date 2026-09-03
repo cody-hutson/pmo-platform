@@ -52,25 +52,65 @@ Three template-keyed types, keyed to the issue-form templates under
 
 ## Kind-derivation contract (the methodology-resolved tier)
 
-The kind set for a resolved methodology is **derived at use time — never
-transcribed here** (the same living-source discipline as the field-derivation
-contract above). Given the methodology `M` resolved at the loop's
-methodology-resolution step, source precedence per invocation:
+The kind set is **derived at use time — never transcribed here** (the same
+living-source discipline as the field-derivation contract above). It is derived
+from **two independently-resolved selectors, not one**: the methodology `M`
+resolved at the loop's methodology-resolution step, and the **work-item kit** `K`
+resolved on its own configuration axis. Either may be unresolved; neither reads
+the other. A kit is a pack that bears kinds while naming **no** archetype
+(`role = "kit"`, `applies_to = "*"`, and every kind's
+`methodology_projection.archetype = "*"`), so it contributes to the registry for
+**every** `M`, including none.
+
+Reading this contract as single-axis is the failure it is written to prevent: a
+derivation parameterized on `M` alone silently drops a kit's kinds at whichever
+rung it matches, with no error and no gate. Source precedence per invocation,
+over the pair `(M, K)`:
 
 1. **The operator's/project's own type-pack (K4) wins.** When the deployment
    declares kinds in a type-pack conforming to the meta-schema
    (`core/schemas/work-item-type-schema.md`), the declared kinds ARE the registry
-   for their archetype — a field-level merge over the shipped defaults, per the
-   override model in `core/disciplines/work-organization-mapping-framework.md`
-   § 4.1.
-2. **Else the selected shipped methodology pack(s) (K1 defaults).** Read `kinds[]`
-   from the pack(s) under `core/packs/` whose `applies_to` equals `M`
-   (byte-identical archetype join): each kind's `kind_id`, `display_name`,
-   `fields` (core-inherit + `kind_specific`), `relationships.allowed_types`, and
-   `methodology_projection` (the hierarchy-level anchor). Hybrid-Two `[A, B]`
-   selects the **union** of both constituents' packs; Custom-with-base selects the
-   base archetype's pack as the default the custom block overrides. The shipped
-   pack set is **open** — never treat the present set as exhaustive.
+   — a field-level merge over the shipped defaults, per the override model in
+   `core/disciplines/work-organization-mapping-framework.md` § 4.1. **Which
+   declared kinds are in scope depends on the pack's `role`, not on `M` alone:**
+   a `role = "archetype"` pack is the registry for **its own archetype**, so it
+   is in scope when its `applies_to` equals `M`; a `role = "kit"` pack is
+   **archetype-neutral and joins on every `M`**, so it is in scope whenever that
+   kit is the resolved `K` — including when no methodology resolved at all. Both
+   forms are read at this rung and their kinds union; on a colliding `kind_id`
+   the K4 pack's own declaration wins, which is what "K4 wins" means.
+
+   > This rung is the higher-precedence of the two archetype-scoped joins in
+   > this contract, and it expresses its scoping in prose (*"the registry for
+   > their archetype"*) rather than in the `applies_to` token — which is why a
+   > token census over this file finds only the rung below. Repairing rung 2
+   > alone would leave the winning rung dropping a kit's kinds.
+2. **Else the selected shipped packs (K1 defaults).** Read `kinds[]` from the
+   **eligible** packs under `core/packs/`: each kind's `kind_id`,
+   `display_name`, `fields` (core-inherit + `kind_specific`),
+   `relationships.allowed_types`, and `methodology_projection` (the
+   hierarchy-level anchor). **A pack is eligible when either limb holds** —
+   (a) its `applies_to` equals `M` (the byte-identical archetype join), **OR**
+   (b) its `applies_to` is `*` **AND** its `role` is `kit` and it is the
+   resolved `K`. Both limbs are load-bearing: limb (b) without the `role`
+   conjunct would also admit the shared base pack, which bears no kinds, and
+   limb (b)'s `applies_to` conjunct alone would admit a `role = "archetype"`
+   pack that claimed neutrality — a shape the grammar now forbids outright.
+   Eligible packs' kinds **union**; on a colliding `kind_id` the kit wins over
+   an archetype pack, per the composition order the pack corpus documents.
+   Hybrid-Two `[A, B]` selects the union of both constituents' packs;
+   Custom-with-base selects the base archetype's pack as the default the custom
+   block overrides. The shipped pack set is **open** — never treat the present
+   set as exhaustive.
+
+   > **The eligibility predicate above is executable, and the executable form is
+   > the oracle.** `python3 core/deploy/tools/check-work-hierarchy.py --resolve
+   > <archetype> [--pack-root <dir>]` prints the eligible pack set and the kind
+   > union, each row tagged by role. Read it rather than re-deriving this
+   > paragraph by eye when the two disagree; this prose is the contract and that
+   > command is how the contract is checked. It resolves eligibility and the
+   > union only — *which* kit `K` a deployment selected is resolved on the
+   > configuration axis, upstream of this rung.
 3. **Else the Layer-2 map fallback (catalogued, pack-less archetypes).** An
    archetype catalogued in the work-organization-mapping-framework Layer-2 map
    with no shipped pack derives its kind set from the map's Work-Item-level
@@ -96,7 +136,7 @@ intake path stamps — derived per invocation from the resolved registry:
 |---|---|
 | Kind | a `kind_id` from the derivation above (or an invariant-tier type) |
 | Label stamped at intake | `type:<kind_id>` for a resolved kind (the label the selected pack contributes via its `[[labels]]` facet, `projects_kind`-joined — one `type:*` label per issue per the label-taxonomy grammar); the template's `labels:` array for an invariant-tier type |
-| Hierarchy level | the kind's `methodology_projection.general_level` (every finest-execution kind is Work-Item level; grouping kinds are Work-Item-level grouping labels, never new levels) |
+| Hierarchy level | the kind's `methodology_projection.general_level` (every finest-execution kind is Work-Item level; grouping kinds are Work-Item-level grouping labels, never new levels). The grouping-versus-execution distinction is **declared**, not inferred: `methodology_projection.level_role` carries it, with the CLOSED domain `{execution, grouping}` and absent meaning `execution`. It does not change `general_level`, which stays `Work Item` for both — reading a grouping kind as a level above Work Item is the error this row exists to prevent. |
 | Relations the desk may propose | `BELONGS_TO` (placement) · `DEPENDS_ON` / `BLOCKS` (ordering) — intersected with the kind's declared `relationships.allowed_types` where the pack declares one; never an invented edge; never a grouping-of-groupings |
 | Emission template | the type→template routing in force (the intake-style-guide's type→template rule): a resolved kind with a **dedicated kind form** under `.github/ISSUE_TEMPLATE/` emits there — the form's basename equals the `kind_id` and its `labels:` array stamps `type:<kind_id>` + `status: proposed` structurally at submission (the same `projects_kind` join the pack's `[[labels]]` rows declare); a resolved kind with **no dedicated form** emits on the interim `.github/ISSUE_TEMPLATE/improvement.yml` vehicle, with the kind carried as its `type:*` label per `references/output-contract.md` § Structured-field carriage; the invariant types keep their own templates |
 

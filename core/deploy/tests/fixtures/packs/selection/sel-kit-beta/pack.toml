@@ -1,0 +1,58 @@
+# FIXTURE — the SECOND KIT — the one the kit axis is varied TO. Not a shipped pack.
+#
+# WHY IT LIVES HERE AND NOT UNDER core/packs/. The licensed-kind reader unions the
+# kinds declared by every directory under core/packs/ that holds a pack.toml — no
+# allowlist, no naming filter, no underscore-prefix skip — so a fixture placed there
+# would be silently absorbed into the live gate's kind vocabulary. Fixture packs
+# therefore live under core/deploy/tests/fixtures/packs/ and are read through the
+# conformance tool's explicit --pack-root argument. A self-test arm asserts that
+# separation held, by checking the union carries none of these files' kinds.
+#
+# THE sel-* SET IS ONE FIXTURE ROOT, READ AS A WHOLE. Its seven packs exist to make a
+# SELECTION observable: two archetypes and three kits, so that varying one axis while
+# holding the other fixed produces a difference a check can read. A one-kit root would
+# make the filtered and unfiltered unions identical and would green every selection
+# arm under a --kit that was parsed and discarded.
+#
+# Byte-different from sel-kit-alpha only in its pack_id and its single kind, so a
+# --kit that is parsed and discarded produces the same union for both and the
+# selection arms go red.
+
+[meta]
+pack_id = "sel-kit-beta"
+pack_version = "0.1.0"
+applies_to = "*"
+role = "kit"
+kit_class = "work-item"
+extends = "sel-common"
+
+[[kinds]]
+kind_id = "sel-beta-only"
+display_name = "Beta Only"
+base = "Work Item"
+axis1_state_machine = "inherit"
+
+[kinds.methodology_projection]
+archetype = "*"
+general_level = "Work Item"
+projects_as = "Beta Only"
+
+[kinds.fields]
+core = "inherit"
+
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+
+[kinds.relationships]
+allowed_types = ["BELONGS_TO", "DEPENDS_ON", "RELATES_TO"]
+
+[kinds.lifecycle_behavior]
+timeboxed = "gate"
+continuous = "gate"
+phased = "gate"
