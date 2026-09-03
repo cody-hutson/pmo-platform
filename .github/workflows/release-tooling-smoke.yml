@@ -258,6 +258,16 @@ on:
       # the HARD GATE without ever triggering its regression suite.
       - 'release/references/how-to/hub-spoke-bridge.md'
       - 'release/releases/hub-state/action-items.md.template'
+      # AER-1 inputs: the agent-editability suite derives its Tier-0 union from the
+      # hook and its execution-path map from the planning spec, and asserts the
+      # bypass token's absence across four delivered surfaces. Without these three
+      # entries an edit to a graded subject would change what the arms assert while
+      # not triggering the job that asserts it — the same trigger-vs-verdict
+      # disagreement the CIAC-3 and selftest-discovery entries above each close.
+      # (hub-spoke-bridge.md, the fourth graded surface, is already on the roster.)
+      - 'core/hooks/block-autonomy-ceiling.sh'
+      - 'release/references/pipeline/stage-04-planning.md'
+      - 'release/skills/release-planner/**'
       # finops-selftest inputs: the four scripts and the store schema they encode.
       - 'core/skills/finops-usage-extractor/**'
       - 'core/schemas/finops-usage-store-schema.md'
@@ -317,6 +327,10 @@ on:
       # Procedure 7a gate-predicate inputs — see the pull_request block above.
       - 'release/references/how-to/hub-spoke-bridge.md'
       - 'release/releases/hub-state/action-items.md.template'
+      # AER-1 inputs — see the pull_request block above.
+      - 'core/hooks/block-autonomy-ceiling.sh'
+      - 'release/references/pipeline/stage-04-planning.md'
+      - 'release/skills/release-planner/**'
       # finops-selftest inputs — see the pull_request block above.
       - 'core/skills/finops-usage-extractor/**'
       - 'core/schemas/finops-usage-store-schema.md'
@@ -514,6 +528,30 @@ jobs:
         # is interpolated — the step is a fixed command, so there is no
         # untrusted-data path into the shell. Gates on exit code.
         run: bash release/tools/tests/test_spoke_run_directory.sh
+
+      - name: AER-1 — Stage-4 agent-editability read (fixture + mutation arms)
+        # The Stage-4 Phase A3.5 read shipped as a prose procedure with two
+        # demonstrations owed and neither delivered: a fixture milestone carrying
+        # one FLOORED and one UNFLOORED card with both classifications correct,
+        # and a fixture asserting the planning output never recommends setting
+        # the hook-bypass variable. Both were graded by reading, which is the
+        # state in which a safety property holds now and regresses silently.
+        # This suite converts both to assertions and is wired here rather than
+        # left as prose for the same reason NC-NS-1 above is:
+        #   (1) The classifier is DERIVED. The Tier-0 union is parsed out of
+        #       core/hooks/block-autonomy-ceiling.sh at run time and the
+        #       execution-path map out of the planning spec's own table. Two
+        #       authority-mutation arms REMOVE an entry (the floored card must
+        #       fall to unconstrained) and ADD one (the unfloored card must
+        #       become floored) — so a restated list anywhere in the suite fails
+        #       it. That is the derivation limb, executed rather than asserted.
+        #   (2) Every mutation control asserts its copy DIFFERS from its source
+        #       before grading it, so a silent no-op mutation is reported as a
+        #       broken control instead of counted as a pass.
+        # Offline + deterministic (one mktemp tree; no network, no gh, no writes
+        # to any operator-instance path or into the checkout). No workflow input
+        # is interpolated. Gates on exit code.
+        run: bash release/tools/tests/test_agent_editability_read.sh
 
       - name: close-class-telemetry regression suite (20 arms; mutation-graded)
         # Wires a suite that shipped with ZERO executors — the same class as the
