@@ -1,8 +1,19 @@
 # Script Execution Allowlist — core/hooks/block-destructive.sh BLOCK-DESTRUCTIVE-022
 #
-# Scripts whose execution via `bash <path>`, `sh <path>`, `source <path>`, or `. <path>`
-# is explicitly allowed. Other script invocations are blocked to prevent the
-# script-laundering Red Team mitigation (write attacker.sh, then bash attacker.sh).
+# Scripts whose execution is explicitly allowed. Other script invocations are blocked
+# to prevent the script-laundering Red Team mitigation (write attacker.sh, then bash
+# attacker.sh). The adjudicated invocation verbs are:
+#   - a SHELL interpreter with a `.sh` operand:  `bash <path>`, `sh <path>`, `zsh <path>`
+#   - a NON-SHELL interpreter with an operand in that interpreter's own suffix domain:
+#     `python <path>.py`, `python3 <path>.py`, `perl <path>.pl|.pm`, `ruby <path>.rb`,
+#     `node <path>.js|.mjs|.cjs`
+#   - the source builtins with a path-shaped operand:  `source <path>`, `. <path>`
+#   - DIRECT EXECUTION by shebang, where the command word itself contains a slash and
+#     carries any of the suffixes above:  `./<path>.sh`, `./<path>.py`, …
+# The interpreter set is a CLOSED exact-literal enumeration. Versioned spellings
+# (`python3.11`) and unadmitted interpreters (`pwsh`, `awk`, `osascript`, `php`,
+# `deno`, `bun`, `Rscript`) are declared residuals, recorded in
+# core/rules/bypass-mode-readiness/block-destructive.md rather than half-closed.
 #
 # COVERAGE BOUNDARY — FOUR CONDITIONS. READ THIS BEFORE CITING THIS FILE AS A CONTROL.
 # ------------------------------------------------------------------------------------
@@ -815,3 +826,29 @@ core/deploy/tools/check-convention.sh
 # only, for the same CIAC-1 control-arm reason. DO NOT "COMPLETE" IT to four forms.
 ./core/deploy/tests/test_check49_mode_identifier_unification.sh
 core/deploy/tests/test_check49_mode_identifier_unification.sh
+
+# ---------------------------------------------------------------------------
+# NON-SHELL SCRIPT ENTRIES (.py / .pl / .pm / .rb / .js / .mjs / .cjs)
+# ---------------------------------------------------------------------------
+#
+# DELIBERATELY EMPTY AT INTRODUCTION. DO NOT PRE-POPULATE THIS SECTION.
+#
+# The non-shell interpreter arm ships at rollout phase `warn`
+# (DESTRUCTIVE_022_INTERP_PHASE in core/hooks/block-destructive.sh). At `warn`
+# nothing is refused: a would-fire is recorded to the drain, carrying
+# `"arm":"interp-nonshell"`, and the call proceeds. The rows below are to be added
+# FROM THAT DRAIN EVIDENCE during the warn phase — from invocations agents actually
+# make — and not from a survey of what the repository happens to contain.
+#
+# WHY THAT ORDER, MEASURED RATHER THAN ASSERTED. At the introducing commit all 289
+# non-comment entries above end in `.sh`, so zero of them could ever match a `.py`
+# path, against 72 tracked `.py` files. Pre-populating from the corpus would admit
+# paths on the evidence of a static survey — which measures CI workflows and
+# documentation, not agent-side traffic — and would graduate the arm against a
+# population nobody observed. The warn phase exists precisely to replace that guess
+# with a reading.
+#
+# The corresponding obligation is dated: deploy.sh Check 71 turns the pipeline red
+# at DESTRUCTIVE_022_INTERP_ARMED + 90 days unless rows land here or a decision to
+# retreat or extend is recorded in the hook. That is the mechanism working, not a
+# fault to route around.
