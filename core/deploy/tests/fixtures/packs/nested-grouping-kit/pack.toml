@@ -1,0 +1,99 @@
+# FIXTURE — a REJECTION arm: a kit declaring two grouping altitudes. PACK-K09.
+#
+# WHAT THE RULE ACTUALLY BINDS, and why it is not what the card specified. AC-4 asks
+# that "no grouping kind is declared as a container for another grouping kind". No
+# Kind field names another kind as its container: the declared field population is
+# kind_id / display_name / base / methodology_projection / fields / criteria /
+# relationships / lifecycle_behavior / axis1_state_machine / materialization, and the
+# only target-bearing members point at an ENTITY, an edge TYPE, or a state machine.
+# A rule keyed on a containment field would be a rule that can never fire.
+#
+# The enforceable predicate forbids the same thing: AT MOST ONE grouping altitude per
+# kit. Two grouping kinds are what a tier ladder needs — portfolio-theme over
+# program-theme over project-theme — and one grouping kind cannot form one. With no
+# containment carrier in the grammar, two grouping kinds are not even DISTINGUISHABLE
+# from a ladder: "these are siblings" is not expressible, so the ambiguous shape is
+# refused until a carrier exists.
+#
+# WHAT IT DOES NOT BIND. A role = "archetype" pack is untouched. SAFe genuinely
+# models Portfolio Epic over Program Epic over Feature over Story, and expressing a
+# methodology faithfully is the pack grammar's whole job. A kit is cross-methodology
+# by definition, so nested grouping THERE is not a methodology's hierarchy but a
+# shadow of the organizational one — which the entity layer already owns.
+#
+# ONE planted defect: both kinds are individually valid and each would be accepted
+# alone. The violation is the PAIR, which is what makes this arm test the rule rather
+# than a malformed field.
+
+[meta]
+pack_id = "nested-grouping-kit"
+pack_version = "0.1.0"
+applies_to = "*"
+role = "kit"
+kit_class = "work-item"
+
+# ── grouping altitude 1 ─────────────────────────────────────────────────────
+[[kinds]]
+kind_id = "portfolio-theme"
+display_name = "Portfolio Theme"
+base = "Work Item"
+axis1_state_machine = "inherit"
+
+[kinds.methodology_projection]
+archetype = "*"
+general_level = "Work Item"      # correctly at the Work-Item level: K06a is clean
+level_role = "grouping"
+projects_as = "Portfolio Theme"
+
+[kinds.fields]
+core = "inherit"
+
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+
+[kinds.relationships]
+allowed_types = ["GENERATES", "BELONGS_TO"]
+
+[kinds.lifecycle_behavior]
+timeboxed = "gate"
+continuous = "gate"
+phased = "gate"
+
+# ── grouping altitude 2 — THE PLANTED DEFECT is this second one ─────────────
+[[kinds]]
+kind_id = "program-theme"
+display_name = "Program Theme"
+base = "Work Item"
+axis1_state_machine = "inherit"
+
+[kinds.methodology_projection]
+archetype = "*"
+general_level = "Work Item"
+level_role = "grouping"          # <-- PACK-K09. One grouping altitude per kit.
+projects_as = "Program Theme"
+
+[kinds.fields]
+core = "inherit"
+
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+
+[kinds.relationships]
+allowed_types = ["GENERATES", "BELONGS_TO"]
+
+[kinds.lifecycle_behavior]
+timeboxed = "gate"
+continuous = "gate"
+phased = "gate"

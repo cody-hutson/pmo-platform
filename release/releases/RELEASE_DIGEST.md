@@ -8,6 +8,9 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### pda-decisions-and-conformance-baseline (2026-09-02, version-less) — Three unsettled rules about project data are decided, and conformance measured
+### v4.48 (2026-09-02) — Label checks now report disagreements instead of quietly passing
+
 ### v4.47 (2026-09-02) — Decision records can now say what replaced them — and how much
 
 ### v4.46 (2026-09-02) — Portfolio frameworks get a home, and a plan check stops missing files

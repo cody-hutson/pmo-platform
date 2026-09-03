@@ -1,0 +1,66 @@
+# FIXTURE — the PROJECT-LEVEL (K4) OVERRIDE. Not a shipped pack.
+#
+# WHY IT LIVES HERE AND NOT UNDER core/packs/. The licensed-kind reader unions the
+# kinds declared by every directory under core/packs/ that holds a pack.toml — no
+# allowlist, no naming filter, no underscore-prefix skip — so a fixture placed there
+# would be silently absorbed into the live gate's kind vocabulary. Fixture packs
+# therefore live under core/deploy/tests/fixtures/packs/ and are read through the
+# conformance tool's explicit --pack-root argument. A self-test arm asserts that
+# separation held, by checking the union carries none of these files' kinds.
+#
+# THE sel-* SET IS ONE FIXTURE ROOT, READ AS A WHOLE. Its seven packs exist to make a
+# SELECTION observable: two archetypes and three kits, so that varying one axis while
+# holding the other fixed produces a difference a check can read. A one-kit root would
+# make the filtered and unfiltered unions identical and would green every selection
+# arm under a --kit that was parsed and discarded.
+#
+# K4-ness is POSITIONAL, not a grammar role: a project's own override is an ordinary
+# pack whose K4-ness is its LOCATION (Layer 2, projects/). Nothing inside this file
+# marks it as K4, which is precisely why --resolve takes the override by NAME (--k4)
+# instead of inferring it — a flat pack root carries no location signal, and a rank
+# derived from the file alone would rank this pack as an archetype pack and let the
+# kit beat it, inverting the documented precedence.
+#
+# It redeclares sel-shared, which sel-kit-alpha also declares, differing in
+# projects_as so the winner is READABLE rather than merely counted. The same root
+# resolves that collision to the KIT when this pack is not named, and to THIS pack
+# when it is — which is what makes the precedence arm discriminating rather than
+# tautological.
+
+[meta]
+pack_id = "sel-k4-override"
+pack_version = "0.1.0"
+applies_to = "Scrum"
+role = "archetype"
+extends = "sel-common"
+
+[[kinds]]
+kind_id = "sel-shared"
+display_name = "Shared"
+base = "Work Item"
+axis1_state_machine = "inherit"
+
+[kinds.methodology_projection]
+archetype = "Scrum"
+general_level = "Work Item"
+projects_as = "Shared From K4 Override"
+
+[kinds.fields]
+core = "inherit"
+
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+
+[kinds.relationships]
+allowed_types = ["BELONGS_TO", "DEPENDS_ON", "RELATES_TO"]
+
+[kinds.lifecycle_behavior]
+timeboxed = "gate"
+continuous = "gate"
+phased = "gate"

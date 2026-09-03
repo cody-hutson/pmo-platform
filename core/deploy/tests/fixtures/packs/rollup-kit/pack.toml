@@ -1,0 +1,103 @@
+# FIXTURE — the ACCEPTANCE arm for level coverage. Not a shipped pack.
+#
+# Fixture-home rationale, layout convention and the level_name_ref omission are
+# stated once in conforming-kit/pack.toml and are not restated here.
+#
+# WHAT THIS FIXTURE ASSERTS. A kit covers every organizational level by PROJECTION,
+# not by declaration. Both kinds sit at the Work-Item level — that is the whole
+# point, not a limitation being worked around — and the container tiers above them
+# resolve an entity type from the frozen entity model rather than a kind. The
+# LEVELS line reports the traversal: kinds_resolved=2, entities_resolved=4,
+# unresolved=0, so every one of the five ladder levels resolves a type.
+#
+# IT ALSO CARRIES THE grouping/execution PARTITION, both arms, in one pack:
+# `initiative-slice` declares level_role = "grouping" and `work-package` OMITS the
+# field, which is the additive default `execution`. A fixture exercising only the
+# declared value would leave the default's behaviour untested, and the default is
+# the value every shipped pack relies on.
+#
+# The card asked for "a fixture declaring kinds at portfolio, program and project".
+# That fixture is tier-claiming-kit/ — the REJECTION arm. Building it as acceptance
+# would ship the defect as its own acceptance evidence.
+
+[meta]
+pack_id = "rollup-kit"
+pack_version = "0.1.0"
+applies_to = "*"
+role = "kit"
+kit_class = "work-item"
+
+# ── the GROUPING altitude: one, and only one, is permitted inside a kit ──────
+[[kinds]]
+kind_id = "initiative-slice"
+display_name = "Initiative Slice"
+base = "Work Item"
+axis1_state_machine = "inherit"
+
+[kinds.methodology_projection]
+archetype = "*"
+general_level = "Work Item"      # a grouping kind is a LABEL at this level,
+level_role = "grouping"          # never a new level above it
+projects_as = "Initiative Slice"
+
+[kinds.fields]
+core = "inherit"
+
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+
+[kinds.relationships]
+allowed_types = ["GENERATES", "BELONGS_TO", "RELATES_TO"]
+
+[kinds.lifecycle_behavior]
+timeboxed = "gate"
+continuous = "gate"
+phased = "gate"
+
+# ── the EXECUTION altitude, by DEFAULT: level_role is deliberately absent ────
+[[kinds]]
+kind_id = "work-package"
+display_name = "Work Package"
+base = "Work Item"
+axis1_state_machine = "inherit"
+
+[kinds.methodology_projection]
+archetype = "*"
+general_level = "Work Item"
+projects_as = "Work Package"     # level_role ABSENT -> execution
+
+[kinds.fields]
+core = "inherit"
+
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+
+[kinds.relationships]
+allowed_types = ["BELONGS_TO", "DEPENDS_ON", "RELATES_TO"]
+
+[kinds.lifecycle_behavior]
+timeboxed = "gate"
+continuous = "gate"
+phased = "gate"
+
+[[labels]]
+group = "category"
+name = "type:initiative-slice"
+projects_kind = "initiative-slice"
+
+[[labels]]
+group = "category"
+name = "type:work-package"
+projects_kind = "work-package"

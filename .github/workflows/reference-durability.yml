@@ -189,9 +189,20 @@ jobs:
             # block-fragile-refs.sh strips identically; neither surface changes alone.
             MARKER_SCAN="$(awk '/^[[:space:]]*```/ { infence = !infence; next } !infence { gsub(/`[^`]*`/, ""); print }' "$f")"
             ALLOW_LINK=0; ALLOW_VERSION=0; ALLOW_URL=0
-            printf '%s\n' "$MARKER_SCAN" | grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->' && ALLOW_LINK=1
-            printf '%s\n' "$MARKER_SCAN" | grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->' && ALLOW_VERSION=1
-            printf '%s\n' "$MARKER_SCAN" | grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-url[[:space:]]*-->' && ALLOW_URL=1
+            # HERE-STRINGS, not pipes, and the reason is a measured defect rather than a style
+            # choice. `grep -q` exits at its FIRST match. Piping $MARKER_SCAN into it leaves the
+            # writer with data still to push whenever the payload exceeds the pipe buffer
+            # (~64 KB), so the writer takes SIGPIPE and returns 141; the `set -o pipefail` at the
+            # top of this step promotes that 141 to the pipeline's status and the `&&` never
+            # runs, even though the marker WAS found. The file's valid override is silently
+            # discarded and its reference is flagged — size-dependently, so every marker under
+            # the buffer resolves correctly and the failure is invisible to small inputs.
+            # A here-string has no second process: no early close, no SIGPIPE, no dependence on
+            # `pipefail` semantics. The hook's marker read carries the same construct for the
+            # same reason; per the invariant above, neither surface may return to a pipe alone.
+            grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->' <<<"$MARKER_SCAN" && ALLOW_LINK=1
+            grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->' <<<"$MARKER_SCAN" && ALLOW_VERSION=1
+            grep -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-url[[:space:]]*-->' <<<"$MARKER_SCAN" && ALLOW_URL=1
 
             # Added lines for this file, mapped to TRUE file-line numbers ("<line>\t<content>"),
             # fenced code excluded. ADDED_MAPPED carries the positions the positional rule needs;
