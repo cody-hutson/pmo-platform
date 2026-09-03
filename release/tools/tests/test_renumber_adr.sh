@@ -855,8 +855,8 @@ assert_eq "A14f the § Renumber log carries all THREE tool entries plus the sibl
 assert_eq "A14f the record's ## Status reads as a THREE-hop lineage, nothing overwritten" \
   "$(grep -o '\*\*Numbering provenance — `[0-9][0-9][0-9] → [0-9][0-9][0-9]`\.\*\*' release/ADRs/ADR-007-bravo.md | wc -l | tr -d ' ')" "3"
 assert_eq "A14f the lineage is chronological (the first hop is still first)" \
-  "$(grep -n '\*\*Numbering provenance — `004 → 005`\.\*\*' release/ADRs/ADR-007-bravo.md | head -1 | cut -d: -f1)" \
-  "$(grep -n '\*\*Numbering provenance' release/ADRs/ADR-007-bravo.md | head -1 | cut -d: -f1)"
+  "$(grep -n -m1 '\*\*Numbering provenance — `004 → 005`\.\*\*' release/ADRs/ADR-007-bravo.md | cut -d: -f1)" \
+  "$(grep -n -m1 '\*\*Numbering provenance' release/ADRs/ADR-007-bravo.md | cut -d: -f1)"
 
 # --- A14h DISCLOSURE — the six divergences that remain OPEN are NAMED ---------
 # This card's AC-1 closes ONE of eight divergence classes. The rest are converted
