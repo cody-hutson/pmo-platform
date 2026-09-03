@@ -86,6 +86,29 @@
 
 set -uo pipefail
 
+# ── Mutation-landed assertion (the class fix) ─────────────────────────────────
+# Every arm below mutates a fixture and then grades the gate against the result.
+# If a mutation silently fails to land, the gate is graded on an UNMUTATED
+# corpus: it correctly reports no finding, and the arm concludes the gate failed
+# to fire. That is not hypothetical — an arm on this release did exactly that,
+# for a whole release cycle, and the resulting verdict blamed a sound gate.
+#
+# The assertion is deliberately content-blind. Arms delete rows, inject rows,
+# rewrite cells, drop enum values and rename headers; a per-arm check would be
+# eight bespoke predicates, each able to be wrong in its own way. Every one of
+# those failures presents identically — the fixture comes out byte-for-byte
+# unchanged — so one snapshot-and-compare covers the class.
+_mut_snap() { _MUT_SNAP="$(cksum < "$1")"; }
+_mut_landed() {
+  local _f="$1" _arm="$2"
+  if [ "$(cksum < "$_f")" = "${_MUT_SNAP:-}" ]; then
+    echo "self-test FAIL: ${_arm} — the mutation did not land: ${_f} is byte-identical to its pre-mutation state, so any verdict below would grade an unmutated corpus." >&2
+    return 1
+  fi
+  return 0
+}
+
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
@@ -552,7 +575,11 @@ self_test() {
   victim="$(awk -F'|' '/^\|[[:space:]]*`/ { gsub(/[` \t]/,"",$2); print $2; exit }' "$tmp/tree/$REG")"
   if [[ -z "$victim" ]]; then
     echo "self-test FAIL: F1 setup — could not read a routine id out of the live registry copy." >&2; return 1; fi
+  _mut_snap "$tmp/tree/$REG"
+  _mut_snap "$tmp/tree/$REG"
   grep -v "^| \`${victim}\` " "$tmp/tree/$REG" > "$tmp/reg.tmp" && mv "$tmp/reg.tmp" "$tmp/tree/$REG"
+  _mut_landed "$tmp/tree/$REG" "F4 inject-an-orphan-row" || return 1
+  _mut_landed "$tmp/tree/$REG" "F1 delete-a-declared-row" || return 1
   out="$(run_check "$tmp/tree" "$tmp/tree/$REG" "$tmp/tree/$SCH" 2>&1)"; rc=$?
   if [[ $rc -ne 1 ]]; then
     echo "self-test FAIL: F1 AC-1 — deleting the row for '$victim' must yield exit 1; got $rc" >&2; echo "$out" >&2; return 1; fi
@@ -597,7 +624,9 @@ self_test() {
   # DIFFERENT automation_id (or none). This is the arm that separates this gate
   # from a presence-only check — both sets are still symmetric here.
   _seed
+  _mut_snap "$tmp/tree/$REG"
   _set_cell "$tmp/tree/$REG" "$victim" 4 "core/schemas/automation-registry-schema.md"
+  _mut_landed "$tmp/tree/$REG" "F5 repoint-an-entrypoint" || return 1
   out="$(run_check "$tmp/tree" "$tmp/tree/$REG" "$tmp/tree/$SCH" 2>&1)"; rc=$?
   if [[ $rc -eq 1 ]] && grep -q "A-03 entrypoint-" <<<"$out"; then pass=$((pass + 1)); else
     echo "self-test FAIL: F5 — a row repointed at a document declaring a different id must fire A-03; got exit $rc" >&2
@@ -607,7 +636,9 @@ self_test() {
   # holding a private copy of the field list is BLIND to this and stays green;
   # one that parses the schema at run time must fail loud on header parity.
   _seed
+  _mut_snap "$tmp/tree/$SCH"
   grep -v '^| 3 | `trigger`' "$tmp/tree/$SCH" > "$tmp/sch.tmp" && mv "$tmp/sch.tmp" "$tmp/tree/$SCH"
+  _mut_landed "$tmp/tree/$SCH" "F6 drop-a-schema-field" || return 1
   run_check "$tmp/tree" "$tmp/tree/$REG" "$tmp/tree/$SCH" >/dev/null 2>&1; rc=$?
   if [[ $rc -eq 3 ]]; then pass=$((pass + 1)); else
     echo "self-test FAIL: F6 CIAC-2 — deleting a field from the SCHEMA must hard-fail at exit 3 (header parity). Got $rc, which means the field list is NOT being parsed from the schema." >&2
@@ -626,7 +657,9 @@ self_test() {
   # gate that also fired on conformance would double-count one defect across two
   # gates and teach a reviewer to ignore one of them.
   _seed
+  _mut_snap "$tmp/tree/$REG"
   _set_cell "$tmp/tree/$REG" "$victim" 2 "every second tuesday"
+  _mut_landed "$tmp/tree/$REG" "F7 natural-language-cadence" || return 1
   out="$(run_check "$tmp/tree" "$tmp/tree/$REG" "$tmp/tree/$SCH" 2>&1)"; rc=$?
   if [[ $rc -eq 0 ]]; then pass=$((pass + 1)); else
     echo "self-test FAIL: F8 specificity — a malformed CADENCE is the conformance predicate's finding, not this one's; this gate must stay green. Got exit $rc:" >&2

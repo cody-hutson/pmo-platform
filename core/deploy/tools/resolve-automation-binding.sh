@@ -92,6 +92,29 @@
 
 set -uo pipefail
 
+# ── Mutation-landed assertion (the class fix) ─────────────────────────────────
+# Every arm below mutates a fixture and then grades the gate against the result.
+# If a mutation silently fails to land, the gate is graded on an UNMUTATED
+# corpus: it correctly reports no finding, and the arm concludes the gate failed
+# to fire. That is not hypothetical — an arm on this release did exactly that,
+# for a whole release cycle, and the resulting verdict blamed a sound gate.
+#
+# The assertion is deliberately content-blind. Arms delete rows, inject rows,
+# rewrite cells, drop enum values and rename headers; a per-arm check would be
+# eight bespoke predicates, each able to be wrong in its own way. Every one of
+# those failures presents identically — the fixture comes out byte-for-byte
+# unchanged — so one snapshot-and-compare covers the class.
+_mut_snap() { _MUT_SNAP="$(cksum < "$1")"; }
+_mut_landed() {
+  local _f="$1" _arm="$2"
+  if [ "$(cksum < "$_f")" = "${_MUT_SNAP:-}" ]; then
+    echo "self-test FAIL: ${_arm} — the mutation did not land: ${_f} is byte-identical to its pre-mutation state, so any verdict below would grade an unmutated corpus." >&2
+    return 1
+  fi
+  return 0
+}
+
+
 # Run from the repo root regardless of cwd. This script lives in
 # core/deploy/tools/, so the repo root is three levels up — matching its sibling
 # predicates in the same directory.
@@ -750,7 +773,9 @@ self_test() {
   # Without this the arm proves only that the two happened to agree today.
   # `index()` rather than a regex: a routine id is matched literally, so no
   # character in it is ever interpreted as a pattern.
+  _mut_snap "$REG"
   awk -v id="$repo_id" 'BEGIN{FS=OFS="|"} /^\|/ && index($0, id) { $3=" `9 9 9 9 9` " } { print }' "$REG" > "$tmp/reg-drift.md"
+  _mut_landed "$REG" "F-A2 corrupt-a-cron-cell" || return 1
   if ! /usr/bin/grep -q '9 9 9 9 9' "$tmp/reg-drift.md"; then
     echo "self-test FAIL (F-A2): the cadence-drift mutation did not take; the falsification below would be vacuous." >&2; return 1; fi
   out="$(run_resolve "$tmp/tree" "$tmp/reg-drift.md" "$SCH" "$DEC" "$tmp/cfg/agent.toml" "$repo_id" 2>&1)"
@@ -860,7 +885,9 @@ self_test() {
   if [[ $rc -ne 3 ]]; then
     echo "self-test FAIL (F-G/AC-3): a declaration offering a THIRD backend with no implemented arm exited $rc, expected 3. The no-unused-arm control is not discriminating, and a backend the config offers that nothing fires would ship green. Output: $out" >&2; return 1; fi
   # And the converse direction: remove a value the adapter implements.
+  _mut_snap "$DEC"
   /usr/bin/sed -e 's|"agent-runtime",||' "$DEC" > "$tmp/decl-short.json"
+  _mut_landed "$DEC" "F-decl drop-an-enum-value" || return 1
   out="$(run_resolve "$tmp/tree" "$REG" "$SCH" "$tmp/decl-short.json" "$tmp/cfg/none.toml" "" 2>&1)"
   rc=$?
   if [[ $rc -ne 3 ]]; then
@@ -868,7 +895,9 @@ self_test() {
   pass=$((pass + 1))
 
   # ── Arm F-H — scan-surface errors ALWAYS hard-fail regardless of posture.
+  _mut_snap "$REG"
   awk 'BEGIN{FS=OFS="|"} /^\| id \| cadence \|/ { $2=" name "; } { print }' "$REG" > "$tmp/reg-renamed.md"
+  _mut_landed "$REG" "F-hdr rename-a-header" || return 1
   out="$(run_resolve "$tmp/tree" "$tmp/reg-renamed.md" "$SCH" "$DEC" "$tmp/cfg/none.toml" "" 2>&1)"
   rc=$?
   if [[ $rc -ne 3 ]]; then
