@@ -153,6 +153,8 @@ Every file in the workspace belongs to one of two domains and one of three layer
 
 ### Bridge Files (Layer 3)
 
+This table lists **cross-domain** bridges only — a file earns a row when one domain's agent writes it *for* the other domain's agent to read. Files that bridge *time* rather than *domains* — `SESSION_STATE.md` (session to session), `CORRECTIONS.md` (standing behavioral redirects), and `SWAP_HANDOFF.md` (account swap) — are equally load-bearing coordination state, but each is written for the next session rather than for the other domain's agent, so they are governed in § Session Management below rather than listed here.
+
 | File | Path | Cowork Role | Claude Code Role |
 |------|------|-------------|-----------------|
 | PORTFOLIO.md | `projects/_config/PORTFOLIO.md` | Writes project health data | Reads for context only |
