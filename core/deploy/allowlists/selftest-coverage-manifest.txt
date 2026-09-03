@@ -74,6 +74,8 @@ core/deploy/tools/generate_release_index.py
 core/deploy/tools/lint_release_corpus.py
 core/deploy/tools/stamp-node-frontmatter.py
 # scope: core/deploy/tools/*.sh
+core/deploy/tools/check-automation-coverage.sh
+core/deploy/tools/check-automation-registry.sh
 core/deploy/tools/check-canonical-structure.sh
 core/deploy/tools/check-citation-anchors.sh
 core/deploy/tools/check-convention.sh
