@@ -8,6 +8,16 @@ name: Security
 #                  fails; add an actionlint-flagged injection pattern -> actionlint fails.
 # (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
 
+# automation_id: [security-scan]
+#   This workflow runs on a cadence, so it is a governed automation and carries a
+#   routine-spec row in core/automations/registry.md. The declaration is a comment
+#   rather than a YAML key because the key set of a workflow file is GitHub's, not
+#   the platform's — an unrecognised top-level key is the host's error to raise.
+#   It is SELF-FIRING: the entrypoint is a workflow path, so GitHub Actions fires
+#   it and the operator's scheduler adapter must NOT also register it, or it
+#   double-fires. That is derivable from the entrypoint value and needs no field
+#   (registry schema § 8).
+
 on:
   push:
     branches: [main]

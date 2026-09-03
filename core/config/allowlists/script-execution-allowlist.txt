@@ -812,3 +812,53 @@ core/deploy/tests/test_check36_drift_classes.sh
 ./core/deploy/tools/start-skill-editor-session.sh
 core/deploy/tools/start-skill-editor-session.sh
 */core/deploy/tools/start-skill-editor-session.sh
+
+# check-automation-registry.sh — the automation-registry CONFORMANCE predicate.
+# It is executed agent-side in both argument forms: `--self-test` (the hard step
+# that proves the validator discriminates — one well-formed row returning zero
+# findings and one malformed row per rejection class) and a bare scan of the live
+# registry. Both arms are the acceptance demonstration a schema-and-validator
+# slice owes, and a single-arm result cannot distinguish a working rejection from
+# a validator that always fires — so both must be runnable. All four invocation
+# forms per the per-tool form convention above. (CI runs no Claude hooks, so
+# these rows are for the agent-side path, not the workflow step.)
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-automation-registry.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-automation-registry.sh
+./core/deploy/tools/check-automation-registry.sh
+core/deploy/tools/check-automation-registry.sh
+
+# check-automation-coverage.sh — the automation-registry COVERAGE predicate, and
+# the admission gate proper. Where the conformance predicate above judges the rows
+# that are PRESENT, this one judges which rows EXIST AT ALL: it asserts that the
+# set of automations the corpus DECLARES and the set of rows the registry CARRIES
+# are the same set in both directions, that every row's entrypoint declares that
+# row's own id, and that every scheduled workflow is registered. Executed
+# agent-side in both argument forms: `--self-test` (the falsification suite, which
+# mutates copies of the LIVE population and hard-fails on an empty one) and a bare
+# scan. Both arms are needed for the acceptance demonstration — a red without the
+# restoring green does not show the gate discriminates, and a green without the
+# deletion does not show it can fire. All four invocation forms per the per-tool
+# form convention above. (CI runs no Claude hooks, so these rows are for the
+# agent-side path, not the workflow step.)
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-automation-coverage.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-automation-coverage.sh
+./core/deploy/tools/check-automation-coverage.sh
+core/deploy/tools/check-automation-coverage.sh
+
+# resolve-automation-binding.sh — the SCHEDULER ADAPTER. Where the two predicates
+# above judge the registry, this one CONSUMES it: it resolves a routine's registry
+# id to the binding that fires it on THIS install, deriving the backend class from
+# the entrypoint and reading the [adapters].scheduler selector fresh at every call.
+# Executed agent-side in three argument forms: `--self-test` (the SD-1..SD-4
+# falsification suite, which mutates copies of the LIVE population and hard-fails
+# on an empty one), a bare run (every row, one binding record each — the form an
+# operator reads to find the MANUAL lines on a no-scheduler install), and a single
+# routine id. All three are needed for the acceptance demonstration: the degrade
+# arm without the populated arm cannot distinguish a working adapter from one that
+# returns zero unconditionally. All four invocation forms per the per-tool form
+# convention above. (CI runs no Claude hooks, so these rows are for the agent-side
+# path, not the workflow step.)
+[PMO_PLATFORM_ROOT]/core/deploy/tools/resolve-automation-binding.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/resolve-automation-binding.sh
+./core/deploy/tools/resolve-automation-binding.sh
+core/deploy/tools/resolve-automation-binding.sh

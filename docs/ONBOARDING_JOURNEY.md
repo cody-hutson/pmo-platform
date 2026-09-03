@@ -1,6 +1,6 @@
 # Onboarding journey
 
-> **What this is:** the map across the whole clone → working-install journey, and where each external-host choice plugs in. One altitude above the individual walkthroughs — it names the full arc and the four host-adapter plug points, then **links out** to the step-by-step docs for every "how."
+> **What this is:** the map across the whole clone → working-install journey, and where each external-host choice plugs in. One altitude above the individual walkthroughs — it names the full arc and the five host-adapter plug points, then **links out** to the step-by-step docs for every "how."
 
 This document is the journey **spine**: a navigational map for the operator standing up a host configuration, and the contract an adapter author looks up. It does not restate install steps — for those, follow the links. Read it when you want to know *where am I in the whole journey, and where does my host plug in.*
 
@@ -8,14 +8,14 @@ It sits at the head of the onboarding set in [docs/README.md](README.md): INSTAL
 
 ## The journey — clone to working install
 
-Seven named, ordered stages take you from a bare `git clone` to a verified working install running real work. Each stage names what happens and links to the authoritative how-to. The one stage with net-new substance here is **J4 (Configure hosts)** — where your external-surface choices are made and where the four adapter extension points converge.
+Seven named, ordered stages take you from a bare `git clone` to a verified working install running real work. Each stage names what happens and links to the authoritative how-to. The one stage with net-new substance here is **J4 (Configure hosts)** — where your external-surface choices are made and where the five adapter extension points converge.
 
 | Stage | What happens | How-to |
 |---|---|---|
 | **J1 · Acquire** | `git clone` (HEAD-tracking, for builders) or fetch a pinned release tag (for users). The clone source is your repo host. | [INSTALL.md](INSTALL.md) |
 | **J2 · Prerequisites** | Verify macOS, `git`, `jq`, and Claude Code are present. (Non-macOS support is roadmapped, not yet shipped.) | [INSTALL.md](INSTALL.md) |
 | **J3 · Bootstrap** | `./install.sh` lays down the workspace layout, resolves operator-identity tokens, installs the security hooks, and seeds composition surfaces. It writes `operator.toml` — the config surface where your host choices live (see [Where your choices live](#where-your-choices-live)). | [INSTALL.md](INSTALL.md) |
-| **J4 · Configure hosts** | **You declare your external-host choices** — repository host, ticketing surface, knowledge base, and AI tool — plus your default methodology. Each choice is written to the `operator.toml [adapters]` table. This is where all four adapter extension points below bind. Every choice ships a v1 default, so a fresh install runs end-to-end with no action; you change a choice only to point the platform at a different host. | [Adapter extension points](#adapter-extension-points) (this doc) · [workspace-setup.md](workspace-setup.md) |
+| **J4 · Configure hosts** | **You declare your external-host choices** — repository host, ticketing surface, knowledge base, and AI tool — plus your default methodology. Each choice is written to the `operator.toml [adapters]` table. This is where all five adapter extension points below bind. Every choice ships a v1 default, so a fresh install runs end-to-end with no action; you change a choice only to point the platform at a different host. | [Adapter extension points](#adapter-extension-points) (this doc) · [workspace-setup.md](workspace-setup.md) |
 | **J5 · Deploy** | `deploy.sh` mirrors skills, rules, and hooks to the runtime path your AI tool expects. The deployment target follows your AI-tool choice from J4. | [INSTALL.md](INSTALL.md) |
 | **J6 · Verify** | `./docs/scripts/validate-install.sh` runs per-check validation and your first skill resolves. | [INSTALL.md](INSTALL.md) · [GETTING_STARTED.md](GETTING_STARTED.md) |
 | **J7 · First work** | Invoke a real skill, then pick a track — configure a PMO project, or hook up a repo and drive a release. | [GETTING_STARTED.md](GETTING_STARTED.md) · [FIRST_STEPS.md](FIRST_STEPS.md) |
@@ -24,7 +24,7 @@ Stages J1–J3 and J5–J6 already have authoritative how-to in INSTALL.md; this
 
 ## Adapter extension points
 
-Each external-host dimension gets one **Adapter Extension Point** below. The four blocks share an identical seven-field shape, so each adapter extends the *same* contract instead of re-deriving its own. The spine fixes three things per dimension — the journey stage it plugs into, the config key it binds to, and the v1 default — and defers the full per-host enumeration and selection mechanism to each dimension's own roadmap milestone. The v1 defaults below ship today, so a fresh install runs end-to-end with no operator action.
+Each external-host dimension gets one **Adapter Extension Point** below. The five blocks share an identical seven-field shape, so each adapter extends the *same* contract instead of re-deriving its own. The spine fixes three things per dimension — the journey stage it plugs into, the config key it binds to, and the v1 default — and defers the full per-host enumeration and selection mechanism to each dimension's own roadmap milestone. The v1 defaults below ship today, so a fresh install runs end-to-end with no operator action.
 
 The bare GitHub issue and milestone numbers behind each "Roadmap owner" line are listed once, with summaries, in [Provenance](#provenance) — the dimension names below are the durable handles.
 
@@ -68,9 +68,19 @@ The bare GitHub issue and milestone numbers behind each "Roadmap owner" line are
 - **What the spine fixes (so adapters don't re-derive):** the journey stage, the config key name, and the v1 default. The adapter supplies only the per-target enumeration and selection mechanism.
 - **Status:** Shipped default (`claude-code`); broader target enumeration roadmapped under the `ai-tool-target-adapter` milestone.
 
+### EP-SCHED — scheduler extension point
+
+- **Journey stage:** J4 (Configure hosts), J6 (Activate).
+- **Dimension owner (roadmap):** the automation-registry milestone — enumerates supported scheduler surfaces at its own design stage.
+- **Config key (the seam):** `operator.toml [adapters].scheduler` — see [Where your choices live](#where-your-choices-live).
+- **Default (v1 baseline):** `"none"` — no scheduler on this install; every registered routine stays manually invocable. **This is the one extension point whose default is not a working backend, and that is deliberate:** registering a scheduled task is the one install step the installer cannot perform for you, so a backend default would have the config assert something the install guide denies. You lose nothing silently — the adapter prints a `MANUAL` line per routine saying exactly how to run it.
+- **Contract the adapter must satisfy:** enumerate the supported scheduler surfaces; declare a selection mechanism; bind the operator's choice to the config key; **declare the reduced-feature fallback for an install with no scheduler** — the routine stays invocable and says so per routine, rather than falling silent (`SD-1`..`SD-4` in [scheduler-adapter-routine-firing.md](../core/standards/scheduler-adapter-routine-firing.md)).
+- **What the spine fixes (so adapters don't re-derive):** the journey stage, the config key name, and the v1 default. The adapter supplies only the per-surface enumeration and selection mechanism.
+- **Status:** Shipped defaults for both real backends — an agent-runtime scheduler for routines an agent session runs, and the repository host for routines whose entrypoint is a workflow (that class is derived from the entrypoint and does not consult this key). Broader enumeration gated on its own adapter ticket.
+
 ## Where your choices live
 
-The host choices you make at **J4 (Configure hosts)** are written to one place: the **`operator.toml` config surface**, in its `[adapters]` table — `repo_host`, `ticketing`, `kb`, and `ai_tool`. This is the single seam where onboarding-time operator choices land; the four extension points above all bind to keys in this one table.
+The host choices you make at **J4 (Configure hosts)** are written to one place: the **`operator.toml` config surface**, in its `[adapters]` table — `repo_host`, `ticketing`, `kb`, `ai_tool`, and `scheduler`. This is the single seam where onboarding-time operator choices land; the five extension points above all bind to keys in this one table.
 
 This config surface is described in [ADR-017](../core/ADRs/ADR-017-distribution-architecture.md) (§Decision 1, the S2 Config surface), which names `operator.toml` — at `~/.config/pmo-platform/` — as the home for "identity, paths, methodology, adapters." The schema of that `[adapters]` table (its valid values, defaults, and field-level governance) is formalized in [core/config/operator.toml.template](../core/config/operator.toml.template); see also the [platform-config reference](platform-config-reference.md) for the broader config surface.
 

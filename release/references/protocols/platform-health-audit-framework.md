@@ -2,6 +2,7 @@
 title: Platform Health Audit Framework
 purpose: Anthropic Base-vs-Build observation methodology + audit cadence policy
 type: protocol
+automation_id: [platform-health-quarterly-audit, platform-health-drift-watch]
 related: anthropic-base-vs-build-registry.md (instance), pmo-qa-auditor Mode E (mode integration — §4)
 audit_baseline_sha: 4a943131c9e0323d5811f92704914657d7f7c314
 audit_baseline_date: 2026-05-03
@@ -83,8 +84,9 @@ audit-baseline-when-target-population-is-empty discipline
 
 > **Scope note:** This section describes the cadence *policy*. The operational cadence (responsible
 > party, escalation, audit-trail) is owned by [OPERATIONS.md § Platform Health Audit Protocol](../../../core/governance/OPERATIONS.md);
-> the `mcp__scheduled-tasks` cadence registration (`platform-health-quarterly-audit` +
-> `platform-health-drift-watch`) and the pmo-qa-auditor Mode E integration (§4) are
+> the cadence registrations for `platform-health-quarterly-audit` +
+> `platform-health-drift-watch` (declared in `core/automations/registry.md`) and the
+> pmo-qa-auditor Mode E integration (§4) are
 > **operationalized at this release**.
 
 ### Quarterly cadence
@@ -109,7 +111,7 @@ Re-audit triggers fire when any of the following signals occur (event taxonomy p
 
 The cadence operationalization layer is live at this release:
 
-- `mcp__scheduled-tasks` registrations (`platform-health-quarterly-audit` cron `0 9 1 1,4,7,10 *` + `platform-health-drift-watch` weekly) carry the §3.5 drift trigger conditions. **Note:** the schedule is evaluated in the user's LOCAL timezone, while the audit-folder date stamp uses UTC (`date -u`) — this LOCAL-schedule / UTC-folder split is intentional; do not unify. The tool's completion notification is **per-run** (`notifyOnCompletion`), not conditional, so the drift-watch self-routes any drift to an observation issue-draft rather than relying on a conditional ping.
+- The registered routines `platform-health-quarterly-audit` (cron `0 9 1 1,4,7,10 *`) and `platform-health-drift-watch` (weekly) — both declared in [`core/automations/registry.md`](../../../core/automations/registry.md), with how they fire resolved at fire time from the operator's `[adapters].scheduler` — carry the §3.5 drift trigger conditions. **Note:** the schedule is evaluated in the user's LOCAL timezone, while the audit-folder date stamp uses UTC (`date -u`) — this LOCAL-schedule / UTC-folder split is intentional; do not unify. The completion notification is **per-run**, not conditional, so the drift-watch self-routes any drift to an observation issue-draft rather than relying on a conditional ping.
 - pmo-qa-auditor Mode E integration (§4).
 - The inaugural audit folder is a Mode E runtime output at `<OPERATOR_INSTANCE_ANALYSIS_PATH>/platform-health-${AUDIT_DATE_UTC}/` (operator-instance, git-ignored).
 - [OPERATIONS.md § Platform Health Audit Protocol](../../../core/governance/OPERATIONS.md) (responsible party + escalation + audit-trail).
@@ -278,7 +280,7 @@ this release's Stage 4 close (2026-05-03) per the N=2 emergence threshold in
 
 ### §3.5 Drift Trigger Conditions (event taxonomy)
 
-Drift triggers consumed by the `mcp__scheduled-tasks` registrations (§4.2) and by Mode E:
+Drift triggers consumed by the registered `platform-health-*` routines (§4.2) and by Mode E:
 
 | Trigger ID | Surface | Detection signal | Update path |
 |---|---|---|---|

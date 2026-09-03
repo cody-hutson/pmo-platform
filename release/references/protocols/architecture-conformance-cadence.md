@@ -2,6 +2,7 @@
 title: Architecture-Conformance Audit Cadence
 purpose: When-to-re-run cadence policy for the as-built architecture-conformance audit axis (event-bound triggers + 90-day fallback)
 type: protocol
+automation_id: [architecture-conformance-sentinel]
 related: architecture-conformance-mode-spec.md (how-to-run machinery — core/skills/pmo-qa-auditor/references/), architecture-conformance-dimension-rubric.md (content SSOT — core/skills/pmo-qa-auditor/references/), process-fitness-cadence.md (sibling process-fitness axis), structural-audit-cadence.md (sibling structural axis), platform-health-audit-framework.md (sibling Anthropic Base-vs-Build axis — §2), analysis-workspace-standard.md (analysis-folder output convention — core/standards/)
 effective-date: 2026-07-25
 scope: The as-built architecture-conformance audit axis only — delivered work (per the release record) vs the platform's architecture baseline (ADR corpus primary; the cross-chain index + architecture-overview secondary). Not the process-fitness axis (see process-fitness-cadence.md), not the structural axis (see structural-audit-cadence.md), and not the Anthropic Base-vs-Build axis (see platform-health-audit-framework.md §2).
@@ -147,21 +148,22 @@ the same split the other three axes run:
   change, or receives a baseline-change signal invokes the audit. The audit executor is
   `pmo-qa-auditor` **Mode I** (the how-to-run home). Findings are observations for human
   routing; the audit **auto-files nothing**.
-- **Automated (time-driven).** The §3 90-day fallback is an [`mcp__scheduled-tasks`](../../../core/governance/OPERATIONS.md)
-  **staleness sentinel** that checks the age of the latest `analysis/architecture-conformance-*`
-  anchor (or the committed summary's `baseline_date`) and routes a due-audit signal to an
-  observation draft.
+- **Automated (time-driven).** The §3 90-day fallback is a scheduled **staleness sentinel** that
+  checks the age of the latest `analysis/architecture-conformance-*` anchor (or the committed
+  summary's `baseline_date`) and routes a due-audit signal to an observation draft. The routine is
+  registered as `architecture-conformance-sentinel` in
+  [`core/automations/registry.md`](../../../core/automations/registry.md); how it fires resolves at
+  fire time from the operator's `[adapters].scheduler`.
 
 **Inherited conventions** (from the sibling-axis precedents — do not unify):
 
 - The sentinel **schedule is evaluated in the user's LOCAL timezone**, while the audit-folder
   date stamp uses **UTC** (`date -u`). This LOCAL-schedule / UTC-folder split is intentional.
-- The sentinel's completion notification is **per-run** (`notifyOnCompletion`), so a
-  due/overdue result self-routes to an observation issue-draft rather than relying on a
-  conditional ping.
+- The sentinel's completion notification is **per-run**, so a due/overdue result self-routes to
+  an observation issue-draft rather than relying on a conditional ping.
 
-**`[ASSUMPTION – CONFIRM]`** Sentinel **registration** (creating the `mcp__scheduled-tasks`
-job) is an **operator-instance build step** (Stage 12), not committed corpus — the
+**`[ASSUMPTION – CONFIRM]`** Sentinel **registration** (creating the scheduled job) is an
+**operator-instance build step** (Stage 12), not committed corpus — the
 registration carries an instance-local path and is not portable. This tracked doc states the
 **policy** (a 90-day staleness sentinel exists and behaves as above); the instance owns the
 registration.
