@@ -12,7 +12,7 @@ ADRs follow the canonical **[ADR schema](../schemas/adr-schema.md)** — the sin
 
 ## Naming convention
 
-`ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing across the platform (NOT per-module). ADR-003 + ADR-004 are foundational core-scope decisions migrated from an earlier governance location. ADR-001 + ADR-002 + ADR-005 (release-scope) live in [`../../release/ADRs/`](../../release/ADRs/). ADR-006..009 are module-restructure decisions. ADR-087 is the current highest core-scope number (see § Runtime-control / hook-class ADRs).
+`ADR-NNN-kebab-case-title.md` where NNN is monotonically increasing across the platform (NOT per-module). ADR-003 + ADR-004 are foundational core-scope decisions migrated from an earlier governance location. ADR-001 + ADR-002 + ADR-005 (release-scope) live in [`../../release/ADRs/`](../../release/ADRs/). ADR-006..009 are module-restructure decisions.
 
 **Enforcement.** The platform-wide-unique + gap-free numbering rule is enforced in CI by `release/tools/check-adr-numbers.py` (the `adr-number-integrity` job in `.github/workflows/repo-integrity.yml`), which fails any PR that introduces a duplicate ADR number or a gap in the global sequence.
 
@@ -132,6 +132,13 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Decision:** Adopt the form-anchored five-rung enum AS0 (agent procedure) / AS1 (documented command) / AS2 (tracked tool, agent-invoked) / AS3 (checkpoint-wired) / AS4 (autonomous guard) as the promotion-ladder vocabulary for the agent-to-script promotion framework, with the split-promotion rule (judgment-class steps promote only their evidence-gathering substrate) and the caller-type AS2/AS3 boundary test (AS3 iff the invoker is another governed executable). Rejected: reusing the gate-criteria Check enum (parallel-vocabulary leak), a 4-rung collapse (erases the documented-command rung where most promotions begin), and a continuous readiness score (not schema-validatable). Canonical definition: [core/standards/agent-script-promotion-framework.md](../standards/agent-script-promotion-framework.md).
 **Reversibility:** CHEAP at ship, trending MODERATE as downstream artifacts accumulate rung citations.
 **File:** [ADR-020-agent-script-promotion-ladder.md](ADR-020-agent-script-promotion-ladder.md)
+
+### ADR-181 — The automation registry is the gate, and it decouples what runs from how it fires from who governs
+
+**Status:** Accepted (operator-ratified at the automation-registry-as-gate Stage 5 Collective Review scope-lock 2026-09-02).
+**Decision:** Separate a recurring routine's three concerns onto three surfaces with three owners — **WHAT runs** is a routine-spec row in the git-tracked registry at `core/automations/registry.md`, validated against the contract at `core/schemas/automation-registry-schema.md`; **HOW it fires** is a fifth `scheduler` selector on the operator-configuration adapter table, resolved by the scheduler adapter at fire time, defaulting to `none` so a fresh install asserts no backend the install documentation says is unregistered; **WHO governs** is the existing automation-level dial, carried in the row as a declared default only and never as the effective value. The registry is the **admission gate**: an automation is admitted only if it carries a row that validates, modelled on the skill-registry-currency precedent rather than a new enforcement shape. Three canonicalizations fixed: the schema/data split, six routine-spec fields minting zero new value vocabularies, and the adapter seam. Rejected: extending the scheduled-automation-library catalog in place (host-binding leak into public corpus, inverted dependency direction, no admission predicate, re-entangled change cadences); placing the firing backend in the routine spec itself (relocates the leak into the registry while the consumer-facing scan reads green); and a full automation runtime with dispatcher and pluggable drivers (blast-radius ceiling, against the parent epic's own written guard). The two-way split — WHAT and WHO together — is carried as the opposing view: it loses on gradability, not elegance, because a prose-only ceiling leaves the gate unable to assert that an entry declares one.
+**Reversibility:** CHEAP at ship, trending MODERATE as registry rows and citations accumulate.
+**File:** [ADR-181-automation-registry-is-the-gate-what-how-who-decoupled.md](ADR-181-automation-registry-is-the-gate-what-how-who-decoupled.md)
 
 ## Config-architecture ADRs
 
