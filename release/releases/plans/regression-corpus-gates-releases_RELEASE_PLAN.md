@@ -4,7 +4,7 @@
 version: regression-corpus-gates-releases
 date: 2026-09-02
 type: plan
-status: EXECUTING
+status: ACTIVE
 issues: ["#5863", "#5864"]
 pr: "populated at Stage 6"
 reversibility-tier: CHEAP
