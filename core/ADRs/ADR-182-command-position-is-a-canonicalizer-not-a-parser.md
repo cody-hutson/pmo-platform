@@ -1,5 +1,5 @@
 ---
-title: ADR-177 — Command-start position is resolved by a pre-match canonicalizer, not by a parser and not by a wider anchor
+title: ADR-182 — Command-start position is resolved by a pre-match canonicalizer, not by a parser and not by a wider anchor
 status: Proposed — flips to Accepted when the operator ratifies it at this release's Stage 9 Plan Review gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
 date: 2026-09-02
 release: hooks-block-only-their-scope
@@ -16,13 +16,15 @@ source_observations:
 ---
 <!-- reference-durability: allow-link -->
 
-# ADR-177 — Command-start position is resolved by a pre-match canonicalizer, not by a parser and not by a wider anchor
+# ADR-182 — Command-start position is resolved by a pre-match canonicalizer, not by a parser and not by a wider anchor
 
 ## Status
 
 **Proposed.** Ratification flips this field at this release's Stage 9 Plan Review gate.
 
 **Numbering provenance.** The number was READ from the allocation oracle at authoring, never reserved. The allocator reported an anchor on the mainline and the next free slot above it, and that slot is the one taken here. A set of branch-only claims on the same slot was reported alongside, labelled by the tool itself as detection-only; those claims are not consulted, because the next free number is `anchor + 1` and never `max(claimed) + 1`. Stepping past the allocator's answer to dodge a branch claim would land a **gap**, and the numbering integrity check fails a gap as readily as a duplicate. The claim binds at merge per ADR-115; if a sibling branch merges the same slot first, the merge-time renumber moves this record and writes its own provenance note. That is the governed mechanism operating correctly, not a defect.
+
+**Numbering provenance — `177 → 182`.** Held **ADR-177** branch-local; renumbered to **ADR-182** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 177. In-release citations that read "ADR-177" denote this record.
 
 ## Context
 
