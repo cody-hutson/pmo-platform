@@ -217,7 +217,9 @@ Pre-PR checks the refiner runs against the produced SKILL.md before declaring th
 
 ## Eval Framework
 
-The refiner runs the preserved eval harness (`scripts/run_eval.py`, `scripts/run_loop.py`, `scripts/run_eval_audit.py`, plus `agents/grader.md`, `agents/comparator.md`, `agents/analyzer.md`, and the `eval-viewer/` UI). See `references/eval-framework.md` for the full workflow — script inventory, variance-analysis and gaming-detection interpretation, blind A/B protocol, and the description-trigger optimization loop end-to-end.
+The refiner runs the preserved eval harness (`scripts/run_eval.py`, `scripts/run_loop.py`, `scripts/run_eval_audit.py`, plus `agents/grader.md`, `agents/comparator.md`, `agents/analyzer.md`, and the `eval-viewer/` UI), alongside `scripts/run_scenario_eval.py` — the output-scoring runner, which is not part of the preserved harness. See `references/eval-framework.md` for the full workflow — script inventory, variance-analysis and gaming-detection interpretation, blind A/B protocol, and the description-trigger optimization loop end-to-end.
+
+**Two runners, two questions, no overlap.** `run_eval.py` asks whether a skill's description causes the model to *fire* for a query and passes on a trigger rate; `run_scenario_eval.py` asks whether a scenario's graded statements *hold* against a committed fixture and passes on an output score. Neither reads the other and neither modifies the other. Reach for the trigger harness when tuning a `description:`; reach for the output-scoring runner when guarding against a behavioural regression. Its contract — the scenario schema, the closed predicate vocabulary, the non-triviality control, the command-line signature and the closed exit-code set — is `references/scenario-eval-contract.md`, written so a scenario author can add a suite without reading the runner's source.
 
 Workspace convention for regression tracking:
 ```
@@ -377,9 +379,11 @@ for the authoritative list. Domain-specific additions appear under
 - `references/pmo-platform-context.md` — Platform architecture, Layer 1/2 boundary, dependency-graph schema, shared contracts
 - `references/pmo-antipatterns.md` — Catalog of 8 common PMO-skill failure modes to probe during Interview
 - `references/eval-framework.md` — Preserved eval harness invocation, variance analysis, blind A/B, description-trigger optimization
+- `references/scenario-eval-contract.md` — The output-scoring runner's contract: scenario schema, the closed five-value predicate vocabulary, the non-triviality control arm, the command-line signature, and the closed four-value exit-code set. Written for a scenario author who has not read the runner's source
 - `references/regression-protocol.md` — How the refiner extends `regression-checks.md` when creating or modifying a skill
 - `references/schemas.md` — evals.json / grading.json / benchmark.json / timing.json / feedback.json schemas (preserved from skill-creator)
-- `scripts/` — preserved eval harness (run_eval.py, run_loop.py, run_eval_audit.py, aggregate_benchmark.py, improve_description.py, package_skill.py, quick_validate.py, generate_report.py, utils.py)
+- `scripts/` — preserved eval harness (run_eval.py, run_loop.py, run_eval_audit.py, aggregate_benchmark.py, improve_description.py, package_skill.py, quick_validate.py, generate_report.py, utils.py), plus run_scenario_eval.py (the output-scoring runner — added, not preserved)
+- `evals/scenario-runner/` — the output-scoring runner's own suite: `evals.json` plus three committed fixtures (unregressed baseline, deliberately-regressed subject, structurally-empty non-triviality control)
 - `agents/` — preserved subagents (grader.md, comparator.md, analyzer.md)
 - `eval-viewer/` — preserved HTML review UI (generate_review.py, viewer.html)
 - `assets/eval_review.html` — preserved description-optimization review template

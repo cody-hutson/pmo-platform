@@ -554,6 +554,28 @@ Run all EQ checks + PTR-01 through PTR-06 + OS-01, OS-02, OS-04, OS-06, OS-07 + 
 
 ---
 
+## Mechanized Regression — the behavioral corpus and its release gate
+
+A subset of the checks above now runs **automatically**, on every pull request. This section states what runs, where it lives, what it is measured against, and what a failure does. It adds no check and changes no check definition: the categories above remain the single source of every criterion's intent, validation, and failure mode.
+
+**The paths below are repo-relative locators, given with their context rather than as links.** You are as likely to be reading this file from a deployed skill package as from a clone, and a link resolves to nothing there.
+
+**1 — The runner.** The output-scoring runner is `run_scenario_eval.py`, in the `scripts/` directory of the `pmo-skill-refiner` skill — repo path `release/skills/pmo-skill-refiner/scripts/`. Invoke it as a module from that skill's root:
+
+```
+python3 -m scripts.run_scenario_eval --suite <path/to/evals.json> [--fixture <path>] [--fail-under <float>] [--verbose]
+```
+
+It grades a scenario's assertions against a committed fixture and emits the eval framework's existing report contract. The full input contract — written so a scenario author never has to read the runner's source — is `scenario-eval-contract.md`, in that same skill's `references/` directory. It is **not** the trigger harness `run_eval.py`, which asks whether a skill's description causes the model to fire for a query; the two are independent and neither reads the other.
+
+**2 — The corpus.** The scenarios and fixtures live at `core/disciplines/evals/behavioral-regression/`. **The corpus supplies the scenarios and fixtures; this document remains the single source of the check definitions the corpus grades against, cited by ID.** Each assertion there names the criterion it grades — `EQ-01`, `XC-03`, and so on — and copies none of that criterion's text, so no criterion acquires a second home. A check the corpus carries no scenario for is simply unasserted by it: the check is still defined above, and still run by hand per the procedure above.
+
+**3 — The threshold.** The corpus is measured against the pass-rate floor recorded at `[behavioral_regression].pass_rate_floor` in `core/config/platform-config.toml.template`. That field is the single numeric home for the value, and this document deliberately does not restate the number — so a recalibration moves one config line and never requires an edit here.
+
+**4 — What a failure does.** The gate is `behavioral-regression.yml`, under `.github/workflows/`. It runs on **every pull request, advisory** — reporting there and never blocking, which is what keeps it exercised rather than idle between major releases. It **binds at the major-release boundary**, a signed `v*.00` tag, where a below-floor result blocks the release close-out once the committed sentinel `behavioral-regression.enforce`, under `.github/`, reads `enforce`. That sentinel ships reading `warn`, so today the gate reports at both rungs and blocks at neither.
+
+---
+
 ## Reference: Skill Definitions
 
 The regression checks above reference several skill definitions and cross-project artifacts. For context:

@@ -179,6 +179,18 @@ Capability switches for git-native release automation. **All three default OFF**
 
 **Not related to `[automation].automation_level`.** That dial (in `operator.toml`, § 3 above) is the autonomy *ceiling*; these are capability *switches*. Turning one on never raises the ceiling — an action stays clamped by `min(automation_level, per-action max)` — so no toggle here can authorize something `automation_level` forbids. Different files, different readers, and no shared key name or key prefix.
 
+### `[behavioral_regression]`
+
+The pass-rate floor the behavioural-regression corpus must hold. This is the **single numeric home** for that floor — what the number *means* lives in `release/ADRs/ADR-183-behavioral-regression-floor-and-major-release-binding-boundary.md` and `core/standards/regression-checks.md`, which name it by role and never restate its magnitude. Change it here, in one place, and nothing else needs editing.
+
+| Field | What it tunes | Allowed values | Default | Calibration |
+|---|---|---|---|---|
+| `pass_rate_floor` | the pass rate the corpus at `core/disciplines/evals/behavioral-regression/` must hold for the gate to report green | a decimal in `[0.0, 1.0]` | `1.00` | CALIBRATE-AFTER-3 |
+
+**Why the default is `1.00` rather than the `0.90` of the other rate floor.** A regression corpus's members are must-hold assertions — any failing scenario *is* a regression, by the corpus's own definition — so a sub-1.0 floor is a standing regression budget you may draw on forever while staying green. A genuinely known-open defect is carried instead as an expected-FAIL assertion in the corpus, which holds the rate at the floor while keeping the exception named in every run and retirable when it is fixed.
+
+**How the value reaches the gate.** The workflow reads this field and passes it to the scenario runner as `--fail-under`; the runner performs the comparison and sets its exit code; the gate consumes **only** that exit code and never parses the report. A consumer that cannot resolve the field must fail closed — read as zero, a floor satisfies every comparison and the gate would report green forever.
+
 ## 5. Consumer examples (how the platform reads these)
 
 The wired examples, enumerated rather than totalled — the list grows as fields are added, and a stated count goes stale on the day a release adds one:

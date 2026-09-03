@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.50] - 2026-09-03
+
+When a decision record's number has to change, the tool that changes it no longer rewrites the historical entries that record what the number used to be.
+
+[Full notes](release/releases/notes/v4.50_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.50)
+
 ## [v4.49] - 2026-09-03
 
 A set of work-item types can now be shared across methodologies and chosen in configuration, instead of being tied to one methodology.

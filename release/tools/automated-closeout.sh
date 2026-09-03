@@ -24,7 +24,7 @@
 #   6.6 inject_velocity_field **Velocity:** field after **Cycle-Time:** in that block (stage-13-close.md Phase B-velocity; surface-resolved)
 #   6.7 append_release_learnings  sibling H4 `#### Release Learnings v<X.Y>` after the Deployment Log block (stage-13-close.md Phase A7; hot ledger only)
 #   6.8 inject_close_class_telemetry_field  **Close-Class-Telemetry:** field after **Outcome rationale:**/**Outcome:** in that block (close-class-telemetry.md § 3.2; surface-resolved; anchor STRING resolved through the same shared field-key grammar as 6.5, #4222)
-#   6.9 transition_plan_status  release-plan frontmatter `status:` ACTIVE → CLOSED (release-corpus-schema.md § Plan-status lifecycle; comment-tolerant reader, bounded to the leading fence). ORDERED AFTER 6 and BEFORE 9.3 — 9.3 is its completeness backstop
+#   6.9 transition_plan_status  release-plan frontmatter `status:` ACTIVE → CLOSED (release-corpus-schema.md § Plan-status lifecycle; comment-tolerant reader, bounded to the leading fence). ORDERED AFTER 6 and BEFORE 9.3 — 9.3 backstops the WRITE only; the COMMIT is asserted by the phase-10 staging-completeness arms (#6258), since 9.3 runs above phase 10 and reads the working tree
 #   7  append_release_index    new row in RELEASE_INDEX.md
 #   8  append_release_digest   new entry under v<MAJOR>.* H2 in RELEASE_DIGEST.md
 #   8.5 append_reversions   append re-version row(s) to RELEASE_REVERSIONS.md (#1679; N/A on the common no-collision path)
@@ -3311,6 +3311,23 @@ PY
 # from disk and FAILs when the re-read does not say CLOSED. Phase 9.3 is the
 # backstop, not the only defence — which matters because the 9.3 assertion is
 # conditional on the plan joining to its ledger row.
+#
+# WHAT 9.3 DOES *NOT* BACKSTOP — corrected per #6258, and the correction matters
+# because the earlier wording read as blanket cover and was cited as such.
+# 9.3 backstops the WRITE. It cannot backstop the COMMIT, and no re-ordering makes
+# it able to: it runs seven dispatch lines ABOVE phase_commit_chore_pr and reads
+# the WORKING TREE, where this phase's write is already present and correct. It
+# passes truthfully while files=() drops the file. That is not a hypothetical —
+# the transition was written and then dropped at six consecutive closes
+# (v4.42-v4.46, v4.48), every phase green, repaired by hand each time.
+#   The commit-side assertion is therefore a SEPARATE mechanism and lives where it
+# can read the commit: the staging-completeness arms in phase_commit_chore_pr,
+# fed by _reported_write_surfaces, which is why this phase's PASS detail must keep
+# naming its write target in parentheses.
+#   Phase 9.56's output-set manifest is NOT that mechanism either and adding a
+# member there would not have caught this: _output_set_member_present is a
+# deliberate TREE-presence probe, and the file is present in the tree with the
+# transition applied.
 phase_transition_plan_status() {
   local plan
   if ! plan="$(plan_rel_path)"; then
@@ -3359,7 +3376,11 @@ phase_transition_plan_status() {
     mark_phase "transition_plan_status" "FAIL" "post-write re-read of ${plan} returned '${after}', not CLOSED"
     return 3
   fi
-  mark_phase "transition_plan_status" "PASS" "transitioned ${plan} ACTIVE → CLOSED"
+  # The parenthesized path is the STAGING CONTRACT, not decoration (#6258): it is
+  # the token _reported_write_surfaces reads to assert this write reached the chore
+  # commit. Strip it and the phase still reports PASS while its write is silently
+  # dropped again — which is exactly what happened at six consecutive closes.
+  mark_phase "transition_plan_status" "PASS" "transitioned ACTIVE → CLOSED (${plan})"
   return 0
 }
 
@@ -5164,21 +5185,97 @@ phase_rebuild_skill_packages() {
   return 0
 }
 
+# ─── The reported-write set — ONE producer, read from the PHASE RECORD ───────
+#
+# Emits one `<phase>\t<surface-basename>` line per surface a PASS-reporting phase
+# NAMED in its own detail. Deduped on the surface; the hot ledger is filtered out
+# because files=() names it unconditionally, so it can never be the dropped one.
+#
+# WHY THE KEY IS "A PHASE REPORTED A SURFACE" AND NOT A NAME PREFIX (#6258). Both
+# staging-completeness arms below keyed on `inject_*`, which is a PROXY for "is a
+# writer phase" — and phase_transition_plan_status (Phase 6.9) is a writer whose
+# name does not match that proxy. Its frontmatter ACTIVE -> CLOSED write landed on
+# disk and was dropped from the chore commit at SIX consecutive closes (v4.42-v4.46,
+# v4.48) while every phase reported green, because neither arm could see a writer
+# the prefix did not name. Widening the prefix to a second literal only moves the
+# blind spot to the next writer; keying on the REPORT removes it.
+#
+# THE `PASS` RESULT FILTER STAYS, AND IS LOAD-BEARING — for the reason MEASURED
+# below, not the one first written here. The first draft of this block claimed the
+# filter is what excludes phase_append_reversions' N/A line, "no re-version this
+# release (RELEASE_REVERSIONS.md untouched)". That was FALSE, and a mutation run
+# proved it: dropping the filter did not admit that line at all, because the token
+# grammar requires the parenthetical to hold the path AND NOTHING ELSE, and that
+# one carries a trailing word. The grammar excludes it; the filter never touched
+# it. Recorded because the wrong rationale would send the next reader hunting for
+# a hazard this code does not have.
+#
+# What the filter ACTUALLY excludes, enumerated over all 47 mark_phase sites: FOUR
+# non-PASS limbs whose detail DOES use the strict path-only form —
+# inject_outcome_field (SKIPPED, twice), append_release_learnings (SKIPPED) and
+# inject_close_class_telemetry_field (SKIPPED), each naming its resolved surface
+# as `($target_name)` / `($_log_name)`. A SKIPPED limb wrote nothing, so admitting
+# one would demand a commit for a file its own phase declined to touch — a guard
+# that FAILs a correct close. Arm PS-5 drives exactly that fixture.
+#
+# The token grammar admits a repo-relative path as well as a bare basename and
+# reduces it with basename(1), so a writer may name its target in whichever form
+# reads naturally in its own detail. It does NOT admit a parenthetical carrying
+# anything besides the path, which is what keeps prose asides out. Matching
+# downstream is by basename against the committed path list, so a surface landing
+# in a different directory is still adjudicated rather than silently excluded.
+#
+# INDEPENDENCE (unchanged, and the binding constraint). The set is derived from the
+# phase record ONLY — never from TOUCHED_ARCHIVE_SEGMENTS or any other recorder —
+# because a guard sourced from the recorder whose omission IS the defect goes
+# vacuous the instant a write site stops recording. That is what makes these arms
+# fail on a MISSING recorder call rather than agree with it.
+_reported_write_surfaces() {
+  local _i _tok _seen="" _hot
+  _hot="$(/usr/bin/basename "$RELEASE_LOG")"
+  for ((_i=0; _i<${#PHASE_NAMES[@]}; _i++)); do
+    [[ "${PHASE_RESULTS[$_i]}" == "PASS" ]] || continue
+    for _tok in $(/usr/bin/printf '%s\n' "${PHASE_DETAILS[$_i]}" \
+                    | /usr/bin/grep -oE '\([A-Za-z0-9._/-]+\.md\)' | /usr/bin/tr -d '()' || true); do
+      _tok="$(/usr/bin/basename "$_tok")"
+      [[ "$_tok" == "$_hot" ]] && continue
+      case " $_seen " in *" $_tok "*) continue ;; esac
+      _seen="${_seen}${_tok} "
+      /usr/bin/printf '%s\t%s\n' "${PHASE_NAMES[$_i]}" "$_tok"
+    done
+  done
+}
+
 phase_commit_chore_pr() {
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "commit_chore_pr" "DRY-RUN" "would: git add RELEASE_LOG.md RELEASE_INDEX.md RELEASE_DIGEST.md RELEASE_REVERSIONS.md (if re-versioned) RELEASE_NOTES.md CHANGELOG.md (if present) .version (if versioned) packages/<skill>.skill + .sha256 (per rebuilt skill) && git commit -m 'chore(${VERSION}): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG'"
+    mark_phase "commit_chore_pr" "DRY-RUN" "would: git add RELEASE_LOG.md RELEASE_INDEX.md RELEASE_DIGEST.md RELEASE_REVERSIONS.md (if re-versioned) RELEASE_NOTES.md <release plan> (if one resolves) CHANGELOG.md (if present) .version (if versioned) packages/<skill>.skill + .sha256 (per rebuilt skill) && git commit -m 'chore(${VERSION}): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG'"
     return 0
   fi
 
   # The note entry is resolved, not retyped: staging is guarded by `[[ -f ]]`, so a
   # path that disagrees with the producer does not error — it silently stages
   # nothing, and the release note never reaches the chore commit.
+  #
+  # Phase 6.9's write target, resolved through plan_rel_path() — the SAME resolver
+  # 6.9 writes through, so the stager and the writer cannot express two different
+  # layouts (#6258). `|| true` because that resolver returns 1 and echoes NOTHING
+  # when no plan exists for this release; the empty element is then dropped by the
+  # `[[ -z "$f" ]] && continue` guard below, exactly as an empty array expansion is.
+  # Resolved into a variable rather than inlined as `"$(plan_rel_path)"`: this
+  # script runs under `set -e`, and the exit status of a compound array assignment
+  # containing a failing substitution is not portable across the bash 3.2 the macOS
+  # close-out path uses and a modern bash.
+  local _plan_rel; _plan_rel="$(plan_rel_path || true)"
   local files=(
     "release/releases/RELEASE_LOG.md"
     "release/releases/RELEASE_INDEX.md"
     "release/releases/RELEASE_DIGEST.md"
     "release/releases/RELEASE_REVERSIONS.md"
     "release/releases/$(notes_rel_path)"
+    "$_plan_rel"                    # the release plan, carrying the frontmatter
+                                    # status: ACTIVE -> CLOSED transition written by
+                                    # phase_transition_plan_status (Phase 6.9); empty
+                                    # when no plan resolves for this release.
     "CHANGELOG.md"
     ".version"
     "${REBUILT_PACKAGES[@]:-}"      # .skill packages + .sha256 sidecars staged by
@@ -5214,13 +5311,19 @@ phase_commit_chore_pr() {
     # the same recorder whose omission IS the defect cannot catch that omission —
     # it would go vacuous the moment a future write site forgets to record, which
     # is the regression this exists to catch. Structurally general: any future
-    # inject_* phase is covered without touching this code.
-    local _iw="" _i
-    for ((_i=0; _i<${#PHASE_NAMES[@]}; _i++)); do
-      if [[ "${PHASE_NAMES[$_i]}" == inject_* && "${PHASE_RESULTS[$_i]}" == "PASS" ]]; then _iw="${_iw}${PHASE_NAMES[$_i]} "; fi
-    done
+    # writer phase is covered without touching this code, because the population is
+    # `_reported_write_surfaces` (a phase that NAMED a surface) rather than a name
+    # prefix — see that function's header for why the prefix was the defect.
+    local _iw="" _ipn _isf
+    while IFS="$(/usr/bin/printf '\t')" read -r _ipn _isf; do
+      [[ -z "$_ipn" ]] && continue
+      case " $_iw " in *" $_ipn "*) continue ;; esac
+      _iw="${_iw}${_ipn} "
+    done <<EOF
+$(_reported_write_surfaces)
+EOF
     if [[ -n "$_iw" ]]; then
-      mark_phase "commit_chore_pr" "FAIL" "staging-completeness: ${_iw% } reported an injected write but the staged set is EMPTY — the write landed on a surface files=() does not name, so a mandated output would be dropped from the chore PR while every phase reported green"
+      mark_phase "commit_chore_pr" "FAIL" "staging-completeness: ${_iw% } reported a write but the staged set is EMPTY — the write landed on a surface files=() does not name, so a mandated output would be dropped from the chore PR while every phase reported green"
       return 3
     fi
     mark_phase "commit_chore_pr" "SKIPPED" "nothing staged — phases 6-9 + 9.5 + 9.6 were no-op (already up-to-date)"
@@ -5267,20 +5370,18 @@ phase_commit_chore_pr() {
     #   Matched by basename against the committed path list, so a future surface
     # that lands in a different directory is still adjudicated instead of silently
     # excluded. The hot ledger is skipped — files=() names it unconditionally.
-    local _reported="" _rmissing="" _rfound="" _sfc _sfc_re _hot _i2 _tok
-    _hot="$(/usr/bin/basename "$RELEASE_LOG")"
-    for ((_i2=0; _i2<${#PHASE_NAMES[@]}; _i2++)); do
-      [[ "${PHASE_NAMES[$_i2]}" == inject_* && "${PHASE_RESULTS[$_i2]}" == "PASS" ]] || continue
-      # Parenthesized "(<surface>.md)" is the shape every inject_* PASS detail uses
-      # to name the surface it resolved to. Non-.md parentheticals (e.g. the
-      # "(+ **Outcome rationale:**)" suffix) do not match and are ignored.
-      for _tok in $(/usr/bin/printf '%s\n' "${PHASE_DETAILS[$_i2]}" \
-                      | /usr/bin/grep -oE '\([A-Za-z0-9._-]+\.md\)' | /usr/bin/tr -d '()' || true); do
-        [[ "$_tok" == "$_hot" ]] && continue
-        case " $_reported " in *" $_tok "*) continue ;; esac
-        _reported="${_reported}${_tok} "
-      done
-    done
+    #
+    #   The population is `_reported_write_surfaces`, keyed on a phase having NAMED
+    # a surface rather than on an `inject_*` name prefix (#6258). The prefix was a
+    # proxy for "is a writer", and Phase 6.9 is a writer it did not name — see that
+    # function's header for the six closes that proves.
+    local _reported="" _rmissing="" _rfound="" _sfc _sfc_re _rpn
+    while IFS="$(/usr/bin/printf '\t')" read -r _rpn _sfc; do
+      [[ -z "$_sfc" ]] && continue
+      _reported="${_reported}${_sfc} "
+    done <<EOF
+$(_reported_write_surfaces)
+EOF
     for _sfc in $_reported; do
       _sfc_re="${_sfc//./\\.}"
       # Here-string, not `printf … | grep -q`: the reader short-circuits on its
@@ -6604,13 +6705,47 @@ tagger_hygiene_violations() {
 # the published-Release tag list in file $2, minus the recorded exemptions. Both files
 # must be sorted. Taking files (not live probes) is what makes this testable offline:
 # the self-test drives it with fixtures, no gh and no network.
+# #6857 — the in-flight set, derived from the RELEASE_LOG state column and NOTHING
+# else, so this stays as file-only and offline-testable as anchor_parity_violations.
+# A release is IN FLIGHT between Stage 12 Phase B5 (which lands the DEPLOYED row) and
+# Stage 13 close (which transitions it to VERIFIED). Inside that window its tag exists
+# and its Release does not — the state phase 15.55's own comment calls expected for
+# "a sibling release genuinely in flight", and which had no implementation.
+# Args: <log_file>.  Emits one tag per line.
+inflight_release_tags() {
+  local _log="$1" _ann="${2:-}"
+  { # (i) the LATE half — Phase B5 has landed the row, Stage 13 has not transitioned it.
+    /usr/bin/awk -F' *\\| *' '/^\| v[0-9]/ && $8=="DEPLOYED" { print $2 }' "$_log" 2>/dev/null
+    # (ii) the EARLY half — Phase B3 has pushed the tag and B5 has not landed the row yet,
+    # so there is no state column to read. Bounded to tags ABOVE the highest version the
+    # LOG records: that is what separates a release mid-Stage-12 from an ancient orphan
+    # tag that will never get a row (v3.31 has no row either, and must stay reportable).
+    if [[ -n "$_ann" && -s "$_ann" ]]; then
+      local _max _t
+      _max="$(/usr/bin/awk -F' *\\| *' '/^\| v[0-9]/ { print $2 }' "$_log" 2>/dev/null | /usr/bin/sort -V | /usr/bin/tail -1)"
+      if [[ -n "$_max" ]]; then
+        while IFS= read -r _t; do
+          [[ -z "$_t" ]] && continue
+          /usr/bin/grep -qE "^\| *${_t} *\|" "$_log" 2>/dev/null && continue
+          [[ "$(/usr/bin/printf '%s\n%s\n' "$_t" "$_max" | /usr/bin/sort -V | /usr/bin/tail -1)" == "$_t" && "$_t" != "$_max" ]] && /usr/bin/printf '%s\n' "$_t"
+        done < "$_ann"
+      fi
+    fi
+  } | /usr/bin/sort -u
+}
+
 anchor_parity_violations() {
-  local ann_file="$1" rel_file="$2"
+  local ann_file="$1" rel_file="$2" inflight_file="${3:-}"
   local exempt; exempt="$(/usr/bin/printf '%s\n' "${ANCHOR_PARITY_EXEMPT_TAGS[@]}" | /usr/bin/sort -u)"
   local t
   while IFS= read -r t; do
     [[ -z "$t" ]] && continue
     if /usr/bin/printf '%s\n' "$exempt" | /usr/bin/grep -qxF "$t"; then continue; fi
+    # #6857 — a sibling still inside its Stage-12/13 window is the expected benign
+    # case, not drift. Scoped to THIS arm: a published Release on a lightweight tag
+    # (the other arm) is never an in-flight condition.
+    if [[ -n "$inflight_file" && -s "$inflight_file" ]] \
+       && /usr/bin/grep -qxF "$t" "$inflight_file"; then continue; fi
     /usr/bin/printf 'MISSING-RELEASE %s (annotated tag with no published GitHub Release)\n' "$t"
   done < <(/usr/bin/comm -23 "$ann_file" "$rel_file")
   while IFS= read -r t; do
@@ -6690,7 +6825,24 @@ phase_assert_anchor_hygiene() {
     if ledger_gap_is_this_close "$_idx" "$_log" "$RELEASE_INDEX" "$RELEASE_LOG" "$VERSION" "$MODE"; then
       _parity_pred="; LEDGER-ROW-PARITY PREDICTED not asserted under --dry-run — the single missing INDEX row is ${VERSION}'s own, and phase_append_release_index adds it at --apply while deliberately writing nothing here, so the gap is this script's own no-op. Parity is asserted for real at --apply, after the 8.x append lands"
     else
-      findings="${findings}LEDGER-ROW-PARITY RELEASE_INDEX has ${_idx} version rows, RELEASE_LOG has ${_log}"$'\n'
+      # #6857 — the gap may be INHERITED rather than introduced. A sibling inside its
+      # Stage-12/13 window has landed its RELEASE_LOG row and not yet its RELEASE_INDEX
+      # row, so it contributes exactly one to this difference through no fault of the
+      # release now closing. Account for those before reporting: a gap this release did
+      # not create must not halt it, and a gap larger than the in-flight set still does.
+      local _inflight_gap=0 _v
+      while IFS= read -r _v; do
+        [[ -z "$_v" ]] && continue
+        /usr/bin/grep -qE "^\| *\[?${_v}([^0-9]|$)" "$RELEASE_INDEX" 2>/dev/null || _inflight_gap=$((_inflight_gap+1))
+      done < <(inflight_release_tags "$RELEASE_LOG")
+      # DIRECTIONAL, per self-test h5: the allowance covers a LOG-ahead gap only.
+      # An INDEX-ahead gap is a different defect (a row exists for a release with no
+      # LOG entry) and an in-flight sibling can never explain it, so it always reports.
+      if (( _log > _idx && _log - _idx <= _inflight_gap )); then
+        _parity_pred="; LEDGER-ROW-PARITY INHERITED not reported — the ${_log}-vs-${_idx} difference is fully accounted for by ${_inflight_gap} sibling release(s) still inside the Stage-12/13 window, each carrying a RELEASE_LOG row and no RELEASE_INDEX row yet. Not drift this close introduced; it clears when those siblings close"
+      else
+        findings="${findings}LEDGER-ROW-PARITY RELEASE_INDEX has ${_idx} version rows, RELEASE_LOG has ${_log} (in-flight siblings account for ${_inflight_gap})"$'\n'
+      fi
     fi
   fi
 
@@ -6701,7 +6853,8 @@ phase_assert_anchor_hygiene() {
   annotated_tags_of "$REPO_ROOT" > "$tmp/ann"
   if $GH release list --limit 400 --json tagName -q '.[].tagName' 2>/dev/null | /usr/bin/sort > "$tmp/rel" \
      && [[ -s "$tmp/rel" ]]; then
-    local _ap; _ap="$(anchor_parity_violations "$tmp/ann" "$tmp/rel")"
+    inflight_release_tags "$RELEASE_LOG" "$tmp/ann" > "$tmp/inflight" 2>/dev/null || : > "$tmp/inflight"
+    local _ap; _ap="$(anchor_parity_violations "$tmp/ann" "$tmp/rel" "$tmp/inflight")"
     [[ -n "$_ap" ]] && findings="${findings}${_ap}"$'\n'
   else
     _net_note="; tag<->Release set parity NOT CHECKED (gh release list unavailable — offline or credential-less)"
@@ -11417,6 +11570,187 @@ PLAN-VERSION-UNKNOWN: release/releases/plans/v2/v2.98_RELEASE_PLAN.md declares v
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   /bin/rm -rf "$_tsc_tmp"
 
+  # Test 11e — group PS: the PLAN-STATUS staging drop (#6258), BEHAVIORAL.
+  #
+  # THE DEFECT. Phase 6.9 rewrote the release plan's frontmatter status: ACTIVE ->
+  # CLOSED into the working tree; files=() did not name the plan; the write was
+  # therefore never staged and never reached main. It recurred at SIX consecutive
+  # closes (v4.42-v4.46, v4.48) with every phase reporting green, and was repaired
+  # by hand each time — three of those repair commits carry near-identical
+  # messages, which is the signature of a defect that had become routine.
+  #
+  # WHY A PRESENCE ARM IS NOT ENOUGH, stated here because this is the exact trap
+  # this file's own header names. "Does the plan path appear in files=()?" is a
+  # `declare -f | grep`, and a grep cannot observe an assertion FAILING. Worse: the
+  # ARM ITSELF passes on the pre-fix code for the guard half, because the `inject_*`
+  # branch was always present — it was simply blind to a writer whose name did not
+  # match. So PS-1 is the presence arm and PS-2/PS-3 are its paired behavioral
+  # polarities, driving the REAL phase against a sandbox git repo.
+  local _ps_saved_root="$REPO_ROOT" _ps_saved_mode="$MODE" _ps_saved_version="$VERSION"
+  local _ps_saved_log="$RELEASE_LOG" _ps_saved_plansdir="$RELEASE_PLANS_DIR"
+  local _ps_saved_slug="$STATE_MILESTONE_SLUG"
+  local _ps_tmp; _ps_tmp="$(/usr/bin/mktemp -d -t planstatus-selftest.XXXXXX)"
+  /bin/mkdir -p "$_ps_tmp/release/releases/plans/v9"
+  $GIT -C "$_ps_tmp" init -q >/dev/null 2>&1
+  $GIT -C "$_ps_tmp" config user.email "selftest@example.invalid" >/dev/null 2>&1
+  $GIT -C "$_ps_tmp" config user.name "selftest" >/dev/null 2>&1
+  $GIT -C "$_ps_tmp" config commit.gpgsign false >/dev/null 2>&1
+  local _ps_ledger="$_ps_tmp/release/releases/RELEASE_LOG.md"
+  local _ps_plan="$_ps_tmp/release/releases/plans/v9/v9.99_RELEASE_PLAN.md"
+  /usr/bin/printf 'seed\n' > "$_ps_ledger"
+  /usr/bin/printf -- '---\ntitle: Release Plan — selftest\nstatus: ACTIVE\n---\nbody\n' > "$_ps_plan"
+  # A parent commit, so the chore commit is never a ROOT commit — `diff-tree -r HEAD`
+  # emits nothing for a root commit without --root, which would make both polarities
+  # look identical and the whole group vacuous.
+  $GIT -C "$_ps_tmp" add -A >/dev/null 2>&1
+  $GIT -C "$_ps_tmp" commit -q -m "seed" >/dev/null 2>&1
+
+  REPO_ROOT="$_ps_tmp"; MODE="apply"; VERSION="v9.99"
+  RELEASE_LOG="$_ps_ledger"; RELEASE_PLANS_DIR="$_ps_tmp/release/releases/plans"
+  STATE_MILESTONE_SLUG="v9.99"
+
+  # PS-0 anti-vacuity — the fixture's plan must actually RESOLVE through the same
+  # resolver files=() and Phase 6.9 both use. Without this, PS-2 could pass because
+  # nothing was ever owed rather than because the staging works.
+  local _ps_rel; _ps_rel="$(plan_rel_path || true)"
+  [[ "$_ps_rel" == "release/releases/plans/v9/v9.99_RELEASE_PLAN.md" ]] \
+    || { echo "FAIL: PS-0 anti-vacuity — plan_rel_path must resolve the sandbox plan, got '$_ps_rel'"; failures=$((failures+1)); }
+
+  # PS-1 presence — files=() must expand the RESOLVED plan path, not a retyped
+  # literal. Paired with PS-2/PS-3, which are what actually observe the drop.
+  #
+  # Captured into a variable and read through a HERE-STRING, never `declare -f |
+  # grep -q`: `grep -q` exits on its first match, SIGPIPEs the writer, and under
+  # `pipefail` promotes that status to the pipeline's — so a successful probe can
+  # report failure. Same disposition the AC-3 independence guard below already
+  # uses, and the CI SIGPIPE-idiom gate enforces it on added lines.
+  local _ps_cbody; _ps_cbody="$(declare -f phase_commit_chore_pr)"
+  if ! /usr/bin/grep -qF '"$_plan_rel"' <<<"$_ps_cbody"; then
+    echo "FAIL: PS-1 phase_commit_chore_pr files=() must expand \"\$_plan_rel\" (the plan_rel_path-resolved release plan)"; failures=$((failures+1))
+  fi
+  if ! /usr/bin/grep -qF '_plan_rel="$(plan_rel_path' <<<"$_ps_cbody"; then
+    echo "FAIL: PS-1b the plan path must be RESOLVED through plan_rel_path(), never retyped as a layout literal"; failures=$((failures+1))
+  fi
+
+  local _ps_rc _ps_detail _ps_committed
+  # ── PS-2 (positive) — 6.9 reports its write; the plan reaches the commit. ────
+  PHASE_NAMES=("transition_plan_status"); PHASE_RESULTS=("PASS")
+  PHASE_DETAILS=("transitioned ACTIVE → CLOSED (release/releases/plans/v9/v9.99_RELEASE_PLAN.md)")
+  REBUILT_PACKAGES=(); TOUCHED_ARCHIVE_SEGMENTS=()
+  /usr/bin/printf 'seed\nledger edit\n' > "$_ps_ledger"
+  /usr/bin/printf -- '---\ntitle: Release Plan — selftest\nstatus: CLOSED\n---\nbody\n' > "$_ps_plan"
+  _ps_rc=0; phase_commit_chore_pr >/dev/null 2>&1 || _ps_rc=$?
+  _ps_detail="$(get_phase commit_chore_pr)"
+  [[ "$_ps_rc" -eq 0 ]] || { echo "FAIL: PS-2 the staged plan-status transition must commit cleanly, got rc=$_ps_rc ('$_ps_detail')"; failures=$((failures+1)); }
+  _ps_committed="$($GIT -C "$_ps_tmp" diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null || true)"
+  /usr/bin/grep -qxF 'release/releases/plans/v9/v9.99_RELEASE_PLAN.md' <<<"$_ps_committed" \
+    || { echo "FAIL: PS-2 THE DEFECT — the release plan is NOT in the chore commit; committed set was: $(/usr/bin/tr '\n' ' ' <<<"$_ps_committed")"; failures=$((failures+1)); }
+
+  # ── PS-3 (sensitivity) — the PRE-FIX condition, reproduced as a fixture. ────
+  # A writer reports a surface that files=() does not name. This is byte-for-byte
+  # what the pre-fix code did on every close: the write is on disk, the phase says
+  # PASS, and the array has no entry for it. The arm asserts the guard FAILS and
+  # NAMES the dropped surface. On the pre-fix guard (keyed on `inject_*`) this arm
+  # goes RED, because transition_plan_status was invisible to it.
+  PHASE_NAMES=("transition_plan_status"); PHASE_RESULTS=("PASS")
+  PHASE_DETAILS=("transitioned ACTIVE → CLOSED (release/releases/plans/v9/v9.98_UNSTAGED_PLAN.md)")
+  REBUILT_PACKAGES=(); TOUCHED_ARCHIVE_SEGMENTS=()
+  /usr/bin/printf 'seed\nledger edit 2\n' > "$_ps_ledger"
+  _ps_rc=0; phase_commit_chore_pr >/dev/null 2>&1 || _ps_rc=$?
+  _ps_detail="$(get_phase commit_chore_pr)"
+  [[ "$_ps_rc" -eq 3 ]] || { echo "FAIL: PS-3 SENSITIVITY — a reported write on a surface files=() does not name must FAIL the phase (rc=3), got rc=$_ps_rc ('$_ps_detail')"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'v9.98_UNSTAGED_PLAN.md' <<<"$_ps_detail" \
+    || { echo "FAIL: PS-3 the failure must NAME the dropped surface, got '$_ps_detail'"; failures=$((failures+1)); }
+
+  # ── PS-4 — the guard is keyed on the REPORT, not on an `inject_*` name prefix.
+  # Read from the shipped text of the producer, because that is the property whose
+  # absence WAS the defect: a prefix test here re-blinds the guard to every writer
+  # not named `inject_*`, and PS-3 would then be the only thing that noticed.
+  local _ps_body; _ps_body="$(declare -f _reported_write_surfaces)"
+  [[ -n "$_ps_body" ]] \
+    || { echo "FAIL: PS-4 anti-vacuity — _reported_write_surfaces is not defined, so the arms below are unfalsifiable"; failures=$((failures+1)); }
+  if /usr/bin/grep -qE 'inject_\*' <<<"$_ps_body"; then
+    echo "FAIL: PS-4 _reported_write_surfaces must NOT filter on an 'inject_*' name prefix — that prefix is a proxy for 'is a writer' and Phase 6.9 is a writer it does not name (#6258)"; failures=$((failures+1))
+  fi
+  if ! /usr/bin/grep -qF 'PHASE_RESULTS[$_i]}" == "PASS"' <<<"$_ps_body"; then
+    echo "FAIL: PS-4b _reported_write_surfaces must keep the PASS result filter — it is what excludes the four SKIPPED limbs that name a resolved surface in the strict path-only form despite writing nothing (see PS-5)"; failures=$((failures+1))
+  fi
+  # Independence, extended to the extracted producer: it must not consult the
+  # recorder whose omission is the defect.
+  if /usr/bin/grep -qF 'TOUCHED_ARCHIVE_SEGMENTS' <<<"$_ps_body"; then
+    echo "FAIL: PS-4c _reported_write_surfaces must not consult TOUCHED_ARCHIVE_SEGMENTS — a guard sourced from that recorder goes vacuous when a write site stops recording"; failures=$((failures+1))
+  fi
+
+  # ── PS-5 — the PASS filter, on the fixture that actually exercises it. ─────
+  # The first version of this arm used phase_append_reversions' N/A detail, "no
+  # re-version this release (RELEASE_REVERSIONS.md untouched)", and was VACUOUS: a
+  # mutation dropping the PASS filter left it GREEN, because the token grammar
+  # rejects that parenthetical on its trailing word, not on the phase result. The
+  # real hazard is a SKIPPED limb using the strict path-only form — four sites do
+  # (inject_outcome_field twice, append_release_learnings,
+  # inject_close_class_telemetry_field). A SKIPPED limb wrote nothing, so admitting
+  # one would demand a commit for a file its own phase declined to touch.
+  PHASE_NAMES=("inject_outcome_field" "transition_plan_status")
+  PHASE_RESULTS=("SKIPPED" "PASS")
+  PHASE_DETAILS=("already present in the v9.99 Deployment Log block (RELEASE_LOG_ARCHIVE-v9.md)" \
+                 "transitioned ACTIVE → CLOSED (release/releases/plans/v9/v9.99_RELEASE_PLAN.md)")
+  local _ps_set; _ps_set="$(_reported_write_surfaces | /usr/bin/cut -f2 | /usr/bin/tr '\n' ' ')"
+  if /usr/bin/grep -qF 'RELEASE_LOG_ARCHIVE-v9.md' <<<"$_ps_set"; then
+    echo "FAIL: PS-5 a SKIPPED limb's named surface must not enter the reported-write set — it wrote nothing, so demanding it in the commit would FAIL a correct close; got '$_ps_set'"; failures=$((failures+1))
+  fi
+  # Specificity twin: the PASS entry alongside it MUST be picked up, else PS-5
+  # passes because the extractor found nothing at all.
+  /usr/bin/grep -qF 'v9.99_RELEASE_PLAN.md' <<<"$_ps_set" \
+    || { echo "FAIL: PS-5b anti-vacuity — the PASS writer's surface must be in the reported set, got '$_ps_set'"; failures=$((failures+1)); }
+
+  # ── PS-6 — THE DETAIL CONTRACT, coupled to its producer. ──────────────────
+  # Phase 6.9's PASS detail is the ONLY thing that puts the plan into the reported
+  # set, so the parenthesized target is load-bearing SYNTAX, not prose. Nothing
+  # asserted it, and that was measured rather than supposed: a mutation restoring
+  # 6.9's natural phrasing ("transitioned ${plan} ACTIVE → CLOSED" — the shape it
+  # actually shipped with) left this entire suite GREEN while silently removing the
+  # plan from the guard's population. The staging fix would then still be in place
+  # and still be uncovered.
+  #   So this arm drives the REAL phase and feeds its RECORDED detail through the
+  # REAL extractor — producer coupled to consumer, the same anti-drift shape Test 12
+  # uses for SCAFFOLD_RESIDUE_TOKENS. Re-word 6.9's detail out of the grammar and
+  # this reddens; no second copy of the grammar exists here to drift from it.
+  /usr/bin/printf -- '---\ntitle: Release Plan — selftest\nstatus: ACTIVE\n---\nbody\n' > "$_ps_plan"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_transition_plan_status >/dev/null 2>&1
+  local _ps69; _ps69="$(get_phase transition_plan_status)"
+  [[ "$_ps69" == PASS\|* ]] \
+    || { echo "FAIL: PS-6 anti-vacuity — phase_transition_plan_status must PASS on an ACTIVE sandbox plan, got '$_ps69'"; failures=$((failures+1)); }
+  local _ps69_set; _ps69_set="$(_reported_write_surfaces | /usr/bin/cut -f2 | /usr/bin/tr '\n' ' ')"
+  /usr/bin/grep -qF 'v9.99_RELEASE_PLAN.md' <<<"$_ps69_set" \
+    || { echo "FAIL: PS-6 phase 6.9's own PASS detail must name its write target in the parenthesized form _reported_write_surfaces reads, else the plan silently leaves the staging guard's population; recorded detail was '$_ps69', extracted set was '$_ps69_set'"; failures=$((failures+1)); }
+
+  # ── PS-7 — the grammar is PATH-ONLY, asserted directly on the extractor. ───
+  # No mutation of the shipped code reaches this today: widening the token to admit
+  # trailing prose leaves every other arm green, because no PASS detail in the
+  # current script carries a prose-bearing parenthetical. That makes the widened
+  # form a behaviourally-EQUIVALENT mutant now and a live hazard later — the first
+  # PASS detail written as "(note.md, 42 lines)" would extract a token whose
+  # basename is "42 lines", match no committed path, and FAIL a correct close.
+  # Asserted here as a unit on the extractor rather than left to be discovered.
+  PHASE_NAMES=("some_future_writer" "transition_plan_status")
+  PHASE_RESULTS=("PASS" "PASS")
+  PHASE_DETAILS=("wrote the note (v9.99_RELEASE_NOTES.md, 42 lines)" \
+                 "transitioned ACTIVE → CLOSED (release/releases/plans/v9/v9.99_RELEASE_PLAN.md)")
+  local _ps7; _ps7="$(_reported_write_surfaces | /usr/bin/cut -f2 | /usr/bin/tr '\n' ' ')"
+  if /usr/bin/grep -qE '42|RELEASE_NOTES' <<<"$_ps7"; then
+    echo "FAIL: PS-7 the token grammar must admit a parenthetical holding the path AND NOTHING ELSE — a prose-bearing parenthetical must be ignored rather than yielding a garbled surface; got '$_ps7'"; failures=$((failures+1))
+  fi
+  /usr/bin/grep -qF 'v9.99_RELEASE_PLAN.md' <<<"$_ps7" \
+    || { echo "FAIL: PS-7b anti-vacuity — the well-formed sibling token must still be extracted, got '$_ps7'"; failures=$((failures+1)); }
+
+  REPO_ROOT="$_ps_saved_root"; MODE="$_ps_saved_mode"; VERSION="$_ps_saved_version"
+  RELEASE_LOG="$_ps_saved_log"; RELEASE_PLANS_DIR="$_ps_saved_plansdir"
+  STATE_MILESTONE_SLUG="$_ps_saved_slug"
+  REBUILT_PACKAGES=(); TOUCHED_ARCHIVE_SEGMENTS=()
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  /bin/rm -rf "$_ps_tmp"
+
   # Test 12: scaffold-residue detector (AC1) + pre-authored-note tolerance (AC2).
   # Offline, hermetic, credential-free — the CI smoke job runs --self-test with no
   # network and no gh token.
@@ -12065,6 +12399,52 @@ REL
   /usr/bin/printf 'v9.03\n' >> "$_ah_tmp/ann"; /usr/bin/sort -o "$_ah_tmp/ann" "$_ah_tmp/ann"
   _ah_out="$(anchor_parity_violations "$_ah_tmp/ann" "$_ah_tmp/rel")"
   /usr/bin/printf '%s' "$_ah_out" | /usr/bin/grep -qF 'MISSING-RELEASE v9.03' || { echo "FAIL: AC4-b — a NEW annotated-tag-without-Release divergence must be reported, got: $_ah_out"; failures=$((failures+1)); }
+
+  # ---- #6857: an IN-FLIGHT sibling is the expected benign case, not drift ----
+  # Matched with a bash glob rather than `printf | grep -q`: a short-circuiting
+  # reader SIGPIPEs its writer, which the SIGPIPE-idiom gate polices on added lines.
+  # Read as a pair. AC4-e is the property; AC4-f is the control WITHOUT which AC4-e
+  # cannot distinguish "the in-flight set suppressed it" from "passing a third argument
+  # suppressed everything". v9.03 is still annotated-without-Release in BOTH arms; the
+  # only variable is whether it is named in the in-flight file.
+  /usr/bin/printf 'v9.03\n' > "$_ah_tmp/inflight"
+  _ah_out="$(anchor_parity_violations "$_ah_tmp/ann" "$_ah_tmp/rel" "$_ah_tmp/inflight")"
+  [[ "$_ah_out" == *'MISSING-RELEASE v9.03'* ]] && { echo "FAIL: AC4-e — a tag named in the in-flight set must NOT be reported, got: $_ah_out"; failures=$((failures+1)); }
+  : > "$_ah_tmp/inflight"
+  _ah_out="$(anchor_parity_violations "$_ah_tmp/ann" "$_ah_tmp/rel" "$_ah_tmp/inflight")"
+  [[ "$_ah_out" == *'MISSING-RELEASE v9.03'* ]] || { echo "FAIL: AC4-f — with an EMPTY in-flight set the same tag must still be reported; the skip must be attributable to membership, not to the argument existing, got: $_ah_out"; failures=$((failures+1)); }
+
+  # AC4-g — SCOPE: in-flight excuses the missing-RELEASE arm ONLY. A published Release
+  # on a lightweight tag is never an in-flight condition, so naming it must not mute it.
+  /usr/bin/printf 'v9.05\n' >> "$_ah_tmp/rel"; /usr/bin/sort -o "$_ah_tmp/rel" "$_ah_tmp/rel"
+  /usr/bin/printf 'v9.05\n' > "$_ah_tmp/inflight"
+  _ah_out="$(anchor_parity_violations "$_ah_tmp/ann" "$_ah_tmp/rel" "$_ah_tmp/inflight")"
+  [[ "$_ah_out" == *'MISSING-ANNOTATED-TAG v9.05'* ]] || { echo "FAIL: AC4-g — the in-flight set must not suppress the MISSING-ANNOTATED-TAG arm, got: $_ah_out"; failures=$((failures+1)); }
+  /usr/bin/sed -i.bak '/^v9.05$/d' "$_ah_tmp/rel" 2>/dev/null || true
+
+  # AC4-h — the EXTRACTOR: in-flight is exactly the DEPLOYED rows, read from the LOG
+  # state column and nothing else. Both arms, so a total-silence bug cannot pass.
+  /bin/cat > "$_ah_tmp/log" <<'AHLOG'
+| v9.10 | slug-a | #1 | #2 | `sha` | `v9.10` | DEPLOYED | 2026-01-01 |
+| v9.11 | slug-b | #3 | #4 | `sha` | `v9.11` | VERIFIED | 2026-01-02 |
+AHLOG
+  local _ah_if; _ah_if="$(inflight_release_tags "$_ah_tmp/log")"
+  [[ "$_ah_if" == "v9.10" ]] || { echo "FAIL: AC4-h — in-flight must be exactly the DEPLOYED rows (expected v9.10), got: '$_ah_if'"; failures=$((failures+1)); }
+
+  # AC4-i — the EARLY half of the window: Phase B3 has pushed the tag and Phase B5 has
+  # not landed the row, so there is no state column to read. Bounded ABOVE the highest
+  # version the LOG records, which is what separates a release mid-Stage-12 from an
+  # ancient orphan tag that will never get a row. Three arms, one variable apart.
+  /bin/cat > "$_ah_tmp/annx" <<'AHANN'
+v3.31
+v9.10
+v9.11
+v9.12
+AHANN
+  _ah_if="$(inflight_release_tags "$_ah_tmp/log" "$_ah_tmp/annx")"
+  [[ "$_ah_if" == *'v9.12'* ]] || { echo "FAIL: AC4-i — a tag above the LOG's highest version with no row is mid-Stage-12 and must read in-flight, got: '$_ah_if'"; failures=$((failures+1)); }
+  [[ "$_ah_if" == *'v3.31'* ]] && { echo "FAIL: AC4-i CONTROL — an ancient orphan tag with no row is BELOW the highest version and must stay reportable, got: '$_ah_if'"; failures=$((failures+1)); }
+  [[ "$_ah_if" == *'v9.11'* ]] && { echo "FAIL: AC4-i CONTROL — a tag whose row reads VERIFIED is closed, not in-flight, got: '$_ah_if'"; failures=$((failures+1)); }
 
   # (c) the OTHER direction — a published Release with no annotated tag.
   /usr/bin/printf 'v9.04\n' >> "$_ah_tmp/rel"; /usr/bin/sort -o "$_ah_tmp/rel" "$_ah_tmp/rel"

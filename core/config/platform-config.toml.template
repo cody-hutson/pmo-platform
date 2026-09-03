@@ -383,3 +383,39 @@ review_process_integration = false
 ci_auto_resolve = false
 # Valid: true | false.  Default: false.
 comment_auto_resolution = false
+
+[behavioral_regression]
+# The pass-rate floor the behavioral-regression corpus must hold at the major-release
+# boundary. The corpus lives at core/disciplines/evals/behavioral-regression/; the gate
+# is .github/workflows/behavioral-regression.yml, which READS THIS FIELD and passes it
+# to the runner as --fail-under. The runner performs the comparison and sets the exit
+# code; the gate consumes only that exit code and never parses the report, so exactly
+# one definition of the report contract exists in the tree.
+#
+# THIS FIELD IS THE SINGLE NUMERIC HOME FOR THE FLOOR AND RESTATES NOTHING ELSE.
+# What the number MEANS -- the denominator, the boundary it binds at, and what a
+# below-floor run does to a release -- is canonical in
+# release/ADRs/ADR-183-behavioral-regression-floor-and-major-release-binding-boundary.md
+# and core/standards/regression-checks.md. Those surfaces name the floor BY ROLE and
+# never restate its magnitude, so a recalibration moves this line and nothing else.
+# (Same convention as [bundling].mode_a_parse_rate_floor above.)
+#
+# WHY 1.00 RATHER THAN THE 0.90 OF THE RATE-FLOOR PRECEDENT. A regression corpus's
+# members are must-hold assertions: any failing scenario IS a regression, by the
+# corpus's own definition. A sub-1.0 floor is therefore a standing regression budget --
+# you may regress N% forever and stay green -- which is the never-FAIL anti-pattern in a
+# different costume. A known-open defect is carried instead as an expected-FAIL
+# assertion (`expect: "fail"` per the scenario-eval contract), which holds the rate at
+# the floor while keeping the exception named in the run and retirable.
+#
+# FAIL-CLOSED ON AN UNRESOLVABLE VALUE. A consumer that cannot resolve this field
+# must treat it as UNRESOLVED and fail, never as zero: a zero floor satisfies every
+# `>=` comparison and would green the gate permanently. This mirrors the
+# empty-means-UNRESOLVED contract the platform's other rate-floor readers already
+# honour.
+# Calibration policy: CALIBRATE-AFTER-3 -- 1.00 is a seed, not a measurement. The
+# corpus did not exist when it was set, so there was no observed distribution to
+# calibrate against; recalibrate from observed corpus behaviour after 3 releases.
+# Valid: a decimal fraction in [0.0, 1.0].
+# Default: 1.00
+pass_rate_floor = 1.00
