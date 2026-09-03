@@ -1,0 +1,94 @@
+# FIXTURE — a REJECTION arm: a kit whose kind claims a container tier. PACK-K06a.
+#
+# THIS IS THE FIXTURE THE CARD ASKED FOR AS ACCEPTANCE, and it is the rejection arm.
+# AC-1 asked the kit to "declare or project a kind for every level that participates
+# in a rollup — portfolio, program and project". A kind's `base` is the const
+# "Work Item" with no other base permitted, and the entity model holding Portfolio,
+# Program, Project and Milestone/Workstream is FROZEN — so a kind at a container tier
+# is exactly the "new entity node" the card's own AC-2 forbids. Building this shape
+# as the acceptance arm would have shipped the defect as its own evidence.
+#
+# ITS RED ARM IS THE SHIPPED STATE, not a hypothetical past one. Before this change
+# `general_level = "Portfolio"` was LEGAL: admitted by the Layer-1 enum, called only
+# "a modeling smell to flag" by its own schema row, and read by zero executables.
+# Run --validate-packs against this file at the branch point and it PASSES.
+#
+# ONE planted defect, so the arm can assert PACK-K06a AND THE ABSENCE OF EVERY OTHER
+# rule. `ground-task` is present and conforming precisely so the pack is otherwise
+# valid — the rejection is attributable to the tier claim and to nothing else. Note
+# `general_level = "Portfolio"` is IN the Layer-1 enum, so PACK-K06 (domain
+# membership) correctly does not fire; only the kit-conditional narrowing does.
+#
+# No [[labels]] facet: a label row joining to a kind would add a second failure
+# surface to a fixture whose whole value is carrying exactly one.
+
+[meta]
+pack_id = "tier-claiming-kit"
+pack_version = "0.1.0"
+applies_to = "*"
+role = "kit"
+kit_class = "work-item"
+
+# ── THE PLANTED DEFECT: a kind occupying a container tier ───────────────────
+[[kinds]]
+kind_id = "portfolio-bucket"
+display_name = "Portfolio Bucket"
+base = "Work Item"
+axis1_state_machine = "inherit"
+
+[kinds.methodology_projection]
+archetype = "*"
+general_level = "Portfolio"      # <-- PACK-K06a. A kind never occupies a tier.
+projects_as = "Portfolio Bucket"
+
+[kinds.fields]
+core = "inherit"
+
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+
+[kinds.relationships]
+allowed_types = ["BELONGS_TO", "RELATES_TO"]
+
+[kinds.lifecycle_behavior]
+timeboxed = "gate"
+continuous = "gate"
+phased = "gate"
+
+# ── conforming, so the pack fails on the tier claim and nothing else ────────
+[[kinds]]
+kind_id = "ground-task"
+display_name = "Ground Task"
+base = "Work Item"
+axis1_state_machine = "inherit"
+
+[kinds.methodology_projection]
+archetype = "*"
+general_level = "Work Item"
+projects_as = "Ground Task"
+
+[kinds.fields]
+core = "inherit"
+
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+
+[kinds.relationships]
+allowed_types = ["BELONGS_TO", "RELATES_TO"]
+
+[kinds.lifecycle_behavior]
+timeboxed = "gate"
+continuous = "gate"
+phased = "gate"

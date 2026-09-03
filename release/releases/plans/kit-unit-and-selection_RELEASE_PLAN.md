@@ -1,0 +1,504 @@
+<!-- reference-durability: allow-link -->
+<!-- reference-durability: allow-version-ref -->
+<!-- repo-integrity: allow-issue-ref -->
+---
+title: Release Plan — kit-unit-and-selection
+purpose: Stage-4 release plan for the five kit-unit-and-selection members — a work-item kit becomes a first-class, archetype-neutral, kind-bearing unit a deployment selects independently of the methodology it runs.
+type: release-plan
+plan_type: release
+status: ACTIVE
+reversibility: EXPENSIVE / Confidence HIGH
+consumers: Stage 5-9 spokes; the release hub; Stage 9 Plan Review
+---
+
+# Release Plan: kit-unit-and-selection — A Work-Item Kit Is a First-Class, Selectable Unit
+
+## Header
+
+| Field | Value |
+|-------|-------|
+| **Version** | {{RELEASE_VERSION}} |
+| **Bump Class** | minor — the durable determination. The concrete number binds only at the Stage-12 atomic claim. Recomputed at Engineering Commit 0 per the authoritative-version-selection procedure against tags, published Releases and ledger rows, and RE-recomputed at every Stage-12 pass; anchor tag **v4.48**, recomputed next-free **v4.49**, free at re-computation on all four surfaces (no `v4.49` tag, no published Release, no `RELEASE_LOG` row, no `plans/v4/` file). v4.48's ledger surfaces have since landed on the mainline, so the tag and ledger surfaces now agree on the same anchor rather than one leading the other. Every earlier computation is kept rather than overwritten, because each was correct against the mainline it could see and the sequence of losses is the evidence that the number cannot be carried: Commit 0 returned anchor **v4.45** / next-free **v4.46** until `portfolio-tier-framework-pack` merged and took v4.46; the post-merge remediation returned **v4.46** / **v4.47** until `adr-corpus-status-integrity` merged and took v4.47; the Stage-12 rebase returned **v4.47** / **v4.48** until `label-and-reference-integrity` merged — during this release's own CI wait — and took v4.48. Three recomputations, three sibling merges. A value bound against a moving population is not bound; the binding act is the atomic claim at the merge SHA, not any of these reads. |
+| **Date Created** | 2026-09-01 (Tuesday) |
+| **Commit-0 Date** | 2026-09-01 (Tuesday) — the resolution instant for every load-bearing date this release writes |
+| **Release Manager** | Agent-assisted (release-hub Mode O) |
+| **Status** | Executing (Stage 6 Engineering) |
+| **Branch** | `release/kit-unit-and-selection` |
+| **PR** | opened as a DRAFT at the first Engineering spoke's commits; the release ships as a SINGLE PR with one merge gate, transitioned to ready-for-review at the Stage 9 gate |
+| **Milestone** | `kit-unit-and-selection` (#371) |
+| **Release Class** | `cross-cutting` — re-classified at the Stage-4 plan gate (D-ReleaseClass) from `novel` |
+| **Composition** | keystone bundle; single connected dependency component (6 edges over 5 nodes) |
+| **Effective points** | **39** — 30 raw × `cross-cutting` weight 1.3, against a 15–25 band. **Over ceiling, dispositioned (C) keep-with-rationale by the operator.** Two independent changes each crossed it: the class re-classification (22 × 1.3 = 29) and #6361's L → XL re-estimate absorbing the meta-schema validator (30 × 1.3 = 39). Splitting is rejected on the dependency graph's own algorithm: the component is connected, so every sub-slice immediately depends on another and a split buys ceremony without isolation. Accepted oversize; reversibility MODERATE, confidence HIGH. |
+| **Branch topology** | **SINGLE** (D-C) — one branch, one PR, one merge gate; this plan lands as Engineering Commit 0 |
+| **Concurrency posture** | **P0 fully-serial** (D-Concurrency Posture). One Engineering chip at a time in Implementation Sequence order; the next chip waits until the prior commit lands on the release branch. Force-push on the shared release branch is prohibited, including `--force-with-lease`. |
+| **Baseline** | `origin/main` @ `539c4440fc1457e8d42d2bbe11c7be663baf596f` — the pinned baseline; every Engineering spoke branches from it |
+
+**Stamp manifest.** The `**Version**` cell above is a machine-read manifest, not prose. It carries the literal `{{RELEASE_VERSION}}` token, which the Stage-12 claim resolves at the merge SHA while renaming this file to `release/releases/plans/v4/vX.Y_RELEASE_PLAN.md`. Asserted read-only at Commit 0 by `release/tools/claim-version.sh --verify-stamp kit-unit-and-selection`; a plan that fails that assertion is never committed, because Stage 12 could then neither resolve the version nor complete the rename.
+
+## Release Outcome Statement
+
+**AFTER** — a deployment declares and selects a work-item kit independently of the methodology it runs; the kit types work at the **Work-Item level** and **projects onto** every organizational level a rollup traverses, introducing no entity at any of them. The full impact chain of the change is mapped before the grammar moves.
+
+**BEFORE** — kind-bearing is welded to archetype identity — a kind-bearing pack must name exactly one archetype, and the methodology-neutral value is reserved for packs that cannot bear kinds. A cross-methodology kit is not expressible. The grouping/execution distinction has no grammar carrier, so a rollup's traversal is invisible to the type system and enforcement falls back to hardcoded literals.
+
+> **Amended 2026-09-01 (Tuesday) at Collective Review (D-OutcomeAmend).** Both clauses previously encoded a mechanism the Stage-5 design **overturned** — that a kit types container tiers directly, and that Work-Item-level anchoring is the defect. Verified: the meta-schema fixes `base` as `const "Work Item"` with *"No other base permitted"*, and `project-entity-model.md` is the FROZEN entity substrate, so a kind at Portfolio / Program / Project would be the very "new entity node" #6381's own AC-2 forbids. Work-Item-level typing is structurally mandatory, not a shortcoming. The real gap, measured at the pinned baseline: `general_level` was read by **0 of 244** repo executables — the tracked `.py` / `.sh` / `.ps1` census, **72 / 169 / 3** (an earlier rendering of this figure read **241** under a narrower `.py` / `.sh` method; the two differ by method, not by error) — while its own schema row calls a non-`Work Item` value *"a modeling smell to flag"*, and the grouping/execution distinction had no grammar carrier while live enforcement hardcodes the literal `type:epic` in **6** executables. Both limbs of that gap are closed by this release, which is what the AFTER clause above states; the figures are anchored to the baseline so the frame records the gap rather than asserting it still stands. Amended rather than annotated because the Outcome Statement is the acceptance frame Stage 13's 30-day outcome window grades against; a stale frame mis-grades the release. Card bodies remain untouched as historical record.
+
+## Release Class
+
+Class: **`cross-cutting`**
+
+Re-classified 2026-09-01 (Tuesday) at the Stage-4 plan gate (D-ReleaseClass), from `novel`. Multi-trigger resolution takes the highest-ceremony class: `cross-cutting` > `novel` > `routine`.
+
+| Class | Trigger | Fires? | Evidence |
+|---|---|---|---|
+| `novel` (a) | ≥1 issue introduces a new reference doc / schema / skill | YES | #6360 adds an ADR; #6377 adds the consumer map |
+| `novel` (b) | ≥1 D-class decision in the release plan | YES | D-Version, D-ReleaseClass, D-Concurrency Posture, plus the two placement D-decisions |
+| `novel` (c) | ≥1 Stage 5 ADR | YES | #6360 *is* the founding ADR |
+| `cross-cutting` (a) | matrix changes ≥3 pipeline stage specs | NO | 0 |
+| `cross-cutting` (b) | matrix changes ≥3 of the 6 rule-defining governance surfaces | NO | 0 of 6 |
+| `cross-cutting` (c) | ≥3 in-bundle compositional edges | **YES — 6 edges over 5 nodes** | the Stage-4 A2 DAG; robust to the one card-absent edge (5 still clears 3) |
+
+Differentiation delta is narrow and was verified against the dimension table: only **engagement density** moves (Standard → **Tight**). Stage 9 review depth (Deep), Stage 5 activation bias (ALL) and the Stage 13 outcome window (30-day) are identical across the two classes. The consequential change is the **capacity weight** (1.15 → 1.3), recorded in the Header.
+
+**Additive-landing premise, as corrected.** The release does **not** land as "one optional add plus one relaxation." The real shape is **4 adds + 1 relaxation + 1 restriction**, and the meta-schema grammar version stays **v1**. The full enumeration and its grounding are in § Backward-Compat Landing below; the correction is recorded here because Release Class rests on it.
+
+## Scope
+
+### Issues Included
+
+| # | Issue | Title (abbreviated) | Layer | Size | Stage 5 |
+|---|-------|---------------------|-------|------|---------|
+| 1 | #6360 | Decide the work-item kit as a first-class unit — founding ADR | foundation | S (2) | APPLIED |
+| 2 | #6377 | Map the full link and blast-radius chain | foundation | M (4) | APPLIED |
+| 3 | #6361 | Make a work-item kit expressible in the pack grammar | infrastructure | XL (16) | APPLIED |
+| 4 | #6362 | Select a work-item kit through the configuration cascade | infrastructure | M (4) | APPLIED |
+| 5 | #6381 | Cover every organizational level in the kit, portfolio down | infrastructure | M (4) | APPLIED |
+
+**Total 30 raw points.** #6361 was re-estimated L → XL at the Stage-4 plan gate when it absorbed the meta-schema validator; this is a Stage-4 scope absorption, not a Triage re-estimate.
+
+### Composition Lock
+
+**Locked at:** Stage 4 Planning entry · 2026-09-01 · planning sub-task #6447. Membership **5 in / 5 out**, unchanged. `issues_added` MUST be **0** for the remainder of the release. Work that does not fit an existing member routes to a next bundle and is surfaced, never filed. The lock was enforced once already: a proposed re-home of #6371 into this milestone was **not performed**; the intent was satisfied instead by per-issue scope refinement on #6361, which is explicitly outside what the lock binds.
+
+### Scope-lock (Collective Review)
+
+Scope **LOCKED** at Collective Review, 2026-09-01 (Tuesday): 5 of 5 Solutioning PASS, membership unchanged. Six decisions were rendered; the ones that bind Engineering are carried in § Ratified Corrections below.
+
+## Ratified Corrections Engineering Carries
+
+These are operator-rendered decisions and independently-verified findings that change what Engineering builds. They are recorded here because a spoke reading only its own Stage-5 comment would build the superseded shape.
+
+**D-CarryFindings — the independent adversarial review's findings carry into Stage 6; Stage 5 is NOT re-opened.** Two of them land on this release's foundation cards and are restated in full:
+
+- **`kit_class` generality was overclaimed (falsified).** The Stage-5 design for #6360 claimed the second-kit-class problem was discharged *"by construction, not by promise"* by conditioning facet requiredness on `kit_class`. Its own downstream rule set conditions requiredness on `role` instead — `kinds` required iff `role ∈ {archetype, kit}`, unconditionally for every kit — so a `field` or `workflow` kit declaring no work-item kinds is hard-rejected and the second class costs a grammar re-open. A second symptom of the same root: the `kit_class` value domain is declared OPEN with an unknown class yielding a caveat rather than an error, but the `role`-conditioned `kinds` rule rejects that same pack on a different rule, so the open domain is unreachable as written. **Resolution taken at Stage 6:** ADR-180 states the requiredness rule as a two-level rule — forbidden on `base`, required on `archetype`, and on `kit` **selected by `kit_class`** — and the grammar edit implements it. Detail in § Backward-Compat Landing.
+- **The empty-vocabulary premise was falsified by execution (D-EmptyKitRetire).** The premise that "a deployment selecting a kit and licensing no archetype pack resolves to an empty vocabulary and exits 3" is false: a conforming kit is mandatorily kind-bearing, so a kit-only root resolves the kit's own kinds. Executed against the shipped reader at Commit 0 — a kit-only pack root emits its kind and exits **0**; the sensitivity arm (a root whose only pack declares no kinds) exits **3**, so the detector is live; the control arm (the repo root) emits four kinds and exits 0, so the reader is live. **D-EmptyKit is RETIRED by supersession.** No empty-vocabulary constraint is carried into ADR-180. The replacement constraint is identified at Stage 6 by #6362, whose criterion inherited the false predicate.
+
+**D-CompatShape — the corrected backward-compat shape.** Recorded in full in § Backward-Compat Landing. The decision (grammar stays **v1**; additive in effect on shipped packs) is unchanged; only the arithmetic and the restriction axis moved.
+
+**D-MapHome** — the consumer map lands at `core/references/reference/work-item-type-consumer-map.md`. Settled; not relitigated.
+
+**D-FixtureHome** — every fixture pack this release introduces lives under `core/deploy/tests/fixtures/packs/`, **never** under `core/packs/`. The ground is structural, not stylistic: the licensed-kind reader unions `kind_id` rows from any directory under `core/packs/` holding a `pack.toml`, with no allowlist, no naming filter and no underscore-prefix skip, so a fixture inside that tree is silently absorbed into the production gate's vocabulary.
+
+**D-ReadmeSplit + CR-1** — section ownership on `core/packs/README.md`, which three cards name in their acceptance criteria. #6361 owns `## The role and extends model` **plus** the head matter, the H1 and `## Layout`; #6362 owns a new `## Kit selection and precedence`; #6381 owns `## What lives where`. Waves are serial and the release ships as one PR, so this is sequencing, not conflict — but the last writer would otherwise inherit all three obligations blind.
+
+**D-Instrument** — the `SCANNED_TYPES` fix adding `py` to `release/tools/blast-radius.sh` lands as Stage-6 scope on #6377. Two action items are hard-gated at close: the fix MUST ship with a self-test arm exercising at least one `.py` reference under a RED→GREEN assertion (the current suite passes identically patched and unpatched, so shipping the one-line fix alone would re-create the gate-that-cannot-fail class this card exists to document); and `release/tools/domain-blast-radius.sh` MUST NOT be extended — it already carries `py` and its blindness is architectural, not a type-list omission.
+
+**CR-2 — D-KitFieldShape: RENDERED at Stage 6 by #6362. The selection field is a flat scalar, `operator.toml [methodology].default_work_item_kit`.**
+
+Collective Review deferred this rather than settling it, and named the risk that a deferred decision gets settled by whoever writes first. The rationale is therefore recorded here, in its own commit, **before** either shape was implemented.
+
+*The two candidates.* **(a)** a flat scalar `default_work_item_kit` in the existing `[methodology]` table, one key per kit class named for its class; **(b)** a class-keyed map `[methodology.default_kits]` whose keys are `kit_class` values — `work-item = "<pack_id>"`.
+
+*The map's stated ground was already falsified.* #6360's D-Rec-3 preferred (b) because a flat scalar *"forces a governed Track-A config change for every future class."* Check 70 leg **C70c** asserts that the declaration's key set equals `operator.toml.template`'s key set in **both** directions, in ENFORCE mode, so a new class costs one governed declaration entry under **either** shape. Cost is not the discriminator.
+
+*What decides it is a fact neither Stage-5 design probed: the map is not expressible at its own canonical key.* C70c extracts template keys with `^([A-Za-z_][A-Za-z0-9_]*)\s*=` — a charset that **excludes the hyphen**. The `kit_class` value ADR-180 registers is `work-item`, hyphenated, and that is its sole spelling in the ADR, in the pack corpus README and in the validator. A template line `work-item = "…"` under `[methodology.default_kits]` is therefore **invisible to the gate's own extractor** while its declaration entry is visible, so C70c reports the key as declared-but-absent and **hard-fails the build**. Quoting the key does not help; the regex is anchored and a quote is not in the leading class either.
+
+Executed against the real predicate over synthetic roots, six arms:
+
+| Arm | Shape | Exit | C70c denominator |
+|---|---|---|---|
+| baseline | unmodified repo pair | **0** | 40 declared / 40 template |
+| A | flat `[methodology].default_work_item_kit`, declared | **0** | 41 / 41 |
+| **B** | **map `[methodology.default_kits].work-item`, declared** | **1 — FAIL** | 41 / **40** |
+| C | same nesting, key respelled `work_item` | **0** | 41 / 41 |
+| D | *sensitivity* — nested key in template, undeclared | **1 — FAIL** | 40 / 41 |
+| E | *sensitivity* — flat key declared, undocumented | **1 — FAIL** | 41 / 40 |
+
+Arm C isolates the cause: **the nesting is fine, the hyphen is not.** Arms D and E are the live controls that make B a real firing rather than a dead reader.
+
+*So the map has exactly one way to ship, and it is worse than the option it was preferred over.* Respelling the key `work_item` forks a second spelling of a value ADR-180 froze as `work-item` — a shadow vocabulary at precisely the seam that record declares OPEN, on the field whose whole purpose is to be extended by later classes. Every future class would inherit the fork.
+
+*Decision: **(a)**, the flat scalar.* It passes the enforcing gate at its canonical spelling; it is byte-symmetric with the sibling axis `default_delivery_approach` that AC-3 and AC-4 both reason against; and it is prefix-distinctive under the section-blind TOML readers this repo documents as such. Generality is carried by `kit_class` on the **pack** (ADR-180 D3), not by the selection field — a future `field` kit gets `default_field_kit`, re-founding nothing.
+
+*What would change my mind — either alone.* **(i)** C70c's key regex is widened to the TOML v1.0 bare-key charset (`[A-Za-z0-9_-]`), which removes the expressibility objection and returns the decision to the original cost-and-enumerability trade, where the map's real advantage — enumerating selected kits without knowing class names — is genuine. **(ii)** A consumer appears that must iterate the selected-kit set without knowing class names. Neither holds today: no such consumer exists and one class exists. If either arrives the migration is a **CHEAP** ALIAS along the path ADR-022 D3 already walks for `[platform].work_board`.
+
+**Reversibility: CHEAP / Confidence HIGH** pre-consumption — the field is optional at every rung and absent is the pre-kit status quo. Crosses to MODERATE once a deployment authors the key.
+
+**D-EmptyKitReplace — the constraint that replaces D-EmptyKit. Rendered at Stage 6 by #6362.**
+
+D-EmptyKit was retired because its predicate was false. The operator directed *retire **and replace***, so what the real constraint is had to be determined — and "there is none" was a permitted answer that still had to be **reached**, not assumed.
+
+*Method: enumerate every reachable state in which a resolution is empty, and run the shipped reader over each, every subject arm paired with a control over the same root that must return a non-zero count.* The rows are the enumeration; Q6 was added when the same method was re-run at the shipping head, which is why this is a set and not a total:
+
+| # | State | Observed | Kit-specific? |
+|---|---|---|---|
+| Q1 | conforming work-item kit, no archetype pack | `deliverable`, COUNT 1, **exit 0** | the retired premise, falsified again |
+| Q2 | kit with an **unregistered** `kit_class` and no kinds | validates (`PACK-P08` caveat, exit 0); resolves COUNT 0, exit 0 | **yes** |
+| Q3 | base pack only | COUNT 0, exit 0 | **no — pre-kit** |
+| Q4 | archetype pack present, none matching the archetype | COUNT 0, exit 0 | **no — pre-kit** |
+| Q5 | base + archetype + kit | COUNT 2, exit 0 | the normal case |
+| Q6 | a kit **welded to one archetype at its header** (`applies_to = "Scrum"`), selected under a non-matching archetype | `--resolve Kanban` → `EXCLUDED`, COUNT 0, exit 0; control `--resolve Scrum` → COUNT 1 | **yes** |
+
+*The finding.* The doors to an empty resolution are ENUMERATED, not counted — an earlier form of this paragraph read "three doors", and a fourth (Q6) was found afterwards by the same method, which is exactly what a count cannot absorb. **Q3 and Q4 are pre-kit shapes this release does not touch** — a deployment could reach both before kits existed, and nothing about the kit changes either. **Q2 and Q6 are kit-specific.** Q2 is not a violated constraint but the **correct behaviour of an open class domain**: a `field` kit is not supposed to contribute work-item kinds, and the grammar already names the state — `PACK-P08` emits a caveat carrying the offending value rather than staying silent.
+
+**Conclusion: there is no genuine joint-emptiness constraint on the selection axis, and this release asserts none.** `SEL-06` is not resurrected in any form, and no empty-vocabulary rule is added to any surface.
+
+*What the replacement constraint is instead.* D-EmptyKit was reaching for a real hazard and aimed it at the wrong observable. The hazard selection genuinely introduces is that **a selection that fails to resolve is observationally identical to no selection at all** — both yield a union carrying no kit-attributed rows. That shape is new with `--kit`, it is the silent-drop class one rung above #6361's, and unlike emptiness it is executable:
+
+> **SEL-RESOLVE — a kit selection resolves, or it fails loudly. The absence of a selection and the failure of a selection must never produce the same observation.** A `--kit <pack_id>` naming a pack absent from the read root, or present but not `role = "kit"`, is **exit 3**, naming the pack and, where it exists, its actual role. It is never a fall-through to "no kit selected." The same rule binds `--k4`.
+
+*Boundary, stated rather than implied.* This constrains **selection resolvability**, not pack conformance. A pack that is malformed *as a kit* is `--validate-packs`'s business (`PACK-P05`, `PACK-K05`); `--resolve` does not duplicate validation. Two modes, two jobs.
+
+## Backward-Compat Landing
+
+The meta-schema grammar version stays at **v1**. The change is **4 adds + 1 relaxation + 1 restriction**, and the set — not a literal count — is what the grammar's own extension note records, because the population closed one wave after the count was first written.
+
+**Adds (4), all optional; a pack declaring none is byte-identical to a pre-change pack:**
+
+| # | Add | Owner |
+|---|---|---|
+| 1 | the `kit` member of the `role` enum | #6361 |
+| 2 | the `kit_class` field, required iff `role = "kit"` | #6361 |
+| 3 | the `"*"` value in the `methodology_projection.archetype` domain | #6361 |
+| 4 | the `methodology_projection.level_role` field | #6381 |
+
+**Relaxation (1), asymmetric on the forward axis:** `extends` widens from permitted only on `role = "archetype"` to permitted on `role ∈ {archetype, kit}`. An old validator asserting `extends ⇒ role == "archetype"` would reject a now-valid kit pack. Theoretical at the moment the relaxation was taken, and measured rather than asserted: at the pinned baseline **0 of 244** tracked executables validated against the meta-schema — the same `.py` / `.sh` / `.ps1` census as the consumer map's, **72 / 169 / 3**, not the narrower `.py` / `.sh` 241. The validator this release builds is kit-aware from the start rather than retrofitted, and it is the **first** — so the window in which this relaxation was free closes with this release, and a future relaxation of this grammar meets a live reader.
+
+**Restriction (1) — the one shape that can invalidate a previously-valid pack:** `applies_to = "*"` becomes **illegal** on `role = "archetype"`. It is legal today; the role-conditional constraint is one-directional (a `base` pack MUST set `*`) and nothing binds archetype packs. The consequence is bounded by measurement rather than assertion: **0 of 3** shipped packs combine `role = "archetype"` with `applies_to = "*"` — `_common` is `role = base` (which must be `*`, unaffected), `kanban` is `Kanban`, `scrum` is `Scrum`. Control arm live at Commit 0 (`role = base` with `*` → 1), specificity arm 0, so the zero is real and the byte-identity guarantee for the shipped packs holds.
+
+**Restate as: additive in effect on shipped packs, not purely additive in grammar.** The restriction closes a door no shipped pack walked through. The residual is named rather than dismissed: pack *instances* are operator-local configuration by design, so the repo is not the whole population — the restriction ships with zero enforcing validators today, and the grammar's own extension note states the restriction axis explicitly so an adopting deployment reads it before it bites.
+
+**The count was corrected, not the decision.** The fourth add (`level_role`) entered in wave 3, one wave after the shape was recorded at three. A bucket assignment ("it lands in the ADD bucket") was conflated with a count ("the count is unchanged") at that handoff. The obligation this places on #6361 is to **enumerate the ADD set rather than total it**, and to carry `level_role` as a named member.
+
+## Implementation Sequence
+
+Stage-6 Engineering is **P0 fully-serial**. The order below is the authoritative Stage-6 dispatch order.
+
+**#6360 → #6377 → #6361 → #6362 → #6381**
+
+| Position | Issue | Pts | Rationale |
+|---|---|---|---|
+| 1 | **#6360** | 2 | In-degree 0. The founding ADR every downstream acceptance criterion cites. Lands Engineering Commit 0 (this plan). |
+| 2 | **#6377** | 4 | In-degree 0 and genuinely independent of #6360 — neither names the other on any surface. Gates #6361 **and** #6362; the map must exist before the grammar moves. |
+| 3 | **#6361** | 16 | The single structural change: the grammar, the validator, the fixture home convention. Every remaining member resolves against it. |
+| 4 | **#6362** | 4 | Consumes the grammar. Placed before #6381 to take `core/packs/README.md` first under serial file contention. |
+| 5 | **#6381** | 4 | Last writer on `core/packs/README.md`. Its rules ride #6361's validator mode rather than adding an argv branch. |
+
+**Parallel-eligible sets (Stages 5 / 7 / 8 only — coordination semantics, not usage-window semantics):** wave 1 `{#6360, #6377}` · wave 2 `{#6361}` · wave 3 `{#6362, #6381}`. **Stage 6 remains serial regardless of wave.**
+
+## Stage Applicability Matrix
+
+| Issue | S5 | S6 | S7 | S8 | S9 | S10 | S11 | S12 | S13 |
+|---|---|---|---|---|---|---|---|---|---|
+| #6360 | YES | YES | YES | YES | YES | YES | YES | YES | YES |
+| #6377 | YES | YES | YES | YES | YES | YES | YES | YES | YES |
+| #6361 | YES | YES | YES | YES | YES | YES | YES | YES | YES |
+| #6362 | YES | YES | YES | YES | YES | YES | YES | YES | YES |
+| #6381 | YES | YES | YES | YES | YES | YES | YES | YES | YES |
+
+**No stage skips for any member, and each YES rests on positive evidence rather than on default.** #6360's Stage 7 applies because the ADR durability and ADR numbering checks are executable and fire on a new `core/ADRs/ADR-*.md`. #6377's applies because the map is durable corpus subject to doc-link and reference-durability checks, and because its blast-radius fix carries a RED→GREEN self-test arm. #6361 / #6362 / #6381 each carry predicate-form criteria with declared fixture methods that Stages 7 and 8 grade. Nothing here is documentation-only, so the no-functional-impact skip is unavailable to any member.
+
+**Parallel-eligible spoke count per parallel stage:** Stage 5 = 5 · Stage 7 = 5 · Stage 8 = 5.
+
+## Contention Map
+
+| Surface | Writers | Order | Handling |
+|---|---|---|---|
+| `core/packs/README.md` | #6361, #6362, #6381 | serial per sequence | D-ReadmeSplit + CR-1 assign disjoint sections. Each chip re-reads the file at checkout rather than patching from a stale copy. CIAC-2 grades the merged end state. |
+| `core/schemas/work-item-type-schema.md` | #6361, #6381 | serial per sequence | #6361 authors the role / `applies_to` / `extends` / `kinds` / `kit_class` / archetype-domain edits and the extension note; #6381 adds `level_role` inside the existing projection object and is recorded in the ADD set. CIAC-4 grades that no parallel level enum is minted. |
+| `core/deploy/tools/check-work-hierarchy.py` | #6361, #6362, #6381 | serial per sequence | #6361 authors both new argv branches; #6362's and #6381's rules **ride** them and add no third branch. The H1/H2 finding set and the existing kind-emit output stay byte-identical, asserted by a regression arm. |
+| `operations/skills/intake-desk/references/type-map.md` | #6361, #6381 | serial per sequence | Disjoint lines by assignment: #6361 owns the rung-2 join; #6381 owns the hierarchy-level statement. |
+| `core/deploy/tests/fixtures/packs/` | #6361, #6362, #6381 | serial per sequence | #6361 establishes the layout convention (one directory per fixture, root-parameterized read); the other two extend it. CIAC-5 grades the single-home constraint. |
+
+## File Change Matrix
+
+```
+# ── #6360 — founding ADR ──
+core/ADRs/ADR-180-work-item-kit-first-class-unit.md                       add
+
+# ── #6377 — consumer map + instrument fix ──
+core/references/reference/work-item-type-consumer-map.md                  add
+core/references/reference/README.md                                       edit
+release/tools/blast-radius.sh                                             edit
+
+# ── #6361 — the grammar, the validator, the fixture home ──
+core/schemas/work-item-type-schema.md                                     edit
+core/packs/README.md                                                      edit
+core/deploy/tools/check-work-hierarchy.py                                 edit
+core/deploy/tools/README.md                                               edit
+core/deploy/deploy.sh                                                     edit
+operations/skills/intake-desk/references/type-map.md                      edit
+core/deploy/tests/fixtures/packs/conforming-kit/pack.toml                 add
+core/deploy/tests/fixtures/packs/nonconforming-kit/pack.toml              add
+packages/intake-desk.skill                                                edit
+packages/intake-desk.skill.sha256                                         edit
+
+# ── #6362 — selection through the cascade ──
+core/config/operator.toml.template                                        edit
+core/config/operator-toml-schema.json                                     edit
+core/schemas/project-schema.md                                            edit
+core/schemas/platform-config-schema.md                                    edit
+docs/platform-config-reference.md                                         edit
+core/deploy/tests/fixtures/packs/selection/sel-common/pack.toml           add
+core/deploy/tests/fixtures/packs/selection/sel-scrum/pack.toml            add
+core/deploy/tests/fixtures/packs/selection/sel-kanban/pack.toml           add
+core/deploy/tests/fixtures/packs/selection/sel-kit-alpha/pack.toml        add
+core/deploy/tests/fixtures/packs/selection/sel-kit-beta/pack.toml         add
+core/deploy/tests/fixtures/packs/selection/sel-kit-gamma/pack.toml        add
+core/deploy/tests/fixtures/packs/selection/sel-k4-override/pack.toml      add
+core/packs/README.md                                                      edit
+core/ADRs/ADR-180-work-item-kit-first-class-unit.md                       edit
+core/references/reference/work-item-type-consumer-map.md                  edit
+
+# ── #6381 — level coverage ──
+core/deploy/tests/fixtures/packs/rollup-kit/pack.toml                     add
+core/deploy/tests/fixtures/packs/tier-claiming-kit/pack.toml              add
+core/deploy/tests/fixtures/packs/nested-grouping-kit/pack.toml            add
+core/schemas/work-item-type-schema.md                                     edit
+core/deploy/tools/check-work-hierarchy.py                                 edit
+core/packs/README.md                                                      edit
+operations/skills/intake-desk/references/type-map.md                      edit
+packages/intake-desk.skill                                                edit
+packages/intake-desk.skill.sha256                                         edit
+
+# ── Stage 12 — release mechanics (outside every card's scope) ──
+core/ADRs/README.md                                                       edit
+
+# ── Release-wide explicit non-scope ──
+core/packs/_common/pack.toml                                              NOT EDITED
+core/packs/scrum/pack.toml                                                NOT EDITED
+core/packs/kanban/pack.toml                                               NOT EDITED
+release/tools/domain-blast-radius.sh                                      NOT EDITED
+```
+
+### Read-only inputs
+
+```
+core/disciplines/project-entity-model.md                                  READ
+core/schemas/entity-field-schemas.md                                      READ
+core/ADRs/ADR-018-work-item-type-layer.md                                 READ
+core/ADRs/ADR-069-methodology-pack-composing-unit.md                      READ
+core/ADRs/ADR-070-methodology-pack-composition-grammar.md                 READ
+core/ADRs/ADR-077-cross-cutting-control-field-layer.md                    READ
+core/deploy/tools/check-label-parity.py                                   READ
+core/governance/OPERATIONS.md                                             READ
+```
+
+**Notes binding the matrix.**
+
+- **Both Stage-4 CONDITIONAL blocks are PROMOTED at this commit**, carrying their concrete paths. `CONDITIONAL:map-placement-d-decision` resolved to `core/references/reference/work-item-type-consumer-map.md` (D-MapHome). `CONDITIONAL:fixture-home-d-decision` resolved to `core/deploy/tests/fixtures/packs/` (D-FixtureHome), and the three placeholder fixture rows the Stage-4 matrix carried under `core/packs/tests/fixtures/` are superseded by the twelve concrete fixture rows above. Leaving a row CONDITIONAL after its condition has fired is an authoring defect, so the promotion happens here rather than being deferred.
+- **The three shipped-pack `NOT EDITED` rows are load-bearing, not decoration.** #6361's byte-identity criterion asserts them; the widened role enum leaves each pack's existing `role` value correct and its kinds archetype-keyed by design.
+- **`core/ADRs/README.md` carries NO index row, and that is a determination rather than a drop.** *(The file is nonetheless edited at Stage 12 — by the renumber tool's § Renumber log append, and by a hand-reconciled merge conflict on that same one-line paragraph; see deviation 34. The determination below concerns an enumeration row and is unaffected by either.)* The Stage-5 design listed an index-row edit there. That file states in its own text that it is a curated thematic document and **not** an index, that it has never enumerated the module's full record set, and that it must not be converted to a generated index — the authoritative complete list is the file set itself, whose contiguity CI enforces. The Stage-4 plan reached the same conclusion independently from the index generator's scope block. Adding an enumeration row would create the second hand-maintained surface that file exists to refuse.
+- **`release/tools/domain-blast-radius.sh` is NOT EDITED** (D-Instrument / AI-002). It already carries `py` as the first element of its scanned-type list; its blindness is architectural — a shell subprocess is never an import edge — so no type-list edit reaches it.
+- **`core/governance/OPERATIONS.md` is READ, not edited, by design.** #6362's criterion requires resolution through the *existing* five-rung cascade and asserts no parallel resolution path is introduced, so the resolver is consumed and never modified. An edit appearing here at Engineering would be evidence the criterion was violated.
+- **No new executable script is added**, so the script-execution allowlist companion obligation does not fire. The new deploy check is registered inside the existing script; the validator modes extend an existing tool, adding no new advertiser to the self-test coverage manifest.
+
+`domain_practice: { source: N/A — pipeline-internal release, date: 2026-09-01, domain: governance }`
+
+Sourcing-exempt — every matrix path is an internal pmo-platform artifact (schema, pack grammar, config template, ADR, deploy tooling, release tooling) — and domain-classified `governance`. No secondary domain: there is no application source and no product-facing code in the matrix.
+
+## Risk Register
+
+| ID | Risk | Sev | Root cause | Mitigation (owner) | Reversibility |
+|---|---|---|---|---|---|
+| **R-1** | **RETIRED at the Stage-4 plan gate.** #6361's first criterion named a meta-schema validator that did not exist, making it ungradable | — | The criterion was authored against a capability the roadmap sequenced after it | #6361 absorbed the validator as its sixth criterion (L → XL). The criterion is now gradable in-release and the deferral is withdrawn (Stage 4 / operator) | CHEAP |
+| **R-2** | **#6381's dependency on #6361 is declared nowhere on either card** — milestone-description-only. An actor reading the cards alone would see #6381 as unblocked | MED | Bundle-level sequencing recorded in the milestone description, never mirrored to the card surface | Carried explicitly in the Implementation Sequence above, which is the authoritative order. Serial Stage-6 dispatch makes the edge unviolatable in practice (Stage 4 / operator) | CHEAP |
+| **R-3** | **RESOLVED.** Two placement decisions were unresolved at plan time — the map's home and the fixture home | — | Neither card named a path at intake | Both rendered at Collective Review (D-MapHome, D-FixtureHome) and promoted into the matrix above. CIAC-3 and CIAC-5 grade the resulting single-home constraints (Stage 4 / operator) | CHEAP |
+| **R-4** | **Rollback is release-atomic, not per-issue — keystone amplification.** Five downstream milestones resolve against this bundle's definition of a kit; #6362 and #6381 are meaningless without #6361, and #6361 is meaningless without #6360's ADR | HIGH | Structural: the bundle ships one definition and four consumers of it, on a single PR under milestone-one-PR discipline | Revert is whole-PR and that is the correct granularity — do not attempt a partial revert. The compensating control is front-loaded: the consumer map is inside the bundle and gates the grammar change. Deep Stage 9 review (Stage 9) | **EXPENSIVE** |
+| **R-5** | **`core/packs/README.md` takes three sequential writers.** The last writer sees a file two prior chips have reshaped | MED | 3-way single-file contention under P0 serial Engineering | D-ReadmeSplit + CR-1 assign disjoint sections; each chip re-reads at checkout. CIAC-2 grades the merged end state for mutual consistency (Stage 6 / Stage 9) | CHEAP |
+| **R-6** | **The licensed-kind reader silently widens its vocabulary.** It walks every directory under `core/packs/` and unions declared kinds into the SSOT vocabulary; a fixture pack placed there would be absorbed into the live gate's vocabulary | MED | The consumer discovers packs by directory enumeration, not by an explicit registry; it cannot distinguish a shipped pack from a fixture | D-FixtureHome places every fixture outside `core/packs/`, so the union structurally cannot absorb them. Optional hardening (an explicit skip rule in the union) is flagged for a next bundle, not filed (Stage 6 / #6361) | MODERATE |
+| **R-7** | **Bundle is over band at 39 effective points against a 25 ceiling** | MED | Two independent changes each crossed it; the component is connected so a split does not isolate | Dispositioned (C) keep-with-rationale by the operator; recorded as a breach carried, not a bound satisfied. The split-by-sub-capability arm remains available at Stage 9 if the bundle proves unwieldy (Stage 4 / operator) | MODERATE |
+| **R-8** | **A sibling milestone's parity-gate hardening lands against a moved target.** #6361 changes what a pack-declared kind means; #5291 hardens the gate that validates it, from a different milestone | LOW | Cross-milestone sequencing, correctly recorded as coordination | Coordination-only: the gate stays permissive through this release, so nothing breaks in flight. #5291 reads the post-#6361 definition when it hardens (Stage 13 / #5291's own release) | CHEAP |
+| **R-9** | **Five designs deep with no structurally independent review, and the one independent pass that finally ran falsified three premises three prior verification passes had confirmed** | HIGH | No independent-reviewer agent definition exists in this deployment, so every Stage-5 adversarial pass was self-administered; and one hub verification confirmed a constraint by checking that a line of code existed rather than by exercising it | The independent pass ran before Stage 6 (CR-3) and its findings are carried in § Ratified Corrections. The durable mitigation is the conduct rule the release paid for: **existence is not exercise** — a behavioral claim is verified by running it, and every null result carries a control arm that must fire (Stage 6 / every spoke) | MODERATE |
+
+## Cross-Issue Acceptance Criteria
+
+Five criteria. Each spans ≥2 issues, names a shared surface, and is graded at Stage 9 on the merged PR.
+
+- [ ] **CIAC-1 (#6360 × #6361 — the meta-schema version claim on two surfaces):** the backward-compat landing analysis recorded in the founding ADR and the meta-schema's own extension note **agree that the grammar version is unchanged** — one claim, two surfaces, no divergence. *Method:* `grep -n "stays at v1\|stays v1\|version is unchanged\|grammar version" core/schemas/work-item-type-schema.md core/ADRs/ADR-180-work-item-kit-first-class-unit.md` and confirm both assert retention and neither asserts a bump; sensitivity arm — the same probe over the pre-change schema must return the existing extension-note hits, so a zero on the new note is distinguishable from an unresolvable path.
+
+- [ ] **CIAC-1b (#6360 × #6361 × #6381 — the ADD set is enumerated, not totalled):** the extension note enumerates the **four** optional adds by name, `level_role` among them, rather than stating a literal count that closed one wave early. *Method:* `grep -c "level_role" core/schemas/work-item-type-schema.md` returns non-zero inside the extension note's own section body; control arm — `grep -c "kit_class" core/schemas/work-item-type-schema.md` returns non-zero on the same file with the same instrument, so a zero on `level_role` is a real absence and not a dead pattern.
+
+- [ ] **CIAC-2 (#6361 × #6362 × #6381 on `core/packs/README.md`):** the three obligations landing in this one file — pack **composition order**, **kit-vs-override precedence**, and **the kit types the work and does not redefine the tiers** — are all present and **mutually non-contradictory** after the last writer, in the sections D-ReadmeSplit + CR-1 assign. *Method:* `grep -nE "composition order|precedence|does not redefine" core/packs/README.md` returns ≥3 distinct obligation statements in ≥3 distinct sections; a reviewer confirms no statement negates another.
+
+- [ ] **CIAC-3 (#6377 × #6361 × #6362 on the consumer map):** the map is **cited by the acceptance of both consuming stories** — a map nothing cites is the failure mode the card was written to prevent. *Method:* `grep -rn "work-item-type-consumer-map" core/schemas/work-item-type-schema.md core/packs/README.md core/ADRs/ADR-180-work-item-kit-first-class-unit.md` returns ≥1 hit from the grammar surface and ≥1 from the selection surface.
+
+- [ ] **CIAC-4 (#6361 × #6381 on `core/schemas/work-item-type-schema.md`):** #6381's level coverage **reuses the existing level vocabulary** already declared for the controls facet and introduces **no second, parallel level enum**. *Method:* null-expecting, so it carries its arms — `grep -cE '^\s*levels\s*=' core/schemas/work-item-type-schema.md` counts level-enum declaration sites; expect the pre-existing count with no new distinct enum literal set · control: `grep -c 'Portfolio' core/schemas/work-item-type-schema.md` returns a **non-zero** count on the same file with the same instrument, proving the path resolves and the pattern class matches before the null is believed.
+
+- [ ] **CIAC-5 (#6361 × #6362 × #6381 on the fixture home):** all fixtures introduced by this release live under **exactly one** home — no issue mints a parallel fixture tree. *Method:* enumerate every `add` row in the File Change Matrix above whose path contains `fixture`; assert every such path shares the common parent `core/deploy/tests/fixtures/packs/` · control: assert the same enumeration over `core/packs/` returns **0** rows while a probe for `core/packs/` paths anywhere in the matrix returns non-zero, so the zero is a measured absence rather than an unresolvable pattern.
+
+## Verification Plan
+
+**AC baseline, re-read at Engineering Commit 0 against `539c4440`:** #6360 → **5** criteria · #6377 → **6** · #6361 → **6** · #6362 → **5** · #6381 → **6**. **Total 28.**
+
+**The baseline moved from the Stage-4 figure and the move is recorded rather than absorbed.** Stage 4 recorded #6361 at 5 criteria for a total of 27; the live count is 6 for a total of 28. The sixth criterion is the meta-schema validator #6361 absorbed at the Stage-4 scope re-estimate (L → XL) — the same absorption the Header records as one of the two changes that took the bundle over band. The baseline is a pinned measurement carrying no verdict; a criterion count that no longer matches it is a mechanical signal to re-bind, and this is that signal being acted on rather than left for a later stage to discover.
+
+Instrument: `grep -c "^- \[ \]"` over each issue body, read through the REST issues endpoint. Extraction was non-empty for every card (5 / 6 / 6 / 5 / 6, none zero).
+
+| Issue | AC | Verification Method | Expected Result |
+|---|---|---|---|
+| #6360 | AC-1 | `grep -nE "^### D1\|^### D2" core/ADRs/ADR-180-work-item-kit-first-class-unit.md` — the ADR records how a kit bears kinds without naming an archetype (the role decision and the kind-level neutral sentinel are separate, non-severable sub-decisions) and how it composes with a methodology pack | Both decision headings present; the composition order appears in the same record |
+| #6360 | AC-2 | `grep -nE "five-rung\|cascade" core/ADRs/ADR-180-work-item-kit-first-class-unit.md` — the binding model names what a project selects and how kit selection resolves relative to the methodology selection and to project-level overrides | ≥1 hit stating selection rides the existing cascade with no parallel resolver, and stating the precedence order |
+| #6360 | AC-3 | `grep -nE "4 adds\|four .*adds\|relaxation\|restriction" core/ADRs/ADR-180-work-item-kit-first-class-unit.md` — the additive-landing analysis is recorded on both backward-compat axes, per the precedent that kept the meta-schema at v1 through two prior extensions | The add set enumerated (4, `level_role` named), the relaxation grounded separately, and the restriction recorded with its measured 0-of-3 impact |
+| #6360 | AC-4 | `grep -n "kit_class" core/ADRs/ADR-180-work-item-kit-first-class-unit.md` — extensibility to a second kit class is addressed explicitly, either designed in or ruled out with a reason. Graded against the carried correction: a claim of generality is graded NOT MET unless the requiredness rule the ADR states is conditioned on `kit_class` for `role = "kit"` | The two-level requiredness rule stated; the cost of a second class named; no unconditioned-on-`role` generality claim survives |
+| #6360 | AC-5 | `grep -rn "ADR-180" core/schemas/work-item-type-schema.md core/packs/README.md` — the ADR is referenced by the grammar and selection stories in this epic. Null-expecting on neither arm; control: `grep -rn "ADR-070" core/schemas/work-item-type-schema.md` returns non-zero on the same instrument, so a zero is a real absence | ≥1 citation from the grammar surface and ≥1 from the selection surface · control non-zero |
+| #6377 | AC-1 | `grep -nE "^## Read paths" core/references/reference/work-item-type-consumer-map.md` plus a row count of that section's table — every read path of the type system is enumerated with its discovery method | The read-path section present with a row per enumerated consumer; each row names its path and method |
+| #6377 | AC-2 | `grep -nE "^## Create / update / delete paths" core/references/reference/work-item-type-consumer-map.md` — create, update and delete paths are enumerated with their execution locus | The CRUD section present; each row names its locus |
+| #6377 | AC-3 | `grep -nE "^## Flows beyond this repository" core/references/reference/work-item-type-consumer-map.md` — data flows leaving the repository are enumerated with their exclusion state | The flows section present with the exclusion column populated |
+| #6377 | AC-4 | `grep -nE "^## First-order vs second-order impact" core/references/reference/work-item-type-consumer-map.md` — first- and second-order impact are distinguished and keyed to the grammar relaxation | Both tables present and keyed to the relaxation |
+| #6377 | AC-5 | `grep -nE "^## Named breakages" core/references/reference/work-item-type-consumer-map.md` — consumers that would break under a decoupled kind unit are named. Graded against the carried correction: the section carries **two** rows, not one, because the higher-precedence rung of the same consumer carries a second archetype-scoped join expressed in prose rather than in the token the original probe searched | ≥2 breakage rows, each naming its rung and its failure mode; the blind-spot section states that a token census cannot see a join expressed in prose |
+| #6377 | AC-6 | Tree-resident anchor the executor can run: `grep -c '"py"' release/tools/blast-radius.sh` — the scanned-type list carries the Python entry, and the self-test region carries at least one assertion naming a `.py` reference. The RED→GREEN arm itself is run at Stage 6 and re-run at Stage 7 as `bash release/tools/blast-radius.sh --self-test`, which this executor declines by verb allowlist and reports as an honest skip rather than a fabricated pass | Anchor **≥ 2** — the type-list entry plus the self-test fixture reference · assertion count strictly greater than the pre-change 36, all passing · the new arm observed failing on the unpatched instrument, so the green is falsifiable |
+| #6361 | AC-1 | Tree-resident anchor the executor can run: `grep -c 'archetype = "\*"' core/deploy/tests/fixtures/packs/conforming-kit/pack.toml` — the conforming fixture asserts neutrality at the **kind** level, not only at the pack level, because a change relaxing only the pack-level field would validate a kit whose every kind is still archetype-welded and the capability would be absent. The behavioral arm is run at Stage 6 and re-run at Stage 7 as `python3 core/deploy/tools/check-work-hierarchy.py --validate-packs --pack-root core/deploy/tests/fixtures/packs/conforming-kit` | Anchor **≥ 1** · exit 0 with the kit's kinds accepted · the mutation arm removing kind-level neutrality rejected under its own rule identifier and no other |
+| #6361 | AC-2 | `grep -nE "composition order" core/packs/README.md` — the unit composes with a methodology pack and the README documents the composition order | The order documented as base → archetype pack(s) → kit → project override, most-specific-wins, field-level merge |
+| #6361 | AC-3 | Regression, unchanged-files-intact: the three shipped packs are byte-identical to their pre-change state and still validate. Probe: `git diff --stat origin/main -- core/packs/_common/pack.toml core/packs/scrum/pack.toml core/packs/kanban/pack.toml`. Null-expecting, so it carries its arms · control: the same command over `core/schemas/work-item-type-schema.md` returns a non-zero diffstat on the same instrument, proving the comparison resolves | **Empty diffstat** for all three · control non-zero · all three accepted by the validator |
+| #6361 | AC-4 | `grep -nE "6\.2c\|landing analysis" core/schemas/work-item-type-schema.md` — the change lands additively with the grammar version retained at v1 and the analysis recorded in the founding ADR. Graded as restated by the ratified correction, not as literally worded: the criterion's "one optional add plus one relaxation" is historical | The extension note present, enumerating **4 adds + 1 relaxation + 1 restriction**, version retained at v1, citing ADR-180 |
+| #6361 | AC-5 | `grep -nE "as-is\|left as-is" core/packs/README.md` — each shipped pack is either migrated or explicitly left as-is with the reason stated alongside it | Three as-is rows, each carrying the reason that the widened enum leaves its existing role value correct and its kinds archetype-keyed by design |
+| #6361 | AC-6 | Tree-resident anchor the executor can run: `grep -c "PACK-P0" core/deploy/tools/check-work-hierarchy.py` — the validator exists in the tree and emits per-rule identifiers, so its arms are attributable rather than a bare exit code. The suite itself is run at Stage 6 and re-run at Stage 7 as `python3 core/deploy/tools/check-work-hierarchy.py --self-test`, with both arms required: accept the three shipped packs, reject the deliberately-nonconforming fixture, and **each mutation arm asserts its own rule identifier and the absence of every other**, so a dead rule fails an arm instead of riding a green suite | Anchor **≥ 1** · suite green with the arm count strictly greater than pre-change · every rule identifier exercised by at least one arm that fails when its rule is mutated |
+| #6362 | AC-1 | `grep -n "work_item_kit" core/config/operator.toml.template core/config/operator-toml-schema.json` — a deployment declares a global default kit through operator configuration, schema-registered on both surfaces | The field present in the template's methodology table and as a schema key entry; absence documented as a valid state |
+| #6362 | AC-2 | `grep -n "work_item_kit" core/schemas/project-schema.md` — a project overrides the global default on its own frontmatter surface, with the resolution row stated | The optional frontmatter key declared and a resolution row parallel to the existing delivery-approach row |
+| #6362 | AC-3 | Regression, unchanged-files-intact on the resolver surface: resolution runs through the existing five-rung cascade and introduces **no parallel resolution path**, so the resolver is consumed and never modified. Probe: `git diff --stat origin/main -- core/governance/OPERATIONS.md`. Null-expecting, so it carries its arms · control: the same command over `core/config/operator.toml.template` returns a non-zero diffstat on the same instrument | **Empty diffstat** on the resolver surface · control non-zero |
+| #6362 | AC-4 | Tree-resident anchor the executor can run: `grep -c "SEL-0" core/deploy/tools/check-work-hierarchy.py` — the selection arms exist and emit per-arm identifiers. The behavioral arm is run at Stage 6 and re-run at Stage 7 as `python3 core/deploy/tools/check-work-hierarchy.py --resolve ARCHETYPE --kit PACK_ID --pack-root core/deploy/tests/fixtures/packs/selection`, resolving the same kit under two different archetypes and the same archetype under two different kits, which is what makes orthogonality observable rather than asserted | Anchor **≥ 1** · four resolutions, each emitting the expected kind set with provenance · the kit axis and the methodology axis each vary independently |
+| #6362 | AC-5 | `grep -nE "^## Kit selection and precedence" core/packs/README.md` — the README documents kit-to-methodology orthogonality and kit-to-override precedence. Graded against the retired empty-kit premise: prose asserting that a kit selected without an archetype pack is an error state is graded NOT MET, because a kit-only root resolves the kit's own kinds and exits 0 | The section present, stating orthogonality and precedence, and stating that selecting a kit **cannot** empty the vocabulary — the replacement constraint rendered at Stage 6 is that a selection **resolves or fails loudly**, not that some population must be jointly non-empty (deviation 22) |
+| #6381 | AC-1 | Tree-resident anchor the executor can run: `grep -c "level_role" core/deploy/tests/fixtures/packs/rollup-kit/pack.toml` — the acceptance fixture carries the traversal carrier. Graded as restated by the design, not as literally worded: container levels resolve an entity type, never a kind, so a fixture declaring kinds at portfolio, program and project is the **rejection** arm, not the acceptance arm. The behavioral arm is run at Stage 6 and re-run at Stage 7 as `python3 core/deploy/tools/check-work-hierarchy.py --validate-packs --pack-root core/deploy/tests/fixtures/packs/rollup-kit` | Anchor **≥ 1** · exit 0 on the rollup fixture with the full traversal depth reported · the tier-claiming fixture rejected under its own rule identifier and no other |
+| #6381 | AC-2 | Null-expecting, stated as a valid extended-regex probe rather than a lookahead the matcher cannot compile: `grep -cE '^[[:space:]]*base[[:space:]]*=[[:space:]]*"[^"]*"' core/deploy/tests/fixtures/packs/rollup-kit/pack.toml` counts every base declaration, and `grep -cE '^[[:space:]]*base[[:space:]]*=[[:space:]]*"Work Item"' <same file>` counts the conforming subset; the two counts must be equal, which is the same assertion without a negative match — no new entity node is introduced at any level · control: the conforming-subset count returns non-zero on the same file with the same instrument | Both counts **equal** and non-zero, so **0** non-`Work Item` bases · control non-zero |
+| #6381 | AC-3 | `grep -n "level_role" core/schemas/work-item-type-schema.md` — the grouping/execution distinction has a grammar carrier inside the existing projection object rather than as a new top-level construct | The field declared inside the projection object with a **CLOSED** value domain — an unknown value is an error, distinct from the kit-class field's OPEN domain |
+| #6381 | AC-4 | Tree-resident anchor the executor can run: `grep -c "PACK-K09" core/deploy/tools/check-work-hierarchy.py` — the nested-grouping rule exists and carries its own identifier, so a rejection is attributable. The suite arm is run at Stage 6 and re-run at Stage 7 as `python3 core/deploy/tools/check-work-hierarchy.py --self-test`, restricted to the level rules | Anchor **≥ 1** · the nested-grouping fixture rejected under its own rule identifier and no other |
+| #6381 | AC-5 | `grep -nE "^## What lives where" core/packs/README.md` — the README states that the kit types the work and does not redefine the tiers held in the entity model | The boundary statement present in the assigned section |
+| #6381 | AC-6 | Regression, unchanged-files-intact on behavior rather than on bytes: the existing hierarchy finding set and kind-emit output are byte-identical before and after the change on the same tree. Probe: capture `python3 core/deploy/tools/check-work-hierarchy.py --emit-kinds` at the baseline and at branch head and compare. Null-expecting on the diff, so it carries its arms · control: the same comparison against a seeded extra fixture pack must produce a **non-empty** diff | **Byte-identical** output · control non-empty |
+
+## Quota Budget
+
+**Verdict:** **WARN** (per the quota-budget protocol, Checkpoint A)
+**Parallel-eligible spokes per parallel stage (from the Stage Applicability Matrix):** Stage 5: **5** · Stage 7: **5** · Stage 8: **5**
+**Per-spoke cost estimate:** size-bucket ordinal band (heuristic — no telemetry medians available; the per-bucket cutover conditions are unevaluated, so every bucket keeps its band). Worst batch composition = 1 × `size:XL` (high) + 3 × `size:M` (low–moderate) + 1 × `size:S` (lowest).
+**Assumed/stated remaining usage-window envelope:** **UNSTATED** — no operator quota band was captured at hub start. The conservative default applies. `[ASSUMPTION – CONFIRM]`
+**Estimated cumulative draw % (worst parallel batch):** **not computable — deliberately not synthesized.** A draw percentage is only ever a projection of an operator-stated band; with basis `UNSTATED` no figure may be rendered. A sourced-looking number the session could not obtain is worse than no number.
+**Routing:** WARN → **window-aware launch timing + quota-budgeting (split batch)**. This is not a stagger: a stagger is a rate-limit defense and does not change cumulative consumption. Concretely, an `UNSTATED` basis caps Checkpoint B's wave width at **2**, so each 5-spoke parallel batch splits into 3 sub-waves, re-gated before each. Stating the band is what buys width.
+**Note:** Checkpoint B re-validates at every agent launch — wave or singleton, every stage — and gates on a second axis these fields deliberately do not carry: the host-API quota pools, read at runtime and combined defer-dominant. Checkpoint A stays usage-window-only, because a plan-time pool reading has no predictive value at Engineering time. Bands and the cumulative-draw budget are calibration-pending at MEDIUM confidence.
+
+**Observed host-API condition, recorded because it is load-bearing for the remaining spokes.** The GraphQL pool has been exhausted twice on this run, and the rate-limit probe was observed reporting a full GraphQL quota while GraphQL calls were being rejected. **The probe is not trustworthy on this run.** A spoke whose issue reads start failing as rate-limited switches to the REST issues endpoints — a separate quota — rather than sleeping. This Engineering spoke used REST exclusively and made no GraphQL call.
+
+## Authorized ADRs
+
+| ADR | Owner | Home | Status at authoring |
+|---|---|---|---|
+| **ADR-180** — Work-item kit as a first-class, archetype-neutral, kind-bearing pack role | #6360 | `core/ADRs/` | `Proposed`, flipping to `Accepted` when the operator ratifies at the Stage 9 Plan Review gate |
+
+Number **170** verified free at Engineering Commit 0 against both ADR directories and the allocator's next-free oracle. No other ADR is authorized by this release; the two placement recommendations that reached Collective Review were rendered as D-decisions, not as decision records.
+
+## Baseline Pin
+
+`origin/main` @ **`539c4440fc1457e8d42d2bbe11c7be663baf596f`**
+
+Every Engineering spoke branches from this commit, and every measurement in this plan was taken against it. Stage 9 re-checks mid-pipeline divergence against this pin. Confirmed at Engineering Commit 0: `origin/main` still resolves to this SHA after a fresh fetch, so no divergence has accrued between Planning and the first write.
+
+## Delivery Strategy · Verification · Rollback
+
+**Branch topology:** SINGLE — one branch `release/kit-unit-and-selection`, one PR, five issues as delivery slices in Implementation Sequence order.
+**Concurrency posture:** P0 fully-serial. Force-push on the shared release branch is prohibited under any posture and is not applicable at P0.
+**Version:** rule-computed next-free for a minor bump, anchor `v4.45`. Re-verified at Engineering Commit 0 and re-verified again at the Stage-12 atomic claim; the concrete number binds only there.
+**Sub-task decomposition container:** GitHub sub-issue container. The threshold predicate selects it unambiguously — the change matrix carries far more than five file-level units, and the work is multi-file and structure-changing on the pack grammar, so the lightweight checklist path is unavailable.
+**Verification:** the per-issue table above is the executor's input; the five cross-issue criteria are the release-level cohesion constraints, graded at Stage 9 on the merged PR.
+**Rollback:** whole-PR revert, and that is the correct granularity (R-4). No partial or per-issue revert path exists or should be attempted — the bundle ships one definition and four consumers of it. Reversibility **EXPENSIVE** / confidence **HIGH**.
+
+## Change Description
+
+*Authored incrementally across the Engineering slices; refreshed by the last Engineering spoke before the draft-to-ready transition at Stage 9.*
+
+### Outcome
+
+A work-item kit becomes a first-class unit of the pack grammar: a third pack role that is archetype-neutral at both the pack level and — the limb that carries the capability — at the kind level, kind-bearing without naming an archetype, and selectable through the configuration cascade a deployment already uses for its methodology. The unit is generic over future kit classes by construction rather than by promise, and it types work at the Work-Item level while projecting onto every organizational level a rollup traverses. Level coverage is achieved by **projection, not by declaration**: a container tier resolves an entity type from the frozen entity model and only the Work-Item level resolves a kit-declared kind, with a validator rule that rejects a kit kind claiming a tier and a reported footprint that moves when one does.
+
+### Issues delivered
+
+| Issue | Slice | State |
+|---|---|---|
+| #6360 | the founding ADR | landed at Engineering Commit 0 + 1 |
+| #6377 | the consumer map and the instrument fix | landed — instrument fix first, then the map re-derived against it |
+| #6361 | the grammar, the validator, the fixture home | landed — grammar, then the validator with its discrimination arms, then the derivation-block widening, then the deploy check |
+| #6362 | selection through the cascade | landed — the two open decisions rendered first, then the config surfaces, then the selection flags with their fixtures and arms, then the README section |
+| #6381 | level coverage | landed — the `level_role` carrier, then the three level rules with their discrimination arms and fixtures, then the derivation row, then the README boundary bullet and the whole-file verification |
+
+Each is marked as closed at Stage 13 against the merged PR; no per-issue close keyword appears in this plan or in the PR body.
+
+### Key decisions
+
+D-ReleaseClass · D-Concurrency Posture · D-Version · D-MapHome · D-FixtureHome · D-Instrument · D-CompatShape · D-ReadmeSplit + CR-1 · D-EmptyKitRetire · D-OutcomeAmend · D-CarryFindings · CR-2 D-KitFieldShape (**rendered at Stage 6** — flat scalar `[methodology].default_work_item_kit`) · D-EmptyKitReplace (**rendered at Stage 6** — no joint-emptiness constraint exists on the selection axis; the replacement is SEL-RESOLVE, a selection resolves or fails loudly). Both are recorded in full in § Ratified Corrections Engineering Carries.
+
+### Reversibility
+
+**EXPENSIVE / Confidence HIGH.** The grammar becomes a contract the moment a deployment authors kit packs and a consumer resolves against them. Pre-consumption the additions are optional and reversible at MODERATE cost; the release is deliberately taken at the cheap moment for that reason.
+
+### Downstream impact
+
+Five downstream milestones resolve against this bundle's definition of a kit. The consumer map inside the bundle is what makes the grammar change safe to attempt in one merge.
+
+### Cross-references
+
+The founding ADR is subordinate to the work-item-type-layer kernel, extends the methodology-pack composition grammar at the same altitude, and is a sibling to the composing-unit record. It supersedes nothing.
+
+## Deviation Log
+
+| # | Stage | Deviation | Disposition |
+|---|---|---|---|
+| 1 | 6 | The Stage-5 design for #6360 listed an index-row edit to `core/ADRs/README.md`. That file's own text refuses enumeration rows and the Stage-4 plan reached the same conclusion independently. | Recorded as `NOT EDITED` in the matrix with the reason stated. Minor adjustment; no scope change. |
+| 2 | 6 | The AC baseline moved from 27 to 28: #6361 carries 6 criteria, not the 5 Stage 4 recorded. | Re-baselined in the Verification Plan with the instrument and the cause named. Minor adjustment; no scope change. |
+| 3 | 6 | Four Verification-Plan rows carried an unescaped pipe inside a regex alternation, breaking table field parity so every cell past the break read at a shifted index. The plan-verification executor refused to index them. | Pipes escaped; re-measured with an independent parity probe over all 102 table rows — 4 mismatches → **0**. Authoring defect on this file, fixed at Commit 0 + 2 rather than carried. |
+| 4 | 6 | Nine Verification-Plan rows named a tool invocation with no probe the plan executor's family classifier recognizes, so each graded ERROR as an unreadable check rather than running. | Each row re-cut to lead with a tree-resident anchor the executor can run, naming the behavioral invocation as the arm executed at Stage 6 and re-run at Stage 7. Unclassified rows 9 → **0**. The assertions are unchanged; only their expression moved. |
+| 5 | 6 | One row expressed a null expectation as a negative-lookahead regex, which the extended-regex matcher cannot compile — the check could never have run. | Restated as two counts that must be equal, which is the same assertion without a negative match. |
+| 6 | 6 | The AI-001 self-test fixture ships **three** new assertions (36 → **39**), not the single arm a 37-total anticipated. | Kept at three, for two measured reasons. (a) `build_scan_list` reaches its type filter by **two** routes — `find`'s `-name` predicates on the all-files source and `path_has_scanned_type` on the tracked source — so a single arm leaves one route's regression undetected; T6a covers the first, T5l the second. (b) The suite's own stated discipline pairs every defect assertion with a control on the same fixture, and a new arm whose control did not exist would reproduce the very class this card documents; T6z is that control and passes in both states. Minor adjustment; no scope change. |
+| 7 | 6 | `core/references/reference/README.md` was edited (one `Key entries` row) and was not in the File Change Matrix. | Row added to the README, **and the matrix reconciled to match** rather than the edit being recorded only here. That README enumerates **every** entry in its folder (3 of 3 before this change), so landing a fourth file unlisted would ship the index wrong on the day it is written — the same authoring-debt shape recorded at deviation 2. Verified no gate enforces the enumeration, no sibling card writes the file, and the delivery check reads declared-to-delivered rather than the reverse, so nothing forced the matrix update — it was made because a matrix that omits a landed edit is no longer the record it exists to be. Minor adjustment; no scope change. |
+| 8 | 6 | The consumer map's far-end table carries a **forward-declared** kit-axis row for the operator-configuration surface. | Declared at authoring time. The independent review recorded this seam as **unowned**: the selection card's integration criterion asserts the map carries the kit axis, while no card's File Change Matrix contains the map — this card's Change 2 is "none". Declaring the row here is the cheaper of the two named fixes and needs no matrix change on either card. Minor adjustment; no scope change. |
+| 9 | 6 | The Stage-5 design's line anchors for the pack-union reader had drifted (`346-369` for a function that begins at `327`). | Re-measured every cited anchor at `verified_at` and recorded the measured values in the map. The drift is why the map ships a `verified_at` stamp and a reproduction block rather than bare line citations. Minor adjustment; no scope change. |
+
+| 10 | 6 | The Stage-5 design specified the new `deploy.sh` check as **always-enforce**. It ships **warn-mode initial** (`resolve_check_mode "pack-conformance"`), with the enforce-flip deferred. | Two specific grounds, not ceremony. (a) The progressive-rollout convention every sibling detector followed (14/18/42/43/50/51/52/53/54/55) is warn-mode-initial for a new detector with no shakedown history. (b) The population this check binds is **not fully visible from the repo** — type-pack *instances* are operator-local user config by design, so an operator tree can hold packs this corpus has never seen, and the new `applies_to` restriction is precisely the axis that could reject one. Enforcing on day one would fail loud on a deployment nobody surveyed. The graduation stays a committed default rather than a mode file, so the flip leaves a repo record. Minor adjustment; no scope change. |
+| 11 | 6 | The Stage-5 design's prose narrated its rule table as **"the 18 rules"**; the table it enumerates has **17** rows (P01–P08, K01–K07, L01–L02). The validator ships 17. | The enumeration was right and the total was wrong — the same count-versus-set defect §6.2c is written to prevent, one artifact earlier. Corrected by shipping the enumeration as the authority: `PACK_RULE_IDS` in the tool is the set, `rules_evaluated` is derived from it per run, and a self-test coverage arm asserts every member is exercised by a mutation arm that fails when its rule is mutated. No count is stated anywhere that a set could be. Minor adjustment; no scope change. |
+| 12 | 6 | `core/schemas/work-item-type-schema.md` §1.1.1's `group` row was **parameterized** to read the label-group domain from the label grammar. That edit is not in the Stage-5 cascade sweep. | It was forced by execution, not chosen for tidiness: the row restated **seven** groups while `core/specs/label-taxonomy.md` declares **eight**, and the shipped `_common` pack populates the eighth (`provenance`). A validator implementing the row as written would have hard-failed a shipped pack and broken the byte-identity criterion — the drift was invisible until the first executable reader arrived. Re-freezing an eighth name would have re-created the same duplicate source, so the enumeration was replaced by a citation and the validator reads the grammar live, emitting `SKIP PACK-L01` — never a silent pass — when that grammar is unreadable. Minor adjustment; no scope change. |
+| 13 | 6 | `packages/intake-desk.skill` and its `.sha256` content baseline were rebuilt and committed; neither was in the File Change Matrix. | `operations/skills/intake-desk/references/type-map.md` is a rostered skill's reference file, so the C4 package-rebuild beat fires and the `skill-package-freshness` CI gate enforces it pre-merge. Rebuilt through the governed builder (`build-skill-packages.sh intake-desk`), verified by `deploy.sh --check-package-freshness` (55 rostered packages content-fresh), **and the matrix reconciled to match** — following deviation 7's precedent that a matrix omitting a landed edit stops being the record it exists to be. Minor adjustment; no scope change. |
+| 14 | 6 | `core/packs/README.md`'s H1 and frontmatter `title:` were renamed from *Methodology Packs* to *Type Packs*. | Required by CR-1 rather than optional: the file's head matter defined the unit as bundling kinds *"per delivery-approach archetype"* while its body now documents an archetype-neutral kit, which is a self-contradiction **this release would have introduced**. The unit's own grammar calls it a type-pack, so the umbrella name is taken from the meta-schema rather than invented, and the lead paragraph names the methodology pack as one of its three forms so continuity holds for a reader who knows the old name. Measured before the rename: inbound path references to the file = **3** (this plan, the consumer map, and a historical v3.60 plan — none a live consumer of the title), and inbound references to the title string *Methodology Packs* = **0** outside the file itself, against a live control arm (`core/deploy/tools/README.md` draws 20). Minor adjustment; no scope change. |
+
+| 15 | 6 | The **PV-7 vocabulary gate** went red on the first push of the validator: the new tool wrote the Register-B terminal token in its space-separated form at `check-work-hierarchy.py:738`, and a matching comment landed in the new deploy check. | Reconciled both sites to the hyphenated form — the one spelling the register sanctions. Not exempted, and no third spelling coined: the gate's own guidance is that a surface needing a state the register cannot express amends the rider, and this surface needed exactly the state the register already has. Re-verified by a whole-tree sweep — unsanctioned spellings **1 → 0** outside the gate's own detector fixture, against a live control arm of 110 sanctioned occurrences. Caught by CI on a real push, fixed forward, not carried. Minor adjustment; no scope change. |
+| 16 | 6 | **CodeQL** raised one HIGH alert (`py/redos`) against the validator's semver pattern: `(?:[-+][0-9A-Za-z.-]+)*` is exponential, because the leading class and the inner class both match `-`, so an input of the form `0.0.0+` followed by many `--` splits ambiguously across the outer `*`. | Fixed forward rather than dismissed, per the public-surface security posture. Semver carries at most one pre-release segment and at most one build segment, so the two are now separate OPTIONAL groups instead of a starred alternation — the outer repetition is gone and with it the ambiguity. Behaviour re-verified over 6 accept cases and 8 reject cases, and the pathological input matches in under a millisecond. Minor adjustment; no scope change. |
+| 17 | 6 | **#6361 AC-4 was ungradable and nobody could have seen it by reading.** Running `verify-release-plan.sh` against this plan showed the row graded `regression` / FAIL — but the `regression` family delegates wholesale to `deploy.sh --check` and never runs the row's own probe. Reading the executor's classifier showed why: it keyword-matches the whole method string, its deploy-check arm tests for `unchanged` / `intact` / `byte-diff`, and that arm is evaluated **before** the `grep` arm — so the phrase *"the grammar version unchanged"* in AC-4's own method text routed it away from its declared `grep`. | Method reworded to *"the grammar version retained at v1"* — the assertion is untouched and only its expression moves off the trigger word, exactly the remedy Commit 0 + 2 applied to nine other rows. Verified after the edit: the method string contains `grep` and **none** of `unchanged` / `intact` / `byte-diff` / `byte-equivalent` / `deploy --check`, so it now classifies `per-issue` and its probe runs. The underlying assertion was separately confirmed true by direct measurement (`6.2c` → 2 occurrences in the schema, against a live `kit_class` control of 13). **This is why the executor was run at all**, and it is the second time in this release a plan row has been found unrunnable rather than failing. Minor adjustment; no scope change. |
+| 18 | 6 | **The four `regression`-family rows across #6361 / #6362 / #6381 all read FAIL for one shared reason that is not any card's assertion.** `handle_deploy_check` runs `deploy.sh --check` once and returns FAIL for **every** row in the family whenever that suite exits non-zero, without evaluating the row's own probe. The suite exits 1 here on **4 pre-existing findings** — `release-body-drift` (13 findings over 69 logged releases) and `count-structure` (4 sites) — and **none of them is on a file this release changed**, except one, which is surfaced separately. | Recorded, not worked around. #6361 AC-3's own declared probe (`git diff --stat origin/main` over the three shipped packs) is strictly more precise than the family oracle and was run directly: **empty diffstat**, against a live control returning a non-empty diffstat on the schema. The rows are not re-classified — AC-3 genuinely belongs to the regression family, and moving a row out of its family to obtain a green would be gaming the instrument rather than reading it. Surfaced to Stage 7 as a property of the executor. |
+
+| 19 | 6 | **CR-2 and the D-EmptyKit replacement were committed BEFORE any implementation of either**, as a decision-only commit against this plan. | Not ceremony. Collective Review deferred CR-2 to Stage 6 and named the specific risk that a deferred decision gets settled by whoever writes first. Recording the rationale in its own commit makes the ordering verifiable in history rather than asserted in a report. Minor adjustment; no scope change. |
+| 20 | 6 | The seven selection fixtures land under **`core/deploy/tests/fixtures/packs/selection/`**, a per-topic subdirectory, rather than flat beside #6361's two as the File Change Matrix declared. | Forced by a real coupling, not preference. The flat parent is a `--pack-root` denominator **three** cards write into, so an arm reading it has a population a sibling card can change — running it that way, #6361's `nonconforming-kit` joined the Scrum resolution and contributed a kind to the orthogonality comparison. An arm whose verdict moves for reasons that are not its own card's behaviour is not a stable arm. The subdirectory keeps the single fixture home D-FixtureHome names (CIAC-5 asserts a common **parent**, which a subdirectory preserves) and follows the per-topic precedent already in this tree (`agent-tools-conformance/`, `bundle-metrics/`). **Matrix reconciled to match**, per deviation 7's precedent. Minor adjustment; no scope change. |
+| 21 | 6 | The `work_item_kit` resolution rule does **not** land as a row in `project-schema.md`'s persisted-key table at `:183`, which the Stage-5 design named. | That table is the **entity-record** persisted key set, and every row in it carries a `V-CORE-*` / `V-PRJ-*` rule id naming the entity-field authority. `work_item_kit` is a project frontmatter field, not a Project **entity** field, and has no such rule — so a row there would have invented a validation rule id, which No-invention forbids. The rule lands instead in the three places that do own it: the frontmatter declaration block, the §3 presence table, and its own field section beside `delivery_approach`. The assertion AC-2 grades (an optional key plus a stated two-rung resolution rule) is satisfied in substance; only its location moved. Found by reading the table end-to-end before editing it. Minor adjustment; no scope change. |
+| 22 | 6 | **AC-5's expectation column still encoded the retired empty-vocabulary premise.** It required the README to state "the vocabulary-emptiness condition as 'no kind-bearing pack at all'", which presumes such a condition exists and that only its *wording* was wrong. | The operator's D-EmptyKitRetire directed *retire **and replace***, and explicitly allowed "there is no genuine joint-emptiness constraint" as an answer that had to be **reached**. It was reached, by enumerating all five reachable empty-resolution states and running the shipped reader over each: two are pre-kit shapes this release does not touch, and the third is the correct behaviour of an OPEN `kit_class` domain already named by `PACK-P08`. The expectation is reconciled to the rendered decision. **The NOT-MET clause is deliberately left intact** — prose asserting the kit-only case is an error still fails the row. Only the residue of the retired premise moved, never the assertion, and no row was re-classified to obtain a green (deviation 18's rule). Minor adjustment; no scope change. |
+| 23 | 6 | Two files outside this card's declared change set were edited: `core/ADRs/ADR-180-…md` (the Cross-D count) and `core/references/reference/work-item-type-consumer-map.md` (the F6 row). | Both were **routed to this slice**, not self-authorized. The ADR count is the carried correction slice 3 surfaced and declined to guess at, which the hub routed here; the F6 row is the forward-declared row #6377 authored at deviation 8 *for this card to complete*, and completing it is what discharges INT-5. Matrix reconciled to carry both, per deviation 7. Neither ADR-180's decisions nor the map's method were touched — only a preamble's framing and one row's tense. Minor adjustment; no scope change. |
+| 24 | 6 | A **new** `count-structure` site appeared at `docs/platform-config-reference.md:184`, caused by this slice. | Adding a fourth consumer example under a heading reading "Three wired examples" made the count wrong on the same edit that introduced it. Fixed rather than carried, using the remedy this release had already codified twice (§6.2c's ADD **set**, deviation 11's rule set): the list enumerates and states no total, because a total goes stale on the day a release adds a member. Caught by running `deploy.sh --check`, not by reading the diff. Minor adjustment; no scope change. |
+| 25 | 6 | `--kit` was first implemented so that naming a kit **granted** it eligibility; it ships **narrowing** eligibility instead. | Caught by running the arm rather than by review. Under the grant form, a kit welded to one archetype at its header is admitted under *every* archetype, so the kit-eligible set is invariant **by construction** and the orthogonality arm could never render a non-orthogonal verdict — the gate-that-cannot-fail class, reproduced at the exact place this slice was told to prove it had closed. Selection chooses **among** eligible kits (#6573 DK-5); the two-limb match stays the eligibility authority. The welded fixture is correspondingly welded at the **header**, not only at its kinds, because a kind-level weld still satisfies the kit join under every archetype and yields the same unfailable arm. Minor adjustment; no scope change. |
+| 26 | 6 | The `since` value on the new `operator-toml-schema.json` key is written as the literal **`4.49`**. | The concrete release number binds only at the Stage-12 atomic claim, but every sibling key in the declaration carries a bare numeric `since` and the field has no `{{RELEASE_VERSION}}` consumer (`claim-version.sh --stamp-file` resolves to a **tag**, `vX.Y`, which is not the shape this field uses). `4.49` is the re-recomputed next-free the Header records. **Named rather than hidden — and the naming has now paid off three times:** this row anticipated that if a different number were won, this value would need the same edit the plan's own version stamp gets. That is exactly what happened, three times: `portfolio-tier-framework-pack` took v4.46, `adr-corpus-status-integrity` took v4.47, and `label-and-reference-integrity` took v4.48, moving this literal 4.46 -> 4.47 -> 4.48 -> 4.49 in step with the Header each time. Each move was a one-line edit at a named site rather than a hunt, which is the whole return on writing the row: an un-tokenized literal is safe only while something names it. Its blast radius is one display string in C70a's WARN-mode remedy line. Minor adjustment; no scope change. |
+
+| 27 | 6 | **`PACK-K09` does not bind the predicate the card OR this card's own Stage-5 design specified, because that predicate has no input.** AC-4 asks that no grouping kind be *"declared as a container for another grouping kind"*, and the design specified a rule keyed on a kind naming another kind as its container. **No such field exists.** | Found by enumerating the field population BY PROPERTY rather than by spelling a candidate list: the schema's own §1.2 + §1.3 tables declare **16** field rows, and a property test for "names another kind as a target" narrows them to three — `fields.kind_specific[]` (whose `ref?` targets an **entity**), `relationships` (whose `allowed_types[]` is a subset of the 7 relationship **types** and whose `required_edges[]` names an edge type, not a target kind), and `axis1_state_machine` (a **state-machine** ref). The corpus cross-check is decisive: across **12** pack files, **0** of **17** live kind-scoped keys name another kind. A rule keyed on a containment field is a rule that can never fire — the gate-that-cannot-fail class this release is paying to close, which would have been its fifth instance. **Shipped predicate: at most ONE `level_role = "grouping"` kind per kit.** It forbids the same thing — two grouping altitudes are what a shadow tier ladder needs and one cannot form one — and with no containment carrier the two shapes are not even distinguishable, so the ambiguous one is refused until a carrier exists. The rule ID, the fixture name and both Verification-Plan rows are unchanged and grade GREEN as written. Minor adjustment; no scope change. |
+| 28 | 6 | `PACK-K08` binds on the **field's presence** rather than on `role = "kit"`, widening the Stage-5 design's *"three rules binding only `role = "kit"` packs"*. | Deliberate, and it strengthens rather than broadens. A malformed `level_role` is equally an error in an archetype pack, and binding the domain rule to kits alone would leave exactly the "legal, condemned, undetected" shape this card exists to close — one altitude over. It still cannot invalidate a pack that pre-dates the change, and the D-CompatShape argument is unmoved: it simply reaches the same conclusion from the FIELD's novelty (no pack authored before this edit can carry a value for it) rather than from the role's. A dedicated arm asserts the property on an archetype pack. `PACK-K06a` and `PACK-K09` remain kit-only, each with a negative arm proving it. Minor adjustment; no scope change. |
+| 29 | 6 | The Stage-5 design specified *"exit 3 at `levels_visited == 0`"*. **No such guard ships.** | It could never fire. `validate_packs` already returns **3** on a degraded parse and on a zero-pack root, both upstream of any level computation, so a second guard on a value derived below them is unreachable — an unreachable guard is itself a gate that cannot fail, which is the defect the guard was written to prevent. Caught by tracing the call order rather than by reading the design. The input-end contract stays with the existing check, and that check is **exercised** by a live arm (*"PC an empty pack root EXITS 3 rather than reporting a clean zero"*) — verified by reading the arm, not by confirming the line exists, which is the distinction that cost this release its D-EmptyKit premise. Minor adjustment; no scope change. |
+| 30 | 6 | The Stage-5 design specified a **severed-chain arm** over a container chain populated from the entity layer. **No entity-chain fixture ships.** | There is no entity-chain data in this corpus to traverse, and inventing a chain-record format would be inventing substrate — the precise error class three cards in this bundle already made. The container ladder is the frozen five-level constant ADR-049 records, so the traversal runs over it and the **unresolved-hop path is exercised by a real input instead**: `tier-claiming-kit` takes `entities_resolved` **4 → 3** and `unresolved` **0 → 1**, asserted by a dedicated arm against the accepted fixture. **Residual, named not closed:** the traversal covers the ladder, not a deployment's own entity records; an entity-record traversal needs entity-layer fixtures that do not exist and are not this card's to found. Routed to a NEXT bundle with residual **R-C**. Minor adjustment; no scope change. |
+| 31 | 6 | Six files outside #6381's declared three-fixture matrix were edited. | All six are the card's own Stage-5 Change matrix (schema §1.2/§1.3, the validator, the README bullet, the derivation row) plus the package-rebuild beat that the derivation row's rostered-skill home forces. **Matrix reconciled to match**, per deviation 7's precedent that a matrix omitting a landed edit stops being the record it exists to be. Minor adjustment; no scope change. |
+| 32 | 6 | **The README reconciliation's own V-1 probe returns a false zero against the landed file.** Its regex terminates in the literal token `K4`; the landed composition chain spells that rung *"the project's own instance-level override"* and contains no `K4` at all. | Re-cut to match the rung **by property** — any of its spellings — and re-run: the chain appears **exactly once**, inside `## The role and extends model`, which is the assertion. The published regex is retained as a **control arm** returning 0, so the token error is recorded as measured rather than asserted. This is the third time this release a probe's token choice has hidden a real population, and it landed on the very check the reconciliation flagged as one *"a reviewer cannot eyeball reliably"*. Minor adjustment; no scope change. |
+| 33 | 6 | **V-5 does not reach ∅, and the residual is reported rather than removed.** The claim-atom comparator finds **2** atoms shared between #6381's bullet and #6361's `### The kit, as a unit` — a section that landed AFTER the reconciliation was written, and not the section the reconciliation named (`### What selecting a kit does not do`, which #6362's E-2 removed). | Trimmed where this card owns the text: the drafted bullet shared **3** atoms and now shares **2**, with the mechanism cited to the sibling section rather than re-derived. The residual cannot be trimmed further without failing **AC-5**, which requires the boundary statement in `## What lives where` — V-5 and AC-5 genuinely conflict given where #6361's paragraph landed, and AC-5 is the shipped acceptance criterion. **Surfaced, not resolved by rewriting a sibling's prose.** The comparator was itself corrected mid-run: its first sensitivity arm intersected the *bullet's* atoms with a known restatement, so trimming the bullet silently killed the control — the arm is now bullet-independent and fires at 3. Minor adjustment; no scope change. |
+| 34 | 12 | **`core/ADRs/README.md` is declared `NOT EDITED` in three places (the matrix, the non-scope prose, and deviation 1) and is delivered EDITED.** The Stage-12 renumber of this release's ADR to its next-free number appends one sentence to that file's § Renumber log, and R4 of `release/tools/renumber-adr.py` performs that append unconditionally — the file is the log's sole carrier. It was additionally the release's **only true merge conflict** on every rebase this release has taken — three of them, when sibling releases appended to the same one-line paragraph; the third rebase replayed it as two conflicts, one per renumber commit already in this branch's history. The append has now happened three times, because the record itself moved three times (170 → 171 → 177 → 180). | **Matrix reconciled to match, per deviation 7's rule that a matrix omitting a landed edit is no longer the record it exists to be**: the entry moves out of *Release-wide explicit non-scope* into a new `Stage 12 — release mechanics` block as `edit`, and the non-scope prose is re-scoped from *"is NOT EDITED"* to *"carries no index row"*. **The original determination is preserved, not reversed** — deviation 1 refused an **enumeration row**, and neither the renumber log nor the conflict resolution is one. The two claims were only ever in tension because the first was written as a whole-file claim when its subject was a single row. The conflict was resolved by hand keeping **every** party's entries — the mainline's three new entries plus this record's own hop sentences — asserted by reading all six renumber-log entries back out of the merged paragraph, and by asserting the merge is append-only (the pre-merge line is a strict prefix of the merged one), rather than trusting the merge. **No `--exclude-path` was used, and an earlier draft of this row was wrong to say one was**: `renumber-adr.py` exempts historical-numbering lines from its citation sweep line-wise (`is_historical_numbering_line`), so the § Renumber log — which carries the mainline's `ADR-<old>` tokens beside this record's earlier hops — is protected by construction rather than by a path exclusion. A path exclusion would in fact have been the wrong instrument here: it drops the whole file from the sweep, and this file needs one token class kept and none rewritten, not the file skipped. Minor adjustment; no scope change. |
+
+## Issue References
+
+- #6360 — decide the work-item kit as a first-class unit (founding ADR)
+- #6377 — map the full link and blast-radius chain before any type-system change
+- #6361 — make a work-item kit expressible in the pack grammar
+- #6362 — select a work-item kit through the configuration cascade
+- #6381 — cover every organizational level in the kit, portfolio down
+- #6447 — Stage 4 Release Planning sub-task (closed; the pre-Commit-0 working reference)
+- #6591 — Stage 9 Plan Review sub-task, carrying the README reconciliation, the independent adversarial review, and the Collective Review scope-lock
+- #5291 — parity-gate hardening in a sibling milestone; coordination edge only, and the owner of the unsanctioned kind-label disposition, so the labels on #6360 and #6377 are not re-typed by this release
+- #5827 — an undeclared cross-methodology kind in the base pack; this release's role model supplies its structural answer but the composition lock forbids pulling it in. Surfaced, not filed.
+- #6371 — pack and kit content-completeness lint, held in a sibling milestone; the composition lock forbade re-homing it here and the intent was satisfied by scope refinement on #6361 instead.

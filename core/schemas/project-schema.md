@@ -66,6 +66,11 @@ co_management_smartsheet_id: string | null # CONDITIONAL — non-null iff dual_f
 delivery_approach: Scrum | Kanban | XP | Waterfall | PRINCE2 | SAFe | Hybrid | Custom
                                            # REQUIRED — top-level methodology archetype
 
+# Work-item kit selection — NEW — orthogonal to delivery_approach (two independent axes)
+work_item_kit: string                      # OPTIONAL — pack_id of a role="kit" type pack.
+                                           # Absent → operator.toml [methodology].default_work_item_kit.
+                                           # Absent at both rungs → no kit selected, which is valid.
+
 # Conditionally required — present iff delivery_approach: Custom
 custom_methodology_definition:
   name: string                             # REQUIRED — display name (e.g., "Scrumban")
@@ -143,6 +148,7 @@ Field presence rules summary:
 | `co_management_sharepoint_folder` | ⚪ Conditional | non-null iff `dual_framing_enabled: true`; null-or-absent otherwise |
 | `co_management_smartsheet_id` | ⚪ Conditional | non-null iff `dual_framing_enabled: true`; null-or-absent otherwise |
 | `delivery_approach` | ✅ Always | — (new) |
+| `work_item_kit` | ⚪ Optional | when present, names the `pack_id` of a `role = "kit"` type pack; absent → the `operator.toml` `[methodology].default_work_item_kit` global default; absent at both rungs → no kit selected, which is a valid state and the pre-kit status quo (new) |
 | `custom_methodology_definition` | Conditional | ✅ iff `delivery_approach: Custom`; ❌ otherwise |
 | `operational_methodology` | ⚪ Optional | when present: one of the 6 composable archetypes OR `[A, B]` per the V2 array sub-assertions (V16); absent → the operational space falls back to `delivery_approach` (new) |
 | `release_methodology` | ⚪ Optional | when present: same grammar (V17); absent → the release space falls back to `delivery_approach` (new) |
@@ -274,6 +280,29 @@ Required. Enum — one of 8 values (title-case, case-sensitive):
 Full normative definitions (3-5 sentences per archetype) live in [`methodology-parameterization-v1.md § Definitions`](../../release/references/specs/methodology-parameterization-v1.md). Variation table (lifecycle / ceremonies / artifacts / cadence / consumers / sample-types / distinguishing-constraint) lives in [`methodology-archetype-matrix.md`](../../release/references/specs/methodology-archetype-matrix.md).
 
 Consumer skills read this field at invocation and parameterize their behavior per [`OPERATIONS.md § Methodology Awareness Protocol`](../governance/OPERATIONS.md) Rules 1-3.
+
+### `work_item_kit`
+
+Optional. The `pack_id` of a type pack this deployment authored with `role = "kit"` — a kind
+set selected independently of the methodology archetype.
+
+**Resolution is two-rung, the same shape `delivery_approach` uses:** the file's own
+`work_item_kit:` when present; otherwise the `operator.toml`
+`[methodology].default_work_item_kit`, which that file states the project-level key
+overrides. **Absent at both rungs means no kit is selected** — a valid state, not a
+degraded one, and the arrangement every deployment ran before kits existed.
+
+**The two axes do not interact.** The methodology lookup reads `delivery_approach`; the kit
+lookup reads `work_item_kit`. Neither field appears in the other's resolution, so changing
+the selected methodology leaves the resolved kit unchanged and vice versa. That is a
+property of two independent lookups, not a behaviour each consumer must remember to
+preserve.
+
+The kit unit, its neutrality mechanism and its composition position are decided in
+[ADR-180](../ADRs/ADR-180-work-item-kit-first-class-unit.md); the grammar a kit conforms to
+is [`work-item-type-schema.md`](work-item-type-schema.md); selection and precedence are
+documented in [`core/packs/README.md`](../packs/README.md) § Kit selection and precedence.
+This field does not re-list or re-validate any of them.
 
 ### `custom_methodology_definition`
 
