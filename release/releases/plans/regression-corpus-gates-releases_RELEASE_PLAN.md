@@ -396,7 +396,7 @@ This release gives the platform a way to catch a change to one skill silently re
 | # | Outcome (one line) | Status |
 |---|---|---|
 | #5863 | An output-scoring runner that grades a suite's assertions against a committed fixture, emits the framework's existing report contract, and refuses to report a pass rate when nothing was gradable | DONE |
-| #5864 | A behavioural-regression corpus and the gate that runs it against a recorded floor, advisory on every pull request and binding at the major-release tag | (delivered by the second Engineering spoke) |
+| #5864 | A behavioural-regression corpus and the gate that runs it against a recorded floor, advisory on every pull request and binding at the major-release tag | DONE |
 
 ### Key decisions
 
@@ -405,6 +405,8 @@ This release gives the platform a way to catch a change to one skill silently re
 - **D-ReleaseClass:** `novel` — new runner, new corpus, new workflow, and three D-class decisions in the plan.
 - **ADR-180 (consumed schema):** the runner consumes the eval-harness schema the platform already ships, rather than the trigger-rate schema the commissioning item cites or a new one. The citation was wrong; the delta is one optional field, so no existing suite needs migrating.
 - **ADR-181 (floor and boundary):** the floor is recorded once as a numeric configuration field and restated nowhere; the gate binds at the major-release tag and runs advisory on every pull request, because a gate bound only to a boundary this platform crosses about quarterly would ship months before its first real exercise.
+- **The contract gained a SECOND optional field, on operator authorization mid-release.** The schema delta ADR-180 records is one optional field, and that record stands as written — it is a dated decision, not a live rule. What shipped is two: `assertions[].check`, and `assertions[].expect`, added to discharge the open integration criterion the corpus needed. The count moved; the ADR's stated bound did not, because that bound is backward compatibility rather than arithmetic — `expect` defaults to the identity, so every suite committed before it existed scores byte-identically, verified by comparing the upstream card's own reports across the amendment. Recorded here rather than by editing an accepted decision record.
+- **The advisory rung is non-blocking in the tree, not merely unregistered.** The workflow itself enforces the context clause of the blocking predicate. Branch protection is repository settings, lives outside the tree, and no committed file can state which contexts are required — so leaving "the pull-request rung never blocks" to non-membership would have made a load-bearing property contingent on a fact nothing here can assert.
 
 ### Reversibility
 
@@ -417,6 +419,9 @@ This release gives the platform a way to catch a change to one skill silently re
 - The regression standard becomes a pointer surface as well as a definition surface: a reader arriving there finds the runner, the corpus, the threshold by role, and the failure semantics.
 - One package rebuild is coupled to a documentation edit in a non-obvious way — the standard is a registered mirror shipped inside a skill package — and that coupling is invisible from the standard itself.
 - A consumer of the eval framework now exists outside the module that owns it, which is the trigger for revisiting whether the runner belongs in the shared kernel.
+- **The platform acquires a 23rd workflow and a new branch-protection context**, `Behavioral-regression pass-rate gate`. It shares no identifier token with the existing release-documentation gate, so the two contexts cannot be conflated by a reader of the settings page — but registering it is an operator action outside the tree, and until it happens the gate reports without being required even after the sentinel flips.
+- **The corpus ships thin — 3 scenarios — and that is the reason the gate ships in warn mode.** Its shakedown exit criterion is committed in the sentinel and evaluable from the tree, so the decision to arm it will not depend on a log nobody can read back.
+- **A known-open defect is now tracked as a corpus assertion rather than a note.** The check bank's Reference section cites the output-contracts document at an absolute path under a root that exists nowhere in this repository. Repairing it is out of both cards' scope, so the corpus carries it as an expected-FAIL: the run names it every time, and turns red on the day it is fixed — which is the prompt to retire the exception in that same change.
 
 ### Cross-references
 
