@@ -3,7 +3,7 @@
 title: Release Plan — automation-registry-as-gate (the automation registry is the admission gate)
 type: release-plan
 plan_type: release
-status: EXECUTING
+status: ACTIVE
 release: "{{RELEASE_VERSION}}"
 milestone: 379-automation-registry-as-gate
 release_class: cross-cutting
@@ -263,7 +263,7 @@ Occurrence counts differ by population, and all three readings are correct: **tr
 | **#5861** | Gate falsification repro | Attempt to add an automation with no registry row; assert the gate blocks and its verdict names the missing entry | Blocks, names the entry |
 | **#5861** | Gate runs deploy + CI | Confirm one consolidated check at deploy check number 75 **and** the CI workflow, single-sourced on one predicate | Both paths, one predicate |
 | **#5862** | Zero hardcoded backend | Scan the migrated consumer surface for the backend token, frontmatter included | **0**; control arm on the pre-migration revision returns **19** |
-| **#5862** | Every migrated cadence registered | Cross-check the roster against registry rows | 8 roster entries, 8 rows |
+| **#5862** | Every migrated cadence registered | Cross-check the roster against registry rows | 9 roster entries, 9 rows |
 
 ### Release-scoped verification
 
