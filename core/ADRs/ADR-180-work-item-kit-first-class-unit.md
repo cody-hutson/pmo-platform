@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-180 — Work-item kit as a first-class unit: a third pack role that is kind-bearing without naming an archetype, neutral at the kind level, discriminated by kit class, and selected on the existing configuration cascade"
-status: Proposed — flips to Accepted when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
+status: Accepted — ratified by the operator at the Stage 9 Plan Review gate on 2026-09-02 (verdict GO WITH CONDITIONS), the gate this record's own ratification promise named; the flip was applied at Stage 13 Close Phase A13, the beat that owns the `Proposed → Accepted` transition, and landed on `main` via this release's Stage-13 chore PR. This field is the authority: the automated ratification-flip check is advisory-only and structurally cannot fail, so a green close-out is not evidence the flip landed, and neither is milestone closure nor a review comment.
 date: 2026-09-01
 release: kit-unit-and-selection
 deciders: "Stage 5 Solutioning spoke (design, evidence-grounding) + independent adversarial review (falsification by execution) + operator ratification at Collective Review (D-CompatShape, D-MapHome, D-FixtureHome, D-ReadmeSplit, D-EmptyKitRetire, D-OutcomeAmend, D-CarryFindings) + Stage 6 Engineering spoke (authoring, correction-carrying, re-grounding)"
@@ -20,9 +20,9 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Stage 6 Engineering of the `kit-unit-and-selection` release, after the Collective Review scope-lock that ratified the design and carried its corrections forward. It flips to **Accepted** when the operator ratifies it at the Stage 9 Plan Review gate; the flip is recorded in this file's own `status:` field, which is the authority. A green release close-out is not evidence that the flip landed, and neither is a review comment.
+**Accepted.** Authored at Stage 6 Engineering of the `kit-unit-and-selection` release, after the Collective Review scope-lock that ratified the design and carried its corrections forward. The operator ratified it at the Stage 9 Plan Review gate on 2026-09-02, rendering **GO WITH CONDITIONS** — the gate this record named as its deciding one — and the `Proposed → Accepted` flip was applied at Stage 13 Close Phase A13, the beat that owns that transition. The flip is recorded in this file's own `status:` field, which is the authority. A green release close-out is not evidence that the flip landed, and neither is a review comment.
 
-`Proposed` is the honest value here rather than the `Accepted`-at-authoring that the two sibling pack records took, and the difference is not stylistic: those records were written after their deciding gate had already run, whereas this record's deciding gate is still ahead of it.
+`Proposed` was the honest value at authoring rather than the `Accepted`-at-authoring that the two sibling pack records took, and the difference was not stylistic: those records were written after their deciding gate had already run, whereas this record's deciding gate was still ahead of it. That gate has now run, and this record carries its terminal status on the strength of the gate rather than on the strength of having shipped.
 
 **Numbering provenance — `170 → 171`.** Held **ADR-170** branch-local; renumbered to **ADR-171** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 170. In-release citations that read "ADR-170" denote this record.
 
