@@ -577,3 +577,54 @@ Measured, three arms: `"First emit"` occurs **1×** in `hub-state/README.md` and
 ---
 
 _Engineering Commit 0. The Stage-4 planning sub-task comment is the working reference up to this commit; from here the plan file is the durable surface. `## Change Description` is authored on this branch before the PR is marked ready-for-review, per the Change Description Protocol._
+
+---
+
+## Change Description
+
+### Outcome
+
+A hub session's comment staging is now bounded by the same Run-Directory Discipline a spoke's is; Stage-4 planning classifies each card's agent-editability, so a `tier-0-floored` or `sanctioned-session-required` card surfaces at planning rather than at Engineering; and the Stage-13 `.version` stamp is **monotone** rather than merely idempotent, so a close landing out of order can no longer write the version back down. Four late adds (D7) extend the same run: FinOps rollup attribution recognises slug-keyed hub-state directories instead of silently dropping them, the hub-state run key is spelled one way across the corpus, `autonomy-tiers.md` routes governed-set membership to its authority instead of restating it, and the two deferred agent-editability remediation homes land. Measured against the current merge-base: **49 files, 2,669 insertions, 138 deletions over 63 non-merge commits**; release-identity mode **version-less**, so identity is the capability slug and no version key is claimed.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #5833 | `§ Hub Staging Discipline` bounds hub-side comment staging, with a determinate run key, a registered gate-coverage predicate (wired half + named gap) and three new test arms (A7–A9). | DONE |
+| #5084 | The `.version` stamp is monotone and Surface-1 publication resolves `--latest` explicitly at every construction site; the superseded "idempotent" framing is gone from the Stage-13 chip as well as from the specs. | DONE |
+| #5505 | Stage-4 planning gains the Agent-Editability Read (Phase A3.5) with a three-value classification, transported to sub-task and brief and scaffolded in the plan template. The owed bypass-assertion fixture landed post-QA. AC-1's demonstration limb and AC-2's mutation test remain undelivered: the first is structurally unavailable (no `tier-0-floored` card exists in this milestone), the second presupposes a design that was not chosen. | PARTIAL |
+| #6596 | Rollup attribution binds the hub-state worktree column from each file's header and resolves slug-primary release branches, so slug-keyed run keys are attributed instead of silently dropped. | DONE |
+| #6597 | All three `autonomy-tiers.md` governed-set enumerations now cite their authority instead of restating it. **AC3's second limb ships deliberately unmet (D41):** the spec declines to declare `block-autonomy-ceiling.sh` authoritative, because doing so would drop `PORTFOLIO.md` and `SESSION_STATE.md` — both charter-named governance files — out of the governed set. One Operator Override Record is **outstanding**. | PARTIAL |
+| #6598 | The hub-state run key is spelled as the milestone slug at every corpus site, so a consumer filtering on one form no longer drops the other. | DONE |
+| #6599 | The two agent-editability remediation homes the planning-dimension design deferred — Procedure-1 late-add stamping, and the Procedure-3/4 editability pre-flight and currency dimension — land in the bridge. | DONE |
+
+### Key decisions
+
+*This plan carries no `§ Hub-Rendered D-Decisions` section; each decision below is cited to the section that records it.*
+
+- **D7 — four late adds accepted.** #6596, #6597, #6598 and #6599 joined a three-card release through a second Solutioning wave (§ Size and band override, § Contention Map). This is why the release ships seven cards against a milestone description that still describes three.
+- **D17 — Release Class promoted `routine` → `novel`** at the Stage-5 exit gate on trigger (c), ≥1 Stage-5 ADR; Stage 9 review depth rose to Deep (§ Release Class declaration). The milestone description still reads `routine`.
+- **D13 / D26 — size override accepted, then extended.** 16 → 28 effective after D7, → **30 against a 15–25 band** when the #5505 packaging cascade surfaced (§ Size and band override). The D26 rows are structural, not discretionary: Check 7 fails CI if a rostered skill's package is not rebuilt.
+- **D41 — AC3's premise rejected; the criterion ships unmet.** Recorded in § Verification Plan. The governance reason is a three-way conflict the release names in place rather than silently resolving, and the disposition is Accept rather than Defer — there is no future release in which the criterion becomes correct. Operator signature, not the spoke's.
+- **D8 — the editability read emits three outcome values, not two.** CIAC-2 was amended accordingly (§ Cross-Issue Acceptance Criteria); a two-value floored/unfloored grading would have mis-classified this release's own cards.
+- **D27 — ADR number deferred to Stage 12.** Cite the Stage-5 ADR as **#6617**, never `ADR-17x`; three concurrent releases collided on 170/171, and a number written now is a claim this release cannot honour (§ Summary).
+
+### Reversibility
+
+**CHEAP · HIGH confidence** — single branch, single PR, zero deletes and zero renames, no data migration and no external state, so rollback is `git revert -m 1` of one merge commit plus a redeploy of the four rebuilt skill packages; the one asymmetry is R-5, where the monotonicity predicate is not exercised by this version-less release's own close, so a defect in it would surface only at a later out-of-order close even though the revert itself stays cheap.
+
+### Downstream impact
+
+- **The Stage-13 close path changes behaviour for existing installs.** `automated-closeout.sh` stamps `.version` monotonically and resolves `--latest` explicitly; four `.skill` packages (`release-hub`, `release-planner`, `release-executor`, `finops-usage-extractor`) are rebuilt and propagate on the next deploy.
+- **A behaviour widening awaits ratification (AI-023).** Post-merge, an edit under the deployed `.claude/hooks/` or `.claude/rules/` surface classifies Tier 0 where the removed three-file enumeration would not have named it — convergence toward the live enforcer, and declared in the artifact itself.
+- **A named governance conflict lands open, by design.** The Autonomy Tier of a write to `PORTFOLIO.md` or `SESSION_STATE.md` is answered inconsistently by `autonomy-tiers.md`, the `block-autonomy-ceiling` registry entry and `memory-architecture.md` § 2; readers are routed to all three rather than handed a fabricated resolution.
+- **QC3.5 cannot pass as specified.** All four CIACs return `SKIP` because their methods are `python3` invocations and `python3` is deliberately outside the verifier's `RUNNABLE_VERBS` allowlist. Do not widen that allowlist to clear it — it is a read-only-execution security boundary. #6236 owns the gap.
+- **Carry-forward into Stage 12/13:** the #6597 Operator Override Record needs signature; #6617 needs its ADR number and file; Stage-6 sub-task #6601 is complete in substance but unclosed; deployed-copy sync is deferred post-merge as N/A-with-reason (R-2); and the milestone Outcome Statement needs refreshing before close, since it still describes 3 issues / 16 pts.
+
+### Cross-references
+
+- Release plan: this file, top section.
+- Milestone: `hub-spoke-run-and-planning-discipline` (GitHub Milestone #367); the Release Outcome Statement lives in its description.
+- Stage-5 ADR of record: **#6617** (number deferred to Stage 12 per D27).
+- User-facing release note: lands at `release/releases/notes/_unversioned/hub-spoke-run-and-planning-discipline_RELEASE_NOTES.md` at Stage 13 Close, per `release/references/standards/release-notes-standard.md`.
+- Protocol: `release/governance/RELEASE_PROTOCOL.md` § Change Description Protocol.
