@@ -387,7 +387,44 @@ N/A — enumerated over every schema this release touches: the eval-harness inpu
 
 ## Change Description
 
-(Authored at PR-creation time — see below.)
+### Outcome
+
+This release gives the platform a way to catch a change to one skill silently regressing another. It ships the **output-scoring runner** the eval suite was opened for — the missing executor for a schema and a report contract the platform had already declared and left inert — plus a standing **behavioural-regression corpus** and the CI gate that runs it against a recorded pass-rate floor. At Stage 9 Plan Review the operator sees a runner that scores a committed scenario end-to-end and discriminates a deliberately-regressed fixture from its baseline, a gate that runs advisory on every pull request and binds at the major-release boundary, and a threshold recorded as data in exactly one place. Before this release, nothing in the tree could fail on a behavioural regression.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #5863 | An output-scoring runner that grades a suite's assertions against a committed fixture, emits the framework's existing report contract, and refuses to report a pass rate when nothing was gradable | DONE |
+| #5864 | A behavioural-regression corpus and the gate that runs it against a recorded floor, advisory on every pull request and binding at the major-release tag | (delivered by the second Engineering spoke) |
+
+### Key decisions
+
+- **D-Version-R2:** bump class `minor`. The slot this release provisionally held was claimed by a concurrent release mid-planning; the rule never moved, only the anchor. Recomputed at Commit 0 against both authoritative surfaces, which now agree.
+- **D-Concurrency Posture:** `P0` fully-serial. A build-blocking edge plus a genuine within-release file contention; Engineering runs one spoke at a time on one branch.
+- **D-ReleaseClass:** `novel` — new runner, new corpus, new workflow, and three D-class decisions in the plan.
+- **ADR-177 (consumed schema):** the runner consumes the eval-harness schema the platform already ships, rather than the trigger-rate schema the commissioning item cites or a new one. The citation was wrong; the delta is one optional field, so no existing suite needs migrating.
+- **ADR-178 (floor and boundary):** the floor is recorded once as a numeric configuration field and restated nowhere; the gate binds at the major-release tag and runs advisory on every pull request, because a gate bound only to a boundary this platform crosses about quarterly would ship months before its first real exercise.
+
+### Reversibility
+
+**CHEAP — HIGH confidence.** Every deliverable is additive. `git revert` of the release commits removes the runner, the corpus and the gate and restores the current ungated state; the trigger-eval path is not modified, so no revert can disturb trigger detection. The one caveat, stated rather than buried: once a corpus gate exists and passes, downstream releases begin relying on it, so rollback grows more expensive with each release that trusts the gate.
+
+### Downstream impact
+
+- The eval-harness schema now has a **deterministic** producer of the pass-rate field alongside the model-judged one, so a benchmark aggregate can mix reproducible and sampled runs. A reader of that aggregate needs to know which producer wrote each run.
+- The deferred runner-wiring commitment recorded in the acceptance-assertion-type decision is **partially**, not fully, discharged — the model-judged assertion types stay runner-inert. Do not read it as closed.
+- The regression standard becomes a pointer surface as well as a definition surface: a reader arriving there finds the runner, the corpus, the threshold by role, and the failure semantics.
+- One package rebuild is coupled to a documentation edit in a non-obvious way — the standard is a registered mirror shipped inside a skill package — and that coupling is invisible from the standard itself.
+- A consumer of the eval framework now exists outside the module that owns it, which is the trigger for revisiting whether the runner belongs in the shared kernel.
+
+### Cross-references
+
+- Release plan: this file, top section
+- Milestone: `regression-corpus-gates-releases`
+- Decision records: `core/ADRs/ADR-177-output-scoring-runner-consumes-the-shipped-eval-harness-schema.md` and `release/ADRs/ADR-178-behavioral-regression-floor-and-major-release-binding-boundary.md`
+- Runner contract: `release/skills/pmo-skill-refiner/references/scenario-eval-contract.md`
+- User-facing release notes: authored at Stage 13 Close, under `release/releases/notes/`
 
 ## Verification Evidence
 
