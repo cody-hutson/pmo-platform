@@ -40,10 +40,12 @@ python3 -m scripts.run_scenario_eval \
 # the control arm — expect a STRICTLY LOWER pass rate and exit 1
 python3 -m scripts.run_scenario_eval \
   --suite ../../../core/disciplines/evals/behavioral-regression/evals.json \
-  --fixture ../../../core/disciplines/evals/behavioral-regression/fixtures/regressed.json \
+  --fixture fixtures/regressed.json \
   --fail-under "$(python3 ../../../core/disciplines/evals/behavioral-regression/gate_inputs.py read-floor)" \
   --out /tmp/control.json
 ```
+
+**`--fixture` is resolved relative to the SUITE FILE's directory** — `fixtures/regressed.json`, not a path from where you are standing. `--suite` and `--out` are read as given, so the three flags do not share one convention and the difference is easy to miss. It is what makes one suite runnable against any of its fixtures without editing it. The commands above are the same ones the CI job runs, verbatim, so a local run and the gate measure the same thing.
 
 Pass `--out` to a path outside the tree, as above, or the runner writes `grading.json` beside the suite and you commit a report by accident. Add `--verbose` for per-assertion evidence.
 

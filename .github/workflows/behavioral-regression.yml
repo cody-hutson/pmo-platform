@@ -144,9 +144,15 @@ jobs:
           set -uo pipefail
           cd release/skills/pmo-skill-refiner
           set +e
+          # --fixture is resolved RELATIVE TO THE SUITE FILE'S DIRECTORY, not to the
+          # working directory — unlike --suite and --out, which are read as given. A
+          # cwd-relative path here silently resolves under the suite's own directory
+          # and the run dies on a not-found. Keep this identical to the command the
+          # suite's README gives an operator, or the local arm and the CI arm stop
+          # measuring the same thing.
           OUT="$(python3 -m scripts.run_scenario_eval \
             --suite ../../../core/disciplines/evals/behavioral-regression/evals.json \
-            --fixture ../../../core/disciplines/evals/behavioral-regression/fixtures/regressed.json \
+            --fixture fixtures/regressed.json \
             --fail-under "$FLOOR" \
             --out "$RUNNER_TEMP/behavioral-regression-control.json" 2>&1)"; RC=$?
           set -e
