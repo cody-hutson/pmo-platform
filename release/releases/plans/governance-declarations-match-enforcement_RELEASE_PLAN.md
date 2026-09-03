@@ -2,7 +2,7 @@
 title: Release Plan — governance-declarations-match-enforcement (the charter declares only what the platform actually enforces)
 type: release-plan
 plan_type: release
-status: ACTIVE
+status: CLOSED
 release: version-less (theme-named; no tag claimed)
 milestone: 369-governance-declarations-match-enforcement
 release_class: routine
@@ -28,10 +28,10 @@ reversibility: CHEAP / Confidence HIGH
 | **Version** | version-less (theme-named; no tag, no stamp manifest) |
 | **Date Created** | 2026-09-02 (Wednesday) |
 | **Release Manager** | Agent-assisted (release-hub Mode O) |
-| **Status** | Executing (Stage 6 Engineering) |
+| **Status** | Closed (Stage 13 Close; release VERIFIED on main) |
 | **Branch** | `release/governance-declarations-match-enforcement` |
 | **Baseline pin** | `origin/main` @ `77947f74e2375530660fe9dbe42b70bd62b35dc6` |
-| **PR** | (populated at PR creation, Stage 6) |
+| **PR** | #6835 (merged to `main` at `0406586ba50f73e5e18c88db9c1e0372141b8f2b`) |
 | **Milestone** | `governance-declarations-match-enforcement` (#369) |
 
 ---

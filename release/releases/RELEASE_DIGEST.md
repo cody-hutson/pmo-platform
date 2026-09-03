@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### governance-declarations-match-enforcement (2026-09-03, version-less) — The charter now says who performs a rule, and what backs it
+
 ### v4.49 (2026-09-03) — Work-item types can now be shared across methodologies
 
 ### pda-decisions-and-conformance-baseline (2026-09-02, version-less) — Three unsettled rules about project data are decided, and conformance measured
