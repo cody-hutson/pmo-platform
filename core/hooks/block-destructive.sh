@@ -631,24 +631,45 @@ script_interp_noexec_flag() {   # $1 = interpreter basename  $2 = normalized fla
 # normalize_script_token could not close the token's own quote and $1 is a filter
 # probe rather than a filename. Defaulting to 1 keeps every existing one-argument
 # call site byte-identical in behaviour.
+#
+# HINT ORDERING IS LOAD-BEARING, AND THE ORDER IS RETRY → WIDEN → BYPASS.
+# is_script_allowlisted above matches with `case "$path" in $pattern)` — a bash
+# glob against the path EXACTLY AS WRITTEN on argv. There is no realpath, no
+# canonicalization, no normalization to absolute. The allowlist is overwhelmingly
+# spelled in repository-relative form, so the SAME script is refused by an
+# absolute path from a session worktree and permitted by its repository-relative
+# path from the repository root. That retry is therefore not a workaround: it is
+# the invocation the allowlist was already written to admit, and it is the move
+# that most often resolves this block.
+#
+# The hints below used to name only allowlist-widening and the bypass variable.
+# Both are worse first moves. Widening edits a security control to admit a path
+# a sanctioned spelling already covers, and the bypass is an operator-only escape
+# hatch that disables every rule in every hook — not one path in one rule. Naming
+# them first taught blocked agents to reach for the two expensive answers and
+# hid the cheap correct one, which is why the retry now leads all three strings.
+#
+# THE BYPASS STAYS NAMED. It is a real escape hatch and removing it would leave a
+# genuinely-stuck operator with no documented route. It is ordered last and
+# labelled as the operator's, not demoted out of the text.
 check_script_target() {
   local path="$1" resolved="${2:-1}"
   if [ "$resolved" -eq 0 ]; then
     block "BLOCK-DESTRUCTIVE-022" \
       "unresolvable script path (quoting): the operand's quotes do not close within its own token, so the filename the shell will run cannot be determined from argv (nearest resolvable prefix: $path)." \
-      "invoke with a fully-quoted literal path (bash '/abs/path.sh'), or add the resolved path to .claude/script-execution-allowlist.txt, or set CLAUDE_HOOK_BYPASS=1"
+      "first retry the form the allowlist already permits: a fully-quoted literal path, spelled repository-relative from the repository root (bash 'core/deploy/deploy.sh'). The allowlist matches the path AS WRITTEN, so an absolute path can be refused where the identical script's repository-relative form is allowed. Only if no permitted form matches, add the resolved path to .claude/script-execution-allowlist.txt; CLAUDE_HOOK_BYPASS=1 is an operator-only escape hatch, not an agent's next step."
   fi
   case "$path" in
     *'$'*)
       block "BLOCK-DESTRUCTIVE-022" \
         "unresolvable script path (variable-bearing): $path — the hook sees unexpanded argv and cannot resolve it to an allowlist entry." \
-        "invoke with a literal path, or add the resolved path to .claude/script-execution-allowlist.txt, or set CLAUDE_HOOK_BYPASS=1"
+        "first retry the form the allowlist already permits: a literal path with no variable, spelled repository-relative from the repository root. The allowlist matches the path AS WRITTEN, so an absolute path can be refused where the identical script's repository-relative form is allowed. Only if no permitted form matches, add the resolved path to .claude/script-execution-allowlist.txt; CLAUDE_HOOK_BYPASS=1 is an operator-only escape hatch, not an agent's next step."
       ;;
   esac
   if ! is_script_allowlisted "$path"; then
     block "BLOCK-DESTRUCTIVE-022" \
       "subprocess script execution not in allowlist: $path (Red Team C1 — script-laundering mitigation)." \
-      "add to .claude/script-execution-allowlist.txt (glob patterns supported), or set CLAUDE_HOOK_BYPASS=1"
+      "first retry the form the allowlist already permits: invoke the script by its repository-relative path from the repository root. The allowlist matches the path AS WRITTEN, so an absolute path can be refused where the identical script's repository-relative form is allowed. Only if no permitted form matches, add to .claude/script-execution-allowlist.txt (glob patterns supported); CLAUDE_HOOK_BYPASS=1 is an operator-only escape hatch, not an agent's next step."
   fi
 }
 
