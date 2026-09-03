@@ -20,6 +20,7 @@ consumers: readers navigating the core/schemas corpus; agents and gates locating
 |---|---|
 | [../schemas/adr-schema.md](../schemas/adr-schema.md) | ADR frontmatter (7 fields) + body-section (7) contract |
 | [../schemas/agent-processing-contracts.md](../schemas/agent-processing-contracts.md) | Agent ↔ document-ecosystem integration contracts |
+| [../schemas/automation-registry-schema.md](../schemas/automation-registry-schema.md) | Routine-spec contract for an automation-registry row (6 required fields + the cadence/trigger matrix) |
 | [../schemas/field-lifecycle-matrix.md](../schemas/field-lifecycle-matrix.md) | Field create / update / retire lifecycle across the ecosystem |
 | [../schemas/frontmatter-schema.md](../schemas/frontmatter-schema.md) | Document-ecosystem metadata frontmatter schema |
 | [../schemas/gate-criteria-spec.md](../schemas/gate-criteria-spec.md) | Stage-gate pass/fail criteria (G1..GN) specification |
