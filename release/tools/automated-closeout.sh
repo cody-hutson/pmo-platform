@@ -11450,6 +11450,25 @@ PLAN-VERSION-UNKNOWN: release/releases/plans/v2/v2.98_RELEASE_PLAN.md declares v
   /usr/bin/grep -qF 'v9.99_RELEASE_PLAN.md' <<<"$_ps69_set" \
     || { echo "FAIL: PS-6 phase 6.9's own PASS detail must name its write target in the parenthesized form _reported_write_surfaces reads, else the plan silently leaves the staging guard's population; recorded detail was '$_ps69', extracted set was '$_ps69_set'"; failures=$((failures+1)); }
 
+  # ── PS-7 — the grammar is PATH-ONLY, asserted directly on the extractor. ───
+  # No mutation of the shipped code reaches this today: widening the token to admit
+  # trailing prose leaves every other arm green, because no PASS detail in the
+  # current script carries a prose-bearing parenthetical. That makes the widened
+  # form a behaviourally-EQUIVALENT mutant now and a live hazard later — the first
+  # PASS detail written as "(note.md, 42 lines)" would extract a token whose
+  # basename is "42 lines", match no committed path, and FAIL a correct close.
+  # Asserted here as a unit on the extractor rather than left to be discovered.
+  PHASE_NAMES=("some_future_writer" "transition_plan_status")
+  PHASE_RESULTS=("PASS" "PASS")
+  PHASE_DETAILS=("wrote the note (v9.99_RELEASE_NOTES.md, 42 lines)" \
+                 "transitioned ACTIVE → CLOSED (release/releases/plans/v9/v9.99_RELEASE_PLAN.md)")
+  local _ps7; _ps7="$(_reported_write_surfaces | /usr/bin/cut -f2 | /usr/bin/tr '\n' ' ')"
+  if /usr/bin/grep -qE '42|RELEASE_NOTES' <<<"$_ps7"; then
+    echo "FAIL: PS-7 the token grammar must admit a parenthetical holding the path AND NOTHING ELSE — a prose-bearing parenthetical must be ignored rather than yielding a garbled surface; got '$_ps7'"; failures=$((failures+1))
+  fi
+  /usr/bin/grep -qF 'v9.99_RELEASE_PLAN.md' <<<"$_ps7" \
+    || { echo "FAIL: PS-7b anti-vacuity — the well-formed sibling token must still be extracted, got '$_ps7'"; failures=$((failures+1)); }
+
   REPO_ROOT="$_ps_saved_root"; MODE="$_ps_saved_mode"; VERSION="$_ps_saved_version"
   RELEASE_LOG="$_ps_saved_log"; RELEASE_PLANS_DIR="$_ps_saved_plansdir"
   STATE_MILESTONE_SLUG="$_ps_saved_slug"
