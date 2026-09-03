@@ -231,7 +231,7 @@ CAUSE_GAP = "the claim would have landed a gap beneath it on the mainline"
 # describes, so the sweep must leave all of them alone. It is NOT a valid
 # idempotence guard and NOT a valid verify — see `provenance_head`.
 #
-# DEMOTED, NOT RENAMED. Until ADR-177 this regex WAS the exemption; it is now one
+# DEMOTED, NOT RENAMED. Until ADR-181 this regex WAS the exemption; it is now one
 # row of `RECORD_OPENERS`. The name, the pattern and the module-level binding are
 # deliberately byte-unchanged: a sibling release re-targets the VERIFY side of this
 # same symbol, and a silent rename would leave it re-targeting a predicate that
@@ -244,7 +244,7 @@ RENUMBER_LOG_SENTENCE_RE = re.compile(
     r"ADR-\d{3} \(`[^`]+`\) → \*\*ADR-\d{3}\*\* by `release/tools/renumber-adr\.py`"
 )
 
-# ---- the widened RECORD population (ADR-177) ------------------------------
+# ---- the widened RECORD population (ADR-181) ------------------------------
 #
 # The exemption used to be keyed on TWO strings, both of which only this tool
 # writes. Measured against the corpus at the introducing release's baseline: of
@@ -433,7 +433,7 @@ def _text_in_spans(line, spans):
     """
     return "\n".join(line[a:b] for a, b in spans)
 
-# ---- late-binding citations (ADR-177) -------------------------------------
+# ---- late-binding citations (ADR-181) -------------------------------------
 #
 # The VERSION has had a late-binding rule since ADR-092: the plan carries
 # `{{RELEASE_VERSION}}` and the concrete number is compare-and-swap-claimed at the
@@ -945,7 +945,7 @@ def is_historical_numbering_line(line):
     shape-keyed provenance arm pins it and that arm is CORRECT — it asserts the
     sweep exempts every hop of a double move, which is the audit trail the move
     creates. A ``paragraph`` extent evaluated on a single-line input is that line
-    and no more, so the shim's answer is the pre-ADR-177 answer wherever the input
+    and no more, so the shim's answer is the pre-ADR-181 answer wherever the input
     is one line.
     """
     return classify_lines(line)[0] == RECORD
@@ -957,7 +957,7 @@ def rewrite_citations(text, old, new, preserve_historical=True):
     ``review`` is the AMBIGUOUS out-parameter: a list of ``(line_number, text)``
     for every site the classifier could not decide. Those lines are NOT rewritten
     and they are NOT silently dropped — the caller names them, because after
-    ADR-177 the review report is the ONLY detector for a citation the sweep left
+    ADR-181 the review report is the ONLY detector for a citation the sweep left
     behind. No gate reads a bare ``ADR-NNN`` out of prose: the ADR index checker
     globs filenames and never opens a file, and only PATH-bearing citations are
     covered by the doc-link checks.
@@ -1116,7 +1116,7 @@ def append_renumber_log(text, old, new, slug, cause):
 def _log_review_block(log, sites):
     """Emit the ambiguous-site review block on EVERY path, including zero sites.
 
-    Unconditional on purpose. After ADR-177 no gate reads a bare ``ADR-NNN`` out
+    Unconditional on purpose. After ADR-181 no gate reads a bare ``ADR-NNN`` out
     of prose, so this block is the ONLY detector for a live citation the sweep
     declined to rewrite. A step that is silent when it finds nothing is
     indistinguishable from a step that did not run — the same disclosure failure
@@ -1449,7 +1449,7 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
 
     if not apply_changes:
         # CALL SITE 3 — the reporting path, wired to the SAME authority the apply
-        # path uses. Before ADR-177 this block counted `citation_re(old).findall`
+        # path uses. Before ADR-181 this block counted `citation_re(old).findall`
         # raw: no exemption, no region handling, so it predicted rewriting the very
         # lines R3 correctly leaves alone and the rows R4's projector regenerates.
         #
@@ -1758,7 +1758,7 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
 
 
 # --------------------------------------------------------------------------
-# --stamp — resolve {{ADR:<slug>}} at the claim (ADR-177)
+# --stamp — resolve {{ADR:<slug>}} at the claim (ADR-181)
 # --------------------------------------------------------------------------
 
 
@@ -1905,7 +1905,7 @@ def self_test():
         if got != want:
             failures.append(f"[{label}] expected {want!r}, got {got!r}")
 
-    # `rewrite_citations` returns (text, count, review) since ADR-177. The arms
+    # `rewrite_citations` returns (text, count, review) since ADR-181. The arms
     # below assert text-and-count exactly as they always did — `[:2]` keeps their
     # right-hand sides byte-unchanged rather than restating six expectations to
     # absorb a signature change. The review channel gets its own arms further down.
@@ -1933,8 +1933,8 @@ def self_test():
     # the provenance note and the § Renumber log alone, or it erases its own
     # audit trail.
     #
-    # WIDENED AT ADR-177, DELIBERATELY. Line 2 here is a hard-wrapped
-    # CONTINUATION of the note's paragraph, and the pre-ADR-177 line-wise
+    # WIDENED AT ADR-181, DELIBERATELY. Line 2 here is a hard-wrapped
+    # CONTINUATION of the note's paragraph, and the pre-ADR-181 line-wise
     # exemption swept it — that is facet (a), the defect this arm's fixture
     # happens to be shaped like. It now correctly reports 0 rewrites. The
     # sensitivity guarantee this arm used to carry has NOT been dropped; it moved
@@ -1950,7 +1950,7 @@ def self_test():
     eq("historical/renumber-log-exempt", rc2(logline, 4, 5),
        (logline, 0))
 
-    # ---- ADR-177: the three-valued classifier over a region registry --------
+    # ---- ADR-181: the three-valued classifier over a region registry --------
     # Widening the population is adding a REGISTRY ROW, never editing a predicate
     # body — so these arms assert against rows and regions, not against a shape.
 
@@ -2290,7 +2290,7 @@ def self_test():
     eq("dryrun/region-specificity",
        _strip_projected_region(["a ADR-004", "b"]), ["a ADR-004", "b"])
 
-    # ---- ADR-177: slug-keyed citation-token late binding -------------------
+    # ---- ADR-181: slug-keyed citation-token late binding -------------------
     #
     # THE FIXTURE TOKENS ARE BUILT AT RUNTIME, NOT WRITTEN AS LITERALS, and that
     # is not a style choice. `--stamp --check` is a GATE limb that scans the whole
@@ -2387,7 +2387,7 @@ def self_test():
         failures.append("[provenance] the note does not match its own detector")
     # PROVENANCE_RE IS PRESERVED AS A NAMED SYMBOL AND AS REGISTRY ROW 1, and both
     # halves are asserted rather than left to a comment. A sibling release
-    # re-targets the VERIFY side of this same regex while ADR-177 widens the
+    # re-targets the VERIFY side of this same regex while ADR-181 widens the
     # sweep-exemption side, so a silent rename or a silent gutting would break it.
     #
     # The move-agnostic arm exists because the arms above are NOT sufficient on

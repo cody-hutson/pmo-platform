@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-177 — ADR citations bind at the claim, not at authorship; the sweep's exemption is regions that record a number, and where it cannot decide it names rather than rewrites
+title: ADR-181 — ADR citations bind at the claim, not at authorship; the sweep's exemption is regions that record a number, and where it cannot decide it names rather than rewrites
 status: Proposed — authored at Stage 6 Engineering for the `adr-corpus-integrity` release. Ratification is rendered by the operator at the Stage 13 close gate and is recorded in this file's `status:` field, never inferred from milestone closure.
 date: 2026-09-01
 release: adr-corpus-integrity
@@ -16,7 +16,7 @@ source_observations:
   - "A reservation held against a shared surface converts the cheap failure into the expensive one: the contiguity checker fails a GAP as readily as a DUPLICATE, and an unclaimed reservation from an abandoned branch IS a gap."
 ---
 
-# ADR-177 — ADR citations bind at the claim, not at authorship; the sweep's exemption is regions that record a number, and where it cannot decide it names rather than rewrites
+# ADR-181 — ADR citations bind at the claim, not at authorship; the sweep's exemption is regions that record a number, and where it cannot decide it names rather than rewrites
 
 ## Status
 
@@ -29,6 +29,8 @@ source_observations:
 **Numbering provenance — `170 → 173`.** Held **ADR-170** branch-local; renumbered to **ADR-173** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 170. In-release citations that read "ADR-170" denote this record.
 
 **Numbering provenance — `173 → 177`.** Held **ADR-173** branch-local; renumbered to **ADR-177** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 173. In-release citations that read "ADR-173" denote this record.
+
+**Numbering provenance — `177 → 181`.** Held **ADR-177** branch-local; renumbered to **ADR-181** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 177. In-release citations that read "ADR-177" denote this record.
 
 ## Context
 
