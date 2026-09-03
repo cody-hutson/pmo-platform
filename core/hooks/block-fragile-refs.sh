@@ -437,13 +437,25 @@ MARKER_SCAN="$("$PRINTF" '%s\n' "$MARKER_SRC" | "$AWK" '
 ALLOW_LINK=0
 ALLOW_VERSION=0
 ALLOW_URL=0
-if "$PRINTF" '%s\n' "$MARKER_SCAN" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->'; then
+# HERE-STRINGS, not pipes, and the reason is a measured defect rather than a style choice.
+# `grep -q` exits at its FIRST match. Piping $MARKER_SCAN into it leaves the writer with data
+# still to push whenever the payload exceeds the pipe buffer (~64 KB), so the writer takes
+# SIGPIPE and returns 141; `set -o pipefail` above promotes that 141 to the pipeline's status
+# and this `if` reads FALSE even though the marker WAS found. The file's valid override is
+# silently discarded and its reference is flagged — size-dependently, so every marker under the
+# buffer resolves correctly and the failure is invisible to small inputs. Removing the writer
+# removes the hazard rather than relocating it: a here-string has no second process, so there is
+# no early close, no SIGPIPE, and no dependence on `pipefail` semantics.
+# The CI marker read uses the same construct for the same reason — the invariant recorded at
+# the MARKER_SCAN comment above binds both surfaces, and neither may return to a pipe alone.
+# Pinned behavioural arms: core/hooks/testdata/marker-resolution-fixtures.txt.
+if "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-link[[:space:]]*-->' <<<"$MARKER_SCAN"; then
   ALLOW_LINK=1
 fi
-if "$PRINTF" '%s\n' "$MARKER_SCAN" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->'; then
+if "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-version-ref[[:space:]]*-->' <<<"$MARKER_SCAN"; then
   ALLOW_VERSION=1
 fi
-if "$PRINTF" '%s\n' "$MARKER_SCAN" | "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-url[[:space:]]*-->'; then
+if "$GREP" -qE '<!--[[:space:]]*reference-durability:[[:space:]]*allow-url[[:space:]]*-->' <<<"$MARKER_SCAN"; then
   ALLOW_URL=1
 fi
 

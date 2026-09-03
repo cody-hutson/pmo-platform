@@ -486,6 +486,194 @@ else
   rb_summary="refblock identity scan: ${rb_divergent} divergent / ${rb_identical} identical-accounted / ${rb_shape} value-shape across ${rb_real_present} of ${rb_real_total} paths${rb_shape_sites}"
 fi
 
+# --- PER-FILE OVERRIDE-MARKER RESOLUTION ARM (BEHAVIOURAL — runs the REAL hook) -----------
+# Every arm above this one is STATIC: it applies a detector to a line, or a scan to a file.
+# None of them reaches the step that runs BEFORE any detector — reading a file's per-file
+# override marker out of the fence-stripped content and deciding whether the file has exempted
+# itself from a class. That step had zero behavioural coverage and was broken size-dependently:
+# both marker-resolving surfaces piped a file-sized variable into `grep -q` under `pipefail`,
+# `grep -q` exited at its first match, the writer took SIGPIPE and returned 141, and the
+# override was silently discarded on any file past the ~64 KB pipe buffer. The fixture rows and
+# their rationale live in testdata/marker-resolution-fixtures.txt.
+#
+# WHY THIS ARM INVOKES THE HOOK INSTEAD OF RE-IMPLEMENTING THE READ. A copy of the marker
+# resolution inside this runner would be a THIRD site of the same construct, and — decisively —
+# it could never fail: fixing the two real surfaces would not touch the copy, so the arm would
+# report green against a broken gate. An assertion that cannot fail for the reason it exists is
+# not a test. So the row is fed to the real block-fragile-refs.sh and its EXIT CODE is the
+# verdict. That also makes the arm answer the question a reviewer actually has — "does a large
+# file's marker still exempt it?" — rather than a proxy for it.
+#
+# THE THROWAWAY HOOK ROOT, and why each property is deliberate. The hook resolves its mode, its
+# allowlist and its logs from ${HOOK_DIR}, so running it in place would read operator config and
+# write JSONL logs into the source tree. It is copied into a temp root instead — the same
+# materialise-then-run shape the refblock arm uses — where:
+#   .mode = enforce   so the verdict is an EXIT CODE (2 = reported, 0 = clean) rather than a
+#                     stderr string. In warn-mode the hook exits 0 on a finding and the arm
+#                     would be blind to every failure it exists to catch.
+#   allowlist         a synthetic file with one inert entry. The REAL allowlist is deliberately
+#                     NOT used: a future path exemption covering the fixture's durable path
+#                     would make every CLEAN row pass vacuously, which is the precise silent
+#                     pass this arm exists to rule out. It must exist and be non-empty, because
+#                     an absent allowlist is fail-closed in enforce.
+#   libs              exactly the three the hook REQUIRES in enforce (dep-resolve,
+#                     fragile-ref-patterns, positional-issueref). master-enable.sh and
+#                     scope-guard.sh are omitted ON PURPOSE: each is skipped when absent, and
+#                     copying them would couple this arm to operator config and to $CWD. If a
+#                     future edit makes another lib required, this arm fails LOUD — a fail-closed
+#                     hook returns 2 for every row and the CLEAN rows report FLAG.
+MARKER_FIXTURE="${SCRIPT_DIR}/testdata/marker-resolution-fixtures.txt"
+# SIZED INTO A TWO-SIDED WINDOW, both bounds MEASURED against the real hook rather than
+# reasoned about. This constant is the arm's whole sensitivity, so it is stated here with the
+# numbers that chose it.
+#
+#   LOWER BOUND — the defect must actually fire. The writer has to still be pushing when
+#   `grep -q` matches the marker on line 1. Swept against the pre-fix hook: 700 lines
+#   (57,537 B) still resolves the marker; 800 lines (65,737 B) discards it, and every larger
+#   size discards it too. So the floor is the ~64 KB pipe buffer, and anything at or under it
+#   makes this arm SILENTLY VACUOUS — it would pass against the broken gate.
+#
+#   UPPER BOUND — the row must not collide with an unrelated limit. Linux caps a single argv
+#   string at MAX_ARG_STRLEN (131,072 B); the hook passes its whole stdin JSON to an external
+#   printf when validating it, so a row whose JSON exceeds that cap makes the hook exit on
+#   "malformed hook input JSON" instead of adjudicating the marker. That is a real and
+#   separate hook defect (it is NOT this issue's six sites, and is reported rather than fixed
+#   here), but an arm that tripped it would fail for a reason other than the one it names —
+#   the opposite of the isolation the small/large row pair exists to provide.
+#
+# 1200 lines puts the body at 98,537 B and its JSON at 99,867 B: ~33 KB clear of the firing
+# floor and ~31 KB clear of the argv ceiling. Verified in both directions at exactly this
+# size — pre-fix hook exits 2 (marker discarded), post-fix hook exits 0 (marker honoured).
+MARKER_BULK_LINES=1200
+# Inert by construction: no `](`, no bare issue reference, no raw ledger URL, no version-cutover
+# idiom. The large row must differ from the small row in SIZE ALONE, or a failure would not
+# isolate the size dependence.
+MARKER_PAD_LINE='Filler prose line carrying no fragile reference construct of any kind whatsoever.'
+
+if [ ! -r "$MARKER_FIXTURE" ]; then
+  "$PRINTF" 'FAIL: marker-resolution fixture not found: %s\n' "$MARKER_FIXTURE" >&2
+  exit 1
+fi
+
+# jq builds the hook's stdin payload. Resolved through the shared helper's resolve_jq rather
+# than a literal path, so this runner obeys the same fixed-allowlist resolution posture as the
+# hooks (GHSA-9cjm-v22x-4x33) and check-hook-dep-hardening.sh CHECK-3 stays satisfied.
+mk_jq=""
+mk_dep_lib="${SCRIPT_DIR}/lib/dep-resolve.sh"
+if [ -r "$mk_dep_lib" ] && "${BASH:-/bin/bash}" -n "$mk_dep_lib" 2>/dev/null && . "$mk_dep_lib" 2>/dev/null \
+   && command -v resolve_jq >/dev/null 2>&1; then
+  mk_jq="$(resolve_jq)"
+fi
+
+mk_hook_src="${SCRIPT_DIR}/block-fragile-refs.sh"
+mk_rows=0
+mk_flag=0
+mk_clean=0
+mk_fail=0
+mk_observed_flag=0
+mk_fail_lines=""
+mk_skip=""
+mk_bulk_kb=0
+
+# An environment that cannot run the hook is labelled SKIPPED-VACUOUS rather than reported as
+# clean — the distinction this runner already draws for its other populations. A missing
+# FIXTURE is still a hard failure above; a missing ENVIRONMENT is a skip. The two gating
+# callers (deploy.sh Check 31, the reference-durability CI) both run from a full checkout with
+# jq present, so the skip is a smoke-run affordance and never their result.
+if [ -z "$mk_jq" ]; then
+  mk_skip="jq unresolvable"
+elif [ ! -x "$mk_hook_src" ]; then
+  mk_skip="block-fragile-refs.sh not present beside the runner"
+elif [ ! -r "${SCRIPT_DIR}/lib/fragile-ref-patterns.sh" ] || [ ! -r "${SCRIPT_DIR}/lib/positional-issueref.awk" ]; then
+  mk_skip="co-shipped hook libs not present beside the runner"
+fi
+
+if [ -z "$mk_skip" ]; then
+  mk_td="$(mktemp -d)"
+  mkdir -p "${mk_td}/hooks/lib"
+  cp "$mk_hook_src" "${mk_td}/hooks/block-fragile-refs.sh"
+  cp "$mk_dep_lib" "${mk_td}/hooks/lib/dep-resolve.sh"
+  cp "${SCRIPT_DIR}/lib/fragile-ref-patterns.sh" "${mk_td}/hooks/lib/fragile-ref-patterns.sh"
+  cp "${SCRIPT_DIR}/lib/positional-issueref.awk" "${mk_td}/hooks/lib/positional-issueref.awk"
+  chmod +x "${mk_td}/hooks/block-fragile-refs.sh"
+  "$PRINTF" 'enforce\n' > "${mk_td}/hooks/.mode"
+  "$PRINTF" '# synthetic allowlist for the marker-resolution arm — one inert entry so the\n# surface is reachable (absent is fail-closed) while no fixture path can match it.\nnever-matches-any-fixture-path.md\n' \
+    > "${mk_td}/reference-durability-allowlist.txt"
+
+  # THE BULK PAYLOAD NEVER TRAVELS AS AN ARGUMENT. Linux caps a SINGLE argv string at
+  # MAX_ARG_STRLEN (128 KiB, 32 pages) independently of the much larger total ARG_MAX, so
+  # handing a >64 KB payload to any EXTERNAL command as an argument fails with E2BIG
+  # ("Argument list too long"). macOS has no equivalent per-string cap, so this arm passed
+  # locally and died on the CI runner — the same class of platform-dependent break as the
+  # defect it pins. Everything large therefore moves by FILE or STDIN: awk writes the filler
+  # by redirection, `wc -c <file>` measures it, and jq reads the row body with --rawfile.
+  # The only printf that touches a large value below is the shell BUILTIN, which never
+  # execs and so has no argv limit at all.
+  "$AWK" -v n="$MARKER_BULK_LINES" -v p="$MARKER_PAD_LINE" \
+    'BEGIN { for (i = 1; i <= n; i++) print p }' > "${mk_td}/bulk-filler.txt"
+  mk_padding="$(cat "${mk_td}/bulk-filler.txt")"
+  # MEASURED, never computed from the line count. The summary states this arm's sensitivity —
+  # whether the bulk row actually clears the pipe buffer — so an arithmetic estimate of it
+  # would be a number the run never checked, in the one field a reader consults to decide
+  # whether the arm could have fired at all.
+  mk_bulk_kb=$(( $(wc -c < "${mk_td}/bulk-filler.txt") / 1024 ))
+
+  while IFS= read -r raw || [ -n "$raw" ]; do
+    case "$raw" in
+      ''|'#'*) continue ;;
+    esac
+    mk_expect="$("$PRINTF" '%s' "$raw" | cut -f1)"
+    mk_class="$("$PRINTF" '%s' "$raw" | cut -f2)"
+    mk_content="$("$PRINTF" '%s' "$raw" | cut -f3-)"
+    [ -z "$mk_expect" ] && continue
+    mk_path="${mk_content%%|*}"
+    mk_raw="${mk_content#*|}"
+    # `\n` -> newline FIRST, then the sentinel, so %b never walks the filler block. $mk_raw is
+    # one fixture line, so the pinned printf is safe here; the EXPANDED body is not, and from
+    # this point on it moves only by file (see the MAX_ARG_STRLEN note above).
+    mk_body="$("$PRINTF" '%b' "$mk_raw")"
+    mk_body="${mk_body//@@BULK@@/$mk_padding}"
+    # BUILTIN printf, deliberately not "$PRINTF": a builtin never execs, so it has no argv
+    # limit, and this is the one write that must carry the full expanded body.
+    printf '%s' "$mk_body" > "${mk_td}/row-body.txt"
+    mk_bytes="$(wc -c < "${mk_td}/row-body.txt" | tr -d ' ')"
+
+    mk_rows=$((mk_rows + 1))
+    case "$mk_expect" in
+      FLAG)  mk_flag=$((mk_flag + 1)) ;;
+      CLEAN) mk_clean=$((mk_clean + 1)) ;;
+    esac
+
+    # --rawfile, not --arg: the body reaches jq as a FILE it opens, so a row of any size is
+    # encoded without the payload ever becoming an argument.
+    mk_json="$("$mk_jq" -n --arg fp "$mk_path" --rawfile c "${mk_td}/row-body.txt" \
+      '{tool_name:"Write", cwd:"/", tool_input:{file_path:$fp, content:$c}}')"
+    # HERE-STRING, not a pipe — the same repair this arm exists to pin. A writer feeding a
+    # process that may exit before draining stdin can take SIGPIPE and return 141, and under
+    # `pipefail` that would report FLAG for a hook that in fact exited 0. Using the construct
+    # under test to test itself would make every verdict here unreadable.
+    if "${mk_td}/hooks/block-fragile-refs.sh" >/dev/null 2>&1 <<<"$mk_json"; then
+      mk_got="CLEAN"
+    else
+      mk_got="FLAG"
+      mk_observed_flag=$((mk_observed_flag + 1))
+    fi
+
+    if [ "$mk_got" != "$mk_expect" ]; then
+      mk_fail=$((mk_fail + 1))
+      mk_fail_lines="${mk_fail_lines}  expected ${mk_expect} got ${mk_got} [${mk_class}]: ${mk_path} (${mk_bytes} bytes)"$'\n'
+    fi
+  done < "$MARKER_FIXTURE"
+
+  rm -rf "$mk_td"
+fi
+
+if [ -n "$mk_skip" ]; then
+  mk_summary="marker-resolution arm: SKIPPED-VACUOUS (${mk_skip}) — NOT a clean result"
+else
+  mk_summary="marker-resolution arm: ${mk_flag} FLAG / ${mk_clean} CLEAN, ${mk_rows} rows, ${mk_fail} failed (bulk filler ${mk_bulk_kb} KB measured, pipe buffer ~64 KB)"
+fi
+
 # PV-6 instrument form: a finding count is only readable next to its denominator and its arm
 # results. "46 passed, 0 failed" alone cannot distinguish a healthy run from one that examined
 # nothing.
@@ -493,6 +681,7 @@ fi
   "$n_flag" "$n_clean" "$pass" "$fail" "$FIXTURE" "$scan_summary"
 "$PRINTF" 'refblock identity fixture: %d FLAG / %d CLEAN, %d cases, %d failed over %d materialised paths · %s\n' \
   "$rb_flag" "$rb_clean" "$rb_rows" "$rb_fail" "$rb_pop_n" "$rb_summary"
+"$PRINTF" '%s\n' "$mk_summary"
 
 if [ "$fail" -gt 0 ]; then
   "$PRINTF" '%s' "$fail_lines" >&2
@@ -520,5 +709,28 @@ if [ "$rb_divergent" -gt 0 ]; then
   "$PRINTF" 'FAIL: REFBLOCK_RE declared outside lib/fragile-ref-patterns.sh with a DIVERGENT value.\nEither source the library or make the value byte-identical to it:\n%s\n' \
     "$("$PRINTF" '%s\n' "$rb_real_verdicts" | "$GREP" '^NAME-DIVERGENT	' || true)" >&2
   exit 1
+fi
+# --- marker-resolution arm verdicts -------------------------------------------------------
+# Ordered so the arm's own readability is asserted BEFORE its results are believed, matching
+# the refblock arm's one-armed and reachability guards above.
+if [ -z "$mk_skip" ]; then
+  if [ "$mk_flag" -eq 0 ] || [ "$mk_clean" -eq 0 ]; then
+    "$PRINTF" 'FAIL: marker-resolution fixture is one-armed (%d FLAG / %d CLEAN) — a zero from it would be unreadable\n' \
+      "$mk_flag" "$mk_clean" >&2
+    exit 1
+  fi
+  # REACHABILITY. CLEAN is also what a hook that exited early produces — at its scope gate, its
+  # allowlist, or a lib guard — so a row full of passing CLEANs cannot on its own distinguish
+  # "adjudicated and found exempt" from "never adjudicated". A non-zero exit is reachable ONLY
+  # through the scope gate, the marker read and the Class L detector in order, so one observed
+  # FLAG is the positive evidence that the CLEAN rows' zeros are load-bearing.
+  if [ "$mk_observed_flag" -eq 0 ]; then
+    "$PRINTF" 'FAIL: marker-resolution arm observed NO flagged row — every row reported CLEAN, which is also what a hook that exited before adjudicating would report, so none of these results can be read\n' >&2
+    exit 1
+  fi
+  if [ "$mk_fail" -gt 0 ]; then
+    "$PRINTF" 'FAIL: per-file override markers did not resolve as committed:\n%s' "$mk_fail_lines" >&2
+    exit 1
+  fi
 fi
 exit 0
