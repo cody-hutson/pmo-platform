@@ -28,7 +28,7 @@ The hub writes runtime instances to `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milesto
 ## Authoring contract
 
 - **Authored by:** Hub at every routing decision (Procedure 0b in [`../../references/how-to/hub-spoke-bridge.md`](../../references/how-to/hub-spoke-bridge.md) and every subsequent action-item emit or approval enqueue)
-- **First emit:** Hub copies the template from this directory to `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/<surface>.md`, substitutes the milestone slug into the frontmatter, and appends the first row
+- **First emit:** Hub copies the template from this directory to `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/<surface>.md`, substitutes the milestone slug into the frontmatter, and appends the first row. A small number of directories predate the slug-keyed convention and are keyed on a version; the resolver reads the slug form first and falls back to the version form, which it treats as read-only
 - **Read by:** Hub on session resume (Resume Procedure Steps 7-8 in `hub-session-continuity.md`); operator (manually inspecting pending approvals)
 
 ## Classification
