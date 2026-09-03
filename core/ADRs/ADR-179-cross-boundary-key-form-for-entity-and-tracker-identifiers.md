@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 ---
-title: "ADR-175 — The cross-boundary key form is a qualified composite anchored on the project's frontmatter join key"
+title: "ADR-179 — The cross-boundary key form is a qualified composite anchored on the project's frontmatter join key"
 status: Proposed — flips to Accepted at Stage 13 Close (Phase A13, the ratification beat; gate row G-CL9 verifies). The flip is recorded in this file's `status:` field, which is where it must be verified — the automated ratification-flip check is advisory-only and structurally cannot fail, so this line is the authority, never a milestone state or a review comment.
 date: 2026-09-02
 release: pda-decisions-and-conformance-baseline
@@ -18,13 +18,15 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-175 — The cross-boundary key form is a qualified composite anchored on the project's frontmatter join key
+# ADR-179 — The cross-boundary key form is a qualified composite anchored on the project's frontmatter join key
 
 ## Status
 
 **Proposed** — flips to **Accepted** at Stage 13 Close (Phase A13, which owns the `Proposed → Accepted` performing beat; gate row G-CL9 verifies the flip). The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — the automated ratification-flip check is advisory-only and structurally cannot fail, so the field is the authority, never a milestone state, a stage comment, or a green close-out.
 
 **Numbering provenance.** Allocated at this Engineering commit as the next number above the union of the mainline anchor and this branch's own in-flight claims — never `max(claimed)+1`. `renumber-adr.py --detect` at the commit instant reported `ANCHOR 172 origin/main`, `NEXT-FREE 173`, `CLAIMED-SET-BRANCH-ONLY 173,174,175,176 (detection only — never binds)`, and two binding branch claims: `ADR-177 … BINDS` and `ADR-178 … BINDS`. This branch already carries the sibling lifecycle-carrier record at 173 and the sibling validator-surface record at 174, so the union is `{…172} ∪ {173, 174}` and **175** binds here. The branch-only claims on 175 and 176 belong to other in-flight branches and never bind; a cross-branch collision is governed — resolved by the renumber tool at merge time — and is never a reason to skip ahead or reserve a higher slot.
+
+**Numbering provenance — `175 → 179`.** Held **ADR-175** branch-local; renumbered to **ADR-179** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 175. In-release citations that read "ADR-175" denote this record.
 
 ## Context
 
