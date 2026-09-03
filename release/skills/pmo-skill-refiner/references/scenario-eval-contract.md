@@ -202,12 +202,15 @@ Run as a module from the skill root, matching every sibling in the Script Invent
 
 ```
 python3 -m scripts.run_scenario_eval \
-  --suite <path/to/evals.json>          # required
-  [--out <path/to/grading.json>]        # default: alongside the suite file
-  [--fixture <path>]                    # override the suite's declared fixture
+  --suite <path/to/evals.json>          # required; read AS GIVEN (cwd-relative)
+  [--out <path/to/grading.json>]        # read AS GIVEN; default: alongside the suite file
+  [--fixture <path>]                    # override the declared fixture; resolved
+                                        #   RELATIVE TO THE SUITE FILE'S DIRECTORY
   [--fail-under <float>]                # exit 1 when the pass rate is below this
   [--verbose]                           # per-assertion PASS/FAIL with evidence
 ```
+
+**The three path flags do not share one convention, and the difference is easy to miss.** `--suite` and `--out` are read as given, so they are relative to wherever you are standing. `--fixture` is resolved against **the suite file's own directory**, exactly as the suite's declared `fixture` field is (§ 1) — that consistency is what lets one suite be scored against a baseline, a regressed and an empty fixture with no edit to the suite. Passing a working-directory-relative path to `--fixture` resolves it under the suite's directory instead and dies on a not-found, which is a usage error (exit 2) rather than a score.
 
 ### Exit codes — a closed four-value set
 
