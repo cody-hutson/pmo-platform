@@ -2808,6 +2808,323 @@ test_case "PARSE-14c: shipped hook ALLOWS the identical payload (mutation pair c
 
 /bin/rm -f "$PARSE_MUTANT"
 
+echo ""
+echo "BLOCK-022 HD here-document modelling (#6229)"
+echo "---"
+#
+# WHAT THESE ARMS ARE FOR. A here-document BODY is the INPUT DATA a redirection
+# supplies to a command (POSIX Shell Command Language 2.7.4); the shell never
+# parses it as a command list. Before this change the rule latched suppression
+# OFF for any command containing `<<`, so text it had already adjudicated
+# correctly was re-adjudicated as if it were command text — and the identical
+# report bytes were refused on stdin and accepted from a file.
+#
+# EVERY ALLOW-ASSERTING ARM BELOW IS PAIRED WITH A REFUSE-ASSERTING ARM IN THE
+# SAME RUN. That pairing is the whole evidentiary value: a blanket allow shows up
+# as a SILENT CONTROL, a disabled rule shows up as a DROPPED TOTAL, and an
+# exemption that is real but inert shows up as a GREEN MUTANT (HD-09). An arm
+# whose control arm is also green is measuring a permissive hook, not a fix.
+#
+# The pre-change verdict of every shape below was recorded before the excision
+# landed, so a reader can tell a tightening from a narrowing rather than
+# inferring it.
+
+# ----- AC-1: the card's measurement, both transports -----
+#
+# Identical report bytes quoting an interpreter invocation as evidence, delivered
+# two ways. Before: (a) refused, (b) allowed — the transport decided the verdict
+# for bytes that reach the same destination either way. The asymmetry is CLOSED,
+# not documented: both allow now.
+test_case "HD-01a: a report quoting an invocation, delivered by here-document, allows" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'RPT'"'"'
+## Finding
+
+The CI log line the finding is about:
+
+    bash /tmp/evil.sh --self-test
+
+That invocation is the subject of the report, not a proposal to run it.
+RPT')" \
+  0
+
+test_case "HD-01b: the same report bytes delivered by file path allow (transport parity)" \
+  "$(bash_payload 'gh issue comment 1 --body-file /tmp/report.md')" \
+  0
+
+# The sensitivity arm. A green HD-01a whose control is silent is a disabled rule,
+# not a repair — this is the arm that makes the pair readable.
+test_case "HD-01c control: a genuine invocation of the same script still blocks" \
+  "$(bash_payload 'bash /tmp/evil.sh --self-test')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# ----- AC-2: the stdin-executing arm is refused -----
+#
+# THE SINGLE MOST IMPORTANT ARM SET. `bash` reads its PROGRAM from stdin, so the
+# body genuinely executes. This is the fail-open the carrier condition is shaped
+# to avoid, and it is why the exemption cannot key on the construct alone.
+test_case "HD-02a control: bash reading its program from a here-document blocks" \
+  "$(bash_payload 'bash <<'"'"'EOF'"'"'
+bash /tmp/evil.sh
+EOF')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "HD-02b control: sh reading its program from a here-document blocks" \
+  "$(bash_payload 'sh <<'"'"'EOF'"'"'
+bash /tmp/evil.sh
+EOF')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "HD-02c control: zsh reading its program from a here-document blocks" \
+  "$(bash_payload 'zsh <<'"'"'EOF'"'"'
+bash /tmp/evil.sh
+EOF')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# The byte-identical BODY under a carrier allows in the same run, so the verdict
+# above is attributable to the RECEIVING COMMAND and not to the body text.
+test_case "HD-02d: the byte-identical body under a carrier allows (verdict is the receiver's)" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'EOF'"'"'
+bash /tmp/evil.sh
+EOF')" \
+  0
+
+# ----- AC-3: the delimiter-quoting axis discriminates -----
+#
+# A QUOTED delimiter suppresses every expansion in the body; a BARE one performs
+# parameter expansion, command substitution and arithmetic expansion. That is the
+# same two-tier split the file already applies to '...' versus "...", so the test
+# is the CONSTRUCT's expansion capability, not the delimiter's quote characters.
+test_case "HD-03a: single-quoted delimiter into a carrier allows" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'RPT'"'"'
+bash /tmp/evil.sh
+RPT')" \
+  0
+
+test_case "HD-03b: double-quoted delimiter into a carrier allows" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<"RPT"
+bash /tmp/evil.sh
+RPT')" \
+  0
+
+test_case "HD-03c: backslash-quoted delimiter into a carrier allows" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<\RPT
+bash /tmp/evil.sh
+RPT')" \
+  0
+
+# (d)(e) are the discriminating pair, and they differ by ONE character. A bare
+#     delimiter whose body carries a `$` can expand, so the body is left in the
+#     adjudicated text and still blocks; remove the `$` and the same body is
+#     inert and is excised. If (e) were red the rule would be reading the
+#     delimiter's quote characters instead of the construct's capability.
+test_case "HD-03d control: bare delimiter with an expandable body still blocks" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<RPT
+bash /tmp/evil.sh $HOME
+RPT')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "HD-03e: bare delimiter with an inert body allows (the one-character pair)" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<RPT
+bash /tmp/evil.sh
+RPT')" \
+  0
+
+# ----- AC-5: post-terminator text keeps its verdict -----
+#
+# A real execution AFTER the terminator must stay adjudicated. If the excision
+# corrupted the line structure this is the arm that fails — and the inherited
+# arm AC-FP-2x above, which is deliberately left unmodified, is its twin.
+test_case "HD-05 control: a real execution after the terminator still blocks" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'RPT'"'"'
+report text
+RPT
+bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# ----- AC-6: the exemption is STRUCTURAL, not a content heuristic -----
+#
+# The card's constraint: an exemption keyed on "it looked like a report" is
+# trivially forgeable by anything that can print a markdown fence. Assert the
+# implementation keys on none of that. The control arm proves the instrument is
+# live rather than mis-spelled.
+#
+# THE INSTRUMENT MEASURES CODE, NOT PROSE. Comment lines are stripped first,
+# because the criterion is that no BRANCH keys on a content marker — an English
+# sentence explaining the quote scanner is not a branch. Left un-stripped this
+# probe failed on the word "report" inside a comment carried over from
+# script_qadvance, which would have made it a prose linter rather than a
+# structure test and would have pressured the prose to satisfy the instrument.
+HD_PRESCAN="$(/usr/bin/sed -n '/^script_heredoc_prescan() {/,/^}$/p' "$HOOK" \
+  | /usr/bin/grep -v '^[[:space:]]*#')"
+if [ -n "$HD_PRESCAN" ] && ! /usr/bin/printf '%s' "$HD_PRESCAN" \
+     | /usr/bin/grep -qiE 'report|evidence|markdown|fence|body-file|--body|```'; then
+  /usr/bin/printf 'PASS: HD-06a the pre-pass keys on no content marker (no report/fence/flag token)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: HD-06a the pre-pass keys on a content marker, or the instrument found no function\n'
+  FAIL=$((FAIL + 1))
+fi
+
+if /usr/bin/printf '%s' "$HD_PRESCAN" | /usr/bin/grep -qE 'script_qnext|gh\|printf\|echo\|jq'; then
+  /usr/bin/printf 'PASS: HD-06b control: the same instrument finds the quote scanner and the carrier set\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: HD-06b control is SILENT — HD-06a zero is unreadable, not clean\n'
+  FAIL=$((FAIL + 1))
+fi
+
+# ----- AC-7: un-modelled shapes bail closed, keeping the pre-change verdict -----
+#
+# ALL-OR-NOTHING. One declined body means nothing is excised and the whole
+# command keeps the text it had before, so a shape the model does not cover can
+# only ever degrade to adjudicate-everything — never to allow.
+test_case "HD-07a control: an unterminated here-document blocks (model cannot resolve)" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'RPT'"'"'
+bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "HD-07b control: a NON-carrier receiver keeps the false positive (residual R-4)" \
+  "$(bash_payload 'cat <<'"'"'RPT'"'"' > /tmp/out.md
+bash /tmp/evil.sh
+RPT')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "HD-07c control: a delimiter bearing expansion characters blocks" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<RP$T
+bash /tmp/evil.sh
+RP$T')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "HD-07d control: more than two here-documents queued on one line blocks" \
+  "$(bash_payload 'gh a --f - <<'"'"'A'"'"' --g - <<'"'"'B'"'"' --h - <<'"'"'C'"'"'
+bash /tmp/evil.sh
+A
+x
+B
+y
+C')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# ----- AC-8: the latch narrowing did not disarm quoted-argument suppression -----
+#
+# This is the pair the whole card turns on. (a) was ALREADY allowed before the
+# change; (b) is the identical command plus an UNRELATED trailing here-document,
+# and it was refused — the latch disarmed a suppression that had already decided
+# correctly. Both allow now.
+test_case "HD-08a: the shipped quoted-argument suppression still allows" \
+  "$(bash_payload "gh issue comment 1 --body 'note; bash /tmp/evil.sh'")" \
+  0
+
+test_case "HD-08b: the same command plus an unrelated here-document now also allows" \
+  "$(bash_payload "gh issue comment 1 --body 'note; bash /tmp/evil.sh' <<'X'
+unrelated body
+X")" \
+  0
+
+# The wrapper asymmetry documented at script_resolve_head is preserved: a prefix
+# in front of a carrier must NOT resolve to the carrier. If this went green the
+# carrier walk was silently widened while the surface grew.
+test_case "HD-08c control: a wrapper in front of a carrier is still not a carrier" \
+  "$(bash_payload "sudo gh issue comment 1 --body 'note; bash /tmp/evil.sh'")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# ----- Construct coverage the model must get right -----
+
+# `<<-` strips leading TABS from body and delimiter lines before the match.
+HD_TAB="$(/usr/bin/printf '\t')"
+test_case "HD-10: <<- tab-stripping form with a quoted delimiter allows" \
+  "$(bash_payload "gh issue comment 1 --body-file - <<-'RPT'
+${HD_TAB}bash /tmp/evil.sh
+${HD_TAB}RPT")" \
+  0
+
+# THE RECEIVER IS RESOLVED FROM THE LAST SEPARATOR, NOT FROM THE LINE HEAD. If it
+# were read from the head, a carrier ahead of a separator would lend its
+# exemption to a real interpreter that receives the redirection after it. This is
+# the arm that would catch that fail-open.
+test_case "HD-11 control: a carrier before a separator does not vouch for the real receiver" \
+  "$(bash_payload 'gh issue view 1 ; bash <<'"'"'E'"'"'
+bash /tmp/evil.sh
+E')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# POSIX runs a command that follows the operator on the OPERATOR's own line
+# BEFORE the body begins. After separator substitution it is indistinguishable
+# from the first body line, which is why the pre-pass runs on the original text.
+test_case "HD-12 control: a command after the operator on the operator line still blocks" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'E'"'"' ; bash /tmp/evil.sh
+body line
+E')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# A here-STRING is one word, already covered by the quote model. It must be
+# recognised BEFORE `<<`, or the scan reads a delimiter of `<` and corrupts.
+test_case "HD-13: a here-string is not read as a here-document" \
+  "$(bash_payload "gh issue comment 1 --body-file - <<< 'note bash /tmp/evil.sh'")" \
+  0
+
+# `<<` INSIDE a quoted argument is text, not an operator. The latch this replaces
+# globbed the raw command and could not tell the difference.
+test_case "HD-14: << inside a quoted argument is text and does not disarm suppression" \
+  "$(bash_payload "gh issue comment 1 --body 'note << not an operator; bash /tmp/evil.sh'")" \
+  0
+
+# Every carrier in the set receives the same treatment, not just gh.
+test_case "HD-15a: printf as the receiving carrier allows" \
+  "$(bash_payload 'printf '"'"'%s'"'"' - <<'"'"'RPT'"'"'
+bash /tmp/evil.sh
+RPT')" \
+  0
+
+test_case "HD-15b: jq as the receiving carrier allows" \
+  "$(bash_payload 'jq -R . <<'"'"'RPT'"'"'
+bash /tmp/evil.sh
+RPT')" \
+  0
+
+# ALL-OR-NOTHING, asserted directly: a command mixing an excisable here-document
+# with a declined one excises NEITHER and keeps its pre-change verdict.
+test_case "HD-16 control: one declined body means the whole command is left adjudicated" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'A'"'"'
+bash /tmp/evil.sh
+A
+cat <<'"'"'B'"'"'
+plain
+B')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# ----- AC-9: paired mutation arm -----
+#
+# An exemption that is real but INERT reads green on every arm above. Three arms
+# in this milestone's prior release did exactly that. Revert the excision in a
+# sibling copy — so HOOK_DIR, every lib and the allowlist resolve identically —
+# and require the mutant to REFUSE the payload the shipped hook allows.
+HD_MUTANT="$(dirname "$HOOK")/block-destructive.HD-mutant.sh"
+/usr/bin/sed 's#\[ "\$_ex" -eq 1 \]#[ "$_ex" -eq 99 ]#' "$HOOK" > "$HD_MUTANT"
+
+if /usr/bin/cmp -s "$HOOK" "$HD_MUTANT"; then
+  /usr/bin/printf 'FAIL: HD-09a mutation is INERT — mutant is byte-identical to the shipped hook\n'
+  FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: HD-09a mutation is live (mutant differs from the shipped hook)\n'
+  PASS=$((PASS + 1))
+fi
+
+sandbox_case "HD-09b: mutant (excision reverted) BLOCKS the report HD-01a allows" \
+  "$HD_MUTANT" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'RPT'"'"'
+bash /tmp/evil.sh --self-test
+RPT')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "HD-09c: shipped hook ALLOWS the identical payload (mutation pair closes)" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'RPT'"'"'
+bash /tmp/evil.sh --self-test
+RPT')" \
+  0
+
+/bin/rm -f "$HD_MUTANT"
+
 # --- Summary ---
 echo ""
 echo "================================"
