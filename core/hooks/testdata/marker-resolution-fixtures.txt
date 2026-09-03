@@ -1,0 +1,77 @@
+# marker-resolution-fixtures.txt — committed arms for the per-file override-marker read
+#
+# WHY THIS FILE EXISTS. cutover-fixtures.txt proves each DETECTOR matches the right content
+# line, and refblock-identity-fixtures.txt proves the detector CONSTANTS have not been copied
+# and allowed to drift. Neither one exercises the step that runs BEFORE any detector: reading
+# the per-file override marker out of the fence-stripped file and deciding whether the file
+# has exempted itself from a class. That step had zero behavioural coverage, and it was
+# broken — SIZE-DEPENDENTLY, which is the worst way for a gate to be broken, because every
+# small fixture anyone would think to write passes.
+#
+# THE DEFECT THESE ARMS PIN. Both marker-resolving surfaces read a file-sized variable
+# through a PIPE into `grep -q`, under `set -euo pipefail`:
+#
+#     printf '%s\n' "$MARKER_SCAN" | grep -qE '<!-- reference-durability: allow-link -->'
+#
+# `grep -q` exits at its FIRST match. When the payload is larger than the pipe buffer
+# (~64 KB) the writer still has data to push, takes SIGPIPE, and returns 141; `pipefail`
+# promotes that 141 to the pipeline's status, so the test reads FALSE even though the marker
+# was found. The override is silently discarded and the file is flagged for a reference it
+# had validly exempted. Under the buffer it passes, so the bug is invisible to any fixture
+# small enough to read comfortably. The repair is to remove the writer — a here-string has no
+# second process, so there is no early close, no SIGPIPE, and no dependence on `pipefail`
+# semantics. (The same reasoning, and the same repair, are already recorded inline at the two
+# here-strings in the refblock identity arm of run-fragile-ref-fixtures.sh; those were written
+# correctly from the start, and these two older surfaces were not.)
+#
+# FORMAT (one test case per non-comment line) — the cutover-fixtures.txt schema, verbatim:
+#   <EXPECT>\t<CLASS>\t<content>
+# where
+#   <EXPECT>  = FLAG  (the hook MUST report this write)
+#             | CLEAN (the hook MUST NOT report it — the file's marker governs)
+#   <CLASS>   = MARKER-ALLOW-LINK   (which override marker is under resolution; the other two
+#               markers, allow-version-ref and allow-url, resolve through the SAME three
+#               lines of code, so widening the class set is additive and needs no new arm)
+#   <content> = "<relpath>|<file body>" — the pipe-delimited idiom ISSUEREF-POS uses. Split on
+#               the FIRST '|' (a relative path never contains one). In the body, `\n` is a
+#               line separator and @@BULK@@ is a sentinel (below).
+#
+# THE RELPATH IS LOAD-BEARING, NOT DECORATION. It becomes the hook's file_path, so it must
+# match a durable-corpus glob or the hook exits at its scope gate and every row reports CLEAN
+# vacuously. That is exactly the silent-pass this arm exists to rule out, which is why the
+# FLAG row below is the reachability evidence for the CLEAN rows: a non-zero verdict is only
+# reachable by running the scope gate, the marker read and the Class L detector in order, so
+# one observed FLAG is proof the CLEAN rows were adjudicated rather than skipped. The runner
+# fails the run when no row flags, so that proof is asserted and not assumed.
+#
+# @@BULK@@ expands at run time to a filler block sized past the pipe buffer. It is a sentinel
+# and not literal bytes for the same reason @@CANONICAL@@ is one in the refblock fixture:
+# committing ~170 KB of padding to make one row large would make this file unreadable and
+# unreviewable, and the size is a property of the RUNNER's constant, where it can be stated
+# with its rationale, rather than a fact buried in an enormous line. Each filler line is inert
+# by construction — no `](`, no bare issue reference, no raw ledger URL, no version-cutover
+# idiom — so the large row differs from the small row in SIZE ALONE. That is the whole
+# experimental control: if the two rows disagreed in content as well as length, a failure
+# would not isolate the size dependence.
+
+# ─── sensitivity: the fenced marker MUST NOT claim the override ───────────────
+# A marker inside a fenced code block ILLUSTRATES the syntax; it does not DECLARE it. Both
+# surfaces strip fences before resolving, so this file documents the marker without exempting
+# itself from the gate that governs it — and its link is therefore reported. This is also the
+# arm that proves the hook was reached at all (see THE RELPATH IS LOAD-BEARING above): it is
+# the only row whose expectation cannot be met by a hook that exits early.
+FLAG	MARKER-ALLOW-LINK	core/standards/marker-fenced.md|```\n<!-- reference-durability: allow-link -->\n```\n\nSee [the durability standard](core/standards/reference-durability-standard.md) for the rule.
+
+# ─── specificity (small): the marker governs, and the link is not reported ────
+# The control row. It passed before the fix and after it, and its only job is to show that
+# the large row's failure is about SIZE and not about the marker, the link, the path or the
+# detector — all four of which are identical here.
+CLEAN	MARKER-ALLOW-LINK	core/standards/marker-small.md|<!-- reference-durability: allow-link -->\n\nSee [the durability standard](core/standards/reference-durability-standard.md) for the rule.\n\nFiller prose line carrying no fragile reference construct of any kind whatsoever.
+
+# ─── specificity (large): THE FALSIFIABLE ROW — same file, past the buffer ────
+# Identical to the small row except for the @@BULK@@ filler, and the marker sits at the top
+# so `grep -q` matches early and leaves the writer with the whole remainder still to push —
+# the exact condition that produces the broken pipe. This row FAILS against the piped form
+# and PASSES against the here-string form; it is the one arm in this file that could ever
+# have caught the defect, and the rest of the file exists to make its verdict readable.
+CLEAN	MARKER-ALLOW-LINK	core/standards/marker-large.md|<!-- reference-durability: allow-link -->\n\nSee [the durability standard](core/standards/reference-durability-standard.md) for the rule.\n\n@@BULK@@
