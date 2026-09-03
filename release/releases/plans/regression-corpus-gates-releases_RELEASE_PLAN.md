@@ -124,6 +124,9 @@ release/skills/pmo-skill-refiner/evals/scenario-runner/fixtures/empty.yaml      
 core/ADRs/ADR-177-output-scoring-runner-consumes-the-shipped-eval-harness-schema.md   add
 release/ADRs/ADR-178-behavioral-regression-floor-and-major-release-binding-boundary.md   add
 
+# ── Edits (#5863 — derived-surface consequence of the decision-record add) ──
+release/ADRs/README.md                                                           edit
+
 # ── Edits (#5863 — bounded documentation reconciliation) ──
 release/skills/pmo-skill-refiner/references/schemas.md                           edit
 release/skills/pmo-skill-refiner/references/eval-framework.md                    edit
@@ -162,6 +165,10 @@ core/skills/skill-compliance-auditor/references/scenario-and-calibration-schema.
 **The `CONDITIONAL:schema-extension-selected` row from Stage 4 resolved to NOT-FIRED.** Stage 4 recorded a conditional row against the trigger-rate schema under `skill-compliance-auditor`, to be promoted into the unconditional set if the schema decision selected an extension of it. Stage 5 selected a third option — adopt the eval-harness schema the platform already ships — so the condition did not fire and the row is recorded above as explicit non-scope rather than dropped. Recording the non-firing positively is what stops a later reader from reading the absence as an oversight.
 
 **`run_eval.py` is explicit non-scope, not merely absent.** The runner card's second acceptance criterion requires that the trigger-eval path be unchanged. The file therefore carries an explicit `NOT EDITED` row, and the criterion's verification is a mechanical assertion over the delivered diff.
+
+**The release-module decision-record index is a derived surface, not a hand-maintained one.** Adding a record under `release/ADRs/` obliges a regeneration of that module's index by its own projector, and a hand-added row fails the projector's verification. The core module's record README is the opposite by decision — a curated thematic document that has never enumerated the full record set — so the core record added here correctly adds no row anywhere.
+
+**Both decision records are authored by this release's first Engineering spoke.** The record under `release/ADRs/` belongs to the gate card's decisions, and its content was settled in full at Solutioning with no dependency on implementation, so it is authored at Commit 0 rather than deferred. The gate card's spoke **consumes** it and must not allocate a second record number for the same decisions.
 
 **Package-rebuild obligation.** Two rostered skills have `SKILL.md` or `references/` content edited, and both ship distribution packages with committed content-baseline sidecars. The freshness assertion is content-based, not modification-time-based, so a fresh checkout does not mask staleness. Both packages and both sidecars are rebuilt with the platform's own package builder and committed alongside the edits that stale them. The third package listed above is staled by the gate card's coordinated edit, because the standard it edits is a registered template-sync mirror shipped inside that package; that rebuild belongs to the gate card's Engineering spoke.
 

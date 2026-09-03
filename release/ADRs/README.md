@@ -79,6 +79,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-160](ADR-160-arm-e-population-is-the-directory-never-the-manifest.md) | The tool-coverage engine hosts a second invariant whose population is the directory, never the manifest | Accepted | 2026-08-28 | ci-stable-under-transient-conditions |
 | [ADR-168](ADR-168-a-verification-claim-is-a-named-schema-column.md) | An unindexable verification table ERRORs only when it names a verification-schema column; sharing the word `Issue` is not a verification claim — and the method-column match stays CONTAINMENT, because equality silently de-indexes twenty live rows | Accepted | 2026-08-30 | warn-mode-gate-graduation |
 | [ADR-173](ADR-173-declared-kind-is-a-residual-feature-signal.md) | A declared work-item kind is a RESIDUAL feature signal in the allocation map, never a co-equal one | Accepted | 2026-09-02 | label-and-reference-integrity |
+| [ADR-178](ADR-178-behavioral-regression-floor-and-major-release-binding-boundary.md) | The behavioural-regression pass-rate floor and the boundary the gate binds at | Accepted | 2026-09-02 | regression-corpus-gates-releases |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.
