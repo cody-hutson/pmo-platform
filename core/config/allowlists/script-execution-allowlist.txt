@@ -801,3 +801,17 @@ core/deploy/tests/test_check36_drift_classes.sh
 ./core/deploy/tools/start-skill-editor-session.sh
 core/deploy/tools/start-skill-editor-session.sh
 */core/deploy/tools/start-skill-editor-session.sh
+
+# check-automation-registry.sh — the automation-registry CONFORMANCE predicate.
+# It is executed agent-side in both argument forms: `--self-test` (the hard step
+# that proves the validator discriminates — one well-formed row returning zero
+# findings and one malformed row per rejection class) and a bare scan of the live
+# registry. Both arms are the acceptance demonstration a schema-and-validator
+# slice owes, and a single-arm result cannot distinguish a working rejection from
+# a validator that always fires — so both must be runnable. All four invocation
+# forms per the per-tool form convention above. (CI runs no Claude hooks, so
+# these rows are for the agent-side path, not the workflow step.)
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-automation-registry.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-automation-registry.sh
+./core/deploy/tools/check-automation-registry.sh
+core/deploy/tools/check-automation-registry.sh
