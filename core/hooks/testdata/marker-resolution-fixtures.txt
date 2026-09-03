@@ -44,15 +44,20 @@
 # one observed FLAG is proof the CLEAN rows were adjudicated rather than skipped. The runner
 # fails the run when no row flags, so that proof is asserted and not assumed.
 #
-# @@BULK@@ expands at run time to a filler block sized past the pipe buffer. It is a sentinel
-# and not literal bytes for the same reason @@CANONICAL@@ is one in the refblock fixture:
-# committing ~170 KB of padding to make one row large would make this file unreadable and
-# unreviewable, and the size is a property of the RUNNER's constant, where it can be stated
-# with its rationale, rather than a fact buried in an enormous line. Each filler line is inert
-# by construction — no `](`, no bare issue reference, no raw ledger URL, no version-cutover
-# idiom — so the large row differs from the small row in SIZE ALONE. That is the whole
-# experimental control: if the two rows disagreed in content as well as length, a failure
-# would not isolate the size dependence.
+# @@BULK@@ expands at run time to a filler block sized into a measured two-sided window: above
+# the ~64 KB pipe buffer, so the defect fires, and below the 131,072 B per-argument cap Linux
+# imposes, which the hook trips on a different code path entirely and which would make this row
+# fail for a reason other than the one it names. Both bounds and the chosen size live beside
+# MARKER_BULK_LINES in the runner, measured rather than asserted.
+#
+# It is a sentinel and not literal bytes for the same reason @@CANONICAL@@ is one in the
+# refblock fixture: committing ~100 KB of padding to make one row large would make this file
+# unreadable and unreviewable, and the size is a property of the RUNNER's constant — where it
+# can be stated with its rationale and re-measured — rather than a fact buried in an enormous
+# line. Each filler line is inert by construction — no `](`, no bare issue reference, no raw
+# ledger URL, no version-cutover idiom — so the large row differs from the small row in SIZE
+# ALONE. That is the whole experimental control: if the two rows disagreed in content as well
+# as length, a failure would not isolate the size dependence.
 
 # ─── sensitivity: the fenced marker MUST NOT claim the override ───────────────
 # A marker inside a fenced code block ILLUSTRATES the syntax; it does not DECLARE it. Both

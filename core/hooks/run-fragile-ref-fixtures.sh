@@ -523,12 +523,28 @@ fi
 #                     future edit makes another lib required, this arm fails LOUD — a fail-closed
 #                     hook returns 2 for every row and the CLEAN rows report FLAG.
 MARKER_FIXTURE="${SCRIPT_DIR}/testdata/marker-resolution-fixtures.txt"
-# Sized at ~3x the 64 KB pipe buffer. Large enough that the writer is still pushing when
-# `grep -q` matches the marker on line 1 — which is the condition that produces the broken
-# pipe — and small enough that the row costs milliseconds. Below the buffer the defect is
-# INVISIBLE, so this constant is the arm's whole sensitivity and is stated here with its
-# reason rather than buried as padding in the fixture.
-MARKER_BULK_LINES=2000
+# SIZED INTO A TWO-SIDED WINDOW, both bounds MEASURED against the real hook rather than
+# reasoned about. This constant is the arm's whole sensitivity, so it is stated here with the
+# numbers that chose it.
+#
+#   LOWER BOUND — the defect must actually fire. The writer has to still be pushing when
+#   `grep -q` matches the marker on line 1. Swept against the pre-fix hook: 700 lines
+#   (57,537 B) still resolves the marker; 800 lines (65,737 B) discards it, and every larger
+#   size discards it too. So the floor is the ~64 KB pipe buffer, and anything at or under it
+#   makes this arm SILENTLY VACUOUS — it would pass against the broken gate.
+#
+#   UPPER BOUND — the row must not collide with an unrelated limit. Linux caps a single argv
+#   string at MAX_ARG_STRLEN (131,072 B); the hook passes its whole stdin JSON to an external
+#   printf when validating it, so a row whose JSON exceeds that cap makes the hook exit on
+#   "malformed hook input JSON" instead of adjudicating the marker. That is a real and
+#   separate hook defect (it is NOT this issue's six sites, and is reported rather than fixed
+#   here), but an arm that tripped it would fail for a reason other than the one it names —
+#   the opposite of the isolation the small/large row pair exists to provide.
+#
+# 1200 lines puts the body at 98,537 B and its JSON at 99,867 B: ~33 KB clear of the firing
+# floor and ~31 KB clear of the argv ceiling. Verified in both directions at exactly this
+# size — pre-fix hook exits 2 (marker discarded), post-fix hook exits 0 (marker honoured).
+MARKER_BULK_LINES=1200
 # Inert by construction: no `](`, no bare issue reference, no raw ledger URL, no version-cutover
 # idiom. The large row must differ from the small row in SIZE ALONE, or a failure would not
 # isolate the size dependence.
@@ -584,12 +600,23 @@ if [ -z "$mk_skip" ]; then
   "$PRINTF" '# synthetic allowlist for the marker-resolution arm — one inert entry so the\n# surface is reachable (absent is fail-closed) while no fixture path can match it.\nnever-matches-any-fixture-path.md\n' \
     > "${mk_td}/reference-durability-allowlist.txt"
 
-  mk_padding="$("$AWK" -v n="$MARKER_BULK_LINES" -v p="$MARKER_PAD_LINE" 'BEGIN { for (i = 1; i <= n; i++) print p }')"
+  # THE BULK PAYLOAD NEVER TRAVELS AS AN ARGUMENT. Linux caps a SINGLE argv string at
+  # MAX_ARG_STRLEN (128 KiB, 32 pages) independently of the much larger total ARG_MAX, so
+  # handing a >64 KB payload to any EXTERNAL command as an argument fails with E2BIG
+  # ("Argument list too long"). macOS has no equivalent per-string cap, so this arm passed
+  # locally and died on the CI runner — the same class of platform-dependent break as the
+  # defect it pins. Everything large therefore moves by FILE or STDIN: awk writes the filler
+  # by redirection, `wc -c <file>` measures it, and jq reads the row body with --rawfile.
+  # The only printf that touches a large value below is the shell BUILTIN, which never
+  # execs and so has no argv limit at all.
+  "$AWK" -v n="$MARKER_BULK_LINES" -v p="$MARKER_PAD_LINE" \
+    'BEGIN { for (i = 1; i <= n; i++) print p }' > "${mk_td}/bulk-filler.txt"
+  mk_padding="$(cat "${mk_td}/bulk-filler.txt")"
   # MEASURED, never computed from the line count. The summary states this arm's sensitivity —
   # whether the bulk row actually clears the pipe buffer — so an arithmetic estimate of it
   # would be a number the run never checked, in the one field a reader consults to decide
   # whether the arm could have fired at all.
-  mk_bulk_kb=$(( $("$PRINTF" '%s' "$mk_padding" | wc -c) / 1024 ))
+  mk_bulk_kb=$(( $(wc -c < "${mk_td}/bulk-filler.txt") / 1024 ))
 
   while IFS= read -r raw || [ -n "$raw" ]; do
     case "$raw" in
@@ -601,9 +628,15 @@ if [ -z "$mk_skip" ]; then
     [ -z "$mk_expect" ] && continue
     mk_path="${mk_content%%|*}"
     mk_raw="${mk_content#*|}"
-    # `\n` -> newline FIRST, then the sentinel, so %b never walks the filler block.
+    # `\n` -> newline FIRST, then the sentinel, so %b never walks the filler block. $mk_raw is
+    # one fixture line, so the pinned printf is safe here; the EXPANDED body is not, and from
+    # this point on it moves only by file (see the MAX_ARG_STRLEN note above).
     mk_body="$("$PRINTF" '%b' "$mk_raw")"
     mk_body="${mk_body//@@BULK@@/$mk_padding}"
+    # BUILTIN printf, deliberately not "$PRINTF": a builtin never execs, so it has no argv
+    # limit, and this is the one write that must carry the full expanded body.
+    printf '%s' "$mk_body" > "${mk_td}/row-body.txt"
+    mk_bytes="$(wc -c < "${mk_td}/row-body.txt" | tr -d ' ')"
 
     mk_rows=$((mk_rows + 1))
     case "$mk_expect" in
@@ -611,7 +644,9 @@ if [ -z "$mk_skip" ]; then
       CLEAN) mk_clean=$((mk_clean + 1)) ;;
     esac
 
-    mk_json="$("$mk_jq" -n --arg fp "$mk_path" --arg c "$mk_body" \
+    # --rawfile, not --arg: the body reaches jq as a FILE it opens, so a row of any size is
+    # encoded without the payload ever becoming an argument.
+    mk_json="$("$mk_jq" -n --arg fp "$mk_path" --rawfile c "${mk_td}/row-body.txt" \
       '{tool_name:"Write", cwd:"/", tool_input:{file_path:$fp, content:$c}}')"
     # HERE-STRING, not a pipe — the same repair this arm exists to pin. A writer feeding a
     # process that may exit before draining stdin can take SIGPIPE and return 141, and under
@@ -626,7 +661,7 @@ if [ -z "$mk_skip" ]; then
 
     if [ "$mk_got" != "$mk_expect" ]; then
       mk_fail=$((mk_fail + 1))
-      mk_fail_lines="${mk_fail_lines}  expected ${mk_expect} got ${mk_got} [${mk_class}]: ${mk_path} ($("$PRINTF" '%s' "$mk_body" | wc -c | tr -d ' ') bytes)"$'\n'
+      mk_fail_lines="${mk_fail_lines}  expected ${mk_expect} got ${mk_got} [${mk_class}]: ${mk_path} (${mk_bytes} bytes)"$'\n'
     fi
   done < "$MARKER_FIXTURE"
 
