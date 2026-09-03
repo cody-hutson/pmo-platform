@@ -358,7 +358,7 @@
           "default": "",
           "required": false,
           "description": "The work-item kit a deployment tracks when a project does not set its own work_item_kit. A role=\"kit\" pack's pack_id, or empty for no kit selected — the pre-kit status quo and a valid state at both rungs. Orthogonal to default_delivery_approach: two independent lookups, neither reading the other's field. NO enum is declared: which kits exist is deployment data and ADR-177 declares the kit set OPEN, so enumerating it here would re-create the frozen-roster anti-pattern one altitude up.",
-          "since": "4.47"
+          "since": "4.49"
         }
       ]
     },
