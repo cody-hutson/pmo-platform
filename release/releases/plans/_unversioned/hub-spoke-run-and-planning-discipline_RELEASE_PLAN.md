@@ -576,7 +576,7 @@ Measured, three arms: `"First emit"` occurs **1×** in `hub-state/README.md` and
 
 ---
 
-_Engineering Commit 0. The Stage-4 planning sub-task comment is the working reference up to this commit; from here the plan file is the durable surface. `## Change Description` is authored on this branch before the PR is marked ready-for-review, per the Change Description Protocol._
+_Engineering Commit 0. The Stage-4 planning sub-task comment is the working reference up to this commit; from here the plan file is the durable surface. The `## Change Description` section at the foot of this file is that summary, authored per the Change Description Protocol._
 
 ---
 
