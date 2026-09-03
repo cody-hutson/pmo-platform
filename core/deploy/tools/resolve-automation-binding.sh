@@ -662,6 +662,17 @@ self_test() {
   cp -R "$REPO_ROOT/core" "$tmp/tree/core" 2>/dev/null || true
   mkdir -p "$tmp/tree/.github/workflows"
   cp -R "$REPO_ROOT/.github/workflows/." "$tmp/tree/.github/workflows/" 2>/dev/null || true
+  # Stage every OTHER subtree the live registry's entrypoints actually reference.
+  # Deriving the copy set from the population — rather than naming subtrees —
+  # is what keeps this fixture correct when a later row points somewhere new.
+  # A hardcoded list was complete for the 2-row population this was written
+  # against and silently incomplete once 6 rows landed under release/.
+  while IFS= read -r _ep; do
+    [[ -n "$_ep" ]] || continue
+    [[ -f "$REPO_ROOT/$_ep" ]] || continue
+    mkdir -p "$tmp/tree/$(dirname "$_ep")"
+    cp "$REPO_ROOT/$_ep" "$tmp/tree/$_ep" 2>/dev/null || true
+  done < <(awk -F'|' '/^\| `/ {gsub(/^[ \t]*`|`[ \t]*$/,"",$5); print $5}' "$LIVE_REG")
   local REG="$tmp/tree/core/automations/registry.md"
   local SCH="$tmp/tree/core/schemas/automation-registry-schema.md"
   local DEC="$tmp/tree/core/config/operator-toml-schema.json"
