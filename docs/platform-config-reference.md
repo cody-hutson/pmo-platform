@@ -181,7 +181,7 @@ Capability switches for git-native release automation. **All three default OFF**
 
 ### `[behavioral_regression]`
 
-The pass-rate floor the behavioural-regression corpus must hold. This is the **single numeric home** for that floor — what the number *means* lives in `release/ADRs/ADR-181-behavioral-regression-floor-and-major-release-binding-boundary.md` and `core/standards/regression-checks.md`, which name it by role and never restate its magnitude. Change it here, in one place, and nothing else needs editing.
+The pass-rate floor the behavioural-regression corpus must hold. This is the **single numeric home** for that floor — what the number *means* lives in `release/ADRs/ADR-183-behavioral-regression-floor-and-major-release-binding-boundary.md` and `core/standards/regression-checks.md`, which name it by role and never restate its magnitude. Change it here, in one place, and nothing else needs editing.
 
 | Field | What it tunes | Allowed values | Default | Calibration |
 |---|---|---|---|---|

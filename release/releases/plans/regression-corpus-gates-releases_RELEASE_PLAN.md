@@ -122,7 +122,7 @@ release/skills/pmo-skill-refiner/evals/scenario-runner/fixtures/baseline.yaml   
 release/skills/pmo-skill-refiner/evals/scenario-runner/fixtures/regressed.yaml   add
 release/skills/pmo-skill-refiner/evals/scenario-runner/fixtures/empty.yaml       add
 core/ADRs/ADR-182-output-scoring-runner-consumes-the-shipped-eval-harness-schema.md   add
-release/ADRs/ADR-181-behavioral-regression-floor-and-major-release-binding-boundary.md   add
+release/ADRs/ADR-183-behavioral-regression-floor-and-major-release-binding-boundary.md   add
 
 # ── Edits (#5863 — derived-surface consequence of the decision-record add) ──
 release/ADRs/README.md                                                           edit
@@ -404,7 +404,7 @@ This release gives the platform a way to catch a change to one skill silently re
 - **D-Concurrency Posture:** `P0` fully-serial. A build-blocking edge plus a genuine within-release file contention; Engineering runs one spoke at a time on one branch.
 - **D-ReleaseClass:** `novel` — new runner, new corpus, new workflow, and three D-class decisions in the plan.
 - **ADR-182 (consumed schema):** the runner consumes the eval-harness schema the platform already ships, rather than the trigger-rate schema the commissioning item cites or a new one. The citation was wrong; the delta is one optional field, so no existing suite needs migrating.
-- **ADR-181 (floor and boundary):** the floor is recorded once as a numeric configuration field and restated nowhere; the gate binds at the major-release tag and runs advisory on every pull request, because a gate bound only to a boundary this platform crosses about quarterly would ship months before its first real exercise.
+- **ADR-183 (floor and boundary):** the floor is recorded once as a numeric configuration field and restated nowhere; the gate binds at the major-release tag and runs advisory on every pull request, because a gate bound only to a boundary this platform crosses about quarterly would ship months before its first real exercise.
 - **The contract gained a SECOND optional field, on operator authorization mid-release.** The schema delta ADR-182 records is one optional field, and that record stands as written — it is a dated decision, not a live rule. What shipped is two: `assertions[].check`, and `assertions[].expect`, added to discharge the open integration criterion the corpus needed. The count moved; the ADR's stated bound did not, because that bound is backward compatibility rather than arithmetic — `expect` defaults to the identity, so every suite committed before it existed scores byte-identically, verified by comparing the upstream card's own reports across the amendment. Recorded here rather than by editing an accepted decision record.
 - **The advisory rung is non-blocking in the tree, not merely unregistered.** The workflow itself enforces the context clause of the blocking predicate. Branch protection is repository settings, lives outside the tree, and no committed file can state which contexts are required — so leaving "the pull-request rung never blocks" to non-membership would have made a load-bearing property contingent on a fact nothing here can assert.
 
@@ -427,7 +427,7 @@ This release gives the platform a way to catch a change to one skill silently re
 
 - Release plan: this file, top section
 - Milestone: `regression-corpus-gates-releases`
-- Decision records: `core/ADRs/ADR-182-output-scoring-runner-consumes-the-shipped-eval-harness-schema.md` and `release/ADRs/ADR-181-behavioral-regression-floor-and-major-release-binding-boundary.md`
+- Decision records: `core/ADRs/ADR-182-output-scoring-runner-consumes-the-shipped-eval-harness-schema.md` and `release/ADRs/ADR-183-behavioral-regression-floor-and-major-release-binding-boundary.md`
 - Runner contract: `release/skills/pmo-skill-refiner/references/scenario-eval-contract.md`
 - User-facing release notes: authored at Stage 13 Close, under `release/releases/notes/`
 

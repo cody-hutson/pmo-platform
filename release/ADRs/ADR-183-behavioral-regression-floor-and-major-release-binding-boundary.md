@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-181 — The behavioural-regression pass-rate floor and the boundary the gate binds at"
+title: "ADR-183 — The behavioural-regression pass-rate floor and the boundary the gate binds at"
 status: Accepted
 date: 2026-09-02
 release: regression-corpus-gates-releases
@@ -15,7 +15,7 @@ source_observations:
   - "An unresolvable numeric floor that defaults to zero satisfies every greater-than-or-equal comparison and greens the gate permanently. The platform already carries a contract for the opposite posture: empty means unresolved, never zero."
 ---
 
-# ADR-181 — The behavioural-regression pass-rate floor and the boundary the gate binds at
+# ADR-183 — The behavioural-regression pass-rate floor and the boundary the gate binds at
 
 ## Status
 
@@ -24,6 +24,8 @@ source_observations:
 **Authorship note.** This record is owed by the corpus-and-gate half of the release, and it is authored here — at the first Engineering commit, by the runner half's spoke — because its decision content was settled in full at Solutioning and depends on no implementation. The spoke that builds the gate consumes this record; it does **not** author a second one, and it must not allocate another decision-record number for the same decisions.
 
 **Numbering provenance — `178 → 181`.** Held **ADR-178** branch-local; renumbered to **ADR-181** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 178. In-release citations that read "ADR-178" denote this record.
+
+**Numbering provenance — `181 → 183`.** Held **ADR-181** branch-local; renumbered to **ADR-183** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 181. In-release citations that read "ADR-181" denote this record.
 
 ## Context
 
