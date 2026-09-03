@@ -42,6 +42,29 @@
 # mutation arm (a deliberately perturbed copy must make the differ say
 # DISAGREE, or the differ cannot report disagreement at all).
 #
+# WHAT THE EQUIVALENCE OBLIGATION COSTS, AND WHERE NEW ASSERTIONS THEREFORE GO.
+# The oracle is a differential over a SHARED corpus, so the corpus is frozen at
+# the pre-extraction body's verdicts for as long as the obligation stands. Any
+# fixture added to fixtures/issue-ref/{cases,manifest.txt} whose verdict differs
+# between that body and this checker fails the arm in the WEAKENED/STRENGTHENED
+# direction — REGARDLESS OF WHETHER THE CHANGE IS CORRECT. A behaviour fix is
+# exactly such a change, which is why widening the override pattern could not be
+# fixtured through the corpus: the pre-extraction body carries the narrow
+# pattern, so it FLAGS a rationale-carrying fixture this checker SUPPRESSES.
+# Nor can the anchor simply be moved forward — extract_oracle materialises the
+# workflow's `run:` block at PRE_EXTRACTION_SHA and dies unless it still
+# contains REFBLOCK_RE, which a post-extraction thin caller does not.
+# THE PATTERN, for anyone adding a behavioural assertion here: site it as a
+# CORPUS-FREE block inside run_self_test that writes its own files under
+# $HARNESS_TD and never under $FX_REPO. run_self_test's override-form block is
+# the worked example, and the scope-predicate block above it is the precedent.
+# Corpus growth stays reserved for behaviour the pre-extraction body ALSO has.
+# The corollary for a reader of CI logs: --equivalence has NO gate authority
+# there. The selftest-discovery job checks out shallow by design, so
+# PRE_EXTRACTION_SHA is unreachable and harness_main prints its SKIP line. The
+# arm is blocking only on a full clone, and a SKIP in an evidence trail is a
+# NOT-MET, never a pass.
+#
 # INTERFACE
 #   --base <sha> --head <sha>   delta mode: scan lines ADDED between the two
 #                               commits (CI parity; what the workflow passes)
@@ -139,7 +162,34 @@ esac
 # rewritten pipelines are marked SIGPIPE-REWRITE with their original form.
 # =============================================================================
 
-OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-issue-ref[[:space:]]*-->'
+# The whole-file override marker. The optional `([[:space:]][^>]*)?` group is
+# what makes this pattern accept the form the gate's OWN failure message
+# mandates and core/standards/adr-authoring-guide.md ratifies under
+# § Declaration obligation — a marker carrying a trailing rationale on the same
+# line, INSIDE the comment, naming which limb applies. Before that group existed
+# the pattern required whitespace-only between the token and the comment close,
+# so the compliant rationale-carrying form did not match and did not suppress,
+# while the bare form the message calls "a silenced warning, not a declaration"
+# was the only form that worked. The regex was the outlier, not the message.
+#
+# `[^>]` rather than `.` is load-bearing, and was chosen by measurement rather
+# than by preference. `.*-->` accepts the rationale but destroys the token
+# boundary: it also matches `allow-issue-refX -->`, which is a DIFFERENT token,
+# and it runs past the comment close. `[^>]` cannot cross `>`, so the match
+# stays bounded to this comment and the token boundary survives. Both arms are
+# pinned as assertions in run_self_test's override-form block — must-match for
+# the rationale-carrying forms, must-NOT-match for the near misses — because a
+# widened pattern that nothing exercises is how the next mismatch ships.
+# KNOWN LIMIT, accepted: a rationale containing a literal `>` is rejected. The
+# remedy is to reword the rationale; a raw `>` inside an HTML comment is hostile.
+#
+# DECLARED HERE, DELIBERATELY. This constant is NOT promoted into
+# core/hooks/lib/fragile-ref-patterns.sh. That library's canonical constants are
+# the ones this gate and the reference-durability gate must compute IDENTICALLY;
+# `allow-issue-ref` belongs to repo-integrity alone, and the library's consumers
+# neither know nor need it. Widening it there would widen a second required
+# status check for no defect.
+OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-issue-ref([[:space:]][^>]*)?-->'
 # Designated reference-block headers. SOURCED from the canonical declaration
 # in core/hooks/lib/fragile-ref-patterns.sh rather than declared here. This
 # gate and the reference-durability gate compute the SAME quantity — the file
@@ -324,10 +374,27 @@ run_scan() {
   while IFS= read -r f || [ -n "$f" ]; do
     [ -z "$f" ] && continue
     [ -f "$f" ] || continue
-    # SCOPE: every changed .md MINUS the self-doc files that necessarily
-    # quote worked-example #N (they carry a file-top allow-issue-ref).
+    # SCOPE: every changed .md MINUS the ONE surviving PATH exemption.
+    #
+    # The release-tracking surface stays enumerated because its basis is native
+    # PROVENANCE, not a marker: issue and pull-request references are what a
+    # ledger IS, and only a minority of that surface's files carry an override
+    # marker — so there is no marker population to discover the exemption from,
+    # and deriving it would pull hundreds of ledger files into scope. Retained
+    # deliberately, not by default.
+    #
+    # The self-documentation files (this gate's own rules page and the PR
+    # template) are NOT enumerated here, and their absence is the point. They
+    # are exempt because they CARRY the whole-file override marker, which the
+    # `grep -qE "$OVERRIDE"` check a few lines below re-establishes on every
+    # single run. The enumeration that used to sit here asserted that same
+    # precondition in a trailing comment — and nothing ever evaluated it, so a
+    # marker-LESS file at either path stayed silently exempt forever. Discovered
+    # rather than enumerated, an exemption cannot outlive its own justification.
+    # Both directions are pinned corpus-free in run_self_test()'s `self-doc`
+    # block: marker present (bare OR rationale-carrying) -> zero, marker absent
+    # -> FLAG.
     case "$f" in
-      core/rules/git-workflow.md|.github/PULL_REQUEST_TEMPLATE.md) continue ;;  # self-doc (file-top allow-issue-ref)
       release/releases/*) continue ;;  # tracking surface (RELEASE_LOG/INDEX/DIGEST/NOTES/plans) — #N + PR-refs are native provenance; exempt, mirroring the reference-durability gate
     esac
     # Test data, not corpus prose — see is_test_fixture_path(). Not a `case` arm
@@ -839,6 +906,251 @@ run_self_test() {
   done
   if [ "$failures" -eq 0 ]; then
     echo "    PASS  [scope]  must-exclude=5  must-scan=6"
+  fi
+
+  # ── Override-marker FORM: the OVERRIDE predicate, both arms, plus an
+  #    end-to-end pair ────────────────────────────────────────────────────────
+  # CORPUS-FREE BY CONSTRUCTION, and that siting is load-bearing rather than
+  # stylistic. run_equivalence asserts the report text is BYTE-IDENTICAL between
+  # this checker and the pre-extraction inline body over the SHARED fixture
+  # corpus. That body carries the OLD narrow OVERRIDE, so a rationale-carrying
+  # fixture added to cases/ + manifest.txt would be FLAGGED by the oracle and
+  # SUPPRESSED by the checker — `direction oracle->checker: gate WEAKENED` — and
+  # the required status check would fail ON A CORRECT FIX. Re-pinning the oracle
+  # forward is not an escape either: extract_oracle materialises the workflow's
+  # `run:` block at PRE_EXTRACTION_SHA and dies unless it still contains
+  # REFBLOCK_RE, which a post-extraction thin caller does not.
+  # Therefore every file written below lives under $td and NEVER under $FX_REPO,
+  # and fixtures/issue-ref/cases/z1-override.md deliberately keeps the BARE
+  # form. The corpus README states the same rule from the other side: do not add
+  # the whole-file override marker to any fixture except z1-override.md.
+  local om_dir="$td/override-form"
+  local om_f om_out om_rc om_match=0 om_nomatch=0 om_e2e=0 om_fail=0
+  mkdir -p "$om_dir"
+  echo "--- override-marker form: OVERRIDE predicate (both arms) + end-to-end pair ---"
+
+  # Arm 1 — MUST match. Entry 1 is the bare form (all the shipped narrow pattern
+  # ever accepted); entries 3-5 are the rationale-carrying forms that
+  # core/standards/adr-authoring-guide.md § Declaration obligation ratifies and
+  # this gate's own failure message instructs an author to write. Asserted
+  # through the SAME `grep -qE "$OVERRIDE"` call the production override check
+  # makes, so the assertion cannot drift from the thing it asserts.
+  for om_f in \
+    '<!-- repo-integrity: allow-issue-ref -->' \
+    '<!--repo-integrity:allow-issue-ref-->' \
+    '<!-- repo-integrity: allow-issue-ref — limb 1: synthetic ids, cannot resolve by construction -->' \
+    '<!-- repo-integrity: allow-issue-ref - limb 2: worked example, cannot be relocated -->' \
+    '<!-- repo-integrity: allow-issue-ref (limb 1: this file displays the construct) -->' ; do
+    assertions=$((assertions + 1))
+    printf '%s\n' "$om_f" > "$om_dir/probe.md"
+    if grep -qE "$OVERRIDE" "$om_dir/probe.md"; then
+      om_match=$((om_match + 1))
+    else
+      echo "    FAIL  [override-form] declared marker form did NOT match OVERRIDE: $om_f"
+      om_fail=$((om_fail + 1)); failures=$((failures + 1))
+    fi
+  done
+
+  # Arm 2 — MUST NOT match. This arm is what keeps the widening honest: it is
+  # the card's own "the fixture asserting the narrow case still fires". Entries
+  # 1-2 are the token-boundary near misses that a `.*-->` widening would wrongly
+  # accept — `allow-issue-refX` is a DIFFERENT token. Entry 3 is the token in
+  # prose/backticks with no comment delimiters. Entries 4-5 are the wrong marker
+  # and the wrong namespace: `allow-link` belongs to reference-durability, and
+  # `reference-durability: allow-issue-ref` is a spelling no gate recognizes.
+  for om_f in \
+    '<!-- repo-integrity: allow-issue-refX -->' \
+    '<!-- repo-integrity: allow-issue-refX: limb 1 -->' \
+    '`repo-integrity: allow-issue-ref`' \
+    '<!-- repo-integrity: allow-link -->' \
+    '<!-- reference-durability: allow-issue-ref -->' ; do
+    assertions=$((assertions + 1))
+    printf '%s\n' "$om_f" > "$om_dir/probe.md"
+    if grep -qE "$OVERRIDE" "$om_dir/probe.md"; then
+      echo "    FAIL  [override-form] non-canonical form wrongly matched OVERRIDE (over-wide): $om_f"
+      om_fail=$((om_fail + 1)); failures=$((failures + 1))
+    else
+      om_nomatch=$((om_nomatch + 1))
+    fi
+  done
+
+  # Arm 3 — END TO END. The predicate arms prove the regex; this proves the
+  # GATE. Subject and control are byte-identical but for the marker line.
+  {
+    printf '%s\n' '<!-- repo-integrity: allow-issue-ref — limb 1: synthetic ids, cannot resolve by construction -->'
+    printf 'Override end-to-end fixture — subject arm.\n\n'
+    printf -- '- #909501 — does not resolve, and sits above any reference block.\n'
+  } > "$om_dir/subject.md"
+  {
+    printf 'Override end-to-end fixture — control arm.\n\n'
+    printf -- '- #909501 — does not resolve, and sits above any reference block.\n'
+  } > "$om_dir/control.md"
+
+  assertions=$((assertions + 1))
+  set +e
+  om_out="$( cd "$om_dir" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA \
+      GITHUB_REPOSITORY=fixture-owner/fixture-repo \
+      bash "$SCRIPT_PATH" --resolver fixture --fixture-map "$FX_MAP" --path subject.md 2>&1 )"
+  om_rc=$?
+  set -e
+  if [ "$om_rc" -eq 0 ]; then
+    om_e2e=$((om_e2e + 1))
+  else
+    echo "    FAIL  [override-form] e2e: the rationale-carrying marker did NOT suppress (exit ${om_rc})"
+    printf '%s\n' "$om_out" | sed -e 's/^/            /'
+    om_fail=$((om_fail + 1)); failures=$((failures + 1))
+  fi
+
+  # CONTROL, and it is mandatory. Without it the zero above proves nothing: it
+  # would read exactly the same if the gate had simply stopped detecting.
+  assertions=$((assertions + 1))
+  set +e
+  om_out="$( cd "$om_dir" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA \
+      GITHUB_REPOSITORY=fixture-owner/fixture-repo \
+      bash "$SCRIPT_PATH" --resolver fixture --fixture-map "$FX_MAP" --path control.md 2>&1 )"
+  om_rc=$?
+  set -e
+  if [ "$om_rc" -ne 0 ]; then
+    om_e2e=$((om_e2e + 1))
+  else
+    echo "    FAIL  [override-form] e2e control: the unmarked twin did NOT fire — the subject arm is vacuous"
+    om_fail=$((om_fail + 1)); failures=$((failures + 1))
+  fi
+
+  if [ "$om_fail" -eq 0 ]; then
+    echo "    PASS  [override-form]  must-match=${om_match}  must-not-match=${om_nomatch}  e2e=${om_e2e}"
+  else
+    echo "    ---   [override-form]  ${om_fail} failure(s)"
+  fi
+
+  # ── Self-doc exemption: DISCOVERED from the marker, never enumerated ───────
+  # CORPUS-FREE BY CONSTRUCTION, for the same load-bearing reason the
+  # override-form block above is — and one step harder, because this change had
+  # to REMOVE two shared inputs rather than merely avoid adding one.
+  #
+  # run_equivalence asserts the report text is BYTE-IDENTICAL between this
+  # checker and the pre-extraction inline body over the SHARED fixture corpus,
+  # and that body still carries the path arm deleted from run_scan's SCOPE
+  # `case`. Two shared fixtures used to pin this class by LIVING at the two
+  # exempt paths carrying no marker. After the deletion the two implementations
+  # genuinely DISAGREE on those files — which IS the change — so keeping them
+  # fails the equivalence arm in the `gate STRENGTHENED` direction however
+  # correct the change is; and merely giving them the marker fails it too, on
+  # the two extra `::notice::` lines the oracle never emits because it hits its
+  # own path arm first. Re-pinning the oracle forward is not an escape either:
+  # extract_oracle materialises the workflow's `run:` block at
+  # PRE_EXTRACTION_SHA and dies unless it still contains REFBLOCK_RE, which a
+  # post-extraction thin caller does not.
+  #
+  # So the two fixtures were RETIRED from cases/ + manifest.txt and their class
+  # re-sited here, where it gets STRONGER rather than weaker: they asserted one
+  # direction only (zero, from an unmarked file at an enumerated path), this
+  # asserts BOTH directions and adds a third marker state. Removing the input
+  # states the boundary of the equivalence claim; suppressing the output would
+  # have asserted an agreement that no longer exists.
+  #
+  # Every file below is written under $td and NEVER under $FX_REPO.
+  #
+  # 3 marker states x 2 exempt-looking paths x 2 input modes x 2 resolvers = 24.
+  #   marked-bare      -> zero   the form the retired fixtures never carried
+  #   marked-rationale -> zero   the declared rationale-carrying form; ALSO the
+  #                              live integration assertion against the widened
+  #                              OVERRIDE regex — narrow it again and exactly
+  #                              these 8 go red while the other 16 stay green
+  #   unmarked         -> FLAG   the CONTROL, and the whole point. Without it
+  #                              the zeros are indistinguishable from a gate
+  #                              that simply stopped detecting — and it is
+  #                              precisely the drift the deleted path arm made
+  #                              unreachable: a marker-less file at either path
+  #                              was silently exempt forever.
+  local sd_dir="$td/selfdoc"
+  local sd_state sd_input sd_resolver sd_repo sd_base sd_head sd_out sd_want sd_got
+  local sd_pair sd_dest sd_num
+  local sd_marked_zero=0 sd_unmarked_flag=0 sd_fail=0
+  local sd_a='core/rules/git-workflow.md'
+  local sd_b='.github/PULL_REQUEST_TEMPLATE.md'
+  mkdir -p "$sd_dir"
+  echo "--- self-doc exemption: discovered from the marker, all three arms ---"
+
+  for sd_state in marked-bare marked-rationale unmarked; do
+    sd_repo="$sd_dir/$sd_state"
+    mkdir -p "$sd_repo/docs"
+    git -C "$sd_repo" init -q 2>/dev/null
+    git -C "$sd_repo" config user.email "fixtures@example.invalid"
+    git -C "$sd_repo" config user.name "issue-ref self-doc harness"
+    git -C "$sd_repo" config commit.gpgsign false
+    printf 'seed\n' > "$sd_repo/docs/.seed.md"
+    git -C "$sd_repo" add -A
+    git -C "$sd_repo" commit -q -m "self-doc base"
+    sd_base="$(git -C "$sd_repo" rev-parse HEAD)"
+
+    # The three bodies are byte-identical but for the marker line, so a verdict
+    # difference can only be the marker. The two synthetic numbers are the ones
+    # the retired fixtures used — one per path — so neither verdict-map row is
+    # orphaned by the retirement. Both resolve `unresolvable`.
+    for sd_pair in "${sd_a}|909601" "${sd_b}|909602"; do
+      sd_dest="${sd_pair%%|*}"
+      sd_num="${sd_pair##*|}"
+      mkdir -p "$sd_repo/$(dirname "$sd_dest")"
+      {
+        case "$sd_state" in
+          marked-bare)
+            printf '%s\n' '<!-- repo-integrity: allow-issue-ref -->' ;;
+          marked-rationale)
+            printf '%s\n' '<!-- repo-integrity: allow-issue-ref — limb 1: worked-example ids displayed as subject matter -->' ;;
+        esac
+        printf 'Self-doc exemption probe — %s.\n\n' "$sd_dest"
+        printf -- '- #%s — does not resolve, and sits above any reference block.\n' "$sd_num"
+      } > "$sd_repo/$sd_dest"
+    done
+    git -C "$sd_repo" add -A
+    git -C "$sd_repo" commit -q -m "self-doc head"
+    sd_head="$(git -C "$sd_repo" rev-parse HEAD)"
+
+    if [ "$sd_state" = "unmarked" ]; then sd_want=flag; else sd_want=zero; fi
+    for sd_input in delta path; do
+      for sd_resolver in gh fixture; do
+        sd_out="$sd_dir/out-${sd_state}-${sd_input}-${sd_resolver}.txt"
+        set +e
+        if [ "$sd_input" = "delta" ]; then
+          ( cd "$sd_repo" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA \
+              GH_TOKEN=fixture-token GITHUB_REPOSITORY=fixture-owner/fixture-repo \
+              bash "$SCRIPT_PATH" --base "$sd_base" --head "$sd_head" \
+                --resolver "$sd_resolver" --fixture-map "$FX_MAP" ) > "$sd_out" 2>&1
+        else
+          ( cd "$sd_repo" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA \
+              GH_TOKEN=fixture-token GITHUB_REPOSITORY=fixture-owner/fixture-repo \
+              bash "$SCRIPT_PATH" --resolver "$sd_resolver" --fixture-map "$FX_MAP" \
+                --path "$sd_a" "$sd_b" ) > "$sd_out" 2>&1
+        fi
+        set -e
+        for sd_dest in "$sd_a" "$sd_b"; do
+          assertions=$((assertions + 1))
+          if grep -qE "^${sd_dest}:[0-9]+: " "$sd_out" 2>/dev/null; then sd_got=flag; else sd_got=zero; fi
+          if [ "$sd_got" != "$sd_want" ]; then
+            echo "    FAIL  [self-doc] ${sd_state} ${sd_dest} (${sd_input} x --resolver ${sd_resolver}): expected ${sd_want}, got ${sd_got}"
+            sd_fail=$((sd_fail + 1)); failures=$((failures + 1))
+          elif [ "$sd_want" = "zero" ]; then
+            sd_marked_zero=$((sd_marked_zero + 1))
+          else
+            sd_unmarked_flag=$((sd_unmarked_flag + 1))
+          fi
+        done
+      done
+    done
+  done
+
+  # Suite-level control, the same one the fixture matrix carries: a zero is
+  # never reported without a non-zero from the SAME block proving the harness
+  # actually ran. Not counted as an assertion — it grades the other 24.
+  if [ "$sd_unmarked_flag" -eq 0 ]; then
+    echo "    FAIL  [self-doc] vacuity control: the unmarked arm produced ZERO findings"
+    sd_fail=$((sd_fail + 1)); failures=$((failures + 1))
+  fi
+  if [ "$sd_fail" -eq 0 ]; then
+    echo "    PASS  [self-doc]  marked-must-zero=${sd_marked_zero}  unmarked-must-flag=${sd_unmarked_flag}"
+  else
+    echo "    ---   [self-doc]  ${sd_fail} failure(s)"
   fi
 
   echo "--- fixture matrix: 2 invocation forms x 2 input modes x 2 resolvers = 8 cells ---"

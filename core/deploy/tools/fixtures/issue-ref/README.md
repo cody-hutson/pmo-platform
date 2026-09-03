@@ -62,11 +62,33 @@ deprecated legacy identifier; a valid reference above the block with no inline
 marker; a valid reference in a file with no block at all; and a valid reference
 under a heading that is a deliberate near-miss.
 
-**Specificity (`Z-*`, must return zero).** The whole-file override; each path
-exemption arm; a failing reference inside a fenced code block; the inline
+**Specificity (`Z-*`, must return zero).** The whole-file override; the surviving
+path exemption arm; a failing reference inside a fenced code block; the inline
 provenance marker as the placement alternative; every recognized heading spelling
 at every level; a pre-existing reference outside the added-line delta; and the
 near-miss tokens that must not widen the tokenizer.
+
+## The one specificity class that does not live here
+
+The self-documentation class — the gate's own rules page and the pull-request
+template — used to be pinned by two fixtures written to those exact paths, `Z-2b`
+and `Z-2c`, because a second path-exemption arm named them in the scope filter.
+That arm is gone. Those files are now exempt because they carry the whole-file
+override marker, which the gate re-checks on every run, so the exemption cannot
+outlive the marker that justifies it.
+
+The fixtures could not follow the arm into this corpus. What is here is the input
+to the differential equivalence oracle, which asserts byte-identical report text
+against the pre-extraction body — and that body still carries the deleted arm, so
+a fixture at either path makes the two implementations genuinely disagree and
+fails a required status check on a correct change. Removing the input states the
+boundary of the equivalence claim; suppressing the output would have asserted an
+agreement that no longer exists. The class was re-sited corpus-free into
+`run_self_test`'s `self-doc` block, where it is stronger than it was here: it
+asserts both directions (marker present returns zero, marker absent flags) and a
+third marker state, the rationale-carrying form, where the two retired fixtures
+asserted only the single zero direction. Their two synthetic numbers are reused
+there, so no `verdict-map.txt` row is orphaned.
 
 Each specificity assertion ships alongside a sensitivity assertion **from the
 same invocation**. A zero reported by a harness that never ran is

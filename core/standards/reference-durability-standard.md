@@ -73,13 +73,17 @@ Because the flagged classes are flagged wholesale, the escape valves are path-ba
 
 ### Per-file override marker
 
-A durable-corpus file that legitimately needs a flagged construct — for example an external upstream-catalog link that genuinely cannot be summarized inline — declares a per-file override marker once, as an HTML comment anywhere in the file. The markers are:
+A durable-corpus file that legitimately needs a flagged construct — for example an external upstream-catalog link that genuinely cannot be summarized inline — declares a per-file override marker once, as an HTML comment anywhere in the file **outside a fenced code block and outside an inline code span**. The markers are:
 
 ```
 <!-- reference-durability: allow-link -->
 <!-- reference-durability: allow-version-ref -->
 <!-- reference-durability: allow-url -->
 ```
+
+**The fenced block above is an illustration, not a declaration.** A marker inside a fenced code block — or inside backticks in a sentence — shows the syntax; it does not claim the override. Both enforcement surfaces — the pre-write hook (`core/hooks/block-fragile-refs.sh`) and the CI gate (`.github/workflows/reference-durability.yml`) — strip fenced blocks and inline code spans before resolving a marker, so a file that merely documents the syntax does not thereby exempt itself from the gate that governs it. A real declaration goes outside every fence.
+
+The two surfaces resolve markers by the same rule deliberately, so that a file is writable locally exactly when it passes in CI. **Neither may be changed without the other.**
 
 A present marker suppresses the corresponding class for that file: matches are still reported for visibility, but they do not fail the gate. The `allow-url` marker suppresses Class U; it is distinct from `allow-link` so a file that legitimately carries summarized links does not silently also suppress the raw-URL prohibition. This mirrors the parser-clean override pattern. A marker is a deliberate, auditable declaration that a specific file needs a specific class — it documents why the file carries the construct, not a wish to silence warnings.
 

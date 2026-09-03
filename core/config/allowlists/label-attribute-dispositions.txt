@@ -1,0 +1,132 @@
+# Label Attribute-Disposition Registry
+#
+# Per-row dispositions for the DIVERGED class of deploy.sh --check Check 51
+# (core/deploy/tools/check-label-parity.py --dispositions). A DIVERGED row is a label
+# that is DECLARED in a pack's [[labels]] facet AND LIVE on GitHub, whose colour
+# and/or description disagrees with the declaration.
+#
+# Format: <disposition> <label-name>  # <rationale>
+#
+# Disposition FIRST, and the order is forced rather than stylistic: a label name may
+# contain spaces (`cluster: architecture`), so a name-first record is unparseable,
+# whereas the disposition is a closed space-free enum and the label name is then the
+# free-form remainder.
+#
+# disposition values (closed enum):
+#   reconcile-live         the DECLARATION is right; live is wrong. Remediated by the
+#                          operator running the `gh label edit` line that
+#                          `check-label-parity.py --emit-fix` renders.
+#   reconcile-declaration  LIVE is right; the declaration is wrong. Remediated by
+#                          editing the row in core/packs/<pack>/pack.toml — never in
+#                          core/specs/label-taxonomy.md, which per ADR-070 holds the
+#                          GRAMMAR — group definitions, rules and namespace patterns —
+#                          and cannot express a colour or a description at all.
+#   accept-override        the divergence is a DELIBERATE operator choice and is not
+#                          drift. The row is suppressed and reports in no arm.
+#                          Optional axis qualifier: `accept-override:color` /
+#                          `accept-override:description`; the bare form covers both.
+#                          Axis scoping matters — accepting a colour must not
+#                          silently accept an unreviewed description, so a row
+#                          registered on one axis still reports on the other.
+#
+# A `reconcile-*` row is OWNED but still divergent, so it KEEPS reporting until the
+# operator-run cascade closes it. Only `accept-override` suppresses. A row registered
+# here that is no longer divergent (or no longer live) reports as DIVERGED-STALE and
+# should be removed — an unaudited suppression that has silently stopped matching is
+# the defect class this arm exists to close.
+#
+# Blank lines and #-prefixed comments ignored. A malformed record is a HARD parse
+# error (exit 2), never a silent skip: a dropped record is a suppression the operator
+# believes is in force.
+#
+# Governance: additions follow the "No ungoverned changes" protocol
+# (CLAUDE.md Guardrails) — GitHub Issue + plan + PR required.
+#
+# See: core/specs/label-taxonomy.md § Instance Model
+#
+# ---------------------------------------------------------------------------------
+# WHY THE 27 `reconcile-live` ROWS BELOW ARE ONE RULING AND NOT 27 JUDGEMENT CALLS
+#
+# The 24 rows whose LIVE description is empty share one cause. Their declarations
+# were authored into the packs; NO CODE PATH IN THIS REPOSITORY HAS EVER WRITTEN A
+# LABEL DESCRIPTION TO GITHUB. `--emit-fix` renders the `gh label edit` commands and
+# runs none of them, and there is no other writer. The empty live description is
+# therefore ABSENCE-OF-WRITE — the original state of a label created by the
+# apply-an-unrecognised-label path, which auto-creates it with a default colour and a
+# null description — and never a deliberate override that was made and then lost.
+# There is no operator choice to preserve, so `reconcile-live` is the only disposition
+# consistent with the evidence.
+#
+# The 11 of those 24 that ALSO diverge on colour corroborate it: the DECLARED palette
+# is semantically coherent (`status: approved` green / `deferred` yellow / `proposed`
+# grey) and the live one is not (teal / red / peach) — the signature of GitHub's
+# default assignment, not of a considered choice.
+#
+# The remaining 3 (`bug`, `documentation`, `duplicate`) carry GitHub's verbatim
+# out-of-the-box description text. Same repository-default family the § Excluded
+# Labels table names; same ruling.
+# ---------------------------------------------------------------------------------
+
+# --- LIVE-EMPTY: declared description substantive, live description '' (24 rows) ---
+reconcile-live adr  # declared this release with the live colour verbatim; live description never written
+reconcile-live cluster: architecture  # declaration authored into core/packs/_common; live description is absence-of-write
+reconcile-live cluster: automation  # declaration authored into core/packs/_common; live description is absence-of-write
+reconcile-live cluster: cross-cutting  # declaration authored into core/packs/_common; live description is absence-of-write
+reconcile-live cluster: documentation  # declaration authored into core/packs/_common; live description is absence-of-write
+reconcile-live cluster: eval-quality  # declaration authored into core/packs/_common; live description is absence-of-write
+reconcile-live cluster: gate-handoff  # declaration authored into core/packs/_common; live description is absence-of-write
+reconcile-live cluster: pipeline-definitions  # declaration authored into core/packs/_common; live description is absence-of-write
+reconcile-live cluster: process-protocol  # declaration authored into core/packs/_common; live description is absence-of-write
+reconcile-live cluster: security  # declaration authored into core/packs/_common; live description is absence-of-write
+reconcile-live cluster: skill-modes  # declaration authored into core/packs/_common; live description is absence-of-write
+reconcile-live cluster: system-config  # declaration authored into core/packs/_common; live description is absence-of-write
+reconcile-live cluster: templates-schemas  # declaration authored into core/packs/_common; live description is absence-of-write
+reconcile-live improvement  # live description absent AND live colour is a GitHub default; declared palette is the coherent one
+reconcile-live observation  # live description absent AND live colour is a GitHub default; declared palette is the coherent one
+reconcile-live protocol  # live description absent AND live colour is a GitHub default; declared palette is the coherent one
+reconcile-live routing-rules  # live description absent AND live colour is a GitHub default; declared palette is the coherent one
+reconcile-live skill-update  # live description absent AND live colour is a GitHub default; declared palette is the coherent one
+reconcile-live status: approved  # live description absent AND live colour is a GitHub default; declared palette is the coherent one
+reconcile-live status: bundled  # live description absent AND live colour is a GitHub default; declared palette is the coherent one
+reconcile-live status: deferred  # live description absent AND live colour is a GitHub default; declared palette is the coherent one
+reconcile-live status: proposed  # live description absent AND live colour is a GitHub default; declared palette is the coherent one
+reconcile-live structure  # live description absent AND live colour is a GitHub default; declared palette is the coherent one
+reconcile-live tracker-schema  # live description absent AND live colour is a GitHub default; declared palette is the coherent one
+
+# --- BOTH-SUBSTANTIVE, GitHub stock text: live value is the out-of-the-box default (3 rows) ---
+reconcile-live bug  # live text is GitHub's stock "Something isn't working"; the declaration adds the intake-mutex clause
+reconcile-live documentation  # live text is GitHub's stock "Improvements or additions to documentation"
+reconcile-live duplicate  # live text is GitHub's stock "This issue or pull request already exists"
+
+# --- BOTH-SUBSTANTIVE, genuine per-row operator call (5 rows) ---
+#
+# Both sides are platform-authored here, so neither the absence-of-write argument nor
+# the stock-text argument reaches them. These five are NOT dispositioned by any class
+# ruling and must not be given a value until the operator rules at the Stage-9
+# sign-off. They are left as comments deliberately: a record with no disposition value
+# is a HARD parse error, so committing a placeholder record would break the gate,
+# while committing an invented value would fabricate a decision.
+#
+# Until they are ruled, all five report in the DIVERGED arm — which is correct: an
+# unruled divergence is exactly what that arm is for.
+#
+# [OPERATOR CALL — Stage 9]  status: rejected
+#     live "Triage Reject verdict (terminal; issue closed not planned)"
+#     decl "Triaged, rejected — premise stale or out of scope"
+# [OPERATOR CALL — Stage 9]  sub-task            (diverges on colour as well)
+#     live "Pipeline stage sub-task (hub-spoke release process)"
+#     decl "Engineering sub-task for release implementation (dual category+lifecycle marker per § Rules 6)"
+# [OPERATOR CALL — Stage 9]  type:epic           (diverges on colour as well)
+#     live "Agile kind: large capability umbrella (Epic)"
+#     decl "Scrum kind: a large body of work decomposed into stories"
+# [OPERATOR CALL — Stage 9]  type:story
+#     live "Agile kind: user/operator-facing value increment"
+#     decl "Scrum kind: user/operator-facing value increment"
+# [OPERATOR CALL — Stage 9]  type:task
+#     live "Agile kind: enabler/execution work (no direct user-facing value)"
+#     decl "Scrum kind: an engineering unit of work under a story/epic"
+#
+# The three `type:*` rows are the live-vs-declared "Agile kind:" / "Scrum kind:"
+# prefix question. Rule them TOGETHER with the kind-projection clause decided
+# alongside them in this release, not separately — ruling them in isolation risks
+# contradicting what that clause settles about how a declared kind projects.
