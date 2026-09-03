@@ -87,14 +87,21 @@ rather than entering it as a zero.
 
 EXIT CODES (closed four-value set)
 ----------------------------------
-    0  every gradable assertion passed, and (if --fail-under was given) the pass
-       rate is at or above it
-    1  at least one gradable assertion failed, OR the pass rate is below
-       --fail-under, OR the suite-level non-triviality control did not hold
-    2  usage or environment error (unreadable suite, malformed suite, unknown
-       check.kind, unknown expect value, an expect declared on an ungraded
-       assertion, missing optional dependency for the fixture format in use)
+    0  --fail-under given: the pass rate is at or above the floor.
+       --fail-under absent: every gradable assertion passed.
+    1  --fail-under given: the pass rate is below the floor.
+       --fail-under absent: at least one gradable assertion failed.
+       Either way: OR the suite-level non-triviality control did not hold.
+    2  usage or environment error (unreadable suite, malformed suite, unreadable
+       or malformed FIXTURE, unknown check.kind, unknown expect value, an expect
+       declared on an ungraded assertion, missing optional dependency for the
+       fixture format in use)
     3  nothing was gradable -- no report written
+
+    WHEN --fail-under IS GIVEN, THE FLOOR IS THE DISCRIMINATOR -- across the whole
+    of its documented [0.0, 1.0] domain, not only at 1.00. When it is absent, any
+    failing assertion is a failure: no threshold means no declared tolerance, and
+    the runner does not invent one. See the verdict block in main() for why.
 
 Usage:
     python3 -m scripts.run_scenario_eval --suite evals/scenario-runner/evals.json
@@ -159,8 +166,24 @@ class SuiteError(Exception):
 # assertion.
 # --------------------------------------------------------------------------- #
 def load_structured(path: Path):
-    """Parse a JSON or YAML document into Python data."""
-    text = path.read_text(encoding="utf-8")
+    """Parse a JSON or YAML document into Python data.
+
+    EVERY failure here raises SuiteError, which main() maps to exit 2. That is not
+    defensive habit; it is the contract's exit-2 row ("unreadable or malformed
+    suite ... missing fixture") applied to the fixture, which is the sibling of
+    every case that row already lists. An unguarded parse raises through main()
+    and Python exits 1 -- the ONE code that means "the corpus scored below the
+    floor", and the one code the CI falsification arm reads as proof the gate can
+    fail. A crash delivered to that arm as exit 1 makes it print its green over a
+    run that graded nothing. Distinguishability is the whole property here: a
+    below-floor result must never share a code with a runner error.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise SuiteError(f"fixture is not valid UTF-8 ({path}): {exc}")
+    except OSError as exc:
+        raise SuiteError(f"fixture is unreadable ({path}): {exc}")
     suffix = path.suffix.lower()
     if suffix in (".yaml", ".yml"):
         try:
@@ -171,9 +194,15 @@ def load_structured(path: Path):
                 "Install with: pip install pyyaml -- or use a .json fixture, "
                 "which this runner reads with no extra dependency."
             )
-        return yaml.safe_load(text)
+        try:
+            return yaml.safe_load(text)
+        except yaml.YAMLError as exc:
+            raise SuiteError(f"fixture is not valid YAML ({path}): {exc}")
     if suffix == ".json":
-        return json.loads(text)
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise SuiteError(f"fixture is not valid JSON ({path}): {exc}")
     raise SuiteError(
         f"unsupported fixture format {suffix!r} for {path} "
         f"(supported: .json, .yaml, .yml)"
@@ -731,13 +760,49 @@ def main(argv=None) -> int:
     print(f"report     : {out_path}")
 
     # ---- Verdict ------------------------------------------------------------ #
+    #
+    # THE FLOOR IS THE DISCRIMINATOR WHEN ONE IS SUPPLIED.
+    #
+    # `gradable = passed + failed`, so `failed == 0` is the same statement as
+    # `pass_rate == 1.0`. An unconditional `if failed: FAIL` placed BEFORE the floor
+    # comparison therefore makes every floor in [0.0, 1.0) unreachable -- the caller
+    # can record any value in the documented domain and observe exactly one exit code,
+    # with no diagnostic saying the setting did nothing. That is worse than an
+    # unrecorded threshold, because it reads as an available lever to whoever inherits
+    # it. So when --fail-under is given, the pass rate is compared against it and THAT
+    # comparison decides between 0 and 1.
+    #
+    # At the shipped floor of 1.00 this changes nothing: any failure puts the rate
+    # below 1.00 and still returns 1, and a clean run returns 0. Only floors below
+    # 1.00 gain meaning -- which is precisely the remedy the floor's own decision
+    # record names.
+    #
+    # WITH NO --fail-under, ANY FAILURE IS A FAILURE. That is the pre-existing
+    # behaviour and it is kept deliberately, not by omission: a caller who supplies no
+    # threshold has expressed no tolerance, and inventing one for them would be the
+    # standing-regression-budget anti-pattern arriving by default rather than by
+    # decision. The two branches are stated separately below so neither is implied.
+    #
+    # The suite-level non-triviality control is checked first and is not a rate
+    # question at all: a suite whose passes are unfalsifiable has no meaningful rate
+    # to compare against any floor.
     if not control_ok:
         return EXIT_FAIL
+    if args.fail_under is not None:
+        if pass_rate < args.fail_under:
+            print(f"VERDICT    : FAIL (pass rate {pass_rate:.4f} < floor {args.fail_under})")
+            return EXIT_FAIL
+        if failed:
+            print(
+                f"VERDICT    : PASS (pass rate {pass_rate:.4f} >= floor "
+                f"{args.fail_under}; {failed} gradable assertion(s) failed within "
+                f"the floor's tolerance)"
+            )
+        else:
+            print("VERDICT    : PASS")
+        return EXIT_PASS
     if failed:
-        print(f"VERDICT    : FAIL ({failed} gradable assertion(s) failed)")
-        return EXIT_FAIL
-    if args.fail_under is not None and pass_rate < args.fail_under:
-        print(f"VERDICT    : FAIL (pass rate {pass_rate:.4f} < floor {args.fail_under})")
+        print(f"VERDICT    : FAIL ({failed} gradable assertion(s) failed; no floor given)")
         return EXIT_FAIL
     print("VERDICT    : PASS")
     return EXIT_PASS

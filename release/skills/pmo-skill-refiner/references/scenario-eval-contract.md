@@ -131,6 +131,8 @@ A `resolves_to` that carries neither `check.value` nor `expected_value` is a usa
 
 `.json`, `.yaml`, and `.yml`. YAML support imports its parser lazily and, when that parser is unavailable, reports a **usage error (exit 2)** with an install hint — never a failing assertion, because a missing dependency is not a regression. A suite that wants zero optional dependencies uses `.json` fixtures; `resolves_to` is format-agnostic.
 
+A fixture that cannot be parsed — invalid JSON, invalid YAML, or bytes that are not UTF-8 — reports the same way: **exit 2, with the file named and the parser's own message quoted**. It is an environment error, not a low score, for the reason the exit-code table gives below.
+
 ---
 
 ## 3. `control.empty_fixture` — the non-triviality arm
@@ -216,16 +218,24 @@ python3 -m scripts.run_scenario_eval \
 
 | Code | Meaning |
 |---|---|
-| `0` | Every gradable assertion passed, and — if `--fail-under` was given — the pass rate is at or above it. |
-| `1` | At least one gradable assertion failed, **or** the pass rate is below `--fail-under`, **or** the non-triviality control did not hold. |
-| `2` | Usage or environment error — unreadable or malformed suite, unknown `check.kind`, an unknown `expect` value, an `expect` declared on an assertion with no `check`, missing fixture, unnamed regular-expression engine, or a missing optional dependency for the fixture format in use. |
+| `0` | **With `--fail-under`:** the pass rate is at or above the floor. **Without it:** every gradable assertion passed. |
+| `1` | **With `--fail-under`:** the pass rate is below the floor. **Without it:** at least one gradable assertion failed. Either way — **or** the non-triviality control did not hold. |
+| `2` | Usage or environment error — unreadable or malformed suite, **an unreadable or malformed fixture** (invalid JSON, invalid YAML, or bytes that are not UTF-8), unknown `check.kind`, an unknown `expect` value, an `expect` declared on an assertion with no `check`, missing fixture, unnamed regular-expression engine, or a missing optional dependency for the fixture format in use. |
 | `3` | **Nothing was gradable.** No report is written — see below. |
 
 The set is closed and the codes are **distinguishable by design**: a below-floor result must never share a code with a runner error, because a gate that cannot tell "the corpus regressed" from "the runner crashed" reports the same red for both and teaches its reader to ignore it.
 
+**A malformed fixture is a runner error, and the distinguishability rule is why.** Every parse failure inside the fixture loader is raised as a usage error and reported as **exit 2** — not left to raise through and land on Python's uncaught-exception status, which is **1**, the one code that means "the corpus scored below the floor." A caller that reads exit 1 as a measurement would read a crash as a measurement. The CI falsification arm is exactly such a caller: its predicate is `exit == 1`, and that strictness is correct — an arm loosened to "non-zero" would accept an environment error as proof the gate can fail. The arm's exposure was never its predicate but its **input**, so the fix belongs here, in the runner, where a non-measurement is prevented from being *delivered as* a measurement.
+
 ### `--fail-under` takes the threshold as data
 
 The runner performs the comparison and sets the exit status. It does **not** know where the threshold is recorded, and a caller does not need the runner to know. A gate reads the floor from wherever it is recorded, passes it here, and consumes **only the exit status** — it never parses the report. That is what keeps exactly one definition of the report contract in the tree: a consumer that never reads a field cannot restate it.
+
+**When a floor is supplied it is the discriminator, across the whole of its `[0.0, 1.0]` domain.** The pass rate is compared against the floor and that comparison alone decides between exit 0 and exit 1; a failing assertion does not short-circuit it. This matters because `gradable = passed + failed`, so "no assertion failed" and "the pass rate is 1.0" are the same statement — a failure check placed ahead of the comparison would collapse every floor below `1.00` into the same observable behaviour, leaving a recorded threshold that cannot take effect and prints no diagnostic saying so. At the shipped floor of `1.00` the behaviour is unchanged either way: any failure puts the rate below `1.00` and still exits 1.
+
+**With no `--fail-under`, any failing gradable assertion exits 1.** This is a decision, not a leftover. A caller who supplies no threshold has declared no tolerance, and defaulting to one would install a standing regression budget — the never-FAIL anti-pattern — by omission rather than by choice. A caller that wants tolerance states it, and the statement is then honoured across the domain.
+
+Nothing here recommends a sub-`1.00` floor for a regression corpus; the floor field's own record argues against it, and a known-open defect is carried as an `expect: fail` assertion instead (§ 1.1). The property this section fixes is narrower and non-negotiable: a threshold that is recorded as tunable must be *operative*, so that lowering it is a real remedy rather than a silent no-op.
 
 ### The zero-denominator rule
 
