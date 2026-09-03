@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-180 — The output-scoring runner consumes the shipped eval-harness schema, not a new one"
+title: "ADR-182 — The output-scoring runner consumes the shipped eval-harness schema, not a new one"
 status: Accepted
 date: 2026-09-02
 release: regression-corpus-gates-releases
@@ -16,13 +16,15 @@ source_observations:
   - "The one shipped runner with a non-triviality control arm implements it as four hard-coded, domain-specific Python functions re-run against an empty roster. The pattern is exactly right; the code cannot execute a second suite without new Python per suite."
 ---
 
-# ADR-180 — The output-scoring runner consumes the shipped eval-harness schema, not a new one
+# ADR-182 — The output-scoring runner consumes the shipped eval-harness schema, not a new one
 
 ## Status
 
 **Accepted.** Authored at Engineering for the `regression-corpus-gates-releases` release.
 
 **Numbering provenance — `177 → 180`.** Held **ADR-177** branch-local; renumbered to **ADR-180** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 177. In-release citations that read "ADR-177" denote this record.
+
+**Numbering provenance — `180 → 182`.** Held **ADR-180** branch-local; renumbered to **ADR-182** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 180. In-release citations that read "ADR-180" denote this record.
 
 ## Context
 

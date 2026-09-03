@@ -5,7 +5,7 @@ status: Accepted
 date: 2026-09-02
 release: regression-corpus-gates-releases
 deciders: "Stage 5 Solutioning spoke (five-decision design with measured trade-off matrices) + Stage 6 Engineering spoke (record authored at Commit 0 under operator authorization at the Stage 5 gate) + operator GO at the Stage 4 plan gate"
-tags: [behavioral-regression, pass-rate-floor, release-gate, major-release-boundary, warn-mode-initial, never-fail, gate-efficacy, platform-config, ADR-180]
+tags: [behavioral-regression, pass-rate-floor, release-gate, major-release-boundary, warn-mode-initial, never-fail, gate-efficacy, platform-config, ADR-182]
 source_observations:
   - "Measured over the whole tag history at the release baseline: 192 tags across 4 major families, with one clean major-bump event in 89 days — a minor-to-major ratio of roughly 48 to 1. A gate bound exclusively to the major boundary runs about quarterly and would ship months before its first real exercise."
   - "The standard that carries the platform's behavioural checks has zero fixtures. Its own procedure instructs the reader to prepare a test artifact and use a known-good one. It is an assertion bank, not a corpus: the missing layer is scenarios plus fixtures, which the bank never carried and structurally cannot carry."
@@ -109,4 +109,4 @@ Per-decision, where the tiers differ:
 
 ## Related ADRs
 
-- **ADR-180** — decided that the output-scoring runner consumes the eval-harness schema the platform already ships and emits the report contract the framework already defines, and froze the runner's command-line signature and its closed exit-code set. This record binds to that signature from the other side: the workflow reads the floor from configuration and passes it as a command-line value, and consumes only the exit status. The two halves compose structurally — the runner owns the comparison, the gate owns the boundary, and neither restates the other's contract.
+- **ADR-182** — decided that the output-scoring runner consumes the eval-harness schema the platform already ships and emits the report contract the framework already defines, and froze the runner's command-line signature and its closed exit-code set. This record binds to that signature from the other side: the workflow reads the floor from configuration and passes it as a command-line value, and consumes only the exit status. The two halves compose structurally — the runner owns the comparison, the gate owns the boundary, and neither restates the other's contract.
