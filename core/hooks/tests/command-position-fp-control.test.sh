@@ -171,7 +171,7 @@ MATCH_RE="${ANCHOR}(${VERBS})([[:space:]]+|\$)"
 
 # match_re(command) -> 0 when the verb pattern matches at a recognised command start.
 match_re() {
-  /usr/bin/printf '%s' "$1" | /usr/bin/grep -qE "$MATCH_RE"
+  /usr/bin/grep -qE "$MATCH_RE" <<<"$1"
 }
 
 # canonicalize(command) -> the canonicalized text on stdout.

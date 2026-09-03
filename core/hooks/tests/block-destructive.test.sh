@@ -2969,8 +2969,8 @@ bash /tmp/evil.sh')" \
 # structure test and would have pressured the prose to satisfy the instrument.
 HD_PRESCAN="$(/usr/bin/sed -n '/^script_heredoc_prescan() {/,/^}$/p' "$HOOK" \
   | /usr/bin/grep -v '^[[:space:]]*#')"
-if [ -n "$HD_PRESCAN" ] && ! /usr/bin/printf '%s' "$HD_PRESCAN" \
-     | /usr/bin/grep -qiE 'report|evidence|markdown|fence|body-file|--body|```'; then
+if [ -n "$HD_PRESCAN" ] \
+   && ! /usr/bin/grep -qiE 'report|evidence|markdown|fence|body-file|--body|```' <<<"$HD_PRESCAN"; then
   /usr/bin/printf 'PASS: HD-06a the pre-pass keys on no content marker (no report/fence/flag token)\n'
   PASS=$((PASS + 1))
 else
@@ -2978,7 +2978,7 @@ else
   FAIL=$((FAIL + 1))
 fi
 
-if /usr/bin/printf '%s' "$HD_PRESCAN" | /usr/bin/grep -qE 'script_qnext|gh\|printf\|echo\|jq'; then
+if /usr/bin/grep -qE 'script_qnext|gh\|printf\|echo\|jq' <<<"$HD_PRESCAN"; then
   /usr/bin/printf 'PASS: HD-06b control: the same instrument finds the quote scanner and the carrier set\n'
   PASS=$((PASS + 1))
 else
@@ -3519,7 +3519,7 @@ esac
 # The arming stamp must be a RESOLVABLE ISO date, not a placeholder. The platform
 # has a worked failure behind that rule: a check shipped expecting a stamp nobody
 # wrote and gated nothing for 62 releases.
-if /usr/bin/printf '%s' "$B022_INTERP_ARMED" | /usr/bin/grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' \
+if /usr/bin/grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' <<<"$B022_INTERP_ARMED" \
    && python3 -c 'import datetime,sys; datetime.date.fromisoformat(sys.argv[1])' "$B022_INTERP_ARMED" 2>/dev/null; then
   /usr/bin/printf 'PASS: T-NSI-10b the interpreter-arm arming stamp is a resolvable ISO date (%s), not a placeholder\n' "$B022_INTERP_ARMED"
   PASS=$((PASS + 1))

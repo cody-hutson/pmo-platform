@@ -142,7 +142,7 @@ id_pair() {
   local name="$1" tool="$2" twin_rc="$3" srepo="$4" srel="$5" trepo="$6" trel="$7"
   local brc berr
   id_run "$tool" "$trepo" "$trel"; brc="$ID_RC"; berr="$ID_ERR"
-  if [ "$brc" != "$twin_rc" ] || ! /usr/bin/printf '%s' "$berr" | /usr/bin/grep -q 'BLOCK-DRAFT-001'; then
+  if [ "$brc" != "$twin_rc" ] || ! /usr/bin/grep -q 'BLOCK-DRAFT-001' <<<"$berr"; then
     /usr/bin/printf 'FAIL: %s (UNUSABLE — arming proof failed: twin %s expected exit=%s + BLOCK-DRAFT-001, got exit=%s stderr: %s)\n' \
       "$name" "$trel" "$twin_rc" "$brc" "$berr"; FAIL=$((FAIL+1)); return
   fi

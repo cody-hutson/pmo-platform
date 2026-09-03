@@ -191,6 +191,13 @@ test_case "tee traversal escape blocks (.. token → strict)" \
 test_case "AC-2: pipe into head (no file operand) allowed" \
   "$(bash_payload 'git log --oneline | head -n 20')" 0
 
+# The case LABEL below names the command it pins, so it carries that command's
+# text verbatim. GATE 10's T1 content-exemption strips single-quoted spans only,
+# so the payload on the second line is exempt automatically while the identical
+# text in the double-quoted label reads as a finding — the documented
+# double-quoted false-alarm class, resolved by a declared marker rather than by
+# renaming the case or re-quoting it away.
+# sigpipe-idiom: allow — double-quoted test-case LABEL, a string operand to `test_case`, not a pipeline: no writer, no reader, no pipeline status to invert
 test_case "AC-2: ps aux | head -5 allowed" \
   "$(bash_payload 'ps aux | head -5')" 0
 
