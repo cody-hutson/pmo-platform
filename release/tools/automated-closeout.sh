@@ -6528,13 +6528,29 @@ tagger_hygiene_violations() {
 # the published-Release tag list in file $2, minus the recorded exemptions. Both files
 # must be sorted. Taking files (not live probes) is what makes this testable offline:
 # the self-test drives it with fixtures, no gh and no network.
+# #6857 — the in-flight set, derived from the RELEASE_LOG state column and NOTHING
+# else, so this stays as file-only and offline-testable as anchor_parity_violations.
+# A release is IN FLIGHT between Stage 12 Phase B5 (which lands the DEPLOYED row) and
+# Stage 13 close (which transitions it to VERIFIED). Inside that window its tag exists
+# and its Release does not — the state phase 15.55's own comment calls expected for
+# "a sibling release genuinely in flight", and which had no implementation.
+# Args: <log_file>.  Emits one tag per line.
+inflight_release_tags() {
+  /usr/bin/awk -F' *\\| *' '/^\| v[0-9]/ && $8=="DEPLOYED" { print $2 }' "$1" 2>/dev/null | /usr/bin/sort -u
+}
+
 anchor_parity_violations() {
-  local ann_file="$1" rel_file="$2"
+  local ann_file="$1" rel_file="$2" inflight_file="${3:-}"
   local exempt; exempt="$(/usr/bin/printf '%s\n' "${ANCHOR_PARITY_EXEMPT_TAGS[@]}" | /usr/bin/sort -u)"
   local t
   while IFS= read -r t; do
     [[ -z "$t" ]] && continue
     if /usr/bin/printf '%s\n' "$exempt" | /usr/bin/grep -qxF "$t"; then continue; fi
+    # #6857 — a sibling still inside its Stage-12/13 window is the expected benign
+    # case, not drift. Scoped to THIS arm: a published Release on a lightweight tag
+    # (the other arm) is never an in-flight condition.
+    if [[ -n "$inflight_file" && -s "$inflight_file" ]] \
+       && /usr/bin/grep -qxF "$t" "$inflight_file"; then continue; fi
     /usr/bin/printf 'MISSING-RELEASE %s (annotated tag with no published GitHub Release)\n' "$t"
   done < <(/usr/bin/comm -23 "$ann_file" "$rel_file")
   while IFS= read -r t; do
@@ -6614,7 +6630,24 @@ phase_assert_anchor_hygiene() {
     if ledger_gap_is_this_close "$_idx" "$_log" "$RELEASE_INDEX" "$RELEASE_LOG" "$VERSION" "$MODE"; then
       _parity_pred="; LEDGER-ROW-PARITY PREDICTED not asserted under --dry-run — the single missing INDEX row is ${VERSION}'s own, and phase_append_release_index adds it at --apply while deliberately writing nothing here, so the gap is this script's own no-op. Parity is asserted for real at --apply, after the 8.x append lands"
     else
-      findings="${findings}LEDGER-ROW-PARITY RELEASE_INDEX has ${_idx} version rows, RELEASE_LOG has ${_log}"$'\n'
+      # #6857 — the gap may be INHERITED rather than introduced. A sibling inside its
+      # Stage-12/13 window has landed its RELEASE_LOG row and not yet its RELEASE_INDEX
+      # row, so it contributes exactly one to this difference through no fault of the
+      # release now closing. Account for those before reporting: a gap this release did
+      # not create must not halt it, and a gap larger than the in-flight set still does.
+      local _inflight_gap=0 _v
+      while IFS= read -r _v; do
+        [[ -z "$_v" ]] && continue
+        /usr/bin/grep -qE "^\| *\[?${_v}([^0-9]|$)" "$RELEASE_INDEX" 2>/dev/null || _inflight_gap=$((_inflight_gap+1))
+      done < <(inflight_release_tags "$RELEASE_LOG")
+      # DIRECTIONAL, per self-test h5: the allowance covers a LOG-ahead gap only.
+      # An INDEX-ahead gap is a different defect (a row exists for a release with no
+      # LOG entry) and an in-flight sibling can never explain it, so it always reports.
+      if (( _log > _idx && _log - _idx <= _inflight_gap )); then
+        _parity_pred="; LEDGER-ROW-PARITY INHERITED not reported — the ${_log}-vs-${_idx} difference is fully accounted for by ${_inflight_gap} sibling release(s) still inside the Stage-12/13 window, each carrying a RELEASE_LOG row and no RELEASE_INDEX row yet. Not drift this close introduced; it clears when those siblings close"
+      else
+        findings="${findings}LEDGER-ROW-PARITY RELEASE_INDEX has ${_idx} version rows, RELEASE_LOG has ${_log} (in-flight siblings account for ${_inflight_gap})"$'\n'
+      fi
     fi
   fi
 
@@ -6625,7 +6658,8 @@ phase_assert_anchor_hygiene() {
   annotated_tags_of "$REPO_ROOT" > "$tmp/ann"
   if $GH release list --limit 400 --json tagName -q '.[].tagName' 2>/dev/null | /usr/bin/sort > "$tmp/rel" \
      && [[ -s "$tmp/rel" ]]; then
-    local _ap; _ap="$(anchor_parity_violations "$tmp/ann" "$tmp/rel")"
+    inflight_release_tags "$RELEASE_LOG" > "$tmp/inflight" 2>/dev/null || : > "$tmp/inflight"
+    local _ap; _ap="$(anchor_parity_violations "$tmp/ann" "$tmp/rel" "$tmp/inflight")"
     [[ -n "$_ap" ]] && findings="${findings}${_ap}"$'\n'
   else
     _net_note="; tag<->Release set parity NOT CHECKED (gh release list unavailable — offline or credential-less)"
@@ -11849,6 +11883,35 @@ REL
   /usr/bin/printf 'v9.03\n' >> "$_ah_tmp/ann"; /usr/bin/sort -o "$_ah_tmp/ann" "$_ah_tmp/ann"
   _ah_out="$(anchor_parity_violations "$_ah_tmp/ann" "$_ah_tmp/rel")"
   /usr/bin/printf '%s' "$_ah_out" | /usr/bin/grep -qF 'MISSING-RELEASE v9.03' || { echo "FAIL: AC4-b — a NEW annotated-tag-without-Release divergence must be reported, got: $_ah_out"; failures=$((failures+1)); }
+
+  # ---- #6857: an IN-FLIGHT sibling is the expected benign case, not drift ----
+  # Read as a pair. AC4-e is the property; AC4-f is the control WITHOUT which AC4-e
+  # cannot distinguish "the in-flight set suppressed it" from "passing a third argument
+  # suppressed everything". v9.03 is still annotated-without-Release in BOTH arms; the
+  # only variable is whether it is named in the in-flight file.
+  /usr/bin/printf 'v9.03\n' > "$_ah_tmp/inflight"
+  _ah_out="$(anchor_parity_violations "$_ah_tmp/ann" "$_ah_tmp/rel" "$_ah_tmp/inflight")"
+  /usr/bin/printf '%s' "$_ah_out" | /usr/bin/grep -qF 'MISSING-RELEASE v9.03' && { echo "FAIL: AC4-e — a tag named in the in-flight set must NOT be reported, got: $_ah_out"; failures=$((failures+1)); }
+  : > "$_ah_tmp/inflight"
+  _ah_out="$(anchor_parity_violations "$_ah_tmp/ann" "$_ah_tmp/rel" "$_ah_tmp/inflight")"
+  /usr/bin/printf '%s' "$_ah_out" | /usr/bin/grep -qF 'MISSING-RELEASE v9.03' || { echo "FAIL: AC4-f — with an EMPTY in-flight set the same tag must still be reported; the skip must be attributable to membership, not to the argument existing, got: $_ah_out"; failures=$((failures+1)); }
+
+  # AC4-g — SCOPE: in-flight excuses the missing-RELEASE arm ONLY. A published Release
+  # on a lightweight tag is never an in-flight condition, so naming it must not mute it.
+  /usr/bin/printf 'v9.05\n' >> "$_ah_tmp/rel"; /usr/bin/sort -o "$_ah_tmp/rel" "$_ah_tmp/rel"
+  /usr/bin/printf 'v9.05\n' > "$_ah_tmp/inflight"
+  _ah_out="$(anchor_parity_violations "$_ah_tmp/ann" "$_ah_tmp/rel" "$_ah_tmp/inflight")"
+  /usr/bin/printf '%s' "$_ah_out" | /usr/bin/grep -qF 'MISSING-ANNOTATED-TAG v9.05' || { echo "FAIL: AC4-g — the in-flight set must not suppress the MISSING-ANNOTATED-TAG arm, got: $_ah_out"; failures=$((failures+1)); }
+  /usr/bin/sed -i.bak '/^v9.05$/d' "$_ah_tmp/rel" 2>/dev/null || true
+
+  # AC4-h — the EXTRACTOR: in-flight is exactly the DEPLOYED rows, read from the LOG
+  # state column and nothing else. Both arms, so a total-silence bug cannot pass.
+  /bin/cat > "$_ah_tmp/log" <<'AHLOG'
+| v9.10 | slug-a | #1 | #2 | `sha` | `v9.10` | DEPLOYED | 2026-01-01 |
+| v9.11 | slug-b | #3 | #4 | `sha` | `v9.11` | VERIFIED | 2026-01-02 |
+AHLOG
+  local _ah_if; _ah_if="$(inflight_release_tags "$_ah_tmp/log")"
+  [[ "$_ah_if" == "v9.10" ]] || { echo "FAIL: AC4-h — in-flight must be exactly the DEPLOYED rows (expected v9.10), got: '$_ah_if'"; failures=$((failures+1)); }
 
   # (c) the OTHER direction — a published Release with no annotated tag.
   /usr/bin/printf 'v9.04\n' >> "$_ah_tmp/rel"; /usr/bin/sort -o "$_ah_tmp/rel" "$_ah_tmp/rel"
