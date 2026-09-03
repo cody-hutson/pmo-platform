@@ -636,14 +636,22 @@ self_test() {
   # of a live workflow that has none, so the arm's subject is a real workflow.
   _seed
   local wf_victim
-  wf_victim="$(cd "$tmp/tree" && git ls-files -- '.github/workflows/*.yml' | head -20 | while read -r w; do
-      if ! awk '/^[[:space:]]*#/ { next } /cron:/ { found=1 } END { exit !found }' "$w"; then echo "$w"; break; fi
-    done)"
+  # Bounded by a counter rather than by a truncating reader: such a reader closes
+  # the pipe on git, which under `pipefail` reports a failure that has nothing
+  # to do with the search. The bound is the same twenty entries either way.
+  wf_victim="$(cd "$tmp/tree" && git ls-files -- '.github/workflows/*.yml' | {
+      _i=0
+      while read -r w; do
+        _i=$((_i + 1))
+        if [ "$_i" -gt 20 ]; then break; fi
+        if ! awk '/^[[:space:]]*#/ { next } /cron:/ { found=1 } END { exit !found }' "$w"; then echo "$w"; break; fi
+      done
+    })"
   if [[ -z "$wf_victim" ]]; then
     echo "self-test FAIL: F9 setup — no schedule-free workflow available to mutate." >&2; return 1; fi
   printf '\non:\n  schedule:\n    - cron: %s0 3 * * *%s\n' "'" "'" >> "$tmp/tree/$wf_victim"
   out="$(run_check "$tmp/tree" "$tmp/tree/$REG" "$tmp/tree/$SCH" 2>&1)"; rc=$?
-  if [[ $rc -eq 1 ]] && printf '%s' "$out" | grep -q "A-04 unregistered-schedule.*$wf_victim"; then pass=$((pass + 1)); else
+  if [[ $rc -eq 1 ]] && grep -q "A-04 unregistered-schedule.*$wf_victim" <<<"$out"; then pass=$((pass + 1)); else
     echo "self-test FAIL: F9 — a newly-scheduled workflow with no row must fire A-04 naming it; got exit $rc" >&2
     echo "$out" >&2; return 1; fi
 
@@ -680,7 +688,7 @@ self_test() {
   _seed
   local twofile
   twofile="$(cd "$tmp/tree" && git ls-files -- '*.md' | while read -r m; do
-      if roster_md_awk "$m" | grep -q .; then echo "$m"; break; fi
+      _rm_out="$(roster_md_awk "$m")"; if [[ -n "$_rm_out" ]]; then echo "$m"; break; fi
     done)"
   if [[ -z "$twofile" ]]; then
     echo "self-test FAIL: list-valued setup — no declaring markdown file in the live copy." >&2; return 1; fi

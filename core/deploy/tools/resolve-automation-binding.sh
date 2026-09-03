@@ -331,7 +331,7 @@ workflow_cron() {
 read_selector() {
   local _op="$1" _v=""
   if [[ -f "$_op" ]]; then
-    _v="$(/usr/bin/grep -E '^[[:space:]]*scheduler[[:space:]]*=' "$_op" 2>/dev/null | head -1)"
+    _v="$(/usr/bin/grep -m1 -E '^[[:space:]]*scheduler[[:space:]]*=' "$_op" 2>/dev/null)"
     _v="${_v#*=}"
     _v="${_v%%#*}"
     # strip surrounding whitespace and quotes without a glob-exposed split
@@ -721,11 +721,11 @@ self_test() {
   rc=$?
   if [[ $rc -ne 0 ]]; then
     echo "self-test FAIL (F-A/SD-2): agent-runtime resolve of '$sess_id' exited $rc, expected 0. Output: $out" >&2; return 1; fi
-  if ! printf '%s' "$out" | /usr/bin/grep -q "^${TOK_AGENT}"; then
+  if ! /usr/bin/grep -q "^${TOK_AGENT}" <<<"$out"; then
     echo "self-test FAIL (F-A/SD-2): no ${TOK_AGENT} record emitted for '$sess_id'. Output: $out" >&2; return 1; fi
-  if ! printf '%s' "$out" | /usr/bin/grep -qF -- "task='${sess_id}'"; then
+  if ! /usr/bin/grep -qF -- "task='${sess_id}'" <<<"$out"; then
     echo "self-test FAIL (F-A/SD-2): the binding does not carry task='${sess_id}'. The task name IS the registry id — one string on three surfaces. Output: $out" >&2; return 1; fi
-  if ! printf '%s' "$out" | /usr/bin/grep -qF -- "cron='${sess_cad}'"; then
+  if ! /usr/bin/grep -qF -- "cron='${sess_cad}'" <<<"$out"; then
     echo "self-test FAIL (F-A/SD-2): the binding does not carry the row's cadence verbatim (expected cron='${sess_cad}'). A populated binding is what forbids the unconditionally-zero resolver SD-1 alone would accept. Output: $out" >&2; return 1; fi
   if ! printf '%s' "$out" | /usr/bin/grep -qF -- "entrypoint=${sess_ep}"; then
     echo "self-test FAIL (F-A/SD-2): the binding does not cite the row's entrypoint (${sess_ep}). Output: $out" >&2; return 1; fi
@@ -739,7 +739,9 @@ self_test() {
   if ! printf '%s' "$out" | /usr/bin/grep -q "^${TOK_REPO}"; then
     echo "self-test FAIL (F-A2/AC-1): no ${TOK_REPO} record for '$repo_id'. A workflow entrypoint is repo-fired and must not consult the selector. Output: $out" >&2; return 1; fi
   local live_wf_cron
-  live_wf_cron="$(workflow_cron "$tmp/tree/$repo_ep" | head -1)"
+  # Capture, then take the first line: no reader closes the pipe on the writer.
+  _lwc_all="$(workflow_cron "$tmp/tree/$repo_ep")"
+  live_wf_cron="${_lwc_all%%$'\n'*}"
   if [[ -z "$live_wf_cron" ]]; then
     echo "self-test FAIL (F-A2/AC-1): could not read a cron from '$repo_ep'; the equality assertion below would be vacuous." >&2; return 1; fi
   if ! printf '%s' "$out" | /usr/bin/grep -qF -- "cron='${live_wf_cron}'"; then

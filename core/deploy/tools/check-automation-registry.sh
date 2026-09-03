@@ -576,7 +576,7 @@ JSON
       return 1
     fi
     if [[ "$want_sub" != "-" ]]; then
-      if ! printf '%s' "$out" | grep -q "$want_sub"; then
+      if ! grep -q "$want_sub" <<<"$out"; then
         echo "self-test FAIL: $label — expected a '$want_sub' finding; got:" >&2
         echo "$out" >&2
         return 1
