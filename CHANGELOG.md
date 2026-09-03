@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.51] - 2026-09-03
+
+Eval suites can now be scored automatically, and a behavioural-regression check runs on every pull request.
+
+[Full notes](release/releases/notes/v4.51_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.51)
+
 ## [v4.50] - 2026-09-03
 
 When a decision record's number has to change, the tool that changes it no longer rewrites the historical entries that record what the number used to be.
