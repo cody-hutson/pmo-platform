@@ -5154,19 +5154,30 @@ phase_rebuild_skill_packages() {
 # the prefix did not name. Widening the prefix to a second literal only moves the
 # blind spot to the next writer; keying on the REPORT removes it.
 #
-# THE `PASS` RESULT FILTER STAYS, AND IS LOAD-BEARING. A SKIPPED/FAIL/N-A limb
-# writes nothing, and exactly one detail in this script legitimately parenthesizes
-# a basename it did NOT write — phase_append_reversions' N/A line, "no re-version
-# this release (RELEASE_REVERSIONS.md untouched)". Measured across all 47
-# mark_phase sites: that is the only such parenthetical, and the result filter is
-# the whole reason it stays out. Arm PS-5 locks that, so a future PASS detail which
-# names a file it does not write reddens here rather than asserting a phantom.
+# THE `PASS` RESULT FILTER STAYS, AND IS LOAD-BEARING — for the reason MEASURED
+# below, not the one first written here. The first draft of this block claimed the
+# filter is what excludes phase_append_reversions' N/A line, "no re-version this
+# release (RELEASE_REVERSIONS.md untouched)". That was FALSE, and a mutation run
+# proved it: dropping the filter did not admit that line at all, because the token
+# grammar requires the parenthetical to hold the path AND NOTHING ELSE, and that
+# one carries a trailing word. The grammar excludes it; the filter never touched
+# it. Recorded because the wrong rationale would send the next reader hunting for
+# a hazard this code does not have.
+#
+# What the filter ACTUALLY excludes, enumerated over all 47 mark_phase sites: FOUR
+# non-PASS limbs whose detail DOES use the strict path-only form —
+# inject_outcome_field (SKIPPED, twice), append_release_learnings (SKIPPED) and
+# inject_close_class_telemetry_field (SKIPPED), each naming its resolved surface
+# as `($target_name)` / `($_log_name)`. A SKIPPED limb wrote nothing, so admitting
+# one would demand a commit for a file its own phase declined to touch — a guard
+# that FAILs a correct close. Arm PS-5 drives exactly that fixture.
 #
 # The token grammar admits a repo-relative path as well as a bare basename and
 # reduces it with basename(1), so a writer may name its target in whichever form
-# reads naturally in its own detail. Matching downstream is by basename against the
-# committed path list, so a surface landing in a different directory is still
-# adjudicated rather than silently excluded.
+# reads naturally in its own detail. It does NOT admit a parenthetical carrying
+# anything besides the path, which is what keeps prose asides out. Matching
+# downstream is by basename against the committed path list, so a surface landing
+# in a different directory is still adjudicated rather than silently excluded.
 #
 # INDEPENDENCE (unchanged, and the binding constraint). The set is derived from the
 # phase record ONLY — never from TOUCHED_ARCHIVE_SEGMENTS or any other recorder —
@@ -11395,21 +11406,49 @@ PLAN-VERSION-UNKNOWN: release/releases/plans/v2/v2.98_RELEASE_PLAN.md declares v
     echo "FAIL: PS-4c _reported_write_surfaces must not consult TOUCHED_ARCHIVE_SEGMENTS — a guard sourced from that recorder goes vacuous when a write site stops recording"; failures=$((failures+1))
   fi
 
-  # ── PS-5 — the PASS filter, measured rather than asserted. phase_append_reversions
-  # records N/A with "(RELEASE_REVERSIONS.md untouched)" — the ONE parenthetical in
-  # this script that names a file its phase did not write. It must not enter the
-  # reported set, or the guard would demand a commit for a file declared untouched.
-  PHASE_NAMES=("append_reversions" "transition_plan_status")
-  PHASE_RESULTS=("N/A" "PASS")
-  PHASE_DETAILS=("no re-version this release (RELEASE_REVERSIONS.md untouched)" \
+  # ── PS-5 — the PASS filter, on the fixture that actually exercises it. ─────
+  # The first version of this arm used phase_append_reversions' N/A detail, "no
+  # re-version this release (RELEASE_REVERSIONS.md untouched)", and was VACUOUS: a
+  # mutation dropping the PASS filter left it GREEN, because the token grammar
+  # rejects that parenthetical on its trailing word, not on the phase result. The
+  # real hazard is a SKIPPED limb using the strict path-only form — four sites do
+  # (inject_outcome_field twice, append_release_learnings,
+  # inject_close_class_telemetry_field). A SKIPPED limb wrote nothing, so admitting
+  # one would demand a commit for a file its own phase declined to touch.
+  PHASE_NAMES=("inject_outcome_field" "transition_plan_status")
+  PHASE_RESULTS=("SKIPPED" "PASS")
+  PHASE_DETAILS=("already present in the v9.99 Deployment Log block (RELEASE_LOG_ARCHIVE-v9.md)" \
                  "transitioned ACTIVE → CLOSED (release/releases/plans/v9/v9.99_RELEASE_PLAN.md)")
   local _ps_set; _ps_set="$(_reported_write_surfaces | /usr/bin/cut -f2 | /usr/bin/tr '\n' ' ')"
-  /usr/bin/grep -qF 'RELEASE_REVERSIONS.md' <<<"$_ps_set" \
-    && { echo "FAIL: PS-5 an N/A detail naming an UNTOUCHED file must not enter the reported-write set, got '$_ps_set'"; failures=$((failures+1)); }
+  if /usr/bin/grep -qF 'RELEASE_LOG_ARCHIVE-v9.md' <<<"$_ps_set"; then
+    echo "FAIL: PS-5 a SKIPPED limb's named surface must not enter the reported-write set — it wrote nothing, so demanding it in the commit would FAIL a correct close; got '$_ps_set'"; failures=$((failures+1))
+  fi
   # Specificity twin: the PASS entry alongside it MUST be picked up, else PS-5
   # passes because the extractor found nothing at all.
   /usr/bin/grep -qF 'v9.99_RELEASE_PLAN.md' <<<"$_ps_set" \
     || { echo "FAIL: PS-5b anti-vacuity — the PASS writer's surface must be in the reported set, got '$_ps_set'"; failures=$((failures+1)); }
+
+  # ── PS-6 — THE DETAIL CONTRACT, coupled to its producer. ──────────────────
+  # Phase 6.9's PASS detail is the ONLY thing that puts the plan into the reported
+  # set, so the parenthesized target is load-bearing SYNTAX, not prose. Nothing
+  # asserted it, and that was measured rather than supposed: a mutation restoring
+  # 6.9's natural phrasing ("transitioned ${plan} ACTIVE → CLOSED" — the shape it
+  # actually shipped with) left this entire suite GREEN while silently removing the
+  # plan from the guard's population. The staging fix would then still be in place
+  # and still be uncovered.
+  #   So this arm drives the REAL phase and feeds its RECORDED detail through the
+  # REAL extractor — producer coupled to consumer, the same anti-drift shape Test 12
+  # uses for SCAFFOLD_RESIDUE_TOKENS. Re-word 6.9's detail out of the grammar and
+  # this reddens; no second copy of the grammar exists here to drift from it.
+  /usr/bin/printf -- '---\ntitle: Release Plan — selftest\nstatus: ACTIVE\n---\nbody\n' > "$_ps_plan"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_transition_plan_status >/dev/null 2>&1
+  local _ps69; _ps69="$(get_phase transition_plan_status)"
+  [[ "$_ps69" == PASS\|* ]] \
+    || { echo "FAIL: PS-6 anti-vacuity — phase_transition_plan_status must PASS on an ACTIVE sandbox plan, got '$_ps69'"; failures=$((failures+1)); }
+  local _ps69_set; _ps69_set="$(_reported_write_surfaces | /usr/bin/cut -f2 | /usr/bin/tr '\n' ' ')"
+  /usr/bin/grep -qF 'v9.99_RELEASE_PLAN.md' <<<"$_ps69_set" \
+    || { echo "FAIL: PS-6 phase 6.9's own PASS detail must name its write target in the parenthesized form _reported_write_surfaces reads, else the plan silently leaves the staging guard's population; recorded detail was '$_ps69', extracted set was '$_ps69_set'"; failures=$((failures+1)); }
 
   REPO_ROOT="$_ps_saved_root"; MODE="$_ps_saved_mode"; VERSION="$_ps_saved_version"
   RELEASE_LOG="$_ps_saved_log"; RELEASE_PLANS_DIR="$_ps_saved_plansdir"
