@@ -773,9 +773,7 @@ self_test() {
   # Without this the arm proves only that the two happened to agree today.
   # `index()` rather than a regex: a routine id is matched literally, so no
   # character in it is ever interpreted as a pattern.
-  _mut_snap "$REG"
   awk -v id="$repo_id" 'BEGIN{FS=OFS="|"} /^\|/ && index($0, id) { $3=" `9 9 9 9 9` " } { print }' "$REG" > "$tmp/reg-drift.md"
-  _mut_landed "$REG" "F-A2 corrupt-a-cron-cell" || return 1
   if ! /usr/bin/grep -q '9 9 9 9 9' "$tmp/reg-drift.md"; then
     echo "self-test FAIL (F-A2): the cadence-drift mutation did not take; the falsification below would be vacuous." >&2; return 1; fi
   out="$(run_resolve "$tmp/tree" "$tmp/reg-drift.md" "$SCH" "$DEC" "$tmp/cfg/agent.toml" "$repo_id" 2>&1)"
@@ -887,7 +885,7 @@ self_test() {
   # And the converse direction: remove a value the adapter implements.
   _mut_snap "$DEC"
   /usr/bin/sed -e 's|"agent-runtime",||' "$DEC" > "$tmp/decl-short.json"
-  _mut_landed "$DEC" "F-decl drop-an-enum-value" || return 1
+  _mut_landed "$tmp/decl-short.json" "F-decl drop-an-enum-value" || return 1
   out="$(run_resolve "$tmp/tree" "$REG" "$SCH" "$tmp/decl-short.json" "$tmp/cfg/none.toml" "" 2>&1)"
   rc=$?
   if [[ $rc -ne 3 ]]; then
@@ -897,7 +895,7 @@ self_test() {
   # ── Arm F-H — scan-surface errors ALWAYS hard-fail regardless of posture.
   _mut_snap "$REG"
   awk 'BEGIN{FS=OFS="|"} /^\| id \| cadence \|/ { $2=" name "; } { print }' "$REG" > "$tmp/reg-renamed.md"
-  _mut_landed "$REG" "F-hdr rename-a-header" || return 1
+  _mut_landed "$tmp/reg-renamed.md" "F-hdr rename-a-header" || return 1
   out="$(run_resolve "$tmp/tree" "$tmp/reg-renamed.md" "$SCH" "$DEC" "$tmp/cfg/none.toml" "" 2>&1)"
   rc=$?
   if [[ $rc -ne 3 ]]; then

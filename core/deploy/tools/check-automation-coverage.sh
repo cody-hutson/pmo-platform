@@ -576,9 +576,7 @@ self_test() {
   if [[ -z "$victim" ]]; then
     echo "self-test FAIL: F1 setup — could not read a routine id out of the live registry copy." >&2; return 1; fi
   _mut_snap "$tmp/tree/$REG"
-  _mut_snap "$tmp/tree/$REG"
   grep -v "^| \`${victim}\` " "$tmp/tree/$REG" > "$tmp/reg.tmp" && mv "$tmp/reg.tmp" "$tmp/tree/$REG"
-  _mut_landed "$tmp/tree/$REG" "F4 inject-an-orphan-row" || return 1
   _mut_landed "$tmp/tree/$REG" "F1 delete-a-declared-row" || return 1
   out="$(run_check "$tmp/tree" "$tmp/tree/$REG" "$tmp/tree/$SCH" 2>&1)"; rc=$?
   if [[ $rc -ne 1 ]]; then
@@ -614,8 +612,10 @@ self_test() {
   # that never happened. F1 above escapes correctly because it is
   # double-quoted, so the shell consumes the backslash first.
   hdr_line="$(grep -m1 -n '^| `' "$tmp/tree/$REG" | cut -d: -f1)"
+  _mut_snap "$tmp/tree/$REG"
   awk -v n="$hdr_line" 'NR==n { print; print "| `qqzz-not-a-routine` | `0 6 * * *` | `time-driven` | `core/automations/registry.md` | `recommend` | `CHEAP` |"; next } { print }' \
     "$tmp/tree/$REG" > "$tmp/reg.tmp" && mv "$tmp/reg.tmp" "$tmp/tree/$REG"
+  _mut_landed "$tmp/tree/$REG" "F4 inject-an-orphan-row" || return 1
   out="$(run_check "$tmp/tree" "$tmp/tree/$REG" "$tmp/tree/$SCH" 2>&1)"; rc=$?
   if [[ $rc -eq 1 ]] && grep -q "A-02 orphan-row.*qqzz-not-a-routine" <<<"$out"; then pass=$((pass + 1)); else
     echo "self-test FAIL: F4 — an orphan row must fire A-02 naming it; got exit $rc" >&2; echo "$out" >&2; return 1; fi
