@@ -11885,23 +11885,25 @@ REL
   /usr/bin/printf '%s' "$_ah_out" | /usr/bin/grep -qF 'MISSING-RELEASE v9.03' || { echo "FAIL: AC4-b — a NEW annotated-tag-without-Release divergence must be reported, got: $_ah_out"; failures=$((failures+1)); }
 
   # ---- #6857: an IN-FLIGHT sibling is the expected benign case, not drift ----
+  # Matched with a bash glob rather than `printf | grep -q`: a short-circuiting
+  # reader SIGPIPEs its writer, which the SIGPIPE-idiom gate polices on added lines.
   # Read as a pair. AC4-e is the property; AC4-f is the control WITHOUT which AC4-e
   # cannot distinguish "the in-flight set suppressed it" from "passing a third argument
   # suppressed everything". v9.03 is still annotated-without-Release in BOTH arms; the
   # only variable is whether it is named in the in-flight file.
   /usr/bin/printf 'v9.03\n' > "$_ah_tmp/inflight"
   _ah_out="$(anchor_parity_violations "$_ah_tmp/ann" "$_ah_tmp/rel" "$_ah_tmp/inflight")"
-  /usr/bin/printf '%s' "$_ah_out" | /usr/bin/grep -qF 'MISSING-RELEASE v9.03' && { echo "FAIL: AC4-e — a tag named in the in-flight set must NOT be reported, got: $_ah_out"; failures=$((failures+1)); }
+  [[ "$_ah_out" == *'MISSING-RELEASE v9.03'* ]] && { echo "FAIL: AC4-e — a tag named in the in-flight set must NOT be reported, got: $_ah_out"; failures=$((failures+1)); }
   : > "$_ah_tmp/inflight"
   _ah_out="$(anchor_parity_violations "$_ah_tmp/ann" "$_ah_tmp/rel" "$_ah_tmp/inflight")"
-  /usr/bin/printf '%s' "$_ah_out" | /usr/bin/grep -qF 'MISSING-RELEASE v9.03' || { echo "FAIL: AC4-f — with an EMPTY in-flight set the same tag must still be reported; the skip must be attributable to membership, not to the argument existing, got: $_ah_out"; failures=$((failures+1)); }
+  [[ "$_ah_out" == *'MISSING-RELEASE v9.03'* ]] || { echo "FAIL: AC4-f — with an EMPTY in-flight set the same tag must still be reported; the skip must be attributable to membership, not to the argument existing, got: $_ah_out"; failures=$((failures+1)); }
 
   # AC4-g — SCOPE: in-flight excuses the missing-RELEASE arm ONLY. A published Release
   # on a lightweight tag is never an in-flight condition, so naming it must not mute it.
   /usr/bin/printf 'v9.05\n' >> "$_ah_tmp/rel"; /usr/bin/sort -o "$_ah_tmp/rel" "$_ah_tmp/rel"
   /usr/bin/printf 'v9.05\n' > "$_ah_tmp/inflight"
   _ah_out="$(anchor_parity_violations "$_ah_tmp/ann" "$_ah_tmp/rel" "$_ah_tmp/inflight")"
-  /usr/bin/printf '%s' "$_ah_out" | /usr/bin/grep -qF 'MISSING-ANNOTATED-TAG v9.05' || { echo "FAIL: AC4-g — the in-flight set must not suppress the MISSING-ANNOTATED-TAG arm, got: $_ah_out"; failures=$((failures+1)); }
+  [[ "$_ah_out" == *'MISSING-ANNOTATED-TAG v9.05'* ]] || { echo "FAIL: AC4-g — the in-flight set must not suppress the MISSING-ANNOTATED-TAG arm, got: $_ah_out"; failures=$((failures+1)); }
   /usr/bin/sed -i.bak '/^v9.05$/d' "$_ah_tmp/rel" 2>/dev/null || true
 
   # AC4-h — the EXTRACTOR: in-flight is exactly the DEPLOYED rows, read from the LOG
