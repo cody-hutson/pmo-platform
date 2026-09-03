@@ -395,7 +395,7 @@ Populated per slice as it lands (stage-06 Phase C4 self-verification); the PR-as
 
 | Deliverable | Declared canonical path | Acceptance evidence |
 |---|---|---|
-| Lifecycle audit-trail carrier decision record (#5838, task-class) | `core/ADRs/ADR-173-lifecycle-audit-trail-carrier-or-retirement.md` (this branch) | The record itself (durability lint COUNT 0 with fired control arm; AC method probes above; status `Proposed` pending Stage 9 ratification) + #6663 Stage-6 comment |
+| Lifecycle audit-trail carrier decision record (#5838, task-class) | `core/ADRs/ADR-173-lifecycle-audit-trail-carrier-or-retirement.md` (this branch) | The record itself (durability lint COUNT 0 with fired control arm; AC method probes above; status `Proposed` pending Stage 13 Phase A13 ratification — the record's own `status:` field is the authority) + #6663 Stage-6 comment |
 
 ### #5841 slice (Engineering spoke #6655, 2026-09-02)
 
