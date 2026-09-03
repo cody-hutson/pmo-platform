@@ -3,7 +3,7 @@
 title: Release Plan — pda-decisions-and-conformance-baseline (PDA decisions + instance conformance baseline)
 type: release-plan
 plan_type: release
-status: ACTIVE
+status: CLOSED
 release: version-less (capability-slug identity; no tag claimed)
 milestone: 357-pda-decisions-and-conformance-baseline
 release_class: novel
@@ -29,11 +29,11 @@ reversibility: CHEAP rollback (single additive PR) / Confidence HIGH
 | **Version** | version-less (capability-slug identity; no tag, no stamp manifest — declared mode, not an absent field) |
 | **Date Created** | 2026-09-02 (Wednesday) |
 | **Release Manager** | Agent-assisted (release-hub Mode O) |
-| **Status** | Executing (Stage 6 Engineering) |
+| **Status** | Closed (Stage 13 Close; release VERIFIED on main) |
 | **Branch** | `release/pda-decisions-and-conformance-baseline` |
 | **Baseline pin (branch base)** | `origin/main` @ `bd961c0583c845c8eb391d742147d750b28391d8` (Engineering Commit 0 instant) |
 | **Stage-4 A0 pin** | `origin/main` @ `1c857727e79efc8bde0d839138e659a45ff50fa6` (fetched 2026-09-02T16:56Z; Stage-5 design pin `539c4440` — mainline advanced between the pins with no divergence relevant to any bundled card found at re-read) |
-| **PR** | (populated at PR creation, Stage 6 — hub sequences after Wave-1 slices land) |
+| **PR** | #6746 (merged to `main` at `77947f74e2375530660fe9dbe42b70bd62b35dc6`) |
 | **Milestone** | `pda-decisions-and-conformance-baseline` (#357) |
 
 ---
@@ -441,3 +441,20 @@ Populated per slice as it lands (stage-06 Phase C4 self-verification); the PR-as
 | Deliverable | Declared canonical path | Acceptance evidence |
 |---|---|---|
 | Cross-boundary key-form decision record (#5836, task-class) | `core/ADRs/ADR-179-cross-boundary-key-form-for-entity-and-tracker-identifiers.md` (this branch) | The record itself (scoped durability lint COUNT 0 with two fired control arms; AC-1/AC-2/AC-3 method probes above; entry conditions 6 and 7 discharged; status `Proposed` pending Stage 13 Phase A13 ratification — the record's own `status:` field is the authority) + #6659 Stage-6 comment |
+
+
+### Stage 13 Close (spoke #6670, 2026-09-02)
+
+| Beat | Evidence |
+|---|---|
+| Close mechanism | Phase-B chore-PR path. `automated-closeout.sh` rejects a version-less release at CLI identity validation before phase dispatch (stage-13-close.md Phase A8 trigger (ii)); this is the expected path for the declared identity mode, not a deviation. |
+| Procedure 7a action-item gate | `STATE=RESOLVED` — 6 AI rows, 0 open/in-flight after AI-001 discharge. Probe: canonical `" | "`-delimited awk over field 11; sensitivity arm returned 1 on a seeded open row, specificity arm returned 0 on a no-AI-row file. |
+| AI-001 (event-record integrity, release-scoped) | Population-wide: 218 post-cutover violations + 574 legacy across 1288 ledger rows in 54 ledgers. Release-scoped: **0 violations, 0 legacy**. Probe validity: subject ledger confirmed inside the swept denominator (54/54 ledgers, 1288/1288 rows matched the tool's own glob), control arm `data-architecture` returned 144. The zero is measured, not a dead probe — pre-existing sibling debt does not gate this release. |
+| §3.2 note-content lint (Phase A8.1 / Step-4 cmd 1b) | exit 0; 0 findings naming this release. Sensitivity arm: injected banned-jargon term produced exit 1 naming this note; file restored byte-identical. |
+| ADR-092 plan-identity lint (Step-4 cmd 1c) | Identity limbs N/A (version-less: no Version cell for a filename to disagree with). The plan-status limb fired and was cleared: frontmatter `status:` transitioned `ACTIVE` → `CLOSED` per release-corpus-schema § Plan-status lifecycle. |
+| Velocity | planned 9 pts / delivered 9 pts (1.00); files-changed 5; class novel; mechanism `compute-release-velocity.sh`. |
+| Release Learnings | Rendered from 1 captured `release-synthesis/learnings-triple` source row (anchor ts `2026-09-03T03:40:33Z`). The Phase-A7 row was absent at close entry; it was captured per the prescribed remedy and the block rendered from it — never hand-composed. |
+
+**Phase A13 — ADR ratification disposition: NOT APPLIED, pending operator authorization.**
+
+ADR-177, ADR-178 and ADR-179 each read `status: Proposed` on `main`, on both the frontmatter field and the `## Status` body restatement, and each carries an explicit ratification promise naming this release's Stage 13 Phase A13. The `Proposed → Accepted` transition is a **Tier-0 irreducible human task**: an agent may prepare and present the edit set but may not apply one absent the operator gate, and a flip applied without that gate is a governance defect regardless of whether the resulting status is correct. The Stage-13 spoke therefore prepared the edit set (two surfaces per record, same commit) and surfaced it; **no flip rides this chore PR**. The records remain non-terminal, and this row is the recorded disposition per Phase A13's declared-records-are-recorded-not-silent rule. Verification of any later flip must read each file's own `status:` field — the automated ratification-flip check (G-CL9 / Check 58) is advisory-only and structurally cannot fail, so a green close-out is not evidence a flip landed.

@@ -1,0 +1,58 @@
+# FIXTURE — the SECOND ARCHETYPE PACK. Not a shipped pack.
+#
+# WHY IT LIVES HERE AND NOT UNDER core/packs/. The licensed-kind reader unions the
+# kinds declared by every directory under core/packs/ that holds a pack.toml — no
+# allowlist, no naming filter, no underscore-prefix skip — so a fixture placed there
+# would be silently absorbed into the live gate's kind vocabulary. Fixture packs
+# therefore live under core/deploy/tests/fixtures/packs/ and are read through the
+# conformance tool's explicit --pack-root argument. A self-test arm asserts that
+# separation held, by checking the union carries none of these files' kinds.
+#
+# THE sel-* SET IS ONE FIXTURE ROOT, READ AS A WHOLE. Its seven packs exist to make a
+# SELECTION observable: two archetypes and three kits, so that varying one axis while
+# holding the other fixed produces a difference a check can read. A one-kit root would
+# make the filtered and unfiltered unions identical and would green every selection
+# arm under a --kit that was parsed and discarded.
+#
+# Same role as sel-scrum with a different archetype and a different kind, so the
+# archetype-attributed half of a resolution genuinely CHANGES when the methodology
+# axis is varied. Without that change the orthogonality arm would be comparing a
+# constant against itself.
+
+[meta]
+pack_id = "sel-kanban"
+pack_version = "0.1.0"
+applies_to = "Kanban"
+role = "archetype"
+extends = "sel-common"
+
+[[kinds]]
+kind_id = "sel-card"
+display_name = "Card"
+base = "Work Item"
+axis1_state_machine = "inherit"
+
+[kinds.methodology_projection]
+archetype = "Kanban"
+general_level = "Work Item"
+projects_as = "Card"
+
+[kinds.fields]
+core = "inherit"
+
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+
+[kinds.relationships]
+allowed_types = ["BELONGS_TO", "DEPENDS_ON", "RELATES_TO"]
+
+[kinds.lifecycle_behavior]
+timeboxed = "gate"
+continuous = "gate"
+phased = "gate"
