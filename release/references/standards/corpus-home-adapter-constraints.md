@@ -12,7 +12,7 @@ reversibility: CHEAP / Confidence HIGH — a constraint record plus its executab
 # Corpus-Home Adapter — Path-Resolution Constraints
 
 > Reversibility: CHEAP / Confidence: HIGH.
-> **Status: the seam has landed; the selector has not.** Instance-aware corpus-path resolution exists in `automated-closeout.sh`, the committed arming sentinel reads `armed`, and the suite in §5 reports `PASS-SEAM-LANDED` — so CH-1..CH-4 are graded on every qualifying PR rather than merely anticipated. What has **not** landed is the adapter selector: `operator.toml [adapters]` ships four selectors (`repo_host`, `ticketing`, `kb`, `ai_tool`) and **no `corpus_home`** — and this document creates none. §6 names the one design still owed.
+> **Status: the seam has landed; the selector has not.** Instance-aware corpus-path resolution exists in `automated-closeout.sh`, the committed arming sentinel reads `armed`, and the suite in §5 reports `PASS-SEAM-LANDED` — so CH-1..CH-4 are graded on every qualifying PR rather than merely anticipated. What has **not** landed is the adapter selector: `operator.toml [adapters]` ships five selectors (`repo_host`, `ticketing`, `kb`, `ai_tool`, `scheduler`) and **no `corpus_home`** — and this document creates none. §6 names the one design still owed.
 
 ## 1. Why this exists
 
