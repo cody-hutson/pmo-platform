@@ -1,0 +1,104 @@
+{
+  "suite_name": "scenario-runner",
+  "description": "The output-scoring runner's own suite. Scores the runner's frozen contract surface against three committed fixtures: an unregressed baseline, a deliberately-regressed subject, and a structurally-empty non-triviality control. Every assertion is deterministic and offline — no live model call is made on this path, so a run is reproducible rather than sampled. Authored in the shipped eval-harness schema plus the one optional `assertions[].check` field the runner adds; an assertion carrying no `check` is ungraded and leaves both numerator and denominator. Full contract: references/scenario-eval-contract.md.",
+  "fixture": "fixtures/baseline.yaml",
+  "control": {
+    "empty_fixture": "fixtures/empty.yaml"
+  },
+  "evals": [
+    {
+      "id": 1,
+      "name": "report-contract-surface-holds",
+      "prompt": "Read the scenario-eval contract surface recorded in the active fixture and confirm the report contract it declares still matches what the runner emits.",
+      "expected_output": "The fixture names grading.json as the report contract, references the pass-rate field by its fully-qualified path rather than the ambiguous bare token, declares the all-drift-out denominator, and lists the three emitted top-level keys including the suite provenance block.",
+      "files": ["fixtures/baseline.yaml"],
+      "assertions": [
+        {
+          "text": "The report contract is named grading.json — the runner adds no second report definition",
+          "type": "resolution",
+          "expected_value": "grading.json",
+          "check": { "kind": "resolves_to", "path": "report_contract.name" }
+        },
+        {
+          "text": "The pass-rate field is referenced fully-qualified as summary.pass_rate, never as the bare token that three unrelated corpus metrics share",
+          "type": "resolution",
+          "expected_value": "summary.pass_rate",
+          "check": { "kind": "resolves_to", "path": "report_contract.pass_rate_field" }
+        },
+        {
+          "text": "The denominator convention is all-drift-out — ungraded assertions leave both numerator and denominator",
+          "type": "resolution",
+          "expected_value": "all-drift-out",
+          "check": { "kind": "resolves_to", "path": "report_contract.denominator" }
+        },
+        {
+          "text": "The emitted-key set carries the suite provenance block, so a report can be tied back to the fixture it scored",
+          "type": "structural",
+          "check": { "kind": "contains", "value": "    - suite\n" }
+        },
+        {
+          "text": "The grader-agent-specific keys are declared not-emitted, so a reader does not expect stubs for them",
+          "type": "structural",
+          "check": {
+            "kind": "matches",
+            "pattern": "^\\s+- execution_metrics$",
+            "engine": "python-re"
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "runner-surface-and-read-only-property-hold",
+      "prompt": "Confirm the runner's own closed vocabularies are intact in the active fixture, that its documented contract exists at the path the suite expects, and that scoring the fixture does not modify it.",
+      "expected_output": "The exit-code set is the closed four-value set; the zero-denominator rule writes no report; the closed predicate vocabulary still carries every member; the contract document resolves at its declared path; and the fixture is byte-identical before and after the run.",
+      "files": ["fixtures/baseline.yaml"],
+      "assertions": [
+        {
+          "text": "The exit-code set is the closed four-value set — a below-floor result stays distinguishable from a runner error and from a non-measuring run",
+          "type": "resolution",
+          "expected_value": "0, 1, 2, 3",
+          "check": { "kind": "resolves_to", "path": "runner.exit_codes" }
+        },
+        {
+          "text": "The zero-denominator rule writes no report rather than emitting or omitting a pass rate a consumer would read as total failure",
+          "type": "resolution",
+          "expected_value": "no-report-exit-3",
+          "check": { "kind": "resolves_to", "path": "runner.zero_denominator" }
+        },
+        {
+          "text": "The closed predicate vocabulary still carries the structured-path member",
+          "type": "structural",
+          "check": {
+            "kind": "matches",
+            "pattern": "^\\s+- resolves_to$",
+            "engine": "python-re"
+          }
+        },
+        {
+          "text": "The read/write key asymmetry is preserved — the runner reads assertions and writes expectations",
+          "type": "resolution",
+          "expected_value": "assertions",
+          "check": { "kind": "resolves_to", "path": "runner.input_key" }
+        },
+        {
+          "text": "The contract document a second scenario author reads exists at its declared path",
+          "type": "structural",
+          "check": {
+            "kind": "path_exists",
+            "target": "../../references/scenario-eval-contract.md"
+          }
+        },
+        {
+          "text": "Scoring the fixture is read-only — the fixture is byte-identical before and after the run",
+          "type": "read-only",
+          "check": { "kind": "unchanged" }
+        },
+        {
+          "text": "A second scenario author can add a suite from the contract document alone, without reading the runner's source",
+          "type": "judgment"
+        }
+      ]
+    }
+  ]
+}

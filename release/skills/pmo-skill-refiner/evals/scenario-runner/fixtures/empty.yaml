@@ -1,0 +1,25 @@
+# EMPTY control fixture — the non-triviality arm.
+#
+# Structurally present, semantically empty. The suite declares it under
+# `control.empty_fixture`, and the runner re-runs EVERY `resolves_to` check
+# against it and requires ALL of them to fail.
+#
+# What that buys: a resolution that still succeeds against this file is not
+# reading the fixture at all, which would make every one of the suite's baseline
+# passes unfalsifiable. This is the declarative form of the NON-TRIVIALITY layer
+# that `core/disciplines/evals/people-graph-consumption/run_consumption_eval.py`
+# implements as hard-coded per-skill functions.
+#
+# The top-level keys are PRESENT and their bodies are EMPTY, deliberately.
+# Deleting the keys would make every path miss at depth 1, which tests less: with
+# the keys present, a path must miss at the leaf, so the arm exercises the
+# resolver's full walk rather than its first step.
+
+scenario: null
+
+report_contract: {}
+
+runner: {}
+
+notes: >
+  Nothing resolves from here. That is the whole contribution of this file.
