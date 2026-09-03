@@ -1,10 +1,10 @@
 ---
 title: C2 — Path-A Scheduled Intake Sweep
-purpose: Declares the scheduled Path-A intake sweep — a mcp__scheduled-tasks registration that drives the existing OPERATIONS.md Daily Processing Cycle intake steps (1 Intake / 2 Surfacing / 3 Classification / 4 PPM Triage / 5 Register / 6 Follow-up + 15 Orphan) over the C1 ambient inbox, reading the C1 cursor to skip already-Context-Structured files — clamped so every emitted action resolves effective = min(automation_level, per-action max). Wiring spec only — adds the scheduler + cursor-aware skip; it drives the existing intake steps, it does not fork a parallel intake engine. The sweep emits one run-record per run (field-aligned to the C3 sweep run-record) so a silent no-op is impossible.
+purpose: Declares the scheduled Path-A intake sweep — the registry-declared `ambient-intake-sweep` routine that drives the existing OPERATIONS.md Daily Processing Cycle intake steps (1 Intake / 2 Surfacing / 3 Classification / 4 PPM Triage / 5 Register / 6 Follow-up + 15 Orphan) over the C1 ambient inbox, reading the C1 cursor to skip already-Context-Structured files — clamped so every emitted action resolves effective = min(automation_level, per-action max). Wiring spec only — adds the scheduler + cursor-aware skip; it drives the existing intake steps, it does not fork a parallel intake engine. The sweep emits one run-record per run (field-aligned to the C3 sweep run-record) so a silent no-op is impossible.
 type: standard
 status: ACTIVE
 automation_id: [ambient-intake-sweep]
-consumers: "mcp__scheduled-tasks (the registration target that runs the sweep); OPERATIONS.md Daily Processing Cycle (the intake steps this sweep drives over the C1 inbox); c1-ambient-inbox-cursor.md (the cursor this sweep reads + advances)"
+consumers: "core/automations/registry.md (the `ambient-intake-sweep` row that declares this routine; the operator's [adapters].scheduler resolves how it fires); OPERATIONS.md Daily Processing Cycle (the intake steps this sweep drives over the C1 inbox); c1-ambient-inbox-cursor.md (the cursor this sweep reads + advances)"
 composes_with: [depersonalization-spec.md, c1-ambient-inbox-cursor.md, ../disciplines/context-lifecycle-model.md, ../specs/autonomy-tiers.md, ../governance/OPERATIONS.md]
 reversibility: MODERATE (spec + 1 path field + 1 token row + a scheduled-task registration + a consumer registration) / Confidence HIGH — git revert restores the tracked surface; the scheduled-task registration rolls back by deregistration (non-git install-root state); the runtime cursor + run-log are gitignored, so their post-revert absence is harmless (a re-scan re-seeds). The one MODERATE commitment is binding to the C1 cursor identity scheme (changing it post-ship orphans cursor entries).
 ---
@@ -24,7 +24,7 @@ The Daily Processing Cycle intake steps already exist and are pre-authorized for
 *scheduler* that drives them without the operator kicking off each cycle by hand, and the
 *cursor-aware skip* so a re-scan over an unchanged inbox re-processes nothing. C2 adds exactly
 those two things, as one scheduled sweep:
-- **(a) a schedule** — a `mcp__scheduled-tasks` registration runs the intake sub-path independent
+- **(a) a schedule** — a registry-declared scheduled routine runs the intake sub-path independent
   of the manual daily cycle (§9).
 - **(b) a cursor-aware skip** — read the C1 cursor (path + SHA-256 identity) and SKIP any file
   already at `Context-Structured` (§3); a re-scan over an unchanged inbox advances nothing.
@@ -243,7 +243,7 @@ to it. This is the same governed-ingest constraint C1 and the C3 sweep confirmed
 > below is **operator-performed**, and its documented home is the activation subsection of
 > `docs/INSTALL.md` § 3 — which names this section as the source of the bootstrap prompt,
 > states the cadence and notification settings, and states the reversal. No installer,
-> deploy or update script performs it, and none can: `mcp__scheduled-tasks` is an
+> deploy or update script performs it, and none can: the configured scheduler is an
 > agent-runtime surface, and every one of those scripts is bash, which has no path to it.
 > This is not a gap awaiting automation. It matches the precedent the platform already set
 > for the `platform-health` sentinels — sentinel registration is an operator-instance build
@@ -259,18 +259,18 @@ to it. This is the same governed-ingest constraint C1 and the C3 sweep confirmed
 > back-fills at the resolved location and closes the gap. C1 §1 records the mechanism and why
 > the installer behaves that way.
 - **Scheduler:** C2 registers a scheduled task named `ambient-intake-sweep` on the platform's
-  existing `mcp__scheduled-tasks` surface — the same agent-runtime scheduler the operator.toml
-  `[adapters] ai_tool` designates, and the SAME mechanism the two `platform-health-*` scheduled tasks
+  existing scheduler surface — the same agent-runtime scheduler the operator.toml
+  `[adapters].scheduler` designates, and the SAME mechanism the two `platform-health-*` scheduled tasks
   use. C2 introduces no new scheduler primitive (NOT a new cron daemon). Properties inherited from
   the platform-health precedent verbatim:
-  - **Registration:** a `mcp__scheduled-tasks` task named `ambient-intake-sweep` carrying the cadence
+  - **Registration:** a scheduled task named `ambient-intake-sweep` carrying the cadence
     + a prompt that spawns a session invoking the sweep.
   - **Cron + timezone:** a cron-expression cadence evaluated in the operator's LOCAL timezone (the
     platform-health split: LOCAL schedule, UTC for any date-stamped output — do not unify). Default
     once-daily, aligned to the daily-processing rhythm, at an early-morning local hour so the digest
     the C4 heartbeat renders is ready for the AM status. The cadence is a registration parameter,
     operator-configurable via the task's cron expression — not hardcoded in a tracked file.
-  - **Notification:** `notifyOnCompletion` per-run (not conditional) — every run pings + emits its
+  - **Notification:** completion notification per-run (not conditional) — every run pings + emits its
     run-record, which is the anti-silent-failure guarantee (§5).
   - **Non-git state:** the registration is install-root MCP state, NOT a tracked repo file —
     recorded as a Stage 12 deploy-log line item; rollback is deregistration (`enabled:false` or task
