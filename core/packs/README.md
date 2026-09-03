@@ -20,7 +20,7 @@ Packs ship as **best-practice defaults** (codified, universal knowledge); a depl
 project's own declared kinds are instance configuration and are never authored into
 this tracked corpus. The grammar every pack conforms to is the work-item type-pack
 meta-schema; the kit role, its neutrality mechanism and its composition position are
-decided in [ADR-177](../ADRs/ADR-177-work-item-kit-first-class-unit.md).
+decided in [ADR-180](../ADRs/ADR-180-work-item-kit-first-class-unit.md).
 
 ## Layout
 

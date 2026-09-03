@@ -451,7 +451,7 @@ ARCHETYPE_NAMES = ("Scrum", "Kanban", "XP", "Waterfall", "PRINCE2", "SAFe",
                    "Hybrid", "Custom")
 # The methodology-neutral sentinel. ONE token, deliberately: the grammar already uses
 # `*` at the pack level and in the controls facet, so minting a second neutrality token
-# would fork the sentinel vocabulary inside one grammar (ADR-177 D2).
+# would fork the sentinel vocabulary inside one grammar (ADR-180 D2).
 NEUTRAL_SENTINEL = "*"
 PACK_ROLES = ("archetype", "base", "kit")
 GENERAL_LEVELS = ("Portfolio", "Program", "Project", "Milestone/Workstream",
@@ -464,7 +464,7 @@ WORK_ITEM_LEVEL = "Work Item"
 # resolved by the FROZEN entity model, never by a kind — which is what
 # PACK-K06a enforces and what the LEVELS line measures.
 CONTAINER_LEVELS = tuple(l for l in GENERAL_LEVELS if l != WORK_ITEM_LEVEL)
-# level_role's domain is CLOSED (ADR-177 D6) — an unknown value is an ERROR,
+# level_role's domain is CLOSED (ADR-180 D6) — an unknown value is an ERROR,
 # deliberately unlike kit_class's OPEN domain. The distinction is binary and
 # internal to how a rollup traverses; there is no third role to discover, and
 # silently admitting one would make a traversal unanalyzable rather than
@@ -476,7 +476,7 @@ MVP_RELATIONSHIP_TYPES = ("GENERATES", "DEPENDS_ON", "BLOCKS", "SUPERSEDES",
                           "BELONGS_TO", "RELATES_TO", "ASSIGNED_TO")
 
 # THE CLASS→FACET REGISTRY — the second level of the two-level requiredness rule
-# (ADR-177 D3). `role` decides whether a facet requirement applies at all; `kit_class`
+# (ADR-180 D3). `role` decides whether a facet requirement applies at all; `kit_class`
 # decides WHICH facet. Registering a second kit class is one entry here plus the rule
 # implementing that facet — no `role` change, no re-opening of the `kinds` rule. A
 # class ABSENT from this map asserts no facet requirement and is reported as a
@@ -820,7 +820,7 @@ def _validate_one_pack(rel, pack, packs_by_id, label_groups):
                       "work-item kit of its kinds obligation"
                       % (kit_class, ", ".join(sorted(KIT_CLASS_FACETS)))))
 
-        # ── PACK-P07: the TWO-LEVEL kinds requiredness rule (ADR-177 D3) ─────
+        # ── PACK-P07: the TWO-LEVEL kinds requiredness rule (ADR-180 D3) ─────
         # role decides WHETHER a facet requirement applies; kit_class decides WHICH.
         # Conditioning the kit arm on role alone would forbid every future kit class
         # and make P08's open domain unreachable — the same pack would fail here first.
