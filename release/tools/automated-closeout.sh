@@ -6536,7 +6536,25 @@ tagger_hygiene_violations() {
 # "a sibling release genuinely in flight", and which had no implementation.
 # Args: <log_file>.  Emits one tag per line.
 inflight_release_tags() {
-  /usr/bin/awk -F' *\\| *' '/^\| v[0-9]/ && $8=="DEPLOYED" { print $2 }' "$1" 2>/dev/null | /usr/bin/sort -u
+  local _log="$1" _ann="${2:-}"
+  { # (i) the LATE half — Phase B5 has landed the row, Stage 13 has not transitioned it.
+    /usr/bin/awk -F' *\\| *' '/^\| v[0-9]/ && $8=="DEPLOYED" { print $2 }' "$_log" 2>/dev/null
+    # (ii) the EARLY half — Phase B3 has pushed the tag and B5 has not landed the row yet,
+    # so there is no state column to read. Bounded to tags ABOVE the highest version the
+    # LOG records: that is what separates a release mid-Stage-12 from an ancient orphan
+    # tag that will never get a row (v3.31 has no row either, and must stay reportable).
+    if [[ -n "$_ann" && -s "$_ann" ]]; then
+      local _max _t
+      _max="$(/usr/bin/awk -F' *\\| *' '/^\| v[0-9]/ { print $2 }' "$_log" 2>/dev/null | /usr/bin/sort -V | /usr/bin/tail -1)"
+      if [[ -n "$_max" ]]; then
+        while IFS= read -r _t; do
+          [[ -z "$_t" ]] && continue
+          /usr/bin/grep -qE "^\| *${_t} *\|" "$_log" 2>/dev/null && continue
+          [[ "$(/usr/bin/printf '%s\n%s\n' "$_t" "$_max" | /usr/bin/sort -V | /usr/bin/tail -1)" == "$_t" && "$_t" != "$_max" ]] && /usr/bin/printf '%s\n' "$_t"
+        done < "$_ann"
+      fi
+    fi
+  } | /usr/bin/sort -u
 }
 
 anchor_parity_violations() {
@@ -6658,7 +6676,7 @@ phase_assert_anchor_hygiene() {
   annotated_tags_of "$REPO_ROOT" > "$tmp/ann"
   if $GH release list --limit 400 --json tagName -q '.[].tagName' 2>/dev/null | /usr/bin/sort > "$tmp/rel" \
      && [[ -s "$tmp/rel" ]]; then
-    inflight_release_tags "$RELEASE_LOG" > "$tmp/inflight" 2>/dev/null || : > "$tmp/inflight"
+    inflight_release_tags "$RELEASE_LOG" "$tmp/ann" > "$tmp/inflight" 2>/dev/null || : > "$tmp/inflight"
     local _ap; _ap="$(anchor_parity_violations "$tmp/ann" "$tmp/rel" "$tmp/inflight")"
     [[ -n "$_ap" ]] && findings="${findings}${_ap}"$'\n'
   else
@@ -11914,6 +11932,21 @@ REL
 AHLOG
   local _ah_if; _ah_if="$(inflight_release_tags "$_ah_tmp/log")"
   [[ "$_ah_if" == "v9.10" ]] || { echo "FAIL: AC4-h — in-flight must be exactly the DEPLOYED rows (expected v9.10), got: '$_ah_if'"; failures=$((failures+1)); }
+
+  # AC4-i — the EARLY half of the window: Phase B3 has pushed the tag and Phase B5 has
+  # not landed the row, so there is no state column to read. Bounded ABOVE the highest
+  # version the LOG records, which is what separates a release mid-Stage-12 from an
+  # ancient orphan tag that will never get a row. Three arms, one variable apart.
+  /bin/cat > "$_ah_tmp/annx" <<'AHANN'
+v3.31
+v9.10
+v9.11
+v9.12
+AHANN
+  _ah_if="$(inflight_release_tags "$_ah_tmp/log" "$_ah_tmp/annx")"
+  [[ "$_ah_if" == *'v9.12'* ]] || { echo "FAIL: AC4-i — a tag above the LOG's highest version with no row is mid-Stage-12 and must read in-flight, got: '$_ah_if'"; failures=$((failures+1)); }
+  [[ "$_ah_if" == *'v3.31'* ]] && { echo "FAIL: AC4-i CONTROL — an ancient orphan tag with no row is BELOW the highest version and must stay reportable, got: '$_ah_if'"; failures=$((failures+1)); }
+  [[ "$_ah_if" == *'v9.11'* ]] && { echo "FAIL: AC4-i CONTROL — a tag whose row reads VERIFIED is closed, not in-flight, got: '$_ah_if'"; failures=$((failures+1)); }
 
   # (c) the OTHER direction — a published Release with no annotated tag.
   /usr/bin/printf 'v9.04\n' >> "$_ah_tmp/rel"; /usr/bin/sort -o "$_ah_tmp/rel" "$_ah_tmp/rel"
