@@ -173,7 +173,7 @@ ls -d "${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"/pmo-instance/{inbox,ambient-intak
 
 **Nothing runs until you register the scheduled tasks.** This is deliberate, and it is the one step the installer cannot perform for you: the tasks live on the agent-runtime scheduled-task surface, which a shell script has no way to reach. The same rule already governs the platform-health sentinels — the platform ships the specification, your instance owns the registration, because a registration carries an instance-local path and is not portable.
 
-To activate, register two scheduled tasks on the `mcp__scheduled-tasks` surface from an agent session:
+To activate, register the two scheduled tasks below from an agent session, on the scheduled-task surface your `operator.toml` `[adapters].scheduler` names (both routines are declared in [`core/automations/registry.md`](../core/automations/registry.md)):
 
 | Task name | What it does | Prompt to register it with |
 |---|---|---|
