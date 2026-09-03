@@ -577,7 +577,16 @@ self_test() {
   # SIGPIPE, the pipeline reported failure, hdr_line landed EMPTY, and
   # `awk -v n=""` matched no line — the orphan row was never injected, and F4
   # then blamed the gate for not firing on a mutation that never happened.
-  hdr_line="$(grep -m1 -n '^| \`' "$tmp/tree/$REG" | cut -d: -f1)"
+  # The backtick is LITERAL inside single quotes, so the backslash is not an
+  # escape here — it reaches grep as part of the pattern. POSIX leaves
+  # backslash-before-ordinary undefined: BSD grep and ugrep read it as the
+  # literal backtick (so this passed locally), while GNU grep reads it as a
+  # zero-width buffer-start anchor, which cannot match after `^| ` has
+  # consumed two characters. On GNU it matched nothing, hdr_line landed
+  # empty, awk injected no row, and F4 graded a gate against a mutation
+  # that never happened. F1 above escapes correctly because it is
+  # double-quoted, so the shell consumes the backslash first.
+  hdr_line="$(grep -m1 -n '^| `' "$tmp/tree/$REG" | cut -d: -f1)"
   awk -v n="$hdr_line" 'NR==n { print; print "| `qqzz-not-a-routine` | `0 6 * * *` | `time-driven` | `core/automations/registry.md` | `recommend` | `CHEAP` |"; next } { print }' \
     "$tmp/tree/$REG" > "$tmp/reg.tmp" && mv "$tmp/reg.tmp" "$tmp/tree/$REG"
   out="$(run_check "$tmp/tree" "$tmp/tree/$REG" "$tmp/tree/$SCH" 2>&1)"; rc=$?
