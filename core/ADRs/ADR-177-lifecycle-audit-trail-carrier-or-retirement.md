@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 <!-- repo-integrity: allow-issue-ref -->
 ---
-title: "ADR-173 — The lifecycle audit trail is retired from the index; frontmatter last-transition state is the only lifecycle state"
+title: "ADR-177 — The lifecycle audit trail is retired from the index; frontmatter last-transition state is the only lifecycle state"
 status: Proposed — flips to Accepted at Stage 13 Close (Phase A13, the ratification beat that owns the `Proposed → Accepted` transition; gate row G-CL9 verifies). The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
 date: 2026-09-02
 release: pda-decisions-and-conformance-baseline
@@ -18,13 +18,15 @@ source_observations:
   - "Merged records in the same season decided the adjacent defect classes this record leans on: a sink with no writer measures the wiring rather than the behaviour; an append-only log whose consumer needs history acquires retention obligations the moment it exists; and the founding ecosystem design rejected a centralized metadata registry precisely because metadata would diverge from files."
 ---
 
-# ADR-173 — The lifecycle audit trail is retired from the index; frontmatter last-transition state is the only lifecycle state
+# ADR-177 — The lifecycle audit trail is retired from the index; frontmatter last-transition state is the only lifecycle state
 
 ## Status
 
 **Proposed** — flips to **Accepted** at Stage 13 Close (Phase A13, which owns the `Proposed → Accepted` performing beat; gate row G-CL9 verifies the flip). The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified.
 
 **Numbering provenance.** Allocated at this Engineering commit as the next number above the union of the mainline anchor and this branch's own in-flight claims — never `max(claimed)+1`. `renumber-adr.py --detect` at the commit instant reported `ANCHOR 172 origin/main`, `NEXT-FREE 173`, `CLAIMED-SET-BRANCH-ONLY 173,174,175,176 (detection only — never binds)`, and `CLAIM NONE` for this tree. This branch carried no ADR of its own at allocation time, so the union is the mainline anchor alone and 173 binds here. The branch-only claims on 173–176 belong to other in-flight branches; a cross-branch collision is governed — resolved by the renumber tool at merge time, as this corpus has done before — and is never a reason to skip ahead.
+
+**Numbering provenance — `173 → 177`.** Held **ADR-173** branch-local; renumbered to **ADR-177** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 173. In-release citations that read "ADR-173" denote this record.
 
 ## Context
 

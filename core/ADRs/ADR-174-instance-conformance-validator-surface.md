@@ -24,7 +24,7 @@ supersedes: none
 
 **Proposed** — flips to **Accepted** at Stage 13 Close (Phase A13, which owns the `Proposed → Accepted` performing beat; gate row G-CL9 verifies the flip). The flip is recorded in this file's frontmatter `status:` field, which is where it must be verified — the automated ratification-flip check is advisory-only and structurally cannot fail, so the field is the authority.
 
-**Numbering provenance.** Allocated at this Engineering commit as the next number above the union of the mainline anchor and this branch's own in-flight claims — never `max(claimed)+1`. `renumber-adr.py --detect` at the commit instant reported `ANCHOR 172 origin/main`, `NEXT-FREE 173`, `CLAIMED-SET-BRANCH-ONLY 173,174,175,176 (detection only — never binds)`, and `CLAIM ADR-173 … BINDS BRANCH-CLAIM` — this branch already carries the sibling lifecycle-carrier record at 173, so the union is `{…172} ∪ {173}` and **174** binds here. The branch-only claims on 174–176 belong to other in-flight branches and never bind; a cross-branch collision is governed — resolved by the renumber tool at merge time — and is never a reason to skip ahead.
+**Numbering provenance.** Allocated at this Engineering commit as the next number above the union of the mainline anchor and this branch's own in-flight claims — never `max(claimed)+1`. `renumber-adr.py --detect` at the commit instant reported `ANCHOR 172 origin/main`, `NEXT-FREE 173`, `CLAIMED-SET-BRANCH-ONLY 173,174,175,176 (detection only — never binds)`, and `CLAIM ADR-177 … BINDS BRANCH-CLAIM` — this branch already carries the sibling lifecycle-carrier record at 173, so the union is `{…172} ∪ {173}` and **174** binds here. The branch-only claims on 174–176 belong to other in-flight branches and never bind; a cross-branch collision is governed — resolved by the renumber tool at merge time — and is never a reason to skip ahead.
 
 ## Context
 
@@ -154,7 +154,7 @@ This record decides; the validator delivery child builds. Its build obligations,
 - **ADR-080** — the folder-taxonomy rule class the validator enforces.
 - **ADR-166** — a disposition names its blocker, not its schedule: the shape of the flip arm in Decision §3.
 - **ADR-167** — written-is-not-repo-derivable: why the W2 exit arm must be repo-derivable while the drain evidence stays operator-local.
-- **ADR-173** — sibling record in this release: the governed approval-class trigger vocabulary and last-transition lifecycle state its restated predicate defines are exactly the shape of frontmatter rule the validator's field classes enforce; the two records compose without overlap.
+- **ADR-177** — sibling record in this release: the governed approval-class trigger vocabulary and last-transition lifecycle state its restated predicate defines are exactly the shape of frontmatter rule the validator's field classes enforce; the two records compose without overlap.
 
 ### Provenance
 
