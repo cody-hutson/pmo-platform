@@ -116,7 +116,7 @@ jobs:
 
       # ── The subject, and the control arm that proves the subject can fail ────
       - name: Score the corpus against its baseline fixture
-        id: corpus
+        id: score
         env:
           FLOOR: ${{ steps.floor.outputs.floor }}
         run: |
@@ -174,7 +174,7 @@ jobs:
       # ── Verdict ─────────────────────────────────────────────────────────────
       - name: Gate decision (warn-mode-initial)
         env:
-          RC: ${{ steps.corpus.outputs.rc }}
+          RC: ${{ steps.score.outputs.rc }}
           FLOOR: ${{ steps.floor.outputs.floor }}
           EVENT: ${{ github.event_name }}
           REF: ${{ github.ref }}
