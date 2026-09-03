@@ -1,0 +1,9 @@
+{
+  "_comment": "EMPTY CONTROL — the non-triviality arm. Every top-level key of the baseline is PRESENT and its body is EMPTY. Deleting the keys instead would make every path miss at depth 1, which tests less: with the keys present a path must miss at the LEAF, so the arm exercises the resolver's full walk rather than its first step. Every resolves_to check in this suite must FAIL against this file. One that still passes is not reading the fixture at all, which would make every one of the suite's baseline passes unfalsifiable — and the runner exits 1 on that condition regardless of the pass rate.",
+
+  "output_under_test": {},
+  "evidence_quality": {},
+  "push_to_resolve": {},
+  "guardrails": {},
+  "cross_skill": {}
+}

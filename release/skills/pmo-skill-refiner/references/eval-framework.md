@@ -13,8 +13,10 @@ The harness is **preserved verbatim** from skill-creator via `git mv` in the ref
 | Layer | Purpose | Entry point |
 |---|---|---|
 | **1. Qualitative review** | Human judges output quality via HTML viewer showing per-eval outputs + benchmark comparison | `eval-viewer/generate_review.py` |
-| **2. Quantitative assertion grading** | Each eval's assertions graded PASS/FAIL; aggregated with variance analysis (mean ± stddev) and gaming detection (non-discriminating assertions flagged) | `scripts/run_eval.py` |
+| **2. Quantitative assertion grading** | Each eval's assertions graded PASS/FAIL against a committed fixture and reduced to a pass rate; emits `grading.json` | `scripts/run_scenario_eval.py` |
 | **3. Description-trigger optimization** | 60/40 train/test split on 20 trigger eval queries; iterates up to 5× on the `description:` field; selects `best_description` by test score | `scripts/run_loop.py` |
+
+**Layer 2's entry point is the output-scoring runner, not the trigger harness.** `run_eval.py` grades *triggers* — whether a skill's description causes the model to fire for a query — and it grades nothing else. It computes no output score, reads no `assertions[]`, and writes no `grading.json`. This table previously named it as Layer 2's entry point and credited it with variance analysis and gaming detection; that claim was false against the checked-in file. Layer 2 now names the runner that actually implements it, and the aggregate statistics that claim referred to are produced by `aggregate_benchmark.py` over multiple runs, not by any single-run script. Full contract for the Layer-2 runner: `scenario-eval-contract.md`.
 
 Supplementary: **Cross-skill false-positive detection** via `scripts/run_eval_audit.py` — surfaces trigger-set overlaps between the new skill and existing skills. Unique to the PMO harness; not present in Anthropic's out-of-box scaffolder.
 
@@ -26,7 +28,8 @@ All scripts live at `scripts/` within this skill directory. Preserved via `git m
 
 | Script | Role | Invocation pattern |
 |---|---|---|
-| `run_eval.py` | Single-skill assertion grading with variance analysis and gaming detection | `python -m scripts.run_eval --skill-path <path> --eval-set <evals.json>` |
+| `run_eval.py` | **Trigger detection only** — runs each query and reports whether the skill fired; passes on a trigger rate above a threshold. Computes no output score, reads no `assertions[]`, invokes no judge | `python -m scripts.run_eval --skill-path <path> --eval-set <eval-set.json>` |
+| `run_scenario_eval.py` | **Output scoring** — grades a suite's `assertions[]` against a committed fixture through a closed declarative predicate vocabulary, emits `grading.json`, and carries a suite-level non-triviality control. Not preserved from skill-creator; added to execute the assertion-grading path the schema had declared and left inert. Contract: `scenario-eval-contract.md` | `python -m scripts.run_scenario_eval --suite <evals.json> [--fixture <path>] [--fail-under <float>]` |
 | `run_loop.py` | Description-trigger optimization loop (60/40 train/test, up to 5 iterations) | `python -m scripts.run_loop --eval-set <eval-set.json> --skill-path <path> --model <model-id> --max-iterations 5` |
 | `run_eval_audit.py` | Cross-skill trigger audit (false-positive detection across the suite) | `python -m scripts.run_eval_audit --skills-dir release/skills/` |
 | `aggregate_benchmark.py` | Aggregates per-iteration benchmark.json; produces benchmark.md | `python -m scripts.aggregate_benchmark <workspace>/iteration-N --skill-name <name>` |
@@ -88,8 +91,9 @@ Write to `/tmp/eval_review_<skill-name>.html`; open via `open`. User edits, togg
 ## Schemas reference
 
 `references/schemas.md` — preserved from skill-creator — documents:
-- `evals.json` — eval set schema (id, prompt, expected_output, files, assertions)
-- `grading.json` — per-run grading results (expectations array with `text` / `passed` / `evidence` fields — exact field names required by viewer)
+- `evals.json` — eval set schema (id, name, prompt, expected_output, files, assertions). Graded statements are read from `assertions[]`; the optional `assertions[].check` predicate is what the output-scoring runner executes, and the optional `assertions[].expect` declares which outcome that predicate is expected to produce (default `pass`; `fail` marks a known-open defect)
+- `grading.json` — per-run grading results (expectations array with `text` / `passed` / `evidence` fields — exact field names required by viewer). **Two producers:** the grader subagent writes the full object, the output-scoring runner writes the deterministic subset
+- `references/scenario-eval-contract.md` — the output-scoring runner's own contract: the scenario schema, the closed predicate vocabulary, the non-triviality control, the command-line signature and the closed exit-code set. Written so a scenario author can add a suite without reading the runner's source
 - `benchmark.json` — aggregated per-assertion pass rates with mean ± stddev
 - `timing.json` — per-run timing (`total_tokens`, `duration_ms`, `total_duration_seconds`)
 - `feedback.json` — user feedback from viewer "Submit All Reviews"
@@ -100,7 +104,9 @@ Viewer rendering depends on exact field names. Changes to schema require corresp
 
 ## Variance Analysis and Gaming Detection
 
-`run_eval.py` produces per-assertion statistics across multiple runs:
+**These are properties of the ACROSS-RUN aggregate, not of any single run.** `aggregate_benchmark.py` collects each run's `grading.json` and computes the statistics below; `analyzer.md` reads the result and surfaces the patterns. Neither `run_eval.py` nor `run_scenario_eval.py` computes a standard deviation — a single run has nothing to vary against. This section previously attributed the whole set to `run_eval.py`, which grades triggers and produces none of it.
+
+Per-assertion statistics across multiple runs:
 
 - **Mean pass rate** — `pass_count / total_runs`
 - **Standard deviation** — flags high-variance assertions as "possibly flaky"

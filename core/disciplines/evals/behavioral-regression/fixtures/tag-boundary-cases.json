@@ -1,0 +1,20 @@
+{
+  "_comment": "The committed expected-match set for the gate's major-release tag filter. The glob it grades is NOT copied here — gate_inputs.py reads it out of .github/workflows/behavioral-regression.yml, so this fixture asserts the filter the workflow actually triggers on rather than a second copy of it that could drift. A filter verified by reading its own glob is an unverified filter: the `v*.00` pattern is reachable only by a remote tag push, so without this arm nothing in the tree would notice the day it stopped meaning what it says.",
+
+  "_grammar": "A major release is exactly vM.00. claim-version.sh renders a major bump as (anchor.M + 1, 0, 0) and format_version prints v%s.%s with the minor zero-padded to two digits and the patch component appended ONLY when non-zero. No minor or patch tag the grammar can produce ends in .00.",
+
+  "must_match": [
+    { "tag": "v4.00", "why": "the canonical major-release tag — a major bump renders the minor as two zero-padded zeros" },
+    { "tag": "v10.00", "why": "a two-digit major must match too; a filter anchored on a single major digit would silently stop firing at v10" }
+  ],
+
+  "must_not_match": [
+    { "tag": "v4.49", "why": "an ordinary minor release — the overwhelming majority of this repo's tags, and the case that would turn a major-release gate into an every-release gate" },
+    { "tag": "v4.06.1", "why": "a patch on a minor — carries a patch component and a non-zero minor" },
+    { "tag": "v4.0", "why": "a single-digit minor. THE NEAR MISS: it differs from v4.00 by one character, and a filter written v*.0 would wrongly flag it" },
+    { "tag": "v4.00.1", "why": "a patch on top of a major. The major-release EVENT was v4.00; a later patch is not a second crossing of that boundary" },
+    { "tag": "v4.00-rc1", "why": "a pre-release suffix — not the signed release tag the gate binds at" },
+    { "tag": "release/v4.00", "why": "proves the glob's * does not cross a path separator, which is GitHub's tag-filter semantics and is NOT what a naive fnmatch translation gives" },
+    { "tag": "main", "why": "a branch name, not a version tag — the specificity floor" }
+  ]
+}
