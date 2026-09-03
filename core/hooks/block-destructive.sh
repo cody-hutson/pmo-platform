@@ -480,17 +480,40 @@ script_operand_implicated() {   # $1 = interp | source | exec
   return 1
 }
 
-# The three declared operand domains, one `case` body each, carried over verbatim
-# from the arms they came from. `interp` takes a script suffix; `source` takes ANY
-# file and so carries PREFIX alternatives too; `exec` mirrors `interp` widened only
-# by `*.bash`. Do NOT unify them — the shipped reasoning on each arm forbids it in
-# both directions, and the bodies are adjacent here only so the subject rule above
-# has a single implementation.
+# The declared operand domains, one `case` body each, carried over verbatim from
+# the arms they came from. `interp` takes a shell script suffix; `source` takes ANY
+# file and so carries PREFIX alternatives too; `exec` mirrors the union of the
+# interpreter domains. Do NOT unify them — the shipped reasoning on each arm forbids
+# it in both directions, and the bodies are adjacent here only so the subject rule
+# above has a single implementation.
+#
+# THE `interp` BODY IS BYTE-PRESERVED, AND THAT IS THE MECHANISM RATHER THAN A
+# PROMISE. Admitting the non-shell interpreters did not edit it: four SIBLING arms
+# were added beside it, and script_set_interp_domain below defaults every basename
+# it does not name — the shell trio included — back to `interp`. So every token
+# that resolved to the `*.sh` domain before resolves to it now, by construction and
+# not by argument. Editing this body is how a widening would silently narrow.
+#
+# WHY ONE DOMAIN PER INTERPRETER FAMILY AND NOT ONE SHARED `*.py|*.rb|…` SET. A
+# shared set would adjudicate `python3 x.rb` against the Ruby suffix — a token no
+# Python invocation can execute — which is the blanket-widening failure the exec
+# arm's own comment argues against. The domain follows the INTERPRETER, so each
+# arm claims exactly what its interpreter can run.
 script_operand_domain_hit() {   # $1 = domain  $2 = subject
   case "$1" in
     interp) case "$2" in *.sh) return 0 ;; esac ;;
+    interp-py) case "$2" in *.py) return 0 ;; esac ;;
+    interp-pl) case "$2" in *.pl|*.pm) return 0 ;; esac ;;
+    interp-rb) case "$2" in *.rb) return 0 ;; esac ;;
+    interp-js) case "$2" in *.js|*.mjs|*.cjs) return 0 ;; esac ;;
     source) case "$2" in /*|./*|../*|~/*|*.sh|*.bash) return 0 ;; esac ;;
-    exec)   case "$2" in *.sh|*.bash) return 0 ;; esac ;;
+    # THE EXEC DOMAIN IS THE UNION OF THE INTERPRETER DOMAINS, WIDENED BY `*.bash`,
+    # AND THE PARITY IS REQUIRED RATHER THAN TIDY. `python3 tools/x.py` and
+    # `./tools/x.py` are the same execution by two spellings; adjudicating the first
+    # and not the second would ship exactly the arm-to-arm asymmetry that produced
+    # this rule's three prior remediations. The extensionless residual is UNCHANGED
+    # — `./x` still escapes every arm — and arm T-EXEC-9 pins it.
+    exec)   case "$2" in *.sh|*.bash|*.py|*.pl|*.pm|*.rb|*.js|*.mjs|*.cjs) return 0 ;; esac ;;
   esac
   return 1
 }
@@ -616,6 +639,45 @@ script_interp_noexec_flag() {   # $1 = interpreter basename  $2 = normalized fla
   return 1
 }
 
+# THE OPERAND-DOMAIN TABLE, KEYED ON THE INTERPRETER — the second per-interpreter
+# table, placed beside the first deliberately so the two cannot drift apart. The
+# table above answers "does this interpreter's flag mean it executes nothing"; this
+# one answers "what can this interpreter execute". Both are asked about the SAME
+# basename the verb classifier matched, and widening the interpreter set means
+# adding a label to each — one place to look, not two.
+#
+# THE `*)` DEFAULT IS THE WHOLE SAFETY ARGUMENT, NOT A TIDY-UP. `bash`, `sh`, `zsh`
+# and every basename this table does not name resolve to `interp`, the domain they
+# already resolved to when the domain was a hard-coded literal at the call sites.
+# The shell arms' behaviour is therefore unchanged BY CONSTRUCTION rather than by
+# assertion — the same direction the subject rule takes on
+# script_operand_implicated: a new view may ADD coverage, it may never VETO it.
+#
+# THE SET IS CLOSED EXACT LITERALS, AND THE CLOSEDNESS IS A SAFETY PROPERTY. See
+# the verb classifier below for the reason a trailing glob is refused here: the
+# verb `case` runs BEFORE the exec discriminator, so a glob that accidentally
+# claimed a script name (`python3.9-wrapper.sh` under `python3.[0-9]*`) would
+# remove that script from exec-arm adjudication — a widening that narrows. Versioned
+# spellings are a DECLARED RESIDUAL, recorded in
+# core/rules/bypass-mode-readiness/block-destructive.md, not half-closed here.
+#
+# `awk` IS DELIBERATELY ABSENT. Its script operand arrives through `-f`, a flag
+# ARGUMENT the operand walk does not consume, so an `awk` label could never reach
+# its operand — a dead branch on a security surface. core/hooks/lib/positional-
+# issueref.awk states the same boundary from the other side. Admitting it depends
+# on the flag-walk fix, which is filed separately.
+#
+# Bash 3.2-safe: `case` only, no associative arrays (the file-wide constraint).
+script_set_interp_domain() {   # $1 = interpreter basename -> sets script_interp_domain
+  case "$1" in
+    python|python3) script_interp_domain="interp-py" ;;
+    perl)           script_interp_domain="interp-pl" ;;
+    ruby)           script_interp_domain="interp-rb" ;;
+    node)           script_interp_domain="interp-js" ;;
+    *)              script_interp_domain="interp" ;;   # shell trio + all else: UNCHANGED
+  esac
+}
+
 # Adjudicate one candidate script path against the allowlist. Blocks (exit 2) on
 # a non-allowlisted target, and blocks on an UNRESOLVABLE one: this hook sees
 # unexpanded argv, so a variable-bearing path cannot be resolved here. Denying is
@@ -718,10 +780,54 @@ readonly DESTRUCTIVE_022_EXEC_PHASE="warn"   # shadow | warn | enforce
 # ESCALATE_DAYS with this phase constant unchanged it increments ISSUES so
 # `--check --strict` exits 1. Doing nothing turns the pipeline red, and every way
 # of turning it green is a recorded decision.
-readonly DESTRUCTIVE_022_EXEC_ARMED="2026-08-24"
+#
+# RE-DATED 2026-09-03, AND THE RE-DATE IS THE RECORDED DECISION RATHER THAN AN
+# INCIDENTAL EDIT. The exec arm's operand domain was widened in the same change
+# that admitted the non-shell interpreters, so rows accumulated from that commit
+# forward include `.py`/`.rb`/`.js`/`.pl` direct executions — traffic the original
+# 2026-08-24 arming was not measuring. Check 71 names this exact remedy in its own
+# failure text ("extend ONCE by re-dating"), and reading a graduation against a
+# population whose composition changed underneath it is the alternative. This is
+# the one extension; a second would be a decision to retreat or graduate instead.
+readonly DESTRUCTIVE_022_EXEC_ARMED="2026-09-03"
 readonly DESTRUCTIVE_022_EXEC_REVIEW_DAYS=60    # deadline arm — repo-derivable
 readonly DESTRUCTIVE_022_EXEC_REVIEW_ROWS=25    # evidence arm — operator-local
 readonly DESTRUCTIVE_022_EXEC_ESCALATE_DAYS=90  # deadline arm turns ISSUES red
+
+# ── THE INTERPRETER ARM'S SIBLING FAMILY, AND IT IS A SIBLING RATHER THAN A REUSE.
+#
+# WHAT THIS ARM IS. The verb classifier admitted only `bash|sh|zsh`, so a script
+# invoked through any other interpreter was never classified as an execution at
+# all and no arm ever asked the allowlist about it. `python3 <path>.py` was as
+# unadjudicated as `./x.sh` was before the exec arm shipped, and for the same root
+# cause: an execution model expressed as a fixed vocabulary of shell tokens and
+# shell suffixes. Operator decision D-ScriptScope already resolves that this
+# allowlist governs EXECUTION CAPABILITY rather than interpreter invocations only,
+# and a non-shell interpreter invocation is an execution capability.
+#
+# WHY A SEPARATE CONSTANT FAMILY AND NOT `DESTRUCTIVE_022_EXEC_*`. The two
+# rollouts must be able to retreat INDEPENDENTLY. Binding this larger widening to
+# the exec constant would mean a noisy reading on either forces a retreat on both,
+# destroying the "retreat must be as cheap as advance" property the 3-value enum
+# exists to provide. They are two widenings with two populations and two
+# graduation decisions; one constant cannot record two decisions.
+#
+# WHY THE ENTRY RUNG IS `warn` AND NOT `enforce`. Measured at the introducing
+# commit: all 289 non-comment entries in the script-execution allowlist end in
+# `.sh`, so ZERO of them can ever match a `.py` path, against 72 tracked `.py`
+# files. Landing this at `enforce` would refuse every one of them on day one. The
+# `warn` phase is what measures the real agent-side population — which no static
+# corpus survey can supply — and the allowlist rows are then added from that
+# evidence rather than speculatively. `shadow` is carried for the cheap retreat if
+# the first reading is as noisy as the corpus count suggests it may be.
+readonly DESTRUCTIVE_022_INTERP_PHASE="warn"   # shadow | warn | enforce
+
+# Self-armed at the commit that introduced this family — never a placeholder for a
+# later editor to fill, for the reason recorded on the exec arming stamp above.
+readonly DESTRUCTIVE_022_INTERP_ARMED="2026-09-03"
+readonly DESTRUCTIVE_022_INTERP_REVIEW_DAYS=60    # deadline arm — repo-derivable
+readonly DESTRUCTIVE_022_INTERP_REVIEW_ROWS=25    # evidence arm — operator-local
+readonly DESTRUCTIVE_022_INTERP_ESCALATE_DAYS=90  # deadline arm turns ISSUES red
 
 # Rollout telemetry for the exec arm: evaluate, record, take no action. Carries
 # the CAUSE CLASS as well as the path, because an operator reading this drain must
@@ -733,16 +839,29 @@ readonly DESTRUCTIVE_022_EXEC_ESCALATE_DAYS=90  # deadline arm turns ISSUES red
 # PRETTY form, spanning several lines per entry — which is why the block-log
 # needed a streaming JSON parser rather than a line count. That shape is
 # deliberately NOT copied here.
+#
+# THE `arm` FIELD, AND THE DEFECT IT CLOSES IS ONE THIS DRAIN ALREADY HAD. Before
+# it, every row carried the bare reason `would-fire` and nothing naming WHICH
+# widening produced it — so a reading of 1,067 rows could size the rule and could
+# not apportion a single row to the arm whose graduation it was supposed to inform.
+# With two phase-gated arms writing to one drain that stops being an inconvenience
+# and becomes unusable: two independent graduation decisions, one undifferentiated
+# population. One `--arg` makes both readable from the same file.
+#
+# ROWS WRITTEN BEFORE THIS CHANGE CARRY NO `arm` FIELD, and a reader must treat an
+# absent field as `exec` — which is factually correct, because the exec arm was the
+# only writer that existed. deploy.sh Check 71 does exactly that.
 log_would_fire_022() {
   local phase="$1"
   local cause="$2"
   local path="$3"
+  local arm="${4:-exec}"
   local ts
   ts="$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo 'unknown')"
   "$JQ" -nc --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "BLOCK-DESTRUCTIVE-022" \
     --arg tool "$TOOL_NAME" --arg phase "$phase" --arg cause "$cause" \
-    --arg path "$path" --arg cwd "$CWD" \
-    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, phase:$phase, reason:"would-fire", cause:$cause, path:$path, cwd:$cwd}' \
+    --arg arm "$arm" --arg path "$path" --arg cwd "$CWD" \
+    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, phase:$phase, reason:"would-fire", arm:$arm, cause:$cause, path:$path, cwd:$cwd}' \
     >> "$WARN_LOG" 2>/dev/null || true
 }
 
@@ -782,17 +901,65 @@ destructive_022_exec_verdict() {
   fi
   case "$DESTRUCTIVE_022_EXEC_PHASE" in
     shadow)
-      log_would_fire_022 "shadow" "$cause" "$path"
+      log_would_fire_022 "shadow" "$cause" "$path" "exec"
       return 0
       ;;
     warn)
-      log_would_fire_022 "warn" "$cause" "$path"
+      log_would_fire_022 "warn" "$cause" "$path" "exec"
       "$PRINTF" '[CLAUDE-HOOK:%s:BLOCK-DESTRUCTIVE-022] WARN (would-block, rollout=warn, cause=%s): direct script execution %s\n' \
         "$HOOK_NAME" "$cause" "$path" >&2
       return 0
       ;;
   esac
-  log_would_fire_022 "enforce" "$cause" "$path"
+  log_would_fire_022 "enforce" "$cause" "$path" "exec"
+  check_script_target "$path" "$resolved"
+}
+
+# Adjudicate one NON-SHELL INTERPRETER operand under its own rollout phase.
+#
+# THE SHELL TRIO DOES NOT ROUTE THROUGH THIS, and that is the same discipline the
+# exec router states one function above. `bash`, `sh`, `zsh`, `source` and `.` keep
+# calling check_script_target directly from their unedited call-site branch, so
+# their always-enforce verdicts are byte-preserved rather than argued to be
+# equivalent. That unconditional posture is the basis on which the mode-capable
+# hook cohort was permitted to degrade at all; softening it as a side effect of
+# admitting python would be the one change this widening must not make. The
+# `[ "$script_interp_domain" = "interp" ]` test at each call site is what enforces
+# it, and it is a positive test for the shipped domain rather than a negative test
+# against a list that could grow.
+#
+# An allowlisted, resolvable path returns silently and writes NOTHING — a drain
+# that records permitted traffic measures the corpus rather than the widening.
+#
+# At `enforce` the verdict is delegated to check_script_target rather than
+# reimplemented, so this arm cannot grow a second block message that drifts from
+# the interpreter arm's. An unrecognised phase value falls through to `enforce`,
+# the same fail-closed direction the exec router takes, and deploy.sh Check 71
+# validates the enum so a typo surfaces as a check finding rather than as a silent
+# posture change.
+destructive_022_interp_verdict() {   # $1 = path  $2 = resolved
+  local path="$1" resolved="${2:-1}"
+  local cause="not-allowlisted"
+  case "$path" in
+    *'$'*) cause="unresolvable" ;;
+  esac
+  if [ "$resolved" -eq 0 ]; then cause="unresolvable"; fi
+  if [ "$cause" = "not-allowlisted" ] && is_script_allowlisted "$path"; then
+    return 0
+  fi
+  case "$DESTRUCTIVE_022_INTERP_PHASE" in
+    shadow)
+      log_would_fire_022 "shadow" "$cause" "$path" "interp-nonshell"
+      return 0
+      ;;
+    warn)
+      log_would_fire_022 "warn" "$cause" "$path" "interp-nonshell"
+      "$PRINTF" '[CLAUDE-HOOK:%s:BLOCK-DESTRUCTIVE-022] WARN (would-block, rollout=warn, cause=%s): non-shell interpreter script execution %s\n' \
+        "$HOOK_NAME" "$cause" "$path" >&2
+      return 0
+      ;;
+  esac
+  log_would_fire_022 "enforce" "$cause" "$path" "interp-nonshell"
   check_script_target "$path" "$resolved"
 }
 
@@ -1943,9 +2110,20 @@ case "$TOOL_NAME" in
       # beside script_verb, so a previous segment's interpreter cannot leak into
       # this one's parse-only decision.
       script_interp_base=""
+      # THE OPERAND DOMAIN THIS SEGMENT ADJUDICATES AGAINST — the interpreter's
+      # answer to "what can I execute", resolved once here and read at the three
+      # call sites below instead of a literal `interp`. Reset per segment beside
+      # script_interp_base, for the same leak reason.
+      #
+      # THE DEFAULT IS `interp`, WHICH IS WHAT MAKES THE SHELL ARMS UNCHANGED. Every
+      # path that reaches a call site without a classified interpreter — and every
+      # basename script_set_interp_domain does not name, the shell trio included —
+      # reads the same `*.sh` domain the call sites used to name literally.
+      script_interp_domain="interp"
       case "${script_tokens[$script_hidx]##*/}" in
-        bash|sh|zsh) script_verb="interp"; script_interp_base="${script_tokens[$script_hidx]##*/}" ;;
-        source|.)    script_verb="source" ;;
+        bash|sh|zsh) script_verb="interp"; script_interp_base="${script_tokens[$script_hidx]##*/}"
+                     script_set_interp_domain "$script_interp_base" ;;
+        source|.)    script_verb="source"; script_interp_domain="source" ;;
       esac
       if [ -z "$script_verb" ]; then
         normalize_script_token "${script_tokens[$script_hidx]}"
@@ -1958,8 +2136,9 @@ case "$TOOL_NAME" in
         # core/rules/bypass-mode-readiness/block-destructive.md rather than half-closed.
         if [ "$script_norm_ok" -eq 1 ]; then
           case "${script_norm_out##*/}" in
-            bash|sh|zsh) script_verb="interp"; script_interp_base="${script_norm_out##*/}" ;;
-            source|.)    script_verb="source" ;;
+            bash|sh|zsh) script_verb="interp"; script_interp_base="${script_norm_out##*/}"
+                         script_set_interp_domain "$script_interp_base" ;;
+            source|.)    script_verb="source"; script_interp_domain="source" ;;
           esac
         fi
       fi
@@ -2175,7 +2354,15 @@ case "$TOOL_NAME" in
             if [ "$script_norm_ok" -eq 1 ]; then
               case "$script_norm_out" in
                 -*)
-                  if ! script_operand_implicated "$script_verb"; then
+                  # THE DOMAIN, NOT THE VERB. `$script_verb` is the three-value
+                  # CLASS (interp | source | exec); the domain is what the
+                  # interpreter can execute, and those stopped being the same thing
+                  # when the non-shell interpreters were admitted. Asking the class
+                  # here would test a `-`-normalizing token under `python3` against
+                  # the SHELL suffix set and find no claim, skipping a token the
+                  # Python domain claims — the exemption widening this walk's own
+                  # comment forbids.
+                  if ! script_operand_implicated "$script_interp_domain"; then
                     script_ftok="$script_norm_out"
                   fi
                   ;;
@@ -2236,8 +2423,12 @@ case "$TOOL_NAME" in
           # segment splitting routinely hands it fragments like `'echo`. The gate
           # keeps those inert (arm F1-FP-cmode) while a fragment whose real name
           # ends `.sh` is still adjudicated.
-          if script_operand_implicated interp; then
-            check_script_target "$script_cand" "$script_norm_ok"
+          if script_operand_implicated "$script_interp_domain"; then
+            if [ "$script_interp_domain" = "interp" ]; then
+              check_script_target "$script_cand" "$script_norm_ok"
+            else
+              destructive_022_interp_verdict "$script_cand" "$script_norm_ok"
+            fi
           fi
           script_idx=$(( script_idx + 1 ))
         done
@@ -2265,8 +2456,18 @@ case "$TOOL_NAME" in
             check_script_target "$script_cand" "$script_norm_ok"
           fi
         else
-          if script_operand_implicated interp; then
-            check_script_target "$script_cand" "$script_norm_ok"
+          # THE SHELL TRIO'S PATH IS THE UNEDITED ONE, AND THE BRANCH IS HOW THAT IS
+          # ENFORCED RATHER THAN ASSERTED. Domain `interp` — `bash`, `sh`, `zsh` and
+          # every basename script_set_interp_domain does not name — still calls
+          # check_script_target directly and still blocks unconditionally. Only a
+          # newly-admitted interpreter reaches the phase-gated router, so admitting
+          # python cannot soften the arm that was always-enforce before it.
+          if script_operand_implicated "$script_interp_domain"; then
+            if [ "$script_interp_domain" = "interp" ]; then
+              check_script_target "$script_cand" "$script_norm_ok"
+            else
+              destructive_022_interp_verdict "$script_cand" "$script_norm_ok"
+            fi
           fi
         fi
       fi
