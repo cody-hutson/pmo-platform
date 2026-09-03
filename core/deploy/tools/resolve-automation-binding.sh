@@ -727,7 +727,7 @@ self_test() {
     echo "self-test FAIL (F-A/SD-2): the binding does not carry task='${sess_id}'. The task name IS the registry id — one string on three surfaces. Output: $out" >&2; return 1; fi
   if ! /usr/bin/grep -qF -- "cron='${sess_cad}'" <<<"$out"; then
     echo "self-test FAIL (F-A/SD-2): the binding does not carry the row's cadence verbatim (expected cron='${sess_cad}'). A populated binding is what forbids the unconditionally-zero resolver SD-1 alone would accept. Output: $out" >&2; return 1; fi
-  if ! printf '%s' "$out" | /usr/bin/grep -qF -- "entrypoint=${sess_ep}"; then
+  if ! /usr/bin/grep -qF -- "entrypoint=${sess_ep}" <<<"$out"; then
     echo "self-test FAIL (F-A/SD-2): the binding does not cite the row's entrypoint (${sess_ep}). Output: $out" >&2; return 1; fi
   pass=$((pass + 1))
 
@@ -736,7 +736,7 @@ self_test() {
   rc=$?
   if [[ $rc -ne 0 ]]; then
     echo "self-test FAIL (F-A2/AC-1): repo-fired resolve of '$repo_id' exited $rc, expected 0. Output: $out" >&2; return 1; fi
-  if ! printf '%s' "$out" | /usr/bin/grep -q "^${TOK_REPO}"; then
+  if ! /usr/bin/grep -q "^${TOK_REPO}" <<<"$out"; then
     echo "self-test FAIL (F-A2/AC-1): no ${TOK_REPO} record for '$repo_id'. A workflow entrypoint is repo-fired and must not consult the selector. Output: $out" >&2; return 1; fi
   local live_wf_cron
   # Capture, then take the first line: no reader closes the pipe on the writer.
@@ -744,7 +744,7 @@ self_test() {
   live_wf_cron="${_lwc_all%%$'\n'*}"
   if [[ -z "$live_wf_cron" ]]; then
     echo "self-test FAIL (F-A2/AC-1): could not read a cron from '$repo_ep'; the equality assertion below would be vacuous." >&2; return 1; fi
-  if ! printf '%s' "$out" | /usr/bin/grep -qF -- "cron='${live_wf_cron}'"; then
+  if ! /usr/bin/grep -qF -- "cron='${live_wf_cron}'" <<<"$out"; then
     echo "self-test FAIL (F-A2/AC-1): the emitted cron is not the workflow's own ('${live_wf_cron}'). Output: $out" >&2; return 1; fi
   # FALSIFY: perturb the row's cadence and require the equality assertion to fire.
   # Without this the arm proves only that the two happened to agree today.
@@ -764,13 +764,13 @@ self_test() {
   rc=$?
   if [[ $rc -ne 0 ]]; then
     echo "self-test FAIL (F-B/SD-1): a no-scheduler install exited $rc, expected 0. An absent backend degrades the FIRING; it is never an error. Output: $out" >&2; return 1; fi
-  if ! printf '%s' "$out" | /usr/bin/grep -q "^${TOK_MANUAL} .*${sess_id}"; then
+  if ! /usr/bin/grep -q "^${TOK_MANUAL} .*${sess_id}" <<<"$out"; then
     echo "self-test FAIL (F-B/SD-4): no per-routine ${TOK_MANUAL} record for '$sess_id' under scheduler=none. Silence is the defect this adapter exists to close. Output: $out" >&2; return 1; fi
-  if ! printf '%s' "$out" | /usr/bin/grep -qF -- "invoke: run the routine declared at ${sess_ep}"; then
+  if ! /usr/bin/grep -qF -- "invoke: run the routine declared at ${sess_ep}" <<<"$out"; then
     echo "self-test FAIL (F-B/SD-4): the ${TOK_MANUAL} record does not carry the exact manual invocation. A degraded routine is applicable, unscheduled and INVOCABLE, and the record must say how. Output: $out" >&2; return 1; fi
   # The repo-fired routine must STILL be repo-fired under scheduler=none: it does
   # not consult the selector, so degrading the selector must not degrade it.
-  if ! printf '%s' "$out" | /usr/bin/grep -q "^${TOK_REPO} .*${repo_id}"; then
+  if ! /usr/bin/grep -q "^${TOK_REPO} .*${repo_id}" <<<"$out"; then
     echo "self-test FAIL (F-B): '$repo_id' lost its ${TOK_REPO} binding under scheduler=none. A repo-fired routine does not consult the selector; degrading the selector must not degrade it. Output: $out" >&2; return 1; fi
   pass=$((pass + 1))
 
@@ -780,7 +780,7 @@ self_test() {
   rc=$?
   if [[ $rc -ne 0 ]]; then
     echo "self-test FAIL (F-B2/SD-1): an operator.toml with NO scheduler key exited $rc, expected 0. An absent key resolves to 'none', never to an error. Output: $out" >&2; return 1; fi
-  if ! printf '%s' "$out" | /usr/bin/grep -q "^${TOK_MANUAL}"; then
+  if ! /usr/bin/grep -q "^${TOK_MANUAL}" <<<"$out"; then
     echo "self-test FAIL (F-B2/SD-1): an absent key produced no ${TOK_MANUAL} record. Output: $out" >&2; return 1; fi
   # And with NO operator.toml at all — a fresh clone that has never been installed.
   out="$(run_resolve "$tmp/tree" "$REG" "$SCH" "$DEC" "$tmp/cfg/does-not-exist.toml" "" 2>&1)"
@@ -829,7 +829,7 @@ self_test() {
   rc=$?
   if [[ $rc -ne 2 ]]; then
     echo "self-test FAIL (F-E): a selector outside the declared value space exited $rc, expected 2. A typo must not read as 'this install has no scheduler'. Output: $out" >&2; return 1; fi
-  if printf '%s' "$out" | /usr/bin/grep -q "^${TOK_MANUAL}"; then
+  if /usr/bin/grep -q "^${TOK_MANUAL}" <<<"$out"; then
     echo "self-test FAIL (F-E): an out-of-range selector emitted a ${TOK_MANUAL} record — it silently degraded to 'none', which is the exact indistinguishability this arm forbids. Output: $out" >&2; return 1; fi
   pass=$((pass + 1))
 
@@ -838,9 +838,9 @@ self_test() {
   # undifferentiated OK, and (ii) the detector that checks (i) must itself fire
   # on a synthetic OK line — otherwise (i) is a green that means nothing.
   out="$(run_resolve "$tmp/tree" "$REG" "$SCH" "$DEC" "$tmp/cfg/none.toml" "" 2>&1)"
-  if printf '%s' "$out" | /usr/bin/grep -qE '^OK[[:space:]]'; then
+  if /usr/bin/grep -qE '^OK[[:space:]]' <<<"$out"; then
     echo "self-test FAIL (F-F/SD-4): a binding record led with an undifferentiated 'OK'. The state token is the first field, from a closed set; 'OK' is the downgrade that satisfies tolerance while asserting nothing." >&2; return 1; fi
-  if ! printf '%s\n' "OK             some-routine  resolved" | /usr/bin/grep -qE '^OK[[:space:]]'; then
+  if ! /usr/bin/grep -qE '^OK[[:space:]]' <<<"OK             some-routine  resolved"; then
     echo "self-test FAIL (F-F): the SD-4 negative-control DETECTOR did not fire on a synthetic 'OK' line, so the limb above is a zero that proves nothing." >&2; return 1; fi
   pass=$((pass + 1))
 
