@@ -915,6 +915,340 @@ script_qadvance() {
   return 0
 }
 
+# --------------------------------------------------------------------------
+# HERE-DOCUMENT PRE-PASS (POSIX Shell Command Language 2.7.4)
+#
+# A here-document BODY is the INPUT DATA a redirection supplies to a command. It
+# is not command text, and the shell never parses it as a command list. That is a
+# GRAMMAR fact about where command text can appear — the same class of authority
+# this file already relies on at 2.9.1 for the assignment-prefix walk and at
+# 2.9.1.1 for the exec discriminator — not a property of what the body says. No
+# markdown fence, no "report"-like phrasing and no CLI flag name enters the
+# decision below, because every one of those is forgeable by anything that can
+# print one.
+#
+# WHY A PRE-PASS AND NOT A BRANCH IN THE SEGMENT LOOP. A body is delimited by
+# TRUE NEWLINES in the original command, and the splitter replaces `;`, `&` and
+# `|` with newlines BEFORE the loop runs — so by the time the loop sees text the
+# line structure is already gone. `gh … <<'E' ; echo done` puts `echo done` on
+# the OPERATOR's own line, where POSIX runs it before the body begins; after
+# `;` → newline it is indistinguishable from the first body line. Detecting
+# bodies inside the loop would therefore fail OPEN on exactly that shape. Running
+# this pass on the original text makes the hazard unreachable.
+#
+# WHAT IT REMOVES. Only bodies that PROVABLY CANNOT be evaluated, under the SAME
+# two conditions the quoted-fragment suppression below already states (see THE
+# INVARIANT there), extended over one further construct:
+#
+#  (1) CARRIER — the command RECEIVING the redirection is in the existing
+#      `gh|printf|echo|jq` set. For a here-document the question is "does not
+#      execute its STDIN" rather than "cannot evaluate its ARGUMENT"; for these
+#      four the answers coincide (`gh` and `jq` read stdin as data, `printf` and
+#      `echo` ignore it), so the VALUE is reused unchanged. The MEMBERSHIP
+#      CRITERION is now the CONJUNCTION of both tests, and an editor adding a
+#      member must satisfy both — a verb that cannot evaluate its argument but
+#      DOES execute its stdin would be a fail-open here while remaining sound
+#      below. `bash <<'EOF'` is what this condition exists to refuse: bash reads
+#      its PROGRAM from stdin, so that body genuinely executes.
+#  (2) CONSTRUCT-INERT — the delimiter is QUOTED (`'D'`, `"D"`, `\D`), which
+#      suppresses every expansion in the body; or it is BARE and the body
+#      contains neither `$` nor a backtick. That is the identical two-tier split
+#      already applied to `'…'` versus `"…"`, and it rests on the identical
+#      claim: every expansion is introduced by one of those two characters. If a
+#      future shell adds a third introducer BOTH suppressions break together,
+#      which is the right coupling — it is one claim, not two.
+#
+# The receiving command is resolved from the text between the last SEPARATOR at
+# quote-state 0 and the operator, not from the head of the line. `gh x ; bash
+# <<'E'` must resolve to `bash`, not to `gh`; reading the line head would hand a
+# real interpreter's stdin the carrier's exemption.
+#
+# ALL-OR-NOTHING, BY DESIGN. If ANY here-document in the command fails either
+# condition, NOTHING is excised and the caller latches script_qbail — so every
+# shape this model declines keeps its PRE-CHANGE VERDICT BIT-FOR-BIT, rather than
+# being handed a partially-rewritten text whose verdict nobody measured. The same
+# latch covers every shape the model cannot RESOLVE: an unterminated body, a
+# delimiter outside the accepted word charset, more than two here-documents
+# queued on one line, more than eight in a command, more than 500 lines, or the
+# work budget.
+#
+# WHAT NEWLY PASSES, EXACTLY: the body of a here-document whose delimiter is
+# quoted, or is bare with a body free of `$` and backtick, redirected into `gh`,
+# `printf`, `echo` or `jq`. Nothing else. The RESIDUAL is that naming a carrier
+# verb gets that body unadjudicated — which is NOT a new residual. It is exactly
+# the one the quoted-argument suppression below already carries and ships:
+# `gh … --body 'note; bash <x>.sh'` is allowed today by the same reasoning. This
+# extends that residual's SURFACE from quoted arguments to here-document bodies;
+# it does not change its KIND, its precondition (impersonating a carrier) or its
+# fail direction. That is the honest cost, and it is why the carrier set is
+# reused at its current value rather than widened: a missing entry costs a false
+# positive and can never admit an evasion.
+# --------------------------------------------------------------------------
+
+# A delimiter word this model will accept: a non-empty run of [A-Za-z0-9_.-].
+# Anything else — a delimiter bearing `$`, a backtick, or any other expansion
+# character — is a shape the model declines, and declining latches the bail.
+script_hd_delim_ok() {
+  case "$1" in
+    "") return 1 ;;
+    *[!A-Za-z0-9_.-]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+# Walk $COMMAND left to right, honouring quote state so a `<<` inside a quoted
+# span is TEXT and not an operator, and excise the provably-inert bodies.
+# Sets script_hdstripped (the text the splitter consumes) and script_hdbail.
+script_heredoc_prescan() {
+  script_hdstripped="$COMMAND"
+  script_hdbail=0
+
+  # FAST PATH. No `<<` anywhere means no here-document and no here-string, so the
+  # adjudicated text is $COMMAND byte-for-byte and nothing below can perturb it.
+  # This is what keeps every command that carries no such operator — the
+  # overwhelming majority — on exactly its pre-change code path.
+  case "$COMMAND" in
+    *'<<'*) : ;;
+    *) return 0 ;;
+  esac
+
+  local _lt='<' _sc=';' _amp='&' _bar='|'
+  local -a _lines _qdelim _qquoted _qstrip _qhead
+  local _tmp="" _opline="" _cmp="" _pre="" _ch=""
+  local _delim="" _delimline="" _body="" _bodyraw="" _headtxt=""
+  local _n=0 _i=0 _k=0 _qn=0 _qs=0 _work=0 _pos=0 _lastsep=0 _abs=0
+  local _total=0 _excised=0 _found=0 _quoted=0 _strip=0 _ex=0 _out=""
+
+  # Split into PHYSICAL lines. Bodies are newline-delimited, so the line is the
+  # unit this pass reasons in.
+  _tmp="$COMMAND"
+  while [ -n "$_tmp" ]; do
+    if [ "$_n" -ge 500 ]; then script_hdbail=1; return 0; fi
+    case "$_tmp" in
+      *$'\n'*) _lines[$_n]="${_tmp%%$'\n'*}"; _tmp="${_tmp#*$'\n'}" ;;
+      *)       _lines[$_n]="$_tmp"; _tmp="" ;;
+    esac
+    _n=$(( _n + 1 ))
+  done
+
+  while [ "$_i" -lt "$_n" ]; do
+    _opline="${_lines[$_i]}"
+    _i=$(( _i + 1 ))
+    _qn=0
+    _pos=0
+    _lastsep=0
+    script_qt="$_opline"
+
+    # ---- scan this line for here-document operators at quote-state 0 ----
+    while [ -n "$script_qt" ]; do
+      _work=$(( _work + 1 ))
+      if [ "$_work" -ge 2000 ]; then script_hdbail=1; return 0; fi
+
+      if [ "$_qs" -eq 1 ]; then
+        script_qnext "$script_q1"
+        if [ "$script_qi" -lt 0 ]; then break; fi
+        _pos=$(( _pos + script_qi + 1 )); script_qt="${script_qt:$(( script_qi + 1 ))}"
+        _qs=0
+      elif [ "$_qs" -eq 3 ]; then
+        script_qnext "$script_bs" "$script_q1"
+        if [ "$script_qi" -lt 0 ]; then break; fi
+        _ch="$script_qc"
+        _pos=$(( _pos + script_qi + 1 )); script_qt="${script_qt:$(( script_qi + 1 ))}"
+        if [ "$_ch" = "$script_bs" ]; then
+          _pos=$(( _pos + 1 )); script_qt="${script_qt:1}"
+        else
+          _qs=0
+        fi
+      elif [ "$_qs" -eq 2 ]; then
+        script_qnext "$script_bs" "$script_q2"
+        if [ "$script_qi" -lt 0 ]; then break; fi
+        _ch="$script_qc"
+        _pos=$(( _pos + script_qi + 1 )); script_qt="${script_qt:$(( script_qi + 1 ))}"
+        if [ "$_ch" = "$script_bs" ]; then
+          _pos=$(( _pos + 1 )); script_qt="${script_qt:1}"
+        else
+          _qs=0
+        fi
+      else
+        script_qnext "$script_bs" "$script_q1" "$script_q2" "$_lt" "$_sc" "$_amp" "$_bar"
+        if [ "$script_qi" -lt 0 ]; then break; fi
+        _pre="$script_qpre"
+        _ch="$script_qc"
+        _abs=$(( _pos + script_qi ))
+        _pos=$(( _abs + 1 )); script_qt="${script_qt:$(( script_qi + 1 ))}"
+        if [ "$_ch" = "$script_bs" ]; then
+          _pos=$(( _pos + 1 )); script_qt="${script_qt:1}"
+        elif [ "$_ch" = "$script_q1" ]; then
+          # A `'` directly preceded by `$` opens ANSI-C quoting, exactly as in
+          # script_qadvance. Reading it as a plain single quote would end one
+          # quote out of phase and report *inside* where bash is *outside*.
+          _qs=1
+          case "$_pre" in
+            *"$script_qd") _qs=3 ;;
+          esac
+        elif [ "$_ch" = "$script_q2" ]; then
+          _qs=2
+        elif [ "$_ch" = "$_sc" ] || [ "$_ch" = "$_amp" ] || [ "$_ch" = "$_bar" ]; then
+          # A separator OUTSIDE any quote starts a new simple command, so the
+          # receiving command of any operator after it is resolved from here.
+          _lastsep="$_pos"
+        else
+          # `<`. Three distinct constructs share the character.
+          case "$script_qt" in
+            '<<'*)
+              # `<<<` is a HERE-STRING: one word, already covered by the quote
+              # model. Recognised FIRST — reading it as `<<` plus a delimiter of
+              # `<` would corrupt the scan. (The latch this replaces globbed
+              # `*'<<'*`, which matched here-strings too; part of why it was
+              # over-broad.)
+              _pos=$(( _pos + 2 )); script_qt="${script_qt:2}"
+              ;;
+            '<'*)
+              # `<<` or `<<-`: a here-document redirection operator.
+              _pos=$(( _pos + 1 )); script_qt="${script_qt:1}"
+              _strip=0
+              case "$script_qt" in
+                '-'*) _strip=1; _pos=$(( _pos + 1 )); script_qt="${script_qt:1}" ;;
+              esac
+              while :; do
+                case "$script_qt" in
+                  ' '*|$'\t'*) _pos=$(( _pos + 1 )); script_qt="${script_qt:1}" ;;
+                  *) break ;;
+                esac
+              done
+              _quoted=0
+              _delim=""
+              case "$script_qt" in
+                "$script_q1"*)
+                  _quoted=1
+                  script_qt="${script_qt:1}"; _pos=$(( _pos + 1 ))
+                  case "$script_qt" in
+                    *"$script_q1"*) _delim="${script_qt%%"$script_q1"*}" ;;
+                    *) script_hdbail=1; return 0 ;;
+                  esac
+                  _pos=$(( _pos + ${#_delim} + 1 ))
+                  script_qt="${script_qt:$(( ${#_delim} + 1 ))}"
+                  ;;
+                "$script_q2"*)
+                  _quoted=1
+                  script_qt="${script_qt:1}"; _pos=$(( _pos + 1 ))
+                  case "$script_qt" in
+                    *"$script_q2"*) _delim="${script_qt%%"$script_q2"*}" ;;
+                    *) script_hdbail=1; return 0 ;;
+                  esac
+                  _pos=$(( _pos + ${#_delim} + 1 ))
+                  script_qt="${script_qt:$(( ${#_delim} + 1 ))}"
+                  ;;
+                "$script_bs"*)
+                  # `<<\D`: the backslash quotes the delimiter, so the body
+                  # performs no expansion, exactly as `'D'` does.
+                  _quoted=1
+                  script_qt="${script_qt:1}"; _pos=$(( _pos + 1 ))
+                  _delim="${script_qt%%[!A-Za-z0-9_.-]*}"
+                  case "$script_qt" in
+                    [!A-Za-z0-9_.-]*) _delim="" ;;
+                  esac
+                  _pos=$(( _pos + ${#_delim} ))
+                  script_qt="${script_qt:${#_delim}}"
+                  ;;
+                *)
+                  _delim="${script_qt%%[!A-Za-z0-9_.-]*}"
+                  case "$script_qt" in
+                    [!A-Za-z0-9_.-]*) _delim="" ;;
+                  esac
+                  _pos=$(( _pos + ${#_delim} ))
+                  script_qt="${script_qt:${#_delim}}"
+                  ;;
+              esac
+              if ! script_hd_delim_ok "$_delim"; then script_hdbail=1; return 0; fi
+              if [ "$_qn" -ge 2 ]; then script_hdbail=1; return 0; fi
+              _qdelim[$_qn]="$_delim"
+              _qquoted[$_qn]="$_quoted"
+              _qstrip[$_qn]="$_strip"
+              _qhead[$_qn]="${_opline:$_lastsep:$(( _abs - _lastsep ))}"
+              _qn=$(( _qn + 1 ))
+              ;;
+            *)
+              # A plain `<` input redirection. Already consumed; nothing to do.
+              :
+              ;;
+          esac
+        fi
+      fi
+    done
+
+    _out="${_out}${_opline}"$'\n'
+
+    # ---- consume the queued bodies, in operator order ----
+    _k=0
+    while [ "$_k" -lt "$_qn" ]; do
+      _delim="${_qdelim[$_k]}"
+      _quoted="${_qquoted[$_k]}"
+      _strip="${_qstrip[$_k]}"
+      _headtxt="${_qhead[$_k]}"
+      _body=""
+      _bodyraw=""
+      _delimline=""
+      _found=0
+      while [ "$_i" -lt "$_n" ]; do
+        _cmp="${_lines[$_i]}"
+        _delimline="${_lines[$_i]}"
+        _i=$(( _i + 1 ))
+        if [ "$_strip" -eq 1 ]; then
+          while :; do
+            case "$_cmp" in
+              $'\t'*) _cmp="${_cmp:1}" ;;
+              *) break ;;
+            esac
+          done
+        fi
+        if [ "$_cmp" = "$_delim" ]; then _found=1; break; fi
+        _bodyraw="${_bodyraw}${_delimline}"$'\n'
+        _body="${_body}${_delimline}"
+      done
+      # An unterminated body is a shape the model cannot resolve.
+      if [ "$_found" -eq 0 ]; then script_hdbail=1; return 0; fi
+
+      _total=$(( _total + 1 ))
+      if [ "$_total" -gt 8 ]; then script_hdbail=1; return 0; fi
+
+      _ex=0
+      script_resolve_head "$_headtxt"
+      case "${script_head##*/}" in
+        gh|printf|echo|jq)
+          if [ "$_quoted" -eq 1 ]; then
+            _ex=1
+          else
+            case "$_body" in
+              *"$script_qd"*|*"$script_qbt"*) _ex=0 ;;
+              *) _ex=1 ;;
+            esac
+          fi
+          ;;
+      esac
+
+      if [ "$_ex" -eq 1 ]; then
+        _excised=$(( _excised + 1 ))
+        _out="${_out}${_delimline}"$'\n'
+      else
+        _out="${_out}${_bodyraw}${_delimline}"$'\n'
+      fi
+      _k=$(( _k + 1 ))
+    done
+  done
+
+  # No here-document operator at quote-state 0 — every `<<` in this command was a
+  # here-string or quoted text. Nothing to excise, and nothing to decline.
+  if [ "$_total" -eq 0 ]; then return 0; fi
+
+  # ALL-OR-NOTHING: one declined body means the whole command keeps its
+  # pre-change text and the caller latches the bail.
+  if [ "$_excised" -ne "$_total" ]; then script_hdbail=1; return 0; fi
+
+  script_hdstripped="${_out%$'\n'}"
+  return 0
+}
+
 # Resolve the command word of a segment into script_head (empty when the segment
 # has none), using the POSIX 2.9.1 prefix walk: a simple command is
 # `prefix* word suffix*`, and a prefix is a variable assignment. An assignment
@@ -1199,9 +1533,11 @@ case "$TOOL_NAME" in
     # `tr`, no associative arrays, and the loop runs in the CURRENT shell (here-string,
     # never a pipeline) so `block`'s exit 2 propagates rather than dying in a subshell.
 
-    script_segments="${COMMAND//;/$'\n'}"
-    script_segments="${script_segments//&/$'\n'}"
-    script_segments="${script_segments//|/$'\n'}"
+    # THE SEPARATOR SUBSTITUTION MOVED DOWN, and the move is load-bearing. It now
+    # runs AFTER the here-document pre-pass, on script_hdstripped rather than on
+    # $COMMAND — because the pass has to read TRUE newlines, and this substitution
+    # injects newlines that are indistinguishable from them. See the pre-pass
+    # header for the shape that fails OPEN when the order is reversed.
 
     # ---- Quoted-fragment suppression (per-opener attribution) ----
     #
@@ -1258,16 +1594,45 @@ case "$TOOL_NAME" in
     # `$( )`, `` ` ` ``, `$(( ))`, `${ }` and anything later added to the language.
     #
     # A segment whose start state is 0 still begins at COMMAND POSITION and is
-    # ALWAYS adjudicated. Unquoted `$( )`, backticks and `<( )` all land there, so
-    # they need no separate rule.
+    # ALWAYS adjudicated.
     #
-    # HEREDOCS ARE NOT MODELLED, so suppression is switched off entirely for any
-    # command containing `<<`. A heredoc BODY line is not a command line, but the
-    # matcher splits on newlines and cannot tell the difference: a body line that
-    # opens a quote poisons the carried state, and a real execution after the
-    # terminator is then read as interior to it. Declining to suppress is the
-    # fail-closed answer to "this construct is outside the model"; the cost is that
-    # `<<`-bearing commands keep the false positive.
+    # THAT IS NOT TRUE OF ENCLOSURE, and an earlier version of this comment said it
+    # was. It claimed unquoted `$( )`, backticks and `<( )` "all land there, so they
+    # need no separate rule". Measured, they do not: `$(bash <x>.sh)`,
+    # `` `bash <x>.sh` ``, `cat <( bash <x>.sh )` and `echo "$(bash <x>.sh)"` are all
+    # ALLOWED today. The inner command word sits at token index >= 1 of its segment,
+    # where the command-position walk never looks — a substitution is not a
+    # SEPARATOR, so it never starts a new segment and the inner word never reaches
+    # command position. (Adding a `;` inside the substitution blocks, but only
+    # incidentally: the separator shreds the substitution into a fresh segment.)
+    # This is a live fail-open in an always-enforce arm. It is a WIDENING to close
+    # and is tracked separately; the false claim is corrected here so a reader does
+    # not infer coverage the code does not have. Condition (2) below is unaffected —
+    # it governs what may be SUPPRESSED, and it is why `echo "$(…)"` is not.
+    #
+    # HERE-DOCUMENTS ARE MODELLED, by a pre-pass that runs before the separator
+    # substitution and excises only PROVABLY-INERT bodies — see the
+    # script_heredoc_prescan header for the construct rule, the two conditions and
+    # the all-or-nothing posture. What reaches this loop is therefore either a
+    # command with every body excised, or the ORIGINAL text with script_qbail
+    # latched. The four declared residuals:
+    #
+    #   R-1 CARRIER IMPERSONATION. A shell function or alias named `gh` makes the
+    #       head token a carrier while the body executes. This rule cannot see
+    #       prior-turn state. NOT NEW — the quoted-argument suppression below
+    #       carries the identical hole (`gh … --body 'note; bash <x>.sh'` ships
+    #       allowed). The surface grows to here-document bodies; the kind, the
+    #       precondition and the fail direction do not.
+    #   R-2 A BARE-DELIMITER EXPANSION INTRODUCED BY NEITHER `$` NOR A BACKTICK.
+    #       None exists in POSIX; this is the same claim condition (2) already
+    #       makes for `"…"`, so both break together if a shell ever adds one.
+    #   R-3 THE COMMAND-SUBSTITUTION FAIL-OPEN above is UNTOUCHED and remains live.
+    #       The pre-pass neither creates nor widens it, and a here-document arm
+    #       reading green is not evidence of its absence.
+    #   R-4 A NON-CARRIER RECEIVER KEEPS THE FALSE POSITIVE. `cat <<'RPT'` still
+    #       blocks. Deliberate: a missing carrier entry costs a false positive and
+    #       can never admit an evasion, which is the fail direction this block
+    #       demands below.
     #
     # Suppression stays gated on an ALLOWLIST of command words that cannot evaluate
     # their arguments. The direction of that choice is deliberate: an entry MISSING
@@ -1281,6 +1646,19 @@ case "$TOOL_NAME" in
     # alias.x='!<cmd>' x` evaluates its own quoted argument, so it fails the set's
     # stated membership criterion; keeping it would leave exactly the fail-open this
     # block exists to avoid. Membership is the property to re-check when editing.
+    #
+    # MEMBERSHIP IS NOW A CONJUNCTION, because this one set gates two suppressions.
+    # A member must BOTH (a) be unable to evaluate its ARGUMENT — what the quoted
+    # fragment rule below asks — AND (b) not execute its STDIN, which is what the
+    # here-document pre-pass asks. The four current members satisfy both, so the
+    # value is shared rather than duplicated into a second set that could drift from
+    # this one (keeping two matchers is what let the arms drift apart before). A
+    # verb that satisfies (a) but not (b) — `cat` and `tee` do not execute stdin, but
+    # any stdin-executing verb would — is a fail-open on the pre-pass while still
+    # sound here, so BOTH tests must be answered before adding a member. `cat` and
+    # `tee` are plausible additions that would remove the R-4 false positive; they
+    # are deliberately NOT added here, because membership risk does not belong in a
+    # change whose job is to narrow.
     script_q1="'"
     script_q2='"'
     script_bs='\'
@@ -1304,12 +1682,34 @@ case "$TOOL_NAME" in
     script_norm_raw=""
     script_norm_ok=1
 
-    # Heredocs are outside the model — see THE INVARIANT above. Latch suppression
-    # off for the whole command rather than reason about a body line. This reuses
-    # script_qbail, whose meaning is already "stop vouching for anything".
-    case "$COMMAND" in
-      *'<<'*) script_qbail=1 ;;
-    esac
+    # HERE-DOCUMENT PRE-PASS. What stood here was a blunt latch —
+    # `case "$COMMAND" in *'<<'*) script_qbail=1` — which switched suppression off
+    # for ANY command containing `<<`, including text this loop had already
+    # adjudicated correctly. It was over-broad in three separate ways: it matched a
+    # `<<` inside a QUOTED argument, where the characters are text and not an
+    # operator; it matched a here-STRING `<<<`, which is one word and needs no
+    # model; and it disarmed the whole command for a here-document with nothing to
+    # do with the quoted argument in question. Measured: `gh … --body 'note; bash
+    # <x>.sh'` is ALLOWED, and the same bytes plus an unrelated trailing `<<'X'`
+    # BLOCK. That is the machinery working and then being switched off.
+    #
+    # The pass below replaces the latch with a model of the construct and KEEPS the
+    # latch for everything the model declines, so the fail-closed posture is
+    # preserved for every shape it does not cover. script_qbail is reused because
+    # its meaning is already "stop vouching for anything".
+    script_hdstripped="$COMMAND"
+    script_hdbail=0
+    script_heredoc_prescan
+    if [ "$script_hdbail" -eq 1 ]; then
+      script_qbail=1
+      script_hdstripped="$COMMAND"
+    fi
+
+    # Separator substitution, on the pre-pass output. Excised bodies are already
+    # gone; a declined command reaches this line as $COMMAND verbatim.
+    script_segments="${script_hdstripped//;/$'\n'}"
+    script_segments="${script_segments//&/$'\n'}"
+    script_segments="${script_segments//|/$'\n'}"
 
     while IFS= read -r script_seg; do
       # Quote state at the START of this segment, carried in from everything before
