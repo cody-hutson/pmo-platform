@@ -186,10 +186,14 @@ roster_wf_awk() {
 # ─── SCHED: scheduled workflows ───────────────────────────────────────────────
 # A workflow carrying a non-comment `cron:` key. Comment lines are excluded so a
 # workflow that merely DISCUSSES a cron in its header is not swept in.
+#
+# Deduplicated with a seen-map rather than `nextfile`: that is a GNU/newer-mawk
+# extension, and a gate that must not fail spuriously across runners does not
+# depend on one when a portable form is this cheap.
 sched_wf_awk() {
   awk '
     /^[[:space:]]*#/ { next }
-    /cron:/ { print FILENAME; nextfile }
+    /cron:/ { if (!(FILENAME in seen)) { print FILENAME; seen[FILENAME] = 1 } }
   ' "$@"
 }
 
@@ -480,7 +484,7 @@ self_test() {
       FNR == 1 { fm = ($0 == "---") ? 1 : 0; next }
       fm != 1 { next }
       $0 == "---" { fm = 0; next }
-      /^automation_id:[[:space:]]*/ { print FILENAME; nextfile }
+      /^automation_id:[[:space:]]*/ { print FILENAME }
     ' | sort -u
   )
 
