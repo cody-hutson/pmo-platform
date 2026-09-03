@@ -579,6 +579,26 @@ core/deploy/tests/test_check45_governing_doc_name_match.sh
 ./core/deploy/tests/test_check73_bundle_metrics_discrimination.sh
 core/deploy/tests/test_check73_bundle_metrics_discrimination.sh
 
+# Check 54 ownership-collision teeth suite
+# (test_check54_ownership_collision_teeth.sh) — new in-tree bash CLI. Drives the
+# ADR-044 I3 and I1 invariants against COPIES of the live corpus rather than the
+# toy fixtures the primitive's own --self-test carries, because the self-test can
+# only show the predicate compiles, never that it fires on the real 19-entity
+# owning-agent matrix. Carries specificity arms (unmutated corpus exits 0), a
+# vacuity guard that re-reads section 6 so a stale ownership assumption fails
+# before the sensitivity arm can pass for the wrong reason, a mutation guard that
+# asserts each fixture actually differs from its source, and a placement arm that
+# relocates the contracts file's own worked marker example into a skill section
+# and requires a collision. Executed agent-side at Stage 6 self-verification and
+# Stage 7 Dev Testing, and by the install-tests shell-tests job; all four
+# invocation forms so BLOCK-DESTRUCTIVE-022 does not block the agent-side path.
+# (CI runs no Claude hooks, so this entry is for the agent-side path, not the
+# workflow.)
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_check54_ownership_collision_teeth.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_check54_ownership_collision_teeth.sh
+./core/deploy/tests/test_check54_ownership_collision_teeth.sh
+core/deploy/tests/test_check54_ownership_collision_teeth.sh
+
 # Targeted composition-surface refresh regression (test_refresh_surfaces.sh) — new
 # in-tree bash CLI. Asserts that `deploy.sh --deploy` CANNOT heal a regressed
 # composition surface (it never sources the composition-surface manifest), that its
