@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.50 (2026-09-03) — Renumbering a decision record no longer rewrites its own history
+
 ### governance-declarations-match-enforcement (2026-09-03, version-less) — The charter now says who performs a rule, and what backs it
 
 ### v4.49 (2026-09-03) — Work-item types can now be shared across methodologies
