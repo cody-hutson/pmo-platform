@@ -329,7 +329,7 @@
     {
       "name": "methodology",
       "delivery": "delivered",
-      "description": "Global delivery-approach default, the opt-in portfolio-framework selector, and the work-item-kit default — three independent selection axes. ADR-022 §1 / ADR-017 §S2 name methodology an operator.toml concern. The keys are different altitudes and axes, not variants: default_delivery_approach governs a project, portfolio_framework governs the portfolio above it, and ADR-171 places the kit axis beside them rather than on a second surface.",
+      "description": "Global delivery-approach default, the opt-in portfolio-framework selector, and the work-item-kit default — three independent selection axes. ADR-022 §1 / ADR-017 §S2 name methodology an operator.toml concern. The keys are different altitudes and axes, not variants: default_delivery_approach governs a project, portfolio_framework governs the portfolio above it, and ADR-177 places the kit axis beside them rather than on a second surface.",
       "keys": [
         {
           "key": "default_delivery_approach",
@@ -357,7 +357,7 @@
           "source": "operator-or-default",
           "default": "",
           "required": false,
-          "description": "The work-item kit a deployment tracks when a project does not set its own work_item_kit. A role=\"kit\" pack's pack_id, or empty for no kit selected — the pre-kit status quo and a valid state at both rungs. Orthogonal to default_delivery_approach: two independent lookups, neither reading the other's field. NO enum is declared: which kits exist is deployment data and ADR-171 declares the kit set OPEN, so enumerating it here would re-create the frozen-roster anti-pattern one altitude up.",
+          "description": "The work-item kit a deployment tracks when a project does not set its own work_item_kit. A role=\"kit\" pack's pack_id, or empty for no kit selected — the pre-kit status quo and a valid state at both rungs. Orthogonal to default_delivery_approach: two independent lookups, neither reading the other's field. NO enum is declared: which kits exist is deployment data and ADR-177 declares the kit set OPEN, so enumerating it here would re-create the frozen-roster anti-pattern one altitude up.",
           "since": "4.47"
         }
       ]

@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-171 — Work-item kit as a first-class unit: a third pack role that is kind-bearing without naming an archetype, neutral at the kind level, discriminated by kit class, and selected on the existing configuration cascade"
+title: "ADR-177 — Work-item kit as a first-class unit: a third pack role that is kind-bearing without naming an archetype, neutral at the kind level, discriminated by kit class, and selected on the existing configuration cascade"
 status: Proposed — flips to Accepted when the operator ratifies it at the Stage 9 Plan Review gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
 date: 2026-09-01
 release: kit-unit-and-selection
@@ -16,7 +16,7 @@ source_observations:
   - "Container tiers cannot be typed by a kind and that is structural, not a shortcoming. Every kind's base is the constant Work Item with no other base permitted, and the entity model holding Portfolio, Program, Project and Milestone/Workstream is frozen — so a kind declared at a container tier would be the new entity node the level-coverage work explicitly forbids. Coverage of every organizational level is therefore achieved by projection, not by declaration."
 ---
 
-# ADR-171 — Work-item kit as a first-class unit
+# ADR-177 — Work-item kit as a first-class unit
 
 ## Status
 
@@ -25,6 +25,8 @@ source_observations:
 `Proposed` is the honest value here rather than the `Accepted`-at-authoring that the two sibling pack records took, and the difference is not stylistic: those records were written after their deciding gate had already run, whereas this record's deciding gate is still ahead of it.
 
 **Numbering provenance — `170 → 171`.** Held **ADR-170** branch-local; renumbered to **ADR-171** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 170. In-release citations that read "ADR-170" denote this record.
+
+**Numbering provenance — `171 → 177`.** Held **ADR-171** branch-local; renumbered to **ADR-177** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 171. In-release citations that read "ADR-171" denote this record.
 
 ## Subordinate to
 
