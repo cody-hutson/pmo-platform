@@ -1508,8 +1508,21 @@ exec_notflag_case "T-EXEC-5 must-not-flag: allowlisted tool by direct execution 
 exec_notflag_case "T-EXEC-6 must-not-flag: markdown table row with a backticked .sh path in a carrier argument" \
   'gh issue comment 1 --body "| step | `./tmp/x.sh` | run it |"'
 
-exec_notflag_case "T-EXEC-7 must-not-flag: system-bin interpreter for another language" \
-  '/usr/bin/python3 script.py'
+# RETARGETED BY #6167, AND THE RETARGET IS THE POINT RATHER THAN A REPAIR. This arm
+# read `/usr/bin/python3 script.py` and asserted the EXEC arm does not flag it. That
+# was true because `python3` was not a verb, so the exec arm claimed the command word
+# `/usr/bin/python3` and exempted it as system-bin. Admitting the non-shell
+# interpreters moves the same input to the INTERPRETER arm, where the adjudicated
+# subject is `script.py` — the file that actually executes — and it is now flagged.
+# That is the card's whole subject, so the old expectation cannot stand.
+#
+# The arm's CLAIM is unchanged and still worth asserting: a system-bin interpreter
+# for a language OUTSIDE the admitted set is not flagged by the exec arm. The fixture
+# moves to `osascript`, which is a declared residual rather than an admitted verb.
+# T-NSI-07d below asserts the new verdict for the python spelling, so the pair reads
+# as one fact: the boundary moved, and both sides of it are pinned.
+exec_notflag_case "T-EXEC-7 must-not-flag: system-bin interpreter for a language OUTSIDE the admitted set" \
+  '/usr/bin/osascript script.scpt'
 
 exec_notflag_case "T-EXEC-8 must-not-flag: PATH-resolved utility, no slash (arm never reached)" \
   'git status'
@@ -3212,6 +3225,418 @@ test_case "HINT-04: the hint's worked example (quoted bare-relative) is permitte
 test_case "HINT-05 [ctl]: the ABSOLUTE spelling of that same script is still refused" \
   "$(bash_payload "bash '/srv/pmo-platform/core/deploy/deploy.sh'")" \
   2 "BLOCK-DESTRUCTIVE-022"
+
+# ==========================================================================
+# T-NSI-* — the non-shell interpreter arm (#6167)
+# ==========================================================================
+#
+# THE HOLE THESE ARMS PIN. The verb classifier admitted `bash|sh|zsh` and nothing
+# else, so `python3 <path>.py` was not merely un-adjudicated — it was never
+# classified as an execution at all, and no arm ever asked the allowlist about it.
+# The allowlist was bypassable by writing the laundered script in a language the
+# classifier could not name. Same root cause as the shebang hole the exec arm
+# closed: an execution model expressed as a fixed vocabulary of shell tokens and
+# shell suffixes.
+#
+# WHY EVERY MUST-FLAG ARM READS THE DRAIN AND NOT ONLY THE EXIT CODE. This arm
+# ships at `warn`, so it returns 0 on a would-fire input. An arm asserting exit 0
+# alone would pass against a hook that never evaluated the widening — it would pass
+# against the PRE-change hook, and it would keep passing if the widening were
+# reverted. The drain delta is what makes evaluation a necessary condition of green.
+#
+# WHY THE `arm` FIELD IS ASSERTED ON EVERY ROW. Two phase-gated arms now write to
+# one drain. Without the field their graduations are unapportionable — which is the
+# defect this card's own body reported against the 1,067 rows already collected.
+
+echo ""
+echo "T-NSI-*: non-shell interpreter arm (#6167)"
+echo "---"
+
+# The shipped interpreter-arm phase, read OUT OF THE HOOK SOURCE for the same
+# reason the exec phase is: a restated copy lets the constant and the expectation
+# drift in opposite directions and still go green.
+B022_INTERP_PHASE="$(/usr/bin/sed -n '/^readonly DESTRUCTIVE_022_INTERP_PHASE=/{s/^readonly DESTRUCTIVE_022_INTERP_PHASE="\([a-z]*\)".*/\1/p;q;}' "$HOOK")"
+B022_INTERP_ARMED="$(/usr/bin/sed -n '/^readonly DESTRUCTIVE_022_INTERP_ARMED=/{s/^readonly DESTRUCTIVE_022_INTERP_ARMED="\([0-9-]*\)".*/\1/p;q;}' "$HOOK")"
+if [ -z "$B022_INTERP_PHASE" ]; then
+  /usr/bin/printf 'FAIL: T-NSI-00 interpreter-arm phase constant not readable from %s\n' "$HOOK"
+  FAIL=$((FAIL + 1))
+  B022_INTERP_PHASE="unreadable"
+fi
+case "$B022_INTERP_PHASE" in
+  enforce) B022_INTERP_FLAG_EXIT=2 ;;
+  *)       B022_INTERP_FLAG_EXIT=0 ;;
+esac
+/usr/bin/printf 'PASS: T-NSI-00 interpreter-arm rollout phase resolved from the hook source: %s (must-flag expects exit %s)\n' \
+  "$B022_INTERP_PHASE" "$B022_INTERP_FLAG_EXIT"
+PASS=$((PASS + 1))
+
+# A would-fire case on the INTERPRETER arm. Same shape as exec_warn_case, with the
+# `arm` field asserted so a row written by the other router cannot satisfy it.
+nsi_warn_case() { # $1 name  $2 command  $3 expected cause
+  local rc=0 before after last err tmp_err ok=1 why=""
+  before="$(b022_drain_rows)"
+  tmp_err="$(/usr/bin/mktemp)"
+  /usr/bin/printf '%s' "$(bash_payload "$2")" | /bin/bash "$HOOK" >/dev/null 2>"$tmp_err" || rc="$?"
+  after="$(b022_drain_rows)"
+  err="$(/bin/cat "$tmp_err")"; /bin/rm -f "$tmp_err"
+
+  [ "$rc" = "$B022_INTERP_FLAG_EXIT" ] || { ok=0; why="$why exit=$rc(want $B022_INTERP_FLAG_EXIT)"; }
+  [ "$(( after - before ))" = "1" ] || { ok=0; why="$why drain_delta=$(( after - before ))(want 1)"; }
+  last="$(/usr/bin/tail -1 "$B022_DRAIN" 2>/dev/null || /usr/bin/printf '')"
+  case "$last" in
+    *'"arm":"interp-nonshell"'*) ;;
+    *) ok=0; why="$why arm!=interp-nonshell" ;;
+  esac
+  case "$last" in
+    *"\"phase\":\"${B022_INTERP_PHASE}\""*) ;;
+    *) ok=0; why="$why phase-field!=${B022_INTERP_PHASE}" ;;
+  esac
+  case "$last" in
+    *"\"cause\":\"$3\""*) ;;
+    *) ok=0; why="$why cause!=$3" ;;
+  esac
+  case "$B022_INTERP_PHASE" in
+    warn)
+      case "$err" in
+        *'BLOCK-DESTRUCTIVE-022] WARN (would-block, rollout=warn'*) ;;
+        *) ok=0; why="$why no-stderr-notice" ;;
+      esac
+      ;;
+    shadow)
+      case "$err" in
+        *'BLOCK-DESTRUCTIVE-022'*) ok=0; why="$why shadow-must-be-silent" ;;
+        *) ;;
+      esac
+      ;;
+  esac
+
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  %s\n  last_drain_row: %s\n' "$1" "$why" "$last"; FAIL=$((FAIL + 1))
+  fi
+}
+
+# A hard-refusal case that ALSO asserts the drain did not move. This is the shell
+# trio's shape: always-enforce, and NOT routed through the phase-gated router. Exit
+# 2 alone would not distinguish the two — a router at `enforce` also exits 2 — so
+# the zero drain delta is the half that proves the routing.
+nsi_block_norow_case() { # $1 name  $2 command
+  local rc=0 before after err tmp_err ok=1 why=""
+  before="$(b022_drain_rows)"
+  tmp_err="$(/usr/bin/mktemp)"
+  /usr/bin/printf '%s' "$(bash_payload "$2")" | /bin/bash "$HOOK" >/dev/null 2>"$tmp_err" || rc="$?"
+  after="$(b022_drain_rows)"
+  err="$(/bin/cat "$tmp_err")"; /bin/rm -f "$tmp_err"
+  [ "$rc" = "2" ] || { ok=0; why="$why exit=$rc(want 2)"; }
+  [ "$(( after - before ))" = "0" ] || { ok=0; why="$why drain_delta=$(( after - before ))(want 0 — the trio must not have acquired the warn posture)"; }
+  case "$err" in
+    *'BLOCK-DESTRUCTIVE-022'*) ;;
+    *) ok=0; why="$why no-022-in-stderr" ;;
+  esac
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  %s\n' "$1" "$why"; FAIL=$((FAIL + 1))
+  fi
+}
+
+# Non-allowlisted fixture paths, one per admitted interpreter's suffix domain.
+NSI_PY="core/deploy/tools/no-such-tool-xyz.py"
+NSI_PL="core/deploy/tools/no-such-tool-xyz.pl"
+NSI_RB="core/deploy/tools/no-such-tool-xyz.rb"
+NSI_JS="core/deploy/tools/no-such-tool-xyz.js"
+NSI_SH="core/deploy/tools/no-such-tool-xyz.sh"
+
+# --- AC-1: a non-shell interpreter invocation is adjudicated AT ALL ------------
+nsi_warn_case "T-NSI-01a must-flag: python3 <unlisted>.py is adjudicated" \
+  "python3 $NSI_PY" 'not-allowlisted'
+nsi_warn_case "T-NSI-01b must-flag: python <unlisted>.py is adjudicated" \
+  "python $NSI_PY" 'not-allowlisted'
+nsi_warn_case "T-NSI-01c must-flag: perl <unlisted>.pl is adjudicated" \
+  "perl $NSI_PL" 'not-allowlisted'
+nsi_warn_case "T-NSI-01d must-flag: ruby <unlisted>.rb is adjudicated" \
+  "ruby $NSI_RB" 'not-allowlisted'
+nsi_warn_case "T-NSI-01e must-flag: node <unlisted>.js is adjudicated" \
+  "node $NSI_JS" 'not-allowlisted'
+# The absolute spelling reaches the interpreter arm too — the basename is what the
+# classifier matches. This is the input T-EXEC-7 used to carry.
+nsi_warn_case "T-NSI-07d must-flag: /usr/bin/python3 <unlisted>.py (the input T-EXEC-7 retargeted away from)" \
+  "/usr/bin/python3 $NSI_PY" 'not-allowlisted'
+# A variable-bearing operand keeps its own cause class, exactly as on the exec arm:
+# `unresolvable` has no allowlist remedy and must not be reported as though it had.
+nsi_warn_case "T-NSI-01f must-flag: variable-bearing python3 operand records cause=unresolvable" \
+  'python3 $TMPDIR/probe.py' 'unresolvable'
+
+# --- AC-1 CONTROL THAT MUST FIRE: an ALLOWLISTED operand writes NO row ---------
+# Without this, every arm above would pass against a router that logged
+# unconditionally and then allowed. The sandbox allowlist is appended to, the pair
+# is observed, and the file is restored — with the restore asserted as its own arm,
+# so a failed restore is loud rather than silently corrupting later suites.
+NSI_ALLOWLIST="${HOOK%/*}/../script-execution-allowlist.txt"
+NSI_ALLOWLIST_BAK="$(/usr/bin/mktemp)"
+/bin/cp "$NSI_ALLOWLIST" "$NSI_ALLOWLIST_BAK"
+/usr/bin/printf '%s\n' "$NSI_PY" >> "$NSI_ALLOWLIST"
+exec_notflag_case "T-NSI-02a [ctl] must-not-flag: the SAME python3 operand, once allowlisted, writes no row" \
+  "python3 $NSI_PY"
+/bin/cp "$NSI_ALLOWLIST_BAK" "$NSI_ALLOWLIST"
+if /usr/bin/cmp -s "$NSI_ALLOWLIST" "$NSI_ALLOWLIST_BAK"; then
+  /usr/bin/printf 'PASS: T-NSI-02b allowlist restored after the control arm (later suites see the shipped file)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: T-NSI-02b allowlist NOT restored — later arms and suites are running against a mutated allowlist\n'
+  FAIL=$((FAIL + 1))
+fi
+/bin/rm -f "$NSI_ALLOWLIST_BAK"
+# And the pair closes: with the row removed again, the identical payload flags.
+nsi_warn_case "T-NSI-02c must-flag: with the allowlist row removed, the identical payload flags again (pair closes)" \
+  "python3 $NSI_PY" 'not-allowlisted'
+
+# --- AC-2: the widening is DOMAIN-CORRECT, not blanket ------------------------
+# Each domain follows its INTERPRETER. A shared suffix set would adjudicate
+# `python3 x.rb` — a file no Python invocation can execute — and would make the
+# per-interpreter arms decorative.
+exec_notflag_case "T-NSI-03a [ctl]: python3 with an out-of-domain .rb operand is NOT adjudicated" \
+  "python3 $NSI_RB"
+exec_notflag_case "T-NSI-03b [ctl]: ruby with an out-of-domain .py operand is NOT adjudicated" \
+  "ruby $NSI_PY"
+exec_notflag_case "T-NSI-03c [ctl]: python3 with a suffixless-domain .txt operand is NOT adjudicated" \
+  'python3 core/deploy/tools/no-such-tool-xyz.txt'
+# THE BYTE-PRESERVATION SHOWING THROUGH: bash's domain is still `*.sh` alone, so a
+# `.py` operand under bash is outside it and unadjudicated — exactly as before this
+# change. Its pair on the next line is the discriminator.
+exec_notflag_case "T-NSI-03d [ctl]: bash with a .py operand is NOT adjudicated (interp domain unchanged)" \
+  "bash $NSI_PY"
+nsi_block_norow_case "T-NSI-03e: bash with a .sh operand still hard-refuses (the discriminating pair)" \
+  "bash $NSI_SH"
+
+# --- AC-3: the shell trio is byte-preserved AND still always-enforce -----------
+# Exit 2 with a ZERO drain delta is the assertion. A trio silently re-routed
+# through the phase-gated router would exit 0 and write a row at `warn`; one routed
+# through it at `enforce` would exit 2 AND write a row. Both are caught here.
+nsi_block_norow_case "T-NSI-04a: bash <unlisted>.sh hard-refuses and writes NO interpreter-arm row" \
+  "bash $NSI_SH"
+nsi_block_norow_case "T-NSI-04b: sh <unlisted>.sh hard-refuses and writes NO interpreter-arm row" \
+  "sh $NSI_SH"
+nsi_block_norow_case "T-NSI-04c: zsh <unlisted>.sh hard-refuses and writes NO interpreter-arm row" \
+  "zsh $NSI_SH"
+nsi_block_norow_case "T-NSI-04d: source <unlisted>.sh hard-refuses and writes NO interpreter-arm row" \
+  "source $NSI_SH"
+# CONTROL THAT MUST FIRE, in the same run: the newly-admitted interpreter returns
+# success AND writes a row, so the difference above is attributable to the ROUTING
+# and not to the fixture or to an inert hook.
+nsi_warn_case "T-NSI-04e [ctl]: the same fixture stem under python3 returns success and writes a row" \
+  "python3 $NSI_PY" 'not-allowlisted'
+
+# --- AC-6: #6172's per-interpreter null holds across the widened key set -------
+# `-n` is a parse-only flag FOR A POSIX SHELL. `perl -n` and `ruby -n` are implicit
+# input loops that EXECUTE; python has no `-n`; node's parse-only spelling is
+# `--check`. Every one of the five new keys therefore hits #6172's documented
+# explicit null and must NOT be exempted.
+nsi_warn_case "T-NSI-05a: python3 -n <unlisted>.py is NOT exempted (#6172 per-interpreter null)" \
+  "python3 -n $NSI_PY" 'not-allowlisted'
+nsi_warn_case "T-NSI-05b: perl -n <unlisted>.pl is NOT exempted (implicit input loop EXECUTES)" \
+  "perl -n $NSI_PL" 'not-allowlisted'
+nsi_warn_case "T-NSI-05c: ruby -n <unlisted>.rb is NOT exempted (implicit input loop EXECUTES)" \
+  "ruby -n $NSI_RB" 'not-allowlisted'
+nsi_warn_case "T-NSI-05d: node -n <unlisted>.js is NOT exempted" \
+  "node -n $NSI_JS" 'not-allowlisted'
+# CONTROL THAT MUST FIRE: `bash -n` IS exempted in the same run, so the table is
+# observed DISCRIMINATING rather than uniformly refusing.
+exec_notflag_case "T-NSI-05e [ctl]: bash -n <unlisted>.sh IS still exempted (the table discriminates)" \
+  "bash -n $NSI_SH"
+
+# --- AC-7: the exec arm covers the new suffixes symmetrically ------------------
+# `python3 tools/x.py` and `./tools/x.py` are one execution by two spellings.
+# These rows carry arm=exec and inherit the exec arm's existing phase.
+exec_warn_case "T-NSI-06a must-flag: direct execution of a .py by shebang (exec-arm parity)" \
+  './tmp/evil.py' 'not-allowlisted'
+exec_warn_case "T-NSI-06b must-flag: direct execution of a .rb by shebang" \
+  './tmp/evil.rb' 'not-allowlisted'
+exec_warn_case "T-NSI-06c must-flag: direct execution of a .js by shebang" \
+  './tmp/evil.js' 'not-allowlisted'
+exec_warn_case "T-NSI-06d must-flag: direct execution of a .pl by shebang" \
+  './tmp/evil.pl' 'not-allowlisted'
+# CONTROL THAT MUST FIRE: the extensionless residual stays PINNED. If this goes red
+# the exec domain has been widened past its declared scope.
+exec_notflag_case "T-NSI-06e [ctl]: extensionless direct execution still reaches ALLOW (residual stays pinned)" \
+  './tmp/evil'
+
+# --- AC-5: the drain is APPORTIONABLE across the two routers -------------------
+# A run exercising both routers must produce rows of BOTH `arm` values. A
+# single-valued result means one router is not writing and the field is untested.
+NSI_ARM_BEFORE="$(b022_drain_rows)"
+/usr/bin/printf '%s' "$(bash_payload "python3 $NSI_PY")" | /bin/bash "$HOOK" >/dev/null 2>&1 || true
+/usr/bin/printf '%s' "$(bash_payload './tmp/evil.sh')" | /bin/bash "$HOOK" >/dev/null 2>&1 || true
+nsi_tail="$(/usr/bin/tail -n 2 "$B022_DRAIN" 2>/dev/null || /usr/bin/printf '')"
+nsi_n_interp="$(/usr/bin/printf '%s\n' "$nsi_tail" | /usr/bin/grep -c '"arm":"interp-nonshell"' || true)"
+nsi_n_exec="$(/usr/bin/printf '%s\n' "$nsi_tail" | /usr/bin/grep -c '"arm":"exec"' || true)"
+if [ "$nsi_n_interp" -ge 1 ] && [ "$nsi_n_exec" -ge 1 ]; then
+  /usr/bin/printf 'PASS: T-NSI-08 drain is apportionable — one run produced arm=interp-nonshell (%s) AND arm=exec (%s)\n' \
+    "$nsi_n_interp" "$nsi_n_exec"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: T-NSI-08 drain not apportionable — interp-nonshell=%s exec=%s (a single-valued result means one router is silent)\n' \
+    "$nsi_n_interp" "$nsi_n_exec"
+  FAIL=$((FAIL + 1))
+fi
+# Every row this suite wrote carries the field at all. An absent field would read as
+# `exec` downstream, which would silently mis-attribute an interpreter-arm row.
+if [ "$(( $(b022_drain_rows) - NSI_ARM_BEFORE ))" -ge 2 ]; then
+  /usr/bin/printf 'PASS: T-NSI-08b both routers wrote in the same run (drain grew by >= 2)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: T-NSI-08b the two-router run did not grow the drain by 2\n'; FAIL=$((FAIL + 1))
+fi
+
+# --- AC-12: the #6724 PIN ------------------------------------------------------
+# DECLARED RESIDUAL, NOT DESIRED BEHAVIOUR. The operand-locating walk does not
+# consume a flag's ARGUMENT, so `-X faulthandler` leaves `faulthandler` as the
+# adjudicated operand — a token no domain claims — and the real script is never
+# reached. #6724 owns that walk. Pinning it here means their fix flips a PINNED arm
+# and is a deliberate act rather than a drift nobody notices. Same convention as
+# T-EXEC-9 and F1-INTERP-RESIDUAL.
+exec_notflag_case "T-NSI-09a [PIN, #6724-owned residual]: python3 -X faulthandler <unlisted>.py reaches ALLOW" \
+  "python3 -X faulthandler $NSI_PY"
+exec_notflag_case "T-NSI-09b [PIN, #6724-owned residual]: perl -I lib <unlisted>.pl reaches ALLOW" \
+  "perl -I lib $NSI_PL"
+# CONTROL THAT MUST FIRE: the same invocation WITHOUT the option-taking flag is
+# adjudicated in the same run, so the pin measures the flag walk and not a dead arm.
+nsi_warn_case "T-NSI-09c [ctl]: the identical invocation without the flag IS adjudicated" \
+  "python3 $NSI_PY" 'not-allowlisted'
+
+# --- AC-4 (RETARGETED): the phase gate is LOAD-BEARING, not decorative ---------
+# The original AC4 asserted a mode declaration this hook has never had — it is
+# MODE-INDEPENDENT and always-enforce. The mechanism it DOES have is the per-rule
+# phase constant, and reading the literal is not enough: the constant must be shown
+# to change behaviour across all three enum values, plus the fail-closed direction
+# for a value outside the enum.
+case "$B022_INTERP_PHASE" in
+  warn)
+    /usr/bin/printf 'PASS: T-NSI-10a the committed interpreter-arm phase is the entry rung `warn`\n'; PASS=$((PASS + 1)) ;;
+  *)
+    /usr/bin/printf 'FAIL: T-NSI-10a expected committed phase `warn`, read `%s`\n' "$B022_INTERP_PHASE"; FAIL=$((FAIL + 1)) ;;
+esac
+# The arming stamp must be a RESOLVABLE ISO date, not a placeholder. The platform
+# has a worked failure behind that rule: a check shipped expecting a stamp nobody
+# wrote and gated nothing for 62 releases.
+if /usr/bin/printf '%s' "$B022_INTERP_ARMED" | /usr/bin/grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' \
+   && python3 -c 'import datetime,sys; datetime.date.fromisoformat(sys.argv[1])' "$B022_INTERP_ARMED" 2>/dev/null; then
+  /usr/bin/printf 'PASS: T-NSI-10b the interpreter-arm arming stamp is a resolvable ISO date (%s), not a placeholder\n' "$B022_INTERP_ARMED"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: T-NSI-10b arming stamp `%s` is not a resolvable ISO date — the deadline arm cannot be evaluated\n' "$B022_INTERP_ARMED"
+  FAIL=$((FAIL + 1))
+fi
+
+# The three-value behavioural demonstration. Each probe is a SIBLING of the real
+# hook so HOOK_DIR — and therefore every lib and the allowlist — resolves
+# identically; each differs from the shipped hook in exactly one word.
+nsi_phase_probe() { # $1 phase-value  -> prints "<rc>:<stderr>"
+  local probe="${HOOK%/*}/.block-destructive-nsi-phase-probe.sh" rc=0 out=""
+  /usr/bin/sed "s/^readonly DESTRUCTIVE_022_INTERP_PHASE=.*/readonly DESTRUCTIVE_022_INTERP_PHASE=\"$1\"/" \
+    "$HOOK" > "$probe"
+  /bin/chmod +x "$probe"
+  out="$(/usr/bin/printf '%s' "$(bash_payload "python3 $NSI_PY")" | /bin/bash "$probe" 2>&1 >/dev/null)" || rc="$?"
+  /bin/rm -f "$probe"
+  /usr/bin/printf '%s:%s' "$rc" "$out"
+}
+
+nsi_enforce="$(nsi_phase_probe enforce)"
+case "$nsi_enforce" in
+  2:*BLOCK-DESTRUCTIVE-022*)
+    /usr/bin/printf 'PASS: T-NSI-10c phase=enforce HARD-REFUSES the identical input\n'; PASS=$((PASS + 1)) ;;
+  *)
+    /usr/bin/printf 'FAIL: T-NSI-10c phase=enforce: expected exit 2 + BLOCK-DESTRUCTIVE-022, got %s\n' "$nsi_enforce"; FAIL=$((FAIL + 1)) ;;
+esac
+
+# `shadow` keeps measuring and stops emitting — the rung that exists so a noisy
+# warn phase does not force a choice between notice-spam and going blind. So:
+# success, NO notice, and the row still written.
+nsi_shadow_before="$(b022_drain_rows)"
+nsi_shadow="$(nsi_phase_probe shadow)"
+nsi_shadow_delta="$(( $(b022_drain_rows) - nsi_shadow_before ))"
+case "${nsi_shadow}|${nsi_shadow_delta}" in
+  0:\|1)
+    /usr/bin/printf 'PASS: T-NSI-10d phase=shadow allows SILENTLY and still writes its row\n'; PASS=$((PASS + 1)) ;;
+  *)
+    /usr/bin/printf 'FAIL: T-NSI-10d phase=shadow: expected exit 0, empty stderr, drain +1; got rc:stderr=%s drain_delta=%s\n' \
+      "$nsi_shadow" "$nsi_shadow_delta"; FAIL=$((FAIL + 1)) ;;
+esac
+
+# CONTROL THAT MUST FIRE: an unrecognised value falls through to REFUSAL. A router
+# that failed OPEN on a typo would silently un-arm the rule, which is the direction
+# a security control must never take.
+nsi_typo="$(nsi_phase_probe wrn)"
+case "$nsi_typo" in
+  2:*BLOCK-DESTRUCTIVE-022*)
+    /usr/bin/printf 'PASS: T-NSI-10e [ctl] an out-of-enum phase value FAILS CLOSED (refuses)\n'; PASS=$((PASS + 1)) ;;
+  *)
+    /usr/bin/printf 'FAIL: T-NSI-10e [ctl] an out-of-enum phase value did not fail closed, got %s\n' "$nsi_typo"; FAIL=$((FAIL + 1)) ;;
+esac
+
+# --- AC-9: PAIRED MUTATION ARMS (REQUIRED) ------------------------------------
+# Three arms in this milestone's prior release read green while their mutation was
+# INERT, so each mutant is asserted to DIFFER from the shipped hook before anything
+# it reports is believed.
+#
+# MUTANT 1 reverts the interpreter set to the shell-only trio at BOTH classifier
+# views — exactly the two lines the widening commit changed.
+NSI_MUT1="${HOOK%/*}/.block-destructive-nsi-mut1.sh"
+/usr/bin/sed 's/^\( *\)bash|sh|zsh|python|python3|perl|ruby|node)/\1bash|sh|zsh)/' \
+  "$HOOK" > "$NSI_MUT1"
+if /usr/bin/cmp -s "$HOOK" "$NSI_MUT1"; then
+  /usr/bin/printf 'FAIL: T-NSI-11a mutation 1 is INERT — mutant is byte-identical to the shipped hook\n'; FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: T-NSI-11a mutation 1 is live (classifier reverted to the shell trio)\n'; PASS=$((PASS + 1))
+fi
+# The mutant must NOT adjudicate T-NSI-01a's subject: exit 0 AND no drain row. That
+# is the pre-change behaviour, and it is what proves T-NSI-01a measures the
+# widening rather than a hook that flags everything.
+nsi_m1_before="$(b022_drain_rows)"
+nsi_m1_rc=0
+/usr/bin/printf '%s' "$(bash_payload "python3 $NSI_PY")" | /bin/bash "$NSI_MUT1" >/dev/null 2>&1 || nsi_m1_rc="$?"
+nsi_m1_delta="$(( $(b022_drain_rows) - nsi_m1_before ))"
+if [ "$nsi_m1_rc" = "0" ] && [ "$nsi_m1_delta" = "0" ]; then
+  /usr/bin/printf 'PASS: T-NSI-11b mutant 1 (shell-trio classifier) does NOT adjudicate python3 <unlisted>.py\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: T-NSI-11b mutant 1 should be inert on the new subject; rc=%s drain_delta=%s\n' "$nsi_m1_rc" "$nsi_m1_delta"; FAIL=$((FAIL + 1))
+fi
+/bin/rm -f "$NSI_MUT1"
+
+# MUTANT 2 reverts ONLY the four operand-domain arms, leaving the classifier
+# widened. It must ALSO turn the new subject inert — which is the proof that the
+# verb widening ALONE is inert, and therefore that both halves of the fix are
+# load-bearing. A design that shipped the classifier without the domains would look
+# correct and adjudicate nothing.
+NSI_MUT2="${HOOK%/*}/.block-destructive-nsi-mut2.sh"
+/usr/bin/sed -e '/^    interp-py) case /d' -e '/^    interp-pl) case /d' \
+             -e '/^    interp-rb) case /d' -e '/^    interp-js) case /d' \
+  "$HOOK" > "$NSI_MUT2"
+if /usr/bin/cmp -s "$HOOK" "$NSI_MUT2"; then
+  /usr/bin/printf 'FAIL: T-NSI-11c mutation 2 is INERT — mutant is byte-identical to the shipped hook\n'; FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: T-NSI-11c mutation 2 is live (per-interpreter operand domains removed)\n'; PASS=$((PASS + 1))
+fi
+nsi_m2_before="$(b022_drain_rows)"
+nsi_m2_rc=0
+/usr/bin/printf '%s' "$(bash_payload "python3 $NSI_PY")" | /bin/bash "$NSI_MUT2" >/dev/null 2>&1 || nsi_m2_rc="$?"
+nsi_m2_delta="$(( $(b022_drain_rows) - nsi_m2_before ))"
+if [ "$nsi_m2_rc" = "0" ] && [ "$nsi_m2_delta" = "0" ]; then
+  /usr/bin/printf 'PASS: T-NSI-11d mutant 2 (classifier widened, domains removed) is INERT — the verb widening alone adjudicates nothing\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: T-NSI-11d mutant 2 should be inert; rc=%s drain_delta=%s\n' "$nsi_m2_rc" "$nsi_m2_delta"; FAIL=$((FAIL + 1))
+fi
+# The mutant must still refuse the SHELL operand — otherwise mutation 2 broke the
+# whole rule and T-NSI-11d's zero would be measuring a dead hook rather than an
+# inert widening.
+nsi_m2_sh_rc=0
+/usr/bin/printf '%s' "$(bash_payload "bash $NSI_SH")" | /bin/bash "$NSI_MUT2" >/dev/null 2>&1 || nsi_m2_sh_rc="$?"
+if [ "$nsi_m2_sh_rc" = "2" ]; then
+  /usr/bin/printf 'PASS: T-NSI-11e [ctl] mutant 2 still refuses bash <unlisted>.sh — its inertness above is scoped, not a dead hook\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: T-NSI-11e [ctl] mutant 2 stopped refusing the shell operand (rc=%s) — T-NSI-11d proves nothing\n' "$nsi_m2_sh_rc"; FAIL=$((FAIL + 1))
+fi
+/bin/rm -f "$NSI_MUT2"
 
 # --- Summary ---
 echo ""

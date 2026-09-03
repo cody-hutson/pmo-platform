@@ -739,7 +739,7 @@ check_script_target() {
 # BLOCK-DESTRUCTIVE-022 EXEC ARM — rollout phase, drain, and verdict router.
 #
 # WHAT THE ARM IS. Direct execution of a script (`./x.sh`, no interpreter token)
-# carries no `bash`/`sh`/`zsh`/`source` verb, so it matched no arm of this rule
+# carries no interpreter or `source` verb at all, so it matched no arm of this rule
 # and the allowlist was never consulted — the allowlist was bypassable by making
 # the file executable and dropping the interpreter word. Operator decision
 # D-ScriptScope (rendered 2026-08-23) resolves that this allowlist governs
@@ -1681,7 +1681,9 @@ case "$TOOL_NAME" in
 
     # ----- NEW-B: subprocess script ban (closes Red Team C1 — script laundering) -----
 
-    # BLOCK-DESTRUCTIVE-022 — bash/sh/zsh <path.sh> or source/. <path> not in allowlist
+    # BLOCK-DESTRUCTIVE-022 — an interpreter (bash/sh/zsh, or python/python3/perl/
+    # ruby/node) with a script operand in that interpreter's suffix domain, or
+    # source/. <path>, or a direct execution — not in allowlist
     #
     # STRATEGY: segment first, then match — for BOTH verbs, through ONE matcher.
     # A single ERE cannot model shell grammar, and the prior single-pass pattern
@@ -2088,12 +2090,15 @@ case "$TOOL_NAME" in
       # of a token may ADD coverage, it may never VETO it.
       #
       # AND IT COSTS THE EXEC ARM NOTHING — provable, not asserted. A token only
-      # reaches the new view if its NORMALIZED BASENAME is exactly `bash`, `sh`, `zsh`,
-      # `source` or `.`. None of those carries a `.sh` or `.bash` suffix, so no such
-      # token could ever have satisfied the exec arm's operand domain: the exec arm
-      # never returned a verdict and never wrote a drain row for any of them. Arm
-      # F1-QVERB-ctl-exec is the control — a quoted NON-verb command word must still
-      # reach exec and still flag — and it was green before this change.
+      # reaches the new view if its NORMALIZED BASENAME is exactly one of the verb
+      # literals: `bash`, `sh`, `zsh`, `python`, `python3`, `perl`, `ruby`, `node`,
+      # `source` or `.`. THE PROOF IS RE-ARGUED FOR THE NEW MEMBERS RATHER THAN
+      # INHERITED: none of the five added literals carries `.sh`, `.bash`, `.py`,
+      # `.pl`, `.pm`, `.rb`, `.js`, `.mjs` or `.cjs` either, so no such token could
+      # ever have satisfied the exec arm's operand domain even after that domain was
+      # widened to the union — the exec arm never returned a verdict and never wrote
+      # a drain row for any of them. Arm F1-QVERB-ctl-exec is the control — a quoted
+      # NON-verb command word must still reach exec and still flag.
       #
       # ORDER IS LOAD-BEARING, UNCHANGED: the exec discriminator stays LAST, so
       # `/bin/bash` and `/bin/.` keep resolving to their own arms rather than being
@@ -2101,6 +2106,18 @@ case "$TOOL_NAME" in
       # that matters here: it missed the raw verb set AND was then exempted by the exec
       # arm's system-bin set, so the interpreter binary itself carried its operand past
       # both arms (arm F1-QVERB-abs).
+      #
+      # AND IT IS WHY THE INTERPRETER SET IS CLOSED EXACT LITERALS RATHER THAN A GLOB.
+      # This `case` runs BEFORE the exec discriminator and SUPPRESSES it on a match.
+      # A trailing glob per family — `python3.[0-9]*` for the versioned spellings —
+      # also matches a SCRIPT named `python3.9-wrapper.sh`, which would classify as an
+      # interpreter, stop being its own adjudicated subject, and turn a direct
+      # execution the exec arm adjudicates today into an ALLOW. A widening whose
+      # implementation NARROWS is strictly worse than the residual it closes, and
+      # nothing here asserts that an arbitrary `.sh` name is not a verb, so it would
+      # be silent. Versioned spellings stay a DECLARED RESIDUAL; the safe way to close
+      # them is an order change running a slash-bearing token's exec test first, which
+      # is the operand-walk's neighbourhood and not this one's.
       script_verb=""
       script_word=""
       # THE INTERPRETER BASENAME THE CLASSIFIER DECIDED ON, captured at the two
@@ -2121,7 +2138,8 @@ case "$TOOL_NAME" in
       # reads the same `*.sh` domain the call sites used to name literally.
       script_interp_domain="interp"
       case "${script_tokens[$script_hidx]##*/}" in
-        bash|sh|zsh) script_verb="interp"; script_interp_base="${script_tokens[$script_hidx]##*/}"
+        bash|sh|zsh|python|python3|perl|ruby|node)
+                     script_verb="interp"; script_interp_base="${script_tokens[$script_hidx]##*/}"
                      script_set_interp_domain "$script_interp_base" ;;
         source|.)    script_verb="source"; script_interp_domain="source" ;;
       esac
@@ -2136,7 +2154,8 @@ case "$TOOL_NAME" in
         # core/rules/bypass-mode-readiness/block-destructive.md rather than half-closed.
         if [ "$script_norm_ok" -eq 1 ]; then
           case "${script_norm_out##*/}" in
-            bash|sh|zsh) script_verb="interp"; script_interp_base="${script_norm_out##*/}"
+            bash|sh|zsh|python|python3|perl|ruby|node)
+                         script_verb="interp"; script_interp_base="${script_norm_out##*/}"
                          script_set_interp_domain "$script_interp_base" ;;
             source|.)    script_verb="source"; script_interp_domain="source" ;;
           esac
