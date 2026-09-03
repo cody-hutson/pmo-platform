@@ -121,7 +121,7 @@ release/skills/pmo-skill-refiner/evals/scenario-runner/evals.json               
 release/skills/pmo-skill-refiner/evals/scenario-runner/fixtures/baseline.yaml    add
 release/skills/pmo-skill-refiner/evals/scenario-runner/fixtures/regressed.yaml   add
 release/skills/pmo-skill-refiner/evals/scenario-runner/fixtures/empty.yaml       add
-core/ADRs/ADR-177-output-scoring-runner-consumes-the-shipped-eval-harness-schema.md   add
+core/ADRs/ADR-180-output-scoring-runner-consumes-the-shipped-eval-harness-schema.md   add
 release/ADRs/ADR-178-behavioral-regression-floor-and-major-release-binding-boundary.md   add
 
 # ── Edits (#5863 — derived-surface consequence of the decision-record add) ──
@@ -403,7 +403,7 @@ This release gives the platform a way to catch a change to one skill silently re
 - **D-Version-R2:** bump class `minor`. The slot this release provisionally held was claimed by a concurrent release mid-planning; the rule never moved, only the anchor. Recomputed at Commit 0 against both authoritative surfaces, which now agree.
 - **D-Concurrency Posture:** `P0` fully-serial. A build-blocking edge plus a genuine within-release file contention; Engineering runs one spoke at a time on one branch.
 - **D-ReleaseClass:** `novel` — new runner, new corpus, new workflow, and three D-class decisions in the plan.
-- **ADR-177 (consumed schema):** the runner consumes the eval-harness schema the platform already ships, rather than the trigger-rate schema the commissioning item cites or a new one. The citation was wrong; the delta is one optional field, so no existing suite needs migrating.
+- **ADR-180 (consumed schema):** the runner consumes the eval-harness schema the platform already ships, rather than the trigger-rate schema the commissioning item cites or a new one. The citation was wrong; the delta is one optional field, so no existing suite needs migrating.
 - **ADR-178 (floor and boundary):** the floor is recorded once as a numeric configuration field and restated nowhere; the gate binds at the major-release tag and runs advisory on every pull request, because a gate bound only to a boundary this platform crosses about quarterly would ship months before its first real exercise.
 
 ### Reversibility
@@ -422,7 +422,7 @@ This release gives the platform a way to catch a change to one skill silently re
 
 - Release plan: this file, top section
 - Milestone: `regression-corpus-gates-releases`
-- Decision records: `core/ADRs/ADR-177-output-scoring-runner-consumes-the-shipped-eval-harness-schema.md` and `release/ADRs/ADR-178-behavioral-regression-floor-and-major-release-binding-boundary.md`
+- Decision records: `core/ADRs/ADR-180-output-scoring-runner-consumes-the-shipped-eval-harness-schema.md` and `release/ADRs/ADR-178-behavioral-regression-floor-and-major-release-binding-boundary.md`
 - Runner contract: `release/skills/pmo-skill-refiner/references/scenario-eval-contract.md`
 - User-facing release notes: authored at Stage 13 Close, under `release/releases/notes/`
 
