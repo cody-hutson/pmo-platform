@@ -3296,6 +3296,19 @@ _c35_compute_verdict() {
 # baseline-vs-live-package content compare + the mtime signal (logged), matching the
 # graceful-skip posture of the deploy-time Check 7.
 #
+# THE mtime FALLBACK IS INERT ON A FRESH CHECKOUT AND IS NOT A SECOND LINE OF DEFENCE.
+# Where the staged rebuild cannot run, both degraded branches below fall back to
+# c7_src_newer — source mtime vs package mtime. A fresh `git checkout` sets every
+# working-tree file to checkout time, so that comparison is FALSE for every skill by
+# construction and both branches report FRESH regardless of whether any package is
+# stale. This is INERT, not merely weak: there is no state in which it catches a
+# committed-stale package on a fresh checkout, so there is no signal here to repair.
+# It is retained only because it is a real signal on an operator machine, where
+# mtimes are meaningful. A caller that reads FRESH as evidence of content freshness
+# must therefore first establish that the content arm RAN — the WARN line below is
+# the observable, and the CI gate asserts that precondition before invoking this body
+# (.github/workflows/skill-package-freshness.yml, the prerequisite steps).
+#
 # Check 7 has no network anchor, so the surface argument does not change the verdict;
 # it is accepted for signature parity with the other _cNN_compute_verdict bodies.
 #
@@ -3352,7 +3365,10 @@ _c7_compute_verdict() {
     # fresh checkout). Run whenever a rebuild is available; the result decides.
     if [[ "$c7_can_rebuild" == "true" ]]; then
       c7_tmp_pkgdir="$(mktemp -d)"
-      if build_skill_to_dir "$skill" "$c7_module" "$c7_tmp_pkgdir" >/dev/null 2>&1; then
+      # stdout stays suppressed — this function's stdout is the one-line verdict
+      # protocol and is captured by both callers. stderr is per-skill detail by
+      # design (see the protocol header above), so let the cause through.
+      if build_skill_to_dir "$skill" "$c7_module" "$c7_tmp_pkgdir" >/dev/null; then
         c7_rebuilt_pkg="$c7_tmp_pkgdir/${skill}.skill"
         c7_rebuilt_hash=$(skill_content_hash "$c7_rebuilt_pkg")
         if [[ -z "$c7_rebuilt_hash" ]]; then
@@ -3852,13 +3868,27 @@ build_skill_to_dir() {
 
   # Invoke the per-skill packager from the pmo-skill-refiner module so its
   # `from scripts.quick_validate` import resolves. Emit into out_dir.
-  local repo_root rc=0
+  local repo_root rc=0 pkg_log
   repo_root="$(pwd)"
   mkdir -p "$out_dir"
+  # Capture rather than discard. The packager's stderr was previously sent to
+  # /dev/null here AND again at the _c7_compute_verdict call site, so a
+  # ModuleNotFoundError surfaced as the causeless line "staged rebuild failed to
+  # run" — 55 times per CI run, for the life of the gate, naming nothing. Emit on
+  # failure only: the packager prints progress on SUCCESS too, so unconditional
+  # pass-through would be noise.
+  pkg_log="$(mktemp)"
   (
     cd release/skills/pmo-skill-refiner || exit 1
     /usr/bin/python3 -m scripts.package_skill "$stage_dir/$skill" "$out_dir"
-  ) >/dev/null 2>&1 || rc=1
+  ) >"$pkg_log" 2>&1 || rc=1
+  if [[ $rc -ne 0 ]]; then
+    printf '  WARN:  %s — packager failed; its own output follows (the cause, not just the symptom):\n' "$skill" >&2
+    # First 20 lines, indented. `sed -n` over a FILE, never `| head` — a pipe into a
+    # short-circuiting reader is the SIGPIPE-idiom class repo-integrity.yml scans for.
+    sed -n '1,20{s/^/         /;p;}' "$pkg_log" >&2
+  fi
+  rm -f "$pkg_log"
   rm -rf "$stage_dir"
   return $rc
 }
