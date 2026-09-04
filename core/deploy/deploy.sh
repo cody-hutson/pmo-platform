@@ -3053,6 +3053,132 @@ _c77_compute_verdict() {
   esac
 }
 
+# ─── Rules-corpus admission + byte budget (Check 78 / --check-required-subset) ────
+#
+# The predicate body, factored to TOP LEVEL so both surfaces share ONE body (the DD1
+# shape used by _c38_/_c73_/_c77_compute_verdict): the lifecycle Check 78 inside
+# cmd_check, and the --check-required-subset runner. No predicate is re-encoded on
+# either surface, so the pre-merge gate and the deploy-time check can never disagree
+# about what the invariant asserts.
+#
+# WHAT IT ASSERTS. Everything in the deployed rules set loads ambiently into every
+# session, so the set is a per-session context cost rather than a list of files. The
+# primitive holds it to the thresholds published in
+# core/standards/rules-corpus-admission-standard.md §3 — the admitted set inside the
+# byte ceiling, every member over the per-file trigger carrying a §2 conditional
+# scoping field, every member carrying the §2 required frontmatter including
+# `type: rule` (the admission decision, made machine-readable).
+#
+# WHY IT IS ON THE PRE-MERGE ROSTER. The roster predicate is { network-free AND
+# install-independent AND posture:required AND no dedicated CI mirror }. This check
+# reads only tracked source text and never touches $DEPLOY_ROOT, so it satisfies all
+# four. That property matters more here than elsewhere: the budget must be verifiable
+# at BUILD time, because the deployed set it bounds is produced by the carrier at
+# deploy time — a check that could only observe the installed mirror would certify
+# the cost only after the cost had already been paid.
+#
+# WHY IT IS NOT FOLDED INTO CHECK 9 OR CHECK 77. Check 9 owns byte-identity between
+# a source and its installed mirror and is INSTALL-DEPENDENT (it correctly SKIPs in
+# CI and the public repo), so sharing its body would bar this invariant from the
+# pre-merge surface. Check 77 owns path-set parity ACROSS holders; this check
+# measures the SET those holders declare. Folding them would put two invariants
+# behind one verdict, so a budget breach and a holder divergence would be
+# indistinguishable in the output.
+#
+# A VACUOUS RUN IS AN INPUT FAILURE, NOT A PASS. A sum over zero members is 0 and 0
+# is inside every ceiling, so an empty scan is byte-indistinguishable from a healthy
+# one. The primitive reports that state NOT-EVALUATED rather than WITHIN.
+#
+# SURFACE ASYMMETRY. On the "gate" surface every input is a committed file, so an
+# unreadable member is a checkout defect reported FAIL; emitting the outage token
+# there would hard-fail CI on an outage via the runner's `*)` arm regardless of the
+# sentinel. The outage class is reachable only on the lifecycle surface, where it
+# routes through flag_not_evaluated and never touches a counter. The token set is
+# therefore PASS/FAIL on the gate and PASS/FAIL/NOT-EVALUATED on lifecycle.
+#
+# Echoes ONE protocol line on stdout; per-row detail follows for the caller:
+#   PASS <n> rule(s), <sum> B of <ceiling> B     within budget and contract
+#   FAIL <detail>                                breach, contract violation, or vacuity
+#   NOT-EVALUATED <detail>                       lifecycle only — scan incomplete
+_c78_compute_verdict() {
+  local surface="${1:-lifecycle}"
+  local _sr; _sr="$(_bm_src_root)"
+  local _prim="${C78_PRIMITIVE:-${_sr}/core/deploy/tools/check-rules-budget.py}"
+  local _root="${C78_ROOT:-${_sr}}"
+
+  if [[ ! -r "$_prim" ]]; then
+    # A missing primitive is a repo defect, not a benign absence: without it the
+    # check asserts nothing, and reporting clean would be the exact false-green this
+    # check exists to remove.
+    printf 'FAIL rules-budget primitive missing or unreadable: %s (the gate cannot assert anything without it)\n' "$_prim"
+    return 0
+  fi
+
+  local _out _rc=0
+  _out="$(/usr/bin/python3 "$_prim" --root "$_root" --output-format tsv 2>&1)" || _rc=$?
+
+  # RESIDUAL BUCKET. Field 1 is the class column; EVERY value outside the classified
+  # set is a FINDING, never a filtered-into-silence absence. A new class value that
+  # preserved column count, order and separator would otherwise match no selector and
+  # let this caller report clean while the primitive held a finding.
+  local _residual
+  _residual="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '
+    /^[[:space:]]*$/ { next }
+    $1 !~ /^(SCAN|MEMBERS|MEMBER|VERDICT|OVERSHOOT|UNSCOPED|FRONTMATTER|NOT-EVALUATED)$/ { printf "%s%s", (n++ ? "; " : ""), $0 }
+  ')"
+  if [[ -n "$_residual" ]]; then
+    printf 'FAIL rules-budget emitted unrecognised TSV class value(s): %s\n' "$_residual"
+    return 0
+  fi
+
+  local _verdict _n _sum _ceil _head
+  _verdict="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="VERDICT"{print $2}')"
+  _n="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="MEMBERS"{print $2}')"
+  _sum="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="MEMBERS"{print $3}')"
+  _ceil="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="MEMBERS"{print $4}')"
+  _head="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="MEMBERS"{print $5}')"
+
+  if [[ -z "$_verdict" ]]; then
+    printf 'FAIL rules-budget emitted no VERDICT row (exit %s) — an unreadable verdict is a defect, not a clean result: %s\n' \
+      "$_rc" "$(printf '%s' "$_out" | /usr/bin/tr '\n' ';')"
+    return 0
+  fi
+
+  case "$_verdict" in
+    WITHIN)
+      printf 'PASS %s admitted rule(s), %s B of %s B ceiling (%s B headroom) surface=%s\n' \
+        "$_n" "$_sum" "$_ceil" "$_head" "$surface"
+      ;;
+    OVER-BUDGET)
+      printf 'FAIL admitted rules set is OVER BUDGET — %s B of %s B ceiling across %s rule(s):%s\n' \
+        "$_sum" "$_ceil" "$_n" \
+        "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="OVERSHOOT"{printf " over by %s B; largest contributors: %s;", $2, $3}')"
+      ;;
+    UNSCOPED-VIOLATION)
+      printf 'FAIL rule(s) over the per-file trigger carry neither paths: nor unscoped_rationale::%s\n' \
+        "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="UNSCOPED"{printf " %s (%s B) — %s;", $2, $3, $4}')"
+      ;;
+    FRONTMATTER-VIOLATION)
+      printf 'FAIL admitted rule(s) breach the frontmatter contract:%s\n' \
+        "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="FRONTMATTER"{printf " %s [%s] — %s;", $2, $3, $4}')"
+      ;;
+    NOT-EVALUATED)
+      # On the gate surface every input is a committed file, so an unreadable member
+      # is a checkout defect reported as FAIL — see the surface-asymmetry note above.
+      if [[ "$surface" == "gate" ]]; then
+        printf 'FAIL rules-budget could not measure the admitted set (a checkout defect on this surface):%s\n' \
+          "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="NOT-EVALUATED"{printf " %s — %s;", $2, $3}')"
+      else
+        printf 'NOT-EVALUATED the admitted set could not be measured, so a budget claim would be unsound:%s\n' \
+          "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="NOT-EVALUATED"{printf " %s — %s;", $2, $3}')"
+      fi
+      ;;
+    *)
+      printf 'FAIL rules-budget emitted an unrecognised VERDICT token [%s] — an unreadable verdict is a defect, not a clean result\n' "$_verdict"
+      ;;
+  esac
+}
+
 # ─── Release-corpus completeness (Check 32 / --check-release-corpus) — #1484 ─────
 # The LOG-row-driven completeness predicate, factored to TOP LEVEL so it is shared
 # by two surfaces with ONE body (DD1, like _vf_/_cc_/_c38_compute_verdict): the
@@ -14527,6 +14653,48 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
     esac
   fi
 
+  # Check 78 — Rules-corpus admission + byte budget (advisory; warn-mode initial)
+  #
+  # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md Req (b)):
+  #   posture: required(warn-mode-initial)
+  #   enforcement-surface: --check-required-subset (pre-merge) + deploy-check.mode
+  #            warn-window (blocks when the operator flips
+  #            .github/deploy-check-ci.enforce to enforce)
+  #   invariant: the admitted rules set stays inside the byte ceiling published in
+  #              rules-corpus-admission-standard.md §3, every member over the
+  #              per-file trigger carries a §2 conditional scoping field, and every
+  #              member carries the §2 required frontmatter including `type: rule`.
+  #   falsification: add a member that carries the set past the ceiling -> WARN
+  #                  (advisory) / FAIL (post-flip), naming the overshoot in bytes and
+  #                  the top-3 contributors by size; drop the scoping field from a
+  #                  member over the trigger -> UNSCOPED-VIOLATION. Both arms are
+  #                  exercised by `check-rules-budget.py --self-test`, so the
+  #                  falsification claim is re-runnable rather than asserted once.
+  #
+  # Warn-mode initial per bypass-mode-readiness.md §Shakedown, matching the posture
+  # accepted for the sibling parity check shipped in this same release.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 78: Rules-corpus admission + byte budget (admitted set within the published ceiling and frontmatter contract; warn-mode initial; enforce-flip deferred)"
+    local c78_verdict c78_tok
+    c78_verdict="$(_c78_compute_verdict "lifecycle")"
+    c78_tok="${c78_verdict%% *}"
+    case "$c78_tok" in
+      PASS)
+        log "  OK:    rules-budget — ${c78_verdict#PASS }"
+        ;;
+      FAIL)
+        flag_warn_or_issue "rules-budget" "${c78_verdict#FAIL }"
+        ;;
+      NOT-EVALUATED)
+        flag_not_evaluated "rules-budget" "degraded — ${c78_verdict#NOT-EVALUATED }; this is not a clean result"
+        ;;
+      *)
+        flag_warn_or_issue "rules-budget" \
+          "unexpected verdict token '$c78_tok' from _c78_compute_verdict (an unreadable verdict is a defect in the verdict body, never an absence of findings): $c78_verdict"
+        ;;
+    esac
+  fi
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
@@ -16396,16 +16564,19 @@ cmd_check_decision_emission() {
 # Check 7 (skill-package-freshness.yml #2656), Check 32 (release-corpus-completeness.yml
 # #1484), Check 41 (version-freeness.yml), Check 48 (close-completeness.yml).
 #
-# TODAY the predicate resolves to THREE members — Check 38
-# (hook-registry-index-freshness), Check 73 (bundle-metrics-gate-integrity) and
-# Check 77 (mirror-pair-parity).
+# TODAY the predicate resolves to FOUR members — Check 38
+# (hook-registry-index-freshness), Check 73 (bundle-metrics-gate-integrity),
+# Check 77 (mirror-pair-parity) and Check 78 (rules-budget).
 # New members are appended here as future posture:required checks are back-filled
 # (#1036 / #313). Check 73 is the first back-fill against that declaration: #313 is
 # the milestone this runner's own header named as its back-fill vehicle, so the
 # roster grew through the mechanism it declared rather than around it. Check 77 is
 # the second: its invariant reads only tracked source text, which is exactly the
 # property that admits it here and that Check 9 — the install-dependent check
-# owning the same subject — lacks.
+# owning the same subject — lacks. Check 78 is the third, and admitted for a reason
+# specific to what it bounds: the deployed rules set it measures is PRODUCED at
+# deploy time, so a check that could only observe the installed mirror would certify
+# the per-session cost only after that cost had already been paid.
 #
 # Surface = "gate": fail-closed. Warn-vs-enforce at the CI surface is decided by the
 # committed .github/deploy-check-ci.enforce sentinel — during the warn-mode window an
@@ -16432,7 +16603,7 @@ cmd_check_required_subset() {
     [[ "$_rs_tok_line" == "enforce" ]] && rs_enforce="enforce"
   fi
 
-  # Enumerated allowlist: "check-id:verdict-body". TODAY: Checks 38, 73 and 77.
+  # Enumerated allowlist: "check-id:verdict-body". TODAY: Checks 38, 73, 77 and 78.
   # Append a row per future posture:required check that lacks a dedicated CI mirror.
   #
   # Every member's verdict enum MUST be drawn from the tokens the case below
@@ -16448,6 +16619,7 @@ cmd_check_required_subset() {
     "hook-registry-index-freshness:_c38_compute_verdict"
     "bundle-metrics-gate-integrity:_c73_compute_verdict"
     "mirror-pair-parity:_c77_compute_verdict"
+    "rules-budget:_c78_compute_verdict"
   )
 
   local rs_fail=0 rs_err=0 rs_pass=0 _entry _id _fn _verdict _tok
@@ -17134,7 +17306,7 @@ main() {
       echo "  --check-lifecycle            List retired/dormant checks + dispositions + reactivation anchors"
       echo "  --check-version-freeness     Pre-merge version-freeness probe (Check 41 only; exits 1 on a claimed/undecidable candidate) (#1677)"
       echo "  --check-close-completeness   Close-completeness probe (Check 48 only; exits 1 on a VERIFIED row missing a Stage-13 output) (#1290)"
-      echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73, 77); honors .github/deploy-check-ci.enforce (#1485)"
+      echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73, 77, 78); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; exits 1 on an INCOMPLETE row set when enforce) (#1484)"
       echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; advisory/deploy-time-only; exits 1 on INCOMPLETE/NOSET when enforce) (#4026)"
       echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, unexpected=1) (#2656)"
