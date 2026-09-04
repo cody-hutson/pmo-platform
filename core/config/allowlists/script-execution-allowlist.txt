@@ -269,6 +269,17 @@ release/tools/tests/test_corpus_home_tolerance.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_action_item_gate_predicate.sh
 ./release/tools/tests/test_action_item_gate_predicate.sh
 release/tools/tests/test_action_item_gate_predicate.sh
+# test_agent_editability_read.sh — fixture suite for the Stage-4 Phase A3.5
+# agent-editability read. Its load-bearing arms MUTATE copies of the Tier-0
+# authority hook and of the planning spec and re-run the derivation against
+# them, so a blocked agent-side invocation leaves exactly the arms that prove
+# the classifier reads its authority (rather than restating it) unrunnable. It
+# runs in CI and is invoked agent-side at Stage 6 self-verification and Stage 7
+# Dev Testing.
+[PMO_PLATFORM_ROOT]/release/tools/tests/test_agent_editability_read.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_agent_editability_read.sh
+./release/tools/tests/test_agent_editability_read.sh
+release/tools/tests/test_agent_editability_read.sh
 # test_close_class_telemetry.sh — regression suite for compute-close-class-telemetry.sh
 # (over-argv payload transport + Indicator-5 bivalence + the interface contract). It runs
 # in CI and is invoked agent-side at Stage 6 self-verification and Stage 7 Dev Testing; the

@@ -133,22 +133,68 @@ guard_store_git_ignored() {
 
 NOW_UTC() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
-# ── Surface C → {worktree: "vX.Y"} map. Scans <hub-state>/vX.Y/sessions.md tables;
-#    the milestone is the parent dir name; the worktree is table column 4. ──
+# ── Surface C → {worktree: "<run-key>"} map. Scans <hub-state>/<run-key>/sessions.md
+#    tables; the milestone is the parent dir name. Run keys are SLUG-primary (ADR-092;
+#    hub-session-continuity.md § 2) with legacy vX.Y dirs read-only
+#    (orchestration-playbook.md § 4a.3). The worktree COLUMN INDEX is bound per file from
+#    that file's declared header — it is NOT fixed at column 4. ──
 build_worktree_milestone_map() {
   local hub_dir="$1"
   [ -d "$hub_dir" ] || { printf '{}'; return 0; }
-  local f ver
-  while IFS= read -r f; do
-    ver="$(basename "$(dirname "$f")")"
-    case "$ver" in v[0-9]*) : ;; *) continue ;; esac
-    # Data rows only: start with '|', not the header ('session_id') or separator ('---').
-    awk -F'|' -v ver="$ver" '
-      /^[[:space:]]*\|/ && $0 !~ /session_id/ && $0 !~ /-{3,}/ {
-        wt=$5; gsub(/^[[:space:]]+|[[:space:]]+$/,"",wt);   # $1 empty (leading |), col4 = $5
-        if (wt != "") printf "%s\t%s\n", wt, ver
-      }' "$f"
-  done < <(find "$hub_dir" -type f -name 'sessions.md' 2>/dev/null) \
+  local f ver pairs
+  # A NAME-shaped run-key guard silently drops whichever key form it was not written for,
+  # so there is none here — only the degenerate basenames are refused. The population is
+  # constrained by TABLE SHAPE instead: bind the `worktree` COLUMN INDEX and the field
+  # count from the row that declares both `session_id` and `worktree`, and ingest only
+  # later rows of the same width. A hardcoded $5 reads narrative out of a `sessions.md`
+  # whose table is a different shape, and a `$0 !~ /session_id/` header-skip cannot skip a
+  # header that does not contain `session_id`.
+  #
+  # THE BIND IS STICKY PER FILE. The deployed hub-state file interleaves
+  # `# === END MANAGED SECTION ===` / `# === BEGIN OPERATOR ADDITIONS ...` between the
+  # separator row and the first data row (update.sh composes those fences at install; the
+  # in-repo .template carries none). A parser that unbinds on a blank or non-pipe line
+  # drops every row after the fence. Do not add such a reset — the failure is SILENT, and
+  # the `sticky-header-bind` self-test arm exists to keep it that way only if it is kept.
+  pairs="$(
+    while IFS= read -r f; do
+      ver="$(basename "$(dirname "$f")")"
+      # The leading `(` is REQUIRED: this `case` lives inside a `$( … )` command
+      # substitution, where an unbalanced pattern-closing `)` ends the substitution early
+      # and the remainder is reparsed as shell. The balanced form is portable POSIX.
+      case "$ver" in (""|.|..) continue ;; esac
+      awk -F'|' -v ver="$ver" '
+        function trim(s) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", s); return s }
+        /^[[:space:]]*\|/ {
+          if (idx == 0) {
+            hs = 0; hw = 0
+            for (i = 2; i <= NF; i++) {
+              c = trim($i)
+              if (c == "session_id") hs = 1
+              if (c == "worktree")   hw = i
+            }
+            if (hs && hw) { idx = hw; nf = NF }
+            next
+          }
+          if ($0 ~ /^[[:space:]]*\|[-|[:space:]:]+\|[[:space:]]*$/) next
+          if (NF != nf) next
+          wt = trim($idx)
+          if (wt != "") printf "%s\t%s\n", wt, ver
+        }' "$f"
+    done < <(find "$hub_dir" -type f -name 'sessions.md' 2>/dev/null | LC_ALL=C sort)
+  )"
+  # `LC_ALL=C sort` on the find output is REQUIRED, not cosmetic: the jq reduction below is
+  # last-wins and the record it feeds asserts `reproducible: true`, so an unsorted,
+  # filesystem-dependent traversal order would make a collision's outcome irreproducible.
+  # Sorting makes it deterministic; the warning below makes it VISIBLE (the convention's
+  # stated posture is fail-visible, never a silent drop). Identical (worktree, run-key)
+  # pairs are deduped first, so only a key spanning two DIFFERENT milestones warns.
+  printf '%s\n' "$pairs" | LC_ALL=C sort -u | awk -F'\t' '
+    NF == 2 { n[$1]++; m[$1] = (n[$1] == 1 ? $2 : m[$1] ", " $2) }
+    END { for (k in n) if (n[k] > 1)
+            printf "WARNING: hub-state worktree key \047%s\047 maps to %d milestones (%s); last-wins applied\n", \
+              k, n[k], m[k] > "/dev/stderr" }'
+  printf '%s\n' "$pairs" \
     | jq -R -s 'split("\n") | map(select(length>0) | split("\t")) | map({(.[0]): .[1]}) | add // {}'
 }
 
@@ -238,6 +284,26 @@ def parse_milestone($b):
   | if ($s | test("^(?:release|chore)/v[0-9]+\\.[0-9]+"))
     then ($s | capture("^(?:release|chore)/(?<v>v[0-9]+\\.[0-9]+)") | .v)
     else null end ;
+def parse_milestone_slug($b):
+  # Slug-primary release branches (ADR-092): `release/<milestone-slug>`, no version stem
+  # (core/rules/git-workflow.md § Branch naming). TWO deliberate properties:
+  #  1. The capture is a single PATH SEGMENT ([^/]+) — a STRUCTURAL constraint, not a
+  #     character grammar. The platform declares no milestone-slug grammar (the only two
+  #     slug-shaped rules in the corpus govern .md basenames and skill frontmatter names),
+  #     and authoring one here would be the same defect that eliminated the explicit-grammar
+  #     candidate at design. This axis uses the directory axis's posture: structure, not
+  #     name shape.
+  #  2. The legacy version form is excluded by DERIVATION from parse_milestone, not by a
+  #     second inline copy of the version regex. ONE version predicate in this file.
+  # `chore/` is deliberately excluded: `chore/<slug>-stage-13-close` carries a suffix with
+  # no delimiter separating it from the slug, so a chore-slug parse would manufacture a
+  # wrong key. Such a branch stays `unattributed` — a named, accepted residual.
+  # Test-guarded because a bare capture on a non-match yields EMPTY and would silently
+  # drop the whole session.
+  ($b // "") as $s
+  | if (parse_milestone($s) == null) and ($s | test("^release/[^/]+$"))
+    then ($s | capture("^release/(?<v>[^/]+)$") | .v)
+    else null end ;
 def is_fixfeat($b): ($b // "") | test("^(?:fix|feat)/") ;
 
 # T1: an issue-event whose worktree == session.worktree and ts within the session window.
@@ -267,6 +333,7 @@ def t1_issue($wt; $start; $end):
 # relying on condition-bound variables, which jq does not carry into `then`).
 | (t1_issue($wt; $start; $end)) as $t1
 | (parse_milestone($branch)) as $t2v
+| (parse_milestone_slug($branch)) as $t2sv
 # Null-guard the T3 object index: `{...}[null]` is a jq HARD error ("Cannot index object
 # with null"), and do_emit runs this program with 2>/dev/null and an untested exit status,
 # so an abort here would silently yield an EMPTY roll-up that the coverage record then
@@ -289,6 +356,18 @@ def t1_issue($wt; $start; $end):
       { work_item: ("milestone:" + $t3v), work_item_kind: "milestone",
         attribution_tier: "hub-state-lineage", reproducible: true,
         attribution_basis: ("hub-state worktree " + $wt + " -> milestone " + $t3v) }
+    # $t2sv sits BELOW $t3v deliberately: a branch name is a heuristic for the milestone,
+    # while the hub-state directory holds the value the hub AUTHORED. Lifting this arm
+    # above $t3v would let `release/<slug>-suffix` override the exact `<slug>`, splitting
+    # one release into two rollup rows. The `shadowing-guard` self-test arm turns red on
+    # such a reorder. NOTE the ladder is only PARTLY precision-ordered: the pre-existing
+    # $t2v arm is itself a branch-name parse sitting above the authored $t3v. That breach
+    # is pre-existing and deliberately NOT reordered here — a reorder would move the
+    # attribution of every session currently resolving through $t2v.
+    elif $t2sv != null then
+      { work_item: ("milestone:" + $t2sv), work_item_kind: "milestone",
+        attribution_tier: "branch-milestone", reproducible: true,
+        attribution_basis: ("slug-primary release branch " + $branch + " -> milestone " + $t2sv) }
     else
       { work_item: "unattributed", work_item_kind: "unattributed",
         attribution_tier: "unattributed", reproducible: true,
@@ -571,6 +650,99 @@ self_test() {
     fail=1
   else
     echo "  PASS: CIAC-1 ground-truth attribution (resolver reproduces oracle, tier-by-tier)"
+  fi
+
+  # ── Run-key recognition arms. Each is separately named so a CI mutation probe can assert
+  #    the SPECIFIC assertion that turned red; a bare non-zero exit would let an unrelated
+  #    failure masquerade as the property being regressed. Graded on ATTRIBUTED SESSIONS,
+  #    never on directory admission — a directory-admission metric goes green while the tier
+  #    stays dead, which is the exact failure this file's run-key handling exists to close.
+  local sid_chore="aaaaaaaa-0000-4000-8000-000000000011"
+  local sid_shadow="aaaaaaaa-0000-4000-8000-000000000012"
+  local sid_fenced="aaaaaaaa-0000-4000-8000-000000000013"
+  local sid_prose="aaaaaaaa-0000-4000-8000-000000000014"
+
+  # (L) SENSITIVITY — both run-key forms this file learned must actually resolve a session.
+  #     A green suite whose sensitivity arm never fired is a broken probe, not a filter.
+  local n_t3slug n_t2sv
+  n_t3slug="$(jq -s '[.[]|select(.work_item=="milestone:synthetic-slug-release" and .attribution_tier=="hub-state-lineage")]|length' "$res" 2>/dev/null)"
+  n_t2sv="$(jq -s '[.[]|select(.work_item=="milestone:synthetic-slug-branch" and .attribution_tier=="branch-milestone")]|length' "$res" 2>/dev/null)"
+  if [ "${n_t3slug:-0}" -ge 1 ] && [ "${n_t2sv:-0}" -ge 1 ]; then
+    echo "  PASS: run-key-sensitivity (slug hub-state dir -> $n_t3slug session(s); slug release branch -> $n_t2sv session(s))"
+  else
+    echo "FAIL: run-key-sensitivity — slug hub-state=${n_t3slug:-0}, slug release branch=${n_t2sv:-0}; both must be >=1 or the suite is certifying a tier that resolves nothing"; fail=1
+  fi
+
+  # (L2) LEGACY REGRESSION — a version-keyed hub-state dir must still resolve. It passes by
+  #      CONSTRUCTION under a name-agnostic recogniser (there is no legacy limb to rot), but
+  #      the forward guarantee is demonstrated rather than asserted.
+  local n_v99
+  n_v99="$(jq -s --arg s "aaaaaaaa-0000-4000-8000-000000000004" '[.[]|select(.session_id==$s and .work_item=="milestone:v9.9" and .attribution_tier=="hub-state-lineage")]|length' "$res" 2>/dev/null)"
+  [ "${n_v99:-0}" -eq 1 ] && echo "  PASS: legacy-run-key-regression (version-keyed hub-state dir still resolves to milestone:v9.9)" \
+    || { echo "FAIL: legacy-run-key-regression — the v9.9 hub-state session no longer resolves (got ${n_v99:-0}, want 1)"; fail=1; }
+
+  # (M) SPECIFICITY — a slug-keyed `chore/` branch has no delimiter separating slug from
+  #     suffix, so it is deliberately NOT parsed. It must produce ZERO milestone rows; a
+  #     non-zero here means the branch arm over-widened and is manufacturing keys.
+  local n_chore_ms
+  n_chore_ms="$(jq -s --arg s "$sid_chore" '[.[]|select(.session_id==$s and (.work_item|startswith("milestone:")))]|length' "$res" 2>/dev/null)"
+  [ "${n_chore_ms:-0}" -eq 0 ] && echo "  PASS: run-key-specificity (slug-keyed chore branch produced 0 milestone rows — not over-widened)" \
+    || { echo "FAIL: run-key-specificity — a slug-keyed chore branch produced ${n_chore_ms:-0} milestone row(s); the branch arm is manufacturing keys"; fail=1; }
+
+  # (N) MALFORMED-TABLE REJECTION — `find -name sessions.md` matches a FILENAME, not a
+  #     well-formed Surface-C table. The malformed fixture carries both live malformation
+  #     shapes (no `session_id` header; a width-mismatched data row) and must contribute
+  #     nothing. `Action` is the literal column label the pre-fix hardcoded-$5 read emitted
+  #     from a header-less pipe table — it must never become a work item.
+  local n_mal n_prose
+  n_mal="$(printf '%s' "$wt_map" | jq '[to_entries[]|select(.value=="synthetic-malformed")]|length' 2>/dev/null)"
+  n_prose="$(jq -s --arg s "$sid_prose" '[.[]|select(.session_id==$s and .work_item=="unattributed")]|length' "$res" 2>/dev/null)"
+  if [ "${n_mal:-1}" -eq 0 ] && [ "${n_prose:-0}" -eq 1 ]; then
+    echo "  PASS: malformed-table-rejection (malformed fixture contributed 0 map entries; a prose column label did not become a work item)"
+  else
+    echo "FAIL: malformed-table-rejection — malformed fixture contributed ${n_mal:-?} map entries and the prose-key session resolved to a work item (unattributed count ${n_prose:-0}, want 1)"; fail=1
+  fi
+
+  # (O) SHADOWING GUARD — the session's branch parses to `<slug>-suffix` while the hub-state
+  #     directory AUTHORS `<slug>`. The authored value must win, or one release splits into
+  #     two rollup rows. This arm turns red on any reorder lifting $t2sv above $t3v — which
+  #     is what makes the ladder ordering a tested property rather than a comment.
+  local shadow_wi
+  shadow_wi="$(jq -s -r --arg s "$sid_shadow" '[.[]|select(.session_id==$s)|.work_item]|first // "MISSING"' "$res" 2>/dev/null)"
+  if [ "$shadow_wi" = "milestone:synthetic-slug-release" ]; then
+    echo "  PASS: shadowing-guard (authored hub-state key beat the branch-parsed key)"
+  else
+    echo "FAIL: shadowing-guard — expected milestone:synthetic-slug-release (authored hub-state key), got '$shadow_wi'; a branch-name heuristic is overriding the authored value"; fail=1
+  fi
+
+  # (P) STICKY HEADER BIND — the column bind must survive the managed-section fences the
+  #     deploy composition interleaves between the separator row and the first data row.
+  #     A parser that unbinds on a non-pipe line emits NOTHING for such a file: no error,
+  #     no exit code, the run directory just vanishes from attribution. The in-repo
+  #     .template carries no fences, so this property is only reachable through a fixture
+  #     that reproduces the composed shape.
+  local n_fenced n_fenced_sess
+  n_fenced="$(printf '%s' "$wt_map" | jq '[to_entries[]|select(.value=="synthetic-managed-fence")]|length' 2>/dev/null)"
+  n_fenced_sess="$(jq -s --arg s "$sid_fenced" '[.[]|select(.session_id==$s and .work_item=="milestone:synthetic-managed-fence")]|length' "$res" 2>/dev/null)"
+  if [ "${n_fenced:-0}" -eq 2 ] && [ "${n_fenced_sess:-0}" -eq 1 ]; then
+    echo "  PASS: sticky-header-bind (both post-fence rows ingested; the fenced session attributed)"
+  else
+    echo "FAIL: sticky-header-bind — the fenced hub-state file yielded ${n_fenced:-0} map entries (want 2) and ${n_fenced_sess:-0} attributed session(s) (want 1); the header bind did not survive the managed-section fences"; fail=1
+  fi
+
+  # (Q) COLLISION DETERMINISM — one worktree key claimed by two milestones. `add` is
+  #     last-wins and the record it feeds asserts `reproducible: true`, so the outcome must
+  #     be stable across runs (guaranteed by the sorted `find`) and VISIBLE (one stderr
+  #     WARNING). The second grep is the specificity control: an absent key must not warn.
+  local map_a map_b n_warn n_warn_ctl
+  map_a="$(FINOPS_HUB_STATE_DIR="$fx_hub" build_worktree_milestone_map "$fx_hub" 2>/dev/null)"
+  map_b="$(FINOPS_HUB_STATE_DIR="$fx_hub" build_worktree_milestone_map "$fx_hub" 2>/dev/null)"
+  n_warn="$(FINOPS_HUB_STATE_DIR="$fx_hub" build_worktree_milestone_map "$fx_hub" 2>&1 >/dev/null | grep -c -F "worktree key 'collide-wt'")"
+  n_warn_ctl="$(FINOPS_HUB_STATE_DIR="$fx_hub" build_worktree_milestone_map "$fx_hub" 2>&1 >/dev/null | grep -c -F "worktree key 'zzznope-wt'")"
+  if [ "$map_a" = "$map_b" ] && [ "${n_warn:-0}" -eq 1 ] && [ "${n_warn_ctl:-1}" -eq 0 ]; then
+    echo "  PASS: collision-determinism (repeated builds identical; 1 warning for the colliding key, 0 for an absent one)"
+  else
+    echo "FAIL: collision-determinism — repeated builds differ, or warnings were ${n_warn:-0} for the colliding key (want 1) and ${n_warn_ctl:-?} for an absent key (want 0)"; fail=1
   fi
 
   # Run the full roll-up (default local-only path) for the remaining checks.

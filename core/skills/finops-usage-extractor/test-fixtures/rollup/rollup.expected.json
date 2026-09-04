@@ -6,5 +6,11 @@
   { "session_id": "aaaaaaaa-0000-4000-8000-000000000005", "work_item": "unattributed", "work_item_kind": "unattributed", "attribution_tier": "unattributed" },
   { "session_id": "aaaaaaaa-0000-4000-8000-000000000006", "work_item": "unattributed", "work_item_kind": "unattributed", "attribution_tier": "unattributed" },
   { "session_id": "aaaaaaaa-0000-4000-8000-000000000007", "work_item": "multi-branch", "work_item_kind": "multi-branch", "attribution_tier": "unattributed" },
-  { "session_id": "aaaaaaaa-0000-4000-8000-000000000008", "work_item": "#5151", "work_item_kind": "issue", "attribution_tier": "pr-resolved" }
+  { "session_id": "aaaaaaaa-0000-4000-8000-000000000008", "work_item": "#5151", "work_item_kind": "issue", "attribution_tier": "pr-resolved" },
+  { "session_id": "aaaaaaaa-0000-4000-8000-000000000009", "work_item": "milestone:synthetic-slug-release", "work_item_kind": "milestone", "attribution_tier": "hub-state-lineage" },
+  { "session_id": "aaaaaaaa-0000-4000-8000-000000000010", "work_item": "milestone:synthetic-slug-branch", "work_item_kind": "milestone", "attribution_tier": "branch-milestone" },
+  { "session_id": "aaaaaaaa-0000-4000-8000-000000000011", "work_item": "unattributed", "work_item_kind": "unattributed", "attribution_tier": "unattributed" },
+  { "session_id": "aaaaaaaa-0000-4000-8000-000000000012", "work_item": "milestone:synthetic-slug-release", "work_item_kind": "milestone", "attribution_tier": "hub-state-lineage" },
+  { "session_id": "aaaaaaaa-0000-4000-8000-000000000013", "work_item": "milestone:synthetic-managed-fence", "work_item_kind": "milestone", "attribution_tier": "hub-state-lineage" },
+  { "session_id": "aaaaaaaa-0000-4000-8000-000000000014", "work_item": "unattributed", "work_item_kind": "unattributed", "attribution_tier": "unattributed" }
 ]

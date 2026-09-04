@@ -173,6 +173,18 @@ Dependency-ordered implementation plan. Each issue includes file-level change sp
 
 [Same structure as above]
 
+### Agent-Editability Read
+
+**Derivation** — controls read at commit `<short SHA>`:
+- Tier-0 floor: `core/hooks/block-autonomy-ceiling.sh` — every `case` block whose arms invoke `always_block "BLOCK-AUTONOMY-001"`: `<N>` block(s) observed; each block's arms quoted verbatim below, one per line.
+- Sanctioned-session gate: `core/hooks/block-skill-direct-edit.sh` — `SKILL_SCOPE_RE` = `<quoted>`; arming key = `<quoted>`; exemption list resolved at `<deployed path>` — `present (<n> entries) | absent | undetermined`.
+
+| Card | Write-set path | Tier-0 ∩ | Skill-gate ∩ | Path class | Card class | Execution path |
+|------|----------------|----------|--------------|-----------|-----------|----------------|
+| #N | [path] | yes/no | yes/no | tier-0-floored / sanctioned-session-required / unconstrained | [most-constrained of this card's rows] | operator-executed / sanctioned-session: `<skill> <mode>` / ordinary Engineering spoke |
+
+Per-path rows are retained, never collapsed into the card class. A `delete` row is recorded `out-of-scope (destructive-control class)`. Procedure per `pipeline/stage-04-planning.md` § 5.9.
+
 ## Risk Register
 
 | # | Risk | Likelihood | Impact | Mitigation | Owner |

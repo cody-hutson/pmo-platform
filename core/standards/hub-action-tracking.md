@@ -1,6 +1,6 @@
 ---
 title: Hub Action Tracking
-purpose: K1 codified-knowledge standard defining the schema, persistence mechanism, and review cadence for hub-tracked action items (AI-NNN) — durable commitments the hub or operator must execute at a future routing point. Rides on the hub-session-continuity substrate (file-based markdown — template at release/releases/hub-state/action-items.md.template; runtime instance at <OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/action-items.md); composes with the agent-handoff framework when action items are handed off to spoke owners; surfaces via the main-thread Decision Briefing mechanism governed by the hub-orchestration layer.
+purpose: K1 codified-knowledge standard defining the schema, persistence mechanism, and review cadence for hub-tracked action items (AI-NNN) — durable commitments the hub or operator must execute at a future routing point. Rides on the hub-session-continuity substrate (file-based markdown — template at release/releases/hub-state/action-items.md.template; runtime instance at <OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/action-items.md); composes with the agent-handoff framework when action items are handed off to spoke owners; surfaces via the main-thread Decision Briefing mechanism governed by the hub-orchestration layer.
 type: standard
 status: ACTIVE
 source: ""
@@ -30,14 +30,14 @@ Per Stage 5 D-2 verdict on : the action-item schema + persistence-substrate-bind
 ## 2. Action-Item Schema
 
 **Template (tracked):** [`release/releases/hub-state/action-items.md.template`](../../release/releases/hub-state/action-items.md.template)
-**Runtime instance (operator-local):** `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/action-items.md` — sibling to [the hub-session-continuity `pending-approvals.md` runtime instance](hub-session-continuity.md). Created LAZILY on first action-item emit per the directory-creation discipline in [`hub-session-continuity.md` § 2](hub-session-continuity.md).
+**Runtime instance (operator-local):** `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/action-items.md` — sibling to [the hub-session-continuity `pending-approvals.md` runtime instance](hub-session-continuity.md). Created LAZILY on first action-item emit per the directory-creation discipline in [`hub-session-continuity.md` § 2](hub-session-continuity.md). The run key is the milestone slug. A small number of directories predate that convention and are keyed on a version; the resolver reads the slug form first and falls back to the version form, which it treats as read-only. The resolver contract is specified in the release-hub orchestration playbook § 4a.3 and the hub-session-continuity standard § 7.3.
 
 **Frontmatter (YAML — parallel to the hub-session-continuity Surface A; session-ID format inherited verbatim per [`hub-session-continuity.md` § 5](hub-session-continuity.md)):**
 
 ```yaml
 ---
 schema_version: "v1.0"
-milestone: "vX.Y-<milestone-slug>"
+milestone: "<milestone-slug>"
 created_at: "<ISO 8601 UTC of first row enqueue>"
 last_updated: "<ISO 8601 UTC of most recent row mutation>"
 last_session_id: "<worktree>__<ISO-start>__<short-sha>"
@@ -154,12 +154,12 @@ The 4-value taxonomy covers all observable trigger surfaces hub has detection ac
 
 This standard rides the hub-session-continuity substrate verbatim. No parallel persistence directory, no parallel ID namespace, no parallel decision log, no parallel session-ID format.
 
-**Substrate (cited from [`hub-session-continuity.md` § 2](hub-session-continuity.md)):** schema templates tracked at `release/releases/hub-state/*.template`; runtime instance written to the operator-instance path `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/` per [`public-repo-vs-operator-instance-taxonomy.md`](public-repo-vs-operator-instance-taxonomy.md) §4.3; file-based markdown; frontmatter + table format; append-only-with-status-mutation discipline.
+**Substrate (cited from [`hub-session-continuity.md` § 2](hub-session-continuity.md)):** schema templates tracked at `release/releases/hub-state/*.template`; runtime instance written to the operator-instance path `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/` per [`public-repo-vs-operator-instance-taxonomy.md`](public-repo-vs-operator-instance-taxonomy.md) §4.3; file-based markdown; frontmatter + table format; append-only-with-status-mutation discipline.
 
 **Resulting runtime directory contents per release (at the operator-instance path):**
 
 ```
-<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/
+<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/
 ├── pending-approvals.md     (per hub-session-continuity Surface A — PA-NNN approval queue)
 ├── action-items.md          (per this standard — AI-NNN action-item ledger)
 └── sessions.md              (per hub-session-continuity Surface C — lazy, informational; optional)
@@ -185,7 +185,7 @@ This standard rides the hub-session-continuity substrate verbatim. No parallel p
 
 4. **No competing substrate.** This standard explicitly does NOT introduce a parallel persistence directory, parallel ID namespace, parallel decision log, or parallel session-ID format. All four mechanisms reuse.
 
-**Why ride the hub-session-continuity substrate rather than separate (rationale archive):** One persistence pattern for operator to learn; Resume Procedure reads both files at hub-session-continuity Step 7 (generalized from `pending-approvals.md` to all `*-state.md` files in `hub-state/vX.Y/`); single-directory edit reduces commit overhead; future skill replacement consumes the standard substrate uniformly; citation-graph clarity (this standard cites hub-session-continuity for substrate without re-canonicalizing).
+**Why ride the hub-session-continuity substrate rather than separate (rationale archive):** One persistence pattern for operator to learn; Resume Procedure reads both files at hub-session-continuity Step 7 (generalized from `pending-approvals.md` to all `*-state.md` files in `hub-state/<milestone-slug>/`); single-directory edit reduces commit overhead; future skill replacement consumes the standard substrate uniformly; citation-graph clarity (this standard cites hub-session-continuity for substrate without re-canonicalizing).
 
 ## 4. Review Cadence — 5-Routing-Point Binding
 
@@ -243,7 +243,7 @@ Each of the THREE NEW protocols shipping in this standard carries the cutover cl
 |---|---|
 | Parent design discussion | Parent issue — establishes the gap (5 evidence cases) and 3 ACs (schema, persistence, cadence) |
 | Stage 5 Solutioning spec | D-2 verdict, 13-field schema, 6-value category enum, 4-value trigger-type enum, 5-state status lifecycle, 5-routing-point cadence binding, R1 Evidence-Grounding artifacts (5 canonicalizations) |
-| Hub-session-continuity substrate | **Substrate canonical** — this standard rides on `hub-session-continuity.md`'s file-based markdown convention (templates at `release/releases/hub-state/*.template`, runtime instance at `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/`); AI-NNN schema parallels PA-NNN schema |
+| Hub-session-continuity substrate | **Substrate canonical** — this standard rides on `hub-session-continuity.md`'s file-based markdown convention (templates at `release/releases/hub-state/*.template`, runtime instance at `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/`); AI-NNN schema parallels PA-NNN schema |
 | [`hub-session-continuity.md`](hub-session-continuity.md) | Sibling K1 standard — durable substrate this standard rides on; `consumers` field declares this standard explicitly; Surface A schema parallelism + Surface B decision-log integration + § 5 session-ID format inheritance |
 | Agent-handoff framework | Framework composer — 9-field handoff manifest composes with action items handed off to spoke owners (opportunistic; no modification required) |
 | [`agent-handoff-framework.md`](agent-handoff-framework.md) | Sibling K1 standard — cross-agent handoff manifest format; composes with this standard's action-item handoff surface |

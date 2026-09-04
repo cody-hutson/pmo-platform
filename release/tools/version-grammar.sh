@@ -96,6 +96,64 @@ version_cmp() {
   else echo 0; fi
 }
 
+# version_stamp_state <current> <target>
+#   Echo PASS | MISSING | UNVERIFIED — the three-outcome verdict for "is <current>
+#   stamped at or above <target>?". Always returns 0: the verdict is on stdout (the
+#   _vg_freeness token convention), so a consumer never has to distinguish "not
+#   higher" from "could not tell" by exit status — the collapse that produced three
+#   divergent renderings of this predicate across the corpus.
+#     UNVERIFIED — EITHER argument is non-canonical, so the comparison CANNOT be
+#                  made. Never PASS: an unorderable value read as PASS is the silent
+#                  wrong answer inside the fix. Both operands are gated here, so a
+#                  consumer cannot reproduce the one-operand-gated defect locally.
+#     MISSING    — <current> orders strictly BELOW <target>; the stamp did not land.
+#     PASS       — <current> is EQUAL TO or ABOVE <target>. Higher is CORRECT, not a
+#                  miss: on an out-of-order close a later release has already
+#                  advanced the file. This is monotonicity, not equality.
+#   Canonical-first per the consumer contract: version_canonical gates before
+#   version_cmp is reached, so version_cmp is never handed a value that bypassed it.
+version_stamp_state() {
+  local current="$1" target="$2"
+  version_canonical "$current" || { echo "UNVERIFIED"; return 0; }
+  version_canonical "$target"  || { echo "UNVERIFIED"; return 0; }
+  if [[ "$(version_cmp "$current" "$target")" == "-1" ]]; then
+    echo "MISSING"; return 0
+  fi
+  echo "PASS"
+}
+
+# version_badge_latest <anchor> <target>
+#   Echo ADVANCE | WITHHOLD_HIGHER | WITHHOLD_UNORDERABLE | WITHHOLD_NO_ANCHOR — the
+#   fail-closed verdict for "may the repo's Latest badge move to <target>, given
+#   <anchor> is the currently-published Latest?". Always returns 0 (the _vg_freeness
+#   token convention), so a consumer never distinguishes "withhold" from "could not
+#   tell" by exit status, and the REASON class travels with the verdict.
+#     WITHHOLD_NO_ANCHOR   — <anchor> is empty: no published Release resolved (first
+#                            release, or the host was unreachable).
+#     WITHHOLD_UNORDERABLE — <anchor> or <target> is non-canonical, so the comparison
+#                            CANNOT be made. BOTH operands are gated: gating only the
+#                            anchor routes a non-canonical target to ADVANCE on a
+#                            comparison that never happened — fail-OPEN, on a public
+#                            mutation. That defect is unreachable from here.
+#     WITHHOLD_HIGHER      — <anchor> orders strictly ABOVE <target>: a backfill or an
+#                            out-of-order publish. The badge stays where it is.
+#     ADVANCE              — <anchor> is not above <target> (lower, or the same slot).
+#                            Equality advances: v2.6 and v2.06 are one slot.
+#   Fail-closed by construction — every non-ADVANCE outcome withholds. A badge declined
+#   is recoverable with one `gh release edit --latest`; a badge taken wrongly regresses
+#   every consumer silently. Same recovery cost, opposite detectability.
+#   Canonical-first per the consumer contract: version_canonical gates before version_cmp.
+version_badge_latest() {
+  local anchor="$1" target="$2"
+  if [[ -z "$anchor" ]]; then echo "WITHHOLD_NO_ANCHOR"; return 0; fi
+  version_canonical "$anchor" || { echo "WITHHOLD_UNORDERABLE"; return 0; }
+  version_canonical "$target" || { echo "WITHHOLD_UNORDERABLE"; return 0; }
+  if [[ "$(version_cmp "$anchor" "$target")" == "1" ]]; then
+    echo "WITHHOLD_HIGHER"; return 0
+  fi
+  echo "ADVANCE"
+}
+
 # ---------------------------------------------------------------------------
 # Self-test — run `bash release/tools/version-grammar.sh --self-test`.
 # Hermetic; no network, no tags read; exits 0 iff every fixture is green.
@@ -185,6 +243,44 @@ _vg_self_test() {
   _vg_t_cmp "v2.6"    "v2.06"    0 "C-5 leading-zero equivalence"
   _vg_t_cmp "v2.10"   "v2.9"     1 "C-6 numeric not lexical"      # 10 > 9
   _vg_t_cmp "v2.15"   "v3.20"   -1 "C-7 cross-major ordering"
+
+  # --- version_stamp_state fixtures (current, target, expected) ---
+  # Anti-vacuity: S-2/S-6/S-7 kill an always-PASS implementation; S-1/S-3/S-4/S-5
+  # kill an always-MISSING one; S-4 kills a string-equality shortcut (v2.6 and
+  # v2.06 are string-UNEQUAL and version-EQUAL). No degenerate form passes.
+  _vg_t_stamp() {  # <current> <target> <expected> <label>
+    local got; got="$(version_stamp_state "$1" "$2")"
+    if [[ "$got" != "$3" ]]; then
+      echo "FAIL [$4]: version_stamp_state '$1' '$2' expected $3 got '$got'"
+      failures=$((failures+1))
+    fi
+  }
+  _vg_t_stamp "v4.18" "v4.17" PASS       "S-1 higher is PASS (out-of-order close)"
+  _vg_t_stamp "v4.16" "v4.17" MISSING    "S-2 lower is MISSING"
+  _vg_t_stamp "v4.17" "v4.17" PASS       "S-3 equal limb"
+  _vg_t_stamp "v2.6"  "v2.06" PASS       "S-4 leading-zero equivalence"
+  _vg_t_stamp "v4.10" "v4.9"  PASS       "S-5 numeric not lexical"
+  _vg_t_stamp "slug"  "v4.17" UNVERIFIED "S-6 non-canonical CURRENT never PASS"
+  _vg_t_stamp "v4.18" "slug"  UNVERIFIED "S-7 non-canonical TARGET also gated"
+
+  # --- version_badge_latest fixtures (anchor, target, expected) ---
+  # Anti-vacuity: B-1/B-2/B-3/B-6/B-8 kill an always-ADVANCE implementation;
+  # B-4/B-5/B-7 kill an always-withhold one; B-7 kills a string-equality shortcut.
+  _vg_t_badge() {  # <anchor> <target> <expected> <label>
+    local got; got="$(version_badge_latest "$1" "$2")"
+    if [[ "$got" != "$3" ]]; then
+      echo "FAIL [$4]: version_badge_latest '$1' '$2' expected $3 got '$got'"
+      failures=$((failures+1))
+    fi
+  }
+  _vg_t_badge ""       "v4.17" WITHHOLD_NO_ANCHOR   "B-1 no anchor (first release)"
+  _vg_t_badge "slug"   "v4.17" WITHHOLD_UNORDERABLE "B-2 anchor non-canonical"
+  _vg_t_badge "v4.18"  "v4.17" WITHHOLD_HIGHER      "B-3 anchor higher — backfill withholds"
+  _vg_t_badge "v4.16"  "v4.17" ADVANCE              "B-4 anchor lower — advance"
+  _vg_t_badge "v4.17"  "v4.17" ADVANCE              "B-5 equal slot advances"
+  _vg_t_badge "v4.18"  "slug"  WITHHOLD_UNORDERABLE "B-6 TARGET non-canonical (both operands gated)"
+  _vg_t_badge "v2.6"   "v2.06" ADVANCE              "B-7 leading-zero equivalence"
+  _vg_t_badge "v4.10"  "v4.9"  WITHHOLD_HIGHER      "B-8 numeric not lexical"
 
   # --- exit-contract fixtures (CD-3): parse/cmp exit 1, no stdout, on non-canonical ---
   local out rc

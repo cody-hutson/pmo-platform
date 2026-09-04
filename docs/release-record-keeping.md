@@ -27,7 +27,7 @@ Release records live in **two homes**, and knowing which is which is the whole k
 | Home | What lives here | In git? | Who reads it | Governed by |
 |---|---|---|---|---|
 | **Tracked corpus** — `release/releases/` root + `plans/` + `notes/` | `RELEASE_LOG.md`, `RELEASE_INDEX.md`, `RELEASE_DIGEST.md`, `RELEASE_REVERSIONS.md`, per-release `plans/vX.Y_RELEASE_PLAN.md`, `notes/vX.Y_RELEASE_NOTES.md` | **Yes** — tracked verbatim | Anyone, forever — the shared pipeline substrate and the permanent audit trail | taxonomy → **UNIVERSAL-PUBLIC** |
-| **Operator-instance runtime** — `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/` | `hub-state`: `pending-approvals.md`, `sessions.md`, `action-items.md` — the hub's live session-continuity state | **No** — only the schema *templates* ship; the runtime instance is per-machine | Only the **same operator's hub**, across sessions in one release | taxonomy → **OPERATOR-INSTANCE** |
+| **Operator-instance runtime** — `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/` | `hub-state`: `pending-approvals.md`, `sessions.md`, `action-items.md` — the hub's live session-continuity state | **No** — only the schema *templates* ship; the runtime instance is per-machine | Only the **same operator's hub**, across sessions in one release | taxonomy → **OPERATOR-INSTANCE** |
 
 **Why the split exists:** the tracked corpus is the durable, shared record — every downstream spoke, a future operator auditing what was planned, and `gh release create` all need it, so it is committed. Hub-state runtime mutates dozens of times per release and has no cross-operator readership, so tracking it would produce micro-commit noise for no benefit — it stays operator-local. The practical consequence for tracing: **if you are not the operator who ran the release, the runtime hub-state is gone by design — but the entire durable record is in the tracked corpus.** See [`release/releases/README.md` § Classification](../release/releases/README.md) for the per-surface breakdown.
 
@@ -70,7 +70,7 @@ flowchart TD
     EVID -->|"cross-release context"| DIGEST["RELEASE_DIGEST.md<br/>→ version-family grouping"]
     EVID -->|"what the hub decided mid-run"| RT{"Are you the operator<br/>who ran this release?"}
 
-    RT -->|"yes"| HUBSTATE["operator-instance hub-state/vX.Y/<br/>(your machine only — not in git)"]
+    RT -->|"yes"| HUBSTATE["operator-instance hub-state/&lt;milestone-slug&gt;/<br/>(your machine only — not in git)"]
     RT -->|"no"| GONE["Runtime state is operator-local<br/>by design — use the tracked record above"]
 
     PR --> REV{"Row (or a later row)<br/>says 're-versioned'?"}
@@ -88,7 +88,7 @@ flowchart TD
 
 **Retention differs by home.** Tracked surfaces are *current-only + git history* — one canonical file, and `git log --follow <path>` is the version database (no snapshot directory). Operator-instance hub-state is *ephemeral* — it is not retained anywhere shared; once the release closes and the machine moves on, it is gone. So: trace **durable** facts from the tracked corpus; do not expect to reconstruct a past run's live hub decisions unless you were the one running it.
 
-**Overlapping releases don't collide.** `RELEASE_LOG` / `RELEASE_INDEX` / `RELEASE_DIGEST` are **append-only** — two releases in flight each append their own row, so distinct rows never merge-conflict. Version collisions (two concurrent claims on one number) are resolved by **re-versioning**, and the reassignment is recorded in `RELEASE_REVERSIONS.md` — that is why a few historical `RELEASE_LOG` rows read `(unrecoverable — re-versioned)`. hub-state is namespaced per version (`hub-state/vX.Y/`), so overlapping runs keep separate runtime state.
+**Overlapping releases don't collide.** `RELEASE_LOG` / `RELEASE_INDEX` / `RELEASE_DIGEST` are **append-only** — two releases in flight each append their own row, so distinct rows never merge-conflict. Version collisions (two concurrent claims on one number) are resolved by **re-versioning**, and the reassignment is recorded in `RELEASE_REVERSIONS.md` — that is why a few historical `RELEASE_LOG` rows read `(unrecoverable — re-versioned)`. hub-state is namespaced per **milestone slug** (`hub-state/<milestone-slug>/`) — which is exactly why overlapping runs keep separate runtime state: two concurrent releases can rule-compute the same provisional version, but never the same slug. A small number of directories predate that convention and are keyed on a version; the resolver reads the slug form first and falls back to the version form, which it treats as read-only.
 
 ## Related References
 

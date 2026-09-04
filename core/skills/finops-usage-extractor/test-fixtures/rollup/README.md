@@ -13,7 +13,7 @@ artifact on this public repo).
 
 ## What each fixture exercises
 
-`usage.jsonl` is a synthetic **store** (the extractor's output) — a `meta` line plus eight
+`usage.jsonl` is a synthetic **store** (the extractor's output) — a `meta` line plus fourteen
 `session` records, one per resolver outcome:
 
 | session_id (…000000000N) | Attribution tier exercised | Expected `(work_item, tier)` |
@@ -26,11 +26,46 @@ artifact on this public repo).
 | …006 | T4 unattributed — auto `agent-*` branch, no hit | `(unattributed, unattributed)` |
 | …007 | FM-1 multi-branch — `branch_switch: true` | `(multi-branch, unattributed)` |
 | …008 | T-PR opt-in — `fix/*` branch resolved via the PR stub | `(#5151, pr-resolved)` |
+| …009 | T3 join against a **slug-keyed** hub-state dir (sensitivity) | `(milestone:synthetic-slug-release, hub-state-lineage)` |
+| …010 | T2-slug — slug-primary `release/<slug>` branch, no hub-state row | `(milestone:synthetic-slug-branch, branch-milestone)` |
+| …011 | **Specificity** — slug-keyed `chore/` branch is deliberately unparsed | `(unattributed, unattributed)` |
+| …012 | **Shadowing guard** — branch parses `<slug>-suffix`, hub-state authors `<slug>` | `(milestone:synthetic-slug-release, hub-state-lineage)` |
+| …013 | **Sticky header bind** — hub-state file carrying the deployed managed-section fences | `(milestone:synthetic-managed-fence, hub-state-lineage)` |
+| …014 | **Malformed-table rejection** — worktree is the prose column label a hardcoded `$5` read emitted | `(unattributed, unattributed)` |
+
+Rows …009–…014 exercise **run-key recognition**. Run keys are slug-primary (ADR-092) with
+legacy `vX.Y` read-only, on two independent axes — the hub-state directory basename and the
+git branch name — and the shipped `v[0-9]` name-shaped predicates recognised neither slug
+form. The directory axis is now recognised **structurally** (table shape, not name shape)
+and the branch axis carries a slug arm ordered strictly **below** the authored hub-state
+tier.
 
 Supporting synthetic surfaces:
 
 - `hub-state/v9.9/sessions.md` — Surface C; its `worktree` column joins `…004`'s
-  `session.worktree` to milestone `v9.9`.
+  `session.worktree` to milestone `v9.9`. **This is the legacy-run-key arm — keep it.**
+  Together with the slug-keyed directories it is the two-form proof.
+- `hub-state/synthetic-slug-release/sessions.md` — the canonical **slug-keyed** run
+  directory. Carries `…009`'s join, `…012`'s shadowing-guard join, and one half of the
+  collision pair.
+- `hub-state/synthetic-collision-peer/sessions.md` — declares the same `worktree` key
+  (`collide-wt`) as the directory above, so one key is claimed by two milestones. No
+  session uses it, so the collision is observable without perturbing a graded resolution.
+  The map builder sorts its `find` output so last-wins is deterministic and emits one
+  stderr `WARNING:` so it is visible.
+- `hub-state/synthetic-malformed/sessions.md` — **must contribute zero map entries.** It
+  reproduces both live malformation shapes: a pipe table with no `session_id` header (the
+  pre-fix `$0 !~ /session_id/` skip cannot skip it, so a hardcoded `$5` read the column
+  label `Action` as a worktree), and a conforming header followed by a width-mismatched
+  data row. `find -name sessions.md` matches a filename, not a well-formed table.
+- `hub-state/synthetic-managed-fence/sessions.md` — the **sticky-header-bind** arm. This is
+  the *deployed* shape of a hub-state file, not the in-repo `.template` shape: the
+  composition step wraps the template body in managed-section and operator-additions
+  fences at install, so those non-pipe lines sit between the table's separator row and its
+  first data row. A parser that unbinds its column reference on a non-pipe line emits
+  nothing for such a file — silently, with no error and no exit code. The in-repo template
+  carries no fences, so this property is unreachable from tracked artifacts and only a
+  fixture reproducing the composed shape can regress it.
 - `pipeline-event-log.md` — Surface B; its decision row carries a `session:<composite>`
   payload whose worktree joins `…003`'s `session.worktree` to issue `#4242`. It also carries
   an ignored-event-type row and a no-matching-session row to exercise filtering.

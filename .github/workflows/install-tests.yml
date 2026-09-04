@@ -27,7 +27,7 @@ name: Install tests
 #   - test_notify_version_skew.sh  SessionStart version-skew hook resolution
 #                                  (both layouts x skew/equal + reaches-compare proof)
 #   - test_version_stamping.sh     .version release-cut ownership: phase_bump_version
-#                                  stage/skip/idempotency + Check 39 signed-minor-
+#                                  stage/skip/monotonicity + Check 39 signed-minor-
 #                                  distance verdict algorithm (#1643)
 #   - test_agent_tools_conformance.sh  deploy.sh Check 46 (agent-tools-list-
 #                                  conformance) scan logic: ≥2 findings on a bad
