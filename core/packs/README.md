@@ -135,9 +135,21 @@ reason rather than by omission:
 | `kanban` | **left as-is** | Same grounds as `scrum`: `role = "archetype"`, `applies_to = "Kanban"`, one archetype-keyed kind. |
 
 The reason is stated here, in the pack corpus's own governing document, rather than in
-each pack's header comment — a header comment would state it alongside the pack and
-break the byte-identity the extension guarantees for every shipped pack. All three
-files are byte-identical to their pre-change state.
+each pack's header comment, because a rule stated once at the governing document is a
+rule; the same rule restated in three manifest headers is three copies that drift
+independently of it. That is the pointer discipline this file already applies to the
+grammar and to the composition order.
+
+**"Left as-is" scopes to the kit extension and to nothing else.** The extension
+migrated no shipped pack — no `role`, no `applies_to`, no `extends` and no kind of any
+shipped pack moved because kits became expressible. It is a separate matter whether a
+manifest has changed for some *other* reason since, and it has: the methodology packs'
+criteria and field content is authored by its own change, so `scrum` and `kanban` are
+no longer byte-identical to their pre-extension state and `_common` still is. An
+earlier form of this paragraph asserted byte-identity for all three as a standing
+guarantee. It is corrected rather than annotated, because a governance file that
+asserts an immutability its own corpus falsifies teaches a reader to distrust the rest
+of it.
 
 ## Kit selection and precedence
 
@@ -254,6 +266,60 @@ states that neither eligibility limb held — and `--validate-packs` rejects tha
 outright under `PACK-P05` (`role = "kit"` requires `applies_to = "*"`), so the state is
 unreachable in a conforming corpus. No joint-emptiness rule is added on the selection
 axis; the constraint that binds it is `SEL-RESOLVE` above.
+
+### A pack's default is the kind set it declares
+
+**A methodology pack's default is the kind set it declares.** When no kit is selected,
+a pack contributes exactly its own `[[kinds]]` — that is the pack's default, it needs
+no pointer, and it is what the resolution returns. A selected kit composes *above* it
+and wins a colliding `kind_id`; a project's own override wins above that. **A pack does
+not name a kit**, because a kit is deployment data and none ships in this corpus.
+
+The rule quantifies over packs instead of enumerating them, so a seventh methodology
+pack adds no row here, no fixture and no check. Nothing in a pack header points at a
+default: the default *is* the declaration, and a pointer would make it less local
+rather than more findable. Why the alternative — a pack-header field naming a kit — is
+rejected, and what would make such a field earn its place later, is decided in
+[ADR-187](../ADRs/ADR-187-pack-default-is-the-declared-kind-set.md).
+
+**Three states, and the third is not the first.** These are the three configurations a
+reader must hold apart to use the resolver correctly. Composition order, the merge
+model and the collision rule are defined once in
+[`## The role and extends model`](#the-role-and-extends-model) above and are not
+restated here.
+
+| State | What the resolution contains | Who is in it |
+|---|---|---|
+| **No kit selected** — the deployment's kit field is empty and no project overrides it | the resolved methodology pack's own kinds, and nothing else | a deployment that tracks no work-item kit; the pre-kit arrangement, and the state every shipped deployment is in today |
+| **A kit is selected** — a kit is named at the deployment or project rung | the methodology pack's kinds **plus** the selected kit's, with the kit winning any colliding `kind_id` | a deployment that tracks a kit, with the kit composing above the pack |
+| **Unnarrowed** — the diagnostic is run with no kit named | **every** kit in the read root, each eligible under **every** archetype and each outranking the methodology pack | a reader inspecting a pack root, **not** a deployment state — and *not* the same thing as the first row |
+
+The third row is the one that surprises. Eligibility is a two-limb match: the first limb
+is a byte-identical archetype match, so no methodology pack ever reaches a foreign
+archetype; the second admits any pack that is methodology-neutral **and** carries the
+kit role. The second limb tests the examined pack's own properties and never the
+requested archetype, so it fires under every archetype, and composition rank then places
+a kit above a methodology pack. Naming a kit *narrows* that eligible set; it never
+grants eligibility. Over this corpus the first and third rows coincide, because no kit
+ships — but they are different states, and they diverge the moment a deployment authors
+one kit.
+
+**Registered gap — the diagnostic cannot express "resolved to no kit."** Stated in the
+gate-coverage register's form so it is a countable row rather than a silent absence:
+
+| | |
+|---|---|
+| **Invariant** | A deployment that has deliberately selected no kit resolves to the methodology pack's own kinds alone. |
+| **Enforcing gate** | *(empty — a named gap)*. The kit argument's domain is a pack id or absent, and absent means *unnarrowed*, not *none selected*. Over a kit-bearing root there is no invocation that returns the methodology pack's kinds alone: naming the kit leaves the kit winning, omitting the argument leaves the kit winning, and both an empty value and the literal `none` fail loudly under `SEL-RESOLVE` because each is read as a selection naming an absent pack. |
+| **Declared observable** | Over a root holding at least one methodology-neutral kit, an unnarrowed resolution returns that kit's rows and lets it win a colliding `kind_id` with nothing selected. Pinned executably by a read-only self-test arm over the shipped selection fixture root, so the behaviour is a green arm that must be **edited** when the missing arity lands — not a prose sentence nobody re-reads. |
+
+This is the same class `SEL-RESOLVE` closed one step over: it separated a *failed*
+selection from an *absent* one, and left a *deliberately-empty* selection sharing an
+invocation with an *unnarrowed* one. The gap is registered rather than closed here
+because the fix is new argument arity on this diagnostic — which reads no configuration
+file and is deliberately not a second resolver — and because the state is unreachable
+over a corpus that ships zero kits, so a change made now would ship untested against any
+real deployment kit.
 
 ## What lives where
 
