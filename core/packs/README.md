@@ -281,6 +281,27 @@ axis; the constraint that binds it is `SEL-RESOLVE` above.
 - The **best-practice content** in each pack is sourced from the archetype's
   authoritative body of practice (for example the Scrum Guide, INVEST, the Kanban
   Method) — never reverse-engineered from any one deployment's issue tracker.
+  **Each declaration says so in the manifest**, through the `source` key the
+  grammar requires on every criteria check entry and every kind-specific field
+  declaration, and on a `[kinds.criteria.*]` or `[kinds.fields]` table whose
+  array is present and empty — where it states the practice basis for the
+  emptiness. Two worked lines: at the entry altitude,
+  `source = "Scrum Guide 2020 — Definition of Done"`; at the block altitude,
+  `source = "Kanban Method (Anderson 2010) — no readiness practice is prescribed at card level"`.
+  **The value convention — and it is a convention, not a grammar rule.** Name the
+  work, its edition or year, and the locator where the work has one. The locator
+  is deliberately not mandated: INVEST is a six-letter acronym with no sections,
+  so a required section separator would forbid an authentic citation of it —
+  `source = "INVEST (Wake 2003) — V, Valuable"` is a complete citation exactly as
+  it stands. What the value must never be is a repository path, an issue
+  template, a label name, or this deployment's own tracker: a declaration whose
+  stated origin is the deployment that consumes it has recorded a local
+  convention, which is the thing this key exists to tell apart from a body of
+  practice. Requiredness, the two altitudes and the no-inheritance rule are
+  defined in the grammar and **are not restated here**; read its boundary
+  statement alongside them, which says that `source` makes a provenance claim
+  visible and locatable and does not make it true — checking a value against the
+  work it names is a person's job, and no gate does it.
 - **Organizational tiers** are owned by the entity layer; a pack — a kit included —
   types the work and never redefines them. Portfolio, Program, Project and
   Milestone/Workstream are container entities with their own identity, lifecycle and
