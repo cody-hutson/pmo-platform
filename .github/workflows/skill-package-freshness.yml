@@ -177,8 +177,11 @@ jobs:
       - name: Run package-freshness check (single check, via the deploy.sh engine)
         id: check
         # THIN caller. The probe reads .github/skill-package-freshness.enforce itself:
-        # warn maps STALE to exit 2 (advisory), enforce to exit 1 (blocking); an
-        # unexpected verdict fail-closes to 1. The probe never exits 0 on STALE.
+        # warn maps STALE to exit 2 and an unevaluated run to exit 3 (both advisory),
+        # enforce maps BOTH to exit 1 (blocking); an unexpected verdict fail-closes to 1.
+        # The probe never exits 0 on STALE and never exits 0 on an unevaluated run. This
+        # step re-parses no sentinel: the mode rides the integer. See the contract table
+        # on cmd_check_package_freshness in core/deploy/deploy.sh (the authoring home).
         run: |
           set -uo pipefail
           set +e
@@ -209,12 +212,29 @@ jobs:
               echo "::warning::package-freshness: stale .skill package reported in WARN mode — not blocking (flip the enforce sentinel token to block)"
               exit 0
               ;;
+            3)
+              {
+                echo "## :grey_question: skill package-freshness did NOT RUN (warn mode — not blocking)"
+                echo ""
+                echo "The staged-rebuild content comparison could not execute, so NOTHING was measured."
+                echo "This run establishes neither freshness nor staleness. Do not read it as a pass:"
+                echo "a green job here means the gate did not answer, not that the answer was yes."
+                echo "Usual cause: the packager's import chain does not resolve for /usr/bin/python3,"
+                echo "or unzip is absent. The prerequisite steps above are what normally catch that."
+                echo "This is ADVISORY while .github/skill-package-freshness.enforce holds a non-enforce"
+                echo "token; under enforce the probe exits 1 instead and this job fails."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::warning::package-freshness: content verdict NOT EVALUATED — nothing was measured this run (advisory in WARN mode; blocking once the enforce sentinel is flipped)"
+              exit 0
+              ;;
             *)
               {
                 echo "## :x: skill package-freshness gate FAILED (enforce mode) or fail-closed"
                 echo ""
                 echo "A rostered skill's .skill package is stale with the enforce sentinel active,"
-                echo "OR the verdict was unexpected (fail-closed). Probe exit code: $RC."
+                echo "OR the content comparison did not run at all with that sentinel active (an"
+                echo "unevaluated gate does not pass under enforce), OR the verdict was unexpected"
+                echo "(fail-closed). Probe exit code: $RC."
                 echo "Rebuild via core/deploy/tools/build-skill-packages.sh <skill> and commit the package + .sha256 sidecar before merge."
               } | tee -a "$GITHUB_STEP_SUMMARY"
               exit 1
