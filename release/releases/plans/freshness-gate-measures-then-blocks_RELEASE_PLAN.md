@@ -2,7 +2,7 @@
 title: Release Plan — freshness-gate-measures-then-blocks (the freshness gate measures, then blocks)
 type: release-plan
 plan_type: release
-status: EXECUTING
+status: ACTIVE
 release: version-less (slug-keyed; no tag claimed)
 milestone: 385-freshness-gate-measures-then-blocks
 release_class: cross-cutting
