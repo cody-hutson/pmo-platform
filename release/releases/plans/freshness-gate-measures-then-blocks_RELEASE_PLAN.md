@@ -634,6 +634,8 @@ This release makes the pre-merge `.skill` package-freshness gate actually measur
 - **D-6181Arm:** Arm A (flip), conditioned on sentinel → proof-while-non-required → byte-exact revert → merge → register post-merge.
 - **D-Blocking:** `NOT-EVALUATED` is advisory under `warn` and blocking under `enforce`, expressed through the sentinel rather than through a hard-coded integer, preserving the in-tree invariant that the probe is the sentinel's single reader.
 - **D-AC3Card:** #6998 was milestoned into this release, making the Tier-0 registration depend on it.
+- **D-NpmEntry:** the npm ecosystem is registered with `open-pull-requests-limit: 0`. Registration is what makes `SECURITY.md`'s two label claims true and the npm security surface audit-discoverable; the zero limit disables version updates entirely, so the entry adds no new PRs that would themselves stale a package and meet the now-required gate. Security updates ignore the limit and still arrive — they are the traffic being labelled.
+- **D-AdminOverride:** the admin-merge exception is written into `SECURITY.md`, framed explicitly as non-routine — conditioned on the vulnerability plainly outweighing a stale package, requiring a rationale recorded on the PR, and stating the property that keeps it from becoming a silent bypass (the workflow also runs on push to `main`, so a bypassed merge reddens `main` on the next run and the rebuild is still owed). Leaving it undocumented was the alternative and was rejected on this release's own thesis: declared must match actual.
 
 ### Reversibility
 
