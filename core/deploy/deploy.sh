@@ -4752,9 +4752,27 @@ _write_operations_rules_index() {
     # The `|| true` is bound to the whole pipeline (a no-match grep is non-zero, and
     # `set -o pipefail` would otherwise propagate that) — a missing purpose: line is a
     # degraded index entry, never a failed deploy.
+    # NO FIRST-PERIOD TRUNCATION. This read used to end in `cut -d'.' -f1`, which
+    # kept only the text BEFORE the first period — and because the printf below
+    # re-appends one, a truncated entry rendered as a well-formed sentence. That is
+    # the worst shape a corruption can take: a `purpose:` reading "… the rule. It
+    # binds X." emitted "… the rule." and nothing downstream could tell the
+    # difference between that and a genuinely one-sentence purpose.
+    #
+    # It was invisible because every conduct-class member's purpose happens to be a
+    # single sentence today, so the truncation had nothing to cut. Membership is an
+    # admission decision made per rule, not a style rule about sentence count, so
+    # that is a coincidence and not a constraint — the next multi-sentence purpose
+    # admitted would have shipped a silently-shortened index entry.
+    #
+    # What replaces it strips ONE trailing period (plus trailing whitespace) so the
+    # printf's own `.` reproduces it — byte-identical output for every current
+    # member, which is the no-regression guarantee, while every internal period now
+    # survives. Asserted by --self-test group RI (RI-1 truncation, RI-2 the
+    # byte-identity control).
     _purpose=""
     if [[ -f "$_src" ]]; then
-      _purpose="$(grep -m1 '^purpose:' "$_src" 2>/dev/null | /usr/bin/sed 's/^purpose:[[:space:]]*//' | /usr/bin/cut -d'.' -f1 || true)"
+      _purpose="$(grep -m1 '^purpose:' "$_src" 2>/dev/null | /usr/bin/sed -e 's/^purpose:[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/\.$//' || true)"
     fi
     if [[ -n "$_purpose" ]]; then
       printf -- '- `%s` — %s.\n' "$_base" "$_purpose" >> "$_idx"
@@ -16658,6 +16676,135 @@ Nothing measured yet.
 EOF
 )"
 
+  # ─── assertion group RI (operations-index purpose rendering, F-05) ───────────
+  #
+  # Drives the REAL _write_operations_rules_index — the function the carrier calls —
+  # against a sandbox pair set, so there is no second renderer here to drift from the
+  # shipped one. The mirror_pair_set override is declared INSIDE a subshell, so it
+  # cannot leak into a later group or into the live carrier.
+  #
+  # WHY EXACT-LINE CONTAINMENT AND NOT `| grep -qxF`: a pipe into a short-circuiting
+  # reader is the class the repo-integrity sigpipe-idiom gate reddens a PR for, and an
+  # assertion helper is not exempt from it. The comparison below is pure bash.
+  echo "self-test: starting assertion group RI (operations-index purpose rendering, F-05)" >&2
+
+  _ri_render() {
+    # $1 = sandbox dir holding the fixture sources and a `rows` pair-set file.
+    # Echoes the rendered index.
+    local _d="$1"
+    (
+      mirror_pair_set() { /bin/cat "$_d/rows"; }
+      _write_operations_rules_index "$_d"
+    )
+    /bin/cat "$_d/_operations-index.md"
+  }
+
+  _ri_assert() {
+    # $1 = arm id · $2 = the index line that MUST appear verbatim · $3 = rendered index
+    local _nl=$'\n'
+    if [[ "${_nl}${3}${_nl}" != *"${_nl}${2}${_nl}"* ]]; then
+      echo "FAIL: $1 expected verbatim index line:"
+      echo "        want: $2"
+      echo "        rendered index was:"
+      echo "$3"
+      failures=$((failures+1))
+    fi
+  }
+
+  _ri_refute() {
+    # $1 = arm id · $2 = a substring that MUST NOT appear · $3 = rendered index
+    if [[ "$3" == *"$2"* ]]; then
+      echo "FAIL: $1 index must NOT contain [$2] but it did"
+      failures=$((failures+1))
+    fi
+  }
+
+  _ri_refute_line() {
+    # $1 = arm id · $2 = a WHOLE LINE that must NOT appear · $3 = rendered index.
+    # Line-exact, not substring: the truncated rendering is a strict PREFIX of the
+    # correct one, so a substring refutation would fire on the correct output too.
+    local _nl=$'\n'
+    if [[ "${_nl}${3}${_nl}" == *"${_nl}${2}${_nl}"* ]]; then
+      echo "FAIL: $1 index must NOT carry the line [$2] but it did"
+      failures=$((failures+1))
+    fi
+  }
+
+  local _rit; _rit="$(/usr/bin/mktemp -d -t opsindex-selftest.XXXXXX)"
+  /bin/mkdir -p "$_rit/out"
+
+  # RI-1 fixture — THE REGRESSION ARM. Two sentences and an embedded version token,
+  # so the first period sits well before the end. Under the retired `cut -d'.' -f1`
+  # this rendered as "The rule that binds X." — a well-formed sentence, which is why
+  # the corruption was undetectable from the output alone.
+  /bin/cat > "$_rit/multi.md" <<'EOF'
+---
+purpose: The rule that binds X. It also binds Y, and v1.2 is named in it.
+---
+EOF
+  # RI-2 fixture — THE NO-REGRESSION CONTROL. One sentence, one trailing period:
+  # the shape every conduct-class member has today. Its rendering must be
+  # byte-identical to what the pre-fix body produced, or the fix moved live output.
+  /bin/cat > "$_rit/single.md" <<'EOF'
+---
+purpose: A single-sentence purpose with a trailing period.
+---
+EOF
+  # RI-3 fixture — no `purpose:` key at all: the degraded bare form.
+  /bin/cat > "$_rit/nopurpose.md" <<'EOF'
+---
+title: no purpose key here
+---
+EOF
+  # RI-4 fixture — engineering class: must not reach the index at all.
+  /bin/cat > "$_rit/eng.md" <<'EOF'
+---
+purpose: An engineering-class rule. It must never appear in the operations index.
+---
+EOF
+  # RI-5 fixture — trailing whitespace after the period, guarding the added
+  # `s/[[:space:]]*$//` from leaving a space before the printf's own period. Written
+  # with printf, not a heredoc: the trailing blanks are the point of the fixture and
+  # an editor or a whitespace-stripping hook would silently remove them from a
+  # heredoc body, turning this arm into a duplicate of RI-2 without failing.
+  printf -- '---\npurpose: Trailing whitespace follows this period.   \n---\n' > "$_rit/ws.md"
+  /bin/cat > "$_rit/rows" <<EOF
+$_rit/multi.md:$_rit/out/multi-sentence.md:conduct
+$_rit/single.md:$_rit/out/single.md:conduct
+$_rit/nopurpose.md:$_rit/out/nopurpose.md:conduct
+$_rit/eng.md:$_rit/out/engineering-only.md:engineering
+$_rit/ws.md:$_rit/out/ws.md:conduct
+EOF
+
+  local _ri_out; _ri_out="$(_ri_render "$_rit")"
+
+  # RI-1 — the whole purpose survives, internal periods and all. THIS is the arm that
+  # fires if the truncation is reintroduced.
+  _ri_assert "RI-1 internal periods survive" \
+    '- `multi-sentence.md` — The rule that binds X. It also binds Y, and v1.2 is named in it.' \
+    "$_ri_out"
+  # RI-1b — DISCRIMINATION: the truncated line must be absent as a WHOLE LINE.
+  # Without it, a body emitting both the truncated and the full line would satisfy
+  # RI-1; with substring matching instead of line matching it would fire on the
+  # correct output, since the truncation is a strict prefix of the full rendering.
+  _ri_refute_line "RI-1b truncated form absent" \
+    '- `multi-sentence.md` — The rule that binds X.' "$_ri_out"
+  # RI-2 — the no-regression control: unchanged for the shape every live member has.
+  _ri_assert "RI-2 single-sentence unchanged (no-regression control)" \
+    '- `single.md` — A single-sentence purpose with a trailing period.' \
+    "$_ri_out"
+  # RI-3 — SPECIFICITY: a source with no purpose: key renders the bare form, no
+  # em-dash and no period. An arm set that passed this too would be matching anything.
+  _ri_assert "RI-3 absent purpose renders the bare form" \
+    '- `nopurpose.md`' "$_ri_out"
+  # RI-4 — the conduct/engineering class filter still holds.
+  _ri_refute "RI-4 engineering class excluded" 'engineering-only.md' "$_ri_out"
+  # RI-5 — trailing whitespace is stripped, so exactly one period closes the line.
+  _ri_assert "RI-5 trailing whitespace stripped" \
+    '- `ws.md` — Trailing whitespace follows this period.' "$_ri_out"
+
+  /bin/rm -rf "$_rit"
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failure(s))" >&2
     return 1
@@ -16682,6 +16829,8 @@ EOF
   echo "  deployment-status emitter validated (#4215, group DS):" >&2
   echo "    DS-1 well-formed slug OK / DS-2 empty + pipe-bearing + whitespace-bearing slugs rejected / DS-3 outcome derivation incl. DS-3c the degraded-but-not-in-FAILURES union term (FAILURES is the exit-code oracle, not the deploy-health oracle) / DS-4 SILENCE DEFAULT — absent --release emits ZERO rows, DS-4b malformed slug likewise / DS-5 CONTROL — the same call WITH a slug emits exactly 1 row carrying the fixed 10-column contract / DS-6 escalated row survives with result:FAIL + DS-6c payload pipe-forging guard + DS-6d 300-char bound / DS-7 THE OBSERVING STEP — targets-with-no-flag WARNs, zero-targets does NOT (honest no-op), release-stamped does NOT / DS-8 exactly 4 emitting subtypes (deploy-rules-mirror joined when its producer shipped), the one remaining producer-less subtype never emitted, with DS-8c a firing control arm and DS-8d a discrimination arm proving the narrowed detector still separates the two / DS-9 a failing event writer must not fail the deploy / DS-10 the CANONICAL writer accepts all four subtypes via --dry-run, and rejects an out-of-enum subtype and a version-shaped release key (two control arms). Every write in this group routes through the DS_WRITER stub seam — no assertion can append to the real append-only log." >&2
   echo "  G1-03 evidence shapes validated (#4923, group EV):" >&2
+  echo "  operations-index purpose rendering validated (F-05, group RI):" >&2
+  echo "    RI-1 a multi-sentence purpose survives whole — the arm that fires if the retired first-period truncation (cut -d . -f1) returns / RI-1b DISCRIMINATION, the truncated line must be absent as a WHOLE LINE (substring refutation would fire on the correct output, since the truncation is a strict prefix of it) / RI-2 NO-REGRESSION CONTROL — the one-sentence shape every live conduct member has renders byte-identically to the pre-fix body, so the fix is proved not to have moved live output / RI-3 SPECIFICITY — a source carrying no purpose: key renders the bare form with no em-dash, so the set is not matching anything / RI-4 the conduct/engineering class filter still excludes engineering rows / RI-5 trailing whitespace is stripped so exactly one period closes the line. Every arm drives the real _write_operations_rules_index the carrier calls, through a subshell-scoped mirror_pair_set override — no second renderer to drift." >&2
   echo "    EV-1 six-marker probe record PASSes with zero bracket tokens (the shape this card admits) / EV-2 the >=2 BOUNDARY holds at exactly two markers (turns red if the count is raised) / EV-3 no Evidence section FAILs / EV-4 DISCRIMINATION — all six marker words as running prose still FAIL, so prose ABOUT evidence is not evidence / EV-5 an evidence-free Evidence section FAILs (the falsification arm: the widened predicate is not a never-FAIL check) / EV-6 shape (a) bracket-only still PASSes (regression) / EV-7 a lone label-position marker FAILs, killing the >=1 mutant / EV-8 the SAME token as EV-6 placed OUTSIDE the Evidence section FAILs, killing the whole-body mutant. Every arm drives _g1_03_evaluate, the same function Check 22 calls — no parallel reimplementation to drift." >&2
   return 0
 }
