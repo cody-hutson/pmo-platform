@@ -11,6 +11,10 @@ name: Skill package content-freshness (pre-merge gate)
 #   falsification: edit a skills/*/SKILL.md (or references/) without rebuilding the
 #                  .skill package -> the probe reports STALE and exits 2 (warn-mode:
 #                  job green with a ::warning:: annotation) or 1 (enforce: job red).
+#                  Break the staged rebuild instead (remove the packager's dependency)
+#                  -> the probe reports NOT-EVALUATED and exits 3 (warn-mode: green
+#                  with a ::warning::) or 1 (enforce: job red) — an unmeasured roster
+#                  is a withheld verdict, never a clean one, and never exit 0.
 #                  It never exits 0 on STALE. Rebuild via build-skill-packages.sh
 #                  and commit the package + .sha256 sidecar -> FRESH, exit 0, green.
 #                  Second arm, on the OTHER input vector: edit a TEMPLATE_SYNC_MAP
@@ -214,28 +218,33 @@ jobs:
               ;;
             3)
               {
-                echo "## :grey_question: skill package-freshness did NOT RUN (warn mode — not blocking)"
+                echo "## :grey_question: skill package-freshness could NOT BE MEASURED (not a clean result)"
                 echo ""
-                echo "The staged-rebuild content comparison could not execute, so NOTHING was measured."
-                echo "This run establishes neither freshness nor staleness. Do not read it as a pass:"
-                echo "a green job here means the gate did not answer, not that the answer was yes."
-                echo "Usual cause: the packager's import chain does not resolve for /usr/bin/python3,"
-                echo "or unzip is absent. The prerequisite steps above are what normally catch that."
-                echo "This is ADVISORY while .github/skill-package-freshness.enforce holds a non-enforce"
-                echo "token; under enforce the probe exits 1 instead and this job fails."
+                echo "The staged-rebuild content arm did not conclude for part of the rostered skill set,"
+                echo "so this run cannot certify those packages either fresh or stale. It is NOT a pass."
+                echo "Cause and denominator are named in the probe output above."
+                echo ""
+                echo "Exit 3 is reachable only while the enforce sentinel holds a non-enforce token."
+                echo "Under enforce the same verdict exits 1 and this job is RED."
               } | tee -a "$GITHUB_STEP_SUMMARY"
-              echo "::warning::package-freshness: content verdict NOT EVALUATED — nothing was measured this run (advisory in WARN mode; blocking once the enforce sentinel is flipped)"
+              echo "::warning::package-freshness: NOT-EVALUATED — the content arm did not run for part of the roster; this is a withheld verdict, never a clean one"
               exit 0
               ;;
             *)
               {
                 echo "## :x: skill package-freshness gate FAILED (enforce mode) or fail-closed"
                 echo ""
-                echo "A rostered skill's .skill package is stale with the enforce sentinel active,"
-                echo "OR the content comparison did not run at all with that sentinel active (an"
-                echo "unevaluated gate does not pass under enforce), OR the verdict was unexpected"
-                echo "(fail-closed). Probe exit code: $RC."
-                echo "Rebuild via core/deploy/tools/build-skill-packages.sh <skill> and commit the package + .sha256 sidecar before merge."
+                echo "One of three things happened:"
+                echo "  (a) a rostered skill's .skill package is stale with the enforce sentinel active;"
+                echo "  (b) the content arm COULD NOT BE MEASURED with the enforce sentinel active"
+                echo "      (NOT-EVALUATED — a withheld verdict, never a clean one); or"
+                echo "  (c) the verdict was unexpected (fail-closed)."
+                echo "Probe exit code: $RC."
+                echo ""
+                echo "Remedy for (a): rebuild via core/deploy/tools/build-skill-packages.sh <skill> and"
+                echo "commit the package + .sha256 sidecar before merge."
+                echo "Remedy for (b): resolve the dependency / interpreter cause the probe named above,"
+                echo "then re-run — do not merge on an unmeasured gate."
               } | tee -a "$GITHUB_STEP_SUMMARY"
               exit 1
               ;;

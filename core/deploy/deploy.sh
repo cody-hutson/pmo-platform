@@ -5921,6 +5921,7 @@ cmd_check() {
   # emits per-skill detail to stderr; this block maps the verdict to the deploy-time
   # emit. Always-enforce: each stale skill increments ISSUES (byte-identical accounting).
   local c7_verdict c7_tok c7_rest c7_count
+  local c7_ne_unmeasured c7_ne_tail c7_ne_total c7_ne_reason
   c7_verdict="$(_c7_compute_verdict "lifecycle")"
   c7_tok="${c7_verdict%% *}"
   case "$c7_tok" in
@@ -5935,28 +5936,19 @@ cmd_check() {
       ISSUES=$((ISSUES + c7_count))
       ;;
     NOT-EVALUATED)
-      # THE MEASUREMENT DID NOT RUN — a withheld verdict, never a clean one, and
-      # never a stale-package finding either. Routed to flag_not_evaluated (hoisted
-      # to top level for exactly this caller: see its header) rather than to the
-      # fail-closed *) arm below, which would report an "unexpected verdict" for a
-      # state the engine now emits deliberately.
-      #
-      # DEPLOY-TIME POSTURE IS ADVISORY, AND THE ASYMMETRY WITH THE CI SURFACE IS
-      # INTENTIONAL. Check 7 is always-enforce for what it MEASURED, but a
-      # comparison that never executed cannot establish a violation; incrementing
-      # ISSUES here would fail a developer's local --check for a missing packager
-      # rather than for a stale package, which is the false-positive class that
-      # makes a gate get switched off. The blocking decision for this state lives
-      # at the CI surface (cmd_check_package_freshness), which is the single reader
-      # of the .github/skill-package-freshness.enforce sentinel and maps the state
-      # to exit 3 under warn and exit 1 under enforce.
-      #
-      # Precedence is STALE > NOT-EVALUATED > FRESH and is resolved by the engine
-      # in _c7_compute_verdict, not here: a run that measured SOME skills and found
-      # one stale emits STALE, so no partial outage can mask a real finding.
-      c7_rest="${c7_verdict#NOT-EVALUATED}"
-      c7_rest="${c7_rest# }"
-      flag_not_evaluated "package-freshness" "${c7_rest:-the staged rebuild could not execute, so no per-skill content comparison was performed}; the content-freshness verdict is WITHHELD for the unmeasured skills — this is not a clean result"
+      # "NOT-EVALUATED <unmeasured> <total> <reason>" — a measurement OUTAGE, not a
+      # finding. flag_not_evaluated carries no mode branch and no ISSUES increment, so
+      # an outage can never move ./deploy.sh --check's exit status (PV-7c). SENTINEL-
+      # BLIND BY DESIGN: this lifecycle arm has never read the enforce sentinel (the
+      # STALE arm above is always-enforce), and D-Blocking is scoped to the CI check the
+      # Release Outcome Statement names. Stale counter deliberately ABSENT (PV-7b).
+      c7_rest="${c7_verdict#NOT-EVALUATED }"     # "<unmeasured> <total> <reason>"
+      c7_ne_unmeasured="${c7_rest%% *}"
+      c7_ne_tail="${c7_rest#* }"                 # "<total> <reason>"
+      c7_ne_total="${c7_ne_tail%% *}"
+      c7_ne_reason="${c7_ne_tail#* }"
+      flag_not_evaluated "package-freshness" \
+        "the staged-rebuild content arm did not conclude for ${c7_ne_unmeasured} of ${c7_ne_total} rostered skill(s) (${c7_ne_reason}) — the committed packages may be stale and this run cannot tell; this is not a clean result"
       ;;
     *)
       log "  FAIL:  Check 7 — unexpected verdict: $c7_verdict"
@@ -16445,24 +16437,17 @@ cmd_check_release_corpus() {
 # A STALE verdict NEVER maps to exit 0 — a probe that says STALE in prose and OK in $?
 # invites a caller to conclude the opposite of the truth.
 #
-#   verdict   sentinel token   exit   caller reads it as
-#   -------   --------------   ----   ----------------------------------------------
-#   FRESH     any              0      pass — every rostered package is content-current
-#   STALE     != enforce       2      ADVISORY finding: not fresh, not blocking. Non-
-#                                     zero (so `-eq 0` cannot mis-read it) and not 1
-#                                     (so a caller can still tell advisory from block).
-#   STALE     enforce          1      BLOCKING finding — the gate must fail closed
-#   NOT-EVAL. != enforce       3      ADVISORY OUTAGE: the content comparison did not
-#                                     run, so NOTHING was measured. Distinct from 2 —
-#                                     2 means "measured, and it is stale"; 3 means "no
-#                                     measurement happened". Collapsing them would let
-#                                     a degraded run read as a stale-package finding,
-#                                     and a green run read as a clean one.
-#   NOT-EVAL. enforce          1      BLOCKING — under enforce, an unevaluated gate is
-#                                     not allowed to pass. A gate that cannot measure
-#                                     is exactly the state this whole check exists to
-#                                     stop reporting as green.
-#   <other>   any              1      unexpected verdict — fail-closed, sentinel-agnostic
+#   verdict         sentinel token   exit   caller reads it as
+#   -------------   --------------   ----   ----------------------------------------------
+#   FRESH           any              0      pass — every rostered package is content-current
+#   STALE           != enforce       2      ADVISORY finding: not fresh, not blocking
+#   STALE           enforce          1      BLOCKING finding — the gate must fail closed
+#   NOT-EVALUATED   != enforce       3      ADVISORY OUTAGE: the content arm did not run for
+#                                           part of the roster. Distinct from 2 so "stale"
+#                                           and "unmeasured" can never be conflated.
+#   NOT-EVALUATED   enforce          1      BLOCKING OUTAGE — a green gate must mean the arm
+#                                           actually ran. Cause is on stdout, not the integer.
+#   <other>         any              1      unexpected verdict — fail-closed, sentinel-agnostic
 #
 # The advisory value 2 follows the in-tree precedent of core/deploy/tools/cross-module-audit.sh
 # (2 = "violations detected (advisory)" vs 1 = BLOCKER). Enforcement POLICY stays in the
@@ -16498,17 +16483,21 @@ cmd_check_package_freshness() {
       exit 2
       ;;
     NOT-EVALUATED)
-      # THE PROBE DID NOT MEASURE. Sentinel-aware by INTEGER, never by re-reading the
-      # sentinel in the caller: enforcement policy stays here, in the probe that is the
-      # single reader of the .enforce file, and the CI workflow dispatches on $? alone
-      # (it holds zero sentinel-reading lines, by design — see the contract table above).
-      log "package-freshness: NOT-EVALUATED — ${verdict#NOT-EVALUATED } (the staged-rebuild content comparison did not run; see detail above)"
-      log "  NOTHING WAS MEASURED. This is a withheld verdict, not a clean one: no rostered package was compared against its committed baseline, so this run establishes neither freshness nor staleness."
-      log "  Usual cause: the packager's import chain cannot resolve for /usr/bin/python3, or unzip is absent. Fix the environment — do not read this as a pass."
+      log "package-freshness: NOT-EVALUATED — ${verdict#NOT-EVALUATED } (unmeasured / total / cause; per-skill detail above)"
+      log "  The staged-rebuild content arm did not conclude for part of the roster, so this run"
+      log "  cannot certify those packages either fresh or stale — this is not a clean result."
+      log "  Resolve the cause named above (CI dependency install / interpreter / unzip), then re-run."
+      # SENTINEL-AWARE, mirroring the STALE arm above. Under `enforce` a green gate must
+      # mean the content arm actually RAN, so an unmeasured roster blocks; under warn it
+      # is advisory on its OWN code, distinct from the STALE advisory 2, so no caller can
+      # conflate "stale" with "unmeasured". The *) arm below stays fail-closed: an
+      # UNRECOGNISED verdict is a tooling failure, a recognised outage is not — which is
+      # why the exit values coincide under enforce while the arms do not.
       if [[ "$pf_enforce" == "enforce" ]]; then
+        log "  ENFORCE-MODE (sentinel '$pf_enforce_file' token == enforce): an unmeasured roster BLOCKS — exit 1."
         exit 1
       fi
-      log "  WARN-MODE (sentinel '$pf_enforce_file' token != enforce): reporting the outage as ADVISORY — exit 3, the in-tree 'could not run' value, distinct from both the STALE advisory (2) and the blocking exit 1."
+      log "  WARN-MODE (sentinel '$pf_enforce_file' token != enforce): reporting the outage as ADVISORY — exit 3, non-zero and distinct from the STALE advisory 2. Flip the token to 'enforce' to block on it."
       exit 3
       ;;
     *)
@@ -17051,7 +17040,7 @@ main() {
       echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; exits 1 on an INCOMPLETE row set when enforce) (#1484)"
       echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; advisory/deploy-time-only; exits 1 on INCOMPLETE/NOSET when enforce) (#4026)"
-      echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, unexpected=1) (#2656)"
+      echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, NOT-EVALUATED=3 advisory / 1 when enforce, unexpected=1) (#2656)"
       echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"
       echo "  --report                     Structured report for Stage 13 verification evidence"
       echo ""

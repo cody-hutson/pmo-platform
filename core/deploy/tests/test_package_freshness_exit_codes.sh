@@ -14,16 +14,33 @@
 # THE CONTRACT UNDER TEST (authoring home: the cmd_check_package_freshness
 # header table in core/deploy/deploy.sh — this test is the executable mirror):
 #
-#   verdict   sentinel token   exit
-#   -------   --------------   ----
-#   FRESH     any              0
-#   STALE     != enforce       2     advisory: not fresh, not blocking
-#   STALE     enforce          1     blocking
-#   <other>   any              1     fail-closed, sentinel-agnostic
+#   verdict         sentinel token   exit
+#   -------------   --------------   ----
+#   FRESH           any              0
+#   STALE           != enforce       2     advisory: not fresh, not blocking
+#   STALE           enforce          1     blocking
+#   NOT-EVALUATED   != enforce       3     advisory OUTAGE: the content arm did not run
+#                                          for part of the roster. Distinct from 2 so
+#                                          "stale" and "unmeasured" cannot be conflated.
+#   NOT-EVALUATED   enforce          1     blocking OUTAGE — a green gate must mean the
+#                                          content arm actually ran
+#   <other>         any              1     fail-closed, sentinel-agnostic
+#
+# EVERY MODE-DEPENDENT ARM PINS ITS OWN SYNTHETIC SENTINEL, AND THAT IS A CONTRACT
+# TEST'S JOB RATHER THAN A CONVENIENCE. PF-2 and PF-6 assert the `!= enforce` row;
+# PF-3 asserts the `enforce` row. Read from the sandbox's COMMITTED sentinel, the
+# first two assert whatever posture the repository happens to hold today, so the
+# moment that token is flipped to `enforce` a correct probe returns 1, the arms
+# expecting 2 fail, and the suite reports a regression that is really a stale test
+# expectation. A committed posture is a deployment decision; the verdict -> exit
+# contract is an invariant. Each arm therefore hands probe_rc an explicit token and
+# the suite stays green across the flip in either direction. PF-1 / PF-4 / PF-5 /
+# PF-7 need no pin: they assert FRESH -> 0, which the `any` row makes
+# sentinel-independent by construction.
 #
 # THE ASSERTIONS
 #   PF-1  fresh sandbox, committed sentinel default    -> exit 0   (clean control)
-#   PF-2  one stale package, committed sentinel default -> exit 2  (the regression)
+#   PF-2  one stale package, SYNTHETIC `warn` sentinel  -> exit 2  (the regression)
 #   PF-2b that exit 2 was reached BY THE CONTENT VERDICT — the probe's own output
 #         carries the `source content changed since build (rebuilt hash ... !=
 #         committed baseline ...)` line naming the staled skill
@@ -37,7 +54,8 @@
 #         run the packager. Never silently absent, never counted as a pass, and
 #         never green: a skip fails the suite (see WHY A SKIP FAILS THE SUITE).
 #   PF-6  a TEMPLATE_SYNC_MAP canonical OUTSIDE every skills tree staled with no
-#         rebuild -> exit 2   (the injected-canonical vector)
+#         rebuild, SYNTHETIC `warn` sentinel -> exit 2 (the injected-canonical
+#         vector)
 #   PF-7  that same canonical restored from its pristine snapshot -> exit 0
 #         (PF-6's anti-vacuity control; restores, never rebuilds)
 #   PF-8  the skill-package-freshness workflow declares NO `paths:` key
@@ -186,6 +204,7 @@ SKIP=0
 SBX=""           # git-archive export of the tracked tree
 SBX_HOME=""      # redirected HOME for every probe invocation
 ENFORCE_FILE=""  # synthetic sentinel holding the `enforce` token
+WARN_FILE=""     # synthetic sentinel holding the `warn` token
 PROBE_LOG=""     # combined output of the MOST RECENT probe_rc invocation
 
 cleanup() {
@@ -194,6 +213,7 @@ cleanup() {
     [ -n "${d}" ] && [ -d "${d}" ] && rm -rf "${d}"
   done
   [ -n "${ENFORCE_FILE}" ] && [ -f "${ENFORCE_FILE}" ] && rm -f "${ENFORCE_FILE}"
+  [ -n "${WARN_FILE}" ] && [ -f "${WARN_FILE}" ] && rm -f "${WARN_FILE}"
   return 0
 }
 trap cleanup EXIT
@@ -371,8 +391,15 @@ printf '\n<!-- package-freshness exit-code regression fixture -->\n' >> "${STALE
   || die_loud "could not append to the stale target"
 
 # --- PF-2: STALE + non-enforce sentinel -> exit 2 (THE regression assertion) ---
-printf '\nPF-2: STALE tree, committed sentinel default (warn) -> expect exit 2\n'
-RC2=$(probe_rc)
+# Pins a SYNTHETIC `warn` sentinel rather than inheriting the sandbox's committed
+# one, mirroring PF-3's synthetic-`enforce` pattern. See EVERY MODE-DEPENDENT ARM
+# PINS ITS OWN SYNTHETIC SENTINEL in the header: this arm asserts the contract's
+# `!= enforce` row, not the repository's current posture, so it must not change
+# meaning when the committed token is flipped.
+WARN_FILE=$(mktemp -t pkgfresh-warn.XXXXXX) || die_loud "mktemp failed (warn sentinel)"
+printf '# synthetic sentinel for PF-2 / PF-6\nwarn\n' > "${WARN_FILE}"
+printf '\nPF-2: STALE tree, synthetic warn sentinel -> expect exit 2\n'
+RC2=$(probe_rc "${WARN_FILE}")
 if [ "${RC2}" = "2" ]; then
   report "PF-2 STALE + warn -> exit 2 (advisory, non-zero, distinguishable)" 1
 elif [ "${RC2}" = "0" ]; then
@@ -508,10 +535,11 @@ cp "${CANONICAL_TARGET}" "${CANONICAL_PRISTINE}" \
   || die_loud "could not snapshot the injected canonical ${CANONICAL_REL}"
 
 # --- PF-6: injected canonical staled, no rebuild -> exit 2 (the v4.06 shape) ---
-printf '\nPF-6: injected canonical %s staled (no rebuild) -> expect exit 2\n' "${CANONICAL_REL}"
+printf '\nPF-6: injected canonical %s staled (no rebuild), synthetic warn sentinel -> expect exit 2\n' "${CANONICAL_REL}"
 printf '\n<!-- package-freshness injected-canonical regression fixture -->\n' >> "${CANONICAL_TARGET}" \
   || die_loud "could not append to the injected canonical ${CANONICAL_REL}"
-RC6=$(probe_rc)
+# Same synthetic-`warn` pin as PF-2, and for the same reason.
+RC6=$(probe_rc "${WARN_FILE}")
 if [ "${RC6}" = "2" ]; then
   report "PF-6 injected canonical STALE + warn -> exit 2 (the injected-canonical vector)" 1
 elif [ "${RC6}" = "0" ]; then
