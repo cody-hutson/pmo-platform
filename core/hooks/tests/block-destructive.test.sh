@@ -2112,6 +2112,365 @@ test_case "F1-QTOK-RESIDUAL-space (pin, not fix-evidence): a space-bearing quote
   0
 
 # ==========================================================================
+# BLOCK-022 F2 FWALK — the operand walk must stop where the arm ADJUDICATES
+# ==========================================================================
+#
+# A SIBLING ROOT CAUSE IN THE SAME WALK, WHICH IS WHY IT IS A SIBLING FAMILY.
+# F1 above is about the walk's SUBJECT — a quoted token was read raw and the
+# wrong string was tested. F2 is about the walk's TERMINATION PREDICATE — the
+# right string was tested against the wrong question. The walk answered "where
+# is the operand?" with "the first token that is not flag-shaped", and that is
+# wrong in two independent ways that both land in the same place: a token that
+# is NOT the operand becomes the adjudicated operand, falls outside the arm's
+# declared operand domain, and the arm concludes the invocation is not its
+# business — reaching ALLOW WITHOUT THE ALLOWLIST EVER BEING CONSULTED.
+#
+#   DEFECT 1 — the skip arm was DASH-ANCHORED. A plus-form option is not matched
+#   by `-*`, so it fell to `*)` and the OPTION ITSELF became the operand:
+#       bash +x <script>
+#
+#   DEFECT 2 — the skip did not CONSUME A FLAG'S ARGUMENT. `-*` advanced past the
+#   option, the value is not dash-prefixed, `*)` broke, and THE VALUE became the
+#   operand:
+#       bash -o errexit <script>
+#
+# THE CONTROLS ARE WHAT MAKE THIS A DEFECT RATHER THAN A DECLARED BOUNDARY. An
+# option taking no separate argument leaves the real operand in place, so
+# `bash -x <script>` blocked while `bash -o errexit <script>` allowed — two
+# spellings of one execution, one checked and one not.
+#
+# WHY THE ALLOW-ARMS BELOW ARE NOT FIX-EVIDENCE, AND MUST NOT BE READ AS SUCH.
+# Every `F2-FWALK-ctl-*` arm was ALSO green before this change — for the OPPOSITE
+# reason. Pre-fix they allowed because the allowlist was never consulted at all;
+# post-fix they allow because the target IS allowlisted. An allow-arm cannot tell
+# those two apart. Its only value is as the paired SPECIFICITY control for its
+# must-flag twin: the twins differ in allowlist membership and in nothing else,
+# so a fix that simply denied the whole class would turn the control red.
+#
+# HERMETIC BY CONSTRUCTION, AND THAT IS AC5 RATHER THAN TIDINESS. Running
+# block-destructive.test.sh standalone reports ~179 PASS / 219 FAIL, because
+# test-runner.sh exports PMO_SCOPE_GUARD_ROOT=/ and without it scope_guard_root()
+# falls to <HOOK_DIR>/../.., the default fixture cwd lands outside it, and THE
+# HOOK EXITS BEFORE ANY RULE RUNS. The 179 that "pass" are allow-arms passing
+# VACUOUSLY. A block of all-allow arms would therefore read 100% green against a
+# completely inert hook. So this block owns its whole runtime: its own sandbox
+# root, its own hook copies, its own one-line allowlist, its own .mode, payload
+# cwd pointed INSIDE the sandbox, and PMO_SCOPE_GUARD_ROOT / CLAUDE_WORKSPACE_ROOT
+# unset for every run — it reads nothing from the runner and nothing from the
+# ambient install, and returns the same verdict standalone and under the runner,
+# because a suite whose verdict depends on how it is invoked is not a gate.
+# F2-FWALK-SCOPE asserts that liveness BEFORE any verdict below is read.
+
+echo ""
+echo "BLOCK-022 F2 FWALK (operand walk terminates on the arm's operand domain)"
+echo "---"
+
+F2_ROOT="$(/usr/bin/mktemp -d)"
+F2_CLAUDE="${F2_ROOT}/.claude"
+F2_HOOKS="${F2_CLAUDE}/hooks"
+/bin/mkdir -p "${F2_HOOKS}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh  "${F2_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK%/*}/lib/"*.awk "${F2_HOOKS}/lib/" 2>/dev/null || true
+
+# ONE allowlist entry, owned by this block. Every ctl-arm allow and every must-flag
+# deny below turns on membership in THIS file and on nothing else — not on the
+# ambient core/script-execution-allowlist.txt, which is absent in a source checkout
+# and token-resolved in a deployed one.
+/usr/bin/printf '/tmp/pmo-f2-fwalk-allowed.sh\n' > "${F2_CLAUDE}/script-execution-allowlist.txt"
+/usr/bin/printf 'enforce' > "${F2_HOOKS}/.mode"
+
+/bin/cp "$HOOK" "${F2_HOOKS}/block-destructive.sh"
+# The mutant: revert the operand walk to the dash-anchored form. Two expressions,
+# because a pure deletion would leave the `case` with no default arm at all — a
+# non-flag token would then match nothing, script_idx would never advance, and the
+# while-loop would spin forever. Expression 1 deletes the arm BODY (anchored on
+# M-FWALK-BODY, which the marker line does not carry); expression 2 rewrites the
+# marker line back to `*) break ;;`. Net: 6 lines -> 1, pinned by AC-D022-M1.
+/usr/bin/sed \
+  -e '/# M-FWALK-BODY/,/^[[:space:]]*;;$/d' \
+  -e 's|^\([[:space:]]*\)\*) # M-FWALK-ADVANCE.*|\1*) break ;;|' \
+  "$HOOK" > "${F2_HOOKS}/block-destructive-mut.sh"
+/bin/chmod +x "${F2_HOOKS}/block-destructive.sh" "${F2_HOOKS}/block-destructive-mut.sh"
+
+F2_NA='/tmp/pmo-f2-fwalk-na.sh'
+F2_OK='/tmp/pmo-f2-fwalk-allowed.sh'
+
+F2_EXIT=0
+F2_ERR=""
+# Run one payload through one of the two sandbox copies. Both live in the SAME
+# directory, so they resolve the same allowlist, the same .mode and the same scope
+# root: the sed is the only difference between them, which is what makes the pair a
+# differential rather than two unrelated runs. The unsets are what make scope
+# resolve from THIS fixture's own layout (<HOOK_DIR>/../.. == F2_ROOT == the payload
+# cwd) instead of from whatever the caller exported.
+f2_run() {
+  local which="$1" cmd="$2" tmp
+  tmp="$(/usr/bin/mktemp)"
+  F2_EXIT=0
+  ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+    /usr/bin/printf '%s' "$(bash_payload "$cmd" "$F2_ROOT")" \
+      | /bin/bash "${F2_HOOKS}/${which}" 2>"$tmp" >/dev/null ) || F2_EXIT="$?"
+  F2_ERR="$(/bin/cat "$tmp")"
+  /bin/rm -f "$tmp"
+}
+
+# $1 = arm name  $2 = command  $3 = expected exit  $4 = (optional) stderr pattern
+f2_case() {
+  local name="$1" cmd="$2" want="$3" pat="${4:-}"
+  f2_run block-destructive.sh "$cmd"
+  local ok=1
+  [ "$F2_EXIT" = "$want" ] || ok=0
+  if [ -n "$pat" ] && ! /usr/bin/printf '%s' "$F2_ERR" | /usr/bin/grep -qE "$pat"; then ok=0; fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s\n' "$name"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  expected_exit=%s actual_exit=%s\n  stderr: %s\n' \
+      "$name" "$want" "$F2_EXIT" "$F2_ERR"; FAIL=$((FAIL + 1))
+  fi
+}
+
+# --- AC5: assert the harness BEFORE asserting any verdict --------------------
+# A canary the hook must block for a reason UNRELATED to this fix. If it allows,
+# the fixture is out of scope / inert and every verdict below is vacuous — an
+# all-allow block would read 100% green against a hook that never ran a rule. A
+# broken probe must report itself unusable, never report the population empty.
+f2_run block-destructive.sh 'git push --force origin main'
+if [ "$F2_EXIT" = 2 ] && /usr/bin/printf '%s' "$F2_ERR" | /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-001'; then
+  /usr/bin/printf 'PASS: F2-FWALK-SCOPE: fixture is in scope and enforcing (unrelated rule -001 fires), so the verdicts below are live\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: F2-FWALK-SCOPE: SCOPE ASSERTION FAILED - verdicts below are unusable (exit=%s, expected 2 naming BLOCK-DESTRUCTIVE-001)\n  stderr: %s\n' \
+    "$F2_EXIT" "$F2_ERR"; FAIL=$((FAIL + 1))
+fi
+
+# --- AC1: plus-form options are not the operand ------------------------------
+f2_case "F2-FWALK-plus-x: bash +x <non-allowlisted> blocks (plus-form option is not the operand)" \
+  "bash +x ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
+
+f2_case "F2-FWALK-plus-v: bash +v <non-allowlisted> blocks" \
+  "bash +v ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
+
+f2_case "F2-FWALK-plus-O: bash +O extglob <non-allowlisted> blocks (plus-form WITH a separate argument)" \
+  "bash +O extglob ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
+
+f2_case "F2-FWALK-plus-sh: sh +x <non-allowlisted> blocks (the walk is shared by every interpreter)" \
+  "sh +x ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- AC2: an option's ARGUMENT is never adjudicated as the operand -----------
+f2_case "F2-FWALK-o-errexit: bash -o errexit <non-allowlisted> blocks (flag argument consumed)" \
+  "bash -o errexit ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
+
+f2_case "F2-FWALK-o-noexec: bash -o noexec <non-allowlisted> blocks" \
+  "bash -o noexec ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
+
+f2_case "F2-FWALK-O-extglob: bash -O extglob <non-allowlisted> blocks" \
+  "bash -O extglob ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
+
+# A long option with a separate value. `--rcfile` is NOT `--`: the end-of-options
+# arm is a literal match, so this reaches the generic flag arm as intended.
+f2_case "F2-FWALK-rcfile: bash --rcfile <path> <non-allowlisted> blocks (long option, separate value)" \
+  "bash --rcfile /tmp/pmo-f2-fwalk-rc ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
+
+f2_case "F2-FWALK-init-file: bash --init-file <path> <non-allowlisted> blocks" \
+  "bash --init-file /tmp/pmo-f2-fwalk-rc ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
+
+f2_case "F2-FWALK-zsh-o: zsh -o errexit <non-allowlisted> blocks" \
+  "zsh -o errexit ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
+
+# The walk is SHARED by the source arm, so the defect was too. The flag VALUE here
+# is deliberately non-path-shaped: the source arm's operand domain carries PREFIX
+# alternatives (`/*`), so a path-shaped value would land inside its domain and be
+# adjudicated (as the wrong file) even before this fix.
+f2_case "F2-FWALK-source-o: source -o errexit <non-allowlisted> blocks (shared walk, source arm)" \
+  "source -o errexit ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- Paired specificity controls: same shapes, ALLOWLISTED target ------------
+# Green before this change too, and for the wrong reason — see the block header.
+# These are the specificity halves of the pairs above, not independent evidence.
+f2_case "F2-FWALK-ctl-plus-x (paired control): bash +x <allowlisted> still allows" \
+  "bash +x ${F2_OK}" 0
+
+f2_case "F2-FWALK-ctl-o-errexit (paired control): bash -o errexit <allowlisted> still allows" \
+  "bash -o errexit ${F2_OK}" 0
+
+f2_case "F2-FWALK-ctl-rcfile (paired control): bash --rcfile <path> <allowlisted> still allows" \
+  "bash --rcfile /tmp/pmo-f2-fwalk-rc ${F2_OK}" 0
+
+f2_case "F2-FWALK-ctl-source-o (paired control): source -o errexit <allowlisted> still allows" \
+  "source -o errexit ${F2_OK}" 0
+
+# --- The fail-closed deny the defect DISARMED --------------------------------
+# A variable-bearing path cannot be resolved from argv, so check_script_target
+# denies it. Before this fix, prefixing ANY value-taking flag hid that operand and
+# the documented fail-closed posture silently did not apply: `bash "$DIR/x.sh"`
+# denied while `bash -o errexit "$DIR/x.sh"` allowed.
+f2_case "F2-FWALK-varbearing: a value-taking flag no longer disarms the variable-bearing fail-closed deny" \
+  'bash -o errexit "$DIR/x.sh"' 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- The bypass must not survive by position on the line ---------------------
+f2_case "F2-FWALK-chain: the SECOND command on a line is walked with the same predicate" \
+  "bash ${F2_OK}; bash +x ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
+
+# `-c` was UNREACHABLE behind a value-taking flag: the walk stopped on the flag's
+# argument before it ever saw `-c`, so the whole cmode scanning loop was skipped.
+# Reaching it is the correct widening, not a new mechanism.
+f2_case "F2-FWALK-cmode-reach: -c is reachable behind a value-taking flag and its program string is scanned" \
+  "bash -o errexit -c 'bash ${F2_NA}'" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- The bypass must not survive by how the interpreter is spelled -----------
+f2_case "F2-FWALK-wrapper: env bash -o errexit <non-allowlisted> blocks (verb behind a prefix word)" \
+  "env bash -o errexit ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
+
+f2_case "F2-FWALK-varprefix: FOO=1 bash +x <non-allowlisted> blocks (verb behind an assignment prefix)" \
+  "FOO=1 bash +x ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
+
+f2_case "F2-FWALK-quotedverb: \"bash\" -o errexit <non-allowlisted> blocks (F1 verb widening + F2 walk)" \
+  "\"bash\" -o errexit ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
+
+f2_case "F2-FWALK-absinterp: /bin/bash -o errexit <non-allowlisted> blocks (absolute interpreter)" \
+  "/bin/bash -o errexit ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- DECLARED RESIDUAL (pin, NOT fix-evidence) -------------------------------
+# R1: a value-taking flag whose ARGUMENT is itself an allowlisted script path. The
+# scan legitimately terminates on that argument and the real operand is never
+# reached. This is a strict NARROWING of the hole this card closes — today ANY
+# value-taking flag hid the script unconditionally; now the caller must also name
+# an allowlisted path in flag position. It is declared in
+# core/rules/bypass-mode-readiness/block-destructive.md rather than half-closed
+# here; closing it is an arity overlay's job, and layered on top of this walk that
+# overlay's failure direction is safe. This arm asserts the CURRENT verdict so a
+# later closure is a deliberate act rather than a drift.
+f2_case "F2-FWALK-RESIDUAL-flagarg (pin, not fix-evidence): a flag argument that is itself an allowlisted script still terminates the scan" \
+  "bash --rcfile ${F2_OK} ${F2_NA}" 0
+
+# --- DECLARED VERDICT CHANGE (pin) -------------------------------------------
+# P6: an EXTENSIONLESS executed target with a script argument moves ALLOW -> BLOCK.
+# The walk advances past the un-adjudicable wrapper (the extensionless residual
+# three arms already share) and adjudicates the argument. The direction is
+# over-block, which this rule's doc calls recoverable, and no prior arm pinned it.
+# `bash -- <wrapper> <script>` is UNCHANGED — `--` remains a hard stop, so POSIX
+# operand semantics are preserved exactly.
+f2_case "F2-FWALK-CONSEQ-extless (pin): an extensionless target with a .sh argument now blocks on the argument" \
+  "bash /tmp/pmo-f2-fwalk-wrapper ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
+
+# =====================================================================
+# AC-D022-M* — mutation differential on the operand walk (#6724 AC4)
+# =====================================================================
+# Every F2 arm above is an OUTCOME assertion against the shipped hook, and no
+# outcome arm can separate "the walk's termination predicate changed" from "some
+# other property of this hook happens to reach the same verdict". AC4 asks for the
+# discriminating form: the new arms demonstrated FAILING on a fixture whose walk is
+# reverted to the dash-anchored form, and PASSING on the conformant control. The
+# requirement is a BEHAVIOURAL DIFFERENCE, not a green light.
+#
+# THE POLARITY IS INVERTED relative to the one shipped precedent for this shape
+# (AC-E007-M* in block-egress.test.sh, whose conformant control is an ALLOW and
+# whose differential is a DENY). Here the fix ADDS blocks, so the conformant
+# control is the DENY and the differential is the ALLOW — which is exactly why M5
+# below is not optional.
+echo ""
+echo "BLOCK-022 operand-walk mutation differential (AC-D022-M*)"
+echo "---"
+
+# M1 — guard the mutation itself. If the sed matched nothing, the "mutant" IS the
+# shipped hook and every arm below is an inert tautology. Pinning the exact delta
+# also means a future edit that moves or reshapes the arm turns this red rather
+# than silently neutering the fixture: re-point the sed, do not delete the arm.
+#
+# THE SECOND CLAUSE IS COUNTED, NOT MERELY PRESENT, AND THAT IS THE WHOLE POINT.
+# `*) break ;;` occurs at TWO other places in this hook at the same indentation, so
+# "the mutant contains a dash-anchored default arm" is true of the SHIPPED file too
+# and asserts nothing. The discriminating form is that the mutant carries exactly
+# ONE MORE such arm than the shipped copy, and carries NO M-FWALK marker at all.
+F2_M_REMOVED=$(( $(/usr/bin/wc -l < "${F2_HOOKS}/block-destructive.sh") - $(/usr/bin/wc -l < "${F2_HOOKS}/block-destructive-mut.sh") ))
+F2_M_ARMS_SHIP="$(/usr/bin/grep -cE '^[[:space:]]*\*\) break ;;[[:space:]]*$' "${F2_HOOKS}/block-destructive.sh" || true)"
+F2_M_ARMS_MUT="$(/usr/bin/grep -cE '^[[:space:]]*\*\) break ;;[[:space:]]*$' "${F2_HOOKS}/block-destructive-mut.sh" || true)"
+F2_M_MARKERS_MUT="$(/usr/bin/grep -c 'M-FWALK' "${F2_HOOKS}/block-destructive-mut.sh" || true)"
+if [ "$F2_M_REMOVED" = 5 ] \
+  && [ "$F2_M_ARMS_MUT" = "$(( F2_M_ARMS_SHIP + 1 ))" ] \
+  && [ "$F2_M_MARKERS_MUT" = 0 ]; then
+  /usr/bin/printf 'PASS: AC-D022-M1: fixture sed removed exactly the 5 body lines, dropped both M-FWALK markers, and restored one additional dash-anchored `*) break ;;` arm (%s -> %s)\n' \
+    "$F2_M_ARMS_SHIP" "$F2_M_ARMS_MUT"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-D022-M1: fixture sed removed %s lines (expected 5), break-arms %s -> %s (expected +1), residual M-FWALK markers in mutant = %s (expected 0) — it no longer targets the operand walk; re-point the sed\n' \
+    "$F2_M_REMOVED" "$F2_M_ARMS_SHIP" "$F2_M_ARMS_MUT" "$F2_M_MARKERS_MUT"; FAIL=$((FAIL + 1))
+fi
+
+# M2 — the mutated copy must still PARSE. A fixture that fails because it no longer
+# runs proves nothing about the predicate it reverted; this arm is what makes M4's
+# ALLOW attributable to changed BEHAVIOUR rather than to a broken file.
+F2_M_SYNTAX=0
+/bin/bash -n "${F2_HOOKS}/block-destructive-mut.sh" 2>/dev/null || F2_M_SYNTAX="$?"
+if [ "$F2_M_SYNTAX" = 0 ]; then
+  /usr/bin/printf 'PASS: AC-D022-M2: mutated copy is still valid bash (its verdict below is behavioural, not a parse error)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-D022-M2: mutated copy does not parse (bash -n exit=%s) — the differential would be meaningless\n' \
+    "$F2_M_SYNTAX"; FAIL=$((FAIL + 1))
+fi
+
+# M3 — the CONFORMANT control. The shipped walk consumes the flag's argument, reaches
+# the real operand, and denies it.
+f2_run block-destructive.sh "bash -o errexit ${F2_NA}"
+if [ "$F2_EXIT" = 2 ] && /usr/bin/printf '%s' "$F2_ERR" | /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022'; then
+  /usr/bin/printf 'PASS: AC-D022-M3: conformant control — shipped hook DENIES the non-allowlisted script behind a value-taking flag\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-D022-M3: conformant control did not deny (exit=%s, expected 2 naming BLOCK-DESTRUCTIVE-022)\n  stderr: %s\n' \
+    "$F2_EXIT" "$F2_ERR"; FAIL=$((FAIL + 1))
+fi
+
+# M4 — the DIFFERENTIAL. Same payload, same sandbox, walk reverted to dash-anchored.
+# The bypass reopens and the identical invocation reaches ALLOW.
+f2_run block-destructive-mut.sh "bash -o errexit ${F2_NA}"
+if [ "$F2_EXIT" = 0 ]; then
+  /usr/bin/printf 'PASS: AC-D022-M4: differential — with the walk reverted to the dash-anchored form the SAME invocation reaches ALLOW\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-D022-M4: differential inconclusive (exit=%s, expected 0) — the mutant did not reopen the bypass\n  stderr: %s\n' \
+    "$F2_EXIT" "$F2_ERR"; FAIL=$((FAIL + 1))
+fi
+
+# M5 — LIVENESS OF THE MUTANT, and the arm that makes AC4 a guarantee rather than a
+# green light. M4 asserts an EXIT 0, and an inert hook — out of scope, master-off,
+# missing lib, unparsed — produces exit 0 for free. Unlike the egress precedent, M4
+# here has NO stderr to assert on, so nothing inside M4 can distinguish "the mutation
+# reopened the bypass" from "the sandbox is dead". This arm supplies that
+# discrimination: the mutant must still enforce the UNTOUCHED half of the very same
+# rule — the bare invocation, and the no-argument flag that always blocked.
+F2_M5_OK=1
+f2_run block-destructive-mut.sh "bash ${F2_NA}"
+{ [ "$F2_EXIT" = 2 ] && /usr/bin/printf '%s' "$F2_ERR" | /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022'; } || F2_M5_OK=0
+F2_M5_BARE="$F2_EXIT"
+f2_run block-destructive-mut.sh "bash -x ${F2_NA}"
+{ [ "$F2_EXIT" = 2 ] && /usr/bin/printf '%s' "$F2_ERR" | /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022'; } || F2_M5_OK=0
+if [ "$F2_M5_OK" = 1 ]; then
+  /usr/bin/printf 'PASS: AC-D022-M5: mutated copy still enforces the untouched half of -022 (bare and no-argument-flag forms), so M4 is a live ALLOW and not a dead sandbox\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-D022-M5: mutated copy did not enforce -022 on the untouched forms (bare exit=%s, -x exit=%s) — M4 may be an artefact of an inert hook\n  stderr: %s\n' \
+    "$F2_M5_BARE" "$F2_EXIT" "$F2_ERR"; FAIL=$((FAIL + 1))
+fi
+
+# M6 — SPECIFICITY OF THE SANDBOX, which is what the ctl-arms' exit 0 rests on. M3
+# proves this fixture can DENY; on its own that leaves "does it deny everything?"
+# open, and a fix that simply denied the whole class would satisfy every must-flag
+# arm above. Same hook, same sandbox, same value-taking-flag shape — only allowlist
+# membership differs — and this MUST allow. The pair M3/M6 is therefore the one
+# place the block shows its verdicts are allowlist DECISIONS rather than a posture.
+f2_run block-destructive.sh "bash -o errexit ${F2_OK}"
+if [ "$F2_EXIT" = 0 ]; then
+  /usr/bin/printf 'PASS: AC-D022-M6: same sandbox ALLOWS the allowlisted twin of M3 behind the same flag, so the F2 verdicts are allowlist decisions and not a blanket deny\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-D022-M6: sandbox denied an allowlisted target behind a value-taking flag (exit=%s) — the fix is over-blocking, not adjudicating\n  stderr: %s\n' \
+    "$F2_EXIT" "$F2_ERR"; FAIL=$((FAIL + 1))
+fi
+
+/bin/rm -rf "$F2_ROOT"
+
+# ==========================================================================
 # BLOCK-022 AC-FP — the verdict must not depend on non-executing text
 # ==========================================================================
 #
