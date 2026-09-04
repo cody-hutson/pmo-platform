@@ -1,0 +1,381 @@
+---
+title: Release Plan — hook-guards-fail-closed-fasttrack (two fail-closed hook guards corrected: an execution-guard flag-walk bypass and a Layer-1 write block that denies its own sanctioned analysis workspace)
+type: release-plan
+plan_type: release
+status: EXECUTING
+release: versioned (bump-class minor; concrete number binds at the Stage-12 atomic claim)
+milestone: hook-guards-fail-closed-fasttrack
+release_class: hotfix
+reversibility: CHEAP / Confidence HIGH (release-level); MODERATE for #6724 revert
+---
+# Release Plan — `hook-guards-fail-closed-fasttrack`
+
+**Milestone:** `hook-guards-fail-closed-fasttrack` (#393) · hub sub-task #6908 = Stage 4 plan source and the D-1/D-2/D-3 gate record · #6957 = #6427 Stage 5 design source · #6959 = the Stage 6 Engineering sub-task that authored this file
+**Version identity:** **versioned** — release-identity mode declared at Bundle. Bump-class **`minor`**; the concrete `vX.Y` binds only at the Stage-12 atomic claim per `release/governance/RELEASE_PROTOCOL.md` § Versioning Phase 2, so the plan file and branch stay slug-primary while in flight and the Header `**Version**` cell carries the unresolved stamp token. The Commit-0 version re-verify was executed in full — see § Commit-0 Version Re-Verify Record.
+**Topology:** D-C SINGLE — one release branch (`release/hook-guards-fail-closed-fasttrack`), one PR, one merge, base `main`; this plan lands as **Engineering Commit 0**.
+**Concurrency posture:** P0 fully-serial — Stage 6 chips route one at a time in Implementation-Sequence order on the single branch. Force-push (including `--force-with-lease`) on the shared release branch is prohibited under any non-serial posture; moot at P0, recorded for completeness.
+**Release class:** `hotfix` — rendered by the operator at the Stage-4 gate (D-2). Differentiation posture: engagement density Light · **Stage 9 review depth Standard (operator override from `Light`)** · **Stage 5 activation bias ALL (operator override from `SKIP-where-trivial`)** · Stage 13 outcome-window 7-day.
+
+> **Provenance.** This file transcribes the Stage-4 Release Planning output posted on hub sub-task #6908, together with the four **Decision Recorded** comments on that same sub-task (Stage-4 Plan Review Phase B1; Procedure 1 Scaffold Review; Stage 5 Wave + Collective Review scope-lock), and reconciles them to the #6427 Stage-5 design specification posted on sub-task #6957. Where a later disposition superseded a Stage-4 assumption, the transcribed sections preserve the Stage-4 plan of record and § Deviation Log records the ratified delta. Authored at Engineering Commit 0 by the first Stage-6 Engineering spoke (sub-task #6959, card #6427).
+
+---
+
+## Header
+
+| Field | Value |
+|-------|-------|
+| **Version** | {{RELEASE_VERSION}} |
+| **Bump Class** | `minor` — declared at Phase 1 as intent-to-bump; it sets the floor, it binds no concrete number. Next-free recomputed at Commit 0 against fresh authoritative host state (see § Commit-0 Version Re-Verify Record). |
+| **Date Created** | 2026-09-04 (Friday) |
+| **Release Manager** | Agent-assisted (release-hub Mode O) |
+| **Status** | Executing (Stage 6 Engineering) |
+| **Branch** | `release/hook-guards-fail-closed-fasttrack` |
+| **PR** | (populated at PR creation, Stage 6 Phase C2 — hub-owned, after both Engineering chips land) |
+| **Milestone** | `hook-guards-fail-closed-fasttrack` (#393) |
+
+`domain_practice: { source: N/A — pipeline-internal release, date: 2026-09-04, domain: software }`
+
+**Domain classification.** Every File-Change-Matrix path is an internal pmo-platform artifact, so external sourcing does not fire and `source` is `N/A` by construction rather than by omission. The deliverable is shell code plus its executable test suite (`software`, dominant); the three `.md` reconciliations are `governance` (secondary). Dominant recorded in the label, secondary noted here, per the A3-time classification rule.
+
+---
+
+## Commit-0 Version Re-Verify Record
+
+`release/references/how-to/hub-spoke-bridge.md` § Procedure 0 § Canonical location requires the **first** Engineering spoke under SINGLE topology to re-run the authoritative-version-selection check across the plan-file write and its commit. This release is `versioned`, so every step applies in full and each carries its executed result rather than a disposition.
+
+| Step | Result | Evidence |
+|---|---|---|
+| **1** — refresh authoritative host state | **EXECUTED.** `origin/main` = `ef008d6d9c32c5982feb943a1a916c4b80c7c321`, identical to the Stage-4 baseline pin — the substrate did not move between Planning and Engineering. | `git fetch --tags origin`; `git fetch origin main`; `git rev-parse origin/main` |
+| **2** — recompute next-free for bump-class `minor` | **EXECUTED.** `anchor()` = **v4.52** (the highest claimed version across all three `claimed_set()` arms). `FLOOR(minor)` = `(4, 53)` = **v4.53**. v4.53 is **not** in `claimed_set()`, so the walk terminates at the floor and next-free = **v4.53**. | Origin tags: max `v4.52` over 390 tag refs. Published Releases: `gh release list` latest = `v4.52`. Ledger arm read via `git show origin/main:release/releases/RELEASE_LOG.md` — highest row `v4.52`, zero `v4.53` occurrences against a control of 8 for `v4.52`. |
+| **3** — PROCEED / HALT on claimed-set membership | **PROCEED.** No collision: the recomputed next-free is free on all three arms, and no shipped version's plan file is at risk of being overwritten (`release/releases/plans/hook-guards-fail-closed-fasttrack_RELEASE_PLAN.md` did not exist on `origin/main` at Commit 0). | The concrete number is **not** written into this file — it binds at the Stage-12 compare-and-swap. Step 2's result is recorded as the Commit-0 reading, not as a reservation. |
+| **3b** — stamp-manifest assertion | **EXECUTED post-write, pre-commit.** `release/tools/claim-version.sh --verify-stamp hook-guards-fail-closed-fasttrack` → exit 0. | The Header `**Version**` cell carries the literal unresolved stamp token, which is what the Stage-12 claim resolves and renames on. |
+
+**Why the number is recorded but not bound.** Step 2's `v4.53` is a Commit-0 *reading* of authoritative state, not a claim. Nothing is held between now and the merge; a concurrent release that merges first takes v4.53 and this release's claim recomputes upward at the compare-and-swap. Recording the reading makes the Commit-0 PROCEED reproducible — a later reader can re-run the same three arms and see what this spoke saw — without asserting a reservation the allocation rule explicitly does not create.
+
+---
+
+## Change Description
+
+*Scaffolded at Engineering Commit 0; authored in full at Stage 6 Phase C1 per `release/governance/RELEASE_PROTOCOL.md` § Change Description Protocol, before the draft PR is transitioned to ready-for-review at the Stage 9 gate. Operator-facing voice.*
+
+**Outcome (as declared at Bundle).** Two always-enforce hook guards each fail in a way their own documentation does not admit. One execution guard walks a command's flags to find the script operand and stops early on shapes it does not recognise, so a bypassing invocation reaches the shell unblocked. One Layer-1 write guard denies writes to the very analysis workspace the platform's own standard designates as the sanctioned home for platform analysis, for exactly the session shape that standard anticipates. Both are corrected so the enforced behaviour matches the declared behaviour, with discrimination arms pinning that neither correction widens past its own subject.
+
+**Issues in scope.** #6427 · #6724. Each is closed at Stage 13 per the close-out procedure; no close-family keyword is carried in this file or in the PR body outside the PR's dedicated Issue References block.
+
+**Reversibility.** **CHEAP / HIGH** for #6427 — reverting the carve-out restores a working-but-noisy block with no state, no config surface and no file class to unwind. **MODERATE** for #6724 — reverting re-opens a P1 execution bypass, so the revert is itself a security decision requiring operator sign-off rather than an automatic rollback. Release-level rollback is `git revert -m 1` of the merge commit.
+
+**Downstream impact and cross-references.** Populated at Phase C1 when the full change-set has landed.
+
+---
+
+## Baseline Pin
+
+**`origin/main` @ `ef008d6d9c32c5982feb943a1a916c4b80c7c321`** (short `ef008d6d`, committed 2026-09-03T22:00:00-0500). Stage-4 audit run at 2026-09-04T03:39:27Z; re-confirmed unchanged at Engineering Commit 0. Every count, line number and hunk range in this plan is measured against this pin and is reproducible from it.
+
+**Stage-9 obligation (Stage-4 R7, carried forward).** Every measurement here is pinned to `ef008d6d` and to sibling head `7e4c0034`. The sibling-merge stale-pin trigger must re-run at Stage 9 entry, and the line-1718 finding in particular must be re-measured **by reading the arm**, never by a line-oriented pattern — a single-line `grep` for the dash-anchored arm returns 1 hit on `main` and 0 on the sibling branch purely because the sibling split the arm across 11 lines, which reads as "the defect was removed" and is the opposite of the truth.
+
+---
+
+## Implementation Sequence
+
+Single branch, single PR (D-C SINGLE, P0 fully-serial — the default posture; opt-in parallelism declined at a 2-card release).
+
+| # | Card | Rationale |
+|---|---|---|
+| 0 | Engineering Commit 0 — this plan file | Carries the Commit-0 Survival Set; version re-verify + `--verify-stamp` pre-flight executed per Procedure 0 § Canonical location |
+| 1 | **#6427** (P2, size:S) | **Sequenced FIRST despite lower severity.** Zero cross-PR contention, smallest surface, and it establishes the shared test-file append point and the shared doc edit before the contended card touches them. If #6724 later re-routes, #6427 is already landed and the release still delivers a floor. |
+| 2 | **#6724** (P1, size:M) | Sequenced second because it is the contended card (it collides with in-flight PR #6745 at `main` line 1718) and the one that carried the Stage-5 pivot condition. Landing it last keeps the release's fallback available for as long as possible. |
+
+This **inverts the milestone description's original severity-descending sequence**. The inversion is deliberate: severity-descending was the right rule when the three then-believed cards were on independent files. They are not — both live cards edit `core/hooks/block-destructive.sh` — and the contention asymmetry is the dominant sequencing input. `[CHEAP · confidence: HIGH]`
+
+**Commit granularity is a hard requirement, not hygiene.** #6427 and #6724 land in **separate commits**, each distinct from Engineering Commit 0. Risk R8 is the reason: PR #6745 may build on whichever lands, so each card must revert independently.
+
+---
+
+## Stage Applicability Matrix
+
+Default is all stages; deviations are argued, not assumed. **No stage was skipped** — the matrix returned APPLY for every stage.
+
+| Stage | #6724 | #6427 | Basis |
+|---|---|---|---|
+| 5 Solutioning | **APPLY** | **APPLY** | Neither is trivial. #6724 carried a live design question (does its fix need a per-interpreter option-arity table?); #6427 carried an unrendered D-FixDirection decision its own body deferred to design. The `hotfix` class biases SKIP-where-trivial — the bias does not fire, and the operator additionally rendered activation `ALL`. |
+| 6 Engineering | APPLY | APPLY | Both mutate shipped code. |
+| 7 Dev Testing | **APPLY** | **APPLY** | Both have functional impact on an always-enforce security control. #6724's AC4 mandates a paired mutation arm; #6427's AC2 mandates a discrimination arm. Neither is verifiable without execution. |
+| 8 QA Testing | APPLY | APPLY | Per-criterion AC verdicts required (6 ACs + 3 ACs). |
+| 9 Plan Review | APPLY (release-scoped) | — | `hotfix` maps to **Light**; **operator override to Standard** (D-2). |
+| 10 Dry Run · 11 Snapshot · 12 Execute · 13 Close | APPLY (release-scoped) | — | Standard release-scoped stages. |
+
+**Parallel-eligible spoke count** per parallel-safe stage: Stage 5: **2** · Stage 7: **2** · Stage 8: **2**.
+
+**Scaffold as built:** Stage 5 #6957 / #6958 · Stage 6 #6959 / #6960 · Stage 7 #6961 / #6962 · Stage 8 #6963 / #6964 · release-scoped Stage 9 #6965 · 10 #6966 · 11 #6967 · 12 #6968 · 13 #6969.
+
+---
+
+## Release Class declaration
+
+**`hotfix`** — rendered by the operator at the Stage-4 Phase B1 gate (D-2).
+
+| Trigger | Evidence at the live scope |
+|---|---|
+| (a) source defect is a P1/P2 Issue raised against a deployed release | **FIRES** — #6724 P1-Critical, #6427 P2-Material, both against shipped hook behaviour |
+| (b) bundle contains ≤ 3 issues | **FIRES** — 2 live cards |
+| (c) bundle scope is corrective | **FIRES** — both `type:bug`; no new file class, no new protocol |
+| (d) trailing patch number | **Inapplicable** — this release's bump-class is `minor`, not `patch`; the class stands on (a)–(c) regardless |
+
+**Anti-pattern check (the one that disqualifies `hotfix`):** neither card introduces a new protocol, reference doc, schema or skill. The `novel` trigger does not fire. `cross-cutting` triggers do not fire either: the matrix touches **0** `pipeline/stage-*.md` files and **0** of the six rule-defining governance surfaces. The D-FixDirection decision is a choice between two remediations of one defect, not a new protocol, and does not disqualify.
+
+**Band:** 5 effective pts (`round_half_up(6 raw × 0.9)`) against `release_size_target_pts` 15–25 — **below band by design**; the `hotfix` class waives the size-target band.
+
+**The two operator overrides, and why each moves only one dimension.** Stage-9 depth `Light → Standard`: `Light` scopes design discussion out, and this release's dominant risk is a cross-release conflict resolution in a security control that fails open — exactly what `Light` declines to look at. Stage-5 activation `SKIP-where-trivial → ALL`: both cards carried live design questions, so the trivial trigger is met by letter only. The class itself stays `hotfix`, so neither override carries re-classification cost.
+
+---
+
+## File Change Matrix
+
+Machine-readable, one path per line, `<path>  <VERB>` (path-first columnar-in-fence form):
+
+```
+core/hooks/block-destructive.sh                            edit
+core/hooks/tests/block-destructive.test.sh                 edit
+core/rules/bypass-mode-readiness/block-destructive.md      edit
+core/rules/bypass-mode-readiness/_cross-cutting.md         edit
+core/rules/bypass-mode-readiness.md                        edit
+core/standards/analysis-workspace-standard.md              edit
+release/releases/plans/hook-guards-fail-closed-fasttrack_RELEASE_PLAN.md   add
+```
+
+**This matrix is CORRECTED against the Stage-4 original — two additions and one scope-lock addition, all ratified.** The Stage-4 matrix named five paths. Three rows are new here and each has a named authority:
+
+- `core/rules/bypass-mode-readiness.md` — **AI-005 / Stage-5 R-2.** It is a **GENERATED** index assembled by `core/deploy/tools/build-hook-registry.py` from the `core/rules/bypass-mode-readiness/` fragments (ADR-030). Editing a fragment without regenerating leaves the index stale, which `deploy.sh --check` **Check 38** (`hook-registry-index-freshness`) reports as `FAIL`. It is tool output: **regenerate it, never hand-edit it**.
+- `core/rules/bypass-mode-readiness/_cross-cutting.md` — **Stage-5 R-3, approved at Collective Review as scope-lock `BASE + R-3`.** One line (~126) asserts that BLOCK-DESTRUCTIVE-019 protects "only `.claude/settings*.json` and `.claude/hooks/*`" — false at the pin, and more false after #6427's carve-out. CIAC-3 grades merged-document consistency, so leaving it would ship a fresh contradiction this release authored.
+- `core/rules/bypass-mode-readiness/block-destructive.md` was declared at Stage 4 for #6724 only; **AI-002** adds it to #6427's declared set, where AC3's residual record must land.
+
+### Read-only inputs
+
+```
+core/hooks/block-autonomy-ceiling.sh                       READ
+core/hooks/block-fs-boundary.sh                            READ
+core/hooks/block-draft-files.sh                            READ
+core/hooks/block-skill-direct-edit.sh                      READ
+core/hooks/lib/scope-guard.sh                              READ
+core/hooks/tests/setup-ci-layout.sh                        READ
+core/hooks/tests/test-runner.sh                            READ
+core/deploy/tools/build-hook-registry.py                   READ
+```
+
+### Release-wide explicit non-scope
+
+```
+core/config/allowlists/script-execution-allowlist.txt      NOT EDITED
+core/hooks/block-fs-boundary.sh                            NOT EDITED
+core/hooks/block-draft-files.sh                            NOT EDITED
+core/hooks/lib/scope-guard.sh                              NOT EDITED
+core/deploy/deploy.sh                                      NOT EDITED
+```
+
+The non-scope block is explicit because all five are in sibling PR #6745's edit set: declaring them out of scope is what makes the contention map's boundary falsifiable rather than merely unstated. **No `add` row for a tracked executable script**, so the `script-execution-allowlist.txt` companion obligation does not fire — an enumerated non-trigger, not an omission. The `Bash` branch of `block-destructive.sh` is likewise out of scope: closing the Write/Edit-vs-Bash coverage asymmetry is a new capability, and the operator rejected it at Collective Review in favour of the recorded residual (see CIAC-3 and § Accepted Residuals).
+
+### Per-card attribution
+
+| Path | #6427 | #6724 |
+|---|---|---|
+| `core/hooks/block-destructive.sh` | `BLOCK-DESTRUCTIVE-019` carve-out, `main` 1850–1866 | flag walk, `main` 1713–1720 |
+| `core/hooks/tests/block-destructive.test.sh` | 8 carve-out + discrimination arms | AC1–AC5 arms |
+| `core/rules/bypass-mode-readiness/block-destructive.md` | AC3 residual record + carve-out scope note + registry-row amendment | AC6 coverage-boundary correction |
+| `core/rules/bypass-mode-readiness/_cross-cutting.md` | R-3 one-line `-019` scope correction | — |
+| `core/rules/bypass-mode-readiness.md` | regenerated index (tool output) | regenerated index (tool output) |
+| `core/standards/analysis-workspace-standard.md` | §1 write-path contract row | — |
+
+---
+
+## Contention Map
+
+### Within-release contention (both cards, one PR)
+
+| File | #6724 region (main) | #6427 region (main) | Overlap | Resolution |
+|---|---|---|---|---|
+| `core/hooks/block-destructive.sh` | 1713–1720 (flag walk, `Bash` arm) | 1830–1866 (`BLOCK-DESTRUCTIVE-019`, `Write`/`Edit` arm) | **none** — 110 lines apart, different `case` statements, different tool arms | Sequencing alone. Under D-C SINGLE both land on one branch; `overlap_class = single-pr`, no merge surface. |
+| `core/hooks/tests/block-destructive.test.sh` | new arms per bypassing shape + controls | new arms for carve-out + discrimination | **append-adjacent** | Sequential commits on one branch; no conflict. |
+| `core/rules/bypass-mode-readiness/block-destructive.md` | coverage-boundary correction (AC6) | Write/Edit-vs-Bash residual record (AC3) | **same document, different claims** | Sequencing + CIAC-3. |
+
+**The milestone description's original claim `"independent files, no contention"` was false** and was amended by the operator at AI-001. Both cards target the same hook file; the claim is true only at *line* granularity.
+
+**Line-number displacement #6724 must not inherit.** #6427 inserts inside the `Write|Edit` branch, so every line below `main` ~1820 shifts downward; `block "BLOCK-DESTRUCTIVE-019"` moves from 1861 to roughly 1899. #6724's own region (1713–1720) is **unmoved** — the insertion is ~130 lines below it. Any #6724 artifact citing a Layer-1 line number must re-resolve it post-#6427, and PR #6745's line-1718 collision is not perturbed by #6427.
+
+**No shared identifier between the two cards.** #6427 touches `abs_target`, `is_layer1`, `CWD`, `PRIMARY_ROOT`, all local to the `Write|Edit` arm; #6724 touches `script_ftok`, `script_idx`, `script_cmode`, `script_verb`, all local to the `Bash` arm. Different `case "$TOOL_NAME"` arms; no shared function, no shared variable, no shared control flow.
+
+### Cross-release contention (in-flight PR #6745, `release/hooks-block-only-their-scope`)
+
+| File | #6745 touches | #6724 needs | #6427 needs | `overlap_class` (ADR-005) |
+|---|---|---|---|---|
+| `core/hooks/block-destructive.sh` | 21 hunks @ `-U3` / 35 @ `-U0` | **line 1718** | 1830–1866 | **`line-range-overlap` for #6724** · `single-pr` for #6427 |
+| `core/hooks/tests/block-destructive.test.sh` | 2 hunks: 1511–1512, +941 lines appended at 2686 | append | append | **`append-pattern`** — structurally HIGH, operationally LOW |
+| `core/rules/bypass-mode-readiness/block-destructive.md` | 6 hunks: 15, 29, 37, 61, 80, 112 | ~67–72 (scope list) | new residual note | **no line intersection**; semantic-coherence risk only |
+
+**#6427 separates cleanly, measured not assumed.** Its edit region is **byte-identical** on `main` and on #6745's branch — pure +726-line displacement, zero hunk intersection, nearest #6745 hunk 67 lines away, far outside git's 3-line merge context. **#6724 collides at exactly one line:** #6745 rewrites `main` line 1718 from 1 line into 11, and that is precisely the line #6724 must edit. A textual conflict is certain, not probable, and both sides are security-control logic where a wrong resolution fails open.
+
+**Who resolves, and against which baseline (D-1, option (a)).** #6745 resolves, against a `main` that already contains this release. It must re-baseline anyway (`main` was 84 commits past its merge-base and it is draft with `mergeStateStatus: UNSTABLE`), the merge direction was clean at the pin, its author holds the context the resolution needs, and its `cross-cutting` + `Deep` Stage-9 review is the right depth for a security-control conflict resolution. What makes this safe rather than hopeful is a mechanism, not an intention: #6724's AC4 mandates a paired mutation arm, so once those arms are on `main` a re-baseline that silently drops the fix **cannot** read green.
+
+**Cross-release coordination already posted to PR #6745** (Stage-5 hub verification, AI-007 / AI-008): its `T-NSI-09a` / `T-NSI-09b` arms pin today's ALLOW for the exact shapes #6724 closes and will flip red at its re-baseline (the pin firing on schedule, not a merge regression); and its new `script_set_interp_domain()` split means #6724's `script_operand_implicated "$script_verb"` must become `"$script_interp_domain"` at re-baseline — git merges either spelling cleanly and the wrong one silently re-opens fail-open, which is why it was posted rather than remembered.
+
+---
+
+## Cross-Issue Acceptance Criteria
+
+Three CIACs. Both cards move the **same security control in opposite directions** — #6724 widens what it blocks, #6427 narrows it — which is a genuine release-scoped cohesion constraint that neither card's own ACs can see.
+
+- [ ] **CIAC-1 (#6724 × #6427 on `core/hooks/tests/block-destructive.test.sh`):** the merged suite runs green with **both** cards' arms present — #6724's per-bypassing-shape arms with their allowlisted-script controls, and #6427's carve-out arms with their tracked-Layer-1 discrimination arms — at a total assertion count strictly greater than the Commit-0 baseline, with `FAIL: 0`. *Method:* run the suite through its sanctioned harness — `core/hooks/tests/setup-ci-layout.sh` then the emitted layout's `test-runner.sh` — and assert the `Total:` line exceeds the Commit-0 baseline recorded below and that `FAIL: 0`. Expected result is non-null, so no control arm is owed under AC-Binding Limb 2. *Graded at Stage 9 QC3.5 on the merged PR.*
+
+  **Commit-0 assertion baseline: `block-destructive.test.sh` = `Total: 398 PASS: 398 FAIL: 0` at `ef008d6d`, through `test-runner.sh`.** Post-#6427 target **406**; #6724 adds further arms above that. **#6724 must not restate 398 as its own pre-baseline** — CIAC-1's "strictly greater" is read against the post-#6427 number.
+
+  **Harness assertion is a precondition of this criterion, not an aside.** Running `block-destructive.test.sh` directly reports roughly `PASS: 179 FAIL: 219` — every block assertion failing with exit 0 and empty stderr — because the layer-3 scope guard resolves its governed root from the hook directory's grandparent and early-exits before any rule fires. `test-runner.sh` exports `PMO_SCOPE_GUARD_ROOT="/"` for exactly this reason and is the only sanctioned path; an agent cannot set that variable from a tool call, because `BLOCK-DESTRUCTIVE-023` denies it mid-session. **An all-allow change reads 100% green against a fully inert hook, so the harness must be asserted before any verdict is asserted.** Two independent Stage-5 spokes measured this separately.
+
+- [ ] **CIAC-2 (#6724 × #6427 on `core/hooks/block-destructive.sh`):** the two changes move the hook's allow/deny surface in opposite directions **without either overshooting into the other's arm** — #6427's carve-out narrows `BLOCK-DESTRUCTIVE-019` to the git-ignored `analysis/` subtree only and does not widen any `Bash`-arm allowance, and #6724's widening of the flag walk does not narrow any `Write`/`Edit`-arm block. *Method:* run both cards' discrimination arms in one pass — #6427's AC2 arm set (a Write to a **tracked** Layer-1 path from a non-worktree session must still block; expected denials: 1) and #6724's AC3 arm (every previously-blocking invocation shape still blocks, at the prior verdict set). Both arms are non-null must-fire assertions, each paired with its own control. *Graded at Stage 9 QC3.5 on the merged PR.*
+
+- [ ] **CIAC-3 (#6724 × #6427 on the `bypass-mode-readiness` corpus):** the single shipped coverage-boundary document is **internally consistent after all edits** — #6724's correction of the declared scope boundary, #6427's recorded Write/Edit-vs-Bash residual, and the R-3 `_cross-cutting.md` `-019` scope correction do not contradict each other or the shipped hook, and the **generated index `core/rules/bypass-mode-readiness.md` is byte-consistent with its fragments**. *Method:* reviewer read of the merged documents against the merged hook, asserting (i) the "forms out of this rule's scope" list no longer names the plus-form and separate-argument shapes as out of scope, (ii) the tool-path-coverage residual is stated once, not twice in conflicting terms, and (iii) the `-019` protected-path claim in `_cross-cutting.md` matches the hook's actual `is_layer1` classification set. Declared as a **reviewer-read** method; no executor exists for prose-coherence grading and none is claimed. Mechanical companion that **is** executable: `python3 core/deploy/tools/build-hook-registry.py && git diff --exit-code core/rules/bypass-mode-readiness.md` (exit 0 ⇒ the committed index matches its sources ⇒ Check 38 `FRESH`). *Graded at Stage 9 QC3.5 on the merged PR.*
+
+---
+
+## Verification Plan
+
+**AC baseline as read at `ef008d6d`:** #6724 — **6** criteria; #6427 — **3** criteria. A count that no longer matches this baseline is the mechanical signal to re-bind the ordinals.
+
+### Per-Issue Verification
+
+| Issue | AC | Verification Method | Expected Result |
+|---|---|---|---|
+| #6724 | AC-1 | Fixture per plus-form shape through the CI layout; paired control with an allowlisted script | BLOCK fires on each bypassing shape; control ALLOWs |
+| #6724 | AC-2 | Fixture per separate-argument shape, same control pairing | BLOCK fires; control ALLOWs |
+| #6724 | AC-3 | Re-run the existing suite through `test-runner.sh`; compare against the Commit-0 assertion count and verdict set | Prior assertion count and verdicts hold |
+| #6724 | AC-4 | Paired mutation arm — revert the walk to the dash-anchored form; gate on the mutant differing from the shipped hook | New tests **FAIL** under the mutant (a behavioural difference, not a green re-run) |
+| #6724 | AC-5 | Each fixture asserts its own scope-root resolution before asserting a verdict | Scope root resolves in-scope on every fixture |
+| #6724 | AC-6 | Reviewer read of `core/rules/bypass-mode-readiness/block-destructive.md` against the shipped walk | Declared boundary matches actual coverage |
+| #6427 | AC-1 | Suite arms A1 / A2 / A3 — Write and Edit payloads to `pmo-platform/analysis/<subfolder>/…` (depth 2 and depth 3) with a non-worktree cwd, through `test-runner.sh`; plus a Stage-8 re-run of Reproduction Steps 1–2 from a genuine non-worktree session against the **deployed** hook | Exit 0 on each; no `BLOCK-DESTRUCTIVE-019` denial |
+| #6427 | AC-2 | Suite arms A4–A8 — the five discrimination partners: a tracked Layer-1 path under `core/`, the tracked `analysis/README.md`, a `..`-bearing path through the carve-out, the `analysis-notes` sibling prefix, and a differently-located `release/analysis/` | Blocked with `BLOCK-DESTRUCTIVE-019` on each; **expected denials: 1 per arm** — a non-null must-fire expectation carrying its own arm |
+| #6427 | AC-3 | Inspect the shipped `core/rules/bypass-mode-readiness/block-destructive.md` for the recorded decision, and the regenerated index for byte-consistency with it | Asymmetry explicitly recorded as an accepted residual, with its direction-of-travel statement |
+
+No row expects a null result, so AC-Binding Limb 2 owes no control arms here — stated because a silent absence of arms is indistinguishable from an omission.
+
+### Paired mutation arms (Stage 7 — both #6427 guards must be shown load-bearing)
+
+A green suite proves the arms pass; it does not prove either guard does any work. Two mutants, each run against the **unmodified** suite:
+
+| Mutant | Change to the shipped hook | Arm that MUST flip to FAIL |
+|---|---|---|
+| **M-1** | Delete the traversal-reject arm of the carve-out `case` | **A6** (the `..` escape becomes an allow) |
+| **M-2** | Narrow the subtree arm from the subfolder-requiring pattern to the bare `analysis/` prefix | **A5** (tracked `README.md` becomes an allow) |
+
+A mutant that leaves the suite green means the corresponding guard is untested and the arm is decorative. Restore the shipped hook after each mutant — and **commit before mutating**, because a `git checkout --` restore in a mutate→test→restore loop discards the uncommitted change under test.
+
+---
+
+## Delivery Strategy
+
+D-C **SINGLE** topology — one branch `release/hook-guards-fail-closed-fasttrack`, one PR, one merge, base `main`. **P0 fully-serial** concurrency posture. This plan lands as Engineering Commit 0 with the version re-verify and `--verify-stamp` pre-flight recorded above. The PR is created in **draft** at Stage 6 Phase C2 after both Engineering chips have landed, and transitions to ready-for-review at the Stage 9 gate.
+
+---
+
+## Rollback Strategy
+
+Per-card revert. **#6427 and #6724 land in separate commits** so either reverts independently — a hard requirement under R8, not a hygiene preference, because PR #6745 may build on whichever lands. Both changes are behaviour-only edits to one hook plus its suite and docs; neither adds a file class, migrates state, or changes a config surface, so a revert is a clean `git revert` with no unwind. Release-level rollback is `git revert -m 1` of the merge commit.
+
+**Reversibility asymmetry, stated because the two cards are not the same decision.** **CHEAP** for #6427 — reverting the carve-out restores a working-but-noisy block. **MODERATE** for #6724 — reverting re-opens a P1 execution bypass, so the revert is itself a security decision requiring operator sign-off rather than an automatic rollback.
+
+---
+
+## Risk Register
+
+| # | Risk | Class | Owner | Mitigation | Reversibility |
+|---|---|---|---|---|---|
+| R1 | **Line-1718 conflict resolved wrongly, failing OPEN.** Both sides are security logic; a bad resolution either re-opens #6724's bypass or re-breaks the `bash -n` exemption. | Contention | PR #6745 at its re-baseline | #6724 AC4's paired mutation arm + #6745's own parse-mode arms; **both suites must be green post-merge, and the mutation arm must be shown to still fail on the reverted walk.** Neither side's assertion count is the post-merge count — both restate. | MODERATE |
+| R2 | **#6724's fix shape duplicates #6745's per-interpreter table.** | Dependency | Stage 5 | **RESOLVED at Stage 5 (AI-003): NEEDS NEITHER.** The dependency runs the opposite way — #6745 declares three of its own extensions blocked on this fix. An arity table would additionally invert the failure direction: #6745's table fails safe on omission, an arity table fails **open**. No pivot. | MODERATE |
+| R3 | **Doc incoherence survives a clean textual merge.** The `bypass-mode-readiness` corpus merges without conflict while its scope claims contradict each other or the shipped hook. | Contention | Stage 8 / CIAC-3 | CIAC-3 grades the merged documents for internal consistency, not just presence; R-3 folds the known `_cross-cutting.md` contradiction into scope rather than shipping it. | CHEAP |
+| R4 | **Milestone description stale in three ways** — 3-row Scope table, 9 effective pts, and the false no-contention claim. | Scope | Operator | **RESOLVED — AI-001 amendment approved and executed by the hub.** | CHEAP |
+| R5 | **`hotfix` → `Light` Stage-9 depth under-reviews a cross-release conflict.** | Scope | Operator | **RESOLVED — D-2 override to `Standard`.** | CHEAP |
+| R6 | **Baseline self-invalidation.** Every measurement is pinned to `ef008d6d` / `7e4c0034`; #6745 is actively worked. | Dependency | Stage 9 A6.5 | Sibling-merge stale-pin trigger re-runs at Stage 9 entry. The line-1718 finding must be re-confirmed **by reading the arm**, not inherited and not pattern-matched. | CHEAP |
+| R7 | **Single-card degeneration.** | Scope | Operator | Moot — R2 resolved with no pivot, so both cards ship. | CHEAP |
+| R8 | **Rollback couples to #6745.** If this release ships first and #6745 builds on it, reverting #6724 later means reverting through #6745's resolution. | Rollback | Stage 12 | **Separate commits per card** — revert granularity is a hard requirement here, not a preference. | MODERATE |
+| R9 | **Generated-index staleness ships silently at CI.** `deploy.sh` Check 38 flags a stale `core/rules/bypass-mode-readiness.md`, but the CI subset aggregating it reads the committed sentinel `.github/deploy-check-ci.enforce`, whose token was `warn` at the pin — an in-scope FAIL is reported and swallowed, exit 0. A missed regeneration turns Stage-7/9 `--check` red but produces **no red CI check-run**. | Verification | Stage 6 / Stage 9 | Regeneration is a **mandatory Engineering step** (DS-3), not a CI backstop. Re-read the sentinel token before restating this at Stage 9 — a flip to `enforce` changes Check 38 from reported to blocking. | CHEAP |
+| R10 | **Deployed-hook freshness.** `core/hooks/*.sh` deploys to the agent config root, and a plain `--deploy` can silently no-op on a stale baseline, so the operator can install a hook whose bytes are unchanged. | Deployment | Stage 12 / 13 | Re-deploy with `--all` and verify **by hash**, not by exit code. Stage 8's end-to-end AC1 re-run must exercise the **deployed** artifact, which is the reason the distinction matters. | CHEAP |
+
+---
+
+## Accepted Residuals
+
+Recorded here so they are read as decisions, not as gaps a later reader should re-open.
+
+| # | Residual | Basis | Disposition |
+|---|---|---|---|
+| **AR-1** | **Write/Edit-vs-Bash tool-path coverage asymmetry for tracked Layer-1 paths.** `BLOCK-DESTRUCTIVE-019` is a Write/Edit-matcher rule only; the `Bash` branch carries no Layer-1 write guard, so a Bash-mediated write to a tracked Layer-1 path succeeds where the same write via `Write` is denied. | Closing it needs a general Bash file-write detector over an open-ended command surface — a new capability on a security-class hook, not a defect fix. The hook's own `-022` documentation already records that a closed enumeration of shell forms measured smaller than the real set, which is the same failure mode one directory up. | **ACCEPTED for this release** and recorded in the rule's own documentation per #6427 AC3. Rejected as in-scope at Collective Review. **The change NARROWS the asymmetric surface:** for the analysis subtree the two tool paths now agree (both permitted); for tracked Layer-1 paths the asymmetry is unchanged. Follow-up work item routed through `intake-desk` Mode C. |
+| **AR-2** | **Stale line-number citation** in `core/hooks/block-destructive.sh` and `core/hooks/tests/block-destructive.test.sh` — both cite a "`:425` Layer-1 detection base" that no longer resolves to a Layer-1 base at the pin. | Comment-only, no behavioural effect. A line-number citation in prose is the parameterize-over-hardcode anti-pattern. | **ACCEPTED**; not required for any AC. |
+| **AR-3** | **No ADR authored this release** for the generalizable principle #6427's design turns on (*a security-class fail-closed hook's exemption predicate must not be authored in a surface the hook's own subject can write*). | An ADR would falsify the `hotfix` class's own trigger — "neither card introduces a new protocol, reference doc, schema or skill" — on a 2-point corrective card. | **ACCEPTED (DS-5, operator-confirmed at Collective Review).** The principle is recorded where it is load-bearing: inside the rule fragment it governs. Follow-up ADR proposed as an intake slug. **Stating the omission rather than skipping it silently is the point.** |
+| **AR-4** | **Four permanent `M3-ADV` advisory rows** on milestone #393 from `check-milestone-epic-membership.py --leg M3`, caused by #6817 remaining assigned after being closed `not_planned`. | Operator override D-4 retained the assignment to preserve the in-tracker breadcrumb that this milestone originally carried three cards. | **ACCEPTED — expected steady state, non-blocking.** A later reader should not treat these rows as work to be done. |
+
+---
+
+## Quota Budget
+
+**Verdict:** **PASS** (per `quota-budget-protocol.md` Checkpoint A)
+**Parallel-eligible spokes per parallel stage (from the Stage Applicability Matrix):** Stage 5: **2** · Stage 7: **2** · Stage 8: **2**
+**Per-spoke cost estimate:** size-bucket ordinal band (§ 5 heuristic; no telemetry medians available). Worst batch = one `size:M` (low–moderate) + one `size:S` (lowest).
+**Assumed/stated remaining usage-window envelope:** **not stated by the operator at hub start** — conservative default assumed, and the assumption is named rather than synthesized into a number (§ 6.1 refuse-to-synthesize).
+**Estimated cumulative draw % (worst parallel batch):** ~**10%** of a full window (2 spokes at the observed ≈5%-per-spoke reference point), well inside the `< 50%` PASS band even on a substantially depleted envelope.
+**Routing:** **PASS — proceed parallel; no warning in the plan.**
+**Note:** Checkpoint A is advisory. The load-bearing gate is Checkpoint B at Procedure 2 Step 5.5, re-validated at **every** `Agent`-tool launch — wave or singleton, every stage, including the write-serialized Stage 6 and Stage 13 singletons. Checkpoint B also gates a second axis this section deliberately omits — the host-API (`core`/`graphql`) pools, read at runtime and combined DEFER-dominant per § 4.3b. A plan-time pool reading has no predictive value by Engineering time (§ 3.1), so its absence here is a recorded decision, not a gap.
+
+---
+
+## Decisions Rendered
+
+| ID | Decision | Verdict | Reversibility |
+|---|---|---|---|
+| **D-1** | Sequencing against in-flight PR #6745 | **Option (a), split by card** — ship both on `main`, sequence #6427 first; #6745 resolves the line-1718 conflict at the re-baseline it must perform regardless | `MODERATE · confidence: HIGH` |
+| **D-2** | Release Class + review depth | **`hotfix`**, with Stage-9 depth override `Light → Standard` and Stage-5 activation `ALL` | `CHEAP · confidence: HIGH` |
+| **D-3** | #6427 fix direction | **Direction (a)** — hook carve-out permitting writes under the git-ignored `analysis/` subtree; direction (b) standard-repoint rejected | `CHEAP · confidence: HIGH` |
+| **D-4** | #6817 milestone membership | **KEEP ASSIGNED** — operator override of the hub's recommendation to remove; see AR-4 for the accepted consequence | `CHEAP · confidence: HIGH` |
+| **D-C** | Branch topology | **SINGLE** — one milestone, one PR, one merge | recorded determination |
+| **D-Concurrency** | Concurrency posture | **P0** fully-serial | recorded determination |
+| **D-Version** | Release identity | **`versioned`**, bump-class **`minor`**; rule-computed next-free binds at the Stage-12 atomic claim, not at Planning | recorded determination |
+| **Scope-lock** | Collective Review | **BASE + R-3** — both cards as designed, plus the one-line `_cross-cutting.md` `-019` scope correction (graded by CIAC-3). Bash-asymmetry closure REJECTED as accepted residual AR-1 | `MODERATE · confidence: HIGH` |
+| **AI-003** | Pivot test — does #6724 duplicate #6745's per-interpreter keying? | **NEEDS NEITHER.** No pivot to option (e) | `MODERATE · confidence: HIGH` |
+| **DS-5** | Author an ADR this release? | **NO** — follows from the rendered `hotfix` class; principle recorded inline, intake slug proposed. See AR-3 | `CHEAP · confidence: HIGH` |
+
+### Action-item register (authoritative — supersedes the colliding IDs both Stage-5 spokes minted)
+
+**AI-001** milestone description amend *(done)* · **AI-002** #6427 declared file set extended to the rule fragment *(carried into the File Change Matrix above)* · **AI-003** pivot test *(resolved — no pivot)* · **AI-004** re-measure line 1718 at Stage 9 by reading the arm, never a line pattern · **AI-005** #6427's write set includes the **generated** index `core/rules/bypass-mode-readiness.md` per ADR-030 *(carried into the File Change Matrix above)* · **AI-006** #6724 declared file set · **AI-007** verb→domain rename hazard *(posted to PR #6745)* · **AI-008** sibling pin flip *(posted to PR #6745)*.
+
+---
+
+## Deviation Log
+
+Deviations from the Stage-4 plan of record, each with its ratifying authority. An empty row set would mean no deviation; these are recorded, not silent.
+
+| # | Deviation from Stage-4 plan | Authority | Disposition |
+|---|---|---|---|
+| **DEV-1** | **File Change Matrix grew from 5 rows to 7.** Stage 4 declared four edits plus the plan add; the delivered set adds `core/rules/bypass-mode-readiness.md` (generated index) and `core/rules/bypass-mode-readiness/_cross-cutting.md`. | AI-005 / Stage-5 R-2 for the index; Collective Review scope-lock `BASE + R-3` for `_cross-cutting.md` | **RATIFIED before Engineering.** Transcribed into the matrix above with per-row authority. A declared-vs-delivered check against the Stage-4 matrix alone would report two undeclared edits; against this matrix it is clean. |
+| **DEV-2** | **Implementation sequence inverted** from the milestone description's severity-descending order to `#6427 → #6724`. | Stage-4 R2 / D-1 | **RATIFIED at the Stage-4 gate.** |
+| **DEV-3** | **Stage-9 depth and Stage-5 activation overridden** from the `hotfix` class defaults. | D-2 | **RATIFIED at the Stage-4 gate.** Class unchanged; only the two dimensions move. |
+
+---
+
+## Verification Evidence
+
+*Populated at Stage 6 Phase C4 self-verification, per card, before handoff to Dev Testing.*
+
+**ADR index:** N/A — this release adds no record under `release/ADRs/`.
+
+---
+
+## Issue References
+
+<!-- repo-integrity: allow-issue-ref -->
+
+- **#6427** — Layer-1 write hook denies the sanctioned repo-root analysis workspace for non-worktree sessions. P2/size:S. The `BLOCK-DESTRUCTIVE-019` rule denies `Write`/`Edit` to `pmo-platform/**` from any session whose cwd is not under the repo's worktree base, with no carve-out for the git-ignored `analysis/` subtree that `core/standards/analysis-workspace-standard.md` §1 designates as the sanctioned home for platform analysis — so the control and the standard contradict each other for exactly the session shape the standard anticipates.
+- **#6724** — the execution guard's flag walk terminates early on unrecognised option shapes, so a bypassing invocation reaches the shell unblocked. P1/size:M.
+- **#6431** — parent of #6427.
+- **#6619** — parent of #6724.
+- **#6908** — Stage 4 Release Planning sub-task; the plan source and the D-1 / D-2 / D-3 / D-4 gate record.
+- **#6957** / **#6958** — Stage 5 Solutioning sub-tasks for #6427 and #6724.
+- **#6959** / **#6960** — Stage 6 Engineering sub-tasks for #6427 and #6724.
+- **#6745** — in-flight draft PR on `release/hooks-block-only-their-scope`; the cross-release contention counterparty, which resolves the line-1718 conflict at its own re-baseline.
+- **#6817** — closed `not_planned` as a duplicate; retained on the milestone by operator override D-4 (see AR-4).
