@@ -622,7 +622,9 @@ log() {
 #   deploy-rules-mirror
 #                   DO NOT EMIT — but this is a COVERAGE HOLE, not a cleanup, and the
 #                   distinction matters. The target set is real and enumerated: Check 9
-#                   asserts an 11-path rules mirror under $DEPLOY_ROOT/.claude/rules/,
+#                   asserts a rules mirror under $DEPLOY_ROOT/.claude/rules/ whose
+#                   membership is the marker-registered array itself — self-counting,
+#                   so read it from the entries rather than from a number stated here,
 #                   `release/tools/blast-radius.sh` carries the identical pair set, and
 #                   `.claude/rules` is NOT git-tracked — so the mirror can only exist by
 #                   being deployed. What is missing is the PRODUCER: no file in this
