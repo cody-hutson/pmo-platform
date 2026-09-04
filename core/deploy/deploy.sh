@@ -16183,23 +16183,39 @@ STUB
   _r1="$(_ds_warn_unstamped 3)"
   [[ "$_r1" == "OK" ]] || { echo "FAIL: DS-7c a release-stamped deploy must NOT warn, got '$_r1'"; failures=$((failures+1)); }
 
-  # DS-8 — three subtypes emit, and each maps to its own target class. The emitting set
-  #        is deliberately THREE: deploy-rules-mirror and deploy-helper are excluded
-  #        because this script contains no code path that performs either deploy, and a
-  #        row asserting a deploy that never happened is fabricated telemetry in a log
-  #        that cannot be rewritten.
+  # DS-8 — four subtypes emit, and each maps to its own target class. The emitting set
+  #        is deliberately FOUR: deploy-helper alone is excluded, because this script
+  #        contains no code path that performs that deploy, and a row asserting a deploy
+  #        that never happened is fabricated telemetry in a log that cannot be rewritten.
+  #
+  #        deploy-rules-mirror LEFT the exclusion set when its producer shipped. It was
+  #        never a cleanup candidate — it was a COVERAGE HOLE (see the emitter preamble
+  #        near the top of this file), and deploy_rules_mirror() is the producer that
+  #        closes it. The re-evaluation the preamble demanded is discharged here, in the
+  #        executable assertion, not only in prose: DS-8a's count is the arm that would
+  #        turn red if the producer were reverted without restoring the exclusion.
   : > "$_dcap"
   DS_WRITER="$_dstub" _emit_deployment_status "deploy-skill"   "skill"   "s1" "resolved" "none"
   DS_WRITER="$_dstub" _emit_deployment_status "deploy-package" "package" "p1" "resolved" "none"
   DS_WRITER="$_dstub" _emit_deployment_status "deploy-harness" "harness" "h1" "resolved" "none"
+  DS_WRITER="$_dstub" _emit_deployment_status "deploy-rules-mirror" "mirror" "rules-mirror" "resolved" "none"
   _n1="$(/usr/bin/awk -F'\t' '{print $4}' "$_dcap" | /usr/bin/sort -u | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
-  [[ "$_n1" == "3" ]] || { echo "FAIL: DS-8a the emitting subtype set must be exactly 3 distinct subtypes, got $_n1"; failures=$((failures+1)); }
-  _n2="$(/usr/bin/grep -cE '	(deploy-rules-mirror|deploy-helper)	' "$_dcap" || true)"
+  [[ "$_n1" == "4" ]] || { echo "FAIL: DS-8a the emitting subtype set must be exactly 4 distinct subtypes, got $_n1"; failures=$((failures+1)); }
+  _n2="$(/usr/bin/grep -cE '	(deploy-helper)	' "$_dcap" || true)"
   [[ "$_n2" == "0" ]] || { echo "FAIL: DS-8b producer-less subtypes must never be emitted, got $_n2 row(s)"; failures=$((failures+1)); }
   # SPECIFICITY control for DS-8b: the arm above must be capable of counting a match,
   # or its zero proves nothing. Feed it the shape it is looking for, in isolation.
-  _n2="$(/usr/bin/printf 'v\t12\tdeployment-status\tdeploy-helper\thub\ts\tCHEAP\tresolved\tp\n' | /usr/bin/grep -cE '	(deploy-rules-mirror|deploy-helper)	' || true)"
+  # The control still feeds deploy-helper, which is still IN the narrowed alternation —
+  # so narrowing the pattern did not cost this arm its ability to fire.
+  _n2="$(/usr/bin/printf 'v\t12\tdeployment-status\tdeploy-helper\thub\ts\tCHEAP\tresolved\tp\n' | /usr/bin/grep -cE '	(deploy-helper)	' || true)"
   [[ "$_n2" == "1" ]] || { echo "FAIL: DS-8c the producer-less-subtype detector must be able to FIRE (control arm), got $_n2"; failures=$((failures+1)); }
+  # DS-8d — the DISCRIMINATION arm the narrowing makes necessary. DS-8b's zero must mean
+  # "deploy-helper was not emitted", NOT "the pattern matches nothing any more". Feed it a
+  # deploy-rules-mirror row — the subtype that just left the exclusion set — and require a
+  # zero. Without this, reverting DS-8b's alternation to a never-matching literal would be
+  # indistinguishable from the shipped state.
+  _n2="$(/usr/bin/printf 'v\t12\tdeployment-status\tdeploy-rules-mirror\thub\ts\tCHEAP\tresolved\tp\n' | /usr/bin/grep -cE '	(deploy-helper)	' || true)"
+  [[ "$_n2" == "0" ]] || { echo "FAIL: DS-8d the narrowed detector must NOT match the now-producing subtype, got $_n2"; failures=$((failures+1)); }
 
   # DS-9 — a writer that fails must NOT fail the deploy. deploy.sh runs
   #        `set -euo pipefail`, so an unguarded non-zero from the writer would abort the
@@ -16217,7 +16233,7 @@ STUB
   #         canonical writer accepts.
   if [[ -x release/tools/append-pipeline-event.sh ]]; then
     local _sub
-    for _sub in deploy-skill deploy-package deploy-harness; do
+    for _sub in deploy-skill deploy-package deploy-harness deploy-rules-mirror; do
       if ! release/tools/append-pipeline-event.sh --dry-run --version "stage9-gate-integrity" --stage 12 \
            --event-type deployment-status --event-subtype "$_sub" --actor hub --subject "skill:x" \
            --reversibility CHEAP --outcome resolved --payload 'target:x; module:core; mech:deploy.sh --deploy; result:SUCCESS; detail:none' >/dev/null 2>&1; then
@@ -16408,7 +16424,7 @@ EOF
   echo "  register runner-resolution validated (#4208, group RR):" >&2
   echo "    RR-5 absent standard NOSET / RR-1 all pointers resolve CLEAN|2 / RR-2 runner no longer carries its anchor UNRESOLVED|1|2 (the shipped defect, in fixture form) / RR-3 absent runner-definition file UNRESOLVED|2|2 / RR-4 zero pointers NOSET / RR-6 prose-only token mentions parse to zero (parser control) / RR-7 runner-src body does not name its anchor UNRESOLVED|1|1 / RR-7b unregistered RC-NN id in the runner body UNRESOLVED|1|1 (the #4442 defect, in fixture form) / RR-8 RC-<stage>-<slug> ids do NOT match RC-NN, CLEAN|1 (namespace-collision specificity arm) / RR-9 bank-shaped id absent from the bank UNRESOLVED|1|1" >&2
   echo "  deployment-status emitter validated (#4215, group DS):" >&2
-  echo "    DS-1 well-formed slug OK / DS-2 empty + pipe-bearing + whitespace-bearing slugs rejected / DS-3 outcome derivation incl. DS-3c the degraded-but-not-in-FAILURES union term (FAILURES is the exit-code oracle, not the deploy-health oracle) / DS-4 SILENCE DEFAULT — absent --release emits ZERO rows, DS-4b malformed slug likewise / DS-5 CONTROL — the same call WITH a slug emits exactly 1 row carrying the fixed 10-column contract / DS-6 escalated row survives with result:FAIL + DS-6c payload pipe-forging guard + DS-6d 300-char bound / DS-7 THE OBSERVING STEP — targets-with-no-flag WARNs, zero-targets does NOT (honest no-op), release-stamped does NOT / DS-8 exactly 3 emitting subtypes, producer-less subtypes never emitted, with a firing control arm / DS-9 a failing event writer must not fail the deploy / DS-10 the CANONICAL writer accepts all three subtypes via --dry-run, and rejects an out-of-enum subtype and a version-shaped release key (two control arms). Every write in this group routes through the DS_WRITER stub seam — no assertion can append to the real append-only log." >&2
+  echo "    DS-1 well-formed slug OK / DS-2 empty + pipe-bearing + whitespace-bearing slugs rejected / DS-3 outcome derivation incl. DS-3c the degraded-but-not-in-FAILURES union term (FAILURES is the exit-code oracle, not the deploy-health oracle) / DS-4 SILENCE DEFAULT — absent --release emits ZERO rows, DS-4b malformed slug likewise / DS-5 CONTROL — the same call WITH a slug emits exactly 1 row carrying the fixed 10-column contract / DS-6 escalated row survives with result:FAIL + DS-6c payload pipe-forging guard + DS-6d 300-char bound / DS-7 THE OBSERVING STEP — targets-with-no-flag WARNs, zero-targets does NOT (honest no-op), release-stamped does NOT / DS-8 exactly 4 emitting subtypes (deploy-rules-mirror joined when its producer shipped), the one remaining producer-less subtype never emitted, with DS-8c a firing control arm and DS-8d a discrimination arm proving the narrowed detector still separates the two / DS-9 a failing event writer must not fail the deploy / DS-10 the CANONICAL writer accepts all four subtypes via --dry-run, and rejects an out-of-enum subtype and a version-shaped release key (two control arms). Every write in this group routes through the DS_WRITER stub seam — no assertion can append to the real append-only log." >&2
   echo "  G1-03 evidence shapes validated (#4923, group EV):" >&2
   echo "    EV-1 six-marker probe record PASSes with zero bracket tokens (the shape this card admits) / EV-2 the >=2 BOUNDARY holds at exactly two markers (turns red if the count is raised) / EV-3 no Evidence section FAILs / EV-4 DISCRIMINATION — all six marker words as running prose still FAIL, so prose ABOUT evidence is not evidence / EV-5 an evidence-free Evidence section FAILs (the falsification arm: the widened predicate is not a never-FAIL check) / EV-6 shape (a) bracket-only still PASSes (regression) / EV-7 a lone label-position marker FAILs, killing the >=1 mutant / EV-8 the SAME token as EV-6 placed OUTSIDE the Evidence section FAILs, killing the whole-body mutant. Every arm drives _g1_03_evaluate, the same function Check 22 calls — no parallel reimplementation to drift." >&2
   return 0
