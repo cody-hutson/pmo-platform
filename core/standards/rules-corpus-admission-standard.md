@@ -250,40 +250,53 @@ a number nobody can audit.
 | Date | Threshold | Value | Derivation | Admitted-set position when set |
 |---|---|---:|---|---|
 | 2026-09-04 | Per-file trigger | 25,600 B | `C6_BYTE_THRESHOLD`, reused verbatim from `canonical-skill-structure.md` §5 | 2 of 9 members over trigger; both carry a §2 conditional field |
-| 2026-09-04 | Directory ceiling | 204,800 B | 8 × the per-file trigger | 146,869 B — **WITHIN**, 28.3 % headroom |
+| 2026-09-04 | Directory ceiling | 204,800 B | 8 × the per-file trigger | 149,168 B — **WITHIN**, 27.2 % headroom |
 
 ### Founding measurement {#founding-measurement}
 
 Recorded per the audit-baseline discipline: a measurement is reproducible only when its
-anchor is stated. **These figures are a dated snapshot, not the live value** — the live
-authority is the rules-budget check, which re-measures at build time.
+anchor is stated. **A date is not an anchor.** The whole of this release landed on
+2026-09-04, so a dated anchor cannot distinguish two commits that measure differently —
+which is precisely how the figure below first went stale while still reading as correct.
+The anchor is therefore a **commit**. **These figures are a pinned snapshot, not the live
+value** — the live authority is the rules-budget check, which re-measures at build time.
 
 | Population | Files | Bytes |
 |---|---:|---:|
 | Prior mirror pair set | 11 | 505,303 |
 | Prior directory-shaped hook-fragment set | 12 | 145,288 |
 | **Prior deployed payload** | **23** | **650,591** |
-| **Admitted set after §5** | **9** | **146,869** |
-| Reduction | — | **503,722 B (77.4 %)** |
+| **Admitted set after §5** | **9** | **149,168** |
+| Reduction | — | **501,423 B (77.1 %)** |
 
-- **Measured on** 2026-09-04 over the delivered state — after the §5 verdicts were
-  applied to both mirror holders and the §2 contract was satisfied across the admitted
-  set. The prior-payload figures are the same populations measured before those
+- **Anchor: commit `060ec486`**, measured over the delivered state — after the §5 verdicts
+  were applied to both mirror holders and the §2 contract was satisfied across the
+  admitted set. The prior-payload figures are the same populations measured before those
   removals landed.
-- **Position against §3:** 146,869 B of 204,800 B — **WITHIN**, 57,931 B of headroom
-  (28.3 %).
+- **Stability window: `bc84eca2..060ec486`.** `bc84eca2` is the last commit to change any
+  admitted member's content, so the figure reproduces unchanged at every commit in that
+  range — the bounded window the audit-baseline discipline asks for alongside the anchor.
+- **Reproduce it** by summing `wc -c` over the source paths emitted by `mirror_pair_set()`
+  in `core/deploy/deploy.sh` at the anchor — the member list is read from the
+  marker-registered holder, never transcribed.
+- **Position against §3:** 149,168 B of 204,800 B — **WITHIN**, 55,632 B of headroom
+  (27.2 %).
 - **Token equivalent** ≈ 37 K, against ≈ 163 K prior — `[INFERRED]`, reported as context
   only and **never gated** (§3).
 
 The ceiling demonstrably bites rather than ratifying the status quo: the prior payload
-overshot it by **3.18×**. The headroom is sized for roughly six further median rules
-before §4 fires.
+overshot it by **3.18×**. The headroom is sized for roughly five further median rules
+(median member 10,413 B) before §4 fires.
 
-**These numbers are a dated snapshot and will drift as the admitted rules are edited.**
-That is expected and is not drift to be corrected here — the live authority is the
-rules-budget check, which re-derives the member list from the marker-registered holder
-and re-measures at build time on every run. This row records what the thresholds were
-set against, not what the set currently weighs.
+**These numbers are a commit-pinned snapshot and will drift as the admitted rules are
+edited.** That is expected and is not drift to be corrected here — the live authority is
+the rules-budget check, which re-derives the member list from the marker-registered holder
+and re-measures at build time on every run. This row records what the thresholds were set
+against, not what the set currently weighs. **What a stale figure *is*, once the anchor is
+a commit, is reproducible-and-wrong rather than unfalsifiable:** a reader can re-measure at
+the stated anchor and tell the two apart. Under the previous dated anchor they could not,
+and the figure sat 2,299 B stale — two admitted members grew after the measurement, inside
+the same calendar day — while still reading as correctly recorded.
 
 ---
 
