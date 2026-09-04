@@ -401,10 +401,12 @@ baked digit. The re-measured arms below **replace** the Commit-0 table.
 | adapter `--dry-run` (fifth, corroborating) | — | prints `v4.54`, exit 0 | — | — |
 
 **Note on the published-Releases arm.** It reads `v4.53` as *absent* while three other arms
-read it as *claimed*. That is a **lagging arm, not evidence the slot is free** — the sibling
-release's Stage-13 close-out, which publishes the GitHub Release, is still open. The claimed
-set is the **union** across arms, so `v4.53` is claimed. Reading that single zero as
-availability is precisely the failure the multi-arm procedure exists to prevent.
+read it as *claimed*. That is a **lagging arm, not evidence the slot is free**: the published
+GitHub Release is emitted by a step downstream of the tag, the ledger row and the plan file,
+so it can trail them by an arbitrary interval — re-measured here after that release's
+close-out had already merged, and still absent. The claimed set is the **union** across arms,
+so `v4.53` is claimed. Reading that single zero as availability is precisely the failure the
+multi-arm procedure exists to prevent, and it is why no arm is load-bearing alone.
 
 `anchor()` = **v4.53** · floor for a `minor` bump = `(4, 54, 0)` · recomputed next-free =
 **v4.54** · planned value = **v4.54**. Not in the claimed set **and** equal to the recomputed
