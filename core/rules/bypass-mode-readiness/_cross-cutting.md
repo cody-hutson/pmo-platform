@@ -123,7 +123,7 @@ These eight are the allowlists the bypass-mode hooks consult. The broader worksp
 
 The helper validates that the target is one of the 8 known allowlists and that the entry has no control characters. All additions are logged to `.claude/hooks/allowlist-additions.log`.
 
-**Allowlist files are explicitly excluded from the self-mod guard** (NEW-B BLOCK-DESTRUCTIVE-019) — Claude can append to them without bypass. Only `.claude/settings*.json` and `.claude/hooks/*` are protected.
+**Allowlist files are explicitly excluded from the self-mod guard** (NEW-B BLOCK-DESTRUCTIVE-019) — Claude can append to them without bypass. The guard's protected set is `CLAUDE.md`, `pmo-platform/**`, `.claude/settings.json`, `.claude/hooks/*` and `.claude/rules/*`, less that rule's two exemptions (a repo-rooted worktree cwd, and the git-ignored `pmo-platform/analysis/<subfolder>/…` workspace).
 
 ## Warn-Mode vs. Enforce-Mode
 

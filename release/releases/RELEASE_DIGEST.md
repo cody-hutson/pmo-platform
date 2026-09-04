@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.53 (2026-09-04) — Analysis writes work again, and a skippable safety check is fixed
+
 ### hub-spoke-run-and-planning-discipline (2026-09-03, version-less) — Update notices stay accurate, and more edits now pause for approval
 
 ### v4.52 (2026-09-03) — Every automation now registers before it ships

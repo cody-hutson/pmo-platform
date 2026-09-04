@@ -705,17 +705,35 @@ script_interp_noexec_flag() {   # $1 = interpreter basename  $2 = normalized fla
 # and `+-emulate`. Controls fired both ways (`zsh --xtrace -n marker.sh` silent,
 # `zsh --emulate -n marker.sh` prints M1RAN).
 #
-# `+-emulate` IS DELIBERATELY ABSENT, for the same structural reason as `-c` below.
-# The walk's option arm matches `-*`; a `+`-leading token matches neither it nor
-# the `--`/`-c` labels, so it falls to `*) break` and is taken as the operand — the
-# table is never consulted for it. A `+-emulate` row would be a dead branch. The
-# consequence is real but INHERITED, not introduced here: `zsh +-emulate -n <path>`
-# is ALLOW on origin/main and ALLOW here alike, because `script_noexec` never gets
-# set. The same is true of the `+O`/`+o` rows above, which are dead for the same
-# reason and are left in place rather than removed, so that widening the walk to
-# `+`-leading tokens finds the arity already stated. Recorded here rather than
-# half-closed: closing it means teaching the WALK about `+` options, which is a
-# change to operand selection on a security surface and needs its own measurement.
+# `+-emulate` IS PRESENT, AND AN EARLIER FORM OF THIS NOTE SAID IT WAS DELIBERATELY
+# ABSENT. That exclusion was correct for the code it was written against and is now
+# false, so it is replaced rather than annotated. The argument was structural: the
+# walk's option arm matches `-*`, a `+`-leading token matches neither it nor the
+# `--`/`-c` labels, so it fell to `*) break`, was taken as the operand, and the table
+# was never consulted for it — a `+-emulate` row would have been a dead branch. THE
+# `*) break` IT RESTED ON NO LONGER EXISTS: the operand walk now terminates on the
+# arm's declared operand DOMAIN and ADVANCES PAST any token the domain does not
+# claim, so every `+`-leading spelling reaches this table. The row is live, and so
+# are the `+O`/`+o` rows above, which were kept for exactly this eventuality.
+#
+# THE ROW IS ALSO NO LONGER OPTIONAL, because the consequence stopped being
+# inherited. `zsh +-emulate -n <path>` is BLOCK on origin/main — main advances past
+# `+-emulate` and adjudicates the script, having no parse-only exemption to fool —
+# and without this row the merged hook would ALLOW it. That is a BLOCK -> ALLOW on a
+# shape the real shell EXECUTES: an escape INTRODUCED BY THE MERGE rather than by
+# either side. Measured with controls firing: `zsh +-emulate -n -c 'echo X'` prints
+# X, `zsh -n -c 'echo X'` is silent.
+#
+# THE `+` SURFACE WAS RE-SWEPT BEFORE THE ROW WAS ADDED, because a row is only worth
+# what the sweep behind it is. 656 zsh `+` spellings (`+<letter>`, and `+-<name>`,
+# `+-no<name>`, `+-no-<name>` over the live shell's own 197 `${(k)options}` plus the
+# 12 documented aliases) and 89 bash/sh `+` spellings, classified by the THREE-outcome
+# read this note already mandates — B-named = consumed, A-named-and-REJECTED =
+# consumed against a validated namespace, A-named-and-not-found = A was the script.
+# Controls fired on both readings (`--emulate`/`--rcfile` arity 1, `-x` arity 0).
+# Result: `+-emulate` is the ONLY arity-1 `+` spelling zsh has beyond `+o`, and
+# bash/sh have none beyond the `+O`/`+o` already listed. It is also the only one that
+# leaves the shell LIVE after eating a `-n` (`+o`/`+O` abort, rc=2/rc=1).
 #
 # THE ZSH `--rcfile` / `--init-file` ROWS ARE DELIBERATE AND THEY ARE NOT A CLAIM
 # THAT ZSH HAS THOSE OPTIONS. It does not — `zsh --rcfile …` exits "no such
@@ -746,7 +764,7 @@ script_interp_optarg_flag() {   # $1 = interpreter basename  $2 = normalized fla
       case "$2" in --rcfile|--init-file|-O|+O|-o|+o) return 0 ;; esac
       ;;
     zsh)
-      case "$2" in -o|+o|--emulate|--rcfile|--init-file) return 0 ;; esac
+      case "$2" in -o|+o|--emulate|+-emulate|--rcfile|--init-file) return 0 ;; esac
       ;;
     *) : ;;   # EXPLICIT NULL — see the table note above. Not an omission.
   esac
@@ -2575,6 +2593,72 @@ case "$TOOL_NAME" in
             fi
             ;;
         esac
+        # THE TERMINATION PREDICATE IS THE ARM'S OWN DECLARED OPERAND DOMAIN, not
+        # "the first token that is not flag-shaped". Answering "where is the operand?"
+        # with "the first non-flag token" is wrong in two independent ways, and both
+        # land in the same place: a token that is NOT the operand becomes the
+        # adjudicated operand, fails the arm's operand-domain test, and the arm
+        # concludes the invocation is not its business -- reaching ALLOW WITHOUT THE
+        # ALLOWLIST EVER BEING CONSULTED.
+        #
+        #   (1) A PLUS-FORM option is not matched by `-*`, so it fell to `*)` and the
+        #       OPTION ITSELF became the operand:      bash +x <script>
+        #   (2) An option taking a SEPARATE argument was skipped by `-*`, its value is
+        #       not dash-prefixed, so THE VALUE became the operand:
+        #                                              bash -o errexit <script>
+        #
+        # The controls are what made this a defect rather than a boundary: an option
+        # that takes NO separate argument leaves the real operand in place, so
+        # `bash -x <script>` blocked while `bash -o errexit <script>` allowed. Two
+        # spellings of one execution, one checked and one not. It also DISARMED the
+        # variable-bearing fail-closed deny — `bash -o errexit "$DIR/x.sh"` reached
+        # ALLOW while the bare spelling denied — so a documented fail-closed posture
+        # was bypassable by prefixing any value-taking flag.
+        #
+        # WHY A DOMAIN TEST AND NOT AN ARITY TABLE. A per-interpreter "which flags take
+        # an argument" table FAILS OPEN on omission: one unenumerated value-taking flag
+        # leaves its argument unconsumed, the argument lands outside the domain, nothing
+        # is adjudicated, ALLOW — the exact defect above, re-entering through the fix.
+        # That is the denylist construction this rule's own doc already forbids inside a
+        # fail-closed control. The domain test has nothing to omit: `+x`, `errexit`,
+        # `extglob`, an rcfile path are all simply NOT THE OPERAND, and the walk keeps
+        # looking. It needs no arity knowledge and no plus-form enumeration.
+        #
+        # AN UNRESOLVABLE TOKEN IS NEVER SKIPPED, AND THAT CLAUSE IS NOT OPTIONAL. It is
+        # this file's own doctrine (stated above and on script_exempt_system_bin) applied
+        # to a new arm: ADVANCING PAST a token is an exemption in exactly the sense
+        # SKIPPING one is, so it inherits the same rule -- a filename that cannot be
+        # determined from argv cannot be shown not to be the operand either. Without the
+        # clause the walk advances off `'/tmp/pmo` (whitespace splitting hands it the
+        # first fragment of a space-bearing quoted path) onto a LATER fragment and
+        # adjudicates the wrong subject; arm F1-QTOK-RESIDUAL-space is that control and
+        # it turns red, which is how the clause was found.
+        #
+        # NET DIRECTION -- MONOTONE ALLOW->BLOCK BY CONSTRUCTION, which is the property
+        # to check any edit to this arm against. If the old first-non-flag token WAS
+        # domain-claimed, the new walk stops at the same token and behaviour is
+        # identical. If it was NOT domain-claimed, the old code adjudicated nothing and
+        # no block was possible. So this can only turn an ALLOW into a BLOCK, never the
+        # reverse. It introduces no new exemption.
+        #
+        # DECLARED RESIDUAL (R1), pinned by F2-FWALK-RESIDUAL-flagarg: a value-taking
+        # flag whose ARGUMENT is itself an allowlisted script path still hides the real
+        # operand, because the scan legitimately terminates on that argument. This is a
+        # strict NARROWING of the prior hole -- today any value-taking flag hid the
+        # script unconditionally; now the caller must additionally name an allowlisted
+        # path in flag position. Closing it is the one job an arity overlay would be
+        # right for, and layered ON TOP of this walk its failure direction inverts back
+        # to safe (an omitted flag falls through to the domain test, not to an
+        # unguarded ALLOW).
+        #
+        # THE DOMAIN ARGUMENT IS THE ONE TOKEN A SUCCESSOR CHANGE MUST RE-POINT. This
+        # arm asks script_operand_implicated for the domain of `$script_verb` because
+        # on this revision the verb class and the operand domain are the same three
+        # values. A successor change that SPLITS interpreter DOMAIN from verb CLASS
+        # (per-interpreter operand suffix sets) must re-point this ONE argument to that
+        # domain variable, or a non-shell interpreter's real script is tested against
+        # the SHELL suffix set, found unclaimed, walked past, and silently
+        # under-adjudicated -- a fail-open re-introduced by an otherwise clean merge.
         case "$script_ftok" in
           --) script_idx=$(( script_idx + 1 )); break ;;
           -c)
@@ -2650,7 +2734,75 @@ case "$TOOL_NAME" in
               script_idx=$(( script_idx + 1 ))
             fi
             ;;
-          *) break ;;
+          *) # M-FWALK-ADVANCE - mutation target (AC4; pinned by AC-D022-M1)
+            # THE ADVANCE-PAST ARM AND THE SKIP ARM ARE ONE JUDGEMENT, SO THEY MUST
+            # ASK THE TOKEN THE SAME QUESTIONS. `3f364a59` replaced `*) break` with a
+            # domain test, and the reason it gives is that a token the domain does not
+            # claim is NOT THE OPERAND — which is the same statement the `-*)` arm above
+            # makes about a token it skips. Once the walk ADVANCES PAST a token here,
+            # that token is an option by the walk's own reasoning, and an option whose
+            # arity is never asked leaves its ARGUMENT in the stream. The `-*)` arm asks;
+            # this one did not, and the whole `+`-leading surface reaches only this arm.
+            #
+            # THAT ASYMMETRY IS AN EXECUTION HOLE AND IT IS THIS MERGE THAT OPENS IT.
+            # Neither side has it alone. `origin/main` advances past `+-emulate` and then
+            # adjudicates the script, because main has no parse-only exemption to fool.
+            # This branch never advances past `+-emulate` at all, because `*) break` took
+            # it as the operand. Combine them — main's advance plus this branch's
+            # parse-only exemption — and `zsh +-emulate -n <unlisted>.sh` walks past
+            # `+-emulate`, hands the FOLLOWING `-n` to the noexec table as a flag, and
+            # exempts a segment the real shell EXECUTES. Measured, controls firing:
+            # `zsh +-emulate -n -c 'echo X'` prints X while `zsh -n -c 'echo X'` is
+            # silent, because `+-emulate` eats the `-n` as the emulation MODE NAME.
+            # Asking arity here is what closes it, and it closes the CLASS rather than
+            # that one spelling.
+            #
+            # THIS IS THE OVERLAY `3f364a59` NAMED, NOT A SPECIAL CASE BESIDE IT. That
+            # commit rejected an arity table as the TERMINATION predicate because such a
+            # table fails OPEN on omission, and said in the same breath that closing its
+            # declared residual R1 "is the one job an arity overlay would be right for,
+            # and layered ON TOP of this walk its failure direction inverts back to safe
+            # (an omitted flag falls through to the domain test, not to an unguarded
+            # ALLOW)". That is exactly the shape here: the domain test still decides where
+            # the walk STOPS, and arity only decides how far it STEPS. An arity row this
+            # table omits costs an over-block, never an exemption. Both properties are
+            # kept; neither side wins.
+            #
+            # THE DOMAIN ARGUMENT IS RE-POINTED, AND `3f364a59` ASKED FOR THAT BY NAME.
+            # Its note says a successor that SPLITS interpreter DOMAIN from verb CLASS
+            # "must re-point this ONE argument to that domain variable, or a non-shell
+            # interpreter's real script is tested against the SHELL suffix set, found
+            # unclaimed, walked past, and silently under-adjudicated -- a fail-open
+            # re-introduced by an otherwise clean merge." This branch IS that successor:
+            # script_interp_domain exists here and does not exist on main, so main's
+            # `$script_verb` would test `python3 <path>.py` against the `*.sh` set. Taking
+            # main's arm verbatim is the fail-open it predicted. Arm FWALK-DOM-py is that
+            # control.
+            #
+            # NOEXEC IS DELIBERATELY *NOT* ASKED HERE, and the asymmetry is the point. The
+            # arity question can only REMOVE a false inertness claim or ADD an
+            # adjudication, so it moves ALLOW -> BLOCK. A noexec question here could
+            # CREATE an inertness claim from a `+` token and move BLOCK -> ALLOW, which is
+            # the direction this rule refuses on an unmeasured surface. `+n` is zsh for
+            # "turn noexec OFF" — the exact inversion — so a symmetric-looking widening
+            # would be wrong on its most obvious member.
+            normalize_script_token "${script_tokens[$script_idx]}"   # M-FWALK-BODY
+            if [ "$script_norm_ok" -eq 0 ]; then break; fi
+            if script_operand_implicated "$script_interp_domain"; then break; fi
+            # The NORMALIZED view is what the arity table is asked about, because the
+            # raw view is what got us here: a `+`-leading token never reaches the flag
+            # normalization above, so `'+-emulate'` (quoted) would otherwise miss the
+            # table and fall to the fail-OPEN side. Captured before the consumption
+            # below re-normalizes into the same globals.
+            script_fadv="$script_norm_out"
+            script_idx=$(( script_idx + 1 ))
+            if [ "$script_verb" = "interp" ] \
+               && [ "$script_idx" -lt "${#script_tokens[@]}" ] \
+               && script_interp_optarg_flag "$script_interp_base" "$script_fadv"; then
+              script_adjudicate_optarg "${script_tokens[$script_idx]}"
+              script_idx=$(( script_idx + 1 ))
+            fi
+            ;;
         esac
       done
       [ "$script_idx" -lt "${#script_tokens[@]}" ] || continue
@@ -2829,6 +2981,62 @@ case "$TOOL_NAME" in
           exit 0
           ;;
       esac
+
+      # SECOND -019 EXEMPTION — the git-ignored analysis workspace (#6427).
+      # core/standards/analysis-workspace-standard.md §1 designates the repo-root
+      # analysis/ folder as the analysis home and §2 makes each analysis ONE dated
+      # SUBFOLDER; .gitignore (`/analysis/*` + `!/analysis/README.md`) ignores every
+      # such subfolder and tracks README.md alone. The sanctioned location and this
+      # control contradicted each other, and the session shape the standard
+      # anticipates is exactly the non-worktree one this rule denies.
+      #
+      # TWO ARMS, AND THE ORDER IS THE GUARD. `case` takes the FIRST match:
+      #
+      #   Arm 1 (dot segments) matches and does NOTHING, so control falls through
+      #   to `block`. It is NOT decoration. abs_target above is the RAW,
+      #   UN-NORMALIZED FILE_PATH whenever the target AND its parent directory
+      #   both do not exist (the else-branch of the normalizer) — and a `case`
+      #   glob matches across `/`, so `<root>/pmo-platform/analysis/../core/x.md`
+      #   matches arm 2's pattern while naming a TRACKED Layer-1 file. Today that
+      #   path is harmless because -019 denies the whole tree; the carve-out below
+      #   is what would make it an escape. The guard is required BY this change.
+      #
+      #   BOTH dot segments are rejected, each in a mid-path and a trailing form.
+      #   `..` is the escape above. A SINGLE `.` does not traverse, but it does
+      #   satisfy arm 2's `*/*` subfolder requirement on this same raw-path branch,
+      #   so `<root>/pmo-platform/analysis/./README.md` would reach arm 2 and admit
+      #   the one TRACKED file the subfolder segment exists to exclude. Rejecting
+      #   `.` is therefore not traversal defence — it is what keeps arm 2's
+      #   subfolder predicate from being satisfied by a no-op segment. A dotfile
+      #   (`…/analysis/<sub>/.hidden.md`) carries `/.` but is neither `/./` nor
+      #   trailing `/.`, so it is unaffected and still admitted.
+      #
+      #   Arm 2 requires a SUBFOLDER SEGMENT (`analysis/`*`/`*), not `analysis/`*.
+      #   analysis/README.md is the one TRACKED file under this folder and the bare
+      #   prefix admits it. Keying on the subfolder is the standard's own §2
+      #   convention, so the predicate tracks the sanctioned shape rather than a
+      #   filename exception that a future .gitignore edit would silently void.
+      #
+      # The pattern is ANCHORED AT THE REPO ROOT: `release/analysis/…` and
+      # `.claude/worktrees/*/analysis/…` do NOT match, so this admits exactly one
+      # subtree and not every directory in the tree named `analysis`.
+      #
+      # WHY THE PREDICATE IS STATIC, AND WHY THAT IS THE SECURITY PROPERTY. This
+      # pattern lives inside .claude/hooks/*, which -019 itself protects and
+      # BLOCK-AUTONOMY-001 always-blocks. An exemption authored in a surface the
+      # rule's own subject can write is not an exemption, it is a widening
+      # primitive: an allowlist file at .claude/<name>.txt is agent-appendable by
+      # design, and `git check-ignore` answers from .gitignore / core.excludesFile,
+      # which `git config --global` can re-point with no hook rule in the way.
+      # Neither is admissible for the self-modification guard specifically.
+      case "$abs_target" in
+        *"/../"*|*/..|*"/./"*|*/.)
+          ;;
+        "${PRIMARY_ROOT}/pmo-platform/analysis/"*/*)
+          exit 0
+          ;;
+      esac
+
       block "BLOCK-DESTRUCTIVE-019" \
         "Write/Edit to Layer 1 primary path denied: ${is_layer1}. cwd=${CWD} is not under pmo-platform/.claude/worktrees/" \
         "work from a git worktree (git worktree add), or set CLAUDE_HOOK_BYPASS=1"
