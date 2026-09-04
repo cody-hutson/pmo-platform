@@ -96,8 +96,19 @@ jobs:
           uname -s
           command -v bash
           command -v git
-          command -v unzip || echo "::warning::unzip missing — Check 7 degrades to the mtime signal"
-          test -x /usr/bin/python3 || echo "::warning::/usr/bin/python3 missing — the staged-rebuild content verdict degrades"
+          # FAILS rather than warns, and the two arms are uniform because
+          # _c7_compute_verdict treats them identically (deploy.sh:3309-3310): either
+          # one missing sets c7_can_rebuild=false and the content arm does not run.
+          # A ::warning:: on a green job is exactly the invisibility this gate was found
+          # publishing — 55/55 skills degraded, conclusion `success`.
+          command -v unzip || {
+            echo "::error::unzip missing — Check 7's content verdict CANNOT BE COMPUTED. This gate must not publish a content-freshness verdict it did not compute."
+            exit 1
+          }
+          test -x /usr/bin/python3 || {
+            echo "::error::/usr/bin/python3 missing — build_skill_to_dir cannot stage the comparison rebuild. This gate must not publish a content-freshness verdict it did not compute."
+            exit 1
+          }
 
       - name: Ensure PyYAML (pinned — the packager's transitive dependency)
         # Mirrors the `Ensure PyYAML` step in .github/workflows/install-tests.yml
@@ -134,6 +145,34 @@ jobs:
           # provisionings stay byte-aligned, and so an engine change that ever sandboxes
           # HOME cannot silently re-open the gap.
           echo "PYTHONPATH=$(/usr/bin/python3 -m site --user-site)${PYTHONPATH:+:${PYTHONPATH}}" >> "$GITHUB_ENV"
+
+      - name: Verify the packager import chain resolves (degradation guard)
+        # THE ARM THAT MAKES A FUTURE DEGRADATION VISIBLE RATHER THAN SILENT.
+        #
+        # The step above asserts `import yaml`. This one asserts the WHOLE chain the
+        # engine walks, with the exact interpreter and the exact working directory
+        # build_skill_to_dir uses (deploy.sh:3859-3860) — so a packager that acquires a
+        # SECOND non-stdlib dependency is caught here rather than degrading this gate
+        # silently for another release cycle. That is not hypothetical: the dependency
+        # this card fixes was itself transitive and invisible to a direct read.
+        #
+        # Importing the module is side-effect free: package_skill.py guards its entry
+        # point with `if __name__ == "__main__"`.
+        #
+        # This is a PREREQUISITE assertion, not a verdict. It re-encodes no part of the
+        # freshness predicate — see "NO predicate is re-encoded in this YAML
+        # (single-engine, CIAC-2)" in this file's header. The verdict stays with
+        # _c7_compute_verdict, and the per-skill "did the rebuild run" question is the
+        # engine's to express. A post-run scan of the probe's output would duplicate
+        # PF-2c in core/deploy/tests/test_package_freshness_exit_codes.sh; do not add one.
+        working-directory: release/skills/pmo-skill-refiner
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 -c 'import scripts.package_skill' || {
+            echo "::error::The skill packager cannot be imported by /usr/bin/python3. build_skill_to_dir would fail for EVERY rostered skill, and this gate would publish a green content verdict having compared nothing. Fix the 'Ensure PyYAML' step or the packager's dependencies — do not silence this."
+            exit 1
+          }
+          echo "packager import chain OK — the staged-rebuild content arm can run"
 
       - name: Run package-freshness check (single check, via the deploy.sh engine)
         id: check
