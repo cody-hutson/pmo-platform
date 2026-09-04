@@ -27,7 +27,7 @@ reversibility: CHEAP rollback (additive; `git revert -m 1` on the release merge 
 | Field | Value |
 |-------|-------|
 | **Version** | {{RELEASE_VERSION}} |
-| **Bump Class** | `minor` — the durable determination. The concrete number binds only at the Stage-12 atomic claim (ADR-092); this file is authored **slug-primary / pre-claim** and carries the stamp token above rather than a digit. Recomputed at Engineering Commit 0 per the authoritative-version-selection procedure against five independently-controlled arms (origin tag refs · published GitHub Releases · the mainline release ledger read via `git show origin/main:` · `release/releases/plans/v4/` · the adapter's own `--dry-run`): `anchor()` = **v4.52**, floor for a `minor` bump = `(4, 53, 0)`, recomputed next-free = **v4.53**, free on all five. See § Verification Plan → *Commit-0 version re-verify*. |
+| **Bump Class** | `minor` — the durable determination. The concrete number binds only at the Stage-12 atomic claim (ADR-092); this file is authored **slug-primary / pre-claim** and carries the stamp token above rather than a digit. Re-measured at the third Engineering card per the authoritative-version-selection procedure against five independently-controlled arms (origin tag refs · published GitHub Releases · the mainline release ledger read via `git show origin/main:` · `release/releases/plans/v4/` · the adapter's own `--dry-run`): `anchor()` = **v4.53**, floor for a `minor` bump = `(4, 54, 0)`, recomputed next-free = **v4.54**, free on all five. **This supersedes the Commit-0 figure**: a sibling release claimed and deployed **v4.53** mid-run, so the anchor moved under this plan — exactly the slot-collision class R-8 anticipates. The stamp token above is why that costs nothing here. See § Verification Plan → *Commit-0 version re-verify*. |
 | **Date Created** | 2026-09-04 (Friday) |
 | **Release Manager** | Agent-assisted (release-hub Mode O) |
 | **Status** | Executing |
@@ -385,15 +385,31 @@ Single release branch, **fully serial**. One Engineering chip at a time; the nex
 
 Run at Engineering Commit 0, spanning the plan-file write and its commit, against freshly-fetched authoritative host state (`git fetch --tags origin && git fetch origin main`). The ledger arm was read via `git show origin/main:` — never the worktree copy.
 
-| Arm | Denominator | `v4.53` (candidate) | `v4.52` (sensitivity) | specificity control |
-|---|---|---|---|---|
-| origin tag refs | 53 `v4.x` tags | **0** | 1 | `v4.999` → 0 |
-| published GitHub Releases | 194 | **0** | 1 | `v4.99` → 0 |
-| mainline release-ledger version rows | 196 table rows | **0** | 1 | `v4.99` → 0 |
-| `release/releases/plans/v4/` files | 53 | **0** | present | — |
-| adapter `--dry-run` (fifth, corroborating) | — | prints `v4.53`, exit 0 | — | — |
+**Superseded mid-run — re-measured at the third Engineering card.** The Commit-0 run
+resolved next-free to `v4.53`. A sibling release then **claimed and deployed `v4.53`**
+while this one was in Engineering (tag pushed, ledger row `DEPLOYED`), moving the anchor
+under this plan. That is R-8's slot-collision class occurring, not a defect in the
+procedure — and it cost nothing, because this file carries the stamp token rather than a
+baked digit. The re-measured arms below **replace** the Commit-0 table.
 
-`anchor()` = **v4.52** · floor for a `minor` bump = `(4, 53, 0)` · recomputed next-free = **v4.53** · planned value = **v4.53**. Not in the claimed set **and** equal to the recomputed next-free ⇒ **PROCEED**. Binding remains forward-only at the Stage-12 atomic claim; re-verify there.
+| Arm | Denominator | `v4.54` (candidate) | `v4.53` (sensitivity) | specificity control |
+|---|---|---|---|---|
+| origin tag refs | 54 `v4.x` tags | **0** | 1 | `v4.999` → 0 |
+| published GitHub Releases | 190 distinct version tokens | **0** | **0** — lagging arm, see note | `v4.99` → 0 |
+| mainline release-ledger version rows | 197 table rows | **0** | 1 (max `v4.x` = `v4.53`) | `v4.99` → 0 |
+| `release/releases/plans/v4/` files | 54 | **0** | present | `v4.99` → 0 |
+| adapter `--dry-run` (fifth, corroborating) | — | prints `v4.54`, exit 0 | — | — |
+
+**Note on the published-Releases arm.** It reads `v4.53` as *absent* while three other arms
+read it as *claimed*. That is a **lagging arm, not evidence the slot is free** — the sibling
+release's Stage-13 close-out, which publishes the GitHub Release, is still open. The claimed
+set is the **union** across arms, so `v4.53` is claimed. Reading that single zero as
+availability is precisely the failure the multi-arm procedure exists to prevent.
+
+`anchor()` = **v4.53** · floor for a `minor` bump = `(4, 54, 0)` · recomputed next-free =
+**v4.54** · planned value = **v4.54**. Not in the claimed set **and** equal to the recomputed
+next-free ⇒ **PROCEED**. Binding remains forward-only at the Stage-12 atomic claim; re-verify
+there, because the anchor has now moved twice during this run.
 
 **Stamp-manifest assertion (step 3b):** `release/tools/claim-version.sh --verify-stamp rules-mirror-delivered` run after the plan-file write and before its commit; exit 0 required. Result recorded in § Verification Evidence.
 

@@ -241,7 +241,7 @@ a number nobody can audit.
 | Date | Threshold | Value | Derivation | Admitted-set position when set |
 |---|---|---:|---|---|
 | 2026-09-04 | Per-file trigger | 25,600 B | `C6_BYTE_THRESHOLD`, reused verbatim from `canonical-skill-structure.md` §5 | 2 of 9 members over trigger; both carry a §2 conditional field |
-| 2026-09-04 | Directory ceiling | 204,800 B | 8 × the per-file trigger | 146,415 B — **WITHIN**, 28.5 % headroom |
+| 2026-09-04 | Directory ceiling | 204,800 B | 8 × the per-file trigger | 146,869 B — **WITHIN**, 28.3 % headroom |
 
 ### Founding measurement {#founding-measurement}
 
@@ -254,18 +254,27 @@ authority is the rules-budget check, which re-measures at build time.
 | Prior mirror pair set | 11 | 505,303 |
 | Prior directory-shaped hook-fragment set | 12 | 145,288 |
 | **Prior deployed payload** | **23** | **650,591** |
-| **Admitted set after §5** | **9** | **146,415** |
-| Reduction | — | **504,176 B (77.5 %)** |
+| **Admitted set after §5** | **9** | **146,869** |
+| Reduction | — | **503,722 B (77.4 %)** |
 
-- **Measured at** commit `a53e7a22`, 2026-09-04, on the release branch after the
-  admission verdicts were taken and before the removals landed.
-- **Position against §3:** 146,415 B of 204,800 B — **WITHIN**, 28.5 % headroom.
-- **Token equivalent** ≈ 36 K, against ≈ 159 K prior — `[INFERRED]`, reported as context
+- **Measured on** 2026-09-04 over the delivered state — after the §5 verdicts were
+  applied to both mirror holders and the §2 contract was satisfied across the admitted
+  set. The prior-payload figures are the same populations measured before those
+  removals landed.
+- **Position against §3:** 146,869 B of 204,800 B — **WITHIN**, 57,931 B of headroom
+  (28.3 %).
+- **Token equivalent** ≈ 37 K, against ≈ 163 K prior — `[INFERRED]`, reported as context
   only and **never gated** (§3).
 
 The ceiling demonstrably bites rather than ratifying the status quo: the prior payload
 overshot it by **3.18×**. The headroom is sized for roughly six further median rules
 before §4 fires.
+
+**These numbers are a dated snapshot and will drift as the admitted rules are edited.**
+That is expected and is not drift to be corrected here — the live authority is the
+rules-budget check, which re-derives the member list from the marker-registered holder
+and re-measures at build time on every run. This row records what the thresholds were
+set against, not what the set currently weighs.
 
 ---
 
