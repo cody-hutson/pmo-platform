@@ -76,13 +76,21 @@ agent still needs the rule in hand to act correctly the first time.
 No reliable on-demand load path may exist — a skill trigger, a pipeline stage spec, a
 pointer the agent would predictably follow.
 
+**Reliable means total, not merely present:** a load path is reliable only when its firing
+condition is implied by the obligation's own trigger, so that the document loads in
+**every** session where the obligation binds — a path covering only some of those sessions
+leaves the remainder unbound, and that remainder is exactly what ambient residency exists
+to reach.
+
 Ambient residency is the load mechanism of last resort. Where a dependable invocation path
 exists, using it is strictly cheaper: the content costs nothing in the sessions that never
 need it.
 
-> **Falsifier.** Search for the invoking surface. A skill whose description would fire, a
-> stage spec that cites the document, a rule that points at it — any one of these means A3
-> **fails**.
+> **Falsifier.** Search for the invoking surface, then test it for **coverage**. A skill
+> whose description would fire, a stage spec that cites the document, a rule that points at
+> it — any one of these means A3 **fails** *if it fires wherever the obligation binds*. A
+> surface citing the document from inside one activity covers that activity's sessions and
+> no others, so a citation count is not the test: **a pointer is not a load path.**
 
 ### Applying the test to a candidate {#applying-the-test}
 
