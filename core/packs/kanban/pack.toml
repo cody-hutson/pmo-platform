@@ -5,7 +5,7 @@
 
 [meta]
 pack_id = "kanban"
-pack_version = "0.1.0"
+pack_version = "0.2.0"
 schema_version = 1              # MANIFEST meta key — NOT the meta-schema grammar version
 applies_to = "Kanban"          # byte-identical archetype join key (§1.1)
 role = "archetype"
@@ -26,13 +26,20 @@ core = "inherit"
 source = "Kanban Method (Anderson 2010) — reasoned empty set, and the ground is a mandate boundary rather than a silence. Foundational principle 1, Start with what you do now, makes Kanban a change method laid over an existing process: it mandates no required card field list, so no field set is owed here. The Method does name a per-card construct — class of service, the demand classes whose policies core practice 4 makes explicit — but which classes a service runs, and what each promises, is that service's own policy; a corpus-wide default could name the concept and never carry a value a deployment could use, which is why class of service is left to an operator-local override rather than shipped as a field. What the Method prescribes per card is policy-shaped, and core practice 4 puts that content in the readiness and done criteria this kind populates, not in fields."
 kind_specific = []
 [kinds.criteria.readiness]
-criteria_version = "0.1.0"
-checks = []
+criteria_version = "0.2.0"
+checks = [
+  { id = "kanban-dor-pull-policy-explicit", statement = "The pull policy governing entry to the receiving workflow state is written down for the service this card belongs to, and this card satisfies it.", level = "L2", automatable = false, source = "Kanban Method (Anderson 2010) — core practice 4, Make process policies explicit" },
+  { id = "kanban-dor-commitment-point-reached", statement = "The card has passed the commitment point: the service and its customer have agreed the item will be carried to delivery rather than abandoned, so it is no longer a discardable option.", level = "L3", automatable = false, source = "Essential Kanban Condensed (Anderson & Carmichael 2016) — the commitment point of a Kanban system" },
+]
 [kinds.criteria.done]
-criteria_version = "0.1.0"
-checks = []
+criteria_version = "0.2.0"
+checks = [
+  { id = "kanban-dod-exit-policy-satisfied", statement = "The exit policy written down for the final workflow state of this card's service is satisfied for this card.", level = "L2", automatable = false, source = "Kanban Method (Anderson 2010) — core practice 4, Make process policies explicit" },
+  { id = "kanban-dod-delivery-point-reached", statement = "The card has reached the delivery point: the item is delivered to the customer of the service, not merely finished by the people working it.", level = "L3", automatable = false, source = "Essential Kanban Condensed (Anderson & Carmichael 2016) — the delivery point of a Kanban system" },
+  { id = "kanban-dod-flow-record-complete", statement = "The service can state when this card passed its commitment point and when it reached its delivery point, from whatever record that service keeps, so the card's lead time enters the flow distribution the service measures.", level = "L3", automatable = false, source = "Kanban Method (Anderson 2010) — core practice 3, Manage flow (lead time and throughput measurement); the Method obliges the system to measure flow and names no carrier for the record, so the per-card form asks only that the service be able to state the two instants" },
+]
 [kinds.criteria.gate]
-criteria_version = "0.1.0"
+criteria_version = "0.2.0"
 # WIP set-aggregate pull-limit gate — the continuous lifecycle's signature gate
 # (§1.2.1 Arm 2). SHIPPED AS A STUB, not a live condition: a `set-aggregate` condition
 # REQUIRES both `scope_ref` (when scope = "board") and `on_unresolved` (§1.2.1 Arm 2),
@@ -42,6 +49,7 @@ criteria_version = "0.1.0"
 # per ADR-039 begins the type-pack gate surface's cross toward EXPENSIVE reversibility —
 # deferred until a deployment (K4) or the consumer read-refit wires it. The resolver is
 # consumer-side (deferred consumer read-refit slice), NOT built here.
+source = "Kanban Method (Anderson 2010) — reasoned empty set. Core practice 2, Limit work in progress, is the Method's signature control, and it is a cap on a column of one board sized to the capacity of the service running it: the Method prescribes that the limit exist and leaves its number to that service. A corpus-wide default therefore has a concept to name and no number to carry, so this gate ships declared and unbound rather than carrying a cap no body of practice could ground. The emptiness is the practice basis, not a placeholder."
 checks = []                                     # <fill per Kanban Method + §1.2.1 Arm-2 required fields: guards_transition, condition{kind=set-aggregate, set{scope, scope_ref, status_filter, edge}, aggregate, comparator, limit|limit_ref, on_unresolved}. Class-of-service = a kind_filter on this set-aggregate count (§1.2.1 line 126), NOT a separate key.>
 [kinds.relationships]
 allowed_types = ["BELONGS_TO", "DEPENDS_ON", "BLOCKS", "RELATES_TO"]
