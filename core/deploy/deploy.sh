@@ -612,28 +612,31 @@ log() {
 # hand-written by hub sessions at their own discretion — so the defect was never
 # an absent CLASS, it was an absent PRODUCER. This is that producer.
 #
-# THE EMITTING SUBTYPE SET IS THREE, NOT FIVE, and each exclusion is a different
-# fact rather than one rule applied twice:
+# THE EMITTING SUBTYPE SET IS FOUR, NOT FIVE. One exclusion remains, and it is a
+# different fact from the one that was lifted:
 #   deploy-skill    EMIT — the per-skill loop in cmd_deploy
 #   deploy-harness  EMIT — the harness loop (dormant until a harness artifact ships)
 #   deploy-package  EMIT — the packages loop; audit-trail only, see the consumer note
+#   deploy-rules-mirror
+#                   EMIT — deploy_rules_mirror(), the carrier; ONE ROW PER INVOCATION,
+#                   not one per member. THE COVERAGE HOLE RECORDED HERE IS CLOSED, and
+#                   the standing instruction attached to it ("when the producer ships,
+#                   RE-EVALUATE this exclusion rather than leaving the subtype silently
+#                   dark") is discharged by that carrier rather than deferred again.
+#                   What was missing was never the target set — the mirror's membership
+#                   is the marker-registered declaration mirror_pair_set(), which is
+#                   self-counting, so read it from the entries rather than from a number
+#                   stated here, and `release/tools/blast-radius.sh` carries the
+#                   identical pair set. What was missing was the PRODUCER: no file in
+#                   this repository wrote that mirror, which is why Check 9's advertised
+#                   "re-run --deploy to restore" remedy could not work. It now does.
+#                   `.claude/rules` is still NOT git-tracked, so the mirror exists only
+#                   by being deployed — which is exactly why the deploy owes a row.
 #   deploy-helper   DO NOT EMIT — genuinely producer-less AND target-less. The token
 #                   appears only in enum declarations; no directory, no path, no check.
-#   deploy-rules-mirror
-#                   DO NOT EMIT — but this is a COVERAGE HOLE, not a cleanup, and the
-#                   distinction matters. The target set is real and enumerated: Check 9
-#                   asserts a rules mirror under $DEPLOY_ROOT/.claude/rules/ whose
-#                   membership is the marker-registered array itself — self-counting,
-#                   so read it from the entries rather than from a number stated here,
-#                   `release/tools/blast-radius.sh` carries the identical pair set, and
-#                   `.claude/rules` is NOT git-tracked — so the mirror can only exist by
-#                   being deployed. What is missing is the PRODUCER: no file in this
-#                   repository writes that mirror, which is why Check 9's advertised
-#                   "re-run --deploy to restore" remedy cannot work. Excluding the
-#                   subtype is correct TODAY because emitting a row for a deploy this
-#                   script does not perform would be fabricated telemetry in an
-#                   append-only log. When the producer ships, RE-EVALUATE this exclusion
-#                   rather than leaving the subtype silently dark.
+#                   This exclusion is NOT the same shape as the one above and does not
+#                   expire with it: there is no coverage hole here, because there is no
+#                   target to cover. It has no re-evaluation trigger attached.
 #
 # EMITS NOTHING ABSENT `--release <slug>`. deploy.sh is also the fresh-install path
 # (install.sh -> orchestrate.sh -> deploy.sh --deploy) and the operator's ad-hoc
@@ -4646,6 +4649,154 @@ detect_changed_skills() {
     sed -n 's|harness/\([^/]*\)/.*|\1|p' | sort -u)
 }
 
+# ─── mirror_pair_set — the SINGLE declaration of the mirror pair set ─────────
+#
+# Pure. Echoes one "<src>:<dest>:<class>" row per line, one row per mirror member.
+#
+# READ BY TWO CALLERS AND DECLARED BY NEITHER: Check 9 (which verifies the mirror)
+# and deploy_rules_mirror (which lays it down). There is no second copy anywhere in
+# this file. That is the whole point — a carrier holding its own list is the silent
+# desync the mirror-pair-parity check (Check 77) exists to prevent, so when the
+# carrier needed this set the declaration was HOISTED out of cmd_check rather than
+# duplicated into cmd_deploy. This file therefore still presents exactly ONE
+# marker-registered holder, and the cross-file total stays two (this and
+# release/tools/blast-radius.sh).
+#
+# A FUNCTION, NOT A GLOBAL ARRAY, for two reasons that both bite under
+# `set -euo pipefail`: a `local -a` is not legal at top level, and a bare global
+# array is mutable by any later caller — a shared declaration that any function can
+# rewrite is not a single source of truth. Every other shared body in this file
+# (_cNN_compute_verdict, _vf_*, _ds_*, _cc_*) is a pure emitter for the same reason;
+# this extends that convention rather than introducing a new shape.
+#
+# $DEPLOY_ROOT IS DELIBERATELY NOT A LITERAL. The heredoc expands at CALL time, and
+# DEPLOY_ROOT is assigned near the top of this script, long before any caller exists.
+# Do not "fix" this into a constant — a constant would pin the mirror to whatever
+# root happened to be current when the file was edited.
+#
+# FIELD 3 IS THE OPERATIONS CLASS, and it is invisible to the parity extractor by
+# construction: that extractor splits on the FIRST separator and takes field 1, so a
+# third field cannot reach it. It IS visible to anything using "${pair##*:}", which
+# returns the class token rather than the destination path — Check 9 and the carrier
+# both strip fields explicitly for that reason. class is one of
+# { conduct | engineering }; the criterion is stated once, in
+# core/rules/operations-bridge.md § Context-Load Contract, and is NOT restated here.
+# The classification rides ON the declaration rather than in a parallel list so it
+# cannot drift from the set it annotates.
+# THE CONTAINER IS AN ARRAY LITERAL, NOT A HEREDOC, AND THAT IS LOAD-BEARING.
+# check-mirror-pair-parity.py skips the container's own opening and closing
+# delimiters BY NAME ("must be skipped by name rather than by guessing" — its
+# ARRAY_OPEN / ARRAY_CLOSE patterns), because the markers wrap the literal from
+# outside and its delimiters therefore fall inside the marked region. It knows
+# array literals; it does not know heredocs. A `cat <<EOF` body here parses `EOF`
+# as an entry carrying no separator and the primitive returns UNPARSEABLE —
+# measured, not assumed. Keeping the array literal is what lets this hoist land
+# with ZERO change to that primitive.
+mirror_pair_set() {
+  # mirror-pair-set: BEGIN holder=deploy-script sep=colon field=1
+  local -a _mps_rows=(
+    "core/rules/skill-deployment.md:$DEPLOY_ROOT/.claude/rules/skill-deployment.md:engineering"
+    "core/rules/harness-deployment.md:$DEPLOY_ROOT/.claude/rules/harness-deployment.md:engineering"
+    "core/rules/doc-link-maintenance.md:$DEPLOY_ROOT/.claude/rules/doc-link-maintenance.md:conduct"
+    "core/rules/operations-bridge.md:$DEPLOY_ROOT/.claude/rules/operations-bridge.md:conduct"
+    "core/rules/git-workflow.md:$DEPLOY_ROOT/.claude/rules/git-workflow.md:engineering"
+    "core/rules/governance-files.md:$DEPLOY_ROOT/.claude/rules/governance-files.md:conduct"
+    "core/rules/decision-time-adherence.md:$DEPLOY_ROOT/.claude/rules/decision-time-adherence.md:conduct"
+    "core/rules/rename-reference-cascade.md:$DEPLOY_ROOT/.claude/rules/rename-reference-cascade.md:conduct"
+    "core/rules/analysis-mandate.md:$DEPLOY_ROOT/.claude/rules/analysis-mandate.md:conduct"
+  )
+  # mirror-pair-set: END
+  printf '%s\n' "${_mps_rows[@]}"
+}
+
+_write_operations_rules_index() {
+  # Regenerate the deployed operations index from the conduct-class rows of the
+  # SINGLE declaration. Rewritten in full on every carrier run, so it cannot drift
+  # from the set it summarises — and derived, so it is not a second list. The
+  # criterion itself is NOT restated here; this file names where it lives.
+  local _idx_dir="$1"
+  local _idx="$_idx_dir/_operations-index.md"
+  local _pair _src _class _base _purpose
+  {
+    printf '# Agent-conduct rules — operations-session load set\n\n'
+    printf '<!-- GENERATED FILE — do not hand-edit. Producer: deploy_rules_mirror() in\n'
+    printf '     core/deploy/deploy.sh. Regenerated in full on every ./deploy.sh --deploy.\n'
+    printf '     Any hand edit is lost on the next deploy. -->\n\n'
+    printf 'These are the rules in this directory whose normative subject is the agent'"'"'s own\n'
+    printf 'conduct — what it may conclude, decide, or do next. They bind an operations\n'
+    printf 'session even though that session operates no platform-engineering mechanism.\n\n'
+    printf 'The membership criterion is stated once, in `core/rules/operations-bridge.md`\n'
+    printf '§ Context-Load Contract. It is not restated here, and this list is generated\n'
+    printf 'from the classification carried on the mirror pair-set declaration rather than\n'
+    printf 'maintained by hand.\n\n'
+    printf 'The remaining files in this directory are platform-engineering rules. They are\n'
+    printf 'deployed here because the engineering branch loads them; an operations session\n'
+    printf 'is not expected to read them.\n\n'
+  } > "$_idx"
+  while IFS= read -r _pair; do
+    _class="${_pair##*:}"
+    [[ "$_class" == "conduct" ]] || continue
+    _src="${_pair%%:*}"
+    _base="$(basename "$_src")"
+    # `if`, not `[[ … ]] && assign`: under `set -e` a false test would abort the deploy.
+    # The `|| true` is bound to the whole pipeline (a no-match grep is non-zero, and
+    # `set -o pipefail` would otherwise propagate that) — a missing purpose: line is a
+    # degraded index entry, never a failed deploy.
+    _purpose=""
+    if [[ -f "$_src" ]]; then
+      _purpose="$(grep -m1 '^purpose:' "$_src" 2>/dev/null | /usr/bin/sed 's/^purpose:[[:space:]]*//' | /usr/bin/cut -d'.' -f1 || true)"
+    fi
+    if [[ -n "$_purpose" ]]; then
+      printf -- '- `%s` — %s.\n' "$_base" "$_purpose" >> "$_idx"
+    else
+      printf -- '- `%s`\n' "$_base" >> "$_idx"
+    fi
+  done < <(mirror_pair_set)
+}
+
+deploy_rules_mirror() {
+  # THE PRODUCER. Lays down the workspace rules mirror from the SINGLE pair-set
+  # declaration. Byte-identical by contract — this is what Check 9 verifies, and the
+  # reason $DEPLOY_ROOT/.claude/rules/ can exist at all, since it is not git-tracked.
+  #
+  # Before this existed, Check 9 verified a mirror that nothing in this repository
+  # wrote: its advertised "re-run ./deploy.sh --deploy to restore" remedy could not
+  # work, and an absent mirror was indistinguishable from a synchronised one.
+  #
+  # UNCONDITIONAL, and it does NOT gate on COWORK_AVAILABLE. The target is
+  # $DEPLOY_ROOT, never the Cowork session install path, so a session-less machine
+  # still gets its mirror — the same rationale (and the same ADR-013 basis) as the
+  # user-local skills mirror.
+  #
+  # IT COPIES THE ADMITTED SET AND NOTHING ELSE. There is deliberately no directory
+  # recursion here. A directory-recursive copy would silently restore the payload the
+  # admission standard removed and push the release past its own byte ceiling while
+  # the declaration still read compliant — mirror membership is expressed ONLY by the
+  # marker-registered declaration, never by a glob or a directory-existence test.
+  local target_dir="$DEPLOY_ROOT/.claude/rules"
+  mkdir -p "$target_dir"
+  local wrote=0 pair src rest dest
+  while IFS= read -r pair; do
+    src="${pair%%:*}"
+    rest="${pair#*:}"
+    dest="${rest%:*}"
+    if [[ ! -f "$src" ]]; then
+      log "  FAILED:   rules-mirror/$(basename "$src") — declared source missing"
+      FAILURES+=("rules-mirror/$(basename "$src")")
+      continue
+    fi
+    if cp "$src" "$dest" 2>/dev/null && diff -q "$src" "$dest" >/dev/null 2>&1; then
+      log "  Deployed: rules-mirror/$(basename "$dest")"
+      wrote=$((wrote + 1))
+    else
+      log "  FAILED:   rules-mirror/$(basename "$dest") — copy or verification failed"
+      FAILURES+=("rules-mirror/$(basename "$dest")")
+    fi
+  done < <(mirror_pair_set)
+  _write_operations_rules_index "$target_dir"
+  RULES_MIRROR_WROTE="$wrote"
+}
+
 # ─── Mode: --deploy ──────────────────────────────────────────────────────────
 #
 # Note: --init mode (a one-time legacy cutover migration) has been REMOVED per
@@ -4845,6 +4996,30 @@ cmd_deploy() {
   done
   set -- ${_deploy_args[@]+"${_deploy_args[@]}"}
 
+  # ─── The rules mirror carrier — RUNS BEFORE THE E-02 EARLY EXIT ────────────
+  #
+  # THE ORDERING IS THE WHOLE POINT, not a stylistic choice. cmd_deploy's E-02
+  # "No changes" branch exits 0 before any deploy work happens. Placing the carrier
+  # after it would make Check 9's NEVER-POPULATED state unreachable by the exact
+  # command Check 9's own remediation prints: an operator with an absent mirror and
+  # no changed skills would run `./deploy.sh --deploy`, be told "nothing to deploy",
+  # and still have no mirror — with the check still telling them to run it. The
+  # mirror is not a function of the skill/package/harness change sets, so it must
+  # not be gated on them.
+  #
+  # It runs after the --release flag-strip so the telemetry row below carries the
+  # release join key, and after `local -a FAILURES=()` so a failed copy reaches
+  # cmd_deploy's terminal die.
+  local __rm_fail_before=${#FAILURES[@]}
+  deploy_rules_mirror
+  local __rm_outcome __rm_detail="none"
+  __rm_outcome="$(_ds_outcome "$__rm_fail_before" "${#FAILURES[@]}" "false")"
+  [[ "$__rm_outcome" == "resolved" ]] || __rm_detail="rules-mirror-copy-failed"
+  # ONE ROW PER INVOCATION, not one per file: the established convention is one row
+  # per target, and a row per member would inflate an append-only Vital-retention log
+  # for no consumer.
+  DS_MODULE="core" _emit_deployment_status "deploy-rules-mirror" "mirror" "rules-mirror" "$__rm_outcome" "$__rm_detail"
+
   if [[ -n "$DEPLOY_RELEASE_SLUG" ]]; then
     local _slug_verdict
     _slug_verdict="$(_ds_validate_slug "$DEPLOY_RELEASE_SLUG")"
@@ -4932,6 +5107,18 @@ cmd_deploy() {
   if [[ ${#CHANGED_SKILLS[@]} -eq 0 ]] && [[ ${#CHANGED_PACKAGES[@]} -eq 0 ]] && \
      [[ ${#CHANGED_HARNESS[@]} -eq 0 ]]; then
     log "No skill, package, or harness changes detected. Nothing to deploy."
+    # The rules mirror is NOT part of those three change sets and already ran above,
+    # so this path is no longer a no-op. Say what it did — an operator told "nothing
+    # to deploy" would otherwise reasonably conclude the mirror was skipped too.
+    log "  Rules mirror: ${RULES_MIRROR_WROTE:-0} file(s) written to $DEPLOY_ROOT/.claude/rules/ (the mirror is deployed unconditionally, not on skill change)."
+    # _ds_warn_unstamped is normally reached only at the bottom of a full deploy. The
+    # carrier addressed a real target on this path too, so an unstamped run here owes
+    # the same warning — without it, a mirror-only deploy silently emits no rows and
+    # reads downstream as a release that legitimately deployed nothing.
+    if [[ "$(_ds_warn_unstamped "${RULES_MIRROR_WROTE:-0}")" == "WARN" ]]; then
+      log "WARN: deployed ${RULES_MIRROR_WROTE:-0} rules-mirror target(s) with no --release <slug> — ZERO deployment-status rows were emitted."
+      log "      Stage-12 invocation form: ./deploy.sh --deploy --release <milestone-slug>"
+    fi
     log "  Note: composition surfaces (hook-tier allowlists, hub-state templates,"
     log "        platform-config seed) are OUT OF SCOPE for --deploy and were NOT"
     log "        examined. --deploy reads three change sets — skills, packages,"
@@ -4940,6 +5127,13 @@ cmd_deploy() {
     log "        To refresh a composition surface, run:"
     log "          ./update.sh --surfaces-only    (targeted — surfaces only)"
     log "          ./update.sh                    (full update; wider blast radius)"
+    # A carrier failure must not leave by the zero-exit door. Before the mirror had a
+    # producer this branch had nothing that could fail; it does now, and an exit 0 on
+    # a partially-written mirror is precisely the silent-partial state Check 9's new
+    # MISSING-MEMBER verdict exists to make impossible.
+    if [[ ${#FAILURES[@]} -gt 0 ]]; then
+      die "Deployment failures: ${FAILURES[*]}"
+    fi
     exit 0
   fi
 
@@ -5182,7 +5376,7 @@ cmd_deploy() {
   # already-current skill must report 0 skills, not 1 (#384 v3.91 regression fix).
   local pkg_count=${#CHANGED_PACKAGES[@]:-0}
   local harness_count=${#CHANGED_HARNESS[@]:-0}
-  log "Deployed: ${skills_changed} skills, $pkg_count packages, $harness_count harness artifacts"
+  log "Deployed: ${skills_changed} skills, $pkg_count packages, $harness_count harness artifacts, ${RULES_MIRROR_WROTE:-0} rules-mirror files"
 
   # ─── #4215: the observing step for --release ───────────────────────────────
   # Placed BEFORE the terminal die so it fires on the failed-deploy path too — an
@@ -5190,7 +5384,17 @@ cmd_deploy() {
   # The target count is the ATTEMPTED set, not skills_changed: a re-run that
   # re-mirrors byte-identical content reports 0 changed skills but did address real
   # targets, and a release-stamped deploy is owed rows for those targets.
-  local __attempted=$(( ${#CHANGED_SKILLS[@]} + pkg_count + harness_count ))
+  # The rules mirror is an ATTEMPTED target too. Omitting it lets a deploy whose only
+  # real target was the mirror read as zero-targets, and _ds_warn_unstamped would then
+  # stay silent about a missing --release on a run that genuinely deployed something —
+  # under-counting the predicate rather than merely mis-labelling it.
+  # `if`, not `[[ … ]] && assign`: under `set -e` the latter returns non-zero when the
+  # test fails and takes the whole deploy down on the ordinary zero-written path.
+  local __rm_attempted=0
+  if [[ "${RULES_MIRROR_WROTE:-0}" -gt 0 ]]; then
+    __rm_attempted=1
+  fi
+  local __attempted=$(( ${#CHANGED_SKILLS[@]} + pkg_count + harness_count + __rm_attempted ))
   if [[ "$(_ds_warn_unstamped "$__attempted")" == "WARN" ]]; then
     log "WARN: deployed ${__attempted} target(s) with no --release <slug> — ZERO deployment-status rows were emitted."
     log "      Cycle-Time and the DORA deployment-frequency read N/A for this deploy, which is"
@@ -6466,7 +6670,19 @@ cmd_check() {
   #   posture: advisory   enforcement-surface: deploy-check.mode warn-window
   #            (becomes required when the operator flips deploy-check.mode to enforce)
   #   invariant: every workspace rules-mirror file (~/.claude/rules/<file>.md) is
-  #              byte-identical to its in-repo source — asserted by diff -q.
+  #              byte-identical to its in-repo source — asserted by diff -q — AND,
+  #              on a workspace that has been deployed at all, the mirror EXISTS.
+  #              The second clause is new: the mirror now has a producer
+  #              (deploy_rules_mirror), so its absence on a deployed tree is a
+  #              finding rather than the ambient condition it used to be.
+  #   falsification (absence arm): on a deployed workspace, remove
+  #              $DEPLOY_ROOT/.claude/rules/ entirely -> NEVER-POPULATED WARNs
+  #              (advisory) / FAILs (post-flip); remove one member -> MISSING-MEMBER
+  #              does the same. On a tree that has never been deployed, the same
+  #              absence yields NOT-DEPLOYED, which is emitted through
+  #              flag_not_evaluated and CANNOT move the exit code — the guarantee is
+  #              the emitter's SHAPE (no mode case, no enforce branch, no ISSUES
+  #              increment), not a default some later edit could flip.
   #   NOTE (#2213): the former core/governance/OPERATIONS.md ↔ operations/OPERATIONS.md
   #              byte-identical mirror-pair entry was RETIRED here — that dual-home
   #              full copy silently drifted (#1346/#2213). It is replaced by the
@@ -6496,57 +6712,84 @@ cmd_check() {
   #
   # The engineering/rules mirror was DROPPED per the layout §8.3. Drift means
   # "workspace mirror diverged from v2 source; re-run ./deploy.sh --deploy to
-  # restore". The pair set is the array below — it is self-counting, so read the
-  # membership from the entries rather than from a number stated in prose.
-  # This array and detect_mirror_pairs() in release/tools/blast-radius.sh must
+  # restore" — and that remedy now WORKS, because deploy_rules_mirror() is the
+  # producer that lays the mirror down. It used to be advice with nothing behind it.
+  #
+  # The pair set is NOT declared here any more. It is declared ONCE, by the
+  # top-level emitter mirror_pair_set(), which this check reads and the carrier
+  # reads. There is deliberately no second copy: a carrier holding its own list is
+  # precisely the silent desync the mirror-pair-parity check exists to prevent, so
+  # the set was hoisted rather than duplicated. Read the membership from the
+  # emitter's rows; it is self-counting and no number is stated in prose.
+  # That emitter and detect_mirror_pairs() in release/tools/blast-radius.sh must
   # hold IDENTICAL path sets — adding a rule to one and not the other silently
   # desynchronises the blast-radius mirror topology from the enforced pair set.
   # This is asserted, not remembered: the mirror-pair-parity check (Check 77)
   # diffs the source-side path set across every holder carrying a
   # "mirror-pair-set:" marker and FAILs naming any path and the holder it is
-  # missing from. The markers below are that registration — keep them wrapped
-  # around the array literal when editing it.
+  # missing from. The markers live around the emitter's rows — keep them wrapped
+  # around the heredoc when editing it.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 9: Mirror-pair sync (source-to-workspace)"
-    # mirror-pair-set: BEGIN holder=deploy-check sep=colon field=1
-    local -a MIRROR_PAIRS=(
-      "core/rules/skill-deployment.md:$DEPLOY_ROOT/.claude/rules/skill-deployment.md"
-      "core/rules/harness-deployment.md:$DEPLOY_ROOT/.claude/rules/harness-deployment.md"
-      "core/rules/doc-link-maintenance.md:$DEPLOY_ROOT/.claude/rules/doc-link-maintenance.md"
-      "core/rules/operations-bridge.md:$DEPLOY_ROOT/.claude/rules/operations-bridge.md"
-      "core/rules/git-workflow.md:$DEPLOY_ROOT/.claude/rules/git-workflow.md"
-      "core/rules/governance-files.md:$DEPLOY_ROOT/.claude/rules/governance-files.md"
-      "core/rules/decision-time-adherence.md:$DEPLOY_ROOT/.claude/rules/decision-time-adherence.md"
-      "core/rules/rename-reference-cascade.md:$DEPLOY_ROOT/.claude/rules/rename-reference-cascade.md"
-      "core/rules/analysis-mandate.md:$DEPLOY_ROOT/.claude/rules/analysis-mandate.md"
-    )
-    # mirror-pair-set: END
-    for pair in "${MIRROR_PAIRS[@]}"; do
+    # DIRECTORY-LEVEL VERDICT, taken before the per-pair loop. An absent mirror used
+    # to be a per-pair SKIP, which conflated two states that mean opposite things:
+    # "nothing has been deployed to this tree" (honest — CI, a fresh checkout, the
+    # public repo) and "this workspace HAS been deployed and the mirror still is not
+    # there" (a real finding, and the one the carrier exists to make impossible).
+    #
+    # The discriminator is $USER_LOCAL_SKILLS_PATH. Every deploy writes it, and it is
+    # Cowork-INDEPENDENT per ADR-013 — so it answers "has anything ever been deployed
+    # here?" without needing a Cowork session to resolve. That is what makes
+    # NEVER-POPULATED safe to raise in CI: CI has neither directory, so it takes the
+    # NOT-DEPLOYED arm and no verdict is issued at all.
+    if [[ ! -d "$DEPLOY_ROOT/.claude/rules" ]]; then
+      if [[ -d "$USER_LOCAL_SKILLS_PATH" ]]; then
+        flag_warn_or_issue "mirror-sync" \
+          "NEVER-POPULATED — $DEPLOY_ROOT/.claude/rules/ is absent on a workspace that HAS been deployed ($USER_LOCAL_SKILLS_PATH exists). The carrier has not run on this tree; ./deploy.sh --deploy populates it."
+      else
+        flag_not_evaluated "mirror-sync" \
+          "NOT-DEPLOYED — neither the rules mirror nor the user-local skills mirror exists, so nothing has ever been deployed to this tree (fresh checkout / CI / public repo). No pair was compared; this is not a clean result."
+      fi
+    fi
+    while IFS= read -r pair; do
+      # Three colon-separated fields: <src>:<dest>:<class>. The right-hand path is
+      # field 2, so it is NOT "${pair##*:}" — that expression returns the CLASS
+      # token and every pair would then compare against a path that does not exist.
+      # Strip the first field, then strip the last; what remains is the dest.
       local c9_left="${pair%%:*}"
-      local c9_right="${pair##*:}"
+      local c9_rest="${pair#*:}"
+      local c9_right="${c9_rest%:*}"
       # A declared SOURCE (left, in-repo) that does not exist is a config error:
       # a typo'd or moved path silently disables the pair's enforcement (the
       # #1104 failure class). WARN on it — never silent-SKIP. A missing MIRROR
       # (right, ~/.claude/rules/) is legitimately operator-instance-absent in
       # the public repo / CI / a fresh checkout, so that stays a clean SKIP.
       if [[ ! -f "$c9_left" ]]; then
-        flag_warn_or_issue "mirror-sync" "$c9_left: declared MIRROR_PAIRS source does not exist (typo or moved path — pair cannot be enforced)"
+        flag_warn_or_issue "mirror-sync" "$c9_left: declared mirror_pair_set source does not exist (typo or moved path — pair cannot be enforced)"
         continue
       fi
       if [[ ! -f "$c9_right" ]]; then
-        log "  SKIP:  $c9_left ↔ $c9_right (workspace mirror absent — operator-instance)"
+        # The mirror DIRECTORY branch above already spoke for the wholly-absent case.
+        # Reaching here means the directory exists and THIS member is missing from it
+        # — the carrier ran and failed on this file. That is a finding, never a SKIP.
+        # Collapsing MISSING-MEMBER back into NEVER-POPULATED would re-create, one
+        # level down, exactly the conflation this check just removed.
+        if [[ -d "$DEPLOY_ROOT/.claude/rules" ]]; then
+          flag_warn_or_issue "mirror-sync" \
+            "MISSING-MEMBER — $c9_right is absent while the mirror directory exists: the carrier ran and did not lay down this member. Re-run ./deploy.sh --deploy."
+        fi
         continue
       fi
       if diff -q "$c9_left" "$c9_right" >/dev/null 2>&1; then
-        log "  OK:    $c9_left ↔ $c9_right (byte-identical)"
+        log "  OK:    IN-SYNC $c9_left ↔ $c9_right (byte-identical)"
       else
-        flag_warn_or_issue "mirror-sync" "$c9_left ↔ $c9_right divergence"
+        flag_warn_or_issue "mirror-sync" "DRIFTED — $c9_left ↔ $c9_right divergence"
         # `diff` exits 1 on divergence (the path we are in); guard the preview
         # pipeline so it cannot abort the check sweep under set -e + pipefail.
         # sigpipe-idiom: allow — multi-line diagnostic preview whose exit status is discarded (`|| true`); `diff` has no bounded-output flag to fold `head` into.
         diff -u "$c9_left" "$c9_right" 2>/dev/null | head -20 | sed 's/^/         /' || true
       fi
-    done
+    done < <(mirror_pair_set)
 
     # REMOVED — the directory-shaped mirror set (the former per-hook drop-in loop).
     #
