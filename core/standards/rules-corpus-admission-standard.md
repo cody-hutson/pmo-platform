@@ -210,7 +210,7 @@ Each row records the three falsifier outcomes and a one-line rationale.
 | 1 | `core/rules/analysis-mandate.md` | ✓ | ✓ | ✓ | **RULE** | Binds every analysis output; no preventive gate stops an agent acting on its own finding. |
 | 2 | `core/rules/decision-time-adherence.md` | ✓ | ✓ | ✓ | **RULE** | Fires at an arbitrary decision moment — by construction unschedulable and unlookupable. |
 | 3 | `core/rules/doc-link-maintenance.md` | ✓ | ✓ | ✓ | **RULE** | The doc-link check is **detective**; the rule is what produces a correct link the first time. |
-| 4 | The `core/rules/` workflow-discipline rule | ✓ | ✓ | ✓ | **RULE** | Branch and commit discipline must be held *before* the branch is chosen. Over the §3 trigger → carries `unscoped_rationale:`, because path-scoping would defeat it. |
+| 4 | `core/rules/git-workflow.md` | ✓ | ✓ | ✓ | **RULE** | Branch and commit discipline must be held *before* the branch is chosen. Over the §3 trigger → carries `unscoped_rationale:`, because path-scoping would defeat it. |
 | 5 | `core/rules/governance-files.md` | ✓ | ✓ | ✓ | **RULE** | Already conformant — the only member carrying `paths:` before this standard. |
 | 6 | `core/rules/harness-deployment.md` | ✓ | ✓ | ✓ | **RULE** | Governs runtime-tool deployment outside the repo tree; no gate covers it. |
 | 7 | `core/rules/operations-bridge.md` | ✓ | ✓ | ✓ | **RULE** | The operations-boundary hook covers one direction only; layer classification is unenforced. |
