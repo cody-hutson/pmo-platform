@@ -7,6 +7,8 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| hub-spoke-run-and-planning-discipline (version-less) | hub-spoke-run-and-planning-discipline | 2026-09-03 | — | #6634 | [notes/_unversioned/hub-spoke-run-and-planning-discipline_RELEASE_NOTES.md](notes/_unversioned/hub-spoke-run-and-planning-discipline_RELEASE_NOTES.md) |
+| v4.52 | automation-registry-as-gate | 2026-09-03 | — | #6882 | [notes/v4.52_RELEASE_NOTES.md](notes/v4.52_RELEASE_NOTES.md) |
 | v4.51 | regression-corpus-gates-releases | 2026-09-03 | — | #6831 | [notes/v4.51_RELEASE_NOTES.md](notes/v4.51_RELEASE_NOTES.md) |
 | v4.50 | adr-corpus-integrity | 2026-09-03 | — | #6744 | [notes/v4.50_RELEASE_NOTES.md](notes/v4.50_RELEASE_NOTES.md) |
 | governance-declarations-match-enforcement (version-less) | governance-declarations-match-enforcement | 2026-09-03 | — | #6835 | [notes/_unversioned/governance-declarations-match-enforcement_RELEASE_NOTES.md](notes/_unversioned/governance-declarations-match-enforcement_RELEASE_NOTES.md) |

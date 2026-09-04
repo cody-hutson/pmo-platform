@@ -2,7 +2,7 @@
 name: release-executor
 description: >
   Executes approved release plans. Modes: Execute release · Verify release · Rollback release · Close release · Author release note · Publish release · Pattern review execute. Creates snapshots, applies file changes, closes IMP items, updates release log, runs verification, runs automated Stage 13 close-out. Requires an approved plan with Dry-Run Record. Triggers: "execute the approved release plan", "verify the release", "rollback v[X.Y]", "close the release", "stage 13 close-out".
-version: v4.34
+version: v4.46
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -396,6 +396,8 @@ Mode E drafts the user-facing release note prose into the file scaffolded by Mod
 
 Mode F publishes the canonical public release-notes surface (Surface 1 of the Layer-1 dual-write mechanism per [`release-notes-standard.md § Part 5`](../../references/standards/release-notes-standard.md) and the Layer-1 dual-write protocol) to GitHub Releases via `gh release create` (or `gh release edit` when the release already exists). Mode F is standalone — it does NOT require a Mode D close-out invocation. It composes with `pipeline/stage-12-execute.md § Phase B5.5` (the autonomous Phase B5.5 emit inside Stage 12 spoke execution) AND `automated-closeout.sh` Phase 15.5 (the dual-invocation point inside Mode D for non-fix-forward scenarios). All three invocation paths (Phase B5.5 / Mode D Phase 15.5 / Mode F standalone) share the same `gh release view` → `gh release create | gh release edit` view-then-create-or-edit state machine per `release-notes-standard.md § 5.5`.
 
+All three paths also resolve `--latest` **explicitly** on the create branch rather than letting `gh` default it; the rule, its fail-closed policy, and the comparator are stated once in [`release-notes-standard.md § 5.5`](../../references/standards/release-notes-standard.md) and applied here. Mode F is the path where this binds hardest: its **Pre-cutover backfill** use case publishes older versions after newer ones are already live, so the withhold outcome is Mode F's routine result, not an exception.
+
 **Use cases:**
 - **Fix-forward backfill** — Stage 12 spoke skipped Phase B5.5 OR Mode D close-out completed without Phase 15.5 firing; operator invokes Mode F post-close to publish Surface 1.
 - **Post-VERIFIED corrections** — operator updates canonical RELEASE_NOTES.md content via a `fix(release-notes):` PR per `release-notes-standard.md § 5.6`; Mode F re-publishes Surface 1 via `gh release edit` (idempotent).
@@ -429,7 +431,16 @@ Mode F publishes the canonical public release-notes surface (Surface 1 of the La
    # Source the shared § 5.1 transform; never inline a copy. Inline copies of this
    # strip drifted across four call sites, and one form returns an EMPTY body on
    # GNU userlands while returning the body on BSD.
+   # $REPO_ROOT is read by BOTH library sources below. Make it total: a Mode F session
+   # invoked standalone may not have inherited it, and an empty value sources from "/".
+   REPO_ROOT="${REPO_ROOT:-$(git rev-parse --show-toplevel)}"
    . "$REPO_ROOT/release/tools/lib/frontmatter-strip.sh"
+   # Version-grammar SSOT — the platform's total order over versions, the SAME comparator
+   # phase_bump_version() and phase_publish_github_release() consume. Never hand-roll one:
+   # a shell string compare ranks v4.9 above v4.10 and mis-decides v4.99 -> v5.0. The empty
+   # positional keeps the library's --self-test dispatch inert, the same idiom
+   # automated-closeout.sh uses where it sources this library.
+   . "$REPO_ROOT/release/tools/version-grammar.sh" ""
    CANONICAL_BODY=$(strip_frontmatter "$NOTES_PATH" 2>/dev/null)
 
    # EMPTY-BODY GUARD (§ 5.1 S4). The strip is fail-closed, so empty means the note
@@ -437,6 +448,56 @@ Mode F publishes the canonical public release-notes surface (Surface 1 of the La
    if [[ -z "$CANONICAL_BODY" ]]; then
      echo "HALT — frontmatter strip produced an EMPTY body from $NOTES_PATH; refusing to publish nothing"
      exit 1
+   fi
+
+   # ---- Badge resolution (--latest) — computed ONCE, BEFORE the state branch ----
+   # TWO consumers read it: the Step-4 approval question (which renders the resolved
+   # value so the operator approves the badge move, not just the publish) and the
+   # State-0 create invocation executed at Step 5. Same hoisting rule that puts
+   # CANONICAL_BODY above: compute before the branch when more than one path reads it.
+   # The State-1 edit path DISCARDS the value — `gh release edit` documents no --latest
+   # default, so omitting the flag there leaves the badge untouched. Never add the flag
+   # to the edit invocation; that converts a safe idempotent refresh into a badge mutation.
+   #
+   # --latest is RESOLVED on create, never omitted. Without the flag gh sends
+   # make_latest=legacy — "automatic based on date and version" (gh 2.98 --help) — a
+   # vendor heuristic we neither pin nor test. That badge is the anchor read by
+   # core/hooks/notify-version-skew.sh AND by deploy.sh Check 39, so a regressed badge
+   # silently re-bases every workspace's version-skew comparison. Canonical rule home:
+   # release-notes-standard.md § 5.5.
+   #
+   # THIS IS MODE F'S NORMAL PATH, NOT ITS EDGE CASE. The Pre-cutover backfill use case
+   # publishes an OLD version while NEWER ones are already live, by design and
+   # repeatedly, so the withhold branch is the one backfill takes every time. The sibling
+   # sites publish the current release and take the advance branch normally. Same
+   # invariant, same comparator, same predicate, inverted frequency.
+   #
+   # FAIL-CLOSED, both operands gated — enforced in the SSOT, not restated here.
+   # version_badge_latest lives in release/tools/version-grammar.sh (sourced above) and
+   # returns ADVANCE only when the anchor is not higher than the target; EVERY other
+   # verdict withholds. Do not re-render the comparison or the policy at this site.
+   #
+   # The anchor read needs no `|| echo ""`: this block sets neither `set -e` nor
+   # `pipefail`, so an unreachable gh yields empty stdout, tr exits 0, and the helper's
+   # WITHHOLD_NO_ANCHOR branch is what fires. If you transplant this line into a
+   # script that DOES set `-euo pipefail`, put the fallback OUTSIDE the pipeline
+   # (`... 2>/dev/null || echo ""`) — attached to a pipeline it can never run.
+   LATEST=false
+   if ! command -v version_badge_latest >/dev/null 2>&1; then
+     LATEST_WHY="version-grammar SSOT unavailable — withholding the badge (fail-closed)"
+   else
+     ANCHOR="$(gh api "repos/{REPO}/releases/latest" --jq '.tag_name' 2>/dev/null | tr -d '[:space:]')"
+     case "$(version_badge_latest "$ANCHOR" "v<X.Y>")" in
+       ADVANCE)
+         LATEST=true
+         LATEST_WHY="current Latest ($ANCHOR) is not higher than v<X.Y> — the badge advances" ;;
+       WITHHOLD_HIGHER)
+         LATEST_WHY="current Latest ($ANCHOR) is HIGHER than v<X.Y> — backfill or out-of-order publish; the badge stays where it is" ;;
+       WITHHOLD_UNORDERABLE)
+         LATEST_WHY="anchor '$ANCHOR' or target 'v<X.Y>' is not orderable under the version grammar — withholding the badge (fail-closed)" ;;
+       WITHHOLD_NO_ANCHOR)
+         LATEST_WHY="no published Release anchor resolved (first release, or gh unreachable) — withholding the badge (fail-closed)" ;;
+     esac
    fi
 
    # Read current state via gh release view
@@ -463,16 +524,18 @@ Mode F publishes the canonical public release-notes surface (Surface 1 of the La
        --repo {REPO} \
        --title "v<X.Y> — $HEADLINE" \
        --notes "$CANONICAL_BODY" \
-       --target "$MERGE_SHA"
-     echo "CREATED — release v<X.Y> published"
+       --target "$MERGE_SHA" \
+       --latest="$LATEST"
+     echo "CREATED — release v<X.Y> published (--latest=$LATEST: $LATEST_WHY)"
    fi
    ```
 
 4. **Operator approval gate (AskUserQuestion):**
-   - questionText: "Publish release v<X.Y> to GitHub Releases? (action: <CREATE | EDIT | NO-OP> based on preflight)"
+   - questionText: "Publish release v<X.Y> to GitHub Releases? (action: <CREATE | EDIT | NO-OP> based on preflight; on CREATE the Latest badge resolves to --latest=<LATEST> — <LATEST_WHY>)"
+     On EDIT and NO-OP, `<LATEST>` and `<LATEST_WHY>` render as `n/a (this path does not touch the badge)` — without this clause a resolved `true` displays on a path that never applies it.
    - options:
      - option: "Publish (apply state-machine action)"
-       description: "Execute the determined action — `gh release create` for State 0, `gh release edit` for State 1, no-op for State 2. Surface 1 reaches steady-state regardless."
+       description: "Execute the determined action — `gh release create` for State 0, `gh release edit` for State 1, no-op for State 2. Surface 1 reaches steady-state regardless. On CREATE the resolved `--latest` value and the `releases/latest` anchor it was computed against are applied as shown; the badge is withheld whenever a higher version is already published (fail-closed)."
      - option: "Cancel"
        description: "Halt without state mutation. Operator may re-invoke Mode F later."
    - On Cancel: halt without state mutation.
@@ -485,6 +548,7 @@ Mode F publishes the canonical public release-notes surface (Surface 1 of the La
 6. **Report:**
    - State-machine final state (CREATED / EDITED / NO-OP)
    - Public release URL: `https://github.com/{REPO}/releases/tag/v<X.Y>`
+   - Resolved `--latest` value and the `releases/latest` anchor it was computed against (CREATE path only; `gh release edit` leaves the badge untouched)
    - Reversibility tier: CHEAP — `gh release delete v<X.Y>` removes the server-side release (tag preserved); re-invoke Mode F after delete to re-publish
 
 ### Mode G — Pattern Review Execute (EXECUTE phase)

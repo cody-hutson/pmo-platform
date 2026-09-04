@@ -24,7 +24,7 @@
 #                                               — schema templates for hub-state Surfaces A/C +
 #                                               action-items per hub-session-continuity.md §2 +
 #                                               hub-action-tracking.md §2; runtime per-release
-#                                               subdirectories (vX.Y/) created lazily by hub
+#                                               subdirectories (<milestone-slug>/) created lazily by hub
 #                                               on first surface emit)
 #                           "workspace-root" → <workspace-root>/<basename minus trailing .template>
 #                                              (ADR-122; suffix-stripping)
@@ -124,7 +124,7 @@ COMPOSITION_SURFACE_FILES=(
 
   # Hub-state-tier (operator-scoped, <instance-base>/hub-state/<basename>)
   # Schema templates for hub-state Surfaces A, C + action-items ledger. Hub
-  # copies these to <OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/<basename-stripped>
+  # copies these to <OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/<basename-stripped>
   # on first surface emit per release (lazy per-release directory creation
   # per hub-session-continuity.md §2 directory creation discipline).
   # Token-free — templates are placeholders; hub does milestone-slug

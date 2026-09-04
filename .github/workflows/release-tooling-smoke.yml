@@ -258,6 +258,16 @@ on:
       # the HARD GATE without ever triggering its regression suite.
       - 'release/references/how-to/hub-spoke-bridge.md'
       - 'release/releases/hub-state/action-items.md.template'
+      # AER-1 inputs: the agent-editability suite derives its Tier-0 union from the
+      # hook and its execution-path map from the planning spec, and asserts the
+      # bypass token's absence across four delivered surfaces. Without these three
+      # entries an edit to a graded subject would change what the arms assert while
+      # not triggering the job that asserts it — the same trigger-vs-verdict
+      # disagreement the CIAC-3 and selftest-discovery entries above each close.
+      # (hub-spoke-bridge.md, the fourth graded surface, is already on the roster.)
+      - 'core/hooks/block-autonomy-ceiling.sh'
+      - 'release/references/pipeline/stage-04-planning.md'
+      - 'release/skills/release-planner/**'
       # finops-selftest inputs: the four scripts and the store schema they encode.
       - 'core/skills/finops-usage-extractor/**'
       - 'core/schemas/finops-usage-store-schema.md'
@@ -317,6 +327,10 @@ on:
       # Procedure 7a gate-predicate inputs — see the pull_request block above.
       - 'release/references/how-to/hub-spoke-bridge.md'
       - 'release/releases/hub-state/action-items.md.template'
+      # AER-1 inputs — see the pull_request block above.
+      - 'core/hooks/block-autonomy-ceiling.sh'
+      - 'release/references/pipeline/stage-04-planning.md'
+      - 'release/skills/release-planner/**'
       # finops-selftest inputs — see the pull_request block above.
       - 'core/skills/finops-usage-extractor/**'
       - 'core/schemas/finops-usage-store-schema.md'
@@ -514,6 +528,30 @@ jobs:
         # is interpolated — the step is a fixed command, so there is no
         # untrusted-data path into the shell. Gates on exit code.
         run: bash release/tools/tests/test_spoke_run_directory.sh
+
+      - name: AER-1 — Stage-4 agent-editability read (fixture + mutation arms)
+        # The Stage-4 Phase A3.5 read shipped as a prose procedure with two
+        # demonstrations owed and neither delivered: a fixture milestone carrying
+        # one FLOORED and one UNFLOORED card with both classifications correct,
+        # and a fixture asserting the planning output never recommends setting
+        # the hook-bypass variable. Both were graded by reading, which is the
+        # state in which a safety property holds now and regresses silently.
+        # This suite converts both to assertions and is wired here rather than
+        # left as prose for the same reason NC-NS-1 above is:
+        #   (1) The classifier is DERIVED. The Tier-0 union is parsed out of
+        #       core/hooks/block-autonomy-ceiling.sh at run time and the
+        #       execution-path map out of the planning spec's own table. Two
+        #       authority-mutation arms REMOVE an entry (the floored card must
+        #       fall to unconstrained) and ADD one (the unfloored card must
+        #       become floored) — so a restated list anywhere in the suite fails
+        #       it. That is the derivation limb, executed rather than asserted.
+        #   (2) Every mutation control asserts its copy DIFFERS from its source
+        #       before grading it, so a silent no-op mutation is reported as a
+        #       broken control instead of counted as a pass.
+        # Offline + deterministic (one mktemp tree; no network, no gh, no writes
+        # to any operator-instance path or into the checkout). No workflow input
+        # is interpolated. Gates on exit code.
+        run: bash release/tools/tests/test_agent_editability_read.sh
 
       - name: close-class-telemetry regression suite (20 arms; mutation-graded)
         # Wires a suite that shipped with ZERO executors — the same class as the
@@ -1511,6 +1549,120 @@ jobs:
           fi
 
           echo "Precision probe OK — a neutered count-once overlap map correctly failed the FM-2 assertion (exit $probe_rc)."
+
+      - name: Precision probe — the rollup self-test actually FAILS on a non-sticky header bind
+        # `build_worktree_milestone_map` binds the `worktree` column index from each file's
+        # declared header. The bind MUST be sticky per file: the deployed hub-state
+        # `sessions.md` carries the managed-section / operator-additions fences BETWEEN the
+        # table's separator row and its first data row, so a parser that unbinds on a
+        # non-pipe line throws the binding away before any data arrives and emits NOTHING
+        # for that run directory — no error, no exit code, the directory simply vanishes
+        # from attribution. This probe introduces exactly that reset in a THROWAWAY copy.
+        # A pass here would mean the silent-drop class is unregressed and this job green
+        # over it. The in-repo hub-state .template carries no fences (they are composed at
+        # install), which is why the property needs the synthetic-managed-fence fixture.
+        # No workflow expression is interpolated below; every value is a shell literal.
+        run: |
+          # -e is ON for every setup step: a failed mktemp / cp / injection must ABORT,
+          # never fall through to a probe that silently tests nothing. It is relaxed
+          # only around the one invocation that is EXPECTED to fail.
+          set -euo pipefail
+          probe="$(mktemp -d)"
+          cp -R core/skills/finops-usage-extractor "$probe/finops-usage-extractor"
+          target="$probe/finops-usage-extractor/scripts/rollup-attribution.sh"
+
+          # The anchor must match exactly once. If the implementation moves, this exits
+          # non-zero and -e aborts the job — a probe that can no longer find what it
+          # breaks reports that, rather than quietly passing.
+          python3 - "$target" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1]); s = p.read_text(encoding="utf-8")
+          old = '        /^[[:space:]]*\\|/ {\n'
+          new = '        !/^[[:space:]]*\\|/ { idx = 0 }\n        /^[[:space:]]*\\|/ {\n'
+          if s.count(old) != 1:
+              sys.exit("probe anchor not found exactly once in rollup-attribution.sh "
+                       "(count=%d) — the probe would silently stop testing anything" % s.count(old))
+          p.write_text(s.replace(old, new), encoding="utf-8")
+          PY
+
+          set +e
+          bash "$target" --self-test > "$probe/probe.out" 2>&1
+          probe_rc=$?
+          set -e
+
+          if [ "$probe_rc" -eq 0 ]; then
+            echo "::error::Precision probe FAILED — rollup-attribution.sh --self-test returned 0 with the header bind reset on every non-pipe line. A hub-state file carrying the deployed managed-section fences would contribute nothing and no assertion would notice; this gate is blind to the silent-drop class."
+            sed -n '1,40p' "$probe/probe.out"
+            exit 1
+          fi
+
+          if ! grep -q 'FAIL: sticky-header-bind' "$probe/probe.out"; then
+            echo "::error::Precision probe returned non-zero (exit $probe_rc) but NOT via the sticky-header-bind assertion — the self-test may be failing for an unrelated reason, which would mask a real silent-drop regression."
+            sed -n '1,40p' "$probe/probe.out"
+            exit 1
+          fi
+
+          echo "Precision probe OK — a non-sticky header bind correctly failed the sticky-header-bind assertion (exit $probe_rc)."
+
+      - name: Precision probe — the rollup self-test actually FAILS on a shadowing ladder reorder
+        # The slug branch arm ($t2sv) sits BELOW the authored hub-state tier ($t3v) because
+        # a branch name is a heuristic for the milestone while the hub-state directory holds
+        # the value the hub AUTHORED. Lifting it above lets `release/<slug>-suffix` override
+        # the exact `<slug>`, splitting one release into two rollup rows — the silently-wrong
+        # version of the obvious fix. This probe performs exactly that reorder in a THROWAWAY
+        # copy. A pass here would mean the ladder ordering is a comment, not a property.
+        # No workflow expression is interpolated below; every value is a shell literal.
+        run: |
+          # -e is ON for every setup step: a failed mktemp / cp / injection must ABORT,
+          # never fall through to a probe that silently tests nothing. It is relaxed
+          # only around the one invocation that is EXPECTED to fail.
+          set -euo pipefail
+          probe="$(mktemp -d)"
+          cp -R core/skills/finops-usage-extractor "$probe/finops-usage-extractor"
+          target="$probe/finops-usage-extractor/scripts/rollup-attribution.sh"
+
+          # Both arms must match exactly once AND appear in the expected order. If either
+          # check fails this exits non-zero and -e aborts the job.
+          python3 - "$target" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1]); s = p.read_text(encoding="utf-8")
+          t3 = ('    elif $t3v != null then\n'
+                '      { work_item: ("milestone:" + $t3v), work_item_kind: "milestone",\n'
+                '        attribution_tier: "hub-state-lineage", reproducible: true,\n'
+                '        attribution_basis: ("hub-state worktree " + $wt + " -> milestone " + $t3v) }\n')
+          t2sv = ('    elif $t2sv != null then\n'
+                  '      { work_item: ("milestone:" + $t2sv), work_item_kind: "milestone",\n'
+                  '        attribution_tier: "branch-milestone", reproducible: true,\n'
+                  '        attribution_basis: ("slug-primary release branch " + $branch + " -> milestone " + $t2sv) }\n')
+          if s.count(t3) != 1 or s.count(t2sv) != 1:
+              sys.exit("probe anchors not unique (t3=%d t2sv=%d) — the probe would silently "
+                       "stop testing anything" % (s.count(t3), s.count(t2sv)))
+          i3, i2 = s.index(t3), s.index(t2sv)
+          if not i3 < i2:
+              sys.exit("expected the $t3v arm to precede the $t2sv arm; the ladder has "
+                       "already been reordered and this probe is measuring nothing")
+          block = s[i3:i2 + len(t2sv)]
+          p.write_text(s.replace(block, t2sv + s[i3 + len(t3):i2] + t3), encoding="utf-8")
+          PY
+
+          set +e
+          bash "$target" --self-test > "$probe/probe.out" 2>&1
+          probe_rc=$?
+          set -e
+
+          if [ "$probe_rc" -eq 0 ]; then
+            echo "::error::Precision probe FAILED — rollup-attribution.sh --self-test returned 0 with the slug branch arm lifted above the authored hub-state tier. A branch-name heuristic could override an authored milestone key and split one release into two rollup rows without failing any assertion."
+            sed -n '1,40p' "$probe/probe.out"
+            exit 1
+          fi
+
+          if ! grep -q 'FAIL: shadowing-guard' "$probe/probe.out"; then
+            echo "::error::Precision probe returned non-zero (exit $probe_rc) but NOT via the shadowing-guard assertion — the self-test may be failing for an unrelated reason, which would mask a real ladder-ordering regression."
+            sed -n '1,40p' "$probe/probe.out"
+            exit 1
+          fi
+
+          echo "Precision probe OK — a reordered ladder correctly failed the shadowing-guard assertion (exit $probe_rc)."
 
       - name: Precision probe — the report self-test actually FAILS on the SA-3 silent-zero
         # Re-introduces the exact historical defect SA-3 documents: a v1.2.0 by_X entry is

@@ -8,6 +8,10 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### hub-spoke-run-and-planning-discipline (2026-09-03, version-less) — Update notices stay accurate, and more edits now pause for approval
+
+### v4.52 (2026-09-03) — Every automation now registers before it ships
+
 ### v4.51 (2026-09-03) — Behavioural regressions are now caught before they ship
 
 ### v4.50 (2026-09-03) — Renumbering a decision record no longer rewrites its own history

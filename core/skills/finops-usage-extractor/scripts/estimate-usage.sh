@@ -216,13 +216,48 @@ release_log_velocity_map() {
     [ -r "$seg" ] && sources+=("$seg")
   done
   awk '
-    FNR == 1 { ver=""; have=0 }
+    # n MUST be initialized numerically. An uninitialized awk scalar used as an
+    # array SUBSCRIPT is the empty string, not 0, so `k[n]` would file the first
+    # entry under "" while `n++` coerces to 1 — losing exactly one release and
+    # leaving a phantom at index 0. Silent, and it survives a casual read.
+    BEGIN { n = 0 }
+    FNR == 1 { ver=""; have=0; in_ledger=0 }
+    # ── Ledger alias source. The roll-up now emits SLUG-keyed work items for
+    #    slug-primary releases (ADR-092), while a Deployment-Log heading may carry
+    #    either form. A velocity entry reachable under only one key silently drops
+    #    its release out of the estimator basis as `P7 unkeyable`. The hot ledger
+    #    `| Version | Milestone | ... |` table carries both forms per release, so
+    #    each entry is emitted under BOTH keys. Aliasing ADDS keys, never values —
+    #    the never-default-to-zero invariant above is untouched.
+    #    COVERAGE NOTE: this table exists in the HOT RELEASE_LOG.md only; the
+    #    archive segments carry none, while velocity entries are read from all of
+    #    them. The alias therefore covers hot-ledger releases only. That is a
+    #    property of the sweep window, not of the construction — an archived
+    #    release keyed on the other form stays `unkeyable`, visibly.
+    /^\| *Version *\| *Milestone *\|/ { in_ledger=1; next }
+    in_ledger && /^\| *-/ { next }
+    in_ledger && /^\|/ {
+      split($0, lc, "|"); lv=lc[2]; lm=lc[3]
+      gsub(/^[ \t]+|[ \t]+$/, "", lv); gsub(/^[ \t]+|[ \t]+$/, "", lm)
+      sub(/[ \t].*$/, "", lv)              # `<slug> (version-less)` -> leading token
+      sub(/^v[0-9]+\.[0-9]+-/, "", lm)     # strip a vX.Y- stem from a Milestone cell
+      if (lv != "" && lm != "" && lv != lm) { alias[lv]=lm; alias[lm]=lv }
+      next
+    }
+    in_ledger && !/^\|/ { in_ledger=0 }
     /^#### Deployment Log / { ver=$4; have=0; next }
     (ver != "") && (have == 0) && /^\*\*Velocity:\*\*/ {
       have=1; line=$0; pts=""; cls="";
       if (match(line, /planned [0-9]+ pts/)) { s=substr(line, RSTART, RLENGTH); gsub(/[^0-9]/, "", s); pts=s }
       if (match(line, /class [a-z][a-z-]*/))  { cls=substr(line, RSTART+6, RLENGTH-6) }
-      if (pts != "" && cls != "") printf "%s\t%s\t%s\n", ver, pts, cls
+      if (pts != "" && cls != "") { k[n]=ver; kp[n]=pts; kc[n]=cls; n++ }
+    }
+    # Primary keys are emitted FIRST and recorded, so an alias can never overwrite
+    # a release that already carries its own Velocity row.
+    END {
+      for (i=0; i<n; i++) if (!(k[i] in seen)) { seen[k[i]]=1; printf "%s\t%s\t%s\n", k[i], kp[i], kc[i] }
+      for (i=0; i<n; i++) { a=alias[k[i]]
+        if (a != "" && !(a in seen)) { seen[a]=1; printf "%s\t%s\t%s\n", a, kp[i], kc[i] } }
     }
   ' "${sources[@]}" \
   | jq -R -s 'split("\n") | map(select(length > 0) | split("\t"))
@@ -1113,6 +1148,39 @@ self_test() {
       && ok "SE-7 SA-8: a narrative **Velocity:** row fails to parse and is excluded, not defaulted" \
       || bad "SE-7 SA-8: the narrative velocity row was not excluded as unkeyable"
   fi
+
+  # ── SE-7b LEDGER ALIAS — a velocity entry must be reachable under BOTH the version
+  #    and the milestone-slug key. The roll-up emits slug-keyed work items for
+  #    slug-primary releases (ADR-092); an entry reachable under only one form drops
+  #    its release out of the basis as `P7 unkeyable` — a NAMED exclusion, so it is
+  #    diagnosable, but the basis is understated until the alias exists.
+  #    Both normalizations are asserted, and each alias must carry the SAME value as
+  #    its primary (aliasing adds keys, never values). The specificity arm is the
+  #    load-bearing half: without it, a map that aliased everything to everything
+  #    would pass the first two checks. ──
+  local vmap v_primary v_alias g_primary g_alias n_bogus
+  vmap="$(release_log_velocity_map "$rlog")"
+  v_primary="$(printf '%s' "$vmap" | jq -c '.["v9.94"] // null')"
+  v_alias="$(printf '%s' "$vmap"   | jq -c '.["alpha-slug"] // null')"
+  g_primary="$(printf '%s' "$vmap" | jq -c '.["v9.90"] // null')"
+  g_alias="$(printf '%s' "$vmap"   | jq -c '.["gamma-slug"] // null')"
+  n_bogus="$(printf '%s' "$vmap"   | jq '[keys[]|select(.=="zzznope-slug" or .=="")]|length')"
+  if [ "$v_alias" != "null" ] && [ "$v_alias" = "$v_primary" ]; then
+    ok "SE-7b ALIAS: a vX.Y- stem is stripped from a Milestone cell (v9.94 -> alpha-slug, same entry $v_alias)"
+  else
+    bad "SE-7b ALIAS: v9.94's entry is not reachable as 'alpha-slug' (primary=$v_primary alias=$v_alias) — a slug-keyed work item for this release would read as P7 unkeyable"
+  fi
+  if [ "$g_alias" != "null" ] && [ "$g_alias" = "$g_primary" ]; then
+    ok "SE-7b ALIAS: a '<slug> (version-less)' Version cell contributes its leading token (v9.90 -> gamma-slug, same entry $g_alias)"
+  else
+    bad "SE-7b ALIAS: v9.90's entry is not reachable as 'gamma-slug' (primary=$g_primary alias=$g_alias) — the version-less normalization did not apply"
+  fi
+  # Specificity + the empty-subscript canary. An uninitialized awk scalar used as an
+  # array subscript is "" rather than 0, which files one entry under the empty key and
+  # loses it; a "" key present here is that bug, visible.
+  [ "${n_bogus:-1}" -eq 0 ] \
+    && ok "SE-7b ALIAS specificity: no alias for an absent milestone, and no empty-string key" \
+    || bad "SE-7b ALIAS specificity: the velocity map carries an unexpected key (absent-milestone alias or an empty-string subscript) — count ${n_bogus:-?}, want 0"
 
   # ── SE-8 UNITS — volume by default; $ only from a provider record's own rate;
   #    a present-but-unreadable provider record renders volume + a NAMED notice. ──

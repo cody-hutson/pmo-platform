@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.52] - 2026-09-03
+
+Every platform automation now needs a registry entry before it ships, and how it fires is your own setting rather than a name in the docs.
+
+[Full notes](release/releases/notes/v4.52_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.52)
+
 ## [v4.51] - 2026-09-03
 
 Eval suites can now be scored automatically, and a behavioural-regression check runs on every pull request.

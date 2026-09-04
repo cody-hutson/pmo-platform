@@ -14,19 +14,21 @@ Surface B (the hub-decisions / pipeline-event-log) is not represented here — i
 
 ## Runtime instance (OPERATOR-INSTANCE — NOT tracked)
 
-The hub writes runtime instances to `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/` — the operator-local path that resolves at install time per the operator-instance path convention. Per-release `vX.Y/` subdirectories are created lazily by the hub on first surface emit; hubs do NOT pre-create empty per-release directories.
+The hub writes runtime instances to `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/` — the operator-local path that resolves at install time per the operator-instance path convention. The run key is the milestone slug, per the hub-session-continuity standard's Persistence Format, so a version-less release keys correctly too. Per-release subdirectories are created lazily by the hub on first surface emit; hubs do NOT pre-create empty per-release directories.
 
 ```
-<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/
+<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/
 ├── pending-approvals.md    # Surface A runtime instance
 ├── action-items.md         # Action-item runtime instance
-└── sessions.md             # Surface C runtime instance (OPTIONAL)
+├── sessions.md             # Surface C runtime instance (OPTIONAL)
+└── staging/                # Run-scoped staging for hub-authored bodies
+                            # awaiting posting; ends at Procedure 7 Step 6
 ```
 
 ## Authoring contract
 
 - **Authored by:** Hub at every routing decision (Procedure 0b in [`../../references/how-to/hub-spoke-bridge.md`](../../references/how-to/hub-spoke-bridge.md) and every subsequent action-item emit or approval enqueue)
-- **First emit:** Hub copies the template from this directory to `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/<surface>.md`, substitutes the milestone slug into the frontmatter, and appends the first row
+- **First emit:** Hub copies the template from this directory to `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/<surface>.md`, substitutes the milestone slug into the frontmatter, and appends the first row. A small number of directories predate the slug-keyed convention and are keyed on a version; the resolver reads the slug form first and falls back to the version form, which it treats as read-only
 - **Read by:** Hub on session resume (Resume Procedure Steps 7-8 in `hub-session-continuity.md`); operator (manually inspecting pending approvals)
 
 ## Classification
@@ -35,4 +37,4 @@ The hub writes runtime instances to `<OPERATOR_INSTANCE_HUB_STATE_PATH>/vX.Y/` �
 
 ## Cleanup
 
-Runtime `vX.Y/` directories at the operator-instance path are NOT deleted post-release — they serve as a local release-close audit artifact. Workspace-wide cleanup is handled by [`../../tools/cleanup-orphan-state.sh`](../../tools/cleanup-orphan-state.sh) per Procedure 7 Step 6 in the bridge.
+Runtime per-release directories at the operator-instance path are NOT deleted post-release — they serve as a local release-close audit artifact. The `staging/` subdirectory is the exception in lifecycle but not in mechanism: it ends at Procedure 7 Step 6, where the hub reports it for operator disposition; nothing deletes it automatically. Workspace-wide cleanup is handled by [`../../tools/cleanup-orphan-state.sh`](../../tools/cleanup-orphan-state.sh) per Procedure 7 Step 6 in the bridge.
