@@ -1858,6 +1858,52 @@ case "$TOOL_NAME" in
           exit 0
           ;;
       esac
+
+      # SECOND -019 EXEMPTION — the git-ignored analysis workspace (#6427).
+      # core/standards/analysis-workspace-standard.md §1 designates the repo-root
+      # analysis/ folder as the analysis home and §2 makes each analysis ONE dated
+      # SUBFOLDER; .gitignore (`/analysis/*` + `!/analysis/README.md`) ignores every
+      # such subfolder and tracks README.md alone. The sanctioned location and this
+      # control contradicted each other, and the session shape the standard
+      # anticipates is exactly the non-worktree one this rule denies.
+      #
+      # TWO ARMS, AND THE ORDER IS THE GUARD. `case` takes the FIRST match:
+      #
+      #   Arm 1 (traversal) matches and does NOTHING, so control falls through to
+      #   `block`. It is NOT decoration. abs_target above is the RAW, UN-NORMALIZED
+      #   FILE_PATH whenever the target AND its parent directory both do not exist
+      #   (the else-branch of the normalizer) — and a `case` glob matches across
+      #   `/`, so `<root>/pmo-platform/analysis/../core/x.md` matches arm 2's
+      #   pattern while naming a TRACKED Layer-1 file. Today that path is harmless
+      #   because -019 denies the whole tree; the carve-out below is what would
+      #   make it an escape. The guard is required BY this change.
+      #
+      #   Arm 2 requires a SUBFOLDER SEGMENT (`analysis/`*`/`*), not `analysis/`*.
+      #   analysis/README.md is the one TRACKED file under this folder and the bare
+      #   prefix admits it. Keying on the subfolder is the standard's own §2
+      #   convention, so the predicate tracks the sanctioned shape rather than a
+      #   filename exception that a future .gitignore edit would silently void.
+      #
+      # The pattern is ANCHORED AT THE REPO ROOT: `release/analysis/…` and
+      # `.claude/worktrees/*/analysis/…` do NOT match, so this admits exactly one
+      # subtree and not every directory in the tree named `analysis`.
+      #
+      # WHY THE PREDICATE IS STATIC, AND WHY THAT IS THE SECURITY PROPERTY. This
+      # pattern lives inside .claude/hooks/*, which -019 itself protects and
+      # BLOCK-AUTONOMY-001 always-blocks. An exemption authored in a surface the
+      # rule's own subject can write is not an exemption, it is a widening
+      # primitive: an allowlist file at .claude/<name>.txt is agent-appendable by
+      # design, and `git check-ignore` answers from .gitignore / core.excludesFile,
+      # which `git config --global` can re-point with no hook rule in the way.
+      # Neither is admissible for the self-modification guard specifically.
+      case "$abs_target" in
+        *"/../"*|*/..)
+          ;;
+        "${PRIMARY_ROOT}/pmo-platform/analysis/"*/*)
+          exit 0
+          ;;
+      esac
+
       block "BLOCK-DESTRUCTIVE-019" \
         "Write/Edit to Layer 1 primary path denied: ${is_layer1}. cwd=${CWD} is not under pmo-platform/.claude/worktrees/" \
         "work from a git worktree (git worktree add), or set CLAUDE_HOOK_BYPASS=1"

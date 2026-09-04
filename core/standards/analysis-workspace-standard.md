@@ -31,6 +31,7 @@ the platform already uses for initiative roadmaps
 | **Tracked** | Only `analysis/README.md` (the in-folder signpost). The folder ships on clone so the location is always discoverable. |
 | **Git-ignored** | Everything else under `analysis/` — every `<name>-YYYY-MM-DD/` subfolder and its contents. Enforced by `.gitignore` (`/analysis/*` with `!/analysis/README.md`). Operator-written analysis never enters git history. |
 | **Scaffolding** | None required — the folder exists in the repo via the tracked README; there is no install/resolver step. |
+| **Write path** | Any session shape may write the workspace — worktree or not, `Write`/`Edit` or Bash — with **no hook bypass**. `BLOCK-DESTRUCTIVE-019` exempts `analysis/<subfolder>/…` for Write/Edit; the tracked `analysis/README.md` is **not** exempt and is edited from a worktree like any other tracked file. |
 
 **Scope boundary.** This workspace is for analysis **about the platform/repo** (release,
 backlog, platform audits/reviews/gap analyses). It is **not** for:

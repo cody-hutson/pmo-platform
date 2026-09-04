@@ -2508,6 +2508,68 @@ test_case "Write pmo-platform/x.md with primary cwd blocks (base-correction inva
   "$(write_payload ''"$HOME"'/Claude/pmo-platform/reference/x.md' ''"$HOME"'/Claude')" \
   2 "BLOCK-DESTRUCTIVE-019"
 
+# --- BLOCK-DESTRUCTIVE-019 analysis-workspace carve-out (#6427) ---
+#
+# The second -019 exemption: the git-ignored analysis workspace. Three must-ALLOW
+# arms and five discrimination partners. The discrimination partners are not
+# decoration — each is a SPECIFIC WIDENING the naive `analysis/`* predicate would
+# have introduced, and two of them (A5, A6) were confirmed live against that
+# predicate before this design was settled.
+#
+# Environment-independence: `hookfix-2026-01-01` and `zz-nonexistent` are chosen
+# NOT to exist on any runner, so the hook's [ -e "$FILE_PATH" ] test takes the
+# raw/parent-fallback branch deterministically. These arms add no dependency on an
+# on-disk file, unlike the pre-existing ../-escape arms below which require
+# $HOME/Claude/CLAUDE.md to exist.
+
+# A1 — the defect itself. Non-worktree cwd, dated analysis subfolder → allow.
+test_case "Write analysis/<subfolder>/SUMMARY.md with primary cwd allows (carve-out)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/analysis/hookfix-2026-01-01/SUMMARY.md' ''"$HOME"'/Claude')" \
+  0
+
+# A2 — Edit parity. The card says "a Write (or Edit)"; both tool names reach -019.
+test_case "Edit analysis/<subfolder>/SUMMARY.md with primary cwd allows (carve-out)" \
+  "$(edit_payload ''"$HOME"'/Claude/pmo-platform/analysis/hookfix-2026-01-01/SUMMARY.md' ''"$HOME"'/Claude')" \
+  0
+
+# A3 — depth 3. The standard's §2 support folders (evidence/, _scores/, issue-drafts/).
+test_case "Write analysis/<subfolder>/evidence/probe.md with primary cwd allows (carve-out depth 3)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/analysis/hookfix-2026-01-01/evidence/probe.md' ''"$HOME"'/Claude')" \
+  0
+
+# A4 — THE PIN (card AC2). A TRACKED Layer-1 path from the same session still blocks.
+# This is what proves the carve-out did not widen past its own subtree.
+test_case "Write pmo-platform/core/x.md with primary cwd still blocks (carve-out did not widen)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/core/zz-carveout-probe.md' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+# A5 — the one TRACKED file INSIDE the carve-out folder. .gitignore is
+# `/analysis/*` + `!/analysis/README.md`, so README.md is tracked Layer 1 and a
+# bare `analysis/`* predicate would have admitted it. The subfolder segment is
+# what excludes it, and this arm is that guard's teeth.
+test_case "Write analysis/README.md with primary cwd still blocks (tracked file, no subfolder segment)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/analysis/README.md' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+# A6 — the ../ escape through the raw-path fallback. Neither the target nor its
+# parent exists, so abs_target is the RAW un-normalized FILE_PATH with `..`
+# intact; a `case` glob matches across `/`, so without the traversal arm this
+# would match the carve-out pattern while naming a tracked Layer-1 file.
+test_case "Write analysis/../core/x.md with primary cwd still blocks (traversal guard)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/analysis/../core/zz-nonexistent/x.md' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+# A7 — sibling PREFIX does not widen. `analysis-notes` is not `analysis/`.
+test_case "Write pmo-platform/analysis-notes/x.md with primary cwd still blocks (prefix is not a segment)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/analysis-notes/x.md' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+# A8 — the pattern is REPO-ROOT-ANCHORED. A differently-located directory named
+# `analysis` is not exempt; this admits exactly one subtree, not every such dir.
+test_case "Write pmo-platform/release/analysis/x.md with primary cwd still blocks (repo-root-anchored)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/release/analysis/x.md' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
 # Explicit allow: .claude/skills (deploy target)
 test_case "Write .claude/skills/SKILL.md allows (deploy target)" \
   "$(write_payload ''"$HOME"'/Claude/.claude/skills/skill-x/SKILL.md' ''"$HOME"'/Claude')" \
