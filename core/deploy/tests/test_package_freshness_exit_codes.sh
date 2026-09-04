@@ -27,7 +27,7 @@
 #   <other>         any              1     fail-closed, sentinel-agnostic
 #
 # EVERY MODE-DEPENDENT ARM PINS ITS OWN SYNTHETIC SENTINEL, AND THAT IS A CONTRACT
-# TEST'S JOB RATHER THAN A CONVENIENCE. PF-2, PF-6, PF-9a and PF-9d assert a
+# TEST'S JOB RATHER THAN A CONVENIENCE. PF-2, PF-6, PF-9a, PF-9d and PF-10 assert a
 # `!= enforce` row; PF-3 asserts the `enforce` row. Read from the sandbox's COMMITTED
 # sentinel, those first four assert whatever posture the repository happens to hold
 # today, so the moment that token is flipped to `enforce` a correct probe returns 1,
@@ -35,7 +35,7 @@
 # stale test expectation. A committed posture is a deployment decision; the verdict ->
 # exit contract is an invariant. Each arm therefore hands probe_rc an explicit token
 # and the suite stays green across the flip in either direction. PF-1 / PF-4 / PF-5 /
-# PF-7 / PF-9c need no pin: they assert FRESH -> 0, which the `any` row makes
+# PF-7 / PF-9c / PF-11 need no pin: they assert FRESH -> 0, which the `any` row makes
 # sentinel-independent by construction.
 #
 # THE ASSERTIONS
@@ -71,6 +71,37 @@
 #         so a measurement outage can never suppress a real finding. The staleness is
 #         seeded in the SIDECAR, the one finding class that survives a packager
 #         outage on a fresh checkout
+#   PF-10 an AUTOMATED-DEPENDENCY ingress: a dependency manifest inside a rostered
+#         skill's content set edited with no rebuild, mtime RESTORED, SYNTHETIC
+#         `warn` sentinel -> exit 2, and the verdict came from the content arm.
+#         The manifest is DERIVED through the real resolver, never hardcoded
+#   PF-11 that same manifest restored from its pristine snapshot -> exit 0
+#         (PF-10's anti-vacuity control; restores, never rebuilds)
+#
+# THE AUTOMATED-DEPENDENCY INGRESS (PF-10 / PF-11)
+# A Dependabot SECURITY update reaches a manifest whether or not its ecosystem carries
+# an `updates:` entry, and it is not a release — so the Stage-12 rebuild beat never
+# fires for it. Two npm manifests sit inside one rostered skill's package content set,
+# and one such PR merged: at that merge the committed .skill carried undici 7.28.0
+# while the source held 7.29.0, at the SAME 19531 bytes on both sides. A length or
+# mtime signal could not have seen it; only the content-manifest hash can. The package
+# then sat stale on `main` for 8 days and was cleared by a hand rebuild, not a control.
+#
+# PF-10 RESTORES THE mtime AFTER STALING, AND THAT LINE IS THE ARM. Appending to the
+# manifest bumps the source mtime, and a bumped mtime gives the DEGRADED branches their
+# own road to exit 2 (see THE PF-2 DISCRIMINATOR) — so an arm that left it bumped would
+# also pass on a runner where the content verdict never ran, which is the direction that
+# matters. `touch -r` from the pristine snapshot removes that road. It cannot suppress
+# the real one: the mtime compare is a non-verdict PRE-FILTER that only sets a flag, and
+# the content verdict runs whenever a rebuild is available and its result decides. With
+# the mtime restored, exit 2 is reachable ONLY through the content arm.
+#
+# The target is DERIVED, not named: every candidate is confirmed through the real
+# resolver (`build-skill-packages.sh --skills-for-paths`, which reads repo-relative
+# paths on STDIN and returns empty for an argv invocation). A hardcoded path would stop
+# asserting the day the manifests move, and would do so silently. If no manifest inside
+# any skills tree resolves to a rostered skill, the vector no longer exists and this
+# suite ANNOUNCES that rather than swallowing it — PF-6's posture.
 #
 # THE UNMEASURED STATE (PF-9a..d)
 # The probe's third verdict is the one that was missing when a CI dependency stopped
@@ -793,6 +824,124 @@ elif [ "${RC9D}" = "3" ]; then
 else
   report "PF-9d STALE > NOT-EVALUATED (a measurement outage cannot suppress a finding)" 0 \
     "expected 2, observed ${RC9D}"
+fi
+
+# --- PF-10 / PF-11: the automated-dependency ingress ---
+# See THE AUTOMATED-DEPENDENCY INGRESS in the header for why this vector needs its own
+# arm and why the mtime is restored.
+
+# Derive the target through the REAL resolver rather than naming one. Basenames are the
+# dependency-manifest classes a package manager would open; membership in a skill's
+# content set is decided by the resolver, not by the path looking plausible.
+PF10_MANIFEST_NAMES="package.json package-lock.json yarn.lock pnpm-lock.yaml requirements.txt Pipfile.lock poetry.lock go.sum Gemfile.lock Cargo.lock composer.lock"
+PF10_TARGET=""
+PF10_TARGET_REL=""
+PF10_SKILL=""
+
+for pf10_tree in core operations release; do
+  [ -d "${SBX}/${pf10_tree}/skills" ] || continue
+  while IFS= read -r pf10_cand; do
+    [ -n "${pf10_cand}" ] || continue
+    case " ${PF10_MANIFEST_NAMES} " in
+      *" ${pf10_cand##*/} "*) ;;
+      *) continue ;;
+    esac
+    pf10_rel="${pf10_cand#${SBX}/}"
+    # The resolver reads repo-relative paths on STDIN. An argv invocation returns empty
+    # for every input INCLUDING one that genuinely cascades, which would read here as
+    # "not in any content set" while having measured nothing.
+    pf10_resolved="$(
+      cd "${SBX}" || exit 127
+      printf '%s\n' "${pf10_rel}" \
+        | bash core/deploy/tools/build-skill-packages.sh --skills-for-paths 2>/dev/null \
+        | head -1
+    )"
+    if [ -n "${pf10_resolved}" ]; then
+      PF10_TARGET="${pf10_cand}"
+      PF10_TARGET_REL="${pf10_rel}"
+      PF10_SKILL="${pf10_resolved}"
+      break
+    fi
+  done < <(find "${SBX}/${pf10_tree}/skills" -type f -not -path '*/.*' 2>/dev/null | LC_ALL=C sort)
+  [ -n "${PF10_TARGET}" ] && break
+done
+
+[ -n "${PF10_TARGET}" ] \
+  || die_loud "no dependency manifest inside any skills tree resolves to a rostered skill — the automated-dependency vector appears not to exist. If the manifests were deliberately relocated or excluded from the package content set, retire PF-10/PF-11 in that same change rather than leaving an arm that asserts nothing."
+
+# Re-normalize to FRESH before staling. PF-9d restored its sidecar, but a baseline that
+# is merely ASSUMED fresh would let PF-10 score a leftover finding and would then send
+# PF-11 red for an unrelated reason.
+PF10_RC_BASE=$(probe_rc)
+if [ "${PF10_RC_BASE}" != "0" ]; then
+  if [ "$(sandbox_build)" != "0" ]; then
+    [ -s "${BUILD_LOG}" ] && tail -20 "${BUILD_LOG}" >&2
+    die_loud "sandbox rebuild failed while re-establishing the FRESH baseline for PF-10"
+  fi
+  PF10_RC_BASE=$(probe_rc)
+  [ "${PF10_RC_BASE}" = "0" ] \
+    || die_loud "sandbox not FRESH at PF-10 entry (rc=${PF10_RC_BASE}) — PF-10 cannot attribute a finding to its own edit"
+fi
+printf '\nPF-10 baseline confirmed FRESH (rc=0); derived target %s -> skill %s\n' \
+  "${PF10_TARGET_REL}" "${PF10_SKILL}"
+
+# Snapshot WITH mtime preserved — `touch -r` below reads it back.
+PF10_PRISTINE="${SBX_HOME}/pristine-dep-manifest.bak"
+cp -p "${PF10_TARGET}" "${PF10_PRISTINE}" \
+  || die_loud "could not snapshot the dependency manifest ${PF10_TARGET_REL}"
+
+printf '\nPF-10: dependency manifest %s staled (mtime restored), synthetic warn sentinel -> expect exit 2\n' \
+  "${PF10_TARGET_REL}"
+# A single trailing space. The file is JSON and trailing whitespace keeps it parseable
+# for the package manager, while skill_content_hash hashes BYTES and does not parse — so
+# the edit is content-changing and semantically inert, which is the bot-PR shape in
+# miniature (a real dependency bump is also semantically inert to the packager).
+printf ' ' >> "${PF10_TARGET}" \
+  || die_loud "could not append to the dependency manifest ${PF10_TARGET_REL}"
+# THE LOAD-BEARING LINE. See the header.
+touch -r "${PF10_PRISTINE}" "${PF10_TARGET}" \
+  || die_loud "could not restore the mtime on ${PF10_TARGET_REL} — without it PF-10 could reach exit 2 through the mtime pre-filter alone and would assert nothing about the content arm"
+
+RC10=$(probe_rc "${WARN_FILE}")
+PF10_CONTENT=$(count_fixed "${PF10_SKILL} — source content changed since build" "${PROBE_LOG}")
+PF10_DEGRADED=$(count_fixed 'staged rebuild failed to run' "${PROBE_LOG}")
+
+if [ "${RC10}" = "3" ]; then
+  # #5242's unmeasured token. Never a PASS and never silent: the content arm did not run,
+  # so this run establishes nothing about the ingress. The fail-on-SKIP rule reddens it.
+  report_skip "PF-10 automated-dependency ingress STALE + warn -> exit 2" \
+    "content arm not evaluated in this environment (probe returned 3, NOT-EVALUATED) — the ingress assertion did not run"
+elif [ "${RC10}" = "0" ]; then
+  report "PF-10 automated-dependency ingress STALE + warn -> exit 2 (content arm)" 0 \
+    "observed 0 — an automated dependency PR staled a package and the probe reported success. This is the merged-bot-PR shape the arm exists to catch, reproduced in the sandbox."
+elif [ "${RC10}" != "2" ]; then
+  report "PF-10 automated-dependency ingress STALE + warn -> exit 2 (content arm)" 0 \
+    "expected 2, observed ${RC10} (target: ${PF10_TARGET_REL}, skill: ${PF10_SKILL})"
+elif [ ! -s "${PROBE_LOG}" ]; then
+  report "PF-10 automated-dependency ingress STALE + warn -> exit 2 (content arm)" 0 \
+    "the probe emitted NO output — both limbs read an empty extraction, which is a broken probe, not a clean result"
+elif [ "${PF10_CONTENT}" -lt 1 ]; then
+  report "PF-10 automated-dependency ingress STALE + warn -> exit 2 (content arm)" 0 \
+    "exit 2 was reached, but no 'source content changed since build' line names ${PF10_SKILL} — so the verdict did not come from the content arm. With the mtime restored this should be unreachable; it means the staleness was found by some other road and the arm has not asserted the ingress."
+elif [ "${PF10_DEGRADED}" -ne 0 ]; then
+  report "PF-10 automated-dependency ingress STALE + warn -> exit 2 (content arm)" 0 \
+    "${PF10_DEGRADED} rostered skill(s) fell back because the staged rebuild could not run — this run's verdict is partly degraded, so it does not establish the content contract this arm claims"
+else
+  report "PF-10 automated-dependency ingress (${PF10_TARGET_REL}) STALE + warn -> exit 2 via the content arm" 1
+fi
+
+# --- PF-11: restore the manifest -> exit 0 (PF-10's anti-vacuity control) ---
+# Restores, never rebuilds (the PF-4 / PF-7 discipline): a control that depended on the
+# packager could not distinguish "PF-10's edit was the cause" from "the packager works".
+printf '\nPF-11: dependency manifest restored (restore, not rebuild) -> expect exit 0\n'
+cp -p "${PF10_PRISTINE}" "${PF10_TARGET}" \
+  || die_loud "could not restore the dependency manifest ${PF10_TARGET_REL}"
+RC11=$(probe_rc)
+if [ "${RC11}" = "0" ]; then
+  report "PF-11 dependency manifest restored -> exit 0 (PF-10 is not unconditionally non-zero)" 1
+else
+  report "PF-11 dependency manifest restored -> exit 0 (PF-10 is not unconditionally non-zero)" 0 \
+    "expected 0, observed ${RC11} — PF-10's exit 2 cannot be attributed to its own edit if the probe does not return to 0 once that edit is reverted (target: ${PF10_TARGET_REL})"
 fi
 
 # --- Summary ---
