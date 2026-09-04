@@ -2198,7 +2198,9 @@ F2_HOOKS="${F2_CLAUDE}/hooks"
 # non-flag token would then match nothing, script_idx would never advance, and the
 # while-loop would spin forever. Expression 1 deletes the arm BODY (anchored on
 # M-FWALK-BODY, which the marker line does not carry); expression 2 rewrites the
-# marker line back to `*) break ;;`. Net: 6 lines -> 1, pinned by AC-D022-M1.
+# marker line back to `*) break ;;`. The arm now carries the ARITY OVERLAY as well as
+# the domain test, so the sed reverts BOTH — which is why M3/M4's payload is a `+`
+# form rather than `-o errexit`. Net: 18 lines -> 1, pinned by AC-D022-M1.
 /usr/bin/sed \
   -e '/# M-FWALK-BODY/,/^[[:space:]]*;;$/d' \
   -e 's|^\([[:space:]]*\)\*) # M-FWALK-ADVANCE.*|\1*) break ;;|' \
@@ -2343,18 +2345,24 @@ f2_case "F2-FWALK-quotedverb: \"bash\" -o errexit <non-allowlisted> blocks (F1 v
 f2_case "F2-FWALK-absinterp: /bin/bash -o errexit <non-allowlisted> blocks (absolute interpreter)" \
   "/bin/bash -o errexit ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
 
-# --- DECLARED RESIDUAL (pin, NOT fix-evidence) -------------------------------
-# R1: a value-taking flag whose ARGUMENT is itself an allowlisted script path. The
-# scan legitimately terminates on that argument and the real operand is never
-# reached. This is a strict NARROWING of the hole this card closes — today ANY
-# value-taking flag hid the script unconditionally; now the caller must also name
-# an allowlisted path in flag position. It is declared in
-# core/rules/bypass-mode-readiness/block-destructive.md rather than half-closed
-# here; closing it is an arity overlay's job, and layered on top of this walk that
-# overlay's failure direction is safe. This arm asserts the CURRENT verdict so a
-# later closure is a deliberate act rather than a drift.
-f2_case "F2-FWALK-RESIDUAL-flagarg (pin, not fix-evidence): a flag argument that is itself an allowlisted script still terminates the scan" \
-  "bash --rcfile ${F2_OK} ${F2_NA}" 0
+# --- DECLARED RESIDUAL R1 — NOW CLOSED, AND THE PIN IS THE RECORD OF IT ---------
+# The pin read: "R1: a value-taking flag whose ARGUMENT is itself an allowlisted
+# script path. The scan legitimately terminates on that argument and the real operand
+# is never reached … closing it is an arity overlay's job, and layered on top of this
+# walk that overlay's failure direction is safe. This arm asserts the CURRENT verdict
+# so a later closure is a deliberate act rather than a drift."
+#
+# THE ARITY OVERLAY IS THE OTHER HALF OF THIS MERGE, SO THE CLOSURE IS THAT ACT. The
+# walk now asks the interpreter whether a flag takes a separate argument, consumes it,
+# and ADJUDICATES it in place — so `--rcfile <allowlisted>` no longer terminates the
+# scan: the allowlisted path is checked where it sits, and the walk continues to the
+# script bash actually runs. R1 is closed for every flag the arity table names, and
+# the overlay's failure direction is the safe one the pin predicted: a flag the table
+# omits falls through to the domain test, which is an over-block, not an exemption.
+# The arm keeps its subject and asserts the NEW verdict, so a regression that
+# re-opens R1 turns it red in the other direction.
+f2_case "F2-FWALK-RESIDUAL-flagarg [CLOSED by the arity overlay]: a flag argument that is an allowlisted script no longer hides the operand" \
+  "bash --rcfile ${F2_OK} ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
 
 # --- DECLARED VERDICT CHANGE (pin) -------------------------------------------
 # P6: an EXTENSIONLESS executed target with a script argument moves ALLOW -> BLOCK.
@@ -2399,14 +2407,20 @@ F2_M_REMOVED=$(( $(/usr/bin/wc -l < "${F2_HOOKS}/block-destructive.sh") - $(/usr
 F2_M_ARMS_SHIP="$(/usr/bin/grep -cE '^[[:space:]]*\*\) break ;;[[:space:]]*$' "${F2_HOOKS}/block-destructive.sh" || true)"
 F2_M_ARMS_MUT="$(/usr/bin/grep -cE '^[[:space:]]*\*\) break ;;[[:space:]]*$' "${F2_HOOKS}/block-destructive-mut.sh" || true)"
 F2_M_MARKERS_MUT="$(/usr/bin/grep -c 'M-FWALK' "${F2_HOOKS}/block-destructive-mut.sh" || true)"
-if [ "$F2_M_REMOVED" = 5 ] \
+# THE EXPECTED DELTA IS 17, AND IT WAS 5 — the tripwire above did exactly its job at
+# the reconcile with the arity branch. The advance-past arm now also asks the arity
+# question of the token it steps over (see FWALK-PLUS-* below), so the sed's range —
+# `# M-FWALK-BODY` through the arm's `;;` — covers the domain test AND the arity
+# overlay. Both are what the mutant must revert, so the count is UPDATED rather than
+# the assertion loosened: a hard number is what makes a reshaped arm turn this red.
+if [ "$F2_M_REMOVED" = 17 ] \
   && [ "$F2_M_ARMS_MUT" = "$(( F2_M_ARMS_SHIP + 1 ))" ] \
   && [ "$F2_M_MARKERS_MUT" = 0 ]; then
-  /usr/bin/printf 'PASS: AC-D022-M1: fixture sed removed exactly the 5 body lines, dropped both M-FWALK markers, and restored one additional dash-anchored `*) break ;;` arm (%s -> %s)\n' \
+  /usr/bin/printf 'PASS: AC-D022-M1: fixture sed removed exactly the 17 body lines, dropped both M-FWALK markers, and restored one additional dash-anchored `*) break ;;` arm (%s -> %s)\n' \
     "$F2_M_ARMS_SHIP" "$F2_M_ARMS_MUT"
   PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: AC-D022-M1: fixture sed removed %s lines (expected 5), break-arms %s -> %s (expected +1), residual M-FWALK markers in mutant = %s (expected 0) — it no longer targets the operand walk; re-point the sed\n' \
+  /usr/bin/printf 'FAIL: AC-D022-M1: fixture sed removed %s lines (expected 17), break-arms %s -> %s (expected +1), residual M-FWALK markers in mutant = %s (expected 0) — it no longer targets the operand walk; re-point the sed\n' \
     "$F2_M_REMOVED" "$F2_M_ARMS_SHIP" "$F2_M_ARMS_MUT" "$F2_M_MARKERS_MUT"; FAIL=$((FAIL + 1))
 fi
 
@@ -2423,9 +2437,20 @@ else
     "$F2_M_SYNTAX"; FAIL=$((FAIL + 1))
 fi
 
-# M3 — the CONFORMANT control. The shipped walk consumes the flag's argument, reaches
-# the real operand, and denies it.
-f2_run block-destructive.sh "bash -o errexit ${F2_NA}"
+# M3/M4 — THE DIFFERENTIAL PAYLOAD IS RE-POINTED FROM `-o errexit` TO `+x`, AND THE
+# REASON IS THAT THE TWO FIXES IN THIS MERGE OVERLAP. `bash -o errexit <script>` is
+# closed TWICE over: by this walk's domain termination (the value is not the operand,
+# so the walk keeps looking) and, independently, by the arity overlay merged alongside
+# it (the `-*` skip arm consumes `errexit` as `-o`'s argument). Reverting only the walk
+# therefore no longer reopens that payload — M4 measured a genuine overlap and said so
+# by going red, which is the arm working. The `+`-FORM is the shape only the walk
+# closes: `+x` is arity 0 on bash, so the overlay has nothing to consume, and a
+# dash-anchored `*)` takes `+x` ITSELF as the operand — a token no domain claims — and
+# reaches ALLOW. Same fixture, same rule, one predicate reverted.
+#
+# M3 — the CONFORMANT control. The shipped walk advances past the plus-form option,
+# reaches the real operand, and denies it.
+f2_run block-destructive.sh "bash +x ${F2_NA}"
 if [ "$F2_EXIT" = 2 ] && /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$F2_ERR"; then
   /usr/bin/printf 'PASS: AC-D022-M3: conformant control — shipped hook DENIES the non-allowlisted script behind a value-taking flag\n'
   PASS=$((PASS + 1))
@@ -2436,7 +2461,7 @@ fi
 
 # M4 — the DIFFERENTIAL. Same payload, same sandbox, walk reverted to dash-anchored.
 # The bypass reopens and the identical invocation reaches ALLOW.
-f2_run block-destructive-mut.sh "bash -o errexit ${F2_NA}"
+f2_run block-destructive-mut.sh "bash +x ${F2_NA}"
 if [ "$F2_EXIT" = 0 ]; then
   /usr/bin/printf 'PASS: AC-D022-M4: differential — with the walk reverted to the dash-anchored form the SAME invocation reaches ALLOW\n'
   PASS=$((PASS + 1))
@@ -3406,10 +3431,10 @@ test_case "ARITY-16 [ctl]: bash -nx <unlisted>.sh still blocks (cluster residual
 # +-<name>, +-no-<name> for all 197 setopt names plus the 12 documented aliases
 # (1135 spellings) — with a script-execution marker as the discriminator and
 # controls firing both ways. Exactly two spellings execute despite a following
-# `-n`: `--emulate` and `+-emulate`. `+-emulate` is NOT in the table and its
-# absence is structural, not an omission: the walk's option arm matches `-*`, so a
-# `+`-leading token falls to the operand branch and the table is never consulted
-# for it. ARITY-18d is the arm that records that boundary as measured behaviour.
+# `-n`: `--emulate` and `+-emulate`. BOTH are now in the table; an earlier form of
+# this note said `+-emulate` was structurally excluded because the walk's option arm
+# matches `-*` and a `+`-leading token fell to `*) break`. That `*) break` is gone —
+# see FWALK-PLUS-* below, which is the arm set that records the new boundary.
 test_case "ARITY-18a: zsh --emulate -n <unlisted>.sh blocks (-n is the emulation MODE NAME; this executes)" \
   "$(bash_payload "zsh --emulate -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 test_case "ARITY-18b: zsh --emulate -n -x <unlisted>.sh blocks (trailing flags do not restore inertness)" \
@@ -3422,6 +3447,55 @@ test_case "ARITY-18c: zsh --emulate zsh -n <unlisted>.sh allowed (a REAL -n afte
 # non-allowlisted script sitting in it is caught rather than stepped over.
 test_case "ARITY-18d [ctl]: zsh --emulate <unlisted>.sh <allowed> blocks (the consumed argument is STILL adjudicated)" \
   "$(bash_payload "zsh --emulate $PARSE_UNLISTED $ARITY_ALLOWED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- FWALK-PLUS-* : the `+`-leading arity surface, live since the walk stopped -----
+# being dash-anchored. THIS IS THE ARM SET FOR A HOLE NEITHER SIDE OF THE MERGE HAS.
+# `origin/main` advances past a `+`-leading option (its walk terminates on the operand
+# DOMAIN, not on flag shape) and then adjudicates the real script — it has no
+# parse-only exemption to fool, so `zsh +-emulate -n <unlisted>.sh` BLOCKS there. This
+# branch never advanced past `+-emulate` at all, because `*) break` took it as the
+# operand. Compose main's advance with this branch's parse-only exemption and the walk
+# steps over `+-emulate`, offers the FOLLOWING `-n` to the noexec table as a flag, and
+# exempts a segment the real shell EXECUTES. Measured inline, controls firing both
+# ways: `zsh +-emulate -n -c 'echo X'` prints X; `zsh -n -c 'echo X'` is silent.
+#
+# The fix is the arity question asked in the advance-past arm — the same question the
+# `-*` skip arm already asks — so it closes the CLASS rather than this spelling, and
+# the `+O`/`+o` rows kept "for a later widening" become live with it. The `+` surface
+# was re-swept before the row was added: 656 zsh and 89 bash/sh `+` spellings under the
+# three-outcome read (B-named = consumed; A-named-and-REJECTED = consumed against a
+# validated namespace; A-named-and-not-found = A was the script), controls firing on
+# both readings. `+-emulate` is the ONLY arity-1 `+` spelling zsh has beyond `+o`, and
+# the only one leaving the shell LIVE after eating a `-n` (`+o`/`+O` abort).
+test_case "FWALK-PLUS-emulate: zsh +-emulate -n <unlisted>.sh blocks (the + spelling eats the -n too)" \
+  "$(bash_payload "zsh +-emulate -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-PLUS-emulate-x: zsh +-emulate -n -x <unlisted>.sh blocks (trailing flags do not restore inertness)" \
+  "$(bash_payload "zsh +-emulate -n -x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# The QUOTED spelling is why the arity table is asked about the NORMALIZED token here
+# and not the raw one: a `+`-leading token never reaches the flag-normalization step
+# above, so a raw-token lookup would miss `'+-emulate'` and fall to the fail-OPEN side.
+test_case "FWALK-PLUS-emulate-quoted: zsh '+-emulate' -n <unlisted>.sh blocks (normalized view feeds the table)" \
+  "$(bash_payload "zsh '+-emulate' -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# ARITY-18d's analogue for the + spelling: consuming is not stepping over. The token
+# in the consumed mode-name slot is still adjudicated, so it is caught there instead.
+test_case "FWALK-PLUS-adjudicated [ctl]: zsh +-emulate <unlisted>.sh <allowed> blocks (consumed argument STILL adjudicated)" \
+  "$(bash_payload "zsh +-emulate $PARSE_UNLISTED $ARITY_ALLOWED")" 2 "BLOCK-DESTRUCTIVE-022"
+# ARITY-18c's analogue, and the arm that keeps this from being a blanket `+` over-block:
+# a REAL -n after the consumed mode name is genuinely inert, so #6172's exemption must
+# still fire. Without it, "block everything with a +" would pass every arm above.
+test_case "FWALK-PLUS-ctl-inert: zsh +-emulate zsh -n <unlisted>.sh allowed (a REAL -n after the consumed mode name)" \
+  "$(bash_payload "zsh +-emulate zsh -n $PARSE_UNLISTED")" 0
+# The paired control for the OTHER direction: a `+` option that takes NO argument must
+# not consume anything, so the -n after it is a real flag and the segment stays exempt.
+# `+x` is arity 0 on every one of the three shells (swept, controls firing).
+test_case "FWALK-PLUS-ctl-arity0: zsh +x -n <unlisted>.sh allowed (+x takes no argument; the -n is real)" \
+  "$(bash_payload "zsh +x -n $PARSE_UNLISTED")" 0
+# R1, the residual the walk-termination commit declared, is CLOSED for the + forms by
+# the same overlay: a value-taking flag whose argument is an allowlisted script no
+# longer hides the real operand, because the argument is consumed and adjudicated in
+# place and the walk continues to the token the shell actually runs.
+test_case "FWALK-PLUS-r1: zsh +-emulate <allowed> <unlisted>.sh blocks (flag argument no longer hides the operand)" \
+  "$(bash_payload "zsh +-emulate $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 
 # --- PAIRED MUTATION ARMS — prove the arity predicate is what these arms measure ---
 # Same harness discipline as PARSE-14: a sibling mutant so HOOK_DIR and therefore
@@ -4052,6 +4126,23 @@ nsi_warn_case "T-NSI-07d must-flag: /usr/bin/python3 <unlisted>.py (the input T-
 nsi_warn_case "T-NSI-01f must-flag: variable-bearing python3 operand records cause=unresolvable" \
   'python3 $TMPDIR/probe.py' 'unresolvable'
 
+# --- FWALK-DOM-* : the operand walk's domain argument, re-pointed at the reconcile -
+# The walk terminates on "is this token in the arm's declared operand domain?". The
+# commit that introduced that predicate asked it about `$script_verb` and said, in
+# the same note, that a successor splitting interpreter DOMAIN from verb CLASS "must
+# re-point this ONE argument to that domain variable, or a non-shell interpreter's
+# real script is tested against the SHELL suffix set, found unclaimed, walked past,
+# and silently under-adjudicated -- a fail-open re-introduced by an otherwise clean
+# merge." The per-interpreter domain table IS that split and exists only on this
+# side, so these arms are the control for taking the walk verbatim: under
+# `$script_verb` the domain is `interp` (the `*.sh` set), `<unlisted>.py` is not
+# claimed, the walk advances OFF THE END, and NOTHING is adjudicated -- no drain row
+# at all, which is what nsi_warn_case's drain_delta=1 assertion catches.
+nsi_warn_case "FWALK-DOM-py must-flag: python3 +x <unlisted>.py is adjudicated (walk asks the PY domain, not the shell one)" \
+  "python3 +x $NSI_PY" 'not-allowlisted'
+nsi_warn_case "FWALK-DOM-js must-flag: node +x <unlisted>.js is adjudicated (same re-point, second domain)" \
+  "node +x $NSI_JS" 'not-allowlisted'
+
 # --- AC-1 CONTROL THAT MUST FIRE: an ALLOWLISTED operand writes NO row ---------
 # Without this, every arm above would pass against a router that logged
 # unconditionally and then allowed. The sandbox allowlist is appended to, the pair
@@ -4172,17 +4263,32 @@ else
   /usr/bin/printf 'FAIL: T-NSI-08b the two-router run did not grow the drain by 2\n'; FAIL=$((FAIL + 1))
 fi
 
-# --- AC-12: the #6724 PIN ------------------------------------------------------
-# DECLARED RESIDUAL, NOT DESIRED BEHAVIOUR. The operand-locating walk does not
-# consume a flag's ARGUMENT, so `-X faulthandler` leaves `faulthandler` as the
-# adjudicated operand — a token no domain claims — and the real script is never
-# reached. #6724 owns that walk. Pinning it here means their fix flips a PINNED arm
-# and is a deliberate act rather than a drift nobody notices. Same convention as
-# T-EXEC-9 and F1-INTERP-RESIDUAL.
-exec_notflag_case "T-NSI-09a [PIN, #6724-owned residual]: python3 -X faulthandler <unlisted>.py reaches ALLOW" \
-  "python3 -X faulthandler $NSI_PY"
-exec_notflag_case "T-NSI-09b [PIN, #6724-owned residual]: perl -I lib <unlisted>.pl reaches ALLOW" \
-  "perl -I lib $NSI_PL"
+# --- AC-12: the #6724 PIN, NOW FLIPPED -----------------------------------------
+# THE PIN DID ITS JOB AND IS CONVERTED RATHER THAN DELETED. It read: "DECLARED
+# RESIDUAL, NOT DESIRED BEHAVIOUR. The operand-locating walk does not consume a
+# flag's ARGUMENT, so `-X faulthandler` leaves `faulthandler` as the adjudicated
+# operand — a token no domain claims — and the real script is never reached. #6724
+# owns that walk. Pinning it here means their fix flips a PINNED arm and is a
+# deliberate act rather than a drift nobody notices."
+#
+# #6724 SHIPPED, THIS BRANCH MERGED IT, AND THE FLIP IS THAT DELIBERATE ACT. The walk
+# now advances past a token the arm's operand domain does not claim, so `faulthandler`
+# and `lib` are stepped over and the real script is reached and adjudicated. The arms
+# are re-pointed at the NEW verdict and keep the same subject, so the residual cannot
+# quietly return: if the walk ever stops short again these go red in the other
+# direction.
+#
+# THE FLIP DEPENDS ON THE DOMAIN RE-POINT AND IS THE EVIDENCE FOR IT. #6724's walk
+# asks `script_operand_implicated` about the operand domain, and its own note requires
+# a successor that splits interpreter DOMAIN from verb CLASS to re-point that argument.
+# Taken verbatim it would ask `$script_verb` — `interp`, the `*.sh` set — so
+# `<unlisted>.py` would be unclaimed, advanced past, and the walk would run OFF THE
+# END with nothing adjudicated: these two arms would still read ALLOW. They are green
+# only because the argument reads `$script_interp_domain`. See FWALK-DOM-*.
+nsi_warn_case "T-NSI-09a [flipped, was #6724-owned residual]: python3 -X faulthandler <unlisted>.py IS adjudicated" \
+  "python3 -X faulthandler $NSI_PY" 'not-allowlisted'
+nsi_warn_case "T-NSI-09b [flipped, was #6724-owned residual]: perl -I lib <unlisted>.pl IS adjudicated" \
+  "perl -I lib $NSI_PL" 'not-allowlisted'
 # CONTROL THAT MUST FIRE: the same invocation WITHOUT the option-taking flag is
 # adjudicated in the same run, so the pin measures the flag walk and not a dead arm.
 nsi_warn_case "T-NSI-09c [ctl]: the identical invocation without the flag IS adjudicated" \
