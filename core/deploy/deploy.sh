@@ -6347,9 +6347,24 @@ cmd_check() {
   #                  source -> this check WARNs (advisory) / FAILS (post-flip).
   #
   # Semantics per Spec Surface 5.4 + ADR-008 Consequence 2:
-  #   in-repo source `core/rules/<file>.md` OR `release/governance/release-process.md`
+  #   in-repo source `core/rules/<file>.md`
   #   ↔ workspace mirror `~/.claude/rules/<file>.md`
   #   (source-mirrors-to-workspace; uni-directional)
+  #
+  # MEMBERSHIP IS AN ADMISSION DECISION, NOT A CONVENIENCE. A path belongs in the
+  # array below only if it passes the §1 admission test in
+  # core/standards/rules-corpus-admission-standard.md (ambient-bind AND
+  # enforcement-completeness AND non-invocability), and the admitted set as a whole
+  # must stay inside that standard's §3 byte ceiling — everything here is loaded
+  # ambiently into every session, so the set is a context cost, not a list.
+  #
+  # Two former members were reclassified REFERENCE under that test and removed: the
+  # hook-registry index (its hooks enforce PREVENTIVELY, so the index documents them
+  # rather than obliging anything) and the release procedure (it binds only inside a
+  # named activity, and the release skills plus every pipeline stage shard load it on
+  # demand). NEITHER FILE MOVED — both still live at their source paths and are read
+  # on demand; they left the DEPLOYED set only. Re-adding either one re-opens a
+  # recorded decision: restate the §1 outcome before you do.
   #
   # The engineering/rules mirror was DROPPED per the layout §8.3. Drift means
   # "workspace mirror diverged from v2 source; re-run ./deploy.sh --deploy to
@@ -6368,7 +6383,6 @@ cmd_check() {
     # mirror-pair-set: BEGIN holder=deploy-check sep=colon field=1
     local -a MIRROR_PAIRS=(
       "core/rules/skill-deployment.md:$DEPLOY_ROOT/.claude/rules/skill-deployment.md"
-      "core/rules/bypass-mode-readiness.md:$DEPLOY_ROOT/.claude/rules/bypass-mode-readiness.md"
       "core/rules/harness-deployment.md:$DEPLOY_ROOT/.claude/rules/harness-deployment.md"
       "core/rules/doc-link-maintenance.md:$DEPLOY_ROOT/.claude/rules/doc-link-maintenance.md"
       "core/rules/operations-bridge.md:$DEPLOY_ROOT/.claude/rules/operations-bridge.md"
@@ -6377,7 +6391,6 @@ cmd_check() {
       "core/rules/decision-time-adherence.md:$DEPLOY_ROOT/.claude/rules/decision-time-adherence.md"
       "core/rules/rename-reference-cascade.md:$DEPLOY_ROOT/.claude/rules/rename-reference-cascade.md"
       "core/rules/analysis-mandate.md:$DEPLOY_ROOT/.claude/rules/analysis-mandate.md"
-      "release/governance/release-process.md:$DEPLOY_ROOT/.claude/rules/release-process.md"
     )
     # mirror-pair-set: END
     for pair in "${MIRROR_PAIRS[@]}"; do
@@ -6407,32 +6420,25 @@ cmd_check() {
       fi
     done
 
-    # Directory-shaped mirror set (per ADR-030 #18 hook-registry split): the
-    # bypass-mode-readiness index above mirrors 1:1 as a single MIRROR_PAIRS
-    # entry; its per-hook drop-in SOURCES under core/rules/bypass-mode-readiness/
-    # each mirror 1:1 too. Enumerate them and byte-diff each against its
-    # ~/.claude/rules/bypass-mode-readiness/<basename> counterpart, preserving the
-    # same SKIP-on-missing semantics (so the public repo, where the .claude/rules/
-    # mirror is operator-instance and absent, stays a clean SKIP — no false drift)
-    # and the same warn-mode posture.
-    if [[ -d core/rules/bypass-mode-readiness ]]; then
-      local c9_hook_src
-      for c9_hook_src in core/rules/bypass-mode-readiness/*.md; do
-        [[ -e "$c9_hook_src" ]] || continue
-        local c9_hook_mir="$DEPLOY_ROOT/.claude/rules/bypass-mode-readiness/$(basename "$c9_hook_src")"
-        if [[ ! -f "$c9_hook_src" ]] || [[ ! -f "$c9_hook_mir" ]]; then
-          log "  SKIP:  $c9_hook_src ↔ $c9_hook_mir (one or both missing)"
-          continue
-        fi
-        if diff -q "$c9_hook_src" "$c9_hook_mir" >/dev/null 2>&1; then
-          log "  OK:    $c9_hook_src ↔ $c9_hook_mir (byte-identical)"
-        else
-          flag_warn_or_issue "mirror-sync" "$c9_hook_src ↔ $c9_hook_mir divergence"
-          # sigpipe-idiom: allow — same discarded-status diagnostic preview as the pair above.
-        diff -u "$c9_hook_src" "$c9_hook_mir" 2>/dev/null | head -20 | sed 's/^/         /' || true
-        fi
-      done
-    fi
+    # REMOVED — the directory-shaped mirror set (the former per-hook drop-in loop).
+    #
+    # A second mirror set used to live here, gated on `[[ -d core/rules/<the hook
+    # readiness dir> ]]` and enumerating that directory's per-hook fragments. It was
+    # removed with the index it accompanied, because the two are one body of content:
+    # the index is GENERATED from those fragments, so mirroring both shipped the same
+    # hook registry twice.
+    #
+    # THE SHAPE IS THE POINT, AND IT IS WHY THIS TOMBSTONE EXISTS RATHER THAN A CLEAN
+    # DELETION. That loop was a THIRD, UNMARKED expression of mirror membership: it
+    # was gated on DIRECTORY EXISTENCE, not on membership of the marked array above,
+    # so it mirrored its payload no matter what the array said and no marker-based
+    # parity check could see it. Removing the index entry alone would have left its
+    # fragments mirrored with their index gone.
+    #
+    # INVARIANT GOING FORWARD: mirror membership is expressed ONLY by the
+    # marker-registered array above. A path that is mirrored must be an entry there —
+    # never a directory-existence conditional, a glob, or any other implicit form that
+    # the parity check cannot read.
 
     # OPERATIONS.md SSOT + pointer duplicate-home check (per #2213 — replaces the
     # retired byte-identical mirror-pair enrollment above).
