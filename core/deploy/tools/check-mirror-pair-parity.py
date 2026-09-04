@@ -21,11 +21,19 @@ and forgetting the holder itself become the same act. The accepted residual is t
 holder authored WITHOUT a marker is invisible; that is closed contractually by the
 holder-registration decision record, not heuristically.
 
-THE MARKER.
+THE MARKER (shown box-quoted, because a bare example would register THIS file as a
+holder — see the self-reference note below):
 
-    # mirror-pair-set: BEGIN holder=<id> sep=<colon|tab> field=<n>
-    <the array literal>
-    # mirror-pair-set: END
+    │ # mirror-pair-set: BEGIN holder=<id> sep=<colon|tab> field=<n>
+    │ <the array literal>
+    │ # mirror-pair-set: END
+
+SELF-REFERENCE. Discovery is line-based over the whole tracked tree and knows nothing
+about Python strings, so any literal marker line in THIS file's prose or fixtures would
+be discovered as a real holder — and was, on the first live run. Every marker text this
+file needs is therefore either box-quoted (prose) or assembled from a variable at runtime
+(fixtures), and a self-test case asserts this file registers ZERO holders. That case is
+the regression guard: it fails the moment someone pastes a bare example back in.
 
 `sep` is a WORD, never a literal character: a literal TAB inside a comment is invisible
 to a reviewer and a literal `:` inside a `k=v` grammar is ambiguous with the `=`. The
@@ -339,27 +347,28 @@ def emit(rows, stream):
 # Self-test
 # ---------------------------------------------------------------------------
 
-DEPLOY_SHAPE = """\
-#!/usr/bin/env bash
-check() {{
-  # mirror-pair-set: BEGIN holder={hid} sep=colon field=1
-  local -a MIRROR_PAIRS=(
-{entries}
-  )
-  # mirror-pair-set: END
-}}
-"""
+# Assembled from a variable rather than written literally: a bare marker line in this
+# file would be discovered as a real holder by this very scanner. See the self-reference
+# note in the module docstring; `selftest-file-registers-no-holders` guards it.
+_MARK = "mirror-pair" + "-set:"
+_BEGIN = "  # " + _MARK + " BEGIN holder={hid} sep={sep} field=1"
+_END = "  # " + _MARK + " END"
 
-BLAST_SHAPE = """\
-#!/usr/bin/env bash
-detect() {{
-  # mirror-pair-set: BEGIN holder={hid} sep=tab field=1
-  local -a pairs=(
-{entries}
-  )
-  # mirror-pair-set: END
-}}
-"""
+DEPLOY_SHAPE = (
+    "#!/usr/bin/env bash\ncheck() {{\n"
+    + _BEGIN.replace("{sep}", "colon")
+    + "\n  local -a MIRROR_PAIRS=(\n{entries}\n  )\n"
+    + _END
+    + "\n}}\n"
+)
+
+BLAST_SHAPE = (
+    "#!/usr/bin/env bash\ndetect() {{\n"
+    + _BEGIN.replace("{sep}", "tab")
+    + "\n  local -a pairs=(\n{entries}\n  )\n"
+    + _END
+    + "\n}}\n"
+)
 
 
 def _colon_entries(paths):
@@ -483,9 +492,38 @@ def _cases():
     ]
 
 
+def _self_registers_no_holders():
+    """Regression guard for the self-reference defect found on the first live run.
+
+    This scanner is line-based over the whole tree and knows nothing about Python
+    strings, so a bare marker example anywhere in this file registers it as a real
+    holder. It did, and the live gate correctly reported UNPARSEABLE. Assert the
+    property directly rather than trusting the authoring convention to hold.
+    """
+    holders, problems, unread = scan_file(os.path.dirname(os.path.abspath(__file__)),
+                                          os.path.basename(os.path.abspath(__file__)))
+    errs = []
+    if holders:
+        errs.append("registers %d holder(s): %s" % (len(holders), [h.id for h in holders]))
+    if problems:
+        errs.append("emits %d marker problem(s): %s" % (len(problems), problems[0][1][:120]))
+    if unread is not None:
+        errs.append("own source unreadable: %s" % (unread,))
+    return errs
+
+
 def self_test():
     passed = 0
     failed = 0
+
+    errs = _self_registers_no_holders()
+    if errs:
+        failed += 1
+        sys.stdout.write("FAIL  selftest-file-registers-no-holders — %s\n" % ("; ".join(errs),))
+    else:
+        passed += 1
+        sys.stdout.write("ok    selftest-file-registers-no-holders (0 holders, 0 marker problems)\n")
+
     for name, build, want_verdict, want_exit, must_contain in _cases():
         tmp = tempfile.mkdtemp(prefix="mpp-selftest-")
         build(tmp)

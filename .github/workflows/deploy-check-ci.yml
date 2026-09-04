@@ -7,13 +7,18 @@ name: Deploy-check required subset (pre-merge load-bearing gate)
 #              asserted as a blocking status check BEFORE the change lands, closing
 #              the gap that the whole --check battery ran only at deploy time
 #              (operator machine, post-merge) and was therefore skippable. Today the
-#              subset resolves to TWO members: Check 38
-#              (hook-registry-index-freshness) and Check 73
-#              (bundle-metrics-gate-integrity); it grows as posture:required checks
+#              subset resolves to THREE members: Check 38
+#              (hook-registry-index-freshness), Check 73
+#              (bundle-metrics-gate-integrity) and Check 77 (mirror-pair-parity);
+#              it grows as posture:required checks
 #              lacking a mirror are back-filled (#1036 / #313). Check 73 is the
 #              first back-fill against that declaration — #313 is the milestone
 #              named above as this runner's back-fill vehicle, so the roster grew
-#              through the mechanism it declared rather than around it.
+#              through the mechanism it declared rather than around it. Check 77 is
+#              the second, and it is why this gate matters for its own subject: the
+#              mirror-pair desync it asserts against escaped both the post-merge
+#              check surface AND PR review, so a deploy-time-only assertion would
+#              not have closed it.
 #   falsification: edit a per-hook source (e.g. add a rule row) under
 #                  core/rules/bypass-mode-readiness/ without regenerating the index
 #                  -> this gate reports STALE (warn-mode: summary + exit 0; enforce:

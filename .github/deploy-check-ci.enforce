@@ -2,8 +2,9 @@
 #
 # This committed marker governs whether the required-subset CI gate
 # (`deploy.sh --check-required-subset`, the enumerated load-bearing check subset —
-# today Check 38 hook-registry-index-freshness and Check 73
-# bundle-metrics-gate-integrity) BLOCKS or merely REPORTS when an in-scope check
+# today Check 38 hook-registry-index-freshness, Check 73
+# bundle-metrics-gate-integrity and Check 77 mirror-pair-parity) BLOCKS or merely
+# REPORTS when an in-scope check
 # FAILs. The runner reads this file directly, so the sentinel is load-bearing on
 # its own; the thin CI workflow (deploy-check-ci.yml) additionally consumes the
 # runner's exit code. One token governs ALL members: flipping it arms every check

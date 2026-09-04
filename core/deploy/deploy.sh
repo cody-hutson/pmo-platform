@@ -2937,6 +2937,122 @@ _c73_compute_verdict() {
     "$_arms" "$_decls_total" "$_emitters_total" "$surface"
 }
 
+# ─── Mirror-pair path-set parity (Check 77 / --check-required-subset) — #4738 ────
+#
+# The predicate body, factored to TOP LEVEL so both surfaces share ONE body (the
+# DD1 shape used by _c38_/_c73_/_c32_compute_verdict): the lifecycle Check 77
+# inside cmd_check, and the --check-required-subset runner. No predicate is
+# re-encoded on either surface, so the pre-merge gate and the deploy-time check
+# can never disagree about what the invariant asserts.
+#
+# WHY THIS IS ON THE PRE-MERGE ROSTER AND NOT DEPLOY-TIME-ONLY. The defect this
+# closes escaped TWO layers — the automated check surface AND PR review — and
+# --check runs post-merge on the operator machine. The roster predicate is
+# { network-free AND install-independent AND posture:required AND no dedicated CI
+# mirror }, and this check satisfies all four because it reads only tracked source
+# text. That is precisely the property Check 9 lacks: Check 9 diffs against the
+# workspace mirror under $DEPLOY_ROOT, which is absent in CI and the public repo
+# where it correctly SKIPs, so folding parity into Check 9's body would make it
+# inherit that install-dependence and be permanently barred from the one surface
+# where the defect actually escaped.
+#
+# SURFACE ASYMMETRY, AND WHY THE GATE TOKEN SET IS BOUNDED. The runner's `*)` arm
+# fail-closes on any unrecognised token REGARDLESS of the warn/enforce sentinel.
+# On the "gate" surface every registered holder is a committed file, so an
+# unreadable holder there is a checkout defect and is reported FAIL; emitting a
+# measurement-outage token there would hard-fail CI on an outage, which the
+# withheld-verdict discipline forbids. The outage class is reachable only on the
+# lifecycle surface, where it routes through flag_not_evaluated and never touches
+# a counter. The token set is therefore PASS/FAIL on the gate and
+# PASS/FAIL/NOT-EVALUATED on lifecycle.
+#
+# Echoes ONE protocol line on stdout; per-row detail follows on subsequent lines
+# for the caller to render:
+#   PASS <n> holders, <m> paths        every holder parsed; symmetric difference empty
+#   FAIL <detail>                      divergence, an unparseable holder, or the
+#                                      vacuity state (fewer than two holders)
+#   NOT-EVALUATED <detail>             lifecycle only — the scan could not be completed
+_c77_compute_verdict() {
+  local surface="${1:-lifecycle}"
+  local _sr; _sr="$(_bm_src_root)"
+  local _prim="${C77_PRIMITIVE:-${_sr}/core/deploy/tools/check-mirror-pair-parity.py}"
+  local _root="${C77_ROOT:-${_sr}}"
+
+  if [[ ! -r "$_prim" ]]; then
+    # A missing primitive is a repo defect, not a benign absence: without it the
+    # check asserts nothing, and reporting clean would be the exact false-green
+    # this check exists to remove.
+    printf 'FAIL mirror-pair-parity primitive missing or unreadable: %s (the gate cannot assert anything without it)\n' "$_prim"
+    return 0
+  fi
+
+  local _out _rc=0
+  _out="$(/usr/bin/python3 "$_prim" --root "$_root" --output-format tsv 2>&1)" || _rc=$?
+
+  # RESIDUAL BUCKET. Field 1 is the class column; EVERY value outside the
+  # classified set is a FINDING, never a filtered-into-silence absence. A new
+  # class value that preserves column count, order and separator would otherwise
+  # match no selector and let this caller report clean while the primitive held a
+  # finding — the recorded failure mode of the 50-55 check cohort.
+  #
+  # This is the same predicate the shared tsv_residual_rows helper implements, but
+  # that helper is defined NESTED inside cmd_check and so does not exist when the
+  # --check-required-subset runner executes. Calling it here would work on the
+  # lifecycle surface and fail on the gate surface — the exact single-engine
+  # divergence this body is factored to top level to prevent. It is implemented
+  # once, here, rather than called on one surface and re-encoded on the other.
+  local _residual
+  _residual="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '
+    /^[[:space:]]*$/ { next }
+    $1 !~ /^(SCAN|HOLDERS|HOLDER|VERDICT|MISSING|UNPARSEABLE|NOT-EVALUATED)$/ { printf "%s%s", (n++ ? "; " : ""), $0 }
+  ')"
+  if [[ -n "$_residual" ]]; then
+    printf 'FAIL mirror-pair-parity emitted unrecognised TSV class value(s): %s\n' "$_residual"
+    return 0
+  fi
+
+  local _verdict _holders _paths
+  _verdict="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="VERDICT"{print $2}')"
+  _holders="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="HOLDERS"{print $2}')"
+  _paths="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="HOLDER"{print $5}' | /usr/bin/sort -u | /usr/bin/tr '\n' '/' | /usr/bin/sed 's#/$##')"
+
+  if [[ -z "$_verdict" ]]; then
+    printf 'FAIL mirror-pair-parity emitted no VERDICT row (exit %s) — an unreadable verdict is a defect, not a clean result: %s\n' \
+      "$_rc" "$(printf '%s' "$_out" | /usr/bin/tr '\n' ';')"
+    return 0
+  fi
+
+  case "$_verdict" in
+    PARITY)
+      printf 'PASS %s holders, %s source path(s) each, symmetric difference empty surface=%s\n' \
+        "$_holders" "$_paths" "$surface"
+      ;;
+    DIVERGENT)
+      printf 'FAIL mirror-pair path sets DIVERGE across %s holder(s):%s\n' "$_holders" \
+        "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="MISSING"{printf " %s — absent from holder %s (%s:%s);", $2, $3, $4, $5}')"
+      ;;
+    UNPARSEABLE)
+      printf 'FAIL mirror-pair parity UNPARSEABLE (%s holder(s) discovered):%s\n' "$_holders" \
+        "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="UNPARSEABLE"{printf " [%s] %s;", $2, $3}')"
+      ;;
+    NOT-EVALUATED)
+      # On the gate surface every holder is a committed file, so an unreadable one
+      # is a checkout defect reported as FAIL. Emitting the outage token there
+      # would gate a measurement outage — see the surface-asymmetry note above.
+      if [[ "$surface" == "gate" ]]; then
+        printf 'FAIL mirror-pair parity could not read a tracked holder file (a checkout defect on this surface):%s\n' \
+          "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="NOT-EVALUATED"{printf " %s — %s;", $2, $3}')"
+      else
+        printf 'NOT-EVALUATED the parity scan could not be completed, so a parity claim would be unsound:%s\n' \
+          "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="NOT-EVALUATED"{printf " %s — %s;", $2, $3}')"
+      fi
+      ;;
+    *)
+      printf 'FAIL mirror-pair-parity emitted an unrecognised VERDICT token [%s] — an unreadable verdict is a defect, not a clean result\n' "$_verdict"
+      ;;
+  esac
+}
+
 # ─── Release-corpus completeness (Check 32 / --check-release-corpus) — #1484 ─────
 # The LOG-row-driven completeness predicate, factored to TOP LEVEL so it is shared
 # by two surfaces with ONE body (DD1, like _vf_/_cc_/_c38_compute_verdict): the
@@ -12950,7 +13066,7 @@ sys.stdout.write("".join(out) + "|")
   # coverage claim can never be read as larger than its delivery.
   #
   # NOT ON THE REQUIRED-SUBSET ROSTER. Check 63 is deliberately absent from
-  # --check-required-subset. That roster carries Checks 38 and 73; joining it is a
+  # --check-required-subset. That roster carries Checks 38, 73 and 77; joining it is a
   # separate, later, evidence-gated decision, and staying off it is what makes shipping
   # enforcing safe today (no CI workflow runs the full --check suite).
   #
@@ -14354,6 +14470,55 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
         esac
       fi
     fi
+  fi
+
+  # Check 77 — Mirror-pair path-set parity across holders (advisory; warn-mode initial) [#4738]
+  #
+  # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md Req (b)):
+  #   posture: required(warn-mode-initial)
+  #   enforcement-surface: --check-required-subset (pre-merge) + deploy-check.mode warn-window
+  #            (blocks when the operator flips .github/deploy-check-ci.enforce to enforce)
+  #   invariant: every holder of the source-side mirror-pair path set declares an
+  #              IDENTICAL set — asserted by extracting the declared field of each
+  #              marked region and diffing every holder against the union.
+  #   falsification: add one entry to ONE holder's array only -> WARN (advisory) /
+  #                  FAIL (post-flip), naming the path and the holder.
+  #
+  # The predicate body _c77_compute_verdict is TOP-LEVEL and shared verbatim with
+  # the --check-required-subset runner, so no predicate is re-encoded on either
+  # surface and the CI gate and this lifecycle surface can never disagree.
+  #
+  # WHY THIS IS NOT FOLDED INTO CHECK 9, which already owns the mirror-pair
+  # invariant and reads the same array: Check 9's verdict is INSTALL-DEPENDENT (it
+  # diffs against $DEPLOY_ROOT/.claude/rules/, absent in CI and the public repo
+  # where it correctly SKIPs). Sharing its body would make parity inherit that
+  # install-dependence and be permanently barred from the pre-merge surface — the
+  # one surface where the defect being closed here actually escaped.
+  #
+  # NOT-EVALUATED routes through flag_not_evaluated, which has no mode branch and
+  # no counter increment in its body: a measurement outage is a withheld verdict
+  # and can never escalate. It is reachable only on this surface — see the
+  # surface-asymmetry note on _c77_compute_verdict.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 77: Mirror-pair path-set parity (all marker-registered holders hold identical source-side sets; warn-mode initial; enforce-flip deferred)"
+    local c77_verdict c77_tok
+    c77_verdict="$(_c77_compute_verdict "lifecycle")"
+    c77_tok="${c77_verdict%% *}"
+    case "$c77_tok" in
+      PASS)
+        log "  OK:    mirror-pair-parity — ${c77_verdict#PASS }"
+        ;;
+      FAIL)
+        flag_warn_or_issue "mirror-pair-parity" "${c77_verdict#FAIL }"
+        ;;
+      NOT-EVALUATED)
+        flag_not_evaluated "mirror-pair-parity" "degraded — ${c77_verdict#NOT-EVALUATED }; this is not a clean result"
+        ;;
+      *)
+        flag_warn_or_issue "mirror-pair-parity" \
+          "unexpected verdict token '$c77_tok' from _c77_compute_verdict (an unreadable verdict is a defect in the verdict body, never an absence of findings): $c77_verdict"
+        ;;
+    esac
   fi
 
   # Summary
@@ -16225,12 +16390,16 @@ cmd_check_decision_emission() {
 # Check 7 (skill-package-freshness.yml #2656), Check 32 (release-corpus-completeness.yml
 # #1484), Check 41 (version-freeness.yml), Check 48 (close-completeness.yml).
 #
-# TODAY the predicate resolves to TWO members — Check 38
-# (hook-registry-index-freshness) and Check 73 (bundle-metrics-gate-integrity).
+# TODAY the predicate resolves to THREE members — Check 38
+# (hook-registry-index-freshness), Check 73 (bundle-metrics-gate-integrity) and
+# Check 77 (mirror-pair-parity).
 # New members are appended here as future posture:required checks are back-filled
 # (#1036 / #313). Check 73 is the first back-fill against that declaration: #313 is
 # the milestone this runner's own header named as its back-fill vehicle, so the
-# roster grew through the mechanism it declared rather than around it.
+# roster grew through the mechanism it declared rather than around it. Check 77 is
+# the second: its invariant reads only tracked source text, which is exactly the
+# property that admits it here and that Check 9 — the install-dependent check
+# owning the same subject — lacks.
 #
 # Surface = "gate": fail-closed. Warn-vs-enforce at the CI surface is decided by the
 # committed .github/deploy-check-ci.enforce sentinel — during the warn-mode window an
@@ -16257,17 +16426,22 @@ cmd_check_required_subset() {
     [[ "$_rs_tok_line" == "enforce" ]] && rs_enforce="enforce"
   fi
 
-  # Enumerated allowlist: "check-id:verdict-body". TODAY: Checks 38 and 73. Append
-  # a row per future posture:required check that lacks a dedicated CI mirror.
+  # Enumerated allowlist: "check-id:verdict-body". TODAY: Checks 38, 73 and 77.
+  # Append a row per future posture:required check that lacks a dedicated CI mirror.
   #
   # Every member's verdict enum MUST be drawn from the tokens the case below
   # recognises. A bespoke token falls to the `*)` arm and fail-closes on a healthy
   # tree regardless of the sentinel, which is why Check 73 emits only PASS/FAIL and
   # carries no not-evaluated arm (it has no measurement-outage class — every input
-  # is a committed file).
+  # is a committed file). Check 77 has a measurement-outage class on its LIFECYCLE
+  # surface but deliberately never emits it here: on this surface every registered
+  # holder is a committed file, so an unreadable holder is a checkout defect
+  # reported FAIL. Emitting the outage token would hard-fail CI on an outage via
+  # the `*)` arm, regardless of the sentinel.
   local -a rs_checks=(
     "hook-registry-index-freshness:_c38_compute_verdict"
     "bundle-metrics-gate-integrity:_c73_compute_verdict"
+    "mirror-pair-parity:_c77_compute_verdict"
   )
 
   local rs_fail=0 rs_err=0 rs_pass=0 _entry _id _fn _verdict _tok
@@ -16904,8 +17078,8 @@ main() {
       # install-independent AND posture:required AND no dedicated CI mirror) and exits
       # per the AGGREGATE verdict, honoring the committed .github/deploy-check-ci.enforce
       # sentinel (warn swallows a FAIL, enforce blocks). Each member runs its shared
-      # _cNN_compute_verdict "gate" body — no re-encoded predicate. Today seeded with
-      # Check 38 (hook-registry-index-freshness). Used by .github/workflows/deploy-check-ci.yml.
+      # _cNN_compute_verdict "gate" body — no re-encoded predicate. Today carrying
+      # Checks 38, 73 and 77. Used by .github/workflows/deploy-check-ci.yml.
       cmd_check_required_subset
       ;;
     --check-release-corpus)
@@ -16954,7 +17128,7 @@ main() {
       echo "  --check-lifecycle            List retired/dormant checks + dispositions + reactivation anchors"
       echo "  --check-version-freeness     Pre-merge version-freeness probe (Check 41 only; exits 1 on a claimed/undecidable candidate) (#1677)"
       echo "  --check-close-completeness   Close-completeness probe (Check 48 only; exits 1 on a VERIFIED row missing a Stage-13 output) (#1290)"
-      echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73); honors .github/deploy-check-ci.enforce (#1485)"
+      echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73, 77); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; exits 1 on an INCOMPLETE row set when enforce) (#1484)"
       echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; advisory/deploy-time-only; exits 1 on INCOMPLETE/NOSET when enforce) (#4026)"
       echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, unexpected=1) (#2656)"
