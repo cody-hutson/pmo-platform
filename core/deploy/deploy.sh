@@ -4670,10 +4670,11 @@ detect_changed_skills() {
 # (_cNN_compute_verdict, _vf_*, _ds_*, _cc_*) is a pure emitter for the same reason;
 # this extends that convention rather than introducing a new shape.
 #
-# $DEPLOY_ROOT IS DELIBERATELY NOT A LITERAL. The heredoc expands at CALL time, and
-# DEPLOY_ROOT is assigned near the top of this script, long before any caller exists.
-# Do not "fix" this into a constant — a constant would pin the mirror to whatever
-# root happened to be current when the file was edited.
+# $DEPLOY_ROOT IS DELIBERATELY NOT A LITERAL. The array literal's elements are
+# double-quoted, so $DEPLOY_ROOT expands when the function BODY runs — that is, at
+# CALL time — and DEPLOY_ROOT is assigned near the top of this script, long before
+# any caller exists. Do not "fix" this into a constant — a constant would pin the
+# mirror to whatever root happened to be current when the file was edited.
 #
 # FIELD 3 IS THE OPERATIONS CLASS, and it is invisible to the parity extractor by
 # construction: that extractor splits on the FIRST separator and takes field 1, so a
@@ -6737,7 +6738,10 @@ cmd_check() {
   # diffs the source-side path set across every holder carrying a
   # "mirror-pair-set:" marker and FAILs naming any path and the holder it is
   # missing from. The markers live around the emitter's rows — keep them wrapped
-  # around the heredoc when editing it.
+  # around the ARRAY LITERAL when editing it, and keep the container an array
+  # literal: the parity primitive skips a literal's delimiters by name and has no
+  # heredoc case, so a `cat <<EOF` container reads `EOF` as a separator-less entry
+  # and returns UNPARSEABLE. Measured, not assumed — see the emitter's own note.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 9: Mirror-pair sync (source-to-workspace)"
     # DIRECTORY-LEVEL VERDICT, taken before the per-pair loop. An absent mirror used
