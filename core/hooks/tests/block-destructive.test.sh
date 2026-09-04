@@ -3576,6 +3576,18 @@ test_case "NOEXEC-CTL-03: bash -n +n <allowed> allowed (revoked, but the allowli
 test_case "NOEXEC-R1: bash -n -x <unlisted>.sh blocks (declared over-block; unrecognised token revokes)" \
   "$(bash_payload "bash -n -x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 
+# (5) QUOTED SPELLINGS. A `+`-leading token never reaches the flag normalization at
+# the top of the walk, so the quoted form arrives at the advance-past arm still
+# wearing its quotes — the same asymmetry that made `'+-emulate'` a hole worth an arm
+# in FWALK-PLUS. These pin that a quoted clear still revokes and a quoted set still
+# grants, so the fix cannot be walked around by adding quotes.
+test_case "NOEXEC-Q1: bash -n '+n' <unlisted>.sh blocks (quoted clearing form still revokes)" \
+  "$(bash_payload "bash -n '+n' $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-Q2: bash '-n' '+n' <unlisted>.sh blocks (both tokens quoted)" \
+  "$(bash_payload "bash '-n' '+n' $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-Q3: bash '-n' <unlisted>.sh allowed (quoted set form still grants; paired control)" \
+  "$(bash_payload "bash '-n' $PARSE_UNLISTED")" 0
+
 # --- PAIRED MUTATION ARMS — prove the REVOCATION is what arms 01-06 measure ---
 # Same discipline as PARSE-14 / ARITY-17: a sibling mutant beside the real hook so
 # HOOK_DIR, every lib and the allowlist resolve identically, differing in exactly one
