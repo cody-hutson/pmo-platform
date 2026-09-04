@@ -66,6 +66,7 @@ core/deploy/tools/check-milestone-epic-membership.py
 core/deploy/tools/check-mirror-pair-parity.py
 core/deploy/tools/check-mode-declaration-residual.py
 core/deploy/tools/check-ownership-collision.py
+core/deploy/tools/check-rules-budget.py
 core/deploy/tools/check-skill-count-imp.py
 core/deploy/tools/check-version-anchors.py
 core/deploy/tools/check-work-hierarchy.py
