@@ -3292,35 +3292,89 @@ _c35_compute_verdict() {
 # rebuild-stable content-manifest hash of a STAGED REBUILD of source vs the committed
 # baseline sidecar (packages/<skill>.skill.sha256) — mtime-independent, so a
 # committed-stale package is caught even on a fresh checkout. mtime is a cheap
-# non-verdict pre-filter only. python3/unzip absent → degrades to the
-# baseline-vs-live-package content compare + the mtime signal (logged), matching the
-# graceful-skip posture of the deploy-time Check 7.
+# non-verdict pre-filter only. Where the staged rebuild cannot run — a missing
+# interpreter, a missing unzip, or a packager dependency that will not import — the
+# body degrades to the baseline-vs-live-package content compare + the mtime signal
+# AND WITHHOLDS ITS VERDICT for every skill so degraded (NOT-EVALUATED, below).
 #
 # THE mtime FALLBACK IS INERT ON A FRESH CHECKOUT AND IS NOT A SECOND LINE OF DEFENCE.
 # Where the staged rebuild cannot run, both degraded branches below fall back to
 # c7_src_newer — source mtime vs package mtime. A fresh `git checkout` sets every
 # working-tree file to checkout time, so that comparison is FALSE for every skill by
-# construction and both branches report FRESH regardless of whether any package is
-# stale. This is INERT, not merely weak: there is no state in which it catches a
+# construction, and neither branch can distinguish a current package from a stale one.
+# This is INERT, not merely weak: there is no state in which it catches a
 # committed-stale package on a fresh checkout, so there is no signal here to repair.
 # It is retained only because it is a real signal on an operator machine, where
-# mtimes are meaningful. A caller that reads FRESH as evidence of content freshness
-# must therefore first establish that the content arm RAN — the WARN line below is
-# the observable, and the CI gate asserts that precondition before invoking this body
-# (.github/workflows/skill-package-freshness.yml, the prerequisite steps).
+# mtimes are meaningful.
+#
+# WHICH IS WHY A DEGRADED RUN NO LONGER REPORTS FRESH. Those branches used to fall
+# through to the FRESH line, so "every package is current" and "the arm that would
+# have told us never ran" were the same observable — a caller had to establish the
+# precondition itself, out of band, from a WARN line nothing obliged it to read. The
+# body now counts the skills whose content arm did not conclude (c7_unmeasured) and
+# emits NOT-EVALUATED instead, so the withheld verdict is carried IN the protocol line
+# the caller already parses rather than alongside it.
 #
 # Check 7 has no network anchor, so the surface argument does not change the verdict;
 # it is accepted for signature parity with the other _cNN_compute_verdict bodies.
 #
 # Echoes ONE protocol line on stdout (the CALLER maps it to ++ISSUES or an exit code);
 # per-skill detail goes to stderr:
-#   FRESH <n>                all n rostered skill package(s) content-fresh
-#   STALE <count> <csv>      count stale skill(s), comma-separated — detail to stderr
+#   FRESH <n>                            all n rostered skill package(s) content-fresh
+#   STALE <count> <csv>                  count stale skill(s), comma-separated — detail to stderr
+#   NOT-EVALUATED <unmeasured> <total> <reason>
+#                                        the staged-rebuild content arm did not conclude for
+#                                        <unmeasured> of <total> rostered skills. A WITHHELD
+#                                        verdict, never a clean one (PV-7a Register B). The
+#                                        stale counter is ABSENT, not zero (PV-7b).
+#
+# PRECEDENCE: STALE > NOT-EVALUATED > FRESH. A real finding is never suppressed by a
+# measurement outage, so every blocking behaviour that predates the third token survives
+# byte-for-byte; the only state that moves is the former false FRESH.
+
+# _c7_packager_importable — can the STAGED-REBUILD packager's REAL import chain
+# resolve, under the interpreter build_skill_to_dir actually invokes?
+#
+# WHY THE REAL CHAIN AND NOT `import yaml`. The defect this closes was a PROXY
+# failure: the guard tested the INTERPRETER (`-x /usr/bin/python3`) while the
+# packager needed a MODULE. Swapping in a narrower proxy — a hardcoded `import
+# yaml` — repeats the class the day the packager grows a second dependency. This
+# imports the packager's own entrypoint, from the packager's own working
+# directory, under the packager's own interpreter, so the assertion IS the
+# dependency closure rather than a copy of it (the same discipline PF-6 applies
+# to resolve_template_sync_source).
+#
+# Import-safe by inspection: package_skill.py and quick_validate.py each carry an
+# `if __name__ == "__main__"` guard, and their module-level code only defines
+# constants — no I/O, no side effects.
+#
+# Echoes the last line of the failure on stdout when it fails; echoes nothing and
+# returns 0 when the chain resolves.
+_c7_packager_importable() {
+  local _out _rc=0
+  _out="$( ( cd release/skills/pmo-skill-refiner 2>/dev/null \
+             && /usr/bin/python3 -c 'import scripts.package_skill' ) 2>&1 )" || _rc=$?
+  [[ $_rc -eq 0 ]] && return 0
+  printf '%s' "$_out" | /usr/bin/tail -1 | /usr/bin/tr -s '[:space:]' ' ' | /usr/bin/cut -c1-120
+  return 1
+}
+
 _c7_compute_verdict() {
   local surface="${1:-lifecycle}"   # accepted for signature parity; verdict is surface-invariant
-  local c7_can_rebuild=true
-  [[ -x "/usr/bin/python3" ]] || c7_can_rebuild=false
-  command -v unzip >/dev/null 2>&1 || c7_can_rebuild=false
+  # CAPABILITY PROBE — supplies the REASON string only. It does NOT decide the verdict:
+  # the verdict rests on c7_unmeasured, the observed count of rostered skills whose
+  # content arm did not conclude. A capability probe that decided the verdict would be
+  # the same proxy this change removes, one layer up — it can only assert what it was
+  # written to foresee, and the original defect was a dependency nobody had foreseen.
+  local c7_can_rebuild=true c7_ne_reason="" c7_probe_msg=""
+  if [[ ! -x "/usr/bin/python3" ]]; then
+    c7_can_rebuild=false; c7_ne_reason="interpreter-missing:/usr/bin/python3"
+  elif ! command -v unzip >/dev/null 2>&1; then
+    c7_can_rebuild=false; c7_ne_reason="unzip-missing"
+  elif ! c7_probe_msg="$(_c7_packager_importable)"; then
+    c7_can_rebuild=false; c7_ne_reason="packager-import-failed:${c7_probe_msg:-no-diagnostic}"
+  fi
+  local c7_unmeasured=0
 
   local c7_total=0 c7_stale=0 c7_stale_list=""
   local skill c7_module c7_src_dir c7_pkg c7_sidecar c7_live_hash c7_baseline
@@ -3372,13 +3426,15 @@ _c7_compute_verdict() {
         c7_rebuilt_pkg="$c7_tmp_pkgdir/${skill}.skill"
         c7_rebuilt_hash=$(skill_content_hash "$c7_rebuilt_pkg")
         if [[ -z "$c7_rebuilt_hash" ]]; then
-          printf '  WARN:  %s — rebuild produced no hashable package; baseline matched (PASS, staged-rebuild inconclusive)\n' "$skill" >&2
+          printf '  WARN:  %s — rebuild produced no hashable package; baseline matched (staged-rebuild INCONCLUSIVE — not a clean result)\n' "$skill" >&2
+          c7_unmeasured=$((c7_unmeasured + 1))
         elif [[ "$c7_rebuilt_hash" != "$c7_baseline" ]]; then
           printf '  FAIL:  %s — source content changed since build (rebuilt hash %s != committed baseline %s); rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$c7_rebuilt_hash" "$c7_baseline" "$skill" >&2
           c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"
         fi
       else
         printf '  WARN:  %s — staged rebuild failed to run; falling back to baseline-vs-package content compare\n' "$skill" >&2
+        c7_unmeasured=$((c7_unmeasured + 1))
         if [[ "$c7_src_newer" == "true" ]]; then
           printf '  FAIL:  %s — source mtime newer than package and rebuild unavailable to confirm content; rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$skill" >&2
           c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"
@@ -3388,6 +3444,10 @@ _c7_compute_verdict() {
     else
       # Degraded: no rebuild available; the baseline-vs-live-package compare already
       # passed, so the mtime pre-filter is the only remaining source-change signal.
+      # Counted UNCONDITIONALLY, once per rostered skill — NOT inside the src_newer
+      # guard below. The content arm did not conclude for this skill whether or not the
+      # pre-filter happened to fire, and it is the non-conclusion that is being counted.
+      c7_unmeasured=$((c7_unmeasured + 1))
       if [[ "$c7_src_newer" == "true" ]]; then
         printf '  FAIL:  %s — source mtime newer than package; python3/unzip unavailable to confirm by content — rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$skill" >&2
         c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"
@@ -3395,10 +3455,26 @@ _c7_compute_verdict() {
     fi
   done
 
-  if [[ $c7_stale -eq 0 ]]; then
-    printf 'FRESH %s\n' "$c7_total"
-  else
+  # One aggregate line naming the outage and its denominator, on EVERY verdict — so a
+  # STALE run still states how much of the roster went unmeasured (CIAC-4's stated
+  # denominator). Exactly one finding, naming the cause; per-skill verdicts are
+  # WITHHELD for the unmeasured skills, never guessed (PV-7c).
+  if [[ $c7_unmeasured -gt 0 ]]; then
+    printf '  WARN:  staged-rebuild content arm did not conclude for %s of %s rostered skill(s)%s\n' \
+      "$c7_unmeasured" "$c7_total" "${c7_ne_reason:+ — $c7_ne_reason}" >&2
+  fi
+
+  # PRECEDENCE: STALE > NOT-EVALUATED > FRESH. A real finding is NEVER suppressed by a
+  # measurement outage, so every blocking behaviour that existed before the third token
+  # survives unchanged; the ONLY state that moves is the former false FRESH.
+  # PV-7b: the stale counter is ABSENT from the NOT-EVALUATED line, not zero.
+  if [[ $c7_stale -gt 0 ]]; then
     printf 'STALE %s %s\n' "$c7_stale" "${c7_stale_list%,}"
+  elif [[ $c7_unmeasured -gt 0 ]]; then
+    printf 'NOT-EVALUATED %s %s %s\n' "$c7_unmeasured" "$c7_total" \
+      "${c7_ne_reason:-staged-rebuild-did-not-run}"
+  else
+    printf 'FRESH %s\n' "$c7_total"
   fi
 }
 
