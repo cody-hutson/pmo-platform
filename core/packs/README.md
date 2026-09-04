@@ -266,6 +266,18 @@ axis; the constraint that binds it is `SEL-RESOLVE` above.
   `label-taxonomy.md` by the label-cleave).
 - The **grammar** every `pack.toml` conforms to (the meta-schema) lives in the
   work-item type-pack meta-schema. The packs here are **instances** of that grammar.
+- **Which of a pack's declarations a methodology owns, and which the platform fixes
+  regardless of configuration**, is decided by the configurable/fixed boundary at
+  [`../schemas/work-item-type-schema.md` §1.5](../schemas/work-item-type-schema.md#the-configurable-fixed-boundary).
+  It carries the configurable and fixed enumerations, the explicit placement of
+  readiness and done, and the ordered test an author applies to a **new** candidate
+  field or criterion. **Rules are defined there and are not restated here** — this is
+  the pointer discipline this file already applies to the grammar itself. Where that
+  boundary names an invariant no gate enforces, the gap is registered as a row in the
+  gate-coverage register in
+  [`../standards/gate-efficacy-standard.md`](../standards/gate-efficacy-standard.md),
+  each carrying its declared observable; §1.5 points at those rows rather than
+  copying them, and so does this line.
 - The **best-practice content** in each pack is sourced from the archetype's
   authoritative body of practice (for example the Scrum Guide, INVEST, the Kanban
   Method) — never reverse-engineered from any one deployment's issue tracker.

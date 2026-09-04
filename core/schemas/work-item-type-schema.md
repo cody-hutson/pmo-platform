@@ -378,6 +378,131 @@ This doc therefore **does not** define Story / Bug / WBS-task field lists — th
 
 ---
 
+### 1.5 The configurable/fixed boundary {#the-configurable-fixed-boundary}
+
+§1.1–§1.4 say *what a pack may declare*. This section says **which of those declarations a methodology owns and which the platform fixes regardless of configuration** — and gives an author a test to place a new candidate on one side or the other. The risk runs both ways: over-constrain and a kit cannot express a real methodology's practice; under-constrain and the platform's guarantees become negotiable. Neither failure is visible until a second methodology is authored against the boundary, which is why the boundary is written down here rather than discovered later.
+
+**This section classifies; it mints no rule.** Every `Enforcing gate` cell cites an existing `PACK-*` id from `check-work-hierarchy.py` or is **explicitly labelled a named gap**. No `PACK-C*` family is created: an id earned by a table rather than by a runner is a gate that cannot fail, which is the class this boundary exists to make countable. The validator's own reasoning at its `PACK-K09` comment applies the same rule — a specified predicate was refused there because no field carries its input.
+
+#### 1.5.1 The three-tier census
+
+| Tier | The platform fixes | The pack chooses | Enforced by |
+|---|---|---|---|
+| **T-I — Shape** | Which keys exist and which are required | The values | `PACK-P01 P02 P06 P07 P08 K01 K02 K07 L01 L02` |
+| **T-II — Domain** | The admissible value set | Which member of it | `PACK-P03 P04 P05 K03 K04 K05 K06 K06a K08 K09` |
+| **T-III — Content** | **nothing** | everything | **no runner exists** |
+
+`criteria` is required-**present** and its interior is unread. The enforced unit is the `criteria` **object**, never its three named members: `PACK-K01`'s predicate is a **truthiness** test over a required-field tuple at the `Kind` level, so removing all three sub-objects fires it while renaming one away does not. That distinction is invisible to a name census and is why the F-table below states it explicitly.
+
+#### 1.5.2 The configurable surface
+
+`Bound by` says what constrains the choice; `Enforcing gate` says what *executes* that constraint. **Both columns are present deliberately** — a bound nothing enforces must not be typographically identical to a live rule.
+
+| # | Configurable | Unit of choice | Bound by | Enforcing gate | Posture |
+|---|---|---|---|---|---|
+| **C1** | `criteria.{readiness,done,gate}.checks[]` — membership, cardinality, wording, level mix, ordering | The whole list, **including the empty list with a stated reason** | Each entry conforms to the check shape (F2) | *(none — inherits F2's empty cell)* | **GAP — no runner** |
+| **C2** | `fields.kind_specific[]` | The field set, including empty | `FieldDecl` per `entity-field-schemas.md` §3.0 | *(none — inherits F2's empty cell)* | **GAP — no runner** |
+| **C3** | `criteria_version` **value** | Any semver, per block | Key required + semver-shaped | *(none)* | **GAP — no runner.** Neither the value's **shape** nor the key's **presence** is enforced: `criteria_version` is **not** a member of `PACK-K01`'s required-field tuple, so a manifest with the key removed from every block validates clean |
+| **C4** | `display_name`, `projects_as` — methodology vernacular | Free-form | `kind_id` stays a slug | `PACK-K02` | Check 75, warn |
+| **C5** | The `kind_id` set — which kinds, how many | Open set | Slug form + within-pack uniqueness | `PACK-K02` | Check 75, warn |
+| **C6** | `relationships.allowed_types[]` **subset**, and `required_edges[]` | Any subset of the 7 | The **7 MVP types** are fixed (F3) | `PACK-K04` — **`allowed_types[]` ONLY** | **PARTIAL — `required_edges[]` is a GAP** |
+| **C7** | `[[labels]]` rows | Any row | Grammar-declared `group`; a `type:*` row carries `projects_kind` | `PACK-L01`, `PACK-L02` | Check 75, warn |
+| **C8** | `[[controls]]` set, `value_domain` members, `default`, `applies_to` | Any control set | Type set `{enum, integer}`; further types are RESERVED and declared *fail-loud* | *(none)* | **GAP — no runner.** `value_domain` is unread; the grammar says **fail-loud** and it fails **silent** |
+| **C9** | `axis1_state_machine` refinement | Inline, or `inherit` | Projects over the entity base (F1) | `PACK-K01` (presence of the key only) | **PARTIAL** |
+| **C10** | `lifecycle_behavior` **map values** | Per-lifecycle selection | Keys drawn from the fixed 3-set (F4) | `PACK-K01` (**presence only**) | **PARTIAL — the value is unread** |
+| **C11** | `guards_transition` + `condition` on a **gate** check | Any of the 3 condition arms | Gate-only for `condition` (F4); `guards_transition` is governed by the §1.2.1 D-A requiredness rule, which binds **all three** sub-objects; no gating cycle per §7.6 | *(none)* | **GAP — no runner.** `guards_transition` and `condition` are both unread, so no cycle detector can exist |
+| **C12** | Whether the pack declares kinds, and how many | ≥1 for an archetype; `kit_class`-selected for a kit | `PACK-P07`'s two-level rule | `PACK-P07` | Check 75, warn |
+
+**Deliberately unbounded inside C1 and C2** — no minimum check count, no required topic, no L1/L2/L3 ratio, no upper bound. That is the over-constraint defense, and it is a decision rather than an omission: a Kanban card's readiness bar is legitimately shorter than a Scrum story's.
+
+#### 1.5.3 The fixed surface
+
+Per [`gate-efficacy-standard.md`](../standards/gate-efficacy-standard.md) § Requirement (c), every row carries a falsification test — *a concrete repro describing the tampered input that MUST flip the gate red*. **Every test below was executed** against a scratch copy of `core/packs/`, one line-anchored defect per corpus, each verified landed before the validator ran. An empty `Enforcing gate` cell is a **named gap**, and the three gaps are registered in the gate-coverage register rather than only stated here.
+
+| # | Invariant | Why it cannot be a knob | Enforcing gate | Posture | Falsification test — arm and observed result |
+|---|---|---|---|---|---|
+| **F1 — Entity identity** | `base` is const `Work Item`; `general_level` ∈ the Layer-1 taxonomy; **a kit's** kinds sit at `Work Item` only; ≤1 `grouping` altitude **per kit** | A variable identity is a new entity node, not a projection of the one canonical `Work Item` | `PACK-K03`, `PACK-K06`, `PACK-K06a`, `PACK-K09` | Check 75, **warn** | `base = "Deliverable"` (3 sites) → **`PACK-K03`**, exit 1 · `general_level = "Portfolio"` on a **kit** kind → **`PACK-K06a`**, exit 1 · the same mutation on an **archetype** kind → **clean, and correctly so** (see the carve-out note below) |
+| **F2 — Read-by-name keys (the join surface)** | The three `criteria` sub-objects; the check shape `{id, statement, level, automatable}` plus `source`; `level` ∈ `{L1,L2,L3}`; `fields.core` / `kind_specific[]`; `methodology_projection`; `projects_kind` | A cross-pack consumer must resolve without branching on the pack. §3.1 step 5 **switches on `level` and `automatable`** to pick the materialization class | `PACK-K01` covers the `criteria` **object's presence only** — a truthiness test over its required-field tuple. **Nothing covers the members or the check shape** | **GAP — no runner** | a check keyed `auto` with no `level` → **clean** · `level = "L9"`, `automatable = "yes-please"` → **clean** · `criteria.done` renamed away → **clean** · a malformed `kind_specific` entry → **clean** · **all three** sub-objects removed → **`PACK-K01`**, exit 1 — which is what proves the enforced unit is the parent object |
+| **F3 — Aggregation contracts** | The 7 MVP relationship types; `work_item_type` as the rollup discriminator; the label **group** set; one `control_id` and one value domain spanning kinds | Two methodologies must be **summable**. The §4 anti-EAV rollup keys on a shared discriminator | `PACK-K04` (**`allowed_types[]` only**), `PACK-L01` | **PARTIAL — GAP on `required_edges[]`** | an 8th type in `allowed_types[]` → **`PACK-K04`**, exit 1 · **the same 8th type in `required_edges[]` → clean, exit 0** · an unknown label `group` → **`PACK-L01`**, exit 1 |
+| **F4 — Firing, not asserting** | Behaviour keys off the **project's** `lifecycle` ∈ `{timeboxed, continuous, phased}`, never off the kind. A `condition` is permitted **only** inside `criteria.gate` | §7.4: a kind carrying sprint semantics breaks on a continuous or phased project | **`PACK-K01` enforces `lifecycle_behavior`'s PRESENCE** — it is a member of the required-field tuple. `project-schema.md` **V8** closes the domain on the project side. **No rule reads the pack-side VALUE, and none enforces the `condition` prohibition** | **PARTIAL — the value and the prohibition have no runner** | remove the `[kinds.lifecycle_behavior]` block (3 sites) → **`PACK-K01`**, exit 1 · `lifecycle = "sprint"` (3 sites) → **clean** · a `condition` plus `guards_transition` on `criteria.readiness` → **clean** · `guards_transition` on a **gate** check with no `condition` → **clean** |
+| **F5 — Layer scope closure** | The type layer types **work items**, and only those | ADR-170's portfolio axis and ADR-050's deliverable-domain axis each landed **outside** the pack grammar for this reason | Structural — the grammar carries no field to tamper with; `PACK-P03`/`P04` reject out-of-domain values | By construction | **No arm is constructible**, because there is no key to mutate. Recorded as **by-construction**, never as covered — the distinction is the point of this column |
+| **F6 — Neutrality of the kit axis** | A `role = "kit"` pack is archetype-neutral at the pack level and at **every** kind; an `archetype` pack must not claim neutrality; only `base` may be an `extends` target | If a kit could name an archetype, *which kits are selectable would depend on the methodology* — and the two axes would stop being independent | `PACK-P05`, `PACK-P06`, `PACK-K05` | Check 75, **warn** | `role = "kit"` on a pack whose `applies_to = "Scrum"` → **`PACK-P05`, `PACK-P08`**, exit 1 · an archetype kind setting `archetype = "*"` → **`PACK-K05`**, exit 1 |
+
+**Three named gaps, stated rather than smoothed: F2, F3, F4.** All three are class **3-O** prose-declared normative predicates per `gate-efficacy-standard.md` § Scope boundary, and each carries a row in that file's gate-coverage register with its declared observable. **They are not closed in this release, and the reason is mechanical rather than editorial:** the runner must be **entry-scoped** (*"every `checks[]` entry carries X"*), which fires on zero entries in today's corpus, and must not be **array-scoped** (*"`checks` is absent-or-empty"*), which fires on 45 of 57 criteria tables including both of `deploy.sh` Check 75's discrimination fixtures — and that branch increments the issue counter **outside** the warn-mode gate, so an array-scoped rule hard-fails `--check` on both control arms.
+
+**A near-miss reported as a NON-gap, because it is the strongest evidence Counter-test A is real.** Setting `general_level = "Portfolio"` on an **archetype** kind validates clean. That looks like a fourth gap. It is not: `PACK-K06a` is guarded `role == "kit"`, and the exemption is deliberate, documented and **self-tested** — the validator carries a dedicated arm asserting *"PACK-K06a does NOT fire on an archetype pack at a container tier — the advisory is unchanged for non-kits"*, alongside the sibling `PACK-K09` arm and a comment block explaining that both rules are deliberately kit-scoped because *a rule that also fired on archetype packs would pass every positive arm while silently migrating shipped packs*. **The paired control settles it:** the identical mutation on a **kit** fires `PACK-K06a`. The platform declined to widen a rule for archetype packs because a real published methodology's practice needs the freedom — SAFe models portfolio-epic over program-epic. That is Counter-test A's third arm, already exercised in the shipped corpus.
+
+#### 1.5.4 Readiness and done, placed explicitly
+
+These are the presenting case, so each sub-key is placed on exactly **one** side.
+
+| Element | Side | Reason |
+|---|---|---|
+| Existence of `criteria.readiness` / `.done` / `.gate` as three keyed sub-objects | **FIXED** | F2 — read by name; enforced only at the **parent-object** level |
+| Check shape `{id, statement, level, automatable, source}` | **FIXED** | F2 — §3.1 step 5 branches on `level` and `automatable` |
+| `level` domain `{L1, L2, L3}` | **FIXED, CLOSED** | F2/F3 — the projection is a 3-way switch; a fourth value has no arm |
+| `criteria_version` — key present, semver-shaped | **FIXED** | F2/F4 — the grandfather stamp (§6.3). **Unenforced on both limbs** (C3) |
+| `criteria_version` **value** | **CONFIGURABLE** | C3 |
+| **How many** checks, **what** they assert, their **wording**, **level mix** and **order** | **CONFIGURABLE — wholly** | C1, including zero with a stated reason |
+| Whether a populated readiness or done bar **gates** anything | **FIXED: it does not, by itself** | F4 — firing is `lifecycle_behavior`-keyed off the **project's** lifecycle. A populated DoR is an assertion set, not a gate |
+| `condition` on **readiness** or **done** | **FIXED PROHIBITION** | F4 — §1.2.1 permits `condition` only inside `criteria.gate`. **Unenforced** |
+| `condition` inside `criteria.gate` | **CONFIGURABLE** | C11, bounded by §7.6's cycle rule — **also unenforced** |
+| `guards_transition` on **any** of the three sub-objects | **FIXED — a conditional-requiredness rule, not a side** | §1.2.1's D-A rule binds all three sub-objects equally: `guards_transition` is REQUIRED whenever `condition` is present and omitted otherwise. **Its legality is a function of another key's presence**, which is why it is stated as a rule here rather than placed on one side of the table — a one-side-per-key placement cannot express it. **Unenforced in both directions** |
+| The **provenance** each check and FieldDecl carries — `source` | **FIXED key, CONFIGURABLE value** | The key is grammar (§1.2.1); which body of practice it names is the methodology's |
+
+**The `gate` block is the seam where over- and under-constraint meet.** The Kanban pack's `[kinds.criteria.gate]` ships as a **deliberate stub**: a `set-aggregate` WIP condition needs a `scope_ref` that is inherently instance-local (K4), so it cannot be sourced into a git-tracked default. That is the boundary working correctly in the *fixed* direction — the platform declines to ship a default it cannot ground.
+
+#### 1.5.5 The placement test
+
+An ordered **first-YES sequent**, not a scored rubric: every placement construct in this grammar is an ordered discriminated branch with an explicit negative arm (§2.2's CASE 1/2/3; §1.1's two-level `role`-then-`kit_class` selection), and a score cannot express the negative arm the evidence contract depends on.
+
+**Declared input class, stated because it decides how a result is read.** The test places a **new** candidate field or criterion — one the grammar does not yet declare. Applied *retrospectively* to a key §1.1–§1.4 already declares, it is **diagnostic rather than constitutive**: a NOT PLACED result there does not un-declare the key, it reports that the existing declaration has no consumer and therefore no runner, which is a coverage finding for the register and not a re-placement. Read the two uses apart. Conflating them is how a grammar-required key like `criteria_version` can be simultaneously FIXED in §1.5.4 and NOT PLACED under the sequent — both are correct, about different questions.
+
+> **Q1 — IDENTITY.** Does this determine **what entity a declared kind IS**, or where it sits in the Layer-1 taxonomy?
+> **YES ⇒ FIXED (F1).**
+>
+> **Q2 — JOIN.** Does a consumer **outside the declaring pack** resolve this key by name — either **(a)** in the shipped tree today, or **(b)** by the specification of a **named, tracked** downstream consumer?
+> - **YES (a) — shipped.** Cite the consumer `file:line` **and the table or section whose key it reads**. A same-named key in another facet is **not** a consumer, and a self-test arm whose assertion is that the key must **NOT** reach a verdict is **not** a consumer. ⇒ **KEY is FIXED (F2)**; its VALUE may be configurable.
+> - **YES (b) — specified.** Cite the consumer **and the work item that ships it**. The work item must be **tracked and open**: one closed as not-planned is not a specification, it is a withdrawn one. ⇒ **KEY is FIXED (F2), PROVISIONAL** — the placement binds on that work item's merge, and the candidate **returns to the test** if it closes without shipping the consumer.
+> - **NO to both.** Nothing reads it and nothing is specified to. **Do not fall through to CONFIGURABLE** — carry a **NO-CONSUMER flag** into Q3/Q4, which may still fix it, and into Counter-test B, which disposes of it if they do not.
+>
+> **Q3 — AGGREGATION.** Does the set of **admissible** values change what an aggregate over multiple packs computes — either in the shipped tree today, or by the specification of a **named, tracked** downstream aggregate (cite it and its work item)?
+> - **Where the value domain is declared OPEN, Q3 is N/A** and the candidate proceeds to Q4 carrying its flag. An open set has no admissible-value set to reason over, and OPEN is this grammar's default posture for extensible sets (§7.1).
+> - **YES ⇒ FIXED domain (F3)**; membership within the domain may be configurable.
+>
+> **Q4 — FIRING.** Does this decide **whether or when a gate fires**?
+> **YES ⇒ FIXED (F4), and project-owned** — the input is the project's `lifecycle`, never the kind.
+>
+> **All NO and no NO-CONSUMER flag ⇒ CONFIGURABLE.** **All NO with the flag ⇒ Counter-test B arm 3 ⇒ NOT PLACED.**
+
+**Both counter-tests must be answered in writing.** A candidate that reaches CONFIGURABLE but cannot answer B is not placed — it is registered.
+
+> **Counter-test A — the over-constraint check.** For any candidate placed FIXED, name a real published methodology whose practice the fix forbids.
+> - If you can name one **and the fix would bind it**, the candidate is a **default**, not an invariant.
+> - If you can name one but the fix is **scoped to a role or class** that excludes it, the candidate is an **invariant scoped to that role** — name the scope **and the self-test arm that asserts the exemption**.
+> - If you can name none, the candidate stands as an unscoped invariant.
+>
+> **Counter-test B — the under-constraint check.** For any candidate placed CONFIGURABLE, describe what breaks when two deployments choose differently.
+> - *"It breaks"* ⇒ the candidate is FIXED after all.
+> - *"Nobody knows"* ⇒ the candidate is FIXED after all.
+> - *"Nothing reads it at all"* ⇒ **NOT PLACED.** It routes to the gate-coverage register as an **unclassified declaration**, never to the configurable side. *(A candidate that is not a key — a member or a value inside a declared key — is not subject to this arm; its consumer is the key's consumer, resolved at the nearest enclosing key the grammar declares.)*
+
+**Two failure shapes this test is written to survive, because both were observed on it before it shipped.** First, *"is this read by name?"* is not the same question as *"does a consumer resolve **this** key?"* — this grammar declares `applies_to` in two facets, and the validator had to defend against that collision explicitly, so a citation can be correct and still be about a different key. Second, a question asked in the present indicative over the live consumer set is unanswerable for a **new** candidate, which by construction has no live consumer; Q2 and Q3 therefore each carry a prospective arm whose evidence is citable, so the prospective reading is a documented arm rather than a licence to declare anything fixed.
+
+#### 1.5.6 Reconciliation with the §7.4 lifecycle rule
+
+§7.4 and this boundary are **orthogonal partitions of different questions**. §7.4 partitions *kind vs project* — which input selects firing. §1.5 partitions *pack vs platform* — who may declare a thing at all. They compose at one seam, already implemented: **the pack configures the gate set** (`criteria.gate.checks[]`, C11) while **the platform fixes the selector** (`lifecycle_behavior`, keyed on the project's lifecycle, F4).
+
+The boundary contributes one thing §7.4 leaves implicit, and the enforcement split matters: **the `lifecycle` value domain is FIXED and CLOSED** — a pack may not mint a fourth lifecycle. On the **project** side that closure is real: `project-schema.md` **V8** validates `custom_methodology_definition.lifecycle` against `{continuous, phased, timeboxed}`, so even `archetype: Custom` cannot escape it. On the **pack** side, `PACK-K01` enforces that `lifecycle_behavior` is **present** and **nothing reads its value** — a manifest keying `lifecycle = "sprint"` validates clean. **Presence covered; value unenforced.** Both halves are stated because a reader who takes only the first would over-claim the closure, and a reader who takes only the second would miss that the block is required at all.
+
+#### 1.5.7 Where the gaps are recorded
+
+The three named gaps live as rows in the gate-coverage register in [`gate-efficacy-standard.md`](../standards/gate-efficacy-standard.md) § Gate-coverage register, each carrying its declared observable and the falsification arm that ran. **This section points at them; it does not copy them** — a second copy would be the duplicate-source pattern, and the register is where every coverage reader and audit already looks.
+
+**No resolution-pointer token appears anywhere in this section, and that is load-bearing rather than stylistic.** `deploy.sh --check` Check 62 recomputes the register's verdict by extracting resolution pointers **file-wide**, not table-scoped, so a pointer written in prose enters the denominator exactly as one written in a row. A pointer here would either inflate the count or, if it failed to resolve, flip the register's verdict to `UNRESOLVED`. A named-gap row correctly carries none until its runner ships.
+
+---
+
 ## 2. Custom-kind escape hatch + N=2 governance-promotion
 
 The custom-kind mechanism mirrors `custom_methodology_definition` **exactly** (the methodology-parameterization Custom Extension Protocol + Skill Consumption Pattern), so the platform carries **one** custom-extension mental model. The kind set is **open declaratively** (any project MAY declare a custom kind) but **closed at the enum/code level** (no skill ever adds a `kind_id` to a hardcoded list; the registry is data; promotion is governed) — the standing defense against the enum-drift failure mode.
@@ -627,9 +752,9 @@ Each anti-pattern below is conditional ("do NOT do X when Y, because Z"), distin
 ### 7.3 Re-authoring the best-practice defaults as governance (OUT)
 
 - **Signature.** This grammar (or a "seed pack" committed to `core/`) enumerates Story/Bug/WBS-task field lists as a baked-in roster.
-- **Conditional.** Do NOT bake concrete kinds into the git-tracked corpus, because **types are user config (K4)**: the package ships best-practice DEFAULTS (the framework's Layer 3, authored from methodology best practice) and supports BYO/override (the framework's Layer 4) — a "canonical seed pack" as governance both duplicates Layer 3 and re-traps user config in the kernel.
-- **Root cause.** Treating the worked examples as a deliverable roster rather than as the framework's consumable defaults.
-- **Mitigation.** Define the grammar here; consume Layer-3 defaults by reference (§1.4); keep declared kinds as operator-local data.
+- **Conditional.** Do NOT bake **a project's** declared kinds into the git-tracked corpus **as governance**, because **types are user config (K4)**: the package ships best-practice DEFAULTS (the framework's Layer 3, authored from methodology best practice) and supports BYO/override (the framework's Layer 4) — a "canonical seed pack" as governance both duplicates Layer 3 and re-traps user config in the kernel. **The qualifiers are the rule, not decoration:** §0 states this prohibition scoped — *"a project's declared kinds"* — and states the permission alongside it, that a deployment may consume the shipped best-practice defaults and that those defaults are exemplars rather than a baked-in roster. Read §0; this entry does not restate it. A shipped archetype pack that populates its own `[kinds.criteria.*]` from a named body of practice is the *permitted* act, not this failure mode.
+- **Root cause.** Treating the worked examples as a deliverable roster rather than as the framework's consumable defaults — or, reading this entry alone, mistaking its terse form for a broader prohibition than §0 states.
+- **Mitigation.** Define the grammar here; consume Layer-3 defaults by reference (§1.4); keep **a project's** declared kinds as operator-local data. Which side of the boundary a given declaration falls on is decided by §1.5's placement test, not by this entry.
 - **Principal vs. junior.** Principal ships a grammar + accepts the defaults; junior commits a 7-kind roster and creates a perpetual drift/maintenance surface.
 
 ### 7.4 Hardcoded-sprint-presumption in `lifecycle_behavior` (PROC)
