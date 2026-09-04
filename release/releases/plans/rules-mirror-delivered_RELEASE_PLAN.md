@@ -410,7 +410,7 @@ Run at Engineering Commit 0, spanning the plan-file write and its commit, agains
 | #4739 | AC-2 | `grep -c 'workspace-root fallback' release/references/pipeline/stage-06-engineering.md` | Zero · control: the same instrument for the cited canonical rule's filename in the same file must return non-zero |
 | #4739 | AC-3 | `grep -c ']\(\.\./' core/rules/git-workflow.md` | Zero relative cross-tree links remain in the retained corpus members |
 | #4739 | AC-4 | `grep -q 'claude/rules' release/references/pipeline/stage-06-engineering.md` | The C4 clause names a real mirror pair rather than a self-pair |
-| #4739 | AC-5 | `bash core/deploy/deploy.sh --check` | Doc-link integrity (Check 14) reports no unresolved internal link in the modified files |
+| #4739 | AC-5 | `python3 core/deploy/tools/check-doc-links.py --output-format tsv` | Zero unresolved internal cross-references in the modified files · control: the primitive's own `--self-test` must pass, so a zero is a working probe rather than an unread surface |
 | #6441 | AC-1 | `test -f core/standards/rules-corpus-admission-standard.md` | The admission test is published at a named canonical path |
 | #6441 | AC-2 | `grep -q 'type: rule' core/rules/git-workflow.md` | The frontmatter contract is applied to a retained corpus member |
 | #6441 | AC-3 | `grep -c 'release/governance/release-process.md' core/deploy/deploy.sh` | Zero — the excluded member is gone from the mirror-pair array |
@@ -434,7 +434,7 @@ Ordinals are positional. A count that no longer matches this baseline is the mec
 
 - [ ] **File Integrity** — every declared unconditional ADD in the File Change Matrix is present in the merged diff.
 - [ ] **Content Correctness** — the parity check reports PARITY at the delivered holder count; the published budget's ceiling is met by the retained corpus.
-- [ ] **Cross-Reference Validity** — `core/deploy/deploy.sh --check` Check 14 reports no unresolved internal markdown link in any modified `.md` file.
+- [ ] **Cross-Reference Validity** — the doc-link primitive reports no unresolved internal markdown link in any modified `.md` file (Check 14 runs the same primitive inside the lifecycle battery).
 - [ ] **Skill Invocation** — N/A — enumerated over the File Change Matrix; no rostered skill's `SKILL.md` or `references/` is edited by any card, so no `.skill` package rebuild is owed and the package-freshness gate has no subject.
 - [ ] **Output Contract Compliance** — the parity primitive's TSV is consumed through the residual-row path, so an unrecognized class value is reported as a finding rather than silently filtered to nothing.
 
