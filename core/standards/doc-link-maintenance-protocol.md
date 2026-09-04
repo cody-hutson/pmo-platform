@@ -103,6 +103,27 @@ release has merged. Enforcement is therefore shape-based rather than resolution-
 `--plan-depth-lint` mode of `check-release-links.py` asserts the *form* of the link on the
 release PR instead of waiting for the resolution to fail on the post-merge chore PR.
 
+**Artifacts that are copied: the mirror-pair link form.** A **mirror-pair file** is an in-repo
+source with a byte-identical deployed copy at a second path — the set enforced by `deploy.sh
+--check` Check 9, whose array is the authoritative membership list. Where the depth-invariance
+rule above governs one file that *moves*, this governs one file that is *read from two places at
+once*, so its links must resolve from both:
+
+- A link whose target is **also a member of the mirrored set** MAY remain relative. It then
+  resolves to the mirror's own copy of that target, which Check 9 asserts is byte-identical.
+  Rooting these is a regression rather than neutral churn: it sends a mirror reader back into the
+  repo instead of to the copy sitting beside it, and an operations-branch session is deliberately
+  rooted *outside* the platform repo ([`CLAUDE.md.template`](../CLAUDE.md.template) § Routing),
+  where the rooted form does not resolve at all.
+- Every other link — any target outside the mirrored set — MUST use the leading-`/`
+  workspace-rooted form of clause 2, which is the only form correct at both locations. The bare
+  module-prefix form is not a workspace-rooted form and MUST NOT be used (clause 3).
+
+Membership is therefore the entire predicate, which has a consequence worth stating because it is
+easy to miss: a target **leaving** the mirrored set converts every inbound link to it from the
+first case into the second. Root those links in the same change that removes it, or they resolve
+today and break at the next deploy.
+
 **Self-test:** `python3 core/deploy/tools/check-doc-links.py --self-test` runs an internal smoke test (parser + resolver + code-block exclusion) and exits 0 on pass.
 
 ### 4.2 Enforcement-surface integration
