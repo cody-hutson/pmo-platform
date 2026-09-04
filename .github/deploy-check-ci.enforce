@@ -8,8 +8,8 @@
 # REPORTS when an in-scope check
 # FAILs. The roster is declared ONCE, in the `rs_checks` array in
 # core/deploy/deploy.sh; the enumeration above restates it and has drifted behind
-# it before (#4738 swept this file for Check 77; #6441 did not follow suit for
-# Check 78). The runner reads this file directly, so the sentinel is load-bearing on
+# it before — the release that admitted Check 77 swept this file, the one that
+# admitted Check 78 did not. The runner reads this file directly, so the sentinel is load-bearing on
 # its own; the thin CI workflow (deploy-check-ci.yml) additionally consumes the
 # runner's exit code. One token governs ALL members: flipping it arms every check
 # on the roster at once, so a new member joins at whatever posture this token

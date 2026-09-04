@@ -27,9 +27,11 @@ name: Deploy-check required subset (pre-merge load-bearing gate)
 #              THE ROSTER IS DECLARED ONCE, in the `rs_checks` array in
 #              core/deploy/deploy.sh (cmd_check_required_subset). This enumeration
 #              and the .github/deploy-check-ci.enforce sentinel's both RESTATE it,
-#              and both have drifted behind it before: #4738 swept them for Check
-#              77, #6441 did not follow suit for Check 78. A member added to
-#              rs_checks owes an edit here and there.
+#              and both have drifted behind it before: the release that admitted
+#              Check 77 swept both restatements, the one that admitted Check 78 did
+#              not, and the count here read THREE against a four-member roster until
+#              it was corrected. A member added to rs_checks owes an edit here and
+#              in the sentinel; neither is derived, so neither updates itself.
 #   falsification: edit a per-hook source (e.g. add a rule row) under
 #                  core/rules/bypass-mode-readiness/ without regenerating the index
 #                  -> this gate reports STALE (warn-mode: summary + exit 0; enforce:
