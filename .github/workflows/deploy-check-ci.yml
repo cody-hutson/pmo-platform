@@ -7,9 +7,10 @@ name: Deploy-check required subset (pre-merge load-bearing gate)
 #              asserted as a blocking status check BEFORE the change lands, closing
 #              the gap that the whole --check battery ran only at deploy time
 #              (operator machine, post-merge) and was therefore skippable. Today the
-#              subset resolves to THREE members: Check 38
+#              subset resolves to FOUR members: Check 38
 #              (hook-registry-index-freshness), Check 73
-#              (bundle-metrics-gate-integrity) and Check 77 (mirror-pair-parity);
+#              (bundle-metrics-gate-integrity), Check 77 (mirror-pair-parity) and
+#              Check 78 (rules-budget);
 #              it grows as posture:required checks
 #              lacking a mirror are back-filled (#1036 / #313). Check 73 is the
 #              first back-fill against that declaration — #313 is the milestone
@@ -18,7 +19,17 @@ name: Deploy-check required subset (pre-merge load-bearing gate)
 #              the second, and it is why this gate matters for its own subject: the
 #              mirror-pair desync it asserts against escaped both the post-merge
 #              check surface AND PR review, so a deploy-time-only assertion would
-#              not have closed it.
+#              not have closed it. Check 78 is the third, admitted for a reason
+#              specific to what it bounds: the deployed rules set it measures is
+#              PRODUCED at deploy time, so a check that could only observe the
+#              installed mirror would certify the per-session context cost only
+#              after that cost had already been paid.
+#              THE ROSTER IS DECLARED ONCE, in the `rs_checks` array in
+#              core/deploy/deploy.sh (cmd_check_required_subset). This enumeration
+#              and the .github/deploy-check-ci.enforce sentinel's both RESTATE it,
+#              and both have drifted behind it before: #4738 swept them for Check
+#              77, #6441 did not follow suit for Check 78. A member added to
+#              rs_checks owes an edit here and there.
 #   falsification: edit a per-hook source (e.g. add a rule row) under
 #                  core/rules/bypass-mode-readiness/ without regenerating the index
 #                  -> this gate reports STALE (warn-mode: summary + exit 0; enforce:
@@ -117,7 +128,11 @@ jobs:
           uname -s
           command -v bash
           command -v git
-          test -x /usr/bin/python3 || echo "::warning::/usr/bin/python3 missing — the subset's Check 38 member will fail-closed"
+          # THREE of the four members shell out to /usr/bin/python3 by absolute path
+          # (Check 38's build-hook-registry.py, Check 77's check-mirror-pair-parity.py,
+          # Check 78's check-rules-budget.py). Naming only one understated the blast
+          # radius of an image without it; Check 73 is the sole pure-bash member.
+          test -x /usr/bin/python3 || echo "::warning::/usr/bin/python3 missing — the subset's Check 38, Check 77 and Check 78 members will fail-closed"
 
       - name: Run required-subset (via the deploy.sh engine)
         id: check
