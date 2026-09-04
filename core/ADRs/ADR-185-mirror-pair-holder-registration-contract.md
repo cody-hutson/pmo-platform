@@ -11,7 +11,7 @@ source_observations:
   - "The parity held at authoring time as an artefact of the author noticing, not of any control: the release that added three members shipped a one-sided edit at an intermediate commit, and it escaped both the automated check surface and PR review before being caught by hand."
   - "The two holders' separators genuinely differ — one splits on a colon, the other on a literal tab — and so do their array identifiers. Discovery keyed on an identifier returns zero paths from one side and reads as parity, so an identifier-keyed extractor is falsified by measurement rather than by preference."
   - "The consuming code on both sides splits on the FIRST separator occurrence. A last-occurrence split against a value carrying a second separator compares every pair against a path that does not exist, while reporting clean."
-  - "A third holder was concurrent rather than hypothetical: the mirror carrier shipping in the same release introduces a copy set of the same paths."
+  - "A third holder was in prospect rather than hypothetical: at design time the mirror carrier being built in the same release was headed for a copy set of the same paths."
   - "The corpus already carries a machine-greppable in-band declaration idiom of the form `# <token>: k=v`, used inside the deploy script and in a second tree for machine-read declarations. The alternatives are markdown-only or carry no parseable attributes."
   - "A heuristic arm for unmarked holders was measured and deferred: 75 tracked files name two or more of the source paths and three name all of them, of which one is a documentation enumeration needing permanent exemption. A tuned threshold plus an exemption register is a larger surface than the defect."
 supersedes: none
@@ -33,7 +33,7 @@ When a member was added to one and not the other, the two desynchronised **silen
 
 Three facts about the substrate shape the decision, and each is measured rather than assumed.
 
-**The framing "these two agree" is itself the defect.** Writing the assertion pairwise encodes arity 2 in the shape of the check, so the next holder is not covered and the same failure recurs one level of abstraction up. That is not a hypothetical: the mirror carrier shipping in this same release introduces a third holder of the same paths.
+**The framing "these two agree" is itself the defect.** Writing the assertion pairwise encodes arity 2 in the shape of the check, so the next holder is not covered and the same failure recurs one level of abstraction up. That is not a hypothetical: a third holder was in prospect while this contract was being designed, because the mirror carrier shipping in this same release was headed for a copy set of the same paths. That carrier later resolved to reuse the single declaration instead, so the holder count did not move — and the assertion needed no edit to stay correct either way. Absorbing either resolution without a rewrite is the arity-general property being argued for here: it let the carrier's shape be settled on its own merits — reuse, which this record already prefers — instead of being forced by what the assertion happened to tolerate.
 
 **Discovery cannot key on the array identifier.** The two holders name their arrays differently, and their entries use different separators — a colon on one side, a literal tab on the other. An extractor keyed on an identifier returns zero paths from the side that does not use it, and a zero-path holder trivially agrees with everything. The failure mode of a naive shared extractor is therefore not an error but a **false parity**.
 
@@ -66,7 +66,7 @@ Four properties are part of the decision, not implementation detail:
 
 ## Consequences
 
-**Adding holder N+1 costs one marker pair inside the new holder and zero change to the asserting check.** That is the property the decision was chosen for, and it is what makes the concurrent third holder safe rather than a re-litigation.
+**Adding holder N+1 costs one marker pair inside the new holder and zero change to the asserting check.** That is the property the decision was chosen for, and the third holder anticipated in this release exercised it: the carrier resolved to reuse the single declaration rather than copy it, the holder count stayed where it was, and the assertion needed no change either way. Being indifferent to which way that resolved is the same property — it kept the carrier's shape a build decision rather than a re-litigation of this record.
 
 **A member add or removal becomes a checked multi-file edit.** Removing a member from one holder and not another now fails the assertion naming both the path and the lagging holder, on the pre-merge surface as well as after merge.
 
