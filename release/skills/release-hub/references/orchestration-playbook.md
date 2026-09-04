@@ -75,9 +75,16 @@ before routing continues. Neither alone is sufficient (`core/standards/hub-sessi
    is `core/disciplines/decision-discipline.md` § 3.1, which owns the merit test
    that decides whether the fork emits at all — routine template routing emits
    nothing, and that silence is correct.
-3. Set `--subject` to the decision's scope (`milestone:#N` / `issue:#N` / `sub-task:#N`)
-   and open `--payload` with the release-stable token `ms:#<milestone-number>;`
-   (see § 4a.2 Join-key note).
+3. Set `--subject` to the decision's scope (`milestone:#N` / `issue:#N` / `sub-task:#N`).
+   Open `--payload` with the release-stable token `ms:#<milestone-number>;` **unless the
+   target `(event_type, event_subtype)` carries a registered closed payload vocabulary**
+   in `pipeline-event-log-schema.md` § 11.8 / § 11.8.1. That registry is the single
+   authority for which pairs are closed; this step does NOT restate the set, so
+   registering a new vocabulary needs no edit here. On a closed-vocabulary pair the
+   payload carries the registered labels and nothing else — the emit is REJECTED if it
+   carries the token — and § 2a rung 1 (the `version` column carrying the milestone
+   slug, enforced at the writer) carries the release join for that row. On every other
+   pair the token stays MANDATORY (see § 4a.2 Join-key note).
 4. Render the "Events emitted this routing point" block in the Decision Briefing.
    Omission is a structural defect. **Read every row back from the log before that
    block renders** — the block reports what the log CONTAINS, not what this routing
@@ -230,21 +237,25 @@ from a provisional value (ADR-092), so it is neither unique across releases nor 
 within one — concurrent hubs rule-compute the same next-free slot, and a release that is
 re-versioned mid-pipeline emits rows under two or three different values.
 
-Therefore every hub-emitted row opens `--payload` with `ms:#<milestone-number>;`. The
-milestone number is immutable and unique, costs ~9 characters of the 300-character
-payload budget, contains no pipe, and needs no schema or validator change. Pass the
-milestone slug (not `vX.Y`) to `--version` for the same reason — the slug is bound
-pre-claim, the version is not.
+Therefore every hub-emitted row on an **open-vocabulary** pair opens `--payload` with
+`ms:#<milestone-number>;`. The milestone number is immutable and unique, costs ~9
+characters of the 300-character payload budget, and contains no pipe. It needs no schema
+change, but it is NOT validator-neutral: `append-pipeline-event.sh` REJECTS the token on
+a pair carrying a registered closed vocabulary (§ 11.8 / § 11.8.1), which is why step 3
+states the prefix conditionally. Pass the milestone slug (not `vX.Y`) to `--version` for
+the same reason — the slug is bound pre-claim, the version is not.
 
-**The key surface has landed, and the token is deliberately RETAINED.** The canonical
-release join key is now the `version` column carrying the milestone slug —
+**The key surface has landed, and the token is deliberately RETAINED where it is legal.**
+The canonical release join key is now the `version` column carrying the milestone slug —
 `pipeline-event-log-schema.md` § 2a (the read ladder + the release→rows inverse). This
-step already writes that key, so no re-point is needed. The `ms:#N` payload token is
-NOT dropped: it is the only release anchor on rows whose `subject` is `issue:#N` /
-`sub-task:#N` / `suite:…` (measured: 29 of 152 live rows carry no milestone subject),
-and it costs ~9 of the 300-character budget. Read it as a **redundant secondary
-anchor**, not a competing key surface — § 2a rung 1 is canonical, and any conflict
-resolves to the `version` column.
+step already writes that key, so no re-point is needed. On an open-vocabulary pair the
+`ms:#N` payload token is NOT dropped: it is the second release anchor on rows whose
+`subject` is `issue:#N` / `sub-task:#N` / `suite:…` (measured: 29 of 152 live rows carry
+no milestone subject), and it costs ~9 of the 300-character budget. Read it as a
+**redundant secondary anchor**, not a competing key surface — § 2a rung 1 is canonical,
+and any conflict resolves to the `version` column. On a closed-vocabulary pair the token
+is absent by rule and rung 1 alone carries the join; because the writer enforces
+slug-form on `--version`, a subject-less row on such a pair still resolves.
 
 **Why `version-claim` is CONDITIONAL, not MUST.** Stage 13 documents version-less
 releases, so a version claim is not total over completed releases; tagging it MUST would
