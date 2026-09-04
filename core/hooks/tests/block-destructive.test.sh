@@ -2407,16 +2407,20 @@ F2_M_REMOVED=$(( $(/usr/bin/wc -l < "${F2_HOOKS}/block-destructive.sh") - $(/usr
 F2_M_ARMS_SHIP="$(/usr/bin/grep -cE '^[[:space:]]*\*\) break ;;[[:space:]]*$' "${F2_HOOKS}/block-destructive.sh" || true)"
 F2_M_ARMS_MUT="$(/usr/bin/grep -cE '^[[:space:]]*\*\) break ;;[[:space:]]*$' "${F2_HOOKS}/block-destructive-mut.sh" || true)"
 F2_M_MARKERS_MUT="$(/usr/bin/grep -c 'M-FWALK' "${F2_HOOKS}/block-destructive-mut.sh" || true)"
-# THE EXPECTED DELTA IS 17, AND IT WAS 5 — the tripwire above did exactly its job at
-# the reconcile with the arity branch. The advance-past arm now also asks the arity
-# question of the token it steps over (see FWALK-PLUS-* below), so the sed's range —
-# `# M-FWALK-BODY` through the arm's `;;` — covers the domain test AND the arity
-# overlay. Both are what the mutant must revert, so the count is UPDATED rather than
-# the assertion loosened: a hard number is what makes a reshaped arm turn this red.
-if [ "$F2_M_REMOVED" = 17 ] \
+# THE EXPECTED DELTA IS 20. IT WAS 5, THEN 17 — the tripwire above has now done
+# exactly its job at two successive reconciles, which is the argument for keeping it
+# a hard number. 5 -> 17 when the advance-past arm took on the arity question (see
+# FWALK-PLUS-* below). 17 -> 20 when it took on the NOEXEC REVOCATION (see
+# NOEXEC-* below): the arm now also clears the parse-only flag for any token it steps
+# over, three more lines inside the same `# M-FWALK-BODY` .. `;;` range. All three
+# concerns — the domain test, the arity overlay and the revocation — are what the
+# mutant must revert, so the count is UPDATED rather than the assertion loosened.
+# Loosening it to a range or a `-gt` would retire the only thing that catches a
+# reshaped arm.
+if [ "$F2_M_REMOVED" = 20 ] \
   && [ "$F2_M_ARMS_MUT" = "$(( F2_M_ARMS_SHIP + 1 ))" ] \
   && [ "$F2_M_MARKERS_MUT" = 0 ]; then
-  /usr/bin/printf 'PASS: AC-D022-M1: fixture sed removed exactly the 17 body lines, dropped both M-FWALK markers, and restored one additional dash-anchored `*) break ;;` arm (%s -> %s)\n' \
+  /usr/bin/printf 'PASS: AC-D022-M1: fixture sed removed exactly the 20 body lines, dropped both M-FWALK markers, and restored one additional dash-anchored `*) break ;;` arm (%s -> %s)\n' \
     "$F2_M_ARMS_SHIP" "$F2_M_ARMS_MUT"
   PASS=$((PASS + 1))
 else
@@ -3496,6 +3500,128 @@ test_case "FWALK-PLUS-ctl-arity0: zsh +x -n <unlisted>.sh allowed (+x takes no a
 # place and the walk continues to the token the shell actually runs.
 test_case "FWALK-PLUS-r1: zsh +-emulate <allowed> <unlisted>.sh blocks (flag argument no longer hides the operand)" \
   "$(bash_payload "zsh +-emulate $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+echo ""
+echo "BLOCK-022 parse-only LAST-ONE-WINS (#6172 noexec latch)"
+echo "---"
+# SUBJECT: the parse-only flag was a ONE-WAY LATCH. It was set to 1 the first time an
+# inert-mode spelling appeared and never cleared, but every shell in the table treats
+# these options as LAST-ONE-WINS state. A later token that turns noexec back OFF left
+# the hook reporting parse-only on an invocation the interpreter EXECUTES.
+#
+# MEASURED ON THE REFERENCE HOST, with the marker ASSEMBLED AT RUNTIME so that `-v`
+# or `-x` echoing the source text cannot forge it (`p=OPER; q=AND_RAN; echo "${p}${q}"`
+# piped to <interp> <opts> /dev/stdin):
+#     bash -n +n            -> marker prints   (EXECUTES)
+#     bash -n +o noexec     -> marker prints   (EXECUTES)
+#     zsh  -n +-noexec      -> marker prints   (EXECUTES)
+#     bash -n               -> silent          CONTROL: the exemption is real
+#     bash +n -n            -> silent          CONTROL: order matters, last wins
+#     bash -n +n -n         -> silent          CONTROL: interleaving resolves to ON
+# The controls are what make this a defect rather than a boundary: the same tokens in
+# the other order are genuinely inert, so a blanket "any `+` cancels it" would be as
+# wrong as the latch, in the opposite direction.
+#
+# THE PREDICATE IS NOT A CLEARING TABLE, and that is the whole point of the fix. A
+# table of clear-spellings symmetric to the set-table fails OPEN on omission — one
+# unlisted way of writing "noexec off" and the parse-only claim stands while the
+# script runs. Instead: parse-only is GRANTED only by positive recognition and
+# REVOKED by every other token the walk steps over. A spelling never seen costs an
+# over-block, never an exemption.
+#
+# BOTH ORDERS ARE ARMED ON PURPOSE. Three prior sweeps enumerated `<candidate> -n`
+# and this class lives at `-n <candidate>`, which is how it survived them.
+
+# (1) THE CLASS — a clearing form AFTER the set form. These ALLOW on the pre-fix hook.
+test_case "NOEXEC-01: bash -n +n <unlisted>.sh blocks (+n turns noexec OFF; this EXECUTES)" \
+  "$(bash_payload "bash -n +n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-02: sh -n +n <unlisted>.sh blocks (the walk is shared by every interpreter)" \
+  "$(bash_payload "sh -n +n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-03: zsh -n +n <unlisted>.sh blocks" \
+  "$(bash_payload "zsh -n +n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# `+o` is in the ARITY table, so `noexec` is consumed as its argument and never
+# offered to the noexec table — the revocation must come from `+o` itself.
+test_case "NOEXEC-04: bash -n +o noexec <unlisted>.sh blocks (clearing form with a separate argument)" \
+  "$(bash_payload "bash -n +o noexec $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-05: zsh -n +-noexec <unlisted>.sh blocks (long `+` spelling of the same clear)" \
+  "$(bash_payload "zsh -n +-noexec $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# INTERLEAVING that resolves to OFF — an even number of flips ending on a clear.
+test_case "NOEXEC-06: bash -n +n -n +n <unlisted>.sh blocks (interleaved; final state is OFF)" \
+  "$(bash_payload "bash -n +n -n +n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (2) THE OTHER ORDER, AND INTERLEAVINGS THAT RESOLVE TO ON. These are the arms that
+# keep the fix HONEST: if the predicate were "any `+` token cancels parse-only" they
+# would over-block, and the exemption would be worth much less than the card claims.
+test_case "NOEXEC-07: bash +n -n <unlisted>.sh allowed (clear THEN set; final state is ON, shell is inert)" \
+  "$(bash_payload "bash +n -n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-08: bash -n +n -n <unlisted>.sh allowed (interleaved; final state is ON)" \
+  "$(bash_payload "bash -n +n -n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-09: zsh +-noexec -n <unlisted>.sh allowed (long clear THEN set)" \
+  "$(bash_payload "zsh +-noexec -n $PARSE_UNLISTED")" 0
+
+# (3) THE CARD'S VALUE — unchanged. If any of these turn red the fix has eaten the
+# feature it was protecting.
+test_case "NOEXEC-CTL-01: bash -n <unlisted>.sh STILL allowed (the operand ends the walk, it does not revoke)" \
+  "$(bash_payload "bash -n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-CTL-02: bash -n <allowed> still allowed" \
+  "$(bash_payload "bash -n $ARITY_ALLOWED")" 0
+test_case "NOEXEC-CTL-03: bash -n +n <allowed> allowed (revoked, but the allowlist still governs)" \
+  "$(bash_payload "bash -n +n $ARITY_ALLOWED")" 0
+
+# (4) DECLARED RESIDUAL — a genuinely inert invocation that this predicate over-blocks.
+# `bash -n -x <script>` IS inert (measured: silent), but `-x` is not a recognised
+# parse-only spelling, so it revokes and the segment is adjudicated. This is the
+# fail-SAFE direction and it is pinned so a future maintainer reads it as intended
+# rather than as a bug: the cost of having nothing to omit on the revoke side.
+test_case "NOEXEC-R1: bash -n -x <unlisted>.sh blocks (declared over-block; unrecognised token revokes)" \
+  "$(bash_payload "bash -n -x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- PAIRED MUTATION ARMS — prove the REVOCATION is what arms 01-06 measure ---
+# Same discipline as PARSE-14 / ARITY-17: a sibling mutant beside the real hook so
+# HOOK_DIR, every lib and the allowlist resolve identically, differing in exactly one
+# predicate. Here the two revocation sites are reverted to the pre-fix LATCH by
+# turning each `script_noexec=0` marked M-NOEXEC-REVOKE into a self-assignment. The
+# per-segment initialiser carries no marker and is deliberately untouched — reverting
+# THAT would break segment isolation and measure a different thing.
+NOEXEC_MUTANT="$(dirname "$HOOK")/block-destructive.NOEXEC-mutant.sh"
+/usr/bin/sed '/M-NOEXEC-REVOKE/s/script_noexec=0/script_noexec=$script_noexec/' \
+  "$HOOK" > "$NOEXEC_MUTANT"
+
+# (a) NON-INERTNESS GATE — a byte-identical mutant would make every arm below measure
+#     the shipped hook, and a green result would mean nothing.
+if /usr/bin/cmp -s "$HOOK" "$NOEXEC_MUTANT"; then
+  /usr/bin/printf 'FAIL: NOEXEC-M1a mutation is INERT — mutant is byte-identical to the shipped hook\n'
+  FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: NOEXEC-M1a mutation is live (mutant differs from the shipped hook)\n'
+  PASS=$((PASS + 1))
+fi
+
+# (b)/(c) The mutant reproduces the pre-fix ALLOW on each shape; the shipped hook
+#         blocks the identical payload in the same run. The PAIR is the evidence.
+sandbox_case "NOEXEC-M1b: mutant (latch restored) ALLOWS bash -n +n <unlisted>.sh" \
+  "$NOEXEC_MUTANT" "$(bash_payload "bash -n +n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-M1c: shipped hook BLOCKS the identical payload (`+n` pair closes)" \
+  "$(bash_payload "bash -n +n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+sandbox_case "NOEXEC-M1d: mutant (latch restored) ALLOWS bash -n +o noexec <unlisted>.sh" \
+  "$NOEXEC_MUTANT" "$(bash_payload "bash -n +o noexec $PARSE_UNLISTED")" 0
+test_case "NOEXEC-M1e: shipped hook BLOCKS the identical payload (`+o noexec` pair closes)" \
+  "$(bash_payload "bash -n +o noexec $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+sandbox_case "NOEXEC-M1f: mutant (latch restored) ALLOWS zsh -n +-noexec <unlisted>.sh" \
+  "$NOEXEC_MUTANT" "$(bash_payload "zsh -n +-noexec $PARSE_UNLISTED")" 0
+test_case "NOEXEC-M1g: shipped hook BLOCKS the identical payload (`+-noexec` pair closes)" \
+  "$(bash_payload "zsh -n +-noexec $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (h) THE MUTANT MUST STILL ALLOW THE CARD'S OWN PAYLOAD. This is what proves the
+#     mutation reverted the REVOCATION and not the exemption itself — otherwise
+#     NOEXEC-M1b..g would be green for the wrong reason (a mutant that blocks
+#     everything blocks these too).
+sandbox_case "NOEXEC-M1h: mutant STILL allows bash -n <unlisted>.sh (the mutation is the revoke, not the exemption)" \
+  "$NOEXEC_MUTANT" "$(bash_payload "bash -n $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$NOEXEC_MUTANT"
 
 # --- PAIRED MUTATION ARMS — prove the arity predicate is what these arms measure ---
 # Same harness discipline as PARSE-14: a sibling mutant so HOOK_DIR and therefore

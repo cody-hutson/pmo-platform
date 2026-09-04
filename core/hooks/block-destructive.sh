@@ -2565,8 +2565,12 @@ case "$TOOL_NAME" in
       # checked against the interpreter, not argued from this code.
       script_idx=$(( script_hidx + 1 ))
       script_cmode=0
-      # Did this segment declare a parse-only interpreter mode? Reset per segment
-      # beside script_cmode; read once, after the walk, together with it.
+      # Is the interpreter in a parse-only mode AS OF THE LAST OPTION TOKEN SEEN?
+      # Not "was a parse-only flag ever present" — the shells resolve this mode
+      # last-one-wins, so the walk carries the RUNNING state and each stepped-over
+      # token reassigns it (see the `-*)` arm). Reset per segment beside
+      # script_cmode; read once, after the walk, together with it. 0 is both the
+      # initial value and the fail-safe one: it exempts nothing.
       script_noexec=0
       while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
         script_ftok="${script_tokens[$script_idx]}"
@@ -2665,14 +2669,57 @@ case "$TOOL_NAME" in
             if [ "$script_verb" = "interp" ]; then script_cmode=1; fi
             script_idx=$(( script_idx + 1 )); break ;;
           -*)
-            # PARSE-ONLY DETECTION. Asked of the INTERPRETER, about the same
-            # token the walk is about to skip (raw when the raw view decided,
-            # normalized when it did not — script_ftok already carries whichever
-            # view won above). The skip itself is UNCHANGED: this records that an
-            # inert-mode flag was seen and adjudicates nothing on its own.
-            if [ "$script_verb" = "interp" ] \
-               && script_interp_noexec_flag "$script_interp_base" "$script_ftok"; then
-              script_noexec=1
+            # PARSE-ONLY DETECTION — AN ASSIGNMENT OF THE *CURRENT EFFECTIVE STATE*,
+            # NOT A LATCH. Asked of the INTERPRETER, about the same token the walk is
+            # about to skip (raw when the raw view decided, normalized when it did not
+            # — script_ftok already carries whichever view won above). The skip itself
+            # is UNCHANGED: this records the mode the interpreter is in and adjudicates
+            # nothing on its own.
+            #
+            # WHY AN ASSIGNMENT. `noexec` is a shell MODE, and every shell in the table
+            # resolves mode options LAST-ONE-WINS. An earlier form of this block set the
+            # flag to 1 on first sight and never cleared it, so a later token that turns
+            # noexec back OFF left the hook believing the invocation was parse-only while
+            # the interpreter EXECUTED the operand. Measured on the reference host with a
+            # runtime-assembled marker (so `-v`/`-x` echoing the source cannot forge it):
+            #   bash -n +n /dev/stdin        -> marker prints   (EXECUTES)
+            #   bash -n +o noexec /dev/stdin -> marker prints   (EXECUTES)
+            #   zsh  -n +-noexec /dev/stdin  -> marker prints   (EXECUTES)
+            #   bash -n /dev/stdin           -> silent          (control: really inert)
+            # Reading "was a set-spelling ever seen" answers a question the shell does
+            # not ask. Reading the LAST token to speak answers the one it does.
+            #
+            # THE REVOCATION IS DELIBERATELY NOT A CLEARING TABLE, and that asymmetry is
+            # the whole design. A table of clear-spellings symmetric to the set-table
+            # fails OPEN on omission: one unlisted way of writing "noexec off" leaves the
+            # parse-only claim standing and the segment is exempted while it runs — the
+            # identical failure direction `3f364a59` cited when it refused an arity table
+            # as the TERMINATION predicate. Here there is nothing to omit. Parse-only
+            # status is granted ONLY by positive recognition in script_interp_noexec_flag
+            # and is REVOKED BY EVERY OTHER TOKEN THE WALK STEPS OVER, whatever it is
+            # spelled. A spelling this file has never seen therefore cannot silently
+            # produce a parse-only verdict; it can only cost an over-block.
+            #
+            # FAIL-SAFE DIRECTION, PER BRANCH. Recognised set-spelling -> 1 (exempt) is
+            # the ONLY path to parse-only, and it is exactly today's measured row. Every
+            # other token -> 0, which does not allow anything: it routes the segment into
+            # the ordinary allowlist adjudication below. Unknown therefore means REFUSED,
+            # never EXEMPT.
+            #
+            # THE CONSUMED ARGUMENT OF AN ARITY OPTION NEEDS NO REVOCATION OF ITS OWN,
+            # and that is a property of the two tables rather than an assumption: every
+            # member of script_interp_optarg_flag (`--rcfile --init-file -O +O -o +o
+            # --emulate +-emulate`) is absent from script_interp_noexec_flag (`-n`), so
+            # the option ALWAYS revokes before its argument is consumed. `bash -n -o
+            # noexec <script>` is revoked by `-o`, not by `noexec`. Adding an
+            # argument-taking option to the noexec table would break that and is why the
+            # two tables are neighbours.
+            if [ "$script_verb" = "interp" ]; then
+              if script_interp_noexec_flag "$script_interp_base" "$script_ftok"; then
+                script_noexec=1
+              else
+                script_noexec=0   # M-NOEXEC-REVOKE (mutation target; pinned by NOEXEC-M1)
+              fi
             fi
             script_idx=$(( script_idx + 1 ))
             # OPTION ARITY — the one thing this walk did not know. It stepped over
@@ -2779,16 +2826,42 @@ case "$TOOL_NAME" in
             # main's arm verbatim is the fail-open it predicted. Arm FWALK-DOM-py is that
             # control.
             #
-            # NOEXEC IS DELIBERATELY *NOT* ASKED HERE, and the asymmetry is the point. The
-            # arity question can only REMOVE a false inertness claim or ADD an
-            # adjudication, so it moves ALLOW -> BLOCK. A noexec question here could
-            # CREATE an inertness claim from a `+` token and move BLOCK -> ALLOW, which is
-            # the direction this rule refuses on an unmeasured surface. `+n` is zsh for
-            # "turn noexec OFF" — the exact inversion — so a symmetric-looking widening
-            # would be wrong on its most obvious member.
+            # NOEXEC IS NEVER *GRANTED* HERE, AND IS ALWAYS *REVOKED* HERE. An earlier
+            # form of this note said noexec is "deliberately not asked here" and stopped
+            # there; that was right about the direction it refused and silent about the
+            # one it owed. Both halves follow from the same observation it already makes.
+            #
+            #   GRANT — still refused, unchanged. A noexec question that could answer YES
+            #   on a `+` token would CREATE an inertness claim and move BLOCK -> ALLOW on
+            #   an unmeasured surface. `+n` is "turn noexec OFF", the exact inversion, so
+            #   a symmetric widening would be wrong on its most obvious member.
+            #
+            #   REVOKE — owed, and its absence was the defect. That same sentence says a
+            #   `+` token can turn noexec OFF; a walk that steps over one while still
+            #   holding a parse-only claim from an earlier `-n` reports inert on an
+            #   invocation the shell RUNS. `bash -n +n <script>` and `zsh -n +-noexec
+            #   <script>` reach ALLOW that way, and the whole `+` surface arrives only at
+            #   this arm. Revoking is the ALLOW -> BLOCK direction this arm already
+            #   accepts for arity, so it is the same trade, not a new one.
+            #
+            # THE REVOKE IS UNCONDITIONAL BY CONSTRUCTION — no test, no table, nothing to
+            # omit. Anything the walk advances past here is, by this arm's own reasoning,
+            # an option or an option's argument rather than the operand; none of them can
+            # be a recognised parse-only spelling, because those are `-`-leading and are
+            # answered by the `-*)` arm above. So the honest state after stepping over one
+            # is "not known to be parse-only", which is 0.
+            #
+            # IT SITS BELOW BOTH BREAKS ON PURPOSE. A token that ENDS the walk — an
+            # unresolvable token, or the domain-claimed operand — is not stepped over and
+            # must not revoke, or `bash -n <script>.sh` would revoke on the script itself
+            # and the card's entire value would be lost. Arms PARSE-07 and NOEXEC-CTL-01
+            # pin that boundary.
             normalize_script_token "${script_tokens[$script_idx]}"   # M-FWALK-BODY
             if [ "$script_norm_ok" -eq 0 ]; then break; fi
             if script_operand_implicated "$script_interp_domain"; then break; fi
+            if [ "$script_verb" = "interp" ]; then
+              script_noexec=0   # M-NOEXEC-REVOKE (mutation target; pinned by NOEXEC-M1)
+            fi
             # The NORMALIZED view is what the arity table is asked about, because the
             # raw view is what got us here: a `+`-leading token never reaches the flag
             # normalization above, so `'+-emulate'` (quoted) would otherwise miss the
