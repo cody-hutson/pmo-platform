@@ -2,7 +2,7 @@
 title: Release Plan — kit-content-and-defaults (the pack configurable/fixed boundary, content provenance, the Scrum and Kanban kit content, and a pack's declared default)
 type: release-plan
 plan_type: release
-status: IN-PROGRESS
+status: ACTIVE
 release: versioned (bump-class minor; concrete number binds at the Stage-12 atomic claim)
 milestone: kit-content-and-defaults
 release_class: cross-cutting
