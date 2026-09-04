@@ -299,12 +299,19 @@ fi
 #     floored. This is the criterion's own wording: adding a path to the
 #     authority changes the behaviour with no edit to the check.
 python3 - "$AUTHORITY" "$TMP/authority-added.sh" <<'PYEOF'
-import sys
+import sys, re
 src, dst = sys.argv[1], sys.argv[2]
 t = open(src, encoding='utf-8').read()
-needle = '        */CLAUDE.md|*/OPERATIONS.md|*/RELEASE_PROTOCOL.md)'
-assert t.count(needle) == 1, f'BROKEN MUTATION ANCHOR: matched {t.count(needle)} times, want 1'
-out = t.replace(needle, '        */CLAUDE.md|*/OPERATIONS.md|*/RELEASE_PROTOCOL.md|*/stage-04-planning.md)')
+# Anchor STRUCTURALLY on the Tier-0 case arm, never on a byte-literal member
+# list. A literal anchor breaks on the exact maintenance event this suite
+# exists to track -- adding a path to the authority -- and reports it as
+# BROKEN MUTATION, which reads as though the maintainer's change is at fault.
+# Match the arm that names CLAUDE.md and append to whatever it holds today.
+arms = re.findall(r'(?m)^([ \t]*)(\*/CLAUDE\.md\|[^\n()]*)\)$', t)
+assert len(arms) == 1, f'BROKEN MUTATION ANCHOR: matched {len(arms)} Tier-0 case arms naming */CLAUDE.md, want 1'
+m = re.search(r'(?m)^([ \t]*)(\*/CLAUDE\.md\|[^\n()]*)\)$', t)
+out = t[:m.start()] + m.group(1) + m.group(2) + '|*/stage-04-planning.md)' + t[m.end():]
+assert out != t, 'BROKEN MUTATION: the structural rewrite produced no change'
 open(dst, 'w', encoding='utf-8').write(out)
 PYEOF
 if [ $? -ne 0 ] || cmp -s "$AUTHORITY" "$TMP/authority-added.sh"; then
@@ -356,11 +363,15 @@ python3 - "$SPEC" "$TMP/spec-bypass.md" <<'PYEOF'
 import sys
 src, dst = sys.argv[1], sys.argv[2]
 t = open(src, encoding='utf-8').read()
-needle = '| `tier-0-floored` | matches the Tier-0 union from step 1 | `operator-executed` |'
-assert t.count(needle) == 1, f'BROKEN MUTATION ANCHOR: matched {t.count(needle)} times, want 1'
-out = t.replace(
-    needle,
-    '| `tier-0-floored` | matches the Tier-0 union from step 1 | `CLAUDE_HOOK_BYPASS=1` |')
+# Anchor on the ROW, not on its predicate wording: the middle cell is prose
+# and is edited by ordinary spec maintenance, which a byte-literal needle
+# would report as a broken mutation rather than as the edit it is.
+import re
+rows = re.findall(r'(?m)^\| `tier-0-floored` \|([^\n|]*)\| `operator-executed` \|$', t)
+assert len(rows) == 1, f'BROKEN MUTATION ANCHOR: matched {len(rows)} tier-0-floored rows, want 1'
+out = re.sub(r'(?m)^(\| `tier-0-floored` \|[^\n|]*\| )`operator-executed`( \|)$',
+             r'\1`CLAUDE_HOOK_BYPASS=1`\2', t)
+assert out != t, 'BROKEN MUTATION: the structural rewrite produced no change'
 open(dst, 'w', encoding='utf-8').write(out)
 PYEOF
 if [ $? -ne 0 ] || cmp -s "$SPEC" "$TMP/spec-bypass.md"; then
