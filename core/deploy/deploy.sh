@@ -4711,6 +4711,141 @@ mirror_pair_set() {
   printf '%s\n' "${_mps_rows[@]}"
 }
 
+# ─── _c9_undeclared_scan — the mirror's UNDECLARED-ENTRY enumeration (F-01) ────
+#
+# Pure emitter. Echoes exactly ONE verdict line for a mirror directory. Shared by
+# Check 9 and `--self-test` group UE, so there is one engine and no second scanner
+# to drift — the same single-engine discipline (CIAC-2) the required-subset runner
+# is built on.
+#
+# WHY IT EXISTS. Check 9 verifies that every DECLARED pair matches. Nothing verified
+# that the mirror contains ONLY declared members. Dev Testing planted an undeclared
+# file AND an undeclared subdirectory in the deployed mirror; Check 9 reported
+# 9 x IN-SYNC and zero mentions across an 829-line --check, against a sensitivity
+# control that was firing. A per-pair check cannot see an entry that is in no pair.
+#
+# THIS IS DELIBERATE SCOPE GROWTH, and it is bounded. No acceptance criterion
+# required it; the operator authorised it as growth, with that stated. So it
+# enumerates and does nothing else: it does NOT touch the declared-pair comparison
+# that already works, and it introduces NO new --check verdict state or exit-code
+# path. The four tokens below are internal to this emitter and its single caller
+# maps them onto emitters that already exist.
+#
+# AN UNDECLARED ENTRY IS A WARNING, NOT A FINDING — a deliberate call, stated. The
+# mirror is an operator-instance directory that the platform writes into but does
+# not own exclusively, so this predicate CANNOT distinguish "a stale member from a
+# retired declaration" from "a file the operator put here on purpose". That is
+# precisely flag_advisory_only's founding criterion, so the caller routes every hit
+# through it: no mode case, no enforce branch, no ISSUES increment, and therefore no
+# way for an operator's own unrelated file to block their --check when Check 9
+# graduates to enforce. A false-positive-prone gate on a real workspace would be
+# worse than the gap it closes.
+#
+# The signal is worth having even so, and the reason is specific: the carrier COPIES
+# and never deletes. When a rule leaves mirror_pair_set() — two did, reclassified
+# REFERENCE under the admission standard — every already-deployed workspace keeps
+# its mirror file forever. The byte ceiling the release enforces is then met in the
+# declaration and missed on the machine, which is the one thing a source-side check
+# structurally cannot see.
+#
+# VACUITY GUARD. The state that would make this pass falsely is an ABSENT mirror
+# reading as "no undeclared entries". It cannot: absence returns NOT-RUN, whose text
+# says nothing was enumerated, and no CLEAN line is reachable without a directory to
+# scan. Every non-absent verdict carries the scanned DENOMINATOR, so a zero is never
+# reported without the population it was measured over.
+#
+#   NOT-RUN <detail>     — no directory; NOTHING enumerated (never a clean result)
+#   CLEAN <detail>       — every entry classified, zero undeclared
+#   UNDECLARED <detail>  — one or more entries in no pair, named
+#   RESIDUAL <detail>    — the buckets do not sum to the scan; the classifier is wrong
+_c9_undeclared_scan() {
+  local _dir="$1"
+
+  if [[ ! -d "$_dir" ]]; then
+    printf 'NOT-RUN the mirror directory %s is absent, so NOTHING was enumerated — zero undeclared entries have NOT been asserted (the directory-level verdict owns this state)\n' "$_dir"
+    return 0
+  fi
+
+  # Declared basenames, read from the SAME single declaration Check 9 and the
+  # carrier read. Field 2 is the dest; "${_p##*:}" would return the CLASS token.
+  local -a _decl=()
+  local _p _r _d
+  while IFS= read -r _p; do
+    _r="${_p#*:}"
+    _d="${_r%:*}"
+    _decl+=("$(basename "$_d")")
+  done < <(mirror_pair_set)
+
+  local _seen=0 _present=0 _generated=0 _undeclared=0
+  local -a _names=()
+  local _entry _base _hit _known
+
+  # find -mindepth 1 -maxdepth 1 lists dotfiles and returns a subdirectory as ONE
+  # entry rather than recursing into it — a planted subdirectory is a single
+  # undeclared entry, which is what it is. Sorted so the verdict is deterministic.
+  while IFS= read -r _entry; do
+    [[ -n "$_entry" ]] || continue
+    _seen=$((_seen + 1))
+    _base="$(basename "$_entry")"
+
+    # (1) THE CARRIER'S OWN OUTPUT. _write_operations_rules_index writes this file
+    # into the mirror on every deploy and it is deliberately NOT a declared pair.
+    # A scan that did not exclude it by name would report a finding on day one,
+    # against a mirror the platform had just produced correctly. This exclusion is
+    # the reason to read a population's contract before inferring a gap from it.
+    if [[ "$_base" == "_operations-index.md" && -f "$_entry" ]]; then
+      _generated=$((_generated + 1))
+      continue
+    fi
+
+    # (2) A declared member, present as a regular file.
+    _known=false
+    for _hit in ${_decl[@]+"${_decl[@]}"}; do
+      if [[ "$_base" == "$_hit" && -f "$_entry" ]]; then
+        _known=true
+        break
+      fi
+    done
+    if [[ "$_known" == "true" ]]; then
+      _present=$((_present + 1))
+      continue
+    fi
+
+    # (3) Everything else. A DIRECTORY is always undeclared — every pair is a file,
+    # so a directory carrying a declared basename is still not that pair.
+    _undeclared=$((_undeclared + 1))
+    if [[ -d "$_entry" ]]; then
+      _names+=("$_base/ (directory)")
+    else
+      _names+=("$_base")
+    fi
+  done < <(/usr/bin/find "$_dir" -mindepth 1 -maxdepth 1 2>/dev/null | /usr/bin/sort)
+
+  # RESIDUAL BUCKET. Every scanned entry must land in exactly one class. If the
+  # three buckets do not sum to the scan, the classifier is wrong and a CLEAN
+  # verdict would be a false green — the same fail-loud discipline tsv_residual_rows
+  # applies to a primitive's verdict column.
+  if [[ $((_present + _generated + _undeclared)) -ne "$_seen" ]]; then
+    printf 'RESIDUAL classifier identity broke in %s: %s scanned but %s declared-present + %s carrier-generated + %s undeclared do not sum to it — this is a defect in the scan, never a clean result\n' \
+      "$_dir" "$_seen" "$_present" "$_generated" "$_undeclared"
+    return 0
+  fi
+
+  if [[ $_undeclared -gt 0 ]]; then
+    local _joined="" _n
+    for _n in ${_names[@]+"${_names[@]}"}; do
+      [[ -z "$_joined" ]] && _joined="$_n" || _joined="$_joined, $_n"
+    done
+    printf 'UNDECLARED %s entr(ies) in %s are in no mirror_pair_set() pair: %s [scanned %s: %s declared-present, %s carrier-generated]. A stale member left by a RETIRED declaration still costs its bytes in every session on this machine — the carrier copies and never deletes, so removing a rule from the declaration does not remove it from an already-deployed workspace. Delete it, or leave it if it is yours: this arm never gates.\n' \
+      "$_undeclared" "$_dir" "$_joined" "$_seen" "$_present" "$_generated"
+    return 0
+  fi
+
+  printf 'CLEAN %s entr(ies) scanned in %s: %s declared-present, %s carrier-generated, 0 undeclared\n' \
+    "$_seen" "$_dir" "$_present" "$_generated"
+  return 0
+}
+
 _write_operations_rules_index() {
   # Regenerate the deployed operations index from the conduct-class rows of the
   # SINGLE declaration. Rewritten in full on every carrier run, so it cannot drift
@@ -6841,6 +6976,40 @@ cmd_check() {
     # marker-registered array above. A path that is mirrored must be an entry there —
     # never a directory-existence conditional, a glob, or any other implicit form that
     # the parity check cannot read.
+
+    # UNDECLARED-ENTRY ENUMERATION (F-01) — the mechanical assertion of the invariant
+    # the tombstone above states in prose. Until now that invariant was asserted only
+    # in a comment: every arm of this check is per-PAIR, so an entry belonging to no
+    # pair was invisible to all of them. The verdict body is _c9_undeclared_scan (one
+    # engine, also driven by --self-test group UE); this caller only maps its token
+    # onto emitters that already exist. Nothing here can move the exit code — see the
+    # emitter's own header for why a warning, not a finding, is the right posture on
+    # an operator-instance directory.
+    local c9_scan c9_scan_tok
+    c9_scan="$(_c9_undeclared_scan "$DEPLOY_ROOT/.claude/rules")"
+    c9_scan_tok="${c9_scan%% *}"
+    case "$c9_scan_tok" in
+      CLEAN)
+        log "  OK:    undeclared-entry scan — ${c9_scan#CLEAN }"
+        ;;
+      NOT-RUN)
+        # NOT a clean line, deliberately. An absent mirror must never render as
+        # "0 undeclared entries"; it renders as "nothing was enumerated".
+        log "  NOT-EVAL: undeclared-entry scan — ${c9_scan#NOT-RUN }"
+        ;;
+      UNDECLARED)
+        flag_advisory_only "mirror-undeclared-entry" "${c9_scan#UNDECLARED }"
+        ;;
+      RESIDUAL)
+        flag_advisory_only "mirror-undeclared-entry" "${c9_scan#RESIDUAL }"
+        ;;
+      *)
+        # An unreadable verdict is a defect in the verdict body, never an absence of
+        # findings — the same fail-loud contract the 77/78 callers carry.
+        flag_advisory_only "mirror-undeclared-entry" \
+          "unrecognised scan token [$c9_scan_tok] from _c9_undeclared_scan — an unreadable verdict is a defect, not a clean result: $c9_scan"
+        ;;
+    esac
 
     # OPERATIONS.md SSOT + pointer duplicate-home check (per #2213 — replaces the
     # retired byte-identical mirror-pair enrollment above).
@@ -16805,6 +16974,115 @@ EOF
 
   /bin/rm -rf "$_rit"
 
+  # ─── assertion group UE (mirror undeclared-entry enumeration, F-01) ──────────
+  #
+  # Drives the REAL _c9_undeclared_scan — the body Check 9 calls — against sandbox
+  # mirrors, with mirror_pair_set overridden inside a subshell so the override cannot
+  # leak. Two arms are load-bearing and both are proven failable by mutation: UE-1/UE-2
+  # (an undeclared entry IS detected) and UE-5 (an ABSENT mirror does not read as
+  # "no undeclared entries"), which is this addition's own vacuity guard.
+  echo "self-test: starting assertion group UE (mirror undeclared-entry enumeration, F-01)" >&2
+
+  _ue_scan() {
+    # $1 = sandbox mirror dir · $2 = a `rows` pair-set file. Echoes the verdict line.
+    local _m="$1" _rows="$2"
+    (
+      mirror_pair_set() { /bin/cat "$_rows"; }
+      _c9_undeclared_scan "$_m"
+    )
+  }
+
+  _ue_assert_tok() {
+    # $1 = arm id · $2 = expected leading token · $3 = the verdict line
+    local _got="${3%% *}"
+    if [[ "$_got" != "$2" ]]; then
+      echo "FAIL: $1 expected token $2, got $_got — verdict was: $3"
+      failures=$((failures+1))
+    fi
+  }
+
+  _ue_assert_has() {
+    # $1 = arm id · $2 = substring that MUST appear · $3 = verdict line
+    if [[ "$3" != *"$2"* ]]; then
+      echo "FAIL: $1 verdict must name [$2] but did not: $3"
+      failures=$((failures+1))
+    fi
+  }
+
+  _ue_refute_has() {
+    # $1 = arm id · $2 = substring that MUST NOT appear · $3 = verdict line
+    if [[ "$3" == *"$2"* ]]; then
+      echo "FAIL: $1 verdict must NOT contain [$2] but did: $3"
+      failures=$((failures+1))
+    fi
+  }
+
+  local _uet; _uet="$(/usr/bin/mktemp -d -t mirrorscan-selftest.XXXXXX)"
+  /bin/mkdir -p "$_uet/mirror"
+  /bin/cat > "$_uet/rows" <<EOF
+core/rules/alpha.md:$_uet/mirror/alpha.md:conduct
+core/rules/beta.md:$_uet/mirror/beta.md:engineering
+EOF
+  # The mirror as the carrier would leave it: both declared members plus the
+  # generated index the carrier itself writes.
+  printf 'a\n' > "$_uet/mirror/alpha.md"
+  printf 'b\n' > "$_uet/mirror/beta.md"
+  printf 'idx\n' > "$_uet/mirror/_operations-index.md"
+
+  # UE-4 — THE FALSE-POSITIVE GUARD, asserted FIRST because it is the state that
+  # exists on every correctly-deployed workspace. The carrier's own generated
+  # _operations-index.md is in no pair; a scan that did not exclude it by name would
+  # report a finding on day one against a mirror the platform just produced.
+  local _ue_out; _ue_out="$(_ue_scan "$_uet/mirror" "$_uet/rows")"
+  _ue_assert_tok  "UE-4 correctly-deployed mirror is CLEAN" CLEAN "$_ue_out"
+  _ue_assert_has  "UE-4 denominator is reported" "3 entr(ies) scanned" "$_ue_out"
+  _ue_assert_has  "UE-4 generated file is classified, not flagged" "1 carrier-generated" "$_ue_out"
+  _ue_refute_has  "UE-4 generated file never named as undeclared" "_operations-index.md are in no" "$_ue_out"
+
+  # UE-1 — POSITIVE, undeclared FILE (the planted-file half of the Dev Testing case).
+  printf 'x\n' > "$_uet/mirror/planted-stale.md"
+  _ue_out="$(_ue_scan "$_uet/mirror" "$_uet/rows")"
+  _ue_assert_tok "UE-1 undeclared file detected" UNDECLARED "$_ue_out"
+  _ue_assert_has "UE-1 names the entry" "planted-stale.md" "$_ue_out"
+
+  # UE-2 — POSITIVE, undeclared SUBDIRECTORY (the other half; Check 9 saw neither).
+  /bin/mkdir -p "$_uet/mirror/planted-dir"
+  printf 'y\n' > "$_uet/mirror/planted-dir/inner.md"
+  _ue_out="$(_ue_scan "$_uet/mirror" "$_uet/rows")"
+  _ue_assert_tok "UE-2 undeclared subdirectory detected" UNDECLARED "$_ue_out"
+  _ue_assert_has "UE-2 names it AS a directory" "planted-dir/ (directory)" "$_ue_out"
+  # UE-2b — the subdirectory counts as ONE entry, not as its contents: find is
+  # depth-capped, so a planted tree cannot inflate the count.
+  _ue_assert_has "UE-2b subdirectory counted once" "2 entr(ies) in" "$_ue_out"
+
+  # UE-3 — a DECLARED basename present as a DIRECTORY is still undeclared: every
+  # pair is a file, so name-matching alone must not launder a directory into
+  # declared-present.
+  /bin/rm -rf "$_uet/mirror/planted-stale.md" "$_uet/mirror/planted-dir"
+  /bin/rm -f "$_uet/mirror/alpha.md"
+  /bin/mkdir -p "$_uet/mirror/alpha.md"
+  _ue_out="$(_ue_scan "$_uet/mirror" "$_uet/rows")"
+  _ue_assert_tok "UE-3 declared basename as a directory is undeclared" UNDECLARED "$_ue_out"
+  _ue_assert_has "UE-3 names it as a directory" "alpha.md/ (directory)" "$_ue_out"
+  /bin/rm -rf "$_uet/mirror/alpha.md"
+  printf 'a\n' > "$_uet/mirror/alpha.md"
+
+  # UE-5 — THE VACUITY GUARD. An ABSENT mirror must NOT read as "no undeclared
+  # entries". It must return NOT-RUN, must not return CLEAN, and must not carry the
+  # "0 undeclared" phrasing a reader would take as a clean result.
+  _ue_out="$(_ue_scan "$_uet/no-such-mirror" "$_uet/rows")"
+  _ue_assert_tok "UE-5 absent mirror returns NOT-RUN" "NOT-RUN" "$_ue_out"
+  _ue_refute_has "UE-5 absent mirror never claims zero undeclared" "0 undeclared" "$_ue_out"
+  _ue_assert_has "UE-5 says nothing was enumerated" "NOTHING was enumerated" "$_ue_out"
+
+  # UE-6 — RESIDUAL: the bucket identity is asserted, not assumed. Every scanned
+  # entry lands in exactly one class, so a CLEAN verdict cannot be reached while an
+  # entry went unclassified.
+  _ue_out="$(_ue_scan "$_uet/mirror" "$_uet/rows")"
+  _ue_refute_has "UE-6 no residual on a well-formed mirror" "RESIDUAL" "$_ue_out"
+
+  /bin/rm -rf "$_uet"
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failure(s))" >&2
     return 1
@@ -16829,6 +17107,8 @@ EOF
   echo "  deployment-status emitter validated (#4215, group DS):" >&2
   echo "    DS-1 well-formed slug OK / DS-2 empty + pipe-bearing + whitespace-bearing slugs rejected / DS-3 outcome derivation incl. DS-3c the degraded-but-not-in-FAILURES union term (FAILURES is the exit-code oracle, not the deploy-health oracle) / DS-4 SILENCE DEFAULT — absent --release emits ZERO rows, DS-4b malformed slug likewise / DS-5 CONTROL — the same call WITH a slug emits exactly 1 row carrying the fixed 10-column contract / DS-6 escalated row survives with result:FAIL + DS-6c payload pipe-forging guard + DS-6d 300-char bound / DS-7 THE OBSERVING STEP — targets-with-no-flag WARNs, zero-targets does NOT (honest no-op), release-stamped does NOT / DS-8 exactly 4 emitting subtypes (deploy-rules-mirror joined when its producer shipped), the one remaining producer-less subtype never emitted, with DS-8c a firing control arm and DS-8d a discrimination arm proving the narrowed detector still separates the two / DS-9 a failing event writer must not fail the deploy / DS-10 the CANONICAL writer accepts all four subtypes via --dry-run, and rejects an out-of-enum subtype and a version-shaped release key (two control arms). Every write in this group routes through the DS_WRITER stub seam — no assertion can append to the real append-only log." >&2
   echo "  G1-03 evidence shapes validated (#4923, group EV):" >&2
+  echo "  mirror undeclared-entry enumeration validated (F-01, group UE):" >&2
+  echo "    UE-4 FALSE-POSITIVE GUARD asserted first — the correctly-deployed mirror (declared members + the carrier's own generated _operations-index.md, which is in NO pair) is CLEAN, reports its denominator, and never names the generated file as undeclared / UE-1 a planted undeclared FILE is detected and named / UE-2 a planted undeclared SUBDIRECTORY is detected and named AS a directory, with UE-2b proving it counts once rather than by its contents / UE-3 a declared basename present as a DIRECTORY is still undeclared, so name-matching alone cannot launder it into declared-present / UE-5 THE VACUITY GUARD — an ABSENT mirror returns NOT-RUN, never CLEAN, and never carries the phrase '0 undeclared'; the state that would make this addition pass falsely is the one arm that cannot / UE-6 the residual identity holds, so a CLEAN verdict is unreachable while an entry went unclassified. Every arm drives the real _c9_undeclared_scan that Check 9 calls, through a subshell-scoped mirror_pair_set override." >&2
   echo "  operations-index purpose rendering validated (F-05, group RI):" >&2
   echo "    RI-1 a multi-sentence purpose survives whole — the arm that fires if the retired first-period truncation (cut -d . -f1) returns / RI-1b DISCRIMINATION, the truncated line must be absent as a WHOLE LINE (substring refutation would fire on the correct output, since the truncation is a strict prefix of it) / RI-2 NO-REGRESSION CONTROL — the one-sentence shape every live conduct member has renders byte-identically to the pre-fix body, so the fix is proved not to have moved live output / RI-3 SPECIFICITY — a source carrying no purpose: key renders the bare form with no em-dash, so the set is not matching anything / RI-4 the conduct/engineering class filter still excludes engineering rows / RI-5 trailing whitespace is stripped so exactly one period closes the line. Every arm drives the real _write_operations_rules_index the carrier calls, through a subshell-scoped mirror_pair_set override — no second renderer to drift." >&2
   echo "    EV-1 six-marker probe record PASSes with zero bracket tokens (the shape this card admits) / EV-2 the >=2 BOUNDARY holds at exactly two markers (turns red if the count is raised) / EV-3 no Evidence section FAILs / EV-4 DISCRIMINATION — all six marker words as running prose still FAIL, so prose ABOUT evidence is not evidence / EV-5 an evidence-free Evidence section FAILs (the falsification arm: the widened predicate is not a never-FAIL check) / EV-6 shape (a) bracket-only still PASSes (regression) / EV-7 a lone label-position marker FAILs, killing the >=1 mutant / EV-8 the SAME token as EV-6 placed OUTSIDE the Evidence section FAILs, killing the whole-body mutant. Every arm drives _g1_03_evaluate, the same function Check 22 calls — no parallel reimplementation to drift." >&2
