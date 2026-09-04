@@ -789,6 +789,37 @@ Its blast radius is bounded by measurement rather than by assertion: **0 of the 
 
 **Verdict: additive in effect on shipped packs, not purely additive in grammar.** Because every shipped pack is unaffected on all three axes, **the meta-schema version stays v1**; no shim. A pack that *adopts* the new fields takes a `pack_version` minor bump per §6.1 (the data-level additive rule), independent of the meta-schema version.
 
+### 6.2d The content-provenance extension is additive in effect — meta-schema version stays v1 ({{ADR:kit-content-provenance-key}})
+
+The content-provenance layer (§1.2 the amended `criteria` check tuple and the FieldDecl declared superset, §1.2.1 the `source` rule at two altitudes with its no-inheritance and `role`-total clauses, §3.1 / §3.2 the `x-pmo-content-source[]` projection) extends the meta-schema **without** a version bump — the fourth such extension, after §6.2a, §6.2b and §6.2c. It follows §6.2c's three-axis form, and **diverges from it on the axis where the evidence diverges**.
+
+**Axis 1 — the optional ADDs: N/A.** `source` is REQUIRED at the entry altitude and conditionally required at the block altitude. There is no optional-add limb to analyse, so the [ADR-039](../ADRs/ADR-039-declarative-gate-conditions.md) optional-`condition` symmetry that carried §6.2a, §6.2b and §6.2c's first axis is unavailable here and is not borrowed.
+
+**Axis 2 — the relaxation: N/A.** Nothing is widened. No value domain grows, no requiredness is dropped, and no previously-illegal shape becomes legal.
+
+**Axis 3 — the RESTRICTION, and this is the first of the four extensions whose restriction meets a NON-EMPTY population.** §6.2a, §6.2b and §6.2c could each write that every shipped pack is byte-identical after the change. **This one cannot, and does not.** Measured across the corpus's 15 `pack.toml` at the commit that introduces the rule, by a structural block walk rather than a token count:
+
+| Limb | Site class | State | Count | Requirement fires? |
+|---|---|---|---|---|
+| Entry | `criteria.checks[]` entries | any | **0** | — none exists anywhere in the corpus |
+| Entry | `fields.kind_specific[]` FieldDecls | in a non-empty array | **1** | **yes** |
+| Block | `[kinds.criteria.*]` | `checks` present and empty | **12** | **yes** |
+| Block | `[kinds.criteria.*]` | `checks` absent | 45 | no |
+| Block | `[kinds.criteria.*]` | `checks` present and non-empty | 0 | — |
+| Block | `[kinds.fields]` | `kind_specific` present and empty | **3** | **yes** |
+| Block | `[kinds.fields]` | `kind_specific` absent | 15 | no |
+| | | **affected declarations** | **16** | |
+
+Both limbs reconcile against the structure they count — criteria `12 + 0 + 45 = 57 = 19 kinds × 3`, fields `3 + 1 + 15 = 19 = one table per kind` — which is the check that distinguishes a measured population from a plausible one. Every affected declaration sits in the two shipped archetype manifests, `core/packs/scrum/pack.toml` (12) and `core/packs/kanban/pack.toml` (4); the base pack and the fixture packs declare no criteria entries and no field arrays that fire the requirement.
+
+**The verdict therefore rests on NON-ENFORCEMENT, not on byte-identity.** The token `checks` occurs **zero** times in the pack validator, against live controls on the same reader over the same file (`criteria_version`, `kind_specific`, `lifecycle_behavior`, `kind_id`, `criteria` all non-zero) and a zero specificity arm — so **no runner exists that could reject any of the 16**. §6.2c's *"every shipped pack is byte-identical after this change"* sentence is not available here and is not transferred; what holds instead is that a pack which has not yet adopted `source` validates exactly as it did before, because nothing reads the key.
+
+**The population does not drain to zero when this release's content lands, and that is by design rather than by omission.** A subset of the affected blocks ship as **reasoned empty sets carrying a permanent block-level `source`** — a criteria block deliberately left unpopulated because the practice basis says no check belongs there yet, and a `[kinds.fields]` block for a kind that genuinely has no fields beyond Core 7. One of them is held empty on purpose so that a separate, tracked piece of work retains its scope. Following §6.2c's own recorded lesson — *a literal total went stale on the day it was authored while an enumeration could not* — the permanent residual is stated as a class rather than as a count: **an empty set that has been reasoned about is a first-class outcome of this grammar, not an unfinished one**, so a future version analysis must not assume the block-altitude population trends to zero.
+
+**The residual is named rather than dismissed, and it differs from §6.2c's in kind.** §6.2c's restriction met a live rule and a zero population; this one meets **no rule** and a **non-zero** population. Type-pack *instances* are K4 operator-local config by design (§0), so the tracked corpus is not the whole population — and here the usual *"no operator-local instance is rejected until that deployment runs the check"* clause is stronger than it needs to be, because there is no check to run. Stated plainly: this extension's backward compatibility rests entirely on the absence of an enforcer, and **when the content-completeness lint ships, every declaration that has not adopted `source` becomes a finding** — 16 of them in this corpus if none had adopted. That is the intended behaviour and it is why the shipped manifests are remediated in the same release that introduces the rule.
+
+**Verdict: additive in effect, not purely additive in grammar. The meta-schema version stays v1**; no shim. A pack that *adopts* `source` takes a `pack_version` minor bump per §6.1 (the data-level additive rule), independent of the meta-schema version. The architectural decision this records is {{ADR:kit-content-provenance-key}}, a grammar-altitude sibling extension of [ADR-018](../ADRs/ADR-018-work-item-type-layer.md) in the same lineage as ADR-039, ADR-070, ADR-077 and ADR-180.
+
 ### 6.3 Per-kind criteria versioning (the grandfather core)
 
 Each kind's `criteria.{readiness,done,gate}.criteria_version` is **independent of `pack_version`**. An in-flight item records the `criteria_version` it was judged against when it passes a DoR/DoD/gate check. When a kind's criteria are revised, **already-judged items keep their judged version** (grandfathered); only items entering the gate *after* the revision use the new version. (Carrying the judged version as a small stamp on the `Work Item` instance is the natural home; whether that stamp is a first-class entity field is an entity-layer consideration, flagged not required by this grammar.) This is the version-controlled-criteria remediation for criteria drift, made concrete.
