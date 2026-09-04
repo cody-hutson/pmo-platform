@@ -622,17 +622,88 @@ script_exempt_system_bin() {   # $1 = normalized token  $2 = script_norm_ok
 #     following token and change which token is the operand. `bash -nx <path>`
 #     keeps blocking exactly as today. Declared residual, not an oversight.
 #   - `-o noexec` IS NOT ADMITTED, and it is UNREACHABLE rather than merely
-#     omitted: the walk skips `-o` and then stops on `noexec` as the operand, so
-#     this table can never be asked about it. Listing it would ship a dead branch
-#     on a security surface. It is recorded as listed-but-unreachable in
-#     core/rules/bypass-mode-readiness/block-destructive.md, pointing at the
-#     flag-walk defect that makes it so, rather than half-closed here.
+#     omitted: `-o` takes a separate argument, so the arity table below consumes
+#     `noexec` AS THAT ARGUMENT and never offers it to this table as a flag. This
+#     table can therefore never be asked about it. Listing it would ship a dead
+#     branch on a security surface. It is recorded as listed-but-unreachable in
+#     core/rules/bypass-mode-readiness/block-destructive.md.
+#
+# THIS TABLE IS ONLY SOUND IF THE WALK KNOWS OPTION ARITY, which is why the arity
+# table below is its immediate neighbour rather than a separate concern. An
+# arity-blind walk hands this table the ARGUMENT of an argument-taking option and
+# asks "is this a flag": `bash --rcfile -n <path>` presents `-n`, which bash has
+# already consumed as the rcfile FILENAME, and the answer "yes, parse-only" turns
+# a live block into an allow on an invocation that genuinely executes <path>.
+# Measured, not reasoned: `bash --rcfile -n -c 'echo X'` prints X, while
+# `bash -n -c 'echo X'` prints nothing. Never widen one table without the other.
 #
 # Bash 3.2-safe: `case` only, no associative arrays (the file-wide constraint).
 script_interp_noexec_flag() {   # $1 = interpreter basename  $2 = normalized flag token
   case "$1" in
     bash|sh|zsh)
       case "$2" in -n) return 0 ;; esac
+      ;;
+    *) : ;;   # EXPLICIT NULL — see the table note above. Not an omission.
+  esac
+  return 1
+}
+
+# THE OPTION-ARITY TABLE, KEYED ON THE INTERPRETER — the third per-interpreter
+# table, beside the other two for the same reason they are beside each other:
+# widening the interpreter set must mean adding a label in one place, not hunting
+# three. This one answers "does this option consume the NEXT token as its
+# argument".
+#
+# WHY THE WALK NEEDS IT AT ALL. The flag walk steps over `-*` one token at a time
+# and stops on the first non-option, calling that the operand. With no notion of
+# arity it is wrong in both directions on the same invocation:
+#   - it can stop on an option's ARGUMENT and adjudicate that instead of the
+#     script — `bash --rcfile <allowlisted> <unlisted>` adjudicated the rcfile and
+#     never saw the script bash actually runs; and
+#   - it can hand an option's ARGUMENT to the noexec table as though it were a
+#     flag — `bash --rcfile -n <unlisted>`, where `-n` is the rcfile filename and
+#     the invocation executes.
+#
+# THE SET IS MEASURED, NOT INFERRED. Each spelling below was probed against the
+# interpreter on the reference host (bash 3.2.57, /bin/sh = bash, zsh 5.9):
+# `<interp> <opt> -n -c 'echo X'` prints X exactly when <opt> consumed the `-n`.
+#   bash, sh : --rcfile --init-file -O +O -o +o   (bash's own usage text names
+#              `-c command`, `-O shopt_option`, `-o option` as the argument-taking
+#              forms; `--rcfile=FILE` is rejected outright, so only the separate
+#              -argument spelling exists and only it is listed)
+#   zsh      : -o +o                              (measured: `zsh -O -n -c …` runs
+#              nothing, so zsh's `-O`/`+O` take NO argument and are correctly absent)
+#
+# THE ZSH `--rcfile` / `--init-file` ROWS ARE DELIBERATE AND THEY ARE NOT A CLAIM
+# THAT ZSH HAS THOSE OPTIONS. It does not — `zsh --rcfile …` exits "no such
+# option: rcfile" and runs nothing. They are listed because the alternative is
+# worse: without them the walk hands `-n` in `zsh --rcfile -n <path>` to the
+# noexec table and allows the segment, which is a shipped BLOCK turned into an
+# ALLOW. The verdict would then rest on "zsh will reject this invocation" — a
+# second-order argument about another program's option parser, exactly the kind
+# this file declines to carry two tables up. Listing them costs nothing real,
+# because no zsh invocation that reaches an interpreter uses them.
+#
+# `-c` IS DELIBERATELY ABSENT and its absence is structural, not an omission. The
+# walk's own `-c)` label runs BEFORE this one and BREAKS, handing every following
+# token to the cmode loop. A `-c` row here could never be reached — a dead branch
+# on a security surface, which this file refuses on principle.
+#
+# THE NON-SHELL INTERPRETERS REACH THE EXPLICIT NULL and their behaviour is
+# unchanged. `python3 -m`, `perl -e`, `node -r` and the rest have their own arity
+# and are a DECLARED RESIDUAL here: they adjudicate through the phase-gated
+# destructive_022_interp_verdict, F-01's blast radius does not reach them, and
+# admitting them needs its own measurement rather than a guess made inside a fix
+# for the shell trio.
+#
+# Bash 3.2-safe: `case` only, no associative arrays (the file-wide constraint).
+script_interp_optarg_flag() {   # $1 = interpreter basename  $2 = normalized flag token
+  case "$1" in
+    bash|sh)
+      case "$2" in --rcfile|--init-file|-O|+O|-o|+o) return 0 ;; esac
+      ;;
+    zsh)
+      case "$2" in -o|+o|--rcfile|--init-file) return 0 ;; esac
       ;;
     *) : ;;   # EXPLICIT NULL — see the table note above. Not an omission.
   esac
@@ -662,10 +733,11 @@ script_interp_noexec_flag() {   # $1 = interpreter basename  $2 = normalized fla
 # core/rules/bypass-mode-readiness/block-destructive.md, not half-closed here.
 #
 # `awk` IS DELIBERATELY ABSENT. Its script operand arrives through `-f`, a flag
-# ARGUMENT the operand walk does not consume, so an `awk` label could never reach
-# its operand — a dead branch on a security surface. core/hooks/lib/positional-
-# issueref.awk states the same boundary from the other side. Admitting it depends
-# on the flag-walk fix, which is filed separately.
+# ARGUMENT — and the arity table above names no `awk` row, so the walk still does
+# not consume it and an `awk` label here could never reach its operand: a dead
+# branch on a security surface. core/hooks/lib/positional-issueref.awk states the
+# same boundary from the other side. Admitting `awk` now means TWO measured rows,
+# one in the arity table and one here, added together — not one without the other.
 #
 # Bash 3.2-safe: `case` only, no associative arrays (the file-wide constraint).
 script_set_interp_domain() {   # $1 = interpreter basename -> sets script_interp_domain
@@ -961,6 +1033,39 @@ destructive_022_interp_verdict() {   # $1 = path  $2 = resolved
   esac
   log_would_fire_022 "enforce" "$cause" "$path" "interp-nonshell"
   check_script_target "$path" "$resolved"
+}
+
+# ADJUDICATE A TOKEN THE FLAG WALK CONSUMED AS AN OPTION'S ARGUMENT.
+#
+# WHY CONSUMING IS NOT ENOUGH, AND THIS FUNCTION IS THE WHOLE DIFFERENCE. Teaching
+# the walk arity moves an option's argument out of the operand slot. If the walk
+# merely STEPPED OVER it, that token would leave adjudication altogether — and the
+# walk's own NET DIRECTION rule forbids exactly that: it may never move a token
+# out of a domain that claimed it, because that converts a shipped BLOCK into an
+# ALLOW. `bash --rcfile <unlisted>.sh <allowlisted>.sh` blocks today on the rcfile,
+# and it must keep blocking: an rcfile is a file bash SOURCES, so a non-allowlisted
+# one is exactly what this rule exists to refuse.
+#
+# So the argument is consumed for OPERAND SELECTION and still adjudicated here,
+# through the identical pair of calls the post-walk operand branch makes. The
+# change is then purely ADDITIVE: every token adjudicated before this change is
+# still adjudicated, and the true operand — previously unreachable behind the
+# argument — is adjudicated as well. Direction: ALLOW may become BLOCK, never the
+# reverse. That is the property to check any edit to this function against.
+#
+# A token that claims no arm's operand domain (`-o noexec`, `-O expand_aliases`)
+# falls through the gate and adjudicates nothing, exactly as it does anywhere else
+# in this file. The gate, not a special case, is what keeps a shell-option NAME
+# from being treated as a path.
+script_adjudicate_optarg() {   # $1 = raw argv token consumed as an option argument
+  normalize_script_token "$1"
+  if script_operand_implicated "$script_interp_domain"; then
+    if [ "$script_interp_domain" = "interp" ]; then
+      check_script_target "$script_norm_out" "$script_norm_ok"
+    else
+      destructive_022_interp_verdict "$script_norm_out" "$script_norm_ok"
+    fi
+  fi
 }
 
 # --------------------------------------------------------------------------
@@ -2358,7 +2463,10 @@ case "$TOOL_NAME" in
       # move from "operand that no arm claimed" to "skipped", and the walk then
       # reaches a LATER token that may be adjudicated. It can never move a token out
       # of a domain that claimed it. So the change can only turn an ALLOW into a
-      # BLOCK, never the reverse.
+      # BLOCK, never the reverse. The arity step added below keeps this rule by
+      # ADJUDICATING each argument it consumes rather than merely stepping over it —
+      # consuming alone would move a claimed token out of adjudication, which is the
+      # forbidden direction. Check any arity edit against that, first.
       script_idx=$(( script_hidx + 1 ))
       script_cmode=0
       # Did this segment declare a parse-only interpreter mode? Reset per segment
@@ -2404,7 +2512,39 @@ case "$TOOL_NAME" in
                && script_interp_noexec_flag "$script_interp_base" "$script_ftok"; then
               script_noexec=1
             fi
-            script_idx=$(( script_idx + 1 )) ;;
+            script_idx=$(( script_idx + 1 ))
+            # OPTION ARITY — the one thing this walk did not know. It stepped over
+            # `-*` a token at a time and called the first non-option the operand,
+            # so an option that takes a SEPARATE argument left that argument in the
+            # operand slot. Two failures, one cause:
+            #   `bash --rcfile <allowlisted> <unlisted>` adjudicated the rcfile and
+            #     never saw the script bash runs — an unlisted script admitted; and
+            #   `bash --rcfile -n <unlisted>` offered `-n` to the noexec table as a
+            #     FLAG, when bash had taken it as the rcfile FILENAME, so the
+            #     parse-only exemption above fired on an invocation that executes.
+            # Consuming the argument closes both, because the walk then continues
+            # to the token the interpreter will really run.
+            #
+            # ORDER IS LOAD-BEARING: the argument is consumed AFTER the noexec test
+            # of its own option and BEFORE the next iteration, so it is never itself
+            # offered to the noexec table. That is the half that closes the second
+            # failure, and reordering these two blocks reopens it.
+            #
+            # THE ARGUMENT IS STILL ADJUDICATED — see script_adjudicate_optarg for
+            # why that is required rather than tidy. Consuming without adjudicating
+            # would move a token out of a domain that claimed it, which is the one
+            # direction this walk's NET DIRECTION rule forbids.
+            #
+            # `-c` cannot reach here (its own label breaks the walk above), and a
+            # trailing option with no argument left on argv is bounded by the index
+            # test rather than reading past the end.
+            if [ "$script_verb" = "interp" ] \
+               && [ "$script_idx" -lt "${#script_tokens[@]}" ] \
+               && script_interp_optarg_flag "$script_interp_base" "$script_ftok"; then
+              script_adjudicate_optarg "${script_tokens[$script_idx]}"
+              script_idx=$(( script_idx + 1 ))
+            fi
+            ;;
           *) break ;;
         esac
       done
