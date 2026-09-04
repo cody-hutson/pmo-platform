@@ -54,7 +54,7 @@ Four properties are part of the decision, not implementation detail:
 
 **The contract binds every future holder.** Any artifact that declares its own copy of the source-side path set MUST carry a marker pair with a distinct holder id. Reusing an existing holder's array in place is preferred and satisfies the contract trivially — a holder that cannot desynchronise beats one whose desynchronisation is merely detected.
 
-## Alternatives considered
+## Alternatives Considered
 
 **Pairwise hardcoded comparison** — two inline extractions and a sorted diff, the "roughly five lines of shell" the originating observation proposed. **Rejected**: it fails the arity requirement by construction, because the shape encodes arity 2. Adding a third holder is a rewrite, not an edit. It is the defect restated one level of abstraction up.
 
@@ -75,3 +75,13 @@ Four properties are part of the decision, not implementation detail:
 **A scanner that discovers markers by line will discover its own examples.** Any file documenting the marker — this record included — must quote it in a form that does not match, or it registers itself as a broken holder. This is not hypothetical: the primitive's first live run discovered its own docstring and fixtures and correctly reported them unparseable. Documentation of the marker is box-quoted for that reason, and the primitive carries a self-test asserting its own source registers zero holders.
 
 **The assertion reads only tracked source text, and that is why it can run pre-merge.** The pre-merge roster admits a check only when it is network-free, install-independent, posture-required, and lacks a dedicated mirror workflow. Reading source text rather than a deployed tree satisfies all four. The pre-existing mirror-sync check cannot join that roster, because its verdict is install-dependent — it diffs against a workspace directory that is absent in CI and the public repository, where it correctly skips. Folding parity into that check's body would have made parity inherit the install-dependence and be permanently barred from the one surface where the original defect escaped. That is the reason the assertion is a **new check adjacent to** the mirror-sync check rather than an extension of it.
+
+## Reversibility
+
+**CHEAP** — Confidence HIGH. Reversal is a single-agent revert of the release merge: the marker pairs bracket each holder's array rows without touching them (Decision property 1), so nothing a holder declares has to be reconstructed, and the assertion reads tracked source text and writes nothing — there is no deployed state, no migrated data, and no external commitment to unwind. A marker left behind after a revert is an inert comment, not a dangling reference. The forward-binding half of the decision retires with the record, because a holder authored under the contract acquires no dependency on it.
+
+## Related ADRs
+
+- ADR-186 — The rules mirror has two carriers on two paths (the carrier shipping in this same release; named in the Consequences above as this contract's first bound consumer, and the source of the prospective additional holder whose resolution to reuse the single declaration left the assertion unchanged either way)
+- ADR-030 — Hook registry: per-hook drop-in sources + generated canonical-path index + completeness check (the precedent this record composes with and departs from — it keeps the completeness-check half, under which an unregistered declaration is reported rather than skipped, while rejecting the separate registry file in favour of registration in band)
+- ADR-008 — deploy.sh per-module array design (the array-literal declaration idiom the marker pair is specified around; Decision property 1 places the markers outside that literal's own delimiters so a member edit cannot silently deregister its holder)

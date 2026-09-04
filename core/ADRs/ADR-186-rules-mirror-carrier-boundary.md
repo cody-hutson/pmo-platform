@@ -55,7 +55,7 @@ Treating these as one problem produces a design that ships bytes nobody reads.
 
 **The check distinguishes five states** rather than two, discriminating "never deployed anything here" from "deployed, but the mirror is missing" using a signal every deploy writes independently of any session. The former withholds its verdict through an emitter that structurally cannot move the exit code; the latter is a finding.
 
-## Options considered
+## Alternatives Considered
 
 **For the pair-set source.** (a) Hoist to one emitter read by both callers — **selected**; no new holder, nothing to desync. (b) Let the carrier declare its own copy set — rejected: it is exactly the silent desync the parity contract exists to prevent, and "a check catches it" is a mitigation for a defect you chose to create. (c) Derive the set from a glob over the rules directory — rejected: a predicate rather than a list, it silently over-copies the moment a member is removed from the set while its file remains. (d) Parse the marker region out of the script's own source at runtime — rejected on maintainability; a script that reads its own text to find its data must locate itself and couples the deploy hot path to marker parsing.
 
@@ -76,3 +76,15 @@ Treating these as one problem produces a design that ships bytes nobody reads.
 **A failed mirror copy now fails the whole deploy.** This failure class did not previously exist. It is deliberate: a silently-partial mirror is the state the new verdict semantics exist to make impossible.
 
 **The first populated mirror changes what every subsequent session loads at start.** Reversibility is **CHEAP** with **HIGH** confidence — re-running the deploy from reverted sources restores the prior content — but the effect is observable immediately, and reverting the source alone does not un-populate the directory. Repopulation is a second, operator-run action.
+
+## Reversibility
+
+**CHEAP** — Confidence HIGH. Reverting the sources and re-running the deploy restores the prior content in a single-agent action; the mirror's payload is a copy of tracked files bounded by the declared set, so discarding it loses nothing that is not recoverable from the repository. The one asymmetry, recorded in the Consequences above, does not raise the tier: the source revert alone does not un-populate the deployed directory, so removing it is a second operator-run action rather than a consequence of the revert. Carrier 2 reverses on the same terms through the composition surface's own update path.
+
+## Related ADRs
+
+- ADR-185 — A mirror-pair path-set holder registers itself in-band, and the marker is the contract (the parity contract this record's pair-set decision satisfies by reuse rather than by a second declaration; option (b) under the pair-set source above is rejected on exactly that ground, and the hoist keeps the array-literal container that contract's primitive can parse)
+- ADR-113 — A general analysis-mandate rule supersedes per-surface read-only point fixes (its Consequences name this record's two gaps as its own bounded remainder — that the deploy check detects mirror drift without pushing the mirror, and that a rule shipped into the rules directory is loaded on the platform-engineering routing branch only; Carrier 1 and Carrier 2 close them respectively)
+- ADR-122 — CLAUDE.md is re-categorized from Customizable to Composition-surface (why Carrier 2 rides the composition-surface update path and not the deploy path: a composition surface is fenced and regenerated at update time, so it cannot be byte-identical and the content carrier structurally cannot deliver it)
+- ADR-030 — Hook registry: per-hook drop-in sources + generated canonical-path index + completeness check (the generated-index precedent reused for the loadable subset — the criterion has one home and the members are generated from the declaration on every deploy, so neither context file enumerates them)
+- ADR-013 — detect_install_path session-resolution policy + COWORK_AVAILABLE seam (the deploy script's conditionality discipline this record extends: a write block that reads no session path stays unconditional, which is why Carrier 1 runs ahead of the no-changes early exit and why the never-deployed signal must be readable without resolving a session)
