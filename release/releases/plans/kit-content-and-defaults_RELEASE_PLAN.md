@@ -30,7 +30,7 @@ reversibility: CHEAP / Confidence HIGH — every card is additive authoring into
 | **Release Manager** | Agent-assisted (release-hub Mode O) |
 | **Status** | Executing (Stage 6 Engineering) |
 | **Branch** | `release/kit-content-and-defaults` |
-| **PR** | (populated at PR creation, Stage 6 — draft on create, transitions to ready at the Stage 9 gate) |
+| **PR** | #7017 — created **draft** at Stage 6; the hub transitions it to ready-for-review at the Stage 9 gate |
 | **Milestone** | `kit-content-and-defaults` |
 
 `domain_practice: { source: core/disciplines/work-organization-mapping-framework.md §3.2, name: Scrum Guide 2020 + INVEST (Cohn — User Stories Applied), date: 2026-09-04, domain: process }`
@@ -497,6 +497,22 @@ Deviations from the Stage-4 plan of record, each with its ratifying authority. A
 ## Verification Evidence
 
 *Populated at Stage 6 Phase C4 self-verification, per card, before handoff to Dev Testing.*
+
+### #6378 — C4 self-verification (executed 2026-09-04)
+
+| Check | Verdict | Observed |
+|---|---|---|
+| `deploy.sh --check` **Check 62** (gate-coverage register runner-resolution) | **OK** | *"all 26 gate-coverage register resolution pointer(s) resolve"* — **26 before and after the three added rows**, exactly as predicted. A named-gap row correctly carries no pointer, so the verdict is unmoved |
+| `deploy.sh --check` **Check 75** (pack-grammar conformance) | **OK** | `0 findings (packs_read=3 kinds_read=4 rules_evaluated=20)`, and its own **CTRL** line reports `sensitivity exit=1 rule='PACK-K05'` / `specificity exit=0` — **both discrimination arms intact.** The Check-75 trap was not tripped, which is the whole reason no rule was minted |
+| `deploy.sh --check` overall | exit 0, **2 issue(s)** | Neither is in this write set: `release-body-drift` (13 findings across 77 logged releases) and `count-structure` (three named paths, none of them a file this release touches). Both pre-existing |
+| `check-work-hierarchy.py --validate-packs --pack-root core/packs` | **`COUNT 0`, exit 0** | The live corpus is untouched and still validates |
+| `claim-version.sh --verify-stamp` | **exit 0** | `verify-stamp OK` |
+| `verify-release-plan.sh` provenance-survival | **3 PASS + PROV-DELTA PASS** | `form=A date=2026-09-04`; `prov-no-loss (comment_elements=3 all present in the plan)` |
+| `renumber-adr.py --detect` | **ADR-185 BINDS** | `ANCHOR 184 · NEXT-FREE 185` |
+| `check-adr-durability.py` | **0 findings** | One `R2-COUNT` finding on a drifting live-corpus count was raised and fixed by citing the deriving command |
+| `check-release-links.py --check-anchors` | **0 broken links** | One warn-mode missing-anchor on the explicit `{#…}` heading anchor — a **standing corpus-wide condition**, not introduced here (control: an existing cross-reference to another discipline file warns identically) |
+| Falsification arms | **21 arms executed** | Every run self-reported `packs_read=3 rules_evaluated=20`; every subject zero paired with a control firing on the same corpus and invocation. One arm self-rejected on its landed-check and was discarded rather than reported |
+| PR-body parser self-check | **CLEAN** | 1 close-family + `#N` occurrence, inside the Issue References block only; control — 13 bare `#NNNN` references, so the reader is live |
 
 **ADR index:** this release adds **three** records under `core/ADRs/` — ADR-185, ADR-186, ADR-187 — allocated sequentially from the `origin/main` anchor of 184. `renumber-adr.py --detect` is run **first** by each authoring spoke; branch claims are detection-only and non-binding.
 
