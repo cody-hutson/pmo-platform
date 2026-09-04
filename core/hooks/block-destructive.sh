@@ -664,15 +664,58 @@ script_interp_noexec_flag() {   # $1 = interpreter basename  $2 = normalized fla
 #     flag — `bash --rcfile -n <unlisted>`, where `-n` is the rcfile filename and
 #     the invocation executes.
 #
-# THE SET IS MEASURED, NOT INFERRED. Each spelling below was probed against the
-# interpreter on the reference host (bash 3.2.57, /bin/sh = bash, zsh 5.9):
-# `<interp> <opt> -n -c 'echo X'` prints X exactly when <opt> consumed the `-n`.
+# THE SET IS MEASURED, NOT INFERRED, AND THE PROBE IS A SCRIPT-EXECUTION MARKER
+# rather than an option-parse result. Each spelling below was swept against the
+# interpreter on the reference host (bash 3.2.57, /bin/sh = bash, zsh 5.9) with
+# `<interp> <opt> <sentinel> marker.sh`, where marker.sh prints M1RAN:
+#   - M1RAN on stdout      => <opt> CONSUMED <sentinel> and marker.sh became the
+#                             script, i.e. arity 1;
+#   - <sentinel> named in  => <opt> consumed it and then REJECTED it, i.e. arity 1
+#     the error message       with a validated argument namespace (`-o`, `+o`);
+#   - marker.sh named in   => <sentinel> was the SCRIPT, i.e. arity 0. This third
+#     the error message       case is why the probe must not be read as a mere
+#                             pass/fail: `-n <sentinel> marker.sh` errors on the
+#                             sentinel too, and is arity 0.
+#
+# AN EARLIER FORM OF THIS NOTE STATED THE PROBE AS `<interp> <opt> -n -c 'echo X'`
+# PRINTS X EXACTLY WHEN <opt> CONSUMED THE `-n`. That is NOT a biconditional and it
+# would drop four correct rows: `bash -O +O -o +o` DO consume the `-n` but print
+# nothing, because bash then aborts with `-n: invalid shell option name` (rc=2);
+# `zsh -o +o` abort the same way (rc=1). A maintainer widening this table by the
+# old rule would exclude exactly the rows that are already in it. Use the marker
+# form above, and read all three outcomes, not two.
+#
 #   bash, sh : --rcfile --init-file -O +O -o +o   (bash's own usage text names
 #              `-c command`, `-O shopt_option`, `-o option` as the argument-taking
 #              forms; `--rcfile=FILE` is rejected outright, so only the separate
-#              -argument spelling exists and only it is listed)
-#   zsh      : -o +o                              (measured: `zsh -O -n -c …` runs
+#              -argument spelling exists and only it is listed. No long-option
+#              ABBREVIATION is accepted — `--rcf`, `--init-f`, `--initfile` all
+#              rc=2 — so no unlisted spelling of these two exists)
+#   zsh      : -o +o --emulate                    (measured: `zsh -O -n -c …` runs
 #              nothing, so zsh's `-O`/`+O` take NO argument and are correctly absent)
+#
+# `--emulate` IS THE ROW THAT A LETTER-BY-LETTER SWEEP MISSES, and it is listed
+# because it was measured, not because zsh's own `--help` names it — it does not.
+# `zsh --emulate -n -s` EXECUTES its stdin while the control `zsh -n -s` prints
+# nothing, because `-n` is eaten as the emulation-mode NAME. The sweep behind this
+# row enumerated zsh's full option surface — every `-X`/`+X` single letter, and
+# `--<name>`, `--no<name>`, `--no-<name>`, `+-<name>`, `+-no-<name>` for all 197
+# setopt names plus the 12 documented aliases, 1135 spellings in all — and found
+# exactly two arity-1 spellings that execute despite a following `-n`: `--emulate`
+# and `+-emulate`. Controls fired both ways (`zsh --xtrace -n marker.sh` silent,
+# `zsh --emulate -n marker.sh` prints M1RAN).
+#
+# `+-emulate` IS DELIBERATELY ABSENT, for the same structural reason as `-c` below.
+# The walk's option arm matches `-*`; a `+`-leading token matches neither it nor
+# the `--`/`-c` labels, so it falls to `*) break` and is taken as the operand — the
+# table is never consulted for it. A `+-emulate` row would be a dead branch. The
+# consequence is real but INHERITED, not introduced here: `zsh +-emulate -n <path>`
+# is ALLOW on origin/main and ALLOW here alike, because `script_noexec` never gets
+# set. The same is true of the `+O`/`+o` rows above, which are dead for the same
+# reason and are left in place rather than removed, so that widening the walk to
+# `+`-leading tokens finds the arity already stated. Recorded here rather than
+# half-closed: closing it means teaching the WALK about `+` options, which is a
+# change to operand selection on a security surface and needs its own measurement.
 #
 # THE ZSH `--rcfile` / `--init-file` ROWS ARE DELIBERATE AND THEY ARE NOT A CLAIM
 # THAT ZSH HAS THOSE OPTIONS. It does not — `zsh --rcfile …` exits "no such
@@ -703,7 +746,7 @@ script_interp_optarg_flag() {   # $1 = interpreter basename  $2 = normalized fla
       case "$2" in --rcfile|--init-file|-O|+O|-o|+o) return 0 ;; esac
       ;;
     zsh)
-      case "$2" in -o|+o|--rcfile|--init-file) return 0 ;; esac
+      case "$2" in -o|+o|--emulate|--rcfile|--init-file) return 0 ;; esac
       ;;
     *) : ;;   # EXPLICIT NULL — see the table note above. Not an omission.
   esac
@@ -1047,11 +1090,34 @@ destructive_022_interp_verdict() {   # $1 = path  $2 = resolved
 # one is exactly what this rule exists to refuse.
 #
 # So the argument is consumed for OPERAND SELECTION and still adjudicated here,
-# through the identical pair of calls the post-walk operand branch makes. The
-# change is then purely ADDITIVE: every token adjudicated before this change is
-# still adjudicated, and the true operand — previously unreachable behind the
-# argument — is adjudicated as well. Direction: ALLOW may become BLOCK, never the
-# reverse. That is the property to check any edit to this function against.
+# through the identical pair of calls the post-walk operand branch makes. No token
+# is dropped BY THE CONSUMPTION STEP ITSELF, and the true operand — previously
+# unreachable behind the argument — is adjudicated as well.
+#
+# THE CHANGE IS NOT "PURELY ADDITIVE", AND AN EARLIER FORM OF THIS COMMENT SAID IT
+# WAS. The claim was "Direction: ALLOW may become BLOCK, never the reverse — that
+# is the property to check any edit to this function against", and it is FALSE as
+# stated. Changing which token is the operand necessarily changes post-walk
+# ROUTING: when an option's argument is `-c` or `--`, the walk's own labels no
+# longer see it, so a segment that used to route through the cmode loop — which
+# adjudicates every remaining token — now routes through the single-operand branch,
+# and later tokens do leave adjudication. Measured against the pre-arity hook over
+# 4775 payloads: 64 ALLOW -> BLOCK, 15 BLOCK -> ALLOW, the rest unchanged. An
+# independent dev-testing differential over a different 4183-payload set measured
+# 154 and 23. Two sets, same mechanism, no other.
+#
+# THE PROPERTY THAT IS TRUE, AND THE ONE TO CHECK ANY EDIT AGAINST, IS NARROWER:
+# every BLOCK -> ALLOW this function causes must be a PRECISION IMPROVEMENT — a
+# verdict the real interpreter agrees with — and never an escape. That has to be
+# checked against the interpreter, not argued from the code. Every measured
+# instance holds: the shape either aborts in the real shell (`-c: invalid shell
+# option name`, rc=1/2) or is genuinely inert (`bash --rcfile -c -n <script>`:
+# rc=0, no output) or executes exactly the token this walk does adjudicate
+# (`bash --rcfile -c <a> <b>` runs <a>).
+#
+# DO NOT "FIX" THIS BY DECLINING TO CONSUME `--` AND `-c`. It restores the literal
+# additive claim and opens a real hole — `bash --rcfile -- -c <script>` executes
+# <script>. The arity step carries the measurement and the counter-example.
 #
 # A token that claims no arm's operand domain (`-o noexec`, `-O expand_aliases`)
 # falls through the gate and adjudicates nothing, exactly as it does anywhere else
@@ -2459,14 +2525,26 @@ case "$TOOL_NAME" in
       # operand, where script_operand_implicated reads BOTH views and the
       # unresolvable deny is reachable.
       #
-      # NET DIRECTION, which is the property to check any edit against: a token can
-      # move from "operand that no arm claimed" to "skipped", and the walk then
-      # reaches a LATER token that may be adjudicated. It can never move a token out
-      # of a domain that claimed it. So the change can only turn an ALLOW into a
-      # BLOCK, never the reverse. The arity step added below keeps this rule by
-      # ADJUDICATING each argument it consumes rather than merely stepping over it —
-      # consuming alone would move a claimed token out of adjudication, which is the
-      # forbidden direction. Check any arity edit against that, first.
+      # NET DIRECTION. For the FLAG-SHAPE rule immediately above, the direction is
+      # one-way: a token can move from "operand that no arm claimed" to "skipped",
+      # and the walk then reaches a LATER token that may be adjudicated; it can never
+      # move a token out of a domain that claimed it, so that rule can only turn an
+      # ALLOW into a BLOCK. The arity step added below preserves the same guarantee
+      # for the token it consumes, by ADJUDICATING each argument rather than merely
+      # stepping over it — consuming alone would move a claimed token out of
+      # adjudication. Check any arity edit against that, first.
+      #
+      # THE ONE-WAY CLAIM DOES NOT EXTEND TO THE WALK'S VERDICTS AS A WHOLE, and an
+      # earlier form of this note over-reached by saying it did. Arity changes WHICH
+      # TOKEN IS THE OPERAND, and that changes post-walk ROUTING: when an option's
+      # argument is `-c` or `--`, the walk's own labels no longer see it and a
+      # segment that used to route through the cmode loop — which adjudicates every
+      # remaining token — now routes through the single-operand branch. Measured
+      # against the pre-arity hook over 4775 payloads: 55 ALLOW -> BLOCK and 12
+      # BLOCK -> ALLOW. The property that actually binds is stated on
+      # script_adjudicate_optarg: every BLOCK -> ALLOW must be a PRECISION
+      # improvement the real interpreter agrees with, never an escape — and that is
+      # checked against the interpreter, not argued from this code.
       script_idx=$(( script_hidx + 1 ))
       script_cmode=0
       # Did this segment declare a parse-only interpreter mode? Reset per segment
@@ -2533,11 +2611,38 @@ case "$TOOL_NAME" in
             # THE ARGUMENT IS STILL ADJUDICATED — see script_adjudicate_optarg for
             # why that is required rather than tidy. Consuming without adjudicating
             # would move a token out of a domain that claimed it, which is the one
-            # direction this walk's NET DIRECTION rule forbids.
+            # direction the NET DIRECTION note above forbids for this step.
             #
-            # `-c` cannot reach here (its own label breaks the walk above), and a
-            # trailing option with no argument left on argv is bounded by the index
-            # test rather than reading past the end.
+            # `-c` cannot reach here AS THE OPTION (its own label breaks the walk
+            # above), and a trailing option with no argument left on argv is bounded
+            # by the index test rather than reading past the end.
+            #
+            # THE ARGUMENT IS CONSUMED UNCONDITIONALLY, INCLUDING WHEN IT IS `--` OR
+            # `-c`, AND DECLINING THOSE TWO WAS TRIED AND IS WRONG. Consumption
+            # happens before the walk's own `--)` and `-c)` labels can see the token,
+            # so when an arity option's argument is literally `-c` the cmode flag
+            # stays 0 where it previously became 1 and the post-walk route changes
+            # from the cmode loop to the single-operand branch. That is a REAL change
+            # in verdicts and it is not one-directional — see the NET DIRECTION note
+            # above, which is corrected accordingly. Declining to consume the two
+            # tokens looks like the tidy fix and it opens a hole:
+            #
+            #   bash --rcfile -- -c <script>   EXECUTES <script>. Measured, with an
+            #     executable marker: rc=0 and the marker prints. `--` is the rcfile
+            #     FILENAME, not an end-of-options marker, and `-c` is a real
+            #     command-mode flag. If the walk declines `--`, its `--)` label
+            #     breaks the walk and takes `-c` as the operand — a token that claims
+            #     no domain — and the whole segment is ALLOWED. Consuming keeps the
+            #     segment blocked. This shape is ALLOW on the pre-arity hook, BLOCK
+            #     here, and ALLOW again under a decline: declining re-opens it.
+            #
+            #   bash --rcfile -c -n <script>   is genuinely INERT (measured: rc=0, no
+            #     output), and bash --rcfile -c <a> <b> runs <a> — precisely the
+            #     token the operand branch adjudicates. Declining `-c` turns both of
+            #     those correct verdicts back into over-blocks.
+            #
+            # So `--` and `-c` are consumed like any other argument, because that is
+            # what the interpreter does with them in this position.
             if [ "$script_verb" = "interp" ] \
                && [ "$script_idx" -lt "${#script_tokens[@]}" ] \
                && script_interp_optarg_flag "$script_interp_base" "$script_ftok"; then

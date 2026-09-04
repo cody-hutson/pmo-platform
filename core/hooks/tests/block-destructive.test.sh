@@ -2919,6 +2919,41 @@ test_case "ARITY-15 [ctl]: bash --rcfile <allowed> allowed (argument ends argv; 
 test_case "ARITY-16 [ctl]: bash -nx <unlisted>.sh still blocks (cluster residual unchanged)" \
   "$(bash_payload "bash -nx $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 
+# --- (4) `zsh --emulate` — the row a letter-by-letter sweep misses ---
+# zsh's own `--help` lists its "special options" as --help, --version, -b, -c and
+# `-o OPTION`, and does NOT name --emulate. It exists all the same, it takes a
+# SEPARATE argument, and that makes it the same defect shape as ARITY-06/07:
+#
+#   zsh --emulate -n -s  <<< 'echo RUNOK'  ->  RUNOK    (-n eaten as the mode NAME)
+#   zsh -n -s            <<< 'echo RUNOK'  ->  (empty)  (control: -n really is inert)
+#
+# so `zsh --emulate -n <unlisted>` EXECUTES, and before this row the walk read the
+# `-n` as a flag and the parse-only exemption allowed the segment. origin/main
+# BLOCKS the payload; this branch ALLOWED it until the row was added — the same
+# block-to-allow F-01 names, on the interp domain, not phase-gated.
+#
+# The row is measured, not inferred. The sweep enumerated zsh's whole option
+# surface — every -X/+X single letter, and --<name>, --no<name>, --no-<name>,
+# +-<name>, +-no-<name> for all 197 setopt names plus the 12 documented aliases
+# (1135 spellings) — with a script-execution marker as the discriminator and
+# controls firing both ways. Exactly two spellings execute despite a following
+# `-n`: `--emulate` and `+-emulate`. `+-emulate` is NOT in the table and its
+# absence is structural, not an omission: the walk's option arm matches `-*`, so a
+# `+`-leading token falls to the operand branch and the table is never consulted
+# for it. ARITY-18d is the arm that records that boundary as measured behaviour.
+test_case "ARITY-18a: zsh --emulate -n <unlisted>.sh blocks (-n is the emulation MODE NAME; this executes)" \
+  "$(bash_payload "zsh --emulate -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "ARITY-18b: zsh --emulate -n -x <unlisted>.sh blocks (trailing flags do not restore inertness)" \
+  "$(bash_payload "zsh --emulate -n -x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# The discriminating arm: a REAL -n after a consumed mode name is genuinely inert,
+# so #6172's exemption must still fire. This is ARITY-10's analogue for zsh.
+test_case "ARITY-18c: zsh --emulate zsh -n <unlisted>.sh allowed (a REAL -n after the consumed mode name)" \
+  "$(bash_payload "zsh --emulate zsh -n $PARSE_UNLISTED")" 0
+# ARITY-11's analogue: the consumed mode-name slot is still adjudicated, so a
+# non-allowlisted script sitting in it is caught rather than stepped over.
+test_case "ARITY-18d [ctl]: zsh --emulate <unlisted>.sh <allowed> blocks (the consumed argument is STILL adjudicated)" \
+  "$(bash_payload "zsh --emulate $PARSE_UNLISTED $ARITY_ALLOWED")" 2 "BLOCK-DESTRUCTIVE-022"
+
 # --- PAIRED MUTATION ARMS — prove the arity predicate is what these arms measure ---
 # Same harness discipline as PARSE-14: a sibling mutant so HOOK_DIR and therefore
 # every lib and the allowlist resolve identically, differing in exactly one
@@ -2954,7 +2989,52 @@ sandbox_case "ARITY-17d: mutant (arity reverted) ALLOWS bash --rcfile -n <unlist
 test_case "ARITY-17e: shipped hook BLOCKS the identical payload (shape-2 pair closes)" \
   "$(bash_payload "bash --rcfile -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 
+# (f)/(g) shape (2) again, on the zsh `--emulate` row. Same mutant, same polarity:
+# the pair proves ARITY-18a measures the ARITY TABLE and not some other predicate
+# that would keep the payload blocked anyway.
+sandbox_case "ARITY-17f: mutant (arity reverted) ALLOWS zsh --emulate -n <unlisted>.sh" \
+  "$ARITY_MUTANT" \
+  "$(bash_payload "zsh --emulate -n $PARSE_UNLISTED")" \
+  0
+test_case "ARITY-17g: shipped hook BLOCKS the identical payload (--emulate pair closes)" \
+  "$(bash_payload "zsh --emulate -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
 /bin/rm -f "$ARITY_MUTANT"
+
+# --- ARITY-19: `--` AND `-c` ARE CONSUMED LIKE ANY OTHER ARGUMENT ---
+# These arms exist because the obvious "tidy" edit here is WRONG and would pass
+# every other arm in this block. The arity step consumes the next token before the
+# walk's own `--)` and `-c)` labels can see it, so when an option's argument is
+# literally `-c` the cmode flag stays 0 and the post-walk route changes. That is a
+# real, measurable change in verdicts (4775-payload differential against the
+# pre-arity hook: 64 ALLOW->BLOCK, 15 BLOCK->ALLOW), which is why the "purely
+# additive" claim this file used to carry has been corrected rather than restored.
+#
+# THE TEMPTING FIX — decline to consume `--` and `-c` so the labels keep their
+# tokens — RE-OPENS AN EXECUTION HOLE, and ARITY-19a is that hole. Measured against
+# real bash with an executable marker: `bash --rcfile -- -c <script>` prints the
+# marker and exits 0, because `--` is the rcfile FILENAME (not an end-of-options
+# marker) and `-c` is a real command-mode flag. Under a decline the `--)` label
+# breaks the walk and takes `-c` as the operand — a token no domain claims — and
+# the segment is ALLOWED. Consuming keeps it BLOCKED. If someone implements the
+# decline, ARITY-19a is the arm that goes red, and it is the one to read first.
+test_case "ARITY-19a [ctl]: bash --rcfile -- -c <unlisted>.sh blocks (-- is the rcfile NAME; this EXECUTES)" \
+  "$(bash_payload "bash --rcfile -- -c $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "ARITY-19b [ctl]: bash -O -- -c <unlisted>.sh blocks (same shape through a short arity option)" \
+  "$(bash_payload "bash -O -- -c $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# The other half of the same decision: consuming `-c` REMOVES over-blocks, and the
+# removals are correct against the real shell rather than merely harmless.
+# `bash --rcfile -c -n <script>` is genuinely inert (measured: rc=0, no output) —
+# the rcfile is named `-c`, the `-n` is a real parse-only flag. Declining `-c`
+# would turn this correct ALLOW back into a block.
+test_case "ARITY-19c: bash --rcfile -c -n <unlisted>.sh allowed (genuinely inert; rcfile is named -c)" \
+  "$(bash_payload "bash --rcfile -c -n $PARSE_UNLISTED")" 0
+# And `bash --rcfile -c <a> <b>` runs <a> — exactly the token the operand branch
+# adjudicates — so an allowlisted <a> is a correct ALLOW and an unlisted one blocks.
+test_case "ARITY-19d: bash --rcfile -c <allowed> <unlisted>.sh allowed (the shell runs <allowed>)" \
+  "$(bash_payload "bash --rcfile -c $ARITY_ALLOWED $PARSE_UNLISTED")" 0
+test_case "ARITY-19e [ctl]: bash --rcfile -c <unlisted>.sh <allowed> blocks (the shell runs <unlisted>)" \
+  "$(bash_payload "bash --rcfile -c $PARSE_UNLISTED $ARITY_ALLOWED")" 2 "BLOCK-DESTRUCTIVE-022"
 
 echo ""
 echo "BLOCK-022 HD here-document modelling (#6229)"
