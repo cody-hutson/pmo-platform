@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.53 | hook-guards-fail-closed-fasttrack | 2026-09-04 | — | #6997 | [notes/v4.53_RELEASE_NOTES.md](notes/v4.53_RELEASE_NOTES.md) |
 | hub-spoke-run-and-planning-discipline (version-less) | hub-spoke-run-and-planning-discipline | 2026-09-03 | — | #6634 | [notes/_unversioned/hub-spoke-run-and-planning-discipline_RELEASE_NOTES.md](notes/_unversioned/hub-spoke-run-and-planning-discipline_RELEASE_NOTES.md) |
 | v4.52 | automation-registry-as-gate | 2026-09-03 | — | #6882 | [notes/v4.52_RELEASE_NOTES.md](notes/v4.52_RELEASE_NOTES.md) |
 | v4.51 | regression-corpus-gates-releases | 2026-09-03 | — | #6831 | [notes/v4.51_RELEASE_NOTES.md](notes/v4.51_RELEASE_NOTES.md) |
