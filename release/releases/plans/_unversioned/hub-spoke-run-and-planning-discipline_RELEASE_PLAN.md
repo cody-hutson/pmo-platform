@@ -637,9 +637,9 @@ A hub session's comment staging is now bounded by the same Run-Directory Discipl
 
 ### Close-class resolution (Phase A7.5)
 
-`Close class: DEPLOYABLE (fall-through) — resolved via rung 1; declared value: governance.`
+`Close class: DEPLOYABLE — resolved via rung 1; declared value: governance.`
 
-Rung 1 (`domain_practice.domain`, § Baseline pin) resolves `governance` — neither the literal `task-artifact` nor a guide-backed deliverable class — so the A7.5.2 fall-through is **reported rather than taken silently**, per that phase's own instruction. The TASK-ARTIFACT branch does not fire. No Artifact-Acceptance Record is owed: this release declares no task-artifact deliverable, so the AAR is **ABSENT (explicit no-op)**, never FAIL.
+Rung 1 (`domain_practice.domain`, § Baseline pin) resolves `governance`. That is **not** a fall-through: `governance` is a named deliverable class in `domain-token-registry.md` § 2 Concept 1 and it is **guide-backed** — `core/standards/domain-best-practices/governance.md` ships today — so the value is a recognized class, and the A7.5.2 *report-the-fall-through* line (which fires only on a rung-3 resolution or on a value that is neither `task-artifact` nor a guide-backed class) **does not fire**. The class is recorded here anyway, because the routing decision should be legible whether or not the reporting clause is triggered. The TASK-ARTIFACT branch does not fire: the branch keys on the literal `task-artifact` only. No Artifact-Acceptance Record is owed: this release declares no task-artifact deliverable, so the AAR is **ABSENT (explicit no-op)**, never FAIL.
 
 ### Release-identity mode and close mechanism
 
