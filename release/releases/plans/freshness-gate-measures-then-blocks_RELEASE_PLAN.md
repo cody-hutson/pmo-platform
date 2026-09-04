@@ -39,7 +39,7 @@ reversibility: CHEAP / Confidence HIGH
 | **Status** | Executing (Stage 6 Engineering) |
 | **Branch** | `release/freshness-gate-measures-then-blocks` |
 | **Baseline pin** | `origin/main` @ `ef008d6d9c32c5982feb943a1a916c4b80c7c321` |
-| **PR** | #7005 (draft at Stage 6; transitions to ready at the Stage 9 gate) |
+| **PR** | #7007 (draft at Stage 6; transitions to ready at the Stage 9 gate) |
 | **Milestone** | `freshness-gate-measures-then-blocks` (#385) |
 
 ---
@@ -556,6 +556,10 @@ exit 1
 **Normalization 2 — the plan path.** The tool prints the plan's absolute path, which on any operator machine carries a home-directory segment. This repository is public, so the quoted lines carry the repo-relative path instead. Both normalizations are confined to those two substrings; nothing else in the quoted text is altered, and the verdict token, the reasoning and the exit code are the tool's own.
 
 **Reading:** `TOKEN-LESS PLAN` is the *declared* version-less state, not the verb's `HALT` verdict. The verb distinguishes three exit-1 verdicts — `NO PRE-CLAIM PLAN`, `TOKEN-LESS PLAN`, and `HALT` — and only the third means a broken manifest. Of the two readings the message offers, the first is correct and intentional: the plan was authored without the placeholder because this release claims no version. Recorded per V-2's expected result; **any other non-zero verdict would block.**
+
+**PF regression suite (V-4), at slot 1:** `bash core/deploy/tests/test_package_freshness_exit_codes.sh` → **11 passed, 0 failed, 0 skipped**, exit 0. **PF-2c is the load-bearing arm for #4332's stderr-capture commit** — it asserts zero `staged rebuild failed` lines across the roster by reading the probe's captured output, so a stderr-shape change had to be shown not to disturb it. It was not disturbed. This is the pre-flip baseline; Risk R3b's re-point is what has to keep it green through slot 6.
+
+**#4332 AC5 (V-5 input), re-derived at slot 1 rather than restated:** reaching set **2 of 24** — `skill-package-freshness.yml` (degraded, fixed at slot 1) and `install-tests.yml` (already correct). Sensitivity arm `runs-on` → 24/24; specificity arm on a fabricated token → 0/24; extraction non-empty for all 24 files (min 3,629 bytes). **The first pass of this probe was broken and is recorded as such:** its comment classifier keyed on a leading `#` only, so `repo-integrity.yml`'s echoed prose string mentioning the lifecycle flag counted as an invocation and the reaching set read **3**. Re-classified against the executable-line criterion it is 2, which independently reproduces the Stage-5 finding.
 
 **Artifact-acceptance / deliverable state:** this release is deployable-class. `deliverable_state: deployed-copy-synced` — the source changes are committed on the release branch and the release declares **no Layer-2 propagation target** (no skill source is edited, so the S-2 copy mechanism has nothing to sync).
 
