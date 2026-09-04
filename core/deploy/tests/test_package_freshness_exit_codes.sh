@@ -850,12 +850,19 @@ for pf10_tree in core operations release; do
     # The resolver reads repo-relative paths on STDIN. An argv invocation returns empty
     # for every input INCLUDING one that genuinely cascades, which would read here as
     # "not in any content set" while having measured nothing.
-    pf10_resolved="$(
+    #
+    # The WHOLE emission is captured and the first line taken by parameter expansion,
+    # never by piping into a short-circuiting reader. Such a reader closes the pipe under
+    # the resolver and SIGPIPEs it mid-write; the derivation would then be reading a
+    # truncated answer from a writer it had killed, which is precisely the failure shape
+    # this suite refuses to accept anywhere else. The emission is a handful of skill
+    # names, so reading all of it costs nothing.
+    pf10_emission="$(
       cd "${SBX}" || exit 127
       printf '%s\n' "${pf10_rel}" \
-        | bash core/deploy/tools/build-skill-packages.sh --skills-for-paths 2>/dev/null \
-        | head -1
+        | bash core/deploy/tools/build-skill-packages.sh --skills-for-paths 2>/dev/null
     )"
+    pf10_resolved="${pf10_emission%%$'\n'*}"
     if [ -n "${pf10_resolved}" ]; then
       PF10_TARGET="${pf10_cand}"
       PF10_TARGET_REL="${pf10_rel}"
