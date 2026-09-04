@@ -5118,6 +5118,49 @@ _g1_03_evaluate() {
   return 1
 }
 
+# ─── flag_not_evaluated — the NOT-EVALUATED class emitter (TOP-LEVEL) ────────
+#
+# HOISTED TO TOP LEVEL DELIBERATELY; the placement is load-bearing, not stylistic.
+# Bash registers a nested function only when execution REACHES its definition, so a
+# definition sited inside cmd_check() is callable only from code that runs after that
+# point in the body. Check 7's verdict dispatch sits ~150 lines EARLIER in that same
+# function, so while this emitter was nested it was unreachable from the one caller
+# that most needs it — the "measurement did not run" arm of a content-freshness gate.
+# At top level the reachability is unconditional and independent of where any future
+# caller lands.
+#
+# The NOT-EVALUATED class means: the measurement DID NOT HAPPEN. Same structural
+# guarantee as flag_advisory_only — no `case` on any mode, no enforce branch, no ISSUES
+# increment — for the same reason: a measurement outage must never move the exit code.
+# It is a SEPARATE function, not a parameter on that one, because the two say OPPOSITE
+# things. ADVISORY means "I measured and this signal cannot gate"; NOT-EVALUATED means
+# "I did not measure." flag_advisory_only's line asserts "this check is never
+# enforce-capable", which is FALSE of an enforce-capable check that merely could not
+# read its input this run — and its ADVISORY: prefix is the greppable discriminator, so
+# two classes under one prefix re-creates the very conflation this emitter exists to
+# remove.
+#
+# WARN_LOG IS RESOLVED DEFENSIVELY, AND THE GUARD IS REQUIRED RATHER THAN DEFENSIVE
+# HABIT. cmd_check() declares `local WARN_LOG` well AFTER its Check 7 block, and this
+# script runs under `set -euo pipefail` (line 2), so an UNGUARDED expansion aborts the
+# entire run the moment this emitter is called from any caller sited above that
+# declaration. The fallback re-derives the same path the local would have held, so a
+# hoisted call logs to the identical destination.
+#
+# Per review-discipline-principles.md § 8 PV-7. The detail SHOULD name the Register A
+# status and MUST carry "this is not a clean result".
+flag_not_evaluated() {
+  local check_id="$1"
+  local detail="$2"
+  log "  NOT-EVAL: $check_id — $detail (not-evaluated; the measurement did not run — this is a withheld verdict, never a clean one)"
+  local _ts
+  _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  local _detail_escaped="${detail//\\/\\\\}"
+  _detail_escaped="${_detail_escaped//\"/\\\"}"
+  local _wl="${WARN_LOG:-$(warn_log_path)}"
+  printf '{"ts":"%s","check":"%s","evaluated":false,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$_wl" 2>/dev/null || true
+}
+
 # ─── Mode: --check ───────────────────────────────────────────────────────────
 
 cmd_check() {
@@ -5891,6 +5934,30 @@ cmd_check() {
       log "  FAIL:  ${c7_count} stale skill package(s): ${c7_rest#* } — rebuild via core/deploy/tools/build-skill-packages.sh (per-skill detail above)"
       ISSUES=$((ISSUES + c7_count))
       ;;
+    NOT-EVALUATED)
+      # THE MEASUREMENT DID NOT RUN — a withheld verdict, never a clean one, and
+      # never a stale-package finding either. Routed to flag_not_evaluated (hoisted
+      # to top level for exactly this caller: see its header) rather than to the
+      # fail-closed *) arm below, which would report an "unexpected verdict" for a
+      # state the engine now emits deliberately.
+      #
+      # DEPLOY-TIME POSTURE IS ADVISORY, AND THE ASYMMETRY WITH THE CI SURFACE IS
+      # INTENTIONAL. Check 7 is always-enforce for what it MEASURED, but a
+      # comparison that never executed cannot establish a violation; incrementing
+      # ISSUES here would fail a developer's local --check for a missing packager
+      # rather than for a stale package, which is the false-positive class that
+      # makes a gate get switched off. The blocking decision for this state lives
+      # at the CI surface (cmd_check_package_freshness), which is the single reader
+      # of the .github/skill-package-freshness.enforce sentinel and maps the state
+      # to exit 3 under warn and exit 1 under enforce.
+      #
+      # Precedence is STALE > NOT-EVALUATED > FRESH and is resolved by the engine
+      # in _c7_compute_verdict, not here: a run that measured SOME skills and found
+      # one stale emits STALE, so no partial outage can mask a real finding.
+      c7_rest="${c7_verdict#NOT-EVALUATED}"
+      c7_rest="${c7_rest# }"
+      flag_not_evaluated "package-freshness" "${c7_rest:-the staged rebuild could not execute, so no per-skill content comparison was performed}; the content-freshness verdict is WITHHELD for the unmeasured skills — this is not a clean result"
+      ;;
     *)
       log "  FAIL:  Check 7 — unexpected verdict: $c7_verdict"
       ISSUES=$((ISSUES + 1))
@@ -6010,31 +6077,6 @@ cmd_check() {
     local _detail_escaped="${detail//\\/\\\\}"
     _detail_escaped="${_detail_escaped//\"/\\\"}"
     printf '{"ts":"%s","check":"%s","advisory":true,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
-  }
-
-  # flag_not_evaluated — the NOT-EVALUATED class emitter: the measurement DID NOT
-  # HAPPEN. Same structural guarantee as flag_advisory_only above — no `case` on
-  # any mode, no enforce branch, no ISSUES increment — for the same reason: a
-  # measurement outage must never move the exit code. It is a SEPARATE function,
-  # not a parameter on that one, because the two say OPPOSITE things. ADVISORY
-  # means "I measured and this signal cannot gate"; NOT-EVALUATED means "I did not
-  # measure." flag_advisory_only's line asserts "this check is never
-  # enforce-capable", which is FALSE of an enforce-capable check that merely could
-  # not read its input this run — and its ADVISORY: prefix is the greppable
-  # discriminator, so two classes under one prefix re-creates the very conflation
-  # this emitter exists to remove.
-  #
-  # Per review-discipline-principles.md § 8 PV-7. The detail SHOULD name the
-  # Register A status and MUST carry "this is not a clean result".
-  flag_not_evaluated() {
-    local check_id="$1"
-    local detail="$2"
-    log "  NOT-EVAL: $check_id — $detail (not-evaluated; the measurement did not run — this is a withheld verdict, never a clean one)"
-    local _ts
-    _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    local _detail_escaped="${detail//\\/\\\\}"
-    _detail_escaped="${_detail_escaped//\"/\\\"}"
-    printf '{"ts":"%s","check":"%s","evaluated":false,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
   }
 
   # tsv_residual_rows — the RESIDUAL BUCKET for a TSV-emitting primitive's verdict
@@ -16410,6 +16452,16 @@ cmd_check_release_corpus() {
 #                                     zero (so `-eq 0` cannot mis-read it) and not 1
 #                                     (so a caller can still tell advisory from block).
 #   STALE     enforce          1      BLOCKING finding — the gate must fail closed
+#   NOT-EVAL. != enforce       3      ADVISORY OUTAGE: the content comparison did not
+#                                     run, so NOTHING was measured. Distinct from 2 —
+#                                     2 means "measured, and it is stale"; 3 means "no
+#                                     measurement happened". Collapsing them would let
+#                                     a degraded run read as a stale-package finding,
+#                                     and a green run read as a clean one.
+#   NOT-EVAL. enforce          1      BLOCKING — under enforce, an unevaluated gate is
+#                                     not allowed to pass. A gate that cannot measure
+#                                     is exactly the state this whole check exists to
+#                                     stop reporting as green.
 #   <other>   any              1      unexpected verdict — fail-closed, sentinel-agnostic
 #
 # The advisory value 2 follows the in-tree precedent of core/deploy/tools/cross-module-audit.sh
@@ -16444,6 +16496,20 @@ cmd_check_package_freshness() {
       fi
       log "  WARN-MODE (sentinel '$pf_enforce_file' token != enforce): reporting the true verdict as ADVISORY — exit 2, so no caller can read a STALE package as fresh, and distinct from the blocking exit 1. Flip the token to 'enforce' after shakedown."
       exit 2
+      ;;
+    NOT-EVALUATED)
+      # THE PROBE DID NOT MEASURE. Sentinel-aware by INTEGER, never by re-reading the
+      # sentinel in the caller: enforcement policy stays here, in the probe that is the
+      # single reader of the .enforce file, and the CI workflow dispatches on $? alone
+      # (it holds zero sentinel-reading lines, by design — see the contract table above).
+      log "package-freshness: NOT-EVALUATED — ${verdict#NOT-EVALUATED } (the staged-rebuild content comparison did not run; see detail above)"
+      log "  NOTHING WAS MEASURED. This is a withheld verdict, not a clean one: no rostered package was compared against its committed baseline, so this run establishes neither freshness nor staleness."
+      log "  Usual cause: the packager's import chain cannot resolve for /usr/bin/python3, or unzip is absent. Fix the environment — do not read this as a pass."
+      if [[ "$pf_enforce" == "enforce" ]]; then
+        exit 1
+      fi
+      log "  WARN-MODE (sentinel '$pf_enforce_file' token != enforce): reporting the outage as ADVISORY — exit 3, the in-tree 'could not run' value, distinct from both the STALE advisory (2) and the blocking exit 1."
+      exit 3
       ;;
     *)
       log "package-freshness: unexpected verdict '$verdict' — fail-closed"
@@ -16941,10 +17007,15 @@ main() {
       ;;
     --check-package-freshness)
       # Single-check CI .skill package content-freshness probe (#2656): runs ONLY
-      # Check 7's full content-hash verdict and exits per the verdict (0 FRESH; 2 STALE
-      # advisory when the .github/skill-package-freshness.enforce sentinel is not enforce;
-      # 1 STALE when it IS enforce; 1 fail-closed on an unexpected verdict — never 0 on
-      # STALE, see the contract table on cmd_check_package_freshness). The Check 7 logic
+      # Check 7's full content-hash verdict and exits per the verdict. Four states, not
+      # three: 0 FRESH; 2 STALE advisory when the
+      # .github/skill-package-freshness.enforce sentinel is not enforce; 3 NOT-EVALUATED
+      # advisory under the same non-enforce sentinel (the comparison did not run, so
+      # nothing was measured — never conflate it with 2, which means measured-and-stale);
+      # 1 for EITHER STALE or NOT-EVALUATED when the sentinel IS enforce; 1 fail-closed on
+      # a genuinely unexpected verdict — never 0 on STALE and never 0 on an unevaluated
+      # run, see the contract table on cmd_check_package_freshness, which is the authoring
+      # home this comment cites rather than restates. The Check 7 logic
       # ALSO fires inside the full --check
       # suite — one shared body (_c7_compute_verdict), no copy. Used by
       # .github/workflows/skill-package-freshness.yml.
