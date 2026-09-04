@@ -493,9 +493,15 @@ Layer 2 file propagation targets for Stage 12/13:
 
 | # | Source (Layer 1) | Target (Layer 2) | Mechanism | Verification |
 |---|------------------|------------------|-----------|--------------|
-| 1 | the nine retained `core/rules/*.md` members | the deployed workspace rules directory | deploy-mediated copy by the carrier (#4740) | the mirror check reports byte-identity for every pair; `never populated` is distinguishable from `in sync` |
-| 2 | `core/CLAUDE.md.template` | the deployed workspace charter | deploy render | the deployed charter routes sessions to the mirrored rules set |
-| 3 | `operations/CLAUDE.md.template` (CONDITIONAL) | the deployed operations context anchor | deploy render | the operations-rooted session loads the declared subset |
+| 1 | the nine retained `core/rules/*.md` members | the deployed workspace rules directory | `./deploy.sh --deploy --release rules-mirror-delivered` — deploy-mediated copy by the carrier (#4740) | the mirror check reports byte-identity for every pair; `never populated` is distinguishable from `in sync` |
+| 2 | `core/CLAUDE.md.template` | the deployed workspace charter | **`./update.sh --surfaces-only`** — a composition surface, NOT a deploy render | the deployed charter routes sessions to the mirrored rules set |
+| 3 | `operations/CLAUDE.md.template` (CONDITIONAL **RESOLVED: TAKEN**) | the deployed operations context anchor | **`./update.sh --surfaces-only`** — a composition surface, NOT a deploy render | the operations-rooted session loads the declared subset |
+
+**Rows 2 and 3 are a SEPARATE command from row 1, and that is the single most missable step in this release.** `deploy.sh --deploy` does not refresh composition surfaces and does not source the composition-surface manifest — the script states this in its own usage banner and repeats it in its "No changes" output. Both templates above are registered composition-surface rows. **A Stage 12 that runs only `--deploy` ships the mirror and silently omits the instruction to read it**, which delivers the content half of this release with the reach half missing — and the resulting workspace looks correct to every check, because Check 9 verifies the bytes and nothing verifies the instruction. There is no automated detection backstop for this class today; the convention is recorded at `release/references/pipeline/stage-12-execute.md` § Composition-surface change propagation, and the manifest row is the only control.
+
+**Stage 12 therefore runs two required commands, in this order:**
+1. `./deploy.sh --deploy --release rules-mirror-delivered` (carrier 1 — content, plus the `deploy-rules-mirror` telemetry row)
+2. `./update.sh --surfaces-only` (carrier 2 — the instruction)
 
 **No skill packages propagate in this release** — enumerated over the File Change Matrix: no rostered skill's `SKILL.md` or `references/` is edited, so the direct-copy skill mechanism has no subject.
 
