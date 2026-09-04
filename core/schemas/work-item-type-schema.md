@@ -797,7 +797,9 @@ The content-provenance layer (§1.2 the amended `criteria` check tuple and the F
 
 **Axis 2 — the relaxation: N/A.** Nothing is widened. No value domain grows, no requiredness is dropped, and no previously-illegal shape becomes legal.
 
-**Axis 3 — the RESTRICTION, and this is the first of the four extensions whose restriction meets a NON-EMPTY population.** §6.2a, §6.2b and §6.2c could each write that every shipped pack is byte-identical after the change. **This one cannot, and does not.** Measured across the corpus's 15 `pack.toml` at the commit that introduces the rule, by a structural block walk rather than a token count:
+**Axis 3 — the RESTRICTION, and this is the first of the four extensions whose restriction meets a NON-EMPTY population.** §6.2a, §6.2b and §6.2c could each write that every shipped pack is byte-identical after the change. **This one cannot, and does not.**
+
+The population below is measured across every `pack.toml` in the corpus, at the commit that introduces the rule, by a structural block walk rather than by a token count:
 
 | Limb | Site class | State | Count | Requirement fires? |
 |---|---|---|---|---|
@@ -810,7 +812,7 @@ The content-provenance layer (§1.2 the amended `criteria` check tuple and the F
 | Block | `[kinds.fields]` | `kind_specific` absent | 15 | no |
 | | | **affected declarations** | **16** | |
 
-Both limbs reconcile against the structure they count — criteria `12 + 0 + 45 = 57 = 19 kinds × 3`, fields `3 + 1 + 15 = 19 = one table per kind` — which is the check that distinguishes a measured population from a plausible one. Every affected declaration sits in the two shipped archetype manifests, `core/packs/scrum/pack.toml` (12) and `core/packs/kanban/pack.toml` (4); the base pack and the fixture packs declare no criteria entries and no field arrays that fire the requirement.
+The walk covers every `pack.toml` the corpus holds, shipped and fixture alike, and both limbs reconcile against the structure they count — criteria `12 + 0 + 45 = 57 = 19 kinds × 3`, fields `3 + 1 + 15 = 19 = one table per kind`. That reconciliation is the check which distinguishes a measured population from a plausible one, and it is stated because an earlier reading of this same population returned **zero** by measuring only the entry limb and reporting it as the whole. Every affected declaration sits in the two shipped archetype manifests, `core/packs/scrum/pack.toml` (12) and `core/packs/kanban/pack.toml` (4); the base pack and the fixture packs declare no criteria entries and no field arrays that fire the requirement.
 
 **The verdict therefore rests on NON-ENFORCEMENT, not on byte-identity.** The token `checks` occurs **zero** times in the pack validator, against live controls on the same reader over the same file (`criteria_version`, `kind_specific`, `lifecycle_behavior`, `kind_id`, `criteria` all non-zero) and a zero specificity arm — so **no runner exists that could reject any of the 16**. §6.2c's *"every shipped pack is byte-identical after this change"* sentence is not available here and is not transferred; what holds instead is that a pack which has not yet adopted `source` validates exactly as it did before, because nothing reads the key.
 
