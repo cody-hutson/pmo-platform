@@ -138,8 +138,8 @@ Each entry in `kinds[]` is a `Kind` object with exactly these fields:
 | `base` | const `Work Item` | ✅ | Every kind IS the canonical `Work Item` entity (§18). No other base permitted — this is what keeps a kind a *projection*, not a new entity (D2; the ADR-018 rejected alternative (B) "don't add an entity per kind"). |
 | `methodology_projection` | object | ✅ | The projection record. **Projects onto the general hierarchy via the work-organization mapping framework's Layer-2 map** (see §1.3). Fields: `archetype`, `general_level`, `projects_as`, `level_name_ref`, `level_role`. |
 | `fields` | object | ✅ | The field overlay. Two sub-keys: `core` (a const reference to the inherited Core 7 — never re-listed, per the `entity-field-schemas.md` §3.0 house style) and `kind_specific[]` (the array below). |
-| `fields.kind_specific[]` | array&lt;FieldDecl&gt; | ⚪ | Each `FieldDecl` reuses the §3.N row shape **verbatim**: `{ name, type, required (✅/⚪), cardinality, enum? (enum type), ref? (target entity for typed-ref), description }`. Empty array = a kind with no fields beyond Core 7 (valid — the thin-generic floor). |
-| `criteria` | object | ✅ | Three keyed sub-objects: `readiness` (DoR), `done` (DoD), `gate` (phase/stage gate). Each = `{ criteria_version (semver), checks[] }`, where each check = `{ id, statement, level (L1 structural / L2 referential / L3 judgment), automatable (bool) }` plus the **two OPTIONAL keys** `guards_transition` + `condition` (the relationship-conditioned / set-aggregate gate construct — §1.2.1). **The criteria carry their own version**, independent of `pack_version` — the grandfather hook (§6.3). |
+| `fields.kind_specific[]` | array&lt;FieldDecl&gt; | ⚪ | Each `FieldDecl` reuses the §3.N row shape **verbatim, plus the pack-provenance key `source`**: `{ name, type, required (✅/⚪), cardinality, enum? (enum type), ref? (target entity for typed-ref), description, source }`. The addition is a **declared pack-layer superset**, not a redefinition of the §3.N shape: `source` names the body of practice the *pack author* drew the declaration from, which is a fact about the pack rather than about the entity field, so `entity-field-schemas.md` gains no column and the seven inherited members keep their meanings unchanged. Requiredness and the block-level carrier are §1.2.1. Empty array = a kind with no fields beyond Core 7 (valid — the thin-generic floor), and an empty array carries its `source` on the enclosing `[kinds.fields]` block instead. |
+| `criteria` | object | ✅ | Three keyed sub-objects: `readiness` (DoR), `done` (DoD), `gate` (phase/stage gate). Each = `{ criteria_version (semver), checks[] }`, where each check = `{ id, statement, level (L1 structural / L2 referential / L3 judgment), automatable (bool), source (string — the body of practice the check derives from; §1.2.1) }` plus the **two OPTIONAL keys** `guards_transition` + `condition` (the relationship-conditioned / set-aggregate gate construct — §1.2.1). **The criteria carry their own version**, independent of `pack_version` — the grandfather hook (§6.3). |
 | `relationships` | object | ✅ | `allowed_types[]` — a subset of the **7 MVP relationship types by reference** (`frontmatter-schema.md` §Category 4: `GENERATES` / `DEPENDS_ON` / `BLOCKS` / `SUPERSEDES` / `BELONGS_TO` / `RELATES_TO` / `ASSIGNED_TO`). Plus `required_edges[]` (e.g., a kind MAY require a `BELONGS_TO` parent). **No type is defined here** — only referenced + constrained. A pack naming a relationship type outside the 7 is invalid (§5 enforcement). |
 | `lifecycle_behavior` | object | ✅ | The behavior map keyed off the **project's** `lifecycle` value (`{timeboxed, continuous, phased}` — read from `delivery_approach` / `custom_methodology_definition`, **NOT** from the kind). Value = the behavior selection (which `criteria.gate` set applies, which cadence primitive). **The explicit defense against the hardcoded-sprint-presumption failure mode:** a kind declares *what gates exist*; the project's lifecycle selects *which fire*. The kind never carries `sprint`/`phase` semantics directly. |
 | `axis1_state_machine` | ref OR inline | ✅ | The kind's operational lifecycle (Axis-1). **Default = inherit the generic `Work Item` Axis-1 base machine** `backlog → ready → in-progress → in-review → done | cancelled`, owned by the entity layer (ADR-018 D1; `entity-field-schemas.md` §3.18 V-WI-04). A kind declares this field as `inherit` unless it genuinely **narrows or extends** the generic states, in which case it declares the refinement inline (a type-scoped sub-state per D1 — type-packs project labels over the base, they never re-found it). |
@@ -147,11 +147,11 @@ Each entry in `kinds[]` is a `Kind` object with exactly these fields:
 
 ### 1.2.1 Relationship-conditioned + set-aggregate gate construct (the `condition` discriminated union)
 
-A `criteria.checks[]` entry MAY carry **two OPTIONAL keys** beyond the four base fields (`id`, `statement`, `level`, `automatable`): `guards_transition` and `condition`. When `condition` is **absent**, the check is a plain self-evaluating criterion — **byte-identical to today's behavior** (the backward-compatibility guarantee that keeps the change additive; §6.1). When `condition` is **present**, `condition.kind` is a **required discriminator** selecting exactly one of three disjoint condition bodies — the §4 discriminated-union / table-per-type / anti-EAV pattern, applied one level down to criteria (the bodies are DISJOINT; no shared payload field beyond the envelope — the anti-EAV requirement).
+A `criteria.checks[]` entry MAY carry **two OPTIONAL keys** beyond the five base fields (`id`, `statement`, `level`, `automatable`, `source`): `guards_transition` and `condition`. When `condition` is **absent**, the check is a plain self-evaluating criterion — **byte-identical to today's behavior** (the backward-compatibility guarantee that keeps the change additive; §6.1). When `condition` is **present**, `condition.kind` is a **required discriminator** selecting exactly one of three disjoint condition bodies — the §4 discriminated-union / table-per-type / anti-EAV pattern, applied one level down to criteria (the bodies are DISJOINT; no shared payload field beyond the envelope — the anti-EAV requirement).
 
 This construct lets a kind declare a gate whose pass/fail condition reads (a) the **workflow status of a *related* Work Item** across a declared `relationships` edge, or (b) an **aggregate over a scope-bounded *set*** of Work Items (the Kanban WIP / pull-limit gate). Both express gates in **methodology workflow statuses** (the kind's `axis1_state_machine`, keyed off the project `lifecycle`), never platform release-pipeline stages (the ADR-018 §7.2 kernel discipline; see §7.2 + §7.6).
 
-**The expanded check shape.** The 4 existing fields are UNCHANGED; `guards_transition` + `condition` are NEW + OPTIONAL.
+**The expanded check shape.** The 5 base fields are UNCHANGED in meaning; `source` is NEW + REQUIRED (§1.2.1 *Content provenance* below); `guards_transition` + `condition` are NEW + OPTIONAL.
 
 ```yaml
 # A check entry in criteria.{readiness,done,gate}.checks[].
@@ -161,6 +161,10 @@ This construct lets a kind declare a gate whose pass/fail condition reads (a) th
   statement: <string>             # EXISTING — human-readable gate statement
   level: <L1 | L2 | L3>           # EXISTING — projection level (a condition'd check is L2; see EAD §3)
   automatable: <bool>             # EXISTING
+  source: <string>                # NEW, REQUIRED — the body of practice this check derives from
+                                  #   (flat string; never an inline table or a nested block).
+                                  #   See "Content provenance" below for the two altitudes,
+                                  #   the no-inheritance rule, and the value convention.
   guards_transition: "<from> -> <to>"   # NEW, OPTIONAL — the axis1_state_machine transition this gate
                                   #   guards (from/to ∈ the kind's axis1_state_machine states).
                                   #   REQUIRED when `condition` is present; omitted otherwise (D-A).
@@ -168,6 +172,34 @@ This construct lets a kind declare a gate whose pass/fail condition reads (a) th
     kind: <related-item-status | set-aggregate | control-field>   # REQUIRED discriminator.
     # ... exactly ONE condition body below, selected by `kind`.
 ```
+
+**Content provenance — the `source` key.** Every field and criterion a pack declares names the body of practice its author claims it derives from, so a reader can tell a criterion drawn from a named methodology apart from one team's local convention. **Trigger:** a pack declares a `criteria.{readiness,done,gate}.checks[]` entry, a `fields.kind_specific[]` FieldDecl, or a `[kinds.criteria.*]` / `[kinds.fields]` table whose array is present and empty. **Act:** that declaration MUST carry a `source` naming the body of practice it derives from. **No verdict is stated for the negation** — see the `**Runner:**` label below.
+
+**Two altitudes, and only two.**
+
+| Altitude | Carrier | `source` required when |
+|---|---|---|
+| **Entry** | the `checks[]` entry · the `kind_specific[]` FieldDecl | **always** — every entry carries its own |
+| **Block** | the `[kinds.criteria.{readiness,done,gate}]` table · the `[kinds.fields]` table | **only when its array is present and empty** (`checks = []` / `kind_specific = []`). The block `source` states the practice basis for the *emptiness* — the machine-readable form of an explicit, reasoned empty set |
+
+A table whose array is **absent** carries no requirement, and neither does one whose array is **non-empty** — there, each entry carries its own.
+
+**No inheritance, in either direction.** A block-level `source` never satisfies an entry's requirement, and an entry's never satisfies its block's. The two answer different questions — *why this declaration exists* versus *why none does* — and a reader extracting provenance grades each declaration site individually. Inheritance would let one block `source` silently discharge an unbounded number of entry-level obligations, which converts a per-declaration audit into a per-block one and hides exactly the content this key exists to expose.
+
+**Value.** A flat string; never an inline table and never a nested block. The convention — name the work, its edition or year, and the locator where the work has one — is stated once in the type-packs README under `## What lives where` and is not restated here. The value never names a repository path, an issue template, a label name, or this deployment's own tracker: a declaration whose stated origin is the deployment that consumes it has recorded a local convention, which is the very thing this key exists to tell apart from a body of practice.
+
+**The rule is `role`-total.** It binds on every pack whatever its `role` — `base`, `archetype` and `kit` alike — and the value domain admits **archetype-bound** bodies of practice (the Scrum Guide, the Kanban Method) **and archetype-neutral** ones (ISO, PMBOK, an INVEST-class heuristic). A `role = "kit"` pack, whose kinds are required to be archetype-neutral, therefore states a neutral value rather than citing an archetype — including for a reasoned empty set, for example `source = "no archetype-bound body of practice applies — this kit is methodology-neutral by role"`. The two rules do not interact mechanically: the archetype-neutrality constraint reads `methodology_projection.archetype` and never the `source` string. Stating the rule for all three roles is deliberate and follows §1.1's own move on `role` ↔ `applies_to` — a one-directional statement leaves the unnamed role's case unwritten and permissive, which is how a kit's content ends up hollow.
+
+**Runner: NONE — this is a registered named gap, and recording that is the point.** No `deploy.sh --check` gate, CI job, or script `--self-test` case reads `source`, and none reads any key inside a criteria block: the token `checks` occurs **zero** times in the pack validator, against live controls on the same reader over the same file (`criteria_version`, `kind_specific`, `lifecycle_behavior` and `kind_id` all non-zero) and a zero specificity arm on a fabricated token. The obligation is registered as a named-gap row in the gate-coverage register (`core/standards/gate-efficacy-standard.md`) carrying its declared observable. The intended runner is the pack/kit content-completeness lint, and it must be **entry-scoped** (*every entry carries a `source`*) rather than **array-scoped** (*`checks` is absent-or-empty*): most shipped criteria tables omit the `checks` key entirely, both of the pack-conformance check's discrimination fixtures included, and that check's discrimination branch fails outside the warn-mode gate — so an array-scoped rule turns the deploy check red on both control arms.
+
+**What `source` guarantees, and what it does not.** This paragraph is **descriptive**: it states what the mechanism reaches and states no obligation, because a mechanism that leaves its own limits unstated reproduces the failure it exists to close.
+
+1. **What it guarantees.** Every criterion and field declaration states, in machine-readable form, the body of practice its author claims it derives from. A reader can extract every declaration together with its claimed origin, and can find the named work. That is the corpus-versus-local-convention boundary made *checkable*.
+2. **What it does not guarantee.** That the claim is **true**. A well-formed citation naming a real body of practice can assert a proposition that work does not support. `source` makes a provenance claim **visible and locatable**; it does not adjudicate it.
+3. **Why the value convention exists.** Because truth-checking is the part the mechanism cannot do, the value is written to be *checkable against the named work* — the work, its edition or year, and its locator. A `source` that cannot be looked up leaves the only surface that *can* falsify it with nothing to read. The convention is therefore not a style preference; it is what makes the residual reviewable.
+4. **Where the residual is closed.** By a person reading the value against the named work — at acceptance, at review, or by anyone auditing a shipped pack. A false attribution is a **content defect owned by whoever authored the content**, not a defect in this mechanism, and no gate detects it. A green completeness lint is never a correctness verdict on the practice cited.
+
+**And the adjacent scope boundary.** `source` is scoped to `criteria.checks[]` entries and `fields.kind_specific[]` FieldDecls. Pack-level `[[controls]]` declarations (§1.1.2) carry **no** content-provenance key, and that is a stated boundary rather than an oversight: no shipped pack declares a control today, so the gap is latent — but a WIP or pull-limit control is a named core practice of a published method, which is exactly the object this key exists to make auditable. Extending `source` to `[[controls]]` crosses the controls facet's own provenance key (`x-pmo-control-source`, which records *which pack declared a control*, not which practice a declaration derives from) and is owned by whichever change first declares a control.
 
 **Arm 1 — `related-item-status`.** Resolves a *single related Work Item's* axis-1 workflow status across a declared edge.
 
@@ -254,7 +286,7 @@ This construct lets a kind declare a gate whose pass/fail condition reads (a) th
 
 **Gate-disposition definition (`on_unresolved`) — distinct from the entity-layer write-time enum (D-B).** A gate check's `on_unresolved` draws from the **gate-layer disposition set `{BLOCK-TRANSITION, WARN-HEALTH}`**, defined here in the meta-schema. This is **distinct from** the entity layer's frozen write-time `on-unresolved` enum `{BLOCK-WRITE, WARN-HEALTH, DEFER-G8}` (`entity-field-schemas.md` §on-unresolved): the two govern **different events on different layers**. The entity-layer enum governs a **write** of a malformed *referential field* (a dangling FK at row-write — `BLOCK-WRITE`); the gate `on_unresolved` governs a **transition** of a *well-formed* row whose *gate condition* can't be resolved or isn't satisfied (a state move — `BLOCK-TRANSITION`). `BLOCK-TRANSITION` is a **peer-by-posture** of the entity layer's `BLOCK-WRITE` — same refuse-and-route posture (refuse the move, surface the failing rule + expected-vs-actual, route to repair per `entity-field-schemas.md` §7), different governed event; `WARN-HEALTH` is reused by name from the entity-layer posture (a soft WIP gate may WARN; a hard gate BLOCKs). The frozen entity-layer enum is **cross-walked, not extended** — this construct adds no member to it.
 
-**Worked instances** (illustrative grammar — not shipped kinds; kinds are K4 user config per §1.4).
+**Worked instances** (illustrative grammar — not shipped kinds; kinds are K4 user config per §1.4). Each carries a `source`, because the rule above binds every check entry including the ones this document writes. **Three of the four say plainly that they are drawn from this grammar rather than from a named body of practice**, and that is the correct value for them: manufacturing a plausible citation for an illustration whose origin really is the construct would produce exactly the well-formed-but-false claim the boundary paragraph above says `source` cannot detect. The WIP example is the one whose origin *is* a named practice, so it cites it.
 
 *(a) Child cannot advance `refinement → ready` until parent Epic is design-approved (BELONGS_TO).* Gates at the *enter-ready* point of the lean cycle — a child Story cannot leave refinement for `ready` (committable for development) until its parent Epic's design is approved.
 
@@ -264,6 +296,7 @@ This construct lets a kind declare a gate whose pass/fail condition reads (a) th
   statement: "Cannot advance to ready until the parent Epic is design-approved."
   level: L2
   automatable: true
+  source: "illustrative — demonstrates the related-item-status arm; drawn from this grammar, not from a named body of practice"
   guards_transition: "refinement -> ready"
   condition:
     kind: related-item-status
@@ -280,6 +313,7 @@ This construct lets a kind declare a gate whose pass/fail condition reads (a) th
   statement: "Cannot leave ready until the blocking Spike is done."
   level: L2
   automatable: true
+  source: "illustrative — demonstrates a second gating point on the same arm; drawn from this grammar, not from a named body of practice"
   guards_transition: "ready -> in-progress"
   condition:
     kind: related-item-status
@@ -299,6 +333,7 @@ This construct lets a kind declare a gate whose pass/fail condition reads (a) th
   statement: "Cannot pull a Story into in-progress while >= N Stories are already in-progress on this board."
   level: L2
   automatable: true
+  source: "Kanban Method (Anderson 2010) — core practice 2, Limit work-in-progress"
   guards_transition: "ready -> in-progress"
   condition:
     kind: set-aggregate
@@ -326,6 +361,7 @@ This construct lets a kind declare a gate whose pass/fail condition reads (a) th
   statement: "Cannot advance to ready until this item's architecture review is approved, waived, or not required."
   level: L2
   automatable: true
+  source: "illustrative — demonstrates the control-field arm; drawn from this grammar, not from a named body of practice"
   guards_transition: "refinement -> ready"
   condition:
     kind: control-field
