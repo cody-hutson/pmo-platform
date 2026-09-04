@@ -2,6 +2,7 @@
 title: Structural Audit Cadence
 purpose: When-to-re-run cadence policy for the structural audit axis (event-bound triggers + 90-day fallback)
 type: protocol
+automation_id: [structural-audit-sentinel]
 related: AUDIT_FRAMEWORK.md (how-to-run methodology, Session 1 Structural & Behavioral Audit — core/standards/), process-fitness-cadence.md (sibling process-fitness axis), platform-health-audit-framework.md (sibling Anthropic Base-vs-Build axis — §2), architecture-conformance-cadence.md (sibling architecture-conformance axis), analysis-workspace-standard.md (analysis-folder output convention — core/standards/)
 effective-date: 2026-06-29
 scope: The structural audit axis only — Diátaxis conformance / NARA naming / ISO 15489 / orphan files / cross-reference integrity. Not the process-fitness axis (see process-fitness-cadence.md) and not the Anthropic Base-vs-Build axis (see platform-health-audit-framework.md §2).
@@ -92,14 +93,14 @@ The roster is the **continuity contract**: a run measures the same frames the pr
 The cadence runs as a **HYBRID** of manual event-triggers and an automated staleness sentinel — the same split the Anthropic axis runs (`platform-health-quarterly-audit` + `platform-health-drift-watch`, `platform-health-audit-framework.md` §2):
 
 - **Manual (event-driven).** The §2 triggers (T1–T3) fire **manually at their semantic moment** — the operator or spoke who closes a structure-affecting milestone, starts a release, or lands a taxonomy change invokes the audit.
-- **Automated (time-driven).** The §3 90-day fallback is an [`mcp__scheduled-tasks`](../../../core/governance/OPERATIONS.md) **staleness sentinel** that checks the age of the latest `analysis/tree-audit-*` anchor and routes a due-audit signal to an observation draft.
+- **Automated (time-driven).** The §3 90-day fallback is a scheduled **staleness sentinel** that checks the age of the latest `analysis/tree-audit-*` anchor and routes a due-audit signal to an observation draft. The routine is registered as `structural-audit-sentinel` in [`core/automations/registry.md`](../../../core/automations/registry.md); how it fires resolves at fire time from the operator's `[adapters].scheduler`.
 
 **Inherited conventions** (from the Anthropic-axis precedent — do not unify):
 
 - The sentinel **schedule is evaluated in the user's LOCAL timezone**, while the audit-folder date stamp uses **UTC** (`date -u`). This LOCAL-schedule / UTC-folder split is intentional.
-- The sentinel's completion notification is **per-run** (`notifyOnCompletion`), so a due/overdue result self-routes to an observation issue-draft rather than relying on a conditional ping.
+- The sentinel's completion notification is **per-run**, so a due/overdue result self-routes to an observation issue-draft rather than relying on a conditional ping.
 
-**`[ASSUMPTION – CONFIRM]`** Sentinel **registration** (creating the `mcp__scheduled-tasks` job) is an **operator-instance build step** (Stage 12), not committed corpus — the registration carries an instance-local path and is not portable. This tracked doc states the **policy** (a 90-day staleness sentinel exists and behaves as above); the instance owns the registration.
+**`[ASSUMPTION – CONFIRM]`** Sentinel **registration** (creating the scheduled job) is an **operator-instance build step** (Stage 12), not committed corpus — the registration carries an instance-local path and is not portable. This tracked doc states the **policy** (a 90-day staleness sentinel exists and behaves as above); the instance owns the registration.
 
 ---
 

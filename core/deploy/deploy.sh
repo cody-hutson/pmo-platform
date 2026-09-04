@@ -9998,7 +9998,7 @@ sys.stdout.write("".join(out) + "|")
         log "  detail: operator.toml.template missing [adapters] table (#703 seam)"
       fi
       local _ad
-      for _ad in repo_host ticketing kb ai_tool; do
+      for _ad in repo_host ticketing kb ai_tool scheduler; do
         if ! /usr/bin/grep -qE "^[[:space:]]*${_ad}[[:space:]]*=[[:space:]]*\S" "$c33_op" 2>/dev/null; then
           c33_findings=$((c33_findings + 1))
           log "  detail: operator.toml.template [adapters].$_ad has no default"
@@ -14275,6 +14275,119 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
         else
           flag_warn_or_issue "pack-conformance" "check errored (exit $c75_exit): $(head -1 <<<"$c75_out")"
         fi
+      fi
+    fi
+  fi
+
+  # Check 76 — Automation-registry admission (conformance + coverage)
+  #
+  # WHAT IT ASSERTS. An automation is admitted only if it has a routine-spec row
+  # in core/automations/registry.md that VALIDATES. Two predicates, one check:
+  #   conformance  every row that is PRESENT satisfies the field contract
+  #   coverage     every automation the corpus DECLARES has a row, every row has
+  #                a declaring automation, every row's entrypoint declares that
+  #                row's own id, and every scheduled workflow is registered
+  #
+  # WHY BOTH, AND WHY IN ONE CHECK. Either alone is green in a state the other
+  # exists to catch. Conformance alone is green on an EMPTY registry — which is
+  # precisely the failure that motivated the registry: cadences declared in
+  # prose, none registered, nothing signalling it. Coverage alone is green on a
+  # registry whose rows are all present and all malformed. They are one admission
+  # question asked from two directions, so they share one check number and one
+  # verdict rather than letting a reader see one green and infer the other.
+  #
+  # WHY DEPLOY-TIME AND NOT CI-ONLY. The CI workflow is the load-bearing leg — a
+  # deploy-time check runs after merge on the operator's machine and cannot block
+  # a ship. This is its deploy-time companion, single-sourced on the same two
+  # predicates (no policy is re-encoded here), so an operator running --check sees
+  # registry violations locally. Every other tool in this directory that has a CI
+  # mirror is wired here too; CI-only has no precedent in the family.
+  #
+  # THE CONTROL ARMS ARE NOT OPTIONAL. Both predicates carry a --self-test whose
+  # control arm asserts that a well-formed population returns ZERO findings. That
+  # arm is the one that distinguishes a working gate from a gate that always
+  # fires, and this release has already produced one of the latter: a word-split
+  # defect made the conformance predicate reject every well-formed cron row while
+  # still reporting a SUMMARY line. The self-tests run FIRST and hard-fail, so a
+  # predicate that has stopped discriminating fails the check rather than
+  # reporting a corpus it can no longer read.
+  #
+  # Primitives: core/deploy/tools/check-automation-registry.sh (conformance)
+  #             core/deploy/tools/check-automation-coverage.sh (coverage)
+  # Both carry --self-test. Both are also invoked by the CI gate
+  # .github/workflows/automation-registry-check.yml over the same scan surfaces.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 76: Automation-registry admission (every declared automation has a conforming routine-spec row, both directions + entrypoint round-trip + scheduled-workflow arm; enforcing; whole-corpus; CI-mirrored)"
+    local c76_conf="core/deploy/tools/check-automation-registry.sh"
+    local c76_cov="core/deploy/tools/check-automation-coverage.sh"
+    if [[ ! -f "$c76_conf" || ! -f "$c76_cov" ]]; then
+      log "  FAIL:  automation-registry — primitive script missing (conformance: $c76_conf; coverage: $c76_cov). The gate cannot assert anything without both; this is a repo defect, not a benign absence."
+      ISSUES=$((ISSUES + 1))
+    else
+      # ── control arms FIRST: a probe that cannot be shown to discriminate proves
+      # nothing by returning zero.
+      local c76_cf_out c76_cf_rc=0 c76_cv_out c76_cv_rc=0
+      c76_cf_out=$(bash "$c76_conf" --self-test 2>&1) || c76_cf_rc=$?
+      c76_cv_out=$(bash "$c76_cov" --self-test 2>&1) || c76_cv_rc=$?
+      log "  CTRL:  automation-registry — conformance: $(echo "$c76_cf_out" | tail -1)"
+      log "  CTRL:  automation-registry — coverage:    $(echo "$c76_cv_out" | tail -1)"
+      if [[ $c76_cf_rc -ne 0 || $c76_cv_rc -ne 0 ]]; then
+        log "  FAIL:  automation-registry-fixtures — a predicate self-test regressed (conformance exit=${c76_cf_rc}, coverage exit=${c76_cv_rc}). A probe that can no longer be shown to detect AND to discriminate proves nothing, so the registry is NOT reported clean."
+        [[ $c76_cf_rc -ne 0 ]] && echo "$c76_cf_out" | sed 's/^/         /'
+        [[ $c76_cv_rc -ne 0 ]] && echo "$c76_cv_out" | sed 's/^/         /'
+        ISSUES=$((ISSUES + 1))
+      else
+        # ── leg 1: conformance over the live registry.
+        local c76_out c76_rc=0
+        c76_out=$(bash "$c76_conf" 2>&1) || c76_rc=$?
+        case "$c76_rc" in
+          0) log "  OK:    automation-registry conformance — $(echo "$c76_out" | sed -n 's/^SUMMARY: //p' | tail -1)" ;;
+          1)
+            # The finding count is checked against the exit code. A predicate
+            # that says "findings" while emitting nothing this loop can parse
+            # would otherwise increment ISSUES zero times and read as a PASS —
+            # the silent-pass shape this whole check exists to prevent.
+            local _c76_hit _c76_n=0
+            while IFS= read -r _c76_hit; do
+              [[ -z "$_c76_hit" ]] && continue
+              log "  FAIL:  automation-registry — ${_c76_hit#FAIL:  }"
+              ISSUES=$((ISSUES + 1))
+              _c76_n=$((_c76_n + 1))
+            done < <(echo "$c76_out" | grep '^FAIL:  R-' || true)
+            if [[ $_c76_n -eq 0 ]]; then
+              log "  FAIL:  automation-registry — the conformance predicate exited 1 (findings) but emitted no parseable 'FAIL:  R-' line. Its output grammar and this reader have diverged; a findings verdict must never be swallowed into a clean report."
+              ISSUES=$((ISSUES + 1))
+            fi
+            ;;
+          *)
+            log "  FAIL:  automation-registry — conformance scan-surface error (exit ${c76_rc}): $(grep -m1 'scan-surface error' <<<"$c76_out")"
+            ISSUES=$((ISSUES + 1))
+            ;;
+        esac
+
+        # ── leg 2: coverage over the live corpus.
+        local c76b_out c76b_rc=0
+        c76b_out=$(bash "$c76_cov" 2>&1) || c76b_rc=$?
+        case "$c76b_rc" in
+          0) log "  OK:    automation-registry coverage — $(echo "$c76b_out" | sed -n 's/^SUMMARY: //p' | tail -1)" ;;
+          1)
+            local _c76b_hit _c76b_n=0
+            while IFS= read -r _c76b_hit; do
+              [[ -z "$_c76b_hit" ]] && continue
+              log "  FAIL:  automation-registry — ${_c76b_hit#FAIL:  }"
+              ISSUES=$((ISSUES + 1))
+              _c76b_n=$((_c76b_n + 1))
+            done < <(echo "$c76b_out" | grep '^FAIL:  A-' || true)
+            if [[ $_c76b_n -eq 0 ]]; then
+              log "  FAIL:  automation-registry — the coverage predicate exited 1 (findings) but emitted no parseable 'FAIL:  A-' line. Its output grammar and this reader have diverged; a findings verdict must never be swallowed into a clean report."
+              ISSUES=$((ISSUES + 1))
+            fi
+            ;;
+          *)
+            log "  FAIL:  automation-registry — coverage scan-surface error (exit ${c76b_rc}): $(grep -m1 'scan-surface error' <<<"$c76b_out")"
+            ISSUES=$((ISSUES + 1))
+            ;;
+        esac
       fi
     fi
   fi

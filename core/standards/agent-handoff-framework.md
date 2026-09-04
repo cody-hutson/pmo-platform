@@ -40,7 +40,7 @@ The framework **composes with — does not replace** — five pre-existing asset
 | Model | Definition | Boundary criterion | Examples |
 |---|---|---|---|
 | **Sync (user-present)** | Operator awaits response in real-time within an active session/chat. Output is the unit of value. | An operator awaits this output's **rendering**. | ppm-agent invoked from chat for meeting review; daily-status invoked at standup; file-router triaging a freshly uploaded file in active chat; release-planner Mode A invoked from chat |
-| **Async (background)** | No operator-present at invocation; output is a queued artifact awaiting subsequent disposition. | An operator awaits this output's **disposition** (or no operator awaits at all). | folder-watch on `projects/Transcripts/` triggering file-router; scheduled cron tasks via `mcp__scheduled-tasks__*`; `loop` skill self-pacing iterations; spawn_task spokes running while operator is in another session; release-executor running Stage 12 chore-PR sequences |
+| **Async (background)** | No operator-present at invocation; output is a queued artifact awaiting subsequent disposition. | An operator awaits this output's **disposition** (or no operator awaits at all). | folder-watch on `projects/Transcripts/` triggering file-router; registry-declared scheduled cron routines; `loop` skill self-pacing iterations; spawn_task spokes running while operator is in another session; release-executor running Stage 12 chore-PR sequences |
 
 **Boundary test (single discriminator):** *"Does an operator await this output's RENDERING (sync) or its DISPOSITION (async)?"* — RENDERING means the operator is watching the output appear; DISPOSITION means the operator's next interaction is reviewing what landed.
 
