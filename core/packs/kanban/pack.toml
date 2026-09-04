@@ -23,6 +23,7 @@ projects_as = "Card"
 level_name_ref = "derive"                       # anchor into the work-organization-mapping-framework Layer-2 Kanban row
 [kinds.fields]
 core = "inherit"
+source = "Kanban Method (Anderson 2010) — reasoned empty set, and the ground is a mandate boundary rather than a silence. Foundational principle 1, Start with what you do now, makes Kanban a change method laid over an existing process: it mandates no required card field list, so no field set is owed here. The Method does name a per-card construct — class of service, the demand classes whose policies core practice 4 makes explicit — but which classes a service runs, and what each promises, is that service's own policy; a corpus-wide default could name the concept and never carry a value a deployment could use, which is why class of service is left to an operator-local override rather than shipped as a field. What the Method prescribes per card is policy-shaped, and core practice 4 puts that content in the readiness and done criteria this kind populates, not in fields."
 kind_specific = []
 [kinds.criteria.readiness]
 criteria_version = "0.1.0"
