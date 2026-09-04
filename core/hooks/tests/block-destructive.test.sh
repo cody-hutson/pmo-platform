@@ -2220,7 +2220,7 @@ f2_case() {
   f2_run block-destructive.sh "$cmd"
   local ok=1
   [ "$F2_EXIT" = "$want" ] || ok=0
-  if [ -n "$pat" ] && ! /usr/bin/printf '%s' "$F2_ERR" | /usr/bin/grep -qE "$pat"; then ok=0; fi
+  if [ -n "$pat" ] && ! /usr/bin/grep -qE "$pat" <<<"$F2_ERR"; then ok=0; fi
   if [ "$ok" = 1 ]; then
     /usr/bin/printf 'PASS: %s\n' "$name"; PASS=$((PASS + 1))
   else
@@ -2235,7 +2235,7 @@ f2_case() {
 # all-allow block would read 100% green against a hook that never ran a rule. A
 # broken probe must report itself unusable, never report the population empty.
 f2_run block-destructive.sh 'git push --force origin main'
-if [ "$F2_EXIT" = 2 ] && /usr/bin/printf '%s' "$F2_ERR" | /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-001'; then
+if [ "$F2_EXIT" = 2 ] && /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-001' <<<"$F2_ERR"; then
   /usr/bin/printf 'PASS: F2-FWALK-SCOPE: fixture is in scope and enforcing (unrelated rule -001 fires), so the verdicts below are live\n'
   PASS=$((PASS + 1))
 else
@@ -2413,7 +2413,7 @@ fi
 # M3 — the CONFORMANT control. The shipped walk consumes the flag's argument, reaches
 # the real operand, and denies it.
 f2_run block-destructive.sh "bash -o errexit ${F2_NA}"
-if [ "$F2_EXIT" = 2 ] && /usr/bin/printf '%s' "$F2_ERR" | /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022'; then
+if [ "$F2_EXIT" = 2 ] && /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$F2_ERR"; then
   /usr/bin/printf 'PASS: AC-D022-M3: conformant control — shipped hook DENIES the non-allowlisted script behind a value-taking flag\n'
   PASS=$((PASS + 1))
 else
@@ -2441,10 +2441,10 @@ fi
 # rule — the bare invocation, and the no-argument flag that always blocked.
 F2_M5_OK=1
 f2_run block-destructive-mut.sh "bash ${F2_NA}"
-{ [ "$F2_EXIT" = 2 ] && /usr/bin/printf '%s' "$F2_ERR" | /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022'; } || F2_M5_OK=0
+{ [ "$F2_EXIT" = 2 ] && /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$F2_ERR"; } || F2_M5_OK=0
 F2_M5_BARE="$F2_EXIT"
 f2_run block-destructive-mut.sh "bash -x ${F2_NA}"
-{ [ "$F2_EXIT" = 2 ] && /usr/bin/printf '%s' "$F2_ERR" | /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022'; } || F2_M5_OK=0
+{ [ "$F2_EXIT" = 2 ] && /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$F2_ERR"; } || F2_M5_OK=0
 if [ "$F2_M5_OK" = 1 ]; then
   /usr/bin/printf 'PASS: AC-D022-M5: mutated copy still enforces the untouched half of -022 (bare and no-argument-flag forms), so M4 is a live ALLOW and not a dead sandbox\n'
   PASS=$((PASS + 1))
