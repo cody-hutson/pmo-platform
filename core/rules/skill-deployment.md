@@ -176,6 +176,11 @@ register rather than being derivable from the tree. A criterion needing only
 "the gate fails on a stale package" depends on the token alone; a criterion
 needing "a stale package cannot merge" depends on both halves.
 
+**Current pre-merge mode:** the sentinel token reads `enforce`, so this surface fails
+the job red on a rostered package that is stale — or that it could not measure —
+rather than annotating it and passing; whether that red job also stops a merge still
+depends on the `required_status_checks` half above, which no file here records.
+
 ### Automatic post-merge deploy
 
 `core/hooks/git-post-merge-deploy.sh` is installed as the repository's `post-merge`

@@ -1,6 +1,6 @@
 name: Skill package content-freshness (pre-merge gate)
 
-# gate-efficacy: posture=required(warn-mode-initial)  enforcement=branch-protection:"Pre-merge .skill package content-freshness gate"  always-reports=yes
+# gate-efficacy: posture=required(enforce; ratified 2026-09-04)  enforcement=branch-protection:"Pre-merge .skill package content-freshness gate"  always-reports=yes
 #   invariant: every rostered skill's compiled .skill package reflects current source
 #              content (the committed package == what source would build now) — asserted
 #              PRE-MERGE so a PR that edits a skill's SKILL.md or references/ cannot
@@ -48,16 +48,21 @@ name: Skill package content-freshness (pre-merge gate)
 # merged green with this gate never having run — the injected-canonical vector, invisible
 # precisely because a non-matching path filter produces no check run to read.
 #
-# always-reports=yes is ALSO A PREREQUISITE for the enforce flip, not a nicety: a required
+# always-reports=yes is ALSO A PREREQUISITE for enforcement, not a nicety: a required
 # status check that is path-filtered leaves every non-matching PR permanently pending
-# ("Expected — waiting for status"), so the graduation path stated below is broken by
-# construction for as long as a filter exists. Ships warn-mode-initial. Check 7's
+# ("Expected — waiting for status"), so the graduation path would be broken by
+# construction for as long as a filter existed. This workflow carries no filter.
+# GRADUATED. It shipped warn-mode-initial; the committed
+# .github/skill-package-freshness.enforce token now reads `enforce`, so a STALE or a
+# NOT-EVALUATED verdict exits 1 and this job is RED rather than annotated. Check 7's
 # non-reproducible-archive false-positive class is CLOSED, so mirroring the content-hash
-# verdict into CI does not yield false-positive failures. Flips when the committed
-# .github/skill-package-freshness.enforce token -> `enforce` AND the job is added to
-# required_status_checks (branch protection, out-of-tree — R3).
-# (Per core/standards/gate-efficacy-standard.md (b)/(b'); warn-mode-initial per
-# core/rules/git-workflow.md § Repository-Integrity Gates.)
+# verdict into CI does not yield false-positive failures. THE OTHER HALF IS OUT-OF-TREE
+# AND UNVERSIONED: adding "Pre-merge .skill package content-freshness gate" to
+# required_status_checks (branch protection — R3) is an operator step executed AFTER this
+# release merges, so until it runs a red job here reports without stopping a merge.
+# Read that membership; never infer it from this header.
+# (Per core/standards/gate-efficacy-standard.md (b)/(b'); the warn-mode-initial posture
+# this graduated from is defined in core/rules/git-workflow.md § Repository-Integrity Gates.)
 #
 # THIN caller of the single engine. --check-package-freshness runs Check 7's FULL
 # rostered-skill content-hash verdict via the shared _c7_compute_verdict "gate" body —
@@ -194,7 +199,7 @@ jobs:
           printf '%s\n' "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
           echo "rc=$RC" >> "$GITHUB_OUTPUT"
 
-      - name: Gate decision (warn-mode-initial)
+      - name: Gate decision (enforce)
         env:
           RC: ${{ steps.check.outputs.rc }}
         run: |
