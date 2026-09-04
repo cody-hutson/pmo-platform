@@ -2938,6 +2938,134 @@ def self_test():
     check("SEL-R02 --kit passed without --resolve EXITS 3 rather than being ignored",
           rc == 3 and "modifiers on --resolve" in err)
 
+    # ── PD-*: THE PACK DEFAULT — what a pack contributes when nothing narrows it ──
+    # THE RULE THESE ARMS GRADE: a methodology pack's default is the kind set it
+    # declares. It names no kit, because a kit is deployment data and none ships. The
+    # rule is stated once at core/packs/README.md § Kit selection and precedence and is
+    # cited here rather than restated.
+    #
+    # WHY A DEDICATED ROOT AND NOT AN EXTENSION OF selection/. SEL-00 pins that root's
+    # exact SEVEN-tuple as its non-vacuity guard, and SEL-04a/04b/04x read its
+    # eligibility populations — 04b's ARCHETYPE-eligible set is its own control arm.
+    # Adding a kit-free archetype pack there would move that population, so an arm's
+    # verdict would change for a reason that is not the behaviour it grades. A second
+    # root costs two files; moving a control arm costs the discrimination of three.
+    _pd_root = os.path.join(_pc_fx, "pack-default")
+    _pd_live = os.path.join(_pc_repo, "core", "packs")
+
+    def _pd(archetype, root):
+        return _pc_cli(_pc_repo, ("--resolve", archetype, "--pack-root", root,
+                                  "--skip-backlog"))
+
+    def _pd_roles(out):
+        """{`role=<value>`} over the KIND provenance rows — the union's OWNERSHIP.
+
+        Read from the provenance row rather than from ELIGIBLE, deliberately: a kit can
+        be ELIGIBLE and still win nothing, so eligibility would answer a weaker question
+        than 'whose declaration is in the union'."""
+        return set(r[3] for r in _pc_rows(out, "KIND"))
+
+    # NON-VACUITY FIRST. Every arm below reads two tracked fixture packs; a deleted or
+    # renamed fixture must fail HERE, naming the cause, rather than silently shrinking
+    # PD-01's union to the empty set — which would satisfy its `no kit rows` conjunct
+    # on nothing at all.
+    _pd_expect = ("pd-base", "pd-plan")
+    check("PD-00 non-vacuity: both pack-default fixtures are present and readable",
+          os.path.isdir(_pd_root)
+          and all(os.path.isfile(os.path.join(_pd_root, d, "pack.toml"))
+                  for d in _pd_expect))
+
+    # PD-01 — THE PACK DEFAULT POPULATES. Over a root holding one methodology pack and
+    # NO kit, an unselected resolution returns exactly that pack's own kinds.
+    _rc_pd, out_pd, _e = _pd("Waterfall", _pd_root)
+    check("PD-01 a pack's OWN declared kinds are what an unselected resolution returns "
+          "— exactly its kind set, and every row attributed to it",
+          _rc_pd == 0
+          and _sel_kinds(out_pd) == {"pd-activity", "pd-work-package"}
+          and set(r[2] for r in _pc_rows(out_pd, "KIND")) == {"pd-plan"}
+          and _pd_roles(out_pd) == {"role=archetype"})
+
+    # PD-01c — THE READER CONTROL for PD-01's zero kit rows. It proves the reader FINDS
+    # `role=kit` provenance where it exists. It does NOT — and structurally cannot —
+    # prove that PD-01's own root could have produced one: that root holds zero kits, so
+    # its zero is a property of the population as well as of the rule. PD-04 below is
+    # where the population that CAN exhibit the behaviour is read.
+    _rc_c, out_pdc, _e = _pd("Scrum", _sel_root)
+    check("PD-01c control: the SAME reader over a kit-bearing root DOES return "
+          "role=kit provenance — PD-01's zero is measured, not a dead field",
+          _rc_c == 0 and "role=kit" in _pd_roles(out_pdc))
+
+    # PD-02 — THE SHIPPED PACKS, which are what the rule is actually about. Each
+    # methodology pack resolves to its own kinds with the sibling EXCLUDED, and the two
+    # kind sets are DISJOINT. This is the release's CIAC-5 predicate; no parallel path
+    # is added, and the cross-pack comparison is its own control — two non-empty sets,
+    # so disjointness is not read off an empty population.
+    _rc_s, out_s, _e = _pd("Scrum", _pd_live)
+    _rc_k, out_k, _e = _pd("Kanban", _pd_live)
+    _pd_s, _pd_k = _sel_kinds(out_s), _sel_kinds(out_k)
+    check("PD-02 each shipped methodology pack resolves to its OWN kinds with the "
+          "sibling EXCLUDED, and the two kind sets are disjoint and non-empty",
+          _rc_s == 0 and _rc_k == 0
+          and len(_pd_s) > 0 and len(_pd_k) > 0
+          and not (_pd_s & _pd_k)
+          and set(r[2] for r in _pc_rows(out_s, "KIND")) == {"scrum"}
+          and set(r[2] for r in _pc_rows(out_k, "KIND")) == {"kanban"}
+          and any(r[1] == "kanban" for r in _pc_rows(out_s, "EXCLUDED"))
+          and any(r[1] == "scrum" for r in _pc_rows(out_k, "EXCLUDED")))
+
+    # PD-03 — NO ARCHETYPE-KEYED FALLBACK. Limb (a) is a byte-identical match, so no
+    # methodology pack reaches a foreign archetype: a plan-driven resolution over the
+    # shipped corpus is empty, and both shipped packs say why on their own EXCLUDED row.
+    #
+    # THE ASSERTION IS SCOPED TO WHAT IT MEASURES, and the scope is the point. This is
+    # NOT the claim that no cross-archetype edge exists — limb (b) IS one, it admits
+    # every neutral kit under EVERY archetype, and PD-04 reads it. It is the narrower
+    # and TRUE claim that over a KIT-FREE corpus a plan-driven resolution inherits
+    # nothing. An earlier form of this arm asserted the absolute; it was falsified by
+    # execution on two conforming roots differing by one directory. PD-01's non-zero
+    # over a root that DOES hold a matching methodology pack is the reader control.
+    _rc_w, out_w, _e = _pd("Waterfall", _pd_live)
+    check("PD-03 over a KIT-FREE corpus a plan-driven resolution inherits nothing — "
+          "COUNT 0 at exit 0, both shipped packs EXCLUDED naming the failed limbs",
+          _rc_w == 0
+          and _sel_kinds(out_w) == set()
+          and set(r[1] for r in _pc_rows(out_w, "EXCLUDED")) == {"scrum", "kanban"}
+          and all("neither limb holds" in r[4] for r in _pc_rows(out_w, "EXCLUDED")))
+
+    # PD-04 — THE DIVERGENCE, PINNED. Read-only over the EXISTING selection root: no
+    # pack is added, SEL-00's seven-tuple and SEL-04b's control population are untouched.
+    #
+    # WHAT IT PINS. `--resolve <archetype>` WITHOUT `--kit` does not mean "no kit
+    # selected" — it means UNNARROWED. Every kit in the root is eligible under every
+    # archetype through limb (b), and a kit outranks a methodology pack, so a kit wins a
+    # colliding kind_id with NOTHING SELECTED. sel-shared is declared by both
+    # sel-kit-alpha (role=kit) and sel-k4-override (role=archetype, applies_to=Scrum),
+    # and it resolves to the KIT.
+    #
+    # REGISTERED GAP, and this arm is its runner. The resolver has no arity for
+    # "resolved to no kit": --kit takes a pack id or is absent, and absent means
+    # unnarrowed. Over a kit-bearing root the empty string and the literal `none` each
+    # exit 3 by SEL-RESOLVE, so no invocation returns the methodology pack's kinds
+    # alone. The gap is stated at core/packs/README.md § Kit selection and precedence
+    # with an EMPTY enforcing-gate cell. This arm exists so that when the arity lands it
+    # must be EDITED rather than silently satisfied — a prose row has no failing state.
+    check("PD-04 the UNNARROWED diagnostic is NOT the 'no kit selected' state — a "
+          "neutral kit is eligible and wins a colliding kind_id with nothing selected",
+          _rc_c == 0
+          and "role=kit" in _pd_roles(out_pdc)
+          and _owner(out_pdc, "sel-shared") == ("sel-kit-alpha", None)
+          and any(r[1] == "sel-k4-override" and r[2] == "role=archetype"
+                  for r in _pc_rows(out_pdc, "ELIGIBLE")))
+
+    # PD-04c — the FAIL-CAPABILITY control for PD-04. The same collision under an
+    # EXPLICIT k4 override flips the winner, so the kit-wins verdict above is a real
+    # precedence reading rather than a constant this root always produces.
+    _rc_c4, out_pdc4, _e = _sel("Scrum", kit="sel-kit-alpha", k4="sel-k4-override")
+    check("PD-04c control: the SAME collision resolves to the OVERRIDE when one is "
+          "named — PD-04's kit-wins verdict is a precedence reading, not a constant",
+          _rc_c4 == 0 and _owner(out_pdc4, "sel-shared") == ("sel-k4-override",
+                                                             "slot=k4"))
+
     # ── COVERAGE META-ARM ────────────────────────────────────────────────────
     # Every rule the reader can emit is exercised by an arm that fails when its rule
     # is mutated. A rule added without an arm reddens THIS case rather than riding a
