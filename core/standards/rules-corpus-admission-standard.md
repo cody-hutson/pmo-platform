@@ -86,7 +86,8 @@ need it.
 
 ### Applying the test to a candidate {#applying-the-test}
 
-Run the three falsifiers in order and record each outcome. The result is one of:
+Run the A1, A2 and A3 falsifiers in order, record each outcome, then read the
+disposition from this table:
 
 | Outcome | Meaning | Disposition |
 |---|---|---|
