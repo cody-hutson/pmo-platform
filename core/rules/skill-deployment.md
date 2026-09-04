@@ -219,7 +219,7 @@ default is to propagate:
 drift) is the DETECTION backstop, not a substitute for the disposition: it
 catches a references-only change that was neither propagated nor deferred. Do NOT
 re-implement drift detection — route through Check 1. The worked Stage-12 example
-lives in [`pipeline/stage-12-execute.md`](../../release/references/pipeline/stage-12-execute.md)
+lives in [`pipeline/stage-12-execute.md`](/release/references/pipeline/stage-12-execute.md)
 § References-only change propagation.
 
 ## Auto-detect window semantics
@@ -290,22 +290,22 @@ any mirror that goes stale.
 
 ### Existing skills (chained PMO skills)
 
-Modifications to any `{core,operations,release}/skills/<skill>/SKILL.md` (or its `reference/*.md` files) MUST flow through `pmo-skill-editor` (Mode A for edits; Modes B/C/D for audits). Direct Write/Edit to a SKILL.md is blocked at edit-time by `.claude/hooks/block-skill-direct-edit.sh` (BLOCK-SKILL-EDIT-001..002) for any migrated skill (frontmatter `skill_discipline_migrated_v10_2: true`) — **from a main session or a spawned subagent alike, and only while the four-condition coverage boundary holds: loading ∧ no pre-launch `CLAUDE_HOOK_BYPASS` ∧ master-activation class ∧ hook mode.** This hook is `workflow`-class and master activation ships OFF, so condition 3 fails on a default instance and the edit-time gate is then a convention rather than an interlock. Boundary + consequence: [canonical-skill-structure.md § Coverage boundary of the edit-time gate](../standards/canonical-skill-structure.md). Deploy-time enforcement via `./deploy.sh --check` Check 10 (editor audit-trail trailer assertion on last non-merge commit) is **unaffected by that boundary** and is the enforcing half of the pair. See [canonical-skill-structure.md §2 Scope of Enforcement](../standards/canonical-skill-structure.md) for the full enforcement matrix.
+Modifications to any `{core,operations,release}/skills/<skill>/SKILL.md` (or its `reference/*.md` files) MUST flow through `pmo-skill-editor` (Mode A for edits; Modes B/C/D for audits). Direct Write/Edit to a SKILL.md is blocked at edit-time by `.claude/hooks/block-skill-direct-edit.sh` (BLOCK-SKILL-EDIT-001..002) for any migrated skill (frontmatter `skill_discipline_migrated_v10_2: true`) — **from a main session or a spawned subagent alike, and only while the four-condition coverage boundary holds: loading ∧ no pre-launch `CLAUDE_HOOK_BYPASS` ∧ master-activation class ∧ hook mode.** This hook is `workflow`-class and master activation ships OFF, so condition 3 fails on a default instance and the edit-time gate is then a convention rather than an interlock. Boundary + consequence: [canonical-skill-structure.md § Coverage boundary of the edit-time gate](/core/standards/canonical-skill-structure.md). Deploy-time enforcement via `./deploy.sh --check` Check 10 (editor audit-trail trailer assertion on last non-merge commit) is **unaffected by that boundary** and is the enforcing half of the pair. See [canonical-skill-structure.md §2 Scope of Enforcement](/core/standards/canonical-skill-structure.md) for the full enforcement matrix.
 
 ### NEW skills
 
-NEW PMO skills MAY be authored via `anthropic-skills:skill-creator` (Anthropic built-in), `pmo-skill-refiner` Mode 2 (Create New — wraps the Anthropic scaffolder + applies 7-field injection + pre-handoff gate), or direct authoring. **PMO tooling does NOT gate the NEW-skill authoring path.** Direct authoring does NOT automatically satisfy Principal Standard or failure-mode-standard.md requirements — those are checked at PR review + pmo-qa-auditor invocation, not at deploy-time. The intentional non-enforcement boundary is documented in [canonical-skill-structure.md §2](../standards/canonical-skill-structure.md).
+NEW PMO skills MAY be authored via `anthropic-skills:skill-creator` (Anthropic built-in), `pmo-skill-refiner` Mode 2 (Create New — wraps the Anthropic scaffolder + applies 7-field injection + pre-handoff gate), or direct authoring. **PMO tooling does NOT gate the NEW-skill authoring path.** Direct authoring does NOT automatically satisfy Principal Standard or failure-mode-standard.md requirements — those are checked at PR review + pmo-qa-auditor invocation, not at deploy-time. The intentional non-enforcement boundary is documented in [canonical-skill-structure.md §2](/core/standards/canonical-skill-structure.md).
 
 ### Dual-gate enforcement infrastructure
 
 - **Gate 1 (spec-compliance, deploy-time):** `./deploy.sh --check` Checks 6-10 validate canonical structure, package freshness, canonical-session-path freshness, mirror-sync, editor audit-trail.
 - **Gate 2 (editor-invocation, edit-time):** `.claude/hooks/block-skill-direct-edit.sh` PreToolUse hook on Write/Edit matchers. Pattern matches `bypass-mode-readiness.md` hooks exactly.
 - **Exemption surface:** `.claude/skill-editor-exemption-list.txt` (canary initially). Operator additions follow "No ungoverned changes" protocol.
-- **Shakedown posture:** Initial deploy uses warn-mode for Checks 8-10 and the edit-time hook (per `.claude/hooks/.mode` and `.claude/hooks/deploy-check.mode`). After ≥3 days of warn-log review + false-positive allowlist additions, flip to `enforce` per [bypass-mode-readiness.md Shakedown → Enforce Transition Checklist](bypass-mode-readiness.md).
+- **Shakedown posture:** Initial deploy uses warn-mode for Checks 8-10 and the edit-time hook (per `.claude/hooks/.mode` and `.claude/hooks/deploy-check.mode`). After ≥3 days of warn-log review + false-positive allowlist additions, flip to `enforce` per [bypass-mode-readiness.md Shakedown → Enforce Transition Checklist](/core/rules/bypass-mode-readiness.md).
 
 ### Version field
 
-The `version:` field in every SKILL.md frontmatter follows [version-field-semantics.md](../standards/version-field-semantics.md) — release-tag-at-last-material-edit. Dual-gate: the Gate 2 hook routes edits through `pmo-skill-editor`, which is responsible for bumping the field per the semantics doc; `deploy.sh --check` Check 6 asserts presence + format.
+The `version:` field in every SKILL.md frontmatter follows [version-field-semantics.md](/core/standards/version-field-semantics.md) — release-tag-at-last-material-edit. Dual-gate: the Gate 2 hook routes edits through `pmo-skill-editor`, which is responsible for bumping the field per the semantics doc; `deploy.sh --check` Check 6 asserts presence + format.
 
 ## Drift Check
 At session start, optionally run: `./deploy.sh --check --warn`

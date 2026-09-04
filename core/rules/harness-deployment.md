@@ -101,5 +101,5 @@ For account-switcher itself (Mac-app multi-account launcher with `clone-prefs` m
 ## Cross-Reference
 
 - Symmetric pattern for skills: see [skill-deployment.md](skill-deployment.md). Both governance docs are byte-identical-mirrored to `.claude/rules/`.
-- Hook compliance for harness artifacts: see [bypass-mode-readiness.md](bypass-mode-readiness.md) for the workspace's PreToolUse hook layer that gates destructive ops, credential reads, and egress patterns. Harness bash entrypoints must remain compliant with these hooks.
-- Release process for harness changes: see [release-process.md](../../release/governance/release-process.md). Harness changes follow the standard 13-stage pipeline (Stages 10-11 compress for git-native releases). Operational deployment of harness artifacts at Stage 12/13 uses `./deploy.sh --deploy` (auto-detected or manual).
+- Hook compliance for harness artifacts: see [bypass-mode-readiness.md](/core/rules/bypass-mode-readiness.md) for the workspace's PreToolUse hook layer that gates destructive ops, credential reads, and egress patterns. Harness bash entrypoints must remain compliant with these hooks.
+- Release process for harness changes: see [release-process.md](/release/governance/release-process.md). Harness changes follow the standard 13-stage pipeline (Stages 10-11 compress for git-native releases). Operational deployment of harness artifacts at Stage 12/13 uses `./deploy.sh --deploy` (auto-detected or manual).
