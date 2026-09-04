@@ -4,7 +4,7 @@
 title: Release Plan — rules-mirror-delivered (the rules mirror is delivered, bounded and resolvable)
 type: release-plan
 plan_type: release
-status: Executing
+status: ACTIVE
 release: "{{RELEASE_VERSION}}"
 milestone: rules-mirror-delivered
 release_class: novel
