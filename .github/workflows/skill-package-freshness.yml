@@ -63,7 +63,13 @@ name: Skill package content-freshness (pre-merge gate)
 # CIAC-2).
 #
 # Platform: macos-latest — the content-hash verdict needs python3 + unzip (both on the
-# macOS image) and deploy.sh uses BSD `stat -f`/`md5` (mirrors version-freeness.yml).
+# macOS image) AND PyYAML, which is NOT on the image. build_skill_to_dir() runs
+# `/usr/bin/python3 -m scripts.package_skill` (deploy.sh:3860); package_skill.py:17
+# imports scripts.quick_validate, which imports yaml at quick_validate.py:28. The
+# dependency is TRANSITIVE — a direct read of the packager does not reveal it, which is
+# why this workflow shipped without it and published a green CONTENT verdict while the
+# staged rebuild ran for ZERO of 55 rostered packages. deploy.sh uses BSD `stat -f`/`md5`
+# (mirrors version-freeness.yml).
 #
 # Security: consumes NO untrusted github.event.* input. Every run: block is a static
 # invocation; the RC handoff uses the env-var pattern (no ${{ }} inside a run: block).
@@ -92,6 +98,42 @@ jobs:
           command -v git
           command -v unzip || echo "::warning::unzip missing — Check 7 degrades to the mtime signal"
           test -x /usr/bin/python3 || echo "::warning::/usr/bin/python3 missing — the staged-rebuild content verdict degrades"
+
+      - name: Ensure PyYAML (pinned — the packager's transitive dependency)
+        # Mirrors the `Ensure PyYAML` step in .github/workflows/install-tests.yml
+        # (shell-tests job, same macos-latest runner) — the only other workflow that
+        # reaches build_skill_to_dir. Kept byte-aligned with it deliberately: two
+        # provisionings of one dependency that differ are a divergence the next reader
+        # has to re-derive.
+        run: |
+          # The CONSUMER is /usr/bin/python3: deploy.sh's build_skill_to_dir() invokes
+          # `/usr/bin/python3 -m scripts.package_skill` by absolute path (deploy.sh:3860),
+          # and guards on `[[ -x "/usr/bin/python3" ]]` at :3830. So the assertion that
+          # matters is that THAT interpreter can import yaml.
+          #
+          # Do NOT substitute eval-viewer-tests.yml's `pip install pyyaml` idiom: it
+          # installs into the setup-python interpreter, which /usr/bin/python3 cannot see.
+          # It would report success and leave this gate exactly as degraded.
+          #
+          # The install path cannot simply target the consumer either: on macOS runners
+          # /usr/bin/python3 is the Xcode shim and its pip REJECTS
+          # --break-system-packages, while the PATH-resolved python3 is a different
+          # interpreter whose pip accepts it. Try the consumer first, fall back to the
+          # flagged form, then ASSERT against the consumer either way — a successful
+          # install into an interpreter nothing runs is not success.
+          if ! /usr/bin/python3 -c 'import yaml' >/dev/null 2>&1; then
+            /usr/bin/python3 -m pip install --user 'pyyaml==6.0.2' \
+              || python3 -m pip install --user --break-system-packages 'pyyaml==6.0.2' \
+              || true
+          fi
+          /usr/bin/python3 -c 'import yaml; print("PyYAML", yaml.__version__, "via", __import__("sys").executable)'
+          # A --user install lives under $HOME. This workflow does not redirect HOME
+          # (deploy.sh assigns HOME nowhere — it only reads it), so unlike
+          # test_package_freshness_exit_codes.sh, which sandboxes HOME per probe via
+          # SBX_HOME, the pin is not load-bearing here. It is carried anyway so the two
+          # provisionings stay byte-aligned, and so an engine change that ever sandboxes
+          # HOME cannot silently re-open the gap.
+          echo "PYTHONPATH=$(/usr/bin/python3 -m site --user-site)${PYTHONPATH:+:${PYTHONPATH}}" >> "$GITHUB_ENV"
 
       - name: Run package-freshness check (single check, via the deploy.sh engine)
         id: check
