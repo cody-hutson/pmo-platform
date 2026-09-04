@@ -368,7 +368,12 @@ How Claude Code operates when working on the platform — 10 files:
 - rename-reference-cascade.md — the edit-time obligation to cascade every reference when an entity's identity changes
 - skill-deployment.md — deployment paths and procedures
 
-`release-process.md` (the 13-stage pipeline rules) is **not** a `core/rules/` file — it is sourced from `release/governance/release-process.md` and mirrored into the deployed `.claude/rules/` set, which is therefore 11 files rather than 10.
+**The source directory and the deployed set are not the same population.** Membership of the deployed `.claude/rules/` set is an admission decision governed by [`rules-corpus-admission-standard.md`](../standards/rules-corpus-admission-standard.md) §1, and two documents that live above are deliberately **not** deployed:
+
+- `bypass-mode-readiness.md` sits in the directory but is classified **REFERENCE** — the hooks it describes enforce preventively, so the index documents them rather than obliging anything, and its per-hook fragments are the source of truth read on demand.
+- `release-process.md` (the 13-stage pipeline rules) is not a `core/rules/` file at all — it is sourced from `release/governance/release-process.md`, and it is classified **REFERENCE (procedure)** because it binds only inside a named activity, which the release skills and every pipeline stage shard load on demand.
+
+Neither file was moved or deleted; both are still read where they live. The deployed set is therefore the **nine** admitted rules, held to a published byte ceiling by `deploy.sh` Check 78.
 
 ### projects/ (runtime data)
 The actual work being managed by the platform:
