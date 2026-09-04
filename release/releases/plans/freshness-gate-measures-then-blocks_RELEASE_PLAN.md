@@ -387,6 +387,21 @@ Read 2026-09-04 from the six issue bodies' `### Acceptance Criteria` sections. #
 | #6998 | AC-4 | Run the added PF arm simulating a bot-shaped staling PR | The probe catches the staled package · control: the same probe on a clean tree passes |
 | #6998 | AC-5 | Read the remediation path against the three verified auto-rebuild blockers | The path does not stall a Dependabot **security** update: it blocks with a documented self-service remediation rather than attempting an auto-rebuild that cannot re-report the required check |
 
+### Executor dispatch coverage — what `verify-release-plan.sh` can run here, and what it cannot
+
+Recorded at Engineering Commit 0 so Stage 9 reads a **declared** position rather than an unexplained roll-up. First run at slot 1: **8 PASS / 3 FAIL / 11 SKIP / 18 ERROR over 30 per-issue rows, 0 declared-deferred** (the tool's own roll-up line; a line-based re-tally of the emitted table undercounts it, so the roll-up is the figure of record).
+
+| Element | Result | What it means here |
+|---|---|---|
+| **Survival row 1 — `domain_practice`** (`provenance-survival`) | **PASS ×3** | `PROV-PRESENCE` 1 conformant label · `PROV-GRAMMAR` form=X, date=2026-09-04, in-label domain present · `PROV-COVERAGE` over 635 plan lines. `PROV-DELTA` **SKIP** — the set-difference limb has no producer surface unless the Stage-4 comment is supplied to the run; it explicitly does **not** pass by default |
+| **Survival row 2 — File Change Matrix** (`fcm-delivery`) | **FCM-1 PASS**, `FCM-COVERAGE` **SKIP** | The one ADD obligation (this plan file) is delivered and matched. Coverage is `declared=28 interpreted=26 uninterpreted=2`. The two unreadable rows are **`SECURITY.md`** and **`packages/`**, identified by replicating the tool's own `pathof()` recognizer over the fenced block — the replication reproduces `28/26/2` exactly. Both fall in the recognizer's **own documented residual class** (repository-root files with no directory segment; bare directory rows), of which its source records 52 of 54 corpus-wide as real declarations. **They are left as authored:** `SECURITY.md` is an `edit`, not an ADD, so no delivery obligation is lost, and `packages/` is explicit non-scope. Rewriting a correct path to satisfy a recognizer would be gaming the instrument |
+| **Survival row 3 — CIAC** (`integration`) | **CIAC-1 PASS · CIAC-2 PASS · CIAC-3 SKIP · CIAC-4 SKIP** | Both SKIPs are `tool-invocation-outside-executor-allowlist` — the methods name a mode-string read and a CI step-summary read, neither of which the executor is permitted to run. They are graded at **Stage 9 QC3.5 on the merged PR**, which is where the plan already assigns them |
+| **Survival row 4 — Verification Plan** | Parsed, **30 rows indexed** | The parser reaches every row; nothing is silently dropped |
+| **18 ERROR — `unclassified-method (no family match)`** | Expected, not a defect | These rows are **named reads of named surfaces**, which AC-Binding Limb 1 admits explicitly alongside commands. The executor dispatches five runnable families and has no family for a documentary read, so it reports ERROR rather than inventing a verdict. Stage 7/8 grade them by reading the named surface |
+| **2 of the 3 FAIL — `sync` family** | Attributable, and **not** to this diff | Both are the shared `deploy.sh --check` exit being non-clean on this operator instance. The only check this diff touches is Check 7, which passes **directly**: `--check-package-freshness` → rc 0, `55 rostered skill package(s) content-fresh — OK`, verified twice. **Stage 7 should re-run `deploy.sh --check` and grep for `  FAIL:` lines** — that is the discriminator between a real failure and operator-instance drift, and a bare exit-1 does not distinguish them |
+
+**Honest limit on this record.** The run transcribed above executed against the plan as it stood at Commit-0 authoring time, before the stamp-token redaction and the PR-cell population; those edits touch prose cells, not the parsed structures, but the run was **not** re-attributed to the final file. A re-run against the committed file was still executing at handoff. Stage 7 re-executes the plan-verification step as its own gate input, which is the authoritative reading.
+
 ### Release-Scoped Verification
 
 | ID | Claim | Method | Expected |
