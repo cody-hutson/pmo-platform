@@ -6237,13 +6237,19 @@ cmd_check() {
   #
   # The engineering/rules mirror was DROPPED per the layout §8.3. Drift means
   # "workspace mirror diverged from v2 source; re-run ./deploy.sh --deploy to
-  # restore". The pair set covers all 11 files under .claude/rules/ (including
-  # git-workflow.md and governance-files.md surfaced by the Stage 5 spec).
+  # restore". The pair set is the array below — it is self-counting, so read the
+  # membership from the entries rather than from a number stated in prose.
   # This array and detect_mirror_pairs() in release/tools/blast-radius.sh must
   # hold IDENTICAL path sets — adding a rule to one and not the other silently
   # desynchronises the blast-radius mirror topology from the enforced pair set.
+  # This is asserted, not remembered: the mirror-pair-parity check (Check 77)
+  # diffs the source-side path set across every holder carrying a
+  # "mirror-pair-set:" marker and FAILs naming any path and the holder it is
+  # missing from. The markers below are that registration — keep them wrapped
+  # around the array literal when editing it.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 9: Mirror-pair sync (source-to-workspace)"
+    # mirror-pair-set: BEGIN holder=deploy-check sep=colon field=1
     local -a MIRROR_PAIRS=(
       "core/rules/skill-deployment.md:$DEPLOY_ROOT/.claude/rules/skill-deployment.md"
       "core/rules/bypass-mode-readiness.md:$DEPLOY_ROOT/.claude/rules/bypass-mode-readiness.md"
@@ -6257,6 +6263,7 @@ cmd_check() {
       "core/rules/analysis-mandate.md:$DEPLOY_ROOT/.claude/rules/analysis-mandate.md"
       "release/governance/release-process.md:$DEPLOY_ROOT/.claude/rules/release-process.md"
     )
+    # mirror-pair-set: END
     for pair in "${MIRROR_PAIRS[@]}"; do
       local c9_left="${pair%%:*}"
       local c9_right="${pair##*:}"
