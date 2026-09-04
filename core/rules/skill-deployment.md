@@ -4,6 +4,9 @@ purpose: The deployment rule mapping a skill's git source to its Cowork install 
 type: rule
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
+paths:
+  - "**/SKILL.md"
+  - "packages/**"
 ---
 <!-- reference-durability: allow-link -->
 # Skill Deployment — pmo-platform

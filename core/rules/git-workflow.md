@@ -4,6 +4,7 @@ purpose: The git workflow rules for pmo-platform — branching, commit-message, 
 type: rule
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
+unscoped_rationale: "Branch, commit and worktree discipline must be held BEFORE a branch is chosen or a checkout is entered, so there is no set of paths that could scope it without defeating it — by the time the agent touches a matching file the branch decision this rule governs has already been made. Ambient load is the requirement, not a convenience. Recorded per rules-corpus-admission-standard.md §2."
 ---
 # Git Workflow — pmo-platform
 
