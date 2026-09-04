@@ -528,11 +528,26 @@ A methodology pack can already declare kinds, fields and criteria — but nothin
 
 ### Issues resolved
 
-*(Populated at Phase C1 when the full change-set has landed.)*
+| # | Outcome (one line) | Status |
+|---|---|---|
+| **#6378** | The grammar now says which of a pack's declarations a methodology owns and which the platform fixes — with a test an author applies to a new field, and three invariants the platform states but does not yet enforce recorded as named gaps rather than left invisible | **DONE** |
+| **#6363** | Every authored criterion and field carries the body of practice it came from, so its source is auditable rather than asserted | *pending — wave 2* |
+| **#6365** | The Scrum pack's empty criteria arrays are filled from the Scrum Guide and INVEST | *pending — wave 3* |
+| **#6366** | The Kanban pack's empty criteria arrays are filled from the Kanban Method, with the pull-limit gate deliberately left as a stub | *pending — wave 3* |
+| **#6380** | A pack's default is the kind set it declares — stated, and exercised by fixtures that prove a pack resolves to its own kinds and not a sibling's | *pending — wave 3* |
 
 ### Key decisions
 
-*(See § Decisions Rendered. Summarized at Phase C1.)*
+- **D-ContentHome: (A) content on the pack kinds.** Deferred at Stage 4 to #6378's spike output and rendered on its evidence rather than ahead of it. It is what froze the File Change Matrix.
+- **D-AC4: (A) reword to current capability.** Option (B) — a Stage-13 ship-gate on a later milestone — was available and not taken, because it would have collapsed a ship-gating relationship into a build-gating one and idled work that could proceed.
+- **D-R2-QualifierRestore** *(supersedes `D-R2-Reconcile`)*: a failure-mode entry regains the scoping qualifier §0 already carries and cites §0 rather than restating it. The earlier decision was rendered on a mis-reading of §0 as prohibiting when it permits; correcting that shrank the work from authoring a new reconciliation to restoring one word.
+- **D-PlacementTest-ToStage6:** the placement test's repairs land during implementation rather than in a third design pass, and **the adversarial reviewer's independent candidate set is the acceptance evidence** — implementation reports placement on both sets.
+- **D-CIAC5: restate.** As approved, one cross-issue criterion graded an artifact that will not exist — a vacuous pass, and the silent kind. It now binds to a predicate executable today.
+- **D-Version: v4.53 → v4.54** *(rule-determined)*. The Commit-0 re-verify caught a real collision; see § Commit-0 Version Re-Verify Record.
+
+### Deliverable state
+
+**`artifact-accepted`** for **#6378** — the deliverable is the boundary record itself, at its declared canonical paths (`core/schemas/work-item-type-schema.md` §1.5 + §7.3, three rows in `core/standards/gate-efficacy-standard.md`, a pointer in `core/packs/README.md`, and `core/ADRs/ADR-185-*.md`). Work whose definition of done **is** the artifact reaches this state, not `deployed-copy-synced`: the release has **no** Layer-2 propagation target (§ Operational Deployment Manifest enumerates all three classes and none fires), so declaring a deployed-copy state would be a fiction. The Artifact-Acceptance Record rows are populated in § Verification Evidence above.
 
 ### Reversibility
 
@@ -540,7 +555,10 @@ A methodology pack can already declare kinds, fields and criteria — but nothin
 
 ### Downstream impact
 
-*(Populated at Phase C1.)*
+- **It unblocks the two content cards.** Both must cite the boundary in their acceptance (CIAC-4), and both authored against it while it was still under revision — which is why their briefs named what was in flux versus stable.
+- **It hands the next milestone a specified runner.** The three named gaps are not left as prose: each carries a declared observable and an executed falsification arm, so the content-completeness lint has a written contract to build against rather than a re-derivation.
+- **It records a trap that would otherwise be re-hit.** The deploy-time conformance check's discrimination branch increments its issue counter outside the warn-mode gate, so an array-scoped completeness rule hard-fails on both control arms. That is now written down with its measurement, in the ADR and in the register rows.
+- **Consumer impact is narrow by construction.** No `PACK-*` rule id is minted, so the reachable verdict set of the pack-conformance check is unchanged; no skill, package, hook or deploy gate changes; and the register's own verdict is unmoved at 26 resolution pointers.
 
 ### Cross-references
 
