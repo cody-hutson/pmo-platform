@@ -58,8 +58,20 @@ You will receive an acknowledgement, an initial assessment, and a remediation pl
 
 ## Automated Security PRs — Pipeline Exemption
 
-Dependabot version-update PRs and Dependabot security-update PRs are tagged with the `dependabot` label and **bypass the 13-stage improvement pipeline** (Stages 1-9). They are not routed through Triage, Bundle, Planning, or Solutioning — they go directly to PR review.
+Dependabot version-update PRs and Dependabot security-update PRs **bypass the 13-stage improvement pipeline** (Stages 1-9). They are not routed through Triage, Bundle, Planning, or Solutioning — they go directly to PR review. They carry the `dependabot` label for every ecosystem registered with an `updates:` entry in `.github/dependabot.yml`, which is where that label comes from. An ecosystem that receives security updates without such an entry gets Dependabot's default labels instead, and the guarantees in this section do not reach it.
 
 Rationale: dependency bumps are self-contained, reversible, and CI-validated. Subjecting each to the full pipeline would create overhead disproportionate to risk. The pipeline is reserved for work routed via `improvement.yml` (any category label) that requires design judgment.
 
-The `cluster: security` label is retained on these PRs so they remain discoverable in security audits.
+The `cluster: security` label is retained on these PRs — by that same `updates:` entry, and subject to that same condition — so they remain discoverable in security audits.
+
+### Dependency PRs and the package-freshness gate
+
+A dependency PR that rewrites a file inside a rostered skill's compiled-package content set turns the pre-merge `.skill` package-freshness gate red: the committed package no longer matches what its source would build. Today that is one skill and two manifests, under `release/skills/pmo-skill-refiner/eval-viewer/tests/`.
+
+**Dependabot cannot clear it.** It rewrites the manifest; it does not rebuild packages. Workflows it triggers receive a read-only token and no secrets, and a commit pushed by Actions using `GITHUB_TOKEN` starts no new workflow run — so the check would never re-report and the PR would stay blocked. There is no automated path.
+
+**Clear it by hand, on the bot's own branch:** fetch the `dependabot/…` branch (it lives in this repository, not a fork, so anyone with write access can push to it); run the rebuild the gate's own failure output names, and commit the package together with its `.sha256` sidecar; push to that same branch. The push re-runs every check, and Dependabot stops rebasing a branch once a commit has been pushed to it, so the rebuild is not overwritten.
+
+The same path clears the out-of-band case — a non-release PR editing a skill's `references/` — with the fetch step omitted, since that author already owns the branch.
+
+**Admin-merge is an exception, not a step.** An administrator can merge past the red check. That is defensible only where the vulnerability being patched plainly outweighs shipping a stale package, and it requires a rationale recorded on the PR. It does not retire the rebuild: the freshness workflow also runs on every push to `main`, so a bypassed merge turns `main` itself red on the next run, and the rebuild is still owed — now on the default branch.
