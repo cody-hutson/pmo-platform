@@ -2974,8 +2974,9 @@ _c73_compute_verdict() {
 # Echoes ONE protocol line on stdout; per-row detail follows on subsequent lines
 # for the caller to render:
 #   PASS <n> holders, <m> paths        every holder parsed; symmetric difference empty
-#   FAIL <detail>                      divergence, an unparseable holder, or the
-#                                      vacuity state (fewer than two holders)
+#   FAIL <detail>                      divergence, an unparseable holder, or either
+#                                      vacuity state (fewer than two holders, or every
+#                                      discovered holder declaring zero members)
 #   NOT-EVALUATED <detail>             lifecycle only — the scan could not be completed
 _c77_compute_verdict() {
   local surface="${1:-lifecycle}"

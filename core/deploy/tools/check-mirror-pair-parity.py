@@ -47,11 +47,25 @@ a second separator silently compares every pair against a path that does not exi
 declared field is 1-indexed over that single split, so only 1 and 2 are reachable and a
 higher declared field is reported UNPARSEABLE rather than defaulted.
 
-THE VACUITY GUARD is the single most important rule here. "All holders agree" over zero
-or one holder is VACUOUSLY TRUE, and a PASS in that state is byte-indistinguishable from
-a working check — which is precisely the false-green this check exists to prevent. Fewer
-than two discovered holders is therefore a FAILURE, and zero holders exits 3 (the marker
-convention moved) rather than reading green.
+THE VACUITY GUARD is the single most important rule here, and it has TWO limbs because
+"all holders agree" is vacuously true along two independent axes.
+
+  ARITY. Over zero or one holder there is nothing to compare. Fewer than two discovered
+  holders is therefore a FAILURE, and zero holders exits 3 (the marker convention moved)
+  rather than reading green.
+
+  EMPTINESS. Over two or more holders that ALL declare zero members there is likewise
+  nothing to compare: the symmetric difference of empty sets is empty, so an unguarded
+  check reports PARITY over an empty mirror at exit 0. The arity limb cannot reach this
+  state — two empty holders are still two holders — and no comparison can, because it is
+  SYMMETRY that buys the false pass: emptying only ONE holder is correctly DIVERGENT.
+  The emptiness must therefore be asserted DIRECTLY rather than inferred from a diff. An
+  empty union is an input failure (exit 3), mirroring the zero-member guard the budget
+  check applies to these SAME holders — two checks reading one corpus must not disagree
+  about whether a state is an input failure.
+
+A PASS in either state is byte-indistinguishable from a working check, which is
+precisely the false-green this check exists to prevent.
 
 A MEASUREMENT OUTAGE IS NOT A CLEAN RESULT. A tracked file that cannot be READ makes the
 scan incomplete, so a PARITY claim over it would be unsound. That state is reported as
@@ -77,7 +91,8 @@ an unrecognized class is a FINDING, never an absence.
 EXIT CODES (mirroring the check-roster extraction-contract convention):
     0  PARITY
     1  a non-PARITY verdict was reached (finding, or a withheld verdict)
-    3  input failure — zero holders discovered; fail loud rather than reading green
+    3  input failure — zero holders discovered, or the discovered holders declare no
+       members between them; fail loud rather than reading green over an empty set
 """
 
 import argparse
@@ -304,6 +319,40 @@ def run(root):
             rows.append(("NOT-EVALUATED", rel, why))
         return rows, "UNPARSEABLE", 1
 
+    if not union:
+        # THE EMPTINESS LIMB of the vacuity guard. The arity limb below cannot reach
+        # this state — two holders declaring zero members are still two holders — and
+        # neither can the comparison, because empty minus empty is empty and the run
+        # would fall through to PARITY at exit 0 over an empty mirror. It is SYMMETRY
+        # that buys that false pass: emptying only ONE holder is correctly DIVERGENT.
+        # So the emptiness is asserted directly rather than inferred from a diff.
+        #
+        # UNPARSEABLE rather than NOT-EVALUATED, deliberately. Exit 3 matches the
+        # budget check, which calls this same physical state an input failure over the
+        # SAME holders. But NOT-EVALUATED is this file's MEASUREMENT-OUTAGE token and
+        # the wrapper routes it to the never-escalating emitter on the lifecycle
+        # surface; nothing here went un-measured — the holders were read and found
+        # empty. UNPARSEABLE is the token that reports that as the input failure it is
+        # on BOTH surfaces.
+        #
+        # Placed above the outage check for the same reason: no completion of an
+        # incomplete scan can turn this state green, because an unread file holding a
+        # populated holder would make the verdict DIVERGENT, never PARITY.
+        rows.append(("VERDICT", "UNPARSEABLE"))
+        rows.append(
+            (
+                "UNPARSEABLE",
+                "-",
+                "vacuity guard: %d holder(s) discovered and every one declares ZERO "
+                "members — the symmetric difference over empty sets is empty, so this "
+                "state would otherwise read PARITY over an empty mirror. An empty "
+                "declared set is an input failure, not parity." % (len(holders),),
+            )
+        )
+        for rel, why in unreadable:
+            rows.append(("NOT-EVALUATED", rel, why))
+        return rows, "UNPARSEABLE", 3
+
     if missing:
         rows.append(("VERDICT", "DIVERGENT"))
         for p, hid, hpath, hline in missing:
@@ -426,6 +475,22 @@ def _cases():
         _write(root, "b.sh", BLAST_SHAPE.format(hid="blast-radius", entries=_tab_entries(a)).replace(
             "sep=tab", "sep=colon"))
 
+    def both_holders_empty(root):
+        # THE SYMMETRY ESCAPE, reproduced. Both holders keep their markers and their
+        # array literals and declare NO members. Two holders clears the arity limb of
+        # the vacuity guard, and empty-minus-empty is empty, so before the emptiness
+        # limb existed this returned PARITY at exit 0 over an empty mirror.
+        _write(root, "a.sh", DEPLOY_SHAPE.format(hid="deploy-check", entries=""))
+        _write(root, "b.sh", BLAST_SHAPE.format(hid="blast-radius", entries=""))
+
+    def one_holder_empty_control(root):
+        # CONTROL ARM for the case above: identical construction except that ONE holder
+        # keeps its members, so the emptiness is ASYMMETRIC. This must be DIVERGENT.
+        # That is what proves the case above tests SYMMETRY rather than emptiness, and
+        # that the guard was not simply widened into "any empty holder is a failure".
+        _write(root, "a.sh", DEPLOY_SHAPE.format(hid="deploy-check", entries=""))
+        _write(root, "b.sh", BLAST_SHAPE.format(hid="blast-radius", entries=_tab_entries(a)))
+
     def single_holder(root):
         _write(root, "a.sh", DEPLOY_SHAPE.format(hid="deploy-check", entries=_colon_entries(a)))
 
@@ -480,6 +545,10 @@ def _cases():
         ("begin-without-end", begin_without_end, "UNPARSEABLE", 1, ["no matching END"]),
         ("swapped-separators-not-vacuous-pass", swapped_separators, "UNPARSEABLE", 1,
          ["carries no 'tab' separator", "carries no 'colon' separator"]),
+        ("both-holders-empty-vacuity-guard", both_holders_empty, "UNPARSEABLE", 3,
+         ["every one declares ZERO members"]),
+        ("both-holders-empty-asymmetry-control", one_holder_empty_control, "DIVERGENT", 1,
+         ["MISSING\tcore/rules/alpha.md\tdeploy-check"]),
         ("single-holder-vacuity-guard", single_holder, "UNPARSEABLE", 1, ["vacuity guard"]),
         ("zero-holders-input-failure", zero_holders, "UNPARSEABLE", 3, ["zero holders discovered"]),
         ("malformed-begin-not-invisible", malformed_begin, "UNPARSEABLE", 1, ["malformed BEGIN marker"]),
