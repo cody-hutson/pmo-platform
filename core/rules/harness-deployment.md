@@ -77,6 +77,8 @@ A future hardening pass (out of scope) may introduce true TOML smart-merge (sour
 
 The mirror-pair sync between the canonical source `core/rules/harness-deployment.md` (this file) and the deployed mirror `~/.claude/rules/harness-deployment.md` is enforced by `deploy.sh --check` Check 9 (rules-mirror sync).
 
+The **source-side path set** of those mirror pairs is held by more than one artifact, so agreement between the holders is itself asserted rather than remembered: every holder wraps its list in an in-band `mirror-pair-set:` marker declaring that holder's own id, separator and source field, and the `mirror-pair-parity` check diffs each holder's extracted set against the union of all of them — on both `deploy.sh --check` and the pre-merge `--check-required-subset` surface. A member added to one holder and not another therefore FAILs the check naming both the path and the lagging holder, instead of drifting silently. Adding a further holder costs one marker pair inside that holder and no change to the check; a holder that declares its own copy of the set MUST carry the marker, because an unmarked holder is invisible to the assertion.
+
 ## Adding a New Harness Artifact (Operator Workflow)
 
 1. Create source directory: `mkdir -p harness/<name>/commands`
