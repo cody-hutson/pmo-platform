@@ -4716,7 +4716,7 @@ _write_operations_rules_index() {
   # criterion itself is NOT restated here; this file names where it lives.
   local _idx_dir="$1"
   local _idx="$_idx_dir/_operations-index.md"
-  local _pair _src _class _base _purpose
+  local _pair _src _rest _dest _class _base _purpose
   {
     printf '# Agent-conduct rules — operations-session load set\n\n'
     printf '<!-- GENERATED FILE — do not hand-edit. Producer: deploy_rules_mirror() in\n'
@@ -4737,7 +4737,15 @@ _write_operations_rules_index() {
     _class="${_pair##*:}"
     [[ "$_class" == "conduct" ]] || continue
     _src="${_pair%%:*}"
-    _base="$(basename "$_src")"
+    # The index names the DEPLOYED file, not the source. A reader opens this index
+    # from inside the mirror and follows the name it finds, so the name must be the
+    # one that exists HERE. src and dest basenames happen to match for every current
+    # member, which is exactly what would keep this latent until a pair whose names
+    # differ is admitted — and then the index would point at a file the mirror does
+    # not contain.
+    _rest="${_pair#*:}"
+    _dest="${_rest%:*}"
+    _base="$(basename "$_dest")"
     # `if`, not `[[ … ]] && assign`: under `set -e` a false test would abort the deploy.
     # The `|| true` is bound to the whole pipeline (a no-match grep is non-zero, and
     # `set -o pipefail` would otherwise propagate that) — a missing purpose: line is a
