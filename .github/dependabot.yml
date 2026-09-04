@@ -1,20 +1,36 @@
-# Dependabot configuration — schedules version updates for GitHub Actions.
+# Dependabot configuration — schedules version updates for GitHub Actions, and
+# registers the npm ecosystem that already receives security updates.
 # Pairs with security alerts (auto-enabled on visibility flip to public) and
 # Dependabot security updates (operator-enabled separately).
 #
-# v2 layout deviation (Tier 1 [ADJUST] per application Phase 2):
-# The K1 standard §5.1 schema requires at least 2 update entries (github-actions
-# + one language-specific ecosystem). cody-hutson/pmo-platform v2 layout ships
-# zero Python dependency manifests (no requirements.txt / pyproject.toml /
-# setup.py / setup.cfg / Pipfile at any path — verified at Stage 6 via
-# `gh api 'repos/cody-hutson/pmo-platform/git/trees/main?recursive=1'`).
-# Per §5.2 fallback clause: "application phases may ship a single github-actions
-# entry — but this places the repo BELOW the 2-entry schema minimum and requires
-# an operator override with rationale recorded in the application-phase release
-# plan deviation log." Recorded in the application Phase 2 PR body deviation log.
+# ECOSYSTEM INVENTORY (verified against `git ls-files`, denominator 1984 tracked
+# paths — a recursive walk of the checkout is NOT equivalent, because sibling
+# worktrees under .claude/worktrees/ each carry a full copy of the tree):
+#   Python — ZERO dependency manifests at any path (no requirements.txt /
+#            pyproject.toml / setup.py / setup.cfg / Pipfile). Still true.
+#   npm    — TWO manifests, both under one skill:
+#            release/skills/pmo-skill-refiner/eval-viewer/tests/package.json
+#            release/skills/pmo-skill-refiner/eval-viewer/tests/package-lock.json
 #
-# When v2 ships its first Python dependency manifest, add the corresponding
-# package-ecosystem entry to restore the 2-entry minimum.
+# With the npm entry below, this repository MEETS the K1 standard §5.1 two-entry
+# minimum (github-actions + one language-specific ecosystem). The §5.2
+# single-entry fallback and the operator override it required are RETIRED, not
+# merely unused — the earlier deviation rested on the Python count alone and
+# never asked whether a non-Python manifest existed. One did.
+#
+# WHY THE npm ENTRY EXISTS, GIVEN IT OPENS NO VERSION PRs
+# Dependabot SECURITY updates reach a manifest whether or not its ecosystem has
+# an `updates:` entry — the merged npm PR against the lockfile above is the
+# proof. What the entry adds is the `labels:` block, and GitHub applies those
+# labels to that ecosystem's SECURITY PRs too (unless `target-branch` is set,
+# which is why this entry does not set one). Without the entry those PRs carried
+# only Dependabot's defaults — `dependencies` and `javascript` — so SECURITY.md's
+# claim that they carry `dependabot` and `cluster: security` was false for npm,
+# and the npm security surface was invisible to the audit those labels support.
+# Registering the ecosystem is what makes that claim true. It is not cosmetic.
+#
+# When a new dependency-manifest class appears at any path — Python or otherwise —
+# add its package-ecosystem entry here.
 
 version: 2
 updates:
@@ -25,6 +41,33 @@ updates:
       day: "monday"
       time: "06:00"
       timezone: "Etc/UTC"
+    labels:
+      - "dependabot"
+      - "cluster: security"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  - package-ecosystem: "npm"
+    # Leading slash: this matches Dependabot's OWN rendering of the directory in
+    # the branch name and PR title on the merged npm PR, so the config and the PR
+    # join by inspection. Deliberately NOT the eval-viewer workflow's
+    # `working-directory` form, which is a different, cwd-relative schema.
+    directory: "/release/skills/pmo-skill-refiner/eval-viewer/tests"
+    # REGISTRATION ONLY — version updates are disabled outright.
+    # These manifests sit inside a rostered skill's compiled-package content set,
+    # so any PR that rewrites one stales that skill's .skill archive and turns the
+    # package-freshness gate red. Only a human rebuild pushed onto the PR branch
+    # can clear it (see SECURITY.md § Automated Security PRs). A zero limit means
+    # this entry manufactures none of that traffic. Security updates ignore the
+    # limit and still arrive — they are the traffic this entry exists to label.
+    open-pull-requests-limit: 0
+    # Schema-required on every updates: entry; inert while no version PR opens.
+    schedule:
+      interval: "monthly"
+    # The reason the entry exists. These propagate to this ecosystem's SECURITY
+    # PRs as well. Do NOT add `target-branch` here — it suppresses exactly that
+    # propagation, which is the mechanism SECURITY.md's audit claim depends on.
     labels:
       - "dependabot"
       - "cluster: security"
