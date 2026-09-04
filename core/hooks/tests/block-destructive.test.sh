@@ -2929,6 +2929,54 @@ test_case "Write pmo-platform/release/analysis/x.md with primary cwd still block
   "$(write_payload ''"$HOME"'/Claude/pmo-platform/release/analysis/x.md' ''"$HOME"'/Claude')" \
   2 "BLOCK-DESTRUCTIVE-019"
 
+# A9-A12 — the SINGLE-DOT segment. A6 pins `..`; these pin `.`, which the
+# traversal arm did not originally reject.
+#
+# WHY A SINGLE DOT IS A CARVE-OUT DEFECT AND NOT A TRAVERSAL ONE. A `.` segment
+# cannot leave the subtree, so it is not an escape. It is a defect because it
+# SATISFIES ARM 2's `*/*` SUBFOLDER REQUIREMENT while adding no subfolder — the
+# very predicate A5 relies on to keep the tracked `analysis/README.md` outside the
+# carve-out. On the raw-path branch `analysis/./README.md` therefore reached the
+# carve-out and was ALLOWED.
+#
+# WHY THESE SUBJECTS AND NOT THE BARE `analysis/./README.md`. The raw-path branch
+# is taken only when the target AND its parent are both absent. `analysis/` and its
+# tracked README EXIST in a real checkout, so `analysis/./README.md` is resolved by
+# the normalizer (which collapses `.`) and blocks for the NORMALIZER's reason on
+# such a runner — it would pass against the un-fixed hook too, and would pin
+# nothing. A9/A10 use the block's `zz-nonexistent` convention so the raw branch is
+# taken DETERMINISTICALLY on every runner, which is what makes them discriminating:
+# each was confirmed to ALLOW (exit 0) against the pre-fix arm and to BLOCK against
+# the fixed one.
+
+# A9 — mid-path `/./`, the `*"/./"*` limb. Discriminating.
+test_case "Write analysis/./zz-nonexistent/x.md with primary cwd still blocks (single-dot segment, mid-path)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/analysis/./zz-nonexistent/x.md' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+# A10 — trailing `/.`, the `*/.` limb. Arm 1 carries a mid-path AND a trailing form
+# for each dot segment; pinning only the mid-path one would leave half the
+# predicate invisible to regression. Discriminating.
+test_case "Write analysis/zz-nonexistent/. with primary cwd still blocks (single-dot segment, trailing)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/analysis/zz-nonexistent/.' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+# A11 — PAIRED CONTROL. The false positive the new limbs could have introduced: a
+# DOTFILE inside a legitimate analysis subfolder carries `/.` but is neither `/./`
+# nor a trailing `/.`, so the carve-out must still admit it. Without this arm the
+# fix could have been over-broadened to `*/.*` and stayed green.
+test_case "Write analysis/<subfolder>/.hidden.md with primary cwd allows (dotfile is not a dot segment)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/analysis/hookfix-2026-01-01/.hidden.md' ''"$HOME"'/Claude')" \
+  0
+
+# A12 — OUTCOME pin for AC2's named subject. The tracked `analysis/README.md`
+# stays blocked under a dot spelling. Environment-independent in OUTCOME but not
+# in mechanism (normalizer where `analysis/` exists, arm 1 where it does not), so
+# A9/A10 above are the discriminating pins and this one asserts the criterion.
+test_case "Write analysis/./README.md with primary cwd still blocks (tracked file, dot spelling)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/analysis/./README.md' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
 # Explicit allow: .claude/skills (deploy target)
 test_case "Write .claude/skills/SKILL.md allows (deploy target)" \
   "$(write_payload ''"$HOME"'/Claude/.claude/skills/skill-x/SKILL.md' ''"$HOME"'/Claude')" \

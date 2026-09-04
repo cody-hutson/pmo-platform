@@ -1940,14 +1940,24 @@ case "$TOOL_NAME" in
       #
       # TWO ARMS, AND THE ORDER IS THE GUARD. `case` takes the FIRST match:
       #
-      #   Arm 1 (traversal) matches and does NOTHING, so control falls through to
-      #   `block`. It is NOT decoration. abs_target above is the RAW, UN-NORMALIZED
-      #   FILE_PATH whenever the target AND its parent directory both do not exist
-      #   (the else-branch of the normalizer) — and a `case` glob matches across
-      #   `/`, so `<root>/pmo-platform/analysis/../core/x.md` matches arm 2's
-      #   pattern while naming a TRACKED Layer-1 file. Today that path is harmless
-      #   because -019 denies the whole tree; the carve-out below is what would
-      #   make it an escape. The guard is required BY this change.
+      #   Arm 1 (dot segments) matches and does NOTHING, so control falls through
+      #   to `block`. It is NOT decoration. abs_target above is the RAW,
+      #   UN-NORMALIZED FILE_PATH whenever the target AND its parent directory
+      #   both do not exist (the else-branch of the normalizer) — and a `case`
+      #   glob matches across `/`, so `<root>/pmo-platform/analysis/../core/x.md`
+      #   matches arm 2's pattern while naming a TRACKED Layer-1 file. Today that
+      #   path is harmless because -019 denies the whole tree; the carve-out below
+      #   is what would make it an escape. The guard is required BY this change.
+      #
+      #   BOTH dot segments are rejected, each in a mid-path and a trailing form.
+      #   `..` is the escape above. A SINGLE `.` does not traverse, but it does
+      #   satisfy arm 2's `*/*` subfolder requirement on this same raw-path branch,
+      #   so `<root>/pmo-platform/analysis/./README.md` would reach arm 2 and admit
+      #   the one TRACKED file the subfolder segment exists to exclude. Rejecting
+      #   `.` is therefore not traversal defence — it is what keeps arm 2's
+      #   subfolder predicate from being satisfied by a no-op segment. A dotfile
+      #   (`…/analysis/<sub>/.hidden.md`) carries `/.` but is neither `/./` nor
+      #   trailing `/.`, so it is unaffected and still admitted.
       #
       #   Arm 2 requires a SUBFOLDER SEGMENT (`analysis/`*`/`*), not `analysis/`*.
       #   analysis/README.md is the one TRACKED file under this folder and the bare
@@ -1968,7 +1978,7 @@ case "$TOOL_NAME" in
       # which `git config --global` can re-point with no hook rule in the way.
       # Neither is admissible for the self-modification guard specifically.
       case "$abs_target" in
-        *"/../"*|*/..)
+        *"/../"*|*/..|*"/./"*|*/.)
           ;;
         "${PRIMARY_ROOT}/pmo-platform/analysis/"*/*)
           exit 0
