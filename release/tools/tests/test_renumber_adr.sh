@@ -27,6 +27,21 @@
 
 set -u
 
+# R1 REFUSES A DIRTY TREE, so anything a fixture worktree acquires without being
+# committed does not fail as itself — it fails as a REFUSAL, and every arm past it
+# collapses at once. Interpreter bytecode is exactly that: `renumber-adr.py` loads
+# its sibling tools through `importlib`, and on a Python that writes `__pycache__`
+# the first invocation in a worktree leaves ONE untracked directory behind. That is
+# enough. Observed as 15 ACT-16 failures on CI against a tool whose logic was
+# correct, and invisible locally on a Python that writes none — a fixture failing
+# for a reason that is a property of the interpreter, not of the code under test.
+#
+# The acts that predate this were immune by accident: `author_B` runs the index
+# projector inside the worktree before its `git add -A`, so whatever bytecode the
+# tools emit is committed. Relying on that is relying on a side effect of an
+# unrelated setup step. Turning bytecode off removes the class instead.
+export PYTHONDONTWRITEBYTECODE=1
+
 REPO_UNDER_TEST="$(cd "$(dirname "$0")/../../.." && pwd -P)"
 TOOLS="${REPO_UNDER_TEST}/release/tools"
 
@@ -86,6 +101,12 @@ seed_origin() {
   printf -- '---\ntitle: "ADR-002 — Seed two"\nstatus: Accepted\ndate: 2026-01-02\nrelease: seed-release\n---\n\n# ADR-002 — Seed two\n\n## Status\n\nAccepted.\n' \
     > "$s/release/ADRs/ADR-002-seed002.md"
   rm -f "$s/core/ADRs/ADR-002-seed002.md"
+  # A SECOND, INDEPENDENT immunization against the dirty-tree class the
+  # PYTHONDONTWRITEBYTECODE export above addresses. Two belts on purpose: that
+  # export is an environment property and this one is a repository property, so
+  # neither depends on the other holding. A real checkout ignores bytecode too, so
+  # the fixture is also more faithful for carrying it.
+  printf '__pycache__/\n*.pyc\n' > "$s/.gitignore"
   # core README — carries the § Renumber log surface the tool appends to.
   cat > "$s/core/ADRs/README.md" <<'EOF'
 # Core ADRs
@@ -1259,8 +1280,11 @@ assert_eq "A16a the dry run predicts rewriting ZERO tokens in the curated index"
   "$(dr_field "$DRY16" 'core/ADRs/README.md' would)" "0"
 assert_eq "A16a the dry run NAMES the 3 foreign tokens in a not-ours column of its own" \
   "$(printf '%s\n' "$DRY16" | grep -c 'in core/ADRs/README.md  ·  exempt (record) 0  ·  REVIEW 0  ·  not-ours 3')" "1"
+# Asserted on the PATHS, not on a count. `expected [0] got [1]` names nothing, and
+# a dirty tree here makes R1 refuse — so the count form reports the one fact that
+# explains every later failure in the least useful possible way.
 assert_eq "A16a the dry run mutates nothing" \
-  "$(G status --porcelain | wc -l | tr -d ' ')" "0"
+  "$(G status --porcelain | tr '\n' ';')" ""
 
 APPLY16="$(python3 release/tools/renumber-adr.py --renumber 4 5 --apply 2>&1)"; A16_RC=$?
 
