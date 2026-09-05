@@ -2,7 +2,7 @@
 title: Release Plan — freshness-gate-measures-then-blocks (the freshness gate measures, then blocks)
 type: release-plan
 plan_type: release
-status: ACTIVE
+status: CLOSED
 release: version-less (slug-keyed; no tag claimed)
 milestone: 385-freshness-gate-measures-then-blocks
 release_class: cross-cutting
@@ -674,6 +674,8 @@ exit 1
 - **Cycle-Time telemetry is a two-sided structural absence, not a broken query.** Queried by the release join key (the milestone slug per `pipeline-event-log-schema.md` § 2a), the slug carries **81** event rows and **0** `gate-outcome` rows and **0** `deployment-status` rows. Control arms on the same whole-log population: `gate-outcome` 378 rows, `deployment-status` 65 rows, and a fabricated slug returns 0 — so the zero is a real absence rather than a failed extraction. The Stage-9 GO was emitted as a `decision` row rather than a `gate-outcome` row, which is why the T_GO half is missing as well as T_DEPLOY. This is a structural gap in what the pipeline emits, not a telemetry failure at read time.
 
 **Close-class resolution (Phase A7.5).** `Close class: DEPLOYABLE (fall-through) — resolved via rung 3; declared value: none.` The plan declares no `domain_practice.domain` key and no `PROJECT.md` `deliverable_type` is in scope, so the class resolves through the explicit no-op default. Routing to the default is correct; the line is recorded because routing there quietly is the failure the fall-through report exists to prevent. No Artifact-Acceptance Record is written — the release declares no task-artifact deliverable, which is the ABSENT mode, an explicit no-op.
+
+**Plan-status terminal transition (cmd 1c) — caught by the gate, and worth recording as a finding.** The first run of the Step-4 plan-identity lint against this close returned **rc=1** naming this release's own plan: `PLAN-STATUS-NOT-TERMINAL: release/releases/plans/freshness-gate-measures-then-blocks_RELEASE_PLAN.md reads status: ACTIVE but release/releases/RELEASE_LOG.md:233 records State VERIFIED`. The transition is a one-line frontmatter change, `status: ACTIVE` -> `status: CLOSED`, and it is owned by `automated-closeout.sh` **Phase 6.9** — a phase that **never runs on this release's path**, because the CLI validates `--version` against the canonical grammar and exits *before* phase dispatch for a version-less identity. So the omission is not carelessness in the hand-assembled close; it is a structural consequence of binding the transition to a script phase that the version-less identity mode cannot reach. That is the same shape as Phase A8.1's own recorded history — *the rule existed but was unenforced on the hub-direct path* — one phase further on. Corrected here, and the reference shape was read rather than assumed: `governance-declarations-match-enforcement`, the most recent closed version-less release, carries `status: CLOSED` with no other frontmatter difference. **Carried forward:** the version-less close path has no runner for the plan-status transition; the durable fix is to bind it to the close *event* rather than to a script phase, exactly as A8.1 and A8.3 were re-bound.
 
 ## Operational Deployment Manifest
 
