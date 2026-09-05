@@ -14601,7 +14601,7 @@ sys.stdout.write("".join(out) + "|")
   fi
 
 
-  # Check 71 — BLOCK-DESTRUCTIVE-022 exec-arm rollout graduation (MIXED MODE) [#5250]
+  # Check 71 — BLOCK-DESTRUCTIVE-022 rollout graduation, ALL ARMS (MIXED MODE) [#5250]
   #
   # WHAT IT ASSERTS. That the -022 exec arm's warn-mode rollout is DECIDED rather
   # than left running. It reads the arm's four committed constants and, past the
@@ -14636,97 +14636,140 @@ sys.stdout.write("".join(out) + "|")
   # DECLARED COVERAGE BOUNDARY. It asserts the constants are readable, that the
   # phase is one of the three enum values, and that the review window has not
   # elapsed unaddressed. It does NOT assert that the arm behaves as the phase says
-  # — that is the test suite's job (T-EXEC-10 pins the phase gate) — and it does not
-  # read, classify or grade drain CONTENT.
+  # — that is the test suite's job (T-EXEC-10 and T-NSI-10c/d/e pin the phase gates)
+  # — and it does not read, classify or grade drain CONTENT.
+  #
+  # PARAMETERIZED OVER A FAMILY LIST, NOT COPIED PER ARM [#6167]. -022 now carries
+  # TWO phased widenings — the exec arm and the non-shell interpreter arm — each
+  # with its own five constants, because two rollouts with two populations must be
+  # able to retreat independently. The alternative was a third verbatim copy of this
+  # block (deploy.sh already records one reuse of its shape elsewhere), and a
+  # graduation READER duplicated three ways is exactly the drift surface the
+  # register-or-remove rule exists to prevent. Two families read by one body cannot
+  # drift; three literal copies can.
+  #
+  # ADDING A THIRD ARM IS ONE WORD IN `c71_families`, plus the five constants in the
+  # hook. That is the property being bought here.
+  #
+  # THE DRAIN IS SPLIT BY THE `arm` FIELD, AND AN ABSENT FIELD READS AS `exec`.
+  # Every row written before the field existed came from the exec arm, which was the
+  # only writer, so treating an absent field as `exec` is factually correct rather
+  # than a convenient default. Without the split, one drain would report the same
+  # undifferentiated count as evidence for two independent graduation decisions.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 71: BLOCK-DESTRUCTIVE-022 exec-arm rollout graduation (deadline arm repo-derivable + enforcing; evidence arm operator-local + advisory)"
+    log "Check 71: BLOCK-DESTRUCTIVE-022 rollout graduation, per arm (deadline arm repo-derivable + enforcing; evidence arm operator-local + advisory)"
     local c71_hook="core/hooks/block-destructive.sh"
+    local c71_families="EXEC INTERP"
     if [[ ! -f "$c71_hook" ]]; then
-      log "  FAIL:  destructive-022-exec-graduation — hook source missing: $c71_hook (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
+      log "  FAIL:  destructive-022-graduation — hook source missing: $c71_hook (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
       ISSUES=$((ISSUES + 1))
     else
-      local c71_phase c71_armed c71_days c71_rows_thr c71_esc
-      c71_phase="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_PHASE=/{s/^readonly DESTRUCTIVE_022_EXEC_PHASE="\([a-z]*\)".*/\1/p;q;}' "$c71_hook")"
-      c71_armed="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_ARMED=/{s/^readonly DESTRUCTIVE_022_EXEC_ARMED="\([0-9-]*\)".*/\1/p;q;}' "$c71_hook")"
-      c71_days="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_REVIEW_DAYS=/{s/^readonly DESTRUCTIVE_022_EXEC_REVIEW_DAYS=\([0-9]*\).*/\1/p;q;}' "$c71_hook")"
-      c71_rows_thr="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_REVIEW_ROWS=/{s/^readonly DESTRUCTIVE_022_EXEC_REVIEW_ROWS=\([0-9]*\).*/\1/p;q;}' "$c71_hook")"
-      c71_esc="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_ESCALATE_DAYS=/{s/^readonly DESTRUCTIVE_022_EXEC_ESCALATE_DAYS=\([0-9]*\).*/\1/p;q;}' "$c71_hook")"
-
-      # ── control arm FIRST: a probe that cannot be shown to detect proves nothing.
-      # The extractor must return a KNOWN value from a synthetic line and must
-      # return EMPTY for a constant that is not there. Without both, an extractor
-      # silently returning empty would read as "no finding" on every run.
-      local c71_ctrl_hit c71_ctrl_miss
-      c71_ctrl_hit="$(printf 'readonly DESTRUCTIVE_022_EXEC_PHASE="shadow"\n' \
-        | sed -n 's/^readonly DESTRUCTIVE_022_EXEC_PHASE="\([a-z]*\)".*/\1/p')"
-      c71_ctrl_miss="$(printf 'readonly SOMETHING_ELSE=1\n' \
-        | sed -n 's/^readonly DESTRUCTIVE_022_EXEC_PHASE="\([a-z]*\)".*/\1/p')"
-      log "  CTRL:  destructive-022-exec-graduation — extractor sensitivity='${c71_ctrl_hit}' (want shadow), specificity='${c71_ctrl_miss}' (want empty)"
-      if [[ "$c71_ctrl_hit" != "shadow" || -n "$c71_ctrl_miss" ]]; then
-        log "  FAIL:  destructive-022-exec-graduation — constant extractor no longer discriminates; every verdict below would be unattributable"
-        ISSUES=$((ISSUES + 1))
-      elif [[ -z "$c71_phase" || -z "$c71_armed" || -z "$c71_days" || -z "$c71_rows_thr" || -z "$c71_esc" ]]; then
-        log "  FAIL:  destructive-022-exec-graduation — one or more rollout constants unreadable in $c71_hook (phase='${c71_phase}' armed='${c71_armed}' days='${c71_days}' rows='${c71_rows_thr}' escalate='${c71_esc}'). A gate that cannot read its own input must not pass."
-        ISSUES=$((ISSUES + 1))
-      else
-        case "$c71_phase" in
-          shadow|warn|enforce) ;;
-          *)
-            log "  FAIL:  destructive-022-exec-graduation — DESTRUCTIVE_022_EXEC_PHASE='${c71_phase}' is not one of shadow|warn|enforce. An unrecognised value falls through to enforce in the hook, so a typo silently hardens a rule firing 28% of the layer's blocks."
-            ISSUES=$((ISSUES + 1))
-            ;;
+      local c71_fam c71_id c71_armfield
+      for c71_fam in $c71_families; do
+        # Finding id and drain selector for this family. `c71_armfield` is the value
+        # the hook's router writes into each row it emits.
+        case "$c71_fam" in
+          EXEC)   c71_id="destructive-022-exec-graduation";   c71_armfield="exec" ;;
+          INTERP) c71_id="destructive-022-interp-graduation"; c71_armfield="interp-nonshell" ;;
+          *)      c71_id="destructive-022-$(printf '%s' "$c71_fam" | tr 'A-Z' 'a-z')-graduation"; c71_armfield="" ;;
         esac
-        local c71_elapsed
-        c71_elapsed="$(python3 -c 'import datetime,sys
-a=datetime.date.fromisoformat(sys.argv[1])
-print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || printf '')"
-        local c71_drain="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/.claude/hooks/destructive-warn-log.jsonl"
-        local c71_rows="SKIP"
-        if [[ -f "$c71_drain" ]]; then
-          # `wc -l`, not `grep -c ''`: on an EMPTY drain grep prints 0 AND exits 1,
-          # so an `|| printf 0` fallback concatenates a second zero and every
-          # numeric comparison below dies on `0\n0`. Caught by running this check
-          # against a zero-row drain — which is the state the graduation verdict
-          # cares most about getting right.
-          c71_rows="$(wc -l < "$c71_drain" 2>/dev/null | tr -d '[:space:]')"
-          [[ -n "$c71_rows" ]] || c71_rows=0
-        fi
-        log "  DENOM: destructive-022-exec-graduation — phase=${c71_phase} armed=${c71_armed} elapsed=${c71_elapsed}d thresholds=${c71_days}d/${c71_rows_thr}rows escalate=${c71_esc}d drain_rows=${c71_rows}"
 
-        if [[ "$c71_phase" == "enforce" ]]; then
-          log "  OK:    destructive-022-exec-graduation — the exec arm has GRADUATED to enforce; the rollout is decided and this gate is discharged"
-        elif [[ -z "$c71_elapsed" ]]; then
-          log "  FAIL:  destructive-022-exec-graduation — DESTRUCTIVE_022_EXEC_ARMED='${c71_armed}' is not a resolvable ISO date, so the deadline arm cannot be evaluated. This is the failure mode a placeholder arming stamp produces."
+        local c71_phase c71_armed c71_days c71_rows_thr c71_esc
+        c71_phase="$(sed -n "/^readonly DESTRUCTIVE_022_${c71_fam}_PHASE=/{s/^readonly DESTRUCTIVE_022_${c71_fam}_PHASE=\"\\([a-z]*\\)\".*/\\1/p;q;}" "$c71_hook")"
+        c71_armed="$(sed -n "/^readonly DESTRUCTIVE_022_${c71_fam}_ARMED=/{s/^readonly DESTRUCTIVE_022_${c71_fam}_ARMED=\"\\([0-9-]*\\)\".*/\\1/p;q;}" "$c71_hook")"
+        c71_days="$(sed -n "/^readonly DESTRUCTIVE_022_${c71_fam}_REVIEW_DAYS=/{s/^readonly DESTRUCTIVE_022_${c71_fam}_REVIEW_DAYS=\\([0-9]*\\).*/\\1/p;q;}" "$c71_hook")"
+        c71_rows_thr="$(sed -n "/^readonly DESTRUCTIVE_022_${c71_fam}_REVIEW_ROWS=/{s/^readonly DESTRUCTIVE_022_${c71_fam}_REVIEW_ROWS=\\([0-9]*\\).*/\\1/p;q;}" "$c71_hook")"
+        c71_esc="$(sed -n "/^readonly DESTRUCTIVE_022_${c71_fam}_ESCALATE_DAYS=/{s/^readonly DESTRUCTIVE_022_${c71_fam}_ESCALATE_DAYS=\\([0-9]*\\).*/\\1/p;q;}" "$c71_hook")"
+
+        # ── control arm FIRST: a probe that cannot be shown to detect proves nothing.
+        # The extractor must return a KNOWN value from a synthetic line and must
+        # return EMPTY for a constant that is not there. Without both, an extractor
+        # silently returning empty would read as "no finding" on every run. Run PER
+        # FAMILY, because the parameterization is exactly what could silently stop
+        # matching for one family while still matching for another.
+        local c71_ctrl_hit c71_ctrl_miss
+        c71_ctrl_hit="$(printf 'readonly DESTRUCTIVE_022_%s_PHASE="shadow"\n' "$c71_fam" \
+          | sed -n "s/^readonly DESTRUCTIVE_022_${c71_fam}_PHASE=\"\\([a-z]*\\)\".*/\\1/p")"
+        c71_ctrl_miss="$(printf 'readonly SOMETHING_ELSE=1\n' \
+          | sed -n "s/^readonly DESTRUCTIVE_022_${c71_fam}_PHASE=\"\\([a-z]*\\)\".*/\\1/p")"
+        log "  CTRL:  ${c71_id} — extractor sensitivity='${c71_ctrl_hit}' (want shadow), specificity='${c71_ctrl_miss}' (want empty)"
+        if [[ "$c71_ctrl_hit" != "shadow" || -n "$c71_ctrl_miss" ]]; then
+          log "  FAIL:  ${c71_id} — constant extractor no longer discriminates for family ${c71_fam}; every verdict below would be unattributable"
+          ISSUES=$((ISSUES + 1))
+        elif [[ -z "$c71_phase" || -z "$c71_armed" || -z "$c71_days" || -z "$c71_rows_thr" || -z "$c71_esc" ]]; then
+          log "  FAIL:  ${c71_id} — one or more rollout constants unreadable in $c71_hook (phase='${c71_phase}' armed='${c71_armed}' days='${c71_days}' rows='${c71_rows_thr}' escalate='${c71_esc}'). A gate that cannot read its own input must not pass."
           ISSUES=$((ISSUES + 1))
         else
-          # The three-way verdict, emitted WITH any due notice so a zero drain is
-          # read as a finding rather than as an absence of one.
-          local c71_verdict
-          if [[ "$c71_rows" == "SKIP" ]]; then
-            c71_verdict="drain absent on this instance (operator-local, git-ignored) — the evidence arm SKIPs; read it where the sessions actually ran"
-          elif [[ "$c71_rows" -eq 0 ]]; then
-            c71_verdict="0 rows → INSTRUMENTATION-SUSPECT, not 'no evidence'. Run the must-flag control (block-destructive.test.sh T-EXEC-1). If it writes a row the surface is genuinely quiet — graduate at near-zero risk or remove the arm as dead code. If it does not, the drain is BROKEN and that is a defect."
-          elif [[ "$c71_rows" -lt "$c71_rows_thr" ]]; then
-            c71_verdict="${c71_rows} rows (< ${c71_rows_thr}) → INSUFFICIENT-TRAFFIC. Choose one and record it: graduate on the small sample, retreat to shadow, or extend ONCE by re-dating DESTRUCTIVE_022_EXEC_ARMED."
-          else
-            c71_verdict="${c71_rows} rows (>= ${c71_rows_thr}) → classify the sample true-positive / benign-shape / mandated-tool-blocked with its denominator, then GRADUATE to enforce or NARROW the predicate. Never auto-promoted by count."
+          case "$c71_phase" in
+            shadow|warn|enforce) ;;
+            *)
+              log "  FAIL:  ${c71_id} — DESTRUCTIVE_022_${c71_fam}_PHASE='${c71_phase}' is not one of shadow|warn|enforce. An unrecognised value falls through to enforce in the hook, so a typo silently hardens a rule firing 28% of the layer's blocks."
+              ISSUES=$((ISSUES + 1))
+              ;;
+          esac
+          local c71_elapsed
+          c71_elapsed="$(python3 -c 'import datetime,sys
+a=datetime.date.fromisoformat(sys.argv[1])
+print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || printf '')"
+          local c71_drain="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/.claude/hooks/destructive-warn-log.jsonl"
+          local c71_rows="SKIP"
+          if [[ -f "$c71_drain" ]]; then
+            # PER-FAMILY row count. `grep … | wc -l`, never a bare `grep -c`: on a
+            # drain with no matching row grep prints 0 AND exits 1, so an
+            # `|| printf 0` fallback concatenates a second zero and every numeric
+            # comparison below dies on `0\n0`. A pipeline ending in `wc -l` always
+            # exits 0 and always prints one number. The drain is line-delimited
+            # (`jq -nc`, one object per line) — deliberately NOT the pretty-printed
+            # shape this hook's block-log uses, which is why a line count is valid.
+            local c71_r_tagged c71_r_untagged
+            c71_r_tagged="$(grep -F "\"arm\":\"${c71_armfield}\"" "$c71_drain" 2>/dev/null | wc -l | tr -d '[:space:]')"
+            c71_r_untagged=0
+            if [[ "$c71_fam" == "EXEC" ]]; then
+              # Rows predating the `arm` field. The exec router was the only writer
+              # when they were written, so attributing them to EXEC is factual.
+              c71_r_untagged="$(grep -vF '"arm":"' "$c71_drain" 2>/dev/null | wc -l | tr -d '[:space:]')"
+            fi
+            [[ -n "$c71_r_tagged" ]]   || c71_r_tagged=0
+            [[ -n "$c71_r_untagged" ]] || c71_r_untagged=0
+            c71_rows=$(( c71_r_tagged + c71_r_untagged ))
           fi
+          log "  DENOM: ${c71_id} — arm=${c71_armfield} phase=${c71_phase} armed=${c71_armed} elapsed=${c71_elapsed}d thresholds=${c71_days}d/${c71_rows_thr}rows escalate=${c71_esc}d drain_rows=${c71_rows}"
 
-          if [[ "$c71_elapsed" -ge "$c71_esc" ]]; then
-            log "  FAIL:  destructive-022-exec-graduation — GRADUATION-OVERDUE: ${c71_elapsed} days at phase='${c71_phase}', past the ${c71_esc}-day escalation. ${c71_verdict}"
-            log "         Turn this green by RECORDING A DECISION in core/hooks/block-destructive.sh: advance DESTRUCTIVE_022_EXEC_PHASE, retreat it to shadow, or re-date DESTRUCTIVE_022_EXEC_ARMED. Doing nothing is the one option this gate removes."
+          if [[ "$c71_phase" == "enforce" ]]; then
+            log "  OK:    ${c71_id} — the ${c71_armfield} arm has GRADUATED to enforce; the rollout is decided and this gate is discharged"
+          elif [[ -z "$c71_elapsed" ]]; then
+            log "  FAIL:  ${c71_id} — DESTRUCTIVE_022_${c71_fam}_ARMED='${c71_armed}' is not a resolvable ISO date, so the deadline arm cannot be evaluated. This is the failure mode a placeholder arming stamp produces."
             ISSUES=$((ISSUES + 1))
-          elif [[ "$c71_elapsed" -ge "$c71_days" ]]; then
-            log "  WARN:  destructive-022-exec-graduation — GRADUATION-DUE (deadline): ${c71_elapsed} days since arming (threshold ${c71_days}d; escalates to a finding at ${c71_esc}d). ${c71_verdict}"
-          elif [[ "$c71_rows" != "SKIP" && "$c71_rows" -ge "$c71_rows_thr" ]]; then
-            log "  WARN:  destructive-022-exec-graduation — GRADUATION-DUE (evidence): ${c71_verdict}"
           else
-            # Silent below threshold: omission IS the non-ceremony signal. Nothing
-            # is emitted beyond the DENOM line above.
-            log "  OK:    destructive-022-exec-graduation — within the review window (${c71_elapsed}d of ${c71_days}d, drain=${c71_rows})"
+            # The three-way verdict, emitted WITH any due notice so a zero drain is
+            # read as a finding rather than as an absence of one.
+            local c71_verdict
+            if [[ "$c71_rows" == "SKIP" ]]; then
+              c71_verdict="drain absent on this instance (operator-local, git-ignored) — the evidence arm SKIPs; read it where the sessions actually ran"
+            elif [[ "$c71_rows" -eq 0 ]]; then
+              c71_verdict="0 rows for arm=${c71_armfield} → INSTRUMENTATION-SUSPECT, not 'no evidence'. Run that arm's must-flag control (block-destructive.test.sh T-EXEC-1 for exec, T-NSI-01a for interp-nonshell). If it writes a row the surface is genuinely quiet — graduate at near-zero risk or remove the arm as dead code. If it does not, the drain is BROKEN and that is a defect."
+            elif [[ "$c71_rows" -lt "$c71_rows_thr" ]]; then
+              c71_verdict="${c71_rows} rows (< ${c71_rows_thr}) → INSUFFICIENT-TRAFFIC. Choose one and record it: graduate on the small sample, retreat to shadow, or extend ONCE by re-dating DESTRUCTIVE_022_${c71_fam}_ARMED."
+            else
+              c71_verdict="${c71_rows} rows (>= ${c71_rows_thr}) → classify the sample true-positive / benign-shape / mandated-tool-blocked with its denominator, then GRADUATE to enforce or NARROW the predicate. Never auto-promoted by count."
+            fi
+
+            if [[ "$c71_elapsed" -ge "$c71_esc" ]]; then
+              log "  FAIL:  ${c71_id} — GRADUATION-OVERDUE: ${c71_elapsed} days at phase='${c71_phase}', past the ${c71_esc}-day escalation. ${c71_verdict}"
+              log "         Turn this green by RECORDING A DECISION in core/hooks/block-destructive.sh: advance DESTRUCTIVE_022_${c71_fam}_PHASE, retreat it to shadow, or re-date DESTRUCTIVE_022_${c71_fam}_ARMED. Doing nothing is the one option this gate removes."
+              ISSUES=$((ISSUES + 1))
+            elif [[ "$c71_elapsed" -ge "$c71_days" ]]; then
+              log "  WARN:  ${c71_id} — GRADUATION-DUE (deadline): ${c71_elapsed} days since arming (threshold ${c71_days}d; escalates to a finding at ${c71_esc}d). ${c71_verdict}"
+            elif [[ "$c71_rows" != "SKIP" && "$c71_rows" -ge "$c71_rows_thr" ]]; then
+              log "  WARN:  ${c71_id} — GRADUATION-DUE (evidence): ${c71_verdict}"
+            else
+              # Silent below threshold: omission IS the non-ceremony signal. Nothing
+              # is emitted beyond the DENOM line above.
+              log "  OK:    ${c71_id} — within the review window (${c71_elapsed}d of ${c71_days}d, drain=${c71_rows})"
+            fi
           fi
         fi
-      fi
+      done
     fi
   fi
 

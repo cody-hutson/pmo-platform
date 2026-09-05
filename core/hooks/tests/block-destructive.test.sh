@@ -1508,8 +1508,21 @@ exec_notflag_case "T-EXEC-5 must-not-flag: allowlisted tool by direct execution 
 exec_notflag_case "T-EXEC-6 must-not-flag: markdown table row with a backticked .sh path in a carrier argument" \
   'gh issue comment 1 --body "| step | `./tmp/x.sh` | run it |"'
 
-exec_notflag_case "T-EXEC-7 must-not-flag: system-bin interpreter for another language" \
-  '/usr/bin/python3 script.py'
+# RETARGETED BY #6167, AND THE RETARGET IS THE POINT RATHER THAN A REPAIR. This arm
+# read `/usr/bin/python3 script.py` and asserted the EXEC arm does not flag it. That
+# was true because `python3` was not a verb, so the exec arm claimed the command word
+# `/usr/bin/python3` and exempted it as system-bin. Admitting the non-shell
+# interpreters moves the same input to the INTERPRETER arm, where the adjudicated
+# subject is `script.py` — the file that actually executes — and it is now flagged.
+# That is the card's whole subject, so the old expectation cannot stand.
+#
+# The arm's CLAIM is unchanged and still worth asserting: a system-bin interpreter
+# for a language OUTSIDE the admitted set is not flagged by the exec arm. The fixture
+# moves to `osascript`, which is a declared residual rather than an admitted verb.
+# T-NSI-07d below asserts the new verdict for the python spelling, so the pair reads
+# as one fact: the boundary moved, and both sides of it are pinned.
+exec_notflag_case "T-EXEC-7 must-not-flag: system-bin interpreter for a language OUTSIDE the admitted set" \
+  '/usr/bin/osascript script.scpt'
 
 exec_notflag_case "T-EXEC-8 must-not-flag: PATH-resolved utility, no slash (arm never reached)" \
   'git status'
@@ -2185,7 +2198,9 @@ F2_HOOKS="${F2_CLAUDE}/hooks"
 # non-flag token would then match nothing, script_idx would never advance, and the
 # while-loop would spin forever. Expression 1 deletes the arm BODY (anchored on
 # M-FWALK-BODY, which the marker line does not carry); expression 2 rewrites the
-# marker line back to `*) break ;;`. Net: 6 lines -> 1, pinned by AC-D022-M1.
+# marker line back to `*) break ;;`. The arm now carries the ARITY OVERLAY as well as
+# the domain test, so the sed reverts BOTH — which is why M3/M4's payload is a `+`
+# form rather than `-o errexit`. Net: 18 lines -> 1, pinned by AC-D022-M1.
 /usr/bin/sed \
   -e '/# M-FWALK-BODY/,/^[[:space:]]*;;$/d' \
   -e 's|^\([[:space:]]*\)\*) # M-FWALK-ADVANCE.*|\1*) break ;;|' \
@@ -2330,18 +2345,24 @@ f2_case "F2-FWALK-quotedverb: \"bash\" -o errexit <non-allowlisted> blocks (F1 v
 f2_case "F2-FWALK-absinterp: /bin/bash -o errexit <non-allowlisted> blocks (absolute interpreter)" \
   "/bin/bash -o errexit ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
 
-# --- DECLARED RESIDUAL (pin, NOT fix-evidence) -------------------------------
-# R1: a value-taking flag whose ARGUMENT is itself an allowlisted script path. The
-# scan legitimately terminates on that argument and the real operand is never
-# reached. This is a strict NARROWING of the hole this card closes — today ANY
-# value-taking flag hid the script unconditionally; now the caller must also name
-# an allowlisted path in flag position. It is declared in
-# core/rules/bypass-mode-readiness/block-destructive.md rather than half-closed
-# here; closing it is an arity overlay's job, and layered on top of this walk that
-# overlay's failure direction is safe. This arm asserts the CURRENT verdict so a
-# later closure is a deliberate act rather than a drift.
-f2_case "F2-FWALK-RESIDUAL-flagarg (pin, not fix-evidence): a flag argument that is itself an allowlisted script still terminates the scan" \
-  "bash --rcfile ${F2_OK} ${F2_NA}" 0
+# --- DECLARED RESIDUAL R1 — NOW CLOSED, AND THE PIN IS THE RECORD OF IT ---------
+# The pin read: "R1: a value-taking flag whose ARGUMENT is itself an allowlisted
+# script path. The scan legitimately terminates on that argument and the real operand
+# is never reached … closing it is an arity overlay's job, and layered on top of this
+# walk that overlay's failure direction is safe. This arm asserts the CURRENT verdict
+# so a later closure is a deliberate act rather than a drift."
+#
+# THE ARITY OVERLAY IS THE OTHER HALF OF THIS MERGE, SO THE CLOSURE IS THAT ACT. The
+# walk now asks the interpreter whether a flag takes a separate argument, consumes it,
+# and ADJUDICATES it in place — so `--rcfile <allowlisted>` no longer terminates the
+# scan: the allowlisted path is checked where it sits, and the walk continues to the
+# script bash actually runs. R1 is closed for every flag the arity table names, and
+# the overlay's failure direction is the safe one the pin predicted: a flag the table
+# omits falls through to the domain test, which is an over-block, not an exemption.
+# The arm keeps its subject and asserts the NEW verdict, so a regression that
+# re-opens R1 turns it red in the other direction.
+f2_case "F2-FWALK-RESIDUAL-flagarg [CLOSED by the arity overlay]: a flag argument that is an allowlisted script no longer hides the operand" \
+  "bash --rcfile ${F2_OK} ${F2_NA}" 2 "BLOCK-DESTRUCTIVE-022"
 
 # --- DECLARED VERDICT CHANGE (pin) -------------------------------------------
 # P6: an EXTENSIONLESS executed target with a script argument moves ALLOW -> BLOCK.
@@ -2386,14 +2407,24 @@ F2_M_REMOVED=$(( $(/usr/bin/wc -l < "${F2_HOOKS}/block-destructive.sh") - $(/usr
 F2_M_ARMS_SHIP="$(/usr/bin/grep -cE '^[[:space:]]*\*\) break ;;[[:space:]]*$' "${F2_HOOKS}/block-destructive.sh" || true)"
 F2_M_ARMS_MUT="$(/usr/bin/grep -cE '^[[:space:]]*\*\) break ;;[[:space:]]*$' "${F2_HOOKS}/block-destructive-mut.sh" || true)"
 F2_M_MARKERS_MUT="$(/usr/bin/grep -c 'M-FWALK' "${F2_HOOKS}/block-destructive-mut.sh" || true)"
-if [ "$F2_M_REMOVED" = 5 ] \
+# THE EXPECTED DELTA IS 20. IT WAS 5, THEN 17 — the tripwire above has now done
+# exactly its job at two successive reconciles, which is the argument for keeping it
+# a hard number. 5 -> 17 when the advance-past arm took on the arity question (see
+# FWALK-PLUS-* below). 17 -> 20 when it took on the NOEXEC REVOCATION (see
+# NOEXEC-* below): the arm now also clears the parse-only flag for any token it steps
+# over, three more lines inside the same `# M-FWALK-BODY` .. `;;` range. All three
+# concerns — the domain test, the arity overlay and the revocation — are what the
+# mutant must revert, so the count is UPDATED rather than the assertion loosened.
+# Loosening it to a range or a `-gt` would retire the only thing that catches a
+# reshaped arm.
+if [ "$F2_M_REMOVED" = 20 ] \
   && [ "$F2_M_ARMS_MUT" = "$(( F2_M_ARMS_SHIP + 1 ))" ] \
   && [ "$F2_M_MARKERS_MUT" = 0 ]; then
-  /usr/bin/printf 'PASS: AC-D022-M1: fixture sed removed exactly the 5 body lines, dropped both M-FWALK markers, and restored one additional dash-anchored `*) break ;;` arm (%s -> %s)\n' \
+  /usr/bin/printf 'PASS: AC-D022-M1: fixture sed removed exactly the 20 body lines, dropped both M-FWALK markers, and restored one additional dash-anchored `*) break ;;` arm (%s -> %s)\n' \
     "$F2_M_ARMS_SHIP" "$F2_M_ARMS_MUT"
   PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: AC-D022-M1: fixture sed removed %s lines (expected 5), break-arms %s -> %s (expected +1), residual M-FWALK markers in mutant = %s (expected 0) — it no longer targets the operand walk; re-point the sed\n' \
+  /usr/bin/printf 'FAIL: AC-D022-M1: fixture sed removed %s lines (expected 20), break-arms %s -> %s (expected +1), residual M-FWALK markers in mutant = %s (expected 0) — it no longer targets the operand walk; re-point the sed\n' \
     "$F2_M_REMOVED" "$F2_M_ARMS_SHIP" "$F2_M_ARMS_MUT" "$F2_M_MARKERS_MUT"; FAIL=$((FAIL + 1))
 fi
 
@@ -2410,9 +2441,20 @@ else
     "$F2_M_SYNTAX"; FAIL=$((FAIL + 1))
 fi
 
-# M3 — the CONFORMANT control. The shipped walk consumes the flag's argument, reaches
-# the real operand, and denies it.
-f2_run block-destructive.sh "bash -o errexit ${F2_NA}"
+# M3/M4 — THE DIFFERENTIAL PAYLOAD IS RE-POINTED FROM `-o errexit` TO `+x`, AND THE
+# REASON IS THAT THE TWO FIXES IN THIS MERGE OVERLAP. `bash -o errexit <script>` is
+# closed TWICE over: by this walk's domain termination (the value is not the operand,
+# so the walk keeps looking) and, independently, by the arity overlay merged alongside
+# it (the `-*` skip arm consumes `errexit` as `-o`'s argument). Reverting only the walk
+# therefore no longer reopens that payload — M4 measured a genuine overlap and said so
+# by going red, which is the arm working. The `+`-FORM is the shape only the walk
+# closes: `+x` is arity 0 on bash, so the overlay has nothing to consume, and a
+# dash-anchored `*)` takes `+x` ITSELF as the operand — a token no domain claims — and
+# reaches ALLOW. Same fixture, same rule, one predicate reverted.
+#
+# M3 — the CONFORMANT control. The shipped walk advances past the plus-form option,
+# reaches the real operand, and denies it.
+f2_run block-destructive.sh "bash +x ${F2_NA}"
 if [ "$F2_EXIT" = 2 ] && /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$F2_ERR"; then
   /usr/bin/printf 'PASS: AC-D022-M3: conformant control — shipped hook DENIES the non-allowlisted script behind a value-taking flag\n'
   PASS=$((PASS + 1))
@@ -2423,7 +2465,7 @@ fi
 
 # M4 — the DIFFERENTIAL. Same payload, same sandbox, walk reverted to dash-anchored.
 # The bypass reopens and the identical invocation reaches ALLOW.
-f2_run block-destructive-mut.sh "bash -o errexit ${F2_NA}"
+f2_run block-destructive-mut.sh "bash +x ${F2_NA}"
 if [ "$F2_EXIT" = 0 ]; then
   /usr/bin/printf 'PASS: AC-D022-M4: differential — with the walk reverted to the dash-anchored form the SAME invocation reaches ALLOW\n'
   PASS=$((PASS + 1))
@@ -3152,6 +3194,1657 @@ sandbox_case "helper-missing: fails CLOSED (exit 2, LIB-MISSING)" \
   2 "LIB-MISSING"
 
 /bin/rm -rf "$DESTRUCTIVE_SANDBOX" "$DESTRUCTIVE_NOLIB"
+
+# ==========================================================================
+# PARSE-* — parse-only (noexec) exemption + the two admitted allowlist paths
+# ==========================================================================
+#
+# Subject: BLOCK-DESTRUCTIVE-022 refused `bash -n <script>` — an invocation that
+# PARSES AND EXITS, executing nothing — while permitting several forms that do
+# execute. It also refused two named platform scripts the corpus tells agents to
+# run. Both are refusals outside any arm's declared scope.
+#
+# EVERY "ALLOW" ARM BELOW IS PAIRED WITH A CONTROL THAT MUST BLOCK. An exemption
+# suite in which nothing blocks cannot distinguish a working exemption from a
+# dead allowlist or an inert hook, and would read green either way.
+
+echo ""
+echo "PARSE-*: parse-only exemption + allowlist admission (#6172)"
+echo "---"
+
+# The non-allowlisted fixture path. Deliberately reused across the AC-3/4/5 arms
+# so each ALLOW and its BLOCK control differ ONLY by the flag under test.
+PARSE_UNLISTED="core/deploy/tools/no-such-tool-xyz.sh"
+
+# --- AC-1: the two named paths execute, in both repository-relative spellings ---
+test_case "PARSE-01: bash core/deploy/tools/check-convention.sh allowed (bare-relative)" \
+  "$(bash_payload 'bash core/deploy/tools/check-convention.sh')" 0
+test_case "PARSE-02: bash ./core/deploy/tools/check-convention.sh allowed (dot-relative)" \
+  "$(bash_payload 'bash ./core/deploy/tools/check-convention.sh')" 0
+test_case "PARSE-03: bash core/deploy/tests/test_check49_mode_identifier_unification.sh allowed (bare-relative)" \
+  "$(bash_payload 'bash core/deploy/tests/test_check49_mode_identifier_unification.sh')" 0
+test_case "PARSE-04: bash ./core/deploy/tests/test_check49_mode_identifier_unification.sh allowed (dot-relative)" \
+  "$(bash_payload 'bash ./core/deploy/tests/test_check49_mode_identifier_unification.sh')" 0
+
+# AC-1 control arm THAT MUST FIRE: a sibling-shaped path that was never admitted
+# still blocks. Without it, PARSE-01..04 would read green against an allowlist
+# that had stopped being consulted at all.
+test_case "PARSE-05 [ctl]: bash <unlisted>.sh still blocks (AC-1 is not a dead allowlist)" \
+  "$(bash_payload "bash $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- AC-2 / CIAC-1: the widening is FORM-SCOPED, not path-scoped ---
+# The rows added for these two scripts are repository-relative ONLY. The absolute
+# spelling of the SAME script must still be refused — that is what makes the -022
+# hint's "retry the allowlisted relative form" truthful rather than decorative,
+# and it is why the added allowlist block carries a do-not-complete-to-four-forms
+# guard. If someone adds the absolute form, this arm goes red and says why.
+test_case "PARSE-06 [ctl]: ABSOLUTE spelling of check-convention.sh still blocks (CIAC-1 form-scoping)" \
+  "$(bash_payload 'bash /srv/pmo-platform/core/deploy/tools/check-convention.sh')" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- AC-3: parse-only is not execution ---
+test_case "PARSE-07: bash -n <unlisted>.sh allowed (parses and exits; executes nothing)" \
+  "$(bash_payload "bash -n $PARSE_UNLISTED")" 0
+
+# --- AC-4 / CIAC-2: the exemption is keyed on the INTERPRETER, not on the token ---
+test_case "PARSE-08: sh -n <unlisted>.sh allowed" \
+  "$(bash_payload "sh -n $PARSE_UNLISTED")" 0
+test_case "PARSE-09: zsh -n <unlisted>.sh allowed" \
+  "$(bash_payload "zsh -n $PARSE_UNLISTED")" 0
+# Control arms that MUST fire: `source`/`.` are builtins taking no options, so a
+# `-n` there is an OPERAND, not a parse-only flag. They reach the table's explicit
+# null and keep blocking. A flag-keyed exemption would wrongly allow both.
+test_case "PARSE-10 [ctl]: source -n <unlisted>.sh still blocks (per-interpreter null)" \
+  "$(bash_payload "source -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "PARSE-11 [ctl]: . -n <unlisted>.sh still blocks (per-interpreter null)" \
+  "$(bash_payload ". -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- AC-5: executing forms stay refused (per-flag fixture table) ---
+# The `-c` pair is the load-bearing entry. `bash -c '<prog>' -n <p>` GENUINELY
+# EXECUTES: the walk breaks at `-c`, so the trailing `-n` is never seen as a flag.
+# `bash -n -c '<prog>'` is declined by the explicit no-`-c` conjunct instead.
+test_case "PARSE-12a [ctl]: bash <unlisted>.sh blocks (no flag)" \
+  "$(bash_payload "bash $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "PARSE-12b [ctl]: bash -x <unlisted>.sh blocks (executing flag)" \
+  "$(bash_payload "bash -x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "PARSE-12c [ctl]: bash -s <unlisted>.sh blocks (executing flag)" \
+  "$(bash_payload "bash -s $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "PARSE-12d [ctl]: bash -- <unlisted>.sh blocks (end-of-options)" \
+  "$(bash_payload "bash -- $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "PARSE-12e [ctl]: bash -c '<prog>' -n <unlisted>.sh blocks (TRAILING -n; this form executes)" \
+  "$(bash_payload "bash -c 'echo hi' -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "PARSE-12f [ctl]: bash -n -c '<prog>' blocks (cmode conjunct declines the exemption)" \
+  "$(bash_payload "bash -n -c 'echo hi' $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# A cluster is a DECLARED RESIDUAL, not an admitted spelling: unchanged behaviour.
+test_case "PARSE-12g [ctl]: bash -nx <unlisted>.sh still blocks (cluster is a declared residual)" \
+  "$(bash_payload "bash -nx $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- AC-7: an already-permitted path must not change verdict ---
+test_case "PARSE-13: bash -n core/deploy/deploy.sh still allowed (was ALLOW at baseline)" \
+  "$(bash_payload 'bash -n core/deploy/deploy.sh')" 0
+
+# --- AC-6: PAIRED MUTATION ARM — proves PARSE-07's detector is LIVE ---
+#
+# Three arms in this milestone's prior release read green while their mutation was
+# INERT, so this harness asserts the mutation actually changed the file before it
+# believes anything the mutant reports. The mutant is written as a SIBLING of the
+# real hook so HOOK_DIR — and therefore every lib and the allowlist — resolves
+# identically; the mutant differs from the shipped hook in exactly one predicate.
+PARSE_MUTANT="$(dirname "$HOOK")/block-destructive.PARSE-mutant.sh"
+/usr/bin/sed 's#\[ "\$script_noexec" -eq 1 \]#[ "$script_noexec" -eq 99 ]#' \
+  "$HOOK" > "$PARSE_MUTANT"
+
+# (a) NON-INERTNESS GATE. If the substitution matched nothing the mutant is a byte
+#     copy, the "mutant blocks" arm below would be measuring the shipped hook, and
+#     a green result would mean nothing. Fail loudly instead.
+if /usr/bin/cmp -s "$HOOK" "$PARSE_MUTANT"; then
+  /usr/bin/printf 'FAIL: PARSE-14a mutation is INERT — mutant is byte-identical to the shipped hook\n'
+  FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: PARSE-14a mutation is live (mutant differs from the shipped hook)\n'
+  PASS=$((PASS + 1))
+fi
+
+# (b) The mutant — exemption reverted — must BLOCK the very payload the shipped
+#     hook allows at PARSE-07. This is what proves PARSE-07 measures the exemption
+#     rather than a permissive hook.
+sandbox_case "PARSE-14b: mutant (exemption reverted) BLOCKS bash -n <unlisted>.sh" \
+  "$PARSE_MUTANT" \
+  "$(bash_payload "bash -n $PARSE_UNLISTED")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# (c) The shipped hook allows the identical payload in the same run — the pair is
+#     the evidence, not either arm alone.
+test_case "PARSE-14c: shipped hook ALLOWS the identical payload (mutation pair closes)" \
+  "$(bash_payload "bash -n $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$PARSE_MUTANT"
+
+echo ""
+echo "BLOCK-022 flag-walk OPTION ARITY (#6172 F-01)"
+echo "---"
+#
+# WHAT THESE ARMS ARE FOR. The flag walk stepped over `-*` one token at a time and
+# called the first non-option the operand. It had no notion of option ARITY, so an
+# option that takes a SEPARATE argument left that argument sitting in the operand
+# slot — and the walk was wrong in two directions at once:
+#
+#   (1) It adjudicated the ARGUMENT instead of the script. `bash --rcfile <allowed>
+#       <unlisted>` checked the rcfile, found it allowlisted, allowed the segment,
+#       and never saw the script bash actually runs. Measured on origin/main as
+#       well as on this branch: INHERITED, not introduced here.
+#
+#   (2) It offered the ARGUMENT to the parse-only table as though it were a FLAG.
+#       In `bash --rcfile -n <unlisted>` bash has taken `-n` as the rcfile
+#       FILENAME, so the invocation EXECUTES <unlisted> — but the walk read `-n`,
+#       set script_noexec, and the parse-only exemption allowed the whole segment.
+#       origin/main BLOCKS this payload and this branch ALLOWED it: INTRODUCED by
+#       the #6172 exemption, and the reason F-01 is a live block-to-allow rather
+#       than an inherited gap.
+#
+# Both are one cause, so they get one fix and one block of arms. The arity table is
+# MEASURED against the interpreters, not inferred: `<interp> <opt> -n -c 'echo X'`
+# prints X exactly when <opt> consumed the `-n`.
+#
+# THE PROPERTY THESE ARMS PIN, and the one an edit is most likely to break: a
+# consumed argument is STILL ADJUDICATED. Consuming it and stepping over it would
+# close (1) and (2) while moving a claimed token out of adjudication — the one
+# direction the walk's NET DIRECTION rule forbids, and the direction that would
+# flip ARITY-11 from BLOCK to ALLOW. ARITY-11 is that control and it is the arm to
+# read first if this block ever goes red.
+ARITY_ALLOWED="core/deploy/deploy.sh"
+
+# --- (1) an argument-taking option preceding a NON-ALLOWLISTED operand ---
+test_case "ARITY-01: bash --rcfile <allowed> <unlisted>.sh blocks (operand is the SCRIPT, not the rcfile)" \
+  "$(bash_payload "bash --rcfile $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "ARITY-02: bash --init-file <allowed> <unlisted>.sh blocks" \
+  "$(bash_payload "bash --init-file $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "ARITY-03: sh --rcfile <allowed> <unlisted>.sh blocks (/bin/sh is bash on the reference host)" \
+  "$(bash_payload "sh --rcfile $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# The short argument-taking forms reach the same walk. `-O shopt_option` and
+# `-o option` take a shell-option NAME, which claims no operand domain — so before
+# the fix the walk stopped on a name it could not adjudicate and the script behind
+# it escaped entirely. This is the shape the noexec table's own comment recorded as
+# making `-o noexec` unreachable.
+test_case "ARITY-04: bash -O expand_aliases <unlisted>.sh blocks (-O takes a shopt name)" \
+  "$(bash_payload "bash -O expand_aliases $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "ARITY-05: zsh -o noexec <unlisted>.sh blocks (-o takes an option name)" \
+  "$(bash_payload "zsh -o noexec $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- (2) the same, with an inert-mode flag ALSO present as the option's argument ---
+# These are the block-to-allow arms. On origin/main all three BLOCK.
+test_case "ARITY-06: bash --rcfile -n <unlisted>.sh blocks (-n is the rcfile NAME; this executes)" \
+  "$(bash_payload "bash --rcfile -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "ARITY-07: bash --init-file -n <unlisted>.sh blocks (-n is the init-file NAME)" \
+  "$(bash_payload "bash --init-file -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# zsh implements neither long option and exits "no such option", so nothing runs
+# either way. It is listed in the arity table regardless: the alternative leaves the
+# verdict resting on another program's option parser, which this control does not
+# reason about. See the ZSH ROWS note on script_interp_optarg_flag.
+test_case "ARITY-08: zsh --rcfile -n <unlisted>.sh blocks (verdict does not rest on zsh's parser)" \
+  "$(bash_payload "zsh --rcfile -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- (3) a GENUINE parse-only invocation is still admitted — #6172's whole point ---
+# The fix must close the arity hole without taking back the exemption. ARITY-10 is
+# the discriminating arm: the rcfile argument is consumed, and the `-n` that
+# FOLLOWS it is a real parse-only flag, so the segment is genuinely inert.
+test_case "ARITY-09: bash -n <unlisted>.sh still allowed (parse-only survives the arity fix)" \
+  "$(bash_payload "bash -n $PARSE_UNLISTED")" 0
+test_case "ARITY-10: bash --rcfile <allowed> -n <unlisted>.sh allowed (a REAL -n after a consumed argument)" \
+  "$(bash_payload "bash --rcfile $ARITY_ALLOWED -n $PARSE_UNLISTED")" 0
+
+# --- Control arms THAT MUST FIRE ---
+# ARITY-11 is the load-bearing one: the consumed argument is still adjudicated. A
+# consume-and-skip implementation passes every arm above and ALLOWS this one.
+test_case "ARITY-11 [ctl]: bash --rcfile <unlisted>.sh <allowed> blocks (a consumed argument is STILL adjudicated)" \
+  "$(bash_payload "bash --rcfile $PARSE_UNLISTED $ARITY_ALLOWED")" 2 "BLOCK-DESTRUCTIVE-022"
+# `--rcfile=FILE` is not a bash spelling at all (bash rejects it), so no token is
+# consumed and the operand is unchanged. Pins the arity table to the exact separate-
+# argument forms rather than a `--rcfile*` prefix.
+test_case "ARITY-12 [ctl]: bash --rcfile=<allowed> <unlisted>.sh blocks (attached form consumes nothing)" \
+  "$(bash_payload "bash --rcfile=$ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# `-c` breaks the walk before the arity step can run, so cmode still wins.
+test_case "ARITY-13 [ctl]: bash -c '<prog>' -n <unlisted>.sh still blocks (the -c break precedes arity)" \
+  "$(bash_payload "bash -c 'echo hi' -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# The source arm consumes nothing: `source`/`.` are builtins that take no options,
+# so the first non-option is still the operand there.
+test_case "ARITY-14 [ctl]: source --rcfile <unlisted>.sh <allowed> blocks (source arm consumes no argument)" \
+  "$(bash_payload "source --rcfile $PARSE_UNLISTED $ARITY_ALLOWED")" 2 "BLOCK-DESTRUCTIVE-022"
+# A trailing option whose argument ends argv leaves no operand; the index bound
+# keeps the walk from reading past the end, and the argument is adjudicated anyway.
+test_case "ARITY-15 [ctl]: bash --rcfile <allowed> allowed (argument ends argv; no operand follows)" \
+  "$(bash_payload "bash --rcfile $ARITY_ALLOWED")" 0
+# The cluster residual is untouched by arity — still refused, exactly as before.
+test_case "ARITY-16 [ctl]: bash -nx <unlisted>.sh still blocks (cluster residual unchanged)" \
+  "$(bash_payload "bash -nx $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- (4) `zsh --emulate` — the row a letter-by-letter sweep misses ---
+# zsh's own `--help` lists its "special options" as --help, --version, -b, -c and
+# `-o OPTION`, and does NOT name --emulate. It exists all the same, it takes a
+# SEPARATE argument, and that makes it the same defect shape as ARITY-06/07:
+#
+#   zsh --emulate -n -s  <<< 'echo RUNOK'  ->  RUNOK    (-n eaten as the mode NAME)
+#   zsh -n -s            <<< 'echo RUNOK'  ->  (empty)  (control: -n really is inert)
+#
+# so `zsh --emulate -n <unlisted>` EXECUTES, and before this row the walk read the
+# `-n` as a flag and the parse-only exemption allowed the segment. origin/main
+# BLOCKS the payload; this branch ALLOWED it until the row was added — the same
+# block-to-allow F-01 names, on the interp domain, not phase-gated.
+#
+# The row is measured, not inferred. The sweep enumerated zsh's whole option
+# surface — every -X/+X single letter, and --<name>, --no<name>, --no-<name>,
+# +-<name>, +-no-<name> for all 197 setopt names plus the 12 documented aliases
+# (1135 spellings) — with a script-execution marker as the discriminator and
+# controls firing both ways. Exactly two spellings execute despite a following
+# `-n`: `--emulate` and `+-emulate`. BOTH are now in the table; an earlier form of
+# this note said `+-emulate` was structurally excluded because the walk's option arm
+# matches `-*` and a `+`-leading token fell to `*) break`. That `*) break` is gone —
+# see FWALK-PLUS-* below, which is the arm set that records the new boundary.
+test_case "ARITY-18a: zsh --emulate -n <unlisted>.sh blocks (-n is the emulation MODE NAME; this executes)" \
+  "$(bash_payload "zsh --emulate -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "ARITY-18b: zsh --emulate -n -x <unlisted>.sh blocks (trailing flags do not restore inertness)" \
+  "$(bash_payload "zsh --emulate -n -x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# The discriminating arm: a REAL -n after a consumed mode name is genuinely inert,
+# so #6172's exemption must still fire. This is ARITY-10's analogue for zsh.
+test_case "ARITY-18c: zsh --emulate zsh -n <unlisted>.sh allowed (a REAL -n after the consumed mode name)" \
+  "$(bash_payload "zsh --emulate zsh -n $PARSE_UNLISTED")" 0
+# ARITY-11's analogue: the consumed mode-name slot is still adjudicated, so a
+# non-allowlisted script sitting in it is caught rather than stepped over.
+test_case "ARITY-18d [ctl]: zsh --emulate <unlisted>.sh <allowed> blocks (the consumed argument is STILL adjudicated)" \
+  "$(bash_payload "zsh --emulate $PARSE_UNLISTED $ARITY_ALLOWED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# --- FWALK-PLUS-* : the `+`-leading arity surface, live since the walk stopped -----
+# being dash-anchored. THIS IS THE ARM SET FOR A HOLE NEITHER SIDE OF THE MERGE HAS.
+# `origin/main` advances past a `+`-leading option (its walk terminates on the operand
+# DOMAIN, not on flag shape) and then adjudicates the real script — it has no
+# parse-only exemption to fool, so `zsh +-emulate -n <unlisted>.sh` BLOCKS there. This
+# branch never advanced past `+-emulate` at all, because `*) break` took it as the
+# operand. Compose main's advance with this branch's parse-only exemption and the walk
+# steps over `+-emulate`, offers the FOLLOWING `-n` to the noexec table as a flag, and
+# exempts a segment the real shell EXECUTES. Measured inline, controls firing both
+# ways: `zsh +-emulate -n -c 'echo X'` prints X; `zsh -n -c 'echo X'` is silent.
+#
+# The fix is the arity question asked in the advance-past arm — the same question the
+# `-*` skip arm already asks — so it closes the CLASS rather than this spelling, and
+# the `+O`/`+o` rows kept "for a later widening" become live with it. The `+` surface
+# was re-swept before the row was added: 656 zsh and 89 bash/sh `+` spellings under the
+# three-outcome read (B-named = consumed; A-named-and-REJECTED = consumed against a
+# validated namespace; A-named-and-not-found = A was the script), controls firing on
+# both readings. `+-emulate` is the ONLY arity-1 `+` spelling zsh has beyond `+o`, and
+# the only one leaving the shell LIVE after eating a `-n` (`+o`/`+O` abort).
+test_case "FWALK-PLUS-emulate: zsh +-emulate -n <unlisted>.sh blocks (the + spelling eats the -n too)" \
+  "$(bash_payload "zsh +-emulate -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-PLUS-emulate-x: zsh +-emulate -n -x <unlisted>.sh blocks (trailing flags do not restore inertness)" \
+  "$(bash_payload "zsh +-emulate -n -x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# The QUOTED spelling is why the arity table is asked about the NORMALIZED token here
+# and not the raw one: a `+`-leading token never reaches the flag-normalization step
+# above, so a raw-token lookup would miss `'+-emulate'` and fall to the fail-OPEN side.
+test_case "FWALK-PLUS-emulate-quoted: zsh '+-emulate' -n <unlisted>.sh blocks (normalized view feeds the table)" \
+  "$(bash_payload "zsh '+-emulate' -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# ARITY-18d's analogue for the + spelling: consuming is not stepping over. The token
+# in the consumed mode-name slot is still adjudicated, so it is caught there instead.
+test_case "FWALK-PLUS-adjudicated [ctl]: zsh +-emulate <unlisted>.sh <allowed> blocks (consumed argument STILL adjudicated)" \
+  "$(bash_payload "zsh +-emulate $PARSE_UNLISTED $ARITY_ALLOWED")" 2 "BLOCK-DESTRUCTIVE-022"
+# ARITY-18c's analogue, and the arm that keeps this from being a blanket `+` over-block:
+# a REAL -n after the consumed mode name is genuinely inert, so #6172's exemption must
+# still fire. Without it, "block everything with a +" would pass every arm above.
+test_case "FWALK-PLUS-ctl-inert: zsh +-emulate zsh -n <unlisted>.sh allowed (a REAL -n after the consumed mode name)" \
+  "$(bash_payload "zsh +-emulate zsh -n $PARSE_UNLISTED")" 0
+# The paired control for the OTHER direction: a `+` option that takes NO argument must
+# not consume anything, so the -n after it is a real flag and the segment stays exempt.
+# `+x` is arity 0 on every one of the three shells (swept, controls firing).
+test_case "FWALK-PLUS-ctl-arity0: zsh +x -n <unlisted>.sh allowed (+x takes no argument; the -n is real)" \
+  "$(bash_payload "zsh +x -n $PARSE_UNLISTED")" 0
+# R1, the residual the walk-termination commit declared, is CLOSED for the + forms by
+# the same overlay: a value-taking flag whose argument is an allowlisted script no
+# longer hides the real operand, because the argument is consumed and adjudicated in
+# place and the walk continues to the token the shell actually runs.
+test_case "FWALK-PLUS-r1: zsh +-emulate <allowed> <unlisted>.sh blocks (flag argument no longer hides the operand)" \
+  "$(bash_payload "zsh +-emulate $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+echo ""
+echo "BLOCK-022 parse-only LAST-ONE-WINS (#6172 noexec latch)"
+echo "---"
+# SUBJECT: the parse-only flag was a ONE-WAY LATCH. It was set to 1 the first time an
+# inert-mode spelling appeared and never cleared, but every shell in the table treats
+# these options as LAST-ONE-WINS state. A later token that turns noexec back OFF left
+# the hook reporting parse-only on an invocation the interpreter EXECUTES.
+#
+# MEASURED ON THE REFERENCE HOST, with the marker ASSEMBLED AT RUNTIME so that `-v`
+# or `-x` echoing the source text cannot forge it (`p=OPER; q=AND_RAN; echo "${p}${q}"`
+# piped to <interp> <opts> /dev/stdin):
+#     bash -n +n            -> marker prints   (EXECUTES)
+#     bash -n +o noexec     -> marker prints   (EXECUTES)
+#     zsh  -n +-noexec      -> marker prints   (EXECUTES)
+#     bash -n               -> silent          CONTROL: the exemption is real
+#     bash +n -n            -> silent          CONTROL: order matters, last wins
+#     bash -n +n -n         -> silent          CONTROL: interleaving resolves to ON
+# The controls are what make this a defect rather than a boundary: the same tokens in
+# the other order are genuinely inert, so a blanket "any `+` cancels it" would be as
+# wrong as the latch, in the opposite direction.
+#
+# THE PREDICATE IS NOT A CLEARING TABLE, and that is the whole point of the fix. A
+# table of clear-spellings symmetric to the set-table fails OPEN on omission — one
+# unlisted way of writing "noexec off" and the parse-only claim stands while the
+# script runs. Instead: parse-only is GRANTED only by positive recognition and
+# REVOKED by every other token the walk steps over. A spelling never seen costs an
+# over-block, never an exemption.
+#
+# BOTH ORDERS ARE ARMED ON PURPOSE. Three prior sweeps enumerated `<candidate> -n`
+# and this class lives at `-n <candidate>`, which is how it survived them.
+
+# (1) THE CLASS — a clearing form AFTER the set form. These ALLOW on the pre-fix hook.
+test_case "NOEXEC-01: bash -n +n <unlisted>.sh blocks (+n turns noexec OFF; this EXECUTES)" \
+  "$(bash_payload "bash -n +n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-02: sh -n +n <unlisted>.sh blocks (the walk is shared by every interpreter)" \
+  "$(bash_payload "sh -n +n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-03: zsh -n +n <unlisted>.sh blocks" \
+  "$(bash_payload "zsh -n +n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# `+o` is in the ARITY table, so `noexec` is consumed as its argument and never
+# offered to the noexec table — the revocation must come from `+o` itself.
+test_case "NOEXEC-04: bash -n +o noexec <unlisted>.sh blocks (clearing form with a separate argument)" \
+  "$(bash_payload "bash -n +o noexec $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-05: zsh -n +-noexec <unlisted>.sh blocks (long `+` spelling of the same clear)" \
+  "$(bash_payload "zsh -n +-noexec $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# INTERLEAVING that resolves to OFF — an even number of flips ending on a clear.
+test_case "NOEXEC-06: bash -n +n -n +n <unlisted>.sh blocks (interleaved; final state is OFF)" \
+  "$(bash_payload "bash -n +n -n +n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (2) THE OTHER ORDER, AND INTERLEAVINGS THAT RESOLVE TO ON. These are the arms that
+# keep the fix HONEST: if the predicate were "any `+` token cancels parse-only" they
+# would over-block, and the exemption would be worth much less than the card claims.
+test_case "NOEXEC-07: bash +n -n <unlisted>.sh allowed (clear THEN set; final state is ON, shell is inert)" \
+  "$(bash_payload "bash +n -n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-08: bash -n +n -n <unlisted>.sh allowed (interleaved; final state is ON)" \
+  "$(bash_payload "bash -n +n -n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-09: zsh +-noexec -n <unlisted>.sh allowed (long clear THEN set)" \
+  "$(bash_payload "zsh +-noexec -n $PARSE_UNLISTED")" 0
+
+# (3) THE CARD'S VALUE — unchanged. If any of these turn red the fix has eaten the
+# feature it was protecting.
+test_case "NOEXEC-CTL-01: bash -n <unlisted>.sh STILL allowed (the operand ends the walk, it does not revoke)" \
+  "$(bash_payload "bash -n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-CTL-02: bash -n <allowed> still allowed" \
+  "$(bash_payload "bash -n $ARITY_ALLOWED")" 0
+test_case "NOEXEC-CTL-03: bash -n +n <allowed> allowed (revoked, but the allowlist still governs)" \
+  "$(bash_payload "bash -n +n $ARITY_ALLOWED")" 0
+
+# (4) DECLARED RESIDUAL — a genuinely inert invocation that this predicate over-blocks.
+# `bash -n -x <script>` IS inert (measured: silent), but `-x` is not a recognised
+# parse-only spelling, so it revokes and the segment is adjudicated. This is the
+# fail-SAFE direction and it is pinned so a future maintainer reads it as intended
+# rather than as a bug: the cost of the revoke being unconditional for every token the
+# walk STEPS OVER. That scope is the whole guarantee, and stating it unscoped — "nothing
+# to omit on the revoke side" — is false: a token that ENDS the walk does not revoke, so
+# an earlier grant survives it. NOEXEC-QSPLIT-* below pins the one family where that is
+# live, and NOEXEC-ORD-* pins the line order the scope depends on.
+test_case "NOEXEC-R1: bash -n -x <unlisted>.sh blocks (declared over-block; unrecognised token revokes)" \
+  "$(bash_payload "bash -n -x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (5) QUOTED SPELLINGS. A `+`-leading token never reaches the flag normalization at
+# the top of the walk, so the quoted form arrives at the advance-past arm still
+# wearing its quotes — the same asymmetry that made `'+-emulate'` a hole worth an arm
+# in FWALK-PLUS. These pin that a quoted clear still revokes and a quoted set still
+# grants, so the fix cannot be walked around by adding quotes.
+test_case "NOEXEC-Q1: bash -n '+n' <unlisted>.sh blocks (quoted clearing form still revokes)" \
+  "$(bash_payload "bash -n '+n' $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-Q2: bash '-n' '+n' <unlisted>.sh blocks (both tokens quoted)" \
+  "$(bash_payload "bash '-n' '+n' $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-Q3: bash '-n' <unlisted>.sh allowed (quoted set form still grants; paired control)" \
+  "$(bash_payload "bash '-n' $PARSE_UNLISTED")" 0
+
+# --- (6) ORDERING PIN — the revoke must stay BELOW both breaks ---
+# The predicate's guarantee is scoped to tokens the walk STEPS OVER, and that scope is
+# produced by one thing only: the revoke sitting below both `break`s. Hoist it and
+# `bash -n <script>.sh` revokes on the script itself and the card's whole value is lost.
+# NOEXEC-CTL-01 catches that behaviourally for the shapes it covers; this arm reads the
+# ORDER out of the hook, so a hoist is caught as the structural edit it is.
+#
+# The predicate is "no `script_noexec=0` appears between the walk-body marker and the
+# second break, and the advance-past revoke appears after it". It FAILS CLOSED: a marker
+# that stops matching reports MARKER-MISSING rather than reading as "ordering fine".
+# ONE awk PASS OVER THE FILE, AND NO PIPELINE ANYWHERE IN IT. The obvious spelling of
+# this helper — `grep -n … | head -1 | cut` — is a writer piped into a short-circuiting
+# reader, which the SIGPIPE-idiom gate matches by name. awk reads the file directly, uses
+# index() rather than regexes so no marker needs escaping, and takes its only `exit`
+# inside END, which that gate documents as safe because END runs after the input is drained.
+noexec_ord_check() {
+  /usr/bin/awk '
+    index($0, "# M-FWALK-BODY")                                                  { if (body == 0) body = NR }
+    index($0, "script_norm_ok\" -eq 0 ]; then break")                            { if (b1 == 0)   b1   = NR }
+    index($0, "script_operand_implicated \"$script_interp_domain\"; then break") { if (b2 == 0)   b2   = NR }
+    index($0, "M-NOEXEC-REVOKE")                                                 { rev = NR }
+    index($0, "script_noexec=0")                                                 { n++; nl[n] = NR }
+    END {
+      if (body == 0 || b1 == 0 || b2 == 0 || rev == 0) { printf "MARKER-MISSING"; exit }
+      for (i = 1; i <= n; i++) {
+        if (nl[i] >= body && nl[i] <= b2) { printf "HOISTED"; exit }
+      }
+      if (b1 > body && b2 > b1 && rev > b2) { printf "BELOW" } else { printf "OUT-OF-ORDER" }
+    }
+  ' "$1"
+}
+
+noexec_ord_shipped="$(noexec_ord_check "$HOOK")"
+if [ "$noexec_ord_shipped" = "BELOW" ]; then
+  /usr/bin/printf 'PASS: NOEXEC-ORD-01 revoke sits BELOW both walk-ending breaks (scope of the fail-safe guarantee)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: NOEXEC-ORD-01 revoke ordering\n  expected=BELOW actual=%s\n' "$noexec_ord_shipped"
+  FAIL=$((FAIL + 1))
+fi
+
+# RED-BEFORE CONTROL for NOEXEC-ORD-01. A checker that cannot fail proves nothing, so the
+# same predicate is run against a mutant with the revoke hoisted onto the walk-body line —
+# above both breaks. It must report HOISTED. The hoist is a single-line substitution on
+# the marker comment, which keeps it portable across BSD and GNU sed. The marker is
+# RE-EMITTED at the end of the line: the checker locates the region by it, so a mutant
+# that dropped it would report MARKER-MISSING and the control would pass for the wrong
+# reason — it would prove only that the checker notices a missing marker.
+ORD_MUTANT="$(dirname "$HOOK")/block-destructive.ORD-mutant.sh"
+/usr/bin/sed 's|# M-FWALK-BODY|; if [ "$script_verb" = "interp" ]; then script_noexec=0; fi   # M-FWALK-BODY|' \
+  "$HOOK" > "$ORD_MUTANT"
+
+if /usr/bin/cmp -s "$HOOK" "$ORD_MUTANT"; then
+  /usr/bin/printf 'FAIL: NOEXEC-ORD-02a hoist mutation is INERT — mutant is byte-identical to the shipped hook\n'
+  FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: NOEXEC-ORD-02a hoist mutation is live (mutant differs from the shipped hook)\n'
+  PASS=$((PASS + 1))
+fi
+
+noexec_ord_mutant="$(noexec_ord_check "$ORD_MUTANT")"
+if [ "$noexec_ord_mutant" = "HOISTED" ]; then
+  /usr/bin/printf 'PASS: NOEXEC-ORD-02b checker REPORTS the hoist (red-before control fires)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: NOEXEC-ORD-02b checker did not report the hoist\n  expected=HOISTED actual=%s\n' "$noexec_ord_mutant"
+  FAIL=$((FAIL + 1))
+fi
+
+# And the CONSEQUENCE, measured rather than asserted: with the revoke hoisted the operand
+# itself revokes, so the card's own payload stops being admitted. This is the pair that
+# says WHY the order matters — the shipped hook allows it in the same run (NOEXEC-CTL-01).
+sandbox_case "NOEXEC-ORD-03: hoisted mutant BLOCKS bash -n <unlisted>.sh (the card's value is what the order protects)" \
+  "$ORD_MUTANT" "$(bash_payload "bash -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+/bin/rm -f "$ORD_MUTANT"
+
+# --- (6b) DOC <-> BEHAVIOUR TIE — the documented exemption claim must match the verdict ---
+# WHY THIS PAIR EXISTS, AND WHY A FRESHNESS GATE COULD NOT CATCH WHAT IT CATCHES. The
+# BLOCK-DESTRUCTIVE-022 registry row described this exemption as UNCONDITIONAL — "a bare -n
+# under bash/sh/zsh with no -c in the flag span executes nothing and is not adjudicated" — and
+# went on saying it after the predicate stopped being unconditional. build-hook-registry.py
+# --check was rc=0 throughout, and correctly so: it proves the GENERATED index is byte-identical
+# to its SOURCE fragment, and both carried the same false sentence. Comparing two copies of one
+# claim can never falsify the claim. The missing check is a tie between the SENTENCE and the
+# VERDICT, which is what these arms are — the claim is read out of the readiness corpus and held
+# against what the shipped hook actually decides for `bash -n +n <unlisted>.sh` in this same run.
+#
+# FAILS CLOSED. An unresolvable document reports DOC-MISSING and reddens; it never reads as
+# "nothing to check", which is the failure mode a documentation arm most easily acquires.
+#
+# ONE RESOLUTION EXPRESSION COVERS BOTH LAYOUTS. ${HOOK_DIR}/../rules/... is
+# <sandbox>/.claude/rules/... under setup-ci-layout.sh (which mirrors the corpus exactly as
+# deploy.sh's rules-mirror pair set does) and <repo>/core/rules/... in a source-tree run. The
+# repo-root form is kept as a second rung so an unfamiliar layout degrades to a resolved read.
+#
+# NO PIPELINES ANYWHERE IN THIS BLOCK. The classifier is one awk pass using index() — literal
+# matching, so no marker needs escaping — and the behavioural probe feeds the hook from a FILE
+# rather than from a writer on the other side of a pipe. Both are deliberate: a writer piped
+# into a short-circuiting reader is the idiom the SIGPIPE gate matches by name.
+NOEXEC_DOC_FRAG="$(cd "$(dirname "$0")/../.." && pwd -P)/rules/bypass-mode-readiness/block-destructive.md"
+[ -f "$NOEXEC_DOC_FRAG" ] || NOEXEC_DOC_FRAG="$(cd "$(dirname "$0")/../../.." && pwd -P)/core/rules/bypass-mode-readiness/block-destructive.md"
+NOEXEC_DOC_INDEX="$(cd "$(dirname "$0")/../.." && pwd -P)/rules/bypass-mode-readiness.md"
+[ -f "$NOEXEC_DOC_INDEX" ] || NOEXEC_DOC_INDEX="$(cd "$(dirname "$0")/../../.." && pwd -P)/core/rules/bypass-mode-readiness.md"
+
+# CONDITIONAL requires BOTH halves of the corrected claim AND the absence of the stale absolute.
+# Either half alone is not enough: prose that says "conditional" while still carrying "executes
+# nothing and is not adjudicated" is exactly the both-ways-at-once state a partial reconcile
+# leaves behind, and it is the state this rule's own history produced.
+noexec_doc_claim() {   # $1 = readiness file -> CONDITIONAL | STALE-ABSOLUTE | NO-QUALIFIER | NO-REVOKE-RULE | DOC-MISSING
+  if [ ! -f "$1" ]; then /usr/bin/printf 'DOC-MISSING'; return 0; fi
+  /usr/bin/awk '
+    index($0, "executes nothing and is not adjudicated")             { stale = 1 }
+    index($0, "conditional on the FINAL EFFECTIVE")                  { qual  = 1 }
+    index($0, "by every later token the walk steps over")            { revok = 1 }
+    END {
+      if (stale == 1) { printf "STALE-ABSOLUTE"; exit }
+      if (qual  != 1) { printf "NO-QUALIFIER";   exit }
+      if (revok != 1) { printf "NO-REVOKE-RULE"; exit }
+      printf "CONDITIONAL"
+    }
+  ' "$1"
+}
+
+# The behavioural half, taken from the SHIPPED hook in this same run. `bash -n +n <unlisted>.sh`
+# is the discriminating payload: a bare -n, no -c in the flag span — precisely what the stale
+# sentence declared exempt — on an invocation the shell RUNS and the hook BLOCKS.
+noexec_doc_verdict() {   # -> BLOCK | ALLOW
+  local noexec_doc_pf noexec_doc_rc=0
+  noexec_doc_pf="$(/usr/bin/mktemp)"
+  /usr/bin/printf '%s' "$(bash_payload "bash -n +n $PARSE_UNLISTED")" > "$noexec_doc_pf"
+  /bin/bash "$HOOK" < "$noexec_doc_pf" >/dev/null 2>&1 || noexec_doc_rc="$?"
+  /bin/rm -f "$noexec_doc_pf"
+  if [ "$noexec_doc_rc" = 2 ]; then /usr/bin/printf 'BLOCK'; else /usr/bin/printf 'ALLOW'; fi
+}
+
+noexec_doc_frag_claim="$(noexec_doc_claim "$NOEXEC_DOC_FRAG")"
+noexec_doc_index_claim="$(noexec_doc_claim "$NOEXEC_DOC_INDEX")"
+noexec_doc_behaviour="$(noexec_doc_verdict)"
+
+if [ "$noexec_doc_behaviour" = "BLOCK" ] && [ "$noexec_doc_frag_claim" = "CONDITIONAL" ]; then
+  /usr/bin/printf 'PASS: NOEXEC-DOC-01 readiness SOURCE and hook agree (doc=%s, bash -n +n <unlisted>.sh=%s)\n' \
+    "$noexec_doc_frag_claim" "$noexec_doc_behaviour"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: NOEXEC-DOC-01 readiness SOURCE and hook DISAGREE\n  doc=%s (expected CONDITIONAL)  behaviour=%s (expected BLOCK)\n  file=%s\n' \
+    "$noexec_doc_frag_claim" "$noexec_doc_behaviour" "$NOEXEC_DOC_FRAG"
+  FAIL=$((FAIL + 1))
+fi
+
+# The GENERATED index is pinned separately rather than assumed. build-hook-registry.py --check
+# already proves it matches its source, but that gate is about freshness; this one is about the
+# claim, and a reader who lands on the index must not find the retired absolute there.
+if [ "$noexec_doc_index_claim" = "CONDITIONAL" ]; then
+  /usr/bin/printf 'PASS: NOEXEC-DOC-02 generated registry index carries the same conditional claim\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: NOEXEC-DOC-02 generated index claim=%s (expected CONDITIONAL) — regenerate with build-hook-registry.py\n  file=%s\n' \
+    "$noexec_doc_index_claim" "$NOEXEC_DOC_INDEX"
+  FAIL=$((FAIL + 1))
+fi
+
+# RED-BEFORE CONTROLS — ONE PER WAY THE CLAIM CAN GO WRONG. A classifier that cannot report
+# anything but CONDITIONAL proves nothing, so the same predicate is run against three mutants of
+# the shipped document. Each arm asserts the mutation is LIVE (the mutant differs from the
+# shipped file) AND that the classifier reports the specific code that mutation should produce —
+# a merged conjunct, because a sed that matched nothing would otherwise let the control pass for
+# the wrong reason, which is the trap NOEXEC-ORD-02a exists to name.
+noexec_doc_control() {   # $1 = arm id  $2 = expected code  $3 = sed script
+  local noexec_doc_mut noexec_doc_got
+  noexec_doc_mut="$(/usr/bin/mktemp)"
+  /usr/bin/sed "$3" "$NOEXEC_DOC_FRAG" > "$noexec_doc_mut"
+  if /usr/bin/cmp -s "$NOEXEC_DOC_FRAG" "$noexec_doc_mut"; then
+    /usr/bin/printf 'FAIL: %s mutation is INERT — mutant is byte-identical to the shipped document; re-point the sed\n' "$1"
+    FAIL=$((FAIL + 1)); /bin/rm -f "$noexec_doc_mut"; return 0
+  fi
+  noexec_doc_got="$(noexec_doc_claim "$noexec_doc_mut")"
+  /bin/rm -f "$noexec_doc_mut"
+  if [ "$noexec_doc_got" = "$2" ]; then
+    /usr/bin/printf 'PASS: %s mutation is live AND the classifier reports %s (red-before control fires)\n' "$1" "$noexec_doc_got"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s classifier did not report the drift\n  expected=%s actual=%s\n' "$1" "$2" "$noexec_doc_got"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# (a) the historical regression itself — the retired absolute back in the text.
+noexec_doc_control "NOEXEC-DOC-03a" "STALE-ABSOLUTE" \
+  's|A token that ENDS the walk does not revoke|it executes nothing and is not adjudicated. A token that ENDS the walk does not revoke|'
+# (b) the conditionality qualifier silently dropped.
+noexec_doc_control "NOEXEC-DOC-03b" "NO-QUALIFIER" \
+  's|conditional on the FINAL EFFECTIVE|contingent upon the FINAL EFFECTIVE|'
+# (c) the revocation rule silently dropped — the half that makes the claim decidable per token.
+noexec_doc_control "NOEXEC-DOC-03c" "NO-REVOKE-RULE" \
+  's|by every later token the walk steps over|by every later token the walk hops over|'
+
+# --- (7) THE DECLARED RESIDUAL OF THAT SCOPE — leading quote closes early ---
+# A token whose leading quote closes early is marked unresolvable by
+# normalize_script_token, so it BREAKS the walk above the revoke and an earlier `-n`
+# grant survives. These pin the behaviour as it stands today so a future change to it is
+# visible rather than silent. They are NOT assertions that the behaviour is correct.
+#
+# INHERITED, NOT INTRODUCED: the same shapes ALLOW on `origin/main`, measured through this
+# harness against main's hook as a sibling. The shape that locates the cause carries no
+# `-n` at all — `bash ""-x <unlisted>.sh` allows on main and here alike — so the ALLOW
+# comes from the unresolvable-operand path, not from the noexec predicate.
+test_case "NOEXEC-QSPLIT-01: bash -n \"\"+n <unlisted>.sh ALLOWED (inherited; the token ends the walk, so the grant survives)" \
+  "$(bash_payload "bash -n \"\"+n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-QSPLIT-02: bash -n ''+n <unlisted>.sh ALLOWED (same family, single quotes)" \
+  "$(bash_payload "bash -n ''+n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-QSPLIT-03: bash \"\"-x <unlisted>.sh ALLOWED (no -n anywhere — the cause is the operand path, not noexec)" \
+  "$(bash_payload "bash \"\"-x $PARSE_UNLISTED")" 0
+
+# CONTROLS THAT MUST FIRE. Without these the three arms above would read green against a
+# harness that had stopped blocking anything at all. Each is the unquoted twin of the
+# arm above it, and each BLOCKS.
+test_case "NOEXEC-QSPLIT-ctl-unquoted: bash -n +n <unlisted>.sh BLOCKS (the twin of QSPLIT-01 the revoke does reach)" \
+  "$(bash_payload "bash -n +n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-QSPLIT-ctl-flag: bash -x <unlisted>.sh BLOCKS (the twin of QSPLIT-03)" \
+  "$(bash_payload "bash -x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# WHY NO SYMMETRIC CLEAR IS SHIPPED, pinned so the proposal is not re-made. Dev testing
+# built the obvious remedy — revoke on the unresolvable break too — and measured it INERT.
+# This mutant IS that remedy, and QSPLIT-M1b shows the shape still ALLOWs under it, because
+# the allow originates in operand adjudication. Shipping it would add a fourth enumeration
+# and close nothing.
+QSPLIT_MUTANT="$(dirname "$HOOK")/block-destructive.QSPLIT-mutant.sh"
+/usr/bin/sed 's|if \[ "$script_norm_ok" -eq 0 \]; then break; fi|if [ "$script_norm_ok" -eq 0 ]; then if [ "$script_verb" = "interp" ]; then script_noexec=0; fi; break; fi|' \
+  "$HOOK" > "$QSPLIT_MUTANT"
+
+if /usr/bin/cmp -s "$HOOK" "$QSPLIT_MUTANT"; then
+  /usr/bin/printf 'FAIL: NOEXEC-QSPLIT-M1a symmetric-clear mutation is INERT — mutant is byte-identical to the shipped hook\n'
+  FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: NOEXEC-QSPLIT-M1a symmetric-clear mutation is live (mutant differs from the shipped hook)\n'
+  PASS=$((PASS + 1))
+fi
+
+sandbox_case "NOEXEC-QSPLIT-M1b: symmetric-clear mutant STILL ALLOWS bash -n \"\"+n <unlisted>.sh (the remedy is measurably inert)" \
+  "$QSPLIT_MUTANT" "$(bash_payload "bash -n \"\"+n $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$QSPLIT_MUTANT"
+
+# M1b would read green for the WRONG reason if that break were simply never reached on
+# this payload — an unexecuted mutation allows everything it never touches. So the break
+# is proved reachable directly, with a second mutant that makes it announce itself on
+# stderr and changes no verdict. M2b is the positive read and M2c is its negative control:
+# the same marker must stay SILENT on a resolvable operand, which takes the other break.
+QSPLIT_REACH="$(dirname "$HOOK")/block-destructive.QSPLIT-reach.sh"
+/usr/bin/sed 's|if \[ "$script_norm_ok" -eq 0 \]; then break; fi|if [ "$script_norm_ok" -eq 0 ]; then /usr/bin/printf "QSPLIT-REACH" >\&2; break; fi|' \
+  "$HOOK" > "$QSPLIT_REACH"
+
+if /usr/bin/cmp -s "$HOOK" "$QSPLIT_REACH"; then
+  /usr/bin/printf 'FAIL: NOEXEC-QSPLIT-M2a reach mutation is INERT — mutant is byte-identical to the shipped hook\n'
+  FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: NOEXEC-QSPLIT-M2a reach mutation is live (mutant differs from the shipped hook)\n'
+  PASS=$((PASS + 1))
+fi
+
+sandbox_case "NOEXEC-QSPLIT-M2b: the unresolvable-token break IS on the path of bash -n \"\"+n <unlisted>.sh (M1b is not vacuous)" \
+  "$QSPLIT_REACH" "$(bash_payload "bash -n \"\"+n $PARSE_UNLISTED")" 0 "QSPLIT-REACH"
+
+qsplit_reach_err="$(/usr/bin/mktemp)"
+/usr/bin/printf '%s' "$(bash_payload "bash -n $PARSE_UNLISTED")" \
+  | /bin/bash "$QSPLIT_REACH" 2>"$qsplit_reach_err" >/dev/null || true
+if /usr/bin/grep -qF 'QSPLIT-REACH' "$qsplit_reach_err"; then
+  /usr/bin/printf 'FAIL: NOEXEC-QSPLIT-M2c marker fired on a RESOLVABLE operand — the marker does not discriminate\n'
+  FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: NOEXEC-QSPLIT-M2c marker stays silent on bash -n <unlisted>.sh (negative control; that path takes the other break)\n'
+  PASS=$((PASS + 1))
+fi
+/bin/rm -f "$qsplit_reach_err" "$QSPLIT_REACH"
+
+# --- PAIRED MUTATION ARMS — prove the REVOCATION is what arms 01-06 measure ---
+# Same discipline as PARSE-14 / ARITY-17: a sibling mutant beside the real hook so
+# HOOK_DIR, every lib and the allowlist resolve identically, differing in exactly one
+# predicate. Here the two revocation sites are reverted to the pre-fix LATCH by
+# turning each `script_noexec=0` marked M-NOEXEC-REVOKE into a self-assignment. The
+# per-segment initialiser carries no marker and is deliberately untouched — reverting
+# THAT would break segment isolation and measure a different thing.
+NOEXEC_MUTANT="$(dirname "$HOOK")/block-destructive.NOEXEC-mutant.sh"
+/usr/bin/sed '/M-NOEXEC-REVOKE/s/script_noexec=0/script_noexec=$script_noexec/' \
+  "$HOOK" > "$NOEXEC_MUTANT"
+
+# (a) NON-INERTNESS GATE — a byte-identical mutant would make every arm below measure
+#     the shipped hook, and a green result would mean nothing.
+if /usr/bin/cmp -s "$HOOK" "$NOEXEC_MUTANT"; then
+  /usr/bin/printf 'FAIL: NOEXEC-M1a mutation is INERT — mutant is byte-identical to the shipped hook\n'
+  FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: NOEXEC-M1a mutation is live (mutant differs from the shipped hook)\n'
+  PASS=$((PASS + 1))
+fi
+
+# (b)/(c) The mutant reproduces the pre-fix ALLOW on each shape; the shipped hook
+#         blocks the identical payload in the same run. The PAIR is the evidence.
+sandbox_case "NOEXEC-M1b: mutant (latch restored) ALLOWS bash -n +n <unlisted>.sh" \
+  "$NOEXEC_MUTANT" "$(bash_payload "bash -n +n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-M1c: shipped hook BLOCKS the identical payload (`+n` pair closes)" \
+  "$(bash_payload "bash -n +n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+sandbox_case "NOEXEC-M1d: mutant (latch restored) ALLOWS bash -n +o noexec <unlisted>.sh" \
+  "$NOEXEC_MUTANT" "$(bash_payload "bash -n +o noexec $PARSE_UNLISTED")" 0
+test_case "NOEXEC-M1e: shipped hook BLOCKS the identical payload (`+o noexec` pair closes)" \
+  "$(bash_payload "bash -n +o noexec $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+sandbox_case "NOEXEC-M1f: mutant (latch restored) ALLOWS zsh -n +-noexec <unlisted>.sh" \
+  "$NOEXEC_MUTANT" "$(bash_payload "zsh -n +-noexec $PARSE_UNLISTED")" 0
+test_case "NOEXEC-M1g: shipped hook BLOCKS the identical payload (`+-noexec` pair closes)" \
+  "$(bash_payload "zsh -n +-noexec $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (h) THE MUTANT MUST STILL ALLOW THE CARD'S OWN PAYLOAD. This is what proves the
+#     mutation reverted the REVOCATION and not the exemption itself — otherwise
+#     NOEXEC-M1b..g would be green for the wrong reason (a mutant that blocks
+#     everything blocks these too).
+sandbox_case "NOEXEC-M1h: mutant STILL allows bash -n <unlisted>.sh (the mutation is the revoke, not the exemption)" \
+  "$NOEXEC_MUTANT" "$(bash_payload "bash -n $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$NOEXEC_MUTANT"
+
+# --- PAIRED MUTATION ARMS — prove the arity predicate is what these arms measure ---
+# Same harness discipline as PARSE-14: a sibling mutant so HOOK_DIR and therefore
+# every lib and the allowlist resolve identically, differing in exactly one
+# predicate — here the arity table, neutered to its pre-fix answer. The polarity is
+# the inverse of PARSE-14's: the MUTANT allows and the SHIPPED hook blocks.
+ARITY_MUTANT="$(dirname "$HOOK")/block-destructive.ARITY-mutant.sh"
+/usr/bin/sed 's#^script_interp_optarg_flag() {#script_interp_optarg_flag() { return 1;#' \
+  "$HOOK" > "$ARITY_MUTANT"
+
+# (a) NON-INERTNESS GATE — a byte-identical mutant would make every arm below
+#     measure the shipped hook, and a green result would mean nothing.
+if /usr/bin/cmp -s "$HOOK" "$ARITY_MUTANT"; then
+  /usr/bin/printf 'FAIL: ARITY-17a mutation is INERT — mutant is byte-identical to the shipped hook\n'
+  FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: ARITY-17a mutation is live (mutant differs from the shipped hook)\n'
+  PASS=$((PASS + 1))
+fi
+
+# (b)/(c) shape (1): mutant reproduces the pre-fix ALLOW; shipped hook blocks.
+sandbox_case "ARITY-17b: mutant (arity reverted) ALLOWS bash --rcfile <allowed> <unlisted>.sh" \
+  "$ARITY_MUTANT" \
+  "$(bash_payload "bash --rcfile $ARITY_ALLOWED $PARSE_UNLISTED")" \
+  0
+test_case "ARITY-17c: shipped hook BLOCKS the identical payload (shape-1 pair closes)" \
+  "$(bash_payload "bash --rcfile $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (d)/(e) shape (2): the block-to-allow the #6172 exemption introduced.
+sandbox_case "ARITY-17d: mutant (arity reverted) ALLOWS bash --rcfile -n <unlisted>.sh" \
+  "$ARITY_MUTANT" \
+  "$(bash_payload "bash --rcfile -n $PARSE_UNLISTED")" \
+  0
+test_case "ARITY-17e: shipped hook BLOCKS the identical payload (shape-2 pair closes)" \
+  "$(bash_payload "bash --rcfile -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (f)/(g) shape (2) again, on the zsh `--emulate` row. Same mutant, same polarity:
+# the pair proves ARITY-18a measures the ARITY TABLE and not some other predicate
+# that would keep the payload blocked anyway.
+sandbox_case "ARITY-17f: mutant (arity reverted) ALLOWS zsh --emulate -n <unlisted>.sh" \
+  "$ARITY_MUTANT" \
+  "$(bash_payload "zsh --emulate -n $PARSE_UNLISTED")" \
+  0
+test_case "ARITY-17g: shipped hook BLOCKS the identical payload (--emulate pair closes)" \
+  "$(bash_payload "zsh --emulate -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+/bin/rm -f "$ARITY_MUTANT"
+
+# --- ARITY-19: `--` AND `-c` ARE CONSUMED LIKE ANY OTHER ARGUMENT ---
+# These arms exist because the obvious "tidy" edit here is WRONG and would pass
+# every other arm in this block. The arity step consumes the next token before the
+# walk's own `--)` and `-c)` labels can see it, so when an option's argument is
+# literally `-c` the cmode flag stays 0 and the post-walk route changes. That is a
+# real, measurable change in verdicts (4775-payload differential against the
+# pre-arity hook: 64 ALLOW->BLOCK, 15 BLOCK->ALLOW), which is why the "purely
+# additive" claim this file used to carry has been corrected rather than restored.
+#
+# THE TEMPTING FIX — decline to consume `--` and `-c` so the labels keep their
+# tokens — RE-OPENS AN EXECUTION HOLE, and ARITY-19a is that hole. Measured against
+# real bash with an executable marker: `bash --rcfile -- -c <script>` prints the
+# marker and exits 0, because `--` is the rcfile FILENAME (not an end-of-options
+# marker) and `-c` is a real command-mode flag. Under a decline the `--)` label
+# breaks the walk and takes `-c` as the operand — a token no domain claims — and
+# the segment is ALLOWED. Consuming keeps it BLOCKED. If someone implements the
+# decline, ARITY-19a is the arm that goes red, and it is the one to read first.
+test_case "ARITY-19a [ctl]: bash --rcfile -- -c <unlisted>.sh blocks (-- is the rcfile NAME; this EXECUTES)" \
+  "$(bash_payload "bash --rcfile -- -c $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "ARITY-19b [ctl]: bash -O -- -c <unlisted>.sh blocks (same shape through a short arity option)" \
+  "$(bash_payload "bash -O -- -c $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# The other half of the same decision: consuming `-c` REMOVES over-blocks, and the
+# removals are correct against the real shell rather than merely harmless.
+# `bash --rcfile -c -n <script>` is genuinely inert (measured: rc=0, no output) —
+# the rcfile is named `-c`, the `-n` is a real parse-only flag. Declining `-c`
+# would turn this correct ALLOW back into a block.
+test_case "ARITY-19c: bash --rcfile -c -n <unlisted>.sh allowed (genuinely inert; rcfile is named -c)" \
+  "$(bash_payload "bash --rcfile -c -n $PARSE_UNLISTED")" 0
+# And `bash --rcfile -c <a> <b>` runs <a> — exactly the token the operand branch
+# adjudicates — so an allowlisted <a> is a correct ALLOW and an unlisted one blocks.
+test_case "ARITY-19d: bash --rcfile -c <allowed> <unlisted>.sh allowed (the shell runs <allowed>)" \
+  "$(bash_payload "bash --rcfile -c $ARITY_ALLOWED $PARSE_UNLISTED")" 0
+test_case "ARITY-19e [ctl]: bash --rcfile -c <unlisted>.sh <allowed> blocks (the shell runs <unlisted>)" \
+  "$(bash_payload "bash --rcfile -c $PARSE_UNLISTED $ARITY_ALLOWED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+echo ""
+echo "BLOCK-022 HD here-document modelling (#6229)"
+echo "---"
+#
+# WHAT THESE ARMS ARE FOR. A here-document BODY is the INPUT DATA a redirection
+# supplies to a command (POSIX Shell Command Language 2.7.4); the shell never
+# parses it as a command list. Before this change the rule latched suppression
+# OFF for any command containing `<<`, so text it had already adjudicated
+# correctly was re-adjudicated as if it were command text — and the identical
+# report bytes were refused on stdin and accepted from a file.
+#
+# EVERY ALLOW-ASSERTING ARM BELOW IS PAIRED WITH A REFUSE-ASSERTING ARM IN THE
+# SAME RUN. That pairing is the whole evidentiary value: a blanket allow shows up
+# as a SILENT CONTROL, a disabled rule shows up as a DROPPED TOTAL, and an
+# exemption that is real but inert shows up as a GREEN MUTANT (HD-09). An arm
+# whose control arm is also green is measuring a permissive hook, not a fix.
+#
+# The pre-change verdict of every shape below was recorded before the excision
+# landed, so a reader can tell a tightening from a narrowing rather than
+# inferring it.
+
+# ----- AC-1: the card's measurement, both transports -----
+#
+# Identical report bytes quoting an interpreter invocation as evidence, delivered
+# two ways. Before: (a) refused, (b) allowed — the transport decided the verdict
+# for bytes that reach the same destination either way. The asymmetry is CLOSED,
+# not documented: both allow now.
+test_case "HD-01a: a report quoting an invocation, delivered by here-document, allows" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'RPT'"'"'
+## Finding
+
+The CI log line the finding is about:
+
+    bash /tmp/evil.sh --self-test
+
+That invocation is the subject of the report, not a proposal to run it.
+RPT')" \
+  0
+
+test_case "HD-01b: the same report bytes delivered by file path allow (transport parity)" \
+  "$(bash_payload 'gh issue comment 1 --body-file /tmp/report.md')" \
+  0
+
+# The sensitivity arm. A green HD-01a whose control is silent is a disabled rule,
+# not a repair — this is the arm that makes the pair readable.
+test_case "HD-01c control: a genuine invocation of the same script still blocks" \
+  "$(bash_payload 'bash /tmp/evil.sh --self-test')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# ----- AC-2: the stdin-executing arm is refused -----
+#
+# THE SINGLE MOST IMPORTANT ARM SET. `bash` reads its PROGRAM from stdin, so the
+# body genuinely executes. This is the fail-open the carrier condition is shaped
+# to avoid, and it is why the exemption cannot key on the construct alone.
+test_case "HD-02a control: bash reading its program from a here-document blocks" \
+  "$(bash_payload 'bash <<'"'"'EOF'"'"'
+bash /tmp/evil.sh
+EOF')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "HD-02b control: sh reading its program from a here-document blocks" \
+  "$(bash_payload 'sh <<'"'"'EOF'"'"'
+bash /tmp/evil.sh
+EOF')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "HD-02c control: zsh reading its program from a here-document blocks" \
+  "$(bash_payload 'zsh <<'"'"'EOF'"'"'
+bash /tmp/evil.sh
+EOF')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# The byte-identical BODY under a carrier allows in the same run, so the verdict
+# above is attributable to the RECEIVING COMMAND and not to the body text.
+test_case "HD-02d: the byte-identical body under a carrier allows (verdict is the receiver's)" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'EOF'"'"'
+bash /tmp/evil.sh
+EOF')" \
+  0
+
+# ----- AC-3: the delimiter-quoting axis discriminates -----
+#
+# A QUOTED delimiter suppresses every expansion in the body; a BARE one performs
+# parameter expansion, command substitution and arithmetic expansion. That is the
+# same two-tier split the file already applies to '...' versus "...", so the test
+# is the CONSTRUCT's expansion capability, not the delimiter's quote characters.
+test_case "HD-03a: single-quoted delimiter into a carrier allows" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'RPT'"'"'
+bash /tmp/evil.sh
+RPT')" \
+  0
+
+test_case "HD-03b: double-quoted delimiter into a carrier allows" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<"RPT"
+bash /tmp/evil.sh
+RPT')" \
+  0
+
+test_case "HD-03c: backslash-quoted delimiter into a carrier allows" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<\RPT
+bash /tmp/evil.sh
+RPT')" \
+  0
+
+# (d)(e) are the discriminating pair, and they differ by ONE character. A bare
+#     delimiter whose body carries a `$` can expand, so the body is left in the
+#     adjudicated text and still blocks; remove the `$` and the same body is
+#     inert and is excised. If (e) were red the rule would be reading the
+#     delimiter's quote characters instead of the construct's capability.
+test_case "HD-03d control: bare delimiter with an expandable body still blocks" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<RPT
+bash /tmp/evil.sh $HOME
+RPT')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "HD-03e: bare delimiter with an inert body allows (the one-character pair)" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<RPT
+bash /tmp/evil.sh
+RPT')" \
+  0
+
+# ----- AC-5: post-terminator text keeps its verdict -----
+#
+# A real execution AFTER the terminator must stay adjudicated. If the excision
+# corrupted the line structure this is the arm that fails — and the inherited
+# arm AC-FP-2x above, which is deliberately left unmodified, is its twin.
+test_case "HD-05 control: a real execution after the terminator still blocks" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'RPT'"'"'
+report text
+RPT
+bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# ----- AC-6: the exemption is STRUCTURAL, not a content heuristic -----
+#
+# The card's constraint: an exemption keyed on "it looked like a report" is
+# trivially forgeable by anything that can print a markdown fence. Assert the
+# implementation keys on none of that. The control arm proves the instrument is
+# live rather than mis-spelled.
+#
+# THE INSTRUMENT MEASURES CODE, NOT PROSE. Comment lines are stripped first,
+# because the criterion is that no BRANCH keys on a content marker — an English
+# sentence explaining the quote scanner is not a branch. Left un-stripped this
+# probe failed on the word "report" inside a comment carried over from
+# script_qadvance, which would have made it a prose linter rather than a
+# structure test and would have pressured the prose to satisfy the instrument.
+HD_PRESCAN="$(/usr/bin/sed -n '/^script_heredoc_prescan() {/,/^}$/p' "$HOOK" \
+  | /usr/bin/grep -v '^[[:space:]]*#')"
+if [ -n "$HD_PRESCAN" ] \
+   && ! /usr/bin/grep -qiE 'report|evidence|markdown|fence|body-file|--body|```' <<<"$HD_PRESCAN"; then
+  /usr/bin/printf 'PASS: HD-06a the pre-pass keys on no content marker (no report/fence/flag token)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: HD-06a the pre-pass keys on a content marker, or the instrument found no function\n'
+  FAIL=$((FAIL + 1))
+fi
+
+if /usr/bin/grep -qE 'script_qnext|gh\|printf\|echo\|jq' <<<"$HD_PRESCAN"; then
+  /usr/bin/printf 'PASS: HD-06b control: the same instrument finds the quote scanner and the carrier set\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: HD-06b control is SILENT — HD-06a zero is unreadable, not clean\n'
+  FAIL=$((FAIL + 1))
+fi
+
+# ----- AC-7: un-modelled shapes bail closed, keeping the pre-change verdict -----
+#
+# ALL-OR-NOTHING. One declined body means nothing is excised and the whole
+# command keeps the text it had before, so a shape the model does not cover can
+# only ever degrade to adjudicate-everything — never to allow.
+test_case "HD-07a control: an unterminated here-document blocks (model cannot resolve)" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'RPT'"'"'
+bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "HD-07b control: a NON-carrier receiver keeps the false positive (residual R-4)" \
+  "$(bash_payload 'cat <<'"'"'RPT'"'"' > /tmp/out.md
+bash /tmp/evil.sh
+RPT')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "HD-07c control: a delimiter bearing expansion characters blocks" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<RP$T
+bash /tmp/evil.sh
+RP$T')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "HD-07d control: more than two here-documents queued on one line blocks" \
+  "$(bash_payload 'gh a --f - <<'"'"'A'"'"' --g - <<'"'"'B'"'"' --h - <<'"'"'C'"'"'
+bash /tmp/evil.sh
+A
+x
+B
+y
+C')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# ----- AC-8: the latch narrowing did not disarm quoted-argument suppression -----
+#
+# This is the pair the whole card turns on. (a) was ALREADY allowed before the
+# change; (b) is the identical command plus an UNRELATED trailing here-document,
+# and it was refused — the latch disarmed a suppression that had already decided
+# correctly. Both allow now.
+test_case "HD-08a: the shipped quoted-argument suppression still allows" \
+  "$(bash_payload "gh issue comment 1 --body 'note; bash /tmp/evil.sh'")" \
+  0
+
+test_case "HD-08b: the same command plus an unrelated here-document now also allows" \
+  "$(bash_payload "gh issue comment 1 --body 'note; bash /tmp/evil.sh' <<'X'
+unrelated body
+X")" \
+  0
+
+# The wrapper asymmetry documented at script_resolve_head is preserved: a prefix
+# in front of a carrier must NOT resolve to the carrier. If this went green the
+# carrier walk was silently widened while the surface grew.
+test_case "HD-08c control: a wrapper in front of a carrier is still not a carrier" \
+  "$(bash_payload "sudo gh issue comment 1 --body 'note; bash /tmp/evil.sh'")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# ----- Construct coverage the model must get right -----
+
+# `<<-` strips leading TABS from body and delimiter lines before the match.
+HD_TAB="$(/usr/bin/printf '\t')"
+test_case "HD-10: <<- tab-stripping form with a quoted delimiter allows" \
+  "$(bash_payload "gh issue comment 1 --body-file - <<-'RPT'
+${HD_TAB}bash /tmp/evil.sh
+${HD_TAB}RPT")" \
+  0
+
+# THE RECEIVER IS RESOLVED FROM THE LAST SEPARATOR, NOT FROM THE LINE HEAD. If it
+# were read from the head, a carrier ahead of a separator would lend its
+# exemption to a real interpreter that receives the redirection after it. This is
+# the arm that would catch that fail-open.
+test_case "HD-11 control: a carrier before a separator does not vouch for the real receiver" \
+  "$(bash_payload 'gh issue view 1 ; bash <<'"'"'E'"'"'
+bash /tmp/evil.sh
+E')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# POSIX runs a command that follows the operator on the OPERATOR's own line
+# BEFORE the body begins. After separator substitution it is indistinguishable
+# from the first body line, which is why the pre-pass runs on the original text.
+test_case "HD-12 control: a command after the operator on the operator line still blocks" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'E'"'"' ; bash /tmp/evil.sh
+body line
+E')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# A here-STRING is one word, already covered by the quote model. It must be
+# recognised BEFORE `<<`, or the scan reads a delimiter of `<` and corrupts.
+test_case "HD-13: a here-string is not read as a here-document" \
+  "$(bash_payload "gh issue comment 1 --body-file - <<< 'note bash /tmp/evil.sh'")" \
+  0
+
+# `<<` INSIDE a quoted argument is text, not an operator. The latch this replaces
+# globbed the raw command and could not tell the difference.
+test_case "HD-14: << inside a quoted argument is text and does not disarm suppression" \
+  "$(bash_payload "gh issue comment 1 --body 'note << not an operator; bash /tmp/evil.sh'")" \
+  0
+
+# Every carrier in the set receives the same treatment, not just gh.
+test_case "HD-15a: printf as the receiving carrier allows" \
+  "$(bash_payload 'printf '"'"'%s'"'"' - <<'"'"'RPT'"'"'
+bash /tmp/evil.sh
+RPT')" \
+  0
+
+test_case "HD-15b: jq as the receiving carrier allows" \
+  "$(bash_payload 'jq -R . <<'"'"'RPT'"'"'
+bash /tmp/evil.sh
+RPT')" \
+  0
+
+# ALL-OR-NOTHING, asserted directly: a command mixing an excisable here-document
+# with a declined one excises NEITHER and keeps its pre-change verdict.
+test_case "HD-16 control: one declined body means the whole command is left adjudicated" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'A'"'"'
+bash /tmp/evil.sh
+A
+cat <<'"'"'B'"'"'
+plain
+B')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# ----- AC-9: paired mutation arm -----
+#
+# An exemption that is real but INERT reads green on every arm above. Three arms
+# in this milestone's prior release did exactly that. Revert the excision in a
+# sibling copy — so HOOK_DIR, every lib and the allowlist resolve identically —
+# and require the mutant to REFUSE the payload the shipped hook allows.
+HD_MUTANT="$(dirname "$HOOK")/block-destructive.HD-mutant.sh"
+/usr/bin/sed 's#\[ "\$_ex" -eq 1 \]#[ "$_ex" -eq 99 ]#' "$HOOK" > "$HD_MUTANT"
+
+if /usr/bin/cmp -s "$HOOK" "$HD_MUTANT"; then
+  /usr/bin/printf 'FAIL: HD-09a mutation is INERT — mutant is byte-identical to the shipped hook\n'
+  FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: HD-09a mutation is live (mutant differs from the shipped hook)\n'
+  PASS=$((PASS + 1))
+fi
+
+sandbox_case "HD-09b: mutant (excision reverted) BLOCKS the report HD-01a allows" \
+  "$HD_MUTANT" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'RPT'"'"'
+bash /tmp/evil.sh --self-test
+RPT')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "HD-09c: shipped hook ALLOWS the identical payload (mutation pair closes)" \
+  "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'RPT'"'"'
+bash /tmp/evil.sh --self-test
+RPT')" \
+  0
+
+/bin/rm -f "$HD_MUTANT"
+
+# ==========================================================================
+# HINT-* — the -022 remediation hint names the sanctioned retry FIRST (#6166)
+# ==========================================================================
+#
+# Subject: when -022 refuses, its Override line offered allowlist-widening and
+# the bypass variable, and named the retry that usually works nowhere. The
+# allowlist is matched with `case "$path" in $pattern)` — a bash glob against the
+# path AS WRITTEN on argv, with no realpath and no canonicalization — and it is
+# spelled overwhelmingly in repository-relative form. The same script is
+# therefore refused by an absolute path and permitted by its repository-relative
+# one, and the hint never said so.
+#
+# WHY THIS IS TESTED AT ALL. At the baseline NOT ONE arm in this file asserted
+# any hint text: the four -022 Override strings were emitted, agent-facing, and
+# wholly uncovered, so a reorder or a deletion of the retry would have read green.
+# Measured before these arms landed: four hint substrings, zero occurrences each,
+# against 345 `test_case` invocations.
+#
+# THE ORDERING IS ASSERTED POSITIONALLY, NOT BY PRESENCE. The pattern pins
+# `Override: ` immediately followed by the retry, then requires the widening and
+# the bypass to appear AFTER it. Presence alone would pass on the old string too,
+# because the old string also mentioned the allowlist. Anchoring on what directly
+# follows `Override: ` is what makes "first" mean first — and it is why no
+# separate must-not-match arm is needed: only one clause can follow `Override: `.
+#
+# THE BYPASS CLAUSE IS PART OF THE ASSERTION, DELIBERATELY. It is a real escape
+# hatch and must stay documented; the arms require it present and LAST, so a
+# future edit that deletes it to "clean up the hint" goes red rather than quietly
+# stranding an operator who has no other route.
+#
+# Each hint gets a PAIR: an `a` arm pinning WHICH cause class fired (the reason
+# line) and a `b` arm pinning the ordering (the Override line). They are separate
+# `test_case` calls because grep is line-oriented and the reason and the Override
+# are different lines — one pattern cannot span them. Without the `a` arm a
+# payload that silently drifted to a different cause class would still satisfy
+# `b`, and the pair would prove nothing about the string it claims to cover.
+
+echo ""
+echo "HINT-*: -022 remediation hint ordering (#6166)"
+echo "---"
+
+# Ordered across all three strings: retry → repository root → AS WRITTEN →
+# allowlist widening → bypass. One pattern, five positional claims.
+HINT_ORDER='Override: first retry the form the allowlist already permits.*repository root.*AS WRITTEN.*script-execution-allowlist\.txt.*CLAUDE_HOOK_BYPASS=1'
+
+HINT_UNLISTED="core/deploy/tools/no-such-tool-xyz.sh"
+
+# --- the not-allowlisted arm: the card's stated subject, and the common case ---
+test_case "HINT-01a: bash <unlisted>.sh reports the not-allowlisted cause" \
+  "$(bash_payload "bash $HINT_UNLISTED")" \
+  2 "subprocess script execution not in allowlist"
+test_case "HINT-01b: ... and its Override names the retry BEFORE widening and the bypass" \
+  "$(bash_payload "bash $HINT_UNLISTED")" \
+  2 "$HINT_ORDER"
+
+# --- the variable-bearing unresolvable arm ---
+test_case "HINT-02a: bash \"\$W/x.sh\" reports the variable-bearing cause" \
+  "$(bash_payload 'bash "$W/not-allowlisted.sh"')" \
+  2 "unresolvable script path \(variable-bearing\)"
+test_case "HINT-02b: ... and its Override names the retry BEFORE widening and the bypass" \
+  "$(bash_payload 'bash "$W/not-allowlisted.sh"')" \
+  2 "$HINT_ORDER"
+
+# --- the quoting unresolvable arm. The `;` splits the segment before
+# normalization sees it, so the operand arrives as an UNCLOSED `'…/deploy.sh`
+# with an in-domain `.sh` probe — the shape § F1 QUOTED already pins.
+test_case "HINT-03a: an unclosed-quote operand reports the quoting cause" \
+  "$(bash_payload "bash './core/deploy/deploy.sh;'")" \
+  2 "unresolvable script path \(quoting\)"
+test_case "HINT-03b: ... and its Override names the retry BEFORE widening and the bypass" \
+  "$(bash_payload "bash './core/deploy/deploy.sh;'")" \
+  2 "$HINT_ORDER"
+
+# --- AC3: the hint's own worked example must be TRUE, and the asymmetry it
+# asserts must be real. HINT-04 runs the exact spelling the -022 quoting hint
+# prints; HINT-05 runs the SAME script by an absolute path and must still be
+# refused. Together they are the non-broadening guard for this card: if anyone
+# "fixes" a future block by adding absolute forms to the allowlist, HINT-05 goes
+# red and the hint's central claim becomes false in the same instant.
+# Distinct from PARSE-06, which pins the same asymmetry for #6172's two admitted
+# paths; this pair pins it for the script THIS hint names.
+test_case "HINT-04: the hint's worked example (quoted bare-relative) is permitted" \
+  "$(bash_payload "bash 'core/deploy/deploy.sh'")" \
+  0
+test_case "HINT-05 [ctl]: the ABSOLUTE spelling of that same script is still refused" \
+  "$(bash_payload "bash '/srv/pmo-platform/core/deploy/deploy.sh'")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+# ==========================================================================
+# T-NSI-* — the non-shell interpreter arm (#6167)
+# ==========================================================================
+#
+# THE HOLE THESE ARMS PIN. The verb classifier admitted `bash|sh|zsh` and nothing
+# else, so `python3 <path>.py` was not merely un-adjudicated — it was never
+# classified as an execution at all, and no arm ever asked the allowlist about it.
+# The allowlist was bypassable by writing the laundered script in a language the
+# classifier could not name. Same root cause as the shebang hole the exec arm
+# closed: an execution model expressed as a fixed vocabulary of shell tokens and
+# shell suffixes.
+#
+# WHY EVERY MUST-FLAG ARM READS THE DRAIN AND NOT ONLY THE EXIT CODE. This arm
+# ships at `warn`, so it returns 0 on a would-fire input. An arm asserting exit 0
+# alone would pass against a hook that never evaluated the widening — it would pass
+# against the PRE-change hook, and it would keep passing if the widening were
+# reverted. The drain delta is what makes evaluation a necessary condition of green.
+#
+# WHY THE `arm` FIELD IS ASSERTED ON EVERY ROW. Two phase-gated arms now write to
+# one drain. Without the field their graduations are unapportionable — which is the
+# defect this card's own body reported against the 1,067 rows already collected.
+
+echo ""
+echo "T-NSI-*: non-shell interpreter arm (#6167)"
+echo "---"
+
+# The shipped interpreter-arm phase, read OUT OF THE HOOK SOURCE for the same
+# reason the exec phase is: a restated copy lets the constant and the expectation
+# drift in opposite directions and still go green.
+B022_INTERP_PHASE="$(/usr/bin/sed -n '/^readonly DESTRUCTIVE_022_INTERP_PHASE=/{s/^readonly DESTRUCTIVE_022_INTERP_PHASE="\([a-z]*\)".*/\1/p;q;}' "$HOOK")"
+B022_INTERP_ARMED="$(/usr/bin/sed -n '/^readonly DESTRUCTIVE_022_INTERP_ARMED=/{s/^readonly DESTRUCTIVE_022_INTERP_ARMED="\([0-9-]*\)".*/\1/p;q;}' "$HOOK")"
+if [ -z "$B022_INTERP_PHASE" ]; then
+  /usr/bin/printf 'FAIL: T-NSI-00 interpreter-arm phase constant not readable from %s\n' "$HOOK"
+  FAIL=$((FAIL + 1))
+  B022_INTERP_PHASE="unreadable"
+fi
+case "$B022_INTERP_PHASE" in
+  enforce) B022_INTERP_FLAG_EXIT=2 ;;
+  *)       B022_INTERP_FLAG_EXIT=0 ;;
+esac
+/usr/bin/printf 'PASS: T-NSI-00 interpreter-arm rollout phase resolved from the hook source: %s (must-flag expects exit %s)\n' \
+  "$B022_INTERP_PHASE" "$B022_INTERP_FLAG_EXIT"
+PASS=$((PASS + 1))
+
+# A would-fire case on the INTERPRETER arm. Same shape as exec_warn_case, with the
+# `arm` field asserted so a row written by the other router cannot satisfy it.
+nsi_warn_case() { # $1 name  $2 command  $3 expected cause
+  local rc=0 before after last err tmp_err ok=1 why=""
+  before="$(b022_drain_rows)"
+  tmp_err="$(/usr/bin/mktemp)"
+  /usr/bin/printf '%s' "$(bash_payload "$2")" | /bin/bash "$HOOK" >/dev/null 2>"$tmp_err" || rc="$?"
+  after="$(b022_drain_rows)"
+  err="$(/bin/cat "$tmp_err")"; /bin/rm -f "$tmp_err"
+
+  [ "$rc" = "$B022_INTERP_FLAG_EXIT" ] || { ok=0; why="$why exit=$rc(want $B022_INTERP_FLAG_EXIT)"; }
+  [ "$(( after - before ))" = "1" ] || { ok=0; why="$why drain_delta=$(( after - before ))(want 1)"; }
+  last="$(/usr/bin/tail -1 "$B022_DRAIN" 2>/dev/null || /usr/bin/printf '')"
+  case "$last" in
+    *'"arm":"interp-nonshell"'*) ;;
+    *) ok=0; why="$why arm!=interp-nonshell" ;;
+  esac
+  case "$last" in
+    *"\"phase\":\"${B022_INTERP_PHASE}\""*) ;;
+    *) ok=0; why="$why phase-field!=${B022_INTERP_PHASE}" ;;
+  esac
+  case "$last" in
+    *"\"cause\":\"$3\""*) ;;
+    *) ok=0; why="$why cause!=$3" ;;
+  esac
+  case "$B022_INTERP_PHASE" in
+    warn)
+      case "$err" in
+        *'BLOCK-DESTRUCTIVE-022] WARN (would-block, rollout=warn'*) ;;
+        *) ok=0; why="$why no-stderr-notice" ;;
+      esac
+      ;;
+    shadow)
+      case "$err" in
+        *'BLOCK-DESTRUCTIVE-022'*) ok=0; why="$why shadow-must-be-silent" ;;
+        *) ;;
+      esac
+      ;;
+  esac
+
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  %s\n  last_drain_row: %s\n' "$1" "$why" "$last"; FAIL=$((FAIL + 1))
+  fi
+}
+
+# A hard-refusal case that ALSO asserts the drain did not move. This is the shell
+# trio's shape: always-enforce, and NOT routed through the phase-gated router. Exit
+# 2 alone would not distinguish the two — a router at `enforce` also exits 2 — so
+# the zero drain delta is the half that proves the routing.
+nsi_block_norow_case() { # $1 name  $2 command
+  local rc=0 before after err tmp_err ok=1 why=""
+  before="$(b022_drain_rows)"
+  tmp_err="$(/usr/bin/mktemp)"
+  /usr/bin/printf '%s' "$(bash_payload "$2")" | /bin/bash "$HOOK" >/dev/null 2>"$tmp_err" || rc="$?"
+  after="$(b022_drain_rows)"
+  err="$(/bin/cat "$tmp_err")"; /bin/rm -f "$tmp_err"
+  [ "$rc" = "2" ] || { ok=0; why="$why exit=$rc(want 2)"; }
+  [ "$(( after - before ))" = "0" ] || { ok=0; why="$why drain_delta=$(( after - before ))(want 0 — the trio must not have acquired the warn posture)"; }
+  case "$err" in
+    *'BLOCK-DESTRUCTIVE-022'*) ;;
+    *) ok=0; why="$why no-022-in-stderr" ;;
+  esac
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  %s\n' "$1" "$why"; FAIL=$((FAIL + 1))
+  fi
+}
+
+# Non-allowlisted fixture paths, one per admitted interpreter's suffix domain.
+NSI_PY="core/deploy/tools/no-such-tool-xyz.py"
+NSI_PL="core/deploy/tools/no-such-tool-xyz.pl"
+NSI_RB="core/deploy/tools/no-such-tool-xyz.rb"
+NSI_JS="core/deploy/tools/no-such-tool-xyz.js"
+NSI_SH="core/deploy/tools/no-such-tool-xyz.sh"
+
+# --- AC-1: a non-shell interpreter invocation is adjudicated AT ALL ------------
+nsi_warn_case "T-NSI-01a must-flag: python3 <unlisted>.py is adjudicated" \
+  "python3 $NSI_PY" 'not-allowlisted'
+nsi_warn_case "T-NSI-01b must-flag: python <unlisted>.py is adjudicated" \
+  "python $NSI_PY" 'not-allowlisted'
+nsi_warn_case "T-NSI-01c must-flag: perl <unlisted>.pl is adjudicated" \
+  "perl $NSI_PL" 'not-allowlisted'
+nsi_warn_case "T-NSI-01d must-flag: ruby <unlisted>.rb is adjudicated" \
+  "ruby $NSI_RB" 'not-allowlisted'
+nsi_warn_case "T-NSI-01e must-flag: node <unlisted>.js is adjudicated" \
+  "node $NSI_JS" 'not-allowlisted'
+# The absolute spelling reaches the interpreter arm too — the basename is what the
+# classifier matches. This is the input T-EXEC-7 used to carry.
+nsi_warn_case "T-NSI-07d must-flag: /usr/bin/python3 <unlisted>.py (the input T-EXEC-7 retargeted away from)" \
+  "/usr/bin/python3 $NSI_PY" 'not-allowlisted'
+# A variable-bearing operand keeps its own cause class, exactly as on the exec arm:
+# `unresolvable` has no allowlist remedy and must not be reported as though it had.
+nsi_warn_case "T-NSI-01f must-flag: variable-bearing python3 operand records cause=unresolvable" \
+  'python3 $TMPDIR/probe.py' 'unresolvable'
+
+# --- FWALK-DOM-* : the operand walk's domain argument, re-pointed at the reconcile -
+# The walk terminates on "is this token in the arm's declared operand domain?". The
+# commit that introduced that predicate asked it about `$script_verb` and said, in
+# the same note, that a successor splitting interpreter DOMAIN from verb CLASS "must
+# re-point this ONE argument to that domain variable, or a non-shell interpreter's
+# real script is tested against the SHELL suffix set, found unclaimed, walked past,
+# and silently under-adjudicated -- a fail-open re-introduced by an otherwise clean
+# merge." The per-interpreter domain table IS that split and exists only on this
+# side, so these arms are the control for taking the walk verbatim: under
+# `$script_verb` the domain is `interp` (the `*.sh` set), `<unlisted>.py` is not
+# claimed, the walk advances OFF THE END, and NOTHING is adjudicated -- no drain row
+# at all, which is what nsi_warn_case's drain_delta=1 assertion catches.
+nsi_warn_case "FWALK-DOM-py must-flag: python3 +x <unlisted>.py is adjudicated (walk asks the PY domain, not the shell one)" \
+  "python3 +x $NSI_PY" 'not-allowlisted'
+nsi_warn_case "FWALK-DOM-js must-flag: node +x <unlisted>.js is adjudicated (same re-point, second domain)" \
+  "node +x $NSI_JS" 'not-allowlisted'
+
+# --- AC-1 CONTROL THAT MUST FIRE: an ALLOWLISTED operand writes NO row ---------
+# Without this, every arm above would pass against a router that logged
+# unconditionally and then allowed. The sandbox allowlist is appended to, the pair
+# is observed, and the file is restored — with the restore asserted as its own arm,
+# so a failed restore is loud rather than silently corrupting later suites.
+NSI_ALLOWLIST="${HOOK%/*}/../script-execution-allowlist.txt"
+NSI_ALLOWLIST_BAK="$(/usr/bin/mktemp)"
+/bin/cp "$NSI_ALLOWLIST" "$NSI_ALLOWLIST_BAK"
+/usr/bin/printf '%s\n' "$NSI_PY" >> "$NSI_ALLOWLIST"
+exec_notflag_case "T-NSI-02a [ctl] must-not-flag: the SAME python3 operand, once allowlisted, writes no row" \
+  "python3 $NSI_PY"
+/bin/cp "$NSI_ALLOWLIST_BAK" "$NSI_ALLOWLIST"
+if /usr/bin/cmp -s "$NSI_ALLOWLIST" "$NSI_ALLOWLIST_BAK"; then
+  /usr/bin/printf 'PASS: T-NSI-02b allowlist restored after the control arm (later suites see the shipped file)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: T-NSI-02b allowlist NOT restored — later arms and suites are running against a mutated allowlist\n'
+  FAIL=$((FAIL + 1))
+fi
+/bin/rm -f "$NSI_ALLOWLIST_BAK"
+# And the pair closes: with the row removed again, the identical payload flags.
+nsi_warn_case "T-NSI-02c must-flag: with the allowlist row removed, the identical payload flags again (pair closes)" \
+  "python3 $NSI_PY" 'not-allowlisted'
+
+# --- AC-2: the widening is DOMAIN-CORRECT, not blanket ------------------------
+# Each domain follows its INTERPRETER. A shared suffix set would adjudicate
+# `python3 x.rb` — a file no Python invocation can execute — and would make the
+# per-interpreter arms decorative.
+exec_notflag_case "T-NSI-03a [ctl]: python3 with an out-of-domain .rb operand is NOT adjudicated" \
+  "python3 $NSI_RB"
+exec_notflag_case "T-NSI-03b [ctl]: ruby with an out-of-domain .py operand is NOT adjudicated" \
+  "ruby $NSI_PY"
+exec_notflag_case "T-NSI-03c [ctl]: python3 with a suffixless-domain .txt operand is NOT adjudicated" \
+  'python3 core/deploy/tools/no-such-tool-xyz.txt'
+# THE BYTE-PRESERVATION SHOWING THROUGH: bash's domain is still `*.sh` alone, so a
+# `.py` operand under bash is outside it and unadjudicated — exactly as before this
+# change. Its pair on the next line is the discriminator.
+exec_notflag_case "T-NSI-03d [ctl]: bash with a .py operand is NOT adjudicated (interp domain unchanged)" \
+  "bash $NSI_PY"
+nsi_block_norow_case "T-NSI-03e: bash with a .sh operand still hard-refuses (the discriminating pair)" \
+  "bash $NSI_SH"
+
+# --- AC-3: the shell trio is byte-preserved AND still always-enforce -----------
+# Exit 2 with a ZERO drain delta is the assertion. A trio silently re-routed
+# through the phase-gated router would exit 0 and write a row at `warn`; one routed
+# through it at `enforce` would exit 2 AND write a row. Both are caught here.
+nsi_block_norow_case "T-NSI-04a: bash <unlisted>.sh hard-refuses and writes NO interpreter-arm row" \
+  "bash $NSI_SH"
+nsi_block_norow_case "T-NSI-04b: sh <unlisted>.sh hard-refuses and writes NO interpreter-arm row" \
+  "sh $NSI_SH"
+nsi_block_norow_case "T-NSI-04c: zsh <unlisted>.sh hard-refuses and writes NO interpreter-arm row" \
+  "zsh $NSI_SH"
+nsi_block_norow_case "T-NSI-04d: source <unlisted>.sh hard-refuses and writes NO interpreter-arm row" \
+  "source $NSI_SH"
+# CONTROL THAT MUST FIRE, in the same run: the newly-admitted interpreter returns
+# success AND writes a row, so the difference above is attributable to the ROUTING
+# and not to the fixture or to an inert hook.
+nsi_warn_case "T-NSI-04e [ctl]: the same fixture stem under python3 returns success and writes a row" \
+  "python3 $NSI_PY" 'not-allowlisted'
+
+# --- AC-6: #6172's per-interpreter null holds across the widened key set -------
+# `-n` is a parse-only flag FOR A POSIX SHELL. `perl -n` and `ruby -n` are implicit
+# input loops that EXECUTE; python has no `-n`; node's parse-only spelling is
+# `--check`. Every one of the five new keys therefore hits #6172's documented
+# explicit null and must NOT be exempted.
+nsi_warn_case "T-NSI-05a: python3 -n <unlisted>.py is NOT exempted (#6172 per-interpreter null)" \
+  "python3 -n $NSI_PY" 'not-allowlisted'
+nsi_warn_case "T-NSI-05b: perl -n <unlisted>.pl is NOT exempted (implicit input loop EXECUTES)" \
+  "perl -n $NSI_PL" 'not-allowlisted'
+nsi_warn_case "T-NSI-05c: ruby -n <unlisted>.rb is NOT exempted (implicit input loop EXECUTES)" \
+  "ruby -n $NSI_RB" 'not-allowlisted'
+nsi_warn_case "T-NSI-05d: node -n <unlisted>.js is NOT exempted" \
+  "node -n $NSI_JS" 'not-allowlisted'
+# CONTROL THAT MUST FIRE: `bash -n` IS exempted in the same run, so the table is
+# observed DISCRIMINATING rather than uniformly refusing.
+exec_notflag_case "T-NSI-05e [ctl]: bash -n <unlisted>.sh IS still exempted (the table discriminates)" \
+  "bash -n $NSI_SH"
+
+# --- AC-7: the exec arm covers the new suffixes symmetrically ------------------
+# `python3 tools/x.py` and `./tools/x.py` are one execution by two spellings.
+# These rows carry arm=exec and inherit the exec arm's existing phase.
+exec_warn_case "T-NSI-06a must-flag: direct execution of a .py by shebang (exec-arm parity)" \
+  './tmp/evil.py' 'not-allowlisted'
+exec_warn_case "T-NSI-06b must-flag: direct execution of a .rb by shebang" \
+  './tmp/evil.rb' 'not-allowlisted'
+exec_warn_case "T-NSI-06c must-flag: direct execution of a .js by shebang" \
+  './tmp/evil.js' 'not-allowlisted'
+exec_warn_case "T-NSI-06d must-flag: direct execution of a .pl by shebang" \
+  './tmp/evil.pl' 'not-allowlisted'
+# CONTROL THAT MUST FIRE: the extensionless residual stays PINNED. If this goes red
+# the exec domain has been widened past its declared scope.
+exec_notflag_case "T-NSI-06e [ctl]: extensionless direct execution still reaches ALLOW (residual stays pinned)" \
+  './tmp/evil'
+
+# --- AC-5: the drain is APPORTIONABLE across the two routers -------------------
+# A run exercising both routers must produce rows of BOTH `arm` values. A
+# single-valued result means one router is not writing and the field is untested.
+NSI_ARM_BEFORE="$(b022_drain_rows)"
+/usr/bin/printf '%s' "$(bash_payload "python3 $NSI_PY")" | /bin/bash "$HOOK" >/dev/null 2>&1 || true
+/usr/bin/printf '%s' "$(bash_payload './tmp/evil.sh')" | /bin/bash "$HOOK" >/dev/null 2>&1 || true
+nsi_tail="$(/usr/bin/tail -n 2 "$B022_DRAIN" 2>/dev/null || /usr/bin/printf '')"
+nsi_n_interp="$(/usr/bin/printf '%s\n' "$nsi_tail" | /usr/bin/grep -c '"arm":"interp-nonshell"' || true)"
+nsi_n_exec="$(/usr/bin/printf '%s\n' "$nsi_tail" | /usr/bin/grep -c '"arm":"exec"' || true)"
+if [ "$nsi_n_interp" -ge 1 ] && [ "$nsi_n_exec" -ge 1 ]; then
+  /usr/bin/printf 'PASS: T-NSI-08 drain is apportionable — one run produced arm=interp-nonshell (%s) AND arm=exec (%s)\n' \
+    "$nsi_n_interp" "$nsi_n_exec"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: T-NSI-08 drain not apportionable — interp-nonshell=%s exec=%s (a single-valued result means one router is silent)\n' \
+    "$nsi_n_interp" "$nsi_n_exec"
+  FAIL=$((FAIL + 1))
+fi
+# Every row this suite wrote carries the field at all. An absent field would read as
+# `exec` downstream, which would silently mis-attribute an interpreter-arm row.
+if [ "$(( $(b022_drain_rows) - NSI_ARM_BEFORE ))" -ge 2 ]; then
+  /usr/bin/printf 'PASS: T-NSI-08b both routers wrote in the same run (drain grew by >= 2)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: T-NSI-08b the two-router run did not grow the drain by 2\n'; FAIL=$((FAIL + 1))
+fi
+
+# --- AC-12: the #6724 PIN, NOW FLIPPED -----------------------------------------
+# THE PIN DID ITS JOB AND IS CONVERTED RATHER THAN DELETED. It read: "DECLARED
+# RESIDUAL, NOT DESIRED BEHAVIOUR. The operand-locating walk does not consume a
+# flag's ARGUMENT, so `-X faulthandler` leaves `faulthandler` as the adjudicated
+# operand — a token no domain claims — and the real script is never reached. #6724
+# owns that walk. Pinning it here means their fix flips a PINNED arm and is a
+# deliberate act rather than a drift nobody notices."
+#
+# #6724 SHIPPED, THIS BRANCH MERGED IT, AND THE FLIP IS THAT DELIBERATE ACT. The walk
+# now advances past a token the arm's operand domain does not claim, so `faulthandler`
+# and `lib` are stepped over and the real script is reached and adjudicated. The arms
+# are re-pointed at the NEW verdict and keep the same subject, so the residual cannot
+# quietly return: if the walk ever stops short again these go red in the other
+# direction.
+#
+# THE FLIP DEPENDS ON THE DOMAIN RE-POINT AND IS THE EVIDENCE FOR IT. #6724's walk
+# asks `script_operand_implicated` about the operand domain, and its own note requires
+# a successor that splits interpreter DOMAIN from verb CLASS to re-point that argument.
+# Taken verbatim it would ask `$script_verb` — `interp`, the `*.sh` set — so
+# `<unlisted>.py` would be unclaimed, advanced past, and the walk would run OFF THE
+# END with nothing adjudicated: these two arms would still read ALLOW. They are green
+# only because the argument reads `$script_interp_domain`. See FWALK-DOM-*.
+nsi_warn_case "T-NSI-09a [flipped, was #6724-owned residual]: python3 -X faulthandler <unlisted>.py IS adjudicated" \
+  "python3 -X faulthandler $NSI_PY" 'not-allowlisted'
+nsi_warn_case "T-NSI-09b [flipped, was #6724-owned residual]: perl -I lib <unlisted>.pl IS adjudicated" \
+  "perl -I lib $NSI_PL" 'not-allowlisted'
+# CONTROL THAT MUST FIRE: the same invocation WITHOUT the option-taking flag is
+# adjudicated in the same run, so the pin measures the flag walk and not a dead arm.
+nsi_warn_case "T-NSI-09c [ctl]: the identical invocation without the flag IS adjudicated" \
+  "python3 $NSI_PY" 'not-allowlisted'
+
+# --- AC-4 (RETARGETED): the phase gate is LOAD-BEARING, not decorative ---------
+# The original AC4 asserted a mode declaration this hook has never had — it is
+# MODE-INDEPENDENT and always-enforce. The mechanism it DOES have is the per-rule
+# phase constant, and reading the literal is not enough: the constant must be shown
+# to change behaviour across all three enum values, plus the fail-closed direction
+# for a value outside the enum.
+case "$B022_INTERP_PHASE" in
+  warn)
+    /usr/bin/printf 'PASS: T-NSI-10a the committed interpreter-arm phase is the entry rung `warn`\n'; PASS=$((PASS + 1)) ;;
+  *)
+    /usr/bin/printf 'FAIL: T-NSI-10a expected committed phase `warn`, read `%s`\n' "$B022_INTERP_PHASE"; FAIL=$((FAIL + 1)) ;;
+esac
+# The arming stamp must be a RESOLVABLE ISO date, not a placeholder. The platform
+# has a worked failure behind that rule: a check shipped expecting a stamp nobody
+# wrote and gated nothing for 62 releases.
+if /usr/bin/grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' <<<"$B022_INTERP_ARMED" \
+   && python3 -c 'import datetime,sys; datetime.date.fromisoformat(sys.argv[1])' "$B022_INTERP_ARMED" 2>/dev/null; then
+  /usr/bin/printf 'PASS: T-NSI-10b the interpreter-arm arming stamp is a resolvable ISO date (%s), not a placeholder\n' "$B022_INTERP_ARMED"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: T-NSI-10b arming stamp `%s` is not a resolvable ISO date — the deadline arm cannot be evaluated\n' "$B022_INTERP_ARMED"
+  FAIL=$((FAIL + 1))
+fi
+
+# The three-value behavioural demonstration. Each probe is a SIBLING of the real
+# hook so HOOK_DIR — and therefore every lib and the allowlist — resolves
+# identically; each differs from the shipped hook in exactly one word.
+nsi_phase_probe() { # $1 phase-value  -> prints "<rc>:<stderr>"
+  local probe="${HOOK%/*}/.block-destructive-nsi-phase-probe.sh" rc=0 out=""
+  /usr/bin/sed "s/^readonly DESTRUCTIVE_022_INTERP_PHASE=.*/readonly DESTRUCTIVE_022_INTERP_PHASE=\"$1\"/" \
+    "$HOOK" > "$probe"
+  /bin/chmod +x "$probe"
+  out="$(/usr/bin/printf '%s' "$(bash_payload "python3 $NSI_PY")" | /bin/bash "$probe" 2>&1 >/dev/null)" || rc="$?"
+  /bin/rm -f "$probe"
+  /usr/bin/printf '%s:%s' "$rc" "$out"
+}
+
+nsi_enforce="$(nsi_phase_probe enforce)"
+case "$nsi_enforce" in
+  2:*BLOCK-DESTRUCTIVE-022*)
+    /usr/bin/printf 'PASS: T-NSI-10c phase=enforce HARD-REFUSES the identical input\n'; PASS=$((PASS + 1)) ;;
+  *)
+    /usr/bin/printf 'FAIL: T-NSI-10c phase=enforce: expected exit 2 + BLOCK-DESTRUCTIVE-022, got %s\n' "$nsi_enforce"; FAIL=$((FAIL + 1)) ;;
+esac
+
+# `shadow` keeps measuring and stops emitting — the rung that exists so a noisy
+# warn phase does not force a choice between notice-spam and going blind. So:
+# success, NO notice, and the row still written.
+nsi_shadow_before="$(b022_drain_rows)"
+nsi_shadow="$(nsi_phase_probe shadow)"
+nsi_shadow_delta="$(( $(b022_drain_rows) - nsi_shadow_before ))"
+case "${nsi_shadow}|${nsi_shadow_delta}" in
+  0:\|1)
+    /usr/bin/printf 'PASS: T-NSI-10d phase=shadow allows SILENTLY and still writes its row\n'; PASS=$((PASS + 1)) ;;
+  *)
+    /usr/bin/printf 'FAIL: T-NSI-10d phase=shadow: expected exit 0, empty stderr, drain +1; got rc:stderr=%s drain_delta=%s\n' \
+      "$nsi_shadow" "$nsi_shadow_delta"; FAIL=$((FAIL + 1)) ;;
+esac
+
+# CONTROL THAT MUST FIRE: an unrecognised value falls through to REFUSAL. A router
+# that failed OPEN on a typo would silently un-arm the rule, which is the direction
+# a security control must never take.
+nsi_typo="$(nsi_phase_probe wrn)"
+case "$nsi_typo" in
+  2:*BLOCK-DESTRUCTIVE-022*)
+    /usr/bin/printf 'PASS: T-NSI-10e [ctl] an out-of-enum phase value FAILS CLOSED (refuses)\n'; PASS=$((PASS + 1)) ;;
+  *)
+    /usr/bin/printf 'FAIL: T-NSI-10e [ctl] an out-of-enum phase value did not fail closed, got %s\n' "$nsi_typo"; FAIL=$((FAIL + 1)) ;;
+esac
+
+# --- AC-9: PAIRED MUTATION ARMS (REQUIRED) ------------------------------------
+# Three arms in this milestone's prior release read green while their mutation was
+# INERT, so each mutant is asserted to DIFFER from the shipped hook before anything
+# it reports is believed.
+#
+# MUTANT 1 reverts the interpreter set to the shell-only trio at BOTH classifier
+# views — exactly the two lines the widening commit changed.
+NSI_MUT1="${HOOK%/*}/.block-destructive-nsi-mut1.sh"
+/usr/bin/sed 's/^\( *\)bash|sh|zsh|python|python3|perl|ruby|node)/\1bash|sh|zsh)/' \
+  "$HOOK" > "$NSI_MUT1"
+if /usr/bin/cmp -s "$HOOK" "$NSI_MUT1"; then
+  /usr/bin/printf 'FAIL: T-NSI-11a mutation 1 is INERT — mutant is byte-identical to the shipped hook\n'; FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: T-NSI-11a mutation 1 is live (classifier reverted to the shell trio)\n'; PASS=$((PASS + 1))
+fi
+# The mutant must NOT adjudicate T-NSI-01a's subject: exit 0 AND no drain row. That
+# is the pre-change behaviour, and it is what proves T-NSI-01a measures the
+# widening rather than a hook that flags everything.
+nsi_m1_before="$(b022_drain_rows)"
+nsi_m1_rc=0
+/usr/bin/printf '%s' "$(bash_payload "python3 $NSI_PY")" | /bin/bash "$NSI_MUT1" >/dev/null 2>&1 || nsi_m1_rc="$?"
+nsi_m1_delta="$(( $(b022_drain_rows) - nsi_m1_before ))"
+if [ "$nsi_m1_rc" = "0" ] && [ "$nsi_m1_delta" = "0" ]; then
+  /usr/bin/printf 'PASS: T-NSI-11b mutant 1 (shell-trio classifier) does NOT adjudicate python3 <unlisted>.py\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: T-NSI-11b mutant 1 should be inert on the new subject; rc=%s drain_delta=%s\n' "$nsi_m1_rc" "$nsi_m1_delta"; FAIL=$((FAIL + 1))
+fi
+/bin/rm -f "$NSI_MUT1"
+
+# MUTANT 2 reverts ONLY the four operand-domain arms, leaving the classifier
+# widened. It must ALSO turn the new subject inert — which is the proof that the
+# verb widening ALONE is inert, and therefore that both halves of the fix are
+# load-bearing. A design that shipped the classifier without the domains would look
+# correct and adjudicate nothing.
+NSI_MUT2="${HOOK%/*}/.block-destructive-nsi-mut2.sh"
+/usr/bin/sed -e '/^    interp-py) case /d' -e '/^    interp-pl) case /d' \
+             -e '/^    interp-rb) case /d' -e '/^    interp-js) case /d' \
+  "$HOOK" > "$NSI_MUT2"
+if /usr/bin/cmp -s "$HOOK" "$NSI_MUT2"; then
+  /usr/bin/printf 'FAIL: T-NSI-11c mutation 2 is INERT — mutant is byte-identical to the shipped hook\n'; FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: T-NSI-11c mutation 2 is live (per-interpreter operand domains removed)\n'; PASS=$((PASS + 1))
+fi
+nsi_m2_before="$(b022_drain_rows)"
+nsi_m2_rc=0
+/usr/bin/printf '%s' "$(bash_payload "python3 $NSI_PY")" | /bin/bash "$NSI_MUT2" >/dev/null 2>&1 || nsi_m2_rc="$?"
+nsi_m2_delta="$(( $(b022_drain_rows) - nsi_m2_before ))"
+if [ "$nsi_m2_rc" = "0" ] && [ "$nsi_m2_delta" = "0" ]; then
+  /usr/bin/printf 'PASS: T-NSI-11d mutant 2 (classifier widened, domains removed) is INERT — the verb widening alone adjudicates nothing\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: T-NSI-11d mutant 2 should be inert; rc=%s drain_delta=%s\n' "$nsi_m2_rc" "$nsi_m2_delta"; FAIL=$((FAIL + 1))
+fi
+# The mutant must still refuse the SHELL operand — otherwise mutation 2 broke the
+# whole rule and T-NSI-11d's zero would be measuring a dead hook rather than an
+# inert widening.
+nsi_m2_sh_rc=0
+/usr/bin/printf '%s' "$(bash_payload "bash $NSI_SH")" | /bin/bash "$NSI_MUT2" >/dev/null 2>&1 || nsi_m2_sh_rc="$?"
+if [ "$nsi_m2_sh_rc" = "2" ]; then
+  /usr/bin/printf 'PASS: T-NSI-11e [ctl] mutant 2 still refuses bash <unlisted>.sh — its inertness above is scoped, not a dead hook\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: T-NSI-11e [ctl] mutant 2 stopped refusing the shell operand (rc=%s) — T-NSI-11d proves nothing\n' "$nsi_m2_sh_rc"; FAIL=$((FAIL + 1))
+fi
+/bin/rm -f "$NSI_MUT2"
 
 # --- Summary ---
 echo ""
