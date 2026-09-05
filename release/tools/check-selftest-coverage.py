@@ -50,6 +50,19 @@ THE ARMS
     E  DOC COVERAGE    HARD   every top-level *.py/*.sh in core/deploy/tools/ carries
                               exactly one core/deploy/tools/README.md inventory row,
                               and every row names a tool that exists
+    F  MANDATE REACH.  HARD   every invocation a release/references/pipeline/*.md spec
+                              PRESCRIBES is admitted by the script-execution allowlist,
+                              adjudicated by the hook's own match rule
+
+    Arm F REPORTS FINDINGS ON ARRIVAL and is not expected green: most of what it names is
+    a `.py` tool, and the allowlist's non-shell section is deliberately empty pending
+    BLOCK-DESTRUCTIVE-022's drain, so those are unmatchable by construction rather than
+    unregistered by oversight. Arm F is HARD INSIDE this engine — the exit code below
+    admits no per-arm severity — and ADVISORY OUTSIDE it, because the selftest-discovery
+    job is posture=advisory and is not a required context. Both are true and they are not
+    in tension: the ceiling is the workflow's posture, not the arm's. Do NOT register that
+    job as a required context until the non-shell population is drained; doing so would
+    register a context that cannot pass. See the ARM F constants block.
 
     Arm E's population is a SECOND, independently-declared one: the DIRECTORY, never
     the self-test manifest, whose population is smaller by design. See the ARM E
@@ -83,6 +96,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import fnmatch
 import io
 import os
 import re
@@ -168,6 +182,61 @@ DOC_COVERAGE_README_REL = "core/deploy/tools/README.md"
 DOC_COVERAGE_GLOBS = ("core/deploy/tools/*.py", "core/deploy/tools/*.sh")
 DOC_TABLE_HEADER_PREFIX = "| Tool | Used by"
 _DOC_ROW_KEY_RE = re.compile(r"^\|\s*`([^`]+)`")
+
+# --------------------------------------------------------------------------------
+# ARM F — mandate reachability: can an agent run what a pipeline spec tells it to run?
+# --------------------------------------------------------------------------------
+# ARM F REPORTS FINDINGS ON ARRIVAL AND IS NOT EXPECTED GREEN. DO NOT REGISTER THE
+# selftest-discovery JOB AS A REQUIRED CONTEXT UNTIL THE NON-SHELL POPULATION IS DRAINED.
+# Most of what this arm names today is a `.py` tool. Every non-comment row in the
+# allowlist ends `.sh`; the non-shell section is DELIBERATELY EMPTY at introduction and
+# is to be filled from drain evidence during BLOCK-DESTRUCTIVE-022's warn phase, NOT
+# pre-populated from a corpus survey (core/rules/bypass-mode-readiness/block-destructive.md).
+# So a `.py` finding here is unmatchable BY CONSTRUCTION and is not remediable by adding
+# a row. Naming the population on every in-scope PR is this arm's job; draining it is the
+# graduation reviewer's. A red selftest-discovery from Arm F is the arm WORKING.
+#
+# WHAT IS ASSERTED IS THE MATCHER, NOT A ROW COUNT. A row count is an unfaithful proxy
+# and the originating card proved it twice: compute-release-velocity.sh HAD a row and was
+# still unreachable (the row was the cwd-relative form, which cannot match the
+# `bash release/tools/<tool>` spelling its spec prescribes), while check-convention.sh has
+# two rows DELIBERATELY and is correct as it stands. The load-bearing question is whether
+# the command a spec tells an agent to TYPE is admitted by the allowlist, so that is what
+# is measured: the specs' own literal invocations, run through the hook's own match rule.
+#
+# COVERAGE BOUNDARY — REPOSITORY-RELATIVE FORMS ONLY, DECLARED RATHER THAN SILENT.
+# `[PMO_PLATFORM_ROOT]` and `[CLAUDE_WORKSPACE_ROOT]` rows are token-substituted at deploy
+# time and are not resolvable in the source tree this check runs against, so they are
+# skipped as PATTERNS. The repository-relative forms are exactly what a spec spells and
+# what the -022 block message names as the first retry, which is why they are the ones
+# worth asserting. The absolute and worktree-glob forms are out of this arm's reach.
+#
+# SPEC-CORPUS BOUNDARY. `release/references/pipeline/*.md` only. Tools are also mandated
+# from release/governance/release-process.md and release/references/how-to/hub-spoke-bridge.md;
+# widening the corpus widens the finding count against a population that cannot be drained
+# yet, so it is accepted as a residual and is a one-line change once the drain closes.
+ALLOWLIST_REL = "core/config/allowlists/script-execution-allowlist.txt"
+SPEC_CORPUS_GLOB = "release/references/pipeline/*.md"
+
+# The interpreter verbs are the allowlist header's own CLOSED exact-literal enumeration,
+# read from there rather than re-coined here: a shell interpreter, a non-shell interpreter
+# in its own suffix domain, and the source builtins. Direct execution by shebang carries no
+# verb, so it is matched separately below.
+_ARM_F_VERBS = r"(?:bash|sh|zsh|source|\.|python|python3|perl|ruby|node)"
+_ARM_F_SUFFIXES = r"(?:sh|py|pl|pm|rb|js|mjs|cjs)"
+_ARM_F_OPERAND = r"((?:\./)?[A-Za-z0-9_][A-Za-z0-9_./*-]*\." + _ARM_F_SUFFIXES + r")"
+# Interpreter flags between the verb and the operand (`bash -x t.sh`, `python3 -u t.py`)
+# are tolerated; a spec that spells one must not read as "no invocation here".
+_ARM_F_FLAGS = r"(?:[ \t]+-[A-Za-z-]+)*"
+ARM_F_INVOCATION_RE = re.compile(
+    r"(?<![\w./-])" + _ARM_F_VERBS + _ARM_F_FLAGS + r"[ \t]+" + _ARM_F_OPERAND
+)
+# Direct execution by shebang: the command word itself carries the slash and the suffix.
+ARM_F_DIRECT_RE = re.compile(
+    r"(?<![\w./-])(\./[A-Za-z0-9_][A-Za-z0-9_./*-]*\." + _ARM_F_SUFFIXES + r")"
+)
+_ARM_F_FENCE_RE = re.compile(r"^\s*(?:```|~~~)")
+_ARM_F_TICK_SPAN_RE = re.compile(r"`+([^`\n]+)`+")
 
 # --------------------------------------------------------------------------------
 # ADVERTISE — the predicate
@@ -446,6 +515,72 @@ def tracked_scripts(root: Path) -> list[str]:
             if fn.endswith((".sh", ".py")):
                 rels.append((Path(dirpath) / fn).relative_to(root).as_posix())
     return sorted(rels)
+
+
+def allowlist_patterns(root: Path) -> list[str]:
+    """Arm F: the allowlist's REPOSITORY-RELATIVE non-comment rows, as written.
+
+    Token-bearing rows ([PMO_PLATFORM_ROOT], [CLAUDE_WORKSPACE_ROOT]) are skipped: they
+    are substituted at deploy time and cannot be resolved against a source tree. That is
+    a declared coverage boundary, not an omission — see the ARM F constants block.
+    """
+    path = root / ALLOWLIST_REL
+    if not path.is_file():
+        return []
+    out = []
+    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or line.startswith("["):
+            continue
+        out.append(line)
+    return out
+
+
+def _code_spans(text: str):
+    """Yield (lineno, chunk) for fenced blocks and backticked spans.
+
+    A spec spells a command in one of exactly these two places. Prose outside them may
+    NAME a tool without prescribing an invocation, and this arm asserts invocations.
+    """
+    infence = False
+    for lineno, line in enumerate(text.split("\n"), start=1):
+        if _ARM_F_FENCE_RE.match(line):
+            infence = not infence
+            continue
+        if infence:
+            yield lineno, line
+        else:
+            for m in _ARM_F_TICK_SPAN_RE.finditer(line):
+                yield lineno, m.group(1)
+
+
+def spec_invocations(root: Path) -> dict[str, list[tuple[str, int, str]]]:
+    """Arm F's population: {operand: [(spec_rel, lineno, command_text), ...]}.
+
+    THE PREDICATE IS DELIBERATELY RECALL-BIASED — DO NOT "TIGHTEN" IT. This is the same
+    asymmetry the ADVERTISE section states for `advertises`, adopted here for the same
+    reason and pointing the same way:
+      * a false NEGATIVE is a mandated-but-unreachable tool — the silent defect this arm
+        exists to close, and the one that has now recurred across consecutive releases;
+      * a false POSITIVE costs one line in the exclusions file carrying a written reason,
+        and it is LOUD.
+    Narrowing the regex to kill a false positive re-opens the silent class. Precision is
+    the exclusions file's job, not the predicate's.
+    """
+    found: dict[str, list[tuple[str, int, str]]] = {}
+    for spec in sorted(root.glob(SPEC_CORPUS_GLOB)):
+        rel = spec.relative_to(root).as_posix()
+        try:
+            text = spec.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for lineno, chunk in _code_spans(text):
+            for rx in (ARM_F_INVOCATION_RE, ARM_F_DIRECT_RE):
+                for m in rx.finditer(chunk):
+                    found.setdefault(m.group(1), []).append(
+                        (rel, lineno, chunk.strip()[:120])
+                    )
+    return found
 
 
 def doc_population(root: Path) -> list[str]:
@@ -850,6 +985,73 @@ def mode_reconcile(ctx: Ctx) -> int:
                 f"manifest lines: {', '.join(sorted(unexplained))}"
             )
 
+    # ---- Arm F (HARD): every invocation a pipeline spec PRESCRIBES is admitted by the
+    # script-execution allowlist. Asserts the MATCHER over the specs' own literal
+    # commands, never a row count — see the ARM F constants block for why the count is an
+    # unfaithful proxy and for the two declared boundaries (repo-relative rows only,
+    # pipeline spec corpus only).
+    allow_path = root / ALLOWLIST_REL
+    if not allow_path.is_file():
+        if is_real_tree:
+            failed = True
+            err(
+                f"Arm F MANDATE REACHABILITY — {ALLOWLIST_REL} is missing from the real "
+                f"checkout. The allowlist is one of this arm's two inputs; with it absent "
+                f"the arm cannot measure, and an arm that cannot measure must not report a "
+                f"pass."
+            )
+        else:
+            # PV-7 Register A: NOT-EVALUATED is emitted POSITIVELY and the counters are
+            # OMITTED rather than zeroed, so a fixture tree can never read as 'clean'.
+            print(
+                f"ARM F SCAN not-run — no {ALLOWLIST_REL} under --root {root}; "
+                f"invocation and pattern counts are ABSENT, not zero."
+            )
+    else:
+        patterns = allowlist_patterns(root)
+        invocations = spec_invocations(root)
+        print(
+            f"ARM F SCAN fetched — spec-invocations={len(invocations)} "
+            f"repo-relative-patterns={len(patterns)} (of "
+            f"{len([1 for l in allow_path.read_text(encoding='utf-8', errors='replace').splitlines() if l.strip() and not l.strip().startswith('#')])} rows)"
+        )
+        unreachable: dict[str, list[tuple[str, int, str]]] = {}
+        suppressed: list[str] = []
+        for operand, sites in sorted(invocations.items()):
+            if any(fnmatch.fnmatchcase(operand, pat) for pat in patterns):
+                continue
+            # Suppression costs a written reason, exactly as Arms C and E require. The
+            # key is the operand AS THE SPEC SPELLS IT, because that is the string the
+            # matcher adjudicates.
+            if operand in ctx.exclusions:
+                suppressed.append(f"{operand}  # {ctx.exclusions[operand]}")
+                continue
+            unreachable[operand] = sites
+        for row in suppressed:
+            print(f"  ARM F SUPPRESSED: {row}")
+        if unreachable:
+            failed = True
+            err(
+                f"Arm F MANDATE REACHABILITY — {len(unreachable)} invocation(s) that a "
+                f"pipeline spec MANDATES match no allowlist pattern, so the agent executing "
+                f"that stage cannot run what the spec tells it to run. The allowlist "
+                f"obligation fires when a script becomes AGENT-EXECUTED, not only when a "
+                f"script is added. A `.py` operand is unmatchable by construction today "
+                f"(the non-shell section is deliberately empty pending its drain) and is "
+                f"NOT remediable by adding a row — it is named here so the population is "
+                f"countable before the interpreter arm graduates, not on the day it does."
+            )
+            for operand, sites in sorted(unreachable.items()):
+                spec_rel, lineno, cmd = sites[0]
+                extra = f" (+{len(sites) - 1} more site(s))" if len(sites) > 1 else ""
+                print(f"  UNREACHABLE: {operand}{extra}")
+                print(f"      {spec_rel}:{lineno}  {cmd}")
+        else:
+            print(
+                f"ARM F PASSED — all {len(invocations)} spec-prescribed invocation(s) are "
+                f"admitted by the allowlist."
+            )
+
     return 1 if failed else 0
 
 
@@ -946,6 +1148,31 @@ class _Fixture:
             "| Fixture | Verifies |\n|---|---|\n| `decoy.sh` | nothing |\n"
         )
         self.write(DOC_COVERAGE_README_REL, body)
+
+    def spec(self, name: str, commands):
+        """Arm F's spec corpus. The commands land inside a FENCED block, because that
+        is one of the two places a real spec spells an invocation; the prose line
+        before them names the same tool WITHOUT prescribing it, which is what makes
+        the fence-vs-prose distinction gradable rather than assumed."""
+        body = (
+            f"# {name}\n\nProse that merely names a tool: run the thing at "
+            f"release/tools/prose-only.sh when convenient.\n\n```bash\n"
+            + "\n".join(commands)
+            + "\n```\n"
+        )
+        self.write(f"release/references/pipeline/{name}", body)
+
+    def allowlist(self, patterns):
+        """Arm F's other input. The header comment and a token-bearing row are written
+        deliberately: the parser must skip both, and a fixture that omits them cannot
+        grade that."""
+        body = (
+            "# fixture allowlist — comments are skipped\n"
+            "[PMO_PLATFORM_ROOT]/release/tools/token-bearing.sh\n"
+            + "\n".join(patterns)
+            + "\n"
+        )
+        self.write(ALLOWLIST_REL, body)
 
     def close(self):
         shutil.rmtree(self.root, ignore_errors=True)
@@ -1338,6 +1565,191 @@ def _selftest() -> int:
             mode_reconcile(Ctx(fx.root)) == 0,
             "T-46 CONTROL: the same tool ON the manifest floor passes, so T-45 is "
             "attributable to the identity and not to the tree",
+        )
+    finally:
+        fx.close()
+
+    # ---- ARM F. Same discipline as Arm E above: every failing assertion is paired with
+    # a CONTROL that differs from its subject by ONE fact, so a failure is attributable
+    # to the arm and not to the fixture tree.
+
+    # T-55 CONTROL, run FIRST: the unmutated tree reconciles. Without this, T-50's red
+    # could be produced by anything in the fixture and would grade nothing.
+    def _armf_base(fx):
+        fx.write("release/tools/a.sh", _PASS_SH)
+        fx.manifest(["release/tools/*.sh"], ["release/tools/a.sh"])
+        fx.readme([])
+
+    fx = _Fixture()
+    try:
+        _armf_base(fx)
+        fx.spec("stage-01.md", ["bash release/tools/mandated.sh --self-test"])
+        fx.allowlist(["release/tools/mandated.sh"])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 0 and "ARM F PASSED" in out,
+            "T-55 CONTROL: a spec-prescribed invocation WITH a matching allowlist row "
+            "passes Arm F, so a later red is attributable to the arm and not the tree",
+        )
+    finally:
+        fx.close()
+
+    # T-50: the subject. One fact differs from T-55 — the row is gone.
+    fx = _Fixture()
+    try:
+        _armf_base(fx)
+        fx.spec("stage-01.md", ["bash release/tools/mandated.sh --self-test"])
+        fx.allowlist(["release/tools/something-else.sh"])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 1
+            and "MANDATE REACHABILITY" in out
+            and "release/tools/mandated.sh" in out
+            and "stage-01.md:" in out,
+            "T-50 a spec-prescribed invocation matching NO allowlist row FAILS Arm F and "
+            "is NAMED with its spec file and line",
+        )
+    finally:
+        fx.close()
+
+    # T-51: prose is not a prescription. The same basename appears OUTSIDE any fence or
+    # backtick span; Arm F asserts invocations, so it must not fire. This is the limb
+    # that keeps the arm from degenerating into the basename-mention proxy the design
+    # rejected — a proxy that would fire on every doc that merely cites a tool.
+    fx = _Fixture()
+    try:
+        _armf_base(fx)
+        fx.spec("stage-01.md", ["bash release/tools/mandated.sh"])
+        fx.allowlist(["release/tools/mandated.sh"])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 0 and "prose-only.sh" not in out,
+            "T-51 a tool NAMED in prose but not spelled as an invocation does NOT fire "
+            "Arm F (the arm asserts prescriptions, not mentions)",
+        )
+    finally:
+        fx.close()
+
+    # T-52: suppression costs a written reason, exactly as Arms C and E require.
+    fx = _Fixture()
+    try:
+        _armf_base(fx)
+        fx.spec("stage-01.md", ["bash release/tools/mandated.sh"])
+        fx.allowlist(["release/tools/something-else.sh"])
+        fx.write(
+            EXCLUSIONS_REL,
+            "release/tools/mandated.sh  # illustrative command, not a real mandate\n",
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 0 and "ARM F SUPPRESSED" in out and "illustrative command" in out,
+            "T-52 an exclusions entry WITH a written reason suppresses an Arm F finding, "
+            "and the suppression is echoed rather than silent",
+        )
+    finally:
+        fx.close()
+
+    # T-53: the reasonless entry. It must not suppress — it must not parse at all.
+    fx = _Fixture()
+    try:
+        _armf_base(fx)
+        fx.spec("stage-01.md", ["bash release/tools/mandated.sh"])
+        fx.allowlist(["release/tools/something-else.sh"])
+        fx.write(EXCLUSIONS_REL, "release/tools/mandated.sh\n")
+        raised = False
+        try:
+            mode_reconcile(Ctx(fx.root))
+        except ConfigError:
+            raised = True
+        check(
+            raised,
+            "T-53 an exclusions entry WITHOUT a reason does not suppress an Arm F "
+            "finding — it is a parse error, so a silent suppression is unreachable",
+        )
+    finally:
+        fx.close()
+
+    # T-54: ENGINE PARITY. fnmatch is a MODEL of the hook's matcher, not the matcher.
+    # The hook matches with `case "$path" in $pattern)`. Duplicate a parse, which fails
+    # loud; never a policy, which drifts silent — so the equivalence is ASSERTED here on
+    # the probe set that decided the four-vs-five form question, including the two facts
+    # the design turns on: `*` CROSSES `/` (so `*/x` admits an arbitrary prefix) and the
+    # bare-relative form is NOT covered by it.
+    probes = [
+        ("*/release/tools/t.sh", "/Users/x/Claude/pmo-platform/release/tools/t.sh"),
+        ("*/release/tools/t.sh", "/Users/x/pmo-platform/.claude/worktrees/w1/release/tools/t.sh"),
+        ("*/release/tools/t.sh", "./release/tools/t.sh"),
+        ("*/release/tools/t.sh", "release/tools/t.sh"),
+        ("*/release/tools/t.sh", "/tmp/attacker/release/tools/t.sh"),
+        ("release/tools/t.sh", "release/tools/t.sh"),
+        ("release/tools/t.sh", "./release/tools/t.sh"),
+        ("./release/tools/t.sh", "./release/tools/t.sh"),
+        ("release/tools/*.sh", "release/tools/t.sh"),
+    ]
+    py_verdicts = [fnmatch.fnmatchcase(path, pat) for pat, path in probes]
+    script_lines = ["#!/usr/bin/env bash", "out=''"]
+    for pat, path in probes:
+        script_lines.append(f'case "{path}" in {pat}) out="${{out}}1";; *) out="${{out}}0";; esac')
+    script_lines.append('printf "%s" "$out"')
+    parity_checked = False
+    try:
+        proc = subprocess.run(
+            ["bash", "-c", "\n".join(script_lines)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if proc.returncode == 0 and len(proc.stdout.strip()) == len(probes):
+            parity_checked = True
+            bash_verdicts = [c == "1" for c in proc.stdout.strip()]
+    except (OSError, subprocess.SubprocessError):
+        pass
+    if parity_checked:
+        check(
+            py_verdicts == bash_verdicts
+            # The two facts the form-set decision rests on, asserted POSITIVELY so the
+            # table cannot pass by both engines being wrong in the same direction.
+            and bash_verdicts[4] is True
+            and bash_verdicts[3] is False,
+            "T-54 ENGINE PARITY: fnmatch and bash `case` return an identical verdict on "
+            "every probe, `*` crosses `/` (an arbitrary prefix IS admitted) and the "
+            "bare-relative form is NOT covered by the suffix glob",
+        )
+    else:
+        # PV-7 Register A: report NOT-EVALUATED positively. A parity table that silently
+        # passes when bash is unavailable would assert nothing while looking green.
+        check(
+            False,
+            "T-54 ENGINE PARITY could not be evaluated — bash did not run the probe "
+            "table. This is NOT a pass: the fnmatch model is unasserted.",
+        )
+
+    # T-56: the missing-input guard, mirroring T-44 for Arm E. A fixture tree with no
+    # allowlist must report not-run with counters ABSENT, never a clean pass.
+    fx = _Fixture()
+    try:
+        _armf_base(fx)
+        fx.spec("stage-01.md", ["bash release/tools/mandated.sh"])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 0 and "ARM F SCAN not-run" in out and "ABSENT, not zero" in out,
+            "T-56 a missing allowlist under --root reports not-run (ABSENT, not zero) "
+            "rather than a clean Arm F pass",
         )
     finally:
         fx.close()
