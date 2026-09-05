@@ -2694,17 +2694,43 @@ case "$TOOL_NAME" in
             # fails OPEN on omission: one unlisted way of writing "noexec off" leaves the
             # parse-only claim standing and the segment is exempted while it runs — the
             # identical failure direction `3f364a59` cited when it refused an arity table
-            # as the TERMINATION predicate. Here there is nothing to omit. Parse-only
-            # status is granted ONLY by positive recognition in script_interp_noexec_flag
-            # and is REVOKED BY EVERY OTHER TOKEN THE WALK STEPS OVER, whatever it is
-            # spelled. A spelling this file has never seen therefore cannot silently
-            # produce a parse-only verdict; it can only cost an over-block.
+            # as the TERMINATION predicate. Parse-only status is granted ONLY by positive
+            # recognition in script_interp_noexec_flag and is REVOKED BY EVERY TOKEN THE
+            # WALK STEPS OVER, whatever it is spelled.
+            #
+            # THE GUARANTEE IS SCOPED TO STEPPED-OVER TOKENS, AND AN EARLIER FORM OF THIS
+            # NOTE OVERSTATED IT. It said "there is nothing to omit" and "a spelling this
+            # file has never seen cannot produce a parse-only verdict; it can only cost an
+            # over-block" — unqualified, of the whole predicate. That holds for every token
+            # the walk STEPS OVER and FAILS for a token the walk ENDS ON, because the
+            # revoke sits below both breaks (see the advance-past arm below). For a token
+            # that ends the walk an earlier grant SURVIVES, and what keeps that safe is
+            # OPERAND ADJUDICATION, not this predicate. State the property that way and it
+            # is decidable per token; state it unqualified and it is simply false.
+            #
+            # THE BOUNDARY HAS ONE LIVE FAMILY, AND IT IS INHERITED, NOT INTRODUCED HERE.
+            # A token whose leading quote closes early — `""+n`, `''+n`, `'+'n`, `"-"n` —
+            # is marked unresolvable by normalize_script_token, so it breaks at the
+            # script_norm_ok test ABOVE the revoke and an earlier `-n` grant stands:
+            #   bash -n ""+n <unlisted>.sh  -> ALLOW  (the shell runs it; `""+n` IS `+n`)
+            #   bash -n   +n <unlisted>.sh  -> BLOCK  (same invocation, unquoted)
+            # The same family ALLOWs on `origin/main`, so this release introduces none of
+            # it, and the shape that proves WHERE the allow comes from carries no `-n` at
+            # all: `bash ""-x <unlisted>.sh` ALLOWs on `origin/main` and here alike. The
+            # cause is the unresolvable-operand path, not noexec. A symmetric clear on that
+            # break is therefore MEASURABLY INERT — it was built and measured and the shape
+            # still ALLOWs — so it is deliberately NOT shipped: it would add a fourth
+            # enumeration and close nothing. Arms NOEXEC-QSPLIT-* pin the family and
+            # NOEXEC-QSPLIT-M* pins the inertness; closing it is the operand path's job.
             #
             # FAIL-SAFE DIRECTION, PER BRANCH. Recognised set-spelling -> 1 (exempt) is
             # the ONLY path to parse-only, and it is exactly today's measured row. Every
-            # other token -> 0, which does not allow anything: it routes the segment into
-            # the ordinary allowlist adjudication below. Unknown therefore means REFUSED,
-            # never EXEMPT.
+            # other token THE WALK STEPS OVER -> 0, which does not allow anything: it
+            # routes the segment into the ordinary allowlist adjudication below. Within
+            # that class, unknown means REFUSED, never EXEMPT. A token the walk ENDS ON is
+            # outside the class and does not revoke — deliberately, per the advance-past
+            # arm — so there "unknown" leaves the prior state standing and the operand
+            # adjudication below is what decides.
             #
             # THE CONSUMED ARGUMENT OF AN ARITY OPTION NEEDS NO REVOCATION OF ITS OWN,
             # and that is a property of the two tables rather than an assumption: every
@@ -2844,18 +2870,32 @@ case "$TOOL_NAME" in
             #   this arm. Revoking is the ALLOW -> BLOCK direction this arm already
             #   accepts for arity, so it is the same trade, not a new one.
             #
-            # THE REVOKE IS UNCONDITIONAL BY CONSTRUCTION — no test, no table, nothing to
-            # omit. Anything the walk advances past here is, by this arm's own reasoning,
-            # an option or an option's argument rather than the operand; none of them can
-            # be a recognised parse-only spelling, because those are `-`-leading and are
-            # answered by the `-*)` arm above. So the honest state after stepping over one
-            # is "not known to be parse-only", which is 0.
+            # THE REVOKE IS UNCONDITIONAL WITHIN THIS ARM — no test, no table, nothing to
+            # omit — AND THAT IS THE WHOLE OF ITS SCOPE. Anything the walk advances past
+            # here is, by this arm's own reasoning, an option or an option's argument
+            # rather than the operand; none of them can be a recognised parse-only
+            # spelling, because those are `-`-leading and are answered by the `-*)` arm
+            # above. So the honest state after stepping over one is "not known to be
+            # parse-only", which is 0. It says NOTHING about a token that ENDS the walk —
+            # that is the next paragraph's subject and the predicate's declared residual,
+            # and reading this sentence as a property of the whole predicate is the
+            # overstatement corrected at the `-*)` arm above.
             #
             # IT SITS BELOW BOTH BREAKS ON PURPOSE. A token that ENDS the walk — an
             # unresolvable token, or the domain-claimed operand — is not stepped over and
             # must not revoke, or `bash -n <script>.sh` would revoke on the script itself
             # and the card's entire value would be lost. Arms PARSE-07 and NOEXEC-CTL-01
-            # pin that boundary.
+            # pin that boundary behaviourally and NOEXEC-ORD-01 pins the LINE ORDER
+            # itself, so hoisting the revoke above either break is caught as a structural
+            # edit rather than only as a behavioural regression.
+            #
+            # AND THAT ORDERING IS EXACTLY WHERE THE PREDICATE'S GUARANTEE STOPS. The two
+            # breaks above are the tokens the revoke never sees, so a grant made earlier
+            # survives them; the `-*)` arm's note carries the measured residual (the
+            # leading-quote-closes-early family) and the evidence that clearing here would
+            # be inert. The right reading of this ordering is a declared trade — the
+            # card's value in exchange for a residual the OPERAND path owns — and not a
+            # claim that the predicate cannot fail open.
             normalize_script_token "${script_tokens[$script_idx]}"   # M-FWALK-BODY
             if [ "$script_norm_ok" -eq 0 ]; then break; fi
             if script_operand_implicated "$script_interp_domain"; then break; fi

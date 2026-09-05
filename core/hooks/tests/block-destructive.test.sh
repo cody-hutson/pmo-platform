@@ -3572,7 +3572,11 @@ test_case "NOEXEC-CTL-03: bash -n +n <allowed> allowed (revoked, but the allowli
 # `bash -n -x <script>` IS inert (measured: silent), but `-x` is not a recognised
 # parse-only spelling, so it revokes and the segment is adjudicated. This is the
 # fail-SAFE direction and it is pinned so a future maintainer reads it as intended
-# rather than as a bug: the cost of having nothing to omit on the revoke side.
+# rather than as a bug: the cost of the revoke being unconditional for every token the
+# walk STEPS OVER. That scope is the whole guarantee, and stating it unscoped — "nothing
+# to omit on the revoke side" — is false: a token that ENDS the walk does not revoke, so
+# an earlier grant survives it. NOEXEC-QSPLIT-* below pins the one family where that is
+# live, and NOEXEC-ORD-* pins the line order the scope depends on.
 test_case "NOEXEC-R1: bash -n -x <unlisted>.sh blocks (declared over-block; unrecognised token revokes)" \
   "$(bash_payload "bash -n -x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 
@@ -3587,6 +3591,158 @@ test_case "NOEXEC-Q2: bash '-n' '+n' <unlisted>.sh blocks (both tokens quoted)" 
   "$(bash_payload "bash '-n' '+n' $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 test_case "NOEXEC-Q3: bash '-n' <unlisted>.sh allowed (quoted set form still grants; paired control)" \
   "$(bash_payload "bash '-n' $PARSE_UNLISTED")" 0
+
+# --- (6) ORDERING PIN — the revoke must stay BELOW both breaks ---
+# The predicate's guarantee is scoped to tokens the walk STEPS OVER, and that scope is
+# produced by one thing only: the revoke sitting below both `break`s. Hoist it and
+# `bash -n <script>.sh` revokes on the script itself and the card's whole value is lost.
+# NOEXEC-CTL-01 catches that behaviourally for the shapes it covers; this arm reads the
+# ORDER out of the hook, so a hoist is caught as the structural edit it is.
+#
+# The predicate is "no `script_noexec=0` appears between the walk-body marker and the
+# second break, and the advance-past revoke appears after it". It FAILS CLOSED: a marker
+# that stops matching reports MARKER-MISSING rather than reading as "ordering fine".
+noexec_ord_check() {
+  local f="$1" body b1 b2 rev hoisted
+  body="$(/usr/bin/grep -nF '# M-FWALK-BODY' "$f" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  b1="$(/usr/bin/grep -nF 'script_norm_ok" -eq 0 ]; then break' "$f" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  b2="$(/usr/bin/grep -nF 'script_operand_implicated "$script_interp_domain"; then break' "$f" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+  rev="$(/usr/bin/grep -nF 'M-NOEXEC-REVOKE' "$f" | /usr/bin/tail -1 | /usr/bin/cut -d: -f1)"
+  if [ -z "$body" ] || [ -z "$b1" ] || [ -z "$b2" ] || [ -z "$rev" ]; then
+    /usr/bin/printf 'MARKER-MISSING'; return 0
+  fi
+  hoisted="$(/usr/bin/sed -n "${body},${b2}p" "$f" | /usr/bin/grep -cF 'script_noexec=0')"
+  if [ "$hoisted" != 0 ]; then /usr/bin/printf 'HOISTED'; return 0; fi
+  if [ "$b1" -gt "$body" ] && [ "$b2" -gt "$b1" ] && [ "$rev" -gt "$b2" ]; then
+    /usr/bin/printf 'BELOW'
+  else
+    /usr/bin/printf 'OUT-OF-ORDER'
+  fi
+}
+
+noexec_ord_shipped="$(noexec_ord_check "$HOOK")"
+if [ "$noexec_ord_shipped" = "BELOW" ]; then
+  /usr/bin/printf 'PASS: NOEXEC-ORD-01 revoke sits BELOW both walk-ending breaks (scope of the fail-safe guarantee)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: NOEXEC-ORD-01 revoke ordering\n  expected=BELOW actual=%s\n' "$noexec_ord_shipped"
+  FAIL=$((FAIL + 1))
+fi
+
+# RED-BEFORE CONTROL for NOEXEC-ORD-01. A checker that cannot fail proves nothing, so the
+# same predicate is run against a mutant with the revoke hoisted onto the walk-body line —
+# above both breaks. It must report HOISTED. The hoist is a single-line substitution on
+# the marker comment, which keeps it portable across BSD and GNU sed. The marker is
+# RE-EMITTED at the end of the line: the checker locates the region by it, so a mutant
+# that dropped it would report MARKER-MISSING and the control would pass for the wrong
+# reason — it would prove only that the checker notices a missing marker.
+ORD_MUTANT="$(dirname "$HOOK")/block-destructive.ORD-mutant.sh"
+/usr/bin/sed 's|# M-FWALK-BODY|; if [ "$script_verb" = "interp" ]; then script_noexec=0; fi   # M-FWALK-BODY|' \
+  "$HOOK" > "$ORD_MUTANT"
+
+if /usr/bin/cmp -s "$HOOK" "$ORD_MUTANT"; then
+  /usr/bin/printf 'FAIL: NOEXEC-ORD-02a hoist mutation is INERT — mutant is byte-identical to the shipped hook\n'
+  FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: NOEXEC-ORD-02a hoist mutation is live (mutant differs from the shipped hook)\n'
+  PASS=$((PASS + 1))
+fi
+
+noexec_ord_mutant="$(noexec_ord_check "$ORD_MUTANT")"
+if [ "$noexec_ord_mutant" = "HOISTED" ]; then
+  /usr/bin/printf 'PASS: NOEXEC-ORD-02b checker REPORTS the hoist (red-before control fires)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: NOEXEC-ORD-02b checker did not report the hoist\n  expected=HOISTED actual=%s\n' "$noexec_ord_mutant"
+  FAIL=$((FAIL + 1))
+fi
+
+# And the CONSEQUENCE, measured rather than asserted: with the revoke hoisted the operand
+# itself revokes, so the card's own payload stops being admitted. This is the pair that
+# says WHY the order matters — the shipped hook allows it in the same run (NOEXEC-CTL-01).
+sandbox_case "NOEXEC-ORD-03: hoisted mutant BLOCKS bash -n <unlisted>.sh (the card's value is what the order protects)" \
+  "$ORD_MUTANT" "$(bash_payload "bash -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+/bin/rm -f "$ORD_MUTANT"
+
+# --- (7) THE DECLARED RESIDUAL OF THAT SCOPE — leading quote closes early ---
+# A token whose leading quote closes early is marked unresolvable by
+# normalize_script_token, so it BREAKS the walk above the revoke and an earlier `-n`
+# grant survives. These pin the behaviour as it stands today so a future change to it is
+# visible rather than silent. They are NOT assertions that the behaviour is correct.
+#
+# INHERITED, NOT INTRODUCED: the same shapes ALLOW on `origin/main`, measured through this
+# harness against main's hook as a sibling. The shape that locates the cause carries no
+# `-n` at all — `bash ""-x <unlisted>.sh` allows on main and here alike — so the ALLOW
+# comes from the unresolvable-operand path, not from the noexec predicate.
+test_case "NOEXEC-QSPLIT-01: bash -n \"\"+n <unlisted>.sh ALLOWED (inherited; the token ends the walk, so the grant survives)" \
+  "$(bash_payload "bash -n \"\"+n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-QSPLIT-02: bash -n ''+n <unlisted>.sh ALLOWED (same family, single quotes)" \
+  "$(bash_payload "bash -n ''+n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-QSPLIT-03: bash \"\"-x <unlisted>.sh ALLOWED (no -n anywhere — the cause is the operand path, not noexec)" \
+  "$(bash_payload "bash \"\"-x $PARSE_UNLISTED")" 0
+
+# CONTROLS THAT MUST FIRE. Without these the three arms above would read green against a
+# harness that had stopped blocking anything at all. Each is the unquoted twin of the
+# arm above it, and each BLOCKS.
+test_case "NOEXEC-QSPLIT-ctl-unquoted: bash -n +n <unlisted>.sh BLOCKS (the twin of QSPLIT-01 the revoke does reach)" \
+  "$(bash_payload "bash -n +n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-QSPLIT-ctl-flag: bash -x <unlisted>.sh BLOCKS (the twin of QSPLIT-03)" \
+  "$(bash_payload "bash -x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# WHY NO SYMMETRIC CLEAR IS SHIPPED, pinned so the proposal is not re-made. Dev testing
+# built the obvious remedy — revoke on the unresolvable break too — and measured it INERT.
+# This mutant IS that remedy, and QSPLIT-M1b shows the shape still ALLOWs under it, because
+# the allow originates in operand adjudication. Shipping it would add a fourth enumeration
+# and close nothing.
+QSPLIT_MUTANT="$(dirname "$HOOK")/block-destructive.QSPLIT-mutant.sh"
+/usr/bin/sed 's|if \[ "$script_norm_ok" -eq 0 \]; then break; fi|if [ "$script_norm_ok" -eq 0 ]; then if [ "$script_verb" = "interp" ]; then script_noexec=0; fi; break; fi|' \
+  "$HOOK" > "$QSPLIT_MUTANT"
+
+if /usr/bin/cmp -s "$HOOK" "$QSPLIT_MUTANT"; then
+  /usr/bin/printf 'FAIL: NOEXEC-QSPLIT-M1a symmetric-clear mutation is INERT — mutant is byte-identical to the shipped hook\n'
+  FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: NOEXEC-QSPLIT-M1a symmetric-clear mutation is live (mutant differs from the shipped hook)\n'
+  PASS=$((PASS + 1))
+fi
+
+sandbox_case "NOEXEC-QSPLIT-M1b: symmetric-clear mutant STILL ALLOWS bash -n \"\"+n <unlisted>.sh (the remedy is measurably inert)" \
+  "$QSPLIT_MUTANT" "$(bash_payload "bash -n \"\"+n $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$QSPLIT_MUTANT"
+
+# M1b would read green for the WRONG reason if that break were simply never reached on
+# this payload — an unexecuted mutation allows everything it never touches. So the break
+# is proved reachable directly, with a second mutant that makes it announce itself on
+# stderr and changes no verdict. M2b is the positive read and M2c is its negative control:
+# the same marker must stay SILENT on a resolvable operand, which takes the other break.
+QSPLIT_REACH="$(dirname "$HOOK")/block-destructive.QSPLIT-reach.sh"
+/usr/bin/sed 's|if \[ "$script_norm_ok" -eq 0 \]; then break; fi|if [ "$script_norm_ok" -eq 0 ]; then /usr/bin/printf "QSPLIT-REACH" >\&2; break; fi|' \
+  "$HOOK" > "$QSPLIT_REACH"
+
+if /usr/bin/cmp -s "$HOOK" "$QSPLIT_REACH"; then
+  /usr/bin/printf 'FAIL: NOEXEC-QSPLIT-M2a reach mutation is INERT — mutant is byte-identical to the shipped hook\n'
+  FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: NOEXEC-QSPLIT-M2a reach mutation is live (mutant differs from the shipped hook)\n'
+  PASS=$((PASS + 1))
+fi
+
+sandbox_case "NOEXEC-QSPLIT-M2b: the unresolvable-token break IS on the path of bash -n \"\"+n <unlisted>.sh (M1b is not vacuous)" \
+  "$QSPLIT_REACH" "$(bash_payload "bash -n \"\"+n $PARSE_UNLISTED")" 0 "QSPLIT-REACH"
+
+qsplit_reach_err="$(/usr/bin/mktemp)"
+/usr/bin/printf '%s' "$(bash_payload "bash -n $PARSE_UNLISTED")" \
+  | /bin/bash "$QSPLIT_REACH" 2>"$qsplit_reach_err" >/dev/null || true
+if /usr/bin/grep -qF 'QSPLIT-REACH' "$qsplit_reach_err"; then
+  /usr/bin/printf 'FAIL: NOEXEC-QSPLIT-M2c marker fired on a RESOLVABLE operand — the marker does not discriminate\n'
+  FAIL=$((FAIL + 1))
+else
+  /usr/bin/printf 'PASS: NOEXEC-QSPLIT-M2c marker stays silent on bash -n <unlisted>.sh (negative control; that path takes the other break)\n'
+  PASS=$((PASS + 1))
+fi
+/bin/rm -f "$qsplit_reach_err" "$QSPLIT_REACH"
 
 # --- PAIRED MUTATION ARMS — prove the REVOCATION is what arms 01-06 measure ---
 # Same discipline as PARSE-14 / ARITY-17: a sibling mutant beside the real hook so
