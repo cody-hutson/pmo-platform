@@ -3602,22 +3602,26 @@ test_case "NOEXEC-Q3: bash '-n' <unlisted>.sh allowed (quoted set form still gra
 # The predicate is "no `script_noexec=0` appears between the walk-body marker and the
 # second break, and the advance-past revoke appears after it". It FAILS CLOSED: a marker
 # that stops matching reports MARKER-MISSING rather than reading as "ordering fine".
+# ONE awk PASS OVER THE FILE, AND NO PIPELINE ANYWHERE IN IT. The obvious spelling of
+# this helper — `grep -n … | head -1 | cut` — is a writer piped into a short-circuiting
+# reader, which the SIGPIPE-idiom gate matches by name. awk reads the file directly, uses
+# index() rather than regexes so no marker needs escaping, and takes its only `exit`
+# inside END, which that gate documents as safe because END runs after the input is drained.
 noexec_ord_check() {
-  local f="$1" body b1 b2 rev hoisted
-  body="$(/usr/bin/grep -nF '# M-FWALK-BODY' "$f" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
-  b1="$(/usr/bin/grep -nF 'script_norm_ok" -eq 0 ]; then break' "$f" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
-  b2="$(/usr/bin/grep -nF 'script_operand_implicated "$script_interp_domain"; then break' "$f" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
-  rev="$(/usr/bin/grep -nF 'M-NOEXEC-REVOKE' "$f" | /usr/bin/tail -1 | /usr/bin/cut -d: -f1)"
-  if [ -z "$body" ] || [ -z "$b1" ] || [ -z "$b2" ] || [ -z "$rev" ]; then
-    /usr/bin/printf 'MARKER-MISSING'; return 0
-  fi
-  hoisted="$(/usr/bin/sed -n "${body},${b2}p" "$f" | /usr/bin/grep -cF 'script_noexec=0')"
-  if [ "$hoisted" != 0 ]; then /usr/bin/printf 'HOISTED'; return 0; fi
-  if [ "$b1" -gt "$body" ] && [ "$b2" -gt "$b1" ] && [ "$rev" -gt "$b2" ]; then
-    /usr/bin/printf 'BELOW'
-  else
-    /usr/bin/printf 'OUT-OF-ORDER'
-  fi
+  /usr/bin/awk '
+    index($0, "# M-FWALK-BODY")                                                  { if (body == 0) body = NR }
+    index($0, "script_norm_ok\" -eq 0 ]; then break")                            { if (b1 == 0)   b1   = NR }
+    index($0, "script_operand_implicated \"$script_interp_domain\"; then break") { if (b2 == 0)   b2   = NR }
+    index($0, "M-NOEXEC-REVOKE")                                                 { rev = NR }
+    index($0, "script_noexec=0")                                                 { n++; nl[n] = NR }
+    END {
+      if (body == 0 || b1 == 0 || b2 == 0 || rev == 0) { printf "MARKER-MISSING"; exit }
+      for (i = 1; i <= n; i++) {
+        if (nl[i] >= body && nl[i] <= b2) { printf "HOISTED"; exit }
+      }
+      if (b1 > body && b2 > b1 && rev > b2) { printf "BELOW" } else { printf "OUT-OF-ORDER" }
+    }
+  ' "$1"
 }
 
 noexec_ord_shipped="$(noexec_ord_check "$HOOK")"
