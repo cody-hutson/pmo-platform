@@ -220,6 +220,30 @@ else
   log "setup-ci-layout: WARNING workspace-scope gate missing at ${SCOPEGUARD_SRC}"
 fi
 
+# 1g) Mirror the bypass-mode readiness rules corpus at .claude/rules/, matching the
+#     DEPLOYED layout: deploy.sh's rules-mirror pair set copies
+#     core/rules/bypass-mode-readiness.md to $DEPLOY_ROOT/.claude/rules/bypass-mode-readiness.md
+#     and every per-hook source under core/rules/bypass-mode-readiness/ to
+#     .claude/rules/bypass-mode-readiness/<basename>. NO HOOK READS EITHER PATH AT RUNTIME, so
+#     this cannot move a single verdict; it is here so a test arm can hold a DOCUMENTED CLAIM
+#     against the hook's ACTUAL verdict in the same run (NOEXEC-DOC-* in
+#     block-destructive.test.sh). Without it that arm would resolve in a source-tree run and be
+#     unresolvable in the CI layout — a test layout that omits a file the deployed layout
+#     carries, which is the same CI-fidelity defect the co-locations above exist to prevent.
+RULES_INDEX_SRC="${REPO_ROOT}/core/rules/bypass-mode-readiness.md"
+RULES_FRAG_SRC="${REPO_ROOT}/core/rules/bypass-mode-readiness"
+if [ -f "${RULES_INDEX_SRC}" ] && [ -d "${RULES_FRAG_SRC}" ]; then
+  mkdir -p "${CLAUDE_DIR}/rules/bypass-mode-readiness"
+  cp "${RULES_INDEX_SRC}" "${CLAUDE_DIR}/rules/bypass-mode-readiness.md"
+  for rules_frag in "${RULES_FRAG_SRC}"/*.md; do
+    [ -f "${rules_frag}" ] || continue
+    cp "${rules_frag}" "${CLAUDE_DIR}/rules/bypass-mode-readiness/"
+  done
+  log "setup-ci-layout: mirrored readiness rules -> ${CLAUDE_DIR}/rules/"
+else
+  log "setup-ci-layout: WARNING readiness rules corpus missing at ${RULES_INDEX_SRC}"
+fi
+
 # 2) Copy tests + runner (skip this setup script — it is not a test file).
 log "setup-ci-layout: copying tests -> ${TESTS_DST}"
 for tf in "${TESTS_SRC}"/*.sh; do

@@ -2920,8 +2920,14 @@ case "$TOOL_NAME" in
       done
       [ "$script_idx" -lt "${#script_tokens[@]}" ] || continue
 
-      # PARSE-ONLY EXEMPTION. Under `bash -n` (and `sh`/`zsh`) the interpreter
-      # PARSES and exits — it executes nothing, whatever the operand is. Inertness
+      # PARSE-ONLY EXEMPTION, AND WHAT script_noexec MEANS AT THIS GATE: the FINAL
+      # EFFECTIVE noexec state after the whole flag span, NOT "a `-n` was seen".
+      # Under `bash -n <script>` (and `sh`/`zsh`) the interpreter PARSES and exits —
+      # it executes nothing, whatever the operand is — but `bash -n +n <script>`
+      # carries the same bare `-n` and RUNS, and the walk above has already revoked
+      # the grant, so this conjunct is false and the segment is adjudicated. The
+      # exemption is therefore conditional on the RESOLVED state, never on a `-n`
+      # having appeared. Inertness under that resolved state
       # is a property of the interpreter's MODE, fully determined by argv, so this
       # needs no path resolution and correctly covers the non-allowlisted,
       # variable-bearing and quote-unresolvable operands that otherwise hard-block.

@@ -2424,7 +2424,7 @@ if [ "$F2_M_REMOVED" = 20 ] \
     "$F2_M_ARMS_SHIP" "$F2_M_ARMS_MUT"
   PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: AC-D022-M1: fixture sed removed %s lines (expected 17), break-arms %s -> %s (expected +1), residual M-FWALK markers in mutant = %s (expected 0) — it no longer targets the operand walk; re-point the sed\n' \
+  /usr/bin/printf 'FAIL: AC-D022-M1: fixture sed removed %s lines (expected 20), break-arms %s -> %s (expected +1), residual M-FWALK markers in mutant = %s (expected 0) — it no longer targets the operand walk; re-point the sed\n' \
     "$F2_M_REMOVED" "$F2_M_ARMS_SHIP" "$F2_M_ARMS_MUT" "$F2_M_MARKERS_MUT"; FAIL=$((FAIL + 1))
 fi
 
@@ -3668,6 +3668,126 @@ sandbox_case "NOEXEC-ORD-03: hoisted mutant BLOCKS bash -n <unlisted>.sh (the ca
   "$ORD_MUTANT" "$(bash_payload "bash -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 
 /bin/rm -f "$ORD_MUTANT"
+
+# --- (6b) DOC <-> BEHAVIOUR TIE — the documented exemption claim must match the verdict ---
+# WHY THIS PAIR EXISTS, AND WHY A FRESHNESS GATE COULD NOT CATCH WHAT IT CATCHES. The
+# BLOCK-DESTRUCTIVE-022 registry row described this exemption as UNCONDITIONAL — "a bare -n
+# under bash/sh/zsh with no -c in the flag span executes nothing and is not adjudicated" — and
+# went on saying it after the predicate stopped being unconditional. build-hook-registry.py
+# --check was rc=0 throughout, and correctly so: it proves the GENERATED index is byte-identical
+# to its SOURCE fragment, and both carried the same false sentence. Comparing two copies of one
+# claim can never falsify the claim. The missing check is a tie between the SENTENCE and the
+# VERDICT, which is what these arms are — the claim is read out of the readiness corpus and held
+# against what the shipped hook actually decides for `bash -n +n <unlisted>.sh` in this same run.
+#
+# FAILS CLOSED. An unresolvable document reports DOC-MISSING and reddens; it never reads as
+# "nothing to check", which is the failure mode a documentation arm most easily acquires.
+#
+# ONE RESOLUTION EXPRESSION COVERS BOTH LAYOUTS. ${HOOK_DIR}/../rules/... is
+# <sandbox>/.claude/rules/... under setup-ci-layout.sh (which mirrors the corpus exactly as
+# deploy.sh's rules-mirror pair set does) and <repo>/core/rules/... in a source-tree run. The
+# repo-root form is kept as a second rung so an unfamiliar layout degrades to a resolved read.
+#
+# NO PIPELINES ANYWHERE IN THIS BLOCK. The classifier is one awk pass using index() — literal
+# matching, so no marker needs escaping — and the behavioural probe feeds the hook from a FILE
+# rather than from a writer on the other side of a pipe. Both are deliberate: a writer piped
+# into a short-circuiting reader is the idiom the SIGPIPE gate matches by name.
+NOEXEC_DOC_FRAG="$(cd "$(dirname "$0")/../.." && pwd -P)/rules/bypass-mode-readiness/block-destructive.md"
+[ -f "$NOEXEC_DOC_FRAG" ] || NOEXEC_DOC_FRAG="$(cd "$(dirname "$0")/../../.." && pwd -P)/core/rules/bypass-mode-readiness/block-destructive.md"
+NOEXEC_DOC_INDEX="$(cd "$(dirname "$0")/../.." && pwd -P)/rules/bypass-mode-readiness.md"
+[ -f "$NOEXEC_DOC_INDEX" ] || NOEXEC_DOC_INDEX="$(cd "$(dirname "$0")/../../.." && pwd -P)/core/rules/bypass-mode-readiness.md"
+
+# CONDITIONAL requires BOTH halves of the corrected claim AND the absence of the stale absolute.
+# Either half alone is not enough: prose that says "conditional" while still carrying "executes
+# nothing and is not adjudicated" is exactly the both-ways-at-once state a partial reconcile
+# leaves behind, and it is the state this rule's own history produced.
+noexec_doc_claim() {   # $1 = readiness file -> CONDITIONAL | STALE-ABSOLUTE | NO-QUALIFIER | NO-REVOKE-RULE | DOC-MISSING
+  if [ ! -f "$1" ]; then /usr/bin/printf 'DOC-MISSING'; return 0; fi
+  /usr/bin/awk '
+    index($0, "executes nothing and is not adjudicated")             { stale = 1 }
+    index($0, "conditional on the FINAL EFFECTIVE")                  { qual  = 1 }
+    index($0, "by every later token the walk steps over")            { revok = 1 }
+    END {
+      if (stale == 1) { printf "STALE-ABSOLUTE"; exit }
+      if (qual  != 1) { printf "NO-QUALIFIER";   exit }
+      if (revok != 1) { printf "NO-REVOKE-RULE"; exit }
+      printf "CONDITIONAL"
+    }
+  ' "$1"
+}
+
+# The behavioural half, taken from the SHIPPED hook in this same run. `bash -n +n <unlisted>.sh`
+# is the discriminating payload: a bare -n, no -c in the flag span — precisely what the stale
+# sentence declared exempt — on an invocation the shell RUNS and the hook BLOCKS.
+noexec_doc_verdict() {   # -> BLOCK | ALLOW
+  local noexec_doc_pf noexec_doc_rc=0
+  noexec_doc_pf="$(/usr/bin/mktemp)"
+  /usr/bin/printf '%s' "$(bash_payload "bash -n +n $PARSE_UNLISTED")" > "$noexec_doc_pf"
+  /bin/bash "$HOOK" < "$noexec_doc_pf" >/dev/null 2>&1 || noexec_doc_rc="$?"
+  /bin/rm -f "$noexec_doc_pf"
+  if [ "$noexec_doc_rc" = 2 ]; then /usr/bin/printf 'BLOCK'; else /usr/bin/printf 'ALLOW'; fi
+}
+
+noexec_doc_frag_claim="$(noexec_doc_claim "$NOEXEC_DOC_FRAG")"
+noexec_doc_index_claim="$(noexec_doc_claim "$NOEXEC_DOC_INDEX")"
+noexec_doc_behaviour="$(noexec_doc_verdict)"
+
+if [ "$noexec_doc_behaviour" = "BLOCK" ] && [ "$noexec_doc_frag_claim" = "CONDITIONAL" ]; then
+  /usr/bin/printf 'PASS: NOEXEC-DOC-01 readiness SOURCE and hook agree (doc=%s, bash -n +n <unlisted>.sh=%s)\n' \
+    "$noexec_doc_frag_claim" "$noexec_doc_behaviour"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: NOEXEC-DOC-01 readiness SOURCE and hook DISAGREE\n  doc=%s (expected CONDITIONAL)  behaviour=%s (expected BLOCK)\n  file=%s\n' \
+    "$noexec_doc_frag_claim" "$noexec_doc_behaviour" "$NOEXEC_DOC_FRAG"
+  FAIL=$((FAIL + 1))
+fi
+
+# The GENERATED index is pinned separately rather than assumed. build-hook-registry.py --check
+# already proves it matches its source, but that gate is about freshness; this one is about the
+# claim, and a reader who lands on the index must not find the retired absolute there.
+if [ "$noexec_doc_index_claim" = "CONDITIONAL" ]; then
+  /usr/bin/printf 'PASS: NOEXEC-DOC-02 generated registry index carries the same conditional claim\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: NOEXEC-DOC-02 generated index claim=%s (expected CONDITIONAL) — regenerate with build-hook-registry.py\n  file=%s\n' \
+    "$noexec_doc_index_claim" "$NOEXEC_DOC_INDEX"
+  FAIL=$((FAIL + 1))
+fi
+
+# RED-BEFORE CONTROLS — ONE PER WAY THE CLAIM CAN GO WRONG. A classifier that cannot report
+# anything but CONDITIONAL proves nothing, so the same predicate is run against three mutants of
+# the shipped document. Each arm asserts the mutation is LIVE (the mutant differs from the
+# shipped file) AND that the classifier reports the specific code that mutation should produce —
+# a merged conjunct, because a sed that matched nothing would otherwise let the control pass for
+# the wrong reason, which is the trap NOEXEC-ORD-02a exists to name.
+noexec_doc_control() {   # $1 = arm id  $2 = expected code  $3 = sed script
+  local noexec_doc_mut noexec_doc_got
+  noexec_doc_mut="$(/usr/bin/mktemp)"
+  /usr/bin/sed "$3" "$NOEXEC_DOC_FRAG" > "$noexec_doc_mut"
+  if /usr/bin/cmp -s "$NOEXEC_DOC_FRAG" "$noexec_doc_mut"; then
+    /usr/bin/printf 'FAIL: %s mutation is INERT — mutant is byte-identical to the shipped document; re-point the sed\n' "$1"
+    FAIL=$((FAIL + 1)); /bin/rm -f "$noexec_doc_mut"; return 0
+  fi
+  noexec_doc_got="$(noexec_doc_claim "$noexec_doc_mut")"
+  /bin/rm -f "$noexec_doc_mut"
+  if [ "$noexec_doc_got" = "$2" ]; then
+    /usr/bin/printf 'PASS: %s mutation is live AND the classifier reports %s (red-before control fires)\n' "$1" "$noexec_doc_got"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s classifier did not report the drift\n  expected=%s actual=%s\n' "$1" "$2" "$noexec_doc_got"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# (a) the historical regression itself — the retired absolute back in the text.
+noexec_doc_control "NOEXEC-DOC-03a" "STALE-ABSOLUTE" \
+  's|A token that ENDS the walk does not revoke|it executes nothing and is not adjudicated. A token that ENDS the walk does not revoke|'
+# (b) the conditionality qualifier silently dropped.
+noexec_doc_control "NOEXEC-DOC-03b" "NO-QUALIFIER" \
+  's|conditional on the FINAL EFFECTIVE|contingent upon the FINAL EFFECTIVE|'
+# (c) the revocation rule silently dropped — the half that makes the claim decidable per token.
+noexec_doc_control "NOEXEC-DOC-03c" "NO-REVOKE-RULE" \
+  's|by every later token the walk steps over|by every later token the walk hops over|'
 
 # --- (7) THE DECLARED RESIDUAL OF THAT SCOPE — leading quote closes early ---
 # A token whose leading quote closes early is marked unresolvable by
