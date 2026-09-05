@@ -13,7 +13,13 @@
 #   File-read:  cat, head, tail, less, more, base64, xxd, od, hexdump, strings
 #   File-write: cp, mv, tee, dd
 # Resolved-path prefix-match against `.claude/fs-boundary-allowlist.txt`.
-# Strict-policy block on unresolvable tokens (variables / $(...) / backticks).
+# Operand disposition: an ordered guard cascade over the operand's LITERAL spans
+# (see resolve_and_classify). Command substitution, backticks, the canonicalizer's
+# quoted-span sentinel, literal `..` traversal and normalizer failure are refused
+# under -003; a decidable literal prefix is classified under -001/-002; an operand
+# with no decidable prefix is admitted with a -004 advisory record, written on every
+# invocation that reaches check_verb (warn and enforce; at .mode=off this hook exits
+# above that point, so the operand is still admitted but nothing is recorded).
 # Shell redirection (`>`, `>>`, `<`) deferred to v2 — accepted v1 residual per
 # block-rm-prefer-trash.sh § Known Limitations precedent.
 #
@@ -22,7 +28,7 @@
 # block-shell-injection, block-rm-prefer-trash, block-skill-direct-edit.
 #
 # Matcher scope: Bash
-# Rule IDs: BLOCK-FS-BOUNDARY-001..003
+# Rule IDs: BLOCK-FS-BOUNDARY-001..004
 # Mode gating: shared .claude/hooks/.mode (warn / enforce / off), same file as
 # block-egress + block-mcp-writes. Default initial = warn (3-day shakedown).
 # Release: monolith-cleanup
@@ -338,28 +344,96 @@ is_allowed_path() {
   return 1
 }
 
-# resolve_and_classify(token)
-#   Resolve a path token and classify against the allowed-roots allowlist.
-#   Returns: 0 = inside allowed root, 1 = outside allowed root, 2 = unresolvable (strict)
-#   Outputs the resolved absolute path on stdout (when return is 0 or 1).
-resolve_and_classify() {
+# --- POLICY P CONSTANTS (#5555) ---
+# The canonicalizer (lib/command-position.awk) replaces command-structural characters
+# INSIDE a quoted span with \001. On the stream this hook actually reads
+# ($COMMAND_CMDPOS), a quoted `${VAR}` and a quoted `$(cmd)` are therefore BYTE-IDENTICAL
+# — both arrive as $\001…\001. Any policy that admits braced parameter expansions
+# silently admits command substitution. That single fact is why the cascade below
+# REFUSES on the sentinel (G1) instead of parsing the brace, and why `${…}` must never
+# be "simplified" into a benign form. The suite's three-way G1 arm exists to fail that edit.
+readonly CMDPOS_SENTINEL=$'\001'
+# Substituted for each expansion span when building the skeleton. Deliberately a single
+# path segment containing no `/` and no `.`, so an expansion can never introduce a
+# separator or a traversal component into the skeleton that steps 3-7 then classify.
+readonly EXPANSION_SENTINEL='EXPANSION'
+
+# render_token(token)
+#   Message-safe rendering. The 286 sentinel-bearing operands would otherwise emit a raw
+#   \001 control byte to the operator and display as a corrupted path.
+render_token() {
+  local t="$1"
+  "$PRINTF" '%s' "${t//$CMDPOS_SENTINEL/<quoted-expansion>}"
+}
+
+# _split_expansions(token)
+#   Split an expansion-bearing token into its SKELETON (each expansion span replaced by
+#   $EXPANSION_SENTINEL) and its literal PREFIX (the text before the FIRST expansion).
+#   Recognized expansion spans: $NAME, an UNQUOTED ${...}, and the $1/$@/$#/$*/$?/$$/$!
+#   positional-and-special class. A `$` that introduces none of these is NOT guessed at —
+#   the function fails and the caller refuses. Conservative by construction.
+#   Sets: _SK, _PFX. Returns 0 on a clean split, 1 when a `$` is unrecognizable.
+_split_expansions() {
+  local rest="$1"
+  local sk="" pfx="" seen_exp=0 head_ after consumed inner name i c
+  _SK=""; _PFX=""
+  while [ -n "$rest" ]; do
+    head_="${rest%%\$*}"
+    if [ "$head_" = "$rest" ]; then
+      sk="${sk}${rest}"
+      [ "$seen_exp" = 0 ] && pfx="${pfx}${rest}"
+      rest=""
+      break
+    fi
+    sk="${sk}${head_}"
+    [ "$seen_exp" = 0 ] && pfx="${pfx}${head_}"
+    rest="${rest#"$head_"}"
+    after="${rest#\$}"
+    consumed=""
+    case "$after" in
+      \{*)
+        # Unquoted ${...}. A QUOTED one never reaches here — it carries the sentinel
+        # and was already refused by G1.
+        case "$after" in
+          *\}*) inner="${after%%\}*}"; consumed="\$${inner}}";;
+          *)    return 1;;
+        esac
+        ;;
+      [A-Za-z_]*)
+        name=""; i=0
+        while [ "$i" -lt "${#after}" ]; do
+          c="${after:$i:1}"
+          case "$c" in
+            [A-Za-z0-9_]) name="${name}${c}"; i=$((i + 1));;
+            *) break;;
+          esac
+        done
+        consumed="\$${name}"
+        ;;
+      [0-9@#*?!$]*)
+        consumed="\$${after:0:1}"
+        ;;
+      *)
+        # A bare `$` introducing nothing recognizable — do not guess.
+        return 1
+        ;;
+    esac
+    sk="${sk}${EXPANSION_SENTINEL}"
+    seen_exp=1
+    rest="${rest#"$consumed"}"
+  done
+  _SK="$sk"; _PFX="$pfx"
+  return 0
+}
+
+# _classify_literal(token)
+#   Steps 3-7 for a token containing NO expansions. Extracted verbatim from the original
+#   resolve_and_classify body so the literal path is provably unchanged, and so the
+#   skeleton and the literal prefix are classified by the SAME code.
+#   Returns: 0 = inside allowed root, 1 = outside, 2 = unresolvable.
+_classify_literal() {
   local token="$1"
   local resolved=""
-
-  # Step 1: strip surrounding single/double quotes
-  case "$token" in
-    \"*\") token="${token#\"}"; token="${token%\"}";;
-    \'*\') token="${token#\'}"; token="${token%\'}";;
-  esac
-
-  # Step 2: detect unresolvable patterns (variables, command substitution, backticks).
-  # Patterns match literal $, $(, and ` characters in the input string.
-  # shellcheck disable=SC2016  # literal char matches in case glob; not expansions
-  case "$token" in
-    *\$\(*) return 2;;
-    *\`*)   return 2;;
-    *\$*)   return 2;;
-  esac
 
   # Step 3: tilde expansion (~ or ~/...). Per-character checks avoid the
   # SC2088 false positive on the literal "~/" prefix string.
@@ -414,6 +488,105 @@ resolve_and_classify() {
   return 1
 }
 
+# resolve_and_classify(token)
+#   Classify a path token — POLICY P (#5555): classify the SKELETON, not the token.
+#
+#   The predicate this replaces was a CHARACTER test (`case $token in *\$*) return 2`),
+#   not a SHAPE test: it fired on "$SPOKE_OUT/comment.md" exactly as it fired on
+#   "$(curl -s http://evil/loot)", and it fired before any machinery that could tell them
+#   apart. It collapsed three distinct epistemic states — decidably-inside,
+#   decidably-outside, and genuinely undecidable — into one refusal.
+#
+#   Ordered guard cascade (refuse-before-decide: G0/G1/G2 precede any span analysis, so
+#   an ambiguous or executable construct can never reach the code that could admit it):
+#
+#     G0  token is exactly $XARGS-STDIN (canonicalizer's stdin sentinel)  -> REFUSE  -003
+#     G1  token carries the \001 quoted-span sentinel (ambiguous)         -> REFUSE  -003
+#     G2  token contains $( or a backtick (execution surface)             -> REFUSE  -003
+#     G3  a literal span holds `..`; or cwd absent for a relative token;
+#         or python3 unresolvable / realpath fails                        -> REFUSE  -003
+#     G5  decidable literal prefix resolves OUTSIDE all allowed roots     -> REFUSE  -001/-002
+#     G4  decidable literal prefix resolves INSIDE an allowed root        -> ALLOW   (silent)
+#     G6  no decidable prefix (token opens with an expansion)             -> ALLOW   -004 advisory
+#
+#   G0 is carved out explicitly: the canonicalizer routes an `xargs` denial THROUGH the
+#   unresolvable branch, so a naive "leading expansion -> allow" rule would silently
+#   disable that coverage with no test noticing. The suite arms it.
+#
+#   Returns: 0 = inside allowed root (or decidable prefix inside)
+#            1 = outside allowed root (fully resolved)
+#            2 = unresolvable (strict refusal)
+#            3 = advisory-allow, logged by the caller (BLOCK-FS-BOUNDARY-004);
+#                see advise_unresolvable for the mode scope of that record
+#            4 = decidable literal PREFIX outside allowed roots (message must say "prefix")
+#   Outputs the resolved absolute path on stdout when the return is 0, 1 or 4.
+#   A distinct return code — not a global — carries the prefix qualifier, because callers
+#   invoke this in a command substitution and a subshell assignment would not propagate.
+resolve_and_classify() {
+  local token="$1"
+
+  # Step 1: strip surrounding single/double quotes
+  case "$token" in
+    \"*\") token="${token#\"}"; token="${token%\"}";;
+    \'*\') token="${token#\'}"; token="${token%\'}";;
+  esac
+
+  # --- G0: the canonicalizer's xargs-stdin sentinel. MUST precede the $NAME parser:
+  # `$XARGS-STDIN` would otherwise split as $XARGS + literal "-STDIN", yielding an empty
+  # prefix and an advisory ALLOW — turning off an `xargs` denial by accident. ---
+  # shellcheck disable=SC2016  # literal sentinel text, not an expansion
+  if [ "$token" = '$XARGS-STDIN' ]; then return 2; fi
+
+  # --- G1: quoted structural construct. See CMDPOS_SENTINEL above — on this stream a
+  # quoted ${VAR} is indistinguishable from a quoted $(cmd), so both are refused. ---
+  case "$token" in
+    *"$CMDPOS_SENTINEL"*) return 2;;
+  esac
+
+  # --- G2: unquoted execution surface. ---
+  # shellcheck disable=SC2016  # literal char matches in case glob; not expansions
+  case "$token" in
+    *\$\(*) return 2;;
+    *\`*)   return 2;;
+  esac
+
+  # --- No expansion at all: the pre-existing literal path, behaviour unchanged. ---
+  case "$token" in
+    *\$*) :;;
+    *) _classify_literal "$token"; return "$?";;
+  esac
+
+  # --- Expansion-bearing operand: build the skeleton and classify THAT. ---
+  _split_expansions "$token" || return 2
+
+  # G3 — run the literal-span checks over the skeleton. Only a rc of 2 is meaningful
+  # here: the skeleton carries a sentinel standing for unknown text, so "outside" on the
+  # skeleton is not a decidable verdict and is deliberately NOT acted on.
+  local sk_rc=0
+  _classify_literal "$_SK" >/dev/null || sk_rc="$?"
+  if [ "$sk_rc" = 2 ]; then return 2; fi
+
+  # G5 / G4 — a decidable literal prefix DIRECTORY: the text before the first expansion,
+  # truncated at its last `/`. Truncating at the separator is what makes the prefix a
+  # directory the allowlist can decide; `/tmp$X` therefore decides on `/`, never on `/tmp`.
+  case "$_PFX" in
+    */*)
+      local pfx_dir="${_PFX%/*}/"
+      local pfx_rc=0 pfx_resolved
+      pfx_resolved="$(_classify_literal "$pfx_dir")" || pfx_rc="$?"
+      case "$pfx_rc" in
+        0) return 0;;
+        1) "$PRINTF" '%s' "$pfx_resolved"; return 4;;
+        *) return 2;;
+      esac
+      ;;
+  esac
+
+  # G6 — no decidable prefix. Advisory allow; the caller logs it whenever this function
+  # was reached at all (see advise_unresolvable — .mode=off exits above check_verb).
+  return 3
+}
+
 # extract_target_tokens(verb)
 #   Tokenize $COMMAND, skip $verb itself and flag tokens (-*).
 #   Emits target tokens from segments where $verb is the first token.
@@ -466,10 +639,37 @@ extract_target_tokens() {
   '
 }
 
+# advise_unresolvable(verb, token) — BLOCK-FS-BOUNDARY-004 (#5555)
+#   The genuinely-undecidable class: an operand whose first character is a parameter
+#   expansion, carrying no $(, no backtick, no \001 sentinel, and no `..` in any literal
+#   span. It is ADMITTED, and the admission is recorded whenever this function is reached.
+#
+#   THE DISPOSITION IS MODE-INDEPENDENT; THE RECORD IS NOT. This function never reads
+#   $MODE and never blocks at any .mode value, so the false-positive fix ships without
+#   touching the dial that seven unrelated hooks share. That is a design property, not
+#   "warn-mode behaviour" — do not route it through block_or_warn.
+#
+#   But mode-independence is a property of what this function DOES, not of whether it
+#   RUNS. At .mode=off the hook short-circuits at the `off` exit above the dependency
+#   gate, so check_verb is never called, this function is never reached, and NO -004
+#   record is written. "Always recorded" is therefore wrong as an unqualified claim:
+#   the ADMIT is mode-independent, the RECORD is scoped to warn and enforce. Do not
+#   restore the absolute wording — the suite's MODEOFF-REC arms fail exactly that edit.
+#
+#   Record-only, no stderr: the record is what keeps the admitted population measurable
+#   on a warn- or enforce-mode instance (and a later narrowing evidence-backed); at
+#   .mode=off the class is admitted and unmeasured. Emitting a stderr line per operand
+#   would reproduce, on ~90% of file reads, exactly the operator noise this card removes.
+advise_unresolvable() {
+  local verb="$1"; local token="$2"
+  log_warn "BLOCK-FS-BOUNDARY-004" \
+    "${verb} target opens with an unresolvable expansion and has no decidable literal prefix to classify; admitted under advisory policy: $(render_token "$token")"
+}
+
 # check_verb(verb, rule_id_class)
 #   Run the verb-detection + per-token classification loop.
-#   rule_id_class: "READ" → BLOCK-FS-BOUNDARY-001 / -003
-#                  "WRITE" → BLOCK-FS-BOUNDARY-002 / -003
+#   rule_id_class: "READ" → BLOCK-FS-BOUNDARY-001 / -003 / -004
+#                  "WRITE" → BLOCK-FS-BOUNDARY-002 / -003 / -004
 #   Returns: 0 always (block_or_warn exits on enforce-mode block; warn-mode returns)
 check_verb() {
   local verb="$1"; local class="$2"
@@ -501,10 +701,22 @@ check_verb() {
           "${verb} target outside workspace-boundary allowed roots: $resolved" \
           "(a) extend .claude/fs-boundary-allowlist.txt via allowlist-add.sh if root is legitimate, (b) use a path within an allowed root, (c) set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional" || true
         ;;
+      4)
+        # G5 — the DECIDABLE LITERAL PREFIX resolves outside the allowed roots. The
+        # message must say "prefix": the operand was never fully resolved, and telling an
+        # operator a path resolved when only its prefix did is the failure mode this
+        # wording exists to prevent.
+        block_or_warn "$outside_rule" \
+          "${verb} target's decidable literal prefix resolves outside workspace-boundary allowed roots: ${resolved} (this is the PREFIX of an expansion-bearing operand — the full path was NOT resolved)" \
+          "(a) extend .claude/fs-boundary-allowlist.txt via allowlist-add.sh if root is legitimate, (b) use a path within an allowed root, (c) set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional" || true
+        ;;
       2)
         block_or_warn "$strict_rule" \
-          "${verb} target unresolvable under strict policy (variable/subshell/backtick/traversal token, or path-normalizer unavailable): $token" \
+          "${verb} target unresolvable under strict policy (variable/subshell/backtick/traversal token, or path-normalizer unavailable): $(render_token "$token")" \
           "use explicit absolute paths without .. traversal instead of variables/subshells, ensure python3 is installed, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional" || true
+        ;;
+      3)
+        advise_unresolvable "$verb" "$token"
         ;;
     esac
   done < <(extract_target_tokens "$verb")

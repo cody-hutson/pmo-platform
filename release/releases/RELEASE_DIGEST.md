@@ -8,6 +8,9 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### freshness-gate-measures-then-blocks (2026-09-05, version-less) — A stale skill package can no longer reach the main branch
+### v4.54 (2026-09-05) — The rules mirror is delivered, and what it lands is bounded
+
 ### v4.53 (2026-09-04) — Analysis writes work again, and a skippable safety check is fixed
 
 ### hub-spoke-run-and-planning-discipline (2026-09-03, version-less) — Update notices stay accurate, and more edits now pause for approval

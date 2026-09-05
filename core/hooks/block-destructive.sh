@@ -480,17 +480,40 @@ script_operand_implicated() {   # $1 = interp | source | exec
   return 1
 }
 
-# The three declared operand domains, one `case` body each, carried over verbatim
-# from the arms they came from. `interp` takes a script suffix; `source` takes ANY
-# file and so carries PREFIX alternatives too; `exec` mirrors `interp` widened only
-# by `*.bash`. Do NOT unify them — the shipped reasoning on each arm forbids it in
-# both directions, and the bodies are adjacent here only so the subject rule above
-# has a single implementation.
+# The declared operand domains, one `case` body each, carried over verbatim from
+# the arms they came from. `interp` takes a shell script suffix; `source` takes ANY
+# file and so carries PREFIX alternatives too; `exec` mirrors the union of the
+# interpreter domains. Do NOT unify them — the shipped reasoning on each arm forbids
+# it in both directions, and the bodies are adjacent here only so the subject rule
+# above has a single implementation.
+#
+# THE `interp` BODY IS BYTE-PRESERVED, AND THAT IS THE MECHANISM RATHER THAN A
+# PROMISE. Admitting the non-shell interpreters did not edit it: four SIBLING arms
+# were added beside it, and script_set_interp_domain below defaults every basename
+# it does not name — the shell trio included — back to `interp`. So every token
+# that resolved to the `*.sh` domain before resolves to it now, by construction and
+# not by argument. Editing this body is how a widening would silently narrow.
+#
+# WHY ONE DOMAIN PER INTERPRETER FAMILY AND NOT ONE SHARED `*.py|*.rb|…` SET. A
+# shared set would adjudicate `python3 x.rb` against the Ruby suffix — a token no
+# Python invocation can execute — which is the blanket-widening failure the exec
+# arm's own comment argues against. The domain follows the INTERPRETER, so each
+# arm claims exactly what its interpreter can run.
 script_operand_domain_hit() {   # $1 = domain  $2 = subject
   case "$1" in
     interp) case "$2" in *.sh) return 0 ;; esac ;;
+    interp-py) case "$2" in *.py) return 0 ;; esac ;;
+    interp-pl) case "$2" in *.pl|*.pm) return 0 ;; esac ;;
+    interp-rb) case "$2" in *.rb) return 0 ;; esac ;;
+    interp-js) case "$2" in *.js|*.mjs|*.cjs) return 0 ;; esac ;;
     source) case "$2" in /*|./*|../*|~/*|*.sh|*.bash) return 0 ;; esac ;;
-    exec)   case "$2" in *.sh|*.bash) return 0 ;; esac ;;
+    # THE EXEC DOMAIN IS THE UNION OF THE INTERPRETER DOMAINS, WIDENED BY `*.bash`,
+    # AND THE PARITY IS REQUIRED RATHER THAN TIDY. `python3 tools/x.py` and
+    # `./tools/x.py` are the same execution by two spellings; adjudicating the first
+    # and not the second would ship exactly the arm-to-arm asymmetry that produced
+    # this rule's three prior remediations. The extensionless residual is UNCHANGED
+    # — `./x` still escapes every arm — and arm T-EXEC-9 pins it.
+    exec)   case "$2" in *.sh|*.bash|*.py|*.pl|*.pm|*.rb|*.js|*.mjs|*.cjs) return 0 ;; esac ;;
   esac
   return 1
 }
@@ -574,6 +597,220 @@ script_exempt_system_bin() {   # $1 = normalized token  $2 = script_norm_ok
   return 1
 }
 
+# THE PARSE-ONLY (noexec) TABLE, KEYED ON THE INTERPRETER — NEVER ON THE FLAG.
+#
+# `-n` is not a parse-only flag; it is a parse-only flag FOR A POSIX SHELL.
+# `perl -n` and `ruby -n` are implicit input loops that EXECUTE, `python3` has no
+# `-n` at all, and `source`/`.` are builtins taking no options — a `-n` there is
+# an operand, not a flag. A flag-keyed exemption would therefore turn into a hole
+# the moment the adjudicated interpreter set widens. A table keyed on the
+# interpreter cannot: every interpreter not named below reaches the EXPLICIT NULL
+# and its behaviour is unchanged.
+#
+# WHERE THIS FUNCTION LIVES IS PART OF THE DESIGN. It sits with the other
+# `script_*` predicates and DELIBERATELY apart from both the verb classifier and
+# script_operand_implicated, because widening the interpreter set edits those two
+# and must not have to move this. Widening means ADDING A `case` LABEL HERE —
+# with a measured row for the new interpreter, or leaving it on the documented
+# null — and nothing in the flag walk changes.
+#
+# RECOGNISED SPELLINGS ARE DELIBERATELY MINIMAL — the bare token `-n` only.
+# Everything else falls through to today's adjudication, which is the fail-safe
+# direction (still refused, never newly permitted):
+#   - A CLUSTER (`-nx`) IS NOT ADMITTED. Admitting one requires proving that no
+#     letter in it takes an argument; a letter that does would consume the
+#     following token and change which token is the operand. `bash -nx <path>`
+#     keeps blocking exactly as today. Declared residual, not an oversight.
+#   - `-o noexec` IS NOT ADMITTED, and it is UNREACHABLE rather than merely
+#     omitted: `-o` takes a separate argument, so the arity table below consumes
+#     `noexec` AS THAT ARGUMENT and never offers it to this table as a flag. This
+#     table can therefore never be asked about it. Listing it would ship a dead
+#     branch on a security surface. It is recorded as listed-but-unreachable in
+#     core/rules/bypass-mode-readiness/block-destructive.md.
+#
+# THIS TABLE IS ONLY SOUND IF THE WALK KNOWS OPTION ARITY, which is why the arity
+# table below is its immediate neighbour rather than a separate concern. An
+# arity-blind walk hands this table the ARGUMENT of an argument-taking option and
+# asks "is this a flag": `bash --rcfile -n <path>` presents `-n`, which bash has
+# already consumed as the rcfile FILENAME, and the answer "yes, parse-only" turns
+# a live block into an allow on an invocation that genuinely executes <path>.
+# Measured, not reasoned: `bash --rcfile -n -c 'echo X'` prints X, while
+# `bash -n -c 'echo X'` prints nothing. Never widen one table without the other.
+#
+# Bash 3.2-safe: `case` only, no associative arrays (the file-wide constraint).
+script_interp_noexec_flag() {   # $1 = interpreter basename  $2 = normalized flag token
+  case "$1" in
+    bash|sh|zsh)
+      case "$2" in -n) return 0 ;; esac
+      ;;
+    *) : ;;   # EXPLICIT NULL — see the table note above. Not an omission.
+  esac
+  return 1
+}
+
+# THE OPTION-ARITY TABLE, KEYED ON THE INTERPRETER — the third per-interpreter
+# table, beside the other two for the same reason they are beside each other:
+# widening the interpreter set must mean adding a label in one place, not hunting
+# three. This one answers "does this option consume the NEXT token as its
+# argument".
+#
+# WHY THE WALK NEEDS IT AT ALL. The flag walk steps over `-*` one token at a time
+# and stops on the first non-option, calling that the operand. With no notion of
+# arity it is wrong in both directions on the same invocation:
+#   - it can stop on an option's ARGUMENT and adjudicate that instead of the
+#     script — `bash --rcfile <allowlisted> <unlisted>` adjudicated the rcfile and
+#     never saw the script bash actually runs; and
+#   - it can hand an option's ARGUMENT to the noexec table as though it were a
+#     flag — `bash --rcfile -n <unlisted>`, where `-n` is the rcfile filename and
+#     the invocation executes.
+#
+# THE SET IS MEASURED, NOT INFERRED, AND THE PROBE IS A SCRIPT-EXECUTION MARKER
+# rather than an option-parse result. Each spelling below was swept against the
+# interpreter on the reference host (bash 3.2.57, /bin/sh = bash, zsh 5.9) with
+# `<interp> <opt> <sentinel> marker.sh`, where marker.sh prints M1RAN:
+#   - M1RAN on stdout      => <opt> CONSUMED <sentinel> and marker.sh became the
+#                             script, i.e. arity 1;
+#   - <sentinel> named in  => <opt> consumed it and then REJECTED it, i.e. arity 1
+#     the error message       with a validated argument namespace (`-o`, `+o`);
+#   - marker.sh named in   => <sentinel> was the SCRIPT, i.e. arity 0. This third
+#     the error message       case is why the probe must not be read as a mere
+#                             pass/fail: `-n <sentinel> marker.sh` errors on the
+#                             sentinel too, and is arity 0.
+#
+# AN EARLIER FORM OF THIS NOTE STATED THE PROBE AS `<interp> <opt> -n -c 'echo X'`
+# PRINTS X EXACTLY WHEN <opt> CONSUMED THE `-n`. That is NOT a biconditional and it
+# would drop four correct rows: `bash -O +O -o +o` DO consume the `-n` but print
+# nothing, because bash then aborts with `-n: invalid shell option name` (rc=2);
+# `zsh -o +o` abort the same way (rc=1). A maintainer widening this table by the
+# old rule would exclude exactly the rows that are already in it. Use the marker
+# form above, and read all three outcomes, not two.
+#
+#   bash, sh : --rcfile --init-file -O +O -o +o   (bash's own usage text names
+#              `-c command`, `-O shopt_option`, `-o option` as the argument-taking
+#              forms; `--rcfile=FILE` is rejected outright, so only the separate
+#              -argument spelling exists and only it is listed. No long-option
+#              ABBREVIATION is accepted — `--rcf`, `--init-f`, `--initfile` all
+#              rc=2 — so no unlisted spelling of these two exists)
+#   zsh      : -o +o --emulate                    (measured: `zsh -O -n -c …` runs
+#              nothing, so zsh's `-O`/`+O` take NO argument and are correctly absent)
+#
+# `--emulate` IS THE ROW THAT A LETTER-BY-LETTER SWEEP MISSES, and it is listed
+# because it was measured, not because zsh's own `--help` names it — it does not.
+# `zsh --emulate -n -s` EXECUTES its stdin while the control `zsh -n -s` prints
+# nothing, because `-n` is eaten as the emulation-mode NAME. The sweep behind this
+# row enumerated zsh's full option surface — every `-X`/`+X` single letter, and
+# `--<name>`, `--no<name>`, `--no-<name>`, `+-<name>`, `+-no-<name>` for all 197
+# setopt names plus the 12 documented aliases, 1135 spellings in all — and found
+# exactly two arity-1 spellings that execute despite a following `-n`: `--emulate`
+# and `+-emulate`. Controls fired both ways (`zsh --xtrace -n marker.sh` silent,
+# `zsh --emulate -n marker.sh` prints M1RAN).
+#
+# `+-emulate` IS PRESENT, AND AN EARLIER FORM OF THIS NOTE SAID IT WAS DELIBERATELY
+# ABSENT. That exclusion was correct for the code it was written against and is now
+# false, so it is replaced rather than annotated. The argument was structural: the
+# walk's option arm matches `-*`, a `+`-leading token matches neither it nor the
+# `--`/`-c` labels, so it fell to `*) break`, was taken as the operand, and the table
+# was never consulted for it — a `+-emulate` row would have been a dead branch. THE
+# `*) break` IT RESTED ON NO LONGER EXISTS: the operand walk now terminates on the
+# arm's declared operand DOMAIN and ADVANCES PAST any token the domain does not
+# claim, so every `+`-leading spelling reaches this table. The row is live, and so
+# are the `+O`/`+o` rows above, which were kept for exactly this eventuality.
+#
+# THE ROW IS ALSO NO LONGER OPTIONAL, because the consequence stopped being
+# inherited. `zsh +-emulate -n <path>` is BLOCK on origin/main — main advances past
+# `+-emulate` and adjudicates the script, having no parse-only exemption to fool —
+# and without this row the merged hook would ALLOW it. That is a BLOCK -> ALLOW on a
+# shape the real shell EXECUTES: an escape INTRODUCED BY THE MERGE rather than by
+# either side. Measured with controls firing: `zsh +-emulate -n -c 'echo X'` prints
+# X, `zsh -n -c 'echo X'` is silent.
+#
+# THE `+` SURFACE WAS RE-SWEPT BEFORE THE ROW WAS ADDED, because a row is only worth
+# what the sweep behind it is. 656 zsh `+` spellings (`+<letter>`, and `+-<name>`,
+# `+-no<name>`, `+-no-<name>` over the live shell's own 197 `${(k)options}` plus the
+# 12 documented aliases) and 89 bash/sh `+` spellings, classified by the THREE-outcome
+# read this note already mandates — B-named = consumed, A-named-and-REJECTED =
+# consumed against a validated namespace, A-named-and-not-found = A was the script.
+# Controls fired on both readings (`--emulate`/`--rcfile` arity 1, `-x` arity 0).
+# Result: `+-emulate` is the ONLY arity-1 `+` spelling zsh has beyond `+o`, and
+# bash/sh have none beyond the `+O`/`+o` already listed. It is also the only one that
+# leaves the shell LIVE after eating a `-n` (`+o`/`+O` abort, rc=2/rc=1).
+#
+# THE ZSH `--rcfile` / `--init-file` ROWS ARE DELIBERATE AND THEY ARE NOT A CLAIM
+# THAT ZSH HAS THOSE OPTIONS. It does not — `zsh --rcfile …` exits "no such
+# option: rcfile" and runs nothing. They are listed because the alternative is
+# worse: without them the walk hands `-n` in `zsh --rcfile -n <path>` to the
+# noexec table and allows the segment, which is a shipped BLOCK turned into an
+# ALLOW. The verdict would then rest on "zsh will reject this invocation" — a
+# second-order argument about another program's option parser, exactly the kind
+# this file declines to carry two tables up. Listing them costs nothing real,
+# because no zsh invocation that reaches an interpreter uses them.
+#
+# `-c` IS DELIBERATELY ABSENT and its absence is structural, not an omission. The
+# walk's own `-c)` label runs BEFORE this one and BREAKS, handing every following
+# token to the cmode loop. A `-c` row here could never be reached — a dead branch
+# on a security surface, which this file refuses on principle.
+#
+# THE NON-SHELL INTERPRETERS REACH THE EXPLICIT NULL and their behaviour is
+# unchanged. `python3 -m`, `perl -e`, `node -r` and the rest have their own arity
+# and are a DECLARED RESIDUAL here: they adjudicate through the phase-gated
+# destructive_022_interp_verdict, F-01's blast radius does not reach them, and
+# admitting them needs its own measurement rather than a guess made inside a fix
+# for the shell trio.
+#
+# Bash 3.2-safe: `case` only, no associative arrays (the file-wide constraint).
+script_interp_optarg_flag() {   # $1 = interpreter basename  $2 = normalized flag token
+  case "$1" in
+    bash|sh)
+      case "$2" in --rcfile|--init-file|-O|+O|-o|+o) return 0 ;; esac
+      ;;
+    zsh)
+      case "$2" in -o|+o|--emulate|+-emulate|--rcfile|--init-file) return 0 ;; esac
+      ;;
+    *) : ;;   # EXPLICIT NULL — see the table note above. Not an omission.
+  esac
+  return 1
+}
+
+# THE OPERAND-DOMAIN TABLE, KEYED ON THE INTERPRETER — the second per-interpreter
+# table, placed beside the first deliberately so the two cannot drift apart. The
+# table above answers "does this interpreter's flag mean it executes nothing"; this
+# one answers "what can this interpreter execute". Both are asked about the SAME
+# basename the verb classifier matched, and widening the interpreter set means
+# adding a label to each — one place to look, not two.
+#
+# THE `*)` DEFAULT IS THE WHOLE SAFETY ARGUMENT, NOT A TIDY-UP. `bash`, `sh`, `zsh`
+# and every basename this table does not name resolve to `interp`, the domain they
+# already resolved to when the domain was a hard-coded literal at the call sites.
+# The shell arms' behaviour is therefore unchanged BY CONSTRUCTION rather than by
+# assertion — the same direction the subject rule takes on
+# script_operand_implicated: a new view may ADD coverage, it may never VETO it.
+#
+# THE SET IS CLOSED EXACT LITERALS, AND THE CLOSEDNESS IS A SAFETY PROPERTY. See
+# the verb classifier below for the reason a trailing glob is refused here: the
+# verb `case` runs BEFORE the exec discriminator, so a glob that accidentally
+# claimed a script name (`python3.9-wrapper.sh` under `python3.[0-9]*`) would
+# remove that script from exec-arm adjudication — a widening that narrows. Versioned
+# spellings are a DECLARED RESIDUAL, recorded in
+# core/rules/bypass-mode-readiness/block-destructive.md, not half-closed here.
+#
+# `awk` IS DELIBERATELY ABSENT. Its script operand arrives through `-f`, a flag
+# ARGUMENT — and the arity table above names no `awk` row, so the walk still does
+# not consume it and an `awk` label here could never reach its operand: a dead
+# branch on a security surface. core/hooks/lib/positional-issueref.awk states the
+# same boundary from the other side. Admitting `awk` now means TWO measured rows,
+# one in the arity table and one here, added together — not one without the other.
+#
+# Bash 3.2-safe: `case` only, no associative arrays (the file-wide constraint).
+script_set_interp_domain() {   # $1 = interpreter basename -> sets script_interp_domain
+  case "$1" in
+    python|python3) script_interp_domain="interp-py" ;;
+    perl)           script_interp_domain="interp-pl" ;;
+    ruby)           script_interp_domain="interp-rb" ;;
+    node)           script_interp_domain="interp-js" ;;
+    *)              script_interp_domain="interp" ;;   # shell trio + all else: UNCHANGED
+  esac
+}
+
 # Adjudicate one candidate script path against the allowlist. Blocks (exit 2) on
 # a non-allowlisted target, and blocks on an UNRESOLVABLE one: this hook sees
 # unexpanded argv, so a variable-bearing path cannot be resolved here. Denying is
@@ -589,24 +826,45 @@ script_exempt_system_bin() {   # $1 = normalized token  $2 = script_norm_ok
 # normalize_script_token could not close the token's own quote and $1 is a filter
 # probe rather than a filename. Defaulting to 1 keeps every existing one-argument
 # call site byte-identical in behaviour.
+#
+# HINT ORDERING IS LOAD-BEARING, AND THE ORDER IS RETRY → WIDEN → BYPASS.
+# is_script_allowlisted above matches with `case "$path" in $pattern)` — a bash
+# glob against the path EXACTLY AS WRITTEN on argv. There is no realpath, no
+# canonicalization, no normalization to absolute. The allowlist is overwhelmingly
+# spelled in repository-relative form, so the SAME script is refused by an
+# absolute path from a session worktree and permitted by its repository-relative
+# path from the repository root. That retry is therefore not a workaround: it is
+# the invocation the allowlist was already written to admit, and it is the move
+# that most often resolves this block.
+#
+# The hints below used to name only allowlist-widening and the bypass variable.
+# Both are worse first moves. Widening edits a security control to admit a path
+# a sanctioned spelling already covers, and the bypass is an operator-only escape
+# hatch that disables every rule in every hook — not one path in one rule. Naming
+# them first taught blocked agents to reach for the two expensive answers and
+# hid the cheap correct one, which is why the retry now leads all three strings.
+#
+# THE BYPASS STAYS NAMED. It is a real escape hatch and removing it would leave a
+# genuinely-stuck operator with no documented route. It is ordered last and
+# labelled as the operator's, not demoted out of the text.
 check_script_target() {
   local path="$1" resolved="${2:-1}"
   if [ "$resolved" -eq 0 ]; then
     block "BLOCK-DESTRUCTIVE-022" \
       "unresolvable script path (quoting): the operand's quotes do not close within its own token, so the filename the shell will run cannot be determined from argv (nearest resolvable prefix: $path)." \
-      "invoke with a fully-quoted literal path (bash '/abs/path.sh'), or add the resolved path to .claude/script-execution-allowlist.txt, or set CLAUDE_HOOK_BYPASS=1"
+      "first retry the form the allowlist already permits: a fully-quoted literal path, spelled repository-relative from the repository root (bash 'core/deploy/deploy.sh'). The allowlist matches the path AS WRITTEN, so an absolute path can be refused where the identical script's repository-relative form is allowed. Only if no permitted form matches, add the resolved path to .claude/script-execution-allowlist.txt; CLAUDE_HOOK_BYPASS=1 is an operator-only escape hatch, not an agent's next step."
   fi
   case "$path" in
     *'$'*)
       block "BLOCK-DESTRUCTIVE-022" \
         "unresolvable script path (variable-bearing): $path — the hook sees unexpanded argv and cannot resolve it to an allowlist entry." \
-        "invoke with a literal path, or add the resolved path to .claude/script-execution-allowlist.txt, or set CLAUDE_HOOK_BYPASS=1"
+        "first retry the form the allowlist already permits: a literal path with no variable, spelled repository-relative from the repository root. The allowlist matches the path AS WRITTEN, so an absolute path can be refused where the identical script's repository-relative form is allowed. Only if no permitted form matches, add the resolved path to .claude/script-execution-allowlist.txt; CLAUDE_HOOK_BYPASS=1 is an operator-only escape hatch, not an agent's next step."
       ;;
   esac
   if ! is_script_allowlisted "$path"; then
     block "BLOCK-DESTRUCTIVE-022" \
       "subprocess script execution not in allowlist: $path (Red Team C1 — script-laundering mitigation)." \
-      "add to .claude/script-execution-allowlist.txt (glob patterns supported), or set CLAUDE_HOOK_BYPASS=1"
+      "first retry the form the allowlist already permits: invoke the script by its repository-relative path from the repository root. The allowlist matches the path AS WRITTEN, so an absolute path can be refused where the identical script's repository-relative form is allowed. Only if no permitted form matches, add to .claude/script-execution-allowlist.txt (glob patterns supported); CLAUDE_HOOK_BYPASS=1 is an operator-only escape hatch, not an agent's next step."
   fi
 }
 
@@ -614,7 +872,7 @@ check_script_target() {
 # BLOCK-DESTRUCTIVE-022 EXEC ARM — rollout phase, drain, and verdict router.
 #
 # WHAT THE ARM IS. Direct execution of a script (`./x.sh`, no interpreter token)
-# carries no `bash`/`sh`/`zsh`/`source` verb, so it matched no arm of this rule
+# carries no interpreter or `source` verb at all, so it matched no arm of this rule
 # and the allowlist was never consulted — the allowlist was bypassable by making
 # the file executable and dropping the interpreter word. Operator decision
 # D-ScriptScope (rendered 2026-08-23) resolves that this allowlist governs
@@ -655,10 +913,54 @@ readonly DESTRUCTIVE_022_EXEC_PHASE="warn"   # shadow | warn | enforce
 # ESCALATE_DAYS with this phase constant unchanged it increments ISSUES so
 # `--check --strict` exits 1. Doing nothing turns the pipeline red, and every way
 # of turning it green is a recorded decision.
-readonly DESTRUCTIVE_022_EXEC_ARMED="2026-08-24"
+#
+# RE-DATED 2026-09-03, AND THE RE-DATE IS THE RECORDED DECISION RATHER THAN AN
+# INCIDENTAL EDIT. The exec arm's operand domain was widened in the same change
+# that admitted the non-shell interpreters, so rows accumulated from that commit
+# forward include `.py`/`.rb`/`.js`/`.pl` direct executions — traffic the original
+# 2026-08-24 arming was not measuring. Check 71 names this exact remedy in its own
+# failure text ("extend ONCE by re-dating"), and reading a graduation against a
+# population whose composition changed underneath it is the alternative. This is
+# the one extension; a second would be a decision to retreat or graduate instead.
+readonly DESTRUCTIVE_022_EXEC_ARMED="2026-09-03"
 readonly DESTRUCTIVE_022_EXEC_REVIEW_DAYS=60    # deadline arm — repo-derivable
 readonly DESTRUCTIVE_022_EXEC_REVIEW_ROWS=25    # evidence arm — operator-local
 readonly DESTRUCTIVE_022_EXEC_ESCALATE_DAYS=90  # deadline arm turns ISSUES red
+
+# ── THE INTERPRETER ARM'S SIBLING FAMILY, AND IT IS A SIBLING RATHER THAN A REUSE.
+#
+# WHAT THIS ARM IS. The verb classifier admitted only `bash|sh|zsh`, so a script
+# invoked through any other interpreter was never classified as an execution at
+# all and no arm ever asked the allowlist about it. `python3 <path>.py` was as
+# unadjudicated as `./x.sh` was before the exec arm shipped, and for the same root
+# cause: an execution model expressed as a fixed vocabulary of shell tokens and
+# shell suffixes. Operator decision D-ScriptScope already resolves that this
+# allowlist governs EXECUTION CAPABILITY rather than interpreter invocations only,
+# and a non-shell interpreter invocation is an execution capability.
+#
+# WHY A SEPARATE CONSTANT FAMILY AND NOT `DESTRUCTIVE_022_EXEC_*`. The two
+# rollouts must be able to retreat INDEPENDENTLY. Binding this larger widening to
+# the exec constant would mean a noisy reading on either forces a retreat on both,
+# destroying the "retreat must be as cheap as advance" property the 3-value enum
+# exists to provide. They are two widenings with two populations and two
+# graduation decisions; one constant cannot record two decisions.
+#
+# WHY THE ENTRY RUNG IS `warn` AND NOT `enforce`. Measured at the introducing
+# commit: all 289 non-comment entries in the script-execution allowlist end in
+# `.sh`, so ZERO of them can ever match a `.py` path, against 72 tracked `.py`
+# files. Landing this at `enforce` would refuse every one of them on day one. The
+# `warn` phase is what measures the real agent-side population — which no static
+# corpus survey can supply — and the allowlist rows are then added from that
+# evidence rather than speculatively. `shadow` is carried for the cheap retreat if
+# the first reading is as noisy as the corpus count suggests it may be.
+readonly DESTRUCTIVE_022_INTERP_PHASE="warn"   # shadow | warn | enforce
+
+# Self-armed at the commit that introduced this family — never a placeholder for a
+# later editor to fill, for the reason recorded on the exec arming stamp above.
+readonly DESTRUCTIVE_022_INTERP_ARMED="2026-09-03"
+readonly DESTRUCTIVE_022_INTERP_REVIEW_DAYS=60    # deadline arm — repo-derivable
+readonly DESTRUCTIVE_022_INTERP_REVIEW_ROWS=25    # evidence arm — operator-local
+readonly DESTRUCTIVE_022_INTERP_ESCALATE_DAYS=90  # deadline arm turns ISSUES red
 
 # Rollout telemetry for the exec arm: evaluate, record, take no action. Carries
 # the CAUSE CLASS as well as the path, because an operator reading this drain must
@@ -670,16 +972,29 @@ readonly DESTRUCTIVE_022_EXEC_ESCALATE_DAYS=90  # deadline arm turns ISSUES red
 # PRETTY form, spanning several lines per entry — which is why the block-log
 # needed a streaming JSON parser rather than a line count. That shape is
 # deliberately NOT copied here.
+#
+# THE `arm` FIELD, AND THE DEFECT IT CLOSES IS ONE THIS DRAIN ALREADY HAD. Before
+# it, every row carried the bare reason `would-fire` and nothing naming WHICH
+# widening produced it — so a reading of 1,067 rows could size the rule and could
+# not apportion a single row to the arm whose graduation it was supposed to inform.
+# With two phase-gated arms writing to one drain that stops being an inconvenience
+# and becomes unusable: two independent graduation decisions, one undifferentiated
+# population. One `--arg` makes both readable from the same file.
+#
+# ROWS WRITTEN BEFORE THIS CHANGE CARRY NO `arm` FIELD, and a reader must treat an
+# absent field as `exec` — which is factually correct, because the exec arm was the
+# only writer that existed. deploy.sh Check 71 does exactly that.
 log_would_fire_022() {
   local phase="$1"
   local cause="$2"
   local path="$3"
+  local arm="${4:-exec}"
   local ts
   ts="$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo 'unknown')"
   "$JQ" -nc --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "BLOCK-DESTRUCTIVE-022" \
     --arg tool "$TOOL_NAME" --arg phase "$phase" --arg cause "$cause" \
-    --arg path "$path" --arg cwd "$CWD" \
-    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, phase:$phase, reason:"would-fire", cause:$cause, path:$path, cwd:$cwd}' \
+    --arg arm "$arm" --arg path "$path" --arg cwd "$CWD" \
+    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, phase:$phase, reason:"would-fire", arm:$arm, cause:$cause, path:$path, cwd:$cwd}' \
     >> "$WARN_LOG" 2>/dev/null || true
 }
 
@@ -719,18 +1034,122 @@ destructive_022_exec_verdict() {
   fi
   case "$DESTRUCTIVE_022_EXEC_PHASE" in
     shadow)
-      log_would_fire_022 "shadow" "$cause" "$path"
+      log_would_fire_022 "shadow" "$cause" "$path" "exec"
       return 0
       ;;
     warn)
-      log_would_fire_022 "warn" "$cause" "$path"
+      log_would_fire_022 "warn" "$cause" "$path" "exec"
       "$PRINTF" '[CLAUDE-HOOK:%s:BLOCK-DESTRUCTIVE-022] WARN (would-block, rollout=warn, cause=%s): direct script execution %s\n' \
         "$HOOK_NAME" "$cause" "$path" >&2
       return 0
       ;;
   esac
-  log_would_fire_022 "enforce" "$cause" "$path"
+  log_would_fire_022 "enforce" "$cause" "$path" "exec"
   check_script_target "$path" "$resolved"
+}
+
+# Adjudicate one NON-SHELL INTERPRETER operand under its own rollout phase.
+#
+# THE SHELL TRIO DOES NOT ROUTE THROUGH THIS, and that is the same discipline the
+# exec router states one function above. `bash`, `sh`, `zsh`, `source` and `.` keep
+# calling check_script_target directly from their unedited call-site branch, so
+# their always-enforce verdicts are byte-preserved rather than argued to be
+# equivalent. That unconditional posture is the basis on which the mode-capable
+# hook cohort was permitted to degrade at all; softening it as a side effect of
+# admitting python would be the one change this widening must not make. The
+# `[ "$script_interp_domain" = "interp" ]` test at each call site is what enforces
+# it, and it is a positive test for the shipped domain rather than a negative test
+# against a list that could grow.
+#
+# An allowlisted, resolvable path returns silently and writes NOTHING — a drain
+# that records permitted traffic measures the corpus rather than the widening.
+#
+# At `enforce` the verdict is delegated to check_script_target rather than
+# reimplemented, so this arm cannot grow a second block message that drifts from
+# the interpreter arm's. An unrecognised phase value falls through to `enforce`,
+# the same fail-closed direction the exec router takes, and deploy.sh Check 71
+# validates the enum so a typo surfaces as a check finding rather than as a silent
+# posture change.
+destructive_022_interp_verdict() {   # $1 = path  $2 = resolved
+  local path="$1" resolved="${2:-1}"
+  local cause="not-allowlisted"
+  case "$path" in
+    *'$'*) cause="unresolvable" ;;
+  esac
+  if [ "$resolved" -eq 0 ]; then cause="unresolvable"; fi
+  if [ "$cause" = "not-allowlisted" ] && is_script_allowlisted "$path"; then
+    return 0
+  fi
+  case "$DESTRUCTIVE_022_INTERP_PHASE" in
+    shadow)
+      log_would_fire_022 "shadow" "$cause" "$path" "interp-nonshell"
+      return 0
+      ;;
+    warn)
+      log_would_fire_022 "warn" "$cause" "$path" "interp-nonshell"
+      "$PRINTF" '[CLAUDE-HOOK:%s:BLOCK-DESTRUCTIVE-022] WARN (would-block, rollout=warn, cause=%s): non-shell interpreter script execution %s\n' \
+        "$HOOK_NAME" "$cause" "$path" >&2
+      return 0
+      ;;
+  esac
+  log_would_fire_022 "enforce" "$cause" "$path" "interp-nonshell"
+  check_script_target "$path" "$resolved"
+}
+
+# ADJUDICATE A TOKEN THE FLAG WALK CONSUMED AS AN OPTION'S ARGUMENT.
+#
+# WHY CONSUMING IS NOT ENOUGH, AND THIS FUNCTION IS THE WHOLE DIFFERENCE. Teaching
+# the walk arity moves an option's argument out of the operand slot. If the walk
+# merely STEPPED OVER it, that token would leave adjudication altogether — and the
+# walk's own NET DIRECTION rule forbids exactly that: it may never move a token
+# out of a domain that claimed it, because that converts a shipped BLOCK into an
+# ALLOW. `bash --rcfile <unlisted>.sh <allowlisted>.sh` blocks today on the rcfile,
+# and it must keep blocking: an rcfile is a file bash SOURCES, so a non-allowlisted
+# one is exactly what this rule exists to refuse.
+#
+# So the argument is consumed for OPERAND SELECTION and still adjudicated here,
+# through the identical pair of calls the post-walk operand branch makes. No token
+# is dropped BY THE CONSUMPTION STEP ITSELF, and the true operand — previously
+# unreachable behind the argument — is adjudicated as well.
+#
+# THE CHANGE IS NOT "PURELY ADDITIVE", AND AN EARLIER FORM OF THIS COMMENT SAID IT
+# WAS. The claim was "Direction: ALLOW may become BLOCK, never the reverse — that
+# is the property to check any edit to this function against", and it is FALSE as
+# stated. Changing which token is the operand necessarily changes post-walk
+# ROUTING: when an option's argument is `-c` or `--`, the walk's own labels no
+# longer see it, so a segment that used to route through the cmode loop — which
+# adjudicates every remaining token — now routes through the single-operand branch,
+# and later tokens do leave adjudication. Measured against the pre-arity hook over
+# 4775 payloads: 64 ALLOW -> BLOCK, 15 BLOCK -> ALLOW, the rest unchanged. An
+# independent dev-testing differential over a different 4183-payload set measured
+# 154 and 23. Two sets, same mechanism, no other.
+#
+# THE PROPERTY THAT IS TRUE, AND THE ONE TO CHECK ANY EDIT AGAINST, IS NARROWER:
+# every BLOCK -> ALLOW this function causes must be a PRECISION IMPROVEMENT — a
+# verdict the real interpreter agrees with — and never an escape. That has to be
+# checked against the interpreter, not argued from the code. Every measured
+# instance holds: the shape either aborts in the real shell (`-c: invalid shell
+# option name`, rc=1/2) or is genuinely inert (`bash --rcfile -c -n <script>`:
+# rc=0, no output) or executes exactly the token this walk does adjudicate
+# (`bash --rcfile -c <a> <b>` runs <a>).
+#
+# DO NOT "FIX" THIS BY DECLINING TO CONSUME `--` AND `-c`. It restores the literal
+# additive claim and opens a real hole — `bash --rcfile -- -c <script>` executes
+# <script>. The arity step carries the measurement and the counter-example.
+#
+# A token that claims no arm's operand domain (`-o noexec`, `-O expand_aliases`)
+# falls through the gate and adjudicates nothing, exactly as it does anywhere else
+# in this file. The gate, not a special case, is what keeps a shell-option NAME
+# from being treated as a path.
+script_adjudicate_optarg() {   # $1 = raw argv token consumed as an option argument
+  normalize_script_token "$1"
+  if script_operand_implicated "$script_interp_domain"; then
+    if [ "$script_interp_domain" = "interp" ]; then
+      check_script_target "$script_norm_out" "$script_norm_ok"
+    else
+      destructive_022_interp_verdict "$script_norm_out" "$script_norm_ok"
+    fi
+  fi
 }
 
 # --------------------------------------------------------------------------
@@ -870,6 +1289,340 @@ script_qadvance() {
       fi
     fi
   done
+  return 0
+}
+
+# --------------------------------------------------------------------------
+# HERE-DOCUMENT PRE-PASS (POSIX Shell Command Language 2.7.4)
+#
+# A here-document BODY is the INPUT DATA a redirection supplies to a command. It
+# is not command text, and the shell never parses it as a command list. That is a
+# GRAMMAR fact about where command text can appear — the same class of authority
+# this file already relies on at 2.9.1 for the assignment-prefix walk and at
+# 2.9.1.1 for the exec discriminator — not a property of what the body says. No
+# markdown fence, no "report"-like phrasing and no CLI flag name enters the
+# decision below, because every one of those is forgeable by anything that can
+# print one.
+#
+# WHY A PRE-PASS AND NOT A BRANCH IN THE SEGMENT LOOP. A body is delimited by
+# TRUE NEWLINES in the original command, and the splitter replaces `;`, `&` and
+# `|` with newlines BEFORE the loop runs — so by the time the loop sees text the
+# line structure is already gone. `gh … <<'E' ; echo done` puts `echo done` on
+# the OPERATOR's own line, where POSIX runs it before the body begins; after
+# `;` → newline it is indistinguishable from the first body line. Detecting
+# bodies inside the loop would therefore fail OPEN on exactly that shape. Running
+# this pass on the original text makes the hazard unreachable.
+#
+# WHAT IT REMOVES. Only bodies that PROVABLY CANNOT be evaluated, under the SAME
+# two conditions the quoted-fragment suppression below already states (see THE
+# INVARIANT there), extended over one further construct:
+#
+#  (1) CARRIER — the command RECEIVING the redirection is in the existing
+#      `gh|printf|echo|jq` set. For a here-document the question is "does not
+#      execute its STDIN" rather than "cannot evaluate its ARGUMENT"; for these
+#      four the answers coincide (`gh` and `jq` read stdin as data, `printf` and
+#      `echo` ignore it), so the VALUE is reused unchanged. The MEMBERSHIP
+#      CRITERION is now the CONJUNCTION of both tests, and an editor adding a
+#      member must satisfy both — a verb that cannot evaluate its argument but
+#      DOES execute its stdin would be a fail-open here while remaining sound
+#      below. `bash <<'EOF'` is what this condition exists to refuse: bash reads
+#      its PROGRAM from stdin, so that body genuinely executes.
+#  (2) CONSTRUCT-INERT — the delimiter is QUOTED (`'D'`, `"D"`, `\D`), which
+#      suppresses every expansion in the body; or it is BARE and the body
+#      contains neither `$` nor a backtick. That is the identical two-tier split
+#      already applied to `'…'` versus `"…"`, and it rests on the identical
+#      claim: every expansion is introduced by one of those two characters. If a
+#      future shell adds a third introducer BOTH suppressions break together,
+#      which is the right coupling — it is one claim, not two.
+#
+# The receiving command is resolved from the text between the last SEPARATOR at
+# quote-state 0 and the operator, not from the head of the line. `gh x ; bash
+# <<'E'` must resolve to `bash`, not to `gh`; reading the line head would hand a
+# real interpreter's stdin the carrier's exemption.
+#
+# ALL-OR-NOTHING, BY DESIGN. If ANY here-document in the command fails either
+# condition, NOTHING is excised and the caller latches script_qbail — so every
+# shape this model declines keeps its PRE-CHANGE VERDICT BIT-FOR-BIT, rather than
+# being handed a partially-rewritten text whose verdict nobody measured. The same
+# latch covers every shape the model cannot RESOLVE: an unterminated body, a
+# delimiter outside the accepted word charset, more than two here-documents
+# queued on one line, more than eight in a command, more than 500 lines, or the
+# work budget.
+#
+# WHAT NEWLY PASSES, EXACTLY: the body of a here-document whose delimiter is
+# quoted, or is bare with a body free of `$` and backtick, redirected into `gh`,
+# `printf`, `echo` or `jq`. Nothing else. The RESIDUAL is that naming a carrier
+# verb gets that body unadjudicated — which is NOT a new residual. It is exactly
+# the one the quoted-argument suppression below already carries and ships:
+# `gh … --body 'note; bash <x>.sh'` is allowed today by the same reasoning. This
+# extends that residual's SURFACE from quoted arguments to here-document bodies;
+# it does not change its KIND, its precondition (impersonating a carrier) or its
+# fail direction. That is the honest cost, and it is why the carrier set is
+# reused at its current value rather than widened: a missing entry costs a false
+# positive and can never admit an evasion.
+# --------------------------------------------------------------------------
+
+# A delimiter word this model will accept: a non-empty run of [A-Za-z0-9_.-].
+# Anything else — a delimiter bearing `$`, a backtick, or any other expansion
+# character — is a shape the model declines, and declining latches the bail.
+script_hd_delim_ok() {
+  case "$1" in
+    "") return 1 ;;
+    *[!A-Za-z0-9_.-]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+# Walk $COMMAND left to right, honouring quote state so a `<<` inside a quoted
+# span is TEXT and not an operator, and excise the provably-inert bodies.
+# Sets script_hdstripped (the text the splitter consumes) and script_hdbail.
+script_heredoc_prescan() {
+  script_hdstripped="$COMMAND"
+  script_hdbail=0
+
+  # FAST PATH. No `<<` anywhere means no here-document and no here-string, so the
+  # adjudicated text is $COMMAND byte-for-byte and nothing below can perturb it.
+  # This is what keeps every command that carries no such operator — the
+  # overwhelming majority — on exactly its pre-change code path.
+  case "$COMMAND" in
+    *'<<'*) : ;;
+    *) return 0 ;;
+  esac
+
+  local _lt='<' _sc=';' _amp='&' _bar='|'
+  local -a _lines _qdelim _qquoted _qstrip _qhead
+  local _tmp="" _opline="" _cmp="" _pre="" _ch=""
+  local _delim="" _delimline="" _body="" _bodyraw="" _headtxt=""
+  local _n=0 _i=0 _k=0 _qn=0 _qs=0 _work=0 _pos=0 _lastsep=0 _abs=0
+  local _total=0 _excised=0 _found=0 _quoted=0 _strip=0 _ex=0 _out=""
+
+  # Split into PHYSICAL lines. Bodies are newline-delimited, so the line is the
+  # unit this pass reasons in.
+  _tmp="$COMMAND"
+  while [ -n "$_tmp" ]; do
+    if [ "$_n" -ge 500 ]; then script_hdbail=1; return 0; fi
+    case "$_tmp" in
+      *$'\n'*) _lines[$_n]="${_tmp%%$'\n'*}"; _tmp="${_tmp#*$'\n'}" ;;
+      *)       _lines[$_n]="$_tmp"; _tmp="" ;;
+    esac
+    _n=$(( _n + 1 ))
+  done
+
+  while [ "$_i" -lt "$_n" ]; do
+    _opline="${_lines[$_i]}"
+    _i=$(( _i + 1 ))
+    _qn=0
+    _pos=0
+    _lastsep=0
+    script_qt="$_opline"
+
+    # ---- scan this line for here-document operators at quote-state 0 ----
+    while [ -n "$script_qt" ]; do
+      _work=$(( _work + 1 ))
+      if [ "$_work" -ge 2000 ]; then script_hdbail=1; return 0; fi
+
+      if [ "$_qs" -eq 1 ]; then
+        script_qnext "$script_q1"
+        if [ "$script_qi" -lt 0 ]; then break; fi
+        _pos=$(( _pos + script_qi + 1 )); script_qt="${script_qt:$(( script_qi + 1 ))}"
+        _qs=0
+      elif [ "$_qs" -eq 3 ]; then
+        script_qnext "$script_bs" "$script_q1"
+        if [ "$script_qi" -lt 0 ]; then break; fi
+        _ch="$script_qc"
+        _pos=$(( _pos + script_qi + 1 )); script_qt="${script_qt:$(( script_qi + 1 ))}"
+        if [ "$_ch" = "$script_bs" ]; then
+          _pos=$(( _pos + 1 )); script_qt="${script_qt:1}"
+        else
+          _qs=0
+        fi
+      elif [ "$_qs" -eq 2 ]; then
+        script_qnext "$script_bs" "$script_q2"
+        if [ "$script_qi" -lt 0 ]; then break; fi
+        _ch="$script_qc"
+        _pos=$(( _pos + script_qi + 1 )); script_qt="${script_qt:$(( script_qi + 1 ))}"
+        if [ "$_ch" = "$script_bs" ]; then
+          _pos=$(( _pos + 1 )); script_qt="${script_qt:1}"
+        else
+          _qs=0
+        fi
+      else
+        script_qnext "$script_bs" "$script_q1" "$script_q2" "$_lt" "$_sc" "$_amp" "$_bar"
+        if [ "$script_qi" -lt 0 ]; then break; fi
+        _pre="$script_qpre"
+        _ch="$script_qc"
+        _abs=$(( _pos + script_qi ))
+        _pos=$(( _abs + 1 )); script_qt="${script_qt:$(( script_qi + 1 ))}"
+        if [ "$_ch" = "$script_bs" ]; then
+          _pos=$(( _pos + 1 )); script_qt="${script_qt:1}"
+        elif [ "$_ch" = "$script_q1" ]; then
+          # A `'` directly preceded by `$` opens ANSI-C quoting, exactly as in
+          # script_qadvance. Reading it as a plain single quote would end one
+          # quote out of phase and report *inside* where bash is *outside*.
+          _qs=1
+          case "$_pre" in
+            *"$script_qd") _qs=3 ;;
+          esac
+        elif [ "$_ch" = "$script_q2" ]; then
+          _qs=2
+        elif [ "$_ch" = "$_sc" ] || [ "$_ch" = "$_amp" ] || [ "$_ch" = "$_bar" ]; then
+          # A separator OUTSIDE any quote starts a new simple command, so the
+          # receiving command of any operator after it is resolved from here.
+          _lastsep="$_pos"
+        else
+          # `<`. Three distinct constructs share the character.
+          case "$script_qt" in
+            '<<'*)
+              # `<<<` is a HERE-STRING: one word, already covered by the quote
+              # model. Recognised FIRST — reading it as `<<` plus a delimiter of
+              # `<` would corrupt the scan. (The latch this replaces globbed
+              # `*'<<'*`, which matched here-strings too; part of why it was
+              # over-broad.)
+              _pos=$(( _pos + 2 )); script_qt="${script_qt:2}"
+              ;;
+            '<'*)
+              # `<<` or `<<-`: a here-document redirection operator.
+              _pos=$(( _pos + 1 )); script_qt="${script_qt:1}"
+              _strip=0
+              case "$script_qt" in
+                '-'*) _strip=1; _pos=$(( _pos + 1 )); script_qt="${script_qt:1}" ;;
+              esac
+              while :; do
+                case "$script_qt" in
+                  ' '*|$'\t'*) _pos=$(( _pos + 1 )); script_qt="${script_qt:1}" ;;
+                  *) break ;;
+                esac
+              done
+              _quoted=0
+              _delim=""
+              case "$script_qt" in
+                "$script_q1"*)
+                  _quoted=1
+                  script_qt="${script_qt:1}"; _pos=$(( _pos + 1 ))
+                  case "$script_qt" in
+                    *"$script_q1"*) _delim="${script_qt%%"$script_q1"*}" ;;
+                    *) script_hdbail=1; return 0 ;;
+                  esac
+                  _pos=$(( _pos + ${#_delim} + 1 ))
+                  script_qt="${script_qt:$(( ${#_delim} + 1 ))}"
+                  ;;
+                "$script_q2"*)
+                  _quoted=1
+                  script_qt="${script_qt:1}"; _pos=$(( _pos + 1 ))
+                  case "$script_qt" in
+                    *"$script_q2"*) _delim="${script_qt%%"$script_q2"*}" ;;
+                    *) script_hdbail=1; return 0 ;;
+                  esac
+                  _pos=$(( _pos + ${#_delim} + 1 ))
+                  script_qt="${script_qt:$(( ${#_delim} + 1 ))}"
+                  ;;
+                "$script_bs"*)
+                  # `<<\D`: the backslash quotes the delimiter, so the body
+                  # performs no expansion, exactly as `'D'` does.
+                  _quoted=1
+                  script_qt="${script_qt:1}"; _pos=$(( _pos + 1 ))
+                  _delim="${script_qt%%[!A-Za-z0-9_.-]*}"
+                  case "$script_qt" in
+                    [!A-Za-z0-9_.-]*) _delim="" ;;
+                  esac
+                  _pos=$(( _pos + ${#_delim} ))
+                  script_qt="${script_qt:${#_delim}}"
+                  ;;
+                *)
+                  _delim="${script_qt%%[!A-Za-z0-9_.-]*}"
+                  case "$script_qt" in
+                    [!A-Za-z0-9_.-]*) _delim="" ;;
+                  esac
+                  _pos=$(( _pos + ${#_delim} ))
+                  script_qt="${script_qt:${#_delim}}"
+                  ;;
+              esac
+              if ! script_hd_delim_ok "$_delim"; then script_hdbail=1; return 0; fi
+              if [ "$_qn" -ge 2 ]; then script_hdbail=1; return 0; fi
+              _qdelim[$_qn]="$_delim"
+              _qquoted[$_qn]="$_quoted"
+              _qstrip[$_qn]="$_strip"
+              _qhead[$_qn]="${_opline:$_lastsep:$(( _abs - _lastsep ))}"
+              _qn=$(( _qn + 1 ))
+              ;;
+            *)
+              # A plain `<` input redirection. Already consumed; nothing to do.
+              :
+              ;;
+          esac
+        fi
+      fi
+    done
+
+    _out="${_out}${_opline}"$'\n'
+
+    # ---- consume the queued bodies, in operator order ----
+    _k=0
+    while [ "$_k" -lt "$_qn" ]; do
+      _delim="${_qdelim[$_k]}"
+      _quoted="${_qquoted[$_k]}"
+      _strip="${_qstrip[$_k]}"
+      _headtxt="${_qhead[$_k]}"
+      _body=""
+      _bodyraw=""
+      _delimline=""
+      _found=0
+      while [ "$_i" -lt "$_n" ]; do
+        _cmp="${_lines[$_i]}"
+        _delimline="${_lines[$_i]}"
+        _i=$(( _i + 1 ))
+        if [ "$_strip" -eq 1 ]; then
+          while :; do
+            case "$_cmp" in
+              $'\t'*) _cmp="${_cmp:1}" ;;
+              *) break ;;
+            esac
+          done
+        fi
+        if [ "$_cmp" = "$_delim" ]; then _found=1; break; fi
+        _bodyraw="${_bodyraw}${_delimline}"$'\n'
+        _body="${_body}${_delimline}"
+      done
+      # An unterminated body is a shape the model cannot resolve.
+      if [ "$_found" -eq 0 ]; then script_hdbail=1; return 0; fi
+
+      _total=$(( _total + 1 ))
+      if [ "$_total" -gt 8 ]; then script_hdbail=1; return 0; fi
+
+      _ex=0
+      script_resolve_head "$_headtxt"
+      case "${script_head##*/}" in
+        gh|printf|echo|jq)
+          if [ "$_quoted" -eq 1 ]; then
+            _ex=1
+          else
+            case "$_body" in
+              *"$script_qd"*|*"$script_qbt"*) _ex=0 ;;
+              *) _ex=1 ;;
+            esac
+          fi
+          ;;
+      esac
+
+      if [ "$_ex" -eq 1 ]; then
+        _excised=$(( _excised + 1 ))
+        _out="${_out}${_delimline}"$'\n'
+      else
+        _out="${_out}${_bodyraw}${_delimline}"$'\n'
+      fi
+      _k=$(( _k + 1 ))
+    done
+  done
+
+  # No here-document operator at quote-state 0 — every `<<` in this command was a
+  # here-string or quoted text. Nothing to excise, and nothing to decline.
+  if [ "$_total" -eq 0 ]; then return 0; fi
+
+  # ALL-OR-NOTHING: one declined body means the whole command keeps its
+  # pre-change text and the caller latches the bail.
+  if [ "$_excised" -ne "$_total" ]; then script_hdbail=1; return 0; fi
+
+  script_hdstripped="${_out%$'\n'}"
   return 0
 }
 
@@ -1117,7 +1870,9 @@ case "$TOOL_NAME" in
 
     # ----- NEW-B: subprocess script ban (closes Red Team C1 — script laundering) -----
 
-    # BLOCK-DESTRUCTIVE-022 — bash/sh/zsh <path.sh> or source/. <path> not in allowlist
+    # BLOCK-DESTRUCTIVE-022 — an interpreter (bash/sh/zsh, or python/python3/perl/
+    # ruby/node) with a script operand in that interpreter's suffix domain, or
+    # source/. <path>, or a direct execution — not in allowlist
     #
     # STRATEGY: segment first, then match — for BOTH verbs, through ONE matcher.
     # A single ERE cannot model shell grammar, and the prior single-pass pattern
@@ -1157,9 +1912,11 @@ case "$TOOL_NAME" in
     # `tr`, no associative arrays, and the loop runs in the CURRENT shell (here-string,
     # never a pipeline) so `block`'s exit 2 propagates rather than dying in a subshell.
 
-    script_segments="${COMMAND//;/$'\n'}"
-    script_segments="${script_segments//&/$'\n'}"
-    script_segments="${script_segments//|/$'\n'}"
+    # THE SEPARATOR SUBSTITUTION MOVED DOWN, and the move is load-bearing. It now
+    # runs AFTER the here-document pre-pass, on script_hdstripped rather than on
+    # $COMMAND — because the pass has to read TRUE newlines, and this substitution
+    # injects newlines that are indistinguishable from them. See the pre-pass
+    # header for the shape that fails OPEN when the order is reversed.
 
     # ---- Quoted-fragment suppression (per-opener attribution) ----
     #
@@ -1216,16 +1973,45 @@ case "$TOOL_NAME" in
     # `$( )`, `` ` ` ``, `$(( ))`, `${ }` and anything later added to the language.
     #
     # A segment whose start state is 0 still begins at COMMAND POSITION and is
-    # ALWAYS adjudicated. Unquoted `$( )`, backticks and `<( )` all land there, so
-    # they need no separate rule.
+    # ALWAYS adjudicated.
     #
-    # HEREDOCS ARE NOT MODELLED, so suppression is switched off entirely for any
-    # command containing `<<`. A heredoc BODY line is not a command line, but the
-    # matcher splits on newlines and cannot tell the difference: a body line that
-    # opens a quote poisons the carried state, and a real execution after the
-    # terminator is then read as interior to it. Declining to suppress is the
-    # fail-closed answer to "this construct is outside the model"; the cost is that
-    # `<<`-bearing commands keep the false positive.
+    # THAT IS NOT TRUE OF ENCLOSURE, and an earlier version of this comment said it
+    # was. It claimed unquoted `$( )`, backticks and `<( )` "all land there, so they
+    # need no separate rule". Measured, they do not: `$(bash <x>.sh)`,
+    # `` `bash <x>.sh` ``, `cat <( bash <x>.sh )` and `echo "$(bash <x>.sh)"` are all
+    # ALLOWED today. The inner command word sits at token index >= 1 of its segment,
+    # where the command-position walk never looks — a substitution is not a
+    # SEPARATOR, so it never starts a new segment and the inner word never reaches
+    # command position. (Adding a `;` inside the substitution blocks, but only
+    # incidentally: the separator shreds the substitution into a fresh segment.)
+    # This is a live fail-open in an always-enforce arm. It is a WIDENING to close
+    # and is tracked separately; the false claim is corrected here so a reader does
+    # not infer coverage the code does not have. Condition (2) below is unaffected —
+    # it governs what may be SUPPRESSED, and it is why `echo "$(…)"` is not.
+    #
+    # HERE-DOCUMENTS ARE MODELLED, by a pre-pass that runs before the separator
+    # substitution and excises only PROVABLY-INERT bodies — see the
+    # script_heredoc_prescan header for the construct rule, the two conditions and
+    # the all-or-nothing posture. What reaches this loop is therefore either a
+    # command with every body excised, or the ORIGINAL text with script_qbail
+    # latched. The four declared residuals:
+    #
+    #   R-1 CARRIER IMPERSONATION. A shell function or alias named `gh` makes the
+    #       head token a carrier while the body executes. This rule cannot see
+    #       prior-turn state. NOT NEW — the quoted-argument suppression below
+    #       carries the identical hole (`gh … --body 'note; bash <x>.sh'` ships
+    #       allowed). The surface grows to here-document bodies; the kind, the
+    #       precondition and the fail direction do not.
+    #   R-2 A BARE-DELIMITER EXPANSION INTRODUCED BY NEITHER `$` NOR A BACKTICK.
+    #       None exists in POSIX; this is the same claim condition (2) already
+    #       makes for `"…"`, so both break together if a shell ever adds one.
+    #   R-3 THE COMMAND-SUBSTITUTION FAIL-OPEN above is UNTOUCHED and remains live.
+    #       The pre-pass neither creates nor widens it, and a here-document arm
+    #       reading green is not evidence of its absence.
+    #   R-4 A NON-CARRIER RECEIVER KEEPS THE FALSE POSITIVE. `cat <<'RPT'` still
+    #       blocks. Deliberate: a missing carrier entry costs a false positive and
+    #       can never admit an evasion, which is the fail direction this block
+    #       demands below.
     #
     # Suppression stays gated on an ALLOWLIST of command words that cannot evaluate
     # their arguments. The direction of that choice is deliberate: an entry MISSING
@@ -1239,6 +2025,19 @@ case "$TOOL_NAME" in
     # alias.x='!<cmd>' x` evaluates its own quoted argument, so it fails the set's
     # stated membership criterion; keeping it would leave exactly the fail-open this
     # block exists to avoid. Membership is the property to re-check when editing.
+    #
+    # MEMBERSHIP IS NOW A CONJUNCTION, because this one set gates two suppressions.
+    # A member must BOTH (a) be unable to evaluate its ARGUMENT — what the quoted
+    # fragment rule below asks — AND (b) not execute its STDIN, which is what the
+    # here-document pre-pass asks. The four current members satisfy both, so the
+    # value is shared rather than duplicated into a second set that could drift from
+    # this one (keeping two matchers is what let the arms drift apart before). A
+    # verb that satisfies (a) but not (b) — `cat` and `tee` do not execute stdin, but
+    # any stdin-executing verb would — is a fail-open on the pre-pass while still
+    # sound here, so BOTH tests must be answered before adding a member. `cat` and
+    # `tee` are plausible additions that would remove the R-4 false positive; they
+    # are deliberately NOT added here, because membership risk does not belong in a
+    # change whose job is to narrow.
     script_q1="'"
     script_q2='"'
     script_bs='\'
@@ -1262,12 +2061,34 @@ case "$TOOL_NAME" in
     script_norm_raw=""
     script_norm_ok=1
 
-    # Heredocs are outside the model — see THE INVARIANT above. Latch suppression
-    # off for the whole command rather than reason about a body line. This reuses
-    # script_qbail, whose meaning is already "stop vouching for anything".
-    case "$COMMAND" in
-      *'<<'*) script_qbail=1 ;;
-    esac
+    # HERE-DOCUMENT PRE-PASS. What stood here was a blunt latch —
+    # `case "$COMMAND" in *'<<'*) script_qbail=1` — which switched suppression off
+    # for ANY command containing `<<`, including text this loop had already
+    # adjudicated correctly. It was over-broad in three separate ways: it matched a
+    # `<<` inside a QUOTED argument, where the characters are text and not an
+    # operator; it matched a here-STRING `<<<`, which is one word and needs no
+    # model; and it disarmed the whole command for a here-document with nothing to
+    # do with the quoted argument in question. Measured: `gh … --body 'note; bash
+    # <x>.sh'` is ALLOWED, and the same bytes plus an unrelated trailing `<<'X'`
+    # BLOCK. That is the machinery working and then being switched off.
+    #
+    # The pass below replaces the latch with a model of the construct and KEEPS the
+    # latch for everything the model declines, so the fail-closed posture is
+    # preserved for every shape it does not cover. script_qbail is reused because
+    # its meaning is already "stop vouching for anything".
+    script_hdstripped="$COMMAND"
+    script_hdbail=0
+    script_heredoc_prescan
+    if [ "$script_hdbail" -eq 1 ]; then
+      script_qbail=1
+      script_hdstripped="$COMMAND"
+    fi
+
+    # Separator substitution, on the pre-pass output. Excised bodies are already
+    # gone; a declined command reaches this line as $COMMAND verbatim.
+    script_segments="${script_hdstripped//;/$'\n'}"
+    script_segments="${script_segments//&/$'\n'}"
+    script_segments="${script_segments//|/$'\n'}"
 
     while IFS= read -r script_seg; do
       # Quote state at the START of this segment, carried in from everything before
@@ -1458,12 +2279,15 @@ case "$TOOL_NAME" in
       # of a token may ADD coverage, it may never VETO it.
       #
       # AND IT COSTS THE EXEC ARM NOTHING — provable, not asserted. A token only
-      # reaches the new view if its NORMALIZED BASENAME is exactly `bash`, `sh`, `zsh`,
-      # `source` or `.`. None of those carries a `.sh` or `.bash` suffix, so no such
-      # token could ever have satisfied the exec arm's operand domain: the exec arm
-      # never returned a verdict and never wrote a drain row for any of them. Arm
-      # F1-QVERB-ctl-exec is the control — a quoted NON-verb command word must still
-      # reach exec and still flag — and it was green before this change.
+      # reaches the new view if its NORMALIZED BASENAME is exactly one of the verb
+      # literals: `bash`, `sh`, `zsh`, `python`, `python3`, `perl`, `ruby`, `node`,
+      # `source` or `.`. THE PROOF IS RE-ARGUED FOR THE NEW MEMBERS RATHER THAN
+      # INHERITED: none of the five added literals carries `.sh`, `.bash`, `.py`,
+      # `.pl`, `.pm`, `.rb`, `.js`, `.mjs` or `.cjs` either, so no such token could
+      # ever have satisfied the exec arm's operand domain even after that domain was
+      # widened to the union — the exec arm never returned a verdict and never wrote
+      # a drain row for any of them. Arm F1-QVERB-ctl-exec is the control — a quoted
+      # NON-verb command word must still reach exec and still flag.
       #
       # ORDER IS LOAD-BEARING, UNCHANGED: the exec discriminator stays LAST, so
       # `/bin/bash` and `/bin/.` keep resolving to their own arms rather than being
@@ -1471,11 +2295,42 @@ case "$TOOL_NAME" in
       # that matters here: it missed the raw verb set AND was then exempted by the exec
       # arm's system-bin set, so the interpreter binary itself carried its operand past
       # both arms (arm F1-QVERB-abs).
+      #
+      # AND IT IS WHY THE INTERPRETER SET IS CLOSED EXACT LITERALS RATHER THAN A GLOB.
+      # This `case` runs BEFORE the exec discriminator and SUPPRESSES it on a match.
+      # A trailing glob per family — `python3.[0-9]*` for the versioned spellings —
+      # also matches a SCRIPT named `python3.9-wrapper.sh`, which would classify as an
+      # interpreter, stop being its own adjudicated subject, and turn a direct
+      # execution the exec arm adjudicates today into an ALLOW. A widening whose
+      # implementation NARROWS is strictly worse than the residual it closes, and
+      # nothing here asserts that an arbitrary `.sh` name is not a verb, so it would
+      # be silent. Versioned spellings stay a DECLARED RESIDUAL; the safe way to close
+      # them is an order change running a slash-bearing token's exec test first, which
+      # is the operand-walk's neighbourhood and not this one's.
       script_verb=""
       script_word=""
+      # THE INTERPRETER BASENAME THE CLASSIFIER DECIDED ON, captured at the two
+      # points below that already compute one, so script_interp_noexec_flag is
+      # asked about the same token this `case` matched rather than re-deriving it
+      # downstream from a view the classifier did not use. Reset per segment,
+      # beside script_verb, so a previous segment's interpreter cannot leak into
+      # this one's parse-only decision.
+      script_interp_base=""
+      # THE OPERAND DOMAIN THIS SEGMENT ADJUDICATES AGAINST — the interpreter's
+      # answer to "what can I execute", resolved once here and read at the three
+      # call sites below instead of a literal `interp`. Reset per segment beside
+      # script_interp_base, for the same leak reason.
+      #
+      # THE DEFAULT IS `interp`, WHICH IS WHAT MAKES THE SHELL ARMS UNCHANGED. Every
+      # path that reaches a call site without a classified interpreter — and every
+      # basename script_set_interp_domain does not name, the shell trio included —
+      # reads the same `*.sh` domain the call sites used to name literally.
+      script_interp_domain="interp"
       case "${script_tokens[$script_hidx]##*/}" in
-        bash|sh|zsh) script_verb="interp" ;;
-        source|.)    script_verb="source" ;;
+        bash|sh|zsh|python|python3|perl|ruby|node)
+                     script_verb="interp"; script_interp_base="${script_tokens[$script_hidx]##*/}"
+                     script_set_interp_domain "$script_interp_base" ;;
+        source|.)    script_verb="source"; script_interp_domain="source" ;;
       esac
       if [ -z "$script_verb" ]; then
         normalize_script_token "${script_tokens[$script_hidx]}"
@@ -1488,8 +2343,10 @@ case "$TOOL_NAME" in
         # core/rules/bypass-mode-readiness/block-destructive.md rather than half-closed.
         if [ "$script_norm_ok" -eq 1 ]; then
           case "${script_norm_out##*/}" in
-            bash|sh|zsh) script_verb="interp" ;;
-            source|.)    script_verb="source" ;;
+            bash|sh|zsh|python|python3|perl|ruby|node)
+                         script_verb="interp"; script_interp_base="${script_norm_out##*/}"
+                         script_set_interp_domain "$script_interp_base" ;;
+            source|.)    script_verb="source"; script_interp_domain="source" ;;
           esac
         fi
       fi
@@ -1686,13 +2543,35 @@ case "$TOOL_NAME" in
       # operand, where script_operand_implicated reads BOTH views and the
       # unresolvable deny is reachable.
       #
-      # NET DIRECTION, which is the property to check any edit against: a token can
-      # move from "operand that no arm claimed" to "skipped", and the walk then
-      # reaches a LATER token that may be adjudicated. It can never move a token out
-      # of a domain that claimed it. So the change can only turn an ALLOW into a
-      # BLOCK, never the reverse.
+      # NET DIRECTION. For the FLAG-SHAPE rule immediately above, the direction is
+      # one-way: a token can move from "operand that no arm claimed" to "skipped",
+      # and the walk then reaches a LATER token that may be adjudicated; it can never
+      # move a token out of a domain that claimed it, so that rule can only turn an
+      # ALLOW into a BLOCK. The arity step added below preserves the same guarantee
+      # for the token it consumes, by ADJUDICATING each argument rather than merely
+      # stepping over it — consuming alone would move a claimed token out of
+      # adjudication. Check any arity edit against that, first.
+      #
+      # THE ONE-WAY CLAIM DOES NOT EXTEND TO THE WALK'S VERDICTS AS A WHOLE, and an
+      # earlier form of this note over-reached by saying it did. Arity changes WHICH
+      # TOKEN IS THE OPERAND, and that changes post-walk ROUTING: when an option's
+      # argument is `-c` or `--`, the walk's own labels no longer see it and a
+      # segment that used to route through the cmode loop — which adjudicates every
+      # remaining token — now routes through the single-operand branch. Measured
+      # against the pre-arity hook over 4775 payloads: 55 ALLOW -> BLOCK and 12
+      # BLOCK -> ALLOW. The property that actually binds is stated on
+      # script_adjudicate_optarg: every BLOCK -> ALLOW must be a PRECISION
+      # improvement the real interpreter agrees with, never an escape — and that is
+      # checked against the interpreter, not argued from this code.
       script_idx=$(( script_hidx + 1 ))
       script_cmode=0
+      # Is the interpreter in a parse-only mode AS OF THE LAST OPTION TOKEN SEEN?
+      # Not "was a parse-only flag ever present" — the shells resolve this mode
+      # last-one-wins, so the walk carries the RUNNING state and each stepped-over
+      # token reassigns it (see the `-*)` arm). Reset per segment beside
+      # script_cmode; read once, after the walk, together with it. 0 is both the
+      # initial value and the fail-safe one: it exempts nothing.
+      script_noexec=0
       while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
         script_ftok="${script_tokens[$script_idx]}"
         case "$script_ftok" in
@@ -1702,7 +2581,15 @@ case "$TOOL_NAME" in
             if [ "$script_norm_ok" -eq 1 ]; then
               case "$script_norm_out" in
                 -*)
-                  if ! script_operand_implicated "$script_verb"; then
+                  # THE DOMAIN, NOT THE VERB. `$script_verb` is the three-value
+                  # CLASS (interp | source | exec); the domain is what the
+                  # interpreter can execute, and those stopped being the same thing
+                  # when the non-shell interpreters were admitted. Asking the class
+                  # here would test a `-`-normalizing token under `python3` against
+                  # the SHELL suffix set and find no claim, skipping a token the
+                  # Python domain claims — the exemption widening this walk's own
+                  # comment forbids.
+                  if ! script_operand_implicated "$script_interp_domain"; then
                     script_ftok="$script_norm_out"
                   fi
                   ;;
@@ -1781,16 +2668,286 @@ case "$TOOL_NAME" in
           -c)
             if [ "$script_verb" = "interp" ]; then script_cmode=1; fi
             script_idx=$(( script_idx + 1 )); break ;;
-          -*) script_idx=$(( script_idx + 1 )) ;;
+          -*)
+            # PARSE-ONLY DETECTION — AN ASSIGNMENT OF THE *CURRENT EFFECTIVE STATE*,
+            # NOT A LATCH. Asked of the INTERPRETER, about the same token the walk is
+            # about to skip (raw when the raw view decided, normalized when it did not
+            # — script_ftok already carries whichever view won above). The skip itself
+            # is UNCHANGED: this records the mode the interpreter is in and adjudicates
+            # nothing on its own.
+            #
+            # WHY AN ASSIGNMENT. `noexec` is a shell MODE, and every shell in the table
+            # resolves mode options LAST-ONE-WINS. An earlier form of this block set the
+            # flag to 1 on first sight and never cleared it, so a later token that turns
+            # noexec back OFF left the hook believing the invocation was parse-only while
+            # the interpreter EXECUTED the operand. Measured on the reference host with a
+            # runtime-assembled marker (so `-v`/`-x` echoing the source cannot forge it):
+            #   bash -n +n /dev/stdin        -> marker prints   (EXECUTES)
+            #   bash -n +o noexec /dev/stdin -> marker prints   (EXECUTES)
+            #   zsh  -n +-noexec /dev/stdin  -> marker prints   (EXECUTES)
+            #   bash -n /dev/stdin           -> silent          (control: really inert)
+            # Reading "was a set-spelling ever seen" answers a question the shell does
+            # not ask. Reading the LAST token to speak answers the one it does.
+            #
+            # THE REVOCATION IS DELIBERATELY NOT A CLEARING TABLE, and that asymmetry is
+            # the whole design. A table of clear-spellings symmetric to the set-table
+            # fails OPEN on omission: one unlisted way of writing "noexec off" leaves the
+            # parse-only claim standing and the segment is exempted while it runs — the
+            # identical failure direction `3f364a59` cited when it refused an arity table
+            # as the TERMINATION predicate. Parse-only status is granted ONLY by positive
+            # recognition in script_interp_noexec_flag and is REVOKED BY EVERY TOKEN THE
+            # WALK STEPS OVER, whatever it is spelled.
+            #
+            # THE GUARANTEE IS SCOPED TO STEPPED-OVER TOKENS, AND AN EARLIER FORM OF THIS
+            # NOTE OVERSTATED IT. It said "there is nothing to omit" and "a spelling this
+            # file has never seen cannot produce a parse-only verdict; it can only cost an
+            # over-block" — unqualified, of the whole predicate. That holds for every token
+            # the walk STEPS OVER and FAILS for a token the walk ENDS ON, because the
+            # revoke sits below both breaks (see the advance-past arm below). For a token
+            # that ends the walk an earlier grant SURVIVES, and what keeps that safe is
+            # OPERAND ADJUDICATION, not this predicate. State the property that way and it
+            # is decidable per token; state it unqualified and it is simply false.
+            #
+            # THE BOUNDARY HAS ONE LIVE FAMILY, AND IT IS INHERITED, NOT INTRODUCED HERE.
+            # A token whose leading quote closes early — `""+n`, `''+n`, `'+'n`, `"-"n` —
+            # is marked unresolvable by normalize_script_token, so it breaks at the
+            # script_norm_ok test ABOVE the revoke and an earlier `-n` grant stands:
+            #   bash -n ""+n <unlisted>.sh  -> ALLOW  (the shell runs it; `""+n` IS `+n`)
+            #   bash -n   +n <unlisted>.sh  -> BLOCK  (same invocation, unquoted)
+            # The same family ALLOWs on `origin/main`, so this release introduces none of
+            # it, and the shape that proves WHERE the allow comes from carries no `-n` at
+            # all: `bash ""-x <unlisted>.sh` ALLOWs on `origin/main` and here alike. The
+            # cause is the unresolvable-operand path, not noexec. A symmetric clear on that
+            # break is therefore MEASURABLY INERT — it was built and measured and the shape
+            # still ALLOWs — so it is deliberately NOT shipped: it would add a fourth
+            # enumeration and close nothing. Arms NOEXEC-QSPLIT-* pin the family and
+            # NOEXEC-QSPLIT-M* pins the inertness; closing it is the operand path's job.
+            #
+            # FAIL-SAFE DIRECTION, PER BRANCH. Recognised set-spelling -> 1 (exempt) is
+            # the ONLY path to parse-only, and it is exactly today's measured row. Every
+            # other token THE WALK STEPS OVER -> 0, which does not allow anything: it
+            # routes the segment into the ordinary allowlist adjudication below. Within
+            # that class, unknown means REFUSED, never EXEMPT. A token the walk ENDS ON is
+            # outside the class and does not revoke — deliberately, per the advance-past
+            # arm — so there "unknown" leaves the prior state standing and the operand
+            # adjudication below is what decides.
+            #
+            # THE CONSUMED ARGUMENT OF AN ARITY OPTION NEEDS NO REVOCATION OF ITS OWN,
+            # and that is a property of the two tables rather than an assumption: every
+            # member of script_interp_optarg_flag (`--rcfile --init-file -O +O -o +o
+            # --emulate +-emulate`) is absent from script_interp_noexec_flag (`-n`), so
+            # the option ALWAYS revokes before its argument is consumed. `bash -n -o
+            # noexec <script>` is revoked by `-o`, not by `noexec`. Adding an
+            # argument-taking option to the noexec table would break that and is why the
+            # two tables are neighbours.
+            if [ "$script_verb" = "interp" ]; then
+              if script_interp_noexec_flag "$script_interp_base" "$script_ftok"; then
+                script_noexec=1
+              else
+                script_noexec=0   # M-NOEXEC-REVOKE (mutation target; pinned by NOEXEC-M1)
+              fi
+            fi
+            script_idx=$(( script_idx + 1 ))
+            # OPTION ARITY — the one thing this walk did not know. It stepped over
+            # `-*` a token at a time and called the first non-option the operand,
+            # so an option that takes a SEPARATE argument left that argument in the
+            # operand slot. Two failures, one cause:
+            #   `bash --rcfile <allowlisted> <unlisted>` adjudicated the rcfile and
+            #     never saw the script bash runs — an unlisted script admitted; and
+            #   `bash --rcfile -n <unlisted>` offered `-n` to the noexec table as a
+            #     FLAG, when bash had taken it as the rcfile FILENAME, so the
+            #     parse-only exemption above fired on an invocation that executes.
+            # Consuming the argument closes both, because the walk then continues
+            # to the token the interpreter will really run.
+            #
+            # ORDER IS LOAD-BEARING: the argument is consumed AFTER the noexec test
+            # of its own option and BEFORE the next iteration, so it is never itself
+            # offered to the noexec table. That is the half that closes the second
+            # failure, and reordering these two blocks reopens it.
+            #
+            # THE ARGUMENT IS STILL ADJUDICATED — see script_adjudicate_optarg for
+            # why that is required rather than tidy. Consuming without adjudicating
+            # would move a token out of a domain that claimed it, which is the one
+            # direction the NET DIRECTION note above forbids for this step.
+            #
+            # `-c` cannot reach here AS THE OPTION (its own label breaks the walk
+            # above), and a trailing option with no argument left on argv is bounded
+            # by the index test rather than reading past the end.
+            #
+            # THE ARGUMENT IS CONSUMED UNCONDITIONALLY, INCLUDING WHEN IT IS `--` OR
+            # `-c`, AND DECLINING THOSE TWO WAS TRIED AND IS WRONG. Consumption
+            # happens before the walk's own `--)` and `-c)` labels can see the token,
+            # so when an arity option's argument is literally `-c` the cmode flag
+            # stays 0 where it previously became 1 and the post-walk route changes
+            # from the cmode loop to the single-operand branch. That is a REAL change
+            # in verdicts and it is not one-directional — see the NET DIRECTION note
+            # above, which is corrected accordingly. Declining to consume the two
+            # tokens looks like the tidy fix and it opens a hole:
+            #
+            #   bash --rcfile -- -c <script>   EXECUTES <script>. Measured, with an
+            #     executable marker: rc=0 and the marker prints. `--` is the rcfile
+            #     FILENAME, not an end-of-options marker, and `-c` is a real
+            #     command-mode flag. If the walk declines `--`, its `--)` label
+            #     breaks the walk and takes `-c` as the operand — a token that claims
+            #     no domain — and the whole segment is ALLOWED. Consuming keeps the
+            #     segment blocked. This shape is ALLOW on the pre-arity hook, BLOCK
+            #     here, and ALLOW again under a decline: declining re-opens it.
+            #
+            #   bash --rcfile -c -n <script>   is genuinely INERT (measured: rc=0, no
+            #     output), and bash --rcfile -c <a> <b> runs <a> — precisely the
+            #     token the operand branch adjudicates. Declining `-c` turns both of
+            #     those correct verdicts back into over-blocks.
+            #
+            # So `--` and `-c` are consumed like any other argument, because that is
+            # what the interpreter does with them in this position.
+            if [ "$script_verb" = "interp" ] \
+               && [ "$script_idx" -lt "${#script_tokens[@]}" ] \
+               && script_interp_optarg_flag "$script_interp_base" "$script_ftok"; then
+              script_adjudicate_optarg "${script_tokens[$script_idx]}"
+              script_idx=$(( script_idx + 1 ))
+            fi
+            ;;
           *) # M-FWALK-ADVANCE - mutation target (AC4; pinned by AC-D022-M1)
+            # THE ADVANCE-PAST ARM AND THE SKIP ARM ARE ONE JUDGEMENT, SO THEY MUST
+            # ASK THE TOKEN THE SAME QUESTIONS. `3f364a59` replaced `*) break` with a
+            # domain test, and the reason it gives is that a token the domain does not
+            # claim is NOT THE OPERAND — which is the same statement the `-*)` arm above
+            # makes about a token it skips. Once the walk ADVANCES PAST a token here,
+            # that token is an option by the walk's own reasoning, and an option whose
+            # arity is never asked leaves its ARGUMENT in the stream. The `-*)` arm asks;
+            # this one did not, and the whole `+`-leading surface reaches only this arm.
+            #
+            # THAT ASYMMETRY IS AN EXECUTION HOLE AND IT IS THIS MERGE THAT OPENS IT.
+            # Neither side has it alone. `origin/main` advances past `+-emulate` and then
+            # adjudicates the script, because main has no parse-only exemption to fool.
+            # This branch never advances past `+-emulate` at all, because `*) break` took
+            # it as the operand. Combine them — main's advance plus this branch's
+            # parse-only exemption — and `zsh +-emulate -n <unlisted>.sh` walks past
+            # `+-emulate`, hands the FOLLOWING `-n` to the noexec table as a flag, and
+            # exempts a segment the real shell EXECUTES. Measured, controls firing:
+            # `zsh +-emulate -n -c 'echo X'` prints X while `zsh -n -c 'echo X'` is
+            # silent, because `+-emulate` eats the `-n` as the emulation MODE NAME.
+            # Asking arity here is what closes it, and it closes the CLASS rather than
+            # that one spelling.
+            #
+            # THIS IS THE OVERLAY `3f364a59` NAMED, NOT A SPECIAL CASE BESIDE IT. That
+            # commit rejected an arity table as the TERMINATION predicate because such a
+            # table fails OPEN on omission, and said in the same breath that closing its
+            # declared residual R1 "is the one job an arity overlay would be right for,
+            # and layered ON TOP of this walk its failure direction inverts back to safe
+            # (an omitted flag falls through to the domain test, not to an unguarded
+            # ALLOW)". That is exactly the shape here: the domain test still decides where
+            # the walk STOPS, and arity only decides how far it STEPS. An arity row this
+            # table omits costs an over-block, never an exemption. Both properties are
+            # kept; neither side wins.
+            #
+            # THE DOMAIN ARGUMENT IS RE-POINTED, AND `3f364a59` ASKED FOR THAT BY NAME.
+            # Its note says a successor that SPLITS interpreter DOMAIN from verb CLASS
+            # "must re-point this ONE argument to that domain variable, or a non-shell
+            # interpreter's real script is tested against the SHELL suffix set, found
+            # unclaimed, walked past, and silently under-adjudicated -- a fail-open
+            # re-introduced by an otherwise clean merge." This branch IS that successor:
+            # script_interp_domain exists here and does not exist on main, so main's
+            # `$script_verb` would test `python3 <path>.py` against the `*.sh` set. Taking
+            # main's arm verbatim is the fail-open it predicted. Arm FWALK-DOM-py is that
+            # control.
+            #
+            # NOEXEC IS NEVER *GRANTED* HERE, AND IS ALWAYS *REVOKED* HERE. An earlier
+            # form of this note said noexec is "deliberately not asked here" and stopped
+            # there; that was right about the direction it refused and silent about the
+            # one it owed. Both halves follow from the same observation it already makes.
+            #
+            #   GRANT — still refused, unchanged. A noexec question that could answer YES
+            #   on a `+` token would CREATE an inertness claim and move BLOCK -> ALLOW on
+            #   an unmeasured surface. `+n` is "turn noexec OFF", the exact inversion, so
+            #   a symmetric widening would be wrong on its most obvious member.
+            #
+            #   REVOKE — owed, and its absence was the defect. That same sentence says a
+            #   `+` token can turn noexec OFF; a walk that steps over one while still
+            #   holding a parse-only claim from an earlier `-n` reports inert on an
+            #   invocation the shell RUNS. `bash -n +n <script>` and `zsh -n +-noexec
+            #   <script>` reach ALLOW that way, and the whole `+` surface arrives only at
+            #   this arm. Revoking is the ALLOW -> BLOCK direction this arm already
+            #   accepts for arity, so it is the same trade, not a new one.
+            #
+            # THE REVOKE IS UNCONDITIONAL WITHIN THIS ARM — no test, no table, nothing to
+            # omit — AND THAT IS THE WHOLE OF ITS SCOPE. Anything the walk advances past
+            # here is, by this arm's own reasoning, an option or an option's argument
+            # rather than the operand; none of them can be a recognised parse-only
+            # spelling, because those are `-`-leading and are answered by the `-*)` arm
+            # above. So the honest state after stepping over one is "not known to be
+            # parse-only", which is 0. It says NOTHING about a token that ENDS the walk —
+            # that is the next paragraph's subject and the predicate's declared residual,
+            # and reading this sentence as a property of the whole predicate is the
+            # overstatement corrected at the `-*)` arm above.
+            #
+            # IT SITS BELOW BOTH BREAKS ON PURPOSE. A token that ENDS the walk — an
+            # unresolvable token, or the domain-claimed operand — is not stepped over and
+            # must not revoke, or `bash -n <script>.sh` would revoke on the script itself
+            # and the card's entire value would be lost. Arms PARSE-07 and NOEXEC-CTL-01
+            # pin that boundary behaviourally and NOEXEC-ORD-01 pins the LINE ORDER
+            # itself, so hoisting the revoke above either break is caught as a structural
+            # edit rather than only as a behavioural regression.
+            #
+            # AND THAT ORDERING IS EXACTLY WHERE THE PREDICATE'S GUARANTEE STOPS. The two
+            # breaks above are the tokens the revoke never sees, so a grant made earlier
+            # survives them; the `-*)` arm's note carries the measured residual (the
+            # leading-quote-closes-early family) and the evidence that clearing here would
+            # be inert. The right reading of this ordering is a declared trade — the
+            # card's value in exchange for a residual the OPERAND path owns — and not a
+            # claim that the predicate cannot fail open.
             normalize_script_token "${script_tokens[$script_idx]}"   # M-FWALK-BODY
             if [ "$script_norm_ok" -eq 0 ]; then break; fi
-            if script_operand_implicated "$script_verb"; then break; fi
+            if script_operand_implicated "$script_interp_domain"; then break; fi
+            if [ "$script_verb" = "interp" ]; then
+              script_noexec=0   # M-NOEXEC-REVOKE (mutation target; pinned by NOEXEC-M1)
+            fi
+            # The NORMALIZED view is what the arity table is asked about, because the
+            # raw view is what got us here: a `+`-leading token never reaches the flag
+            # normalization above, so `'+-emulate'` (quoted) would otherwise miss the
+            # table and fall to the fail-OPEN side. Captured before the consumption
+            # below re-normalizes into the same globals.
+            script_fadv="$script_norm_out"
             script_idx=$(( script_idx + 1 ))
+            if [ "$script_verb" = "interp" ] \
+               && [ "$script_idx" -lt "${#script_tokens[@]}" ] \
+               && script_interp_optarg_flag "$script_interp_base" "$script_fadv"; then
+              script_adjudicate_optarg "${script_tokens[$script_idx]}"
+              script_idx=$(( script_idx + 1 ))
+            fi
             ;;
         esac
       done
       [ "$script_idx" -lt "${#script_tokens[@]}" ] || continue
+
+      # PARSE-ONLY EXEMPTION, AND WHAT script_noexec MEANS AT THIS GATE: the FINAL
+      # EFFECTIVE noexec state after the whole flag span, NOT "a `-n` was seen".
+      # Under `bash -n <script>` (and `sh`/`zsh`) the interpreter PARSES and exits —
+      # it executes nothing, whatever the operand is — but `bash -n +n <script>`
+      # carries the same bare `-n` and RUNS, and the walk above has already revoked
+      # the grant, so this conjunct is false and the segment is adjudicated. The
+      # exemption is therefore conditional on the RESOLVED state, never on a `-n`
+      # having appeared. Inertness under that resolved state
+      # is a property of the interpreter's MODE, fully determined by argv, so this
+      # needs no path resolution and correctly covers the non-allowlisted,
+      # variable-bearing and quote-unresolvable operands that otherwise hard-block.
+      # The refused-but-inert case is what this rule was blocking that no arm
+      # declares: a syntax check runs nothing.
+      #
+      # THE `-c` EXCLUSION IS BELT AND BRACES, because the two orders fail
+      # differently and only one of them is closed structurally:
+      #   - `bash -c 'echo hi' -n <path>` — the walk BREAKS at `-c`, so the
+      #     trailing `-n` is never examined as a flag and script_noexec stays 0.
+      #     That invocation genuinely executes, and the break is what keeps it
+      #     refused. Structural, not asserted.
+      #   - `bash -n -c '…'` — here `-n` IS seen first and does set the flag, so
+      #     the structure alone would exempt it. The script_cmode conjunct below
+      #     declines it. Reasoning about whether an arbitrary program string is
+      #     inert under noexec is a second-order argument a security control
+      #     should not carry.
+      if [ "$script_noexec" -eq 1 ] && [ "$script_cmode" -eq 0 ]; then
+        continue
+      fi
 
       if [ "$script_cmode" -eq 1 ]; then
         while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
@@ -1801,8 +2958,12 @@ case "$TOOL_NAME" in
           # segment splitting routinely hands it fragments like `'echo`. The gate
           # keeps those inert (arm F1-FP-cmode) while a fragment whose real name
           # ends `.sh` is still adjudicated.
-          if script_operand_implicated interp; then
-            check_script_target "$script_cand" "$script_norm_ok"
+          if script_operand_implicated "$script_interp_domain"; then
+            if [ "$script_interp_domain" = "interp" ]; then
+              check_script_target "$script_cand" "$script_norm_ok"
+            else
+              destructive_022_interp_verdict "$script_cand" "$script_norm_ok"
+            fi
           fi
           script_idx=$(( script_idx + 1 ))
         done
@@ -1830,8 +2991,18 @@ case "$TOOL_NAME" in
             check_script_target "$script_cand" "$script_norm_ok"
           fi
         else
-          if script_operand_implicated interp; then
-            check_script_target "$script_cand" "$script_norm_ok"
+          # THE SHELL TRIO'S PATH IS THE UNEDITED ONE, AND THE BRANCH IS HOW THAT IS
+          # ENFORCED RATHER THAN ASSERTED. Domain `interp` — `bash`, `sh`, `zsh` and
+          # every basename script_set_interp_domain does not name — still calls
+          # check_script_target directly and still blocks unconditionally. Only a
+          # newly-admitted interpreter reaches the phase-gated router, so admitting
+          # python cannot soften the arm that was always-enforce before it.
+          if script_operand_implicated "$script_interp_domain"; then
+            if [ "$script_interp_domain" = "interp" ]; then
+              check_script_target "$script_cand" "$script_norm_ok"
+            else
+              destructive_022_interp_verdict "$script_cand" "$script_norm_ok"
+            fi
           fi
         fi
       fi

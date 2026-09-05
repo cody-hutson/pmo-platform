@@ -111,6 +111,26 @@
 # repository. Scope is decided by the session's working directory, not by repository
 # identity. Operators who place worktrees outside the workspace root must either keep
 # them inside it or accept that coverage does not follow the clone.
+#
+# THE CONVERSE, AND WHERE IT IS ANSWERED (#6115)
+# ----------------------------------------------
+# The same sentence cuts the other way: a SECOND repository checked out BENEATH the
+# governed root is a strict descendant, so it is in scope here — and should be. That is
+# correct for 12 of the 13 consumers; block-egress.sh and block-gh-path-leak.sh MUST keep
+# firing in a nested repository, which may be public, and silencing them there would trade
+# a false positive for lost protection on a public surface.
+#
+# But a hook whose RULE is written against THIS repository's directory layout needs a
+# second, different question — "is this repository the platform?" — and asking it HERE
+# would change the bound for all 13 consumers in order to fix one. So it is asked
+# DOWNSTREAM, local to the hook that needs it: core/hooks/block-draft-files.sh carries a
+# repo-identity gate as its layer 4, immediately after this gate returns. Identity is
+# deliberately outside THIS lib's contract, and the header sentence above is the statement
+# of that boundary, not an omission from it.
+#
+# Read the two together as: this lib decides WHERE enforcement applies (workspace scope);
+# a layout-specific rule decides separately WHETHER ITS OWN repository is the one it
+# describes. Neither answers the other's question.
 
 # _sg_canonicalize PATH — echo the physical (symlink-resolved) absolute form of PATH
 # when it names an existing directory; otherwise echo PATH unchanged with trailing

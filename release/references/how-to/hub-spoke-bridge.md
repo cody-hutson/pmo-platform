@@ -1815,8 +1815,20 @@ incorrectly is a finding to report, never an obstacle to route around.
 
 **The line between rewording and evading.** Rewording changes what the text
 SAYS. Evading changes only how the text is SPELLED, so a matcher misses it.
-Three things that look like evasion and are not:
+Four things that look like evasion and are not:
 
+- Retrying a refused script by the invocation form its allowlist **already
+  permits**. `BLOCK-DESTRUCTIVE-022` matches the path **as written** — a bash
+  glob against argv, with no realpath and no canonicalization — and its
+  allowlist is spelled overwhelmingly in repository-relative form. The identical
+  script is therefore refused by an absolute path from a session worktree and
+  permitted by its repository-relative path from the repository root. **Try that
+  retry first,** ahead of proposing an allowlist entry; `CLAUDE_HOOK_BYPASS` is
+  an operator-only escape hatch and is never a spoke's move at all. Same script,
+  same tool, a spelling the control was written to admit — the control is
+  satisfied, not dodged. **The limit is real:** if no permitted form matches,
+  the refusal is not about spelling and the block is correct. Stop hunting for a
+  form that matches and surface it.
 - Choosing a genuinely different, genuinely safer operation — regenerating a
   branch with `checkout -B` rather than a hard reset changes the operation, not
   merely its spelling. § Hook-Safe Chip Git Idioms prescribes exactly that, at

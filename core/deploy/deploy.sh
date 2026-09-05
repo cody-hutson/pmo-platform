@@ -3540,22 +3540,89 @@ _c35_compute_verdict() {
 # rebuild-stable content-manifest hash of a STAGED REBUILD of source vs the committed
 # baseline sidecar (packages/<skill>.skill.sha256) — mtime-independent, so a
 # committed-stale package is caught even on a fresh checkout. mtime is a cheap
-# non-verdict pre-filter only. python3/unzip absent → degrades to the
-# baseline-vs-live-package content compare + the mtime signal (logged), matching the
-# graceful-skip posture of the deploy-time Check 7.
+# non-verdict pre-filter only. Where the staged rebuild cannot run — a missing
+# interpreter, a missing unzip, or a packager dependency that will not import — the
+# body degrades to the baseline-vs-live-package content compare + the mtime signal
+# AND WITHHOLDS ITS VERDICT for every skill so degraded (NOT-EVALUATED, below).
+#
+# THE mtime FALLBACK IS INERT ON A FRESH CHECKOUT AND IS NOT A SECOND LINE OF DEFENCE.
+# Where the staged rebuild cannot run, both degraded branches below fall back to
+# c7_src_newer — source mtime vs package mtime. A fresh `git checkout` sets every
+# working-tree file to checkout time, so that comparison is FALSE for every skill by
+# construction, and neither branch can distinguish a current package from a stale one.
+# This is INERT, not merely weak: there is no state in which it catches a
+# committed-stale package on a fresh checkout, so there is no signal here to repair.
+# It is retained only because it is a real signal on an operator machine, where
+# mtimes are meaningful.
+#
+# WHICH IS WHY A DEGRADED RUN NO LONGER REPORTS FRESH. Those branches used to fall
+# through to the FRESH line, so "every package is current" and "the arm that would
+# have told us never ran" were the same observable — a caller had to establish the
+# precondition itself, out of band, from a WARN line nothing obliged it to read. The
+# body now counts the skills whose content arm did not conclude (c7_unmeasured) and
+# emits NOT-EVALUATED instead, so the withheld verdict is carried IN the protocol line
+# the caller already parses rather than alongside it.
 #
 # Check 7 has no network anchor, so the surface argument does not change the verdict;
 # it is accepted for signature parity with the other _cNN_compute_verdict bodies.
 #
 # Echoes ONE protocol line on stdout (the CALLER maps it to ++ISSUES or an exit code);
 # per-skill detail goes to stderr:
-#   FRESH <n>                all n rostered skill package(s) content-fresh
-#   STALE <count> <csv>      count stale skill(s), comma-separated — detail to stderr
+#   FRESH <n>                            all n rostered skill package(s) content-fresh
+#   STALE <count> <csv>                  count stale skill(s), comma-separated — detail to stderr
+#   NOT-EVALUATED <unmeasured> <total> <reason>
+#                                        the staged-rebuild content arm did not conclude for
+#                                        <unmeasured> of <total> rostered skills. A WITHHELD
+#                                        verdict, never a clean one (PV-7a Register B). The
+#                                        stale counter is ABSENT, not zero (PV-7b).
+#
+# PRECEDENCE: STALE > NOT-EVALUATED > FRESH. A real finding is never suppressed by a
+# measurement outage, so every blocking behaviour that predates the third token survives
+# byte-for-byte; the only state that moves is the former false FRESH.
+
+# _c7_packager_importable — can the STAGED-REBUILD packager's REAL import chain
+# resolve, under the interpreter build_skill_to_dir actually invokes?
+#
+# WHY THE REAL CHAIN AND NOT `import yaml`. The defect this closes was a PROXY
+# failure: the guard tested the INTERPRETER (`-x /usr/bin/python3`) while the
+# packager needed a MODULE. Swapping in a narrower proxy — a hardcoded `import
+# yaml` — repeats the class the day the packager grows a second dependency. This
+# imports the packager's own entrypoint, from the packager's own working
+# directory, under the packager's own interpreter, so the assertion IS the
+# dependency closure rather than a copy of it (the same discipline PF-6 applies
+# to resolve_template_sync_source).
+#
+# Import-safe by inspection: package_skill.py and quick_validate.py each carry an
+# `if __name__ == "__main__"` guard, and their module-level code only defines
+# constants — no I/O, no side effects.
+#
+# Echoes the last line of the failure on stdout when it fails; echoes nothing and
+# returns 0 when the chain resolves.
+_c7_packager_importable() {
+  local _out _rc=0
+  _out="$( ( cd release/skills/pmo-skill-refiner 2>/dev/null \
+             && /usr/bin/python3 -c 'import scripts.package_skill' ) 2>&1 )" || _rc=$?
+  [[ $_rc -eq 0 ]] && return 0
+  printf '%s' "$_out" | /usr/bin/tail -1 | /usr/bin/tr -s '[:space:]' ' ' | /usr/bin/cut -c1-120
+  return 1
+}
+
 _c7_compute_verdict() {
   local surface="${1:-lifecycle}"   # accepted for signature parity; verdict is surface-invariant
-  local c7_can_rebuild=true
-  [[ -x "/usr/bin/python3" ]] || c7_can_rebuild=false
-  command -v unzip >/dev/null 2>&1 || c7_can_rebuild=false
+  # CAPABILITY PROBE — supplies the REASON string only. It does NOT decide the verdict:
+  # the verdict rests on c7_unmeasured, the observed count of rostered skills whose
+  # content arm did not conclude. A capability probe that decided the verdict would be
+  # the same proxy this change removes, one layer up — it can only assert what it was
+  # written to foresee, and the original defect was a dependency nobody had foreseen.
+  local c7_can_rebuild=true c7_ne_reason="" c7_probe_msg=""
+  if [[ ! -x "/usr/bin/python3" ]]; then
+    c7_can_rebuild=false; c7_ne_reason="interpreter-missing:/usr/bin/python3"
+  elif ! command -v unzip >/dev/null 2>&1; then
+    c7_can_rebuild=false; c7_ne_reason="unzip-missing"
+  elif ! c7_probe_msg="$(_c7_packager_importable)"; then
+    c7_can_rebuild=false; c7_ne_reason="packager-import-failed:${c7_probe_msg:-no-diagnostic}"
+  fi
+  local c7_unmeasured=0
 
   local c7_total=0 c7_stale=0 c7_stale_list=""
   local skill c7_module c7_src_dir c7_pkg c7_sidecar c7_live_hash c7_baseline
@@ -3600,17 +3667,22 @@ _c7_compute_verdict() {
     # fresh checkout). Run whenever a rebuild is available; the result decides.
     if [[ "$c7_can_rebuild" == "true" ]]; then
       c7_tmp_pkgdir="$(mktemp -d)"
-      if build_skill_to_dir "$skill" "$c7_module" "$c7_tmp_pkgdir" >/dev/null 2>&1; then
+      # stdout stays suppressed — this function's stdout is the one-line verdict
+      # protocol and is captured by both callers. stderr is per-skill detail by
+      # design (see the protocol header above), so let the cause through.
+      if build_skill_to_dir "$skill" "$c7_module" "$c7_tmp_pkgdir" >/dev/null; then
         c7_rebuilt_pkg="$c7_tmp_pkgdir/${skill}.skill"
         c7_rebuilt_hash=$(skill_content_hash "$c7_rebuilt_pkg")
         if [[ -z "$c7_rebuilt_hash" ]]; then
-          printf '  WARN:  %s — rebuild produced no hashable package; baseline matched (PASS, staged-rebuild inconclusive)\n' "$skill" >&2
+          printf '  WARN:  %s — rebuild produced no hashable package; baseline matched (staged-rebuild INCONCLUSIVE — not a clean result)\n' "$skill" >&2
+          c7_unmeasured=$((c7_unmeasured + 1))
         elif [[ "$c7_rebuilt_hash" != "$c7_baseline" ]]; then
           printf '  FAIL:  %s — source content changed since build (rebuilt hash %s != committed baseline %s); rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$c7_rebuilt_hash" "$c7_baseline" "$skill" >&2
           c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"
         fi
       else
         printf '  WARN:  %s — staged rebuild failed to run; falling back to baseline-vs-package content compare\n' "$skill" >&2
+        c7_unmeasured=$((c7_unmeasured + 1))
         if [[ "$c7_src_newer" == "true" ]]; then
           printf '  FAIL:  %s — source mtime newer than package and rebuild unavailable to confirm content; rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$skill" >&2
           c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"
@@ -3620,6 +3692,10 @@ _c7_compute_verdict() {
     else
       # Degraded: no rebuild available; the baseline-vs-live-package compare already
       # passed, so the mtime pre-filter is the only remaining source-change signal.
+      # Counted UNCONDITIONALLY, once per rostered skill — NOT inside the src_newer
+      # guard below. The content arm did not conclude for this skill whether or not the
+      # pre-filter happened to fire, and it is the non-conclusion that is being counted.
+      c7_unmeasured=$((c7_unmeasured + 1))
       if [[ "$c7_src_newer" == "true" ]]; then
         printf '  FAIL:  %s — source mtime newer than package; python3/unzip unavailable to confirm by content — rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$skill" >&2
         c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"
@@ -3627,10 +3703,26 @@ _c7_compute_verdict() {
     fi
   done
 
-  if [[ $c7_stale -eq 0 ]]; then
-    printf 'FRESH %s\n' "$c7_total"
-  else
+  # One aggregate line naming the outage and its denominator, on EVERY verdict — so a
+  # STALE run still states how much of the roster went unmeasured (CIAC-4's stated
+  # denominator). Exactly one finding, naming the cause; per-skill verdicts are
+  # WITHHELD for the unmeasured skills, never guessed (PV-7c).
+  if [[ $c7_unmeasured -gt 0 ]]; then
+    printf '  WARN:  staged-rebuild content arm did not conclude for %s of %s rostered skill(s)%s\n' \
+      "$c7_unmeasured" "$c7_total" "${c7_ne_reason:+ — $c7_ne_reason}" >&2
+  fi
+
+  # PRECEDENCE: STALE > NOT-EVALUATED > FRESH. A real finding is NEVER suppressed by a
+  # measurement outage, so every blocking behaviour that existed before the third token
+  # survives unchanged; the ONLY state that moves is the former false FRESH.
+  # PV-7b: the stale counter is ABSENT from the NOT-EVALUATED line, not zero.
+  if [[ $c7_stale -gt 0 ]]; then
     printf 'STALE %s %s\n' "$c7_stale" "${c7_stale_list%,}"
+  elif [[ $c7_unmeasured -gt 0 ]]; then
+    printf 'NOT-EVALUATED %s %s %s\n' "$c7_unmeasured" "$c7_total" \
+      "${c7_ne_reason:-staged-rebuild-did-not-run}"
+  else
+    printf 'FRESH %s\n' "$c7_total"
   fi
 }
 
@@ -4100,13 +4192,27 @@ build_skill_to_dir() {
 
   # Invoke the per-skill packager from the pmo-skill-refiner module so its
   # `from scripts.quick_validate` import resolves. Emit into out_dir.
-  local repo_root rc=0
+  local repo_root rc=0 pkg_log
   repo_root="$(pwd)"
   mkdir -p "$out_dir"
+  # Capture rather than discard. The packager's stderr was previously sent to
+  # /dev/null here AND again at the _c7_compute_verdict call site, so a
+  # ModuleNotFoundError surfaced as the causeless line "staged rebuild failed to
+  # run" — 55 times per CI run, for the life of the gate, naming nothing. Emit on
+  # failure only: the packager prints progress on SUCCESS too, so unconditional
+  # pass-through would be noise.
+  pkg_log="$(mktemp)"
   (
     cd release/skills/pmo-skill-refiner || exit 1
     /usr/bin/python3 -m scripts.package_skill "$stage_dir/$skill" "$out_dir"
-  ) >/dev/null 2>&1 || rc=1
+  ) >"$pkg_log" 2>&1 || rc=1
+  if [[ $rc -ne 0 ]]; then
+    printf '  WARN:  %s — packager failed; its own output follows (the cause, not just the symptom):\n' "$skill" >&2
+    # First 20 lines, indented. `sed -n` over a FILE, never `| head` — a pipe into a
+    # short-circuiting reader is the SIGPIPE-idiom class repo-integrity.yml scans for.
+    sed -n '1,20{s/^/         /;p;}' "$pkg_log" >&2
+  fi
+  rm -f "$pkg_log"
   rm -rf "$stage_dir"
   return $rc
 }
@@ -5699,6 +5805,49 @@ _g1_03_evaluate() {
   return 1
 }
 
+# ─── flag_not_evaluated — the NOT-EVALUATED class emitter (TOP-LEVEL) ────────
+#
+# HOISTED TO TOP LEVEL DELIBERATELY; the placement is load-bearing, not stylistic.
+# Bash registers a nested function only when execution REACHES its definition, so a
+# definition sited inside cmd_check() is callable only from code that runs after that
+# point in the body. Check 7's verdict dispatch sits ~150 lines EARLIER in that same
+# function, so while this emitter was nested it was unreachable from the one caller
+# that most needs it — the "measurement did not run" arm of a content-freshness gate.
+# At top level the reachability is unconditional and independent of where any future
+# caller lands.
+#
+# The NOT-EVALUATED class means: the measurement DID NOT HAPPEN. Same structural
+# guarantee as flag_advisory_only — no `case` on any mode, no enforce branch, no ISSUES
+# increment — for the same reason: a measurement outage must never move the exit code.
+# It is a SEPARATE function, not a parameter on that one, because the two say OPPOSITE
+# things. ADVISORY means "I measured and this signal cannot gate"; NOT-EVALUATED means
+# "I did not measure." flag_advisory_only's line asserts "this check is never
+# enforce-capable", which is FALSE of an enforce-capable check that merely could not
+# read its input this run — and its ADVISORY: prefix is the greppable discriminator, so
+# two classes under one prefix re-creates the very conflation this emitter exists to
+# remove.
+#
+# WARN_LOG IS RESOLVED DEFENSIVELY, AND THE GUARD IS REQUIRED RATHER THAN DEFENSIVE
+# HABIT. cmd_check() declares `local WARN_LOG` well AFTER its Check 7 block, and this
+# script runs under `set -euo pipefail` (line 2), so an UNGUARDED expansion aborts the
+# entire run the moment this emitter is called from any caller sited above that
+# declaration. The fallback re-derives the same path the local would have held, so a
+# hoisted call logs to the identical destination.
+#
+# Per review-discipline-principles.md § 8 PV-7. The detail SHOULD name the Register A
+# status and MUST carry "this is not a clean result".
+flag_not_evaluated() {
+  local check_id="$1"
+  local detail="$2"
+  log "  NOT-EVAL: $check_id — $detail (not-evaluated; the measurement did not run — this is a withheld verdict, never a clean one)"
+  local _ts
+  _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  local _detail_escaped="${detail//\\/\\\\}"
+  _detail_escaped="${_detail_escaped//\"/\\\"}"
+  local _wl="${WARN_LOG:-$(warn_log_path)}"
+  printf '{"ts":"%s","check":"%s","evaluated":false,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$_wl" 2>/dev/null || true
+}
+
 # ─── Mode: --check ───────────────────────────────────────────────────────────
 
 cmd_check() {
@@ -6459,6 +6608,7 @@ cmd_check() {
   # emits per-skill detail to stderr; this block maps the verdict to the deploy-time
   # emit. Always-enforce: each stale skill increments ISSUES (byte-identical accounting).
   local c7_verdict c7_tok c7_rest c7_count
+  local c7_ne_unmeasured c7_ne_tail c7_ne_total c7_ne_reason
   c7_verdict="$(_c7_compute_verdict "lifecycle")"
   c7_tok="${c7_verdict%% *}"
   case "$c7_tok" in
@@ -6471,6 +6621,21 @@ cmd_check() {
       c7_count="${c7_rest%% *}"
       log "  FAIL:  ${c7_count} stale skill package(s): ${c7_rest#* } — rebuild via core/deploy/tools/build-skill-packages.sh (per-skill detail above)"
       ISSUES=$((ISSUES + c7_count))
+      ;;
+    NOT-EVALUATED)
+      # "NOT-EVALUATED <unmeasured> <total> <reason>" — a measurement OUTAGE, not a
+      # finding. flag_not_evaluated carries no mode branch and no ISSUES increment, so
+      # an outage can never move ./deploy.sh --check's exit status (PV-7c). SENTINEL-
+      # BLIND BY DESIGN: this lifecycle arm has never read the enforce sentinel (the
+      # STALE arm above is always-enforce), and D-Blocking is scoped to the CI check the
+      # Release Outcome Statement names. Stale counter deliberately ABSENT (PV-7b).
+      c7_rest="${c7_verdict#NOT-EVALUATED }"     # "<unmeasured> <total> <reason>"
+      c7_ne_unmeasured="${c7_rest%% *}"
+      c7_ne_tail="${c7_rest#* }"                 # "<total> <reason>"
+      c7_ne_total="${c7_ne_tail%% *}"
+      c7_ne_reason="${c7_ne_tail#* }"
+      flag_not_evaluated "package-freshness" \
+        "the staged-rebuild content arm did not conclude for ${c7_ne_unmeasured} of ${c7_ne_total} rostered skill(s) (${c7_ne_reason}) — the committed packages may be stale and this run cannot tell; this is not a clean result"
       ;;
     *)
       log "  FAIL:  Check 7 — unexpected verdict: $c7_verdict"
@@ -6591,31 +6756,6 @@ cmd_check() {
     local _detail_escaped="${detail//\\/\\\\}"
     _detail_escaped="${_detail_escaped//\"/\\\"}"
     printf '{"ts":"%s","check":"%s","advisory":true,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
-  }
-
-  # flag_not_evaluated — the NOT-EVALUATED class emitter: the measurement DID NOT
-  # HAPPEN. Same structural guarantee as flag_advisory_only above — no `case` on
-  # any mode, no enforce branch, no ISSUES increment — for the same reason: a
-  # measurement outage must never move the exit code. It is a SEPARATE function,
-  # not a parameter on that one, because the two say OPPOSITE things. ADVISORY
-  # means "I measured and this signal cannot gate"; NOT-EVALUATED means "I did not
-  # measure." flag_advisory_only's line asserts "this check is never
-  # enforce-capable", which is FALSE of an enforce-capable check that merely could
-  # not read its input this run — and its ADVISORY: prefix is the greppable
-  # discriminator, so two classes under one prefix re-creates the very conflation
-  # this emitter exists to remove.
-  #
-  # Per review-discipline-principles.md § 8 PV-7. The detail SHOULD name the
-  # Register A status and MUST carry "this is not a clean result".
-  flag_not_evaluated() {
-    local check_id="$1"
-    local detail="$2"
-    log "  NOT-EVAL: $check_id — $detail (not-evaluated; the measurement did not run — this is a withheld verdict, never a clean one)"
-    local _ts
-    _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    local _detail_escaped="${detail//\\/\\\\}"
-    _detail_escaped="${_detail_escaped//\"/\\\"}"
-    printf '{"ts":"%s","check":"%s","evaluated":false,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
   }
 
   # tsv_residual_rows — the RESIDUAL BUCKET for a TSV-emitting primitive's verdict
@@ -14461,7 +14601,7 @@ sys.stdout.write("".join(out) + "|")
   fi
 
 
-  # Check 71 — BLOCK-DESTRUCTIVE-022 exec-arm rollout graduation (MIXED MODE) [#5250]
+  # Check 71 — BLOCK-DESTRUCTIVE-022 rollout graduation, ALL ARMS (MIXED MODE) [#5250]
   #
   # WHAT IT ASSERTS. That the -022 exec arm's warn-mode rollout is DECIDED rather
   # than left running. It reads the arm's four committed constants and, past the
@@ -14496,97 +14636,140 @@ sys.stdout.write("".join(out) + "|")
   # DECLARED COVERAGE BOUNDARY. It asserts the constants are readable, that the
   # phase is one of the three enum values, and that the review window has not
   # elapsed unaddressed. It does NOT assert that the arm behaves as the phase says
-  # — that is the test suite's job (T-EXEC-10 pins the phase gate) — and it does not
-  # read, classify or grade drain CONTENT.
+  # — that is the test suite's job (T-EXEC-10 and T-NSI-10c/d/e pin the phase gates)
+  # — and it does not read, classify or grade drain CONTENT.
+  #
+  # PARAMETERIZED OVER A FAMILY LIST, NOT COPIED PER ARM [#6167]. -022 now carries
+  # TWO phased widenings — the exec arm and the non-shell interpreter arm — each
+  # with its own five constants, because two rollouts with two populations must be
+  # able to retreat independently. The alternative was a third verbatim copy of this
+  # block (deploy.sh already records one reuse of its shape elsewhere), and a
+  # graduation READER duplicated three ways is exactly the drift surface the
+  # register-or-remove rule exists to prevent. Two families read by one body cannot
+  # drift; three literal copies can.
+  #
+  # ADDING A THIRD ARM IS ONE WORD IN `c71_families`, plus the five constants in the
+  # hook. That is the property being bought here.
+  #
+  # THE DRAIN IS SPLIT BY THE `arm` FIELD, AND AN ABSENT FIELD READS AS `exec`.
+  # Every row written before the field existed came from the exec arm, which was the
+  # only writer, so treating an absent field as `exec` is factually correct rather
+  # than a convenient default. Without the split, one drain would report the same
+  # undifferentiated count as evidence for two independent graduation decisions.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 71: BLOCK-DESTRUCTIVE-022 exec-arm rollout graduation (deadline arm repo-derivable + enforcing; evidence arm operator-local + advisory)"
+    log "Check 71: BLOCK-DESTRUCTIVE-022 rollout graduation, per arm (deadline arm repo-derivable + enforcing; evidence arm operator-local + advisory)"
     local c71_hook="core/hooks/block-destructive.sh"
+    local c71_families="EXEC INTERP"
     if [[ ! -f "$c71_hook" ]]; then
-      log "  FAIL:  destructive-022-exec-graduation — hook source missing: $c71_hook (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
+      log "  FAIL:  destructive-022-graduation — hook source missing: $c71_hook (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
       ISSUES=$((ISSUES + 1))
     else
-      local c71_phase c71_armed c71_days c71_rows_thr c71_esc
-      c71_phase="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_PHASE=/{s/^readonly DESTRUCTIVE_022_EXEC_PHASE="\([a-z]*\)".*/\1/p;q;}' "$c71_hook")"
-      c71_armed="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_ARMED=/{s/^readonly DESTRUCTIVE_022_EXEC_ARMED="\([0-9-]*\)".*/\1/p;q;}' "$c71_hook")"
-      c71_days="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_REVIEW_DAYS=/{s/^readonly DESTRUCTIVE_022_EXEC_REVIEW_DAYS=\([0-9]*\).*/\1/p;q;}' "$c71_hook")"
-      c71_rows_thr="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_REVIEW_ROWS=/{s/^readonly DESTRUCTIVE_022_EXEC_REVIEW_ROWS=\([0-9]*\).*/\1/p;q;}' "$c71_hook")"
-      c71_esc="$(sed -n '/^readonly DESTRUCTIVE_022_EXEC_ESCALATE_DAYS=/{s/^readonly DESTRUCTIVE_022_EXEC_ESCALATE_DAYS=\([0-9]*\).*/\1/p;q;}' "$c71_hook")"
-
-      # ── control arm FIRST: a probe that cannot be shown to detect proves nothing.
-      # The extractor must return a KNOWN value from a synthetic line and must
-      # return EMPTY for a constant that is not there. Without both, an extractor
-      # silently returning empty would read as "no finding" on every run.
-      local c71_ctrl_hit c71_ctrl_miss
-      c71_ctrl_hit="$(printf 'readonly DESTRUCTIVE_022_EXEC_PHASE="shadow"\n' \
-        | sed -n 's/^readonly DESTRUCTIVE_022_EXEC_PHASE="\([a-z]*\)".*/\1/p')"
-      c71_ctrl_miss="$(printf 'readonly SOMETHING_ELSE=1\n' \
-        | sed -n 's/^readonly DESTRUCTIVE_022_EXEC_PHASE="\([a-z]*\)".*/\1/p')"
-      log "  CTRL:  destructive-022-exec-graduation — extractor sensitivity='${c71_ctrl_hit}' (want shadow), specificity='${c71_ctrl_miss}' (want empty)"
-      if [[ "$c71_ctrl_hit" != "shadow" || -n "$c71_ctrl_miss" ]]; then
-        log "  FAIL:  destructive-022-exec-graduation — constant extractor no longer discriminates; every verdict below would be unattributable"
-        ISSUES=$((ISSUES + 1))
-      elif [[ -z "$c71_phase" || -z "$c71_armed" || -z "$c71_days" || -z "$c71_rows_thr" || -z "$c71_esc" ]]; then
-        log "  FAIL:  destructive-022-exec-graduation — one or more rollout constants unreadable in $c71_hook (phase='${c71_phase}' armed='${c71_armed}' days='${c71_days}' rows='${c71_rows_thr}' escalate='${c71_esc}'). A gate that cannot read its own input must not pass."
-        ISSUES=$((ISSUES + 1))
-      else
-        case "$c71_phase" in
-          shadow|warn|enforce) ;;
-          *)
-            log "  FAIL:  destructive-022-exec-graduation — DESTRUCTIVE_022_EXEC_PHASE='${c71_phase}' is not one of shadow|warn|enforce. An unrecognised value falls through to enforce in the hook, so a typo silently hardens a rule firing 28% of the layer's blocks."
-            ISSUES=$((ISSUES + 1))
-            ;;
+      local c71_fam c71_id c71_armfield
+      for c71_fam in $c71_families; do
+        # Finding id and drain selector for this family. `c71_armfield` is the value
+        # the hook's router writes into each row it emits.
+        case "$c71_fam" in
+          EXEC)   c71_id="destructive-022-exec-graduation";   c71_armfield="exec" ;;
+          INTERP) c71_id="destructive-022-interp-graduation"; c71_armfield="interp-nonshell" ;;
+          *)      c71_id="destructive-022-$(printf '%s' "$c71_fam" | tr 'A-Z' 'a-z')-graduation"; c71_armfield="" ;;
         esac
-        local c71_elapsed
-        c71_elapsed="$(python3 -c 'import datetime,sys
-a=datetime.date.fromisoformat(sys.argv[1])
-print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || printf '')"
-        local c71_drain="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/.claude/hooks/destructive-warn-log.jsonl"
-        local c71_rows="SKIP"
-        if [[ -f "$c71_drain" ]]; then
-          # `wc -l`, not `grep -c ''`: on an EMPTY drain grep prints 0 AND exits 1,
-          # so an `|| printf 0` fallback concatenates a second zero and every
-          # numeric comparison below dies on `0\n0`. Caught by running this check
-          # against a zero-row drain — which is the state the graduation verdict
-          # cares most about getting right.
-          c71_rows="$(wc -l < "$c71_drain" 2>/dev/null | tr -d '[:space:]')"
-          [[ -n "$c71_rows" ]] || c71_rows=0
-        fi
-        log "  DENOM: destructive-022-exec-graduation — phase=${c71_phase} armed=${c71_armed} elapsed=${c71_elapsed}d thresholds=${c71_days}d/${c71_rows_thr}rows escalate=${c71_esc}d drain_rows=${c71_rows}"
 
-        if [[ "$c71_phase" == "enforce" ]]; then
-          log "  OK:    destructive-022-exec-graduation — the exec arm has GRADUATED to enforce; the rollout is decided and this gate is discharged"
-        elif [[ -z "$c71_elapsed" ]]; then
-          log "  FAIL:  destructive-022-exec-graduation — DESTRUCTIVE_022_EXEC_ARMED='${c71_armed}' is not a resolvable ISO date, so the deadline arm cannot be evaluated. This is the failure mode a placeholder arming stamp produces."
+        local c71_phase c71_armed c71_days c71_rows_thr c71_esc
+        c71_phase="$(sed -n "/^readonly DESTRUCTIVE_022_${c71_fam}_PHASE=/{s/^readonly DESTRUCTIVE_022_${c71_fam}_PHASE=\"\\([a-z]*\\)\".*/\\1/p;q;}" "$c71_hook")"
+        c71_armed="$(sed -n "/^readonly DESTRUCTIVE_022_${c71_fam}_ARMED=/{s/^readonly DESTRUCTIVE_022_${c71_fam}_ARMED=\"\\([0-9-]*\\)\".*/\\1/p;q;}" "$c71_hook")"
+        c71_days="$(sed -n "/^readonly DESTRUCTIVE_022_${c71_fam}_REVIEW_DAYS=/{s/^readonly DESTRUCTIVE_022_${c71_fam}_REVIEW_DAYS=\\([0-9]*\\).*/\\1/p;q;}" "$c71_hook")"
+        c71_rows_thr="$(sed -n "/^readonly DESTRUCTIVE_022_${c71_fam}_REVIEW_ROWS=/{s/^readonly DESTRUCTIVE_022_${c71_fam}_REVIEW_ROWS=\\([0-9]*\\).*/\\1/p;q;}" "$c71_hook")"
+        c71_esc="$(sed -n "/^readonly DESTRUCTIVE_022_${c71_fam}_ESCALATE_DAYS=/{s/^readonly DESTRUCTIVE_022_${c71_fam}_ESCALATE_DAYS=\\([0-9]*\\).*/\\1/p;q;}" "$c71_hook")"
+
+        # ── control arm FIRST: a probe that cannot be shown to detect proves nothing.
+        # The extractor must return a KNOWN value from a synthetic line and must
+        # return EMPTY for a constant that is not there. Without both, an extractor
+        # silently returning empty would read as "no finding" on every run. Run PER
+        # FAMILY, because the parameterization is exactly what could silently stop
+        # matching for one family while still matching for another.
+        local c71_ctrl_hit c71_ctrl_miss
+        c71_ctrl_hit="$(printf 'readonly DESTRUCTIVE_022_%s_PHASE="shadow"\n' "$c71_fam" \
+          | sed -n "s/^readonly DESTRUCTIVE_022_${c71_fam}_PHASE=\"\\([a-z]*\\)\".*/\\1/p")"
+        c71_ctrl_miss="$(printf 'readonly SOMETHING_ELSE=1\n' \
+          | sed -n "s/^readonly DESTRUCTIVE_022_${c71_fam}_PHASE=\"\\([a-z]*\\)\".*/\\1/p")"
+        log "  CTRL:  ${c71_id} — extractor sensitivity='${c71_ctrl_hit}' (want shadow), specificity='${c71_ctrl_miss}' (want empty)"
+        if [[ "$c71_ctrl_hit" != "shadow" || -n "$c71_ctrl_miss" ]]; then
+          log "  FAIL:  ${c71_id} — constant extractor no longer discriminates for family ${c71_fam}; every verdict below would be unattributable"
+          ISSUES=$((ISSUES + 1))
+        elif [[ -z "$c71_phase" || -z "$c71_armed" || -z "$c71_days" || -z "$c71_rows_thr" || -z "$c71_esc" ]]; then
+          log "  FAIL:  ${c71_id} — one or more rollout constants unreadable in $c71_hook (phase='${c71_phase}' armed='${c71_armed}' days='${c71_days}' rows='${c71_rows_thr}' escalate='${c71_esc}'). A gate that cannot read its own input must not pass."
           ISSUES=$((ISSUES + 1))
         else
-          # The three-way verdict, emitted WITH any due notice so a zero drain is
-          # read as a finding rather than as an absence of one.
-          local c71_verdict
-          if [[ "$c71_rows" == "SKIP" ]]; then
-            c71_verdict="drain absent on this instance (operator-local, git-ignored) — the evidence arm SKIPs; read it where the sessions actually ran"
-          elif [[ "$c71_rows" -eq 0 ]]; then
-            c71_verdict="0 rows → INSTRUMENTATION-SUSPECT, not 'no evidence'. Run the must-flag control (block-destructive.test.sh T-EXEC-1). If it writes a row the surface is genuinely quiet — graduate at near-zero risk or remove the arm as dead code. If it does not, the drain is BROKEN and that is a defect."
-          elif [[ "$c71_rows" -lt "$c71_rows_thr" ]]; then
-            c71_verdict="${c71_rows} rows (< ${c71_rows_thr}) → INSUFFICIENT-TRAFFIC. Choose one and record it: graduate on the small sample, retreat to shadow, or extend ONCE by re-dating DESTRUCTIVE_022_EXEC_ARMED."
-          else
-            c71_verdict="${c71_rows} rows (>= ${c71_rows_thr}) → classify the sample true-positive / benign-shape / mandated-tool-blocked with its denominator, then GRADUATE to enforce or NARROW the predicate. Never auto-promoted by count."
+          case "$c71_phase" in
+            shadow|warn|enforce) ;;
+            *)
+              log "  FAIL:  ${c71_id} — DESTRUCTIVE_022_${c71_fam}_PHASE='${c71_phase}' is not one of shadow|warn|enforce. An unrecognised value falls through to enforce in the hook, so a typo silently hardens a rule firing 28% of the layer's blocks."
+              ISSUES=$((ISSUES + 1))
+              ;;
+          esac
+          local c71_elapsed
+          c71_elapsed="$(python3 -c 'import datetime,sys
+a=datetime.date.fromisoformat(sys.argv[1])
+print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || printf '')"
+          local c71_drain="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/.claude/hooks/destructive-warn-log.jsonl"
+          local c71_rows="SKIP"
+          if [[ -f "$c71_drain" ]]; then
+            # PER-FAMILY row count. `grep … | wc -l`, never a bare `grep -c`: on a
+            # drain with no matching row grep prints 0 AND exits 1, so an
+            # `|| printf 0` fallback concatenates a second zero and every numeric
+            # comparison below dies on `0\n0`. A pipeline ending in `wc -l` always
+            # exits 0 and always prints one number. The drain is line-delimited
+            # (`jq -nc`, one object per line) — deliberately NOT the pretty-printed
+            # shape this hook's block-log uses, which is why a line count is valid.
+            local c71_r_tagged c71_r_untagged
+            c71_r_tagged="$(grep -F "\"arm\":\"${c71_armfield}\"" "$c71_drain" 2>/dev/null | wc -l | tr -d '[:space:]')"
+            c71_r_untagged=0
+            if [[ "$c71_fam" == "EXEC" ]]; then
+              # Rows predating the `arm` field. The exec router was the only writer
+              # when they were written, so attributing them to EXEC is factual.
+              c71_r_untagged="$(grep -vF '"arm":"' "$c71_drain" 2>/dev/null | wc -l | tr -d '[:space:]')"
+            fi
+            [[ -n "$c71_r_tagged" ]]   || c71_r_tagged=0
+            [[ -n "$c71_r_untagged" ]] || c71_r_untagged=0
+            c71_rows=$(( c71_r_tagged + c71_r_untagged ))
           fi
+          log "  DENOM: ${c71_id} — arm=${c71_armfield} phase=${c71_phase} armed=${c71_armed} elapsed=${c71_elapsed}d thresholds=${c71_days}d/${c71_rows_thr}rows escalate=${c71_esc}d drain_rows=${c71_rows}"
 
-          if [[ "$c71_elapsed" -ge "$c71_esc" ]]; then
-            log "  FAIL:  destructive-022-exec-graduation — GRADUATION-OVERDUE: ${c71_elapsed} days at phase='${c71_phase}', past the ${c71_esc}-day escalation. ${c71_verdict}"
-            log "         Turn this green by RECORDING A DECISION in core/hooks/block-destructive.sh: advance DESTRUCTIVE_022_EXEC_PHASE, retreat it to shadow, or re-date DESTRUCTIVE_022_EXEC_ARMED. Doing nothing is the one option this gate removes."
+          if [[ "$c71_phase" == "enforce" ]]; then
+            log "  OK:    ${c71_id} — the ${c71_armfield} arm has GRADUATED to enforce; the rollout is decided and this gate is discharged"
+          elif [[ -z "$c71_elapsed" ]]; then
+            log "  FAIL:  ${c71_id} — DESTRUCTIVE_022_${c71_fam}_ARMED='${c71_armed}' is not a resolvable ISO date, so the deadline arm cannot be evaluated. This is the failure mode a placeholder arming stamp produces."
             ISSUES=$((ISSUES + 1))
-          elif [[ "$c71_elapsed" -ge "$c71_days" ]]; then
-            log "  WARN:  destructive-022-exec-graduation — GRADUATION-DUE (deadline): ${c71_elapsed} days since arming (threshold ${c71_days}d; escalates to a finding at ${c71_esc}d). ${c71_verdict}"
-          elif [[ "$c71_rows" != "SKIP" && "$c71_rows" -ge "$c71_rows_thr" ]]; then
-            log "  WARN:  destructive-022-exec-graduation — GRADUATION-DUE (evidence): ${c71_verdict}"
           else
-            # Silent below threshold: omission IS the non-ceremony signal. Nothing
-            # is emitted beyond the DENOM line above.
-            log "  OK:    destructive-022-exec-graduation — within the review window (${c71_elapsed}d of ${c71_days}d, drain=${c71_rows})"
+            # The three-way verdict, emitted WITH any due notice so a zero drain is
+            # read as a finding rather than as an absence of one.
+            local c71_verdict
+            if [[ "$c71_rows" == "SKIP" ]]; then
+              c71_verdict="drain absent on this instance (operator-local, git-ignored) — the evidence arm SKIPs; read it where the sessions actually ran"
+            elif [[ "$c71_rows" -eq 0 ]]; then
+              c71_verdict="0 rows for arm=${c71_armfield} → INSTRUMENTATION-SUSPECT, not 'no evidence'. Run that arm's must-flag control (block-destructive.test.sh T-EXEC-1 for exec, T-NSI-01a for interp-nonshell). If it writes a row the surface is genuinely quiet — graduate at near-zero risk or remove the arm as dead code. If it does not, the drain is BROKEN and that is a defect."
+            elif [[ "$c71_rows" -lt "$c71_rows_thr" ]]; then
+              c71_verdict="${c71_rows} rows (< ${c71_rows_thr}) → INSUFFICIENT-TRAFFIC. Choose one and record it: graduate on the small sample, retreat to shadow, or extend ONCE by re-dating DESTRUCTIVE_022_${c71_fam}_ARMED."
+            else
+              c71_verdict="${c71_rows} rows (>= ${c71_rows_thr}) → classify the sample true-positive / benign-shape / mandated-tool-blocked with its denominator, then GRADUATE to enforce or NARROW the predicate. Never auto-promoted by count."
+            fi
+
+            if [[ "$c71_elapsed" -ge "$c71_esc" ]]; then
+              log "  FAIL:  ${c71_id} — GRADUATION-OVERDUE: ${c71_elapsed} days at phase='${c71_phase}', past the ${c71_esc}-day escalation. ${c71_verdict}"
+              log "         Turn this green by RECORDING A DECISION in core/hooks/block-destructive.sh: advance DESTRUCTIVE_022_${c71_fam}_PHASE, retreat it to shadow, or re-date DESTRUCTIVE_022_${c71_fam}_ARMED. Doing nothing is the one option this gate removes."
+              ISSUES=$((ISSUES + 1))
+            elif [[ "$c71_elapsed" -ge "$c71_days" ]]; then
+              log "  WARN:  ${c71_id} — GRADUATION-DUE (deadline): ${c71_elapsed} days since arming (threshold ${c71_days}d; escalates to a finding at ${c71_esc}d). ${c71_verdict}"
+            elif [[ "$c71_rows" != "SKIP" && "$c71_rows" -ge "$c71_rows_thr" ]]; then
+              log "  WARN:  ${c71_id} — GRADUATION-DUE (evidence): ${c71_verdict}"
+            else
+              # Silent below threshold: omission IS the non-ceremony signal. Nothing
+              # is emitted beyond the DENOM line above.
+              log "  OK:    ${c71_id} — within the review window (${c71_elapsed}d of ${c71_days}d, drain=${c71_rows})"
+            fi
           fi
         fi
-      fi
+      done
     fi
   fi
 
@@ -17435,14 +17618,17 @@ cmd_check_release_corpus() {
 # A STALE verdict NEVER maps to exit 0 — a probe that says STALE in prose and OK in $?
 # invites a caller to conclude the opposite of the truth.
 #
-#   verdict   sentinel token   exit   caller reads it as
-#   -------   --------------   ----   ----------------------------------------------
-#   FRESH     any              0      pass — every rostered package is content-current
-#   STALE     != enforce       2      ADVISORY finding: not fresh, not blocking. Non-
-#                                     zero (so `-eq 0` cannot mis-read it) and not 1
-#                                     (so a caller can still tell advisory from block).
-#   STALE     enforce          1      BLOCKING finding — the gate must fail closed
-#   <other>   any              1      unexpected verdict — fail-closed, sentinel-agnostic
+#   verdict         sentinel token   exit   caller reads it as
+#   -------------   --------------   ----   ----------------------------------------------
+#   FRESH           any              0      pass — every rostered package is content-current
+#   STALE           != enforce       2      ADVISORY finding: not fresh, not blocking
+#   STALE           enforce          1      BLOCKING finding — the gate must fail closed
+#   NOT-EVALUATED   != enforce       3      ADVISORY OUTAGE: the content arm did not run for
+#                                           part of the roster. Distinct from 2 so "stale"
+#                                           and "unmeasured" can never be conflated.
+#   NOT-EVALUATED   enforce          1      BLOCKING OUTAGE — a green gate must mean the arm
+#                                           actually ran. Cause is on stdout, not the integer.
+#   <other>         any              1      unexpected verdict — fail-closed, sentinel-agnostic
 #
 # The advisory value 2 follows the in-tree precedent of core/deploy/tools/cross-module-audit.sh
 # (2 = "violations detected (advisory)" vs 1 = BLOCKER). Enforcement POLICY stays in the
@@ -17476,6 +17662,24 @@ cmd_check_package_freshness() {
       fi
       log "  WARN-MODE (sentinel '$pf_enforce_file' token != enforce): reporting the true verdict as ADVISORY — exit 2, so no caller can read a STALE package as fresh, and distinct from the blocking exit 1. Flip the token to 'enforce' after shakedown."
       exit 2
+      ;;
+    NOT-EVALUATED)
+      log "package-freshness: NOT-EVALUATED — ${verdict#NOT-EVALUATED } (unmeasured / total / cause; per-skill detail above)"
+      log "  The staged-rebuild content arm did not conclude for part of the roster, so this run"
+      log "  cannot certify those packages either fresh or stale — this is not a clean result."
+      log "  Resolve the cause named above (CI dependency install / interpreter / unzip), then re-run."
+      # SENTINEL-AWARE, mirroring the STALE arm above. Under `enforce` a green gate must
+      # mean the content arm actually RAN, so an unmeasured roster blocks; under warn it
+      # is advisory on its OWN code, distinct from the STALE advisory 2, so no caller can
+      # conflate "stale" with "unmeasured". The *) arm below stays fail-closed: an
+      # UNRECOGNISED verdict is a tooling failure, a recognised outage is not — which is
+      # why the exit values coincide under enforce while the arms do not.
+      if [[ "$pf_enforce" == "enforce" ]]; then
+        log "  ENFORCE-MODE (sentinel '$pf_enforce_file' token == enforce): an unmeasured roster BLOCKS — exit 1."
+        exit 1
+      fi
+      log "  WARN-MODE (sentinel '$pf_enforce_file' token != enforce): reporting the outage as ADVISORY — exit 3, non-zero and distinct from the STALE advisory 2. Flip the token to 'enforce' to block on it."
+      exit 3
       ;;
     *)
       log "package-freshness: unexpected verdict '$verdict' — fail-closed"
@@ -17973,10 +18177,15 @@ main() {
       ;;
     --check-package-freshness)
       # Single-check CI .skill package content-freshness probe (#2656): runs ONLY
-      # Check 7's full content-hash verdict and exits per the verdict (0 FRESH; 2 STALE
-      # advisory when the .github/skill-package-freshness.enforce sentinel is not enforce;
-      # 1 STALE when it IS enforce; 1 fail-closed on an unexpected verdict — never 0 on
-      # STALE, see the contract table on cmd_check_package_freshness). The Check 7 logic
+      # Check 7's full content-hash verdict and exits per the verdict. Four states, not
+      # three: 0 FRESH; 2 STALE advisory when the
+      # .github/skill-package-freshness.enforce sentinel is not enforce; 3 NOT-EVALUATED
+      # advisory under the same non-enforce sentinel (the comparison did not run, so
+      # nothing was measured — never conflate it with 2, which means measured-and-stale);
+      # 1 for EITHER STALE or NOT-EVALUATED when the sentinel IS enforce; 1 fail-closed on
+      # a genuinely unexpected verdict — never 0 on STALE and never 0 on an unevaluated
+      # run, see the contract table on cmd_check_package_freshness, which is the authoring
+      # home this comment cites rather than restates. The Check 7 logic
       # ALSO fires inside the full --check
       # suite — one shared body (_c7_compute_verdict), no copy. Used by
       # .github/workflows/skill-package-freshness.yml.
@@ -18012,7 +18221,7 @@ main() {
       echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73, 77, 78); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; exits 1 on an INCOMPLETE row set when enforce) (#1484)"
       echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; advisory/deploy-time-only; exits 1 on INCOMPLETE/NOSET when enforce) (#4026)"
-      echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, unexpected=1) (#2656)"
+      echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, NOT-EVALUATED=3 advisory / 1 when enforce, unexpected=1) (#2656)"
       echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"
       echo "  --report                     Structured report for Stage 13 verification evidence"
       echo ""
