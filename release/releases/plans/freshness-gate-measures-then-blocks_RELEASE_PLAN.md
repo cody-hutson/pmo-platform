@@ -220,7 +220,7 @@ Release Class `cross-cutting` → Stage 5 activation bias **ALL**, Stage 9 depth
 | **R5** | **Premature flip on a vacuous warn log.** The sentinel demands ">=3 days, zero false positives", but the content arm has never run in CI — the existing warn log is the output of a probe that measured nothing, so "zero false positives" is unfalsifiable rather than satisfied | Operator | **HIGH** | MODERATE | The warn-log clock **restarts at slot 1**. Arm A accepts the seeded-stale proof as substitute evidence — a positive falsification rather than an absence of complaints. Do not read pre-#4332 history as a shakedown |
 | **R6** | #5500 AC2 is genuinely open at plan time | Engineering | MEDIUM | n/a (discovery) | Sited at slot 4, after the probe can measure. **Resolved at Stage 5:** #188 Part B was never built and Part C was relaxed on the same premise |
 | **R7** | `--user` install invisible under a sandboxed HOME | Engineering | MEDIUM | CHEAP | **Framing corrected at Stage 5:** `deploy.sh` assigns `HOME` **0** times (it reads it 21; the broad control pattern fired at 21, so the narrow zero is a real absence). The freshness probe does not sandbox HOME the way the PF suite does, so the `PYTHONPATH` pin is **not load-bearing on this path**. It is carried anyway — for provisioning parity between the only two workflows that reach the packager, and so an engine change that ever sandboxes HOME cannot silently re-open the gap |
-| **R8** | Out-of-tree change has no git trace | Operator | LOW | CHEAP | Pre-state recorded here (**9 contexts, `strict: false`, measured `ef008d6d`**); post-state read back at sequence step 12 |
+| **R8** | Out-of-tree change has no git trace | Operator | LOW | CHEAP | Pre-state recorded here in full — see § Out-of-tree pre-state snapshot (**9 contexts, `strict: false`, measured `ef008d6d`**); post-state read back at sequence step 12 |
 | **R9** | Register-row drift — a flip that does not update `gate-efficacy-standard.md` re-creates the declared-vs-actual gap this release exists to close | Engineering | MEDIUM | CHEAP | The register row is in the File Change Matrix, assigned to #5897 alone |
 | **R10** | **Concurrent-merge-race residual.** With `strict=false`, a stale package can still land behind a concurrent merge even once the gate is required | Operator | MEDIUM | CHEAP | **Carried forward, not claimed as shipped.** The Outcome Statement was amended to remove the claim rather than ship it undischarged (D-StrictReopen). A `strict=true` change is its own card with its own blast-radius review |
 | **R11** | **Registration stalls Dependabot security updates.** Once the sentinel flips AND the gate is registered, a bot PR touching a manifest inside a rostered skill's content set turns a **required** check red and cannot self-remediate — on a public repository | Operator | **HIGH** | CHEAP | **#6998 ships the documented remediation path in this release, before registration** (D-Dependabot). Sequence steps 11–12 depend on it. Auto-rebuild was rejected on three verified blockers, not on cost: `GITHUB_TOKEN`-triggered events spawn no new workflow run (so the required check never re-reports and the PR stays blocked), Dependabot-triggered workflows receive a read-only token and no secrets, and `required_signatures: true` is live on `main` |
@@ -231,6 +231,44 @@ Release Class `cross-cutting` → Stage 5 activation bias **ALL**, Stage 9 depth
 Every limb is independently revertible and none is IRREVERSIBLE. Sentinel flip: one token, one commit. Verdict-token change: a code revert; the `*)` fail-closed arm means a partial revert degrades to blocking-not-silent, which is the safe direction. Workflow dependency install: a CI-only change with no runtime surface. Branch-protection registration: operator removes the context — CHEAP, but leaves no git trace, hence R8's read-back record.
 
 **Composite rollback order is the inverse of the sequence:** deregister the required check first, then revert the sentinel, then the code. Reverting the code while the check is required and enforcing would leave the gate hard-failing on a fail-closed unknown token.
+
+### Out-of-tree pre-state snapshot (R8)
+
+**This record exists because `git revert` cannot reach the thing it describes.** Branch-protection state is not versioned: it carries no commit, produces no diff, and is not reproduced by `git merge`. Every other limb of this release is restored by ordinary git history — which is why the snapshot stage compresses to nothing for them. Sequence steps 11–12 are the exception, and for that one limb **this section is the entire snapshot.** If it is wrong or missing, R8 has no mitigation.
+
+**Restoration target — `required_status_checks.contexts` on `main`, verbatim and ordered:**
+
+```
+Python SAST (bandit)
+Python deps (pip-audit)
+Secret scanning (gitleaks)
+Depersonalization gate
+Issue-reference validity gate
+Dead-file-reference gate
+Commit-message depersonalization gate
+Durable-corpus fragile-reference delta
+Operator-memory-reference gate
+```
+
+| Field | Value |
+|---|---|
+| **Context count** | **9** |
+| **`strict`** | **`false`** — the key is explicitly present and typed boolean, not an absent key reading as a default |
+| **Measurement anchor** | Branch protection is a repository-level setting with no commit of its own, so it is pinned by time plus a commit anchor: measured **2026-09-05**, release branch at `5f5a0d60`. The values recorded against the plan's original anchor `ef008d6d` were re-measured at the dry-run stage and again, independently, at the snapshot stage — unchanged at both readings. A sibling release merged to `main` between the two and did not perturb them, which is the expected result: the setting is commit-independent. |
+| **Context to be added** | `Pre-merge .skill package content-freshness gate` — 47 bytes, pure ASCII, the leading `.` is U+002E |
+| **Expected post-state** | 10 contexts; `strict` unchanged at `false` |
+
+**Other protection settings at measurement, all untouched by the proposed change:** `enforce_admins: false`, `required_signatures: true`, `required_conversation_resolution: true`, `required_linear_history: false`, `allow_force_pushes: false`, `allow_deletions: false`, `block_creations: false`, `lock_branch: false`, `allow_fork_syncing: false`, `required_pull_request_reviews: {dismiss_stale_reviews: true, require_code_owner_reviews: false, require_last_push_approval: false, required_approving_review_count: 0}`.
+
+**Which of the two names is registrable — and why the other one is the trap.** `.github/workflows/skill-package-freshness.yml` declares `name:` exactly twice. The **workflow-level** key, on the file's first line, reads `Skill package content-freshness (pre-merge gate)` — 48 bytes. The **job-level** key, nested under `jobs:` → `skill-package-freshness:`, reads `Pre-merge .skill package content-freshness gate` — 47 bytes. GitHub reports the **job** name as the check-run name, so the job name is the only registrable context. That is measured rather than assumed: across the 77 check runs at `5f5a0d60` the job-level string appears as a check-run name and the workflow-level string appears **zero** times — on a probe whose fabricated-needle control also returned zero and whose live-context control returned true, so the zero discriminates. The job name is additionally byte-identical on `main` and on the release branch, so the string registered post-merge is the string reporting today. Both names carry "pre-merge" and "package content-freshness", and the wrong one is the first line of the file — exactly what a reader restoring or re-registering from the top of the workflow would take. **Registering the workflow-level string would produce a well-formed required check that no run ever reports under, and therefore protects nothing.** Cite the structural position, not the line number: the job-level key drifts with the file (it sits lower on the release branch than on `main`), while `jobs:` → `skill-package-freshness:` → `name:` does not.
+
+**Composite rollback order, with the blast radius stated.** § Rollback strategy gives the order in one line; this is that same statement in operational form:
+
+1. **Deregister the required context first** — the `…/required_status_checks/contexts` endpoint named in the § Implementation Sequence operator handoff, with `DELETE` in place of `POST` and an identical single-element body. It restores the ordered nine-context list above exactly, and it is the cheapest of the three steps.
+2. **Then** revert the sentinel, `enforce` → `warn`.
+3. **Then** revert the code.
+
+Any other order is a trap, and the cost is specific. Reverting the code while the context is still **required** and the sentinel is still **enforcing** leaves the gate hard-failing on a fail-closed unrecognised verdict token — the `*)` arm R2 exists to guard. That failure is **not** confined to PRs that touch skills: the workflow declares no `paths:` and no `paths-ignore:` filter by design (verified — zero such keys, against a control that located the file's own `on:` and `jobs:` keys through the same instrument), so it runs on every pull request and would redden **every open PR in the repository**.
 
 ---
 
