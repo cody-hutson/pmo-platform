@@ -136,6 +136,8 @@ The model composes with (does **not** restate) [`architecture-overview.md`](../d
 | **K4** | `projects/[Project]/` (01–08 + PROJECT.md) | L2 | Claude Code (operations) | Claude Code (operations) | never in L1 |
 | **K5** | `projects/_config/CORRECTIONS.md`, the observation log + promoted confirmed-pattern entries (user auto-memory store) | L2 + auto-memory | Claude Code (operations) / auto-memory | both | never hardcoded into K1; promotion path = observation → pattern → (maybe) governance |
 
+**Load-behaviour axis — not carried here.** This model classifies by knowledge tier and universality; it does not distinguish a *rule* from a *skill* or a *reference doc* by how the content loads. That axis — the admission test for the ambiently-loaded rules set, its frontmatter contract, and its byte budget — is owned by [`rules-corpus-admission-standard.md`](../standards/rules-corpus-admission-standard.md). A K1 artifact homed under `core/rules/` in the table above must additionally pass that standard's §1 test; failing it is a placement decision, not a tier reassignment.
+
 ### Parameterization seam {#parameterization-seam}
 
 The model's load-bearing concept, consumed by . The **K1↔K2/K3 boundary** is exactly where CLAUDE.md "Parameterize over hardcode" and "Pre-creation governance check" apply. The [§4 leakage register](#local-context-leakage-register) is the catalog of where this seam is currently breached.

@@ -9,7 +9,7 @@ reversibility: CHEAP / Confidence HIGH
 # Doc-Link Maintenance — pmo-platform
 
 **Release:** doc-cleanup
-**Authoritative standard:** [`core/standards/doc-link-maintenance-protocol.md`](../standards/doc-link-maintenance-protocol.md)
+**Authoritative standard:** [`core/standards/doc-link-maintenance-protocol.md`](/core/standards/doc-link-maintenance-protocol.md)
 
 ## Purpose
 
@@ -45,6 +45,8 @@ python3 core/deploy/tools/check-doc-links.py \
 
 **Path resolution (the canonical rule — both checkers apply it identically):** both inline links (`[text]` followed by a parenthesized path) and reference-style links (`[text]` followed by a `[label]`) are parsed. Three clauses matching GitHub's rendered-blob behavior: (1) a link resolves **relative to the source-file directory**; (2) a **leading `/`** denotes the **workspace (repo) root** — the GitHub-faithful workspace-rooted form; (3) there is **no bare module-prefix fallback** — a bare `core/…`/`release/…` from a non-root file is an ordinary relative path and reads **broken** (as GitHub renders it). `release/tools/check-release-links.py` — the checker the Dead-file-reference gate delegates to — implements the same three clauses, so a workspace-rooted link and a relative link each receive an identical verdict from both checkers. (The earlier bare-prefix workspace-root fallback was retired per ADR-085; it masked GitHub-404s from non-root files.) Fenced code blocks excluded — including fences nested inside a blockquote (`> ` + fence), so a `>`-quoted worked example does not surface its illustrative links as findings.
 
+**Mirror-pair link form (this file is itself one):** a **mirror-pair file** is an in-repo source with a byte-identical deployed copy at a second path — the set enforced by `deploy.sh --check` Check 9, whose array is the authoritative membership list. It is read from two locations, so its links must resolve from both. A link whose target is **also a member of the mirrored set** MAY remain relative: it resolves to the mirror's own copy, which Check 9 asserts is byte-identical, and rooting it would send a mirror reader back into the repo instead of to the copy beside it — worse still for an operations-branch session, which is deliberately rooted *outside* the platform repo ([`CLAUDE.md.template`](/core/CLAUDE.md.template) § Routing) where the rooted form does not resolve at all. Every other link — any target outside the mirrored set — MUST use the **leading-`/`** workspace-rooted form (clause 2), the only form correct at both locations; the bare module-prefix form is not workspace-rooted and MUST NOT be used (clause 3). Membership is the entire predicate, so a target **leaving** the mirrored set converts its inbound links from the first case to the second — root them in the same change that removes it, or they resolve today and break at the next deploy.
+
 **Non-link target classes the primitive skips natively** (in `is_internal()`, so both deploy-time Check 14 and PR-time `link-check.yml` inherit them, and no allowlist upkeep is needed):
 
 | Target shape | Example | Why it is not a link |
@@ -65,7 +67,7 @@ python3 core/deploy/tools/check-doc-links.py \
 | **Dead-file-reference gate** (`repo-integrity.yml`, PR-time) — via `release/tools/check-release-links.py` | `core release docs .github` + top-level `*.md`, changed-delta / added-lines only | **required** (branch-protection); enforce — a broken added-line link fails the PR; anchors warn-mode |
 | **`release-link-check.yml`** (PR-time) — via the same `check-release-links.py` | `release/` full walk (bare invocation) | advisory (path-filtered to `release/**`; absent-is-pass) |
 
-Check 14 (deploy-time) and `link-check.yml` (PR-time) both call the `check-doc-links.py` primitive over the SAME shared `--target-paths-file` scan scope AND the SAME tracked base `--allowlist` (see § Allowlist) — one engine, one scope list, one tracked ignore list, so the deploy-time and PR-time verdicts cannot drift. Sharing scope alone is not sufficient: two callers scanning identical files with different allowlists still reach different verdicts. `check-release-links.py` (the Dead-file-reference gate + `release-link-check.yml`) implements the **same canonical resolution rule** (see § The Primitive → Path resolution), so the doc-links and release-links checker families cannot return opposite verdicts on a given link form either. The `operations/` **module** governance + skill surfaces (`operations/OPERATIONS.md`, `operations/skills/*/SKILL.md`) are **Layer 1** and are in scope; **Layer 2** (`projects/`, the deployed `.claude/skills/` tree, the operator-instance store) is excluded per the CLAUDE.md domain boundary — Claude Code cannot remediate Layer 2 drift. This matches [`doc-link-maintenance-protocol.md`](../standards/doc-link-maintenance-protocol.md) § 4.2, the authoritative standard; the `operations/` module is not Layer 2.
+Check 14 (deploy-time) and `link-check.yml` (PR-time) both call the `check-doc-links.py` primitive over the SAME shared `--target-paths-file` scan scope AND the SAME tracked base `--allowlist` (see § Allowlist) — one engine, one scope list, one tracked ignore list, so the deploy-time and PR-time verdicts cannot drift. Sharing scope alone is not sufficient: two callers scanning identical files with different allowlists still reach different verdicts. `check-release-links.py` (the Dead-file-reference gate + `release-link-check.yml`) implements the **same canonical resolution rule** (see § The Primitive → Path resolution), so the doc-links and release-links checker families cannot return opposite verdicts on a given link form either. The `operations/` **module** governance + skill surfaces (`operations/OPERATIONS.md`, `operations/skills/*/SKILL.md`) are **Layer 1** and are in scope; **Layer 2** (`projects/`, the deployed `.claude/skills/` tree, the operator-instance store) is excluded per the CLAUDE.md domain boundary — Claude Code cannot remediate Layer 2 drift. This matches [`doc-link-maintenance-protocol.md`](/core/standards/doc-link-maintenance-protocol.md) § 4.2, the authoritative standard; the `operations/` module is not Layer 2.
 
 The PR-time gate runs on every pull request (no paths filter) so the status check always reports, and on push to `main` as a post-merge guard. A path-resolution failure (a `--target-paths` glob resolving to zero files, exit 3) is always hard-fail regardless of warn-mode — a relocated scan surface must never read green. The primitive's `--self-test` runs first as a precision probe: a parser/resolver/exclusion regression fails the PR independently of warn-mode.
 
@@ -116,7 +118,7 @@ Findings route to the standard surgical-fix path — small commits, parser-clean
 
 ## Initial Mode + Flip-to-Enforce Timeline
 
-**Initial mode:** warn-mode per [`bypass-mode-readiness.md`](bypass-mode-readiness.md) precedent (Checks 8/9/10).
+**Initial mode:** warn-mode per [`bypass-mode-readiness.md`](/core/rules/bypass-mode-readiness.md) precedent (Checks 8/9/10).
 
 **Flip-to-enforce thresholds (per Collective Review CR-D6, whichever comes first):**
 
@@ -155,5 +157,5 @@ A link can be perfectly resolvable today — it passes the link-resolution check
 - Broken-ref backlog drainage: F-4
 - Frontmatter schema backfill (corpus hygiene): F-3
 - Mirror-pair discipline: [`skill-deployment.md`](skill-deployment.md)
-- Hook layer precedent: [`bypass-mode-readiness.md`](bypass-mode-readiness.md)
+- Hook layer precedent: [`bypass-mode-readiness.md`](/core/rules/bypass-mode-readiness.md)
 - Identifier cascade at edit time (any reference form, any surface): [`rename-reference-cascade.md`](rename-reference-cascade.md) — this protocol detects an unresolvable link after the fact; that rule obliges the sweep at the moment of the rename.
