@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-186 — The rules mirror has two carriers on two paths, and the deploy script is only one of them"
-status: Proposed
+status: Accepted (operator-ratified at the rules-mirror-delivered Stage-13 close, 2026-09-05)
 date: 2026-09-04
 release: rules-mirror-delivered
 deciders: Stage 5 Solutioning spoke (four-branch design exploration on the pair-set source; four-surface exploration on the instruction carrier) + Stage 6 Engineering + operator decisions D-D2 / D-E / D-3
@@ -21,7 +21,7 @@ supersedes: none
 
 ## Status
 
-**Proposed** — authored at Stage 6 Engineering for the `rules-mirror-delivered` release; ratification at Collective Review.
+**Accepted** — operator-ratified at the `rules-mirror-delivered` Stage-13 close, 2026-09-05. The decision this record documents shipped in **v4.54** and is live: the carrier reuses the single hoisted declaration (Branch A per D-D2), so marker-registered holders remain at two.
 
 **Numbering provenance.** This record was authored at the next free number on this branch. The binding oracle is the mainline anchor plus one; a branch claim is detection-only and never binds. The immediately preceding number is claimed by a sibling record shipping in this same release, so this record takes the next slot rather than duplicating it. Should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note per hop. Citations use the slug token `{{ADR:rules-mirror-carrier-boundary}}`, which carries no number shape and resolves at the claim.
 

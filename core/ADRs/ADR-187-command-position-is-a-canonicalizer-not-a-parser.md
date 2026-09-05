@@ -1,6 +1,6 @@
 ---
 title: ADR-187 — Command-start position is resolved by a pre-match canonicalizer, not by a parser and not by a wider anchor
-status: Proposed — flips to Accepted when the operator ratifies it at this release's Stage 9 Plan Review gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
+status: Accepted (operator-ratified at the hooks-block-only-their-scope Stage-9 Plan Review gate, 2026-09-05)
 date: 2026-09-02
 release: hooks-block-only-their-scope
 deciders: "Workspace owner (ratified at the operator gate); the matcher-vs-parser evaluation was rendered at the Stage 5 solutioning gate and is recorded here at Stage 6 Engineering"
@@ -20,7 +20,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Ratification flips this field at this release's Stage 9 Plan Review gate.
+**Accepted** — operator-ratified at the `hooks-block-only-their-scope` Stage-9 Plan Review gate on 2026-09-05 (GO WITH CONDITIONS, rendered by the operator at `938e44a7`). The decision this record documents shipped in **v4.55**.
 
 **Numbering provenance.** The number was READ from the allocation oracle at authoring, never reserved. The allocator reported an anchor on the mainline and the next free slot above it, and that slot is the one taken here. A set of branch-only claims on the same slot was reported alongside, labelled by the tool itself as detection-only; those claims are not consulted, because the next free number is `anchor + 1` and never `max(claimed) + 1`. Stepping past the allocator's answer to dodge a branch claim would land a **gap**, and the numbering integrity check fails a gap as readily as a duplicate. The claim binds at merge per ADR-115; if a sibling branch merges the same slot first, the merge-time renumber moves this record and writes its own provenance note. That is the governed mechanism operating correctly, not a defect.
 

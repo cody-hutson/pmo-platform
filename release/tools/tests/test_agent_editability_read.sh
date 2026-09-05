@@ -392,8 +392,57 @@ else
 fi
 
 # ===========================================================================
-group B "Safety claim — the delivered surfaces never name the bypass"
+group B "Safety claim — no delivered surface RECOMMENDS the bypass"
 # ===========================================================================
+
+# A raw occurrence count cannot tell a surface that RECOMMENDS the escape hatch
+# from one that FORBIDS it, and the delivered corpus deliberately contains the
+# latter: the bridge tells an agent the bypass is not its move. Counting alone
+# therefore fails on the correct behaviour and would go green only if the
+# prohibition were deleted — inverting what the arm is for. So the count is the
+# TRIGGER and the classification is the VERDICT.
+#
+# FAIL-SAFE DIRECTION: only a positively-recognised prohibiting construction
+# passes. A recommending construction fails, and so does one the classifier
+# cannot place — an unseen spelling costs a false failure, never a false pass.
+classify_token() {
+  # $1 = file, $2 = literal needle. Emits: "<line>\t<verdict>\t<window>".
+  python3 - "$1" "$2" <<'PYEOF'
+import sys, re
+path, needle = sys.argv[1], sys.argv[2]
+t = open(path, encoding='utf-8').read()
+
+# Recommending is tested FIRST and wins: a window carrying both an imperative
+# and a negation is not a safe prohibition.
+RECOMMEND = tuple(v + ' ' + needle for v in
+                  ('set', 'use', 'add', 'export', 'pass', 'try', 'run', 'enable'))
+PROHIBIT = ('never', 'not a ', 'is not', 'do not', "don't", 'must not',
+            'forbidden', 'prohibited', 'operator-only', 'not the agent')
+
+def window(text, idx):
+    """The sentence containing idx, bounded by . ! ? or a blank line."""
+    start = 0
+    for m in re.finditer(r'(?<=[.!?])\s+|\n\s*\n', text[:idx]):
+        start = m.end()
+    end = len(text)
+    m = re.search(r'(?<=[.!?])\s+|\n\s*\n', text[idx:])
+    if m:
+        end = idx + m.start() + 1
+    return ' '.join(text[start:end].split())
+
+for m in re.finditer(re.escape(needle), t):
+    line = t.count('\n', 0, m.start()) + 1
+    w = window(t, m.start())
+    wl = w.lower()
+    if any(r.lower() in wl for r in RECOMMEND):
+        verdict = 'RECOMMENDING'
+    elif any(p in wl for p in PROHIBIT):
+        verdict = 'PROHIBITING'
+    else:
+        verdict = 'UNCLASSIFIABLE'
+    print('%d\t%s\t%s' % (line, verdict, w[:160]))
+PYEOF
+}
 
 TOTAL_D=0
 for f in "${DELIVERABLES[@]}"; do
@@ -401,9 +450,19 @@ for f in "${DELIVERABLES[@]}"; do
   TOTAL_D=$((TOTAL_D + n))
   if [ "$n" -eq 0 ]; then
     ok "B — 0 occurrences of $BYPASS_TOKEN in $f"
-  else
-    bad "B — $n occurrence(s) of $BYPASS_TOKEN in $f"
+    continue
   fi
+  while IFS="$(printf '\t')" read -r ln verdict win; do
+    [ -z "${ln:-}" ] && continue
+    case "$verdict" in
+      PROHIBITING)
+        ok "B — $f:$ln names $BYPASS_TOKEN in a PROHIBITING construction" ;;
+      RECOMMENDING)
+        bad "B — $f:$ln RECOMMENDS $BYPASS_TOKEN — $win" ;;
+      *)
+        bad "B — $f:$ln names $BYPASS_TOKEN in an UNCLASSIFIABLE construction (fails closed) — $win" ;;
+    esac
+  done < <(classify_token "$f" "$BYPASS_TOKEN")
 done
 
 # Sensitivity: the SAME instrument over the authority, which does carry the
@@ -423,6 +482,68 @@ if [ "$SPEC_ARM" -eq 0 ]; then
   ok "B-SPEC — a bogus needle returns 0 on the same file the sensitivity arm fires on"
 else
   bad "B-SPEC — the bogus needle returned $SPEC_ARM; the instrument matches too much"
+fi
+
+# B-DISC: the classifier must DISCRIMINATE, not always pass. Take the real
+# graded surface, rewrite its prohibiting sentence into a recommending one, and
+# require the verdict to flip. Without this arm a classifier that returned
+# PROHIBITING unconditionally would satisfy every assertion above.
+BRIDGE_OUT="$(classify_token "$BRIDGE" "$BYPASS_TOKEN")"
+IFS="$(printf '\t')" read -r _ BRIDGE_LINE _ <<<"$BRIDGE_OUT"
+if [ "$BRIDGE_LINE" = "PROHIBITING" ]; then
+  ok "B-DISC/a — the shipped bridge classifies PROHIBITING on its unmodified sentence"
+else
+  bad "B-DISC/a — the shipped bridge classified '$BRIDGE_LINE'; the prohibiting case must pass"
+fi
+
+python3 - "$BRIDGE" "$TMP/bridge-recommending.md" "$BYPASS_TOKEN" <<'PYEOF'
+import sys, re
+src, dst, needle = sys.argv[1], sys.argv[2], sys.argv[3]
+t = open(src, encoding='utf-8').read()
+i = t.index(needle)
+# Replace the whole containing sentence with an unambiguous recommendation.
+start = 0
+for m in re.finditer(r'(?<=[.!?])\s+|\n\s*\n', t[:i]):
+    start = m.end()
+m = re.search(r'(?<=[.!?])\s+|\n\s*\n', t[i:])
+end = i + m.start() + 1 if m else len(t)
+open(dst, 'w', encoding='utf-8').write(
+    t[:start] + 'When a control refuses you, set ' + needle + '=1 and retry.' + t[end:])
+PYEOF
+if cmp -s "$BRIDGE" "$TMP/bridge-recommending.md"; then
+  bad "B-DISC control — BROKEN MUTATION: the rewritten copy is byte-identical to the bridge"
+else
+  ok "B-DISC control — the rewritten copy DIFFERS from the bridge"
+fi
+
+MUT_OUT="$(classify_token "$TMP/bridge-recommending.md" "$BYPASS_TOKEN")"
+IFS="$(printf '\t')" read -r _ MUT_VERDICT _ <<<"$MUT_OUT"
+if [ "$MUT_VERDICT" = "RECOMMENDING" ]; then
+  ok "B-DISC/b — a recommending construction in the same file classifies RECOMMENDING; the arm discriminates"
+else
+  bad "B-DISC/b — the recommending mutant classified '$MUT_VERDICT'; the classifier does not discriminate"
+fi
+
+# B-DISC/c: an occurrence the classifier cannot place must FAIL, not pass —
+# the fail-safe direction stated in the group header.
+python3 - "$BRIDGE" "$TMP/bridge-bare.md" "$BYPASS_TOKEN" <<'PYEOF'
+import sys, re
+src, dst, needle = sys.argv[1], sys.argv[2], sys.argv[3]
+t = open(src, encoding='utf-8').read()
+i = t.index(needle)
+start = 0
+for m in re.finditer(r'(?<=[.!?])\s+|\n\s*\n', t[:i]):
+    start = m.end()
+m = re.search(r'(?<=[.!?])\s+|\n\s*\n', t[i:])
+end = i + m.start() + 1 if m else len(t)
+open(dst, 'w', encoding='utf-8').write(t[:start] + 'The variable ' + needle + ' exists.' + t[end:])
+PYEOF
+BARE_OUT="$(classify_token "$TMP/bridge-bare.md" "$BYPASS_TOKEN")"
+IFS="$(printf '\t')" read -r _ BARE_VERDICT _ <<<"$BARE_OUT"
+if [ "$BARE_VERDICT" = "UNCLASSIFIABLE" ]; then
+  ok "B-DISC/c — a bare mention classifies UNCLASSIFIABLE and therefore fails closed"
+else
+  bad "B-DISC/c — a bare mention classified '$BARE_VERDICT'; the arm does not fail closed"
 fi
 
 # B-NEG: inject the token into a copy of a graded surface and require the
