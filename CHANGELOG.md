@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.55] - 2026-09-05
+
+Nine ways the safety guards blocked ordinary work are fixed, and a refusal now names the retry that usually resolves it.
+
+[Full notes](release/releases/notes/v4.55_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.55)
+
 ## [v4.54] - 2026-09-05
 
 Sessions now receive the platform rules directory at deploy time, with a published size budget and links that resolve where they land.
