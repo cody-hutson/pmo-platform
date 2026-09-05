@@ -155,6 +155,35 @@ is not installed, and — for steps 2 and 3 — work the hook does not do at all
 2. Verify deployment: open Cowork, invoke the changed skill, confirm expected behavior. In Claude Code, type `/` and confirm the skill appears as a plain entry (e.g., `/daily-status`).
 3. **Rebuild .skill package — MANDATORY for every modified skill** via `python3 -m scripts.package_skill <skill-dir> packages/` from `release/skills/pmo-skill-refiner/`. Every skill in `{core,operations,release}/skills/` has a corresponding `.skill` package in `packages/` — no exceptions. Source-vs-package staleness is a release-blocking compliance gap, structurally enforced by `deploy.sh --check` Check 7 (package-freshness). Check 7 asserts freshness **by content, not by mtime** (per the gate-efficacy standard): each build emits a committed content-baseline sidecar `packages/<skill>.skill.sha256` (the rebuild-stable content-manifest hash), and Check 7 stages a rebuild of source and compares its content hash against that baseline — so a stale package fails even on a fresh checkout where every file mtime is equal, while a mere `touch` of a current package does not. Use `bash core/deploy/tools/build-skill-packages.sh <skill>` (which injects `TEMPLATE_SYNC_MAP` canonicals and writes the sidecar) rather than calling the packager directly when a skill consumes injected templates, so the committed package and its sidecar both reflect current canonical content.
 
+**Package freshness is asserted at two surfaces, and they do not fail alike.** A
+criterion that leans on "the freshness gate" has to say which one it means:
+
+- **Deploy-time — `./deploy.sh --check` Check 7.** Always-enforce: its
+  `Gate-efficacy posture:` header block in `core/deploy/deploy.sh` declares
+  `enforcement-surface: always-enforce (deploy-time)`, so a stale package makes
+  `--check` exit non-zero on every run, independent of any mode file. This is the
+  surface every "enforced by Check 7" statement in this file refers to.
+- **Pre-merge — the `Skill package content-freshness (pre-merge gate)` workflow**
+  at `.github/workflows/skill-package-freshness.yml`, a thin caller of
+  `deploy.sh --check-package-freshness` that runs Check 7's content-hash verdict
+  on every pull request. Whether it BLOCKS is governed by the committed sentinel
+  `.github/skill-package-freshness.enforce`, whose first non-comment line is the
+  mode token. Read that token; do not infer this surface's mode from the
+  deploy-time statements above.
+
+**A stale package is stopped from merging only when both halves hold:** the
+sentinel token blocks, so the job goes red, AND the job is a member of the main
+branch's `required_status_checks`. That membership is branch-protection state,
+which this repository does not version, so it is recorded in the gate-efficacy
+register rather than being derivable from the tree. A criterion needing only
+"the gate fails on a stale package" depends on the token alone; a criterion
+needing "a stale package cannot merge" depends on both halves.
+
+**Current pre-merge mode:** the sentinel token reads `enforce`, so this surface fails
+the job red on a rostered package that is stale — or that it could not measure —
+rather than annotating it and passing; whether that red job also stops a merge still
+depends on the `required_status_checks` half above, which no file here records.
+
 ### Automatic post-merge deploy
 
 `core/hooks/git-post-merge-deploy.sh` is installed as the repository's `post-merge`
@@ -325,7 +354,7 @@ carried, which left Checks 16/17/19/21/22/24/26/27/31/32/34–46 unlisted). Each
 check's `# Check N` comment block in `deploy.sh` carries its full description.
 
 Use `--check` (without `--warn`) to exit non-zero on any drift. Enforcement mode
-per check is **not** maintained here either: it is read from
+per `deploy.sh --check` check is **not** maintained here either: it is read from
 `.claude/hooks/deploy-check.mode` (a check in its shakedown window runs warn-mode;
 an always-enforce check is unaffected by that file). The mode file plus each
 check's own `Gate-efficacy posture:` header comment in `deploy.sh` are

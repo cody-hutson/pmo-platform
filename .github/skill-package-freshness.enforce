@@ -12,15 +12,21 @@
 #               true, non-zero exit code but does not block.
 #   enforce   → block on a STALE package (exit-1 propagates to the CI caller).
 #
-# Ships DORMANT (warn) during the calibration window, per the warn-mode-initial
-# posture. The introducing release `governance-ci-gates` dogfoods this gate green on
-# its own PR (its #1632 eval-writer reference edit + rebuild is the live regression
-# signal). Flip the token below to `enforce` after a >=3-day warn-log review with zero
-# false positives (dep #2159 — Check 7's non-reproducible-archive false-positives —
-# is CLOSED) AND after the operator adds the `skill-package-freshness` job to
-# `required_status_checks` (branch protection — the out-of-tree enforcement surface).
-# No code change is needed to graduate.
+# GRADUATED 2026-09-04: token flipped warn -> enforce.
+# The stated precondition (">=3-day warn-log review with zero false positives") was judged
+# UNSATISFIABLE rather than satisfied: the content arm had never executed in CI, so the
+# accumulated warn log was the output of a probe that measured nothing. A positive
+# falsification test is accepted as the substitute evidence, on this explicit sequencing:
+# this flip FIRST, then a seeded stale package proved RED on the release branch WHILE this
+# check is still non-required, then a byte-exact revert proved GREEN, then merge (operator
+# decision D-6181Arm, Arm A conditioned). The proof FOLLOWS this commit and does not
+# precede it — stating it here in the past tense would be the same declared-vs-actual
+# defect this flip exists to close.
+# Dep #2159 (non-reproducible-archive false positives) is CLOSED.
+# The out-of-tree half — adding "Pre-merge .skill package content-freshness gate" to
+# required_status_checks — is an operator step executed AFTER the release merges.
 #
-# (Token-flagged rather than presence-flagged so the file can ship now — the docs
-#  reference it — while the gate stays non-blocking; mirrors close-completeness.enforce.)
-warn
+# (Token-flagged rather than presence-flagged so the file could ship ahead of the flip —
+#  the docs referenced it while the gate was still non-blocking; mirrors
+#  close-completeness.enforce.)
+enforce
