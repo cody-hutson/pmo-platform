@@ -93,7 +93,7 @@ Declared in the milestone: D1 (#4332 → #5242 → #5897) → D2 (#5500 → #618
 | #5500 → #6181 | Confirmed | #6181 is terminal — it grades whether the flip landed and re-reads citing ACs. |
 | #5500 AC4 ← D1 | **New, real** | #5500 AC4 is byte-for-byte the same mechanism as #5242 AC1 and #5897 AC2 — three criteria, one implementation → CIAC-1. |
 | #4332 AC3 ≡ #5242 AC2 ≡ #6181 AC3 | **New — convergence** | One falsification artifact discharges a criterion in three cards → CIAC-2. |
-| #6998 → [T0 operator registration] | **New at Collective Review** | Registering the required check before the bot-PR remediation path exists would stall Dependabot **security** updates on a public repository. Sequence steps 14–15 therefore depend on #6998. |
+| #6998 → [T0 operator registration] | **New at Collective Review** | Registering the required check before the bot-PR remediation path exists would stall Dependabot **security** updates on a public repository. Sequence steps 11–12 therefore depend on #6998. |
 | #5897 → [T0 operator registration] | Confirmed, mis-attributed in the original sub-task | Branch-protection registration is **#5897's** dependency, not #5500's AC. |
 
 **Circular chains: none, and the zero is real.** 3-colour DFS back-edge detection over the verified edge set; denominator 7 nodes / 8 edges; subject arm **0** back-edges. Sensitivity arm: a synthetic `#6181 → #4332` edge returned the back-edge `('6181','4332')`. Specificity arm: a benign forward edge `#4332 → #6181` returned **0**.
@@ -274,6 +274,7 @@ release/governance/release-process.md                           edit
 
 # ── #6181 — the live mode is stated where a criterion author reads it ──
 core/rules/skill-deployment.md                                  edit
+release/references/pipeline/stage-06-engineering.md             edit
 
 # ── #6998 — the automated-dependency and out-of-band ingress paths ──
 .github/dependabot.yml                                          edit
@@ -411,7 +412,7 @@ Recorded at Engineering Commit 0 so Stage 9 reads a **declared** position rather
 | **V-3** | Doc-link integrity | `deploy.sh --check` Check 14 over the modified `.md` files | Every internal markdown link in a modified file resolves |
 | **V-4** | PF regression suite | `bash core/deploy/tests/test_package_freshness_exit_codes.sh` | All PF arms PASS at every slot boundary, including after the slot-6 sentinel flip (R3b's re-point is what makes this survivable) |
 | **V-5** | CIAC-1..4 verdicts | Per § Cross-Issue Acceptance Criteria methods | Graded release-level at Stage 9 QC3.5 on the merged PR |
-| **V-6** | Seed reverted byte-exact | `git diff origin/main -- packages/` at the release-branch head after sequence step 8 | Empty — the seeded-stale artifact leaves no residue · control: the same command during the seeded window returns a non-empty diff |
+| **V-6** | Seed reverted byte-exact | Compare tree objects across sequence step 8 — `git log --format=%T -1 8c0ede06` (pre-seed) against `git log --format=%T -1 bd46f208` (post-revert) — then assert `git diff 8c0ede06..bd46f208` is empty | Identical tree SHAs — both `85b6383a` — and an empty diff: the seeded-stale artifact leaves no residue · control: the seed commit `38cadb75` carries tree `d3448c75`, differing from **both**, so the check discriminates on its subject rather than merely reading non-empty · instrument liveness: the same diff against `main` @ `7dfdb0fa` returns 32 `--stat` lines |
 | **V-7** | Release-level checklist | Per `verification-checklist.md`: File Integrity · Content Correctness · Cross-Reference Validity · Skill Invocation · Output Contract Compliance | All PASS or explained |
 
 ---
