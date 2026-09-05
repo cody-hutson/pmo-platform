@@ -789,7 +789,7 @@ Its blast radius is bounded by measurement rather than by assertion: **0 of the 
 
 **Verdict: additive in effect on shipped packs, not purely additive in grammar.** Because every shipped pack is unaffected on all three axes, **the meta-schema version stays v1**; no shim. A pack that *adopts* the new fields takes a `pack_version` minor bump per §6.1 (the data-level additive rule), independent of the meta-schema version.
 
-### 6.2d The content-provenance extension is additive in effect — meta-schema version stays v1 ({{ADR:kit-content-provenance-key}})
+### 6.2d The content-provenance extension is additive in effect — meta-schema version stays v1 (ADR-189)
 
 The content-provenance layer (§1.2 the amended `criteria` check tuple and the FieldDecl declared superset, §1.2.1 the `source` rule at two altitudes with its no-inheritance and `role`-total clauses, §3.1 / §3.2 the `x-pmo-content-source[]` projection) extends the meta-schema **without** a version bump — the fourth such extension, after §6.2a, §6.2b and §6.2c. It follows §6.2c's three-axis form, and **diverges from it on the axis where the evidence diverges**.
 
@@ -820,7 +820,7 @@ The walk covers every `pack.toml` the corpus holds, shipped and fixture alike, a
 
 **The residual is named rather than dismissed, and it differs from §6.2c's in kind.** §6.2c's restriction met a live rule and a zero population; this one meets **no rule** and a **non-zero** population. Type-pack *instances* are K4 operator-local config by design (§0), so the tracked corpus is not the whole population — and here the usual *"no operator-local instance is rejected until that deployment runs the check"* clause is stronger than it needs to be, because there is no check to run. Stated plainly: this extension's backward compatibility rests entirely on the absence of an enforcer, and **when the content-completeness lint ships, every declaration that has not adopted `source` becomes a finding** — 16 of them in this corpus if none had adopted. That is the intended behaviour and it is why the shipped manifests are remediated in the same release that introduces the rule.
 
-**Verdict: additive in effect, not purely additive in grammar. The meta-schema version stays v1**; no shim. A pack that *adopts* `source` takes a `pack_version` minor bump per §6.1 (the data-level additive rule), independent of the meta-schema version. The architectural decision this records is {{ADR:kit-content-provenance-key}}, a grammar-altitude sibling extension of [ADR-018](../ADRs/ADR-018-work-item-type-layer.md) in the same lineage as ADR-039, ADR-070, ADR-077 and ADR-180.
+**Verdict: additive in effect, not purely additive in grammar. The meta-schema version stays v1**; no shim. A pack that *adopts* `source` takes a `pack_version` minor bump per §6.1 (the data-level additive rule), independent of the meta-schema version. The architectural decision this records is ADR-189, a grammar-altitude sibling extension of [ADR-018](../ADRs/ADR-018-work-item-type-layer.md) in the same lineage as ADR-039, ADR-070, ADR-077 and ADR-180.
 
 ### 6.3 Per-kind criteria versioning (the grandfather core)
 
