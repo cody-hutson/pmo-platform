@@ -17,7 +17,9 @@
 # (see resolve_and_classify). Command substitution, backticks, the canonicalizer's
 # quoted-span sentinel, literal `..` traversal and normalizer failure are refused
 # under -003; a decidable literal prefix is classified under -001/-002; an operand
-# with no decidable prefix is admitted with an always-logged -004 advisory record.
+# with no decidable prefix is admitted with a -004 advisory record, written on every
+# invocation that reaches check_verb (warn and enforce; at .mode=off this hook exits
+# above that point, so the operand is still admitted but nothing is recorded).
 # Shell redirection (`>`, `>>`, `<`) deferred to v2 — accepted v1 residual per
 # block-rm-prefer-trash.sh § Known Limitations precedent.
 #
@@ -514,7 +516,8 @@ _classify_literal() {
 #   Returns: 0 = inside allowed root (or decidable prefix inside)
 #            1 = outside allowed root (fully resolved)
 #            2 = unresolvable (strict refusal)
-#            3 = advisory-allow, always logged (BLOCK-FS-BOUNDARY-004)
+#            3 = advisory-allow, logged by the caller (BLOCK-FS-BOUNDARY-004);
+#                see advise_unresolvable for the mode scope of that record
 #            4 = decidable literal PREFIX outside allowed roots (message must say "prefix")
 #   Outputs the resolved absolute path on stdout when the return is 0, 1 or 4.
 #   A distinct return code — not a global — carries the prefix qualifier, because callers
@@ -579,7 +582,8 @@ resolve_and_classify() {
       ;;
   esac
 
-  # G6 — no decidable prefix. Advisory allow; the caller always logs it.
+  # G6 — no decidable prefix. Advisory allow; the caller logs it whenever this function
+  # was reached at all (see advise_unresolvable — .mode=off exits above check_verb).
   return 3
 }
 
@@ -638,16 +642,24 @@ extract_target_tokens() {
 # advise_unresolvable(verb, token) — BLOCK-FS-BOUNDARY-004 (#5555)
 #   The genuinely-undecidable class: an operand whose first character is a parameter
 #   expansion, carrying no $(, no backtick, no \001 sentinel, and no `..` in any literal
-#   span. It is ADMITTED, and the admission is recorded.
+#   span. It is ADMITTED, and the admission is recorded whenever this function is reached.
 #
-#   MODE-INDEPENDENT BY CONSTRUCTION. This function never reads $MODE and never blocks at
-#   any .mode value, so the false-positive fix ships without touching the dial that seven
-#   unrelated hooks share. That is a design property, not "warn-mode behaviour" — do not
-#   route it through block_or_warn.
+#   THE DISPOSITION IS MODE-INDEPENDENT; THE RECORD IS NOT. This function never reads
+#   $MODE and never blocks at any .mode value, so the false-positive fix ships without
+#   touching the dial that seven unrelated hooks share. That is a design property, not
+#   "warn-mode behaviour" — do not route it through block_or_warn.
+#
+#   But mode-independence is a property of what this function DOES, not of whether it
+#   RUNS. At .mode=off the hook short-circuits at the `off` exit above the dependency
+#   gate, so check_verb is never called, this function is never reached, and NO -004
+#   record is written. "Always recorded" is therefore wrong as an unqualified claim:
+#   the ADMIT is mode-independent, the RECORD is scoped to warn and enforce. Do not
+#   restore the absolute wording — the suite's MODEOFF-REC arms fail exactly that edit.
 #
 #   Record-only, no stderr: the record is what keeps the admitted population measurable
-#   (and a later narrowing evidence-backed). Emitting a stderr line per operand would
-#   reproduce, on ~90% of file reads, exactly the operator noise this card removes.
+#   on a warn- or enforce-mode instance (and a later narrowing evidence-backed); at
+#   .mode=off the class is admitted and unmeasured. Emitting a stderr line per operand
+#   would reproduce, on ~90% of file reads, exactly the operator noise this card removes.
 advise_unresolvable() {
   local verb="$1"; local token="$2"
   log_warn "BLOCK-FS-BOUNDARY-004" \

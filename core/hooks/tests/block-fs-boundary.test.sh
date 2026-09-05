@@ -141,7 +141,8 @@ test_case "dd of=~/Desktop target blocks" \
 # RE-BASELINED BY #5555 — this arm is kept, not removed, because its subject is exactly
 # what Policy P changes. `cat $SECRET_FILE` is a bare parameter expansion: no $(, no
 # backtick, no \001 sentinel, no `..`, and no decidable literal prefix. It is now G6 —
-# ADMITTED with an always-logged -004 advisory record.
+# ADMITTED with a -004 advisory record — written at warn and enforce; at .mode=off the
+# hook exits before check_verb and nothing is recorded (pinned by MODEOFF-REC-01 below).
 #
 # This is a REAL surrender of coverage and is the card's documented cost (Stage 5 risk
 # RA): `cat "$X"` where $X expands to an out-of-boundary path is admitted where it was
@@ -222,7 +223,7 @@ test_case "AC-3 (G6): cat \"\$HOME/Claude/...\" admitted" \
   "$(bash_payload 'cat "$HOME/Claude/pmo-platform/README.md"')" 0
 
 # AC-3 record control: a SILENT allow fails this criterion. -004 must actually log,
-# because the always-logged record is what keeps the admitted class measurable (and
+# because the -004 record is what keeps the admitted class measurable at warn/enforce (and
 # a later narrowing evidence-backed). Counts `rule` lines in the sandbox warn log —
 # the log is pretty-printed JSON, so one record contributes exactly one such line.
 WARN_LOG_FILE="${HOOK_DIR}/fs-boundary-warn-log.jsonl"
@@ -249,6 +250,154 @@ fi
 # suite's default mode is already enforce.
 test_case "AC-3 (INT-3): -004 admits at .mode=enforce — mode-independent by construction, not warn-mode behaviour" \
   "$(bash_payload 'cat "$SPOKE_OUT/enforce-probe.md"')" 0
+
+# ----- MODEOFF-REC: the -004 RECORD is mode-scoped, and the corpus must say so (F-12) --
+#
+# WHY THIS ARM EXISTS. The registry row above it used to read "Admitted and always
+# recorded. Mode-independent by construction", and advise_unresolvable's comment said the
+# admission "is recorded" with no qualifier. Both overstated the same way. The ADMIT is
+# mode-independent — INT-3 directly above proves it at enforce, the mode at which a
+# mode-gated rule WOULD block. The RECORD is not: at .mode=off the hook exits at the `off`
+# short-circuit above the dependency gate, so check_verb is never called,
+# advise_unresolvable is never reached, and NO -004 record is written.
+#
+# It is material rather than pedantic because AC-1's measurability argument rests on the
+# record existing, and the claim was stated in the bypass-mode-readiness corpus — the
+# document an operator reads when deciding an enforce flip, whose whole subject is that
+# dial. A reader who took "always recorded" literally would read a zero record count on an
+# off-mode instance as an empty population rather than as a disabled hook.
+#
+# This arm holds the DOCUMENT against the HOOK's own verdict in the same run, so prose and
+# behaviour cannot drift apart silently. Same shape as NOEXEC-DOC-01 in
+# block-destructive.test.sh, and the same reason: a doc claim with no executable arm is a
+# claim that decays.
+#
+# NO PIPELINES ANYWHERE IN THIS BLOCK. The doc classifier and the record counter are each
+# one awk pass using index() — literal matching, so no marker needs escaping — and the
+# behavioural probe feeds the hook from a FILE rather than from a writer on the other side
+# of a pipe. Both are deliberate: a writer piped into a short-circuiting reader is the
+# idiom the SIGPIPE-idiom gate matches by name.
+MODEOFF_FRAG="$(cd "$(dirname "$0")/../.." && pwd -P)/rules/bypass-mode-readiness/block-fs-boundary.md"
+[ -f "$MODEOFF_FRAG" ] || MODEOFF_FRAG="$(cd "$(dirname "$0")/../../.." && pwd -P)/core/rules/bypass-mode-readiness/block-fs-boundary.md"
+MODEOFF_INDEX="$(cd "$(dirname "$0")/../.." && pwd -P)/rules/bypass-mode-readiness.md"
+[ -f "$MODEOFF_INDEX" ] || MODEOFF_INDEX="$(cd "$(dirname "$0")/../../.." && pwd -P)/core/rules/bypass-mode-readiness.md"
+MODEOFF_LOG="${HOOK_DIR}/fs-boundary-warn-log.jsonl"
+
+# MODE-SCOPED requires all three: the retired absolute GONE, the disposition/record split
+# stated, and the .mode=off consequence named. Any two without the third is the
+# both-ways-at-once state a partial reconcile leaves behind — prose that has been softened
+# without being corrected, which is the specific regression this release has flagged
+# repeatedly. A vaguer sentence must not pass this classifier.
+modeoff_rec_claim() {   # $1 = readiness file -> MODE-SCOPED | STALE-ABSOLUTE | NO-SPLIT | NO-OFF-CLAUSE | DOC-MISSING
+  if [ ! -f "$1" ]; then /usr/bin/printf 'DOC-MISSING'; return 0; fi
+  /usr/bin/awk '
+    index($0, "Admitted and always recorded")                                           { stale = 1 }
+    index($0, "The disposition is mode-independent; the record is not")                 { sp = 1 }
+    index($0, "the hook exits before the verb check, so no advisory record is written")  { oc = 1 }
+    END {
+      if (stale == 1) { printf "STALE-ABSOLUTE"; exit }
+      if (sp    != 1) { printf "NO-SPLIT";       exit }
+      if (oc    != 1) { printf "NO-OFF-CLAUSE";  exit }
+      printf "MODE-SCOPED"
+    }
+  ' "$1"
+}
+
+# Counting with awk rather than `grep -c` is deliberate on two counts: grep exits 1 on a
+# zero count, and a zero count is precisely the reading this arm must be able to trust.
+modeoff_rec_count() {   # -> integer count of -004 records currently in the sandbox warn log
+  if [ ! -f "$MODEOFF_LOG" ]; then /usr/bin/printf '0'; return 0; fi
+  /usr/bin/awk 'index($0, "BLOCK-FS-BOUNDARY-004") { n++ } END { printf "%d", n + 0 }' "$MODEOFF_LOG"
+}
+
+# The behavioural half, taken from the SHIPPED hook in this same run. One G6 payload, one
+# mode, measured as a record delta. Restores enforce immediately, like test_off_case above.
+modeoff_rec_delta() {   # $1 = .mode value -> record delta for one G6 payload
+  local modeoff_before modeoff_after modeoff_pf
+  modeoff_before="$(modeoff_rec_count)"
+  modeoff_pf="$(/usr/bin/mktemp)"
+  /usr/bin/printf '%s' "$(bash_payload 'cat "$MODEOFF_PROBE/x.md"')" > "$modeoff_pf"
+  /usr/bin/printf '%s' "$1" > "$MODE_FILE"
+  /bin/bash "$HOOK" < "$modeoff_pf" >/dev/null 2>&1 || true
+  /usr/bin/printf 'enforce' > "$MODE_FILE"
+  /bin/rm -f "$modeoff_pf"
+  modeoff_after="$(modeoff_rec_count)"
+  /usr/bin/printf '%d' "$((modeoff_after - modeoff_before))"
+}
+
+# The enforce delta is this measurement's OWN sensitivity arm. A zero at off proves nothing
+# unless the identical probe returns non-zero at a mode where the record is claimed to
+# exist — otherwise a broken probe and a correct finding are indistinguishable.
+modeoff_off_delta="$(modeoff_rec_delta off)"
+modeoff_enf_delta="$(modeoff_rec_delta enforce)"
+if [ "$modeoff_off_delta" = 0 ] && [ "$modeoff_enf_delta" = 1 ]; then
+  modeoff_behaviour="MODE-SCOPED"
+elif [ "$modeoff_off_delta" != 0 ]; then
+  modeoff_behaviour="RECORDS-AT-OFF"
+else
+  modeoff_behaviour="NEVER-RECORDS"
+fi
+
+modeoff_frag_claim="$(modeoff_rec_claim "$MODEOFF_FRAG")"
+modeoff_index_claim="$(modeoff_rec_claim "$MODEOFF_INDEX")"
+
+if [ "$modeoff_behaviour" = "MODE-SCOPED" ] && [ "$modeoff_frag_claim" = "MODE-SCOPED" ]; then
+  /usr/bin/printf 'PASS: MODEOFF-REC-01 readiness SOURCE and hook agree (doc=%s, records off=%s enforce=%s)\n' \
+    "$modeoff_frag_claim" "$modeoff_off_delta" "$modeoff_enf_delta"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: MODEOFF-REC-01 readiness SOURCE and hook DISAGREE\n  doc=%s (expected MODE-SCOPED)  behaviour=%s (expected MODE-SCOPED; off delta=%s expected 0, enforce delta=%s expected 1)\n  file=%s\n' \
+    "$modeoff_frag_claim" "$modeoff_behaviour" "$modeoff_off_delta" "$modeoff_enf_delta" "$MODEOFF_FRAG"
+  FAIL=$((FAIL + 1))
+fi
+
+# The GENERATED index is pinned separately rather than assumed. build-hook-registry.py
+# --check already proves it matches its source, but that gate is about freshness; this one
+# is about the claim, and a reader who lands on the index must not find the retired
+# absolute there.
+if [ "$modeoff_index_claim" = "MODE-SCOPED" ]; then
+  /usr/bin/printf 'PASS: MODEOFF-REC-02 generated registry index carries the same mode-scoped claim\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: MODEOFF-REC-02 generated index claim=%s (expected MODE-SCOPED) — regenerate with build-hook-registry.py\n  file=%s\n' \
+    "$modeoff_index_claim" "$MODEOFF_INDEX"
+  FAIL=$((FAIL + 1))
+fi
+
+# RED-BEFORE CONTROLS — ONE PER WAY THE CLAIM CAN GO WRONG. A classifier that cannot report
+# anything but MODE-SCOPED proves nothing, so the same predicate is run against three
+# mutants of the shipped document. Each arm asserts the mutation is LIVE (the mutant differs
+# from the shipped file) AND that the classifier reports the specific code that mutation
+# should produce — a merged conjunct, because a sed that matched nothing would otherwise let
+# the control pass for the wrong reason.
+modeoff_rec_control() {   # $1 = arm id  $2 = expected code  $3 = sed script
+  local modeoff_mut modeoff_got
+  modeoff_mut="$(/usr/bin/mktemp)"
+  /usr/bin/sed "$3" "$MODEOFF_FRAG" > "$modeoff_mut"
+  if /usr/bin/cmp -s "$MODEOFF_FRAG" "$modeoff_mut"; then
+    /usr/bin/printf 'FAIL: %s mutation is INERT — mutant is byte-identical to the shipped document; re-point the sed\n' "$1"
+    FAIL=$((FAIL + 1)); /bin/rm -f "$modeoff_mut"; return 0
+  fi
+  modeoff_got="$(modeoff_rec_claim "$modeoff_mut")"
+  /bin/rm -f "$modeoff_mut"
+  if [ "$modeoff_got" = "$2" ]; then
+    /usr/bin/printf 'PASS: %s mutation is live AND the classifier reports %s (red-before control fires)\n' "$1" "$modeoff_got"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s classifier did not report the drift\n  expected=%s actual=%s\n' "$1" "$2" "$modeoff_got"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# (a) the F-12 regression itself — the retired absolute back in the text.
+modeoff_rec_control "MODEOFF-REC-03a" "STALE-ABSOLUTE" \
+  's|Admitted, and recorded on every invocation|Admitted and always recorded. Admitted, and recorded on every invocation|'
+# (b) the disposition/record split silently collapsed back into one claim.
+modeoff_rec_control "MODEOFF-REC-03b" "NO-SPLIT" \
+  's|The disposition is mode-independent; the record is not|The disposition and the record are both mode-independent|'
+# (c) the .mode=off consequence softened away — the half that makes the claim falsifiable.
+modeoff_rec_control "MODEOFF-REC-03c" "NO-OFF-CLAUSE" \
+  's|the hook exits before the verb check, so no advisory record is written|the hook exits before the verb check|'
 
 # ----- AC-4 (G2): command substitution and backticks stay refused, BOTH quotings -----
 
