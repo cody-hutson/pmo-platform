@@ -612,26 +612,31 @@ log() {
 # hand-written by hub sessions at their own discretion — so the defect was never
 # an absent CLASS, it was an absent PRODUCER. This is that producer.
 #
-# THE EMITTING SUBTYPE SET IS THREE, NOT FIVE, and each exclusion is a different
-# fact rather than one rule applied twice:
+# THE EMITTING SUBTYPE SET IS FOUR, NOT FIVE. One exclusion remains, and it is a
+# different fact from the one that was lifted:
 #   deploy-skill    EMIT — the per-skill loop in cmd_deploy
 #   deploy-harness  EMIT — the harness loop (dormant until a harness artifact ships)
 #   deploy-package  EMIT — the packages loop; audit-trail only, see the consumer note
+#   deploy-rules-mirror
+#                   EMIT — deploy_rules_mirror(), the carrier; ONE ROW PER INVOCATION,
+#                   not one per member. THE COVERAGE HOLE RECORDED HERE IS CLOSED, and
+#                   the standing instruction attached to it ("when the producer ships,
+#                   RE-EVALUATE this exclusion rather than leaving the subtype silently
+#                   dark") is discharged by that carrier rather than deferred again.
+#                   What was missing was never the target set — the mirror's membership
+#                   is the marker-registered declaration mirror_pair_set(), which is
+#                   self-counting, so read it from the entries rather than from a number
+#                   stated here, and `release/tools/blast-radius.sh` carries the
+#                   identical pair set. What was missing was the PRODUCER: no file in
+#                   this repository wrote that mirror, which is why Check 9's advertised
+#                   "re-run --deploy to restore" remedy could not work. It now does.
+#                   `.claude/rules` is still NOT git-tracked, so the mirror exists only
+#                   by being deployed — which is exactly why the deploy owes a row.
 #   deploy-helper   DO NOT EMIT — genuinely producer-less AND target-less. The token
 #                   appears only in enum declarations; no directory, no path, no check.
-#   deploy-rules-mirror
-#                   DO NOT EMIT — but this is a COVERAGE HOLE, not a cleanup, and the
-#                   distinction matters. The target set is real and enumerated: Check 9
-#                   asserts an 11-path rules mirror under $DEPLOY_ROOT/.claude/rules/,
-#                   `release/tools/blast-radius.sh` carries the identical pair set, and
-#                   `.claude/rules` is NOT git-tracked — so the mirror can only exist by
-#                   being deployed. What is missing is the PRODUCER: no file in this
-#                   repository writes that mirror, which is why Check 9's advertised
-#                   "re-run --deploy to restore" remedy cannot work. Excluding the
-#                   subtype is correct TODAY because emitting a row for a deploy this
-#                   script does not perform would be fabricated telemetry in an
-#                   append-only log. When the producer ships, RE-EVALUATE this exclusion
-#                   rather than leaving the subtype silently dark.
+#                   This exclusion is NOT the same shape as the one above and does not
+#                   expire with it: there is no coverage hole here, because there is no
+#                   target to cover. It has no re-evaluation trigger attached.
 #
 # EMITS NOTHING ABSENT `--release <slug>`. deploy.sh is also the fresh-install path
 # (install.sh -> orchestrate.sh -> deploy.sh --deploy) and the operator's ad-hoc
@@ -2937,6 +2942,249 @@ _c73_compute_verdict() {
     "$_arms" "$_decls_total" "$_emitters_total" "$surface"
 }
 
+# ─── Mirror-pair path-set parity (Check 77 / --check-required-subset) — #4738 ────
+#
+# The predicate body, factored to TOP LEVEL so both surfaces share ONE body (the
+# DD1 shape used by _c38_/_c73_/_c32_compute_verdict): the lifecycle Check 77
+# inside cmd_check, and the --check-required-subset runner. No predicate is
+# re-encoded on either surface, so the pre-merge gate and the deploy-time check
+# can never disagree about what the invariant asserts.
+#
+# WHY THIS IS ON THE PRE-MERGE ROSTER AND NOT DEPLOY-TIME-ONLY. The defect this
+# closes escaped TWO layers — the automated check surface AND PR review — and
+# --check runs post-merge on the operator machine. The roster predicate is
+# { network-free AND install-independent AND posture:required AND no dedicated CI
+# mirror }, and this check satisfies all four because it reads only tracked source
+# text. That is precisely the property Check 9 lacks: Check 9 diffs against the
+# workspace mirror under $DEPLOY_ROOT, which is absent in CI and the public repo
+# where it correctly SKIPs, so folding parity into Check 9's body would make it
+# inherit that install-dependence and be permanently barred from the one surface
+# where the defect actually escaped.
+#
+# SURFACE ASYMMETRY, AND WHY THE GATE TOKEN SET IS BOUNDED. The runner's `*)` arm
+# fail-closes on any unrecognised token REGARDLESS of the warn/enforce sentinel.
+# On the "gate" surface every registered holder is a committed file, so an
+# unreadable holder there is a checkout defect and is reported FAIL; emitting a
+# measurement-outage token there would hard-fail CI on an outage, which the
+# withheld-verdict discipline forbids. The outage class is reachable only on the
+# lifecycle surface, where it routes through flag_not_evaluated and never touches
+# a counter. The token set is therefore PASS/FAIL on the gate and
+# PASS/FAIL/NOT-EVALUATED on lifecycle.
+#
+# Echoes ONE protocol line on stdout; per-row detail follows on subsequent lines
+# for the caller to render:
+#   PASS <n> holders, <m> paths        every holder parsed; symmetric difference empty
+#   FAIL <detail>                      divergence, an unparseable holder, or either
+#                                      vacuity state (fewer than two holders, or every
+#                                      discovered holder declaring zero members)
+#   NOT-EVALUATED <detail>             lifecycle only — the scan could not be completed
+_c77_compute_verdict() {
+  local surface="${1:-lifecycle}"
+  local _sr; _sr="$(_bm_src_root)"
+  local _prim="${C77_PRIMITIVE:-${_sr}/core/deploy/tools/check-mirror-pair-parity.py}"
+  local _root="${C77_ROOT:-${_sr}}"
+
+  if [[ ! -r "$_prim" ]]; then
+    # A missing primitive is a repo defect, not a benign absence: without it the
+    # check asserts nothing, and reporting clean would be the exact false-green
+    # this check exists to remove.
+    printf 'FAIL mirror-pair-parity primitive missing or unreadable: %s (the gate cannot assert anything without it)\n' "$_prim"
+    return 0
+  fi
+
+  local _out _rc=0
+  _out="$(/usr/bin/python3 "$_prim" --root "$_root" --output-format tsv 2>&1)" || _rc=$?
+
+  # RESIDUAL BUCKET. Field 1 is the class column; EVERY value outside the
+  # classified set is a FINDING, never a filtered-into-silence absence. A new
+  # class value that preserves column count, order and separator would otherwise
+  # match no selector and let this caller report clean while the primitive held a
+  # finding — the recorded failure mode of the 50-55 check cohort.
+  #
+  # This is the same predicate the shared tsv_residual_rows helper implements, but
+  # that helper is defined NESTED inside cmd_check and so does not exist when the
+  # --check-required-subset runner executes. Calling it here would work on the
+  # lifecycle surface and fail on the gate surface — the exact single-engine
+  # divergence this body is factored to top level to prevent. It is implemented
+  # once, here, rather than called on one surface and re-encoded on the other.
+  local _residual
+  _residual="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '
+    /^[[:space:]]*$/ { next }
+    $1 !~ /^(SCAN|HOLDERS|HOLDER|VERDICT|MISSING|UNPARSEABLE|NOT-EVALUATED)$/ { printf "%s%s", (n++ ? "; " : ""), $0 }
+  ')"
+  if [[ -n "$_residual" ]]; then
+    printf 'FAIL mirror-pair-parity emitted unrecognised TSV class value(s): %s\n' "$_residual"
+    return 0
+  fi
+
+  local _verdict _holders _paths
+  _verdict="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="VERDICT"{print $2}')"
+  _holders="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="HOLDERS"{print $2}')"
+  _paths="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="HOLDER"{print $5}' | /usr/bin/sort -u | /usr/bin/tr '\n' '/' | /usr/bin/sed 's#/$##')"
+
+  if [[ -z "$_verdict" ]]; then
+    printf 'FAIL mirror-pair-parity emitted no VERDICT row (exit %s) — an unreadable verdict is a defect, not a clean result: %s\n' \
+      "$_rc" "$(printf '%s' "$_out" | /usr/bin/tr '\n' ';')"
+    return 0
+  fi
+
+  case "$_verdict" in
+    PARITY)
+      printf 'PASS %s holders, %s source path(s) each, symmetric difference empty surface=%s\n' \
+        "$_holders" "$_paths" "$surface"
+      ;;
+    DIVERGENT)
+      printf 'FAIL mirror-pair path sets DIVERGE across %s holder(s):%s\n' "$_holders" \
+        "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="MISSING"{printf " %s — absent from holder %s (%s:%s);", $2, $3, $4, $5}')"
+      ;;
+    UNPARSEABLE)
+      printf 'FAIL mirror-pair parity UNPARSEABLE (%s holder(s) discovered):%s\n' "$_holders" \
+        "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="UNPARSEABLE"{printf " [%s] %s;", $2, $3}')"
+      ;;
+    NOT-EVALUATED)
+      # On the gate surface every holder is a committed file, so an unreadable one
+      # is a checkout defect reported as FAIL. Emitting the outage token there
+      # would gate a measurement outage — see the surface-asymmetry note above.
+      if [[ "$surface" == "gate" ]]; then
+        printf 'FAIL mirror-pair parity could not read a tracked holder file (a checkout defect on this surface):%s\n' \
+          "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="NOT-EVALUATED"{printf " %s — %s;", $2, $3}')"
+      else
+        printf 'NOT-EVALUATED the parity scan could not be completed, so a parity claim would be unsound:%s\n' \
+          "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="NOT-EVALUATED"{printf " %s — %s;", $2, $3}')"
+      fi
+      ;;
+    *)
+      printf 'FAIL mirror-pair-parity emitted an unrecognised VERDICT token [%s] — an unreadable verdict is a defect, not a clean result\n' "$_verdict"
+      ;;
+  esac
+}
+
+# ─── Rules-corpus admission + byte budget (Check 78 / --check-required-subset) ────
+#
+# The predicate body, factored to TOP LEVEL so both surfaces share ONE body (the DD1
+# shape used by _c38_/_c73_/_c77_compute_verdict): the lifecycle Check 78 inside
+# cmd_check, and the --check-required-subset runner. No predicate is re-encoded on
+# either surface, so the pre-merge gate and the deploy-time check can never disagree
+# about what the invariant asserts.
+#
+# WHAT IT ASSERTS. Everything in the deployed rules set loads ambiently into every
+# session, so the set is a per-session context cost rather than a list of files. The
+# primitive holds it to the thresholds published in
+# core/standards/rules-corpus-admission-standard.md §3 — the admitted set inside the
+# byte ceiling, every member over the per-file trigger carrying a §2 conditional
+# scoping field, every member carrying the §2 required frontmatter including
+# `type: rule` (the admission decision, made machine-readable).
+#
+# WHY IT IS ON THE PRE-MERGE ROSTER. The roster predicate is { network-free AND
+# install-independent AND posture:required AND no dedicated CI mirror }. This check
+# reads only tracked source text and never touches $DEPLOY_ROOT, so it satisfies all
+# four. That property matters more here than elsewhere: the budget must be verifiable
+# at BUILD time, because the deployed set it bounds is produced by the carrier at
+# deploy time — a check that could only observe the installed mirror would certify
+# the cost only after the cost had already been paid.
+#
+# WHY IT IS NOT FOLDED INTO CHECK 9 OR CHECK 77. Check 9 owns byte-identity between
+# a source and its installed mirror and is INSTALL-DEPENDENT (it correctly SKIPs in
+# CI and the public repo), so sharing its body would bar this invariant from the
+# pre-merge surface. Check 77 owns path-set parity ACROSS holders; this check
+# measures the SET those holders declare. Folding them would put two invariants
+# behind one verdict, so a budget breach and a holder divergence would be
+# indistinguishable in the output.
+#
+# A VACUOUS RUN IS AN INPUT FAILURE, NOT A PASS. A sum over zero members is 0 and 0
+# is inside every ceiling, so an empty scan is byte-indistinguishable from a healthy
+# one. The primitive reports that state NOT-EVALUATED rather than WITHIN.
+#
+# SURFACE ASYMMETRY. On the "gate" surface every input is a committed file, so an
+# unreadable member is a checkout defect reported FAIL; emitting the outage token
+# there would hard-fail CI on an outage via the runner's `*)` arm regardless of the
+# sentinel. The outage class is reachable only on the lifecycle surface, where it
+# routes through flag_not_evaluated and never touches a counter. The token set is
+# therefore PASS/FAIL on the gate and PASS/FAIL/NOT-EVALUATED on lifecycle.
+#
+# Echoes ONE protocol line on stdout; per-row detail follows for the caller:
+#   PASS <n> rule(s), <sum> B of <ceiling> B     within budget and contract
+#   FAIL <detail>                                breach, contract violation, or vacuity
+#   NOT-EVALUATED <detail>                       lifecycle only — scan incomplete
+_c78_compute_verdict() {
+  local surface="${1:-lifecycle}"
+  local _sr; _sr="$(_bm_src_root)"
+  local _prim="${C78_PRIMITIVE:-${_sr}/core/deploy/tools/check-rules-budget.py}"
+  local _root="${C78_ROOT:-${_sr}}"
+
+  if [[ ! -r "$_prim" ]]; then
+    # A missing primitive is a repo defect, not a benign absence: without it the
+    # check asserts nothing, and reporting clean would be the exact false-green this
+    # check exists to remove.
+    printf 'FAIL rules-budget primitive missing or unreadable: %s (the gate cannot assert anything without it)\n' "$_prim"
+    return 0
+  fi
+
+  local _out _rc=0
+  _out="$(/usr/bin/python3 "$_prim" --root "$_root" --output-format tsv 2>&1)" || _rc=$?
+
+  # RESIDUAL BUCKET. Field 1 is the class column; EVERY value outside the classified
+  # set is a FINDING, never a filtered-into-silence absence. A new class value that
+  # preserved column count, order and separator would otherwise match no selector and
+  # let this caller report clean while the primitive held a finding.
+  local _residual
+  _residual="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '
+    /^[[:space:]]*$/ { next }
+    $1 !~ /^(SCAN|MEMBERS|MEMBER|VERDICT|OVERSHOOT|UNSCOPED|FRONTMATTER|NOT-EVALUATED)$/ { printf "%s%s", (n++ ? "; " : ""), $0 }
+  ')"
+  if [[ -n "$_residual" ]]; then
+    printf 'FAIL rules-budget emitted unrecognised TSV class value(s): %s\n' "$_residual"
+    return 0
+  fi
+
+  local _verdict _n _sum _ceil _head
+  _verdict="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="VERDICT"{print $2}')"
+  _n="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="MEMBERS"{print $2}')"
+  _sum="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="MEMBERS"{print $3}')"
+  _ceil="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="MEMBERS"{print $4}')"
+  _head="$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="MEMBERS"{print $5}')"
+
+  if [[ -z "$_verdict" ]]; then
+    printf 'FAIL rules-budget emitted no VERDICT row (exit %s) — an unreadable verdict is a defect, not a clean result: %s\n' \
+      "$_rc" "$(printf '%s' "$_out" | /usr/bin/tr '\n' ';')"
+    return 0
+  fi
+
+  case "$_verdict" in
+    WITHIN)
+      printf 'PASS %s admitted rule(s), %s B of %s B ceiling (%s B headroom) surface=%s\n' \
+        "$_n" "$_sum" "$_ceil" "$_head" "$surface"
+      ;;
+    OVER-BUDGET)
+      printf 'FAIL admitted rules set is OVER BUDGET — %s B of %s B ceiling across %s rule(s):%s\n' \
+        "$_sum" "$_ceil" "$_n" \
+        "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="OVERSHOOT"{printf " over by %s B; largest contributors: %s;", $2, $3}')"
+      ;;
+    UNSCOPED-VIOLATION)
+      printf 'FAIL rule(s) over the per-file trigger carry neither paths: nor unscoped_rationale::%s\n' \
+        "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="UNSCOPED"{printf " %s (%s B) — %s;", $2, $3, $4}')"
+      ;;
+    FRONTMATTER-VIOLATION)
+      printf 'FAIL admitted rule(s) breach the frontmatter contract:%s\n' \
+        "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="FRONTMATTER"{printf " %s [%s] — %s;", $2, $3, $4}')"
+      ;;
+    NOT-EVALUATED)
+      # On the gate surface every input is a committed file, so an unreadable member
+      # is a checkout defect reported as FAIL — see the surface-asymmetry note above.
+      if [[ "$surface" == "gate" ]]; then
+        printf 'FAIL rules-budget could not measure the admitted set (a checkout defect on this surface):%s\n' \
+          "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="NOT-EVALUATED"{printf " %s — %s;", $2, $3}')"
+      else
+        printf 'NOT-EVALUATED the admitted set could not be measured, so a budget claim would be unsound:%s\n' \
+          "$(printf '%s\n' "$_out" | /usr/bin/awk -F'\t' '$1=="NOT-EVALUATED"{printf " %s — %s;", $2, $3}')"
+      fi
+      ;;
+    *)
+      printf 'FAIL rules-budget emitted an unrecognised VERDICT token [%s] — an unreadable verdict is a defect, not a clean result\n' "$_verdict"
+      ;;
+  esac
+}
+
 # ─── Release-corpus completeness (Check 32 / --check-release-corpus) — #1484 ─────
 # The LOG-row-driven completeness predicate, factored to TOP LEVEL so it is shared
 # by two surfaces with ONE body (DD1, like _vf_/_cc_/_c38_compute_verdict): the
@@ -3292,22 +3540,89 @@ _c35_compute_verdict() {
 # rebuild-stable content-manifest hash of a STAGED REBUILD of source vs the committed
 # baseline sidecar (packages/<skill>.skill.sha256) — mtime-independent, so a
 # committed-stale package is caught even on a fresh checkout. mtime is a cheap
-# non-verdict pre-filter only. python3/unzip absent → degrades to the
-# baseline-vs-live-package content compare + the mtime signal (logged), matching the
-# graceful-skip posture of the deploy-time Check 7.
+# non-verdict pre-filter only. Where the staged rebuild cannot run — a missing
+# interpreter, a missing unzip, or a packager dependency that will not import — the
+# body degrades to the baseline-vs-live-package content compare + the mtime signal
+# AND WITHHOLDS ITS VERDICT for every skill so degraded (NOT-EVALUATED, below).
+#
+# THE mtime FALLBACK IS INERT ON A FRESH CHECKOUT AND IS NOT A SECOND LINE OF DEFENCE.
+# Where the staged rebuild cannot run, both degraded branches below fall back to
+# c7_src_newer — source mtime vs package mtime. A fresh `git checkout` sets every
+# working-tree file to checkout time, so that comparison is FALSE for every skill by
+# construction, and neither branch can distinguish a current package from a stale one.
+# This is INERT, not merely weak: there is no state in which it catches a
+# committed-stale package on a fresh checkout, so there is no signal here to repair.
+# It is retained only because it is a real signal on an operator machine, where
+# mtimes are meaningful.
+#
+# WHICH IS WHY A DEGRADED RUN NO LONGER REPORTS FRESH. Those branches used to fall
+# through to the FRESH line, so "every package is current" and "the arm that would
+# have told us never ran" were the same observable — a caller had to establish the
+# precondition itself, out of band, from a WARN line nothing obliged it to read. The
+# body now counts the skills whose content arm did not conclude (c7_unmeasured) and
+# emits NOT-EVALUATED instead, so the withheld verdict is carried IN the protocol line
+# the caller already parses rather than alongside it.
 #
 # Check 7 has no network anchor, so the surface argument does not change the verdict;
 # it is accepted for signature parity with the other _cNN_compute_verdict bodies.
 #
 # Echoes ONE protocol line on stdout (the CALLER maps it to ++ISSUES or an exit code);
 # per-skill detail goes to stderr:
-#   FRESH <n>                all n rostered skill package(s) content-fresh
-#   STALE <count> <csv>      count stale skill(s), comma-separated — detail to stderr
+#   FRESH <n>                            all n rostered skill package(s) content-fresh
+#   STALE <count> <csv>                  count stale skill(s), comma-separated — detail to stderr
+#   NOT-EVALUATED <unmeasured> <total> <reason>
+#                                        the staged-rebuild content arm did not conclude for
+#                                        <unmeasured> of <total> rostered skills. A WITHHELD
+#                                        verdict, never a clean one (PV-7a Register B). The
+#                                        stale counter is ABSENT, not zero (PV-7b).
+#
+# PRECEDENCE: STALE > NOT-EVALUATED > FRESH. A real finding is never suppressed by a
+# measurement outage, so every blocking behaviour that predates the third token survives
+# byte-for-byte; the only state that moves is the former false FRESH.
+
+# _c7_packager_importable — can the STAGED-REBUILD packager's REAL import chain
+# resolve, under the interpreter build_skill_to_dir actually invokes?
+#
+# WHY THE REAL CHAIN AND NOT `import yaml`. The defect this closes was a PROXY
+# failure: the guard tested the INTERPRETER (`-x /usr/bin/python3`) while the
+# packager needed a MODULE. Swapping in a narrower proxy — a hardcoded `import
+# yaml` — repeats the class the day the packager grows a second dependency. This
+# imports the packager's own entrypoint, from the packager's own working
+# directory, under the packager's own interpreter, so the assertion IS the
+# dependency closure rather than a copy of it (the same discipline PF-6 applies
+# to resolve_template_sync_source).
+#
+# Import-safe by inspection: package_skill.py and quick_validate.py each carry an
+# `if __name__ == "__main__"` guard, and their module-level code only defines
+# constants — no I/O, no side effects.
+#
+# Echoes the last line of the failure on stdout when it fails; echoes nothing and
+# returns 0 when the chain resolves.
+_c7_packager_importable() {
+  local _out _rc=0
+  _out="$( ( cd release/skills/pmo-skill-refiner 2>/dev/null \
+             && /usr/bin/python3 -c 'import scripts.package_skill' ) 2>&1 )" || _rc=$?
+  [[ $_rc -eq 0 ]] && return 0
+  printf '%s' "$_out" | /usr/bin/tail -1 | /usr/bin/tr -s '[:space:]' ' ' | /usr/bin/cut -c1-120
+  return 1
+}
+
 _c7_compute_verdict() {
   local surface="${1:-lifecycle}"   # accepted for signature parity; verdict is surface-invariant
-  local c7_can_rebuild=true
-  [[ -x "/usr/bin/python3" ]] || c7_can_rebuild=false
-  command -v unzip >/dev/null 2>&1 || c7_can_rebuild=false
+  # CAPABILITY PROBE — supplies the REASON string only. It does NOT decide the verdict:
+  # the verdict rests on c7_unmeasured, the observed count of rostered skills whose
+  # content arm did not conclude. A capability probe that decided the verdict would be
+  # the same proxy this change removes, one layer up — it can only assert what it was
+  # written to foresee, and the original defect was a dependency nobody had foreseen.
+  local c7_can_rebuild=true c7_ne_reason="" c7_probe_msg=""
+  if [[ ! -x "/usr/bin/python3" ]]; then
+    c7_can_rebuild=false; c7_ne_reason="interpreter-missing:/usr/bin/python3"
+  elif ! command -v unzip >/dev/null 2>&1; then
+    c7_can_rebuild=false; c7_ne_reason="unzip-missing"
+  elif ! c7_probe_msg="$(_c7_packager_importable)"; then
+    c7_can_rebuild=false; c7_ne_reason="packager-import-failed:${c7_probe_msg:-no-diagnostic}"
+  fi
+  local c7_unmeasured=0
 
   local c7_total=0 c7_stale=0 c7_stale_list=""
   local skill c7_module c7_src_dir c7_pkg c7_sidecar c7_live_hash c7_baseline
@@ -3352,17 +3667,22 @@ _c7_compute_verdict() {
     # fresh checkout). Run whenever a rebuild is available; the result decides.
     if [[ "$c7_can_rebuild" == "true" ]]; then
       c7_tmp_pkgdir="$(mktemp -d)"
-      if build_skill_to_dir "$skill" "$c7_module" "$c7_tmp_pkgdir" >/dev/null 2>&1; then
+      # stdout stays suppressed — this function's stdout is the one-line verdict
+      # protocol and is captured by both callers. stderr is per-skill detail by
+      # design (see the protocol header above), so let the cause through.
+      if build_skill_to_dir "$skill" "$c7_module" "$c7_tmp_pkgdir" >/dev/null; then
         c7_rebuilt_pkg="$c7_tmp_pkgdir/${skill}.skill"
         c7_rebuilt_hash=$(skill_content_hash "$c7_rebuilt_pkg")
         if [[ -z "$c7_rebuilt_hash" ]]; then
-          printf '  WARN:  %s — rebuild produced no hashable package; baseline matched (PASS, staged-rebuild inconclusive)\n' "$skill" >&2
+          printf '  WARN:  %s — rebuild produced no hashable package; baseline matched (staged-rebuild INCONCLUSIVE — not a clean result)\n' "$skill" >&2
+          c7_unmeasured=$((c7_unmeasured + 1))
         elif [[ "$c7_rebuilt_hash" != "$c7_baseline" ]]; then
           printf '  FAIL:  %s — source content changed since build (rebuilt hash %s != committed baseline %s); rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$c7_rebuilt_hash" "$c7_baseline" "$skill" >&2
           c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"
         fi
       else
         printf '  WARN:  %s — staged rebuild failed to run; falling back to baseline-vs-package content compare\n' "$skill" >&2
+        c7_unmeasured=$((c7_unmeasured + 1))
         if [[ "$c7_src_newer" == "true" ]]; then
           printf '  FAIL:  %s — source mtime newer than package and rebuild unavailable to confirm content; rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$skill" >&2
           c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"
@@ -3372,6 +3692,10 @@ _c7_compute_verdict() {
     else
       # Degraded: no rebuild available; the baseline-vs-live-package compare already
       # passed, so the mtime pre-filter is the only remaining source-change signal.
+      # Counted UNCONDITIONALLY, once per rostered skill — NOT inside the src_newer
+      # guard below. The content arm did not conclude for this skill whether or not the
+      # pre-filter happened to fire, and it is the non-conclusion that is being counted.
+      c7_unmeasured=$((c7_unmeasured + 1))
       if [[ "$c7_src_newer" == "true" ]]; then
         printf '  FAIL:  %s — source mtime newer than package; python3/unzip unavailable to confirm by content — rebuild via core/deploy/tools/build-skill-packages.sh %s\n' "$skill" "$skill" >&2
         c7_stale=$((c7_stale + 1)); c7_stale_list+="${skill},"
@@ -3379,10 +3703,26 @@ _c7_compute_verdict() {
     fi
   done
 
-  if [[ $c7_stale -eq 0 ]]; then
-    printf 'FRESH %s\n' "$c7_total"
-  else
+  # One aggregate line naming the outage and its denominator, on EVERY verdict — so a
+  # STALE run still states how much of the roster went unmeasured (CIAC-4's stated
+  # denominator). Exactly one finding, naming the cause; per-skill verdicts are
+  # WITHHELD for the unmeasured skills, never guessed (PV-7c).
+  if [[ $c7_unmeasured -gt 0 ]]; then
+    printf '  WARN:  staged-rebuild content arm did not conclude for %s of %s rostered skill(s)%s\n' \
+      "$c7_unmeasured" "$c7_total" "${c7_ne_reason:+ — $c7_ne_reason}" >&2
+  fi
+
+  # PRECEDENCE: STALE > NOT-EVALUATED > FRESH. A real finding is NEVER suppressed by a
+  # measurement outage, so every blocking behaviour that existed before the third token
+  # survives unchanged; the ONLY state that moves is the former false FRESH.
+  # PV-7b: the stale counter is ABSENT from the NOT-EVALUATED line, not zero.
+  if [[ $c7_stale -gt 0 ]]; then
     printf 'STALE %s %s\n' "$c7_stale" "${c7_stale_list%,}"
+  elif [[ $c7_unmeasured -gt 0 ]]; then
+    printf 'NOT-EVALUATED %s %s %s\n' "$c7_unmeasured" "$c7_total" \
+      "${c7_ne_reason:-staged-rebuild-did-not-run}"
+  else
+    printf 'FRESH %s\n' "$c7_total"
   fi
 }
 
@@ -3852,13 +4192,27 @@ build_skill_to_dir() {
 
   # Invoke the per-skill packager from the pmo-skill-refiner module so its
   # `from scripts.quick_validate` import resolves. Emit into out_dir.
-  local repo_root rc=0
+  local repo_root rc=0 pkg_log
   repo_root="$(pwd)"
   mkdir -p "$out_dir"
+  # Capture rather than discard. The packager's stderr was previously sent to
+  # /dev/null here AND again at the _c7_compute_verdict call site, so a
+  # ModuleNotFoundError surfaced as the causeless line "staged rebuild failed to
+  # run" — 55 times per CI run, for the life of the gate, naming nothing. Emit on
+  # failure only: the packager prints progress on SUCCESS too, so unconditional
+  # pass-through would be noise.
+  pkg_log="$(mktemp)"
   (
     cd release/skills/pmo-skill-refiner || exit 1
     /usr/bin/python3 -m scripts.package_skill "$stage_dir/$skill" "$out_dir"
-  ) >/dev/null 2>&1 || rc=1
+  ) >"$pkg_log" 2>&1 || rc=1
+  if [[ $rc -ne 0 ]]; then
+    printf '  WARN:  %s — packager failed; its own output follows (the cause, not just the symptom):\n' "$skill" >&2
+    # First 20 lines, indented. `sed -n` over a FILE, never `| head` — a pipe into a
+    # short-circuiting reader is the SIGPIPE-idiom class repo-integrity.yml scans for.
+    sed -n '1,20{s/^/         /;p;}' "$pkg_log" >&2
+  fi
+  rm -f "$pkg_log"
   rm -rf "$stage_dir"
   return $rc
 }
@@ -4402,6 +4756,316 @@ detect_changed_skills() {
     sed -n 's|harness/\([^/]*\)/.*|\1|p' | sort -u)
 }
 
+# ─── mirror_pair_set — the SINGLE declaration of the mirror pair set ─────────
+#
+# Pure. Echoes one "<src>:<dest>:<class>" row per line, one row per mirror member.
+#
+# READ BY TWO CALLERS AND DECLARED BY NEITHER: Check 9 (which verifies the mirror)
+# and deploy_rules_mirror (which lays it down). There is no second copy anywhere in
+# this file. That is the whole point — a carrier holding its own list is the silent
+# desync the mirror-pair-parity check (Check 77) exists to prevent, so when the
+# carrier needed this set the declaration was HOISTED out of cmd_check rather than
+# duplicated into cmd_deploy. This file therefore still presents exactly ONE
+# marker-registered holder, and the cross-file total stays two (this and
+# release/tools/blast-radius.sh).
+#
+# A FUNCTION, NOT A GLOBAL ARRAY, for two reasons that both bite under
+# `set -euo pipefail`: a `local -a` is not legal at top level, and a bare global
+# array is mutable by any later caller — a shared declaration that any function can
+# rewrite is not a single source of truth. Every other shared body in this file
+# (_cNN_compute_verdict, _vf_*, _ds_*, _cc_*) is a pure emitter for the same reason;
+# this extends that convention rather than introducing a new shape.
+#
+# $DEPLOY_ROOT IS DELIBERATELY NOT A LITERAL. The array literal's elements are
+# double-quoted, so $DEPLOY_ROOT expands when the function BODY runs — that is, at
+# CALL time — and DEPLOY_ROOT is assigned near the top of this script, long before
+# any caller exists. Do not "fix" this into a constant — a constant would pin the
+# mirror to whatever root happened to be current when the file was edited.
+#
+# FIELD 3 IS THE OPERATIONS CLASS, and it is invisible to the parity extractor by
+# construction: that extractor splits on the FIRST separator and takes field 1, so a
+# third field cannot reach it. It IS visible to anything using "${pair##*:}", which
+# returns the class token rather than the destination path — Check 9 and the carrier
+# both strip fields explicitly for that reason. class is one of
+# { conduct | engineering }; the criterion is stated once, in
+# core/rules/operations-bridge.md § Context-Load Contract, and is NOT restated here.
+# The classification rides ON the declaration rather than in a parallel list so it
+# cannot drift from the set it annotates.
+# THE CONTAINER IS AN ARRAY LITERAL, NOT A HEREDOC, AND THAT IS LOAD-BEARING.
+# check-mirror-pair-parity.py skips the container's own opening and closing
+# delimiters BY NAME ("must be skipped by name rather than by guessing" — its
+# ARRAY_OPEN / ARRAY_CLOSE patterns), because the markers wrap the literal from
+# outside and its delimiters therefore fall inside the marked region. It knows
+# array literals; it does not know heredocs. A `cat <<EOF` body here parses `EOF`
+# as an entry carrying no separator and the primitive returns UNPARSEABLE —
+# measured, not assumed. Keeping the array literal is what lets this hoist land
+# with ZERO change to that primitive.
+mirror_pair_set() {
+  # mirror-pair-set: BEGIN holder=deploy-script sep=colon field=1
+  local -a _mps_rows=(
+    "core/rules/skill-deployment.md:$DEPLOY_ROOT/.claude/rules/skill-deployment.md:engineering"
+    "core/rules/harness-deployment.md:$DEPLOY_ROOT/.claude/rules/harness-deployment.md:engineering"
+    "core/rules/doc-link-maintenance.md:$DEPLOY_ROOT/.claude/rules/doc-link-maintenance.md:conduct"
+    "core/rules/operations-bridge.md:$DEPLOY_ROOT/.claude/rules/operations-bridge.md:conduct"
+    "core/rules/git-workflow.md:$DEPLOY_ROOT/.claude/rules/git-workflow.md:engineering"
+    "core/rules/governance-files.md:$DEPLOY_ROOT/.claude/rules/governance-files.md:conduct"
+    "core/rules/decision-time-adherence.md:$DEPLOY_ROOT/.claude/rules/decision-time-adherence.md:conduct"
+    "core/rules/rename-reference-cascade.md:$DEPLOY_ROOT/.claude/rules/rename-reference-cascade.md:conduct"
+    "core/rules/analysis-mandate.md:$DEPLOY_ROOT/.claude/rules/analysis-mandate.md:conduct"
+  )
+  # mirror-pair-set: END
+  printf '%s\n' "${_mps_rows[@]}"
+}
+
+# ─── _c9_undeclared_scan — the mirror's UNDECLARED-ENTRY enumeration (F-01) ────
+#
+# Pure emitter. Echoes exactly ONE verdict line for a mirror directory. Shared by
+# Check 9 and `--self-test` group UE, so there is one engine and no second scanner
+# to drift — the same single-engine discipline (CIAC-2) the required-subset runner
+# is built on.
+#
+# WHY IT EXISTS. Check 9 verifies that every DECLARED pair matches. Nothing verified
+# that the mirror contains ONLY declared members. Dev Testing planted an undeclared
+# file AND an undeclared subdirectory in the deployed mirror; Check 9 reported
+# 9 x IN-SYNC and zero mentions across an 829-line --check, against a sensitivity
+# control that was firing. A per-pair check cannot see an entry that is in no pair.
+#
+# THIS IS DELIBERATE SCOPE GROWTH, and it is bounded. No acceptance criterion
+# required it; the operator authorised it as growth, with that stated. So it
+# enumerates and does nothing else: it does NOT touch the declared-pair comparison
+# that already works, and it introduces NO new --check verdict state or exit-code
+# path. The four tokens below are internal to this emitter and its single caller
+# maps them onto emitters that already exist.
+#
+# AN UNDECLARED ENTRY IS A WARNING, NOT A FINDING — a deliberate call, stated. The
+# mirror is an operator-instance directory that the platform writes into but does
+# not own exclusively, so this predicate CANNOT distinguish "a stale member from a
+# retired declaration" from "a file the operator put here on purpose". That is
+# precisely flag_advisory_only's founding criterion, so the caller routes every hit
+# through it: no mode case, no enforce branch, no ISSUES increment, and therefore no
+# way for an operator's own unrelated file to block their --check when Check 9
+# graduates to enforce. A false-positive-prone gate on a real workspace would be
+# worse than the gap it closes.
+#
+# The signal is worth having even so, and the reason is specific: the carrier COPIES
+# and never deletes. When a rule leaves mirror_pair_set() — two did, reclassified
+# REFERENCE under the admission standard — every already-deployed workspace keeps
+# its mirror file forever. The byte ceiling the release enforces is then met in the
+# declaration and missed on the machine, which is the one thing a source-side check
+# structurally cannot see.
+#
+# VACUITY GUARD. The state that would make this pass falsely is an ABSENT mirror
+# reading as "no undeclared entries". It cannot: absence returns NOT-RUN, whose text
+# says nothing was enumerated, and no CLEAN line is reachable without a directory to
+# scan. Every non-absent verdict carries the scanned DENOMINATOR, so a zero is never
+# reported without the population it was measured over.
+#
+#   NOT-RUN <detail>     — no directory; NOTHING enumerated (never a clean result)
+#   CLEAN <detail>       — every entry classified, zero undeclared
+#   UNDECLARED <detail>  — one or more entries in no pair, named
+#   RESIDUAL <detail>    — the buckets do not sum to the scan; the classifier is wrong
+_c9_undeclared_scan() {
+  local _dir="$1"
+
+  if [[ ! -d "$_dir" ]]; then
+    printf 'NOT-RUN the mirror directory %s is absent, so NOTHING was enumerated — zero undeclared entries have NOT been asserted (the directory-level verdict owns this state)\n' "$_dir"
+    return 0
+  fi
+
+  # Declared basenames, read from the SAME single declaration Check 9 and the
+  # carrier read. Field 2 is the dest; "${_p##*:}" would return the CLASS token.
+  local -a _decl=()
+  local _p _r _d
+  while IFS= read -r _p; do
+    _r="${_p#*:}"
+    _d="${_r%:*}"
+    _decl+=("$(basename "$_d")")
+  done < <(mirror_pair_set)
+
+  local _seen=0 _present=0 _generated=0 _undeclared=0
+  local -a _names=()
+  local _entry _base _hit _known
+
+  # find -mindepth 1 -maxdepth 1 lists dotfiles and returns a subdirectory as ONE
+  # entry rather than recursing into it — a planted subdirectory is a single
+  # undeclared entry, which is what it is. Sorted so the verdict is deterministic.
+  while IFS= read -r _entry; do
+    [[ -n "$_entry" ]] || continue
+    _seen=$((_seen + 1))
+    _base="$(basename "$_entry")"
+
+    # (1) THE CARRIER'S OWN OUTPUT. _write_operations_rules_index writes this file
+    # into the mirror on every deploy and it is deliberately NOT a declared pair.
+    # A scan that did not exclude it by name would report a finding on day one,
+    # against a mirror the platform had just produced correctly. This exclusion is
+    # the reason to read a population's contract before inferring a gap from it.
+    if [[ "$_base" == "_operations-index.md" && -f "$_entry" ]]; then
+      _generated=$((_generated + 1))
+      continue
+    fi
+
+    # (2) A declared member, present as a regular file.
+    _known=false
+    for _hit in ${_decl[@]+"${_decl[@]}"}; do
+      if [[ "$_base" == "$_hit" && -f "$_entry" ]]; then
+        _known=true
+        break
+      fi
+    done
+    if [[ "$_known" == "true" ]]; then
+      _present=$((_present + 1))
+      continue
+    fi
+
+    # (3) Everything else. A DIRECTORY is always undeclared — every pair is a file,
+    # so a directory carrying a declared basename is still not that pair.
+    _undeclared=$((_undeclared + 1))
+    if [[ -d "$_entry" ]]; then
+      _names+=("$_base/ (directory)")
+    else
+      _names+=("$_base")
+    fi
+  done < <(/usr/bin/find "$_dir" -mindepth 1 -maxdepth 1 2>/dev/null | /usr/bin/sort)
+
+  # RESIDUAL BUCKET. Every scanned entry must land in exactly one class. If the
+  # three buckets do not sum to the scan, the classifier is wrong and a CLEAN
+  # verdict would be a false green — the same fail-loud discipline tsv_residual_rows
+  # applies to a primitive's verdict column.
+  if [[ $((_present + _generated + _undeclared)) -ne "$_seen" ]]; then
+    printf 'RESIDUAL classifier identity broke in %s: %s scanned but %s declared-present + %s carrier-generated + %s undeclared do not sum to it — this is a defect in the scan, never a clean result\n' \
+      "$_dir" "$_seen" "$_present" "$_generated" "$_undeclared"
+    return 0
+  fi
+
+  if [[ $_undeclared -gt 0 ]]; then
+    local _joined="" _n
+    for _n in ${_names[@]+"${_names[@]}"}; do
+      [[ -z "$_joined" ]] && _joined="$_n" || _joined="$_joined, $_n"
+    done
+    printf 'UNDECLARED %s entr(ies) in %s are in no mirror_pair_set() pair: %s [scanned %s: %s declared-present, %s carrier-generated]. A stale member left by a RETIRED declaration still costs its bytes in every session on this machine — the carrier copies and never deletes, so removing a rule from the declaration does not remove it from an already-deployed workspace. Delete it, or leave it if it is yours: this arm never gates.\n' \
+      "$_undeclared" "$_dir" "$_joined" "$_seen" "$_present" "$_generated"
+    return 0
+  fi
+
+  printf 'CLEAN %s entr(ies) scanned in %s: %s declared-present, %s carrier-generated, 0 undeclared\n' \
+    "$_seen" "$_dir" "$_present" "$_generated"
+  return 0
+}
+
+_write_operations_rules_index() {
+  # Regenerate the deployed operations index from the conduct-class rows of the
+  # SINGLE declaration. Rewritten in full on every carrier run, so it cannot drift
+  # from the set it summarises — and derived, so it is not a second list. The
+  # criterion itself is NOT restated here; this file names where it lives.
+  local _idx_dir="$1"
+  local _idx="$_idx_dir/_operations-index.md"
+  local _pair _src _rest _dest _class _base _purpose
+  {
+    printf '# Agent-conduct rules — operations-session load set\n\n'
+    printf '<!-- GENERATED FILE — do not hand-edit. Producer: deploy_rules_mirror() in\n'
+    printf '     core/deploy/deploy.sh. Regenerated in full on every ./deploy.sh --deploy.\n'
+    printf '     Any hand edit is lost on the next deploy. -->\n\n'
+    printf 'These are the rules in this directory whose normative subject is the agent'"'"'s own\n'
+    printf 'conduct — what it may conclude, decide, or do next. They bind an operations\n'
+    printf 'session even though that session operates no platform-engineering mechanism.\n\n'
+    printf 'The membership criterion is stated once, in `core/rules/operations-bridge.md`\n'
+    printf '§ Context-Load Contract. It is not restated here, and this list is generated\n'
+    printf 'from the classification carried on the mirror pair-set declaration rather than\n'
+    printf 'maintained by hand.\n\n'
+    printf 'The remaining files in this directory are platform-engineering rules. They are\n'
+    printf 'deployed here because the engineering branch loads them; an operations session\n'
+    printf 'is not expected to read them.\n\n'
+  } > "$_idx"
+  while IFS= read -r _pair; do
+    _class="${_pair##*:}"
+    [[ "$_class" == "conduct" ]] || continue
+    _src="${_pair%%:*}"
+    # The index names the DEPLOYED file, not the source. A reader opens this index
+    # from inside the mirror and follows the name it finds, so the name must be the
+    # one that exists HERE. src and dest basenames happen to match for every current
+    # member, which is exactly what would keep this latent until a pair whose names
+    # differ is admitted — and then the index would point at a file the mirror does
+    # not contain.
+    _rest="${_pair#*:}"
+    _dest="${_rest%:*}"
+    _base="$(basename "$_dest")"
+    # `if`, not `[[ … ]] && assign`: under `set -e` a false test would abort the deploy.
+    # The `|| true` is bound to the whole pipeline (a no-match grep is non-zero, and
+    # `set -o pipefail` would otherwise propagate that) — a missing purpose: line is a
+    # degraded index entry, never a failed deploy.
+    # NO FIRST-PERIOD TRUNCATION. This read used to end in `cut -d'.' -f1`, which
+    # kept only the text BEFORE the first period — and because the printf below
+    # re-appends one, a truncated entry rendered as a well-formed sentence. That is
+    # the worst shape a corruption can take: a `purpose:` reading "… the rule. It
+    # binds X." emitted "… the rule." and nothing downstream could tell the
+    # difference between that and a genuinely one-sentence purpose.
+    #
+    # It was invisible because every conduct-class member's purpose happens to be a
+    # single sentence today, so the truncation had nothing to cut. Membership is an
+    # admission decision made per rule, not a style rule about sentence count, so
+    # that is a coincidence and not a constraint — the next multi-sentence purpose
+    # admitted would have shipped a silently-shortened index entry.
+    #
+    # What replaces it strips ONE trailing period (plus trailing whitespace) so the
+    # printf's own `.` reproduces it — byte-identical output for every current
+    # member, which is the no-regression guarantee, while every internal period now
+    # survives. Asserted by --self-test group RI (RI-1 truncation, RI-2 the
+    # byte-identity control).
+    _purpose=""
+    if [[ -f "$_src" ]]; then
+      _purpose="$(grep -m1 '^purpose:' "$_src" 2>/dev/null | /usr/bin/sed -e 's/^purpose:[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/\.$//' || true)"
+    fi
+    if [[ -n "$_purpose" ]]; then
+      printf -- '- `%s` — %s.\n' "$_base" "$_purpose" >> "$_idx"
+    else
+      printf -- '- `%s`\n' "$_base" >> "$_idx"
+    fi
+  done < <(mirror_pair_set)
+}
+
+deploy_rules_mirror() {
+  # THE PRODUCER. Lays down the workspace rules mirror from the SINGLE pair-set
+  # declaration. Byte-identical by contract — this is what Check 9 verifies, and the
+  # reason $DEPLOY_ROOT/.claude/rules/ can exist at all, since it is not git-tracked.
+  #
+  # Before this existed, Check 9 verified a mirror that nothing in this repository
+  # wrote: its advertised "re-run ./deploy.sh --deploy to restore" remedy could not
+  # work, and an absent mirror was indistinguishable from a synchronised one.
+  #
+  # UNCONDITIONAL, and it does NOT gate on COWORK_AVAILABLE. The target is
+  # $DEPLOY_ROOT, never the Cowork session install path, so a session-less machine
+  # still gets its mirror — the same rationale (and the same ADR-013 basis) as the
+  # user-local skills mirror.
+  #
+  # IT COPIES THE ADMITTED SET AND NOTHING ELSE. There is deliberately no directory
+  # recursion here. A directory-recursive copy would silently restore the payload the
+  # admission standard removed and push the release past its own byte ceiling while
+  # the declaration still read compliant — mirror membership is expressed ONLY by the
+  # marker-registered declaration, never by a glob or a directory-existence test.
+  local target_dir="$DEPLOY_ROOT/.claude/rules"
+  mkdir -p "$target_dir"
+  local wrote=0 pair src rest dest
+  while IFS= read -r pair; do
+    src="${pair%%:*}"
+    rest="${pair#*:}"
+    dest="${rest%:*}"
+    if [[ ! -f "$src" ]]; then
+      log "  FAILED:   rules-mirror/$(basename "$src") — declared source missing"
+      FAILURES+=("rules-mirror/$(basename "$src")")
+      continue
+    fi
+    if cp "$src" "$dest" 2>/dev/null && diff -q "$src" "$dest" >/dev/null 2>&1; then
+      log "  Deployed: rules-mirror/$(basename "$dest")"
+      wrote=$((wrote + 1))
+    else
+      log "  FAILED:   rules-mirror/$(basename "$dest") — copy or verification failed"
+      FAILURES+=("rules-mirror/$(basename "$dest")")
+    fi
+  done < <(mirror_pair_set)
+  _write_operations_rules_index "$target_dir"
+  RULES_MIRROR_WROTE="$wrote"
+}
+
 # ─── Mode: --deploy ──────────────────────────────────────────────────────────
 #
 # Note: --init mode (a one-time legacy cutover migration) has been REMOVED per
@@ -4601,6 +5265,30 @@ cmd_deploy() {
   done
   set -- ${_deploy_args[@]+"${_deploy_args[@]}"}
 
+  # ─── The rules mirror carrier — RUNS BEFORE THE E-02 EARLY EXIT ────────────
+  #
+  # THE ORDERING IS THE WHOLE POINT, not a stylistic choice. cmd_deploy's E-02
+  # "No changes" branch exits 0 before any deploy work happens. Placing the carrier
+  # after it would make Check 9's NEVER-POPULATED state unreachable by the exact
+  # command Check 9's own remediation prints: an operator with an absent mirror and
+  # no changed skills would run `./deploy.sh --deploy`, be told "nothing to deploy",
+  # and still have no mirror — with the check still telling them to run it. The
+  # mirror is not a function of the skill/package/harness change sets, so it must
+  # not be gated on them.
+  #
+  # It runs after the --release flag-strip so the telemetry row below carries the
+  # release join key, and after `local -a FAILURES=()` so a failed copy reaches
+  # cmd_deploy's terminal die.
+  local __rm_fail_before=${#FAILURES[@]}
+  deploy_rules_mirror
+  local __rm_outcome __rm_detail="none"
+  __rm_outcome="$(_ds_outcome "$__rm_fail_before" "${#FAILURES[@]}" "false")"
+  [[ "$__rm_outcome" == "resolved" ]] || __rm_detail="rules-mirror-copy-failed"
+  # ONE ROW PER INVOCATION, not one per file: the established convention is one row
+  # per target, and a row per member would inflate an append-only Vital-retention log
+  # for no consumer.
+  DS_MODULE="core" _emit_deployment_status "deploy-rules-mirror" "mirror" "rules-mirror" "$__rm_outcome" "$__rm_detail"
+
   if [[ -n "$DEPLOY_RELEASE_SLUG" ]]; then
     local _slug_verdict
     _slug_verdict="$(_ds_validate_slug "$DEPLOY_RELEASE_SLUG")"
@@ -4688,6 +5376,18 @@ cmd_deploy() {
   if [[ ${#CHANGED_SKILLS[@]} -eq 0 ]] && [[ ${#CHANGED_PACKAGES[@]} -eq 0 ]] && \
      [[ ${#CHANGED_HARNESS[@]} -eq 0 ]]; then
     log "No skill, package, or harness changes detected. Nothing to deploy."
+    # The rules mirror is NOT part of those three change sets and already ran above,
+    # so this path is no longer a no-op. Say what it did — an operator told "nothing
+    # to deploy" would otherwise reasonably conclude the mirror was skipped too.
+    log "  Rules mirror: ${RULES_MIRROR_WROTE:-0} file(s) written to $DEPLOY_ROOT/.claude/rules/ (the mirror is deployed unconditionally, not on skill change)."
+    # _ds_warn_unstamped is normally reached only at the bottom of a full deploy. The
+    # carrier addressed a real target on this path too, so an unstamped run here owes
+    # the same warning — without it, a mirror-only deploy silently emits no rows and
+    # reads downstream as a release that legitimately deployed nothing.
+    if [[ "$(_ds_warn_unstamped "${RULES_MIRROR_WROTE:-0}")" == "WARN" ]]; then
+      log "WARN: deployed ${RULES_MIRROR_WROTE:-0} rules-mirror target(s) with no --release <slug> — ZERO deployment-status rows were emitted."
+      log "      Stage-12 invocation form: ./deploy.sh --deploy --release <milestone-slug>"
+    fi
     log "  Note: composition surfaces (hook-tier allowlists, hub-state templates,"
     log "        platform-config seed) are OUT OF SCOPE for --deploy and were NOT"
     log "        examined. --deploy reads three change sets — skills, packages,"
@@ -4696,6 +5396,13 @@ cmd_deploy() {
     log "        To refresh a composition surface, run:"
     log "          ./update.sh --surfaces-only    (targeted — surfaces only)"
     log "          ./update.sh                    (full update; wider blast radius)"
+    # A carrier failure must not leave by the zero-exit door. Before the mirror had a
+    # producer this branch had nothing that could fail; it does now, and an exit 0 on
+    # a partially-written mirror is precisely the silent-partial state Check 9's new
+    # MISSING-MEMBER verdict exists to make impossible.
+    if [[ ${#FAILURES[@]} -gt 0 ]]; then
+      die "Deployment failures: ${FAILURES[*]}"
+    fi
     exit 0
   fi
 
@@ -4938,7 +5645,7 @@ cmd_deploy() {
   # already-current skill must report 0 skills, not 1 (#384 v3.91 regression fix).
   local pkg_count=${#CHANGED_PACKAGES[@]:-0}
   local harness_count=${#CHANGED_HARNESS[@]:-0}
-  log "Deployed: ${skills_changed} skills, $pkg_count packages, $harness_count harness artifacts"
+  log "Deployed: ${skills_changed} skills, $pkg_count packages, $harness_count harness artifacts, ${RULES_MIRROR_WROTE:-0} rules-mirror files"
 
   # ─── #4215: the observing step for --release ───────────────────────────────
   # Placed BEFORE the terminal die so it fires on the failed-deploy path too — an
@@ -4946,7 +5653,17 @@ cmd_deploy() {
   # The target count is the ATTEMPTED set, not skills_changed: a re-run that
   # re-mirrors byte-identical content reports 0 changed skills but did address real
   # targets, and a release-stamped deploy is owed rows for those targets.
-  local __attempted=$(( ${#CHANGED_SKILLS[@]} + pkg_count + harness_count ))
+  # The rules mirror is an ATTEMPTED target too. Omitting it lets a deploy whose only
+  # real target was the mirror read as zero-targets, and _ds_warn_unstamped would then
+  # stay silent about a missing --release on a run that genuinely deployed something —
+  # under-counting the predicate rather than merely mis-labelling it.
+  # `if`, not `[[ … ]] && assign`: under `set -e` the latter returns non-zero when the
+  # test fails and takes the whole deploy down on the ordinary zero-written path.
+  local __rm_attempted=0
+  if [[ "${RULES_MIRROR_WROTE:-0}" -gt 0 ]]; then
+    __rm_attempted=1
+  fi
+  local __attempted=$(( ${#CHANGED_SKILLS[@]} + pkg_count + harness_count + __rm_attempted ))
   if [[ "$(_ds_warn_unstamped "$__attempted")" == "WARN" ]]; then
     log "WARN: deployed ${__attempted} target(s) with no --release <slug> — ZERO deployment-status rows were emitted."
     log "      Cycle-Time and the DORA deployment-frequency read N/A for this deploy, which is"
@@ -5086,6 +5803,49 @@ _g1_03_evaluate() {
     return 0
   fi
   return 1
+}
+
+# ─── flag_not_evaluated — the NOT-EVALUATED class emitter (TOP-LEVEL) ────────
+#
+# HOISTED TO TOP LEVEL DELIBERATELY; the placement is load-bearing, not stylistic.
+# Bash registers a nested function only when execution REACHES its definition, so a
+# definition sited inside cmd_check() is callable only from code that runs after that
+# point in the body. Check 7's verdict dispatch sits ~150 lines EARLIER in that same
+# function, so while this emitter was nested it was unreachable from the one caller
+# that most needs it — the "measurement did not run" arm of a content-freshness gate.
+# At top level the reachability is unconditional and independent of where any future
+# caller lands.
+#
+# The NOT-EVALUATED class means: the measurement DID NOT HAPPEN. Same structural
+# guarantee as flag_advisory_only — no `case` on any mode, no enforce branch, no ISSUES
+# increment — for the same reason: a measurement outage must never move the exit code.
+# It is a SEPARATE function, not a parameter on that one, because the two say OPPOSITE
+# things. ADVISORY means "I measured and this signal cannot gate"; NOT-EVALUATED means
+# "I did not measure." flag_advisory_only's line asserts "this check is never
+# enforce-capable", which is FALSE of an enforce-capable check that merely could not
+# read its input this run — and its ADVISORY: prefix is the greppable discriminator, so
+# two classes under one prefix re-creates the very conflation this emitter exists to
+# remove.
+#
+# WARN_LOG IS RESOLVED DEFENSIVELY, AND THE GUARD IS REQUIRED RATHER THAN DEFENSIVE
+# HABIT. cmd_check() declares `local WARN_LOG` well AFTER its Check 7 block, and this
+# script runs under `set -euo pipefail` (line 2), so an UNGUARDED expansion aborts the
+# entire run the moment this emitter is called from any caller sited above that
+# declaration. The fallback re-derives the same path the local would have held, so a
+# hoisted call logs to the identical destination.
+#
+# Per review-discipline-principles.md § 8 PV-7. The detail SHOULD name the Register A
+# status and MUST carry "this is not a clean result".
+flag_not_evaluated() {
+  local check_id="$1"
+  local detail="$2"
+  log "  NOT-EVAL: $check_id — $detail (not-evaluated; the measurement did not run — this is a withheld verdict, never a clean one)"
+  local _ts
+  _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  local _detail_escaped="${detail//\\/\\\\}"
+  _detail_escaped="${_detail_escaped//\"/\\\"}"
+  local _wl="${WARN_LOG:-$(warn_log_path)}"
+  printf '{"ts":"%s","check":"%s","evaluated":false,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$_wl" 2>/dev/null || true
 }
 
 # ─── Mode: --check ───────────────────────────────────────────────────────────
@@ -5848,6 +6608,7 @@ cmd_check() {
   # emits per-skill detail to stderr; this block maps the verdict to the deploy-time
   # emit. Always-enforce: each stale skill increments ISSUES (byte-identical accounting).
   local c7_verdict c7_tok c7_rest c7_count
+  local c7_ne_unmeasured c7_ne_tail c7_ne_total c7_ne_reason
   c7_verdict="$(_c7_compute_verdict "lifecycle")"
   c7_tok="${c7_verdict%% *}"
   case "$c7_tok" in
@@ -5860,6 +6621,21 @@ cmd_check() {
       c7_count="${c7_rest%% *}"
       log "  FAIL:  ${c7_count} stale skill package(s): ${c7_rest#* } — rebuild via core/deploy/tools/build-skill-packages.sh (per-skill detail above)"
       ISSUES=$((ISSUES + c7_count))
+      ;;
+    NOT-EVALUATED)
+      # "NOT-EVALUATED <unmeasured> <total> <reason>" — a measurement OUTAGE, not a
+      # finding. flag_not_evaluated carries no mode branch and no ISSUES increment, so
+      # an outage can never move ./deploy.sh --check's exit status (PV-7c). SENTINEL-
+      # BLIND BY DESIGN: this lifecycle arm has never read the enforce sentinel (the
+      # STALE arm above is always-enforce), and D-Blocking is scoped to the CI check the
+      # Release Outcome Statement names. Stale counter deliberately ABSENT (PV-7b).
+      c7_rest="${c7_verdict#NOT-EVALUATED }"     # "<unmeasured> <total> <reason>"
+      c7_ne_unmeasured="${c7_rest%% *}"
+      c7_ne_tail="${c7_rest#* }"                 # "<total> <reason>"
+      c7_ne_total="${c7_ne_tail%% *}"
+      c7_ne_reason="${c7_ne_tail#* }"
+      flag_not_evaluated "package-freshness" \
+        "the staged-rebuild content arm did not conclude for ${c7_ne_unmeasured} of ${c7_ne_total} rostered skill(s) (${c7_ne_reason}) — the committed packages may be stale and this run cannot tell; this is not a clean result"
       ;;
     *)
       log "  FAIL:  Check 7 — unexpected verdict: $c7_verdict"
@@ -5980,31 +6756,6 @@ cmd_check() {
     local _detail_escaped="${detail//\\/\\\\}"
     _detail_escaped="${_detail_escaped//\"/\\\"}"
     printf '{"ts":"%s","check":"%s","advisory":true,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
-  }
-
-  # flag_not_evaluated — the NOT-EVALUATED class emitter: the measurement DID NOT
-  # HAPPEN. Same structural guarantee as flag_advisory_only above — no `case` on
-  # any mode, no enforce branch, no ISSUES increment — for the same reason: a
-  # measurement outage must never move the exit code. It is a SEPARATE function,
-  # not a parameter on that one, because the two say OPPOSITE things. ADVISORY
-  # means "I measured and this signal cannot gate"; NOT-EVALUATED means "I did not
-  # measure." flag_advisory_only's line asserts "this check is never
-  # enforce-capable", which is FALSE of an enforce-capable check that merely could
-  # not read its input this run — and its ADVISORY: prefix is the greppable
-  # discriminator, so two classes under one prefix re-creates the very conflation
-  # this emitter exists to remove.
-  #
-  # Per review-discipline-principles.md § 8 PV-7. The detail SHOULD name the
-  # Register A status and MUST carry "this is not a clean result".
-  flag_not_evaluated() {
-    local check_id="$1"
-    local detail="$2"
-    log "  NOT-EVAL: $check_id — $detail (not-evaluated; the measurement did not run — this is a withheld verdict, never a clean one)"
-    local _ts
-    _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    local _detail_escaped="${detail//\\/\\\\}"
-    _detail_escaped="${_detail_escaped//\"/\\\"}"
-    printf '{"ts":"%s","check":"%s","evaluated":false,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
   }
 
   # tsv_residual_rows — the RESIDUAL BUCKET for a TSV-emitting primitive's verdict
@@ -6222,7 +6973,19 @@ cmd_check() {
   #   posture: advisory   enforcement-surface: deploy-check.mode warn-window
   #            (becomes required when the operator flips deploy-check.mode to enforce)
   #   invariant: every workspace rules-mirror file (~/.claude/rules/<file>.md) is
-  #              byte-identical to its in-repo source — asserted by diff -q.
+  #              byte-identical to its in-repo source — asserted by diff -q — AND,
+  #              on a workspace that has been deployed at all, the mirror EXISTS.
+  #              The second clause is new: the mirror now has a producer
+  #              (deploy_rules_mirror), so its absence on a deployed tree is a
+  #              finding rather than the ambient condition it used to be.
+  #   falsification (absence arm): on a deployed workspace, remove
+  #              $DEPLOY_ROOT/.claude/rules/ entirely -> NEVER-POPULATED WARNs
+  #              (advisory) / FAILs (post-flip); remove one member -> MISSING-MEMBER
+  #              does the same. On a tree that has never been deployed, the same
+  #              absence yields NOT-DEPLOYED, which is emitted through
+  #              flag_not_evaluated and CANNOT move the exit code — the guarantee is
+  #              the emitter's SHAPE (no mode case, no enforce branch, no ISSUES
+  #              increment), not a default some later edit could flip.
   #   NOTE (#2213): the former core/governance/OPERATIONS.md ↔ operations/OPERATIONS.md
   #              byte-identical mirror-pair entry was RETIRED here — that dual-home
   #              full copy silently drifted (#1346/#2213). It is replaced by the
@@ -6231,85 +6994,162 @@ cmd_check() {
   #                  source -> this check WARNs (advisory) / FAILS (post-flip).
   #
   # Semantics per Spec Surface 5.4 + ADR-008 Consequence 2:
-  #   in-repo source `core/rules/<file>.md` OR `release/governance/release-process.md`
+  #   in-repo source `core/rules/<file>.md`
   #   ↔ workspace mirror `~/.claude/rules/<file>.md`
   #   (source-mirrors-to-workspace; uni-directional)
   #
+  # MEMBERSHIP IS AN ADMISSION DECISION, NOT A CONVENIENCE. A path belongs in the
+  # array below only if it passes the §1 admission test in
+  # core/standards/rules-corpus-admission-standard.md (ambient-bind AND
+  # enforcement-completeness AND non-invocability), and the admitted set as a whole
+  # must stay inside that standard's §3 byte ceiling — everything here is loaded
+  # ambiently into every session, so the set is a context cost, not a list.
+  #
+  # Two former members were reclassified REFERENCE under that test and removed: the
+  # hook-registry index (its hooks enforce PREVENTIVELY, so the index documents them
+  # rather than obliging anything) and the release procedure (it binds only inside a
+  # named activity, and the release skills plus every pipeline stage shard load it on
+  # demand). NEITHER FILE MOVED — both still live at their source paths and are read
+  # on demand; they left the DEPLOYED set only. Re-adding either one re-opens a
+  # recorded decision: restate the §1 outcome before you do.
+  #
   # The engineering/rules mirror was DROPPED per the layout §8.3. Drift means
   # "workspace mirror diverged from v2 source; re-run ./deploy.sh --deploy to
-  # restore". The pair set covers all 11 files under .claude/rules/ (including
-  # git-workflow.md and governance-files.md surfaced by the Stage 5 spec).
-  # This array and detect_mirror_pairs() in release/tools/blast-radius.sh must
+  # restore" — and that remedy now WORKS, because deploy_rules_mirror() is the
+  # producer that lays the mirror down. It used to be advice with nothing behind it.
+  #
+  # The pair set is NOT declared here any more. It is declared ONCE, by the
+  # top-level emitter mirror_pair_set(), which this check reads and the carrier
+  # reads. There is deliberately no second copy: a carrier holding its own list is
+  # precisely the silent desync the mirror-pair-parity check exists to prevent, so
+  # the set was hoisted rather than duplicated. Read the membership from the
+  # emitter's rows; it is self-counting and no number is stated in prose.
+  # That emitter and detect_mirror_pairs() in release/tools/blast-radius.sh must
   # hold IDENTICAL path sets — adding a rule to one and not the other silently
   # desynchronises the blast-radius mirror topology from the enforced pair set.
+  # This is asserted, not remembered: the mirror-pair-parity check (Check 77)
+  # diffs the source-side path set across every holder carrying a
+  # "mirror-pair-set:" marker and FAILs naming any path and the holder it is
+  # missing from. The markers live around the emitter's rows — keep them wrapped
+  # around the ARRAY LITERAL when editing it, and keep the container an array
+  # literal: the parity primitive skips a literal's delimiters by name and has no
+  # heredoc case, so a `cat <<EOF` container reads `EOF` as a separator-less entry
+  # and returns UNPARSEABLE. Measured, not assumed — see the emitter's own note.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 9: Mirror-pair sync (source-to-workspace)"
-    local -a MIRROR_PAIRS=(
-      "core/rules/skill-deployment.md:$DEPLOY_ROOT/.claude/rules/skill-deployment.md"
-      "core/rules/bypass-mode-readiness.md:$DEPLOY_ROOT/.claude/rules/bypass-mode-readiness.md"
-      "core/rules/harness-deployment.md:$DEPLOY_ROOT/.claude/rules/harness-deployment.md"
-      "core/rules/doc-link-maintenance.md:$DEPLOY_ROOT/.claude/rules/doc-link-maintenance.md"
-      "core/rules/operations-bridge.md:$DEPLOY_ROOT/.claude/rules/operations-bridge.md"
-      "core/rules/git-workflow.md:$DEPLOY_ROOT/.claude/rules/git-workflow.md"
-      "core/rules/governance-files.md:$DEPLOY_ROOT/.claude/rules/governance-files.md"
-      "core/rules/decision-time-adherence.md:$DEPLOY_ROOT/.claude/rules/decision-time-adherence.md"
-      "core/rules/rename-reference-cascade.md:$DEPLOY_ROOT/.claude/rules/rename-reference-cascade.md"
-      "core/rules/analysis-mandate.md:$DEPLOY_ROOT/.claude/rules/analysis-mandate.md"
-      "release/governance/release-process.md:$DEPLOY_ROOT/.claude/rules/release-process.md"
-    )
-    for pair in "${MIRROR_PAIRS[@]}"; do
+    # DIRECTORY-LEVEL VERDICT, taken before the per-pair loop. An absent mirror used
+    # to be a per-pair SKIP, which conflated two states that mean opposite things:
+    # "nothing has been deployed to this tree" (honest — CI, a fresh checkout, the
+    # public repo) and "this workspace HAS been deployed and the mirror still is not
+    # there" (a real finding, and the one the carrier exists to make impossible).
+    #
+    # The discriminator is $USER_LOCAL_SKILLS_PATH. Every deploy writes it, and it is
+    # Cowork-INDEPENDENT per ADR-013 — so it answers "has anything ever been deployed
+    # here?" without needing a Cowork session to resolve. That is what makes
+    # NEVER-POPULATED safe to raise in CI: CI has neither directory, so it takes the
+    # NOT-DEPLOYED arm and no verdict is issued at all.
+    if [[ ! -d "$DEPLOY_ROOT/.claude/rules" ]]; then
+      if [[ -d "$USER_LOCAL_SKILLS_PATH" ]]; then
+        flag_warn_or_issue "mirror-sync" \
+          "NEVER-POPULATED — $DEPLOY_ROOT/.claude/rules/ is absent on a workspace that HAS been deployed ($USER_LOCAL_SKILLS_PATH exists). The carrier has not run on this tree; ./deploy.sh --deploy populates it."
+      else
+        flag_not_evaluated "mirror-sync" \
+          "NOT-DEPLOYED — neither the rules mirror nor the user-local skills mirror exists, so nothing has ever been deployed to this tree (fresh checkout / CI / public repo). No pair was compared; this is not a clean result."
+      fi
+    fi
+    while IFS= read -r pair; do
+      # Three colon-separated fields: <src>:<dest>:<class>. The right-hand path is
+      # field 2, so it is NOT "${pair##*:}" — that expression returns the CLASS
+      # token and every pair would then compare against a path that does not exist.
+      # Strip the first field, then strip the last; what remains is the dest.
       local c9_left="${pair%%:*}"
-      local c9_right="${pair##*:}"
+      local c9_rest="${pair#*:}"
+      local c9_right="${c9_rest%:*}"
       # A declared SOURCE (left, in-repo) that does not exist is a config error:
       # a typo'd or moved path silently disables the pair's enforcement (the
       # #1104 failure class). WARN on it — never silent-SKIP. A missing MIRROR
       # (right, ~/.claude/rules/) is legitimately operator-instance-absent in
       # the public repo / CI / a fresh checkout, so that stays a clean SKIP.
       if [[ ! -f "$c9_left" ]]; then
-        flag_warn_or_issue "mirror-sync" "$c9_left: declared MIRROR_PAIRS source does not exist (typo or moved path — pair cannot be enforced)"
+        flag_warn_or_issue "mirror-sync" "$c9_left: declared mirror_pair_set source does not exist (typo or moved path — pair cannot be enforced)"
         continue
       fi
       if [[ ! -f "$c9_right" ]]; then
-        log "  SKIP:  $c9_left ↔ $c9_right (workspace mirror absent — operator-instance)"
+        # The mirror DIRECTORY branch above already spoke for the wholly-absent case.
+        # Reaching here means the directory exists and THIS member is missing from it
+        # — the carrier ran and failed on this file. That is a finding, never a SKIP.
+        # Collapsing MISSING-MEMBER back into NEVER-POPULATED would re-create, one
+        # level down, exactly the conflation this check just removed.
+        if [[ -d "$DEPLOY_ROOT/.claude/rules" ]]; then
+          flag_warn_or_issue "mirror-sync" \
+            "MISSING-MEMBER — $c9_right is absent while the mirror directory exists: the carrier ran and did not lay down this member. Re-run ./deploy.sh --deploy."
+        fi
         continue
       fi
       if diff -q "$c9_left" "$c9_right" >/dev/null 2>&1; then
-        log "  OK:    $c9_left ↔ $c9_right (byte-identical)"
+        log "  OK:    IN-SYNC $c9_left ↔ $c9_right (byte-identical)"
       else
-        flag_warn_or_issue "mirror-sync" "$c9_left ↔ $c9_right divergence"
+        flag_warn_or_issue "mirror-sync" "DRIFTED — $c9_left ↔ $c9_right divergence"
         # `diff` exits 1 on divergence (the path we are in); guard the preview
         # pipeline so it cannot abort the check sweep under set -e + pipefail.
         # sigpipe-idiom: allow — multi-line diagnostic preview whose exit status is discarded (`|| true`); `diff` has no bounded-output flag to fold `head` into.
         diff -u "$c9_left" "$c9_right" 2>/dev/null | head -20 | sed 's/^/         /' || true
       fi
-    done
+    done < <(mirror_pair_set)
 
-    # Directory-shaped mirror set (per ADR-030 #18 hook-registry split): the
-    # bypass-mode-readiness index above mirrors 1:1 as a single MIRROR_PAIRS
-    # entry; its per-hook drop-in SOURCES under core/rules/bypass-mode-readiness/
-    # each mirror 1:1 too. Enumerate them and byte-diff each against its
-    # ~/.claude/rules/bypass-mode-readiness/<basename> counterpart, preserving the
-    # same SKIP-on-missing semantics (so the public repo, where the .claude/rules/
-    # mirror is operator-instance and absent, stays a clean SKIP — no false drift)
-    # and the same warn-mode posture.
-    if [[ -d core/rules/bypass-mode-readiness ]]; then
-      local c9_hook_src
-      for c9_hook_src in core/rules/bypass-mode-readiness/*.md; do
-        [[ -e "$c9_hook_src" ]] || continue
-        local c9_hook_mir="$DEPLOY_ROOT/.claude/rules/bypass-mode-readiness/$(basename "$c9_hook_src")"
-        if [[ ! -f "$c9_hook_src" ]] || [[ ! -f "$c9_hook_mir" ]]; then
-          log "  SKIP:  $c9_hook_src ↔ $c9_hook_mir (one or both missing)"
-          continue
-        fi
-        if diff -q "$c9_hook_src" "$c9_hook_mir" >/dev/null 2>&1; then
-          log "  OK:    $c9_hook_src ↔ $c9_hook_mir (byte-identical)"
-        else
-          flag_warn_or_issue "mirror-sync" "$c9_hook_src ↔ $c9_hook_mir divergence"
-          # sigpipe-idiom: allow — same discarded-status diagnostic preview as the pair above.
-        diff -u "$c9_hook_src" "$c9_hook_mir" 2>/dev/null | head -20 | sed 's/^/         /' || true
-        fi
-      done
-    fi
+    # REMOVED — the directory-shaped mirror set (the former per-hook drop-in loop).
+    #
+    # A second mirror set used to live here, gated on `[[ -d core/rules/<the hook
+    # readiness dir> ]]` and enumerating that directory's per-hook fragments. It was
+    # removed with the index it accompanied, because the two are one body of content:
+    # the index is GENERATED from those fragments, so mirroring both shipped the same
+    # hook registry twice.
+    #
+    # THE SHAPE IS THE POINT, AND IT IS WHY THIS TOMBSTONE EXISTS RATHER THAN A CLEAN
+    # DELETION. That loop was a THIRD, UNMARKED expression of mirror membership: it
+    # was gated on DIRECTORY EXISTENCE, not on membership of the marked array above,
+    # so it mirrored its payload no matter what the array said and no marker-based
+    # parity check could see it. Removing the index entry alone would have left its
+    # fragments mirrored with their index gone.
+    #
+    # INVARIANT GOING FORWARD: mirror membership is expressed ONLY by the
+    # marker-registered array above. A path that is mirrored must be an entry there —
+    # never a directory-existence conditional, a glob, or any other implicit form that
+    # the parity check cannot read.
+
+    # UNDECLARED-ENTRY ENUMERATION (F-01) — the mechanical assertion of the invariant
+    # the tombstone above states in prose. Until now that invariant was asserted only
+    # in a comment: every arm of this check is per-PAIR, so an entry belonging to no
+    # pair was invisible to all of them. The verdict body is _c9_undeclared_scan (one
+    # engine, also driven by --self-test group UE); this caller only maps its token
+    # onto emitters that already exist. Nothing here can move the exit code — see the
+    # emitter's own header for why a warning, not a finding, is the right posture on
+    # an operator-instance directory.
+    local c9_scan c9_scan_tok
+    c9_scan="$(_c9_undeclared_scan "$DEPLOY_ROOT/.claude/rules")"
+    c9_scan_tok="${c9_scan%% *}"
+    case "$c9_scan_tok" in
+      CLEAN)
+        log "  OK:    undeclared-entry scan — ${c9_scan#CLEAN }"
+        ;;
+      NOT-RUN)
+        # NOT a clean line, deliberately. An absent mirror must never render as
+        # "0 undeclared entries"; it renders as "nothing was enumerated".
+        log "  NOT-EVAL: undeclared-entry scan — ${c9_scan#NOT-RUN }"
+        ;;
+      UNDECLARED)
+        flag_advisory_only "mirror-undeclared-entry" "${c9_scan#UNDECLARED }"
+        ;;
+      RESIDUAL)
+        flag_advisory_only "mirror-undeclared-entry" "${c9_scan#RESIDUAL }"
+        ;;
+      *)
+        # An unreadable verdict is a defect in the verdict body, never an absence of
+        # findings — the same fail-loud contract the 77/78 callers carry.
+        flag_advisory_only "mirror-undeclared-entry" \
+          "unrecognised scan token [$c9_scan_tok] from _c9_undeclared_scan — an unreadable verdict is a defect, not a clean result: $c9_scan"
+        ;;
+    esac
 
     # OPERATIONS.md SSOT + pointer duplicate-home check (per #2213 — replaces the
     # retired byte-identical mirror-pair enrollment above).
@@ -12943,7 +13783,7 @@ sys.stdout.write("".join(out) + "|")
   # coverage claim can never be read as larger than its delivery.
   #
   # NOT ON THE REQUIRED-SUBSET ROSTER. Check 63 is deliberately absent from
-  # --check-required-subset. That roster carries Checks 38 and 73; joining it is a
+  # --check-required-subset. That roster carries Checks 38, 73 and 77; joining it is a
   # separate, later, evidence-gated decision, and staying off it is what makes shipping
   # enforcing safe today (no CI workflow runs the full --check suite).
   #
@@ -14390,6 +15230,97 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
         esac
       fi
     fi
+  fi
+
+  # Check 77 — Mirror-pair path-set parity across holders (advisory; warn-mode initial) [#4738]
+  #
+  # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md Req (b)):
+  #   posture: required(warn-mode-initial)
+  #   enforcement-surface: --check-required-subset (pre-merge) + deploy-check.mode warn-window
+  #            (blocks when the operator flips .github/deploy-check-ci.enforce to enforce)
+  #   invariant: every holder of the source-side mirror-pair path set declares an
+  #              IDENTICAL set — asserted by extracting the declared field of each
+  #              marked region and diffing every holder against the union.
+  #   falsification: add one entry to ONE holder's array only -> WARN (advisory) /
+  #                  FAIL (post-flip), naming the path and the holder.
+  #
+  # The predicate body _c77_compute_verdict is TOP-LEVEL and shared verbatim with
+  # the --check-required-subset runner, so no predicate is re-encoded on either
+  # surface and the CI gate and this lifecycle surface can never disagree.
+  #
+  # WHY THIS IS NOT FOLDED INTO CHECK 9, which already owns the mirror-pair
+  # invariant and reads the same array: Check 9's verdict is INSTALL-DEPENDENT (it
+  # diffs against $DEPLOY_ROOT/.claude/rules/, absent in CI and the public repo
+  # where it correctly SKIPs). Sharing its body would make parity inherit that
+  # install-dependence and be permanently barred from the pre-merge surface — the
+  # one surface where the defect being closed here actually escaped.
+  #
+  # NOT-EVALUATED routes through flag_not_evaluated, which has no mode branch and
+  # no counter increment in its body: a measurement outage is a withheld verdict
+  # and can never escalate. It is reachable only on this surface — see the
+  # surface-asymmetry note on _c77_compute_verdict.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 77: Mirror-pair path-set parity (all marker-registered holders hold identical source-side sets; warn-mode initial; enforce-flip deferred)"
+    local c77_verdict c77_tok
+    c77_verdict="$(_c77_compute_verdict "lifecycle")"
+    c77_tok="${c77_verdict%% *}"
+    case "$c77_tok" in
+      PASS)
+        log "  OK:    mirror-pair-parity — ${c77_verdict#PASS }"
+        ;;
+      FAIL)
+        flag_warn_or_issue "mirror-pair-parity" "${c77_verdict#FAIL }"
+        ;;
+      NOT-EVALUATED)
+        flag_not_evaluated "mirror-pair-parity" "degraded — ${c77_verdict#NOT-EVALUATED }; this is not a clean result"
+        ;;
+      *)
+        flag_warn_or_issue "mirror-pair-parity" \
+          "unexpected verdict token '$c77_tok' from _c77_compute_verdict (an unreadable verdict is a defect in the verdict body, never an absence of findings): $c77_verdict"
+        ;;
+    esac
+  fi
+
+  # Check 78 — Rules-corpus admission + byte budget (advisory; warn-mode initial)
+  #
+  # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md Req (b)):
+  #   posture: required(warn-mode-initial)
+  #   enforcement-surface: --check-required-subset (pre-merge) + deploy-check.mode
+  #            warn-window (blocks when the operator flips
+  #            .github/deploy-check-ci.enforce to enforce)
+  #   invariant: the admitted rules set stays inside the byte ceiling published in
+  #              rules-corpus-admission-standard.md §3, every member over the
+  #              per-file trigger carries a §2 conditional scoping field, and every
+  #              member carries the §2 required frontmatter including `type: rule`.
+  #   falsification: add a member that carries the set past the ceiling -> WARN
+  #                  (advisory) / FAIL (post-flip), naming the overshoot in bytes and
+  #                  the top-3 contributors by size; drop the scoping field from a
+  #                  member over the trigger -> UNSCOPED-VIOLATION. Both arms are
+  #                  exercised by `check-rules-budget.py --self-test`, so the
+  #                  falsification claim is re-runnable rather than asserted once.
+  #
+  # Warn-mode initial per bypass-mode-readiness.md §Shakedown, matching the posture
+  # accepted for the sibling parity check shipped in this same release.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 78: Rules-corpus admission + byte budget (admitted set within the published ceiling and frontmatter contract; warn-mode initial; enforce-flip deferred)"
+    local c78_verdict c78_tok
+    c78_verdict="$(_c78_compute_verdict "lifecycle")"
+    c78_tok="${c78_verdict%% *}"
+    case "$c78_tok" in
+      PASS)
+        log "  OK:    rules-budget — ${c78_verdict#PASS }"
+        ;;
+      FAIL)
+        flag_warn_or_issue "rules-budget" "${c78_verdict#FAIL }"
+        ;;
+      NOT-EVALUATED)
+        flag_not_evaluated "rules-budget" "degraded — ${c78_verdict#NOT-EVALUATED }; this is not a clean result"
+        ;;
+      *)
+        flag_warn_or_issue "rules-budget" \
+          "unexpected verdict token '$c78_tok' from _c78_compute_verdict (an unreadable verdict is a defect in the verdict body, never an absence of findings): $c78_verdict"
+        ;;
+    esac
   fi
 
   # Summary
@@ -15878,23 +16809,39 @@ STUB
   _r1="$(_ds_warn_unstamped 3)"
   [[ "$_r1" == "OK" ]] || { echo "FAIL: DS-7c a release-stamped deploy must NOT warn, got '$_r1'"; failures=$((failures+1)); }
 
-  # DS-8 — three subtypes emit, and each maps to its own target class. The emitting set
-  #        is deliberately THREE: deploy-rules-mirror and deploy-helper are excluded
-  #        because this script contains no code path that performs either deploy, and a
-  #        row asserting a deploy that never happened is fabricated telemetry in a log
-  #        that cannot be rewritten.
+  # DS-8 — four subtypes emit, and each maps to its own target class. The emitting set
+  #        is deliberately FOUR: deploy-helper alone is excluded, because this script
+  #        contains no code path that performs that deploy, and a row asserting a deploy
+  #        that never happened is fabricated telemetry in a log that cannot be rewritten.
+  #
+  #        deploy-rules-mirror LEFT the exclusion set when its producer shipped. It was
+  #        never a cleanup candidate — it was a COVERAGE HOLE (see the emitter preamble
+  #        near the top of this file), and deploy_rules_mirror() is the producer that
+  #        closes it. The re-evaluation the preamble demanded is discharged here, in the
+  #        executable assertion, not only in prose: DS-8a's count is the arm that would
+  #        turn red if the producer were reverted without restoring the exclusion.
   : > "$_dcap"
   DS_WRITER="$_dstub" _emit_deployment_status "deploy-skill"   "skill"   "s1" "resolved" "none"
   DS_WRITER="$_dstub" _emit_deployment_status "deploy-package" "package" "p1" "resolved" "none"
   DS_WRITER="$_dstub" _emit_deployment_status "deploy-harness" "harness" "h1" "resolved" "none"
+  DS_WRITER="$_dstub" _emit_deployment_status "deploy-rules-mirror" "mirror" "rules-mirror" "resolved" "none"
   _n1="$(/usr/bin/awk -F'\t' '{print $4}' "$_dcap" | /usr/bin/sort -u | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
-  [[ "$_n1" == "3" ]] || { echo "FAIL: DS-8a the emitting subtype set must be exactly 3 distinct subtypes, got $_n1"; failures=$((failures+1)); }
-  _n2="$(/usr/bin/grep -cE '	(deploy-rules-mirror|deploy-helper)	' "$_dcap" || true)"
+  [[ "$_n1" == "4" ]] || { echo "FAIL: DS-8a the emitting subtype set must be exactly 4 distinct subtypes, got $_n1"; failures=$((failures+1)); }
+  _n2="$(/usr/bin/grep -cE '	(deploy-helper)	' "$_dcap" || true)"
   [[ "$_n2" == "0" ]] || { echo "FAIL: DS-8b producer-less subtypes must never be emitted, got $_n2 row(s)"; failures=$((failures+1)); }
   # SPECIFICITY control for DS-8b: the arm above must be capable of counting a match,
   # or its zero proves nothing. Feed it the shape it is looking for, in isolation.
-  _n2="$(/usr/bin/printf 'v\t12\tdeployment-status\tdeploy-helper\thub\ts\tCHEAP\tresolved\tp\n' | /usr/bin/grep -cE '	(deploy-rules-mirror|deploy-helper)	' || true)"
+  # The control still feeds deploy-helper, which is still IN the narrowed alternation —
+  # so narrowing the pattern did not cost this arm its ability to fire.
+  _n2="$(/usr/bin/printf 'v\t12\tdeployment-status\tdeploy-helper\thub\ts\tCHEAP\tresolved\tp\n' | /usr/bin/grep -cE '	(deploy-helper)	' || true)"
   [[ "$_n2" == "1" ]] || { echo "FAIL: DS-8c the producer-less-subtype detector must be able to FIRE (control arm), got $_n2"; failures=$((failures+1)); }
+  # DS-8d — the DISCRIMINATION arm the narrowing makes necessary. DS-8b's zero must mean
+  # "deploy-helper was not emitted", NOT "the pattern matches nothing any more". Feed it a
+  # deploy-rules-mirror row — the subtype that just left the exclusion set — and require a
+  # zero. Without this, reverting DS-8b's alternation to a never-matching literal would be
+  # indistinguishable from the shipped state.
+  _n2="$(/usr/bin/printf 'v\t12\tdeployment-status\tdeploy-rules-mirror\thub\ts\tCHEAP\tresolved\tp\n' | /usr/bin/grep -cE '	(deploy-helper)	' || true)"
+  [[ "$_n2" == "0" ]] || { echo "FAIL: DS-8d the narrowed detector must NOT match the now-producing subtype, got $_n2"; failures=$((failures+1)); }
 
   # DS-9 — a writer that fails must NOT fail the deploy. deploy.sh runs
   #        `set -euo pipefail`, so an unguarded non-zero from the writer would abort the
@@ -15912,7 +16859,7 @@ STUB
   #         canonical writer accepts.
   if [[ -x release/tools/append-pipeline-event.sh ]]; then
     local _sub
-    for _sub in deploy-skill deploy-package deploy-harness; do
+    for _sub in deploy-skill deploy-package deploy-harness deploy-rules-mirror; do
       if ! release/tools/append-pipeline-event.sh --dry-run --version "stage9-gate-integrity" --stage 12 \
            --event-type deployment-status --event-subtype "$_sub" --actor hub --subject "skill:x" \
            --reversibility CHEAP --outcome resolved --payload 'target:x; module:core; mech:deploy.sh --deploy; result:SUCCESS; detail:none' >/dev/null 2>&1; then
@@ -16081,6 +17028,244 @@ Nothing measured yet.
 EOF
 )"
 
+  # ─── assertion group RI (operations-index purpose rendering, F-05) ───────────
+  #
+  # Drives the REAL _write_operations_rules_index — the function the carrier calls —
+  # against a sandbox pair set, so there is no second renderer here to drift from the
+  # shipped one. The mirror_pair_set override is declared INSIDE a subshell, so it
+  # cannot leak into a later group or into the live carrier.
+  #
+  # WHY EXACT-LINE CONTAINMENT AND NOT `| grep -qxF`: a pipe into a short-circuiting
+  # reader is the class the repo-integrity sigpipe-idiom gate reddens a PR for, and an
+  # assertion helper is not exempt from it. The comparison below is pure bash.
+  echo "self-test: starting assertion group RI (operations-index purpose rendering, F-05)" >&2
+
+  _ri_render() {
+    # $1 = sandbox dir holding the fixture sources and a `rows` pair-set file.
+    # Echoes the rendered index.
+    local _d="$1"
+    (
+      mirror_pair_set() { /bin/cat "$_d/rows"; }
+      _write_operations_rules_index "$_d"
+    )
+    /bin/cat "$_d/_operations-index.md"
+  }
+
+  _ri_assert() {
+    # $1 = arm id · $2 = the index line that MUST appear verbatim · $3 = rendered index
+    local _nl=$'\n'
+    if [[ "${_nl}${3}${_nl}" != *"${_nl}${2}${_nl}"* ]]; then
+      echo "FAIL: $1 expected verbatim index line:"
+      echo "        want: $2"
+      echo "        rendered index was:"
+      echo "$3"
+      failures=$((failures+1))
+    fi
+  }
+
+  _ri_refute() {
+    # $1 = arm id · $2 = a substring that MUST NOT appear · $3 = rendered index
+    if [[ "$3" == *"$2"* ]]; then
+      echo "FAIL: $1 index must NOT contain [$2] but it did"
+      failures=$((failures+1))
+    fi
+  }
+
+  _ri_refute_line() {
+    # $1 = arm id · $2 = a WHOLE LINE that must NOT appear · $3 = rendered index.
+    # Line-exact, not substring: the truncated rendering is a strict PREFIX of the
+    # correct one, so a substring refutation would fire on the correct output too.
+    local _nl=$'\n'
+    if [[ "${_nl}${3}${_nl}" == *"${_nl}${2}${_nl}"* ]]; then
+      echo "FAIL: $1 index must NOT carry the line [$2] but it did"
+      failures=$((failures+1))
+    fi
+  }
+
+  local _rit; _rit="$(/usr/bin/mktemp -d -t opsindex-selftest.XXXXXX)"
+  /bin/mkdir -p "$_rit/out"
+
+  # RI-1 fixture — THE REGRESSION ARM. Two sentences and an embedded version token,
+  # so the first period sits well before the end. Under the retired `cut -d'.' -f1`
+  # this rendered as "The rule that binds X." — a well-formed sentence, which is why
+  # the corruption was undetectable from the output alone.
+  /bin/cat > "$_rit/multi.md" <<'EOF'
+---
+purpose: The rule that binds X. It also binds Y, and v1.2 is named in it.
+---
+EOF
+  # RI-2 fixture — THE NO-REGRESSION CONTROL. One sentence, one trailing period:
+  # the shape every conduct-class member has today. Its rendering must be
+  # byte-identical to what the pre-fix body produced, or the fix moved live output.
+  /bin/cat > "$_rit/single.md" <<'EOF'
+---
+purpose: A single-sentence purpose with a trailing period.
+---
+EOF
+  # RI-3 fixture — no `purpose:` key at all: the degraded bare form.
+  /bin/cat > "$_rit/nopurpose.md" <<'EOF'
+---
+title: no purpose key here
+---
+EOF
+  # RI-4 fixture — engineering class: must not reach the index at all.
+  /bin/cat > "$_rit/eng.md" <<'EOF'
+---
+purpose: An engineering-class rule. It must never appear in the operations index.
+---
+EOF
+  # RI-5 fixture — trailing whitespace after the period, guarding the added
+  # `s/[[:space:]]*$//` from leaving a space before the printf's own period. Written
+  # with printf, not a heredoc: the trailing blanks are the point of the fixture and
+  # an editor or a whitespace-stripping hook would silently remove them from a
+  # heredoc body, turning this arm into a duplicate of RI-2 without failing.
+  printf -- '---\npurpose: Trailing whitespace follows this period.   \n---\n' > "$_rit/ws.md"
+  /bin/cat > "$_rit/rows" <<EOF
+$_rit/multi.md:$_rit/out/multi-sentence.md:conduct
+$_rit/single.md:$_rit/out/single.md:conduct
+$_rit/nopurpose.md:$_rit/out/nopurpose.md:conduct
+$_rit/eng.md:$_rit/out/engineering-only.md:engineering
+$_rit/ws.md:$_rit/out/ws.md:conduct
+EOF
+
+  local _ri_out; _ri_out="$(_ri_render "$_rit")"
+
+  # RI-1 — the whole purpose survives, internal periods and all. THIS is the arm that
+  # fires if the truncation is reintroduced.
+  _ri_assert "RI-1 internal periods survive" \
+    '- `multi-sentence.md` — The rule that binds X. It also binds Y, and v1.2 is named in it.' \
+    "$_ri_out"
+  # RI-1b — DISCRIMINATION: the truncated line must be absent as a WHOLE LINE.
+  # Without it, a body emitting both the truncated and the full line would satisfy
+  # RI-1; with substring matching instead of line matching it would fire on the
+  # correct output, since the truncation is a strict prefix of the full rendering.
+  _ri_refute_line "RI-1b truncated form absent" \
+    '- `multi-sentence.md` — The rule that binds X.' "$_ri_out"
+  # RI-2 — the no-regression control: unchanged for the shape every live member has.
+  _ri_assert "RI-2 single-sentence unchanged (no-regression control)" \
+    '- `single.md` — A single-sentence purpose with a trailing period.' \
+    "$_ri_out"
+  # RI-3 — SPECIFICITY: a source with no purpose: key renders the bare form, no
+  # em-dash and no period. An arm set that passed this too would be matching anything.
+  _ri_assert "RI-3 absent purpose renders the bare form" \
+    '- `nopurpose.md`' "$_ri_out"
+  # RI-4 — the conduct/engineering class filter still holds.
+  _ri_refute "RI-4 engineering class excluded" 'engineering-only.md' "$_ri_out"
+  # RI-5 — trailing whitespace is stripped, so exactly one period closes the line.
+  _ri_assert "RI-5 trailing whitespace stripped" \
+    '- `ws.md` — Trailing whitespace follows this period.' "$_ri_out"
+
+  /bin/rm -rf "$_rit"
+
+  # ─── assertion group UE (mirror undeclared-entry enumeration, F-01) ──────────
+  #
+  # Drives the REAL _c9_undeclared_scan — the body Check 9 calls — against sandbox
+  # mirrors, with mirror_pair_set overridden inside a subshell so the override cannot
+  # leak. Two arms are load-bearing and both are proven failable by mutation: UE-1/UE-2
+  # (an undeclared entry IS detected) and UE-5 (an ABSENT mirror does not read as
+  # "no undeclared entries"), which is this addition's own vacuity guard.
+  echo "self-test: starting assertion group UE (mirror undeclared-entry enumeration, F-01)" >&2
+
+  _ue_scan() {
+    # $1 = sandbox mirror dir · $2 = a `rows` pair-set file. Echoes the verdict line.
+    local _m="$1" _rows="$2"
+    (
+      mirror_pair_set() { /bin/cat "$_rows"; }
+      _c9_undeclared_scan "$_m"
+    )
+  }
+
+  _ue_assert_tok() {
+    # $1 = arm id · $2 = expected leading token · $3 = the verdict line
+    local _got="${3%% *}"
+    if [[ "$_got" != "$2" ]]; then
+      echo "FAIL: $1 expected token $2, got $_got — verdict was: $3"
+      failures=$((failures+1))
+    fi
+  }
+
+  _ue_assert_has() {
+    # $1 = arm id · $2 = substring that MUST appear · $3 = verdict line
+    if [[ "$3" != *"$2"* ]]; then
+      echo "FAIL: $1 verdict must name [$2] but did not: $3"
+      failures=$((failures+1))
+    fi
+  }
+
+  _ue_refute_has() {
+    # $1 = arm id · $2 = substring that MUST NOT appear · $3 = verdict line
+    if [[ "$3" == *"$2"* ]]; then
+      echo "FAIL: $1 verdict must NOT contain [$2] but did: $3"
+      failures=$((failures+1))
+    fi
+  }
+
+  local _uet; _uet="$(/usr/bin/mktemp -d -t mirrorscan-selftest.XXXXXX)"
+  /bin/mkdir -p "$_uet/mirror"
+  /bin/cat > "$_uet/rows" <<EOF
+core/rules/alpha.md:$_uet/mirror/alpha.md:conduct
+core/rules/beta.md:$_uet/mirror/beta.md:engineering
+EOF
+  # The mirror as the carrier would leave it: both declared members plus the
+  # generated index the carrier itself writes.
+  printf 'a\n' > "$_uet/mirror/alpha.md"
+  printf 'b\n' > "$_uet/mirror/beta.md"
+  printf 'idx\n' > "$_uet/mirror/_operations-index.md"
+
+  # UE-4 — THE FALSE-POSITIVE GUARD, asserted FIRST because it is the state that
+  # exists on every correctly-deployed workspace. The carrier's own generated
+  # _operations-index.md is in no pair; a scan that did not exclude it by name would
+  # report a finding on day one against a mirror the platform just produced.
+  local _ue_out; _ue_out="$(_ue_scan "$_uet/mirror" "$_uet/rows")"
+  _ue_assert_tok  "UE-4 correctly-deployed mirror is CLEAN" CLEAN "$_ue_out"
+  _ue_assert_has  "UE-4 denominator is reported" "3 entr(ies) scanned" "$_ue_out"
+  _ue_assert_has  "UE-4 generated file is classified, not flagged" "1 carrier-generated" "$_ue_out"
+  _ue_refute_has  "UE-4 generated file never named as undeclared" "_operations-index.md are in no" "$_ue_out"
+
+  # UE-1 — POSITIVE, undeclared FILE (the planted-file half of the Dev Testing case).
+  printf 'x\n' > "$_uet/mirror/planted-stale.md"
+  _ue_out="$(_ue_scan "$_uet/mirror" "$_uet/rows")"
+  _ue_assert_tok "UE-1 undeclared file detected" UNDECLARED "$_ue_out"
+  _ue_assert_has "UE-1 names the entry" "planted-stale.md" "$_ue_out"
+
+  # UE-2 — POSITIVE, undeclared SUBDIRECTORY (the other half; Check 9 saw neither).
+  /bin/mkdir -p "$_uet/mirror/planted-dir"
+  printf 'y\n' > "$_uet/mirror/planted-dir/inner.md"
+  _ue_out="$(_ue_scan "$_uet/mirror" "$_uet/rows")"
+  _ue_assert_tok "UE-2 undeclared subdirectory detected" UNDECLARED "$_ue_out"
+  _ue_assert_has "UE-2 names it AS a directory" "planted-dir/ (directory)" "$_ue_out"
+  # UE-2b — the subdirectory counts as ONE entry, not as its contents: find is
+  # depth-capped, so a planted tree cannot inflate the count.
+  _ue_assert_has "UE-2b subdirectory counted once" "2 entr(ies) in" "$_ue_out"
+
+  # UE-3 — a DECLARED basename present as a DIRECTORY is still undeclared: every
+  # pair is a file, so name-matching alone must not launder a directory into
+  # declared-present.
+  /bin/rm -rf "$_uet/mirror/planted-stale.md" "$_uet/mirror/planted-dir"
+  /bin/rm -f "$_uet/mirror/alpha.md"
+  /bin/mkdir -p "$_uet/mirror/alpha.md"
+  _ue_out="$(_ue_scan "$_uet/mirror" "$_uet/rows")"
+  _ue_assert_tok "UE-3 declared basename as a directory is undeclared" UNDECLARED "$_ue_out"
+  _ue_assert_has "UE-3 names it as a directory" "alpha.md/ (directory)" "$_ue_out"
+  /bin/rm -rf "$_uet/mirror/alpha.md"
+  printf 'a\n' > "$_uet/mirror/alpha.md"
+
+  # UE-5 — THE VACUITY GUARD. An ABSENT mirror must NOT read as "no undeclared
+  # entries". It must return NOT-RUN, must not return CLEAN, and must not carry the
+  # "0 undeclared" phrasing a reader would take as a clean result.
+  _ue_out="$(_ue_scan "$_uet/no-such-mirror" "$_uet/rows")"
+  _ue_assert_tok "UE-5 absent mirror returns NOT-RUN" "NOT-RUN" "$_ue_out"
+  _ue_refute_has "UE-5 absent mirror never claims zero undeclared" "0 undeclared" "$_ue_out"
+  _ue_assert_has "UE-5 says nothing was enumerated" "NOTHING was enumerated" "$_ue_out"
+
+  # UE-6 — RESIDUAL: the bucket identity is asserted, not assumed. Every scanned
+  # entry lands in exactly one class, so a CLEAN verdict cannot be reached while an
+  # entry went unclassified.
+  _ue_out="$(_ue_scan "$_uet/mirror" "$_uet/rows")"
+  _ue_refute_has "UE-6 no residual on a well-formed mirror" "RESIDUAL" "$_ue_out"
+
+  /bin/rm -rf "$_uet"
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failure(s))" >&2
     return 1
@@ -16103,8 +17288,12 @@ EOF
   echo "  register runner-resolution validated (#4208, group RR):" >&2
   echo "    RR-5 absent standard NOSET / RR-1 all pointers resolve CLEAN|2 / RR-2 runner no longer carries its anchor UNRESOLVED|1|2 (the shipped defect, in fixture form) / RR-3 absent runner-definition file UNRESOLVED|2|2 / RR-4 zero pointers NOSET / RR-6 prose-only token mentions parse to zero (parser control) / RR-7 runner-src body does not name its anchor UNRESOLVED|1|1 / RR-7b unregistered RC-NN id in the runner body UNRESOLVED|1|1 (the #4442 defect, in fixture form) / RR-8 RC-<stage>-<slug> ids do NOT match RC-NN, CLEAN|1 (namespace-collision specificity arm) / RR-9 bank-shaped id absent from the bank UNRESOLVED|1|1" >&2
   echo "  deployment-status emitter validated (#4215, group DS):" >&2
-  echo "    DS-1 well-formed slug OK / DS-2 empty + pipe-bearing + whitespace-bearing slugs rejected / DS-3 outcome derivation incl. DS-3c the degraded-but-not-in-FAILURES union term (FAILURES is the exit-code oracle, not the deploy-health oracle) / DS-4 SILENCE DEFAULT — absent --release emits ZERO rows, DS-4b malformed slug likewise / DS-5 CONTROL — the same call WITH a slug emits exactly 1 row carrying the fixed 10-column contract / DS-6 escalated row survives with result:FAIL + DS-6c payload pipe-forging guard + DS-6d 300-char bound / DS-7 THE OBSERVING STEP — targets-with-no-flag WARNs, zero-targets does NOT (honest no-op), release-stamped does NOT / DS-8 exactly 3 emitting subtypes, producer-less subtypes never emitted, with a firing control arm / DS-9 a failing event writer must not fail the deploy / DS-10 the CANONICAL writer accepts all three subtypes via --dry-run, and rejects an out-of-enum subtype and a version-shaped release key (two control arms). Every write in this group routes through the DS_WRITER stub seam — no assertion can append to the real append-only log." >&2
+  echo "    DS-1 well-formed slug OK / DS-2 empty + pipe-bearing + whitespace-bearing slugs rejected / DS-3 outcome derivation incl. DS-3c the degraded-but-not-in-FAILURES union term (FAILURES is the exit-code oracle, not the deploy-health oracle) / DS-4 SILENCE DEFAULT — absent --release emits ZERO rows, DS-4b malformed slug likewise / DS-5 CONTROL — the same call WITH a slug emits exactly 1 row carrying the fixed 10-column contract / DS-6 escalated row survives with result:FAIL + DS-6c payload pipe-forging guard + DS-6d 300-char bound / DS-7 THE OBSERVING STEP — targets-with-no-flag WARNs, zero-targets does NOT (honest no-op), release-stamped does NOT / DS-8 exactly 4 emitting subtypes (deploy-rules-mirror joined when its producer shipped), the one remaining producer-less subtype never emitted, with DS-8c a firing control arm and DS-8d a discrimination arm proving the narrowed detector still separates the two / DS-9 a failing event writer must not fail the deploy / DS-10 the CANONICAL writer accepts all four subtypes via --dry-run, and rejects an out-of-enum subtype and a version-shaped release key (two control arms). Every write in this group routes through the DS_WRITER stub seam — no assertion can append to the real append-only log." >&2
   echo "  G1-03 evidence shapes validated (#4923, group EV):" >&2
+  echo "  mirror undeclared-entry enumeration validated (F-01, group UE):" >&2
+  echo "    UE-4 FALSE-POSITIVE GUARD asserted first — the correctly-deployed mirror (declared members + the carrier's own generated _operations-index.md, which is in NO pair) is CLEAN, reports its denominator, and never names the generated file as undeclared / UE-1 a planted undeclared FILE is detected and named / UE-2 a planted undeclared SUBDIRECTORY is detected and named AS a directory, with UE-2b proving it counts once rather than by its contents / UE-3 a declared basename present as a DIRECTORY is still undeclared, so name-matching alone cannot launder it into declared-present / UE-5 THE VACUITY GUARD — an ABSENT mirror returns NOT-RUN, never CLEAN, and never carries the phrase '0 undeclared'; the state that would make this addition pass falsely is the one arm that cannot / UE-6 the residual identity holds, so a CLEAN verdict is unreachable while an entry went unclassified. Every arm drives the real _c9_undeclared_scan that Check 9 calls, through a subshell-scoped mirror_pair_set override." >&2
+  echo "  operations-index purpose rendering validated (F-05, group RI):" >&2
+  echo "    RI-1 a multi-sentence purpose survives whole — the arm that fires if the retired first-period truncation (cut -d . -f1) returns / RI-1b DISCRIMINATION, the truncated line must be absent as a WHOLE LINE (substring refutation would fire on the correct output, since the truncation is a strict prefix of it) / RI-2 NO-REGRESSION CONTROL — the one-sentence shape every live conduct member has renders byte-identically to the pre-fix body, so the fix is proved not to have moved live output / RI-3 SPECIFICITY — a source carrying no purpose: key renders the bare form with no em-dash, so the set is not matching anything / RI-4 the conduct/engineering class filter still excludes engineering rows / RI-5 trailing whitespace is stripped so exactly one period closes the line. Every arm drives the real _write_operations_rules_index the carrier calls, through a subshell-scoped mirror_pair_set override — no second renderer to drift." >&2
   echo "    EV-1 six-marker probe record PASSes with zero bracket tokens (the shape this card admits) / EV-2 the >=2 BOUNDARY holds at exactly two markers (turns red if the count is raised) / EV-3 no Evidence section FAILs / EV-4 DISCRIMINATION — all six marker words as running prose still FAIL, so prose ABOUT evidence is not evidence / EV-5 an evidence-free Evidence section FAILs (the falsification arm: the widened predicate is not a never-FAIL check) / EV-6 shape (a) bracket-only still PASSes (regression) / EV-7 a lone label-position marker FAILs, killing the >=1 mutant / EV-8 the SAME token as EV-6 placed OUTSIDE the Evidence section FAILs, killing the whole-body mutant. Every arm drives _g1_03_evaluate, the same function Check 22 calls — no parallel reimplementation to drift." >&2
   return 0
 }
@@ -16261,12 +17450,19 @@ cmd_check_decision_emission() {
 # Check 7 (skill-package-freshness.yml #2656), Check 32 (release-corpus-completeness.yml
 # #1484), Check 41 (version-freeness.yml), Check 48 (close-completeness.yml).
 #
-# TODAY the predicate resolves to TWO members — Check 38
-# (hook-registry-index-freshness) and Check 73 (bundle-metrics-gate-integrity).
+# TODAY the predicate resolves to FOUR members — Check 38
+# (hook-registry-index-freshness), Check 73 (bundle-metrics-gate-integrity),
+# Check 77 (mirror-pair-parity) and Check 78 (rules-budget).
 # New members are appended here as future posture:required checks are back-filled
 # (#1036 / #313). Check 73 is the first back-fill against that declaration: #313 is
 # the milestone this runner's own header named as its back-fill vehicle, so the
-# roster grew through the mechanism it declared rather than around it.
+# roster grew through the mechanism it declared rather than around it. Check 77 is
+# the second: its invariant reads only tracked source text, which is exactly the
+# property that admits it here and that Check 9 — the install-dependent check
+# owning the same subject — lacks. Check 78 is the third, and admitted for a reason
+# specific to what it bounds: the deployed rules set it measures is PRODUCED at
+# deploy time, so a check that could only observe the installed mirror would certify
+# the per-session cost only after that cost had already been paid.
 #
 # Surface = "gate": fail-closed. Warn-vs-enforce at the CI surface is decided by the
 # committed .github/deploy-check-ci.enforce sentinel — during the warn-mode window an
@@ -16293,17 +17489,23 @@ cmd_check_required_subset() {
     [[ "$_rs_tok_line" == "enforce" ]] && rs_enforce="enforce"
   fi
 
-  # Enumerated allowlist: "check-id:verdict-body". TODAY: Checks 38 and 73. Append
-  # a row per future posture:required check that lacks a dedicated CI mirror.
+  # Enumerated allowlist: "check-id:verdict-body". TODAY: Checks 38, 73, 77 and 78.
+  # Append a row per future posture:required check that lacks a dedicated CI mirror.
   #
   # Every member's verdict enum MUST be drawn from the tokens the case below
   # recognises. A bespoke token falls to the `*)` arm and fail-closes on a healthy
   # tree regardless of the sentinel, which is why Check 73 emits only PASS/FAIL and
   # carries no not-evaluated arm (it has no measurement-outage class — every input
-  # is a committed file).
+  # is a committed file). Check 77 has a measurement-outage class on its LIFECYCLE
+  # surface but deliberately never emits it here: on this surface every registered
+  # holder is a committed file, so an unreadable holder is a checkout defect
+  # reported FAIL. Emitting the outage token would hard-fail CI on an outage via
+  # the `*)` arm, regardless of the sentinel.
   local -a rs_checks=(
     "hook-registry-index-freshness:_c38_compute_verdict"
     "bundle-metrics-gate-integrity:_c73_compute_verdict"
+    "mirror-pair-parity:_c77_compute_verdict"
+    "rules-budget:_c78_compute_verdict"
   )
 
   local rs_fail=0 rs_err=0 rs_pass=0 _entry _id _fn _verdict _tok
@@ -16416,14 +17618,17 @@ cmd_check_release_corpus() {
 # A STALE verdict NEVER maps to exit 0 — a probe that says STALE in prose and OK in $?
 # invites a caller to conclude the opposite of the truth.
 #
-#   verdict   sentinel token   exit   caller reads it as
-#   -------   --------------   ----   ----------------------------------------------
-#   FRESH     any              0      pass — every rostered package is content-current
-#   STALE     != enforce       2      ADVISORY finding: not fresh, not blocking. Non-
-#                                     zero (so `-eq 0` cannot mis-read it) and not 1
-#                                     (so a caller can still tell advisory from block).
-#   STALE     enforce          1      BLOCKING finding — the gate must fail closed
-#   <other>   any              1      unexpected verdict — fail-closed, sentinel-agnostic
+#   verdict         sentinel token   exit   caller reads it as
+#   -------------   --------------   ----   ----------------------------------------------
+#   FRESH           any              0      pass — every rostered package is content-current
+#   STALE           != enforce       2      ADVISORY finding: not fresh, not blocking
+#   STALE           enforce          1      BLOCKING finding — the gate must fail closed
+#   NOT-EVALUATED   != enforce       3      ADVISORY OUTAGE: the content arm did not run for
+#                                           part of the roster. Distinct from 2 so "stale"
+#                                           and "unmeasured" can never be conflated.
+#   NOT-EVALUATED   enforce          1      BLOCKING OUTAGE — a green gate must mean the arm
+#                                           actually ran. Cause is on stdout, not the integer.
+#   <other>         any              1      unexpected verdict — fail-closed, sentinel-agnostic
 #
 # The advisory value 2 follows the in-tree precedent of core/deploy/tools/cross-module-audit.sh
 # (2 = "violations detected (advisory)" vs 1 = BLOCKER). Enforcement POLICY stays in the
@@ -16457,6 +17662,24 @@ cmd_check_package_freshness() {
       fi
       log "  WARN-MODE (sentinel '$pf_enforce_file' token != enforce): reporting the true verdict as ADVISORY — exit 2, so no caller can read a STALE package as fresh, and distinct from the blocking exit 1. Flip the token to 'enforce' after shakedown."
       exit 2
+      ;;
+    NOT-EVALUATED)
+      log "package-freshness: NOT-EVALUATED — ${verdict#NOT-EVALUATED } (unmeasured / total / cause; per-skill detail above)"
+      log "  The staged-rebuild content arm did not conclude for part of the roster, so this run"
+      log "  cannot certify those packages either fresh or stale — this is not a clean result."
+      log "  Resolve the cause named above (CI dependency install / interpreter / unzip), then re-run."
+      # SENTINEL-AWARE, mirroring the STALE arm above. Under `enforce` a green gate must
+      # mean the content arm actually RAN, so an unmeasured roster blocks; under warn it
+      # is advisory on its OWN code, distinct from the STALE advisory 2, so no caller can
+      # conflate "stale" with "unmeasured". The *) arm below stays fail-closed: an
+      # UNRECOGNISED verdict is a tooling failure, a recognised outage is not — which is
+      # why the exit values coincide under enforce while the arms do not.
+      if [[ "$pf_enforce" == "enforce" ]]; then
+        log "  ENFORCE-MODE (sentinel '$pf_enforce_file' token == enforce): an unmeasured roster BLOCKS — exit 1."
+        exit 1
+      fi
+      log "  WARN-MODE (sentinel '$pf_enforce_file' token != enforce): reporting the outage as ADVISORY — exit 3, non-zero and distinct from the STALE advisory 2. Flip the token to 'enforce' to block on it."
+      exit 3
       ;;
     *)
       log "package-freshness: unexpected verdict '$verdict' — fail-closed"
@@ -16940,8 +18163,8 @@ main() {
       # install-independent AND posture:required AND no dedicated CI mirror) and exits
       # per the AGGREGATE verdict, honoring the committed .github/deploy-check-ci.enforce
       # sentinel (warn swallows a FAIL, enforce blocks). Each member runs its shared
-      # _cNN_compute_verdict "gate" body — no re-encoded predicate. Today seeded with
-      # Check 38 (hook-registry-index-freshness). Used by .github/workflows/deploy-check-ci.yml.
+      # _cNN_compute_verdict "gate" body — no re-encoded predicate. Today carrying
+      # Checks 38, 73 and 77. Used by .github/workflows/deploy-check-ci.yml.
       cmd_check_required_subset
       ;;
     --check-release-corpus)
@@ -16954,10 +18177,15 @@ main() {
       ;;
     --check-package-freshness)
       # Single-check CI .skill package content-freshness probe (#2656): runs ONLY
-      # Check 7's full content-hash verdict and exits per the verdict (0 FRESH; 2 STALE
-      # advisory when the .github/skill-package-freshness.enforce sentinel is not enforce;
-      # 1 STALE when it IS enforce; 1 fail-closed on an unexpected verdict — never 0 on
-      # STALE, see the contract table on cmd_check_package_freshness). The Check 7 logic
+      # Check 7's full content-hash verdict and exits per the verdict. Four states, not
+      # three: 0 FRESH; 2 STALE advisory when the
+      # .github/skill-package-freshness.enforce sentinel is not enforce; 3 NOT-EVALUATED
+      # advisory under the same non-enforce sentinel (the comparison did not run, so
+      # nothing was measured — never conflate it with 2, which means measured-and-stale);
+      # 1 for EITHER STALE or NOT-EVALUATED when the sentinel IS enforce; 1 fail-closed on
+      # a genuinely unexpected verdict — never 0 on STALE and never 0 on an unevaluated
+      # run, see the contract table on cmd_check_package_freshness, which is the authoring
+      # home this comment cites rather than restates. The Check 7 logic
       # ALSO fires inside the full --check
       # suite — one shared body (_c7_compute_verdict), no copy. Used by
       # .github/workflows/skill-package-freshness.yml.
@@ -16990,10 +18218,10 @@ main() {
       echo "  --check-lifecycle            List retired/dormant checks + dispositions + reactivation anchors"
       echo "  --check-version-freeness     Pre-merge version-freeness probe (Check 41 only; exits 1 on a claimed/undecidable candidate) (#1677)"
       echo "  --check-close-completeness   Close-completeness probe (Check 48 only; exits 1 on a VERIFIED row missing a Stage-13 output) (#1290)"
-      echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73); honors .github/deploy-check-ci.enforce (#1485)"
+      echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73, 77, 78); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; exits 1 on an INCOMPLETE row set when enforce) (#1484)"
       echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; advisory/deploy-time-only; exits 1 on INCOMPLETE/NOSET when enforce) (#4026)"
-      echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, unexpected=1) (#2656)"
+      echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, NOT-EVALUATED=3 advisory / 1 when enforce, unexpected=1) (#2656)"
       echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"
       echo "  --report                     Structured report for Stage 13 verification evidence"
       echo ""

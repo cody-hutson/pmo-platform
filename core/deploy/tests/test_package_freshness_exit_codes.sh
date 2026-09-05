@@ -14,16 +14,33 @@
 # THE CONTRACT UNDER TEST (authoring home: the cmd_check_package_freshness
 # header table in core/deploy/deploy.sh — this test is the executable mirror):
 #
-#   verdict   sentinel token   exit
-#   -------   --------------   ----
-#   FRESH     any              0
-#   STALE     != enforce       2     advisory: not fresh, not blocking
-#   STALE     enforce          1     blocking
-#   <other>   any              1     fail-closed, sentinel-agnostic
+#   verdict         sentinel token   exit
+#   -------------   --------------   ----
+#   FRESH           any              0
+#   STALE           != enforce       2     advisory: not fresh, not blocking
+#   STALE           enforce          1     blocking
+#   NOT-EVALUATED   != enforce       3     advisory OUTAGE: the content arm did not run
+#                                          for part of the roster. Distinct from 2 so
+#                                          "stale" and "unmeasured" cannot be conflated.
+#   NOT-EVALUATED   enforce          1     blocking OUTAGE — a green gate must mean the
+#                                          content arm actually ran
+#   <other>         any              1     fail-closed, sentinel-agnostic
+#
+# EVERY MODE-DEPENDENT ARM PINS ITS OWN SYNTHETIC SENTINEL, AND THAT IS A CONTRACT
+# TEST'S JOB RATHER THAN A CONVENIENCE. PF-2, PF-6, PF-9a, PF-9d and PF-10 assert a
+# `!= enforce` row; PF-3 asserts the `enforce` row. Read from the sandbox's COMMITTED
+# sentinel, those first four assert whatever posture the repository happens to hold
+# today, so the moment that token is flipped to `enforce` a correct probe returns 1,
+# the arms expecting 2 or 3 fail, and the suite reports a regression that is really a
+# stale test expectation. A committed posture is a deployment decision; the verdict ->
+# exit contract is an invariant. Each arm therefore hands probe_rc an explicit token
+# and the suite stays green across the flip in either direction. PF-1 / PF-4 / PF-5 /
+# PF-7 / PF-9c / PF-11 need no pin: they assert FRESH -> 0, which the `any` row makes
+# sentinel-independent by construction.
 #
 # THE ASSERTIONS
 #   PF-1  fresh sandbox, committed sentinel default    -> exit 0   (clean control)
-#   PF-2  one stale package, committed sentinel default -> exit 2  (the regression)
+#   PF-2  one stale package, SYNTHETIC `warn` sentinel  -> exit 2  (the regression)
 #   PF-2b that exit 2 was reached BY THE CONTENT VERDICT — the probe's own output
 #         carries the `source content changed since build (rebuilt hash ... !=
 #         committed baseline ...)` line naming the staled skill
@@ -37,11 +54,75 @@
 #         run the packager. Never silently absent, never counted as a pass, and
 #         never green: a skip fails the suite (see WHY A SKIP FAILS THE SUITE).
 #   PF-6  a TEMPLATE_SYNC_MAP canonical OUTSIDE every skills tree staled with no
-#         rebuild -> exit 2   (the injected-canonical vector)
+#         rebuild, SYNTHETIC `warn` sentinel -> exit 2 (the injected-canonical
+#         vector)
 #   PF-7  that same canonical restored from its pristine snapshot -> exit 0
 #         (PF-6's anti-vacuity control; restores, never rebuilds)
 #   PF-8  the skill-package-freshness workflow declares NO `paths:` key
 #         (the anti-narrowing floor; carries its own sensitivity arm)
+#   PF-9a the packager's module chain cannot import on an otherwise FRESH tree,
+#         SYNTHETIC `warn` sentinel -> exit 3. The content arm ran for no skill, so
+#         the verdict is WITHHELD rather than clean
+#   PF-9b that exit 3 names the outage, its cause, and its denominator — read from
+#         the same probe invocation, with the roster total READ rather than pinned
+#   PF-9c the shim removed and nothing else changed -> exit 0 (PF-9a's anti-vacuity
+#         control, in the PF-4 / PF-7 pattern)
+#   PF-9d a tree that is BOTH stale and unmeasured -> exit 2, not 3: STALE dominates,
+#         so a measurement outage can never suppress a real finding. The staleness is
+#         seeded in the SIDECAR, the one finding class that survives a packager
+#         outage on a fresh checkout
+#   PF-10 an AUTOMATED-DEPENDENCY ingress: a dependency manifest inside a rostered
+#         skill's content set edited with no rebuild, mtime RESTORED, SYNTHETIC
+#         `warn` sentinel -> exit 2, and the verdict came from the content arm.
+#         The manifest is DERIVED through the real resolver, never hardcoded
+#   PF-11 that same manifest restored from its pristine snapshot -> exit 0
+#         (PF-10's anti-vacuity control; restores, never rebuilds)
+#
+# THE AUTOMATED-DEPENDENCY INGRESS (PF-10 / PF-11)
+# A Dependabot SECURITY update reaches a manifest whether or not its ecosystem carries
+# an `updates:` entry, and it is not a release — so the Stage-12 rebuild beat never
+# fires for it. Two npm manifests sit inside one rostered skill's package content set,
+# and one such PR merged: at that merge the committed .skill carried undici 7.28.0
+# while the source held 7.29.0, at the SAME 19531 bytes on both sides. A length or
+# mtime signal could not have seen it; only the content-manifest hash can. The package
+# then sat stale on `main` for 8 days and was cleared by a hand rebuild, not a control.
+#
+# PF-10 RESTORES THE mtime AFTER STALING, AND THAT LINE IS THE ARM. Appending to the
+# manifest bumps the source mtime, and a bumped mtime gives the DEGRADED branches their
+# own road to exit 2 (see THE PF-2 DISCRIMINATOR) — so an arm that left it bumped would
+# also pass on a runner where the content verdict never ran, which is the direction that
+# matters. `touch -r` from the pristine snapshot removes that road. It cannot suppress
+# the real one: the mtime compare is a non-verdict PRE-FILTER that only sets a flag, and
+# the content verdict runs whenever a rebuild is available and its result decides. With
+# the mtime restored, exit 2 is reachable ONLY through the content arm.
+#
+# The target is DERIVED, not named: every candidate is confirmed through the real
+# resolver (`build-skill-packages.sh --skills-for-paths`, which reads repo-relative
+# paths on STDIN and returns empty for an argv invocation). A hardcoded path would stop
+# asserting the day the manifests move, and would do so silently. If no manifest inside
+# any skills tree resolves to a rostered skill, the vector no longer exists and this
+# suite ANNOUNCES that rather than swallowing it — PF-6's posture.
+#
+# THE UNMEASURED STATE (PF-9a..d)
+# The probe's third verdict is the one that was missing when a CI dependency stopped
+# resolving: the staged-rebuild content arm ran for zero of 55 skills, both degraded
+# branches fell through to the mtime pre-filter, and that pre-filter is FALSE for
+# every skill on a fresh checkout by construction — so the gate reported FRESH and
+# exit 0 over an arm that had measured nothing. PF-9a asserts that those exact
+# conditions now produce a withheld verdict on its own exit code.
+#
+# The degradation is injected the way the real one arrived, and that choice is the
+# arm. A `sys.path` entry holding a `yaml` module that raises makes the packager's
+# real import chain fail while the interpreter stays healthy — the shape a guard that
+# tests the interpreter cannot see. Disabling python3 outright would prove something
+# weaker and already covered; the point is that the capability the probe asserts and
+# the capability the packager needs are different things.
+#
+# THE SHIM IS PREPENDED TO PYTHONPATH, NEVER SUBSTITUTED FOR IT. install-tests.yml
+# exports PYTHONPATH as the user-site pin that survives this suite's HOME redirect.
+# Replacing it would degrade the run by LOSING the user-site rather than by shadowing
+# the module, and PF-9c would then be asserting PYTHONPATH restoration — a different
+# claim that happens to produce the same exit code.
 #
 # PF-1 and PF-4 are not optional garnish. Without them PF-2 and PF-3 would pass
 # against a probe that returned non-zero unconditionally, which is the vacuity
@@ -186,7 +267,10 @@ SKIP=0
 SBX=""           # git-archive export of the tracked tree
 SBX_HOME=""      # redirected HOME for every probe invocation
 ENFORCE_FILE=""  # synthetic sentinel holding the `enforce` token
+WARN_FILE=""     # synthetic sentinel holding the `warn` token
 PROBE_LOG=""     # combined output of the MOST RECENT probe_rc invocation
+PF9_SHIM=""         # sys.path dir holding a `yaml` module that refuses to import
+PF9_SHIM_ACTIVE=""  # non-empty => probe_rc prepends PF9_SHIM to the probe's PYTHONPATH
 
 cleanup() {
   local d
@@ -194,6 +278,7 @@ cleanup() {
     [ -n "${d}" ] && [ -d "${d}" ] && rm -rf "${d}"
   done
   [ -n "${ENFORCE_FILE}" ] && [ -f "${ENFORCE_FILE}" ] && rm -f "${ENFORCE_FILE}"
+  [ -n "${WARN_FILE}" ] && [ -f "${WARN_FILE}" ] && rm -f "${WARN_FILE}"
   return 0
 }
 trap cleanup EXIT
@@ -248,6 +333,17 @@ probe_rc() {
     export HOME="${SBX_HOME}"
     [ -n "${PY_USER_BASE}" ] && export PYTHONUSERBASE="${PY_USER_BASE}"
     [ -n "${sentinel}" ] && export SKILL_PACKAGE_FRESHNESS_ENFORCE_FILE="${sentinel}"
+    # PF-9's synthetic degradation. PREPEND, never replace: install-tests.yml exports
+    # PYTHONPATH (the user-site pin that survives the HOME redirect), so clobbering it
+    # would degrade the run by LOSING the user-site rather than by shadowing the
+    # module. PF-9c would then be asserting PYTHONPATH restoration — a different claim
+    # that happens to produce the same exit code, which is the worst kind of control.
+    # An active shim with no directory behind it would probe UNDEGRADED and let PF-9a
+    # fail for a reason it could not name, so that state exits loudly instead.
+    if [ -n "${PF9_SHIM_ACTIVE:-}" ]; then
+      [ -n "${PF9_SHIM:-}" ] || exit 126
+      export PYTHONPATH="${PF9_SHIM}${PYTHONPATH:+:${PYTHONPATH}}"
+    fi
     bash core/deploy/deploy.sh --check-package-freshness
   ) >"${PROBE_LOG:-/dev/null}" 2>&1
   rc=$?
@@ -371,8 +467,15 @@ printf '\n<!-- package-freshness exit-code regression fixture -->\n' >> "${STALE
   || die_loud "could not append to the stale target"
 
 # --- PF-2: STALE + non-enforce sentinel -> exit 2 (THE regression assertion) ---
-printf '\nPF-2: STALE tree, committed sentinel default (warn) -> expect exit 2\n'
-RC2=$(probe_rc)
+# Pins a SYNTHETIC `warn` sentinel rather than inheriting the sandbox's committed
+# one, mirroring PF-3's synthetic-`enforce` pattern. See EVERY MODE-DEPENDENT ARM
+# PINS ITS OWN SYNTHETIC SENTINEL in the header: this arm asserts the contract's
+# `!= enforce` row, not the repository's current posture, so it must not change
+# meaning when the committed token is flipped.
+WARN_FILE=$(mktemp -t pkgfresh-warn.XXXXXX) || die_loud "mktemp failed (warn sentinel)"
+printf '# synthetic sentinel for PF-2 / PF-6\nwarn\n' > "${WARN_FILE}"
+printf '\nPF-2: STALE tree, synthetic warn sentinel -> expect exit 2\n'
+RC2=$(probe_rc "${WARN_FILE}")
 if [ "${RC2}" = "2" ]; then
   report "PF-2 STALE + warn -> exit 2 (advisory, non-zero, distinguishable)" 1
 elif [ "${RC2}" = "0" ]; then
@@ -508,10 +611,11 @@ cp "${CANONICAL_TARGET}" "${CANONICAL_PRISTINE}" \
   || die_loud "could not snapshot the injected canonical ${CANONICAL_REL}"
 
 # --- PF-6: injected canonical staled, no rebuild -> exit 2 (the v4.06 shape) ---
-printf '\nPF-6: injected canonical %s staled (no rebuild) -> expect exit 2\n' "${CANONICAL_REL}"
+printf '\nPF-6: injected canonical %s staled (no rebuild), synthetic warn sentinel -> expect exit 2\n' "${CANONICAL_REL}"
 printf '\n<!-- package-freshness injected-canonical regression fixture -->\n' >> "${CANONICAL_TARGET}" \
   || die_loud "could not append to the injected canonical ${CANONICAL_REL}"
-RC6=$(probe_rc)
+# Same synthetic-`warn` pin as PF-2, and for the same reason.
+RC6=$(probe_rc "${WARN_FILE}")
 if [ "${RC6}" = "2" ]; then
   report "PF-6 injected canonical STALE + warn -> exit 2 (the injected-canonical vector)" 1
 elif [ "${RC6}" = "0" ]; then
@@ -574,6 +678,277 @@ if grep -qE "${PF8_PATHS_RE}" "${PF8_GATE_WF}"; then
     "a \`paths:\` filter was reintroduced — this gate's verdict is whole-roster; re-read the always-reports rationale in the workflow header before re-adding one"
 else
   report "PF-8 anti-narrowing: no paths: key on the package-freshness gate" 1
+fi
+
+# --- PF-9a..d: the UNMEASURED state has its own verdict and its own exit code ---
+# The degradation is injected the way the real one arrived: a module the packager
+# imports stops resolving while the interpreter stays healthy. A sys.path entry
+# holding a `yaml` that raises makes the packager's real import chain
+# (package_skill.py -> quick_validate.py -> yaml) fail without touching python3
+# itself, which is the shape the CI defect had — the guard tested the interpreter,
+# the packager needed the module, and 55 of 55 skills fell through to a fallback
+# that reports FRESH on a fresh checkout by construction.
+#
+# The tree is NOT staled for PF-9a..c. That is the whole point: with no staleness
+# anywhere, the pre-change probe returns FRESH 55 and exit 0 — a green gate over an
+# arm that ran for zero skills. PF-9a asserts that the same conditions now produce a
+# withheld verdict and its own exit code instead.
+#
+# The sandbox's freshness at entry is established by PF-7 (rc 0, asserted) and is not
+# re-probed here: a dirty baseline cannot pass silently, because it would drive PF-9a
+# to 2 rather than 3 and PF-9c to 2 rather than 0 — both loud.
+PF9_SHIM="${SBX_HOME}/pf9-shim"
+mkdir -p "${PF9_SHIM}" || die_loud "could not create the PF-9 shim dir"
+printf 'raise ImportError("PF-9 synthetic degradation: PyYAML unavailable")\n' \
+  > "${PF9_SHIM}/yaml.py" || die_loud "could not write the PF-9 shim"
+
+printf '\nPF-9a: packager module unimportable, tree FRESH, synthetic warn sentinel -> expect exit 3\n'
+PF9_SHIM_ACTIVE=1
+RC9A=$(probe_rc "${WARN_FILE}")
+PF9_SHIM_ACTIVE=""
+if [ "${RC9A}" = "3" ]; then
+  report "PF-9a content arm unmeasurable -> exit 3 (withheld verdict, own code)" 1
+elif [ "${RC9A}" = "0" ]; then
+  report "PF-9a content arm unmeasurable -> exit 3 (withheld verdict, own code)" 0 \
+    "observed 0 — THE REGRESSION: the content arm ran for zero skills and the probe reported success. This is the state that let a dependency outage read as 55 of 55 packages verified."
+elif [ "${RC9A}" = "2" ]; then
+  report "PF-9a content arm unmeasurable -> exit 3 (withheld verdict, own code)" 0 \
+    "observed 2 — the sandbox was not FRESH at PF-9 entry, so this arm scored a staleness finding rather than the outage it exists to assert"
+else
+  report "PF-9a content arm unmeasurable -> exit 3 (withheld verdict, own code)" 0 \
+    "expected 3, observed ${RC9A}"
+fi
+
+# --- PF-9b: attribute that exit 3 to the degradation this arm injected ---
+# Read from the SAME probe invocation PF-9a just scored, before any later probe
+# overwrites ${PROBE_LOG} — the PF-2b pattern.
+#
+# The discriminator is the REASON STRING, not the per-skill `staged rebuild failed to
+# run` line, and the difference is not cosmetic. That line belongs to the OTHER
+# degradation shape: a capability probe that passed and a per-skill build that then
+# failed anyway. Here the capability probe catches the missing module up front, so the
+# loop never attempts a rebuild and emits no such line — measured, 0 occurrences. An
+# arm asserting it would fail against correct behaviour. What the probe does emit is
+# the aggregate outage line with its cause and its denominator, so that is what is
+# asserted, together with the stated denominator CIAC-4 requires.
+PF9_TOKEN=$(count_fixed 'NOT-EVALUATED' "${PROBE_LOG}")
+PF9_CAUSE=$(count_fixed 'packager-import-failed' "${PROBE_LOG}")
+PF9_DENOM=$(count_fixed 'content arm did not conclude for' "${PROBE_LOG}")
+
+# The denominator is READ, never hardcoded. A literal roster size would stop asserting
+# the day a skill is added or retired, and would do so by going red for a reason that
+# has nothing to do with the contract — the failure mode PF-6 and PF-8 both take pains
+# to avoid. The outage line reads "... did not conclude for <unmeasured> of <total>
+# rostered skill(s) ...": extracting BOTH and requiring them equal asserts the
+# stated-denominator property itself rather than today's value of it. Under a
+# module-level outage the packager resolves for no skill, so the whole roster is
+# unmeasured; an unmeasured count short of the total would mean the outage was
+# partial and this arm's premise did not hold.
+PF9_PAIR=""
+if [ -f "${PROBE_LOG}" ]; then
+  while IFS= read -r line || [ -n "${line}" ]; do
+    case "${line}" in
+      *"content arm did not conclude for "*)
+        PF9_PAIR="${line#*content arm did not conclude for }"; break ;;
+    esac
+  done < "${PROBE_LOG}"
+fi
+PF9_UNMEASURED="${PF9_PAIR%% *}"
+PF9_REST="${PF9_PAIR#* of }"
+PF9_TOTAL="${PF9_REST%% *}"
+
+if [ ! -s "${PROBE_LOG}" ]; then
+  report "PF-9b exit 3 is attributable to the injected module outage, with its denominator stated" 0 \
+    "the probe emitted NO output — the discriminator read an empty extraction, which is a broken probe, not a clean result"
+elif [ "${PF9_TOKEN}" -lt 1 ] || [ "${PF9_CAUSE}" -lt 1 ] || [ "${PF9_DENOM}" -lt 1 ]; then
+  report "PF-9b exit 3 is attributable to the injected module outage, with its denominator stated" 0 \
+    "expected each limb >= 1, observed NOT-EVALUATED=${PF9_TOKEN} packager-import-failed=${PF9_CAUSE} outage-line=${PF9_DENOM}. Exit ${RC9A} was reached without naming the outage, its cause, or the share of the roster it covered — so the verdict states less than the contract claims it states."
+elif [ -n "${PF9_UNMEASURED}" ] && [ "${PF9_UNMEASURED}" = "${PF9_TOTAL}" ]; then
+  report "PF-9b exit 3 is attributable to the injected module outage, with its denominator stated (${PF9_UNMEASURED} of ${PF9_TOTAL})" 1
+else
+  report "PF-9b exit 3 is attributable to the injected module outage, with its denominator stated" 0 \
+    "the outage line reported ${PF9_UNMEASURED:-<none>} of ${PF9_TOTAL:-<none>} — a module-level outage leaves NO skill measurable, so an unmeasured count short of the roster total means the injected degradation was partial and this arm asserted something weaker than it claims"
+fi
+
+# --- PF-9c: shim removed, nothing else changed -> exit 0 (anti-vacuity control) ---
+# Without this arm PF-9a would pass against a probe that returned 3 unconditionally.
+# No sentinel pin: this arm asserts FRESH -> 0, the `any` row, which is
+# sentinel-independent by construction — the same reason PF-1 / PF-4 / PF-7 take none.
+printf '\nPF-9c: shim removed, nothing else changed -> expect exit 0\n'
+RC9C=$(probe_rc)
+if [ "${RC9C}" = "0" ]; then
+  report "PF-9c shim removed -> exit 0 (PF-9a is not unconditionally non-zero)" 1
+else
+  report "PF-9c shim removed -> exit 0 (PF-9a is not unconditionally non-zero)" 0 \
+    "expected 0, observed ${RC9C} — PF-9a's exit 3 cannot be attributed to the shim if the probe does not return to 0 without it"
+fi
+
+# --- PF-9d: precedence — STALE dominates the outage -> exit 2, not 3 ---
+# A measurement outage must never SUPPRESS a real finding. The loop runs to completion
+# and the stale counter is tested first, so a tree that is both stale and partly
+# unmeasured reports the staleness. Asserting 2 here also proves the outage does not
+# short-circuit the roster loop, which an early return on a failed capability probe
+# would do — and which would silently convert today's blocking behaviour into an
+# advisory one.
+#
+# THE STALENESS IS SEEDED IN THE SIDECAR, NOT IN THE SOURCE, AND THAT IS THE ARM.
+# Appending to a source file is PF-2's vector, and with the packager disabled it is
+# detectable only by the mtime pre-filter — which is FALSE for every skill on a fresh
+# checkout by construction (see THE mtime FALLBACK IS INERT in deploy.sh). An arm
+# resting on it would assert precedence over a finding CI can never produce, and would
+# pass while establishing nothing about the case that matters. The baseline-vs-live
+# package hash compare needs only unzip + shasum, so it is the finding class that
+# actually SURVIVES a packager outage on a fresh checkout — precedence has to be
+# asserted over that one to mean anything. A sidecar that disagrees with its package
+# is also a real staleness class in its own right: it is what a rebuild committed
+# without its regenerated sidecar leaves behind.
+printf '\nPF-9d: STALE tree AND packager unimportable, synthetic warn sentinel -> expect exit 2 (STALE wins)\n'
+PF9D_SIDECAR="${SBX}/packages/${PROBE_SKILL}.skill.sha256"
+PF9D_SIDECAR_PRISTINE="${SBX_HOME}/pristine-pf9d-sidecar.bak"
+[ -f "${PF9D_SIDECAR}" ] \
+  || die_loud "content baseline sidecar missing: packages/${PROBE_SKILL}.skill.sha256 — PF-9d cannot seed a packager-independent finding"
+cp "${PF9D_SIDECAR}" "${PF9D_SIDECAR_PRISTINE}" \
+  || die_loud "could not snapshot the PF-9d sidecar"
+printf '0000000000000000000000000000000000000000000000000000000000000000\n' > "${PF9D_SIDECAR}" \
+  || die_loud "could not seed the PF-9d sidecar mismatch"
+PF9_SHIM_ACTIVE=1
+RC9D=$(probe_rc "${WARN_FILE}")
+PF9_SHIM_ACTIVE=""
+cp "${PF9D_SIDECAR_PRISTINE}" "${PF9D_SIDECAR}" \
+  || die_loud "could not restore the PF-9d sidecar"
+if [ "${RC9D}" = "2" ]; then
+  report "PF-9d STALE > NOT-EVALUATED (a measurement outage cannot suppress a finding)" 1
+elif [ "${RC9D}" = "3" ]; then
+  report "PF-9d STALE > NOT-EVALUATED (a measurement outage cannot suppress a finding)" 0 \
+    "observed 3 — the outage SUPPRESSED a real staleness finding. Either the precedence is inverted, or the capability probe returns before the roster loop runs."
+else
+  report "PF-9d STALE > NOT-EVALUATED (a measurement outage cannot suppress a finding)" 0 \
+    "expected 2, observed ${RC9D}"
+fi
+
+# --- PF-10 / PF-11: the automated-dependency ingress ---
+# See THE AUTOMATED-DEPENDENCY INGRESS in the header for why this vector needs its own
+# arm and why the mtime is restored.
+
+# Derive the target through the REAL resolver rather than naming one. Basenames are the
+# dependency-manifest classes a package manager would open; membership in a skill's
+# content set is decided by the resolver, not by the path looking plausible.
+PF10_MANIFEST_NAMES="package.json package-lock.json yarn.lock pnpm-lock.yaml requirements.txt Pipfile.lock poetry.lock go.sum Gemfile.lock Cargo.lock composer.lock"
+PF10_TARGET=""
+PF10_TARGET_REL=""
+PF10_SKILL=""
+
+for pf10_tree in core operations release; do
+  [ -d "${SBX}/${pf10_tree}/skills" ] || continue
+  while IFS= read -r pf10_cand; do
+    [ -n "${pf10_cand}" ] || continue
+    case " ${PF10_MANIFEST_NAMES} " in
+      *" ${pf10_cand##*/} "*) ;;
+      *) continue ;;
+    esac
+    pf10_rel="${pf10_cand#${SBX}/}"
+    # The resolver reads repo-relative paths on STDIN. An argv invocation returns empty
+    # for every input INCLUDING one that genuinely cascades, which would read here as
+    # "not in any content set" while having measured nothing.
+    #
+    # The WHOLE emission is captured and the first line taken by parameter expansion,
+    # never by piping into a short-circuiting reader. Such a reader closes the pipe under
+    # the resolver and SIGPIPEs it mid-write; the derivation would then be reading a
+    # truncated answer from a writer it had killed, which is precisely the failure shape
+    # this suite refuses to accept anywhere else. The emission is a handful of skill
+    # names, so reading all of it costs nothing.
+    pf10_emission="$(
+      cd "${SBX}" || exit 127
+      printf '%s\n' "${pf10_rel}" \
+        | bash core/deploy/tools/build-skill-packages.sh --skills-for-paths 2>/dev/null
+    )"
+    pf10_resolved="${pf10_emission%%$'\n'*}"
+    if [ -n "${pf10_resolved}" ]; then
+      PF10_TARGET="${pf10_cand}"
+      PF10_TARGET_REL="${pf10_rel}"
+      PF10_SKILL="${pf10_resolved}"
+      break
+    fi
+  done < <(find "${SBX}/${pf10_tree}/skills" -type f -not -path '*/.*' 2>/dev/null | LC_ALL=C sort)
+  [ -n "${PF10_TARGET}" ] && break
+done
+
+[ -n "${PF10_TARGET}" ] \
+  || die_loud "no dependency manifest inside any skills tree resolves to a rostered skill — the automated-dependency vector appears not to exist. If the manifests were deliberately relocated or excluded from the package content set, retire PF-10/PF-11 in that same change rather than leaving an arm that asserts nothing."
+
+# Re-normalize to FRESH before staling. PF-9d restored its sidecar, but a baseline that
+# is merely ASSUMED fresh would let PF-10 score a leftover finding and would then send
+# PF-11 red for an unrelated reason.
+PF10_RC_BASE=$(probe_rc)
+if [ "${PF10_RC_BASE}" != "0" ]; then
+  if [ "$(sandbox_build)" != "0" ]; then
+    [ -s "${BUILD_LOG}" ] && tail -20 "${BUILD_LOG}" >&2
+    die_loud "sandbox rebuild failed while re-establishing the FRESH baseline for PF-10"
+  fi
+  PF10_RC_BASE=$(probe_rc)
+  [ "${PF10_RC_BASE}" = "0" ] \
+    || die_loud "sandbox not FRESH at PF-10 entry (rc=${PF10_RC_BASE}) — PF-10 cannot attribute a finding to its own edit"
+fi
+printf '\nPF-10 baseline confirmed FRESH (rc=0); derived target %s -> skill %s\n' \
+  "${PF10_TARGET_REL}" "${PF10_SKILL}"
+
+# Snapshot WITH mtime preserved — `touch -r` below reads it back.
+PF10_PRISTINE="${SBX_HOME}/pristine-dep-manifest.bak"
+cp -p "${PF10_TARGET}" "${PF10_PRISTINE}" \
+  || die_loud "could not snapshot the dependency manifest ${PF10_TARGET_REL}"
+
+printf '\nPF-10: dependency manifest %s staled (mtime restored), synthetic warn sentinel -> expect exit 2\n' \
+  "${PF10_TARGET_REL}"
+# A single trailing space. The file is JSON and trailing whitespace keeps it parseable
+# for the package manager, while skill_content_hash hashes BYTES and does not parse — so
+# the edit is content-changing and semantically inert, which is the bot-PR shape in
+# miniature (a real dependency bump is also semantically inert to the packager).
+printf ' ' >> "${PF10_TARGET}" \
+  || die_loud "could not append to the dependency manifest ${PF10_TARGET_REL}"
+# THE LOAD-BEARING LINE. See the header.
+touch -r "${PF10_PRISTINE}" "${PF10_TARGET}" \
+  || die_loud "could not restore the mtime on ${PF10_TARGET_REL} — without it PF-10 could reach exit 2 through the mtime pre-filter alone and would assert nothing about the content arm"
+
+RC10=$(probe_rc "${WARN_FILE}")
+PF10_CONTENT=$(count_fixed "${PF10_SKILL} — source content changed since build" "${PROBE_LOG}")
+PF10_DEGRADED=$(count_fixed 'staged rebuild failed to run' "${PROBE_LOG}")
+
+if [ "${RC10}" = "3" ]; then
+  # #5242's unmeasured token. Never a PASS and never silent: the content arm did not run,
+  # so this run establishes nothing about the ingress. The fail-on-SKIP rule reddens it.
+  report_skip "PF-10 automated-dependency ingress STALE + warn -> exit 2" \
+    "content arm not evaluated in this environment (probe returned 3, NOT-EVALUATED) — the ingress assertion did not run"
+elif [ "${RC10}" = "0" ]; then
+  report "PF-10 automated-dependency ingress STALE + warn -> exit 2 (content arm)" 0 \
+    "observed 0 — an automated dependency PR staled a package and the probe reported success. This is the merged-bot-PR shape the arm exists to catch, reproduced in the sandbox."
+elif [ "${RC10}" != "2" ]; then
+  report "PF-10 automated-dependency ingress STALE + warn -> exit 2 (content arm)" 0 \
+    "expected 2, observed ${RC10} (target: ${PF10_TARGET_REL}, skill: ${PF10_SKILL})"
+elif [ ! -s "${PROBE_LOG}" ]; then
+  report "PF-10 automated-dependency ingress STALE + warn -> exit 2 (content arm)" 0 \
+    "the probe emitted NO output — both limbs read an empty extraction, which is a broken probe, not a clean result"
+elif [ "${PF10_CONTENT}" -lt 1 ]; then
+  report "PF-10 automated-dependency ingress STALE + warn -> exit 2 (content arm)" 0 \
+    "exit 2 was reached, but no 'source content changed since build' line names ${PF10_SKILL} — so the verdict did not come from the content arm. With the mtime restored this should be unreachable; it means the staleness was found by some other road and the arm has not asserted the ingress."
+elif [ "${PF10_DEGRADED}" -ne 0 ]; then
+  report "PF-10 automated-dependency ingress STALE + warn -> exit 2 (content arm)" 0 \
+    "${PF10_DEGRADED} rostered skill(s) fell back because the staged rebuild could not run — this run's verdict is partly degraded, so it does not establish the content contract this arm claims"
+else
+  report "PF-10 automated-dependency ingress (${PF10_TARGET_REL}) STALE + warn -> exit 2 via the content arm" 1
+fi
+
+# --- PF-11: restore the manifest -> exit 0 (PF-10's anti-vacuity control) ---
+# Restores, never rebuilds (the PF-4 / PF-7 discipline): a control that depended on the
+# packager could not distinguish "PF-10's edit was the cause" from "the packager works".
+printf '\nPF-11: dependency manifest restored (restore, not rebuild) -> expect exit 0\n'
+cp -p "${PF10_PRISTINE}" "${PF10_TARGET}" \
+  || die_loud "could not restore the dependency manifest ${PF10_TARGET_REL}"
+RC11=$(probe_rc)
+if [ "${RC11}" = "0" ]; then
+  report "PF-11 dependency manifest restored -> exit 0 (PF-10 is not unconditionally non-zero)" 1
+else
+  report "PF-11 dependency manifest restored -> exit 0 (PF-10 is not unconditionally non-zero)" 0 \
+    "expected 0, observed ${RC11} — PF-10's exit 2 cannot be attributed to its own edit if the probe does not return to 0 once that edit is reverted (target: ${PF10_TARGET_REL})"
 fi
 
 # --- Summary ---

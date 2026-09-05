@@ -1,6 +1,6 @@
 name: Skill package content-freshness (pre-merge gate)
 
-# gate-efficacy: posture=required(warn-mode-initial)  enforcement=branch-protection:"Pre-merge .skill package content-freshness gate"  always-reports=yes
+# gate-efficacy: posture=required(enforce; ratified 2026-09-04)  enforcement=branch-protection:"Pre-merge .skill package content-freshness gate"  always-reports=yes
 #   invariant: every rostered skill's compiled .skill package reflects current source
 #              content (the committed package == what source would build now) — asserted
 #              PRE-MERGE so a PR that edits a skill's SKILL.md or references/ cannot
@@ -11,6 +11,10 @@ name: Skill package content-freshness (pre-merge gate)
 #   falsification: edit a skills/*/SKILL.md (or references/) without rebuilding the
 #                  .skill package -> the probe reports STALE and exits 2 (warn-mode:
 #                  job green with a ::warning:: annotation) or 1 (enforce: job red).
+#                  Break the staged rebuild instead (remove the packager's dependency)
+#                  -> the probe reports NOT-EVALUATED and exits 3 (warn-mode: green
+#                  with a ::warning::) or 1 (enforce: job red) — an unmeasured roster
+#                  is a withheld verdict, never a clean one, and never exit 0.
 #                  It never exits 0 on STALE. Rebuild via build-skill-packages.sh
 #                  and commit the package + .sha256 sidecar -> FRESH, exit 0, green.
 #                  Second arm, on the OTHER input vector: edit a TEMPLATE_SYNC_MAP
@@ -44,16 +48,21 @@ name: Skill package content-freshness (pre-merge gate)
 # merged green with this gate never having run — the injected-canonical vector, invisible
 # precisely because a non-matching path filter produces no check run to read.
 #
-# always-reports=yes is ALSO A PREREQUISITE for the enforce flip, not a nicety: a required
+# always-reports=yes is ALSO A PREREQUISITE for enforcement, not a nicety: a required
 # status check that is path-filtered leaves every non-matching PR permanently pending
-# ("Expected — waiting for status"), so the graduation path stated below is broken by
-# construction for as long as a filter exists. Ships warn-mode-initial. Check 7's
+# ("Expected — waiting for status"), so the graduation path would be broken by
+# construction for as long as a filter existed. This workflow carries no filter.
+# GRADUATED. It shipped warn-mode-initial; the committed
+# .github/skill-package-freshness.enforce token now reads `enforce`, so a STALE or a
+# NOT-EVALUATED verdict exits 1 and this job is RED rather than annotated. Check 7's
 # non-reproducible-archive false-positive class is CLOSED, so mirroring the content-hash
-# verdict into CI does not yield false-positive failures. Flips when the committed
-# .github/skill-package-freshness.enforce token -> `enforce` AND the job is added to
-# required_status_checks (branch protection, out-of-tree — R3).
-# (Per core/standards/gate-efficacy-standard.md (b)/(b'); warn-mode-initial per
-# core/rules/git-workflow.md § Repository-Integrity Gates.)
+# verdict into CI does not yield false-positive failures. THE OTHER HALF IS OUT-OF-TREE
+# AND UNVERSIONED: adding "Pre-merge .skill package content-freshness gate" to
+# required_status_checks (branch protection — R3) is an operator step executed AFTER this
+# release merges, so until it runs a red job here reports without stopping a merge.
+# Read that membership; never infer it from this header.
+# (Per core/standards/gate-efficacy-standard.md (b)/(b'); the warn-mode-initial posture
+# this graduated from is defined in core/rules/git-workflow.md § Repository-Integrity Gates.)
 #
 # THIN caller of the single engine. --check-package-freshness runs Check 7's FULL
 # rostered-skill content-hash verdict via the shared _c7_compute_verdict "gate" body —
@@ -63,7 +72,13 @@ name: Skill package content-freshness (pre-merge gate)
 # CIAC-2).
 #
 # Platform: macos-latest — the content-hash verdict needs python3 + unzip (both on the
-# macOS image) and deploy.sh uses BSD `stat -f`/`md5` (mirrors version-freeness.yml).
+# macOS image) AND PyYAML, which is NOT on the image. build_skill_to_dir() runs
+# `/usr/bin/python3 -m scripts.package_skill` (deploy.sh:3860); package_skill.py:17
+# imports scripts.quick_validate, which imports yaml at quick_validate.py:28. The
+# dependency is TRANSITIVE — a direct read of the packager does not reveal it, which is
+# why this workflow shipped without it and published a green CONTENT verdict while the
+# staged rebuild ran for ZERO of 55 rostered packages. deploy.sh uses BSD `stat -f`/`md5`
+# (mirrors version-freeness.yml).
 #
 # Security: consumes NO untrusted github.event.* input. Every run: block is a static
 # invocation; the RC handoff uses the env-var pattern (no ${{ }} inside a run: block).
@@ -90,14 +105,92 @@ jobs:
           uname -s
           command -v bash
           command -v git
-          command -v unzip || echo "::warning::unzip missing — Check 7 degrades to the mtime signal"
-          test -x /usr/bin/python3 || echo "::warning::/usr/bin/python3 missing — the staged-rebuild content verdict degrades"
+          # FAILS rather than warns, and the two arms are uniform because
+          # _c7_compute_verdict treats them identically (deploy.sh:3309-3310): either
+          # one missing sets c7_can_rebuild=false and the content arm does not run.
+          # A ::warning:: on a green job is exactly the invisibility this gate was found
+          # publishing — 55/55 skills degraded, conclusion `success`.
+          command -v unzip || {
+            echo "::error::unzip missing — Check 7's content verdict CANNOT BE COMPUTED. This gate must not publish a content-freshness verdict it did not compute."
+            exit 1
+          }
+          test -x /usr/bin/python3 || {
+            echo "::error::/usr/bin/python3 missing — build_skill_to_dir cannot stage the comparison rebuild. This gate must not publish a content-freshness verdict it did not compute."
+            exit 1
+          }
+
+      - name: Ensure PyYAML (pinned — the packager's transitive dependency)
+        # Mirrors the `Ensure PyYAML` step in .github/workflows/install-tests.yml
+        # (shell-tests job, same macos-latest runner) — the only other workflow that
+        # reaches build_skill_to_dir. Kept byte-aligned with it deliberately: two
+        # provisionings of one dependency that differ are a divergence the next reader
+        # has to re-derive.
+        run: |
+          # The CONSUMER is /usr/bin/python3: deploy.sh's build_skill_to_dir() invokes
+          # `/usr/bin/python3 -m scripts.package_skill` by absolute path (deploy.sh:3860),
+          # and guards on `[[ -x "/usr/bin/python3" ]]` at :3830. So the assertion that
+          # matters is that THAT interpreter can import yaml.
+          #
+          # Do NOT substitute eval-viewer-tests.yml's `pip install pyyaml` idiom: it
+          # installs into the setup-python interpreter, which /usr/bin/python3 cannot see.
+          # It would report success and leave this gate exactly as degraded.
+          #
+          # The install path cannot simply target the consumer either: on macOS runners
+          # /usr/bin/python3 is the Xcode shim and its pip REJECTS
+          # --break-system-packages, while the PATH-resolved python3 is a different
+          # interpreter whose pip accepts it. Try the consumer first, fall back to the
+          # flagged form, then ASSERT against the consumer either way — a successful
+          # install into an interpreter nothing runs is not success.
+          if ! /usr/bin/python3 -c 'import yaml' >/dev/null 2>&1; then
+            /usr/bin/python3 -m pip install --user 'pyyaml==6.0.2' \
+              || python3 -m pip install --user --break-system-packages 'pyyaml==6.0.2' \
+              || true
+          fi
+          /usr/bin/python3 -c 'import yaml; print("PyYAML", yaml.__version__, "via", __import__("sys").executable)'
+          # A --user install lives under $HOME. This workflow does not redirect HOME
+          # (deploy.sh assigns HOME nowhere — it only reads it), so unlike
+          # test_package_freshness_exit_codes.sh, which sandboxes HOME per probe via
+          # SBX_HOME, the pin is not load-bearing here. It is carried anyway so the two
+          # provisionings stay byte-aligned, and so an engine change that ever sandboxes
+          # HOME cannot silently re-open the gap.
+          echo "PYTHONPATH=$(/usr/bin/python3 -m site --user-site)${PYTHONPATH:+:${PYTHONPATH}}" >> "$GITHUB_ENV"
+
+      - name: Verify the packager import chain resolves (degradation guard)
+        # THE ARM THAT MAKES A FUTURE DEGRADATION VISIBLE RATHER THAN SILENT.
+        #
+        # The step above asserts `import yaml`. This one asserts the WHOLE chain the
+        # engine walks, with the exact interpreter and the exact working directory
+        # build_skill_to_dir uses (deploy.sh:3859-3860) — so a packager that acquires a
+        # SECOND non-stdlib dependency is caught here rather than degrading this gate
+        # silently for another release cycle. That is not hypothetical: the dependency
+        # this card fixes was itself transitive and invisible to a direct read.
+        #
+        # Importing the module is side-effect free: package_skill.py guards its entry
+        # point with `if __name__ == "__main__"`.
+        #
+        # This is a PREREQUISITE assertion, not a verdict. It re-encodes no part of the
+        # freshness predicate — see "NO predicate is re-encoded in this YAML
+        # (single-engine, CIAC-2)" in this file's header. The verdict stays with
+        # _c7_compute_verdict, and the per-skill "did the rebuild run" question is the
+        # engine's to express. A post-run scan of the probe's output would duplicate
+        # PF-2c in core/deploy/tests/test_package_freshness_exit_codes.sh; do not add one.
+        working-directory: release/skills/pmo-skill-refiner
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 -c 'import scripts.package_skill' || {
+            echo "::error::The skill packager cannot be imported by /usr/bin/python3. build_skill_to_dir would fail for EVERY rostered skill, and this gate would publish a green content verdict having compared nothing. Fix the 'Ensure PyYAML' step or the packager's dependencies — do not silence this."
+            exit 1
+          }
+          echo "packager import chain OK — the staged-rebuild content arm can run"
 
       - name: Run package-freshness check (single check, via the deploy.sh engine)
         id: check
         # THIN caller. The probe reads .github/skill-package-freshness.enforce itself:
-        # warn maps STALE to exit 2 (advisory), enforce to exit 1 (blocking); an
-        # unexpected verdict fail-closes to 1. The probe never exits 0 on STALE.
+        # warn maps STALE to exit 2 and an unevaluated run to exit 3 (both advisory),
+        # enforce maps BOTH to exit 1 (blocking); an unexpected verdict fail-closes to 1.
+        # The probe never exits 0 on STALE and never exits 0 on an unevaluated run. This
+        # step re-parses no sentinel: the mode rides the integer. See the contract table
+        # on cmd_check_package_freshness in core/deploy/deploy.sh (the authoring home).
         run: |
           set -uo pipefail
           set +e
@@ -106,7 +199,7 @@ jobs:
           printf '%s\n' "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
           echo "rc=$RC" >> "$GITHUB_OUTPUT"
 
-      - name: Gate decision (warn-mode-initial)
+      - name: Gate decision (enforce)
         env:
           RC: ${{ steps.check.outputs.rc }}
         run: |
@@ -128,13 +221,35 @@ jobs:
               echo "::warning::package-freshness: stale .skill package reported in WARN mode — not blocking (flip the enforce sentinel token to block)"
               exit 0
               ;;
+            3)
+              {
+                echo "## :grey_question: skill package-freshness could NOT BE MEASURED (not a clean result)"
+                echo ""
+                echo "The staged-rebuild content arm did not conclude for part of the rostered skill set,"
+                echo "so this run cannot certify those packages either fresh or stale. It is NOT a pass."
+                echo "Cause and denominator are named in the probe output above."
+                echo ""
+                echo "Exit 3 is reachable only while the enforce sentinel holds a non-enforce token."
+                echo "Under enforce the same verdict exits 1 and this job is RED."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::warning::package-freshness: NOT-EVALUATED — the content arm did not run for part of the roster; this is a withheld verdict, never a clean one"
+              exit 0
+              ;;
             *)
               {
                 echo "## :x: skill package-freshness gate FAILED (enforce mode) or fail-closed"
                 echo ""
-                echo "A rostered skill's .skill package is stale with the enforce sentinel active,"
-                echo "OR the verdict was unexpected (fail-closed). Probe exit code: $RC."
-                echo "Rebuild via core/deploy/tools/build-skill-packages.sh <skill> and commit the package + .sha256 sidecar before merge."
+                echo "One of three things happened:"
+                echo "  (a) a rostered skill's .skill package is stale with the enforce sentinel active;"
+                echo "  (b) the content arm COULD NOT BE MEASURED with the enforce sentinel active"
+                echo "      (NOT-EVALUATED — a withheld verdict, never a clean one); or"
+                echo "  (c) the verdict was unexpected (fail-closed)."
+                echo "Probe exit code: $RC."
+                echo ""
+                echo "Remedy for (a): rebuild via core/deploy/tools/build-skill-packages.sh <skill> and"
+                echo "commit the package + .sha256 sidecar before merge."
+                echo "Remedy for (b): resolve the dependency / interpreter cause the probe named above,"
+                echo "then re-run — do not merge on an unmeasured gate."
               } | tee -a "$GITHUB_STEP_SUMMARY"
               exit 1
               ;;
