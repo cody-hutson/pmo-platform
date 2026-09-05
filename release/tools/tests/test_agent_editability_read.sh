@@ -488,7 +488,8 @@ fi
 # graded surface, rewrite its prohibiting sentence into a recommending one, and
 # require the verdict to flip. Without this arm a classifier that returned
 # PROHIBITING unconditionally would satisfy every assertion above.
-BRIDGE_LINE="$(classify_token "$BRIDGE" "$BYPASS_TOKEN" | head -1 | cut -f2)"
+BRIDGE_OUT="$(classify_token "$BRIDGE" "$BYPASS_TOKEN")"
+IFS="$(printf '\t')" read -r _ BRIDGE_LINE _ <<<"$BRIDGE_OUT"
 if [ "$BRIDGE_LINE" = "PROHIBITING" ]; then
   ok "B-DISC/a — the shipped bridge classifies PROHIBITING on its unmodified sentence"
 else
@@ -515,7 +516,8 @@ else
   ok "B-DISC control — the rewritten copy DIFFERS from the bridge"
 fi
 
-MUT_VERDICT="$(classify_token "$TMP/bridge-recommending.md" "$BYPASS_TOKEN" | head -1 | cut -f2)"
+MUT_OUT="$(classify_token "$TMP/bridge-recommending.md" "$BYPASS_TOKEN")"
+IFS="$(printf '\t')" read -r _ MUT_VERDICT _ <<<"$MUT_OUT"
 if [ "$MUT_VERDICT" = "RECOMMENDING" ]; then
   ok "B-DISC/b — a recommending construction in the same file classifies RECOMMENDING; the arm discriminates"
 else
@@ -536,7 +538,8 @@ m = re.search(r'(?<=[.!?])\s+|\n\s*\n', t[i:])
 end = i + m.start() + 1 if m else len(t)
 open(dst, 'w', encoding='utf-8').write(t[:start] + 'The variable ' + needle + ' exists.' + t[end:])
 PYEOF
-BARE_VERDICT="$(classify_token "$TMP/bridge-bare.md" "$BYPASS_TOKEN" | head -1 | cut -f2)"
+BARE_OUT="$(classify_token "$TMP/bridge-bare.md" "$BYPASS_TOKEN")"
+IFS="$(printf '\t')" read -r _ BARE_VERDICT _ <<<"$BARE_OUT"
 if [ "$BARE_VERDICT" = "UNCLASSIFIABLE" ]; then
   ok "B-DISC/c — a bare mention classifies UNCLASSIFIABLE and therefore fails closed"
 else
