@@ -36,6 +36,7 @@ release/tools/version-grammar.sh
 # scope: release/tools/*.py
 release/tools/av-verify.py
 release/tools/bundle-issues-parser.py
+release/tools/check-ac-binding.py
 release/tools/check-adr-durability.py
 release/tools/check-adr-numbers.py
 release/tools/check-analysis-staleness.py
