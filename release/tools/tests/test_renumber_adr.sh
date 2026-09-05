@@ -1160,6 +1160,197 @@ assert_eq "A15e AC5 DISCRIMINATION — the live citation outside the section sti
 assert_eq "A15e AC5 the hop-2 run names EXACTLY the row carrying the number this hop moves" \
   "$(printf '%s\n' "$APPLY15B" | grep -c 'R3 REVIEW:.*fixture-milestone_RELEASE_PLAN.md')" "1"
 
+echo "=== ACT 16 — a FOREIGN same-numbered INDEX ENTRY (the mis-targeting shape) ==="
+# WHY THIS ACT EXISTS. Observed live at Stage 12. Two records held one number: the
+# mainline's, which HAD a curated entry in `core/ADRs/README.md`, and the branch's,
+# which had NONE. The branch had nonetheless edited that README, so the file was an
+# ordinary member of the branch diff — and a bare-number sweep over a branch-diff
+# file rewrote the only entry of that number present, which belonged to the OTHER
+# record. Its heading and its `File:` link were repointed at a path that does not
+# exist.
+#
+# EVERY LATER STEP REPORTED CLEAN, and that is the half worth pinning. R6 asks
+# "does any in-scope file still cite ADR-<old>?" — but the corruption carries
+# ADR-<new> on a FOREIGN slug, so no ADR-<old> token survives for it to find. The
+# damage and the detector sat in different number spaces; the tool exited 0.
+#
+# THE SHAPE IS NOT EXOTIC. `core/ADRs/README.md` states on its face that it is a
+# curated thematic document which has never enumerated the full record set, so
+# "the moved record has no entry here" is the ORDINARY case, not an edge one.
+#
+# Three groups, and the last two are what make the first a measurement:
+#   A16a-i   the foreign entry survives and the notice is named  (the defect)
+#   A16j-l   DISCRIMINATION — a branch-authored entry is STILL rewritten in the
+#            same run, so "untouched" is not merely "the tool stopped touching
+#            index files at all"
+#   A16m-p   SENSITIVITY + SPECIFICITY — the new R6 link check is observed
+#            FAILING, and observed NOT firing on a number this run did not mint
+
+seed_origin origin16
+
+# --- the mainline claimant, WITH a curated core-index entry ------------------
+G clone -q "$ROOT/origin16" "$ROOT/wt-A16"
+( cd "$ROOT/wt-A16" && G checkout -q -b feat/a
+  printf -- '---\ntitle: "ADR-004 — Automation registry"\nstatus: Accepted\ndate: 2026-03-01\nrelease: alpha-release\n---\n\n# ADR-004 — automation registry\n\n## Status\n\nAccepted.\n\n## Context\n\nAlpha.\n' \
+    > core/ADRs/ADR-004-automation-registry.md
+  printf '\n### ADR-004 — The automation registry is the gate\n\n**File:** [ADR-004-automation-registry.md](ADR-004-automation-registry.md)\n' \
+    >> core/ADRs/README.md
+  G add -A >/dev/null && G commit -qm "author ADR-004 automation-registry" && \
+  G push -q origin feat/a && G checkout -q main && G merge -q --no-edit feat/a && \
+  G push -q origin main )
+
+# --- the later claimant, with NO core-index entry of its own -----------------
+# It DOES edit the README, which is the whole point: that edit is what put the file
+# in the branch diff and handed the bare-number sweep a foreign entry to corrupt.
+author_B16() {   # $1 worktree name
+  G clone -q "$ROOT/origin16" "$ROOT/$1"
+  ( cd "$ROOT/$1" && G checkout -q -b feat/b
+    { printf -- '---\ntitle: "ADR-004 — Command position"\nstatus: Proposed\ndate: 2026-03-02\nrelease: bravo-release\n---\n\n# ADR-004 — command position\n\n## Status\n\nProposed.\n\n## Context\n\n'
+      for i in 1 2 3 4 5 6 7 8 9 10; do
+        printf 'Context paragraph %d for the bravo record, carrying enough prose that a rename stays detectable.\n\n' "$i"
+      done
+      printf '## Decision\n\nBravo decides.\n\n## Consequences\n\nBravo consequences.\n'
+    } > core/ADRs/ADR-004-command-position.md
+    printf 'Design cites ADR-004.\n' > design-note.md
+    # A branch edit to the index carrying NO ADR-004: the file joins the branch
+    # diff without the branch having written that number anywhere in it.
+    printf '\nBravo groups this theme; see ADR-003 for context.\n' >> core/ADRs/README.md
+    G add -A >/dev/null && G commit -qm "author ADR-004 command-position" )
+}
+author_B16 wt-B16
+cd "$ROOT/wt-B16" && G fetch -q origin
+
+FOREIGN_HEAD='### ADR-004 — The automation registry is the gate'
+FOREIGN_LINK='**File:** [ADR-004-automation-registry.md](ADR-004-automation-registry.md)'
+occ() { grep -oF "$2" "$1" 2>/dev/null | wc -l | tr -d ' '; }
+# How many ADR-file references in $1 name no file under $2. This is the
+# Dead-file-reference gate's own question, asked of the link AS WRITTEN — not of
+# some file that happens to exist. The distinction is load-bearing: the pre-fix
+# corruption left `ADR-004-automation-registry.md` on disk untouched and repointed
+# the INDEX at `ADR-005-automation-registry.md`, so an arm that tested the disk
+# passed against the very defect it was meant to catch.
+unresolvable_refs() {   # $1 markdown file · $2 directory the refs resolve against
+  local bad=0 f
+  for f in $(grep -oE 'ADR-[0-9]{3}-[A-Za-z0-9._-]+\.md' "$1" 2>/dev/null | sort -u); do
+    [ -f "$2/$f" ] || bad=$((bad + 1))
+  done
+  echo "$bad"
+}
+
+# --- A16 PRECONDITIONS — asserted BEFORE any "untouched" claim ---------------
+# An "untouched" arm over a file that was never in scope, or that never carried the
+# foreign entry, passes for the wrong reason. Both are measured on the same
+# instrument the arms below read.
+DRY16="$(python3 release/tools/renumber-adr.py --renumber 4 5 2>&1)"
+assert_eq "A16 PRECONDITION — the curated index IS in R3 scope (so 'untouched' is not vacuous)" \
+  "$(dr_lines "$DRY16" 'core/ADRs/README.md')" "1"
+assert_eq "A16 PRECONDITION — the foreign entry is PRESENT before the move" \
+  "$(occ core/ADRs/README.md "$FOREIGN_LINK")" "1"
+assert_eq "A16 PRECONDITION — the MOVING record has NO entry in that index (the triggering state)" \
+  "$(grep -c 'command-position' core/ADRs/README.md)" "0"
+assert_eq "A16 PRECONDITION — the foreign entry's link target EXISTS before the move" \
+  "$( [ -f core/ADRs/ADR-004-automation-registry.md ] && echo yes || echo no )" "yes"
+
+# --- A16a DRY-RUN PARITY — the prediction already declines those tokens ------
+# The report and the apply path share one mask, so this is the report's half of
+# that contract: predict rewriting NONE of the foreign tokens, and NAME them rather
+# than folding them into `exempt (record)`, which means a different thing.
+assert_eq "A16a the dry run predicts rewriting ZERO tokens in the curated index" \
+  "$(dr_field "$DRY16" 'core/ADRs/README.md' would)" "0"
+assert_eq "A16a the dry run NAMES the 3 foreign tokens in a not-ours column of its own" \
+  "$(printf '%s\n' "$DRY16" | grep -c 'in core/ADRs/README.md  ·  exempt (record) 0  ·  REVIEW 0  ·  not-ours 3')" "1"
+assert_eq "A16a the dry run mutates nothing" \
+  "$(G status --porcelain | wc -l | tr -d ' ')" "0"
+
+APPLY16="$(python3 release/tools/renumber-adr.py --renumber 4 5 --apply 2>&1)"; A16_RC=$?
+
+# --- A16b-e THE DEFECT — the foreign record is left alone --------------------
+assert_eq "A16b the foreign record's HEADING is byte-identical after the move" \
+  "$(occ core/ADRs/README.md "$FOREIGN_HEAD")" "1"
+assert_eq "A16c the foreign record's File: LINK is byte-identical after the move" \
+  "$(occ core/ADRs/README.md "$FOREIGN_LINK")" "1"
+assert_eq "A16d every ADR reference IN THE INDEX resolves (the Dead-file-reference gate's question)" \
+  "$(unresolvable_refs core/ADRs/README.md core/ADRs)" "0"
+# The pre-fix corruption's exact signature, asserted as an absence. Keyed on the
+# FOREIGN slug carrying the NEW number — the shape no ADR-<old> scan can see.
+assert_eq "A16e ZERO references to a nonexistent ADR-005-automation-registry.md were created" \
+  "$(grep -c 'ADR-005-automation-registry' core/ADRs/README.md)" "0"
+
+# --- A16f-g THE NOTICE — named and visible, never silent ---------------------
+assert_eq "A16f R4 NAMES the missing entry rather than editing a same-numbered stranger" \
+  "$(printf '%s\n' "$APPLY16" | grep -c 'R4 index: NO ENTRY for the moved record in core/ADRs/README.md')" "1"
+assert_eq "A16f the notice states HOW MANY foreign occurrences it declined to touch" \
+  "$(printf '%s\n' "$APPLY16" | grep -c 'ADR-004 appears 3× in core/ADRs/README.md')" "1"
+assert_eq "A16g R3 discloses the attribution split unconditionally" \
+  "$(printf '%s\n' "$APPLY16" | grep -c 'R3 attribution: 3 bare ADR-004 token')" "1"
+
+# --- A16h-i THE NOTICE IS NOT A REFUSAL — the move still completes -----------
+# A missing entry in a deliberately-curated index is the ordinary case, so refusing
+# on it would block most renumbers. The move must land, and the § Renumber log —
+# additive and keyed to the moving record — must still be appended.
+assert_eq "A16h the run exits 0 (a notice, not a failure)" "$A16_RC" "0"
+assert_file "A16h the record actually moved" core/ADRs/ADR-005-command-position.md
+assert_nofile "A16h the old path is gone" core/ADRs/ADR-004-command-position.md
+assert_eq "A16i the § Renumber log was appended anyway (the notice suppresses only the ENTRY rewrite)" \
+  "$(grep -c 'ADR-004 (`command-position`) → \*\*ADR-005\*\*' core/ADRs/README.md)" "1"
+assert_eq "A16i R6's link check ran and reported its zero out loud" \
+  "$(printf '%s\n' "$APPLY16" | grep -c 'R6 link check: 0 unresolvable ADR-005 file reference')" "1"
+
+# --- A16j-l DISCRIMINATION — a branch-authored entry IS still rewritten ------
+# Without this, every arm above is satisfied by a tool that simply stopped touching
+# index files. Same fixture, same foreign entry, one difference: this branch ALSO
+# wrote an entry for its own record. That entry must move; the foreign one must not.
+author_B16 wt-C16
+( cd "$ROOT/wt-C16" && \
+  printf '\n### ADR-004 — Command position is a canonicalizer\n\n**File:** [ADR-004-command-position.md](ADR-004-command-position.md)\n' \
+    >> core/ADRs/README.md
+  G add -A >/dev/null && G commit -qm "bravo registers its own record in the curated index" )
+cd "$ROOT/wt-C16" && G fetch -q origin
+APPLY16C="$(python3 release/tools/renumber-adr.py --renumber 4 5 --apply 2>&1)"; A16C_RC=$?
+assert_eq "A16j DISCRIMINATION run exits 0" "$A16C_RC" "0"
+assert_eq "A16j the BRANCH's own entry WAS rewritten (the mask is per-LINE, not per-file)" \
+  "$(occ core/ADRs/README.md '**File:** [ADR-005-command-position.md](ADR-005-command-position.md)')" "1"
+assert_eq "A16k …and the FOREIGN entry in the very same file was still left alone" \
+  "$(occ core/ADRs/README.md "$FOREIGN_LINK")" "1"
+assert_eq "A16k SPECIFICITY — no NO-ENTRY notice fires when the record does have an entry" \
+  "$(printf '%s\n' "$APPLY16C" | grep -c 'R4 index: NO ENTRY for the moved record')" "0"
+assert_eq "A16l every ADR reference in the index resolves after the move, both entries included" \
+  "$(unresolvable_refs core/ADRs/README.md core/ADRs)" "0"
+
+# --- A16m-p SENSITIVITY — the R6 link check must be observed FAILING ---------
+# "R6 link check: 0 unresolvable" is worth nothing until the same instrument is
+# seen returning non-zero. A16i's zero is a measurement only because of this arm.
+# The bad reference is planted on a branch-authored line of a file R3 rewrites, so
+# the file lands in the written set the link check reads.
+author_B16 wt-D16
+( cd "$ROOT/wt-D16" && \
+  printf 'Bravo also links [the successor](ADR-005-does-not-exist.md) here.\n' >> design-note.md
+  G add -A >/dev/null && G commit -qm "plant an unresolvable ADR-005 reference" )
+cd "$ROOT/wt-D16" && G fetch -q origin
+APPLY16D="$(python3 release/tools/renumber-adr.py --renumber 4 5 --apply 2>&1)"; A16D_RC=$?
+assert_eq "A16m SENSITIVITY — the link check FAILS the run on an unresolvable ADR-005 reference" \
+  "$A16D_RC" "3"
+assert_eq "A16n the offending site is NAMED with file and line" \
+  "$(printf '%s\n' "$APPLY16D" | grep -c 'R6 link: design-note.md:.*ADR-005-does-not-exist.md names no ADR file')" "1"
+assert_eq "A16o the whole staged set was REVERTED (zero partial application)" \
+  "$(printf '%s\n' "$APPLY16D" | grep -c 'reverting the whole staged set')" "1"
+assert_file "A16o the record is back at its old path after the revert" \
+  "$ROOT/wt-D16/core/ADRs/ADR-004-command-position.md"
+assert_nofile "A16o the renamed path is gone after the revert" \
+  "$ROOT/wt-D16/core/ADRs/ADR-005-command-position.md"
+# SPECIFICITY for the link check: it keys on ADR-<new>, not on every broken link it
+# can see. A pre-existing dangling reference to some OTHER number is not this run's
+# doing, and reverting a correct move over it would be a worse failure than the one
+# this arm guards.
+author_B16 wt-E16
+( cd "$ROOT/wt-E16" && \
+  printf 'Bravo links [an unrelated stale target](ADR-003-does-not-exist.md) here.\n' >> design-note.md
+  G add -A >/dev/null && G commit -qm "plant an unresolvable reference to a DIFFERENT number" )
+cd "$ROOT/wt-E16" && G fetch -q origin
+python3 release/tools/renumber-adr.py --renumber 4 5 --apply >/dev/null 2>&1
+assert_eq "A16p SPECIFICITY — a dangling reference to a number this run did not mint does NOT revert it" \
+  "$?" "0"
+
 echo
 echo "renumber-adr fixture: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ] || exit 1
