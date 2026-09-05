@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.56 (2026-09-05) — Scrum and Kanban packs now ship with real, sourced work-item criteria
+
 ### v4.55 (2026-09-05) — Each safety guard now blocks its own scope, and nothing wider
 
 ### freshness-gate-measures-then-blocks (2026-09-05, version-less) — A stale skill package can no longer reach the main branch

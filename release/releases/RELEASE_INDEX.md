@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.56 | kit-content-and-defaults | 2026-09-05 | — | #7017 | [notes/v4.56_RELEASE_NOTES.md](notes/v4.56_RELEASE_NOTES.md) |
 | v4.55 | hooks-block-only-their-scope | 2026-09-05 | — | #6745 | [notes/v4.55_RELEASE_NOTES.md](notes/v4.55_RELEASE_NOTES.md) |
 | freshness-gate-measures-then-blocks (version-less) | freshness-gate-measures-then-blocks | 2026-09-05 | — | #7007 | [notes/_unversioned/freshness-gate-measures-then-blocks_RELEASE_NOTES.md](notes/_unversioned/freshness-gate-measures-then-blocks_RELEASE_NOTES.md) |
 | v4.54 | rules-mirror-delivered | 2026-09-05 | — | #7006 | [notes/v4.54_RELEASE_NOTES.md](notes/v4.54_RELEASE_NOTES.md) |
