@@ -22,6 +22,12 @@ supersedes: none
 
 # ADR-185 — The boundary between methodology-configurable and platform-fixed is a classification over the existing grammar, mapped to the runners that execute it
 
+## Status
+
+**Accepted.** Operator-ratified at the `kit-content-and-defaults` Stage 5 Collective Review scope-lock on 2026-09-04.
+
+This section is a projection of the frontmatter `status:` field, which is the value-bearing surface per [`adr-schema.md`](../schemas/adr-schema.md) §3; the two are reconciled body → frontmatter, never the inverse.
+
 ## Context
 
 A methodology pack declares kinds, fields, criteria, labels and controls. Readiness and done are the obvious configurable cases — what "ready" means is genuinely methodology-specific. But not everything is: some behaviour is platform-invariant and must not become a per-methodology knob, or every deployment becomes a bespoke fork and no cross-pack consumer can rely on anything.
@@ -130,7 +136,7 @@ This set placed **2 of 8** against the pre-repair test. It is re-run here unchan
 
 **Neutral.** The register's verdict is unchanged. Its resolution-pointer count is 26 before and after, because a named-gap row correctly carries none; the rows buy **register-anchoring and discoverability, which are review-time properties**, and no computed count moves. That is stated narrowly on purpose: an earlier pass claimed the rows would raise a named-gap count, and no executable anywhere counts named gaps.
 
-## Alternatives considered
+## Alternatives Considered
 
 | Option | Why not |
 |---|---|
@@ -139,6 +145,22 @@ This set placed **2 of 8** against the pre-repair test. It is re-run here unchan
 | A numeric-scored placement rubric | Every placement construct surveyed in this grammar is an ordered discriminated branch with an explicit negative arm. A score cannot express the negative arm, and it would break the *which question did you answer NO to* evidence contract the content cards' acceptance depends on |
 | Close the three gaps in this release by extending the pack validator | An array-scoped completeness rule hard-fails the deploy-time check on **both** of its discrimination arms. The trap is measured, not predicted |
 | Leave the gaps unstated | An invariant with no enforcing surface and no register row is invisible. The register row is what makes a miss countable instead of silent |
+
+## Reversibility
+
+**CHEAP · confidence HIGH.** The decision is additive and documentary: one classification section appended to the type-pack meta-schema after §1.4 (D4), a pointer from the packs README in the form that file already applies to the grammar itself, and three named-gap rows in the gate-coverage register (D5). **No `PACK-C*` rule id is minted** — that is the decision, not a side effect — so the deploy-time pack-conformance check's reachable verdict set is unchanged, its discrimination arms are untouched, and no new gate can fail vacuously. No pack manifest value moves, no runner changes, no meta-schema version advances and no consumer contract narrows. Standard branch revert.
+
+The caveat worth naming is the one D5 already records rather than a new one: a revert removes the register rows that make F2/F3/F4 countable, returning three declared-but-unenforced invariants to being **invisible** rather than merely unenforced. That is a loss of review-time visibility, not a broken gate — the correct partial state.
+
+## Related ADRs
+
+- [ADR-018](ADR-018-work-item-type-layer.md) — the work-item type layer whose meta-schema this boundary classifies over; D1's three-tier census is a census *of* that grammar.
+- [ADR-070](ADR-070-methodology-pack-composition-grammar.md) — the methodology-pack composition grammar this record **extends rather than sits beside**; the Context's rejection of a sibling `*-boundary.md` standard rests on that record owning the grammar home.
+- [ADR-077](ADR-077-cross-cutting-control-field-layer.md) — the pack-level `[[controls]]` facet whose same-named key across two facets is the collision Q2's facet clause (D3, defect 1) and candidate M2 exist to answer.
+- [ADR-170](ADR-170-portfolio-framework-axis-lands-as-template-registry-subtree.md) — the portfolio-framework axis cited for F5: variability that is not work-item-type variability does not belong in the type layer.
+- [ADR-180](ADR-180-work-item-kit-first-class-unit.md) — froze the kit as a first-class unit; its archetype-neutral sense of *kit* is the sense F6's neutrality invariant uses. This record is subordinate to it.
+- [ADR-186](ADR-186-kit-content-provenance-key.md) — sibling record from this same release; the `source` key it makes required at two altitudes is candidate 5 of Set 1's placement run above.
+- [ADR-187](ADR-187-pack-default-is-the-declared-kind-set.md) — sibling record from this same release; decides what a pack's default kind set is, over the same grammar this record classifies.
 
 ## Cross-references
 
