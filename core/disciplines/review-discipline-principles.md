@@ -694,11 +694,16 @@ NOT COVERED — ACTOR BOUNDARY: this discipline is DELIVERED to the agents that 
 the surfaces citing it — review-class skills that load this file, the Stage-5
 evidence-grounding review, the per-stage spoke prompt convention, and, for the
 orchestrating hub, `hub-spoke-bridge.md` Procedure 7 Step 4, which states itself to
-be the hub's delivery surface for Rule 15. A session outside all of those
-conventions is bound by the rule as an ACT and is not REACHED by any delivery
-surface. That is a delivery gap, distinct from the enforcement gap: the rule is not
-merely unenforced there, it is unread. Named here so the coverage claim is not
-larger than the delivery.
+be the hub's delivery surface for Rule 15, and the quota-budget gate's host-API
+axis (`quota-budget-protocol.md` § 4.3b), which cites PV-7/PV-7b for the
+distinct-state-per-reachable-state obligation on its own verdict. That axis is
+recorded here because it was previously an UNREACHED consumer of shape 13 — it
+emitted one PROCEED for both the healthy and the exhausted state, which is the
+exact defect PV-7 names, and no delivery surface carried the rule to it. A session
+outside all of those conventions is bound by the rule as an ACT and is not REACHED
+by any delivery surface. That is a delivery gap, distinct from the enforcement
+gap: the rule is not merely unenforced there, it is unread. Named here so the
+coverage claim is not larger than the delivery.
 
 ASYMMETRY BY DESIGN. PV-0..PV-3 fire on a zero/clean/absent claim. THREE clauses are
 extended to the false-alarm direction: PV-4, the PV-2c specificity arm, and PV-2 via
