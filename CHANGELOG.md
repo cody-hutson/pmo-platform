@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.54] - 2026-09-05
+
+Sessions now receive the platform rules directory at deploy time, with a published size budget and links that resolve where they land.
+
+[Full notes](release/releases/notes/v4.54_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.54)
+
 ## [v4.53] - 2026-09-04
 
 Writing analysis into the platform's own analysis folder no longer gets blocked, and a safety check that could be skipped now always runs.
