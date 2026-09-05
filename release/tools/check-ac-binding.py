@@ -94,6 +94,7 @@ import tempfile
 # The per-issue table lives under a `### Per-Issue Verification` heading; the
 # baseline is a fenced-code `ac_baseline:` line in the same section. Both shapes are
 # published in release/skills/release-planner/references/release-plan-template.md.
+_OUTER_SECTION_RE = re.compile(r"^##\s+Verification Plan\s*$")
 _SECTION_RE = re.compile(r"^#{2,4}\s+Per-Issue Verification\s*$")
 _HEADING_RE = re.compile(r"^#{1,6}\s+")
 _BASELINE_RE = re.compile(r"ac_baseline\s*:\s*\{(.*?)\}", re.DOTALL)
@@ -212,31 +213,10 @@ def split_row(line):
     return cells
 
 
-def parse_plan(text):
-    """Return (rows, baseline, read_at, saw_section).
-
-    rows: list of dicts {issue, kind, ordinal, method, expected}
-    baseline: {issue -> declared criterion count}
-    """
-    lines = text.splitlines()
-    start = None
-    for idx, line in enumerate(lines):
-        if _SECTION_RE.match(line.strip()):
-            start = idx + 1
-            break
-    if start is None:
-        return [], {}, "", False
-
-    end = len(lines)
-    for idx in range(start, len(lines)):
-        stripped = lines[idx].strip()
-        if _HEADING_RE.match(stripped) and not _SECTION_RE.match(stripped):
-            end = idx
-            break
-    body = "\n".join(lines[start:end])
-
+def _scan_rows(lines):
+    """Graded rows in `lines`: `| #N | AC-k | method | expected |` (or `OBL-k`)."""
     rows = []
-    for line in lines[start:end]:
+    for line in lines:
         stripped = line.strip()
         if not stripped.startswith("|"):
             continue
@@ -244,9 +224,7 @@ def parse_plan(text):
         if len(cells) < 2:
             continue
         m_issue = _ISSUE_CELL_RE.match(cells[0])
-        if not m_issue:
-            continue
-        m_label = _LABEL_CELL_RE.match(cells[1])
+        m_label = _LABEL_CELL_RE.match(cells[1]) if m_issue else None
         if not m_label:
             continue
         rows.append({
@@ -256,6 +234,49 @@ def parse_plan(text):
             "method": cells[2] if len(cells) > 2 else "",
             "expected": cells[3] if len(cells) > 3 else "",
         })
+    return rows
+
+
+def parse_plan(text):
+    """Return (rows, baseline, read_at, saw_section).
+
+    rows: list of dicts {issue, kind, ordinal, method, expected}
+    baseline: {issue -> declared criterion count}
+    """
+    lines = text.splitlines()
+
+    # THE ANCHOR IS THE `## Verification Plan` SECTION, NOT the `### Per-Issue
+    # Verification` sub-heading, because the shipped corpus carries THREE variants of
+    # the same contract: table under the sub-heading with the baseline after it; the
+    # baseline above the sub-heading; and — in 9 plans — the table directly under the
+    # parent with no sub-heading at all. Anchoring on the sub-heading reads all three
+    # of the last kind as "no verification section" and reports a false UNPARSEABLE on
+    # a conforming plan. The contract is what the section HOLDS, not which heading
+    # level introduces it.
+    start = None
+    for idx, line in enumerate(lines):
+        if _OUTER_SECTION_RE.match(line.strip()) or _SECTION_RE.match(line.strip()):
+            start = idx + 1
+            break
+    if start is None:
+        # No heading. Scan the WHOLE document for graded rows anyway, so the
+        # out-of-scope escape in analyse() can require their absence rather than
+        # trusting a heading that a conforming plan could simply lose.
+        return _scan_rows(lines), {}, "", False
+
+    # The section ends at the next SAME-OR-HIGHER heading. Sub-headings inside it
+    # (`### Per-Issue Verification`, `### Release-Level Verification`) stay in scope;
+    # the rollback tables, which live under their own `## Rollback Strategy` and carry
+    # a `### Per-Issue Rollback` of their own, do not.
+    end = len(lines)
+    for idx in range(start, len(lines)):
+        stripped = lines[idx].strip()
+        if stripped.startswith("## ") and not stripped.startswith("###"):
+            end = idx
+            break
+
+    body = "\n".join(lines[start:end])
+    rows = _scan_rows(lines[start:end])
 
     baseline, read_at = {}, ""
     m_base = _BASELINE_RE.search(body)
@@ -287,8 +308,16 @@ def discriminative(criteria):
     return out, all_terms
 
 
-def analyse(plan_text, criteria_map=None, plan_name="-"):
-    """Return (rows_out, verdict, exit_code)."""
+def analyse(plan_text, criteria_map=None, plan_name="-", ordinals_only=False):
+    """Return (rows_out, verdict, exit_code).
+
+    `ordinals_only` runs the plan-local limb alone. It exists because the two limbs
+    have DIFFERENT input sets and therefore different enforceable surfaces: the
+    ordinal limb is offline and deterministic, so it can block a pull request, while
+    the binding limb needs the issue bodies and can only run where they are readable.
+    Without this split the CI surface would report NOT-EVALUATED on every run —
+    a permanently degraded gate, which is the shape operators learn to ignore.
+    """
     criteria_map = criteria_map or {}
     out = []
     rows, baseline, read_at, saw_section = parse_plan(plan_text)
@@ -298,13 +327,52 @@ def analyse(plan_text, criteria_map=None, plan_name="-"):
 
     # --- Vacuity guards. Each is an INPUT FAILURE, never a clean result. --------
     if not saw_section:
-        out.append(("UNPARSEABLE", "no `### Per-Issue Verification` section in the plan"))
+        # OUT-OF-SCOPE, NOT a pass, and the distinction is the whole point. 181 of the
+        # 201 plans in the corpus predate the per-issue Verification Plan schema
+        # entirely; grading them UNPARSEABLE would turn a CI surface red on history
+        # and teach the operator to ignore it. The population test is emitted with the
+        # verdict so an absent section is on the record rather than silently absorbed.
+        #
+        # THE ESCAPE IS NARROW BY CONSTRUCTION, and it turns on POSITIVE evidence
+        # rather than on an absence. It requires zero parsed graded rows AND a
+        # document that is structurally a plan (at least one `## ` heading). An
+        # empty file, a truncated read, or a file that is not a plan at all has no
+        # heading and falls through to UNPARSEABLE — because "nothing here" and
+        # "nothing here YET" must not share a verdict. A conforming plan cannot opt
+        # out of the gate by losing its heading either: its rows keep it out of this
+        # branch.
+        plan_shaped = any(ln.startswith("## ") for ln in plan_text.splitlines())
+        if not rows and plan_shaped:
+            out.append(("OUT-OF-SCOPE",
+                        "no `### Per-Issue Verification` section and no `AC-`/`OBL-` "
+                        "rows — this plan predates the per-issue verification schema"))
+            out.append(("VERDICT", "OUT-OF-SCOPE"))
+            return out, "OUT-OF-SCOPE", 0
+        out.append(("UNPARSEABLE",
+                    "no `### Per-Issue Verification` heading; %d graded row(s) parsed, "
+                    "plan-shaped=%s — neither an in-scope plan nor a readable one"
+                    % (len(rows), "yes" if plan_shaped else "no")))
         out.append(("VERDICT", "UNPARSEABLE"))
         return out, "UNPARSEABLE", 3
+    # OPT-IN TEST, and it runs BEFORE the vacuity guards for a reason. A plan can
+    # carry a `## Verification Plan` section that holds only the release-level
+    # checklist and grades no per-issue criteria at all; that plan is outside this
+    # contract, and reporting it UNPARSEABLE would grade a section for lacking a
+    # thing it never claimed. A plan opts IN by carrying graded rows or a baseline —
+    # and once it has either, both vacuity guards below apply in full, so opting in
+    # halfway is a finding rather than an exemption.
+    if not rows and not baseline:
+        out.append(("OUT-OF-SCOPE",
+                    "a Verification Plan section carrying no graded `AC-`/`OBL-` row "
+                    "and no `ac_baseline:` line — this plan grades no per-issue "
+                    "criteria"))
+        out.append(("VERDICT", "OUT-OF-SCOPE"))
+        return out, "OUT-OF-SCOPE", 0
     if not baseline:
         out.append(("UNPARSEABLE",
-                    "no `ac_baseline:` line — the criterion ordinal set has no oracle, "
-                    "so no binding can be asserted"))
+                    "%d graded row(s) but no `ac_baseline:` line — the criterion "
+                    "ordinal set has no oracle, so no binding can be asserted"
+                    % len(rows)))
         out.append(("VERDICT", "UNPARSEABLE"))
         return out, "UNPARSEABLE", 3
     if not ac_rows:
@@ -352,6 +420,8 @@ def analyse(plan_text, criteria_map=None, plan_name="-"):
                         "excluded-from-ac-set"))
 
         # --- Binding limb ------------------------------------------------------
+        if ordinals_only:
+            continue
         criteria = criteria_map.get(issue)
         if not criteria:
             findings["NOT-EVALUATED"] += 1
@@ -526,10 +596,24 @@ def _vacuity_cases():
          _plan([]), _CRIT, "UNPARSEABLE", 3),
         ("vacuity — a plan with no `ac_baseline` line has no ordinal oracle",
          _plan([bound], baseline=""), _CRIT, "UNPARSEABLE", 3),
-        ("vacuity — a plan with no per-issue section at all",
-         _plan([bound], section=False), _CRIT, "UNPARSEABLE", 3),
+        # Opting in halfway is a finding, never an exemption: a baseline with no rows
+        # and rows with no baseline are BOTH input failures.
+        ("vacuity — a baseline with no graded rows at all",
+         _plan([]), _CRIT, "UNPARSEABLE", 3),
+        ("out-of-scope — a Verification Plan section that grades no per-issue criteria",
+         "## Verification Plan\n\n- [ ] File Integrity\n\n## Rollback\n",
+         _CRIT, "OUT-OF-SCOPE", 0),
         ("vacuity — an EMPTY input is an input failure, never BOUND",
          "", _CRIT, "UNPARSEABLE", 3),
+        ("vacuity — a file with no `## ` heading is not a plan that predates the schema",
+         "just some prose with no headings at all\n", _CRIT, "UNPARSEABLE", 3),
+        # The out-of-scope escape, pinned in BOTH directions: a genuine pre-schema plan
+        # passes, and the same plan carrying a single graded row cannot.
+        ("out-of-scope — a plan-shaped document with no verification section at all",
+         "## Summary\n\nNo verification plan here.\n", _CRIT, "OUT-OF-SCOPE", 0),
+        ("out-of-scope refused — one graded row is enough to keep a plan in the gate",
+         "## Summary\n\n| #1 | AC-1 | `grep x` | Something |\n",
+         _CRIT, "UNPARSEABLE", 3),
     ]
 
 
@@ -567,6 +651,31 @@ def self_test():
         failures.append("precedence: a BASELINE-DRIFT headline must still emit the "
                         "ORDINAL-GAP and UNBOUND rows it outranks (got %s / %s)"
                         % (verdict, sorted(classes)))
+
+    # --ordinals-only is the CI surface, so its own failure modes are pinned here.
+    # It must stay SILENT about binding (never a false BOUND on an unread oracle),
+    # must still fire on an ordinal gap, and must NOT lose the vacuity guards — an
+    # offline mode that reads an empty plan as clean is the false green one level up.
+    ordinal_arms = [
+        ("ordinals-only — an ordinal gap still fires with no oracle at all",
+         _plan(["| #1 | AC-1 | `grep checksum w.py` | Every shard carries a checksum |\n"]),
+         "ORDINAL-GAP", 1),
+        ("ordinals-only — a clean ordinal set passes without consulting any oracle",
+         _plan(["| #1 | AC-1 | `grep checksum w.py` | Every shard carries a checksum |\n",
+                "| #1 | AC-2 | `grep journal d.py` | The journal rotates at midnight |\n"]),
+         "BOUND", 0),
+        ("ordinals-only — the vacuity guards still hold",
+         _plan([]), "UNPARSEABLE", 3),
+    ]
+    for name, plan, want_verdict, want_exit in ordinal_arms:
+        rows, verdict, code = analyse(plan, {}, "self-test", ordinals_only=True)
+        ran += 1
+        if verdict != want_verdict or code != want_exit:
+            failures.append("%s: expected %s/exit %d, got %s/exit %d"
+                            % (name, want_verdict, want_exit, verdict, code))
+        if any(r[0] in ("BINDING", "UNBOUND", "NOT-EVALUATED", "BASELINE-DRIFT")
+               for r in rows):
+            failures.append("%s: emitted a binding-limb row with no oracle read" % name)
 
     # The term relation, pinned in both directions against measured cases. `cite`/
     # `cited` is the fold's short-stem failure that subsumption exists to rescue;
@@ -618,6 +727,9 @@ def main(argv=None):
                         help="JSON {issue: [criterion, ...]} — the determinism seam")
     parser.add_argument("--fetch", action="store_true",
                         help="read criteria live with `gh issue view` instead")
+    parser.add_argument("--ordinals-only", action="store_true",
+                        help="run the plan-local ordinal limb alone (offline, "
+                             "deterministic — the CI surface)")
     parser.add_argument("--repo", default="cody-hutson/pmo-platform")
     parser.add_argument("--output-format", choices=("tsv",), default="tsv")
     parser.add_argument("--self-test", action="store_true",
@@ -642,7 +754,8 @@ def main(argv=None):
         _rows, baseline, _read_at, _seen = parse_plan(text)
         criteria = fetch_criteria(sorted(baseline, key=int), args.repo)
 
-    rows, _verdict, code = analyse(text, criteria, os.path.basename(args.plan))
+    rows, _verdict, code = analyse(text, criteria, os.path.basename(args.plan),
+                                   ordinals_only=args.ordinals_only)
     emit(rows, sys.stdout)
     return code
 
