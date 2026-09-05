@@ -1,5 +1,5 @@
 ---
-title: ADR-184 — Command-start position is resolved by a pre-match canonicalizer, not by a parser and not by a wider anchor
+title: ADR-187 — Command-start position is resolved by a pre-match canonicalizer, not by a parser and not by a wider anchor
 status: Proposed — flips to Accepted when the operator ratifies it at this release's Stage 9 Plan Review gate. The flip is recorded in this file's `status:` field, which is where it must be verified — never inferred from milestone closure or from a review comment.
 date: 2026-09-02
 release: hooks-block-only-their-scope
@@ -16,7 +16,7 @@ source_observations:
 ---
 <!-- reference-durability: allow-link -->
 
-# ADR-184 — Command-start position is resolved by a pre-match canonicalizer, not by a parser and not by a wider anchor
+# ADR-187 — Command-start position is resolved by a pre-match canonicalizer, not by a parser and not by a wider anchor
 
 ## Status
 
@@ -27,6 +27,8 @@ source_observations:
 **Numbering provenance — `177 → 182`.** Held **ADR-177** branch-local; renumbered to **ADR-182** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 177. In-release citations that read "ADR-177" denote this record.
 
 **Numbering provenance — `182 → 184`.** Held **ADR-182** branch-local; renumbered to **ADR-184** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 182. In-release citations that read "ADR-182" denote this record.
+
+**Numbering provenance — `184 → 187`.** Held **ADR-184** branch-local; renumbered to **ADR-187** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 184. In-release citations that read "ADR-184" denote this record.
 
 ## Context
 
