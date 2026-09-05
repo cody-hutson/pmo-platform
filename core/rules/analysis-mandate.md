@@ -55,7 +55,7 @@ Recommendations, options, and a proposed plan are all in scope for an analysis m
 Stated positively, so the rule cannot creep into universal friction. The over-firing risk is symmetric with the under-firing risk: a rule that asks permission it already holds trains the operator to stop reading it.
 
 - **An explicit execution instruction.** "Fix it", "update X", "run the release" — the ask licenses the act. No checkpoint.
-- **A standing authorization that already covers the action** — an approved plan, an approved release, a stage running under an authorization already given. Re-opening a gate the operator already closed is its own failure mode; the *Approval authorizes the whole plan* preference in [`CLAUDE.md.template`](../CLAUDE.md.template) § Universal Preferences governs, and this rule never overrides it.
+- **A standing authorization that already covers the action** — an approved plan, an approved release, a stage running under an authorization already given. Re-opening a gate the operator already closed is its own failure mode; the *Approval authorizes the whole plan* preference in [`CLAUDE.md.template`](/core/CLAUDE.md.template) § Universal Preferences governs, and this rule never overrides it.
 - **Reads and probes performed in service of the analysis.** Searching, opening, fetching, measuring — that **is** the analysis. Routine tool use with no action attached does not fire.
 - **Ephemeral scratch outside the system under analysis** — a working note or a temporary probe that mutates nothing the analysis is about.
 - **A surface whose own contract already carries an equivalent gate.** That gate discharges this one. No double-gating.
@@ -66,12 +66,12 @@ Two surface-scoped guardrails in the corpus are instances of this rule, each aut
 
 | Surface | Its own entry |
 |---|---|
-| [`release/skills/release-hub/SKILL.md`](../../release/skills/release-hub/SKILL.md) § Domain-Specific Failure Modes | the Mode-R entry — a read-only readiness mode that mutates state despite its contract |
-| [`release/skills/release-planner/SKILL.md`](../../release/skills/release-planner/SKILL.md) § Domain-Specific Failure Modes | the Mode-B write-scope entry — read-only against governance files by contract |
+| [`release/skills/release-hub/SKILL.md`](/release/skills/release-hub/SKILL.md) § Domain-Specific Failure Modes | the Mode-R entry — a read-only readiness mode that mutates state despite its contract |
+| [`release/skills/release-planner/SKILL.md`](/release/skills/release-planner/SKILL.md) § Domain-Specific Failure Modes | the Mode-B write-scope entry — read-only against governance files by contract |
 
 Each remains authoritative for its own surface's specifics. Neither is restated here, and neither is superseded.
 
-Two independent point fixes for one behavior class is the promotion threshold in [`failure-mode-standard.md`](../standards/failure-mode-standard.md) — met before the generalizing rule was written. The residual is the reason this rule is not scoped to those two surfaces: **every surface that declares a read-only, recommend-only, or mutates-nothing contract is bound by § 1 limb 1, and most of them carry no entry of their own.**
+Two independent point fixes for one behavior class is the promotion threshold in [`failure-mode-standard.md`](/core/standards/failure-mode-standard.md) — met before the generalizing rule was written. The residual is the reason this rule is not scoped to those two surfaces: **every surface that declares a read-only, recommend-only, or mutates-nothing contract is bound by § 1 limb 1, and most of them carry no entry of their own.**
 
 The rule also reaches a surface no skill-scoped guardrail can: an **ad-hoc conversational turn**, where no skill is loaded and there is no SKILL.md to carry an entry.
 
@@ -86,6 +86,6 @@ When a new surface needs one: cite this rule, and name only that surface's own b
 | Surface | Relationship |
 |---|---|
 | [`decision-time-adherence.md`](decision-time-adherence.md) | Owns the surfacing mechanism. This rule is `DTA-9`'s governing rule; the index owns when it surfaces and what is emitted. |
-| [`discovery-discipline.md`](../disciplines/discovery-discipline.md) | Discovery-class work — asking what we do not know — is the activity class this rule most often protects. It defines the activity; this rule bounds what the agent may do on finding something during it. |
-| [`review-discipline-principles.md`](../disciplines/review-discipline-principles.md) | Review-class work is the other locus. A review that remediates mid-pass has forfeited its own evidence. |
-| [`CLAUDE.md.template`](../CLAUDE.md.template) § Universal Preferences — *Skill-boundary transparency* | The adjacent case: crossing a skill's declared scope under an authorization that already covers it. That preference governs the **notice**; this rule governs the case where **no such authorization exists**. |
+| [`discovery-discipline.md`](/core/disciplines/discovery-discipline.md) | Discovery-class work — asking what we do not know — is the activity class this rule most often protects. It defines the activity; this rule bounds what the agent may do on finding something during it. |
+| [`review-discipline-principles.md`](/core/disciplines/review-discipline-principles.md) | Review-class work is the other locus. A review that remediates mid-pass has forfeited its own evidence. |
+| [`CLAUDE.md.template`](/core/CLAUDE.md.template) § Universal Preferences — *Skill-boundary transparency* | The adjacent case: crossing a skill's declared scope under an authorization that already covers it. That preference governs the **notice**; this rule governs the case where **no such authorization exists**. |

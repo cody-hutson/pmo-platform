@@ -77,6 +77,10 @@ A future hardening pass (out of scope) may introduce true TOML smart-merge (sour
 
 The mirror-pair sync between the canonical source `core/rules/harness-deployment.md` (this file) and the deployed mirror `~/.claude/rules/harness-deployment.md` is enforced by `deploy.sh --check` Check 9 (rules-mirror sync).
 
+The mirror itself is **deploy-produced, not hand-maintained**: `deploy.sh --deploy` lays down `<deploy-root>/.claude/rules/` from the single pair-set declaration, so the directory exists only by being deployed and is restored by re-running the deploy. Check 9 verifies that producer's output rather than a directory somebody copied by hand — and it now distinguishes a mirror that is *in sync* from one that was *never populated*, so an absent mirror on a deployed workspace is a finding rather than a clean skip.
+
+The **source-side path set** of those mirror pairs is held by more than one artifact, so agreement between the holders is itself asserted rather than remembered: every holder wraps its list in an in-band `mirror-pair-set:` marker declaring that holder's own id, separator and source field, and the `mirror-pair-parity` check diffs each holder's extracted set against the union of all of them — on both `deploy.sh --check` and the pre-merge `--check-required-subset` surface. A member added to one holder and not another therefore FAILs the check naming both the path and the lagging holder, instead of drifting silently. Adding a further holder costs one marker pair inside that holder and no change to the check; a holder that declares its own copy of the set MUST carry the marker, because an unmarked holder is invisible to the assertion.
+
 ## Adding a New Harness Artifact (Operator Workflow)
 
 1. Create source directory: `mkdir -p harness/<name>/commands`
@@ -86,7 +90,7 @@ The mirror-pair sync between the canonical source `core/rules/harness-deployment
 5. If the artifact creates additional operator-state files at runtime (logs, markers, etc.) that the source does not ship, append those filenames to `deploy.sh` `HARNESS_OPERATOR_STATE`
 6. Update the file-class table in this doc to reflect any new file class
 7. Run `./deploy.sh --deploy <name>` to perform initial deploy; verify with `./deploy.sh --check`
-8. Mirror the governance doc edits (this file ↔ `.claude/rules/harness-deployment.md`) and run `deploy.sh --check` Check 9 to confirm
+8. Do **not** copy this file into `.claude/rules/` by hand — `./deploy.sh --deploy` is the carrier and re-lays the mirror from the pair-set declaration. Run it, then `deploy.sh --check` Check 9 to confirm the mirror is in sync
 
 ## Account-switcher (relocated)
 
@@ -99,5 +103,5 @@ For account-switcher itself (Mac-app multi-account launcher with `clone-prefs` m
 ## Cross-Reference
 
 - Symmetric pattern for skills: see [skill-deployment.md](skill-deployment.md). Both governance docs are byte-identical-mirrored to `.claude/rules/`.
-- Hook compliance for harness artifacts: see [bypass-mode-readiness.md](bypass-mode-readiness.md) for the workspace's PreToolUse hook layer that gates destructive ops, credential reads, and egress patterns. Harness bash entrypoints must remain compliant with these hooks.
-- Release process for harness changes: see [release-process.md](../../release/governance/release-process.md). Harness changes follow the standard 13-stage pipeline (Stages 10-11 compress for git-native releases). Operational deployment of harness artifacts at Stage 12/13 uses `./deploy.sh --deploy` (auto-detected or manual).
+- Hook compliance for harness artifacts: see [bypass-mode-readiness.md](/core/rules/bypass-mode-readiness.md) for the workspace's PreToolUse hook layer that gates destructive ops, credential reads, and egress patterns. Harness bash entrypoints must remain compliant with these hooks.
+- Release process for harness changes: see [release-process.md](/release/governance/release-process.md). Harness changes follow the standard 13-stage pipeline (Stages 10-11 compress for git-native releases). Operational deployment of harness artifacts at Stage 12/13 uses `./deploy.sh --deploy` (auto-detected or manual).
