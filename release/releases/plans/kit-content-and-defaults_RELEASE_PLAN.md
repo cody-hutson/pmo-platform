@@ -178,7 +178,7 @@ core/packs/README.md                                                       edit
 core/ADRs/ADR-188-pack-configurable-vs-platform-fixed-boundary.md          add
 
 # ── #6363 · content provenance (wave 2) ──
-core/ADRs/ADR-186-kit-content-provenance-key.md                            add
+core/ADRs/ADR-189-kit-content-provenance-key.md                            add
 
 # ── #6365 / #6366 · the authored kit content (wave 3) ──
 core/packs/scrum/pack.toml                                                 edit
@@ -286,7 +286,7 @@ Dependency-ordered. Three waves driven by the six edges, on one branch under P0 
 | Card | Write-set path | Tier-0 ∩ | Skill-gate ∩ | Path class | Card class | Execution path |
 |------|----------------|----------|--------------|-----------|-----------|----------------|
 | #6378 | `core/schemas/work-item-type-schema.md` · `core/standards/gate-efficacy-standard.md` · `core/packs/README.md` · `core/ADRs/ADR-188-*.md` | ∅ | ∅ | unconstrained | **unconstrained** | ordinary Engineering spoke |
-| #6363 | same three + `core/ADRs/ADR-186-*.md` | ∅ | ∅ | unconstrained | **unconstrained** | ordinary Engineering spoke |
+| #6363 | same three + `core/ADRs/ADR-189-*.md` | ∅ | ∅ | unconstrained | **unconstrained** | ordinary Engineering spoke |
 | #6365 | `core/packs/scrum/pack.toml` | ∅ | ∅ | unconstrained | **unconstrained** | ordinary Engineering spoke |
 | #6366 | `core/packs/kanban/pack.toml` | ∅ | ∅ | unconstrained | **unconstrained** | ordinary Engineering spoke |
 | #6380 | `core/packs/README.md` · `core/deploy/tools/check-work-hierarchy.py` · fixtures · `core/ADRs/ADR-187-*.md` | ∅ | ∅ | unconstrained | **unconstrained** | ordinary Engineering spoke |
@@ -555,11 +555,11 @@ Three of #6380's six criteria are graded against readings the shipped tree suppo
 | **`lint_release_corpus.py --check plan-identity`** | **exit 0** | No FAIL line; **zero** findings name this plan. `PLAN-STATUS-DENOM` reports the enum `ACTIVE\|CLOSED\|ABANDONED`; the plan reads `ACTIVE`, a valid member. **This is the tool the wave-1 spoke's self-chosen set could not see** — it is run here because the C4 set is prescribed, not selected |
 | `lint_release_corpus.py --check plan-identity` — **falsification arm** | **fires** | Mutated the plan's frontmatter to `status: IN-FLIGHT` → **exit 1**, `PLAN-STATUS-ENUM: … carries status: 'IN-FLIGHT' — the enum is ACTIVE\|CLOSED\|ABANDONED`, naming this plan. Restored byte-identical (`git status` clean). Opposite-verdict pair on the exact predicate |
 | `lint_release_corpus.py --self-test` | **49 arms, 0 failures** | Includes its own anti-vacuity arm (`F-4`: the pre-change model disagrees on 6 of 7 fixture cases, so `F-3` discriminates) |
-| `verify-release-plan.sh` | **12 PASS / 8 FAIL / 7 SKIP / 0 ERROR** | **0 ERROR is the load-bearing figure** — every method still classifies. The 8 FAIL are waves 3a/3b/3c, unstarted by construction: `#6365`/`#6366`/`#6380` per-issue rows and `FCM-3/4/5` (#6380's declared ADDs). **`FCM-2` PASS** — `declared-add-delivered: core/ADRs/ADR-186-kit-content-provenance-key.md`. `PROV-PRESENCE` / `PROV-GRAMMAR` / `PROV-COVERAGE` PASS (`form=A date=2026-09-04`) |
-| `renumber-adr.py --detect` | **ADR-186 BINDS** | `ANCHOR 184 (origin/main) · NEXT-FREE 185`; branch claims 185 and 186, both `BINDS BRANCH-CLAIM`. Run **first**, per the numbering rule; the hub's allocation is the anchor, never `max(claimed)+1` |
+| `verify-release-plan.sh` | **12 PASS / 8 FAIL / 7 SKIP / 0 ERROR** | **0 ERROR is the load-bearing figure** — every method still classifies. The 8 FAIL are waves 3a/3b/3c, unstarted by construction: `#6365`/`#6366`/`#6380` per-issue rows and `FCM-3/4/5` (#6380's declared ADDs). **`FCM-2` PASS** — `declared-add-delivered: core/ADRs/ADR-189-kit-content-provenance-key.md`. `PROV-PRESENCE` / `PROV-GRAMMAR` / `PROV-COVERAGE` PASS (`form=A date=2026-09-04`) |
+| `renumber-adr.py --detect` | **ADR-189 BINDS** | `ANCHOR 184 (origin/main) · NEXT-FREE 185`; branch claims 185 and 186, both `BINDS BRANCH-CLAIM`. Run **first**, per the numbering rule; the hub's allocation is the anchor, never `max(claimed)+1` |
 | `renumber-adr.py --stamp --check` | **2 residual tokens, 0 in link position** | The expected pre-Stage-12 state per the citation rule: `{{ADR:kit-content-provenance-key}}` appears twice in §6.2d, in prose. **Zero in link position** is the property that matters now — a token in a link target is parsed as a path and reported as a broken cross-reference. No workflow runs `--stamp`; the residual resolves at the Stage-12 claim |
-| `check-adr-durability.py` | **0 findings on ADR-186** | Corpus total fell 25 → 23 — exactly the two this card raised and fixed. **Control arm live:** 21 `R2-COUNT` findings still fire elsewhere, so the detector is not passing vacuously. Both fixes were historical anchors on genuinely point-in-time counts, not suppressions |
-| `generate-adr-index.py --verify` | **`COUNT 0`** | **ADR index: N/A** — this release adds no record under `release/ADRs/`; ADR-186 lands under `core/ADRs/`, which has no projector and no projected region |
+| `check-adr-durability.py` | **0 findings on ADR-189** | Corpus total fell 25 → 23 — exactly the two this card raised and fixed. **Control arm live:** 21 `R2-COUNT` findings still fire elsewhere, so the detector is not passing vacuously. Both fixes were historical anchors on genuinely point-in-time counts, not suppressions |
+| `generate-adr-index.py --verify` | **`COUNT 0`** | **ADR index: N/A** — this release adds no record under `release/ADRs/`; ADR-189 lands under `core/ADRs/`, which has no projector and no projected region |
 | `check-release-links.py --check-anchors` | **0 broken links** — **and the pass is VACUOUS for this card, stated as such** | `=== 0 broken links across 0 files ===`. The checker is scoped to `release/`; this card's write set is `core/`, so it examined **nothing of mine**. A guard that passes on empty input has told you nothing, so the doc-link verdict for this card comes from Check 14 below, not from here |
 | `deploy.sh --check` **Check 14** (doc-link maintenance) | **OK** | *"no broken cross-refs in scope"* — the governance + SKILL.md scope that does cover `core/` |
 | `deploy.sh --check` **Check 62** (gate-coverage register runner-resolution) | **OK** | *"all 26 gate-coverage register resolution pointer(s) resolve"* — **26 before and after this card's row**, exactly as predicted. A named-gap row correctly declares no `runner-def:` pointer, so it never joins Check 62's population and the verdict is unmoved. Anti-vacuity holds: the register carries 23 declared pointers, so the `NOSET` arm cannot fire |
@@ -578,7 +578,7 @@ Three of #6380's six criteria are graded against readings the shipped tree suppo
 
 **Two probe defects were self-caught and are published rather than smoothed.** (1) A block-scoped reader used an end anchor missing a trailing period inside the bold markers, so `str.find` returned `-1` and the "block" silently became *the rest of the file* — reporting **4** occurrences of a phrase the block does not contain. Corrected by asserting every anchor index is non-negative and ordered, and by printing the block length against the file length. (2) A polarity control arm searched for `absent from` where the corpus writes `**absent** from`; the markdown emphasis blinded the substring reader and the control returned **0**, so the subject zero rested on nothing. Corrected with a markup-stripping reader, after which all three sibling rows fire. **Both are the same hazard: a control arm proves the reader is live, not that the pattern encodes the right mechanism.**
 
-**ADR index:** this release adds **three** records under `core/ADRs/` — ADR-188, ADR-186, ADR-187 — allocated sequentially from the `origin/main` anchor of 184. `renumber-adr.py --detect` is run **first** by each authoring spoke; branch claims are detection-only and non-binding.
+**ADR index:** this release adds **three** records under `core/ADRs/` — ADR-188, ADR-189, ADR-187 — allocated sequentially from the `origin/main` anchor of 184. `renumber-adr.py --detect` is run **first** by each authoring spoke; branch claims are detection-only and non-binding.
 
 ### #6365 — C4 self-verification (executed 2026-09-04)
 
@@ -748,7 +748,7 @@ A methodology pack can already declare kinds, fields and criteria — but nothin
 
 ### Deliverable state
 
-**`artifact-accepted`** for **#6363** — the deliverable is the provenance grammar itself, at its declared canonical paths (`core/schemas/work-item-type-schema.md` §1.2 / §1.2.1 / §3.1 / §3.2 / §6.2d, one named-gap row in `core/standards/gate-efficacy-standard.md`, an extended sourcing bullet in `core/packs/README.md`, and `core/ADRs/ADR-186-kit-content-provenance-key.md`). Same basis as #6378's: the release has no Layer-2 propagation target, so `deployed-copy-synced` would be a fiction.
+**`artifact-accepted`** for **#6363** — the deliverable is the provenance grammar itself, at its declared canonical paths (`core/schemas/work-item-type-schema.md` §1.2 / §1.2.1 / §3.1 / §3.2 / §6.2d, one named-gap row in `core/standards/gate-efficacy-standard.md`, an extended sourcing bullet in `core/packs/README.md`, and `core/ADRs/ADR-189-kit-content-provenance-key.md`). Same basis as #6378's: the release has no Layer-2 propagation target, so `deployed-copy-synced` would be a fiction.
 
 **`artifact-accepted`** for **#6365** — the deliverable is the authored kit content itself, at its declared canonical path (`core/packs/scrum/pack.toml`). Same basis as its siblings': § Operational Deployment Manifest enumerates all three Layer-2 propagation classes and none fires, so `deployed-copy-synced` would be a fiction. The Artifact-Acceptance Record row is populated in § Verification Evidence above.
 

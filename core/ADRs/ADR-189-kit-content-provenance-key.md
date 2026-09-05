@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-186 — Kit content declares its provenance through a required `source` key at two altitudes, projected as a new sibling annotation class"
+title: "ADR-189 — Kit content declares its provenance through a required `source` key at two altitudes, projected as a new sibling annotation class"
 status: Accepted (operator-ratified at the kit-content-and-defaults Stage 5 Collective Review scope-lock 2026-09-04; the annotation-name sub-decision deferred to and rendered at Stage 6)
 date: 2026-09-04
 release: kit-content-and-defaults
@@ -21,11 +21,13 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-186 — Kit content declares its provenance through a required `source` key at two altitudes, projected as a new sibling annotation class
+# ADR-189 — Kit content declares its provenance through a required `source` key at two altitudes, projected as a new sibling annotation class
 
 ## Status
 
 **Accepted.** Operator-ratified at the `kit-content-and-defaults` Stage 5 Collective Review scope-lock on 2026-09-04. One sub-decision — the annotation's name — was deliberately deferred to Stage 6 so it could be rendered against the real diff rather than against a design sketch; it is recorded in **D4** below and is part of this Accepted record.
+
+**Numbering provenance — `186 → 189`.** Held **ADR-186** branch-local; renumbered to **ADR-189** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 186. In-release citations that read "ADR-186" denote this record.
 
 ## Context
 

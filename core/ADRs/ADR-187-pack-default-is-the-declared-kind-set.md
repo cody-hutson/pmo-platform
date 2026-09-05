@@ -5,7 +5,7 @@ status: Accepted (operator-ratified at the kit-content-and-defaults Stage 5 Coll
 date: 2026-09-04
 release: kit-content-and-defaults
 deciders: Stage 5 Solutioning spoke + an independent Phase A6.5 adversarial reviewer + operator at the Collective Review scope-lock + the Stage 6 Engineering spoke on the re-grounded rejection ground
-tags: [type-pack, methodology-packs, pack-default, kit-selection, resolution-order, named-gap, class-3-O, ADR-180, ADR-188, ADR-186]
+tags: [type-pack, methodology-packs, pack-default, kit-selection, resolution-order, named-gap, class-3-O, ADR-180, ADR-188, ADR-189]
 source_observations:
   - "The resolution over the shipped corpus already returns each methodology pack's own kinds and nothing else. --resolve Scrum over the three shipped packs returns COUNT 3 (epic, story, task), all attributed to scrum, with kanban EXCLUDED; --resolve Kanban returns COUNT 1 (card) with scrum EXCLUDED. Both exit 0. The two kind sets are disjoint. Nothing had to be built to make that true."
   - "No kit ships. The pack corpus holds three packs and none carries role = \"kit\", so a pack-header field naming a kit would have exactly one shipped value -- the empty one -- unless the corpus reversed its own direction that a kit is deployment data."
@@ -121,5 +121,5 @@ The fixture root this record's card ships holds **zero** kits, and the shipped p
 
 - [ADR-180](ADR-180-work-item-kit-first-class-unit.md) — froze the kit as a first-class unit, its neutrality mechanism and the composition order this record's D2 cites rather than restates. This record is subordinate to it.
 - [ADR-188](ADR-188-pack-configurable-vs-platform-fixed-boundary.md) — the configurable/fixed boundary for type packs; the sibling record from this same release that decides which of a pack's declarations a methodology owns.
-- [ADR-186](ADR-186-kit-content-provenance-key.md) — content provenance on a pack's declarations; the sibling record that makes the authored content say where it came from.
+- [ADR-189](ADR-189-kit-content-provenance-key.md) — content provenance on a pack's declarations; the sibling record that makes the authored content say where it came from.
 - [ADR-062](ADR-062-substrate-vs-canonical-precedent.md) — why the originating card's body is not amended when a design renders one of its criteria against current capability.
