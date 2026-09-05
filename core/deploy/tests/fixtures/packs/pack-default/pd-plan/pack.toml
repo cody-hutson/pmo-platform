@@ -1,0 +1,95 @@
+# FIXTURE — the PLAN-DRIVEN ARCHETYPE PACK of the pack-default root. Not a shipped pack.
+#
+# WHY IT LIVES HERE AND NOT UNDER core/packs/. The licensed-kind reader unions the
+# kinds declared by every directory under core/packs/ that holds a pack.toml — no
+# allowlist, no naming filter, no underscore-prefix skip — so a fixture placed there
+# would be silently absorbed into the live gate's kind vocabulary. Fixture packs
+# therefore live under core/deploy/tests/fixtures/packs/ and are read through the
+# conformance tool's explicit --pack-root argument. A self-test arm asserts that
+# separation held, by checking the union carries none of these files' kinds.
+#
+# THIS PACK DECLARES NO KIT AND NAMES NONE. Its own [[kinds]] ARE its default: under
+# --resolve Waterfall with no --kit over this root, the resolution returns exactly
+# pd-activity and pd-work-package, attributed to this pack, and nothing else. That is
+# the whole pack-default rule, executed rather than asserted.
+#
+# WHY WATERFALL AND NOT SCRUM — the choice is the point, not a detail. Only Scrum and
+# Kanban ship, so a plan-driven resolution is unexercised over the live corpus: it
+# returns a measured COUNT 0 there. This fixture supplies the populated half of that
+# pair. Together they make the claim falsifiable — a plan-driven pack resolves to its
+# OWN kinds, and the shipped corpus contributes nothing archetype-keyed to anything
+# else. Waterfall is a member of the archetype-name set, so this is a resolution that
+# returns something, not an argument the tool rejects.
+#
+# THE CRITERIA BLOCKS CARRY criteria_version AND NO checks KEY, which is byte-consistent
+# with every other pack fixture in this corpus — both of the deploy-time pack-conformance
+# check's discrimination fixtures included. That check asserts its sensitivity fixture
+# emits PACK-K05 AND NOTHING ELSE and increments its issue counter outside the warn-mode
+# gate, so a content-completeness rule keyed on an absent-or-empty checks array would
+# turn it red on both control arms. Nothing in this root adds such a rule; the shape is
+# held deliberately so it cannot.
+
+[meta]
+pack_id = "pd-plan"
+pack_version = "0.1.0"
+applies_to = "Waterfall"
+role = "archetype"
+extends = "pd-base"
+
+[[kinds]]
+kind_id = "pd-activity"
+display_name = "Activity"
+base = "Work Item"
+axis1_state_machine = "inherit"
+
+[kinds.methodology_projection]
+archetype = "Waterfall"
+general_level = "Work Item"
+projects_as = "Activity"
+
+[kinds.fields]
+core = "inherit"
+
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+
+[kinds.relationships]
+allowed_types = ["BELONGS_TO", "DEPENDS_ON", "RELATES_TO"]
+
+[kinds.lifecycle_behavior]
+phased = "gate"
+
+[[kinds]]
+kind_id = "pd-work-package"
+display_name = "Work Package"
+base = "Work Item"
+axis1_state_machine = "inherit"
+
+[kinds.methodology_projection]
+archetype = "Waterfall"
+general_level = "Work Item"
+projects_as = "Work Package"
+
+[kinds.fields]
+core = "inherit"
+
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+
+[kinds.relationships]
+allowed_types = ["BELONGS_TO", "DEPENDS_ON", "RELATES_TO"]
+
+[kinds.lifecycle_behavior]
+phased = "gate"

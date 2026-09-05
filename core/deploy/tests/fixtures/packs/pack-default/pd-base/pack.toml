@@ -1,0 +1,44 @@
+# FIXTURE — the SHARED BASE of the pack-default fixture root. Not a shipped pack.
+#
+# WHY IT LIVES HERE AND NOT UNDER core/packs/. The licensed-kind reader unions the
+# kinds declared by every directory under core/packs/ that holds a pack.toml — no
+# allowlist, no naming filter, no underscore-prefix skip — so a fixture placed there
+# would be silently absorbed into the live gate's kind vocabulary. Fixture packs
+# therefore live under core/deploy/tests/fixtures/packs/ and are read through the
+# conformance tool's explicit --pack-root argument. A self-test arm asserts that
+# separation held, by checking the union carries none of these files' kinds.
+#
+# THE pd-* SET IS ITS OWN ROOT, AND THE SEPARATION IS THE POINT. It is deliberately
+# NOT an extension of the sibling selection/ root: that root's SEL-00 arm pins an
+# exact seven-tuple as its non-vacuity guard, and three of its arms read the
+# archetype-eligible population as their CONTROL. Adding a kit-free archetype pack
+# there would move a control arm's population, so an arm's verdict would change for
+# a reason that is not the behaviour it grades. A new root costs two files; moving a
+# control arm costs the discrimination of three.
+#
+# WHAT THIS ROOT DEMONSTRATES. One archetype pack and no kit — the configuration a
+# deployment runs when it selects no work-item kit. The resolution over it returns
+# the archetype pack's own kinds and nothing else, which is the pack-default rule
+# stated at core/packs/README.md § A pack's default is the kind set it declares.
+#
+# WHAT IT CANNOT DEMONSTRATE, STATED HERE RATHER THAN INFERRED FROM ITS ABSENCE.
+# This root holds ZERO role="kit" packs, so the zero-kit-rows assertion the PD-01
+# arm makes over it is guaranteed by the population as well as by the rule. Over a
+# root that DOES hold a neutral kit, an unnarrowed resolution admits that kit under
+# every archetype and it outranks the archetype pack — the divergence PD-04 pins
+# read-only over the selection/ root, and the reason the resolver has no arity for
+# "resolved to no kit". A fixture that demonstrated the pack default in the
+# kit-bearing configuration cannot be built today: --kit '' and --kit none both exit
+# 3 by SEL-RESOLVE, so no invocation returns the archetype pack's kinds alone.
+#
+# It bears no kinds, which is what the two-level requiredness rule states as a
+# prohibition for role = "base". It occupies composition position 0 as the
+# inheritance root and never participates in a kind_id collision — --resolve
+# reports it on its own BASE row rather than pretending to rank it. It exists so the
+# root exercises the real BASE row rather than a degenerate one-pack root.
+
+[meta]
+pack_id = "pd-base"
+pack_version = "0.1.0"
+applies_to = "*"
+role = "base"

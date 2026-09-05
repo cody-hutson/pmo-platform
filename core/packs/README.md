@@ -135,9 +135,21 @@ reason rather than by omission:
 | `kanban` | **left as-is** | Same grounds as `scrum`: `role = "archetype"`, `applies_to = "Kanban"`, one archetype-keyed kind. |
 
 The reason is stated here, in the pack corpus's own governing document, rather than in
-each pack's header comment — a header comment would state it alongside the pack and
-break the byte-identity the extension guarantees for every shipped pack. All three
-files are byte-identical to their pre-change state.
+each pack's header comment, because a rule stated once at the governing document is a
+rule; the same rule restated in three manifest headers is three copies that drift
+independently of it. That is the pointer discipline this file already applies to the
+grammar and to the composition order.
+
+**"Left as-is" scopes to the kit extension and to nothing else.** The extension
+migrated no shipped pack — no `role`, no `applies_to`, no `extends` and no kind of any
+shipped pack moved because kits became expressible. It is a separate matter whether a
+manifest has changed for some *other* reason since, and it has: the methodology packs'
+criteria and field content is authored by its own change, so `scrum` and `kanban` are
+no longer byte-identical to their pre-extension state and `_common` still is. An
+earlier form of this paragraph asserted byte-identity for all three as a standing
+guarantee. It is corrected rather than annotated, because a governance file that
+asserts an immutability its own corpus falsifies teaches a reader to distrust the rest
+of it.
 
 ## Kit selection and precedence
 
@@ -255,6 +267,60 @@ outright under `PACK-P05` (`role = "kit"` requires `applies_to = "*"`), so the s
 unreachable in a conforming corpus. No joint-emptiness rule is added on the selection
 axis; the constraint that binds it is `SEL-RESOLVE` above.
 
+### A pack's default is the kind set it declares
+
+**A methodology pack's default is the kind set it declares.** When no kit is selected,
+a pack contributes exactly its own `[[kinds]]` — that is the pack's default, it needs
+no pointer, and it is what the resolution returns. A selected kit composes *above* it
+and wins a colliding `kind_id`; a project's own override wins above that. **A pack does
+not name a kit**, because a kit is deployment data and none ships in this corpus.
+
+The rule quantifies over packs instead of enumerating them, so a seventh methodology
+pack adds no row here, no fixture and no check. Nothing in a pack header points at a
+default: the default *is* the declaration, and a pointer would make it less local
+rather than more findable. Why the alternative — a pack-header field naming a kit — is
+rejected, and what would make such a field earn its place later, is decided in
+[ADR-190](../ADRs/ADR-190-pack-default-is-the-declared-kind-set.md).
+
+**Three states, and the third is not the first.** These are the three configurations a
+reader must hold apart to use the resolver correctly. Composition order, the merge
+model and the collision rule are defined once in
+[`## The role and extends model`](#the-role-and-extends-model) above and are not
+restated here.
+
+| State | What the resolution contains | Who is in it |
+|---|---|---|
+| **No kit selected** — the deployment's kit field is empty and no project overrides it | the resolved methodology pack's own kinds, and nothing else | a deployment that tracks no work-item kit; the pre-kit arrangement, and the state every shipped deployment is in today |
+| **A kit is selected** — a kit is named at the deployment or project rung | the methodology pack's kinds **plus** the selected kit's, with the kit winning any colliding `kind_id` | a deployment that tracks a kit, with the kit composing above the pack |
+| **Unnarrowed** — the diagnostic is run with no kit named | **every** kit in the read root, each eligible under **every** archetype and each outranking the methodology pack | a reader inspecting a pack root, **not** a deployment state — and *not* the same thing as the first row |
+
+The third row is the one that surprises. Eligibility is a two-limb match: the first limb
+is a byte-identical archetype match, so no methodology pack ever reaches a foreign
+archetype; the second admits any pack that is methodology-neutral **and** carries the
+kit role. The second limb tests the examined pack's own properties and never the
+requested archetype, so it fires under every archetype, and composition rank then places
+a kit above a methodology pack. Naming a kit *narrows* that eligible set; it never
+grants eligibility. Over this corpus the first and third rows coincide, because no kit
+ships — but they are different states, and they diverge the moment a deployment authors
+one kit.
+
+**Registered gap — the diagnostic cannot express "resolved to no kit."** Stated in the
+gate-coverage register's form so it is a countable row rather than a silent absence:
+
+| | |
+|---|---|
+| **Invariant** | A deployment that has deliberately selected no kit resolves to the methodology pack's own kinds alone. |
+| **Enforcing gate** | *(empty — a named gap)*. The kit argument's domain is a pack id or absent, and absent means *unnarrowed*, not *none selected*. Over a kit-bearing root there is no invocation that returns the methodology pack's kinds alone: naming the kit leaves the kit winning, omitting the argument leaves the kit winning, and both an empty value and the literal `none` fail loudly under `SEL-RESOLVE` because each is read as a selection naming an absent pack. |
+| **Declared observable** | Over a root holding at least one methodology-neutral kit, an unnarrowed resolution returns that kit's rows and lets it win a colliding `kind_id` with nothing selected. Pinned executably by a read-only self-test arm over the shipped selection fixture root, so the behaviour is a green arm that must be **edited** when the missing arity lands — not a prose sentence nobody re-reads. |
+
+This is the same class `SEL-RESOLVE` closed one step over: it separated a *failed*
+selection from an *absent* one, and left a *deliberately-empty* selection sharing an
+invocation with an *unnarrowed* one. The gap is registered rather than closed here
+because the fix is new argument arity on this diagnostic — which reads no configuration
+file and is deliberately not a second resolver — and because the state is unreachable
+over a corpus that ships zero kits, so a change made now would ship untested against any
+real deployment kit.
+
 ## What lives where
 
 - **Work-status** is owned by the entity layer (the Axis-1 base machine); a kind
@@ -266,9 +332,42 @@ axis; the constraint that binds it is `SEL-RESOLVE` above.
   `label-taxonomy.md` by the label-cleave).
 - The **grammar** every `pack.toml` conforms to (the meta-schema) lives in the
   work-item type-pack meta-schema. The packs here are **instances** of that grammar.
+- **Which of a pack's declarations a methodology owns, and which the platform fixes
+  regardless of configuration**, is decided by the configurable/fixed boundary at
+  [`../schemas/work-item-type-schema.md` §1.5](../schemas/work-item-type-schema.md#the-configurable-fixed-boundary).
+  It carries the configurable and fixed enumerations, the explicit placement of
+  readiness and done, and the ordered test an author applies to a **new** candidate
+  field or criterion. **Rules are defined there and are not restated here** — this is
+  the pointer discipline this file already applies to the grammar itself. Where that
+  boundary names an invariant no gate enforces, the gap is registered as a row in the
+  gate-coverage register in
+  [`../standards/gate-efficacy-standard.md`](../standards/gate-efficacy-standard.md),
+  each carrying its declared observable; §1.5 points at those rows rather than
+  copying them, and so does this line.
 - The **best-practice content** in each pack is sourced from the archetype's
   authoritative body of practice (for example the Scrum Guide, INVEST, the Kanban
   Method) — never reverse-engineered from any one deployment's issue tracker.
+  **Each declaration says so in the manifest**, through the `source` key the
+  grammar requires on every criteria check entry and every kind-specific field
+  declaration, and on a `[kinds.criteria.*]` or `[kinds.fields]` table whose
+  array is present and empty — where it states the practice basis for the
+  emptiness. Two worked lines: at the entry altitude,
+  `source = "Scrum Guide 2020 — Definition of Done"`; at the block altitude,
+  `source = "Kanban Method (Anderson 2010) — no readiness practice is prescribed at card level"`.
+  **The value convention — and it is a convention, not a grammar rule.** Name the
+  work, its edition or year, and the locator where the work has one. The locator
+  is deliberately not mandated: INVEST is a six-letter acronym with no sections,
+  so a required section separator would forbid an authentic citation of it —
+  `source = "INVEST (Wake 2003) — V, Valuable"` is a complete citation exactly as
+  it stands. What the value must never be is a repository path, an issue
+  template, a label name, or this deployment's own tracker: a declaration whose
+  stated origin is the deployment that consumes it has recorded a local
+  convention, which is the thing this key exists to tell apart from a body of
+  practice. Requiredness, the two altitudes and the no-inheritance rule are
+  defined in the grammar and **are not restated here**; read its boundary
+  statement alongside them, which says that `source` makes a provenance claim
+  visible and locatable and does not make it true — checking a value against the
+  work it names is a person's job, and no gate does it.
 - **Organizational tiers** are owned by the entity layer; a pack — a kit included —
   types the work and never redefines them. Portfolio, Program, Project and
   Milestone/Workstream are container entities with their own identity, lifecycle and

@@ -5,7 +5,7 @@
 
 [meta]
 pack_id = "scrum"
-pack_version = "0.1.0"
+pack_version = "0.2.0"
 schema_version = 1              # MANIFEST meta key — NOT the meta-schema grammar version
 applies_to = "Scrum"            # byte-identical archetype join key (§1.1)
 role = "archetype"              # widened §1.1; default when omitted — stated for clarity
@@ -25,15 +25,29 @@ projects_as = "Epic"
 level_name_ref = "derive"                       # anchor into the work-organization-mapping-framework Layer-2 Scrum row
 [kinds.fields]
 core = "inherit"                                # §1.2 Core 7, never re-listed
-kind_specific = []                              # <fill per Scrum Guide if the Epic kind adds fields>
+kind_specific = [
+  { name = "as_a", type = "string", required = "✅", cardinality = "one", description = "role — the who of the epic's value frame, carried into every story it is split into", source = "Cohn, User Stories Applied (2004) — an epic is a large user story and carries the same role-goal-benefit frame" },
+  { name = "i_want", type = "string", required = "✅", cardinality = "one", description = "goal — the capability the epic seeks, stated at the altitude that survives the split", source = "Cohn, User Stories Applied (2004) — an epic is a large user story and carries the same role-goal-benefit frame" },
+  { name = "so_that", type = "string", required = "✅", cardinality = "one", description = "benefit — the value rationale the epic exists to deliver", source = "Cohn, User Stories Applied (2004) — the benefit clause of the role-goal-benefit frame an epic carries" },
+]
 [kinds.criteria.readiness]
-criteria_version = "0.1.0"
-checks = []                                     # <fill DoR per INVEST / Scrum Guide>
+criteria_version = "0.2.0"
+checks = [
+  { id = "dor-epic-valuable", statement = "as_a, i_want and so_that are each present and non-empty.", level = "L1", automatable = true, source = "INVEST (Wake 2003) — V, Valuable" },
+  { id = "dor-epic-decomposed", statement = "At least one Work Item declares a BELONGS_TO edge to this epic.", level = "L3", automatable = false, source = "Cohn, User Stories Applied (2004) — an epic is split into stories before it can be committed" },
+  { id = "dor-epic-splittable", statement = "The epic names how it will be split into items a Scrum Team can make Done within one Sprint.", level = "L3", automatable = false, source = "Cohn, User Stories Applied (2004) — splitting a large story; INVEST (Wake 2003) S and E are the properties an epic fails by construction" },
+  { id = "dor-epic-outcome-named", statement = "The epic states which product outcome it advances.", level = "L3", automatable = false, source = "Scrum Guide 2020 — Product Goal; the Product Backlog defines what will fulfil the Product Goal" },
+]
 [kinds.criteria.done]
-criteria_version = "0.1.0"
-checks = []                                     # <fill DoD>
+criteria_version = "0.2.0"
+checks = [
+  { id = "dod-epic-children-terminal", statement = "Every Work Item that BELONGS_TO this epic has reached a terminal Axis-1 state.", level = "L3", automatable = false, source = "Cohn, User Stories Applied (2004) — an epic is complete when the stories it was split into are complete" },
+  { id = "dod-epic-outcome-realized", statement = "The product outcome the epic named is realised — not merely that its items closed.", level = "L3", automatable = false, source = "Scrum Guide 2020 — Increment as a concrete stepping stone toward the Product Goal" },
+  { id = "dod-epic-remainder-returned", statement = "Any item split out of this epic and not delivered has been returned to the Product Backlog rather than closed with the epic.", level = "L3", automatable = false, source = "Scrum Guide 2020 — Product Backlog; an item not meeting the Definition of Done returns to the Product Backlog" },
+]
 [kinds.criteria.gate]
-criteria_version = "0.1.0"
+criteria_version = "0.2.0"
+source = "Scrum Guide 2020 — reasoned empty set. Scrum prescribes no per-item transition gate for an epic; the framework's only prescribed controls are the Sprint boundary and the Definition of Done, and criteria.done plus the project lifecycle already carry both. The inherited Axis-1 states — backlog, ready, in-progress, in-review, done, cancelled — contain none a Scrum-sourced gate could guard, so a check authored here would be an invention wearing a citation. The emptiness is the practice basis, not a placeholder."
 checks = []
 [kinds.relationships]
 allowed_types = ["BELONGS_TO", "RELATES_TO", "GENERATES"]   # subset of the 7 MVP types (by reference)
@@ -53,16 +67,32 @@ level_name_ref = "derive"
 [kinds.fields]
 core = "inherit"
 kind_specific = [
-  { name = "story_points", type = "number", required = "⚪", cardinality = "one", description = "Scrum relative estimate (best-practice: Scrum Guide / INVEST)" },
-]                                               # story points → fields.kind_specific[] (NOT a `sortable_fields` key)
+  { name = "as_a", type = "string", required = "✅", cardinality = "one", description = "role — the who of the story", source = "Cohn, User Stories Applied (2004) — the role clause of the role-goal-benefit story frame" },
+  { name = "i_want", type = "string", required = "✅", cardinality = "one", description = "goal — the capability sought", source = "Cohn, User Stories Applied (2004) — the goal clause of the role-goal-benefit story frame" },
+  { name = "so_that", type = "string", required = "✅", cardinality = "one", description = "benefit — the value rationale", source = "Cohn, User Stories Applied (2004) — the benefit clause of the role-goal-benefit story frame" },
+  { name = "acceptance_criteria", type = "string", required = "✅", cardinality = "many", description = "the conditions of satisfaction (the done test)", source = "Cohn, User Stories Applied (2004) — conditions of satisfaction, the story's own done test" },
+  { name = "story_points", type = "number", required = "⚪", cardinality = "one", description = "relative-size estimate", source = "Scrum Guide 2020 — Product Backlog item attribute size; the relative-point unit is Cohn, Agile Estimating and Planning (2005)" },
+]                                               # story points → fields.kind_specific (NOT a `sortable_fields` key)
 [kinds.criteria.readiness]
-criteria_version = "0.1.0"
-checks = []                                     # <fill INVEST-based DoR>
+criteria_version = "0.2.0"
+checks = [
+  { id = "dor-story-valuable", statement = "as_a, i_want and so_that are each present and non-empty.", level = "L1", automatable = true, source = "INVEST (Wake 2003) — V, Valuable" },
+  { id = "dor-story-testable", statement = "acceptance_criteria is present with at least one entry.", level = "L1", automatable = true, source = "INVEST (Wake 2003) — T, Testable" },
+  { id = "dor-story-estimable", statement = "story_points carries a size before the story is selected in Sprint Planning.", level = "L1", automatable = true, source = "Scrum Guide 2020 — Product Backlog item attribute size, sized by the Developers who will do the work; INVEST (Wake 2003) — E, Estimable" },
+  { id = "dor-story-independent", statement = "The story carries no unmet DEPENDS_ON or BLOCKS edge that would force another item to complete first within the same Sprint.", level = "L3", automatable = false, source = "INVEST (Wake 2003) — I, Independent" },
+  { id = "dor-story-negotiable", statement = "The story states the need and the outcome and leaves the implementation approach for the Developers to determine.", level = "L3", automatable = false, source = "INVEST (Wake 2003) — N, Negotiable" },
+  { id = "dor-story-small", statement = "The story is small enough that the Scrum Team can make it Done within one Sprint.", level = "L3", automatable = false, source = "Scrum Guide 2020 — Product Backlog refinement; items that can be Done within one Sprint are deemed ready for selection" },
+]
 [kinds.criteria.done]
-criteria_version = "0.1.0"
-checks = []
+criteria_version = "0.2.0"
+checks = [
+  { id = "dod-story-definition-of-done-met", statement = "The work satisfies the Scrum Team Definition of Done; work that does not is not part of the Increment.", level = "L3", automatable = false, source = "Scrum Guide 2020 — Increment and Definition of Done" },
+  { id = "dod-story-acceptance-criteria-met", statement = "Every entry in acceptance_criteria is met.", level = "L3", automatable = false, source = "Cohn, User Stories Applied (2004) — a story is done when its conditions of satisfaction are met" },
+  { id = "dod-story-children-terminal", statement = "Every Task that BELONGS_TO this story has reached a terminal Axis-1 state.", level = "L3", automatable = false, source = "Scrum Guide 2020 — Sprint Planning Topic Three; the story is not delivered while its own plan is open" },
+]
 [kinds.criteria.gate]
-criteria_version = "0.1.0"
+criteria_version = "0.2.0"
+source = "Scrum Guide 2020 — reasoned empty set. Scrum prescribes no per-item transition gate for a story; the framework's only prescribed controls are the Sprint boundary and the Definition of Done, and criteria.done plus the project lifecycle already carry both. The inherited Axis-1 states — backlog, ready, in-progress, in-review, done, cancelled — contain none a Scrum-sourced gate could guard, so a check authored here would be an invention wearing a citation. The emptiness is the practice basis, not a placeholder."
 checks = []
 [kinds.relationships]
 allowed_types = ["BELONGS_TO", "DEPENDS_ON", "BLOCKS", "RELATES_TO"]
@@ -81,15 +111,24 @@ projects_as = "Task"
 level_name_ref = "derive"
 [kinds.fields]
 core = "inherit"
+source = "Scrum Guide 2020 — reasoned empty set. Sprint Planning Topic Three leaves how a Product Backlog item is decomposed to the sole discretion of the Developers, so the framework prescribes no task field set. The 2020 edition also dropped the 2017 remaining-work tracking mandate, so a remaining-hours field would be an invention wearing a citation. Core 7 plus work_item_type and parent_ref already carry identity, state, ownership and the parent edge."
 kind_specific = []
 [kinds.criteria.readiness]
-criteria_version = "0.1.0"
-checks = []
+criteria_version = "0.2.0"
+checks = [
+  { id = "dor-task-belongs-to-item", statement = "The task declares a BELONGS_TO edge to the Product Backlog item it decomposes.", level = "L2", automatable = true, source = "Scrum Guide 2020 — Sprint Planning Topic Three; tasks decompose selected Product Backlog items" },
+  { id = "dor-task-actionable", statement = "The task states work a Developer can start without further decomposition.", level = "L3", automatable = false, source = "Scrum Guide 2020 — Sprint Backlog as an actionable plan for delivering the Increment" },
+  { id = "dor-task-serves-sprint-goal", statement = "The task contributes to the Sprint Goal the Sprint Backlog commits to.", level = "L3", automatable = false, source = "Scrum Guide 2020 — Sprint Goal as the single objective for the Sprint" },
+]
 [kinds.criteria.done]
-criteria_version = "0.1.0"
-checks = []
+criteria_version = "0.2.0"
+checks = [
+  { id = "dod-task-parent-done-standard", statement = "The task output is complete to the standard the parent item Definition of Done requires; a task is not separately releasable.", level = "L3", automatable = false, source = "Scrum Guide 2020 — the Definition of Done applies to the Increment, not to a unit of the Developers plan" },
+  { id = "dod-task-no-implicit-remainder", statement = "No undone remainder of the task is left implicit; anything not completed is raised as its own item.", level = "L3", automatable = false, source = "Scrum Guide 2020 — Sprint Backlog as a real-time picture of the work the Developers plan to accomplish" },
+]
 [kinds.criteria.gate]
-criteria_version = "0.1.0"
+criteria_version = "0.2.0"
+source = "Scrum Guide 2020 — reasoned empty set. Scrum prescribes no per-item transition gate for a task; the framework's only prescribed controls are the Sprint boundary and the Definition of Done, and criteria.done plus the project lifecycle already carry both. The inherited Axis-1 states — backlog, ready, in-progress, in-review, done, cancelled — contain none a Scrum-sourced gate could guard, so a check authored here would be an invention wearing a citation. The emptiness is the practice basis, not a placeholder."
 checks = []
 [kinds.relationships]
 allowed_types = ["BELONGS_TO", "DEPENDS_ON", "BLOCKS"]
