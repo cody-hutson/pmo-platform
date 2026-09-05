@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.56] - 2026-09-05
+
+Choosing Scrum or Kanban now gives you populated, sourced work-item criteria and a stated default, instead of empty placeholders.
+
+[Full notes](release/releases/notes/v4.56_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.56)
+
 ## [v4.55] - 2026-09-05
 
 Nine ways the safety guards blocked ordinary work are fixed, and a refusal now names the retry that usually resolves it.
