@@ -306,6 +306,18 @@ on:
       # converting a 3-job workflow to filter-free to close a ONE-FILE gap that one
       # roster line closes completely.
       - 'core/deploy/deploy.sh'
+      # Arm F inputs (selftest-discovery): the arm asserts that every invocation a
+      # pipeline spec PRESCRIBES is admitted by the script-execution allowlist, so it
+      # reads BOTH sides — the spec corpus and the allowlist. Without these two entries
+      # a PR that edits only a spec (adding a mandated command) or only the allowlist
+      # (removing the row that admitted one) would not trigger the arm that reads them,
+      # which is the trigger-vs-verdict disagreement the CIAC-3, selftest-discovery, R8
+      # and VIC entries above each close for their own inputs. LOAD-BEARING, not a
+      # nicety: those are exactly the two edits able to create the defect Arm F exists
+      # to catch. The narrower stage-04-planning.md entry above is retained because the
+      # AER-1 note names it as an AER-1 input; the glob here subsumes it for Arm F.
+      - 'release/references/pipeline/**'
+      - 'core/config/allowlists/script-execution-allowlist.txt'
   push:
     branches: [main]
     paths:
@@ -338,6 +350,9 @@ on:
       - '.github/workflows/repo-integrity.yml'
       # R8 arming-declaration input — see the pull_request block above.
       - '.github/corpus-home-tolerance.arming'
+      # Arm F inputs — see the pull_request block above.
+      - 'release/references/pipeline/**'
+      - 'core/config/allowlists/script-execution-allowlist.txt'
       # VIC engine member — see the pull_request block above.
       - 'core/deploy/deploy.sh'
 
@@ -1175,8 +1190,19 @@ jobs:
         # silence, is the honest treatment.
         # Arm E (HARD) reconciles core/deploy/tools/ against its README inventory over
         # the DIRECTORY listing — never the self-test manifest, whose population is
-        # smaller by design. No predicate, glob or roster enters this YAML: the thin
-        # caller below reaches the new arm with no functional change.
+        # smaller by design.
+        # Arm F (HARD in the engine, ADVISORY here) asserts that every invocation a
+        # pipeline spec PRESCRIBES is admitted by the script-execution allowlist,
+        # adjudicated by the hook's own match rule rather than by a row count. IT
+        # REPORTS FINDINGS ON ARRIVAL AND IS NOT EXPECTED GREEN: most of what it names
+        # is a .py tool, and the allowlist's non-shell section is deliberately empty
+        # pending BLOCK-DESTRUCTIVE-022's drain, so those are unmatchable by
+        # construction rather than unregistered by oversight. A red from Arm F is the
+        # arm WORKING. This job is posture=advisory and is not a required context; do
+        # NOT register it as one until that population is drained, or the roster gains
+        # a context that cannot pass.
+        # No predicate, glob or roster enters this YAML: the thin caller below reaches
+        # every arm with no functional change.
         run: python3 release/tools/check-selftest-coverage.py --reconcile
 
       - name: Precision probe — a deliberately broken self-test MUST fail the gate
