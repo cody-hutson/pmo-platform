@@ -104,10 +104,20 @@ _LABEL_CELL_RE = re.compile(r"^(AC|OBL)[-‐-―\s]?(\d+)$", re.IGNORECASE)
 
 _ORDINAL_CLASSES = ("missing", "extra", "duplicate")
 
-# Terms this short, or this common, carry no discriminating power. Kept small and
-# explicit: the predicate's job is to find the terms that SEPARATE sibling criteria,
-# and an over-large stoplist would erase real signal rather than noise.
+# `_MIN_TERM_LEN` is a NOISE AND COST GUARD, NOT A CORRECTNESS GUARD, and the
+# distinction is measured rather than assumed: removing it leaves the self-test fully
+# green (a deliberately-retained surviving mutant). The reason is the discriminative-
+# term design one level up — a short token common enough to matter appears in the
+# sibling criteria too, so it is subtracted out of every discriminative set before any
+# row is compared, and `related()` carries its own floor so subsumption never fires on
+# a short stem either. The floor is kept because it keeps the emitted `shared` cell
+# readable and the term sets small; it is NOT claimed to be load-bearing.
+#
+# `_MAX_PREFIX_DELTA` IS load-bearing and is proven so by mutation — see `related()`.
 _MIN_TERM_LEN = 4
+_MAX_PREFIX_DELTA = 1
+# The stoplist is deliberately small: the predicate's job is to find the terms that
+# SEPARATE sibling criteria, and an over-large stoplist erases signal, not noise.
 _STOPWORDS = frozenset("""
 that this with from into than then when what which where while there their they them
 have been being does done doing must should would could shall will
@@ -140,12 +150,21 @@ def related(a, b):
     subsumption for the other would let a term count as discriminating under the
     strict relation and then match a sibling's row under the loose one — a binding
     asserted by the inconsistency rather than by the text.
+
+    THE LENGTH BOUND IS LOAD-BEARING, and it was added against a measured false BOUND.
+    Unbounded subsumption crosses morpheme boundaries: `carried` folds to `carri`,
+    which is a prefix of `carrier`, so a criterion about the subset CARRIED to a branch
+    read as bound to a row about the mirror CARRIER. The fold already handles every
+    ordinary inflection (`links`/`link`, `mirrored`/`mirror`); subsumption exists only
+    to rescue the fold's short-stem failures, which are all off by exactly one
+    character. Bounding the delta at 1 keeps every rescue and refuses the drift.
     """
     if a == b:
         return True
-    if len(b) >= _MIN_TERM_LEN and a.startswith(b):
-        return True
-    return len(a) >= _MIN_TERM_LEN and b.startswith(a)
+    shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
+    if len(shorter) < _MIN_TERM_LEN or len(longer) - len(shorter) > _MAX_PREFIX_DELTA:
+        return False
+    return longer.startswith(shorter)
 
 
 def terms(text):
@@ -461,6 +480,16 @@ def _cases():
         ("ordinal-gap extra — a row claims an ordinal the issue does not have",
          _plan(bound + ["| #1 | AC-3 | `grep x w.py` | Something |\n"]),
          _CRIT, "ORDINAL-GAP", 1),
+        # THE ARM THAT DISCRIMINATES THIS GATE FROM `ac_baseline`. Two rows against a
+        # declared two criteria: the COUNT closes exactly, and the ORDINAL SET does
+        # not — AC-2 is ungraded while AC-3 grades a criterion that does not exist.
+        # A cardinality comparison reads this plan as clean. Downgrade the set read
+        # to a count read and this arm is the one that goes red.
+        ("ordinal-gap extra at a MATCHING count — the shape a count check cannot see",
+         _plan([bound[0], "| #1 | AC-3 | `grep journal d.py` | The journal rotates |\n"]),
+         _CRIT, "ORDINAL-GAP", 1),
+        ("ordinal-gap duplicate at a MATCHING count — same blindness, repeated ordinal",
+         _plan([bound[0], bound[0]]), _CRIT, "ORDINAL-GAP", 1),
         ("unbound — the count and the ordinals both close, and AC-2 grades AC-1's subject",
          _plan([bound[0],
                 "| #1 | AC-2 | `grep checksum w.py` | The shard checksum is emitted |\n"]),
@@ -477,9 +506,13 @@ def _cases():
          _CRIT, "BASELINE-DRIFT", 1),
         ("not-evaluated — no oracle for the issue withholds the binding verdict",
          _plan(bound), {}, "NOT-EVALUATED", 1),
-        ("escaped pipes in a method cell do not shear the row",
+        # The shear is POSITIONAL: splitting on a bare pipe turns one method cell into
+        # two and pushes Expected out of the read window entirely. The method cell here
+        # is deliberately all short tokens, so every discriminating term lives in
+        # Expected and a sheared row binds to nothing.
+        ("escaped pipes in a method cell do not shear the row out of its Expected cell",
          _plan([
-             "| #1 | AC-1 | `grep checksum w.py \\| wc -l` | Every shard carries a checksum |\n",
+             "| #1 | AC-1 | `a \\| b` | The widget emits a checksum for every shard |\n",
              bound[1]]),
          _CRIT, "BOUND", 0),
     ]
@@ -534,6 +567,23 @@ def self_test():
         failures.append("precedence: a BASELINE-DRIFT headline must still emit the "
                         "ORDINAL-GAP and UNBOUND rows it outranks (got %s / %s)"
                         % (verdict, sorted(classes)))
+
+    # The term relation, pinned in both directions against measured cases. `cite`/
+    # `cited` is the fold's short-stem failure that subsumption exists to rescue;
+    # `carri`/`carrier` is the morpheme-boundary crossing that produced a real false
+    # BOUND on a live plan before the length bound was added.
+    for a, b, want, why in (
+        ("cite", "cited", True, "the fold's short-stem failure must still match"),
+        ("link", "links", True, "an ordinary inflection must match"),
+        ("carri", "carrier", False, "subsumption must not cross a morpheme boundary"),
+        ("core", "corpus", False, "unrelated terms sharing three letters must not match"),
+        ("cor", "core", False, "a stem below the length floor cannot subsume"),
+        ("state", "statement", False, "a two-character delta is beyond the bound"),
+    ):
+        ran += 1
+        if related(a, b) != want or related(b, a) != want:
+            failures.append("relation: related(%r, %r) must be %s — %s"
+                            % (a, b, want, why))
 
     # Round-trip: the criteria extractor must read a real issue-body shape.
     body = ("## Summary\n\n### Acceptance Criteria\n\n"
