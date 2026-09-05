@@ -236,7 +236,7 @@ EXAMPLES
   blast-radius.sh --format=json --depth=1 CLAUDE.md
 
   # Include mirror-pair references (forensic mode)
-  blast-radius.sh --include-mirrors .claude/rules/release-process.md
+  blast-radius.sh --include-mirrors .claude/rules/skill-deployment.md
 
   # Structural/path-move sweep: who hard-codes the OLD release-notes dir path?
   blast-radius.sh --mode=structural --format=json release/releases/notes
@@ -713,7 +713,12 @@ build_scan_list() {
 #
 # Topology source of truth: core/deploy/deploy.sh Check 9 MIRROR_PAIRS. Keep
 # this table in sync with that array. Each entry is the repo-relative SOURCE
-# path; the second column is its canonical mirror partner.
+# path; the second column is its canonical mirror partner. That sync is
+# asserted, not remembered: the mirror-pair-parity check (deploy.sh Check 77)
+# diffs the source-side path set across every holder carrying a
+# "mirror-pair-set:" marker and FAILs naming any path and the holder it is
+# missing from. The markers around the array below are this file's registration
+# as such a holder — keep them wrapped around the array literal when editing it.
 #
 # Reachability note: all mirrors deploy OUTWARD to $HOME/.claude/rules/, which
 # is OUTSIDE the scanned REPO_ROOT and therefore never appears as a referrer in
@@ -731,10 +736,15 @@ detect_mirror_pairs() {
   : > "$MIRROR_MAP_FILE"
 
   # <source-rel>\t<mirror-rel> — mirror of deploy.sh MIRROR_PAIRS (Check 9).
-  # release-process.md source is release/governance/ (per #1104 correction).
+  # Membership is an admission decision governed by
+  # core/standards/rules-corpus-admission-standard.md §1; the hook-registry index
+  # and the release procedure were reclassified REFERENCE under that test and are
+  # no longer mirrored. Neither file moved — they left the DEPLOYED set only, so
+  # references to their source paths are still real edges and must not be
+  # mirror-suppressed.
+  # mirror-pair-set: BEGIN holder=blast-radius sep=tab field=1
   local -a pairs=(
     "core/rules/skill-deployment.md	.claude/rules/skill-deployment.md"
-    "core/rules/bypass-mode-readiness.md	.claude/rules/bypass-mode-readiness.md"
     "core/rules/harness-deployment.md	.claude/rules/harness-deployment.md"
     "core/rules/doc-link-maintenance.md	.claude/rules/doc-link-maintenance.md"
     "core/rules/operations-bridge.md	.claude/rules/operations-bridge.md"
@@ -743,8 +753,8 @@ detect_mirror_pairs() {
     "core/rules/decision-time-adherence.md	.claude/rules/decision-time-adherence.md"
     "core/rules/rename-reference-cascade.md	.claude/rules/rename-reference-cascade.md"
     "core/rules/analysis-mandate.md	.claude/rules/analysis-mandate.md"
-    "release/governance/release-process.md	.claude/rules/release-process.md"
   )
+  # mirror-pair-set: END
 
   local entry src mir
   for entry in "${pairs[@]}"; do
