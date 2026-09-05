@@ -188,7 +188,7 @@ core/packs/kanban/pack.toml                                                edit
 core/deploy/tests/fixtures/packs/pack-default/pd-base/pack.toml            add
 core/deploy/tests/fixtures/packs/pack-default/pd-plan/pack.toml            add
 core/deploy/tools/check-work-hierarchy.py                                  edit
-core/ADRs/ADR-187-pack-default-is-the-declared-kind-set.md                 add
+core/ADRs/ADR-190-pack-default-is-the-declared-kind-set.md                 add
 
 # ── release-scoped ──
 release/releases/plans/kit-content-and-defaults_RELEASE_PLAN.md            add
@@ -289,7 +289,7 @@ Dependency-ordered. Three waves driven by the six edges, on one branch under P0 
 | #6363 | same three + `core/ADRs/ADR-189-*.md` | ∅ | ∅ | unconstrained | **unconstrained** | ordinary Engineering spoke |
 | #6365 | `core/packs/scrum/pack.toml` | ∅ | ∅ | unconstrained | **unconstrained** | ordinary Engineering spoke |
 | #6366 | `core/packs/kanban/pack.toml` | ∅ | ∅ | unconstrained | **unconstrained** | ordinary Engineering spoke |
-| #6380 | `core/packs/README.md` · `core/deploy/tools/check-work-hierarchy.py` · fixtures · `core/ADRs/ADR-187-*.md` | ∅ | ∅ | unconstrained | **unconstrained** | ordinary Engineering spoke |
+| #6380 | `core/packs/README.md` · `core/deploy/tools/check-work-hierarchy.py` · fixtures · `core/ADRs/ADR-190-*.md` | ∅ | ∅ | unconstrained | **unconstrained** | ordinary Engineering spoke |
 
 Per-path rows are retained, never collapsed into the card class. **All-`unconstrained` is the correct and informative output here**: no write-set path sits under `.claude/`, is a root governance file, or matches `*/skills/*`. Conjunct 1 of the skill gate decided every row — the paths do not match `SKILL_SCOPE_RE` — so conjuncts 2 and 3 were never reached, which is stated so a reader can tell a discriminating read from a lucky one.
 
@@ -453,7 +453,7 @@ Recorded here because each is a claim a reader can falsify in one command, and n
 6. **#6366** — **nine statements across seven sections** still carry the superseded `PRESERVE`, one of them a *"preserved byte-for-byte"* transcription instruction that would direct Engineering to do the **opposite** of `D-CriteriaVersion-BlockRule`. Confirmed by execution that `criteria_version = "NOT-A-SEMVER"` passes `--validate-packs` clean on the same file where `PACK-K01` fires — **nothing mechanical catches this.**
 7. **#6363** — four worked `checks[]` entries in §1.2.1 (`gate-parent-epic-design-approved`, `gate-blocking-spike-done`, `gate-wip-pull-limit`, `gate-architecture-review-approved`), **0 of 4** carrying a `source` key **as read at the merge base `5facfded`**, plus the §3.2 worked materialization. Under the card's own new rule the grammar would ship **five illustrations violating it**. **That census was a pre-Engineering reading and it is now closed: all 4 carry a `source` at the branch tip `32100655`** (§ Verification Evidence records the 0-of-4 → 4-of-4 move). The figure is anchored rather than restated because this item is the list of corrections *carried into* Engineering — a later reader must be able to tell a discharged finding from a live one, and an un-anchored present-tense count cannot say which it is.
 8. **#6365** — **four L2 checks to re-level to L3.** `automatable: false` suppresses nothing at L2: the projection rule carries the `automatable` conjunct on the **L1** arm only.
-9. **#6380** — ADR-187 D3's ground 2. *"The field makes AC3 violable"* is **false**; AC3 is already violable through `limb_b`. The AC1 decision stands on a stronger ground than the one it loses.
+9. **#6380** — ADR-190 D3's ground 2. *"The field makes AC3 violable"* is **false**; AC3 is already violable through `limb_b`. The AC1 decision stands on a stronger ground than the one it loses.
 
 ---
 
@@ -578,7 +578,7 @@ Three of #6380's six criteria are graded against readings the shipped tree suppo
 
 **Two probe defects were self-caught and are published rather than smoothed.** (1) A block-scoped reader used an end anchor missing a trailing period inside the bold markers, so `str.find` returned `-1` and the "block" silently became *the rest of the file* — reporting **4** occurrences of a phrase the block does not contain. Corrected by asserting every anchor index is non-negative and ordered, and by printing the block length against the file length. (2) A polarity control arm searched for `absent from` where the corpus writes `**absent** from`; the markdown emphasis blinded the substring reader and the control returned **0**, so the subject zero rested on nothing. Corrected with a markup-stripping reader, after which all three sibling rows fire. **Both are the same hazard: a control arm proves the reader is live, not that the pattern encodes the right mechanism.**
 
-**ADR index:** this release adds **three** records under `core/ADRs/` — ADR-188, ADR-189, ADR-187 — allocated sequentially from the `origin/main` anchor of 184. `renumber-adr.py --detect` is run **first** by each authoring spoke; branch claims are detection-only and non-binding.
+**ADR index:** this release adds **three** records under `core/ADRs/` — ADR-188, ADR-189, ADR-190 — allocated sequentially from the `origin/main` anchor of 184. `renumber-adr.py --detect` is run **first** by each authoring spoke; branch claims are detection-only and non-binding.
 
 ### #6365 — C4 self-verification (executed 2026-09-04)
 
@@ -658,7 +658,7 @@ Three of #6380's six criteria are graded against readings the shipped tree suppo
 
 | File | Which gate actually reads it | How that was established |
 |---|---|---|
-| `core/ADRs/ADR-187-*.md` | **Check 14** (doc-link), the **ADR-durability** lint, **ADR-number integrity**, and **Check 63**'s markdown population | A probe file carrying one broken link, placed under `core/ADRs/`, **flagged** under the shared scan-scope list |
+| `core/ADRs/ADR-190-*.md` | **Check 14** (doc-link), the **ADR-durability** lint, **ADR-number integrity**, and **Check 63**'s markdown population | A probe file carrying one broken link, placed under `core/ADRs/`, **flagged** under the shared scan-scope list |
 | `core/packs/README.md` | **`none` for link integrity.** Check 63 reads it and examines **0** count-structure pairs in it | The **identical** probe placed under `core/packs/` did **not** flag on the same invocation that flagged the `core/ADRs/` one. The reader is live; `core/packs/` is outside the scan scope — and the CI link job reads the **same** scope file, so neither surface covers it |
 | `core/deploy/tools/check-work-hierarchy.py` | **`none` at deploy time for its own content.** Its gate is the `Discovered tool self-tests` CI job, which reaches it by **glob discovery** and never names it | The job passed on this branch's tip and ran this file's `--self-test` at **157/157** |
 | `core/deploy/tests/fixtures/packs/pack-default/*.toml` | **`none`.** Check 75 reads `core/packs` only; Check 63 globs `*.md`; no script under `core/deploy/tests/` reads a pack fixture | `grep -rl 'fixtures/packs' core/deploy/tests/` returns **only the fixture manifests' own header comments**, against a live control of **28** files there referencing `deploy.sh` |
@@ -712,7 +712,7 @@ Three of #6380's six criteria are graded against readings the shipped tree suppo
 
 **Byte-identity, measured per manifest rather than in aggregate** (§ Deviation Log **DEV-21**): the base pack's content hash is identical at the merge base and at the branch tip; the two methodology packs differ, **+73 / −25** combined (`git diff --numstat`: `scrum` 58/19, `kanban` 15/6; the `--stat` summary reads `73 insertions(+), 25 deletions(-)`). **The specificity arm is the manifest that did not change**, so a reader reporting "changed" for all three is excluded. **A second column-confusion of my own, recorded beside the probe defect above rather than smoothed:** an earlier reading gave `+77 / −25`, taking `77` from `--stat`'s **per-file** column for `scrum` — that file's *changed lines*, 58 + 19 — and `25` from the **summary** line's deletions across both files. Neither number is wrong; they are two columns counting different things, and one read of both is a third number that measures nothing.
 
-**Artifact-Acceptance Record.** `core/ADRs/ADR-187-pack-default-is-the-declared-kind-set.md` · `core/packs/README.md` § A pack's default is the kind set it declares · `core/deploy/tests/fixtures/packs/pack-default/{pd-base,pd-plan}/pack.toml` · the seven `PD-*` arms in `core/deploy/tools/check-work-hierarchy.py`. All five paths exist at their declared canonical locations on the release branch; each is named in the § File Change Matrix; **`deliverable_state: artifact-accepted`**.
+**Artifact-Acceptance Record.** `core/ADRs/ADR-190-pack-default-is-the-declared-kind-set.md` · `core/packs/README.md` § A pack's default is the kind set it declares · `core/deploy/tests/fixtures/packs/pack-default/{pd-base,pd-plan}/pack.toml` · the seven `PD-*` arms in `core/deploy/tools/check-work-hierarchy.py`. All five paths exist at their declared canonical locations on the release branch; each is named in the § File Change Matrix; **`deliverable_state: artifact-accepted`**.
 
 ---
 
@@ -754,7 +754,7 @@ A methodology pack can already declare kinds, fields and criteria — but nothin
 
 **`artifact-accepted`** for **#6366** — the deliverable is the authored Kanban content itself, at its declared canonical path (`core/packs/kanban/pack.toml`). Same basis as its siblings': § Operational Deployment Manifest enumerates all three Layer-2 propagation classes and none fires, so `deployed-copy-synced` would be a fiction. The Artifact-Acceptance Record row is populated in § Verification Evidence above.
 
-**`artifact-accepted`** for **#6380** — the deliverable is the rule, its record and the arms under it, at their declared canonical paths (`core/packs/README.md` § A pack's default is the kind set it declares, `core/deploy/tests/fixtures/packs/pack-default/{pd-base,pd-plan}/pack.toml`, the seven `PD-*` arms in `core/deploy/tools/check-work-hierarchy.py`, and `core/ADRs/ADR-187-*.md`). Same basis as its siblings': § Operational Deployment Manifest enumerates all three Layer-2 propagation classes and none fires, so `deployed-copy-synced` would be a fiction. The Artifact-Acceptance Record row is populated in § Verification Evidence above.
+**`artifact-accepted`** for **#6380** — the deliverable is the rule, its record and the arms under it, at their declared canonical paths (`core/packs/README.md` § A pack's default is the kind set it declares, `core/deploy/tests/fixtures/packs/pack-default/{pd-base,pd-plan}/pack.toml`, the seven `PD-*` arms in `core/deploy/tools/check-work-hierarchy.py`, and `core/ADRs/ADR-190-*.md`). Same basis as its siblings': § Operational Deployment Manifest enumerates all three Layer-2 propagation classes and none fires, so `deployed-copy-synced` would be a fiction. The Artifact-Acceptance Record row is populated in § Verification Evidence above.
 
 **`artifact-accepted`** for **#6378** — the deliverable is the boundary record itself, at its declared canonical paths (`core/schemas/work-item-type-schema.md` §1.5 + §7.3, three rows in `core/standards/gate-efficacy-standard.md`, a pointer in `core/packs/README.md`, and `core/ADRs/ADR-188-*.md`). Work whose definition of done **is** the artifact reaches this state, not `deployed-copy-synced`: the release has **no** Layer-2 propagation target (§ Operational Deployment Manifest enumerates all three classes and none fires), so declaring a deployed-copy state would be a fiction. The Artifact-Acceptance Record rows are populated in § Verification Evidence above.
 
@@ -786,7 +786,7 @@ A methodology pack can already declare kinds, fields and criteria — but nothin
 - **#6363** — *Carry provenance on kit content so its source is auditable.* `size:M`. Declares `source` as the fifth base field on every `criteria.checks[]` entry and every `fields.kind_specific[]` FieldDecl, projecting as `x-pmo-content-source[]`.
 - **#6365** — *Author the Scrum-shaped kit content.* `size:L`. Nine criteria arrays across three kinds.
 - **#6366** — *Author the Kanban-shaped kit content.* `size:M`. Three criteria arrays on one kind, with the pull-limit `gate` block deliberately preserved as a stub.
-- **#6380** — *Ship a default kit with every methodology pack.* `size:M`. Renders as "a pack's default is the kind set it declares"; adds two fixtures, seven self-test arms and ADR-187.
+- **#6380** — *Ship a default kit with every methodology pack.* `size:M`. Renders as "a pack's default is the kind set it declares"; adds two fixtures, seven self-test arms and ADR-190.
 - **#6909** — Stage 4 Release Planning sub-task; the plan source and the operator decision record.
 - **#6970** / **#6974** / **#6978** / **#6982** / **#6986** — Stage 5 Solutioning sub-tasks for #6378 / #6363 / #6365 / #6366 / #6380.
 - **#6971** / **#6975** / **#6979** / **#6983** / **#6987** — Stage 6 Engineering sub-tasks.

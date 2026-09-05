@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-187 — A methodology pack's default is the kind set it declares, and no pack-header field names a kit"
+title: "ADR-190 — A methodology pack's default is the kind set it declares, and no pack-header field names a kit"
 status: Accepted (operator-ratified at the kit-content-and-defaults Stage 5 Collective Review scope-lock 2026-09-04; one ground of the rejection re-grounded at Stage 6 after an independent Phase A6.5 adversarial pass falsified it by execution)
 date: 2026-09-04
 release: kit-content-and-defaults
@@ -18,13 +18,15 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-187 — A methodology pack's default is the kind set it declares, and no pack-header field names a kit
+# ADR-190 — A methodology pack's default is the kind set it declares, and no pack-header field names a kit
 
 ## Status
 
 **Accepted.** Operator-ratified at the `kit-content-and-defaults` Stage 5 Collective Review scope-lock on 2026-09-04.
 
 **One of the four grounds under D3 was re-grounded at Stage 6 and the record says so rather than shipping the original.** An independent Phase A6.5 adversarial review falsified ground 2 *by execution* — it built two conforming fixture roots differing by one directory and showed the property that ground claimed the rejected option would create is **already present**. The decision is unchanged and the record is stronger: it now rests on a ground that is true. The original wording, and why it was wrong, are preserved in D3 so a later reader does not re-derive the falsified premise and reopen a settled question on it.
+
+**Numbering provenance — `187 → 190`.** Held **ADR-187** branch-local; renumbered to **ADR-190** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 187. In-release citations that read "ADR-187" denote this record.
 
 ## Context
 

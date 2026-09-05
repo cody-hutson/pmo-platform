@@ -162,7 +162,7 @@ The caveat worth naming is the one D5 already records rather than a new one: a r
 - [ADR-170](ADR-170-portfolio-framework-axis-lands-as-template-registry-subtree.md) — the portfolio-framework axis cited for F5: variability that is not work-item-type variability does not belong in the type layer.
 - [ADR-180](ADR-180-work-item-kit-first-class-unit.md) — froze the kit as a first-class unit; its archetype-neutral sense of *kit* is the sense F6's neutrality invariant uses. This record is subordinate to it.
 - [ADR-189](ADR-189-kit-content-provenance-key.md) — sibling record from this same release; the `source` key it makes required at two altitudes is candidate 5 of Set 1's placement run above.
-- [ADR-187](ADR-187-pack-default-is-the-declared-kind-set.md) — sibling record from this same release; decides what a pack's default kind set is, over the same grammar this record classifies.
+- [ADR-190](ADR-190-pack-default-is-the-declared-kind-set.md) — sibling record from this same release; decides what a pack's default kind set is, over the same grammar this record classifies.
 
 ## Cross-references
 

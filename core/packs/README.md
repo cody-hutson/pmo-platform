@@ -280,7 +280,7 @@ pack adds no row here, no fixture and no check. Nothing in a pack header points 
 default: the default *is* the declaration, and a pointer would make it less local
 rather than more findable. Why the alternative — a pack-header field naming a kit — is
 rejected, and what would make such a field earn its place later, is decided in
-[ADR-187](../ADRs/ADR-187-pack-default-is-the-declared-kind-set.md).
+[ADR-190](../ADRs/ADR-190-pack-default-is-the-declared-kind-set.md).
 
 **Three states, and the third is not the first.** These are the three configurations a
 reader must hold apart to use the resolver correctly. Composition order, the merge
