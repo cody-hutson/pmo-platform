@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-185 — The boundary between methodology-configurable and platform-fixed is a classification over the existing grammar, mapped to the runners that execute it"
+title: "ADR-188 — The boundary between methodology-configurable and platform-fixed is a classification over the existing grammar, mapped to the runners that execute it"
 status: Accepted (operator-ratified at the kit-content-and-defaults Stage 5 Collective Review scope-lock 2026-09-04)
 date: 2026-09-04
 release: kit-content-and-defaults
@@ -20,13 +20,15 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-185 — The boundary between methodology-configurable and platform-fixed is a classification over the existing grammar, mapped to the runners that execute it
+# ADR-188 — The boundary between methodology-configurable and platform-fixed is a classification over the existing grammar, mapped to the runners that execute it
 
 ## Status
 
 **Accepted.** Operator-ratified at the `kit-content-and-defaults` Stage 5 Collective Review scope-lock on 2026-09-04.
 
 This section is a projection of the frontmatter `status:` field, which is the value-bearing surface per [`adr-schema.md`](../schemas/adr-schema.md) §3; the two are reconciled body → frontmatter, never the inverse.
+
+**Numbering provenance — `185 → 188`.** Held **ADR-185** branch-local; renumbered to **ADR-188** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 185. In-release citations that read "ADR-185" denote this record.
 
 ## Context
 

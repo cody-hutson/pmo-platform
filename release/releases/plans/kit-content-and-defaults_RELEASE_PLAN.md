@@ -175,7 +175,7 @@ Selected under multi-trigger resolution (`cross-cutting` > `novel` > `routine`),
 core/schemas/work-item-type-schema.md                                      edit
 core/standards/gate-efficacy-standard.md                                   edit
 core/packs/README.md                                                       edit
-core/ADRs/ADR-185-pack-configurable-vs-platform-fixed-boundary.md          add
+core/ADRs/ADR-188-pack-configurable-vs-platform-fixed-boundary.md          add
 
 # ── #6363 · content provenance (wave 2) ──
 core/ADRs/ADR-186-kit-content-provenance-key.md                            add
@@ -285,7 +285,7 @@ Dependency-ordered. Three waves driven by the six edges, on one branch under P0 
 
 | Card | Write-set path | Tier-0 ∩ | Skill-gate ∩ | Path class | Card class | Execution path |
 |------|----------------|----------|--------------|-----------|-----------|----------------|
-| #6378 | `core/schemas/work-item-type-schema.md` · `core/standards/gate-efficacy-standard.md` · `core/packs/README.md` · `core/ADRs/ADR-185-*.md` | ∅ | ∅ | unconstrained | **unconstrained** | ordinary Engineering spoke |
+| #6378 | `core/schemas/work-item-type-schema.md` · `core/standards/gate-efficacy-standard.md` · `core/packs/README.md` · `core/ADRs/ADR-188-*.md` | ∅ | ∅ | unconstrained | **unconstrained** | ordinary Engineering spoke |
 | #6363 | same three + `core/ADRs/ADR-186-*.md` | ∅ | ∅ | unconstrained | **unconstrained** | ordinary Engineering spoke |
 | #6365 | `core/packs/scrum/pack.toml` | ∅ | ∅ | unconstrained | **unconstrained** | ordinary Engineering spoke |
 | #6366 | `core/packs/kanban/pack.toml` | ∅ | ∅ | unconstrained | **unconstrained** | ordinary Engineering spoke |
@@ -538,7 +538,7 @@ Three of #6380's six criteria are graded against readings the shipped tree suppo
 | `check-work-hierarchy.py --validate-packs --pack-root core/packs` | **`COUNT 0`, exit 0** | The live corpus is untouched and still validates |
 | `claim-version.sh --verify-stamp` | **exit 0** | `verify-stamp OK` |
 | `verify-release-plan.sh` provenance-survival | **3 PASS + PROV-DELTA PASS** | `form=A date=2026-09-04`; `prov-no-loss (comment_elements=3 all present in the plan)` |
-| `renumber-adr.py --detect` | **ADR-185 BINDS** | `ANCHOR 184 · NEXT-FREE 185` |
+| `renumber-adr.py --detect` | **ADR-188 BINDS** | `ANCHOR 184 · NEXT-FREE 185` |
 | `check-adr-durability.py` | **0 findings** | One `R2-COUNT` finding on a drifting live-corpus count was raised and fixed by citing the deriving command |
 | `check-release-links.py --check-anchors` | **0 broken links** | One warn-mode missing-anchor on the explicit `{#…}` heading anchor — a **standing corpus-wide condition**, not introduced here (control: an existing cross-reference to another discipline file warns identically) |
 | Falsification arms | **21 arms executed** | Every run self-reported `packs_read=3 rules_evaluated=20`; every subject zero paired with a control firing on the same corpus and invocation. One arm self-rejected on its landed-check and was discarded rather than reported |
@@ -578,7 +578,7 @@ Three of #6380's six criteria are graded against readings the shipped tree suppo
 
 **Two probe defects were self-caught and are published rather than smoothed.** (1) A block-scoped reader used an end anchor missing a trailing period inside the bold markers, so `str.find` returned `-1` and the "block" silently became *the rest of the file* — reporting **4** occurrences of a phrase the block does not contain. Corrected by asserting every anchor index is non-negative and ordered, and by printing the block length against the file length. (2) A polarity control arm searched for `absent from` where the corpus writes `**absent** from`; the markdown emphasis blinded the substring reader and the control returned **0**, so the subject zero rested on nothing. Corrected with a markup-stripping reader, after which all three sibling rows fire. **Both are the same hazard: a control arm proves the reader is live, not that the pattern encodes the right mechanism.**
 
-**ADR index:** this release adds **three** records under `core/ADRs/` — ADR-185, ADR-186, ADR-187 — allocated sequentially from the `origin/main` anchor of 184. `renumber-adr.py --detect` is run **first** by each authoring spoke; branch claims are detection-only and non-binding.
+**ADR index:** this release adds **three** records under `core/ADRs/` — ADR-188, ADR-186, ADR-187 — allocated sequentially from the `origin/main` anchor of 184. `renumber-adr.py --detect` is run **first** by each authoring spoke; branch claims are detection-only and non-binding.
 
 ### #6365 — C4 self-verification (executed 2026-09-04)
 
@@ -756,7 +756,7 @@ A methodology pack can already declare kinds, fields and criteria — but nothin
 
 **`artifact-accepted`** for **#6380** — the deliverable is the rule, its record and the arms under it, at their declared canonical paths (`core/packs/README.md` § A pack's default is the kind set it declares, `core/deploy/tests/fixtures/packs/pack-default/{pd-base,pd-plan}/pack.toml`, the seven `PD-*` arms in `core/deploy/tools/check-work-hierarchy.py`, and `core/ADRs/ADR-187-*.md`). Same basis as its siblings': § Operational Deployment Manifest enumerates all three Layer-2 propagation classes and none fires, so `deployed-copy-synced` would be a fiction. The Artifact-Acceptance Record row is populated in § Verification Evidence above.
 
-**`artifact-accepted`** for **#6378** — the deliverable is the boundary record itself, at its declared canonical paths (`core/schemas/work-item-type-schema.md` §1.5 + §7.3, three rows in `core/standards/gate-efficacy-standard.md`, a pointer in `core/packs/README.md`, and `core/ADRs/ADR-185-*.md`). Work whose definition of done **is** the artifact reaches this state, not `deployed-copy-synced`: the release has **no** Layer-2 propagation target (§ Operational Deployment Manifest enumerates all three classes and none fires), so declaring a deployed-copy state would be a fiction. The Artifact-Acceptance Record rows are populated in § Verification Evidence above.
+**`artifact-accepted`** for **#6378** — the deliverable is the boundary record itself, at its declared canonical paths (`core/schemas/work-item-type-schema.md` §1.5 + §7.3, three rows in `core/standards/gate-efficacy-standard.md`, a pointer in `core/packs/README.md`, and `core/ADRs/ADR-188-*.md`). Work whose definition of done **is** the artifact reaches this state, not `deployed-copy-synced`: the release has **no** Layer-2 propagation target (§ Operational Deployment Manifest enumerates all three classes and none fires), so declaring a deployed-copy state would be a fiction. The Artifact-Acceptance Record rows are populated in § Verification Evidence above.
 
 ### Reversibility
 
