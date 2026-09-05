@@ -495,13 +495,23 @@ def criteria_from_body(body):
     return crits
 
 
-def fetch_criteria(issues, repo):
+def fetch_criteria(issues, repo=None):
+    """Read criteria live via `gh`.
+
+    NO REPOSITORY IS NAMED IN THIS FILE. With `--repo` unset the `gh` invocation
+    omits the flag entirely and `gh` resolves the repository from the checkout's own
+    remote — which is both the portable behaviour and the reason a repo slug never
+    needs to be a literal here. A hardcoded default would be operator-identifying
+    data in a tracked `release/` file, which the repository-integrity
+    depersonalization gate correctly refuses.
+    """
     out = {}
     for issue in issues:
-        proc = subprocess.run(
-            ["gh", "issue", "view", issue, "--repo", repo,
-             "--json", "body", "--jq", ".body"],
-            capture_output=True, text=True)
+        cmd = ["gh", "issue", "view", issue]
+        if repo:
+            cmd += ["--repo", repo]
+        cmd += ["--json", "body", "--jq", ".body"]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             continue
         crits = criteria_from_body(proc.stdout)
@@ -730,7 +740,10 @@ def main(argv=None):
     parser.add_argument("--ordinals-only", action="store_true",
                         help="run the plan-local ordinal limb alone (offline, "
                              "deterministic — the CI surface)")
-    parser.add_argument("--repo", default="cody-hutson/pmo-platform")
+    parser.add_argument("--repo", default=None,
+                        help="OWNER/REPO for --fetch; omit to let `gh` resolve it "
+                             "from the checkout's own remote (the default — no "
+                             "repository slug is hardcoded in this file)")
     parser.add_argument("--output-format", choices=("tsv",), default="tsv")
     parser.add_argument("--self-test", action="store_true",
                         help="run the falsification arms and exit")
