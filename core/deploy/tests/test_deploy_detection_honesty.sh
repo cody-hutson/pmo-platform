@@ -362,12 +362,21 @@ fi
 printf '\nArm C — unrepairable drift: residual survives the repair and fails\n'
 
 printf '\n<!-- staged divergence: test_deploy_detection_honesty.sh arm C -->\n' >> "${PROBE_TGT}"
+# THE UNWRITABLE BIT MUST SIT ON THE PARENT, NOT ON THE SKILL DIRECTORY. deploy.sh
+# runs `chmod -R u+w "$target"` as the FIRST step of its own repair path, where
+# $target is the skill directory. Staging the read-only state only there is undone
+# by the deploy before it copies, so the drift is repairable and exiting 0 is
+# CORRECT — an arm staged that way asserts a failure it can never reach, and reports
+# a green deploy as a defect. That `chmod -R u+w` cannot reach ${MIRROR}: both
+# removing the stale entry and recreating it need write permission on the PARENT,
+# so the residual survives the repair and the deploy must report it.
 chmod -R a-w "${MIRROR}/${PROBE}" 2>/dev/null || true
+chmod a-w "${MIRROR}" 2>/dev/null || true
 
-if [ -w "${MIRROR}/${PROBE}" ]; then
-  report "setup: target for '${PROBE}' is unwritable" 0 "chmod did not take (running as root?)"
+if [ -w "${MIRROR}" ]; then
+  report "setup: mirror parent unwritable, so the drift is truly unrepairable" 0 "chmod did not take (running as root?)"
 else
-  report "setup: target for '${PROBE}' is unwritable" 1
+  report "setup: mirror parent unwritable, so the drift is truly unrepairable" 1
 fi
 
 run_deploy "${SBX}/run-residual.log"
@@ -395,6 +404,7 @@ else
     "unwritable cause reported without its remedy string"
 fi
 
+chmod u+w "${MIRROR}" 2>/dev/null || true
 chmod -R u+w "${MIRROR}/${PROBE}" 2>/dev/null || true
 
 # --- Live-tree safety proof -------------------------------------------------
