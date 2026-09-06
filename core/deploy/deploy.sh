@@ -5017,28 +5017,28 @@ mirror_pair_set() {
 # Reusing it would admit this map into that population and make Check 77 report a
 # phantom desync against a set it has nothing to do with. Two families, no collision.
 hook_publish_set() {
-  # hook-publish-set: BEGIN holder=deploy-script sep=pipe field=1
+  # hook-publish-set: BEGIN holder=deploy-script sep=triple-pipe field=1
   local -a _hps_rows=(
-    "core/hooks/*.sh|*.sh|entrypoint|glob"
-    "core/deploy/tools/path-leak-patterns.sh|path-leak-patterns.sh|co-deployed-lib|exact"
-    "core/deploy/lib-instance-path.sh|lib-instance-path.sh|co-deployed-lib|exact"
-    "core/hooks/lib/dep-resolve.sh|lib/dep-resolve.sh|co-deployed-lib|exact"
-    "core/hooks/lib/positional-issueref.awk|lib/positional-issueref.awk|co-deployed-lib|exact"
-    "core/hooks/lib/command-position.awk|lib/command-position.awk|co-deployed-lib|exact"
-    "core/hooks/lib/fragile-ref-patterns.sh|lib/fragile-ref-patterns.sh|co-deployed-lib|exact"
-    "core/hooks/lib/master-enable.sh|lib/master-enable.sh|co-deployed-lib|exact"
-    "core/hooks/lib/scope-guard.sh|lib/scope-guard.sh|co-deployed-lib|exact"
-    "core/hooks/.mode.template|.mode|mode-template|presence"
-    "core/hooks/deploy-check.mode.template|deploy-check.mode|mode-template|presence"
-    "core/hooks/.gh-path-leak-mode.template|.gh-path-leak-mode|mode-template|presence"
-    "core/hooks/.autonomy-mode.template|.autonomy-mode|mode-template|presence"
-    "core/hooks/.verify-session-config-mode.template|.verify-session-config-mode|mode-template|presence-optional"
-    "-|*-warn-log.jsonl|operator-state|glob"
-    "-|block-log.jsonl|operator-state|exact"
-    "-|allowlist-additions.log|operator-state|exact"
-    "-|*.mode|operator-state|glob"
-    "core/hooks/tests/**|-|not-deployed|glob"
-    "core/hooks/testdata/**|-|not-deployed|glob"
+    "core/hooks/*.sh|||*.sh|||entrypoint|||glob"
+    "core/deploy/tools/path-leak-patterns.sh|||path-leak-patterns.sh|||co-deployed-lib|||exact"
+    "core/deploy/lib-instance-path.sh|||lib-instance-path.sh|||co-deployed-lib|||exact"
+    "core/hooks/lib/dep-resolve.sh|||lib/dep-resolve.sh|||co-deployed-lib|||exact"
+    "core/hooks/lib/positional-issueref.awk|||lib/positional-issueref.awk|||co-deployed-lib|||exact"
+    "core/hooks/lib/command-position.awk|||lib/command-position.awk|||co-deployed-lib|||exact"
+    "core/hooks/lib/fragile-ref-patterns.sh|||lib/fragile-ref-patterns.sh|||co-deployed-lib|||exact"
+    "core/hooks/lib/master-enable.sh|||lib/master-enable.sh|||co-deployed-lib|||exact"
+    "core/hooks/lib/scope-guard.sh|||lib/scope-guard.sh|||co-deployed-lib|||exact"
+    "core/hooks/.mode.template|||.mode|||mode-template|||presence"
+    "core/hooks/deploy-check.mode.template|||deploy-check.mode|||mode-template|||presence"
+    "core/hooks/.gh-path-leak-mode.template|||.gh-path-leak-mode|||mode-template|||presence"
+    "core/hooks/.autonomy-mode.template|||.autonomy-mode|||mode-template|||presence"
+    "core/hooks/.verify-session-config-mode.template|||.verify-session-config-mode|||mode-template|||presence-optional"
+    "-|||*-warn-log.jsonl|||operator-state|||glob"
+    "-|||block-log.jsonl|||operator-state|||exact"
+    "-|||allowlist-additions.log|||operator-state|||exact"
+    "-|||*.mode|||operator-state|||glob"
+    "core/hooks/tests/**|||-|||not-deployed|||glob"
+    "core/hooks/testdata/**|||-|||not-deployed|||glob"
   )
   # hook-publish-set: END
   printf '%s\n' "${_hps_rows[@]}"
@@ -5190,7 +5190,7 @@ for line in sys.stdin.read().split('\n'):
     line = line.strip()
     if not line:
         continue
-    f = line.split('|')
+    f = line.split('|||')
     if len(f) != 4:
         malformed.append(line)
         continue
@@ -5198,7 +5198,7 @@ for line in sys.stdin.read().split('\n'):
 
 if malformed:
     out('ARMA', 'FAILPROBE',
-        '%d malformed row(s) in hook_publish_set() (want 4 pipe-separated fields): %s'
+        '%d malformed row(s) in hook_publish_set() (want 4 |||-separated fields): %s'
         % (len(malformed), '; '.join(malformed[:4])))
     sys.exit(0)
 if not rows:
@@ -5365,7 +5365,7 @@ try:
         with open(os.path.join(_cdep, _n), 'wb') as _fh:
             _fh.write(_depbytes)
 
-    _cpop = ['core/hooks/ctrl-same.sh', 'core/hooks/ctrl-diff.sh']
+    _cpop = ['core/hooks/ctrl-same.sh', 'core/hooks/ctrl-diff.sh']  # deploy-path-literal: allow — synthetic control-arm fixture written into this self-test's temp tree; it never exists in the repo by construction, and the arm's purpose is to prove compare_pair still distinguishes MATCH from DRIFT from ABSENT
     _cpairs = dict(expand(('core/hooks/*.sh', '*.sh', 'entrypoint', 'glob'), _cpop))
     _croot = os.path.join(_ctrl_dir, 'src')
 
@@ -5374,14 +5374,14 @@ try:
     if _expanded:
         # Every assertion goes through compare_pair — the SAME callable the row
         # loop uses — so a mutation to the comparison is visible here.
-        _same = compare_pair(_croot, 'core/hooks/ctrl-same.sh', _cdep,
-                             _cpairs['core/hooks/ctrl-same.sh'])[0] == 'MATCH'
-        _diff = compare_pair(_croot, 'core/hooks/ctrl-diff.sh', _cdep,
-                             _cpairs['core/hooks/ctrl-diff.sh'])[0] == 'DRIFT'
+        _same = compare_pair(_croot, 'core/hooks/ctrl-same.sh', _cdep,  # deploy-path-literal: allow — synthetic control-arm fixture written into this self-test's temp tree; it never exists in the repo by construction, and the arm's purpose is to prove compare_pair still distinguishes MATCH from DRIFT from ABSENT
+                             _cpairs['core/hooks/ctrl-same.sh'])[0] == 'MATCH'  # deploy-path-literal: allow — synthetic control-arm fixture written into this self-test's temp tree; it never exists in the repo by construction, and the arm's purpose is to prove compare_pair still distinguishes MATCH from DRIFT from ABSENT
+        _diff = compare_pair(_croot, 'core/hooks/ctrl-diff.sh', _cdep,  # deploy-path-literal: allow — synthetic control-arm fixture written into this self-test's temp tree; it never exists in the repo by construction, and the arm's purpose is to prove compare_pair still distinguishes MATCH from DRIFT from ABSENT
+                             _cpairs['core/hooks/ctrl-diff.sh'])[0] == 'DRIFT'  # deploy-path-literal: allow — synthetic control-arm fixture written into this self-test's temp tree; it never exists in the repo by construction, and the arm's purpose is to prove compare_pair still distinguishes MATCH from DRIFT from ABSENT
         # The NOT-DEPLOYED branch keys on the deployed side being unreadable. If it
         # ever returned a digest for a missing path, an absent deployed file would
         # silently count as a match.
-        _absent = compare_pair(_croot, 'core/hooks/ctrl-same.sh', _cdep,
+        _absent = compare_pair(_croot, 'core/hooks/ctrl-same.sh', _cdep,  # deploy-path-literal: allow — synthetic control-arm fixture written into this self-test's temp tree; it never exists in the repo by construction, and the arm's purpose is to prove compare_pair still distinguishes MATCH from DRIFT from ABSENT
                                'ctrl-never-written.sh')[0] == 'ABSENT'
 
     _ctrl_pass = _expanded and _same and _diff and _absent
