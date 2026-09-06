@@ -4890,6 +4890,585 @@ mirror_pair_set() {
   printf '%s\n' "${_mps_rows[@]}"
 }
 
+# ─── hook_publish_set — the S4 HOOK TIER's declared publish map (TOP-LEVEL) ───
+#
+# WHAT THIS IS, AND WHY IT IS THE MISSING FAMILY MEMBER RATHER THAN A NEW IDEA.
+# ADR-017 Decision 1 places the deployed hook tree in S4 (runtime deployment) and
+# states the invariant every S4 tier carries: S4 is DERIVED from S1 and must always
+# be regenerable — never hand-edited. Checks 7 / 9 / 11 / 12 already assert that
+# invariant for the package, rules, harness and user-local-skills tiers. The hook
+# tier had a publisher (setup-workspace.sh install_hooks() / --refresh-hooks, which
+# update.sh delegates to) and NO assertion that the publisher's output matches its
+# input. Check 79 is that assertion. It OBSERVES; it never writes the deployed tree.
+#
+# A FUNCTION, NOT A GLOBAL ARRAY, for the reasons stated on mirror_pair_set() above:
+# `local -a` is not legal at top level, and a bare global array is rewritable by any
+# later caller, so it is not a single source of truth. Same convention, extended.
+#
+# FOUR PIPE-SEPARATED FIELDS: <source>|<dest>|<class>|<match>.
+#   source  repo-relative path or glob; "-" means the deployed artifact HAS no source
+#   dest    path or glob RELATIVE TO THE DEPLOYED HOOKS ROOT; "-" means not published
+#   class   entrypoint | co-deployed-lib | mode-template | operator-state | not-deployed
+#   match   glob | exact | presence | presence-optional
+#
+# THE DEST FIELD IS ROOT-RELATIVE, DELIBERATELY. mirror_pair_set() embeds $DEPLOY_ROOT
+# because its pairs live under $HOME/.claude/; the hook tier lives under a DIFFERENT
+# root (${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/.claude/hooks — the only root at which
+# deployed hooks actually exist, and the one Check 71 already resolves). Naming the
+# root once in the check, rather than 20 times here, means a row can never disagree
+# with the resolver about which tree it is describing.
+#
+# WHY `entrypoint` IS ONE GLOB ROW AND NOT 23 ENUMERATED ROWS. install_hooks()
+# iterates "${SOURCE_REPO}/core/hooks/"*.sh, so the population is DERIVED by the
+# publisher. Enumerating it here would create a second hand-maintained holder of a
+# set the publisher already owns — precisely the "hand-maintained enumerations …
+# let the checks pass over populations they never saw" defect this milestone exists
+# to remove. A new hook needs no edit to this map.
+#
+# MATCH PRECEDENCE IS EXACT-BEFORE-GLOB, IN DECLARATION ORDER, AND IT IS LOAD-BEARING
+# IN TWO PLACES — both measured, neither hypothetical:
+#   1. `path-leak-patterns.sh` and `lib-instance-path.sh` are published into the hooks
+#      root from core/deploy/, NOT core/hooks/. They match the `*.sh` entrypoint glob
+#      by shape. Without exact-first they would be compared against a core/hooks/
+#      source that does not exist and reported unsourced — 2 permanent false
+#      positives, and the reason a basename-keyed walk cannot work here at all.
+#   2. `.mode` and `deploy-check.mode` match the `*.mode` operator-state glob. Without
+#      exact-first, operator-state would shadow their mode-template rows and the check
+#      would silently stop asserting that the four postures were ever installed.
+#
+# GLOB SEMANTICS ARE POSIX: `*` does NOT cross `/`, `**` does. That is what keeps the
+# `*.sh` entrypoint row from claiming `lib/dep-resolve.sh`, and what lets the
+# not-deployed rows cover the tests/ and testdata/ subtrees wholesale.
+#
+# `mode-template` IS PRESENCE-ONLY, AND A CONTENT COMPARE HERE WOULD BE A LATENT
+# FALSE POSITIVE — worse than a live one, because it reads GREEN at authoring time.
+# All four deployed mode files happen to equal their template today (every posture is
+# still `warn`); the check would turn red the first time an operator flips one to
+# `enforce`, which is the entire purpose of the file. install_mode_template_if_missing
+# already prints `PRESERVED (operator-state)` for exactly this reason. This is the
+# `config.toml` row of core/rules/harness-deployment.md § Operator-State Preservation
+# Policy — "Only if target doesn't exist … Presence-only check (template vs.
+# customized values diverge by design)" — projected onto the hook tier.
+#
+# `operator-state` ROWS CARRY GLOBS WHERE THE HARNESS ALLOWLIST CARRIES LITERAL
+# FILENAMES. Forced by the population, and stated rather than silently deviated:
+# these runtime artifacts are GENERATIVE — every new block-*.sh hook produces its own
+# <name>-warn-log.jsonl. A literal list would need an edit per hook and would silently
+# under-cover until somebody made it. Same role as HARNESS_OPERATOR_STATE ("NEVER
+# touched (target-only operational log) · Skipped (target-only file)"), different
+# shape because the population is open rather than closed.
+#
+# ONE CLASSED DECLARATION INSTEAD OF THE HARNESS'S TWO PARALLEL ARRAYS. harness-
+# deployment.md splits HARNESS_LIST from HARNESS_OPERATOR_STATE. One classed emitter
+# is strictly safer here for the reason this milestone exists — two holders of one set
+# desync. The cost is real and is recorded rather than hidden: that document's
+# "append the filename to HARNESS_OPERATOR_STATE" instruction does not transfer
+# verbatim to hooks; the equivalent act is adding a row with class `operator-state`.
+#
+# THE MARKER IS A NEW FAMILY — `hook-publish-set:`, DELIBERATELY NOT `mirror-pair-set:`.
+# Check 77 enumerates mirror-pair holders from that other marker and diffs their sets.
+# Reusing it would admit this map into that population and make Check 77 report a
+# phantom desync against a set it has nothing to do with. Two families, no collision.
+hook_publish_set() {
+  # hook-publish-set: BEGIN holder=deploy-script sep=pipe field=1
+  local -a _hps_rows=(
+    "core/hooks/*.sh|*.sh|entrypoint|glob"
+    "core/deploy/tools/path-leak-patterns.sh|path-leak-patterns.sh|co-deployed-lib|exact"
+    "core/deploy/lib-instance-path.sh|lib-instance-path.sh|co-deployed-lib|exact"
+    "core/hooks/lib/dep-resolve.sh|lib/dep-resolve.sh|co-deployed-lib|exact"
+    "core/hooks/lib/positional-issueref.awk|lib/positional-issueref.awk|co-deployed-lib|exact"
+    "core/hooks/lib/command-position.awk|lib/command-position.awk|co-deployed-lib|exact"
+    "core/hooks/lib/fragile-ref-patterns.sh|lib/fragile-ref-patterns.sh|co-deployed-lib|exact"
+    "core/hooks/lib/master-enable.sh|lib/master-enable.sh|co-deployed-lib|exact"
+    "core/hooks/lib/scope-guard.sh|lib/scope-guard.sh|co-deployed-lib|exact"
+    "core/hooks/.mode.template|.mode|mode-template|presence"
+    "core/hooks/deploy-check.mode.template|deploy-check.mode|mode-template|presence"
+    "core/hooks/.gh-path-leak-mode.template|.gh-path-leak-mode|mode-template|presence"
+    "core/hooks/.autonomy-mode.template|.autonomy-mode|mode-template|presence"
+    "core/hooks/.verify-session-config-mode.template|.verify-session-config-mode|mode-template|presence-optional"
+    "-|*-warn-log.jsonl|operator-state|glob"
+    "-|block-log.jsonl|operator-state|exact"
+    "-|allowlist-additions.log|operator-state|exact"
+    "-|*.mode|operator-state|glob"
+    "core/hooks/tests/**|-|not-deployed|glob"
+    "core/hooks/testdata/**|-|not-deployed|glob"
+  )
+  # hook-publish-set: END
+  printf '%s\n' "${_hps_rows[@]}"
+}
+
+# ─── hook_parity_remedy — the republish instruction, declared ONCE (TOP-LEVEL) ─
+#
+# Every Check 79 finding that names a fix names THIS string. D-5651-1 — which carrier
+# regenerates the S4 hook tier, the installer (status quo) or `deploy.sh --deploy` —
+# is an OPEN operator decision this check does not resolve. Emitting the remedy from
+# one declared constant means settling it later is a one-line edit here rather than a
+# sweep through every finding string.
+hook_parity_remedy() {
+  printf '%s' 'republish via the hook carrier: bash docs/scripts/setup-workspace.sh --refresh-hooks (a durable pre-refresh snapshot is captured first; --list-hook-snapshots / --restore-hooks reverse it)'
+}
+
+# ─── _c79_compute_verdict — Check 79's pure emitter (TOP-LEVEL) ───────────────
+#
+# Echoes TAB-separated verdict lines; the caller renders them. Same pure-emitter
+# convention as _c9_undeclared_scan / _c78_compute_verdict, and hoisted to top level
+# for the reason stated on flag_not_evaluated: bash registers a nested function only
+# when execution REACHES its definition, so a body sited inside cmd_check() is
+# reachable only from below its own definition point.
+#
+# TWO ARMS, ASYMMETRIC BY DESIGN — this is Check 71's own declared split reused:
+# "deadline arm repo-derivable + enforcing; evidence arm operator-local + advisory".
+#
+#   ARM A — MAP CLOSURE. Derives the publisher's publish acts READ-ONLY from
+#   install_hooks() and asserts set equality against the map above, both directions.
+#   It needs no deployed tree, runs in CI, and is green by construction at landing
+#   because it asserts a relation between two REPOSITORY files. Every degradation
+#   direction fails loud: a co-deploy the map lacks, a declared pair the publisher
+#   dropped, and — the one that matters most — a derivation that returns NOTHING.
+#   ZERO DERIVED IS A HARD FAIL ON EVERY MODE, never a pass. A publisher refactor
+#   that breaks the extraction would otherwise read as "no undeclared publish acts",
+#   which is the failed-probe-as-clean-result inversion.
+#
+#   ARM B — BYTE PARITY. Operator-local and ADVISORY, so it is STRUCTURALLY incapable
+#   of reddening CI on pre-existing drift (R-5 discharged by construction, not by a
+#   warn-mode promise that a later cohort flip could revoke). No deployed tree — which
+#   is every CI runner — resolves to NOT-EVALUATED, a withheld verdict, never a clean
+#   one.
+#
+# RESIDUAL ARMS RUN IN BOTH DIRECTIONS. A deployed file matching no row, and a tracked
+# source under core/hooks/ matching no row, are both reported UNCLASSIFIED. Without
+# them the map itself becomes the blind spot it was written to remove.
+#
+# THE THIRD INPUT IS GIT HISTORY, NOT THE RECORDED CHECKSUM BASELINE. hook_checksums
+# in <workspace>/.claude/.workspace-setup.state is the obvious third input and it is
+# WRONG: refresh_hooks_flow deliberately does not call write_state_file (that function
+# rebuilds the whole state document and would blank verified_artifacts), and no
+# persist_hook_checksums_to_state sibling exists — only the settings baseline got one.
+# So the baseline is never persisted after a refresh and self-latches: it matches
+# neither source nor deployed, and install_hook_with_checksum then takes its
+# PRESERVED (operator-edited) branch forever. A check consuming it would classify a
+# stale PLATFORM copy as an accepted OPERATOR edit and stay quiet — reintroducing,
+# inside the remedy, the exact silence this check exists to remove. A bounded
+# git-history walk distinguishes the two states honestly instead: STALE (the deployed
+# bytes ARE some historical revision of the mapped source — refreshable) versus
+# DIVERGENT (they match no revision within the cap — an operator decision, and a
+# republish will PRESERVE rather than fix it). Past the cap the verdict is
+# UNCLASSIFIED-DEPTH, never DIVERGENT — an unfinished search is not a finding.
+#
+# THE COMPARATOR CONTROL ARM RUNS BEFORE ANY VERDICT, and it is not ceremony. The
+# live tree can be — and on the authoring instance now IS — fully reconciled, so
+# Arm B's population of drift rows can legitimately be zero. A 0-of-0 "clean" is not
+# evidence the comparator works. The control feeds it a synthetic identical pair
+# (must report match) and a synthetic one-byte-flipped pair (must report drift), and
+# FAILs on every mode if it stops discriminating — Check 71's own CTRL: precedent,
+# "every verdict below would be unattributable". This also discharges the card's
+# control-arm acceptance criterion REPO-DERIVABLY, without anyone modifying a live
+# deployed hook — which no agent may do in any case: the deployed tree is Tier-0
+# floored by block-autonomy-ceiling.sh BLOCK-AUTONOMY-001.
+#
+# Emitted tokens (TAB-separated, one per line):
+#   CTRL   PASS|FAIL              <detail>
+#   ARMA   PASS|FAIL|FAILPROBE    <detail>
+#   ARMB   PASS|DRIFT|UNCLASSIFIED|NOT-EVAL   <detail>
+#   DENOM  <detail>
+#   NOTE   <detail>                (per-row diagnostics; never a verdict)
+#
+# FAIL VERSUS FAILPROBE IS THE MODE BOUNDARY, and the split is why it exists as two
+# tokens rather than one. FAIL is a genuine closure FINDING (a publish act the map
+# lacks, a declared pair the publisher dropped) and routes through flag_warn_or_issue,
+# so it respects warn-mode during the shakedown window like every other new gate.
+# FAILPROBE means the check COULD NOT MEASURE — an empty map, a derivation that
+# returned nothing, a publisher whose function body could not be located, a declared
+# source that does not exist. Those increment ISSUES on EVERY mode, deliberately
+# bypassing the warn-mode gate, because a broken probe reported as a warning is
+# indistinguishable from a clean run and would let the whole check rot silently. Same
+# posture Check 71 takes on its own control-arm and unreadable-constant arms.
+_c79_compute_verdict() {
+  local _repo="$1"
+  local _dep="$2"
+  local _pub="$3"
+  local _cap="$4"
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    printf 'ARMA\tFAILPROBE\tpython3 is unavailable, so the publisher-closure derivation did not run — a gate that cannot read its own input must not pass\n'
+    return 0
+  fi
+  if [[ ! -r "$_pub" ]]; then
+    printf 'ARMA\tFAILPROBE\tthe hook publisher is unreadable at %s — Arm A asserts a relation between two repository files and one of them is missing; this is a repo defect, not a benign absence\n' "$_pub"
+    return 0
+  fi
+
+  local _py
+  _py="$(mktemp)" || { printf 'ARMA\tFAILPROBE\tcould not create a temporary file for the verdict body\n'; return 0; }
+  /bin/cat > "$_py" <<'PYEOF'
+import hashlib
+import os
+import re
+import subprocess
+import sys
+
+repo, dep, pub = sys.argv[1], sys.argv[2], sys.argv[3]
+cap = int(sys.argv[4])
+
+def out(*parts):
+    sys.stdout.write('\t'.join(str(p) for p in parts) + '\n')
+
+# ── the declaration, read from the SINGLE emitter on stdin ──────────────────
+rows = []
+malformed = []
+for line in sys.stdin.read().split('\n'):
+    line = line.strip()
+    if not line:
+        continue
+    f = line.split('|')
+    if len(f) != 4:
+        malformed.append(line)
+        continue
+    rows.append(tuple(f))
+
+if malformed:
+    out('ARMA', 'FAILPROBE',
+        '%d malformed row(s) in hook_publish_set() (want 4 pipe-separated fields): %s'
+        % (len(malformed), '; '.join(malformed[:4])))
+    sys.exit(0)
+if not rows:
+    out('ARMA', 'FAILPROBE',
+        'hook_publish_set() emitted ZERO rows — the declaration is the check\'s whole input, '
+        'so an empty map is a failed probe, never a clean result')
+    sys.exit(0)
+
+PUBLISHABLE = ('entrypoint', 'co-deployed-lib', 'mode-template')
+EXACTISH = ('exact', 'presence', 'presence-optional')
+
+# POSIX glob semantics: '*' does not cross '/', '**' does.
+def gmatch(pat, s):
+    rx, i = [], 0
+    while i < len(pat):
+        if pat[i] == '*':
+            if pat[i:i + 2] == '**':
+                rx.append('.*')
+                i += 2
+                continue
+            rx.append('[^/]*')
+            i += 1
+            continue
+        rx.append(re.escape(pat[i]))
+        i += 1
+    return re.match('^' + ''.join(rx) + '$', s) is not None
+
+# EXACT-BEFORE-GLOB, declaration order. Both passes are separate loops on purpose:
+# a single loop would resolve in row order and let a glob shadow a later exact row.
+def classify(field, value):
+    for r in rows:
+        v = r[field]
+        if v == '-':
+            continue
+        if r[3] in EXACTISH and v == value:
+            return r
+    for r in rows:
+        v = r[field]
+        if v == '-':
+            continue
+        if r[3] == 'glob' and gmatch(v, value):
+            return r
+    return None
+
+def sha_path(p):
+    try:
+        with open(p, 'rb') as fh:
+            return hashlib.sha256(fh.read()).hexdigest()
+    except Exception:
+        return None
+
+# ── control arm: prove the comparator discriminates BEFORE any verdict ──────
+_a = b'hook-parity comparator control arm\n'
+_b = bytearray(_a)
+_b[0] ^= 0x01
+same = hashlib.sha256(_a).hexdigest() == hashlib.sha256(bytes(_a)).hexdigest()
+diff = hashlib.sha256(_a).hexdigest() != hashlib.sha256(bytes(_b)).hexdigest()
+if same and diff:
+    out('CTRL', 'PASS',
+        'comparator sensitivity=DRIFT on a one-byte-flipped pair, specificity=MATCH on an '
+        'identical pair — the sha-256 comparator discriminates, so the parity verdicts below '
+        'are attributable')
+else:
+    out('CTRL', 'FAIL',
+        'comparator no longer discriminates (identical-pair match=%s, flipped-pair drift=%s); '
+        'every parity verdict below would be unattributable' % (same, diff))
+
+# ── ARM A — map closure, derived read-only from the publisher ───────────────
+plines = open(pub, encoding='utf-8', errors='replace').read().split('\n')
+start = None
+for i, l in enumerate(plines):
+    if re.match(r'^install_hooks\(\)\s*\{', l):
+        start = i
+        break
+end = None
+if start is not None:
+    for j in range(start + 1, len(plines)):
+        if re.match(r'^\}\s*$', plines[j]):
+            end = j
+            break
+
+derived = set()
+scoped = 0
+if start is not None and end is not None:
+    body = plines[start:end + 1]
+    scoped = len(body)
+    srcvars = {}
+    for l in body:
+        m = re.search(r'\b([A-Za-z_][A-Za-z0-9_]*)_src="\$\{SOURCE_REPO\}/([^"]+)"', l)
+        if m:
+            srcvars[m.group(1)] = m.group(2)
+        # Anchored on the hooks root specifically. The same function also assigns
+        # `version_dst` (${WORKSPACE_ROOT}/.claude/.version) and `gh_dst` (the git
+        # hooks dir); neither publishes into the hook tree, and the anchor is what
+        # keeps them out. Scoping to the function body likewise keeps the three
+        # sibling _dst sites in verify_hooks_invokable / restore_hooks_flow /
+        # rehome_pretooluse_wiring out — unscoped, they over-match.
+        m = re.search(r'\b([A-Za-z_][A-Za-z0-9_]*)_dst="\$\{WORKSPACE_ROOT\}/\.claude/hooks/([^"]+)"', l)
+        if m and m.group(1) in srcvars:
+            derived.add((srcvars[m.group(1)], m.group(2)))
+        if re.search(r'for\s+\w+\s+in\s+"\$\{SOURCE_REPO\}/core/hooks/"\*\.sh', l):
+            derived.add(('core/hooks/*.sh', '*.sh'))
+        m = re.search(r'install_mode_template_if_missing\s+"([^"]+)"\s+"([^"]+)"', l)
+        if m:
+            derived.add(('core/hooks/' + m.group(1), m.group(2)))
+
+declared_pub = set((r[0], r[1]) for r in rows if r[2] in PUBLISHABLE)
+optional = set((r[0], r[1]) for r in rows if r[3] == 'presence-optional')
+
+# A declared source that does not exist is map rot: the row would compare against
+# nothing and report a clean pair forever.
+missing_src = sorted(
+    r[0] for r in rows
+    if r[0] != '-' and r[2] in PUBLISHABLE and '*' not in r[0]
+    and not os.path.exists(os.path.join(repo, r[0]))
+)
+
+if start is None or end is None:
+    out('ARMA', 'FAILPROBE',
+        'install_hooks() could not be located in the publisher, so ZERO publish acts were '
+        'derived — this is a failed probe, not an absence of undeclared publish acts')
+elif not derived:
+    out('ARMA', 'FAILPROBE',
+        'ZERO publish acts derived from install_hooks() across %d scoped lines — the publisher '
+        'was refactored out from under the derivation, or the extraction broke. A zero here is a '
+        'FAILED PROBE, never a pass: it is indistinguishable from a publisher that publishes '
+        'nothing.' % scoped)
+elif missing_src:
+    out('ARMA', 'FAILPROBE',
+        '%d declared source(s) do not exist in the repository, so their rows compare against '
+        'nothing and would report clean forever: %s'
+        % (len(missing_src), ', '.join(missing_src)))
+else:
+    undeclared = sorted(derived - declared_pub)
+    unmatched = sorted(declared_pub - derived - optional)
+    if undeclared:
+        out('ARMA', 'FAIL',
+            '%d publish act(s) performed by install_hooks() are absent from hook_publish_set(), '
+            'so the parity arm never sees them: %s — add a row for each'
+            % (len(undeclared), ', '.join('%s -> %s' % p for p in undeclared)))
+    elif unmatched:
+        out('ARMA', 'FAIL',
+            '%d declared pair(s) are no longer published by install_hooks(), so the map claims '
+            'coverage it does not have: %s — retire the row, or restore the publish act'
+            % (len(unmatched), ', '.join('%s -> %s' % p for p in unmatched)))
+    else:
+        out('ARMA', 'PASS',
+            'publisher closure holds both directions: %d derived publish act(s) == %d declared '
+            'publishable row(s) less %d presence-optional (a template tracked with no install '
+            'call site, declared optional so the gap is recorded without this check adopting it)'
+            % (len(derived), len(declared_pub), len(optional)))
+
+# ── ARM B — byte parity over the deployed tree (operator-local, advisory) ───
+def tracked_hook_sources():
+    try:
+        r = subprocess.run(['git', '-C', repo, 'ls-files', '--', 'core/hooks'],
+                           capture_output=True, text=True)
+        return [x for x in r.stdout.split('\n') if x.strip()]
+    except Exception:
+        return []
+
+src_pop = tracked_hook_sources()
+src_unclassified = sorted(p for p in src_pop if classify(0, p) is None)
+
+if not os.path.isdir(dep):
+    out('ARMB', 'NOT-EVAL',
+        'the deployed hooks tree is absent at %s, so NOTHING was compared — no source-vs-deployed '
+        'parity has been asserted on this machine (expected on a CI runner and on any clone with '
+        'no installed workspace)' % dep)
+    out('DENOM',
+        'declared_rows=%d derived_publish_acts=%d tracked_core_hooks_sources=%d '
+        'source_unclassified=%d deployed_population=n/a mapped_pairs=n/a' %
+        (len(rows), len(derived), len(src_pop), len(src_unclassified)))
+    if src_unclassified:
+        out('NOTE', 'source-side UNCLASSIFIED (%d): %s'
+            % (len(src_unclassified), ', '.join(src_unclassified[:8])))
+    sys.exit(0)
+
+dep_pop = []
+for root, _dirs, files in os.walk(dep):
+    for n in files:
+        dep_pop.append(os.path.relpath(os.path.join(root, n), dep))
+
+# Expand each publishable row into concrete (source, dest) pairs. A glob row's dest
+# is derived by substituting the source glob's captured segment, so the map never
+# enumerates a population the publisher already derives.
+def expand(row):
+    s, d, cls, m = row
+    if m != 'glob':
+        return [(s, d)]
+    rx, i, groups = [], 0, 0
+    while i < len(s):
+        if s[i] == '*':
+            if s[i:i + 2] == '**':
+                rx.append('(.*)')
+                i += 2
+            else:
+                rx.append('([^/]*)')
+                i += 1
+            groups += 1
+            continue
+        rx.append(re.escape(s[i]))
+        i += 1
+    pat = re.compile('^' + ''.join(rx) + '$')
+    pairs = []
+    for f in sorted(src_pop):
+        mm = pat.match(f)
+        if not mm:
+            continue
+        dd, gi = [], 0
+        k = 0
+        while k < len(d):
+            if d[k] == '*':
+                step = 2 if d[k:k + 2] == '**' else 1
+                dd.append(mm.group(gi + 1) if gi < groups else '')
+                gi += 1
+                k += step
+                continue
+            dd.append(d[k])
+            k += 1
+        pairs.append((f, ''.join(dd)))
+    return pairs
+
+match_n = drift_n = notdep_n = presence_n = presence_missing = 0
+drift_rows = []
+missing_rows = []
+mapped = 0
+for row in rows:
+    cls, m = row[2], row[3]
+    if cls in ('operator-state', 'not-deployed'):
+        continue
+    for s, d in expand(row):
+        dp = os.path.join(dep, d)
+        if cls == 'mode-template':
+            presence_n += 1
+            if not os.path.exists(dp):
+                if m != 'presence-optional':
+                    presence_missing += 1
+                    missing_rows.append('%s (mode template never installed)' % d)
+            continue
+        mapped += 1
+        hs = sha_path(os.path.join(repo, s))
+        hd = sha_path(dp)
+        if hd is None:
+            notdep_n += 1
+            missing_rows.append('%s (declared but absent from the deployed tree)' % d)
+        elif hs == hd:
+            match_n += 1
+        else:
+            drift_n += 1
+            drift_rows.append((s, d, hd))
+
+dep_unclassified = sorted(p for p in dep_pop if classify(1, p) is None)
+
+# ── drift classifier: bounded git-history walk, drift rows ONLY ─────────────
+def classify_drift(s, deployed_sha):
+    try:
+        r = subprocess.run(['git', '-C', repo, 'log', '--format=%H', '--follow', '--', s],
+                           capture_output=True, text=True)
+        revs = [x for x in r.stdout.split('\n') if x.strip()]
+    except Exception:
+        return 'UNCLASSIFIED-DEPTH', 'git history is unreadable for %s' % s
+    if not revs:
+        return 'UNCLASSIFIED-DEPTH', 'no revisions found for %s' % s
+    for rev in revs[:cap]:
+        try:
+            b = subprocess.run(['git', '-C', repo, 'show', '%s:%s' % (rev, s)],
+                               capture_output=True)
+        except Exception:
+            continue
+        if b.returncode != 0:
+            continue
+        if hashlib.sha256(b.stdout).hexdigest() == deployed_sha:
+            behind = '?'
+            try:
+                c = subprocess.run(
+                    ['git', '-C', repo, 'rev-list', '--count', '%s..HEAD' % rev, '--', s],
+                    capture_output=True, text=True)
+                behind = c.stdout.strip() or '?'
+            except Exception:
+                pass
+            return 'STALE', ('the deployed bytes ARE %s@%s, %s source commit(s) behind — a stale '
+                             'PLATFORM copy, not an operator edit; %s'
+                             % (s, rev[:12], behind, sys.argv[5]))
+    if len(revs) > cap:
+        return 'UNCLASSIFIED-DEPTH', ('no match in the most recent %d of %d revisions of %s — the '
+                                      'search was truncated, so this is NOT a divergence finding'
+                                      % (cap, len(revs), s))
+    return 'DIVERGENT', ('the deployed bytes match no revision of %s in its full %d-commit history '
+                         '— treat as an operator decision, and note that a republish will PRESERVE '
+                         'rather than fix it: install_hook_with_checksum reads a baseline-diverged '
+                         'copy as operator-edited' % (s, len(revs)))
+
+for s, d, hd in drift_rows:
+    verdict, why = classify_drift(s, hd)
+    out('NOTE', 'DRIFT %s — %s: %s' % (d, verdict, why))
+for r in missing_rows:
+    out('NOTE', 'MISSING %s' % r)
+if dep_unclassified:
+    out('NOTE', 'deployed-side UNCLASSIFIED (%d, in no declared row): %s'
+        % (len(dep_unclassified), ', '.join(dep_unclassified[:8])))
+if src_unclassified:
+    out('NOTE', 'source-side UNCLASSIFIED (%d, in no declared row): %s'
+        % (len(src_unclassified), ', '.join(src_unclassified[:8])))
+
+out('DENOM',
+    'declared_rows=%d derived_publish_acts=%d mapped_pairs=%d deployed_population=%d '
+    'tracked_core_hooks_sources=%d MATCH=%d DRIFT=%d NOT-DEPLOYED=%d presence_checked=%d '
+    'presence_missing=%d deployed_unclassified=%d source_unclassified=%d'
+    % (len(rows), len(derived), mapped, len(dep_pop), len(src_pop), match_n, drift_n,
+       notdep_n, presence_n, presence_missing, len(dep_unclassified), len(src_unclassified)))
+
+if mapped == 0:
+    out('ARMB', 'NOT-EVAL',
+        'ZERO mapped pairs were compared against a deployed tree that EXISTS — the expansion '
+        'produced nothing, so no parity has been asserted; this is a failed probe, not a clean '
+        'result')
+elif dep_unclassified or src_unclassified:
+    out('ARMB', 'UNCLASSIFIED',
+        '%d deployed and %d tracked-source file(s) match no row in hook_publish_set(), so the map '
+        'itself is the blind spot for them (MATCH=%d DRIFT=%d of %d mapped pairs) — classify each '
+        'by adding a row' % (len(dep_unclassified), len(src_unclassified), match_n, drift_n, mapped))
+elif drift_n or notdep_n or presence_missing:
+    out('ARMB', 'DRIFT',
+        '%d of %d mapped pair(s) diverge, %d declared pair(s) are absent downstream, and %d '
+        'required mode template(s) were never installed — %s'
+        % (drift_n, mapped, notdep_n, presence_missing, sys.argv[5]))
+else:
+    out('ARMB', 'PASS',
+        'every one of the %d mapped pair(s) is byte-identical to its source, %d mode template(s) '
+        'are present, and nothing on either side is unclassified'
+        % (mapped, presence_n))
+PYEOF
+
+  python3 "$_py" "$_repo" "$_dep" "$_pub" "$_cap" "$(hook_parity_remedy)" \
+    < <(hook_publish_set) 2>/dev/null \
+    || printf 'ARMA\tFAILPROBE\tthe Check 79 verdict body exited non-zero, so neither arm concluded — a gate that cannot run must not pass\n'
+  /bin/rm -f "$_py" 2>/dev/null || true
+}
+
 # ─── _c9_undeclared_scan — the mirror's UNDECLARED-ENTRY enumeration (F-01) ────
 #
 # Pure emitter. Echoes exactly ONE verdict line for a mirror directory. Shared by
@@ -15545,6 +16124,119 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
           "unexpected verdict token '$c78_tok' from _c78_compute_verdict (an unreadable verdict is a defect in the verdict body, never an absence of findings): $c78_verdict"
         ;;
     esac
+  fi
+
+  # Check 79 — S4 hook-tier publish parity [#5651]
+  #
+  # THE GAP THIS CLOSES IS NOT "NO PUBLISHER" — that framing is half wrong and the
+  # untrue half changes the design. A hook publisher exists and is hardened:
+  # setup-workspace.sh install_hooks() with a --refresh-hooks flow, eight co-deploy
+  # special cases, checksum-aware operator-edit preservation, a durable pre-write
+  # snapshot, replayable rollback ops, a hook-library closure assertion, its own
+  # regression suite and its own CI job — and update.sh delegates to it. What did not
+  # exist is any ASSERTION that its output matches its input. Before this check,
+  # deploy.sh carried exactly ONE line that resolved the deployed hooks tree at all
+  # (Check 71's warn-log drain, which reads an operator-state artifact rather than a
+  # published one), and zero occurrences of refresh-hooks.
+  #
+  # SO THE HOOK TIER WAS THE ONLY S4 RUNTIME SURFACE WITH A PUBLISHER AND NO PARITY
+  # CHECK. Checks 7 / 9 / 11 / 12 already assert the ADR-017 Decision-1 invariant —
+  # S4 is derived from S1 and must always be regenerable, never hand-edited — for the
+  # package, rules, harness and user-local-skills tiers. This is the missing family
+  # member, modelled on them, not a new mechanism.
+  #
+  # THE DEPLOYED TREE IS READ, NEVER WRITTEN. It is Tier-0 floored by
+  # block-autonomy-ceiling.sh BLOCK-AUTONOMY-001, so no agent session may write it and
+  # this check does not try: it observes and reports, and its remedy string names the
+  # operator-executed republish. That remedy comes from hook_parity_remedy() — one
+  # declared constant — because D-5651-1 (which carrier regenerates the S4 hook tier:
+  # the installer, or deploy.sh --deploy gaining a hook limb) is an OPEN operator
+  # decision this check deliberately does not resolve. Settling it later edits one line.
+  #
+  # THE ROOT IS ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}, AND $DEPLOY_ROOT IS FALSIFIED
+  # RATHER THAN MERELY DISPREFERRED. $DEPLOY_ROOT resolves to $HOME, where
+  # .claude/hooks does not exist; a check keyed on it would report "runtime directory
+  # missing" on a correctly-installed workspace — a guaranteed false FAIL on every
+  # instance. The token used here is the one Check 71 already resolves the deployed
+  # hooks tree with, the one the publisher itself writes to, and the one ADR-017
+  # Decision 4 makes canonical for workspace content.
+  #
+  # WARN-MODE INITIAL for the closure FINDINGS, always-on for the failed-probe arms.
+  # Findings route through flag_warn_or_issue, so they respect the shakedown window
+  # like every other newly-landed gate and graduate independently via a per-check
+  # hook-parity.mode file. The control arm and the FAILPROBE arms bypass that gate on
+  # purpose (see _c79_compute_verdict's header): a probe that could not measure must
+  # never read as a warning, because a warning is indistinguishable from a clean run.
+  # Byte parity is advisory in every mode and is structurally incapable of gating.
+  # DELIBERATELY OFF the --check-required-subset roster, per the Check 63 / Check 68
+  # precedent; joining it is a separate, later, evidence-gated decision.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 79: S4 hook-tier publish parity (map-closure arm repo-derivable + enforcing-capable; byte-parity arm operator-local + advisory)"
+    local c79_dep c79_pub c79_line c79_tok c79_state c79_detail c79_rest
+    local c79_saw_ctrl=0 c79_saw_arma=0 c79_saw_armb=0
+    c79_dep="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/.claude/hooks"
+    c79_pub="docs/scripts/setup-workspace.sh"
+    # Process substitution, never a pipe: `while … read` on the right of a pipe runs
+    # in a subshell, and every ISSUES increment and c79_saw_* assignment below would
+    # be discarded — the counter would silently stay at zero on a real finding.
+    while IFS= read -r c79_line; do
+      [[ -n "$c79_line" ]] || continue
+      c79_tok="${c79_line%%$'\t'*}"
+      c79_rest="${c79_line#*$'\t'}"
+      case "$c79_tok" in
+        CTRL)
+          c79_saw_ctrl=1
+          c79_state="${c79_rest%%$'\t'*}"
+          c79_detail="${c79_rest#*$'\t'}"
+          log "  CTRL:  hook-parity — $c79_detail"
+          if [[ "$c79_state" != "PASS" ]]; then
+            log "  FAIL:  hook-parity — the comparator control arm did not discriminate; every parity verdict this run would be unattributable"
+            ISSUES=$((ISSUES + 1))
+          fi
+          ;;
+        ARMA)
+          c79_saw_arma=1
+          c79_state="${c79_rest%%$'\t'*}"
+          c79_detail="${c79_rest#*$'\t'}"
+          case "$c79_state" in
+            PASS)      log "  OK:    hook-parity — $c79_detail" ;;
+            FAIL)      flag_warn_or_issue "hook-parity" "$c79_detail" ;;
+            FAILPROBE)
+              log "  FAIL:  hook-parity — $c79_detail"
+              ISSUES=$((ISSUES + 1))
+              ;;
+            *)
+              log "  FAIL:  hook-parity — unexpected map-closure state '$c79_state' (an unreadable verdict is a defect in the verdict body, never an absence of findings): $c79_detail"
+              ISSUES=$((ISSUES + 1))
+              ;;
+          esac
+          ;;
+        ARMB)
+          c79_saw_armb=1
+          c79_state="${c79_rest%%$'\t'*}"
+          c79_detail="${c79_rest#*$'\t'}"
+          case "$c79_state" in
+            PASS)     log "  OK:    hook-parity-bytes — $c79_detail" ;;
+            NOT-EVAL) flag_not_evaluated "hook-parity-bytes" "$c79_detail" ;;
+            *)        flag_advisory_only "hook-parity-bytes" "$c79_detail" "id-non-gating" ;;
+          esac
+          ;;
+        DENOM) log "  DENOM: hook-parity — $c79_rest" ;;
+        NOTE)  log "         hook-parity — $c79_rest" ;;
+        *)
+          log "  FAIL:  hook-parity — unrecognised emitter token '$c79_tok' from _c79_compute_verdict: $c79_rest"
+          ISSUES=$((ISSUES + 1))
+          ;;
+      esac
+    done < <(_c79_compute_verdict "." "$c79_dep" "$c79_pub" 60)
+    # ANTI-VACUITY. A body that emitted no arm at all would otherwise pass in silence,
+    # which is the exact failure this check exists to remove — one tier deeper.
+    if [[ "$c79_saw_ctrl" -eq 0 || "$c79_saw_arma" -eq 0 ]]; then
+      log "  FAIL:  hook-parity — the verdict body emitted no control arm and/or no map-closure arm (ctrl=$c79_saw_ctrl closure=$c79_saw_arma); nothing was asserted, so this run is not a clean result"
+      ISSUES=$((ISSUES + 1))
+    elif [[ "$c79_saw_armb" -eq 0 ]]; then
+      flag_not_evaluated "hook-parity-bytes" "the byte-parity arm emitted no verdict at all, so no source-vs-deployed comparison has been asserted this run; this is not a clean result"
+    fi
   fi
 
   # Summary
