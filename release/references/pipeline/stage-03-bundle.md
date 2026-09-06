@@ -206,6 +206,7 @@ The map carries a bidirectional verdict + an evidence-cited per-edge table + an 
 
 **Reconfirm procedure:** Run the hard-vs-soft scan via:
 
+~~~
 gh issue list --milestone "<this milestone>" --state open --limit 500 \
   --json number,body,blockedBy --jq '
   def sec:  (.body // "") | (capture("(?ims)^#{2,3} +Dependencies\\b(?P<s>.*?)(?:\\n#{1,6} |\\z)").s) // null;
@@ -217,6 +218,7 @@ gh issue list --milestone "<this milestone>" --state open --limit 500 \
       edge_candidates: [ .[] | select(.verdict == "EDGE" or .typed > 0) ],
       no_section:      [ .[] | select(.verdict == "NO-SECTION") | .n ] }
 '
+~~~
 
 The scan slices each member body to its `Dependencies` section (H2 **or** H3) before matching, so a dependency phrase in ordinary prose elsewhere in the body cannot match. It returns one verdict per member: `EDGE` (section present and carrying an anchored `<keyword> #N` reference), `CLEAN` (section present, no anchored reference — the author addressed dependencies and declared none), `NO-SECTION` (no Dependencies section — the bug, story, epic and observation templates carry no such field, so the body cannot answer). **A `NO-SECTION` member is not a clean member:** resolve it from the `typed` count or the Stage-4 dependency graph. Any member with `typed > 0` appears in `edge_candidates` whatever its body verdict; a `typed` count of 0 is weak evidence, because the typed-dependency substrate is only partially populated. `members` is printed so a truncated read is visible — compare it against the milestone's open count. The `(?ims)` flags are load-bearing: `gh --jq` does not treat `^` as line-anchored by default, and dropping them makes every member read `NO-SECTION`.
 AND, for any sibling milestone whose File Change Matrix declares a rename / relocate / delete, re-run the structural-blast-radius mover-classifier + F1–F6 sweep and re-test the intersection predicate (see the Structural-Blast-Radius axis below)
