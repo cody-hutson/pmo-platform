@@ -50,6 +50,16 @@ echo "────────────────────────�
 # would collide with it. Per-function anchors make that insertion invisible here.
 extract_fn() { /usr/bin/sed -n "/^  $1() {\$/,/^  }\$/p" "$DEPLOY_SH"; }
 
+# Top-level helpers the emitters CALL: same per-function anchoring, at ZERO
+# indent. deploy.sh defines its warn-log escape helper at file scope, so the
+# two-space anchor above returns EMPTY for it. That emptiness does not fail
+# loudly: the generated runner simply calls an undefined function, and then dies
+# under `set -u` on the very global that call was meant to set — before it
+# prints its ISSUES counter. The failure then presents as a count mismatch in an
+# arm that has nothing to do with escaping. Arm A's non-vacuity assertion below
+# is what converts that silence into a named failure.
+extract_fn0() { /usr/bin/sed -n "/^$1() {\$/,/^}\$/p" "$DEPLOY_SH"; }
+
 # Emit region: sentinel-marked, because it is THIS card's own region.
 extract_emit() {
   local _b _e
@@ -75,17 +85,19 @@ extract_inputs() {
 FW="$(extract_fn flag_warn_or_issue)"
 FA="$(extract_fn flag_advisory_only)"
 RM="$(extract_fn resolve_check_mode)"
+JE="$(extract_fn0 json_escape_detail)"
 EM="$(extract_emit)"
 IN="$(extract_inputs)"
 _a_ok=1
 [[ -n "$FW" && "$FW" == *'ISSUES=$((ISSUES + 1))'* ]] || { _a_ok=0; fail "A flag_warn_or_issue extraction empty or missing its ISSUES increment"; }
 [[ -n "$FA" && "$FA" != *'ISSUES=$((ISSUES + 1))'* && "$FA" != *'case '* ]] || { _a_ok=0; fail "A flag_advisory_only extraction empty, or it carries a mode case / ISSUES increment (its structural guarantee is gone)"; }
 [[ -n "$RM" && "$RM" == *'.mode'* ]] || { _a_ok=0; fail "A resolve_check_mode extraction empty or missing its .mode read"; }
+[[ -n "$JE" && "$JE" == *'JSON_ESCAPED='* ]] || { _a_ok=0; fail "A json_escape_detail extraction empty or missing its JSON_ESCAPED assignment — both emitters call it and then read that global, so an empty extraction aborts the runner under set -u before any counter prints"; }
 [[ -n "$EM" && "$EM" == *'flag_advisory_only'* && "$EM" == *'milestone-epic M1'* ]] || { _a_ok=0; fail "A C56-EMIT region empty, or it does not carry BOTH legs (Arm D needs M1 in scope)"; }
 [[ -n "$IN" && "$IN" == *'$1=="M1"'* && "$IN" == *'$1=="M2"'* ]] || { _a_ok=0; fail "A input-building block empty or missing its M1/M2 awk extractions (anchor moved)"; }
 if [[ "$_a_ok" -eq 1 ]]; then
-  pass "A all five regions extracted from deploy.sh and carry their discriminating tokens"
-  note "denominators: flag_warn_or_issue $(printf '%s\n' "$FW" | wc -l | tr -d ' ') lines · flag_advisory_only $(printf '%s\n' "$FA" | wc -l | tr -d ' ') lines · resolve_check_mode $(printf '%s\n' "$RM" | wc -l | tr -d ' ') lines · emit region $(printf '%s\n' "$EM" | wc -l | tr -d ' ') lines · input block $(printf '%s\n' "$IN" | wc -l | tr -d ' ') lines"
+  pass "A all six regions extracted from deploy.sh and carry their discriminating tokens"
+  note "denominators: flag_warn_or_issue $(printf '%s\n' "$FW" | wc -l | tr -d ' ') lines · flag_advisory_only $(printf '%s\n' "$FA" | wc -l | tr -d ' ') lines · resolve_check_mode $(printf '%s\n' "$RM" | wc -l | tr -d ' ') lines · json_escape_detail $(printf '%s\n' "$JE" | wc -l | tr -d ' ') lines · emit region $(printf '%s\n' "$EM" | wc -l | tr -d ' ') lines · input block $(printf '%s\n' "$IN" | wc -l | tr -d ' ') lines"
 fi
 
 # ── Runner ──────────────────────────────────────────────────────────────────
@@ -101,6 +113,8 @@ build_runner() {  # $1 = mode-dir, $2 = out path
     echo 'log() { printf "%s\n" "$1"; }'
     echo "WARN_LOG=\"$TMPD/warn.jsonl\""
     echo 'DEPLOY_CHECK_MODE="__no-mode-file-was-read__"'
+    echo 'JSON_ESCAPED=""'
+    printf '%s\n' "$JE"
     printf '%s\n' "$FW"; printf '%s\n' "$FA"; printf '%s\n' "$RM"
     echo 'run() {'; echo '  local ISSUES=0'
     echo '  local c56_out c56_mode'
