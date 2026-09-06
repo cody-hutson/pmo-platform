@@ -48,7 +48,7 @@ name: Repository integrity
 #                 registered in branch protection, which a PR cannot do. The gate is
 #                 ENFORCING (it exits non-zero on a finding); it is not yet BLOCKING.
 #
-# gate-efficacy: posture=advisory  enforcement=ci-enforce:"ADR-number integrity gate" (no WARN_MODE — a finding turns the check RED)  always-reports=yes
+# gate-efficacy: posture=required  enforcement=branch-protection:"ADR-number integrity gate" (no WARN_MODE — a finding turns the check RED)  always-reports=yes
 #   invariant: the ONE global ADR-NNN sequence spanning core/ADRs/ + release/ADRs/ is
 #              unique and gap-free; the release-module ADR index is a faithful
 #              projection of that file set (no MISSING / ORPHAN / DRIFT row); and the

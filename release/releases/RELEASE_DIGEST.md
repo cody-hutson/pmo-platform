@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.59 (2026-09-06) — Release tools now actually run, and a green check means it measured
+
 ### v4.58 (2026-09-06) — Release checks now match what the platform actually does
 
 ### v4.57 (2026-09-06) — Agents now follow a written contract when writing into outside systems
