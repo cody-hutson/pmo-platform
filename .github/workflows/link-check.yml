@@ -1,12 +1,27 @@
 name: Doc-link check
 
-# gate-efficacy: posture=required  enforcement=branch-protection:"Cross-reference integrity (governance + reference + rules + skills)"  always-reports=yes
+# gate-efficacy: posture=required(warn-mode-initial)  enforcement=branch-protection:"Cross-reference integrity (governance + reference + rules + skills)"  always-reports=yes
 #   invariant: every internal markdown link in the governance/reference/rules/skill
 #              corpus resolves (target file + anchor) — asserted by the shared
 #              check-doc-links.py primitive over the shared --target-paths-file
 #              (core/deploy/allowlists/doc-link-target-paths.txt), the same scan
 #              scope Check 14 reads.
-#   falsification: add "[x](does-not-exist.md)" to a governance doc -> this gate red.
+#   falsification: add "[x](does-not-exist.md)" to a governance doc -> the primitive
+#                  reports the broken ref as an inline PR annotation. Under
+#                  WARN_MODE='true' the job still exits 0; setting WARN_MODE to 'false'
+#                  turns that same finding RED. The self-test arm hard-fails regardless.
+#   posture note: the qualifier is load-bearing and was ADDED because the bare
+#                 `posture=required` this header carried was FALSE ON BOTH AXES. The job
+#                 sets WARN_MODE: 'true' and swallows every finding to `exit 0`, so a red
+#                 verdict is not reachable at all; and the context is absent from main's
+#                 live required_status_checks.contexts. Registering it in that state
+#                 would manufacture a required check STRUCTURALLY INCAPABLE of turning
+#                 red — a merge-predicate conjunct that can never be false, which is a
+#                 strictly weaker guarantee than a reader of "required" assumes. The
+#                 graduation order is therefore fixed: flip WARN_MODE to 'false' FIRST
+#                 (per core/rules/doc-link-maintenance.md § Flip-to-Enforce), and only
+#                 then register the context. Recorded as CORRECT-THEN-HOLD in
+#                 core/standards/gate-efficacy-standard.md § Declared-required contexts.
 # (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
 
 # PR-time cross-reference-integrity gate (issue #169) — promotes the deploy-time

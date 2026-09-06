@@ -47,6 +47,109 @@ name: Repository integrity
 #                 Requirement (b') makes `required` unavailable until the context is
 #                 registered in branch protection, which a PR cannot do. The gate is
 #                 ENFORCING (it exits non-zero on a finding); it is not yet BLOCKING.
+#
+# gate-efficacy: posture=required  enforcement=branch-protection:"ADR-number integrity gate"  always-reports=yes
+#   invariant: the ONE global ADR-NNN sequence spanning core/ADRs/ + release/ADRs/ is
+#              unique and gap-free; the release-module ADR index is a faithful
+#              projection of that file set (no MISSING / ORPHAN / DRIFT row); and the
+#              merge-time renumber tool still behaves on a two-branch collision fixture.
+#              FOUR assertions ride this one check-run, not one — the checker's
+#              --self-test, the numbering scan, the index projection, and the renumber
+#              fixture — and a red on any of them is a red on this context.
+#   falsification: give a second ADR file a number the mainline already holds -> the
+#                  numbering step exits 1 and the job goes RED; delete an index row
+#                  without regenerating -> the projection step reports DRIFT and exits 1;
+#                  break one --self-test case -> the job fails BEFORE it reads the tree.
+#   posture note: this declaration records the INTENDED posture per
+#                 core/standards/gate-efficacy-standard.md § Requirement (b) — "a
+#                 posture=required declaration records the *intended* posture and names
+#                 its enforcement surface. It does NOT itself edit branch-protection."
+#                 As of this declaration the context is NOT in main's live
+#                 required_status_checks.contexts: registering it is an operator
+#                 repository-settings action, evidenced by a live branch-protection
+#                 read-back through the GitHub API and never by a green PR. Until that
+#                 read-back shows the context, the gate is ENFORCING (it exits non-zero)
+#                 but not BLOCKING, and the declared-vs-live delta is reported on every
+#                 pull request by the branch-protection reconciliation reporter
+#                 (.github/workflows/gate-posture-reconciliation.yml). That reporter is
+#                 the Requirement (c) coverage audit this posture is reconciled by.
+#   eligibility note: this gate is one of the few structurally eligible for
+#                 branch-protection today. Its verdict-input closure over repository
+#                 paths is CLOSED — release/tools/check-adr-numbers.py imports only
+#                 __future__/argparse/pathlib/re/tempfile, carries ZERO network or
+#                 subprocess tokens, and reads only the core/ADRs and release/ADRs
+#                 globs. It therefore passes the exact test that disqualified
+#                 `deploy.sh` Check 51 from `required` (gate-efficacy-standard.md
+#                 § Flip-decision status, the label-parity row, limb (b)): no transient
+#                 network, auth or rate-limit failure can turn this context red.
+#
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Draft-file gate" (WARN_MODE='true' — findings are reported and the job exits 0)  always-reports=yes
+#   invariant: no PR ADDS a draft / scratch / proposal / working-notes file outside the
+#              governed corpus — the sanctioned homes are the issue tracker and the
+#              git-ignored runtime tier, per core/rules/git-workflow.md § Draft /
+#              scratch content.
+#   falsification: add `docs/proposals/some-draft.md` in a PR -> the gate reports the
+#                  finding in the run summary. Under WARN_MODE='true' the job still
+#                  exits 0; flipping WARN_MODE to 'false' turns that same finding RED.
+#   posture note: `advisory` is the accurate posture on BOTH axes today, and both are
+#                 stated because either alone would overstate the gate. The context is
+#                 not registered in branch protection, AND the job sets WARN_MODE='true'
+#                 and exits 0 on a finding — so a red verdict is not merely non-blocking,
+#                 it is not currently reachable. Flip-to-enforce is the WARN_MODE flip
+#                 first; branch-protection registration is a separate, later step.
+#
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Governance-file-map cross-check gate" (WARN_MODE='true' — findings are reported and the job exits 0; the parser self-test hard-fails independent of it)  always-reports=yes
+#   invariant: every path an added line claims for the CLAUDE.md Governance File Map
+#              resolves on disk, so the map cannot drift from the tree it describes.
+#              Placeholder and token segments are skipped by construction.
+#   falsification: add a map row naming a path that does not exist -> the gate reports
+#                  it. Under WARN_MODE='true' the job exits 0; with WARN_MODE='false' the
+#                  same finding is RED. Break one labeled expected-match case in the
+#                  detector's self-test -> the job FAILS regardless of WARN_MODE.
+#   posture note: `advisory` on both axes — unregistered context AND WARN_MODE='true'.
+#                 The self-test step is the one arm that is genuinely enforcing today: a
+#                 mis-parsing detector reading green is indistinguishable from a passing
+#                 one, so its failure is not a warn-able finding.
+#
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Projects/ casing canonicalization gate" (WARN_MODE='true' — findings are reported and the job exits 0)  always-reports=yes
+#   invariant: no added line introduces a net-new capital-P `Projects/` path reference
+#              in the changed markdown corpus (plus the two named legitimate hook
+#              sources), so the canonical lowercase `projects/` spelling stays single.
+#   falsification: add a line citing `Projects/_config/PORTFOLIO.md` to any changed .md
+#                  -> the gate reports it; with WARN_MODE='false' that finding is RED.
+#   posture note: `advisory` on both axes — unregistered context AND WARN_MODE='true'
+#                 per core/rules/bypass-mode-readiness.md warn-mode-initial.
+#
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"ADR durability gate" (WARN_MODE='true' — findings are reported and the job exits 0; the self-test hard-fails independent of it)  always-reports=yes
+#   invariant: no ADDED line in a changed ADR introduces a durability violation — a
+#              status: value outside the four-token Nygard enum, a hardcoded commit SHA
+#              or live corpus-population count in durable prose, the operator's literal
+#              GitHub handle, or a bare issue reference in an identity frontmatter field.
+#   falsification: add `status: Half-accepted` to a changed ADR -> the lint reports the
+#                  enum violation; with WARN_MODE='false' it is RED. Break one self-test
+#                  case -> the job FAILS regardless of WARN_MODE.
+#   posture note: `advisory` on both axes, and the WARN_MODE axis is HARD-GATED rather
+#                 than merely deferred: this lint LOCKS a clean baseline, it does not
+#                 create one, so flipping before the ADR full-conformance pass lands
+#                 would red-CI the pre-existing corpus. The flip becomes eligible only
+#                 after that pass, and then only after the standard warn-log shakedown.
+#                 Do not treat this row as a routine shakedown row.
+#
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"operator.toml declared-schema gate" (no WARN_MODE — a finding turns the check RED)  always-reports=yes
+#   invariant: the operator.toml schema DECLARATION is the single source of truth for the
+#              key set — the declaration and the template describe the same keys (C70b),
+#              and no hand-written per-key literal sits beside the generator loop (C70c).
+#              The C70a leg is deliberately absent: it reads operator-instance state CI
+#              does not have and must never fabricate.
+#   falsification: add a key record to the declaration without the matching template
+#                  prose block (or the reverse) -> exit 1, RED; hand-write a per-key emit
+#                  literal beside the loop -> exit 1, RED. Corrupt the declaration so
+#                  zero keys extract -> exit 3, a fail-loud BROKEN PROBE rather than a
+#                  clean zero.
+#   posture note: `advisory`, not `required`, is the HONEST declaration today —
+#                 Requirement (b') makes `required` unavailable until the context is
+#                 registered in branch protection, which a PR cannot do. The gate is
+#                 ENFORCING (it exits non-zero on a finding); it is not yet BLOCKING.
 
 # Three PR-time integrity gates as three named jobs on one workflow, on the
 # proven parser-clean scaffold (override-marker -> locate-anchor -> scan-changed-

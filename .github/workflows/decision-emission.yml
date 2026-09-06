@@ -17,7 +17,7 @@ name: Decision-emission (split-predicate gate mirror)
 #                  pass: the arms assert different things and only this one can turn red
 #                  on a real regression today.
 #
-# gate-efficacy: posture=advisory  enforcement=deploy-time-only-live-arm  always-reports=yes
+# gate-efficacy: posture=advisory  enforcement=deploy-time-only-live-arm:"Decision-emission live arm (report-only — NOT a merge gate)"  always-reports=yes
 #   invariant: the LIVE half — that post-cutover VERIFIED releases actually emitted every
 #              asserted MUST class — is REPORTED here and asserted nowhere in CI. Its
 #              verdict input is the pipeline event log, which is git-ignored
