@@ -64,11 +64,14 @@ name: Install tests
 #                                  whose other half honours a warn sentinel (#6298)
 #   - core/deploy/tools/tests/test-status-label-invariant.sh  deploy.sh Check 16
 #                                  status-label invariant fixture self-test: the four
-#                                  arms (mutex / presence / proposed+milestone /
+#                                  invariants (mutex / presence / proposed+milestone /
 #                                  orphaned bundle) EXECUTE deploy.sh and assert
 #                                  against Check 16's real emissions; the suite holds
 #                                  no copy of the inline jq filters, so there is
-#                                  nothing to keep in lockstep. Lives here, not in
+#                                  nothing to keep in lockstep. Five arms: 0 stub
+#                                  scope-awareness, A --check emissions, B no-op
+#                                  falsifier, C --check-vs---report population parity,
+#                                  D mutated subject proving C can go red (#6165). Lives here, not in
 #                                  release-tooling-smoke.yml, on GENRE grounds: this
 #                                  job is the established home for deploy.sh
 #                                  check-fixture suites. The TRIGGER ground once given
@@ -742,8 +745,20 @@ jobs:
         run: bash core/deploy/tests/test_advisory_emitter_contract.sh
 
       - name: Run Check 16 status-label invariant fixture self-test (test-status-label-invariant.sh)
-        # Invokes core/deploy/tools/tests/test-status-label-invariant.sh (4 fixture
-        # arms: I1 mutex, I2 presence, I3 proposed+milestone, I4 orphaned bundle).
+        # Invokes core/deploy/tools/tests/test-status-label-invariant.sh, which asserts
+        # the four invariants (I1 mutex, I2 presence, I3 proposed+milestone, I4
+        # orphaned bundle) across five arms:
+        #   0  the gh stub honours --label — prerequisite for C and D, because a
+        #      scope-blind stub serves the same population to both fetch shapes and
+        #      makes the parity arms read GREEN on the scope defect
+        #   A  the real subject under `--check`, asserted as exact issue-number sets
+        #   B  a no-op subject through the same harness — A's PASS is subject-caused
+        #   C  the real subject under `--report`, asserted for population parity with
+        #      A: deploy.sh has TWO Check 16 surfaces and #6165 made them share one
+        #      population body after they had silently drifted three ways
+        #   D  a MUTATED subject carrying the pre-#6165 inline report block, which C's
+        #      comparison must go red against — an unfalsified parity check is the
+        #      same defect one layer up
         #
         # What rots without it: the suite EXECUTES deploy.sh Check 16 and asserts
         # against the real emissions of that run. It carries NO copy of Check 16's
