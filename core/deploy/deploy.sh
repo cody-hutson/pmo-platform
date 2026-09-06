@@ -5894,11 +5894,21 @@ _g1_03_evaluate() {
 # increment — for the same reason: a measurement outage must never move the exit code.
 # It is a SEPARATE function, not a parameter on that one, because the two say OPPOSITE
 # things. ADVISORY means "I measured and this signal cannot gate"; NOT-EVALUATED means
-# "I did not measure." flag_advisory_only's line asserts "this check is never
-# enforce-capable", which is FALSE of an enforce-capable check that merely could not
-# read its input this run — and its ADVISORY: prefix is the greppable discriminator, so
-# two classes under one prefix re-creates the very conflation this emitter exists to
-# remove.
+# "I did not measure." flag_advisory_only's line asserts that THIS EMIT cannot gate —
+# a claim that is true of a measurement that happened, and says nothing at all about a
+# check that could not read its input this run — and its ADVISORY: prefix is the
+# greppable discriminator, so two classes under one prefix re-creates the very
+# conflation this emitter exists to remove.
+#
+# THE ORIGINAL ARGUMENT WAS SHARPER AND IS PRESERVED, because the sentence it rested on
+# was retired rather than merely reworded. flag_advisory_only used to append a fixed
+# "this check is never enforce-capable" to every emit, and the reason THAT could not be
+# reused here was that the sentence is FALSE of an enforce-capable check whose input
+# failed. The sentence is gone — it was a per-caller fact shipped from shared code, and
+# wrong for most callers — so the emitter no longer makes any check-scoped claim at all.
+# The separation still stands, on the ground stated above: the two classes answer
+# different questions, and only a separate function keeps the ADVISORY: prefix meaning
+# one thing.
 #
 # WARN_LOG IS RESOLVED DEFENSIVELY, AND THE GUARD IS REQUIRED RATHER THAN DEFENSIVE
 # HABIT. cmd_check() declares `local WARN_LOG` well AFTER its Check 7 block, and this
@@ -6815,15 +6825,64 @@ cmd_check() {
   # it can see that an ADR promises a flip while still Proposed, but the ratifying
   # reference is free text, so it cannot see whether that review has CLOSED. A
   # genuinely-pending ADR is correct and reports on every run; failing on it would
-  # punish correctness. Enforcement for that invariant lives at the release-close gate
-  # (G-CL9), which has the release context this surface structurally lacks.
+  # punish correctness. Enforcement for THAT check's invariant lives at the
+  # release-close gate G-CL9 — which is Check 58's authority, and no other caller's.
+  # This emitter therefore names NO authority at all: an authority is a per-caller
+  # fact, so it belongs in the caller's own `detail`, where Check 58 already writes it.
+  #
+  # THIS EMITTER ASSERTS ONLY PROPERTIES OF ITS OWN EMIT. Anything scoped to the check,
+  # to the check_id, or to a downstream gate is a per-caller fact supplied by the
+  # caller — as the posture token below, or in the caller's own `detail`. A shared
+  # helper stating a per-caller fact cannot be correct for more than one caller, and a
+  # hardcoded one is wrong silently rather than loudly.
+  #
+  # CALLING CONTRACT — arity 3; the third argument is REQUIRED by contract:
+  #
+  #   flag_advisory_only <check_id> <detail> <posture>
+  #
+  #   <posture> is a CLOSED two-member set naming the SCOPE of the non-gating claim:
+  #     id-non-gating   no emit under this check_id can gate — the id carries ZERO
+  #                     escalating emits (flag_warn_or_issue / flag_g1_enforcement)
+  #     arm-non-gating  THIS emit cannot gate, but sibling emits under the SAME
+  #                     check_id can — the id carries at least one escalating emit
+  #
+  #   The subject is the check_id, and it is printed literally in the rendered clause:
+  #   a check NUMBER is a console grouping with no runtime identity, while the id is
+  #   what resolve_check_mode keys on and what the warn-log "check" field carries. The
+  #   token is spelled from neither sense of the overloaded word "advisory" on purpose
+  #   — gate-efficacy-standard.md uses `RATIFIED ADVISORY` for enforce-capable-but-held,
+  #   which is the OPPOSITE of what this token conveys.
+  #
+  # WHY ${3:-} AND NOT A BARE $3. This script runs under `set -euo pipefail` (line 2)
+  # and cmd_check clears only errexit, so `nounset` stays armed: a bare $3 on a
+  # two-argument caller would abort the WHOLE check run rather than report one bad
+  # call. The empty branch renders the class-true clause alone and asserts no scope.
+  #
+  # WHY THE MISSING-ARGUMENT FAILURE IS LOUD ELSEWHERE AND NOT HERE. Raising in this
+  # body requires an escalation path in this body, and the ABSENCE of one is the class
+  # guarantee stated at the top of this header — the same absence ADR-134 D3 fixes and
+  # core/deploy/tests/test_check56_m2_advisory.sh Arms B and C execute against a real
+  # counter. So the contract is graded STATICALLY instead, by
+  # core/deploy/tests/test_advisory_emitter_contract.sh: a call site carrying no
+  # posture token, or one whose declared posture contradicts the measured escalation
+  # surface of its own check_id, fails CI. The loudness lives there, by construction.
   #
   # Consequence for callers: an advisory finding NEVER contributes to the exit code.
-  # Rows are logged to the same warn jsonl so the signal is reviewable over time.
+  # Rows are logged to the same warn jsonl so the signal is reviewable over time. The
+  # JSON row is deliberately UNCHANGED by the posture — the clause is console-only, and
+  # widening the drain schema for a fact a static assertion already grades would move a
+  # claim into an emitted record, which ADR-134 D4 warns against by name.
   flag_advisory_only() {
     local check_id="$1"
     local detail="$2"
-    log "  ADVISORY: $check_id — $detail (advisory-only; this check is never enforce-capable — see G-CL9 for the authoritative gate)"
+    local _posture="${3:-}"
+    local _scope=""
+    if [[ "$_posture" == "id-non-gating" ]]; then
+      _scope=", and no \"$check_id\" emit can"
+    elif [[ "$_posture" == "arm-non-gating" ]]; then
+      _scope="; other \"$check_id\" emits can"
+    fi
+    log "  ADVISORY: $check_id — $detail (advisory — this emit cannot gate$_scope)"
     local _ts
     _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     json_escape_detail "$detail"
@@ -7211,16 +7270,16 @@ cmd_check() {
         log "  NOT-EVAL: undeclared-entry scan — ${c9_scan#NOT-RUN }"
         ;;
       UNDECLARED)
-        flag_advisory_only "mirror-undeclared-entry" "${c9_scan#UNDECLARED }"
+        flag_advisory_only "mirror-undeclared-entry" "${c9_scan#UNDECLARED }" "id-non-gating"
         ;;
       RESIDUAL)
-        flag_advisory_only "mirror-undeclared-entry" "${c9_scan#RESIDUAL }"
+        flag_advisory_only "mirror-undeclared-entry" "${c9_scan#RESIDUAL }" "id-non-gating"
         ;;
       *)
         # An unreadable verdict is a defect in the verdict body, never an absence of
         # findings — the same fail-loud contract the 77/78 callers carry.
         flag_advisory_only "mirror-undeclared-entry" \
-          "unrecognised scan token [$c9_scan_tok] from _c9_undeclared_scan — an unreadable verdict is a defect, not a clean result: $c9_scan"
+          "unrecognised scan token [$c9_scan_tok] from _c9_undeclared_scan — an unreadable verdict is a defect, not a clean result: $c9_scan" "id-non-gating"
         ;;
     esac
 
@@ -8705,7 +8764,7 @@ cmd_check() {
         ;;
       NONE)
         flag_advisory_only "g1-enforcement-scope" \
-          "no release in flight — Layer-B(g) release gate is NOT APPLICABLE this run (${c22_vdetail}); the Layer-B(d) backlog-wide detector is unaffected and G1 defects remain visible at recommend-tier"
+          "no release in flight — Layer-B(g) release gate is NOT APPLICABLE this run (${c22_vdetail}); the Layer-B(d) backlog-wide detector is unaffected and G1 defects remain visible at recommend-tier" "id-non-gating"
         c22_gate_run=false
         ;;
       *)
@@ -8715,7 +8774,7 @@ cmd_check() {
             "G1 enforce scope NOT-EVALUATED — release identity '${c22_ms}' asserted via PMO_G1_ENFORCE_MILESTONE but ${c22_vtok} (${c22_vreason}; ${c22_mcount} milestone(s) read): ${c22_vdetail}. Refusing to gate on a population that could not be identified — correct the assertion or unset it"
         else
           flag_advisory_only "g1-enforcement-scope" \
-            "release identity detected from the checked-out branch but ${c22_vtok} (${c22_vreason}; ${c22_mcount} milestone(s) read): ${c22_vdetail}. A DETECTED candidate never blocks — set PMO_G1_ENFORCE_MILESTONE to assert a scope and make this fail-closed"
+            "release identity detected from the checked-out branch but ${c22_vtok} (${c22_vreason}; ${c22_mcount} milestone(s) read): ${c22_vdetail}. A DETECTED candidate never blocks — set PMO_G1_ENFORCE_MILESTONE to assert a scope and make this fail-closed" "id-non-gating"
         fi
         ;;
     esac
@@ -12091,7 +12150,7 @@ sys.stdout.write("".join(out) + "|")
             c44_uncod_raw=$((c44_uncod_raw + $(grep -cxF "$c44_tok" <<<"$c44_ang_hits" || true)))
           done
           c44_owned="<OPERATOR_INSTANCE_RELEASE_LOG_PATH>"  # depersonalization-token: allow — illustrative naming of the one un-codified token that has a tracked owner
-          flag_advisory_only "depersonalization-token" "angle-bracket token inventory: ${c44_uncod_n} un-codified token(s) / ${c44_uncod_raw} raw match(es) in tracked corpus. These are SANCTIONED, not defects — depersonalization-spec.md §4 'Convention scope' states un-codified angle tokens inherit the resolution-rule convention and that codification is incremental. Closure path is the §4 rule itself (a token's row is added when its consumer lands), and this arm's own decline is the progress signal; do NOT hunt for a per-token owner, only ${c44_owned} has one (#5824). Inventory: ${c44_uncod}"
+          flag_advisory_only "depersonalization-token" "angle-bracket token inventory: ${c44_uncod_n} un-codified token(s) / ${c44_uncod_raw} raw match(es) in tracked corpus. These are SANCTIONED, not defects — depersonalization-spec.md §4 'Convention scope' states un-codified angle tokens inherit the resolution-rule convention and that codification is incremental. Closure path is the §4 rule itself (a token's row is added when its consumer lands), and this arm's own decline is the progress signal; do NOT hunt for a per-token owner, only ${c44_owned} has one (#5824). Inventory: ${c44_uncod}" "arm-non-gating"
         fi
       fi
     else
@@ -12673,10 +12732,10 @@ sys.stdout.write("".join(out) + "|")
           # remediation overwrites non-git-revertible repository state and which the
           # gate cannot distinguish from a deliberate override.
           if [[ -n "$c51_diverged" ]]; then
-            flag_advisory_only "label-parity" "attribute divergence — $(echo "$c51_diverged" | grep -cv '^[[:space:]]*$') declared-and-live row(s) diverge on colour and/or description and are not registered as accepted overrides: $(echo "$c51_diverged" | paste -sd, -). Read-only: the sanctioned remediation renderer is check-label-parity.py --emit-fix (it runs nothing); the disposition record is $c51_dispositions"
+            flag_advisory_only "label-parity" "attribute divergence — $(echo "$c51_diverged" | grep -cv '^[[:space:]]*$') declared-and-live row(s) diverge on colour and/or description and are not registered as accepted overrides: $(echo "$c51_diverged" | paste -sd, -). Read-only: the sanctioned remediation renderer is check-label-parity.py --emit-fix (it runs nothing); the disposition record is $c51_dispositions" "arm-non-gating"
           fi
           if [[ -n "$c51_diverged_stale" ]]; then
-            flag_advisory_only "label-parity" "stale disposition row(s) — $c51_dispositions registers label(s) that are no longer divergent, or no longer live: $(echo "$c51_diverged_stale" | paste -sd, -). Remove the row(s); a suppression that has silently stopped matching is the defect class this arm exists to close"
+            flag_advisory_only "label-parity" "stale disposition row(s) — $c51_dispositions registers label(s) that are no longer divergent, or no longer live: $(echo "$c51_diverged_stale" | paste -sd, -). Remove the row(s); a suppression that has silently stopped matching is the defect class this arm exists to close" "arm-non-gating"
           fi
           if [[ -n "$c51_unknown" ]]; then
             flag_warn_or_issue "label-parity" "unrecognized verdict class in the parity TSV — the primitive emits a class this caller does not classify; treat as a finding, not an absence, and extend c51_known_re: $c51_unknown"
@@ -13027,7 +13086,7 @@ sys.stdout.write("".join(out) + "|")
         c55_h3_count=$(echo "$c55_out" | awk -F'\t' '$1=="COUNT_H3"{print $2}')
         c55_h3_skip=$(echo "$c55_out" | awk -F'\t' '$1=="SKIP" && $2=="H3"{print $3}')
         if [[ -n "$c55_h3" ]]; then
-          flag_advisory_only "work-hierarchy-coextension" "H3 initiative-coextension — open epic(s) reading as an initiative container (family shape + title coextension + in-family fan-out, all three): $c55_h3 — re-tier to a project: label plus an operator-local roadmap, or record the judgment as \`#<issue> initiative-coextension\` in .claude/work-hierarchy-exemption-list.txt"
+          flag_advisory_only "work-hierarchy-coextension" "H3 initiative-coextension — open epic(s) reading as an initiative container (family shape + title coextension + in-family fan-out, all three): $c55_h3 — re-tier to a project: label plus an operator-local roadmap, or record the judgment as \`#<issue> initiative-coextension\` in .claude/work-hierarchy-exemption-list.txt" "id-non-gating"
         elif [[ -n "$c55_h3_skip" ]]; then
           log "  SKIP:  work-hierarchy H3 coextension advisory — $c55_h3_skip"
         elif [[ -n "$c55_h3_count" ]]; then
@@ -13215,9 +13274,10 @@ sys.stdout.write("".join(out) + "|")
           # the guarantee the emitter already provides.
           #
           # THE check_id IS ITS OWN, and that is not a detail — the same reason
-          # M4 carries `milestone-subtask-orphan`. flag_advisory_only's line
-          # states "this check is never enforce-capable"; that is TRUE of
-          # `milestone-description-reconciliation` and FALSE of
+          # M4 carries `milestone-subtask-orphan`. The posture token passed below
+          # is `id-non-gating`, which asserts that NO emit under
+          # `milestone-description-reconciliation` can gate. That is TRUE of this
+          # id — it carries zero escalating emits — and it would be FALSE of
           # `milestone-epic-membership`, which M1 graduates through a live dial.
           # Emitting the shared id here would write a false claim into the warn
           # log the M1 enforce-flip decision is READ FROM, and would leave M2's
@@ -13225,12 +13285,20 @@ sys.stdout.write("".join(out) + "|")
           # that never calls resolve_check_mode, M2 is non-gating twice over:
           # by emitter shape, and by dial disjunction.
           #
+          # THE SPLIT PREDATES THE TOKEN AND IS WHAT MAKES THE TOKEN TRUE. The
+          # emitter used to append a fixed "this check is never enforce-capable"
+          # to every advisory line; splitting the id was the workaround that kept
+          # that shared sentence from lying here. The sentence is retired and the
+          # scope is now a per-caller argument — but the disjoint id is still
+          # load-bearing, because it is what makes `id-non-gating` a measurable
+          # fact rather than a hopeful one. Do not merge the ids back.
+          #
           # The constraint that previously held this call on the warn emitter was
           # an acceptance criterion of the card that split the named-not-member
           # sub-classes; that card CLOSED 2026-08-07 and the constraint is
           # discharged.
           if [[ -n "$c56_m2" ]]; then
-            flag_advisory_only "milestone-description-reconciliation" "M2 reconciliation (advisory-only; structurally non-gating) — description↔membership divergence on: $c56_m2 [named-not-member ${c56_m2_nnm:-0}: ${c56_m2_else:-0} in another milestone, ${c56_m2_none:-0} in no milestone, ${c56_m2_mex:-0} member-excluded, ${c56_m2_unres:-0} unresolved]${c56_m2_degraded} — $c56_m2_detail"
+            flag_advisory_only "milestone-description-reconciliation" "M2 reconciliation (advisory-only; structurally non-gating) — description↔membership divergence on: $c56_m2 [named-not-member ${c56_m2_nnm:-0}: ${c56_m2_else:-0} in another milestone, ${c56_m2_none:-0} in no milestone, ${c56_m2_mex:-0} member-excluded, ${c56_m2_unres:-0} unresolved]${c56_m2_degraded} — $c56_m2_detail" "id-non-gating"
           fi
         fi
         # >>> C56-EMIT-END
@@ -13317,7 +13385,7 @@ sys.stdout.write("".join(out) + "|")
         else
           [[ "$c56_m3_scan" == "truncated" ]] && c56_m3_partial=" [DEGRADED — the stage-title scan was truncated, so every count here is a LOWER BOUND; this is not a clean result]"
           if [[ -n "$c56_m3" ]]; then
-            flag_advisory_only "milestone-scaffold-completeness" "M3 scaffold completeness — load-bearing finding(s): $c56_m3 [${c56_m3_eval} evaluated, ${c56_m3_skipped} not-yet-scaffolded; advisory ${c56_m3_adv:-0}; marker adoption ${c56_marker:-none}]${c56_m3_partial}"
+            flag_advisory_only "milestone-scaffold-completeness" "M3 scaffold completeness — load-bearing finding(s): $c56_m3 [${c56_m3_eval} evaluated, ${c56_m3_skipped} not-yet-scaffolded; advisory ${c56_m3_adv:-0}; marker adoption ${c56_marker:-none}]${c56_m3_partial}" "id-non-gating"
           else
             log "  OK:    milestone scaffold completeness (M3) — 0 load-bearing finding(s) over ${c56_m3_eval} evaluated milestone(s); ${c56_m3_skipped} not-yet-scaffolded (NOT evaluated, non-gating) (${c56_m3_adv:-0} advisory; marker adoption ${c56_marker:-none})${c56_m3_partial}"
           fi
@@ -13525,14 +13593,14 @@ sys.stdout.write("".join(out) + "|")
     log "Check 58: ADR ratification-flip backstop (Proposed + flip-promise; ADVISORY — never enforce-capable; G-CL9 is the authority)"
     local c58_script="core/deploy/tools/check-adr-flip.py"
     if [[ ! -f "$c58_script" ]]; then
-      flag_advisory_only "adr-flip-verify" "primitive script missing: $c58_script"
+      flag_advisory_only "adr-flip-verify" "primitive script missing: $c58_script" "id-non-gating"
     else
       local c58_out c58_exit=0
       c58_out=$(/usr/bin/python3 "$c58_script" --root . --output-format tsv 2>&1) || c58_exit=$?
       if [[ $c58_exit -eq 3 ]]; then
-        flag_advisory_only "adr-flip-verify" "input failure (exit 3): $(head -1 <<<"$c58_out") — zero ADRs parsed; the ADR tree may have moved"
+        flag_advisory_only "adr-flip-verify" "input failure (exit 3): $(head -1 <<<"$c58_out") — zero ADRs parsed; the ADR tree may have moved" "id-non-gating"
       elif [[ $c58_exit -ne 0 ]]; then
-        flag_advisory_only "adr-flip-verify" "check errored (exit $c58_exit): $(head -1 <<<"$c58_out")"
+        flag_advisory_only "adr-flip-verify" "check errored (exit $c58_exit): $(head -1 <<<"$c58_out")" "id-non-gating"
       else
         local c58_proposed c58_count c58_oldest
         c58_proposed=$(echo "$c58_out" | awk -F'\t' '$1=="PROPOSED"{print $2}')
@@ -13542,7 +13610,7 @@ sys.stdout.write("".join(out) + "|")
         else
           # Oldest promise first — the aging signal, not an alphabetical dump.
           c58_oldest=$(head -3 <<<"$(awk -F'\t' '$1=="PROMISED" && $3 != "?" {print $3"\t"$2}' <<<"$c58_out" | sort -rn)" | awk -F'\t' '{printf "%s (%sd) ", $2, $1}')
-          flag_advisory_only "adr-flip-verify" "${c58_count} of ${c58_proposed:-?} Proposed ADR(s) carry flip-promise wording; oldest: ${c58_oldest:-n/a}— confirm at release close whether each ratifying review has CLOSED (G-CL9); a still-pending review means Proposed is CORRECT"
+          flag_advisory_only "adr-flip-verify" "${c58_count} of ${c58_proposed:-?} Proposed ADR(s) carry flip-promise wording; oldest: ${c58_oldest:-n/a}— confirm at release close whether each ratifying review has CLOSED (G-CL9); a still-pending review means Proposed is CORRECT" "id-non-gating"
         fi
       fi
     fi
@@ -14915,7 +14983,7 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
           local _c71_hit
           while IFS= read -r _c71_hit; do
             [[ -z "$_c71_hit" ]] && continue
-            flag_advisory_only "issue-body-anchor-drift" "$_c71_hit"
+            flag_advisory_only "issue-body-anchor-drift" "$_c71_hit" "id-non-gating"
           done < <(echo "$c71_out" | awk -F'\t' '$1=="UNRESOLVED"{printf "#%s (body line %s) cites %s section %s, which that file does not carry; it does carry: %s\n", $2, $3, $4, $5, $7}')
         fi
       fi
