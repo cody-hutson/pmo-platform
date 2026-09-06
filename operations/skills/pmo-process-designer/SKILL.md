@@ -461,6 +461,11 @@ These are hard rejections — same standard as all suite skills:
   confidence level (HIGH / MEDIUM / LOW) per
   `core/specs/reversibility-protocol.md`. Outputs missing tiers on
   decision-class items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
+- **External-seam writes** — a work-item record or knowledge page in a connected system,
+  and their comment streams — follow `core/disciplines/external-seam-conduct.md`: the
+  record holds state, a comment addresses a person. A drafted requirement, a gap finding,
+  or a traceability update destined for an external record lands in that record's own
+  fields or body, not as a dated log comment beneath it.
 
 ## Domain-Specific Failure Modes
 

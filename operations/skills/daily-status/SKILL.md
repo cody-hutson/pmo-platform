@@ -385,6 +385,13 @@ Inherits CLAUDE.md § Universal Preferences and § Quality Standards. See the so
 for the authoritative list. Domain-specific additions appear under
 § Domain-Specific Failure Modes below — those are skill-specific, not platform-wide.
 
+**External-seam writes** — a work-item record or knowledge page in a connected system,
+and their comment streams — follow `core/disciplines/external-seam-conduct.md`: the
+record holds state, a comment addresses a person. A status update posted to an external
+record is the highest-risk case this skill runs, because a daily cadence is exactly what
+turns one well-formed comment into a stacked register: one agent comment per record per
+run, updated in place on re-run, never a second dated block below the first.
+
 ## Domain-Specific Failure Modes
 
 These domain-specific anti-patterns coexist with the `### Guardrails` subsection above

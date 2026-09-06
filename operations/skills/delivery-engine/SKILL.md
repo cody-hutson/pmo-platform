@@ -611,6 +611,12 @@ These are hard rejections — same standard as PPM:
   IRREVERSIBLE) paired with a confidence level (HIGH / MEDIUM / LOW) per
   `core/specs/reversibility-protocol.md`. Outputs missing tiers on decision-class
   items fail pmo-qa-auditor G4. See Reversibility Discipline section above.
+- **External-seam writes** — a work-item record or knowledge page in a connected system,
+  and their comment streams — follow `core/disciplines/external-seam-conduct.md`: the
+  record holds state, a comment addresses a person. A gate verdict, a sprint-scope
+  decision, or a RAID entry destined for an external work item lands in that record's
+  own fields; never narrate a status or assignee transition the system's own changelog
+  already records, and never overwrite a human-authored assessment because it is stale.
 
 ## Domain-Specific Failure Modes
 
