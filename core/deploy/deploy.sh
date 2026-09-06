@@ -13051,7 +13051,7 @@ sys.stdout.write("".join(out) + "|")
     fi
     # (b)/(d) registry-derived token conformance, both delimiter families
     if [[ -f "$c44_spec" ]]; then
-      local c44_sq_reg c44_ang_reg c44_pfx c44_tok c44_ang_hits c44_owned
+      local c44_sq_reg c44_ang_reg c44_pfx c44_tok c44_ang_hits
       local c44_uncod_n=0 c44_uncod_raw=0
       # Registry read — TABLE-SCOPED. §1.3 says "the §1 and §1.1 TABLES are the closed
       # registered set", so only the FIRST CELL of a markdown table row registers. That
@@ -13090,8 +13090,13 @@ sys.stdout.write("".join(out) + "|")
             c44_uncod_n=$((c44_uncod_n + 1))
             c44_uncod_raw=$((c44_uncod_raw + $(grep -cxF "$c44_tok" <<<"$c44_ang_hits" || true)))
           done
-          c44_owned="<OPERATOR_INSTANCE_RELEASE_LOG_PATH>"  # depersonalization-token: allow — illustrative naming of the one un-codified token that has a tracked owner
-          flag_advisory_only "depersonalization-token" "angle-bracket token inventory: ${c44_uncod_n} un-codified token(s) / ${c44_uncod_raw} raw match(es) in tracked corpus. These are SANCTIONED, not defects — depersonalization-spec.md §4 'Convention scope' states un-codified angle tokens inherit the resolution-rule convention and that codification is incremental. Closure path is the §4 rule itself (a token's row is added when its consumer lands), and this arm's own decline is the progress signal; do NOT hunt for a per-token owner, only ${c44_owned} has one (#5824). Inventory: ${c44_uncod}" "arm-non-gating"
+          # The owner-hint that used to sit here named ONE token as the only un-codified
+          # one with a tracked owner. That was a point-in-time census claim hardcoded
+          # beside a live-derived count, and it was false by the time it was read: the
+          # inventory carried sixteen. A literal that has to be re-verified on every
+          # reading is the drift this arm exists to avoid, so it is gone rather than
+          # corrected — the payload below is derived end to end.
+          flag_advisory_only "depersonalization-token" "angle-bracket token inventory: ${c44_uncod_n} un-codified token(s) / ${c44_uncod_raw} raw match(es) in tracked corpus. These are SANCTIONED, not defects — depersonalization-spec.md §4 'Convention scope' states un-codified angle tokens inherit the resolution-rule convention and that codification is incremental. Closure path is the §4 rule itself (a token's row is added when its consumer lands), and this arm's own decline is the progress signal, so do NOT hunt for a per-token owner. The one obligation that IS enforced is the same-change one, at the surface that has a diff: check-operator-toml-schema.sh leg C70e fails a pull request that authors a NEW angle token without its §4 row, and leg C70d fails when the §4 table and the two operator.toml registries disagree. Inventory: ${c44_uncod}" "arm-non-gating"
         fi
       fi
     else

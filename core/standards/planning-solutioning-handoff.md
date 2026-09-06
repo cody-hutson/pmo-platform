@@ -96,7 +96,7 @@ Stage 4 Planning spokes instantiate the matrix below in the release plan's `## S
 - ANY ✓ on ANY issue → release-wide **ACTIVATE** (Stage 5 sub-tasks created for ALL retained issues).
 - ALL ✗ across ALL issues → release-wide **SKIP** (Engineering Stage 6 receives Planning-level specs directly).
 
-**Worked instantiation (this release):** See [the release plan](<OPERATOR_INSTANCE_RELEASES_PLANS_PATH>) § 6 Stage Applicability Matrix for the canonical example. All four release issues hit ≥1 trigger; release-level verdict is **ACTIVATE**.
+**Worked instantiation (this release):** See [the release plan](<OPERATOR_INSTANCE_RELEASES_PLANS_PATH>) § 6 Stage Applicability Matrix for the canonical example. All four release issues hit ≥1 trigger; release-level verdict is **ACTIVATE**. <!-- depersonalization-token: allow — an illustrative pointer at a per-release plan file, not a codified path: the token has no consumer and no canonical default, so registering it would mean inventing one -->
 
 **Authoring note (Stage 4 spoke):** The matrix can be terse (single ✓/✗ glyph per cell) when the Rationale column captures the per-trigger evidence. The Rationale column is the read-surface for Collective Review's R4 N-way consistency table — it must be specific enough that a downstream reader can verify the trigger fired without re-reading the issue body.
 

@@ -1837,8 +1837,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # C70e needs the base commit: "newly authored" is decided
+                           # by absence at base, and a shallow clone cannot answer it
 
       - name: Assert the operator.toml schema declaration is the single source of truth
+        env:
+          # Injection-safety: BASE_SHA is bound via env: and used only as "$BASE_SHA",
+          # never inlined into the run command — the convention every other
+          # diff-scoped job in this workflow follows. It is a commit SHA supplied by
+          # the event payload, not attacker-authored free text.
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
 
@@ -1848,14 +1857,68 @@ jobs:
           bash core/deploy/tools/check-operator-toml-schema.sh --self-test \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
-          # --repo-integrity runs the C70b and C70c legs ONLY. The C70a leg reads
-          # operator-instance state, which CI does not have and must never
+          # --repo-integrity runs the C70b, C70c and C70d legs ONLY. The C70a leg
+          # reads operator-instance state, which CI does not have and must never
           # fabricate — it runs at `deploy.sh --check` on an operator machine.
           set +e
           bash core/deploy/tools/check-operator-toml-schema.sh --repo-integrity \
             | tee /tmp/operator-toml-schema.out
           RC=${PIPESTATUS[0]}
           set -e
+
+          # C70e — the same-change obligation, at the ONE surface that has a diff.
+          # A separate invocation rather than a fourth leg of --repo-integrity because
+          # it is the only leg whose population is a diff: it is meaningless at deploy
+          # time and must not silently no-op there.
+          set +e
+          bash core/deploy/tools/check-operator-toml-schema.sh --diff-base "$BASE_SHA" \
+            | tee /tmp/operator-toml-diff.out
+          RC_DIFF=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo "### section-4 same-change obligation (C70e, diff-scoped)"
+            echo '```'
+            cat /tmp/operator-toml-diff.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # A broken diff probe is NOT a clean diff. An unresolvable base would make
+          # every token look newly authored, so exit 3 here fails the job exactly as
+          # it does for the repo legs.
+          if [ "$RC_DIFF" -eq 3 ]; then
+            echo "::error::C70e could not establish a readable diff against the base — the scan is unusable, not clean."
+            exit 1
+          fi
+
+          if [ "$RC_DIFF" -ne 0 ]; then
+            {
+              echo "## :x: A newly authored operator-instance token has no section-4 vocabulary row"
+              echo ""
+              echo "\`depersonalization-spec.md\` section 4: *\"Authoring NEW angle-bracket"
+              echo "tokens MUST add a row to this table in the same PR.\"* This arm is the"
+              echo "only place that obligation can be checked, because it is a property of"
+              echo "a **diff** and not of a working tree."
+              echo ""
+              echo "### What is and is not flagged"
+              echo ""
+              echo "Only a token **absent from the corpus at the base commit** is flagged."
+              echo "Adding another reference to a token that already exists is the"
+              echo "incremental use section 4 expressly sanctions and is never reported — a"
+              echo "gate that failed on those would fail correct work across 17"
+              echo "spec-sanctioned tokens."
+              echo ""
+              echo "### The fix"
+              echo ""
+              echo "Add the section-4 row (canonical default, \`[paths]\` override field, and"
+              echo "the landed consumer that supplies the default), plus its"
+              echo "\`operator.toml.template\` and \`operator-toml-schema.json\` counterparts —"
+              echo "leg **C70d** asserts all three agree. If the literal is a fixture or an"
+              echo "illustration rather than a real reference, mark the line"
+              echo "\`depersonalization-token: allow\`."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
           {
             echo "### operator.toml declared-schema scan"
