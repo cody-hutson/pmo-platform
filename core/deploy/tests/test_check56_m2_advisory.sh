@@ -50,6 +50,21 @@ echo "────────────────────────�
 # would collide with it. Per-function anchors make that insertion invisible here.
 extract_fn() { /usr/bin/sed -n "/^  $1() {\$/,/^  }\$/p" "$DEPLOY_SH"; }
 
+# Top-level helpers the emitters CALL: same per-function anchoring, at ZERO
+# indent. deploy.sh defines its warn-log escape helper at file scope, so the
+# two-space anchor above returns EMPTY for it.
+#
+# WHAT AN EMPTY EXTRACTION NOW DOES, stated accurately. The runner initialises
+# JSON_ESCAPED at file scope exactly as deploy.sh does, so an absent helper does
+# NOT abort it under `set -u` — the emitters call a function that is not defined,
+# read the still-empty global, and emit a well-formed row whose `detail` is the
+# empty string. That is the shipped script's own behaviour, and a runner that
+# aborted instead would be the unfaithful one. So the degradation is silent by
+# construction, and two arms convert it into a named failure: Arm A asserts the
+# extraction is non-vacuous, and Arm G reads the emitted rows and fails on an
+# empty detail — with the degraded extraction as its own sensitivity control.
+extract_fn0() { /usr/bin/sed -n "/^$1() {\$/,/^}\$/p" "$DEPLOY_SH"; }
+
 # Emit region: sentinel-marked, because it is THIS card's own region.
 extract_emit() {
   local _b _e
@@ -75,17 +90,19 @@ extract_inputs() {
 FW="$(extract_fn flag_warn_or_issue)"
 FA="$(extract_fn flag_advisory_only)"
 RM="$(extract_fn resolve_check_mode)"
+JE="$(extract_fn0 json_escape_detail)"
 EM="$(extract_emit)"
 IN="$(extract_inputs)"
 _a_ok=1
 [[ -n "$FW" && "$FW" == *'ISSUES=$((ISSUES + 1))'* ]] || { _a_ok=0; fail "A flag_warn_or_issue extraction empty or missing its ISSUES increment"; }
 [[ -n "$FA" && "$FA" != *'ISSUES=$((ISSUES + 1))'* && "$FA" != *'case '* ]] || { _a_ok=0; fail "A flag_advisory_only extraction empty, or it carries a mode case / ISSUES increment (its structural guarantee is gone)"; }
 [[ -n "$RM" && "$RM" == *'.mode'* ]] || { _a_ok=0; fail "A resolve_check_mode extraction empty or missing its .mode read"; }
+[[ -n "$JE" && "$JE" == *'JSON_ESCAPED='* ]] || { _a_ok=0; fail "A json_escape_detail extraction empty or missing its JSON_ESCAPED assignment — both emitters call it and then read that global, so an empty extraction leaves JSON_ESCAPED at its initial empty value and every arm below emits a warn-log row whose detail is the empty string, while still printing its counters normally (Arm G is what catches that downstream)"; }
 [[ -n "$EM" && "$EM" == *'flag_advisory_only'* && "$EM" == *'milestone-epic M1'* ]] || { _a_ok=0; fail "A C56-EMIT region empty, or it does not carry BOTH legs (Arm D needs M1 in scope)"; }
 [[ -n "$IN" && "$IN" == *'$1=="M1"'* && "$IN" == *'$1=="M2"'* ]] || { _a_ok=0; fail "A input-building block empty or missing its M1/M2 awk extractions (anchor moved)"; }
 if [[ "$_a_ok" -eq 1 ]]; then
-  pass "A all five regions extracted from deploy.sh and carry their discriminating tokens"
-  note "denominators: flag_warn_or_issue $(printf '%s\n' "$FW" | wc -l | tr -d ' ') lines · flag_advisory_only $(printf '%s\n' "$FA" | wc -l | tr -d ' ') lines · resolve_check_mode $(printf '%s\n' "$RM" | wc -l | tr -d ' ') lines · emit region $(printf '%s\n' "$EM" | wc -l | tr -d ' ') lines · input block $(printf '%s\n' "$IN" | wc -l | tr -d ' ') lines"
+  pass "A all six regions extracted from deploy.sh and carry their discriminating tokens"
+  note "denominators: flag_warn_or_issue $(printf '%s\n' "$FW" | wc -l | tr -d ' ') lines · flag_advisory_only $(printf '%s\n' "$FA" | wc -l | tr -d ' ') lines · resolve_check_mode $(printf '%s\n' "$RM" | wc -l | tr -d ' ') lines · json_escape_detail $(printf '%s\n' "$JE" | wc -l | tr -d ' ') lines · emit region $(printf '%s\n' "$EM" | wc -l | tr -d ' ') lines · input block $(printf '%s\n' "$IN" | wc -l | tr -d ' ') lines"
 fi
 
 # ── Runner ──────────────────────────────────────────────────────────────────
@@ -95,12 +112,19 @@ fi
 # DEPLOY_CHECK_MODE is set to a value that is NOT a valid mode, so that a run in
 # which the mode file was not read emits nothing at all rather than quietly
 # resolving to a plausible default — a loud failure, not a silent substitution.
-build_runner() {  # $1 = mode-dir, $2 = out path
+build_runner() {  # $1 = mode-dir, $2 = out path, $3 = warn-log path, $4 = json_escape_detail body
   { echo '#!/usr/bin/env bash'; echo 'set -uo pipefail'
     echo "pmo_instance_path() { printf '%s' \"$1\"; }"
     echo 'log() { printf "%s\n" "$1"; }'
-    echo "WARN_LOG=\"$TMPD/warn.jsonl\""
+    echo "WARN_LOG=\"$3\""
     echo 'DEPLOY_CHECK_MODE="__no-mode-file-was-read__"'
+    # JSON_ESCAPED is pre-initialised because deploy.sh initialises it at file
+    # scope too. Omitting it would make the runner UNFAITHFUL to the shipped
+    # script: an absent escape helper would abort the runner under `set -u`
+    # here while deploy.sh itself would carry on and emit an empty detail. Arm G
+    # asserts the real consequence instead of relying on that artificial abort.
+    echo 'JSON_ESCAPED=""'
+    printf '%s\n' "$4"
     printf '%s\n' "$FW"; printf '%s\n' "$FA"; printf '%s\n' "$RM"
     echo 'run() {'; echo '  local ISSUES=0'
     echo '  local c56_out c56_mode'
@@ -157,11 +181,13 @@ _fix_ok=1
 # ── Arm driver ──────────────────────────────────────────────────────────────
 # $1 = fixture tsv, $2 = mode written to the mode file. Runs in a temp cwd so the
 # resolver's relative .claude/hooks fallback cannot reach an operator's tree.
-run_arm() {  # $1 = tsv, $2 = mode; echoes the run output
+run_arm() {  # $1 = tsv, $2 = mode, [$3 = warn-log], [$4 = json_escape_detail body]
   local _md="$TMPD/mode.$2"
+  local _wl="${3:-$TMPD/warn.jsonl}"
+  local _je="${4-$JE}"
   mkdir -p "$_md"
   printf '%s\n' "$2" > "$_md/milestone-epic-membership.mode"
-  build_runner "$_md" "$TMPD/runner.sh"
+  build_runner "$_md" "$TMPD/runner.sh" "$_wl" "$_je"
   ( cd "$TMPD" && bash "$TMPD/runner.sh" "$1" 2>&1 )
 }
 field() { /usr/bin/awk -F'\t' -v k="$1" '$1==k{print $2; exit}' <<<"$2"; }
@@ -269,6 +295,66 @@ elif [[ "$F_SUBJ_H" != "-" ]]; then
   fail "F a flag_warn_or_issue call site still claims unconditional warn-only in its governing comment — deploy.sh line(s): $F_SUBJ_H (denominator $F_SUBJ_N)"
 else
   pass "F 0 of $F_SUBJ_N flag_warn_or_issue call sites claim unconditional warn-only ($F_SUBJ_C carry a governing comment); sensitivity arm returns $F_CTRL_K hit(s) over $F_CTRL_N flag_advisory_only call sites"
+fi
+
+# ── Arm G — the warn-log rows the arms above have been WRITING are now READ ──
+# Both emitters append a JSON row to $WARN_LOG, and every arm above has been
+# producing them. Until this arm existed, WARN_LOG occurred exactly ONCE in this
+# file — at the writer declaration in build_runner — so the harness generated
+# evidence that nothing consumed, and the whole `detail` field could be empty on
+# every row without a single arm noticing.
+#
+# The discrimination is total, which is why the gap mattered: under an extraction
+# that loses json_escape_detail, the runner emits `"detail":""` on every row,
+# while the shipped extractor emits the full detail. Arm G asserts the subject
+# and Arm G2 runs exactly that degraded extraction as its sensitivity control.
+_g_read() {  # $1 = warn-log path; echoes "<rows>\t<empty-detail rows>\t<unparseable rows>"
+  /usr/bin/python3 - "$1" <<'PYEOF'
+import json
+import sys
+try:
+    raw = open(sys.argv[1], encoding='utf-8').read()
+except OSError:
+    print('0\t0\t0')
+    sys.exit(0)
+rows = [l for l in raw.split('\n') if l.strip()]
+empty = bad = 0
+for l in rows:
+    try:
+        d = json.loads(l)
+    except Exception:
+        bad += 1
+        continue
+    if not d.get('detail'):
+        empty += 1
+print('%d\t%d\t%d' % (len(rows), empty, bad))
+PYEOF
+}
+
+G_STAT="$(_g_read "$TMPD/warn.jsonl")"
+G_ROWS="$(cut -f1 <<<"$G_STAT")"
+G_EMPTY="$(cut -f2 <<<"$G_STAT")"
+G_BAD="$(cut -f3 <<<"$G_STAT")"
+
+# Sensitivity: the SAME arms, with json_escape_detail extracted as nothing —
+# the degradation Arm A's guard is about. Its rows must come back detail-empty,
+# or Arm G's zero is a broken probe rather than a measurement.
+run_arm "$TMPD/m2_only.tsv" enforce "$TMPD/warn_degraded.jsonl" "" >/dev/null 2>&1
+run_arm "$TMPD/m1_only.tsv" warn    "$TMPD/warn_degraded.jsonl" "" >/dev/null 2>&1
+G2_STAT="$(_g_read "$TMPD/warn_degraded.jsonl")"
+G2_ROWS="$(cut -f1 <<<"$G2_STAT")"
+G2_EMPTY="$(cut -f2 <<<"$G2_STAT")"
+
+if [[ "${G_ROWS:-0}" -eq 0 ]]; then
+  fail "G BROKEN PROBE — the arms above wrote ZERO warn-log rows, so there is nothing to assert about their detail field. The emitters' log path is not reaching this harness"
+elif [[ "${G2_ROWS:-0}" -eq 0 || "${G2_EMPTY:-0}" -lt 1 ]]; then
+  fail "G SENSITIVITY CONTROL FAILED — the degraded-extraction run produced ${G2_ROWS:-0} row(s) of which ${G2_EMPTY:-0} carry an empty detail (want >=1). Arm G's subject is therefore UNUSABLE, not clean: a zero whose control arm also returns zero is a BROKEN PROBE"
+elif [[ "${G_BAD:-1}" -ne 0 ]]; then
+  fail "G ${G_BAD} of ${G_ROWS} emitted warn-log row(s) are not parseable JSON — the drain that consumes this family cannot read them"
+elif [[ "${G_EMPTY:-1}" -ne 0 ]]; then
+  fail "G ${G_EMPTY} of ${G_ROWS} emitted warn-log row(s) carry an EMPTY detail field. The row is written but says nothing, which is indistinguishable from a check that found nothing"
+else
+  pass "G all ${G_ROWS} warn-log row(s) emitted by the arms above parse as JSON and carry a non-empty detail; sensitivity arm (json_escape_detail extracted as nothing) returns ${G2_EMPTY} of ${G2_ROWS} row(s) detail-empty — so this zero is a measurement"
 fi
 
 echo "─────────────────────────────────────────────────────────────────────────"

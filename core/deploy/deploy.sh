@@ -337,7 +337,15 @@ warn_log_segment_set() {
 
 # Echo the hot warn-log path, rotating it FIRST if it is over budget. Both
 # writer variables in cmd_check assign from here, so all 12 append sites are
-# bounded by one choke point and none of them changed.
+# bounded by one choke point.
+#
+# THE 12 SPLIT 9 + 3, and the split is worth stating because it was mis-derived
+# once. NINE sites interpolate a free-text `detail` through `"%s"` and therefore
+# route through json_escape_detail() below; THREE build `detail` from integers
+# only and carry no escaping step at all (close-completeness, decision-emission,
+# register-runner-resolution). The total is unchanged at 12 and the choke point
+# is unchanged; only the serialization step behind nine of them was converted
+# from nine duplicated two-line idioms to one shared definition.
 #
 # ROTATION IS A MOVE, NEVER A DELETION. The hot file is renamed whole into the
 # next numbered segment in the SAME directory. Nothing is discarded; retention
@@ -401,6 +409,71 @@ warn_log_path() {
     fi
   fi
   printf '%s\n' "$_wl_hot"
+}
+
+# Escape a warn-log `detail` value for embedding in a JSON string, per RFC 8259
+# §7: every U+0000–U+001F must be escaped, not only the two structural
+# characters. Sets JSON_ESCAPED rather than echoing, so no call site forks a
+# subshell — these are emitters whose contract (`>> … 2>/dev/null || true`) is
+# never to fail, and a fork is a failure mode a substitution cannot have.
+#
+# WHY THIS IS THE THIRD MEMBER OF THIS BLOCK. The two helpers above are the
+# warn-log family's read surface and its bounded-append choke point; this is its
+# serialization step. All three are writer-family machinery and the block is the
+# file's declared single home for it. A `lib-*.sh` was considered and rejected:
+# deploy.sh sources a lib only where a SECOND consumer exists, and this helper
+# has one.
+#
+# ORDERING IS LOAD-BEARING: backslash is substituted FIRST. Any other order
+# re-escapes the backslashes this function itself introduces.
+#
+# The C0 loop runs only when a control character is actually present. The common
+# path therefore costs the same two substitutions it always did.
+#
+# NUL is unreachable rather than unhandled: bash cannot hold U+0000 in a
+# variable, so no `detail` can carry one.
+#
+# WHY NOT `jq`. Not on dependency grounds — jq is already an undeclared hard
+# dependency of this file. Every one of the 12 append sites ends
+# `>> … 2>/dev/null || true` under `set -euo pipefail`, i.e. it is built never to
+# fail. Piping into jq inserts a short-circuiting reader into that path, which is
+# the documented SIGPIPE/pipefail class in which a SUCCESSFUL escape can report
+# failure. Parameter expansion cannot fork, cannot signal, and cannot be affected
+# by pipefail.
+#
+# bash 3.2.57-safe: parameter expansion, `case`, `printf` only — no associative
+# array, no ${var@Q}, no mapfile.
+JSON_ESCAPED=""
+json_escape_detail() {
+  local _s="$1" _i _c _r
+  _s="${_s//\\/\\\\}"
+  _s="${_s//\"/\\\"}"
+  case "$_s" in
+    *[[:cntrl:]]*)
+      _s="${_s//$'\t'/\\t}"
+      _s="${_s//$'\n'/\\n}"
+      _s="${_s//$'\r'/\\r}"
+      _s="${_s//$'\b'/\\b}"
+      _s="${_s//$'\f'/\\f}"
+      case "$_s" in
+        *[[:cntrl:]]*)
+          _i=1
+          while [ $_i -lt 32 ]; do
+            case $_i in
+              8|9|10|12|13) : ;;
+              *)
+                _c=$(printf "\\$(printf %03o $_i)")
+                _r=$(printf "\\\\u%04x" $_i)
+                _s="${_s//$_c/$_r}"
+                ;;
+            esac
+            _i=$((_i + 1))
+          done
+          ;;
+      esac
+      ;;
+  esac
+  JSON_ESCAPED="$_s"
 }
 
 # User-local skills mirror — exposes every PMO skill as a plain /skill-name
@@ -4864,6 +4937,737 @@ mirror_pair_set() {
   printf '%s\n' "${_mps_rows[@]}"
 }
 
+# ─── hook_publish_set — the S4 HOOK TIER's declared publish map (TOP-LEVEL) ───
+#
+# WHAT THIS IS, AND WHY IT IS THE MISSING FAMILY MEMBER RATHER THAN A NEW IDEA.
+# ADR-017 Decision 1 places the deployed hook tree in S4 (runtime deployment) and
+# states the invariant every S4 tier carries: S4 is DERIVED from S1 and must always
+# be regenerable — never hand-edited. Checks 7 / 9 / 11 / 12 already assert that
+# invariant for the package, rules, harness and user-local-skills tiers. The hook
+# tier had a publisher (setup-workspace.sh install_hooks() / --refresh-hooks, which
+# update.sh delegates to) and NO assertion that the publisher's output matches its
+# input. Check 79 is that assertion. It OBSERVES; it never writes the deployed tree.
+#
+# A FUNCTION, NOT A GLOBAL ARRAY, for the reasons stated on mirror_pair_set() above:
+# `local -a` is not legal at top level, and a bare global array is rewritable by any
+# later caller, so it is not a single source of truth. Same convention, extended.
+#
+# FOUR PIPE-SEPARATED FIELDS: <source>|<dest>|<class>|<match>.
+#   source  repo-relative path or glob; "-" means the deployed artifact HAS no source
+#   dest    path or glob RELATIVE TO THE DEPLOYED HOOKS ROOT; "-" means not published
+#   class   entrypoint | co-deployed-lib | mode-template | operator-state | not-deployed
+#   match   glob | exact | presence | presence-optional
+#
+# THE DEST FIELD IS ROOT-RELATIVE, DELIBERATELY. mirror_pair_set() embeds $DEPLOY_ROOT
+# because its pairs live under $HOME/.claude/; the hook tier lives under a DIFFERENT
+# root (${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/.claude/hooks — the only root at which
+# deployed hooks actually exist, and the one Check 71 already resolves). Naming the
+# root once in the check, rather than 20 times here, means a row can never disagree
+# with the resolver about which tree it is describing.
+#
+# WHY `entrypoint` IS ONE GLOB ROW AND NOT 23 ENUMERATED ROWS. install_hooks()
+# iterates "${SOURCE_REPO}/core/hooks/"*.sh, so the population is DERIVED by the
+# publisher. Enumerating it here would create a second hand-maintained holder of a
+# set the publisher already owns — precisely the "hand-maintained enumerations …
+# let the checks pass over populations they never saw" defect this milestone exists
+# to remove. A new hook needs no edit to this map.
+#
+# MATCH PRECEDENCE IS EXACT-BEFORE-GLOB, IN DECLARATION ORDER, AND IT IS LOAD-BEARING
+# IN TWO PLACES — both measured, neither hypothetical:
+#   1. `path-leak-patterns.sh` and `lib-instance-path.sh` are published into the hooks
+#      root from core/deploy/, NOT core/hooks/. They match the `*.sh` entrypoint glob
+#      by shape. Without exact-first they would be compared against a core/hooks/
+#      source that does not exist and reported unsourced — 2 permanent false
+#      positives, and the reason a basename-keyed walk cannot work here at all.
+#   2. `.mode` and `deploy-check.mode` match the `*.mode` operator-state glob. Without
+#      exact-first, operator-state would shadow their mode-template rows and the check
+#      would silently stop asserting that the four postures were ever installed.
+#
+# GLOB SEMANTICS ARE POSIX: `*` does NOT cross `/`, `**` does. That is what keeps the
+# `*.sh` entrypoint row from claiming `lib/dep-resolve.sh`, and what lets the
+# not-deployed rows cover the tests/ and testdata/ subtrees wholesale.
+#
+# `mode-template` IS PRESENCE-ONLY, AND A CONTENT COMPARE HERE WOULD BE A LATENT
+# FALSE POSITIVE — worse than a live one, because it reads GREEN at authoring time.
+# All four deployed mode files happen to equal their template today (every posture is
+# still `warn`); the check would turn red the first time an operator flips one to
+# `enforce`, which is the entire purpose of the file. install_mode_template_if_missing
+# already prints `PRESERVED (operator-state)` for exactly this reason. This is the
+# `config.toml` row of core/rules/harness-deployment.md § Operator-State Preservation
+# Policy — "Only if target doesn't exist … Presence-only check (template vs.
+# customized values diverge by design)" — projected onto the hook tier.
+#
+# `operator-state` ROWS CARRY GLOBS WHERE THE HARNESS ALLOWLIST CARRIES LITERAL
+# FILENAMES. Forced by the population, and stated rather than silently deviated:
+# these runtime artifacts are GENERATIVE — every new block-*.sh hook produces its own
+# <name>-warn-log.jsonl. A literal list would need an edit per hook and would silently
+# under-cover until somebody made it. Same role as HARNESS_OPERATOR_STATE ("NEVER
+# touched (target-only operational log) · Skipped (target-only file)"), different
+# shape because the population is open rather than closed.
+#
+# ONE CLASSED DECLARATION INSTEAD OF THE HARNESS'S TWO PARALLEL ARRAYS. harness-
+# deployment.md splits HARNESS_LIST from HARNESS_OPERATOR_STATE. One classed emitter
+# is strictly safer here for the reason this milestone exists — two holders of one set
+# desync. The cost is real and is recorded rather than hidden: that document's
+# "append the filename to HARNESS_OPERATOR_STATE" instruction does not transfer
+# verbatim to hooks; the equivalent act is adding a row with class `operator-state`.
+#
+# THE MARKER IS A NEW FAMILY — `hook-publish-set:`, DELIBERATELY NOT `mirror-pair-set:`.
+# Check 77 enumerates mirror-pair holders from that other marker and diffs their sets.
+# Reusing it would admit this map into that population and make Check 77 report a
+# phantom desync against a set it has nothing to do with. Two families, no collision.
+hook_publish_set() {
+  # hook-publish-set: BEGIN holder=deploy-script sep=triple-pipe field=1
+  local -a _hps_rows=(
+    "core/hooks/*.sh|||*.sh|||entrypoint|||glob"
+    "core/deploy/tools/path-leak-patterns.sh|||path-leak-patterns.sh|||co-deployed-lib|||exact"
+    "core/deploy/lib-instance-path.sh|||lib-instance-path.sh|||co-deployed-lib|||exact"
+    "core/hooks/lib/dep-resolve.sh|||lib/dep-resolve.sh|||co-deployed-lib|||exact"
+    "core/hooks/lib/positional-issueref.awk|||lib/positional-issueref.awk|||co-deployed-lib|||exact"
+    "core/hooks/lib/command-position.awk|||lib/command-position.awk|||co-deployed-lib|||exact"
+    "core/hooks/lib/fragile-ref-patterns.sh|||lib/fragile-ref-patterns.sh|||co-deployed-lib|||exact"
+    "core/hooks/lib/master-enable.sh|||lib/master-enable.sh|||co-deployed-lib|||exact"
+    "core/hooks/lib/scope-guard.sh|||lib/scope-guard.sh|||co-deployed-lib|||exact"
+    "core/hooks/.mode.template|||.mode|||mode-template|||presence"
+    "core/hooks/deploy-check.mode.template|||deploy-check.mode|||mode-template|||presence"
+    "core/hooks/.gh-path-leak-mode.template|||.gh-path-leak-mode|||mode-template|||presence"
+    "core/hooks/.autonomy-mode.template|||.autonomy-mode|||mode-template|||presence"
+    "core/hooks/.verify-session-config-mode.template|||.verify-session-config-mode|||mode-template|||presence-optional"
+    "-|||*-warn-log.jsonl|||operator-state|||glob"
+    "-|||block-log.jsonl|||operator-state|||exact"
+    "-|||allowlist-additions.log|||operator-state|||exact"
+    "-|||*.mode|||operator-state|||glob"
+    "core/hooks/tests/**|||-|||not-deployed|||glob"
+    "core/hooks/testdata/**|||-|||not-deployed|||glob"
+  )
+  # hook-publish-set: END
+  printf '%s\n' "${_hps_rows[@]}"
+}
+
+# ─── hook_parity_remedy — the republish instruction, declared ONCE (TOP-LEVEL) ─
+#
+# Every Check 79 finding that names a fix names THIS string. D-5651-1 — which carrier
+# regenerates the S4 hook tier, the installer (status quo) or `deploy.sh --deploy` —
+# is an OPEN operator decision this check does not resolve. Emitting the remedy from
+# one declared constant means settling it later is a one-line edit here rather than a
+# sweep through every finding string.
+hook_parity_remedy() {
+  printf '%s' 'republish via the hook carrier: bash docs/scripts/setup-workspace.sh --refresh-hooks (a durable pre-refresh snapshot is captured first; --list-hook-snapshots / --restore-hooks reverse it)'
+}
+
+# ─── _c79_compute_verdict — Check 79's pure emitter (TOP-LEVEL) ───────────────
+#
+# Echoes TAB-separated verdict lines; the caller renders them. Same pure-emitter
+# convention as _c9_undeclared_scan / _c78_compute_verdict, and hoisted to top level
+# for the reason stated on flag_not_evaluated: bash registers a nested function only
+# when execution REACHES its definition, so a body sited inside cmd_check() is
+# reachable only from below its own definition point.
+#
+# TWO ARMS, ASYMMETRIC BY DESIGN — this is Check 71's own declared split reused:
+# "deadline arm repo-derivable + enforcing; evidence arm operator-local + advisory".
+#
+#   ARM A — MAP CLOSURE. Derives the publisher's publish acts READ-ONLY from
+#   install_hooks() and asserts set equality against the map above, both directions.
+#   It needs no deployed tree, runs in CI, and is green by construction at landing
+#   because it asserts a relation between two REPOSITORY files. Every degradation
+#   direction fails loud: a co-deploy the map lacks, a declared pair the publisher
+#   dropped, and — the one that matters most — a derivation that returns NOTHING.
+#   ZERO DERIVED IS A HARD FAIL ON EVERY MODE, never a pass. A publisher refactor
+#   that breaks the extraction would otherwise read as "no undeclared publish acts",
+#   which is the failed-probe-as-clean-result inversion.
+#
+#   ARM B — BYTE PARITY. Operator-local and ADVISORY, so it is STRUCTURALLY incapable
+#   of reddening CI on pre-existing drift (R-5 discharged by construction, not by a
+#   warn-mode promise that a later cohort flip could revoke). No deployed tree — which
+#   is every CI runner — resolves to NOT-EVALUATED, a withheld verdict, never a clean
+#   one.
+#
+# RESIDUAL ARMS RUN IN BOTH DIRECTIONS. A deployed file matching no row, and a tracked
+# source under core/hooks/ matching no row, are both reported UNCLASSIFIED. Without
+# them the map itself becomes the blind spot it was written to remove.
+#
+# THE THIRD INPUT IS GIT HISTORY, NOT THE RECORDED CHECKSUM BASELINE. hook_checksums
+# in <workspace>/.claude/.workspace-setup.state is the obvious third input and it is
+# WRONG: refresh_hooks_flow deliberately does not call write_state_file (that function
+# rebuilds the whole state document and would blank verified_artifacts), and no
+# persist_hook_checksums_to_state sibling exists — only the settings baseline got one.
+# So the baseline is never persisted after a refresh and self-latches: it matches
+# neither source nor deployed, and install_hook_with_checksum then takes its
+# PRESERVED (operator-edited) branch forever. A check consuming it would classify a
+# stale PLATFORM copy as an accepted OPERATOR edit and stay quiet — reintroducing,
+# inside the remedy, the exact silence this check exists to remove. A bounded
+# git-history walk distinguishes the two states honestly instead: STALE (the deployed
+# bytes ARE some historical revision of the mapped source — refreshable) versus
+# DIVERGENT (they match no revision within the cap — an operator decision, and a
+# republish will PRESERVE rather than fix it). Past the cap the verdict is
+# UNCLASSIFIED-DEPTH, never DIVERGENT — an unfinished search is not a finding.
+#
+# THE COMPARATOR CONTROL ARM RUNS BEFORE ANY VERDICT, and it is not ceremony. The
+# live tree can be — and on the authoring instance now IS — fully reconciled, so
+# Arm B's population of drift rows can legitimately be zero. A 0-of-0 "clean" is not
+# evidence the comparator works. The control builds a synthetic source/deployed tree
+# in its own temp directory and drives it through THE SAME CALLABLES THE VERDICT
+# USES — expand() for row expansion, os.path.join() for path construction, and
+# sha_path() for hashing — asserting all four discriminations: the glob row expands
+# to both pairs, the identical pair reports MATCH, the one-byte-flipped pair reports
+# DRIFT, and an absent deployed file reads as absent rather than as a match. It FAILs
+# on every mode if any of them stops discriminating — Check 71's own CTRL: precedent,
+# "every verdict below would be unattributable".
+#
+#   IT TRAVERSES THE REAL PATH BECAUSE A NARROWER ARM CERTIFIED NOTHING. The first
+#   version hashed two in-memory literals and compared the digests — a property of
+#   hashlib, not of this check. Dev Testing mutated the verdict's own comparison to
+#   compare every file against ITSELF; the output was byte-identical to an honest run
+#   and the control still printed PASS. An arm that cannot see that mutation is not a
+#   control, so the arm now runs the functions the mutation would have to change.
+#
+# This also discharges the card's control-arm acceptance criterion REPO-DERIVABLY,
+# without anyone modifying a live deployed hook — which no agent may do in any case:
+# the deployed tree is Tier-0 floored by block-autonomy-ceiling.sh
+# BLOCK-AUTONOMY-001.
+#
+# THE DENOMINATOR HAS A FLOOR, for the reason the mapped population is not fixed:
+# every glob row is expanded against the tracked source listing, so a degraded
+# listing SHRINKS the denominator rather than erroring. A listing returning only the
+# non-glob rows collapses the mapped population from 31 pairs to 8 — losing all 23
+# entrypoint hooks — while every surviving pair still compares clean. Arm A therefore
+# FAILPROBEs on an empty source listing and on any publishable glob row that expands
+# to zero pairs; both limbs are repo-derivable, so both are enforcing on every mode.
+#
+# Emitted tokens (TAB-separated, one per line):
+#   CTRL   PASS|FAIL              <detail>
+#   ARMA   PASS|FAIL|FAILPROBE    <detail>
+#   ARMB   PASS|DRIFT|UNCLASSIFIED|NOT-EVAL   <detail>
+#   DENOM  <detail>
+#   NOTE   <detail>                (per-row diagnostics; never a verdict)
+#
+# FAIL VERSUS FAILPROBE IS THE MODE BOUNDARY, and the split is why it exists as two
+# tokens rather than one. FAIL is a genuine closure FINDING (a publish act the map
+# lacks, a declared pair the publisher dropped) and routes through flag_warn_or_issue,
+# so it respects warn-mode during the shakedown window like every other new gate.
+# FAILPROBE means the check COULD NOT MEASURE — an empty map, a derivation that
+# returned nothing, a publisher whose function body could not be located, a declared
+# source that does not exist. Those increment ISSUES on EVERY mode, deliberately
+# bypassing the warn-mode gate, because a broken probe reported as a warning is
+# indistinguishable from a clean run and would let the whole check rot silently. Same
+# posture Check 71 takes on its own control-arm and unreadable-constant arms.
+_c79_compute_verdict() {
+  local _repo="$1"
+  local _dep="$2"
+  local _pub="$3"
+  local _cap="$4"
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    printf 'ARMA\tFAILPROBE\tpython3 is unavailable, so the publisher-closure derivation did not run — a gate that cannot read its own input must not pass\n'
+    return 0
+  fi
+  if [[ ! -r "$_pub" ]]; then
+    printf 'ARMA\tFAILPROBE\tthe hook publisher is unreadable at %s — Arm A asserts a relation between two repository files and one of them is missing; this is a repo defect, not a benign absence\n' "$_pub"
+    return 0
+  fi
+
+  local _py
+  _py="$(mktemp)" || { printf 'ARMA\tFAILPROBE\tcould not create a temporary file for the verdict body\n'; return 0; }
+  /bin/cat > "$_py" <<'PYEOF'
+import hashlib
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+repo, dep, pub = sys.argv[1], sys.argv[2], sys.argv[3]
+cap = int(sys.argv[4])
+
+def out(*parts):
+    sys.stdout.write('\t'.join(str(p) for p in parts) + '\n')
+
+# ── the declaration, read from the SINGLE emitter on stdin ──────────────────
+rows = []
+malformed = []
+for line in sys.stdin.read().split('\n'):
+    line = line.strip()
+    if not line:
+        continue
+    f = line.split('|||')
+    if len(f) != 4:
+        malformed.append(line)
+        continue
+    rows.append(tuple(f))
+
+if malformed:
+    out('ARMA', 'FAILPROBE',
+        '%d malformed row(s) in hook_publish_set() (want 4 |||-separated fields): %s'
+        % (len(malformed), '; '.join(malformed[:4])))
+    sys.exit(0)
+if not rows:
+    out('ARMA', 'FAILPROBE',
+        'hook_publish_set() emitted ZERO rows — the declaration is the check\'s whole input, '
+        'so an empty map is a failed probe, never a clean result')
+    sys.exit(0)
+
+PUBLISHABLE = ('entrypoint', 'co-deployed-lib', 'mode-template')
+EXACTISH = ('exact', 'presence', 'presence-optional')
+
+# POSIX glob semantics: '*' does not cross '/', '**' does.
+def gmatch(pat, s):
+    rx, i = [], 0
+    while i < len(pat):
+        if pat[i] == '*':
+            if pat[i:i + 2] == '**':
+                rx.append('.*')
+                i += 2
+                continue
+            rx.append('[^/]*')
+            i += 1
+            continue
+        rx.append(re.escape(pat[i]))
+        i += 1
+    return re.match('^' + ''.join(rx) + '$', s) is not None
+
+# EXACT-BEFORE-GLOB, declaration order. Both passes are separate loops on purpose:
+# a single loop would resolve in row order and let a glob shadow a later exact row.
+def classify(field, value):
+    for r in rows:
+        v = r[field]
+        if v == '-':
+            continue
+        if r[3] in EXACTISH and v == value:
+            return r
+    for r in rows:
+        v = r[field]
+        if v == '-':
+            continue
+        if r[3] == 'glob' and gmatch(v, value):
+            return r
+    return None
+
+def sha_path(p):
+    try:
+        with open(p, 'rb') as fh:
+            return hashlib.sha256(fh.read()).hexdigest()
+    except Exception:
+        return None
+
+def compare_pair(repo_root, src_rel, dep_root, dest_rel):
+    """THE parity comparison — one expression, shared by the verdict and its control.
+
+    Returns (state, deployed_sha) with state in MATCH / DRIFT / ABSENT.
+
+    IT IS A FUNCTION SPECIFICALLY SO THE CONTROL ARM CAN EXECUTE IT. While this
+    comparison was written inline in the row loop, the control arm could not reach
+    it: Dev Testing changed the deployed side to re-read the SOURCE — comparing
+    every file against itself, which can never report drift — and the control still
+    printed PASS over output byte-identical to an honest run. A control arm that
+    does not execute the expression under test is not a control arm.
+    """
+    hs = sha_path(os.path.join(repo_root, src_rel))
+    hd = sha_path(os.path.join(dep_root, dest_rel))
+    if hd is None:
+        return 'ABSENT', None
+    if hs == hd:
+        return 'MATCH', hd
+    return 'DRIFT', hd
+
+
+def tracked_hook_sources():
+    try:
+        r = subprocess.run(['git', '-C', repo, 'ls-files', '--', 'core/hooks'],
+                           capture_output=True, text=True)
+        return [x for x in r.stdout.split('\n') if x.strip()]
+    except Exception:
+        return []
+
+
+# Expand each publishable row into concrete (source, dest) pairs. A glob row's dest
+# is derived by substituting the source glob's captured segment, so the map never
+# enumerates a population the publisher already derives.
+#
+# `pop` IS A PARAMETER, not a closed-over global. The control arm below expands a
+# synthetic row over a synthetic population, and it can only do that if the
+# expansion it exercises is the same callable the verdict uses.
+def expand(row, pop):
+    s, d, cls, m = row
+    if m != 'glob':
+        return [(s, d)]
+    rx, i, groups = [], 0, 0
+    while i < len(s):
+        if s[i] == '*':
+            if s[i:i + 2] == '**':
+                rx.append('(.*)')
+                i += 2
+            else:
+                rx.append('([^/]*)')
+                i += 1
+            groups += 1
+            continue
+        rx.append(re.escape(s[i]))
+        i += 1
+    pat = re.compile('^' + ''.join(rx) + '$')
+    pairs = []
+    for f in sorted(pop):
+        mm = pat.match(f)
+        if not mm:
+            continue
+        dd, gi = [], 0
+        k = 0
+        while k < len(d):
+            if d[k] == '*':
+                step = 2 if d[k:k + 2] == '**' else 1
+                dd.append(mm.group(gi + 1) if gi < groups else '')
+                gi += 1
+                k += step
+                continue
+            dd.append(d[k])
+            k += 1
+        pairs.append((f, ''.join(dd)))
+    return pairs
+
+
+src_pop = tracked_hook_sources()
+src_unclassified = sorted(p for p in src_pop if classify(0, p) is None)
+
+# ── control arm: prove the REAL comparison path discriminates BEFORE any verdict ──
+#
+# WHY THIS ARM IS NOT TWO hashlib CALLS ANY MORE. The arm this replaced hashed two
+# in-memory literals and compared the digests. That asserts a property of
+# hashlib.sha256 — which was never in doubt — and nothing whatever about this check.
+# The parity verdict depends on three things the old arm never traversed: sha_path()
+# (which opens a file and SWALLOWS every error into a None), os.path.join() building
+# the deployed side of each pair, and expand() turning a glob row into concrete
+# pairs. Dev Testing proved the gap by mutating the verdict's own comparison to
+# compare every file against ITSELF: the output was byte-identical to an honest run
+# and still printed CTRL: PASS.
+#
+# The arm below runs those same three callables over real files on a temporary tree,
+# so a mutation to any of them is visible here. It writes only inside its own
+# mkdtemp and removes it; it never touches the repository or the deployed tree.
+_ctrl_pass = False
+_ctrl_why = 'the control arm did not complete'
+_ctrl_dir = None
+try:
+    _ctrl_dir = tempfile.mkdtemp(prefix='c79-ctrl-')
+    _csrc = os.path.join(_ctrl_dir, 'src', 'core', 'hooks')
+    _cdep = os.path.join(_ctrl_dir, 'dep')
+    os.makedirs(_csrc)
+    os.makedirs(_cdep)
+    _body = b'hook-parity comparator control arm\n'
+    _flip = bytearray(_body)
+    _flip[0] ^= 0x01
+
+    # A pair that MUST read as identical, and a pair that MUST read as drifted —
+    # both reached the way the verdict reaches them: through expand(), then
+    # os.path.join(), then sha_path().
+    for _n, _depbytes in (('ctrl-same.sh', _body), ('ctrl-diff.sh', bytes(_flip))):
+        with open(os.path.join(_csrc, _n), 'wb') as _fh:
+            _fh.write(_body)
+        with open(os.path.join(_cdep, _n), 'wb') as _fh:
+            _fh.write(_depbytes)
+
+    _cpop = ['core/hooks/ctrl-same.sh', 'core/hooks/ctrl-diff.sh']  # deploy-path-literal: allow — synthetic control-arm fixture written into this self-test's temp tree; it never exists in the repo by construction, and the arm's purpose is to prove compare_pair still distinguishes MATCH from DRIFT from ABSENT
+    _cpairs = dict(expand(('core/hooks/*.sh', '*.sh', 'entrypoint', 'glob'), _cpop))
+    _croot = os.path.join(_ctrl_dir, 'src')
+
+    _expanded = len(_cpairs) == 2
+    _same = _diff = _absent = False
+    if _expanded:
+        # Every assertion goes through compare_pair — the SAME callable the row
+        # loop uses — so a mutation to the comparison is visible here.
+        _same = compare_pair(_croot, 'core/hooks/ctrl-same.sh', _cdep,  # deploy-path-literal: allow — synthetic control-arm fixture written into this self-test's temp tree; it never exists in the repo by construction, and the arm's purpose is to prove compare_pair still distinguishes MATCH from DRIFT from ABSENT
+                             _cpairs['core/hooks/ctrl-same.sh'])[0] == 'MATCH'  # deploy-path-literal: allow — synthetic control-arm fixture written into this self-test's temp tree; it never exists in the repo by construction, and the arm's purpose is to prove compare_pair still distinguishes MATCH from DRIFT from ABSENT
+        _diff = compare_pair(_croot, 'core/hooks/ctrl-diff.sh', _cdep,  # deploy-path-literal: allow — synthetic control-arm fixture written into this self-test's temp tree; it never exists in the repo by construction, and the arm's purpose is to prove compare_pair still distinguishes MATCH from DRIFT from ABSENT
+                             _cpairs['core/hooks/ctrl-diff.sh'])[0] == 'DRIFT'  # deploy-path-literal: allow — synthetic control-arm fixture written into this self-test's temp tree; it never exists in the repo by construction, and the arm's purpose is to prove compare_pair still distinguishes MATCH from DRIFT from ABSENT
+        # The NOT-DEPLOYED branch keys on the deployed side being unreadable. If it
+        # ever returned a digest for a missing path, an absent deployed file would
+        # silently count as a match.
+        _absent = compare_pair(_croot, 'core/hooks/ctrl-same.sh', _cdep,  # deploy-path-literal: allow — synthetic control-arm fixture written into this self-test's temp tree; it never exists in the repo by construction, and the arm's purpose is to prove compare_pair still distinguishes MATCH from DRIFT from ABSENT
+                               'ctrl-never-written.sh')[0] == 'ABSENT'
+
+    _ctrl_pass = _expanded and _same and _diff and _absent
+    _ctrl_why = ('glob row expanded to %d pair(s) (want 2), identical pair reported MATCH=%s, '
+                 'one-byte-flipped pair reported DRIFT=%s, absent deployed file reported '
+                 'ABSENT=%s' % (len(_cpairs), _same, _diff, _absent))
+except Exception as _e:
+    _ctrl_pass = False
+    _ctrl_why = 'the control arm raised %s: %s' % (type(_e).__name__, _e)
+finally:
+    if _ctrl_dir:
+        shutil.rmtree(_ctrl_dir, ignore_errors=True)
+
+if _ctrl_pass:
+    out('CTRL', 'PASS',
+        'the real comparison path discriminates over a synthetic tree — expand() produced both '
+        'pairs, sha_path() + os.path.join() reported MATCH on the identical pair and DRIFT on '
+        'the one-byte-flipped pair, and a missing deployed file read as absent rather than as a '
+        'match; so the parity verdicts below are attributable')
+else:
+    out('CTRL', 'FAIL',
+        'the real comparison path no longer discriminates (%s); every parity verdict below would '
+        'be unattributable' % _ctrl_why)
+
+# ── ARM A — map closure, derived read-only from the publisher ───────────────
+plines = open(pub, encoding='utf-8', errors='replace').read().split('\n')
+start = None
+for i, l in enumerate(plines):
+    if re.match(r'^install_hooks\(\)\s*\{', l):
+        start = i
+        break
+end = None
+if start is not None:
+    for j in range(start + 1, len(plines)):
+        if re.match(r'^\}\s*$', plines[j]):
+            end = j
+            break
+
+derived = set()
+scoped = 0
+if start is not None and end is not None:
+    body = plines[start:end + 1]
+    scoped = len(body)
+    srcvars = {}
+    for l in body:
+        m = re.search(r'\b([A-Za-z_][A-Za-z0-9_]*)_src="\$\{SOURCE_REPO\}/([^"]+)"', l)
+        if m:
+            srcvars[m.group(1)] = m.group(2)
+        # Anchored on the hooks root specifically. The same function also assigns
+        # `version_dst` (${WORKSPACE_ROOT}/.claude/.version) and `gh_dst` (the git
+        # hooks dir); neither publishes into the hook tree, and the anchor is what
+        # keeps them out. Scoping to the function body likewise keeps the three
+        # sibling _dst sites in verify_hooks_invokable / restore_hooks_flow /
+        # rehome_pretooluse_wiring out — unscoped, they over-match.
+        m = re.search(r'\b([A-Za-z_][A-Za-z0-9_]*)_dst="\$\{WORKSPACE_ROOT\}/\.claude/hooks/([^"]+)"', l)
+        if m and m.group(1) in srcvars:
+            derived.add((srcvars[m.group(1)], m.group(2)))
+        if re.search(r'for\s+\w+\s+in\s+"\$\{SOURCE_REPO\}/core/hooks/"\*\.sh', l):
+            derived.add(('core/hooks/*.sh', '*.sh'))
+        m = re.search(r'install_mode_template_if_missing\s+"([^"]+)"\s+"([^"]+)"', l)
+        if m:
+            derived.add(('core/hooks/' + m.group(1), m.group(2)))
+
+declared_pub = set((r[0], r[1]) for r in rows if r[2] in PUBLISHABLE)
+optional = set((r[0], r[1]) for r in rows if r[3] == 'presence-optional')
+
+# A declared source that does not exist is map rot: the row would compare against
+# nothing and report a clean pair forever.
+missing_src = sorted(
+    r[0] for r in rows
+    if r[0] != '-' and r[2] in PUBLISHABLE and '*' not in r[0]
+    and not os.path.exists(os.path.join(repo, r[0]))
+)
+
+# ── DENOMINATOR FLOOR — a collapsed population must fail, never pass ────────
+# The mapped population is not a fixed number: every glob row is expanded against
+# the tracked source listing, so a DEGRADED listing silently shrinks the
+# denominator instead of erroring. Measured: a listing that returns only the
+# non-glob rows collapses the mapped population from 31 pairs to 8 — losing all 23
+# entrypoint hooks — and every surviving pair still compares clean, so the check
+# reported PASS over a population missing three quarters of its subject.
+#
+# Both limbs below are REPO-DERIVABLE, which is why they are ARMA (enforcing on
+# every mode) rather than Arm B findings: neither needs a deployed tree, and a
+# probe that cannot enumerate its own subject must not report a clean result. This
+# is the same posture the ZERO-DERIVED limb above already takes, applied to the
+# other input the verdict depends on.
+glob_rows = [r for r in rows if r[3] == 'glob' and r[2] in PUBLISHABLE]
+collapsed = sorted(r[0] for r in glob_rows if not expand(r, src_pop))
+
+if start is None or end is None:
+    out('ARMA', 'FAILPROBE',
+        'install_hooks() could not be located in the publisher, so ZERO publish acts were '
+        'derived — this is a failed probe, not an absence of undeclared publish acts')
+elif not src_pop:
+    out('ARMA', 'FAILPROBE',
+        'the tracked source listing for core/hooks/ returned ZERO files, so every glob row '
+        'expands to nothing and the mapped population collapses to the non-glob rows alone. '
+        'core/hooks/ is a tracked directory that is never empty, so a zero here means the '
+        'listing failed, not that the hooks are gone — a collapsed denominator is a failed '
+        'probe, never a clean result')
+elif collapsed:
+    out('ARMA', 'FAILPROBE',
+        '%d publishable glob row(s) expanded to ZERO pairs against a source listing of %d '
+        'file(s): %s. The row declares a population the listing no longer contains, so those '
+        'pairs are silently absent from the parity comparison rather than reported — a '
+        'collapsed denominator is a failed probe, never a clean result'
+        % (len(collapsed), len(src_pop), ', '.join(collapsed)))
+elif not derived:
+    out('ARMA', 'FAILPROBE',
+        'ZERO publish acts derived from install_hooks() across %d scoped lines — the publisher '
+        'was refactored out from under the derivation, or the extraction broke. A zero here is a '
+        'FAILED PROBE, never a pass: it is indistinguishable from a publisher that publishes '
+        'nothing.' % scoped)
+elif missing_src:
+    out('ARMA', 'FAILPROBE',
+        '%d declared source(s) do not exist in the repository, so their rows compare against '
+        'nothing and would report clean forever: %s'
+        % (len(missing_src), ', '.join(missing_src)))
+else:
+    undeclared = sorted(derived - declared_pub)
+    unmatched = sorted(declared_pub - derived - optional)
+    if undeclared:
+        out('ARMA', 'FAIL',
+            '%d publish act(s) performed by install_hooks() are absent from hook_publish_set(), '
+            'so the parity arm never sees them: %s — add a row for each'
+            % (len(undeclared), ', '.join('%s -> %s' % p for p in undeclared)))
+    elif unmatched:
+        out('ARMA', 'FAIL',
+            '%d declared pair(s) are no longer published by install_hooks(), so the map claims '
+            'coverage it does not have: %s — retire the row, or restore the publish act'
+            % (len(unmatched), ', '.join('%s -> %s' % p for p in unmatched)))
+    else:
+        out('ARMA', 'PASS',
+            'publisher closure holds both directions: %d derived publish act(s) == %d declared '
+            'publishable row(s) less %d presence-optional (a template tracked with no install '
+            'call site, declared optional so the gap is recorded without this check adopting it)'
+            % (len(derived), len(declared_pub), len(optional)))
+
+# ── ARM B — byte parity over the deployed tree (operator-local, advisory) ───
+# tracked_hook_sources(), src_pop, src_unclassified and expand() are all resolved
+# ABOVE, before the control arm: the arm exercises expand(), and the denominator
+# floor in Arm A reads src_pop. Both need them before this point.
+if not os.path.isdir(dep):
+    out('ARMB', 'NOT-EVAL',
+        'the deployed hooks tree is absent at %s, so NOTHING was compared — no source-vs-deployed '
+        'parity has been asserted on this machine (expected on a CI runner and on any clone with '
+        'no installed workspace)' % dep)
+    out('DENOM',
+        'declared_rows=%d derived_publish_acts=%d tracked_core_hooks_sources=%d '
+        'source_unclassified=%d deployed_population=n/a mapped_pairs=n/a' %
+        (len(rows), len(derived), len(src_pop), len(src_unclassified)))
+    if src_unclassified:
+        out('NOTE', 'source-side UNCLASSIFIED (%d): %s'
+            % (len(src_unclassified), ', '.join(src_unclassified[:8])))
+    sys.exit(0)
+
+dep_pop = []
+for root, _dirs, files in os.walk(dep):
+    for n in files:
+        dep_pop.append(os.path.relpath(os.path.join(root, n), dep))
+
+match_n = drift_n = notdep_n = presence_n = presence_present = presence_missing = 0
+drift_rows = []
+missing_rows = []
+mapped = 0
+for row in rows:
+    cls, m = row[2], row[3]
+    if cls in ('operator-state', 'not-deployed'):
+        continue
+    for s, d in expand(row, src_pop):
+        dp = os.path.join(dep, d)
+        if cls == 'mode-template':
+            # presence_n counts rows EXAMINED; presence_present counts rows whose
+            # target exists. They are separate counters because a presence-optional
+            # row is legitimately absent, so reporting the examined count as though
+            # it were the present count states something false — which is precisely
+            # the class of silent overstatement this check exists to remove.
+            presence_n += 1
+            if os.path.exists(dp):
+                presence_present += 1
+            elif m != 'presence-optional':
+                presence_missing += 1
+                missing_rows.append('%s (mode template never installed)' % d)
+            continue
+        mapped += 1
+        state, hd = compare_pair(repo, s, dep, d)
+        if state == 'ABSENT':
+            notdep_n += 1
+            missing_rows.append('%s (declared but absent from the deployed tree)' % d)
+        elif state == 'MATCH':
+            match_n += 1
+        else:
+            drift_n += 1
+            drift_rows.append((s, d, hd))
+
+dep_unclassified = sorted(p for p in dep_pop if classify(1, p) is None)
+
+# ── drift classifier: bounded git-history walk, drift rows ONLY ─────────────
+def classify_drift(s, deployed_sha):
+    try:
+        r = subprocess.run(['git', '-C', repo, 'log', '--format=%H', '--follow', '--', s],
+                           capture_output=True, text=True)
+        revs = [x for x in r.stdout.split('\n') if x.strip()]
+    except Exception:
+        return 'UNCLASSIFIED-DEPTH', 'git history is unreadable for %s' % s
+    if not revs:
+        return 'UNCLASSIFIED-DEPTH', 'no revisions found for %s' % s
+    for rev in revs[:cap]:
+        try:
+            b = subprocess.run(['git', '-C', repo, 'show', '%s:%s' % (rev, s)],
+                               capture_output=True)
+        except Exception:
+            continue
+        if b.returncode != 0:
+            continue
+        if hashlib.sha256(b.stdout).hexdigest() == deployed_sha:
+            behind = '?'
+            try:
+                c = subprocess.run(
+                    ['git', '-C', repo, 'rev-list', '--count', '%s..HEAD' % rev, '--', s],
+                    capture_output=True, text=True)
+                behind = c.stdout.strip() or '?'
+            except Exception:
+                pass
+            return 'STALE', ('the deployed bytes ARE %s@%s, %s source commit(s) behind — a stale '
+                             'PLATFORM copy, not an operator edit; %s'
+                             % (s, rev[:12], behind, sys.argv[5]))
+    if len(revs) > cap:
+        return 'UNCLASSIFIED-DEPTH', ('no match in the most recent %d of %d revisions of %s — the '
+                                      'search was truncated, so this is NOT a divergence finding'
+                                      % (cap, len(revs), s))
+    return 'DIVERGENT', ('the deployed bytes match no revision of %s in its full %d-commit history '
+                         '— treat as an operator decision, and note that a republish will PRESERVE '
+                         'rather than fix it: install_hook_with_checksum reads a baseline-diverged '
+                         'copy as operator-edited' % (s, len(revs)))
+
+for s, d, hd in drift_rows:
+    verdict, why = classify_drift(s, hd)
+    out('NOTE', 'DRIFT %s — %s: %s' % (d, verdict, why))
+for r in missing_rows:
+    out('NOTE', 'MISSING %s' % r)
+if dep_unclassified:
+    out('NOTE', 'deployed-side UNCLASSIFIED (%d, in no declared row): %s'
+        % (len(dep_unclassified), ', '.join(dep_unclassified[:8])))
+if src_unclassified:
+    out('NOTE', 'source-side UNCLASSIFIED (%d, in no declared row): %s'
+        % (len(src_unclassified), ', '.join(src_unclassified[:8])))
+
+out('DENOM',
+    'declared_rows=%d derived_publish_acts=%d mapped_pairs=%d deployed_population=%d '
+    'tracked_core_hooks_sources=%d MATCH=%d DRIFT=%d NOT-DEPLOYED=%d presence_checked=%d '
+    'presence_present=%d presence_missing=%d deployed_unclassified=%d source_unclassified=%d'
+    % (len(rows), len(derived), mapped, len(dep_pop), len(src_pop), match_n, drift_n,
+       notdep_n, presence_n, presence_present, presence_missing, len(dep_unclassified),
+       len(src_unclassified)))
+
+if mapped == 0:
+    out('ARMB', 'NOT-EVAL',
+        'ZERO mapped pairs were compared against a deployed tree that EXISTS — the expansion '
+        'produced nothing, so no parity has been asserted; this is a failed probe, not a clean '
+        'result')
+elif dep_unclassified or src_unclassified:
+    out('ARMB', 'UNCLASSIFIED',
+        '%d deployed and %d tracked-source file(s) match no row in hook_publish_set(), so the map '
+        'itself is the blind spot for them (MATCH=%d DRIFT=%d of %d mapped pairs) — classify each '
+        'by adding a row' % (len(dep_unclassified), len(src_unclassified), match_n, drift_n, mapped))
+elif drift_n or notdep_n or presence_missing:
+    out('ARMB', 'DRIFT',
+        '%d of %d mapped pair(s) diverge, %d declared pair(s) are absent downstream, and %d '
+        'required mode template(s) were never installed — %s'
+        % (drift_n, mapped, notdep_n, presence_missing, sys.argv[5]))
+else:
+    out('ARMB', 'PASS',
+        'every one of the %d mapped pair(s) is byte-identical to its source; of %d mode-template '
+        'row(s) examined, %d are present and 0 REQUIRED one(s) are missing (any remainder is a '
+        'presence-optional row, absent by declaration); nothing on either side is unclassified'
+        % (mapped, presence_n, presence_present))
+PYEOF
+
+  python3 "$_py" "$_repo" "$_dep" "$_pub" "$_cap" "$(hook_parity_remedy)" \
+    < <(hook_publish_set) 2>/dev/null \
+    || printf 'ARMA\tFAILPROBE\tthe Check 79 verdict body exited non-zero, so neither arm concluded — a gate that cannot run must not pass\n'
+  /bin/rm -f "$_py" 2>/dev/null || true
+}
+
 # ─── _c9_undeclared_scan — the mirror's UNDECLARED-ENTRY enumeration (F-01) ────
 #
 # Pure emitter. Echoes exactly ONE verdict line for a mirror directory. Shared by
@@ -5251,6 +6055,129 @@ deployed_skill_footprint() {
   done | LC_ALL=C sort
 }
 
+skill_content_drift() {
+  # Pure emitter. One "<skill>\t<target-class>\t<cause>" row per DRIFTED
+  # (skill × deploy target), where <target-class> is user-local|cowork and
+  # <cause> is missing|differs|unwritable. Emits nothing else, mutates no
+  # global, never logs, never exits. Zero args → the full deployed roster.
+  #
+  # WHY THIS EXISTS — the selection-time sibling of deployed_skill_footprint's
+  # counting-time answer. detect_changed_skills() answers "what changed in the
+  # repository since the last tag"; cmd_deploy used that as a PROXY for "what is
+  # missing from the installed corpus". The proxy is valid only under an
+  # unstated, unenforced and structurally unrepresentable precondition — that
+  # the instance was last deployed at exactly diff_base. One commit past the tag
+  # it stops firing and the release's own skill edits leave the window
+  # permanently, so `--deploy` reported "Deployed: 0 skills" and exit 0 over a
+  # corpus it had not made current. This asks the ground-truth question instead:
+  # does the installed content match source, right now.
+  #
+  # THE PREDICATE IS NOT NEW — it is the one Check 1 (skill sync) and Check 12
+  # (user-local mirror sync) already apply, and the one
+  # release/references/standards/partial-deployment-recovery.md § 3 already uses
+  # to DEFINE full-success. This is a wiring change, not a new detector. The
+  # three inline copies are a knowingly-accepted duplication: Checks 1 and 12
+  # carry per-skill ISSUES accounting, read-only cause annotation and
+  # supplementary-content walks that the deploy path does not need, so folding
+  # them onto this emitter would multiply this change's blast radius across the
+  # check surface. This signature is the one they can migrate onto later.
+  #
+  # THE TEMPLATE_SYNC_MAP EXCLUSION IS LOAD-BEARING, NOT COSMETIC. A bare
+  # `diff -rq` over references/ flags 12 of 55 roster skills on a FULLY CURRENT
+  # instance — every one an injected-template artifact absent from source by
+  # single-source-of-truth design, zero real differences. Applying the same
+  # injected_ref_basenames exclusion Check 1 applies takes that population to 0.
+  # Omitted, this is an unterminating repair loop (the union re-selects skills
+  # the deploy can never make match) and a permanently red deploy (the residual
+  # assertion can never clear). Do not "simplify" the exclusion away.
+  #
+  # CANARY_SKILLS IS EXCLUDED BY CONSTRUCTION — the roster is read from the three
+  # DEPLOYED module arrays only, exactly as Check 1 reads them. The canary is
+  # source-only per ADR-006 and is never a deploy target, so including it would
+  # yield a finding no deploy can ever clear (the same trap Check 1 records
+  # having already fallen into once).
+  #
+  # A SESSION-LESS MACHINE IS A SUPPORTED INSTALL SHAPE (ADR-013): the Cowork
+  # target is scanned only when a session resolved, so its absence never reads
+  # as drift. The root expression is deployed_skill_footprint's, so a future
+  # change to the target roots updates one place.
+  #
+  # bash 3.2 portable: explicit iteration, empty-array `+` guards per ADR-008
+  # Rule 2 under `set -euo pipefail`, no associative arrays, no mapfile.
+  local -a _scd_roster=()
+  local _scd_s
+  if [[ $# -gt 0 ]]; then
+    for _scd_s in "$@"; do _scd_roster+=("$_scd_s"); done
+  else
+    for _scd_s in ${OPERATIONS_SKILLS[@]+"${OPERATIONS_SKILLS[@]}"} \
+                  ${RELEASE_SKILLS[@]+"${RELEASE_SKILLS[@]}"} \
+                  ${CORE_SKILLS[@]+"${CORE_SKILLS[@]}"}; do
+      _scd_roster+=("$_scd_s")
+    done
+  fi
+
+  local _scd_module _scd_src_dir _scd_src _scd_root _scd_class _scd_cause _scd_b _scd_i
+  local -a _scd_roots=() _scd_classes=() _scd_ex=()
+
+  for _scd_s in ${_scd_roster[@]+"${_scd_roster[@]}"}; do
+    # A pure emitter never aborts its caller. resolve_skill_module dies on a
+    # non-roster name; that die lands inside this command substitution, so the
+    # name is SKIPPED here rather than taking the deploy down. It is unreachable
+    # in practice — the deploy loop resolves the same name first and dies there.
+    _scd_module=$(resolve_skill_module "$_scd_s" 2>/dev/null) || continue
+    _scd_src_dir="$_scd_module/skills/$_scd_s"
+    _scd_src="$_scd_src_dir/SKILL.md"
+    # A missing SOURCE is Check 12's finding (source-side breakage), not a
+    # question about whether the deploy target is current. Skip rather than
+    # report drift the deploy could not fix.
+    [[ -f "$_scd_src" ]] || continue
+
+    _scd_roots=("$USER_LOCAL_SKILLS_PATH/$_scd_s")
+    _scd_classes=("user-local")
+    if [[ "${COWORK_AVAILABLE:-false}" == "true" && -n "${INSTALL_PATH:-}" ]]; then
+      _scd_roots+=("$INSTALL_PATH/$_scd_s")
+      _scd_classes+=("cowork")
+    fi
+
+    _scd_i=0
+    while [[ $_scd_i -lt ${#_scd_roots[@]} ]]; do
+      _scd_root="${_scd_roots[$_scd_i]}"
+      _scd_class="${_scd_classes[$_scd_i]}"
+      _scd_i=$((_scd_i + 1))
+      _scd_cause=""
+
+      if [[ ! -f "$_scd_root/SKILL.md" ]]; then
+        _scd_cause="missing"
+      elif ! diff -q "$_scd_src" "$_scd_root/SKILL.md" >/dev/null 2>&1; then
+        _scd_cause="differs"
+      elif ! is_supplementary "$_scd_s" && [[ -d "$_scd_src_dir/references" ]]; then
+        # Same exclusion set, from the same helper, as Check 1's references/ arm.
+        _scd_ex=()
+        while IFS= read -r _scd_b; do
+          [[ -n "$_scd_b" ]] && _scd_ex+=("--exclude=$_scd_b")
+        done < <(injected_ref_basenames "$_scd_s")
+        if [[ ! -d "$_scd_root/references" ]]; then
+          _scd_cause="missing"
+        elif ! diff -rq ${_scd_ex[@]+"${_scd_ex[@]}"} "$_scd_src_dir/references" "$_scd_root/references" >/dev/null 2>&1; then
+          _scd_cause="differs"
+        fi
+      fi
+
+      [[ -n "$_scd_cause" ]] || continue
+      # Cause upgrade: an EXISTING but unwritable target is the Cowork
+      # session-churn orphan class. It routes to a different remedy than
+      # missing/differs (chmod, not redeploy), so it is named rather than
+      # collapsed into "differs" — the same distinction Check 1 already draws
+      # with its read-only DRIFT annotation, promoted here from a diagnostic
+      # note to an actionable failure token.
+      if [[ -e "$_scd_root" && ! -w "$_scd_root" ]]; then
+        _scd_cause="unwritable"
+      fi
+      printf '%s\t%s\t%s\n' "$_scd_s" "$_scd_class" "$_scd_cause"
+    done
+  done
+}
+
 cmd_deploy() {
   # Deploy changed skills/packages/harness artifacts to Cowork install path.
   # E-02, E-03, E-08, E-11: Handles no-changes, deleted skills, invalid names, permissions.
@@ -5345,6 +6272,18 @@ cmd_deploy() {
     log "Release-stamped deploy: deployment-status rows will be emitted for release '$DEPLOY_RELEASE_SLUG'."
   fi
 
+  # ─── What this invocation CLAIMED (the residual assertion's scope) ─────────
+  # Auto-detect and --all claim the ROSTER; `--deploy <names>` claims only those
+  # names. The distinction is a hard constraint, not a nicety: ADR-165's
+  # post-merge hook computes its own list and calls the NAMED form, so a
+  # full-roster residual assertion there would fail every hook run on unrelated
+  # pre-existing drift. _dep_manual is what keeps manual mode narrow; the empty
+  # _dep_claimed on the manual path (a harness-only `--deploy <harness-name>`)
+  # claims no skills at all and is asserted over nothing.
+  local _dep_manual=false
+  local _dep_selection_scan=false
+  local -a _dep_claimed=()
+
   # Argument handling: manual vs auto-detect
   if [[ $# -gt 0 ]]; then
     # E-08: Validate manual artifact names; route each into skills or harness.
@@ -5394,6 +6333,8 @@ cmd_deploy() {
       CHANGED_PACKAGES=()
     fi
     DELETED_SKILLS=()
+    _dep_manual=true
+    _dep_claimed=(${manual_skills[@]+"${manual_skills[@]}"})
   else
     # A fresh clone whose install deployed nothing leaves the user-local skills
     # mirror empty. install.sh Phase 2 reaches here (orchestrate.sh runs
@@ -5416,13 +6357,97 @@ cmd_deploy() {
       DELETED_SKILLS=()
     else
       detect_changed_skills
+      # The incremental path is the ONE path carrying the defect: the full-roster
+      # branch above already selected everything, and manual mode is an explicit
+      # instruction. Scanning only here also keeps a fresh install quiet — every
+      # skill is legitimately "missing" there, and reporting 55 stale skills on a
+      # first install would be noise, not signal.
+      _dep_selection_scan=true
+    fi
+  fi
+
+  # ─── Ground-truth selection — RUNS BEFORE THE E-02 EARLY EXIT ──────────────
+  #
+  # THE ORDERING IS THE WHOLE POINT, exactly as it is for the rules-mirror carrier
+  # above. detect_changed_skills answers "what changed in the repository since the
+  # last tag"; this path used that as a PROXY for "what is missing from the
+  # installed corpus". Below the E-02 exit, the branch that most needs the scan —
+  # the one where the tag window sees nothing — is the one branch that never runs
+  # it, and `--deploy` reports "Deployed: 0 skills" with exit 0 over a corpus it
+  # never made current. Byte-identical to a correct run, so nothing downstream can
+  # tell them apart.
+  #
+  # UNION, NEVER REPLACE. The tag diff stays: it is the sole source of
+  # DELETED_SKILLS (a deletion is a repository fact with no on-disk counterpart to
+  # compare against) and of CHANGED_PACKAGES / CHANGED_HARNESS. The two answer
+  # different questions — "what changed in the repo" and "what is stale on disk" —
+  # so this strictly ADDS: no skill that deploys today stops deploying.
+  #
+  # THE REPORTED COUNT CANNOT BE INFLATED BY THIS. skills_changed is incremented
+  # only when deployed_skill_footprint differs before-vs-after, so it is defined
+  # over what was WRITTEN, not what was SELECTED. Widening the candidate set
+  # therefore cannot move it, and the EX_NOCHANGE(64) contract update.sh reads is
+  # untouched — the #384 v3.91 fix is precisely what decoupled the two.
+  local -a _gt_drift=()
+  local _gt_roster_n=0
+  local _gt_targets=1
+  if [[ "$_dep_selection_scan" == "true" ]]; then
+    build_full_roster_skills
+    _gt_roster_n=${#FULL_ROSTER_SKILLS[@]}
+    if [[ "${COWORK_AVAILABLE:-false}" == "true" && -n "${INSTALL_PATH:-}" ]]; then
+      _gt_targets=2
+    fi
+    # The emitter reports one row per (skill × target); rows for one skill are
+    # contiguous, so a same-as-previous name is the second target of the skill
+    # already recorded.
+    local _gt_row _gt_name _gt_prev="" _gt_known _gt_c
+    while IFS= read -r _gt_row; do
+      [[ -n "$_gt_row" ]] || continue
+      _gt_name="${_gt_row%%$'\t'*}"
+      [[ "$_gt_name" == "$_gt_prev" ]] && continue
+      _gt_prev="$_gt_name"
+      _gt_drift+=("$_gt_name")
+    done < <(skill_content_drift)
+    for _gt_name in ${_gt_drift[@]+"${_gt_drift[@]}"}; do
+      _gt_known=false
+      for _gt_c in ${CHANGED_SKILLS[@]+"${CHANGED_SKILLS[@]}"}; do
+        if [[ "$_gt_c" == "$_gt_name" ]]; then _gt_known=true; break; fi
+      done
+      if [[ "$_gt_known" == "false" ]]; then
+        CHANGED_SKILLS+=("$_gt_name")
+      fi
+    done
+    if [[ ${#_gt_drift[@]} -gt 0 ]]; then
+      # An operator who sees skills deploy while `git log` shows nothing needs to
+      # know WHY they were selected. This line is that answer.
+      log "Ground-truth scan: ${#_gt_drift[@]} of ${_gt_roster_n} roster skill(s) stale on disk — added to the deploy set: ${_gt_drift[*]}"
     fi
   fi
 
   # E-02: No changes case
   if [[ ${#CHANGED_SKILLS[@]} -eq 0 ]] && [[ ${#CHANGED_PACKAGES[@]} -eq 0 ]] && \
      [[ ${#CHANGED_HARNESS[@]} -eq 0 ]]; then
-    log "No skill, package, or harness changes detected. Nothing to deploy."
+    # The denominator is what converts an inference into a measurement. Before the
+    # ground-truth scan ran above, "nothing to deploy" was a claim about the tag
+    # window and said nothing whatever about the instance; it now reports a
+    # comparison that was actually performed, over a stated population, against a
+    # stated number of targets. That is the difference the reported defect turns on
+    # — "nothing needed deploying" and "the comparison could not see what needed
+    # deploying" previously printed the same sentence.
+    #
+    # THE ORIGINAL SENTENCE IS PRESERVED VERBATIM AS THE PREFIX, and that is a
+    # contract rather than a courtesy: test_refresh_surfaces.sh Arm 2b matches this
+    # line with `grep -qF` on the exact literal to decide whether the E-02 branch
+    # was reached at all, and skips its assertion when it does not match. Appending
+    # the grounded clause keeps that consumer matching and its arm asserting;
+    # rewording the head of the line would have silently converted a passing
+    # assertion into a skip — a coverage loss that reads as green. Add after the
+    # existing sentence; do not rewrite it.
+    if [[ ${_gt_roster_n:-0} -gt 0 ]]; then
+      log "No skill, package, or harness changes detected. Nothing to deploy. Verified current: ${_gt_roster_n} of ${_gt_roster_n} roster skills match source on ${_gt_targets} target(s)."
+    else
+      log "No skill, package, or harness changes detected. Nothing to deploy."
+    fi
     # The rules mirror is NOT part of those three change sets and already ran above,
     # so this path is no longer a no-op. Say what it did — an operator told "nothing
     # to deploy" would otherwise reasonably conclude the mirror was skipped too.
@@ -5686,6 +6711,49 @@ cmd_deploy() {
     done
   fi
 
+  # ─── Residual assertion — the deploy made it current, or this run FAILS ────
+  #
+  # The selection above widened WHAT gets deployed; this asserts it WORKED. Run
+  # over exactly the set the invocation CLAIMED (see _dep_claimed), any surviving
+  # drift appends to the existing FAILURES array and reaches the existing terminal
+  # `die` below — no new failure machinery, no new exit path, no new emitter, and
+  # no change to the flag_* family.
+  #
+  # THIS IS WHAT RESERVES THE NON-ZERO EXIT FOR THE UNREPAIRABLE CASE. A drift the
+  # deploy healed leaves nothing here and exits 0; a drift that survived the repair
+  # — a read-only orphan target, a copy that failed — is the state the reported
+  # defect described as "detection could not establish what to deploy", and it now
+  # fails loudly instead of printing a zero.
+  local -a _res_rows=()
+  local _res_row _res_name _res_class _res_cause _res_rest
+  if [[ "$_dep_manual" == "true" ]]; then
+    if [[ ${#_dep_claimed[@]} -gt 0 ]]; then
+      while IFS= read -r _res_row; do
+        [[ -n "$_res_row" ]] && _res_rows+=("$_res_row")
+      done < <(skill_content_drift "${_dep_claimed[@]}")
+    fi
+  else
+    while IFS= read -r _res_row; do
+      [[ -n "$_res_row" ]] && _res_rows+=("$_res_row")
+    done < <(skill_content_drift)
+  fi
+  for _res_row in ${_res_rows[@]+"${_res_rows[@]}"}; do
+    _res_name="${_res_row%%$'\t'*}"
+    _res_rest="${_res_row#*$'\t'}"
+    _res_class="${_res_rest%%$'\t'*}"
+    _res_cause="${_res_rest#*$'\t'}"
+    if [[ "$_res_cause" == "unwritable" ]]; then
+      # Check 1 already prints this remedy as a diagnostic annotation; here it is
+      # promoted to actionable deploy guidance, because this is the run that
+      # failed and the operator is reading it now.
+      log "  FAILED:   $_res_name — residual drift on $_res_class target (unwritable — chmod -R u+w then redeploy)"
+      FAILURES+=("$_res_name (residual drift on $_res_class target: unwritable — chmod -R u+w then redeploy)")
+    else
+      log "  FAILED:   $_res_name — residual drift on $_res_class target ($_res_cause)"
+      FAILURES+=("$_res_name (residual drift on $_res_class target: $_res_cause)")
+    fi
+  done
+
   # Summary. The skills field is skills_changed (actually-changed on disk), NOT
   # ${#CHANGED_SKILLS[@]} (the stateless git tag-diff list) — update.sh keys off
   # this field for the EX_NOCHANGE contract, so a no-op re-run that re-mirrors an
@@ -5813,8 +6881,18 @@ LIFECYCLE
 # Label-shape is what separates a body REPORTING a probe from one DISCUSSING
 # probes; the >=2 count then rejects a bare `Verdict:` with no probe behind it.
 # Loosening EITHER half converts a real control into a never-FAIL check — see
-# ADR-150. The negative arm is not optional: --self-test group EV asserts the
-# evidence-free and prose-near-miss bodies still FAIL.
+# ADR-144, the record that admitted shape (b) and set that constraint. The
+# negative arm is not optional: --self-test group EV asserts the evidence-free
+# and prose-near-miss bodies still FAIL.
+#
+# ON THE CITATION ITSELF — NO MECHANICAL GATE DETECTS A WRONG-BUT-RESOLVABLE
+# REFERENT. This line named ADR-150 (BLOCK-DESTRUCTIVE-022 execution capability
+# — an unrelated subject) and every check stayed green the whole time: link
+# resolution passes because the file exists, and the ADR numbering-integrity
+# check passes because the sequence is contiguous with no duplicates. Neither
+# reads a title. Only a reader who knows both records can catch it, and this
+# change builds no gate for the class. So verify an ADR token here by reading
+# the record's `title:` — never by trusting a green check.
 #
 # Extracted as a function rather than left inline in Check 22 because Check
 # 22's live query reaches only OPEN issues in the DEPLOYING milestone, so it
@@ -5868,11 +6946,21 @@ _g1_03_evaluate() {
 # increment — for the same reason: a measurement outage must never move the exit code.
 # It is a SEPARATE function, not a parameter on that one, because the two say OPPOSITE
 # things. ADVISORY means "I measured and this signal cannot gate"; NOT-EVALUATED means
-# "I did not measure." flag_advisory_only's line asserts "this check is never
-# enforce-capable", which is FALSE of an enforce-capable check that merely could not
-# read its input this run — and its ADVISORY: prefix is the greppable discriminator, so
-# two classes under one prefix re-creates the very conflation this emitter exists to
-# remove.
+# "I did not measure." flag_advisory_only's line asserts that THIS EMIT cannot gate —
+# a claim that is true of a measurement that happened, and says nothing at all about a
+# check that could not read its input this run — and its ADVISORY: prefix is the
+# greppable discriminator, so two classes under one prefix re-creates the very
+# conflation this emitter exists to remove.
+#
+# THE ORIGINAL ARGUMENT WAS SHARPER AND IS PRESERVED, because the sentence it rested on
+# was retired rather than merely reworded. flag_advisory_only used to append a fixed
+# "this check is never enforce-capable" to every emit, and the reason THAT could not be
+# reused here was that the sentence is FALSE of an enforce-capable check whose input
+# failed. The sentence is gone — it was a per-caller fact shipped from shared code, and
+# wrong for most callers — so the emitter no longer makes any check-scoped claim at all.
+# The separation still stands, on the ground stated above: the two classes answer
+# different questions, and only a separate function keeps the ADVISORY: prefix meaning
+# one thing.
 #
 # WARN_LOG IS RESOLVED DEFENSIVELY, AND THE GUARD IS REQUIRED RATHER THAN DEFENSIVE
 # HABIT. cmd_check() declares `local WARN_LOG` well AFTER its Check 7 block, and this
@@ -5889,10 +6977,135 @@ flag_not_evaluated() {
   log "  NOT-EVAL: $check_id — $detail (not-evaluated; the measurement did not run — this is a withheld verdict, never a clean one)"
   local _ts
   _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  local _detail_escaped="${detail//\\/\\\\}"
-  _detail_escaped="${_detail_escaped//\"/\\\"}"
+  json_escape_detail "$detail"
+  local _detail_escaped="$JSON_ESCAPED"
   local _wl="${WARN_LOG:-$(warn_log_path)}"
   printf '{"ts":"%s","check":"%s","evaluated":false,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$_wl" 2>/dev/null || true
+}
+
+# ─── Check 16 population body — _c16_* (TOP-LEVEL) ───────────────────────────
+#
+# HOISTED TO TOP LEVEL DELIBERATELY; the placement is load-bearing, not stylistic,
+# and for exactly the reason flag_not_evaluated above is hoisted. Bash registers a
+# nested function only when execution REACHES its definition. Check 16's population
+# logic used to live inside cmd_check(), while main() routes --report STRAIGHT to
+# cmd_report() without ever entering cmd_check() — so a definition sited there is
+# never registered on the report path, and calling it aborts the whole run under the
+# `set -euo pipefail` at the head of this file. At top level the reachability is
+# unconditional and independent of which command mode the caller landed in. This is
+# a constraint on the remedy, not a preference: it is WHY the fix is a hoist rather
+# than a call.
+#
+# DD1 — ONE body, two surfaces. cmd_check() and cmd_report() previously carried two
+# independent encodings of Check 16's population, and they had drifted apart in THREE
+# places: the report copy was still on the pre-#2682 `--label improvement` scope, it
+# carried none of the I2 type exemptions, and it never consulted the operator
+# exemption list at all. Nothing detected the divergence, and the report path GATES
+# (cmd_report exits 1 on FAIL > 0, under a comment stating its exit code matches
+# --check) — so the drift was a false-green on a gating surface, not a cosmetic
+# reporting nit. Sharing the body makes the divergent state unreachable rather than
+# merely detectable, which also closes the partial-fix hazard: widening the report
+# scope WITHOUT the exemptions is strictly worse than the bug (measured on the live
+# population: I2 goes from 0 correct to 31, every one of them a statusless type:epic).
+#
+# WHAT IS SHARED IS THE POPULATION, AND ONLY THE POPULATION. The two surfaces' EMIT
+# semantics are deliberately different and MUST stay different: cmd_check() is
+# mode-gated (warn/enforce), emits per-issue detail through flag_status_label() and
+# logs EXEMPT: lines, while cmd_report() is the unvarnished "what would happen in
+# enforce-mode" PASS/FAIL view that Stage 13 consumes as evidence. Collapsing the
+# emit would destroy that evidence property. Sharing the population is what the
+# invariant actually needs, and is what the defect was about: a consumer reading the
+# report sees the same population the check evaluates.
+
+# _c16_population — the single Check 16 fetch, UNSCOPED.
+# SCOPE [#2682, 2026-07-19]: the `--label improvement` filter is deliberately absent
+# so the invariants cover ALL open intake (bug / observation / sub-task / type:task),
+# not just improvement. The prior scope let non-improvement intake drift half-labeled
+# indefinitely and left the I4 orphaned-bundle detector blind to non-improvement
+# bundles. Per-invariant type applicability is enforced in _c16_violators (I2 exempts
+# type:epic + sub-task); I1/I3/I4 remain all-types. --limit 5000 has ample headroom
+# for the ~500 open population. Degrades to an empty array rather than aborting.
+_c16_population() {
+  gh issue list --repo "$AUDIT_REPO" --state open \
+    --limit 5000 --json number,labels,milestone 2>/dev/null || echo "[]"
+}
+
+# _c16_exempt_pair <issue-number> <invariant-id> — returns 0 if the pair is exempt.
+# Hoisted alongside the rest of the population body because it is now consulted on
+# BOTH surfaces; the report path never reaches cmd_check()'s body, so a nested
+# definition was unreachable there. Exemption file:
+# .claude/status-label-invariant-exemption-list.txt — lines of
+# `<issue-number> <invariant-id>` skip the matching violation.
+_c16_exempt_pair() {
+  local _num="$1" _inv="$2"
+  local _exempt_file=".claude/status-label-invariant-exemption-list.txt"
+  [[ -f "$_exempt_file" ]] || return 1
+  grep -qE "^[[:space:]]*${_num}[[:space:]]+${_inv}([[:space:]]|$)" "$_exempt_file"
+}
+
+# _c16_violators <invariant-id> <issues-json> — the single filter + exemption engine.
+# Emits one line per in-scope issue, tagged so each caller gets what its own emit
+# needs and neither re-encodes a filter:
+#     <issue-number> VIOLATION      flag it
+#     <issue-number> EXEMPT         on the operator exemption list
+# An UNKNOWN invariant id returns 2 rather than printing an empty set, so a typo
+# cannot read as "no violators" — the silent-empty failure mode this check exists to
+# rule out elsewhere.
+#
+# A RETURN CODE IS ONLY A GUARD WHERE SOMETHING READS IT, and for a time only one
+# of this engine's two callers did. The report path assigns from a pipeline, so
+# under pipefail the 2 propagates and aborts. The --check path consumed the rows as
+# `done <<< "$(_c16_violators …)"`, and a here-string DISCARDS its command
+# substitution's exit status: an unknown id delivered an empty row set, the loop
+# found nothing, and the check reported zero violations — which is exactly the
+# silent-empty failure the paragraph above claims to rule out, reproduced inside
+# the remedy. Both callers now read the status; see _c16_guard in cmd_check.
+_c16_violators() {
+  local _inv="$1" _issues_json="$2"
+  local _filter
+  case "$_inv" in
+    # I1 — mutex: >1 status:* label (all types)
+    I1) _filter='.[] | select((.labels | map(.name) | map(select(startswith("status: "))) | length) > 1)
+      | .number' ;;
+    # I2 — presence: 0 status:* labels.
+    # TYPE EXEMPTION [#2682, 2026-07-19]: skip `type:epic` and `sub-task`.
+    #   - type:epic: operator decision — epics are CONTAINERS, not lifecycle work
+    #     items, so "exactly one status label" does not apply (label-taxonomy.md
+    #     Rule 2). Without this, the unscoped fetch would false-FAIL on every
+    #     statusless epic (load-bearing, not cosmetic).
+    #   - sub-task: the pre-existing carve-out (label-taxonomy.md Rule 6) — a
+    #     sub-task's status label is a point-in-time hygiene mirror, not an
+    #     invariant-enforced field. Previously implicit (sub-tasks lacked the
+    #     `improvement` label); explicit since the fetch is unscoped. Retained on
+    #     that governance basis, NOT on any current count: the statusless-sub-task
+    #     population is transient and may be non-empty tomorrow.
+    # This exemption applies to I2 ONLY. I1 / I3 / I4 stay all-types: an epic that
+    # never carries a status label simply never trips them.
+    I2) _filter='.[] | select((.labels | map(.name) | map(select(startswith("status: "))) | length) == 0)
+      | select((.labels | map(.name) | index("type:epic")) | not)
+      | select((.labels | map(.name) | index("sub-task")) | not)
+      | .number' ;;
+    # I3 — contradiction-A: status: proposed + milestone set (all types)
+    I3) _filter='.[] | select(.milestone != null)
+      | select((.labels | map(.name) | map(select(. == "status: proposed"))) | length > 0)
+      | .number' ;;
+    # I4 — contradiction-B: status: bundled + no milestone (all types)
+    I4) _filter='.[] | select(.milestone == null)
+      | select((.labels | map(.name) | map(select(. == "status: bundled"))) | length > 0)
+      | .number' ;;
+    *)  return 2 ;;
+  esac
+  local _nums _num
+  _nums=$(printf '%s' "$_issues_json" | jq -r "$_filter")
+  while IFS= read -r _num; do
+    [[ -n "$_num" ]] || continue
+    if _c16_exempt_pair "$_num" "$_inv"; then
+      printf '%s EXEMPT\n' "$_num"
+    else
+      printf '%s VIOLATION\n' "$_num"
+    fi
+  done <<< "$_nums"
+  return 0
 }
 
 # ─── Mode: --check ───────────────────────────────────────────────────────────
@@ -6305,8 +7518,8 @@ cmd_check() {
           log "  WARN:  registry-field-currency — $_frf_detail (warn-mode; flip registry-field-currency.mode to 'enforce' after the shakedown window)"
           local _frf_ts
           _frf_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          local _frf_esc="${_frf_detail//\\/\\\\}"
-          _frf_esc="${_frf_esc//\"/\\\"}"
+          json_escape_detail "$_frf_detail"
+          local _frf_esc="$JSON_ESCAPED"
           printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_frf_ts" "registry-field-currency" "$_frf_esc" >> "$_rfc_warn_log" 2>/dev/null || true
           ;;
       esac
@@ -6769,8 +7982,8 @@ cmd_check() {
         log "  WARN:  $check_id — $detail (warn-mode; flip .claude/hooks/deploy-check.mode to 'enforce' after shakedown)"
         local _ts
         _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        local _detail_escaped="${detail//\\/\\\\}"
-        _detail_escaped="${_detail_escaped//\"/\\\"}"
+        json_escape_detail "$detail"
+        local _detail_escaped="$JSON_ESCAPED"
         printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
         ;;
     esac
@@ -6789,19 +8002,68 @@ cmd_check() {
   # it can see that an ADR promises a flip while still Proposed, but the ratifying
   # reference is free text, so it cannot see whether that review has CLOSED. A
   # genuinely-pending ADR is correct and reports on every run; failing on it would
-  # punish correctness. Enforcement for that invariant lives at the release-close gate
-  # (G-CL9), which has the release context this surface structurally lacks.
+  # punish correctness. Enforcement for THAT check's invariant lives at the
+  # release-close gate G-CL9 — which is Check 58's authority, and no other caller's.
+  # This emitter therefore names NO authority at all: an authority is a per-caller
+  # fact, so it belongs in the caller's own `detail`, where Check 58 already writes it.
+  #
+  # THIS EMITTER ASSERTS ONLY PROPERTIES OF ITS OWN EMIT. Anything scoped to the check,
+  # to the check_id, or to a downstream gate is a per-caller fact supplied by the
+  # caller — as the posture token below, or in the caller's own `detail`. A shared
+  # helper stating a per-caller fact cannot be correct for more than one caller, and a
+  # hardcoded one is wrong silently rather than loudly.
+  #
+  # CALLING CONTRACT — arity 3; the third argument is REQUIRED by contract:
+  #
+  #   flag_advisory_only <check_id> <detail> <posture>
+  #
+  #   <posture> is a CLOSED two-member set naming the SCOPE of the non-gating claim:
+  #     id-non-gating   no emit under this check_id can gate — the id carries ZERO
+  #                     escalating emits (flag_warn_or_issue / flag_g1_enforcement)
+  #     arm-non-gating  THIS emit cannot gate, but sibling emits under the SAME
+  #                     check_id can — the id carries at least one escalating emit
+  #
+  #   The subject is the check_id, and it is printed literally in the rendered clause:
+  #   a check NUMBER is a console grouping with no runtime identity, while the id is
+  #   what resolve_check_mode keys on and what the warn-log "check" field carries. The
+  #   token is spelled from neither sense of the overloaded word "advisory" on purpose
+  #   — gate-efficacy-standard.md uses `RATIFIED ADVISORY` for enforce-capable-but-held,
+  #   which is the OPPOSITE of what this token conveys.
+  #
+  # WHY ${3:-} AND NOT A BARE $3. This script runs under `set -euo pipefail` (line 2)
+  # and cmd_check clears only errexit, so `nounset` stays armed: a bare $3 on a
+  # two-argument caller would abort the WHOLE check run rather than report one bad
+  # call. The empty branch renders the class-true clause alone and asserts no scope.
+  #
+  # WHY THE MISSING-ARGUMENT FAILURE IS LOUD ELSEWHERE AND NOT HERE. Raising in this
+  # body requires an escalation path in this body, and the ABSENCE of one is the class
+  # guarantee stated at the top of this header — the same absence ADR-134 D3 fixes and
+  # core/deploy/tests/test_check56_m2_advisory.sh Arms B and C execute against a real
+  # counter. So the contract is graded STATICALLY instead, by
+  # core/deploy/tests/test_advisory_emitter_contract.sh: a call site carrying no
+  # posture token, or one whose declared posture contradicts the measured escalation
+  # surface of its own check_id, fails CI. The loudness lives there, by construction.
   #
   # Consequence for callers: an advisory finding NEVER contributes to the exit code.
-  # Rows are logged to the same warn jsonl so the signal is reviewable over time.
+  # Rows are logged to the same warn jsonl so the signal is reviewable over time. The
+  # JSON row is deliberately UNCHANGED by the posture — the clause is console-only, and
+  # widening the drain schema for a fact a static assertion already grades would move a
+  # claim into an emitted record, which ADR-134 D4 warns against by name.
   flag_advisory_only() {
     local check_id="$1"
     local detail="$2"
-    log "  ADVISORY: $check_id — $detail (advisory-only; this check is never enforce-capable — see G-CL9 for the authoritative gate)"
+    local _posture="${3:-}"
+    local _scope=""
+    if [[ "$_posture" == "id-non-gating" ]]; then
+      _scope=", and no \"$check_id\" emit can"
+    elif [[ "$_posture" == "arm-non-gating" ]]; then
+      _scope="; other \"$check_id\" emits can"
+    fi
+    log "  ADVISORY: $check_id — $detail (advisory — this emit cannot gate$_scope)"
     local _ts
     _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    local _detail_escaped="${detail//\\/\\\\}"
-    _detail_escaped="${_detail_escaped//\"/\\\"}"
+    json_escape_detail "$detail"
+    local _detail_escaped="$JSON_ESCAPED"
     printf '{"ts":"%s","check":"%s","advisory":true,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
   }
 
@@ -6925,8 +8187,8 @@ cmd_check() {
         log "  WARN:  $check_id — $detail (warn-mode; flip g1-enforcement.mode to 'enforce' after the shakedown window)"
         local _ts
         _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        local _detail_escaped="${detail//\\/\\\\}"
-        _detail_escaped="${_detail_escaped//\"/\\\"}"
+        json_escape_detail "$detail"
+        local _detail_escaped="$JSON_ESCAPED"
         printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
         ;;
     esac
@@ -6955,8 +8217,8 @@ cmd_check() {
         log "  WARN:  $check_id — $detail (warn-mode; this check ships ENFORCE — a local release-body-drift.mode dialed it down)"
         local _ts
         _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        local _detail_escaped="${detail//\\/\\\\}"
-        _detail_escaped="${_detail_escaped//\"/\\\"}"
+        json_escape_detail "$detail"
+        local _detail_escaped="$JSON_ESCAPED"
         printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
         ;;
     esac
@@ -6976,8 +8238,8 @@ cmd_check() {
     log "  RECOMMEND:  $check_id — $detail (advisory; judgment-tier, never gate-blocking)"
     local _ts
     _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    local _detail_escaped="${detail//\\/\\\\}"
-    _detail_escaped="${_detail_escaped//\"/\\\"}"
+    json_escape_detail "$detail"
+    local _detail_escaped="$JSON_ESCAPED"
     printf '{"ts":"%s","check":"%s","level":"recommend","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
   }
 
@@ -7185,16 +8447,16 @@ cmd_check() {
         log "  NOT-EVAL: undeclared-entry scan — ${c9_scan#NOT-RUN }"
         ;;
       UNDECLARED)
-        flag_advisory_only "mirror-undeclared-entry" "${c9_scan#UNDECLARED }"
+        flag_advisory_only "mirror-undeclared-entry" "${c9_scan#UNDECLARED }" "id-non-gating"
         ;;
       RESIDUAL)
-        flag_advisory_only "mirror-undeclared-entry" "${c9_scan#RESIDUAL }"
+        flag_advisory_only "mirror-undeclared-entry" "${c9_scan#RESIDUAL }" "id-non-gating"
         ;;
       *)
         # An unreadable verdict is a defect in the verdict body, never an absence of
         # findings — the same fail-loud contract the 77/78 callers carry.
         flag_advisory_only "mirror-undeclared-entry" \
-          "unrecognised scan token [$c9_scan_tok] from _c9_undeclared_scan — an unreadable verdict is a defect, not a clean result: $c9_scan"
+          "unrecognised scan token [$c9_scan_tok] from _c9_undeclared_scan — an unreadable verdict is a defect, not a clean result: $c9_scan" "id-non-gating"
         ;;
     esac
 
@@ -7725,7 +8987,8 @@ cmd_check() {
   # Asserts the 4 atomic invariants on ALL open intake issues:
   #   I1 mutex          — any open issue with >1 status:* label          (all types)
   #   I2 presence       — any open issue with 0 status:* labels          (all types
-  #                       EXCEPT type:epic + sub-task — see the I2 exemption below)
+  #                       EXCEPT type:epic + sub-task — the I2 exemption is stated
+  #                       at _c16_violators, which owns it for BOTH surfaces)
   #   I3 contradiction-A — status: proposed + milestone set               (all types)
   #   I4 contradiction-B — status: bundled + no milestone                 (all types)
   # SCOPE [#2682, 2026-07-19]: previously scanned `--label improvement` only; the
@@ -7742,7 +9005,13 @@ cmd_check() {
   # bypass-mode-readiness.md §Shakedown; the introducing release is itself exempt
   # (reflexive-pipeline loop — the broadened net does not gate its own release).
   # Exemption: .claude/status-label-invariant-exemption-list.txt — lines of
-  # `<issue-number> <invariant-id>` skip the matching violation.
+  # `<issue-number> <invariant-id>` skip the matching violation; the predicate is
+  # _c16_exempt_pair, consulted by _c16_violators on BOTH surfaces.
+  # SHARED BODY [#6165]: the fetch, the four filters and the exemption predicate live
+  # at top level as _c16_population / _c16_violators / _c16_exempt_pair, so this check
+  # and the --report mirror evaluate ONE population. Only the emit below is local to
+  # this surface. Do not re-encode a filter here: two copies is the defect that body
+  # exists to make unreachable.
   # NOTE: the c14_ / C14_ variable prefix below is stale copy-paste naming WITHIN
   # Check 16 (not a numbering error) — flagged for a cosmetic follow-up rename;
   # deliberately NOT renamed here to keep this in-place scope-widen a single
@@ -7751,15 +9020,7 @@ cmd_check() {
   STATUS_LABEL_MODE=$(resolve_check_mode "status-label-invariant")
   if [[ "$STATUS_LABEL_MODE" != "off" ]]; then
     log "Check 16: Status-label invariant (I1/I2/I3/I4; all-intake scope; warn-mode initial; enforce-flip deferred)"
-    local C14_EXEMPT_FILE=".claude/status-label-invariant-exemption-list.txt"
     local c14_violations=0
-
-    # exempt_pair issue_num invariant_id — returns 0 if exempt
-    exempt_pair() {
-      local _num="$1" _inv="$2"
-      [[ -f "$C14_EXEMPT_FILE" ]] || return 1
-      grep -qE "^[[:space:]]*${_num}[[:space:]]+${_inv}([[:space:]]|$)" "$C14_EXEMPT_FILE"
-    }
 
     # flag_status_label — Check 16 decoupled emit. Mirrors flag_warn_or_issue but
     # switches on $STATUS_LABEL_MODE (resolved above), not the shared mode — the
@@ -7776,99 +9037,84 @@ cmd_check() {
           log "  WARN:  $check_id — $detail (warn-mode; flip status-label-invariant.mode to 'enforce' after shakedown)"
           local _ts
           _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          local _detail_escaped="${detail//\\/\\\\}"
-          _detail_escaped="${_detail_escaped//\"/\\\"}"
+          json_escape_detail "$detail"
+          local _detail_escaped="$JSON_ESCAPED"
           printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
           ;;
       esac
     }
 
-    # Single fetch — feeds all 4 invariant queries via local jq filters.
-    # SCOPE WIDENED [#2682, 2026-07-19]: the `--label improvement` filter was
-    # dropped so the invariants cover ALL open intake (bug / observation / sub-task
-    # / type:task) — not just improvement. The prior scope let non-improvement
-    # intake drift half-labeled indefinitely (facet 2), and left the already-present
-    # I4 orphaned-bundle detector blind to non-improvement bundles. Per-invariant
-    # type applicability is enforced BELOW (I2 exempts type:epic + sub-task); I1/I3/I4
-    # remain all-types. --limit 5000 has ample headroom for the ~300 open population.
+    # Single fetch + the four filters + the exemption predicate all come from the
+    # top-level _c16_* body (DD1), so this surface and the --report mirror cannot
+    # disagree about which issues are in scope. Only the EMIT below is check-path
+    # specific: mode-gated severity via flag_status_label() and the EXEMPT: log lines.
     local c14_issues_json
-    c14_issues_json=$(gh issue list --repo "$AUDIT_REPO" --state open \
-      --limit 5000 --json number,labels,milestone 2>/dev/null || echo "[]")
+    c14_issues_json=$(_c16_population)
+    local _num _verdict
+    local c14_rows
+
+    # _c16_guard — makes the engine's UNKNOWN-id guard real on THIS surface.
+    # _c16_violators returns 2 on an unknown invariant id so a typo cannot read as
+    # "no violators", but the four loops below consumed its output through a
+    # here-string, which discards the command substitution's exit status. The guard
+    # was therefore documented and enforced on the report path, and absent here.
+    # Each site now captures rows and status separately and routes a non-zero
+    # through this helper, so a bad id is a loud, named failure on every mode
+    # instead of an empty population that reads clean.
+    _c16_guard() {  # $1 = invariant id, $2 = rc from _c16_violators
+      [[ "$2" -eq 0 ]] && return 0
+      log "  FAIL:  status-label — _c16_violators rejected invariant id '$1' (rc=$2). That is a typo or a retired id in deploy.sh, NOT an absence of violators: the $1 population was never evaluated on this run"
+      ISSUES=$((ISSUES + 1))
+      return 1
+    }
 
     # I1 — mutex: >1 status:* label
-    local c14_i1_violators
-    c14_i1_violators=$(printf '%s' "$c14_issues_json" | jq -r '
-      .[] | select((.labels | map(.name) | map(select(startswith("status: "))) | length) > 1)
-      | .number')
-    while IFS= read -r _num; do
+    c14_rows=$(_c16_violators I1 "$c14_issues_json") || _c16_guard I1 "$?"
+    while IFS=' ' read -r _num _verdict; do
       [[ -n "$_num" ]] || continue
-      if exempt_pair "$_num" "I1"; then
+      if [[ "$_verdict" == "EXEMPT" ]]; then
         log "  EXEMPT: I1 mutex on issue #$_num (exemption-list)"
         continue
       fi
       flag_status_label "status-label-I1-mutex" "issue #$_num has >1 status:* label"
       c14_violations=$((c14_violations + 1))
-    done <<< "$c14_i1_violators"
+    done <<< "$c14_rows"
 
-    # I2 — presence: 0 status:* labels.
-    # TYPE EXEMPTION [#2682, 2026-07-19]: skip `type:epic` and `sub-task`.
-    #   - type:epic: operator decision — epics are CONTAINERS, not lifecycle work
-    #     items, so "exactly one status label" does not apply (label-taxonomy.md
-    #     Rule 2). Without this, the widened scope would false-FAIL on the 38
-    #     statusless epics (load-bearing, not cosmetic).
-    #   - sub-task: the pre-existing carve-out (label-taxonomy.md Rule 6) — a
-    #     sub-task's status label is a point-in-time hygiene mirror, not an
-    #     invariant-enforced field. Previously implicit (sub-tasks lacked the
-    #     `improvement` label); now explicit since the fetch is unscoped.
-    # This exemption applies to I2 ONLY. I1 (mutex) / I3 / I4 stay all-types: an
-    # epic that never carries a status label simply never trips them.
-    local c14_i2_violators
-    c14_i2_violators=$(printf '%s' "$c14_issues_json" | jq -r '
-      .[] | select((.labels | map(.name) | map(select(startswith("status: "))) | length) == 0)
-      | select((.labels | map(.name) | index("type:epic")) | not)
-      | select((.labels | map(.name) | index("sub-task")) | not)
-      | .number')
-    while IFS= read -r _num; do
+    # I2 — presence: 0 status:* labels (type:epic + sub-task exempt; see _c16_violators)
+    c14_rows=$(_c16_violators I2 "$c14_issues_json") || _c16_guard I2 "$?"
+    while IFS=' ' read -r _num _verdict; do
       [[ -n "$_num" ]] || continue
-      if exempt_pair "$_num" "I2"; then
+      if [[ "$_verdict" == "EXEMPT" ]]; then
         log "  EXEMPT: I2 presence on issue #$_num (exemption-list)"
         continue
       fi
       flag_status_label "status-label-I2-presence" "issue #$_num missing all status:* labels"
       c14_violations=$((c14_violations + 1))
-    done <<< "$c14_i2_violators"
+    done <<< "$c14_rows"
 
     # I3 — contradiction-A: status: proposed + milestone set
-    local c14_i3_violators
-    c14_i3_violators=$(printf '%s' "$c14_issues_json" | jq -r '
-      .[] | select(.milestone != null)
-      | select((.labels | map(.name) | map(select(. == "status: proposed"))) | length > 0)
-      | .number')
-    while IFS= read -r _num; do
+    c14_rows=$(_c16_violators I3 "$c14_issues_json") || _c16_guard I3 "$?"
+    while IFS=' ' read -r _num _verdict; do
       [[ -n "$_num" ]] || continue
-      if exempt_pair "$_num" "I3"; then
+      if [[ "$_verdict" == "EXEMPT" ]]; then
         log "  EXEMPT: I3 contradiction-A on issue #$_num (exemption-list)"
         continue
       fi
       flag_status_label "status-label-I3-contradiction-A" "issue #$_num is status: proposed but milestone is set"
       c14_violations=$((c14_violations + 1))
-    done <<< "$c14_i3_violators"
+    done <<< "$c14_rows"
 
     # I4 — contradiction-B: status: bundled + no milestone
-    local c14_i4_violators
-    c14_i4_violators=$(printf '%s' "$c14_issues_json" | jq -r '
-      .[] | select(.milestone == null)
-      | select((.labels | map(.name) | map(select(. == "status: bundled"))) | length > 0)
-      | .number')
-    while IFS= read -r _num; do
+    c14_rows=$(_c16_violators I4 "$c14_issues_json") || _c16_guard I4 "$?"
+    while IFS=' ' read -r _num _verdict; do
       [[ -n "$_num" ]] || continue
-      if exempt_pair "$_num" "I4"; then
+      if [[ "$_verdict" == "EXEMPT" ]]; then
         log "  EXEMPT: I4 contradiction-B on issue #$_num (exemption-list)"
         continue
       fi
       flag_status_label "status-label-I4-contradiction-B" "issue #$_num is status: bundled but no milestone"
       c14_violations=$((c14_violations + 1))
-    done <<< "$c14_i4_violators"
+    done <<< "$c14_rows"
 
     if [[ "$c14_violations" -eq 0 ]]; then
       log "  OK:    0 violations across I1/I2/I3/I4 (all open intake; type:epic + sub-task exempt from I2)"
@@ -8679,7 +9925,7 @@ cmd_check() {
         ;;
       NONE)
         flag_advisory_only "g1-enforcement-scope" \
-          "no release in flight — Layer-B(g) release gate is NOT APPLICABLE this run (${c22_vdetail}); the Layer-B(d) backlog-wide detector is unaffected and G1 defects remain visible at recommend-tier"
+          "no release in flight — Layer-B(g) release gate is NOT APPLICABLE this run (${c22_vdetail}); the Layer-B(d) backlog-wide detector is unaffected and G1 defects remain visible at recommend-tier" "id-non-gating"
         c22_gate_run=false
         ;;
       *)
@@ -8689,7 +9935,7 @@ cmd_check() {
             "G1 enforce scope NOT-EVALUATED — release identity '${c22_ms}' asserted via PMO_G1_ENFORCE_MILESTONE but ${c22_vtok} (${c22_vreason}; ${c22_mcount} milestone(s) read): ${c22_vdetail}. Refusing to gate on a population that could not be identified — correct the assertion or unset it"
         else
           flag_advisory_only "g1-enforcement-scope" \
-            "release identity detected from the checked-out branch but ${c22_vtok} (${c22_vreason}; ${c22_mcount} milestone(s) read): ${c22_vdetail}. A DETECTED candidate never blocks — set PMO_G1_ENFORCE_MILESTONE to assert a scope and make this fail-closed"
+            "release identity detected from the checked-out branch but ${c22_vtok} (${c22_vreason}; ${c22_mcount} milestone(s) read): ${c22_vdetail}. A DETECTED candidate never blocks — set PMO_G1_ENFORCE_MILESTONE to assert a scope and make this fail-closed" "id-non-gating"
         fi
         ;;
     esac
@@ -12038,7 +13284,7 @@ sys.stdout.write("".join(out) + "|")
     fi
     # (b)/(d) registry-derived token conformance, both delimiter families
     if [[ -f "$c44_spec" ]]; then
-      local c44_sq_reg c44_ang_reg c44_pfx c44_tok c44_ang_hits c44_owned
+      local c44_sq_reg c44_ang_reg c44_pfx c44_tok c44_ang_hits
       local c44_uncod_n=0 c44_uncod_raw=0
       # Registry read — TABLE-SCOPED. §1.3 says "the §1 and §1.1 TABLES are the closed
       # registered set", so only the FIRST CELL of a markdown table row registers. That
@@ -12077,8 +13323,13 @@ sys.stdout.write("".join(out) + "|")
             c44_uncod_n=$((c44_uncod_n + 1))
             c44_uncod_raw=$((c44_uncod_raw + $(grep -cxF "$c44_tok" <<<"$c44_ang_hits" || true)))
           done
-          c44_owned="<OPERATOR_INSTANCE_RELEASE_LOG_PATH>"  # depersonalization-token: allow — illustrative naming of the one un-codified token that has a tracked owner
-          flag_advisory_only "depersonalization-token" "angle-bracket token inventory: ${c44_uncod_n} un-codified token(s) / ${c44_uncod_raw} raw match(es) in tracked corpus. These are SANCTIONED, not defects — depersonalization-spec.md §4 'Convention scope' states un-codified angle tokens inherit the resolution-rule convention and that codification is incremental. Closure path is the §4 rule itself (a token's row is added when its consumer lands), and this arm's own decline is the progress signal; do NOT hunt for a per-token owner, only ${c44_owned} has one (#5824). Inventory: ${c44_uncod}"
+          # The owner-hint that used to sit here named ONE token as the only un-codified
+          # one with a tracked owner. That was a point-in-time census claim hardcoded
+          # beside a live-derived count, and it was false by the time it was read: the
+          # inventory carried sixteen. A literal that has to be re-verified on every
+          # reading is the drift this arm exists to avoid, so it is gone rather than
+          # corrected — the payload below is derived end to end.
+          flag_advisory_only "depersonalization-token" "angle-bracket token inventory: ${c44_uncod_n} un-codified token(s) / ${c44_uncod_raw} raw match(es) in tracked corpus. These are SANCTIONED, not defects — depersonalization-spec.md §4 'Convention scope' states un-codified angle tokens inherit the resolution-rule convention and that codification is incremental. Closure path is the §4 rule itself (a token's row is added when its consumer lands), and this arm's own decline is the progress signal, so do NOT hunt for a per-token owner. The one obligation that IS enforced is the same-change one, at the surface that has a diff: check-operator-toml-schema.sh leg C70e fails a pull request that authors a NEW angle token without its §4 row, and leg C70d fails when the §4 table and the two operator.toml registries disagree. Inventory: ${c44_uncod}" "arm-non-gating"
         fi
       fi
     else
@@ -12660,10 +13911,10 @@ sys.stdout.write("".join(out) + "|")
           # remediation overwrites non-git-revertible repository state and which the
           # gate cannot distinguish from a deliberate override.
           if [[ -n "$c51_diverged" ]]; then
-            flag_advisory_only "label-parity" "attribute divergence — $(echo "$c51_diverged" | grep -cv '^[[:space:]]*$') declared-and-live row(s) diverge on colour and/or description and are not registered as accepted overrides: $(echo "$c51_diverged" | paste -sd, -). Read-only: the sanctioned remediation renderer is check-label-parity.py --emit-fix (it runs nothing); the disposition record is $c51_dispositions"
+            flag_advisory_only "label-parity" "attribute divergence — $(echo "$c51_diverged" | grep -cv '^[[:space:]]*$') declared-and-live row(s) diverge on colour and/or description and are not registered as accepted overrides: $(echo "$c51_diverged" | paste -sd, -). Read-only: the sanctioned remediation renderer is check-label-parity.py --emit-fix (it runs nothing); the disposition record is $c51_dispositions" "arm-non-gating"
           fi
           if [[ -n "$c51_diverged_stale" ]]; then
-            flag_advisory_only "label-parity" "stale disposition row(s) — $c51_dispositions registers label(s) that are no longer divergent, or no longer live: $(echo "$c51_diverged_stale" | paste -sd, -). Remove the row(s); a suppression that has silently stopped matching is the defect class this arm exists to close"
+            flag_advisory_only "label-parity" "stale disposition row(s) — $c51_dispositions registers label(s) that are no longer divergent, or no longer live: $(echo "$c51_diverged_stale" | paste -sd, -). Remove the row(s); a suppression that has silently stopped matching is the defect class this arm exists to close" "arm-non-gating"
           fi
           if [[ -n "$c51_unknown" ]]; then
             flag_warn_or_issue "label-parity" "unrecognized verdict class in the parity TSV — the primitive emits a class this caller does not classify; treat as a finding, not an absence, and extend c51_known_re: $c51_unknown"
@@ -12933,7 +14184,7 @@ sys.stdout.write("".join(out) + "|")
   # falsify a finding in one read.
   # Exemption: .claude/work-hierarchy-exemption-list.txt — lines of `<path> <token>`
   # (H1), `#<issue> type:epic` (H2) or `#<issue> initiative-coextension` (H3),
-  # mirroring Check 16's exempt_pair shape; this
+  # mirroring Check 16's _c16_exempt_pair shape; this
   # is #1039's "allowlist-able during cutover" requirement. The H2 form is parsed
   # as an ENTRY, not a comment (`#` + digits + whitespace); the bare `<issue>
   # <token>` form is accepted too, since both normalize to one lookup key. The
@@ -13014,7 +14265,7 @@ sys.stdout.write("".join(out) + "|")
         c55_h3_count=$(echo "$c55_out" | awk -F'\t' '$1=="COUNT_H3"{print $2}')
         c55_h3_skip=$(echo "$c55_out" | awk -F'\t' '$1=="SKIP" && $2=="H3"{print $3}')
         if [[ -n "$c55_h3" ]]; then
-          flag_advisory_only "work-hierarchy-coextension" "H3 initiative-coextension — open epic(s) reading as an initiative container (family shape + title coextension + in-family fan-out, all three): $c55_h3 — re-tier to a project: label plus an operator-local roadmap, or record the judgment as \`#<issue> initiative-coextension\` in .claude/work-hierarchy-exemption-list.txt"
+          flag_advisory_only "work-hierarchy-coextension" "H3 initiative-coextension — open epic(s) reading as an initiative container (family shape + title coextension + in-family fan-out, all three): $c55_h3 — re-tier to a project: label plus an operator-local roadmap, or record the judgment as \`#<issue> initiative-coextension\` in .claude/work-hierarchy-exemption-list.txt" "id-non-gating"
         elif [[ -n "$c55_h3_skip" ]]; then
           log "  SKIP:  work-hierarchy H3 coextension advisory — $c55_h3_skip"
         elif [[ -n "$c55_h3_count" ]]; then
@@ -13202,9 +14453,10 @@ sys.stdout.write("".join(out) + "|")
           # the guarantee the emitter already provides.
           #
           # THE check_id IS ITS OWN, and that is not a detail — the same reason
-          # M4 carries `milestone-subtask-orphan`. flag_advisory_only's line
-          # states "this check is never enforce-capable"; that is TRUE of
-          # `milestone-description-reconciliation` and FALSE of
+          # M4 carries `milestone-subtask-orphan`. The posture token passed below
+          # is `id-non-gating`, which asserts that NO emit under
+          # `milestone-description-reconciliation` can gate. That is TRUE of this
+          # id — it carries zero escalating emits — and it would be FALSE of
           # `milestone-epic-membership`, which M1 graduates through a live dial.
           # Emitting the shared id here would write a false claim into the warn
           # log the M1 enforce-flip decision is READ FROM, and would leave M2's
@@ -13212,12 +14464,20 @@ sys.stdout.write("".join(out) + "|")
           # that never calls resolve_check_mode, M2 is non-gating twice over:
           # by emitter shape, and by dial disjunction.
           #
+          # THE SPLIT PREDATES THE TOKEN AND IS WHAT MAKES THE TOKEN TRUE. The
+          # emitter used to append a fixed "this check is never enforce-capable"
+          # to every advisory line; splitting the id was the workaround that kept
+          # that shared sentence from lying here. The sentence is retired and the
+          # scope is now a per-caller argument — but the disjoint id is still
+          # load-bearing, because it is what makes `id-non-gating` a measurable
+          # fact rather than a hopeful one. Do not merge the ids back.
+          #
           # The constraint that previously held this call on the warn emitter was
           # an acceptance criterion of the card that split the named-not-member
           # sub-classes; that card CLOSED 2026-08-07 and the constraint is
           # discharged.
           if [[ -n "$c56_m2" ]]; then
-            flag_advisory_only "milestone-description-reconciliation" "M2 reconciliation (advisory-only; structurally non-gating) — description↔membership divergence on: $c56_m2 [named-not-member ${c56_m2_nnm:-0}: ${c56_m2_else:-0} in another milestone, ${c56_m2_none:-0} in no milestone, ${c56_m2_mex:-0} member-excluded, ${c56_m2_unres:-0} unresolved]${c56_m2_degraded} — $c56_m2_detail"
+            flag_advisory_only "milestone-description-reconciliation" "M2 reconciliation (advisory-only; structurally non-gating) — description↔membership divergence on: $c56_m2 [named-not-member ${c56_m2_nnm:-0}: ${c56_m2_else:-0} in another milestone, ${c56_m2_none:-0} in no milestone, ${c56_m2_mex:-0} member-excluded, ${c56_m2_unres:-0} unresolved]${c56_m2_degraded} — $c56_m2_detail" "id-non-gating"
           fi
         fi
         # >>> C56-EMIT-END
@@ -13304,7 +14564,7 @@ sys.stdout.write("".join(out) + "|")
         else
           [[ "$c56_m3_scan" == "truncated" ]] && c56_m3_partial=" [DEGRADED — the stage-title scan was truncated, so every count here is a LOWER BOUND; this is not a clean result]"
           if [[ -n "$c56_m3" ]]; then
-            flag_advisory_only "milestone-scaffold-completeness" "M3 scaffold completeness — load-bearing finding(s): $c56_m3 [${c56_m3_eval} evaluated, ${c56_m3_skipped} not-yet-scaffolded; advisory ${c56_m3_adv:-0}; marker adoption ${c56_marker:-none}]${c56_m3_partial}"
+            flag_advisory_only "milestone-scaffold-completeness" "M3 scaffold completeness — load-bearing finding(s): $c56_m3 [${c56_m3_eval} evaluated, ${c56_m3_skipped} not-yet-scaffolded; advisory ${c56_m3_adv:-0}; marker adoption ${c56_marker:-none}]${c56_m3_partial}" "id-non-gating"
           else
             log "  OK:    milestone scaffold completeness (M3) — 0 load-bearing finding(s) over ${c56_m3_eval} evaluated milestone(s); ${c56_m3_skipped} not-yet-scaffolded (NOT evaluated, non-gating) (${c56_m3_adv:-0} advisory; marker adoption ${c56_marker:-none})${c56_m3_partial}"
           fi
@@ -13399,12 +14659,15 @@ sys.stdout.write("".join(out) + "|")
               ;;
             warn)
               log "  WARN:  milestone-subtask-orphan — $c56_m4_detail (warn-mode; flip milestone-subtask-orphan.mode to 'enforce' after shakedown — NOT the shared deploy-check.mode, which this leg deliberately does not follow)"
-              # Same escaping contract as flag_warn_or_issue's writer: backslash
-              # then double-quote, so the row stays parseable JSONL.
+              # Same escaping contract as flag_warn_or_issue's writer — which is
+              # now literally the same code: both route through the one
+              # json_escape_detail() helper in the warn-log helper block, so the
+              # row stays parseable JSONL for any control character, not only for
+              # a backslash or a double-quote.
               local _c56_m4_ts _c56_m4_esc
               _c56_m4_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-              _c56_m4_esc="${c56_m4_detail//\\/\\\\}"
-              _c56_m4_esc="${_c56_m4_esc//\"/\\\"}"
+              json_escape_detail "$c56_m4_detail"
+              _c56_m4_esc="$JSON_ESCAPED"
               printf '{"ts":"%s","check":"%s","detail":"%s"}\n' \
                 "$_c56_m4_ts" "milestone-subtask-orphan" "$_c56_m4_esc" >> "$WARN_LOG" 2>/dev/null || true
               ;;
@@ -13509,14 +14772,14 @@ sys.stdout.write("".join(out) + "|")
     log "Check 58: ADR ratification-flip backstop (Proposed + flip-promise; ADVISORY — never enforce-capable; G-CL9 is the authority)"
     local c58_script="core/deploy/tools/check-adr-flip.py"
     if [[ ! -f "$c58_script" ]]; then
-      flag_advisory_only "adr-flip-verify" "primitive script missing: $c58_script"
+      flag_advisory_only "adr-flip-verify" "primitive script missing: $c58_script" "id-non-gating"
     else
       local c58_out c58_exit=0
       c58_out=$(/usr/bin/python3 "$c58_script" --root . --output-format tsv 2>&1) || c58_exit=$?
       if [[ $c58_exit -eq 3 ]]; then
-        flag_advisory_only "adr-flip-verify" "input failure (exit 3): $(head -1 <<<"$c58_out") — zero ADRs parsed; the ADR tree may have moved"
+        flag_advisory_only "adr-flip-verify" "input failure (exit 3): $(head -1 <<<"$c58_out") — zero ADRs parsed; the ADR tree may have moved" "id-non-gating"
       elif [[ $c58_exit -ne 0 ]]; then
-        flag_advisory_only "adr-flip-verify" "check errored (exit $c58_exit): $(head -1 <<<"$c58_out")"
+        flag_advisory_only "adr-flip-verify" "check errored (exit $c58_exit): $(head -1 <<<"$c58_out")" "id-non-gating"
       else
         local c58_proposed c58_count c58_oldest
         c58_proposed=$(echo "$c58_out" | awk -F'\t' '$1=="PROPOSED"{print $2}')
@@ -13526,7 +14789,7 @@ sys.stdout.write("".join(out) + "|")
         else
           # Oldest promise first — the aging signal, not an alphabetical dump.
           c58_oldest=$(head -3 <<<"$(awk -F'\t' '$1=="PROMISED" && $3 != "?" {print $3"\t"$2}' <<<"$c58_out" | sort -rn)" | awk -F'\t' '{printf "%s (%sd) ", $2, $1}')
-          flag_advisory_only "adr-flip-verify" "${c58_count} of ${c58_proposed:-?} Proposed ADR(s) carry flip-promise wording; oldest: ${c58_oldest:-n/a}— confirm at release close whether each ratifying review has CLOSED (G-CL9); a still-pending review means Proposed is CORRECT"
+          flag_advisory_only "adr-flip-verify" "${c58_count} of ${c58_proposed:-?} Proposed ADR(s) carry flip-promise wording; oldest: ${c58_oldest:-n/a}— confirm at release close whether each ratifying review has CLOSED (G-CL9); a still-pending review means Proposed is CORRECT" "id-non-gating"
         fi
       fi
     fi
@@ -14557,8 +15820,11 @@ sys.stdout.write("".join(out) + "|")
   # WHAT IT ASSERTS. core/config/operator-toml-schema.json is the ONE place the
   # operator.toml key set is declared, and everything downstream agrees with it:
   # the generator emits from it (C70b), the hand-authored template documents
-  # exactly it (C70c), and the operator's live config carries every key it marks
-  # delivered (C70a).
+  # exactly it (C70c), the third registry — the spec's §4 token vocabulary — agrees
+  # with the other two (C70d), a newly authored angle token carries its §4 row in
+  # the SAME change (C70e), and the operator's live config carries every key the
+  # declaration marks delivered (C70a). FIVE legs, not three; the primitive's own
+  # header is the authority on each.
   #
   # WHY IT EXISTS. write_operator_toml was install-time only and invoked from
   # exactly one place, so a schema addition reached NEW INSTALLS ONLY. The
@@ -14568,11 +15834,12 @@ sys.stdout.write("".join(out) + "|")
   # that check.
   #
   # TWO MODES IN ONE CHECK, AND THE SPLIT IS THE POINT.
-  #   C70b/C70c are REPO-INTEGRITY assertions over tracked files. The live corpus
-  #   is clean at this pin (C1/C2 make it so in the same change), so there is no
-  #   pre-existing debt to baseline — Check 64/69's day-one-enforce precedent
+  #   C70b/C70c/C70d are REPO-INTEGRITY assertions over tracked files. The live
+  #   corpus is clean at this pin (C1/C2 make it so in the same change), so there is
+  #   no pre-existing debt to baseline — Check 64/69's day-one-enforce precedent
   #   applies rather than Check 63's committed-baseline hedge. They increment
-  #   ISSUES.
+  #   ISSUES. (C70e is repo-integrity too, but it needs a diff base to decide what
+  #   is "newly authored", so it runs only at the PR surface named below.)
   #   C70a reads OPERATOR-INSTANCE STATE. An operator whose config is behind is
   #   the VICTIM of this defect, not its author, and red-walling their deploy
   #   would punish them for a bug the platform shipped. It emits WARN and does
@@ -14582,9 +15849,11 @@ sys.stdout.write("".join(out) + "|")
   #
   # NOT THE ONLY LOCUS. The same primitive is wired as the `operator-toml-schema`
   # job in .github/workflows/repo-integrity.yml, which runs PRE-merge on every
-  # pull request and carries the C70b/C70c legs. That job is the load-bearing leg
-  # for repo integrity; this one is the deploy-time companion and the ONLY locus
-  # that can see C70a, because CI has no operator instance to read.
+  # pull request and carries the C70b/C70c/C70d legs (via --repo-integrity) plus
+  # C70e (via --diff-base, which is why that job checks out with fetch-depth: 0).
+  # That job is the load-bearing surface for repo integrity; this one is the
+  # deploy-time companion and the ONLY locus that can see C70a, because CI has no
+  # operator instance to read.
   #
   # DECLARED COVERAGE BOUNDARY. Key SETS and the absence of a hand-written emit.
   # It does NOT assert that a declared `enum` constrains a value already on disk
@@ -14597,7 +15866,7 @@ sys.stdout.write("".join(out) + "|")
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     local c70_mode
     c70_mode="$(resolve_check_mode "operator-toml-schema" "warn")"
-    log "Check 70: operator.toml declared-schema conformance (declaration/template parity + no hand-written emit, enforcing; live-config key delta, ${c70_mode})"
+    log "Check 70: operator.toml declared-schema conformance (declaration/template parity + no hand-written emit + spec-§4/template/declaration registry parity, enforcing; live-config key delta, ${c70_mode})"
     local c70_script="core/deploy/tools/check-operator-toml-schema.sh"
     if [[ ! -f "$c70_script" ]]; then
       log "  FAIL:  operator-toml-schema — primitive script missing: $c70_script (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
@@ -14864,15 +16133,15 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
   # Primitive: core/deploy/tools/check-issue-body-anchors.sh (carries --self-test).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 72: Issue-body section-anchor drift (numeric anchors in OPEN issue bodies vs their target's headings; ADVISORY — never enforce-capable)"
-    local c71_script="core/deploy/tools/check-issue-body-anchors.sh"
-    if [[ ! -f "$c71_script" ]]; then
-      flag_not_evaluated "issue-body-anchor-drift" "primitive script missing: $c71_script — the population was not read and no citation was resolved; this is not a clean result"
+    local c72_script="core/deploy/tools/check-issue-body-anchors.sh"
+    if [[ ! -f "$c72_script" ]]; then
+      flag_not_evaluated "issue-body-anchor-drift" "primitive script missing: $c72_script — the population was not read and no citation was resolved; this is not a clean result"
     elif ! command -v gh >/dev/null 2>&1; then
       log "  SKIP:  issue-body-anchor-drift — gh not on PATH; the OPEN-issue population is unreachable offline, so no anchor was resolved (skipped, not clean)"
     else
-      local c71_out c71_exit=0
-      c71_out=$(bash "$c71_script" --output-format tsv 2>&1) || c71_exit=$?
-      if [[ $c71_exit -eq 3 ]]; then
+      local c72_out c72_exit=0
+      c72_out=$(bash "$c72_script" --output-format tsv 2>&1) || c72_exit=$?
+      if [[ $c72_exit -eq 3 ]]; then
         # PV-7c: ONE finding naming ONE root cause, through the emitter that
         # carries no mode branch and no ISSUES increment. One outage never
         # becomes one finding per issue. The DETAIL carries the mandated
@@ -14880,27 +16149,27 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
         # places that obligation on the detail, and its log line does not
         # supply it, so a detail that omits it ships an unmarked withheld
         # verdict that nothing downstream can tell from a clean one.
-        flag_not_evaluated "issue-body-anchor-drift" "measurement outage (exit 3): $(head -1 <<<"$c71_out") — status degraded, all per-citation verdicts withheld and no counter emitted; this is not a clean result"
+        flag_not_evaluated "issue-body-anchor-drift" "measurement outage (exit 3): $(head -1 <<<"$c72_out") — status degraded, all per-citation verdicts withheld and no counter emitted; this is not a clean result"
       else
         # The coverage counts are emitted on EVERY evaluated run, findings or
         # not. A leg that measured nothing must render as unmeasured, never as
         # clean — which is this release's own outcome statement applied to the
         # check introducing it.
-        local _c71_row
-        while IFS= read -r _c71_row; do
-          [[ -z "$_c71_row" ]] && continue
-          log "  DENOM: issue-body-anchor-drift — ${_c71_row}"
-        done < <(echo "$c71_out" | awk -F'\t' '$1=="STATUS"{printf "%s = %s\n", $2, $3}')
-        if [[ $c71_exit -eq 0 ]]; then
-          local _c71_seen
-          _c71_seen=$(echo "$c71_out" | awk -F'\t' '$1=="DENOM"{print $3}')
-          log "  OK:    issue-body-anchor-drift — no unresolved anchors over ${_c71_seen:-?} citation site(s); see the DENOM rows above for what was NOT evaluated"
+        local _c72_row
+        while IFS= read -r _c72_row; do
+          [[ -z "$_c72_row" ]] && continue
+          log "  DENOM: issue-body-anchor-drift — ${_c72_row}"
+        done < <(echo "$c72_out" | awk -F'\t' '$1=="STATUS"{printf "%s = %s\n", $2, $3}')
+        if [[ $c72_exit -eq 0 ]]; then
+          local _c72_seen
+          _c72_seen=$(echo "$c72_out" | awk -F'\t' '$1=="DENOM"{print $3}')
+          log "  OK:    issue-body-anchor-drift — no unresolved anchors over ${_c72_seen:-?} citation site(s); see the DENOM rows above for what was NOT evaluated"
         else
-          local _c71_hit
-          while IFS= read -r _c71_hit; do
-            [[ -z "$_c71_hit" ]] && continue
-            flag_advisory_only "issue-body-anchor-drift" "$_c71_hit"
-          done < <(echo "$c71_out" | awk -F'\t' '$1=="UNRESOLVED"{printf "#%s (body line %s) cites %s section %s, which that file does not carry; it does carry: %s\n", $2, $3, $4, $5, $7}')
+          local _c72_hit
+          while IFS= read -r _c72_hit; do
+            [[ -z "$_c72_hit" ]] && continue
+            flag_advisory_only "issue-body-anchor-drift" "$_c72_hit" "id-non-gating"
+          done < <(echo "$c72_out" | awk -F'\t' '$1=="UNRESOLVED"{printf "#%s (body line %s) cites %s section %s, which that file does not carry; it does carry: %s\n", $2, $3, $4, $5, $7}')
         fi
       fi
     fi
@@ -15381,6 +16650,119 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
           "unexpected verdict token '$c78_tok' from _c78_compute_verdict (an unreadable verdict is a defect in the verdict body, never an absence of findings): $c78_verdict"
         ;;
     esac
+  fi
+
+  # Check 79 — S4 hook-tier publish parity [#5651]
+  #
+  # THE GAP THIS CLOSES IS NOT "NO PUBLISHER" — that framing is half wrong and the
+  # untrue half changes the design. A hook publisher exists and is hardened:
+  # setup-workspace.sh install_hooks() with a --refresh-hooks flow, eight co-deploy
+  # special cases, checksum-aware operator-edit preservation, a durable pre-write
+  # snapshot, replayable rollback ops, a hook-library closure assertion, its own
+  # regression suite and its own CI job — and update.sh delegates to it. What did not
+  # exist is any ASSERTION that its output matches its input. Before this check,
+  # deploy.sh carried exactly ONE line that resolved the deployed hooks tree at all
+  # (Check 71's warn-log drain, which reads an operator-state artifact rather than a
+  # published one), and zero occurrences of refresh-hooks.
+  #
+  # SO THE HOOK TIER WAS THE ONLY S4 RUNTIME SURFACE WITH A PUBLISHER AND NO PARITY
+  # CHECK. Checks 7 / 9 / 11 / 12 already assert the ADR-017 Decision-1 invariant —
+  # S4 is derived from S1 and must always be regenerable, never hand-edited — for the
+  # package, rules, harness and user-local-skills tiers. This is the missing family
+  # member, modelled on them, not a new mechanism.
+  #
+  # THE DEPLOYED TREE IS READ, NEVER WRITTEN. It is Tier-0 floored by
+  # block-autonomy-ceiling.sh BLOCK-AUTONOMY-001, so no agent session may write it and
+  # this check does not try: it observes and reports, and its remedy string names the
+  # operator-executed republish. That remedy comes from hook_parity_remedy() — one
+  # declared constant — because D-5651-1 (which carrier regenerates the S4 hook tier:
+  # the installer, or deploy.sh --deploy gaining a hook limb) is an OPEN operator
+  # decision this check deliberately does not resolve. Settling it later edits one line.
+  #
+  # THE ROOT IS ${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}, AND $DEPLOY_ROOT IS FALSIFIED
+  # RATHER THAN MERELY DISPREFERRED. $DEPLOY_ROOT resolves to $HOME, where
+  # .claude/hooks does not exist; a check keyed on it would report "runtime directory
+  # missing" on a correctly-installed workspace — a guaranteed false FAIL on every
+  # instance. The token used here is the one Check 71 already resolves the deployed
+  # hooks tree with, the one the publisher itself writes to, and the one ADR-017
+  # Decision 4 makes canonical for workspace content.
+  #
+  # WARN-MODE INITIAL for the closure FINDINGS, always-on for the failed-probe arms.
+  # Findings route through flag_warn_or_issue, so they respect the shakedown window
+  # like every other newly-landed gate and graduate independently via a per-check
+  # hook-parity.mode file. The control arm and the FAILPROBE arms bypass that gate on
+  # purpose (see _c79_compute_verdict's header): a probe that could not measure must
+  # never read as a warning, because a warning is indistinguishable from a clean run.
+  # Byte parity is advisory in every mode and is structurally incapable of gating.
+  # DELIBERATELY OFF the --check-required-subset roster, per the Check 63 / Check 68
+  # precedent; joining it is a separate, later, evidence-gated decision.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 79: S4 hook-tier publish parity (map-closure arm repo-derivable + enforcing-capable; byte-parity arm operator-local + advisory)"
+    local c79_dep c79_pub c79_line c79_tok c79_state c79_detail c79_rest
+    local c79_saw_ctrl=0 c79_saw_arma=0 c79_saw_armb=0
+    c79_dep="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/.claude/hooks"
+    c79_pub="docs/scripts/setup-workspace.sh"
+    # Process substitution, never a pipe: `while … read` on the right of a pipe runs
+    # in a subshell, and every ISSUES increment and c79_saw_* assignment below would
+    # be discarded — the counter would silently stay at zero on a real finding.
+    while IFS= read -r c79_line; do
+      [[ -n "$c79_line" ]] || continue
+      c79_tok="${c79_line%%$'\t'*}"
+      c79_rest="${c79_line#*$'\t'}"
+      case "$c79_tok" in
+        CTRL)
+          c79_saw_ctrl=1
+          c79_state="${c79_rest%%$'\t'*}"
+          c79_detail="${c79_rest#*$'\t'}"
+          log "  CTRL:  hook-parity — $c79_detail"
+          if [[ "$c79_state" != "PASS" ]]; then
+            log "  FAIL:  hook-parity — the comparator control arm did not discriminate; every parity verdict this run would be unattributable"
+            ISSUES=$((ISSUES + 1))
+          fi
+          ;;
+        ARMA)
+          c79_saw_arma=1
+          c79_state="${c79_rest%%$'\t'*}"
+          c79_detail="${c79_rest#*$'\t'}"
+          case "$c79_state" in
+            PASS)      log "  OK:    hook-parity — $c79_detail" ;;
+            FAIL)      flag_warn_or_issue "hook-parity" "$c79_detail" ;;
+            FAILPROBE)
+              log "  FAIL:  hook-parity — $c79_detail"
+              ISSUES=$((ISSUES + 1))
+              ;;
+            *)
+              log "  FAIL:  hook-parity — unexpected map-closure state '$c79_state' (an unreadable verdict is a defect in the verdict body, never an absence of findings): $c79_detail"
+              ISSUES=$((ISSUES + 1))
+              ;;
+          esac
+          ;;
+        ARMB)
+          c79_saw_armb=1
+          c79_state="${c79_rest%%$'\t'*}"
+          c79_detail="${c79_rest#*$'\t'}"
+          case "$c79_state" in
+            PASS)     log "  OK:    hook-parity-bytes — $c79_detail" ;;
+            NOT-EVAL) flag_not_evaluated "hook-parity-bytes" "$c79_detail" ;;
+            *)        flag_advisory_only "hook-parity-bytes" "$c79_detail" "id-non-gating" ;;
+          esac
+          ;;
+        DENOM) log "  DENOM: hook-parity — $c79_rest" ;;
+        NOTE)  log "         hook-parity — $c79_rest" ;;
+        *)
+          log "  FAIL:  hook-parity — unrecognised emitter token '$c79_tok' from _c79_compute_verdict: $c79_rest"
+          ISSUES=$((ISSUES + 1))
+          ;;
+      esac
+    done < <(_c79_compute_verdict "." "$c79_dep" "$c79_pub" 60)
+    # ANTI-VACUITY. A body that emitted no arm at all would otherwise pass in silence,
+    # which is the exact failure this check exists to remove — one tier deeper.
+    if [[ "$c79_saw_ctrl" -eq 0 || "$c79_saw_arma" -eq 0 ]]; then
+      log "  FAIL:  hook-parity — the verdict body emitted no control arm and/or no map-closure arm (ctrl=$c79_saw_ctrl closure=$c79_saw_arma); nothing was asserted, so this run is not a clean result"
+      ISSUES=$((ISSUES + 1))
+    elif [[ "$c79_saw_armb" -eq 0 ]]; then
+      flag_not_evaluated "hook-parity-bytes" "the byte-parity arm emitted no verdict at all, so no source-vs-deployed comparison has been asserted this run; this is not a clean result"
+    fi
   fi
 
   # Summary
@@ -18070,15 +19452,26 @@ cmd_report() {
   echo ""
 
   # --- Status-Label Invariant (Check 16) ---
+  # SHARED BODY [#6165]: the population, the four filters and the exemption predicate
+  # come from the top-level _c16_* body — the SAME body cmd_check() evaluates — so
+  # this mirror and the check cannot disagree about which issues are in scope. This
+  # block previously carried its own fetch and its own four filters, and they had
+  # drifted three ways: still on the pre-#2682 `--label improvement` scope, missing
+  # the I2 type exemptions, and never consulting the operator exemption list at all.
+  # Nothing detected it, and this surface GATES (see the exit gate at the foot of
+  # cmd_report), so it was a false-green rather than a cosmetic reporting nit.
+  # Only the EMIT below is report-specific, and that divergence is deliberate: this
+  # is the unvarnished "what would happen in enforce-mode" PASS/FAIL view regardless
+  # of cmd_check's warn-mode, which is what makes it usable as Stage 13 evidence.
+  # Re-encoding a filter here would re-create the defect; call the shared body.
   echo "--- Status-Label Invariant (Check 16) ---"
   local c14r_json
-  c14r_json=$(gh issue list --repo "$AUDIT_REPO" --state open \
-    --label improvement --limit 5000 --json number,labels,milestone 2>/dev/null || echo "[]")
+  c14r_json=$(_c16_population)
   local c14r_i1 c14r_i2 c14r_i3 c14r_i4
-  c14r_i1=$(printf '%s' "$c14r_json" | jq '[.[] | select((.labels | map(.name) | map(select(startswith("status: "))) | length) > 1)] | length')
-  c14r_i2=$(printf '%s' "$c14r_json" | jq '[.[] | select((.labels | map(.name) | map(select(startswith("status: "))) | length) == 0)] | length')
-  c14r_i3=$(printf '%s' "$c14r_json" | jq '[.[] | select(.milestone != null) | select((.labels | map(.name) | map(select(. == "status: proposed"))) | length > 0)] | length')
-  c14r_i4=$(printf '%s' "$c14r_json" | jq '[.[] | select(.milestone == null) | select((.labels | map(.name) | map(select(. == "status: bundled"))) | length > 0)] | length')
+  c14r_i1=$(_c16_violators I1 "$c14r_json" | awk '$2 == "VIOLATION" { n++ } END { print n + 0 }')
+  c14r_i2=$(_c16_violators I2 "$c14r_json" | awk '$2 == "VIOLATION" { n++ } END { print n + 0 }')
+  c14r_i3=$(_c16_violators I3 "$c14r_json" | awk '$2 == "VIOLATION" { n++ } END { print n + 0 }')
+  c14r_i4=$(_c16_violators I4 "$c14r_json" | awk '$2 == "VIOLATION" { n++ } END { print n + 0 }')
   for entry in "I1 mutex:$c14r_i1" "I2 presence:$c14r_i2" "I3 contradiction-A:$c14r_i3" "I4 contradiction-B:$c14r_i4"; do
     local _name="${entry%%:*}"
     local _count="${entry##*:}"

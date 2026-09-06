@@ -267,12 +267,22 @@ POST_REGRESSION_SHA="$(sha "${TARGET}")"
 # no-changes branch Arm 2b targets is structurally unreachable. Roster names are
 # DERIVED from the repo tree rather than hardcoded, so the seed cannot drift out of
 # step with the roster arrays deploy.sh builds.
+#
+# THE SEED COPIES CONTENT, NOT JUST DIRECTORY NAMES, and that is load-bearing.
+# should_full_roster() tests directory PRESENCE, so bare `mkdir`s were enough to
+# flip it — but deploy.sh now also selects against GROUND TRUTH (installed-vs-source
+# content, per skill_content_drift), and a mirror of hollow directories is a
+# genuinely stale instance: every roster skill reads as `missing`, the change set is
+# non-empty, and the E-02 branch this arm targets becomes unreachable again. Seeding
+# a real mirror keeps the fixture faithful to the state it claims to represent — an
+# instance that is already current — which is the only state in which "no changes"
+# is the correct answer for Arm 2b to assert on.
 MIRROR="${SBX}/home/.claude/skills"
 mkdir -p "${MIRROR}"
 seeded=0
 while IFS= read -r skill_md; do
   skill_dir="$(dirname "${skill_md}")"
-  mkdir -p "${MIRROR}/$(basename "${skill_dir}")"
+  cp -R "${skill_dir}" "${MIRROR}/" 2>/dev/null || mkdir -p "${MIRROR}/$(basename "${skill_dir}")"
   seeded=$((seeded + 1))
 done < <(find "${REPO_ROOT}/release/skills" "${REPO_ROOT}/core/skills" "${REPO_ROOT}/operations/skills" \
            -mindepth 2 -maxdepth 2 -name SKILL.md 2>/dev/null | LC_ALL=C sort)

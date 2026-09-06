@@ -64,11 +64,14 @@ name: Install tests
 #                                  whose other half honours a warn sentinel (#6298)
 #   - core/deploy/tools/tests/test-status-label-invariant.sh  deploy.sh Check 16
 #                                  status-label invariant fixture self-test: the four
-#                                  arms (mutex / presence / proposed+milestone /
+#                                  invariants (mutex / presence / proposed+milestone /
 #                                  orphaned bundle) EXECUTE deploy.sh and assert
 #                                  against Check 16's real emissions; the suite holds
 #                                  no copy of the inline jq filters, so there is
-#                                  nothing to keep in lockstep. Lives here, not in
+#                                  nothing to keep in lockstep. Five arms: 0 stub
+#                                  scope-awareness, A --check emissions, B no-op
+#                                  falsifier, C --check-vs---report population parity,
+#                                  D mutated subject proving C can go red (#6165). Lives here, not in
 #                                  release-tooling-smoke.yml, on GENRE grounds: this
 #                                  job is the established home for deploy.sh
 #                                  check-fixture suites. The TRIGGER ground once given
@@ -639,6 +642,32 @@ jobs:
         # against workspace files, no interpolation of any kind inside the run: block.
         run: bash core/deploy/tests/test_check54_ownership_collision_teeth.sh
 
+      - name: Run warn-log JSON-escape suite (test_warn_log_json_escape.sh)
+        # deploy.sh's warn-log `detail` serialization folded a backslash and a
+        # double-quote and nothing else, while RFC 8259 §7 requires every
+        # U+0000–U+001F in a JSON string to be escaped. 659 rows of the live family
+        # were therefore invalid JSON and invisible to any parsing drain — absent
+        # from both the numerator and the denominator of every count over the file.
+        #
+        # The suite EXTRACTS the shipped json_escape_detail() out of deploy.sh and
+        # evaluates it, so the function under test is the one that ships rather than
+        # a copy — a copy is the defect class this suite exists to keep retired.
+        #
+        # A4 is the arm that makes the rest mean anything: it reproduces the pre-fix
+        # two-substitution serialization on the SAME input through the SAME emit
+        # format and requires the row to FAIL to parse. A zero there is a broken
+        # probe, not a clean result, and it says so. A5 bounds A4 by requiring a
+        # control-character-free input to parse under both arms. A7/A8/A9 carry the
+        # name- and keyword-agnostic completeness matcher, its reconstructed 9 / 0 / 0
+        # pre-fix null arm, and the demonstration that the retired
+        # `local _detail_escaped=` instrument reads only 7 of the 9 sites.
+        #
+        # Hermetic: every row under mktemp -d, the live warn-log family and the
+        # durable corpus read-only, no gh, no network. Consumes NO workflow event
+        # input — a static invocation against workspace files, with no interpolation
+        # of any kind inside the run: block.
+        run: bash core/deploy/tests/test_warn_log_json_escape.sh
+
       - name: Run Check 22 G1-06 priority-carrier regression (test_g1_06_priority_carrier.sh)
         # Check 22's G1-06 criterion used to bind one priority carrier and was
         # therefore blind to every body the intake form renders. The fix delegates
@@ -718,9 +747,53 @@ jobs:
         # --fixture path. Consumes no workflow event input.
         run: bash core/deploy/tests/test_check56_m2_advisory.sh
 
+      - name: Run advisory-emitter contract regression (test_advisory_emitter_contract.sh)
+        # flag_advisory_only requires a third argument naming the SCOPE of its
+        # non-gating claim — id-non-gating or arm-non-gating. THIS STEP IS WHERE
+        # THAT REQUIREMENT IS LOUD. It cannot be loud in the emitter: raising
+        # there needs an escalation path in that body, and the ABSENCE of one is
+        # the emitter's class guarantee — the property its header states, ADR-134
+        # D3 fixes, and the sibling step above executes against a real failure
+        # counter. So the contract is graded statically, here, instead.
+        #
+        # What rots without it: the defect that motivated the contract was a
+        # per-caller fact hardcoded into shared code — one check's gate
+        # identifier, plus a check-level enforce-capability claim, appended to
+        # every caller's line and therefore wrong for most of them. Nothing
+        # structural prevents that returning. Unrun, a caller may omit the
+        # posture token (the emitter degrades silently to the class-true clause,
+        # by design, so a missing token is INVISIBLE at runtime) or declare a
+        # posture its own check_id's behaviour contradicts, and both ship green.
+        #
+        # The arms that make its zeros usable are its controls: flipping one
+        # arm-non-gating site to id-non-gating on a mutated copy must make the
+        # contradiction arm report >=1 (sensitivity), dropping one site's third
+        # argument must make the census arm report >=1 (sensitivity), and the
+        # escalation census over the unmutated tree must be non-empty and must
+        # discriminate (specificity), so a zero cannot be an artefact of a census
+        # that measured nothing. Denominators are reported, never pinned — a
+        # pinned call-site count is a drift alarm, not a conformance gate.
+        #
+        # Hermetic: no gh, no network. Every region under assertion is extracted
+        # from deploy.sh at run time, never pasted. Consumes no workflow event
+        # input.
+        run: bash core/deploy/tests/test_advisory_emitter_contract.sh
+
       - name: Run Check 16 status-label invariant fixture self-test (test-status-label-invariant.sh)
-        # Invokes core/deploy/tools/tests/test-status-label-invariant.sh (4 fixture
-        # arms: I1 mutex, I2 presence, I3 proposed+milestone, I4 orphaned bundle).
+        # Invokes core/deploy/tools/tests/test-status-label-invariant.sh, which asserts
+        # the four invariants (I1 mutex, I2 presence, I3 proposed+milestone, I4
+        # orphaned bundle) across five arms:
+        #   0  the gh stub honours --label — prerequisite for C and D, because a
+        #      scope-blind stub serves the same population to both fetch shapes and
+        #      makes the parity arms read GREEN on the scope defect
+        #   A  the real subject under `--check`, asserted as exact issue-number sets
+        #   B  a no-op subject through the same harness — A's PASS is subject-caused
+        #   C  the real subject under `--report`, asserted for population parity with
+        #      A: deploy.sh has TWO Check 16 surfaces and #6165 made them share one
+        #      population body after they had silently drifted three ways
+        #   D  a MUTATED subject carrying the pre-#6165 inline report block, which C's
+        #      comparison must go red against — an unfalsified parity check is the
+        #      same defect one layer up
         #
         # What rots without it: the suite EXECUTES deploy.sh Check 16 and asserts
         # against the real emissions of that run. It carries NO copy of Check 16's

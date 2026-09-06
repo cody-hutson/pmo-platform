@@ -495,7 +495,7 @@ def run_self_test() -> int:
 
     # ── Pre-existing skip classes still hold ──
     for t in ["https://example.com/x", "#anchor", "mailto:a@b.c",
-              "{REPO}/x.md", "<OPERATOR_INSTANCE_LOG>", "$VAR/x.md",
+              "{REPO}/x.md", "<OPERATOR_INSTANCE_LOG>", "$VAR/x.md",  # depersonalization-token: allow — a self-test fixture literal standing for the angle-token SHAPE this checker must skip; it names no real operator-instance path and must not enter the Check 44 inventory
               "~/x.md", "URL", "...", "vX.Y"]:
         assert is_skippable(t), f"self-test: pre-existing skip class regressed: {t!r}"
     # ...and a plain relative link in that same neighborhood is still checked.

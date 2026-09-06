@@ -26,6 +26,46 @@
 #         is what keeps "what exists" (the declaration) and "what it means" (the
 #         template) from drifting apart without forcing one to generate the other.
 #
+#   C70d  the THIRD registry agrees with the other two. Population: tracked repo files.
+#         Mode: ENFORCE.
+#         The operator-instance vocabulary is declared in THREE places, not two: the
+#         depersonalization-spec.md §4 table (the registry deploy.sh Check 44 actually
+#         reads at runtime), operator.toml.template, and the declaration. C70c asserts
+#         the second against the third. Nothing asserted either against the FIRST, and
+#         they had already drifted: §4 codified <OPERATOR_INSTANCE_ANALYSIS_PATH> — 91
+#         corpus references — while both config registries omitted it entirely.
+#         This leg closes that seam, all three directions, naming the token and every
+#         surface it is missing from.
+#
+#         WHY THIS IS A REGISTRY-TO-REGISTRY ASSERTION AND NOT A CORPUS ONE. It would be
+#         a category error to widen this into "every angle token in the corpus must be
+#         registered". ADR-154 decided the opposite and the spec says so in its own
+#         words: the square family is closed and gating, the ANGLE family is open and
+#         incrementally codified, so an un-codified angle token in corpus is SANCTIONED
+#         and a gate failing on it would fail correct work — measured at 239 findings
+#         across 17 spec-sanctioned tokens. Closure is true BETWEEN THE REGISTRIES and
+#         false over corpus usage. This leg asserts only where closure holds.
+#
+#   C70e  a NEWLY AUTHORED angle token carries a §4 table row in the SAME change.
+#         Population: the added lines of a pull-request diff. Mode: ENFORCE (see below).
+#         This is the one obligation §4 does impose on the open family, and it is a
+#         property of a DIFF, not of a working tree — which is why no deploy-time check
+#         can carry it and why ADR-154 recorded it as deferred rather than shipping a
+#         stored tolerated-set (a list the violating change may edit in the same diff
+#         buys the word "ratchet" and not the property).
+#
+#         THE BASE-ABSENCE TEST IS WHAT KEEPS THIS HONEST. "Newly authored" means the
+#         token is absent from the corpus at the BASE commit — not merely that a line
+#         mentioning it was added. A diff adding another reference to an already-present
+#         un-codified token is exactly the incremental use §4 sanctions, and firing on it
+#         would reproduce the failure C70d's comment above describes.
+#
+#         ENFORCING, NOT BLOCKING. A finding exits non-zero and turns the CI job red.
+#         Whether red BLOCKS a merge is branch-protection required-context registration —
+#         repository configuration, not readable from this tree, and an operator action.
+#         Stated rather than implied, because a check that quietly does not block is
+#         indistinguishable from one that does until the day it matters.
+#
 # WHY A PRIMITIVE RATHER THAN AN INLINE deploy.sh BLOCK. THREE consumers share this one
 # predicate — deploy.sh Check 70, the repo-integrity CI job, and update.sh Phase 2. Three
 # call sites re-encoding one predicate is how the two lists this card deletes drifted in
@@ -60,15 +100,17 @@
 #   0  clean
 #   1  one or more findings (one FAIL line each; WARN lines do not set this)
 #   3  input failure / broken probe — declaration unreadable, zero keys extracted,
-#      generator source not found, or python3 unavailable. NEVER a clean zero.
+#      generator source not found, a §4 table parsing to zero rows, an unresolvable
+#      diff base, or python3/git unavailable. NEVER a clean zero.
 #
 # USAGE
-#   bash core/deploy/tools/check-operator-toml-schema.sh                # all legs
-#   bash core/deploy/tools/check-operator-toml-schema.sh --repo-integrity  # C70b + C70c
+#   bash core/deploy/tools/check-operator-toml-schema.sh                # all repo+instance legs
+#   bash core/deploy/tools/check-operator-toml-schema.sh --repo-integrity  # C70b + C70c + C70d
 #   bash core/deploy/tools/check-operator-toml-schema.sh --instance     # C70a (warn)
 #   bash core/deploy/tools/check-operator-toml-schema.sh --emit-delta   # for update.sh
 #   bash core/deploy/tools/check-operator-toml-schema.sh --self-test    # fixture arms
 #   bash core/deploy/tools/check-operator-toml-schema.sh --root <dir>   # another work tree
+#   bash core/deploy/tools/check-operator-toml-schema.sh --diff-base <ref>  # C70e (PR-time)
 
 set -uo pipefail
 
@@ -78,6 +120,10 @@ CONFIG_ROOT="${PMO_PLATFORM_CONFIG_ROOT:-${HOME}/.config/pmo-platform}"
 REL_DECL="core/config/operator-toml-schema.json"
 REL_TEMPLATE="core/config/operator.toml.template"
 REL_GENERATOR="docs/scripts/setup-workspace.sh"
+# The THIRD registry. deploy.sh Check 44 reads this same file as its runtime
+# vocabulary; C70d/C70e read it here so the gate and the spec cannot disagree.
+REL_SPEC="core/standards/depersonalization-spec.md"
+DIFF_BASE=""
 
 # python3 is the parser. It is a hard preflight dependency of setup-workspace.sh
 # already; an absence here is a LOUD failure so a caller can never read it as clean.
@@ -99,9 +145,12 @@ run_probe() {
   S_DECL="${ROOT}/${REL_DECL}" \
   S_TEMPLATE="${ROOT}/${REL_TEMPLATE}" \
   S_GENERATOR="${ROOT}/${REL_GENERATOR}" \
+  S_SPEC="${ROOT}/${REL_SPEC}" \
+  S_ROOT="${ROOT}" \
+  S_BASE="${DIFF_BASE}" \
   S_LIVE="${CONFIG_ROOT}/operator.toml" \
   python3 -c '
-import json, os, re, sys
+import json, os, re, subprocess, sys
 
 verb = os.environ["S_VERB"]
 decl_path = os.environ["S_DECL"]
@@ -145,6 +194,23 @@ def parse_toml_keys(path):
             if m and section is not None:
                 keys.append((section, m.group(1)))
     return keys
+
+# TABLE-SCOPED, exactly as deploy.sh Check 44 reads the same file: only the FIRST
+# CELL of a markdown table row registers. That is not a stylistic choice — it is
+# what excludes the §4 schema metavariable  <OPERATOR_INSTANCE_X_PATH>  BY  # depersonalization-token: allow — naming the metavariable this read excludes; it is prose here exactly as it is prose there
+# CONSTRUCTION rather than by a name-specific exception a future edit must
+# remember. Prose mentions, including the Convention-scope clause that names
+# un-codified tokens as examples, do not register.
+ANGLE_ROW = re.compile(r"^\|\s*`<([A-Z][A-Z0-9_]*)>`\s*\|", re.M)
+SQUARE_ROW = re.compile(r"^\|\s*`\[([A-Z][A-Z0-9_]*)\]`\s*\|", re.M)
+
+def read_spec(path):
+    try:
+        with open(path, "r") as f:
+            return f.read()
+    except (IOError, OSError) as e:
+        print("SCAN-ERROR: cannot read the vocabulary registry {}: {}".format(path, e))
+        sys.exit(3)
 
 findings = 0
 
@@ -230,6 +296,179 @@ if verb in ("repo", "all"):
           " present, so the {} literal-emit finding(s) above are readable.".format(
               len(body), len(hits)))
 
+    # ---- C70d: THREE-registry parity, all directions ----
+    # spec §4 vocabulary table  <->  operator.toml.template  <->  the declaration.
+    spec_text = read_spec(os.environ["S_SPEC"])
+    spec_rows = set(ANGLE_ROW.findall(spec_text))
+    # The §4 token <-> [paths] key correspondence is a pure lowercasing. Asserting it
+    # here is what makes a row and its config key ONE fact rather than two that happen
+    # to look alike.
+    spec_keys = set(t.lower() for t in spec_rows)
+    tpl_inst = set(k for (_s, k) in tpl if k.startswith("operator_instance_"))
+    decl_inst = set(k for (_s, k, _v, _d) in declared if k.startswith("operator_instance_"))
+
+    # CONTROL ARM, BEFORE ANY VERDICT — and it is the arm this leg most needs. A §4
+    # table that parsed to zero rows would make every set-difference below empty and
+    # report a vacuous clean over a registry the extractor never reached. That is the
+    # precise failure mode the check exists to prevent, so it must not be able to
+    # commit it itself.
+    if not spec_rows:
+        print("SCAN-ERROR: the §4 vocabulary table in {} parsed to ZERO angle rows; the"
+              " registry extractor is not reaching the population. This is a broken"
+              " probe, not an empty registry.".format(os.environ["S_SPEC"]))
+        sys.exit(3)
+    if not tpl_inst or not decl_inst:
+        print("SCAN-ERROR: operator_instance_* key set parsed to ZERO in {} — refusing"
+              " to report registry parity from a population that was never read.".format(
+                  "operator.toml.template" if not tpl_inst else "the declaration"))
+        sys.exit(3)
+
+    c70d_hits = 0
+    for key in sorted(spec_keys - (tpl_inst & decl_inst)):
+        absent = []
+        if key not in tpl_inst:
+            absent.append("core/config/operator.toml.template")
+        if key not in decl_inst:
+            absent.append("core/config/operator-toml-schema.json")
+        print("FAIL: <{}> carries a depersonalization-spec.md §4 vocabulary row but is"
+              " ABSENT from {} — a codified token whose override field does not exist"
+              " cannot be set by an operator, and deploy.sh Check 44 reads §4 as the live"
+              " registry, so the two disagree on every run.".format(
+                  key.upper(), " and ".join(absent)))
+        c70d_hits += 1
+        findings += 1
+    for key in sorted((tpl_inst | decl_inst) - spec_keys):
+        present = []
+        if key in tpl_inst:
+            present.append("core/config/operator.toml.template")
+        if key in decl_inst:
+            present.append("core/config/operator-toml-schema.json")
+        print("FAIL: {} is declared in {} but has NO §4 vocabulary row in"
+              " depersonalization-spec.md — add the row (canonical default, override"
+              " field, and the landed consumer that supplies the default) or remove the"
+              " key. An override with no registry row is unreachable by the resolver and"
+              " invisible to Check 44.".format(key, " and ".join(present)))
+        c70d_hits += 1
+        findings += 1
+    print("DENOM: C70d compared {} §4 vocabulary row(s) against {} template and {}"
+          " declared operator_instance_* key(s); CONTROL all three populations non-zero,"
+          " so the {} parity finding(s) above are readable.".format(
+              len(spec_rows), len(tpl_inst), len(decl_inst), c70d_hits))
+
+if verb == "diff":
+    # ---- C70e: the same-change obligation, at the one surface that has a diff ----
+    spec_path = os.environ["S_SPEC"]
+    root = os.environ["S_ROOT"]
+    base = os.environ["S_BASE"]
+    if not base:
+        print("SCAN-ERROR: --diff-base requires a ref; none was supplied.")
+        sys.exit(3)
+
+    def git(*args):
+        return subprocess.run(["git", "-C", root] + list(args),
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    probe = git("rev-parse", "--verify", "{}^{{commit}}".format(base))
+    if probe.returncode != 0:
+        print("SCAN-ERROR: diff base {!r} does not resolve to a commit in {} ({}). A"
+              " shallow checkout is the usual cause — this arm needs fetch-depth 0."
+              .format(base, root, probe.stderr.decode("utf-8", "replace").strip()))
+        sys.exit(3)
+
+    spec_text = read_spec(spec_path)
+    spec_rows = set(ANGLE_ROW.findall(spec_text))
+    if not spec_rows:
+        print("SCAN-ERROR: the §4 vocabulary table parsed to ZERO angle rows; refusing to"
+              " classify any token as un-codified against a registry never read.")
+        sys.exit(3)
+
+    # Prefix set derived at runtime from BOTH registry table families, exactly as
+    # Check 44 derives it — so the reach of this arm matches the deploy-time
+    # inventory exactly, and a new prefix widens both at once with no edit here.
+    prefixes = sorted(set(t.split("_")[0] for t in
+                          list(spec_rows) + SQUARE_ROW.findall(spec_text)))
+    if not prefixes:
+        print("SCAN-ERROR: registry tables yielded an EMPTY prefix set; the derived"
+              " vocabulary is unavailable and this arm did not run.")
+        sys.exit(3)
+    tok_re = re.compile(r"<((?:" + "|".join(prefixes) + r")_[A-Z0-9_]+)>")
+
+    dif = git("diff", "--unified=0", "{}...HEAD".format(base))
+    if dif.returncode != 0:
+        print("SCAN-ERROR: could not compute the diff against {} ({}).".format(
+            base, dif.stderr.decode("utf-8", "replace").strip()))
+        sys.exit(3)
+
+    # Added lines only, file-scoped so the §4 EXCLUSIONS apply here exactly as they
+    # apply at deploy time: release/releases/ is a terminal ledger surface, and a line
+    # carrying the marker is a declared illustrative use.
+    added = []          # (path, line_text)
+    spec_rel = os.path.relpath(spec_path, root)
+    spec_added_rows = set()
+    cur = None
+    for line in dif.stdout.decode("utf-8", "replace").splitlines():
+        if line.startswith("+++ "):
+            p = line[4:].strip()
+            cur = None if p == "/dev/null" else p[2:] if p.startswith("b/") else p
+            continue
+        if not line.startswith("+") or line.startswith("+++"):
+            continue
+        if cur is None:
+            continue
+        text = line[1:]
+        if cur == spec_rel:
+            spec_added_rows |= set(ANGLE_ROW.findall(text + "\n"))
+        if cur.startswith("release/releases/"):
+            continue
+        if "depersonalization-token: allow" in text:
+            continue
+        added.append((cur, text))
+
+    cand = {}
+    for (p, text) in added:
+        for m in tok_re.finditer(text):
+            cand.setdefault(m.group(1), set()).add(p)
+
+    # The BASE-ABSENCE test. Without it this arm fires on every added REFERENCE to an
+    # already-present un-codified token — which §4 expressly sanctions — and becomes
+    # the uniform closed-set rule ADR-154 rejected, only louder because it fails a PR.
+    base_tokens = set()
+    if cand:
+        bg = git("grep", "-h", "-I", "-E",
+                 "<(" + "|".join(prefixes) + ")_[A-Z0-9_]+>", base, "--", ".")
+        # git grep exits 1 on "no match", which is a legitimate empty result, not an
+        # error; anything above 1 is a real failure and must not read as "all new".
+        if bg.returncode > 1:
+            print("SCAN-ERROR: could not enumerate tokens present at base {} ({}). An"
+                  " unreadable base would make every token look newly authored."
+                  .format(base, bg.stderr.decode("utf-8", "replace").strip()))
+            sys.exit(3)
+        for line in bg.stdout.decode("utf-8", "replace").splitlines():
+            base_tokens |= set(tok_re.findall(line))
+
+    c70e_hits = 0
+    for tok in sorted(cand):
+        if tok in base_tokens:
+            continue                       # pre-existing: sanctioned incremental use
+        if tok in spec_rows:
+            continue                       # codified at HEAD (row added in this diff or earlier)
+        where = ", ".join(sorted(cand[tok])[:3])
+        print("FAIL: <{}> is NEWLY AUTHORED in this change ({}) and carries no"
+              " depersonalization-spec.md §4 vocabulary row added in the same diff."
+              " §4: \"Authoring NEW angle-bracket tokens MUST add a row to this table in"
+              " the same PR.\" Add the row (canonical default, [paths] override field,"
+              " and the landed consumer supplying the default) plus its"
+              " operator.toml.template and operator-toml-schema.json counterparts — C70d"
+              " asserts all three agree.".format(tok, where))
+        c70e_hits += 1
+        findings += 1
+    print("DENOM: C70e read {} added line(s) across {} changed path(s) against base {};"
+          " {} distinct angle token(s) appeared in them, {} token(s) were already present"
+          " at base, §4 carries {} row(s) ({} added in this diff); {} finding(s) above."
+          .format(len(added), len(set(p for (p, _t) in added)), base[:12], len(cand),
+                  len([t for t in cand if t in base_tokens]), len(spec_rows),
+                  len(spec_added_rows), c70e_hits))
+
 if verb in ("instance", "all", "delta"):
     # ---- C70a: the live config carries every delivered key ----
     live_path = os.environ["S_LIVE"]
@@ -265,32 +504,91 @@ sys.exit(1 if findings else 0)
 '
 }
 
+# ─── self-test fixture writers ────────────────────────────────────────────────
+# Two registries the C70d/C70e arms must be able to vary INDEPENDENTLY, so each is
+# written by a function taking an optional extra member. Varying one surface while
+# holding the others fixed is what makes an arm discriminating rather than merely
+# loud: an arm that changed all three at once could not tell a parity failure from
+# a parse failure.
+_fx_write_decl() {
+  # $1 = fixture root; $2 = OPTIONAL extra operator_instance_* key under [paths]
+  local _root="$1" _extra=""
+  if [ -n "${2:-}" ]; then
+    _extra=",
+   {\"key\":\"$2\",\"type\":\"string\",\"source\":\"operator-or-default\",\"delivery\":\"opt-in\",\"default\":\"\",\"since\":\"1.0\"}"
+  fi
+  cat >"${_root}/core/config/operator-toml-schema.json" <<JSON
+{"schema":"operator.toml","declaration_version":1,"sections":[
+ {"name":"meta","delivery":"delivered","keys":[
+   {"key":"schema_version","type":"int","source":"declaration-version","since":"1.0"}]},
+ {"name":"automation","delivery":"delivered","keys":[
+   {"key":"automation_level","type":"string","source":"operator-or-default","default":"recommend","since":"4.23"}]},
+ {"name":"paths","delivery":"opt-in","keys":[
+   {"key":"operator_instance_hub_state_path","type":"string","source":"operator-or-default","delivery":"opt-in","default":"","since":"1.0"}${_extra}]},
+ {"name":"projects","delivery":"opt-in","keys":[
+   {"key":"board_url","type":"string","source":"operator-or-default","since":"4.0"}]}
+]}
+JSON
+}
+
+_fx_write_template() {
+  # $1 = fixture root; $2 = OPTIONAL extra operator_instance_* key under [paths]
+  local _root="$1"
+  cat >"${_root}/core/config/operator.toml.template" <<'TPL'
+[meta]
+schema_version = 1
+[automation]
+automation_level = "recommend"
+[paths]
+operator_instance_hub_state_path = ""
+TPL
+  [ -n "${2:-}" ] && printf '%s = ""\n' "$2" >>"${_root}/core/config/operator.toml.template"
+  printf '[projects]\nboard_url = ""\n' >>"${_root}/core/config/operator.toml.template"
+}
+
+_fx_write_spec() {
+  # $1 = fixture root; $2 = OPTIONAL extra §4 angle row token (bare NAME, no <>)
+  local _root="$1"
+  mkdir -p "${_root}/core/standards"
+  cat >"${_root}/core/standards/depersonalization-spec.md" <<'SPEC'
+# fixture spec
+
+## §1 Identity tokens
+
+| Token | Meaning |
+|---|---|
+| `[OPERATOR_NAME]` | the operator display name |
+
+## §4 Operator-instance path tokens
+
+| Token | Canonical default | operator.toml override field | Codified by |
+|---|---|---|---|
+| `<OPERATOR_INSTANCE_HUB_STATE_PATH>` | `WSROOT/pmo-instance/hub-state` | `[paths].operator_instance_hub_state_path` | fixture |
+SPEC
+  # Prose mention of a metavariable — present so every arm re-proves that the registry
+  # read is TABLE-SCOPED and does not register prose. This is the property that keeps
+  # the real spec free of a name-specific exception for its schema metavariable.
+  # The marker must sit on the SAME line as the literal — the matcher is per-line — so
+  # this printf deliberately does NOT use a line continuation.
+  printf 'Each `<OPERATOR_INSTANCE_X_PATH>` resolves per the rule above (prose, not a row).\n' >>"${_root}/core/standards/depersonalization-spec.md"  # depersonalization-token: allow — fixture metavariable written INTO a throwaway temp spec, never a corpus reference
+  if [ -n "${2:-}" ]; then
+    printf '| `<%s>` | `WSROOT/x` | `[paths].%s` | fixture |\n' \
+      "$2" "$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')" \
+      >>"${_root}/core/standards/depersonalization-spec.md"
+  fi
+}
+
 self_test() {
-  # FIVE arms. Each states what it must observe, and the run FAILS if an arm that must
+  # NINE arms. Each states what it must observe, and the run FAILS if an arm that must
   # fire does not — an arm that silently passes is the failure mode this exists to catch.
   local tmp rc fails=0
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/c70-selftest-XXXXXX") || return 3
   mkdir -p "${tmp}/core/config" "${tmp}/docs/scripts"
 
   # A minimal but structurally faithful fixture repo.
-  cat >"${tmp}/core/config/operator-toml-schema.json" <<'JSON'
-{"schema":"operator.toml","declaration_version":1,"sections":[
- {"name":"meta","delivery":"delivered","keys":[
-   {"key":"schema_version","type":"int","source":"declaration-version","since":"1.0"}]},
- {"name":"automation","delivery":"delivered","keys":[
-   {"key":"automation_level","type":"string","source":"operator-or-default","default":"recommend","since":"4.23"}]},
- {"name":"projects","delivery":"opt-in","keys":[
-   {"key":"board_url","type":"string","source":"operator-or-default","since":"4.0"}]}
-]}
-JSON
-  cat >"${tmp}/core/config/operator.toml.template" <<'TPL'
-[meta]
-schema_version = 1
-[automation]
-automation_level = "recommend"
-[projects]
-board_url = ""
-TPL
+  _fx_write_decl "${tmp}"
+  _fx_write_template "${tmp}"
+  _fx_write_spec "${tmp}"
   {
     echo 'write_operator_toml() {'
     echo '  python3 -c "'
@@ -356,12 +654,124 @@ TPL
     fails=$((fails + 1))
   fi
 
+  # ARM 6 (sensitivity, C70d) — a §4 row whose [paths] counterpart does not exist must
+  # FIRE, and must name the token AND both surfaces it is missing from. This is the
+  # shipped defect in fixture form: <OPERATOR_INSTANCE_ANALYSIS_PATH> carried a §4 row
+  # and 91 corpus references while both config registries omitted it, and no executable
+  # compared those surfaces.
+  _fx_write_spec "${tmp}" "OPERATOR_INSTANCE_GHOST_PATH"
+  ROOT="${tmp}" CONFIG_ROOT="${tmp}/noconfig" run_probe repo >"${tmp}/a6.out" 2>&1
+  rc=$?
+  if [ "${rc}" -ne 1 ] \
+     || ! grep -q 'OPERATOR_INSTANCE_GHOST_PATH' "${tmp}/a6.out" \
+     || ! grep -q 'operator.toml.template' "${tmp}/a6.out" \
+     || ! grep -q 'operator-toml-schema.json' "${tmp}/a6.out"; then
+    echo "SELF-TEST FAIL arm6: a codified token absent from both config registries must FAIL and name the token and both surfaces; exit ${rc}"
+    sed 's/^/  /' "${tmp}/a6.out"
+    fails=$((fails + 1))
+  fi
+
+  # ARM 7 (specificity, C70d) — reconcile the SAME token across all three registries and
+  # the leg must go silent. The DENOM assertion is what makes this arm non-vacuous: a
+  # silence produced by an extractor that read nothing would report 0 rows against 0
+  # keys, so the arm requires the reconciled count (2) to appear.
+  _fx_write_template "${tmp}" "operator_instance_ghost_path"
+  _fx_write_decl "${tmp}" "operator_instance_ghost_path"
+  ROOT="${tmp}" CONFIG_ROOT="${tmp}/noconfig" run_probe repo >"${tmp}/a7.out" 2>&1
+  rc=$?
+  if [ "${rc}" -ne 0 ] \
+     || grep -q '^FAIL:' "${tmp}/a7.out" \
+     || ! grep -q 'C70d compared 2 ' "${tmp}/a7.out"; then
+    echo "SELF-TEST FAIL arm7: three reconciled registries must be silent AND report a non-empty denominator; exit ${rc}"
+    sed 's/^/  /' "${tmp}/a7.out"
+    fails=$((fails + 1))
+  fi
+  # restore the base fixture for anything downstream
+  _fx_write_spec "${tmp}"; _fx_write_template "${tmp}"; _fx_write_decl "${tmp}"
+
+  # ARMS 8-9 (C70e) — the diff-scoped arm asserts a property of a DIFF, so its fixture
+  # is a real two-commit git repository. Nothing else can exercise it honestly.
+  # SKIPPED, not failed, where git is absent: that is an environment fact, and failing
+  # on it would make the whole primitive unusable rather than reporting one arm unrun.
+  local ran=7
+  if command -v git >/dev/null 2>&1; then
+    ran=9
+    local gfx="${tmp}/gitfx" basesha
+    mkdir -p "${gfx}/core/config" "${gfx}/docs"
+    _fx_write_decl "${gfx}"; _fx_write_template "${gfx}"; _fx_write_spec "${gfx}"
+    # Every fixture token below is a THROWAWAY LITERAL written into a temp git repo —
+    # it is not a corpus reference, so each line carries the exemption marker. Without
+    # them these four names would enter Check 44 arm (d) inventory as real un-codified
+    # tokens, and C70e would flag this very file on the PR that introduces it.
+    printf 'base doc: <OPERATOR_INSTANCE_LEGACY_PATH> is already here, and un-codified.\n' >"${gfx}/docs/notes.md"  # depersonalization-token: allow — self-test fixture literal
+    git -C "${gfx}" -c init.defaultBranch=main init -q >/dev/null 2>&1
+    git -C "${gfx}" add -A >/dev/null 2>&1
+    # commit.gpgsign is FORCED off for the fixture: this repo sets it globally, and a
+    # fixture commit that needs a signing key would make the self-test fail for a
+    # reason that has nothing to do with the check.
+    git -C "${gfx}" -c user.email=selftest@example.invalid -c user.name=selftest \
+      -c commit.gpgsign=false commit -q -m base >/dev/null 2>&1
+    basesha="$(git -C "${gfx}" rev-parse HEAD 2>/dev/null)"
+
+    # ONE commit carrying all three cases, so a single run adjudicates all of them and
+    # the three verdicts are known to come from the same extraction.
+    _fx_write_spec "${gfx}" "OPERATOR_INSTANCE_SAMECHANGE_PATH"
+    {
+      printf 'newly authored, no row anywhere: <OPERATOR_INSTANCE_BRANDNEW_PATH>\n'   # depersonalization-token: allow — self-test fixture literal
+      printf 'another reference to the pre-existing <OPERATOR_INSTANCE_LEGACY_PATH>\n'   # depersonalization-token: allow — self-test fixture literal
+      printf 'codified in this very diff: <OPERATOR_INSTANCE_SAMECHANGE_PATH>\n'   # depersonalization-token: allow — self-test fixture literal
+    } >>"${gfx}/docs/notes.md"
+    git -C "${gfx}" add -A >/dev/null 2>&1
+    git -C "${gfx}" -c user.email=selftest@example.invalid -c user.name=selftest \
+      -c commit.gpgsign=false commit -q -m head >/dev/null 2>&1
+
+    DIFF_BASE="${basesha}" ROOT="${gfx}" CONFIG_ROOT="${tmp}/noconfig" \
+      run_probe diff >"${tmp}/a89.out" 2>&1
+    rc=$?
+
+    # ARM 8 (sensitivity) — the genuinely new, un-codified token MUST fire and be named.
+    if [ "${rc}" -ne 1 ] || ! grep -q 'OPERATOR_INSTANCE_BRANDNEW_PATH' "${tmp}/a89.out"; then
+      echo "SELF-TEST FAIL arm8: a newly authored angle token with no same-change row must FAIL and be named; exit ${rc}"
+      sed 's/^/  /' "${tmp}/a89.out"
+      fails=$((fails + 1))
+    fi
+
+    # ARM 9 (specificity, THREE limbs) — this is the arm that keeps C70e from silently
+    # becoming the uniform closed-set rule ADR-154 rejected. Limb (a): a token already
+    # present at base is sanctioned incremental use and must NOT be reported. Limb (b):
+    # a token whose §4 row lands in the same diff has MET the obligation. Limb (c): the
+    # two silences must be shown non-vacuous — the run has to have SEEN all three
+    # tokens and recognised one as pre-existing, which the DENOM line reports.
+    if grep -q 'OPERATOR_INSTANCE_LEGACY_PATH' "${tmp}/a89.out"; then
+      echo "SELF-TEST FAIL arm9a: a token already present at BASE must not be reported — that is the sanctioned incremental use, and firing on it fails correct work"
+      sed 's/^/  /' "${tmp}/a89.out"
+      fails=$((fails + 1))
+    fi
+    if grep -q 'OPERATOR_INSTANCE_SAMECHANGE_PATH' "${tmp}/a89.out"; then
+      echo "SELF-TEST FAIL arm9b: a token whose §4 row lands in the SAME diff must not be reported"
+      sed 's/^/  /' "${tmp}/a89.out"
+      fails=$((fails + 1))
+    fi
+    if ! grep -q '3 distinct angle token(s) appeared' "${tmp}/a89.out" \
+       || ! grep -q '1 token(s) were already present at base' "${tmp}/a89.out"; then
+      echo "SELF-TEST FAIL arm9c: the specificity silences are VACUOUS — the DENOM line must show all 3 tokens seen and 1 recognised as pre-existing"
+      sed 's/^/  /' "${tmp}/a89.out"
+      fails=$((fails + 1))
+    fi
+  else
+    echo "SELF-TEST NOTE: arms 8-9 (C70e diff-scoped) SKIPPED — git is not available here."
+  fi
+
   rm -rf "${tmp}"
   if [ "${fails}" -ne 0 ]; then
     echo "SELF-TEST: ${fails} arm(s) failed — the check is NOT trustworthy in this state."
     return 3
   fi
-  echo "SELF-TEST: 5/5 arms behaved as specified (2 specificity silent, 3 sensitivity fired)."
+  if [ "${ran}" -eq 9 ]; then
+    echo "SELF-TEST: 9/9 arms behaved as specified (4 specificity silent, 5 sensitivity fired)."
+  else
+    echo "SELF-TEST: 7/7 runnable arms behaved as specified (3 specificity silent, 4 sensitivity fired); 2 diff-scoped arms skipped for want of git."
+  fi
   return 0
 }
 
@@ -372,9 +782,10 @@ while [ $# -gt 0 ]; do
     --repo-integrity)  MODE="repo"; shift ;;
     --instance)        MODE="instance"; shift ;;
     --emit-delta)      MODE="delta"; shift ;;
+    --diff-base)       MODE="diff"; DIFF_BASE="${2:?--diff-base requires a ref}"; shift 2 ;;
     --root)            ROOT="${2:?--root requires a path}"; shift 2 ;;
     --config-root)     CONFIG_ROOT="${2:?--config-root requires a path}"; shift 2 ;;
-    *) echo "usage: $0 [--self-test | --repo-integrity | --instance | --emit-delta] [--root <dir>] [--config-root <dir>]"; exit 3 ;;
+    *) echo "usage: $0 [--self-test | --repo-integrity | --instance | --emit-delta | --diff-base <ref>] [--root <dir>] [--config-root <dir>]"; exit 3 ;;
   esac
 done
 

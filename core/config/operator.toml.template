@@ -150,6 +150,78 @@ operator_instance_evals_results_path = ""
 # and MUST never commit on the public repo.
 operator_instance_finops_store_path = ""
 
+# Resolves <OPERATOR_INSTANCE_ANALYSIS_PATH>.
+# Default: ${claude_workspace_root}/pmo-platform/analysis  (the shipped in-repo
+# analysis workspace — folder + README tracked, audit contents git-ignored; the
+# archetypal analysis/-workspace pattern the roadmaps key above cites).
+# Consumer: core/standards/analysis-workspace-standard.md + the workspace charter's
+# Governance File Map — read-once engineering analysis artifacts (audits, reviews,
+# gap analyses) under dated <audit-name>-YYYY-MM-DD/ subfolders.
+# Leave empty to use the default; set a path to repoint (plug-and-play storage).
+operator_instance_analysis_path = ""
+
+# Resolves <OPERATOR_INSTANCE_CLAUDE_MD>.
+# Default: ${claude_workspace_root}/CLAUDE.md   (a FILE leaf, not a directory —
+# the stem-exception class documented in the spec's §4 vocabulary table).
+# Consumer: core/hooks/block-destructive.sh BLOCK-DESTRUCTIVE-019, whose Layer-1
+# anchored arm spells this exact path; the workspace charter is the Tier-1
+# Director context file every session reads first.
+operator_instance_claude_md = ""
+
+# Resolves <OPERATOR_INSTANCE_CLAUDE_DIR>.
+# Default: ${claude_workspace_root}/.claude
+# Consumer: the agent-config root — the deployed rules mirror (.claude/rules/),
+# the hook layer (.claude/hooks/) and its .mode file, and the operator-instance
+# allowlist core/rules/doc-link-maintenance.md names as
+# <OPERATOR_INSTANCE_CLAUDE_DIR>/skip-doc-link-check.txt.
+operator_instance_claude_dir = ""
+
+# Resolves <OPERATOR_INSTANCE_CLAUDE_SETTINGS>.
+# Default: ${claude_workspace_root}/.claude/settings.json
+# Consumer: the managed settings file regenerated from core/settings.json.template
+# + this config on install and update (depersonalization-spec.md §3 item 7); named
+# in BLOCK-DESTRUCTIVE-019's Layer-1 primary-write set. Operator-added keys live in
+# .claude/settings.local.json, which is never regenerated.
+operator_instance_claude_settings = ""
+
+# Resolves <OPERATOR_INSTANCE_WORKTREES_PATH>.
+# Default: ${claude_workspace_root}/.claude/worktrees
+# Consumer: core/rules/git-workflow.md § Primary Checkout Discipline — the home
+# every session worktree is created under, the primary checkout being read-only
+# for Claude Code sessions.
+operator_instance_worktrees_path = ""
+
+# Resolves <OPERATOR_INSTANCE_SKILLS_PATH>.
+# Default: ${claude_workspace_root}/.claude/skills
+# Consumer: the skill DEPLOYMENT TARGET (Layer 2, git-ignored) that
+# ./deploy.sh --deploy writes into, per core/rules/skill-deployment.md. Distinct
+# from the tracked skill SOURCE under <module>/skills/ — this key names where
+# deployed copies land, never where they are authored.
+operator_instance_skills_path = ""
+
+# Resolves <OPERATOR_INSTANCE_PROJECTS_PATH>.
+# Default: ${claude_workspace_root}/projects
+# Consumer: core/deploy/lib-instance-path.sh pmo_operations_path_for(), the single
+# resolution site for the operations-workspace root. A workspace-root SIBLING of
+# pmo-instance/, not a subpath of it — the Layer-2 Operations domain.
+operator_instance_projects_path = ""
+
+# Resolves <OPERATOR_INSTANCE_PROJECTS_CONFIG_PATH>.
+# Default: ${claude_workspace_root}/projects/_config
+# Consumer: the program-scoped operational-config home named in the workspace
+# charter's Governance File Map — PORTFOLIO.md, SESSION_STATE.md, CORRECTIONS.md,
+# SWAP_HANDOFF.md. Read-only for platform-engineering sessions per
+# core/rules/operations-bridge.md.
+operator_instance_projects_config_path = ""
+
+# Resolves <OPERATOR_INSTANCE_EVALS_PATH>.
+# Default: ${claude_workspace_root}/pmo-instance/evals
+# Consumer: core/standards/review-composition-framework.md § Calibration Ledger,
+# whose sites address <OPERATOR_INSTANCE_EVALS_PATH>/judge-calibration/. This is
+# the PARENT of operator_instance_evals_results_path above, and the ledger is a
+# SIBLING of results/ — the two keys are distinct paths, not variants of one.
+operator_instance_evals_path = ""
+
 [adapters]
 # Host-adapter selectors — the five external surfaces the platform integrates
 # with (ADR-017 §S2 names operator.toml as the home for "identity, paths,

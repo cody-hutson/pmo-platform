@@ -118,7 +118,7 @@ parser: negation detection is the NLP-shaped predicate this design rejects.
 EXEMPTION
 ---------
 `.claude/work-hierarchy-exemption-list.txt` — one entry per line, mirroring
-Check 16's `exempt_pair` shape. Operator escape hatch for anything the citation
+Check 16's `_c16_exempt_pair` shape. Operator escape hatch for anything the citation
 guard does not cover (e.g. a superseded ADR narrating an old hierarchy), and
 #1039's "allowlist-able during cutover" requirement.
 
