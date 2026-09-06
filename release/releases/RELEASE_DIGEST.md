@@ -8,7 +8,7 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
-### v4.60 (2026-09-06) — <headline — populated by operator at chore PR review>
+### v4.60 (2026-09-06) — Checks that pass without looking now have to prove they looked
 
 ### v4.59 (2026-09-06) — Release tools now actually run, and a green check means it measured
 
