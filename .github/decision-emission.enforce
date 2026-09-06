@@ -1,9 +1,24 @@
 # decision-emission enforcement sentinel — read by deploy.sh
 # cmd_check_decision_emission (--check-decision-emission, Check 61).
 #
-# First non-comment token decides whether an INCOMPLETE verdict BLOCKS:
-#   enforce  -> INCOMPLETE exits 1 (blocking)
-#   warn     -> INCOMPLETE reports the true verdict, exits 0 (non-blocking)
+# First non-comment token decides whether an INCOMPLETE or NOSET verdict BLOCKS:
+#   enforce  -> INCOMPLETE exits 1, NOSET exits 1 (blocking)
+#   warn     -> INCOMPLETE exits 2, NOSET exits 4 — the true verdict, reported as a
+#               NON-BLOCKING ADVISORY on its own non-zero code
+#
+# THIS TOKEN IS AN ESCALATION DIAL, NOT A SUPPRESSION DIAL (#4216). It moves a verdict
+# between advisory and blocking; it can never move one onto exit 0. Exit 0 belongs to
+# CLEAN alone, under either token — a degraded or unmeasured state never shares a code
+# with the clean state (PV-7). Until #4216 it did: under `warn` both INCOMPLETE and NOSET
+# returned 0, so a run that measured a gap — or, in CI, one where an emptied asserted set
+# meant the gate asserted nothing — was indistinguishable from a clean one, and
+# .github/workflows/decision-emission.yml printed its completeness claim over both.
+#
+# The full five-code contract (0 CLEAN · 2 INCOMPLETE advisory · 3 SKIP NOT-EVALUATED,
+# sentinel-agnostic · 4 NOSET advisory · 1 blocking or fail-closed) has its authoring
+# home on the cmd_check_decision_emission header table in core/deploy/deploy.sh, and its
+# executable form in _de_verdict_exit_code, asserted by --self-test group DE arm DE-10.
+# Flipping this token changes which of those rows applies; it does not change the space.
 #
 # Ships `warn`. The `shadow` rung of the shadow -> warn -> enforce ladder
 # (progressive-rollout-convention.md) is NOT reachable in this codebase —
@@ -23,10 +38,16 @@
 # and on its own it changes nothing observable in CI.
 #
 #   STEP 1 — flip the token below to `enforce`.
-#     This arms the LIVE ARM only: an INCOMPLETE/NOSET verdict then exits 1
-#     instead of 0. In CI it does NOTHING, because the live arm's verdict input
-#     is the pipeline event log — git-ignored operator-instance state, absent
-#     from every checkout — so the CI run verdicts SKIP and exits 3 either way.
+#     This arms the LIVE ARM only: an INCOMPLETE verdict then exits 1 instead of
+#     2, and a NOSET verdict exits 1 instead of 4. Both were already non-zero and
+#     already reported; the flip changes them from advisory to BLOCKING, it does
+#     not make a silent verdict audible. In CI it does NOTHING for the ordinary
+#     case, because the live arm's verdict input is the pipeline event log —
+#     git-ignored operator-instance state, absent from every checkout — so the CI
+#     run verdicts SKIP and exits 3 either way. The one CI-reachable exception is
+#     NOSET: the engine's asserted-set guards precede its event-log guard, so an
+#     absent or emptied asserted set verdicts NOSET rather than SKIP even on a bare
+#     checkout, and under `enforce` that exits 1 rather than 4.
 #     SKIP is sentinel-AGNOSTIC on purpose: mapping it to 1 under enforce would
 #     turn this flip into a permanent red on every pull request rather than into
 #     enforcement. The live arm's real surface is deploy time and Stage-13
