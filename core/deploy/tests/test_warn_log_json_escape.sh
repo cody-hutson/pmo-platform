@@ -338,6 +338,22 @@ for lit in 'json_escape_detail() {' 'JSON_ESCAPED="$_s"' '*[[:cntrl:]]*'; do
 done
 report "A10 deploy.sh still carries the helper header, the terminal assignment and the cntrl short-circuit this file pins" "$a10_ok" "$a10_missing"
 
+# ── Arm-count floor — the expectation lives HERE, not in a handoff ──────────
+# This suite runs 11 arms: A0 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10. The Stage-6
+# handoff quoted `passed=10 failed=0` as the expected line, which is fail-UNSAFE
+# in the one direction that matters: a run that lost an arm to an early `exit`,
+# a mis-set fixture or a silently-skipped branch reports a LOWER pass count with
+# zero failures, and reads as success against a number that was already too low.
+# Asserting the total here makes a missing arm a failure rather than a quieter
+# pass, and keeps the expected value in the file that owns it, where a reader
+# can re-derive it from the arms themselves.
+EXPECTED_ARMS=11
+_ran=$((PASS_COUNT + FAIL_COUNT))
+if [[ "$_ran" -ne "$EXPECTED_ARMS" ]]; then
+  echo "  FAIL: arm-count floor — $_ran of $EXPECTED_ARMS arms reported (A0..A10). A run that reports fewer arms than the suite defines has skipped one; its passes do not cover the missing arm's subject"
+  FAIL_COUNT=$((FAIL_COUNT + 1))
+fi
+
 echo
-echo "passed=$PASS_COUNT failed=$FAIL_COUNT"
+echo "passed=$PASS_COUNT failed=$FAIL_COUNT arms=$_ran/$EXPECTED_ARMS"
 [[ "$FAIL_COUNT" -eq 0 ]] || exit 1

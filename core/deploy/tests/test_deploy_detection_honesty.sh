@@ -407,10 +407,28 @@ else
     "manifest drift under ${LIVE_SKILLS} — an invocation escaped its sandbox"
 fi
 
+# --- Arm-count floor — the expectation lives HERE, not in a handoff ----------
+# This suite reports 17 arms across 35 `report` call sites: 12 labels appear
+# twice as an exact PASS/FAIL pair, 5 more pair with slightly different text
+# (the PASS branch interpolates a measured count, the FAIL branch does not), and
+# one is a genuine singleton. The Stage-6 handoff quoted 14, which is fail-UNSAFE
+# in the one direction that matters: a run that lost an arm to an early exit or a
+# skipped setup block reports a LOWER pass count with zero failures, and reads as
+# success against a number that was already too low. Asserting the total here
+# makes a missing arm a failure rather than a quieter pass, and keeps the expected
+# value in the file that owns it.
+EXPECTED_ARMS=17
+RAN=$((PASS + FAIL))
+if [ "${RAN}" -ne "${EXPECTED_ARMS}" ]; then
+  printf '  FAIL: arm-count floor — %d of %d arms reported. A run reporting fewer arms than the suite defines has skipped one; its passes do not cover the missing arm.\n' \
+    "${RAN}" "${EXPECTED_ARMS}"
+  FAIL=$((FAIL + 1))
+fi
+
 # --- Summary ----------------------------------------------------------------
 printf -- '─────────────────────────────────────────────────────────────────────────\n'
-printf 'test_deploy_detection_honesty.sh: %d passed, %d failed (bash %s)\n' \
-  "${PASS}" "${FAIL}" "${BASH_VERSION:-unknown}"
+printf 'test_deploy_detection_honesty.sh: %d passed, %d failed, %d/%d arms (bash %s)\n' \
+  "${PASS}" "${FAIL}" "${RAN}" "${EXPECTED_ARMS}" "${BASH_VERSION:-unknown}"
 
 if [ "${FAIL}" -ne 0 ]; then
   exit 1
