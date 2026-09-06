@@ -67,6 +67,118 @@ gh api -X PATCH repos/:owner/:repo/milestones/N -f description=@/path/to/body.md
 gh api -X PATCH repos/:owner/:repo/milestones/N -F description=@/path/to/body.md
 ```
 
+## 2.1 Detecting the form — two predicates over two populations
+
+The rule above prevents the corruption where it originates. Detecting it needs
+**two** predicates, because the failure has two observable surfaces and neither
+one can see the other.
+
+|  | **Call-site predicate** | **Artifact-body predicate** |
+|---|---|---|
+| Observes | a source line passing an `@`-prefixed value to the *literal-value* parameter | a published body that is a single token beginning with `@` |
+| Population | the tracked corpus | the host's work-item and change-request bodies |
+| Denominator obtained by | the version-control file listing | the count of artifacts the enumeration returned |
+| Catches | the cause, before it runs | the effect, after it published |
+| Cannot see | a call issued outside the corpus — an ad-hoc shell, a scratch script, a hand-typed command | a body corrupted by any other mechanism, or any artifact the enumeration did not reach |
+
+**Rule.** Neither predicate subsumes the other, and neither may be reported alone
+as "the sweep". A corpus clean under the call-site predicate can still have a
+corrupt body published by an untracked call; a body population clean under the
+artifact-body predicate says nothing about a call site that has not yet run.
+
+**Call-site predicate — a literal-value parameter carrying a file reference.**
+Three properties are load-bearing, and each was chosen against a survey of the
+forms actually present rather than invented:
+
+- **Case discriminates.** The type-converting parameter differs from the literal
+  one only by case, and it is the *correct* form. A case-insensitive match
+  reports every correct call in the corpus as a defect.
+- **The field name is not part of the predicate.** The first witnessed instance
+  corrupted a description; the second corrupted a body. A predicate bound to one
+  field name is blind by construction to the third.
+- **Fenced code blocks are excluded** — the same convention the corpus's
+  link-resolution primitive already applies. Without it, the WRONG example in
+  § 2 above is reported as its own finding and this file cannot document the
+  rule it carries.
+
+```
+(?<![\w-])(?:-f|--raw-field)[= ]\s*[A-Za-z_][\w.\[\]-]*=@
+```
+
+**Artifact-body predicate — a body that is a file reference rather than a body.**
+Applied to the published body text, never to the command that posted it: a body
+whose whitespace-stripped form is a single token beginning with the sigil, where
+the remainder reads as a file reference.
+
+```
+^@\S+$   AND   the remainder is '-', or contains '/', or ends in .<1-6 alnum>
+```
+
+The file-reference qualification is what separates a lost body from an ordinary
+mention, and the stdin token is included because the type-converting parameter
+accepts it — so the literal parameter can post it verbatim. **Residual, stated
+rather than hidden:** a bare mention whose handle itself ends in a dot-suffix
+satisfies this predicate. It is characterised, not eliminated — a matched body
+is read before it is called a finding.
+
+**Rule — both predicates report a denominator and two arms; neither reports a
+bare zero.** A zero is evidence only when it arrives with:
+
+1. the **denominator**, and how that population count was obtained;
+2. a **sensitivity arm** — a seeded positive of each shape the predicate exists
+   to catch, observed flagged. The arm is *seeded* rather than borrowed from the
+   population, because a healthy population legitimately holds no positive and a
+   probe that has never fired has demonstrated nothing;
+3. a **specificity arm** — the correct type-converting form carrying the same
+   `@` value, and a legitimate literal-value parameter on a non-`@` scalar, each
+   observed **not** flagged.
+
+A zero whose sensitivity arm also returned zero is a **broken probe** and is
+reported as unusable, not as a clean population (§ 7.2).
+
+**The measured counts belong to the run, not to this file.** Record the
+denominator, the arms and the findings in the change's own verification record.
+A count written into this section is stale at the next artifact.
+
+## 2.2 What no automated control covers — the artifact-body surface
+
+**Rule.** State the coverage a control actually has. This failure publishes to a
+surface the repository's content controls do not read, and a remediation that
+implies otherwise is worse than none.
+
+The two controls that scan for personal data both take a **repository**
+population, and the division between them is stated in their own configuration:
+
+- the **changed-file content gate** reads the file delta of a change request,
+  intersected with the governance domains. Its population is tracked file
+  content;
+- the **commit-message gate** reads the messages in that same commit range. Its
+  own header records why it exists — the content gates never read a commit
+  message.
+
+Both are described at [`git-workflow.md`](../rules/git-workflow.md)
+§ Repository-Integrity Gates, which is their governed home.
+
+A work-item or change-request **body is neither.** It is host state, not
+repository state: it never appears in a file delta and never appears in a commit
+message. No content gate can reach it, and no scan of the corpus — scheduled or
+otherwise — will ever surface it.
+
+One control does reach the body surface: the agent-side pre-write guard that
+reads a posted body (inline, or the file behind a type-converting or body-file
+parameter) and refuses a write carrying an operator-local path. **Its limits are
+its own, and they are stated where it lives:** it fires only on the agent's own
+tool calls, never on a hand-typed command or a web-UI edit; it ships in a warn
+posture; it depends on wiring an instance may not have loaded; and it matches a
+**path-leak** pattern rather than this failure's mechanism. A body lost to the
+literal-value parameter whose path does not match that pattern passes it in
+silence.
+
+**Consequence, stated plainly.** The artifact-body predicate in § 2.1 is a
+**measurement, not a gate.** It makes a recurrence countable against a stated
+denominator. It prevents nothing, it is registered in no verdict, and it must
+never be cited as coverage the content gates do not have.
+
 ## 3. Form 2 — the empty-from-unset variable
 
 **Observed 2026-08-06.** A work item's milestone field was set from a shell
