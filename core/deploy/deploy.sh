@@ -5352,7 +5352,7 @@ def expand(row):
         pairs.append((f, ''.join(dd)))
     return pairs
 
-match_n = drift_n = notdep_n = presence_n = presence_missing = 0
+match_n = drift_n = notdep_n = presence_n = presence_present = presence_missing = 0
 drift_rows = []
 missing_rows = []
 mapped = 0
@@ -5363,11 +5363,17 @@ for row in rows:
     for s, d in expand(row):
         dp = os.path.join(dep, d)
         if cls == 'mode-template':
+            # presence_n counts rows EXAMINED; presence_present counts rows whose
+            # target exists. They are separate counters because a presence-optional
+            # row is legitimately absent, so reporting the examined count as though
+            # it were the present count states something false — which is precisely
+            # the class of silent overstatement this check exists to remove.
             presence_n += 1
-            if not os.path.exists(dp):
-                if m != 'presence-optional':
-                    presence_missing += 1
-                    missing_rows.append('%s (mode template never installed)' % d)
+            if os.path.exists(dp):
+                presence_present += 1
+            elif m != 'presence-optional':
+                presence_missing += 1
+                missing_rows.append('%s (mode template never installed)' % d)
             continue
         mapped += 1
         hs = sha_path(os.path.join(repo, s))
@@ -5437,9 +5443,10 @@ if src_unclassified:
 out('DENOM',
     'declared_rows=%d derived_publish_acts=%d mapped_pairs=%d deployed_population=%d '
     'tracked_core_hooks_sources=%d MATCH=%d DRIFT=%d NOT-DEPLOYED=%d presence_checked=%d '
-    'presence_missing=%d deployed_unclassified=%d source_unclassified=%d'
+    'presence_present=%d presence_missing=%d deployed_unclassified=%d source_unclassified=%d'
     % (len(rows), len(derived), mapped, len(dep_pop), len(src_pop), match_n, drift_n,
-       notdep_n, presence_n, presence_missing, len(dep_unclassified), len(src_unclassified)))
+       notdep_n, presence_n, presence_present, presence_missing, len(dep_unclassified),
+       len(src_unclassified)))
 
 if mapped == 0:
     out('ARMB', 'NOT-EVAL',
@@ -5458,9 +5465,10 @@ elif drift_n or notdep_n or presence_missing:
         % (drift_n, mapped, notdep_n, presence_missing, sys.argv[5]))
 else:
     out('ARMB', 'PASS',
-        'every one of the %d mapped pair(s) is byte-identical to its source, %d mode template(s) '
-        'are present, and nothing on either side is unclassified'
-        % (mapped, presence_n))
+        'every one of the %d mapped pair(s) is byte-identical to its source; of %d mode-template '
+        'row(s) examined, %d are present and 0 REQUIRED one(s) are missing (any remainder is a '
+        'presence-optional row, absent by declaration); nothing on either side is unclassified'
+        % (mapped, presence_n, presence_present))
 PYEOF
 
   python3 "$_py" "$_repo" "$_dep" "$_pub" "$_cap" "$(hook_parity_remedy)" \
