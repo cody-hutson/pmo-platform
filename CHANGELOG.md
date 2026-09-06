@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.57] - 2026-09-06
+
+Agents writing into an outside system now put durable state in the record's own fields instead of stacking dated comment blocks.
+
+[Full notes](release/releases/notes/v4.57_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.57)
+
 ## [v4.56] - 2026-09-05
 
 Choosing Scrum or Kanban now gives you populated, sourced work-item criteria and a stated default, instead of empty placeholders.
