@@ -1000,6 +1000,28 @@ core/deploy/tools/check-convention.sh
 ./core/deploy/tests/test_check49_mode_identifier_unification.sh
 core/deploy/tests/test_check49_mode_identifier_unification.sh
 
+# test_deploy_path_literals.sh — the standing assertion that every REQUIRED path
+# literal in deploy.sh resolves (#4217). Allowlisted because an agent must be able
+# to run what CI runs: install-tests.yml invokes this file directly in shell-tests,
+# and a verification step an agent cannot execute is a gate nobody stands on. The
+# suite is read-only — it drives no deploy, and its fixtures live in a mktemp -d
+# sandbox — so allowlisting it grants no capability beyond reading the repository.
+#
+# Executed agent-side at Stage 6 self-verification and Stage 7 Dev Testing, and by
+# the install-tests shell-tests job; all four invocation forms so
+# BLOCK-DESTRUCTIVE-022 does not block the agent-side path. (CI runs no Claude
+# hooks, so these rows are for the agent-side path, not the workflow.) Named rows
+# rather than a core/deploy/tests/* glob, per the entries above: a pattern would
+# auto-admit any future file dropped into that directory.
+#
+# FOUR FORMS, DELIBERATELY — not five, not six. The two blocks above that carry
+# only two forms are a protected divergence; this block is a NEW tool and takes the
+# canonical set.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_deploy_path_literals.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_deploy_path_literals.sh
+./core/deploy/tests/test_deploy_path_literals.sh
+core/deploy/tests/test_deploy_path_literals.sh
+
 # ---------------------------------------------------------------------------
 # NON-SHELL SCRIPT ENTRIES (.py / .pl / .pm / .rb / .js / .mjs / .cjs)
 # ---------------------------------------------------------------------------
