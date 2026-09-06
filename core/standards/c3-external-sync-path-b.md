@@ -199,8 +199,9 @@ surface:
   (`create`/`edit`/`update`/`delete`/`add`/`transition`/…) → BLOCK-MCP-001 never fires for C3.
 - **Why not write back:** writing a status back to Jira (`transitionJiraIssue`) or a row to
   Smartsheet (`update_rows`) would (a) trip BLOCK-MCP-001 (those verbs ARE in the write set),
-  (b) require the live MCP server IDs in `core/mcp-write-allowlist.txt` (they are NOT — it is a
-  test allowlist whose `atlassian` server segment does not match the live UUID server IDs), and
+  (b) depend on the deployed MCP write-allowlist and hook mode for whatever they happen to
+  permit — per-install state this document does not assert and a reader must read (see the
+  audit note below), and
   (c) invert the data-flow (external systems would become the source of truth the operator's
   trackers are reconciled against). C3's job is "external reality flows INTO trackers," not the
   reverse.
@@ -211,10 +212,31 @@ surface:
   Bash/WebFetch. `core/hooks/block-egress.sh` matches only the Bash and WebFetch tools, so polling
   via MCP read tools is the non-blocked channel the AC requires.
 
+> **Where the live control state is read (audit note).** The allowlist and the mode that govern
+> BLOCK-MCP-001 are **deployed, per-install state**. This document states neither one's contents,
+> because any such statement is true only of the install it was written against. Read them under
+> the deployed `.claude/` tree, which is what the hook itself resolves via
+> `${HOOK_DIR}/../mcp-write-allowlist.txt`:
+>
+> ```bash
+> cat "${CLAUDE_WORKSPACE_ROOT:?}/.claude/mcp-write-allowlist.txt"   # what is permitted
+> cat "${CLAUDE_WORKSPACE_ROOT:?}/.claude/hooks/.mode"               # enforce | warn | off
+> ```
+>
+> The in-repo `core/mcp-write-allowlist.txt` is the **test fixture** that
+> `core/hooks/tests/block-mcp-writes.test.sh` seeds and restores, and it is what the hook resolves
+> when run from a source checkout. It is never what a live install resolves — do not read it as
+> evidence about a deployment.
+>
+> **Neither surface is load-bearing for this invariant.** A permissive allowlist or a `warn` mode
+> would not make external write-back in-scope for C3: §9 is a design invariant C3 self-limits to
+> regardless of enforcement posture (§8). The controls are defence in depth, not the reason.
+
 **If a future capability genuinely needs external write-back**, it is a *separate* governed change:
-a new Issue + plan + the specific live-server write verbs added to `core/mcp-write-allowlist.txt`
-via the allowlist-add tool. That is explicitly out of C3 scope — recorded so the boundary is not
-silently crossed.
+a new Issue + plan + the specific live-server write verbs added to the **deployed**
+`.claude/mcp-write-allowlist.txt` via `allowlist-add.sh`, which places them inside the
+`OPERATOR ADDITIONS` region so they survive the next update-path regeneration. That is explicitly
+out of C3 scope — recorded so the boundary is not silently crossed.
 
 ## 10. Scheduler surface + thin-bootstrap registration
 

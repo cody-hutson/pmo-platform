@@ -204,8 +204,23 @@ The map carries a bidirectional verdict + an evidence-cited per-edge table + an 
 |---|---|---|---|
 | v<N.M> | this-blocks-other / other-blocks-this / bidirectional | hard / soft / file-contention / structural-blast-radius | <evidence cite — for a structural-blast-radius edge, the mover-classifier + F1–F6 sweep verdict line + the intersecting form(s); for a **version-slot contention** the same `structural-blast-radius` edge type is reused with the intersecting `Δversion/<claim-key>` token + both releases' provisional versions as the evidence (Step 2a) — no separate edge type> |
 
-**Reconfirm procedure:** Run hard-vs-soft scan via:
-`gh issue list --milestone "<this milestone>" --state open --json number,body --jq '.[] | select(.body | test("(?i)blocked by|depends on|requires|after #[0-9]+"))'`
+**Reconfirm procedure:** Run the hard-vs-soft scan via:
+
+~~~
+gh issue list --milestone "<this milestone>" --state open --limit 500 \
+  --json number,body,blockedBy --jq '
+  def sec:  (.body // "") | (capture("(?ims)^#{2,3} +Dependencies\\b(?P<s>.*?)(?:\\n#{1,6} |\\z)").s) // null;
+  def edge: test("(?i)\\b(blocks|blocked by|depends on|requires|after)\\b[ \\t]*[:,–—-]?[ \\t]*#[0-9]+");
+  [ .[] | { n: .number, typed: (.blockedBy.totalCount // 0), s: sec }
+        | { n, typed, verdict: (if .s == null then "NO-SECTION" elif (.s|edge) then "EDGE" else "CLEAN" end) } ]
+  | { members:         length,
+      counts:          (group_by(.verdict) | map({key: .[0].verdict, value: length}) | from_entries),
+      edge_candidates: [ .[] | select(.verdict == "EDGE" or .typed > 0) ],
+      no_section:      [ .[] | select(.verdict == "NO-SECTION") | .n ] }
+'
+~~~
+
+The scan slices each member body to its `Dependencies` section (H2 **or** H3) before matching, so a dependency phrase in ordinary prose elsewhere in the body cannot match. It returns one verdict per member: `EDGE` (section present and carrying an anchored `<keyword> #N` reference), `CLEAN` (section present, no anchored reference — the author addressed dependencies and declared none), `NO-SECTION` (no Dependencies section — the bug, story, epic and observation templates carry no such field, so the body cannot answer). **A `NO-SECTION` member is not a clean member:** resolve it from the `typed` count or the Stage-4 dependency graph. Any member with `typed > 0` appears in `edge_candidates` whatever its body verdict; a `typed` count of 0 is weak evidence, because the typed-dependency substrate is only partially populated. `members` is printed so a truncated read is visible — compare it against the milestone's open count. The `(?ims)` flags are load-bearing: `gh --jq` does not treat `^` as line-anchored by default, and dropping them makes every member read `NO-SECTION`.
 AND, for any sibling milestone whose File Change Matrix declares a rename / relocate / delete, re-run the structural-blast-radius mover-classifier + F1–F6 sweep and re-test the intersection predicate (see the Structural-Blast-Radius axis below)
 AND, for any sibling milestone whose **provisional-version intent has changed** since the map was recorded, re-mint the `Δversion/<claim-key>` token (Step 2a) and re-test the intersection — a version-only collision has no mover event to trip the rename/relocate/delete trigger, so this clause is its dedicated staleness path.
 
@@ -216,7 +231,7 @@ Reconfirmed at Stage 3 A7 refresh and Stage 4 Phase A0 entry; stale-dated map = 
 
 | Class | Trigger language in issue body | Action |
 |---|---|---|
-| Hard | "blocks", "depends on", "requires", "after #N" | enters bidirectional graph as dep |
+| Hard | "blocks", "blocked by", "depends on", "requires", "after #N" | enters bidirectional graph as dep |
 | Soft | "composes with", "coordinates with", "adjacent to", "relates to" | does NOT enter graph; informational |
 | File-contention | "same file as #N", "edits same section" | enters Contention Map only, not dep graph |
 | Structural-blast-radius | a sibling's edit-set intersects this release's structural surface — computed by the mover-classifier → F1–F6 sweep (`git`-computed; see the axis definition below). Pre-branch fallback (no release branch exists yet at Stage 3): the sibling's File Change Matrix `change_type` declaring rename / relocate / delete. | enters the Parallelization Map as a serialization edge (Tier-S); NOT the dep graph |

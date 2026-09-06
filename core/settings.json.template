@@ -210,6 +210,10 @@
           {
             "type": "command",
             "command": "[CLAUDE_WORKSPACE_ROOT]/.claude/hooks/block-scope-segregation.sh"
+          },
+          {
+            "type": "command",
+            "command": "[CLAUDE_WORKSPACE_ROOT]/.claude/hooks/block-external-seam-shape.sh"
           }
         ]
       }

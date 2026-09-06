@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.57] - 2026-09-06
+
+Agents writing into an outside system now put durable state in the record's own fields instead of stacking dated comment blocks.
+
+[Full notes](release/releases/notes/v4.57_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.57)
+
 ## [v4.56] - 2026-09-05
 
 Choosing Scrum or Kanban now gives you populated, sourced work-item criteria and a stated default, instead of empty placeholders.
@@ -1497,7 +1503,7 @@ Two new automated quality gates ship, both starting in a logged-but-not-blocking
 
 ## [parallel-launch-quota-budget-gate] - 2026-06-14
 
-Version-less release (no `vMAJOR.MINOR` assigned; ships under the slug `parallel-launch-quota-budget-gate`, which is also the signed git tag and the GitHub Release tag). Running several release tasks in parallel used to launch them blind to the operator's remaining usage window, so a batch could fail partway through once the window was exhausted; the release pipeline now estimates a parallel batch's cost and checks it against the remaining window before launching, and re-checks before each wave rather than only once at planning time.
+Version-less release (no `vMAJOR.MINOR` assigned, no git tag, no GitHub Release; ships under the slug `parallel-launch-quota-budget-gate`). Running several release tasks in parallel used to launch them blind to the operator's remaining usage window, so a batch could fail partway through once the window was exhausted; the release pipeline now estimates a parallel batch's cost and checks it against the remaining window before launching, and re-checks before each wave rather than only once at planning time.
 
 ### Added
 

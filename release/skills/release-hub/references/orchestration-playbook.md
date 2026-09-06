@@ -183,7 +183,30 @@ before routing continues. Neither alone is sufficient (`core/standards/hub-sessi
    release/tools/check-event-record-integrity.sh
    ```
 
-   Report the denominators it prints. **A post-cutover violation BLOCKS close.**
+   Report the denominators it prints. **A post-cutover violation attributable to the
+   closing release's own slug BLOCKS close.** A post-cutover violation attributable to
+   any other slug — or to no release scope at all — is **reported, not blocking**.
+
+   **Why the BLOCK is slug-scoped, and why the scope is not an optional refinement.**
+   The checker is whole-population BY DESIGN — that is exactly its advantage over step 4,
+   stated below — so the sweep routinely surfaces other releases' unreconciled debt. A
+   BLOCK keyed on the whole population would therefore gate every close on findings the
+   closing release neither caused nor can fix, and would stay unsatisfiable by the party
+   it gates until an unrelated ledger was reconciled by somebody else. A gate that the
+   blocked party cannot satisfy is not a strict gate; it is a broken one, and the
+   predictable outcome is that it gets waived by hand every time — which is how the rule
+   was actually operated before it was scoped. Attribute by grouping the report's
+   `[VIOLATION] C4 <slug>:L<n>` rows by slug. Report every out-of-scope group with its
+   owning slug named, and carry it forward; do not attempt to reconcile another release's
+   ledger from inside this close.
+
+   **Report the whole-population denominator alongside the release-scoped count.**
+   Filtering the report for a release slug returns zero BOTH for a release that is
+   genuinely clean AND for one whose ledger was never scanned, so the scoped count alone
+   cannot tell those two apart. The denominator line the checker prints — well-formed
+   ledger rows and distinct ids — together with confirming this release's ledger is
+   inside the scanned root, is what separates them. A scoped zero reported without its
+   denominator is not evidence of a clean release.
 
    This is not a duplicate of step 4, and the difference is structural: a per-write
    assertion can only see writes that were ATTEMPTED. It cannot detect a row that

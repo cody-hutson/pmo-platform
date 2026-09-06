@@ -255,6 +255,22 @@ for tf in "${TESTS_SRC}"/*.sh; do
 done
 chmod +x "${TESTS_DST}"/*.sh
 
+# 2b) Record the SOURCE repo root beside the tests.
+#
+#     A test that grades a CORPUS document cannot derive the corpus location from
+#     its own path here. In a source checkout a test at core/hooks/tests/ walks up
+#     two levels to the repo root and finds core/disciplines/; materialized into
+#     this sandbox the identical walk lands on <sandbox>/, where no corpus exists.
+#     block-external-seam-shape.test.sh's AC-2 arms did exactly that and reported
+#     an unreadable file (-1 hits) as a BROKEN PROBE — the fail-loud branch working
+#     correctly on a resolution defect.
+#
+#     The sandbox deliberately does NOT copy the corpus: it materializes a hook
+#     RUNTIME, and core/disciplines/ is not part of one. So the layout carries a
+#     pointer back to the source instead. Not a *.sh file, so step 2 above never
+#     re-copies it into a nested sandbox.
+printf '%s\n' "${REPO_ROOT}" > "${TESTS_DST}/.source-repo-root"
+
 # 3) Materialize token-resolved allowlists for the "hook"-tier composition
 #    surface, reading the manifest as the source of truth for which files are
 #    hook-tier and which carry the "tokens" flag.
