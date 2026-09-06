@@ -124,6 +124,55 @@ needles="$(pmo_localized_needles)"
   || report "5c: PMO_LOCALIZED_NEEDLES overrides the derived location" 0 "got ${needles}"
 unset PMO_LOCALIZED_NEEDLES PMO_INSTANCE_PATH
 
+printf '\nCase 6: the NEEDLE-BEARING resolvers land OUTSIDE the repository tree\n'
+# This is the invariant the operator-instance directory exists to protect, and it is
+# narrower than "no operator-instance path is in-repo" on purpose. That broader claim is
+# FALSE BY DESIGN: <OPERATOR_INSTANCE_ROADMAPS_PATH> and <OPERATOR_INSTANCE_ANALYSIS_PATH>
+# both default to in-repo homes (folder + README tracked, contents git-ignored), so a test
+# asserting it would fail on 2 of the codified tokens while the platform behaved
+# correctly.  # depersonalization-token: allow — naming two codified tokens in an explanatory comment
+#
+# What actually must never be reachable by a git operation is the pair of files the PII
+# detectors load at runtime: localized-context-needles.txt and people-roster.yaml. The
+# .gitignore states the reason directly — hardcoding those values would make the detector
+# itself a leak. A git-ignored in-repo home would protect them only while .gitignore stays
+# correct and every tool honours it; a sibling directory outside the tree is unreachable by
+# any git operation at all.
+unset PMO_INSTANCE_PATH PMO_LOCALIZED_NEEDLES PMO_PEOPLE_ROSTER 2>/dev/null || true
+CLAUDE_WORKSPACE_ROOT="/tmp/ws-outoftree"
+needles="$(pmo_localized_needles)"
+roster="$(pmo_people_roster)"
+# REPO_ROOT is this checkout. The assertion is a prefix test against it, so it holds for a
+# worktree, a sandboxed install, and a clone under any directory name.
+case "${needles}" in
+  "${REPO_ROOT}"/*) report "6a: the needle file resolves OUTSIDE the repository tree" 0 \
+                      "resolved INSIDE the repo: ${needles}" ;;
+  *)                report "6a: the needle file resolves OUTSIDE the repository tree" 1 ;;
+esac
+case "${roster}" in
+  "${REPO_ROOT}"/*) report "6b: the people roster resolves OUTSIDE the repository tree" 0 \
+                      "resolved INSIDE the repo: ${roster}" ;;
+  *)                report "6b: the people roster resolves OUTSIDE the repository tree" 1 ;;
+esac
+# SENSITIVITY. Both arms above are "does NOT start with the repo root" — a shape that
+# passes for free if the prefix test is broken, if REPO_ROOT is empty, or if the resolver
+# returns nothing at all. So point the resolver INTO the repo deliberately and require the
+# same test to catch it. Without this arm 6a/6b prove nothing.
+PMO_INSTANCE_PATH="${REPO_ROOT}/pmo-instance"
+inside="$(pmo_localized_needles)"
+case "${inside}" in
+  "${REPO_ROOT}"/*) report "6c-sensitivity: the same test CATCHES an in-repo resolution" 1 ;;
+  *)                report "6c-sensitivity: the same test CATCHES an in-repo resolution" 0 \
+                      "the in-repo probe was not detected: ${inside}" ;;
+esac
+# ...and the resolvers must have returned a real path, not an empty string that would
+# satisfy every arm above vacuously.
+[ -n "${needles}" ] && [ -n "${roster}" ] && [ "${needles}" != "${roster}" ] \
+  && report "6d: both resolvers returned distinct non-empty paths (arms above are not vacuous)" 1 \
+  || report "6d: both resolvers returned distinct non-empty paths (arms above are not vacuous)" 0 \
+     "needles=${needles} roster=${roster}"
+unset PMO_INSTANCE_PATH CLAUDE_WORKSPACE_ROOT 2>/dev/null || true
+
 printf '\n======================================================================\n'
 printf 'test_lib_instance_path.sh: %d passed, %d failed (bash %s)\n' "${PASS}" "${FAIL}" "${BASH_VERSION}"
 printf '======================================================================\n'

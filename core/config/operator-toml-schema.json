@@ -113,7 +113,7 @@
     {
       "name": "paths",
       "delivery": "delivered",
-      "description": "Workspace and instance paths. The four delivered keys are resolved at install; the eight operator_instance_* overrides are opt-in and resolve to a canonical default when unset.",
+      "description": "Workspace and instance paths. The four delivered keys are resolved at install; the operator_instance_* overrides are opt-in and resolve to a canonical default when unset. Their key set is asserted equal to the depersonalization-spec.md §4 vocabulary table by check-operator-toml-schema.sh leg C70d, so the count is derived by that check rather than stated here.",
       "keys": [
         {
           "key": "claude_workspace_root",
@@ -233,6 +233,96 @@
           "required": false,
           "description": "Override for the Agent-FinOps token-spend store. Empty resolves to the canonical default ${claude_workspace_root}/pmo-instance/finops.",
           "since": "4.0"
+        },
+        {
+          "key": "operator_instance_analysis_path",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for the read-once engineering analysis workspace. Empty resolves to the canonical default ${claude_workspace_root}/pmo-platform/analysis (in-repo: folder + README tracked, audit contents git-ignored).",
+          "since": "4.57"
+        },
+        {
+          "key": "operator_instance_claude_md",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for the workspace charter file. Empty resolves to the canonical default ${claude_workspace_root}/CLAUDE.md. A file leaf, not a directory — a stem exception per depersonalization-spec.md §4.",
+          "since": "4.57"
+        },
+        {
+          "key": "operator_instance_claude_dir",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for the agent-config root holding the deployed rules mirror, the hook layer and its mode file. Empty resolves to the canonical default ${claude_workspace_root}/.claude.",
+          "since": "4.57"
+        },
+        {
+          "key": "operator_instance_claude_settings",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for the managed settings file regenerated from core/settings.json.template. Empty resolves to the canonical default ${claude_workspace_root}/.claude/settings.json. Operator-added keys live in settings.local.json, which is never regenerated.",
+          "since": "4.57"
+        },
+        {
+          "key": "operator_instance_worktrees_path",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for the session-worktree home. Empty resolves to the canonical default ${claude_workspace_root}/.claude/worktrees, per core/rules/git-workflow.md § Primary Checkout Discipline.",
+          "since": "4.57"
+        },
+        {
+          "key": "operator_instance_skills_path",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for the skill DEPLOYMENT TARGET (Layer 2, git-ignored) that deploy.sh writes into. Empty resolves to the canonical default ${claude_workspace_root}/.claude/skills. Distinct from the tracked skill source under <module>/skills/.",
+          "since": "4.57"
+        },
+        {
+          "key": "operator_instance_projects_path",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for the operations-workspace root (Layer 2). Empty resolves to the canonical default ${claude_workspace_root}/projects, the value core/deploy/lib-instance-path.sh pmo_operations_path_for() returns.",
+          "since": "4.57"
+        },
+        {
+          "key": "operator_instance_projects_config_path",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for the program-scoped operational-config home (PORTFOLIO.md, SESSION_STATE.md, CORRECTIONS.md, SWAP_HANDOFF.md). Empty resolves to the canonical default ${claude_workspace_root}/projects/_config.",
+          "since": "4.57"
+        },
+        {
+          "key": "operator_instance_evals_path",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for the evals root. Empty resolves to the canonical default ${claude_workspace_root}/pmo-instance/evals. The PARENT of operator_instance_evals_results_path; the Calibration Ledger at judge-calibration/ is a sibling of results/, so the two keys are distinct paths rather than variants of one.",
+          "since": "4.57"
         }
       ]
     },

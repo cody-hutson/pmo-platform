@@ -76,6 +76,7 @@ core/deploy/tools/cross_module_audit_helper.py
 core/deploy/tools/generate_release_index.py
 core/deploy/tools/lint_release_corpus.py
 core/deploy/tools/reconcile-gate-posture.py
+core/deploy/tools/repair-warn-log-escapes.py
 core/deploy/tools/stamp-node-frontmatter.py
 # scope: core/deploy/tools/*.sh
 core/deploy/tools/check-automation-coverage.sh

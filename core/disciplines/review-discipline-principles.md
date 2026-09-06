@@ -500,7 +500,11 @@ PV-7  MEASUREMENT STATE.
              guessed. The emit routes through an emitter that is STRUCTURALLY
              incapable of escalating - no mode branch and no failure-counter
              increment in its body - so a measurement outage can never gate. One
-             root cause must not become one finding per item.
+             root cause must not become one finding per item. THAT EMITTER
+             ASSERTS ONLY PROPERTIES OF ITS OWN EMIT: a claim scoped to the check,
+             or to the check's identifier, is a PER-CALLER fact and is supplied by
+             the caller, because a shared emitter that states one cannot be correct
+             for more than one caller.
 
       PV-7 vs the VERDICT RULE below. PV-7 states whether the MEASUREMENT occurred.
       INDETERMINATE states whether the PROBE is valid. They are different registers

@@ -713,6 +713,20 @@ core/deploy/tests/test_check73_bundle_metrics_discrimination.sh
 ./core/deploy/tests/test_check54_ownership_collision_teeth.sh
 core/deploy/tests/test_check54_ownership_collision_teeth.sh
 
+# Warn-log JSON-escape suite (test_warn_log_json_escape.sh) — new in-tree bash CLI.
+# Drives the shipped json_escape_detail() helper, EXTRACTED from deploy.sh rather
+# than reimplemented, so the function under test is the one that ships. Its arm A4
+# reproduces the pre-fix two-substitution serialization on the same input and
+# requires the row to fail to parse, which is what makes the subject arm's zero a
+# measurement rather than a harness self-report. Run by the Stage 6 spoke, by Stage 7
+# Dev Testing, and by the install-tests shell-tests job; all four invocation forms so
+# BLOCK-DESTRUCTIVE-022 does not block the agent-side path. (CI runs no Claude hooks,
+# so this entry is for the agent-side path, not the workflow.)
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_warn_log_json_escape.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_warn_log_json_escape.sh
+./core/deploy/tests/test_warn_log_json_escape.sh
+core/deploy/tests/test_warn_log_json_escape.sh
+
 # Targeted composition-surface refresh regression (test_refresh_surfaces.sh) — new
 # in-tree bash CLI. Asserts that `deploy.sh --deploy` CANNOT heal a regressed
 # composition surface (it never sources the composition-surface manifest), that its
@@ -775,6 +789,65 @@ core/deploy/tests/test_g1_release_resolver.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_check56_m2_advisory.sh
 ./core/deploy/tests/test_check56_m2_advisory.sh
 core/deploy/tests/test_check56_m2_advisory.sh
+
+# Deploy detection-honesty regression — the proof that `--deploy` selects against
+# GROUND TRUTH (installed-vs-source content) rather than against the tag-diff proxy,
+# and that a residual drift it cannot repair exits non-zero instead of reporting a
+# zero. Its fourth arm is the one that would not otherwise be written: a bare
+# recursive diff flags 12 of 55 roster skills on a fully-current instance — every one
+# a TEMPLATE_SYNC_MAP injection artifact — so the arm carries its own sensitivity
+# control and fails the build if the injected-basename exclusion is ever dropped.
+# Same four invocation forms, for the same reason as the siblings above: it is run by
+# the install-tests shell-tests job AND agent-side at Stage 6/7 dev testing, and a
+# delivered test whose allowlist rows never landed is blocked and therefore
+# unrunnable agent-side on arrival.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_deploy_detection_honesty.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_deploy_detection_honesty.sh
+./core/deploy/tests/test_deploy_detection_honesty.sh
+core/deploy/tests/test_deploy_detection_honesty.sh
+
+# Advisory-emitter contract regression — the STATIC conformance assertion for
+# flag_advisory_only's third argument, which names the scope of its non-gating
+# claim. The requirement cannot be raised inside the emitter: doing so needs an
+# escalation path in a body whose whole guarantee is that it has none, which the
+# sibling above executes against a real failure counter. So the loudness lives
+# in this harness, and the harness must actually be runnable. Same four
+# invocation forms, for the same reason as the siblings above — it is run by the
+# install-tests shell-tests job AND agent-side at Stage 6/7 dev testing, and the
+# authoring session for this very test observed the failure the sibling comment
+# predicts: the harness was refused agent-side on the run that created it,
+# because its rows had not landed yet.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_advisory_emitter_contract.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_advisory_emitter_contract.sh
+./core/deploy/tests/test_advisory_emitter_contract.sh
+core/deploy/tests/test_advisory_emitter_contract.sh
+
+# Upgrade config-durability regression — the NON-dry-run, real-content-delta proof
+# that a user's customized config survives a version upgrade. It is a REGISTERED
+# member of run-install-regression.sh's REGRESSION_MEMBERS array, and Stage 5
+# mandates re-running it whenever the upgrade path is touched — yet it carried ZERO
+# allowlist rows, tracked or deployed. The consequence is the one the siblings above
+# describe, reached from the opposite direction: the test is enrolled and named as
+# mandatory, and no agent-side spoke could execute it, so the mandate was
+# unsatisfiable rather than merely unsatisfied. Same four invocation forms.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_upgrade_config_durability.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_upgrade_config_durability.sh
+./core/deploy/tests/test_upgrade_config_durability.sh
+core/deploy/tests/test_upgrade_config_durability.sh
+
+# Instance-path resolver regression — the behavioural suite for
+# lib-instance-path.sh, whose two resolver forms (pmo_instance_path vs
+# pmo_instance_path_for) disagree SILENTLY when a caller holding an explicit
+# workspace root reaches for the ambient one. It was reachable by no route at all:
+# zero allowlist rows AND zero occurrences in any workflow, so neither CI nor an
+# agent could run it. It is wired on BOTH routes here — enrolled in
+# REGRESSION_MEMBERS alongside the install/update family whose scripts source the
+# resolver, and given the same four invocation forms as its siblings — because a
+# single route is what left it stranded. Same four invocation forms.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_lib_instance_path.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_lib_instance_path.sh
+./core/deploy/tests/test_lib_instance_path.sh
+core/deploy/tests/test_lib_instance_path.sh
 
 # context-budget-auditor Measure-mode scanner — read-only per-component token-cost
 # scan across the loadable-component surface, plus a --self-test mode. Invoked
