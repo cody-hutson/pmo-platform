@@ -102,12 +102,36 @@ mkdir -p "${TMP}/bin" "${TMP}/instance"
 # (`gh issue list --repo <r> --state open --limit 5000 --json number,labels,milestone`)
 # and an empty array to every other gh call, so unrelated checks in the same
 # --check run degrade quietly instead of reaching the network.
+#
+# SCOPE-AWARE BY CONSTRUCTION, AND THIS IS A PREREQUISITE RATHER THAN POLISH.
+# The stub previously matched on the --json shape alone and never inspected
+# --label, so it served the WHOLE fixture to both fetch shapes Check 16 has:
+# cmd_check()'s unscoped fetch and cmd_report()'s (pre-fix) `--label improvement`
+# fetch. Measured: the two call shapes returned byte-identical arrays. Any parity
+# assertion between the check surface and the report surface built on a stub like
+# that reads GREEN on the scope defect, because the narrowing it exists to detect
+# is invisible to the stub — the unfalsifiable-assertion failure this suite's own
+# header warns about, one layer up. Arm 0 below asserts the discrimination, so the
+# prerequisite cannot silently regress.
 cat > "${TMP}/bin/gh" <<'GHSTUB'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "issue" && "${2:-}" == "list" ]]; then
   case "$*" in
     *"--json number,labels,milestone"*)
-      cat "$PMO_TEST_FIXTURE"
+      # Honour `--label <name>` the way the real gh does: narrow the served
+      # population to issues carrying that label. An unscoped call still gets the
+      # whole fixture.
+      _label=""
+      _prev=""
+      for _a in "$@"; do
+        if [[ "$_prev" == "--label" ]]; then _label="$_a"; fi
+        _prev="$_a"
+      done
+      if [[ -n "$_label" ]]; then
+        jq --arg l "$_label" '[.[] | select((.labels | map(.name) | index($l)))]' "$PMO_TEST_FIXTURE"
+      else
+        cat "$PMO_TEST_FIXTURE"
+      fi
       exit 0 ;;
   esac
 fi
@@ -212,6 +236,31 @@ assert_contains() {
     fail=$((fail+1))
   fi
 }
+
+# ── Arm 0 — stub discrimination (prerequisite for every parity arm below) ─────
+# The parity arms compare the check surface's population against the report
+# surface's. That comparison is only meaningful if the harness can REPRESENT a
+# scope difference at all. A stub that ignores --label serves the same array to
+# both call shapes, so a report path still carrying the pre-#2682
+# `--label improvement` narrowing would look identical to a fixed one and the
+# parity arm would pass on the primary defect. This arm asserts the stub
+# discriminates, with both counts pinned: 7 members unscoped, 4 under
+# `--label improvement` (9001/9005/9006/9007 carry it; 9002/9003/9004 do not).
+echo "── Arm 0: gh stub honours --label (prerequisite for the parity arms) ────────"
+_stub_unscoped=$(PMO_TEST_FIXTURE="${TMP}/fixture-violating.json" "${TMP}/bin/gh" \
+  issue list --repo r --state open --limit 5000 --json number,labels,milestone | jq 'length')
+_stub_scoped=$(PMO_TEST_FIXTURE="${TMP}/fixture-violating.json" "${TMP}/bin/gh" \
+  issue list --repo r --state open --label improvement --limit 5000 --json number,labels,milestone | jq 'length')
+if [[ "$_stub_unscoped" == "7" && "$_stub_scoped" == "4" ]]; then
+  echo "  PASS  stub discriminates on --label → unscoped=7, improvement=4"
+  pass=$((pass+1))
+else
+  echo "  FAIL  stub is scope-blind → got unscoped=[$_stub_unscoped] scoped=[$_stub_scoped], want 7 / 4"
+  echo "        Every parity arm below is untestable until this passes: a scope-blind"
+  echo "        stub cannot represent the very difference those arms exist to detect."
+  fail=$((fail+1))
+fi
+echo ""
 
 # ── Arm A — the real subject, executed ────────────────────────────────────────
 echo "── Arm A: deploy.sh Check 16 executed against a seeded violating population ──"
