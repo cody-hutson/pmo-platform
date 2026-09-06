@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.60] - 2026-09-06
+
+Deploy checks that reported success while verifying nothing now have to prove they looked, and 662 unreadable log records were recovered.
+
+[Full notes](release/releases/notes/v4.60_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.60)
+
 ## [v4.59] - 2026-09-06
 
 Tools the release process requires can now actually be run, and a check that measured nothing can no longer report itself clean.
