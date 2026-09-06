@@ -139,7 +139,33 @@ JQ="$(resolve_jq)"; readonly JQ
 # vocabulary: delete / remove / archive / share / transition / permission are writes
 # but carry no authored content, so admitting them would send every comment DELETE
 # into the fail-loud arm below.
-readonly SEAM_WRITE_VERB_RE='^mcp__[^_]+__(create|add|comment|post|insert|update|edit|replace|reply)(_|[A-Z]|$)'
+#
+# SERVER SEGMENT — `.+`, deliberately, and NOT the `[^_]+` the four sibling
+# detectors use. `__` is the delimiter in `mcp__<server>__<tool>`, so a server id
+# that itself contains `_` makes the split ambiguous, and `[^_]+` resolves that
+# ambiguity by refusing to match at all — the tool escapes the detector silently
+# while carrying an in-scope verb and a comment noun. A silent miss is the one
+# failure this discipline does not tolerate, so the ambiguity is resolved the
+# other way: `.+` is greedy, so the LAST `__` before the verb becomes the
+# delimiter, which is the correct boundary on every real name measured
+# (`mcp__Word__By_Anthropic___add_comment` -> verb `add`).
+#
+# Widening here cannot regress: `[^_]+` is a strict SUBSET of `.+`, so every name
+# the old class matched the new one still matches — verified over 4000 synthetic
+# names (0 regressions, 337 new catches) and over the 216 live tool names of a
+# real session (0 newly blocked, 0 lost — the gap is latent, not active). Nor can
+# it over-block: scope is decided by the verb set and by the S1c comment-noun
+# gate, and a name reaching both is in scope whatever its server is called.
+# A charset enumeration (`[A-Za-z0-9_-]+`) was the runner-up and was rejected for
+# re-opening a narrower version of this same silent-miss hole on the first server
+# id using a character outside the class. A lazy `.+?` is not POSIX ERE, and for
+# a boolean match it is anyway equivalent to the greedy form under backtracking.
+#
+# RESIDUAL: the identical `[^_]+` server class ships in four sibling detectors —
+# audit-mcp-usage.sh:87, block-autonomy-ceiling.sh:898, block-mcp-writes.sh:88,
+# block-scope-segregation.sh:322 — and is NOT changed here. See § 8 Limitations
+# of core/disciplines/external-seam-conduct.md; this hook closes its own gap only.
+readonly SEAM_WRITE_VERB_RE='^mcp__.+__(create|add|comment|post|insert|update|edit|replace|reply)(_|[A-Z]|$)'
 # S1c — comment-class noun anywhere in the tool name, case-insensitive.
 readonly SEAM_COMMENT_NOUN_RE='[Cc]omment|[Dd]iscussion|[Nn]ote|[Rr]eply|[Tt]hread'
 

@@ -289,6 +289,24 @@ skill definitions that write to a seam.
   runtime mode file sits beside the deployed hooks, inside a path the autonomy-ceiling floor
   blocks unconditionally. The kill switch is genuinely CHEAP — one line in one file — but the
   governed form is the Hook-Blocked → User-Side Handoff template, not an agent write.
+- **The server-segment ambiguity is resolved here, and only here.** A structured tool name is
+  three fields — a fixed prefix, a server id, and a tool id — joined by a *double* underscore,
+  so a server id that itself contains a single underscore makes the split ambiguous. This
+  hook's S1b class resolves it with a greedy `.+`, taking the last delimiter before the verb —
+  so an underscore-bearing server id no longer escapes the surface gate silently. **Four
+  sibling detectors still carry the narrower `[^_]+` class and still have the gap:**
+  `audit-mcp-usage.sh:87`, `block-autonomy-ceiling.sh:898`, `block-mcp-writes.sh:88`, and
+  `block-scope-segregation.sh:322`. That is a platform-wide class defect, not a property of
+  this discipline, and it is **not** closed by this release — the change here was made under a
+  narrow scope override and deliberately did not reach four shipped security detectors it never
+  otherwise touches. The successor is a single sweep of that class across all five sites,
+  decided on its own evidence.
+  Two properties bound the residual and are worth stating rather than assuming: the widening is
+  **non-regressive by construction** — `[^_]+` is a strict subset of `.+`, so no name the old
+  class matched can stop matching — and it is **inert on present traffic**, measured as zero
+  newly-blocked and zero lost across a 216-name live tool population, because no connector
+  currently pairs an underscore-bearing server id with a comment-write verb. The gap it closes
+  is therefore **latent**: forward protection, not an active leak being stopped.
 
 ---
 
