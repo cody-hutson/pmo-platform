@@ -14948,15 +14948,15 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
   # Primitive: core/deploy/tools/check-issue-body-anchors.sh (carries --self-test).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 72: Issue-body section-anchor drift (numeric anchors in OPEN issue bodies vs their target's headings; ADVISORY — never enforce-capable)"
-    local c71_script="core/deploy/tools/check-issue-body-anchors.sh"
-    if [[ ! -f "$c71_script" ]]; then
-      flag_not_evaluated "issue-body-anchor-drift" "primitive script missing: $c71_script — the population was not read and no citation was resolved; this is not a clean result"
+    local c72_script="core/deploy/tools/check-issue-body-anchors.sh"
+    if [[ ! -f "$c72_script" ]]; then
+      flag_not_evaluated "issue-body-anchor-drift" "primitive script missing: $c72_script — the population was not read and no citation was resolved; this is not a clean result"
     elif ! command -v gh >/dev/null 2>&1; then
       log "  SKIP:  issue-body-anchor-drift — gh not on PATH; the OPEN-issue population is unreachable offline, so no anchor was resolved (skipped, not clean)"
     else
-      local c71_out c71_exit=0
-      c71_out=$(bash "$c71_script" --output-format tsv 2>&1) || c71_exit=$?
-      if [[ $c71_exit -eq 3 ]]; then
+      local c72_out c72_exit=0
+      c72_out=$(bash "$c72_script" --output-format tsv 2>&1) || c72_exit=$?
+      if [[ $c72_exit -eq 3 ]]; then
         # PV-7c: ONE finding naming ONE root cause, through the emitter that
         # carries no mode branch and no ISSUES increment. One outage never
         # becomes one finding per issue. The DETAIL carries the mandated
@@ -14964,27 +14964,27 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
         # places that obligation on the detail, and its log line does not
         # supply it, so a detail that omits it ships an unmarked withheld
         # verdict that nothing downstream can tell from a clean one.
-        flag_not_evaluated "issue-body-anchor-drift" "measurement outage (exit 3): $(head -1 <<<"$c71_out") — status degraded, all per-citation verdicts withheld and no counter emitted; this is not a clean result"
+        flag_not_evaluated "issue-body-anchor-drift" "measurement outage (exit 3): $(head -1 <<<"$c72_out") — status degraded, all per-citation verdicts withheld and no counter emitted; this is not a clean result"
       else
         # The coverage counts are emitted on EVERY evaluated run, findings or
         # not. A leg that measured nothing must render as unmeasured, never as
         # clean — which is this release's own outcome statement applied to the
         # check introducing it.
-        local _c71_row
-        while IFS= read -r _c71_row; do
-          [[ -z "$_c71_row" ]] && continue
-          log "  DENOM: issue-body-anchor-drift — ${_c71_row}"
-        done < <(echo "$c71_out" | awk -F'\t' '$1=="STATUS"{printf "%s = %s\n", $2, $3}')
-        if [[ $c71_exit -eq 0 ]]; then
-          local _c71_seen
-          _c71_seen=$(echo "$c71_out" | awk -F'\t' '$1=="DENOM"{print $3}')
-          log "  OK:    issue-body-anchor-drift — no unresolved anchors over ${_c71_seen:-?} citation site(s); see the DENOM rows above for what was NOT evaluated"
+        local _c72_row
+        while IFS= read -r _c72_row; do
+          [[ -z "$_c72_row" ]] && continue
+          log "  DENOM: issue-body-anchor-drift — ${_c72_row}"
+        done < <(echo "$c72_out" | awk -F'\t' '$1=="STATUS"{printf "%s = %s\n", $2, $3}')
+        if [[ $c72_exit -eq 0 ]]; then
+          local _c72_seen
+          _c72_seen=$(echo "$c72_out" | awk -F'\t' '$1=="DENOM"{print $3}')
+          log "  OK:    issue-body-anchor-drift — no unresolved anchors over ${_c72_seen:-?} citation site(s); see the DENOM rows above for what was NOT evaluated"
         else
-          local _c71_hit
-          while IFS= read -r _c71_hit; do
-            [[ -z "$_c71_hit" ]] && continue
-            flag_advisory_only "issue-body-anchor-drift" "$_c71_hit" "id-non-gating"
-          done < <(echo "$c71_out" | awk -F'\t' '$1=="UNRESOLVED"{printf "#%s (body line %s) cites %s section %s, which that file does not carry; it does carry: %s\n", $2, $3, $4, $5, $7}')
+          local _c72_hit
+          while IFS= read -r _c72_hit; do
+            [[ -z "$_c72_hit" ]] && continue
+            flag_advisory_only "issue-body-anchor-drift" "$_c72_hit" "id-non-gating"
+          done < <(echo "$c72_out" | awk -F'\t' '$1=="UNRESOLVED"{printf "#%s (body line %s) cites %s section %s, which that file does not carry; it does carry: %s\n", $2, $3, $4, $5, $7}')
         fi
       fi
     fi
