@@ -30,7 +30,7 @@ reversibility: CHEAP / Confidence HIGH — one new discipline plus additive bind
 | **Release Manager** | Agent-assisted (release-hub Mode O) |
 | **Status** | Executing |
 | **Branch** | `release/external-seam-conduct-binds` |
-| **PR** | (pending — the release PR is created later in this same Stage-6 pass, in draft state, and this cell is updated to its number; it transitions to ready-for-review at the Stage 9 gate) |
+| **PR** | #7174 — created **draft** at this Stage-6 pass; transitions to ready-for-review at the Stage 9 gate |
 | **Milestone** | `external-seam-conduct-binds` |
 
 `domain_practice: { source: N/A — pipeline-internal release, date: 2026-09-05, domain: governance }`
