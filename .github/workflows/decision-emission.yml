@@ -58,10 +58,21 @@ name: Decision-emission (split-predicate gate mirror)
 #
 # SINGLE-ENGINE DISCIPLINE. NO predicate, threshold, class list, cutover anchor or sentinel
 # read is re-encoded in this YAML. The live arm branches on the engine's EXIT CODE alone
-# (0 / 3 / 1 / other), which is why the SKIP -> exit 3 contract exists in deploy.sh: a
-# caller reading only the integer must be able to tell "measured nothing" from "measured
-# and passed". A verdict-token parser in YAML would be a second reader of the predicate and
-# would drift from the first.
+# (0 / 2 / 3 / 4 / 1 / other), which is why the engine's verdict -> exit contract is what it
+# is: a caller reading only the integer must be able to tell "measured nothing" from
+# "measured and passed", AND "measured and found a gap" from both, AND "the gate asserted
+# nothing" from all three. A verdict-token parser in YAML would be a second reader of the
+# predicate and would drift from the first.
+#
+# EXIT 0 IS CLEAN'S ALONE (#4216, PV-7: a degraded or unmeasured state never shares a member
+# with the clean state). This is load-bearing for THIS FILE specifically, because the `0)`
+# branch below prints a completeness claim. The probe originally mapped INCOMPLETE and NOSET
+# to 0 under the shipped `warn` sentinel, so that claim was printed on runs that had measured
+# a gap — or, in CI, on runs where an emptied asserted-set file meant the gate asserted
+# nothing at all. The advisory codes 2 (measured finding) and 4 (gate asserted nothing) exist
+# so warn-mode can suppress BLOCKING without suppressing the SIGNAL: the sentinel is an
+# escalation dial, never a suppression dial. Do not add any branch that routes a non-CLEAN
+# verdict to 0, and do not merge the 2 / 4 branches into it.
 #
 # THIS CHECK IS ABSENT FROM deploy.sh's rs_checks roster AND MUST STAY ABSENT. That
 # roster's verdict enum maps SKIP into its PASS arm alongside CLEAN/PASS/FRESH, so a member
@@ -151,8 +162,33 @@ jobs:
           set -euo pipefail
           case "$RC" in
             0)
+              # 0 IS CLEAN'S ALONE, under every sentinel state (PV-7, enforced by the engine's
+              # _de_verdict_exit_code and asserted by self-test DE-10c). Before #4216 it was
+              # shared with INCOMPLETE and NOSET under the shipped `warn` sentinel, which made
+              # this line a false completeness claim on the ordinary invocation — the engine
+              # verdicted INCOMPLETE 16 64 and exited 0. The claim below is true only because
+              # nothing else can produce this code; do not add a branch that reaches it.
               echo ":white_check_mark: decision-emission live arm: every in-scope VERIFIED release emitted every asserted MUST class" \
                 | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+              ;;
+            2)
+              {
+                echo "## :warning: decision-emission live arm reported an ADVISORY FINDING (measured)"
+                echo ""
+                echo "A post-cutover VERIFIED release closed **without emitting a MUST class**. The"
+                echo "gate measured the emission record and found it incomplete; the enforce sentinel"
+                echo "is not active, so this is reported rather than blocking."
+                echo ""
+                echo "**This is not a pass.** Exit 2 is the advisory-finding code — distinct from 0"
+                echo "(clean), from 3 (nothing measured) and from 1 (blocking). The remedy is to"
+                echo "**emit the missing rows** per the orchestration playbook's Procedure 4a — never"
+                echo "to waive the finding. The missing class(es) and the releases naming them are in"
+                echo "the probe output above."
+                echo ""
+                echo "This job is **report-only by declaration** and does not block the merge."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::warning::decision-emission: INCOMPLETE — a measured finding, reported not blocking (this arm is advisory by declaration); never read exit 2 as clean"
               exit 0
               ;;
             3)
@@ -174,27 +210,61 @@ jobs:
               echo "::warning::decision-emission: NOT-EVALUATED — the live arm's verdict input is absent in CI; this is a withheld verdict, never a clean one"
               exit 0
               ;;
-            1)
+            4)
+              # THE CI-REACHABLE ARM. The engine's two NOSET guards precede its event-log SKIP
+              # guard, so on a bare checkout — where the event log is absent and every other
+              # run verdicts SKIP — an absent or emptied asserted-set file verdicts NOSET, not
+              # SKIP. Before #4216 that returned 0 under the shipped `warn` sentinel and this
+              # workflow printed the completeness claim above it: a control disabled by a repo
+              # edit, reporting green. This branch is why that is now impossible.
               {
-                echo "## :warning: decision-emission live arm reported a FINDING"
+                echo "## :rotating_light: decision-emission live arm — THE GATE ASSERTED NOTHING (repo defect)"
                 echo ""
-                echo "A post-cutover VERIFIED release closed without emitting a MUST class, with the"
-                echo "enforce sentinel active — or the probe fail-closed on an unexpected verdict."
-                echo "The remedy is to **emit the missing rows** per the orchestration playbook's"
-                echo "Procedure 4a — never to waive the finding."
+                echo "The asserted-set file is **absent or declares zero classes**, so the minimum-"
+                echo "emission gate had nothing to assert and **cannot fail by construction**. This is"
+                echo "a defect in the repository, not a finding about any release, and not a pass."
+                echo ""
+                echo "Restore \`core/deploy/allowlists/decision-emission-asserted-set.txt\`. Its classes"
+                echo "MUST be MUST rows of the orchestration playbook's \`EMISSION-CONTRACT\` block —"
+                echo "\`release/tools/check-emission-contract-subset.sh\` enforces that relation in CI."
+                echo ""
+                echo "Exit 4 is its own code precisely so it can never be read as clean (0), as a real"
+                echo "finding (2), or as an ordinary CI non-measurement (3): the remedy differs from"
+                echo "all three. The resolved path the engine looked for is in the probe output above."
                 echo ""
                 echo "This job is **report-only by declaration** and does not block the merge."
               } | tee -a "$GITHUB_STEP_SUMMARY"
-              echo "::warning::decision-emission: INCOMPLETE/NOSET or fail-closed — reported, not blocking (this arm is advisory by declaration)"
+              echo "::warning::decision-emission: NOSET — the asserted set is absent or empty, so the gate asserted NOTHING; a repo defect to fix, never a pass"
+              exit 0
+              ;;
+            1)
+              {
+                echo "## :warning: decision-emission live arm reported a BLOCKING-CLASS FINDING"
+                echo ""
+                echo "One of three things, all named on stdout above: a post-cutover VERIFIED release"
+                echo "closed **without emitting a MUST class** with the enforce sentinel active; the"
+                echo "**asserted set is absent or empty** with the enforce sentinel active; or the"
+                echo "probe **fail-closed on an unexpected verdict**."
+                echo ""
+                echo "The remedy differs by cause and the probe states which applies: **emit the"
+                echo "missing rows** per the orchestration playbook's Procedure 4a for the first —"
+                echo "never waive it — **restore the asserted-set file** for the second, and treat the"
+                echo "third as an engine/caller contract defect."
+                echo ""
+                echo "This job is **report-only by declaration** and does not block the merge."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::warning::decision-emission: INCOMPLETE/NOSET under enforce, or fail-closed — reported, not blocking (this arm is advisory by declaration)"
               exit 0
               ;;
             *)
               {
                 echo "## :x: decision-emission live arm returned an UNRECOGNISED exit code ($RC)"
                 echo ""
-                echo "The probe's documented contract is 0 (CLEAN), 3 (NOT-EVALUATED), 1 (finding or"
-                echo "fail-closed). Anything else means the engine and this caller disagree about the"
-                echo "contract, which is a defect in one of them and must not be reported as a result."
+                echo "The probe's documented contract is 0 (CLEAN — and nothing else ever exits 0),"
+                echo "2 (INCOMPLETE advisory), 3 (NOT-EVALUATED), 4 (NOSET advisory — the gate asserted"
+                echo "nothing), 1 (blocking finding or fail-closed). Anything else means the engine and"
+                echo "this caller disagree about the contract, which is a defect in one of them and"
+                echo "must not be reported as a result."
               } | tee -a "$GITHUB_STEP_SUMMARY"
               exit 1
               ;;
