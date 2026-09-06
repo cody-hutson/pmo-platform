@@ -2,7 +2,7 @@
 title: Release Plan — external-seam-conduct-binds (external-seam conduct becomes a governed discipline, and the allowlist marker-region root cause is fixed)
 type: release-plan
 plan_type: release
-status: Executing
+status: ACTIVE
 release: versioned (bump-class minor; concrete number binds at the Stage-12 atomic claim)
 milestone: external-seam-conduct-binds
 release_class: novel
