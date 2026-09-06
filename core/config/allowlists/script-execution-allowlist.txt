@@ -593,14 +593,18 @@ doctor.sh
 
 # update.sh — the composition-surface propagation carrier, and the third root-level
 # operator CLI alongside qa.sh and doctor.sh above. Held ZERO rows while TWO pipeline
-# specs MANDATE it (three invocations across those two sites):
-# release/references/pipeline/stage-12-execute.md names `./update.sh --surfaces-only`
-# (targeted) and a full `./update.sh` (wider blast radius) as the DEFAULT disposition for
-# a composition-surface change, and records that `deploy.sh --deploy` does NOT carry that
+# specs name it. The two counts differ by axis and both are stated, because conflating
+# them is the mention-vs-invocation error Arm F exists to avoid: Arm F extracts THREE
+# PRESCRIBED INVOCATIONS of the `./update.sh` operand, ALL AT ONE SITE —
+# release/references/pipeline/stage-12-execute.md:372 — while a second spec MENTIONS the
+# tool in prose without prescribing a command.
+# stage-12-execute.md names `./update.sh --surfaces-only` (targeted) and a full
+# `./update.sh` (wider blast radius) as the DEFAULT disposition for a composition-surface
+# change, and records in the same paragraph that `deploy.sh --deploy` does NOT carry that
 # class and that NO automated detection backstop exists for it — so the mandated command
 # was the only control, and the agent the spec mandates could not run it.
-# release/references/pipeline/stage-13-close.md names it as the propagator of the
-# `.version` stamp to the deployed snapshot.
+# release/references/pipeline/stage-13-close.md names it in prose as the propagator of the
+# `.version` stamp to the deployed snapshot — a mention, not an extracted invocation.
 # Surfaced by Arm F (the mandate-reachability assertion this release ships) rather than by
 # anyone noticing: it is the one remediable finding of the six Arm F reports on arrival —
 # the other five are `.py` operands that no row can match while the non-shell section is
