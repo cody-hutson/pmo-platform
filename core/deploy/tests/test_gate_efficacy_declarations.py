@@ -36,11 +36,50 @@ arm, made structural. Matrix jobs are resolved to their expanded check-run names
 the comparison, because a matrix job publishes one check-run per leg and its raw
 `${{ matrix.* }}` template matches no declared context.
 
+THIRD INVARIANT — A `required` POSTURE MUST NAME THE SURFACE THAT DELIVERS IT
+----------------------------------------------------------------------------
+Operator decision D-13 fixes what `posture=required` MEANS: a red verdict BLOCKS THE
+MERGE. On this host exactly one mechanism delivers that, and it is branch protection's
+`required_status_checks.contexts`. A declaration may therefore not claim `required`
+while naming an enforcement surface that cannot block — `ci-enforce` turns a check red,
+and a red non-required check does not stop anybody merging.
+
+    posture=required*  =>  the declaration names `branch-protection`
+
+The qualifier is included: `required(warn-mode-initial)` and `required(enforce; ratified
+…)` are `required` postures with a shakedown note attached, not a third posture. The
+match is on the LEADING token for exactly the reason `reconcile-gate-posture.py` records
+in its own docstring — a space-intolerant match silently drops the compound form, which
+is how an earlier measurement of this same population came back one short.
+
+WHY THIS ARM, AND WHY IT DID NOT EXIST. The two invariants above grade a declaration
+against its file's TRIGGER and a job against its file's DECLARATION SET. Neither reads
+the posture and the enforcement key TOGETHER, so a declaration could claim an
+enforcement the repository was not delivering and pass every arm in this file. That is
+not a wiring accident: it is a MISSING PREDICATE, and the file carrying it was
+`install-tests.yml` — the workflow that RUNS this very suite. The conformance ratchet
+executed inside the defect it would have caught, and reported green, because
+posture/enforcement agreement was the one pairing it never graded.
+
+The surface test is `startswith("branch-protection")`, character-for-character the test
+`core/deploy/tools/reconcile-gate-posture.py` already applies when it builds its declared
+set. That agreement is deliberate and load-bearing: two readers of one field that
+disagreed on what satisfies it would put this suite and the reconciliation report into
+contradiction over the same header, which is the drift the single-parser coupling
+between these two files exists to prevent.
+
+This arm is STATIC. It grades the declaration against itself and never reads live
+branch protection — an out-of-tree verdict input must not gate a merge (Requirement (b)),
+which is precisely why the reconciler that DOES read it is report-only. The two are
+complements: this arm asserts the claim is well-formed, the reconciler asserts it is
+true today.
+
 EXIT CONTRACT
 -------------
     0  every workflow conforms AND the anti-vacuity harness passed
-    1  at least one declared-vs-actual mismatch (a workflow with no header, or a job
-       publishing a check-run its workflow's headers do not name)
+    1  at least one declared-vs-actual mismatch (a workflow with no header, a job
+       publishing a check-run its workflow's headers do not name, a `required` posture
+       naming a surface that cannot block, or a stale residual-ledger entry)
     2  the harness itself could not assert — an unreadable population, a partition too
        small to build a mutation arm, or a mutation the detector failed to flag.
        Fail-closed: a probe that cannot demonstrate it discriminates reports 2 rather
@@ -83,6 +122,42 @@ ENFORCEMENT_KEYS = ("enforcement", "enforcement-surface")
 QUOTED_RE = re.compile(r'"([^"]+)"')
 MATRIX_REF_RE = re.compile(r"\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}")
 ANY_EXPR_RE = re.compile(r"\$\{\{.*?\}\}")
+
+# `required`, or `required(<qualifier>)`. Anchored, and the qualifier must open with a
+# literal `(`, so a hypothetical future posture word that merely BEGINS with the letters
+# — `required-on-release`, say — is NOT silently swept into the required class.
+POSTURE_REQUIRED_RE = re.compile(r"^required(?:\(|$)")
+
+# The only enforcement surface that makes a red verdict block a merge on this host.
+BLOCKING_SURFACE = "branch-protection"
+
+# RESIDUALS — declarations that fail the posture/enforcement arm and are NOT this
+# change's to fix. Both claim `required(warn-mode-initial)` while naming
+# `path-filtered`, and BOTH SAY SO THEMSELVES a few lines further down their own
+# headers ("Path-filtered, so ADVISORY by skip-semantics"). Neither is registered in
+# branch protection. So each is a genuine posture/enforcement disagreement under D-13 —
+# and resolving one means deciding whether the gate becomes advisory in its header or
+# required in the repository's settings. That is an operator decision about ENFORCEMENT
+# POSTURE, not a spelling fix, and it is deliberately not taken here.
+#
+# The entry is keyed by (file, posture, surface) rather than by file:line — a line
+# number moves under any edit above it, and a file-only key would let a SECOND,
+# different defect hide inside an already-listed file. Changing either graded value
+# retires the exemption automatically, because the key stops matching.
+#
+# EVERY ENTRY MUST STILL REPRODUCE ITS FINDING. `main` re-derives that on each run and
+# reports any entry that no longer does. An allowlist entry states a fact about the
+# corpus, and a fact can stop being true; an entry left standing after its premise
+# expires reads as a silent, permanent exemption, which is strictly worse than the
+# finding it was suppressing.
+POSTURE_RESIDUALS: dict[tuple[str, str, str], str] = {
+    ("close-completeness.yml", "required(warn-mode-initial)", "path-filtered"):
+        "self-describes as ADVISORY by skip-semantics; unregistered in branch "
+        "protection — needs an operator posture decision, not a header edit",
+    ("release-corpus-completeness.yml", "required(warn-mode-initial)", "path-filtered"):
+        "self-describes as ADVISORY by skip-semantics; unregistered in branch "
+        "protection — needs an operator posture decision, not a header edit",
+}
 
 
 def repo_root() -> Path:
@@ -232,6 +307,80 @@ def declared_contexts(text: str) -> set[str]:
             if key in fields:
                 names.update(QUOTED_RE.findall(fields[key]))
     return names
+
+
+def enforcement_surface(fields: dict[str, str]) -> str | None:
+    """The SURFACE token of a declaration's enforcement field, or None if it has none.
+
+    The corpus separates the surface from the check-run list it binds with a colon —
+    `enforcement=branch-protection:"Ctx A","Ctx B"` — so the surface is everything
+    before the FIRST colon. Testing the whole value instead would let a check-run
+    literally named `branch-protection` satisfy a surface test it has nothing to do
+    with; testing after a whitespace split would truncate the annotated forms this tree
+    already carries (`ci-enforce (no warn-mode — findings turn the check red)`).
+
+    Both live spellings of the key are read, for the same reason `declared_contexts`
+    reads both: `enforcement=` is the form the standard fixes, `enforcement-surface=`
+    is a legacy variant on two sites, and reading one would make this arm's denominator
+    quietly wrong rather than absent.
+    """
+    for key in ENFORCEMENT_KEYS:
+        if key in fields:
+            return fields[key].split(":", 1)[0].strip()
+    return None
+
+
+def evaluate_posture(
+    sources: dict[str, str],
+) -> tuple[list[str], set[tuple[str, str, str]], int]:
+    """Return (findings, residual_keys_hit, required_declarations_graded).
+
+    THE INVARIANT: a declaration whose posture is `required` — bare or qualified —
+    names `branch-protection` as its enforcement surface, because under D-13 that is
+    the only surface on this host that makes a red verdict block a merge.
+
+    WHY THIS IS A SEPARATE FUNCTION, for the third time in this file: `evaluate` grades
+    a declaration against its file's TRIGGER, `evaluate_jobs` grades a job against its
+    file's DECLARATION SET, and this grades a declaration against ITSELF — two fields of
+    one header that must agree. Three oracles, three functions; widening either existing
+    return would change a contract for a reason unrelated to it.
+
+    The second element is the set of residual-ledger keys this run actually matched. It
+    is RETURNED rather than recomputed by the caller so the staleness check and the
+    exemption it audits are derived from the same pass over the same population — the
+    identical reason `evaluate` returns its own declaration count instead of letting the
+    caller infer one from `len(sources)`.
+    """
+    findings: list[str] = []
+    hits: set[tuple[str, str, str]] = set()
+    graded = 0
+
+    for name in sorted(sources):
+        for lineno, fields in parse_headers(sources[name]):
+            posture = fields.get("posture", "")
+            if not POSTURE_REQUIRED_RE.match(posture):
+                continue
+            graded += 1
+            surface = enforcement_surface(fields)
+            # `startswith`, character-for-character the test the reconciliation tool
+            # applies to the same field. See the module docstring: two readers of one
+            # field that disagreed would contradict each other over the same header.
+            if surface is not None and surface.startswith(BLOCKING_SURFACE):
+                continue
+            key = (name, posture, surface)
+            if key in POSTURE_RESIDUALS:
+                hits.add(key)
+                continue
+            findings.append(
+                f"{name}:{lineno}: declares posture={posture!r} but names enforcement "
+                f"surface {surface!r} — `required` means a red verdict BLOCKS THE MERGE "
+                f"(operator decision D-13), and only `branch-protection` delivers that. "
+                f"A red non-required check does not stop a merge. Either name "
+                f"`branch-protection` (and register the context), or declare the posture "
+                f"this gate actually has."
+            )
+
+    return findings, hits, graded
 
 
 def named_jobs(text: str) -> list[tuple[str, int, str]]:
@@ -468,6 +617,145 @@ def job_harness(sources: dict[str, str]) -> list[str]:
     return failures
 
 
+def posture_harness(sources: dict[str, str]) -> list[str]:
+    """Anti-vacuity for the posture/enforcement arm. Same doctrine as the two harnesses
+    above: every arm mutates an in-memory copy of the LIVE population, an arm that
+    cannot be BUILT is a reported NOSET rather than a skip, and the specificity arms run
+    on the same non-empty input as the sensitivity arms.
+
+    ARM COVERAGE. `evaluate_posture` decides on TWO fields, so it has two ways to be
+    wrong and both are armed: C1 mutates the ENFORCEMENT side of a conforming
+    declaration, C2 mutates the POSTURE side of a non-conforming one. An implementation
+    that ignored posture entirely and flagged every non-`branch-protection` surface
+    would pass C1 and fail C2; one that ignored the surface would pass C2 and fail C1.
+    C3 and C4 are the specificity pair, and C5 audits the exemption mechanism itself.
+    """
+    failures: list[str] = []
+
+    base_findings, _, graded = evaluate_posture(sources)
+
+    if graded == 0:
+        failures.append("NOSET: no declaration carries a `required` posture, so arms "
+                        "C1/C3 cannot be built — reported rather than skipped")
+
+    def flags(name: str, mutate) -> bool:
+        mutated = dict(sources)
+        mutated[name] = mutate(sources[name])
+        if mutated[name] == sources[name]:
+            failures.append(f"C-CTRL: mutation of {name} changed nothing — the arm "
+                            f"asserts against an unmutated input")
+            return False
+        found, _, _ = evaluate_posture(mutated)
+        return len(found) > len(base_findings)
+
+    def find_declaration(predicate):
+        """First (file, posture, surface) in the live population satisfying predicate."""
+        for name in sorted(sources):
+            for _, fields in parse_headers(sources[name]):
+                posture = fields.get("posture", "")
+                surface = enforcement_surface(fields)
+                if predicate(posture, surface):
+                    return name, posture, surface
+        return None
+
+    # A conforming declaration whose posture is EXACTLY `required`, so the C3 mutation
+    # is a clean substring swap rather than a qualifier stacked onto a qualifier.
+    conforming = find_declaration(
+        lambda p, s: p == "required" and s is not None and s.startswith(BLOCKING_SURFACE)
+    )
+    # An advisory declaration naming a NON-blocking surface — the input on which the arm
+    # must stay silent, and the input C2 promotes into a finding.
+    advisory = find_declaration(
+        lambda p, s: not POSTURE_REQUIRED_RE.match(p) and p != ""
+        and s is not None and not s.startswith(BLOCKING_SURFACE)
+    )
+
+    # C1 — SENSITIVITY, enforcement side. Take a conforming `required` declaration and
+    # point it at a surface that cannot block. This is the exact shape of the defect the
+    # arm was written for, and the shape `install-tests.yml` carried while this suite
+    # ran inside it and reported green.
+    if not conforming:
+        failures.append("NOSET: no declaration pairs a bare `required` posture with "
+                        "`branch-protection`, so arms C1/C3 cannot be built — reported "
+                        "rather than skipped")
+    else:
+        cname, _, _ = conforming
+        if not flags(cname, lambda t: edit_header(
+                t, f"={BLOCKING_SURFACE}", "=zzz-unregistered-surface")):
+            failures.append(f"C1: repointing a `required` declaration in {cname} at a "
+                            f"non-blocking enforcement surface was NOT flagged")
+
+    # C2 — SENSITIVITY, posture side. Promote an advisory declaration that names a
+    # non-blocking surface to `required` WITHOUT touching its enforcement. Only a
+    # detector that actually reads the posture can see this one.
+    if not advisory:
+        failures.append("NOSET: no advisory declaration names a non-blocking surface, "
+                        "so arms C2/C4 cannot be built — reported rather than skipped")
+    else:
+        aname, aposture, _ = advisory
+        if not flags(aname, lambda t, p=aposture: edit_header(
+                t, f"posture={p}", "posture=required")):
+            failures.append(f"C2: promoting an advisory declaration in {aname} to "
+                            f"`required` while it names a non-blocking surface was NOT "
+                            f"flagged — the arm is not reading the posture field")
+
+    # C3 — SPECIFICITY, on the same non-empty input. A QUALIFIED `required` posture that
+    # still names `branch-protection` is conforming and must stay clean. Without this
+    # arm, an implementation that matched only the bare literal `required` would pass
+    # C1 and C2 while silently exempting the six qualified declarations in this tree —
+    # the same space-intolerant-match failure `reconcile-gate-posture.py` records.
+    if conforming:
+        cname, _, _ = conforming
+        if flags(cname, lambda t: edit_header(
+                t, "posture=required", "posture=required(zzz-shakedown-qualifier)")):
+            failures.append(f"C3: a QUALIFIED `required` posture still naming "
+                            f"`branch-protection` in {cname} WAS flagged — the arm "
+                            f"treats a conforming qualified declaration as a defect")
+
+    # C4 — SPECIFICITY, advisory side. An `advisory` posture is unconstrained by this
+    # invariant however its surface is spelled. Without this arm a detector that flagged
+    # every non-`branch-protection` surface outright would pass C1 and be worthless —
+    # and would red-CI twenty-one conforming advisory declarations.
+    if advisory:
+        aname, _, asurface = advisory
+        if flags(aname, lambda t, s=asurface: edit_header(
+                t, f"={s}", "=zzz-some-other-advisory-surface")):
+            failures.append(f"C4: changing an ADVISORY declaration's enforcement "
+                            f"surface in {aname} WAS flagged — the arm over-matches "
+                            f"into postures this invariant does not govern")
+
+    # C5 — THE EXEMPTION AUDIT. Every residual-ledger entry must still reproduce the
+    # finding it suppresses. This arm proves the staleness detector DISCRIMINATES, by
+    # conforming a ledgered declaration and requiring its key to stop being hit.
+    #
+    # An EMPTY ledger is deliberately NOT a NOSET here, unlike every other unbuildable
+    # arm in this file. The NOSET doctrine exists so an emptied population cannot
+    # silently disable a check — but an empty ledger means the exemption mechanism is
+    # UNUSED, so there is nothing to be blind to, and an empty ledger is the target
+    # state. Failing then would make fixing the last residual turn this suite red.
+    if POSTURE_RESIDUALS:
+        rname, rposture, rsurface = next(iter(POSTURE_RESIDUALS))
+        if rname not in sources:
+            failures.append(f"C5: residual ledger names {rname}, which is not in the "
+                            f"workflow population — the entry cannot be audited")
+        else:
+            mutated = dict(sources)
+            mutated[rname] = edit_header(
+                sources[rname], f"={rsurface}", f"={BLOCKING_SURFACE}")
+            if mutated[rname] == sources[rname]:
+                failures.append(f"C5-CTRL: could not conform {rname} — the arm would "
+                                f"assert against an unmutated input")
+            else:
+                _, hits_after, _ = evaluate_posture(mutated)
+                if (rname, rposture, rsurface) in hits_after:
+                    failures.append(
+                        f"C5: conforming {rname} left its residual-ledger entry still "
+                        f"matching — a stale exemption would never be detected, and the "
+                        f"entry would suppress findings forever")
+
+    return failures
+
+
 def load(root: Path) -> dict[str, str]:
     workflows = sorted(
         p for p in (root / ".github" / "workflows").iterdir()
@@ -662,6 +950,23 @@ def main() -> int:
 
     findings, filtered, filter_free, n_declarations = evaluate(sources)
     job_findings, scoped, n_jobs = evaluate_jobs(sources)
+    posture_findings, residual_hits, n_required = evaluate_posture(sources)
+
+    # THE EXEMPTION AUDIT, on the real tree rather than on a mutated copy. A ledger entry
+    # that no longer reproduces its finding has outlived its premise, and an exemption
+    # whose premise expired is a silent permanent hole — strictly worse than the finding
+    # it suppressed. Reported as a finding so retiring the entry is obligatory, not
+    # optional. Computed here and not inside `evaluate_posture` because the harness runs
+    # that function over MUTATED populations, where a missing hit is the arm working
+    # rather than a stale ledger.
+    for key in sorted(POSTURE_RESIDUALS, key=lambda k: (k[0], k[1], str(k[2]))):
+        if key not in residual_hits:
+            posture_findings.append(
+                f"{key[0]}: residual-ledger entry {key[1]!r}/{key[2]!r} no longer "
+                f"reproduces its finding — the exemption has outlived its premise and "
+                f"MUST be deleted from POSTURE_RESIDUALS. Leaving it standing silently "
+                f"exempts that declaration forever."
+            )
 
     # BOTH counts, always. The file count and the declaration count are different
     # numbers in this tree, and reporting agreement over the file count while grading
@@ -675,9 +980,14 @@ def main() -> int:
           f"check-run-naming workflow(s); "
           f"{len(sources) - len(scoped)} workflow(s) out of scope (posture declared by "
           f"containment — no check-run named)")
+    print(f"posture reach: {n_required} declaration(s) carrying a `required` posture "
+          f"graded against their enforcement surface; "
+          f"{len(POSTURE_RESIDUALS)} on the residual ledger "
+          f"({len(residual_hits)} still reproducing)")
 
     harness_failures = harness(sources, filtered, filter_free)
     harness_failures += job_harness(sources)
+    harness_failures += posture_harness(sources)
     if harness_failures:
         print("FAIL (harness): the detector did not demonstrate it discriminates.",
               file=sys.stderr)
@@ -692,8 +1002,14 @@ def main() -> int:
           "was renamed; B3 flagged a broken matrix leg, so `${{ matrix.* }}` is really "
           "expanded rather than exempted; specificity arm B2 stayed clean on a "
           "C1-class workflow whose posture is declared by containment")
+    print("anti-vacuity (posture): C1 flagged a `required` declaration repointed at a "
+          "non-blocking surface and C2 flagged an advisory one promoted to `required`, "
+          "so BOTH graded fields are really read; specificity arms C3 (a QUALIFIED "
+          "`required` still naming branch-protection) and C4 (an advisory declaration's "
+          "surface) stayed clean on the same non-empty input; C5 showed a conformed "
+          "residual stops matching its ledger entry, so a stale exemption is detected")
 
-    findings = findings + job_findings
+    findings = findings + job_findings + posture_findings
     if findings:
         print(f"FAIL: {len(findings)} declared-vs-actual mismatch(es).", file=sys.stderr)
         for finding in findings:
@@ -708,9 +1024,13 @@ def main() -> int:
         return 1
 
     print(f"OK — {n_declarations}/{n_declarations} gate-efficacy declaration(s) across "
-          f"{len(sources)} workflow file(s) agree with their triggers, and "
+          f"{len(sources)} workflow file(s) agree with their triggers, "
           f"{n_jobs}/{n_jobs} named job(s) in check-run-naming workflows carry a "
-          f"declaration of their own.")
+          f"declaration of their own, and "
+          f"{n_required - len(residual_hits)}/{n_required} `required` declaration(s) "
+          f"name a blocking enforcement surface "
+          f"({len(residual_hits)} ledgered residual(s) pending an operator posture "
+          f"decision).")
     return 0
 
 

@@ -1,6 +1,6 @@
 name: Install tests
 
-# gate-efficacy: posture=required  enforcement=ci-enforce:"Shell harness (macOS)","Hook test harness (macOS)","Install/onboarding/update regression suite (macOS)","Cross-platform install/QA (macos-latest)","Cross-platform install/QA (ubuntu-latest)","Cross-platform install/QA (windows-latest)"  always-reports=yes
+# gate-efficacy: posture=required  enforcement=branch-protection:"Shell harness (macOS)","Hook test harness (macOS)","Install/onboarding/update regression suite (macOS)","Cross-platform install/QA (macos-latest)","Cross-platform install/QA (ubuntu-latest)","Cross-platform install/QA (windows-latest)"  always-reports=yes
 #   invariant: install.sh / deploy.sh / setup-workspace.sh and the security hooks
 #              behave correctly end-to-end against /tmp sandboxes — asserted
 #              behaviorally by running the test harnesses (not by file inspection).
@@ -85,7 +85,12 @@ name: Install tests
 #                                  <=> no on.<event>.paths, skip-semantics=
 #                                  absent-is-pass <=> a filter present, the two
 #                                  never co-occur, and every workflow carries a
-#                                  header. Lives in THIS job because the ratchet
+#                                  header; every job publishing a named check-run
+#                                  is named by one of its workflow's headers; and
+#                                  a posture=required declaration names
+#                                  branch-protection, the only surface that makes
+#                                  a red verdict block a merge (D-13).
+#                                  Lives in THIS job because the ratchet
 #                                  must not itself be path-filtered — a gate on
 #                                  trigger conformance that a trigger change can
 #                                  skip is the exact defect it exists to catch.
@@ -792,6 +797,17 @@ jobs:
         # specificity arm made structural. Matrix jobs are resolved to their expanded
         # check-run names first, since a matrix job publishes one check-run per leg.
         #
+        # AND A THIRD: that a `posture=required` declaration names `branch-protection`,
+        # the only enforcement surface on this host that makes a red verdict block a
+        # merge (operator decision D-13). The first two invariants read the trigger and
+        # the jobs; neither reads the posture and the enforcement key TOGETHER, so a
+        # declaration could claim an enforcement the repository was not delivering and
+        # pass every arm. THIS FILE'S OWN HEADER CARRIED EXACTLY THAT DEFECT while
+        # hosting the ratchet: it declared `enforcement=ci-enforce` for six contexts
+        # that branch protection does in fact require, and the suite running in this
+        # very job reported green, because posture/enforcement agreement was the one
+        # pairing it never graded. A missing predicate, not a wiring accident.
+        #
         # NOT VACUOUS BY CONSTRUCTION, and the harness runs by DEFAULT rather than behind
         # a flag — a falsification harness nothing passes a flag to runs once, at
         # implementation, and certifies nothing thereafter. Every invocation mutates
@@ -799,13 +815,15 @@ jobs:
         # react: six sensitivity arms on the header invariant, ONE PER FINDING BRANCH
         # (that arm-per-branch constraint was added after mutation-grading found two
         # branches deletable with the suite still green), a reach arm that mutates a
-        # NON-FIRST declaration, and two sensitivity arms on the per-job invariant —
+        # NON-FIRST declaration, two sensitivity arms on the per-job invariant —
         # orphaning a job by renaming its declared context, and breaking one leg of a
-        # matrix expansion — plus a specificity arm for each invariant, on the same
-        # non-empty input, that must stay clean. Arms are derived from the live
-        # population at run time, never from hardcoded workflow names, so a rename cannot
-        # silently empty one, and a partition too small to build an arm is a reported
-        # NOSET rather than a skip.
+        # matrix expansion — and two on the posture invariant, one per graded field
+        # (repointing a `required` declaration at a non-blocking surface, and promoting
+        # an advisory one to `required` without touching its enforcement), plus a
+        # specificity arm for each invariant, on the same non-empty input, that must
+        # stay clean. Arms are derived from the live population at run time, never from
+        # hardcoded workflow names, so a rename cannot silently empty one, and a
+        # partition too small to build an arm is a reported NOSET rather than a skip.
         #
         # Exit contract: 0 clean / 1 declared-vs-actual mismatch / 2 the harness could
         # not assert (fail-closed). Depends on the Ensure PyYAML step above: the trigger
