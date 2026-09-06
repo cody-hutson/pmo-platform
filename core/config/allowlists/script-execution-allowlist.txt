@@ -730,6 +730,33 @@ core/deploy/tests/test_deploy_detection_honesty.sh
 ./core/deploy/tests/test_advisory_emitter_contract.sh
 core/deploy/tests/test_advisory_emitter_contract.sh
 
+# Upgrade config-durability regression — the NON-dry-run, real-content-delta proof
+# that a user's customized config survives a version upgrade. It is a REGISTERED
+# member of run-install-regression.sh's REGRESSION_MEMBERS array, and Stage 5
+# mandates re-running it whenever the upgrade path is touched — yet it carried ZERO
+# allowlist rows, tracked or deployed. The consequence is the one the siblings above
+# describe, reached from the opposite direction: the test is enrolled and named as
+# mandatory, and no agent-side spoke could execute it, so the mandate was
+# unsatisfiable rather than merely unsatisfied. Same four invocation forms.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_upgrade_config_durability.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_upgrade_config_durability.sh
+./core/deploy/tests/test_upgrade_config_durability.sh
+core/deploy/tests/test_upgrade_config_durability.sh
+
+# Instance-path resolver regression — the behavioural suite for
+# lib-instance-path.sh, whose two resolver forms (pmo_instance_path vs
+# pmo_instance_path_for) disagree SILENTLY when a caller holding an explicit
+# workspace root reaches for the ambient one. It was reachable by no route at all:
+# zero allowlist rows AND zero occurrences in any workflow, so neither CI nor an
+# agent could run it. It is wired on BOTH routes here — enrolled in
+# REGRESSION_MEMBERS alongside the install/update family whose scripts source the
+# resolver, and given the same four invocation forms as its siblings — because a
+# single route is what left it stranded. Same four invocation forms.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_lib_instance_path.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_lib_instance_path.sh
+./core/deploy/tests/test_lib_instance_path.sh
+core/deploy/tests/test_lib_instance_path.sh
+
 # context-budget-auditor Measure-mode scanner — read-only per-component token-cost
 # scan across the loadable-component surface, plus a --self-test mode. Invoked
 # agent-side by the skill's Measure mode, so all four invocation forms per the

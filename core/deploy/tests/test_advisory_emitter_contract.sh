@@ -88,14 +88,17 @@ GATE_ID = re.compile(r'\bG-[A-Z]{1,4}\d+\b')
 lines = open(sys.argv[1], encoding='utf-8').read().split('\n')
 
 
-def logical(i):
+def logical(i, off=0):
     """Join a call site's physical lines across trailing-backslash continuations.
 
     Returns (joined_text, index_of_final_physical_line). The posture token is the
     final argument, so a site whose arguments wrap must be read to its last line
-    or the token reads as absent on every wrapped caller."""
+    or the token reads as absent on every wrapped caller.
+
+    `off` slices the FIRST physical line so the joined text begins after the
+    function name. See sites() for why that slice is load-bearing."""
     j = i
-    parts = [lines[j]]
+    parts = [lines[j][off:]]
     while lines[j].rstrip().endswith('\\') and j + 1 < len(lines):
         j += 1
         parts.append(lines[j])
@@ -103,8 +106,37 @@ def logical(i):
 
 
 def sites(fn):
-    pat = re.compile(r'^[ \t]+' + re.escape(fn) + r'\s')
-    return [i for i, l in enumerate(lines) if pat.match(l)]
+    """Call sites of `fn`, as (line_index, offset_just_past_the_name).
+
+    ANCHORED AT A COMMAND POSITION, NOT AT THE LINE START. A call is recognised
+    at the start of an indented line OR immediately after a shell separator or
+    terminator (`;` `;;` `&&` `||` `|` `(` `)` `{` `}`), so a call carrying a
+    same-line prefix is seen. The previous anchor required the name to begin the
+    line and was therefore SILENTLY blind to every prefixed caller — a `case`
+    branch (`*)  flag_advisory_only ...`) and a `[[ ... ]] &&` guarded emit both
+    read as absent, and an absent site cannot fail any arm below.
+
+    A whole-line comment is excluded. These emitter names are discussed at
+    length in deploy.sh's own prose, and a mention is not a call; without the
+    exclusion the widened anchor reports prose as population.
+
+    THE RETURNED OFFSET IS LOAD-BEARING, not a convenience. Argument extraction
+    must begin AFTER the function name. A guarded emit such as
+    `[[ -n "$c55_h1" ]] && flag_warn_or_issue "work-hierarchy-drift" ...` carries
+    the GUARD's own quoted variable earlier on the line; extracting the first
+    quoted token from the whole line yields `$c55_h1` instead of the check_id,
+    which injects a bogus id into the escalation census that AE-C reads. Widening
+    the anchor without also anchoring extraction trades one silent miss for
+    several silent fabrications."""
+    pat = re.compile(r'(?:^|[;&|(){}])[ \t]*' + re.escape(fn) + r'(?=\s)')
+    out = []
+    for i, l in enumerate(lines):
+        if l.lstrip().startswith('#'):
+            continue
+        m = pat.search(l)
+        if m:
+            out.append((i, m.end()))
+    return out
 
 
 def first_quoted(text):
@@ -113,16 +145,24 @@ def first_quoted(text):
 
 
 def trailing_token(text):
-    m = re.search(r'"([^"]*)"\s*$', text.rstrip())
+    """The final quoted argument of a call.
+
+    A trailing shell terminator is tolerated. Now that sites() sees calls in a
+    `case` branch, the final argument is followed by `;;` on those sites; without
+    this the posture would read as ABSENT on every case-branch caller and AE-B
+    would fail a site that in fact supplies its token — trading the silent miss
+    this widening fixed for an equally wrong false positive."""
+    m = re.search(r'"([^"]*)"\s*(?:;;?)?\s*$', text.rstrip())
     return m.group(1) if m else None
 
 
 # ── the advisory population ────────────────────────────────────────────────
 adv = []
-for i in sites(ADVISORY):
-    text, last = logical(i)
+for i, off in sites(ADVISORY):
+    text, last = logical(i, off)
     adv.append({
         'line': i + 1,
+        'off': off,
         'last': last + 1,
         'id': first_quoted(text),
         'posture': trailing_token(text),
@@ -135,8 +175,8 @@ families = sorted({a['id'] for a in adv if a['id']})
 esc = {}
 esc_total = 0
 for fn in ESCALATING:
-    for i in sites(fn):
-        text, _ = logical(i)
+    for i, off in sites(fn):
+        text, _ = logical(i, off)
         cid = first_quoted(text)
         esc_total += 1
         if cid:
@@ -170,7 +210,7 @@ body_txt = '\n'.join(body)
 body_gate = GATE_ID.findall(body_txt)
 callsite_gate = []
 for a in adv:
-    text, _ = logical(a['line'] - 1)
+    text, _ = logical(a['line'] - 1, a['off'])
     callsite_gate.extend(GATE_ID.findall(text))
 
 out = [

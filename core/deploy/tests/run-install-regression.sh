@@ -83,6 +83,7 @@ REGRESSION_MEMBERS=(
   "test_refresh_surfaces.sh"               # update.sh --surfaces-only targeted composition-surface refresh + leakage backstop
   "test_validate_install.sh"               # validate-install.sh A9 platform-roster predicate + anti-vacuity control
   "test_deploy_detection_honesty.sh"       # --deploy selects against ground truth, not the tag-diff proxy; residual drift exits non-zero
+  "test_lib_instance_path.sh"              # lib-instance-path.sh resolver contract — the install/update/setup scripts source it; previously enrolled nowhere
 )
 
 SUITE_PASS=0
