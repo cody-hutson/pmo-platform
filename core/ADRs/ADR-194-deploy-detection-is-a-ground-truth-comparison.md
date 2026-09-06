@@ -1,5 +1,5 @@
 ---
-title: "ADR-192 — Deploy selection asks the installed corpus, not the repository history"
+title: "ADR-194 — Deploy selection asks the installed corpus, not the repository history"
 status: Accepted (operator-ratified at the deploy-checks-hardening-batch Stage 5 Collective Review scope-lock, 2026-09-05, which re-shaped the card's acceptance criterion from report-the-undetectable-case to resolve-it-then-assert)
 date: 2026-09-05
 release: deploy-checks-hardening-batch
@@ -16,13 +16,15 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-192 — Deploy selection asks the installed corpus, not the repository history
+# ADR-194 — Deploy selection asks the installed corpus, not the repository history
 
 ## Status
 
 **Accepted** — operator-ratified at the `deploy-checks-hardening-batch` Stage 5 Collective Review scope-lock on 2026-09-05 (Saturday). The ratification carried a re-shaping of the originating acceptance criterion: the card as written asked that the undetectable case *report* as a failure, and the operator adopted *resolve it, then assert on what survives*.
 
 **Numbering provenance.** This record was authored at the next free number computed from the mainline anchor plus one, advanced past one slot already occupied by a sibling record on this same release branch. A branch claim is detection-only and never binds for mainline purposes, but a same-branch claim is a file that already exists, and taking its number would be a duplicate rather than a claim. Citations use the slug token `{{ADR:deploy-detection-is-a-ground-truth-comparison}}`, which carries no number shape and resolves at the claim.
+
+**Numbering provenance — `192 → 194`.** Held **ADR-192** branch-local; renumbered to **ADR-194** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 192. In-release citations that read "ADR-192" denote this record.
 
 ## Context
 

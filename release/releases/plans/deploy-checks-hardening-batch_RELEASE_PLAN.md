@@ -218,7 +218,7 @@ core/hooks/block-destructive.sh                                            edit
 # ── #5564 · detect_changed_skills honesty (position 7) ──
 core/deploy/deploy.sh                                                      edit
 core/deploy/tests/test_deploy_detection_honesty.sh                         add
-core/ADRs/ADR-192-deploy-detection-is-a-ground-truth-comparison.md         add
+core/ADRs/ADR-194-deploy-detection-is-a-ground-truth-comparison.md         add
 core/deploy/tests/test_refresh_surfaces.sh                                 edit
 core/deploy/tests/run-install-regression.sh                                edit
 
