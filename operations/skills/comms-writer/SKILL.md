@@ -639,6 +639,15 @@ Hard rejections. If you catch yourself doing any of these, stop and fix:
   (HIGH / MEDIUM / LOW) per `core/specs/reversibility-protocol.md`. Outputs
   missing tiers on decision-class items fail pmo-qa-auditor G4. See Reversibility
   Discipline section above.
+- **External-seam writes** — a work-item record or knowledge page in a connected system,
+  and their comment streams — follow `core/disciplines/external-seam-conduct.md`: the
+  record holds state, a comment addresses a person. This resolves the standing tension
+  between this skill's append-don't-edit posture for **communications** (a sent comm is
+  corrected by a new comm, never retroactively edited) and reconcile-don't-annotate for
+  **records**: they govern different objects, and on a seam the discriminator is
+  authorship — human-authored text is never overwritten, agent- and system-authored
+  state reconciles in place. A knowledge-page change summary is therefore not a free
+  choice between a page comment and a Change Log section: durable state goes to the page.
 
 ## Domain-Specific Failure Modes
 

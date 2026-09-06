@@ -74,6 +74,7 @@ This discipline composes with — does not duplicate — the disciplines that go
 - **`no-status-theater`** (CLAUDE.md guardrail; `core/standards/principal-standard-checklist.md`) — **SIBLING.** A correction comment posted instead of the in-scope body fix is a status-theater instance at the edit surface (Section 4).
 - **`surgical-edits`** (CLAUDE.md preference; `build-philosophy.md` Simplicity row) — **SHARPENS.** Minimal-change ≠ avoid-the-change. The smallest edit that achieves the goal still includes reconciling the contradiction you are touching; surgical scoping bounds *how much* you change, not *whether* you reconcile.
 - **`write-into-referenced-file`** (CLAUDE.md "Surgical edits" family; operator memory) — **ALIGNED.** Develop the correction *into* the artifact, not onto a parallel surface (a timeline comment) — the same "edit the named file, not a sibling" posture, applied to the reconcile-vs-annotate choice.
+- **`external-seam-conduct.md`** — **SIBLING.** Same reconcile-vs-annotate family, different surface contract. This discipline's default governs an artifact the platform owns; that one governs a human-facing external seam — a work-item record or knowledge page in a connected system, and their comment streams — where **the discriminator is authorship, not staleness**: agent- and system-authored state reconciles in place, and human-authored text is never overwritten however stale. The staleness precondition that fires *this* discipline is precisely the limb that does not survive the transfer, because the platform does not own the seam's history and cannot restore what it silently replaced. Where authorship cannot be determined there, the text is treated as human-authored.
 
 ---
 
@@ -82,6 +83,7 @@ This discipline composes with — does not duplicate — the disciplines that go
 - [`decision-discipline.md`](decision-discipline.md) — §2.1.1 Audit-Snapshot Reconciliation, the verify-before-recommend sibling (recommendation-time twin of this edit-time discipline); carries the inbound cross-reference.
 - [`review-discipline-principles.md`](review-discipline-principles.md) — the no-status-theater sibling (documentation-without-resolution); a correction comment without a fix is its edit-surface instance.
 - [`build-philosophy.md`](build-philosophy.md) — the Simplicity row (surgical-edits); minimal-change sharpens, it does not excuse, the reconciliation.
+- [`external-seam-conduct.md`](external-seam-conduct.md) — the sibling discipline for a human-facing external seam; carries the authorship-not-staleness discriminator and the register prohibition for that surface.
 
 ## References
 

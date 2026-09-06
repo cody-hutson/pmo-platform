@@ -106,7 +106,7 @@ Is a formal record required (audit, compliance, decision documentation)?
 |---------|--------------|
 | **Page structure** | Title, purpose statement, table of contents (auto-generated for >3 sections), structured sections with headers. |
 | **Section mapping** | Every update specifies: "This updates [Page Name] → [Section]." |
-| **Change summary** | What changed, why, source, stakeholder document impact. Included as either a page comment or a dedicated "Change Log" section at the bottom. |
+| **Change summary** | What changed, why, source, stakeholder document impact. Goes in the page's own dedicated "Change Log" section at the bottom — durable state belongs in the record's structure. **Not a free choice between a comment and the section:** per [`core/disciplines/external-seam-conduct.md`](../../../../core/disciplines/external-seam-conduct.md) § 1, a page comment is warranted only when it **addresses a person** *and* **carries an ask or an answer**. A change summary written to no reader in particular is a register entry, and it belongs on the page. Where a change genuinely needs a person's attention, the comment carries the ask and the Change Log still carries the state. |
 | **Tables** | Use Confluence table macros. Markdown tables acceptable in copy/paste blocks from comms-writer. |
 | **Version control** | Confluence provides native versioning. Add a manual version note for significant changes: "v2.1 — Updated go-live dates per SteerCo decision 3/28." |
 | **Labels** | Apply Confluence labels for discoverability: project name, document type, status (draft/approved/active/archived). |
