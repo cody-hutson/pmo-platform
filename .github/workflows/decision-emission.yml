@@ -157,7 +157,7 @@ jobs:
               ;;
             3)
               {
-                echo "## :grey_question: decision-emission live arm — NOT EVALUATED (not a clean result)"
+                echo "## :grey_question: decision-emission live arm — NOT-EVALUATED (not a clean result)"
                 echo ""
                 echo "The live arm's verdict input is the **pipeline event log**, which is"
                 echo "operator-instance state: git-ignored, and absent from any CI checkout. This run"
