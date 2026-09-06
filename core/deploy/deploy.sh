@@ -5058,13 +5058,34 @@ hook_parity_remedy() {
 # THE COMPARATOR CONTROL ARM RUNS BEFORE ANY VERDICT, and it is not ceremony. The
 # live tree can be — and on the authoring instance now IS — fully reconciled, so
 # Arm B's population of drift rows can legitimately be zero. A 0-of-0 "clean" is not
-# evidence the comparator works. The control feeds it a synthetic identical pair
-# (must report match) and a synthetic one-byte-flipped pair (must report drift), and
-# FAILs on every mode if it stops discriminating — Check 71's own CTRL: precedent,
-# "every verdict below would be unattributable". This also discharges the card's
-# control-arm acceptance criterion REPO-DERIVABLY, without anyone modifying a live
-# deployed hook — which no agent may do in any case: the deployed tree is Tier-0
-# floored by block-autonomy-ceiling.sh BLOCK-AUTONOMY-001.
+# evidence the comparator works. The control builds a synthetic source/deployed tree
+# in its own temp directory and drives it through THE SAME CALLABLES THE VERDICT
+# USES — expand() for row expansion, os.path.join() for path construction, and
+# sha_path() for hashing — asserting all four discriminations: the glob row expands
+# to both pairs, the identical pair reports MATCH, the one-byte-flipped pair reports
+# DRIFT, and an absent deployed file reads as absent rather than as a match. It FAILs
+# on every mode if any of them stops discriminating — Check 71's own CTRL: precedent,
+# "every verdict below would be unattributable".
+#
+#   IT TRAVERSES THE REAL PATH BECAUSE A NARROWER ARM CERTIFIED NOTHING. The first
+#   version hashed two in-memory literals and compared the digests — a property of
+#   hashlib, not of this check. Dev Testing mutated the verdict's own comparison to
+#   compare every file against ITSELF; the output was byte-identical to an honest run
+#   and the control still printed PASS. An arm that cannot see that mutation is not a
+#   control, so the arm now runs the functions the mutation would have to change.
+#
+# This also discharges the card's control-arm acceptance criterion REPO-DERIVABLY,
+# without anyone modifying a live deployed hook — which no agent may do in any case:
+# the deployed tree is Tier-0 floored by block-autonomy-ceiling.sh
+# BLOCK-AUTONOMY-001.
+#
+# THE DENOMINATOR HAS A FLOOR, for the reason the mapped population is not fixed:
+# every glob row is expanded against the tracked source listing, so a degraded
+# listing SHRINKS the denominator rather than erroring. A listing returning only the
+# non-glob rows collapses the mapped population from 31 pairs to 8 — losing all 23
+# entrypoint hooks — while every surviving pair still compares clean. Arm A therefore
+# FAILPROBEs on an empty source listing and on any publishable glob row that expands
+# to zero pairs; both limbs are repo-derivable, so both are enforcing on every mode.
 #
 # Emitted tokens (TAB-separated, one per line):
 #   CTRL   PASS|FAIL              <detail>
@@ -5104,8 +5125,10 @@ _c79_compute_verdict() {
 import hashlib
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 
 repo, dep, pub = sys.argv[1], sys.argv[2], sys.argv[3]
 cap = int(sys.argv[4])
@@ -5180,21 +5203,161 @@ def sha_path(p):
     except Exception:
         return None
 
-# ── control arm: prove the comparator discriminates BEFORE any verdict ──────
-_a = b'hook-parity comparator control arm\n'
-_b = bytearray(_a)
-_b[0] ^= 0x01
-same = hashlib.sha256(_a).hexdigest() == hashlib.sha256(bytes(_a)).hexdigest()
-diff = hashlib.sha256(_a).hexdigest() != hashlib.sha256(bytes(_b)).hexdigest()
-if same and diff:
+def compare_pair(repo_root, src_rel, dep_root, dest_rel):
+    """THE parity comparison — one expression, shared by the verdict and its control.
+
+    Returns (state, deployed_sha) with state in MATCH / DRIFT / ABSENT.
+
+    IT IS A FUNCTION SPECIFICALLY SO THE CONTROL ARM CAN EXECUTE IT. While this
+    comparison was written inline in the row loop, the control arm could not reach
+    it: Dev Testing changed the deployed side to re-read the SOURCE — comparing
+    every file against itself, which can never report drift — and the control still
+    printed PASS over output byte-identical to an honest run. A control arm that
+    does not execute the expression under test is not a control arm.
+    """
+    hs = sha_path(os.path.join(repo_root, src_rel))
+    hd = sha_path(os.path.join(dep_root, dest_rel))
+    if hd is None:
+        return 'ABSENT', None
+    if hs == hd:
+        return 'MATCH', hd
+    return 'DRIFT', hd
+
+
+def tracked_hook_sources():
+    try:
+        r = subprocess.run(['git', '-C', repo, 'ls-files', '--', 'core/hooks'],
+                           capture_output=True, text=True)
+        return [x for x in r.stdout.split('\n') if x.strip()]
+    except Exception:
+        return []
+
+
+# Expand each publishable row into concrete (source, dest) pairs. A glob row's dest
+# is derived by substituting the source glob's captured segment, so the map never
+# enumerates a population the publisher already derives.
+#
+# `pop` IS A PARAMETER, not a closed-over global. The control arm below expands a
+# synthetic row over a synthetic population, and it can only do that if the
+# expansion it exercises is the same callable the verdict uses.
+def expand(row, pop):
+    s, d, cls, m = row
+    if m != 'glob':
+        return [(s, d)]
+    rx, i, groups = [], 0, 0
+    while i < len(s):
+        if s[i] == '*':
+            if s[i:i + 2] == '**':
+                rx.append('(.*)')
+                i += 2
+            else:
+                rx.append('([^/]*)')
+                i += 1
+            groups += 1
+            continue
+        rx.append(re.escape(s[i]))
+        i += 1
+    pat = re.compile('^' + ''.join(rx) + '$')
+    pairs = []
+    for f in sorted(pop):
+        mm = pat.match(f)
+        if not mm:
+            continue
+        dd, gi = [], 0
+        k = 0
+        while k < len(d):
+            if d[k] == '*':
+                step = 2 if d[k:k + 2] == '**' else 1
+                dd.append(mm.group(gi + 1) if gi < groups else '')
+                gi += 1
+                k += step
+                continue
+            dd.append(d[k])
+            k += 1
+        pairs.append((f, ''.join(dd)))
+    return pairs
+
+
+src_pop = tracked_hook_sources()
+src_unclassified = sorted(p for p in src_pop if classify(0, p) is None)
+
+# ── control arm: prove the REAL comparison path discriminates BEFORE any verdict ──
+#
+# WHY THIS ARM IS NOT TWO hashlib CALLS ANY MORE. The arm this replaced hashed two
+# in-memory literals and compared the digests. That asserts a property of
+# hashlib.sha256 — which was never in doubt — and nothing whatever about this check.
+# The parity verdict depends on three things the old arm never traversed: sha_path()
+# (which opens a file and SWALLOWS every error into a None), os.path.join() building
+# the deployed side of each pair, and expand() turning a glob row into concrete
+# pairs. Dev Testing proved the gap by mutating the verdict's own comparison to
+# compare every file against ITSELF: the output was byte-identical to an honest run
+# and still printed CTRL: PASS.
+#
+# The arm below runs those same three callables over real files on a temporary tree,
+# so a mutation to any of them is visible here. It writes only inside its own
+# mkdtemp and removes it; it never touches the repository or the deployed tree.
+_ctrl_pass = False
+_ctrl_why = 'the control arm did not complete'
+_ctrl_dir = None
+try:
+    _ctrl_dir = tempfile.mkdtemp(prefix='c79-ctrl-')
+    _csrc = os.path.join(_ctrl_dir, 'src', 'core', 'hooks')
+    _cdep = os.path.join(_ctrl_dir, 'dep')
+    os.makedirs(_csrc)
+    os.makedirs(_cdep)
+    _body = b'hook-parity comparator control arm\n'
+    _flip = bytearray(_body)
+    _flip[0] ^= 0x01
+
+    # A pair that MUST read as identical, and a pair that MUST read as drifted —
+    # both reached the way the verdict reaches them: through expand(), then
+    # os.path.join(), then sha_path().
+    for _n, _depbytes in (('ctrl-same.sh', _body), ('ctrl-diff.sh', bytes(_flip))):
+        with open(os.path.join(_csrc, _n), 'wb') as _fh:
+            _fh.write(_body)
+        with open(os.path.join(_cdep, _n), 'wb') as _fh:
+            _fh.write(_depbytes)
+
+    _cpop = ['core/hooks/ctrl-same.sh', 'core/hooks/ctrl-diff.sh']
+    _cpairs = dict(expand(('core/hooks/*.sh', '*.sh', 'entrypoint', 'glob'), _cpop))
+    _croot = os.path.join(_ctrl_dir, 'src')
+
+    _expanded = len(_cpairs) == 2
+    _same = _diff = _absent = False
+    if _expanded:
+        # Every assertion goes through compare_pair — the SAME callable the row
+        # loop uses — so a mutation to the comparison is visible here.
+        _same = compare_pair(_croot, 'core/hooks/ctrl-same.sh', _cdep,
+                             _cpairs['core/hooks/ctrl-same.sh'])[0] == 'MATCH'
+        _diff = compare_pair(_croot, 'core/hooks/ctrl-diff.sh', _cdep,
+                             _cpairs['core/hooks/ctrl-diff.sh'])[0] == 'DRIFT'
+        # The NOT-DEPLOYED branch keys on the deployed side being unreadable. If it
+        # ever returned a digest for a missing path, an absent deployed file would
+        # silently count as a match.
+        _absent = compare_pair(_croot, 'core/hooks/ctrl-same.sh', _cdep,
+                               'ctrl-never-written.sh')[0] == 'ABSENT'
+
+    _ctrl_pass = _expanded and _same and _diff and _absent
+    _ctrl_why = ('glob row expanded to %d pair(s) (want 2), identical pair reported MATCH=%s, '
+                 'one-byte-flipped pair reported DRIFT=%s, absent deployed file reported '
+                 'ABSENT=%s' % (len(_cpairs), _same, _diff, _absent))
+except Exception as _e:
+    _ctrl_pass = False
+    _ctrl_why = 'the control arm raised %s: %s' % (type(_e).__name__, _e)
+finally:
+    if _ctrl_dir:
+        shutil.rmtree(_ctrl_dir, ignore_errors=True)
+
+if _ctrl_pass:
     out('CTRL', 'PASS',
-        'comparator sensitivity=DRIFT on a one-byte-flipped pair, specificity=MATCH on an '
-        'identical pair — the sha-256 comparator discriminates, so the parity verdicts below '
-        'are attributable')
+        'the real comparison path discriminates over a synthetic tree — expand() produced both '
+        'pairs, sha_path() + os.path.join() reported MATCH on the identical pair and DRIFT on '
+        'the one-byte-flipped pair, and a missing deployed file read as absent rather than as a '
+        'match; so the parity verdicts below are attributable')
 else:
     out('CTRL', 'FAIL',
-        'comparator no longer discriminates (identical-pair match=%s, flipped-pair drift=%s); '
-        'every parity verdict below would be unattributable' % (same, diff))
+        'the real comparison path no longer discriminates (%s); every parity verdict below would '
+        'be unattributable' % _ctrl_why)
 
 # ── ARM A — map closure, derived read-only from the publisher ───────────────
 plines = open(pub, encoding='utf-8', errors='replace').read().split('\n')
@@ -5246,10 +5409,40 @@ missing_src = sorted(
     and not os.path.exists(os.path.join(repo, r[0]))
 )
 
+# ── DENOMINATOR FLOOR — a collapsed population must fail, never pass ────────
+# The mapped population is not a fixed number: every glob row is expanded against
+# the tracked source listing, so a DEGRADED listing silently shrinks the
+# denominator instead of erroring. Measured: a listing that returns only the
+# non-glob rows collapses the mapped population from 31 pairs to 8 — losing all 23
+# entrypoint hooks — and every surviving pair still compares clean, so the check
+# reported PASS over a population missing three quarters of its subject.
+#
+# Both limbs below are REPO-DERIVABLE, which is why they are ARMA (enforcing on
+# every mode) rather than Arm B findings: neither needs a deployed tree, and a
+# probe that cannot enumerate its own subject must not report a clean result. This
+# is the same posture the ZERO-DERIVED limb above already takes, applied to the
+# other input the verdict depends on.
+glob_rows = [r for r in rows if r[3] == 'glob' and r[2] in PUBLISHABLE]
+collapsed = sorted(r[0] for r in glob_rows if not expand(r, src_pop))
+
 if start is None or end is None:
     out('ARMA', 'FAILPROBE',
         'install_hooks() could not be located in the publisher, so ZERO publish acts were '
         'derived — this is a failed probe, not an absence of undeclared publish acts')
+elif not src_pop:
+    out('ARMA', 'FAILPROBE',
+        'the tracked source listing for core/hooks/ returned ZERO files, so every glob row '
+        'expands to nothing and the mapped population collapses to the non-glob rows alone. '
+        'core/hooks/ is a tracked directory that is never empty, so a zero here means the '
+        'listing failed, not that the hooks are gone — a collapsed denominator is a failed '
+        'probe, never a clean result')
+elif collapsed:
+    out('ARMA', 'FAILPROBE',
+        '%d publishable glob row(s) expanded to ZERO pairs against a source listing of %d '
+        'file(s): %s. The row declares a population the listing no longer contains, so those '
+        'pairs are silently absent from the parity comparison rather than reported — a '
+        'collapsed denominator is a failed probe, never a clean result'
+        % (len(collapsed), len(src_pop), ', '.join(collapsed)))
 elif not derived:
     out('ARMA', 'FAILPROBE',
         'ZERO publish acts derived from install_hooks() across %d scoped lines — the publisher '
@@ -5282,17 +5475,9 @@ else:
             % (len(derived), len(declared_pub), len(optional)))
 
 # ── ARM B — byte parity over the deployed tree (operator-local, advisory) ───
-def tracked_hook_sources():
-    try:
-        r = subprocess.run(['git', '-C', repo, 'ls-files', '--', 'core/hooks'],
-                           capture_output=True, text=True)
-        return [x for x in r.stdout.split('\n') if x.strip()]
-    except Exception:
-        return []
-
-src_pop = tracked_hook_sources()
-src_unclassified = sorted(p for p in src_pop if classify(0, p) is None)
-
+# tracked_hook_sources(), src_pop, src_unclassified and expand() are all resolved
+# ABOVE, before the control arm: the arm exercises expand(), and the denominator
+# floor in Arm A reads src_pop. Both need them before this point.
 if not os.path.isdir(dep):
     out('ARMB', 'NOT-EVAL',
         'the deployed hooks tree is absent at %s, so NOTHING was compared — no source-vs-deployed '
@@ -5312,46 +5497,6 @@ for root, _dirs, files in os.walk(dep):
     for n in files:
         dep_pop.append(os.path.relpath(os.path.join(root, n), dep))
 
-# Expand each publishable row into concrete (source, dest) pairs. A glob row's dest
-# is derived by substituting the source glob's captured segment, so the map never
-# enumerates a population the publisher already derives.
-def expand(row):
-    s, d, cls, m = row
-    if m != 'glob':
-        return [(s, d)]
-    rx, i, groups = [], 0, 0
-    while i < len(s):
-        if s[i] == '*':
-            if s[i:i + 2] == '**':
-                rx.append('(.*)')
-                i += 2
-            else:
-                rx.append('([^/]*)')
-                i += 1
-            groups += 1
-            continue
-        rx.append(re.escape(s[i]))
-        i += 1
-    pat = re.compile('^' + ''.join(rx) + '$')
-    pairs = []
-    for f in sorted(src_pop):
-        mm = pat.match(f)
-        if not mm:
-            continue
-        dd, gi = [], 0
-        k = 0
-        while k < len(d):
-            if d[k] == '*':
-                step = 2 if d[k:k + 2] == '**' else 1
-                dd.append(mm.group(gi + 1) if gi < groups else '')
-                gi += 1
-                k += step
-                continue
-            dd.append(d[k])
-            k += 1
-        pairs.append((f, ''.join(dd)))
-    return pairs
-
 match_n = drift_n = notdep_n = presence_n = presence_present = presence_missing = 0
 drift_rows = []
 missing_rows = []
@@ -5360,7 +5505,7 @@ for row in rows:
     cls, m = row[2], row[3]
     if cls in ('operator-state', 'not-deployed'):
         continue
-    for s, d in expand(row):
+    for s, d in expand(row, src_pop):
         dp = os.path.join(dep, d)
         if cls == 'mode-template':
             # presence_n counts rows EXAMINED; presence_present counts rows whose
@@ -5376,12 +5521,11 @@ for row in rows:
                 missing_rows.append('%s (mode template never installed)' % d)
             continue
         mapped += 1
-        hs = sha_path(os.path.join(repo, s))
-        hd = sha_path(dp)
-        if hd is None:
+        state, hd = compare_pair(repo, s, dep, d)
+        if state == 'ABSENT':
             notdep_n += 1
             missing_rows.append('%s (declared but absent from the deployed tree)' % d)
-        elif hs == hd:
+        elif state == 'MATCH':
             match_n += 1
         else:
             drift_n += 1
