@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.59 | release-tools-invocable-gates-enforced | 2026-09-06 | — | #7175 | [notes/v4.59_RELEASE_NOTES.md](notes/v4.59_RELEASE_NOTES.md) |
 | v4.58 | governance-docs-reconciled | 2026-09-06 | — | #7178 | [notes/v4.58_RELEASE_NOTES.md](notes/v4.58_RELEASE_NOTES.md) |
 | v4.57 | external-seam-conduct-binds | 2026-09-06 | — | #7174 | [notes/v4.57_RELEASE_NOTES.md](notes/v4.57_RELEASE_NOTES.md) |
 | v4.56 | kit-content-and-defaults | 2026-09-05 | — | #7017 | [notes/v4.56_RELEASE_NOTES.md](notes/v4.56_RELEASE_NOTES.md) |
