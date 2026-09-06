@@ -6243,8 +6243,17 @@ cmd_deploy() {
     # stated number of targets. That is the difference the reported defect turns on
     # — "nothing needed deploying" and "the comparison could not see what needed
     # deploying" previously printed the same sentence.
+    #
+    # THE ORIGINAL SENTENCE IS PRESERVED VERBATIM AS THE PREFIX, and that is a
+    # contract rather than a courtesy: test_refresh_surfaces.sh Arm 2b matches this
+    # line with `grep -qF` on the exact literal to decide whether the E-02 branch
+    # was reached at all, and skips its assertion when it does not match. Appending
+    # the grounded clause keeps that consumer matching and its arm asserting;
+    # rewording the head of the line would have silently converted a passing
+    # assertion into a skip — a coverage loss that reads as green. Add after the
+    # existing sentence; do not rewrite it.
     if [[ ${_gt_roster_n:-0} -gt 0 ]]; then
-      log "No skill, package, or harness changes to deploy — verified current: ${_gt_roster_n} of ${_gt_roster_n} roster skills match source on ${_gt_targets} target(s)."
+      log "No skill, package, or harness changes detected. Nothing to deploy. Verified current: ${_gt_roster_n} of ${_gt_roster_n} roster skills match source on ${_gt_targets} target(s)."
     else
       log "No skill, package, or harness changes detected. Nothing to deploy."
     fi
