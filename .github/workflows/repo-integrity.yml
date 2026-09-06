@@ -48,7 +48,7 @@ name: Repository integrity
 #                 registered in branch protection, which a PR cannot do. The gate is
 #                 ENFORCING (it exits non-zero on a finding); it is not yet BLOCKING.
 #
-# gate-efficacy: posture=required  enforcement=branch-protection:"ADR-number integrity gate"  always-reports=yes
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"ADR-number integrity gate" (no WARN_MODE — a finding turns the check RED)  always-reports=yes
 #   invariant: the ONE global ADR-NNN sequence spanning core/ADRs/ + release/ADRs/ is
 #              unique and gap-free; the release-module ADR index is a faithful
 #              projection of that file set (no MISSING / ORPHAN / DRIFT row); and the
@@ -60,19 +60,24 @@ name: Repository integrity
 #                  numbering step exits 1 and the job goes RED; delete an index row
 #                  without regenerating -> the projection step reports DRIFT and exits 1;
 #                  break one --self-test case -> the job fails BEFORE it reads the tree.
-#   posture note: this declaration records the INTENDED posture per
-#                 core/standards/gate-efficacy-standard.md § Requirement (b) — "a
-#                 posture=required declaration records the *intended* posture and names
-#                 its enforcement surface. It does NOT itself edit branch-protection."
-#                 As of this declaration the context is NOT in main's live
-#                 required_status_checks.contexts: registering it is an operator
-#                 repository-settings action, evidenced by a live branch-protection
-#                 read-back through the GitHub API and never by a green PR. Until that
-#                 read-back shows the context, the gate is ENFORCING (it exits non-zero)
-#                 but not BLOCKING, and the declared-vs-live delta is reported on every
-#                 pull request by the branch-protection reconciliation reporter
-#                 (.github/workflows/gate-posture-reconciliation.yml). That reporter is
-#                 the Requirement (c) coverage audit this posture is reconciled by.
+#   posture note: `advisory`, not `required`, is the HONEST declaration today — the
+#                 same reading the SIGPIPE-idiom and PV-7 rows above already carry.
+#                 A declaration's posture states what its enforcement surface
+#                 ACTUALLY DELIVERS, never what it is intended to deliver
+#                 (core/standards/gate-efficacy-standard.md § Requirement (b), the
+#                 derivation rule). This context is NOT in main's live
+#                 required_status_checks.contexts, so a red verdict does not block a
+#                 merge: the gate is ENFORCING (it exits non-zero on a finding) and
+#                 is not BLOCKING. Registering it is an operator repository-settings
+#                 action, evidenced by a live branch-protection read-back through the
+#                 GitHub API and never by a green PR — a PR cannot perform it. When
+#                 that read-back shows the context, this header flips to
+#                 posture=required enforcement=branch-protection with no code change:
+#                 the declaration follows reality, the registration changes reality.
+#                 The declared-vs-live delta is reported on every pull request by the
+#                 branch-protection reconciliation reporter
+#                 (.github/workflows/gate-posture-reconciliation.yml), which is the
+#                 Requirement (c) coverage audit this posture is reconciled by.
 #   eligibility note: this gate is one of the few structurally eligible for
 #                 branch-protection today. Its verdict-input closure over repository
 #                 paths is CLOSED — release/tools/check-adr-numbers.py imports only

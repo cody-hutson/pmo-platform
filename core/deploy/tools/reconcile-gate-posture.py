@@ -4,10 +4,11 @@
 WHAT THIS IS, AND WHY IT EXISTS
 -------------------------------
 `core/standards/gate-efficacy-standard.md` § Requirement (b) draws a line that is easy
-to read past: a `posture=required` declaration "records the *intended* posture… It does
-NOT itself edit branch-protection… Reconciling a declared `required` posture against the
-actual branch-protection configuration is a **coverage-audit item under Requirement
-(c)**, not a file edit any single gate performs."
+to read past. A declaration's posture is "derived from that surface" — it states what
+the enforcement surface ACTUALLY DELIVERS — while the declaration itself "does not
+itself edit branch-protection", so "reconciling the declared postures against the
+actual branch-protection configuration remains a **coverage-audit item under
+Requirement (c)**, not a file edit any single gate performs."
 
 So the standard NAMES an audit and assigns it to Requirement (c). Until this tool, that
 audit had no runner. Every occurrence of the branch-protection API in an executable

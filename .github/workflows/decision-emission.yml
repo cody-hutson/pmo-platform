@@ -47,9 +47,9 @@ name: Decision-emission (split-predicate gate mirror)
 # grades that biconditional and runs inside install-tests.yml, a required workflow — so a
 # malformed header here turns a REQUIRED check red. That coupling is deliberate.
 #
-# WHY BOTH ARMS DECLARE `advisory`. A `posture=required` declaration records intent and
-# names its enforcement surface; it does NOT itself edit branch protection, which is an
-# operator action outside any PR. Declaring `required` while unregistered is the exact
+# WHY BOTH ARMS DECLARE `advisory`. A declaration's posture states what its enforcement
+# surface ACTUALLY DELIVERS, never what it is intended to deliver; the declaration does
+# not itself edit branch protection, which is an operator action outside any PR. Declaring `required` while unregistered is the exact
 # declared-but-unregistered defect a sibling card in this milestone exists to repair, so
 # this workflow does not reproduce it. The integrity arm is a legitimate future candidate
 # for registration once it has accumulated a clean window; the live arm categorically is
