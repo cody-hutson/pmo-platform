@@ -15,7 +15,7 @@ consumers:
   - release/governance/RELEASE_PROTOCOL.md (Implementation Plan Format section cross-reference)
   - release/references/pipeline/stage-02-triage.md (§ 12 read when A6.5 Pattern (1) surfaces a removal candidate)
   - release/skills/roadmap-curator/SKILL.md (§ 12 read at Mode B re-baseline and Mode C drift audit)
-last-updated: 2026-08-03
+last-updated: 2026-09-06
 ---
 <!-- reference-durability: allow-link -->
 
