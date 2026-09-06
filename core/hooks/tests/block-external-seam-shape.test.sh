@@ -64,8 +64,15 @@ run() {
   local err; err="$(/bin/cat "${SB}/err")"
   local ok=1
   [ "$rc" != "$exp" ] && ok=0
-  if [ -n "$pat" ]; then printf '%s' "$err" | /usr/bin/grep -qE "$pat" || ok=0; fi
-  if [ -n "$negpat" ]; then printf '%s' "$err" | /usr/bin/grep -qE "$negpat" && ok=0; fi
+  # Here-string, not `printf | grep -q`: `-q` closes stdin on its first match, the
+  # writer's next write fails on the broken pipe, and under pipefail that non-zero
+  # status becomes the pipeline's — so a SUCCESSFUL match can report failure. On a
+  # GitHub runner SIGPIPE arrives as SIG_IGN, so the status is 1, indistinguishable
+  # from "no match". A here-string has no writer to signal. The `[ -n ... ]` guards
+  # are load-bearing for the substitution: `<<<""` feeds ONE empty line where
+  # `printf '%s' ""` fed zero, so an empty-pattern arm must not reach the reader.
+  if [ -n "$pat" ]; then /usr/bin/grep -qE "$pat" <<<"$err" || ok=0; fi
+  if [ -n "$negpat" ]; then /usr/bin/grep -qE "$negpat" <<<"$err" && ok=0; fi
   if [ "$ok" = 1 ]; then printf 'PASS: %s\n' "$name"; PASS=$((PASS+1));
   else printf 'FAIL: %s (exp_exit=%s got=%s pat=[%s] neg=[%s])\n  stderr: %s\n' "$name" "$exp" "$rc" "$pat" "$negpat" "$err"; FAIL=$((FAIL+1)); fi
 }
@@ -224,7 +231,8 @@ sbox_run() { # name mode extra_env expected_exit [pattern]
   local err; err="$(/bin/cat "${SBX}/err")"
   local ok=1
   [ "$rc" != "$exp" ] && ok=0
-  [ -n "$pat" ] && ! printf '%s' "$err" | /usr/bin/grep -qE "$pat" && ok=0
+  # Here-string rather than `printf | grep -q` — see the note in run() above.
+  [ -n "$pat" ] && ! /usr/bin/grep -qE "$pat" <<<"$err" && ok=0
   if [ "$ok" = 1 ]; then printf 'PASS: %s\n' "$name"; PASS=$((PASS+1));
   else printf 'FAIL: %s (exp=%s got=%s)\n  stderr: %s\n' "$name" "$exp" "$rc" "$err"; FAIL=$((FAIL+1)); fi
 }
