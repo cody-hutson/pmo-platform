@@ -229,7 +229,7 @@ This section is the hook's registry block. `block-external-seam-shape.sh` is **n
 of the bypass-mode security registry — it is a conduct hook, owned by this discipline, and it
 declares so in its own `# hook-owner:` header line. The registry-external ownership pattern,
 and the reason a conduct hook takes it rather than a per-hook readiness shard, are recorded in
-the architecture decision record `{{ADR:external-seam-hook-owned-by-its-discipline}}` — the
+the architecture decision record `ADR-191` — the
 readiness check classifies a hook as bypass-mode **iff** its declared owner is that hook's own
 readiness shard, so a discipline owner and a shard cannot both be true of one hook.
 

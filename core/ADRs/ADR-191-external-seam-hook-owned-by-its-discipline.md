@@ -21,7 +21,7 @@ supersedes: none
 
 **Proposed** — authored at Stage 5 Solutioning and rendered by the operator as decision **D-SHARD, option (a)**, at the Stage-5 Decision Briefing. It flips to Accepted at the release's Stage-13 close per the ratification gate; the file's own `status:` field is the authority for whether that flip has landed, not a green close-out check.
 
-**Numbering provenance.** This record was authored at the next free number, which is the mainline anchor plus one. A claim visible only on a branch is detection-only and never binds. Should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note per hop. Citations use the slug token `{{ADR:external-seam-hook-owned-by-its-discipline}}`, which carries no number shape and resolves at the claim.
+**Numbering provenance.** This record was authored at the next free number, which is the mainline anchor plus one. A claim visible only on a branch is detection-only and never binds. Should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note per hop. Citations use the slug-token form, which carries no number shape and resolves at the claim.
 
 ## Context
 
