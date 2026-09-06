@@ -17,10 +17,30 @@ change that breaks the invariant — adding a `paths:` key without touching the 
 or deleting one and leaving `skip-semantics=absent-is-pass` behind — was exactly the
 change no gate could see. A declaration nothing checks decays into a comment.
 
+SECOND INVARIANT — THE DECLARATION'S REACH IS THE JOB, NOT THE FILE
+------------------------------------------------------------------
+The same standard states the obligation as "every automated-assertion gate MUST
+self-declare its enforcement posture," and defines that gate's surface as a workflow
+JOB. A workflow can therefore satisfy everything above — a well-formed header, agreeing
+with its own trigger — while publishing check-runs that no header names at all. That is
+a third class, distinct from declared-but-unregistered, and the reader above was blind
+to it by construction: it grades headers and never opens the `jobs:` block.
+
+    every job publishing a named check-run, in a workflow whose headers name at
+    least one check-run, is itself named by one of those headers
+
+The scope clause is not a convenience. A workflow whose headers name NO check-run
+declares its posture by CONTAINMENT — one gate, one file, no ambiguity — and firing
+there would flag eleven conforming workflows in this tree. The scope IS the specificity
+arm, made structural. Matrix jobs are resolved to their expanded check-run names before
+the comparison, because a matrix job publishes one check-run per leg and its raw
+`${{ matrix.* }}` template matches no declared context.
+
 EXIT CONTRACT
 -------------
     0  every workflow conforms AND the anti-vacuity harness passed
-    1  at least one declared-vs-actual mismatch (or a workflow with no header)
+    1  at least one declared-vs-actual mismatch (a workflow with no header, or a job
+       publishing a check-run its workflow's headers do not name)
     2  the harness itself could not assert — an unreadable population, a partition too
        small to build a mutation arm, or a mutation the detector failed to flag.
        Fail-closed: a probe that cannot demonstrate it discriminates reports 2 rather
@@ -53,6 +73,16 @@ except ImportError:  # pragma: no cover - environment guard
 
 HEADER_RE = re.compile(r"^#\s*gate-efficacy:\s*(?P<fields>.*)$")
 FILTER_KEYS = {"paths", "paths-ignore"}
+
+# A declaration binds to a check-run through the quoted value of its enforcement
+# field — `enforcement=branch-protection:"<check name>"`. Both live spellings of the
+# key are read: `enforcement=` is the form the standard fixes and the live majority
+# uses, `enforcement-surface=` is a legacy variant on two sites. Reading only one
+# would make the per-job arm's denominator quietly wrong rather than absent.
+ENFORCEMENT_KEYS = ("enforcement", "enforcement-surface")
+QUOTED_RE = re.compile(r'"([^"]+)"')
+MATRIX_REF_RE = re.compile(r"\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}")
+ANY_EXPR_RE = re.compile(r"\$\{\{.*?\}\}")
 
 
 def repo_root() -> Path:
@@ -188,6 +218,254 @@ def evaluate(
                     )
 
     return findings, filtered, filter_free, n_declarations
+
+
+def declared_contexts(text: str) -> set[str]:
+    """The set of check-run names this workflow's headers bind a posture to.
+
+    Empty for a workflow whose declaration names a posture but no check — the C1
+    class. That emptiness is load-bearing: it is what scopes the per-job arm below.
+    """
+    names: set[str] = set()
+    for _, fields in parse_headers(text):
+        for key in ENFORCEMENT_KEYS:
+            if key in fields:
+                names.update(QUOTED_RE.findall(fields[key]))
+    return names
+
+
+def named_jobs(text: str) -> list[tuple[str, int, str]]:
+    """Every job carrying an explicit `name:`, as (job key, 1-based line, name).
+
+    STRUCTURAL via the YAML parse, for the same reason `has_path_filter` is: a
+    line-oriented scan for `name:` over an arbitrary workflow population also matches
+    every STEP name and every `- name:` inside a `run:` heredoc, which would make this
+    arm wrong rather than absent. The line number is recovered by locating the job key
+    textually, so a finding points at the job the way every other finding here points
+    at a declaration — `file:line`, not `file:some-key`.
+    """
+    doc = yaml.safe_load(text)
+    if not isinstance(doc, dict):
+        raise ValueError("workflow did not parse to a mapping")
+    jobs = doc.get("jobs")
+    if not isinstance(jobs, dict):
+        return []
+    lines = text.splitlines()
+    out: list[tuple[str, int, str]] = []
+    for key, cfg in jobs.items():
+        if not isinstance(cfg, dict):
+            continue
+        name = cfg.get("name")
+        if not isinstance(name, str) or not name.strip():
+            continue          # no explicit name: -> GitHub falls back to the job key
+        lineno = next(
+            (i for i, ln in enumerate(lines, 1) if ln == f"  {key}:"), 0
+        )
+        out.append((str(key), lineno, name.strip()))
+    return out
+
+
+def expand_job_name(text: str, job_key: str, name: str) -> list[str] | None:
+    """Resolve a job `name:` to the check-run name(s) GitHub will actually publish.
+
+    A matrix job publishes ONE check-run per matrix leg, each with `${{ matrix.<k> }}`
+    substituted — `install-tests.yml` declares all three expanded forms and would read
+    as undeclared against its raw template. Returns the expanded list, or None when the
+    name carries an expression this resolver cannot evaluate.
+
+    None is a FINDING upstream, never a skip: a job name that cannot be resolved is a
+    declaration binding that cannot be verified, and reporting it clean would assert
+    over a population this function could not observe.
+    """
+    if "${{" not in name:
+        return [name]
+    doc = yaml.safe_load(text)
+    matrix = {}
+    if isinstance(doc, dict) and isinstance(doc.get("jobs"), dict):
+        cfg = doc["jobs"].get(job_key)
+        if isinstance(cfg, dict):
+            strategy = cfg.get("strategy")
+            if isinstance(strategy, dict) and isinstance(strategy.get("matrix"), dict):
+                matrix = strategy["matrix"]
+    names = [name]
+    for key in MATRIX_REF_RE.findall(name):
+        values = matrix.get(key)
+        if not isinstance(values, list) or not values:
+            return None       # unresolvable: no literal value list to expand over
+        names = [
+            MATRIX_REF_RE.sub(
+                lambda m, v=value: str(v) if m.group(1) == key else m.group(0), n
+            )
+            for n in names
+            for value in values
+        ]
+    if any(ANY_EXPR_RE.search(n) for n in names):
+        return None           # a non-matrix expression survived — do not guess
+    return names
+
+
+def evaluate_jobs(sources: dict[str, str]) -> tuple[list[str], list[str], int]:
+    """Return (findings, scoped_workflow_names, jobs_graded).
+
+    THE INVARIANT: in a workflow whose headers name at least one check-run, EVERY job
+    that publishes a named check-run is itself named by one of those headers.
+
+    WHY THIS IS A SEPARATE FUNCTION FROM `evaluate`. The two grade different objects
+    against different oracles — `evaluate` grades a DECLARATION against its file's
+    trigger, this grades a JOB against its file's declaration set — and `evaluate`'s
+    four-element return is consumed by name upstream. Widening it to carry a fifth
+    element would change a contract for a reason unrelated to it.
+
+    WHY IT IS SCOPED, AND WHY THE SCOPE IS THE SPECIFICITY ARM. A workflow whose
+    headers name NO check-run declares its posture by CONTAINMENT — it is a single
+    gate, and the header is unambiguously about it. Firing there would flag eleven
+    conforming workflows and train a reader to ignore the finding. The scope is not a
+    convenience: it is the boundary between a declaration that binds to a named
+    check-run and one that binds to the file, and only the first kind can be checked
+    this way.
+    """
+    findings: list[str] = []
+    scoped: list[str] = []
+    graded = 0
+
+    for name in sorted(sources):
+        text = sources[name]
+        try:
+            contexts = declared_contexts(text)
+            jobs = named_jobs(text)
+        except Exception as exc:  # unparseable is a finding, never a skip
+            findings.append(f"{name}: jobs unreadable ({exc})")
+            continue
+
+        if not contexts:
+            continue          # C1 class — posture declared by containment; out of scope
+        scoped.append(name)
+
+        for job_key, lineno, job_name in jobs:
+            graded += 1
+            site = f"{name}:{lineno}"
+            expanded = expand_job_name(text, job_key, job_name)
+            if expanded is None:
+                findings.append(
+                    f"{site}: job {job_key!r} has a name this suite cannot resolve to a "
+                    f"check-run ({job_name!r}) — the declaration binding is unverifiable, "
+                    f"which is reported rather than assumed clean"
+                )
+                continue
+            missing = [n for n in expanded if n not in contexts]
+            if missing:
+                findings.append(
+                    f"{site}: job {job_key!r} publishes check-run(s) "
+                    f"{', '.join(repr(m) for m in sorted(missing))} that no "
+                    f"`gate-efficacy:` header in this workflow names — Requirement (b) "
+                    f"obliges every automated-assertion gate to declare its own posture, "
+                    f"and the gate's surface is the JOB"
+                )
+
+    return findings, scoped, graded
+
+
+def job_harness(sources: dict[str, str]) -> list[str]:
+    """Anti-vacuity for the per-job arm. Same doctrine as `harness` above: every arm
+    mutates an in-memory copy of the LIVE population and requires the detector to
+    react, an arm that cannot be BUILT is a reported NOSET rather than a skip, and the
+    specificity arm runs on the same non-empty input as the sensitivity arms."""
+    failures: list[str] = []
+
+    base_findings, scoped, graded = evaluate_jobs(sources)
+
+    if not scoped:
+        failures.append("NOSET: no workflow declares a named check-run, so arms "
+                        "B1/B3 cannot be built — reported rather than skipped")
+    if graded == 0:
+        failures.append("NOSET: zero jobs graded — a clean over an empty population "
+                        "is not a clean")
+
+    def flags(name: str, mutate) -> bool:
+        mutated = dict(sources)
+        mutated[name] = mutate(sources[name])
+        if mutated[name] == sources[name]:
+            failures.append(f"B-CTRL: mutation of {name} changed nothing — the arm "
+                            f"asserts against an unmutated input")
+            return False
+        found, _, _ = evaluate_jobs(mutated)
+        return len(found) > len(base_findings)
+
+    # B1 — SENSITIVITY. Rename a declared context that a job actually matches; that job
+    # must go from covered to uncovered. Renaming rather than deleting keeps the header
+    # well-formed, so the arm proves the JOB check fired and not a parse failure.
+    victim = None
+    for name in scoped:
+        contexts = declared_contexts(sources[name])
+        for job_key, _, job_name in named_jobs(sources[name]):
+            expanded = expand_job_name(sources[name], job_key, job_name) or []
+            hit = next((n for n in expanded if n in contexts), None)
+            if hit:
+                victim = (name, hit)
+                break
+        if victim:
+            break
+    if not victim:
+        failures.append("NOSET: no job in any scoped workflow matches a declared "
+                        "context, so arm B1 cannot be built — reported rather than "
+                        "skipped")
+    else:
+        vname, vctx = victim
+        if not flags(vname, lambda t: edit_header(
+                t, f'"{vctx}"', '"zzz-renamed-context"')):
+            failures.append(f"B1: renaming the declared context {vctx!r} in {vname} — "
+                            f"orphaning the job that publishes it — was NOT flagged")
+
+    # B2 — SPECIFICITY, on the same non-empty input. A C1-class workflow (header
+    # declares a posture but names no check-run) must NOT be graded, however its jobs
+    # are named. Without this arm a detector that flagged every named job would pass B1
+    # and B3 and be worthless — and it would red-CI eleven conforming workflows.
+    c1 = [n for n in sorted(sources)
+          if parse_headers(sources[n]) and not declared_contexts(sources[n])
+          and named_jobs(sources[n])]
+    if not c1:
+        failures.append("NOSET: no C1-class workflow (header present, no check-run "
+                        "named) exists, so arm B2 cannot be built — reported rather "
+                        "than skipped")
+    else:
+        c1_victim = c1[0]
+        if flags(c1_victim, lambda t: re.sub(
+                r"^(    name:).*$", r"\1 Zzz fabricated job name", t, count=1,
+                flags=re.M)):
+            failures.append(f"B2: renaming a job in C1-class {c1_victim} WAS flagged — "
+                            f"the arm over-matches into workflows whose posture is "
+                            f"declared by containment")
+
+    # B3 — MATRIX EXPANSION. A matrix job publishes one check-run per leg, and its raw
+    # `${{ matrix.* }}` template matches no declared context. This arm requires the
+    # expansion to be real: break ONE declared leg and the job must be flagged for that
+    # leg alone. An implementation that skipped matrix jobs entirely would pass B1/B2
+    # and silently exempt every matrix gate in the tree.
+    matrix_victim = None
+    for name in scoped:
+        contexts = declared_contexts(sources[name])
+        for job_key, _, job_name in named_jobs(sources[name]):
+            if "${{" not in job_name:
+                continue
+            expanded = expand_job_name(sources[name], job_key, job_name)
+            if expanded and len(expanded) > 1 and all(n in contexts for n in expanded):
+                matrix_victim = (name, expanded[0])
+                break
+        if matrix_victim:
+            break
+    if not matrix_victim:
+        failures.append("NOSET: no matrix job resolves to more than one DECLARED "
+                        "check-run, so arm B3 cannot be built — reported rather than "
+                        "skipped")
+    else:
+        mname, mleg = matrix_victim
+        if not flags(mname, lambda t: edit_header(
+                t, f'"{mleg}"', '"zzz-broken-matrix-leg"')):
+            failures.append(f"B3: breaking the declared matrix leg {mleg!r} in {mname} "
+                            f"was NOT flagged — the resolver is not expanding "
+                            f"${{{{ matrix.* }}}}, so every matrix job is exempt")
+
+    return failures
 
 
 def load(root: Path) -> dict[str, str]:
@@ -383,16 +661,23 @@ def main() -> int:
         return 2
 
     findings, filtered, filter_free, n_declarations = evaluate(sources)
+    job_findings, scoped, n_jobs = evaluate_jobs(sources)
 
     # BOTH counts, always. The file count and the declaration count are different
     # numbers in this tree, and reporting agreement over the file count while grading
     # declarations is precisely the declared-vs-actual reach overstatement this suite
-    # exists to catch. State the population with the magnitude.
+    # exists to catch. State the population with the magnitude. The job count is
+    # reported for the same reason and taken from the same place that graded it.
     print(f"population: {len(sources)} workflow file(s) — "
           f"{len(filtered)} path-filtered, {len(filter_free)} filter-free; "
           f"{n_declarations} gate-efficacy declaration(s) graded")
+    print(f"per-job reach: {n_jobs} named job(s) graded across {len(scoped)} "
+          f"check-run-naming workflow(s); "
+          f"{len(sources) - len(scoped)} workflow(s) out of scope (posture declared by "
+          f"containment — no check-run named)")
 
     harness_failures = harness(sources, filtered, filter_free)
+    harness_failures += job_harness(sources)
     if harness_failures:
         print("FAIL (harness): the detector did not demonstrate it discriminates.",
               file=sys.stderr)
@@ -403,19 +688,29 @@ def main() -> int:
           "finding branch, so no branch can be deleted silently; A8 flagged a mutation "
           "of a NON-FIRST declaration, so the grader's reach is the whole declaration "
           "set; specificity arm A5 stayed clean on the same non-empty input")
+    print("anti-vacuity (per-job): B1 flagged an orphaned job after a declared context "
+          "was renamed; B3 flagged a broken matrix leg, so `${{ matrix.* }}` is really "
+          "expanded rather than exempted; specificity arm B2 stayed clean on a "
+          "C1-class workflow whose posture is declared by containment")
 
+    findings = findings + job_findings
     if findings:
         print(f"FAIL: {len(findings)} declared-vs-actual mismatch(es).", file=sys.stderr)
         for finding in findings:
             print(f"  {finding}", file=sys.stderr)
         print("Fix the HEADER and the TRIGGER together, in the same commit — that "
               "same-commit obligation is the invariant, per "
-              "core/standards/gate-efficacy-standard.md Requirement (b).",
+              "core/standards/gate-efficacy-standard.md Requirement (b). For a per-job "
+              "finding, add a `gate-efficacy:` block naming that job's check-run and "
+              "stating its ACTUAL posture — an advisory gate declaring `advisory` is "
+              "conforming; an undeclared one is not.",
               file=sys.stderr)
         return 1
 
     print(f"OK — {n_declarations}/{n_declarations} gate-efficacy declaration(s) across "
-          f"{len(sources)} workflow file(s) agree with their triggers.")
+          f"{len(sources)} workflow file(s) agree with their triggers, and "
+          f"{n_jobs}/{n_jobs} named job(s) in check-run-naming workflows carry a "
+          f"declaration of their own.")
     return 0
 
 

@@ -783,16 +783,29 @@ jobs:
         # request. It is a step in an existing job rather than a new job, so it adds no
         # runner and no branch-protection context: the marginal cost is the scan itself.
         #
+        # It asserts a SECOND invariant too: that a declaration's reach is the JOB, not
+        # the file. A workflow can satisfy the biconditional above — well-formed header,
+        # agreeing with its own trigger — while publishing check-runs no header names at
+        # all, which is a third class distinct from declared-but-unregistered. The arm is
+        # scoped to workflows whose headers already name at least one check-run, because
+        # a workflow naming none declares its posture by CONTAINMENT; that scope is the
+        # specificity arm made structural. Matrix jobs are resolved to their expanded
+        # check-run names first, since a matrix job publishes one check-run per leg.
+        #
         # NOT VACUOUS BY CONSTRUCTION, and the harness runs by DEFAULT rather than behind
         # a flag — a falsification harness nothing passes a flag to runs once, at
         # implementation, and certifies nothing thereafter. Every invocation mutates
         # in-memory copies of the LIVE workflow population and requires the detector to
-        # react: six sensitivity arms, ONE PER FINDING BRANCH (that arm-per-branch
-        # constraint was added after mutation-grading found two branches deletable with
-        # the suite still green), plus a specificity arm on the same non-empty input that
-        # must stay clean. Arms are derived from the live population at run time, never
-        # from hardcoded workflow names, so a rename cannot silently empty one, and a
-        # partition too small to build an arm is a reported NOSET rather than a skip.
+        # react: six sensitivity arms on the header invariant, ONE PER FINDING BRANCH
+        # (that arm-per-branch constraint was added after mutation-grading found two
+        # branches deletable with the suite still green), a reach arm that mutates a
+        # NON-FIRST declaration, and two sensitivity arms on the per-job invariant —
+        # orphaning a job by renaming its declared context, and breaking one leg of a
+        # matrix expansion — plus a specificity arm for each invariant, on the same
+        # non-empty input, that must stay clean. Arms are derived from the live
+        # population at run time, never from hardcoded workflow names, so a rename cannot
+        # silently empty one, and a partition too small to build an arm is a reported
+        # NOSET rather than a skip.
         #
         # Exit contract: 0 clean / 1 declared-vs-actual mismatch / 2 the harness could
         # not assert (fail-closed). Depends on the Ensure PyYAML step above: the trigger
