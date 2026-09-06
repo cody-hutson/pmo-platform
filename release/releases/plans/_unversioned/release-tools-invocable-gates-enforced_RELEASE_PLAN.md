@@ -2,7 +2,7 @@
 title: Release Plan — release-tools-invocable-gates-enforced (a declared gate or a mandated tool that does not actually work)
 type: release-plan
 plan_type: release
-status: EXECUTING
+status: ACTIVE
 release: slug-only (ADR-092 — a concrete version binds only at the Stage-12 atomic claim)
 milestone: release-tools-invocable-gates-enforced
 release_class: cross-cutting
