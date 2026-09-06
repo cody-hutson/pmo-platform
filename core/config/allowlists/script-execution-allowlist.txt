@@ -698,6 +698,22 @@ core/deploy/tests/test_g1_release_resolver.sh
 ./core/deploy/tests/test_check56_m2_advisory.sh
 core/deploy/tests/test_check56_m2_advisory.sh
 
+# Deploy detection-honesty regression — the proof that `--deploy` selects against
+# GROUND TRUTH (installed-vs-source content) rather than against the tag-diff proxy,
+# and that a residual drift it cannot repair exits non-zero instead of reporting a
+# zero. Its fourth arm is the one that would not otherwise be written: a bare
+# recursive diff flags 12 of 55 roster skills on a fully-current instance — every one
+# a TEMPLATE_SYNC_MAP injection artifact — so the arm carries its own sensitivity
+# control and fails the build if the injected-basename exclusion is ever dropped.
+# Same four invocation forms, for the same reason as the siblings above: it is run by
+# the install-tests shell-tests job AND agent-side at Stage 6/7 dev testing, and a
+# delivered test whose allowlist rows never landed is blocked and therefore
+# unrunnable agent-side on arrival.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_deploy_detection_honesty.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_deploy_detection_honesty.sh
+./core/deploy/tests/test_deploy_detection_honesty.sh
+core/deploy/tests/test_deploy_detection_honesty.sh
+
 # Advisory-emitter contract regression — the STATIC conformance assertion for
 # flag_advisory_only's third argument, which names the scope of its non-gating
 # claim. The requirement cannot be raised inside the emitter: doing so needs an

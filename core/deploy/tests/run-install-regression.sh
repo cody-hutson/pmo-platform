@@ -82,6 +82,7 @@ REGRESSION_MEMBERS=(
   "test_doctor.sh"                         # #302 doctor.sh: two-layer install self-diagnosis + read-only + fault-injection
   "test_refresh_surfaces.sh"               # update.sh --surfaces-only targeted composition-surface refresh + leakage backstop
   "test_validate_install.sh"               # validate-install.sh A9 platform-roster predicate + anti-vacuity control
+  "test_deploy_detection_honesty.sh"       # --deploy selects against ground truth, not the tag-diff proxy; residual drift exits non-zero
 )
 
 SUITE_PASS=0

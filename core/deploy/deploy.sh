@@ -6081,6 +6081,18 @@ cmd_deploy() {
     log "Release-stamped deploy: deployment-status rows will be emitted for release '$DEPLOY_RELEASE_SLUG'."
   fi
 
+  # ─── What this invocation CLAIMED (the residual assertion's scope) ─────────
+  # Auto-detect and --all claim the ROSTER; `--deploy <names>` claims only those
+  # names. The distinction is a hard constraint, not a nicety: ADR-165's
+  # post-merge hook computes its own list and calls the NAMED form, so a
+  # full-roster residual assertion there would fail every hook run on unrelated
+  # pre-existing drift. _dep_manual is what keeps manual mode narrow; the empty
+  # _dep_claimed on the manual path (a harness-only `--deploy <harness-name>`)
+  # claims no skills at all and is asserted over nothing.
+  local _dep_manual=false
+  local _dep_selection_scan=false
+  local -a _dep_claimed=()
+
   # Argument handling: manual vs auto-detect
   if [[ $# -gt 0 ]]; then
     # E-08: Validate manual artifact names; route each into skills or harness.
@@ -6130,6 +6142,8 @@ cmd_deploy() {
       CHANGED_PACKAGES=()
     fi
     DELETED_SKILLS=()
+    _dep_manual=true
+    _dep_claimed=(${manual_skills[@]+"${manual_skills[@]}"})
   else
     # A fresh clone whose install deployed nothing leaves the user-local skills
     # mirror empty. install.sh Phase 2 reaches here (orchestrate.sh runs
@@ -6152,13 +6166,88 @@ cmd_deploy() {
       DELETED_SKILLS=()
     else
       detect_changed_skills
+      # The incremental path is the ONE path carrying the defect: the full-roster
+      # branch above already selected everything, and manual mode is an explicit
+      # instruction. Scanning only here also keeps a fresh install quiet — every
+      # skill is legitimately "missing" there, and reporting 55 stale skills on a
+      # first install would be noise, not signal.
+      _dep_selection_scan=true
+    fi
+  fi
+
+  # ─── Ground-truth selection — RUNS BEFORE THE E-02 EARLY EXIT ──────────────
+  #
+  # THE ORDERING IS THE WHOLE POINT, exactly as it is for the rules-mirror carrier
+  # above. detect_changed_skills answers "what changed in the repository since the
+  # last tag"; this path used that as a PROXY for "what is missing from the
+  # installed corpus". Below the E-02 exit, the branch that most needs the scan —
+  # the one where the tag window sees nothing — is the one branch that never runs
+  # it, and `--deploy` reports "Deployed: 0 skills" with exit 0 over a corpus it
+  # never made current. Byte-identical to a correct run, so nothing downstream can
+  # tell them apart.
+  #
+  # UNION, NEVER REPLACE. The tag diff stays: it is the sole source of
+  # DELETED_SKILLS (a deletion is a repository fact with no on-disk counterpart to
+  # compare against) and of CHANGED_PACKAGES / CHANGED_HARNESS. The two answer
+  # different questions — "what changed in the repo" and "what is stale on disk" —
+  # so this strictly ADDS: no skill that deploys today stops deploying.
+  #
+  # THE REPORTED COUNT CANNOT BE INFLATED BY THIS. skills_changed is incremented
+  # only when deployed_skill_footprint differs before-vs-after, so it is defined
+  # over what was WRITTEN, not what was SELECTED. Widening the candidate set
+  # therefore cannot move it, and the EX_NOCHANGE(64) contract update.sh reads is
+  # untouched — the #384 v3.91 fix is precisely what decoupled the two.
+  local -a _gt_drift=()
+  local _gt_roster_n=0
+  local _gt_targets=1
+  if [[ "$_dep_selection_scan" == "true" ]]; then
+    build_full_roster_skills
+    _gt_roster_n=${#FULL_ROSTER_SKILLS[@]}
+    if [[ "${COWORK_AVAILABLE:-false}" == "true" && -n "${INSTALL_PATH:-}" ]]; then
+      _gt_targets=2
+    fi
+    # The emitter reports one row per (skill × target); rows for one skill are
+    # contiguous, so a same-as-previous name is the second target of the skill
+    # already recorded.
+    local _gt_row _gt_name _gt_prev="" _gt_known _gt_c
+    while IFS= read -r _gt_row; do
+      [[ -n "$_gt_row" ]] || continue
+      _gt_name="${_gt_row%%$'\t'*}"
+      [[ "$_gt_name" == "$_gt_prev" ]] && continue
+      _gt_prev="$_gt_name"
+      _gt_drift+=("$_gt_name")
+    done < <(skill_content_drift)
+    for _gt_name in ${_gt_drift[@]+"${_gt_drift[@]}"}; do
+      _gt_known=false
+      for _gt_c in ${CHANGED_SKILLS[@]+"${CHANGED_SKILLS[@]}"}; do
+        if [[ "$_gt_c" == "$_gt_name" ]]; then _gt_known=true; break; fi
+      done
+      if [[ "$_gt_known" == "false" ]]; then
+        CHANGED_SKILLS+=("$_gt_name")
+      fi
+    done
+    if [[ ${#_gt_drift[@]} -gt 0 ]]; then
+      # An operator who sees skills deploy while `git log` shows nothing needs to
+      # know WHY they were selected. This line is that answer.
+      log "Ground-truth scan: ${#_gt_drift[@]} of ${_gt_roster_n} roster skill(s) stale on disk — added to the deploy set: ${_gt_drift[*]}"
     fi
   fi
 
   # E-02: No changes case
   if [[ ${#CHANGED_SKILLS[@]} -eq 0 ]] && [[ ${#CHANGED_PACKAGES[@]} -eq 0 ]] && \
      [[ ${#CHANGED_HARNESS[@]} -eq 0 ]]; then
-    log "No skill, package, or harness changes detected. Nothing to deploy."
+    # The denominator is what converts an inference into a measurement. Before the
+    # ground-truth scan ran above, "nothing to deploy" was a claim about the tag
+    # window and said nothing whatever about the instance; it now reports a
+    # comparison that was actually performed, over a stated population, against a
+    # stated number of targets. That is the difference the reported defect turns on
+    # — "nothing needed deploying" and "the comparison could not see what needed
+    # deploying" previously printed the same sentence.
+    if [[ ${_gt_roster_n:-0} -gt 0 ]]; then
+      log "No skill, package, or harness changes to deploy — verified current: ${_gt_roster_n} of ${_gt_roster_n} roster skills match source on ${_gt_targets} target(s)."
+    else
+      log "No skill, package, or harness changes detected. Nothing to deploy."
+    fi
     # The rules mirror is NOT part of those three change sets and already ran above,
     # so this path is no longer a no-op. Say what it did — an operator told "nothing
     # to deploy" would otherwise reasonably conclude the mirror was skipped too.
@@ -6421,6 +6510,49 @@ cmd_deploy() {
       log "Warning: $skill was deleted from repo. Installed copy at $INSTALL_PATH/$skill/ remains. Manual cleanup recommended."
     done
   fi
+
+  # ─── Residual assertion — the deploy made it current, or this run FAILS ────
+  #
+  # The selection above widened WHAT gets deployed; this asserts it WORKED. Run
+  # over exactly the set the invocation CLAIMED (see _dep_claimed), any surviving
+  # drift appends to the existing FAILURES array and reaches the existing terminal
+  # `die` below — no new failure machinery, no new exit path, no new emitter, and
+  # no change to the flag_* family.
+  #
+  # THIS IS WHAT RESERVES THE NON-ZERO EXIT FOR THE UNREPAIRABLE CASE. A drift the
+  # deploy healed leaves nothing here and exits 0; a drift that survived the repair
+  # — a read-only orphan target, a copy that failed — is the state the reported
+  # defect described as "detection could not establish what to deploy", and it now
+  # fails loudly instead of printing a zero.
+  local -a _res_rows=()
+  local _res_row _res_name _res_class _res_cause _res_rest
+  if [[ "$_dep_manual" == "true" ]]; then
+    if [[ ${#_dep_claimed[@]} -gt 0 ]]; then
+      while IFS= read -r _res_row; do
+        [[ -n "$_res_row" ]] && _res_rows+=("$_res_row")
+      done < <(skill_content_drift "${_dep_claimed[@]}")
+    fi
+  else
+    while IFS= read -r _res_row; do
+      [[ -n "$_res_row" ]] && _res_rows+=("$_res_row")
+    done < <(skill_content_drift)
+  fi
+  for _res_row in ${_res_rows[@]+"${_res_rows[@]}"}; do
+    _res_name="${_res_row%%$'\t'*}"
+    _res_rest="${_res_row#*$'\t'}"
+    _res_class="${_res_rest%%$'\t'*}"
+    _res_cause="${_res_rest#*$'\t'}"
+    if [[ "$_res_cause" == "unwritable" ]]; then
+      # Check 1 already prints this remedy as a diagnostic annotation; here it is
+      # promoted to actionable deploy guidance, because this is the run that
+      # failed and the operator is reading it now.
+      log "  FAILED:   $_res_name — residual drift on $_res_class target (unwritable — chmod -R u+w then redeploy)"
+      FAILURES+=("$_res_name (residual drift on $_res_class target: unwritable — chmod -R u+w then redeploy)")
+    else
+      log "  FAILED:   $_res_name — residual drift on $_res_class target ($_res_cause)"
+      FAILURES+=("$_res_name (residual drift on $_res_class target: $_res_cause)")
+    fi
+  done
 
   # Summary. The skills field is skills_changed (actually-changed on disk), NOT
   # ${#CHANGED_SKILLS[@]} (the stateless git tag-diff list) — update.sh keys off
