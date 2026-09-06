@@ -1,5 +1,5 @@
 ---
-title: "ADR-191 — An emitter asserts only properties of its own emit; a check-scoped or id-scoped claim is a caller-supplied input"
+title: "ADR-193 — An emitter asserts only properties of its own emit; a check-scoped or id-scoped claim is a caller-supplied input"
 status: Accepted (operator-ratified at the deploy-checks-hardening-batch Stage 5 Collective Review scope-lock, 2026-09-05; the operator adopted a third shape after rejecting both the card enumerated)
 date: 2026-09-06
 release: deploy-checks-hardening-batch
@@ -15,13 +15,15 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-191 — An emitter asserts only properties of its own emit; a check-scoped or id-scoped claim is a caller-supplied input
+# ADR-193 — An emitter asserts only properties of its own emit; a check-scoped or id-scoped claim is a caller-supplied input
 
 ## Status
 
 **Accepted** — operator-ratified at the `deploy-checks-hardening-batch` Stage 5 Collective Review scope-lock on 2026-09-05. The card that raised the defect enumerated two remedy shapes; the operator adopted **neither**, and ratified a third that splits the remedy by the *kind* of fact each half is.
 
 **Numbering provenance.** This record was authored at the next free number computed from the mainline anchor plus one. A branch claim is detection-only and never binds, and the detector reported one such claim at this number on an unrelated branch; per the numbering rule that claim is not an input, so this record takes the slot rather than skipping it. Should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note per hop. Citations use the slug token `{{ADR:advisory-emit-asserts-only-its-own-scope}}`, which carries no number shape and resolves at the claim.
+
+**Numbering provenance — `191 → 193`.** Held **ADR-191** branch-local; renumbered to **ADR-193** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 191. In-release citations that read "ADR-191" denote this record.
 
 ## Context
 
