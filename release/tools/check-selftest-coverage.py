@@ -1046,6 +1046,16 @@ def mode_reconcile(ctx: Ctx) -> int:
                 extra = f" (+{len(sites) - 1} more site(s))" if len(sites) > 1 else ""
                 print(f"  UNREACHABLE: {operand}{extra}")
                 print(f"      {spec_rel}:{lineno}  {cmd}")
+            # POSTURE, EMITTED AT RUNTIME. The same note is written in three source
+            # locations and was in NONE of them reachable by a CI reader, who sees only
+            # this output — so a reader met an ::error:: with no way to tell an expected
+            # red from a real one. Stating it here is what makes the finding legible
+            # without opening the workflow, the engine header, or the standard.
+            print(
+                "  ARM F POSTURE: the selftest-discovery job is ADVISORY, is NOT a required "
+                "context, and is EXPECTED to stay red until the `.py` population above drains "
+                "— this is the arm reporting, not a broken gate."
+            )
         else:
             print(
                 f"ARM F PASSED — all {len(invocations)} spec-prescribed invocation(s) are "
