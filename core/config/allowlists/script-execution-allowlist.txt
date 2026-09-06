@@ -609,7 +609,7 @@ doctor.sh
 # anyone noticing: it is the one remediable finding of the six Arm F reports on arrival —
 # the other five are `.py` operands that no row can match while the non-shell section is
 # deliberately empty pending its drain.
-# CANONICAL FOUR, and four only. The fifth `*/…` form is NOT added: per ADR-191 it admits
+# CANONICAL FOUR, and four only. The fifth `*/…` form is NOT added: per ADR-192 it admits
 # an arbitrary path prefix (`/tmp/<attacker>/update.sh` matches, since `*` crosses `/` in
 # the hook's `case` matcher), which would widen the script-laundering surface this file
 # exists to close. update.sh has no reachability need that the canonical four do not serve.

@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-191 — Four allowlist invocation forms remain canonical; the suffix glob is a widening, not a completion"
+title: "ADR-192 — Four allowlist invocation forms remain canonical; the suffix glob is a widening, not a completion"
 status: Accepted
 date: 2026-09-05
 release: release-tools-invocable-gates-enforced
@@ -16,11 +16,13 @@ source_observations:
   - "A tool holding a row can still be unreachable: one telemetry producer carried a cwd-relative row that cannot match the `bash release/tools/<tool>` spelling its own stage spec prescribes. A row count is therefore an unfaithful proxy for reachability."
 ---
 
-# ADR-191 — Four allowlist invocation forms remain canonical; the suffix glob is a widening, not a completion
+# ADR-192 — Four allowlist invocation forms remain canonical; the suffix glob is a widening, not a completion
 
 ## Status
 
 **Accepted.** Authored at Engineering for the `release-tools-invocable-gates-enforced` release, alongside the convention-block amendment and the reachability arm it governs.
+
+**Numbering provenance — `191 → 192`.** Held **ADR-191** branch-local; renumbered to **ADR-192** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 191. In-release citations that read "ADR-191" denote this record.
 
 ## Context
 

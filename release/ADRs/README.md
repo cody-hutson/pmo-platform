@@ -81,7 +81,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-173](ADR-173-declared-kind-is-a-residual-feature-signal.md) | A declared work-item kind is a RESIDUAL feature signal in the allocation map, never a co-equal one | Accepted | 2026-09-02 | label-and-reference-integrity |
 | [ADR-181](ADR-181-adr-citations-bind-at-the-claim-not-at-authorship.md) | ADR citations bind at the claim, not at authorship; the sweep's exemption is regions that record a number, and where it cannot decide it names rather than rewrites | Proposed | 2026-09-01 | adr-corpus-integrity |
 | [ADR-183](ADR-183-behavioral-regression-floor-and-major-release-binding-boundary.md) | The behavioural-regression pass-rate floor and the boundary the gate binds at | Accepted | 2026-09-02 | regression-corpus-gates-releases |
-| [ADR-191](ADR-191-allowlist-form-set-four-canonical-fifth-form-is-a-widening.md) | Four allowlist invocation forms remain canonical; the suffix glob is a widening, not a completion | Accepted | 2026-09-05 | release-tools-invocable-gates-enforced |
+| [ADR-192](ADR-192-allowlist-form-set-four-canonical-fifth-form-is-a-widening.md) | Four allowlist invocation forms remain canonical; the suffix glob is a widening, not a completion | Accepted | 2026-09-05 | release-tools-invocable-gates-enforced |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.
