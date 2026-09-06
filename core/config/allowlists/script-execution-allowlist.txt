@@ -698,6 +698,22 @@ core/deploy/tests/test_g1_release_resolver.sh
 ./core/deploy/tests/test_check56_m2_advisory.sh
 core/deploy/tests/test_check56_m2_advisory.sh
 
+# Advisory-emitter contract regression — the STATIC conformance assertion for
+# flag_advisory_only's third argument, which names the scope of its non-gating
+# claim. The requirement cannot be raised inside the emitter: doing so needs an
+# escalation path in a body whose whole guarantee is that it has none, which the
+# sibling above executes against a real failure counter. So the loudness lives
+# in this harness, and the harness must actually be runnable. Same four
+# invocation forms, for the same reason as the siblings above — it is run by the
+# install-tests shell-tests job AND agent-side at Stage 6/7 dev testing, and the
+# authoring session for this very test observed the failure the sibling comment
+# predicts: the harness was refused agent-side on the run that created it,
+# because its rows had not landed yet.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_advisory_emitter_contract.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_advisory_emitter_contract.sh
+./core/deploy/tests/test_advisory_emitter_contract.sh
+core/deploy/tests/test_advisory_emitter_contract.sh
+
 # context-budget-auditor Measure-mode scanner — read-only per-component token-cost
 # scan across the loadable-component surface, plus a --self-test mode. Invoked
 # agent-side by the skill's Measure mode, so all four invocation forms per the

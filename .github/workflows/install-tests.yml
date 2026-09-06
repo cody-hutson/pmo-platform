@@ -709,6 +709,38 @@ jobs:
         # --fixture path. Consumes no workflow event input.
         run: bash core/deploy/tests/test_check56_m2_advisory.sh
 
+      - name: Run advisory-emitter contract regression (test_advisory_emitter_contract.sh)
+        # flag_advisory_only requires a third argument naming the SCOPE of its
+        # non-gating claim — id-non-gating or arm-non-gating. THIS STEP IS WHERE
+        # THAT REQUIREMENT IS LOUD. It cannot be loud in the emitter: raising
+        # there needs an escalation path in that body, and the ABSENCE of one is
+        # the emitter's class guarantee — the property its header states, ADR-134
+        # D3 fixes, and the sibling step above executes against a real failure
+        # counter. So the contract is graded statically, here, instead.
+        #
+        # What rots without it: the defect that motivated the contract was a
+        # per-caller fact hardcoded into shared code — one check's gate
+        # identifier, plus a check-level enforce-capability claim, appended to
+        # every caller's line and therefore wrong for most of them. Nothing
+        # structural prevents that returning. Unrun, a caller may omit the
+        # posture token (the emitter degrades silently to the class-true clause,
+        # by design, so a missing token is INVISIBLE at runtime) or declare a
+        # posture its own check_id's behaviour contradicts, and both ship green.
+        #
+        # The arms that make its zeros usable are its controls: flipping one
+        # arm-non-gating site to id-non-gating on a mutated copy must make the
+        # contradiction arm report >=1 (sensitivity), dropping one site's third
+        # argument must make the census arm report >=1 (sensitivity), and the
+        # escalation census over the unmutated tree must be non-empty and must
+        # discriminate (specificity), so a zero cannot be an artefact of a census
+        # that measured nothing. Denominators are reported, never pinned — a
+        # pinned call-site count is a drift alarm, not a conformance gate.
+        #
+        # Hermetic: no gh, no network. Every region under assertion is extracted
+        # from deploy.sh at run time, never pasted. Consumes no workflow event
+        # input.
+        run: bash core/deploy/tests/test_advisory_emitter_contract.sh
+
       - name: Run Check 16 status-label invariant fixture self-test (test-status-label-invariant.sh)
         # Invokes core/deploy/tools/tests/test-status-label-invariant.sh (4 fixture
         # arms: I1 mutex, I2 presence, I3 proposed+milestone, I4 orphaned bundle).
