@@ -171,7 +171,7 @@ Two co-equal cases are worked below: an **unmapped** domain (web/component — t
 
 **Deliverable domain:** `hooks` (a `core/hooks/**` security hook + its block/allow runtime behavior).
 
-*Step 1 — Stage 7 A8 suite selection (execution altitude).* Consult the selection map §2 with the changed path (e.g. `core/hooks/block-dangerous-command.sh`). Evaluate rows top-to-bottom → the path matches **row 3** (`core/hooks/**` → hook suite, `bash core/hooks/tests/test-runner.sh`, HOME→/tmp). A8 **runs** the hook suite under the `/tmp` HOME-override sandbox and records the outcome. The DT→QA Handoff Payload **Test-results** field carries a real row, e.g. `hook-suite | map row 3 | PASS | 268/0 | sandbox-home-tmp | actions-run:<url> | <ts>`.
+*Step 1 — Stage 7 A8 suite selection (execution altitude).* Consult the selection map §2 with the changed path (e.g. `core/hooks/block-dangerous-command.sh`). Evaluate rows top-to-bottom → the path matches **row 3** (`core/hooks/**` → hook suite, `bash core/hooks/tests/test-runner.sh`, self (per-runner)). A8 **runs** the hook suite under the `/tmp` HOME-override sandbox and records the outcome. The DT→QA Handoff Payload **Test-results** field carries a real row, e.g. `hook-suite | map row 3 | PASS | 268/0 | sandbox-home-tmp | actions-run:<url> | <ts>`.
 
 *Step 2 — Stage 8 acceptance (acceptance altitude), per Runtime-Evidence Acceptance above.* The behavioral AC maps to a suite whose A8 Result is populated → the `PASS` / `FAIL` row fires (not the no-evidence row). Stage 8:
 (i) reads the Test-results Result for the AC's mapped suite (row 3, hook-suite);
