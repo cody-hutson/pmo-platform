@@ -5931,6 +5931,122 @@ flag_not_evaluated() {
   printf '{"ts":"%s","check":"%s","evaluated":false,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$_wl" 2>/dev/null || true
 }
 
+# ─── Check 16 population body — _c16_* (TOP-LEVEL) ───────────────────────────
+#
+# HOISTED TO TOP LEVEL DELIBERATELY; the placement is load-bearing, not stylistic,
+# and for exactly the reason flag_not_evaluated above is hoisted. Bash registers a
+# nested function only when execution REACHES its definition. Check 16's population
+# logic used to live inside cmd_check(), while main() routes --report STRAIGHT to
+# cmd_report() without ever entering cmd_check() — so a definition sited there is
+# never registered on the report path, and calling it aborts the whole run under the
+# `set -euo pipefail` at the head of this file. At top level the reachability is
+# unconditional and independent of which command mode the caller landed in. This is
+# a constraint on the remedy, not a preference: it is WHY the fix is a hoist rather
+# than a call.
+#
+# DD1 — ONE body, two surfaces. cmd_check() and cmd_report() previously carried two
+# independent encodings of Check 16's population, and they had drifted apart in THREE
+# places: the report copy was still on the pre-#2682 `--label improvement` scope, it
+# carried none of the I2 type exemptions, and it never consulted the operator
+# exemption list at all. Nothing detected the divergence, and the report path GATES
+# (cmd_report exits 1 on FAIL > 0, under a comment stating its exit code matches
+# --check) — so the drift was a false-green on a gating surface, not a cosmetic
+# reporting nit. Sharing the body makes the divergent state unreachable rather than
+# merely detectable, which also closes the partial-fix hazard: widening the report
+# scope WITHOUT the exemptions is strictly worse than the bug (measured on the live
+# population: I2 goes from 0 correct to 31, every one of them a statusless type:epic).
+#
+# WHAT IS SHARED IS THE POPULATION, AND ONLY THE POPULATION. The two surfaces' EMIT
+# semantics are deliberately different and MUST stay different: cmd_check() is
+# mode-gated (warn/enforce), emits per-issue detail through flag_status_label() and
+# logs EXEMPT: lines, while cmd_report() is the unvarnished "what would happen in
+# enforce-mode" PASS/FAIL view that Stage 13 consumes as evidence. Collapsing the
+# emit would destroy that evidence property. Sharing the population is what the
+# invariant actually needs, and is what the defect was about: a consumer reading the
+# report sees the same population the check evaluates.
+
+# _c16_population — the single Check 16 fetch, UNSCOPED.
+# SCOPE [#2682, 2026-07-19]: the `--label improvement` filter is deliberately absent
+# so the invariants cover ALL open intake (bug / observation / sub-task / type:task),
+# not just improvement. The prior scope let non-improvement intake drift half-labeled
+# indefinitely and left the I4 orphaned-bundle detector blind to non-improvement
+# bundles. Per-invariant type applicability is enforced in _c16_violators (I2 exempts
+# type:epic + sub-task); I1/I3/I4 remain all-types. --limit 5000 has ample headroom
+# for the ~500 open population. Degrades to an empty array rather than aborting.
+_c16_population() {
+  gh issue list --repo "$AUDIT_REPO" --state open \
+    --limit 5000 --json number,labels,milestone 2>/dev/null || echo "[]"
+}
+
+# _c16_exempt_pair <issue-number> <invariant-id> — returns 0 if the pair is exempt.
+# Hoisted alongside the rest of the population body because it is now consulted on
+# BOTH surfaces; the report path never reaches cmd_check()'s body, so a nested
+# definition was unreachable there. Exemption file:
+# .claude/status-label-invariant-exemption-list.txt — lines of
+# `<issue-number> <invariant-id>` skip the matching violation.
+_c16_exempt_pair() {
+  local _num="$1" _inv="$2"
+  local _exempt_file=".claude/status-label-invariant-exemption-list.txt"
+  [[ -f "$_exempt_file" ]] || return 1
+  grep -qE "^[[:space:]]*${_num}[[:space:]]+${_inv}([[:space:]]|$)" "$_exempt_file"
+}
+
+# _c16_violators <invariant-id> <issues-json> — the single filter + exemption engine.
+# Emits one line per in-scope issue, tagged so each caller gets what its own emit
+# needs and neither re-encodes a filter:
+#     <issue-number> VIOLATION      flag it
+#     <issue-number> EXEMPT         on the operator exemption list
+# An UNKNOWN invariant id returns 2 rather than printing an empty set, so a typo
+# cannot read as "no violators" — the silent-empty failure mode this check exists to
+# rule out elsewhere.
+_c16_violators() {
+  local _inv="$1" _issues_json="$2"
+  local _filter
+  case "$_inv" in
+    # I1 — mutex: >1 status:* label (all types)
+    I1) _filter='.[] | select((.labels | map(.name) | map(select(startswith("status: "))) | length) > 1)
+      | .number' ;;
+    # I2 — presence: 0 status:* labels.
+    # TYPE EXEMPTION [#2682, 2026-07-19]: skip `type:epic` and `sub-task`.
+    #   - type:epic: operator decision — epics are CONTAINERS, not lifecycle work
+    #     items, so "exactly one status label" does not apply (label-taxonomy.md
+    #     Rule 2). Without this, the unscoped fetch would false-FAIL on every
+    #     statusless epic (load-bearing, not cosmetic).
+    #   - sub-task: the pre-existing carve-out (label-taxonomy.md Rule 6) — a
+    #     sub-task's status label is a point-in-time hygiene mirror, not an
+    #     invariant-enforced field. Previously implicit (sub-tasks lacked the
+    #     `improvement` label); explicit since the fetch is unscoped. Retained on
+    #     that governance basis, NOT on any current count: the statusless-sub-task
+    #     population is transient and may be non-empty tomorrow.
+    # This exemption applies to I2 ONLY. I1 / I3 / I4 stay all-types: an epic that
+    # never carries a status label simply never trips them.
+    I2) _filter='.[] | select((.labels | map(.name) | map(select(startswith("status: "))) | length) == 0)
+      | select((.labels | map(.name) | index("type:epic")) | not)
+      | select((.labels | map(.name) | index("sub-task")) | not)
+      | .number' ;;
+    # I3 — contradiction-A: status: proposed + milestone set (all types)
+    I3) _filter='.[] | select(.milestone != null)
+      | select((.labels | map(.name) | map(select(. == "status: proposed"))) | length > 0)
+      | .number' ;;
+    # I4 — contradiction-B: status: bundled + no milestone (all types)
+    I4) _filter='.[] | select(.milestone == null)
+      | select((.labels | map(.name) | map(select(. == "status: bundled"))) | length > 0)
+      | .number' ;;
+    *)  return 2 ;;
+  esac
+  local _nums _num
+  _nums=$(printf '%s' "$_issues_json" | jq -r "$_filter")
+  while IFS= read -r _num; do
+    [[ -n "$_num" ]] || continue
+    if _c16_exempt_pair "$_num" "$_inv"; then
+      printf '%s EXEMPT\n' "$_num"
+    else
+      printf '%s VIOLATION\n' "$_num"
+    fi
+  done <<< "$_nums"
+  return 0
+}
+
 # ─── Mode: --check ───────────────────────────────────────────────────────────
 
 cmd_check() {
@@ -7810,7 +7926,8 @@ cmd_check() {
   # Asserts the 4 atomic invariants on ALL open intake issues:
   #   I1 mutex          — any open issue with >1 status:* label          (all types)
   #   I2 presence       — any open issue with 0 status:* labels          (all types
-  #                       EXCEPT type:epic + sub-task — see the I2 exemption below)
+  #                       EXCEPT type:epic + sub-task — the I2 exemption is stated
+  #                       at _c16_violators, which owns it for BOTH surfaces)
   #   I3 contradiction-A — status: proposed + milestone set               (all types)
   #   I4 contradiction-B — status: bundled + no milestone                 (all types)
   # SCOPE [#2682, 2026-07-19]: previously scanned `--label improvement` only; the
@@ -7827,7 +7944,13 @@ cmd_check() {
   # bypass-mode-readiness.md §Shakedown; the introducing release is itself exempt
   # (reflexive-pipeline loop — the broadened net does not gate its own release).
   # Exemption: .claude/status-label-invariant-exemption-list.txt — lines of
-  # `<issue-number> <invariant-id>` skip the matching violation.
+  # `<issue-number> <invariant-id>` skip the matching violation; the predicate is
+  # _c16_exempt_pair, consulted by _c16_violators on BOTH surfaces.
+  # SHARED BODY [#6165]: the fetch, the four filters and the exemption predicate live
+  # at top level as _c16_population / _c16_violators / _c16_exempt_pair, so this check
+  # and the --report mirror evaluate ONE population. Only the emit below is local to
+  # this surface. Do not re-encode a filter here: two copies is the defect that body
+  # exists to make unreachable.
   # NOTE: the c14_ / C14_ variable prefix below is stale copy-paste naming WITHIN
   # Check 16 (not a numbering error) — flagged for a cosmetic follow-up rename;
   # deliberately NOT renamed here to keep this in-place scope-widen a single
@@ -7836,15 +7959,7 @@ cmd_check() {
   STATUS_LABEL_MODE=$(resolve_check_mode "status-label-invariant")
   if [[ "$STATUS_LABEL_MODE" != "off" ]]; then
     log "Check 16: Status-label invariant (I1/I2/I3/I4; all-intake scope; warn-mode initial; enforce-flip deferred)"
-    local C14_EXEMPT_FILE=".claude/status-label-invariant-exemption-list.txt"
     local c14_violations=0
-
-    # exempt_pair issue_num invariant_id — returns 0 if exempt
-    exempt_pair() {
-      local _num="$1" _inv="$2"
-      [[ -f "$C14_EXEMPT_FILE" ]] || return 1
-      grep -qE "^[[:space:]]*${_num}[[:space:]]+${_inv}([[:space:]]|$)" "$C14_EXEMPT_FILE"
-    }
 
     # flag_status_label — Check 16 decoupled emit. Mirrors flag_warn_or_issue but
     # switches on $STATUS_LABEL_MODE (resolved above), not the shared mode — the
@@ -7868,92 +7983,57 @@ cmd_check() {
       esac
     }
 
-    # Single fetch — feeds all 4 invariant queries via local jq filters.
-    # SCOPE WIDENED [#2682, 2026-07-19]: the `--label improvement` filter was
-    # dropped so the invariants cover ALL open intake (bug / observation / sub-task
-    # / type:task) — not just improvement. The prior scope let non-improvement
-    # intake drift half-labeled indefinitely (facet 2), and left the already-present
-    # I4 orphaned-bundle detector blind to non-improvement bundles. Per-invariant
-    # type applicability is enforced BELOW (I2 exempts type:epic + sub-task); I1/I3/I4
-    # remain all-types. --limit 5000 has ample headroom for the ~300 open population.
+    # Single fetch + the four filters + the exemption predicate all come from the
+    # top-level _c16_* body (DD1), so this surface and the --report mirror cannot
+    # disagree about which issues are in scope. Only the EMIT below is check-path
+    # specific: mode-gated severity via flag_status_label() and the EXEMPT: log lines.
     local c14_issues_json
-    c14_issues_json=$(gh issue list --repo "$AUDIT_REPO" --state open \
-      --limit 5000 --json number,labels,milestone 2>/dev/null || echo "[]")
+    c14_issues_json=$(_c16_population)
+    local _num _verdict
 
     # I1 — mutex: >1 status:* label
-    local c14_i1_violators
-    c14_i1_violators=$(printf '%s' "$c14_issues_json" | jq -r '
-      .[] | select((.labels | map(.name) | map(select(startswith("status: "))) | length) > 1)
-      | .number')
-    while IFS= read -r _num; do
+    while IFS=' ' read -r _num _verdict; do
       [[ -n "$_num" ]] || continue
-      if exempt_pair "$_num" "I1"; then
+      if [[ "$_verdict" == "EXEMPT" ]]; then
         log "  EXEMPT: I1 mutex on issue #$_num (exemption-list)"
         continue
       fi
       flag_status_label "status-label-I1-mutex" "issue #$_num has >1 status:* label"
       c14_violations=$((c14_violations + 1))
-    done <<< "$c14_i1_violators"
+    done <<< "$(_c16_violators I1 "$c14_issues_json")"
 
-    # I2 — presence: 0 status:* labels.
-    # TYPE EXEMPTION [#2682, 2026-07-19]: skip `type:epic` and `sub-task`.
-    #   - type:epic: operator decision — epics are CONTAINERS, not lifecycle work
-    #     items, so "exactly one status label" does not apply (label-taxonomy.md
-    #     Rule 2). Without this, the widened scope would false-FAIL on the 38
-    #     statusless epics (load-bearing, not cosmetic).
-    #   - sub-task: the pre-existing carve-out (label-taxonomy.md Rule 6) — a
-    #     sub-task's status label is a point-in-time hygiene mirror, not an
-    #     invariant-enforced field. Previously implicit (sub-tasks lacked the
-    #     `improvement` label); now explicit since the fetch is unscoped.
-    # This exemption applies to I2 ONLY. I1 (mutex) / I3 / I4 stay all-types: an
-    # epic that never carries a status label simply never trips them.
-    local c14_i2_violators
-    c14_i2_violators=$(printf '%s' "$c14_issues_json" | jq -r '
-      .[] | select((.labels | map(.name) | map(select(startswith("status: "))) | length) == 0)
-      | select((.labels | map(.name) | index("type:epic")) | not)
-      | select((.labels | map(.name) | index("sub-task")) | not)
-      | .number')
-    while IFS= read -r _num; do
+    # I2 — presence: 0 status:* labels (type:epic + sub-task exempt; see _c16_violators)
+    while IFS=' ' read -r _num _verdict; do
       [[ -n "$_num" ]] || continue
-      if exempt_pair "$_num" "I2"; then
+      if [[ "$_verdict" == "EXEMPT" ]]; then
         log "  EXEMPT: I2 presence on issue #$_num (exemption-list)"
         continue
       fi
       flag_status_label "status-label-I2-presence" "issue #$_num missing all status:* labels"
       c14_violations=$((c14_violations + 1))
-    done <<< "$c14_i2_violators"
+    done <<< "$(_c16_violators I2 "$c14_issues_json")"
 
     # I3 — contradiction-A: status: proposed + milestone set
-    local c14_i3_violators
-    c14_i3_violators=$(printf '%s' "$c14_issues_json" | jq -r '
-      .[] | select(.milestone != null)
-      | select((.labels | map(.name) | map(select(. == "status: proposed"))) | length > 0)
-      | .number')
-    while IFS= read -r _num; do
+    while IFS=' ' read -r _num _verdict; do
       [[ -n "$_num" ]] || continue
-      if exempt_pair "$_num" "I3"; then
+      if [[ "$_verdict" == "EXEMPT" ]]; then
         log "  EXEMPT: I3 contradiction-A on issue #$_num (exemption-list)"
         continue
       fi
       flag_status_label "status-label-I3-contradiction-A" "issue #$_num is status: proposed but milestone is set"
       c14_violations=$((c14_violations + 1))
-    done <<< "$c14_i3_violators"
+    done <<< "$(_c16_violators I3 "$c14_issues_json")"
 
     # I4 — contradiction-B: status: bundled + no milestone
-    local c14_i4_violators
-    c14_i4_violators=$(printf '%s' "$c14_issues_json" | jq -r '
-      .[] | select(.milestone == null)
-      | select((.labels | map(.name) | map(select(. == "status: bundled"))) | length > 0)
-      | .number')
-    while IFS= read -r _num; do
+    while IFS=' ' read -r _num _verdict; do
       [[ -n "$_num" ]] || continue
-      if exempt_pair "$_num" "I4"; then
+      if [[ "$_verdict" == "EXEMPT" ]]; then
         log "  EXEMPT: I4 contradiction-B on issue #$_num (exemption-list)"
         continue
       fi
       flag_status_label "status-label-I4-contradiction-B" "issue #$_num is status: bundled but no milestone"
       c14_violations=$((c14_violations + 1))
-    done <<< "$c14_i4_violators"
+    done <<< "$(_c16_violators I4 "$c14_issues_json")"
 
     if [[ "$c14_violations" -eq 0 ]]; then
       log "  OK:    0 violations across I1/I2/I3/I4 (all open intake; type:epic + sub-task exempt from I2)"
@@ -13005,7 +13085,7 @@ sys.stdout.write("".join(out) + "|")
   # falsify a finding in one read.
   # Exemption: .claude/work-hierarchy-exemption-list.txt — lines of `<path> <token>`
   # (H1), `#<issue> type:epic` (H2) or `#<issue> initiative-coextension` (H3),
-  # mirroring Check 16's exempt_pair shape; this
+  # mirroring Check 16's _c16_exempt_pair shape; this
   # is #1039's "allowlist-able during cutover" requirement. The H2 form is parsed
   # as an ENTRY, not a comment (`#` + digits + whitespace); the bare `<issue>
   # <token>` form is accepted too, since both normalize to one lookup key. The
@@ -18028,15 +18108,26 @@ cmd_report() {
   echo ""
 
   # --- Status-Label Invariant (Check 16) ---
+  # SHARED BODY [#6165]: the population, the four filters and the exemption predicate
+  # come from the top-level _c16_* body — the SAME body cmd_check() evaluates — so
+  # this mirror and the check cannot disagree about which issues are in scope. This
+  # block previously carried its own fetch and its own four filters, and they had
+  # drifted three ways: still on the pre-#2682 `--label improvement` scope, missing
+  # the I2 type exemptions, and never consulting the operator exemption list at all.
+  # Nothing detected it, and this surface GATES (see the exit gate at the foot of
+  # cmd_report), so it was a false-green rather than a cosmetic reporting nit.
+  # Only the EMIT below is report-specific, and that divergence is deliberate: this
+  # is the unvarnished "what would happen in enforce-mode" PASS/FAIL view regardless
+  # of cmd_check's warn-mode, which is what makes it usable as Stage 13 evidence.
+  # Re-encoding a filter here would re-create the defect; call the shared body.
   echo "--- Status-Label Invariant (Check 16) ---"
   local c14r_json
-  c14r_json=$(gh issue list --repo "$AUDIT_REPO" --state open \
-    --label improvement --limit 5000 --json number,labels,milestone 2>/dev/null || echo "[]")
+  c14r_json=$(_c16_population)
   local c14r_i1 c14r_i2 c14r_i3 c14r_i4
-  c14r_i1=$(printf '%s' "$c14r_json" | jq '[.[] | select((.labels | map(.name) | map(select(startswith("status: "))) | length) > 1)] | length')
-  c14r_i2=$(printf '%s' "$c14r_json" | jq '[.[] | select((.labels | map(.name) | map(select(startswith("status: "))) | length) == 0)] | length')
-  c14r_i3=$(printf '%s' "$c14r_json" | jq '[.[] | select(.milestone != null) | select((.labels | map(.name) | map(select(. == "status: proposed"))) | length > 0)] | length')
-  c14r_i4=$(printf '%s' "$c14r_json" | jq '[.[] | select(.milestone == null) | select((.labels | map(.name) | map(select(. == "status: bundled"))) | length > 0)] | length')
+  c14r_i1=$(_c16_violators I1 "$c14r_json" | awk '$2 == "VIOLATION" { n++ } END { print n + 0 }')
+  c14r_i2=$(_c16_violators I2 "$c14r_json" | awk '$2 == "VIOLATION" { n++ } END { print n + 0 }')
+  c14r_i3=$(_c16_violators I3 "$c14r_json" | awk '$2 == "VIOLATION" { n++ } END { print n + 0 }')
+  c14r_i4=$(_c16_violators I4 "$c14r_json" | awk '$2 == "VIOLATION" { n++ } END { print n + 0 }')
   for entry in "I1 mutex:$c14r_i1" "I2 presence:$c14r_i2" "I3 contradiction-A:$c14r_i3" "I4 contradiction-B:$c14r_i4"; do
     local _name="${entry%%:*}"
     local _count="${entry##*:}"
