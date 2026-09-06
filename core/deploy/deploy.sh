@@ -6690,8 +6690,18 @@ LIFECYCLE
 # Label-shape is what separates a body REPORTING a probe from one DISCUSSING
 # probes; the >=2 count then rejects a bare `Verdict:` with no probe behind it.
 # Loosening EITHER half converts a real control into a never-FAIL check — see
-# ADR-150. The negative arm is not optional: --self-test group EV asserts the
-# evidence-free and prose-near-miss bodies still FAIL.
+# ADR-144, the record that admitted shape (b) and set that constraint. The
+# negative arm is not optional: --self-test group EV asserts the evidence-free
+# and prose-near-miss bodies still FAIL.
+#
+# ON THE CITATION ITSELF — NO MECHANICAL GATE DETECTS A WRONG-BUT-RESOLVABLE
+# REFERENT. This line named ADR-150 (BLOCK-DESTRUCTIVE-022 execution capability
+# — an unrelated subject) and every check stayed green the whole time: link
+# resolution passes because the file exists, and the ADR numbering-integrity
+# check passes because the sequence is contiguous with no duplicates. Neither
+# reads a title. Only a reader who knows both records can catch it, and this
+# change builds no gate for the class. So verify an ADR token here by reading
+# the record's `title:` — never by trusting a green check.
 #
 # Extracted as a function rather than left inline in Check 22 because Check
 # 22's live query reaches only OPEN issues in the DEPLOYING milestone, so it
