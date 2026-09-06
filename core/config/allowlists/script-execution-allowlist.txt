@@ -621,6 +621,20 @@ core/deploy/tests/test_check73_bundle_metrics_discrimination.sh
 ./core/deploy/tests/test_check54_ownership_collision_teeth.sh
 core/deploy/tests/test_check54_ownership_collision_teeth.sh
 
+# Warn-log JSON-escape suite (test_warn_log_json_escape.sh) — new in-tree bash CLI.
+# Drives the shipped json_escape_detail() helper, EXTRACTED from deploy.sh rather
+# than reimplemented, so the function under test is the one that ships. Its arm A4
+# reproduces the pre-fix two-substitution serialization on the same input and
+# requires the row to fail to parse, which is what makes the subject arm's zero a
+# measurement rather than a harness self-report. Run by the Stage 6 spoke, by Stage 7
+# Dev Testing, and by the install-tests shell-tests job; all four invocation forms so
+# BLOCK-DESTRUCTIVE-022 does not block the agent-side path. (CI runs no Claude hooks,
+# so this entry is for the agent-side path, not the workflow.)
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_warn_log_json_escape.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_warn_log_json_escape.sh
+./core/deploy/tests/test_warn_log_json_escape.sh
+core/deploy/tests/test_warn_log_json_escape.sh
+
 # Targeted composition-surface refresh regression (test_refresh_surfaces.sh) — new
 # in-tree bash CLI. Asserts that `deploy.sh --deploy` CANNOT heal a regressed
 # composition surface (it never sources the composition-surface manifest), that its

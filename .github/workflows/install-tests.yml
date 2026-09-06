@@ -604,6 +604,32 @@ jobs:
         # against workspace files, no interpolation of any kind inside the run: block.
         run: bash core/deploy/tests/test_check54_ownership_collision_teeth.sh
 
+      - name: Run warn-log JSON-escape suite (test_warn_log_json_escape.sh)
+        # deploy.sh's warn-log `detail` serialization folded a backslash and a
+        # double-quote and nothing else, while RFC 8259 §7 requires every
+        # U+0000–U+001F in a JSON string to be escaped. 659 rows of the live family
+        # were therefore invalid JSON and invisible to any parsing drain — absent
+        # from both the numerator and the denominator of every count over the file.
+        #
+        # The suite EXTRACTS the shipped json_escape_detail() out of deploy.sh and
+        # evaluates it, so the function under test is the one that ships rather than
+        # a copy — a copy is the defect class this suite exists to keep retired.
+        #
+        # A4 is the arm that makes the rest mean anything: it reproduces the pre-fix
+        # two-substitution serialization on the SAME input through the SAME emit
+        # format and requires the row to FAIL to parse. A zero there is a broken
+        # probe, not a clean result, and it says so. A5 bounds A4 by requiring a
+        # control-character-free input to parse under both arms. A7/A8/A9 carry the
+        # name- and keyword-agnostic completeness matcher, its reconstructed 9 / 0 / 0
+        # pre-fix null arm, and the demonstration that the retired
+        # `local _detail_escaped=` instrument reads only 7 of the 9 sites.
+        #
+        # Hermetic: every row under mktemp -d, the live warn-log family and the
+        # durable corpus read-only, no gh, no network. Consumes NO workflow event
+        # input — a static invocation against workspace files, with no interpolation
+        # of any kind inside the run: block.
+        run: bash core/deploy/tests/test_warn_log_json_escape.sh
+
       - name: Run Check 22 G1-06 priority-carrier regression (test_g1_06_priority_carrier.sh)
         # Check 22's G1-06 criterion used to bind one priority carrier and was
         # therefore blind to every body the intake form renders. The fix delegates

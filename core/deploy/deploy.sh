@@ -337,7 +337,15 @@ warn_log_segment_set() {
 
 # Echo the hot warn-log path, rotating it FIRST if it is over budget. Both
 # writer variables in cmd_check assign from here, so all 12 append sites are
-# bounded by one choke point and none of them changed.
+# bounded by one choke point.
+#
+# THE 12 SPLIT 9 + 3, and the split is worth stating because it was mis-derived
+# once. NINE sites interpolate a free-text `detail` through `"%s"` and therefore
+# route through json_escape_detail() below; THREE build `detail` from integers
+# only and carry no escaping step at all (close-completeness, decision-emission,
+# register-runner-resolution). The total is unchanged at 12 and the choke point
+# is unchanged; only the serialization step behind nine of them was converted
+# from nine duplicated two-line idioms to one shared definition.
 #
 # ROTATION IS A MOVE, NEVER A DELETION. The hot file is renamed whole into the
 # next numbered segment in the SAME directory. Nothing is discarded; retention
@@ -401,6 +409,71 @@ warn_log_path() {
     fi
   fi
   printf '%s\n' "$_wl_hot"
+}
+
+# Escape a warn-log `detail` value for embedding in a JSON string, per RFC 8259
+# §7: every U+0000–U+001F must be escaped, not only the two structural
+# characters. Sets JSON_ESCAPED rather than echoing, so no call site forks a
+# subshell — these are emitters whose contract (`>> … 2>/dev/null || true`) is
+# never to fail, and a fork is a failure mode a substitution cannot have.
+#
+# WHY THIS IS THE THIRD MEMBER OF THIS BLOCK. The two helpers above are the
+# warn-log family's read surface and its bounded-append choke point; this is its
+# serialization step. All three are writer-family machinery and the block is the
+# file's declared single home for it. A `lib-*.sh` was considered and rejected:
+# deploy.sh sources a lib only where a SECOND consumer exists, and this helper
+# has one.
+#
+# ORDERING IS LOAD-BEARING: backslash is substituted FIRST. Any other order
+# re-escapes the backslashes this function itself introduces.
+#
+# The C0 loop runs only when a control character is actually present. The common
+# path therefore costs the same two substitutions it always did.
+#
+# NUL is unreachable rather than unhandled: bash cannot hold U+0000 in a
+# variable, so no `detail` can carry one.
+#
+# WHY NOT `jq`. Not on dependency grounds — jq is already an undeclared hard
+# dependency of this file. Every one of the 12 append sites ends
+# `>> … 2>/dev/null || true` under `set -euo pipefail`, i.e. it is built never to
+# fail. Piping into jq inserts a short-circuiting reader into that path, which is
+# the documented SIGPIPE/pipefail class in which a SUCCESSFUL escape can report
+# failure. Parameter expansion cannot fork, cannot signal, and cannot be affected
+# by pipefail.
+#
+# bash 3.2.57-safe: parameter expansion, `case`, `printf` only — no associative
+# array, no ${var@Q}, no mapfile.
+JSON_ESCAPED=""
+json_escape_detail() {
+  local _s="$1" _i _c _r
+  _s="${_s//\\/\\\\}"
+  _s="${_s//\"/\\\"}"
+  case "$_s" in
+    *[[:cntrl:]]*)
+      _s="${_s//$'\t'/\\t}"
+      _s="${_s//$'\n'/\\n}"
+      _s="${_s//$'\r'/\\r}"
+      _s="${_s//$'\b'/\\b}"
+      _s="${_s//$'\f'/\\f}"
+      case "$_s" in
+        *[[:cntrl:]]*)
+          _i=1
+          while [ $_i -lt 32 ]; do
+            case $_i in
+              8|9|10|12|13) : ;;
+              *)
+                _c=$(printf "\\$(printf %03o $_i)")
+                _r=$(printf "\\\\u%04x" $_i)
+                _s="${_s//$_c/$_r}"
+                ;;
+            esac
+            _i=$((_i + 1))
+          done
+          ;;
+      esac
+      ;;
+  esac
+  JSON_ESCAPED="$_s"
 }
 
 # User-local skills mirror — exposes every PMO skill as a plain /skill-name
@@ -5842,8 +5915,8 @@ flag_not_evaluated() {
   log "  NOT-EVAL: $check_id — $detail (not-evaluated; the measurement did not run — this is a withheld verdict, never a clean one)"
   local _ts
   _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  local _detail_escaped="${detail//\\/\\\\}"
-  _detail_escaped="${_detail_escaped//\"/\\\"}"
+  json_escape_detail "$detail"
+  local _detail_escaped="$JSON_ESCAPED"
   local _wl="${WARN_LOG:-$(warn_log_path)}"
   printf '{"ts":"%s","check":"%s","evaluated":false,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$_wl" 2>/dev/null || true
 }
@@ -6258,8 +6331,8 @@ cmd_check() {
           log "  WARN:  registry-field-currency — $_frf_detail (warn-mode; flip registry-field-currency.mode to 'enforce' after the shakedown window)"
           local _frf_ts
           _frf_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          local _frf_esc="${_frf_detail//\\/\\\\}"
-          _frf_esc="${_frf_esc//\"/\\\"}"
+          json_escape_detail "$_frf_detail"
+          local _frf_esc="$JSON_ESCAPED"
           printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_frf_ts" "registry-field-currency" "$_frf_esc" >> "$_rfc_warn_log" 2>/dev/null || true
           ;;
       esac
@@ -6722,8 +6795,8 @@ cmd_check() {
         log "  WARN:  $check_id — $detail (warn-mode; flip .claude/hooks/deploy-check.mode to 'enforce' after shakedown)"
         local _ts
         _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        local _detail_escaped="${detail//\\/\\\\}"
-        _detail_escaped="${_detail_escaped//\"/\\\"}"
+        json_escape_detail "$detail"
+        local _detail_escaped="$JSON_ESCAPED"
         printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
         ;;
     esac
@@ -6753,8 +6826,8 @@ cmd_check() {
     log "  ADVISORY: $check_id — $detail (advisory-only; this check is never enforce-capable — see G-CL9 for the authoritative gate)"
     local _ts
     _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    local _detail_escaped="${detail//\\/\\\\}"
-    _detail_escaped="${_detail_escaped//\"/\\\"}"
+    json_escape_detail "$detail"
+    local _detail_escaped="$JSON_ESCAPED"
     printf '{"ts":"%s","check":"%s","advisory":true,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
   }
 
@@ -6878,8 +6951,8 @@ cmd_check() {
         log "  WARN:  $check_id — $detail (warn-mode; flip g1-enforcement.mode to 'enforce' after the shakedown window)"
         local _ts
         _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        local _detail_escaped="${detail//\\/\\\\}"
-        _detail_escaped="${_detail_escaped//\"/\\\"}"
+        json_escape_detail "$detail"
+        local _detail_escaped="$JSON_ESCAPED"
         printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
         ;;
     esac
@@ -6908,8 +6981,8 @@ cmd_check() {
         log "  WARN:  $check_id — $detail (warn-mode; this check ships ENFORCE — a local release-body-drift.mode dialed it down)"
         local _ts
         _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        local _detail_escaped="${detail//\\/\\\\}"
-        _detail_escaped="${_detail_escaped//\"/\\\"}"
+        json_escape_detail "$detail"
+        local _detail_escaped="$JSON_ESCAPED"
         printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
         ;;
     esac
@@ -6929,8 +7002,8 @@ cmd_check() {
     log "  RECOMMEND:  $check_id — $detail (advisory; judgment-tier, never gate-blocking)"
     local _ts
     _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    local _detail_escaped="${detail//\\/\\\\}"
-    _detail_escaped="${_detail_escaped//\"/\\\"}"
+    json_escape_detail "$detail"
+    local _detail_escaped="$JSON_ESCAPED"
     printf '{"ts":"%s","check":"%s","level":"recommend","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
   }
 
@@ -7729,8 +7802,8 @@ cmd_check() {
           log "  WARN:  $check_id — $detail (warn-mode; flip status-label-invariant.mode to 'enforce' after shakedown)"
           local _ts
           _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          local _detail_escaped="${detail//\\/\\\\}"
-          _detail_escaped="${_detail_escaped//\"/\\\"}"
+          json_escape_detail "$detail"
+          local _detail_escaped="$JSON_ESCAPED"
           printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
           ;;
       esac
@@ -13339,12 +13412,15 @@ sys.stdout.write("".join(out) + "|")
               ;;
             warn)
               log "  WARN:  milestone-subtask-orphan — $c56_m4_detail (warn-mode; flip milestone-subtask-orphan.mode to 'enforce' after shakedown — NOT the shared deploy-check.mode, which this leg deliberately does not follow)"
-              # Same escaping contract as flag_warn_or_issue's writer: backslash
-              # then double-quote, so the row stays parseable JSONL.
+              # Same escaping contract as flag_warn_or_issue's writer — which is
+              # now literally the same code: both route through the one
+              # json_escape_detail() helper in the warn-log helper block, so the
+              # row stays parseable JSONL for any control character, not only for
+              # a backslash or a double-quote.
               local _c56_m4_ts _c56_m4_esc
               _c56_m4_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-              _c56_m4_esc="${c56_m4_detail//\\/\\\\}"
-              _c56_m4_esc="${_c56_m4_esc//\"/\\\"}"
+              json_escape_detail "$c56_m4_detail"
+              _c56_m4_esc="$JSON_ESCAPED"
               printf '{"ts":"%s","check":"%s","detail":"%s"}\n' \
                 "$_c56_m4_ts" "milestone-subtask-orphan" "$_c56_m4_esc" >> "$WARN_LOG" 2>/dev/null || true
               ;;
