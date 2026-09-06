@@ -2356,8 +2356,22 @@ _rr_compute_verdict() {
 # between a gate and gate theatre — a control that reads as enforcement while functioning as
 # a no-op is worse than no control at all, which is this release's whole thesis.
 #
-# POSTURE, STATED HONESTLY. advisory / deploy-time-only / warn. There is NO pre-merge
-# surface, so a release can close with zero decision events and a green pipeline. The flip
+# POSTURE, STATED HONESTLY — AND IT IS NOW SPLIT. advisory / warn on both arms, but the
+# enforcement surface is no longer uniformly deploy-time-only. Per ADR-166 the predicate
+# splits by LOCUS OF INPUT:
+#   - MACHINERY arm (tree-resident): that this verdict engine still discriminates is
+#     asserted PRE-MERGE by .github/workflows/decision-emission.yml running
+#     `deploy.sh --self-test` (assertion group DE, which carries two explicit anti-vacuity
+#     arms). Red-capable today, honours no sentinel. This is the half eligible to become
+#     `required` once an operator registers its context.
+#   - LIVE arm (operator-instance): whether releases ACTUALLY emitted their classes stays
+#     deploy-time-only, permanently. Its verdict input is the pipeline event log, which is
+#     git-ignored operator-instance state, so verdict-input closure over repo paths is
+#     empty and `required` is structurally unavailable rather than precondition-blocked.
+#     In CI this arm verdicts SKIP and reports NOT-EVALUATED (exit 3) — never a pass.
+# A release can therefore still close with zero decision events and a green pipeline: the
+# pre-merge surface asserts the machinery, not the emission record. Stated plainly so the
+# tree-resident green is never read as the backlog-resident claim. The flip
 # to `enforce` is an OPERATOR DECISION recorded in gate-efficacy-standard.md's flip ledger —
 # NEVER auto-promoted by hit count (progressive-rollout-convention.md, which owns the
 # shadow -> warn -> enforce ladder). The `shadow` rung is NOT reachable here:
@@ -17371,10 +17385,23 @@ cmd_check_close_completeness() {
 # ─── Mode: --check-decision-emission (the Stage-13 decision-emission probe) — #4026 ─
 #
 # Runs ONLY the decision-emission verdict (not the full --check suite) and maps the verdict
-# to an EXIT CODE. Invoked from stage-13-close.md Phase A8.2 at close-out; there is
-# deliberately NO CI caller, which is exactly why the gate declares
-# `posture: advisory` / `enforcement-surface: deploy-time-only` per gate-efficacy-standard.md
-# Requirement (b′) — a check with no pre-merge surface cannot honestly declare `required`.
+# to an EXIT CODE. Invoked from stage-13-close.md Phase A8.2 at close-out, and from
+# .github/workflows/decision-emission.yml's LIVE ARM at pull-request time.
+#
+# THE PREDICATE IS SPLIT BY LOCUS OF INPUT, AND ONLY THE TREE-RESIDENT HALF IS CI-GATED
+# (ADR-166). The verdict input this probe needs — the pipeline event log — is
+# operator-instance state, git-ignored and absent from a clean checkout, so in CI this
+# probe verdicts SKIP by construction and can assert nothing about emission completeness.
+# That is why the live arm is REPORT-ONLY and why exit 3 exists: a CI caller must be able
+# to tell "measured nothing" from "measured and passed". The MACHINERY half — that the
+# verdict engine itself still discriminates — IS tree-resident and IS CI-gated, by the
+# integrity arm of the same workflow running `deploy.sh --self-test` (assertion group DE).
+#
+# Consequently the gate declares `posture: advisory` on BOTH arms per
+# gate-efficacy-standard.md Requirement (b′). The machinery arm is the half eligible to
+# become `required` once an operator registers its context; the live arm is a PERMANENT
+# advisory residual, because verdict-input closure over repo paths is empty for the event
+# log. Never let the tree-resident row imply the backlog-resident claim.
 #
 # Sentinel-aware, mirroring cmd_check_close_completeness: the committed
 # .github/decision-emission.enforce marker's first non-comment token decides whether an
@@ -17385,9 +17412,37 @@ cmd_check_close_completeness() {
 # no asserted set is a control that cannot fail, which is the defect class this release
 # exists to close — surfacing it as a benign skip would reproduce it.
 #
-#   exit 0  — CLEAN, SKIP (dormant / no in-scope release / corpus absent), or a
-#             non-blocking INCOMPLETE/NOSET while the sentinel token is not `enforce`.
-#   exit 1  — INCOMPLETE / NOSET under `enforce`, or an unexpected verdict (fail-closed).
+#   verdict         sentinel token   exit   caller reads it as
+#   -------------   --------------   ----   ----------------------------------------------
+#   CLEAN           any              0      pass — every in-scope release emitted every
+#                                           asserted MUST class
+#   SKIP            any              3      NOT-EVALUATED: the verdict was WITHHELD, not
+#                                           granted. Four causes, all printed on stdout:
+#                                           dormant cutover · RELEASE_LOG absent · EVENT
+#                                           LOG ABSENT (the CI case) · zero in-scope
+#                                           releases. Distinct from 0 so "clean" and
+#                                           "unmeasured" can never be conflated.
+#   INCOMPLETE      != enforce       0      ADVISORY finding: reported, not blocking
+#   NOSET           != enforce       0      ADVISORY finding: reported, not blocking
+#   INCOMPLETE      enforce          1      BLOCKING finding — the gate must fail closed
+#   NOSET           enforce          1      BLOCKING finding — the gate must fail closed
+#   <other>         any              1      unexpected verdict — fail-closed, sentinel-agnostic
+#
+# SKIP => 3 IS NOT A NEW CONVENTION. It mirrors cmd_check_package_freshness verbatim,
+# where NOT-EVALUATED already carries its own exit code for exactly this reason, and
+# .github/workflows/skill-package-freshness.yml already branches on it with the wording
+# this gate reuses — "could NOT BE MEASURED … It is NOT a pass."
+#
+# The alternative — parsing the printed verdict token in YAML — was rejected: a token
+# parser in the workflow is a SECOND reader of the predicate and drifts from this one.
+# Enforcement POLICY stays in the sentinel, which this probe remains the single reader of;
+# the CI caller dispatches on the integer and never re-parses the sentinel file.
+#
+# SKIP is sentinel-AGNOSTIC on purpose. Under `enforce` a withheld verdict must not become
+# a blocking finding: enforce arms the LIVE arm, and in CI the live arm has no input to
+# evaluate, so mapping SKIP to 1 under enforce would turn the flip into a permanent red on
+# every PR rather than into enforcement. The flip's blocking behaviour belongs to
+# INCOMPLETE/NOSET, which are real findings; SKIP is the absence of a measurement.
 cmd_check_decision_emission() {
   validate_workspace
   detect_install_path || true
@@ -17410,7 +17465,11 @@ cmd_check_decision_emission() {
       ;;
     SKIP)
       log "decision-emission: SKIP — ${verdict#SKIP }"
-      exit 0
+      log "  NOT-EVALUATED — this is a WITHHELD verdict, never a clean one. The run certifies"
+      log "  nothing about emission completeness; the cause and the resolved path are printed above."
+      log "  Exit 3 (mirroring --check-package-freshness's NOT-EVALUATED code) so a caller reading"
+      log "  only the exit code cannot mistake an unmeasured run for a passing one."
+      exit 3
       ;;
     NOSET)
       log "decision-emission: NOSET — ${verdict#NOSET }"
@@ -18150,12 +18209,21 @@ main() {
       ;;
     --check-decision-emission)
       # Stage-13 decision-emission probe (#4026): runs ONLY Check 61's verdict and exits
-      # per the verdict (0 CLEAN/SKIP, 1 INCOMPLETE/NOSET when the committed
-      # .github/decision-emission.enforce sentinel is `enforce`; fail-closed on an
-      # unexpected verdict). The same logic ALSO fires inside the full --check suite
+      # per the verdict (0 CLEAN, 3 SKIP = NOT-EVALUATED, 1 INCOMPLETE/NOSET when the
+      # committed .github/decision-emission.enforce sentinel is `enforce`; fail-closed on
+      # an unexpected verdict). The same logic ALSO fires inside the full --check suite
       # (Check 61, committed warn default) — one shared body (_de_compute_verdict), no
-      # copy. Invoked from stage-13-close.md Phase A8.2; NO CI caller by design, which is
-      # why the gate declares advisory / deploy-time-only.
+      # copy. Invoked from stage-13-close.md Phase A8.2 AND from the live arm of
+      # .github/workflows/decision-emission.yml, which branches on the exit code alone and
+      # re-encodes no predicate. The live arm is report-only: in CI the event log is
+      # absent, so this probe verdicts SKIP and the exit-3 contract is what keeps that
+      # non-measurement from reading as a pass.
+      #
+      # THIS CHECK MUST NOT JOIN rs_checks (--check-required-subset). That roster's verdict
+      # enum maps SKIP into its PASS arm alongside CLEAN/PASS/FRESH, so a member that can
+      # only ever emit SKIP in CI would raise rs_pass on every run and could never raise
+      # rs_fail — laundering a CI non-measurement into a green REQUIRED check, which is the
+      # exact defect this gate's CI mirror exists to avoid reproducing.
       cmd_check_decision_emission
       ;;
     --check-required-subset)
@@ -18220,7 +18288,7 @@ main() {
       echo "  --check-close-completeness   Close-completeness probe (Check 48 only; exits 1 on a VERIFIED row missing a Stage-13 output) (#1290)"
       echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73, 77, 78); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; exits 1 on an INCOMPLETE row set when enforce) (#1484)"
-      echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; advisory/deploy-time-only; exits 1 on INCOMPLETE/NOSET when enforce) (#4026)"
+      echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; CLEAN=0, SKIP=3 NOT-EVALUATED (withheld, never a pass), INCOMPLETE/NOSET=0 advisory / 1 when enforce, unexpected=1) (#4026)"
       echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, NOT-EVALUATED=3 advisory / 1 when enforce, unexpected=1) (#2656)"
       echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"
       echo "  --report                     Structured report for Stage 13 verification evidence"

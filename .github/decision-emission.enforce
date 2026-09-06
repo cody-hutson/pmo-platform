@@ -14,4 +14,44 @@
 # The flip to `enforce` is an OPERATOR DECISION, never auto-promoted by hit
 # count (progressive-rollout-convention.md, verbatim). The flip ledger lives in
 # core/standards/gate-efficacy-standard.md § Flip-decision status.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# GRADUATION CLAUSE — read this before flipping the token below.
+#
+# Check 61's predicate is SPLIT BY LOCUS OF INPUT (ADR-166), and this sentinel
+# governs ONLY ONE OF THE TWO HALVES. Flipping it is not the whole graduation,
+# and on its own it changes nothing observable in CI.
+#
+#   STEP 1 — flip the token below to `enforce`.
+#     This arms the LIVE ARM only: an INCOMPLETE/NOSET verdict then exits 1
+#     instead of 0. In CI it does NOTHING, because the live arm's verdict input
+#     is the pipeline event log — git-ignored operator-instance state, absent
+#     from every checkout — so the CI run verdicts SKIP and exits 3 either way.
+#     SKIP is sentinel-AGNOSTIC on purpose: mapping it to 1 under enforce would
+#     turn this flip into a permanent red on every pull request rather than into
+#     enforcement. The live arm's real surface is deploy time and Stage-13
+#     close-out, where the event log exists.
+#
+#   STEP 2 — register the MACHINERY ARM's context in branch protection.
+#     Context name: "Decision-emission gate integrity (Check 61 machinery)",
+#     from .github/workflows/decision-emission.yml. This is a repository-settings
+#     action a pull request structurally CANNOT perform, so it is an operator
+#     step taken outside any PR. That arm reads no sentinel and honours none —
+#     it is red-capable today — so registration is the only thing standing
+#     between it and `required`.
+#
+#   THERE IS NO STEP 3, and saying so is the point. The sibling
+#   close-completeness.enforce clause carries a delete-the-paths-filter step;
+#   this gate has none, because decision-emission.yml ships FILTER-FREE
+#   (`always-reports=yes` is a prerequisite for any `required` trajectory, not a
+#   later optimization). A graduation clause that silently omits a step is how a
+#   flip half-lands, so the absence is stated rather than left to be inferred.
+#
+#   WHAT NEITHER STEP ACHIEVES. Registering the machinery arm does not make the
+#   emission RECORD a required check — only the machinery that would detect a
+#   gap in it. The live half is a PERMANENT advisory residual: its verdict-input
+#   closure over repository paths is empty, so `required` is structurally
+#   unavailable to it rather than pending. Do not read a green machinery context
+#   as the backlog-resident claim.
+# ─────────────────────────────────────────────────────────────────────────────
 warn
