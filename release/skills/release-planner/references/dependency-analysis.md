@@ -62,7 +62,7 @@ For each issue in the release, identify:
 
 ### Hard-vs-Soft Edge Classifier
 
-When collecting dependencies from issue bodies (Step 1) AND when drafting the standing Parallelization Map convention defined in the Stage 3 Bundle spec, apply this classifier. The classifier MUST be reproducible (a regex-grep over issue-body text), not a judgment call — any operator or spoke re-running the scan reaches the same classification:
+When collecting dependencies from issue bodies (Step 1) AND when drafting the standing Parallelization Map convention defined in the Stage 3 Bundle spec, apply this classifier. The classifier MUST be reproducible (a section-scoped scan over issue-body text), not a judgment call — any operator or spoke re-running the scan reaches the same classification:
 
 | Class | Trigger language in issue body | Action in dep graph |
 |---|---|---|
@@ -70,11 +70,19 @@ When collecting dependencies from issue bodies (Step 1) AND when drafting the st
 | **Soft** | "composes with", "coordinates with", "adjacent to", "relates to", "sibling of" | Does NOT enter dep graph; informational only — surfaced in Parallelization Map as a soft-coupled edge with body confirmation cite |
 | **File-contention** | "same file as #N", "edits same section as #N" | Does NOT enter dep graph; enters File Contention Map only (per § File Contention Analysis above) |
 
-**Reproducibility:** the classifier is a regex-grep over issue bodies, not a judgment call. A reproducible reconfirm scan uses:
+**Reproducibility:** the classifier is a reproducible scan, not a judgment call — it slices each issue body to its `Dependencies` section (H2 or H3) and matches only an anchored `<keyword> #N` reference inside that slice, so ordinary prose elsewhere in the body cannot match and a body that never declared dependencies is reported as `NO-SECTION` rather than silently as clean. A reproducible reconfirm scan uses:
 
 ```
-gh issue list --milestone "<this milestone>" --state open --json number,body --jq '
-  .[] | select(.body | test("(?i)blocked by|depends on|requires|after #[0-9]+|blocks #[0-9]+"))
+gh issue list --milestone "<this milestone>" --state open --limit 500 \
+  --json number,body,blockedBy --jq '
+  def sec:  (.body // "") | (capture("(?ims)^#{2,3} +Dependencies\\b(?P<s>.*?)(?:\\n#{1,6} |\\z)").s) // null;
+  def edge: test("(?i)\\b(blocks|blocked by|depends on|requires|after)\\b[ \\t]*[:,–—-]?[ \\t]*#[0-9]+");
+  [ .[] | { n: .number, typed: (.blockedBy.totalCount // 0), s: sec }
+        | { n, typed, verdict: (if .s == null then "NO-SECTION" elif (.s|edge) then "EDGE" else "CLEAN" end) } ]
+  | { members:         length,
+      counts:          (group_by(.verdict) | map({key: .[0].verdict, value: length}) | from_entries),
+      edge_candidates: [ .[] | select(.verdict == "EDGE" or .typed > 0) ],
+      no_section:      [ .[] | select(.verdict == "NO-SECTION") | .n ] }
 '
 ```
 

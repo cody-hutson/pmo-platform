@@ -1503,7 +1503,7 @@ Two new automated quality gates ship, both starting in a logged-but-not-blocking
 
 ## [parallel-launch-quota-budget-gate] - 2026-06-14
 
-Version-less release (no `vMAJOR.MINOR` assigned; ships under the slug `parallel-launch-quota-budget-gate`, which is also the signed git tag and the GitHub Release tag). Running several release tasks in parallel used to launch them blind to the operator's remaining usage window, so a batch could fail partway through once the window was exhausted; the release pipeline now estimates a parallel batch's cost and checks it against the remaining window before launching, and re-checks before each wave rather than only once at planning time.
+Version-less release (no `vMAJOR.MINOR` assigned, no git tag, no GitHub Release; ships under the slug `parallel-launch-quota-budget-gate`). Running several release tasks in parallel used to launch them blind to the operator's remaining usage window, so a batch could fail partway through once the window was exhausted; the release pipeline now estimates a parallel batch's cost and checks it against the remaining window before launching, and re-checks before each wave rather than only once at planning time.
 
 ### Added
 
