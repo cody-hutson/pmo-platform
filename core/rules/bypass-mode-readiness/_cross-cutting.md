@@ -116,12 +116,21 @@ These eight are the allowlists the bypass-mode hooks consult. The broader worksp
 >
 > Where those conditions hold, an allowlist is a **control**. Where any fails, it is a **convention**: it still records what the platform intends to permit and is still the right thing to maintain, but it is not an interlock and no threat model may treat it as one. Do not accept a residual on the basis that an allowlist "will catch" an invocation without first checking the four conditions on the path that invocation actually runs on.
 
-**Adding entries:** Use the atomic-append helper:
+**Adding entries:** Use the atomic marker-aware add helper:
 ```bash
 ./.claude/hooks/allowlist-add.sh <allowlist-file> '<entry>'
 ```
 
-The helper validates that the target is one of the 8 known allowlists and that the entry has no control characters. All additions are logged to `.claude/hooks/allowlist-additions.log`.
+The helper validates that the target is one of the **9** allowlists it knows and that the entry has no control characters. All additions are logged to `.claude/hooks/allowlist-additions.log`.
+
+**Nine, not the eight in the table above — the two populations are different by design.** The table enumerates the allowlists the *bypass-mode hooks consult*; the helper's known set is those eight **plus** `.claude/skill-editor-exemption-list.txt`, which the boundary note above assigns to its own discipline doc rather than to this registry. Read the count as a property of the helper, not of this table.
+
+**Where the entry lands, and why it matters.** A deployed allowlist is a composed file: the update path regenerates it and preserves only what sits between its `BEGIN`/`END OPERATOR ADDITIONS` markers. The helper therefore inserts the entry **inside that region**, immediately before the `END` marker, so the grant survives the next update. Two consequences worth knowing before you run it:
+
+- On a target with **no** marker region the entry is appended at end of file, exactly as before. Such a file is not a composition target, so nothing is lost.
+- On a target that carries marker text but whose fence the update path will **not** honour — a hand-edited or malformed region — the helper appends at end of file **and warns on stderr** that the entry will not survive the next update. That warning is not advisory noise: an entry outside the preserved region disappears on the next regeneration with no error anywhere, which is precisely how a granted permission becomes silently ungranted. Repair the markers and re-run.
+
+The helper never writes a marker fence itself; the composition tooling owns the fence and its dialect.
 
 **Allowlist files are explicitly excluded from the self-mod guard** (NEW-B BLOCK-DESTRUCTIVE-019) — Claude can append to them without bypass. The guard's protected set is `CLAUDE.md`, `pmo-platform/**`, `.claude/settings.json`, `.claude/hooks/*` and `.claude/rules/*`, less that rule's two exemptions (a repo-rooted worktree cwd, and the git-ignored `pmo-platform/analysis/<subfolder>/…` workspace).
 
