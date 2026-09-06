@@ -270,7 +270,7 @@ fi
 # --deploy), the fully-current instance yields no ground-truth drift at all.
 if grep -q 'Ground-truth scan:' "${SBX}/run-noop.log" 2>/dev/null; then
   report "SUBJECT: fully-current instance yields an EMPTY ground-truth drift set" 0 \
-    "the deploy reported stale skills on an instance it had just made current: $(grep 'Ground-truth scan:' "${SBX}/run-noop.log" | head -1)"
+    "the deploy reported stale skills on an instance it had just made current: $(grep -m1 'Ground-truth scan:' "${SBX}/run-noop.log")"
 else
   report "SUBJECT: fully-current instance yields an EMPTY ground-truth drift set (${BARE_FLAGGED} -> 0 with the exclusion)" 1
 fi
@@ -380,7 +380,7 @@ else
     "exited 0 over an instance it could not make current — the reported defect"
 fi
 
-if grep -q "residual drift" "${SBX}/run-residual.log" 2>/dev/null && \
+if grep -q "residual drift" "${SBX}/run-residual.log" 2>/dev/null &&
    grep -q "${PROBE}" "${SBX}/run-residual.log" 2>/dev/null; then
   report "failure names the skill and the residual cause" 1
 else
