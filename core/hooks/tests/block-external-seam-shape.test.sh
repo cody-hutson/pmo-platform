@@ -171,8 +171,59 @@ echo "===== CONTROL-3 — AC-2 vendor assertion, with its own control arm ====="
 # artefact must not be. Control: the same two arms against a corpus standard that
 # names vendors and tool namespaces in prose MUST return non-zero, or the zero on the
 # artefact is a dead probe rather than a clean file.
-SUBJECT_DOC="${REPO_ROOT}/core/disciplines/external-seam-conduct.md"
-CONTROL_DOC="${REPO_ROOT}/core/standards/c3-external-sync-path-b.md"
+# CORPUS_ROOT is NOT REPO_ROOT. REPO_ROOT is derived from this test's own location,
+# which resolves correctly in a source checkout and INCORRECTLY under the deployed-
+# layout sandbox the gating harness builds: there the same walk lands on <sandbox>/,
+# which carries a hook runtime and no corpus, so both documents read unreadable and
+# vendor_hits returns its -1 sentinel. That is the fail-loud branch reporting a
+# RESOLUTION defect, and the repair belongs at the resolution, never at the sentinel.
+#
+# Ladder, first hit wins. Each rung is a location the corpus genuinely may live at;
+# none of them guesses.
+#   1. $PMO_SEAM_TEST_CORPUS_ROOT   — explicit operator/CI override
+#   2. .source-repo-root            — the pointer setup-ci-layout.sh writes beside
+#                                     the materialized tests (the CI sandbox rung)
+#   3. REPO_ROOT                    — the source-checkout rung
+#   4. walk up from this test        — a relocated checkout still resolves
+CORPUS_MARK="core/disciplines/external-seam-conduct.md"
+CORPUS_ROOT=""
+CORPUS_RUNG=""
+_try_root() { # $1 = candidate root, $2 = rung label
+  [ -n "$CORPUS_ROOT" ] && return 0
+  [ -n "$1" ] || return 0
+  [ -r "${1}/${CORPUS_MARK}" ] || return 0
+  CORPUS_ROOT="$1"; CORPUS_RUNG="$2"
+}
+_try_root "${PMO_SEAM_TEST_CORPUS_ROOT:-}" "env PMO_SEAM_TEST_CORPUS_ROOT"
+if [ -r "$(dirname "$0")/.source-repo-root" ]; then
+  _try_root "$(head -n 1 "$(dirname "$0")/.source-repo-root")" ".source-repo-root marker"
+fi
+_try_root "$REPO_ROOT" "REPO_ROOT (source checkout)"
+_walk="$(cd "$(dirname "$0")" && pwd -P)"
+while [ -z "$CORPUS_ROOT" ] && [ "$_walk" != "/" ]; do
+  _try_root "$_walk" "ancestor walk-up"
+  _walk="$(dirname "$_walk")"
+done
+
+# A harness that cannot find the corpus it exists to grade has not "skipped" AC-2 —
+# it has failed to establish whether AC-2 holds, which is the same class of defect
+# as the -1 sentinel and gets the same loud treatment. Both real runners (a source
+# checkout, and the sandbox via rung 2) resolve; an unresolvable root means the
+# layout changed and the arms below would otherwise grade nothing while reading green.
+if [ -z "$CORPUS_ROOT" ]; then
+  printf 'FAIL: CONTROL-3 corpus root UNRESOLVED — every rung missed (env=%s marker=%s REPO_ROOT=%s walk-up from %s); AC-2 was not graded\n' \
+    "${PMO_SEAM_TEST_CORPUS_ROOT:-<unset>}" \
+    "$(dirname "$0")/.source-repo-root" "$REPO_ROOT" "$(dirname "$0")"
+  FAIL=$((FAIL+1))
+  CORPUS_ROOT="$REPO_ROOT"   # let the arms below run and report their own verdict
+  CORPUS_RUNG="UNRESOLVED"
+else
+  printf 'PASS: CONTROL-3 corpus root resolved via %s -> %s\n' "$CORPUS_RUNG" "$CORPUS_ROOT"
+  PASS=$((PASS+1))
+fi
+
+SUBJECT_DOC="${CORPUS_ROOT}/core/disciplines/external-seam-conduct.md"
+CONTROL_DOC="${CORPUS_ROOT}/core/standards/c3-external-sync-path-b.md"
 vendor_hits() { # $1 = file — echoes a count, never a second line.
   # `grep -c` PRINTS 0 and EXITS 1 on no-match, so a `|| echo 0` fallback emits the
   # count twice and every downstream numeric test then compares against a two-line
