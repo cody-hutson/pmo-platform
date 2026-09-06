@@ -2,7 +2,7 @@
 title: Release Plan — deploy-checks-hardening-batch (warn-log writer correctness, emitter-contract hygiene, and the deploy-check identifier/token surfaces)
 type: release-plan
 plan_type: release
-status: EXECUTING
+status: ACTIVE
 release: versioned (bump-class minor; concrete number binds at the Stage-12 atomic claim)
 milestone: deploy-checks-hardening-batch
 release_class: novel
