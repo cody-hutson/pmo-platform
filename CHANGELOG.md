@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.58] - 2026-09-06
+
+Ten release checks and rules now match what the platform actually does, so several stop reporting problems that were never there.
+
+[Full notes](release/releases/notes/v4.58_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.58)
+
 ## [v4.57] - 2026-09-06
 
 Agents writing into an outside system now put durable state in the record's own fields instead of stacking dated comment blocks.

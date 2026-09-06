@@ -1,0 +1,124 @@
+name: Gate posture reconciliation
+
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Gate posture reconciliation (declared vs live)" (report-only — this job NEVER exits non-zero on a finding)  always-reports=yes
+#   invariant: every context declaring `posture=required enforcement=branch-protection`
+#              in .github/workflows/* appears in main's live
+#              required_status_checks.contexts, and every live context is declared by
+#              some header. This is the Requirement (c) coverage audit that
+#              core/standards/gate-efficacy-standard.md § Requirement (b) NAMES —
+#              "reconciling a declared `required` posture against the actual
+#              branch-protection configuration is a coverage-audit item under
+#              Requirement (c), not a file edit any single gate performs" — and until
+#              this job existed that audit had NO runner: every occurrence of the
+#              branch-protection API in an executable surface across the tracked tree
+#              was a comment describing the operator step, and nothing asserted it.
+#   falsification: this job CANNOT be falsified by a repository edit, and saying so is
+#                  the point — its verdict input is out-of-tree GitHub state, so no
+#                  branch change alters what it reads. What IS falsifiable is the
+#                  reconciler's discrimination, and that is asserted by its committed
+#                  --self-test (run by the selftest-discovery job): S1/S2 require each
+#                  delta direction to be reported, S3 requires a fully reconciled set to
+#                  report NEITHER, and S4 requires a live read that did not return to
+#                  publish NO delta at all. Add a `posture=required
+#                  enforcement=branch-protection` header naming an unregistered context
+#                  -> it appears under Unregistered on the next run; register it
+#                  operator-side -> the report reconciles.
+#   posture note: `advisory` here is STRUCTURAL and PERMANENT, not a shakedown that
+#                 graduates. This job must never become a required context and must
+#                 never join `deploy.sh --check-required-subset` (`rs_checks`). Its
+#                 Verdict-Input Closure over repository paths is EMPTY, so a transient
+#                 gh, auth or rate-limit failure would become merge-blocking —
+#                 declaring an enforcement the surface cannot deliver, which
+#                 Requirement (b) forbids. That is verbatim the reason `deploy.sh`
+#                 Check 51 (label-parity) was declined for `required` and ratified
+#                 permanently advisory. `rs_checks` additionally fail-closes on an
+#                 unexpected verdict REGARDLESS of its warn/enforce sentinel, so a
+#                 network-dependent member there would block a merge for a reason no PR
+#                 author can see or repair.
+#   scope note: the reconciliation is reported, never enforced, and the job exits 0 on
+#               every path — INCLUDING the path where the live read fails. Reading
+#               branch protection is admin-scoped and the default GITHUB_TOKEN is not
+#               guaranteed to hold it, so a 403 is an EXPECTED outcome. That case is
+#               reported as a NON-MEASUREMENT and publishes no delta, rather than
+#               printing the clean zero it did not measure.
+#
+# WHY A SEPARATE SURFACE FROM THE CONFORMANCE RATCHET. The predicate this release closes
+# splits on VERDICT-INPUT CLOSURE, and the two halves must not share a host. Half A —
+# "every job publishing a named check-run is declared" — reads tracked workflow text
+# only: deterministic and network-free, so it rides the existing ratchet at
+# core/deploy/tests/test_gate_efficacy_declarations.py, which is where it lives. Half B
+# is this job, and its only oracle is the GitHub API. Admitting Half B to any repo-closed
+# host would import a non-deterministic verdict into a deterministic one. One invariant
+# family, two closures, two surfaces.
+#
+# SINGLE PARSER. The declared set is extracted by importing the ratchet's header parser
+# rather than re-implementing the grammar. Two parsers over one header format is a second
+# thing to keep in agreement, and the agreement is exactly what would rot.
+#
+# Runs on EVERY pull request (NO paths filter): the delta this reports is a property of
+# the whole workflow tree AND of out-of-tree repository settings, neither of which is
+# expressible as a path filter. Also runs on push to main as a post-merge report.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  gate-posture-reconciliation:
+    name: Gate posture reconciliation (declared vs live)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Ensure PyYAML
+        # The shared parser module imports yaml at module scope. Installing it here
+        # keeps this job on the SAME parser as the ratchet instead of forking a
+        # yaml-free copy of the header grammar.
+        run: python3 -m pip install --quiet pyyaml
+
+      - name: Reconciler self-test (hard-fails independent of the report posture)
+        # The report is advisory; the reconciler's ability to DISCRIMINATE is not. A
+        # detector that cannot be shown to distinguish a delta from a clean set proves
+        # nothing by reporting a clean set, so this step gates on the exit code.
+        run: python3 core/deploy/tools/reconcile-gate-posture.py --self-test
+
+      - name: Read live required_status_checks from branch protection
+        # Report-only and deliberately un-gated. Branch protection is an admin-scoped
+        # read the default GITHUB_TOKEN is not guaranteed to hold, so a 403 is an
+        # EXPECTED outcome rather than a defect. It is recorded by the ABSENCE of the
+        # live file, and the reconciler then refuses to publish a delta it could not
+        # measure. github.repository is a trusted context and is bound through env:
+        # and referenced as a quoted shell variable, never inlined into the command.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          if gh api "repos/${REPO}/branches/main/protection" \
+               --jq '.required_status_checks.contexts[]' > live-contexts.txt 2> live-error.txt
+          then
+            echo "live read: OK"
+          else
+            rm -f live-contexts.txt
+            echo "live read: UNAVAILABLE (reported as a non-measurement, not a delta)"
+            sed -n '1,5p' live-error.txt || true
+          fi
+
+      - name: Reconcile declared-required contexts against live branch protection
+        # Exit 3 (the declared set could not be read at all) is a BROKEN-PROBE signal
+        # and is allowed to surface; every other path exits 0 by contract. The `|| true`
+        # would be wrong here: it would also swallow a broken probe, which is the one
+        # condition this job must never report as clean.
+        run: |
+          set -uo pipefail
+          python3 core/deploy/tools/reconcile-gate-posture.py \
+            --live live-contexts.txt | tee -a "$GITHUB_STEP_SUMMARY"

@@ -1,10 +1,25 @@
 name: Skill-count / IMP-XXX drift
 
-# gate-efficacy: posture=required  enforcement=branch-protection:"Skill-count / IMP-XXX delta"  always-reports=yes
+# gate-efficacy: posture=required(warn-mode-initial)  enforcement=branch-protection:"Skill-count / IMP-XXX delta"  always-reports=yes
 #   invariant: no changed file adds a deprecated IMP-XXX reference or a hardcoded
 #              skill-count that drifts from the runtime-computed roster authority.
 #   falsification: add a line citing "IMP-042" or a stale literal skill total to a
-#                  changed markdown file -> this gate turns red on that added line.
+#                  changed markdown file -> the detector reports it on that added line.
+#                  Under WARN_MODE='true' the job still exits 0; setting WARN_MODE to
+#                  'false' turns that same finding RED. The --self-test step hard-fails
+#                  independent of WARN_MODE.
+#   posture note: the qualifier is load-bearing and was ADDED because the bare
+#                 `posture=required` this header carried was FALSE ON BOTH AXES. The
+#                 workflow sets WARN_MODE: 'true' and swallows every finding to `exit 0`,
+#                 so a red verdict is not reachable at all; and the context is absent
+#                 from main's live required_status_checks.contexts. Registering it in
+#                 that state would manufacture a required check STRUCTURALLY INCAPABLE
+#                 of turning red — a merge-predicate conjunct that can never be false,
+#                 which is a strictly weaker guarantee than a reader of "required"
+#                 assumes. The graduation order is therefore fixed: flip WARN_MODE to
+#                 'false' FIRST once the warn-window is clean, and only then register the
+#                 context. Recorded as CORRECT-THEN-HOLD in
+#                 core/standards/gate-efficacy-standard.md § Declared-required contexts.
 # (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
 
 # Runs on EVERY pull request (no paths filter), so this required status check

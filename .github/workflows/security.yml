@@ -178,6 +178,18 @@ jobs:
 
   hook-dep-hardening:
     name: Hook dependency fail-closed (GHSA-9cjm)
+    # gate-efficacy: posture=advisory  enforcement=ci-enforce:"Hook dependency fail-closed (GHSA-9cjm)" (no WARN_MODE — a finding turns the check RED)  always-reports=yes
+    #   invariant: no security hook hard-codes /usr/bin/jq or carries the legacy blanket
+    #              fail-open. jq is resolved through lib/dep-resolve.sh, and a missing jq
+    #              fails CLOSED under enforce (or degrades per mode) rather than silently
+    #              waving the guarded action through. Guards GHSA-9cjm-v22x-4x33.
+    #   falsification: hard-code /usr/bin/jq in any core/hooks/block-*.sh, or restore a
+    #                  blanket fail-open on the jq resolution path -> the
+    #                  check-hook-dep-hardening.sh harness exits non-zero and the job is RED.
+    #   posture note: `advisory`, not `required`, is the HONEST declaration today —
+    #                 Requirement (b') makes `required` unavailable until the context is
+    #                 registered in branch protection, which a PR cannot do. The gate is
+    #                 ENFORCING (a finding exits non-zero); it is not yet BLOCKING.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -189,6 +201,18 @@ jobs:
 
   eval-viewer-security:
     name: Eval-viewer security (GHSA-fxcr)
+    # gate-efficacy: posture=advisory  enforcement=ci-enforce:"Eval-viewer security (GHSA-fxcr)" (no WARN_MODE — a finding turns the check RED)  always-reports=yes
+    #   invariant: the eval-viewer generator confines file reads to the workspace root,
+    #              caps and redacts embedded output, and gates POST /api/feedback behind a
+    #              loopback Host + same-origin Origin + per-run CSRF token — plus the
+    #              GHSA-rw36 XSS regressions. Guards GHSA-fxcr-7x63-3g94.
+    #   falsification: allow a symlink read to escape the workspace root, drop the PII
+    #                  redaction pass, or remove the CSRF-token check on the feedback POST
+    #                  -> test_generate_review.py exits non-zero and the job is RED.
+    #   posture note: `advisory`, not `required`, is the HONEST declaration today —
+    #                 Requirement (b') makes `required` unavailable until the context is
+    #                 registered in branch protection, which a PR cannot do. The gate is
+    #                 ENFORCING (a finding exits non-zero); it is not yet BLOCKING.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

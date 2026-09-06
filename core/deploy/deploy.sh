@@ -2429,8 +2429,22 @@ _rr_compute_verdict() {
 # between a gate and gate theatre — a control that reads as enforcement while functioning as
 # a no-op is worse than no control at all, which is this release's whole thesis.
 #
-# POSTURE, STATED HONESTLY. advisory / deploy-time-only / warn. There is NO pre-merge
-# surface, so a release can close with zero decision events and a green pipeline. The flip
+# POSTURE, STATED HONESTLY — AND IT IS NOW SPLIT. advisory / warn on both arms, but the
+# enforcement surface is no longer uniformly deploy-time-only. Per ADR-166 the predicate
+# splits by LOCUS OF INPUT:
+#   - MACHINERY arm (tree-resident): that this verdict engine still discriminates is
+#     asserted PRE-MERGE by .github/workflows/decision-emission.yml running
+#     `deploy.sh --self-test` (assertion group DE, which carries two explicit anti-vacuity
+#     arms). Red-capable today, honours no sentinel. This is the half eligible to become
+#     `required` once an operator registers its context.
+#   - LIVE arm (operator-instance): whether releases ACTUALLY emitted their classes stays
+#     deploy-time-only, permanently. Its verdict input is the pipeline event log, which is
+#     git-ignored operator-instance state, so verdict-input closure over repo paths is
+#     empty and `required` is structurally unavailable rather than precondition-blocked.
+#     In CI this arm verdicts SKIP and reports NOT-EVALUATED (exit 3) — never a pass.
+# A release can therefore still close with zero decision events and a green pipeline: the
+# pre-merge surface asserts the machinery, not the emission record. Stated plainly so the
+# tree-resident green is never read as the backlog-resident claim. The flip
 # to `enforce` is an OPERATOR DECISION recorded in gate-efficacy-standard.md's flip ledger —
 # NEVER auto-promoted by hit count (progressive-rollout-convention.md, which owns the
 # shadow -> warn -> enforce ladder). The `shadow` rung is NOT reachable here:
@@ -2611,6 +2625,39 @@ _de_compute_verdict() {
     printf 'INCOMPLETE %s %s\n' "$de_findings" "$de_targets"
   fi
   return 0
+}
+
+# _de_verdict_exit_code <verdict-token> <enforce-token>
+#   THE verdict -> exit mapping for --check-decision-emission, factored to top level so it
+#   is single-sourced (DD1 — one body, two readers) and directly assertable by --self-test
+#   WITHOUT invoking the whole probe. Division of labour: cmd_check_decision_emission owns
+#   the operator-facing LOG TEXT; this function owns the INTEGER. The contract table on
+#   cmd_check_decision_emission is this function rendered as prose — where they disagree,
+#   this function is the authority and the table is the defect.
+#
+#   THE INVARIANT (PV-7): exit 0 has EXACTLY ONE producer, CLEAN, under EVERY sentinel
+#   state. No measured-degraded verdict (INCOMPLETE), no unmeasured verdict (SKIP) and no
+#   instrument-disabled verdict (NOSET) may share a code with the clean one. The sentinel
+#   is an ESCALATION dial, not a suppression dial: it may raise a verdict from advisory to
+#   blocking, and it may never lower one onto 0.
+#
+#   WHY THE ADVISORY CODES ARE NOT 0. warn-mode's meaning is "do not BLOCK the merge", which
+#   is a property of the CALLER's response, not of what the engine FOUND. Encoding "don't
+#   block" as "found nothing" collapses the two, and the collapse is not theoretical: it put
+#   INCOMPLETE and NOSET on 0 alongside CLEAN under the shipped `warn` sentinel, so
+#   .github/workflows/decision-emission.yml's `0)` branch printed "every in-scope VERIFIED
+#   release emitted every asserted MUST class" on a run that had found neither.
+_de_verdict_exit_code() {
+  local _de_tok="${1:-}" _de_enf="${2:-warn}"
+  case "$_de_tok" in
+    CLEAN) printf '0\n' ;;
+    SKIP)  printf '3\n' ;;   # sentinel-AGNOSTIC — see the SKIP clause on the contract table
+    INCOMPLETE)
+      if [[ "$_de_enf" == "enforce" ]]; then printf '1\n'; else printf '2\n'; fi ;;
+    NOSET)
+      if [[ "$_de_enf" == "enforce" ]]; then printf '1\n'; else printf '4\n'; fi ;;
+    *) printf '1\n' ;;       # fail-closed, sentinel-agnostic
+  esac
 }
 
 # ─── Hook-registry index freshness (Check 38 / --check-required-subset) — #1485 ──
@@ -11215,7 +11262,7 @@ sys.stdout.write("".join(out) + "|")
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 27: Designated-model config for hub-spawned spokes (release/.claude/agents/pmo-*.md)"
     # Per the layout §1.4 agent definitions live under release/.claude/agents/.
-    local c26_agents_dir="release/.claude/agents"
+    local c26_agents_dir="release/.claude/agents"   # deploy-path-literal: allow — first rung of the back-compat fallback chain on the next line; a non-resolving first rung is the designed path, and Check 27 declares the zero-file outcome through its own fail-loud arm
     # Fallback to workspace .claude/agents/ for backwards-compatibility during
     # transition window if the operator workspace has not yet been updated.
     [[ -d "$c26_agents_dir" ]] || c26_agents_dir=".claude/agents"
@@ -11227,7 +11274,7 @@ sys.stdout.write("".join(out) + "|")
     # read-path-vs-deploy-path seam so operator per-stage overrides placed in the
     # deployed file are visible to this check.
     local c26_overrides="$(pmo_instance_path)/agents-model-overrides.txt"
-    [[ -f "$c26_overrides" ]] || c26_overrides="release/.claude/agents-model-overrides.txt"
+    [[ -f "$c26_overrides" ]] || c26_overrides="release/.claude/agents-model-overrides.txt"   # deploy-path-literal: allow — middle rung of the back-compat fallback chain; the deployed instance surface above is canonical and the next line falls back again, so this rung is expected not to resolve in-repo
     [[ -f "$c26_overrides" ]] || c26_overrides=".claude/agents-model-overrides.txt"
     # Default spoke model: read the canonical platform-config [spoke_runtime] surface
     # (#340) via the rung-reader; fall back to the documented "opus" literal when the
@@ -11396,7 +11443,7 @@ sys.stdout.write("".join(out) + "|")
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 29: Return-value-conformance for hub-spawned spokes (release/.claude/agents/pmo-*.md)"
     # Per the layout §1.4 agent definitions live under release/.claude/agents/.
-    local c29_agents_dir="release/.claude/agents"
+    local c29_agents_dir="release/.claude/agents"   # deploy-path-literal: allow — first rung of the back-compat fallback chain on the next line; a non-resolving first rung is the designed path, and Check 29 declares the zero-file outcome through its own fail-loud arm
     # Fallback to workspace .claude/agents/ for backwards-compatibility.
     [[ -d "$c29_agents_dir" ]] || c29_agents_dir=".claude/agents"
     local c29_findings=0
@@ -11540,9 +11587,22 @@ sys.stdout.write("".join(out) + "|")
     # Class L + Class V regexes — byte-identical to core/hooks/block-fragile-refs.sh.
     local c31_link_re='\]\('
     local c31_cutover_re='v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?[^.\n]{0,40}merge SHA|v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?([[:space:]]+(release|itself|is))*[[:space:]]+(is[[:space:]]+)?exempt|([Aa]pplies to releases|[Cc]utover[[:space:]]+(applies|discipline|per))[^.\n]{0,80}v[0-9]+\.[0-9]+|reflexive-pipeline-loop'
+    # SEVEN roots, and the count is load-bearing. This array declared TEN until
+    # #4217: "release/standards", "release/specs" and "release/schemas" have never
+    # existed — zero add/delete/rename events across the whole of repository
+    # history, entering here at the initial public-release commit with their
+    # current wrong value. The loop below skips a missing root SILENTLY via
+    # `[[ -d ]] || continue`, so the check declared a ten-root scan surface and
+    # resolved seven, overstating its own denominator by 30%.
+    #
+    # Removing them is behaviour-preserving, not a coverage cut: the intended
+    # content is already walked recursively under "release/references", which
+    # carries release/references/standards/ and release/references/specs/. Do not
+    # "restore" the three for symmetry — a root that resolves nowhere adds no file
+    # to the scan and subtracts credibility from the count it reports.
     local -a c31_globs=(
       "core/rules" "core/standards" "core/specs" "core/disciplines" "core/schemas"
-      "release/references" "release/governance" "release/standards" "release/specs" "release/schemas"
+      "release/references" "release/governance"
     )
     local c31_link_count=0 c31_version_count=0 c31_files_scanned=0
     local _d _f
@@ -17336,6 +17396,63 @@ EOF
   _v="$(_de_selftest_verdict "$_dmissing")"; _tok="${_v%% *}"
   [[ "$_tok" == "NOSET" ]] || { echo "FAIL: DE-9 absent asserted-set file must verdict NOSET (not SKIP, not CLEAN), got '$_v'"; failures=$((failures+1)); }
 
+  # ── DE-10 — THE EXIT-CODE SPACE (#4216). PV-7: a degraded or unmeasured state NEVER
+  # shares a member with the clean state. Every arm ABOVE asserts a verdict TOKEN by
+  # calling _de_compute_verdict directly, so the group could not — and did not — see the
+  # verdict -> EXIT mapping at all. That blind spot is where the defect lived: DE-9 above
+  # asserted the token NOSET while the mapping turned it into exit 0 under the shipped
+  # `warn` sentinel, so "never a silent pass" was true of the word and false of the
+  # integer, and .github/workflows/decision-emission.yml's `0)` branch printed a
+  # completeness claim on a gate that had asserted nothing. These arms assert the mapping
+  # itself, through the same _de_verdict_exit_code body the probe exits on — so a
+  # regression that re-collapses the space turns THIS group, and therefore the workflow's
+  # red-capable machinery arm, red.
+  _de_exit_is() {   # <expected> <verdict-token> <enforce-token> <arm-label>
+    local _e="$1" _t="$2" _s="$3" _lbl="$4" _got
+    _got="$(_de_verdict_exit_code "$_t" "$_s")"
+    [[ "$_got" == "$_e" ]] || { echo "FAIL: DE-10 $_lbl — verdict '$_t' under sentinel '$_s' must exit $_e, got $_got"; failures=$((failures+1)); }
+  }
+
+  # THE INVARIANT, asserted directly: 0 has exactly ONE producer, under BOTH sentinels.
+  _de_exit_is 0 CLEAN      warn    "CLEAN/warn is the clean code"
+  _de_exit_is 0 CLEAN      enforce "CLEAN/enforce stays 0 (enforce must not punish a clean run)"
+  # ANTI-COLLAPSE — the four arms that were exit 0 before #4216 and must never be again.
+  _de_exit_is 2 INCOMPLETE warn    "INCOMPLETE/warn is ADVISORY-nonzero, never 0"
+  _de_exit_is 4 NOSET      warn    "NOSET/warn is ADVISORY-nonzero, never 0"
+  # ESCALATION, not suppression: the sentinel may raise severity, never lower it onto 0.
+  _de_exit_is 1 INCOMPLETE enforce "INCOMPLETE/enforce BLOCKS"
+  _de_exit_is 1 NOSET      enforce "NOSET/enforce BLOCKS"
+  # SKIP is sentinel-AGNOSTIC — mapping it to 1 under enforce would make the flip a
+  # permanent red on every PR rather than enforcement.
+  _de_exit_is 3 SKIP       warn    "SKIP/warn is NOT-EVALUATED"
+  _de_exit_is 3 SKIP       enforce "SKIP/enforce stays NOT-EVALUATED (sentinel-agnostic)"
+  # Fail-closed on an unrecognised verdict, under either sentinel.
+  _de_exit_is 1 __unexpected__ warn    "unrecognised verdict fails closed"
+  _de_exit_is 1 __unexpected__ enforce "unrecognised verdict fails closed under enforce"
+
+  # DE-10b — ANTI-VACUITY for the arms above. The ten assertions are all of the form
+  # "this token maps to this integer", which a mapping that returned a CONSTANT would
+  # fail — but a mapping that returned the RIGHT constant per token while ignoring the
+  # SENTINEL would pass every arm except these two. Asserted as a distinctness relation
+  # rather than as more literals: the sentinel must actually be read.
+  [[ "$(_de_verdict_exit_code INCOMPLETE warn)" != "$(_de_verdict_exit_code INCOMPLETE enforce)" ]] \
+    || { echo "FAIL: DE-10b INCOMPLETE must map differently under warn vs enforce (the sentinel is not being read)"; failures=$((failures+1)); }
+  [[ "$(_de_verdict_exit_code NOSET warn)" != "$(_de_verdict_exit_code NOSET enforce)" ]] \
+    || { echo "FAIL: DE-10b NOSET must map differently under warn vs enforce (the sentinel is not being read)"; failures=$((failures+1)); }
+  # DE-10c — the PV-7 invariant as a POPULATION property, not a per-arm literal: across
+  # every (verdict x sentinel) pair the group knows about, exactly TWO produce 0 and both
+  # are CLEAN. A future verdict token added without a code lands on the *) arm (1) and is
+  # caught here rather than silently joining the clean set.
+  local _de_zero_producers _dt _ds
+  _de_zero_producers=0
+  for _dt in CLEAN SKIP INCOMPLETE NOSET __unexpected__; do
+    for _ds in warn enforce; do
+      [[ "$(_de_verdict_exit_code "$_dt" "$_ds")" == "0" ]] && _de_zero_producers=$((_de_zero_producers+1))
+    done
+  done
+  [[ "$_de_zero_producers" -eq 2 ]] \
+    || { echo "FAIL: DE-10c exit 0 must have exactly 2 producers (CLEAN x {warn,enforce}); found $_de_zero_producers — a degraded verdict has collapsed onto the clean code (PV-7)"; failures=$((failures+1)); }
+
   /bin/rm -rf "$_d" 2>/dev/null || true
 
   # ─── Assertion group RC — RELEASE_LOG row classes (Checks 26/32/47/48/61) [#5234] ──
@@ -17837,7 +17954,7 @@ mirror-only body
 EOF
   }
   _cp_seed_registry() {
-    /usr/bin/printf '# fixture registry\ncore/schemas/fixture-schema.md|||operations/skills/fixture-skill/references/fixture-schema.md|||Owned By Canonical|||Owned By Mirror|||Shared Section\n' > "$_preg"
+    /usr/bin/printf '# fixture registry\ncore/schemas/fixture-schema.md|||operations/skills/fixture-skill/references/fixture-schema.md|||Owned By Canonical|||Owned By Mirror|||Shared Section\n' > "$_preg"   # deploy-path-literal: allow — synthetic self-test fixture record; both paths are resolved against the mktemp -d sandbox root this self-test builds, never against the repository
   }
   _cp_selftest_verdict() {
     CP_ROOT="$_p" CP_PAIRS_FILE="${1:-$_preg}" CP_PACKAGES="$_p/packages" CP_USER_SKILLS="$_p/nonexistent-skills" \
@@ -17903,7 +18020,7 @@ EOF
   # CP-7 — a MALFORMED record (wrong field count) ⇒ MALFORMED, never a silent pass.
   # Guards the second half of the fail-closed posture: absence is CP-4, corruption
   # is this.
-  /usr/bin/printf '# fixture registry\ncore/schemas/fixture-schema.md|||operations/skills/fixture-skill/references/fixture-schema.md|||Owned By Canonical\n' > "$_preg"
+  /usr/bin/printf '# fixture registry\ncore/schemas/fixture-schema.md|||operations/skills/fixture-skill/references/fixture-schema.md|||Owned By Canonical\n' > "$_preg"   # deploy-path-literal: allow — synthetic self-test fixture record; both paths are resolved against the mktemp -d sandbox root this self-test builds, never against the repository
   _v="$(_cp_selftest_verdict)"; _tok="${_v%%|*}"
   [[ "$_tok" == "MALFORMED" ]] || { echo "FAIL: CP-7 a registry record without 5 fields must verdict MALFORMED, got '$_v'"; failures=$((failures+1)); }
 
@@ -18662,7 +18779,7 @@ EOF
   echo "    OS-1 suppressed -> BOTH findings / OS-2 emitted -> zero / OS-3 bolded numerals -> grammar finding / OS-4 explicit-N/A conformant / OS-5 archived+co-located -> zero / OS-6 T4 wrong-surface write -> split-record / OS-7 field on both surfaces -> split-record / OS-8 dangling segment pointer -> finding / OS-9 learnings mis-placed names the heading found / OS-10 short field-set / OS-11 duplicate heading / OS-12 no-match outputs cutoff WARNs vacuous / OS-13 __none__ re-dormants (j)+(k) only. Every arm graded on the FINDING LINE — exit code, corpus-wide grep and 'the field parses' are all identical on OS-4/OS-5 and OS-6.
     Close-Class-Telemetry sub-check (l) (#4437): OS-14 GENUINE FAILURE — a row with velocity+learnings and no telemetry field fires (l) alone / OS-15 control — the same fixture with a measured field raises nothing / OS-16 slot-short field fails the ordered eight-slot grammar while presence passes / OS-17 ANTI-VACUITY — a byte-perfect all-N/A field is a finding, with OS-15 as its control / OS-18 split record (field in the hot stub, body in the segment) / OS-19 __none__ re-dormants (l) and ONLY (l) — the SHIPPED configuration / OS-20 no-match telemetry cutoff WARNs vacuous in its own voice / OS-21 prefix mis-arm WARNs naming the row it actually armed at." >&2
   echo "  decision-emission minimum set validated (#4026, group DE):" >&2
-  echo "    DE-1 dormant SKIP / DE-2 seeded zero-emission INCOMPLETE / DE-3 complete CLEAN 1 / DE-4 partial-set INCOMPLETE / DE-4b sibling-typed omission INCOMPLETE (kills the subtype-conjunct mutant) / DE-5 legacy-key-only INCOMPLETE / DE-6+DE-7 pre-cutover + DEPLOYED rows excluded / DE-7b VERIFIED flip counted / DE-8 rung-2 resolution / DE-9 absent asserted-set NOSET" >&2
+  echo "    DE-1 dormant SKIP / DE-2 seeded zero-emission INCOMPLETE / DE-3 complete CLEAN 1 / DE-4 partial-set INCOMPLETE / DE-4b sibling-typed omission INCOMPLETE (kills the subtype-conjunct mutant) / DE-5 legacy-key-only INCOMPLETE / DE-6+DE-7 pre-cutover + DEPLOYED rows excluded / DE-7b VERIFIED flip counted / DE-8 rung-2 resolution / DE-9 absent asserted-set NOSET / DE-10 THE EXIT-CODE SPACE (#4216) — all ten (verdict x sentinel) pairs map as contracted, with DE-10b proving the sentinel is actually read (warn and enforce must differ for INCOMPLETE and NOSET) and DE-10c asserting PV-7 as a POPULATION property: exactly two of the ten pairs produce exit 0 and both are CLEAN, so a degraded verdict collapsing onto the clean code is caught even if it is a verdict token this group does not yet name" >&2
   echo "  RELEASE_LOG row classes validated (#5234, group RC):" >&2
   echo "    RC-1 both row classes enumerated and resolving clean / RC-2 union invariant enumerated + declared-excluded + not-in-scope == total / RC-2b the same invariant holds under a cutoff-split partition / RC-3 zero version-anchored LOG-row selectors survive in executable source outside _rl_data_rows, with a matched-nowhere detector control / RC-4 a fully-escaped metacharacter key resolves its INDEX row, with a dot-only-escaping control and an unrelated-key specificity arm / RC-5 the tag limb is class-gated OUT for a version-less row, with a VERSIONED control that must still fire / RC-6 a versioned row's row_key and corpus_key are both the verbatim cell (byte-identical — the no-regression guarantee for the versioned population) + a no-match cutoff enumerates nothing / RC-7 an unreadable header returns non-zero AND emits a stderr diagnostic, with a well-formed control returning 0 / RC-8 adding one data row moves the emitted denominator by exactly 1 — the arm that kills a hardcoded or stale denominator." >&2
   echo "  complementary-pair ownership validated (#4178, group CP):" >&2
@@ -18753,23 +18870,85 @@ cmd_check_close_completeness() {
 # ─── Mode: --check-decision-emission (the Stage-13 decision-emission probe) — #4026 ─
 #
 # Runs ONLY the decision-emission verdict (not the full --check suite) and maps the verdict
-# to an EXIT CODE. Invoked from stage-13-close.md Phase A8.2 at close-out; there is
-# deliberately NO CI caller, which is exactly why the gate declares
-# `posture: advisory` / `enforcement-surface: deploy-time-only` per gate-efficacy-standard.md
-# Requirement (b′) — a check with no pre-merge surface cannot honestly declare `required`.
+# to an EXIT CODE. Invoked from stage-13-close.md Phase A8.2 at close-out, and from
+# .github/workflows/decision-emission.yml's LIVE ARM at pull-request time.
+#
+# THE PREDICATE IS SPLIT BY LOCUS OF INPUT, AND ONLY THE TREE-RESIDENT HALF IS CI-GATED
+# (ADR-166). The verdict input this probe needs — the pipeline event log — is
+# operator-instance state, git-ignored and absent from a clean checkout, so in CI this
+# probe verdicts SKIP by construction and can assert nothing about emission completeness.
+# That is why the live arm is REPORT-ONLY and why exit 3 exists: a CI caller must be able
+# to tell "measured nothing" from "measured and passed". The MACHINERY half — that the
+# verdict engine itself still discriminates — IS tree-resident and IS CI-gated, by the
+# integrity arm of the same workflow running `deploy.sh --self-test` (assertion group DE).
+#
+# Consequently the gate declares `posture: advisory` on BOTH arms per
+# gate-efficacy-standard.md Requirement (b′). The machinery arm is the half eligible to
+# become `required` once an operator registers its context; the live arm is a PERMANENT
+# advisory residual, because verdict-input closure over repo paths is empty for the event
+# log. Never let the tree-resident row imply the backlog-resident claim.
 #
 # Sentinel-aware, mirroring cmd_check_close_completeness: the committed
 # .github/decision-emission.enforce marker's first non-comment token decides whether an
-# INCOMPLETE (or NOSET) verdict BLOCKS (enforce => exit 1) or is reported non-blocking
-# (warn / absent => exit 0, true verdict still printed). It ships `warn`.
+# INCOMPLETE (or NOSET) verdict BLOCKS (enforce => exit 1) or is reported as a NON-BLOCKING
+# ADVISORY — on its own non-zero code, never on 0. It ships `warn`.
 #
 # NOSET is treated like INCOMPLETE rather than like SKIP on purpose: an emission gate with
 # no asserted set is a control that cannot fail, which is the defect class this release
-# exists to close — surfacing it as a benign skip would reproduce it.
+# exists to close — surfacing it as a benign skip would reproduce it. It nonetheless
+# carries its OWN advisory code, distinct from INCOMPLETE's: the two demand different
+# remedies (restore the asserted-set file vs. emit the missing rows), and a caller reading
+# only the integer must be able to tell a BROKEN INSTRUMENT from a REAL FINDING.
 #
-#   exit 0  — CLEAN, SKIP (dormant / no in-scope release / corpus absent), or a
-#             non-blocking INCOMPLETE/NOSET while the sentinel token is not `enforce`.
-#   exit 1  — INCOMPLETE / NOSET under `enforce`, or an unexpected verdict (fail-closed).
+# VERDICT -> EXIT CONTRACT (the authoring home for this probe; every other surface CITES
+# this table). THE INVARIANT IS PV-7: a degraded or unmeasured state NEVER shares a member
+# with the clean state. Exit 0 has EXACTLY ONE producer — CLEAN — under EVERY sentinel
+# state. A sentinel may RAISE a verdict's severity (advisory -> blocking); it may never
+# LOWER one onto 0.
+#
+#   verdict         sentinel token   exit   caller reads it as
+#   -------------   --------------   ----   ----------------------------------------------
+#   CLEAN           any              0      pass — every in-scope release emitted every
+#                                           asserted MUST class. SOLE OCCUPANT OF 0.
+#   INCOMPLETE      != enforce       2      ADVISORY finding: MEASURED and incomplete,
+#                                           reported, not blocking. Never 0 — a probe that
+#                                           says INCOMPLETE in prose and OK in $? invites a
+#                                           caller to conclude the opposite of the truth.
+#   INCOMPLETE      enforce          1      BLOCKING finding — the gate must fail closed
+#   SKIP            any              3      NOT-EVALUATED: the verdict was WITHHELD, not
+#                                           granted. Four causes, all printed on stdout:
+#                                           dormant cutover · RELEASE_LOG absent · EVENT
+#                                           LOG ABSENT (the CI case) · zero in-scope
+#                                           releases. Distinct from 0 so "clean" and
+#                                           "unmeasured" can never be conflated.
+#   NOSET           != enforce       4      ADVISORY REPO DEFECT: the asserted set is absent
+#                                           or empty, so the gate asserted NOTHING. Distinct
+#                                           from 2 (a real finding), from 3 (nothing TO
+#                                           measure) and from 0. This is the CI-REACHABLE
+#                                           arm: the NOSET guards precede the event-log SKIP
+#                                           guard, so on a bare checkout an emptied asserted
+#                                           set verdicts NOSET rather than SKIP.
+#   NOSET           enforce          1      BLOCKING repo defect — the gate must fail closed
+#   <other>         any              1      unexpected verdict — fail-closed, sentinel-agnostic
+#
+# NEITHER 3 NOR 2 IS A NEW CONVENTION. Both mirror cmd_check_package_freshness, whose
+# contract table is the tree-wide authoring home: FRESH 0 / STALE advisory 2 / NOT-EVALUATED
+# 3 / blocking 1, with the advisory 2 itself following core/deploy/tools/cross-module-audit.sh
+# (2 = "violations detected (advisory)" vs 1 = BLOCKER).
+# .github/workflows/skill-package-freshness.yml already branches on them with the wording
+# this gate reuses — "could NOT BE MEASURED … It is NOT a pass." This probe shipped with the
+# SKIP half of that convention and stopped one verdict short of the rest; 2 and 4 complete it.
+#
+# The alternative — parsing the printed verdict token in YAML — was rejected: a token
+# parser in the workflow is a SECOND reader of the predicate and drifts from this one.
+# Enforcement POLICY stays in the sentinel, which this probe remains the single reader of;
+# the CI caller dispatches on the integer and never re-parses the sentinel file.
+#
+# SKIP is sentinel-AGNOSTIC on purpose. Under `enforce` a withheld verdict must not become
+# a blocking finding: enforce arms the LIVE arm, and in CI the live arm has no input to
+# evaluate, so mapping SKIP to 1 under enforce would turn the flip into a permanent red on
+# every PR rather than into enforcement. The flip's blocking behaviour belongs to
+# INCOMPLETE/NOSET, which are real findings; SKIP is the absence of a measurement.
 cmd_check_decision_emission() {
   validate_workspace
   detect_install_path || true
@@ -18788,31 +18967,38 @@ cmd_check_decision_emission() {
     CLEAN)
       log "decision-emission: ${verdict#CLEAN } post-cutover VERIFIED release(s) emitted every asserted MUST class — OK"
       log "  Scope note: this asserts EXISTENCE (>=1 row per asserted class), not fidelity. It cannot detect a wrong payload, a mis-keyed subject, or a row emitted for a decision never rendered."
-      exit 0
+      exit "$(_de_verdict_exit_code CLEAN "$de_enforce")"
       ;;
     SKIP)
       log "decision-emission: SKIP — ${verdict#SKIP }"
-      exit 0
+      log "  NOT-EVALUATED — this is a WITHHELD verdict, never a clean one. The run certifies"
+      log "  nothing about emission completeness; the cause and the resolved path are printed above."
+      log "  Exit 3 (mirroring --check-package-freshness's NOT-EVALUATED code) so a caller reading"
+      log "  only the exit code cannot mistake an unmeasured run for a passing one."
+      exit "$(_de_verdict_exit_code SKIP "$de_enforce")"
       ;;
     NOSET)
       log "decision-emission: NOSET — ${verdict#NOSET }"
       log "  A minimum-emission gate with no asserted set asserts nothing. Restore core/deploy/allowlists/decision-emission-asserted-set.txt (its classes MUST be MUST rows of the playbook's EMISSION-CONTRACT block; release/tools/check-emission-contract-subset.sh enforces that relation in CI)."
-      [[ "$de_enforce" == "enforce" ]] && exit 1
-      log "  WARN-MODE (sentinel '$de_enforce_file' token != enforce): reporting the true verdict but NOT blocking."
-      exit 0
+      if [[ "$de_enforce" == "enforce" ]]; then
+        log "  ENFORCE-MODE (sentinel '$de_enforce_file' token == enforce): a gate asserting nothing BLOCKS — exit 1."
+        exit "$(_de_verdict_exit_code NOSET enforce)"
+      fi
+      log "  WARN-MODE (sentinel '$de_enforce_file' token != enforce): reporting the true verdict as ADVISORY — exit 4, non-zero so no caller can read a disabled gate as clean, and distinct from the INCOMPLETE advisory 2 (a real finding) and from the SKIP 3 (nothing to measure). This is a REPO DEFECT to fix, never a pass."
+      exit "$(_de_verdict_exit_code NOSET warn)"
       ;;
     INCOMPLETE)
       log "decision-emission: INCOMPLETE — ${verdict#INCOMPLETE } (missing-class count / checked-release count; see detail above)"
       log "  A post-cutover release closed without emitting a MUST class. The remedy is to emit the missing row(s) per orchestration-playbook.md Procedure 4a — never to waive the finding."
       if [[ "$de_enforce" == "enforce" ]]; then
-        exit 1
+        exit "$(_de_verdict_exit_code INCOMPLETE enforce)"
       fi
-      log "  WARN-MODE (sentinel '$de_enforce_file' token != enforce): reporting the true verdict but NOT blocking — the flip to 'enforce' is an operator decision recorded in core/standards/gate-efficacy-standard.md, never auto-promoted by hit count."
-      exit 0
+      log "  WARN-MODE (sentinel '$de_enforce_file' token != enforce): reporting the true verdict as ADVISORY — exit 2, so no caller can read an INCOMPLETE run as clean, and distinct from the blocking exit 1. The flip to 'enforce' is an operator decision recorded in core/standards/gate-efficacy-standard.md, never auto-promoted by hit count."
+      exit "$(_de_verdict_exit_code INCOMPLETE warn)"
       ;;
     *)
       log "decision-emission: unexpected verdict '$verdict' — fail-closed"
-      exit 1
+      exit "$(_de_verdict_exit_code __unexpected__ "$de_enforce")"
       ;;
   esac
 }
@@ -19543,12 +19729,26 @@ main() {
       ;;
     --check-decision-emission)
       # Stage-13 decision-emission probe (#4026): runs ONLY Check 61's verdict and exits
-      # per the verdict (0 CLEAN/SKIP, 1 INCOMPLETE/NOSET when the committed
-      # .github/decision-emission.enforce sentinel is `enforce`; fail-closed on an
-      # unexpected verdict). The same logic ALSO fires inside the full --check suite
+      # per the verdict. FIVE codes, and 0 is CLEAN'S ALONE under EVERY sentinel state
+      # (PV-7): 0 CLEAN · 2 INCOMPLETE advisory · 3 SKIP = NOT-EVALUATED (sentinel-agnostic)
+      # · 4 NOSET advisory (the gate asserted nothing — a repo defect) · 1 INCOMPLETE/NOSET
+      # when the committed .github/decision-emission.enforce sentinel is `enforce`, and
+      # fail-closed on an unexpected verdict. The sentinel is an ESCALATION dial: it raises
+      # an advisory to blocking and can never lower one onto 0. See the contract table on
+      # cmd_check_decision_emission, which is the authoring home this comment cites rather
+      # than restates. The same logic ALSO fires inside the full --check suite
       # (Check 61, committed warn default) — one shared body (_de_compute_verdict), no
-      # copy. Invoked from stage-13-close.md Phase A8.2; NO CI caller by design, which is
-      # why the gate declares advisory / deploy-time-only.
+      # copy. Invoked from stage-13-close.md Phase A8.2 AND from the live arm of
+      # .github/workflows/decision-emission.yml, which branches on the exit code alone and
+      # re-encodes no predicate. The live arm is report-only: in CI the event log is
+      # absent, so this probe verdicts SKIP and the exit-3 contract is what keeps that
+      # non-measurement from reading as a pass.
+      #
+      # THIS CHECK MUST NOT JOIN rs_checks (--check-required-subset). That roster's verdict
+      # enum maps SKIP into its PASS arm alongside CLEAN/PASS/FRESH, so a member that can
+      # only ever emit SKIP in CI would raise rs_pass on every run and could never raise
+      # rs_fail — laundering a CI non-measurement into a green REQUIRED check, which is the
+      # exact defect this gate's CI mirror exists to avoid reproducing.
       cmd_check_decision_emission
       ;;
     --check-required-subset)
@@ -19613,7 +19813,7 @@ main() {
       echo "  --check-close-completeness   Close-completeness probe (Check 48 only; exits 1 on a VERIFIED row missing a Stage-13 output) (#1290)"
       echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73, 77, 78); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; exits 1 on an INCOMPLETE row set when enforce) (#1484)"
-      echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; advisory/deploy-time-only; exits 1 on INCOMPLETE/NOSET when enforce) (#4026)"
+      echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; CLEAN=0 and NOTHING ELSE EVER EXITS 0, INCOMPLETE=2 advisory, SKIP=3 NOT-EVALUATED (withheld, never a pass), NOSET=4 advisory (gate asserted nothing — repo defect), INCOMPLETE/NOSET=1 when enforce, unexpected=1) (#4026)"
       echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, NOT-EVALUATED=3 advisory / 1 when enforce, unexpected=1) (#2656)"
       echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"
       echo "  --report                     Structured report for Stage 13 verification evidence"
