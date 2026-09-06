@@ -591,6 +591,29 @@ qa.sh
 ./doctor.sh
 doctor.sh
 
+# update.sh — the composition-surface propagation carrier, and the third root-level
+# operator CLI alongside qa.sh and doctor.sh above. Held ZERO rows while TWO pipeline
+# specs MANDATE it (three invocations across those two sites):
+# release/references/pipeline/stage-12-execute.md names `./update.sh --surfaces-only`
+# (targeted) and a full `./update.sh` (wider blast radius) as the DEFAULT disposition for
+# a composition-surface change, and records that `deploy.sh --deploy` does NOT carry that
+# class and that NO automated detection backstop exists for it — so the mandated command
+# was the only control, and the agent the spec mandates could not run it.
+# release/references/pipeline/stage-13-close.md names it as the propagator of the
+# `.version` stamp to the deployed snapshot.
+# Surfaced by Arm F (the mandate-reachability assertion this release ships) rather than by
+# anyone noticing: it is the one remediable finding of the six Arm F reports on arrival —
+# the other five are `.py` operands that no row can match while the non-shell section is
+# deliberately empty pending its drain.
+# CANONICAL FOUR, and four only. The fifth `*/…` form is NOT added: per ADR-191 it admits
+# an arbitrary path prefix (`/tmp/<attacker>/update.sh` matches, since `*` crosses `/` in
+# the hook's `case` matcher), which would widen the script-laundering surface this file
+# exists to close. update.sh has no reachability need that the canonical four do not serve.
+[PMO_PLATFORM_ROOT]/update.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/update.sh
+./update.sh
+update.sh
+
 # finops-usage-extractor scripts (#3909) — new in-tree bash CLIs (local-session usage
 # parser + OFF-by-default provider connector). All four invocation forms per tool.
 [PMO_PLATFORM_ROOT]/core/skills/finops-usage-extractor/scripts/extract-usage.sh
