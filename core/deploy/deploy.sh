@@ -15627,7 +15627,7 @@ sys.stdout.write("".join(out) + "|")
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     local c70_mode
     c70_mode="$(resolve_check_mode "operator-toml-schema" "warn")"
-    log "Check 70: operator.toml declared-schema conformance (declaration/template parity + no hand-written emit, enforcing; live-config key delta, ${c70_mode})"
+    log "Check 70: operator.toml declared-schema conformance (declaration/template parity + no hand-written emit + spec-§4/template/declaration registry parity, enforcing; live-config key delta, ${c70_mode})"
     local c70_script="core/deploy/tools/check-operator-toml-schema.sh"
     if [[ ! -f "$c70_script" ]]; then
       log "  FAIL:  operator-toml-schema — primitive script missing: $c70_script (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
