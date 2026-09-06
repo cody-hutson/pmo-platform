@@ -67,7 +67,7 @@ gh api -X PATCH repos/:owner/:repo/milestones/N -f description=@/path/to/body.md
 gh api -X PATCH repos/:owner/:repo/milestones/N -F description=@/path/to/body.md
 ```
 
-## 2.1 Detecting the form — two predicates over two populations
+### 2.1 Detecting the form — two predicates over two populations
 
 The rule above prevents the corruption where it originates. Detecting it needs
 **two** predicates, because the failure has two observable surfaces and neither
@@ -140,7 +140,7 @@ reported as unusable, not as a clean population (§ 7.2).
 denominator, the arms and the findings in the change's own verification record.
 A count written into this section is stale at the next artifact.
 
-## 2.2 What no automated control covers — the artifact-body surface
+### 2.2 What no automated control covers — the artifact-body surface
 
 **Rule.** State the coverage a control actually has. This failure publishes to a
 surface the repository's content controls do not read, and a remediation that
