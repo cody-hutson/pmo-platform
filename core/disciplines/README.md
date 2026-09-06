@@ -55,6 +55,7 @@ These are parallel — each governs a distinct activity-class at a distinct temp
 
 Decision sub-mechanism (not a peer activity-class — an edit-time twin of `decision-discipline.md` §2.1.1):
 - [reconcile-dont-annotate.md](reconcile-dont-annotate.md) — when editing an artifact that carries stale/contradictory state, reconcile it to current state rather than annotating-and-deferring. The edit-time twin of verify-before-recommend (§2.1.1).
+- [external-seam-conduct.md](external-seam-conduct.md) — the shape of an agent write to a human-facing external seam (a work-item record or knowledge page in a connected system, and their comment streams): routing (the record holds state, a comment addresses a person), the register prohibition, and the authorship-not-staleness discriminator. Sibling of `reconcile-dont-annotate.md` on the surface the platform does *not* own.
 - [ticket-architecture-reconciliation.md](ticket-architecture-reconciliation.md) — the pre-build ticket-vs-live-architecture specialization of Discovery's stage-entry premise-currency check and Decision §2.1.1. Fires at Stage 4/5 entry when a ticket touches ≥1 architecture surface; uses ticket-age-vs-architecture-date as the staleness signal. "Is the ticket's premise still valid vs live architecture?"
 
 Authoring sub-mechanism (not a peer activity-class — the default posture when ADDING durable-corpus content):

@@ -291,6 +291,7 @@ These platform-wide guardrails are inherited from CLAUDE.md § Universal Prefere
 - **Evidence-quality labels** on every grounded claim (`[SOURCE]`, `[INFERRED]`, `[ASSUMPTION – CONFIRM]`, `[CONTEXT]`, `[RECOMMENDED]`), alongside the confidence + band label.
 - **Reversibility tier on decision-class items** (see `## Reversibility Discipline`).
 - **Read-only.** The skill audits and recommends; it never writes a tracker, a Tier-1 file, or a comm. Every mutation is staged or routed for approval.
+- **External-seam writes** — a work-item record or knowledge page in a connected system, and their comment streams — follow `core/disciplines/external-seam-conduct.md`: the record holds state, a comment addresses a person. This skill's read-only contract already forbids the write; the citation is what makes the shape binding on the **staged** output, so a finding routed for approval is drafted as something that belongs in the record's fields rather than as a dated audit comment somebody then pastes.
 
 ## Reference docs
 

@@ -118,19 +118,49 @@ OUT="$(rehome "${WS}" "${TGT}")" || RC=$?
 [ "${RC}" -eq 0 ] && report "exit 0" 1 || report "exit 0" 0 "rc=${RC} out=${OUT}"
 [ "$(q "${TGT}" valid)" = "yes" ] && report "target is valid JSON" 1 || report "target is valid JSON" 0 "${OUT}"
 
+# The two expected counts are DERIVED from core/settings.json.template — the artifact
+# of record the merge itself reads — never transcribed into this file. A transcribed
+# count decays: this assertion carried a frozen `22` and turned RED the moment a release
+# declared a 23rd registration, reporting a defect in a merge that had worked perfectly.
+# The proposition worth asserting is not "the target holds 22" but "the merge dropped
+# nothing", so the target is compared against its own source.
+#
 # NOTE: deliberately NOT named GROUPS. `GROUPS` is a bash-maintained special variable
 # (the invoking user's group IDs); assigning to it is silently ignored, so the assertion
 # would have compared the user's GID — a number that happens to be >= 1 on every macOS
 # account — and passed regardless of what the merge produced. That is a false-green of
 # exactly the shape this release exists to eliminate, caught here by cross-checking the
 # count against an independent read of the same file.
+TPL="${REPO_ROOT}/core/settings.json.template"
+EXP_GROUPS="$(q "${TPL}" groups)"
+EXP_REGS="$(q "${TPL}" registrations)"
+
+# Anti-vacuity. A derived expectation is evidence only while it is non-degenerate: an
+# unreadable, empty, or hook-less template yields "" or 0 on both sides and every
+# comparison below becomes 0 -eq 0 — a green that proves nothing. Assert the source
+# really declares a population before comparing anything to it. `regs >= groups` is the
+# structural invariant (every matcher group wires at least one command).
+is_num() { case "${1:-}" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac; }
+VAC=0
+if [ "$(q "${TPL}" valid)" = "yes" ] && is_num "${EXP_GROUPS}" && is_num "${EXP_REGS}"; then
+  if [ "${EXP_GROUPS}" -gt 0 ] && [ "${EXP_REGS}" -ge "${EXP_GROUPS}" ]; then VAC=1; fi
+fi
+[ "${VAC}" -eq 1 ] \
+  && report "anti-vacuity: template declares a non-degenerate expectation (groups=${EXP_GROUPS} registrations=${EXP_REGS})" 1 \
+  || report "anti-vacuity: template declares a non-degenerate expectation" 0 \
+       "template=${TPL} valid=$(q "${TPL}" valid) groups=${EXP_GROUPS:-<empty>} registrations=${EXP_REGS:-<empty>}"
+
 PRE_GROUPS="$(q "${TGT}" groups)"
-[ "${PRE_GROUPS:-0}" -eq 6 ] 2>/dev/null && report "PreToolUse present with all 6 matcher groups" 1 \
-  || report "PreToolUse present with all 6 matcher groups" 0 "groups=${PRE_GROUPS}"
+[ "${PRE_GROUPS:-0}" -eq "${EXP_GROUPS:-0}" ] 2>/dev/null \
+  && report "PreToolUse present with all ${EXP_GROUPS} matcher groups (derived)" 1 \
+  || report "PreToolUse present with all ${EXP_GROUPS} matcher groups (derived)" 0 \
+       "groups=${PRE_GROUPS} expected=${EXP_GROUPS}"
 
 PRE_REGS="$(q "${TGT}" registrations)"
-[ "${PRE_REGS:-0}" -eq 22 ] 2>/dev/null && report "all 22 PreToolUse registrations merged" 1 \
-  || report "all 22 PreToolUse registrations merged" 0 "registrations=${PRE_REGS}"
+[ "${PRE_REGS:-0}" -eq "${EXP_REGS:-0}" ] 2>/dev/null \
+  && report "all ${EXP_REGS} PreToolUse registrations merged (derived)" 1 \
+  || report "all ${EXP_REGS} PreToolUse registrations merged (derived)" 0 \
+       "registrations=${PRE_REGS} expected=${EXP_REGS}"
 
 # Control arm: a matcher the template does NOT declare must be absent. Without a
 # known-negative the two counts above only prove the object is non-empty.
