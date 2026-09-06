@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.59] - 2026-09-06
+
+Tools the release process requires can now actually be run, and a check that measured nothing can no longer report itself clean.
+
+[Full notes](release/releases/notes/v4.59_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.59)
+
 ## [v4.58] - 2026-09-06
 
 Ten release checks and rules now match what the platform actually does, so several stop reporting problems that were never there.
