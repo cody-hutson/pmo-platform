@@ -371,6 +371,13 @@ the exit criterion: the clarity gate (the 5-test passing for the type/altitude) 
 the stop condition. Project-scoped output discipline does not apply — this skill
 emits to the work tracker, not to a project folder.
 
+**External-seam writes** — a work-item record or knowledge page in a connected
+system, and their comment streams — follow `core/disciplines/external-seam-conduct.md`:
+the record holds state, a comment addresses a person. This binds Mode C most
+directly, because an ambient auto-log whose destination is an external seam rather
+than the platform's own work tracker lands the item in the record's fields, never
+as a dated log comment.
+
 ## Reversibility Discipline
 
 This skill produces decision-class outputs — the proposed work-item type, the
