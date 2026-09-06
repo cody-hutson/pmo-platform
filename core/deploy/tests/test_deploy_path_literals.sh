@@ -155,9 +155,17 @@ function emit_field(f, marked,   seg) {
   if (f ~ /[ \t]/)        return          # not path-shaped: prose or a command
   LIT++
   seg = first_seg(f)
-  # P1 — the root must carry at least one tracked member. ROOTS arrives already
-  # space-padded from a live git ls-files read; a hardcoded list is what the
-  # PL-4 arm exists to catch.
+  # P1, FIRST LIMB — REPO-RELATIVE. An absolute literal (/usr/bin/python3,
+  # /dev/stderr) has an EMPTY first segment, because the separator is at
+  # position 1. An empty segment is not a tracked root, so an absolute path is
+  # out of class. Stating that here rather than leaving it to the membership
+  # test below keeps the clause legible at the point of decision, and keeps the
+  # classifier from depending on the exact whitespace of a value derived
+  # elsewhere. Counted as untracked-root, which is literally what it is.
+  if (seg == "")                      { XROOT++; return }
+  # P1, SECOND LIMB — the root must carry at least one tracked member. ROOTS
+  # arrives already space-padded from a live git ls-files read; a hardcoded list
+  # is what the PL-4 arm exists to catch.
   if (index(ROOTS, " " seg " ") == 0) { XROOT++; return }
   # P2 — runtime-constructed or globbed paths are out of class.
   if (f ~ /[$`]/)                     { XEXP++;  return }
@@ -219,9 +227,19 @@ END { printf "@@\t%d\t%d\t%d\t%d\t%d\t%d\n", FILES+0, LIT+0, XROOT+0, XEXP+0, XG
 # least one tracked file, space-padded for an index() membership test. Never a
 # hardcoded list: a hardcoded set rots the moment a module is added, reproducing
 # the very class this file exists to catch.
+#
+# THE TERMINAL `tr -s` IS LOAD-BEARING, not tidiness. `tr \n ` converts EVERY
+# newline including the trailing one, so the substitution already ends in a
+# space and the printf format then appends a second — leaving a literal double
+# space at the tail. The membership test probes for " " seg " ", so a degenerate
+# EMPTY seg probes for exactly that double space and MATCHES, admitting every
+# absolute path into the required class. Squeezing runs of spaces to one makes
+# the padded string mean what it says: one separator, between and around every
+# token. P1s first limb in emit_field() guards the same degenerate input at the
+# point of use; this keeps the derived value itself well-formed.
 # ─────────────────────────────────────────────────────────────────────────────
 pl_roots() {
-  printf ' %s ' "$(git -C "${REPO_ROOT}" ls-files | awk -F/ 'NF > 1 { print $1 }' | sort -u | tr '\n' ' ')"
+  printf ' %s ' "$(git -C "${REPO_ROOT}" ls-files | awk -F/ 'NF > 1 { print $1 }' | sort -u | tr '\n' ' ')" | tr -s ' '
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -358,24 +376,37 @@ case "${OUT}" in
 esac
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PL-4 — SPECIFICITY. A literal rooted at an UNTRACKED top-level directory is not
-# flagged, and the root set is DERIVED rather than hardcoded. Both halves are
-# needed: a hardcoded list would still pass the fixture half, so the arm
+# PL-4 — SPECIFICITY. A literal whose root is not a tracked top-level directory
+# is not flagged, and the root set is DERIVED rather than hardcoded. Both halves
+# are needed: a hardcoded list would still pass the fixture half, so the arm
 # independently re-derives the set from git and compares.
+#
+# The fixture carries BOTH shapes P1 puts out of class: a literal rooted at an
+# untracked tree (projects/, git-ignored Layer 2), and an ABSOLUTE literal, whose
+# first segment is empty and is therefore no tracked root at all. The absolute
+# case is the one that shipped wrong: pl_roots() left a trailing double space, so
+# the empty-segment probe " " "" " " matched it and every absolute path in
+# deploy.sh — /usr/bin/python3 and /dev/stderr, 14 sites — entered the required
+# class and was then resolved against the repo root, where it can never exist.
 # Mutation that must turn this red: hardcode the root list in pl_roots() instead
-# of deriving it from git ls-files.
+# of deriving it from git ls-files; drop the empty-segment guard in emit_field();
+# or drop the terminal `tr -s` from pl_roots() (the absolute literal starts being
+# flagged, because it is resolved against the fixture root and is absent there).
 # ─────────────────────────────────────────────────────────────────────────────
-printf '\nPL-4: SPECIFICITY — untracked-root literal is out of class; the root set is derived\n'
+printf '\nPL-4: SPECIFICITY — untracked-root and absolute literals are out of class; the root set is derived\n'
 mark_arm "PL-4"
 mkdir -p "${SBX}/f4"
-printf 'local p="projects/Reference/__untracked_root_pl4__.md"\n' > "${SBX}/f4/subject.sh"
+{
+  printf 'local p="projects/Reference/__untracked_root_pl4__.md"\n'
+  printf 'local q="/usr/bin/python3"\n'
+} > "${SBX}/f4/subject.sh"
 OUT="$(pl_scan "${SBX}/f4" "${ROOTS}" "${SBX}/f4/subject.sh")"; RC=$?
 case "${OUT}" in
-  *"FINDING"*) report "PL-4a untracked-root literal is out of class" 0 "$(printf '%s' "${OUT}" | tr '\n' '|')" ;;
+  *"FINDING"*) report "PL-4a untracked-root and absolute literals are out of class" 0 "$(printf '%s' "${OUT}" | tr '\n' '|')" ;;
   *)
     case "${OUT}" in
-      *"required=0"*"untracked-root=1"*) report "PL-4a untracked-root literal is out of class (counted as excluded)" 1 ;;
-      *) report "PL-4a untracked-root literal is out of class (counted as excluded)" 0 "$(printf '%s' "${OUT}" | tr '\n' '|')" ;;
+      *"required=0"*"untracked-root=2"*) report "PL-4a untracked-root + absolute literals are out of class (both counted as excluded)" 1 ;;
+      *) report "PL-4a untracked-root + absolute literals are out of class (both counted as excluded)" 0 "$(printf '%s' "${OUT}" | tr '\n' '|')" ;;
     esac ;;
 esac
 
