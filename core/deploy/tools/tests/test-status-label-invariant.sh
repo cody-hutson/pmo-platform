@@ -80,12 +80,19 @@
 #
 # COST NOTE (read before adding arms)
 # -----------------------------------
-# Check 16 has no standalone entry point — it is inline in cmd_check(), so the
-# only way to execute the real filters is a full `deploy.sh --check`, which runs
-# every check and takes minutes. Each additional arm that needs a different
-# fixture or mode costs another full run. This suite therefore spends exactly ONE
-# real subject run and derives its specificity from exact-set assertions within
-# that run; the no-op arm is free because a no-op exits immediately.
+# Check 16's EMIT is inline in cmd_check(), so exercising the check end to end —
+# emit shape, mode resolution, exit code — still costs a full `deploy.sh --check`,
+# which runs every check and takes minutes. That is why this suite spends exactly
+# ONE real subject run and derives its specificity from exact-set assertions
+# within that run; the no-op arm is free because a no-op exits immediately.
+#
+# The FILTERS are no longer trapped in there. #6165 hoisted the shared body to top
+# level as three directly-callable entry points — `_c16_population` (the fetch),
+# `_c16_violators <invariant-id> <issues-json>` (the four filters plus the
+# exemption predicate) and `_c16_exempt_pair <issue> <invariant-id>` — so a new arm
+# that only needs to assert filter behaviour on a fixture can source deploy.sh and
+# call `_c16_violators` directly, at no full-run cost. Reach for that first, and
+# spend a full run only on an arm whose subject is genuinely the emit surface.
 #
 # Runnable standalone: `bash core/deploy/tools/tests/test-status-label-invariant.sh`
 # Exit 0 = all assertions pass; exit 1 = a mismatch (Check 16 would mis-fire).

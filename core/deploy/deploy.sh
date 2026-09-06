@@ -7004,6 +7004,15 @@ _c16_exempt_pair() {
 # An UNKNOWN invariant id returns 2 rather than printing an empty set, so a typo
 # cannot read as "no violators" — the silent-empty failure mode this check exists to
 # rule out elsewhere.
+#
+# A RETURN CODE IS ONLY A GUARD WHERE SOMETHING READS IT, and for a time only one
+# of this engine's two callers did. The report path assigns from a pipeline, so
+# under pipefail the 2 propagates and aborts. The --check path consumed the rows as
+# `done <<< "$(_c16_violators …)"`, and a here-string DISCARDS its command
+# substitution's exit status: an unknown id delivered an empty row set, the loop
+# found nothing, and the check reported zero violations — which is exactly the
+# silent-empty failure the paragraph above claims to rule out, reproduced inside
+# the remedy. Both callers now read the status; see _c16_guard in cmd_check.
 _c16_violators() {
   local _inv="$1" _issues_json="$2"
   local _filter
@@ -8995,8 +9004,25 @@ cmd_check() {
     local c14_issues_json
     c14_issues_json=$(_c16_population)
     local _num _verdict
+    local c14_rows
+
+    # _c16_guard — makes the engine's UNKNOWN-id guard real on THIS surface.
+    # _c16_violators returns 2 on an unknown invariant id so a typo cannot read as
+    # "no violators", but the four loops below consumed its output through a
+    # here-string, which discards the command substitution's exit status. The guard
+    # was therefore documented and enforced on the report path, and absent here.
+    # Each site now captures rows and status separately and routes a non-zero
+    # through this helper, so a bad id is a loud, named failure on every mode
+    # instead of an empty population that reads clean.
+    _c16_guard() {  # $1 = invariant id, $2 = rc from _c16_violators
+      [[ "$2" -eq 0 ]] && return 0
+      log "  FAIL:  status-label — _c16_violators rejected invariant id '$1' (rc=$2). That is a typo or a retired id in deploy.sh, NOT an absence of violators: the $1 population was never evaluated on this run"
+      ISSUES=$((ISSUES + 1))
+      return 1
+    }
 
     # I1 — mutex: >1 status:* label
+    c14_rows=$(_c16_violators I1 "$c14_issues_json") || _c16_guard I1 "$?"
     while IFS=' ' read -r _num _verdict; do
       [[ -n "$_num" ]] || continue
       if [[ "$_verdict" == "EXEMPT" ]]; then
@@ -9005,9 +9031,10 @@ cmd_check() {
       fi
       flag_status_label "status-label-I1-mutex" "issue #$_num has >1 status:* label"
       c14_violations=$((c14_violations + 1))
-    done <<< "$(_c16_violators I1 "$c14_issues_json")"
+    done <<< "$c14_rows"
 
     # I2 — presence: 0 status:* labels (type:epic + sub-task exempt; see _c16_violators)
+    c14_rows=$(_c16_violators I2 "$c14_issues_json") || _c16_guard I2 "$?"
     while IFS=' ' read -r _num _verdict; do
       [[ -n "$_num" ]] || continue
       if [[ "$_verdict" == "EXEMPT" ]]; then
@@ -9016,9 +9043,10 @@ cmd_check() {
       fi
       flag_status_label "status-label-I2-presence" "issue #$_num missing all status:* labels"
       c14_violations=$((c14_violations + 1))
-    done <<< "$(_c16_violators I2 "$c14_issues_json")"
+    done <<< "$c14_rows"
 
     # I3 — contradiction-A: status: proposed + milestone set
+    c14_rows=$(_c16_violators I3 "$c14_issues_json") || _c16_guard I3 "$?"
     while IFS=' ' read -r _num _verdict; do
       [[ -n "$_num" ]] || continue
       if [[ "$_verdict" == "EXEMPT" ]]; then
@@ -9027,9 +9055,10 @@ cmd_check() {
       fi
       flag_status_label "status-label-I3-contradiction-A" "issue #$_num is status: proposed but milestone is set"
       c14_violations=$((c14_violations + 1))
-    done <<< "$(_c16_violators I3 "$c14_issues_json")"
+    done <<< "$c14_rows"
 
     # I4 — contradiction-B: status: bundled + no milestone
+    c14_rows=$(_c16_violators I4 "$c14_issues_json") || _c16_guard I4 "$?"
     while IFS=' ' read -r _num _verdict; do
       [[ -n "$_num" ]] || continue
       if [[ "$_verdict" == "EXEMPT" ]]; then
@@ -9038,7 +9067,7 @@ cmd_check() {
       fi
       flag_status_label "status-label-I4-contradiction-B" "issue #$_num is status: bundled but no milestone"
       c14_violations=$((c14_violations + 1))
-    done <<< "$(_c16_violators I4 "$c14_issues_json")"
+    done <<< "$c14_rows"
 
     if [[ "$c14_violations" -eq 0 ]]; then
       log "  OK:    0 violations across I1/I2/I3/I4 (all open intake; type:epic + sub-task exempt from I2)"
@@ -15731,8 +15760,11 @@ sys.stdout.write("".join(out) + "|")
   # WHAT IT ASSERTS. core/config/operator-toml-schema.json is the ONE place the
   # operator.toml key set is declared, and everything downstream agrees with it:
   # the generator emits from it (C70b), the hand-authored template documents
-  # exactly it (C70c), and the operator's live config carries every key it marks
-  # delivered (C70a).
+  # exactly it (C70c), the third registry — the spec's §4 token vocabulary — agrees
+  # with the other two (C70d), a newly authored angle token carries its §4 row in
+  # the SAME change (C70e), and the operator's live config carries every key the
+  # declaration marks delivered (C70a). FIVE legs, not three; the primitive's own
+  # header is the authority on each.
   #
   # WHY IT EXISTS. write_operator_toml was install-time only and invoked from
   # exactly one place, so a schema addition reached NEW INSTALLS ONLY. The
@@ -15742,11 +15774,12 @@ sys.stdout.write("".join(out) + "|")
   # that check.
   #
   # TWO MODES IN ONE CHECK, AND THE SPLIT IS THE POINT.
-  #   C70b/C70c are REPO-INTEGRITY assertions over tracked files. The live corpus
-  #   is clean at this pin (C1/C2 make it so in the same change), so there is no
-  #   pre-existing debt to baseline — Check 64/69's day-one-enforce precedent
+  #   C70b/C70c/C70d are REPO-INTEGRITY assertions over tracked files. The live
+  #   corpus is clean at this pin (C1/C2 make it so in the same change), so there is
+  #   no pre-existing debt to baseline — Check 64/69's day-one-enforce precedent
   #   applies rather than Check 63's committed-baseline hedge. They increment
-  #   ISSUES.
+  #   ISSUES. (C70e is repo-integrity too, but it needs a diff base to decide what
+  #   is "newly authored", so it runs only at the PR surface named below.)
   #   C70a reads OPERATOR-INSTANCE STATE. An operator whose config is behind is
   #   the VICTIM of this defect, not its author, and red-walling their deploy
   #   would punish them for a bug the platform shipped. It emits WARN and does
@@ -15756,9 +15789,11 @@ sys.stdout.write("".join(out) + "|")
   #
   # NOT THE ONLY LOCUS. The same primitive is wired as the `operator-toml-schema`
   # job in .github/workflows/repo-integrity.yml, which runs PRE-merge on every
-  # pull request and carries the C70b/C70c legs. That job is the load-bearing leg
-  # for repo integrity; this one is the deploy-time companion and the ONLY locus
-  # that can see C70a, because CI has no operator instance to read.
+  # pull request and carries the C70b/C70c/C70d legs (via --repo-integrity) plus
+  # C70e (via --diff-base, which is why that job checks out with fetch-depth: 0).
+  # That job is the load-bearing surface for repo integrity; this one is the
+  # deploy-time companion and the ONLY locus that can see C70a, because CI has no
+  # operator instance to read.
   #
   # DECLARED COVERAGE BOUNDARY. Key SETS and the absence of a hand-written emit.
   # It does NOT assert that a declared `enum` constrains a value already on disk
