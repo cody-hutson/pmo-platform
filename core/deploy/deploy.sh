@@ -9983,7 +9983,7 @@ sys.stdout.write("".join(out) + "|")
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 27: Designated-model config for hub-spawned spokes (release/.claude/agents/pmo-*.md)"
     # Per the layout §1.4 agent definitions live under release/.claude/agents/.
-    local c26_agents_dir="release/.claude/agents"
+    local c26_agents_dir="release/.claude/agents"   # deploy-path-literal: allow — first rung of the back-compat fallback chain on the next line; a non-resolving first rung is the designed path, and Check 27 declares the zero-file outcome through its own fail-loud arm
     # Fallback to workspace .claude/agents/ for backwards-compatibility during
     # transition window if the operator workspace has not yet been updated.
     [[ -d "$c26_agents_dir" ]] || c26_agents_dir=".claude/agents"
@@ -9995,7 +9995,7 @@ sys.stdout.write("".join(out) + "|")
     # read-path-vs-deploy-path seam so operator per-stage overrides placed in the
     # deployed file are visible to this check.
     local c26_overrides="$(pmo_instance_path)/agents-model-overrides.txt"
-    [[ -f "$c26_overrides" ]] || c26_overrides="release/.claude/agents-model-overrides.txt"
+    [[ -f "$c26_overrides" ]] || c26_overrides="release/.claude/agents-model-overrides.txt"   # deploy-path-literal: allow — middle rung of the back-compat fallback chain; the deployed instance surface above is canonical and the next line falls back again, so this rung is expected not to resolve in-repo
     [[ -f "$c26_overrides" ]] || c26_overrides=".claude/agents-model-overrides.txt"
     # Default spoke model: read the canonical platform-config [spoke_runtime] surface
     # (#340) via the rung-reader; fall back to the documented "opus" literal when the
@@ -10164,7 +10164,7 @@ sys.stdout.write("".join(out) + "|")
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 29: Return-value-conformance for hub-spawned spokes (release/.claude/agents/pmo-*.md)"
     # Per the layout §1.4 agent definitions live under release/.claude/agents/.
-    local c29_agents_dir="release/.claude/agents"
+    local c29_agents_dir="release/.claude/agents"   # deploy-path-literal: allow — first rung of the back-compat fallback chain on the next line; a non-resolving first rung is the designed path, and Check 29 declares the zero-file outcome through its own fail-loud arm
     # Fallback to workspace .claude/agents/ for backwards-compatibility.
     [[ -d "$c29_agents_dir" ]] || c29_agents_dir=".claude/agents"
     local c29_findings=0
@@ -10308,9 +10308,22 @@ sys.stdout.write("".join(out) + "|")
     # Class L + Class V regexes — byte-identical to core/hooks/block-fragile-refs.sh.
     local c31_link_re='\]\('
     local c31_cutover_re='v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?[^.\n]{0,40}merge SHA|v[0-9]+\.[0-9]+[a-z]?(-[a-z0-9-]+)?([[:space:]]+(release|itself|is))*[[:space:]]+(is[[:space:]]+)?exempt|([Aa]pplies to releases|[Cc]utover[[:space:]]+(applies|discipline|per))[^.\n]{0,80}v[0-9]+\.[0-9]+|reflexive-pipeline-loop'
+    # SEVEN roots, and the count is load-bearing. This array declared TEN until
+    # #4217: "release/standards", "release/specs" and "release/schemas" have never
+    # existed — zero add/delete/rename events across the whole of repository
+    # history, entering here at the initial public-release commit with their
+    # current wrong value. The loop below skips a missing root SILENTLY via
+    # `[[ -d ]] || continue`, so the check declared a ten-root scan surface and
+    # resolved seven, overstating its own denominator by 30%.
+    #
+    # Removing them is behaviour-preserving, not a coverage cut: the intended
+    # content is already walked recursively under "release/references", which
+    # carries release/references/standards/ and release/references/specs/. Do not
+    # "restore" the three for symmetry — a root that resolves nowhere adds no file
+    # to the scan and subtracts credibility from the count it reports.
     local -a c31_globs=(
       "core/rules" "core/standards" "core/specs" "core/disciplines" "core/schemas"
-      "release/references" "release/governance" "release/standards" "release/specs" "release/schemas"
+      "release/references" "release/governance"
     )
     local c31_link_count=0 c31_version_count=0 c31_files_scanned=0
     local _d _f
@@ -16469,7 +16482,7 @@ mirror-only body
 EOF
   }
   _cp_seed_registry() {
-    /usr/bin/printf '# fixture registry\ncore/schemas/fixture-schema.md|||operations/skills/fixture-skill/references/fixture-schema.md|||Owned By Canonical|||Owned By Mirror|||Shared Section\n' > "$_preg"
+    /usr/bin/printf '# fixture registry\ncore/schemas/fixture-schema.md|||operations/skills/fixture-skill/references/fixture-schema.md|||Owned By Canonical|||Owned By Mirror|||Shared Section\n' > "$_preg"   # deploy-path-literal: allow — synthetic self-test fixture record; both paths are resolved against the mktemp -d sandbox root this self-test builds, never against the repository
   }
   _cp_selftest_verdict() {
     CP_ROOT="$_p" CP_PAIRS_FILE="${1:-$_preg}" CP_PACKAGES="$_p/packages" CP_USER_SKILLS="$_p/nonexistent-skills" \
@@ -16535,7 +16548,7 @@ EOF
   # CP-7 — a MALFORMED record (wrong field count) ⇒ MALFORMED, never a silent pass.
   # Guards the second half of the fail-closed posture: absence is CP-4, corruption
   # is this.
-  /usr/bin/printf '# fixture registry\ncore/schemas/fixture-schema.md|||operations/skills/fixture-skill/references/fixture-schema.md|||Owned By Canonical\n' > "$_preg"
+  /usr/bin/printf '# fixture registry\ncore/schemas/fixture-schema.md|||operations/skills/fixture-skill/references/fixture-schema.md|||Owned By Canonical\n' > "$_preg"   # deploy-path-literal: allow — synthetic self-test fixture record; both paths are resolved against the mktemp -d sandbox root this self-test builds, never against the repository
   _v="$(_cp_selftest_verdict)"; _tok="${_v%%|*}"
   [[ "$_tok" == "MALFORMED" ]] || { echo "FAIL: CP-7 a registry record without 5 fields must verdict MALFORMED, got '$_v'"; failures=$((failures+1)); }
 
