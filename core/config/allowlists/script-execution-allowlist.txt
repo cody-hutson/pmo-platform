@@ -67,6 +67,29 @@
 #   Forms 1-2 match absolute/worktree-absolute invocations (a session running
 #   from a different cwd); forms 3-4 match invocations from the repo root.
 #
+#   EXCEPTION FORMS — PER-TOOL, NEVER THE DEFAULT. FOUR REMAINS CANONICAL.
+#   Two further forms appear in this file. Neither is a completion of the four,
+#   and neither may be applied as a blanket convention. Each is admitted for one
+#   named tool at a time and carries a WRITTEN REASON at its own block:
+#     5. Generic suffix glob:  */<path>/<tool>
+#        Admitted ONLY where the tool must run from a checkout at a path this
+#        file cannot predict — a downstream clone, a differently-named directory.
+#        Read the matcher before reaching for it: the hook matches with
+#        `case "$path" in $pattern)`, where `*` CROSSES `/`. So this form
+#        SUBSUMES forms 1, 2 and 3, does NOT cover form 4, and additionally
+#        admits an ARBITRARY PREFIX — `/tmp/<attacker>/<path>/<tool>` matches.
+#        That is a widening of the script-laundering surface this file exists to
+#        close (see the Red Team note at the top), which is why it is scoped to a
+#        tool with a stated reachability need rather than granted to the corpus.
+#     6. Cwd-relative form:  ./<tool>
+#        Admitted ONLY where the tool's documented invocation includes standing
+#        in the tool's own directory. See the FIFTH FORM block below for the
+#        telemetry producers that hold it and the drain reason they hold it for.
+#   A tool carrying an exception form still carries the canonical four unless a
+#   comment at its block says otherwise and says why. Two blocks in this file are
+#   deliberately SHORT of four for a control-arm reason and say so in terms; do
+#   not "complete" them.
+#
 # Add custom entries to the OPERATOR ADDITIONS section at runtime, or run:
 #   ./.claude/hooks/allowlist-add.sh .claude/script-execution-allowlist.txt '<pattern>'
 
@@ -219,6 +242,34 @@ release/tools/automated-closeout.sh
 ./release/tools/compute-close-class-telemetry.sh
 release/tools/compute-close-class-telemetry.sh
 */release/tools/compute-close-class-telemetry.sh
+# compute-release-velocity.sh — Stage 13 Phase B velocity producer. Held ONE row
+# (the cwd-relative form in the FIFTH FORM block below), which cannot match the
+# `bash release/tools/compute-release-velocity.sh` spelling the Stage 13 spec
+# mandates — a malformed registration, not an absent tool. Retained rather than
+# retired on measured live consumers: core/deploy/allowlists/selftest-coverage-
+# manifest.txt carries it as a manifest FLOOR member, and that manifest's header
+# declares a missing entry a HARD failure — so CI executes its --self-test on
+# every in-scope PR. The RELEASE_LOG Velocity field template in core/deploy/
+# deploy.sh names it as the mechanism verbatim. Canonical four added here; the
+# cwd-relative row stays where it sits, below, with its drain-clearing siblings.
+[PMO_PLATFORM_ROOT]/release/tools/compute-release-velocity.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/compute-release-velocity.sh
+./release/tools/compute-release-velocity.sh
+release/tools/compute-release-velocity.sh
+# compute-front-cluster-telemetry.sh + compute-middle-cluster-telemetry.sh —
+# the two sibling cluster-telemetry producers. Identical one-row defect shape as
+# compute-release-velocity.sh above, named as deferred work by the FIFTH FORM
+# block itself. Completed here alongside their sibling: leaving two of three
+# half-registered is how this defect class has recurred. Their cwd-relative rows
+# stay in the FIFTH FORM block below.
+[PMO_PLATFORM_ROOT]/release/tools/compute-front-cluster-telemetry.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/compute-front-cluster-telemetry.sh
+./release/tools/compute-front-cluster-telemetry.sh
+release/tools/compute-front-cluster-telemetry.sh
+[PMO_PLATFORM_ROOT]/release/tools/compute-middle-cluster-telemetry.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/compute-middle-cluster-telemetry.sh
+./release/tools/compute-middle-cluster-telemetry.sh
+release/tools/compute-middle-cluster-telemetry.sh
 # --- FIFTH FORM: cwd-relative, for the six telemetry producers ---------------
 #
 # The four-form convention above spells each tool from the REPO ROOT. It has no
@@ -235,16 +286,30 @@ release/tools/compute-close-class-telemetry.sh
 # be made against noise. Clearing them first is what makes the drain measure the
 # widening rather than a known gap.
 #
-# These are the cwd-relative form ONLY. Three of the six carry no other form at
-# all (front-cluster, middle-cluster, release-velocity); completing them to the
-# standard four is the pre-graduation allowlist work recorded in the AC-3
-# assessment, not this slice's scope.
+# These are the cwd-relative form ONLY — form 6 of the per-tool convention, held
+# for the drain reason above. All six now ALSO carry the canonical four in their
+# own blocks: the three that once carried nothing else (front-cluster,
+# middle-cluster, release-velocity) were completed in the release that closed the
+# mandated-but-unreachable defect class, discharging the deferred-work note this
+# block used to carry. These rows are therefore an addition to the four, never a
+# substitute for them — a new entry here does not register a tool.
 ./compute-dora-metrics.sh
 ./compute-cycle-time.sh
 ./compute-release-velocity.sh
 ./compute-close-class-telemetry.sh
 ./compute-front-cluster-telemetry.sh
 ./compute-middle-cluster-telemetry.sh
+# check-release-body-drift.sh — the governed post-publish Surface-1 drift check.
+# Carried ZERO rows, so the hub that the pipeline REQUIRES to run it was
+# BLOCK-DESTRUCTIVE-022-blocked on every spelling — observed live, twice in one
+# release. This is the defect the mandated-but-unreachable class is named for:
+# the allowlist obligation fires when a script becomes AGENT-EXECUTED, not only
+# when a script is added. Canonical four; no exception form is warranted, as the
+# tool is invoked from the repository root by a spec that spells it that way.
+[PMO_PLATFORM_ROOT]/release/tools/check-release-body-drift.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/check-release-body-drift.sh
+./release/tools/check-release-body-drift.sh
+release/tools/check-release-body-drift.sh
 # audit-epic-rollup-close.sh — epic rollup-close detective audit (report-only).
 # Invoked agent-side by the Stage 13 spoke AND chained from automated-closeout.sh
 # phase 16.7, so all four invocation forms per the per-tool form convention above
@@ -525,6 +590,33 @@ qa.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/doctor.sh
 ./doctor.sh
 doctor.sh
+
+# update.sh — the composition-surface propagation carrier, and the third root-level
+# operator CLI alongside qa.sh and doctor.sh above. Held ZERO rows while TWO pipeline
+# specs name it. The two counts differ by axis and both are stated, because conflating
+# them is the mention-vs-invocation error Arm F exists to avoid: Arm F extracts THREE
+# PRESCRIBED INVOCATIONS of the `./update.sh` operand, ALL AT ONE SITE —
+# release/references/pipeline/stage-12-execute.md:372 — while a second spec MENTIONS the
+# tool in prose without prescribing a command.
+# stage-12-execute.md names `./update.sh --surfaces-only` (targeted) and a full
+# `./update.sh` (wider blast radius) as the DEFAULT disposition for a composition-surface
+# change, and records in the same paragraph that `deploy.sh --deploy` does NOT carry that
+# class and that NO automated detection backstop exists for it — so the mandated command
+# was the only control, and the agent the spec mandates could not run it.
+# release/references/pipeline/stage-13-close.md names it in prose as the propagator of the
+# `.version` stamp to the deployed snapshot — a mention, not an extracted invocation.
+# Surfaced by Arm F (the mandate-reachability assertion this release ships) rather than by
+# anyone noticing: it is the one remediable finding of the six Arm F reports on arrival —
+# the other five are `.py` operands that no row can match while the non-shell section is
+# deliberately empty pending its drain.
+# CANONICAL FOUR, and four only. The fifth `*/…` form is NOT added: per ADR-192 it admits
+# an arbitrary path prefix (`/tmp/<attacker>/update.sh` matches, since `*` crosses `/` in
+# the hook's `case` matcher), which would widen the script-laundering surface this file
+# exists to close. update.sh has no reachability need that the canonical four do not serve.
+[PMO_PLATFORM_ROOT]/update.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/update.sh
+./update.sh
+update.sh
 
 # finops-usage-extractor scripts (#3909) — new in-tree bash CLIs (local-session usage
 # parser + OFF-by-default provider connector). All four invocation forms per tool.
@@ -907,6 +999,28 @@ core/deploy/tools/check-convention.sh
 # only, for the same CIAC-1 control-arm reason. DO NOT "COMPLETE" IT to four forms.
 ./core/deploy/tests/test_check49_mode_identifier_unification.sh
 core/deploy/tests/test_check49_mode_identifier_unification.sh
+
+# test_deploy_path_literals.sh — the standing assertion that every REQUIRED path
+# literal in deploy.sh resolves (#4217). Allowlisted because an agent must be able
+# to run what CI runs: install-tests.yml invokes this file directly in shell-tests,
+# and a verification step an agent cannot execute is a gate nobody stands on. The
+# suite is read-only — it drives no deploy, and its fixtures live in a mktemp -d
+# sandbox — so allowlisting it grants no capability beyond reading the repository.
+#
+# Executed agent-side at Stage 6 self-verification and Stage 7 Dev Testing, and by
+# the install-tests shell-tests job; all four invocation forms so
+# BLOCK-DESTRUCTIVE-022 does not block the agent-side path. (CI runs no Claude
+# hooks, so these rows are for the agent-side path, not the workflow.) Named rows
+# rather than a core/deploy/tests/* glob, per the entries above: a pattern would
+# auto-admit any future file dropped into that directory.
+#
+# FOUR FORMS, DELIBERATELY — not five, not six. The two blocks above that carry
+# only two forms are a protected divergence; this block is a NEW tool and takes the
+# canonical set.
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_deploy_path_literals.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_deploy_path_literals.sh
+./core/deploy/tests/test_deploy_path_literals.sh
+core/deploy/tests/test_deploy_path_literals.sh
 
 # ---------------------------------------------------------------------------
 # NON-SHELL SCRIPT ENTRIES (.py / .pl / .pm / .rb / .js / .mjs / .cjs)

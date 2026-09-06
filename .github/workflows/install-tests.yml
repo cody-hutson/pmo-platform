@@ -1,6 +1,6 @@
 name: Install tests
 
-# gate-efficacy: posture=required  enforcement=ci-enforce:"Shell harness (macOS)","Hook test harness (macOS)","Install/onboarding/update regression suite (macOS)","Cross-platform install/QA (macos-latest)","Cross-platform install/QA (ubuntu-latest)","Cross-platform install/QA (windows-latest)"  always-reports=yes
+# gate-efficacy: posture=required  enforcement=branch-protection:"Shell harness (macOS)","Hook test harness (macOS)","Install/onboarding/update regression suite (macOS)","Cross-platform install/QA (macos-latest)","Cross-platform install/QA (ubuntu-latest)","Cross-platform install/QA (windows-latest)"  always-reports=yes
 #   invariant: install.sh / deploy.sh / setup-workspace.sh and the security hooks
 #              behave correctly end-to-end against /tmp sandboxes — asserted
 #              behaviorally by running the test harnesses (not by file inspection).
@@ -85,7 +85,12 @@ name: Install tests
 #                                  <=> no on.<event>.paths, skip-semantics=
 #                                  absent-is-pass <=> a filter present, the two
 #                                  never co-occur, and every workflow carries a
-#                                  header. Lives in THIS job because the ratchet
+#                                  header; every job publishing a named check-run
+#                                  is named by one of its workflow's headers; and
+#                                  a posture=required declaration names
+#                                  branch-protection, the only surface that makes
+#                                  a red verdict block a merge (D-13).
+#                                  Lives in THIS job because the ratchet
 #                                  must not itself be path-filtered — a gate on
 #                                  trigger conformance that a trigger change can
 #                                  skip is the exact defect it exists to catch.
@@ -262,6 +267,12 @@ jobs:
       # Security posture is unchanged: like every other step in this file, none of
       # the steps below consumes any github.event.* input. Each run: block is a
       # static invocation on workspace files only.
+      #
+      # A FOURTH STEP now sits in this block — test_deploy_path_literals.sh (#4217).
+      # It is NOT one of the three suites described above: it was authored wired
+      # rather than found unreached, so the "never invoked" history belongs to the
+      # three and the shared conventions (the 5-minute budget, the falsification
+      # probe below, no opt-out from failing the job) belong to all four.
       # ---------------------------------------------------------------------
 
       - name: Run session-config hook regression (test_verify_session_config.sh)
@@ -305,6 +316,28 @@ jobs:
         # where runtime affinity belongs, not in a coverage-exclusions roster.
         timeout-minutes: 5
         run: bash core/deploy/tests/test_check19_event_log_integrity.sh --fast
+
+      - name: Run deploy.sh required-path-literal assertion (test_deploy_path_literals.sh)
+        # THE STANDING ASSERTION for the born-wrong-path class (#4217). Check 19
+        # carried three path literals that never resolved, so two of its three arms
+        # had never executed on any release while the check emitted a warning that
+        # read as benign. The suite above guards that ONE literal; this one
+        # generalizes the guard to every REQUIRED path literal in deploy.sh.
+        #
+        # It belongs on every pull request rather than at deploy time because the
+        # defect it catches is invisible to every move-triggered control the
+        # platform owns: the literals did not move, they were wrong at birth. There
+        # is no rename, no delete and no path drift to key on — only resolution.
+        #
+        # Cost is the reason it can sit here unconditionally: it drives no deploy,
+        # runs one awk pass over one file plus a mktemp -d fixture set, and
+        # completes sub-second. The budget below is the platform per-tool figure
+        # the three steps above already use, not a fit to a local timing.
+        #
+        # Security posture unchanged: consumes no github.event.* input; a static
+        # invocation on workspace files only, like every other step in this file.
+        timeout-minutes: 5
+        run: bash core/deploy/tests/test_deploy_path_literals.sh
 
       - name: Falsification probe — each newly-wired suite MUST redden the job when broken
         # GATE HONESTY for the three steps above, modeled on the "Precision probe"
@@ -352,7 +385,8 @@ jobs:
           import re, sys
           SUITES = ["test_verify_session_config.sh",
                     "test_instance_path_roundtrip.sh",
-                    "test_check19_event_log_integrity.sh"]
+                    "test_check19_event_log_integrity.sh",
+                    "test_deploy_path_literals.sh"]
           text = open(".github/workflows/install-tests.yml", errors="replace").read()
           # A step begins at exactly six spaces + "- "; everything up to the next
           # such line is that step's block.
@@ -385,10 +419,11 @@ jobs:
           for suite in \
             core/deploy/tests/test_verify_session_config.sh \
             core/deploy/tests/test_instance_path_roundtrip.sh \
-            core/deploy/tests/test_check19_event_log_integrity.sh
+            core/deploy/tests/test_check19_event_log_integrity.sh \
+            core/deploy/tests/test_deploy_path_literals.sh
           do
             before="$(shasum -a 256 "$suite" | awk '{print $1}')"
-            # All three share one terminal contract — `[ "${FAIL}" -ne 0 ] && exit 1`
+            # All four share one terminal contract — `[ "${FAIL}" -ne 0 ] && exit 1`
             # — and one report() signature, so a single injected failing assertion
             # breaks each of them the same way, at the same place, without the probe
             # needing to know anything about what the suite asserts.
@@ -753,15 +788,41 @@ jobs:
         # request. It is a step in an existing job rather than a new job, so it adds no
         # runner and no branch-protection context: the marginal cost is the scan itself.
         #
+        # It asserts a SECOND invariant too: that a declaration's reach is the JOB, not
+        # the file. A workflow can satisfy the biconditional above — well-formed header,
+        # agreeing with its own trigger — while publishing check-runs no header names at
+        # all, which is a third class distinct from declared-but-unregistered. The arm is
+        # scoped to workflows whose headers already name at least one check-run, because
+        # a workflow naming none declares its posture by CONTAINMENT; that scope is the
+        # specificity arm made structural. Matrix jobs are resolved to their expanded
+        # check-run names first, since a matrix job publishes one check-run per leg.
+        #
+        # AND A THIRD: that a `posture=required` declaration names `branch-protection`,
+        # the only enforcement surface on this host that makes a red verdict block a
+        # merge (operator decision D-13). The first two invariants read the trigger and
+        # the jobs; neither reads the posture and the enforcement key TOGETHER, so a
+        # declaration could claim an enforcement the repository was not delivering and
+        # pass every arm. THIS FILE'S OWN HEADER CARRIED EXACTLY THAT DEFECT while
+        # hosting the ratchet: it declared `enforcement=ci-enforce` for six contexts
+        # that branch protection does in fact require, and the suite running in this
+        # very job reported green, because posture/enforcement agreement was the one
+        # pairing it never graded. A missing predicate, not a wiring accident.
+        #
         # NOT VACUOUS BY CONSTRUCTION, and the harness runs by DEFAULT rather than behind
         # a flag — a falsification harness nothing passes a flag to runs once, at
         # implementation, and certifies nothing thereafter. Every invocation mutates
         # in-memory copies of the LIVE workflow population and requires the detector to
-        # react: six sensitivity arms, ONE PER FINDING BRANCH (that arm-per-branch
-        # constraint was added after mutation-grading found two branches deletable with
-        # the suite still green), plus a specificity arm on the same non-empty input that
-        # must stay clean. Arms are derived from the live population at run time, never
-        # from hardcoded workflow names, so a rename cannot silently empty one, and a
+        # react: six sensitivity arms on the header invariant, ONE PER FINDING BRANCH
+        # (that arm-per-branch constraint was added after mutation-grading found two
+        # branches deletable with the suite still green), a reach arm that mutates a
+        # NON-FIRST declaration, two sensitivity arms on the per-job invariant —
+        # orphaning a job by renaming its declared context, and breaking one leg of a
+        # matrix expansion — and two on the posture invariant, one per graded field
+        # (repointing a `required` declaration at a non-blocking surface, and promoting
+        # an advisory one to `required` without touching its enforcement), plus a
+        # specificity arm for each invariant, on the same non-empty input, that must
+        # stay clean. Arms are derived from the live population at run time, never from
+        # hardcoded workflow names, so a rename cannot silently empty one, and a
         # partition too small to build an arm is a reported NOSET rather than a skip.
         #
         # Exit contract: 0 clean / 1 declared-vs-actual mismatch / 2 the harness could
