@@ -5864,6 +5864,129 @@ deployed_skill_footprint() {
   done | LC_ALL=C sort
 }
 
+skill_content_drift() {
+  # Pure emitter. One "<skill>\t<target-class>\t<cause>" row per DRIFTED
+  # (skill × deploy target), where <target-class> is user-local|cowork and
+  # <cause> is missing|differs|unwritable. Emits nothing else, mutates no
+  # global, never logs, never exits. Zero args → the full deployed roster.
+  #
+  # WHY THIS EXISTS — the selection-time sibling of deployed_skill_footprint's
+  # counting-time answer. detect_changed_skills() answers "what changed in the
+  # repository since the last tag"; cmd_deploy used that as a PROXY for "what is
+  # missing from the installed corpus". The proxy is valid only under an
+  # unstated, unenforced and structurally unrepresentable precondition — that
+  # the instance was last deployed at exactly diff_base. One commit past the tag
+  # it stops firing and the release's own skill edits leave the window
+  # permanently, so `--deploy` reported "Deployed: 0 skills" and exit 0 over a
+  # corpus it had not made current. This asks the ground-truth question instead:
+  # does the installed content match source, right now.
+  #
+  # THE PREDICATE IS NOT NEW — it is the one Check 1 (skill sync) and Check 12
+  # (user-local mirror sync) already apply, and the one
+  # release/references/standards/partial-deployment-recovery.md § 3 already uses
+  # to DEFINE full-success. This is a wiring change, not a new detector. The
+  # three inline copies are a knowingly-accepted duplication: Checks 1 and 12
+  # carry per-skill ISSUES accounting, read-only cause annotation and
+  # supplementary-content walks that the deploy path does not need, so folding
+  # them onto this emitter would multiply this change's blast radius across the
+  # check surface. This signature is the one they can migrate onto later.
+  #
+  # THE TEMPLATE_SYNC_MAP EXCLUSION IS LOAD-BEARING, NOT COSMETIC. A bare
+  # `diff -rq` over references/ flags 12 of 55 roster skills on a FULLY CURRENT
+  # instance — every one an injected-template artifact absent from source by
+  # single-source-of-truth design, zero real differences. Applying the same
+  # injected_ref_basenames exclusion Check 1 applies takes that population to 0.
+  # Omitted, this is an unterminating repair loop (the union re-selects skills
+  # the deploy can never make match) and a permanently red deploy (the residual
+  # assertion can never clear). Do not "simplify" the exclusion away.
+  #
+  # CANARY_SKILLS IS EXCLUDED BY CONSTRUCTION — the roster is read from the three
+  # DEPLOYED module arrays only, exactly as Check 1 reads them. The canary is
+  # source-only per ADR-006 and is never a deploy target, so including it would
+  # yield a finding no deploy can ever clear (the same trap Check 1 records
+  # having already fallen into once).
+  #
+  # A SESSION-LESS MACHINE IS A SUPPORTED INSTALL SHAPE (ADR-013): the Cowork
+  # target is scanned only when a session resolved, so its absence never reads
+  # as drift. The root expression is deployed_skill_footprint's, so a future
+  # change to the target roots updates one place.
+  #
+  # bash 3.2 portable: explicit iteration, empty-array `+` guards per ADR-008
+  # Rule 2 under `set -euo pipefail`, no associative arrays, no mapfile.
+  local -a _scd_roster=()
+  local _scd_s
+  if [[ $# -gt 0 ]]; then
+    for _scd_s in "$@"; do _scd_roster+=("$_scd_s"); done
+  else
+    for _scd_s in ${OPERATIONS_SKILLS[@]+"${OPERATIONS_SKILLS[@]}"} \
+                  ${RELEASE_SKILLS[@]+"${RELEASE_SKILLS[@]}"} \
+                  ${CORE_SKILLS[@]+"${CORE_SKILLS[@]}"}; do
+      _scd_roster+=("$_scd_s")
+    done
+  fi
+
+  local _scd_module _scd_src_dir _scd_src _scd_root _scd_class _scd_cause _scd_b _scd_i
+  local -a _scd_roots=() _scd_classes=() _scd_ex=()
+
+  for _scd_s in ${_scd_roster[@]+"${_scd_roster[@]}"}; do
+    # A pure emitter never aborts its caller. resolve_skill_module dies on a
+    # non-roster name; that die lands inside this command substitution, so the
+    # name is SKIPPED here rather than taking the deploy down. It is unreachable
+    # in practice — the deploy loop resolves the same name first and dies there.
+    _scd_module=$(resolve_skill_module "$_scd_s" 2>/dev/null) || continue
+    _scd_src_dir="$_scd_module/skills/$_scd_s"
+    _scd_src="$_scd_src_dir/SKILL.md"
+    # A missing SOURCE is Check 12's finding (source-side breakage), not a
+    # question about whether the deploy target is current. Skip rather than
+    # report drift the deploy could not fix.
+    [[ -f "$_scd_src" ]] || continue
+
+    _scd_roots=("$USER_LOCAL_SKILLS_PATH/$_scd_s")
+    _scd_classes=("user-local")
+    if [[ "${COWORK_AVAILABLE:-false}" == "true" && -n "${INSTALL_PATH:-}" ]]; then
+      _scd_roots+=("$INSTALL_PATH/$_scd_s")
+      _scd_classes+=("cowork")
+    fi
+
+    _scd_i=0
+    while [[ $_scd_i -lt ${#_scd_roots[@]} ]]; do
+      _scd_root="${_scd_roots[$_scd_i]}"
+      _scd_class="${_scd_classes[$_scd_i]}"
+      _scd_i=$((_scd_i + 1))
+      _scd_cause=""
+
+      if [[ ! -f "$_scd_root/SKILL.md" ]]; then
+        _scd_cause="missing"
+      elif ! diff -q "$_scd_src" "$_scd_root/SKILL.md" >/dev/null 2>&1; then
+        _scd_cause="differs"
+      elif ! is_supplementary "$_scd_s" && [[ -d "$_scd_src_dir/references" ]]; then
+        # Same exclusion set, from the same helper, as Check 1's references/ arm.
+        _scd_ex=()
+        while IFS= read -r _scd_b; do
+          [[ -n "$_scd_b" ]] && _scd_ex+=("--exclude=$_scd_b")
+        done < <(injected_ref_basenames "$_scd_s")
+        if [[ ! -d "$_scd_root/references" ]]; then
+          _scd_cause="missing"
+        elif ! diff -rq ${_scd_ex[@]+"${_scd_ex[@]}"} "$_scd_src_dir/references" "$_scd_root/references" >/dev/null 2>&1; then
+          _scd_cause="differs"
+        fi
+      fi
+
+      [[ -n "$_scd_cause" ]] || continue
+      # Cause upgrade: an EXISTING but unwritable target is the Cowork
+      # session-churn orphan class. It routes to a different remedy than
+      # missing/differs (chmod, not redeploy), so it is named rather than
+      # collapsed into "differs" — the same distinction Check 1 already draws
+      # with its read-only DRIFT annotation, promoted here from a diagnostic
+      # note to an actionable failure token.
+      if [[ -e "$_scd_root" && ! -w "$_scd_root" ]]; then
+        _scd_cause="unwritable"
+      fi
+      printf '%s\t%s\t%s\n' "$_scd_s" "$_scd_class" "$_scd_cause"
+    done
+  done
+}
+
 cmd_deploy() {
   # Deploy changed skills/packages/harness artifacts to Cowork install path.
   # E-02, E-03, E-08, E-11: Handles no-changes, deleted skills, invalid names, permissions.
