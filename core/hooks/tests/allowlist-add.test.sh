@@ -379,6 +379,81 @@ SPELLINGS
     "T-8 an outcome bucket is empty (insert=${t8_inside}, warn=${t8_warned}) — the agreement result proves nothing"
 fi
 
+# ---------------------------------------------------------------------------
+# T-9  Region SELECTION — the axis T-8 does not test.
+#
+# T-8 varies the marker SPELLING and uses ONE pair per fixture, so it can only
+# ever assert that the two readers agree about what a marker LOOKS like. It
+# cannot see the other axis: with SEVERAL candidate pairs in one file, WHICH
+# pair each reader binds. The two readers select differently, and the asymmetry
+# is BEGIN-only:
+#
+#   compose.py binds with an UNANCHORED re.search over the whole text, so its
+#   BEGIN can match mid-line — a junk-prefixed marker still binds. Its END is
+#   effectively line-anchored anyway, because the pattern is
+#   BEGIN + "\n(.*?)\n" + END, and that literal \n forces END to start a line.
+#
+#   The helper's awk is ^-anchored on BOTH, so a junk-prefixed BEGIN is skipped
+#   and it binds the first CLEAN pair.
+#
+# Consequence, and it is the reason this arm exists: when compose.py binds an
+# EARLIER begin than the awk and a line-start END falls between them,
+# compose.py's region CLOSES before the helper's insert point. The helper still
+# took the INSERT branch, so T-6's warning is suppressed — the entry is dropped
+# at the next regeneration with no signal at all. That is the fail-SILENT class
+# T-8's P1 exists to catch, reached by an input shape T-8 cannot construct.
+#
+# These arms assert the OBSERVED behaviour, not the desired behaviour. The
+# divergence is NOT reachable on any compose-generated allowlist (compose writes
+# exactly one well-formed pair) and is NOT a regression (the pre-fix EOF append
+# was outside the region too), so it is characterized here rather than fixed.
+# If either reader is ever changed — anchoring compose.py, or loosening the awk
+# — these arms go red and the claim in allowlist-add.sh must be re-derived.
+#
+# Fixture A is the shape the finding was first described as, and it SURVIVES:
+# a junk-prefixed PAIR is skipped by compose.py at its END too, so compose binds
+# a SUPERSET that swallows the clean pair. Recording A alongside B is what keeps
+# the arm honest about which shape actually loses data.
+# ---------------------------------------------------------------------------
+echo ""
+echo "T-9 region selection (multi-pair — the axis T-8 cannot reach)"
+echo "---"
+if [ "$HAVE_COMPOSE" = 1 ]; then
+  # name | expect_survived | expect_warned | fixture lines (\n-separated)
+  t9_run() { # $1=name $2=expect_survived $3=expect_warned $4=fixture
+    local name="$1" exp_s="$2" exp_w="$3"
+    /usr/bin/printf '%b\n' "$4" > "$ALLOWLIST"
+    local err x survived appended warned
+    err="$("$HELPER" "$ALLOWLIST" 'mcp__t9__createOmega' 2>&1 >/dev/null)"
+    x="$(extract "$ALLOWLIST")"
+    survived=0; case "$x" in *mcp__t9__createOmega*) survived=1 ;; esac
+    warned=0; [ -n "$err" ] && warned=1
+    chk "$([ "$survived" = "$exp_s" ] && [ "$warned" = "$exp_w" ] && echo 1 || echo 0)" \
+      "T-9 [${name}] survived=${survived} warned=${warned} — matches the characterized behaviour" \
+      "T-9 [${name}] survived=${survived} warned=${warned}, expected survived=${exp_s} warned=${exp_w} — a reader's region selection changed; re-derive the strict-subset claim in allowlist-add.sh"
+  }
+
+  # A — junk-prefixed PAIR before a clean pair. compose.py skips the junk END
+  #     (line-anchored) and binds a SUPERSET spanning both pairs, so the entry
+  #     lands inside it and survives. No data loss on this shape.
+  t9_run "junk PAIR then clean pair -> superset, survives" 1 0 \
+'# Test allowlist\nxxx# === BEGIN OPERATOR ADDITIONS ===\njunk-region-content\nxxx# === END OPERATOR ADDITIONS ===\n# === BEGIN OPERATOR ADDITIONS ===\nplaceholder\n# === END OPERATOR ADDITIONS ===\nmcp__seed__tail'
+
+  # B — junk-prefixed BEGIN with a CLEAN END, before a clean pair. THIS is the
+  #     silent-loss shape: compose.py binds the mid-line BEGIN, closes at the
+  #     clean END above the helper's region, and the entry falls outside.
+  t9_run "junk BEGIN + clean END then clean pair -> SILENT LOSS" 0 0 \
+'# Test allowlist\nxxx# === BEGIN OPERATOR ADDITIONS ===\njunk-region-content\n# === END OPERATOR ADDITIONS ===\n# === BEGIN OPERATOR ADDITIONS ===\nplaceholder\n# === END OPERATOR ADDITIONS ===\nmcp__seed__tail'
+
+  # C — CONTROL. A single clean pair, the production shape. Without it, arm B's
+  #     survived=0 could be a dead extractor rather than a selection divergence,
+  #     and the whole T-9 block would prove nothing.
+  t9_run "CONTROL single clean pair (production shape) -> survives" 1 0 \
+'# Test allowlist\n# === BEGIN OPERATOR ADDITIONS ===\nplaceholder\n# === END OPERATOR ADDITIONS ===\nmcp__seed__tail'
+else
+  RESIDUALS="${RESIDUALS}RESIDUAL: T-9 region-selection arms SKIPPED — compose.py not resolvable from ${HOOK_DIR}.\n"
+fi
+
 # ----- Summary -----
 
 echo ""

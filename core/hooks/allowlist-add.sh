@@ -122,13 +122,38 @@ fi
 #   begin/end  — a LINE-ANCHORED TRANSLITERATION of compose.py's _fence_re
 #                (core/deploy/compose.py), dialect-agnostic and
 #                parenthetical-tolerant per ADR-122, binding the FIRST BEGIN and
-#                the FIRST END after it exactly as that extractor's non-greedy
-#                capture does. It is deliberately a STRICT SUBSET of _fence_re:
-#                every spelling it accepts, extract_operator_additions() also
+#                the FIRST END after it. It is deliberately a STRICT SUBSET of
+#                _fence_re AT THE LEVEL OF MARKER SPELLINGS: every spelling this
+#                grammar accepts on a line, extract_operator_additions() also
 #                accepts. A looser reader would find a "region" the authoritative
 #                reader will not honour, insert into it, report success, and
 #                SUPPRESS the warning below — dropping the entry at the next
 #                regeneration. It decides only WHERE to insert.
+#
+#                SCOPE OF THAT GUARANTEE — read this before relying on it. The
+#                subset relation holds for marker SPELLINGS, per line. It does
+#                NOT extend to region SELECTION when a file contains more than
+#                one candidate pair, because the two readers disagree on one
+#                axis: compose.py binds with an UNANCHORED re.search, so its
+#                BEGIN can match MID-LINE and a junk-prefixed marker still binds,
+#                while this awk is ^-anchored and skips it. (compose.py's END is
+#                effectively line-anchored regardless — its pattern is
+#                BEGIN + "\n(.*?)\n" + END, and that literal \n forces END to
+#                start a line.) So where a junk-prefixed BEGIN is followed by a
+#                line-start END ABOVE the first clean pair, compose.py's region
+#                closes before this helper's insert point: the entry is written
+#                inside a well-formed pair, the INSERT branch suppresses the
+#                warning, and the entry is dropped at the next regeneration with
+#                no signal. That is the fail-silent class this split exists to
+#                prevent, surviving on an axis the split does not cover.
+#
+#                It is NOT reachable on any compose-generated allowlist — compose
+#                writes exactly one well-formed pair — and it is NOT a regression:
+#                the pre-fix EOF append landed outside the region too. It is left
+#                characterized rather than fixed, and pinned by T-9 in
+#                core/hooks/tests/allowlist-add.test.sh so that changing either
+#                reader's anchoring turns the suite red instead of silently
+#                widening or closing the gap.
 #
 #   carries-marker-text — a deliberately LOOSE substring test. It decides only
 #                whether this file was ever MEANT to have an operator region, and
@@ -140,7 +165,10 @@ fi
 #
 # The subset relation and the warn coverage are ASSERTED, not asserted about, by
 # core/hooks/tests/allowlist-add.test.sh — they were a claim in the design and
-# the claim was false.
+# the claim was false. T-8 asserts the spelling axis; T-9 asserts the selection
+# axis above, including the shape that still loses an entry silently. Both are
+# behavioural arms run against the real extractor, deliberately not a regex
+# compared against another regex.
 find_operator_region() {
   "$AWK" '
     function fence(label,   sp) {
