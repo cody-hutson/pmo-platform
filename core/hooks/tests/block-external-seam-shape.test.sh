@@ -188,8 +188,14 @@ fi
 # Synthetic arm — the UUID and namespace sub-arms return 0 on BOTH real documents for
 # the UUID half, so they are proven here against a constructed fixture instead of
 # being reported as clean on a population that could never have exercised them.
+# The server id below is SYNTHETIC by construction — the all-zero RFC-4122 v4 shape
+# (`00000000-…`) used as the fixture id everywhere else in this repo. It satisfies the
+# UUID sub-arm's character class while being incapable of naming a real connector, so
+# this arm proves the detector without carrying an operator-instance server id into a
+# public surface. Never substitute a live id here: the arm grades the SHAPE, so any
+# well-formed value exercises it identically and a real one adds only disclosure.
 SYNTH="${SB}/synth.md"
-printf 'a mcp__aaaaaaaa__tool and 8db9f365-5408-4425-9d1c-7967f5654460\n' > "$SYNTH"
+printf 'a mcp__aaaaaaaa__tool and 00000000-0000-4000-8000-000000000000\n' > "$SYNTH"
 if [ "$(vendor_hits "$SYNTH")" -gt 0 ]; then
   printf 'PASS: CONTROL-3c shape sub-arms (namespace + server-uuid) fire on a constructed fixture\n'; PASS=$((PASS+1))
 else
