@@ -359,6 +359,8 @@ Stage 13 — Close (per pipeline/stage-13-close.md — THIS FILE)
 │   ├── Phase B5.6 — Verify Surface 1 PROVENANCE (not existence): read phase 15.5's
 │   │                SURFACE1-STATE token. CREATED => Stage-12 omission (report, non-blocking);
 │   │                EDITED | NO-OP => Stage 12 emitted it (genuine pass)
+│   │                Then read its SURFACE1-TITLE token: MATCH | CONVERGED => posted title
+│   │                agrees with the note H1; WITHHELD => no usable H1 (report, non-blocking)
 │   ├── Phase B5.7 — Edit .version: write .version = v<X.Y> (release-cut-owned version source-of-truth)
 │   │                Read by the SessionStart version-skew hook (notify-version-skew.sh)
 │   │                Monotonicity: no-op if .version already >= v<X.Y> (equality is a limb)
@@ -433,7 +435,11 @@ Classification of the four ledgers (and the two regions *within* `RELEASE_LOG.md
 
 **Reversibility (Surface 2):** CHEAP / HIGH confidence — `git revert <Stage-13-chore-PR-SHA>` reverts the CHANGELOG.md prepend atomically alongside INDEX/DIGEST/NOTES + the RELEASE_LOG VERIFIED transition. The atomic landing matches the existing chore-PR rollback semantics; no special revert path needed.
 
-**Phase B5.6 — Surface 1 provenance verification (cross-stage check):** Stage 12 Phase B5.5 owns the Surface-1 emit. `automated-closeout.sh` phase 15.5 is an idempotent backstop that converges Surface 1 when Stage 12 did not. By the time this phase runs, Surface 1 is present either way — so an **existence** check here is vacuous and this phase does not perform one. It verifies **provenance**: which path produced Surface 1, read from the token the backstop recorded before it acted. It then verifies that the live posted Release is well-formed on the two surfaces Check 20 cannot see — the posted title composition and the published body's link resolvability:
+**Phase B5.6 — Surface 1 provenance verification (cross-stage check):** Stage 12 Phase B5.5 owns the Surface-1 emit. `automated-closeout.sh` phase 15.5 is an idempotent backstop that converges Surface 1 when Stage 12 did not. By the time this phase runs, Surface 1 is present either way — so an **existence** check here is vacuous and this phase does not perform one. It verifies **provenance**: which path produced Surface 1, read from the token the backstop recorded before it acted.
+
+**Stage 13 owns canonical Release-title composition, and this is where that ownership is stated.** The release note's H1 is the title's only canonical source, and the note is authored at this stage — so Stage 12 Phase B5.5, which emits Surface 1, cannot read the source the title requires and posts a **provisional** title instead. Phase 15.5 converges it here, at the first point where the note exists. The title rule itself (`vX.Y — <headline>`) belongs to `release-notes-standard.md § 5.2`; this stage owns only *when* it is applied.
+
+It then verifies that the live posted Release is well-formed on the two surfaces Check 20 cannot see — the posted title's **equality** with the note H1, and the published body's link resolvability:
 
 ```bash
 # Read phase 15.5's recorded state machine path from the close-out record.
@@ -460,7 +466,31 @@ esac
 # in-repo Check 20 lint. Catches the defects invisible to a structural lint:
 # a bare-H1 (un-versioned) posted title, and a repo-relative body link that
 # resolves in the file tree but 404s on releases/tag/vX.Y.
-# (1) Posted TITLE is versioned vX.Y — <headline>
+# (1) Posted TITLE agrees with the note H1 — read from phase 15.5's WITNESS token,
+# not from a live re-read of the Release. Phase 15.5 records the comparison it
+# necessarily made BEFORE it edited; re-reading the surface it just wrote would
+# compare its own write against the source it wrote it from, and could disagree only
+# when the edit had already failed and aborted the close.
+#   MATCH     -> the posted title already equalled the note-derived title
+#   CONVERGED -> phase 15.5 composed it from the note H1 and posted it
+#   WITHHELD  -> no usable H1 resolved; the posted title was left as published
+S1_TITLE="$(printf '%s' "$CLOSEOUT_PHASE_DETAIL_publish_github_release" \
+  | sed -n 's/.*SURFACE1-TITLE=\([A-Z-]*\).*/\1/p')"
+case "$S1_TITLE" in
+  MATCH|CONVERGED)
+    echo "PASS — posted Release title agrees with the note H1 (SURFACE1-TITLE=$S1_TITLE)"
+    ;;
+  WITHHELD)
+    echo "REPORT — the note carries no usable '# ' H1, so phase 15.5 withheld --title and left the posted title as published."
+    echo "This is a note-quality finding and is deliberately NON-BLOCKING: an unextractable H1 must never downgrade a good posted title, nor stop a close."
+    echo "Remedy: correct the note H1, then re-run phase 15.5 (or release-executor Mode F) per release-notes-standard.md § 5.6."
+    ;;
+  *)
+    echo "UNVERIFIED — no SURFACE1-TITLE token in the close-out record for v<X.Y>; title agreement not established (never read as PASS)."
+    ;;
+esac
+# Subordinate FORMAT limb, retained so a title that is neither versioned nor
+# H1-matching reports the more specific cause rather than only the equality failure.
 gh release view "v<X.Y>" --repo {REPO} --json name --jq '.name' \
   | grep -qE '^v[0-9]+\.[0-9]+([a-z]|-[0-9a-z][-0-9a-z]*)? — .' \
   || echo "BLOCK — posted Release TITLE is not versioned (expected 'vX.Y — <headline>', not the bare H1)"
@@ -478,7 +508,11 @@ REPO={REPO} ./release/tools/check-release-body-drift.sh "v<X.Y>" \
   || echo "WARN — Surface 1 body drifted from the in-repo note (§5.1); re-emit the body via the §5.6 deterministic transform (gh release edit --notes \"\$(sed '1,/^---\$/d; 1,/^---\$/d' ...)\") or release-executor Mode F"
 ```
 
-Surface 1 provenance verification is the check Stage 13 can structurally perform. The prior form asked whether Surface 1 existed and routed a missing Surface 1 to `release-executor` Mode F as a normal remedy — a question that is vacuously true after the backstop, and a remedy that reframed a Stage-12 omission as routine Stage-13 work. **A `CREATED` verdict is reported as a defect and is deliberately non-blocking**: the release's outputs are complete, and blocking a close on an upstream omission the backstop already repaired is the reflexive-pipeline-loop pathology this file's own exit-2/3 rationale names. Absence of the token resolves `UNVERIFIED`, never PASS — a provenance that could not be read establishes nothing. The three posted-surface assertions (title-format, body-link resolvability, and body-source-of-record drift) are the posted-surface companion to the in-repo whole-body link-purity lint (release-notes-standard.md §3.2 check 13) — they read the LIVE Release page, which the structural Check 20 lint cannot see. The body-drift assertion (3) enforces the §5.1 invariant that the published body is the deterministic transform of the in-repo note; it shares its equality logic with `deploy.sh` Check 47 via the single `check-release-body-drift.sh` tool and is detective-only (it flags, never re-emits). A failure blocks closure: the canonical note is corrected first, then all surfaces re-emit from it per §5.6. Cutover: applies to releases entering Stage 13 going forward; the introducing release closes under the pre-merge runbook (reflexive-pipeline-loop discipline).
+Surface 1 provenance verification is the check Stage 13 can structurally perform. The prior form asked whether Surface 1 existed and routed a missing Surface 1 to `release-executor` Mode F as a normal remedy — a question that is vacuously true after the backstop, and a remedy that reframed a Stage-12 omission as routine Stage-13 work. **A `CREATED` verdict is reported as a defect and is deliberately non-blocking**: the release's outputs are complete, and blocking a close on an upstream omission the backstop already repaired is the reflexive-pipeline-loop pathology this file's own exit-2/3 rationale names. Absence of the token resolves `UNVERIFIED`, never PASS — a provenance that could not be read establishes nothing. The three posted-surface assertions (posted-title equality, body-link resolvability, and body-source-of-record drift) are the posted-surface companion to the in-repo whole-body link-purity lint (release-notes-standard.md §3.2 check 13). Assertion (1) reads a witness token from the close-out record; assertions (2) and (3) read the LIVE Release page, which the structural Check 20 lint cannot see.
+
+**Assertion (1) is version-scoped by construction** — it concerns THIS release's Release and THIS release's note — which is why it does not inherit the corpus-wide historical title divergence that predates it. Nothing here re-titles a shipped Release.
+
+**Runner:** assertion (1)'s predicate is EXECUTED by `automated-closeout.sh` phase 15.5, and graded by that script's `--self-test` arms `4h(k)` (sensitivity — a canonical body with a stale posted title must still reach `gh release edit` carrying the note-derived `--title`), `4h(l)` (specificity — both dimensions already canonical must stay a no-op), and `4h(m)` (withhold — no usable H1 refreshes the body, omits `--title`, and leaves the outcome token unmoved). The block above is the stage's rendering of a predicate the tool implements; it is not itself the enforcing surface, and it does not claim to be. A predicate stated only in prose, with no runner, cannot fail — and in the artifact it is indistinguishable from a clean check. See the gate-coverage register in `core/standards/gate-efficacy-standard.md`, which carries this predicate's row. The body-drift assertion (3) enforces the §5.1 invariant that the published body is the deterministic transform of the in-repo note; it shares its equality logic with `deploy.sh` Check 47 via the single `check-release-body-drift.sh` tool and is detective-only (it flags, never re-emits). A failure blocks closure: the canonical note is corrected first, then all surfaces re-emit from it per §5.6. Cutover: applies to releases entering Stage 13 going forward; the introducing release closes under the pre-merge runbook (reflexive-pipeline-loop discipline).
 
 **Phase B5.7 — `.version` stamp (release-cut-owned version source-of-truth):** The Stage 13 chore PR commit includes a write to the repo-root `.version` file, stamping it to the shipped version (`.version = v<X.Y>`). `.version` is the platform's version source-of-truth: the SessionStart version-skew hook ([`core/hooks/notify-version-skew.sh`](../../../core/hooks/notify-version-skew.sh)) reads it and compares against the latest published GitHub Release; `update.sh` Phase 5b and `setup-workspace.sh` install_hooks propagate it to the deployed `<ws>/.claude/.version` snapshot. The bump has no other owner in the pipeline — Stage 12 Phase B3 owns the git *tag*, not the `.version` *file* — so absent this phase the file freezes at a stale value and the version-skew banner reports a perpetual "update available" no `update.sh` can clear. Owned by `automated-closeout.sh` `phase_bump_version`: it writes atomically (temp + `mv`), is **monotone** — it no-ops when `.version` already names a version **equal to or higher than** `v<X.Y>`, so a close that lands out of order (a later release already advanced the file) never writes it back down. Idempotency is the **equal** limb of that rule, retained unchanged. The comparison is `version_cmp` from the version-grammar SSOT ([`release/tools/version-grammar.sh`](../../tools/version-grammar.sh)), which `automated-closeout.sh` already sources; a string comparison must never be substituted, because it ranks `v4.9` above `v4.10` and mis-decides a major bump such as `v4.99 → v5.0`. A `.version` value that is not canonical under the grammar is treated as a corrupt source-of-truth and **stamped as recovery**, with the recovery recorded in the close-out report. It also **SKIPs with PASS** for a *version-less* / non-`vX.Y` release — there is nothing to stamp, so the file is intentionally left untouched and the SKIP is recorded in the close-out report (auditable, not silent). **Cutover / grandfather:** applies to releases entering Stage 13 strictly AFTER this phase's introducing-release merge SHA; the introducing release itself is exempt (reflexive-pipeline-loop discipline — it is version-less), and `.version` inside historical tags is immutable accepted-residual (only HEAD/`main` is correctable). **Reversibility:** CHEAP / HIGH — the `.version` write reverts atomically with the rest of the Stage 13 chore PR via `git revert <Stage-13-chore-PR-SHA>`. Drift backstop: `deploy.sh --check` Check 39 anchors `.version` against the latest published GitHub Release (warn-mode-initial).
 

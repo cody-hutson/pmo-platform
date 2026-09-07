@@ -182,6 +182,8 @@ Empirical motivation: a prior release's Stage 12 Finding F-1 (2026-05-15) — th
 
 **Stage-anchor rationale (per the sister spec Part 5 §5.4):** Surface 1 lands at Stage 12, not Stage 13, because the `gh release create` invocation is a GitHub API mutation against an existing tag — the tag exists at Stage 12 Phase B3, so the earliest valid emit point is post-Phase B5 (after RELEASE_LOG row records the DEPLOYED state). Surfaces 2+3 are git commits that land via the Stage 13 chore PR. The N-way consistency principle anchors stage assignment to mechanism execution surface — API mutation at Stage 12, git commits at Stage 13.
 
+**Title ownership — this stage posts a PROVISIONAL title; Stage 13 owns the canonical one.** The release note's H1 is the title's only canonical source, and the note is authored at Stage 13. On the normal path it therefore does not exist when this phase runs, so this phase cannot read the source a canonical title requires: the title it posts is provisional by construction, not by choice. `automated-closeout.sh` phase 15.5 converges the title from the note at Stage 13 — the first point at which the note exists — and records the outcome as `SURFACE1-TITLE=MATCH | CONVERGED | WITHHELD`, verified at `stage-13-close.md` § Phase B5.6. **Do not treat the title posted here as final, and do not add a title-correction step to this stage:** correcting it here would require the note, which is exactly what is missing. The title rule itself (`vX.Y — <headline>`) belongs to `release-notes-standard.md § 5.2` and is not restated here.
+
 **RELEASE_NOTES.md authoring constraint:** Surface 1 emit requires `release/releases/notes/v<X.Y>_RELEASE_NOTES.md` to be resolvable to READ and frontmatter-strip (the stripped body is emitted via `--notes "$BODY"` per the §5.1 invariant, NOT the raw file via `--notes-file`). The canonical file is authored at Stage 13 per existing convention. Two operational paths satisfy this requirement at Stage 12 emit time: (1) **operator-authored at Stage 6 or pre-Stage 12** — the release plan's Operational Deployment Manifest may include a pre-Stage-12 RELEASE_NOTES draft on the release branch (operator discretion); the Stage 12 chore-PR could carry the notes (out-of-scope for the Surface-1 mechanism — files in this category land via separate operator workflow). (2) **scaffold-emit at Phase B5.5 with post-VERIFIED `gh release edit` refresh** per [`release-notes-standard.md § 5.5`](../standards/release-notes-standard.md) view-then-create-or-edit pattern AND [§ 5.6](../standards/release-notes-standard.md) post-VERIFIED corrections re-emit procedure. In this case, Stage 13 Phase B chore PR's RELEASE_NOTES authoring updates the canonical file, and Mode F re-invocation (`gh release edit`) refreshes Surface 1 from main. The view-then-create-or-edit state machine guarantees Surface 1 reaches steady-state regardless of which path the operator chooses.
 
 **View-then-create-or-edit state machine (per `release-notes-standard.md § 5.5`):** `gh release create` is NOT independently idempotent — re-running with a tag that already has a release returns HTTP 422 (`Validation Failed: already_exists`). The emit follows a 3-state state machine; `gh release view` discriminates between create-vs-edit before mutation:
@@ -189,7 +191,7 @@ Empirical motivation: a prior release's Stage 12 Finding F-1 (2026-05-15) — th
 | State | Pre-condition | Action | Post-condition |
 |---|---|---|---|
 | **State 0 — no release for tag** | `gh release view v<X.Y>` returns "release not found" (exit code 1) | `gh release create v<X.Y> --notes "$BODY" --title "<H1-headline>" --target "$MERGE_SHA" --latest="$LATEST"` where `BODY="$(strip_frontmatter <canonical-note-path>)"` and `LATEST` is resolved before the state branch from the version-grammar SSOT per [`release-notes-standard.md § 5.5`](../standards/release-notes-standard.md) (the canonical home of the rule and its fail-closed policy) — the frontmatter-stripped note body per the §5.1 enforced-transform invariant, NOT `--notes-file <canonical-note-path>` (which would publish the YAML frontmatter as raw text). **Refuse an empty `$BODY`** per § 5.1 S4. On success → State 2; on transient failure (network / 5xx) → retry once (production-cap=2 per [`autonomous-execution-model.md`](../../../core/disciplines/autonomous-execution-model.md)) → on second failure → HALT and post Tier 2 [SCOPE CHANGE] per [`release/governance/release-process.md`](../../governance/release-process.md) § Inter-Stage Feedback Protocol | release present at desired content; auditable via `gh release view` |
-| **State 1 — release exists; content may differ** | `gh release view v<X.Y> --json body` returns body content (any value) | Compare returned body against canonical note body (excluding frontmatter). If MATCH → State 2 PASS no-op. If DIFFER → `gh release edit v<X.Y> --notes "$BODY"` where `BODY="$(strip_frontmatter <canonical-note-path>)"` — the same frontmatter-stripped body per the §5.1 invariant, NOT `--notes-file <canonical-note-path>` (idempotent) → State 2. **Refuse an empty `$BODY`**: this edit overwrites a live Release body and GitHub keeps no body history | release present at desired content |
+| **State 1 — release exists; content may differ** | `gh release view v<X.Y> --json body` returns body content (any value), and a SEPARATE `--json name` read returns the posted title | Compare returned body against canonical note body (excluding frontmatter) AND returned `name` against the note-derived title `v<X.Y> — <H1>`. If BOTH match → State 2 PASS no-op. If EITHER differs → `gh release edit v<X.Y> --notes "$BODY" --title "$TITLE"` where `BODY="$(strip_frontmatter <canonical-note-path>)"` — the same frontmatter-stripped body per the §5.1 invariant, NOT `--notes-file <canonical-note-path>` (idempotent) → State 2. **Refuse an empty `$BODY`**: this edit overwrites a live Release body and GitHub keeps no body history. **Omit `--title` entirely when no usable H1 resolves** — an empty `--title` blanks the posted title, so an unextractable H1 must leave the published title alone rather than downgrade it | release present at desired content on both dimensions |
 | **State 2 — release present with current content** | view + diff verification passes | No mutation needed; PASS; proceed to Phase C post-deploy verification | sequence complete for Surface 1 |
 
 **Canonical command form (Phase B5.5 — Stage 12 spoke executes after Phase B5 chore-PR merged + Phase B3 tag push verified):**
@@ -205,9 +207,27 @@ if ! git -C "$REPO_ROOT" ls-remote --tags origin "v<X.Y>" | grep -q "v<X.Y>"; th
 fi
 
 # Preflight 2: canonical notes file must be resolvable (operator-authored OR Stage 13 scaffold path)
+#
+# ABSENT NOTE IS THE NORMAL CASE, and it DEFERS — it does not proceed with a skeleton.
+# This block previously said "continue with skeletal --notes", which the empty-body
+# HALT twelve lines below forecloses: with no note, CANONICAL_BODY is empty and the
+# guard exits 1 before any create or edit is reached. The two statements could not
+# both be followed, and the HALT is the one that governs — publishing a Release with
+# no body creates a broken public artifact that the drift gate then compares against.
+#
+# So the disposition is explicit: DEFER the emit. Surface 1 is then created by the
+# Stage-13 backstop (automated-closeout.sh phase 15.5), which records
+# SURFACE1-STATE=CREATED — reported at stage-13-close.md § Phase B5.6 as a Stage-12
+# omission. That report is accurate and is the intended signal; it is not a defect
+# introduced by deferring here.
+#
+# To emit at THIS stage instead, the note must exist on the release branch before
+# Phase B5.5 runs — the operator-authored path in the RELEASE_NOTES.md authoring
+# constraint above. That is the only way this stage can post a body and a title
+# derived from the canonical source rather than provisional ones.
 if [[ ! -f "$NOTES_PATH" ]]; then
-  echo "INFO — RELEASE_NOTES file not present at $NOTES_PATH; Surface 1 emit will use scaffold-then-edit path per release-notes-standard.md § 5.5 State 0 (canonical-note-path resolves at Stage 13 chore PR landing; Mode F re-invocation refreshes)"
-  # Continue with skeletal --notes for State 0 OR defer Surface 1 emit to post-Stage-13 Mode F invocation
+  echo "DEFER — RELEASE_NOTES file not present at $NOTES_PATH; Surface 1 emit is deferred to the Stage-13 backstop (automated-closeout.sh phase 15.5), which will record SURFACE1-STATE=CREATED. Per release-notes-standard.md § 5.5 State 0."
+  exit 0
 fi
 
 # Surface 1 body = the note with its YAML frontmatter stripped (the committed
@@ -240,12 +260,20 @@ LATEST=false; [ "$(version_badge_latest "$ANCHOR" "v<X.Y>")" = ADVANCE ] && LATE
 # View-then-create-or-edit decision (idempotency guard)
 if gh release view "v<X.Y>" --repo {REPO} >/dev/null 2>&1; then
   # State 1 or 2 — release exists; compare body
+  # Two SEPARATE --json reads, never `--json body,name`: the close-out tool's
+  # self-test stubs discriminate on the literal "--json body", which the combined
+  # form also matches, so a fixture would answer a title read with the body.
   EXISTING_BODY=$(gh release view "v<X.Y>" --repo {REPO} --json body --jq .body)
-  if [[ "$EXISTING_BODY" == "$CANONICAL_BODY" ]]; then
-    echo "PASS — Surface 1 already at canonical state for v<X.Y>"
+  EXISTING_TITLE=$(gh release view "v<X.Y>" --repo {REPO} --json name --jq .name)
+  CANONICAL_TITLE="v<X.Y> — $(grep -m1 '^# ' "$NOTES_PATH" | sed 's/^# //')"
+  if [[ "$EXISTING_BODY" == "$CANONICAL_BODY" && "$EXISTING_TITLE" == "$CANONICAL_TITLE" ]]; then
+    echo "PASS — Surface 1 already at canonical state for v<X.Y> (body and title)"
   else
-    # State 1 → State 2 transition via idempotent gh release edit
-    gh release edit "v<X.Y>" --repo {REPO} --notes "$CANONICAL_BODY"
+    # State 1 → State 2 transition via idempotent gh release edit.
+    # --title converges the title from the same note read the body came from.
+    # If no usable H1 resolved, omit --title entirely — never pass an empty one,
+    # which would blank the posted title rather than leave it alone.
+    gh release edit "v<X.Y>" --repo {REPO} --notes "$CANONICAL_BODY" --title "$CANONICAL_TITLE"
   fi
 else
   # State 0 — release does not exist; create
