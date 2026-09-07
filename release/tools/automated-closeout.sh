@@ -39,7 +39,9 @@
 #   9.95 rebuild_skill_packages  rebuild changed skills' .skill packages into the chore commit (content-sidecar-gated; N/A when no skill source changed)
 #   10 commit_chore_pr     git add + git commit (parser-clean message)
 #   11 create_chore_pr     gh pr create with safe-phrasing body throughout
-#   12 await_merge_chore_pr poll mergeStateStatus (#1705: CI-realistic budget, default 300s; --no-merge skips; BLOCKED/UNSTABLE keep-polling)
+#   12 await_merge_chore_pr poll state+mergeable+mergeStateStatus (#1705: CI-realistic budget, default 300s;
+#                          skipped by no-merge mode; BLOCKED/UNSTABLE keep-polling. #6255: MERGED = terminal
+#                          PASS, CLOSED = terminal FAIL, and a failed merge re-probes state before FAILing)
 #   12.2 sync_primary_checkout  fast-forward the primary checkout to origin/main (git -C only; ff-only; non-fatal)
 #   12.5 reparse_ledgers   post-merge structural re-parse of the ledgers (#1680; detective-only)
 #   12.9 action_item_gate  Procedure 7a HARD GATE (#4439) — 5-valued AI-NNN ledger verdict, evaluated
@@ -5540,6 +5542,31 @@ phase_create_chore_pr() {
   return 0
 }
 
+# Terminal-vs-mergeability read for the chore PR (#6255). ONE site, called from the
+# poll head AND from the merge-failure re-probe below, so the two readings cannot
+# drift apart — the same shared-predicate shape adopted elsewhere in this batch for
+# the same reason, and the opposite of the two verbatim copies of the
+# `state,baseRefName` read this file already carries.
+#
+# WHY `state` IS THE FIELD. `state` in {OPEN, CLOSED, MERGED} is a total, terminal
+# partition, and it is already how this file decides that a PR merged (`--json
+# state,baseRefName` tested against "MERGED/main", at two live sites). It is NOT
+# chosen because no other merged-detection convention exists — `mergedAt` IS used
+# for exactly that elsewhere in the corpus (release/skills/release-executor/SKILL.md
+# reads it on a chore PR; release/ADRs/ADR-001 uses it as a governed ordering key).
+# It is chosen because `mergedAt` is null for BOTH an open and a closed-unmerged PR,
+# and `closed` is true for BOTH a merged and a closed-unmerged one, so neither of
+# them separates the three cases with a single field. `state` does.
+#
+# WIDTH IS LOAD-BEARING. The emitted composite is POSITIONAL and every `case` arm
+# below is anchored to its three fields in order. A fourth --json field would shift
+# every arm at once and every arm would go SILENTLY wrong rather than red, which is
+# why --self-test group 4e arm (i) pins this function's shipped text.
+_chore_pr_terminal_state() {
+  $GH pr view "$1" --repo "$REPO_SLUG" --json state,mergeable,mergeStateStatus \
+    --jq '"\(.state)/\(.mergeable)/\(.mergeStateStatus)"' 2>/dev/null || echo "ERROR"
+}
+
 phase_await_merge_chore_pr() {
   # Zero-commit SKIP propagation (#1705): if phase_create_chore_pr SKIPped on the
   # idempotent already-up-to-date path, there is no PR to merge — SKIP gracefully
@@ -5556,7 +5583,7 @@ phase_await_merge_chore_pr() {
   fi
 
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "await_merge_chore_pr" "DRY-RUN" "would poll mergeStateStatus (CI-realistic budget ~${MERGE_TIMEOUT}s; BLOCKED/UNSTABLE = keep-polling) then gh pr merge --merge --delete-branch"
+    mark_phase "await_merge_chore_pr" "DRY-RUN" "would poll state+mergeable+mergeStateStatus (CI-realistic budget ~${MERGE_TIMEOUT}s; BLOCKED/UNSTABLE = keep-polling; MERGED = terminal PASS, CLOSED = terminal FAIL) then gh pr merge --merge --delete-branch"
     return 0
   fi
 
@@ -5572,21 +5599,54 @@ phase_await_merge_chore_pr() {
   # tunable via --merge-timeout). MERGEABLE/BLOCKED + MERGEABLE/UNSTABLE are
   # KEEP-POLLING states (checks pending / non-required-failing), not terminal —
   # only CONFLICTING / DIRTY HALT; only CLEAN proceeds to merge.
+  #
+  # TERMINAL STATES (#6255). The composite now carries `state` as its FIRST field and
+  # the two terminal arms are evaluated FIRST, because `case` is first-match-wins.
+  # This is not defensive decoration — it is the defect this phase shipped with. A PR
+  # that has ALREADY MERGED reports mergeable=UNKNOWN and mergeStateStatus=UNKNOWN
+  # (measured on a live merged PR), so the composite it produced was literally
+  # "UNKNOWN/UNKNOWN" and the `*/UNKNOWN` clause below SWALLOWED it. That clause was
+  # authored for a different condition — an OPEN PR whose mergeability the host is
+  # still computing — where keep-polling is right. It is wrong for a merged PR, which
+  # was therefore polled to the full budget and then reported FAIL against a chore PR
+  # that had merged correctly.
+  #
+  # The terminal arms GLOB their trailing fields deliberately: the host leaves the
+  # mergeability fields undefined for a non-open PR, so depending on the observed
+  # UNKNOWN/UNKNOWN would reproduce this defect's own root cause one level down.
+  #
+  # CLOSED is its own arm and must not collapse into MERGED. A closed-unmerged PR can
+  # present as mergeable (measured: CLOSED/MERGEABLE/BLOCKED as well as
+  # CLOSED/CONFLICTING/DIRTY), so before this arm existed the closed-unmerged verdict
+  # was reached only by accident — by timing out, or by tripping the conflict arm.
+  #
+  # DO NOT harmonize the other mergeStateStatus readers in the corpus to this arm.
+  # They read an OPEN, pre-merge PR: Stage 12 Phase A.6, and also the Stage 7 / 8 / 9
+  # mergeability preflights (release/references/pipeline/stage-07-dev-testing.md,
+  # stage-08-qa-testing.md, and release/references/how-to/hub-spoke-bridge.md, whose
+  # read labels itself "Stage 9 ONLY"). For all of those, */UNKNOWN genuinely does
+  # mean "still computing" and keep-polling is the correct handling.
   local step="$MERGE_POLL_STEP"
   local elapsed=0
-  local merge_state="UNKNOWN"
+  local merge_state="OPEN/UNKNOWN/UNKNOWN"
   while [[ "$elapsed" -lt "$MERGE_TIMEOUT" ]]; do
-    merge_state="$($GH pr view "$CHORE_PR_NUMBER" --repo "$REPO_SLUG" --json mergeStateStatus,mergeable --jq '"\(.mergeable)/\(.mergeStateStatus)"' 2>/dev/null || echo "ERROR")"
+    merge_state="$(_chore_pr_terminal_state "$CHORE_PR_NUMBER")"
     case "$merge_state" in
-      MERGEABLE/CLEAN) break ;;
-      CONFLICTING/*|MERGEABLE/DIRTY) mark_phase "await_merge_chore_pr" "FAIL" "merge state=$merge_state; HALT — escalate Tier 2 [SCOPE CHANGE]"; return 3 ;;
-      # MERGEABLE/BLOCKED, MERGEABLE/UNSTABLE, */UNKNOWN, ERROR → keep polling
+      MERGED/*)
+        mark_phase "await_merge_chore_pr" "PASS" "chore PR #${CHORE_PR_NUMBER} was ALREADY MERGED — recognised after ${elapsed}s of a ${MERGE_TIMEOUT}s budget (state=$merge_state); no merge attempted"
+        return 0 ;;
+      CLOSED/*)
+        mark_phase "await_merge_chore_pr" "FAIL" "chore PR #${CHORE_PR_NUMBER} was CLOSED WITHOUT MERGING after ${elapsed}s (state=$merge_state); HALT — escalate Tier 2 [SCOPE CHANGE]"
+        return 3 ;;
+      OPEN/MERGEABLE/CLEAN) break ;;
+      OPEN/CONFLICTING/*|OPEN/MERGEABLE/DIRTY) mark_phase "await_merge_chore_pr" "FAIL" "merge state=$merge_state; HALT — escalate Tier 2 [SCOPE CHANGE]"; return 3 ;;
+      # OPEN/MERGEABLE/BLOCKED, OPEN/MERGEABLE/UNSTABLE, OPEN/*/UNKNOWN, ERROR → keep polling
     esac
     /bin/sleep "$step"
     elapsed=$((elapsed + step))
   done
 
-  if [[ "$merge_state" != "MERGEABLE/CLEAN" ]]; then
+  if [[ "$merge_state" != "OPEN/MERGEABLE/CLEAN" ]]; then
     mark_phase "await_merge_chore_pr" "FAIL" "merge state still=$merge_state after ${elapsed}s polling (budget ${MERGE_TIMEOUT}s) — escalate (raise --merge-timeout if CI runs longer, or --no-merge to leave the PR for manual merge)"
     return 3
   fi
@@ -5595,7 +5655,20 @@ phase_await_merge_chore_pr() {
     mark_phase "await_merge_chore_pr" "PASS" "merged PR #${CHORE_PR_NUMBER} (after ${elapsed}s poll)"
     return 0
   fi
-  mark_phase "await_merge_chore_pr" "FAIL" "gh pr merge failed"
+
+  # THE SAME FALSE-FAIL PREDICATE AT A SECOND SITE (#6255). `gh pr merge` can fail
+  # against a PR that DID merge: the merge can land server-side while the client
+  # loses the response, and the PR can merge between the CLEAN read above and this
+  # call. Re-probe the terminal state through the SAME reader before reporting a
+  # failure. A still-open PR falls straight through to the existing FAIL — this
+  # re-probe launders nothing; group 4e arm (h2) is its negative control.
+  local post_merge_state
+  post_merge_state="$(_chore_pr_terminal_state "$CHORE_PR_NUMBER")"
+  if [[ "$post_merge_state" == MERGED/* ]]; then
+    mark_phase "await_merge_chore_pr" "PASS" "chore PR #${CHORE_PR_NUMBER} MERGED but the merge call did not observe it (re-probe state=$post_merge_state, after ${elapsed}s poll); the chore branch was NOT deleted by this run"
+    return 0
+  fi
+  mark_phase "await_merge_chore_pr" "FAIL" "gh pr merge failed (re-probe state=$post_merge_state)"
   return 3
 }
 
@@ -10275,47 +10348,71 @@ STUB
   phase_await_merge_chore_pr >/dev/null 2>&1
   [[ "$(get_phase await_merge_chore_pr)" == SKIPPED\|* ]] || { echo "FAIL: await_merge must SKIP under --no-merge, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
 
-  # (c) BLOCKED-then-CLEAN keep-polling reaches a merge. Stub $GH so `pr view`
-  #     returns MERGEABLE/BLOCKED on the first call and MERGEABLE/CLEAN after
-  #     (proving BLOCKED is keep-polling, not terminal), and `pr merge` exits 0.
+  # (c)..(i) SHARED STUB (#6255). ONE stub serves every arm below, driven by data
+  #     files, so no arm can silently diverge from its neighbours' instrumentation:
+  #       $_mt_seq   one composite per line — the Nth `pr view` returns line N and
+  #                  the LAST line repeats thereafter
+  #       $_mt_mrc   the exit status `pr merge` returns
+  #       $_mt_ctr   `pr view` call counter · $_mt_mctr  `pr merge` call counter
+  #     The MERGE counter is not decoration. Post-#6255 a PASS is reachable via the
+  #     MERGED/* terminal arm as well as via the merge path, so `PASS` alone stopped
+  #     proving that a merge was attempted — the coverage this card's own change
+  #     removes. Every arm below asserts BOTH counters, which is also what makes the
+  #     zero-merge claims in (e)/(f)/(g) mean something: (c) is their moving control.
   local _mt_tmp; _mt_tmp="$(/usr/bin/mktemp -d -t mergeawait-selftest.XXXXXX)"
-  local _mt_ctr="$_mt_tmp/calls"; /usr/bin/printf '0' > "$_mt_ctr"
+  local _mt_ctr="$_mt_tmp/calls" _mt_mctr="$_mt_tmp/merges"
+  local _mt_seq="$_mt_tmp/seq" _mt_mrc="$_mt_tmp/mrc"
   local _mt_stub="$_mt_tmp/gh-stub.sh"
   /bin/cat > "$_mt_stub" <<STUB
 #!/usr/bin/env bash
-# #1705 await-merge stub. \`pr view\` → BLOCKED first, CLEAN after; \`pr merge\` → ok.
-ctr_file="$_mt_ctr"
+# #1705 / #6255 await-merge stub: sequenced \`pr view\` composites, counted \`pr merge\`.
+ctr_file="$_mt_ctr"; mctr_file="$_mt_mctr"; seq_file="$_mt_seq"; mrc_file="$_mt_mrc"
 if [[ "\$1" == "pr" && "\$2" == "view" ]]; then
   n="\$(/bin/cat "\$ctr_file" 2>/dev/null || echo 0)"
   /usr/bin/printf '%s' "\$((n+1))" > "\$ctr_file"
-  if [[ "\$n" -eq 0 ]]; then echo "MERGEABLE/BLOCKED"; else echo "MERGEABLE/CLEAN"; fi
+  line="\$(/usr/bin/sed -n "\$((n+1))p" "\$seq_file")"
+  [[ -n "\$line" ]] || line="\$(/usr/bin/tail -n 1 "\$seq_file")"
+  echo "\$line"
   exit 0
 fi
-if [[ "\$1" == "pr" && "\$2" == "merge" ]]; then exit 0; fi
+if [[ "\$1" == "pr" && "\$2" == "merge" ]]; then
+  m="\$(/bin/cat "\$mctr_file" 2>/dev/null || echo 0)"
+  /usr/bin/printf '%s' "\$((m+1))" > "\$mctr_file"
+  exit "\$(/bin/cat "\$mrc_file" 2>/dev/null || echo 0)"
+fi
 exit 0
 STUB
   /bin/chmod +x "$_mt_stub"
-  GH="$_mt_stub"; CHORE_PR_SKIPPED=0; NO_MERGE=0; MERGE_TIMEOUT=5; MERGE_POLL_STEP=0
+  GH="$_mt_stub"; CHORE_PR_SKIPPED=0; NO_MERGE=0
+
+  # (c) BLOCKED-then-CLEAN keep-polling reaches a merge: `pr view` returns
+  #     OPEN/MERGEABLE/BLOCKED first and OPEN/MERGEABLE/CLEAN after, proving BLOCKED
+  #     is keep-polling and not terminal. MERGE_POLL_STEP is 1 and NOT 0: at step 0 a
+  #     composite matching NO case arm never advances `elapsed` and the loop cannot
+  #     exit, so a mis-anchored arm would HANG this suite rather than redden it. That
+  #     hazard is the elapsed-bound deadline form this file names by phase elsewhere,
+  #     and it attaches to any arm whose stub composite is being reshaped — not only
+  #     to the arms being added. One second is the whole cost.
+  /usr/bin/printf 'OPEN/MERGEABLE/BLOCKED\nOPEN/MERGEABLE/CLEAN\n' > "$_mt_seq"
+  /usr/bin/printf '0' > "$_mt_mrc"
+  /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
+  MERGE_TIMEOUT=5; MERGE_POLL_STEP=1
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   phase_await_merge_chore_pr >/dev/null 2>&1
   [[ "$(get_phase await_merge_chore_pr)" == PASS\|* ]] || { echo "FAIL: await_merge must PASS after BLOCKED→CLEAN keep-polling, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
   [[ "$(/bin/cat "$_mt_ctr")" -ge 2 ]] || { echo "FAIL: await_merge must POLL again after BLOCKED (>=2 pr view calls), got $(/bin/cat "$_mt_ctr")"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_mctr")" -eq 1 ]] || { echo "FAIL: await_merge (c) must reach the merge EXACTLY once — post-#6255 a PASS alone no longer proves the merge path ran, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
 
-  # (d) CONFLICTING → FAIL (terminal HALT, regression guard)
-  /usr/bin/printf '0' > "$_mt_ctr"
-  local _mt_stub2="$_mt_tmp/gh-stub2.sh"
-  /bin/cat > "$_mt_stub2" <<'STUB'
-#!/usr/bin/env bash
-if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "CONFLICTING/DIRTY"; exit 0; fi
-exit 0
-STUB
-  /bin/chmod +x "$_mt_stub2"
-  GH="$_mt_stub2"
+  # (d) CONFLICTING → FAIL (terminal HALT, regression guard). Same step-1 budget as
+  #     (c), for the same non-hang reason; its stub composite is reshaped too.
+  /usr/bin/printf 'OPEN/CONFLICTING/DIRTY\n' > "$_mt_seq"
+  /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   if phase_await_merge_chore_pr >/dev/null 2>&1; then
     echo "FAIL: await_merge must FAIL (HALT) on CONFLICTING"; failures=$((failures+1))
   fi
   [[ "$(get_phase await_merge_chore_pr | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: CONFLICTING must mark FAIL"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_mctr")" -eq 0 ]] || { echo "FAIL: await_merge (d) must not attempt a merge on CONFLICTING, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
 
   /bin/rm -rf "$_mt_tmp" 2>/dev/null || true
   GH="$_mt_saved_gh"; MODE="$_mt_saved_mode"; CHORE_PR_NUMBER="$_mt_saved_pr"
