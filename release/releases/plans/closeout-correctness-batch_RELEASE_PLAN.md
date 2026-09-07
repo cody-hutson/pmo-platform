@@ -2,7 +2,7 @@
 title: Release Plan — closeout-correctness-batch (seven correctness defects across the two release close-out tools)
 type: release-plan
 plan_type: release
-status: IN PROGRESS
+status: ACTIVE
 release: versioned (bump-class minor; concrete number binds at the Stage-12 atomic claim)
 milestone: closeout-correctness-batch
 release_class: routine
