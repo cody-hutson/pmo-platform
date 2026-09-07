@@ -10414,6 +10414,115 @@ STUB
   [[ "$(get_phase await_merge_chore_pr | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: CONFLICTING must mark FAIL"; failures=$((failures+1)); }
   [[ "$(/bin/cat "$_mt_mctr")" -eq 0 ]] || { echo "FAIL: await_merge (d) must not attempt a merge on CONFLICTING, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
 
+  # (e) AC-1 + AC-4 — an ALREADY-MERGED PR is recognised on the FIRST read and the
+  #     poll stops. The measured shape of a merged PR is MERGED/UNKNOWN/UNKNOWN; the
+  #     view counter is what proves the budget was not burned, because PASS alone
+  #     does not, and the DETAIL assertion is what makes AC-4 gradeable at all — AC-4
+  #     is graded on the elapsed figure the PASS detail reports, so the arm asserts
+  #     the string exists rather than leaving Stage 8 to grade a value nothing emits.
+  /usr/bin/printf 'MERGED/UNKNOWN/UNKNOWN\n' > "$_mt_seq"
+  /usr/bin/printf '0' > "$_mt_mrc"
+  /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
+  MERGE_TIMEOUT=1; MERGE_POLL_STEP=1
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_await_merge_chore_pr >/dev/null 2>&1
+  [[ "$(get_phase await_merge_chore_pr)" == PASS\|* ]] || { echo "FAIL: await_merge (e) an ALREADY-MERGED PR must PASS, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_ctr")" -eq 1 ]] || { echo "FAIL: await_merge (e) must stop on the FIRST read (exactly 1 pr view call), got $(/bin/cat "$_mt_ctr")"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_mctr")" -eq 0 ]] || { echo "FAIL: await_merge (e) must NOT attempt a merge on an already-merged PR, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
+  case "$(get_phase await_merge_chore_pr)" in
+    *"ALREADY MERGED"*"after 0s"*) : ;;
+    *) echo "FAIL: await_merge (e) AC-4 — the PASS detail must name the already-merged case AND the elapsed figure (expected 0s), got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)) ;;
+  esac
+
+  # (f) AC-3 — a PR CLOSED WITHOUT MERGING is a failure, and must not collapse into
+  #     the merged verdict. The fixture is the deliberately MERGEABLE-looking closed
+  #     shape (measured on a real closed-unmerged PR), because the CONFLICTING one
+  #     trips the pre-existing conflict arm by accident and would grade nothing. The
+  #     DETAIL assertion is mandatory for the same reason: a bare FAIL is satisfied
+  #     by the PRE-FIX timeout path, so without it this arm cannot discriminate the
+  #     fix from the defect it repairs.
+  /usr/bin/printf 'CLOSED/MERGEABLE/BLOCKED\n' > "$_mt_seq"
+  /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
+  MERGE_TIMEOUT=1; MERGE_POLL_STEP=1
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if phase_await_merge_chore_pr >/dev/null 2>&1; then
+    echo "FAIL: await_merge (f) a CLOSED-unmerged PR must return non-zero"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase await_merge_chore_pr | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: await_merge (f) a CLOSED-unmerged PR must mark FAIL, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_mctr")" -eq 0 ]] || { echo "FAIL: await_merge (f) must NOT attempt a merge on a closed PR, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
+  case "$(get_phase await_merge_chore_pr)" in
+    *"CLOSED WITHOUT MERGING"*) : ;;
+    *) echo "FAIL: await_merge (f) AC-3 — the FAIL detail must NAME the closed-without-merging case; a bare FAIL is satisfied by the pre-fix timeout, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)) ;;
+  esac
+
+  # (g) THE REGRESSION PIN ON A PER-ITERATION TERMINAL CHECK. The real v4.42 shape is
+  #     a merge that lands WHILE the poll is running, so the terminal read must happen
+  #     on every iteration and not once before the loop. A pre-loop-only implementation
+  #     passes (e) and fails here, which is the whole point of separating the two.
+  #     MERGE_TIMEOUT is 2, not 1: the bound is `elapsed -lt MERGE_TIMEOUT` with
+  #     `elapsed += step` AFTER the read, so TIMEOUT=1/STEP=1 admits exactly ONE
+  #     iteration and the >=2 assertion would fail against a CORRECT implementation.
+  #     The >=2 assertion is the pin; the budget is what makes it reachable.
+  /usr/bin/printf 'OPEN/MERGEABLE/BLOCKED\nMERGED/UNKNOWN/UNKNOWN\n' > "$_mt_seq"
+  /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
+  MERGE_TIMEOUT=2; MERGE_POLL_STEP=1
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_await_merge_chore_pr >/dev/null 2>&1
+  [[ "$(get_phase await_merge_chore_pr)" == PASS\|* ]] || { echo "FAIL: await_merge (g) a merge landing MID-POLL must PASS, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_ctr")" -ge 2 ]] || { echo "FAIL: await_merge (g) the terminal check must run PER ITERATION, not pre-loop only (>=2 pr view calls), got $(/bin/cat "$_mt_ctr")"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_mctr")" -eq 0 ]] || { echo "FAIL: await_merge (g) must NOT attempt a merge once the PR merged mid-poll, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
+
+  # (h) THE MERGE-FAILURE RE-PROBE. The same false-FAIL predicate at the second site:
+  #     `pr merge` fails, but the PR did merge. The detail assertion is mandatory here
+  #     for (f)'s reason inverted — a bare PASS is indistinguishable from the ordinary
+  #     merge path, so without it this arm grades nothing.
+  /usr/bin/printf 'OPEN/MERGEABLE/CLEAN\nMERGED/UNKNOWN/UNKNOWN\n' > "$_mt_seq"
+  /usr/bin/printf '1' > "$_mt_mrc"
+  /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
+  MERGE_TIMEOUT=2; MERGE_POLL_STEP=1
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_await_merge_chore_pr >/dev/null 2>&1
+  [[ "$(get_phase await_merge_chore_pr)" == PASS\|* ]] || { echo "FAIL: await_merge (h) a failed merge over a PR that DID merge must PASS on the re-probe, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_mctr")" -eq 1 ]] || { echo "FAIL: await_merge (h) must have ATTEMPTED the merge exactly once before re-probing, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
+  case "$(get_phase await_merge_chore_pr)" in
+    *"did not observe"*) : ;;
+    *) echo "FAIL: await_merge (h) the PASS detail must name the merge-landed-but-unobserved case; a bare PASS is the ordinary merge path, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)) ;;
+  esac
+
+  # (h2) THE NEGATIVE CONTROL FOR (h), and the arm that keeps the re-probe honest: a
+  #      failed merge over a PR that is STILL OPEN must still FAIL. Without it, an
+  #      implementation that returns PASS on ANY merge failure satisfies (h), and the
+  #      re-probe would launder every failed merge into a success.
+  /usr/bin/printf 'OPEN/MERGEABLE/CLEAN\n' > "$_mt_seq"
+  /usr/bin/printf '1' > "$_mt_mrc"
+  /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
+  MERGE_TIMEOUT=2; MERGE_POLL_STEP=1
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if phase_await_merge_chore_pr >/dev/null 2>&1; then
+    echo "FAIL: await_merge (h2) a failed merge over a STILL-OPEN PR must return non-zero"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase await_merge_chore_pr | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: await_merge (h2) a failed merge over a STILL-OPEN PR must mark FAIL — the re-probe must not launder it, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_mctr")" -eq 1 ]] || { echo "FAIL: await_merge (h2) must have attempted the merge exactly once, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
+  /usr/bin/printf '0' > "$_mt_mrc"
+
+  # (i) THE WIDTH PIN. The composite every case arm above matches is POSITIONAL: a
+  #     fourth --json field would shift all of them at once and each would go SILENTLY
+  #     wrong rather than red — no arm in this group would notice, because each stub
+  #     emits the shape the arm expects. So the SHIPPED text of the reader is asserted
+  #     to be exactly the three-field form, behind an anti-vacuity floor proving the
+  #     extraction found a non-empty body, and against a CONSTRUCTED four-field line
+  #     that both needles must REJECT — without that specificity control a needle that
+  #     matches any prefix would read as a pass on the very drift this arm exists for.
+  local _mt_body _mt_bad_json _mt_bad_jq
+  _mt_body="$(/usr/bin/sed -n '/^_chore_pr_terminal_state() {/,/^}/p' "${BASH_SOURCE[0]}" || true)"
+  _mt_bad_json='  $GH pr view "$1" --repo "$REPO_SLUG" --json state,mergeable,mergeStateStatus,isDraft \'
+  _mt_bad_jq='"\(.state)/\(.mergeable)/\(.mergeStateStatus)/\(.isDraft)"'
+  [[ "$(/usr/bin/printf '%s\n' "$_mt_body" | /usr/bin/wc -l | /usr/bin/tr -d ' ')" -ge 3 ]] || { echo "FAIL: await_merge (i) width pin extracted fewer than 3 lines of _chore_pr_terminal_state — the extraction, not the file, is what failed (anti-vacuity floor)"; failures=$((failures+1)); }
+  [[ "$(grep_count -F -- '--json state,mergeable,mergeStateStatus ' <<<"$_mt_body")" == "1" ]] || { echo "FAIL: await_merge (i) the shipped --json list must be EXACTLY state,mergeable,mergeStateStatus — a fourth field silently shifts every case arm in this phase"; failures=$((failures+1)); }
+  [[ "$(grep_count -F -- '"\(.state)/\(.mergeable)/\(.mergeStateStatus)"' <<<"$_mt_body")" == "1" ]] || { echo "FAIL: await_merge (i) the shipped --jq template must be EXACTLY the 3-field composite"; failures=$((failures+1)); }
+  [[ "$(grep_count -F -- '--json state,mergeable,mergeStateStatus ' <<<"$_mt_bad_json")" == "0" ]] || { echo "FAIL: await_merge (i) SPECIFICITY — the --json needle matches a constructed FOUR-field line, so the width pin measures nothing"; failures=$((failures+1)); }
+  [[ "$(grep_count -F -- '"\(.state)/\(.mergeable)/\(.mergeStateStatus)"' <<<"$_mt_bad_jq")" == "0" ]] || { echo "FAIL: await_merge (i) SPECIFICITY — the --jq needle matches a constructed FOUR-field template, so the width pin measures nothing"; failures=$((failures+1)); }
+
   /bin/rm -rf "$_mt_tmp" 2>/dev/null || true
   GH="$_mt_saved_gh"; MODE="$_mt_saved_mode"; CHORE_PR_NUMBER="$_mt_saved_pr"
   CHORE_PR_SKIPPED="$_mt_saved_skipped"; NO_MERGE="$_mt_saved_nomerge"
@@ -14870,7 +14979,7 @@ EOF
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache); check-5 settle POLL validated (#4416, legs f-j PLUS the F-01 remediation leg i.2 — six arms, not five; this clause is the settle group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which legs f-j and i.2 never executed: f AC2 an injected 5-read search-index lag, longer than the pre-change single-retry window, still converges to PASS and RENDERS its settle figure in both the row and the phase detail — the v4.02 failure reproduced and closed / g AC3 THE NON-VACUITY CONTROL, same fixture with the budget shrunk BELOW the lag: exhaustion must read PARTIAL and NAME the budget, never PASS, so f is proven capable of failing / h AC1 structural self-parse behind an anti-vacuity floor — the attempt bound exists AND is a loop terminal AND the poll loop exists, with the pre-change 'Retry ONCE' form asserted ABSENT so no limb is satisfiable by the old code / i AC4 an out-of-scope straggler is still reported at once, asserted on the CHECK-5-SCOPED instrument ('check-5 settled at poll 0/15') because a PARTIAL row alone cannot distinguish reported-now from reported-after-the-whole-budget, and because the stub's own 'calls' counter is PHASE-scoped rather than check-5-scoped — the gate-passage-proof rung issues a third 'issue list' after check 5 has rendered — so that counter carries an independent CEILING arm (<= 3 = detect + check-5 + gate-passage-proof) stated as the bound it really is; leg (f)'s 'poll 5/15' is the moving control that makes the zero a real reading / i.2 THE F-01 REMEDIATION ARM, and the only one that discriminates the render guard: leg (i) grades the exhaustion suffix but can only ever exercise it at polls=0, where it is unreachable BY CONSTRUCTION under either guard, which is how '-gt 0' survived it. i.2 drives the one separating state — an out-of-scope straggler surfacing MID-POLL, in-scope #401 holding the poll open across a 3-read lag while #999 breaks the loop at 3 of 15 attempts with the budget never waited — behind an anti-vacuity floor on 'poll 3/15' whose moving controls are (f)'s 'poll 5/15' and (i)'s 'poll 0/15'. Twelve fixtures under both guards: 12/12 pass under the loop's own '-ge' terminal, exactly one fails under '-gt 0' / j AC5 the group stays hermetic and instant at DELAY=0, which only an ATTEMPT bound makes structurally possible)" >&2
   echo "  post_gate_passage_proof three-rung target ladder validated (#3819 — T-13 rung 1 resolves a CLOSED Stage-13 sub-task via --state all and does NOT fall through to the PR / rung 2 posts to the release PR naming the OBSERVED rung-1 reason / rung 3 MANUAL names BOTH attempted targets; T-14 two collect_open_release_issues calls in one run keep EXCLUDED_DETAIL undoubled, COLLECTED_OPEN_ISSUES identical and resolve_stage13_subtask stable, with a non-empty-exclusion anti-vacuity control)" >&2
   echo "  phase_action_item_gate validated (#4439, group AI — 28 arms; this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): A and B are each other's control over ONE differential harness where only the ledger changes — a gate that never blocks fails A, one that always blocks fails B, one reading the wrong path resolves NOT-RECORDED for both and fails BOTH / B2 decoy: a terminal ledger carrying the literal words 'open' and 'in-flight' in trigger_detail still resolves RESOLVED, so the gate is column-addressed and not row-pattern-matched / all five verdict states drive distinct fixtures and are asserted on the STATE_AI_GATE global rather than the detail prose — UNRESOLVED (A) · RESOLVED (B, B2) · NOT-RECORDED (C unattested blocks, C2 attested passes WARN with the operator-actor attestation EMITTED carrying its cause and the spec subtype) · EMPTY-LEDGER (D unattested blocks, D2 attested round-trips the second cause) · UNCLASSIFIABLE (M blocks and NAMES the offending row and its raw value, with a specificity limb proving the enumerator selects the unreadable set and not the terminal one, and the all-terminal ledger re-driven on the same harness as its paired negative control) / E the two SURFACE states must resolve DISTINCT values, because comparing detail strings passes on any two different sentences / E2 an unlicensed attestation cause does NOT clear a SURFACE state / F EXECUTES the two dispatch lines lifted VERBATIM from this file's own text, refusing to pass unless each needle resolves to exactly one top-level line, under three mutually-controlling limbs — F1 blocking gate leaves the close UNFIRED at exit 3, F2 SENSITIVITY a passing gate does fire it (without which F1's clean result is meaningless), F3 NEGATIVE CONTROL a constructed '|| true' line must let the close through (without which a fail-closed gate is indistinguishable from a no-op one) — so capability-to-fail is re-demonstrated on EVERY run, not only under one-time mutation / F4 whole-block invariant: every top-level dispatch line carries the fail-closed guard, with an anti-vacuity floor on the parse and a specificity control proving the filter rejects an unguarded line / G doc<->code parity on the canonical Procedure 7a predicate across the fixture set, with an anti-vacuity floor on the extraction and a sensitivity arm requiring >=5 distinct STATEs over a fixture count DERIVED from the loop rather than restated in the message / M-N-O-Q-R-S-T MEMBERSHIP: the residue of the recognised set is its own BLOCKING state rather than the implicit else of a two-value comparison, which counted a typo, a case variant, a foreign vocabulary and an out-of-range field as RESOLVED — M an unadmitted value blocks and names itself, with the all-terminal ledger as its paired negative control / N case-folding NORMALISES rather than rejects, so an uppercase OPEN resolves UNRESOLVED and a fold-and-reject implementation cannot pass M / O the two section-2.1a status aliases stay ADMITTED, without which every legacy re-run blocks / Q the ARITY class in BOTH its mechanisms, the one witnessed live: at arity<=10 field 11 does not exist and reads EMPTY, at arity 11 the row-terminating pipe stays glued to the last field and reads 'open |' NON-empty, and the detail carries fields:N so a dropped column is distinguishable from a mistyped word / R an unreadable ledger cannot be attested away, the structural sibling of L / S row 6 renders the fifth state WITH its counts instead of falling to the default that asserts the gate did not run, with the still-reachable default as its control / T PRECEDENCE: a ledger carrying both classes renders UNRESOLVED and carries BOTH enumerations in one detail, because the state selects the operator's remedy and reversing it would drop the open enumeration from the ledgers that most need it / H --dry-run never returns non-zero yet still EVALUATES, and names the condition that would FAIL at --apply / I an idempotent re-run over an already-closed milestone, where an UNRESOLVED verdict is the close-before-verdict shape itself / J --no-merge still evaluates and records rather than blocks / K Verification row 6 reads the Phase-12.9 GLOBAL — unset renders UNVERIFIED never a green cell, mutating the global moves the cell, and phase_run_verification is asserted NOT to re-evaluate the predicate after the close / L an attestation does NOT clear an UNRESOLVED verdict — an open row is dispositioned, never attested away / P operator-instance path tokenisation, with a sensitivity arm proving the leak probe can match its own needle" >&2
-  echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
+  echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT; #6255, arms c-i — this clause is the group's conformant-arm extraction, without which a passing run is indistinguishable from one where the arms never executed: TERMINAL STATES — (e) an ALREADY-MERGED PR PASSes on the FIRST read with ZERO merge attempts and its detail carries the elapsed figure AC-4 is graded on, which no earlier version of this phase emitted at all / (f) a CLOSED-unmerged PR FAILs and its detail NAMES the closed-without-merging case, driven on the deliberately MERGEABLE-looking closed shape because the CONFLICTING one trips the pre-existing arm by accident, and asserted on the detail because a bare FAIL is satisfied by the PRE-FIX timeout path / (g) THE PER-ITERATION PIN: a merge landing MID-POLL is recognised on the SECOND read, so a pre-loop-only implementation passes (e) and fails here — budgeted at MERGE_TIMEOUT=2 because the bound admits ceil(TIMEOUT/STEP) iterations and a 1/1 arm would redden against a CORRECT implementation / RE-PROBE — (h) a failed gh pr merge over a PR that DID merge PASSes with the merge ATTEMPTED once and a detail naming the unobserved-merge case, (h2) its NEGATIVE CONTROL: the same failed merge over a STILL-OPEN PR must still FAIL, without which an implementation that PASSes on any merge failure satisfies (h) / (i) THE WIDTH PIN over the shipped text of the one shared reader, three-field --json list and three-field --jq template, behind an anti-vacuity floor on the extraction and TWO specificity controls on constructed FOUR-field lines that both needles must reject / and every arm c-i counts BOTH pr view and pr merge, because post-fix a PASS is reachable through the terminal arm and no longer proves on its own that a merge was attempted)" >&2
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
