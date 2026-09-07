@@ -42,10 +42,12 @@
 #   12 await_merge_chore_pr poll mergeStateStatus (#1705: CI-realistic budget, default 300s; --no-merge skips; BLOCKED/UNSTABLE keep-polling)
 #   12.2 sync_primary_checkout  fast-forward the primary checkout to origin/main (git -C only; ff-only; non-fatal)
 #   12.5 reparse_ledgers   post-merge structural re-parse of the ledgers (#1680; detective-only)
-#   12.9 action_item_gate  Procedure 7a HARD GATE (#4439) — 3-valued AI-NNN ledger verdict, evaluated
+#   12.9 action_item_gate  Procedure 7a HARD GATE (#4439) — 5-valued AI-NNN ledger verdict, evaluated
 #                          BEFORE the milestone close. UNRESOLVED BLOCKS at --apply; NOT-RECORDED /
 #                          EMPTY-LEDGER SURFACE and require --attest-action-items to pass; RESOLVED is
 #                          the only silent pass
+#                          UNCLASSIFIABLE also BLOCKS — a status outside the recognised set is
+#                          unreadable, never resolved, and no attestation clears it
 #   13 post_close_milestone gh api -X PATCH state=closed (#2919: DEFERS under --no-merge)
 #   14 manual_close_release_issues operator-authorized D-1 with structured comment (#2919: DEFERS under --no-merge)
 #   15 run_verification + post_gate_passage_proof per the gate-passage-proof template
@@ -13706,7 +13708,10 @@ PY
   MODE="apply"
   /bin/mkdir -p "$HUB_STATE_PATH/ai-unresolved" "$HUB_STATE_PATH/ai-resolved" \
                 "$HUB_STATE_PATH/ai-notrecorded" "$HUB_STATE_PATH/ai-empty" \
-                "$HUB_STATE_PATH/ai-decoy"
+                "$HUB_STATE_PATH/ai-decoy" "$HUB_STATE_PATH/ai-unclassifiable" \
+                "$HUB_STATE_PATH/ai-shortrow" "$HUB_STATE_PATH/ai-arity11" \
+                "$HUB_STATE_PATH/ai-upper" "$HUB_STATE_PATH/ai-alias" \
+                "$HUB_STATE_PATH/ai-both"
 
   # Fixtures. Quoted heredocs — the escaped pipe and the em-dashes are content.
   /bin/cat > "$HUB_STATE_PATH/ai-unresolved/action-items.md" <<'AIFIX'
@@ -13746,6 +13751,87 @@ AIFIX
 
 | id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
+AIFIX
+  # THE FIVE MEMBERSHIP FIXTURES. Each isolates ONE way a status reaches — or
+  # fails to reach — the recognised set, and together they are why the fix is a
+  # membership test rather than a case-fold. A predicate that merely folded case
+  # would pass `upper` and still silently pass `unclassifiable`, `shortrow` and
+  # `arity11`; a predicate that rejected everything unfamiliar would pass those
+  # three and fail `alias` and `upper`. No single wrong implementation passes all
+  # five.
+  #
+  # `unclassifiable` — a value the enum does not admit at all, at the right index.
+  /bin/cat > "$HUB_STATE_PATH/ai-unclassifiable/action-items.md" <<'AIFIX'
+## Action Items
+
+| id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AI-020 | 2026-08-14T10:00:00Z | 5 | #1 | reminder | hub | a | event | after merge | file:a | bogus-status | — | — |
+| AI-021 | 2026-08-14T10:01:00Z | 5 | #2 | cleanup | hub | b | event | after merge | file:b | done | 2026-08-14T11:01:00Z | landed |
+AIFIX
+  # `shortrow` — THE LIVE WITNESS, reproduced by arity rather than by vocabulary.
+  # Four rows at arities 7 and 8 against the 13-column header, so field 11 does
+  # not exist and $11 reads EMPTY. The word `open` sits at field 6 and the gate
+  # never reads it. Under the shipped predicate this whole file returned
+  # TOTAL=4 UNRES=0 -> RESOLVED, the only silent pass. A fixture written to the
+  # earlier descriptions of this witness — an `open` token at field 6 of a
+  # 10-field row, or an uppercase OPEN — reproduces a condition that does not
+  # occur here, which is why the arity is the thing this fixture pins.
+  /bin/cat > "$HUB_STATE_PATH/ai-shortrow/action-items.md" <<'AIFIX'
+## Action Items
+
+| id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AI-030 | 2026-09-06T00:00:00Z | 5 | #1 | reminder | resolved | did it |
+| AI-031 | 2026-09-06T00:01:00Z | 5 | #2 | reminder | open | not yet | still |
+| AI-032 | 2026-09-06T00:02:00Z | 5 | #3 | reminder | resolved | did it | too |
+| AI-033 | 2026-09-06T00:03:00Z | 5 | #4 | reminder | resolved | did it | also |
+AIFIX
+  # `arity11` — the OTHER arity mechanism, and the one an "empty $11" description
+  # misses entirely. With FS=' [|] ' the row-terminating ` |` never matches the
+  # separator, so on an 11-column row it stays glued to the LAST field: $11 reads
+  # `open |`, NON-empty, and unclassifiable for the right reason — field 11 of an
+  # 11-column row is not the status column of a 13-column schema.
+  /bin/cat > "$HUB_STATE_PATH/ai-arity11/action-items.md" <<'AIFIX'
+## Action Items
+
+| id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AI-040 | 2026-09-06T00:00:00Z | 5 | #1 | reminder | hub | a | event | after merge | file:a | done |
+| AI-041 | 2026-09-06T00:01:00Z | 5 | #2 | reminder | hub | b | event | after merge | file:b | open |
+AIFIX
+  # `upper` — case-folding NORMALISES, it does not reject. Without this fixture a
+  # fold-and-reject implementation passes the unclassifiable arm.
+  /bin/cat > "$HUB_STATE_PATH/ai-upper/action-items.md" <<'AIFIX'
+## Action Items
+
+| id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AI-050 | 2026-08-14T10:00:00Z | 5 | #1 | reminder | hub | a | event | after merge | file:a | OPEN | — | — |
+| AI-051 | 2026-08-14T10:01:00Z | 5 | #2 | cleanup | hub | b | event | after merge | file:b | Done | 2026-08-14T11:01:00Z | landed |
+AIFIX
+  # `alias` — the § 2.1a status aliases are ADMITTED, not swept into the residue.
+  # Hundreds of live rows carry `resolved`; a gate that blocked them would be
+  # unusable on the corpus it governs.
+  /bin/cat > "$HUB_STATE_PATH/ai-alias/action-items.md" <<'AIFIX'
+## Action Items
+
+| id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AI-060 | 2026-08-14T10:00:00Z | 5 | #1 | reminder | hub | a | event | after merge | file:a | resolved | 2026-08-14T11:00:00Z | landed |
+| AI-061 | 2026-08-14T10:01:00Z | 5 | #2 | cleanup | hub | b | event | after merge | file:b | withdrawn | 2026-08-14T11:01:00Z | dropped |
+AIFIX
+  # `both` — one open row AND one unreadable row, the PRECEDENCE fixture. Measured
+  # on the live corpus, 3 of the 8 ledgers carrying an unadmitted status also carry
+  # open rows, one of them 48 open against 2 unreadable, so this is the common
+  # shape and not an edge case.
+  /bin/cat > "$HUB_STATE_PATH/ai-both/action-items.md" <<'AIFIX'
+## Action Items
+
+| id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AI-070 | 2026-08-14T10:00:00Z | 5 | #1 | reminder | hub | a | event | before Stage 13 close | file:a | open | — | — |
+| AI-071 | 2026-08-14T10:01:00Z | 5 | #2 | cleanup | hub | b | event | after merge | file:b | bogus-status | — | — |
 AIFIX
 
   # $AI_EVENT_WRITER stub: appends its full argv to a per-arm witness file. The
@@ -13877,6 +13963,89 @@ AISTUB
   [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-L — --attest-action-items must NOT clear an UNRESOLVED verdict; an open row is dispositioned, not attested away (rc $_ai_rc)"; failures=$((failures+1)); }
   ATTEST_ACTION_ITEMS=""
 
+  # ─── MEMBERSHIP CLASSIFICATION (the fifth state) ───────────────────────────
+  #
+  # (M) A STATUS THE ENUM DOES NOT ADMIT BLOCKS, AND NAMES ITSELF. The defect was
+  #     that everything unrecognised fell through an implicit `else` and was
+  #     counted resolved, so the arm has to assert three things and not one: the
+  #     BLOCK, the count that justifies it, and the row-and-value in the detail —
+  #     a verdict with no offending row named sends the operator back to the
+  #     ledger the gate just read.
+  _ai_drive ai-unclassifiable; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-M — a status outside the recognised set must BLOCK at --apply, got rc $_ai_rc"; failures=$((failures+1)); }
+  [[ "$STATE_AI_GATE" == "UNCLASSIFIABLE" ]] || { echo "FAIL: AI-M — STATE_AI_GATE must be UNCLASSIFIABLE, got '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  [[ "$STATE_AI_TOTAL" -eq 2 && "$STATE_AI_BAD" -eq 1 && "$STATE_AI_UNRES" -eq 0 ]] || { echo "FAIL: AI-M — counts must be TOTAL=2 BAD=1 UNRES=0 (the unreadable row counts toward NEITHER resolved nor unresolved), got TOTAL=$STATE_AI_TOTAL BAD=$STATE_AI_BAD UNRES=$STATE_AI_UNRES"; failures=$((failures+1)); }
+  _ai_rec="$(get_phase action_item_gate)"
+  [[ "$_ai_rec" == FAIL\|* ]] || { echo "FAIL: AI-M — the phase must record FAIL, got '$_ai_rec'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'AI-020' <<<"$_ai_rec" || { echo "FAIL: AI-M — the detail must NAME the offending row, got '$_ai_rec'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'bogus-status' <<<"$_ai_rec" || { echo "FAIL: AI-M — the detail must QUOTE the offending value, got '$_ai_rec'"; failures=$((failures+1)); }
+  if /usr/bin/grep -qF 'AI-021' <<<"$_ai_rec"; then
+    echo "FAIL: AI-M specificity — the enumerator listed a TERMINAL row; it is not selecting the unclassifiable set, got '$_ai_rec'"; failures=$((failures+1))
+  fi
+  # PAIRED NEGATIVE CONTROL, immediately and on the same harness: a well-formed
+  # all-terminal ledger still passes. Without it, a gate that blocked on every
+  # ledger would satisfy every assertion above.
+  _ai_drive ai-resolved; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 0 && "$STATE_AI_GATE" == "RESOLVED" && "$STATE_AI_BAD" -eq 0 ]] || { echo "FAIL: AI-M control — the all-terminal ledger must still PASS RESOLVED with BAD=0, got rc $_ai_rc / '$STATE_AI_GATE' / BAD=$STATE_AI_BAD"; failures=$((failures+1)); }
+
+  # (N) CASE-FOLDING NORMALISES, IT DOES NOT REJECT. `OPEN` is the non-terminal
+  #     state spelled loudly; it must resolve UNRESOLVED, never UNCLASSIFIABLE.
+  #     Without this arm a fold-and-reject implementation passes (M) — it would
+  #     block, just for the wrong reason and with the wrong remedy.
+  _ai_drive ai-upper; _ai_rc="$_AI_RC"
+  [[ "$STATE_AI_GATE" == "UNRESOLVED" ]] || { echo "FAIL: AI-N — an uppercase OPEN must fold to the open state (UNRESOLVED), not be rejected as unreadable, got '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  [[ "$STATE_AI_UNRES" -eq 1 && "$STATE_AI_BAD" -eq 0 ]] || { echo "FAIL: AI-N — counts must be UNRES=1 BAD=0, got UNRES=$STATE_AI_UNRES BAD=$STATE_AI_BAD"; failures=$((failures+1)); }
+  [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-N — the folded open row must still BLOCK at --apply, got rc $_ai_rc"; failures=$((failures+1)); }
+
+  # (O) THE § 2.1a ALIASES ARE ADMITTED. Hundreds of live rows carry `resolved`;
+  #     a recognised set narrowed to the § 2.3 enum would block every legacy
+  #     re-run and contradict the standard the gate enforces.
+  _ai_drive ai-alias; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 0 && "$STATE_AI_GATE" == "RESOLVED" ]] || { echo "FAIL: AI-O — the § 2.1a status aliases (resolved / withdrawn) must read as terminal, got rc $_ai_rc / '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  [[ "$STATE_AI_BAD" -eq 0 ]] || { echo "FAIL: AI-O — an aliased value must not count toward the unreadable residue, got BAD=$STATE_AI_BAD"; failures=$((failures+1)); }
+
+  # (Q) THE ARITY CLASS, BOTH MECHANISMS. This is the one witnessed live, and the
+  #     two arities fail differently: at arity <= 10 there is no field 11 and $11
+  #     is EMPTY; at arity 11 the row-terminating ` |` stays glued to the last
+  #     field and $11 is NON-empty. A test bounded at "arity < 11" reaches only
+  #     the first and leaves the larger live class unexercised, so both are driven
+  #     here and the detail is asserted to carry the field count that tells them
+  #     apart from a mistyped word.
+  _ai_drive ai-shortrow; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 3 && "$STATE_AI_GATE" == "UNCLASSIFIABLE" ]] || { echo "FAIL: AI-Q — a short row whose \$11 is EMPTY must be unreadable, not resolved (this is the shipped gate's live silent pass), got rc $_ai_rc / '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  [[ "$STATE_AI_TOTAL" -eq 4 && "$STATE_AI_BAD" -eq 4 ]] || { echo "FAIL: AI-Q — the witness shape is 4 rows at arities 7 and 8, all four unreadable, got TOTAL=$STATE_AI_TOTAL BAD=$STATE_AI_BAD"; failures=$((failures+1)); }
+  /usr/bin/grep -qE 'fields:(7|8)' <<<"$(get_phase action_item_gate)" || { echo "FAIL: AI-Q — the detail must carry the row's field count, or a dropped column is indistinguishable from a mistyped status, got '$(get_phase action_item_gate)'"; failures=$((failures+1)); }
+  _ai_drive ai-arity11; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 3 && "$STATE_AI_GATE" == "UNCLASSIFIABLE" ]] || { echo "FAIL: AI-Q — an 11-column row's \$11 carries the row-terminating pipe and is NOT empty; it must still be unreadable, got rc $_ai_rc / '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'fields:11' <<<"$(get_phase action_item_gate)" || { echo "FAIL: AI-Q — the arity-11 detail must name fields:11; without it the operator is told to normalise a value whose real fault is a dropped column, got '$(get_phase action_item_gate)'"; failures=$((failures+1)); }
+  # The MECHANISM, pinned rather than inferred: the raw value carries the glued
+  # row-terminating pipe. An arm that only asserted the state would pass against a
+  # predicate that reached UNCLASSIFIABLE by treating $11 as empty here, which is
+  # the description this fixture exists to falsify.
+  /usr/bin/grep -qF 'status:[open |]' <<<"$(get_phase action_item_gate)" || { echo "FAIL: AI-Q — the arity-11 raw value must show the glued row-terminating pipe ('open |'), proving \$11 is NON-empty on this class, got '$(get_phase action_item_gate)'"; failures=$((failures+1)); }
+
+  # (T) PRECEDENCE, MEASURED NOT REASONED. A ledger carrying both classes renders
+  #     UNRESOLVED, because the STATE selects the operator's REMEDY and open rows
+  #     are the dominant one — and the unreadable rows are carried in the SAME
+  #     detail so one pass covers both. Reversing this precedence would render a
+  #     ledger of 48 open rows and 2 unreadable ones as "normalise the value" and
+  #     drop the open enumeration entirely.
+  _ai_drive ai-both; _ai_rc="$_AI_RC"
+  [[ "$STATE_AI_GATE" == "UNRESOLVED" ]] || { echo "FAIL: AI-T — with BOTH an open row and an unreadable one, the state must be UNRESOLVED (the dominant remedy), got '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  [[ "$STATE_AI_UNRES" -eq 1 && "$STATE_AI_BAD" -eq 1 ]] || { echo "FAIL: AI-T — both counters must be live on this fixture (UNRES=1 BAD=1), got UNRES=$STATE_AI_UNRES BAD=$STATE_AI_BAD"; failures=$((failures+1)); }
+  _ai_rec="$(get_phase action_item_gate)"
+  /usr/bin/grep -qF 'AI-070(owner:' <<<"$_ai_rec" || { echo "FAIL: AI-T — the open row must keep its owner+trigger enumeration; losing it is the whole cost of the wrong precedence, got '$_ai_rec'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'AI-071(status:' <<<"$_ai_rec" || { echo "FAIL: AI-T — the unreadable row must be carried in the SAME detail, or the operator makes two passes over one ledger, got '$_ai_rec'"; failures=$((failures+1)); }
+
+  # (R) AN UNREADABLE LEDGER CANNOT BE ATTESTED AWAY — the sibling of (L).
+  #     Attestation licenses an ABSENT ledger; it never licenses one the gate
+  #     could not read. The guarantee is structural: UNCLASSIFIABLE is deliberately
+  #     not in the NOT-RECORDED|EMPTY-LEDGER case pattern.
+  ATTEST_ACTION_ITEMS="no-commitments"
+  _ai_drive ai-unclassifiable; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-R — --attest-action-items must NOT clear an UNCLASSIFIABLE verdict; an unreadable status is normalised, not attested away (rc $_ai_rc)"; failures=$((failures+1)); }
+  ATTEST_ACTION_ITEMS=""
+
   # (H) DRY-RUN — evaluates, records, never halts, and says what it WOULD do.
   MODE="dry-run"
   _ai_drive ai-unresolved; _ai_rc="$_AI_RC"
@@ -13913,6 +14082,24 @@ AISTUB
   [[ "$(_ai_verification_cell)" == "BLOCKED (4 unresolved of 7)" ]] || { echo "FAIL: AI-K — mutating STATE_AI_GATE must change the cell; it does not, so the cell is not reading the pre-close verdict, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
   STATE_AI_GATE=""
   [[ "$(_ai_verification_cell)" == UNVERIFIED* ]] || { echo "FAIL: AI-K — an unset verdict must render UNVERIFIED, never a green cell, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
+
+  # (S) ROW 6 RENDERS THE FIFTH STATE, AND DOES NOT FALL TO THE DEFAULT. A state
+  #     with no `case` arm here lands on `*)` and the Verification table asserts
+  #     the gate DID NOT RUN — on a run where it ran and blocked. That is a worse
+  #     failure than the one the gate closes, because it is a false statement
+  #     inside the gate-passage proof. The count is asserted too: this is the one
+  #     blocking verdict that would otherwise render with no numerator, in a gate
+  #     whose founding argument is that a bare verdict is not enough.
+  STATE_AI_GATE="UNCLASSIFIABLE"; STATE_AI_TOTAL=181; STATE_AI_BAD=2; STATE_AI_UNRES=0
+  [[ "$(_ai_verification_cell)" == "BLOCKED (2 unreadable of 181)" ]] || { echo "FAIL: AI-S — row 6 must render the UNCLASSIFIABLE verdict WITH its counts, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
+  if [[ "$(_ai_verification_cell)" == UNVERIFIED* ]]; then
+    echo "FAIL: AI-S — the fifth state fell through to the *) default; row 6 now asserts the gate did not run on a run where it ran and BLOCKED"; failures=$((failures+1))
+  fi
+  # CONTROL for (S), the same one (K) uses: the default is still reachable, so the
+  # arm above is a property of the new branch and not of a removed default.
+  STATE_AI_GATE=""
+  [[ "$(_ai_verification_cell)" == UNVERIFIED* ]] || { echo "FAIL: AI-S control — the *) default must still render UNVERIFIED for an unset verdict, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
+  STATE_AI_TOTAL=0; STATE_AI_BAD=0; STATE_AI_UNRES=0
   local _ai_verifun
   _ai_verifun="$(/usr/bin/awk '/^phase_run_verification\(\) \{$/{f=1} f{print} f&&/^\}$/{exit}' "${BASH_SOURCE[0]}")"
   [[ -n "$_ai_verifun" ]] || { echo "FAIL: AI-K — could not extract phase_run_verification from this file; the structural limb would pass without asserting anything"; failures=$((failures+1)); }
@@ -14029,8 +14216,10 @@ AISTUB
   if [[ "$_ai_blk_lines" -lt 8 ]] || ! /usr/bin/grep -qF "awk -F' [|] '" <<<"$_ai_block"; then
     echo "FAIL: AI-G anti-vacuity — the canonical Procedure 7a predicate did not extract from ${_ai_doc#$REPO_ROOT/} (${_ai_blk_lines} lines); a parity arm over an empty block asserts nothing"; failures=$((failures+1))
   else
-    local _ai_fx _ai_mine _ai_theirs _ai_seen=""
-    for _ai_fx in ai-unresolved ai-resolved ai-decoy ai-empty ai-notrecorded; do
+    local _ai_fx _ai_mine _ai_theirs _ai_seen="" _ai_nfx=0
+    for _ai_fx in ai-unresolved ai-resolved ai-decoy ai-empty ai-notrecorded \
+                  ai-unclassifiable ai-shortrow ai-arity11 ai-upper ai-alias ai-both; do
+      _ai_nfx=$((_ai_nfx+1))
       _ai_mine="$(_ai_eval_predicate "$HUB_STATE_PATH/$_ai_fx")"
       _ai_theirs="$(
         DIR="$HUB_STATE_PATH/$_ai_fx"
@@ -14045,7 +14234,11 @@ AISTUB
     # implementation on every fixture and the parity arm would prove nothing.
     local _ai_distinct
     _ai_distinct="$(/usr/bin/printf '%s\n' $_ai_seen | /usr/bin/sort -u | /usr/bin/grep -c . || true)"
-    [[ "${_ai_distinct:-0}" -ge 4 ]] || { echo "FAIL: AI-G sensitivity — the canonical predicate returned only ${_ai_distinct} distinct STATEs across 5 fixtures; it is not discriminating, so agreement with it is not evidence"; failures=$((failures+1)); }
+    # The fixture count is DERIVED from the loop that just ran, never restated. A
+    # count written into a diagnostic string is a reference like any other, and it
+    # is the kind that never reddens a test and is read by an operator at the
+    # worst possible moment.
+    [[ "${_ai_distinct:-0}" -ge 5 ]] || { echo "FAIL: AI-G sensitivity — the canonical predicate returned only ${_ai_distinct} distinct STATEs across ${_ai_nfx} fixtures; it is not discriminating, so agreement with it is not evidence"; failures=$((failures+1)); }
   fi
 
   unset -f _ai_drive _ai_exec_dispatch 2>/dev/null || true
@@ -14055,7 +14248,8 @@ AISTUB
   STATE_MILESTONE_SLUG="$_ai_s_slug"; STATE_MILESTONE_STATE="$_ai_s_mstate"
   NO_MERGE="$_ai_s_nomerge"; ATTEST_ACTION_ITEMS="$_ai_s_attest"
   AI_EVENT_WRITER="$_ai_s_writer"; MILESTONE="$_ai_s_ms"
-  STATE_AI_GATE=""; STATE_AI_TOTAL=0; STATE_AI_UNRES=0; STATE_AI_DIR=""; STATE_AI_EMIT="n/a"
+  STATE_AI_GATE=""; STATE_AI_TOTAL=0; STATE_AI_UNRES=0; STATE_AI_BAD=0
+  STATE_AI_DIR=""; STATE_AI_EMIT="n/a"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # Test 15: phase_assert_output_set — pre-commit close-out output-set
@@ -14578,7 +14772,7 @@ EOF
   echo "  phase_inject_close_class_telemetry_field validated (#4437 — clean block PASSes with the field positioned after **Outcome rationale:** and no sibling leak / idempotent re-run SKIPs / fallback anchor lands after **Outcome:** and names which anchor it used / VACUITY PAIR: an all-N/A-but-conformant line is WRITTEN and carries the no-computed-ratio warning WITH the disposition read from the emitted line, measured-line control carries NO warning / a line missing § 3.2 slots FAILs writing nothing / an empty capture at exit 0 FAILs writing nothing / producer exit 2 escalates as a source-integrity condition writing nothing / a non-executable producer SKIPs rather than hand-composing a field that would fabricate its own mechanism claim / dry-run prints the RESOLVED bytes and writes nothing / CO-LOCATION: an archived block's field lands in the SEGMENT beside its own **Result:** with the hot stub at 0, and the cross-surface re-run SKIPs; #5288 AI-028 NOT-PRODUCED MARKER STAGING — j.1 drives the REAL 6.8 call site over an archived block with the producer unavailable and asserts the resolved SEGMENT reaches TOUCHED_ARCHIVE_SEGMENTS, the array files=() consumes, with a sensitivity floor proving the marker genuinely reached the segment (pre-fix the marker still lands on disk, so the differential isolates the LOST APPEND alone) and a HOT-LEDGER control proving the by-design skip is preserved and the recorder is not appending every target it is handed / j.2 STRUCTURAL over the shipped text of BOTH calling phases — neither may invoke the writer inside a command substitution, read from the FUNCTION BODIES so the needle cannot match itself, with per-site vacuity floors and a capability-to-fail arm matching a CONSTRUCTED bad call site so a clean reading is a measurement)" >&2
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache); check-5 settle POLL validated (#4416, legs f-j PLUS the F-01 remediation leg i.2 — six arms, not five; this clause is the settle group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which legs f-j and i.2 never executed: f AC2 an injected 5-read search-index lag, longer than the pre-change single-retry window, still converges to PASS and RENDERS its settle figure in both the row and the phase detail — the v4.02 failure reproduced and closed / g AC3 THE NON-VACUITY CONTROL, same fixture with the budget shrunk BELOW the lag: exhaustion must read PARTIAL and NAME the budget, never PASS, so f is proven capable of failing / h AC1 structural self-parse behind an anti-vacuity floor — the attempt bound exists AND is a loop terminal AND the poll loop exists, with the pre-change 'Retry ONCE' form asserted ABSENT so no limb is satisfiable by the old code / i AC4 an out-of-scope straggler is still reported at once, asserted on the CHECK-5-SCOPED instrument ('check-5 settled at poll 0/15') because a PARTIAL row alone cannot distinguish reported-now from reported-after-the-whole-budget, and because the stub's own 'calls' counter is PHASE-scoped rather than check-5-scoped — the gate-passage-proof rung issues a third 'issue list' after check 5 has rendered — so that counter carries an independent CEILING arm (<= 3 = detect + check-5 + gate-passage-proof) stated as the bound it really is; leg (f)'s 'poll 5/15' is the moving control that makes the zero a real reading / i.2 THE F-01 REMEDIATION ARM, and the only one that discriminates the render guard: leg (i) grades the exhaustion suffix but can only ever exercise it at polls=0, where it is unreachable BY CONSTRUCTION under either guard, which is how '-gt 0' survived it. i.2 drives the one separating state — an out-of-scope straggler surfacing MID-POLL, in-scope #401 holding the poll open across a 3-read lag while #999 breaks the loop at 3 of 15 attempts with the budget never waited — behind an anti-vacuity floor on 'poll 3/15' whose moving controls are (f)'s 'poll 5/15' and (i)'s 'poll 0/15'. Twelve fixtures under both guards: 12/12 pass under the loop's own '-ge' terminal, exactly one fails under '-gt 0' / j AC5 the group stays hermetic and instant at DELAY=0, which only an ATTEMPT bound makes structurally possible)" >&2
   echo "  post_gate_passage_proof three-rung target ladder validated (#3819 — T-13 rung 1 resolves a CLOSED Stage-13 sub-task via --state all and does NOT fall through to the PR / rung 2 posts to the release PR naming the OBSERVED rung-1 reason / rung 3 MANUAL names BOTH attempted targets; T-14 two collect_open_release_issues calls in one run keep EXCLUDED_DETAIL undoubled, COLLECTED_OPEN_ISSUES identical and resolve_stage13_subtask stable, with a non-empty-exclusion anti-vacuity control)" >&2
-  echo "  phase_action_item_gate validated (#4439, group AI — 21 arms; this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): A and B are each other's control over ONE differential harness where only the ledger changes — a gate that never blocks fails A, one that always blocks fails B, one reading the wrong path resolves NOT-RECORDED for both and fails BOTH / B2 decoy: a terminal ledger carrying the literal words 'open' and 'in-flight' in trigger_detail still resolves RESOLVED, so the gate is column-addressed and not row-pattern-matched / all four verdict states drive distinct fixtures and are asserted on the STATE_AI_GATE global rather than the detail prose — UNRESOLVED (A) · RESOLVED (B, B2) · NOT-RECORDED (C unattested blocks, C2 attested passes WARN with the operator-actor attestation EMITTED carrying its cause and the spec subtype) · EMPTY-LEDGER (D unattested blocks, D2 attested round-trips the second cause) / E the two SURFACE states must resolve DISTINCT values, because comparing detail strings passes on any two different sentences / E2 an unlicensed attestation cause does NOT clear a SURFACE state / F EXECUTES the two dispatch lines lifted VERBATIM from this file's own text, refusing to pass unless each needle resolves to exactly one top-level line, under three mutually-controlling limbs — F1 blocking gate leaves the close UNFIRED at exit 3, F2 SENSITIVITY a passing gate does fire it (without which F1's clean result is meaningless), F3 NEGATIVE CONTROL a constructed '|| true' line must let the close through (without which a fail-closed gate is indistinguishable from a no-op one) — so capability-to-fail is re-demonstrated on EVERY run, not only under one-time mutation / F4 whole-block invariant: every top-level dispatch line carries the fail-closed guard, with an anti-vacuity floor on the parse and a specificity control proving the filter rejects an unguarded line / G doc<->code parity on the canonical Procedure 7a predicate across the fixture set, with an anti-vacuity floor on the extraction and a sensitivity arm requiring >=4 distinct STATEs / H --dry-run never returns non-zero yet still EVALUATES, and names the condition that would FAIL at --apply / I an idempotent re-run over an already-closed milestone, where an UNRESOLVED verdict is the close-before-verdict shape itself / J --no-merge still evaluates and records rather than blocks / K Verification row 6 reads the Phase-12.9 GLOBAL — unset renders UNVERIFIED never a green cell, mutating the global moves the cell, and phase_run_verification is asserted NOT to re-evaluate the predicate after the close / L an attestation does NOT clear an UNRESOLVED verdict — an open row is dispositioned, never attested away / P operator-instance path tokenisation, with a sensitivity arm proving the leak probe can match its own needle" >&2
+  echo "  phase_action_item_gate validated (#4439, group AI — 28 arms; this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): A and B are each other's control over ONE differential harness where only the ledger changes — a gate that never blocks fails A, one that always blocks fails B, one reading the wrong path resolves NOT-RECORDED for both and fails BOTH / B2 decoy: a terminal ledger carrying the literal words 'open' and 'in-flight' in trigger_detail still resolves RESOLVED, so the gate is column-addressed and not row-pattern-matched / all five verdict states drive distinct fixtures and are asserted on the STATE_AI_GATE global rather than the detail prose — UNRESOLVED (A) · RESOLVED (B, B2) · NOT-RECORDED (C unattested blocks, C2 attested passes WARN with the operator-actor attestation EMITTED carrying its cause and the spec subtype) · EMPTY-LEDGER (D unattested blocks, D2 attested round-trips the second cause) · UNCLASSIFIABLE (M blocks and NAMES the offending row and its raw value, with a specificity limb proving the enumerator selects the unreadable set and not the terminal one, and the all-terminal ledger re-driven on the same harness as its paired negative control) / E the two SURFACE states must resolve DISTINCT values, because comparing detail strings passes on any two different sentences / E2 an unlicensed attestation cause does NOT clear a SURFACE state / F EXECUTES the two dispatch lines lifted VERBATIM from this file's own text, refusing to pass unless each needle resolves to exactly one top-level line, under three mutually-controlling limbs — F1 blocking gate leaves the close UNFIRED at exit 3, F2 SENSITIVITY a passing gate does fire it (without which F1's clean result is meaningless), F3 NEGATIVE CONTROL a constructed '|| true' line must let the close through (without which a fail-closed gate is indistinguishable from a no-op one) — so capability-to-fail is re-demonstrated on EVERY run, not only under one-time mutation / F4 whole-block invariant: every top-level dispatch line carries the fail-closed guard, with an anti-vacuity floor on the parse and a specificity control proving the filter rejects an unguarded line / G doc<->code parity on the canonical Procedure 7a predicate across the fixture set, with an anti-vacuity floor on the extraction and a sensitivity arm requiring >=5 distinct STATEs over a fixture count DERIVED from the loop rather than restated in the message / M-N-O-Q-R-S-T MEMBERSHIP: the residue of the recognised set is its own BLOCKING state rather than the implicit else of a two-value comparison, which counted a typo, a case variant, a foreign vocabulary and an out-of-range field as RESOLVED — M an unadmitted value blocks and names itself, with the all-terminal ledger as its paired negative control / N case-folding NORMALISES rather than rejects, so an uppercase OPEN resolves UNRESOLVED and a fold-and-reject implementation cannot pass M / O the two section-2.1a status aliases stay ADMITTED, without which every legacy re-run blocks / Q the ARITY class in BOTH its mechanisms, the one witnessed live: at arity<=10 field 11 does not exist and reads EMPTY, at arity 11 the row-terminating pipe stays glued to the last field and reads 'open |' NON-empty, and the detail carries fields:N so a dropped column is distinguishable from a mistyped word / R an unreadable ledger cannot be attested away, the structural sibling of L / S row 6 renders the fifth state WITH its counts instead of falling to the default that asserts the gate did not run, with the still-reachable default as its control / T PRECEDENCE: a ledger carrying both classes renders UNRESOLVED and carries BOTH enumerations in one detail, because the state selects the operator's remedy and reversing it would drop the open enumeration from the ledgers that most need it / H --dry-run never returns non-zero yet still EVALUATES, and names the condition that would FAIL at --apply / I an idempotent re-run over an already-closed milestone, where an UNRESOLVED verdict is the close-before-verdict shape itself / J --no-merge still evaluates and records rather than blocks / K Verification row 6 reads the Phase-12.9 GLOBAL — unset renders UNVERIFIED never a green cell, mutating the global moves the cell, and phase_run_verification is asserted NOT to re-evaluate the predicate after the close / L an attestation does NOT clear an UNRESOLVED verdict — an open row is dispositioned, never attested away / P operator-instance path tokenisation, with a sensitivity arm proving the leak probe can match its own needle" >&2
   echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
