@@ -207,7 +207,18 @@
 # Exit codes:
 #   0 = success (dry-run or apply)
 #   1 = validation failure / missing required flag
-#   2 = preflight failure (Stage 12 chore PR not landed, tag missing, etc.)
+#   2 = entry-gate failure, before any state mutation. Either an entry-gate PHASE
+#       returns non-zero — phase_preflight or phase_detect_open_issues — or a guard
+#       trips before phase 1 runs. This line names the dispatch SITES and restates
+#       no sub-check on purpose: the wording it replaces restated one, drifted from
+#       the code, and ended up asserting a gate that does not exist. That gate was
+#       the version tag. phase_preflight RECORDS the tag and never gates on it; the
+#       tag gates in phase_publish_github_release, against origin, exit 3 — and only
+#       under --apply, because that phase returns early under both --dry-run and
+#       --no-merge, ABOVE its own tag preflight. Under either flag the tag is not
+#       gated anywhere. Test 7 in self_test() derives the phase names above from the
+#       guarded top-level dispatch and asserts them present in this rendered text, so
+#       a third entry gate cannot be added without reddening.
 #   3 = phase execution failure during --apply (idempotent re-run usually safe)
 
 set -euo pipefail
@@ -364,7 +375,8 @@ WORKSPACE_ROOT="${WORKSPACE_ROOT:-${HOME}/Claude}"
 #
 # die() is not defined until much later in this file, so the guard uses the
 # pre-die error idiom already used at the gh-resolution block above. Exit 2 is
-# this file's documented preflight-failure code.
+# this file's documented entry-gate-failure code; a guard tripping before phase 1
+# is one of the sites the exit-codes block names for it.
 INSTANCE_LIB="$REPO_ROOT/core/deploy/lib-instance-path.sh"
 if [[ ! -r "$INSTANCE_LIB" ]]; then
   echo "ERROR: instance-path resolver missing at $INSTANCE_LIB" >&2
