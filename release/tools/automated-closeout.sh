@@ -5595,10 +5595,11 @@ phase_await_merge_chore_pr() {
   # CI-realistic poll budget (#1705). The prior 30s cap was a detection-pending
   # budget (GitHub computing mergeability), NOT a CI-completion budget — a real
   # chore PR must wait for required status checks to go green before
-  # MERGEABLE/CLEAN. Poll with a fixed 10s step up to MERGE_TIMEOUT (default 300s,
-  # tunable via --merge-timeout). MERGEABLE/BLOCKED + MERGEABLE/UNSTABLE are
-  # KEEP-POLLING states (checks pending / non-required-failing), not terminal —
-  # only CONFLICTING / DIRTY HALT; only CLEAN proceeds to merge.
+  # OPEN/MERGEABLE/CLEAN. Poll with a fixed 10s step up to MERGE_TIMEOUT (default
+  # 300s, tunable via --merge-timeout). OPEN/MERGEABLE/BLOCKED and
+  # OPEN/MERGEABLE/UNSTABLE are KEEP-POLLING states (checks pending /
+  # non-required-failing), not terminal — only CONFLICTING / DIRTY HALT; only CLEAN
+  # proceeds to merge.
   #
   # TERMINAL STATES (#6255). The composite now carries `state` as its FIRST field and
   # the two terminal arms are evaluated FIRST, because `case` is first-match-wins.
