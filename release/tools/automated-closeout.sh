@@ -14098,6 +14098,105 @@ EOF
   unset -f phase_ca_synthetic_readonly
   unset -f _ca_classify _ca_violators 2>/dev/null || true
 
+  # ─── (TK) OPERATOR-CONFIG KEY-READ TOLERANCE — the class invariant (#5649) ───
+  #
+  # Every read of an OPTIONAL key out of operator.toml must tolerate that key being
+  # ABSENT. Without the tolerance `grep` exits 1, `pipefail` carries that status out
+  # of the command substitution, and the `set -euo pipefail` at the top of this file
+  # aborts at LOAD time — before argument parsing, on EVERY invocation including
+  # --self-test and --check-paths — with exit 1 and no output at all. Two of the
+  # four sites in this file shipped that way.
+  #
+  # WHOLE-FILE, and that is load-bearing rather than incidental. The subjects live
+  # in the load-time preamble ABOVE this function AND in the arg-parse region below
+  # its closing brace. A region-scoped parse (`sed -n '1,/^self_test() {/p'`) stops
+  # at this function's opening line and is blind to ~170 lines of production code
+  # including check_paths() — itself a path-resolution function, i.e. exactly the
+  # kind of code this class of defect lives in. Four sites sit above that cut, so
+  # any anti-vacuity floor is satisfied and a region-scoped arm reads healthy while
+  # blind. Same reason AI-F4 above reads "${BASH_SOURCE[0]}" whole.
+  #
+  # FIXTURES ARE EXCLUDED BY CONSTRUCTION — no allowlist, no marker, no region cut.
+  # The parse anchors on `_<name>=$(`, so a specimen held in a single-quoted
+  # assignment cannot match: the character after `=` is a quote, not `$`. Every
+  # specimen below is held that way, TK-2 proves the matcher still catches the real
+  # shape, and TK-3b asserts the invisibility itself rather than assuming it.
+  local _tk_pop _tk_tol _tk_head _tk_bad _tk_spec
+  _tk_pop="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' "${BASH_SOURCE[0]}")"
+  _tk_tol="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "|| true") {n++} END {print n+0}' "${BASH_SOURCE[0]}")"
+  _tk_head="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "head") {n++} END {print n+0}' "${BASH_SOURCE[0]}")"
+
+  # (TK-1) ANTI-VACUITY FLOOR, then the invariant. The floor is what stops a renamed
+  #        variable or a reformatted call site from emptying the population and
+  #        reporting clean.
+  if [[ "${_tk_pop:-0}" -lt 4 ]]; then
+    echo "FAIL: TK-1 anti-vacuity — the key-read parse found only ${_tk_pop:-0} site(s) in this file; the tolerance invariant would be vacuous"; failures=$((failures+1))
+  fi
+  if [[ "${_tk_pop:-0}" -ne "${_tk_tol:-0}" ]]; then
+    _tk_bad="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && !index($0, "|| true") {printf "%d ", FNR}' "${BASH_SOURCE[0]}")"
+    echo "FAIL: TK-1 — ${_tk_tol:-0}/${_tk_pop:-0} operator.toml key reads tolerate an ABSENT key; an intolerant read aborts this tool at LOAD time when an OPTIONAL key is missing. Unguarded line(s): ${_tk_bad:-none}"; failures=$((failures+1))
+  fi
+
+  # (TK-2) CAPABILITY TO FAIL, re-demonstrated on every run. Without it a green TK-1
+  #        is satisfied by a matcher that classifies everything as tolerant, or by
+  #        one that recognises nothing at all. Both directions are asserted.
+  _tk_spec="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "|| true") {n++} END {print n+0}' <<<'  _z=$(grep -m1 -E "^k" f | awk -F= "{print}")')"
+  [[ "${_tk_spec:-1}" -eq 0 ]] || { echo "FAIL: TK-2 capability-to-fail — the tolerance filter counted an UNGUARDED specimen as tolerant; TK-1's clean result is uninformative"; failures=$((failures+1)); }
+  _tk_spec="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' <<<'  _z=$(grep -m1 -E "^k" f | awk -F= "{print}")')"
+  [[ "${_tk_spec:-0}" -eq 1 ]] || { echo "FAIL: TK-2 sensitivity — the key-read parse did NOT recognise a constructed call site; it is not reading the shape it claims to, so TK-1's population is not the population"; failures=$((failures+1)); }
+
+  # (TK-3) HEAD-PIPE REINTRODUCTION GUARD. The folded `grep -m1` form is what keeps
+  #        these lines out of the repo-integrity `sigpipe-idiom` job, which scans the
+  #        ADDED-LINES delta and lists `head` among the short-circuiting readers it
+  #        matches. Reintroducing `| head -1` on one of these lines would redden that
+  #        gate and nothing here — unless this arm exists.
+  [[ "${_tk_head:-0}" -eq 0 ]] || { echo "FAIL: TK-3 — ${_tk_head} key-read site(s) pipe into head; the folded grep -m1 form is what keeps this class out of the sigpipe-idiom gate"; failures=$((failures+1)); }
+  _tk_spec="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "head") {n++} END {print n+0}' <<<'  _z=$(grep -E "^k" f | head -1 | awk -F= "{print}")')"
+  [[ "${_tk_spec:-0}" -eq 1 ]] || { echo "FAIL: TK-3 sensitivity — the head-pipe filter did NOT match a constructed head-piping call site; TK-3's zero is a broken probe, not a clean result"; failures=$((failures+1)); }
+  # (TK-3b) THE FIXTURE-EXCLUSION PROOF. Every specimen above is held in a
+  #         single-quoted assignment. This asserts such a line is INVISIBLE to the
+  #         TK-1 parse, which is what makes "excluded by construction" a measurement
+  #         rather than a claim — and what keeps this group from inflating its own
+  #         population and then grading it.
+  _tk_spec="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' <<<"  local _tk_bad='  _z=\$(grep -m1 -E \"^k\" f | awk -F= \"{print}\")'")"
+  [[ "${_tk_spec:-1}" -eq 0 ]] || { echo "FAIL: TK-3b — a specimen HELD in a single-quoted assignment was counted as a real call site; the fixtures are not excluded by construction and TK-1's population is contaminated"; failures=$((failures+1)); }
+
+  # (TK-4) THE BEHAVIOURAL DIFFERENTIAL — the arm that FAILS on the unpatched file.
+  #        TK-1..TK-3 are structural: they grade the text. This one RUNS the
+  #        production line, extracted from this file rather than retyped, against a
+  #        hermetic operator.toml that EXISTS and omits the key — the exact state
+  #        that aborted the tool — and asserts it survives. Its paired arm strips the
+  #        tolerance from that same extracted line and asserts the SAME fixture still
+  #        aborts. That is the sensitivity control: without it a green TK-4 cannot be
+  #        told apart from a fixture that never reproduced the defect.
+  #
+  #        RUN IN A SEPARATE bash PROCESS, deliberately. `( set -e … ) || rc=$?` does
+  #        NOT observe a set -e abort on bash 3.2 (the shell this runner ships
+  #        against): the subshell inherits the enclosing AND-OR list's -e suppression
+  #        and an explicit `set -e` inside does not restore it. Measured on both
+  #        shapes, not assumed. The AI-F harness above uses the subshell form safely
+  #        only because its subject aborts via an explicit `exit`, never via set -e.
+  local _tk_fx _tk_line _tk_new _tk_old _tk_rc_new=0 _tk_rc_old=0
+  _tk_fx="$(/usr/bin/mktemp -d -t keyread-selftest.XXXXXX)"
+  /bin/mkdir -p "$_tk_fx/.config/pmo-platform"
+  /usr/bin/printf 'some_unrelated_key = "x"\n' > "$_tk_fx/.config/pmo-platform/operator.toml"
+  _tk_line="$(/usr/bin/awk '!f && match($0, /^[ \t]*_gh=\$\(/) {print; f=1}' "${BASH_SOURCE[0]}")"
+  if [[ -z "$_tk_line" ]]; then
+    echo "FAIL: TK-4 anti-vacuity — the production key-read line did not extract from this file; the behavioural arm would assert nothing"; failures=$((failures+1))
+  else
+    _tk_new="${_tk_line//\$\{HOME\}/$_tk_fx}"
+    _tk_old="${_tk_new/ || true)/)}"
+    if [[ "$_tk_old" == "$_tk_new" ]]; then
+      echo "FAIL: TK-4 anti-vacuity — stripping the tolerance from the extracted line changed nothing, so both arms below run identical programs and the differential is empty"; failures=$((failures+1))
+    else
+      /bin/bash -c "$(/usr/bin/printf 'set -euo pipefail\n%s\n[[ -z "${_gh:-}" ]] || exit 9\n' "$_tk_new")" || _tk_rc_new=$?
+      /bin/bash -c "$(/usr/bin/printf 'set -euo pipefail\n%s\n' "$_tk_old")" || _tk_rc_old=$?
+      [[ "$_tk_rc_new" -eq 0 ]] || { echo "FAIL: TK-4 — the shipped key read does NOT survive an operator.toml that exists and omits the key (rc $_tk_rc_new); that is the load-time abort this guard exists to close"; failures=$((failures+1)); }
+      [[ "$_tk_rc_old" -ne 0 ]] || { echo "FAIL: TK-4 sensitivity — the SAME fixture with the tolerance stripped did NOT abort (rc 0); the fixture does not reproduce the defect, so TK-4's clean result is a broken probe rather than evidence"; failures=$((failures+1)); }
+    fi
+  fi
+  /bin/rm -rf "$_tk_fx" 2>/dev/null || true
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failures)" >&2
     exit 1
@@ -14145,6 +14244,7 @@ EOF
   echo "  corpus append-ledger merge-immunity validated (#3108 AC1 — union two-branch append CLEAN + both rows kept / non-union control CONFLICTS / state-column union CORRUPTS → LOG+REVERSIONS exclusion)" >&2
   echo "  phase_assert_output_set validated (#5288, group m — 11 arms; this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): m1 THE SEAM — the required-if cutoff is READ out of core/deploy/deploy.sh rather than copied, asserted against a SECOND INDEPENDENT extractor over the same file (awk, not the shipped sed) with an anti-vacuity floor on the oracle, plus a SENSITIVITY arm on an ARMED fixture that a hardcoded default fails, and two SPECIFICITY arms (no assignment / two assignments) that must both resolve UNREADABLE and never a silent default / m2 AN UNEVALUABLE PREDICATE BLOCKS: both required members PRESENT and the only fault is that the membership test could not run — the phase FAILs, returns 3, and reports INDETERMINATE, with a same-fixture one-variable CONTROL proving a readable dormant seam PASSes, so the block is attributable to the seam and not to a gate that always fails / m3 AC-3 a required member's absence blocks and NAMES itself, both members driven, with the present twin as the paired positive / m4 AC-5 membership vs outcome: the SAME absent telemetry field blocks under an ARMED cutover and resolves a REPORTED N-A under a dormant one, one variable apart / m5 THE MARKER IS EVIDENCE, NEVER AN EXEMPTION — differential over one fixture where the only change is that a real **Not-produced:** marker is recorded: the verdict must NOT move, with a SENSITIVITY arm proving the marker is genuinely present (else the arm passes vacuously), an assert that the gate REPORTED reading it (an invisible marker would prove nothing), and a converse SPECIFICITY arm where the member is supplied and the same marker is inert / m6 EMIT ON ABSENCE at the real producer site: a non-executable synthesizer still SKIPs but now records the absence as corpus bytes at its DECLARED anchor, the line immediately after **Result:**, with a working-producer control proving the marker tracks the capability condition and does not fire every run / m7 MODE: --dry-run returns 0 and marks WARN naming the condition that FAILS at --apply, anti-vacuity: the same fixture at --apply returns 3 and FAILs / m8 THE CLASSIFIER IS TOTAL AND FAILS CLOSED: an UNRECORDED producing phase (get_phase's not-found sentinel returns at exit 0, so it is a value and not an error) classifies INDETERMINATE and surfaces, with a PASS-record control proving real discrimination, and the ambiguous SKIPPED result shown to be resolved by the TREE — the identical result string classifies would-present over a present member and would-absent over an absent one, so the classifier is not row-pattern-matching detail prose / m9 the hand-maintained usage()/--help phase roster carries the 9.56 row, with the shipped 9.55 row as its interpretability control / m10 READ-ONLY by content hash across a PASSing run, with an anti-vacuity arm proving the same instrument DOES move on a known write / m11 EXACTLY ONE guarded top-level dispatch line, positioned AFTER assert_derived_surfaces and BEFORE commit_chore_pr (so the stamp cannot commit ahead of the assert), with vacuity floors on all three needles and a fabricated-name specificity control" >&2
   echo "  phase_pattern_scan wiring validated (#3121 — default ON (source-parsed, not live-global) / --no-pattern-scan suppresses with the honest reason / --with-pattern-scan still accepted / NO /dev/null discard / phase detail carries the PARSED counts with a moved-control anti-vacuity arm / captured body reaches the close-out report, and the section is ABSENT when nothing was captured)" >&2
+  echo "  operator.toml key-read tolerance validated (#5649, group TK — 4 arms; this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): TK-1 the CLASS invariant over a WHOLE-FILE parse — every key read tolerates an ABSENT optional key, with an anti-vacuity floor of 4 and the offending line numbers named on failure; the whole-file scan is load-bearing rather than stylistic, because the arg-parse region and check_paths() sit 170 lines BELOW self_test()'s closing brace and a region-scoped parse reads healthy while blind to them / TK-2 CAPABILITY TO FAIL in both directions on a constructed call site: the tolerance filter must NOT count an unguarded specimen as tolerant, and the population parse MUST recognise the specimen at all, so neither an everything-matches nor a nothing-matches filter can satisfy TK-1 / TK-3 the head-pipe reintroduction guard, paired with a specimen the filter must match — the folded grep -m1 form is what keeps this class out of the repo-integrity sigpipe-idiom job, which scans the added-lines delta / TK-3b THE FIXTURE-EXCLUSION PROOF: a specimen held in a single-quoted assignment is asserted INVISIBLE to TK-1's parse, so 'fixtures excluded by construction' is a measurement rather than a claim and this group cannot inflate its own population / TK-4 THE BEHAVIOURAL DIFFERENTIAL, the only arm that fails on the unpatched file: the PRODUCTION line is EXTRACTED from this file rather than retyped and run against a hermetic operator.toml that EXISTS and omits the key, with the tolerance-stripped twin over the SAME fixture asserted to still abort — run in a SEPARATE bash process because '( set -e … ) || rc=\$?' provably does not observe a set -e abort on bash 3.2, which is why the nearby AI-F subshell harness is safe only for its explicit-exit subject" >&2
   exit 0
 }
 
