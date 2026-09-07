@@ -152,7 +152,7 @@ REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
 # construct different pack source lists (see resolve_declared_kinds below). Five
 # other release/tools/*.sh scripts source it exactly this way.
 #
-# Guarded and NON-FATAL, unlike automated-closeout.sh's exit-2 preflight: this
+# Guarded and NON-FATAL, unlike automated-closeout.sh's exit-2 entry-gate: this
 # tool must still emit a measurement from the corpus packs alone when the
 # resolver is unavailable. The absence is ANNOUNCED (resolve_declared_kinds sets
 # a degrade reason), never silently absorbed — a silently-dropped K4 leg would
