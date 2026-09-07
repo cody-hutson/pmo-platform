@@ -385,8 +385,33 @@ source "$INSTANCE_LIB" ""
 # the same posture the frontmatter `date:` accessor in that phase already takes.
 REPO_SLUG="${REPO_SLUG:-}"
 if [[ -z "$REPO_SLUG" ]] && [[ -r "${HOME}/.config/pmo-platform/operator.toml" ]]; then
-  _gh=$(/usr/bin/grep -E '^operator_github' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | /usr/bin/head -1 | /usr/bin/awk -F= '{gsub(/[" ]/,"",$2); print $2}')
-  _repo=$(/usr/bin/grep -E '^pmo_platform_repo_name' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | /usr/bin/head -1 | /usr/bin/awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+  # SIGPIPE-REWRITE + `|| true` — the same two-part fold the claude_workspace_root
+  # read above and the HUB_STATE_PATH read below already carry, applied here to the
+  # last two unguarded key reads in this file. See either of those blocks for the
+  # full rationale, which was PROVEN by breaking this script and is not restated.
+  #
+  # WHAT THE `|| true` CLOSES — the ABSENT-key case, and only that. Both keys here
+  # are OPTIONAL. An operator.toml that exists but omits one makes `grep` exit 1;
+  # `pipefail` propagates that out of the substitution and `set -e` aborts at LOAD
+  # time — before argument parsing, on EVERY invocation including --self-test and
+  # --check-paths — with exit 1 and no output at all. A close-out tool that dies
+  # silently because an OPTIONAL config key is missing is the defect; the tolerance
+  # is what makes the documented fallback on the next two lines reachable.
+  #
+  # WHAT THE `head` FOLD IS NOT. It is NOT claimed to fix an abort on a SUCCESSFUL
+  # read. `grep` reads the FILE directly, so it is the leftmost producer and there
+  # is no upstream writer left for an early-closing reader to signal; the volume
+  # that would be needed to make a downstream `head` matter is far beyond any
+  # realistic operator.toml. It folds for two other reasons, both verified from
+  # source rather than reasoned about: (1) the `sigpipe-idiom` CI job scans the
+  # ADDED-LINES delta and lists `head` among the short-circuiting readers it
+  # matches, so appending `|| true` alone would leave a matched idiom sitting on a
+  # CHANGED line, while the folded form's `awk` — which reads to EOF and carries no
+  # `exit` — is not matched; (2) uniformity: with all four key reads in one shape,
+  # the group TK self-test arm below keys on ONE predicate instead of a disjunction,
+  # and a future non-conforming line has fewer shapes it can take and still pass.
+  _gh=$(/usr/bin/grep -m1 -E '^operator_github' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | /usr/bin/awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
+  _repo=$(/usr/bin/grep -m1 -E '^pmo_platform_repo_name' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | /usr/bin/awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
   [[ -z "$_repo" ]] && _repo="pmo-platform"
   [[ -n "$_gh" ]] && REPO_SLUG="${_gh}/${_repo}"
 fi
