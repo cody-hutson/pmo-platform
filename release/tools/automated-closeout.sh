@@ -737,8 +737,9 @@ CHORE_BRANCH=""
 CHORE_PR_NUMBER=""
 VERIFICATION_RESULTS=""
 STATE_AI_GATE=""          # Procedure 7a verdict computed at Phase 12.9, BEFORE the
-                          # milestone close. One of the gate's four states:
-                          # NOT-RECORDED / EMPTY-LEDGER / RESOLVED / UNRESOLVED.
+                          # milestone close. One of the gate's five states:
+                          # NOT-RECORDED / EMPTY-LEDGER / RESOLVED / UNRESOLVED /
+                          # UNCLASSIFIABLE.
                           # phase_run_verification RENDERS this value in row 6 —
                           # it never recomputes, because a verdict re-derived after
                           # the close is not the verdict the close was gated on.
@@ -750,7 +751,14 @@ STATE_OUTPUT_SET_ROWS=""  # per-member output-set verdicts recorded at Phase 9.5
                           # on, and a value re-derived after the close is a different
                           # claim wearing the same cell.
 STATE_AI_TOTAL=0          # whole AI-row population at Phase 12.9 (the denominator)
-STATE_AI_UNRES=0          # status:open + status:in-flight subset (the numerator)
+STATE_AI_UNRES=0          # status:open + status:in-flight subset, case-folded (the
+                          # numerator)
+STATE_AI_BAD=0            # rows whose status the gate CANNOT classify — outside the
+                          # § 2.3 enum and the § 2.1a status aliases, an empty or
+                          # out-of-range $11 included. A second numerator, and it is
+                          # a numerator for the same reason STATE_AI_TOTAL is one: a
+                          # blocking verdict with no count behind it asks the
+                          # operator to re-read the ledger the gate just read.
 STATE_AI_DIR=""           # resolved hub-state dir for this release (diagnostic)
 STATE_AI_EMIT="n/a"       # attestation-emission outcome: n/a | emitted | dry-run |
                           # failed:<reason>. The spec requires the attestation to be
@@ -5771,8 +5779,19 @@ phase_reparse_ledgers() {
 #
 #   NOT-RECORDED   ledger file absent          -> SURFACE (attestation required)
 #   EMPTY-LEDGER   file present, 0 AI rows     -> SURFACE (attestation required)
-#   RESOLVED       >=1 row, 0 open/in-flight   -> PASS  (the only silent pass)
+#   RESOLVED       >=1 row, every status classifiable, 0 open/in-flight
+#                                              -> PASS  (the only silent pass)
 #   UNRESOLVED     >=1 open or in-flight       -> BLOCK
+#   UNCLASSIFIABLE 0 open/in-flight, >=1 status the gate cannot classify
+#                                              -> BLOCK
+#
+# UNRESOLVED OUTRANKS UNCLASSIFIABLE, MEASURED RATHER THAN REASONED. A real ledger
+# carries both classes — 3 of the 8 operator-instance ledgers with an unadmitted
+# status also carry open rows, one of them 48 open against 2 unreadable. The state
+# token selects the operator's REMEDY, so a ledger whose dominant condition is
+# "disposition 48 commitments" must not render as "normalise 2 values". The
+# unreadable rows are not dropped: the UNRESOLVED detail carries their count and
+# their enumeration as an appended clause, so one pass covers both remedies.
 #
 # SURFACE IS ATTESTATION-GATED, NOT ATTESTATION-FREE. The decision table's rows 1-2
 # end "-> requires explicit operator attestation to pass", and the same section
@@ -5796,8 +5815,11 @@ phase_reparse_ledgers() {
 # invocation of this script is --check-paths or --self-test. CI never executes the
 # close path in any state. The corrected statement is the one that matters and is
 # stronger: because CI never runs the close dispatch, the self-test fixture below is
-# the ONLY automated execution this phase will ever get, which is exactly why it is
-# four-armed, witness-backed, and executes the shipped dispatch text.
+# the ONLY automated execution this phase will ever get, which is exactly why group
+# AI is many-armed, witness-backed, and executes the shipped dispatch text. The arm
+# count is stated once, in the group's own conformant-arm extraction line, and is
+# re-derived there rather than restated here — a second copy of a count is a second
+# thing to forget.
 #
 # NON-BLOCKING BY MODE, for reasons that each cost something to get wrong:
 #   --dry-run    nothing closes, so a return 3 would abort a preview run. The detail
@@ -5822,7 +5844,7 @@ phase_reparse_ledgers() {
 # Self-test group AI arm (G) runs BOTH copies over the same fixtures and fails
 # naming both sides if they ever diverge — the Check 68 `enum-parity` posture.
 #
-# TWO THINGS IN THAT awk INVOCATION ARE LOAD-BEARING AND LOOK LIKE STYLE:
+# THREE THINGS IN THAT awk INVOCATION ARE LOAD-BEARING AND LOOK LIKE STYLE:
 #   FS is ' [|] ' — space, BRACKETED pipe, space. Do NOT "simplify" to ' \| ': awk
 #   puts the -F value through string-escape processing first, which reduces \| to a
 #   bare | (ERE alternation) and the row then splits on every space.
@@ -5830,23 +5852,67 @@ phase_reparse_ledgers() {
 #   cell as \|, and description / owner / trigger_detail / target are all free-text
 #   columns AHEAD of status — under -F'|' an escaped pipe shifts status off $11 and
 #   the gate returns RESOLVED on an unresolved ledger.
+#   STATUS IS CLASSIFIED BY MEMBERSHIP, NEVER BY `else`. The recognised set is the
+#   § 2.3 enum plus the two § 2.1a status aliases, case-folded; everything else
+#   counts as UNCLASSIFIABLE. An `else`-terminalising predicate was the second
+#   silent-PASS path on this gate, beside the bare-pipe split, and it is the wider
+#   one: it swallows a typo, a case variant, a foreign vocabulary AND a status the
+#   gate never reached. `s=tolower($11)` also replaces `gsub(/ /,"",$11)` because
+#   mutating $11 rebuilds $0 with OFS while a local `s` does not.
+#
+# THE RESIDUE IS NOT ALWAYS AN EMPTY FIELD, and assuming it is writes a fixture for
+# a condition the corpus does not have. Two arities reach the residue by two
+# different routes. At arity <= 10 the row has no field 11 and $11 reads EMPTY —
+# that is the live witness, four rows at arities 7 and 8 against a 13-column
+# header. At arity 11 the row-terminating ` |' never matches the separator, so it
+# stays glued to the LAST field and $11 reads `open |` — NON-empty, and after the
+# space-strip `open|`. Both are unreadable and both must be: field 11 of an
+# 11-column row is not the status column of a 13-column contract, and reading it as
+# one is the positional assumption this gate exists to refuse. The detail prints
+# `fields:N` beside the value so the operator sees which of the two they have.
 _ai_eval_predicate() {
-  local _dir="$1" _ai _t=0 _u=0 _state
+  local _dir="$1" _ai _t=0 _u=0 _b=0 _state
   _ai="$_dir/action-items.md"
   if [[ ! -f "$_ai" ]]; then
-    /usr/bin/printf 'NOT-RECORDED 0 0\n'
+    /usr/bin/printf 'NOT-RECORDED 0 0 0\n'
     return 0
   fi
-  read -r _t _u <<<"$(/usr/bin/awk -F' [|] ' '
-      $1 ~ /^\| *AI-[0-9]+ *$/ { t++; gsub(/ /,"",$11);
-                                 if ($11=="open" || $11=="in-flight") u++ }
-      END { print (t+0), (u+0) }' "$_ai" 2>/dev/null)"
-  _t="${_t:-0}"; _u="${_u:-0}"
+  read -r _t _u _b <<<"$(/usr/bin/awk -F' [|] ' '
+      $1 ~ /^\| *AI-[0-9]+ *$/ { t++; s=tolower($11); gsub(/ /,"",s);
+        if (s=="open" || s=="in-flight") u++
+        else if (s!="done" && s!="cancelled" && s!="superseded" &&
+                 s!="resolved" && s!="withdrawn") b++ }
+      END { print (t+0), (u+0), (b+0) }' "$_ai" 2>/dev/null)"
+  _t="${_t:-0}"; _u="${_u:-0}"; _b="${_b:-0}"
   if   [[ "$_t" -eq 0 ]]; then _state="EMPTY-LEDGER"
   elif [[ "$_u" -gt 0 ]]; then _state="UNRESOLVED"
+  elif [[ "$_b" -gt 0 ]]; then _state="UNCLASSIFIABLE"
   else                         _state="RESOLVED"
   fi
-  /usr/bin/printf '%s %s %s\n' "$_state" "$_t" "$_u"
+  /usr/bin/printf '%s %s %s %s\n' "$_state" "$_t" "$_u" "$_b"
+}
+
+# Enumerate ledger rows of ONE class for the operator-facing detail — `open` for
+# the open/in-flight subset, `bad` for the residue the predicate could not
+# classify. One program and one recognised-set chain serves both, because a second
+# chain written beside the first is a second place for the vocabulary to drift and
+# nothing asserts agreement between them. Column-addressed exactly as the predicate
+# is, and case-folded exactly as the predicate is.
+_ai_list_rows() {
+  local _ai="$1" _class="$2"
+  /usr/bin/awk -F' [|] ' -v class="$_class" '
+      $1 ~ /^\| *AI-[0-9]+ *$/ { s=tolower($11); gsub(/ /,"",s);
+        id=$1; gsub(/[| ]/,"",id);
+        if (s=="open" || s=="in-flight") {
+          if (class=="open") {
+            ow=$6; gsub(/^ +| +$/,"",ow); tg=$9; gsub(/^ +| +$/,"",tg);
+            printf "%s(owner:%s; trigger:%s) ", id, ow, tg }
+        } else if (s!="done" && s!="cancelled" && s!="superseded" &&
+                   s!="resolved" && s!="withdrawn") {
+          if (class=="bad") {
+            raw=$11; gsub(/^ +| +$/,"",raw);
+            printf "%s(status:[%s]; fields:%d) ", id, raw, NF } } }' \
+      "$_ai" 2>/dev/null || true
 }
 
 # Resolve this release's hub-state directory per the orchestration-playbook § 4a.3
@@ -5903,6 +5969,7 @@ _ai_verification_cell() {
   case "${STATE_AI_GATE:-}" in
     RESOLVED)      /usr/bin/printf 'RESOLVED (%s/%s)' "$STATE_AI_TOTAL" "$STATE_AI_TOTAL" ;;
     UNRESOLVED)    /usr/bin/printf 'BLOCKED (%s unresolved of %s)' "$STATE_AI_UNRES" "$STATE_AI_TOTAL" ;;
+    UNCLASSIFIABLE) /usr/bin/printf 'BLOCKED (%s unreadable of %s)' "$STATE_AI_BAD" "$STATE_AI_TOTAL" ;;
     NOT-RECORDED)  /usr/bin/printf 'SURFACED — NOT-RECORDED%s' "$_attest" ;;
     EMPTY-LEDGER)  /usr/bin/printf 'SURFACED — EMPTY-LEDGER%s' "$_attest" ;;
     *)             /usr/bin/printf 'UNVERIFIED (Procedure 7a gate did not run before this phase)' ;;
@@ -5912,16 +5979,20 @@ _ai_verification_cell() {
 phase_action_item_gate() {
   # Evaluate FIRST, in every mode. The report carries a real verdict even on a
   # preview run, and the mode branches below decide only what to DO about it.
-  local _dir _res _state _total _unres
+  local _dir _res _state _total _unres _bad
   _dir="$(_ai_resolve_dir)"
   _res="$(_ai_eval_predicate "$_dir")"
+  # Four tokens, peeled left to right. Every %% is non-greedy and only the LAST
+  # field may use the greedy ##; peeling the third with ## would capture the fourth.
   _state="${_res%% *}"; _res="${_res#* }"
-  _total="${_res%% *}"; _unres="${_res##* }"
+  _total="${_res%% *}"; _res="${_res#* }"
+  _unres="${_res%% *}"; _bad="${_res##* }"
 
   STATE_AI_DIR="$_dir"
   STATE_AI_GATE="$_state"
   STATE_AI_TOTAL="$_total"
   STATE_AI_UNRES="$_unres"
+  STATE_AI_BAD="$_bad"
   STATE_AI_EMIT="n/a"
 
   # TOKENISED, NEVER ABSOLUTE. The ledger lives under the operator-instance root, so
@@ -5953,20 +6024,39 @@ phase_action_item_gate() {
     UNRESOLVED)
       # Enumerate the unresolved rows so the operator can act without re-reading
       # the ledger. Column-addressed exactly as the predicate is.
-      local _rows
-      _rows="$(/usr/bin/awk -F' [|] ' '
-          $1 ~ /^\| *AI-[0-9]+ *$/ { s=$11; gsub(/ /,"",s);
-            if (s=="open" || s=="in-flight") {
-              id=$1; gsub(/[| ]/,"",id); ow=$6; gsub(/^ +| +$/,"",ow);
-              tg=$9; gsub(/^ +| +$/,"",tg);
-              printf "%s(owner:%s; trigger:%s) ", id, ow, tg } }' \
-          "${_dir}/action-items.md" 2>/dev/null || true)"
+      local _rows _badclause=""
+      _rows="$(_ai_list_rows "${_dir}/action-items.md" open)"
       [[ -z "$_rows" ]] && _rows="(row enumeration returned empty — read ${_dirlabel}/action-items.md directly) "
+      # A ledger can carry both classes at once, and this branch owns the dominant
+      # one. Carrying the unreadable rows here rather than in a separate verdict is
+      # what lets the operator act once instead of twice.
+      if [[ "$_bad" -gt 0 ]]; then
+        _badclause=" ALSO UNCLASSIFIABLE: ${_bad} of ${_total} rows carry a status this gate cannot classify and were counted toward neither resolved nor unresolved — normalise each to the § 2.3 enum or a § 2.1a alias, and restore the 13-column width where fields:N is not 13: $(_ai_list_rows "${_dir}/action-items.md" bad)"
+      fi
       if [[ "$_blocking" -eq 1 ]]; then
-        mark_phase "action_item_gate" "FAIL" "Procedure 7a HARD GATE: UNRESOLVED — ${_unres} of ${_total} action items still open/in-flight; milestone close BLOCKED until each is transitioned to done / cancelled / superseded: ${_rows}"
+        mark_phase "action_item_gate" "FAIL" "Procedure 7a HARD GATE: UNRESOLVED — ${_unres} of ${_total} action items still open/in-flight; milestone close BLOCKED until each is transitioned to done / cancelled / superseded: ${_rows}${_badclause}"
         return 3
       fi
-      mark_phase "action_item_gate" "WARN" "Procedure 7a: UNRESOLVED — ${_unres} of ${_total} action items still open/in-flight${_mode_note}: ${_rows}"
+      mark_phase "action_item_gate" "WARN" "Procedure 7a: UNRESOLVED — ${_unres} of ${_total} action items still open/in-flight${_mode_note}: ${_rows}${_badclause}"
+      return 0
+      ;;
+    UNCLASSIFIABLE)
+      # NO open row, but at least one status the gate cannot read. The gate refuses
+      # to render a verdict over rows it cannot classify: an unreadable status is a
+      # gate ERROR, never a silent pass, and counting it as resolved is the defect
+      # this state exists to close. The remedy differs from every other state's —
+      # normalise the VALUE, rather than disposition the row or attest the absence
+      # — so this branch is its own, and deliberately NOT joined to the
+      # NOT-RECORDED|EMPTY-LEDGER pattern below: --attest-action-items is therefore
+      # unreachable for it by construction, exactly as it is for an open row.
+      local _badrows
+      _badrows="$(_ai_list_rows "${_dir}/action-items.md" bad)"
+      [[ -z "$_badrows" ]] && _badrows="(row enumeration returned empty — read ${_dirlabel}/action-items.md directly) "
+      if [[ "$_blocking" -eq 1 ]]; then
+        mark_phase "action_item_gate" "FAIL" "Procedure 7a HARD GATE: UNCLASSIFIABLE — ${_bad} of ${_total} action items carry a status outside the § 2.3 enum and the § 2.1a aliases, so the gate cannot say whether they are open; milestone close BLOCKED until each value is normalised to open / in-flight / done / cancelled / superseded (or a § 2.1a alias). Where fields:N is not 13 the row width is the fault, not the word — restore the 13-column row: ${_badrows}"
+        return 3
+      fi
+      mark_phase "action_item_gate" "WARN" "Procedure 7a: UNCLASSIFIABLE — ${_bad} of ${_total} action items carry a status this gate cannot classify${_mode_note}: ${_badrows}"
       return 0
       ;;
     NOT-RECORDED|EMPTY-LEDGER)
@@ -5997,7 +6087,7 @@ phase_action_item_gate() {
       ;;
   esac
 
-  # Unreachable: _ai_eval_predicate emits one of four states. Fail loudly rather
+  # Unreachable: _ai_eval_predicate emits one of five states. Fail loudly rather
   # than falling through to a silent 0 — an unrecognised state is the vacuity
   # shape this whole phase exists to refuse.
   mark_phase "action_item_gate" "FAIL" "Procedure 7a: predicate returned an unrecognised STATE '${_state}' — refusing to grade the close on a verdict this gate cannot read"
@@ -13945,7 +14035,7 @@ AISTUB
       _ai_theirs="$(
         DIR="$HUB_STATE_PATH/$_ai_fx"
         eval "$_ai_block"
-        /usr/bin/printf '%s %s %s\n' "$STATE" "${TOTAL:-0}" "${UNRES:-0}"
+        /usr/bin/printf '%s %s %s %s\n' "$STATE" "${TOTAL:-0}" "${UNRES:-0}" "${BAD:-0}"
       )"
       [[ "$_ai_mine" == "$_ai_theirs" ]] || { echo "FAIL: AI-G — predicate FORK on fixture ${_ai_fx}: automated-closeout.sh says '${_ai_mine}', hub-spoke-bridge.md § Procedure 7a says '${_ai_theirs}'"; failures=$((failures+1)); }
       _ai_seen="${_ai_seen}${_ai_theirs%% *} "
