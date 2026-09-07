@@ -49,7 +49,7 @@
 #   13 post_close_milestone gh api -X PATCH state=closed (#2919: DEFERS under --no-merge)
 #   14 manual_close_release_issues operator-authorized D-1 with structured comment (#2919: DEFERS under --no-merge)
 #   15 run_verification + post_gate_passage_proof per the gate-passage-proof template
-#   15.5 publish_github_release gh release create | edit (Layer-1 dual-write Surface 1; #2919: DEFERS under --no-merge, as does 15.6 check_release_body_drift) — BACKSTOP for Stage 12 Phase B5.5, which owns the emit; records SURFACE1-STATE=CREATED|EDITED|NO-OP
+#   15.5 publish_github_release gh release create | edit (Layer-1 dual-write Surface 1; #2919: DEFERS under --no-merge, as does 15.6 check_release_body_drift) — BACKSTOP for Stage 12 Phase B5.5, which owns the emit; the edit path converges BODY and TITLE; records SURFACE1-STATE=CREATED|EDITED|NO-OP and SURFACE1-TITLE=MATCH|CONVERGED|WITHHELD
 #   15.55 assert_anchor_hygiene  SET-based annotated-tag <-> published-Release parity + tagger identity (dated exemption sets)
 #   15.6 check_release_body_drift  post-emit §5.1 published-body drift assert (gated genuine drift BLOCKS; #2919: DEFERS under --no-merge)
 #   16 invoke_orphan_cleanup cleanup-orphan-state.sh --release-close <slug> --dry-run
@@ -6398,6 +6398,33 @@ ${_body}" 2>&1)"; then
 #   NO-OP    -> Surface 1 existed and was already canonical. Normal.
 # The token records an observation made STRICTLY BEFORE any mutation (the State-0/1/2
 # discrimination that routes the state machine) — a witness record, not a self-grade.
+#
+# TITLE OWNERSHIP. The release note's H1 is the SINGLE canonical source of the Release
+# title (release-notes-standard.md § 5.2, § 5.5). Stage 12 Phase B5.5 posts a
+# PROVISIONAL title: the note is authored at Stage 13 and does not exist when Stage 12
+# emits, so Stage 12 cannot read the source it would need. THIS phase owns canonical
+# title convergence, because it is the first point at which the note exists. The rule
+# itself lives in release-notes-standard.md and is not restated here.
+#
+# Both dimensions derive from ONE notes_abs_path() resolution, so the title can never
+# be composed from a different read of the note than the body.
+#
+# SURFACE1-TITLE=<MATCH|CONVERGED|WITHHELD> is recorded beside SURFACE1-STATE and is
+# subject to the SAME witness discipline: it is computed from the comparison this phase
+# necessarily performs BEFORE it edits, never from a re-read of the surface it just
+# wrote. A post-mutation read would certify this function's own write.
+#   MATCH     -> the posted title already equalled the note-derived title. No title edit.
+#   CONVERGED -> this phase composed the title from the note H1 and posted it.
+#   WITHHELD  -> no usable H1 resolved, so no --title was passed and the posted title
+#                was left ALONE. Deliberately one-way: an unextractable H1 is a
+#                note-quality finding and must never DOWNGRADE a good posted title,
+#                nor block a close.
+# The OUTCOME TOKEN IS DELIBERATELY UNCHANGED — and that constraint binds the title
+# dimension too. A WITHHELD title must NOT raise WARN: phase 15.6 branches on
+# `pub_result != "PASS"`, so a WARN here would make an edited Release report as
+# "Surface 1 not emitted this run" and would suppress the body-drift verdict on
+# precisely the malformed-note input where that verdict matters most (ADR-148 :91).
+# The withhold is recorded in the DETAIL; the token stays where it was.
 # The OUTCOME TOKEN IS DELIBERATELY UNCHANGED. Do not "improve" this by promoting
 # CREATED to a distinct mark_phase result: phase 15.6 branches on
 # `pub_result != "PASS"` (see phase_check_release_body_drift), so a new token there
@@ -6435,6 +6462,33 @@ ${_body}" 2>&1)"; then
 # --no-merge the --apply behaviour is to defer, so predicting a publish there would be
 # a false prediction. The mode test belongs above the three ABORTING preflights, which
 # is where it now is — not at the literal first line.
+
+# _surface1_title <notes_path> — compose the canonical Release title from the note's
+# H1, or print NOTHING when no usable H1 resolves.
+#
+# ONE composer, TWO call sites (edit and create). It previously existed only inside the
+# create branch, which is the mechanical reason the edit branch could not express a
+# title correction at all: there was no title to pass.
+#
+# FM-4: an H1 equal to the bare version means the extraction degenerated — treat it as
+# absent rather than posting "vX.Y — vX.Y". The caller decides what an empty result
+# means, and the two callers decide DIFFERENTLY on purpose (create substitutes a
+# fallback because there is no published title to protect; edit withholds because there
+# is one).
+#
+# The trailing-whitespace trim is load-bearing for agreement with the projector's own
+# H1 accessor (generate_release_index.py read_note(), which .strip()s): two accessors
+# that disagree on whitespace produce two different "canonical" headlines from one note.
+_surface1_title() {
+  local _st_notes="$1" _st_h1
+  _st_h1="$(/usr/bin/grep -m1 '^# ' "$_st_notes" 2>/dev/null | /usr/bin/sed 's/^# //' || echo "")"
+  _st_h1="${_st_h1%"${_st_h1##*[![:space:]]}"}"
+  if [[ -z "$_st_h1" || "$_st_h1" == "$VERSION" ]]; then
+    return 0
+  fi
+  printf '%s — %s' "$VERSION" "$_st_h1"
+}
+
 phase_publish_github_release() {
   # --no-merge (#2919): Surface 1 (the GitHub Release) is published from the
   # RELEASE_NOTES file, which lands on main only when the Stage 13 chore PR merges.
@@ -6451,7 +6505,7 @@ phase_publish_github_release() {
   # path below is reached with exactly the control flow it had before. Detail carries
   # no '|' so it cannot break the markdown phase table in --markdown reports.
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "publish_github_release" "DRY-RUN" "would invoke view-then-create-or-edit state machine: gh release view $VERSION → create OR edit OR no-op (per release-notes-standard.md § 5.5), and would record its path at --apply as SURFACE1-STATE=CREATED, EDITED or NO-OP (stated, NOT pre-evaluated here — this phase is the Stage-12 Phase B5.5 backstop and a CREATED value at --apply means Stage 12 did not emit Surface 1). Not evaluated under --dry-run: the tag-on-origin, tag↔merge-SHA and notes-file preflights. Their inputs do not exist yet — Stage 12 Phase B3 has not pushed the tag and the scaffold phase deliberately wrote no note — so checking them here would only fail on this script's own no-op. All three run for real at --apply, before anything is published"
+    mark_phase "publish_github_release" "DRY-RUN" "would invoke view-then-create-or-edit state machine: gh release view $VERSION → create OR edit OR no-op (per release-notes-standard.md § 5.5), and would compare the posted BODY and the posted TITLE against the canonical note and converge BOTH on the edit path, and would record its path at --apply as SURFACE1-STATE=CREATED, EDITED or NO-OP together with SURFACE1-TITLE=MATCH, CONVERGED or WITHHELD (stated, NOT pre-evaluated here — this phase is the Stage-12 Phase B5.5 backstop and a CREATED value at --apply means Stage 12 did not emit Surface 1). Not evaluated under --dry-run: the tag-on-origin, tag↔merge-SHA and notes-file preflights. Their inputs do not exist yet — Stage 12 Phase B3 has not pushed the tag and the scaffold phase deliberately wrote no note — so checking them here would only fail on this script's own no-op. All three run for real at --apply, before anything is published"
     return 0
   fi
 
@@ -6532,10 +6586,29 @@ phase_publish_github_release() {
 
   # View-then-create-or-edit state machine
   if $GH release view "$VERSION" --repo "$REPO_SLUG" >/dev/null 2>&1; then
-    # State 1 or 2 — release exists; compare body
-    local existing_body canonical_body
+    # State 1 or 2 — release exists; compare body AND title
+    local existing_body canonical_body existing_title canonical_title _s1_title_state
     existing_body="$($GH release view "$VERSION" --repo "$REPO_SLUG" --json body --jq .body 2>/dev/null)"
     canonical_body="$(strip_frontmatter "$notes_path" 2>/dev/null)"
+
+    # The posted title is the `name` field. Read it in a SEPARATE call, not as
+    # `--json body,name`: the self-test stubs discriminate on the literal substring
+    # "--json body", which `--json body,name` also satisfies, so a combined read would
+    # silently receive the body and grade a title comparison against it. One extra API
+    # read per close, in exchange for a fixture that cannot lie to the assertion.
+    existing_title="$($GH release view "$VERSION" --repo "$REPO_SLUG" --json name --jq .name 2>/dev/null)"
+    canonical_title="$(_surface1_title "$notes_path")"
+
+    # WITNESS, computed here — BEFORE any mutation — for the same reason SURFACE1-STATE
+    # is. Recording it after the edit would compare this phase's own write against the
+    # source it wrote it from, which can only disagree when the edit already failed.
+    if [[ -z "$canonical_title" ]]; then
+      _s1_title_state="WITHHELD"
+    elif [[ "$existing_title" == "$canonical_title" ]]; then
+      _s1_title_state="MATCH"
+    else
+      _s1_title_state="CONVERGED"
+    fi
 
     # EMPTY-BODY GUARD — the one irreversible path in this script.
     # `gh release edit --notes ""` blanks a PUBLISHED Release body, and GitHub keeps
@@ -6549,27 +6622,51 @@ phase_publish_github_release() {
       return 3
     fi
 
-    if [[ "$existing_body" == "$canonical_body" ]]; then
-      mark_phase "publish_github_release" "${_s1_outcome_override:-SKIPPED}" "SURFACE1-STATE=NO-OP — Surface 1 was already present and canonical before this backstop ran (Stage 12 Phase B5.5 emitted it). ${_s1_repair_note}GitHub Release $VERSION already at canonical content (State 2 no-op per release-notes-standard.md § 5.5)"
+    # NO-OP requires BOTH dimensions canonical. A withheld title contributes `true`
+    # here, so a note with no usable H1 behaves exactly as it did before this phase
+    # gained the title dimension — the inertness is what bounds the change to its
+    # trigger. Before this condition read the title at all, a stale posted title
+    # survived every close: the body matched, the phase returned 0, and nothing else
+    # ever looked at the title again.
+    if [[ "$existing_body" == "$canonical_body" \
+       && ( "$_s1_title_state" == "MATCH" || "$_s1_title_state" == "WITHHELD" ) ]]; then
+      mark_phase "publish_github_release" "${_s1_outcome_override:-SKIPPED}" "SURFACE1-STATE=NO-OP SURFACE1-TITLE=$_s1_title_state — Surface 1 was already present and canonical before this backstop ran (Stage 12 Phase B5.5 emitted it). ${_s1_repair_note}GitHub Release $VERSION already at canonical content on body and title (State 2 no-op per release-notes-standard.md § 5.5)"
       return 0
     fi
 
-    # State 1 → State 2 transition via idempotent gh release edit
-    if $GH release edit "$VERSION" --repo "$REPO_SLUG" --notes "$canonical_body" >/dev/null 2>&1; then
-      mark_phase "publish_github_release" "${_s1_outcome_override:-PASS}" "SURFACE1-STATE=EDITED — Surface 1 was already present before this backstop ran (Stage 12 Phase B5.5 emitted it); body refreshed from the canonical note. ${_s1_repair_note}edited GitHub Release $VERSION (State 1 → State 2 transition; body refreshed from canonical notes)"
+    # State 1 → State 2 transition via idempotent gh release edit.
+    # --title is passed ONLY when a canonical title resolved. On WITHHELD the argument
+    # is absent entirely rather than empty: `--title ""` would blank the posted title,
+    # which is the downgrade the withhold rule exists to prevent.
+    local _s1_edit_ok=0
+    if [[ "$_s1_title_state" == "WITHHELD" ]]; then
+      $GH release edit "$VERSION" --repo "$REPO_SLUG" --notes "$canonical_body" >/dev/null 2>&1 && _s1_edit_ok=1
+    else
+      $GH release edit "$VERSION" --repo "$REPO_SLUG" --notes "$canonical_body" --title "$canonical_title" >/dev/null 2>&1 && _s1_edit_ok=1
+    fi
+    if [[ "$_s1_edit_ok" -eq 1 ]]; then
+      local _s1_title_detail
+      case "$_s1_title_state" in
+        WITHHELD) _s1_title_detail="title WITHHELD — no usable '# ' H1 resolved in $notes_path, so the posted title was left as published rather than downgraded (a note-quality finding; correct the note H1 and re-run Phase 15.5 per release-notes-standard.md § 5.6)" ;;
+        MATCH)    _s1_title_detail="title already canonical" ;;
+        *)        _s1_title_detail="title converged to '$canonical_title'" ;;
+      esac
+      mark_phase "publish_github_release" "${_s1_outcome_override:-PASS}" "SURFACE1-STATE=EDITED SURFACE1-TITLE=$_s1_title_state — Surface 1 was already present before this backstop ran (Stage 12 Phase B5.5 emitted it); body and title refreshed from the canonical note. ${_s1_repair_note}edited GitHub Release $VERSION (State 1 → State 2 transition; $_s1_title_detail)"
       return 0
     fi
     mark_phase "publish_github_release" "FAIL" "gh release edit failed for existing release $VERSION"
     return 3
   fi
 
-  # State 0 — release does not exist; create
-  # Extract headline from canonical notes H1; fallback per FM-4
-  local headline
-  headline="$(/usr/bin/grep -m1 '^# ' "$notes_path" 2>/dev/null | /usr/bin/sed 's/^# //' || echo "")"
-  if [[ -z "$headline" || "$headline" == "$VERSION" ]]; then
-    headline="Release Notes"
-  fi
+  # State 0 — release does not exist; create.
+  # Same composer as the edit path — the inline extraction that used to live here was
+  # the ONLY title composer in the file, which is why the edit path had none.
+  # The fallback differs from the edit path's withhold ON PURPOSE: there is no
+  # published title to protect here, so substituting is strictly better than creating
+  # a Release with no title at all.
+  local canonical_title
+  canonical_title="$(_surface1_title "$notes_path")"
+  [[ -n "$canonical_title" ]] || canonical_title="$VERSION — Release Notes"
 
   # Surface 1 body = the note minus its YAML frontmatter (the committed notes
   # file is the source of record; the Release page is the rendered copy people
@@ -6626,11 +6723,11 @@ phase_publish_github_release() {
 
   if $GH release create "$VERSION" \
     --repo "$REPO_SLUG" \
-    --title "$VERSION — $headline" \
+    --title "$canonical_title" \
     --notes "$notes_body" \
     --target "$MERGE_SHA" \
     --latest="$s1_latest" >/dev/null 2>&1; then
-    mark_phase "publish_github_release" "${_s1_outcome_override:-PASS}" "SURFACE1-STATE=CREATED — Stage 12 Phase B5.5 did NOT emit Surface 1; this backstop created it. A Stage-12 omission, not the normal path — reported at stage-13-close.md § Phase B5.6. ${_s1_repair_note}created GitHub Release $VERSION bound to merge SHA $MERGE_SHA (Surface 1 of Layer-1 dual-write; title='$VERSION — $headline') --latest=$s1_latest ($s1_latest_why)"
+    mark_phase "publish_github_release" "${_s1_outcome_override:-PASS}" "SURFACE1-STATE=CREATED SURFACE1-TITLE=CONVERGED — Stage 12 Phase B5.5 did NOT emit Surface 1; this backstop created it. A Stage-12 omission, not the normal path — reported at stage-13-close.md § Phase B5.6. ${_s1_repair_note}created GitHub Release $VERSION bound to merge SHA $MERGE_SHA (Surface 1 of Layer-1 dual-write; title='$canonical_title') --latest=$s1_latest ($s1_latest_why)"
     return 0
   fi
   mark_phase "publish_github_release" "FAIL" "gh release create failed for new release $VERSION (canonical recovery: re-run Phase 15.5 OR invoke release-executor Mode F standalone)"
@@ -10510,11 +10607,22 @@ STUB
 
     # (f) NO-OP — the Release exists AND its body is already byte-identical to the
     # canonical note, so the state machine takes State 2 and mutates nothing.
+    # OPERAND-AWARE, and that is load-bearing rather than tidiness. This stub used to
+    # answer ANY `--json` read with the canonical body. Phase 15.5 now issues a second,
+    # separate `--json name` read, so the old shape handed the entire body back as the
+    # posted TITLE — the no-op condition would see a title mismatch, take the edit
+    # branch, and this arm would assert NO-OP against an EDITED run. Discriminating on
+    # the `--json` OPERAND is what keeps the fixture a genuine State-2 no-op on BOTH
+    # dimensions. `.body`/`.name` (the --jq arguments) do not collide with the bare
+    # operand words.
     local _s1_noop_stub="$_ms_tmp/gh-noop.sh"
     /bin/cat > "$_s1_noop_stub" <<STUB
 #!/usr/bin/env bash
 if [[ "\$1" == "release" && "\$2" == "view" ]]; then
-  for _a in "\$@"; do [[ "\$_a" == "--json" ]] && { /bin/cat "$_s1_canon_file"; exit 0; }; done
+  for _a in "\$@"; do
+    [[ "\$_a" == "body" ]] && { /bin/cat "$_s1_canon_file"; exit 0; }
+    [[ "\$_a" == "name" ]] && { printf '%s' "v9.89 — Real headline"; exit 0; }
+  done
   exit 0
 fi
 exit 0
@@ -10532,11 +10640,19 @@ STUB
 
     # (g) EDITED — the Release exists but its body DIFFERS, so the state machine
     # takes the State 1 -> State 2 edit transition.
+    # Operand-aware for the same reason as (f)'s stub above: an undiscriminated
+    # `--json` answer would return the differing BODY as the posted title too, which
+    # still reaches EDITED but for the wrong reason — the arm would pass while the
+    # title dimension went ungraded. Here the posted title is deliberately made to
+    # AGREE with the note, so this arm isolates BODY-only drift.
     local _s1_edit_stub="$_ms_tmp/gh-edit.sh"
     /bin/cat > "$_s1_edit_stub" <<'STUB'
 #!/usr/bin/env bash
 if [[ "$1" == "release" && "$2" == "view" ]]; then
-  for _a in "$@"; do [[ "$_a" == "--json" ]] && { printf '%s\n' "a body that deliberately differs from the canonical note"; exit 0; }; done
+  for _a in "$@"; do
+    [[ "$_a" == "body" ]] && { printf '%s\n' "a body that deliberately differs from the canonical note"; exit 0; }
+    [[ "$_a" == "name" ]] && { printf '%s' "v9.89 — Real headline"; exit 0; }
+  done
   exit 0
 fi
 if [[ "$1" == "release" && "$2" == "edit" ]]; then exit 0; fi
@@ -10552,6 +10668,107 @@ STUB
     if /usr/bin/grep -qF 'SURFACE1-STATE=CREATED' <<<"$_s1_detail"; then
       echo "FAIL: 4h(h) specificity — an EDITED run must NOT report SURFACE1-STATE=CREATED"; failures=$((failures+1))
     fi
+
+    # (k)/(l)/(m) — THE TITLE DIMENSION. (k) and (l) arm each other in both
+    # directions over ONE stub whose only difference is the posted title: (k) proves
+    # the phase CAN reach the edit on a title-only difference, (l) proves it does NOT
+    # when the title already agrees. Without (k), (l) is satisfied by a phase that
+    # never converges a title at all; without (l), (k) is satisfied by one that edits
+    # unconditionally. Both assert on the STUB'S ARGV FILE rather than on the detail
+    # prose, because a phase can record any string it likes — only the argv shows
+    # what was actually sent to GitHub.
+    local _s1_t_argv="$_ms_tmp/title-edit-args"
+
+    # (k) SENSITIVITY — body already canonical, posted TITLE stale. The pre-change
+    #     code returned NO-OP here and the stale title survived every close.
+    local _s1_k_stub="$_ms_tmp/gh-title-drift.sh"
+    /bin/cat > "$_s1_k_stub" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "release" && "\$2" == "view" ]]; then
+  for _a in "\$@"; do
+    [[ "\$_a" == "body" ]] && { /bin/cat "$_s1_canon_file"; exit 0; }
+    [[ "\$_a" == "name" ]] && { printf '%s' "v9.89 — WRONG headline"; exit 0; }
+  done
+  exit 0
+fi
+if [[ "\$1" == "release" && "\$2" == "edit" ]]; then printf '%s\n' "\$*" > "$_s1_t_argv"; exit 0; fi
+exit 0
+STUB
+    /bin/chmod +x "$_s1_k_stub"
+    GH="$_s1_k_stub"
+    /bin/rm -f "$_s1_t_argv"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_publish_github_release >/dev/null 2>&1
+    _s1_detail="$(get_phase publish_github_release)"
+    [[ -f "$_s1_t_argv" ]] || { echo "FAIL: 4h(k) sensitivity — a canonical BODY with a STALE posted title must still reach gh release edit; the edit was never invoked, which is the pre-change no-op that let a wrong title survive close"; failures=$((failures+1)); }
+    if [[ -f "$_s1_t_argv" ]]; then
+      /usr/bin/grep -qF -- '--title' "$_s1_t_argv" || { echo "FAIL: 4h(k) — the converging edit must carry --title, got argv '$(/bin/cat "$_s1_t_argv")'"; failures=$((failures+1)); }
+      /usr/bin/grep -qF -- 'v9.89 — Real headline' "$_s1_t_argv" || { echo "FAIL: 4h(k) — the edit must pass the NOTE-DERIVED title 'v9.89 — Real headline', got argv '$(/bin/cat "$_s1_t_argv")'"; failures=$((failures+1)); }
+    fi
+    /usr/bin/grep -qF 'SURFACE1-TITLE=CONVERGED' <<<"$_s1_detail" || { echo "FAIL: 4h(k) — a converged title must record SURFACE1-TITLE=CONVERGED, got '$_s1_detail'"; failures=$((failures+1)); }
+    [[ "$_s1_detail" == PASS\|* ]] || { echo "FAIL: 4h(k) — converging a title must NOT change the outcome token (ADR-148 :91 — phase 15.6 branches on pub_result != PASS), got '$_s1_detail'"; failures=$((failures+1)); }
+
+    # (l) SPECIFICITY — same stub shape, title now AGREES. Must not mutate at all.
+    #     Non-vacuous because (k) proved this same fixture family CAN reach the edit.
+    local _s1_l_stub="$_ms_tmp/gh-title-match.sh"
+    /bin/cat > "$_s1_l_stub" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "release" && "\$2" == "view" ]]; then
+  for _a in "\$@"; do
+    [[ "\$_a" == "body" ]] && { /bin/cat "$_s1_canon_file"; exit 0; }
+    [[ "\$_a" == "name" ]] && { printf '%s' "v9.89 — Real headline"; exit 0; }
+  done
+  exit 0
+fi
+if [[ "\$1" == "release" && "\$2" == "edit" ]]; then printf '%s\n' "\$*" > "$_s1_t_argv"; exit 0; fi
+exit 0
+STUB
+    /bin/chmod +x "$_s1_l_stub"
+    GH="$_s1_l_stub"
+    /bin/rm -f "$_s1_t_argv"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_publish_github_release >/dev/null 2>&1
+    _s1_detail="$(get_phase publish_github_release)"
+    [[ ! -f "$_s1_t_argv" ]] || { echo "FAIL: 4h(l) specificity — both body and title already canonical must stay a NO-OP; gh release edit WAS invoked with '$(/bin/cat "$_s1_t_argv")'"; failures=$((failures+1)); }
+    /usr/bin/grep -qF 'SURFACE1-TITLE=MATCH' <<<"$_s1_detail" || { echo "FAIL: 4h(l) — an already-canonical title must record SURFACE1-TITLE=MATCH, got '$_s1_detail'"; failures=$((failures+1)); }
+    [[ "$_s1_detail" == SKIPPED\|* ]] || { echo "FAIL: 4h(l) — the no-op token must stay SKIPPED; a title-dimension change must not ride _s1_outcome_override, which BOTH terminal mark_phase calls read, got '$_s1_detail'"; failures=$((failures+1)); }
+
+    # (m) WITHHOLD — a note with no usable '# ' H1. The body edit MUST still be
+    #     issued, --title MUST be absent (never empty — `--title ""` blanks the
+    #     posted title, the one-way degradation this rule exists to prevent), and
+    #     the outcome token MUST stay PASS rather than WARN.
+    local _s1_nh_dir="$_ms_tmp/no-h1-notes"
+    /bin/mkdir -p "$_s1_nh_dir"
+    /usr/bin/printf -- '---\nversion: v9.89\n---\n\nbody with no H1 at all\n' > "$_s1_nh_dir/v9.89_RELEASE_NOTES.md"
+    local _s1_m_stub="$_ms_tmp/gh-no-h1.sh"
+    /bin/cat > "$_s1_m_stub" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "release" && "\$2" == "view" ]]; then
+  for _a in "\$@"; do
+    [[ "\$_a" == "body" ]] && { printf '%s\n' "a previously published body that differs"; exit 0; }
+    [[ "\$_a" == "name" ]] && { printf '%s' "v9.89 — A GOOD posted title worth keeping"; exit 0; }
+  done
+  exit 0
+fi
+if [[ "\$1" == "release" && "\$2" == "edit" ]]; then printf '%s\n' "\$*" > "$_s1_t_argv"; exit 0; fi
+exit 0
+STUB
+    /bin/chmod +x "$_s1_m_stub"
+    GH="$_s1_m_stub"
+    RELEASE_NOTES_DIR="$_s1_nh_dir"
+    /bin/rm -f "$_s1_t_argv"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_publish_github_release >/dev/null 2>&1
+    _s1_detail="$(get_phase publish_github_release)"
+    [[ -f "$_s1_t_argv" ]] || { echo "FAIL: 4h(m) — a note with no H1 must still refresh the BODY; withholding the title must not withhold the whole edit"; failures=$((failures+1)); }
+    if [[ -f "$_s1_t_argv" ]]; then
+      if /usr/bin/grep -qF -- '--title' "$_s1_t_argv"; then
+        echo "FAIL: 4h(m) — no usable H1 resolved, so --title must be ABSENT from the edit argv (a good posted title must never be downgraded), got '$(/bin/cat "$_s1_t_argv")'"; failures=$((failures+1))
+      fi
+    fi
+    /usr/bin/grep -qF 'SURFACE1-TITLE=WITHHELD' <<<"$_s1_detail" || { echo "FAIL: 4h(m) — an unextractable H1 must record SURFACE1-TITLE=WITHHELD, got '$_s1_detail'"; failures=$((failures+1)); }
+    [[ "$_s1_detail" == PASS\|* ]] || { echo "FAIL: 4h(m) — a WITHHELD title must NOT move the outcome token off PASS. ADR-148 :91 forbids it and phase 15.6 branches on pub_result != PASS, so a WARN here would report an edited Release as 'Surface 1 not emitted this run' and suppress the body-drift verdict. Got '$_s1_detail'"; failures=$((failures+1)); }
+    RELEASE_NOTES_DIR="$_ms_work/release/releases/notes"
 
     # (i) AGGREGATION NON-REGRESSION — the arm that fails if anyone later promotes
     # CREATED to its own outcome token. Phase 15.6 branches on `pub_result != PASS`
@@ -14289,7 +14506,7 @@ EOF
   echo "  plan-identity close gate validated (ADR-092 Phase 9.3 — PI-0 clean PASS / PI-1 a this-version placement finding BLOCKS / PI-1b the expected-path needle carries INDEPENDENT reach (every finding class today also names the version, so PI-1 alone proves nothing about it) / PI-2 audit-baseline control: another release does NOT block / PI-3 exit-3 fails loud / PI-4 THE UNMASKING ARM: a plan NAMED FOR THE WRONG VERSION emits its ACTUAL path, which the expected-path needle cannot match — only the version-keyed needle catches it, so a single-needle caller fails here / PI-4b same shape for MAJOR-DIR / PI-4c both version-needle boundary guards / PI-5 version-less SKIPs / PI-6 + PI-7 needle INDEPENDENCE in both directions — and PI-7 is the standing measurement this phase exists for: a plans-path finding provably does NOT reach the note-path needle, so homing a plan limb inside check_note_content() is fail-open / PI-8 advisories are filtered before the needles, so a known residual cannot false-block / PI-9 missing tooling FAILs / PI-10 the phase is DISPATCHED and in the right window (transition_release_log < 9.3 < commit_chore_pr), with a fabricated-name control / PI-11 the hand-maintained usage()/--help phase roster carries the 9.3 row, with the shipped 9.2 row as its control)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  Surface-1 provenance token validated (#4732 — BOTH ARMS of the detection question, offline on fixtures: (e) CREATED on the State-0 create path / (f) NO-OP on a State-2 fixture whose body is extracted with the phase's OWN expression and asserted non-empty, so the no-op is genuine rather than a '' vs '' comparison / (g) EDITED on a State-1 differing-body fixture / (h) SPECIFICITY: neither found arm reports CREATED, without which a stub emitting CREATED unconditionally satisfies (e) and the suite is vacuous / (i) AGGREGATION NON-REGRESSION, the load-bearing arm: the create path keeps outcome token PASS, so a drift-tool exit 3 still reaches the WARN limb at :6224 and not the N/A limb at :6222 — this arm FAILS if anyone later promotes CREATED to its own mark_phase token and silently inverts :6221)" >&2
-  echo "  §5.1 empty-body guard + conformance-fixture binding validated (#4912, group 4h-e..j — six arms; this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): (e) an EMPTY strip aborts the EDIT path and marks publish FAIL, asserted on the STUB'S ARGV FILE — gh release edit must never have been INVOKED, because reporting after an irreversible overwrite is a report and not a guard, and GitHub keeps no Release-body history to revert / (f) the ANTI-VACUITY twin for (e) over the SAME stub and version with a well-formed note: the edit must be REACHED, the H1 must survive the strip and the frontmatter must NOT — without it (e) is satisfied by a stub that cannot invoke gh at all, and the raw-YAML-publish defect goes ungraded / (g) the CREATE path is the second call site and takes the same rule, asserted on its own argv file rather than on (e)'s / (h) the anti-vacuity twin for (g), same shape, so neither empty-body arm can pass by never reaching gh / (i) the sourced shell transform is bound to the SAME committed fixture that binds both Python mirrors, resolved from SCRIPT_DIR and never REPO_ROOT because the arms above reassign REPO_ROOT to a sandbox, behind a >=7-case iteration floor so a truncated or absent fixture cannot report clean by iterating zero times / (j) the TRANSFORM-PRESENT guard, graded on the DETAIL rather than on the verdict and that is the whole arm: with the guard removed an undefined function still yields an empty capture, so the empty-body backstop fires and all three verdict assertions pass on unguarded code — measured, not assumed — leaving the detail the only discriminator; the restore is then proven, else every later arm in the suite would be measuring an unset function" >&2
+  echo "  §5.1 empty-body guard + conformance-fixture binding validated (#4912, group 4h-e..j — six arms; this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): (e) an EMPTY strip aborts the EDIT path and marks publish FAIL, asserted on the STUB'S ARGV FILE — gh release edit must never have been INVOKED, because reporting after an irreversible overwrite is a report and not a guard, and GitHub keeps no Release-body history to revert / (f) the ANTI-VACUITY twin for (e) over the SAME stub and version with a well-formed note: the edit must be REACHED, the H1 must survive the strip and the frontmatter must NOT — without it (e) is satisfied by a stub that cannot invoke gh at all, and the raw-YAML-publish defect goes ungraded / (g) the CREATE path is the second call site and takes the same rule, asserted on its own argv file rather than on (e)'s / (h) the anti-vacuity twin for (g), same shape, so neither empty-body arm can pass by never reaching gh / (i) the sourced shell transform is bound to the SAME committed fixture that binds both Python mirrors, resolved from SCRIPT_DIR and never REPO_ROOT because the arms above reassign REPO_ROOT to a sandbox, behind a >=7-case iteration floor so a truncated or absent fixture cannot report clean by iterating zero times / (j) the TRANSFORM-PRESENT guard, graded on the DETAIL rather than on the verdict and that is the whole arm: with the guard removed an undefined function still yields an empty capture, so the empty-body backstop fires and all three verdict assertions pass on unguarded code — measured, not assumed — leaving the detail the only discriminator; the restore is then proven, else every later arm in the suite would be measuring an unset function / (k)(l)(m) THE TITLE DIMENSION, the arms that make AC-3's title-equality predicate an EXECUTED check rather than an echo inside a markdown fence: (k) SENSITIVITY — a canonical BODY with a stale posted title must still reach gh release edit carrying --title and the NOTE-DERIVED value, asserted on the stub's ARGV FILE because a phase can record any detail string it likes and only the argv shows what was sent; this is the exact input the pre-change no-op condition returned SKIPPED on, which is how a wrong title survived every close / (l) SPECIFICITY over the SAME fixture family with only the posted title changed to agree: the argv file must stay ABSENT and the token must stay SKIPPED — non-vacuous precisely because (k) proved this family CAN reach the edit, and pinning the token is what catches a withhold routed through _s1_outcome_override, which BOTH terminal mark_phase calls read and which would silently flip the no-op branch too / (m) WITHHOLD — a note with no usable H1 must still refresh the BODY while --title is ABSENT from the argv rather than empty (`--title \"\"` blanks the posted title, the one-way degradation the rule exists to prevent), and the outcome token must stay PASS: ADR-148 :91 forbids moving it, and phase 15.6 branches on pub_result != PASS, so a WARN here would report an edited Release as 'Surface 1 not emitted this run' and suppress the body-drift verdict on exactly the malformed-note input where it matters most. All three fixtures' view stubs are OPERAND-AWARE (--json body vs --json name); the undiscriminated shape they replaced returned the whole body as the posted title, which would have reddened (f) and graded (g)'s title dimension against a value no Release ever carries" >&2
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  close-out report phase set is RECORD-DERIVED validated (#4773 — every recorded phase renders against a denominator parsed from this file's own mark_phase subjects (pre-fix: 3 missing — inject_velocity_field / append_release_learnings / audit_epic_rollup) / a phase in NO enumeration still renders (AC-2) / an unmarked name does NOT render (anti-vacuity) / post_gate_passage_proof renders AND is asserted definition-less, so a definition-derived set cannot silently drop it / a double-marked name renders ONE row carrying the FIRST result / the halted marker fires on a FAIL-terminated run and is absent on a clean one / DISPATCH<->RECORD cross-check: every dispatched phase is a record subject, with vacuity floors on both parses plus sensitivity and specificity arms — the one invariant no seeded arm can reach / JSON twin carries the same de-duplicated set with pre-existing keys intact)" >&2
   echo "  Gate-Passage-Proof **Chore PR:** field renders ONCE on BOTH paths (#4322 — b1 POPULATED path, the path the pre-existing report arms never exercised: exactly one **Chore PR:** line carrying the number once, and the doubled form absent / b2 UNSET path, the previously-covered one, renders the fallback verbatim with no '#' / b3 SPECIFICITY on a NON-numeric fixture, because '#3697' contains '3697' so 'no bare number' is unfalsifiable on a numeric input: the value occurs exactly once on the line, counted in PURE BASH by length-delta rather than by grep_count -o, which counts LINES on this suite's BSD grep and so returns the PASS value on the doubled form — paired with the anti-vacuity control asserting the identical computation returns 2 over the pre-fix expansion / b4 EXECUTABLE SENSITIVITY: the pre-fix construct is expanded from a single-quoted source fixture and must BOTH reproduce the doubling AND be rejected by b1's matcher, without which b1's green result is uninformative / b5 REINTRODUCTION GUARD: the production region above self_test carries ZERO same-variable paired set/unset expansions on CHORE_PR_NUMBER, with an anti-vacuity control asserting the same matcher returns 1 on the known-bad source form, so the zero is a measurement rather than a broken probe / b6 the out-of-scope --no-merge deferral message's solitary set-arm is asserted unchanged in BOTH directions, so the fix did not generalize into a correct site / b7 AC-5: with the **Chore PR:** line stripped, two renders differing only in CHORE_PR_NUMBER are byte-identical, preceded by the anti-vacuity arm that the unstripped renders differ — b7 is invariant to a render-line revert BY DESIGN, so the executed mutation-kill set is b1/b3/b5)" >&2
