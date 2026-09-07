@@ -10361,7 +10361,7 @@ STUB
   #     zero-merge claims in (e)/(f)/(g) mean something: (c) is their moving control.
   local _mt_tmp; _mt_tmp="$(/usr/bin/mktemp -d -t mergeawait-selftest.XXXXXX)"
   local _mt_ctr="$_mt_tmp/calls" _mt_mctr="$_mt_tmp/merges"
-  local _mt_seq="$_mt_tmp/seq" _mt_mrc="$_mt_tmp/mrc"
+  local _mt_seq="$_mt_tmp/seq" _mt_mrc="$_mt_tmp/mrc" _mt_rc=0
   local _mt_stub="$_mt_tmp/gh-stub.sh"
   /bin/cat > "$_mt_stub" <<STUB
 #!/usr/bin/env bash
@@ -10398,7 +10398,13 @@ STUB
   /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
   MERGE_TIMEOUT=5; MERGE_POLL_STEP=1
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
-  phase_await_merge_chore_pr >/dev/null 2>&1
+  # `|| _mt_rc=$?`, never a bare call: under `set -e` a bare invocation that returns
+  # non-zero ABORTS the whole suite at the first broken expected-PASS arm, printing
+  # one line and no assertion message — an opaque exit 3 where a NAMED red arm is
+  # what the reader needs. Measured, not assumed: a mutation probe that removed the
+  # MERGED/* arm produced exactly that. The return code is still asserted below.
+  _mt_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _mt_rc=$?
+  [[ "$_mt_rc" -eq 0 ]] || { echo "FAIL: await_merge (c) must return 0 after BLOCKED→CLEAN keep-polling, got rc=$_mt_rc"; failures=$((failures+1)); }
   [[ "$(get_phase await_merge_chore_pr)" == PASS\|* ]] || { echo "FAIL: await_merge must PASS after BLOCKED→CLEAN keep-polling, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
   [[ "$(/bin/cat "$_mt_ctr")" -ge 2 ]] || { echo "FAIL: await_merge must POLL again after BLOCKED (>=2 pr view calls), got $(/bin/cat "$_mt_ctr")"; failures=$((failures+1)); }
   [[ "$(/bin/cat "$_mt_mctr")" -eq 1 ]] || { echo "FAIL: await_merge (c) must reach the merge EXACTLY once — post-#6255 a PASS alone no longer proves the merge path ran, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
@@ -10425,7 +10431,8 @@ STUB
   /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
   MERGE_TIMEOUT=1; MERGE_POLL_STEP=1
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
-  phase_await_merge_chore_pr >/dev/null 2>&1
+  _mt_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _mt_rc=$?
+  [[ "$_mt_rc" -eq 0 ]] || { echo "FAIL: await_merge (e) an ALREADY-MERGED PR must return 0, got rc=$_mt_rc"; failures=$((failures+1)); }
   [[ "$(get_phase await_merge_chore_pr)" == PASS\|* ]] || { echo "FAIL: await_merge (e) an ALREADY-MERGED PR must PASS, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
   [[ "$(/bin/cat "$_mt_ctr")" -eq 1 ]] || { echo "FAIL: await_merge (e) must stop on the FIRST read (exactly 1 pr view call), got $(/bin/cat "$_mt_ctr")"; failures=$((failures+1)); }
   [[ "$(/bin/cat "$_mt_mctr")" -eq 0 ]] || { echo "FAIL: await_merge (e) must NOT attempt a merge on an already-merged PR, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
@@ -10467,7 +10474,8 @@ STUB
   /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
   MERGE_TIMEOUT=2; MERGE_POLL_STEP=1
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
-  phase_await_merge_chore_pr >/dev/null 2>&1
+  _mt_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _mt_rc=$?
+  [[ "$_mt_rc" -eq 0 ]] || { echo "FAIL: await_merge (g) a merge landing MID-POLL must return 0, got rc=$_mt_rc"; failures=$((failures+1)); }
   [[ "$(get_phase await_merge_chore_pr)" == PASS\|* ]] || { echo "FAIL: await_merge (g) a merge landing MID-POLL must PASS, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
   [[ "$(/bin/cat "$_mt_ctr")" -ge 2 ]] || { echo "FAIL: await_merge (g) the terminal check must run PER ITERATION, not pre-loop only (>=2 pr view calls), got $(/bin/cat "$_mt_ctr")"; failures=$((failures+1)); }
   [[ "$(/bin/cat "$_mt_mctr")" -eq 0 ]] || { echo "FAIL: await_merge (g) must NOT attempt a merge once the PR merged mid-poll, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
@@ -10481,7 +10489,8 @@ STUB
   /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
   MERGE_TIMEOUT=2; MERGE_POLL_STEP=1
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
-  phase_await_merge_chore_pr >/dev/null 2>&1
+  _mt_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _mt_rc=$?
+  [[ "$_mt_rc" -eq 0 ]] || { echo "FAIL: await_merge (h) a failed merge over a PR that DID merge must return 0 on the re-probe, got rc=$_mt_rc"; failures=$((failures+1)); }
   [[ "$(get_phase await_merge_chore_pr)" == PASS\|* ]] || { echo "FAIL: await_merge (h) a failed merge over a PR that DID merge must PASS on the re-probe, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
   [[ "$(/bin/cat "$_mt_mctr")" -eq 1 ]] || { echo "FAIL: await_merge (h) must have ATTEMPTED the merge exactly once before re-probing, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
   case "$(get_phase await_merge_chore_pr)" in
