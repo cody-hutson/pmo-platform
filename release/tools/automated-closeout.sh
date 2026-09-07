@@ -11127,19 +11127,63 @@ PLAN-VERSION-UNKNOWN: release/releases/plans/v2/v2.98_RELEASE_PLAN.md declares v
     fi
   fi
 
-  # Test 7: usage block extractable AND not truncated. The old arm ran its own
-  # copy of the fixed `sed -n '2,92p'` window and grepped only for "Usage:",
-  # which sits near the top — so it passed while the window silently evicted the
-  # META section. Drive the REAL renderer (no second copy to drift) and assert
-  # both ends of the block: the opening "Usage:" and the last META flag.
+  # Test 7: usage block extractable AND not truncated, and the exit-2 dispatch set
+  # NAMED in the rendered exit-2 text. The oldest arm ran its own copy of the fixed
+  # `sed -n '2,92p'` window and grepped only for "Usage:", which sits near the top —
+  # so it passed while the window silently evicted the META section. Drive the REAL
+  # renderer (no second copy to drift) and assert the block from both ends.
   local _u7_out; _u7_out="$(usage || true)"
   # Here-strings, not `echo … | grep -q`: grep -q short-circuits and SIGPIPEs the
   # writer (SIGPIPE-idiom gate). Both needles are non-empty, so the `<<<""`
   # one-empty-line degenerate case cannot produce a false match.
   /usr/bin/grep -q "Usage:" <<<"$_u7_out" \
     || { echo "FAIL: usage block extraction — 'Usage:' absent from the rendered help"; failures=$((failures+1)); }
-  /usr/bin/grep -q -- "--self-test" <<<"$_u7_out" \
-    || { echo "FAIL: usage block truncated — the META section (--self-test) is absent from the rendered help"; failures=$((failures+1)); }
+  # TAIL ANCHOR (#5762). The needle this replaces was `--self-test`, and it
+  # contributed ZERO truncation coverage. `grep -q` binds the FIRST match in the
+  # RENDERED output, not the token's last occurrence in the source, and measured on
+  # the real render `--self-test` first matches at row 4 — inside the
+  # `selftest-runner:` preamble, ABOVE `Usage:` at row 112. So the binding bottom
+  # anchor was `Usage:`, leaving every row below it truncation-invisible, with the
+  # exit-codes block squarely inside that window. Three parties reached three
+  # different figures for that window by reading the SOURCE for the token instead
+  # of the RENDER the arm consumes; the number below was measured by running this
+  # renderer. The needle is now the block's genuine last line — usage() terminates
+  # on the first non-`#` source line, so the `3 = ` entry is the last thing rendered
+  # and EVERY possible truncation removes it.
+  /usr/bin/grep -q -- "3 = phase execution failure" <<<"$_u7_out" \
+    || { echo "FAIL: usage block truncated — the exit-codes block's last line (the '3 = ' entry, which is also the last line usage() renders) is absent from the rendered help"; failures=$((failures+1)); }
+  # LIMB C (#5762) — the exit-2 dispatch set is DERIVED from the shipped text and
+  # asserted PRESENT in the rendered exit-2 entry. The line this pins used to
+  # restate a preflight sub-check, drifted from the code, and ended up asserting a
+  # gate that does not exist (the version tag). Naming the dispatch sites instead
+  # is only safe while something binds the naming — this is that binding. The
+  # population is EXTRACTED, never listed here, so a third entry gate added to the
+  # ladder reddens on the day it lands instead of silently under-reporting.
+  local _u7_d2 _u7_n3 _u7_x2 _u7_p
+  _u7_d2="$(/usr/bin/grep -oE '^phase_[A-Za-z0-9_]+ \|\| \{ generate_report; exit 2; \}' "${BASH_SOURCE[0]}" | /usr/bin/awk '{print $1}' | /usr/bin/sort -u || true)"
+  _u7_n3="$(/usr/bin/grep -cE '^phase_[A-Za-z0-9_]+ \|\| \{ generate_report; exit 3; \}' "${BASH_SOURCE[0]}" || true)"
+  # Two floors, and they answer different questions. (1) ANTI-VACUITY on the exit-2
+  # side: an empty set satisfies the loop below by having nothing to check. (2) The
+  # exit-3 arm is the CONTROL that the extractor works at all — a pattern that
+  # stopped matching would empty BOTH sides, and floor (1) alone cannot tell that
+  # apart from a genuine removal of every exit-2 gate. Neither is redundant with
+  # group CA's floors: CA-1 bounds the whole phase_* population and the whole
+  # dispatch set, and asserts nothing about the exit-2 SUBSET this limb reads.
+  [[ -n "$_u7_d2" ]] \
+    || { echo "FAIL: Test 7 limb C anti-vacuity — the exit-2 dispatch extraction returned nothing, so the naming assertion below would check nothing"; failures=$((failures+1)); }
+  [[ "${_u7_n3:-0}" -ge 30 ]] \
+    || { echo "FAIL: Test 7 limb C control — the identical extractor keyed on 'exit 3' returned ${_u7_n3:-0} (floor 30), so the extractor itself is broken and limb C's exit-2 reading attributes nothing"; failures=$((failures+1)); }
+  # The rendered exit-2 entry: from the '2 = ' row up to, but not including, '3 = '.
+  # awk reads its whole input and never exits early, so this is not the
+  # pipe-into-a-short-circuiting-reader form the SIGPIPE-idiom gate matches.
+  _u7_x2="$(/usr/bin/awk '/^ *2 = /{f=1} /^ *3 = /{f=0} f' <<<"$_u7_out" || true)"
+  [[ -n "$_u7_x2" ]] \
+    || { echo "FAIL: Test 7 limb C — no '2 = ' entry found in the rendered exit-codes block; the block is absent, renamed or truncated above it"; failures=$((failures+1)); }
+  while IFS= read -r _u7_p; do
+    [[ -n "$_u7_p" ]] || continue
+    /usr/bin/grep -qF -- "$_u7_p" <<<"$_u7_x2" \
+      || { echo "FAIL: Test 7 limb C — $_u7_p dispatches 'exit 2' but is not named in the rendered exit-2 text, so --help under-reports an entry gate (the #5762 defect class, in the under-inclusive direction)"; failures=$((failures+1)); }
+  done <<<"$_u7_d2"
 
   # Test 8: chore-PR body has zero parser-clean violations
   VERSION="v2.10"
@@ -14251,7 +14295,7 @@ EOF
   echo "  Gate-Passage-Proof **Chore PR:** field renders ONCE on BOTH paths (#4322 — b1 POPULATED path, the path the pre-existing report arms never exercised: exactly one **Chore PR:** line carrying the number once, and the doubled form absent / b2 UNSET path, the previously-covered one, renders the fallback verbatim with no '#' / b3 SPECIFICITY on a NON-numeric fixture, because '#3697' contains '3697' so 'no bare number' is unfalsifiable on a numeric input: the value occurs exactly once on the line, counted in PURE BASH by length-delta rather than by grep_count -o, which counts LINES on this suite's BSD grep and so returns the PASS value on the doubled form — paired with the anti-vacuity control asserting the identical computation returns 2 over the pre-fix expansion / b4 EXECUTABLE SENSITIVITY: the pre-fix construct is expanded from a single-quoted source fixture and must BOTH reproduce the doubling AND be rejected by b1's matcher, without which b1's green result is uninformative / b5 REINTRODUCTION GUARD: the production region above self_test carries ZERO same-variable paired set/unset expansions on CHORE_PR_NUMBER, with an anti-vacuity control asserting the same matcher returns 1 on the known-bad source form, so the zero is a measurement rather than a broken probe / b6 the out-of-scope --no-merge deferral message's solitary set-arm is asserted unchanged in BOTH directions, so the fix did not generalize into a correct site / b7 AC-5: with the **Chore PR:** line stripped, two renders differing only in CHORE_PR_NUMBER are byte-identical, preceded by the anti-vacuity arm that the unstripped renders differ — b7 is invariant to a render-line revert BY DESIGN, so the executed mutation-kill set is b1/b3/b5)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
   echo "  JSON report renders valid JSON" >&2
-  echo "  usage block extractable" >&2
+  echo "  usage block extractable and not truncated, exit-2 dispatch set named in the render (#5762, Test 7 — this line is the arm's conformant extraction, without which a passing run is indistinguishable from one where the limbs never executed): HEAD anchor 'Usage:' / TAIL anchor the exit-codes block's '3 = ' entry, which is the last line usage() renders, replacing the '--self-test' needle that bound at render row 4 and therefore covered nothing below it / LIMB C the exit-2 dispatch set EXTRACTED from the guarded top-level dispatch and asserted present in the rendered exit-2 entry, with an anti-vacuity floor on the extracted set, a floor-30 exit-3 control proving the extractor works, and a non-empty check on the rendered entry so the naming loop cannot pass over nothing" >&2
   echo "  corpus paths resolve (RELEASE_LOG/INDEX/DIGEST + notes dir)" >&2
   echo "  corpus append-ledger merge-immunity validated (#3108 AC1 — union two-branch append CLEAN + both rows kept / non-union control CONFLICTS / state-column union CORRUPTS → LOG+REVERSIONS exclusion)" >&2
   echo "  phase_assert_output_set validated (#5288, group m — 11 arms; this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): m1 THE SEAM — the required-if cutoff is READ out of core/deploy/deploy.sh rather than copied, asserted against a SECOND INDEPENDENT extractor over the same file (awk, not the shipped sed) with an anti-vacuity floor on the oracle, plus a SENSITIVITY arm on an ARMED fixture that a hardcoded default fails, and two SPECIFICITY arms (no assignment / two assignments) that must both resolve UNREADABLE and never a silent default / m2 AN UNEVALUABLE PREDICATE BLOCKS: both required members PRESENT and the only fault is that the membership test could not run — the phase FAILs, returns 3, and reports INDETERMINATE, with a same-fixture one-variable CONTROL proving a readable dormant seam PASSes, so the block is attributable to the seam and not to a gate that always fails / m3 AC-3 a required member's absence blocks and NAMES itself, both members driven, with the present twin as the paired positive / m4 AC-5 membership vs outcome: the SAME absent telemetry field blocks under an ARMED cutover and resolves a REPORTED N-A under a dormant one, one variable apart / m5 THE MARKER IS EVIDENCE, NEVER AN EXEMPTION — differential over one fixture where the only change is that a real **Not-produced:** marker is recorded: the verdict must NOT move, with a SENSITIVITY arm proving the marker is genuinely present (else the arm passes vacuously), an assert that the gate REPORTED reading it (an invisible marker would prove nothing), and a converse SPECIFICITY arm where the member is supplied and the same marker is inert / m6 EMIT ON ABSENCE at the real producer site: a non-executable synthesizer still SKIPs but now records the absence as corpus bytes at its DECLARED anchor, the line immediately after **Result:**, with a working-producer control proving the marker tracks the capability condition and does not fire every run / m7 MODE: --dry-run returns 0 and marks WARN naming the condition that FAILS at --apply, anti-vacuity: the same fixture at --apply returns 3 and FAILs / m8 THE CLASSIFIER IS TOTAL AND FAILS CLOSED: an UNRECORDED producing phase (get_phase's not-found sentinel returns at exit 0, so it is a value and not an error) classifies INDETERMINATE and surfaces, with a PASS-record control proving real discrimination, and the ambiguous SKIPPED result shown to be resolved by the TREE — the identical result string classifies would-present over a present member and would-absent over an absent one, so the classifier is not row-pattern-matching detail prose / m9 the hand-maintained usage()/--help phase roster carries the 9.56 row, with the shipped 9.55 row as its interpretability control / m10 READ-ONLY by content hash across a PASSing run, with an anti-vacuity arm proving the same instrument DOES move on a known write / m11 EXACTLY ONE guarded top-level dispatch line, positioned AFTER assert_derived_surfaces and BEFORE commit_chore_pr (so the stamp cannot commit ahead of the assert), with vacuity floors on all three needles and a fabricated-name specificity control" >&2
