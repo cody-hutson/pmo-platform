@@ -329,9 +329,16 @@ fi
 # NEGATIVE CONTROL for both: the pre-fix comparison had NEITHER construct, and a
 # grep that cannot tell the two forms apart would report clean on the defective
 # predicate. Assert the same matcher rejects the known-bad form.
+#
+# A HERE-STRING, not a pipe. This file runs under `pipefail`, so feeding the
+# fixture through `printf … | grep -q` inverts this very control: on the day the
+# matcher DOES match — the failure this arm exists to catch — grep short-circuits,
+# the writer takes a broken pipe, the pipeline reports non-zero, and the `if`
+# falls to the else branch and prints the reassuring CONTROL pass. The safe form
+# is the one the two arms above already use: give grep its input directly.
 OLDFORM='      $1 ~ /^\| *AI-[0-9]+ *$/ { t++; gsub(/ /,"",$11);
                                  if ($11=="open" || $11=="in-flight") u++ }'
-if printf '%s\n' "$OLDFORM" | grep -q 'tolower('; then
+if grep -q 'tolower(' <<<"$OLDFORM"; then
   bad "the tolower( matcher also matches the pre-fix predicate; the arm above proves nothing"
 else
   ok "CONTROL the tolower( matcher rejects the pre-fix comparison form"
