@@ -512,7 +512,16 @@ All three paths also resolve `--latest` **explicitly** on the create branch rath
      # literal "--json body" also match the combined form and would answer a title
      # read with the body.
      EXISTING_TITLE=$(gh release view "v<X.Y>" --repo {REPO} --json name --jq .name)
+     # Title composition MIRRORS automated-closeout.sh `_surface1_title()`, which is
+     # this predicate's registered runner-def in gate-efficacy-standard.md. Keep the
+     # two in step token-for-token: an inline copy that drifts is the same defect the
+     # § 5.1 note above records for the body transform, one dimension over.
      H1=$(grep -m1 '^# ' "$NOTES_PATH" | sed 's/^# //')
+     # The trailing trim is load-bearing, not cosmetic. The projector's own H1 accessor
+     # (generate_release_index.py read_note()) strips, so an untrimmed copy composes a
+     # DIFFERENT "canonical" title from one note — each path then reads the other's as
+     # non-canonical and re-edits it forever.
+     H1="${H1%"${H1##*[![:space:]]}"}"
      # FM-4: an H1 equal to the bare version means the extraction degenerated.
      CANONICAL_TITLE=""
      if [[ -n "$H1" && "$H1" != "v<X.Y>" ]]; then CANONICAL_TITLE="v<X.Y> — $H1"; fi
