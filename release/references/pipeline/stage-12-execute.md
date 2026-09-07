@@ -265,15 +265,35 @@ if gh release view "v<X.Y>" --repo {REPO} >/dev/null 2>&1; then
   # form also matches, so a fixture would answer a title read with the body.
   EXISTING_BODY=$(gh release view "v<X.Y>" --repo {REPO} --json body --jq .body)
   EXISTING_TITLE=$(gh release view "v<X.Y>" --repo {REPO} --json name --jq .name)
-  CANONICAL_TITLE="v<X.Y> — $(grep -m1 '^# ' "$NOTES_PATH" | sed 's/^# //')"
-  if [[ "$EXISTING_BODY" == "$CANONICAL_BODY" && "$EXISTING_TITLE" == "$CANONICAL_TITLE" ]]; then
+  # Title resolution, computed BEFORE the comparison because both the no-op test
+  # and the edit read it. A usable H1 is one that is present AND is not merely the
+  # bare version: an H1 equal to "v<X.Y>" means the extraction degenerated, and
+  # posting "v<X.Y> — v<X.Y>" is a downgrade, not a title. Either way the result is
+  # NO title, never an empty one.
+  H1=$(grep -m1 '^# ' "$NOTES_PATH" | sed 's/^# //')
+  H1="${H1%"${H1##*[![:space:]]}"}"
+  if [[ -z "$H1" || "$H1" == "v<X.Y>" ]]; then
+    TITLE_STATE=WITHHELD; CANONICAL_TITLE=
+  else
+    TITLE_STATE=RESOLVED; CANONICAL_TITLE="v<X.Y> — $H1"
+  fi
+  # A WITHHELD title satisfies the title dimension of the no-op: there is no
+  # canonical title to converge to, so the title cannot hold up a no-op the body
+  # already satisfies.
+  if [[ "$EXISTING_BODY" == "$CANONICAL_BODY" \
+     && ( "$EXISTING_TITLE" == "$CANONICAL_TITLE" || "$TITLE_STATE" == WITHHELD ) ]]; then
     echo "PASS — Surface 1 already at canonical state for v<X.Y> (body and title)"
   else
     # State 1 → State 2 transition via idempotent gh release edit.
     # --title converges the title from the same note read the body came from.
     # If no usable H1 resolved, omit --title entirely — never pass an empty one,
-    # which would blank the posted title rather than leave it alone.
-    gh release edit "v<X.Y>" --repo {REPO} --notes "$CANONICAL_BODY" --title "$CANONICAL_TITLE"
+    # which would blank the posted title rather than leave it alone. The body is
+    # still refreshed on that path; only the title is left as published.
+    if [[ "$TITLE_STATE" == WITHHELD ]]; then
+      gh release edit "v<X.Y>" --repo {REPO} --notes "$CANONICAL_BODY"
+    else
+      gh release edit "v<X.Y>" --repo {REPO} --notes "$CANONICAL_BODY" --title "$CANONICAL_TITLE"
+    fi
   fi
 else
   # State 0 — release does not exist; create
