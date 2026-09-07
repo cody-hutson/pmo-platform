@@ -145,7 +145,20 @@ WORKSPACE_ROOT="${WORKSPACE_ROOT:-${CLAUDE_WORKSPACE_ROOT:-}}"
 if [[ -z "$WORKSPACE_ROOT" ]]; then
   _operator_toml="${HOME}/.config/pmo-platform/operator.toml"
   if [[ -r "$_operator_toml" ]]; then
-    _wr=$(grep -m1 -E '^claude_workspace_root' "$_operator_toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+    # `|| true` spans the whole substitution. claude_workspace_root is OPTIONAL, so
+    # an operator.toml that EXISTS and omits it makes this grep exit 1, `pipefail`
+    # carries that out of the substitution and `set -e` (line 122) aborts at LOAD
+    # time — before argument parsing, on EVERY invocation including --self-test —
+    # with exit 1 and no output. The default two lines down is what makes the key
+    # optional; without the tolerance that default is unreachable.
+    #
+    # TOLERANCE ONLY here — deliberately NOT the two-part fold applied to the same
+    # class in automated-closeout.sh. These three sites already carry `grep -m1` and
+    # never piped into `head`, so the SIGPIPE half of that fold has no referent in
+    # this file. Two remediation shapes, one class; applying the other one here
+    # would be a rewrite with nothing to fix. selftest_key_read_tolerance() below
+    # asserts the invariant that IS shared.
+    _wr=$(grep -m1 -E '^claude_workspace_root' "$_operator_toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
     [[ -n "$_wr" ]] && WORKSPACE_ROOT="$_wr"
   fi
 fi
@@ -157,8 +170,13 @@ PROTECT_LIST="$WORKSPACE_ROOT/.claude/cleanup-protect-list.txt"
 # Operators can override REPO_SLUG to point cleanup at a fork.
 REPO_SLUG="${REPO_SLUG:-}"
 if [[ -z "$REPO_SLUG" ]] && [[ -r "${HOME}/.config/pmo-platform/operator.toml" ]]; then
-  _gh=$(grep -m1 -E '^operator_github' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
-  _repo=$(grep -m1 -E '^pmo_platform_repo_name' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+  # `|| true` for the same reason as the claude_workspace_root read above: both keys
+  # are OPTIONAL, and without the tolerance a present-but-key-less operator.toml
+  # aborts this tool at LOAD time with exit 1 and no output, making the documented
+  # "pmo-platform" fallback two lines down unreachable. Tolerance only — see above
+  # for why the SIGPIPE half of the sibling's fold has no referent in this file.
+  _gh=$(grep -m1 -E '^operator_github' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
+  _repo=$(grep -m1 -E '^pmo_platform_repo_name' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
   [[ -z "$_repo" ]] && _repo="pmo-platform"
   [[ -n "$_gh" ]] && REPO_SLUG="${_gh}/${_repo}"
 fi
@@ -1938,7 +1956,7 @@ verify_apply() {
 # never exceed its denominator. Every recording site either returns immediately or
 # returns after its cleanup, and the only two sites that do not end their check
 # (selftest_verify_and_prune) are mutually exclusive branches of a single if/else.
-SELFTEST_CHECK_COUNT=16
+SELFTEST_CHECK_COUNT=17
 SELFTEST_SKIPS=()
 
 # Records a check-level SKIP and emits the historical message shape VERBATIM:
@@ -3153,6 +3171,124 @@ selftest_gh_bin_resolves() {
   return 0
 }
 
+# Operator-config key-read tolerance guard (#5649). The sibling of group TK in
+# automated-closeout.sh: same defect class, deliberately a DIFFERENT remediation
+# shape, and one shared invariant that both files can be held to.
+#
+# THE INVARIANT. Every read of an OPTIONAL key out of operator.toml must tolerate
+# that key being ABSENT. Without the tolerance `grep` exits 1, `pipefail` carries
+# that status out of the command substitution, and the `set -euo pipefail` near the
+# top of this file aborts at LOAD time — before argument parsing, on EVERY
+# invocation including --self-test — with exit 1 and no output at all. All three
+# sites in this file shipped that way.
+#
+# TWO SHAPES, ONE CLASS. automated-closeout.sh needed a two-part fold (`| head -1`
+# folded into `grep -m1`, PLUS the tolerance). These three sites already carried
+# `grep -m1` and never piped into `head`, so only the tolerance half has a referent
+# here. That is why this arm asserts the TOLERANCE invariant and not the folded
+# form: an arm demanding byte-identity with the sibling's fix would fail on a
+# correct one.
+#
+# WHOLE-SOURCE, following selftest_no_live_worktree_pipes() above. That is
+# load-bearing rather than stylistic: self_test() below is a DISPATCHER, and ~93
+# lines of production code — usage(), the arg-parse loop, the boundary check, the
+# dispatch and the scope case — sit BELOW its closing brace. A region-scoped parse
+# would satisfy any anti-vacuity floor on the three sites near the top of the file
+# and still be blind to all of it.
+#
+# FIXTURES EXCLUDED BY CONSTRUCTION. The precedent arm above uses a WTPIPEGUARD tag
+# its own matcher filters out. This one needs no tag: the parse anchors on
+# `_<name>=$(`, so every specimen below — each held in a single-quoted assignment
+# whose character after `=` is a quote — is invisible to it, and so is every line of
+# this function (its locals carry no leading underscore). An anchor cannot be
+# forgotten the way a tag can, and K-3 asserts the invisibility rather than
+# assuming it.
+selftest_key_read_tolerance() {
+  local src pop tol bad spec fx line new old rc_new=0 rc_old=0
+  src="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  pop="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' "$src")"
+  tol="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "|| true") {n++} END {print n+0}' "$src")"
+
+  # (K-1) ANTI-VACUITY FLOOR, then the invariant. The floor stops a renamed variable
+  #       or a reformatted call site from emptying the population and reading clean.
+  if [[ "${pop:-0}" -lt 3 ]]; then
+    echo "self-test: key-read tolerance guard FAILED — the parse found only ${pop:-0} key-read site(s) in ${src}; the tolerance invariant would be vacuous" >&2
+    exit 1
+  fi
+  if [[ "${pop:-0}" -ne "${tol:-0}" ]]; then
+    bad="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && !index($0, "|| true") {printf "%d ", FNR}' "$src")"
+    echo "self-test: key-read tolerance guard FAILED — ${tol:-0}/${pop:-0} operator.toml key reads tolerate an ABSENT key; an intolerant read aborts this tool at LOAD time when an OPTIONAL key is missing. Unguarded line(s): ${bad:-none}" >&2
+    exit 1
+  fi
+
+  # (K-2) CAPABILITY TO FAIL, both directions, on a constructed call site. Without
+  #       it K-1 is satisfied by a filter that calls everything tolerant, or by a
+  #       parse that recognises nothing at all.
+  spec="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "|| true") {n++} END {print n+0}' <<<'  _z=$(grep -m1 -E "^k" f | awk -F= "{print}")')"
+  if [[ "${spec:-1}" -ne 0 ]]; then
+    echo "self-test: key-read tolerance guard FAILED — the tolerance filter counted an UNGUARDED specimen as tolerant; K-1's clean result is uninformative" >&2
+    exit 1
+  fi
+  spec="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' <<<'  _z=$(grep -m1 -E "^k" f | awk -F= "{print}")')"
+  if [[ "${spec:-0}" -ne 1 ]]; then
+    echo "self-test: key-read tolerance guard FAILED — the key-read parse did NOT recognise a constructed call site; it is not reading the shape it claims to, so K-1's population is not the population" >&2
+    exit 1
+  fi
+
+  # (K-3) THE FIXTURE-EXCLUSION PROOF. A specimen HELD in a single-quoted assignment
+  #       must be invisible to K-1's parse; that is what makes "excluded by
+  #       construction" a measurement rather than a claim, and what keeps this arm
+  #       from inflating its own population and then grading it.
+  spec="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' <<<"  local kr_bad='  _z=\$(grep -m1 -E \"^k\" f | awk -F= \"{print}\")'")"
+  if [[ "${spec:-1}" -ne 0 ]]; then
+    echo "self-test: key-read tolerance guard FAILED — a specimen HELD in a single-quoted assignment was counted as a real call site; the fixtures are not excluded by construction and K-1's population is contaminated" >&2
+    exit 1
+  fi
+
+  # (K-4) THE BEHAVIOURAL DIFFERENTIAL — the arm that fails on the unpatched file.
+  #       K-1..K-3 grade the text. This one RUNS the production line, EXTRACTED from
+  #       this file rather than retyped, against a hermetic operator.toml that EXISTS
+  #       and omits the key — the exact state that aborted the tool — and asserts it
+  #       survives. Its paired arm strips the tolerance from that same extracted line
+  #       and asserts the SAME fixture still aborts; without that control a green K-4
+  #       cannot be told from a fixture that never reproduced the defect.
+  #
+  #       Each half runs in a SEPARATE bash process, deliberately. `( set -e … ) ||
+  #       rc=$?` does NOT observe a set -e abort on bash 3.2: the subshell inherits
+  #       the enclosing AND-OR list's -e suppression and an explicit `set -e` inside
+  #       does not restore it. Measured on both shapes before this arm was written.
+  fx="$(mktemp -d -t keyread-selftest.XXXXXX)"
+  mkdir -p "$fx/.config/pmo-platform"
+  printf 'some_unrelated_key = "x"\n' > "$fx/.config/pmo-platform/operator.toml"
+  line="$(awk '!f && match($0, /^[ \t]*_gh=\$\(/) {print; f=1}' "$src")"
+  if [[ -z "$line" ]]; then
+    rm -rf "$fx" 2>/dev/null || true
+    echo "self-test: key-read tolerance guard FAILED — the production key-read line did not extract from ${src}; the behavioural arm would assert nothing" >&2
+    exit 1
+  fi
+  new="${line//\$\{HOME\}/$fx}"
+  old="${new/ || true)/)}"
+  if [[ "$old" == "$new" ]]; then
+    rm -rf "$fx" 2>/dev/null || true
+    echo "self-test: key-read tolerance guard FAILED — stripping the tolerance from the extracted line changed nothing, so both arms would run identical programs and the differential is empty" >&2
+    exit 1
+  fi
+  /bin/bash -c "$(printf 'set -euo pipefail\n%s\n[[ -z "${_gh:-}" ]] || exit 9\n' "$new")" || rc_new=$?
+  /bin/bash -c "$(printf 'set -euo pipefail\n%s\n' "$old")" || rc_old=$?
+  rm -rf "$fx" 2>/dev/null || true
+  if [[ "$rc_new" -ne 0 ]]; then
+    echo "self-test: key-read tolerance guard FAILED — the shipped key read does NOT survive an operator.toml that exists and omits the key (rc ${rc_new}); that is the load-time abort this guard exists to close" >&2
+    exit 1
+  fi
+  if [[ "$rc_old" -eq 0 ]]; then
+    echo "self-test: key-read tolerance guard FAILED — the SAME fixture with the tolerance stripped did NOT abort (rc 0); the fixture does not reproduce the defect, so this check's clean result is a broken probe rather than evidence" >&2
+    exit 1
+  fi
+
+  echo "self-test: key-read tolerance guard PASS — ${tol}/${pop} operator.toml key reads tolerate an absent optional key (whole-source parse, anti-vacuity floor 3, fixtures excluded by construction and that exclusion asserted); the extracted production line survives a present-but-key-less config while its tolerance-stripped twin over the same fixture still aborts" >&2
+  return 0
+}
+
 self_test() {
   echo "self-test: running detection logic against current workspace (read-only)..." >&2
   workspace_boundary_check
@@ -3188,6 +3324,8 @@ self_test() {
   selftest_agent_detached_sweep
   echo "self-test: exercising worktree-list pipe guard (no live early-closing pipes; idiom survives scale)..." >&2
   selftest_no_live_worktree_pipes
+  echo "self-test: exercising operator-config key-read tolerance (every optional-key read survives the key being absent; whole-source, behavioural differential) (#5649)..." >&2
+  selftest_key_read_tolerance
   echo "self-test: exercising orphan-tag reap (authority gate, real-reap-observed, double-opt-in, canonical-guard, verify-after, ledger write-back)..." >&2
   selftest_orphan_tag_reap
   echo "self-test: exercising --help protective-guarantee surface (--force / SELF / --self-test) (#669)..." >&2
