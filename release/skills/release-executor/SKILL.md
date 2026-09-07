@@ -502,14 +502,35 @@ All three paths also resolve `--latest` **explicitly** on the create branch rath
 
    # Read current state via gh release view
    if gh release view "v<X.Y>" --repo {REPO} >/dev/null 2>&1; then
-     # State 1 or 2 — release exists; compare body
+     # State 1 or 2 — release exists; compare BODY and TITLE.
+     # Mode F is the § 5.6 route for a post-VERIFIED correction, and a corrected note
+     # H1 is one of those corrections — so this path must be able to carry a title.
+     # Passing only --notes is what let a title composed before the note existed
+     # survive every subsequent re-emit.
      EXISTING_BODY=$(gh release view "v<X.Y>" --repo {REPO} --json body --jq .body)
-     if [[ "$EXISTING_BODY" == "$CANONICAL_BODY" ]]; then
-       echo "PASS — release v<X.Y> already at canonical state (State 2 no-op)"
+     # A SEPARATE read, not `--json body,name`: fixtures that discriminate on the
+     # literal "--json body" also match the combined form and would answer a title
+     # read with the body.
+     EXISTING_TITLE=$(gh release view "v<X.Y>" --repo {REPO} --json name --jq .name)
+     H1=$(grep -m1 '^# ' "$NOTES_PATH" | sed 's/^# //')
+     # FM-4: an H1 equal to the bare version means the extraction degenerated.
+     CANONICAL_TITLE=""
+     if [[ -n "$H1" && "$H1" != "v<X.Y>" ]]; then CANONICAL_TITLE="v<X.Y> — $H1"; fi
+     if [[ "$EXISTING_BODY" == "$CANONICAL_BODY" \
+        && ( "$EXISTING_TITLE" == "$CANONICAL_TITLE" || -z "$CANONICAL_TITLE" ) ]]; then
+       echo "PASS — release v<X.Y> already at canonical state on body and title (State 2 no-op)"
      else
-       # State 1 → State 2 transition via idempotent gh release edit
-       gh release edit "v<X.Y>" --repo {REPO} --notes "$CANONICAL_BODY"
-       echo "EDITED — release v<X.Y> body refreshed from canonical notes"
+       # State 1 → State 2 transition via idempotent gh release edit.
+       # WITHHOLD: with no usable H1, omit --title entirely. Never pass an empty one —
+       # `--title ""` blanks the posted title, so a malformed note would DOWNGRADE a
+       # good published title. Refreshing the body is still correct and still happens.
+       if [[ -z "$CANONICAL_TITLE" ]]; then
+         gh release edit "v<X.Y>" --repo {REPO} --notes "$CANONICAL_BODY"
+         echo "EDITED — release v<X.Y> body refreshed; title WITHHELD (no usable '# ' H1 in $NOTES_PATH — correct the note H1 and re-run)"
+       else
+         gh release edit "v<X.Y>" --repo {REPO} --notes "$CANONICAL_BODY" --title "$CANONICAL_TITLE"
+         echo "EDITED — release v<X.Y> body and title refreshed from canonical notes"
+       fi
      fi
    else
      # State 0 — release does not exist; create
