@@ -7316,9 +7316,15 @@ phase_invoke_orphan_cleanup() {
     return 0
   fi
 
-  # Chained tool defaults to dry-run; operator re-runs with --apply
+  # This phase produces the REPORT the operator approves against, and that is all it
+  # does: the --dry-run here is deliberate and stays. There is no apply path anywhere
+  # in this driver, so the PASS note names where the apply actually lives rather than
+  # leaving a reader of a green close-out to look for one that does not exist. The
+  # dry-run report is now relayable as the approval scope: it projects the resolve
+  # pass, so a branch freed by this run's own worktree removals is reported as a
+  # predicted consequence instead of as skipped.
   if "$CLEANUP_TOOL" --release-close "$slug" --dry-run --markdown >/dev/null 2>&1; then
-    mark_phase "invoke_orphan_cleanup" "PASS" "cleanup dry-run report generated (operator reviews + re-invokes with --apply)"
+    mark_phase "invoke_orphan_cleanup" "PASS" "cleanup dry-run report generated (projects the apply's resolve pass, so its totals are the approval scope). This driver has NO apply path — after operator approval the apply is a DIRECT cleanup-orphan-state.sh --release-close $slug --apply --markdown, not a re-run of this close-out"
     return 0
   fi
   mark_phase "invoke_orphan_cleanup" "FAIL" "cleanup-orphan-state.sh dry-run returned non-zero"
