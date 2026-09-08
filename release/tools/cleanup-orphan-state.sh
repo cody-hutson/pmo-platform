@@ -484,6 +484,31 @@ branch_has_worktree() {
   grep -q "^branch refs/heads/${branch}$" <<<"$(git worktree list --porcelain 2>/dev/null)"
 }
 
+# Classify a `git worktree remove` refusal stream into ONE token from a closed
+# set. ONLY the token is ever written into a candidate row. That bound is the
+# whole point of having a classifier rather than carrying git's message: the
+# row's action field is emitted into JSON unescaped and is parsed positionally
+# out of a TAB-delimited tuple, while git's locked-tree refusal quotes the lock
+# reason verbatim — free-form text written by whatever process took the lock.
+# The stream itself goes to stderr only, where it is already prefixed `git: `.
+#
+# The set is closed at the shapes git actually produces on this path, measured
+# rather than assumed (git 2.50.1):
+#   locked   fatal: cannot remove a locked working tree, lock reason: <free-form>
+#   dirty    fatal: '<path>' contains modified or untracked files, use --force …
+#   other    anything else, including a message a later git reworded
+# A registered worktree whose DIRECTORY is gone (git's `prunable` class) is
+# deliberately absent: measured, git removes such a registration and exits 0, so
+# it is not a refusal shape at all and a `not-found` token here would name a
+# state that cannot reach this code.
+classify_worktree_refusal() {
+  case "$1" in
+    *"locked working tree"*)                  printf 'locked' ;;
+    *"contains modified or untracked files"*) printf 'dirty' ;;
+    *)                                        printf 'other' ;;
+  esac
+}
+
 # Returns disk size in MB for a worktree path (rounded).
 worktree_size_mb() {
   local path="$1"
@@ -1451,8 +1476,18 @@ EOF
   fi
   echo "## Totals"
   echo "- $((lr + rr)) branches $noun, $((lc + rc - lr - rr - bfails)) skipped, $wr worktrees $noun, ≈${disk_total} MB $recov$([[ "$MODE" == "apply" ]] && echo ", $pc stale tracking ref(s) pruned")"
-  if [[ "$MODE" == "apply" && $((bfails + wfails)) -gt 0 ]]; then
-    echo "- ⚠ $((bfails + wfails)) removal(s) FAILED — see the PASS/FAIL log on stderr; a git safety guard refused (\`git branch -d\` on an unmerged branch, or \`git worktree remove\` on a dirty tree). Re-run with \`--force\` only if the deletion is intentional."
+  # #6411. Branch failures and worktree failures are reported SEPARATELY, each
+  # naming its own refusal surface. The single sentence these replace summed the
+  # two counts and then offered one speculative cause from each surface — so a
+  # locked worktree was reported as a dirty one, and an operator went looking for
+  # uncommitted work that did not exist. Neither line guesses now: the branch line
+  # names the only guard `git branch -d` applies, and the worktree line points at
+  # the per-row cause the apply phase captured from git itself.
+  if [[ "$MODE" == "apply" && "$bfails" -gt 0 ]]; then
+    echo "- ⚠ $bfails branch/ref removal(s) FAILED — \`git branch -d\` (or the remote-ref delete) refused; see the PASS/FAIL log on stderr. Re-run with \`--force\` only if the deletion is intentional."
+  fi
+  if [[ "$MODE" == "apply" && "$wfails" -gt 0 ]]; then
+    echo "- ⚠ $wfails worktree removal(s) FAILED — each row's Action names the cause git gave (\`locked\` / \`dirty\` / \`other\`), never a guess. Locked and dirty trees are both classified SKIP before apply, so a refusal here means the tree changed state after classification. \`--force\` does not reach a locked tree — git wants \`-f -f\`, which this tool never emits; run \`git worktree unlock <path>\` instead."
   fi
   if [[ "$sc" -gt 0 ]]; then
     echo "- $sc worktree(s) protected as script's own runtime (SELF)"
@@ -1541,13 +1576,18 @@ emit_json() {
 # SKIP rows are left untouched. The index is tracked with a counter (not "${!arr[@]}")
 # to stay safe on bash 3.2 under `set -u` and to match the array idiom used elsewhere.
 # Returns 0 unconditionally so the caller (under set -e) proceeds to emit the report.
-# Pipeline exit status (git → sed) is git's, not sed's, because `set -o pipefail` is on.
+# Pipeline exit status (git → sed, gh → sed) is the generator's, not sed's, because
+# `set -o pipefail` is on — this still governs the branch, remote-ref and prune
+# removals. The WORKTREE removal deliberately does NOT use that shape: it captures
+# git's stream in a command substitution so the refusal cause survives into the row
+# (#6411). A substitution is not a pipeline, so it carries neither the
+# pipefail-status question nor the [WTPIPEGUARD] SIGPIPE one.
 apply_removals() {
   echo "── Apply phase — executing REMOVE actions ──" >&2
   local wt_flag=""
   if [[ "$FORCE" == "1" ]]; then wt_flag="--force"; fi
 
-  local r name path action idx unique del_flag
+  local r name path action idx unique del_flag wt_err wt_cause
 
   idx=-1
   for r in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
@@ -1634,12 +1674,24 @@ apply_removals() {
     [[ -z "$r" ]] && continue
     path=$(awk -F'\t' '{print $1}' <<<"$r"); action=$(awk -F'\t' '{print $5}' <<<"$r")
     [[ "$action" != "REMOVE" ]] && { echo "SKIPPED worktree $path — $action" >&2; continue; }
-    if git worktree remove $wt_flag "$path" 2>&1 | sed 's/^/  git: /' >&2; then
+    # #6411. Command substitution, NOT `git … | sed`: the per-target cause was
+    # previously available here and thrown away, leaving the report to guess at
+    # emit time. Capturing through a pipe would have to be read back for its
+    # status, and this file carries a named prior defect from restructuring
+    # exactly this construct ([WTPIPEGUARD], the exit-141-at-scale defect) — a
+    # substitution has no pipeline and no second reader, so neither the
+    # exit-status contract nor the SIGPIPE property is in play. The status of
+    # `var=$(cmd)` is cmd's.
+    wt_err=""
+    if wt_err=$(git worktree remove $wt_flag "$path" 2>&1); then
+      [[ -n "$wt_err" ]] && sed 's/^/  git: /' <<<"$wt_err" >&2
       echo "PASS worktree $path removed" >&2
       WORKTREE_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"REMOVED"
     else
-      echo "FAIL worktree $path — git worktree remove refused (likely uncommitted state); use --force if intentional" >&2
-      WORKTREE_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"FAILED — git worktree remove refused"
+      sed 's/^/  git: /' <<<"$wt_err" >&2
+      wt_cause=$(classify_worktree_refusal "$wt_err")
+      echo "FAIL worktree $path — git worktree remove refused ($wt_cause)" >&2
+      WORKTREE_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"FAILED — worktree remove refused ($wt_cause)"
     fi
   done
 
@@ -2037,7 +2089,7 @@ verify_apply() {
 # never exceed its denominator. Every recording site either returns immediately or
 # returns after its cleanup, and the only two sites that do not end their check
 # (selftest_verify_and_prune) are mutually exclusive branches of a single if/else.
-SELFTEST_CHECK_COUNT=17
+SELFTEST_CHECK_COUNT=20
 SELFTEST_SKIPS=()
 
 # Records a check-level SKIP and emits the historical message shape VERBATIM:
@@ -2646,6 +2698,248 @@ selftest_pr_map_identity() {
 # that drops a protective line fails the suite instead of silently regressing (the #1678
 # defect class). Also asserts the Hook-compatibility divider stays OUTSIDE --help (the
 # window's end-anchor holds). Pure read of --help output; net-zero.
+# #6411 group LK — the LOCKED protective class, end-to-end through the REAL
+# script with its OWN control arm in the SAME run. Two throwaway worktrees are
+# created on branches based at merge-base(HEAD, <remote>/<main>) so both are
+# REMOVE-eligible by every other clause (zero unique commits vs the mainline,
+# and deletable from any legal invocation state — the selftest_fixed_point
+# baseline choice, reused here for the same reason). One is locked, one is not.
+#
+# Why a REAL lock rather than a synthetic porcelain block: the mechanism under
+# test is the parse of git's own `locked` line and its position in the
+# precedence chain, and a hand-written block would test the parser against a
+# shape this suite asserted rather than against the one git emits. The hazard a
+# real lock carries is teardown — every other teardown in this file is a single
+# `--force` with `|| true`, and a single `--force` provably CANNOT remove a
+# locked tree, so a lock fixture built from that template would leak an
+# unremovable worktree into the operator's workspace silently. This teardown
+# therefore UNLOCKS first, on every exit path, before removing.
+#
+# Arms:
+#   LK-1 dry-run: the locked tree reads `SKIP — worktree locked …`
+#   LK-2 CONTROL, same run: the unlocked clean tree still reads REMOVE, so the
+#        classifier is not simply skipping everything
+#   LK-3 THE PROTECTIVE CLAIM: under a REAL `--apply --force` the locked tree
+#        still SKIPs and its directory SURVIVES — which is what
+#        core/rules/git-workflow.md § PR Process step 10 asserts about the
+#        protective classes. `--dry-run --force` is deliberately NOT the shape
+#        used: the double-opt-in guard rejects that combination and exits
+#        non-zero with no report, so an arm built on it would assert against an
+#        empty capture and pass on any implementation
+#   LK-4 ANTI-VACUITY for LK-3, same run: the unlocked control tree IS removed,
+#        without which "the locked tree survived" is satisfied by an apply that
+#        removed nothing at all
+selftest_locked_worktree() {
+  if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    selftest_skip "locked-worktree check" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref"
+    return 0
+  fi
+  local script_abs slug base wt_lk wt_ct br_lk br_ct out fail=0
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  slug="cleanup-selftest-lock-$$"
+  br_lk="chore/${slug}-locked"
+  br_ct="chore/${slug}-ctrl"
+  wt_lk="${REPO_ROOT}/.claude/worktrees/${slug}-locked"
+  wt_ct="${REPO_ROOT}/.claude/worktrees/${slug}-ctrl"
+  base=$(git merge-base HEAD "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
+  if [[ -z "$base" ]]; then
+    selftest_skip "locked-worktree check" "no merge-base with ${REMOTE_NAME}/${MAIN_BRANCH}"
+    return 0
+  fi
+  if ! git worktree add -b "$br_lk" "$wt_lk" "$base" >/dev/null 2>&1; then
+    selftest_skip "locked-worktree check" "could not create throwaway worktree"
+    return 0
+  fi
+  if ! git worktree add -b "$br_ct" "$wt_ct" "$base" >/dev/null 2>&1; then
+    git worktree remove --force "$wt_lk" >/dev/null 2>&1 || true
+    git branch -D "$br_lk" >/dev/null 2>&1 || true
+    selftest_skip "locked-worktree check" "could not create control worktree"
+    return 0
+  fi
+  if ! git worktree lock --reason "cleanup-selftest fixture (pid $$ )" "$wt_lk" >/dev/null 2>&1; then
+    git worktree remove --force "$wt_lk" >/dev/null 2>&1 || true
+    git worktree remove --force "$wt_ct" >/dev/null 2>&1 || true
+    git branch -D "$br_lk" >/dev/null 2>&1 || true
+    git branch -D "$br_ct" >/dev/null 2>&1 || true
+    selftest_skip "locked-worktree check" "git worktree lock unavailable on this host"
+    return 0
+  fi
+
+  out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 1 ]]; then
+    echo "self-test: locked-worktree FAILED — inner dry-run exited non-zero" >&2
+  else
+    # LK-1
+    if ! grep -q '"action":"SKIP — worktree locked' <<<"$(grep -F "${slug}-locked" <<<"$out" || true)"; then
+      echo "self-test: locked-worktree FAILED — locked tree not labeled locked (LK-1)" >&2
+      fail=1
+    fi
+    # LK-2 CONTROL
+    if ! grep -q '"action":"REMOVE"' <<<"$(grep -F "${slug}-ctrl" <<<"$out" || true)"; then
+      echo "self-test: locked-worktree FAILED — unlocked clean control tree did not read REMOVE (LK-2); the classifier may be skipping everything" >&2
+      fail=1
+    fi
+  fi
+
+  # LK-3 + LK-4 — one REAL `--apply --force` run carries both
+  if [[ "$fail" -eq 0 ]]; then
+    out=$("$script_abs" --release-close "$slug" --apply --force --json 2>/dev/null) || true
+    if ! grep -q '"action":"SKIP — worktree locked' <<<"$(grep -F "${slug}-locked" <<<"$out" || true)"; then
+      echo "self-test: locked-worktree FAILED — --apply --force did not skip the locked tree (LK-3)" >&2
+      fail=1
+    elif [[ ! -d "$wt_lk" ]]; then
+      echo "self-test: locked-worktree FAILED — locked tree directory did not survive --apply --force (LK-3)" >&2
+      fail=1
+    elif [[ -d "$wt_ct" ]]; then
+      echo "self-test: locked-worktree FAILED — the unlocked control tree also survived, so LK-3 proves nothing about the lock (LK-4)" >&2
+      fail=1
+    fi
+  fi
+
+  git worktree unlock "$wt_lk" >/dev/null 2>&1 || true
+  git worktree remove "$wt_lk" >/dev/null 2>&1 || git worktree remove --force "$wt_lk" >/dev/null 2>&1 || true
+  git worktree remove "$wt_ct" >/dev/null 2>&1 || git worktree remove --force "$wt_ct" >/dev/null 2>&1 || true
+  git branch -D "$br_lk" >/dev/null 2>&1 || true
+  git branch -D "$br_ct" >/dev/null 2>&1 || true
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: locked-worktree check PASS — LK-1 a locked tree SKIPs with no cwd holder / LK-2 an unlocked clean tree in the SAME run still REMOVEs / LK-3 --apply --force does not override the class and the tree survives / LK-4 the control tree is removed in that same run, so LK-3 is not vacuous" >&2
+  return 0
+}
+
+# #6411 group GN — the GLOBAL null-lsof case already fails closed, and this arm
+# makes that a measured property rather than a claim in a comment. The header
+# described the fail-closed limb as covering an ABSENT lsof binary; the code has
+# always carried a second limb, a self-canary that requires the script's own cwd
+# to appear in the map. An lsof that RUNS and returns nothing fails that canary
+# and leaves ORACLE_STATE unavailable, which converts every residual REMOVE to
+# the fail-closed skip.
+#
+# Note what is deliberately NOT built: a PER-CANDIDATE null result is a correct
+# negative, not a probe failure. Failing closed on one would skip every clean
+# unlocked worktree — the exact state group LK's control arm asserts must still
+# read REMOVE.
+#
+# Arms:
+#   GN-1 an lsof stand-in that runs, exits 0 and emits nothing leaves
+#        ORACLE_STATE != "ok"
+#   GN-2 SENSITIVITY: the real binary, same code path, restores "ok" — without
+#        which GN-1 is satisfied by an oracle that never works at all
+selftest_liveness_global_null() {
+  if [[ ! -x /usr/bin/true ]]; then
+    selftest_skip "liveness global-null check" "no /usr/bin/true to stand in for an lsof that emits nothing"
+    return 0
+  fi
+  local fail=0 real_resolver saved_built="$ORACLE_BUILT"
+  real_resolver=$(declare -f resolve_lsof_bin)
+  if [[ -z "$real_resolver" ]]; then
+    selftest_skip "liveness global-null check" "could not capture resolve_lsof_bin for restore"
+    return 0
+  fi
+
+  # The RESOLVER is stubbed, never the builder: build_liveness_map calls
+  # resolve_lsof_bin itself, so assigning LSOF_BIN from outside is overwritten
+  # and the arm would measure the real binary while believing it measured an
+  # empty one. Everything under test — the read loop, the self-canary, the
+  # ORACLE_STATE verdict — is the shipped code.
+  resolve_lsof_bin() { LSOF_BIN=/usr/bin/true; }
+  build_liveness_map >/dev/null 2>&1 || true
+  if [[ "$ORACLE_STATE" == "ok" ]]; then
+    echo "self-test: liveness global-null FAILED — an lsof that RUNS and emits nothing left the oracle reading ok (GN-1)" >&2
+    fail=1
+  fi
+  if [[ "${#LIVE_CWD_ENTRIES[@]}" -ne 0 ]]; then
+    echo "self-test: liveness global-null FAILED — the stub produced ${#LIVE_CWD_ENTRIES[@]} entries, so GN-1 did not exercise the null case (GN-1)" >&2
+    fail=1
+  fi
+
+  eval "$real_resolver"
+  build_liveness_map >/dev/null 2>&1 || true
+  if [[ "$ORACLE_STATE" != "ok" ]]; then
+    echo "self-test: liveness global-null FAILED — the real resolver did not restore a healthy oracle, so GN-1 proves nothing (GN-2)" >&2
+    fail=1
+  fi
+  ORACLE_BUILT="$saved_built"
+  ensure_liveness_map >/dev/null 2>&1 || true
+
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: liveness global-null check PASS — GN-1 an lsof that RUNS and returns an EMPTY map fails closed via the self-canary (the limb the header described only as 'lsof unavailable') / GN-2 the real resolver restores ok, so GN-1 is not an oracle that never worked" >&2
+  return 0
+}
+
+# #6411 group FL — the two failure lines are DISTINGUISHABLE. Before this card
+# the report summed branch and worktree failures into one sentence and offered
+# one speculative cause from each surface, so a locked worktree was reported as
+# a dirty one. Driven on synthetic candidate rows — the file's existing
+# synthetic-survivor idiom — because after this card's classifier change both
+# named worktree refusal shapes are unreachable through the classifier, so the
+# reachable-by-race row cannot be produced on demand.
+#
+# Arms:
+#   FL-1 with BOTH a failed branch and a failed worktree, two distinct lines are
+#        emitted and they differ
+#   FL-2 SPECIFICITY: with only a worktree failure, the branch line is absent —
+#        without which FL-1 is satisfied by an emitter that always prints both
+#   FL-3 the refusal classifier is TOTAL over its closed set and maps git's real
+#        messages, verbatim, to the right token — including the measured fact
+#        that a prunable (missing-directory) worktree is NOT a refusal shape
+selftest_failure_line_split() {
+  local out fail=0 saved_mode="$MODE"
+  local -a saved_local saved_wt
+  saved_local=("${LOCAL_BRANCH_CANDIDATES[@]:-}")
+  saved_wt=("${WORKTREE_CANDIDATES[@]:-}")
+
+  MODE="apply"
+  LOCAL_BRANCH_CANDIDATES=("selftest-fl-branch	0	2026-01-01		(none)	FAILED — git branch refused")
+  WORKTREE_CANDIDATES=("/selftest/fl/wt	selftest-fl-wt	clean	0	FAILED — worktree remove refused (locked)")
+  out=$(emit_markdown 2>/dev/null || true)
+  local bline wline
+  bline=$(grep -c "branch/ref removal(s) FAILED" <<<"$out" || true)
+  wline=$(grep -c "worktree removal(s) FAILED" <<<"$out" || true)
+  if [[ "$bline" != "1" || "$wline" != "1" ]]; then
+    echo "self-test: failure-line split FAILED — expected one branch line and one worktree line, got ${bline}/${wline} (FL-1)" >&2
+    fail=1
+  fi
+  if [[ "$fail" -eq 0 ]] && ! grep -q '(`locked` / `dirty` / `other`)' <<<"$out"; then
+    echo "self-test: failure-line split FAILED — the worktree line does not point at the per-row cause (FL-1)" >&2
+    fail=1
+  fi
+
+  # FL-2 SPECIFICITY
+  if [[ "$fail" -eq 0 ]]; then
+    LOCAL_BRANCH_CANDIDATES=()
+    out=$(emit_markdown 2>/dev/null || true)
+    if grep -q "branch/ref removal(s) FAILED" <<<"$out"; then
+      echo "self-test: failure-line split FAILED — the branch line rendered with no branch failure (FL-2)" >&2
+      fail=1
+    fi
+    if ! grep -q "worktree removal(s) FAILED" <<<"$out"; then
+      echo "self-test: failure-line split FAILED — the worktree line vanished with the branch rows, so FL-1 was measuring one shared line (FL-2)" >&2
+      fail=1
+    fi
+  fi
+
+  MODE="$saved_mode"
+  LOCAL_BRANCH_CANDIDATES=("${saved_local[@]:-}")
+  WORKTREE_CANDIDATES=("${saved_wt[@]:-}")
+
+  # FL-3 — classifier totality over git's real message shapes (git 2.50.1)
+  if [[ "$fail" -eq 0 ]]; then
+    local c
+    c=$(classify_worktree_refusal "fatal: cannot remove a locked working tree, lock reason: anything at all")
+    [[ "$c" == "locked" ]] || { echo "self-test: failure-line split FAILED — locked refusal classified '$c' (FL-3)" >&2; fail=1; }
+    c=$(classify_worktree_refusal "fatal: '/x/y' contains modified or untracked files, use --force to delete it")
+    [[ "$c" == "dirty" ]] || { echo "self-test: failure-line split FAILED — dirty refusal classified '$c' (FL-3)" >&2; fail=1; }
+    c=$(classify_worktree_refusal "fatal: something git has not said before")
+    [[ "$c" == "other" ]] || { echo "self-test: failure-line split FAILED — unknown refusal classified '$c' (FL-3)" >&2; fail=1; }
+    c=$(classify_worktree_refusal "")
+    [[ "$c" == "other" ]] || { echo "self-test: failure-line split FAILED — empty stream classified '$c' rather than other (FL-3)" >&2; fail=1; }
+  fi
+
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: failure-line split check PASS — FL-1 branch and worktree failures render as two distinct lines / FL-2 each is absent when its own surface has no failure / FL-3 the refusal classifier is total over its closed set" >&2
+  return 0
+}
+
 selftest_help_surface() {
   local script_abs help fail=0 tok
   script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
@@ -3409,6 +3703,12 @@ self_test() {
   selftest_key_read_tolerance
   echo "self-test: exercising orphan-tag reap (authority gate, real-reap-observed, double-opt-in, canonical-guard, verify-after, ledger write-back)..." >&2
   selftest_orphan_tag_reap
+  echo "self-test: locked-worktree classification (#6411 group LK)" >&2
+  selftest_locked_worktree
+  echo "self-test: liveness global-null fail-closed (#6411 group GN)" >&2
+  selftest_liveness_global_null
+  echo "self-test: failure-line split (#6411 group FL)" >&2
+  selftest_failure_line_split
   echo "self-test: exercising --help protective-guarantee surface (--force / SELF / --self-test) (#669)..." >&2
   selftest_help_surface
   selftest_skip_ledger
