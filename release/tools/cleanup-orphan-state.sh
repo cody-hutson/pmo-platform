@@ -2520,12 +2520,22 @@ selftest_liveness_gate() {
 # Slug-scoped --release-close bounds the inner apply to fixture objects; the
 # inner prune is reconciliation-class (existing selftest_verify_and_prune
 # precedent).
+#
+# #6207 extends the SAME fixture rather than adding a second one — two fixtures for
+# one equality claim can drift; one cannot. Three invocations, in order: P1 --dry-run
+# (must PROJECT the drain, and must mutate nothing), P2 --dry-run against a copy with
+# the projection dispatch stripped (must STOP projecting it — the arm that makes P1
+# falsifiable), then the original --apply (must PERFORM it). The fixture worktree is
+# created UNLOCKED by the plain `git worktree add` above, which is load-bearing: the
+# locked class is excluded from REMOVE, so a locked fixture would make this check read
+# as its own failure.
 selftest_fixed_point() {
   if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
     selftest_skip "fixed-point check" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref"
     return 0
   fi
   local script_abs slug branch wt base out fail=0
+  local dry mut mut_out drc=0
   base=$(git merge-base HEAD "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
   if [[ -z "$base" ]]; then
     selftest_skip "fixed-point check" "no merge-base between HEAD and ${REMOTE_NAME}/${MAIN_BRANCH}"
@@ -2546,9 +2556,87 @@ selftest_fixed_point() {
     return 0
   fi
 
-  out=$("$script_abs" --release-close "$slug" --apply --json 2>/dev/null) || fail=1
-  if [[ "$fail" -eq 1 ]]; then
+  # ── Precondition (#6207). The arms below assert on the fixture; an arm that passes
+  # because the fixture was never created is the vacuous pass this suite exists to
+  # catch, so the fixture's existence is READ rather than assumed.
+  if [[ ! -d "$wt" ]] || ! git show-ref --verify --quiet "refs/heads/${branch}"; then
+    echo "self-test: fixed-point check FAILED — fixture worktree or branch absent before the projection arm" >&2
+    fail=1
+  fi
+
+  # ── Arm P1 (#6207). ONE fixture, TWO invocations: --dry-run must PROJECT the drain
+  # that the --apply arm below then performs, so the equality claim is made on a single
+  # fixture and cannot drift across two. AC-4's equality is therefore two-sided and NOT
+  # satisfiable by an empty projection.
+  #
+  # Every arm in this function sets fail=1 and FALLS THROUGH. Teardown below is
+  # unconditional and deferred and the single exit 1 sits after it, so an arm that
+  # exited early would strand .claude/worktrees/<slug> and chore/<slug> in the
+  # operator's checkout — the orphan-cleanup tool leaking orphan state from its own
+  # self-test. Do not "simplify" any arm here into an exit.
+  if [[ "$fail" -eq 0 ]]; then
+    drc=0
+    dry=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || drc=1
+    if [[ "$drc" -ne 0 ]]; then
+      echo "self-test: fixed-point check FAILED — inner --dry-run exited non-zero" >&2
+      fail=1
+    else
+      if ! grep -q '"action":"WILL-DRAIN' <<<"$(grep -F "\"name\":\"${branch}\"" <<<"$dry" || true)"; then
+        echo "self-test: fixed-point check FAILED — --dry-run did not project freed branch '$branch' as WILL-DRAIN (#6207 regression: the dry-run understates the apply it describes)" >&2
+        fail=1
+      fi
+      # The dry-run's own mutates-nothing contract, asserted rather than assumed.
+      if ! git show-ref --verify --quiet "refs/heads/${branch}"; then
+        echo "self-test: fixed-point check FAILED — --dry-run removed branch '$branch'" >&2
+        fail=1
+      fi
+      if [[ ! -d "$wt" ]]; then
+        echo "self-test: fixed-point check FAILED — --dry-run removed worktree '$wt'" >&2
+        fail=1
+      fi
+    fi
+  fi
+
+  # ── Arm P2 (#6207, AC-4 sensitivity). P1 asserting WILL-DRAIN proves nothing unless
+  # that assertion FAILS when the projection is removed — otherwise it could be
+  # measuring something that holds anyway. Copy the script, strip the projection
+  # dispatch from the COPY, and require P1's assertion to fail against it.
+  #
+  # copy-and-mutate rather than an env-switch, so no test-only branch ships inside the
+  # production path — this tool's whole design idiom is to have no suppress flag for
+  # the resolve pass. The copy sits beside the original because REPO_ROOT is derived
+  # from SCRIPT_DIR/../..: a copy anywhere else computes a different repo root and
+  # stops being the same program. Dot-prefixed so no *.sh glob (shell or Python) can
+  # discover it, PID-scoped, and removed on every exit path including teardown.
+  if [[ "$fail" -eq 0 ]]; then
+    mut="${SCRIPT_DIR}/.cleanup-selftest-mut-$$.sh"
+    sed 's/^  project_freed_branches$/  : # projection disabled (P2 sensitivity arm)/' "$script_abs" > "$mut"
+    if grep -qF 'projection disabled (P2 sensitivity arm)' "$mut" && ! grep -qE '^  project_freed_branches$' "$mut"; then
+      drc=0
+      mut_out=$(bash "$mut" --release-close "$slug" --dry-run --json 2>/dev/null) || drc=1
+      if [[ "$drc" -ne 0 ]]; then
+        echo "self-test: fixed-point check FAILED — projection-stripped copy exited non-zero; the sensitivity arm cannot be read" >&2
+        fail=1
+      elif grep -q '"action":"WILL-DRAIN' <<<"$(grep -F "\"name\":\"${branch}\"" <<<"$mut_out" || true)"; then
+        echo "self-test: fixed-point check FAILED — sensitivity arm did NOT fire: '$branch' still reads WILL-DRAIN with the projection dispatch removed, so P1 is not measuring the projection" >&2
+        fail=1
+      fi
+    else
+      echo "self-test: fixed-point check FAILED — could not strip the projection dispatch from the throwaway copy; a sensitivity arm that did not mutate proves nothing" >&2
+      fail=1
+    fi
+    rm -f "$mut" 2>/dev/null || true
+  fi
+
+  # Own rc, not the shared accumulator (#6207): with P1/P2 above feeding the same
+  # `fail`, reusing it here would report an apply that exited ZERO as "inner --apply
+  # exited non-zero" — a report asserting a failure that did not happen, in a change
+  # whose whole subject is a report that misstates what a run did.
+  drc=0
+  out=$("$script_abs" --release-close "$slug" --apply --json 2>/dev/null) || drc=1
+  if [[ "$drc" -ne 0 ]]; then
     echo "self-test: fixed-point check FAILED — inner --apply exited non-zero" >&2
+    fail=1
   else
     if git show-ref --verify --quiet "refs/heads/${branch}"; then
       echo "self-test: fixed-point check FAILED — freed branch '$branch' survived the same --apply run (#53 regression)" >&2
@@ -2566,8 +2654,12 @@ selftest_fixed_point() {
 
   git worktree remove --force "$wt" >/dev/null 2>&1 || true
   git branch -D "$branch" >/dev/null 2>&1 || true
+  # Belt-and-braces for the P2 copy: already removed on its own path, repeated here so
+  # no arm added later between the two can strand it. PID-scoped, so this can only ever
+  # name this run's own file.
+  rm -f "${SCRIPT_DIR}/.cleanup-selftest-mut-$$.sh" 2>/dev/null || true
   if [[ "$fail" -ne 0 ]]; then exit 1; fi
-  echo "self-test: fixed-point check PASS — worktree + freed branch removed in one --apply" >&2
+  echo "self-test: fixed-point check PASS — worktree + freed branch removed in one --apply; --dry-run projected that drain on the same fixture (P1) and stopped projecting it when the projection was stripped (P2)" >&2
   return 0
 }
 
