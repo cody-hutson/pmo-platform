@@ -61,7 +61,13 @@
 #         --ledger <path>      Point at a re-version ledger other than the default
 #                              (release/releases/RELEASE_REVERSIONS.md).
 #   MODE (one of, default --dry-run):
-#     --dry-run                Enumerate + report; no mutation (default)
+#     --dry-run                Enumerate + report; no mutation (default). The report
+#                              PROJECTS the apply's resolve pass: a branch whose only
+#                              worktree holders are all in this run's REMOVE set is
+#                              reported "WILL-DRAIN — freed by same-run worktree
+#                              removal" and counted as removable, so the enumerated
+#                              total is the apply's outcome and can be relayed as an
+#                              approval scope
 #     --apply                  Execute removals after enumeration (opt-in). The apply
 #                              phase runs in order: (1) remove REMOVE-action branches /
 #                              worktrees via git porcelain; (2) resolve — one bounded
@@ -74,7 +80,11 @@
 #                              remote-tracking refs (origin/<branch>) whose server-side
 #                              branch was already deleted (e.g. on PR merge), via
 #                              `git remote prune`, so the report's remote view matches
-#                              reality. Steps 2-4 are no-ops in --dry-run.
+#                              reality. Steps 3-4 are no-ops in --dry-run; step 2
+#                              runs there as a PROJECTION that removes nothing —
+#                              it relabels the branches the apply would drain, so
+#                              the dry-run total states what the apply will do
+#                              rather than what is removable in the current state.
 #   OUTPUT (one of, default --markdown):
 #     --markdown               Human-readable report (default)
 #     --json                   Machine-readable
@@ -1344,7 +1354,7 @@ emit_markdown() {
   local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   local lc=${#LOCAL_BRANCH_CANDIDATES[@]} rc=${#REMOTE_BRANCH_CANDIDATES[@]} wc=${#WORKTREE_CANDIDATES[@]}
   local pc=${#PRUNED_TRACKING_REFS[@]}
-  local lr=0 rr=0 wr=0 disk_total=0 bfails=0 wfails=0 sc=0 lvc=0 fcc=0 lkc=0 a ref
+  local lr=0 rr=0 wr=0 disk_total=0 bfails=0 wfails=0 sc=0 lvc=0 fcc=0 lkc=0 pd=0 a ref
 
   # Mode-aware report vocabulary. In --apply, apply_removals (which now runs BEFORE this
   # emitter) has rewritten each acted-on candidate's action field to REMOVED (deleted) or
@@ -1358,6 +1368,13 @@ emit_markdown() {
     a=$(awk -F'\t' '{print $6}' <<<"$r")
     [[ "$a" == "$want" ]] && ((lr++)) || true
     [[ "$a" == FAILED* ]] && ((bfails++)) || true
+    # #6207. A projected drain counts into lr — the SAME variable the removable
+    # figure and the skipped-by-subtraction figure both read — so the Summary line,
+    # the removable total and the skipped total are all correct with NO formula
+    # edited. A separate counter added to the removable side and forgotten in the
+    # subtraction is how a report ends up asserting removable + skipped != total.
+    # pd carries only the explanatory split for the Totals line below.
+    [[ "$a" == WILL-DRAIN* ]] && { ((lr++)) || true; ((pd++)) || true; }
   done
   for r in "${REMOTE_BRANCH_CANDIDATES[@]:-}"; do
     [[ -z "$r" ]] && continue
@@ -1501,8 +1518,18 @@ EOF
   if [[ "$fcc" -gt 0 ]]; then
     echo "- $fcc removal(s) blocked — liveness oracle unavailable (fail-closed)"
   fi
-  if [[ "$FREED_RESOLVED" -gt 0 ]]; then
+  if [[ "$MODE" == "apply" && "$FREED_RESOLVED" -gt 0 ]]; then
     echo "- $FREED_RESOLVED branch(es) removed after being freed by this run's worktree removals (resolve pass)"
+  fi
+  # #6207. The dry-run twin. Counted from the emitted rows (pd), not from the pass's
+  # own tally, so the number a reader relays as an approval scope is the number of
+  # WILL-DRAIN rows they can count in the table above. The trailing clause is the
+  # bound the report must not exceed: the projection is exact for the state this
+  # report read, and a worktree attached or a commit pushed between the dry-run and
+  # the apply can still change the outcome — the same TOCTOU every REMOVE row in
+  # every dry-run already carries, stated because this line is read as an approval.
+  if [[ "$MODE" == "dry-run" && "$pd" -gt 0 ]]; then
+    echo "- $pd branch(es) will be drained after being freed by this run's worktree removals (projected resolve pass) — included in the removable count above, and projected from the state this report read"
   fi
   # Plain `if` — NOT `[[ … ]] && echo`. As the function's last statement, a short-circuit
   # test that evaluates false returns non-zero, making emit_markdown return non-zero; under
@@ -1895,62 +1922,170 @@ ledger_mark_retained() {
 # removal frees nothing further, so a single pass reaches the fixed point for
 # the enumerated input. Invariant: ONLY worktrees this run actually REMOVED
 # free their branches — SELF / locked / live-session / dirty / FAILED worktrees
-# keep their branches attached-and-skipped. Runs between apply_removals and
-# verify_apply; verify then re-checks pass-2 REMOVED rows exactly like pass-1
-# rows. Returns 0 unconditionally (set -e discipline).
+# keep their branches attached-and-skipped.
+#
+# The pass has TWO consumers (#6207). resolve_freed_branches EXECUTES it in
+# --apply, running between apply_removals and verify_apply; verify then re-checks
+# pass-2 REMOVED rows exactly like pass-1 rows. project_freed_branches PROJECTS
+# it in --dry-run, relabelling the rows it would drain and removing nothing.
+# Both return 0 unconditionally (set -e discipline).
 FREED_RESOLVED=0
 
-resolve_freed_branches() {
-  echo "── Resolve phase — re-evaluating branches freed by this run's worktree removals (single bounded pass) ──" >&2
-  local r wbranch waction freed del_flag
-  freed=()
+# ─── Shared freed-branch predicate (#6207) ───────────────────────────────────
+#
+# "Which branches does this run free?" had exactly ONE executable home and that
+# home was a mutation, so --dry-run could not answer it without a second copy of
+# the rule — and a second copy of a predicate is a second thing that can disagree
+# with the first. The question is split here into three reusable parts, so the
+# projection and the execution decide from the SAME code: a freed-set derivation,
+# a row lookup, and the gates. The two passes below differ ONLY in their terminal
+# action, which is also why they stay two functions rather than one mode-switched
+# one: the dry-run path then contains no branch-deletion call at all and cannot
+# delete under any parameter bug.
+#
+# ONE parameter carries the mode — <removed_token>, the WORKTREE_CANDIDATES action
+# value meaning "this run removed / will remove this worktree": REMOVED in --apply
+# (already gone), REMOVE in --dry-run (projected to go). The DERIVATION reads it as
+# well as the holder gate, which is why the derivation is extracted rather than
+# copied: a copy left filtering on a hardcoded REMOVED — a value no worktree row
+# carries in --dry-run — yields an EMPTY projection that reads as a silent no-op
+# while three acceptance criteria pass vacuously.
+
+# Branch names whose worktree row carries <removed_token> and whose ref still
+# exists. One name per line on stdout; empty output when the set is empty.
+freed_set_for_run() {
+  local removed_token="$1" r wbranch waction
   for r in "${WORKTREE_CANDIDATES[@]:-}"; do
     [[ -z "$r" ]] && continue
     waction=$(awk -F'\t' '{print $5}' <<<"$r")
-    [[ "$waction" != "REMOVED" ]] && continue
+    [[ "$waction" != "$removed_token" ]] && continue
     wbranch=$(awk -F'\t' '{print $2}' <<<"$r")
     [[ -z "$wbranch" ]] && continue
     if git show-ref --verify --quiet "refs/heads/${wbranch}"; then
-      freed+=("$wbranch")
+      printf '%s\n' "$wbranch"
     fi
   done
+}
+
+# Row lookup for a freed branch. The answer travels in TWO globals and this is
+# called DIRECTLY, never in a command substitution: the unrowed --historical path
+# classifies fresh and APPENDS to LOCAL_BRANCH_CANDIDATES, and a subshell would
+# strand both the append and the index (same reason tag_protection_state returns
+# through globals). FREED_ROW_IDX is the array index; FREED_ROW is the row.
+FREED_ROW_IDX=-1
+FREED_ROW=""
+freed_row_for_branch() {
+  local b="$1" c i name
+  FREED_ROW_IDX=-1; FREED_ROW=""; i=-1
+  for c in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
+    ((i++)) || true
+    [[ -z "$c" ]] && continue
+    name=$(awk -F'\t' '{print $1}' <<<"$c")
+    if [[ "$name" == "$b" ]]; then FREED_ROW_IDX=$i; FREED_ROW="$c"; return 0; fi
+  done
+  # Unrowed (the --historical case): classify fresh against current state.
+  classify_local "$b" 0
+  FREED_ROW_IDX=$(( ${#LOCAL_BRANCH_CANDIDATES[@]} - 1 ))
+  FREED_ROW="${LOCAL_BRANCH_CANDIDATES[$FREED_ROW_IDX]}"
+  return 0
+}
+
+# Gate 4 — does every worktree still holding <branch> belong to this run's removal
+# set? A branch-keyed COUNT comparison, deliberately NOT a path join: this tool
+# already carries physical_path() because a worktree path is reachable by more than
+# one spelling (a symlinked /tmp or $HOME), so a path join would find no matching
+# row on such a host, the projection would report zero, and the defect this exists
+# to fix would survive its own fix. Branch is the attribute the question is already
+# phrased in, so it needs no normalisation.
+#
+#   holders(B)  — `branch refs/heads/B` lines in the worktree snapshot
+#   removing(B) — WORKTREE_CANDIDATES rows for B whose action is <removed_token>
+#   passes when holders(B) <= removing(B): no holder of B remains OUTSIDE the set
+#
+# In --dry-run nothing has been removed, so holders(B) is every current holder and
+# the comparison IS the projection: an extra live-session or locked holder makes
+# holders exceed removing and the gate refuses, exactly as the apply would.
+# In --apply the snapshot is refreshed at pass entry — i.e. AFTER the removals — so
+# a removed holder is already absent and holders(B) counts only survivors, the same
+# answer branch_has_worktree gives. The apply path additionally keeps that LIVE
+# check (see branch_freed_by_this_run's live_guard), which is strictly stronger, so
+# this gate can only ever pass an apply case THROUGH to it and never decides one.
+# That is what makes the apply path's observable behaviour unchanged by
+# construction rather than by case analysis.
+#
+# Consumes WT_SNAPSHOT through the established built-flag guard and a here-string —
+# never a live pipe into a reader that closes early. [WTPIPEGUARD]
+branch_holders_all_in_removal_set() {
+  local branch="$1" removed_token="$2" r holders removing
+  [[ "$WT_SNAPSHOT_BUILT" == "1" ]] || refresh_wt_snapshot
+  holders=$(grep -c "^branch refs/heads/${branch}$" <<<"$WT_SNAPSHOT" || true)
+  [[ -z "$holders" ]] && holders=0
+  removing=0
+  for r in "${WORKTREE_CANDIDATES[@]:-}"; do
+    [[ -z "$r" ]] && continue
+    [[ "$(awk -F'\t' '{print $2}' <<<"$r")" != "$branch" ]] && continue
+    [[ "$(awk -F'\t' '{print $5}' <<<"$r")" == "$removed_token" ]] && { ((removing++)) || true; }
+  done
+  [[ "$holders" -le "$removing" ]]
+}
+
+# The gates, shared by both passes. Sets no globals.
+#   rc 0 — this run frees <branch> and it is removable
+#   rc 1 — the row IS the attachment skip but a gate refused; the reason is already
+#          reported here, so the caller continues without a second message
+#   rc 2 — the row carries some other action: NOT this predicate's business. Every
+#          other recorded action is honoured as-is — a "SKIP — PR not merged" or
+#          "SKIP — unique commits exist" row is never re-litigated, and a row already
+#          reading REMOVE is pass-1's business.
+# <live_guard> is 1 in --apply ONLY. After gate 4 passes, the LIVE branch_has_worktree
+# read decides, because the invariant on that function says the resolve pass must see
+# post-removal reality and not an enumeration snapshot — which also catches the one
+# case a snapshot cannot: a holder attaching AFTER enumeration.
+branch_freed_by_this_run() {
+  local b="$1" removed_token="$2" recorded_action="$3" live_guard="$4" unique
+  [[ "$recorded_action" != "SKIP — active worktree attached" ]] && return 2
+  if is_protected "$b"; then
+    echo "SKIPPED resolve $b — protected" >&2; return 1
+  fi
+  if ! branch_holders_all_in_removal_set "$b" "$removed_token"; then
+    echo "SKIPPED resolve $b — still attached to a worktree" >&2; return 1
+  fi
+  if [[ "$live_guard" == "1" ]] && branch_has_worktree "$b"; then
+    echo "SKIPPED resolve $b — still attached to a worktree" >&2; return 1
+  fi
+  unique=$(git rev-list --count "${REMOTE_NAME}/${MAIN_BRANCH}..${b}" 2>/dev/null || echo "?")
+  if [[ "$unique" != "0" ]]; then
+    echo "SKIPPED resolve $b — unique commits exist ($unique)" >&2; return 1
+  fi
+  return 0
+}
+
+resolve_freed_branches() {
+  echo "── Resolve phase — re-evaluating branches freed by this run's worktree removals (single bounded pass) ──" >&2
+  local b action rc del_flag idx row
+  local freed=()
+  # Refreshed at pass entry, matching the detect_* convention — and here that
+  # refresh IS the post-removal read the resolve pass is required to make.
+  refresh_wt_snapshot
+  while IFS= read -r b; do
+    [[ -z "$b" ]] && continue
+    freed+=("$b")
+  done <<<"$(freed_set_for_run "REMOVED")"
   if [[ ${#freed[@]} -eq 0 ]]; then
     echo "PASS resolve — no branches freed by this run's worktree removals" >&2
     return 0
   fi
 
-  local b i c idx row name action unique
   for b in "${freed[@]:-}"; do
     [[ -z "$b" ]] && continue
-    idx=-1; row=""; i=-1
-    for c in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
-      ((i++)) || true
-      [[ -z "$c" ]] && continue
-      name=$(awk -F'\t' '{print $1}' <<<"$c")
-      if [[ "$name" == "$b" ]]; then idx=$i; row="$c"; break; fi
-    done
-
-    if [[ $idx -lt 0 ]]; then
-      # Unrowed (the --historical case): classify fresh — post-removal state.
-      classify_local "$b" 0
-      idx=$(( ${#LOCAL_BRANCH_CANDIDATES[@]} - 1 ))
-      row="${LOCAL_BRANCH_CANDIDATES[$idx]}"
-    fi
-
+    freed_row_for_branch "$b"
+    idx="$FREED_ROW_IDX"; row="$FREED_ROW"
     action=$(awk -F'\t' '{print $6}' <<<"$row")
-    if [[ "$action" == "SKIP — active worktree attached" ]]; then
-      # Re-evaluate the recorded skip against live post-removal state.
-      if is_protected "$b"; then
-        echo "SKIPPED resolve $b — protected" >&2; continue
-      fi
-      if branch_has_worktree "$b"; then
-        echo "SKIPPED resolve $b — still attached to a worktree" >&2; continue
-      fi
-      unique=$(git rev-list --count "${REMOTE_NAME}/${MAIN_BRANCH}..${b}" 2>/dev/null || echo "?")
-      if [[ "$unique" != "0" ]]; then
-        echo "SKIPPED resolve $b — unique commits exist ($unique)" >&2; continue
-      fi
+    branch_freed_by_this_run "$b" "REMOVED" "$action" 1 && rc=0 || rc=$?
+    if [[ "$rc" -eq 0 ]]; then
       action="REMOVE"
+    elif [[ "$rc" -eq 1 ]]; then
+      continue                       # gate refused; reason already reported
     fi
     if [[ "$action" != "REMOVE" ]]; then
       echo "SKIPPED resolve $b — $action" >&2; continue
@@ -1976,6 +2111,52 @@ resolve_freed_branches() {
       echo "FAIL resolve $b — git branch refused; use --force if intentional" >&2
       LOCAL_BRANCH_CANDIDATES[$idx]="${row%$'\t'*}"$'\t'"FAILED — git branch refused"
     fi
+  done
+  return 0
+}
+
+# --dry-run sibling of the pass above (#6207). A dry-run states what the apply will
+# do; before this, it stated what was removable in the CURRENT state, and the two
+# diverge exactly when the run is a fixed point — removing a worktree dissolves the
+# "active worktree attached" skip and the resolve pass then drains the branch in the
+# same run. The report is the artifact an approval is granted against, so it under-
+# reported in the direction that matters.
+#
+# Identical to resolve_freed_branches except for the terminal action: it relabels the
+# row instead of deleting the branch. There is deliberately NO branch-deletion call
+# anywhere in this function — that, not a mode flag, is what makes the projection
+# structurally incapable of removing anything. Returns 0 unconditionally.
+project_freed_branches() {
+  echo "── Projection phase — branches this run's worktree removals would free (nothing is removed) ──" >&2
+  local b action rc idx row
+  local freed=()
+  refresh_wt_snapshot
+  while IFS= read -r b; do
+    [[ -z "$b" ]] && continue
+    freed+=("$b")
+  done <<<"$(freed_set_for_run "REMOVE")"
+  if [[ ${#freed[@]} -eq 0 ]]; then
+    echo "PASS projection — no branches would be freed by this run's worktree removals" >&2
+    return 0
+  fi
+
+  for b in "${freed[@]:-}"; do
+    [[ -z "$b" ]] && continue
+    freed_row_for_branch "$b"
+    idx="$FREED_ROW_IDX"; row="$FREED_ROW"
+    action=$(awk -F'\t' '{print $6}' <<<"$row")
+    branch_freed_by_this_run "$b" "REMOVE" "$action" 0 && rc=0 || rc=$?
+    if [[ "$rc" -eq 0 ]]; then
+      action="REMOVE"
+    elif [[ "$rc" -eq 1 ]]; then
+      continue                       # gate refused; reason already reported
+    fi
+    if [[ "$action" != "REMOVE" ]]; then
+      echo "SKIPPED projection $b — $action" >&2; continue
+    fi
+    echo "PASS projection $b will be drained (freed by same-run worktree removal)" >&2
+    LOCAL_BRANCH_CANDIDATES[$idx]="${row%$'\t'*}"$'\t'"WILL-DRAIN — freed by same-run worktree removal"
+    ((FREED_RESOLVED++)) || true
   done
   return 0
 }
@@ -3793,6 +3974,16 @@ if [[ "$MODE" == "apply" && "$SCOPE" != "reap-orphan-tags" ]]; then
   resolve_freed_branches
   verify_apply
   prune_remote_tracking
+fi
+
+# Dry-run sibling of phase (2) — the PROJECTION (#6207). Phases (1), (3) and (4)
+# are genuinely no-ops without an apply, but phase (2)'s OUTCOME is knowable from
+# the enumerated state, so the dry-run reports it instead of understating the
+# apply it describes. Scope-gated off reap-orphan-tags for the same reason the
+# apply block is: the tag accumulator has no interaction with the branch/worktree
+# fixed point. Removes nothing; returns 0.
+if [[ "$MODE" == "dry-run" && "$SCOPE" != "reap-orphan-tags" ]]; then
+  project_freed_branches
 fi
 
 # Reap sibling — scope-gated, with its own verify (AC4). Only the --reap-orphan-tags
