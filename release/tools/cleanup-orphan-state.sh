@@ -1926,7 +1926,7 @@ ledger_mark_retained() {
 #
 # The pass has TWO consumers (#6207). resolve_freed_branches EXECUTES it in
 # --apply, running between apply_removals and verify_apply; verify then re-checks
-# pass-2 REMOVED rows exactly like pass-1 rows. project_freed_branches PROJECTS
+# pass-2 REMOVED rows exactly like pass-1 rows. projected_freed_branches PROJECTS
 # it in --dry-run, relabelling the rows it would drain and removing nothing.
 # Both return 0 unconditionally (set -e discipline).
 FREED_RESOLVED=0
@@ -2126,7 +2126,7 @@ resolve_freed_branches() {
 # row instead of deleting the branch. There is deliberately NO branch-deletion call
 # anywhere in this function — that, not a mode flag, is what makes the projection
 # structurally incapable of removing anything. Returns 0 unconditionally.
-project_freed_branches() {
+projected_freed_branches() {
   echo "── Projection phase — branches this run's worktree removals would free (nothing is removed) ──" >&2
   local b action rc idx row
   local freed=()
@@ -2610,8 +2610,8 @@ selftest_fixed_point() {
   # discover it, PID-scoped, and removed on every exit path including teardown.
   if [[ "$fail" -eq 0 ]]; then
     mut="${SCRIPT_DIR}/.cleanup-selftest-mut-$$.sh"
-    sed 's/^  project_freed_branches$/  : # projection disabled (P2 sensitivity arm)/' "$script_abs" > "$mut"
-    if grep -qF 'projection disabled (P2 sensitivity arm)' "$mut" && ! grep -qE '^  project_freed_branches$' "$mut"; then
+    sed 's/^  projected_freed_branches$/  : # projection disabled (P2 sensitivity arm)/' "$script_abs" > "$mut"
+    if grep -qF 'projection disabled (P2 sensitivity arm)' "$mut" && ! grep -qE '^  projected_freed_branches$' "$mut"; then
       drc=0
       mut_out=$(bash "$mut" --release-close "$slug" --dry-run --json 2>/dev/null) || drc=1
       if [[ "$drc" -ne 0 ]]; then
@@ -4075,7 +4075,7 @@ fi
 # apply block is: the tag accumulator has no interaction with the branch/worktree
 # fixed point. Removes nothing; returns 0.
 if [[ "$MODE" == "dry-run" && "$SCOPE" != "reap-orphan-tags" ]]; then
-  project_freed_branches
+  projected_freed_branches
 fi
 
 # Reap sibling — scope-gated, with its own verify (AC4). Only the --reap-orphan-tags
