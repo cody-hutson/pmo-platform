@@ -82,9 +82,20 @@
 #     --force                  Allow git branch -D + git worktree remove --force; requires --apply
 #     SELF — the script's own runtime worktree is never removed (a new SELF action
 #     class; --force does not override)
+#     LOCKED — a worktree git reports locked is skipped ("SKIP — worktree locked
+#     (pid N)" / "(holder unknown)"). --force does not override, and could not:
+#     git refuses removal of a locked tree at both force levels this tool can
+#     produce (it wants -f -f); `git worktree unlock <path>` is the remedy.
+#     Detected from the porcelain `locked` line, independently of any process's
+#     working directory
 #     LIVE — worktrees held by a live process are skipped ("SKIP — live session
-#     (pid …)"; re-checked at apply time); fail-closed when lsof is unavailable;
-#     --force does not override
+#     (pid …)"; re-checked at apply time); --force does not override. The signal
+#     is a process WORKING-DIRECTORY scan, so it sees a holder sitting inside the
+#     tree and NOT one holding only a lock registration — the LOCKED class above
+#     is what covers that. Fail-closed on BOTH limbs: when lsof is absent, AND
+#     when lsof runs but returns a map missing the script's own cwd (the
+#     self-canary). Either leaves every residual REMOVE converted to
+#     "SKIP — liveness oracle unavailable (fail-closed)"
 #   META:
 #     --help, -h               Usage
 #     --self-test              Validate detection logic + apply path + post-apply verify +
@@ -433,6 +444,36 @@ branch_for_worktree() {
   awk -v p="$wpath" 'BEGIN{found=0} /^worktree /{if (found) exit; if ($2==p) found=1; next} found && /^branch /{print $2; exit}' <<<"$WT_SNAPSHOT"
 }
 
+# The `locked …` line git emits inside a worktree block, or empty when the tree
+# carries none. Enumeration-time BY DESIGN: this reads the same WT_SNAPSHOT tier
+# branch_for_worktree reads, and every detect_* pass refreshes the snapshot before
+# it classifies, so the fact is as fresh as the enumeration that consumes it. There
+# is deliberately NO apply-time consumer — see the note at the apply-time liveness
+# re-verification loop. Here-string input — no live pipe for an early awk-exit to
+# SIGPIPE. [WTPIPEGUARD]
+worktree_lock_line() {
+  local wpath="$1"
+  [[ "$WT_SNAPSHOT_BUILT" == "1" ]] || refresh_wt_snapshot
+  awk -v p="$wpath" 'BEGIN{found=0} /^worktree /{if (found) exit; if ($2==p) found=1; next} found && /^locked/{print; exit}' <<<"$WT_SNAPSHOT"
+}
+
+# Holder pid parsed out of a lock line, or empty when none parses. Git specifies
+# NO format for a lock reason — it is free-form text written by whatever process
+# took the lock — so only an all-digit run following the literal `pid ` is
+# accepted and NOTHING else from the reason is ever propagated. That bound is
+# load-bearing rather than tidy: the value this feeds reaches a candidate row's
+# action field, which is emitted into JSON unescaped and is parsed positionally
+# out of a TAB-delimited tuple, so a stray quote or TAB carried out of a lock
+# reason would corrupt both. The trap case is a reason reading "(pid unknown)":
+# it yields empty, never a bogus pid. Parameter expansion only (bash 3.2).
+lock_holder_pid() {
+  local reason="$1" pid
+  pid="${reason##*pid }"
+  [[ "$pid" == "$reason" ]] && return 0
+  pid="${pid%%[!0-9]*}"
+  printf '%s' "$pid"
+}
+
 # Returns 0 if a worktree is currently attached to the branch. Always LIVE — the
 # resolve pass re-checks this against post-removal state, so it must reflect
 # current reality, not the enumeration snapshot. The here-string is fed by a
@@ -712,6 +753,7 @@ classify_remote() {
 classify_worktree() {
   local path="$1" branch="$2"
   local status="clean" disk action="REMOVE" cand_phys existing detached_ahead
+  local wt_lock lock_pid lock_label=""
 
   # Dedup guard (v1.11 operator scope call): under the default --all scope,
   # detect_spawn_task and detect_historical can both row the same worktree;
@@ -730,8 +772,22 @@ classify_worktree() {
   worktree_is_clean "$path" || status="dirty"
   disk=$(worktree_size_mb "$path")
 
-  # Clause precedence (v1.11 combined design spec, D-3): protective context
-  # classes first (primary → SELF → live), tree-state classes second (dirty →
+  # Lock label resolved up-front so the precedence chain below stays one
+  # assignment per clause. Both forms are wholly script-controlled strings; no
+  # byte of the free-form lock reason reaches the row (see lock_holder_pid).
+  wt_lock=$(worktree_lock_line "$path")
+  if [[ -n "$wt_lock" ]]; then
+    lock_pid=$(lock_holder_pid "$wt_lock")
+    if [[ -n "$lock_pid" ]]; then
+      lock_label="SKIP — worktree locked (pid ${lock_pid})"
+    else
+      lock_label="SKIP — worktree locked (holder unknown)"
+    fi
+  fi
+
+  # Clause precedence (v1.11 combined design spec, D-3; #6411 inserts LOCKED):
+  # protective context classes first (primary → SELF → locked → live), tree-state
+  # classes second (dirty →
   # protected → not-merged). A dirty SELF tree reports SELF; a dirty live-held
   # tree reports the live session. Protective classes are facts about WHO holds
   # the tree, are stable across tree-state changes, and are never overridden by
@@ -746,6 +802,27 @@ classify_worktree() {
     action="SKIP — primary checkout"
   elif [[ -n "$SCRIPT_WORKTREE" && "$cand_phys" == "$SCRIPT_WORKTREE" ]]; then
     action="SELF — script's own runtime worktree (protected)"
+  elif [[ -n "$lock_label" ]]; then
+    # #6411. A lock is held by REGISTRATION in the repository's worktree
+    # metadata, not by any process's working directory, so "locked AND no cwd
+    # holder" is a reachable state — and it is the steady end-state of a
+    # completed-but-still-locked agent worktree, whose lock holder sits outside
+    # the tree. Before this clause such a tree fell through every protective
+    # clause to the initialised REMOVE, and the apply phase then reported a
+    # dirty tree that was not dirty.
+    #
+    # The class is REMOVABILITY, not liveness, and it precedes the live clause
+    # for that reason: git refuses `worktree remove` on a locked tree at BOTH
+    # force levels this tool can produce (plain, and single --force; it wants
+    # -f -f — measured on git 2.50.1, whose one-line -h help says otherwise and
+    # is wrong). The tree therefore cannot be removed whatever a liveness read
+    # says, and labelling it by liveness would report a removability finding as
+    # a liveness finding. Note this does NOT invert git-workflow.md
+    # § Sweep-deletion safety clause (c): that clause is about lock ABSENCE
+    # proving nothing, and it still holds — lock PRESENCE proving unremovable
+    # is the other direction, and the cwd oracle below is retained unchanged
+    # for the holder that never locked.
+    action="$lock_label"
   elif [[ "$ORACLE_STATE" == "ok" ]] && worktree_is_live "$cand_phys"; then
     action="SKIP — live session (${LIVE_HIT})"
   elif [[ "$status" == "dirty" ]]; then
@@ -1242,7 +1319,7 @@ emit_markdown() {
   local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   local lc=${#LOCAL_BRANCH_CANDIDATES[@]} rc=${#REMOTE_BRANCH_CANDIDATES[@]} wc=${#WORKTREE_CANDIDATES[@]}
   local pc=${#PRUNED_TRACKING_REFS[@]}
-  local lr=0 rr=0 wr=0 disk_total=0 bfails=0 wfails=0 sc=0 lvc=0 fcc=0 a ref
+  local lr=0 rr=0 wr=0 disk_total=0 bfails=0 wfails=0 sc=0 lvc=0 fcc=0 lkc=0 a ref
 
   # Mode-aware report vocabulary. In --apply, apply_removals (which now runs BEFORE this
   # emitter) has rewritten each acted-on candidate's action field to REMOVED (deleted) or
@@ -1271,6 +1348,7 @@ emit_markdown() {
     [[ "$action" == FAILED* ]] && ((wfails++)) || true
     case "$action" in
       SELF*) ((sc++)) || true ;;
+      "SKIP — worktree locked"*) ((lkc++)) || true ;;
       "SKIP — live session"*) ((lvc++)) || true ;;
       "SKIP — liveness oracle unavailable"*) ((fcc++)) || true ;;
     esac
@@ -1287,7 +1365,7 @@ emit_markdown() {
 - **Remote branches:** $rc total ($rr $verb)
 - **Stale remote-tracking refs:** $pc $([[ "$MODE" == "apply" ]] && echo "pruned" || echo "stale (run --apply to prune)")
 - **Worktrees:** $wc total ($wr $verb, ≈${disk_total} MB disk $recov)
-- **Protected worktrees:** $sc SELF (script's own runtime), $lvc held by live sessions$([[ "$ORACLE_BUILT" -eq 1 && "$ORACLE_STATE" != "ok" ]] && echo " — liveness oracle UNAVAILABLE (fail-closed; $fcc removal(s) blocked)")
+- **Protected worktrees:** $sc SELF (script's own runtime), $lkc locked, $lvc held by live sessions$([[ "$ORACLE_BUILT" -eq 1 && "$ORACLE_STATE" != "ok" ]] && echo " — liveness oracle UNAVAILABLE (fail-closed; $fcc removal(s) blocked)")
 
 ## Detail — Local branches
 
@@ -1378,6 +1456,9 @@ EOF
   fi
   if [[ "$sc" -gt 0 ]]; then
     echo "- $sc worktree(s) protected as script's own runtime (SELF)"
+  fi
+  if [[ "$lkc" -gt 0 ]]; then
+    echo "- $lkc worktree(s) skipped — locked. \`--force\` does not reach these: git wants \`-f -f\` for a locked tree and this tool emits at most one. Run \`git worktree unlock <path>\` first if removal is intended."
   fi
   if [[ "$lvc" -gt 0 ]]; then
     echo "- $lvc worktree(s) skipped — held by live sessions"
@@ -1761,8 +1842,8 @@ ledger_mark_retained() {
 # ONE bounded re-evaluation pass: worktree removal frees branches; branch
 # removal frees nothing further, so a single pass reaches the fixed point for
 # the enumerated input. Invariant: ONLY worktrees this run actually REMOVED
-# free their branches — SELF / live-session / dirty / FAILED worktrees keep
-# their branches attached-and-skipped. Runs between apply_removals and
+# free their branches — SELF / locked / live-session / dirty / FAILED worktrees
+# keep their branches attached-and-skipped. Runs between apply_removals and
 # verify_apply; verify then re-checks pass-2 REMOVED rows exactly like pass-1
 # rows. Returns 0 unconditionally (set -e discipline).
 FREED_RESOLVED=0
