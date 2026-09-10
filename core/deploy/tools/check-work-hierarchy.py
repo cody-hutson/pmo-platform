@@ -3762,7 +3762,8 @@ def self_test():
         '[kinds.criteria.readiness]\n'
         'criteria_version = "0.1.0"\n'
         'checks = [\n'
-        '  { id = "r1", statement = "A statement, carrying a comma.", level = "L2", '
+        '  { id = "r1", statement = "A statement, carrying a comma and a # that is '
+        'prose rather than a comment.", level = "L2", '
         'automatable = false, source = "T — synthetic basis" },\n'
         ']\n'
         '[kinds.criteria.done]\n'
@@ -3944,6 +3945,71 @@ def self_test():
     _pcc_arm("PCC PACKC-S03 is table-gated: a kind with no criteria tables emits only "
              "C01 rows, never a version finding on a table nobody wrote",
              _PCC_PACK.replace(_PCC_CONTENT, ''), ("PACKC-C01",), expect_rows=4)
+
+    # ── THE FOUR READER HAZARDS, each asserted rather than commented ─────────
+    # Without these the scanner's string-awareness is a gate that cannot fail: measured
+    # by mutation, disabling quote tracking entirely left the suite at 191/191 green,
+    # because every comma in the templates above sits inside an inline table and is
+    # protected by NESTING rather than by string-awareness. H3 and H4 are exercised by
+    # every arm above (a comma inside a `statement`, a nested array inside an entry).
+    # H1 is now exercised by every arm too — the shared template's first statement
+    # carries a `#` — and H2 gets the two arms below.
+    _PCC_H2 = ('[meta]\npack_id = "t-h2"\npack_version = "0.1.0"\napplies_to = "*"\n'
+               'role = "kit"\nkit_class = "work-item"\n\n'
+               '[[kinds]]\nkind_id = "widget"\ndisplay_name = "Widget"\n'
+               'base = "Work Item"\n'
+               '[kinds.criteria.readiness]\ncriteria_version = "0.1.0"\nchecks = [\n'
+               '  { id = "r1", statement = "%s", level = "L2", '
+               'automatable = false, source = "T" },\n]\n')
+
+    # H2, THE `[` CASE — and the outcome here is fail-loud, not silent success. The
+    # GRAMMAR reader's array capture counts brackets without regard for strings, so an
+    # unbalanced `[` inside a quoted statement makes it over-consume the following
+    # line. The content scanner does not. The two readers therefore disagree about
+    # where the array ENDS, and the cross-instrument check turns that disagreement into
+    # a PARTIAL read (exit 3) rather than letting one reader silently under-read.
+    # Recording it as an arm converts a documented residual into a checked property.
+    rc, out, err = _pcc_run(
+        {"h": _PCC_H2 % "Refers to [Section 2 with no closing bracket."})
+    check("PCC hazard H2: an unbalanced `[` inside a quoted statement is a PARTIAL "
+          "read (exit 3) naming the two readers' disagreement — never a silent "
+          "under-read",
+          rc == 3 and "PARTIAL" in err and "disagree on the end" in err
+          and "COUNT" not in out)
+    # The `{` case does NOT disagree: the grammar reader counts only brackets, and the
+    # content scanner is string-aware, so both stop in the same place. Asserted so the
+    # arm above is known to be discriminating rather than firing on any odd character.
+    rc, out, _err = _pcc_run(
+        {"h": _PCC_H2 % "Refers to {Section 2 with no closing brace."})
+    check("PCC hazard H2 specificity: an unbalanced `{` inside a quoted statement is "
+          "read correctly by both, so the disagreement arm is not firing on noise",
+          rc == 1 and _pc_ids(out) == {"PACKC-C01"} and "entries_read=1" in out)
+
+    # THE INVERSE OF H1, and it surfaced a latent defect in the GRAMMAR reader rather
+    # than in this one. A `#` OUTSIDE a string, inside a multi-line array, is a comment
+    # and must be skipped to end of line. `_scan_pack_value` does not skip it: it
+    # counts the `]` inside that comment and closes the array early. The content
+    # scanner does not, so the two readers disagree about where the array ends and the
+    # cross-instrument check turns a would-be SILENT under-count into a loud PARTIAL
+    # read. Measured: 0 of the 19 tracked manifests carry a comment inside an open
+    # array (sensitivity arm: 510 comment lines elsewhere), so the defect is latent
+    # rather than live — and `_scan_pack_value` is deliberately NOT repaired here,
+    # because it is the grammar check's value reader and this card must leave that
+    # check's verdicts untouched. Routed onward as an intake candidate.
+    #
+    # The arm is discriminating on THIS scanner's comment branch: disable it and both
+    # readers stop early in the same place, they AGREE, and the under-count is silent
+    # again — which is precisely the outcome no arm may be allowed to green.
+    rc, out, err = _pcc_run(
+        {"h": _PCC_H2.replace('checks = [\n',
+                              'checks = [\n'
+                              '  # a comment carrying a ] and a , inside the array\n')
+                     % "A plain statement."})
+    check("PCC hazard H1 inverse: a `]` inside an in-array comment is a PARTIAL read "
+          "(exit 3), because this scanner skips the comment and the grammar reader "
+          "does not — a disagreement is loud where a shared blind spot would be silent",
+          rc == 3 and "PARTIAL" in err and "disagree on the end" in err
+          and "COUNT" not in out)
 
     # ── FAIL LOUD IN BOTH DIRECTIONS ─────────────────────────────────────────
     with tempfile.TemporaryDirectory() as tmp:
