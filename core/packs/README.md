@@ -348,10 +348,11 @@ real deployment kit.
   authoritative body of practice (for example the Scrum Guide, INVEST, the Kanban
   Method) — never reverse-engineered from any one deployment's issue tracker.
   **Each declaration says so in the manifest**, through the `source` key the
-  grammar requires on every criteria check entry and every kind-specific field
-  declaration, and on a `[kinds.criteria.*]` or `[kinds.fields]` table whose
-  array is present and empty — where it states the practice basis for the
-  emptiness. Two worked lines: at the entry altitude,
+  grammar requires on every criteria check entry, every kind-specific field
+  declaration and every pack-level `[[controls]]` declaration, and on a
+  `[kinds.criteria.*]` or `[kinds.fields]` table whose array is present and
+  empty — where it states the practice basis for the emptiness. Two worked
+  lines: at the entry altitude,
   `source = "Scrum Guide 2020 — Definition of Done"`; at the block altitude,
   `source = "Kanban Method (Anderson 2010) — no readiness practice is prescribed at card level"`.
   **The value convention — and it is a convention, not a grammar rule.** Name the
