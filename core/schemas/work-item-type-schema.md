@@ -199,7 +199,11 @@ A table whose array is **absent** carries no requirement, and neither does one w
 3. **Why the value convention exists.** Because truth-checking is the part the mechanism cannot do, the value is written to be *checkable against the named work* — the work, its edition or year, and its locator. A `source` that cannot be looked up leaves the only surface that *can* falsify it with nothing to read. The convention is therefore not a style preference; it is what makes the residual reviewable.
 4. **Where the residual is closed.** By a person reading the value against the named work — at acceptance, at review, or by anyone auditing a shipped pack. A false attribution is a **content defect owned by whoever authored the content**, not a defect in this mechanism, and no gate detects it. A green completeness lint is never a correctness verdict on the practice cited.
 
-**And the adjacent scope boundary.** `source` is scoped to `criteria.checks[]` entries and `fields.kind_specific[]` FieldDecls. Pack-level `[[controls]]` declarations (§1.1.2) carry **no** content-provenance key, and that is a stated boundary rather than an oversight: no shipped pack declares a control today, so the gap is latent — but a WIP or pull-limit control is a named core practice of a published method, which is exactly the object this key exists to make auditable. Extending `source` to `[[controls]]` crosses the controls facet's own provenance key (`x-pmo-control-source`, which records *which pack declared a control*, not which practice a declaration derives from) and is owned by whichever change first declares a control.
+**And the adjacent scope boundary, now closed.** `source` is scoped to `criteria.checks[]` entries, `fields.kind_specific[]` FieldDecls, **and pack-level `[[controls]]` declarations (§1.1.2)**. On a control the key is **REQUIRED**, and at the **entry altitude only** — every `[[controls]]` entry states the body of practice its dimension derives from, exactly as a check entry does. The earlier boundary held this third site open pending the first pack to declare a control; that pack now exists, the Kanban pull-limit cap is that declaration, and the decision it forced is recorded in `{{ADR:first-pack-control-declaration}}`.
+
+**The block altitude is structurally inapplicable here, and that is a property of the construct rather than a carve-out.** The two-altitude rule pairs an entry requirement with a block-level `source` on the *table that would have held the entries*, so a reasoned empty set has somewhere to state its basis. `[[controls]]` is an optional top-level array-of-tables with **no enclosing required table**: a pack that declares no control writes nothing at all, so there is no site on which a reasoned-empty `source` could sit and no reader could tell an absent array from an unwritten one. No reasoned-empty-controls construct is minted to create one. The requirement is therefore stated once, at the entry altitude, and the no-inheritance and `role`-total clauses above carry over unchanged.
+
+**No collision with the controls facet's own provenance key.** `x-pmo-control-source` records *which pack declared a control* — a composition fact — while `source` records *which body of practice the dimension derives from* — a content fact. The two are separated in §3.1's `x-pmo-DISAMBIGUATION` table, which is where that distinction is defined and is not restated here.
 
 #### The conformance posture for a kind that declares nothing
 
@@ -263,7 +267,12 @@ A table whose array is **absent** carries no requirement, and neither does one w
     limit_ref: <control-field-id>               # ALTERNATIVE to limit — a control-field holding the cap (composes with
                                                 #   the control-field arm; the WIP cap becomes config, not a literal).
                                                 #   Exactly ONE of {limit, limit_ref} is present (else pack-validation error).
-    on_unresolved: BLOCK-TRANSITION             # REQUIRED — gate-disposition when the set/scope can't be resolved.
+    on_unresolved: BLOCK-TRANSITION             # REQUIRED — gate-disposition when the set/scope can't be resolved,
+                                                #   OR when limit_ref resolves to no value (the named control is unset
+                                                #   and declares no default). The second case is the Arm-3 disposition
+                                                #   semantics, which limit_ref composes with: a cap whose control ships
+                                                #   without a default is unresolved on any deployment that has not set
+                                                #   one, so this is the normal path there rather than an error path.
 ```
 
 **Arm 3 — `control-field`.** Resolves a **cross-cutting control's value** (a `[[controls]]` declaration — §1.1.2) at a declared scope; the gate PASSES when the value is in the satisfying set. The field-axis sibling of Arm 1's status axis: Arm 1 reads a related item's *workflow state*; Arm 3 reads a declared *control value* (data, not an axis1 state).
@@ -507,7 +516,14 @@ These are the presenting case, so each sub-key is placed on exactly **one** side
 | `guards_transition` on **any** of the three sub-objects | **FIXED — a conditional-requiredness rule, not a side** | §1.2.1's D-A rule binds all three sub-objects equally: `guards_transition` is REQUIRED whenever `condition` is present and omitted otherwise. **Its legality is a function of another key's presence**, which is why it is stated as a rule here rather than placed on one side of the table — a one-side-per-key placement cannot express it. **Unenforced in both directions** |
 | The **provenance** each check and FieldDecl carries — `source` | **FIXED key, CONFIGURABLE value** | The key is grammar (§1.2.1); which body of practice it names is the methodology's |
 
-**The `gate` block is the seam where over- and under-constraint meet.** The Kanban pack's `[kinds.criteria.gate]` ships as a **deliberate stub**: a `set-aggregate` WIP condition needs a `scope_ref` that is inherently instance-local (K4), so it cannot be sourced into a git-tracked default. That is the boundary working correctly in the *fixed* direction — the platform declines to ship a default it cannot ground.
+**The `gate` block is the seam where over- and under-constraint meet, and the Kanban WIP gate is the worked case.** That gate is **bound**, and what makes it shippable is that the boundary runs *through* the construct rather than around it. A `set-aggregate` WIP condition has two separable parts, and they fall on opposite sides:
+
+| Part | Side | Why |
+|---|---|---|
+| The gate **structure** — the counted set, its `status_filter`, the aggregate, the comparator, the guarded transition | **CONFIGURABLE, and corpus-shippable as a default** | At `scope = "parent"` the counted population resolves from the item's own container, so the declaration names no instance entity. `scope_ref` is REQUIRED only at `scope = "board"`; a parent-scoped set carries none |
+| The **cap value** | **Not corpus-shippable at all** — it is K4 deployment config | The Method prescribes that a limit exist and leaves its number to the service running the board. A corpus-wide number would be invented, so the pack declares the *dimension* as a `[[controls]]` entry with an integer domain and **no `default`**, and the gate reaches it by `limit_ref` |
+
+**This is the boundary working correctly, and it corrects the earlier reading of it.** The gate was previously held unbound on the premise that the whole condition needed an instance-local `scope_ref`. That premise was overbroad: it was true of one *value* and was applied to the entire *construct*, which declined a default the platform could in fact ground. The rule the seam actually states is narrower and more useful — **decline to ship the value you cannot ground, never the structure you can** — and the split is what lets an unconfigured deployment reach the gate's `on_unresolved` (here `WARN-HEALTH`, surfacing an unset cap) instead of meeting either an invented number or no gate at all. A deployment that wants a named board overrides to `scope = "board"` with its own `scope_ref` as a K4 override, so the corpus default degrades to the instance-precise form rather than blocking it.
 
 #### 1.5.5 The placement test
 
@@ -842,6 +858,30 @@ The walk covers every `pack.toml` the corpus holds, shipped and fixture alike, a
 **The residual is named rather than dismissed, and it differs from §6.2c's in kind.** §6.2c's restriction met a live rule and a zero population; this one meets **no rule** and a **non-zero** population. Type-pack *instances* are K4 operator-local config by design (§0), so the tracked corpus is not the whole population — and here the usual *"no operator-local instance is rejected until that deployment runs the check"* clause is stronger than it needs to be, because there is no check to run. Stated plainly: this extension's backward compatibility rests entirely on the absence of an enforcer, and **when the content-completeness lint ships, every declaration that has not adopted `source` becomes a finding** — 16 of them in this corpus if none had adopted. That is the intended behaviour and it is why the shipped manifests are remediated in the same release that introduces the rule.
 
 **Verdict: additive in effect, not purely additive in grammar. The meta-schema version stays v1**; no shim. A pack that *adopts* `source` takes a `pack_version` minor bump per §6.1 (the data-level additive rule), independent of the meta-schema version. The architectural decision this records is ADR-189, a grammar-altitude sibling extension of [ADR-018](../ADRs/ADR-018-work-item-type-layer.md) in the same lineage as ADR-039, ADR-070, ADR-077 and ADR-180.
+
+### 6.2e The content-provenance extension to `[[controls]]` is additive in effect — meta-schema version stays v1
+
+Requiring `source` on every `[[controls]]` declaration (§1.2.1 the adjacent-scope-boundary rule, §1.1.2 the facet it binds) extends the meta-schema **without** a version bump — the fifth such extension, after §6.2a through §6.2d. It follows §6.2d's three-axis form, and diverges from it on the one axis where the evidence diverges: the population.
+
+**Axis 1 — the optional ADDs: N/A.** `source` on a control is REQUIRED, at the entry altitude, with no optional limb. As in §6.2d, the optional-`condition` symmetry that carried §6.2a through §6.2c is unavailable and is not borrowed.
+
+**Axis 2 — the relaxation: N/A.** Nothing is widened. No value domain grows, no requiredness is dropped, and no previously-illegal shape becomes legal.
+
+**Axis 3 — the RESTRICTION, and it meets a population of ZERO.** Measured at the commit that introduces the rule, by parsing every `pack.toml` the corpus holds — shipped and fixture alike, 17 files — the count of `[[controls]]` entries **immediately before this change is 0**, against live controls on the same reader over the same files (`[[kinds]]` 21, `[[labels]]` 48) and a zero specificity arm on a fabricated array name.
+
+| Limb | Site class | State | Count | Requirement fires? |
+|---|---|---|---|---|
+| Entry | `[[controls]]` declarations | pre-change, whole corpus | **0** | — none existed anywhere |
+| Block | — | **structurally inapplicable** | — | there is no enclosing required table (§1.2.1) |
+| Entry | `[[controls]]` declarations | post-change, whole corpus | **1** | **yes — and it adopts the key in the same commit** |
+
+**So this is the extension §6.2d could not be.** §6.2d recorded, as its own finding, that it was *"the first of the four extensions whose restriction meets a NON-EMPTY population"* — 16 affected declarations, none of them remediable by a runner that does not exist. This one inverts that: **no declaration is invalidated, because none existed to invalidate**, and the single declaration the rule now governs is authored under the rule rather than retrofitted to it. §6.2c's *"every shipped pack is byte-identical after this change"* sentence, unavailable to §6.2d, is available here for every pack except the one making the declaration.
+
+**The cheap window is real, it was taken deliberately, and it does not recur.** A population of zero empties exactly once. Had this requirement waited until a second or third pack declared a control, the analysis above would have had to be written against a non-empty population and the retrofit §6.2d describes would have been reproduced one facet over. That reasoning, and the reversibility band the first declaration crosses, are recorded in `{{ADR:first-pack-control-declaration}}`.
+
+**The residual, named rather than dismissed.** It is the same residual §6.2d owns and it is not reduced here: **no runner reads `source`**, on a control or anywhere else. The pack validator does not open a criteria block's interior and does not read the controls facet's content, so this requirement is enforced today by authoring discipline and acceptance review alone. It becomes mechanically checkable when the content-completeness lint ships, and at that point the corpus holds exactly one control — already conforming.
+
+**Verdict: additive in effect and additive in grammar against the population it meets. The meta-schema version stays v1**; no shim. A pack that adopts a control takes a `pack_version` minor bump per §6.1, independent of the meta-schema version.
 
 ### 6.3 Per-kind criteria versioning (the grandfather core)
 
