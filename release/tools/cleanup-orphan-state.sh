@@ -458,8 +458,13 @@ branch_for_worktree() {
 # carries none. Enumeration-time BY DESIGN: this reads the same WT_SNAPSHOT tier
 # branch_for_worktree reads, and every detect_* pass refreshes the snapshot before
 # it classifies, so the fact is as fresh as the enumeration that consumes it. There
-# is deliberately NO apply-time consumer — see the note at the apply-time liveness
-# re-verification loop. Here-string input — no live pipe for an early awk-exit to
+# is deliberately NO apply-time consumer, and the reason is stated here rather than
+# pointed at: a lock taken AFTER classification is caught by git itself, which
+# refuses `worktree remove` on a locked tree at both force levels this tool can
+# produce, and classify_worktree_refusal names that refusal `locked` rather than
+# letting it read as a dirty tree. Liveness needs an apply-time re-read because
+# porcelain does NOT refuse a clean live-held tree; a lock needs none because
+# porcelain does refuse. Here-string input — no live pipe for an early awk-exit to
 # SIGPIPE. [WTPIPEGUARD]
 worktree_lock_line() {
   local wpath="$1"

@@ -213,7 +213,11 @@
 #   1 = validation failure / missing required flag
 #   2 = entry-gate failure, before any state mutation. Either an entry-gate PHASE
 #       returns non-zero — phase_preflight or phase_detect_open_issues — or a guard
-#       trips before phase 1 runs. This line names the dispatch SITES and restates
+#       OUTSIDE the phase ladder trips. "Outside the ladder" and not "before phase 1":
+#       of the two such guards, the instance-path resolver fires at LOAD time, genuinely
+#       ahead of everything, while workspace_boundary_check has one call site, which
+#       sits AFTER argument parsing (roster phase 1) and before phase_preflight. This
+#       line names the dispatch SITES and restates
 #       no sub-check on purpose: the wording it replaces restated one, drifted from
 #       the code, and ended up asserting a gate that does not exist. That gate was
 #       the version tag. phase_preflight RECORDS the tag and never gates on it; the
@@ -5912,8 +5916,11 @@ phase_reparse_ledgers() {
 # two integer comparisons.
 
 # Evaluate the Procedure 7a predicate over a hub-state directory.
-# Emits "STATE TOTAL UNRES" on stdout. Never fails; an unreadable dir is
-# NOT-RECORDED, which is a SURFACE state, never a silent pass.
+# Emits FOUR space-separated tokens on stdout — "STATE TOTAL UNRES BAD" — on both
+# paths, the NOT-RECORDED early return included; BAD is the unclassifiable-row
+# count the fifth state is resolved from, and both positional consumers read it.
+# Never fails; an unreadable dir is NOT-RECORDED, which is a SURFACE state, never
+# a silent pass.
 #
 # The awk program is the block shipped at hub-spoke-bridge.md § Procedure 7a,
 # implemented here rather than sourced (that file is documentation, not a library).
@@ -5939,8 +5946,15 @@ phase_reparse_ledgers() {
 # THE RESIDUE IS NOT ALWAYS AN EMPTY FIELD, and assuming it is writes a fixture for
 # a condition the corpus does not have. Two arities reach the residue by two
 # different routes. At arity <= 10 the row has no field 11 and $11 reads EMPTY —
-# that is the live witness, four rows at arities 7 and 8 against a 13-column
-# header. At arity 11 the row-terminating ` |' never matches the separator, so it
+# that is the shape the live operator-instance ledger presents, rows short of the
+# 13-column header. NO row count and NO specific arity is stated here on purpose:
+# that ledger is mutable operator-instance state an operator edits between
+# releases, so any figure written into this comment is stale the next time they do
+# (it already was — the arities recorded here when this note shipped did not
+# reproduce one release later, while the MECHANISM did). Read the figures from the
+# ledger; what is durable is the mechanism. The committed self-test fixtures are
+# what bind the behaviour, not this note. At arity 11 the row-terminating ` |'
+# never matches the separator, so it
 # stays glued to the LAST field and $11 reads `open |` — NON-empty, and after the
 # space-strip `open|`. Both are unreadable and both must be: field 11 of an
 # 11-column row is not the status column of a 13-column contract, and reading it as
