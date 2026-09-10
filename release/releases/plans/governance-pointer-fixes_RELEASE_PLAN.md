@@ -12,7 +12,7 @@
 | **Release Manager** | Agent-assisted |
 | **Status** | Executing |
 | **Branch** | release/governance-pointer-fixes |
-| **PR** | (not yet opened at Commit 0 — populated when the release PR is created later in this same Stage-6 pass) |
+| **PR** | #7401 (draft; transitions to ready-for-review at the Stage 9 gate) |
 | **Milestone** | governance-pointer-fixes |
 
 **Release Outcome Statement.** Four governance surfaces each assert something about a mechanism they do not own, and each assertion is wrong in the same shape: it states a conclusion without naming the artifact that owns it. This release corrects all four so that every one names the owner or the live mechanism — a stale layout instruction cites the standard that superseded it, a readiness state records its safety basis, a skill's absence-claim names the hook that actually matches, and a pipeline instruction names the provenance form its own resolver recognises.
