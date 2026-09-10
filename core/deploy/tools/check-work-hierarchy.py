@@ -189,6 +189,17 @@ eligibility join executable, so the prose contract downstream consumers read can
 checked by one command rather than by eye. Both are separate argv branches that return
 before the H1/H2/H3 legs run and share no mutable state with them.
 
+PACK-CONTENT MODE (`--validate-pack-content`) — the same corpus again, asking a
+DIFFERENT question. Grammar-conformance asks whether a declaration is well-formed;
+content-completeness asks whether a declaration was made at all, and whether it says
+where it came from. The two are deliberately separate modes over one reader rather
+than one widened mode, because the findable condition here is SILENCE — an array key
+that is absent — and every declaration site in the grammar check's own fixture corpus
+is silent by construction. A silence rule inside `--validate-packs` would therefore
+reject that check's conforming fixture as readily as its nonconforming one, destroying
+the discrimination its control arm asserts. Emitting the `PACKC-*` ids from a third
+argv branch is what keeps the grammar check's control arm single-valued.
+
 Python 3.9-compatible (no tomllib, no 3.10+ syntax) — matches /usr/bin/python3 on
 the operator baseline.
 """
@@ -526,6 +537,236 @@ PACK_RULE_IDS = (
     "PACK-L01", "PACK-L02",
 )
 
+# EVERY rule the CONTENT mode can emit, and a SEPARATE tuple from PACK_RULE_IDS for a
+# load-bearing reason rather than for tidiness: `--validate-packs` must keep evaluating
+# exactly 20 rules and keep emitting exactly the `PACK-*` namespace, because its own
+# control arm compares its sensitivity rule string to a single literal by equality. Two
+# tuples, two counters, two namespaces — so neither mode's denominator can move when
+# the other gains a rule.
+#
+# RULE-ID DISJOINTNESS IS TOTAL BY CONSTRUCTION, and it is what keeps every arm's
+# expected id set single-valued. Each site is in exactly one of three states and each
+# family is defined on exactly one of them:
+#     ABSENT      the array key is not written        → C01 only
+#     EMPTY       `= []`                              → P03 only
+#     NON-EMPTY   `= [ {...} ]`                       → P01/P02 (and S01/S02) only
+# The two remaining ids range over their own populations: P04 over `[[controls]]`
+# declarations, S03 over PRESENT `[kinds.criteria.*]` tables.
+#
+# WHERE S01 STOPS, AND WHY. The meta-schema's entry contract is the five-member tuple
+# `{id, statement, level, automatable, source}`. `source` is graded by P01 (it is the
+# provenance rule the meta-schema states in its own words); S01 grades the other four.
+# No member is ungraded and none is graded twice — a missing `source` reports once, as
+# P01. The register row's stated predicate is the CONJUNCTION P01 ∧ S01 ∧ S02, and it
+# says so; a runner that double-reported one defect under two ids would make a finding
+# count stop equalling a defect count.
+PACKC_RULE_IDS = (
+    "PACKC-C01",
+    "PACKC-P01", "PACKC-P02", "PACKC-P03", "PACKC-P04",
+    "PACKC-S01", "PACKC-S02", "PACKC-S03",
+)
+
+# The four content surfaces of a kind, and the array key each one carries. Ordered, so
+# a run's finding rows are stable across invocations and a diff of two runs is readable.
+CONTENT_SURFACES = (
+    ("fields", "kind_specific"),
+    ("criteria.readiness", "checks"),
+    ("criteria.done", "checks"),
+    ("criteria.gate", "checks"),
+)
+
+# The closed domain §1.2.1 declares for a check entry's `level`. Read from the tuple
+# below rather than inlined at the comparison, so the SKIP/None discipline the label
+# grammar uses has an obvious home if this domain ever moves to a read surface.
+CONTENT_LEVEL_DOMAIN = ("L1", "L2", "L3")
+CONTENT_BOOL_DOMAIN = ("true", "false")
+
+# The remedy citation every finding carries. It CITES the pack README's placement
+# section rather than restating what belongs where: a restatement here is a second
+# source for the placement rule and drifts from the first the moment that section is
+# edited. The path is repo-relative and resolves from any checkout.
+CONTENT_REMEDY_REF = "core/packs/README.md § What lives where"
+
+
+def _content_scan_array(lines, idx, rhs):
+    """(entries, next_idx) — the TOP-LEVEL elements of an array right-hand side.
+
+    A SECOND, string-aware scanner, deliberately NOT a change to `_scan_pack_value`.
+    That function is the value reader for every array key `--validate-packs` evaluates,
+    including `relationships.allowed_types[]`, which PACK-K04 evaluates as a subset over
+    the live corpus — so changing its return shape changes a rule the grammar check's
+    live arm exercises. The two readers answer different questions over the same bytes
+    and are kept separate for that reason.
+
+    Four hazards this scanner is immune to by construction, each observed in the live
+    corpus or one edit away from it:
+      H1  a `#` inside a quoted string is not a comment
+      H2  an unbalanced `[` or `{` inside a string does not move the nesting depth
+      H3  a comma inside a `statement` string does not end an entry
+      H4  a nested array or inline table inside an entry does not end an entry
+    H3 and H4 are what `_scan_pack_value` cannot do: it splits the captured body on
+    EVERY comma, so kanban's 2-entry `checks` reads back as 13 fragments. No
+    entry-scoped rule can run on that value, which is the whole reason this exists.
+    """
+    entries = []
+    cur = []
+    depth = 0
+    quote = None
+    started = False
+    i = idx
+    text = rhs
+    pos = 0
+    while True:
+        while pos < len(text):
+            ch = text[pos]
+            if quote is not None:
+                cur.append(ch)
+                if ch == "\\" and quote == '"' and pos + 1 < len(text):
+                    cur.append(text[pos + 1])
+                    pos += 2
+                    continue
+                if ch == quote:
+                    quote = None
+                pos += 1
+                continue
+            if ch in ('"', "'"):
+                quote = ch
+                cur.append(ch)
+                pos += 1
+                continue
+            if ch == "#":
+                pos = len(text)          # comment runs to end of THIS line
+                continue
+            if ch in "[{":
+                depth += 1
+                if depth == 1 and ch == "[" and not started:
+                    started = True       # the array's own opening bracket
+                    cur = []
+                    pos += 1
+                    continue
+                cur.append(ch)
+                pos += 1
+                continue
+            if ch in "]}":
+                depth -= 1
+                if depth == 0 and started:
+                    part = "".join(cur).strip()
+                    if part:
+                        entries.append(part)
+                    return entries, i
+                cur.append(ch)
+                pos += 1
+                continue
+            if ch == "," and depth == 1:
+                part = "".join(cur).strip()
+                if part:
+                    entries.append(part)
+                cur = []
+                pos += 1
+                continue
+            cur.append(ch)
+            pos += 1
+        if i + 1 >= len(lines):
+            # Unterminated. Returning what was read would be a silent under-read, so the
+            # caller marks the site UNTERMINATED and `validate_pack_content` exits 3.
+            return None, i
+        i += 1
+        cur.append("\n")
+        text = lines[i]
+        pos = 0
+
+
+def _content_top_level_parts(body):
+    """The `key = value` segments of an inline-table body, split at depth-0 commas."""
+    parts = []
+    cur = []
+    depth = 0
+    quote = None
+    i = 0
+    while i < len(body):
+        ch = body[i]
+        if quote is not None:
+            cur.append(ch)
+            if ch == "\\" and quote == '"' and i + 1 < len(body):
+                cur.append(body[i + 1])
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+            i += 1
+            continue
+        if ch in ('"', "'"):
+            quote = ch
+            cur.append(ch)
+            i += 1
+            continue
+        if ch == "#":
+            nl = body.find("\n", i)
+            i = len(body) if nl == -1 else nl
+            continue
+        if ch in "[{":
+            depth += 1
+            cur.append(ch)
+            i += 1
+            continue
+        if ch in "]}":
+            depth -= 1
+            cur.append(ch)
+            i += 1
+            continue
+        if ch == "," and depth == 0:
+            parts.append("".join(cur))
+            cur = []
+            i += 1
+            continue
+        cur.append(ch)
+        i += 1
+    if "".join(cur).strip():
+        parts.append("".join(cur))
+    return parts
+
+
+def _content_unquote(value):
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+        return value[1:-1]
+    return value
+
+
+def _content_entry_keys(raw):
+    """{key: value} for the TOP-LEVEL keys of one inline-table entry.
+
+    Top-level only, and that is the point: a nested `condition = { … source = … }`
+    must not be read as the ENTRY's `source`. No such nesting exists in the corpus
+    today, so a naive substring search would pass — and would start mis-verdicting the
+    first time one appears. The predicate is written against the grammar, not against
+    the corpus that happens to be shipped.
+    """
+    raw = raw.strip()
+    if raw.startswith("{") and raw.endswith("}"):
+        raw = raw[1:-1]
+    out = {}
+    for part in _content_top_level_parts(raw):
+        eq = -1
+        quote = None
+        for i, ch in enumerate(part):
+            if quote is not None:
+                if ch == quote:
+                    quote = None
+                continue
+            if ch in ('"', "'"):
+                quote = ch
+                continue
+            if ch == "=":
+                eq = i
+                break
+        if eq == -1:
+            continue
+        key = part[:eq].strip()
+        if key:
+            out[key] = _content_unquote(part[eq + 1:])
+    return out
+
 
 def _scan_pack_value(rhs, lines, idx):
     """(value, next_idx) for one TOML right-hand side. str | list | raw-string.
@@ -563,10 +804,71 @@ def _scan_pack_value(rhs, lines, idx):
     return rhs.strip(), idx
 
 
-def parse_pack(text):
+def _content_sites(pack, captured):
+    """The (kind × surface) content record for one pack — 4 rows per declared kind.
+
+    THE DENOMINATOR IS THE GRAMMAR, NOT THE FILE. Every declared kind contributes all
+    four surfaces whether or not it wrote them, because the finding this record exists
+    to support is exactly the surface a kind did NOT write. A record built by walking
+    the tables present in the file could not represent silence at all.
+
+    STATE, and the one edge the meta-schema leaves to the reader:
+      ABSENT     the array key is not written. A finding — the kind took no position.
+                 A table that IS present and carries a block `source` but writes NO
+                 array is ABSENT too. §1.2.1's reasoned-empty-set artifact is the
+                 CONJUNCTION `= []` plus a block `source`; half of it is not the
+                 artifact, and the meta-schema says an absent array carries no
+                 requirement — so a block `source` there discharges nothing. Deciding
+                 it the other way would let a kind buy silence on four surfaces with
+                 one string.
+      EMPTY      `= []`. Green for completeness (a position WAS taken) and the
+                 population the block-level `source` rule ranges over.
+      NON-EMPTY  entries present. The population the entry-level rules range over.
+    """
+    sites = []
+    for k_idx, kind in enumerate(pack["kinds"]):
+        kind_id = kind.get("kind_id") or "<kind #%d>" % (k_idx + 1)
+        for surface, array_key in CONTENT_SURFACES:
+            node = kind
+            for part in surface.split("."):
+                node = node.get(part) if isinstance(node, dict) else None
+            table = node if isinstance(node, dict) else None
+            entries = captured.get((k_idx, surface))
+            if table is None or array_key not in table:
+                state = "ABSENT"
+                entries = []
+            elif entries:
+                state = "NON-EMPTY"
+            else:
+                state = "EMPTY"
+                entries = []
+            block_source = table.get("source") if table is not None else None
+            sites.append({
+                "kind_id": kind_id,
+                "surface": surface,
+                "array_key": array_key,
+                "state": state,
+                "table_present": table is not None,
+                "block_source": block_source,
+                "criteria_version": (table.get("criteria_version")
+                                     if table is not None else None),
+                "entries": entries,
+            })
+    return sites
+
+
+def parse_pack(text, capture_content=False):
     """(pack, degradations) — a section-scoped read of one `pack.toml`.
 
     `pack` = {"meta": {...}, "kinds": [...], "labels": [...], "controls": [...]}.
+
+    `capture_content` DEFAULTS TO FALSE, and that default is the load-bearing part of
+    this signature rather than a convenience. At False the returned dict is exactly
+    what it was before the content mode existed, so every existing call site stays a
+    one-argument call and `--validate-packs`'s verdicts are unmoved as a property of
+    the CALL SIGNATURE — not as something a test happened to observe. At True the pack
+    additionally carries `content_sites`, a per-(kind × surface) record of state, block
+    `source`, and RAW ENTRY TEXT, which no `PACK-*` rule reads.
 
     `degradations` is non-empty when the parse is demonstrably PARTIAL, and a partial
     parse is an error rather than a short result — the same fail-loud-both-directions
@@ -590,6 +892,10 @@ def parse_pack(text):
     current_label = None
     current_control = None
     section_kind_tables = 0
+    surface_keys = dict(CONTENT_SURFACES)
+    current_surface = None
+    kind_index = -1
+    captured = {}                  # (kind_index, surface) -> [raw entry, ...]
 
     i = 0
     while i < len(lines):
@@ -603,11 +909,17 @@ def parse_pack(text):
             is_array = m.group(1) == "[["
             name = m.group(2)
             head = name.split(".")[0]
+            current_surface = None
+            if head == "kinds" and not is_array:
+                sub = name[len("kinds."):] if name.startswith("kinds.") else ""
+                if sub in surface_keys:
+                    current_surface = sub
             if is_array and name == "kinds":
                 current_kind = {}
                 pack["kinds"].append(current_kind)
                 target = current_kind
                 section_kind_tables += 1
+                kind_index += 1
             elif is_array and name == "labels":
                 current_label = {}
                 pack["labels"].append(current_label)
@@ -644,10 +956,39 @@ def parse_pack(text):
             continue
         kv = PACK_KV_RE.match(line)
         if kv:
-            value, i = _scan_pack_value(kv.group(2), lines, i)
+            key = kv.group(1)
+            rhs = kv.group(2)
+            start = i
+            value, i = _scan_pack_value(rhs, lines, i)
             if isinstance(target, dict):
-                target[kv.group(1)] = value
+                target[key] = value
+            if (capture_content and current_surface is not None
+                    and key == surface_keys[current_surface]
+                    and kind_index >= 0):
+                entries, content_end = _content_scan_array(lines, start, rhs)
+                if entries is None:
+                    degraded.append(
+                        "kind #%d surface %s: the `%s` array is UNTERMINATED — the "
+                        "content reader reached end of file inside it"
+                        % (kind_index + 1, current_surface, key))
+                    entries = []
+                elif content_end != i:
+                    # CROSS-INSTRUMENT AGREEMENT, the same control `parse_pack` already
+                    # applies to the kind-table count. Two independently-written
+                    # scanners disagreeing about where one array ENDS is positive
+                    # evidence that one of them is misreading, and it is checkable
+                    # without a TOML parser. Reachable only in capture mode, so
+                    # `--validate-packs` cannot acquire a new degradation path.
+                    degraded.append(
+                        "kind #%d surface %s: the two array readers disagree on the "
+                        "end of `%s` (grammar reader line %d, content reader line %d)"
+                        % (kind_index + 1, current_surface, key, i + 1,
+                           content_end + 1))
+                captured[(kind_index, current_surface)] = entries
         i += 1
+
+    if capture_content:
+        pack["content_sites"] = _content_sites(pack, captured)
 
     union_kind_tables = len(KINDS_TABLE_RE.findall(text))
     if union_kind_tables != section_kind_tables:
@@ -660,8 +1001,11 @@ def parse_pack(text):
     return pack, degraded
 
 
-def read_pack_root(pack_root):
+def read_pack_root(pack_root, capture_content=False):
     """((rel, pack) list, degradations) — every pack under `pack_root`.
+
+    `capture_content` is passed straight through to `parse_pack` and defaults to False
+    for the same reason it does there: every existing caller stays a one-argument call.
 
     TWO shapes are accepted, and both are used by this repo's own verification rows:
     a directory that IS one pack (holds `pack.toml` directly), and a directory OF
@@ -688,7 +1032,7 @@ def read_pack_root(pack_root):
         except OSError as exc:
             degraded.append("%s: unreadable (%s)" % (rel, exc.__class__.__name__))
             continue
-        pack, pack_degraded = parse_pack(text)
+        pack, pack_degraded = parse_pack(text, capture_content=capture_content)
         for why in pack_degraded:
             degraded.append("%s: %s" % (rel, why))
         packs.append((rel, pack))
@@ -1117,6 +1461,170 @@ def validate_packs(root, pack_root):
                 "FINDING" if severity == "ERROR" else "CAVEAT", rule_id, rel, detail))
             if severity == "ERROR":
                 errors += 1
+    out.append("COUNT\t%d" % errors)
+    print("\n".join(out))
+    return 1 if errors else 0
+
+
+def _blank(value):
+    """True when a key is absent, or present and empty/whitespace-only.
+
+    One predicate, used by every `source` rule, so "carries a `source`" cannot mean
+    two different things in two places — a key present with `""` discharges nothing.
+    """
+    return not isinstance(value, str) or not value.strip()
+
+
+def _validate_one_pack_content(rel, pack):
+    """[(rule_id, detail)] for one pack's content. See PACKC_RULE_IDS for disjointness."""
+    f = []
+    for site in pack.get("content_sites", []):
+        where = "%s.%s" % (site["kind_id"], site["surface"])
+
+        # ── PACKC-C01: kind-scoped completeness. Defined ONLY on ABSENT ──────
+        if site["state"] == "ABSENT":
+            f.append(("PACKC-C01",
+                      "%s: `%s` is ABSENT — the kind has taken no position on this "
+                      "surface. Write a position: entries, or `%s = []` with a "
+                      "block-level `source` naming the practice basis for the empty "
+                      "set (a reasoned empty set is complete content). See %s"
+                      % (where, site["array_key"], site["array_key"],
+                         CONTENT_REMEDY_REF)))
+
+        # ── PACKC-P03: block provenance. Defined ONLY on EMPTY ───────────────
+        elif site["state"] == "EMPTY" and _blank(site["block_source"]):
+            f.append(("PACKC-P03",
+                      "%s: `%s = []` carries no block-level `source`. An empty set is "
+                      "complete content only when it says what makes it empty. See %s"
+                      % (where, site["array_key"], CONTENT_REMEDY_REF)))
+
+        # ── The entry-scoped rules. Defined ONLY on NON-EMPTY ────────────────
+        elif site["state"] == "NON-EMPTY":
+            entry_rule = "PACKC-P02" if site["surface"] == "fields" else "PACKC-P01"
+            for n, raw in enumerate(site["entries"], 1):
+                keys = _content_entry_keys(raw)
+                ident = keys.get("id") or "#%d" % n
+                if _blank(keys.get("source")):
+                    f.append((entry_rule,
+                              "%s entry `%s`: no non-empty `source`. Provenance is "
+                              "per-entry and is NOT inherited from the block. See %s"
+                              % (where, ident, CONTENT_REMEDY_REF)))
+                if site["surface"] == "fields":
+                    continue
+                # ── PACKC-S01: the entry tuple, LESS the member P01 owns ─────
+                missing = [k for k in ("id", "statement", "level", "automatable")
+                           if _blank(keys.get(k))]
+                if missing:
+                    f.append(("PACKC-S01",
+                              "%s entry `%s`: missing or empty %s. The check-entry "
+                              "contract is {id, statement, level, automatable, "
+                              "source}; the `source` member is graded by PACKC-P01"
+                              % (where, ident, ", ".join("`%s`" % k
+                                                         for k in missing))))
+                # ── PACKC-S02: closed domains, PRESENCE-GATED ────────────────
+                # Evaluated only where the key is PRESENT. Ungated, one missing
+                # `automatable` would report twice — once as an absent member (S01)
+                # and again as a domain violation (S02) — and a finding count would
+                # stop equalling a defect count.
+                if not _blank(keys.get("level")) \
+                        and keys["level"] not in CONTENT_LEVEL_DOMAIN:
+                    f.append(("PACKC-S02",
+                              "%s entry `%s`: `level = \"%s\"` is outside the "
+                              "declared domain {%s}"
+                              % (where, ident, keys["level"],
+                                 ", ".join(CONTENT_LEVEL_DOMAIN))))
+                if not _blank(keys.get("automatable")) \
+                        and keys["automatable"] not in CONTENT_BOOL_DOMAIN:
+                    f.append(("PACKC-S02",
+                              "%s entry `%s`: `automatable = %s` is not a boolean"
+                              % (where, ident, keys["automatable"])))
+
+        # ── PACKC-S03: criteria_version, on every PRESENT criteria table ─────
+        # Presence-gated on the TABLE for the same reason S02 is gated on the key: an
+        # absent table already reports as an ABSENT array under C01, and grading a
+        # version on a table nobody wrote would double-report one silence.
+        if site["table_present"] and site["surface"].startswith("criteria."):
+            cv = site["criteria_version"]
+            if _blank(cv):
+                f.append(("PACKC-S03",
+                          "%s: no `criteria_version`. A criteria block that cannot be "
+                          "versioned cannot be re-baselined against a later edition of "
+                          "its practice source" % where))
+            elif not SEMVER_RE.match(cv):
+                f.append(("PACKC-S03",
+                          "%s: `criteria_version = \"%s\"` is not semver-shaped"
+                          % (where, cv)))
+
+    # ── PACKC-P04: provenance on a control declaration ───────────────────────
+    # Its own population, disjoint from every site rule: `[[controls]]` is a pack-level
+    # declaration and belongs to no kind or surface.
+    for n, control in enumerate(pack.get("controls", []), 1):
+        cid = control.get("control_id") or "#%d" % n
+        if _blank(control.get("source")):
+            f.append(("PACKC-P04",
+                      "control `%s`: no non-empty `source`. A control declares a "
+                      "dimension the corpus asserts exists; the ground for asserting "
+                      "it is the `source`. See %s" % (cid, CONTENT_REMEDY_REF)))
+    return f
+
+
+def validate_pack_content(root, pack_root):
+    """`--validate-pack-content`: content-completeness of a pack root.
+
+    A SIBLING of `--validate-packs`, not a widening of it, and the separation is a
+    measured constraint rather than a preference. The grammar check's control arm
+    compares its sensitivity rule string to the single literal `PACK-K05` by equality,
+    and that branch increments the issue counter OUTSIDE the warn-mode gate. Every one
+    of the 68 declaration sites in its fixture corpus is array-ABSENT — its CONFORMING
+    fixture included — so a silence rule placed inside that mode returns findings on
+    BOTH of its arms: the sensitivity arm's rule string stops being `PACK-K05` and the
+    specificity arm's exit moves 0 → 1. Two control arms lost, on every mode.
+
+    Fail-loud in BOTH directions, inherited verbatim from the grammar mode: a degraded
+    read and an empty pack root each exit 3. `packs_read=0` is an ERROR — a mistyped
+    `--pack-root` finds no violation BY CONSTRUCTION and must never read clean.
+
+    THE RUN REPORTS ITS OWN DENOMINATOR. `sites_read`, `entries_read`, `controls_read`
+    and `rules_evaluated` are printed on every run, so a zero is never ambiguous
+    between a clean corpus and a scan that spoke about nothing.
+    """
+    packs, degraded = read_pack_root(pack_root, capture_content=True)
+    if degraded:
+        print("ERROR\tpack read is PARTIAL — " + "; ".join(degraded), file=sys.stderr)
+        return 3
+    if not packs:
+        print("ERROR\tno pack.toml found under %s — a pack root that resolves to zero "
+              "packs finds no violation BY CONSTRUCTION and must never read clean"
+              % pack_root, file=sys.stderr)
+        return 3
+
+    sites = sum(len(p.get("content_sites", [])) for _rel, p in packs)
+    entries = sum(len(s["entries"])
+                  for _rel, p in packs for s in p.get("content_sites", []))
+    controls = sum(len(p.get("controls", [])) for _rel, p in packs)
+    states = {"ABSENT": 0, "EMPTY": 0, "NON-EMPTY": 0}
+    for _rel, p in packs:
+        for s in p.get("content_sites", []):
+            states[s["state"]] += 1
+
+    out = ["PACKC\tpacks_read=%d sites_read=%d entries_read=%d controls_read=%d "
+           "rules_evaluated=%d" % (len(packs), sites, entries, controls,
+                                   len(PACKC_RULE_IDS))]
+    try:
+        out.append("ROOT\t%s" % os.path.relpath(pack_root, root))
+    except ValueError:
+        out.append("ROOT\t%s" % pack_root)
+    # The state census is a MEASUREMENT, not decoration: it is what distinguishes "no
+    # findings because every surface is positioned" from "no findings because the run
+    # read nothing", and the two are otherwise the same zero.
+    out.append("STATE\tabsent=%(ABSENT)d empty=%(EMPTY)d non_empty=%(NON-EMPTY)d"
+               % states)
+
+    errors = 0
+    for rel, pack in packs:
+        for rule_id, detail in _validate_one_pack_content(rel, pack):
+            out.append("FINDING\t%s\t%s\t%s" % (rule_id, rel, detail))
+            errors += 1
     out.append("COUNT\t%d" % errors)
     print("\n".join(out))
     return 1 if errors else 0
@@ -3232,6 +3740,304 @@ def self_test():
     check("PC coverage: every PACK-* rule id is exercised by a mutation arm",
           _pc_exercised == set(PACK_RULE_IDS))
 
+    # ── PCC ARMS (--validate-pack-content) ───────────────────────────────────
+    # Same discipline as the PC arms above, and for the same named defect: an arm
+    # asserts THE EXPECTED RULE ID **AND THE ABSENCE OF EVERY OTHER**, so a dead rule
+    # fails its own arm and a rule that fires on everything fails every other arm.
+    #
+    # One property these arms carry that the PC arms cannot. Rule-id disjointness here
+    # is TOTAL — each of the three site states admits exactly one family — so every arm
+    # below expects a SINGLETON id set. An arm that starts returning two ids is
+    # reporting one defect twice, and that is a regression in its own right rather than
+    # a cosmetic one: a finding count that no longer equals a defect count makes the
+    # check's own output unusable as a measure of how much silence a corpus carries.
+
+    _PCC_CONTENT = (
+        '[kinds.fields]\n'
+        'core = "inherit"\n'
+        'kind_specific = [\n'
+        '  { field_id = "widget_ref", display_name = "Widget Ref", type = "string", '
+        'required = false, source = "T — synthetic basis" },\n'
+        ']\n'
+        '[kinds.criteria.readiness]\n'
+        'criteria_version = "0.1.0"\n'
+        'checks = [\n'
+        '  { id = "r1", statement = "A statement, carrying a comma.", level = "L2", '
+        'automatable = false, source = "T — synthetic basis" },\n'
+        ']\n'
+        '[kinds.criteria.done]\n'
+        'criteria_version = "0.1.0"\n'
+        'source = "T — reasoned empty set"\n'
+        'checks = []\n'
+        '[kinds.criteria.gate]\n'
+        'criteria_version = "0.1.0"\n'
+        'checks = [\n'
+        '  { id = "g1", statement = "A gate, with a comma.", level = "L3", '
+        'automatable = true, source = "T — synthetic basis", '
+        'condition = { kind = "set-aggregate", set = { scope = "parent", '
+        'kind_filter = ["widget"], status_filter = ["in-progress"] }, '
+        'aggregate = "count" } },\n'
+        ']\n')
+
+    _PCC_PACK = ('[meta]\n'
+                 'pack_id = "t-content"\n'
+                 'pack_version = "0.1.0"\n'
+                 'applies_to = "*"\n'
+                 'role = "kit"\n'
+                 'kit_class = "work-item"\n\n'
+                 '[[kinds]]\n'
+                 'kind_id = "widget"\n'
+                 'display_name = "Widget"\n'
+                 'base = "Work Item"\n'
+                 + _PCC_CONTENT)
+
+    _PCC_CONTROL = ('\n[[controls]]\n'
+                    'control_id = "t-cap"\n'
+                    'display_name = "Cap"\n'
+                    'source = "T — synthetic basis"\n')
+
+    _pcc_exercised = set()
+
+    def _pcc_run(packs, args=("--validate-pack-content",), taxonomy=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, pack_root = _pc_root(tmp, packs, taxonomy)
+            return _pc_cli(root, tuple(args) + ("--pack-root", pack_root))
+
+    def _pcc_arm(name, text, expect_ids, expect_rc=None, expect_rows=None):
+        rc, out, _err = _pcc_run({"c": text})
+        got = _pc_ids(out)
+        want = set(expect_ids)
+        want_rc = expect_rc if expect_rc is not None else (1 if want else 0)
+        want_rows = expect_rows if expect_rows is not None else len(want)
+        rows = len(_pc_rows(out, "FINDING"))
+        # The ROW COUNT is asserted alongside the id set, and it is not redundant: an
+        # id set can match while the same id fires twice on one defect. That is exactly
+        # the failure the presence-gating on S02 and S03 exists to prevent, and an
+        # id-set assertion alone cannot see it. Where a mutation legitimately plants N
+        # defects, the arm states N.
+        check(name, got == want and rc == want_rc and rows == want_rows)
+        _pcc_exercised.update(want)
+
+    # ── CONTROL: the conforming template must be CLEAN, and non-vacuously so ──
+    _pcc_arm("PCC control: a content-complete kind validates clean", _PCC_PACK, ())
+    _pcc_rc, _pcc_out, _ = _pcc_run({"c": _PCC_PACK})
+    check("PCC control non-vacuity: the clean arm READ something — 4 sites, and 3 "
+          "ENTRIES rather than the fragment count a comma-splitting reader returns",
+          "sites_read=4" in _pcc_out and "entries_read=3" in _pcc_out
+          and "rules_evaluated=%d" % len(PACKC_RULE_IDS) in _pcc_out)
+    check("PCC control: the state census is reported, so a zero is never ambiguous "
+          "between a positioned corpus and a scan that read nothing",
+          "STATE\tabsent=0 empty=1 non_empty=3" in _pcc_out)
+
+    # ── PACKC-C01: ABSENT, and ONLY absent ───────────────────────────────────
+    _pcc_arm("PCC PACKC-C01 fires alone on a surface whose array is ABSENT",
+             _PCC_PACK.replace('checks = [\n'
+                               '  { id = "g1", statement = "A gate, with a comma.", '
+                               'level = "L3", automatable = true, '
+                               'source = "T — synthetic basis", '
+                               'condition = { kind = "set-aggregate", '
+                               'set = { scope = "parent", kind_filter = ["widget"], '
+                               'status_filter = ["in-progress"] }, '
+                               'aggregate = "count" } },\n'
+                               ']\n', ''),
+             ("PACKC-C01",))
+    # THE EDGE, decided rather than inherited: a block `source` does NOT buy silence.
+    # Half the reasoned-empty-set artifact is not the artifact, and without this arm a
+    # kind could discharge four surfaces with one string.
+    _pcc_arm("PCC PACKC-C01 still fires when the table carries a block `source` but "
+             "writes NO array — half the reasoned-empty-set artifact is not the artifact",
+             _PCC_PACK.replace('[kinds.criteria.gate]\ncriteria_version = "0.1.0"\n'
+                               'checks = [\n'
+                               '  { id = "g1", statement = "A gate, with a comma.", '
+                               'level = "L3", automatable = true, '
+                               'source = "T — synthetic basis", '
+                               'condition = { kind = "set-aggregate", '
+                               'set = { scope = "parent", kind_filter = ["widget"], '
+                               'status_filter = ["in-progress"] }, '
+                               'aggregate = "count" } },\n'
+                               ']\n',
+                               '[kinds.criteria.gate]\ncriteria_version = "0.1.0"\n'
+                               'source = "T — a block source that discharges nothing"\n'),
+             ("PACKC-C01",))
+    # A kind that declares NO content table at all is FOUR findings, one per surface —
+    # the granularity decision, executed. Per-kind granularity would collapse "silent
+    # on one surface" and "silent on four" into a single signal and would not name the
+    # remedy site.
+    _pcc_arm("PCC PACKC-C01 is per (kind × surface): a hollow kind yields FOUR "
+             "findings, not one — the granularity names the remedy site",
+             _PCC_PACK.replace(_PCC_CONTENT, ''), ("PACKC-C01",), expect_rows=4)
+    _rc, _out, _ = _pcc_run({"c": _PCC_PACK.replace(_PCC_CONTENT, '')})
+    check("PCC PACKC-C01 granularity: the hollow kind's census reads 4 ABSENT sites, "
+          "so the row count is a measurement rather than a coincidence",
+          len(_pc_rows(_out, "FINDING")) == 4
+          and "STATE\tabsent=4 empty=0 non_empty=0" in _out)
+
+    # ── PACKC-P01/P02/P03: the `source` rule, verbatim, no inheritance ────────
+    _pcc_arm("PCC PACKC-P01 fires alone on a checks[] entry with no `source`",
+             _PCC_PACK.replace(', source = "T — synthetic basis" },\n'
+                               ']\n'
+                               '[kinds.criteria.done]',
+                               ' },\n]\n[kinds.criteria.done]'),
+             ("PACKC-P01",))
+    _pcc_arm("PCC PACKC-P02 fires alone on a kind_specific[] FieldDecl with no `source`",
+             _PCC_PACK.replace('required = false, source = "T — synthetic basis" }',
+                               'required = false }'),
+             ("PACKC-P02",))
+    _pcc_arm("PCC PACKC-P03 fires alone on a present-and-empty array with no block "
+             "`source`",
+             _PCC_PACK.replace('source = "T — reasoned empty set"\n', ''),
+             ("PACKC-P03",))
+    _pcc_arm("PCC PACKC-P01/P03: a `source` present but EMPTY discharges nothing",
+             _PCC_PACK.replace('source = "T — reasoned empty set"',
+                               'source = "   "'),
+             ("PACKC-P03",))
+    # NON-INHERITANCE, both directions, and it is the meta-schema's own words rather
+    # than a convenience: a block `source` does not reach an entry, and no entry
+    # reaches the block.
+    _pcc_arm("PCC no inheritance downward: a block `source` on a NON-EMPTY table does "
+             "not discharge an entry's own obligation",
+             _PCC_PACK.replace('[kinds.criteria.readiness]\ncriteria_version = "0.1.0"\n',
+                               '[kinds.criteria.readiness]\ncriteria_version = "0.1.0"\n'
+                               'source = "T — a block source"\n')
+                      .replace(', source = "T — synthetic basis" },\n'
+                               ']\n'
+                               '[kinds.criteria.done]',
+                               ' },\n]\n[kinds.criteria.done]'),
+             ("PACKC-P01",))
+    _pcc_arm("PCC no inheritance upward: P03 does not consult entries — a NON-EMPTY "
+             "table with no block `source` is clean",
+             _PCC_PACK, ())
+
+    # ── PACKC-P04: control provenance, its own population ────────────────────
+    _pcc_arm("PCC PACKC-P04 does NOT fire on a [[controls]] carrying a `source`",
+             _PCC_PACK + _PCC_CONTROL, ())
+    _pcc_arm("PCC PACKC-P04 fires alone on a [[controls]] with no `source`",
+             _PCC_PACK + _PCC_CONTROL.replace('source = "T — synthetic basis"\n', ''),
+             ("PACKC-P04",))
+
+    # ── PACKC-S01/S02/S03: entry shape, closed domains, criteria_version ─────
+    _pcc_arm("PCC PACKC-S01 fires alone on an entry missing `automatable` — S02 is "
+             "presence-gated, so one defect reports ONCE",
+             _PCC_PACK.replace('level = "L3", automatable = true, ', 'level = "L3", '),
+             ("PACKC-S01",))
+    _pcc_arm("PCC PACKC-S01 fires alone on an entry missing `statement`",
+             _PCC_PACK.replace('statement = "A gate, with a comma.", ', ''),
+             ("PACKC-S01",))
+    _pcc_arm("PCC PACKC-S02 fires alone on a `level` outside the declared domain",
+             _PCC_PACK.replace('level = "L3"', 'level = "L9"'),
+             ("PACKC-S02",))
+    _pcc_arm("PCC PACKC-S02 fires alone on a non-boolean `automatable`",
+             _PCC_PACK.replace('automatable = true', 'automatable = "yes"'),
+             ("PACKC-S02",))
+    _pcc_arm("PCC PACKC-S03 fires alone on a non-semver `criteria_version`",
+             _PCC_PACK.replace('[kinds.criteria.gate]\ncriteria_version = "0.1.0"',
+                               '[kinds.criteria.gate]\ncriteria_version = "banana"'),
+             ("PACKC-S03",))
+    _pcc_arm("PCC PACKC-S03 fires alone on a criteria block with no "
+             "`criteria_version`",
+             _PCC_PACK.replace('[kinds.criteria.gate]\ncriteria_version = "0.1.0"\n',
+                               '[kinds.criteria.gate]\n'),
+             ("PACKC-S03",))
+    # S03 is gated on the TABLE, for the same reason S02 is gated on the key: a table
+    # nobody wrote already reports as an ABSENT array under C01, and grading a version
+    # on it would report one silence twice.
+    _pcc_arm("PCC PACKC-S03 is table-gated: a kind with no criteria tables emits only "
+             "C01 rows, never a version finding on a table nobody wrote",
+             _PCC_PACK.replace(_PCC_CONTENT, ''), ("PACKC-C01",), expect_rows=4)
+
+    # ── FAIL LOUD IN BOTH DIRECTIONS ─────────────────────────────────────────
+    with tempfile.TemporaryDirectory() as tmp:
+        empty_root = os.path.join(tmp, "fixtures")
+        os.makedirs(empty_root, exist_ok=True)
+        rc, out, err = _pc_cli(tmp, ("--validate-pack-content",
+                                     "--pack-root", empty_root))
+        check("PCC an empty pack root EXITS 3 rather than reporting a clean zero",
+              rc == 3 and "no pack.toml found" in err and "COUNT" not in out)
+
+    # ── THE ISOLATION CLAIM, EXECUTED rather than asserted in prose ──────────
+    # The whole siting decision rests on one measured fact: the grammar check's own
+    # CONFORMING template declares all four content tables and writes NONE of the four
+    # arrays. These two arms run THE SAME BYTES through both modes and assert the
+    # contrast — grammar-clean, content-silent on all four surfaces. That is why a
+    # silence rule inside `--validate-packs` would reject that check's conforming
+    # fixture as readily as its nonconforming one, and it is asserted here rather than
+    # left as a claim in a comment.
+    rc, out, _err = _pcc_run({"k": _PC_KIT}, args=("--validate-packs",),
+                             taxonomy=_PC_TAXONOMY)
+    check("PCC isolation A: the grammar check's own conforming template is GRAMMAR-"
+          "clean, emits no PACKC id, and still evaluates exactly %d rules"
+          % len(PACK_RULE_IDS),
+          rc == 0 and _pc_ids(out) == set()
+          and "rules_evaluated=%d" % len(PACK_RULE_IDS) in out)
+    rc, out, _err = _pcc_run({"k": _PC_KIT}, taxonomy=_PC_TAXONOMY)
+    check("PCC isolation B: THE SAME BYTES are content-SILENT on all four surfaces — "
+          "which is exactly why a silence rule inside --validate-packs would redden "
+          "that check's conforming arm and destroy its discrimination",
+          rc == 1 and _pc_ids(out) == {"PACKC-C01"}
+          and len(_pc_rows(out, "FINDING")) == 4
+          and "STATE\tabsent=4 empty=0 non_empty=0" in out)
+    # And the converse, as a property of the CALL SIGNATURE rather than of a run:
+    # `parse_pack` at its default returns exactly what it returned before this mode
+    # existed. Every pre-existing call site is a one-argument call, so no `PACK-*` rule
+    # can see the capture at all.
+    _pp_default, _ = parse_pack(_PCC_PACK)
+    _pp_capture, _ = parse_pack(_PCC_PACK, capture_content=True)
+    check("PCC capture_content defaults OFF: parse_pack's default return carries no "
+          "content_sites key, so the grammar rules cannot observe the capture",
+          "content_sites" not in _pp_default
+          and len(_pp_capture.get("content_sites", [])) == 4)
+
+    # ── THE SHIPPED FIXTURE PAIR AND THE SHIPPED PACKS, through the CLI ──────
+    _pcc_fx = os.path.join(_pc_fx, "content")
+    _pcc_silent = os.path.join(_pcc_fx, "cc-silent", "pack.toml")
+    _pcc_complete = os.path.join(_pcc_fx, "cc-complete", "pack.toml")
+    check("PCC fixture control: both content fixtures exist and are non-empty",
+          os.path.isfile(_pcc_silent) and os.path.getsize(_pcc_silent) > 0
+          and os.path.isfile(_pcc_complete) and os.path.getsize(_pcc_complete) > 0)
+
+    rc, out, _err = _pc_cli(_pc_repo, ("--validate-pack-content", "--pack-root",
+                                       os.path.join(_pcc_fx, "cc-silent")))
+    check("PCC REJECTS the shipped cc-silent fixture under PACKC-C01 and no other "
+          "rule, with exactly one row",
+          rc == 1 and _pc_ids(out) == {"PACKC-C01"}
+          and len(_pc_rows(out, "FINDING")) == 1)
+
+    rc, out, _err = _pc_cli(_pc_repo, ("--validate-pack-content", "--pack-root",
+                                       os.path.join(_pcc_fx, "cc-complete")))
+    check("PCC ACCEPTS the shipped cc-complete fixture — a lint that fired on "
+          "EMPTINESS would fail here while still passing its sensitivity arm",
+          rc == 0 and _pc_ids(out) == set()
+          and "STATE\tabsent=0 empty=2 non_empty=2" in out)
+
+    # Both fixtures must ALSO be grammar-clean, or a whole-parent invocation could
+    # attribute a grammar rejection to one of them and read it as a content result.
+    for _name in ("cc-silent", "cc-complete"):
+        rc, out, _err = _pc_cli(_pc_repo, ("--validate-packs", "--pack-root",
+                                           os.path.join(_pcc_fx, _name)))
+        check("PCC fixture %s is clean under all %d PACK-* grammar rules"
+              % (_name, len(PACK_RULE_IDS)), rc == 0 and _pc_ids(out) == set())
+
+    # THE SITING GUARD, EXECUTED. `--pack-root <parent>` enumerates
+    # `<parent>/<child>/pack.toml`; `content/` holds none of its own, so the pair is
+    # skipped by a whole-parent grammar run. This asserts that layout held, which is
+    # what keeps the grammar check's fixture population a property of the LAYOUT rather
+    # than of the fact that nobody currently runs that form.
+    rc, out, _err = _pc_cli(_pc_repo, ("--validate-packs", "--pack-root", _pc_fx))
+    check("PCC siting guard: a whole-parent grammar run does NOT absorb the content "
+          "fixture pair (packs_read is unchanged at 5 top-level fixtures)",
+          "packs_read=5" in out)
+
+    rc, out, _err = _pc_cli(_pc_repo, ("--validate-pack-content", "--pack-root",
+                                       os.path.join(_pc_repo, "core", "packs")))
+    check("PCC the shipped corpus is content-complete: 0 findings over 16 sites, and "
+          "the census proves the run spoke about something",
+          rc == 0 and _pc_ids(out) == set()
+          and "packs_read=3 sites_read=16" in out
+          and "STATE\tabsent=0" in out)
+
+    check("PCC coverage: every PACKC-* rule id is exercised by a mutation arm",
+          _pcc_exercised == set(PACKC_RULE_IDS))
+
     failed = [n for n, ok in results if not ok]
     for name, ok in results:
         print(("  PASS  " if ok else "  FAIL  ") + name)
@@ -3274,6 +4080,15 @@ def main():
                          "meta-schema; emits one row per finding CARRYING ITS RULE ID, "
                          "so a rejection is attributable to a rule rather than to an "
                          "exit code. Exits 3 on a partial read or an empty pack root")
+    ap.add_argument("--validate-pack-content", action="store_true",
+                    help="validate a pack root for CONTENT COMPLETENESS — whether each "
+                         "declared kind took a position on each of its four surfaces, "
+                         "and whether every position names its provenance. A SIBLING "
+                         "of --validate-packs, not a widening of it: the findable "
+                         "condition here is silence, and the grammar check's fixture "
+                         "corpus is silent by construction. Emits one row per finding "
+                         "CARRYING ITS RULE ID. Exits 3 on a partial read or an empty "
+                         "pack root")
     ap.add_argument("--resolve", metavar="ARCHETYPE",
                     help="print the packs eligible for ARCHETYPE and the kind union, "
                          "each row tagged by role. Eligibility is the two-limb match: "
@@ -3296,7 +4111,8 @@ def main():
                          "(Layer 2) and a flat pack root carries no location signal. No "
                          "role constraint; absence from the root is exit 3")
     ap.add_argument("--pack-root", default=None,
-                    help="pack tree for --validate-packs / --resolve. Accepts either a "
+                    help="pack tree for --validate-packs / --validate-pack-content / "
+                         "--resolve. Accepts either a "
                          "directory holding pack.toml directly, or a directory of pack "
                          "directories. Defaults to <root>/core/packs")
     ap.add_argument("--self-test", action="store_true")
@@ -3312,16 +4128,22 @@ def main():
         # H1/H2 legs so a consumer that needs only the kind set pays for nothing else.
         return emit_kinds(root)
 
-    # The two pack-grammar modes are SEPARATE argv branches sharing no mutable state
+    # The pack modes are SEPARATE argv branches sharing no mutable state
     # with the H1/H2/H3 legs below, and they return before those legs run. That
     # isolation is deliberate and is the mitigation for extending this tool rather
     # than forking a third reader of the same corpus: `deploy.sh` Checks 22 and 55
-    # call the default path, and a defect in either mode below cannot reach it. The
+    # call the default path, and a defect in any mode below cannot reach it. The
     # self-test's existing H1/H2/H3 and --emit-kinds arms are the regression guard on
-    # that claim.
+    # that claim. `--validate-pack-content` INHERITS that isolation rather than
+    # re-arguing it, which is the whole reason it is a branch here and not a second
+    # script: /usr/bin/python3 on the operator baseline is 3.9 with no `tomllib`, so a
+    # standalone reader would be a second hand-rolled TOML dialect over one corpus,
+    # free to disagree with the first about what a pack says.
     pack_root = args.pack_root or os.path.join(root, "core", "packs")
     if args.validate_packs:
         return validate_packs(root, pack_root)
+    if args.validate_pack_content:
+        return validate_pack_content(root, pack_root)
     if args.resolve:
         return resolve_archetype(root, pack_root, args.resolve,
                                  kit=args.kit, k4=args.k4)
