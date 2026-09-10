@@ -2,7 +2,7 @@
 title: Release Plan — pack-conformance-and-parity (pack conformance posture, content lint, and the first pack control)
 type: release-plan
 plan_type: release
-status: EXECUTING
+status: ACTIVE
 release: versioned (bump-class minor; concrete number binds at the Stage-12 atomic claim)
 milestone: pack-conformance-and-parity
 release_class: novel
