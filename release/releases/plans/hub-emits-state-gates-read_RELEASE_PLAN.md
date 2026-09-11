@@ -30,7 +30,7 @@ reversibility: CHEAP / Confidence HIGH — every member is a bounded edit to tra
 | **Release Manager** | Agent-assisted (release-hub Mode O) |
 | **Status** | Executing (Stage 6 Engineering) |
 | **Branch** | `release/hub-emits-state-gates-read` |
-| **PR** | (populated at Stage 6 — opened in draft at Commit 0 per the SINGLE topology) |
+| **PR** | #7416 — opened in **draft** at Commit 0 per the SINGLE topology, so CI runs while the remaining cards land on the same branch; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `hub-emits-state-gates-read` |
 
 `domain_practice: { source: N/A — pipeline-internal release, date: 2026-09-10, domain: governance }`
