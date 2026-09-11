@@ -10,7 +10,7 @@
 | **Release Manager** | Agent-assisted |
 | **Status** | Executing |
 | **Branch** | release/authoring-bar-and-consumers |
-| **PR** | (populated immediately after the draft release PR is opened, in the commit that follows Engineering Commit 0) |
+| **PR** | #7410 (draft at Stage 6; transitioned to ready at the Stage 9 gate) |
 | **Milestone** | authoring-bar-and-consumers |
 
 **Baseline pin (Survival element 9).** `origin/main` = `a30838589583bcddf5f88183cfff1a8ea2475300` (`a3083858`). Every measurement in this plan is pinned here unless a row states otherwise. Stage-9 Phase A6.5 diffs mid-pipeline divergence against this SHA.
