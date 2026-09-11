@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.61] - 2026-09-11
+
+Four governance documents that described superseded behaviour now name the rule or the live mechanism they depend on.
+
+[Full notes](release/releases/notes/v4.61_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.61)
+
 ## [v4.60] - 2026-09-06
 
 Deploy checks that reported success while verifying nothing now have to prove they looked, and 662 unreadable log records were recovered.
