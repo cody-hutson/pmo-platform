@@ -394,6 +394,90 @@ if surface in ("ledger", "both"):
         notes.append("C4 requires BOTH surfaces — run with --surface=both to reconcile "
                      "ledger state against the log (explicit zero-state, not a pass)")
 
+# ─── M4: the population screen ───────────────────────────────────────────────
+#
+# WHAT C4 STRUCTURALLY CANNOT SEE. C4 is an AI-NNN id join both ways plus terminal-
+# state agreement. Both directions of a join over ids cannot detect a commitment
+# that minted NO id on either side — there is nothing to join on. That residue is
+# what this screens for, which is why it is not a duplicate of C4.
+#
+# REPORT-ONLY BY CONSTRUCTION, not by convention. It emits through `notes`, so its
+# output never enters `findings`, never becomes a VIOLATION, and therefore never
+# reaches `sys.exit(1 if violations else 0)`. The screen reports OTHER releases'
+# history, which the closing release neither caused nor can repair, and a blocking
+# arm would gate every future close on debt its own operator cannot pay.
+#
+# The lifecycle term is the point. `(>=1 decision row) AND (no ledger)` is also
+# what a CORRECT in-flight release looks like between plan approval and its first
+# durable commitment, so a screen without a completion term flags healthy siblings
+# at every close, forever.
+if surface == "both" and log_rows is not None:
+    if os.path.isdir(ledger_root):
+        slug_dirs = sorted(d for d in os.listdir(ledger_root)
+                           if os.path.isdir(os.path.join(ledger_root, d)))
+        # field 2 (index 1) is the release SLUG — the schema names it the
+        # "release join key — the Milestone SLUG". No new data source.
+        rows_by_slug = {}
+        for _ln, _raw, _f in log_rows:
+            if len(_f) == 10:
+                rows_by_slug.setdefault(_f[1].strip(), []).append(_f)
+
+        m4_flagged, m4_notyet, m4_nodec, m4_ledger = [], [], [], []
+        for slug in slug_dirs:
+            fs = rows_by_slug.get(slug, [])
+            if os.path.exists(os.path.join(ledger_root, slug, "action-items.md")):
+                m4_ledger.append(slug)
+            elif sum(1 for _f in fs if _f[3].strip() == "decision") < 1:
+                m4_nodec.append(slug)
+            elif any(_f[2].strip() == "13" for _f in fs):
+                m4_flagged.append(slug)
+            else:
+                m4_notyet.append(slug)
+
+        _tot = len(slug_dirs)
+        _sum = len(m4_ledger) + len(m4_flagged) + len(m4_notyet) + len(m4_nodec)
+        # What the denominator EXCLUDES, stated with it. The screen walks the
+        # hub-state root, so a release that never got a directory is outside its
+        # population entirely — and that is the case where the reported condition
+        # is most severely true. An undeclared scope turns "N of 77" into "N of
+        # every release", which is the denominator defect this tool exists to end.
+        _unseen = sorted(s for s in rows_by_slug
+                         if s not in set(slug_dirs)
+                         and sum(1 for _f in rows_by_slug[s] if _f[3].strip() == "decision") >= 1)
+        # EVERY bucket is rendered as `name=[...]`, and that is an assertion
+        # contract, not formatting. A slug appears in MORE THAN ONE bucket name's
+        # vicinity in this text, so an arm that greps the note AS A WHOLE for a
+        # slug passes while the screen is inverted — measured, not assumed: the
+        # mutation that demotes a flagged slug into not-yet leaves every whole-note
+        # substring test satisfied. An arm MUST bind inside one bucket's brackets.
+        notes.append(
+            "M4 population screen — flagged=[%s] (%d of %d slug director(ies) scanned "
+            "carry >=1 decision-class row, NO action-items.md, and a stage-13 row, i.e. "
+            "the release completed)"
+            % (", ".join(m4_flagged), len(m4_flagged), _tot))
+        notes.append(
+            "M4 partition of %d scanned director(ies): ledger-bearing=%d flagged=%d "
+            "not-yet-assessable=%d no-decision-row=%d; not_yet=[%s]; buckets %s the "
+            "denominator (%d vs %d). DENOMINATOR SCOPE: this screen walks the "
+            "hub-state root only — %d further release slug(s) carry decision rows in "
+            "the log with NO hub-state directory at all and are OUTSIDE this "
+            "denominator. REPORT-ONLY — emitted through `notes`, never `add()`, so it "
+            "cannot affect the exit status."
+            % (_tot, len(m4_ledger), len(m4_flagged), len(m4_notyet), len(m4_nodec),
+               ", ".join(m4_notyet),
+               "sum to" if _sum == _tot else "DO NOT SUM TO", _sum, _tot, len(_unseen)))
+    else:
+        notes.append("M4 population screen SKIPPED — ledger_root is not a directory "
+                     "(explicit zero-state; a skipped screen is never reported as a "
+                     "clean population)")
+else:
+    # The screen needs BOTH surfaces: the slug directories AND the log rows the
+    # slug joins against. Say so, rather than emitting nothing — an absent note
+    # and a clean population are the same output, which is the defect family
+    # this whole release exists to close.
+    notes.append("M4 population screen SKIPPED — requires BOTH surfaces; run with "
+                 "--surface=both (explicit zero-state, not a pass)")
+
 # ─── Report ──────────────────────────────────────────────────────────────────
 violations = [f for f in findings if f[1] == "VIOLATION"]
 legacy = [f for f in findings if f[1] == "LEGACY"]
@@ -624,6 +708,72 @@ if [[ "$SELF_TEST" == "true" ]]; then
     FAILED=$((FAILED + 1))
   fi
 
+  # ─── M4 population screen — BOTH ARMS in ONE engine run ────────────────────
+  #
+  # `arm()` grades the EXIT CODE and M4 cannot touch the exit code by design, so
+  # these arms capture the report and assert on the NOTE TEXT — the shape the
+  # denominator and specificity probes above already use, here-strings rather
+  # than pipes (see the SIGPIPE note above).
+  #
+  # BIND INSIDE ONE BUCKET'S BRACKETS. A whole-note grep for a slug is VACUOUS:
+  # every scanned slug is named somewhere in the two notes, so an inverted screen
+  # (flagged slug demoted to not-yet) still satisfies it. Measured, not assumed —
+  # the first form of this arm set reported 9/9 and let that exact mutation
+  # through. The distinct tokens `flagged=[` and `not_yet=[` each occur exactly
+  # once in the report, so the extraction needs no `head` and stays clear of the
+  # SIGPIPE idiom the repository-integrity gate detects.
+  M4T="$F/hub-state-tree"
+  _m4_rc=0
+  _m4_out="$(run_engine "$F/log-m4.md" "/nonexistent" "$M4T" "$PAST" both table "$SCHEMA_FILE")" || _m4_rc=$?
+  _m4_flagged="$(/usr/bin/sed -n 's/.*flagged=\[\([^]]*\)\].*/\1/p' <<<"$_m4_out")"
+  _m4_notyet="$(/usr/bin/sed -n 's/.*not_yet=\[\([^]]*\)\].*/\1/p' <<<"$_m4_out")"
+
+  m4_assert() {   # m4_assert <must|mustnot> <bucket-contents> <slug> <label>
+    local mode="$1" bucket="$2" slug="$3" label="$4" found=0
+    ARMS=$((ARMS + 1))
+    case ",${bucket// /}," in *",$slug,"*) found=1 ;; esac
+    if { [[ "$mode" == "must" ]] && [[ "$found" -ne 1 ]]; } ||
+       { [[ "$mode" == "mustnot" ]] && [[ "$found" -ne 0 ]]; }; then
+      echo "ERROR: self-test arm FAILED: $label (flagged=[$_m4_flagged] not_yet=[$_m4_notyet] rc=$_m4_rc)" >&2
+      FAILED=$((FAILED + 1))
+    fi
+  }
+
+  m4_assert must    "$_m4_flagged" fixture-closed-no-ledger   "M4 POSITIVE: a completed ledger-less slug MUST be flagged"
+  m4_assert mustnot "$_m4_flagged" fixture-inflight-no-ledger "M4 NEGATIVE: an in-flight ledger-less slug must NOT be flagged"
+  m4_assert must    "$_m4_notyet"  fixture-inflight-no-ledger "M4 PARTITION: the in-flight slug lands in not-yet-assessable"
+  m4_assert mustnot "$_m4_flagged" fixture-clean-release      "M4 NEGATIVE: a ledger-bearing slug must NOT be flagged"
+  m4_assert mustnot "$_m4_flagged" fixture-quiet-no-ledger    "M4 NEGATIVE: a slug with no decision row must NOT be flagged"
+
+  # REPORT-ONLY, OBSERVED rather than argued: a run that FLAGS a slug still exits 0.
+  ARMS=$((ARMS + 1))
+  [[ "$_m4_rc" -eq 0 ]] || {
+    echo "ERROR: self-test arm FAILED: the M4 screen must not affect the exit status — a run that flags a slug must still exit 0, got rc=$_m4_rc" >&2
+    FAILED=$((FAILED + 1)); }
+  # The denominator is COMPUTED from the scanned tree, never carried as a constant.
+  ARMS=$((ARMS + 1))
+  /usr/bin/grep -qF "of 4 slug director" <<<"$_m4_out" || {
+    echo "ERROR: self-test arm FAILED: M4 must print a denominator computed from the scanned tree" >&2
+    FAILED=$((FAILED + 1)); }
+  # The buckets must account for EVERY scanned directory.
+  ARMS=$((ARMS + 1))
+  /usr/bin/grep -qF "buckets sum to the denominator (4 vs 4)" <<<"$_m4_out" || {
+    echo "ERROR: self-test arm FAILED: M4 buckets must account for every scanned directory" >&2
+    FAILED=$((FAILED + 1)); }
+  # The DIRECTORY branch must actually have been taken — the whole point of the
+  # tree, and the branch C4/C5 use in production that no other arm reaches.
+  ARMS=$((ARMS + 1))
+  /usr/bin/grep -qF "ledger rows across 1 ledger(s)" <<<"$_m4_out" || {
+    echo "ERROR: self-test arm FAILED: the fixture tree must exercise the DIRECTORY branch of the ledger resolver" >&2
+    FAILED=$((FAILED + 1)); }
+  # A file-shaped root must report the screen SKIPPED — never silence.
+  ARMS=$((ARMS + 1))
+  _m4f_rc=0
+  _m4f_out="$(run_engine "$F/log-clean.md" "$F/writelog-clean.log" "$F/ledger-clean.md" "$PAST" both table "$SCHEMA_FILE")" || _m4f_rc=$?
+  /usr/bin/grep -qF "M4 population screen SKIPPED" <<<"$_m4f_out" || {
+    echo "ERROR: self-test arm FAILED: a file-shaped ledger_root must report the screen SKIPPED, not nothing (rc=$_m4f_rc)" >&2
+    FAILED=$((FAILED + 1)); }
+
   echo "self-test: $((ARMS - FAILED))/$ARMS assertion(s) passed"
   if [[ "$FAILED" -ne 0 ]]; then
     echo "ERROR: self-test: $FAILED arm(s) FAILED" >&2
@@ -637,6 +787,13 @@ if [[ "$SELF_TEST" == "true" ]]; then
   echo "  cutover contract live: pre-cutover findings are LEGACY at exit 0; (unset) grades nothing"
   echo "  --assert-bound asserted BOTH ways: non-zero while (unset), zero once an instant is bound"
   echo "  unreadable surface exits 2 — never reported as clean"
+  echo "  M4 population screen asserted on its NOTE TEXT, bound INSIDE one bucket's brackets:"
+  echo "    a whole-note grep is vacuous — every scanned slug is named somewhere in the notes,"
+  echo "    so an inverted screen satisfies it; the first form of these arms passed while the"
+  echo "    detector was dead. Four buckets, one fixture slug apiece, summing to the computed"
+  echo "    denominator; report-only OBSERVED (a run that flags still exits 0); and the fixture"
+  echo "    tree is the FIRST arm to enter the ledger resolver's DIRECTORY branch — the branch"
+  echo "    C4 and C5 use in production and every other arm bypasses by passing a file"
   exit 0
 fi
 
