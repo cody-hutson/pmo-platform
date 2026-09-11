@@ -117,8 +117,10 @@ paths remain the logged item or the chat-returned copy/paste body; no scratch `.
 downgrade to the `recommend` (surface-only) path even at `bounded_auto`. This floor is
 a **skill-level self-limit** — the C5 enforcement hook hard-blocks only the
 payload-detectable Tier-0 classes (governance-file writes / cross-domain bridge
-paths), and Mode C's `gh issue create` is not payload-detectable, so **no hook fires
-on this create**. The classifier is the only guard; run it unconditionally.
+paths), and Mode C's `gh issue create` is neither, so **that hook does not gate this
+create** (`SKILL.md` § Honest safety read records which hooks do and do not reach it,
+with their modes and coverage conditions). The classifier is the only guard; run it
+unconditionally.
 
 **Non-interactive self-repair → observation downgrade.** With no operator to fix a
 failed Gate, Mode C **re-authors once** from the structured signal input on a fixable
