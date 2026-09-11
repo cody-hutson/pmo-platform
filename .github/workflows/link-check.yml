@@ -215,7 +215,7 @@ jobs:
           Broken 2: [also gone](references/missing.md)
           Non-link 1: [external](https://example.com/x)
           Non-link 2: [anchor](#section)
-          Non-link 3: [placeholder](<OPERATOR_INSTANCE_PATH>)
+          Non-link 3: [placeholder](<SYNTHETIC_FIXTURE_TOKEN>)
           Non-link 4: [meta](path)
           FIXTURE
 
@@ -311,7 +311,7 @@ jobs:
             echo "### Remediation — triage each target by class"
             echo ""
             echo "- **RUNTIME-LOAD** (the hub is instructed to *read* this during a run): it must be reachable INSIDE the deployed tree. Fold the needed content into a deployed sibling reference, or register an injection. It stays a markdown link."
-            echo "- **PROVENANCE** (rationale, authoring standard, or decision record the hub does not execute): convert it to a backticked repo-relative path. The engine matches only \`[text](target)\` and \`[label]: target\`, so a backtick is genuinely not a navigational affordance — and it is the corpus's own established convention for citing a non-deployed file."
+            echo "- **PROVENANCE** (rationale, authoring standard, or decision record the hub does not execute): convert it to a backticked repo-relative path. The engine extracts only inline links (a bracketed label followed by a parenthesized target) and reference-style definitions, so a path in backticks is genuinely not a navigational affordance — and it is the corpus's own established convention for citing a non-deployed file."
             echo "- **Do NOT convert a sibling-skill link** (\`../<other-skill>/SKILL.md\`) — those resolve at runtime and are already correct. The reconstructed-roster target exists precisely so this scan reports them as fine."
           } | tee -a "$GITHUB_STEP_SUMMARY"
 

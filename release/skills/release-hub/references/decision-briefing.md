@@ -35,10 +35,10 @@ Spokes recommend from deep implementation context; the hub interrogates each rec
 | Stage 6 Engineering | Tier 0 (pre-scope-lock) → Tier 3 (post-scope-lock) | NO before Collective Review approval; YES after |
 | Stage 7 Dev Testing | Tier 2 | YES |
 | Stage 8 QA Testing | Tier 2 | YES |
-| **Stage 9 Plan Review** | **Tier 0 (Manual; permanent — Irreducible Human Task #4)** | **NEVER** |
+| **Stage 9 Plan Review** | **Tier 0 (Manual; permanent — Irreducible Human Tasks item 4)** | **NEVER** |
 | Stage 10 Dry Run (compressed) | (N/A — git-native) | N/A |
 | Stage 11 Snapshot (compressed) | (N/A — git-native) | N/A |
-| **Stage 12 Execute** | **Tier 0 (gate; Irreducible Human Task #5) → Tier 3 (post-authorization)** | **NEVER at gate; YES for post-authorization deploy steps** |
+| **Stage 12 Execute** | **Tier 0 (gate; Irreducible Human Tasks item 5) → Tier 3 (post-authorization)** | **NEVER at gate; YES for post-authorization deploy steps** |
 | Stage 13 Close | Tier 3 (post Stage 12) | YES |
 
 **Input 2 — Standing-GO Authorization list.** Stage 9 GO is the operator's irreducible release-authorization decision, and it authorizes whole-package execution of every mechanical state-flip downstream of GO — not a per-step gate. Each action below is **Tier-1 mechanical work under the standing GO** and is therefore **NON-gate-eligible** after Stage 9 GO: no per-step operator gate, no operator request.
