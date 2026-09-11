@@ -278,8 +278,8 @@ Per-path rows are retained, never collapsed into the card class.
 |-------|----|-------------------|----------------|
 | #5892 | AC-1 | File-content assertion on the File Structure fence: read the `notes/` and `plans/` rows | Notes `v1/ v2/ v3/` row absent; plans row reads `v<MAJOR>/`; fence alignment preserved |
 | #5892 | AC-2 | File-content read plus a citation-resolves probe on the named standard | Naming-convention sentence present; the standard cited and its path resolving |
-| #5892 | AC-3 | **Claim-axis semantic sweep** (layout vocabulary ∩ artifact subject), hand-classified — **not** a token sweep, which is structurally blind to this site | Zero stale layout assertions · control: the same sweep over the pre-fix text → the three known sites, and the `_unversioned/` row fires |
-| #5892 | AC-4 | The AC-3 sweep re-run with both arms declared | Zero · sensitivity fires on the `_unversioned/` row · specificity reads 0 |
+| #5892 | AC-3 | File-content assertion on the normative sentence at the `notes/` root: read the sentence that governs whether notes fold | The pre-fix instruction (*note foldering does happen as major versions close out*) absent; the replacement states **notes never fold**, and names `notes/_unversioned/` as the **one permitted** `notes/` subfolder |
+| #5892 | AC-4 | **Claim-axis semantic sweep** (layout vocabulary ∩ artifact subject), hand-classified — **not** a token sweep, which is structurally blind to a site that names no path — with both arms declared | Zero stale layout assertions · sensitivity: the same sweep over the pre-fix text → the three known sites, and the `_unversioned/` row fires · specificity reads 0 |
 | #5892 | AC-5 | `bash core/deploy/deploy.sh --check` plus the release-corpus linter, scoped to this file | Both green on this file |
 | #6409 | AC-1 | **Execute** the `_prov_source_form` resolver against the value shape the corrected instruction produces. Patterns extracted from `release/tools/verify-release-plan.sh` rather than retyped; run on two independent engines (the real `grep -E` and a `python3` re-implementation) so a single-engine quirk cannot produce a plausible-wrong answer | Returns a **named** form (`A`), not `NONE` · control: the pre-fix instructed shape (`the cited source list`) returns `NONE` on both engines, so the arm demonstrably discriminates · specificity: a bare word, an untracked extension and a prose-then-path string all return `NONE` |
 | #6409 | AC-2 | Probe § 5.7 for instruction-shaped provenance directives whose instructed value resolves to `NONE`; denominator is the section's line span | Zero · sensitivity: the same probe over the pre-fix section returns 1 (the step-2 instruction) · specificity: 0 outside the section's span |
@@ -539,7 +539,7 @@ Recoverable byte-for-byte at
 
 ## Change Description
 
-(Authored at PR-creation time; refreshed by the last Stage-6 spoke if Tier 1 [ADJUST] commits change which members land or which decisions stand.)
+(Authored at PR-creation time; refreshed by the last Stage-6 spoke if Tier 1 [ADJUST] commits change which members land, **which status any member carries**, or which decisions stand. A member whose build lands after this section was authored changes its status without changing the member set — that is a refresh trigger too, so a spoke reading this clause literally still refreshes the row.)
 
 ### Outcome
 
@@ -551,7 +551,7 @@ Four governance surfaces stop asserting things about mechanisms they do not own.
 |---|---|---|
 | #5892 | The protocol's layout rows and its normative sentence describe the flat-notes reality and cite the standard that governs it | DONE |
 | #6409 | § 5.7's upgrade-mechanism step names a provenance form the resolver resolves, and records why a count-shaped cascade could not see the section | DONE |
-| #6241 | § 5.1 state 4 records its safety basis, additively, with every predicate unchanged | PENDING — its own Stage-6 spoke |
+| #6241 | § 5.1 state 4 records its safety basis, additively, with every predicate unchanged | DONE |
 | #6394 | Every occurrence of the no-hook-sees-it claim, across both skill files, names the hook and its shipped mode; the package is rebuilt in this PR | DONE |
 
 ### Key decisions
