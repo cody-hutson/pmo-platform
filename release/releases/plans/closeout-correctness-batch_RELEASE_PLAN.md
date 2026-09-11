@@ -6,7 +6,7 @@ status: ACTIVE
 release: versioned (bump-class minor; concrete number binds at the Stage-12 atomic claim)
 milestone: closeout-correctness-batch
 release_class: routine
-reversibility: CHEAP / Confidence HIGH — every member is a bounded edit to a tracked file, and `git revert -m 1` of the merge restores `main` byte-for-byte. Commit-per-issue on the single branch preserves per-member revertability without a whole-release revert. This field previously also claimed "no member adds a file outside `release/releases/plans/`"; that clause is withdrawn at the Stage-9 gating correction — #6841 adds `release/ADRs/ADR-195-...md` — and the CHEAP verdict is unaffected, because an added markdown document reverts with its commit and leaves no residue outside git.
+reversibility: CHEAP / Confidence HIGH — every member is a bounded edit to a tracked file, and `git revert -m 1` of the merge restores `main` byte-for-byte. Commit-per-issue on the single branch preserves per-member revertability without a whole-release revert. This field previously also claimed "no member adds a file outside `release/releases/plans/`"; that clause is withdrawn at the Stage-9 gating correction — #6841 adds `release/ADRs/ADR-195-action-item-status-classified-by-membership.md` — and the CHEAP verdict is unaffected, because an added markdown document reverts with its commit and leaves no residue outside git.
 ---
 # Release Plan — `closeout-correctness-batch`
 
