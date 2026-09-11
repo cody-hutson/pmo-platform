@@ -2552,13 +2552,28 @@ def _self_test() -> int:
     # G-5a — anti-vacuity for G-3, driven through the REAL parser so the whole
     # parse->compare pipeline is what gets discriminated, not just the comparison.
     round_trip = _parse_banned_jargon_rows(_render_24(table_rows))
-    synthetic_extra = _parse_banned_jargon_rows(_render_24(table_rows + ["synthetic-unenforced-row"]))
-    arm("G-5a anti-vacuity — G-3's predicate returns UNEQUAL against a table carrying one extra row",
-        _parity(round_trip, mapped_rows, BANNED_JARGON_ROW_EXCLUSIONS)
-        and not _parity(synthetic_extra, mapped_rows, BANNED_JARGON_ROW_EXCLUSIONS),
-        f"round-trip of the real {len(round_trip)} row(s) -> parity holds (the renderer "
-        f"does not manufacture the difference); +1 synthetic row ({len(synthetic_extra)}) -> "
-        "parity BREAKS, so G-3 discriminates")
+    # The added label MUST NOT already be a row, or the "+1" table is +1 LINE and
+    # +0 SET, the comparison finds the sets equal, and the anti-vacuity arm fails
+    # for a reason that has nothing to do with the property it tests. Collision is
+    # not hypothetical: it is exactly what a scratch copy of §2.4 carrying a
+    # synthetic row — the AC-2 verification procedure — produces.
+    _sentinel = "synthetic-unenforced-row"
+    while _sentinel in table_rows:
+        _sentinel += "-x"
+    synthetic_extra = _parse_banned_jargon_rows(_render_24(table_rows + [_sentinel]))
+    # Graded against a map derived from the round-trip rows THEMSELVES, not against
+    # the shipped map. The property under test is that the parse->compare pipeline
+    # notices one added row; coupling it to the shipped map would make this arm fail
+    # a second time whenever G-3 already failed, reporting an artifact beside the
+    # finding instead of the finding alone.
+    self_map = {r: r for r in round_trip}
+    arm("G-5a anti-vacuity — the parse->compare pipeline returns UNEQUAL on one added row",
+        len(round_trip) == len(table_rows)
+        and _parity(round_trip, self_map.values(), {})
+        and not _parity(synthetic_extra, self_map.values(), {}),
+        f"round-trip of the real {len(round_trip)} row(s) -> equal (the renderer does not "
+        f"manufacture the difference); those same rows +1 synthetic ({len(synthetic_extra)}) "
+        "-> UNEQUAL, so G-3's predicate discriminates a published-but-unmapped row")
 
     # G-5b — anti-vacuity for G-3 in the other direction, and the only exercise
     # BANNED_JARGON_ROW_EXCLUSIONS gets while it ships empty.
