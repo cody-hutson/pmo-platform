@@ -54,7 +54,9 @@
 # exclusion is asserted in both directions rather than assumed — a narrowing
 # control fails the arm if the cut marker is missing from either side, and an
 # inertness arm in run_self_test fails if the excluded region ever starts
-# carrying scan-dependent output.
+# carrying output that VARIES WITH THE FINDING SET. That variation is the whole
+# of the arm's reach, and it is narrower than the exclusion's safety condition;
+# the residual it leaves is stated at normalize_report() rather than implied away.
 #
 # WHAT THE EQUIVALENCE OBLIGATION COSTS, AND WHERE NEW ASSERTIONS THEREFORE GO.
 # The oracle is a differential over a SHARED corpus, so the corpus is frozen at
@@ -794,13 +796,32 @@ ADVISORY_CUT_MARKER='@@ADVISORY-BLOCK-EXCLUDED-FROM-EQUIVALENCE@@'
 #   * That it FIRED — the narrowing control in run_equivalence fails the arm if
 #     the cut marker is missing from either side, so a normalizer that silently
 #     no-ops cannot read as a pass.
-#   * That the excluded region is STILL INERT — the inertness arm in
-#     run_self_test runs the checker over two inputs with DIFFERENT findings and
-#     requires their post-cut regions to be byte-identical while their pre-cut
-#     regions differ. Inertness is the property that justifies the cut, and a
-#     point-in-time reading of the region is not a guarantee; if that region ever
-#     absorbs scan-dependent output, that arm turns red instead of the exclusion
-#     silently widening.
+#   * That the excluded region is STILL INERT AGAINST THE FINDING SET — the
+#     inertness arm in run_self_test runs the checker over two inputs with
+#     DIFFERENT findings and requires their post-cut regions to be byte-identical
+#     while their pre-cut regions differ. Inertness is the property that justifies
+#     the cut, and a point-in-time reading of the region is not a guarantee; if
+#     that region ever starts emitting output that VARIES WITH THE FINDING SET,
+#     that arm turns red instead of the exclusion silently widening.
+#
+# WHAT THAT ARM DOES NOT REACH, NAMED RATHER THAN LEFT TO BE DISCOVERED. Its
+# discriminator is variation ACROSS THE FINDING SET. The exclusion's safety
+# condition is the stronger property that no below-cut output can DIFFER BETWEEN
+# THE TWO IMPLEMENTATIONS, and a below-cut emission that is CONSTANT across
+# finding sets sits in the gap between the two. Measured, not reasoned: one
+# `echo "${REFBLOCK_RE}"` added below the cut is byte-identical in both of the
+# arm's runs, so the arm passes at inertness=1 and the suite reports SELF-TEST
+# RESULT: PASS at exit 0 — while the checker emits a below-cut line the oracle
+# does not emit at all, interpolating a live implementation value. The report-text
+# arm cannot see it either, because that region is excluded from the diff by
+# declaration. Nor can varying the arm's INPUTS close this: a constant is constant,
+# so no second input dimension makes it differ between the two runs. The one arm
+# that WOULD reach it is a below-cut diff between the oracle and this checker —
+# which is the whole-output diff this narrowing exists to remove, and reinstating
+# it reinstates the defect above. So the residual is ACCEPTED and recorded here,
+# the same accounting this block already makes for Arm 3's presence-only pinning:
+# the exclusion is armed against the class the arm measures, and rests on review
+# for the class it does not.
 #
 # INVOCATION FORM IS LOAD-BEARING, NOT STYLISTIC. awk reads the FILE and no
 # producer sits upstream, and the program carries no `exit`. The shape this
@@ -1508,7 +1529,16 @@ run_self_test() {
   # require their reports to DIFFER above the cut and be BYTE-IDENTICAL below it.
   # The differ-above requirement is the vacuity control — without it two identical
   # reports would satisfy the arm trivially. The day the advisory block interpolates
-  # anything scan-derived, this arm goes red instead of the exclusion quietly widening.
+  # anything that VARIES WITH THE FINDING SET, this arm goes red instead of the
+  # exclusion quietly widening.
+  #
+  # ITS REACH STOPS THERE, AND THE BOUND IS STRUCTURAL. The discriminator is
+  # variation across the finding set, so a below-cut emission that is CONSTANT
+  # across finding sets is byte-identical in both runs below and passes — and no
+  # second input dimension can change that, because a constant is constant.
+  # Measured: `echo "${REFBLOCK_RE}"` added below the cut leaves this arm at
+  # inertness=1 and the suite at SELF-TEST RESULT: PASS. normalize_report() records
+  # why that residual is accepted rather than closed, and what closing it costs.
   local xm_a_out="$xm_dir/inert-a.out" xm_b_out="$xm_dir/inert-b.out"
   local xm_a_blk="$xm_dir/inert-a.blk" xm_b_blk="$xm_dir/inert-b.blk"
   local xm_a_norm="$xm_dir/inert-a.norm" xm_b_norm="$xm_dir/inert-b.norm"
