@@ -2,7 +2,7 @@
 title: Release Plan — hub-emits-state-gates-read (the hub emits the state its gates read, and the platform can measure whether its decisions are observable)
 type: release-plan
 plan_type: release
-status: Executing
+status: ACTIVE
 release: versioned (bump-class minor; concrete number binds at the Stage-12 atomic claim)
 milestone: hub-emits-state-gates-read
 release_class: novel
