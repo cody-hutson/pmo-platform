@@ -1269,6 +1269,274 @@ run_self_test() {
     echo "    ---   [self-doc]  ${sd_fail} failure(s)"
   fi
 
+  # ── Exact-match placement, the failure message, and the limb-(a) guard ──────
+  # CORPUS-FREE BY CONSTRUCTION, for the same load-bearing reason as the two
+  # blocks above. The pre-extraction body carries the OLD placement message, so a
+  # fixture added to cases/ + manifest.txt to exercise any of this would be
+  # compared against a body that answers differently, and the equivalence arm
+  # would fail ON A CORRECT FIX. Every file below is written under $td and NEVER
+  # under $FX_REPO.
+  #
+  # THIS BLOCK IS THE REPLACEMENT COVERAGE for what the narrowed equivalence claim
+  # gives up (see normalize_report). The byte-diff pinned the advisory prose to a
+  # frozen historical copy of itself — it could tell you the message had changed,
+  # never that the message was TRUE. Arms 1-2 pin the behaviour, Arm 3 pins the
+  # text, and together they assert the property that actually matters: every
+  # heading the message calls recognized is accepted, every heading it calls
+  # unrecognized is flagged, and the message still says so. Arm 3 alone would pass
+  # on a message that describes a gate doing something else; Arms 1-2 alone would
+  # pass on a message that says nothing at all.
+  #
+  # The headings are not invented. They are the measured matrix: five that
+  # REFBLOCK_RE accepts and six it rejects, and each of the six is a near miss the
+  # corrected message names by example — `## References and Provenance` contains
+  # TWO recognized spellings and is still rejected, which is the whole cost of the
+  # omission in one row.
+  local xm_dir="$td/exact-match"
+  local xm_h xm_i xm_out xm_rc xm_body xm_phrase
+  local xm_accept=0 xm_flagged=0 xm_msg=0 xm_guard=0 xm_inert=0 xm_fail=0
+  mkdir -p "$xm_dir"
+  echo "--- exact-match placement: message text pinned to the behaviour it describes ---"
+
+  # Arm 1 — MUST ACCEPT. #909100 resolves `valid` in the shared verdict map (the
+  # same number the generated heading matrix uses, so no map row is added and
+  # none is orphaned), which makes PLACEMENT the only variable under test.
+  # Filenames are keyed by INDEX rather than by a slug of the heading: two of
+  # these spellings differ only in case and would collide on a case-insensitive
+  # filesystem, silently shrinking the matrix.
+  xm_i=0
+  for xm_h in \
+    '## References' \
+    '## references' \
+    '## Issue References' \
+    '## Sources:' \
+    '## Source(s)' ; do
+    xm_i=$((xm_i + 1))
+    assertions=$((assertions + 1))
+    xm_body="$xm_dir/accept-${xm_i}.md"
+    {
+      printf 'Exact-match probe — must ACCEPT.\n\n'
+      printf '%s\n' "$xm_h"
+      printf -- '\n- #909100 — the reference sits UNDER the heading under test.\n'
+    } > "$xm_body"
+    set +e
+    xm_out="$( cd "$xm_dir" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA \
+        GITHUB_REPOSITORY=fixture-owner/fixture-repo \
+        bash "$SCRIPT_PATH" --resolver fixture --fixture-map "$FX_MAP" --path "accept-${xm_i}.md" 2>&1 )"
+    xm_rc=$?
+    set -e
+    if [ "$xm_rc" -eq 0 ]; then
+      xm_accept=$((xm_accept + 1))
+    else
+      echo "    FAIL  [exact-match] a heading the message calls RECOGNIZED was flagged: ${xm_h}"
+      printf '%s\n' "$xm_out" | sed -e 's/^/            /'
+      xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+    fi
+  done
+
+  # Arm 2 — MUST FLAG. Each of these is named in the corrected message as a near
+  # miss, so this arm is what stops the message and the regex drifting apart: if
+  # REFBLOCK_RE is ever widened to accept one of them, the message becomes wrong
+  # and THIS arm goes red, rather than a reader discovering it.
+  xm_i=0
+  for xm_h in \
+    '## REFERENCES' \
+    '## References and Provenance' \
+    '## Related ADRs' \
+    '## Provenance notes' \
+    '## Reference' \
+    '##References' ; do
+    xm_i=$((xm_i + 1))
+    assertions=$((assertions + 1))
+    xm_body="$xm_dir/flag-${xm_i}.md"
+    {
+      printf 'Exact-match probe — must FLAG.\n\n'
+      printf '%s\n' "$xm_h"
+      printf -- '\n- #909100 — the reference sits under an UNRECOGNIZED heading.\n'
+    } > "$xm_body"
+    set +e
+    xm_out="$( cd "$xm_dir" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA \
+        GITHUB_REPOSITORY=fixture-owner/fixture-repo \
+        bash "$SCRIPT_PATH" --resolver fixture --fixture-map "$FX_MAP" --path "flag-${xm_i}.md" 2>&1 )"
+    xm_rc=$?
+    set -e
+    if [ "$xm_rc" -ne 0 ]; then
+      xm_flagged=$((xm_flagged + 1))
+    else
+      echo "    FAIL  [exact-match] a heading the message calls UNRECOGNIZED was accepted: ${xm_h}"
+      xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+    fi
+  done
+
+  # Arm 3 — THE MESSAGE ITSELF. Emit a real failure verdict and assert the
+  # advisory block states the constraint and names the near misses Arm 2 just
+  # exercised.
+  #
+  # The second group of phrases is deliberately WIDER than the placement bullet,
+  # and the reason is worth stating: the narrowed equivalence claim drops the
+  # byte-diff over this entire region, not merely over the sentence that changed.
+  # The other four verdict-class bullets and the Override criterion lost their
+  # only pin too. A presence assertion is weaker than the behavioural pinning
+  # Arms 1-2 give the placement bullet — it catches deletion and truncation, not
+  # a wrong sentence — but it is the difference between partial coverage and
+  # none, and claiming the whole region is "re-pinned to behaviour" would
+  # overstate what this block does.
+  assertions=$((assertions + 1))
+  xm_body="$xm_dir/message.md"
+  {
+    printf 'Exact-match probe — message content.\n\n'
+    printf -- '- #909100 — a valid reference placed above any reference block.\n'
+  } > "$xm_body"
+  set +e
+  xm_out="$( cd "$xm_dir" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA \
+      GITHUB_REPOSITORY=fixture-owner/fixture-repo \
+      bash "$SCRIPT_PATH" --resolver fixture --fixture-map "$FX_MAP" --path message.md 2>&1 )"
+  xm_rc=$?
+  set -e
+  printf '%s\n' "$xm_out" > "$xm_dir/message.out"
+  # Precondition: the probe must actually have FAILED, or no advisory block was
+  # printed and every phrase assertion below would be checking an empty haystack.
+  if [ "$xm_rc" -eq 0 ]; then
+    echo "    FAIL  [exact-match] message probe did not produce a verdict — the phrase arms would be vacuous"
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  else
+    xm_msg=$((xm_msg + 1))
+    for xm_phrase in \
+      'The match ends at the heading word' \
+      'FIRST LETTER of each word may vary in case' \
+      '`## Related ADRs`' \
+      '`## References and Provenance`' \
+      '`## Provenance notes`' \
+      '`## REFERENCES`' \
+      'RENAME' \
+      'does not resolve / redirect' \
+      'different repository' \
+      'pull-request number' \
+      'deprecated IMP-NNN' \
+      'allow-issue-ref' \
+      'BOTH limbs hold' ; do
+      assertions=$((assertions + 1))
+      if grep -qF -- "$xm_phrase" "$xm_dir/message.out"; then
+        xm_msg=$((xm_msg + 1))
+      else
+        echo "    FAIL  [exact-match] the failure message no longer states: ${xm_phrase}"
+        xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+      fi
+    done
+  fi
+
+  # Arm 4 — THE LIMB-(a) GUARD, both directions. Without this pair the guard
+  # ships with no regression guard at all, and that is precisely how the defect
+  # it fixes escaped in the first place: every other invocation in this harness
+  # pins GITHUB_REPOSITORY, so nothing here could ever reach the unset path.
+  #   gh      + unset -> REFUSE (exit 3), naming the variable, emitting NO finding
+  #   fixture + unset -> proceed normally; the fixture resolver never reads it
+  assertions=$((assertions + 1))
+  set +e
+  xm_out="$( cd "$xm_dir" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA -u GITHUB_REPOSITORY \
+      bash "$SCRIPT_PATH" --resolver gh --path accept-1.md 2>&1 )"
+  xm_rc=$?
+  set -e
+  if [ "$xm_rc" -ne 3 ]; then
+    echo "    FAIL  [exact-match] guard: --resolver gh with GITHUB_REPOSITORY unset returned ${xm_rc}, expected 3 (config failure)"
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  elif ! grep -qF 'GITHUB_REPOSITORY' <<<"$xm_out"; then
+    echo "    FAIL  [exact-match] guard: the refusal does not name GITHUB_REPOSITORY"
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  elif grep -qE '^[^[:space:]]+:[0-9]+: ' <<<"$xm_out"; then
+    echo "    FAIL  [exact-match] guard: a CONTENT finding was emitted alongside the refusal"
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  else
+    xm_guard=$((xm_guard + 1))
+  fi
+
+  # The twin, and it is the specificity arm: a guard that refused here too would
+  # have broken the whole offline surface rather than fixed a false red.
+  assertions=$((assertions + 1))
+  set +e
+  xm_out="$( cd "$xm_dir" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA -u GITHUB_REPOSITORY \
+      bash "$SCRIPT_PATH" --resolver fixture --fixture-map "$FX_MAP" --path accept-1.md 2>&1 )"
+  xm_rc=$?
+  set -e
+  if [ "$xm_rc" -eq 0 ]; then
+    xm_guard=$((xm_guard + 1))
+  else
+    echo "    FAIL  [exact-match] guard twin: --resolver fixture wrongly refused with GITHUB_REPOSITORY unset (exit ${xm_rc})"
+    printf '%s\n' "$xm_out" | sed -e 's/^/            /'
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  fi
+
+  # Arm 5 — INERTNESS OF THE EXCLUDED REGION, which is what keeps the narrowed
+  # equivalence claim honest over time.
+  #
+  # run_equivalence's narrowing control asserts the normalizer RAN. It cannot
+  # assert that the region it removed is still inert, and inertness is the entire
+  # justification for removing it. That property was established by reading the
+  # region once; a reading is not a guarantee, and the failure it leaves open is
+  # silent — an `echo` carrying a scan result added below the cut line would
+  # simply leave the comparison, with every arm still green.
+  #
+  # So: run the checker over two inputs that produce DIFFERENT findings, and
+  # require their reports to DIFFER above the cut and be BYTE-IDENTICAL below it.
+  # The differ-above requirement is the vacuity control — without it two identical
+  # reports would satisfy the arm trivially. The day the advisory block interpolates
+  # anything scan-derived, this arm goes red instead of the exclusion quietly widening.
+  local xm_a_out="$xm_dir/inert-a.out" xm_b_out="$xm_dir/inert-b.out"
+  local xm_a_blk="$xm_dir/inert-a.blk" xm_b_blk="$xm_dir/inert-b.blk"
+  local xm_a_norm="$xm_dir/inert-a.norm" xm_b_norm="$xm_dir/inert-b.norm"
+  {
+    printf 'Inertness probe A.\n\n'
+    printf -- '- #909100 — a VALID reference, misplaced above any reference block.\n'
+  } > "$xm_dir/inert-a.md"
+  {
+    printf 'Inertness probe B — a different finding set, deliberately.\n\n'
+    printf -- '- #909100 — a VALID reference, misplaced above any reference block.\n'
+    printf -- '- #909404 — a number the verdict map does not name, so it does not resolve.\n'
+    printf -- '- IMP-007 — the deprecated form, a third verdict class.\n'
+  } > "$xm_dir/inert-b.md"
+  set +e
+  ( cd "$xm_dir" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA \
+      GITHUB_REPOSITORY=fixture-owner/fixture-repo \
+      bash "$SCRIPT_PATH" --resolver fixture --fixture-map "$FX_MAP" --path inert-a.md ) > "$xm_a_out" 2>&1
+  ( cd "$xm_dir" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA \
+      GITHUB_REPOSITORY=fixture-owner/fixture-repo \
+      bash "$SCRIPT_PATH" --resolver fixture --fixture-map "$FX_MAP" --path inert-b.md ) > "$xm_b_out" 2>&1
+  set -e
+  normalize_report "$xm_a_out" "$xm_a_norm"
+  normalize_report "$xm_b_out" "$xm_b_norm"
+  advisory_block_of "$xm_a_out" "$xm_a_blk"
+  advisory_block_of "$xm_b_out" "$xm_b_blk"
+
+  assertions=$((assertions + 1))
+  if [ ! -s "$xm_a_blk" ] || [ ! -s "$xm_b_blk" ]; then
+    echo "    FAIL  [exact-match] inertness: one or both runs emitted no advisory block — the arm is vacuous"
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  elif cmp -s "$xm_a_norm" "$xm_b_norm"; then
+    echo "    FAIL  [exact-match] inertness vacuity control: the two inputs produced IDENTICAL reports above the cut"
+    echo "            they must differ, or 'identical below the cut' proves nothing"
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  elif cmp -s "$xm_a_blk" "$xm_b_blk"; then
+    xm_inert=$((xm_inert + 1))
+  else
+    echo "    FAIL  [exact-match] inertness: the EXCLUDED region differs between two runs with different findings"
+    echo "            it has absorbed scan-dependent output, so excluding it from the equivalence"
+    echo "            claim now removes real detection coverage. Narrow the cut or drop the exclusion."
+    diff -u "$xm_a_blk" "$xm_b_blk" | sed 's/^/            /' || true
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  fi
+
+  # Suite-level vacuity control, the same one every block here carries: a clean
+  # must-accept run proves nothing unless the must-flag arm actually fired.
+  if [ "$xm_flagged" -eq 0 ]; then
+    echo "    FAIL  [exact-match] vacuity control: the must-flag arm produced ZERO findings"
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  fi
+  if [ "$xm_fail" -eq 0 ]; then
+    echo "    PASS  [exact-match]  must-accept=${xm_accept}  must-flag=${xm_flagged}  message-phrases=${xm_msg}  guard=${xm_guard}  inertness=${xm_inert}"
+  else
+    echo "    ---   [exact-match]  ${xm_fail} failure(s)"
+  fi
+
   echo "--- fixture matrix: 2 invocation forms x 2 input modes x 2 resolvers = 8 cells ---"
   for form in ci direct; do
     for input in delta path; do
