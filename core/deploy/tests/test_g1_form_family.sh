@@ -42,6 +42,15 @@ DEPLOY_SH="${SCRIPT_DIR}/../deploy.sh"
 SRC_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 KIND_TOOL="${SRC_ROOT}/core/deploy/tools/check-work-hierarchy.py"
 
+# The three symbols `build_runner` resolves out of deploy.sh, named ONCE. The
+# extraction and the failure message both read them here, so a message can never
+# disagree with the thing actually searched for — a diagnostic whose text has
+# drifted from its own predicate is precisely the defect this file reports on,
+# and restating these literals in the message would reproduce it.
+C22_BEGIN_MARKER='>>> C22-EVAL-BEGIN'
+C22_END_MARKER='>>> C22-EVAL-END'
+G1_03_PREDICATE='_g1_03_evaluate'
+
 PASS_COUNT=0
 FAIL_COUNT=0
 pass() { PASS_COUNT=$((PASS_COUNT + 1)); printf '  PASS  %s\n' "$1"; }
@@ -54,12 +63,23 @@ echo "G1 form-family scope regression — deploy.sh Check 22 Step 0"
 echo "─────────────────────────────────────────────────────────────────────────"
 
 # ── A. Extract the shipped evaluation region ────────────────────────────────
+# RETURN CONTRACT — part of the interface, not an implementation detail, because
+# the caller renders a DIFFERENT diagnosis per code:
+#
+#   0  runner written
+#   2  sentinel bounds unusable — a marker is absent, or END precedes BEGIN
+#   3  bounds fine; the spliced predicate definition did not resolve
+#
+# These were one code (1) under one message, which named the sentinel pair for
+# both. A renamed splice target therefore sent the reader to markers that were
+# never broken. Any future third cause gets its own code and its own branch —
+# never a widened claim on an existing one.
 build_runner() {
   # $1 = deploy.sh to extract from, $2 = output runner path
   local _src="$1" _out="$2" _b _e _g103
-  _b=$(/usr/bin/grep -m1 -n '>>> C22-EVAL-BEGIN' "$_src" | cut -d: -f1)
-  _e=$(/usr/bin/grep -m1 -n '>>> C22-EVAL-END' "$_src" | cut -d: -f1)
-  [[ -n "$_b" && -n "$_e" && "$_e" -gt "$_b" ]] || return 1
+  _b=$(/usr/bin/grep -m1 -n "$C22_BEGIN_MARKER" "$_src" | cut -d: -f1)
+  _e=$(/usr/bin/grep -m1 -n "$C22_END_MARKER" "$_src" | cut -d: -f1)
+  [[ -n "$_b" && -n "$_e" && "$_e" -gt "$_b" ]] || return 2
   # The G1-03 predicate lives at top level in deploy.sh so that Check 22 and
   # `--self-test` group EV share one code path — which puts it OUTSIDE the
   # C22-EVAL region extracted below, while the region still calls it. Splice
@@ -67,8 +87,8 @@ build_runner() {
   # are synthesised. Never stub it: a stub would grade a re-implementation,
   # which is the exact failure this harness exists to prevent. Empty
   # extraction fails loudly, like a moved sentinel.
-  _g103=$(/usr/bin/sed -n '/^_g1_03_evaluate() {$/,/^}$/p' "$_src")
-  [[ -n "$_g103" ]] || return 1
+  _g103=$(/usr/bin/sed -n "/^${G1_03_PREDICATE}() {\$/,/^}\$/p" "$_src")
+  [[ -n "$_g103" ]] || return 3
   {
     echo '#!/usr/bin/env bash'
     echo 'set -uo pipefail'
@@ -90,8 +110,34 @@ build_runner() {
   return 0
 }
 
+# The diagnosis for a non-zero `build_runner` return. Kept as a FUNCTION rather
+# than as inline text at the call site so arm L can assert the message the
+# harness actually prints; an arm that restated the text would grade a copy of
+# the diagnostic instead of the diagnostic, which is the same substitution this
+# file refuses to make when it splices the shipped predicate rather than a stub.
+#
+# Each branch opens with an UPPERCASE cause tag and then names BOTH the file it
+# was reading and the symbol it could not resolve, so the reader can act without
+# opening this harness. The tag — not any single word of the prose — is what
+# arm L's specificity arms match on: the UNRESOLVED-SYMBOL prose deliberately
+# mentions the sentinels in order to rule them OUT for the reader, so a bare
+# search for "sentinel" could not tell the two messages apart, and a tag can.
+build_failure_reason() {
+  # $1 = build_runner's return code, $2 = the deploy.sh it was reading
+  case "$1" in
+    2) printf 'SENTINEL-BOUNDS: marker %s and/or %s is absent, inverted, or out of order in %s' \
+         "$C22_BEGIN_MARKER" "$C22_END_MARKER" "$2" ;;
+    3) printf 'UNRESOLVED-SYMBOL: no %s() definition found in %s — the C22-EVAL bounds resolved cleanly, so the markers are not the cause; the splice target was renamed or moved' \
+         "$G1_03_PREDICATE" "$2" ;;
+    *) printf 'UNMAPPED-STATUS: build_runner returned %s while reading %s — a cause was added without a diagnosis' \
+         "$1" "$2" ;;
+  esac
+}
+
 RUNNER="$TMPD/runner.sh"
-if build_runner "$DEPLOY_SH" "$RUNNER"; then
+build_runner "$DEPLOY_SH" "$RUNNER"
+BUILD_RC=$?
+if [[ "$BUILD_RC" -eq 0 ]]; then
   _rl=$(/usr/bin/grep -c '' "$RUNNER")
   if [[ "$_rl" -ge 150 ]]; then
     pass "A evaluation region extracted from deploy.sh between the C22-EVAL sentinels (${_rl} lines)"
@@ -99,7 +145,7 @@ if build_runner "$DEPLOY_SH" "$RUNNER"; then
     fail "A extraction returned only ${_rl} lines — the sentinels are present but the region is implausibly small"
   fi
 else
-  fail "A could not extract the C22-EVAL region from deploy.sh (missing or inverted sentinel markers)"
+  fail "A could not build the runner from deploy.sh — $(build_failure_reason "$BUILD_RC" "$DEPLOY_SH")"
   echo "Result: ${PASS_COUNT} passed, ${FAIL_COUNT} failed"
   exit 1
 fi
@@ -619,6 +665,85 @@ if [[ "$_ac_emit_sites" -ge 1 && "$_ac_router" -eq "$_ac_emit_sites" ]]; then
   pass "K every presence emit (${_ac_emit_sites}) routes through _c22_emit_structural — it inherits the ADR-120 authority conjunct and the g1-enforcement.mode posture rather than declaring its own"
 else
   fail "K ${_ac_emit_sites} presence emit site(s) but ${_ac_router} routed through _c22_emit_structural — a bespoke emitter escapes both the authority router and the mode"
+fi
+
+# ── L. Arm A's two failure causes are DISTINGUISHABLE ───────────────────────
+# Arm A aborts the run on failure, so its branches are unreachable in-process.
+# They are driven here instead, against MUTATED COPIES of deploy.sh — one copy
+# per cause — and the assertions read `build_failure_reason`'s own output, so
+# what is graded is the text the harness prints rather than a restatement of it.
+#
+# Why this arm exists: a single `else` reported BOTH causes as a sentinel fault.
+# The guard was loud and never silent, so nothing was hidden — but a reader whose
+# splice target had merely been renamed went and stared at a sentinel pair that
+# was intact. The two causes have two different fixes, which is why each branch
+# below carries a SPECIFICITY arm asserting it stays silent on the other: a
+# corrected message that merely fires proves coverage, not discrimination.
+MUT_DIR="$TMPD/mutants"
+mkdir -p "$MUT_DIR"
+MUT_CLEAN="$MUT_DIR/deploy_clean.sh"
+MUT_NOSENT="$MUT_DIR/deploy_nosentinel.sh"
+MUT_NOPRED="$MUT_DIR/deploy_nopredicate.sh"
+cp "$DEPLOY_SH" "$MUT_CLEAN"
+# Cause 2: drop the BEGIN marker. Cause 3: rename the predicate DEFINITION and
+# leave both markers intact — that intactness is the whole point, because it is
+# the shape on which the old message was not merely vague but actively wrong.
+/usr/bin/grep -vF -- "$C22_BEGIN_MARKER" "$MUT_CLEAN" > "$MUT_NOSENT"
+/usr/bin/sed "s/^${G1_03_PREDICATE}() {\$/${G1_03_PREDICATE}_renamed_by_arm_l() {/" \
+  "$MUT_CLEAN" > "$MUT_NOPRED"
+
+build_runner "$MUT_CLEAN"  "$MUT_DIR/r_clean.sh";  _rc_clean=$?
+build_runner "$MUT_NOSENT" "$MUT_DIR/r_nosent.sh"; _rc_nosent=$?
+build_runner "$MUT_NOPRED" "$MUT_DIR/r_nopred.sh"; _rc_nopred=$?
+_msg_nosent="$(build_failure_reason "$_rc_nosent" "$MUT_NOSENT")"
+_msg_nopred="$(build_failure_reason "$_rc_nopred" "$MUT_NOPRED")"
+
+# CONTROL. Without it, a `cp` that silently produced an empty file would make
+# both mutants return non-zero for a reason unrelated to the mutation, and both
+# sensitivity arms below would pass while measuring nothing at all.
+_nopred_begin=$(/usr/bin/grep -cF -- "$C22_BEGIN_MARKER" "$MUT_NOPRED")
+_nopred_end=$(/usr/bin/grep -cF -- "$C22_END_MARKER" "$MUT_NOPRED")
+_nopred_sym=$(/usr/bin/grep -c "^${G1_03_PREDICATE}() {\$" "$MUT_NOPRED")
+if [[ "$_rc_clean" -eq 0 ]] \
+   && [[ -s "$MUT_NOSENT" && -s "$MUT_NOPRED" ]] \
+   && [[ "$_nopred_begin" -ge 1 && "$_nopred_end" -ge 1 && "$_nopred_sym" -eq 0 ]]; then
+  pass "L CONTROL — an UNMUTATED copy still builds (rc=${_rc_clean}); both mutants are non-empty, and the predicate mutant kept BOTH sentinels while losing exactly its definition line, so each rc below is caused by its own mutation and not by a broken fixture"
+else
+  fail "L CONTROL — fixture set unusable: clean rc=${_rc_clean}, nosentinel $( [[ -s "$MUT_NOSENT" ]] && echo present || echo EMPTY ), nopredicate $( [[ -s "$MUT_NOPRED" ]] && echo present || echo EMPTY ), predicate-mutant begin=${_nopred_begin} end=${_nopred_end} surviving-defs=${_nopred_sym}"
+fi
+
+# SENSITIVITY (sentinel cause) — fires on its OWN cause, naming file and symbol.
+if [[ "$_rc_nosent" -eq 2 ]] \
+   && /usr/bin/grep -qF -- "$C22_BEGIN_MARKER" <<<"$_msg_nosent" \
+   && /usr/bin/grep -qF -- "$MUT_NOSENT" <<<"$_msg_nosent"; then
+  pass "L SENSITIVITY (sentinel) — a deploy.sh missing its BEGIN marker returns rc=2, and the diagnosis names the marker pair AND the file it read"
+else
+  fail "L sentinel cause: rc=${_rc_nosent} (expected 2) — ${_msg_nosent}"
+fi
+# SPECIFICITY (sentinel) — silent on the OTHER cause.
+if ! /usr/bin/grep -qF -- 'UNRESOLVED-SYMBOL' <<<"$_msg_nosent" \
+   && ! /usr/bin/grep -qF -- "$G1_03_PREDICATE" <<<"$_msg_nosent"; then
+  pass "L SPECIFICITY (sentinel) — the sentinel diagnosis never carries the UNRESOLVED-SYMBOL tag and never names ${G1_03_PREDICATE}; a broken marker is not reported as a renamed splice target"
+else
+  fail "L the sentinel diagnosis leaked the predicate cause — ${_msg_nosent}"
+fi
+
+# SENSITIVITY (predicate cause) — THE REGRESSION THIS ARM EXISTS FOR. Before the
+# widening, this input returned the single code 1 and rendered the sentinel text
+# on a tree whose sentinels are provably intact (asserted by the CONTROL above).
+if [[ "$_rc_nopred" -eq 3 ]] \
+   && /usr/bin/grep -qF -- "$G1_03_PREDICATE" <<<"$_msg_nopred" \
+   && /usr/bin/grep -qF -- "$MUT_NOPRED" <<<"$_msg_nopred"; then
+  pass "L SENSITIVITY (predicate) — a deploy.sh whose ${G1_03_PREDICATE} definition was renamed, sentinels intact, returns rc=3 and the diagnosis names the unresolved symbol AND the file it read"
+else
+  fail "L predicate cause: rc=${_rc_nopred} (expected 3) — ${_msg_nopred}"
+fi
+# SPECIFICITY (predicate) — silent on the OTHER cause. This is the arm that goes
+# RED on the pre-widening harness, where this message WAS the sentinel message.
+if ! /usr/bin/grep -qF -- 'SENTINEL-BOUNDS' <<<"$_msg_nopred"; then
+  pass "L SPECIFICITY (predicate) — the unresolved-symbol diagnosis never carries the SENTINEL-BOUNDS tag; the two causes route the reader to two different fixes rather than to one wrong one"
+else
+  fail "L the unresolved-symbol diagnosis blames the sentinel bounds — the wrong-cause defect is back: ${_msg_nopred}"
 fi
 
 echo ""
