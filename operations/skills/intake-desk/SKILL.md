@@ -12,7 +12,7 @@ description: >
   interactive path invoked programmatically, not by a conversational phrase. Use when the user
   says "help me file this idea as an issue", "turn this into a work item", "log this idea", "is
   this intake-ready", or "help me write up this bug/story/initiative".
-version: v2.29
+version: v4.61
 license: BUSL-1.1
 ---
 <!-- reference-durability: allow-link -->
