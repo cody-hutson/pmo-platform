@@ -38,11 +38,13 @@ rule. Read the mode-spec and rubric for the how; read this for the cadence. `[IN
 Splitting cadence from machinery keeps each layer independently editable — a new trigger never
 forces a machinery edit, and vice versa.
 
-**Provisioning note.** The mode and this cadence protocol ship with the host decision; the
-dimension rubric ships with the capability build. Until the rubric lands, an invocation reports
-its unprovisioned state and stops rather than improvising a seam set — see the mode-spec §0. A
-scheduled sentinel firing before that point surfaces the unprovisioned state, which is the
-correct signal, not a failure.
+**Runtime absence guard (not a provisioning state).** The dimension rubric has landed, so the
+mode is provisioned and this protocol's triggers are live. The guard it leaves behind is a
+different thing and is retained: an invocation that cannot resolve the rubric — a partial
+deploy, a mirror that did not sync, a package built before the rubric landed — reports that
+absence and stops rather than improvising a seam set, per the mode-spec §3. A scheduled
+sentinel firing against such an install surfaces the absence, which is the correct signal, not
+a failure.
 
 **Axis boundary.** This is one of **five sibling audit-cadence axes** (see §7):
 
