@@ -487,16 +487,23 @@ BANNED_JARGON_ROW_EXCLUSIONS: dict[str, str] = {}
 # check_note_content() against a synthetic corpus and requires the pattern to
 # fire.
 #
-# Why a specimen rather than the row label: three row labels are not injectable
-# text. Rows 5 and 14 carry parenthetical annotation and alternation, and row 6 is
-# a metavariable form, so an arm that injected the label verbatim would record a
-# spurious zero on exactly those three.
+# Why a specimen rather than the row label — CORRECTED. This note used to say that
+# three row labels are not injectable text. Measured by injecting each row's label
+# verbatim through the real check_note_content(), only one is not: the
+# metavariable row `schema vX.Y → vX.Z`, whose label no real note would contain.
+# The parenthetical in `reversibility tier (as standalone phrase)` and the
+# alternation in `collective review CR-X / CR-Y` do not stop those labels firing
+# their own patterns. So the specimen is a choice rather than a necessity, and it
+# carries a cost the old rationale hid: a specimen is written here, separately
+# from the published row, so a pattern and a specimen written together from a
+# wrong term both pass G-7 while the row goes unenforced. The standard states that
+# residual to authors at §2.4.
 #
 # Why the arm exists at all: G-1..G-5 compare IDENTIFIER SETS, so an edit to a
 # pattern's BODY that preserves its LABEL — "\breversibility tier\b" mistyped to
-# "\breversibility tiers\b" — leaves every one of those arms green while row 5
-# goes unenforced. That is this file's own defect class one layer up, and G-7 is
-# what closes it.
+# "\breversibility tiers\b", its specimen left as it was — leaves every one of
+# those arms green while that row goes unenforced. That is this file's own defect
+# class one layer up, and G-7 is what closes it.
 BANNED_JARGON_SPECIMEN = {
     "reflexive-pipeline self-exemption": "reflexive-pipeline self-exemption",
     "mirror byte-identity": "mirror byte-identity",
@@ -2482,8 +2489,11 @@ def _self_test() -> int:
     # ENFORCES it. Nothing asserted that the two agreed, and they did not: the
     # bare `reflexive` row was published and unenforced, while §3.2 restated a
     # term count that had been wrong since the repository's first public commit.
-    # These arms make the disagreement unable to recur silently — a §2.4 row with
-    # no enforcing pattern, or a pattern with no §2.4 row, is a red arm.
+    # These arms make THAT disagreement unable to recur silently — a §2.4 row with
+    # no enforcing pattern, or a pattern with no §2.4 row, is a red arm. They do
+    # not make every disagreement visible: no arm injects a row's own published
+    # words, so a pattern and a specimen written together from a wrong term pass
+    # (see G-7, and the specimen note beside BANNED_JARGON_SPECIMEN).
     #
     # POSTURE, stated only as far as this repository can pin it. What the repository
     # pins: this suite reaches CI only through
@@ -2559,9 +2569,9 @@ def _self_test() -> int:
     mapped_rows = set(BANNED_JARGON_ROW_OF.values())
     missing_pattern = sorted(set(table_rows) - mapped_rows - set(BANNED_JARGON_ROW_EXCLUSIONS))
     missing_row = sorted((mapped_rows | set(BANNED_JARGON_ROW_EXCLUSIONS)) - set(table_rows))
-    arm("G-3 every §2.4 row is enforced or registered-excluded, and every mapped row exists in §2.4",
+    arm("G-3 every §2.4 row is mapped to an enforcing pattern or registered-excluded, and every mapped row exists in §2.4",
         _parity(table_rows, mapped_rows, BANNED_JARGON_ROW_EXCLUSIONS),
-        f"{len(table_rows)} table row(s) == {len(mapped_rows)} enforced + "
+        f"{len(table_rows)} table row(s) == {len(mapped_rows)} mapped + "
         f"{len(BANNED_JARGON_ROW_EXCLUSIONS)} excluded; "
         + (f"PUBLISHED-BUT-UNENFORCED={missing_pattern} MAPPED-BUT-NOT-IN-TABLE={missing_row}"
            if (missing_pattern or missing_row) else "sets equal"))
@@ -2624,7 +2634,11 @@ def _self_test() -> int:
     # whose BODY is broken while its LABEL is intact leaves them all green. This
     # arm drives one specimen per pattern through the REAL check_note_content()
     # against a synthetic corpus — not a re-implementation of its loops — so a
-    # published, mapped, listed-but-unenforced row turns the suite red.
+    # pattern that no longer fires on its own specimen, a broken body under an
+    # intact label, turns the suite red. Its reach stops at the specimen: the
+    # specimen is written in this file, separately from the published §2.4 row, so
+    # a pattern and a specimen written together from a wrong term pass while that
+    # row goes unenforced. §2.4 of the standard states that residual to authors.
     spec_unmapped = sorted(set(BANNED_JARGON_ROW_OF) ^ set(BANNED_JARGON_SPECIMEN))
     arm("G-7a every enforcing pattern carries an injectable specimen",
         not spec_unmapped,
@@ -2668,8 +2682,9 @@ def _self_test() -> int:
             not silent,
             f"{len(BANNED_JARGON_ROW_OF) - len(silent)}/{len(BANNED_JARGON_ROW_OF)} "
             "pattern(s) fired; "
-            + (f"LISTED BUT UNENFORCED: {silent}" if silent
-               else "no published row is silently unenforced"))
+            + (f"SILENT ON ITS OWN SPECIMEN: {silent}" if silent
+               else "every pattern fires on its own specimen (a row's published "
+                    "words are not injected — see §2.4)"))
 
         # G-7c — the specificity control for G-7b. A clean fixture body carrying
         # no §2.4 term MUST produce no banned-jargon finding; without it, G-7b

@@ -225,7 +225,7 @@ The agent MUST NOT use the phrases below in Section 6a (Layer A). They MAY appea
 | reflexive-pipeline loop | (move to 6b) |
 | collective review CR-X / CR-Y | (move to 6b) |
 
-The list grows over time. Additions require operator approval; deletions require explicit justification (the term has become unambiguous to all Layer A readers). Every row above is either enforced by §3.2 check 10 or registered in the lint as a deliberate exclusion carrying its reason, and the lint's `--self-test` fails when a row is neither — so a row added here cannot silently go unenforced.
+The list grows over time. Additions require operator approval; deletions require explicit justification (the term has become unambiguous to all Layer A readers). Every row above is either mapped to at least one of the patterns §3.2 check 10 enforces, or registered in the lint as a deliberate exclusion carrying its reason. The lint's `--self-test` fails when a row is neither, and when a pattern does not fire on the specimen the lint holds for it. That is the whole of what it checks. It never tests a row's own published words: each specimen is written in the lint, separately from this table, so a pattern and a specimen written from the same mistyped term both pass while the row as published here is not enforced. When adding a row, confirm by hand that its pattern matches the row's own words.
 
 ### 2.5 Voice rules
 
