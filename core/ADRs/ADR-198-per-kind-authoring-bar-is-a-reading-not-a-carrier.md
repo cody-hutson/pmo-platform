@@ -1,5 +1,5 @@
 ---
-title: ADR-196 — The per-kind authoring bar is a reading of the declared grammar, not a new carrier
+title: ADR-198 — The per-kind authoring bar is a reading of the declared grammar, not a new carrier
 status: Accepted
 date: 2026-09-11
 release: authoring-bar-and-consumers
@@ -14,11 +14,13 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-196 — The per-kind authoring bar is a reading of the declared grammar, not a new carrier
+# ADR-198 — The per-kind authoring bar is a reading of the declared grammar, not a new carrier
 
 ## Status
 
 Accepted. Ratified at the Stage-5 Collective Review scope-lock for the `authoring-bar-and-consumers` release, with two structural findings from the independent Phase-A6.5 adversarial review routed Tier-1 and applied inside the design shape rather than reopening it.
+
+**Numbering provenance — `196 → 198`.** Held **ADR-196** branch-local; renumbered to **ADR-198** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 196. In-release citations that read "ADR-196" denote this record.
 
 ## Context
 
@@ -88,7 +90,7 @@ Four carriers were weighed. Each was eliminated on a breached hard constraint, a
 
 - [ADR-069](ADR-069-methodology-pack-composing-unit.md) — the methodology pack as composing unit. D3 owns the methodology-neutrality requirement that makes this standard name no kind; D4 owns the placement of per-kind content in the manifests. Cited and not amended.
 - [ADR-070](ADR-070-methodology-pack-composition-grammar.md) — the pack composition grammar the manifests conform to. A new pack-member file class is a question for that record, which is why the sidecar alternative was not decided here.
-- [ADR-195](ADR-195-l3-judgment-criteria-evaluability.md) — criterion evaluability as a per-check measured property. Owns the judgment-level verdict the standard's enforceability section cites by identifier, its measurement state, and the routing rule the standard takes its branch from; also the presence-versus-adequacy finding this record's ordered procedure grounds its second precedence rule on.
+- [ADR-197](ADR-197-l3-judgment-criteria-evaluability.md) — criterion evaluability as a per-check measured property. Owns the judgment-level verdict the standard's enforceability section cites by identifier, its measurement state, and the routing rule the standard takes its branch from; also the presence-versus-adequacy finding this record's ordered procedure grounds its second precedence rule on.
 - [ADR-018](ADR-018-work-item-type-layer.md) — the Work-Item Type Layer. The thin generic entity plus declarative type layer this record reads rather than extends.
 
 ## References

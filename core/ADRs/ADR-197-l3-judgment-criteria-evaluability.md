@@ -1,5 +1,5 @@
 ---
-title: ADR-195 — Criterion evaluability is a per-check measured property, and it gates admission
+title: ADR-197 — Criterion evaluability is a per-check measured property, and it gates admission
 status: Accepted
 date: 2026-09-11
 release: authoring-bar-and-consumers
@@ -14,11 +14,13 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-195 — Criterion evaluability is a per-check measured property, and it gates admission
+# ADR-197 — Criterion evaluability is a per-check measured property, and it gates admission
 
 ## Status
 
 Accepted. Ratified at the Stage-5 Collective Review scope-lock for the `authoring-bar-and-consumers` release, with two structural findings from the independent Phase-A6.5 adversarial review routed Tier-1 and applied inside the design shape rather than reopening it.
+
+**Numbering provenance — `195 → 197`.** Held **ADR-195** branch-local; renumbered to **ADR-197** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 195. In-release citations that read "ADR-195" denote this record.
 
 ## Context
 
@@ -296,7 +298,7 @@ The base items of the Appendix A instrument, named here because an instrument wh
 
 ## Appendix A — The Layer-E instrument
 
-**Instrument version token:** `ADR-195-INSTRUMENT-v1`. **Members:** the frame's checks × {`conforming`, `violating`} — as of the baseline, 42.
+**Instrument version token:** `ADR-197-INSTRUMENT-v1`. **Members:** the frame's checks × {`conforming`, `violating`} — as of the baseline, 42.
 
 **Every fact in this appendix is frozen at the baseline recorded in `source_observations:`.** It is an instrument record, not a live reading: a later edit to a source item does not change what this appendix says, and is not meant to. That is the point of recording it here rather than pointing at the tracker — a pointer to a mutable record is a free variable wearing a citation.
 
