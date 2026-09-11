@@ -42,6 +42,20 @@
 # mutation arm (a deliberately perturbed copy must make the differ say
 # DISAGREE, or the differ cannot report disagreement at all).
 #
+# THE REPORT-TEXT CLAIM IS BOUNDED, AND THE BOUNDARY IS DECLARED. It covers
+# everything ABOVE the `### Categories` heading — the findings, the `::notice::`
+# lines, the verdict, every part of the output a scan result can reach. It does
+# NOT cover the static advisory block from that heading to EOF, which is literal
+# `echo` with no interpolation and no scan result in it. Diffing that block too
+# pinned the gate's own prose to a frozen historical copy of itself, so
+# CORRECTING A WRONG SENTENCE IN THE MESSAGE FAILED A CORRECTNESS GATE. The full
+# decision, the alternatives rejected, and an honest accounting of what the
+# narrowing does and does not buy are recorded at normalize_report(). The
+# exclusion is asserted in both directions rather than assumed — a narrowing
+# control fails the arm if the cut marker is missing from either side, and an
+# inertness arm in run_self_test fails if the excluded region ever starts
+# carrying scan-dependent output.
+#
 # WHAT THE EQUIVALENCE OBLIGATION COSTS, AND WHERE NEW ASSERTIONS THEREFORE GO.
 # The oracle is a differential over a SHARED corpus, so the corpus is frozen at
 # the pre-extraction body's verdicts for as long as the obligation stands. Any
@@ -59,6 +73,15 @@
 # $HARNESS_TD and never under $FX_REPO. run_self_test's override-form block is
 # the worked example, and the scope-predicate block above it is the precedent.
 # Corpus growth stays reserved for behaviour the pre-extraction body ALSO has.
+# THE SAME COST HAS AN OUTPUT DIMENSION, and it is now bounded there too. The
+# obligation froze the gate's own ADVISORY PROSE as well as its behaviour, so a
+# correction to the failure message was as unshippable through this arm as a
+# behaviour fix was through the corpus — and unlike the corpus case there was no
+# corpus-free siting available, because the message is output the shared run
+# EMITS rather than input it consumes. The claim is therefore bounded on the
+# output dimension by declaration (see normalize_report), which is the same move
+# the retired self-doc fixtures made on the input dimension: state the boundary
+# of the equivalence claim rather than suppress a disagreement that is real.
 # The corollary for a reader of CI logs: --equivalence has NO gate authority
 # there. The selftest-discovery job checks out shallow by design, so
 # PRE_EXTRACTION_SHA is unreachable and harness_main prints its SKIP line. The
@@ -1027,9 +1050,11 @@ run_self_test() {
   # ── Override-marker FORM: the OVERRIDE predicate, both arms, plus an
   #    end-to-end pair ────────────────────────────────────────────────────────
   # CORPUS-FREE BY CONSTRUCTION, and that siting is load-bearing rather than
-  # stylistic. run_equivalence asserts the report text is BYTE-IDENTICAL between
-  # this checker and the pre-extraction inline body over the SHARED fixture
-  # corpus. That body carries the OLD narrow OVERRIDE, so a rationale-carrying
+  # stylistic. run_equivalence asserts the report text is IDENTICAL ABOVE THE
+  # ADVISORY BLOCK (the declared boundary; see normalize_report) between this
+  # checker and the pre-extraction inline body over the SHARED fixture corpus —
+  # and findings are above that boundary, so the constraint below is unchanged by
+  # the narrowing. That body carries the OLD narrow OVERRIDE, so a rationale-carrying
   # fixture added to cases/ + manifest.txt would be FLAGGED by the oracle and
   # SUPPRESSED by the checker — `direction oracle->checker: gate WEAKENED` — and
   # the required status check would fail ON A CORRECT FIX. Re-pinning the oracle
@@ -1144,8 +1169,11 @@ run_self_test() {
   # override-form block above is — and one step harder, because this change had
   # to REMOVE two shared inputs rather than merely avoid adding one.
   #
-  # run_equivalence asserts the report text is BYTE-IDENTICAL between this
-  # checker and the pre-extraction inline body over the SHARED fixture corpus,
+  # run_equivalence asserts the report text is IDENTICAL ABOVE THE ADVISORY BLOCK
+  # (the declared boundary; see normalize_report) between this checker and the
+  # pre-extraction inline body over the SHARED fixture corpus — findings and
+  # `::notice::` lines both sit above that boundary, so neither the constraint
+  # below nor the two extra notice lines it names are affected by the narrowing,
   # and that body still carries the path arm deleted from run_scan's SCOPE
   # `case`. Two shared fixtures used to pin this class by LIVING at the two
   # exempt paths carrying no marker. After the deletion the two implementations

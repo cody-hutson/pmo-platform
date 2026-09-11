@@ -78,8 +78,11 @@ override marker, which the gate re-checks on every run, so the exemption cannot
 outlive the marker that justifies it.
 
 The fixtures could not follow the arm into this corpus. What is here is the input
-to the differential equivalence oracle, which asserts byte-identical report text
-against the pre-extraction body — and that body still carries the deleted arm, so
+to the differential equivalence oracle, which asserts identical report text above
+the `### Categories` advisory block — the claim's declared boundary, recorded at
+`normalize_report()` in the checker — against the pre-extraction body. Findings
+and `::notice::` lines both sit above that boundary, so the constraint on this
+corpus is exactly what it was: that body still carries the deleted arm, so
 a fixture at either path makes the two implementations genuinely disagree and
 fails a required status check on a correct change. Removing the input states the
 boundary of the equivalence claim; suppressing the output would have asserted an
