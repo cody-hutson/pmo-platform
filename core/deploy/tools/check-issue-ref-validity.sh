@@ -513,6 +513,19 @@ emit_verdict() {
     echo "- **deprecated IMP-NNN** — the legacy improvement id; use a GitHub issue \`#N\`."
     echo "- **placed outside a reference block** — a valid \`#N\` must sit under a recognized heading, at any level: \`Issue References\` / \`References\` / \`Related\` / \`Provenance\` / \`Source\` / \`Sources\` / \`Source(s)\`. In an ADR the designated block is \`## References\`; \`## Related ADRs\` is NOT recognized, because a bare \`#N\` is prohibited there outright."
     echo ""
+    echo "### The heading must match EXACTLY"
+    echo ""
+    echo 'The seven spellings above are matched **exactly**, and this is the constraint a misplaced-reference failure usually hits. **The match ends at the heading word**, so a heading that merely CONTAINS a recognized spelling is not a recognized block. Concretely:'
+    echo ""
+    echo '- Nothing may follow the heading word but an optional `:`. `## Sources:` is recognized; `## References and Provenance` is NOT — it contains two recognized spellings and is still rejected.'
+    echo '- Only the FIRST LETTER of each word may vary in case. `## References` and `## references` are recognized; `## REFERENCES` is NOT.'
+    echo '- The word itself must be one of the seven. `## Reference` (singular) is NOT recognized, though `## Source` and `## Sources` both are.'
+    echo '- A space is required after the `#` characters. `##References` is NOT recognized.'
+    echo ""
+    echo 'So the headings a reader reaches for next — `## Related ADRs`, `## References and Provenance`, `## Provenance notes`, `## REFERENCES`, `## Reference`, `##References` — all still fail.'
+    echo ""
+    echo '**The remedy is to RENAME the heading** to one of the seven spellings, or to move the reference under an existing one. Do not reach for the override marker: it is a rare exception (see below), not the fix for a heading that is merely spelled differently.'
+    echo ""
     echo "See [\`core/rules/git-workflow.md\` § Repository-Integrity Gates](../blob/main/core/rules/git-workflow.md) and [\`core/standards/adr-authoring-guide.md\` § Issue references in ADRs](../blob/main/core/standards/adr-authoring-guide.md)."
     echo ""
     echo "### Override — a RARE exception, not the default remedy"
@@ -711,6 +724,91 @@ findings_of() {
   grep -E '^[^[:space:]]+:[0-9]+: ' "$1" 2>/dev/null | LC_ALL=C sort || true
 }
 
+# The line the report-text equivalence claim is cut at, and the marker that
+# replaces everything below it.
+ADVISORY_CUT_LINE='^### Categories$'
+ADVISORY_CUT_MARKER='@@ADVISORY-BLOCK-EXCLUDED-FROM-EQUIVALENCE@@'
+
+# ─── THE EQUIVALENCE CLAIM'S OUTPUT BOUNDARY, AND WHY IT IS DRAWN HERE ────────
+# DECISION RECORDED AT THE SITE, deliberately and by ratification: the narrowing
+# below was considered for an ADR and judged not to need one, so the reasoning
+# lives beside the code it governs rather than in a record a reader has to find.
+#
+# THE PROBLEM. run_equivalence used to diff the WHOLE output of the two
+# implementations. That output is two different kinds of text welded together:
+# everything ABOVE `### Categories` is scan-dependent (the findings, the
+# `::notice::` lines, the verdict), and everything BELOW it is static advisory
+# prose — a literal `echo` per line, no interpolation, no scan result anywhere.
+# Diffing the whole thing pinned the prose as tightly as the behaviour, so
+# CORRECTING A WRONG SENTENCE IN THE MESSAGE FAILED A CORRECTNESS GATE. That is
+# what happened to the exact-match paragraph in emit_verdict: every findings arm
+# and the exit-code arm agreed, and only the prose differed.
+#
+# WHY NOT THE OBVIOUS ALTERNATIVES. Emitting the new text to GITHUB_STEP_SUMMARY
+# only would pass the arm by hiding the fix from the local reader (that variable
+# defaults to /dev/null outside CI) — green by concealment. Re-pinning
+# PRE_EXTRACTION_SHA forward is structurally blocked: extract_oracle dies unless
+# the materialised `run:` block still contains REFBLOCK_RE, which a
+# post-extraction thin caller does not. Dropping the whole-output diff entirely
+# is over-broad — it also pins the `::notice::` lines, which ARE scan-dependent.
+#
+# WHAT THE NARROWING GIVES UP, STATED PLAINLY RATHER THAN CLAIMED AWAY. The
+# byte-diff never proved the advisory prose was CORRECT; it proved the prose
+# matched a frozen historical copy of itself. What replaces it for the placement
+# bullet is strictly stronger — run_self_test's exact-match block asserts that
+# each heading the message calls unrecognized is in fact flagged and each it
+# calls recognized is in fact accepted, so message and implementation can no
+# longer drift. That replacement is NOT uniform across the region, and the
+# honest accounting matters more than a tidy claim: the other four verdict-class
+# bullets, the two doc links and the whole Override criterion below the cut keep
+# only a PRESENCE assertion (exact-match block, Arm 3), not a behavioural one.
+# They are prose whose only previous pin was a frozen copy, so nothing that was
+# load-bearing has been dropped — but "re-pinned to behaviour" would overstate
+# what this bought, and an overstated record is the artifact most likely to
+# mislead the next reader asking whether this was weakened deliberately.
+#
+# THE EXCLUSION IS ASSERTED, NEVER ASSUMED, IN TWO DIRECTIONS.
+#   * That it FIRED — the narrowing control in run_equivalence fails the arm if
+#     the cut marker is missing from either side, so a normalizer that silently
+#     no-ops cannot read as a pass.
+#   * That the excluded region is STILL INERT — the inertness arm in
+#     run_self_test runs the checker over two inputs with DIFFERENT findings and
+#     requires their post-cut regions to be byte-identical while their pre-cut
+#     regions differ. Inertness is the property that justifies the cut, and a
+#     point-in-time reading of the region is not a guarantee; if that region ever
+#     absorbs scan-dependent output, that arm turns red instead of the exclusion
+#     silently widening.
+#
+# INVOCATION FORM IS LOAD-BEARING, NOT STYLISTIC. awk reads the FILE and no
+# producer sits upstream, and the program carries no `exit`. The shape this
+# avoids — `… | awk '/marker/{print; exit}'` — is a pipe into a reader that stops
+# early, inside a file running under `set -euo pipefail`: the reader exits on the
+# marker, the writer's next write fails on the broken pipe, and that non-zero
+# status becomes the pipeline's, so a SUCCESSFUL truncation reports failure. It
+# is also the exact shape this repository's SIGPIPE-idiom gate scans for on added
+# lines in `*.sh`, and this file carries no exemption of either tier. Both the
+# single-line and multi-line spellings of that shape are wrong here and
+# differently so: one turns an enforcing job red, and the other slips past its
+# line-oriented scan while keeping the runtime hazard. Reading the file removes
+# the hazard rather than relocating it — the same SIGPIPE-REWRITE reasoning the
+# header records for the four pipelines rewritten at extraction.
+normalize_report() {
+  awk -v marker="$ADVISORY_CUT_MARKER" '
+    past      { next }
+    /^### Categories$/ { print marker; past = 1; next }
+              { print }
+  ' "$1" > "$2"
+}
+
+# The complement: the excluded region itself, cut line included. Used only by the
+# inertness arm, which is the thing that keeps the exclusion honest.
+advisory_block_of() {
+  awk '
+    inblk     { print }
+    /^### Categories$/ { if (!inblk) { print; inblk = 1 } }
+  ' "$1" > "$2"
+}
+
 run_equivalence() {
   local pre_sha="$1"
   local td="$HARNESS_TD"
@@ -778,10 +876,28 @@ run_equivalence() {
     echo "PASS  exit codes agree: ${rc_o}"
   fi
 
-  if diff -u "$o_out" "$c_out" > "$td/report.diff" 2>&1; then
-    echo "PASS  report text byte-identical across the whole corpus"
+  # REPORT TEXT, narrowed by declaration to everything ABOVE the static advisory
+  # block. The boundary, what it gives up and what re-pins it are recorded at
+  # normalize_report(); this is only its application.
+  local o_norm="$td/oracle.norm" c_norm="$td/checker.norm"
+  normalize_report "$o_out" "$o_norm"
+  normalize_report "$c_out" "$c_norm"
+  # NARROWING CONTROL, and it is mandatory. A normalizer that silently no-opped —
+  # wrong cut line, empty input, a report that never reached the advisory block —
+  # would make this arm compare two untruncated reports and call that a narrowed
+  # comparison. Requiring the marker on BOTH sides is what makes the exclusion an
+  # assertion rather than an assumption. It fails conservatively: the two ways the
+  # marker can go missing (oracle emitted nothing, checker emitted nothing) are
+  # already caught upstream by the sensitivity control, so a failure here is a
+  # normalizer fault and is reported as one.
+  if ! grep -q "$ADVISORY_CUT_MARKER" "$o_norm" || ! grep -q "$ADVISORY_CUT_MARKER" "$c_norm"; then
+    echo "FAIL  narrowing control: the advisory-block cut marker is absent from one or both sides"
+    echo "      the exclusion did not fire, so a PASS here would be an untested claim"
+    status=1
+  elif diff -u "$o_norm" "$c_norm" > "$td/report.diff" 2>&1; then
+    echo "PASS  report text identical OUTSIDE the advisory block (\`### Categories\` -> EOF, excluded by declaration)"
   else
-    echo "FAIL  report text differs:"
+    echo "FAIL  report text differs OUTSIDE the advisory block:"
     sed 's/^/        /' "$td/report.diff"
     status=1
   fi
