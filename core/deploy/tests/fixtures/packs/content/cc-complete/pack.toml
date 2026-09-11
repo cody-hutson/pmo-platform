@@ -1,0 +1,92 @@
+# FIXTURE — the SPECIFICITY arm of the content-completeness check. Not a shipped pack.
+#
+# See the sibling `cc-silent/pack.toml` for why this pair exists and why it is sited in
+# a subdirectory rather than as two more top-level `*-kit` fixtures.
+#
+# WHAT THIS FIXTURE ASSERTS, and it is the arm that catches the likeliest way this
+# check could go wrong. A content lint that fired on EMPTINESS rather than on SILENCE
+# would redden the entire shipped corpus — five of its sixteen surfaces are reasoned
+# empty sets — while still passing a sensitivity arm. So this fixture deliberately
+# carries BOTH shapes of a complete position:
+#
+#   * `criteria.readiness` and `criteria.gate` — present and NON-EMPTY, every entry
+#     carrying its own `source`, its full `{id, statement, level, automatable, source}`
+#     tuple, and a `level` inside the declared domain;
+#   * `fields` and `criteria.done` — present, EMPTY, each with a block-level `source`
+#     naming why the set is empty. This is the reasoned empty set, and it is GREEN.
+#
+# It also declares a `[[controls]]` carrying a `source`, so the specificity arm has a
+# live subject for the control-provenance rule rather than passing it vacuously.
+#
+# The gate entry carries a nested inline table and two nested arrays, and one statement
+# carries a comma. Both are here on purpose: an entry reader that split on every comma,
+# or that counted brackets without regard for nesting, would mis-count this array and
+# the entry-scoped rules would range over fragments instead of entries.
+#
+# Expected result: exit 0, zero findings. Clean under all 20 `PACK-*` grammar rules too.
+
+[meta]
+pack_id = "cc-complete"
+pack_version = "0.1.0"
+applies_to = "*"
+role = "kit"
+kit_class = "work-item"
+
+[[kinds]]
+kind_id = "complete-widget"
+display_name = "Complete Widget"
+base = "Work Item"
+axis1_state_machine = "inherit"
+
+[kinds.methodology_projection]
+archetype = "*"
+general_level = "Work Item"
+projects_as = "Complete Widget"
+
+[kinds.fields]
+core = "inherit"
+source = "FIXTURE — a reasoned empty set. A synthetic practice basis that prescribes no kind-specific field, so none is owed; the position taken is that there is nothing to add."
+kind_specific = []
+
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+checks = [
+  { id = "cc-complete-dor-one", statement = "A readiness statement carrying a comma, so an entry reader splitting on every comma would report two entries where one exists.", level = "L2", automatable = false, source = "FIXTURE — synthetic practice basis" },
+  { id = "cc-complete-dor-two", statement = "A second readiness statement, so the array is plural and an off-by-one entry reader is visible.", level = "L1", automatable = true, source = "FIXTURE — synthetic practice basis" },
+]
+
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+source = "FIXTURE — a reasoned empty set. The synthetic practice basis prescribes no per-item done criterion for this kind, so the empty set IS the position."
+checks = []
+
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+checks = [
+  { id = "cc-complete-gate", statement = "A gate statement, with a comma.", level = "L3", automatable = true, source = "FIXTURE — synthetic practice basis", condition = { kind = "set-aggregate", set = { scope = "parent", kind_filter = ["complete-widget"], status_filter = ["in-progress"], edge = "BELONGS_TO" }, aggregate = "count", comparator = "<", limit_ref = "cc-complete-cap", on_unresolved = "WARN-HEALTH" } },
+]
+
+[kinds.relationships]
+allowed_types = ["BELONGS_TO", "DEPENDS_ON", "RELATES_TO"]
+
+[kinds.lifecycle_behavior]
+timeboxed = "gate"
+continuous = "gate"
+phased = "gate"
+
+[[labels]]
+group = "category"
+name = "type:complete-widget"
+projects_kind = "complete-widget"
+
+[[controls]]
+control_id   = "cc-complete-cap"
+display_name = "Fixture Cap"
+description  = "The threshold the gate above compares against; declared with no default, exactly as a corpus-wide control that grounds a dimension but not its value."
+source       = "FIXTURE — synthetic practice basis. Present so the control-provenance rule has a live subject on this arm rather than passing on an empty population."
+[controls.value_domain]
+type = "integer"
+min  = 0
+[controls.applies_to]
+levels = ["Work Item"]
+kinds  = ["complete-widget"]

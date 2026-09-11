@@ -16375,9 +16375,10 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
   #
   # WIRING, RECORDED ON BOTH SIDES. This is the THIRD deploy.sh consumer of
   # core/deploy/tools/check-work-hierarchy.py, after Check 22 (--emit-kinds) and
-  # Check 55 (the H1/H2/H3 legs). The primitive's own consumer set is recorded in
-  # core/deploy/tools/README.md; a new invocation that is not added there leaves
-  # the tool's documented blast radius short of its real one.
+  # Check 55 (the H1/H2/H3 legs); Check 80 (--validate-pack-content) is the fourth.
+  # The primitive's own consumer set is recorded in core/deploy/tools/README.md; a
+  # new invocation that is not added there leaves the tool's documented blast radius
+  # short of its real one.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 75: Pack-grammar conformance (work-item type-pack meta-schema; warn-mode initial; enforce-flip deferred)"
     local c75_script="core/deploy/tools/check-work-hierarchy.py"
@@ -16762,6 +16763,112 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
       ISSUES=$((ISSUES + 1))
     elif [[ "$c79_saw_armb" -eq 0 ]]; then
       flag_not_evaluated "hook-parity-bytes" "the byte-parity arm emitted no verdict at all, so no source-vs-deployed comparison has been asserted this run; this is not a clean result"
+    fi
+  fi
+
+  # Check 80 — pack CONTENT-completeness (WARN-MODE INITIAL)
+  #
+  # WHAT IT ASSERTS, and how it differs from its sibling. Check 75 asks whether a pack
+  # declaration is WELL-FORMED. This one asks whether the declaration was MADE — and
+  # whether it says where it came from. A kind that declares itself and then writes no
+  # fields and no criteria passes grammar-conformance permanently; the meta-schema's
+  # own words are that an absent array carries no requirement. That is correct as
+  # grammar and useless as content, and the gap is what this check closes.
+  #
+  # THE FINDABLE CONDITION IS SILENCE, NOT EMPTINESS. An array that is present-and-
+  # empty with a block-level `source` is a REASONED EMPTY SET — a position was taken,
+  # and it is green. Five of the shipped corpus's sixteen surfaces are exactly that. An
+  # array that is ABSENT is a surface on which the kind said nothing, and that is the
+  # finding. A check that confused the two would redden the entire shipped corpus while
+  # still passing a sensitivity arm, which is why the specificity fixture below carries
+  # a reasoned empty set on purpose.
+  #
+  # WHY A SEPARATE CHECK RATHER THAN MORE RULES INSIDE CHECK 75. Measured, not assumed:
+  # all 68 declaration sites across Check 75's fixture corpus are array-ABSENT — its
+  # CONFORMING fixture included. A silence rule inside --validate-packs therefore
+  # returns findings on BOTH of that check's control arms: its sensitivity rule string
+  # stops being exactly PACK-K05 and its specificity exit moves 0 -> 1. Both trip the
+  # branch above that increments ISSUES OUTSIDE the mode gate. So the sibling siting is
+  # a measured constraint, not a preference, and it is recorded in an ADR.
+  #
+  # WARN-MODE INITIAL, same rationale as Check 75 and the sibling checks it follows: a
+  # brand-new detector with no shakedown history, over a population that is not fully
+  # visible from here (type-pack instances are operator-local user config by design).
+  # Graduation is a committed default — resolve_check_mode "<id>" "enforce" — never a
+  # mode file, so the flip leaves a repo record.
+  #
+  # WHAT "WARN" DOES AND DOES NOT COVER, stated because it is otherwise misread.
+  # FINDINGS are non-blocking at ship. The CONTROL ARM is blocking from day one, on
+  # every mode: a content check that cannot be shown to discriminate must not report a
+  # clean corpus.
+  #
+  # WIRING, RECORDED ON BOTH SIDES. This is the FOURTH deploy.sh consumer of
+  # core/deploy/tools/check-work-hierarchy.py, after Check 22 (--emit-kinds), Check 55
+  # (the H1/H2/H3 legs) and Check 75 (--validate-packs). The primitive's own consumer
+  # set is recorded in core/deploy/tools/README.md; a new invocation that is not added
+  # there leaves the tool's documented blast radius short of its real one.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 80: Pack content-completeness (declared kinds take a position on every surface, and every position names its source; warn-mode initial; enforce-flip deferred)"
+    local c80_script="core/deploy/tools/check-work-hierarchy.py"
+    local c80_packs="core/packs"
+    if [[ ! -f "$c80_script" ]]; then
+      flag_warn_or_issue "pack-content-completeness" "primitive script missing: $c80_script"
+    elif [[ ! -d "$c80_packs" ]]; then
+      flag_warn_or_issue "pack-content-completeness" "pack corpus missing: $c80_packs"
+    else
+      local c80_mode
+      c80_mode=$(resolve_check_mode "pack-content-completeness")
+
+      # ── CONTROL ARM FIRST, and it has its OWN fixture pair. Reusing Check 75's
+      # would be reusing a population that is array-absent everywhere: the sensitivity
+      # arm would fire for the wrong reason and the specificity arm would fire at all.
+      # The pair lives in a SUBDIRECTORY, not as two more top-level fixtures, because
+      # --pack-root accepts a whole parent and enumerates <root>/<child>/pack.toml —
+      # top-level siblings would be absorbed into a whole-parent grammar run and move
+      # its result set. A subdirectory holding no pack.toml of its own is skipped.
+      local c80_fx="core/deploy/tests/fixtures/packs/content"
+      local c80_sens_rc=0 c80_spec_rc=0 c80_sens_out="" c80_sens_rule=""
+      if [[ -d "$c80_fx/cc-silent" && -d "$c80_fx/cc-complete" ]]; then
+        c80_sens_out=$(/usr/bin/python3 "$c80_script" --validate-pack-content --pack-root "$c80_fx/cc-silent" 2>&1) || c80_sens_rc=$?
+        /usr/bin/python3 "$c80_script" --validate-pack-content --pack-root "$c80_fx/cc-complete" >/dev/null 2>&1 || c80_spec_rc=$?
+        c80_sens_rule=$(echo "$c80_sens_out" | awk -F'\t' '$1=="FINDING"{print $2}' | paste -sd, -)
+        log "  CTRL:  pack-content-completeness — sensitivity(cc-silent fixture) exit=${c80_sens_rc} rule='${c80_sens_rule}' (want exit 1 + PACKC-C01), specificity(cc-complete fixture) exit=${c80_spec_rc} (want 0)"
+      else
+        log "  CTRL:  pack-content-completeness — discrimination fixtures absent at $c80_fx; the arms below cannot be shown to discriminate"
+        c80_sens_rc=-1
+      fi
+
+      # OUTSIDE THE MODE GATE, deliberately. Loss of discrimination is not a finding
+      # about the corpus, it is a statement that this run cannot speak about the
+      # corpus at all — and that must never be softened to a warning.
+      if [[ "$c80_sens_rc" -ne 1 || "$c80_sens_rule" != "PACKC-C01" || "$c80_spec_rc" -ne 0 ]]; then
+        log "  FAIL:  pack-content-completeness — the content lint no longer discriminates (sensitivity exit=${c80_sens_rc} rule='${c80_sens_rule}', specificity exit=${c80_spec_rc}). A content verdict over the live corpus would be unattributable, so the corpus is NOT reported clean."
+        ISSUES=$((ISSUES + 1))
+      else
+        local c80_out c80_exit=0
+        c80_out=$(/usr/bin/python3 "$c80_script" --validate-pack-content --pack-root "$c80_packs" 2>&1) || c80_exit=$?
+        if [[ $c80_exit -eq 3 ]]; then
+          flag_warn_or_issue "pack-content-completeness" "input failure (exit 3): $(head -1 <<<"$c80_out") — the pack corpus was unreadable or resolved to zero packs; a zero-pack root finds no violation BY CONSTRUCTION and must never read clean"
+        elif [[ $c80_exit -eq 0 ]]; then
+          # The run's OWN DENOMINATOR is echoed, so a zero is never ambiguous between
+          # a content-complete corpus and a scan that spoke about nothing.
+          local c80_read c80_state
+          c80_read=$(echo "$c80_out" | awk -F'\t' '$1=="PACKC"{print $2}')
+          c80_state=$(echo "$c80_out" | awk -F'\t' '$1=="STATE"{print $2}')
+          log "  OK:    pack-content-completeness — 0 findings (${c80_read:-packs_read=?}; ${c80_state:-state=?})"
+        elif [[ $c80_exit -eq 1 ]]; then
+          local c80_findings
+          c80_findings=$(echo "$c80_out" | awk -F'\t' '$1=="FINDING"{print $2"@"$3}' | paste -sd, -)
+          if [[ "$c80_mode" == "enforce" ]]; then
+            log "  FAIL:  pack-content-completeness — pack(s) carry incomplete content: $c80_findings"
+            ISSUES=$((ISSUES + 1))
+          else
+            flag_warn_or_issue "pack-content-completeness" "content-completeness finding(s): $c80_findings (warn-mode; graduate by recording resolve_check_mode \"pack-content-completeness\" \"enforce\" after the shakedown)"
+          fi
+        else
+          flag_warn_or_issue "pack-content-completeness" "check errored (exit $c80_exit): $(head -1 <<<"$c80_out")"
+        fi
+      fi
     fi
   fi
 
