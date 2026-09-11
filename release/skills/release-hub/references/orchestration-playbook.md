@@ -178,6 +178,20 @@ before routing continues. Neither alone is sufficient (`core/standards/hub-sessi
    reused), run § 4a.1 first if the file does not exist, and emit the matching
    `decision`/`action-item-opened` row. Every subsequent status transition emits
    its mapped `action-item-*` subtype per that standard's § 3.
+
+   **Apply the § 4 sweep at this routing point and render its result in the
+   Decision Briefing; a routing point that advances with no rendered sweep is
+   incomplete.** The sweep, the renderings that are admissible for it, and the
+   test that decides whether a given utterance is a durable commitment at all are
+   defined in `core/standards/hub-action-tracking.md` § 4. Read them there and
+   apply them; this step issues the instruction and restates no part of the test.
+   The restatement is not merely redundant here — this file ships inside
+   `packages/release-hub.skill` and is read from the installed tree, so a second
+   copy of the test would be a duplicate source that drifts from the standard the
+   moment either one moves, and the drift would be invisible from the deployed
+   side. **The invocation is deliberately written against the sweep as a whole
+   rather than against any one of its branches**, so a branch added to § 4 later
+   is reached by this step without an edit here.
 6. **Population reconciliation** — at Procedure 7 Close, and after any session that
    direct-edited either surface. Run:
 
