@@ -401,21 +401,31 @@ BANNED_JARGON_REGEX = [
     # heading anchor and an HTML comment, none of which is prose an author wrote
     # for a reader. Check 10 scans the UNSTRIPPED Section 6a; the sibling check 12
     # strips inline links first (link_strip_re) before its own scan, so the two
-    # checks disagree about what counts as prose. Every other pattern here is a
-    # multi-word phrase that cannot occur in a URL path, which is why this
-    # single-token entry is the first to reach that surface: a bullet linking to
-    # ".../core/rules/reflexive-pipeline-guard.md", or carrying
+    # checks disagree about what counts as prose. THE VECTOR IS NOT THIS ENTRY'S
+    # ALONE, and an earlier revision of this note wrongly said it was ("every
+    # other pattern is a multi-word phrase that cannot occur in a URL path, which
+    # is why this single-token entry is the first to reach that surface").
+    # Measured by driving check_note_content() with each pattern ISOLATED, so a
+    # firing is attributable to the pattern under test: 3 of the 16 patterns are
+    # single tokens that stand unchanged as a URL path segment — the literal
+    # "forward-only", the regex \bgate-blocking\b, and this one — and TWO OF THE
+    # THREE PRE-DATE this entry, so this row joined that surface rather than
+    # opening it. The other 13 carry a space, which a path segment cannot, and
+    # each returns 0 on its path arm while its prose arm fires. Concretely: a
+    # bullet linking to ".../core/rules/reflexive-pipeline-guard.md", or carrying
     # "<!-- reflexive: internal marker -->", yields a finding whose remedy text
     # asks the author to apply a plain-language replacement to a string that is
     # not prose. Measured reachability at the time of writing: 0 tracked file
     # paths carry the token; 4 of 227 notes carry any Section 6a markdown link
     # and 18 of 227 carry a Section 6a HTML comment. Feeding check 10 the
-    # link-stripped span would fix it, but that changes the scan INPUT for all 16
-    # patterns and re-opens the 227-note clean baseline that three shipped
+    # link-stripped span would fix it FOR ALL THREE AT ONCE — the remedy is
+    # shared, not specific to this row — but that changes the scan INPUT for all
+    # 16 patterns and re-opens the 227-note clean baseline that three shipped
     # consumers (deploy.sh Check 20, the Stage-13 close gate, Check 48) currently
     # rely on by construction. The residual is therefore RECORDED here rather
     # than traded for that — a named limitation with a known remedy, not an
-    # oversight.
+    # oversight, and one whose true scope is three patterns rather than one.
+    # A follow-up sized from the single-pattern reading would under-scope it.
     (re.compile(r"\breflexive\b", re.IGNORECASE), "reflexive"),
 ]
 
