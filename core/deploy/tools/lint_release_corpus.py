@@ -397,35 +397,37 @@ BANNED_JARGON_REGEX = [
     # is the executable record of the choice: a later "simplify it to a literal"
     # refactor turns that arm red instead of silently regressing v2.05.
     #
-    # KNOWN RESIDUAL — this pattern also matches inside a markdown link target, a
-    # heading anchor and an HTML comment, none of which is prose an author wrote
-    # for a reader. Check 10 scans the UNSTRIPPED Section 6a; the sibling check 12
-    # strips inline links first (link_strip_re) before its own scan, so the two
-    # checks disagree about what counts as prose. THE VECTOR IS NOT THIS ENTRY'S
-    # ALONE, and an earlier revision of this note wrongly said it was ("every
-    # other pattern is a multi-word phrase that cannot occur in a URL path, which
-    # is why this single-token entry is the first to reach that surface").
-    # Measured by driving check_note_content() with each pattern ISOLATED, so a
-    # firing is attributable to the pattern under test: 3 of the 16 patterns are
-    # single tokens that stand unchanged as a URL path segment — the literal
-    # "forward-only", the regex \bgate-blocking\b, and this one — and TWO OF THE
-    # THREE PRE-DATE this entry, so this row joined that surface rather than
-    # opening it. The other 13 carry a space, which a path segment cannot, and
-    # each returns 0 on its path arm while its prose arm fires. Concretely: a
-    # bullet linking to ".../core/rules/reflexive-pipeline-guard.md", or carrying
-    # "<!-- reflexive: internal marker -->", yields a finding whose remedy text
-    # asks the author to apply a plain-language replacement to a string that is
-    # not prose. Measured reachability at the time of writing: 0 tracked file
-    # paths carry the token; 4 of 227 notes carry any Section 6a markdown link
-    # and 18 of 227 carry a Section 6a HTML comment. Feeding check 10 the
-    # link-stripped span would fix it FOR ALL THREE AT ONCE — the remedy is
-    # shared, not specific to this row — but that changes the scan INPUT for all
-    # 16 patterns and re-opens the 227-note clean baseline that three shipped
-    # consumers (deploy.sh Check 20, the Stage-13 close gate, Check 48) currently
-    # rely on by construction. The residual is therefore RECORDED here rather
-    # than traded for that — a named limitation with a known remedy, not an
-    # oversight, and one whose true scope is three patterns rather than one.
-    # A follow-up sized from the single-pattern reading would under-scope it.
+    # KNOWN RESIDUAL — check 10 scans the UNSTRIPPED Section 6a, so this pattern,
+    # and every other pattern in both lists, also fires on text a reader of the
+    # note never sees; the sibling check 12 strips inline links before its own
+    # scan, so the two checks disagree about what counts as prose. Two earlier
+    # revisions of this note each stated the scope and each was wrong — first
+    # "this entry alone", then "three patterns", which holds for a bare link
+    # destination or a heading anchor but not for the HTML comment in its own
+    # example, nor for a link destination written in angle brackets. The reach is
+    # therefore pinned by self-test arm G-8 rather than restated here as a count.
+    # Per surface, as G-8 asserts:
+    #   * inside an HTML comment — every pattern;
+    #   * a link destination in the angle-bracket form, which admits spaces —
+    #     every pattern;
+    #   * a bare link destination or a heading-anchor fragment, neither of which
+    #     can carry a space — only a pattern whose specimen carries none.
+    # Concretely: a bullet carrying "<!-- reflexive: internal marker -->", or
+    # linking to ".../core/rules/reflexive-pipeline-guard.md", yields a finding
+    # whose remedy text asks the author to apply a plain-language replacement to
+    # a string that is not prose. Reachability measured when this row was added:
+    # no tracked file path carried the bare token, 4 of 227 notes carried any
+    # Section 6a markdown link, and 18 of 227 a Section 6a HTML comment.
+    # THE REMEDY IS NOT check 12's link_strip_re, which an earlier revision
+    # named: that expression removes a whole inline link — its reader-visible
+    # TEXT along with its destination, a new false negative — and leaves HTML
+    # comments where they are. A remedy has to strip comments and link
+    # destinations while keeping link text, and any remedy changes the scan
+    # INPUT for every pattern and re-opens the 227-note clean baseline that three
+    # shipped consumers (deploy.sh Check 20, the Stage-13 close gate, Check 48)
+    # currently rely on by construction. The residual is therefore RECORDED here
+    # rather than traded for that — a named limitation, not an oversight, and
+    # one a follow-up must size from G-8's surfaces, not from any one pattern.
     (re.compile(r"\breflexive\b", re.IGNORECASE), "reflexive"),
 ]
 
@@ -2706,6 +2708,96 @@ def _self_test() -> int:
             fires(g_findings2, "NOTE-BANNED-JARGON", clean_rel) == 0,
             f"{fires(g_findings2, 'NOTE-BANNED-JARGON', clean_rel)} finding(s) on a "
             "clean body, over a corpus where the other fixtures demonstrably fire")
+
+    # G-8 — the KNOWN RESIDUAL recorded beside the row-9 pattern, made executable.
+    # Check 10 scans the UNSTRIPPED Section 6a, so it also reads text a reader of the
+    # note never sees. Two earlier revisions of that note each restated how far that
+    # reaches, and each was wrong; this arm pins it instead, per surface, by driving
+    # every pattern's specimen through the REAL check_note_content() from four
+    # non-prose surfaces. It is a TRIPWIRE for a recorded limitation, not an
+    # endorsement of it: it goes red when the residual CHANGES — including when
+    # check 10 is fixed — and the remedy then is to re-measure, rewrite that note,
+    # and re-point or retire this arm. Prose is G-7's surface, not this one's.
+    def _g8_hyphenate(s: str) -> str:
+        return re.sub(r"\s+", "-", s.strip())
+
+    def _g8_slug(s: str) -> str:
+        """A heading-anchor slug: lower-cased, punctuation dropped, spaces to hyphens."""
+        return re.sub(r"[^\w\- ]", "", s.lower()).replace(" ", "-")
+
+    g8_surfaces = {
+        "html-comment": lambda t: f"<!-- {t} -->",
+        "angle-bracket link destination": lambda t: f"[the rule](<../core/rules/{t}.md>)",
+        "bare link destination": lambda t: f"[the rule](../core/rules/{_g8_hyphenate(t)}.md)",
+        "heading-anchor fragment": lambda t: f"[below](#{_g8_slug(t)})",
+    }
+    g8_keys = set(BANNED_JARGON_ROW_OF)
+    g8_fired: dict[str, set[str]] = {}
+    g8_control: dict[str, int] = {}
+    with tempfile.TemporaryDirectory() as _g8tmp:
+        _g8_saved = {k: globals()[k] for k in ("WORKSPACE_ROOT", "NOTES_DIR", "PLANS_DIR")}
+        for _si, (_surface, _render) in enumerate(g8_surfaces.items()):
+            s_root = Path(_g8tmp) / f"S{_si}"
+            s_notes = s_root / "release" / "releases" / "notes"
+            s_plans = s_root / "release" / "releases" / "plans"
+            s_plans.mkdir(parents=True, exist_ok=True)
+            _write(s_plans, "v4/v4.02_RELEASE_PLAN.md", "widget-two")
+            s_link = "release/releases/plans/v4/v4.02_RELEASE_PLAN.md"
+
+            def _s_note(rel_name: str, carried: str) -> Path:
+                p = s_notes / "v4" / rel_name
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(
+                    f"---\ntype: release-notes\nlinks:\n  plan: {s_link}\n---\n"
+                    "\n# Fixture note\n\n## What changed for everyone\n\n"
+                    f"- A fixture bullet in plain words. {carried} Why it matters: "
+                    "the arm needs a conformant body.\n",
+                    encoding="utf-8")
+                return p
+
+            s_paths = {k: _s_note(f"v4.{20 + _i}_RELEASE_NOTES.md",
+                                  _render(BANNED_JARGON_SPECIMEN.get(k, "")))
+                       for _i, k in enumerate(BANNED_JARGON_ROW_OF)}
+            s_clean = _s_note("v4.19_RELEASE_NOTES.md", _render("an ordinary aside"))
+            try:
+                globals().update(WORKSPACE_ROOT=s_root, NOTES_DIR=s_notes, PLANS_DIR=s_plans)
+                s_findings = check_note_content()
+                s_rel = {k: _rel(v) for k, v in s_paths.items()}
+                s_clean_rel = _rel(s_clean)
+            finally:
+                globals().update(_g8_saved)
+            g8_fired[_surface] = {
+                k for k in g8_keys
+                if f"'{k}'" in " ".join(f for f in blocking(s_findings)
+                                        if f.startswith("NOTE-BANNED-JARGON") and s_rel[k] in f)}
+            g8_control[_surface] = fires(s_findings, "NOTE-BANNED-JARGON", s_clean_rel)
+
+    g8_ws_free = {k for k in g8_keys if not re.search(r"\s", BANNED_JARGON_SPECIMEN.get(k, ""))}
+
+    def _g8_detail(surface: str, expected: set[str]) -> str:
+        got = g8_fired.get(surface, set())
+        if got == expected:
+            return f"{len(got)}/{len(g8_keys)} pattern(s) fired, as the row-9 note records"
+        return (f"{len(got)}/{len(g8_keys)} fired; FIRING BUT NOT RECORDED={sorted(got - expected)} "
+                f"RECORDED BUT NOT FIRING={sorted(expected - got)} — the residual changed: "
+                "re-measure, rewrite the row-9 KNOWN RESIDUAL note, re-point this arm")
+
+    arm("G-8a KNOWN RESIDUAL tripwire — from inside an HTML comment in Section 6a, every pattern fires",
+        g8_fired.get("html-comment") == g8_keys, _g8_detail("html-comment", g8_keys))
+    arm("G-8b KNOWN RESIDUAL tripwire — from an angle-bracket link destination, every pattern fires",
+        g8_fired.get("angle-bracket link destination") == g8_keys,
+        _g8_detail("angle-bracket link destination", g8_keys))
+    arm("G-8c KNOWN RESIDUAL tripwire — from a bare link destination or a heading-anchor fragment, "
+        "exactly the patterns whose specimen carries no whitespace fire",
+        g8_fired.get("bare link destination") == g8_ws_free
+        and g8_fired.get("heading-anchor fragment") == g8_ws_free,
+        f"whitespace-free specimens {sorted(g8_ws_free)}; bare destination: "
+        + _g8_detail("bare link destination", g8_ws_free)
+        + "; heading anchor: " + _g8_detail("heading-anchor fragment", g8_ws_free))
+    arm("G-8d specificity — the same four surfaces carrying no §2.4 term produce no banned-jargon finding",
+        len(g8_control) == len(g8_surfaces) and all(n == 0 for n in g8_control.values()),
+        "; ".join(f"{s}: {n}" for s, n in g8_control.items())
+        + " finding(s) on a surface carrying an ordinary aside")
 
     print(f"\n{checked} arm(s) run, {len(failures)} failure(s)"
           + (f": {failures}" if failures else ""))
