@@ -53,10 +53,12 @@
 # narrowing does and does not buy are recorded at normalize_report(). The
 # exclusion is asserted in both directions rather than assumed — a narrowing
 # control fails the arm if the cut marker is missing from either side, and an
-# inertness arm in run_self_test fails if the excluded region ever starts
-# carrying output that VARIES WITH THE FINDING SET. That variation is the whole
-# of the arm's reach, and it is narrower than the exclusion's safety condition;
-# the residual it leaves is stated at normalize_report() rather than implied away.
+# inertness arm in run_self_test fails if the excluded region's output DIFFERS
+# BETWEEN THAT ARM'S TWO FIXED PROBES — two samples of the finding set, not the
+# finding set. That difference is the whole of the arm's reach. It is narrower
+# than the exclusion's safety condition and narrower than "varies with the
+# finding set": below-cut output the two probes cannot tell apart passes it. The
+# residual classes are named at normalize_report() rather than implied away.
 #
 # WHAT THE EQUIVALENCE OBLIGATION COSTS, AND WHERE NEW ASSERTIONS THEREFORE GO.
 # The oracle is a differential over a SHARED corpus, so the corpus is frozen at
@@ -799,32 +801,48 @@ ADVISORY_CUT_MARKER='@@ADVISORY-BLOCK-EXCLUDED-FROM-EQUIVALENCE@@'
 #   * That it FIRED — the narrowing control in run_equivalence fails the arm if
 #     the cut marker is missing from either side, so a normalizer that silently
 #     no-ops cannot read as a pass.
-#   * That the excluded region is STILL INERT AGAINST THE FINDING SET — the
-#     inertness arm in run_self_test runs the checker over two inputs with
+#   * That the excluded region is STILL INERT BETWEEN TWO FIXED FINDING SETS —
+#     the inertness arm in run_self_test runs the checker over two inputs with
 #     DIFFERENT findings and requires their post-cut regions to be byte-identical
 #     while their pre-cut regions differ. Inertness is the property that justifies
 #     the cut, and a point-in-time reading of the region is not a guarantee; if
-#     that region ever starts emitting output that VARIES WITH THE FINDING SET,
-#     that arm turns red instead of the exclusion silently widening.
+#     that region ever starts emitting output that DIFFERS BETWEEN THOSE TWO
+#     PROBES, that arm turns red instead of the exclusion silently widening.
+#     Output that varies with the finding set in a way the two probes do not
+#     distinguish does not turn it red; the next paragraph names that output.
 #
 # WHAT THAT ARM DOES NOT REACH, NAMED RATHER THAN LEFT TO BE DISCOVERED. Its
-# discriminator is variation ACROSS THE FINDING SET. The exclusion's safety
-# condition is the stronger property that no below-cut output can DIFFER BETWEEN
-# THE TWO IMPLEMENTATIONS, and a below-cut emission that is CONSTANT across
-# finding sets sits in the gap between the two. Measured, not reasoned: one
-# `echo "${REFBLOCK_RE}"` added below the cut is byte-identical in both of the
-# arm's runs, so the arm passes at inertness=1 and the suite reports SELF-TEST
-# RESULT: PASS at exit 0 — while the checker emits a below-cut line the oracle
-# does not emit at all, interpolating a live implementation value. The report-text
-# arm cannot see it either, because that region is excluded from the diff by
-# declaration. Nor can varying the arm's INPUTS close this: a constant is constant,
-# so no second input dimension makes it differ between the two runs. The one arm
-# that WOULD reach it is a below-cut diff between the oracle and this checker —
-# which is the whole-output diff this narrowing exists to remove, and reinstating
-# it reinstates the defect above. So the residual is ACCEPTED and recorded here,
-# the same accounting this block already makes for Arm 3's presence-only pinning:
-# the exclusion is armed against the class the arm measures, and rests on review
-# for the class it does not.
+# discriminator is a byte difference between two SAMPLES of the finding set, not
+# variation across the finding set. The exclusion's safety condition is the
+# stronger property that no below-cut output can DIFFER BETWEEN THE TWO
+# IMPLEMENTATIONS, and three classes of below-cut output sit in the gap. Each was
+# measured, not reasoned, by one line added directly below the `### Categories`
+# emission, after which the arm passed at inertness=1 and the suite reported
+# SELF-TEST RESULT: PASS at exit 0:
+#   (1) CONSTANT across finding sets. `echo "${REFBLOCK_RE}"` is byte-identical in
+#       both of the arm's runs — while the checker emits a below-cut line the
+#       oracle does not emit at all, interpolating a live implementation value.
+#       Varying the arm's inputs cannot close this: a constant is constant, so no
+#       input dimension makes it differ between two runs.
+#   (2) VARYING WITH THE FINDING SET BUT EQUAL ON BOTH PROBES. A line printing the
+#       count of misplaced-reference findings prints 1 on each probe, since each
+#       carries one, and 2 on an input carrying two.
+#   (3) KEYED TO A FINDING CLASS NEITHER PROBE CARRIES. A hint printed only when a
+#       pull-request-number finding exists prints nothing on either probe, and so
+#       does one keyed to a transferred-issue finding.
+# The boundary was measured from the inside as well: a line printing the count of
+# unresolvable-reference findings — the same shape as (2), on a class probe B
+# carries and probe A does not — prints 0 and 1 and turns the arm red, as does
+# interpolating the whole findings list. The report-text arm cannot see (1)-(3)
+# either, because that region is excluded from the diff by declaration. More
+# probes would narrow (2) and (3) but cannot close them, because a below-cut
+# emission can be keyed to any property every probe happens to share. The one arm
+# that WOULD close all three is a below-cut diff between the oracle and this
+# checker — which is the whole-output diff this narrowing exists to remove, and
+# reinstating it reinstates the defect above. So the residual is ACCEPTED and
+# recorded here, the same accounting this block already makes for Arm 3's
+# presence-only pinning: the exclusion is armed against the class the arm
+# measures, and rests on review for the classes it does not.
 #
 # INVOCATION FORM IS LOAD-BEARING, NOT STYLISTIC. awk reads the FILE and no
 # producer sits upstream, and the program carries no `exit`. The shape this
@@ -1531,17 +1549,24 @@ run_self_test() {
   # So: run the checker over two inputs that produce DIFFERENT findings, and
   # require their reports to DIFFER above the cut and be BYTE-IDENTICAL below it.
   # The differ-above requirement is the vacuity control — without it two identical
-  # reports would satisfy the arm trivially. The day the advisory block interpolates
-  # anything that VARIES WITH THE FINDING SET, this arm goes red instead of the
-  # exclusion quietly widening.
+  # reports would satisfy the arm trivially. Probe A carries one misplaced valid
+  # reference; probe B carries that same finding plus one unresolvable and one
+  # deprecated reference. The day the advisory block emits anything that DIFFERS
+  # BETWEEN THESE TWO PROBES, this arm goes red instead of the exclusion quietly
+  # widening.
   #
-  # ITS REACH STOPS THERE, AND THE BOUND IS STRUCTURAL. The discriminator is
-  # variation across the finding set, so a below-cut emission that is CONSTANT
-  # across finding sets is byte-identical in both runs below and passes — and no
-  # second input dimension can change that, because a constant is constant.
-  # Measured: `echo "${REFBLOCK_RE}"` added below the cut leaves this arm at
-  # inertness=1 and the suite at SELF-TEST RESULT: PASS. normalize_report() records
-  # why that residual is accepted rather than closed, and what closing it costs.
+  # ITS REACH STOPS THERE. The discriminator is a byte difference between two
+  # SAMPLES of the finding set, not variation across the finding set, so three
+  # classes of below-cut output pass: output CONSTANT across finding sets (no
+  # input dimension changes that — a constant is constant); output that varies
+  # with the finding set but takes the SAME VALUE on both probes (a count of
+  # misplaced references is 1 on each); and output keyed to a finding class
+  # NEITHER probe carries (pull-request number, transferred issue). Each was
+  # measured by one line added below the cut that left this arm at inertness=1
+  # and the suite at SELF-TEST RESULT: PASS, while the same-shaped count of
+  # unresolvable references — which the two probes DO tell apart — turned it red.
+  # normalize_report() records why those residuals are accepted rather than
+  # closed, and what closing them costs.
   local xm_a_out="$xm_dir/inert-a.out" xm_b_out="$xm_dir/inert-b.out"
   local xm_a_blk="$xm_dir/inert-a.blk" xm_b_blk="$xm_dir/inert-b.blk"
   local xm_a_norm="$xm_dir/inert-a.norm" xm_b_norm="$xm_dir/inert-b.norm"
