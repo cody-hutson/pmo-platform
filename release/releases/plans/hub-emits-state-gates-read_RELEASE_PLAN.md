@@ -492,12 +492,47 @@ N/A — enumerated over the classes that could produce one: no data schema chang
 | **DEV-10** | **The Stage-4 In-Flight Release Roster's population of n=1 understated the field at the instant it was taken, and understates it further at Commit 0.** | Hub divergence recorded at the Procedure-0 gate; re-measured at Commit 0 | **RECORDED, not restated.** The Stage-4 row is left as the measurement it was, at the SHA and instant it was taken; the live population of five is recorded in § Commit-0 Version Re-Verify Record with the reason the Stage-4 derivation is structurally blind to a release still at Stage 4. Re-writing the pinned row would destroy the prior Stage 9 needs to diff against. |
 | **DEV-11** | **`${AUDIT_DATE_UTC}` is deliberately NOT resolved at Commit 0**, against the date-variable convention's stated default. | #4027's Stage-5 design, recorded explicitly so the default is not applied mechanically against the spec's intent | **DECLARED.** The token is runtime-resolved and must appear literally in every artifact this release adds under the audit skill, because the folder it anchors is produced by each run rather than authored once. A resolved date written into a spec is a defect by the shipped spec's own words. The Commit-0 UTC date is recorded in § Commit-0 Version Re-Verify Record as provenance only. |
 | **DEV-12** | **The Quota Budget's envelope field moves from `UNSTATED` to `partial`.** | Operator statement at the plan-approval gate | **RATIFIED.** The Stage-4 field recorded the refuse-to-synthesize token because no band had been captured; the operator then stated one. The verdict stays **WARN** and the batch split stands. |
+| **DEV-13** | **No new ADR is authored for the coverage-axis canonicalization.** The question was deferred from the Stage-5 amendment gate to Stage-6 Engineering *"where the change's true shape is visible in the diff"*, and tracked as an action item so it could not be skipped under build pressure. | Engineering determination at Commit 0, against the landed diff | **DISCHARGED — decided NO, with the promotion condition recorded rather than left implicit.** Rendered against the diff as the deferral asked. The rubric landed **three** canonicalizations: the roster predicate, the coverage vocabulary with its ordered predicate, and the declared-producer instrumentation test. Three grounds against authoring a record: (i) the sibling audit mode set the precedent deliberately, homing its own canonicalization in its rubric's reconciliation record, and this rubric mirrors that section for exactly this content; (ii) the host decision of record already governs the mode, the layer split, the cadence home and the derive-at-run-time requirement — the roster predicate *closes an item that decision left open* rather than overturning it, which is not ADR-shaped; (iii) the strongest argument **for** a record was reach — that the instrumentation test would bind any future audit axis borrowing the shape — and that consumer is **speculative**, measured rather than assumed: of the sibling audit-cadence axes, none computes an instrumentation ceiling or measures observability today, so the record would have one reader who is already inside the file. The content is not lost: the reconciliation record carries both canonicalizations with their rejected alternatives and the measurement that rejected them. **Promotion condition, recorded so this is a deferral and not a drop:** a second axis measuring instrumentation coverage makes the test a cross-axis contract, and that is the trigger to lift it to the ADR corpus. Reversibility **CHEAP** — the content is already written; promoting it is a move, not an authoring pass. Confidence **HIGH** on (i) and (ii), **MEDIUM** on (iii), which is why the promotion condition rides with it. |
 
 ---
 
 ## Verification Evidence
 
-(Populated during Stage 6 C4 self-verification and Stage 7 re-execution.)
+Populated incrementally by each Stage-6 Engineering spoke as its card lands, and re-executed
+at Stage 7. **Every null claim below carries a control arm run on the same instrument against
+the same target**; where an arm did not fire, the result is recorded as a broken probe rather
+than as a clean one.
+
+### #4027 — decision health-check (Commit 0 + two card commits)
+
+| # | Check | Result | Arms |
+|---|---|---|---|
+| **V1** | **Doc-link integrity** over the card's seven changed/added files | **0 broken cross-refs** | Sensitivity: a seeded broken relative link in the same scanned directory **was reported** (`broken-cross-ref`, P1). Specificity: a resolving link in that same probe file was **not** reported. Probe removed after the arm fired. Deploy-time Check 14 independently reads `no broken cross-refs in scope`. |
+| **V2** | **Plan-depth lint** on the release plan (workspace-rooted link form) | **0 depth-sensitive links** | Sensitivity: a seeded `../`-relative link in a probe plan at the same authoring depth **was reported** with the ADR-092 rename rationale. Specificity: a workspace-rooted link in that same probe was **not** reported. |
+| **V3** | **Link-resolver self-test** (parser/resolver/exclusion regression probe) | **OK — 11 fixtures passed** | The self-test is itself the arm: a parser regression fails it independently of any corpus scan. |
+| **V4** | **Coverage-vocabulary cascade** — the retired value name is gone from the Mode J sense and nowhere else | **pre 15 across 7 files → post 5 across 5 files** | Population: 1836 readable text files of 2033 tracked paths. Sensitivity: a control token resolves **175** times on the same walk, so the scan reads real content. Specificity: a fabricated same-shape token returns **0**. The 5 survivors are the 3 homonyms in an unrelated acceptance mechanism plus 2 terminal historical records, each **read at its site and classified**, never matched-and-swept — and each verified **byte-unchanged** by an empty diff against the baseline on both the committed and worktree surfaces. A run returning zero for all fifteen would have over-swept. |
+| **V5** | **Dangling-citation check** after retiring the mode-spec's provisioning section | **0 references to it remain** | Population: 1769 files. Sensitivity: the same instrument resolves **7** references to the mode-spec section the guard folded into, so it reaches real citations. The seven `§0`-shaped hits it did return all belong to unrelated documents' own section zero. |
+| **V6** | **CIAC-3 as amended** — added-lines scan of the four declared files for an integer adjacent to the scored nouns, excluding the identifier token class | **0 hits over 755 added lines** | **Mandatory seeded control FIRED**: an added line reading the forbidden construct is reported. Run twice during authoring — the first pass returned **7**, one a genuine breach (the coverage vocabulary stated as a count) and six structural adjacencies; all seven were corrected before commit. See the note below. |
+| **V7** | **Canonical-structure compliance** (Check 6) | **OK — `pmo-qa-auditor`** | Read from the deploy-check verdict rather than re-derived, per the size-conformance rule. 55 OK rows in that block, zero FAIL or DRIFT. |
+| **V8** | **Frontmatter description length** | **993 of 1024 characters — PASS** | Unchanged by this card's edits; measured rather than assumed. |
+| **V9** | **Skill-package freshness** (Check 7) | **STALE — expected, not a defect** | `pmo-qa-auditor` reports source-changed-since-build. The rebuild is **deliberately deferred** to after the sibling card's commit per the contention resolution: sequential rebuilds of one package across a limb is the shape that produces package drift. This FAIL is the expected mid-limb state and clears when the package is rebuilt once, before the PR leaves draft. |
+
+**Two deploy-check FAILs are pre-existing and not this card's**, verified rather than assumed: a
+release-body-drift finding across the logged release population, and a count-structure finding in
+two reference documents. Each names files this branch does not touch — an empty diff against the
+baseline on every one of them is the evidence.
+
+**A finding about CIAC-3's own specification, surfaced because it will recur.** The criterion's
+**authoring constraint** was narrowed to *bare cardinality integers*, with predicate comparators
+and quantifiers exempt; its **grading method** was narrowed on different axes — added-lines,
+noun set, identifier-token exclusion — and **not** on that one. The two are therefore asymmetric,
+and a faithful implementation of the stated method over-fires on section numbers, ordered-list
+markers, and existential quantifiers, none of which state a cardinality. This card authored
+around the asymmetry rather than arguing it: headings, family identifiers and list markers keep
+digits away from the scored nouns, so the criterion reads zero by its own stated method. The one
+**genuine** breach the scan caught — the coverage vocabulary written as a count, at eight sites —
+is corrected by naming the values instead. Recorded for Stage 9 because the next card editing
+these files will meet the same asymmetry.
 
 ---
 
