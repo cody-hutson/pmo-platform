@@ -2485,15 +2485,23 @@ def _self_test() -> int:
     # These arms make the disagreement unable to recur silently — a §2.4 row with
     # no enforcing pattern, or a pattern with no §2.4 row, is a red arm.
     #
-    # POSTURE, stated plainly because the arms alone do not imply it: this suite
-    # reaches CI only through .github/workflows/release-tooling-smoke.yml, which
-    # declares `posture=advisory` and whose jobs are NOT branch-protection
-    # contexts. A red arm here is a fast signal; it does NOT block a merge. The
-    # companion path-roster entries added to that workflow buy REACHABILITY — the
-    # arms now run on a PR that edits §2.4 alone, which they previously did not —
-    # and reachability is not enforcement. There is no branch-protection-enforced
-    # home available for this invariant today; that gap is tracked separately and
-    # is not closed here.
+    # POSTURE, stated only as far as this repository can pin it. What the repository
+    # pins: this suite reaches CI only through
+    # .github/workflows/release-tooling-smoke.yml, which declares
+    # `posture=advisory`, and there only in the `selftest-discovery` job, whose
+    # discovery engine runs it; a failing arm surfaces as that engine's `::error::`
+    # annotation naming this file. Read that annotation, not the job's colour — the
+    # job runs other arms too, so its colour is not this suite's verdict. What the
+    # repository CANNOT pin is whether that job is a required status check on
+    # `main`, and therefore whether a red arm here blocks a merge: that is
+    # branch-protection configuration on the host, it changes without a commit, and
+    # a comment asserting it goes stale silently. Read it live instead —
+    #     gh api repos/:owner/:repo/branches/main/protection \
+    #         --jq '.required_status_checks.contexts'
+    # — and look for that job's display name. The companion path-roster entries
+    # added to that workflow buy REACHABILITY — the arms now run on a PR that edits
+    # §2.4 alone, which they previously did not — and reachability is not
+    # enforcement.
     #
     # HISTORY, labelled: that the count §3.2 used to restate was a TABLE-ROW count
     # rather than a count of enforced literals, and that the divergence was an

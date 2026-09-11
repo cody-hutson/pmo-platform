@@ -326,10 +326,12 @@ on:
       # disagreement the CIAC-3, selftest-discovery, R8, VIC and Arm F entries
       # above each close for their own inputs.
       # What it buys is REACHABILITY, not enforcement, and the difference matters:
-      # this workflow is posture=advisory (see :3) and no job of it is a
-      # branch-protection context, so the arm now RUNS on the edit it exists to
-      # catch but does not block the merge. There is no branch-protection-enforced
-      # home for this invariant today; that gap is tracked separately.
+      # this workflow declares posture=advisory (see :3), and the arm RUNS on the
+      # edit it exists to catch in the selftest-discovery job. Whether that job is a
+      # required status check on main — and so whether the arm blocks the merge — is
+      # branch-protection configuration on the host, which this file cannot pin and
+      # which changes without a commit. Read it live rather than from this comment:
+      #   gh api repos/:owner/:repo/branches/main/protection --jq '.required_status_checks.contexts'
       - 'release/references/standards/release-notes-standard.md'
   push:
     branches: [main]
