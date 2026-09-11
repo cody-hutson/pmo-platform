@@ -51,11 +51,41 @@ selector* — not the rows' positions. These citations are a run-time **resolver
 provenance, so an ordinal that shifts when anything above it changes would silently re-point the
 predicate rather than merely dating a reference.
 
+**The shared denominator rule, stated once so no cell restates it.** Every seam's `denom`
+resolves against the obligation class the matched source rows already carry. For each matched
+row tagged `MUST`, the window owes **one occasion per completed release in it** — the block's
+own partition predicate is *structural guarantee in a completed release, not observed
+frequency*, so a `MUST` row is total over completed releases. For each matched row tagged
+`CONDITIONAL`, the window owes **one occasion per firing of that row's gate that the window's
+own record independently evidences**. A seam's cell therefore names only the occasion classes
+it carries *beyond* this rule. Resolving the denominator from the matched rows' own obligation
+tags — rather than from an enumeration held here — is what keeps a later obligation from
+entering the block and escaping every seam's denominator unnoticed (§4.8).
+
 | `DS-id` | Seam name | Decision class | Emitting surface | Evidence key (`select` · `denom`) | Baseline source |
 |---|---|---|---|---|---|
+| **DS1** | **Routing-point decision** — a decision rendered at a hub routing point is recorded with its outcome | operator-gate ∪ deterministic-rule · operator-in-loop | event log · `decision`/\* less the subtypes DS3, DS4 and DS6 claim | **select:** `event_type=decision` ∧ `event_subtype` ∉ (the DS3, DS4 and DS6 selectors) · **denom:** the shared rule over every matched row, with no occasion class beyond it | the `EMISSION-CONTRACT` block, the rows whose `event_type` · `event_subtype` match this seam's selector, keyed by each row's `gate` value; plus the per-stage Audit-Trail-Capture tables for the `decision` subtypes the block delegates to a stage spec |
+| **DS2** | **Gate verdict** — a stage or release gate's verdict is recorded with its evaluation | composed-specialist ∪ operator-gate · operator-in-loop at the release gate | event log · `gate-outcome`/\* | **select:** `event_type=gate-outcome` · **denom:** the shared rule, plus one occasion per stage-gate the release actually traversed whose stage spec assigns it a `gate-outcome` row | the `EMISSION-CONTRACT` block, rows matching this seam's selector, keyed by `gate`; the per-stage Audit-Trail-Capture tables; [`core/schemas/gate-evaluation-spec.md`](../../../schemas/gate-evaluation-spec.md) § the verdict contract |
+| **DS3** | **Finding raise-and-disposition** — every finding raised is tiered and resolved to a sink, and the disposition is recorded | operator-gate ∪ composed-specialist · operator-in-loop | event log · `escalation`/\*, `scope-change`/\*, `iteration`/\*, `decision`/ the action-item lifecycle subtypes together with `queued-pending-approval`, `approval-deferred` and `empirical-verification-finding`; **and** the hub-state action-item ledger for the window's milestones | **select:** the union of those loci, plus the ledger's action-item rows · **denom:** the shared rule, plus one occasion per tiered finding the window's deviation logs and stage sub-tasks record | the `EMISSION-CONTRACT` block, rows matching this seam's selector, keyed by `gate`; [`core/standards/hub-action-tracking.md`](../../../standards/hub-action-tracking.md) § the action-item scan cadence and its close-time attestation gate; [`release/skills/release-hub/SKILL.md`](../../../../release/skills/release-hub/SKILL.md) § the sink-disposition invariant this seam measures |
+| **DS4** | **Recommendation-choice delta** — the agent's prior recommendation is recorded against the rendered choice, the zero-delta case included | operator-gate · operator-in-loop | event log · `decision`/`recommendation-choice-delta` | **select:** `event_type=decision` ∧ `event_subtype=recommendation-choice-delta` · **denom:** the shared rule, plus one occasion per decision moment named by the `via:` provenance enum, **resolved from that enum at run time** rather than from any list held here | the `recommendation-choice-delta` payload convention in [`release/references/standards/pipeline-event-log-schema.md`](../../../../release/references/standards/pipeline-event-log-schema.md), keyed by the subtype name — its `via:` provenance enum and its rule that the aligned state is recorded explicitly and never silently omitted; plus the `EMISSION-CONTRACT` block rows matching this seam's selector, keyed by `gate` |
+| **DS5** | **Self-repair election** — each retry, escalate or rollback is recorded at the moment it is elected | deterministic-rule · **no operator in the loop** (rollback excepted — operator-authorized) | event log · `self-repair`/\* | **select:** `event_type=self-repair` · **denom:** the shared rule, plus one occasion per recovery the window's own record independently evidences — a suite failure routed back to Engineering, an escalation row, an iteration pass beyond the first, a recorded spoke re-spawn | the `EMISSION-CONTRACT` block, rows matching this seam's selector, keyed by `gate`; [`core/disciplines/autonomous-execution-model.md`](../../../disciplines/autonomous-execution-model.md) § Emission — the governing rule that matched row delegates to, which is where the `escalate` and `rollback` loci are named |
+| **DS6** | **Delegation fork** — each spawn-versus-hub-direct merit fork is recorded with the merit condition that fired | deterministic-rule · **no operator in the loop** | event log · `decision`/`delegation` | **select:** `event_type=decision` ∧ `event_subtype=delegation` · **denom:** the shared rule, restricted to the **independently-evidenced** merit forks. Routine template routing is **not** in the denominator — silence there is correct by rule, not a shortfall | the `EMISSION-CONTRACT` block, the row matching this seam's selector, keyed by `gate`; [`core/disciplines/decision-discipline.md`](../../../disciplines/decision-discipline.md) § the delegation merit test and its reviewability clause, which is the rule that decides which forks are owed a row |
+| **DS7** | **Launch admission** — each spoke launch's admission verdict is recorded with the axis and the basis that produced it | deterministic-rule · **no operator in the loop** (surfaced on any non-`PROCEED`) | event log · `spoke-launch`/\*; **and** the hub's rendered admission-verdict line for that launch | **select:** `event_type=spoke-launch` · **denom:** the shared rule, plus one occasion per `Agent`-tool spoke launch in the window, constructible from the stage sub-tasks the window's releases created together with the recorded re-spawns | [`release/references/standards/quota-budget-protocol.md`](../../../../release/references/standards/quota-budget-protocol.md) § the Checkpoint-B rendering obligation, whose own terms are that silence is a failure rather than a pass; the schema enum row for this seam's locus, which carries the no-producer declaration; plus the `EMISSION-CONTRACT` block rows matching this seam's selector, keyed by `gate` |
 
-*Rows are authored by the coverage-scorecard slice that fills this table. This file lands the
-contract; the rows land against it.*
+**Totality and disjointness — stated so they can be falsified.** Every decision-bearing
+`(event_type · event_subtype)` the schema enum carries belongs to **exactly one** row above.
+Disjointness holds by the admission predicate's third conjunct (§4.6) and is checkable by
+intersecting the seven selector sets pairwise. Totality holds because DS1's selector is a
+**complement**: it claims every `decision` subtype the other rows do not, so a subtype added
+to the schema lands in DS1 rather than falling through unmeasured. Neither is a prose claim —
+both are exercised by the fixture families, and the source-completeness family additionally
+asserts that the union of the seams' matched rows equals the block's own parsed row set.
+
+**Why DS1 is one seam rather than two.** The operator-rendered routing decisions and the hub's
+rule-determined recorded determinations share the **same** locus, `decision`/`d-class`, and the
+admission predicate forbids assigning one locus to two seams. The distinction is not lost: the
+`actor` column separates them on every row, and a run reports that split *within* the seam. The
+predicate is doing real work here — it cut a distinction the author wanted to keep.
 
 The seam set is **the reconciled set (§4), not a cap** — roster changes are governed by the
 cadence-doc §5 continuity rule (note additions, rationale for removals, in the run's
@@ -154,6 +184,38 @@ membership.
 Per-seam behavioural anchors specialize these two values against each seam's own evidence key,
 and are authored beside the rows they grade.
 
+`rows(s,W)` is the set of event rows the seam's `select` predicate returns over the window —
+the counterpart to `occasions(s,W)`, which §2.3 resolves from the same cell's `denom` rule. The
+two are the numerator-side and denominator-side reads of one evidence key, and the grade is the
+comparison between them.
+
+**`captured` requires both limbs; `partial` is the failure of either.** A seam grades
+`captured` when **every** occasion in `occasions(s,W)` is evidenced by at least one
+corresponding row **and** every returned row is **well-formed** against its own payload
+convention. Otherwise it grades `partial`.
+
+**Well-formedness is the second limb, not decoration.** A delegation row carrying no merit
+condition, or a delta row carrying no delta value, records that something happened without
+recording what was decided — the seam observable in count and blind in content. Grading such a
+row `captured` would let a complete-looking record stand in for a decided one, which is the
+count-versus-content distinction this whole axis exists to keep.
+
+### 2.5 Per-seam behavioural anchors
+
+Each `captured` cell states the **observable state** a reader should be able to confirm; each
+`partial` cell states that seam's own **diagnostic shortfall** — the coverage-gap shape to
+expect — on top of the generic boundary above.
+
+| `DS-id` | `captured` — the observable state | `partial` — the seam's diagnostic shortfall |
+|---|---|---|
+| **DS1** | Every completed release carries the rows its matched `MUST` obligations owe, and every conditional routing-point decision the release record evidences carries a row naming a subject and an outcome that both resolve against that record | a row whose subject or outcome does not resolve against the release record — the decision recorded as having happened, but not as having been *about* anything retrievable |
+| **DS2** | Every completed release carries its release-gate verdict row, and every stage-gate the release traversed carries the verdict row its own stage spec assigns it | a release shipping with an unrecorded intermediate gate verdict — the release gate present, the stage gates it rests on silent |
+| **DS3** | Every finding the deviation logs and stage sub-tasks record carries **both** a raise row and a terminal disposition — a row, or a resolved ledger entry — and every completed release's close-time attestation is recorded | a raised finding with no terminal disposition; **or** the ledger absent for a milestone whose window carries decision-class events, which the attestation vocabulary treats as *not recorded* rather than as a clean release |
+| **DS4** | Every decision moment the `via:` enum names carries a delta row, **the aligned zero-delta case included** — the aligned row is what separates *the recommendation was adopted* from *nobody recorded anything* | rows appearing only where the choice diverged, so the aligned state is inferred from silence rather than read from a record |
+| **DS5** | Every recovery occasion the window independently evidences carries its row at the elected pattern, one row per attempt, with the terminal outcome on the last row so the cap state is legible | an escalation row with no companion `escalate` row; **or** a retry sequence collapsed into a single row, which erases the cap state the per-attempt rule exists to preserve |
+| **DS6** | Every independently-evidenced merit fork carries a `delegation` row naming which merit condition fired | a row omitting the merit condition — recording the fork without recording what made it one |
+| **DS7** | Every spoke launch carries its admission row with the verdict and the basis in force, on both axes | a row recording a verdict with no basis token, which cannot tell a reader which axis produced it |
+
 ## 3. Coverage index, instrumentation ceiling, and comparability
 
 ### 3.1 The index
@@ -204,6 +266,25 @@ this section's own vocabulary is a different axis, and the cadence protocol's co
 already carries it — an oracle change noted in the run's `SUMMARY.md`, the same machinery that
 carries a roster change. What must not be trended across such a boundary is the **distribution
 render** and the ceiling term, not the index, whose arithmetic is unaffected by a relabelling.
+
+### 3.4 Why the index is comparable — the four guards
+
+Appended to §§3.1–3.3 rather than restating them: each guard below forecloses one concrete way
+two runs could compute indices that are not comparable, and the first three are properties of
+the seam content this rubric carries rather than of the arithmetic above.
+
+| Guard | What it is | The failure it forecloses |
+|---|---|---|
+| **G-A** | **The seam set is authored, not derived.** A run reads §1's rows; it does not compute them. | Two runs deriving different seam sets from one rule and each believing it complied — the incomparability class that motivated freezing the roster predicate in the first place. Nothing here is derived, so nothing here can be derived differently. |
+| **G-B** | **Decision-class grain, with DS1 as complement.** A new emission obligation or a new schema subtype joins an existing seam rather than minting one. | Routine growth silently changing the identifier set, which would trip §3.3's guard on ordinary schema edits and make the index unusable in practice. |
+| **G-C** | **Grade by the stated predicate over `select` ÷ `denom`, both carried in the evidence-key cell, with the denominator resolved from the matched rows' own obligation tags.** | Two runs computing different grades from one window because each built its own denominator — the incomparability defect relocated from the roster to the grade, which is where it would otherwise reappear. |
+| **G-D** | **The comparability guard of §3.3** — a changed identifier set is an oracle change; the run renders `re-based` and states the delta. | Trending across a discontinuity. |
+
+**The first run under this rubric is a `re-based` render.** The baseline the capability's own
+intake cites is an operator-instance analysis artifact that no run, grader or reader can resolve
+from this repository, so set-equality against it cannot be established by any run. That is
+precisely the condition §3.3 converts into a `re-based` render, and it means the first run's
+figures must not be read as a regression against that earlier anchor.
 
 ## 4. Reconciliation record (design provenance)
 
@@ -297,3 +378,105 @@ Mode I scores **delivered work** against the platform's architecture baseline; M
 Different unit of analysis, different baseline, no duplication. This rubric mirrors the sibling
 rubric's four-section shape and its separation of a scored content set from the machinery that
 consumes it; it diverges only where §4.1 records.
+
+### 4.6 The seam-admission predicate, and what "decision-bearing" ranges over
+
+A row is admitted to §1 when **all three** conjuncts hold. The predicate is recorded here
+because it is what makes the §1 table falsifiable rather than curated.
+
+- **a1 — declared obligation.** The decision class carries at least one emission obligation
+  declared by a locatable corpus rule: a row inside the `EMISSION-CONTRACT` delimiters, or an
+  obligation that block **delegates** to a governing discipline.
+- **a2 — resolvable emitting surface.** Every `(event_type · event_subtype)` the row names is a
+  member of the event-log schema's own enum, and every non-event surface resolves to a corpus
+  path or a corpus-declared runtime path token. This is the machine-checkable reading of §1's
+  validity clause — *a row whose emitting surface does not resolve is not a valid seam.*
+- **a3 — disjoint locus set.** The row's locus set intersects no other row's. Two decision
+  classes sharing a locus are **one** seam.
+
+**Decision-bearing, and why the test is stated at subtype grain.** A locus is decision-bearing
+when its rows record an **elected outcome** — a choice among available actions made by the
+operator, the hub, or a spoke. Event types recording a produced artifact, an observed result, or
+a reflection rather than an election are out, and the per-session retrospective is out on the
+event log's own terms: it is declared a sensor, never an actuator, and the cadence protocol
+states that the retrospective grain and this axis are complementary rather than subsuming.
+
+The grain matters and is easy to get wrong. Stating the test at **event-type** grain while a2,
+the selectors and the totality claim all operate at `(event_type · event_subtype)` grain would
+admit a non-decision-bearing subtype inside an admitted type with no test applied to it. The
+test is therefore applied per locus, not per type.
+
+**a1 versus instrumentation are different questions, and §2.2 is the reason the distinction is
+visible.** a1 asks whether the class carries an *obligation*; `instrumented(s)` asks whether the
+locus has a *producer*. A seam admitted by a1 and classified `uninstrumented` by §2.2 is not a
+contradiction — it is the audit reporting exactly the state it exists to report.
+
+### 4.7 The row-generating rule, and the candidates it beat
+
+The seam set is a **partition of the declared-emission-obligation population by decision
+class** — the rows inside the `EMISSION-CONTRACT` delimiters together with the obligations that
+block delegates or does not yet carry. The candidates weighed against it, and why each lost:
+
+| Candidate rule | Why it lost |
+|---|---|
+| One row per decision-bearing locus in the schema enum | Derivable and total, but the span is a property of the **schema**, so ordinary schema growth changes the identifier set and trips §3.3's guard on every subtype addition. It also supplies no denominator — every one would be an authoring judgment. |
+| One row per item in the hub's decision-class floor list | **No partition** — the list declares itself a floor rather than a ceiling, and is hub-scoped while this axis covers the hub *and* its spokes. |
+| One row per cell of the hub's three-sink invariant | **No partition that can be measured** — no event row records which sink a decision took, so the split can be asserted but never observed, which is the unfalsifiable-probe shape the platform's own probe-validity discipline rejects. |
+| One row per pipeline stage cluster | **Wrong grain** — this axis is decision-class-grained, and a decision class recurs across stages. |
+| Reconstruct the earlier analysis artifact's own set | **Not available** — that artifact is operator-instance and unreadable from this repository, which is also why §3.4 records the first run as a `re-based` render. |
+
+**The decisive line is the denominator.** A `captured`-versus-`partial` vocabulary is
+comparable run-over-run only if both runs agree on how many occasions owed a row, and only the
+selected rule takes that quantity from a surface that **already partitions obligations by
+structural guarantee in a completed release** — which is exactly the question a denominator
+asks. The second line is stability under growth: under the locus-per-row candidate, a single new
+obligation shipping in the same release as this rubric would have changed the identifier set and
+forced a `re-based` render on the very next run.
+
+### 4.8 Membership resolves from the block; it is never transcribed
+
+**A baseline-source cell names the source and the key, never the rows.** This is the §1 citation
+contract applied to its most tempting violation: hand-copying the block's rows into the cells.
+The copy is itself an authoring judgment, which silently reintroduces the exact defect the
+row-generating rule was selected to eliminate — and no downstream check can see the difference
+between a faithful copy and a lossy one.
+
+That is not hypothetical. An earlier draft of this table transcribed the rows, and the
+transcription dropped one block row from a seam's denominator and one provenance value from
+another's. Both omissions produced a **false-clean rather than a miscount**: a window in which
+the dropped gate fired and emitted nothing registered no occasion at all, so the seam graded
+`captured` while a declared obligation went unmet. A count-only review cannot find that, because
+nothing is miscounted.
+
+Resolving membership from the block by delimiter and stable key closes both, and closes the
+class rather than the instances — an obligation added under the block's own extension seam
+reaches the matched rows without an edit here. The source-completeness fixture family is the
+arm that keeps it closed: it parses the block between its delimiters, asserts that the union of
+the seams' matched rows **equals** the parsed row set, asserts the same for the provenance enum,
+and carries a negative control in which a row removed from a copy of the block must make the
+fixture fail.
+
+### 4.9 Relation to the deploy-time decision-emission check
+
+The platform already carries a deploy-time check asserting that every verified release at or
+after the emission cutover has at least one event row for **each `MUST` class in the same
+`EMISSION-CONTRACT` block**, resolved through the same release join key. Its relation to this
+rubric is recorded here so the two per-release emission verdicts read as **complements** rather
+than as duplicates discovered to disagree later.
+
+**Extend-before-create determination — `net-new because in-place is infeasible`.** Two grounds,
+both read from that check's own declarations:
+
+1. Its live arm is **operator-instance-resident**: its verdict input is the git-ignored event
+   log, so in CI that arm verdicts SKIP and reports NOT-EVALUATED rather than passing. A rubric
+   deriving its `MUST` limb from that verdict would be unresolvable on a fresh clone.
+2. The capability this rubric adds is the **complement that check's own docstring declares out
+   of bounds**: it asserts existence only, and states in terms that it cannot detect a wrong
+   payload, a mis-keyed subject, or an event emitted for a decision never actually rendered.
+   Those are precisely the well-formedness limb of §2.4 and the evidence-versus-occasion
+   comparison of §2.3.
+
+**What the division means in practice.** That check answers *did a row exist?* and stops. This
+rubric answers *was the row owed, did it arrive, and does it record what was decided?* A reader
+finding the two verdicts apparently disagreeing should reach for that division first: existence
+without well-formedness is exactly the state one surface passes and the other grades `partial`.

@@ -140,6 +140,41 @@ order. Every collected item carries its source so the evidence bar (§5) is chec
 | 3 | The ADR corpus entries whose release field falls in the window | the decisions that crossed the ADR bar | primary |
 | 4 | The deviation logs inside each release plan in the window | the decisions taken *against* the plan, which are the ones most likely to be unrecorded elsewhere | secondary |
 
+### Per-seam collection binding
+
+The rubric declares which seams exist and what each one is; this table binds each **declared
+identifier** to the collection mechanics a run executes for it — which of the four sources above
+it queries, and whether it must additionally read a surface outside the event log. **No seam is
+defined here.** A seam's name, decision class, emitting surface, evidence key and baseline
+source live in the rubric and are not restated; if this table and the rubric ever disagree on
+which identifiers exist, the rubric is right and the run refuses (see the set-equality assertion
+below).
+
+| `DS-id` | Event-log query the run issues | Additional surface the run must read |
+|---|---|---|
+| `DS1` | the `decision` family, less the subtypes `DS3`, `DS4` and `DS6` claim | — |
+| `DS2` | the `gate-outcome` family | — |
+| `DS3` | the `escalation`, `scope-change` and `iteration` families, plus the `decision` subtypes this seam claims | the hub-state action-item ledger for the window's milestones |
+| `DS4` | the `decision` family restricted to this seam's subtype | the payload convention's provenance enum, read at run time to resolve the occasion classes |
+| `DS5` | the `self-repair` family | — |
+| `DS6` | the `decision` family restricted to this seam's subtype | — |
+| `DS7` | the `spoke-launch` family | the hub's rendered admission-verdict line for each launch in the window |
+
+**Two bindings read a surface the event log does not carry, and both are load-bearing.** `DS3`'s
+ledger sits at an operator-instance path, so it is non-retrievable on a fresh clone — the seam's
+event-log locus stands alone there, and a run in that position says so in its summary rather
+than grading the ledger half silently. `DS7`'s rendered verdict line is produced at every launch
+under a standing obligation but is **ephemeral**: it is not queryable at audit time, so it
+confers no instrumentation under §3's declared-producer test even though it is named here as the
+surface a run should read where the session record still holds it.
+
+**Set-equality assertion.** After deriving, the run asserts that the seam-identifier set it
+emits **equals** the set the rubric declares — equality, not overlap, and both sides non-empty.
+On inequality it reports INDETERMINATE naming the differing identifiers and does not score:
+emitting a scorecard over a set the rubric does not declare would publish an index whose
+denominator no one can reconstruct. This is the runtime half of the same single-definition-site
+constraint the consumption map (§1) states.
+
 **Stated limitation, carried into every run's summary.** The event stream is the only
 per-decision source, so a seam **for which no producer is declared** is **blind, not clean** —
 it can emit no rows, and no rows is indistinguishable from no failures unless the distinction is
