@@ -213,6 +213,57 @@ Hub reads `action-items.md` and scans for triggered rows at FIVE routing points.
 
 When zero rows trigger, the subsection reads "No action items triggered at this routing point" — omission is a structural defect (forcing-function makes the scan observable).
 
+**The symmetric second half — the commitment sweep.** The subsection above renders a **read**: action items whose trigger already fired. It has no counterpart for the **write**, and that asymmetry is the defect this subsection closes. Procedure 4a step 5 obliges an `AI-NNN` row *"when the hub or a spoke makes a durable commitment"* — a state the agent must recognise **in itself**, where every other step of that procedure fires at an observable routing point. Nothing ever asks the question, so the answer is frequently never given: measured across the hub-state population, ledgers are absent on releases that emitted decision-class events throughout. Sharpening the words fixes nothing, and adding a second instruction fixes nothing. **The repair relocates the test from the commitment moment to a routing point that already happens**, and makes its result a rendering whose omission a reader sees. The Decision Briefing template therefore gains a second subsection beside the first:
+
+```markdown
+**Commitments opened this routing point:**
+
+| AI-NNN | Category | Description | Which limb of the test it satisfies |
+|---|---|---|---|
+| AI-004 | verification | re-run `deploy.sh --check` after the skill deploys | L1 deferral · L2 owed in-release, carried by no other durable record |
+```
+
+**Exactly three renderings are admissible, and omission of all three is a structural defect** — the same clause the sibling subsection above already carries, for the same reason:
+
+1. **The table**, when ≥ 1 commitment was opened.
+2. `"Commitment sweep run — no durable commitment made in this window."`
+3. `"Commitment sweep run — N UNDECIDED candidate(s), surfaced for operator disposition: <candidate>."`
+
+**Where the sweep fires — four routing points, and the distinction from the scan cadence is load-bearing.** The sweep fires at the four routing points at which a commitment can be **created**: **Procedure 2** (Routing), **Procedure 4** (Spoke completion), **Procedure 5** (Gate handling), and **Procedure 7** (Close). It does **not** fire at **Procedure 0b** (Resume), which reads and creates nothing. This is a strict subset of the five *scan* points enumerated in the table above, and the two obligations are different acts on one substrate: the **scan** is a read and is owed at **all five** points per the cadence-binding rule; the **sweep** is a write-decision and is owed at **four**. The five-point table is unchanged and **no count in this section changes** — a reader auditing "§ 4 at all 5 routing points" is reading the scan, which is still total.
+
+**Catch-up limb.** Each sweep covers this routing point **and every preceding routing point of this release at which no sweep was rendered.** Procedures 0, 1 and 6 are never sweep points, so a commitment arising there is rendered at the next sweep. Procedure 7 Close is total over completed releases, so **no commitment escapes the sweep in a completed release.** This is a **window, not a new routing point**: the four firing points and the five-point scan cadence are both unchanged by it. The limb is not hypothetical — the release that introduced this subsection created three of its own five commitments at **Procedure 0**, before any sweep point existed, which is exactly the case the window covers and a point-scoped rendering would have missed.
+
+**The zero-state is emitted, not merely rendered.** A routing point whose sweep opened nothing emits a `decision` / `action-item-opened` row carrying the payload token `sweep:none-owed`. This rides the **existing** `action-item-open` EMISSION-CONTRACT row in the release-hub orchestration playbook — **no new event type, no new subtype, no new EMISSION-CONTRACT row, no new enum value**. The reuse is deliberate rather than approximate: the point of the row is to make the sweep's *firing* durable and readable after the session that rendered it has ended, and it follows the corpus's own explicit-zero-state discipline, under which a session that produced no learning emits a `no-learning` row rather than nothing. Without it, *"the sweep ran and found nothing"* and *"the sweep never ran"* are the same silence — which is the distinction this whole subsection exists to draw.
+
+**The test the sweep applies (L1/L2).** Applied to **the routing point's own outputs**, never to the agent's inner state. Both limbs must hold:
+
+> **L1 — Deferral.** The output states that something *will be done*, and does not do it now.
+> **L2 — Unowned in-release.** The deferred thing is owed by hub, spoke, or operator **inside this release**, **and its completion is not already carried by another durable record that a gate reads.**
+
+L2's second clause is the discriminator, and it is what makes the follow-up-card route legitimate rather than merely tolerated: a filed work item **is** a durable record, read by the Stage-2 triage gate — a different gate, deliberately. That is why findings routed to follow-up cards can leave the ledger empty without the ledger being wrong.
+
+| # | Scenario | L1 | L2 | Verdict | Category |
+|---|---|---|---|---|---|
+| 1 | **A deferred edit** — "dedup the guide after PR #N merges" | ✔ the edit is named, not made | ✔ hub owes it this release; no other durable record carries it | **COMMITMENT** | `deferred-edit` |
+| 2 | **A finding routed to a follow-up card** — the spoke files a work item and moves on | ✔ the work is deferred | ✘ **the work item IS the durable record**, read by triage, not by the Procedure 7 gate | **NOT a commitment** — no row | — |
+| 3 | **A verification owed at a later stage** — "confirm `deploy.sh --check` passes after the skill deploys at Stage 12" | ✔ named for later | ✔ owed in-release; the plan's Verification Plan *describes* it, but no gate reads that description for **completion** | **COMMITMENT** | `verification` |
+
+**The residue gets its own state, and is never folded into a verdict.** Scenario 4: *a spoke files a follow-up card **and** states that this release will land a pointer to it in the corpus before close.* L1 holds. L2 **splits by object** — the *finding* is carried by the card (no row); the *pointer edit* is owed in-release and carried by nothing (row). One utterance, two objects, two opposite per-object readings. The rule **names this `UNDECIDED` rather than classifying it**, the sweep renders it under form 3, and the operator dispositions it. The claim this test makes is not *"it resolves everything"*; it is *"it either resolves, or it names the residue."*
+
+`UNDECIDED` is a **briefing rendering, never a gate state**: it surfaces in-run for operator disposition and enters no gate verdict. It is a deliberately fresh token rather than a reuse of an existing residue name. A gate-side residue — a classification the platform cannot make, rendered as an `UNCLASSIFIABLE` verdict that **fails closed** — belongs to a different register, carries a different authority, and has a different remedy, so the two must never be collapsed into one.
+
+**The release plan may cite the ledger; it may never substitute for it.** A plan legitimately *summarises* open commitments. A plan-embedded register that carries commitments the ledger does not is drift, not an alternative home — the ledger is the only surface the Procedure 7 gate reads.
+
+**What the hub attests at Procedure 7 Close.** States `NOT-RECORDED` and `EMPTY-LEDGER` require the operator to attest a cause from the closed two-value set (`no-commitments`, or the Procedure 4a emit step was skipped). The hub applies this table to its own sweep renderings and brings the recommended cause **with its basis**, and it **states which routing points of this release rendered a sweep and which did not** — an unrendered sweep is itself the finding, and a gap left unstated reads identically to no gap:
+
+| Observed across this release's routing points | Recommended cause | Basis stated with it |
+|---|---|---|
+| every routing point rendered the sweep, all reported none owed | `no-commitments` | *"N/N routing points swept; 0 commitments"* — sound only because the catch-up limb makes the windows tile the release |
+| ≥ 1 routing point rendered **no sweep at all** | the emit step was skipped | *"the forcing function itself did not run at N of M routing points"* |
+| ≥ 1 sweep rendered a commitment **and no ledger row exists** | the emit step was skipped | *"a commitment was rendered at `<routing point>` with no `AI-NNN`"* — a contradiction that can be named precisely rather than inferred |
+
+This table is the **hub's** rule, and it sits here because all three of its rows read what a sweep *rendered* — evidence the hub holds and a close-time tool cannot see, since the briefing renders in chat. The Stage-13 close-out tool measures what the event log can support and **declines to recommend** where its basis cannot separate the two causes; the two instruments are complements, and the operator still attests either way. **The measurement is the evidence behind the choice, never the choice.**
+
 **Procedure 7 hard-gate rationale:** Open action items at release close are by definition a "to-do list without resolution" — CLAUDE.md "Push-to-resolve" universal preference (*"Resolve actionable items as far as possible. [OPERATOR_NAME] reviews completed work — not to-do lists."*) makes this prohibited at release boundary. The hard gate forces operator disposition (`done` / `cancelled` / `superseded`) before Milestone close. Carry-forward via `superseded` is an acceptable resolution; leaving `open` rows past Milestone close is the prohibited state.
 
 ## 5. Cross-Cutting Composition Notes
