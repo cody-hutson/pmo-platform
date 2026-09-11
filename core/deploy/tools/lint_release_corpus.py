@@ -2485,13 +2485,17 @@ def _self_test() -> int:
     # home available for this invariant today; that gap is tracked separately and
     # is not closed here.
     #
-    # HISTORY, labelled: that the restated `14` was a TABLE-ROW count rather than
-    # a literal count, and that the divergence was an original authoring omission
-    # rather than an unrecorded deliberate exclusion, is an INFERENCE from two
-    # observations, not a measurement. The repository's root commit is a squashed
-    # import, so no read here can separate those two histories. What IS measured:
-    # at that root commit the standard already read "14 literal terms", the
-    # literal list already held 11, and §2.4 already carried the bare row.
+    # HISTORY, labelled: that the count §3.2 used to restate was a TABLE-ROW count
+    # rather than a count of enforced literals, and that the divergence was an
+    # original authoring omission rather than an unrecorded deliberate exclusion,
+    # is an INFERENCE from two observations — not a measurement. The repository's
+    # root commit is a squashed import, so no read available here can separate
+    # those two histories. What IS measured: at that root commit the standard's
+    # restated figure already exceeded the number of literals the list actually
+    # held, and §2.4 already carried the bare row that nothing enforced. The
+    # figures themselves are deliberately not reproduced in this comment — a
+    # verbatim copy would read as a fourth holder of the value the card removes,
+    # and would draw a future cascade sweep into editing a historical statement.
     print("\nlint_release_corpus.py --self-test — §2.4 ↔ check-10 parity (#6251)")
 
     def _parity(table_rows, mapped_values, exclusions) -> bool:
