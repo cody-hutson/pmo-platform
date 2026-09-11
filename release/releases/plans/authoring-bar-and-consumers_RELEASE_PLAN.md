@@ -1,0 +1,475 @@
+# Release Plan: authoring-bar-and-consumers — Per-kind authoring bar and its consumers
+
+## Header
+
+| Field | Value |
+|-------|-------|
+| **Version** | {{RELEASE_VERSION}} |
+| **Bump Class** | minor — the durable determination. A capability release adding a standard and changing consumer behaviour; not corrective against a deployed release (rules out `patch`), no breaking re-architecture (rules out `major`). The concrete number binds only at the Stage-12 atomic claim (ADR-092). Provisional display at Stage 4 and re-verified at Engineering Commit 0: `v4.61`, computed from anchor `v4.60`. |
+| **Date Created** | 2026-09-11 (Friday) |
+| **Release Manager** | Agent-assisted |
+| **Status** | Executing |
+| **Branch** | release/authoring-bar-and-consumers |
+| **PR** | (populated immediately after the draft release PR is opened, in the commit that follows Engineering Commit 0) |
+| **Milestone** | authoring-bar-and-consumers |
+
+**Baseline pin (Survival element 9).** `origin/main` = `a30838589583bcddf5f88183cfff1a8ea2475300` (`a3083858`). Every measurement in this plan is pinned here unless a row states otherwise. Stage-9 Phase A6.5 diffs mid-pipeline divergence against this SHA.
+
+**Provenance label.** `domain_practice: { source: N/A — pipeline-internal release, date: 2026-09-10, domain: governance }`
+
+*Classification rationale (A3-time, from the matrix):* every add/edit row targets `core/` governance, schemas, packs and ADRs plus `operations/skills/` skill definitions — no application source, no web or data surface. Dominant domain `governance`; the secondary domain is `software` for the two `.skill` package artifacts, which are build outputs of the governance-class sources rather than an independent deliverable class. The matrix consists entirely of internal pmo-platform artifacts, so the release is sourcing-exempt and takes Form X verbatim.
+
+## Release Class
+
+**Class: `cross-cutting`** (Survival element 7).
+
+**Dominant trigger: (c) — the in-bundle compositional edge count.** Four intra-bundle dependency edges, confirmed live via the Dependencies API. Trigger (a) does not fire: 0 `pipeline/stage-*.md` files in the matrix. Trigger (b) does not fire: at most 1 of the 6 rule-defining governance surfaces, and that row is CONDITIONAL. Both `cross-cutting` and `novel` fire; the highest-ceremony class wins.
+
+**Differentiation posture:**
+
+- Engagement density: **Tight**
+- Stage 9 Plan Review depth: **Deep**
+- Stage 5 activation bias: **ALL**
+- Stage 13 outcome-window: **30-day**
+
+## Scope
+
+### Issues Included
+
+| # | Issue | Title | Category | Size |
+|---|-------|-------|----------|------|
+| 1 | #6364 | Determine whether L3-judgment checks are agent-evaluable | `type:spike` | S |
+| 2 | #6379 | Consumer contract for the resolved work-item kit | `type:spike` | M |
+| 3 | #6367 | Per-kind authoring standard | `type:story` | L |
+| 4 | #6368 | Elicit to the resolved kit's depth | `type:story` | M |
+| 5 | #6369 | Gates evaluate the resolved kit's criteria | `type:story` | M |
+
+### The measured surface this release acts on
+
+Every figure below was independently re-derived at Engineering Commit 0 against `a3083858`, with control arms, and **supersedes the Stage-4 comment where the two differ**. The Stage-4 comment is immutable history; this file is the first writable artifact downstream of the corrections, so the corrections land here.
+
+| Measurement | Value | Note |
+|---|---|---|
+| Criteria checks declared across `core/packs/{scrum,kanban}/pack.toml` | **26** | scrum 21 · kanban 5 |
+| Checks at `level = "L3"` | **19** | |
+| Checks at `automatable = false` | **21** | |
+| Checks at `automatable = true` | **5** | |
+| Field declarations (`fields.kind_specific[]`) | **8** | all in `core/packs/scrum/pack.toml`; kanban declares none |
+
+**The `L3` set and the `automatable = false` set are NOT the same set.** They diverge on exactly two checks — `kanban-dor-pull-policy-explicit` and `kanban-dod-exit-policy-satisfied` — both `level = "L2"` **and** `automatable = false`. The full cross-tabulation is `(L3, false) = 19`, `(L1, true) = 4`, `(L2, false) = 2`, `(L2, true) = 1`.
+
+**Two Stage-4 figures are corrected here and must not be re-propagated:**
+
+1. **"#6369 evaluates 26 checks or 7" is wrong.** `26 − 19 = 7` silently assumes the two sets above are identical. Non-L3 is 7, but `automatable = true` is **5**. #6369 evaluates **5 + G**, where `G` is the count of the 19 `L3` checks that #6364's experiment lands `gate-capable` or `gate-capable-under-conditions` at `[SOURCE]` grade. It never evaluates 7.
+2. **"16 field declarations" is wrong.** The count is **8**.
+
+**One Stage-4 framing is corrected here.** `core/ADRs/README.md` is **not an index**. It states of itself, in bold, that it is a curated thematic document and not an index, that it has never enumerated the core module's full record set, and that it must not be converted to a generated index. An ADR entry goes **under an existing thematic grouping as curated content**, never as an enumeration row. The file carries no ADR count, so no count cascade follows from adding a record. The Stage-4 "index row" framing would have produced a defect; it is corrected in this file and in the `#6364` change spec below.
+
+### Dependency Graph
+
+Directional, `blocker → blocked`. All edges confirmed live via the GitHub Dependencies API at Stage 4, not inferred from prose.
+
+| Edge | Kind | Blocker state |
+|---|---|---|
+| #6364 → #6367 | hard | in-bundle, wave 1 → wave 2 |
+| #6364 → #6369 | hard | in-bundle, wave 1 → wave 3 |
+| #6367 → #6368 | hard | in-bundle, wave 2 → wave 3 |
+| #6367 → #6369 | hard | in-bundle, wave 2 → wave 3 |
+| #6378 → #6367 | hard, cross-milestone | CLOSED 2026-09-05 — satisfied |
+| #6379 ⇢ #6368, #6369 | soft (informs) | no API edge exists |
+
+Zero cycles: DFS three-colour detection over the 5-node / 4-edge graph returned 0, against a sensitivity arm (injected `#6369 → #6364`) that returned the cycle `[6364, 6367, 6369, 6364]`.
+
+### File Change Matrix
+
+Machine-readable, one path per line, `<path>  <VERB>`. Non-change classes sit in separately labelled blocks and are excluded from the obligation set.
+
+```
+# ── #6364 — L3-judgment evaluability spike ──
+core/ADRs/ADR-195-l3-judgment-criteria-evaluability.md                       add
+core/ADRs/README.md                                                          edit
+core/schemas/work-item-type-schema.md                                        edit
+
+# ── #6379 — consumer-contract spike ──
+core/references/reference/work-item-type-consumer-map.md                     edit
+core/schemas/work-item-type-schema.md                                        edit
+
+# ── #6367 — per-kind authoring standard (D-StandardHome = option C, rendered) ──
+core/standards/work-item-authoring-standard.md                               add
+core/packs/README.md                                                         edit
+
+# ── #6368 — elicit to the resolved kit's depth ──
+operations/skills/intake-desk/SKILL.md                                       edit
+operations/skills/intake-desk/references/elicitation-loop.md                 edit
+operations/skills/intake-desk/references/type-map.md                         edit
+operations/skills/intake-desk/evals/fixtures/kit-depth-divergence.md         add
+packages/intake-desk.skill                                                   edit
+packages/intake-desk.skill.sha256                                            edit
+
+# ── #6369 — gates against resolved kit criteria ──
+operations/skills/delivery-engine/SKILL.md                                   edit
+operations/skills/delivery-engine/references/gate-checklists.md              edit
+operations/skills/delivery-engine/references/gate-definitions.md             edit
+operations/skills/delivery-engine/evals/fixtures/kit-criteria-gate-failure.md add
+CONDITIONAL:g1-g3-criteria-contract-changes core/schemas/gate-criteria-spec.md edit
+packages/delivery-engine.skill                                               edit
+packages/delivery-engine.skill.sha256                                        edit
+
+# ── Release-pipeline artifact ──
+release/releases/plans/authoring-bar-and-consumers_RELEASE_PLAN.md            add
+
+#### Read-only inputs
+core/deploy/tests/fixtures/packs/                                            READ
+core/deploy/tools/check-work-hierarchy.py                                    READ
+core/packs/_common/pack.toml                                                 READ
+core/packs/scrum/pack.toml                                                   READ
+core/packs/kanban/pack.toml                                                  READ
+core/ADRs/ADR-069-methodology-pack-composing-unit.md                         READ
+core/ADRs/ADR-033-methodology-conditional-skill-activation.md                READ
+
+#### Release-wide explicit non-scope
+core/specs/label-taxonomy.md                                                 NOT EDITED
+operations/skills/tracker-manager/SKILL.md                                   NOT EDITED
+operations/skills/ppm-agent/SKILL.md                                         NOT EDITED
+```
+
+**Matrix corrections against the Stage-4 comment, applied here.**
+
+- **#6367's write set is restated.** The Stage-4 matrix carried `core/packs/scrum/pack.toml  edit` and `core/packs/kanban/pack.toml  edit` as unconditional rows. Those rows **do not fire**: #6367 reads the packs, it does not write them. Its delivered write set is a new standard under `core/standards/`, a `core/packs/README.md` bullet, an ADR, and an ADR-README entry. The two pack manifests move to the read-only block above. #6367's ADR and ADR-README rows are not enumerated as separate paths here because the ADR filename binds at that card's own Commit (see § ADR number allocation); its spoke adds them to this matrix in the same commit that authors them.
+- **The two `D-StandardHome` CONDITIONAL rows are promoted.** The decision rendered at the Stage-4 gate as **option (C) — the cleave**. The fired row (`core/standards/work-item-authoring-standard.md  add`) is promoted to unconditional in this commit, carrying its concrete path; the option-(D) rows (`core/packs/{scrum,kanban}/authoring.md`) are removed rather than left CONDITIONAL, because a row left conditional after its decision resolves is indistinguishable from a row whose condition never fired.
+- **`core/schemas/work-item-type-schema.md` gains a second claimant.** See § File Contention Map.
+- **One `add` row names no tracked executable `*.sh`**, enumerated over every `add` row in the matrix, so the `script-execution-allowlist.txt` companion obligation does not fire. Recorded as a discriminating negative.
+
+### File Contention Map
+
+| Path | Claimed by | Severity | Resolution |
+|---|---|---|---|
+| `core/schemas/work-item-type-schema.md` | **#6364**, **#6379** | BINARY | Both are **wave 1**. #6364 edits § 3.1 step 5's `L3` arm; #6379 inserts after § 1.5.7. **#6364 lands first** — `AI-008`. Different sections of one file; sequential edits on one branch, not a merge conflict. |
+
+**This corrects the Stage-4 Contention Map, which understated the claimant set.** Stage 4 recorded the path as claimed by #6364 and #6367 and resolved it by wave order (wave 1 → wave 2). Both halves of that row are wrong: **#6367 carries no claim on this path at all**, and the real second claimant is **#6379**, which is in the *same* wave. Wave ordering therefore does not serialize these two writes — an explicit intra-wave ordering constraint does, and it is recorded as `AI-008` below.
+
+**`AI-008` — the intra-wave anchor constraint.** #6364's edit is anchored inside § 3.1 step 5 (at line 593 as of `a3083858`). #6379 inserts approximately 45 lines after § 1.5.7 (which ends at `:538`, separator at `:540`), which shifts every downstream anchor in the file. **#6364 therefore runs first within wave 1.** Both spokes resolve their anchor **by content match, never by line number** — the line numbers in this plan are a pinned measurement for review, not an addressing mechanism.
+
+### Cross-Milestone Dependency Validation
+
+#### G3-07 Status
+
+`PASS — 5 dependency edge(s) checked, 0 cross-milestone violations.` The single cross-milestone edge (`#6378 → #6367`) resolved: #6378 closed 2026-09-05 in a closed milestone.
+
+#### Violations
+
+N/A — enumerated over all 5 dependency edges (4 intra-bundle, 1 cross-milestone); none unresolved.
+
+#### Registered Exceptions
+
+N/A — enumerated over the violation set, which is empty; no exception is required.
+
+### Cross-PR Overlap Audit
+
+#### Baseline SHA
+
+`a30838589583bcddf5f88183cfff1a8ea2475300`
+
+#### In-Flight Release Roster
+
+**Measured at:** `a3083858` · `2026-09-10` · **Population:** n=1 sibling
+
+| Slug | PR | Head SHA | Bump-class | Carried label | Recomputed next-free | EDITSET ∩ FCM |
+|---|---|---|---|---|---|---|
+| `closeout-correctness-batch` | `#7253` (draft) | `284d5cc3` | `UNRESOLVABLE` | — | `UNRESOLVABLE` | — (empty) |
+
+The sibling declares no bump-class reachable from its PR metadata, so both columns render `UNRESOLVABLE` rather than blank — an unknown, not an absence. Zero same-path collisions against this release's matrix.
+
+**One non-path cross-release contention is real: the ADR number slot.** See § ADR number allocation.
+
+### Exclusions
+
+N/A — enumerated over the milestone's full card set (5 of 5 included) and over the Stage-4 deferral set (empty). No issue in this milestone is deferred out of this release.
+
+## Implementation Sequence
+
+Topological waves, derived: `[[6364, 6379], [6367], [6368, 6369]]`, critical-path depth 3 (Survival element 8).
+
+| Wave | Cards | Order within wave | Why |
+|---|---|---|---|
+| **1 — Foundation** | **#6364** then **#6379** | **#6364 first** (`AI-008`) | Both have in-degree 0. #6364 decides whether the standard is enforceable or guidance; #6379 states the consumer contract. They share `core/schemas/work-item-type-schema.md` and #6379's insertion shifts #6364's anchor, so #6364's line-anchored edit lands first. |
+| **2 — Standard** | **#6367** | singleton | Consumes #6364's verdict; its output is what #6368 and #6369 read. |
+| **3 — Consumers** | **#6369** then **#6368** | **#6369 first** | Both consume #6367. #6369's `references/` write set is `sanctioned-session-required`, so launching it first surfaces a sanctioned-session gate failure at the first spoke rather than the second. |
+
+**Concurrency posture: P0 fully-serial, single-branch topology** — one release branch, one PR, one merge. The hub routes one Engineering chip at a time; the next chip waits until the prior commit lands on the release branch.
+
+### Issue #6364: Determine whether L3-judgment checks are agent-evaluable
+
+**Change Specification:**
+- **Files modified:** `core/ADRs/ADR-195-l3-judgment-criteria-evaluability.md` (add) · `core/schemas/work-item-type-schema.md` (edit, § 3.1 step 5 `L3` arm only) · `core/ADRs/README.md` (edit, curated entry under `## Data-architecture ADRs`)
+- **Change description:** Record that criterion evaluability is a **per-check measured property**, not an attribute of a level; measure it over a census of all 19 `L3` checks plus 2 divergent `L2 ∧ automatable = false` control checks; and state the admission rule the two consumer cards cite.
+- **Estimated complexity:** Medium (spike; the experiment, not the edits, carries the cost)
+- **Dependencies:** None (in-degree 0)
+
+**A6.5 corrections applied under Tier-1 [ADJUST] — inside the existing design shape, not a redesign:**
+
+1. **`r = 3` is grounded rather than left as a free parameter.** Unanimity-over-`r` is monotonically stricter in `r`, so the bar's stringency *is* `r`; the design's claim to introduce "no numeric threshold at all" is false in the one parameter that sets both error rates. The error identity `P(classified gate-capable | true per-run reliability p) = p^(2r)` is recorded in the ADR's Consequences with its `r = 3` row, so an unstated property becomes a recorded one. `r` is **not** raised — raising it worsens the Type-II rate. Instead, every `advisory-only` verdict carries its **arm counts** (`n/r` per arm), so an exclusion driven by a 2/3 arm is distinguishable from one driven by 0/3 and is re-openable against a recorded number rather than permanent.
+2. **The `advisory-only` disjunct conflation is corrected — the mechanism survives, only its justification changes.** `advisory-only` is defined disjunctively: *not unanimous* **or** *any run `UNRENDERABLE`*. Only the `UNRENDERABLE` arm maps to `NO-EVIDENCE` and thus to a permanent BLOCK. A non-unanimous check renders a definite verdict every run, so the engine never sees `NO-EVIDENCE`; admitting it yields a **flaky, re-rollable** gate — the gate-washing vector the engine's own guardrails name — not a permanent block. Both disjuncts still route to MUST-NOT-ADMIT, for two individually sufficient reasons rather than one. Verified at source: the engine evaluates each criterion *"against available evidence"*, which is per work item by construction.
+3. **Layer D's partition is scoped to what it actually feeds.** The three classes are non-disjoint with no precedence rule, and 7 of the 21 in-frame checks have no determinate class. Layer D feeds the diagnostic comparison and the ADR's partition column — **not** the verdict rule, not `G`, and not the routing rule. The fix is scoped accordingly: the partition is replaced by an ordered two-question procedure that is disjoint by construction and yields the same three labels, so the ADR column and the diagnostic comparison are unchanged in shape.
+4. **The un-replicated-rater residual is addressed or explicitly recorded.** Layers D and E are hand-classified by one rater with no agreement measurement, inside a card whose completion condition is *"measured and reported, not asserted."* A second independent classification pass over the 21 Layer-D rows is the cheap remedy (21 classifications). Where it is not run, the whole partition column is graded `[INFERRED]` in the ADR and the diagnostic comparison is stated as diagnostic, not evidential. Silence on this point is not an option.
+
+### Issue #6379: Consumer contract for the resolved work-item kit
+
+**Change Specification:**
+- **Files modified:** `core/references/reference/work-item-type-consumer-map.md` (edit) · `core/schemas/work-item-type-schema.md` (edit, insertion after § 1.5.7)
+- **Dependencies:** None (in-degree 0). Runs **after** #6364 within wave 1 per `AI-008`.
+- **AC-5 is AMENDED by operator decision** — see § Hub-Rendered D-Decisions, `D-Section152Pointer`.
+
+### Issue #6367: Per-kind authoring standard
+
+**Change Specification:**
+- **Files modified:** `core/standards/work-item-authoring-standard.md` (add) · `core/packs/README.md` (edit) · an ADR + its curated `core/ADRs/README.md` entry
+- **Change description:** Under `D-StandardHome` option (C), the archetype-invariant **rubric** lives in `core/standards/` and **names no kind**; the per-kind **content** stays in the packs, which this card reads and does not write.
+- **Dependencies:** #6364 (hard)
+
+### Issue #6368: Elicit to the resolved kit's depth
+
+**Change Specification:**
+- **Files modified:** `operations/skills/intake-desk/SKILL.md` · `references/elicitation-loop.md` · `references/type-map.md` · `evals/fixtures/kit-depth-divergence.md` (add) · `packages/intake-desk.skill` + `.sha256`
+- **Dependencies:** #6367 (hard)
+- **CD-1 is ADOPTED by operator decision.** #6368 widens its depth read from `criteria.readiness` and `criteria.done` to the **full realizer set its cited dimension names** — which is where all 6 block-level `source` carriers actually live: **4 in `criteria.gate`, 2 in `fields`**. Without this widening the card's middle branch reads a domain containing zero instances and ships inert.
+
+### Issue #6369: Gates evaluate the resolved kit's criteria
+
+**Change Specification:**
+- **Files modified:** `operations/skills/delivery-engine/SKILL.md` · `references/gate-checklists.md` · `references/gate-definitions.md` · `evals/fixtures/kit-criteria-gate-failure.md` (add) · `core/schemas/gate-criteria-spec.md` (CONDITIONAL) · `packages/delivery-engine.skill` + `.sha256`
+- **Dependencies:** #6367 (hard), #6364 (hard)
+- **Scope-fix owed (design conflict (a), Tier-1).** #6368's design prohibits any call into the shipped pack reader, and that prohibition **over-covers** the half #6369 relies on — its block-level `source` parsing. The prohibition is narrowed to the half #6368 actually needs.
+- Evaluates **5 + G**, never 7.
+
+### ADR number allocation
+
+**Claim from the anchor, never from the maximum claimed.** `renumber-adr.py --detect` at Commit 0 reported `ANCHOR 194 (origin/main)` → `NEXT-FREE 195`, with `CLAIMED-SET-BRANCH-ONLY 195,196 (detection only — never binds)`. Slots 195 and 196 are claimed on the in-flight sibling branch of PR #7253. That is a **governed collision, not a defect**: an unmerged claim does not bind the sequence, first-to-merge takes the number, and the other claimant renumbers at merge time. #6364 therefore claims **ADR-195**. Do not pre-emptively skip to 196.
+
+A subsequent card on this branch that authors an ADR re-runs `--detect` and reads its own `CLAIM` row, which evaluates the **simulated merge result** and reports the correct `next=` for a second in-tree record. It does not re-derive a number by hand.
+
+### Agent-Editability Read
+
+**Derivation** — controls read at commit `a3083858`:
+
+- **Tier-0 floor:** `core/hooks/block-autonomy-ceiling.sh` — 2 `case "$ABS_TARGET"` blocks invoke `always_block "BLOCK-AUTONOMY-001"`. Projected repo-relative and tested against the tracked index at that SHA, the surviving union for this repository is `**/CLAUDE.md`, `**/OPERATIONS.md`, `**/RELEASE_PROTOCOL.md`. No path in this release's matrix intersects it.
+- **Sanctioned-session gate:** `core/hooks/block-skill-direct-edit.sh` — scope regex covers `<module>/skills/<name>/(SKILL.md|references?/*.md)`; arming key present in `delivery-engine`'s SKILL.md frontmatter, **absent** in `intake-desk`'s; deployed exemption list present with 1 entry, and neither skill is that entry.
+
+| Card | Write-set path | Tier-0 ∩ | Skill-gate ∩ | Path class | Card class | Execution path |
+|---|---|---|---|---|---|---|
+| #6364 | `core/ADRs/ADR-195-*.md` · `core/ADRs/README.md` · `core/schemas/work-item-type-schema.md` | no | no (not a skills path) | `unconstrained` | `unconstrained` | ordinary Engineering spoke |
+| #6379 | `core/references/reference/work-item-type-consumer-map.md` · `core/schemas/work-item-type-schema.md` | no | no | `unconstrained` | `unconstrained` | ordinary Engineering spoke |
+| #6367 | `core/standards/work-item-authoring-standard.md` · `core/packs/README.md` · ADR + README entry | no | no | `unconstrained` | `unconstrained` | ordinary Engineering spoke |
+| #6368 | `operations/skills/intake-desk/SKILL.md` · `references/*.md` | no | **deciding conjunct 2 FALSE** — the skill is not armed | `unconstrained` | `unconstrained` | ordinary Engineering spoke |
+| #6368 | `operations/skills/intake-desk/evals/fixtures/…` · `packages/intake-desk.skill*` | no | **deciding conjunct 1 FALSE** — `evals/` and `packages/` are outside the scope regex | `unconstrained` | ↑ | ↑ |
+| **#6369** | **`operations/skills/delivery-engine/SKILL.md` · `references/gate-checklists.md` · `references/gate-definitions.md`** | no | **all three conjuncts hold** | **`sanctioned-session-required`** | **`sanctioned-session-required`** | **sanctioned session: `pmo-skill-editor` Mode A** |
+| #6369 | `operations/skills/delivery-engine/evals/fixtures/…` · `core/schemas/gate-criteria-spec.md` · `packages/delivery-engine.skill*` | no | deciding conjunct 1 FALSE | `unconstrained` | ↑ (card class is the most-constrained member) | ↑ |
+
+Per-path rows are retained, never collapsed into the card class. **What this read does not answer:** an `unconstrained` row means no control refuses the write; it never means the change is ungoverned. `intake-desk` is `unconstrained` **and** still bound by governance to route through `pmo-skill-editor` — the skill-deployment rule binds every `skills/<skill>/SKILL.md` and reference-file edit, and deploy-time Check 10 enforces its audit-trail trailer independently of the hook's arming boundary.
+
+## Risk Register
+
+| # | Risk | Likelihood | Impact | Reversibility | Mitigation | Owner |
+|---|------|-----------|--------|---|-----------|-------|
+| R1 | **#6364's verdict lands `G = 0`**, collapsing #6367 from an enforceable standard to guidance and reducing #6369 to 5 evaluable checks | Medium — 21 of 26 checks are already `automatable = false`, which is the direction of evidence | High — materially different deliverable for two cards | MODERATE | The verdict's **two downstream shapes are stated before the experiment runs** (below), so wave 2 needs no re-design beat. No FCM row changes under either branch; only authored content differs | #6364 spoke |
+| R2 | **`D-StandardHome` unrendered at Engineering entry** | — | — | — | **CLOSED.** Rendered at the Stage-4 gate as option (C). The fired matrix row is promoted to unconditional in this commit | closed |
+| R3 | **ADR slot 195 contested** with in-flight PR #7253 | High — 195 and 196 are both claimed on that branch | Low — renumber is mechanical and tool-driven at merge | CHEAP | Claim from the anchor at Commit 0; `renumber-adr.py` renumbers at merge time if #7253 lands first. Do not pre-claim | #6364 spoke |
+| R4 | **#6369's `references/` write set is `sanctioned-session-required`**; an ordinary spoke reaches a wall mid-budget | High — all three conjuncts hold today | Medium — a wasted spoke budget, not data loss | CHEAP | Launch #6369 first in wave 3; dispatch as a sanctioned `pmo-skill-editor` session. Route the whole card rather than splitting the fixture limb | hub |
+| R5 | **Package staleness** — `intake-desk` and `delivery-engine` `.skill` packages stale the moment their `references/` change | High if unplanned | Medium — blocks the deploy, and can block the merge | CHEAP | The matrix carries all four companion rows unconditionally. Rebuild via `build-skill-packages.sh intake-desk delivery-engine`, resolving the change set against the roster with `--skills-for-paths` **on STDIN, not argv** | #6368 / #6369 spokes |
+| R6 | **#6379 concludes "the contract needs extending"**, leaving the consumers building against a known-insufficient contract | Medium — the card frames this as an acceptable outcome | Medium | MODERATE | The card's AC-5 already requires the deferred part and its revisit trigger to be named. A "needs extending" verdict is a Stage-9 input, not a wave-3 blocker | #6379 spoke |
+| R7 | **`core/packs/` crosses to EXPENSIVE reversibility** when #6368/#6369 land — the pack manifest becomes a live read contract | Certain (it is the release's purpose) | High if the grammar is wrong | **EXPENSIVE** | This is the argument for having rendered `D-StandardHome` deliberately. Stage-9 review depth is **Deep** per the class | operator |
+| R8 | **A vacuous mechanism ships** — a check that cannot fail, or a branch whose read domain is empty | Was High — three instances found in one design set | High — it is the exact defect class this milestone exists to eliminate | CHEAP pre-merge | All three instances are dispositioned: #6369's admission predicate, #6368's middle branch (CD-1 adopted), #6364's `G`-unreachability. **`CIAC-3` is widened to grade middle-arm reachability on shipped content**, so a design whose middle arm is exercised 0 of 8 no longer passes | Stage 9 |
+
+**Zero rollback-complexity risk above CHEAP at the branch level** — single branch, single PR, one revertible merge commit. R7's EXPENSIVE tier is a post-merge *architectural* reversibility, not a rollback-mechanics one; the two are different objects and are not summed.
+
+### R1 mitigation — the verdict's two downstream shapes, stated before the experiment runs
+
+`G` = the count of the 19 `L3` checks landing `gate-capable` or `gate-capable-under-conditions` at `[SOURCE]` grade.
+
+| | **G ≥ 1 — the standard has teeth** | **G = 0 — the standard is guidance** |
+|---|---|---|
+| **#6367** | The archetype-invariant rubric gains an **enforceability dimension**: each rubric dimension states whether a per-kind rule instantiating it may gate. The standard is **mixed** — the `G` subset gates; the remainder takes the named-gap form with a declared observable | The rubric ships as guidance and names no enforceable dimension. **Every** per-kind rule still takes a disposition — a downgrade to non-normative description, or a named gap with a declared observable. "Guidance" is not a licence to leave 19 normative-and-unrun predicates standing |
+| **#6369** | Evaluates **5 + G**. The `G` subset is **admitted to the ANY-FAIL member set**, each admitted check carrying its own recorded falsification and specificity arm **and its arm counts**. The remaining `(19 − G) + 2` are **explicitly excluded**, and that exclusion is the load-bearing engineering act | Evaluates **5**. The remaining **21** are **reported, never admitted** — the existing explicit-report path generalizes from *no criteria* to *criteria present, not admitted, here they are* |
+| **Common** | The ADR is the **single verdict identifier** both consumers cite. Neither consumer restates the verdict; both cite it. The downstream shape is stated as an **obligation over the aggregate**, never as a named file edit in a sibling card's write set — #6369 owns its own placement | ← identical |
+
+## Delivery Strategy
+
+| Aspect | Decision |
+|--------|---------|
+| **Implementation approach** | Sequential (dependency-ordered), P0 fully-serial |
+| **Commit strategy** | Incremental — each Engineering spoke commits and pushes each coherent slice; one or more commits per card, referencing the card number |
+| **Review approach** | **Single PR for the entire release**, created in draft at Stage 6, transitioned to ready at the Stage 9 gate |
+| **Deployment mechanism** | Git merge + S-2 skill copy + `build-skill-packages.sh` package rebuild |
+| **Stacked-base cleanup posture** | Option A — no stacked-base waves are planned |
+
+## Verification Plan
+
+### Per-Issue Verification
+
+| Issue | AC | Verification Method | Expected Result |
+|-------|----|-------------------|----------------|
+| #6364 | AC-1 | Read the ADR's Methodology + Results sections; confirm a reproducibility test was executed over the 21-check frame and that every row carries per-arm run counts | 21 rows present, each with falsification `n/r` and specificity `n/r` |
+| #6364 | AC-2 | Read the ADR's Results table's agreement column and its evidence-grade column | Agreement statistic **reported per check** as a diagnostic; `[SOURCE]` / `[INFERRED]` grade on every row; no asserted-without-measurement row |
+| #6364 | AC-3 | Read the ADR's Results verdict column against the three-value enum | Every row carries exactly one of `gate-capable` / `gate-capable-under-conditions` / `advisory-only`; every `advisory-only` additionally names which disjunct fired |
+| #6364 | AC-4 | Confirm both consumer cards cite the ADR by identifier: `git grep -l "ADR-195" -- core/standards core/packs operations/skills` | Returns the #6367 artifact **and** the #6369 artifact. Control (same instrument, same target): `git grep -l "ADR-018" -- core` → non-zero, proving the reader is live against a record that exists |
+| #6379 | AC-1..AC-5 | Per that card's own spoke; AC-5 graded **as amended** per `D-Section152Pointer` | AC-5 is MET by the § 1.5.2 pointer, which the operator decision permits |
+| #6367 | AC-1..AC-5 | Per that card's own spoke; AC-3 ("reachable from the kit") graded against `D-StandardHome` option (C) | The rubric names no kind; the per-kind content stays in the packs |
+| #6368 | AC-1..AC-5 | Per that card's own spoke; the depth read is graded over the **full realizer set** per CD-1 | The middle branch reads a non-empty domain: 4 `criteria.gate` + 2 `fields` block-level `source` carriers |
+| #6369 | AC-1..AC-5 | Per that card's own spoke; the evaluated-check count is graded as **5 + G** | Never 7 |
+
+**AC baseline** — per-issue acceptance-criterion counts as read at plan time.
+
+`ac_baseline: { #6364: 4, #6379: 5, #6367: 5, #6368: 5, #6369: 5, read_at: a30838589583bcddf5f88183cfff1a8ea2475300 }`
+
+### Cross-Issue Acceptance Criteria
+
+Four CIACs. Each spans ≥2 issues, asserts a cohesion constraint the integrated release must hold, and is graded at Stage 9 QC3.5 on the merged PR.
+
+**Cross-Issue Acceptance Criteria**
+- [ ] **CIAC-1 (#6364 × #6367 × #6369 on the L3-judgment verdict):** the verdict #6364 records is cited by identifier in both consumers, and the two consumers agree on it — #6367 marks each rule enforceable-or-guidance per that verdict, and #6369 handles judgment checks per that same verdict. A release in which the two consumers assume opposite verdicts is the incoherence this grades. *Method:* `git grep -l "ADR-195" -- core/standards core/packs operations/skills/delivery-engine` must return the #6367 artifact **and** the #6369 artifact. *Graded at Stage 9 QC3.5 on the merged PR.*
+- [ ] **CIAC-2 (#6367 × #6368 on depth guidance):** the depth guidance #6367 authors is the guidance #6368 elicits against — the elicitation surface cites the standard's per-kind depth rules by name rather than restating them. A restatement is a second source that rots. *Method:* `git grep -n "depth" -- operations/skills/intake-desk/references/elicitation-loop.md` returns at least one citation resolving to #6367's authored home, and the doc-link checker resolves it. *Graded at Stage 9 QC3.5 on the merged PR.*
+- [ ] **CIAC-3 (#6368 × #6369 on the no-kit-resolved path) — WIDENED:** both consumers handle an unresolved kit **explicitly and identically in kind**, **and the middle arm of each consumer's branch is demonstrably reachable on shipped content.** Declaring the same branch shape is not sufficient: a middle arm exercised 0 times over the shipped population is an inert mechanism that reads as a working one, which is the vacuous-pass class this release exists to eliminate. *Method:* for each of the two skills, (a) the fixture demonstrating the unresolved-kit path emits a caveat/report string, `grep -c` over each fixture's expected output returns ≥1; **and (b) the middle arm's read domain, evaluated against the shipped `core/packs/` content, is non-empty — state the population enumerated and the count of shipped items that reach that arm.** For #6368 the realizer set per CD-1 is the 6 block-level `source` carriers (4 in `criteria.gate`, 2 in `fields`); a count of 0 over 8 blocks is a FAIL, not a pass. **Null-arm:** the paired control is a *resolved*-kit run on the same fixture harness, which must emit **zero** caveat strings — same instrument, same target. *Graded at Stage 9 QC3.5 on the merged PR.*
+- [ ] **CIAC-4 (#6379 × #6368 × #6369 on the consumer contract):** every place #6379's verdict names as requiring a consumer to special-case a project is either handled by both consumers or recorded as deferred with its revisit trigger — no named special-case is silently unhandled. *Method:* enumerate the special-cases named in #6379's recorded verdict and check membership against a handling citation in both consumer surfaces or a deferral row. **A null result carries its arms:** if the verdict names zero special-cases, state the population enumerated (the ≥2 resolved configurations tested) rather than reporting a bare "none". *Graded at Stage 9 QC3.5 on the merged PR.*
+
+### Release-Level Verification
+
+- [ ] File Integrity
+- [ ] Content Correctness
+- [ ] Cross-Reference Validity — `core/deploy/deploy.sh --check` Check 14 doc-link integrity
+- [ ] Skill Invocation
+- [ ] Output Contract Compliance
+- [ ] Skill-package freshness — resolve the change set against the roster via `build-skill-packages.sh --skills-for-paths` reading repo-relative paths **on STDIN, not argv**
+- [ ] ADR index: **N/A — this release adds no record under `release/ADRs/`.** Its ADRs are core-scope, and `core/ADRs/README.md` is a curated thematic document with no projector and no projected region, so no projection trigger exists to trip.
+
+## Stage Applicability Matrix
+
+Default is all stages. Deviations are stated with rationale; none is silent (Survival element 6).
+
+| Stage | #6364 | #6379 | #6367 | #6368 | #6369 |
+|---|---|---|---|---|---|
+| 5 — Solutioning | APPLY | APPLY | APPLY | APPLY | APPLY |
+| 6 — Engineering | APPLY | APPLY | APPLY | APPLY | APPLY |
+| 7 — Dev Testing | APPLY | APPLY | APPLY | APPLY | APPLY |
+| 8 — QA / Acceptance | APPLY | APPLY | APPLY | APPLY | APPLY |
+| 9 — Plan Review | APPLY (release-scoped, **Deep**) | ← | ← | ← | ← |
+| 10–11 | compressed (git-native) | ← | ← | ← | ← |
+| 12 — Execute | APPLY (release-scoped) | ← | ← | ← | ← |
+| 13 — Close | APPLY (release-scoped) | ← | ← | ← | ← |
+
+**No stage is skipped anywhere in this bundle**, and that is the discriminating output rather than a default: `size:S` #6364 would ordinarily be a Stage-5 SKIP candidate and is explicitly not one, because its risk is concentrated in the experiment design — a badly designed reproducibility test yields an unreproducible verdict that then mis-routes 21 of 26 checks.
+
+## Hub-Rendered D-Decisions
+
+| # | Decision | Verdict |
+|---|---|---|
+| **D-ReleaseClass** | Release Class | **`cross-cutting`**, dominant trigger (c) — 4 in-bundle compositional edges. Posture: Tight / Deep / ALL / 30-day |
+| **D-StandardHome** | Where #6367's per-kind authoring standard lives | **Option (C) — the cleave**: archetype-invariant rubric in `core/standards/` naming no kind, per-kind content staying in the packs. The only option conforming to the methodology-neutrality decision **and** avoiding `_common`-layer duplication |
+| **D-Version** | Version | **Recorded determination.** Bump class `minor`; provisional `v4.61` from anchor `v4.60`; re-verified free at Engineering Commit 0 on the tag arm; binds at the Stage-12 atomic claim |
+| **D-Concurrency Posture** | Execution posture | **P0 fully-serial, single-branch topology** |
+| **D-CollectiveReview** | Scope-lock on the five-design set | **LOCKED.** Engineering authorized. Both structural findings routed **Tier-1 [ADJUST]** to their Engineering spokes — every reviewer stated its findings are reachable inside the existing design shape. Scope unchanged at five cards |
+| **D-Section152Pointer** | The one-clause pointer into `work-item-type-schema.md` § 1.5.2 | **TAKE IT**, and **amend #6379's design AC-5** in the same decision. This diverges from both the #6367 spoke's recommendation and the hub's; breaking a sibling card's acceptance criterion is a release-scope call, and the operator made it |
+| **D-Ciac3** | `CIAC-3` middle-arm divergence | **BOTH** — widen #6368's read domain per its own CD-1, **and** widen the criterion to grade middle-arm reachability. Fix the design and strengthen the check that would have caught it |
+
+**Why AC-5's amendment is recorded here and not edited into the design.** #6379's AC-5 lives in a published Stage-5 comment. Edit history on a public repository is permanent and unscrubable, so the amendment is recorded as a decision and carried into this plan file at Commit 0 — never by rewriting the comment. **Grade AC-5 against this row, not against the published comment.**
+
+## Rollback Strategy
+
+### Per-Issue Rollback
+
+| Issue | Rollback Method | Rollback Complexity |
+|-------|----------------|-------------------|
+| #6364 | `git revert <commit>` | Low — one added ADR plus two surgical edits |
+| #6379 | `git revert <commit>` | Low — two additive edits |
+| #6367 | `git revert <commit>` | Low — one added standard plus a README bullet |
+| #6368 | Forward fix preferred | Medium — skill + package artifacts move together |
+| #6369 | Forward fix preferred | Medium — skill + package artifacts move together; `gate-definitions.md` is a consumed contract |
+
+### Whole-Release Rollback
+
+| Strategy | Trigger | Procedure |
+|----------|---------|-----------|
+| **Partial Revert** | Isolated issue failure pre-merge | Revert the card's commits on the release branch |
+| **Full Restore** | Systemic failure post-merge | Revert the merge commit. The release tag is **retained, not deleted** — a version tag records that the version was claimed, and a rollback is recorded rather than erased |
+| **Forward Fix** | Minor issue, fix well-understood | Fix branch |
+
+**Wave-level granularity is available pre-merge:** waves 1 and 2 produce corpus-only changes under `core/`; wave 3 produces skill + package changes. A wave-3-only rollback is a partial revert of the branch before merge, never after.
+
+## Operational Deployment Manifest
+
+| # | Source (Layer 1) | Target (Layer 2) | Mechanism | Verification |
+|---|-----------------|-----------------|-----------|-------------|
+| 1 | `operations/skills/intake-desk/**` | installed skills tree | S-2 direct copy via `deploy.sh --deploy intake-desk` | `deploy.sh --check` reports no drift |
+| 2 | `operations/skills/delivery-engine/**` | installed skills tree | S-2 direct copy via `deploy.sh --deploy delivery-engine` | `deploy.sh --check` reports no drift |
+| 3 | `packages/intake-desk.skill` + `.sha256` | package surface | `build-skill-packages.sh intake-desk` | Check 7 package-drift clean |
+| 4 | `packages/delivery-engine.skill` + `.sha256` | package surface | `build-skill-packages.sh delivery-engine` | Check 7 package-drift clean |
+
+**Deliverable state.** #6364 and #6379 are **task-class** — `artifact-accepted`; their definition of done is the artifact at its declared canonical path, and they produce no deployed copy. #6367 is `artifact-accepted`. #6368 and #6369 are deployable-class — `deployed-copy-synced`.
+
+### Schema Migrations (if applicable)
+
+N/A — enumerated over the three classes a migration could take in this release (entity-field schema changes, EAD-materialized machine-schema regeneration, pack-manifest grammar widens); none is present. The `level` domain stays `{L1, L2, L3}` and step 5 keeps exactly three by-level arms, so no projection arm is added or removed.
+
+## Verification Evidence
+
+(Populated by each Engineering spoke as its slice lands; completed before the PR is transitioned to ready at Stage 9.)
+
+## Deployment Execution Log
+
+(Populated during Stage 12.)
+
+| Step | Timestamp | Result | Notes |
+|------|-----------|--------|-------|
+| Pre-execution check | | | |
+| Merge PR | | | |
+| Tag release | | | |
+| Skill deployment | | | |
+| Manifest execution | | | |
+| State anchor update | | | |
+| Post-execution verification | | | |
+
+## Change Description
+
+### Outcome
+
+This release makes the shipped methodology packs *readable to depth* by the two consumers that already resolve them. The packs currently declare 26 criteria checks and 8 field declarations that nothing reads: the intake surface asks for a kind's field list and never its depth guidance, and the delivery gates evaluate a static checklist rather than the resolved kit. The release answers the prior question first — **can a judgment-level criterion be evaluated reproducibly at all?** — records that answer as a per-check measured disposition, authors the per-kind authoring bar the answer licenses, and then teaches both consumers to read it.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #6364 | Criterion evaluability is recorded as a per-check measured property with a stated admission rule, not inferred from the check's level | (pending) |
+| #6379 | The consumer contract for a resolved kit is stated, with any deferred part and its revisit trigger named | (pending) |
+| #6367 | A per-kind authoring bar ships as an archetype-invariant rubric that names no kind, with per-kind content staying in the packs | (pending) |
+| #6368 | Intake elicits to the resolved kit's declared depth, reading the full realizer set rather than two blocks of it | (pending) |
+| #6369 | Delivery gates evaluate the resolved kit's criteria, admitting only checks measured admissible and reporting the rest explicitly | (pending) |
+
+### Key decisions
+
+- **D-StandardHome:** option (C), the cleave. The rubric is archetype-invariant and names no kind; per-kind content stays in the packs. The only option that conforms to the methodology-neutrality decision and avoids duplicating the rubric per pack.
+- **D-Ciac3:** both halves — widen #6368's read domain, and widen `CIAC-3` to grade middle-arm **reachability on shipped content** rather than mere branch-shape agreement.
+- **D-Section152Pointer:** take the § 1.5.2 pointer and amend #6379's design AC-5 accordingly; the amendment is recorded in this plan, never by editing the published design comment.
+
+### Reversibility
+
+**MODERATE — HIGH confidence.** Single release branch, single PR, one revertible merge commit. The expensive half is architectural rather than mechanical: `core/packs/` becomes a live read contract the moment #6368 and #6369 land, so the grammar the standard adds is what becomes expensive to change later — which is why Stage 9 review depth is Deep.
+
+### Downstream impact
+
+- The recorded evaluability disposition is the input any future readiness-gate work reads before admitting a judgment-level check to an ANY-FAIL criterion set.
+- `core/packs/` crosses from a declarative manifest to a consumed contract.
+- Two skill packages are rebuilt; the deploy-time package-drift check is the backstop, not the rebuild.
+- One named gap is carried forward rather than closed: nothing validates the `criteria` check shape, so a recorded disposition is only as trustworthy as that absent runner.
+
+### Cross-references
+
+- Release plan: this file
+- Milestone: `authoring-bar-and-consumers`
+- User-facing release notes: authored at Stage 13 Close per [`release-notes-standard.md`](/release/references/standards/release-notes-standard.md)
+
+## Deviation Log
+
+| # | Deviation | Card | Rationale |
+|---|---|---|---|
+| D-1 | The Stage-4 matrix's two `core/packs/{scrum,kanban}/pack.toml  edit` rows for #6367 are **NOT DELIVERED** as edits and move to the read-only block | #6367 | #6367 reads the packs and does not write them. Recorded per the declared-vs-delivered authoring contract so the declared ADD/EDIT set matches the merged diff |
+| D-2 | The Stage-4 matrix's two `D-StandardHome` option-(D) CONDITIONAL rows (`core/packs/{scrum,kanban}/authoring.md  add`) are **NOT DELIVERED** | #6367 | Their condition resolved false: the operator rendered option (C) at the Stage-4 gate. The option-(C) row is promoted to unconditional in this same commit |
+| D-3 | `core/schemas/work-item-type-schema.md` gains #6379 as a second claimant, replacing the Stage-4 record of #6367 | #6364, #6379 | #6367 carries no claim on the path; the real contention is intra-wave and is resolved by `AI-008` rather than by wave order |
