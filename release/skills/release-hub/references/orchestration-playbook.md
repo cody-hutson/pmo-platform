@@ -329,10 +329,21 @@ could bind the release that ships it.
 **The Procedure 7a predicate — live on merge, no exemption.** `hub-spoke-bridge.md` is not
 deployed; it loads from the repo tree, so the revised gate is in force from the merge,
 including for the release that ships it. That is safe by construction rather than by
-exemption: the gate is warn-mode, so states `NOT-RECORDED` and `EMPTY-LEDGER` surface for
-operator attestation and do **not** block, and only an unresolved row blocks. A release
-whose emitter has not yet reached it therefore closes honestly through the attestation
-path, leaving an auditable trace instead of a silent pass.
+exemption, and the construction is this: states `NOT-RECORDED` and `EMPTY-LEDGER` surface
+for operator attestation and do **not** block, so a release whose emitter has not yet
+reached the ledger closes honestly through the attestation path, leaving an auditable
+trace instead of a silent pass.
+
+**Two states block, not one.** An unresolved row blocks — and so does a row whose `status`
+the gate cannot classify, because a value outside the recognised set is unreadable rather
+than resolved, and a gate that counted it as resolved would be passing a verdict it never
+measured. Neither blocking state is clearable by attestation: attestation licenses an
+*absent* ledger, never an unreadable one. The remedy for an unresolved row is to
+disposition it; the remedy for an unreadable one is to normalise the value, or to restore
+the row to the schema's 13 columns where the value is being read out of the wrong column.
+Arming the second blocking state was measured against the live ledger corpus before it
+shipped: no ledger carrying an unclassifiable status belongs to an open milestone, so it
+blocks no release in flight.
 
 ## Procedure 5 — Gate handling (the `STOP`-disposition touchpoints)
 

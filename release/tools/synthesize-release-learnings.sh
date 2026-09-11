@@ -108,8 +108,25 @@ PY=/usr/bin/python3
 # it via os.environ. Literal lives only in the gitignored operator.toml.
 REPO_SLUG="${REPO_SLUG:-}"
 if [[ -z "$REPO_SLUG" ]] && [[ -r "${HOME}/.config/pmo-platform/operator.toml" ]]; then
-  _gh=$(grep -m1 -E '^operator_github' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
-  _repo=$(grep -m1 -E '^pmo_platform_repo_name' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+  # `|| true` spans the whole substitution. Both keys are OPTIONAL, so an
+  # operator.toml that EXISTS and omits one makes this `grep` exit 1, `pipefail`
+  # carries that status out of the substitution, and the `set -euo pipefail` above
+  # aborts at LOAD time — before argument parsing, on EVERY invocation including
+  # --self-test and --help — with exit 1 and ZERO bytes on stdout AND stderr.
+  # Measured on this file before the fix, not inferred. The `2>/dev/null` is NOT a
+  # guard: it suppresses grep's stderr, never its exit status. The bare
+  # "pmo-platform" default two lines down is what makes these keys optional;
+  # without the tolerance that default is unreachable.
+  #
+  # TOLERANCE ONLY here — deliberately NOT the two-part fold automated-closeout.sh
+  # and audit-epic-rollup-close.sh apply to the same class. Both of these sites
+  # already carry `grep -m1` and never piped into `head`, so the SIGPIPE half of
+  # that fold has no referent in this file; applying it would be a rewrite with
+  # nothing to fix. Same discrimination cleanup-orphan-state.sh records for its own
+  # three sites. Two remediation shapes, one class; run_self_test's key-read arm
+  # asserts the invariant that IS shared.
+  _gh=$(grep -m1 -E '^operator_github' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
+  _repo=$(grep -m1 -E '^pmo_platform_repo_name' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
   [[ -z "$_repo" ]] && _repo="pmo-platform"
   [[ -n "$_gh" ]] && REPO_SLUG="${_gh}/${_repo}"
 fi
@@ -790,6 +807,102 @@ run_self_test() {
   ! is_na_sentinel "N/A" || die "self-test: N/A short-form should NOT match"
   ! is_na_sentinel "n/a — no novel learning this release" || die "self-test: case-insensitive should NOT match"
 
+  # ─── Test 4b: OPERATOR-CONFIG KEY-READ TOLERANCE — the class invariant ────────
+  # Every read of an OPTIONAL key out of operator.toml must tolerate that key being
+  # ABSENT. Without the tolerance `grep` exits 1, `pipefail` carries that status out
+  # of the command substitution, and the `set -euo pipefail` near the top of this
+  # file aborts at LOAD time — before argument parsing, on EVERY invocation
+  # including this --self-test and --help — with exit 1 and no output at all. Both
+  # sites in this file shipped that way.
+  #
+  # TWO SHAPES, ONE CLASS. automated-closeout.sh and audit-epic-rollup-close.sh each
+  # needed a two-part fold (`| head -1` folded into `grep -m1`, PLUS the tolerance).
+  # Both sites here already carried `grep -m1` and never piped into `head`, so only
+  # the tolerance half has a referent — the same discrimination
+  # cleanup-orphan-state.sh records. This arm therefore asserts the TOLERANCE
+  # invariant and NOT the folded form: an arm demanding byte-identity with a
+  # sibling's fix would fail on a correct one. The head count is asserted too, as a
+  # reintroduction guard rather than as a claim about today's text.
+  #
+  # WHOLE-SOURCE, not region-scoped: both subjects sit in the load-time preamble
+  # ABOVE this function, and ~28 lines of production dispatch sit BELOW its closing
+  # brace. FIXTURES EXCLUDED BY CONSTRUCTION — the parse anchors on `_<name>=$(`,
+  # so a specimen held in a single-quoted assignment cannot match, and neither can
+  # any line of this arm (its locals carry no leading underscore). K-3 asserts that
+  # invisibility rather than assuming it.
+  local kr_src kr_pop kr_tol kr_head kr_bad kr_spec kr_path kr_line kr_new kr_old
+  local kr_rc_new=0 kr_rc_old=0
+  kr_src="${BASH_SOURCE[0]}"
+  kr_pop="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' "$kr_src")"
+  kr_tol="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "|| true") {n++} END {print n+0}' "$kr_src")"
+  kr_head="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "head") {n++} END {print n+0}' "$kr_src")"
+
+  # (K-1) ANTI-VACUITY FLOOR, then the invariant. The floor is what stops a renamed
+  #       variable or a reformatted call site from emptying the population and
+  #       reading clean.
+  [[ "${kr_pop:-0}" -ge 2 ]] \
+    || die "self-test: K-1 anti-vacuity — the key-read parse found only ${kr_pop:-0} site(s) in ${kr_src}; the tolerance invariant would be vacuous"
+  if [[ "${kr_pop:-0}" -ne "${kr_tol:-0}" ]]; then
+    kr_bad="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && !index($0, "|| true") {printf "%d ", FNR}' "$kr_src")"
+    die "self-test: K-1 — ${kr_tol:-0}/${kr_pop:-0} operator.toml key reads tolerate an ABSENT key; an intolerant read aborts this tool at LOAD time when an OPTIONAL key is missing. Unguarded line(s): ${kr_bad:-none}"
+  fi
+
+  # (K-2) CAPABILITY TO FAIL, both directions, on a constructed call site. Without
+  #       it K-1 is satisfied by a filter that calls everything tolerant, or by a
+  #       parse that recognises nothing at all.
+  kr_spec="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "|| true") {n++} END {print n+0}' <<<'  _z=$(grep -m1 -E "^k" f | awk -F= "{print}")')"
+  [[ "${kr_spec:-1}" -eq 0 ]] \
+    || die "self-test: K-2 specificity — the tolerance filter counted an UNGUARDED specimen as tolerant; K-1's clean result is uninformative"
+  kr_spec="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' <<<'  _z=$(grep -m1 -E "^k" f | awk -F= "{print}")')"
+  [[ "${kr_spec:-0}" -eq 1 ]] \
+    || die "self-test: K-2 sensitivity — the key-read parse did NOT recognise a constructed call site; it is not reading the shape it claims to, so K-1's population is not the population"
+
+  # (K-3) FIXTURE-EXCLUSION PROOF, then the head-pipe reintroduction guard with its
+  #       own sensitivity arm — a zero head count proves nothing unless the filter
+  #       demonstrably matches a head-piping line.
+  kr_spec="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' <<<"  local kr_x='  _z=\$(grep -m1 -E \"^k\" f | awk -F= \"{print}\")'")"
+  [[ "${kr_spec:-1}" -eq 0 ]] \
+    || die "self-test: K-3 — a specimen HELD in a single-quoted assignment was counted as a real call site; the fixtures are not excluded by construction and K-1's population is contaminated"
+  kr_spec="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "head") {n++} END {print n+0}' <<<'  _z=$(grep -E "^k" f | head -1 | awk -F= "{print}")')"
+  [[ "${kr_spec:-0}" -eq 1 ]] \
+    || die "self-test: K-3 sensitivity — the head-pipe filter did NOT match a constructed head-piping call site; the zero below would be a broken probe, not a clean result"
+  [[ "${kr_head:-0}" -eq 0 ]] \
+    || die "self-test: K-3 — ${kr_head} key-read site(s) pipe into head; the folded grep -m1 form is what keeps this class out of the sigpipe-idiom gate"
+
+  # (K-4) THE BEHAVIOURAL DIFFERENTIAL — the arm that FAILS on the unpatched file.
+  #       K-1..K-3 grade the text. This one RUNS the production line, EXTRACTED from
+  #       this file rather than retyped, against a config that EXISTS, is READABLE
+  #       and carries no keys — the exact state that aborted the tool — and asserts
+  #       it survives. Its paired arm strips the tolerance from that same extracted
+  #       line and asserts the SAME fixture still aborts; without that control a
+  #       green K-4 cannot be told from a fixture that never reproduced the defect.
+  #
+  #       The fixture is `/dev/null`: an empty readable file is a faithful
+  #       present-but-key-less operator.toml (`[[ -r ]]` passes, `grep` exits 1) and
+  #       needs no temp tree and no cleanup, so this arm adds neither to a self-test
+  #       that already carries several.
+  #
+  #       Each half runs in a SEPARATE bash process, deliberately. `( set -e … ) ||
+  #       rc=$?` does NOT observe a set -e abort on bash 3.2: the subshell inherits
+  #       the enclosing AND-OR list's -e suppression and an explicit `set -e` inside
+  #       does not restore it. Measured on both shapes before this arm was written.
+  kr_path='${HOME}/.config/pmo-platform/operator.toml'
+  kr_line="$(/usr/bin/awk '!f && match($0, /^[ \t]*_gh=\$\(/) {print; f=1}' "$kr_src")"
+  [[ -n "$kr_line" ]] \
+    || die "self-test: K-4 anti-vacuity — the production key-read line did not extract from ${kr_src}; the behavioural arm would assert nothing"
+  kr_new="${kr_line/$kr_path//dev/null}"
+  kr_old="${kr_new/ || true)/)}"
+  [[ "$kr_new" != "$kr_line" ]] \
+    || die "self-test: K-4 anti-vacuity — pointing the extracted line at the fixture changed nothing, so the arm is not reading the config path it claims to"
+  [[ "$kr_old" != "$kr_new" ]] \
+    || die "self-test: K-4 anti-vacuity — stripping the tolerance changed nothing, so both arms below run identical programs and the differential is empty"
+  /bin/bash -c "$(/usr/bin/printf 'set -euo pipefail\n%s\n[[ -z "${_gh:-}" ]] || exit 9\n' "$kr_new")" || kr_rc_new=$?
+  /bin/bash -c "$(/usr/bin/printf 'set -euo pipefail\n%s\n' "$kr_old")" || kr_rc_old=$?
+  [[ "$kr_rc_new" -eq 0 ]] \
+    || die "self-test: K-4 — the shipped key read does NOT survive an operator.toml that exists and omits the key (rc ${kr_rc_new}); that is the load-time abort this guard exists to close"
+  [[ "$kr_rc_old" -ne 0 ]] \
+    || die "self-test: K-4 sensitivity — the SAME fixture with the tolerance stripped did NOT abort (rc 0); the fixture does not reproduce the defect, so K-4's clean result is a broken probe rather than evidence"
+
   # ─── Per-release source-events counting path — hermetic fixture (#1561) ─────
   # Tests 5–6 assert a DETERMINISTIC per-release source-events count. They read
   # the source events through query-pipeline-event.sh, which resolves the
@@ -1194,6 +1307,7 @@ STUB
   echo "self-test: PASS"
   echo "  parse_triple validated (synthetic + real payload)"
   echo "  N/A sentinel exact-match validated"
+  echo "  key-read tolerance K-1..K-4: all ${kr_pop} operator.toml key read(s) tolerate an ABSENT key; ${kr_head} pipe into head; the extracted production line survives a key-less config (rc ${kr_rc_new}) and ABORTS with the tolerance stripped (rc ${kr_rc_old})"
   echo "  per-release block emit validated (with-events + zero-events)"
   echo "  pattern-detect report renders cleanly on current data"
   echo "  dry-run-vs-apply switch validated"

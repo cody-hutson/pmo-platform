@@ -2498,7 +2498,7 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    **Cutover discipline:** Applies to all releases going forward.
 5. **Hub closes the Milestone (Tier-1 mechanical, per Standing-GO Authorization Model above):** `gh api repos/{REPO}/milestones/<N> -X PATCH -f state=closed`. After the PATCH succeeds, the hub re-runs Verification command #3 (Milestone state) and updates the gate-passage proof comment row from `PENDING` to `PASS`. The operator MAY perform this action manually via the GitHub UI if preferred — hub does not request or block on operator action.
 
-   **Precondition — the Procedure 7a verdict is rendered BEFORE this PATCH, and it governs whether the close proceeds.** Render it per § Procedure 7a below; the authoritative predicate and its three-valued contract are specified in `core/standards/hub-action-tracking.md` § 4 routing point 5 and are not restated here. What this step binds is the **ordering and the disposition**: `RESOLVED` proceeds; `NOT-RECORDED` and `EMPTY-LEDGER` **SURFACE** and proceed only on an explicit operator attestation naming which cause holds; `UNRESOLVED` **BLOCKS** the close pending operator disposition.
+   **Precondition — the Procedure 7a verdict is rendered BEFORE this PATCH, and it governs whether the close proceeds.** Render it per § Procedure 7a below; the authoritative predicate and its verdict contract are specified in `core/standards/hub-action-tracking.md` § 4 routing point 5 and are not restated here. What this step binds is the **ordering and the disposition**: `RESOLVED` proceeds; `NOT-RECORDED` and `EMPTY-LEDGER` **SURFACE** and proceed only on an explicit operator attestation naming which cause holds; `UNRESOLVED` **BLOCKS** the close pending operator disposition; `UNCLASSIFIABLE` **BLOCKS** pending normalisation of the offending status values, and no attestation clears it.
 
    This is the same ordering `release/tools/automated-closeout.sh` enforces on the automated path, where the action-item gate phase is dispatched immediately before the milestone-close phase under a fail-closed guard. The binding is stated **here, at the close action**, because a gate whose only mention lives inside its own section is referenced solely by itself — which is how the originating incident closed a Milestone with the gate recorded SURFACED-not-RESOLVED over a ledger that carried open rows. Per the **Rigor-Invariance Principle** (Procedure 1), a hub-direct close is not an abbreviated path: it binds the identical gate the automated path runs, and the operator-agency carve-out above is a choice of **mechanism**, never a waiver of this precondition.
 6. **Orphan state cleanup chip:** After Step 5 Milestone close (and after the Stage 13 chore PR has merged), the hub spawns a Stage 13 cleanup chip directing the spoke to:
@@ -2521,11 +2521,13 @@ This mandate is consistent with — and bounded by — the **operator-agency car
 
 **Cross-reference:** Canonical specification lives at [`hub-action-tracking.md` § 4 routing point 5](../../../core/standards/hub-action-tracking.md). The standard specifies: scan the release's `action-items.md` for ALL `status:open` AND `status:in-flight` rows; HARD GATE — operator MUST resolve each remaining row (transition to `done`, `cancelled`, or `superseded`) BEFORE Milestone close; carry-forward to the next release is via `superseded` with explicit successor AI-NNN in the next release's `action-items.md` (implicit carry-forward prohibited). Hub does NOT duplicate that content here — read the canonical source.
 
-**The gate is 3-valued over two counts, not boolean over one.** A gate that only counts unresolved rows cannot tell "every commitment was resolved" from "no commitment was ever recorded" — and a release that never emitted an action item is exactly the release whose emit step was skipped. Counting the whole AI-row population alongside the unresolved subset separates them.
+**The gate is 5-valued over three counts, not boolean over one.** A gate that only counts unresolved rows cannot tell "every commitment was resolved" from "no commitment was ever recorded" — and a release that never emitted an action item is exactly the release whose emit step was skipped. Counting the whole AI-row population alongside the unresolved subset separates them. A third count, of the rows whose `status` the gate cannot classify, separates a measured "none open" from an unmeasured one: without it, every value the gate does not recognise is counted as resolved and the gate reports a verdict it never established.
 
 **Probe — structured, whole-population, single pass.** `status` is field 11 of the 13-field schema. Split on the canonical column delimiter `" | "` (space-pipe-space) per [ADR-100](../../ADRs/ADR-100-event-log-payload-pipe-grammar.md), which addresses `status` as `$11` and the `id` column as `$1` (the leading table pipe stays attached to `$1`, so no offset is introduced). Address the column; do not pattern-match the row. A positional probe such as `grep -E '^\| AI-[0-9]+ \|.*\| (open|in-flight) \|'` also matches any *other* cell whose content is exactly `open` or `in-flight` — a `trigger_detail` of `open` on a `done` row reports that row as unresolved. Verified: on a 4-row ledger with zero unresolved rows and one such `trigger_detail`, the positional probe returns 1 and the column probe returns 0.
 
 **Split on `" | "`, never on a bare `|`.** A bare-pipe split is a silent-PASS path, not a style preference. GFM requires a literal pipe inside a table cell to be written escaped as `\|`, and `description` / `owner` / `trigger_detail` / `target` are all free-text columns ahead of `status`. Under `-F'|'` an escaped pipe in any of them adds a field and shifts `status` off its index, so a `status: open` row reads as terminal and the HARD GATE returns `RESOLVED` on an unresolved ledger. Splitting on `" | "` is immune: the character before the pipe in `\|` is a backslash, not a space, so the escaped pipe never matches the delimiter and row arity holds at 13. This is the same bare-pipe hazard ADR-100 § Consequences (c) names — *"a future consumer that reintroduces a bare-pipe split silently reopens the same attribution-loss path."* Regression-guarded by [`test_action_item_gate_predicate.sh`](../../tools/tests/test_action_item_gate_predicate.sh), which extracts the block below verbatim and exercises it against escaped-pipe fixtures.
+
+**Classify by membership, never by `else` — the second silent-PASS path.** A bare-pipe split is one way this gate returns `RESOLVED` on an unresolved ledger; a two-value comparison whose `else` branch means *terminal* is the other, and it is the wider of the two. `if (status == "open" || status == "in-flight") u++` counts everything it does not recognise as resolved: an uppercase `OPEN`, a mistyped `bogus-status`, a vocabulary from some other register, and an empty or shifted field. Test the value for **membership in the recognised set** and give the residue its own state, so the `else` branch stops being a verdict.
 
 `$DIR` is resolved per the orchestration playbook § 4a.3 resolver — slug-keyed first, version-keyed as a read-only legacy fallback. The writer creates only the slug form (`hub-session-continuity.md` § 7.3).
 
@@ -2535,12 +2537,23 @@ if [ ! -f "$AI" ]; then STATE=NOT-RECORDED; else
   # FS is ' [|] ' — space, BRACKETED pipe, space. Do NOT "simplify" to ' \| ':
   # awk puts the -F value through string-escape processing first, which reduces
   # \| to a bare | — ERE alternation — and the row then splits on every space.
-  read -r TOTAL UNRES <<<"$(awk -F' [|] ' '
-      $1 ~ /^\| *AI-[0-9]+ *$/ { t++; gsub(/ /,"",$11);
-                                 if ($11=="open" || $11=="in-flight") u++ }
-      END { print (t+0), (u+0) }' "$AI")"
+  #
+  # STATUS IS CLASSIFIED BY MEMBERSHIP, NEVER BY `else`. Recognised = the § 2.3
+  # enum plus the two § 2.1a status aliases, case-folded. Every other value is
+  # UNCLASSIFIABLE rather than resolved: a typo, a case variant, a foreign
+  # vocabulary, and a status the gate never reached. At arity <= 10 there is no
+  # field 11 and $11 reads EMPTY; at arity 11 the row-terminating ` |' stays glued
+  # to the last field and $11 reads `open |'. Both are unreadable, because field
+  # 11 of a non-13-column row is not the status column of a 13-column contract.
+  read -r TOTAL UNRES BAD <<<"$(awk -F' [|] ' '
+      $1 ~ /^\| *AI-[0-9]+ *$/ { t++; s=tolower($11); gsub(/ /,"",s);
+        if (s=="open" || s=="in-flight") u++
+        else if (s!="done" && s!="cancelled" && s!="superseded" &&
+                 s!="resolved" && s!="withdrawn") b++ }
+      END { print (t+0), (u+0), (b+0) }' "$AI")"
   if   [ "$TOTAL" -eq 0 ]; then STATE=EMPTY-LEDGER
   elif [ "$UNRES" -gt 0 ]; then STATE=UNRESOLVED
+  elif [ "$BAD"   -gt 0 ]; then STATE=UNCLASSIFIABLE
   else                          STATE=RESOLVED; fi
 fi
 ```
@@ -2551,8 +2564,13 @@ fi
 |---|---|---|---|---|
 | 1 | ledger file absent | `NOT-RECORDED` | **SURFACE** | "No action-item ledger exists for this release. Either no commitments were made, or the Procedure 4a emit step was skipped. Attest which." → requires explicit operator attestation to pass. **The prompt carries a measured recommended cause and the basis for it**, so the attestation rests on evidence rather than on recollection: the hub applies the signal table in `core/standards/hub-action-tracking.md` § 4 to this release's own routing-point sweep renderings, and `automated-closeout.sh` prints what it can measure from the event log — recommending **nothing**, and printing why, where its basis cannot separate the two causes. The operator still attests. The measurement is the evidence behind the choice, never the choice |
 | 2 | file present, 0 AI rows | `EMPTY-LEDGER` | **SURFACE** | same attestation, carrying the same measured recommended cause and basis; distinguishes "initialized, never appended" from (1) |
-| 3 | ≥1 row, 0 open/in-flight | `RESOLVED` | **PASS** | *the only silent pass* — report `N/N resolved` |
-| 4 | ≥1 open or in-flight | `UNRESOLVED` | **BLOCK** | enumerate each unresolved `AI-NNN` with owner + trigger |
+| 3 | ≥1 row, every status classifiable, 0 open/in-flight | `RESOLVED` | **PASS** | *the only silent pass* — report `N/N resolved` |
+| 4 | ≥1 open or in-flight | `UNRESOLVED` | **BLOCK** | enumerate each unresolved `AI-NNN` with owner + trigger; where the same ledger also carries unclassifiable rows, append their count and enumeration to the same detail |
+| 5 | 0 open/in-flight, ≥1 status the gate cannot classify | `UNCLASSIFIABLE` | **BLOCK** | enumerate each offending `AI-NNN` with its raw status value and its field count; the remedy is to normalise the value, not to disposition the row |
+
+**Membership, not `else` — and `UNRESOLVED` outranks `UNCLASSIFIABLE`.** The gate classifies `status` by membership in a recognised set: the § 2.3 enum plus the two § 2.1a status aliases, case-folded. A value outside that set is unreadable, never terminal — the `else` branch of a two-value comparison counts a typo, a case variant, a foreign vocabulary and an out-of-range field as *resolved*, which is a silent PASS of a HARD GATE. Row 4 wins over row 5 when a ledger carries both, because the `STATE` selects the operator's remedy and a ledger with many open rows and a few unreadable ones is a disposition task, not a normalisation task; row 4's detail carries both sets so one pass covers both.
+
+**A row whose arity is not 13 is unreadable, and the two arities fail differently.** At arity ≤ 10 there is no field 11, so `$11` is the empty string. At arity 11 the row-terminating ` |` never matches the `" | "` separator and stays glued to the last field, so `$11` reads `open |` — non-empty, and still unclassifiable. Both are correct outcomes: field 11 of a non-13-column row is not the `status` column of the 13-column schema, and reading it as one is the positional assumption the column-addressing rule above exists to refuse. The detail prints `fields:N` beside the raw value so an operator can tell a mistyped word from a dropped column.
 
 **Composition with Procedure 7 Step 4 completion-verification table:** Procedure 7 Step 4's Verification table SHALL include a row carrying the resolved `STATE`, not a bare PASS/FAIL:
 
@@ -2562,13 +2580,13 @@ fi
 
 States 1 and 2 **SURFACE, they do not FAIL.** A release may legitimately make zero durable commitments, and a gate that fails a legitimate state gets disabled or routed around — which is how a gate becomes a no-op in the first place. The attestation is the discriminator: the operator states *which* of the two causes holds, and that attestation is itself emitted (`decision` / `empirical-verification-finding`, actor `operator`) per Procedure 4a, so a skipped emit step leaves an auditable trace rather than a silent pass. State 4 BLOCKs closure pending operator disposition — same severity tier as the other Procedure 7 Step 4 verification commands (missing release notes, open release issues).
 
-This is warn-mode by construction (only state 4 blocks), matching the shadow→warn→enforce posture.
+Two of the five states block: state 4, and state 5. Both are conditions the gate measured and can name, and neither is clearable by attestation — an open row is dispositioned and an unreadable value is normalised. The three non-blocking states remain the legitimate ones (a ledger that does not exist, one that is empty, one that is fully resolved), so the posture is still that a legitimate state never fails; what is refused is a verdict the gate did not measure.
 
 **Why this section exists at this surface:** Procedure 7a binds the hub-consumer entry point to the standard so the action-item HARD GATE fires at the right moment in hub workflow — pattern parallel to Procedure 0a's binding of audit-snapshot reconciliation and Procedure 0b's binding of session-resume. The HARD GATE enforces CLAUDE.md "Push-to-resolve" universal preference at release-close boundary: open action items at close are by definition a "to-do list without resolution," which the workspace-global preference prohibits.
 
 **Transitional posture (hub → skill):** This binding survives the eventual hub-to-skill replacement. When `release-planner`, `principal-engineer`, or any future decision-producing skill assumes hub responsibilities, the skill imports `hub-action-tracking.md` directly per the standard's `consumers` field. The cross-reference paragraph above remains as archival evidence of where the binding fired during the hub era.
 
-**Cutover discipline:** Applies to all releases going forward, **including the release that ships this revision** — this file loads from the repo tree rather than the deployed skill mirror, so the gate is in force from the merge. No introducing-release exemption is needed because the gate is warn-mode: only an unresolved row blocks, and a release whose emitter has not yet reached it closes through the attestation path. The write side that populates the ledger (`orchestration-playbook.md` Procedure 4a) ships in the deployed mirror and therefore carries its own introducing-release exemption — the two halves cut over on different schedules by design, not by oversight.
+**Cutover discipline:** Applies to all releases going forward, **including the release that ships this revision** — this file loads from the repo tree rather than the deployed skill mirror, so the gate is in force from the merge. No introducing-release exemption is needed, and the reason is measured rather than asserted: across the operator-instance ledger corpus, no ledger carrying an unclassifiable status belongs to an open milestone, and a release whose emitter has not yet reached the ledger resolves `NOT-RECORDED` and closes through the attestation path. Arming the second blocking state therefore blocks no in-flight release. A ledger that does drift into it fails loudly with the offending row, its raw value and its field count named — which is the outcome the gate exists to produce. The write side that populates the ledger (`orchestration-playbook.md` Procedure 4a) ships in the deployed mirror and therefore carries its own introducing-release exemption — the two halves cut over on different schedules by design, not by oversight.
 
 ---
 
