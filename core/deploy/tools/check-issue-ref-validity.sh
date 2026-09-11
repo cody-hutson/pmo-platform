@@ -42,6 +42,24 @@
 # mutation arm (a deliberately perturbed copy must make the differ say
 # DISAGREE, or the differ cannot report disagreement at all).
 #
+# THE REPORT-TEXT CLAIM IS BOUNDED, AND THE BOUNDARY IS DECLARED. It covers
+# everything ABOVE the `### Categories` heading — the findings, the `::notice::`
+# lines, the verdict, every part of the output a scan result can reach. It does
+# NOT cover the static advisory block from that heading to EOF, which is literal
+# `echo` with no interpolation and no scan result in it. Diffing that block too
+# pinned the gate's own prose to a frozen historical copy of itself, so
+# CORRECTING A WRONG SENTENCE IN THE MESSAGE FAILED A CORRECTNESS GATE. The full
+# decision, the alternatives rejected, and an honest accounting of what the
+# narrowing does and does not buy are recorded at normalize_report(). The
+# exclusion is asserted in both directions rather than assumed — a narrowing
+# control fails the arm if the cut marker is missing from either side, and an
+# inertness arm in run_self_test fails if the excluded region's output DIFFERS
+# BETWEEN THAT ARM'S TWO FIXED PROBES — two samples of the finding set, not the
+# finding set. That difference is the whole of the arm's reach. It is narrower
+# than the exclusion's safety condition and narrower than "varies with the
+# finding set": below-cut output the two probes cannot tell apart passes it. The
+# residual classes are named at normalize_report() rather than implied away.
+#
 # WHAT THE EQUIVALENCE OBLIGATION COSTS, AND WHERE NEW ASSERTIONS THEREFORE GO.
 # The oracle is a differential over a SHARED corpus, so the corpus is frozen at
 # the pre-extraction body's verdicts for as long as the obligation stands. Any
@@ -59,6 +77,15 @@
 # $HARNESS_TD and never under $FX_REPO. run_self_test's override-form block is
 # the worked example, and the scope-predicate block above it is the precedent.
 # Corpus growth stays reserved for behaviour the pre-extraction body ALSO has.
+# THE SAME COST HAS AN OUTPUT DIMENSION, and it is now bounded there too. The
+# obligation froze the gate's own ADVISORY PROSE as well as its behaviour, so a
+# correction to the failure message was as unshippable through this arm as a
+# behaviour fix was through the corpus — and unlike the corpus case there was no
+# corpus-free siting available, because the message is output the shared run
+# EMITS rather than input it consumes. The claim is therefore bounded on the
+# output dimension by declaration (see normalize_report), which is the same move
+# the retired self-doc fixtures made on the input dimension: state the boundary
+# of the equivalence claim rather than suppress a disagreement that is real.
 # The corollary for a reader of CI logs: --equivalence has NO gate authority
 # there. The selftest-discovery job checks out shallow by design, so
 # PRE_EXTRACTION_SHA is unreachable and harness_main prints its SKIP line. The
@@ -513,6 +540,19 @@ emit_verdict() {
     echo "- **deprecated IMP-NNN** — the legacy improvement id; use a GitHub issue \`#N\`."
     echo "- **placed outside a reference block** — a valid \`#N\` must sit under a recognized heading, at any level: \`Issue References\` / \`References\` / \`Related\` / \`Provenance\` / \`Source\` / \`Sources\` / \`Source(s)\`. In an ADR the designated block is \`## References\`; \`## Related ADRs\` is NOT recognized, because a bare \`#N\` is prohibited there outright."
     echo ""
+    echo "### The heading must match EXACTLY"
+    echo ""
+    echo 'The seven spellings above are matched **exactly**, and this is the constraint a misplaced-reference failure usually hits. **The match ends at the heading word**, so a heading that merely CONTAINS a recognized spelling is not a recognized block. Concretely:'
+    echo ""
+    echo '- Nothing may follow the heading word but an optional `:`. `## Sources:` is recognized; `## References and Provenance` is NOT — it contains two recognized spellings and is still rejected.'
+    echo '- Only the FIRST LETTER of each word may vary in case. `## References` and `## references` are recognized; `## REFERENCES` is NOT.'
+    echo '- The word itself must be one of the seven. `## Reference` (singular) is NOT recognized, though `## Source` and `## Sources` both are.'
+    echo '- A space is required after the `#` characters. `##References` is NOT recognized.'
+    echo ""
+    echo 'So the headings a reader reaches for next — `## Related ADRs`, `## References and Provenance`, `## Provenance notes`, `## REFERENCES`, `## Reference`, `##References` — all still fail.'
+    echo ""
+    echo '**The remedy is to RENAME the heading** to one of the seven spellings, or to move the reference under an existing one. Do not reach for the override marker: it is a rare exception (see below), not the fix for a heading that is merely spelled differently.'
+    echo ""
     echo "See [\`core/rules/git-workflow.md\` § Repository-Integrity Gates](../blob/main/core/rules/git-workflow.md) and [\`core/standards/adr-authoring-guide.md\` § Issue references in ADRs](../blob/main/core/standards/adr-authoring-guide.md)."
     echo ""
     echo "### Override — a RARE exception, not the default remedy"
@@ -711,6 +751,129 @@ findings_of() {
   grep -E '^[^[:space:]]+:[0-9]+: ' "$1" 2>/dev/null | LC_ALL=C sort || true
 }
 
+# The line the report-text equivalence claim is cut at, and the marker that
+# replaces everything below it. Both awk programs below READ this constant rather
+# than repeating the literal, so the cut is single-sourced and the two programs
+# cannot drift apart from each other; the value is consumed as an awk DYNAMIC
+# REGEX (`$0 ~ cut`), so it is an ERE, not a grep BRE.
+ADVISORY_CUT_LINE='^### Categories$'
+ADVISORY_CUT_MARKER='@@ADVISORY-BLOCK-EXCLUDED-FROM-EQUIVALENCE@@'
+
+# ─── THE EQUIVALENCE CLAIM'S OUTPUT BOUNDARY, AND WHY IT IS DRAWN HERE ────────
+# DECISION RECORDED AT THE SITE, deliberately and by ratification: the narrowing
+# below was considered for an ADR and judged not to need one, so the reasoning
+# lives beside the code it governs rather than in a record a reader has to find.
+#
+# THE PROBLEM. run_equivalence used to diff the WHOLE output of the two
+# implementations. That output is two different kinds of text welded together:
+# everything ABOVE `### Categories` is scan-dependent (the findings, the
+# `::notice::` lines, the verdict), and everything BELOW it is static advisory
+# prose — a literal `echo` per line, no interpolation, no scan result anywhere.
+# Diffing the whole thing pinned the prose as tightly as the behaviour, so
+# CORRECTING A WRONG SENTENCE IN THE MESSAGE FAILED A CORRECTNESS GATE. That is
+# what happened to the exact-match paragraph in emit_verdict: every findings arm
+# and the exit-code arm agreed, and only the prose differed.
+#
+# WHY NOT THE OBVIOUS ALTERNATIVES. Emitting the new text to GITHUB_STEP_SUMMARY
+# only would pass the arm by hiding the fix from the local reader (that variable
+# defaults to /dev/null outside CI) — green by concealment. Re-pinning
+# PRE_EXTRACTION_SHA forward is structurally blocked: extract_oracle dies unless
+# the materialised `run:` block still contains REFBLOCK_RE, which a
+# post-extraction thin caller does not. Dropping the whole-output diff entirely
+# is over-broad — it also pins the `::notice::` lines, which ARE scan-dependent.
+#
+# WHAT THE NARROWING GIVES UP, STATED PLAINLY RATHER THAN CLAIMED AWAY. The
+# byte-diff never proved the advisory prose was CORRECT; it proved the prose
+# matched a frozen historical copy of itself. What replaces it for the placement
+# bullet is strictly stronger — run_self_test's exact-match block asserts that
+# each heading the message calls unrecognized is in fact flagged and each it
+# calls recognized is in fact accepted, so message and implementation can no
+# longer drift. That replacement is NOT uniform across the region, and the
+# honest accounting matters more than a tidy claim: the other four verdict-class
+# bullets, the two doc links and the whole Override criterion below the cut keep
+# only a PRESENCE assertion (exact-match block, Arm 3), not a behavioural one.
+# They are prose whose only previous pin was a frozen copy, so nothing that was
+# load-bearing has been dropped — but "re-pinned to behaviour" would overstate
+# what this bought, and an overstated record is the artifact most likely to
+# mislead the next reader asking whether this was weakened deliberately.
+#
+# THE EXCLUSION IS ASSERTED, NEVER ASSUMED, IN TWO DIRECTIONS.
+#   * That it FIRED — the narrowing control in run_equivalence fails the arm if
+#     the cut marker is missing from either side, so a normalizer that silently
+#     no-ops cannot read as a pass.
+#   * That the excluded region is STILL INERT BETWEEN TWO FIXED FINDING SETS —
+#     the inertness arm in run_self_test runs the checker over two inputs with
+#     DIFFERENT findings and requires their post-cut regions to be byte-identical
+#     while their pre-cut regions differ. Inertness is the property that justifies
+#     the cut, and a point-in-time reading of the region is not a guarantee; if
+#     that region ever starts emitting output that DIFFERS BETWEEN THOSE TWO
+#     PROBES, that arm turns red instead of the exclusion silently widening.
+#     Output that varies with the finding set in a way the two probes do not
+#     distinguish does not turn it red; the next paragraph names that output.
+#
+# WHAT THAT ARM DOES NOT REACH, NAMED RATHER THAN LEFT TO BE DISCOVERED. Its
+# discriminator is a byte difference between two SAMPLES of the finding set, not
+# variation across the finding set. The exclusion's safety condition is the
+# stronger property that no below-cut output can DIFFER BETWEEN THE TWO
+# IMPLEMENTATIONS, and three classes of below-cut output sit in the gap. Each was
+# measured, not reasoned, by one line added directly below the `### Categories`
+# emission, after which the arm passed at inertness=1 and the suite reported
+# SELF-TEST RESULT: PASS at exit 0:
+#   (1) CONSTANT across finding sets. `echo "${REFBLOCK_RE}"` is byte-identical in
+#       both of the arm's runs — while the checker emits a below-cut line the
+#       oracle does not emit at all, interpolating a live implementation value.
+#       Varying the arm's inputs cannot close this: a constant is constant, so no
+#       input dimension makes it differ between two runs.
+#   (2) VARYING WITH THE FINDING SET BUT EQUAL ON BOTH PROBES. A line printing the
+#       count of misplaced-reference findings prints 1 on each probe, since each
+#       carries one, and 2 on an input carrying two.
+#   (3) KEYED TO A FINDING CLASS NEITHER PROBE CARRIES. A hint printed only when a
+#       pull-request-number finding exists prints nothing on either probe, and so
+#       does one keyed to a transferred-issue finding.
+# The boundary was measured from the inside as well: a line printing the count of
+# unresolvable-reference findings — the same shape as (2), on a class probe B
+# carries and probe A does not — prints 0 and 1 and turns the arm red, as does
+# interpolating the whole findings list. The report-text arm cannot see (1)-(3)
+# either, because that region is excluded from the diff by declaration. More
+# probes would narrow (2) and (3) but cannot close them, because a below-cut
+# emission can be keyed to any property every probe happens to share. The one arm
+# that WOULD close all three is a below-cut diff between the oracle and this
+# checker — which is the whole-output diff this narrowing exists to remove, and
+# reinstating it reinstates the defect above. So the residual is ACCEPTED and
+# recorded here, the same accounting this block already makes for Arm 3's
+# presence-only pinning: the exclusion is armed against the class the arm
+# measures, and rests on review for the classes it does not.
+#
+# INVOCATION FORM IS LOAD-BEARING, NOT STYLISTIC. awk reads the FILE and no
+# producer sits upstream, and the program carries no `exit`. The shape this
+# avoids — `… | awk '/marker/{print; exit}'` — is a pipe into a reader that stops
+# early, inside a file running under `set -euo pipefail`: the reader exits on the
+# marker, the writer's next write fails on the broken pipe, and that non-zero
+# status becomes the pipeline's, so a SUCCESSFUL truncation reports failure. It
+# is also the exact shape this repository's SIGPIPE-idiom gate scans for on added
+# lines in `*.sh`, and this file carries no exemption of either tier. Both the
+# single-line and multi-line spellings of that shape are wrong here and
+# differently so: one turns an enforcing job red, and the other slips past its
+# line-oriented scan while keeping the runtime hazard. Reading the file removes
+# the hazard rather than relocating it — the same SIGPIPE-REWRITE reasoning the
+# header records for the four pipelines rewritten at extraction.
+normalize_report() {
+  awk -v marker="$ADVISORY_CUT_MARKER" -v cut="$ADVISORY_CUT_LINE" '
+    past      { next }
+    $0 ~ cut  { print marker; past = 1; next }
+              { print }
+  ' "$1" > "$2"
+}
+
+# The complement: the excluded region itself, cut line included. Used only by the
+# inertness arm, which is the thing that keeps the exclusion honest.
+advisory_block_of() {
+  awk -v cut="$ADVISORY_CUT_LINE" '
+    inblk     { print }
+    $0 ~ cut  { if (!inblk) { print; inblk = 1 } }
+  ' "$1" > "$2"
+}
+
 run_equivalence() {
   local pre_sha="$1"
   local td="$HARNESS_TD"
@@ -778,10 +941,28 @@ run_equivalence() {
     echo "PASS  exit codes agree: ${rc_o}"
   fi
 
-  if diff -u "$o_out" "$c_out" > "$td/report.diff" 2>&1; then
-    echo "PASS  report text byte-identical across the whole corpus"
+  # REPORT TEXT, narrowed by declaration to everything ABOVE the static advisory
+  # block. The boundary, what it gives up and what re-pins it are recorded at
+  # normalize_report(); this is only its application.
+  local o_norm="$td/oracle.norm" c_norm="$td/checker.norm"
+  normalize_report "$o_out" "$o_norm"
+  normalize_report "$c_out" "$c_norm"
+  # NARROWING CONTROL, and it is mandatory. A normalizer that silently no-opped —
+  # wrong cut line, empty input, a report that never reached the advisory block —
+  # would make this arm compare two untruncated reports and call that a narrowed
+  # comparison. Requiring the marker on BOTH sides is what makes the exclusion an
+  # assertion rather than an assumption. It fails conservatively: the two ways the
+  # marker can go missing (oracle emitted nothing, checker emitted nothing) are
+  # already caught upstream by the sensitivity control, so a failure here is a
+  # normalizer fault and is reported as one.
+  if ! grep -q "$ADVISORY_CUT_MARKER" "$o_norm" || ! grep -q "$ADVISORY_CUT_MARKER" "$c_norm"; then
+    echo "FAIL  narrowing control: the advisory-block cut marker is absent from one or both sides"
+    echo "      the exclusion did not fire, so a PASS here would be an untested claim"
+    status=1
+  elif diff -u "$o_norm" "$c_norm" > "$td/report.diff" 2>&1; then
+    echo "PASS  report text identical OUTSIDE the advisory block (\`### Categories\` -> EOF, excluded by declaration)"
   else
-    echo "FAIL  report text differs:"
+    echo "FAIL  report text differs OUTSIDE the advisory block:"
     sed 's/^/        /' "$td/report.diff"
     status=1
   fi
@@ -911,9 +1092,11 @@ run_self_test() {
   # ── Override-marker FORM: the OVERRIDE predicate, both arms, plus an
   #    end-to-end pair ────────────────────────────────────────────────────────
   # CORPUS-FREE BY CONSTRUCTION, and that siting is load-bearing rather than
-  # stylistic. run_equivalence asserts the report text is BYTE-IDENTICAL between
-  # this checker and the pre-extraction inline body over the SHARED fixture
-  # corpus. That body carries the OLD narrow OVERRIDE, so a rationale-carrying
+  # stylistic. run_equivalence asserts the report text is IDENTICAL ABOVE THE
+  # ADVISORY BLOCK (the declared boundary; see normalize_report) between this
+  # checker and the pre-extraction inline body over the SHARED fixture corpus —
+  # and findings are above that boundary, so the constraint below is unchanged by
+  # the narrowing. That body carries the OLD narrow OVERRIDE, so a rationale-carrying
   # fixture added to cases/ + manifest.txt would be FLAGGED by the oracle and
   # SUPPRESSED by the checker — `direction oracle->checker: gate WEAKENED` — and
   # the required status check would fail ON A CORRECT FIX. Re-pinning the oracle
@@ -1028,8 +1211,11 @@ run_self_test() {
   # override-form block above is — and one step harder, because this change had
   # to REMOVE two shared inputs rather than merely avoid adding one.
   #
-  # run_equivalence asserts the report text is BYTE-IDENTICAL between this
-  # checker and the pre-extraction inline body over the SHARED fixture corpus,
+  # run_equivalence asserts the report text is IDENTICAL ABOVE THE ADVISORY BLOCK
+  # (the declared boundary; see normalize_report) between this checker and the
+  # pre-extraction inline body over the SHARED fixture corpus — findings and
+  # `::notice::` lines both sit above that boundary, so neither the constraint
+  # below nor the two extra notice lines it names are affected by the narrowing,
   # and that body still carries the path arm deleted from run_scan's SCOPE
   # `case`. Two shared fixtures used to pin this class by LIVING at the two
   # exempt paths carrying no marker. After the deletion the two implementations
@@ -1151,6 +1337,290 @@ run_self_test() {
     echo "    PASS  [self-doc]  marked-must-zero=${sd_marked_zero}  unmarked-must-flag=${sd_unmarked_flag}"
   else
     echo "    ---   [self-doc]  ${sd_fail} failure(s)"
+  fi
+
+  # ── Exact-match placement, the failure message, and the limb-(a) guard ──────
+  # CORPUS-FREE BY CONSTRUCTION, for the same load-bearing reason as the two
+  # blocks above. The pre-extraction body carries the OLD placement message, so a
+  # fixture added to cases/ + manifest.txt to exercise any of this would be
+  # compared against a body that answers differently, and the equivalence arm
+  # would fail ON A CORRECT FIX. Every file below is written under $td and NEVER
+  # under $FX_REPO.
+  #
+  # THIS BLOCK IS THE REPLACEMENT COVERAGE for what the narrowed equivalence claim
+  # gives up (see normalize_report). The byte-diff pinned the advisory prose to a
+  # frozen historical copy of itself — it could tell you the message had changed,
+  # never that the message was TRUE. Arms 1-2 pin the behaviour, Arm 3 pins the
+  # text, and together they assert the property that actually matters: every
+  # heading the message calls recognized is accepted, every heading it calls
+  # unrecognized is flagged, and the message still says so. Arm 3 alone would pass
+  # on a message that describes a gate doing something else; Arms 1-2 alone would
+  # pass on a message that says nothing at all.
+  #
+  # The headings are not invented. They are the measured matrix: five that
+  # REFBLOCK_RE accepts and six it rejects, and each of the six is a near miss the
+  # corrected message names by example — `## References and Provenance` contains
+  # TWO recognized spellings and is still rejected, which is the whole cost of the
+  # omission in one row.
+  local xm_dir="$td/exact-match"
+  local xm_h xm_i xm_out xm_rc xm_body xm_phrase
+  local xm_accept=0 xm_flagged=0 xm_msg=0 xm_guard=0 xm_inert=0 xm_fail=0
+  mkdir -p "$xm_dir"
+  echo "--- exact-match placement: message text pinned to the behaviour it describes ---"
+
+  # Arm 1 — MUST ACCEPT. #909100 resolves `valid` in the shared verdict map (the
+  # same number the generated heading matrix uses, so no map row is added and
+  # none is orphaned), which makes PLACEMENT the only variable under test.
+  # Filenames are keyed by INDEX rather than by a slug of the heading: two of
+  # these spellings differ only in case and would collide on a case-insensitive
+  # filesystem, silently shrinking the matrix.
+  xm_i=0
+  for xm_h in \
+    '## References' \
+    '## references' \
+    '## Issue References' \
+    '## Sources:' \
+    '## Source(s)' ; do
+    xm_i=$((xm_i + 1))
+    assertions=$((assertions + 1))
+    xm_body="$xm_dir/accept-${xm_i}.md"
+    {
+      printf 'Exact-match probe — must ACCEPT.\n\n'
+      printf '%s\n' "$xm_h"
+      printf -- '\n- #909100 — the reference sits UNDER the heading under test.\n'
+    } > "$xm_body"
+    set +e
+    xm_out="$( cd "$xm_dir" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA \
+        GITHUB_REPOSITORY=fixture-owner/fixture-repo \
+        bash "$SCRIPT_PATH" --resolver fixture --fixture-map "$FX_MAP" --path "accept-${xm_i}.md" 2>&1 )"
+    xm_rc=$?
+    set -e
+    if [ "$xm_rc" -eq 0 ]; then
+      xm_accept=$((xm_accept + 1))
+    else
+      echo "    FAIL  [exact-match] a heading the message calls RECOGNIZED was flagged: ${xm_h}"
+      printf '%s\n' "$xm_out" | sed -e 's/^/            /'
+      xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+    fi
+  done
+
+  # Arm 2 — MUST FLAG. Each of these is named in the corrected message as a near
+  # miss, so this arm is what stops the message and the regex drifting apart: if
+  # REFBLOCK_RE is ever widened to accept one of them, the message becomes wrong
+  # and THIS arm goes red, rather than a reader discovering it.
+  xm_i=0
+  for xm_h in \
+    '## REFERENCES' \
+    '## References and Provenance' \
+    '## Related ADRs' \
+    '## Provenance notes' \
+    '## Reference' \
+    '##References' ; do
+    xm_i=$((xm_i + 1))
+    assertions=$((assertions + 1))
+    xm_body="$xm_dir/flag-${xm_i}.md"
+    {
+      printf 'Exact-match probe — must FLAG.\n\n'
+      printf '%s\n' "$xm_h"
+      printf -- '\n- #909100 — the reference sits under an UNRECOGNIZED heading.\n'
+    } > "$xm_body"
+    set +e
+    xm_out="$( cd "$xm_dir" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA \
+        GITHUB_REPOSITORY=fixture-owner/fixture-repo \
+        bash "$SCRIPT_PATH" --resolver fixture --fixture-map "$FX_MAP" --path "flag-${xm_i}.md" 2>&1 )"
+    xm_rc=$?
+    set -e
+    if [ "$xm_rc" -ne 0 ]; then
+      xm_flagged=$((xm_flagged + 1))
+    else
+      echo "    FAIL  [exact-match] a heading the message calls UNRECOGNIZED was accepted: ${xm_h}"
+      xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+    fi
+  done
+
+  # Arm 3 — THE MESSAGE ITSELF. Emit a real failure verdict and assert the
+  # advisory block states the constraint and names the near misses Arm 2 just
+  # exercised.
+  #
+  # The second group of phrases is deliberately WIDER than the placement bullet,
+  # and the reason is worth stating: the narrowed equivalence claim drops the
+  # byte-diff over this entire region, not merely over the sentence that changed.
+  # The other four verdict-class bullets and the Override criterion lost their
+  # only pin too. A presence assertion is weaker than the behavioural pinning
+  # Arms 1-2 give the placement bullet — it catches deletion and truncation, not
+  # a wrong sentence — but it is the difference between partial coverage and
+  # none, and claiming the whole region is "re-pinned to behaviour" would
+  # overstate what this block does.
+  assertions=$((assertions + 1))
+  xm_body="$xm_dir/message.md"
+  {
+    printf 'Exact-match probe — message content.\n\n'
+    printf -- '- #909100 — a valid reference placed above any reference block.\n'
+  } > "$xm_body"
+  set +e
+  xm_out="$( cd "$xm_dir" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA \
+      GITHUB_REPOSITORY=fixture-owner/fixture-repo \
+      bash "$SCRIPT_PATH" --resolver fixture --fixture-map "$FX_MAP" --path message.md 2>&1 )"
+  xm_rc=$?
+  set -e
+  printf '%s\n' "$xm_out" > "$xm_dir/message.out"
+  # Precondition: the probe must actually have FAILED, or no advisory block was
+  # printed and every phrase assertion below would be checking an empty haystack.
+  if [ "$xm_rc" -eq 0 ]; then
+    echo "    FAIL  [exact-match] message probe did not produce a verdict — the phrase arms would be vacuous"
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  else
+    xm_msg=$((xm_msg + 1))
+    for xm_phrase in \
+      'The match ends at the heading word' \
+      'FIRST LETTER of each word may vary in case' \
+      '`## Related ADRs`' \
+      '`## References and Provenance`' \
+      '`## Provenance notes`' \
+      '`## REFERENCES`' \
+      'RENAME' \
+      'does not resolve / redirect' \
+      'different repository' \
+      'pull-request number' \
+      'deprecated IMP-NNN' \
+      'allow-issue-ref' \
+      'BOTH limbs hold' ; do
+      assertions=$((assertions + 1))
+      if grep -qF -- "$xm_phrase" "$xm_dir/message.out"; then
+        xm_msg=$((xm_msg + 1))
+      else
+        echo "    FAIL  [exact-match] the failure message no longer states: ${xm_phrase}"
+        xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+      fi
+    done
+  fi
+
+  # Arm 4 — THE LIMB-(a) GUARD, both directions. Without this pair the guard
+  # ships with no regression guard at all, and that is precisely how the defect
+  # it fixes escaped in the first place: every other invocation in this harness
+  # pins GITHUB_REPOSITORY, so nothing here could ever reach the unset path.
+  #   gh      + unset -> REFUSE (exit 3), naming the variable, emitting NO finding
+  #   fixture + unset -> proceed normally; the fixture resolver never reads it
+  assertions=$((assertions + 1))
+  set +e
+  xm_out="$( cd "$xm_dir" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA -u GITHUB_REPOSITORY \
+      bash "$SCRIPT_PATH" --resolver gh --path accept-1.md 2>&1 )"
+  xm_rc=$?
+  set -e
+  if [ "$xm_rc" -ne 3 ]; then
+    echo "    FAIL  [exact-match] guard: --resolver gh with GITHUB_REPOSITORY unset returned ${xm_rc}, expected 3 (config failure)"
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  elif ! grep -qF 'GITHUB_REPOSITORY' <<<"$xm_out"; then
+    echo "    FAIL  [exact-match] guard: the refusal does not name GITHUB_REPOSITORY"
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  elif grep -qE '^[^[:space:]]+:[0-9]+: ' <<<"$xm_out"; then
+    echo "    FAIL  [exact-match] guard: a CONTENT finding was emitted alongside the refusal"
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  else
+    xm_guard=$((xm_guard + 1))
+  fi
+
+  # The twin, and it is the specificity arm: a guard that refused here too would
+  # have broken the whole offline surface rather than fixed a false red.
+  assertions=$((assertions + 1))
+  set +e
+  xm_out="$( cd "$xm_dir" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA -u GITHUB_REPOSITORY \
+      bash "$SCRIPT_PATH" --resolver fixture --fixture-map "$FX_MAP" --path accept-1.md 2>&1 )"
+  xm_rc=$?
+  set -e
+  if [ "$xm_rc" -eq 0 ]; then
+    xm_guard=$((xm_guard + 1))
+  else
+    echo "    FAIL  [exact-match] guard twin: --resolver fixture wrongly refused with GITHUB_REPOSITORY unset (exit ${xm_rc})"
+    printf '%s\n' "$xm_out" | sed -e 's/^/            /'
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  fi
+
+  # Arm 5 — INERTNESS OF THE EXCLUDED REGION, which is what keeps the narrowed
+  # equivalence claim honest over time.
+  #
+  # run_equivalence's narrowing control asserts the normalizer RAN. It cannot
+  # assert that the region it removed is still inert, and inertness is the entire
+  # justification for removing it. That property was established by reading the
+  # region once; a reading is not a guarantee, and the failure it leaves open is
+  # silent — an `echo` carrying a scan result added below the cut line would
+  # simply leave the comparison, with every arm still green.
+  #
+  # So: run the checker over two inputs that produce DIFFERENT findings, and
+  # require their reports to DIFFER above the cut and be BYTE-IDENTICAL below it.
+  # The differ-above requirement is the vacuity control — without it two identical
+  # reports would satisfy the arm trivially. Probe A carries one misplaced valid
+  # reference; probe B carries that same finding plus one unresolvable and one
+  # deprecated reference. The day the advisory block emits anything that DIFFERS
+  # BETWEEN THESE TWO PROBES, this arm goes red instead of the exclusion quietly
+  # widening.
+  #
+  # ITS REACH STOPS THERE. The discriminator is a byte difference between two
+  # SAMPLES of the finding set, not variation across the finding set, so three
+  # classes of below-cut output pass: output CONSTANT across finding sets (no
+  # input dimension changes that — a constant is constant); output that varies
+  # with the finding set but takes the SAME VALUE on both probes (a count of
+  # misplaced references is 1 on each); and output keyed to a finding class
+  # NEITHER probe carries (pull-request number, transferred issue). Each was
+  # measured by one line added below the cut that left this arm at inertness=1
+  # and the suite at SELF-TEST RESULT: PASS, while the same-shaped count of
+  # unresolvable references — which the two probes DO tell apart — turned it red.
+  # normalize_report() records why those residuals are accepted rather than
+  # closed, and what closing them costs.
+  local xm_a_out="$xm_dir/inert-a.out" xm_b_out="$xm_dir/inert-b.out"
+  local xm_a_blk="$xm_dir/inert-a.blk" xm_b_blk="$xm_dir/inert-b.blk"
+  local xm_a_norm="$xm_dir/inert-a.norm" xm_b_norm="$xm_dir/inert-b.norm"
+  {
+    printf 'Inertness probe A.\n\n'
+    printf -- '- #909100 — a VALID reference, misplaced above any reference block.\n'
+  } > "$xm_dir/inert-a.md"
+  {
+    printf 'Inertness probe B — a different finding set, deliberately.\n\n'
+    printf -- '- #909100 — a VALID reference, misplaced above any reference block.\n'
+    printf -- '- #909404 — a number the verdict map does not name, so it does not resolve.\n'
+    printf -- '- IMP-007 — the deprecated form, a third verdict class.\n'
+  } > "$xm_dir/inert-b.md"
+  set +e
+  ( cd "$xm_dir" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA \
+      GITHUB_REPOSITORY=fixture-owner/fixture-repo \
+      bash "$SCRIPT_PATH" --resolver fixture --fixture-map "$FX_MAP" --path inert-a.md ) > "$xm_a_out" 2>&1
+  ( cd "$xm_dir" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA \
+      GITHUB_REPOSITORY=fixture-owner/fixture-repo \
+      bash "$SCRIPT_PATH" --resolver fixture --fixture-map "$FX_MAP" --path inert-b.md ) > "$xm_b_out" 2>&1
+  set -e
+  normalize_report "$xm_a_out" "$xm_a_norm"
+  normalize_report "$xm_b_out" "$xm_b_norm"
+  advisory_block_of "$xm_a_out" "$xm_a_blk"
+  advisory_block_of "$xm_b_out" "$xm_b_blk"
+
+  assertions=$((assertions + 1))
+  if [ ! -s "$xm_a_blk" ] || [ ! -s "$xm_b_blk" ]; then
+    echo "    FAIL  [exact-match] inertness: one or both runs emitted no advisory block — the arm is vacuous"
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  elif cmp -s "$xm_a_norm" "$xm_b_norm"; then
+    echo "    FAIL  [exact-match] inertness vacuity control: the two inputs produced IDENTICAL reports above the cut"
+    echo "            they must differ, or 'identical below the cut' proves nothing"
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  elif cmp -s "$xm_a_blk" "$xm_b_blk"; then
+    xm_inert=$((xm_inert + 1))
+  else
+    echo "    FAIL  [exact-match] inertness: the EXCLUDED region differs between two runs with different findings"
+    echo "            it has absorbed scan-dependent output, so excluding it from the equivalence"
+    echo "            claim now removes real detection coverage. Narrow the cut or drop the exclusion."
+    diff -u "$xm_a_blk" "$xm_b_blk" | sed 's/^/            /' || true
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  fi
+
+  # Suite-level vacuity control, the same one every block here carries: a clean
+  # must-accept run proves nothing unless the must-flag arm actually fired.
+  if [ "$xm_flagged" -eq 0 ]; then
+    echo "    FAIL  [exact-match] vacuity control: the must-flag arm produced ZERO findings"
+    xm_fail=$((xm_fail + 1)); failures=$((failures + 1))
+  fi
+  if [ "$xm_fail" -eq 0 ]; then
+    echo "    PASS  [exact-match]  must-accept=${xm_accept}  must-flag=${xm_flagged}  message-phrases=${xm_msg}  guard=${xm_guard}  inertness=${xm_inert}"
+  else
+    echo "    ---   [exact-match]  ${xm_fail} failure(s)"
   fi
 
   echo "--- fixture matrix: 2 invocation forms x 2 input modes x 2 resolvers = 8 cells ---"
@@ -1286,6 +1756,41 @@ esac
 
 if [ "$RESOLVER" = "fixture" ] && [ -z "$FIXTURE_MAP" ]; then
   die "--resolver fixture requires --fixture-map"
+fi
+
+# The gh resolver asks "does #N exist in THIS repo", and GITHUB_REPOSITORY is the
+# only thing that says which repo that is. Unset, the query degenerates to
+# `repos//issues/N`, every number 404s, and the gate emits a CONTENT verdict
+# ("#N does not resolve to an issue in this repo") produced entirely by a missing
+# variable — a red that does not depend on the file under test and is therefore
+# indistinguishable, to the reader, from a real finding.
+#
+# REFUSE RATHER THAN DERIVE, and the rejected alternative is the instructive one.
+# Deriving the repo from `git remote` would trade a loud config fault for a silent
+# WRONG one: on a fork or a mirror remote the same #N resolves against a DIFFERENT
+# issue graph, so the gate would confidently report a valid reference as invalid
+# with no evidence that anything was assumed. A config fault reported as a content
+# verdict is the defect this guard removes; a config fault reported as the wrong
+# content verdict is the same defect with the diagnosis deleted.
+#
+# SITED AT THE gh RESOLVER'S PRECONDITION, deliberately, and not at the `:` default
+# at the top of the file. `resolve_issue`'s `gh api` call is the single consumer of
+# the variable; `fixture_verdict` never reads it. Guarding the default instead would
+# break every legitimate `--resolver fixture` invocation, which is the whole offline
+# surface. Guarding lazily inside `resolve_issue` would be worse still: it would fire
+# only once some `#N` was encountered, so one config fault would produce a refusal or
+# a verdict depending on file content.
+#
+# Exit 3, not 1. `1` means findings; `3` means the tool could not run. That is this
+# file's declared interface (see INTERFACE above) and the posture it already takes on
+# the structurally identical unset-REFBLOCK_RE fault. Reusing `1` would leave the
+# false red in place with better wording.
+if [ "$RESOLVER" = "gh" ] && [ -z "${GITHUB_REPOSITORY}" ]; then
+  die "GITHUB_REPOSITORY is unset and --resolver gh cannot resolve #N without it.
+  This is a CONFIGURATION failure, not a verdict: no file was scanned and no finding is implied.
+  Set the repository:  GITHUB_REPOSITORY=owner/name ${TOOL_NAME} ...
+  Or resolve offline:  ${TOOL_NAME} --resolver fixture --fixture-map <path> ...
+  Inside GitHub Actions the runner supplies this variable; outside it you must."
 fi
 
 run_scan

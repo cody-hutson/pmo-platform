@@ -31,6 +31,25 @@
 
 set -euo pipefail
 
+# SELF — this file's own absolute path, resolved ONCE here, before anything in this
+# script changes directory.
+#
+# The self-test re-invokes this file from inside a scratch corpus it `cd`s into. `$0`
+# holds whatever was typed on the command line, so a relative `$0` stops resolving the
+# moment that `cd` happens: invoked as `./core/deploy/tools/start-skill-editor-session.sh`
+# the arms failed with "no such file", while the same file invoked by absolute path
+# passed — a verdict that tracked how the tool was addressed rather than how it behaves.
+# The negative arms failed more quietly than the positive ones: they PASSED, because the
+# mint they require to fail failed for the wrong reason (the interpreter could not find
+# this file, not because the skill was unresolvable), and a same-named script sitting at
+# the post-`cd` path would have been executed in this one's place.
+#
+# `BASH_SOURCE[0]` is this file's own path however it was addressed; made absolute here,
+# it stays valid across every later `cd`. `$0` is still correct in the usage strings at
+# the bottom — those echo back what the caller typed, which is what a usage line shows.
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+readonly SELF
+
 readonly TTL_SECONDS=1800  # MUST match SENTINEL_TTL_SECONDS in block-skill-direct-edit.sh
 readonly ROOTS="core operations release"
 
@@ -117,7 +136,7 @@ self_test() {
   ( cd "$tmp" && git init -q . && git add -A && git -c user.email=t@t -c user.name=t commit -qm i ) >/dev/null 2>&1
 
   # A1 — mint creates a sentinel that parses and names the right skill
-  ( cd "$tmp" && bash "$0" fixture-skill ) >/dev/null 2>&1 || rc=$?
+  ( cd "$tmp" && bash "$SELF" fixture-skill ) >/dev/null 2>&1 || rc=$?
   if [ ! -f "${tmp}/operations/skills/fixture-skill/.editor-session" ]; then
     echo "FAIL A1: sentinel not created"; fails=$((fails+1))
   elif command -v jq >/dev/null 2>&1 && ! jq -e . "${tmp}/operations/skills/fixture-skill/.editor-session" >/dev/null 2>&1; then
@@ -134,13 +153,13 @@ self_test() {
   fi
 
   # A3 — end removes it
-  ( cd "$tmp" && bash "$0" --end fixture-skill ) >/dev/null 2>&1 || true
+  ( cd "$tmp" && bash "$SELF" --end fixture-skill ) >/dev/null 2>&1 || true
   if [ -f "${tmp}/operations/skills/fixture-skill/.editor-session" ]; then
     echo "FAIL A3: --end did not remove the sentinel"; fails=$((fails+1))
   fi
 
   # B1 — NEGATIVE: an unresolvable skill must fail, not silently mint somewhere
-  if ( cd "$tmp" && bash "$0" no-such-skill ) >/dev/null 2>&1; then
+  if ( cd "$tmp" && bash "$SELF" no-such-skill ) >/dev/null 2>&1; then
     echo "FAIL B1: minted a session for a skill that does not exist"; fails=$((fails+1))
   fi
 

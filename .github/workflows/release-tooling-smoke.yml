@@ -318,6 +318,21 @@ on:
       # AER-1 note names it as an AER-1 input; the glob here subsumes it for Arm F.
       - 'release/references/pipeline/**'
       - 'core/config/allowlists/script-execution-allowlist.txt'
+      # Scenario-G input (#6251): release-notes-standard.md §2.4 PUBLISHES the
+      # banned-jargon list, and lint_release_corpus.py --self-test asserts its
+      # enforcing patterns against that table row for row. Without this entry a PR
+      # that adds a §2.4 row and nothing else would not trigger the arm built to
+      # catch a published-but-unenforced row — the same trigger-vs-verdict
+      # disagreement the CIAC-3, selftest-discovery, R8, VIC and Arm F entries
+      # above each close for their own inputs.
+      # What it buys is REACHABILITY, not enforcement, and the difference matters:
+      # this workflow declares posture=advisory (see :3), and the arm RUNS on the
+      # edit it exists to catch in the selftest-discovery job. Whether that job is a
+      # required status check on main — and so whether the arm blocks the merge — is
+      # branch-protection configuration on the host, which this file cannot pin and
+      # which changes without a commit. Read it live rather than from this comment:
+      #   gh api repos/:owner/:repo/branches/main/protection --jq '.required_status_checks.contexts'
+      - 'release/references/standards/release-notes-standard.md'
   push:
     branches: [main]
     paths:
@@ -355,6 +370,10 @@ on:
       - 'core/config/allowlists/script-execution-allowlist.txt'
       # VIC engine member — see the pull_request block above.
       - 'core/deploy/deploy.sh'
+      # Scenario-G input (#6251) — see the pull_request block above. Rostered in
+      # BOTH lists deliberately: they are two holders of one roster, and adding to
+      # one alone is the same divergence class #6251 exists to remove.
+      - 'release/references/standards/release-notes-standard.md'
 
 permissions:
   contents: read
@@ -1101,6 +1120,40 @@ jobs:
         # Arm D relationship: warn-only. Arm D annotates an unwired suite and exits 0;
         # it does not gate. This step is what actually runs the suite.
         run: bash release/tools/tests/test_plan_status_terminal_transition.sh
+
+      - name: Corpus-walker parity — three walkers, one dot-segment verdict
+        # Invokes core/deploy/tools/tests/test_corpus_walker_parity.py (a precondition
+        # arm plus a verdict arm over two planted twins).
+        #
+        # What rots without it: three tools walk the same corpus —
+        # compose-portfolio.py::discover_rollups, stamp-node-frontmatter.py::
+        # iter_corpus_files and build-doc-index.py::discover_files. They disagreed on
+        # whether a dot-leading path segment is in the corpus, and the disagreement was
+        # found only by comparing the three against each other; eleven adversarial
+        # reviews reading them one at a time all missed it. They now share one
+        # predicate, and this suite is what keeps them sharing it.
+        #
+        # It is NOT redundant with those tools' own --self-test. Measured against the
+        # fixed tree: remove the shared skip entirely, or narrow it to directories
+        # only, and stamp-node-frontmatter and build-doc-index BOTH still exit 0. Their
+        # self-tests are blind to this axis and catch only an inverted guard, so for
+        # the two behaviour-preserving refactors this suite is the ONLY verifier.
+        #
+        # It asserts agreement AND that the agreed verdict is EXCLUSION. Agreement
+        # alone is satisfied by removing the skip from all three — they would agree, on
+        # inclusion, having destroyed the corpus definition — so the two failures carry
+        # distinct diagnostics: DIVERGENCE when the walkers disagree, and
+        # AGREED-BUT-INCLUDED when they agree and are all wrong.
+        #
+        # Hermetic: builds its own tempfile tree; no network, no gh, no write to the
+        # checkout. Stdlib-only, Python 3.9 floor.
+        #
+        # Arm D relationship: warn-only. Arm D annotates an unwired suite and exits 0;
+        # it does not gate. This step is what actually runs the suite. Note also that
+        # THIS WORKFLOW IS posture=advisory (see the header) and is already red on
+        # main, so its colour cannot be read as a verdict on this suite — the step
+        # makes the assertion RUN, it does not make it gate.
+        run: python3 core/deploy/tools/tests/test_corpus_walker_parity.py
 
   selftest-discovery:
     name: Discovered tool self-tests (Ubuntu)

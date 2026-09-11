@@ -388,7 +388,142 @@ BANNED_JARGON_REGEX = [
     (re.compile(r"\bcollective review CR-", re.IGNORECASE), "collective review CR-X"),
     (re.compile(r"\bgate-blocking\b", re.IGNORECASE), "gate-blocking"),
     (re.compile(r"\breversibility tier\b", re.IGNORECASE), "reversibility tier (standalone phrase)"),
+    # §2.4 row 9. BOUNDED, not the bare substring "reflexive": the substring form
+    # fires on the adverb "reflexively" in v2.05's Section 6a — plain-language
+    # prose of exactly the kind §2.4 asks an author to write — and would turn a
+    # clean corpus red on a false positive. The bounded form returns 0 over that
+    # same 227-note population while still firing on "reflexive", "Reflexive",
+    # "reflexive-pipeline loop" and "reflexive-pipeline self-exemption". Arm G-6
+    # is the executable record of the choice: a later "simplify it to a literal"
+    # refactor turns that arm red instead of silently regressing v2.05.
+    #
+    # KNOWN RESIDUAL — check 10 scans the UNSTRIPPED Section 6a, so this pattern,
+    # and every other pattern in both lists, also fires on text a reader of the
+    # note never sees; the sibling check 12 strips inline links before its own
+    # scan, so the two checks disagree about what counts as prose. Two earlier
+    # revisions of this note each stated the scope and each was wrong — first
+    # "this entry alone", then "three patterns", which holds for a bare link
+    # destination or a heading anchor but not for the HTML comment in its own
+    # example, nor for a link destination written in angle brackets. The reach is
+    # therefore pinned by self-test arm G-8 rather than restated here as a count.
+    # Per surface, as G-8 asserts:
+    #   * inside an HTML comment — every pattern;
+    #   * a link destination in the angle-bracket form, which admits spaces —
+    #     every pattern;
+    #   * a bare link destination or a heading-anchor fragment, neither of which
+    #     can carry a space — only a pattern whose specimen carries none.
+    # Concretely: a bullet carrying "<!-- reflexive: internal marker -->", or
+    # linking to ".../core/rules/reflexive-pipeline-guard.md", yields a finding
+    # whose remedy text asks the author to apply a plain-language replacement to
+    # a string that is not prose. Reachability measured when this row was added:
+    # no tracked file path carried the bare token, 4 of 227 notes carried any
+    # Section 6a markdown link, and 18 of 227 a Section 6a HTML comment.
+    # THE REMEDY IS NOT check 12's link_strip_re, which an earlier revision
+    # named: that expression removes a whole inline link — its reader-visible
+    # TEXT along with its destination, a new false negative — and leaves HTML
+    # comments where they are. A remedy has to strip comments and link
+    # destinations while keeping link text, and any remedy changes the scan
+    # INPUT for every pattern and re-opens the 227-note clean baseline that three
+    # shipped consumers (deploy.sh Check 20, the Stage-13 close gate, Check 48)
+    # currently rely on by construction. The residual is therefore RECORDED here
+    # rather than traded for that — a named limitation, not an oversight, and
+    # one a follow-up must size from G-8's surfaces, not from any one pattern.
+    (re.compile(r"\breflexive\b", re.IGNORECASE), "reflexive"),
 ]
+
+# ── §2.4 ↔ enforcement parity structures (self-test only; zero runtime reads) ──
+#
+# KEY = an enforcing pattern's own identity (a BANNED_JARGON_LITERAL term, or a
+# BANNED_JARGON_REGEX label). VALUE = the VERBATIM §2.4 first-cell text of the row
+# that pattern discharges. The two differ for four rows, which is why this map is
+# explicit rather than fuzzy-matched, and two rows are discharged by two patterns
+# each (row 3 by two literals; row 8 by a literal plus a regex).
+#
+# The join key is the verbatim first-cell text — not a normalized form, and not
+# the row's ordinal position. Normalizing would impose a second parsing grammar on
+# the same human-authored cells that §2.4's own note keeps under operator
+# approval. Ordinal keying would make an UNASSERTED property load-bearing: the
+# lists happen to sit in table order today, but nothing asserts they stay there,
+# so a reordered table would silently re-bind every mapping while parity still
+# reported equal.
+#
+# Self-test Scenario G asserts that this map, the two pattern lists and the LIVE
+# §2.4 table all agree. Nothing at runtime reads it — check 10's loops are
+# unchanged, so the standing behaviour of every shipped consumer is unaffected by
+# construction rather than by inspection.
+BANNED_JARGON_ROW_OF = {
+    # literals
+    "reflexive-pipeline self-exemption": "reflexive-pipeline self-exemption",
+    "mirror byte-identity": "mirror byte-identity",
+    "warn-mode posture": "warn-mode posture / warn-mode initially",
+    "warn-mode initially": "warn-mode posture / warn-mode initially",
+    "cutover effective date": "cutover effective date",
+    "all-or-nothing rule": "all-or-nothing rule",
+    "structurally gate-blocking": "structurally gate-blocking / gate-blocking",
+    "sub-window mutability": "sub-window mutability",
+    "disjoint scope": "disjoint scope",
+    "forward-only": "forward-only",
+    "reflexive-pipeline loop": "reflexive-pipeline loop",
+    # regex labels
+    "schema vX.Y → vX.Z": "schema vX.Y → vX.Z",
+    "collective review CR-X": "collective review CR-X / CR-Y",
+    "gate-blocking": "structurally gate-blocking / gate-blocking",
+    "reversibility tier (standalone phrase)": "reversibility tier (as standalone phrase)",
+    "reflexive": "reflexive",
+}
+
+# §2.4 rows deliberately NOT enforced, each mapped to the reason it is not.
+# EMPTY BY DESIGN today — every published row is enforced. A future row that
+# cannot be mechanically enforced is registered HERE rather than dropped, because
+# a dropped row is invisible and a registered one fails nothing while staying
+# readable to anyone comparing the table against the code. A row appearing in
+# neither this registry nor BANNED_JARGON_ROW_OF fails arm G-3.
+#
+# While the registry is empty, arm G-4 (every reason is a non-empty string) would
+# pass vacuously over zero entries. Arm G-5b is its sensitivity arm: it re-runs
+# G-4's predicate against a synthetic empty-reason entry and REQUIRES it to fail.
+BANNED_JARGON_ROW_EXCLUSIONS: dict[str, str] = {}
+
+# An injectable specimen per enforcing pattern, keyed identically to
+# BANNED_JARGON_ROW_OF. Arm G-7 drives each specimen through the REAL
+# check_note_content() against a synthetic corpus and requires the pattern to
+# fire.
+#
+# Why a specimen rather than the row label — CORRECTED. This note used to say that
+# three row labels are not injectable text. Measured by injecting each row's label
+# verbatim through the real check_note_content(), only one is not: the
+# metavariable row `schema vX.Y → vX.Z`, whose label no real note would contain.
+# The parenthetical in `reversibility tier (as standalone phrase)` and the
+# alternation in `collective review CR-X / CR-Y` do not stop those labels firing
+# their own patterns. So the specimen is a choice rather than a necessity, and it
+# carries a cost the old rationale hid: a specimen is written here, separately
+# from the published row, so a pattern and a specimen written together from a
+# wrong term both pass G-7 while the row goes unenforced. The standard states that
+# residual to authors at §2.4.
+#
+# Why the arm exists at all: G-1..G-5 compare IDENTIFIER SETS, so an edit to a
+# pattern's BODY that preserves its LABEL — "\breversibility tier\b" mistyped to
+# "\breversibility tiers\b", its specimen left as it was — leaves every one of
+# those arms green while that row goes unenforced. That is this file's own defect
+# class one layer up, and G-7 is what closes it.
+BANNED_JARGON_SPECIMEN = {
+    "reflexive-pipeline self-exemption": "reflexive-pipeline self-exemption",
+    "mirror byte-identity": "mirror byte-identity",
+    "warn-mode posture": "warn-mode posture",
+    "warn-mode initially": "warn-mode initially",
+    "cutover effective date": "cutover effective date",
+    "all-or-nothing rule": "all-or-nothing rule",
+    "structurally gate-blocking": "structurally gate-blocking",
+    "sub-window mutability": "sub-window mutability",
+    "disjoint scope": "disjoint scope",
+    "forward-only": "forward-only",
+    "reflexive-pipeline loop": "reflexive-pipeline loop",
+    "schema vX.Y → vX.Z": "schema v1.2 -> v1.3",
+    "collective review CR-X": "collective review CR-7",
+    "gate-blocking": "gate-blocking",
+    "reversibility tier (standalone phrase)": "reversibility tier",
+    "reflexive": "reflexive",
+}
 
 
 # Sentinel prefix for path-resolution-failure findings. main() maps any finding
@@ -1755,6 +1890,48 @@ def _write_note(root: Path, rel: str, plan_link: str | None = None, lead: str = 
     return path
 
 
+def _parse_banned_jargon_rows(text: str) -> list[str]:
+    """Extract §2.4's first-column row labels from release-notes-standard.md.
+
+    Returns the body-row labels in document order, or `[]` when the section or its
+    table cannot be found or does not have the published shape. Callers treat `[]`
+    as a FAILURE, never as a skip: an unparseable table compared against the
+    pattern lists would yield two empty sets, report PARITY, and be
+    byte-indistinguishable from a working check — which is the exact defect class
+    this apparatus exists to remove.
+
+    Labels are returned VERBATIM. No normalization is applied, because the join
+    key is the cell text as a human authored it (see BANNED_JARGON_ROW_OF).
+    """
+    lines = text.splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        if line.strip().startswith("### 2.4"):
+            start = i
+            break
+    if start is None:
+        return []
+    rows: list[str] = []
+    for line in lines[start + 1:]:
+        s = line.strip()
+        if s.startswith("### "):
+            break
+        if not s.startswith("|"):
+            continue
+        cells = [c.strip() for c in s.strip("|").split("|")]
+        if cells:
+            rows.append(cells[0])
+    # The first two rows MUST be the published header and separator. An
+    # unexpected shape is a parse failure rather than a row, so a retitled
+    # column or a reshaped table fails loudly instead of silently shifting
+    # every label by one.
+    if len(rows) < 3 or rows[0] != "Banned in 6a" or not set(rows[1]) <= set("-: "):
+        return []
+    body_rows = rows[2:]
+    # A blank first cell means the table is not the shape assumed above.
+    return [] if any(not r for r in body_rows) else body_rows
+
+
 def _self_test() -> int:
     import tempfile
 
@@ -2308,6 +2485,319 @@ def _self_test() -> int:
             len(disagreed) >= 1,
             f"pre-change model disagrees on {len(disagreed)}/{len(case_names)}: "
             f"{', '.join(disagreed) if disagreed else 'NOTHING — fixture cannot tell the models apart'}")
+
+    # ── Scenario G — §2.4 ↔ check-10 enforcement parity (#6251) ──────────────
+    # release-notes-standard.md §2.4 PUBLISHES the banned-jargon list; check 10
+    # ENFORCES it. Nothing asserted that the two agreed, and they did not: the
+    # bare `reflexive` row was published and unenforced, while §3.2 restated a
+    # term count that had been wrong since the repository's first public commit.
+    # These arms make THAT disagreement unable to recur silently — a §2.4 row with
+    # no enforcing pattern, or a pattern with no §2.4 row, is a red arm. They do
+    # not make every disagreement visible: no arm injects a row's own published
+    # words, so a pattern and a specimen written together from a wrong term pass
+    # (see G-7, and the specimen note beside BANNED_JARGON_SPECIMEN).
+    #
+    # POSTURE, stated only as far as this repository can pin it. What the repository
+    # pins: this suite reaches CI only through
+    # .github/workflows/release-tooling-smoke.yml, which declares
+    # `posture=advisory`, and there only in the `selftest-discovery` job, whose
+    # discovery engine runs it; a failing arm surfaces as that engine's `::error::`
+    # annotation naming this file. Read that annotation, not the job's colour — the
+    # job runs other arms too, so its colour is not this suite's verdict. What the
+    # repository CANNOT pin is whether that job is a required status check on
+    # `main`, and therefore whether a red arm here blocks a merge: that is
+    # branch-protection configuration on the host, it changes without a commit, and
+    # a comment asserting it goes stale silently. Read it live instead —
+    #     gh api repos/:owner/:repo/branches/main/protection \
+    #         --jq '.required_status_checks.contexts'
+    # — and look for that job's display name. The companion path-roster entries
+    # added to that workflow buy REACHABILITY — the arms now run on a PR that edits
+    # §2.4 alone, which they previously did not — and reachability is not
+    # enforcement.
+    #
+    # HISTORY, labelled: that the count §3.2 used to restate was a TABLE-ROW count
+    # rather than a count of enforced literals, and that the divergence was an
+    # original authoring omission rather than an unrecorded deliberate exclusion,
+    # is an INFERENCE from two observations — not a measurement. The repository's
+    # root commit is a squashed import, so no read available here can separate
+    # those two histories. What IS measured: at that root commit the standard's
+    # restated figure already exceeded the number of literals the list actually
+    # held, and §2.4 already carried the bare row that nothing enforced. The
+    # figures themselves are deliberately not reproduced in this comment — a
+    # verbatim copy would read as a fourth holder of the value the card removes,
+    # and would draw a future cascade sweep into editing a historical statement.
+    print("\nlint_release_corpus.py --self-test — §2.4 ↔ check-10 parity (#6251)")
+
+    def _parity(table_rows, mapped_values, exclusions) -> bool:
+        """The AC-2 predicate. Named so G-5a/G-5b can re-run THIS code, not a copy."""
+        return set(table_rows) == set(mapped_values) | set(exclusions)
+
+    def _reasons_ok(exclusions) -> bool:
+        """The G-4 predicate, likewise named so G-5b re-runs it rather than a copy."""
+        return all(isinstance(v, str) and v.strip() for v in exclusions.values())
+
+    def _render_24(rows: list[str]) -> str:
+        """Render row labels back into a §2.4-shaped table, for the anti-vacuity arms."""
+        out = ["### 2.4 Banned-jargon list", "",
+               "| Banned in 6a | Plain-language equivalent for 6a |", "|---|---|"]
+        out += [f"| {r} | (synthetic) |" for r in rows]
+        return "\n".join(out) + "\n\n### 2.5 Next section\n"
+
+    # Resolved BEFORE Scenario G's globals swap below, so the path is the live
+    # repository's standard and not the synthetic corpus root.
+    std_path = WORKSPACE_ROOT / "release" / "references" / "standards" / "release-notes-standard.md"
+    std_text = std_path.read_text(encoding="utf-8") if std_path.is_file() else ""
+    table_rows = _parse_banned_jargon_rows(std_text)
+
+    # G-1 fails CLOSED. An absent or unparseable table is a finding, never a skip:
+    # a skip would compare two empty sets, report parity, and be
+    # byte-indistinguishable from a working check.
+    arm("G-1 the live §2.4 table resolves and parses to a plausible body-row set",
+        len(table_rows) >= 10,
+        f"{len(table_rows)} row(s) parsed from {_rel(std_path) if std_path.is_file() else str(std_path)}"
+        + ("" if std_path.is_file() else " — STANDARD NOT FOUND"))
+
+    pattern_ids = list(BANNED_JARGON_LITERAL) + [label for _, label in BANNED_JARGON_REGEX]
+    unmapped = [p for p in pattern_ids if p not in BANNED_JARGON_ROW_OF]
+    orphan_keys = [k for k in BANNED_JARGON_ROW_OF if k not in pattern_ids]
+    dupe_ids = [p for p in set(pattern_ids) if pattern_ids.count(p) > 1]
+    arm("G-2 every enforcing pattern has exactly one row-map key, and the map has no orphan key",
+        not unmapped and not orphan_keys and not dupe_ids,
+        f"{len(pattern_ids)} pattern(s) ({len(BANNED_JARGON_LITERAL)} literal + "
+        f"{len(BANNED_JARGON_REGEX)} regex) -> {len(BANNED_JARGON_ROW_OF)} key(s); "
+        + (f"unmapped={unmapped} orphan={orphan_keys} duplicate={dupe_ids}"
+           if (unmapped or orphan_keys or dupe_ids) else "no unmapped, no orphan, no duplicate"))
+
+    mapped_rows = set(BANNED_JARGON_ROW_OF.values())
+    missing_pattern = sorted(set(table_rows) - mapped_rows - set(BANNED_JARGON_ROW_EXCLUSIONS))
+    missing_row = sorted((mapped_rows | set(BANNED_JARGON_ROW_EXCLUSIONS)) - set(table_rows))
+    arm("G-3 every §2.4 row is mapped to an enforcing pattern or registered-excluded, and every mapped row exists in §2.4",
+        _parity(table_rows, mapped_rows, BANNED_JARGON_ROW_EXCLUSIONS),
+        f"{len(table_rows)} table row(s) == {len(mapped_rows)} mapped + "
+        f"{len(BANNED_JARGON_ROW_EXCLUSIONS)} excluded; "
+        + (f"PUBLISHED-BUT-UNENFORCED={missing_pattern} MAPPED-BUT-NOT-IN-TABLE={missing_row}"
+           if (missing_pattern or missing_row) else "sets equal"))
+
+    arm("G-4 every registered exclusion carries a non-empty reason",
+        _reasons_ok(BANNED_JARGON_ROW_EXCLUSIONS),
+        f"{len(BANNED_JARGON_ROW_EXCLUSIONS)} exclusion(s) — vacuous while empty by "
+        "design; G-5b is this arm's sensitivity control")
+
+    # G-5a — anti-vacuity for G-3, driven through the REAL parser so the whole
+    # parse->compare pipeline is what gets discriminated, not just the comparison.
+    round_trip = _parse_banned_jargon_rows(_render_24(table_rows))
+    # The added label MUST NOT already be a row, or the "+1" table is +1 LINE and
+    # +0 SET, the comparison finds the sets equal, and the anti-vacuity arm fails
+    # for a reason that has nothing to do with the property it tests. Collision is
+    # not hypothetical: it is exactly what a scratch copy of §2.4 carrying a
+    # synthetic row — the AC-2 verification procedure — produces.
+    _sentinel = "synthetic-unenforced-row"
+    while _sentinel in table_rows:
+        _sentinel += "-x"
+    synthetic_extra = _parse_banned_jargon_rows(_render_24(table_rows + [_sentinel]))
+    # Graded against a map derived from the round-trip rows THEMSELVES, not against
+    # the shipped map. The property under test is that the parse->compare pipeline
+    # notices one added row; coupling it to the shipped map would make this arm fail
+    # a second time whenever G-3 already failed, reporting an artifact beside the
+    # finding instead of the finding alone.
+    self_map = {r: r for r in round_trip}
+    arm("G-5a anti-vacuity — the parse->compare pipeline returns UNEQUAL on one added row",
+        len(round_trip) == len(table_rows)
+        and _parity(round_trip, self_map.values(), {})
+        and not _parity(synthetic_extra, self_map.values(), {}),
+        f"round-trip of the real {len(round_trip)} row(s) -> equal (the renderer does not "
+        f"manufacture the difference); those same rows +1 synthetic ({len(synthetic_extra)}) "
+        "-> UNEQUAL, so G-3's predicate discriminates a published-but-unmapped row")
+
+    # G-5b — anti-vacuity for G-3 in the other direction, and the only exercise
+    # BANNED_JARGON_ROW_EXCLUSIONS gets while it ships empty.
+    short_map = {k: v for k, v in list(BANNED_JARGON_ROW_OF.items())[1:]
+                 if v != BANNED_JARGON_ROW_OF[list(BANNED_JARGON_ROW_OF)[0]]}
+    arm("G-5b anti-vacuity — a map missing a row fails G-3, and an empty-reason exclusion fails G-4",
+        not _parity(table_rows, set(short_map.values()), BANNED_JARGON_ROW_EXCLUSIONS)
+        and not _reasons_ok({"synthetic-row": ""})
+        and _reasons_ok({"synthetic-row": "a stated reason"}),
+        "dropping one mapped row breaks parity; an empty reason string fails the "
+        "reason predicate while a stated one passes")
+
+    # G-6 — the executable record of the bounded-form decision (D1). A later
+    # "simplify it to a literal substring" refactor turns this red instead of
+    # silently re-firing on v2.05's adverb.
+    _reflexive_pat = next((p for p, lab in BANNED_JARGON_REGEX if lab == "reflexive"), None)
+    arm("G-6 the row-9 pattern is BOUNDED — matches 'reflexive', does not match 'reflexively'",
+        _reflexive_pat is not None
+        and bool(_reflexive_pat.search("The reflexive case applies."))
+        and not _reflexive_pat.search("reflexively perpetuating an existing structure"),
+        "bare term matches; the adverb does not — the false positive that the "
+        "substring form would have produced on a live note"
+        if _reflexive_pat is not None else "row-9 pattern ABSENT from BANNED_JARGON_REGEX")
+
+    # G-7 — behavioural parity. G-1..G-5 compare IDENTIFIER sets, so a pattern
+    # whose BODY is broken while its LABEL is intact leaves them all green. This
+    # arm drives one specimen per pattern through the REAL check_note_content()
+    # against a synthetic corpus — not a re-implementation of its loops — so a
+    # pattern that no longer fires on its own specimen, a broken body under an
+    # intact label, turns the suite red. Its reach stops at the specimen: the
+    # specimen is written in this file, separately from the published §2.4 row, so
+    # a pattern and a specimen written together from a wrong term pass while that
+    # row goes unenforced. §2.4 of the standard states that residual to authors.
+    spec_unmapped = sorted(set(BANNED_JARGON_ROW_OF) ^ set(BANNED_JARGON_SPECIMEN))
+    arm("G-7a every enforcing pattern carries an injectable specimen",
+        not spec_unmapped,
+        f"{len(BANNED_JARGON_SPECIMEN)} specimen(s) for {len(BANNED_JARGON_ROW_OF)} "
+        f"pattern(s); " + (f"key mismatch={spec_unmapped}" if spec_unmapped else "keys agree"))
+
+    with tempfile.TemporaryDirectory() as _gtmp:
+        g_root = Path(_gtmp) / "G"
+        g_notes = g_root / "release" / "releases" / "notes"
+        g_plans = g_root / "release" / "releases" / "plans"
+        g_plans.mkdir(parents=True, exist_ok=True)
+        _write(g_plans, "v4/v4.02_RELEASE_PLAN.md", "widget-two")
+        g_link = "release/releases/plans/v4/v4.02_RELEASE_PLAN.md"
+        g_paths: dict[str, Path] = {}
+        for _i, _key in enumerate(BANNED_JARGON_ROW_OF):
+            _spec = BANNED_JARGON_SPECIMEN.get(_key, "")
+            _p = g_notes / "v4" / f"v4.{20 + _i}_RELEASE_NOTES.md"
+            _p.parent.mkdir(parents=True, exist_ok=True)
+            _p.write_text(
+                f"---\ntype: release-notes\nlinks:\n  plan: {g_link}\n---\n"
+                "\n# Fixture note\n\n## What changed for everyone\n\n"
+                f"- A fixture bullet carrying {_spec} inline. Why it matters: the "
+                "arm needs a conformant body.\n",
+                encoding="utf-8")
+            g_paths[_key] = _p
+
+        _g_saved = {k: globals()[k] for k in ("WORKSPACE_ROOT", "NOTES_DIR", "PLANS_DIR")}
+        try:
+            globals().update(WORKSPACE_ROOT=g_root, NOTES_DIR=g_notes, PLANS_DIR=g_plans)
+            g_findings = check_note_content()
+            g_rel = {k: _rel(v) for k, v in g_paths.items()}
+        finally:
+            globals().update(_g_saved)
+
+        silent = [k for k in BANNED_JARGON_ROW_OF
+                  if fires(g_findings, "NOTE-BANNED-JARGON", g_rel[k]) < 1
+                  or f"'{k}'" not in " ".join(
+                      f for f in blocking(g_findings)
+                      if f.startswith("NOTE-BANNED-JARGON") and g_rel[k] in f)]
+        arm("G-7b every enforcing pattern FIRES on its own specimen through the real check",
+            not silent,
+            f"{len(BANNED_JARGON_ROW_OF) - len(silent)}/{len(BANNED_JARGON_ROW_OF)} "
+            "pattern(s) fired; "
+            + (f"SILENT ON ITS OWN SPECIMEN: {silent}" if silent
+               else "every pattern fires on its own specimen (a row's published "
+                    "words are not injected — see §2.4)"))
+
+        # G-7c — the specificity control for G-7b. A clean fixture body carrying
+        # no §2.4 term MUST produce no banned-jargon finding; without it, G-7b
+        # would pass just as well against a check that flagged everything.
+        _clean = g_notes / "v4" / "v4.19_RELEASE_NOTES.md"
+        _clean.write_text(
+            f"---\ntype: release-notes\nlinks:\n  plan: {g_link}\n---\n"
+            "\n# Fixture note\n\n## What changed for everyone\n\n"
+            "- A fixture bullet carrying ordinary prose. Why it matters: the arm "
+            "needs a conformant body.\n",
+            encoding="utf-8")
+        try:
+            globals().update(WORKSPACE_ROOT=g_root, NOTES_DIR=g_notes, PLANS_DIR=g_plans)
+            g_findings2 = check_note_content()
+            clean_rel = _rel(_clean)
+        finally:
+            globals().update(_g_saved)
+        arm("G-7c specificity — a fixture carrying no §2.4 term produces no banned-jargon finding",
+            fires(g_findings2, "NOTE-BANNED-JARGON", clean_rel) == 0,
+            f"{fires(g_findings2, 'NOTE-BANNED-JARGON', clean_rel)} finding(s) on a "
+            "clean body, over a corpus where the other fixtures demonstrably fire")
+
+    # G-8 — the KNOWN RESIDUAL recorded beside the row-9 pattern, made executable.
+    # Check 10 scans the UNSTRIPPED Section 6a, so it also reads text a reader of the
+    # note never sees. Two earlier revisions of that note each restated how far that
+    # reaches, and each was wrong; this arm pins it instead, per surface, by driving
+    # every pattern's specimen through the REAL check_note_content() from four
+    # non-prose surfaces. It is a TRIPWIRE for a recorded limitation, not an
+    # endorsement of it: it goes red when the residual CHANGES — including when
+    # check 10 is fixed — and the remedy then is to re-measure, rewrite that note,
+    # and re-point or retire this arm. Prose is G-7's surface, not this one's.
+    def _g8_hyphenate(s: str) -> str:
+        return re.sub(r"\s+", "-", s.strip())
+
+    def _g8_slug(s: str) -> str:
+        """A heading-anchor slug: lower-cased, punctuation dropped, spaces to hyphens."""
+        return re.sub(r"[^\w\- ]", "", s.lower()).replace(" ", "-")
+
+    g8_surfaces = {
+        "html-comment": lambda t: f"<!-- {t} -->",
+        "angle-bracket link destination": lambda t: f"[the rule](<../core/rules/{t}.md>)",
+        "bare link destination": lambda t: f"[the rule](../core/rules/{_g8_hyphenate(t)}.md)",
+        "heading-anchor fragment": lambda t: f"[below](#{_g8_slug(t)})",
+    }
+    g8_keys = set(BANNED_JARGON_ROW_OF)
+    g8_fired: dict[str, set[str]] = {}
+    g8_control: dict[str, int] = {}
+    with tempfile.TemporaryDirectory() as _g8tmp:
+        _g8_saved = {k: globals()[k] for k in ("WORKSPACE_ROOT", "NOTES_DIR", "PLANS_DIR")}
+        for _si, (_surface, _render) in enumerate(g8_surfaces.items()):
+            s_root = Path(_g8tmp) / f"S{_si}"
+            s_notes = s_root / "release" / "releases" / "notes"
+            s_plans = s_root / "release" / "releases" / "plans"
+            s_plans.mkdir(parents=True, exist_ok=True)
+            _write(s_plans, "v4/v4.02_RELEASE_PLAN.md", "widget-two")
+            s_link = "release/releases/plans/v4/v4.02_RELEASE_PLAN.md"
+
+            def _s_note(rel_name: str, carried: str) -> Path:
+                p = s_notes / "v4" / rel_name
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(
+                    f"---\ntype: release-notes\nlinks:\n  plan: {s_link}\n---\n"
+                    "\n# Fixture note\n\n## What changed for everyone\n\n"
+                    f"- A fixture bullet in plain words. {carried} Why it matters: "
+                    "the arm needs a conformant body.\n",
+                    encoding="utf-8")
+                return p
+
+            s_paths = {k: _s_note(f"v4.{20 + _i}_RELEASE_NOTES.md",
+                                  _render(BANNED_JARGON_SPECIMEN.get(k, "")))
+                       for _i, k in enumerate(BANNED_JARGON_ROW_OF)}
+            s_clean = _s_note("v4.19_RELEASE_NOTES.md", _render("an ordinary aside"))
+            try:
+                globals().update(WORKSPACE_ROOT=s_root, NOTES_DIR=s_notes, PLANS_DIR=s_plans)
+                s_findings = check_note_content()
+                s_rel = {k: _rel(v) for k, v in s_paths.items()}
+                s_clean_rel = _rel(s_clean)
+            finally:
+                globals().update(_g8_saved)
+            g8_fired[_surface] = {
+                k for k in g8_keys
+                if f"'{k}'" in " ".join(f for f in blocking(s_findings)
+                                        if f.startswith("NOTE-BANNED-JARGON") and s_rel[k] in f)}
+            g8_control[_surface] = fires(s_findings, "NOTE-BANNED-JARGON", s_clean_rel)
+
+    g8_ws_free = {k for k in g8_keys if not re.search(r"\s", BANNED_JARGON_SPECIMEN.get(k, ""))}
+
+    def _g8_detail(surface: str, expected: set[str]) -> str:
+        got = g8_fired.get(surface, set())
+        if got == expected:
+            return f"{len(got)}/{len(g8_keys)} pattern(s) fired, as the row-9 note records"
+        return (f"{len(got)}/{len(g8_keys)} fired; FIRING BUT NOT RECORDED={sorted(got - expected)} "
+                f"RECORDED BUT NOT FIRING={sorted(expected - got)} — the residual changed: "
+                "re-measure, rewrite the row-9 KNOWN RESIDUAL note, re-point this arm")
+
+    arm("G-8a KNOWN RESIDUAL tripwire — from inside an HTML comment in Section 6a, every pattern fires",
+        g8_fired.get("html-comment") == g8_keys, _g8_detail("html-comment", g8_keys))
+    arm("G-8b KNOWN RESIDUAL tripwire — from an angle-bracket link destination, every pattern fires",
+        g8_fired.get("angle-bracket link destination") == g8_keys,
+        _g8_detail("angle-bracket link destination", g8_keys))
+    arm("G-8c KNOWN RESIDUAL tripwire — from a bare link destination or a heading-anchor fragment, "
+        "exactly the patterns whose specimen carries no whitespace fire",
+        g8_fired.get("bare link destination") == g8_ws_free
+        and g8_fired.get("heading-anchor fragment") == g8_ws_free,
+        f"whitespace-free specimens {sorted(g8_ws_free)}; bare destination: "
+        + _g8_detail("bare link destination", g8_ws_free)
+        + "; heading anchor: " + _g8_detail("heading-anchor fragment", g8_ws_free))
+    arm("G-8d specificity — the same four surfaces carrying no §2.4 term produce no banned-jargon finding",
+        len(g8_control) == len(g8_surfaces) and all(n == 0 for n in g8_control.values()),
+        "; ".join(f"{s}: {n}" for s, n in g8_control.items())
+        + " finding(s) on a surface carrying an ordinary aside")
 
     print(f"\n{checked} arm(s) run, {len(failures)} failure(s)"
           + (f": {failures}" if failures else ""))

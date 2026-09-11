@@ -20,7 +20,8 @@ run only inside the Stage-12 execution window, in-workspace, by the operator. Th
 authored at Stage 6 delivers the LOGIC; the run is not performed here.
 
 WHAT IT EMITS (forward-safe, additive frontmatter only — reversibility CHEAP):
-  * `BELONGS_TO`  — target = the file's project (the first corpus-root path segment).
+  * `BELONGS_TO`  — target = the file's project (the first corpus-root path segment,
+                    when the file has a project directory above it).
                     ALWAYS recoverable (the folder path IS the project binding), so every
                     non-excluded, project-resolvable file gets one. This is the always-safe
                     edge the design guarantees.
@@ -249,7 +250,9 @@ def plan_edges(path, root, scope):
     project = _project_of(rel_path)
     if not project:
         plan.disposition = "orphan"
-        plan.reason = "no resolvable project (empty corpus-root segment)"
+        plan.reason = ("no edges planned; no resolvable project (file sits at the "
+                       "corpus root — never stamped, so any edge from it would be "
+                       "unresolvable)")
         return plan
 
     already = _existing_edge_targets(path)
@@ -484,6 +487,61 @@ def _self_test():
             "# Sidecar metadata for: call.txt\nsource_inputs: TR-099\n", encoding="utf-8")
         pg = plan_edges(f_g, root, "active")
         assert any(e["type"] == "DEPENDS_ON" and e["target"] == "TR-099" for e in pg.edges), pg.edges
+
+        # (i) depth-1 corpus-root file -> NO edges at all. A file cannot belong to
+        # itself, and a file the node tool never stamps cannot source ANY resolvable
+        # edge. The whole-plan contract is DECIDED (see _project_of's docstring), so
+        # it is asserted here rather than left as a side effect of the early return.
+        f_i = root / "CLAUDE.md"
+        f_i.write_text("---\ntitle: anchor\n---\n", encoding="utf-8")
+        pi = plan_edges(f_i, root, "active")
+        assert pi.disposition == "orphan", pi.disposition
+        assert not pi.edges, pi.edges
+        assert not any(e["target"] == f_i.name for e in pi.edges), pi.edges  # AC-1's method
+        assert pi.reason.startswith("no edges planned;"), pi.reason
+        assert _project_of(f_i.relative_to(root)) == "", "depth-1 must resolve no project"
+
+        # (i) CONTRACT PIN -- a depth-1 file CARRYING provenance anchors plans ZERO
+        # edges, not "everything except BELONGS_TO". This arm is why the bare fixture
+        # above is not enough: measured RED at HEAD, green under whole-plan
+        # suppression, RED under either narrowed variant. Without it, this spec and a
+        # BELONGS_TO-only spec are indistinguishable by test.
+        f_ip = root / "ANCHOR.md"
+        f_ip.write_text("---\ntitle: a\nsource_inputs: [TR-001, MSG-002]\n"
+                        "supersedes: OLD-DOC\n---\n", encoding="utf-8")
+        pip = plan_edges(f_ip, root, "active")
+        assert not pip.edges, ("depth-1 provenance edges must be suppressed too", pip.edges)
+        assert pip.disposition == "orphan", pip.disposition
+        # PREMISE GUARD for that contract: it is sound only while a project-less file is
+        # never a node. Turns RED if classify() ever learns to stamp one -- at which
+        # point the whole-plan contract must be revisited, not silently kept.
+        assert _node.classify(f_ip, root, "active").is_orphan, \
+            "depth-1 file is now stamped -- revisit the whole-plan suppression contract"
+
+        # (i) CONTROL (AC-2), self-contained so it cannot depend on case ordering: a
+        # depth-2 file still plans its correct BELONGS_TO, and a depth-3 file carrying
+        # the SAME anchors keeps all four edges -- proving the subject arms measure
+        # suppression-of-the-unresolvable, not blanket suppression.
+        f_i2 = root / "Ctrl" / "01-Governance" / "PROJECT.md"
+        f_i2.parent.mkdir(parents=True)
+        f_i2.write_text("---\ntitle: ctrl\n---\n", encoding="utf-8")
+        pi2 = plan_edges(f_i2, root, "active")
+        assert any(e["type"] == "BELONGS_TO" and e["target"] == "Ctrl" for e in pi2.edges), pi2.edges
+        assert pi2.disposition != "orphan", pi2.disposition
+        f_i3 = root / "Ctrl" / "08-Generated" / "d.md"
+        f_i3.parent.mkdir(parents=True)
+        f_i3.write_text("---\ntitle: d\nsource_inputs: [TR-001, MSG-002]\n"
+                        "supersedes: OLD-DOC\n---\n", encoding="utf-8")
+        pi3 = plan_edges(f_i3, root, "active")
+        assert sorted(e["type"] for e in pi3.edges) == \
+            ["BELONGS_TO", "DEPENDS_ON", "DEPENDS_ON", "SUPERSEDES"], pi3.edges
+        # (i) NEGATIVE CONTROL: a depth-2 file whose basename equals its project
+        # directory keeps its binding (a name-identity guard would wrongly suppress it).
+        f_i4 = root / "Bee.md" / "Bee.md"
+        f_i4.parent.mkdir(parents=True)
+        f_i4.write_text("---\ntitle: b\n---\n", encoding="utf-8")
+        pi4 = plan_edges(f_i4, root, "active")
+        assert any(e["type"] == "BELONGS_TO" and e["target"] == "Bee.md" for e in pi4.edges), pi4.edges
 
         # (h) emit is additive + idempotent on a real write into a temp file.
         emit_edges(pa)  # writes BELONGS_TO into f_a

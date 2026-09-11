@@ -9369,7 +9369,8 @@ cmd_check() {
   # ─── Check 20: Note-content lint (release-notes-standard.md §3.2) ──
   # Lints user-facing release notes against the new-standard Section 6a rules:
   #   9  — Section 6a present (>=1 bullet OR 'No user-visible behavior changes' placeholder)
-  #   10 — §2.4 banned-jargon scan (14 literal + 4 regex deny-list patterns)
+  #   10 — §2.4 banned-jargon scan (the enforced pattern set lives in lint_release_corpus.py
+  #        and is deliberately not counted here; its self-test reports the live count)
   #   11 — 'Why it matters:' beat per bullet OR <!-- impact:foundational --> marker
   #   12 — No raw 'pmo-platform/' or '.claude/' paths in bullet bodies (inline markdown links OK)
   # Forward-only from the lint cutover — pre-cutover notes exempt via
