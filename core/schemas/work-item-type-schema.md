@@ -449,7 +449,7 @@ This doc therefore **does not** define Story / Bug / WBS-task field lists — th
 | **C11** | `guards_transition` + `condition` on a **gate** check | Any of the 3 condition arms | Gate-only for `condition` (F4); `guards_transition` is governed by the §1.2.1 D-A requiredness rule, which binds **all three** sub-objects; no gating cycle per §7.6 | *(none)* | **GAP — no runner.** `guards_transition` and `condition` are both unread, so no cycle detector can exist |
 | **C12** | Whether the pack declares kinds, and how many | ≥1 for an archetype; `kit_class`-selected for a kit | `PACK-P07`'s two-level rule | `PACK-P07` | Check 75, warn |
 
-**Deliberately unbounded inside C1 and C2** — no minimum check count, no required topic, no L1/L2/L3 ratio, no upper bound. That is the over-constraint defense, and it is a decision rather than an omission: a Kanban card's readiness bar is legitimately shorter than a Scrum story's.
+**Deliberately unbounded inside C1 and C2** — no minimum check count, no required topic, no L1/L2/L3 ratio, no upper bound. That is the over-constraint defense, and it is a decision rather than an omission: a Kanban card's readiness bar is legitimately shorter than a Scrum story's. **Unbounded is not unguided, and the guidance has a home:** what good looks like inside that space is stated by [`../standards/work-item-authoring-standard.md`](../standards/work-item-authoring-standard.md), which is authoring guidance and not a bound — it names no kind, states no minimum, and adds nothing this table would have to enforce.
 
 #### 1.5.3 The fixed surface
 
