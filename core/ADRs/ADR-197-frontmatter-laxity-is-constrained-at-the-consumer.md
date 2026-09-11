@@ -1,5 +1,5 @@
 ---
-title: "ADR-195 — Frontmatter laxity is frozen at the shared reader and constrained at the consumer that declares a shape"
+title: "ADR-197 — Frontmatter laxity is frozen at the shared reader and constrained at the consumer that declares a shape"
 status: Accepted
 date: 2026-09-11
 release: deploy-tools-and-tests-batch
@@ -16,11 +16,13 @@ source_observations:
   - "The measured key denominator includes prose- and comment-derived pseudo-keys, because any flush-left line containing a colon is admitted as a key. That contaminant does not change the decision, but an unstated contaminant in a measured basis is re-derived from scratch by the next reader."
 ---
 
-# ADR-195 — Frontmatter laxity is frozen at the shared reader and constrained at the consumer that declares a shape
+# ADR-197 — Frontmatter laxity is frozen at the shared reader and constrained at the consumer that declares a shape
 
 ## Status
 
 Accepted. Ratified at the Collective Review scope-lock for the `deploy-tools-and-tests-batch` release and built in that release's Stage 6.
+
+**Numbering provenance — `195 → 197`.** Held **ADR-195** branch-local; renumbered to **ADR-197** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 195. In-release citations that read "ADR-195" denote this record.
 
 ## Context
 
