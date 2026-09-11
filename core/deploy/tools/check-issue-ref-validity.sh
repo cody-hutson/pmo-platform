@@ -750,7 +750,10 @@ findings_of() {
 }
 
 # The line the report-text equivalence claim is cut at, and the marker that
-# replaces everything below it.
+# replaces everything below it. Both awk programs below READ this constant rather
+# than repeating the literal, so the cut is single-sourced and the two programs
+# cannot drift apart from each other; the value is consumed as an awk DYNAMIC
+# REGEX (`$0 ~ cut`), so it is an ERE, not a grep BRE.
 ADVISORY_CUT_LINE='^### Categories$'
 ADVISORY_CUT_MARKER='@@ADVISORY-BLOCK-EXCLUDED-FROM-EQUIVALENCE@@'
 
@@ -837,9 +840,9 @@ ADVISORY_CUT_MARKER='@@ADVISORY-BLOCK-EXCLUDED-FROM-EQUIVALENCE@@'
 # the hazard rather than relocating it — the same SIGPIPE-REWRITE reasoning the
 # header records for the four pipelines rewritten at extraction.
 normalize_report() {
-  awk -v marker="$ADVISORY_CUT_MARKER" '
+  awk -v marker="$ADVISORY_CUT_MARKER" -v cut="$ADVISORY_CUT_LINE" '
     past      { next }
-    /^### Categories$/ { print marker; past = 1; next }
+    $0 ~ cut  { print marker; past = 1; next }
               { print }
   ' "$1" > "$2"
 }
@@ -847,9 +850,9 @@ normalize_report() {
 # The complement: the excluded region itself, cut line included. Used only by the
 # inertness arm, which is the thing that keeps the exclusion honest.
 advisory_block_of() {
-  awk '
+  awk -v cut="$ADVISORY_CUT_LINE" '
     inblk     { print }
-    /^### Categories$/ { if (!inblk) { print; inblk = 1 } }
+    $0 ~ cut  { if (!inblk) { print; inblk = 1 } }
   ' "$1" > "$2"
 }
 
