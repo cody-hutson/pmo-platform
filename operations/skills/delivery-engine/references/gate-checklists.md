@@ -1,3 +1,13 @@
+<!-- reference-durability: allow-link -->
+<!-- Declared because: the Class L links in the two FC-4 gate footers below target
+     gate-definitions.md, a sibling reference file inside this same skill package. The
+     target ships, deploys and moves with this file, so the reference cannot rot
+     independently of it, and the sibling boundary note forbids restating the admission
+     predicate here as an inline summary. The two siblings that carry the same links,
+     gate-definitions.md and SKILL.md, each already declare this class. The marker is
+     bare because the gate matches the allow token followed only by whitespace; this
+     rationale therefore sits alongside it rather than inside it. -->
+
 # Gate Checklists
 
 ## Purpose
