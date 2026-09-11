@@ -1,0 +1,80 @@
+# FIXTURE — the SENSITIVITY arm of the content-completeness check. Not a shipped pack.
+#
+# WHY THIS PAIR EXISTS AT ALL, rather than reusing the grammar check's fixtures. Every
+# declaration site in `core/deploy/tests/fixtures/packs/*-kit/` is array-ABSENT — the
+# CONFORMING kit included, which declares all four tables and writes none of the four
+# arrays. A content rule run over that pair returns four findings on BOTH of its arms,
+# so neither arm discriminates. The grammar check's fixtures assert grammar; asserting
+# content needs its own population, and this is it.
+#
+# WHY A SUBDIRECTORY, not two more top-level `*-kit` dirs. `--pack-root` accepts a
+# whole PARENT and enumerates `<root>/<child>/pack.toml`. Two top-level siblings would
+# therefore be pulled into any whole-parent `--validate-packs` run and change its
+# result set. A subdirectory holding no `pack.toml` of its own is skipped by that
+# enumeration, so "the grammar check's fixture reading is unmoved" is a property of
+# the LAYOUT rather than of the fact that nobody currently runs that form.
+#
+# WHAT THIS FIXTURE ASSERTS. Exactly ONE planted silence, and nothing else wrong:
+# `[kinds.criteria.gate]` is present and versioned but writes NO `checks` array. Every
+# other surface takes a position — two by writing entries, one by writing a reasoned
+# empty set. So the expected result is exactly one finding carrying exactly the id
+# `PACKC-C01`, which is what lets the check's control arm assert an EQUALITY on the
+# rule string rather than the weaker "some finding fired".
+#
+# It is also clean under all 20 `PACK-*` grammar rules, so a whole-parent invocation
+# can never attribute a grammar rejection to this file and read it as a content result.
+
+[meta]
+pack_id = "cc-silent"
+pack_version = "0.1.0"
+applies_to = "*"
+role = "kit"
+kit_class = "work-item"
+
+[[kinds]]
+kind_id = "silent-widget"
+display_name = "Silent Widget"
+base = "Work Item"
+axis1_state_machine = "inherit"
+
+[kinds.methodology_projection]
+archetype = "*"
+general_level = "Work Item"
+projects_as = "Silent Widget"
+
+[kinds.fields]
+core = "inherit"
+source = "FIXTURE — a reasoned empty set. This fixture's practice basis is synthetic; the point of the block-level source is that a position WAS taken on this surface, so no finding is owed here."
+kind_specific = []
+
+[kinds.criteria.readiness]
+criteria_version = "0.1.0"
+checks = [
+  { id = "cc-silent-dor", statement = "A readiness statement, deliberately carrying a comma so an entry reader that split on every comma would mis-count this array.", level = "L2", automatable = false, source = "FIXTURE — synthetic practice basis" },
+]
+
+[kinds.criteria.done]
+criteria_version = "0.1.0"
+checks = [
+  { id = "cc-silent-dod", statement = "A done statement.", level = "L1", automatable = true, source = "FIXTURE — synthetic practice basis" },
+]
+
+# THE PLANTED SILENCE. The table is present and versioned; the `checks` array is not
+# written. That is the finding: an absent array is a surface on which this kind has
+# taken no position, and a block-level `source` here would NOT discharge it — half the
+# reasoned-empty-set artifact is not the artifact.
+[kinds.criteria.gate]
+criteria_version = "0.1.0"
+
+[kinds.relationships]
+allowed_types = ["BELONGS_TO", "RELATES_TO"]
+
+[kinds.lifecycle_behavior]
+timeboxed = "gate"
+continuous = "gate"
+phased = "gate"
+
+[[labels]]
+group = "category"
+name = "type:silent-widget"
+projects_kind = "silent-widget"

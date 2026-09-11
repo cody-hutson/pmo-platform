@@ -5,7 +5,7 @@
 
 [meta]
 pack_id = "kanban"
-pack_version = "0.2.0"
+pack_version = "0.3.0"
 schema_version = 1              # MANIFEST meta key — NOT the meta-schema grammar version
 applies_to = "Kanban"          # byte-identical archetype join key (§1.1)
 role = "archetype"
@@ -39,18 +39,21 @@ checks = [
   { id = "kanban-dod-flow-record-complete", statement = "The service can state when this card passed its commitment point and when it reached its delivery point, from whatever record that service keeps, so the card's lead time enters the flow distribution the service measures.", level = "L3", automatable = false, source = "Kanban Method (Anderson 2010) — core practice 3, Manage flow (lead time and throughput measurement); the Method obliges the system to measure flow and names no carrier for the record, so the per-card form asks only that the service be able to state the two instants" },
 ]
 [kinds.criteria.gate]
-criteria_version = "0.2.0"
+criteria_version = "0.3.0"
 # WIP set-aggregate pull-limit gate — the continuous lifecycle's signature gate
-# (§1.2.1 Arm 2). SHIPPED AS A STUB, not a live condition: a `set-aggregate` condition
-# REQUIRES both `scope_ref` (when scope = "board") and `on_unresolved` (§1.2.1 Arm 2),
-# and `scope_ref` for a board is inherently instance-local (a Workstream-class entity
-# id — K4), so it cannot be sourced into a git-tracked best-practice default. Populating
-# a live `condition` here would also declare the first pack-level gate condition, which
-# per ADR-039 begins the type-pack gate surface's cross toward EXPENSIVE reversibility —
-# deferred until a deployment (K4) or the consumer read-refit wires it. The resolver is
-# consumer-side (deferred consumer read-refit slice), NOT built here.
-source = "Kanban Method (Anderson 2010) — reasoned empty set. Core practice 2, Limit work in progress, is the Method's signature control, and it is a cap on a column of one board sized to the capacity of the service running it: the Method prescribes that the limit exist and leaves its number to that service. A corpus-wide default therefore has a concept to name and no number to carry, so this gate ships declared and unbound rather than carrying a cap no body of practice could ground. The emptiness is the practice basis, not a placeholder."
-checks = []                                     # <fill per Kanban Method + §1.2.1 Arm-2 required fields: guards_transition, condition{kind=set-aggregate, set{scope, scope_ref, status_filter, edge}, aggregate, comparator, limit|limit_ref, on_unresolved}. Class-of-service = a kind_filter on this set-aggregate count (§1.2.1 line 126), NOT a separate key.>
+# (§1.2.1 Arm 2). BOUND. `scope = "parent"` resolves the counted population from this
+# card's own BELONGS_TO container, so no `scope_ref` is carried and no instance-local
+# id is hardcoded (§1.2.1 Arm 2: `scope_ref` is REQUIRED only when scope = "board").
+# The cap is a `limit_ref` into the [[controls]] declaration below, which carries NO
+# default: the Method prescribes that a limit exist and leaves its number to the
+# service running the board. `on_unresolved = "WARN-HEALTH"` therefore surfaces an
+# unset cap rather than blocking every pull on a deployment that has not set one.
+# Class-of-service is the `kind_filter` on this set-aggregate count (§1.2.1 Arm 2),
+# NOT a separate key and NOT a label; an expedite lane is its own check + limit.
+# The resolver is consumer-side and is NOT built here.
+checks = [
+  { id = "kanban-gate-wip-pull-limit", statement = "Cannot pull this card into in-progress while the number of cards already in-progress in this card's container has reached that container's WIP limit.", level = "L2", automatable = true, source = "Kanban Method (Anderson 2010) — core practice 2, Limit work in progress", guards_transition = "ready -> in-progress", condition = { kind = "set-aggregate", set = { scope = "parent", kind_filter = ["card"], status_filter = ["in-progress"], edge = "BELONGS_TO" }, aggregate = "count", comparator = "<", limit_ref = "kanban-wip-limit-in-progress", on_unresolved = "WARN-HEALTH" } },
+]
 [kinds.relationships]
 allowed_types = ["BELONGS_TO", "DEPENDS_ON", "BLOCKS", "RELATES_TO"]
 [kinds.lifecycle_behavior]
@@ -69,3 +72,19 @@ color = "0052cc"
 projects_kind = "card"
 description = "Kanban kind: a unit of work flowing across the board"
 applied_at = "Intake (Stage 1)"
+
+# Kanban control contributions (§1.1.2). The pull-limit cap the gate above resolves via
+# `limit_ref`. Declared, deliberately, with NO `default`: the Method grounds the
+# EXISTENCE of the limit, never its number, so a corpus-wide default would be an
+# invented value. An unset cap therefore reaches the gate's `on_unresolved`.
+[[controls]]
+control_id   = "kanban-wip-limit-in-progress"
+display_name = "WIP Limit — In Progress"
+description  = "The cap on cards concurrently in the in-progress state of one container; the threshold the pull-limit gate compares against."
+source       = "Kanban Method (Anderson 2010) — core practice 2, Limit work in progress. The Method prescribes that a WIP limit exist per workflow state and leaves its number to the service running the board, so this declares the dimension and its domain and carries no default; the value is deployment (K4) config."
+[controls.value_domain]
+type = "integer"
+min  = 0
+[controls.applies_to]
+levels = ["Milestone/Workstream", "Work Item"]
+kinds  = ["card"]
