@@ -478,6 +478,15 @@ COMPUTE_VELOCITY="$SCRIPT_DIR/compute-release-velocity.sh"
 # (the COMPUTE_VELOCITY precedent above), deliberately NOT a fifth check_paths row.
 AI_EVENT_WRITER="$SCRIPT_DIR/append-pipeline-event.sh"
 
+# Pipeline-event READER. Used by ONE caller: phase_action_item_gate, to MEASURE a
+# recommended `--attest-action-items` cause for the operator rather than asking them
+# to attest a cause nothing measured. Same SCRIPT_DIR-sibling form, same inline-guard
+# rationale, and the same deliberate non-registration as the writer above — a TOOL
+# dependency guarded by its consuming phase, not a fifth check_paths() row. Read-only
+# and offline: it reads one local markdown log, so the phase's hermetic property
+# (no network, no `gh`) is preserved.
+AI_EVENT_READER="$SCRIPT_DIR/query-pipeline-event.sh"
+
 # Hub-state root holding this release's AI-NNN action-item ledger. OPERATOR-INSTANCE
 # content (<OPERATOR_INSTANCE_HUB_STATE_PATH>), never in the repo tree. Resolution is
 # the same env-override → operator.toml → canonical-default form WORKSPACE_ROOT and
@@ -5852,6 +5861,85 @@ _ai_emit_attestation() {
   return 0
 }
 
+# Measure a RECOMMENDED --attest-action-items cause, and the basis for it, from this
+# release's own pipeline-event rows. Emits "<cause>|<basis>" on stdout. The cause is
+# EMPTY when the log cannot separate the two causes, and that empty is RENDERED as an
+# explicit no-recommendation — never defaulted to whichever cause is cheaper to say.
+#
+# WHY IT EXISTS. Rows 1-2 of the Procedure 7a decision table say "Either no
+# commitments were made, or the Procedure 4a emit step was skipped. Attest which." —
+# and the operator has been attesting a cause the gate never measured. Two prior
+# closes are the record: one attested `emit-skipped` on circumstantial evidence and
+# needed a separate operator ratification to stand; the next improvised the same
+# measurement by hand at the console. This function is that improvisation, codified.
+#
+# IT DECIDES NOTHING, and that is a structural property rather than a promise. It adds
+# no STATE, changes no verdict, enters no branch of the predicate, and adds no value to
+# the closed two-value enum. The operator is already obliged to choose one of exactly
+# two causes; this supplies the evidence behind the choice. A recommendation that
+# DISAGREES with the operator's attestation still passes the gate — and the
+# disagreement is printed, which is the useful half.
+#
+# THE RESIDUE GETS ITS OWN OUTCOME rather than being folded into whichever cause the
+# `else` happens to reach. Three signals are readable from the log; one case is
+# genuinely unreadable and says so:
+#
+#   >=1 action-item-opened row AND no ledger row on disk
+#       -> emit-skipped, PROVEN. The emit happened and the ledger did not. That is a
+#          contradiction the gate can name precisely, and it is the upgrade from
+#          inferred to provable that both prior closes wanted and could not have.
+#   0 action-item-opened rows AND 0 decision-class rows
+#       -> no-commitments. Nothing was rendered at any routing point that a sweep
+#          could have found.
+#   0 action-item-opened rows BUT >=1 decision-class row
+#       -> NO RECOMMENDATION. A release that swept every routing point and owed
+#          nothing, and a release that never swept at all, BOTH read zero here. The
+#          log cannot separate them; the routing-point briefings can. Saying so is
+#          strictly better than guessing, because a guess printed beside the word
+#          "recommended" is the blind attestation this change exists to end.
+#   the reader is absent, or returns no integer
+#       -> NO RECOMMENDATION, probe reported unusable. An unreadable probe is not a
+#          zero, and a zero it cannot distinguish from a dead reader is not evidence.
+#
+# Never fails: every read is guarded, so a missing reader or an unreadable log
+# degrades to "no recommendation" and never aborts a close the operator has
+# legitimately attested.
+_ai_recommended_cause() {
+  local _slug="${STATE_MILESTONE_SLUG:-$VERSION}" _open="" _dec=""
+  if [[ -z "$_slug" ]]; then
+    /usr/bin/printf '|UNAVAILABLE — this run resolved no release key to query, so no cause is recommended; the attestation stands on the operator own reading of the routing-point briefings'
+    return 0
+  fi
+  if [[ ! -x "$AI_EVENT_READER" ]]; then
+    /usr/bin/printf '|UNAVAILABLE — the pipeline-event reader is not executable, so no cause is recommended; an unreadable probe is not a zero'
+    return 0
+  fi
+  # stderr carries the reader join-key notices; stdout carries the integer. Take the
+  # LAST stdout line and require it to be all digits, so a reader that answered with
+  # anything else is treated as unusable rather than as a count.
+  _open="$("$AI_EVENT_READER" --release "$_slug" --event-type decision \
+             --event-subtype action-item-opened --count 2>/dev/null || true)"
+  _dec="$("$AI_EVENT_READER" --release "$_slug" --event-type decision --count 2>/dev/null || true)"
+  _open="${_open##*$'\n'}"
+  _dec="${_dec##*$'\n'}"
+  [[ "$_open" =~ ^[0-9]+$ ]] || _open=""
+  [[ "$_dec"  =~ ^[0-9]+$ ]] || _dec=""
+  if [[ -z "$_open" || -z "$_dec" ]]; then
+    /usr/bin/printf '|UNAVAILABLE — the pipeline-event reader returned no integer count, so no cause is recommended; an unreadable probe is not a zero'
+    return 0
+  fi
+  if [[ "$_open" -ge 1 ]]; then
+    /usr/bin/printf 'emit-skipped|PROVEN: %s decision/action-item-opened row(s) are recorded for this release and the ledger holds no AI-NNN row. A commitment was emitted with no ledger entry behind it, which is the emit step rather than the absence of commitments' "$_open"
+    return 0
+  fi
+  if [[ "$_dec" -eq 0 ]]; then
+    /usr/bin/printf 'no-commitments|%s decision-class row(s) are recorded for this release, so nothing was rendered at any routing point that a commitment sweep could have found' "$_dec"
+    return 0
+  fi
+  /usr/bin/printf '|INDETERMINATE FROM THE LOG — %s decision-class row(s) and 0 action-item-opened row(s). A release that swept every routing point and owed nothing, and a release that never swept at all, both read zero here; the log cannot separate them and the routing-point briefings can. No cause is recommended' "$_dec"
+  return 0
+}
+
 # Render the Procedure 7a cell for Verification-table row 6 FROM THE GLOBALS Phase
 # 12.9 set. A pure projection with no I/O and no predicate evaluation — that is the
 # contract, not an implementation detail. phase_run_verification runs AFTER the
@@ -5939,6 +6027,22 @@ phase_action_item_gate() {
       else
         _cause_text="The action-item ledger at ${_dirlabel} exists and carries zero AI rows — initialized, never appended. Either no commitments were made, or the Procedure 4a emit step was skipped."
       fi
+
+      # The measured recommendation. It is rendered in ALL THREE outcomes below —
+      # attested, blocking, and non-blocking — because the operator needs the evidence
+      # wherever the choice is live, and because a recommendation that contradicts an
+      # attestation already given is the single most useful thing this gate can say.
+      # It changes no verdict and no return code; see _ai_recommended_cause.
+      local _rec _rec_cause _rec_basis _rec_text
+      _rec="$(_ai_recommended_cause)"
+      _rec_cause="${_rec%%|*}"
+      _rec_basis="${_rec#*|}"
+      if [[ -n "$_rec_cause" ]]; then
+        _rec_text="MEASURED RECOMMENDATION: --attest-action-items ${_rec_cause} — ${_rec_basis}. The operator still attests; this is the evidence behind the choice, not the choice."
+      else
+        _rec_text="MEASURED RECOMMENDATION: none — ${_rec_basis}."
+      fi
+
       if [[ -n "$ATTEST_ACTION_ITEMS" ]]; then
         case "$ATTEST_ACTION_ITEMS" in
           no-commitments|emit-skipped) ;;
@@ -5948,14 +6052,18 @@ phase_action_item_gate() {
             ;;
         esac
         _ai_emit_attestation "$ATTEST_ACTION_ITEMS"
-        mark_phase "action_item_gate" "WARN" "Procedure 7a: ${_state} — SURFACED, attested by operator as '${ATTEST_ACTION_ITEMS}' (attestation-emitted=${STATE_AI_EMIT}); ${_cause_text}"
+        local _rec_agree=""
+        if [[ -n "$_rec_cause" && "$_rec_cause" != "$ATTEST_ACTION_ITEMS" ]]; then
+          _rec_agree=" THE MEASUREMENT DISAGREES WITH THE ATTESTATION — the attested cause stands and the close is not affected, but the disagreement is on the record."
+        fi
+        mark_phase "action_item_gate" "WARN" "Procedure 7a: ${_state} — SURFACED, attested by operator as '${ATTEST_ACTION_ITEMS}' (attestation-emitted=${STATE_AI_EMIT}); ${_cause_text} ${_rec_text}${_rec_agree}"
         return 0
       fi
       if [[ "$_blocking" -eq 1 ]]; then
-        mark_phase "action_item_gate" "FAIL" "Procedure 7a HARD GATE: ${_state} — SURFACE states require explicit operator attestation to pass, and none was supplied. ${_cause_text} Re-run with --attest-action-items no-commitments (the release genuinely made none) or --attest-action-items emit-skipped (the emit step was missed); the attestation is itself emitted as a decision / empirical-verification-finding row. Milestone close BLOCKED until then"
+        mark_phase "action_item_gate" "FAIL" "Procedure 7a HARD GATE: ${_state} — SURFACE states require explicit operator attestation to pass, and none was supplied. ${_cause_text} ${_rec_text} Re-run with --attest-action-items no-commitments (the release genuinely made none) or --attest-action-items emit-skipped (the emit step was missed); the attestation is itself emitted as a decision / empirical-verification-finding row. Milestone close BLOCKED until then"
         return 3
       fi
-      mark_phase "action_item_gate" "WARN" "Procedure 7a: ${_state} — SURFACED, unattested${_mode_note}. ${_cause_text} Pass --attest-action-items no-commitments|emit-skipped to clear it"
+      mark_phase "action_item_gate" "WARN" "Procedure 7a: ${_state} — SURFACED, unattested${_mode_note}. ${_cause_text} ${_rec_text} Pass --attest-action-items no-commitments|emit-skipped to clear it"
       return 0
       ;;
   esac
@@ -13307,6 +13415,7 @@ PY
   local _ai_s_slug="$STATE_MILESTONE_SLUG" _ai_s_mstate="$STATE_MILESTONE_STATE"
   local _ai_s_nomerge="$NO_MERGE" _ai_s_attest="$ATTEST_ACTION_ITEMS"
   local _ai_s_writer="$AI_EVENT_WRITER" _ai_s_ms="$MILESTONE"
+  local _ai_s_reader="$AI_EVENT_READER"
   local _ai_tmp; _ai_tmp="$(/usr/bin/mktemp -d -t aigate-selftest.XXXXXX)"
   HUB_STATE_PATH="$_ai_tmp/hub-state"
   VERSION="v9.99"; MILESTONE="999"; NO_MERGE=0; ATTEST_ACTION_ITEMS=""
@@ -13374,6 +13483,25 @@ exit 0
 AISTUB
   /bin/chmod +x "$_ai_tmp/writer-stub"
   AI_EVENT_WRITER="$_ai_tmp/writer-stub"
+
+  # $AI_EVENT_READER stub, installed for the WHOLE group so every SURFACE-state arm
+  # below stays hermetic — the real reader would read the operator's live event log,
+  # which is neither reproducible nor offline. Same real-file rationale as the writer
+  # stub above (the phase guards its reader with `[[ -x ]]`). Group (M) re-points it
+  # per arm; the two counts are baked in as literals so each arm states its own input.
+  _ai_mk_reader() {   # _ai_mk_reader <action-item-opened-count> <decision-count>
+    /bin/cat > "$_ai_tmp/reader-stub" <<READERSTUB
+#!/bin/sh
+case "\$*" in
+  *action-item-opened*) printf '%s\n' '$1' ;;
+  *)                    printf '%s\n' '$2' ;;
+esac
+exit 0
+READERSTUB
+    /bin/chmod +x "$_ai_tmp/reader-stub"
+    AI_EVENT_READER="$_ai_tmp/reader-stub"
+  }
+  _ai_mk_reader 0 0
 
   # Drive the gate against one fixture, leaving the phase record and the STATE_AI_*
   # globals in place for assertion.
@@ -13488,6 +13616,85 @@ AISTUB
   _ai_drive ai-unresolved; _ai_rc="$_AI_RC"
   [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-L — --attest-action-items must NOT clear an UNRESOLVED verdict; an open row is dispositioned, not attested away (rc $_ai_rc)"; failures=$((failures+1)); }
   ATTEST_ACTION_ITEMS=""
+
+  # (M) THE MEASURED RECOMMENDED CAUSE — 5 arms.
+  #
+  # BIND TO THE RECOMMENDATION CLAUSE, NEVER TO THE WHOLE DETAIL. The blocking FAIL
+  # detail ALREADY names both causes in its remediation sentence ("Re-run with
+  # --attest-action-items no-commitments ... or --attest-action-items emit-skipped"),
+  # so a whole-detail search for either cause passes no matter what the classifier
+  # decided — including when it decided nothing. That arm would be VACUOUS: it would
+  # report green over an inverted classifier. Every arm below therefore matches the
+  # literal prefix `MEASURED RECOMMENDATION: ` plus the cause, which the renderer
+  # emits exactly once, and each positive arm is paired with a specificity arm
+  # asserting the OTHER cause is NOT what was recommended.
+  #
+  # VERDICT-INVARIANCE IS ASSERTED IN EVERY ARM, not stated in a comment: each drives
+  # the same unattested NOT-RECORDED fixture at --apply and requires rc 3 with
+  # STATE_AI_GATE unchanged. A recommendation that moved a verdict would fail here,
+  # which is what makes "it decides nothing" a measured property rather than a claim.
+  local _ai_m
+  _ai_m_check() {   # _ai_m_check <arm> <needle-that-MUST-appear> <needle-that-must-NOT>
+    /usr/bin/grep -qF "$2" <<<"$_ai_m" || {
+      echo "FAIL: AI-$1 — the detail must carry '$2', got '$_ai_m'"; failures=$((failures+1)); }
+    if [[ -n "$3" ]]; then
+      /usr/bin/grep -qF "$3" <<<"$_ai_m" && {
+        echo "FAIL: AI-$1 specificity — the detail must NOT carry '$3'; the classifier is not discriminating, got '$_ai_m'"; failures=$((failures+1)); }
+    fi
+    [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-$1 invariance — the recommendation must not move the verdict; an unattested NOT-RECORDED at --apply must still return 3, got rc $_ai_rc"; failures=$((failures+1)); }
+    [[ "$STATE_AI_GATE" == "NOT-RECORDED" ]] || { echo "FAIL: AI-$1 invariance — STATE_AI_GATE must stay NOT-RECORDED, got '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  }
+
+  # (M1) PROVEN emit-skipped — a commitment was emitted and the ledger holds nothing.
+  #      This is the contradiction the gate can name precisely, and the upgrade from
+  #      attested-blind to measured that two prior closes wanted and could not have.
+  _ai_mk_reader 2 9
+  _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"; _ai_m="$(get_phase action_item_gate)"
+  _ai_m_check M1 'MEASURED RECOMMENDATION: --attest-action-items emit-skipped' \
+                 'MEASURED RECOMMENDATION: --attest-action-items no-commitments'
+
+  # (M2) no-commitments — nothing was rendered anywhere, so nothing could be owed.
+  #      (M1)'s control: same fixture, same mode, only the log counts differ, so a
+  #      classifier stuck on one cause fails one of the two.
+  _ai_mk_reader 0 0
+  _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"; _ai_m="$(get_phase action_item_gate)"
+  _ai_m_check M2 'MEASURED RECOMMENDATION: --attest-action-items no-commitments' \
+                 'MEASURED RECOMMENDATION: --attest-action-items emit-skipped'
+
+  # (M3) THE RESIDUE GETS ITS OWN OUTCOME. Decisions were rendered but no commitment
+  #      was ever emitted — which is what a swept-and-owed-nothing release and a
+  #      never-swept release BOTH look like in the log. Folding this into either
+  #      cause would be a guess printed beside the word "recommended".
+  _ai_mk_reader 0 5
+  _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"; _ai_m="$(get_phase action_item_gate)"
+  _ai_m_check M3 'MEASURED RECOMMENDATION: none' \
+                 'MEASURED RECOMMENDATION: --attest-action-items'
+
+  # (M4) AN UNREADABLE PROBE IS NOT A ZERO. With no reader the classifier must say so
+  #      and recommend nothing — never default to a cause. Without this arm a broken
+  #      reader would silently recommend `no-commitments` on every close, which is the
+  #      exact failure shape this whole phase exists to refuse.
+  AI_EVENT_READER="$_ai_tmp/reader-does-not-exist"
+  _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"; _ai_m="$(get_phase action_item_gate)"
+  _ai_m_check M4 'MEASURED RECOMMENDATION: none' \
+                 'MEASURED RECOMMENDATION: --attest-action-items'
+  /usr/bin/grep -qF 'not executable' <<<"$_ai_m" || { echo "FAIL: AI-M4 — the detail must NAME the reader as the reason no cause was recommended, or an unusable probe is indistinguishable from a measured absence, got '$_ai_m'"; failures=$((failures+1)); }
+
+  # (M5) A DISAGREEMENT WITH AN ATTESTATION ALREADY GIVEN IS RECORDED, AND STILL
+  #      PASSES. The operator's attestation is the decision; the measurement is
+  #      evidence. Asserting BOTH halves is the point: a gate that blocked on the
+  #      disagreement would have quietly turned a report into a verdict.
+  _ai_mk_reader 2 9
+  ATTEST_ACTION_ITEMS="no-commitments"
+  _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"; _ai_m="$(get_phase action_item_gate)"
+  [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-M5 — a measurement that disagrees with the attestation must NOT block; the attested cause is the decision, got rc $_ai_rc"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'THE MEASUREMENT DISAGREES WITH THE ATTESTATION' <<<"$_ai_m" || { echo "FAIL: AI-M5 — the disagreement must be ON THE RECORD; an unrecorded disagreement is the blind attestation this change removes, got '$_ai_m'"; failures=$((failures+1)); }
+  ATTEST_ACTION_ITEMS="no-commitments"
+  _ai_mk_reader 0 0
+  _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"; _ai_m="$(get_phase action_item_gate)"
+  /usr/bin/grep -qF 'THE MEASUREMENT DISAGREES WITH THE ATTESTATION' <<<"$_ai_m" && { echo "FAIL: AI-M5 specificity — an AGREEING measurement must not render the disagreement notice, or the notice carries no information, got '$_ai_m'"; failures=$((failures+1)); }
+  ATTEST_ACTION_ITEMS=""
+  _ai_mk_reader 0 0
 
   # (H) DRY-RUN — evaluates, records, never halts, and says what it WOULD do.
   MODE="dry-run"
@@ -13667,6 +13874,7 @@ AISTUB
   STATE_MILESTONE_SLUG="$_ai_s_slug"; STATE_MILESTONE_STATE="$_ai_s_mstate"
   NO_MERGE="$_ai_s_nomerge"; ATTEST_ACTION_ITEMS="$_ai_s_attest"
   AI_EVENT_WRITER="$_ai_s_writer"; MILESTONE="$_ai_s_ms"
+  AI_EVENT_READER="$_ai_s_reader"
   STATE_AI_GATE=""; STATE_AI_TOTAL=0; STATE_AI_UNRES=0; STATE_AI_DIR=""; STATE_AI_EMIT="n/a"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
@@ -14091,7 +14299,7 @@ EOF
   echo "  phase_inject_close_class_telemetry_field validated (#4437 — clean block PASSes with the field positioned after **Outcome rationale:** and no sibling leak / idempotent re-run SKIPs / fallback anchor lands after **Outcome:** and names which anchor it used / VACUITY PAIR: an all-N/A-but-conformant line is WRITTEN and carries the no-computed-ratio warning WITH the disposition read from the emitted line, measured-line control carries NO warning / a line missing § 3.2 slots FAILs writing nothing / an empty capture at exit 0 FAILs writing nothing / producer exit 2 escalates as a source-integrity condition writing nothing / a non-executable producer SKIPs rather than hand-composing a field that would fabricate its own mechanism claim / dry-run prints the RESOLVED bytes and writes nothing / CO-LOCATION: an archived block's field lands in the SEGMENT beside its own **Result:** with the hot stub at 0, and the cross-surface re-run SKIPs; #5288 AI-028 NOT-PRODUCED MARKER STAGING — j.1 drives the REAL 6.8 call site over an archived block with the producer unavailable and asserts the resolved SEGMENT reaches TOUCHED_ARCHIVE_SEGMENTS, the array files=() consumes, with a sensitivity floor proving the marker genuinely reached the segment (pre-fix the marker still lands on disk, so the differential isolates the LOST APPEND alone) and a HOT-LEDGER control proving the by-design skip is preserved and the recorder is not appending every target it is handed / j.2 STRUCTURAL over the shipped text of BOTH calling phases — neither may invoke the writer inside a command substitution, read from the FUNCTION BODIES so the needle cannot match itself, with per-site vacuity floors and a capability-to-fail arm matching a CONSTRUCTED bad call site so a clean reading is a measurement)" >&2
   echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache); check-5 settle POLL validated (#4416, legs f-j PLUS the F-01 remediation leg i.2 — six arms, not five; this clause is the settle group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which legs f-j and i.2 never executed: f AC2 an injected 5-read search-index lag, longer than the pre-change single-retry window, still converges to PASS and RENDERS its settle figure in both the row and the phase detail — the v4.02 failure reproduced and closed / g AC3 THE NON-VACUITY CONTROL, same fixture with the budget shrunk BELOW the lag: exhaustion must read PARTIAL and NAME the budget, never PASS, so f is proven capable of failing / h AC1 structural self-parse behind an anti-vacuity floor — the attempt bound exists AND is a loop terminal AND the poll loop exists, with the pre-change 'Retry ONCE' form asserted ABSENT so no limb is satisfiable by the old code / i AC4 an out-of-scope straggler is still reported at once, asserted on the CHECK-5-SCOPED instrument ('check-5 settled at poll 0/15') because a PARTIAL row alone cannot distinguish reported-now from reported-after-the-whole-budget, and because the stub's own 'calls' counter is PHASE-scoped rather than check-5-scoped — the gate-passage-proof rung issues a third 'issue list' after check 5 has rendered — so that counter carries an independent CEILING arm (<= 3 = detect + check-5 + gate-passage-proof) stated as the bound it really is; leg (f)'s 'poll 5/15' is the moving control that makes the zero a real reading / i.2 THE F-01 REMEDIATION ARM, and the only one that discriminates the render guard: leg (i) grades the exhaustion suffix but can only ever exercise it at polls=0, where it is unreachable BY CONSTRUCTION under either guard, which is how '-gt 0' survived it. i.2 drives the one separating state — an out-of-scope straggler surfacing MID-POLL, in-scope #401 holding the poll open across a 3-read lag while #999 breaks the loop at 3 of 15 attempts with the budget never waited — behind an anti-vacuity floor on 'poll 3/15' whose moving controls are (f)'s 'poll 5/15' and (i)'s 'poll 0/15'. Twelve fixtures under both guards: 12/12 pass under the loop's own '-ge' terminal, exactly one fails under '-gt 0' / j AC5 the group stays hermetic and instant at DELAY=0, which only an ATTEMPT bound makes structurally possible)" >&2
   echo "  post_gate_passage_proof three-rung target ladder validated (#3819 — T-13 rung 1 resolves a CLOSED Stage-13 sub-task via --state all and does NOT fall through to the PR / rung 2 posts to the release PR naming the OBSERVED rung-1 reason / rung 3 MANUAL names BOTH attempted targets; T-14 two collect_open_release_issues calls in one run keep EXCLUDED_DETAIL undoubled, COLLECTED_OPEN_ISSUES identical and resolve_stage13_subtask stable, with a non-empty-exclusion anti-vacuity control)" >&2
-  echo "  phase_action_item_gate validated (#4439, group AI — 21 arms; this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): A and B are each other's control over ONE differential harness where only the ledger changes — a gate that never blocks fails A, one that always blocks fails B, one reading the wrong path resolves NOT-RECORDED for both and fails BOTH / B2 decoy: a terminal ledger carrying the literal words 'open' and 'in-flight' in trigger_detail still resolves RESOLVED, so the gate is column-addressed and not row-pattern-matched / all four verdict states drive distinct fixtures and are asserted on the STATE_AI_GATE global rather than the detail prose — UNRESOLVED (A) · RESOLVED (B, B2) · NOT-RECORDED (C unattested blocks, C2 attested passes WARN with the operator-actor attestation EMITTED carrying its cause and the spec subtype) · EMPTY-LEDGER (D unattested blocks, D2 attested round-trips the second cause) / E the two SURFACE states must resolve DISTINCT values, because comparing detail strings passes on any two different sentences / E2 an unlicensed attestation cause does NOT clear a SURFACE state / F EXECUTES the two dispatch lines lifted VERBATIM from this file's own text, refusing to pass unless each needle resolves to exactly one top-level line, under three mutually-controlling limbs — F1 blocking gate leaves the close UNFIRED at exit 3, F2 SENSITIVITY a passing gate does fire it (without which F1's clean result is meaningless), F3 NEGATIVE CONTROL a constructed '|| true' line must let the close through (without which a fail-closed gate is indistinguishable from a no-op one) — so capability-to-fail is re-demonstrated on EVERY run, not only under one-time mutation / F4 whole-block invariant: every top-level dispatch line carries the fail-closed guard, with an anti-vacuity floor on the parse and a specificity control proving the filter rejects an unguarded line / G doc<->code parity on the canonical Procedure 7a predicate across the fixture set, with an anti-vacuity floor on the extraction and a sensitivity arm requiring >=4 distinct STATEs / H --dry-run never returns non-zero yet still EVALUATES, and names the condition that would FAIL at --apply / I an idempotent re-run over an already-closed milestone, where an UNRESOLVED verdict is the close-before-verdict shape itself / J --no-merge still evaluates and records rather than blocks / K Verification row 6 reads the Phase-12.9 GLOBAL — unset renders UNVERIFIED never a green cell, mutating the global moves the cell, and phase_run_verification is asserted NOT to re-evaluate the predicate after the close / L an attestation does NOT clear an UNRESOLVED verdict — an open row is dispositioned, never attested away / P operator-instance path tokenisation, with a sensitivity arm proving the leak probe can match its own needle" >&2
+  echo "  phase_action_item_gate validated (#4439, group AI — 21 arms plus group M's 5; this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): A and B are each other's control over ONE differential harness where only the ledger changes — a gate that never blocks fails A, one that always blocks fails B, one reading the wrong path resolves NOT-RECORDED for both and fails BOTH / B2 decoy: a terminal ledger carrying the literal words 'open' and 'in-flight' in trigger_detail still resolves RESOLVED, so the gate is column-addressed and not row-pattern-matched / all four verdict states drive distinct fixtures and are asserted on the STATE_AI_GATE global rather than the detail prose — UNRESOLVED (A) · RESOLVED (B, B2) · NOT-RECORDED (C unattested blocks, C2 attested passes WARN with the operator-actor attestation EMITTED carrying its cause and the spec subtype) · EMPTY-LEDGER (D unattested blocks, D2 attested round-trips the second cause) / E the two SURFACE states must resolve DISTINCT values, because comparing detail strings passes on any two different sentences / E2 an unlicensed attestation cause does NOT clear a SURFACE state / F EXECUTES the two dispatch lines lifted VERBATIM from this file's own text, refusing to pass unless each needle resolves to exactly one top-level line, under three mutually-controlling limbs — F1 blocking gate leaves the close UNFIRED at exit 3, F2 SENSITIVITY a passing gate does fire it (without which F1's clean result is meaningless), F3 NEGATIVE CONTROL a constructed '|| true' line must let the close through (without which a fail-closed gate is indistinguishable from a no-op one) — so capability-to-fail is re-demonstrated on EVERY run, not only under one-time mutation / F4 whole-block invariant: every top-level dispatch line carries the fail-closed guard, with an anti-vacuity floor on the parse and a specificity control proving the filter rejects an unguarded line / G doc<->code parity on the canonical Procedure 7a predicate across the fixture set, with an anti-vacuity floor on the extraction and a sensitivity arm requiring >=4 distinct STATEs / H --dry-run never returns non-zero yet still EVALUATES, and names the condition that would FAIL at --apply / I an idempotent re-run over an already-closed milestone, where an UNRESOLVED verdict is the close-before-verdict shape itself / J --no-merge still evaluates and records rather than blocks / K Verification row 6 reads the Phase-12.9 GLOBAL — unset renders UNVERIFIED never a green cell, mutating the global moves the cell, and phase_run_verification is asserted NOT to re-evaluate the predicate after the close / L an attestation does NOT clear an UNRESOLVED verdict — an open row is dispositioned, never attested away / P operator-instance path tokenisation, with a sensitivity arm proving the leak probe can match its own needle / M the MEASURED recommended --attest-action-items cause: every arm binds to the literal 'MEASURED RECOMMENDATION: ' prefix rather than to the whole detail, because the blocking FAIL text already names BOTH causes in its remediation sentence and a whole-detail search for either one therefore passes over an inverted classifier — the vacuous-arm shape, refused here by construction — M1 a commitment emitted with an empty ledger recommends emit-skipped and provably not the other cause / M2 its differential control, same fixture and mode with only the log counts changed, recommends no-commitments and provably not the other / M3 the residue gets its own outcome: decisions rendered with nothing emitted is the shape a swept-and-owed-nothing release and a never-swept release BOTH produce, so the classifier recommends NEITHER cause instead of guessing / M4 an unreadable probe is not a zero — a missing reader recommends nothing and NAMES the reader, without which a broken reader would silently recommend no-commitments on every close / M5 a measurement that DISAGREES with an attestation already given is recorded and still passes, with the specificity arm that an AGREEING measurement renders no disagreement notice / and every M arm re-asserts rc 3 and STATE_AI_GATE unchanged, so 'the recommendation decides nothing' is measured on each run rather than asserted once" >&2
   echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
