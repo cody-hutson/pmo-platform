@@ -73,7 +73,7 @@ The deterministic composer renders these `PORTFOLIO.md` sections from the §2 fi
 | Sec | `PORTFOLIO.md` section | State | §2 contract field(s) | Backing entity |
 |---|---|---|---|---|
 | **S1** | `## Portfolio Health Summary` (per-project row: Phase · Health RAG · Critical-Path · Go-Live · **Last-Validated**) | EXISTING → extend | `status`, `milestone_delta`, `last_published` | Project (1), Milestone (2) |
-| **S2** | per-project `### Health Indicators` (Schedule / Scope / Quality / Stakeholders / Integration; each `[STALE]` if aged) | EXISTING | — (the five dimensions are derivation **inputs** to `health_rag`, not a §2 contract field; indexed by `weekly-status-rollup/references/metric-registry.md` § Project Metrics under a **non-1:1** mapping — Quality composes Risk + Integration Risk, and Stakeholders is an optional `UNSOURCED-DOMAIN` row that may not exist). **Render posture (interim, stated honestly):** the composer today renders the single composed `health_rag` scalar against all five dimension labels; per-dimension sourcing is **not yet delivered** and no §2 field carries it | Project (1) |
+| **S2** | per-project `### Health Indicators` (Schedule / Scope / Quality / Stakeholders / Integration, **each resolved independently**, in a `Dimension · Status · Source` table; the composed roll-up line beneath the table carries `[STALE]` when aged, while a dimension cell rendering `UNSOURCED` carries no marker — §4.1 R2) | EXISTING | — (the five dimensions are derivation **inputs** to `health_rag`, not a §2 contract field; indexed by `weekly-status-rollup/references/metric-registry.md` § Project Metrics under a **non-1:1** mapping — Quality composes Risk + Integration Risk, and Stakeholders is an optional `UNSOURCED-DOMAIN` row that may not exist). Per-dimension backing is governed in **§4.1**; the composer resolves each dimension independently and renders `UNSOURCED` for any dimension no §2 field backs | Project (1) |
 | **S3** | `## Capacity Dashboard` (per-project utilization + portfolio demand-supply gap RAG) | NEW | `capacity_signal` | Resource (8) |
 | **S4** | `## Portfolio R-G-T Allocation` (Run / Grow / Transform shares; `Unclassified` coverage gap) | NEW | — (reads `PROJECT.md` `investment_class`) | Project (1) |
 | **S5** | per-project `### Top Risks` (≤ 5 rows: risk · owner · mitigation) | EXISTING → extend | `top_risks[]` | RAID Item (6) |
@@ -86,6 +86,26 @@ The deterministic composer renders these `PORTFOLIO.md` sections from the §2 fi
 - **One staleness mechanism.** §3 is the sole freshness apparatus: one `last_published` field, one `[STALE]` marker, one anchor. Threshold values parameterize it; they do not fork it.
 - **One cross-project risk surface.** S6 is a single aggregated section. S5 (per-project) and S6 (cross-project) are distinct scopes of one risk model — composed, never duplicated. `cross_project_conflicts[]` makes S6/S8 render deterministically from fields.
 - **Staging-only.** Every section is composed content staged via `weekly-status-rollup` Section 6's human-in-the-loop checkpoint (§1 boundary). No producer writes `projects/`.
+
+### §4.1 S2 Health-Indicator dimension → metric mapping (governed)
+
+The five S2 dimensions are derivation **inputs** to `health_rag`, not §2 contract fields. This table is the single governed statement of which metric backs which dimension and which §2 field, if any, carries it. It is the SSOT the composer's `HEALTH_DIMENSIONS` table points at; the composer holds no second copy of the mapping's meaning.
+
+| Dimension | Backing metric (and the source that metric reads) | §2 field carrying it | Renders today |
+|---|---|---|---|
+| Schedule | Schedule Performance Index (SPI) — `PROJECT.md` milestone %-complete + plan baseline (EVM tracker) | none | `UNSOURCED` |
+| Scope | Scope — `PROJECT.md` + change log | none | `UNSOURCED` |
+| Quality | **composes two metrics** — Risk (RAID Log) **+** Integration Risk (`PROJECT.md` Health Indicators + technical-analyst findings) | none — and `top_risks[]` cannot substitute: its type is `{risk, owner, mitigation}` with no severity, while the Risk band keys on *any critical risk unmitigated OR ≥3 high risks* | `UNSOURCED` |
+| Stakeholders | Stakeholder Engagement — **optional**, unsourced at the metric registry, and no row for it exists today | none | `UNSOURCED` |
+| Integration | Integration Risk — unsourced at the metric registry (`PROJECT.md` Health Indicators + technical-analyst findings) | none | `UNSOURCED` |
+
+Two mappings are deliberately **not 1:1** and both are stated rather than smoothed over: **Quality** composes two metrics into one dimension, and **Stakeholders** has no metric row at all. A third asymmetry follows from the same table — Integration Risk backs two dimensions, while the Budget (CPI) metric backs none.
+
+**R1 — A dimension renders its own resolved value or `UNSOURCED`.** It never borrows another dimension's value and never borrows the composed project RAG. Five dimension labels carrying one scalar present a single signal as five corroborating ones — the watermelon shape the §7.1 gate and this contract exist to prevent.
+
+**R2 — `UNSOURCED` carries no `[STALE]` marker.** The §3 freshness marker qualifies a value; a cell reporting the absence of a value has nothing for it to qualify. The composed project RAG rendered alongside the table does carry its marker, because it is a real value. This is why the S2 row above scopes the marker to the roll-up line rather than to the dimension cells: with every dimension unbacked, no dimension cell can carry `[STALE]` at all, and a schema row claiming otherwise would assert something the composer cannot produce.
+
+**R3 — Backing arrives with its producer.** A per-dimension field enters §2 atomically with the producer that emits it, exactly as §2 states for `completeness_score`; it is never added as an empty slot so this table can read as delivered.
 
 ## §5 Emit / consume wiring
 
