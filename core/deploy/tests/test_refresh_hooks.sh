@@ -11,11 +11,15 @@
 #      primitives (positional-issueref.awk and fragile-ref-patterns.sh), because the
 #      co-deploy list in setup-workspace.sh is enumerated per named file, so each primitive
 #      is a separate way for the list to be incomplete
-#   3. the operator's .mode is preserved (install-if-missing) -- asserted with a seed
-#      DERIVED to differ from the shipped template default, so "preserved" and
-#      "overwritten from the template" leave observably different state. Do not
-#      re-hardcode this seed: a literal equal to the template default makes the
-#      assertion pass in both directions, which is how it shipped uncovered.
+#   3. the operator's mode files are preserved (install-if-missing) -- ALL FOUR that
+#      setup-workspace.sh installs through install_mode_template_if_missing (.mode,
+#      deploy-check.mode, .gh-path-leak-mode, .autonomy-mode), one named assertion per
+#      file, each seeded with a value DERIVED to differ from ITS OWN shipped template
+#      default, so "preserved" and "overwritten from the template" leave observably
+#      different state. Do not re-hardcode any of these seeds: a literal equal to that
+#      file's template default makes its assertion pass in both directions, which is
+#      how .mode shipped uncovered -- and the other three shipped with no assertion at
+#      all, in this suite or any other (#6111).
 #   4. an operator-EDITED hook (diverged from its recorded baseline) is preserved, not clobbered
 #   5. a true no-op (all hooks match source) emits ZERO "REFRESHED" (so update.sh's EX_NOCHANGE
 #      contract is not broken by the hook phase)
@@ -70,17 +74,46 @@ report() {
 }
 sha() { shasum -a 256 "$1" | awk '{print $1}'; }
 
-# Operator .mode seed. The preserve contract is only OBSERVABLE when the seeded value
-# differs from what the refresh would install from the template: if they are equal,
-# "preserved" and "overwritten from the template" leave byte-equivalent state and the
-# Case 1-3 assertion passes either way. Derive the seed from the shipped template at run
-# time rather than hardcoding it, so a future change to the template default cannot
-# silently re-create that collapse. Legal mode values are the closed set
-# {warn, enforce, off}; prefer the fail-closed member unless it IS the default.
+# Operator mode-file seeds -- the install-if-missing preserve COHORT.
+#
+# setup-workspace.sh installs FOUR mode defaults through install_mode_template_if_missing,
+# and --refresh-hooks routes through that same install path, so all four carry the
+# IDENTICAL preserve-vs-overwrite contract. Each member gets its own seed here and its own
+# named assertion in Case 1-3.
+#
+# The contract is only OBSERVABLE when the seeded value differs from what the refresh would
+# install from THAT FILE'S template: if they are equal, "preserved" and "overwritten from
+# the template" leave byte-equivalent state and the assertion passes either way. Derive each
+# seed from its own shipped template at run time rather than hardcoding it, so a future
+# change to any template default cannot silently re-create that collapse. Legal mode values
+# are the closed set {warn, enforce, off} for all four readers; prefer the fail-closed
+# member unless it IS that file's default.
+#
+# `seed != default` is NOT left as an argument about the derivation -- Case 1-3 asserts it,
+# per member, so a template edit that collapses any one of them is reported rather than
+# silently turning that member's preserve assertion vacuous.
+mode_default_of() { tr -d '[:space:]' < "$1" 2>/dev/null || true; }
+mode_seed_for()   { if [ "$1" = "enforce" ]; then printf 'off'; else printf 'enforce'; fi; }
+
 MODE_TEMPLATE="${REPO_ROOT}/core/hooks/.mode.template"
-MODE_DEFAULT="$(tr -d '[:space:]' < "${MODE_TEMPLATE}" 2>/dev/null || true)"
-if [ "${MODE_DEFAULT}" = "enforce" ]; then MODE_SEED="off"; else MODE_SEED="enforce"; fi
+MODE_DEFAULT="$(mode_default_of "${MODE_TEMPLATE}")"
+MODE_SEED="$(mode_seed_for "${MODE_DEFAULT}")"
 readonly MODE_TEMPLATE MODE_DEFAULT MODE_SEED
+
+DCMODE_TEMPLATE="${REPO_ROOT}/core/hooks/deploy-check.mode.template"
+DCMODE_DEFAULT="$(mode_default_of "${DCMODE_TEMPLATE}")"
+DCMODE_SEED="$(mode_seed_for "${DCMODE_DEFAULT}")"
+readonly DCMODE_TEMPLATE DCMODE_DEFAULT DCMODE_SEED
+
+GHLMODE_TEMPLATE="${REPO_ROOT}/core/hooks/.gh-path-leak-mode.template"
+GHLMODE_DEFAULT="$(mode_default_of "${GHLMODE_TEMPLATE}")"
+GHLMODE_SEED="$(mode_seed_for "${GHLMODE_DEFAULT}")"
+readonly GHLMODE_TEMPLATE GHLMODE_DEFAULT GHLMODE_SEED
+
+AUTOMODE_TEMPLATE="${REPO_ROOT}/core/hooks/.autonomy-mode.template"
+AUTOMODE_DEFAULT="$(mode_default_of "${AUTOMODE_TEMPLATE}")"
+AUTOMODE_SEED="$(mode_seed_for "${AUTOMODE_DEFAULT}")"
+readonly AUTOMODE_TEMPLATE AUTOMODE_DEFAULT AUTOMODE_SEED
 
 # deploy_ws <dir> — materialize a workspace with the CURRENT hook bundle + a baseline state.
 deploy_ws() {
@@ -107,7 +140,7 @@ restore() { bash "${SETUP}" --restore-hooks --workspace-root "$1" --source-repo 
 # COUNT is the unit every #5662 recovery arm reports in, so it is derived once here.
 n_bundle_files() { find "$1" -type f 2>/dev/null | wc -l | tr -d ' '; }
 
-printf '\nCase 1-3: stale hook refreshed · missing hook libs co-deployed (awk + constants) · .mode preserved\n'
+printf '\nCase 1-3: stale hook refreshed · missing hook libs co-deployed (awk + constants) · all FOUR mode files preserved\n'
 # Fixture precondition. install_mode_template_if_missing returns early when its SOURCE is
 # absent, so a deleted or renamed template would leave .mode untouched and make the
 # preserve assertion below pass VACUOUSLY. Assert the template exists so that vacancy is
@@ -122,7 +155,51 @@ printf '\nCase 1-3: stale hook refreshed · missing hook libs co-deployed (awk +
 [ -f "${MODE_TEMPLATE}" ] \
   && report "mode template present (fixture precondition)" 1 \
   || report "mode template present (fixture precondition)" 0 "absent: ${MODE_TEMPLATE}"
+
+# The same precondition for the other three cohort members. Their templates are a
+# SEPARATE way for the same vacancy to arise -- install_mode_template_if_missing returns
+# early per template, so a renamed deploy-check.mode.template leaves .mode's precondition
+# green while deploy-check.mode's preserve assertion below passes for the wrong reason.
+# One arm rather than three: this is a fixture-validity check, and it names the missing
+# member in its detail, so attribution is preserved without three more output lines.
+missing_tpl=""
+for t in "${DCMODE_TEMPLATE}" "${GHLMODE_TEMPLATE}" "${AUTOMODE_TEMPLATE}"; do
+  [ -f "${t}" ] || missing_tpl="${missing_tpl} $(basename "${t}")"
+done
+[ -z "${missing_tpl}" ] \
+  && report "cohort mode templates present (fixture precondition)" 1 \
+  || report "cohort mode templates present (fixture precondition)" 0 "absent:${missing_tpl}"
+
+# ANTI-VACUITY FOR THE WHOLE COHORT. Every preserve assertion below is only meaningful
+# while its seed differs from its own template default; if any pair collapses, that
+# member's assertion passes under BOTH "preserved" and "overwritten" and measures nothing.
+# The derivation above is built to guarantee this, but a guarantee that is never observed
+# is indistinguishable from one that has quietly stopped holding -- so it is measured here
+# rather than argued in the comment.
+seed_collapse=""
+check_seed_distinct() {   # <mode file> <template default> <derived seed>
+  [ "$2" = "$3" ] && seed_collapse="${seed_collapse} $1(both='$2')"
+  return 0
+}
+check_seed_distinct ".mode"               "${MODE_DEFAULT}"     "${MODE_SEED}"
+check_seed_distinct "deploy-check.mode"   "${DCMODE_DEFAULT}"   "${DCMODE_SEED}"
+check_seed_distinct ".gh-path-leak-mode"  "${GHLMODE_DEFAULT}"  "${GHLMODE_SEED}"
+check_seed_distinct ".autonomy-mode"      "${AUTOMODE_DEFAULT}" "${AUTOMODE_SEED}"
+[ -z "${seed_collapse}" ] \
+  && report "every cohort seed DIFFERS from its own template default (AC-3)" 1 \
+  || report "every cohort seed DIFFERS from its own template default (AC-3)" 0 \
+       "collapsed:${seed_collapse} — preserve and overwrite leave identical bytes for these"
+
 WS="${SBX}/ws1"; deploy_ws "${WS}"
+# Seed the other three cohort members into THIS workspace only -- deliberately NOT into
+# deploy_ws, which builds the fixture for every case in this file. In every OTHER case
+# these three are legitimately absent, and that absence is what exercises
+# install_mode_template_if_missing's INSTALL branch: the `cp` and the `rm-file` rollback op
+# it records, which Cases 9d / 11 / 12 read. Seeding them globally would retire that
+# coverage to buy nothing here, since the preserve contract is only asserted in this case.
+printf '%s\n' "${DCMODE_SEED}"   > "${WS}/.claude/hooks/deploy-check.mode"
+printf '%s\n' "${GHLMODE_SEED}"  > "${WS}/.claude/hooks/.gh-path-leak-mode"
+printf '%s\n' "${AUTOMODE_SEED}" > "${WS}/.claude/hooks/.autonomy-mode"
 printf '#!/bin/bash\n# STALE\nexit 0\n' > "${WS}/.claude/hooks/block-gh-path-leak.sh"   # stale
 rm -f "${WS}/.claude/hooks/lib/positional-issueref.awk"                                 # never-deployed
 rm -f "${WS}/.claude/hooks/lib/fragile-ref-patterns.sh"                                 # never-deployed
@@ -152,21 +229,42 @@ grep -q 'path_leak_scan_line' "${WS}/.claude/hooks/block-gh-path-leak.sh" && rep
 # refresh flow asserted it landed. All FOUR anchor-carrying hooks read it at startup and fail
 # CLOSED without it, so its absence is the widest-blast-radius entry in the co-deploy list.
 [ -f "${WS}/.claude/hooks/lib/command-position.awk" ] && report "never-deployed command-position.awk co-deployed" 1 || report "never-deployed command-position.awk co-deployed" 0
-# Mode-file preserve cohort -- the enumeration this assertion's siblings owe.
+# Mode-file preserve cohort -- the enumeration this assertion's siblings owed, now paid.
 # setup-workspace.sh installs FOUR mode defaults install-if-missing (.mode,
 # deploy-check.mode, .gh-path-leak-mode, .autonomy-mode) and --refresh-hooks routes
 # through that same install path, so all four carry the identical preserve-vs-overwrite
-# contract. Only .mode is asserted -- here. The other three have NO preserve assertion in
-# any suite: that is a RECORDED gap, not an assumed-absent one, and the durable remedy is
-# a single assertion driven from the tracked mode-template set rather than a per-file
-# enumeration -- tracked separately, in the same shape as the co-deploy list limitation
-# noted at the top of this file. A fifth tracked template, .verify-session-config-mode,
-# has no install call site at all, so it carries no preserve contract to assert; that is
-# a different defect and is likewise tracked separately.
+# contract. Until #6111 only .mode was asserted, and the other three appeared in this
+# comment and nowhere else -- no preserve assertion in this suite or any other, so a
+# regression clobbering an operator's chosen posture in any of them was undetectable.
+# (Two of the three DO carry an assertion in test_install_end_to_end.sh, but of a
+# DIFFERENT contract -- that a fresh install LANDS the template default -- which is
+# satisfied precisely by the overwrite this cohort exists to forbid.)
+#
+# Each member carries its OWN named assertion below rather than one cohort arm, so a
+# clobber is attributable to the file it happened to instead of reddening all four.
+#
+# STILL A PER-FILE ENUMERATION, and that is the known limitation -- the same shape as the
+# co-deploy list noted at the top of this file. A mode template added in a later release
+# is invisible here until someone adds its name; the durable remedy is a single assertion
+# driven from the tracked mode-template set, tracked separately. A fifth tracked template,
+# .verify-session-config-mode, has no install call site at all, so it carries no preserve
+# contract to assert; that is a different defect and is likewise tracked separately.
 [ "$(cat "${WS}/.claude/hooks/.mode")" = "${MODE_SEED}" ] \
   && report ".mode preserved (operator choice)" 1 \
   || report ".mode preserved (operator choice)" 0 \
        "seeded ${MODE_SEED}, found $(cat "${WS}/.claude/hooks/.mode"); template default is ${MODE_DEFAULT}"
+[ "$(cat "${WS}/.claude/hooks/deploy-check.mode")" = "${DCMODE_SEED}" ] \
+  && report "deploy-check.mode preserved (operator choice)" 1 \
+  || report "deploy-check.mode preserved (operator choice)" 0 \
+       "seeded ${DCMODE_SEED}, found $(cat "${WS}/.claude/hooks/deploy-check.mode"); template default is ${DCMODE_DEFAULT}"
+[ "$(cat "${WS}/.claude/hooks/.gh-path-leak-mode")" = "${GHLMODE_SEED}" ] \
+  && report ".gh-path-leak-mode preserved (operator choice)" 1 \
+  || report ".gh-path-leak-mode preserved (operator choice)" 0 \
+       "seeded ${GHLMODE_SEED}, found $(cat "${WS}/.claude/hooks/.gh-path-leak-mode"); template default is ${GHLMODE_DEFAULT}"
+[ "$(cat "${WS}/.claude/hooks/.autonomy-mode")" = "${AUTOMODE_SEED}" ] \
+  && report ".autonomy-mode preserved (operator choice)" 1 \
+  || report ".autonomy-mode preserved (operator choice)" 0 \
+       "seeded ${AUTOMODE_SEED}, found $(cat "${WS}/.claude/hooks/.autonomy-mode"); template default is ${AUTOMODE_DEFAULT}"
 
 printf '\nCase 4: operator-edited hook preserved (not clobbered)\n'
 WS="${SBX}/ws2"; deploy_ws "${WS}"
