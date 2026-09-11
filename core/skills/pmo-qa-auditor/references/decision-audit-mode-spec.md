@@ -25,26 +25,11 @@ hub's invariants and named failure modes.
 
 **Host decision of record:** [ADR-103](../../../ADRs/ADR-103-decision-audit-host-qa-auditor-mode-j.md).
 
-## 0. Provisioning state (read this first)
-
-This spec ships **ahead of** the content SSOT it cites. The host decision and the capability
-build are separate work items: the host decision registers the mode, this spec, and the
-cadence protocol; the capability build authors `decision-audit-dimension-rubric.md` (the
-coverage-seam set, the per-seam grade vocabulary, and the coverage-index formula) and fills
-the run machinery against the shipped event-log schema.
-
-**Until the rubric exists, a Mode J invocation reports its own unprovisioned state and stops.**
-It does not improvise a seam set, does not score against an ad-hoc rubric, and does not emit a
-partial scorecard — a fabricated baseline is worse than an absent one, because a later run
-would silently measure drift against noise. The check is mechanical: resolve the rubric path;
-if it is absent, emit the unprovisioned notice naming the missing file and the work item that
-lands it, and terminate. §§1–7 below define the machinery that becomes live once it lands.
-
 ## 1. Consumption map (anti-duplication contract)
 
 | Machinery | SSOT | Mode J's use |
 |---|---|---|
-| Coverage-seam set + per-seam grade vocabulary + coverage-index formula | `decision-audit-dimension-rubric.md` | scored verbatim; **zero locally-defined seams**. This is the constraint that makes the capability-versus-scorecard consistency check mechanical rather than a prose judgment |
+| Coverage-seam set + the coverage-state and grade vocabularies with their assignment predicates + the coverage-index formula and its instrumentation-ceiling companion + the comparability guard | `decision-audit-dimension-rubric.md` | scored verbatim; **zero locally-defined seams**. This is the constraint that makes the capability-versus-scorecard consistency check mechanical rather than a prose judgment |
 | **Oracle (PRIMARY): the hub's decision invariants** | `release/skills/release-hub/SKILL.md` | the sink-disposition invariant every hub finding must satisfy; derived at run time (§3), never enumerated here |
 | **Oracle (PRIMARY): the named decision failure modes** | the `## Domain-Specific Failure Modes` sections of the release-orchestration skills | the detection oracle — was each named failure mode caught when its signature occurred? Derived and pinned per run (§3) |
 | **Oracle (SECONDARY): the decision-conduct disciplines** | [`core/disciplines/decision-discipline.md`](../../../disciplines/decision-discipline.md) + [`core/disciplines/autonomous-execution-model.md`](../../../disciplines/autonomous-execution-model.md) | the decision-class taxonomy and the retry / escalate / rollback posture a run classifies observed conduct against |
@@ -89,12 +74,28 @@ count of the same sources. A frozen cardinality is invalidated silently by a sin
 which is exactly the class of decay a decision audit exists to surface. An audit that inherits
 that failure mode cannot credibly report it.
 
+**Step 0 — the rubric-absence guard (runtime, not a provisioning state).** Resolve the rubric
+path before deriving anything. The rubric ships, so its absence is not an expected state — but
+a partial deploy, a mirror that did not sync, or a package built before it landed all produce
+one. On absence, emit the notice naming the missing file and **terminate**. Do not improvise a
+seam set, do not score against an ad-hoc rubric, and do not emit a partial scorecard: a
+fabricated baseline is worse than an absent one, because a later run would silently measure
+drift against noise.
+
 **Derivation:**
 
-1. **Resolve the oracle-source roster from the corpus**, never from an inline list. The roster
-   is the set of release-orchestration skill definitions that declare a named failure-mode
-   section; resolve it by scanning the release module's skill directories for that section
-   heading rather than by naming files.
+1. **Resolve the roster of oracle sources from the corpus by a frozen structural predicate**,
+   never from an inline list and never from an unstated reading. All three conjuncts are
+   machine-checkable: **c1** the file is a `SKILL.md` under the release module's skill tree;
+   **c2** its skill name is a member of the deployed release-skill roster held in the deploy
+   script; **c3** the file carries the named failure-mode section heading. The predicate is
+   frozen rather than left to the scanner's judgment because defensible readings of a
+   roster rule select different source sets, and two runs deriving different sets from one rule
+   compare incomparable indices — a worse failure than an encoded count, which is at least
+   visible. Conjunct **c2** excludes the self-test canary by construction: it is a deliberately
+   non-conformant permanent fixture, and scoring decision health against an artifact built to
+   fail is not a matter of taste. The predicate's full canonicalization, including what it
+   costs, is recorded in the rubric's reconciliation record.
 2. **Count each source with a section-scoped probe, not a whole-file match.** The entries are
    the third-level headings *between* the failure-mode section heading and the next
    second-level heading. A whole-file heading count over-counts, because these files carry
@@ -106,9 +107,23 @@ that failure mode cannot credibly report it.
 4. **Derive the invariant oracle the same way** — read the hub's stated decision invariants
    from the hub skill definition at the pinned anchor, rather than carrying a restatement.
 
-**Pinning:** record, in both emitted surfaces, the content hash of each oracle source, the
-derivation date, and the derived per-source counts, mirroring the freshness anchor Mode I
-carries. A finding that rests on the oracle set is reproducible only against that pin.
+**Pinning:** record, in both emitted surfaces and per oracle source, the repo-relative path, the
+content hash, the entry count, and the **entry-title set**; plus the **roster membership set**
+as a whole and the derivation date. This mirrors the freshness anchor Mode I carries and extends
+it on the membership axis. A finding that rests on the oracle set is reproducible only against
+that pin.
+
+**Roster-delta notice.** Read the prior pin from the committed summary surface (§7b) and emit a
+notice naming any oracle source **added or removed** since it. The continuity rule makes adding
+a source an oracle change; that rule is mechanically enforceable only if a run can *see* the
+change, which is what the membership field of the pin is for — a pin carrying only hashes and
+counts cannot be diffed for membership, so two runs would compare indices over different rosters
+and read the difference as decision-health movement.
+
+**Why the hash field is the half that earns its keep.** A source's content can change while its
+entry count and its ordered entry-title set stay identical. That is not a hypothetical: it was
+measured on a live sibling release editing one of these sources. A derivation that is merely
+cardinality-free reports no drift in that case and is wrong.
 
 **Gradability:** a search across this mode's artifacts for a fixed named-failure-mode count
 must return nothing. That is a mechanical assertion, not a reading exercise.
@@ -126,12 +141,18 @@ order. Every collected item carries its source so the evidence bar (§5) is chec
 | 4 | The deviation logs inside each release plan in the window | the decisions taken *against* the plan, which are the ones most likely to be unrecorded elsewhere | secondary |
 
 **Stated limitation, carried into every run's summary.** The event stream is the only
-per-decision source, so seams with no emission are **blind, not clean** — an unemitted seam
-produces no rows, and no rows is indistinguishable from no failures unless the distinction is
-stated. Every seam whose evidence count is zero reports as `no-evidence` with the emitting
-surface named, never as a passing grade. This is the single most important honesty constraint
-in the mode: a coverage index computed over a partly-blind stream reads as health when it is
-measuring silence.
+per-decision source, so a seam **for which no producer is declared** is **blind, not clean** —
+it can emit no rows, and no rows is indistinguishable from no failures unless the distinction is
+stated. This is the single most important honesty constraint in the mode: a coverage index
+computed over a partly-blind stream reads as health when it is measuring silence.
+
+**Zero rows does not resolve to one state, and the rubric decides which.** A seam with no rows
+is `uninstrumented` when no corpus rule declares a writer for any of its loci, and `unexercised`
+when a writer exists and the window owed it nothing; and a seam that is instrumented, was owed
+occasions, and produced nothing is **`measured` / `partial`** — a shortfall, not an absence.
+Only the first of those is blind. Whichever state applies, the seam reports **with its emitting
+surface named**, and a non-graded state is **never** rendered as a passing grade. The ordered
+predicate that assigns the state lives in the rubric and is not restated here.
 
 ## 5. Evidence bar
 
@@ -153,8 +174,13 @@ bindings are:
   medium.
 - **Systemic patterns** are the cross-release recurrences: the same decision failure signature
   in two or more releases in the window.
-- **The residual risk register** carries every seam reporting `no-evidence`, because an
-  unmeasured seam is a residual risk rather than a finding.
+- **The residual risk register** carries every seam reporting `uninstrumented`, because a seam
+  the platform cannot see is a residual risk rather than a finding. It does **not** carry an
+  `unexercised` seam — a writer exists and nothing was owed, so there is no unmeasured risk to
+  register. The one qualification is the measurement gap: a seam carrying any `indeterminate`
+  occasion class may not render `unexercised` and **retains** register membership, because
+  *the surface that would say what was owed cannot be read from here* is not the same fact as
+  *nothing was owed*.
 - **Remediation priority** is ordered but never prescriptive — see the mutation posture below.
 
 ## 7. Artifact schemas
@@ -169,22 +195,33 @@ git-ignored, where `${AUDIT_DATE_UTC}` resolves at **run time** via `date -u +%Y
 literal token appears in this spec by design; a resolved date written into a spec is a defect.
 
 - **SUMMARY.md** — analysis frontmatter per the analysis-workspace standard, plus the resolved
-  window (both bounds and both merge anchors), the oracle pin (per-source content hashes,
-  derivation date, derived per-source counts), the coverage scorecard rendered from the rubric,
-  the classification counts, the count of seams reporting `no-evidence` with the blind-versus-
-  clean distinction stated, and the evidence-bar pass rate.
+  window (both bounds and both merge anchors), the oracle pin (per-source path, content hash,
+  entry count and entry-title set; the roster membership set; the derivation date), any
+  roster-delta notice, the coverage scorecard rendered from the rubric, the classification
+  counts, the coverage-state distribution with the `uninstrumented` and `unexercised` counts
+  reported **separately** and the blind-versus-quiet distinction stated, the coverage index, the
+  instrumentation ceiling, and the evidence-bar pass rate.
 - **findings-register.md** — one row per finding:
   `| finding-id | release (version + merge anchor) | seam | oracle (invariant / named failure mode) | classification | severity | confidence | evidence | root-cause |`,
   plus a `## Systemic Patterns` table for cross-release recurrences and a single
-  `## Coverage Gap` aggregate row for the `no-evidence` seams.
+  `## Coverage Gap` aggregate row for the `uninstrumented` seams. An `unexercised` seam is not a
+  coverage gap — its writer exists and the window owed it nothing — and it is reported in the
+  distribution rather than in that row.
 - **issue-drafts/NNN-kebab-name.md** — observation format, three fields, ready for operator
   triage; never auto-filed.
 
 **(b) The committed summary handoff** at `release/releases/decision-health-summary.md` —
 tracked, present on every clone, seeded with an awaiting-first-run state and **overwritten**
 by each run (single-record-overwrite, like a status snapshot). It carries the decision-health
-posture, the coverage index, the classification counts, the `no-evidence` seam count, the
-oracle pin, the resolved window, the audit date, and a pointer to the latest folder in (a).
+posture, the coverage index, the **instrumentation ceiling**, the classification counts, the
+coverage-state distribution with the `uninstrumented` and `unexercised` counts reported
+**separately**, the oracle pin including its roster membership, the resolved window, the audit
+date, and a pointer to the latest folder in (a).
+
+**The ceiling is a rendered field, not a note.** A reader must be able to see the reachable
+bound beside the index without reconstructing it, because a persistently sub-maximal index
+below a sub-maximal ceiling is the instrumentation gap being reported honestly — not evidence
+of ill decision-health. Rendering only the number invites exactly that misreading.
 
 **Why the committed surface is load-bearing, not decoration.** The analysis workspace is
 git-ignored, so an acceptance criterion or a downstream consumer that cites only the folder
@@ -206,8 +243,26 @@ pre-empts the operator's triage authority and evades the intake templates' field
 
 ## 9. Fixtures and regression
 
-The capability build lands `evals/decision-audit-characterization-fixtures.md`, mirroring the
-per-mode fixture precedent the sibling audit modes set. Minimum families: a window with a
-recorded and evidenced decision (expect conformant), a window with an undetected named failure
-mode (expect a finding), a window with an unemitted seam (expect `no-evidence`, never a pass),
-and a two-release recurrence (expect a systemic pattern).
+`evals/decision-audit-characterization-fixtures.md` carries the families, mirroring the per-mode
+fixture precedent the sibling audit modes set. The families cover window resolution, roster
+derivation, the derivation control arm, coverage-state discrimination, classification, index
+arithmetic, the ceiling term, and the evidence bar.
+
+**Four of them exist to prove a mechanism can fail**, and they are named here because a control
+arm nothing exercises is indistinguishable from one that cannot fire:
+
+- **the degenerate section boundary** — a corpus in which every source's section-scoped count
+  equals its whole-file heading count must report INDETERMINATE, not proceed. This is the arm
+  for §3 step 3.
+- **instrumented, occasions owed, no rows** — must render `measured` / `partial`, never
+  `unexercised` and never `uninstrumented`. Without it, the state the coverage axis exists to
+  expose can silently regress into a benign class.
+- **an occasion class that cannot be read** — must resolve `indeterminate` rather than zero, so
+  the seam may not render `unexercised` and keeps its register membership.
+- **evidence from an undeclared producer** — must surface a finding rather than an arithmetic
+  error, which is the branch that makes the index-versus-ceiling relation a detector.
+
+The classification family additionally covers a recorded and evidenced decision (expect
+conformant), an undetected named failure mode (expect a finding), a zero-row seam (expect a
+non-graded state and **no grade**), and a two-release recurrence (expect exactly one systemic
+pattern).

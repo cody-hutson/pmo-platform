@@ -47,7 +47,7 @@
 
 ## How to read this surface
 
-**The two non-graded coverage classes are reported separately, and only one of them is blind.**
+**The non-graded coverage classes are reported separately, and only `uninstrumented` is blind.**
 This is the distinction the whole surface exists to preserve, so it is stated here rather than
 left to the reader:
 
