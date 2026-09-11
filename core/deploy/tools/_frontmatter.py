@@ -3,12 +3,22 @@
 
 This is the ONE place the deploy-tool family parses a doc's frontmatter block,
 so two checks that both reason about "does this doc carry frontmatter, and what
-keys does it carry" can never drift apart. It is consumed by:
+keys does it carry" can never drift apart. Its six live consumers, all under
+core/deploy/tools/:
 
-  * check-version-anchors.py (Check 18b/18d) — via read_anchor(), which preserves
-    that tool's exact 4-status contract; and
+  * backfill-relationship-edges.py — via read_frontmatter();
+  * build-doc-index.py — via read_frontmatter();
   * check-doc-frontmatter.py (Check 50) — via read_frontmatter(), the generalized
-    all-keys reader.
+    all-keys reader;
+  * check-version-anchors.py (Check 18b/18d) — via read_anchor(), which preserves
+    that tool's exact 4-status contract;
+  * compose-portfolio.py — via read_frontmatter(); and
+  * stamp-node-frontmatter.py — via read_frontmatter().
+
+The last two of those checks load this module dynamically, through
+importlib.util.spec_from_file_location rather than a static import, which is why
+a grep for `import _frontmatter` UNDER-reports the consumer set. Count the
+dynamic loads too before asserting a blast radius.
 
 The parse idiom is the one check-version-anchors.py shipped (the v11.12 reader):
 a doc has frontmatter IFF line[0].strip() == "---"; the block runs to the next
@@ -17,6 +27,57 @@ colon and the value is stripped of one matching pair of surrounding quotes
 ("…" or '…'). Keeping that idiom byte-identical here is the F1 consistency
 guarantee: a doc Check 18b treats as "has frontmatter" is the same doc Check 50
 treats as "has frontmatter," because both ask THIS module.
+
+FROZEN SEMANTICS
+----------------
+The clauses below state what this module DOES, not what a YAML parser would do.
+They are frozen deliberately: every one of them is a property six consumers
+already depend on, so changing one changes all six resolved-value sets at once
+and silently. Each clause is anchored by a named assertion in _self_test case
+(5), so a future well-meaning tightening fails a test rather than shipping.
+
+F-1  Frontmatter exists IFF the file's FIRST line, stripped, is exactly "---",
+     and the block runs to the next line whose strip() is "---". A file whose
+     first line is anything else — an HTML comment, a heading, a blank line —
+     has no frontmatter at all, however many "---" fences appear later.
+
+F-2  ANY flush-left line containing a colon becomes a top-level key. Only the
+     leading-whitespace test at the top of the loop excludes a line; there is no
+     effective guard beyond it. In particular a full-line "#" comment inside the
+     block IS admitted as a key — the shipped
+     operations/templates/project-rollup-template.md parses to 14 top-level
+     keys, 2 of which are its own "#" comment lines — and so is ordinary prose:
+     "This is prose: something" yields the key "This is prose".
+     The internal-space guard below is UNREACHABLE and is frozen as unreachable.
+     Its enclosing condition asks whether key differs from raw_key.rstrip(), and
+     a flush-left line has no leading whitespace, so strip() and rstrip() agree
+     and the condition is never true. Deleting the dead guard is harmless;
+     REPAIRING it is not — making it reachable would drop prose- and
+     comment-derived keys that every consumer has resolved since this module
+     shipped. If you came here to fix it, that is the behaviour change you would
+     be making, and case (5) will tell you so.
+
+F-3  The value is everything after the FIRST colon; it loses exactly ONE
+     matching pair of surrounding quotes, and is then stripped AGAIN, so inner
+     padding does not survive: `padded: "  T  "` resolves to "T", not "  T  ".
+     Escapes are NOT interpreted — a backslash-quote inside a quoted value stays
+     two characters — because this is a block reader, not a YAML engine.
+
+F-4  A "#" in a value is CONTENT, never a comment delimiter. This is a decision,
+     not an omission. Measured across the tracked corpus at the time of this
+     decision, 639 of 6,664 parsed values carry a "#" and 543 carry it with no
+     preceding whitespace — issue references, heading anchors, flow-list
+     members. A strip here changes every consumer's resolved value at once,
+     silently, and truncates real content wherever the author meant the "#"
+     literally; even a YAML-faithful rule still truncates measured non-template
+     values, including one where the "#" sits inside a quoted string nested in a
+     flow list. A consumer whose key has a DECLARED SHAPE validates that shape
+     and fails loudly on a polluted value; that is where the constraint belongs,
+     and compose-portfolio.py's project_id join key is the worked instance.
+
+F-5  A key line with an empty value yields "". The caller decides whether
+     present-but-empty counts as present — Check 50 treats it as a missing-field
+     finding, and that is the caller's policy, not this module's.
 
 Stdlib-only; no argparse / CLI — this is a library, imported by the checks.
 A small `--self-test` guard is provided for direct sanity invocation.
@@ -72,8 +133,16 @@ def read_frontmatter(doc_path: Path) -> tuple[dict[str, str], str]:
         raw_key, raw_val = line.split(":", 1)
         key = raw_key.strip()
         if not key or key != raw_key.rstrip():
-            # A leading-space key was already filtered; an internal space means
-            # this is prose, not a YAML key — skip it.
+            # DEAD GUARD — frozen as unreachable, see docstring F-2.
+            # The leading-whitespace filter above means raw_key never carries
+            # leading whitespace, so strip() and rstrip() always agree and this
+            # branch is entered only when key is empty — in which case " " in key
+            # is False and the `continue` below never runs. The effect is that
+            # ANY flush-left line containing a colon becomes a top-level key,
+            # including a "#" comment line and ordinary prose. Six consumers have
+            # resolved values under that behaviour since this module shipped.
+            # Do not "repair" this into reachability: that is a corpus-wide
+            # resolved-key change, and case (5) asserts against it.
             if " " in key:
                 continue
         if key and key not in keys:
@@ -88,9 +157,9 @@ def read_anchor(doc_path: Path) -> tuple[str | None, str]:
     status ∈ {"no-file", "no-frontmatter", "frontmatter-no-key", "ok"}.
     anchor_value is the stripped framework_version_anchor value when status=="ok".
 
-    Implemented on top of read_frontmatter so the parse is shared (F1): the two
-    tools cannot disagree about what a frontmatter block is or how a value is
-    quote-stripped.
+    Implemented on top of read_frontmatter so the parse is shared (F1): no
+    consumer can disagree with any other about what a frontmatter block is or how
+    a value is quote-stripped, because every one of them asks THIS module.
     """
     keys, status = read_frontmatter(doc_path)
     if status in ("no-file", "no-frontmatter"):
@@ -142,6 +211,77 @@ def _self_test() -> int:
         assert astat2 == "frontmatter-no-key" and anchor2 is None, (astat2, anchor2)
         anchor3, astat3 = read_anchor(d2)  # no frontmatter
         assert astat3 == "no-frontmatter", astat3
+
+        # (5) FROZEN SEMANTICS — the docstring's F-2, F-3 and F-4 clauses,
+        # anchored as assertions rather than prose.
+        #
+        # READ THIS BEFORE "FIXING" A FAILURE HERE. These assertions exist to
+        # FAIL a future comment-strip (or a repair of the dead internal-space
+        # guard), not to test one. They pass on BOTH arms of such a change by
+        # design — pre-change and post-change — because the behaviour they pin
+        # is already shipped and is deliberate. They are a tripwire, not a
+        # discriminator. The fails-before/passes-after discriminator for this
+        # defect class lives in compose-portfolio.py's (join-key-polluted) case,
+        # where the constraint actually belongs: at the consumer that declares a
+        # shape for its key.
+        d5 = base / "frozen.md"
+        d5.write_text(
+            '---\n'
+            '# Placement: under core/deploy/tools/\n'
+            'project_id: proj-alpha        # renamed from alpha-2024\n'
+            'anchor: terminology-glossary.md#term-work-item\n'
+            'padded: "  T  "\n'
+            'quoted: "a \\" b # c"\n'
+            '---\n# Body\n',
+            encoding="utf-8",
+        )
+        keys5, status5 = read_frontmatter(d5)
+        assert status5 == "ok", status5
+
+        # F-4 — a "#" in a value is CONTENT. Each value must resolve WHOLE.
+        assert keys5["project_id"] == "proj-alpha        # renamed from alpha-2024", (
+            "F-4: a trailing '#' comment is part of the value; a strip here "
+            "would change resolved values across all six consumers at once"
+        )
+        assert keys5["anchor"] == "terminology-glossary.md#term-work-item", (
+            "F-4: a heading anchor's '#' has no preceding whitespace and must "
+            "survive; 543 measured corpus values carry this shape"
+        )
+
+        # F-3 — exactly one quote pair is removed, escapes are NOT interpreted,
+        # and the value is stripped AGAIN after the slice.
+        assert keys5["quoted"] == 'a \\" b # c', (
+            "F-3: one outer quote pair removed; the backslash-quote stays TWO "
+            "characters and the '#' survives"
+        )
+        assert keys5["padded"] == "T", (
+            "F-3: _strip_quotes re-strips after the slice, so inner padding does "
+            "NOT survive — 'T', never '  T  '"
+        )
+
+        # F-2 — any flush-left line with a colon is a key, "#" comments included.
+        assert "# Placement" in keys5, (
+            "F-2: a full-line '#' comment inside the block IS admitted as a "
+            "top-level key; the internal-space guard is unreachable"
+        )
+        assert keys5["# Placement"] == "under core/deploy/tools/", keys5["# Placement"]
+
+        # F-2 second arm — ordinary prose, with the nested-list SPECIFICITY arm
+        # alongside it so a pass cannot come from the reader admitting nothing.
+        d6 = base / "prose.md"
+        d6.write_text(
+            '---\nThis is prose: something\ncomposes_with:\n  - x.md\n---\n',
+            encoding="utf-8",
+        )
+        keys6, status6 = read_frontmatter(d6)
+        assert status6 == "ok", status6
+        assert keys6.get("This is prose") == "something", (
+            "F-2: an internal-space flush-left line becomes a top-level key"
+        )
+        assert "- x.md" not in keys6, (
+            "SPECIFICITY: an INDENTED line is still excluded — F-2 widens what "
+            "counts as flush-left, it does not remove the indentation filter"
+        )
 
     print("_frontmatter self-test OK")
     return 0
