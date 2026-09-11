@@ -683,11 +683,27 @@ def resolve_dimension(dim, rollup, as_of) -> tuple:
 
     A row that DOES name a field reads it off the rollup, formats it (RAG glyph
     for `status`, escaped text otherwise), and carries the ordinary staleness
-    suffix, because that cell holds a real value.
+    suffix, because that cell holds a real value — after asserting the field
+    actually exists, which is §4.1 R3 enforced rather than merely warned about.
     """
     _label, metric, field = dim
     if field is None:
         return (UNSOURCED_CELL, f"{metric} — no §2 contract field carries it")
+    if not hasattr(rollup, field):
+        # §4.1 R3 mis-ordering, caught at the seam it happens at. A bare
+        # getattr here raises AttributeError, which main()'s `except
+        # ContractDrift` does not catch, so the operator gets a traceback
+        # naming no remedy — the one failure in this module that does not
+        # name its contract clause and its fix.
+        raise ContractDrift(
+            f"HEALTH_DIMENSIONS row {_label!r} names §2 field {field!r}, which "
+            f"no rollup carries. This is the §4.1 R3 mis-ordering: backing "
+            f"arrives WITH its producer, so adding a backing field is a §2 "
+            f"CONTRACT change FIRST and a HEALTH_DIMENSIONS row edit second, "
+            f"never the reverse — the reverse makes this table read as "
+            f"delivered when it is not. Either land {field!r} in §2 and on the "
+            f"Rollup this composer builds, or set this row's third field back "
+            f"to None so the cell renders {UNSOURCED_CELL} and says so.")
     value = getattr(rollup, field)
     cell = _rag_cell(value) if field == "status" else _md_escape(value)
     return (f"{cell}{_stale_suffix(rollup.last_published, as_of)}",
@@ -1252,6 +1268,31 @@ def run_self_test() -> int:
                             "staleness marker; [STALE] qualifies a VALUE and this "
                             "cell reports that no value exists")
 
+        # (dimension-seam) The §4.1 R3 mis-ordering fails with THIS module's
+        # diagnostic, not a bare AttributeError. A HEALTH_DIMENSIONS row pointed
+        # at a §2 field no rollup carries is precisely the mistake R3 exists to
+        # warn about; before the guard it escaped main()'s `except ContractDrift`
+        # and reached the operator as a traceback naming no remedy, alone among
+        # this module's failures.
+        try:
+            resolve_dimension(("Q", "m4", "spi"), _r0, as_of)
+            failures.append("(dimension-seam) a row naming a §2 field absent from "
+                            "the rollup did NOT raise ContractDrift")
+        except ContractDrift as _e:
+            if "R3" not in str(_e) or "spi" not in str(_e):
+                failures.append(f"(dimension-seam) ContractDrift raised but does "
+                                f"not name §4.1 R3 and the offending field: {_e}")
+        except AttributeError:
+            failures.append("(dimension-seam) the seam raises a bare AttributeError, "
+                            "which main()'s ContractDrift handler does not catch — "
+                            "the operator gets a traceback naming no remedy")
+        # SPECIFICITY — a row naming a REAL field must still resolve unchanged, so
+        # the guard cannot pass by rejecting everything.
+        _seam_ok = resolve_dimension(("Q", "m4", "status"), _r0, as_of)[0]
+        if _seam_ok != _a:
+            failures.append(f"(dimension-seam) SPECIFICITY FAILED — the guard "
+                            f"changed a real field's resolution: {_seam_ok!r} != {_a!r}")
+
         # (join-key-polluted) FAILS PRE-FIX. A trailing '# …' on the project_id
         # line is CONTENT to the shared reader, so pre-fix the polluted value
         # passed the presence check and composed at exit 0 on a WRONG join key.
@@ -1392,7 +1433,8 @@ def run_self_test() -> int:
     print("compose-portfolio self-test OK "
           "(idempotency byte-identical / S1-S8+meta rendered / staleness discriminates / "
           "exit-0-with-[STALE] / drift->exit-1 / join-key->exit-1 / projects-guard / "
-          "s2-per-dimension / s2-resolver-varies / join-key-polluted / "
+          "s2-per-dimension / s2-resolver-varies / dimension-seam / "
+          "join-key-polluted / "
           "discovery-polluted x2 / dot-segment)")
     return 0
 
