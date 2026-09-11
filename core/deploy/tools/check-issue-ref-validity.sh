@@ -1288,5 +1288,40 @@ if [ "$RESOLVER" = "fixture" ] && [ -z "$FIXTURE_MAP" ]; then
   die "--resolver fixture requires --fixture-map"
 fi
 
+# The gh resolver asks "does #N exist in THIS repo", and GITHUB_REPOSITORY is the
+# only thing that says which repo that is. Unset, the query degenerates to
+# `repos//issues/N`, every number 404s, and the gate emits a CONTENT verdict
+# ("#N does not resolve to an issue in this repo") produced entirely by a missing
+# variable — a red that does not depend on the file under test and is therefore
+# indistinguishable, to the reader, from a real finding.
+#
+# REFUSE RATHER THAN DERIVE, and the rejected alternative is the instructive one.
+# Deriving the repo from `git remote` would trade a loud config fault for a silent
+# WRONG one: on a fork or a mirror remote the same #N resolves against a DIFFERENT
+# issue graph, so the gate would confidently report a valid reference as invalid
+# with no evidence that anything was assumed. A config fault reported as a content
+# verdict is the defect this guard removes; a config fault reported as the wrong
+# content verdict is the same defect with the diagnosis deleted.
+#
+# SITED AT THE gh RESOLVER'S PRECONDITION, deliberately, and not at the `:` default
+# at the top of the file. `resolve_issue`'s `gh api` call is the single consumer of
+# the variable; `fixture_verdict` never reads it. Guarding the default instead would
+# break every legitimate `--resolver fixture` invocation, which is the whole offline
+# surface. Guarding lazily inside `resolve_issue` would be worse still: it would fire
+# only once some `#N` was encountered, so one config fault would produce a refusal or
+# a verdict depending on file content.
+#
+# Exit 3, not 1. `1` means findings; `3` means the tool could not run. That is this
+# file's declared interface (see INTERFACE above) and the posture it already takes on
+# the structurally identical unset-REFBLOCK_RE fault. Reusing `1` would leave the
+# false red in place with better wording.
+if [ "$RESOLVER" = "gh" ] && [ -z "${GITHUB_REPOSITORY}" ]; then
+  die "GITHUB_REPOSITORY is unset and --resolver gh cannot resolve #N without it.
+  This is a CONFIGURATION failure, not a verdict: no file was scanned and no finding is implied.
+  Set the repository:  GITHUB_REPOSITORY=owner/name ${TOOL_NAME} ...
+  Or resolve offline:  ${TOOL_NAME} --resolver fixture --fixture-map <path> ...
+  Inside GitHub Actions the runner supplies this variable; outside it you must."
+fi
+
 run_scan
 emit_verdict
