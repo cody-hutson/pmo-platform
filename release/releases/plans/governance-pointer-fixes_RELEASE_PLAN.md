@@ -479,10 +479,49 @@ The design's proposed replacement was an unqualified absolute of exactly the cla
 | 5 | `#6409`'s citation restated as a content anchor (*§ 5.7, upgrade-mechanism step 2*) rather than as a repaired line number | Tier 1 [ADJUST] | The number had already drifted once between filing and planning; a content anchor cannot drift | Commit 0 |
 | 6 | `#6241`'s delta narrowed — the already-present gate identifier must **not** be re-asserted | Tier 1 [ADJUST] | Hub re-read of § 5.1 at the plan gate; a second copy of an existing claim would fail CIAC-2 | Commit 0 |
 | 7 | `#6394`'s AC-1 re-scoped from two named sentences to every occurrence across both files | Tier 1 [ADJUST] | Whole-file sweep returned six occurrences across at least three sites | Commit 0 |
+| 8 | The `#6394` verification detector was committed at `operations/skills/intake-desk/evals/detect-hook-absolute.py`, then **removed from the tree in the same PR** | Tier 1 [ADJUST] | Committing it made the delivered set **nine** paths where CIAC-3 requires exactly the eight its expected-set block enumerates. Widening that predicate is a recorded hub determination — it was for D-Package-Rebuild — so the spoke held the predicate instead. The blob stays reachable at `cd8cec21`, so the detector is recoverable byte-for-byte and reproducibility is not reduced | `#6394` Stage-6 spoke |
+| 9 | `#6394`'s three fenced scoped-true sentences addressed by **verbatim anchor**, edits applied **bottom-up**, rather than by the design's line numbers | Tier 1 [ADJUST] | The design's own first edit invalidates its later line addresses, and one prescribed range (`output-contract.md` L119–121) enclosed a scoped-true clause it meant to preserve. Anchor-addressing plus bottom-up ordering removes the coordinate-frame drift | `#6394` Stage-6 spoke |
 
 ## Verification Evidence
 
-(Populated during Stage 6 self-verification and Stage 12 execution.)
+(Stage 6 self-verification below; Stage 12 execution evidence appended at deploy.)
+
+### Stage 6 — `#6394` (Engineering spoke, sub-task `#7352`)
+
+Every claim below carries its probe. The local `grep` is `ugrep` and returns a
+plausible zero on a pattern it rejects, so every load-bearing detector is
+`python3 re`, and every zero is paired with a control arm observed non-zero in the
+same run.
+
+**The detector.** Sentence-scoped, re-derived from the Stage-5 D1 record: newlines
+collapsed to spaces *before* sentence splitting, because every in-scope claim wraps
+across a line break (a line-scoped probe for the card's own quoted phrase returns
+0). Three arms: `observ` (the false class — an unqualified claim that a control does
+not observe the create), `enforce` (the true class — no mechanical enforcement behind
+the Tier-0 floor), `fence` (the scoped-true sentences that must not be edited).
+Recoverable byte-for-byte at
+`git show cd8cec21:operations/skills/intake-desk/evals/detect-hook-absolute.py`;
+`--self-test` reproduces 5/5 sensitivity and 7/7 specificity.
+
+| Check | Probe | Result |
+|---|---|---|
+| AC-1 — zero unqualified absolutes, both files | `observ` arm over each file | **PRE 4 → POST 0** (SKILL.md 3→0, output-contract.md 1→0). Sensitivity arm observed **5/5** in the same run, so the zero is evidence rather than a silent miss |
+| AC-1 — the three scoped-true sentences survive | content-hash identity of each fenced line, matched by hash rather than line number | **5/5 BYTE-IDENTICAL** — SKILL.md L224 (unmoved), L481→L494, L735→L748; output-contract.md L118 + L119 (unmoved). The L735 case is the clause-surgical one: it shares a sentence with an edited clause |
+| AC-1 — the fence was not miscounted | `fence` arm, tolerant of both an intervening determiner (*only **the** payload-detectable*) and markdown emphasis markers | **3 in SKILL.md** — independently confirming the fence is 3, not the 2 a literal matcher reports. The arm initially read 2/3 against its own fixture; that was a probe defect, fixed before use |
+| AC-2 — coverage stated with its mode, hook cited | read of § *Honest safety read* | `core/hooks/block-gh-path-leak.sh` named, its `gh (issue|pr) (create|edit|comment)` match and body read stated, shipped mode **`warn`** named, and its four-condition coverage boundary stated — it is not active at any mode on an instance whose PreToolUse wiring has not been re-homed |
+| AC-2 — the enforcement hook is named | same read | `core/hooks/block-autonomy-ceiling.sh` named at all four corrected sites' governing section; stated **once** at the normative site, cited (not restated) at the other three |
+| Operative conclusion preserved | `enforce` arm, specified as a **floor**, never an equality | **8 → 8** (SKILL.md 6, output-contract.md 2). An equality arm over prose this build rewrites would fail a correct build; the floor is ≥1 per file plus the verbatim conclusion present |
+| Containment corpus-wide | `observ` arm over **1,378** tracked `*.md` (`git ls-files '*.md'`) | **0 hits inside the `intake-desk` skill.** 5 residual hits hand-classified: 2 are the corrective record quoting the false sentence in order to correct it (ADR-162, the `declarations-have-a-firing-surface` plan's F-2 row) and must not be "fixed"; 3 are true or unrelated (ADR-031's *remaining* irreducible classes, an ADR-112 options row, a terminal v4.18 risk row) |
+| CIAC-2 — no new unqualified absolute in added lines | `observ` arm over this spoke's **added** lines, with the **removed** lines as control | added **0** / removed **3 [FIRES]** → PASS. The control is what makes the 0 meaningful |
+| CIAC-3 — delivered set equals the expected eight | `git diff --name-only origin/main...HEAD` | **exactly 8**, path-for-path. See the Deviation Log row this spoke added — the detector was removed from the tree to hold this predicate |
+| Package rebuilt and fresh | `core/deploy/tools/build-skill-packages.sh intake-desk`, then `deploy.sh --check-package-freshness` | STALE (1, `intake-desk`) **→ 55 rostered packages content-fresh — OK** |
+| Package embeds the corrected text | unzip the rebuilt archive; run all three arms against the **embedded** copies, not the source | `observ` **0/0** · `fence` **3/1** · `enforce` **6/2** · both embedded files **byte-identical to source** · token count **6→4** and **2→1**. This is the check a source-only sweep cannot make |
+| Doc-link integrity | `check-doc-links.py --require-targets` over both files, plus its own `--self-test` | self-test **OK (11 fixtures)**; **0** broken refs, exit 0. `--require-targets` means the globs resolved to real files rather than reading green on an empty scan |
+| Skill-editor discipline | `pmo-skill-editor` Mode C (Regression) | GR-01..GR-07 and XC-01..XC-08 run; **no regression**. Category-7 RCP predicates **out of scope by the trigger table** — it is keyed on the edited file and names neither of these two. Conduct-enforced: `block-skill-direct-edit.sh` is inert here (no `skill_discipline_migrated_v10_2` key) |
+| Cross-skill contract surface | `core/skills/registry.md` | 3 consumers (`pmo-tier-1-support`, `pmo-wms-specialist` DEPENDS_ON; `pipeline-triage`, `roadmap-curator` RELATES_TO). **No contract surface touched** — no section heading, mode definition, output-contract structure, tag taxonomy, RAID prefix or field set changed; the edit is prose internal to two sections |
+| Pre-packaging | frontmatter inspection | `description` **1005** chars (limit 1024) — PASS, unchanged; frontmatter keys unchanged |
+| ADR index freshness | — | **N/A — this release adds no record under `release/ADRs/`.** The honest no-op, recorded rather than silent |
+| Runtime suite | `runtime-suite-selection-map.md` | **`test-run/suite-skip`** — doc/governance-only change matches the map's explicit no-match row |
 
 ## Deployment Execution Log
 
@@ -513,7 +552,7 @@ Four governance surfaces stop asserting things about mechanisms they do not own.
 | #5892 | The protocol's layout rows and its normative sentence describe the flat-notes reality and cite the standard that governs it | DONE |
 | #6409 | § 5.7's upgrade-mechanism step names a provenance form the resolver resolves, and records why a count-shaped cascade could not see the section | DONE |
 | #6241 | § 5.1 state 4 records its safety basis, additively, with every predicate unchanged | PENDING — its own Stage-6 spoke |
-| #6394 | Every occurrence of the no-hook-sees-it claim, across both skill files, names the hook and its shipped mode; the package is rebuilt in this PR | PENDING — its own Stage-6 spoke |
+| #6394 | Every occurrence of the no-hook-sees-it claim, across both skill files, names the hook and its shipped mode; the package is rebuilt in this PR | DONE |
 
 ### Key decisions
 
