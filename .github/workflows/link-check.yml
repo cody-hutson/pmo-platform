@@ -152,3 +152,172 @@ jobs:
             exit 0
           fi
           exit 1
+
+  deployed-root-link-check:
+    name: Deployed-skill reference reachability (reconstructed runtime root)
+    runs-on: ubuntu-latest
+    # SECURITY NOTE: this job consumes NO workflow-event input. Every value below
+    # is a fixed literal or a runner-provided variable (RUNNER_TEMP, GITHUB_ENV,
+    # GITHUB_STEP_SUMMARY). There is no `${{ ... }}` interpolation into any `run:`
+    # block, so the workflow-injection class does not apply here.
+    env:
+      # Flip to 'false' to make an unresolvable deployed reference fail the PR.
+      # 'true' = warn-mode-initial: report + pass. Matches the sibling job above.
+      WARN_MODE: 'true'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+
+      # ------------------------------------------------------------------
+      # WHY THIS JOB EXISTS, AND WHY IT IS NOT THE JOB ABOVE.
+      #
+      # The sibling job scans the REPOSITORY tree. A skill does not run from the
+      # repository tree — it runs from an installed skills root where the skill's
+      # own directory is the top of its world and its siblings are the other
+      # skills. A reference that resolves perfectly in-repo (`../../../core/...`)
+      # walks off the top of that world at runtime and resolves to nothing, with
+      # no error: the hub silently reads no spec. The in-repo scan cannot see
+      # this class at all — and its scan scope does not even include
+      # `release/skills/*/references/`, only the SKILL.md files.
+      #
+      # NOT A NEW CHECKER. This is a second CALLER of the existing primitive's
+      # documented `--workspace-root` deployed-tree mode.
+      #
+      # THE TARGET IS RECONSTRUCTED, NOT INSTALLED. The operator's mirror is
+      # machine-local and absent in CI; the `.skill` packages are committed.
+      # Extracting ALL of them into one root reproduces the installed topology —
+      # including sibling-skill links, which genuinely resolve at runtime. That
+      # is why the whole roster is extracted rather than one package: validating
+      # a single package over-reports, flagging sibling links that are in fact
+      # fine, and a check that cries wolf gets switched off.
+      # ------------------------------------------------------------------
+
+      - name: Known-answer fixture (control arms — runs BEFORE the subject scan)
+        run: |
+          set -euo pipefail
+          # A warn-mode scan is blind to a detector regression: if the engine
+          # silently stopped detecting, the subject scan would report zero and
+          # this job would read GREEN. This fixture is the standing guarantee
+          # that a zero means "nothing broken" rather than "nothing detected".
+          # It is a HARD gate, independent of WARN_MODE.
+          FIX="$(mktemp -d)/skills"
+          mkdir -p "$FIX/fixture-skill/references" "$FIX/sibling-skill"
+          printf '# sibling\n' > "$FIX/sibling-skill/SKILL.md"
+          printf '# real\n'    > "$FIX/fixture-skill/references/real.md"
+          cat > "$FIX/fixture-skill/SKILL.md" <<'FIXTURE'
+          # Fixture
+          Resolvable 1: [real](references/real.md)
+          Resolvable 2: [sibling](../sibling-skill/SKILL.md)
+          Broken 1: [gone](../../../core/standards/does-not-exist.md)
+          Broken 2: [also gone](references/missing.md)
+          Non-link 1: [external](https://example.com/x)
+          Non-link 2: [anchor](#section)
+          Non-link 3: [placeholder](<OPERATOR_INSTANCE_PATH>)
+          Non-link 4: [meta](path)
+          FIXTURE
+
+          set +e
+          OUT=$(python3 core/deploy/tools/check-doc-links.py \
+                  --workspace-root "$FIX/fixture-skill" \
+                  --target-paths 'SKILL.md,references' \
+                  --require-targets 2>&1)
+          set -e
+
+          # Data rows only — the first line is the TSV header.
+          FOUND=$(printf '%s\n' "$OUT" | tail -n +2 | grep -c . || true)
+
+          echo "--- fixture output ---"
+          printf '%s\n' "$OUT"
+          echo "----------------------"
+
+          # SENSITIVITY ARM — both planted breaks must be reported.
+          printf '%s\n' "$OUT" | grep -q 'does-not-exist.md' \
+            || { echo "::error::FIXTURE SENSITIVITY FAILED — planted break 1 not detected"; exit 1; }
+          printf '%s\n' "$OUT" | grep -q 'references/missing.md' \
+            || { echo "::error::FIXTURE SENSITIVITY FAILED — planted break 2 not detected"; exit 1; }
+
+          # SPECIFICITY ARM — exactly two. The two resolvable refs (including the
+          # sibling-skill hop) and the four non-link targets must NOT be reported.
+          # An over-reporting engine is as broken as an under-reporting one, and
+          # only this arm can tell them apart.
+          if [ "$FOUND" -ne 2 ]; then
+            echo "::error::FIXTURE SPECIFICITY FAILED — expected exactly 2 findings, got ${FOUND}"
+            exit 1
+          fi
+          echo ":white_check_mark: Fixture — sensitivity PASS (2/2 planted breaks found) · specificity PASS (exactly 2 findings; 2 resolvable refs + 4 non-link targets correctly skipped)" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Reconstruct the runtime skills root from committed packages
+        run: |
+          set -euo pipefail
+          ROOT="${RUNNER_TEMP}/runtime-root/skills"
+          mkdir -p "$ROOT"
+          python3 - "$ROOT" <<'RECON'
+          import pathlib, sys, zipfile
+          root = pathlib.Path(sys.argv[1])
+          pkgs = sorted(pathlib.Path("packages").glob("*.skill"))
+          if not pkgs:
+              print("::error::No packages/*.skill found — cannot reconstruct a runtime root")
+              raise SystemExit(3)
+          for p in pkgs:
+              with zipfile.ZipFile(p) as z:
+                  z.extractall(root)
+          print(f"reconstructed {len(pkgs)} package(s)")
+          RECON
+          # Fail loud if the subject skill is absent — a scan against a missing
+          # root must never read green.
+          test -f "$ROOT/release-hub/SKILL.md" \
+            || { echo "::error::release-hub absent from the reconstructed root"; exit 3; }
+          echo "RUNTIME_ROOT=$ROOT" >> "$GITHUB_ENV"
+
+      - name: Scan the deployed skill for unresolvable references
+        run: |
+          set -uo pipefail
+          set +e
+          OUTPUT=$(python3 core/deploy/tools/check-doc-links.py \
+                     --workspace-root "${RUNTIME_ROOT}/release-hub" \
+                     --target-paths 'SKILL.md,references' \
+                     --require-targets 2>&1)
+          EXIT=$?
+          set -e
+
+          if [ "$EXIT" -eq 3 ]; then
+            {
+              echo "## :x: Deployed-root reachability — path-resolution failure"
+              echo ""
+              echo "A declared scan target resolved to zero files. ALWAYS hard-fail, independent of WARN_MODE — a scan against a missing surface must not read green."
+              echo ""
+              printf '%s\n' "$OUTPUT"
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 3
+          fi
+
+          if [ "$EXIT" -eq 0 ]; then
+            echo ":white_check_mark: Deployed-root reachability — every reference in the deployed \`release-hub\` resolves from the installed tree" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## :warning: Deployed-root reachability — unresolvable reference(s)"
+            echo ""
+            echo "A markdown reference inside the deployed \`release-hub\` skill does not resolve from a reconstructed runtime skills root. It resolves in the repository and reads as nothing at runtime — the hub silently loads no spec."
+            echo ""
+            printf '%s\n' "$OUTPUT"
+            echo ""
+            echo "### Remediation — triage each target by class"
+            echo ""
+            echo "- **RUNTIME-LOAD** (the hub is instructed to *read* this during a run): it must be reachable INSIDE the deployed tree. Fold the needed content into a deployed sibling reference, or register an injection. It stays a markdown link."
+            echo "- **PROVENANCE** (rationale, authoring standard, or decision record the hub does not execute): convert it to a backticked repo-relative path. The engine matches only \`[text](target)\` and \`[label]: target\`, so a backtick is genuinely not a navigational affordance — and it is the corpus's own established convention for citing a non-deployed file."
+            echo "- **Do NOT convert a sibling-skill link** (\`../<other-skill>/SKILL.md\`) — those resolve at runtime and are already correct. The reconstructed-roster target exists precisely so this scan reports them as fine."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$WARN_MODE" = "true" ]; then
+            echo "" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "_Warn-mode-initial: reported, not blocking._" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          exit 1
