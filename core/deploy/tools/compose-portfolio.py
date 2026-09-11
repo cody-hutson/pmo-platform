@@ -103,7 +103,7 @@ from pathlib import Path
 # The ONE shared frontmatter reader (F1). This file lives beside it in
 # core/deploy/tools/; the sys.path insert makes --self-test / direct invocation robust.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _frontmatter import read_frontmatter, _strip_quotes  # noqa: E402
+from _frontmatter import read_frontmatter, _strip_quotes, is_corpus_path  # noqa: E402
 
 # --------------------------------------------------------------------------- #
 # Contract constants (core/standards/portfolio-writeback-contract.md §2/§3).
@@ -582,10 +582,25 @@ def discover_rollups(root: Path) -> list:
     a value whose pollution is neither a trailing ` #…` run nor a displaced quote
     pair — a mid-value edit, or a comment with no preceding whitespace. Those are
     still silently skipped, and this sentence is the record of it.
+
+    OUT OF CORPUS. A rollup under a dot-leading path segment — a dot-leading
+    DIRECTORY (`.body-backups/`) or a dot-leading FILENAME (`.draft.md`) — is not
+    in the corpus and is NOT discovered, on the one traversal predicate all three
+    deploy-tool corpus walkers share. Named here because the consequence is
+    silent by design: an operator corpus deliberately holding a live rollup under
+    such a path loses it from the composed portfolio, with no diagnostic.
     """
     found: list = []
     near_miss: list = []
     for path in sorted(root.rglob("*.md"), key=lambda p: p.relative_to(root).as_posix()):
+        # TRAVERSAL GUARD — FIRST statement of the loop body, deliberately. It must
+        # precede read_frontmatter() and therefore the near-miss classification
+        # below: a rollup copy under a dot-leading segment is out of corpus BY
+        # DECLARATION, so if such a copy carried a polluted entity_type, a guard
+        # placed after that classification would hard-fail the composer on a path
+        # it should never have looked at. Order is behaviour here, not style.
+        if not is_corpus_path(path, root):
+            continue
         scalars, status = read_frontmatter(path)
         if status != "ok":
             continue
@@ -1023,6 +1038,14 @@ def run_self_test() -> int:
                      clean discovery finds both fixture rollups. Specificity arm:
                      an unrelated `entity_type` is NOT flagged.
       (guard)        an --out path under projects/ is rejected.
+      (dot-segment)  a rollup planted under a dot-leading DIRECTORY and one at a
+                     dot-leading FILENAME are both OUT OF CORPUS: discovery
+                     returns the clean count and the render is byte-identical.
+                     FAILS PRE-FIX — discover_rollups walked a bare rglob with no
+                     dot-segment skip and returned the planted copies, where the
+                     other two corpus walkers excluded them. Control arm
+                     (anti-vacuity), asserted first: clean discovery finds a
+                     non-zero count, so the equality is not 0 == 0.
     """
     import contextlib
     import io
@@ -1317,6 +1340,50 @@ def run_self_test() -> int:
         if out_path_rejected(str(Path(td) / "staging" / "PORTFOLIO.md")):
             failures.append("(guard) a safe --out staging path was wrongly rejected")
 
+        # (dot-segment) a rollup under a dot-leading path segment is OUT OF CORPUS
+        # and is NOT discovered — the one traversal predicate all three deploy-tool
+        # walkers now share. BOTH shapes are planted, because both are over-returned
+        # identically pre-fix: a dot-leading DIRECTORY and a dot-leading FILENAME.
+        # This case FAILS BEFORE the fix (the bare rglob walked straight into them)
+        # and passes after.
+        ds_root = Path(td) / "dotseg"
+        shutil.copytree(fixture, ds_root)
+        # CONTROL ARM (anti-vacuity), asserted BEFORE the subject — a walker that
+        # discovers nothing anywhere would satisfy the equality below as 0 == 0.
+        clean_n = len(discover_rollups(root))
+        if clean_n == 0:
+            failures.append("(dot-segment) CONTROL FAILED — clean discovery found 0 "
+                            "rollups, so the equality below would be vacuous")
+        donor = discover_rollups(ds_root)[0]
+        body = donor.read_text(encoding="utf-8")
+        hidden_dir = ds_root / ".body-backups"
+        hidden_dir.mkdir(parents=True, exist_ok=True)
+        (hidden_dir / donor.name).write_text(body, encoding="utf-8")      # dot DIRECTORY
+        (ds_root / ("." + donor.name)).write_text(body, encoding="utf-8")  # dot FILENAME
+        try:
+            ds_n = len(discover_rollups(ds_root))
+            if ds_n != clean_n:
+                failures.append(f"(dot-segment) discovery returned {ds_n} rollups with two "
+                                f"dot-segment copies planted, expected {clean_n} — a "
+                                f"dot-leading directory and/or filename is being walked")
+        except ContractDrift as e:
+            failures.append(f"(dot-segment) discovery RAISED on an out-of-corpus path, "
+                            f"which it should never have read: {e}")
+        # The composed render must be byte-identical: an out-of-corpus file is
+        # invisible, so planting two of them changes nothing downstream.
+        try:
+            if (hashlib.sha256(compose(ds_root, as_of).encode("utf-8")).hexdigest()
+                    != hashlib.sha256(compose(root, as_of).encode("utf-8")).hexdigest()):
+                failures.append("(dot-segment) the composed portfolio differs once "
+                                "dot-segment copies are planted; they must be invisible")
+        except ContractDrift as e:
+            failures.append(f"(dot-segment) compose RAISED on a tree whose only change is "
+                            f"two out-of-corpus copies: {e}")
+        rc_ds = _quiet_main(["--root", str(ds_root), "--as-of", as_of.isoformat()])
+        if rc_ds != 0:
+            failures.append(f"(dot-segment) compose over the planted tree returned exit "
+                            f"{rc_ds}, expected 0")
+
     if failures:
         print("compose-portfolio self-test FAILED:", file=sys.stderr)
         for f in failures:
@@ -1326,7 +1393,7 @@ def run_self_test() -> int:
           "(idempotency byte-identical / S1-S8+meta rendered / staleness discriminates / "
           "exit-0-with-[STALE] / drift->exit-1 / join-key->exit-1 / projects-guard / "
           "s2-per-dimension / s2-resolver-varies / join-key-polluted / "
-          "discovery-polluted x2)")
+          "discovery-polluted x2 / dot-segment)")
     return 0
 
 

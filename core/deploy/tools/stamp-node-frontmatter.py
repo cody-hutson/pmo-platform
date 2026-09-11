@@ -109,7 +109,7 @@ from pathlib import Path
 # core/deploy/tools/, so a plain import resolves when run from that dir; the sys.path
 # insert makes `--self-test` / direct invocation from any cwd robust.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _frontmatter import read_frontmatter  # noqa: E402
+from _frontmatter import read_frontmatter, is_corpus_path  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -654,7 +654,7 @@ def iter_corpus_files(root):
     for p in sorted(root.rglob("*")):
         if not p.is_file():
             continue
-        if any(part.startswith(".") for part in p.relative_to(root).parts):
+        if not is_corpus_path(p, root):
             continue
         if p.name.endswith(".meta.yml"):
             continue
