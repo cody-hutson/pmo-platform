@@ -419,13 +419,15 @@ N/A — enumerated over the three classes a migration could take in this release
 
 | `deliverable` | `canonical_path` | `landing_commit` | `acceptance_verdict` | `acceptor` |
 |---|---|---|---|---|
-| #6364 — criterion evaluability recorded as a per-check measured property | `core/ADRs/ADR-195-l3-judgment-criteria-evaluability.md` | `01e61c8b` | **PENDING** — rendered at the Stage-8 acceptance review, ratified at the Stage-9 gate | Stage-8 acceptance review → operator at Stage 9 |
+| #6364 — criterion evaluability recorded as a per-check measured property | `core/ADRs/ADR-195-l3-judgment-criteria-evaluability.md` | `01e61c8b` · `4c4d33af` | **PENDING** — rendered at the Stage-8 acceptance review, ratified at the Stage-9 gate | Stage-8 acceptance review → operator at Stage 9 |
 | #6379 — consumer contract for the resolved kit | (populated by that card's spoke) | — | PENDING | ↑ |
 | #6367 — per-kind authoring standard | (populated by that card's spoke) | — | PENDING | ↑ |
 
 **`acceptance_verdict` is PENDING by construction at Stage 6, and is not self-certified here.** Engineering lands the artifact and records where it landed; the verdict is rendered by a gate Engineering does not sit on. A spoke writing `ACCEPTED` against its own deliverable would be self-referential validation, and the Stage-13 gate that reads this block would then be reading Engineering's own opinion of its own work. The row is populated with the facts a later gate needs — the path and the landing commit — and the verdict cell names the gate that owes it.
 
 **`canonical_path` verification at Stage 6 is branch-side.** The Stage-13 check resolves each path against the mainline; pre-merge that read cannot succeed by construction, so the Stage-6 assertion is that the path resolves on the release branch at the stated landing commit. The mainline read is the Stage-13 gate's own, and is not pre-claimed here.
+
+**A deliverable amended after it lands carries every commit it spans, in order, and the acceptance review reads the last of them.** Recording only the first would point a later gate at a superseded revision of the artifact it is grading — the record would resolve, and resolve to the wrong bytes, which is the failure mode a landing commit exists to prevent.
 
 ## Deployment Execution Log
 
