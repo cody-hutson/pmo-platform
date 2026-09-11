@@ -8,6 +8,9 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.62 (2026-09-11) — A pack that says nothing about a kind it declares is now findable
+### v4.61 (2026-09-11) — Governance documents stop describing the platform from memory
+
 ### v4.60 (2026-09-06) — Checks that pass without looking now have to prove they looked
 
 ### v4.59 (2026-09-06) — Release tools now actually run, and a green check means it measured

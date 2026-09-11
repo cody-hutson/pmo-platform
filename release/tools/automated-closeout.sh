@@ -39,17 +39,21 @@
 #   9.95 rebuild_skill_packages  rebuild changed skills' .skill packages into the chore commit (content-sidecar-gated; N/A when no skill source changed)
 #   10 commit_chore_pr     git add + git commit (parser-clean message)
 #   11 create_chore_pr     gh pr create with safe-phrasing body throughout
-#   12 await_merge_chore_pr poll mergeStateStatus (#1705: CI-realistic budget, default 300s; --no-merge skips; BLOCKED/UNSTABLE keep-polling)
+#   12 await_merge_chore_pr poll state+mergeable+mergeStateStatus (#1705: CI-realistic budget, default 300s;
+#                          skipped by no-merge mode; BLOCKED/UNSTABLE keep-polling. #6255: MERGED = terminal
+#                          PASS, CLOSED = terminal FAIL, and a failed merge re-probes state before FAILing)
 #   12.2 sync_primary_checkout  fast-forward the primary checkout to origin/main (git -C only; ff-only; non-fatal)
 #   12.5 reparse_ledgers   post-merge structural re-parse of the ledgers (#1680; detective-only)
-#   12.9 action_item_gate  Procedure 7a HARD GATE (#4439) — 3-valued AI-NNN ledger verdict, evaluated
+#   12.9 action_item_gate  Procedure 7a HARD GATE (#4439) — 5-valued AI-NNN ledger verdict, evaluated
 #                          BEFORE the milestone close. UNRESOLVED BLOCKS at --apply; NOT-RECORDED /
 #                          EMPTY-LEDGER SURFACE and require --attest-action-items to pass; RESOLVED is
 #                          the only silent pass
+#                          UNCLASSIFIABLE also BLOCKS — a status outside the recognised set is
+#                          unreadable, never resolved, and no attestation clears it
 #   13 post_close_milestone gh api -X PATCH state=closed (#2919: DEFERS under --no-merge)
 #   14 manual_close_release_issues operator-authorized D-1 with structured comment (#2919: DEFERS under --no-merge)
 #   15 run_verification + post_gate_passage_proof per the gate-passage-proof template
-#   15.5 publish_github_release gh release create | edit (Layer-1 dual-write Surface 1; #2919: DEFERS under --no-merge, as does 15.6 check_release_body_drift) — BACKSTOP for Stage 12 Phase B5.5, which owns the emit; records SURFACE1-STATE=CREATED|EDITED|NO-OP
+#   15.5 publish_github_release gh release create | edit (Layer-1 dual-write Surface 1; #2919: DEFERS under --no-merge, as does 15.6 check_release_body_drift) — BACKSTOP for Stage 12 Phase B5.5, which owns the emit; the edit path converges BODY and TITLE; records SURFACE1-STATE=CREATED|EDITED|NO-OP and SURFACE1-TITLE=MATCH|CONVERGED|WITHHELD
 #   15.55 assert_anchor_hygiene  SET-based annotated-tag <-> published-Release parity + tagger identity (dated exemption sets)
 #   15.6 check_release_body_drift  post-emit §5.1 published-body drift assert (gated genuine drift BLOCKS; #2919: DEFERS under --no-merge)
 #   16 invoke_orphan_cleanup cleanup-orphan-state.sh --release-close <slug> --dry-run
@@ -207,7 +211,22 @@
 # Exit codes:
 #   0 = success (dry-run or apply)
 #   1 = validation failure / missing required flag
-#   2 = preflight failure (Stage 12 chore PR not landed, tag missing, etc.)
+#   2 = entry-gate failure, before any state mutation. Either an entry-gate PHASE
+#       returns non-zero — phase_preflight or phase_detect_open_issues — or a guard
+#       OUTSIDE the phase ladder trips. "Outside the ladder" and not "before phase 1":
+#       of the two such guards, the instance-path resolver fires at LOAD time, genuinely
+#       ahead of everything, while workspace_boundary_check has one call site, which
+#       sits AFTER argument parsing (roster phase 1) and before phase_preflight. This
+#       line names the dispatch SITES and restates
+#       no sub-check on purpose: the wording it replaces restated one, drifted from
+#       the code, and ended up asserting a gate that does not exist. That gate was
+#       the version tag. phase_preflight RECORDS the tag and never gates on it; the
+#       tag gates in phase_publish_github_release, against origin, exit 3 — and only
+#       under --apply, because that phase returns early under both --dry-run and
+#       --no-merge, ABOVE its own tag preflight. Under either flag the tag is not
+#       gated anywhere. Test 7 in self_test() derives the phase names above from the
+#       guarded top-level dispatch and asserts them present in this rendered text, so
+#       a third entry gate cannot be added without reddening.
 #   3 = phase execution failure during --apply (idempotent re-run usually safe)
 
 set -euo pipefail
@@ -364,7 +383,8 @@ WORKSPACE_ROOT="${WORKSPACE_ROOT:-${HOME}/Claude}"
 #
 # die() is not defined until much later in this file, so the guard uses the
 # pre-die error idiom already used at the gh-resolution block above. Exit 2 is
-# this file's documented preflight-failure code.
+# this file's documented entry-gate-failure code; a guard tripping before phase 1
+# is one of the sites the exit-codes block names for it.
 INSTANCE_LIB="$REPO_ROOT/core/deploy/lib-instance-path.sh"
 if [[ ! -r "$INSTANCE_LIB" ]]; then
   echo "ERROR: instance-path resolver missing at $INSTANCE_LIB" >&2
@@ -385,8 +405,33 @@ source "$INSTANCE_LIB" ""
 # the same posture the frontmatter `date:` accessor in that phase already takes.
 REPO_SLUG="${REPO_SLUG:-}"
 if [[ -z "$REPO_SLUG" ]] && [[ -r "${HOME}/.config/pmo-platform/operator.toml" ]]; then
-  _gh=$(/usr/bin/grep -E '^operator_github' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | /usr/bin/head -1 | /usr/bin/awk -F= '{gsub(/[" ]/,"",$2); print $2}')
-  _repo=$(/usr/bin/grep -E '^pmo_platform_repo_name' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | /usr/bin/head -1 | /usr/bin/awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+  # SIGPIPE-REWRITE + `|| true` — the same two-part fold the claude_workspace_root
+  # read above and the HUB_STATE_PATH read below already carry, applied here to the
+  # last two unguarded key reads in this file. See either of those blocks for the
+  # full rationale, which was PROVEN by breaking this script and is not restated.
+  #
+  # WHAT THE `|| true` CLOSES — the ABSENT-key case, and only that. Both keys here
+  # are OPTIONAL. An operator.toml that exists but omits one makes `grep` exit 1;
+  # `pipefail` propagates that out of the substitution and `set -e` aborts at LOAD
+  # time — before argument parsing, on EVERY invocation including --self-test and
+  # --check-paths — with exit 1 and no output at all. A close-out tool that dies
+  # silently because an OPTIONAL config key is missing is the defect; the tolerance
+  # is what makes the documented fallback on the next two lines reachable.
+  #
+  # WHAT THE `head` FOLD IS NOT. It is NOT claimed to fix an abort on a SUCCESSFUL
+  # read. `grep` reads the FILE directly, so it is the leftmost producer and there
+  # is no upstream writer left for an early-closing reader to signal; the volume
+  # that would be needed to make a downstream `head` matter is far beyond any
+  # realistic operator.toml. It folds for two other reasons, both verified from
+  # source rather than reasoned about: (1) the `sigpipe-idiom` CI job scans the
+  # ADDED-LINES delta and lists `head` among the short-circuiting readers it
+  # matches, so appending `|| true` alone would leave a matched idiom sitting on a
+  # CHANGED line, while the folded form's `awk` — which reads to EOF and carries no
+  # `exit` — is not matched; (2) uniformity: with all four key reads in one shape,
+  # the group TK self-test arm below keys on ONE predicate instead of a disjunction,
+  # and a future non-conforming line has fewer shapes it can take and still pass.
+  _gh=$(/usr/bin/grep -m1 -E '^operator_github' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | /usr/bin/awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
+  _repo=$(/usr/bin/grep -m1 -E '^pmo_platform_repo_name' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | /usr/bin/awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
   [[ -z "$_repo" ]] && _repo="pmo-platform"
   [[ -n "$_gh" ]] && REPO_SLUG="${_gh}/${_repo}"
 fi
@@ -700,8 +745,9 @@ CHORE_BRANCH=""
 CHORE_PR_NUMBER=""
 VERIFICATION_RESULTS=""
 STATE_AI_GATE=""          # Procedure 7a verdict computed at Phase 12.9, BEFORE the
-                          # milestone close. One of the gate's four states:
-                          # NOT-RECORDED / EMPTY-LEDGER / RESOLVED / UNRESOLVED.
+                          # milestone close. One of the gate's five states:
+                          # NOT-RECORDED / EMPTY-LEDGER / RESOLVED / UNRESOLVED /
+                          # UNCLASSIFIABLE.
                           # phase_run_verification RENDERS this value in row 6 —
                           # it never recomputes, because a verdict re-derived after
                           # the close is not the verdict the close was gated on.
@@ -713,7 +759,14 @@ STATE_OUTPUT_SET_ROWS=""  # per-member output-set verdicts recorded at Phase 9.5
                           # on, and a value re-derived after the close is a different
                           # claim wearing the same cell.
 STATE_AI_TOTAL=0          # whole AI-row population at Phase 12.9 (the denominator)
-STATE_AI_UNRES=0          # status:open + status:in-flight subset (the numerator)
+STATE_AI_UNRES=0          # status:open + status:in-flight subset, case-folded (the
+                          # numerator)
+STATE_AI_BAD=0            # rows whose status the gate CANNOT classify — outside the
+                          # § 2.3 enum and the § 2.1a status aliases, an empty or
+                          # out-of-range $11 included. A second numerator, and it is
+                          # a numerator for the same reason STATE_AI_TOTAL is one: a
+                          # blocking verdict with no count behind it asks the
+                          # operator to re-read the ledger the gate just read.
 STATE_AI_DIR=""           # resolved hub-state dir for this release (diagnostic)
 STATE_AI_EMIT="n/a"       # attestation-emission outcome: n/a | emitted | dry-run |
                           # failed:<reason>. The spec requires the attestation to be
@@ -5493,6 +5546,31 @@ phase_create_chore_pr() {
   return 0
 }
 
+# Terminal-vs-mergeability read for the chore PR (#6255). ONE site, called from the
+# poll head AND from the merge-failure re-probe below, so the two readings cannot
+# drift apart — the same shared-predicate shape adopted elsewhere in this batch for
+# the same reason, and the opposite of the two verbatim copies of the
+# `state,baseRefName` read this file already carries.
+#
+# WHY `state` IS THE FIELD. `state` in {OPEN, CLOSED, MERGED} is a total, terminal
+# partition, and it is already how this file decides that a PR merged (`--json
+# state,baseRefName` tested against "MERGED/main", at two live sites). It is NOT
+# chosen because no other merged-detection convention exists — `mergedAt` IS used
+# for exactly that elsewhere in the corpus (release/skills/release-executor/SKILL.md
+# reads it on a chore PR; release/ADRs/ADR-001 uses it as a governed ordering key).
+# It is chosen because `mergedAt` is null for BOTH an open and a closed-unmerged PR,
+# and `closed` is true for BOTH a merged and a closed-unmerged one, so neither of
+# them separates the three cases with a single field. `state` does.
+#
+# WIDTH IS LOAD-BEARING. The emitted composite is POSITIONAL and every `case` arm
+# below is anchored to its three fields in order. A fourth --json field would shift
+# every arm at once and every arm would go SILENTLY wrong rather than red, which is
+# why --self-test group 4e arm (i) pins this function's shipped text.
+_chore_pr_terminal_state() {
+  $GH pr view "$1" --repo "$REPO_SLUG" --json state,mergeable,mergeStateStatus \
+    --jq '"\(.state)/\(.mergeable)/\(.mergeStateStatus)"' 2>/dev/null || echo "ERROR"
+}
+
 phase_await_merge_chore_pr() {
   # Zero-commit SKIP propagation (#1705): if phase_create_chore_pr SKIPped on the
   # idempotent already-up-to-date path, there is no PR to merge — SKIP gracefully
@@ -5509,7 +5587,7 @@ phase_await_merge_chore_pr() {
   fi
 
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "await_merge_chore_pr" "DRY-RUN" "would poll mergeStateStatus (CI-realistic budget ~${MERGE_TIMEOUT}s; BLOCKED/UNSTABLE = keep-polling) then gh pr merge --merge --delete-branch"
+    mark_phase "await_merge_chore_pr" "DRY-RUN" "would poll state+mergeable+mergeStateStatus (CI-realistic budget ~${MERGE_TIMEOUT}s; BLOCKED/UNSTABLE = keep-polling; MERGED = terminal PASS, CLOSED = terminal FAIL) then gh pr merge --merge --delete-branch"
     return 0
   fi
 
@@ -5521,25 +5599,59 @@ phase_await_merge_chore_pr() {
   # CI-realistic poll budget (#1705). The prior 30s cap was a detection-pending
   # budget (GitHub computing mergeability), NOT a CI-completion budget — a real
   # chore PR must wait for required status checks to go green before
-  # MERGEABLE/CLEAN. Poll with a fixed 10s step up to MERGE_TIMEOUT (default 300s,
-  # tunable via --merge-timeout). MERGEABLE/BLOCKED + MERGEABLE/UNSTABLE are
-  # KEEP-POLLING states (checks pending / non-required-failing), not terminal —
-  # only CONFLICTING / DIRTY HALT; only CLEAN proceeds to merge.
+  # OPEN/MERGEABLE/CLEAN. Poll with a fixed 10s step up to MERGE_TIMEOUT (default
+  # 300s, tunable via --merge-timeout). OPEN/MERGEABLE/BLOCKED and
+  # OPEN/MERGEABLE/UNSTABLE are KEEP-POLLING states (checks pending /
+  # non-required-failing), not terminal — only CONFLICTING / DIRTY HALT; only CLEAN
+  # proceeds to merge.
+  #
+  # TERMINAL STATES (#6255). The composite now carries `state` as its FIRST field and
+  # the two terminal arms are evaluated FIRST, because `case` is first-match-wins.
+  # This is not defensive decoration — it is the defect this phase shipped with. A PR
+  # that has ALREADY MERGED reports mergeable=UNKNOWN and mergeStateStatus=UNKNOWN
+  # (measured on a live merged PR), so the composite it produced was literally
+  # "UNKNOWN/UNKNOWN" and the `*/UNKNOWN` clause below SWALLOWED it. That clause was
+  # authored for a different condition — an OPEN PR whose mergeability the host is
+  # still computing — where keep-polling is right. It is wrong for a merged PR, which
+  # was therefore polled to the full budget and then reported FAIL against a chore PR
+  # that had merged correctly.
+  #
+  # The terminal arms GLOB their trailing fields deliberately: the host leaves the
+  # mergeability fields undefined for a non-open PR, so depending on the observed
+  # UNKNOWN/UNKNOWN would reproduce this defect's own root cause one level down.
+  #
+  # CLOSED is its own arm and must not collapse into MERGED. A closed-unmerged PR can
+  # present as mergeable (measured: CLOSED/MERGEABLE/BLOCKED as well as
+  # CLOSED/CONFLICTING/DIRTY), so before this arm existed the closed-unmerged verdict
+  # was reached only by accident — by timing out, or by tripping the conflict arm.
+  #
+  # DO NOT harmonize the other mergeStateStatus readers in the corpus to this arm.
+  # They read an OPEN, pre-merge PR: Stage 12 Phase A.6, and also the Stage 7 / 8 / 9
+  # mergeability preflights (release/references/pipeline/stage-07-dev-testing.md,
+  # stage-08-qa-testing.md, and release/references/how-to/hub-spoke-bridge.md, whose
+  # read labels itself "Stage 9 ONLY"). For all of those, */UNKNOWN genuinely does
+  # mean "still computing" and keep-polling is the correct handling.
   local step="$MERGE_POLL_STEP"
   local elapsed=0
-  local merge_state="UNKNOWN"
+  local merge_state="OPEN/UNKNOWN/UNKNOWN"
   while [[ "$elapsed" -lt "$MERGE_TIMEOUT" ]]; do
-    merge_state="$($GH pr view "$CHORE_PR_NUMBER" --repo "$REPO_SLUG" --json mergeStateStatus,mergeable --jq '"\(.mergeable)/\(.mergeStateStatus)"' 2>/dev/null || echo "ERROR")"
+    merge_state="$(_chore_pr_terminal_state "$CHORE_PR_NUMBER")"
     case "$merge_state" in
-      MERGEABLE/CLEAN) break ;;
-      CONFLICTING/*|MERGEABLE/DIRTY) mark_phase "await_merge_chore_pr" "FAIL" "merge state=$merge_state; HALT — escalate Tier 2 [SCOPE CHANGE]"; return 3 ;;
-      # MERGEABLE/BLOCKED, MERGEABLE/UNSTABLE, */UNKNOWN, ERROR → keep polling
+      MERGED/*)
+        mark_phase "await_merge_chore_pr" "PASS" "chore PR #${CHORE_PR_NUMBER} was ALREADY MERGED — recognised after ${elapsed}s of a ${MERGE_TIMEOUT}s budget (state=$merge_state); no merge attempted"
+        return 0 ;;
+      CLOSED/*)
+        mark_phase "await_merge_chore_pr" "FAIL" "chore PR #${CHORE_PR_NUMBER} was CLOSED WITHOUT MERGING after ${elapsed}s (state=$merge_state); HALT — escalate Tier 2 [SCOPE CHANGE]"
+        return 3 ;;
+      OPEN/MERGEABLE/CLEAN) break ;;
+      OPEN/CONFLICTING/*|OPEN/MERGEABLE/DIRTY) mark_phase "await_merge_chore_pr" "FAIL" "merge state=$merge_state; HALT — escalate Tier 2 [SCOPE CHANGE]"; return 3 ;;
+      # OPEN/MERGEABLE/BLOCKED, OPEN/MERGEABLE/UNSTABLE, OPEN/*/UNKNOWN, ERROR → keep polling
     esac
     /bin/sleep "$step"
     elapsed=$((elapsed + step))
   done
 
-  if [[ "$merge_state" != "MERGEABLE/CLEAN" ]]; then
+  if [[ "$merge_state" != "OPEN/MERGEABLE/CLEAN" ]]; then
     mark_phase "await_merge_chore_pr" "FAIL" "merge state still=$merge_state after ${elapsed}s polling (budget ${MERGE_TIMEOUT}s) — escalate (raise --merge-timeout if CI runs longer, or --no-merge to leave the PR for manual merge)"
     return 3
   fi
@@ -5548,7 +5660,20 @@ phase_await_merge_chore_pr() {
     mark_phase "await_merge_chore_pr" "PASS" "merged PR #${CHORE_PR_NUMBER} (after ${elapsed}s poll)"
     return 0
   fi
-  mark_phase "await_merge_chore_pr" "FAIL" "gh pr merge failed"
+
+  # THE SAME FALSE-FAIL PREDICATE AT A SECOND SITE (#6255). `gh pr merge` can fail
+  # against a PR that DID merge: the merge can land server-side while the client
+  # loses the response, and the PR can merge between the CLEAN read above and this
+  # call. Re-probe the terminal state through the SAME reader before reporting a
+  # failure. A still-open PR falls straight through to the existing FAIL — this
+  # re-probe launders nothing; group 4e arm (h2) is its negative control.
+  local post_merge_state
+  post_merge_state="$(_chore_pr_terminal_state "$CHORE_PR_NUMBER")"
+  if [[ "$post_merge_state" == MERGED/* ]]; then
+    mark_phase "await_merge_chore_pr" "PASS" "chore PR #${CHORE_PR_NUMBER} MERGED but the merge call did not observe it (re-probe state=$post_merge_state, after ${elapsed}s poll); the chore branch was NOT deleted by this run"
+    return 0
+  fi
+  mark_phase "await_merge_chore_pr" "FAIL" "gh pr merge failed (re-probe state=$post_merge_state)"
   return 3
 }
 
@@ -5734,8 +5859,19 @@ phase_reparse_ledgers() {
 #
 #   NOT-RECORDED   ledger file absent          -> SURFACE (attestation required)
 #   EMPTY-LEDGER   file present, 0 AI rows     -> SURFACE (attestation required)
-#   RESOLVED       >=1 row, 0 open/in-flight   -> PASS  (the only silent pass)
+#   RESOLVED       >=1 row, every status classifiable, 0 open/in-flight
+#                                              -> PASS  (the only silent pass)
 #   UNRESOLVED     >=1 open or in-flight       -> BLOCK
+#   UNCLASSIFIABLE 0 open/in-flight, >=1 status the gate cannot classify
+#                                              -> BLOCK
+#
+# UNRESOLVED OUTRANKS UNCLASSIFIABLE, MEASURED RATHER THAN REASONED. A real ledger
+# carries both classes — 3 of the 8 operator-instance ledgers with an unadmitted
+# status also carry open rows, one of them 48 open against 2 unreadable. The state
+# token selects the operator's REMEDY, so a ledger whose dominant condition is
+# "disposition 48 commitments" must not render as "normalise 2 values". The
+# unreadable rows are not dropped: the UNRESOLVED detail carries their count and
+# their enumeration as an appended clause, so one pass covers both remedies.
 #
 # SURFACE IS ATTESTATION-GATED, NOT ATTESTATION-FREE. The decision table's rows 1-2
 # end "-> requires explicit operator attestation to pass", and the same section
@@ -5759,8 +5895,11 @@ phase_reparse_ledgers() {
 # invocation of this script is --check-paths or --self-test. CI never executes the
 # close path in any state. The corrected statement is the one that matters and is
 # stronger: because CI never runs the close dispatch, the self-test fixture below is
-# the ONLY automated execution this phase will ever get, which is exactly why it is
-# four-armed, witness-backed, and executes the shipped dispatch text.
+# the ONLY automated execution this phase will ever get, which is exactly why group
+# AI is many-armed, witness-backed, and executes the shipped dispatch text. The arm
+# count is stated once, in the group's own conformant-arm extraction line, and is
+# re-derived there rather than restated here — a second copy of a count is a second
+# thing to forget.
 #
 # NON-BLOCKING BY MODE, for reasons that each cost something to get wrong:
 #   --dry-run    nothing closes, so a return 3 would abort a preview run. The detail
@@ -5777,15 +5916,18 @@ phase_reparse_ledgers() {
 # two integer comparisons.
 
 # Evaluate the Procedure 7a predicate over a hub-state directory.
-# Emits "STATE TOTAL UNRES" on stdout. Never fails; an unreadable dir is
-# NOT-RECORDED, which is a SURFACE state, never a silent pass.
+# Emits FOUR space-separated tokens on stdout — "STATE TOTAL UNRES BAD" — on both
+# paths, the NOT-RECORDED early return included; BAD is the unclassifiable-row
+# count the fifth state is resolved from, and both positional consumers read it.
+# Never fails; an unreadable dir is NOT-RECORDED, which is a SURFACE state, never
+# a silent pass.
 #
 # The awk program is the block shipped at hub-spoke-bridge.md § Procedure 7a,
 # implemented here rather than sourced (that file is documentation, not a library).
 # Self-test group AI arm (G) runs BOTH copies over the same fixtures and fails
 # naming both sides if they ever diverge — the Check 68 `enum-parity` posture.
 #
-# TWO THINGS IN THAT awk INVOCATION ARE LOAD-BEARING AND LOOK LIKE STYLE:
+# THREE THINGS IN THAT awk INVOCATION ARE LOAD-BEARING AND LOOK LIKE STYLE:
 #   FS is ' [|] ' — space, BRACKETED pipe, space. Do NOT "simplify" to ' \| ': awk
 #   puts the -F value through string-escape processing first, which reduces \| to a
 #   bare | (ERE alternation) and the row then splits on every space.
@@ -5793,23 +5935,74 @@ phase_reparse_ledgers() {
 #   cell as \|, and description / owner / trigger_detail / target are all free-text
 #   columns AHEAD of status — under -F'|' an escaped pipe shifts status off $11 and
 #   the gate returns RESOLVED on an unresolved ledger.
+#   STATUS IS CLASSIFIED BY MEMBERSHIP, NEVER BY `else`. The recognised set is the
+#   § 2.3 enum plus the two § 2.1a status aliases, case-folded; everything else
+#   counts as UNCLASSIFIABLE. An `else`-terminalising predicate was the second
+#   silent-PASS path on this gate, beside the bare-pipe split, and it is the wider
+#   one: it swallows a typo, a case variant, a foreign vocabulary AND a status the
+#   gate never reached. `s=tolower($11)` also replaces `gsub(/ /,"",$11)` because
+#   mutating $11 rebuilds $0 with OFS while a local `s` does not.
+#
+# THE RESIDUE IS NOT ALWAYS AN EMPTY FIELD, and assuming it is writes a fixture for
+# a condition the corpus does not have. Two arities reach the residue by two
+# different routes. At arity <= 10 the row has no field 11 and $11 reads EMPTY —
+# that is the shape the live operator-instance ledger presents, rows short of the
+# 13-column header. NO row count and NO specific arity is stated here on purpose:
+# that ledger is mutable operator-instance state an operator edits between
+# releases, so any figure written into this comment is stale the next time they do
+# (it already was — the arities recorded here when this note shipped did not
+# reproduce one release later, while the MECHANISM did). Read the figures from the
+# ledger; what is durable is the mechanism. The committed self-test fixtures are
+# what bind the behaviour, not this note. At arity 11 the row-terminating ` |'
+# never matches the separator, so it
+# stays glued to the LAST field and $11 reads `open |` — NON-empty, and after the
+# space-strip `open|`. Both are unreadable and both must be: field 11 of an
+# 11-column row is not the status column of a 13-column contract, and reading it as
+# one is the positional assumption this gate exists to refuse. The detail prints
+# `fields:N` beside the value so the operator sees which of the two they have.
 _ai_eval_predicate() {
-  local _dir="$1" _ai _t=0 _u=0 _state
+  local _dir="$1" _ai _t=0 _u=0 _b=0 _state
   _ai="$_dir/action-items.md"
   if [[ ! -f "$_ai" ]]; then
-    /usr/bin/printf 'NOT-RECORDED 0 0\n'
+    /usr/bin/printf 'NOT-RECORDED 0 0 0\n'
     return 0
   fi
-  read -r _t _u <<<"$(/usr/bin/awk -F' [|] ' '
-      $1 ~ /^\| *AI-[0-9]+ *$/ { t++; gsub(/ /,"",$11);
-                                 if ($11=="open" || $11=="in-flight") u++ }
-      END { print (t+0), (u+0) }' "$_ai" 2>/dev/null)"
-  _t="${_t:-0}"; _u="${_u:-0}"
+  read -r _t _u _b <<<"$(/usr/bin/awk -F' [|] ' '
+      $1 ~ /^\| *AI-[0-9]+ *$/ { t++; s=tolower($11); gsub(/ /,"",s);
+        if (s=="open" || s=="in-flight") u++
+        else if (s!="done" && s!="cancelled" && s!="superseded" &&
+                 s!="resolved" && s!="withdrawn") b++ }
+      END { print (t+0), (u+0), (b+0) }' "$_ai" 2>/dev/null)"
+  _t="${_t:-0}"; _u="${_u:-0}"; _b="${_b:-0}"
   if   [[ "$_t" -eq 0 ]]; then _state="EMPTY-LEDGER"
   elif [[ "$_u" -gt 0 ]]; then _state="UNRESOLVED"
+  elif [[ "$_b" -gt 0 ]]; then _state="UNCLASSIFIABLE"
   else                         _state="RESOLVED"
   fi
-  /usr/bin/printf '%s %s %s\n' "$_state" "$_t" "$_u"
+  /usr/bin/printf '%s %s %s %s\n' "$_state" "$_t" "$_u" "$_b"
+}
+
+# Enumerate ledger rows of ONE class for the operator-facing detail — `open` for
+# the open/in-flight subset, `bad` for the residue the predicate could not
+# classify. One program and one recognised-set chain serves both, because a second
+# chain written beside the first is a second place for the vocabulary to drift and
+# nothing asserts agreement between them. Column-addressed exactly as the predicate
+# is, and case-folded exactly as the predicate is.
+_ai_list_rows() {
+  local _ai="$1" _class="$2"
+  /usr/bin/awk -F' [|] ' -v class="$_class" '
+      $1 ~ /^\| *AI-[0-9]+ *$/ { s=tolower($11); gsub(/ /,"",s);
+        id=$1; gsub(/[| ]/,"",id);
+        if (s=="open" || s=="in-flight") {
+          if (class=="open") {
+            ow=$6; gsub(/^ +| +$/,"",ow); tg=$9; gsub(/^ +| +$/,"",tg);
+            printf "%s(owner:%s; trigger:%s) ", id, ow, tg }
+        } else if (s!="done" && s!="cancelled" && s!="superseded" &&
+                   s!="resolved" && s!="withdrawn") {
+          if (class=="bad") {
+            raw=$11; gsub(/^ +| +$/,"",raw);
+            printf "%s(status:[%s]; fields:%d) ", id, raw, NF } } }' \
+      "$_ai" 2>/dev/null || true
 }
 
 # Resolve this release's hub-state directory per the orchestration-playbook § 4a.3
@@ -5866,6 +6059,7 @@ _ai_verification_cell() {
   case "${STATE_AI_GATE:-}" in
     RESOLVED)      /usr/bin/printf 'RESOLVED (%s/%s)' "$STATE_AI_TOTAL" "$STATE_AI_TOTAL" ;;
     UNRESOLVED)    /usr/bin/printf 'BLOCKED (%s unresolved of %s)' "$STATE_AI_UNRES" "$STATE_AI_TOTAL" ;;
+    UNCLASSIFIABLE) /usr/bin/printf 'BLOCKED (%s unreadable of %s)' "$STATE_AI_BAD" "$STATE_AI_TOTAL" ;;
     NOT-RECORDED)  /usr/bin/printf 'SURFACED — NOT-RECORDED%s' "$_attest" ;;
     EMPTY-LEDGER)  /usr/bin/printf 'SURFACED — EMPTY-LEDGER%s' "$_attest" ;;
     *)             /usr/bin/printf 'UNVERIFIED (Procedure 7a gate did not run before this phase)' ;;
@@ -5875,16 +6069,20 @@ _ai_verification_cell() {
 phase_action_item_gate() {
   # Evaluate FIRST, in every mode. The report carries a real verdict even on a
   # preview run, and the mode branches below decide only what to DO about it.
-  local _dir _res _state _total _unres
+  local _dir _res _state _total _unres _bad
   _dir="$(_ai_resolve_dir)"
   _res="$(_ai_eval_predicate "$_dir")"
+  # Four tokens, peeled left to right. Every %% is non-greedy and only the LAST
+  # field may use the greedy ##; peeling the third with ## would capture the fourth.
   _state="${_res%% *}"; _res="${_res#* }"
-  _total="${_res%% *}"; _unres="${_res##* }"
+  _total="${_res%% *}"; _res="${_res#* }"
+  _unres="${_res%% *}"; _bad="${_res##* }"
 
   STATE_AI_DIR="$_dir"
   STATE_AI_GATE="$_state"
   STATE_AI_TOTAL="$_total"
   STATE_AI_UNRES="$_unres"
+  STATE_AI_BAD="$_bad"
   STATE_AI_EMIT="n/a"
 
   # TOKENISED, NEVER ABSOLUTE. The ledger lives under the operator-instance root, so
@@ -5916,20 +6114,39 @@ phase_action_item_gate() {
     UNRESOLVED)
       # Enumerate the unresolved rows so the operator can act without re-reading
       # the ledger. Column-addressed exactly as the predicate is.
-      local _rows
-      _rows="$(/usr/bin/awk -F' [|] ' '
-          $1 ~ /^\| *AI-[0-9]+ *$/ { s=$11; gsub(/ /,"",s);
-            if (s=="open" || s=="in-flight") {
-              id=$1; gsub(/[| ]/,"",id); ow=$6; gsub(/^ +| +$/,"",ow);
-              tg=$9; gsub(/^ +| +$/,"",tg);
-              printf "%s(owner:%s; trigger:%s) ", id, ow, tg } }' \
-          "${_dir}/action-items.md" 2>/dev/null || true)"
+      local _rows _badclause=""
+      _rows="$(_ai_list_rows "${_dir}/action-items.md" open)"
       [[ -z "$_rows" ]] && _rows="(row enumeration returned empty — read ${_dirlabel}/action-items.md directly) "
+      # A ledger can carry both classes at once, and this branch owns the dominant
+      # one. Carrying the unreadable rows here rather than in a separate verdict is
+      # what lets the operator act once instead of twice.
+      if [[ "$_bad" -gt 0 ]]; then
+        _badclause=" ALSO UNCLASSIFIABLE: ${_bad} of ${_total} rows carry a status this gate cannot classify and were counted toward neither resolved nor unresolved — normalise each to the § 2.3 enum or a § 2.1a alias, and restore the 13-column width where fields:N is not 13: $(_ai_list_rows "${_dir}/action-items.md" bad)"
+      fi
       if [[ "$_blocking" -eq 1 ]]; then
-        mark_phase "action_item_gate" "FAIL" "Procedure 7a HARD GATE: UNRESOLVED — ${_unres} of ${_total} action items still open/in-flight; milestone close BLOCKED until each is transitioned to done / cancelled / superseded: ${_rows}"
+        mark_phase "action_item_gate" "FAIL" "Procedure 7a HARD GATE: UNRESOLVED — ${_unres} of ${_total} action items still open/in-flight; milestone close BLOCKED until each is transitioned to done / cancelled / superseded: ${_rows}${_badclause}"
         return 3
       fi
-      mark_phase "action_item_gate" "WARN" "Procedure 7a: UNRESOLVED — ${_unres} of ${_total} action items still open/in-flight${_mode_note}: ${_rows}"
+      mark_phase "action_item_gate" "WARN" "Procedure 7a: UNRESOLVED — ${_unres} of ${_total} action items still open/in-flight${_mode_note}: ${_rows}${_badclause}"
+      return 0
+      ;;
+    UNCLASSIFIABLE)
+      # NO open row, but at least one status the gate cannot read. The gate refuses
+      # to render a verdict over rows it cannot classify: an unreadable status is a
+      # gate ERROR, never a silent pass, and counting it as resolved is the defect
+      # this state exists to close. The remedy differs from every other state's —
+      # normalise the VALUE, rather than disposition the row or attest the absence
+      # — so this branch is its own, and deliberately NOT joined to the
+      # NOT-RECORDED|EMPTY-LEDGER pattern below: --attest-action-items is therefore
+      # unreachable for it by construction, exactly as it is for an open row.
+      local _badrows
+      _badrows="$(_ai_list_rows "${_dir}/action-items.md" bad)"
+      [[ -z "$_badrows" ]] && _badrows="(row enumeration returned empty — read ${_dirlabel}/action-items.md directly) "
+      if [[ "$_blocking" -eq 1 ]]; then
+        mark_phase "action_item_gate" "FAIL" "Procedure 7a HARD GATE: UNCLASSIFIABLE — ${_bad} of ${_total} action items carry a status outside the § 2.3 enum and the § 2.1a aliases, so the gate cannot say whether they are open; milestone close BLOCKED until each value is normalised to open / in-flight / done / cancelled / superseded (or a § 2.1a alias). Where fields:N is not 13 the row width is the fault, not the word — restore the 13-column row: ${_badrows}"
+        return 3
+      fi
+      mark_phase "action_item_gate" "WARN" "Procedure 7a: UNCLASSIFIABLE — ${_bad} of ${_total} action items carry a status this gate cannot classify${_mode_note}: ${_badrows}"
       return 0
       ;;
     NOT-RECORDED|EMPTY-LEDGER)
@@ -5960,7 +6177,7 @@ phase_action_item_gate() {
       ;;
   esac
 
-  # Unreachable: _ai_eval_predicate emits one of four states. Fail loudly rather
+  # Unreachable: _ai_eval_predicate emits one of five states. Fail loudly rather
   # than falling through to a silent 0 — an unrecognised state is the vacuity
   # shape this whole phase exists to refuse.
   mark_phase "action_item_gate" "FAIL" "Procedure 7a: predicate returned an unrecognised STATE '${_state}' — refusing to grade the close on a verdict this gate cannot read"
@@ -6361,6 +6578,33 @@ ${_body}" 2>&1)"; then
 #   NO-OP    -> Surface 1 existed and was already canonical. Normal.
 # The token records an observation made STRICTLY BEFORE any mutation (the State-0/1/2
 # discrimination that routes the state machine) — a witness record, not a self-grade.
+#
+# TITLE OWNERSHIP. The release note's H1 is the SINGLE canonical source of the Release
+# title (release-notes-standard.md § 5.2, § 5.5). Stage 12 Phase B5.5 posts a
+# PROVISIONAL title: the note is authored at Stage 13 and does not exist when Stage 12
+# emits, so Stage 12 cannot read the source it would need. THIS phase owns canonical
+# title convergence, because it is the first point at which the note exists. The rule
+# itself lives in release-notes-standard.md and is not restated here.
+#
+# Both dimensions derive from ONE notes_abs_path() resolution, so the title can never
+# be composed from a different read of the note than the body.
+#
+# SURFACE1-TITLE=<MATCH|CONVERGED|WITHHELD> is recorded beside SURFACE1-STATE and is
+# subject to the SAME witness discipline: it is computed from the comparison this phase
+# necessarily performs BEFORE it edits, never from a re-read of the surface it just
+# wrote. A post-mutation read would certify this function's own write.
+#   MATCH     -> the posted title already equalled the note-derived title. No title edit.
+#   CONVERGED -> this phase composed the title from the note H1 and posted it.
+#   WITHHELD  -> no usable H1 resolved, so no --title was passed and the posted title
+#                was left ALONE. Deliberately one-way: an unextractable H1 is a
+#                note-quality finding and must never DOWNGRADE a good posted title,
+#                nor block a close.
+# The OUTCOME TOKEN IS DELIBERATELY UNCHANGED — and that constraint binds the title
+# dimension too. A WITHHELD title must NOT raise WARN: phase 15.6 branches on
+# `pub_result != "PASS"`, so a WARN here would make an edited Release report as
+# "Surface 1 not emitted this run" and would suppress the body-drift verdict on
+# precisely the malformed-note input where that verdict matters most (ADR-148 :91).
+# The withhold is recorded in the DETAIL; the token stays where it was.
 # The OUTCOME TOKEN IS DELIBERATELY UNCHANGED. Do not "improve" this by promoting
 # CREATED to a distinct mark_phase result: phase 15.6 branches on
 # `pub_result != "PASS"` (see phase_check_release_body_drift), so a new token there
@@ -6398,6 +6642,33 @@ ${_body}" 2>&1)"; then
 # --no-merge the --apply behaviour is to defer, so predicting a publish there would be
 # a false prediction. The mode test belongs above the three ABORTING preflights, which
 # is where it now is — not at the literal first line.
+
+# _surface1_title <notes_path> — compose the canonical Release title from the note's
+# H1, or print NOTHING when no usable H1 resolves.
+#
+# ONE composer, TWO call sites (edit and create). It previously existed only inside the
+# create branch, which is the mechanical reason the edit branch could not express a
+# title correction at all: there was no title to pass.
+#
+# FM-4: an H1 equal to the bare version means the extraction degenerated — treat it as
+# absent rather than posting "vX.Y — vX.Y". The caller decides what an empty result
+# means, and the two callers decide DIFFERENTLY on purpose (create substitutes a
+# fallback because there is no published title to protect; edit withholds because there
+# is one).
+#
+# The trailing-whitespace trim is load-bearing for agreement with the projector's own
+# H1 accessor (generate_release_index.py read_note(), which .strip()s): two accessors
+# that disagree on whitespace produce two different "canonical" headlines from one note.
+_surface1_title() {
+  local _st_notes="$1" _st_h1
+  _st_h1="$(/usr/bin/grep -m1 '^# ' "$_st_notes" 2>/dev/null | /usr/bin/sed 's/^# //' || echo "")"
+  _st_h1="${_st_h1%"${_st_h1##*[![:space:]]}"}"
+  if [[ -z "$_st_h1" || "$_st_h1" == "$VERSION" ]]; then
+    return 0
+  fi
+  printf '%s — %s' "$VERSION" "$_st_h1"
+}
+
 phase_publish_github_release() {
   # --no-merge (#2919): Surface 1 (the GitHub Release) is published from the
   # RELEASE_NOTES file, which lands on main only when the Stage 13 chore PR merges.
@@ -6414,7 +6685,7 @@ phase_publish_github_release() {
   # path below is reached with exactly the control flow it had before. Detail carries
   # no '|' so it cannot break the markdown phase table in --markdown reports.
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "publish_github_release" "DRY-RUN" "would invoke view-then-create-or-edit state machine: gh release view $VERSION → create OR edit OR no-op (per release-notes-standard.md § 5.5), and would record its path at --apply as SURFACE1-STATE=CREATED, EDITED or NO-OP (stated, NOT pre-evaluated here — this phase is the Stage-12 Phase B5.5 backstop and a CREATED value at --apply means Stage 12 did not emit Surface 1). Not evaluated under --dry-run: the tag-on-origin, tag↔merge-SHA and notes-file preflights. Their inputs do not exist yet — Stage 12 Phase B3 has not pushed the tag and the scaffold phase deliberately wrote no note — so checking them here would only fail on this script's own no-op. All three run for real at --apply, before anything is published"
+    mark_phase "publish_github_release" "DRY-RUN" "would invoke view-then-create-or-edit state machine: gh release view $VERSION → create OR edit OR no-op (per release-notes-standard.md § 5.5), and would compare the posted BODY and the posted TITLE against the canonical note and converge BOTH on the edit path, and would record its path at --apply as SURFACE1-STATE=CREATED, EDITED or NO-OP together with SURFACE1-TITLE=MATCH, CONVERGED or WITHHELD (stated, NOT pre-evaluated here — this phase is the Stage-12 Phase B5.5 backstop and a CREATED value at --apply means Stage 12 did not emit Surface 1). Not evaluated under --dry-run: the tag-on-origin, tag↔merge-SHA and notes-file preflights. Their inputs do not exist yet — Stage 12 Phase B3 has not pushed the tag and the scaffold phase deliberately wrote no note — so checking them here would only fail on this script's own no-op. All three run for real at --apply, before anything is published"
     return 0
   fi
 
@@ -6495,10 +6766,29 @@ phase_publish_github_release() {
 
   # View-then-create-or-edit state machine
   if $GH release view "$VERSION" --repo "$REPO_SLUG" >/dev/null 2>&1; then
-    # State 1 or 2 — release exists; compare body
-    local existing_body canonical_body
+    # State 1 or 2 — release exists; compare body AND title
+    local existing_body canonical_body existing_title canonical_title _s1_title_state
     existing_body="$($GH release view "$VERSION" --repo "$REPO_SLUG" --json body --jq .body 2>/dev/null)"
     canonical_body="$(strip_frontmatter "$notes_path" 2>/dev/null)"
+
+    # The posted title is the `name` field. Read it in a SEPARATE call, not as
+    # `--json body,name`: the self-test stubs discriminate on the literal substring
+    # "--json body", which `--json body,name` also satisfies, so a combined read would
+    # silently receive the body and grade a title comparison against it. One extra API
+    # read per close, in exchange for a fixture that cannot lie to the assertion.
+    existing_title="$($GH release view "$VERSION" --repo "$REPO_SLUG" --json name --jq .name 2>/dev/null)"
+    canonical_title="$(_surface1_title "$notes_path")"
+
+    # WITNESS, computed here — BEFORE any mutation — for the same reason SURFACE1-STATE
+    # is. Recording it after the edit would compare this phase's own write against the
+    # source it wrote it from, which can only disagree when the edit already failed.
+    if [[ -z "$canonical_title" ]]; then
+      _s1_title_state="WITHHELD"
+    elif [[ "$existing_title" == "$canonical_title" ]]; then
+      _s1_title_state="MATCH"
+    else
+      _s1_title_state="CONVERGED"
+    fi
 
     # EMPTY-BODY GUARD — the one irreversible path in this script.
     # `gh release edit --notes ""` blanks a PUBLISHED Release body, and GitHub keeps
@@ -6512,27 +6802,51 @@ phase_publish_github_release() {
       return 3
     fi
 
-    if [[ "$existing_body" == "$canonical_body" ]]; then
-      mark_phase "publish_github_release" "${_s1_outcome_override:-SKIPPED}" "SURFACE1-STATE=NO-OP — Surface 1 was already present and canonical before this backstop ran (Stage 12 Phase B5.5 emitted it). ${_s1_repair_note}GitHub Release $VERSION already at canonical content (State 2 no-op per release-notes-standard.md § 5.5)"
+    # NO-OP requires BOTH dimensions canonical. A withheld title contributes `true`
+    # here, so a note with no usable H1 behaves exactly as it did before this phase
+    # gained the title dimension — the inertness is what bounds the change to its
+    # trigger. Before this condition read the title at all, a stale posted title
+    # survived every close: the body matched, the phase returned 0, and nothing else
+    # ever looked at the title again.
+    if [[ "$existing_body" == "$canonical_body" \
+       && ( "$_s1_title_state" == "MATCH" || "$_s1_title_state" == "WITHHELD" ) ]]; then
+      mark_phase "publish_github_release" "${_s1_outcome_override:-SKIPPED}" "SURFACE1-STATE=NO-OP SURFACE1-TITLE=$_s1_title_state — Surface 1 was already present and canonical before this backstop ran (Stage 12 Phase B5.5 emitted it). ${_s1_repair_note}GitHub Release $VERSION already at canonical content on body and title (State 2 no-op per release-notes-standard.md § 5.5)"
       return 0
     fi
 
-    # State 1 → State 2 transition via idempotent gh release edit
-    if $GH release edit "$VERSION" --repo "$REPO_SLUG" --notes "$canonical_body" >/dev/null 2>&1; then
-      mark_phase "publish_github_release" "${_s1_outcome_override:-PASS}" "SURFACE1-STATE=EDITED — Surface 1 was already present before this backstop ran (Stage 12 Phase B5.5 emitted it); body refreshed from the canonical note. ${_s1_repair_note}edited GitHub Release $VERSION (State 1 → State 2 transition; body refreshed from canonical notes)"
+    # State 1 → State 2 transition via idempotent gh release edit.
+    # --title is passed ONLY when a canonical title resolved. On WITHHELD the argument
+    # is absent entirely rather than empty: `--title ""` would blank the posted title,
+    # which is the downgrade the withhold rule exists to prevent.
+    local _s1_edit_ok=0
+    if [[ "$_s1_title_state" == "WITHHELD" ]]; then
+      $GH release edit "$VERSION" --repo "$REPO_SLUG" --notes "$canonical_body" >/dev/null 2>&1 && _s1_edit_ok=1
+    else
+      $GH release edit "$VERSION" --repo "$REPO_SLUG" --notes "$canonical_body" --title "$canonical_title" >/dev/null 2>&1 && _s1_edit_ok=1
+    fi
+    if [[ "$_s1_edit_ok" -eq 1 ]]; then
+      local _s1_title_detail
+      case "$_s1_title_state" in
+        WITHHELD) _s1_title_detail="title WITHHELD — no usable '# ' H1 resolved in $notes_path, so the posted title was left as published rather than downgraded (a note-quality finding; correct the note H1 and re-run Phase 15.5 per release-notes-standard.md § 5.6)" ;;
+        MATCH)    _s1_title_detail="title already canonical" ;;
+        *)        _s1_title_detail="title converged to '$canonical_title'" ;;
+      esac
+      mark_phase "publish_github_release" "${_s1_outcome_override:-PASS}" "SURFACE1-STATE=EDITED SURFACE1-TITLE=$_s1_title_state — Surface 1 was already present before this backstop ran (Stage 12 Phase B5.5 emitted it); body and title refreshed from the canonical note. ${_s1_repair_note}edited GitHub Release $VERSION (State 1 → State 2 transition; $_s1_title_detail)"
       return 0
     fi
     mark_phase "publish_github_release" "FAIL" "gh release edit failed for existing release $VERSION"
     return 3
   fi
 
-  # State 0 — release does not exist; create
-  # Extract headline from canonical notes H1; fallback per FM-4
-  local headline
-  headline="$(/usr/bin/grep -m1 '^# ' "$notes_path" 2>/dev/null | /usr/bin/sed 's/^# //' || echo "")"
-  if [[ -z "$headline" || "$headline" == "$VERSION" ]]; then
-    headline="Release Notes"
-  fi
+  # State 0 — release does not exist; create.
+  # Same composer as the edit path — the inline extraction that used to live here was
+  # the ONLY title composer in the file, which is why the edit path had none.
+  # The fallback differs from the edit path's withhold ON PURPOSE: there is no
+  # published title to protect here, so substituting is strictly better than creating
+  # a Release with no title at all.
+  local canonical_title
+  canonical_title="$(_surface1_title "$notes_path")"
+  [[ -n "$canonical_title" ]] || canonical_title="$VERSION — Release Notes"
 
   # Surface 1 body = the note minus its YAML frontmatter (the committed notes
   # file is the source of record; the Release page is the rendered copy people
@@ -6589,11 +6903,11 @@ phase_publish_github_release() {
 
   if $GH release create "$VERSION" \
     --repo "$REPO_SLUG" \
-    --title "$VERSION — $headline" \
+    --title "$canonical_title" \
     --notes "$notes_body" \
     --target "$MERGE_SHA" \
     --latest="$s1_latest" >/dev/null 2>&1; then
-    mark_phase "publish_github_release" "${_s1_outcome_override:-PASS}" "SURFACE1-STATE=CREATED — Stage 12 Phase B5.5 did NOT emit Surface 1; this backstop created it. A Stage-12 omission, not the normal path — reported at stage-13-close.md § Phase B5.6. ${_s1_repair_note}created GitHub Release $VERSION bound to merge SHA $MERGE_SHA (Surface 1 of Layer-1 dual-write; title='$VERSION — $headline') --latest=$s1_latest ($s1_latest_why)"
+    mark_phase "publish_github_release" "${_s1_outcome_override:-PASS}" "SURFACE1-STATE=CREATED SURFACE1-TITLE=CONVERGED — Stage 12 Phase B5.5 did NOT emit Surface 1; this backstop created it. A Stage-12 omission, not the normal path — reported at stage-13-close.md § Phase B5.6. ${_s1_repair_note}created GitHub Release $VERSION bound to merge SHA $MERGE_SHA (Surface 1 of Layer-1 dual-write; title='$canonical_title') --latest=$s1_latest ($s1_latest_why)"
     return 0
   fi
   mark_phase "publish_github_release" "FAIL" "gh release create failed for new release $VERSION (canonical recovery: re-run Phase 15.5 OR invoke release-executor Mode F standalone)"
@@ -7016,9 +7330,15 @@ phase_invoke_orphan_cleanup() {
     return 0
   fi
 
-  # Chained tool defaults to dry-run; operator re-runs with --apply
+  # This phase produces the REPORT the operator approves against, and that is all it
+  # does: the --dry-run here is deliberate and stays. There is no apply path anywhere
+  # in this driver, so the PASS note names where the apply actually lives rather than
+  # leaving a reader of a green close-out to look for one that does not exist. The
+  # dry-run report is now relayable as the approval scope: it projects the resolve
+  # pass, so a branch freed by this run's own worktree removals is reported as a
+  # predicted consequence instead of as skipped.
   if "$CLEANUP_TOOL" --release-close "$slug" --dry-run --markdown >/dev/null 2>&1; then
-    mark_phase "invoke_orphan_cleanup" "PASS" "cleanup dry-run report generated (operator reviews + re-invokes with --apply)"
+    mark_phase "invoke_orphan_cleanup" "PASS" "cleanup dry-run report generated (projects the apply's resolve pass, so its totals are the approval scope). This driver has NO apply path — after operator approval the apply is a DIRECT cleanup-orphan-state.sh --release-close $slug --apply --markdown, not a re-run of this close-out"
     return 0
   fi
   mark_phase "invoke_orphan_cleanup" "FAIL" "cleanup-orphan-state.sh dry-run returned non-zero"
@@ -7337,6 +7657,115 @@ generate_report() {
 }
 
 # ─── Self-test ───────────────────────────────────────────────────────────────
+
+# GROUP-EXECUTION WITNESS (#6255 F-01).
+#
+# THE DEFECT THIS CLOSES. Every "… validated (…)" line self_test() prints is an
+# unconditional `echo` in the terminal block at the bottom of this function, and
+# the run reaches that block ONLY when failures -eq 0. So no such line is, on its
+# own, evidence that any arm executed — and the eight that said otherwise were
+# wrong about themselves. Measured at Stage 7 Dev Testing rather than reasoned:
+# guarding one group's arms off with `if false; then` left --self-test at exit 0,
+# printing `self-test: PASS` with output BYTE-IDENTICAL to a healthy run, that
+# group's claim included. An external coverage checker passed the same mutant.
+#
+# THE FIX IS A WITNESS, NOT A NINTH SENTENCE. A group that makes such a claim
+# records itself as the LAST statement of its arm region, so any guard that
+# disables the arms disables the record with them. The gate immediately above the
+# failures check re-derives BOTH sets from this file's own text — the claimed ids
+# from the emitter call sites, the planted ids from the recorder call sites — and
+# turns a claim with no witness into an ordinary named failure. A group that did
+# not run therefore REDDENS and names itself instead of printing a claim it
+# cannot support. Two properties keep that non-vacuous: the derived sets carry
+# anti-vacuity floors, so an extraction that stopped matching is caught rather
+# than emptying the comparison; and the emitter refuses to print an unwitnessed
+# claim, so the id it is handed is load-bearing at run time and not decoration.
+#
+# BOTH EXTRACTIONS ARE LINE-ANCHORED, and that is load-bearing. An unanchored
+# needle also matches PROSE — a comment naming the emitter followed by any word
+# yields that word as a phantom group id, which then fails the static-parity arm
+# against a group that does not exist. Measured on a fixture before this shipped.
+# Anchoring to a call site (start of line, optional indent) rejects prose and the
+# extractor's own pattern line while still matching every real call.
+#
+# ADDING A CLAIM LINE: emit it through the emitter with a fresh id, and record
+# that id at the end of that group's arms. Neither half is optional — a claim
+# with no recorder call site in this file fails the gate's static-parity arm, and
+# a recorder that never executes fails its runtime arm. Do not write either
+# function's name followed by a word in prose; write it bare or in backticks.
+# THE GROUP WITNESS ALONE IS NOT ARM-GRANULAR, and that was the residual (#6255
+# F-01 remediation). The recorder above is planted after a group's LAST arm and
+# therefore outside any individual arm's block, so guarding ONE arm off still
+# reaches it: the witness records, the claim prints, and the suite's stderr stays
+# byte-identical to a healthy run. Measured — sha256 equal on both sides, exit 0,
+# zero FAIL lines, zero UNWITNESSED. The group witness only ever detected a
+# whole-group mutant, which is the coarsest failure the claims can have.
+#
+# THE ARM RECORDER CLOSES THAT AT ARM GRANULARITY. Each arm the claims enumerate
+# records itself, and the arm-parity gate re-derives the declared roster from
+# this file's own recorder call sites and requires every declared arm to have
+# executed. A disabled arm therefore REDDENS and NAMES itself and its group.
+#
+# THE RECORDER IS PREFIXED ONTO THE ARM'S OWN FIRST ASSERTION LINE, deliberately
+# and not for brevity: that line is known-executable code at the arm's own
+# nesting level, so the tick cannot land inside a heredoc, a comment, or a
+# different block than the arm it claims to witness — the failure mode that
+# would make a tick fire for an arm that did not run. Any guard, comment-out or
+# `if false` wrapping the arm takes the tick with it.
+#
+# ADDING AN ARM: prefix `_st_arm <group> <label>` onto its first assertion. The
+# roster derives from that call site, so no list is maintained anywhere. Do not
+# write this function's name followed by two words in prose; the extraction is
+# line-anchored for the same reason the group one is, but a line-initial prose
+# mention would still inject a phantom arm.
+_ST_GROUP_WITNESS=""
+_ST_ARM_WITNESS=""
+_ST_GROUP_ARMCOUNT=""
+
+# Record that a claimed group's arms executed. Two arguments: the group id, and
+# the number of arms that group DECLARES. The count is the one number in this
+# mechanism that is declared rather than derived, and it is declared on purpose:
+# the runtime roster and the static roster are both read from the recorder call
+# sites, so deleting an arm together with its recorder removes it from BOTH and
+# parity still holds while the group's claim goes on enumerating it in prose.
+# A declared count is the only thing that notices a subtraction. It is then
+# cross-checked against the derived roster, so the declaration cannot drift
+# either: whichever of the two moves, the gate names the group and both numbers.
+_st_witness() {
+  _ST_GROUP_WITNESS="${_ST_GROUP_WITNESS} $1"
+  [[ -z "${2:-}" ]] || _ST_GROUP_ARMCOUNT="${_ST_GROUP_ARMCOUNT} $1=$2"
+}
+
+# Record that ONE arm of a claimed group executed. Two arguments, the group id
+# and the arm label. Always returns 0 and touches nothing else, so prefixing it
+# onto an assertion line cannot change that assertion's verdict.
+_st_arm() {
+  _ST_ARM_WITNESS="${_ST_ARM_WITNESS} $1/$2"
+  return 0
+}
+
+# Did one arm execute? The membership predicate BOTH the arm-parity loop and its
+# capability-to-fail controls call, so the controls exercise the same code path
+# the loop grades on — a control over a re-implemented predicate would prove
+# nothing about the loop.
+_st_arm_ran() {
+  case " ${_ST_ARM_WITNESS} " in
+    *" $1/$2 "*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Emit one group-extraction line, bound to the witness id whose arms it
+# describes. Refuses to print the claim unwitnessed: the gate has already failed
+# such a run, so this branch is unreachable in a healthy suite and exists so the
+# id is CHECKED at emit time rather than merely carried.
+_st_claim() {
+  local _id="$1"; shift
+  case " ${_ST_GROUP_WITNESS} " in
+    *" ${_id} "*) echo "$*" >&2 ;;
+    *) echo "  UNWITNESSED CLAIM [${_id}] — this group's arms left no witness in this run; see the group-execution witness gate:$*" >&2 ;;
+  esac
+}
 
 self_test() {
   echo "self-test: starting" >&2
@@ -9067,7 +9496,7 @@ EOF
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   _vd_write; COMPUTE_VELOCITY="$_vd_cv_e2"; MODE="apply"
   _vd_rc=0; phase_inject_velocity_field >/dev/null 2>&1 || _vd_rc=$?
-  [[ "$(get_phase inject_velocity_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: (p) — a producer exit 2 must FAIL the phase at --apply, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  _st_arm 4c.5b p; [[ "$(get_phase inject_velocity_field | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: (p) — a producer exit 2 must FAIL the phase at --apply, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
   [[ "$_vd_rc" -eq 3 ]] || { echo "FAIL: (p) — the phase must return 3 on a producer exit 2 so the runner halts before the close, got $_vd_rc"; failures=$((failures+1)); }
   [[ "$(_vd_vcount)" -eq 0 ]] || { echo "FAIL: (p) — nothing may be written to the ledger when the producer refuses the measurement"; failures=$((failures+1)); }
   # The detail must carry the PRODUCER's own words. A generic "tool failed" sends
@@ -9079,7 +9508,7 @@ EOF
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   _vd_write; COMPUTE_VELOCITY="$_vd_cv_ok"
   phase_inject_velocity_field >/dev/null 2>&1 || true
-  [[ "$(get_phase inject_velocity_field | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: (p) control — the same fixture with a conformant producer must PASS, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  _st_arm 4c.5b p-control; [[ "$(get_phase inject_velocity_field | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: (p) control — the same fixture with a conformant producer must PASS, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
   [[ "$(_vd_vcount)" -eq 1 ]] || { echo "FAIL: (p) control — the conformant run must write exactly one **Velocity:** line, got $(_vd_vcount)"; failures=$((failures+1)); }
 
   # (q) EXIT 2 UNDER --dry-run = non-blocking WARN per the release-wide dry-run /
@@ -9089,7 +9518,7 @@ EOF
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   _vd_write; COMPUTE_VELOCITY="$_vd_cv_e2"; MODE="dry-run"
   _vd_rc=0; phase_inject_velocity_field >/dev/null 2>&1 || _vd_rc=$?
-  [[ "$(get_phase inject_velocity_field | /usr/bin/cut -d'|' -f1)" == "WARN" ]] || { echo "FAIL: (q) — a producer exit 2 under --dry-run must mark WARN per the in-file non-blocking-preview precedent, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  _st_arm 4c.5b q; [[ "$(get_phase inject_velocity_field | /usr/bin/cut -d'|' -f1)" == "WARN" ]] || { echo "FAIL: (q) — a producer exit 2 under --dry-run must mark WARN per the in-file non-blocking-preview precedent, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
   [[ "$_vd_rc" -eq 0 ]] || { echo "FAIL: (q) — the dry-run WARN must be NON-blocking (return 0), got $_vd_rc"; failures=$((failures+1)); }
   /usr/bin/grep -qF 'FAILS the close at --apply' <<<"$(get_phase inject_velocity_field)" || { echo "FAIL: (q) — the dry-run WARN must name the condition that fails at --apply, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
   [[ "$(_vd_vcount)" -eq 0 ]] || { echo "FAIL: (q) — a dry run must not write"; failures=$((failures+1)); }
@@ -9100,7 +9529,7 @@ EOF
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   _vd_write; COMPUTE_VELOCITY="$_vd_cv_e2"
   phase_inject_velocity_field >/dev/null 2>&1 || true
-  ! /usr/bin/grep -q '^\*\*Velocity:\*\* N/A' "$RELEASE_LOG" || { echo "FAIL: (r) — a producer exit 2 was degraded to an 'N/A' field; a refusal to measure must never be recorded as a measurement"; failures=$((failures+1)); }
+  _st_arm 4c.5b r; ! /usr/bin/grep -q '^\*\*Velocity:\*\* N/A' "$RELEASE_LOG" || { echo "FAIL: (r) — a producer exit 2 was degraded to an 'N/A' field; a refusal to measure must never be recorded as a measurement"; failures=$((failures+1)); }
 
   # (r) SENSITIVITY — exit 1 is the generic-unavailable class and MUST still
   # degrade to N/A at PASS. Without this arm (r) is equally satisfied by a phase
@@ -9109,7 +9538,7 @@ EOF
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   _vd_write; COMPUTE_VELOCITY="$_vd_cv_e1"
   phase_inject_velocity_field >/dev/null 2>&1 || true
-  [[ "$(get_phase inject_velocity_field | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: (r) sensitivity — a producer exit 1 must STILL degrade to an N/A field at PASS, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  _st_arm 4c.5b r-sensitivity; [[ "$(get_phase inject_velocity_field | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: (r) sensitivity — a producer exit 1 must STILL degrade to an N/A field at PASS, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
   /usr/bin/grep -q '^\*\*Velocity:\*\* N/A' "$RELEASE_LOG" || { echo "FAIL: (r) sensitivity — the exit-1 degrade must write the explicit N/A field, or the exit-2 arm above proves nothing about exit 2 specifically"; failures=$((failures+1)); }
 
   # (s) A SUCCESSFUL run's stderr still reaches the report. The producer announces
@@ -9119,7 +9548,7 @@ EOF
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   _vd_write; COMPUTE_VELOCITY="$_vd_cv_note"
   phase_inject_velocity_field >/dev/null 2>&1 || true
-  [[ "$(get_phase inject_velocity_field | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: (s) — a producer that writes a NOTE to stderr but a conformant field to stdout must still PASS, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  _st_arm 4c.5b s; [[ "$(get_phase inject_velocity_field | /usr/bin/cut -d'|' -f1)" == "PASS" ]] || { echo "FAIL: (s) — a producer that writes a NOTE to stderr but a conformant field to stdout must still PASS, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
   /usr/bin/grep -qF 'planned-recovery degraded' <<<"$(get_phase inject_velocity_field)" || { echo "FAIL: (s) — a degraded planned-recovery notice must reach the run report; on stderr alone it is discarded and 'planned' under-reports invisibly, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
   [[ "$(_vd_vcount)" -eq 1 ]] || { echo "FAIL: (s) — the stderr note must not disturb the write; expected exactly one **Velocity:** line, got $(_vd_vcount)"; failures=$((failures+1)); }
 
@@ -9128,7 +9557,8 @@ EOF
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   _vd_write; COMPUTE_VELOCITY="$_vd_cv_ok"
   phase_inject_velocity_field >/dev/null 2>&1 || true
-  ! /usr/bin/grep -qF 'producer stderr:' <<<"$(get_phase inject_velocity_field)" || { echo "FAIL: (s) control — a silent producer must add no stderr note to the phase detail, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  _st_arm 4c.5b s-control; ! /usr/bin/grep -qF 'producer stderr:' <<<"$(get_phase inject_velocity_field)" || { echo "FAIL: (s) control — a silent producer must add no stderr note to the phase detail, got '$(get_phase inject_velocity_field)'"; failures=$((failures+1)); }
+  _st_witness 4c.5b 7
 
   /bin/rm -rf "$_vd_tmp" 2>/dev/null || true
   unset -f _vd_write _vd_vcount
@@ -9701,7 +10131,7 @@ STUB
   phase_manual_close_release_issues >/dev/null 2>&1
   phase_run_verification >/dev/null 2>&1
   _v5_row="$(/usr/bin/printf '%s\n' "$VERIFICATION_RESULTS" | /usr/bin/grep '^| 5 |')"
-  [[ "$_v5_row" == *"PASS (settled after 5 poll(s)"* ]] || { echo "FAIL: check 5 must ride out a 5-read index lag and render 'PASS (settled after 5 poll(s), ...)' — a single retry structurally cannot, got '$_v5_row'"; failures=$((failures+1)); }
+  _st_arm 4d-settle f; [[ "$_v5_row" == *"PASS (settled after 5 poll(s)"* ]] || { echo "FAIL: check 5 must ride out a 5-read index lag and render 'PASS (settled after 5 poll(s), ...)' — a single retry structurally cannot, got '$_v5_row'"; failures=$((failures+1)); }
   [[ "$_v5_row" == *"PARTIAL"* ]] && { echo "FAIL: check 5 must NOT still read PARTIAL once the injected lag drains inside the budget, got '$_v5_row'"; failures=$((failures+1)); }
   [[ "${PHASE_DETAILS[*]}" == *"check-5 settled at poll 5/15"* ]] || { echo "FAIL: the run_verification phase DETAIL must carry check 5's settle evidence 'check-5 settled at poll 5/15', got '${PHASE_DETAILS[*]}'"; failures=$((failures+1)); }
 
@@ -9718,7 +10148,7 @@ STUB
   phase_manual_close_release_issues >/dev/null 2>&1
   phase_run_verification >/dev/null 2>&1
   _v5_row="$(/usr/bin/printf '%s\n' "$VERIFICATION_RESULTS" | /usr/bin/grep '^| 5 |')"
-  [[ "$_v5_row" == *"PARTIAL (1 open: #401)"* ]] || { echo "FAIL: CONTROL — a budget below the injected lag must leave check 5 at 'PARTIAL (1 open: #401)'; leg (f) is vacuous unless this fires, got '$_v5_row'"; failures=$((failures+1)); }
+  _st_arm 4d-settle g; [[ "$_v5_row" == *"PARTIAL (1 open: #401)"* ]] || { echo "FAIL: CONTROL — a budget below the injected lag must leave check 5 at 'PARTIAL (1 open: #401)'; leg (f) is vacuous unless this fires, got '$_v5_row'"; failures=$((failures+1)); }
   [[ "$_v5_row" == *"unsettled after"* ]] || { echo "FAIL: budget exhaustion must SAY it exhausted ('unsettled after Ns (N polls)') rather than degrading silently, got '$_v5_row'"; failures=$((failures+1)); }
   [[ "$_v5_row" == *"| PASS"* ]] && { echo "FAIL: an exhausted settle budget must NEVER read as PASS, got '$_v5_row'"; failures=$((failures+1)); }
 
@@ -9729,7 +10159,7 @@ STUB
   #     an empty extraction passes every limb below while measuring nothing.
   local _v5_fun
   _v5_fun="$(/usr/bin/awk '/^phase_run_verification\(\) \{$/{f=1} f{print} f&&/^\}$/{exit}' "${BASH_SOURCE[0]}")"
-  [[ -n "$_v5_fun" ]] || { echo "FAIL: check-5 (h) — could not extract phase_run_verification from this file; every structural limb below would pass without asserting anything"; failures=$((failures+1)); }
+  _st_arm 4d-settle h; [[ -n "$_v5_fun" ]] || { echo "FAIL: check-5 (h) — could not extract phase_run_verification from this file; every structural limb below would pass without asserting anything"; failures=$((failures+1)); }
   /usr/bin/grep -qF 'VERIFY_RECHECK_ATTEMPTS' <<<"$_v5_fun" || { echo "FAIL: check-5 (h) — the settle path must carry the attempt bound VERIFY_RECHECK_ATTEMPTS; an interval with no bound is the single-retry shape #4416 replaces"; failures=$((failures+1)); }
   # `-e` is load-bearing, not decoration: this needle STARTS WITH A DASH, and without
   # -e grep parses it as options, exits 2, and the limb fails on every input — an arm
@@ -9760,7 +10190,7 @@ STUB
   phase_manual_close_release_issues >/dev/null 2>&1
   phase_run_verification >/dev/null 2>&1
   _v5_row="$(/usr/bin/printf '%s\n' "$VERIFICATION_RESULTS" | /usr/bin/grep '^| 5 |')"
-  [[ "$_v5_row" == *"PARTIAL (1 open: #999)"* ]] || { echo "FAIL: an out-of-scope straggler must be reported as 'PARTIAL (1 open: #999)', got '$_v5_row'"; failures=$((failures+1)); }
+  _st_arm 4d-settle i; [[ "$_v5_row" == *"PARTIAL (1 open: #999)"* ]] || { echo "FAIL: an out-of-scope straggler must be reported as 'PARTIAL (1 open: #999)', got '$_v5_row'"; failures=$((failures+1)); }
   #     The poll count is asserted on the CHECK-5-SCOPED instrument (the phase detail
   #     check 5 itself writes), NOT on the stub's `calls` counter: that counter is
   #     PHASE-scoped — the gate-passage-proof rung calls resolve_stage13_subtask, which
@@ -9799,7 +10229,7 @@ STUB
   #     nothing unless the run genuinely reached the render with polls spent AND budget
   #     remaining. Pinned to the check-5-scoped instrument whose moving controls are leg
   #     (f)'s `poll 5/15` and leg (i)'s `poll 0/15`, so `poll 3/15` is a real reading.
-  [[ "${PHASE_DETAILS[*]}" == *"check-5 settled at poll 3/15"* ]] || { echo "FAIL: check-5 (i.2) FLOOR — the mid-poll out-of-scope break must land at 'check-5 settled at poll 3/15' (polls spent, budget remaining); without it the suffix arm below grades nothing, got '${PHASE_DETAILS[*]}'"; failures=$((failures+1)); }
+  _st_arm 4d-settle i.2; [[ "${PHASE_DETAILS[*]}" == *"check-5 settled at poll 3/15"* ]] || { echo "FAIL: check-5 (i.2) FLOOR — the mid-poll out-of-scope break must land at 'check-5 settled at poll 3/15' (polls spent, budget remaining); without it the suffix arm below grades nothing, got '${PHASE_DETAILS[*]}'"; failures=$((failures+1)); }
   [[ "$_v5_row" == *"PARTIAL (1 open: #999)"* ]] || { echo "FAIL: check-5 (i.2) — a straggler outside this run's close set must be reported the moment it surfaces mid-poll, as 'PARTIAL (1 open: #999)', got '$_v5_row'"; failures=$((failures+1)); }
   [[ "$_v5_row" == *"unsettled after"* ]] && { echo "FAIL: check-5 (i.2) — the exhaustion suffix fired on a run that spent 3 of 15 attempts and waited none of the budget it names; the guard must be the loop's own '-ge \$VERIFY_RECHECK_ATTEMPTS' terminal, never '-gt 0', got '$_v5_row'"; failures=$((failures+1)); }
 
@@ -9808,8 +10238,9 @@ STUB
   #     poll advances itself), and no leg above may have leaked a non-zero interval
   #     into the group. 5+2 polls at the shipped 2s interval would alone cost ~14s, so
   #     this arm genuinely can fail.
-  [[ "$VERIFY_RECHECK_DELAY" -eq 0 ]] || { echo "FAIL: check-5 (j) — the settle legs must run at VERIFY_RECHECK_DELAY=0; a leaked non-zero interval buys the suite wall-clock, got '$VERIFY_RECHECK_DELAY'"; failures=$((failures+1)); }
+  _st_arm 4d-settle j; [[ "$VERIFY_RECHECK_DELAY" -eq 0 ]] || { echo "FAIL: check-5 (j) — the settle legs must run at VERIFY_RECHECK_DELAY=0; a leaked non-zero interval buys the suite wall-clock, got '$VERIFY_RECHECK_DELAY'"; failures=$((failures+1)); }
   [[ $(( SECONDS - _v5_t0 )) -le 2 ]] || { echo "FAIL: check-5 (j) — the #4416 settle legs must add no wall-clock (expected <=2s across the six-arm settle group, legs f-j plus i.2), took $(( SECONDS - _v5_t0 ))s"; failures=$((failures+1)); }
+  _st_witness 4d-settle 6
 
   /bin/rm -rf "$_v5_tmp" 2>/dev/null || true
   GH="$_v5_saved_gh"; MODE="$_v5_saved_mode"; STATE_MILESTONE_SLUG="$_v5_saved_slug"
@@ -10049,47 +10480,223 @@ STUB
   phase_await_merge_chore_pr >/dev/null 2>&1
   [[ "$(get_phase await_merge_chore_pr)" == SKIPPED\|* ]] || { echo "FAIL: await_merge must SKIP under --no-merge, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
 
-  # (c) BLOCKED-then-CLEAN keep-polling reaches a merge. Stub $GH so `pr view`
-  #     returns MERGEABLE/BLOCKED on the first call and MERGEABLE/CLEAN after
-  #     (proving BLOCKED is keep-polling, not terminal), and `pr merge` exits 0.
+  # (c)..(i) SHARED STUB (#6255). ONE stub serves every arm below, driven by data
+  #     files, so no arm can silently diverge from its neighbours' instrumentation:
+  #       $_mt_seq   one composite per line — the Nth `pr view` returns line N and
+  #                  the LAST line repeats thereafter
+  #       $_mt_mrc   the exit status `pr merge` returns
+  #       $_mt_ctr   `pr view` call counter · $_mt_mctr  `pr merge` call counter
+  #     The MERGE counter is not decoration. Post-#6255 a PASS is reachable via the
+  #     MERGED/* terminal arm as well as via the merge path, so `PASS` alone stopped
+  #     proving that a merge was attempted — the coverage this card's own change
+  #     removes. Every arm below asserts BOTH counters, which is also what makes the
+  #     zero-merge claims in (e)/(f)/(g) mean something: (c) is their moving control.
   local _mt_tmp; _mt_tmp="$(/usr/bin/mktemp -d -t mergeawait-selftest.XXXXXX)"
-  local _mt_ctr="$_mt_tmp/calls"; /usr/bin/printf '0' > "$_mt_ctr"
+  local _mt_ctr="$_mt_tmp/calls" _mt_mctr="$_mt_tmp/merges"
+  local _mt_seq="$_mt_tmp/seq" _mt_mrc="$_mt_tmp/mrc" _mt_rc=0
   local _mt_stub="$_mt_tmp/gh-stub.sh"
   /bin/cat > "$_mt_stub" <<STUB
 #!/usr/bin/env bash
-# #1705 await-merge stub. \`pr view\` → BLOCKED first, CLEAN after; \`pr merge\` → ok.
-ctr_file="$_mt_ctr"
+# #1705 / #6255 await-merge stub: sequenced \`pr view\` composites, counted \`pr merge\`.
+ctr_file="$_mt_ctr"; mctr_file="$_mt_mctr"; seq_file="$_mt_seq"; mrc_file="$_mt_mrc"
 if [[ "\$1" == "pr" && "\$2" == "view" ]]; then
   n="\$(/bin/cat "\$ctr_file" 2>/dev/null || echo 0)"
   /usr/bin/printf '%s' "\$((n+1))" > "\$ctr_file"
-  if [[ "\$n" -eq 0 ]]; then echo "MERGEABLE/BLOCKED"; else echo "MERGEABLE/CLEAN"; fi
+  line="\$(/usr/bin/sed -n "\$((n+1))p" "\$seq_file")"
+  [[ -n "\$line" ]] || line="\$(/usr/bin/tail -n 1 "\$seq_file")"
+  echo "\$line"
   exit 0
 fi
-if [[ "\$1" == "pr" && "\$2" == "merge" ]]; then exit 0; fi
+if [[ "\$1" == "pr" && "\$2" == "merge" ]]; then
+  m="\$(/bin/cat "\$mctr_file" 2>/dev/null || echo 0)"
+  /usr/bin/printf '%s' "\$((m+1))" > "\$mctr_file"
+  exit "\$(/bin/cat "\$mrc_file" 2>/dev/null || echo 0)"
+fi
 exit 0
 STUB
   /bin/chmod +x "$_mt_stub"
-  GH="$_mt_stub"; CHORE_PR_SKIPPED=0; NO_MERGE=0; MERGE_TIMEOUT=5; MERGE_POLL_STEP=0
+  GH="$_mt_stub"; CHORE_PR_SKIPPED=0; NO_MERGE=0
+
+  # (c) BLOCKED-then-CLEAN keep-polling reaches a merge: `pr view` returns
+  #     OPEN/MERGEABLE/BLOCKED first and OPEN/MERGEABLE/CLEAN after, proving BLOCKED
+  #     is keep-polling and not terminal. MERGE_POLL_STEP is 1 and NOT 0: at step 0 a
+  #     composite matching NO case arm never advances `elapsed` and the loop cannot
+  #     exit, so a mis-anchored arm would HANG this suite rather than redden it. That
+  #     hazard is the elapsed-bound deadline form this file names by phase elsewhere,
+  #     and it attaches to any arm whose stub composite is being reshaped — not only
+  #     to the arms being added. One second is the whole cost.
+  /usr/bin/printf 'OPEN/MERGEABLE/BLOCKED\nOPEN/MERGEABLE/CLEAN\n' > "$_mt_seq"
+  /usr/bin/printf '0' > "$_mt_mrc"
+  /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
+  MERGE_TIMEOUT=5; MERGE_POLL_STEP=1
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
-  phase_await_merge_chore_pr >/dev/null 2>&1
+  # `|| _mt_rc=$?`, never a bare call: under `set -e` a bare invocation that returns
+  # non-zero ABORTS the whole suite at the first broken expected-PASS arm, printing
+  # one line and no assertion message — an opaque exit 3 where a NAMED red arm is
+  # what the reader needs. Measured, not assumed: a mutation probe that removed the
+  # MERGED/* arm produced exactly that. The return code is still asserted below.
+  _mt_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _mt_rc=$?
+  _st_arm 4e-c-j c; [[ "$_mt_rc" -eq 0 ]] || { echo "FAIL: await_merge (c) must return 0 after BLOCKED→CLEAN keep-polling, got rc=$_mt_rc"; failures=$((failures+1)); }
   [[ "$(get_phase await_merge_chore_pr)" == PASS\|* ]] || { echo "FAIL: await_merge must PASS after BLOCKED→CLEAN keep-polling, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
   [[ "$(/bin/cat "$_mt_ctr")" -ge 2 ]] || { echo "FAIL: await_merge must POLL again after BLOCKED (>=2 pr view calls), got $(/bin/cat "$_mt_ctr")"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_mctr")" -eq 1 ]] || { echo "FAIL: await_merge (c) must reach the merge EXACTLY once — post-#6255 a PASS alone no longer proves the merge path ran, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
 
-  # (d) CONFLICTING → FAIL (terminal HALT, regression guard)
-  /usr/bin/printf '0' > "$_mt_ctr"
-  local _mt_stub2="$_mt_tmp/gh-stub2.sh"
-  /bin/cat > "$_mt_stub2" <<'STUB'
-#!/usr/bin/env bash
-if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "CONFLICTING/DIRTY"; exit 0; fi
-exit 0
-STUB
-  /bin/chmod +x "$_mt_stub2"
-  GH="$_mt_stub2"
+  # (d) CONFLICTING → FAIL (terminal HALT, regression guard). Same step-1 budget as
+  #     (c), for the same non-hang reason; its stub composite is reshaped too.
+  _st_arm 4e-c-j d; /usr/bin/printf 'OPEN/CONFLICTING/DIRTY\n' > "$_mt_seq"
+  /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   if phase_await_merge_chore_pr >/dev/null 2>&1; then
     echo "FAIL: await_merge must FAIL (HALT) on CONFLICTING"; failures=$((failures+1))
   fi
   [[ "$(get_phase await_merge_chore_pr | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: CONFLICTING must mark FAIL"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_mctr")" -eq 0 ]] || { echo "FAIL: await_merge (d) must not attempt a merge on CONFLICTING, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
+
+  # (e) AC-1 + AC-4 — an ALREADY-MERGED PR is recognised on the FIRST read and the
+  #     poll stops. The measured shape of a merged PR is MERGED/UNKNOWN/UNKNOWN; the
+  #     view counter is what proves the budget was not burned, because PASS alone
+  #     does not, and the DETAIL assertion is what makes AC-4 gradeable at all — AC-4
+  #     is graded on the elapsed figure the PASS detail reports, so the arm asserts
+  #     the string exists rather than leaving Stage 8 to grade a value nothing emits.
+  /usr/bin/printf 'MERGED/UNKNOWN/UNKNOWN\n' > "$_mt_seq"
+  /usr/bin/printf '0' > "$_mt_mrc"
+  /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
+  MERGE_TIMEOUT=1; MERGE_POLL_STEP=1
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _mt_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _mt_rc=$?
+  _st_arm 4e-c-j e; [[ "$_mt_rc" -eq 0 ]] || { echo "FAIL: await_merge (e) an ALREADY-MERGED PR must return 0, got rc=$_mt_rc"; failures=$((failures+1)); }
+  [[ "$(get_phase await_merge_chore_pr)" == PASS\|* ]] || { echo "FAIL: await_merge (e) an ALREADY-MERGED PR must PASS, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_ctr")" -eq 1 ]] || { echo "FAIL: await_merge (e) must stop on the FIRST read (exactly 1 pr view call), got $(/bin/cat "$_mt_ctr")"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_mctr")" -eq 0 ]] || { echo "FAIL: await_merge (e) must NOT attempt a merge on an already-merged PR, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
+  case "$(get_phase await_merge_chore_pr)" in
+    *"ALREADY MERGED"*"after 0s"*) : ;;
+    *) echo "FAIL: await_merge (e) AC-4 — the PASS detail must name the already-merged case AND the elapsed figure (expected 0s), got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)) ;;
+  esac
+
+  # (f) AC-3 — a PR CLOSED WITHOUT MERGING is a failure, and must not collapse into
+  #     the merged verdict. The fixture is the deliberately MERGEABLE-looking closed
+  #     shape (measured on a real closed-unmerged PR), because the CONFLICTING one
+  #     trips the pre-existing conflict arm by accident and would grade nothing. The
+  #     DETAIL assertion is mandatory for the same reason: a bare FAIL is satisfied
+  #     by the PRE-FIX timeout path, so without it this arm cannot discriminate the
+  #     fix from the defect it repairs.
+  _st_arm 4e-c-j f; /usr/bin/printf 'CLOSED/MERGEABLE/BLOCKED\n' > "$_mt_seq"
+  /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
+  MERGE_TIMEOUT=1; MERGE_POLL_STEP=1
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if phase_await_merge_chore_pr >/dev/null 2>&1; then
+    echo "FAIL: await_merge (f) a CLOSED-unmerged PR must return non-zero"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase await_merge_chore_pr | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: await_merge (f) a CLOSED-unmerged PR must mark FAIL, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_mctr")" -eq 0 ]] || { echo "FAIL: await_merge (f) must NOT attempt a merge on a closed PR, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
+  case "$(get_phase await_merge_chore_pr)" in
+    *"CLOSED WITHOUT MERGING"*) : ;;
+    *) echo "FAIL: await_merge (f) AC-3 — the FAIL detail must NAME the closed-without-merging case; a bare FAIL is satisfied by the pre-fix timeout, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)) ;;
+  esac
+
+  # (g) THE REGRESSION PIN ON A PER-ITERATION TERMINAL CHECK. The real v4.42 shape is
+  #     a merge that lands WHILE the poll is running, so the terminal read must happen
+  #     on every iteration and not once before the loop. A pre-loop-only implementation
+  #     passes (e) and fails here, which is the whole point of separating the two.
+  #     MERGE_TIMEOUT is 2, not 1: the bound is `elapsed -lt MERGE_TIMEOUT` with
+  #     `elapsed += step` AFTER the read, so TIMEOUT=1/STEP=1 admits exactly ONE
+  #     iteration and the >=2 assertion would fail against a CORRECT implementation.
+  #     The >=2 assertion is the pin; the budget is what makes it reachable.
+  /usr/bin/printf 'OPEN/MERGEABLE/BLOCKED\nMERGED/UNKNOWN/UNKNOWN\n' > "$_mt_seq"
+  /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
+  MERGE_TIMEOUT=2; MERGE_POLL_STEP=1
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _mt_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _mt_rc=$?
+  _st_arm 4e-c-j g; [[ "$_mt_rc" -eq 0 ]] || { echo "FAIL: await_merge (g) a merge landing MID-POLL must return 0, got rc=$_mt_rc"; failures=$((failures+1)); }
+  [[ "$(get_phase await_merge_chore_pr)" == PASS\|* ]] || { echo "FAIL: await_merge (g) a merge landing MID-POLL must PASS, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_ctr")" -ge 2 ]] || { echo "FAIL: await_merge (g) the terminal check must run PER ITERATION, not pre-loop only (>=2 pr view calls), got $(/bin/cat "$_mt_ctr")"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_mctr")" -eq 0 ]] || { echo "FAIL: await_merge (g) must NOT attempt a merge once the PR merged mid-poll, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
+
+  # (h) THE MERGE-FAILURE RE-PROBE. The same false-FAIL predicate at the second site:
+  #     `pr merge` fails, but the PR did merge. The detail assertion is mandatory here
+  #     for (f)'s reason inverted — a bare PASS is indistinguishable from the ordinary
+  #     merge path, so without it this arm grades nothing.
+  /usr/bin/printf 'OPEN/MERGEABLE/CLEAN\nMERGED/UNKNOWN/UNKNOWN\n' > "$_mt_seq"
+  /usr/bin/printf '1' > "$_mt_mrc"
+  /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
+  MERGE_TIMEOUT=2; MERGE_POLL_STEP=1
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _mt_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _mt_rc=$?
+  _st_arm 4e-c-j h; [[ "$_mt_rc" -eq 0 ]] || { echo "FAIL: await_merge (h) a failed merge over a PR that DID merge must return 0 on the re-probe, got rc=$_mt_rc"; failures=$((failures+1)); }
+  [[ "$(get_phase await_merge_chore_pr)" == PASS\|* ]] || { echo "FAIL: await_merge (h) a failed merge over a PR that DID merge must PASS on the re-probe, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_mctr")" -eq 1 ]] || { echo "FAIL: await_merge (h) must have ATTEMPTED the merge exactly once before re-probing, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
+  case "$(get_phase await_merge_chore_pr)" in
+    *"did not observe"*) : ;;
+    *) echo "FAIL: await_merge (h) the PASS detail must name the merge-landed-but-unobserved case; a bare PASS is the ordinary merge path, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)) ;;
+  esac
+
+  # (h2) THE NEGATIVE CONTROL FOR (h), and the arm that keeps the re-probe honest: a
+  #      failed merge over a PR that is STILL OPEN must still FAIL. Without it, an
+  #      implementation that returns PASS on ANY merge failure satisfies (h), and the
+  #      re-probe would launder every failed merge into a success.
+  _st_arm 4e-c-j h2; /usr/bin/printf 'OPEN/MERGEABLE/CLEAN\n' > "$_mt_seq"
+  /usr/bin/printf '1' > "$_mt_mrc"
+  /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
+  MERGE_TIMEOUT=2; MERGE_POLL_STEP=1
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  if phase_await_merge_chore_pr >/dev/null 2>&1; then
+    echo "FAIL: await_merge (h2) a failed merge over a STILL-OPEN PR must return non-zero"; failures=$((failures+1))
+  fi
+  [[ "$(get_phase await_merge_chore_pr | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: await_merge (h2) a failed merge over a STILL-OPEN PR must mark FAIL — the re-probe must not launder it, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_mctr")" -eq 1 ]] || { echo "FAIL: await_merge (h2) must have attempted the merge exactly once, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
+  /usr/bin/printf '0' > "$_mt_mrc"
+
+  # (i) THE WIDTH PIN. The composite every case arm above matches is POSITIONAL: a
+  #     fourth --json field would shift all of them at once and each would go SILENTLY
+  #     wrong rather than red — no arm in this group would notice, because each stub
+  #     emits the shape the arm expects. So the SHIPPED text of the reader is asserted
+  #     to be exactly the three-field form, behind an anti-vacuity floor proving the
+  #     extraction found a non-empty body, and against a CONSTRUCTED four-field line
+  #     that both needles must REJECT — without that specificity control a needle that
+  #     matches any prefix would read as a pass on the very drift this arm exists for.
+  local _mt_body _mt_bad_json _mt_bad_jq
+  _mt_body="$(/usr/bin/sed -n '/^_chore_pr_terminal_state() {/,/^}/p' "${BASH_SOURCE[0]}" || true)"
+  _mt_bad_json='  $GH pr view "$1" --repo "$REPO_SLUG" --json state,mergeable,mergeStateStatus,isDraft \'
+  _mt_bad_jq='"\(.state)/\(.mergeable)/\(.mergeStateStatus)/\(.isDraft)"'
+  _st_arm 4e-c-j i; [[ "$(/usr/bin/printf '%s\n' "$_mt_body" | /usr/bin/wc -l | /usr/bin/tr -d ' ')" -ge 3 ]] || { echo "FAIL: await_merge (i) width pin extracted fewer than 3 lines of _chore_pr_terminal_state — the extraction, not the file, is what failed (anti-vacuity floor)"; failures=$((failures+1)); }
+  [[ "$(grep_count -F -- '--json state,mergeable,mergeStateStatus ' <<<"$_mt_body")" == "1" ]] || { echo "FAIL: await_merge (i) the shipped --json list must be EXACTLY state,mergeable,mergeStateStatus — a fourth field silently shifts every case arm in this phase"; failures=$((failures+1)); }
+  [[ "$(grep_count -F -- '"\(.state)/\(.mergeable)/\(.mergeStateStatus)"' <<<"$_mt_body")" == "1" ]] || { echo "FAIL: await_merge (i) the shipped --jq template must be EXACTLY the 3-field composite"; failures=$((failures+1)); }
+  [[ "$(grep_count -F -- '--json state,mergeable,mergeStateStatus ' <<<"$_mt_bad_json")" == "0" ]] || { echo "FAIL: await_merge (i) SPECIFICITY — the --json needle matches a constructed FOUR-field line, so the width pin measures nothing"; failures=$((failures+1)); }
+  [[ "$(grep_count -F -- '"\(.state)/\(.mergeable)/\(.mergeStateStatus)"' <<<"$_mt_bad_jq")" == "0" ]] || { echo "FAIL: await_merge (i) SPECIFICITY — the --jq needle matches a constructed FOUR-field template, so the width pin measures nothing"; failures=$((failures+1)); }
+
+  # (j) AC-2's TIMEOUT LIMB — the limb every other arm in this group leaves ungraded.
+  #     AC-2 has two: "an unmerged, still-pending PR is still polled to the budget",
+  #     which (c) grades with its >=2-view assertion, and "correctly reports the
+  #     timeout", which nothing asserted. MEASURED, not assumed: replacing the
+  #     post-loop `!= OPEN/MERGEABLE/CLEAN` guard with `if false` left the ENTIRE
+  #     suite at exit 0 with zero FAIL lines, so the phase could stop reporting a
+  #     timeout at all and this file would not notice — and AC-2's own rationale is
+  #     that without the guard the fix is indistinguishable from disabling the phase.
+  #     The fixture is a PR that never reaches a terminal or a CLEAN state: BLOCKED on
+  #     EVERY read, so the keep-polling path runs the budget out and no other case arm
+  #     can fire. MERGE_TIMEOUT is 2 for arm (g)'s reason — the bound admits
+  #     ceil(TIMEOUT/STEP) iterations, so a 1/1 budget would assert a view count a
+  #     CORRECT implementation cannot reach. The DETAIL assertion is the discriminator:
+  #     a bare non-zero is satisfied by the CLOSED arm and by the conflict HALT, so the
+  #     arm pins the post-loop guard's own wording rather than its verdict alone. And
+  #     the merge counter must be ZERO — with the guard removed the run falls straight
+  #     through to `gh pr merge`, which is exactly how that mutation launders a spent
+  #     budget into a PASS.
+  /usr/bin/printf 'OPEN/MERGEABLE/BLOCKED\n' > "$_mt_seq"
+  /usr/bin/printf '0' > "$_mt_mrc"
+  /usr/bin/printf '0' > "$_mt_ctr"; /usr/bin/printf '0' > "$_mt_mctr"
+  MERGE_TIMEOUT=2; MERGE_POLL_STEP=1
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _mt_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _mt_rc=$?
+  _st_arm 4e-c-j j; [[ "$_mt_rc" -ne 0 ]] || { echo "FAIL: await_merge (j) AC-2 — a PR that never becomes terminal or CLEAN must return NON-ZERO once the budget is spent, got rc=$_mt_rc"; failures=$((failures+1)); }
+  [[ "$(get_phase await_merge_chore_pr | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: await_merge (j) AC-2 — budget exhaustion must mark FAIL, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+  case "$(get_phase await_merge_chore_pr)" in
+    *"merge state still="*) : ;;
+    *) echo "FAIL: await_merge (j) AC-2 — the FAIL detail must NAME the timeout case ('merge state still=…'); a bare FAIL is satisfied by the CLOSED arm and by the conflict HALT, so without this assertion the timeout report is graded by nothing, got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)) ;;
+  esac
+  [[ "$(/bin/cat "$_mt_ctr")" -eq 2 ]] || { echo "FAIL: await_merge (j) AC-2 — a spent budget must have polled EXACTLY ceil(MERGE_TIMEOUT/MERGE_POLL_STEP)=2 times, got $(/bin/cat "$_mt_ctr") pr view calls"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_mt_mctr")" -eq 0 ]] || { echo "FAIL: await_merge (j) AC-2 — a timed-out PR must NOT be merged; a non-zero count here IS the post-loop guard removed, the mutation this arm exists to redden, got $(/bin/cat "$_mt_mctr") pr merge calls"; failures=$((failures+1)); }
+  _st_witness 4e-c-j 9
 
   /bin/rm -rf "$_mt_tmp" 2>/dev/null || true
   GH="$_mt_saved_gh"; MODE="$_mt_saved_mode"; CHORE_PR_NUMBER="$_mt_saved_pr"
@@ -10473,11 +11080,22 @@ STUB
 
     # (f) NO-OP — the Release exists AND its body is already byte-identical to the
     # canonical note, so the state machine takes State 2 and mutates nothing.
+    # OPERAND-AWARE, and that is load-bearing rather than tidiness. This stub used to
+    # answer ANY `--json` read with the canonical body. Phase 15.5 now issues a second,
+    # separate `--json name` read, so the old shape handed the entire body back as the
+    # posted TITLE — the no-op condition would see a title mismatch, take the edit
+    # branch, and this arm would assert NO-OP against an EDITED run. Discriminating on
+    # the `--json` OPERAND is what keeps the fixture a genuine State-2 no-op on BOTH
+    # dimensions. `.body`/`.name` (the --jq arguments) do not collide with the bare
+    # operand words.
     local _s1_noop_stub="$_ms_tmp/gh-noop.sh"
     /bin/cat > "$_s1_noop_stub" <<STUB
 #!/usr/bin/env bash
 if [[ "\$1" == "release" && "\$2" == "view" ]]; then
-  for _a in "\$@"; do [[ "\$_a" == "--json" ]] && { /bin/cat "$_s1_canon_file"; exit 0; }; done
+  for _a in "\$@"; do
+    [[ "\$_a" == "body" ]] && { /bin/cat "$_s1_canon_file"; exit 0; }
+    [[ "\$_a" == "name" ]] && { printf '%s' "v9.89 — Real headline"; exit 0; }
+  done
   exit 0
 fi
 exit 0
@@ -10495,11 +11113,19 @@ STUB
 
     # (g) EDITED — the Release exists but its body DIFFERS, so the state machine
     # takes the State 1 -> State 2 edit transition.
+    # Operand-aware for the same reason as (f)'s stub above: an undiscriminated
+    # `--json` answer would return the differing BODY as the posted title too, which
+    # still reaches EDITED but for the wrong reason — the arm would pass while the
+    # title dimension went ungraded. Here the posted title is deliberately made to
+    # AGREE with the note, so this arm isolates BODY-only drift.
     local _s1_edit_stub="$_ms_tmp/gh-edit.sh"
     /bin/cat > "$_s1_edit_stub" <<'STUB'
 #!/usr/bin/env bash
 if [[ "$1" == "release" && "$2" == "view" ]]; then
-  for _a in "$@"; do [[ "$_a" == "--json" ]] && { printf '%s\n' "a body that deliberately differs from the canonical note"; exit 0; }; done
+  for _a in "$@"; do
+    [[ "$_a" == "body" ]] && { printf '%s\n' "a body that deliberately differs from the canonical note"; exit 0; }
+    [[ "$_a" == "name" ]] && { printf '%s' "v9.89 — Real headline"; exit 0; }
+  done
   exit 0
 fi
 if [[ "$1" == "release" && "$2" == "edit" ]]; then exit 0; fi
@@ -10515,6 +11141,107 @@ STUB
     if /usr/bin/grep -qF 'SURFACE1-STATE=CREATED' <<<"$_s1_detail"; then
       echo "FAIL: 4h(h) specificity — an EDITED run must NOT report SURFACE1-STATE=CREATED"; failures=$((failures+1))
     fi
+
+    # (k)/(l)/(m) — THE TITLE DIMENSION. (k) and (l) arm each other in both
+    # directions over ONE stub whose only difference is the posted title: (k) proves
+    # the phase CAN reach the edit on a title-only difference, (l) proves it does NOT
+    # when the title already agrees. Without (k), (l) is satisfied by a phase that
+    # never converges a title at all; without (l), (k) is satisfied by one that edits
+    # unconditionally. Both assert on the STUB'S ARGV FILE rather than on the detail
+    # prose, because a phase can record any string it likes — only the argv shows
+    # what was actually sent to GitHub.
+    local _s1_t_argv="$_ms_tmp/title-edit-args"
+
+    # (k) SENSITIVITY — body already canonical, posted TITLE stale. The pre-change
+    #     code returned NO-OP here and the stale title survived every close.
+    local _s1_k_stub="$_ms_tmp/gh-title-drift.sh"
+    /bin/cat > "$_s1_k_stub" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "release" && "\$2" == "view" ]]; then
+  for _a in "\$@"; do
+    [[ "\$_a" == "body" ]] && { /bin/cat "$_s1_canon_file"; exit 0; }
+    [[ "\$_a" == "name" ]] && { printf '%s' "v9.89 — WRONG headline"; exit 0; }
+  done
+  exit 0
+fi
+if [[ "\$1" == "release" && "\$2" == "edit" ]]; then printf '%s\n' "\$*" > "$_s1_t_argv"; exit 0; fi
+exit 0
+STUB
+    /bin/chmod +x "$_s1_k_stub"
+    GH="$_s1_k_stub"
+    /bin/rm -f "$_s1_t_argv"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_publish_github_release >/dev/null 2>&1
+    _s1_detail="$(get_phase publish_github_release)"
+    _st_arm 4h-e-j 4h-k; [[ -f "$_s1_t_argv" ]] || { echo "FAIL: 4h(k) sensitivity — a canonical BODY with a STALE posted title must still reach gh release edit; the edit was never invoked, which is the pre-change no-op that let a wrong title survive close"; failures=$((failures+1)); }
+    if [[ -f "$_s1_t_argv" ]]; then
+      /usr/bin/grep -qF -- '--title' "$_s1_t_argv" || { echo "FAIL: 4h(k) — the converging edit must carry --title, got argv '$(/bin/cat "$_s1_t_argv")'"; failures=$((failures+1)); }
+      /usr/bin/grep -qF -- 'v9.89 — Real headline' "$_s1_t_argv" || { echo "FAIL: 4h(k) — the edit must pass the NOTE-DERIVED title 'v9.89 — Real headline', got argv '$(/bin/cat "$_s1_t_argv")'"; failures=$((failures+1)); }
+    fi
+    /usr/bin/grep -qF 'SURFACE1-TITLE=CONVERGED' <<<"$_s1_detail" || { echo "FAIL: 4h(k) — a converged title must record SURFACE1-TITLE=CONVERGED, got '$_s1_detail'"; failures=$((failures+1)); }
+    [[ "$_s1_detail" == PASS\|* ]] || { echo "FAIL: 4h(k) — converging a title must NOT change the outcome token (ADR-148 :91 — phase 15.6 branches on pub_result != PASS), got '$_s1_detail'"; failures=$((failures+1)); }
+
+    # (l) SPECIFICITY — same stub shape, title now AGREES. Must not mutate at all.
+    #     Non-vacuous because (k) proved this same fixture family CAN reach the edit.
+    local _s1_l_stub="$_ms_tmp/gh-title-match.sh"
+    /bin/cat > "$_s1_l_stub" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "release" && "\$2" == "view" ]]; then
+  for _a in "\$@"; do
+    [[ "\$_a" == "body" ]] && { /bin/cat "$_s1_canon_file"; exit 0; }
+    [[ "\$_a" == "name" ]] && { printf '%s' "v9.89 — Real headline"; exit 0; }
+  done
+  exit 0
+fi
+if [[ "\$1" == "release" && "\$2" == "edit" ]]; then printf '%s\n' "\$*" > "$_s1_t_argv"; exit 0; fi
+exit 0
+STUB
+    /bin/chmod +x "$_s1_l_stub"
+    GH="$_s1_l_stub"
+    /bin/rm -f "$_s1_t_argv"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_publish_github_release >/dev/null 2>&1
+    _s1_detail="$(get_phase publish_github_release)"
+    _st_arm 4h-e-j 4h-l; [[ ! -f "$_s1_t_argv" ]] || { echo "FAIL: 4h(l) specificity — both body and title already canonical must stay a NO-OP; gh release edit WAS invoked with '$(/bin/cat "$_s1_t_argv")'"; failures=$((failures+1)); }
+    /usr/bin/grep -qF 'SURFACE1-TITLE=MATCH' <<<"$_s1_detail" || { echo "FAIL: 4h(l) — an already-canonical title must record SURFACE1-TITLE=MATCH, got '$_s1_detail'"; failures=$((failures+1)); }
+    [[ "$_s1_detail" == SKIPPED\|* ]] || { echo "FAIL: 4h(l) — the no-op token must stay SKIPPED; a title-dimension change must not ride _s1_outcome_override, which BOTH terminal mark_phase calls read, got '$_s1_detail'"; failures=$((failures+1)); }
+
+    # (m) WITHHOLD — a note with no usable '# ' H1. The body edit MUST still be
+    #     issued, --title MUST be absent (never empty — `--title ""` blanks the
+    #     posted title, the one-way degradation this rule exists to prevent), and
+    #     the outcome token MUST stay PASS rather than WARN.
+    local _s1_nh_dir="$_ms_tmp/no-h1-notes"
+    /bin/mkdir -p "$_s1_nh_dir"
+    /usr/bin/printf -- '---\nversion: v9.89\n---\n\nbody with no H1 at all\n' > "$_s1_nh_dir/v9.89_RELEASE_NOTES.md"
+    local _s1_m_stub="$_ms_tmp/gh-no-h1.sh"
+    /bin/cat > "$_s1_m_stub" <<STUB
+#!/usr/bin/env bash
+if [[ "\$1" == "release" && "\$2" == "view" ]]; then
+  for _a in "\$@"; do
+    [[ "\$_a" == "body" ]] && { printf '%s\n' "a previously published body that differs"; exit 0; }
+    [[ "\$_a" == "name" ]] && { printf '%s' "v9.89 — A GOOD posted title worth keeping"; exit 0; }
+  done
+  exit 0
+fi
+if [[ "\$1" == "release" && "\$2" == "edit" ]]; then printf '%s\n' "\$*" > "$_s1_t_argv"; exit 0; fi
+exit 0
+STUB
+    /bin/chmod +x "$_s1_m_stub"
+    GH="$_s1_m_stub"
+    RELEASE_NOTES_DIR="$_s1_nh_dir"
+    /bin/rm -f "$_s1_t_argv"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_publish_github_release >/dev/null 2>&1
+    _s1_detail="$(get_phase publish_github_release)"
+    _st_arm 4h-e-j 4h-m; [[ -f "$_s1_t_argv" ]] || { echo "FAIL: 4h(m) — a note with no H1 must still refresh the BODY; withholding the title must not withhold the whole edit"; failures=$((failures+1)); }
+    if [[ -f "$_s1_t_argv" ]]; then
+      if /usr/bin/grep -qF -- '--title' "$_s1_t_argv"; then
+        echo "FAIL: 4h(m) — no usable H1 resolved, so --title must be ABSENT from the edit argv (a good posted title must never be downgraded), got '$(/bin/cat "$_s1_t_argv")'"; failures=$((failures+1))
+      fi
+    fi
+    /usr/bin/grep -qF 'SURFACE1-TITLE=WITHHELD' <<<"$_s1_detail" || { echo "FAIL: 4h(m) — an unextractable H1 must record SURFACE1-TITLE=WITHHELD, got '$_s1_detail'"; failures=$((failures+1)); }
+    [[ "$_s1_detail" == PASS\|* ]] || { echo "FAIL: 4h(m) — a WITHHELD title must NOT move the outcome token off PASS. ADR-148 :91 forbids it and phase 15.6 branches on pub_result != PASS, so a WARN here would report an edited Release as 'Surface 1 not emitted this run' and suppress the body-drift verdict. Got '$_s1_detail'"; failures=$((failures+1)); }
+    RELEASE_NOTES_DIR="$_ms_work/release/releases/notes"
 
     # (i) AGGREGATION NON-REGRESSION — the arm that fails if anyone later promotes
     # CREATED to its own outcome token. Phase 15.6 branches on `pub_result != PASS`
@@ -10732,7 +11459,7 @@ STUB
     /bin/rm -f "$_eb_editfile"
     PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
     phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
-    [[ "$_pg_rc" -ne 0 ]] || { echo "FAIL: 4h-e — an EMPTY frontmatter strip must abort the publish phase, got rc=0"; failures=$((failures+1)); }
+    _st_arm 4h-e-j 4h-e; [[ "$_pg_rc" -ne 0 ]] || { echo "FAIL: 4h-e — an EMPTY frontmatter strip must abort the publish phase, got rc=0"; failures=$((failures+1)); }
     [[ "$(get_phase publish_github_release | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: 4h-e — an empty strip must mark publish FAIL, got '$(get_phase publish_github_release)'"; failures=$((failures+1)); }
     [[ ! -f "$_eb_editfile" ]] || { echo "FAIL: 4h-e — gh release edit WAS invoked with an empty body ($(/bin/cat "$_eb_editfile")); the guard must block the irreversible mutation, not merely report after it"; failures=$((failures+1)); }
 
@@ -10743,7 +11470,7 @@ STUB
     /bin/rm -f "$_eb_editfile"
     PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
     phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
-    [[ "$_pg_rc" -eq 0 ]] || { echo "FAIL: 4h-f anti-vacuity — a well-formed note must publish through the SAME stub, got rc=$_pg_rc; arm (e) cannot be trusted while this fails"; failures=$((failures+1)); }
+    _st_arm 4h-e-j 4h-f; [[ "$_pg_rc" -eq 0 ]] || { echo "FAIL: 4h-f anti-vacuity — a well-formed note must publish through the SAME stub, got rc=$_pg_rc; arm (e) cannot be trusted while this fails"; failures=$((failures+1)); }
     [[ -f "$_eb_editfile" ]] || { echo "FAIL: 4h-f anti-vacuity — gh release edit was never reached even for a well-formed note, so arm (e)'s absent-argv-file assertion is vacuous"; failures=$((failures+1)); }
     /usr/bin/grep -qF -- '# Headline' "$_eb_editfile" 2>/dev/null || { echo "FAIL: 4h-f — the edited body must be the STRIPPED note body (expected the H1 to survive the strip), got '$(/bin/cat "$_eb_editfile" 2>/dev/null)'"; failures=$((failures+1)); }
     # Negated form, not `grep && { … }`: this file runs under `set -e`, and a bare
@@ -10764,7 +11491,7 @@ STUB
     /bin/rm -f "$_eb_createfile"
     PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
     phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
-    [[ "$_pg_rc" -ne 0 ]] || { echo "FAIL: 4h-g — an EMPTY strip must abort the CREATE path too, got rc=0"; failures=$((failures+1)); }
+    _st_arm 4h-e-j 4h-g; [[ "$_pg_rc" -ne 0 ]] || { echo "FAIL: 4h-g — an EMPTY strip must abort the CREATE path too, got rc=0"; failures=$((failures+1)); }
     [[ ! -f "$_eb_createfile" ]] || { echo "FAIL: 4h-g — gh release create WAS invoked with an empty body ($(/bin/cat "$_eb_createfile")); the create-path guard did not block it"; failures=$((failures+1)); }
 
     # (h) ANTI-VACUITY for (g): same stub, well-formed note, must reach create.
@@ -10772,14 +11499,14 @@ STUB
     /bin/rm -f "$_eb_createfile"
     PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
     phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
-    [[ -f "$_eb_createfile" ]] || { echo "FAIL: 4h-h anti-vacuity — gh release create was never reached even for a well-formed note (rc=$_pg_rc), so arm (g) is vacuous"; failures=$((failures+1)); }
+    _st_arm 4h-e-j 4h-h; [[ -f "$_eb_createfile" ]] || { echo "FAIL: 4h-h anti-vacuity — gh release create was never reached even for a well-formed note (rc=$_pg_rc), so arm (g) is vacuous"; failures=$((failures+1)); }
 
     # (i) §5.1 CONFORMANCE FIXTURE (#4912). Binds the sourced shell transform to
     # the same committed fixture that binds the two Python mirrors
     # (preflight-release-body-reemit.py, lint_release_corpus.py). Resolved from
     # SCRIPT_DIR, never REPO_ROOT — the arms above reassign REPO_ROOT to a sandbox.
     local _fx="$SCRIPT_DIR/../../core/deploy/tools/fixtures/frontmatter-strip"
-    if [[ ! -d "$_fx/cases" ]]; then
+    _st_arm 4h-e-j 4h-i; if [[ ! -d "$_fx/cases" ]]; then
       echo "FAIL: 4h-i — conformance fixture absent at $_fx/cases; the shell transform is bound to nothing"; failures=$((failures+1))
     else
       local _fx_case _fx_name _fx_n=0 _fx_bad=0
@@ -10809,7 +11536,7 @@ STUB
     /bin/rm -f "$_eb_editfile"
     PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); _pg_rc=0
     phase_publish_github_release >/dev/null 2>&1 || _pg_rc=$?
-    [[ "$_pg_rc" -ne 0 ]] || { echo "FAIL: 4h-j — with strip_frontmatter undefined the publish phase must refuse, got rc=0"; failures=$((failures+1)); }
+    _st_arm 4h-e-j 4h-j; [[ "$_pg_rc" -ne 0 ]] || { echo "FAIL: 4h-j — with strip_frontmatter undefined the publish phase must refuse, got rc=0"; failures=$((failures+1)); }
     [[ "$(get_phase publish_github_release | /usr/bin/cut -d'|' -f1)" == "FAIL" ]] || { echo "FAIL: 4h-j — a missing §5.1 transform must mark publish FAIL, got '$(get_phase publish_github_release)'"; failures=$((failures+1)); }
     [[ ! -f "$_eb_editfile" ]] || { echo "FAIL: 4h-j — gh release edit was invoked with no transform available; the guard must precede the mutation"; failures=$((failures+1)); }
     # DISCRIMINATOR, and the arm is worthless without it. With the transform-present
@@ -10823,6 +11550,7 @@ STUB
     # shellcheck source=lib/frontmatter-strip.sh
     source "$SCRIPT_DIR/lib/frontmatter-strip.sh"
     declare -F strip_frontmatter >/dev/null 2>&1 || { echo "FAIL: 4h-j — could not restore strip_frontmatter after the guard arm; later arms would be measuring an unset function"; failures=$((failures+1)); }
+    _st_witness 4h-e-j 9
 
     GH="$_ms_pub_stub"
     NO_MERGE="$_pg_saved_nomerge"
@@ -11090,19 +11818,64 @@ PLAN-VERSION-UNKNOWN: release/releases/plans/v2/v2.98_RELEASE_PLAN.md declares v
     fi
   fi
 
-  # Test 7: usage block extractable AND not truncated. The old arm ran its own
-  # copy of the fixed `sed -n '2,92p'` window and grepped only for "Usage:",
-  # which sits near the top — so it passed while the window silently evicted the
-  # META section. Drive the REAL renderer (no second copy to drift) and assert
-  # both ends of the block: the opening "Usage:" and the last META flag.
+  # Test 7: usage block extractable AND not truncated, and the exit-2 dispatch set
+  # NAMED in the rendered exit-2 text. The oldest arm ran its own copy of the fixed
+  # `sed -n '2,92p'` window and grepped only for "Usage:", which sits near the top —
+  # so it passed while the window silently evicted the META section. Drive the REAL
+  # renderer (no second copy to drift) and assert the block from both ends.
   local _u7_out; _u7_out="$(usage || true)"
   # Here-strings, not `echo … | grep -q`: grep -q short-circuits and SIGPIPEs the
   # writer (SIGPIPE-idiom gate). Both needles are non-empty, so the `<<<""`
   # one-empty-line degenerate case cannot produce a false match.
-  /usr/bin/grep -q "Usage:" <<<"$_u7_out" \
+  _st_arm t7-usage head-anchor; /usr/bin/grep -q "Usage:" <<<"$_u7_out" \
     || { echo "FAIL: usage block extraction — 'Usage:' absent from the rendered help"; failures=$((failures+1)); }
-  /usr/bin/grep -q -- "--self-test" <<<"$_u7_out" \
-    || { echo "FAIL: usage block truncated — the META section (--self-test) is absent from the rendered help"; failures=$((failures+1)); }
+  # TAIL ANCHOR (#5762). The needle this replaces was `--self-test`, and it
+  # contributed ZERO truncation coverage. `grep -q` binds the FIRST match in the
+  # RENDERED output, not the token's last occurrence in the source, and measured on
+  # the real render `--self-test` first matches at row 4 — inside the
+  # `selftest-runner:` preamble, ABOVE `Usage:` at row 112. So the binding bottom
+  # anchor was `Usage:`, leaving every row below it truncation-invisible, with the
+  # exit-codes block squarely inside that window. Three parties reached three
+  # different figures for that window by reading the SOURCE for the token instead
+  # of the RENDER the arm consumes; the number below was measured by running this
+  # renderer. The needle is now the block's genuine last line — usage() terminates
+  # on the first non-`#` source line, so the `3 = ` entry is the last thing rendered
+  # and EVERY possible truncation removes it.
+  _st_arm t7-usage tail-anchor; /usr/bin/grep -q -- "3 = phase execution failure" <<<"$_u7_out" \
+    || { echo "FAIL: usage block truncated — the exit-codes block's last line (the '3 = ' entry, which is also the last line usage() renders) is absent from the rendered help"; failures=$((failures+1)); }
+  # LIMB C (#5762) — the exit-2 dispatch set is DERIVED from the shipped text and
+  # asserted PRESENT in the rendered exit-2 entry. The line this pins used to
+  # restate a preflight sub-check, drifted from the code, and ended up asserting a
+  # gate that does not exist (the version tag). Naming the dispatch sites instead
+  # is only safe while something binds the naming — this is that binding. The
+  # population is EXTRACTED, never listed here, so a third entry gate added to the
+  # ladder reddens on the day it lands instead of silently under-reporting.
+  local _u7_d2 _u7_n3 _u7_x2 _u7_p
+  _u7_d2="$(/usr/bin/grep -oE '^phase_[A-Za-z0-9_]+ \|\| \{ generate_report; exit 2; \}' "${BASH_SOURCE[0]}" | /usr/bin/awk '{print $1}' | /usr/bin/sort -u || true)"
+  _u7_n3="$(/usr/bin/grep -cE '^phase_[A-Za-z0-9_]+ \|\| \{ generate_report; exit 3; \}' "${BASH_SOURCE[0]}" || true)"
+  # Two floors, and they answer different questions. (1) ANTI-VACUITY on the exit-2
+  # side: an empty set satisfies the loop below by having nothing to check. (2) The
+  # exit-3 arm is the CONTROL that the extractor works at all — a pattern that
+  # stopped matching would empty BOTH sides, and floor (1) alone cannot tell that
+  # apart from a genuine removal of every exit-2 gate. Neither is redundant with
+  # group CA's floors: CA-1 bounds the whole phase_* population and the whole
+  # dispatch set, and asserts nothing about the exit-2 SUBSET this limb reads.
+  _st_arm t7-usage limb-c; [[ -n "$_u7_d2" ]] \
+    || { echo "FAIL: Test 7 limb C anti-vacuity — the exit-2 dispatch extraction returned nothing, so the naming assertion below would check nothing"; failures=$((failures+1)); }
+  [[ "${_u7_n3:-0}" -ge 30 ]] \
+    || { echo "FAIL: Test 7 limb C control — the identical extractor keyed on 'exit 3' returned ${_u7_n3:-0} (floor 30), so the extractor itself is broken and limb C's exit-2 reading attributes nothing"; failures=$((failures+1)); }
+  # The rendered exit-2 entry: from the '2 = ' row up to, but not including, '3 = '.
+  # awk reads its whole input and never exits early, so this is not the
+  # pipe-into-a-short-circuiting-reader form the SIGPIPE-idiom gate matches.
+  _u7_x2="$(/usr/bin/awk '/^ *2 = /{f=1} /^ *3 = /{f=0} f' <<<"$_u7_out" || true)"
+  [[ -n "$_u7_x2" ]] \
+    || { echo "FAIL: Test 7 limb C — no '2 = ' entry found in the rendered exit-codes block; the block is absent, renamed or truncated above it"; failures=$((failures+1)); }
+  while IFS= read -r _u7_p; do
+    [[ -n "$_u7_p" ]] || continue
+    /usr/bin/grep -qF -- "$_u7_p" <<<"$_u7_x2" \
+      || { echo "FAIL: Test 7 limb C — $_u7_p dispatches 'exit 2' but is not named in the rendered exit-2 text, so --help under-reports an entry gate (the #5762 defect class, in the under-inclusive direction)"; failures=$((failures+1)); }
+  done <<<"$_u7_d2"
+  _st_witness t7-usage 3
 
   # Test 8: chore-PR body has zero parser-clean violations
   VERSION="v2.10"
@@ -13318,7 +14091,10 @@ PY
   MODE="apply"
   /bin/mkdir -p "$HUB_STATE_PATH/ai-unresolved" "$HUB_STATE_PATH/ai-resolved" \
                 "$HUB_STATE_PATH/ai-notrecorded" "$HUB_STATE_PATH/ai-empty" \
-                "$HUB_STATE_PATH/ai-decoy"
+                "$HUB_STATE_PATH/ai-decoy" "$HUB_STATE_PATH/ai-unclassifiable" \
+                "$HUB_STATE_PATH/ai-shortrow" "$HUB_STATE_PATH/ai-arity11" \
+                "$HUB_STATE_PATH/ai-upper" "$HUB_STATE_PATH/ai-alias" \
+                "$HUB_STATE_PATH/ai-both"
 
   # Fixtures. Quoted heredocs — the escaped pipe and the em-dashes are content.
   /bin/cat > "$HUB_STATE_PATH/ai-unresolved/action-items.md" <<'AIFIX'
@@ -13359,6 +14135,87 @@ AIFIX
 | id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 AIFIX
+  # THE FIVE MEMBERSHIP FIXTURES. Each isolates ONE way a status reaches — or
+  # fails to reach — the recognised set, and together they are why the fix is a
+  # membership test rather than a case-fold. A predicate that merely folded case
+  # would pass `upper` and still silently pass `unclassifiable`, `shortrow` and
+  # `arity11`; a predicate that rejected everything unfamiliar would pass those
+  # three and fail `alias` and `upper`. No single wrong implementation passes all
+  # five.
+  #
+  # `unclassifiable` — a value the enum does not admit at all, at the right index.
+  /bin/cat > "$HUB_STATE_PATH/ai-unclassifiable/action-items.md" <<'AIFIX'
+## Action Items
+
+| id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AI-020 | 2026-08-14T10:00:00Z | 5 | #1 | reminder | hub | a | event | after merge | file:a | bogus-status | — | — |
+| AI-021 | 2026-08-14T10:01:00Z | 5 | #2 | cleanup | hub | b | event | after merge | file:b | done | 2026-08-14T11:01:00Z | landed |
+AIFIX
+  # `shortrow` — THE LIVE WITNESS, reproduced by arity rather than by vocabulary.
+  # Four rows at arities 7 and 8 against the 13-column header, so field 11 does
+  # not exist and $11 reads EMPTY. The word `open` sits at field 6 and the gate
+  # never reads it. Under the shipped predicate this whole file returned
+  # TOTAL=4 UNRES=0 -> RESOLVED, the only silent pass. A fixture written to the
+  # earlier descriptions of this witness — an `open` token at field 6 of a
+  # 10-field row, or an uppercase OPEN — reproduces a condition that does not
+  # occur here, which is why the arity is the thing this fixture pins.
+  /bin/cat > "$HUB_STATE_PATH/ai-shortrow/action-items.md" <<'AIFIX'
+## Action Items
+
+| id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AI-030 | 2026-09-06T00:00:00Z | 5 | #1 | reminder | resolved | did it |
+| AI-031 | 2026-09-06T00:01:00Z | 5 | #2 | reminder | open | not yet | still |
+| AI-032 | 2026-09-06T00:02:00Z | 5 | #3 | reminder | resolved | did it | too |
+| AI-033 | 2026-09-06T00:03:00Z | 5 | #4 | reminder | resolved | did it | also |
+AIFIX
+  # `arity11` — the OTHER arity mechanism, and the one an "empty $11" description
+  # misses entirely. With FS=' [|] ' the row-terminating ` |` never matches the
+  # separator, so on an 11-column row it stays glued to the LAST field: $11 reads
+  # `open |`, NON-empty, and unclassifiable for the right reason — field 11 of an
+  # 11-column row is not the status column of a 13-column schema.
+  /bin/cat > "$HUB_STATE_PATH/ai-arity11/action-items.md" <<'AIFIX'
+## Action Items
+
+| id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AI-040 | 2026-09-06T00:00:00Z | 5 | #1 | reminder | hub | a | event | after merge | file:a | done |
+| AI-041 | 2026-09-06T00:01:00Z | 5 | #2 | reminder | hub | b | event | after merge | file:b | open |
+AIFIX
+  # `upper` — case-folding NORMALISES, it does not reject. Without this fixture a
+  # fold-and-reject implementation passes the unclassifiable arm.
+  /bin/cat > "$HUB_STATE_PATH/ai-upper/action-items.md" <<'AIFIX'
+## Action Items
+
+| id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AI-050 | 2026-08-14T10:00:00Z | 5 | #1 | reminder | hub | a | event | after merge | file:a | OPEN | — | — |
+| AI-051 | 2026-08-14T10:01:00Z | 5 | #2 | cleanup | hub | b | event | after merge | file:b | Done | 2026-08-14T11:01:00Z | landed |
+AIFIX
+  # `alias` — the § 2.1a status aliases are ADMITTED, not swept into the residue.
+  # Hundreds of live rows carry `resolved`; a gate that blocked them would be
+  # unusable on the corpus it governs.
+  /bin/cat > "$HUB_STATE_PATH/ai-alias/action-items.md" <<'AIFIX'
+## Action Items
+
+| id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AI-060 | 2026-08-14T10:00:00Z | 5 | #1 | reminder | hub | a | event | after merge | file:a | resolved | 2026-08-14T11:00:00Z | landed |
+| AI-061 | 2026-08-14T10:01:00Z | 5 | #2 | cleanup | hub | b | event | after merge | file:b | withdrawn | 2026-08-14T11:01:00Z | dropped |
+AIFIX
+  # `both` — one open row AND one unreadable row, the PRECEDENCE fixture. Measured
+  # on the live corpus, 3 of the 8 ledgers carrying an unadmitted status also carry
+  # open rows, one of them 48 open against 2 unreadable, so this is the common
+  # shape and not an edge case.
+  /bin/cat > "$HUB_STATE_PATH/ai-both/action-items.md" <<'AIFIX'
+## Action Items
+
+| id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| AI-070 | 2026-08-14T10:00:00Z | 5 | #1 | reminder | hub | a | event | before Stage 13 close | file:a | open | — | — |
+| AI-071 | 2026-08-14T10:01:00Z | 5 | #2 | cleanup | hub | b | event | after merge | file:b | bogus-status | — | — |
+AIFIX
 
   # $AI_EVENT_WRITER stub: appends its full argv to a per-arm witness file. The
   # attestation EMISSION is a spec obligation ("that attestation is itself
@@ -13395,7 +14252,7 @@ AISTUB
 
   # (A) BLOCK — one open row, --apply. The close must become unreachable.
   _ai_drive ai-unresolved; _ai_rc="$_AI_RC"
-  [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-A — an UNRESOLVED ledger at --apply must return 3 (the dispatcher's guard is what halts the run), got rc $_ai_rc"; failures=$((failures+1)); }
+  _st_arm AI AI-A; [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-A — an UNRESOLVED ledger at --apply must return 3 (the dispatcher's guard is what halts the run), got rc $_ai_rc"; failures=$((failures+1)); }
   [[ "$STATE_AI_GATE" == "UNRESOLVED" ]] || { echo "FAIL: AI-A — STATE_AI_GATE must be UNRESOLVED, got '$STATE_AI_GATE'"; failures=$((failures+1)); }
   [[ "$STATE_AI_TOTAL" -eq 2 && "$STATE_AI_UNRES" -eq 1 ]] || { echo "FAIL: AI-A — counts must be TOTAL=2 UNRES=1 (the escaped pipe must NOT shift the status column), got TOTAL=$STATE_AI_TOTAL UNRES=$STATE_AI_UNRES"; failures=$((failures+1)); }
   _ai_rec="$(get_phase action_item_gate)"
@@ -13404,7 +14261,7 @@ AISTUB
 
   # (B) PASS — three terminal rows. The close must stay reachable. (A)'s control.
   _ai_drive ai-resolved; _ai_rc="$_AI_RC"
-  [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-B — a RESOLVED ledger must return 0, got rc $_ai_rc"; failures=$((failures+1)); }
+  _st_arm AI AI-B; [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-B — a RESOLVED ledger must return 0, got rc $_ai_rc"; failures=$((failures+1)); }
   [[ "$STATE_AI_GATE" == "RESOLVED" ]] || { echo "FAIL: AI-B — STATE_AI_GATE must be RESOLVED, got '$STATE_AI_GATE'"; failures=$((failures+1)); }
   [[ "$STATE_AI_TOTAL" -eq 3 && "$STATE_AI_UNRES" -eq 0 ]] || { echo "FAIL: AI-B — counts must be TOTAL=3 UNRES=0, got TOTAL=$STATE_AI_TOTAL UNRES=$STATE_AI_UNRES"; failures=$((failures+1)); }
   [[ "$(get_phase action_item_gate)" == PASS\|* ]] || { echo "FAIL: AI-B — a RESOLVED ledger must record PASS, got '$(get_phase action_item_gate)'"; failures=$((failures+1)); }
@@ -13414,28 +14271,28 @@ AISTUB
   #      reports 2 unresolved. Without this arm the gate could ship a probe that
   #      blocks a clean close, which is the shape that gets a gate switched off.
   _ai_drive ai-decoy; _ai_rc="$_AI_RC"
-  [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-B2 — a terminal ledger carrying the literals 'open'/'in-flight' in trigger_detail must NOT block (column-addressed, not row-matched), got rc $_ai_rc"; failures=$((failures+1)); }
+  _st_arm AI AI-B2; [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-B2 — a terminal ledger carrying the literals 'open'/'in-flight' in trigger_detail must NOT block (column-addressed, not row-matched), got rc $_ai_rc"; failures=$((failures+1)); }
   [[ "$STATE_AI_GATE" == "RESOLVED" && "$STATE_AI_UNRES" -eq 0 ]] || { echo "FAIL: AI-B2 — decoy fixture must resolve RESOLVED/0, got '$STATE_AI_GATE'/$STATE_AI_UNRES"; failures=$((failures+1)); }
 
   # (C) NOT-RECORDED, UNATTESTED — the state milestone #304 was in at close. The
   #     spec's decision table row 1 ends "requires explicit operator attestation
   #     to pass", so an unattested SURFACE state does NOT pass.
   _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"
-  [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-C — an UNATTESTED NOT-RECORDED state at --apply must NOT pass (this is the #304 state; a silent pass is the defect), got rc $_ai_rc"; failures=$((failures+1)); }
+  _st_arm AI AI-C; [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-C — an UNATTESTED NOT-RECORDED state at --apply must NOT pass (this is the #304 state; a silent pass is the defect), got rc $_ai_rc"; failures=$((failures+1)); }
   [[ "$STATE_AI_GATE" == "NOT-RECORDED" ]] || { echo "FAIL: AI-C — STATE_AI_GATE must be NOT-RECORDED, got '$STATE_AI_GATE'"; failures=$((failures+1)); }
   local _ai_c_state="$STATE_AI_GATE"
   /usr/bin/grep -qF -- '--attest-action-items' <<<"$(get_phase action_item_gate)" || { echo "FAIL: AI-C — the FAIL detail must NAME the remedy flag, or the gate is one an operator routes around"; failures=$((failures+1)); }
 
   # (D) EMPTY-LEDGER, UNATTESTED — same posture, distinct STATE.
   _ai_drive ai-empty; _ai_rc="$_AI_RC"
-  [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-D — an UNATTESTED EMPTY-LEDGER state at --apply must NOT pass, got rc $_ai_rc"; failures=$((failures+1)); }
+  _st_arm AI AI-D; [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-D — an UNATTESTED EMPTY-LEDGER state at --apply must NOT pass, got rc $_ai_rc"; failures=$((failures+1)); }
   [[ "$STATE_AI_GATE" == "EMPTY-LEDGER" ]] || { echo "FAIL: AI-D — STATE_AI_GATE must be EMPTY-LEDGER, got '$STATE_AI_GATE'"; failures=$((failures+1)); }
 
   # (E) DISCRIMINATOR — asserted on the VERDICT, not on the prose. The two SURFACE
   #     states must not collapse into one, or the gate is 2-valued again. Comparing
   #     detail strings would pass on any two distinct sentences; comparing the
   #     globals compares the thing row 6 and every consumer actually read.
-  [[ "$_ai_c_state" != "$STATE_AI_GATE" ]] || { echo "FAIL: AI-E — NOT-RECORDED and EMPTY-LEDGER must resolve DISTINCT STATE_AI_GATE values; both read '$STATE_AI_GATE' and the 3-valued gate has collapsed"; failures=$((failures+1)); }
+  _st_arm AI AI-E; [[ "$_ai_c_state" != "$STATE_AI_GATE" ]] || { echo "FAIL: AI-E — NOT-RECORDED and EMPTY-LEDGER must resolve DISTINCT STATE_AI_GATE values; both read '$STATE_AI_GATE' and the 3-valued gate has collapsed"; failures=$((failures+1)); }
   [[ "$(_ai_verification_cell)" == *"EMPTY-LEDGER"* ]] || { echo "FAIL: AI-E — the row-6 cell must carry the resolved STATE, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
 
   # (C'/D') ATTESTED SURFACE — passes, AND the attestation is EMITTED. The spec
@@ -13445,7 +14302,7 @@ AISTUB
   : > "$_ai_witness"
   ATTEST_ACTION_ITEMS="no-commitments"
   _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"
-  [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-C2 — an ATTESTED NOT-RECORDED state must pass, got rc $_ai_rc"; failures=$((failures+1)); }
+  _st_arm AI AI-C2; [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-C2 — an ATTESTED NOT-RECORDED state must pass, got rc $_ai_rc"; failures=$((failures+1)); }
   [[ "$(get_phase action_item_gate)" == WARN\|* ]] || { echo "FAIL: AI-C2 — an attested SURFACE state records WARN (surfaced, not silently green), got '$(get_phase action_item_gate)'"; failures=$((failures+1)); }
   [[ "$STATE_AI_EMIT" == "emitted" ]] || { echo "FAIL: AI-C2 — the attestation must be EMITTED, STATE_AI_EMIT='$STATE_AI_EMIT'"; failures=$((failures+1)); }
   [[ -s "$_ai_witness" ]] || { echo "FAIL: AI-C2 — the event-writer witness is empty; the attestation row was never emitted"; failures=$((failures+1)); }
@@ -13455,7 +14312,7 @@ AISTUB
   : > "$_ai_witness"
   ATTEST_ACTION_ITEMS="emit-skipped"
   _ai_drive ai-empty; _ai_rc="$_AI_RC"
-  [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-D2 — an ATTESTED EMPTY-LEDGER state must pass, got rc $_ai_rc"; failures=$((failures+1)); }
+  _st_arm AI AI-D2; [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-D2 — an ATTESTED EMPTY-LEDGER state must pass, got rc $_ai_rc"; failures=$((failures+1)); }
   /usr/bin/grep -qF 'attested-cause:emit-skipped' "$_ai_witness" || { echo "FAIL: AI-D2 — the second cause must round-trip into the emitted row, witness: $(/bin/cat "$_ai_witness")"; failures=$((failures+1)); }
 
   # (P) PUBLIC-SURFACE PATH HYGIENE. This phase's detail lands in the close-out
@@ -13467,7 +14324,7 @@ AISTUB
   ATTEST_ACTION_ITEMS=""
   _ai_drive ai-notrecorded
   _ai_rec="$(get_phase action_item_gate)"
-  /usr/bin/grep -qF 'OPERATOR_INSTANCE_HUB_STATE_PATH' <<<"$_ai_rec" || { echo "FAIL: AI-P — the detail must name the ledger surface by its registered token, got '$_ai_rec'"; failures=$((failures+1)); }
+  _st_arm AI AI-P; /usr/bin/grep -qF 'OPERATOR_INSTANCE_HUB_STATE_PATH' <<<"$_ai_rec" || { echo "FAIL: AI-P — the detail must name the ledger surface by its registered token, got '$_ai_rec'"; failures=$((failures+1)); }
   if /usr/bin/grep -qF "$HUB_STATE_PATH" <<<"$_ai_rec"; then
     echo "FAIL: AI-P — the detail carries the RESOLVED absolute hub-state path; in a real run that publishes the operator's home directory into a public comment"; failures=$((failures+1))
   fi
@@ -13479,20 +14336,103 @@ AISTUB
   #      be cleared by a typo, which is attestation-shaped noise, not attestation.
   ATTEST_ACTION_ITEMS="yes"
   _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"
-  [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-E2 — an unlicensed attestation cause must NOT clear a SURFACE state, got rc $_ai_rc"; failures=$((failures+1)); }
+  _st_arm AI AI-E2; [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-E2 — an unlicensed attestation cause must NOT clear a SURFACE state, got rc $_ai_rc"; failures=$((failures+1)); }
 
   # (L) ATTESTATION DOES NOT CLEAR AN OPEN ROW. An unresolved commitment is
   #     dispositioned (done / cancelled / superseded), never attested away. Without
   #     this arm the new flag would be a universal gate bypass.
   ATTEST_ACTION_ITEMS="no-commitments"
   _ai_drive ai-unresolved; _ai_rc="$_AI_RC"
-  [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-L — --attest-action-items must NOT clear an UNRESOLVED verdict; an open row is dispositioned, not attested away (rc $_ai_rc)"; failures=$((failures+1)); }
+  _st_arm AI AI-L; [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-L — --attest-action-items must NOT clear an UNRESOLVED verdict; an open row is dispositioned, not attested away (rc $_ai_rc)"; failures=$((failures+1)); }
+  ATTEST_ACTION_ITEMS=""
+
+  # ─── MEMBERSHIP CLASSIFICATION (the fifth state) ───────────────────────────
+  #
+  # (M) A STATUS THE ENUM DOES NOT ADMIT BLOCKS, AND NAMES ITSELF. The defect was
+  #     that everything unrecognised fell through an implicit `else` and was
+  #     counted resolved, so the arm has to assert three things and not one: the
+  #     BLOCK, the count that justifies it, and the row-and-value in the detail —
+  #     a verdict with no offending row named sends the operator back to the
+  #     ledger the gate just read.
+  _ai_drive ai-unclassifiable; _ai_rc="$_AI_RC"
+  _st_arm AI AI-M; [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-M — a status outside the recognised set must BLOCK at --apply, got rc $_ai_rc"; failures=$((failures+1)); }
+  [[ "$STATE_AI_GATE" == "UNCLASSIFIABLE" ]] || { echo "FAIL: AI-M — STATE_AI_GATE must be UNCLASSIFIABLE, got '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  [[ "$STATE_AI_TOTAL" -eq 2 && "$STATE_AI_BAD" -eq 1 && "$STATE_AI_UNRES" -eq 0 ]] || { echo "FAIL: AI-M — counts must be TOTAL=2 BAD=1 UNRES=0 (the unreadable row counts toward NEITHER resolved nor unresolved), got TOTAL=$STATE_AI_TOTAL BAD=$STATE_AI_BAD UNRES=$STATE_AI_UNRES"; failures=$((failures+1)); }
+  _ai_rec="$(get_phase action_item_gate)"
+  [[ "$_ai_rec" == FAIL\|* ]] || { echo "FAIL: AI-M — the phase must record FAIL, got '$_ai_rec'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'AI-020' <<<"$_ai_rec" || { echo "FAIL: AI-M — the detail must NAME the offending row, got '$_ai_rec'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'bogus-status' <<<"$_ai_rec" || { echo "FAIL: AI-M — the detail must QUOTE the offending value, got '$_ai_rec'"; failures=$((failures+1)); }
+  if /usr/bin/grep -qF 'AI-021' <<<"$_ai_rec"; then
+    echo "FAIL: AI-M specificity — the enumerator listed a TERMINAL row; it is not selecting the unclassifiable set, got '$_ai_rec'"; failures=$((failures+1))
+  fi
+  # PAIRED NEGATIVE CONTROL, immediately and on the same harness: a well-formed
+  # all-terminal ledger still passes. Without it, a gate that blocked on every
+  # ledger would satisfy every assertion above.
+  _ai_drive ai-resolved; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 0 && "$STATE_AI_GATE" == "RESOLVED" && "$STATE_AI_BAD" -eq 0 ]] || { echo "FAIL: AI-M control — the all-terminal ledger must still PASS RESOLVED with BAD=0, got rc $_ai_rc / '$STATE_AI_GATE' / BAD=$STATE_AI_BAD"; failures=$((failures+1)); }
+
+  # (N) CASE-FOLDING NORMALISES, IT DOES NOT REJECT. `OPEN` is the non-terminal
+  #     state spelled loudly; it must resolve UNRESOLVED, never UNCLASSIFIABLE.
+  #     Without this arm a fold-and-reject implementation passes (M) — it would
+  #     block, just for the wrong reason and with the wrong remedy.
+  _ai_drive ai-upper; _ai_rc="$_AI_RC"
+  _st_arm AI AI-N; [[ "$STATE_AI_GATE" == "UNRESOLVED" ]] || { echo "FAIL: AI-N — an uppercase OPEN must fold to the open state (UNRESOLVED), not be rejected as unreadable, got '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  [[ "$STATE_AI_UNRES" -eq 1 && "$STATE_AI_BAD" -eq 0 ]] || { echo "FAIL: AI-N — counts must be UNRES=1 BAD=0, got UNRES=$STATE_AI_UNRES BAD=$STATE_AI_BAD"; failures=$((failures+1)); }
+  [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-N — the folded open row must still BLOCK at --apply, got rc $_ai_rc"; failures=$((failures+1)); }
+
+  # (O) THE § 2.1a ALIASES ARE ADMITTED. Hundreds of live rows carry `resolved`;
+  #     a recognised set narrowed to the § 2.3 enum would block every legacy
+  #     re-run and contradict the standard the gate enforces.
+  _ai_drive ai-alias; _ai_rc="$_AI_RC"
+  _st_arm AI AI-O; [[ "$_ai_rc" -eq 0 && "$STATE_AI_GATE" == "RESOLVED" ]] || { echo "FAIL: AI-O — the § 2.1a status aliases (resolved / withdrawn) must read as terminal, got rc $_ai_rc / '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  [[ "$STATE_AI_BAD" -eq 0 ]] || { echo "FAIL: AI-O — an aliased value must not count toward the unreadable residue, got BAD=$STATE_AI_BAD"; failures=$((failures+1)); }
+
+  # (Q) THE ARITY CLASS, BOTH MECHANISMS. This is the one witnessed live, and the
+  #     two arities fail differently: at arity <= 10 there is no field 11 and $11
+  #     is EMPTY; at arity 11 the row-terminating ` |` stays glued to the last
+  #     field and $11 is NON-empty. A test bounded at "arity < 11" reaches only
+  #     the first and leaves the larger live class unexercised, so both are driven
+  #     here and the detail is asserted to carry the field count that tells them
+  #     apart from a mistyped word.
+  _ai_drive ai-shortrow; _ai_rc="$_AI_RC"
+  _st_arm AI AI-Q; [[ "$_ai_rc" -eq 3 && "$STATE_AI_GATE" == "UNCLASSIFIABLE" ]] || { echo "FAIL: AI-Q — a short row whose \$11 is EMPTY must be unreadable, not resolved (this is the shipped gate's live silent pass), got rc $_ai_rc / '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  [[ "$STATE_AI_TOTAL" -eq 4 && "$STATE_AI_BAD" -eq 4 ]] || { echo "FAIL: AI-Q — the witness shape is 4 rows at arities 7 and 8, all four unreadable, got TOTAL=$STATE_AI_TOTAL BAD=$STATE_AI_BAD"; failures=$((failures+1)); }
+  /usr/bin/grep -qE 'fields:(7|8)' <<<"$(get_phase action_item_gate)" || { echo "FAIL: AI-Q — the detail must carry the row's field count, or a dropped column is indistinguishable from a mistyped status, got '$(get_phase action_item_gate)'"; failures=$((failures+1)); }
+  _ai_drive ai-arity11; _ai_rc="$_AI_RC"
+  [[ "$_ai_rc" -eq 3 && "$STATE_AI_GATE" == "UNCLASSIFIABLE" ]] || { echo "FAIL: AI-Q — an 11-column row's \$11 carries the row-terminating pipe and is NOT empty; it must still be unreadable, got rc $_ai_rc / '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'fields:11' <<<"$(get_phase action_item_gate)" || { echo "FAIL: AI-Q — the arity-11 detail must name fields:11; without it the operator is told to normalise a value whose real fault is a dropped column, got '$(get_phase action_item_gate)'"; failures=$((failures+1)); }
+  # The MECHANISM, pinned rather than inferred: the raw value carries the glued
+  # row-terminating pipe. An arm that only asserted the state would pass against a
+  # predicate that reached UNCLASSIFIABLE by treating $11 as empty here, which is
+  # the description this fixture exists to falsify.
+  /usr/bin/grep -qF 'status:[open |]' <<<"$(get_phase action_item_gate)" || { echo "FAIL: AI-Q — the arity-11 raw value must show the glued row-terminating pipe ('open |'), proving \$11 is NON-empty on this class, got '$(get_phase action_item_gate)'"; failures=$((failures+1)); }
+
+  # (T) PRECEDENCE, MEASURED NOT REASONED. A ledger carrying both classes renders
+  #     UNRESOLVED, because the STATE selects the operator's REMEDY and open rows
+  #     are the dominant one — and the unreadable rows are carried in the SAME
+  #     detail so one pass covers both. Reversing this precedence would render a
+  #     ledger of 48 open rows and 2 unreadable ones as "normalise the value" and
+  #     drop the open enumeration entirely.
+  _ai_drive ai-both; _ai_rc="$_AI_RC"
+  _st_arm AI AI-T; [[ "$STATE_AI_GATE" == "UNRESOLVED" ]] || { echo "FAIL: AI-T — with BOTH an open row and an unreadable one, the state must be UNRESOLVED (the dominant remedy), got '$STATE_AI_GATE'"; failures=$((failures+1)); }
+  [[ "$STATE_AI_UNRES" -eq 1 && "$STATE_AI_BAD" -eq 1 ]] || { echo "FAIL: AI-T — both counters must be live on this fixture (UNRES=1 BAD=1), got UNRES=$STATE_AI_UNRES BAD=$STATE_AI_BAD"; failures=$((failures+1)); }
+  _ai_rec="$(get_phase action_item_gate)"
+  /usr/bin/grep -qF 'AI-070(owner:' <<<"$_ai_rec" || { echo "FAIL: AI-T — the open row must keep its owner+trigger enumeration; losing it is the whole cost of the wrong precedence, got '$_ai_rec'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'AI-071(status:' <<<"$_ai_rec" || { echo "FAIL: AI-T — the unreadable row must be carried in the SAME detail, or the operator makes two passes over one ledger, got '$_ai_rec'"; failures=$((failures+1)); }
+
+  # (R) AN UNREADABLE LEDGER CANNOT BE ATTESTED AWAY — the sibling of (L).
+  #     Attestation licenses an ABSENT ledger; it never licenses one the gate
+  #     could not read. The guarantee is structural: UNCLASSIFIABLE is deliberately
+  #     not in the NOT-RECORDED|EMPTY-LEDGER case pattern.
+  ATTEST_ACTION_ITEMS="no-commitments"
+  _ai_drive ai-unclassifiable; _ai_rc="$_AI_RC"
+  _st_arm AI AI-R; [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-R — --attest-action-items must NOT clear an UNCLASSIFIABLE verdict; an unreadable status is normalised, not attested away (rc $_ai_rc)"; failures=$((failures+1)); }
   ATTEST_ACTION_ITEMS=""
 
   # (H) DRY-RUN — evaluates, records, never halts, and says what it WOULD do.
   MODE="dry-run"
   _ai_drive ai-unresolved; _ai_rc="$_AI_RC"
-  [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-H — --dry-run must never return non-zero (a preview run must not abort), got rc $_ai_rc"; failures=$((failures+1)); }
+  _st_arm AI AI-H; [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-H — --dry-run must never return non-zero (a preview run must not abort), got rc $_ai_rc"; failures=$((failures+1)); }
   [[ "$STATE_AI_GATE" == "UNRESOLVED" ]] || { echo "FAIL: AI-H — --dry-run must still EVALUATE (record a real verdict), got '$STATE_AI_GATE'"; failures=$((failures+1)); }
   /usr/bin/grep -qF 'would BLOCK at --apply' <<<"$(get_phase action_item_gate)" || { echo "FAIL: AI-H — the dry-run detail must name the condition that FAILS at --apply (the :3385 precedent), got '$(get_phase action_item_gate)'"; failures=$((failures+1)); }
   MODE="apply"
@@ -13501,7 +14441,7 @@ AISTUB
   #     whose close was never going to happen.
   NO_MERGE=1
   _ai_drive ai-unresolved; _ai_rc="$_AI_RC"
-  [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-J — under --no-merge the gate records rather than blocks (post_close_milestone already DEFERS), got rc $_ai_rc"; failures=$((failures+1)); }
+  _st_arm AI AI-J; [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-J — under --no-merge the gate records rather than blocks (post_close_milestone already DEFERS), got rc $_ai_rc"; failures=$((failures+1)); }
   [[ "$STATE_AI_GATE" == "UNRESOLVED" ]] || { echo "FAIL: AI-J — --no-merge must still evaluate, got '$STATE_AI_GATE'"; failures=$((failures+1)); }
   NO_MERGE=0
 
@@ -13510,7 +14450,7 @@ AISTUB
   #     closed before the verdict becomes a detector for exactly that.
   STATE_MILESTONE_STATE="closed"
   _ai_drive ai-unresolved; _ai_rc="$_AI_RC"
-  [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-I — an idempotent re-run over an already-closed milestone must not fail, got rc $_ai_rc"; failures=$((failures+1)); }
+  _st_arm AI AI-I; [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-I — an idempotent re-run over an already-closed milestone must not fail, got rc $_ai_rc"; failures=$((failures+1)); }
   /usr/bin/grep -qF '#304 SHAPE' <<<"$(get_phase action_item_gate)" || { echo "FAIL: AI-I — an UNRESOLVED verdict over an ALREADY-CLOSED milestone is the close-before-verdict shape and the detail must say so, got '$(get_phase action_item_gate)'"; failures=$((failures+1)); }
   STATE_MILESTONE_STATE="open"
 
@@ -13520,11 +14460,29 @@ AISTUB
   #     and phase_run_verification's own text contains no predicate evaluation
   #     (structural — the limb that survives a later refactor).
   STATE_AI_GATE="RESOLVED"; STATE_AI_TOTAL=7; STATE_AI_UNRES=0; ATTEST_ACTION_ITEMS=""
-  [[ "$(_ai_verification_cell)" == "RESOLVED (7/7)" ]] || { echo "FAIL: AI-K — the row-6 cell must follow the GLOBAL Phase 12.9 set, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
+  _st_arm AI AI-K; [[ "$(_ai_verification_cell)" == "RESOLVED (7/7)" ]] || { echo "FAIL: AI-K — the row-6 cell must follow the GLOBAL Phase 12.9 set, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
   STATE_AI_GATE="UNRESOLVED"; STATE_AI_UNRES=4
   [[ "$(_ai_verification_cell)" == "BLOCKED (4 unresolved of 7)" ]] || { echo "FAIL: AI-K — mutating STATE_AI_GATE must change the cell; it does not, so the cell is not reading the pre-close verdict, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
   STATE_AI_GATE=""
   [[ "$(_ai_verification_cell)" == UNVERIFIED* ]] || { echo "FAIL: AI-K — an unset verdict must render UNVERIFIED, never a green cell, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
+
+  # (S) ROW 6 RENDERS THE FIFTH STATE, AND DOES NOT FALL TO THE DEFAULT. A state
+  #     with no `case` arm here lands on `*)` and the Verification table asserts
+  #     the gate DID NOT RUN — on a run where it ran and blocked. That is a worse
+  #     failure than the one the gate closes, because it is a false statement
+  #     inside the gate-passage proof. The count is asserted too: this is the one
+  #     blocking verdict that would otherwise render with no numerator, in a gate
+  #     whose founding argument is that a bare verdict is not enough.
+  STATE_AI_GATE="UNCLASSIFIABLE"; STATE_AI_TOTAL=181; STATE_AI_BAD=2; STATE_AI_UNRES=0
+  _st_arm AI AI-S; [[ "$(_ai_verification_cell)" == "BLOCKED (2 unreadable of 181)" ]] || { echo "FAIL: AI-S — row 6 must render the UNCLASSIFIABLE verdict WITH its counts, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
+  if [[ "$(_ai_verification_cell)" == UNVERIFIED* ]]; then
+    echo "FAIL: AI-S — the fifth state fell through to the *) default; row 6 now asserts the gate did not run on a run where it ran and BLOCKED"; failures=$((failures+1))
+  fi
+  # CONTROL for (S), the same one (K) uses: the default is still reachable, so the
+  # arm above is a property of the new branch and not of a removed default.
+  STATE_AI_GATE=""
+  [[ "$(_ai_verification_cell)" == UNVERIFIED* ]] || { echo "FAIL: AI-S control — the *) default must still render UNVERIFIED for an unset verdict, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
+  STATE_AI_TOTAL=0; STATE_AI_BAD=0; STATE_AI_UNRES=0
   local _ai_verifun
   _ai_verifun="$(/usr/bin/awk '/^phase_run_verification\(\) \{$/{f=1} f{print} f&&/^\}$/{exit}' "${BASH_SOURCE[0]}")"
   [[ -n "$_ai_verifun" ]] || { echo "FAIL: AI-K — could not extract phase_run_verification from this file; the structural limb would pass without asserting anything"; failures=$((failures+1)); }
@@ -13552,7 +14510,7 @@ AISTUB
   #     witness on the close. The `|| true` degenerate is the negative control: if
   #     the harness cannot tell the honest form from it, the arm fails and says so.
   local _ai_gate_ln _ai_close_ln _ai_gate_txt _ai_close_txt
-  _ai_gate_ln="$(/usr/bin/grep -nE '^phase_action_item_gate ' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 || true)"
+  _st_arm AI AI-F; _ai_gate_ln="$(/usr/bin/grep -nE '^phase_action_item_gate ' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 || true)"
   _ai_close_ln="$(/usr/bin/grep -nE '^phase_post_close_milestone ' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 || true)"
   if ! [[ "$_ai_gate_ln" =~ ^[0-9]+$ && "$_ai_close_ln" =~ ^[0-9]+$ ]]; then
     echo "FAIL: AI-F anti-vacuity — a dispatch needle did not resolve to exactly ONE top-level line (gate='$_ai_gate_ln' close='$_ai_close_ln'); the arm would otherwise pass without asserting anything"; failures=$((failures+1))
@@ -13582,7 +14540,7 @@ AISTUB
     local _ai_w1="$_ai_tmp/w-honest-block.txt" _ai_w2="$_ai_tmp/w-honest-pass.txt" _ai_w3="$_ai_tmp/w-degenerate.txt"
     local _ai_dst
     _ai_dst="$(_ai_exec_dispatch "$_ai_gate_txt" 3 "$_ai_w1")"
-    [[ "$_ai_dst" -eq 3 ]] || { echo "FAIL: AI-F1 — the SHIPPED dispatch line must propagate the gate's 3 and halt the run, got exit $_ai_dst"; failures=$((failures+1)); }
+    _st_arm AI AI-F1; [[ "$_ai_dst" -eq 3 ]] || { echo "FAIL: AI-F1 — the SHIPPED dispatch line must propagate the gate's 3 and halt the run, got exit $_ai_dst"; failures=$((failures+1)); }
     if [[ -e "$_ai_w1" ]]; then
       echo "FAIL: AI-F1 — the milestone close FIRED behind a BLOCKING gate; the gate's return is not wired to the close: $(/bin/cat "$_ai_w1")"; failures=$((failures+1))
     fi
@@ -13590,14 +14548,14 @@ AISTUB
     # close, so F1's absence is caused by the guard and not by an inert harness —
     # the "a zero whose control also returns zero is a broken probe" case.
     _ai_dst="$(_ai_exec_dispatch "$_ai_gate_txt" 0 "$_ai_w2")"
-    [[ "$_ai_dst" -eq 0 ]] || { echo "FAIL: AI-F2 — a PASSING gate must leave the run running, got exit $_ai_dst"; failures=$((failures+1)); }
+    _st_arm AI AI-F2; [[ "$_ai_dst" -eq 0 ]] || { echo "FAIL: AI-F2 — a PASSING gate must leave the run running, got exit $_ai_dst"; failures=$((failures+1)); }
     /usr/bin/grep -qF 'CLOSED' "$_ai_w2" 2>/dev/null || { echo "FAIL: AI-F2 sensitivity — the harness never fired the close even on a PASSING gate; AI-F1's clean result would be meaningless"; failures=$((failures+1)); }
     # F-degenerate: the NEGATIVE CONTROL. Same position, same phase name, guard
     # replaced by `|| true`. The close MUST fire here. If it does not, this arm
     # cannot discriminate a fail-closed gate from a no-op one and says so rather
     # than shipping green.
     _ai_dst="$(_ai_exec_dispatch 'phase_action_item_gate || true' 3 "$_ai_w3")"
-    /usr/bin/grep -qF 'CLOSED' "$_ai_w3" 2>/dev/null || { echo "FAIL: AI-F3 negative control — a '|| true' dispatch line did NOT let the close through, so this arm cannot tell a fail-closed gate from a no-op one; the whole (F) set is uninformative"; failures=$((failures+1)); }
+    _st_arm AI AI-F3; /usr/bin/grep -qF 'CLOSED' "$_ai_w3" 2>/dev/null || { echo "FAIL: AI-F3 negative control — a '|| true' dispatch line did NOT let the close through, so this arm cannot tell a fail-closed gate from a no-op one; the whole (F) set is uninformative"; failures=$((failures+1)); }
   fi
 
   # (F4) GUARDED-FORM INVARIANT over the whole dispatch block. A bare
@@ -13606,7 +14564,7 @@ AISTUB
   #      Assert the FORM, not just the presence: every dispatched phase carries
   #      the fail-closed guard.
   local _ai_disp_n _ai_guard_n _ai_unguarded
-  _ai_disp_n="$(/usr/bin/grep -cE '^phase_[a-z0-9_]+ ' "${BASH_SOURCE[0]}" || true)"; _ai_disp_n="${_ai_disp_n:-0}"
+  _st_arm AI AI-F4; _ai_disp_n="$(/usr/bin/grep -cE '^phase_[a-z0-9_]+ ' "${BASH_SOURCE[0]}" || true)"; _ai_disp_n="${_ai_disp_n:-0}"
   _ai_guard_n="$(/usr/bin/awk '/^phase_[a-z0-9_]+ / && index($0, "|| { generate_report; exit ") {n++} END {print n+0}' "${BASH_SOURCE[0]}")"
   if [[ "$_ai_disp_n" -lt 25 ]]; then
     echo "FAIL: AI-F4 anti-vacuity — the dispatch parse found only ${_ai_disp_n} lines; the guarded-form invariant would be vacuous"; failures=$((failures+1))
@@ -13634,20 +14592,22 @@ AISTUB
   #     risk, and this is the Check-68 `enum-parity` answer to it. Divergence
   #     fails naming both sides.
   local _ai_doc _ai_block _ai_blk_lines
-  _ai_doc="$SCRIPT_DIR/../references/how-to/hub-spoke-bridge.md"
+  _st_arm AI AI-G; _ai_doc="$SCRIPT_DIR/../references/how-to/hub-spoke-bridge.md"
   _ai_block=""
   [[ -r "$_ai_doc" ]] && _ai_block="$(/usr/bin/awk '/^AI="\$DIR\/action-items\.md"$/{f=1} f{print} f && /^fi$/{exit}' "$_ai_doc")"
   _ai_blk_lines="$(/usr/bin/printf '%s\n' "$_ai_block" | /usr/bin/grep -c . || true)"; _ai_blk_lines="${_ai_blk_lines:-0}"
   if [[ "$_ai_blk_lines" -lt 8 ]] || ! /usr/bin/grep -qF "awk -F' [|] '" <<<"$_ai_block"; then
     echo "FAIL: AI-G anti-vacuity — the canonical Procedure 7a predicate did not extract from ${_ai_doc#$REPO_ROOT/} (${_ai_blk_lines} lines); a parity arm over an empty block asserts nothing"; failures=$((failures+1))
   else
-    local _ai_fx _ai_mine _ai_theirs _ai_seen=""
-    for _ai_fx in ai-unresolved ai-resolved ai-decoy ai-empty ai-notrecorded; do
+    local _ai_fx _ai_mine _ai_theirs _ai_seen="" _ai_nfx=0
+    for _ai_fx in ai-unresolved ai-resolved ai-decoy ai-empty ai-notrecorded \
+                  ai-unclassifiable ai-shortrow ai-arity11 ai-upper ai-alias ai-both; do
+      _ai_nfx=$((_ai_nfx+1))
       _ai_mine="$(_ai_eval_predicate "$HUB_STATE_PATH/$_ai_fx")"
       _ai_theirs="$(
         DIR="$HUB_STATE_PATH/$_ai_fx"
         eval "$_ai_block"
-        /usr/bin/printf '%s %s %s\n' "$STATE" "${TOTAL:-0}" "${UNRES:-0}"
+        /usr/bin/printf '%s %s %s %s\n' "$STATE" "${TOTAL:-0}" "${UNRES:-0}" "${BAD:-0}"
       )"
       [[ "$_ai_mine" == "$_ai_theirs" ]] || { echo "FAIL: AI-G — predicate FORK on fixture ${_ai_fx}: automated-closeout.sh says '${_ai_mine}', hub-spoke-bridge.md § Procedure 7a says '${_ai_theirs}'"; failures=$((failures+1)); }
       _ai_seen="${_ai_seen}${_ai_theirs%% *} "
@@ -13657,8 +14617,13 @@ AISTUB
     # implementation on every fixture and the parity arm would prove nothing.
     local _ai_distinct
     _ai_distinct="$(/usr/bin/printf '%s\n' $_ai_seen | /usr/bin/sort -u | /usr/bin/grep -c . || true)"
-    [[ "${_ai_distinct:-0}" -ge 4 ]] || { echo "FAIL: AI-G sensitivity — the canonical predicate returned only ${_ai_distinct} distinct STATEs across 5 fixtures; it is not discriminating, so agreement with it is not evidence"; failures=$((failures+1)); }
+    # The fixture count is DERIVED from the loop that just ran, never restated. A
+    # count written into a diagnostic string is a reference like any other, and it
+    # is the kind that never reddens a test and is read by an operator at the
+    # worst possible moment.
+    [[ "${_ai_distinct:-0}" -ge 5 ]] || { echo "FAIL: AI-G sensitivity — the canonical predicate returned only ${_ai_distinct} distinct STATEs across ${_ai_nfx} fixtures; it is not discriminating, so agreement with it is not evidence"; failures=$((failures+1)); }
   fi
+  _st_witness AI 28
 
   unset -f _ai_drive _ai_exec_dispatch 2>/dev/null || true
   unset _AI_RC 2>/dev/null || true
@@ -13667,7 +14632,8 @@ AISTUB
   STATE_MILESTONE_SLUG="$_ai_s_slug"; STATE_MILESTONE_STATE="$_ai_s_mstate"
   NO_MERGE="$_ai_s_nomerge"; ATTEST_ACTION_ITEMS="$_ai_s_attest"
   AI_EVENT_WRITER="$_ai_s_writer"; MILESTONE="$_ai_s_ms"
-  STATE_AI_GATE=""; STATE_AI_TOTAL=0; STATE_AI_UNRES=0; STATE_AI_DIR=""; STATE_AI_EMIT="n/a"
+  STATE_AI_GATE=""; STATE_AI_TOTAL=0; STATE_AI_UNRES=0; STATE_AI_BAD=0
+  STATE_AI_DIR=""; STATE_AI_EMIT="n/a"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # Test 15: phase_assert_output_set — pre-commit close-out output-set
@@ -13742,7 +14708,7 @@ EOF
   # already immune (it anchors on leading whitespace, which `#` is not); this
   # oracle has to be made immune independently or it is not an oracle.
   _os_oracle="$(/usr/bin/awk -F'CLOSE_COMPLETENESS_TELEMETRY_CUTOFF:-' '/^[[:space:]]*local cc_telemetry_cutoff=/ { v = $2; sub(/}".*$/, "", v); print v; exit }' "$CLOSE_COMPLETENESS_SOURCE" 2>/dev/null)"
-  [[ -n "$_os_oracle" ]] || { echo "FAIL: #5288 m1 anti-vacuity — the independent oracle read NOTHING from deploy.sh, so agreement with it would prove nothing"; failures=$((failures+1)); }
+  _st_arm m m1; [[ -n "$_os_oracle" ]] || { echo "FAIL: #5288 m1 anti-vacuity — the independent oracle read NOTHING from deploy.sh, so agreement with it would prove nothing"; failures=$((failures+1)); }
   [[ "$_os_read" == "$_os_oracle" ]] || { echo "FAIL: #5288 m1 — the shipped reader must return deploy.sh's OWN committed default; reader='$_os_read' independent-oracle='$_os_oracle'"; failures=$((failures+1)); }
   # SENSITIVITY: point the seam at an ARMED fixture. A reader that hardcoded the
   # shipped `__none__` passes m1 and fails here.
@@ -13769,7 +14735,7 @@ EOF
   _os_write "vel lrn"
   CLOSE_COMPLETENESS_SOURCE="$_os_none"
   local _os_r; _os_drive; _os_r="$(_os_verdict)"
-  [[ "$_os_r" == "3 FAIL" ]] || { echo "FAIL: #5288 m2 — an UNREADABLE membership predicate must BLOCK (expected '3 FAIL'), got '$_os_r'"; failures=$((failures+1)); }
+  _st_arm m m2; [[ "$_os_r" == "3 FAIL" ]] || { echo "FAIL: #5288 m2 — an UNREADABLE membership predicate must BLOCK (expected '3 FAIL'), got '$_os_r'"; failures=$((failures+1)); }
   /usr/bin/grep -qF 'INDETERMINATE' <<<"$(get_phase assert_output_set)" || { echo "FAIL: #5288 m2 — the block must be reported as INDETERMINATE naming the missing element, got '$(get_phase assert_output_set)'"; failures=$((failures+1)); }
   # CONTROL, same fixture, one variable changed: a READABLE dormant seam PASSes.
   # Without this the m2 block is indistinguishable from a gate that always fails.
@@ -13780,7 +14746,7 @@ EOF
   # ── (m3) AC-3: a required member ABSENT blocks; present passes (paired).
   _os_write "lrn"
   _os_drive; _os_r="$(_os_verdict)"
-  [[ "$_os_r" == "3 FAIL" ]] || { echo "FAIL: #5288 m3 — an ABSENT required member must BLOCK, got '$_os_r'"; failures=$((failures+1)); }
+  _st_arm m m3; [[ "$_os_r" == "3 FAIL" ]] || { echo "FAIL: #5288 m3 — an ABSENT required member must BLOCK, got '$_os_r'"; failures=$((failures+1)); }
   /usr/bin/grep -qF 'velocity-field' <<<"$(get_phase assert_output_set)" || { echo "FAIL: #5288 m3 — the finding must NAME the missing member, got '$(get_phase assert_output_set)'"; failures=$((failures+1)); }
   _os_write "vel"
   _os_drive; _os_r="$(_os_verdict)"
@@ -13793,7 +14759,7 @@ EOF
   _os_write "vel lrn"
   CLOSE_COMPLETENESS_TELEMETRY_CUTOFF="v9.01"
   _os_drive; _os_r="$(_os_verdict)"
-  [[ "$_os_r" == "3 FAIL" ]] || { echo "FAIL: #5288 m4 — an ARMED required-if predicate makes the member OWED, so its absence must BLOCK, got '$_os_r'"; failures=$((failures+1)); }
+  _st_arm m m4; [[ "$_os_r" == "3 FAIL" ]] || { echo "FAIL: #5288 m4 — an ARMED required-if predicate makes the member OWED, so its absence must BLOCK, got '$_os_r'"; failures=$((failures+1)); }
   /usr/bin/grep -qF 'close-class-telemetry' <<<"$(get_phase assert_output_set)" || { echo "FAIL: #5288 m4 — the armed finding must NAME the telemetry member, got '$(get_phase assert_output_set)'"; failures=$((failures+1)); }
   CLOSE_COMPLETENESS_TELEMETRY_CUTOFF="__none__"
   _os_drive; _os_r="$(_os_verdict)"
@@ -13807,7 +14773,7 @@ EOF
   # recorded. The verdict must NOT move.
   _os_write "vel"
   _os_drive; _os_r="$(_os_verdict)"
-  [[ "$_os_r" == "3 FAIL" ]] || { echo "FAIL: #5288 m5 pre-arm — the absent member must block BEFORE a marker exists, got '$_os_r'"; failures=$((failures+1)); }
+  _st_arm m m5; [[ "$_os_r" == "3 FAIL" ]] || { echo "FAIL: #5288 m5 pre-arm — the absent member must block BEFORE a marker exists, got '$_os_r'"; failures=$((failures+1)); }
   _write_not_produced_marker "learnings-block" "append_release_learnings" "self-test fixture" >/dev/null 2>&1 || true
   # SENSITIVITY: the arm is only meaningful if a marker is genuinely present.
   _not_produced_marker_present "learnings-block" || { echo "FAIL: #5288 m5 sensitivity — no marker was actually recorded, so the exemption arm below would pass vacuously"; failures=$((failures+1)); }
@@ -13832,7 +14798,7 @@ EOF
   SYNTHESIZE_LEARNINGS="$_os_tmp/definitely-not-here.sh"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   phase_append_release_learnings >/dev/null 2>&1 || true
-  [[ "$(get_phase append_release_learnings)" == SKIPPED\|* ]] || { echo "FAIL: #5288 m6 — the capability arm must still SKIP (the refusal to hand-compose stands), got '$(get_phase append_release_learnings)'"; failures=$((failures+1)); }
+  _st_arm m m6; [[ "$(get_phase append_release_learnings)" == SKIPPED\|* ]] || { echo "FAIL: #5288 m6 — the capability arm must still SKIP (the refusal to hand-compose stands), got '$(get_phase append_release_learnings)'"; failures=$((failures+1)); }
   _not_produced_marker_present "learnings-block" || { echo "FAIL: #5288 m6 — a capability skip must now RECORD the absence as corpus bytes; no **Not-produced:** marker was written"; failures=$((failures+1)); }
   local _os_after; _os_after="$(/usr/bin/awk '/^\*\*Result:\*\*/ { getline; print; exit }' "$RELEASE_LOG")"
   [[ "$_os_after" == '**Not-produced:** learnings-block'* ]] || { echo "FAIL: #5288 m6 — the marker must land at its DECLARED anchor, immediately after **Result:**; the following line was '$_os_after'"; failures=$((failures+1)); }
@@ -13872,7 +14838,7 @@ EOF
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   mark_phase "inject_velocity_field" "DRY-RUN" "would FAIL: fixture producer unavailable"
   local _os_drc=0; phase_assert_output_set >/dev/null 2>&1 || _os_drc=$?
-  [[ "$_os_drc" -eq 0 ]] || { echo "FAIL: #5288 m7 — --dry-run must be NON-blocking (return 0), got $_os_drc"; failures=$((failures+1)); }
+  _st_arm m m7; [[ "$_os_drc" -eq 0 ]] || { echo "FAIL: #5288 m7 — --dry-run must be NON-blocking (return 0), got $_os_drc"; failures=$((failures+1)); }
   [[ "$(get_phase assert_output_set | /usr/bin/cut -d'|' -f1)" == "WARN" ]] || { echo "FAIL: #5288 m7 — a would-be-absent required member under --dry-run must mark WARN per the in-file non-blocking-preview precedent, got '$(get_phase assert_output_set)'"; failures=$((failures+1)); }
   /usr/bin/grep -qF 'FAILS the close at --apply' <<<"$(get_phase assert_output_set)" || { echo "FAIL: #5288 m7 — the dry-run WARN must name the condition that fails at --apply, got '$(get_phase assert_output_set)'"; failures=$((failures+1)); }
   MODE="apply"
@@ -13886,7 +14852,7 @@ EOF
   MODE="dry-run"
   _os_write "lrn"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
-  [[ "$(_output_set_dryrun_class velocity-field inject_velocity_field)" == indeterminate:* ]] || { echo "FAIL: #5288 m8 — an UNRECORDED producing phase must classify INDETERMINATE, got '$(_output_set_dryrun_class velocity-field inject_velocity_field)'"; failures=$((failures+1)); }
+  _st_arm m m8; [[ "$(_output_set_dryrun_class velocity-field inject_velocity_field)" == indeterminate:* ]] || { echo "FAIL: #5288 m8 — an UNRECORDED producing phase must classify INDETERMINATE, got '$(_output_set_dryrun_class velocity-field inject_velocity_field)'"; failures=$((failures+1)); }
   _os_drc=0; phase_assert_output_set >/dev/null 2>&1 || _os_drc=$?
   [[ "$(get_phase assert_output_set | /usr/bin/cut -d'|' -f1)" == "WARN" ]] || { echo "FAIL: #5288 m8 — an INDETERMINATE classification must surface (WARN under --dry-run), never green, got '$(get_phase assert_output_set)'"; failures=$((failures+1)); }
   # CONTROL: a RECORDED pass classifies would-present, so the INDETERMINATE above
@@ -13908,7 +14874,7 @@ EOF
   # asserts that parity generally, so `--help` silently under-reports a phase
   # added to the ladder. Shipped 9.55 row is the interpretability control.
   local _os_roster; _os_roster="$(/usr/bin/awk 'NR==1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "${BASH_SOURCE[0]}")"
-  /usr/bin/grep -qE '^[[:space:]]*9\.56 assert_output_set' <<<"$_os_roster" || { echo "FAIL: #5288 m9 — the hand-maintained usage()/--help phase roster must carry the 9.56 row"; failures=$((failures+1)); }
+  _st_arm m m9; /usr/bin/grep -qE '^[[:space:]]*9\.56 assert_output_set' <<<"$_os_roster" || { echo "FAIL: #5288 m9 — the hand-maintained usage()/--help phase roster must carry the 9.56 row"; failures=$((failures+1)); }
   /usr/bin/grep -qE '^[[:space:]]*9\.55 assert_derived_surfaces' <<<"$_os_roster" || { echo "FAIL: #5288 m9 control — the shipped 9.55 row is missing, so the roster extraction itself is broken and the 9.56 result above is uninformative"; failures=$((failures+1)); }
 
   # ── (m10) READ-ONLY. The phase must not write or stage. Compared by content
@@ -13919,7 +14885,7 @@ EOF
   _os_h1="$(/usr/bin/shasum "$RELEASE_LOG" | /usr/bin/cut -d' ' -f1)"
   _os_drive; _os_r="$(_os_verdict)"
   _os_h2="$(/usr/bin/shasum "$RELEASE_LOG" | /usr/bin/cut -d' ' -f1)"
-  [[ "$_os_r" == "0 PASS" ]] || { echo "FAIL: #5288 m10 precondition — the read-only arm needs a PASSing run, got '$_os_r'"; failures=$((failures+1)); }
+  _st_arm m m10; [[ "$_os_r" == "0 PASS" ]] || { echo "FAIL: #5288 m10 precondition — the read-only arm needs a PASSing run, got '$_os_r'"; failures=$((failures+1)); }
   [[ "$_os_h1" == "$_os_h2" ]] || { echo "FAIL: #5288 m10 — phase_assert_output_set MUST be read-only; the ledger changed across the run"; failures=$((failures+1)); }
   _write_not_produced_marker "velocity-field" "inject_velocity_field" "anti-vacuity" >/dev/null 2>&1 || true
   _os_h3="$(/usr/bin/shasum "$RELEASE_LOG" | /usr/bin/cut -d' ' -f1)"
@@ -13930,7 +14896,7 @@ EOF
   # because it sits after the producers and before the chore commit. Both read
   # from this file's own shipped text.
   local _os_disp; _os_disp="$(grep_count -E '^phase_assert_output_set \|\| \{ generate_report; exit 3; \}' "${BASH_SOURCE[0]}")"
-  [[ "$_os_disp" -eq 1 ]] || { echo "FAIL: #5288 m11 — expected EXACTLY ONE guarded top-level dispatch of phase_assert_output_set, found $_os_disp"; failures=$((failures+1)); }
+  _st_arm m m11; [[ "$_os_disp" -eq 1 ]] || { echo "FAIL: #5288 m11 — expected EXACTLY ONE guarded top-level dispatch of phase_assert_output_set, found $_os_disp"; failures=$((failures+1)); }
   local _os_ln_ads _os_ln_new _os_ln_commit
   # The trailing `head -1` folds into `grep -m1`: grep reads the FILE directly, so it
   # is the leftmost producer and no upstream writer is left for an early-closing
@@ -13943,6 +14909,7 @@ EOF
   [[ "$_os_ln_new" -gt "$_os_ln_ads" && "$_os_ln_new" -lt "$_os_ln_commit" ]] || { echo "FAIL: #5288 m11 — phase 9.56 must dispatch AFTER assert_derived_surfaces and BEFORE commit_chore_pr, or the stamp commits ahead of the assert (ads=$_os_ln_ads new=$_os_ln_new commit=$_os_ln_commit)"; failures=$((failures+1)); }
   local _os_fab; _os_fab="$(grep_count -E '^phase_assert_output_set_zz \|\|' "${BASH_SOURCE[0]}")"
   [[ "$_os_fab" -eq 0 ]] || { echo "FAIL: #5288 m11 specificity — a fabricated phase name matched $_os_fab dispatch lines, so the needle is over-matching"; failures=$((failures+1)); }
+  _st_witness m 11
 
   unset -f _os_write _os_drive 2>/dev/null || true
   /bin/rm -rf "$_os_tmp" 2>/dev/null || true
@@ -14073,6 +15040,202 @@ EOF
   unset -f phase_ca_synthetic_readonly
   unset -f _ca_classify _ca_violators 2>/dev/null || true
 
+  # ─── (TK) OPERATOR-CONFIG KEY-READ TOLERANCE — the class invariant (#5649) ───
+  #
+  # Every read of an OPTIONAL key out of operator.toml must tolerate that key being
+  # ABSENT. Without the tolerance `grep` exits 1, `pipefail` carries that status out
+  # of the command substitution, and the `set -euo pipefail` at the top of this file
+  # aborts at LOAD time — before argument parsing, on EVERY invocation including
+  # --self-test and --check-paths — with exit 1 and no output at all. Two of the
+  # four sites in this file shipped that way.
+  #
+  # WHOLE-FILE, and that is load-bearing rather than incidental. The subjects live
+  # in the load-time preamble ABOVE this function AND in the arg-parse region below
+  # its closing brace. A region-scoped parse (`sed -n '1,/^self_test() {/p'`) stops
+  # at this function's opening line and is blind to ~170 lines of production code
+  # including check_paths() — itself a path-resolution function, i.e. exactly the
+  # kind of code this class of defect lives in. Four sites sit above that cut, so
+  # any anti-vacuity floor is satisfied and a region-scoped arm reads healthy while
+  # blind. Same reason AI-F4 above reads "${BASH_SOURCE[0]}" whole.
+  #
+  # FIXTURES ARE EXCLUDED BY CONSTRUCTION — no allowlist, no marker, no region cut.
+  # The parse anchors on `_<name>=$(`, so a specimen held in a single-quoted
+  # assignment cannot match: the character after `=` is a quote, not `$`. Every
+  # specimen below is held that way, TK-2 proves the matcher still catches the real
+  # shape, and TK-3b asserts the invisibility itself rather than assuming it.
+  local _tk_pop _tk_tol _tk_head _tk_bad _tk_spec
+  _tk_pop="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' "${BASH_SOURCE[0]}")"
+  _tk_tol="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "|| true") {n++} END {print n+0}' "${BASH_SOURCE[0]}")"
+  _tk_head="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "head") {n++} END {print n+0}' "${BASH_SOURCE[0]}")"
+
+  # (TK-1) ANTI-VACUITY FLOOR, then the invariant. The floor is what stops a renamed
+  #        variable or a reformatted call site from emptying the population and
+  #        reporting clean.
+  _st_arm TK TK-1; if [[ "${_tk_pop:-0}" -lt 4 ]]; then
+    echo "FAIL: TK-1 anti-vacuity — the key-read parse found only ${_tk_pop:-0} site(s) in this file; the tolerance invariant would be vacuous"; failures=$((failures+1))
+  fi
+  if [[ "${_tk_pop:-0}" -ne "${_tk_tol:-0}" ]]; then
+    _tk_bad="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && !index($0, "|| true") {printf "%d ", FNR}' "${BASH_SOURCE[0]}")"
+    echo "FAIL: TK-1 — ${_tk_tol:-0}/${_tk_pop:-0} operator.toml key reads tolerate an ABSENT key; an intolerant read aborts this tool at LOAD time when an OPTIONAL key is missing. Unguarded line(s): ${_tk_bad:-none}"; failures=$((failures+1))
+  fi
+
+  # (TK-2) CAPABILITY TO FAIL, re-demonstrated on every run. Without it a green TK-1
+  #        is satisfied by a matcher that classifies everything as tolerant, or by
+  #        one that recognises nothing at all. Both directions are asserted.
+  _tk_spec="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "|| true") {n++} END {print n+0}' <<<'  _z=$(grep -m1 -E "^k" f | awk -F= "{print}")')"
+  _st_arm TK TK-2; [[ "${_tk_spec:-1}" -eq 0 ]] || { echo "FAIL: TK-2 capability-to-fail — the tolerance filter counted an UNGUARDED specimen as tolerant; TK-1's clean result is uninformative"; failures=$((failures+1)); }
+  _tk_spec="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' <<<'  _z=$(grep -m1 -E "^k" f | awk -F= "{print}")')"
+  [[ "${_tk_spec:-0}" -eq 1 ]] || { echo "FAIL: TK-2 sensitivity — the key-read parse did NOT recognise a constructed call site; it is not reading the shape it claims to, so TK-1's population is not the population"; failures=$((failures+1)); }
+
+  # (TK-3) HEAD-PIPE REINTRODUCTION GUARD. The folded `grep -m1` form is what keeps
+  #        these lines out of the repo-integrity `sigpipe-idiom` job, which scans the
+  #        ADDED-LINES delta and lists `head` among the short-circuiting readers it
+  #        matches. Reintroducing `| head -1` on one of these lines would redden that
+  #        gate and nothing here — unless this arm exists.
+  _st_arm TK TK-3; [[ "${_tk_head:-0}" -eq 0 ]] || { echo "FAIL: TK-3 — ${_tk_head} key-read site(s) pipe into head; the folded grep -m1 form is what keeps this class out of the sigpipe-idiom gate"; failures=$((failures+1)); }
+  _tk_spec="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "head") {n++} END {print n+0}' <<<'  _z=$(grep -E "^k" f | head -1 | awk -F= "{print}")')"
+  [[ "${_tk_spec:-0}" -eq 1 ]] || { echo "FAIL: TK-3 sensitivity — the head-pipe filter did NOT match a constructed head-piping call site; TK-3's zero is a broken probe, not a clean result"; failures=$((failures+1)); }
+  # (TK-3b) THE FIXTURE-EXCLUSION PROOF. Every specimen above is held in a
+  #         single-quoted assignment. This asserts such a line is INVISIBLE to the
+  #         TK-1 parse, which is what makes "excluded by construction" a measurement
+  #         rather than a claim — and what keeps this group from inflating its own
+  #         population and then grading it.
+  _tk_spec="$(/usr/bin/awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' <<<"  local _tk_bad='  _z=\$(grep -m1 -E \"^k\" f | awk -F= \"{print}\")'")"
+  _st_arm TK TK-3b; [[ "${_tk_spec:-1}" -eq 0 ]] || { echo "FAIL: TK-3b — a specimen HELD in a single-quoted assignment was counted as a real call site; the fixtures are not excluded by construction and TK-1's population is contaminated"; failures=$((failures+1)); }
+
+  # (TK-4) THE BEHAVIOURAL DIFFERENTIAL — the arm that FAILS on the unpatched file.
+  #        TK-1..TK-3 are structural: they grade the text. This one RUNS the
+  #        production line, extracted from this file rather than retyped, against a
+  #        hermetic operator.toml that EXISTS and omits the key — the exact state
+  #        that aborted the tool — and asserts it survives. Its paired arm strips the
+  #        tolerance from that same extracted line and asserts the SAME fixture still
+  #        aborts. That is the sensitivity control: without it a green TK-4 cannot be
+  #        told apart from a fixture that never reproduced the defect.
+  #
+  #        RUN IN A SEPARATE bash PROCESS, deliberately. `( set -e … ) || rc=$?` does
+  #        NOT observe a set -e abort on bash 3.2 (the shell this runner ships
+  #        against): the subshell inherits the enclosing AND-OR list's -e suppression
+  #        and an explicit `set -e` inside does not restore it. Measured on both
+  #        shapes, not assumed. The AI-F harness above uses the subshell form safely
+  #        only because its subject aborts via an explicit `exit`, never via set -e.
+  local _tk_fx _tk_line _tk_new _tk_old _tk_rc_new=0 _tk_rc_old=0
+  _tk_fx="$(/usr/bin/mktemp -d -t keyread-selftest.XXXXXX)"
+  /bin/mkdir -p "$_tk_fx/.config/pmo-platform"
+  /usr/bin/printf 'some_unrelated_key = "x"\n' > "$_tk_fx/.config/pmo-platform/operator.toml"
+  _tk_line="$(/usr/bin/awk '!f && match($0, /^[ \t]*_gh=\$\(/) {print; f=1}' "${BASH_SOURCE[0]}")"
+  _st_arm TK TK-4; if [[ -z "$_tk_line" ]]; then
+    echo "FAIL: TK-4 anti-vacuity — the production key-read line did not extract from this file; the behavioural arm would assert nothing"; failures=$((failures+1))
+  else
+    _tk_new="${_tk_line//\$\{HOME\}/$_tk_fx}"
+    _tk_old="${_tk_new/ || true)/)}"
+    if [[ "$_tk_old" == "$_tk_new" ]]; then
+      echo "FAIL: TK-4 anti-vacuity — stripping the tolerance from the extracted line changed nothing, so both arms below run identical programs and the differential is empty"; failures=$((failures+1))
+    else
+      /bin/bash -c "$(/usr/bin/printf 'set -euo pipefail\n%s\n[[ -z "${_gh:-}" ]] || exit 9\n' "$_tk_new")" || _tk_rc_new=$?
+      /bin/bash -c "$(/usr/bin/printf 'set -euo pipefail\n%s\n' "$_tk_old")" || _tk_rc_old=$?
+      [[ "$_tk_rc_new" -eq 0 ]] || { echo "FAIL: TK-4 — the shipped key read does NOT survive an operator.toml that exists and omits the key (rc $_tk_rc_new); that is the load-time abort this guard exists to close"; failures=$((failures+1)); }
+      [[ "$_tk_rc_old" -ne 0 ]] || { echo "FAIL: TK-4 sensitivity — the SAME fixture with the tolerance stripped did NOT abort (rc 0); the fixture does not reproduce the defect, so TK-4's clean result is a broken probe rather than evidence"; failures=$((failures+1)); }
+    fi
+  fi
+  _st_witness TK 5
+  /bin/rm -rf "$_tk_fx" 2>/dev/null || true
+
+  # ─── GROUP-EXECUTION WITNESS GATE (#6255 F-01) ─────────────────────────────
+  # Turns every "… validated (…)" claim below from an unconditional echo into a
+  # checked one. Both sets are DERIVED from this file and never restated here:
+  # the CLAIMED ids from the emitter call sites, the PLANTED ids from the
+  # recorder call sites. Three arms, because a derived set fails in three ways —
+  # the extraction stops matching (anti-vacuity), a claim is added with no
+  # recorder planted anywhere (static parity), or a planted recorder never
+  # executed because the group's arms did not (runtime parity, the defect this
+  # gate exists to close). Placed ABOVE the failures check deliberately: an
+  # unwitnessed claim then reports through the ordinary FAIL machinery, naming
+  # the group, rather than needing a second reporting path of its own.
+  #
+  # Both extractions are LINE-ANCHORED to a call site so prose cannot inject a
+  # phantom id and the extractor's own pattern line cannot match itself. Both
+  # read here-strings rather than pipes, per this file's SIGPIPE convention.
+  local _gw_claimed _gw_planted _gw_id _gw_nclaim _gw_nplant
+  _gw_claimed="$(/usr/bin/grep -oE '^[[:space:]]*_st_claim [A-Za-z0-9._-]+' "${BASH_SOURCE[0]}" | /usr/bin/awk '{print $NF}' | /usr/bin/sort -u || true)"
+  _gw_planted="$(/usr/bin/grep -oE '^[[:space:]]*_st_witness [A-Za-z0-9._-]+' "${BASH_SOURCE[0]}" | /usr/bin/awk '{print $NF}' | /usr/bin/sort -u || true)"
+  _gw_nclaim="$(grep_count . <<<"$_gw_claimed")"
+  _gw_nplant="$(grep_count . <<<"$_gw_planted")"
+  [[ "$_gw_nclaim" -gt 0 ]] || { echo "FAIL: witness gate ANTI-VACUITY — the claimed-group extraction over this file returned NOTHING, so the parity arms below would check zero groups; the emitter's call-site shape changed, or this file was unreadable at \${BASH_SOURCE[0]}"; failures=$((failures+1)); }
+  [[ "$_gw_nplant" -gt 0 ]] || { echo "FAIL: witness gate ANTI-VACUITY — the planted-witness extraction over this file returned NOTHING; with both sets empty the static-parity arm is satisfied by having nothing to compare"; failures=$((failures+1)); }
+  while IFS= read -r _gw_id; do
+    [[ -n "$_gw_id" ]] || continue
+    /usr/bin/grep -qx -- "$_gw_id" <<<"$_gw_planted" || { echo "FAIL: witness gate STATIC parity — group '$_gw_id' prints a 'validated' claim but NO witness is planted for it anywhere in this file; plant one as the LAST statement of that group's arm region"; failures=$((failures+1)); }
+    case " ${_ST_GROUP_WITNESS} " in
+      *" ${_gw_id} "*) : ;;
+      *) echo "FAIL: witness gate — group '$_gw_id' claims its arms were validated, but they left NO witness in this run: the group did not execute. Its extraction line is not evidence of execution and never was (#6255 F-01); this gate is"; failures=$((failures+1)) ;;
+    esac
+  done <<<"$_gw_claimed"
+
+  # ─── PER-ARM WITNESS GATE (#6255 F-01 remediation) ─────────────────────────
+  # The gate above is GROUP-granular, which left the arm-level hole it could not
+  # see: the group recorder sits after a group's last arm, so disabling ONE arm
+  # still reaches it and the run stays byte-identical to a healthy one. This gate
+  # grades the arms themselves. The declared roster is DERIVED from this file's
+  # recorder call sites — never restated — and every declared arm must have
+  # executed, so a disabled arm reddens and names itself and its group.
+  #
+  # Five arms, because a derived roster fails in five ways, and each of the five
+  # is a way THIS GATE could silently stop grading:
+  #   anti-vacuity   the extraction stopped matching, so the loop checks nothing
+  #   duplicate      two arms declare one label; `sort -u` collapses them and
+  #                  either one ticking satisfies both
+  #   orphan group   an arm names a group that prints no claim — a typo silently
+  #                  moves an arm OUT of the roster of the group that claims it
+  #   runtime parity the defect itself: a declared arm that did not execute
+  #   capability     the membership predicate must be able to answer NO — a
+  #                  predicate that always answers YES makes the parity loop a
+  #                  green echo, which is the exact shape this release exists to
+  #                  remove. Driven on a synthetic pair every run, not once under
+  #                  one-time mutation.
+  local _ga_decl _ga_uniq _ga_graded _ga_pair _ga_n _ga_nuniq _ga_g _ga_a
+  _ga_decl="$(/usr/bin/grep -oE '^[[:space:]]*_st_arm [A-Za-z0-9._-]+ [A-Za-z0-9._-]+' "${BASH_SOURCE[0]}" | /usr/bin/awk '{print $2"/"$3}' || true)"
+  _ga_uniq="$(/usr/bin/sort -u <<<"$_ga_decl" || true)"
+  _ga_graded="$(/usr/bin/grep -v '^__gatecontrol__/' <<<"$_ga_uniq" || true)"
+  _ga_n="$(grep_count . <<<"$_ga_decl")"
+  _ga_nuniq="$(grep_count . <<<"$_ga_uniq")"
+  [[ "$_ga_n" -ge 70 ]] || { echo "FAIL: per-arm witness gate ANTI-VACUITY — the declared-arm extraction over this file returned ${_ga_n} arm(s), below the floor of 70; the recorder's call-site shape changed or the arms were removed wholesale, and the parity arm below would grade almost nothing"; failures=$((failures+1)); }
+  [[ "$_ga_n" -eq "$_ga_nuniq" ]] || { echo "FAIL: per-arm witness gate DUPLICATE — ${_ga_n} recorder call site(s) collapse to ${_ga_nuniq} distinct group/arm pair(s); a duplicated label lets EITHER arm satisfy BOTH, so one of them can be disabled undetected. Give each arm its own label"; failures=$((failures+1)); }
+  # Capability to fail, re-demonstrated on EVERY run over the same predicate the
+  # parity arm uses. The positive limb keeps the negative honest: without it a
+  # predicate that always answers NO would satisfy the negative limb and redden
+  # every real arm, which is a different broken gate rather than a working one.
+  _st_arm __gatecontrol__ ticked
+  _st_arm_ran __gatecontrol__ ticked || { echo "FAIL: per-arm witness gate CAPABILITY (positive) — the arm-membership predicate answered NO for a pair recorded one line earlier; it cannot recognise an arm that DID run, so every parity finding below is a false positive"; failures=$((failures+1)); }
+  ! _st_arm_ran __gatecontrol__ never-ticked || { echo "FAIL: per-arm witness gate CAPABILITY (negative) — the arm-membership predicate answered YES for a pair that was NEVER recorded; it cannot return false, so the parity arm below is an unconditional pass and this gate grades nothing (#6255 F-01 — a gate that cannot fail is the defect it exists to close)"; failures=$((failures+1)); }
+  while IFS= read -r _ga_pair; do
+    [[ -n "$_ga_pair" ]] || continue
+    _ga_g="${_ga_pair%%/*}"; _ga_a="${_ga_pair#*/}"
+    /usr/bin/grep -qx -- "$_ga_g" <<<"$_gw_claimed" || { echo "FAIL: per-arm witness gate ORPHAN GROUP — arm '$_ga_a' records itself under group '$_ga_g', which prints no 'validated' claim; a mistyped group id silently removes the arm from the roster of the group that DOES claim it, so that group's arm coverage drops without any finding"; failures=$((failures+1)); }
+    _st_arm_ran "$_ga_g" "$_ga_a" || { echo "FAIL: per-arm witness gate ARM parity — group '$_ga_g' arm '$_ga_a' is declared in this file but left NO witness in this run: that arm did not execute. Its group's claim ENUMERATES it, and the enumeration is not evidence of execution (#6255 F-01)"; failures=$((failures+1)); }
+  done <<<"$_ga_graded"
+  # ARM COUNT — the subtraction arm. Deleting an arm together with its recorder
+  # shrinks the derived roster and the runtime witness set together, so the parity
+  # arm above stays green while the group's claim keeps enumerating an arm that no
+  # longer exists. The count each group declares at its witness call is what
+  # notices that, and the comparison runs in both directions so a stale
+  # declaration is a finding too.
+  local _ga_cg _ga_have _ga_want
+  while IFS= read -r _ga_cg; do
+    [[ -n "$_ga_cg" ]] || continue
+    # Exact prefix by field split, not a regex: a group id carries `.` and `-`,
+    # and `^4c.5b/` as a pattern would also match a group that does not exist.
+    _ga_have="$(/usr/bin/awk -F/ -v g="$_ga_cg" '$1==g {n++} END {print n+0}' <<<"$_ga_graded")"
+    _ga_want=""
+    case " ${_ST_GROUP_ARMCOUNT} " in
+      *" ${_ga_cg}="*) _ga_want="$(/usr/bin/awk -v g="$_ga_cg" '{for(i=1;i<=NF;i++){split($i,p,"=");if(p[1]==g)print p[2]}}' <<<"$_ST_GROUP_ARMCOUNT")" ;;
+    esac
+    if [[ -z "$_ga_want" ]]; then
+      echo "FAIL: per-arm witness gate ARM COUNT — group '$_ga_cg' prints a 'validated' claim and declares ${_ga_have} arm(s) by recorder call site, but its witness call declares NO arm count; without one, deleting an arm and its recorder together shrinks both rosters and passes silently. Pass the count as the second argument of that group's witness call"; failures=$((failures+1))
+    elif [[ "$_ga_have" -ne "$_ga_want" ]]; then
+      echo "FAIL: per-arm witness gate ARM COUNT — group '$_ga_cg' declares ${_ga_want} arm(s) at its witness call but only ${_ga_have} recorder call site(s) exist in this file: an arm was removed (or the declaration is stale). Its claim still enumerates every arm either way (#6255 F-01)"; failures=$((failures+1))
+    fi
+  done <<<"$_gw_claimed"
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failures)" >&2
     exit 1
@@ -14087,12 +15250,12 @@ EOF
   echo "  phase_append_release_digest + phase_append_release_index + phase_append_changelog validated (#667 F3/F6 — DIGEST H3 under topmost H2 / INDEX 6-col single-row / idempotency; #2048 — version-less marker + _unversioned notes link + marker-aware idempotency + CHANGELOG SKIP; #4455 — all three entries PROJECTED by generate_release_index.py, versioned CHANGELOG block lands above the prior entry WITH its separating blank line intact, re-run SKIPs, and a non-owner/repo-shaped REPO_SLUG FAILs before writing a broken Release URL)" >&2
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped; #3715 two-surface — archived body resolves to its segment and the hot ledger is left untouched / cross-surface idempotency re-run SKIPs without duplicating / a genuine **Result:** absence still hard-FAILs naming every surface searched / no sibling leak within a segment); Outcome KEY GRAMMAR validated (#4222 — k1 a QUALIFIED key is recognized and REJECTED at --apply leaving the record byte-unchanged, with an EXECUTABLE SENSITIVITY arm re-demonstrating on every run that the pre-fix bare-literal probe reads the same fixture as ABSENT and would inject the second line / k2 the bare path is unregressed (SKIP, no write) with a SPECIFICITY arm proving an Outcome-less block still injects exactly one / k3 phase 6.8 anchors under a qualified key, asserted on the RAW line because the field-name class used elsewhere cannot see parentheses, with the bare-key fallback as its control / k4 ONE RESOLVER, TWO SITES: extending the shared key constant moves BOTH the 6.5 probe and the 6.8 anchor, and at the default constant the same key is accepted at NEITHER — a one-site fix fails here / k5 grammar non-collision asserted in BOTH directions against the real sibling field **Outcome rationale:** / k6 raw-prefix fidelity — an INDENTED key classifies and anchors through the UNCHANGED primitive, with the unindented twin as control / k7 both-present classifies DUPLICATE and FAILs writing nothing, control: bare-only raises no duplicate diagnostic / k8 three PRESENT-BUT-UNPARSEABLE shapes (nested paren, doubled space, missing space) classify UNPARSEABLE rather than ABSENT and stop the write, control: a genuine absence still injects / k9 NO EMPTY ANCHOR REACHES THE PRIMITIVE — an unresolvable anchor FAILs loudly instead of landing the field at the top of the block, paired with an ANTI-VACUITY arm that hands the unchanged primitive an empty anchor and demonstrates it exits 0 writing to the top, so k9 is a measurement and not a tautology / k10 MODE: --dry-run returns 0 and marks WARN naming the condition that FAILS at --apply, control: the same fixture at --apply returns 3 and marks FAIL / k11 the governance constant is hard-assigned, not env-overridable, scoped to the production region with an anti-vacuity control on the known-bad form)" >&2
   echo "  phase_inject_velocity_field + phase_append_release_learnings validated (velocity — field ORDER 'Cycle-Time Velocity Result' on a clean block / no sibling leak / idempotent re-run / bolded-numeral value REJECTED writing nothing / empty capture at exit 0 degrades to an explicit N/A never a bare field / non-conformant existing field SKIPs WITH the warning, conformant control WITHOUT it; CO-LOCATION — an archived block's field lands in the SEGMENT beside its own **Result:** and the hot stub stays at 0, cross-surface re-run SKIPs, dry-run names the segment and prints the RESOLVED bytes. learnings — sibling H4 placed IMMEDIATELY after its Deployment Log block / body intact through the sentinel capture / idempotent re-run / whitespace-only render at exit 0 FAILs writing nothing / D-1 zero-source-events BLOCKS the close and prints the capture remedy, >0-events control PASSes / over an ARCHIVED block the block still lands in the HOT ledger and every segment stays at 0 Release Learnings — RECORDS_POLICY KEEP_CLASS. A7 capture gate — the SAME 0-source-event condition read at Phase 2 by _learnings_capture_gap reports a gap, >0-events control does NOT / an already-placed block is NOT a gap even under the 0-event stub, block-removed sensitivity IS / neither a missing synthesizer nor a whitespace-only render escalates to a gap / phase_preflight actually CALLS the predicate and is dispatched before create_chore_branch and transition_release_log, both derived from the shipped text with fabricated-symbol controls / n.1 THE MANDATED WARN SHAPE — the Collective-Review dry-run posture asserted over that same shipped text in three limbs, one per half of the ruling: the WARN result TOKEN (a regression back to PASS reddens here and nowhere else), the NON-BLOCKING return bound to the WARN line BY CONTEXT (phase_preflight carries two bare 'return 0' lines, so an unbound grep measures nothing), and the TAIL CLAUSE naming what FAILS at --apply, with a fabricated-result-token specificity control / GATE-BACKSTOP PARITY over the placed x synth-absent x synth-empty x render-0 x render-N matrix — a gap implies 6.7 returns 3, with a non-vacuity control asserting the antecedent actually fired)" >&2
-  echo "  phase_inject_velocity_field EXIT-CLASS contract validated (#4927, group 4c.5b — this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): (p) a producer exit 2 FAILs at --apply, returns 3 so the runner halts, writes NOTHING, and quotes the producer's OWN stderr rather than a generic message — with a control proving the same fixture PASSes and writes exactly one field under a conformant producer, so the arm is not just a phase that always fails / (q) the same exit 2 under --dry-run marks a NON-blocking WARN that names the condition failing at --apply, and still writes nothing / (r) exit 2 is never laundered into the explicit 'N/A' form — a refusal to measure must not be recorded as a measurement — with a SENSITIVITY arm requiring exit 1 to STILL degrade to N/A at PASS, so a blanket fail-on-any-nonzero phase reddens here instead of passing / (s) a successful run's stderr still reaches the run report, so a DEGRADED Phase-A2 planned-recovery (which under-reports 'planned' and makes the ratio look healthier than the truth) is visible rather than discarded, with a control proving a silent producer manufactures no note" >&2
+  _st_claim 4c.5b "  phase_inject_velocity_field EXIT-CLASS contract validated (#4927, group 4c.5b — this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): (p) a producer exit 2 FAILs at --apply, returns 3 so the runner halts, writes NOTHING, and quotes the producer's OWN stderr rather than a generic message — with a control proving the same fixture PASSes and writes exactly one field under a conformant producer, so the arm is not just a phase that always fails / (q) the same exit 2 under --dry-run marks a NON-blocking WARN that names the condition failing at --apply, and still writes nothing / (r) exit 2 is never laundered into the explicit 'N/A' form — a refusal to measure must not be recorded as a measurement — with a SENSITIVITY arm requiring exit 1 to STILL degrade to N/A at PASS, so a blanket fail-on-any-nonzero phase reddens here instead of passing / (s) a successful run's stderr still reaches the run report, so a DEGRADED Phase-A2 planned-recovery (which under-reports 'planned' and makes the ratio look healthier than the truth) is visible rather than discarded, with a control proving a silent producer manufactures no note"
   echo "  phase_inject_close_class_telemetry_field validated (#4437 — clean block PASSes with the field positioned after **Outcome rationale:** and no sibling leak / idempotent re-run SKIPs / fallback anchor lands after **Outcome:** and names which anchor it used / VACUITY PAIR: an all-N/A-but-conformant line is WRITTEN and carries the no-computed-ratio warning WITH the disposition read from the emitted line, measured-line control carries NO warning / a line missing § 3.2 slots FAILs writing nothing / an empty capture at exit 0 FAILs writing nothing / producer exit 2 escalates as a source-integrity condition writing nothing / a non-executable producer SKIPs rather than hand-composing a field that would fabricate its own mechanism claim / dry-run prints the RESOLVED bytes and writes nothing / CO-LOCATION: an archived block's field lands in the SEGMENT beside its own **Result:** with the hot stub at 0, and the cross-surface re-run SKIPs; #5288 AI-028 NOT-PRODUCED MARKER STAGING — j.1 drives the REAL 6.8 call site over an archived block with the producer unavailable and asserts the resolved SEGMENT reaches TOUCHED_ARCHIVE_SEGMENTS, the array files=() consumes, with a sensitivity floor proving the marker genuinely reached the segment (pre-fix the marker still lands on disk, so the differential isolates the LOST APPEND alone) and a HOT-LEDGER control proving the by-design skip is preserved and the recorder is not appending every target it is handed / j.2 STRUCTURAL over the shipped text of BOTH calling phases — neither may invoke the writer inside a command substitution, read from the FUNCTION BODIES so the needle cannot match itself, with per-site vacuity floors and a capability-to-fail arm matching a CONSTRUCTED bad call site so a clean reading is a measurement)" >&2
-  echo "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache); check-5 settle POLL validated (#4416, legs f-j PLUS the F-01 remediation leg i.2 — six arms, not five; this clause is the settle group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which legs f-j and i.2 never executed: f AC2 an injected 5-read search-index lag, longer than the pre-change single-retry window, still converges to PASS and RENDERS its settle figure in both the row and the phase detail — the v4.02 failure reproduced and closed / g AC3 THE NON-VACUITY CONTROL, same fixture with the budget shrunk BELOW the lag: exhaustion must read PARTIAL and NAME the budget, never PASS, so f is proven capable of failing / h AC1 structural self-parse behind an anti-vacuity floor — the attempt bound exists AND is a loop terminal AND the poll loop exists, with the pre-change 'Retry ONCE' form asserted ABSENT so no limb is satisfiable by the old code / i AC4 an out-of-scope straggler is still reported at once, asserted on the CHECK-5-SCOPED instrument ('check-5 settled at poll 0/15') because a PARTIAL row alone cannot distinguish reported-now from reported-after-the-whole-budget, and because the stub's own 'calls' counter is PHASE-scoped rather than check-5-scoped — the gate-passage-proof rung issues a third 'issue list' after check 5 has rendered — so that counter carries an independent CEILING arm (<= 3 = detect + check-5 + gate-passage-proof) stated as the bound it really is; leg (f)'s 'poll 5/15' is the moving control that makes the zero a real reading / i.2 THE F-01 REMEDIATION ARM, and the only one that discriminates the render guard: leg (i) grades the exhaustion suffix but can only ever exercise it at polls=0, where it is unreachable BY CONSTRUCTION under either guard, which is how '-gt 0' survived it. i.2 drives the one separating state — an out-of-scope straggler surfacing MID-POLL, in-scope #401 holding the poll open across a 3-read lag while #999 breaks the loop at 3 of 15 attempts with the budget never waited — behind an anti-vacuity floor on 'poll 3/15' whose moving controls are (f)'s 'poll 5/15' and (i)'s 'poll 0/15'. Twelve fixtures under both guards: 12/12 pass under the loop's own '-ge' terminal, exactly one fails under '-gt 0' / j AC5 the group stays hermetic and instant at DELAY=0, which only an ATTEMPT bound makes structurally possible)" >&2
+  _st_claim 4d-settle "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache); check-5 settle POLL validated (#4416, legs f-j PLUS the F-01 remediation leg i.2 — six arms, not five; this clause ENUMERATES the settle group's legs and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when legs f-j and i.2 leave no witness: f AC2 an injected 5-read search-index lag, longer than the pre-change single-retry window, still converges to PASS and RENDERS its settle figure in both the row and the phase detail — the v4.02 failure reproduced and closed / g AC3 THE NON-VACUITY CONTROL, same fixture with the budget shrunk BELOW the lag: exhaustion must read PARTIAL and NAME the budget, never PASS, so f is proven capable of failing / h AC1 structural self-parse behind an anti-vacuity floor — the attempt bound exists AND is a loop terminal AND the poll loop exists, with the pre-change 'Retry ONCE' form asserted ABSENT so no limb is satisfiable by the old code / i AC4 an out-of-scope straggler is still reported at once, asserted on the CHECK-5-SCOPED instrument ('check-5 settled at poll 0/15') because a PARTIAL row alone cannot distinguish reported-now from reported-after-the-whole-budget, and because the stub's own 'calls' counter is PHASE-scoped rather than check-5-scoped — the gate-passage-proof rung issues a third 'issue list' after check 5 has rendered — so that counter carries an independent CEILING arm (<= 3 = detect + check-5 + gate-passage-proof) stated as the bound it really is; leg (f)'s 'poll 5/15' is the moving control that makes the zero a real reading / i.2 THE F-01 REMEDIATION ARM, and the only one that discriminates the render guard: leg (i) grades the exhaustion suffix but can only ever exercise it at polls=0, where it is unreachable BY CONSTRUCTION under either guard, which is how '-gt 0' survived it. i.2 drives the one separating state — an out-of-scope straggler surfacing MID-POLL, in-scope #401 holding the poll open across a 3-read lag while #999 breaks the loop at 3 of 15 attempts with the budget never waited — behind an anti-vacuity floor on 'poll 3/15' whose moving controls are (f)'s 'poll 5/15' and (i)'s 'poll 0/15'. Twelve fixtures under both guards: 12/12 pass under the loop's own '-ge' terminal, exactly one fails under '-gt 0' / j AC5 the group stays hermetic and instant at DELAY=0, which only an ATTEMPT bound makes structurally possible)"
   echo "  post_gate_passage_proof three-rung target ladder validated (#3819 — T-13 rung 1 resolves a CLOSED Stage-13 sub-task via --state all and does NOT fall through to the PR / rung 2 posts to the release PR naming the OBSERVED rung-1 reason / rung 3 MANUAL names BOTH attempted targets; T-14 two collect_open_release_issues calls in one run keep EXCLUDED_DETAIL undoubled, COLLECTED_OPEN_ISSUES identical and resolve_stage13_subtask stable, with a non-empty-exclusion anti-vacuity control)" >&2
-  echo "  phase_action_item_gate validated (#4439, group AI — 21 arms; this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): A and B are each other's control over ONE differential harness where only the ledger changes — a gate that never blocks fails A, one that always blocks fails B, one reading the wrong path resolves NOT-RECORDED for both and fails BOTH / B2 decoy: a terminal ledger carrying the literal words 'open' and 'in-flight' in trigger_detail still resolves RESOLVED, so the gate is column-addressed and not row-pattern-matched / all four verdict states drive distinct fixtures and are asserted on the STATE_AI_GATE global rather than the detail prose — UNRESOLVED (A) · RESOLVED (B, B2) · NOT-RECORDED (C unattested blocks, C2 attested passes WARN with the operator-actor attestation EMITTED carrying its cause and the spec subtype) · EMPTY-LEDGER (D unattested blocks, D2 attested round-trips the second cause) / E the two SURFACE states must resolve DISTINCT values, because comparing detail strings passes on any two different sentences / E2 an unlicensed attestation cause does NOT clear a SURFACE state / F EXECUTES the two dispatch lines lifted VERBATIM from this file's own text, refusing to pass unless each needle resolves to exactly one top-level line, under three mutually-controlling limbs — F1 blocking gate leaves the close UNFIRED at exit 3, F2 SENSITIVITY a passing gate does fire it (without which F1's clean result is meaningless), F3 NEGATIVE CONTROL a constructed '|| true' line must let the close through (without which a fail-closed gate is indistinguishable from a no-op one) — so capability-to-fail is re-demonstrated on EVERY run, not only under one-time mutation / F4 whole-block invariant: every top-level dispatch line carries the fail-closed guard, with an anti-vacuity floor on the parse and a specificity control proving the filter rejects an unguarded line / G doc<->code parity on the canonical Procedure 7a predicate across the fixture set, with an anti-vacuity floor on the extraction and a sensitivity arm requiring >=4 distinct STATEs / H --dry-run never returns non-zero yet still EVALUATES, and names the condition that would FAIL at --apply / I an idempotent re-run over an already-closed milestone, where an UNRESOLVED verdict is the close-before-verdict shape itself / J --no-merge still evaluates and records rather than blocks / K Verification row 6 reads the Phase-12.9 GLOBAL — unset renders UNVERIFIED never a green cell, mutating the global moves the cell, and phase_run_verification is asserted NOT to re-evaluate the predicate after the close / L an attestation does NOT clear an UNRESOLVED verdict — an open row is dispositioned, never attested away / P operator-instance path tokenisation, with a sensitivity arm proving the leak probe can match its own needle" >&2
-  echo "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT)" >&2
+  _st_claim AI "  phase_action_item_gate validated (#4439, group AI — 28 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): A and B are each other's control over ONE differential harness where only the ledger changes — a gate that never blocks fails A, one that always blocks fails B, one reading the wrong path resolves NOT-RECORDED for both and fails BOTH / B2 decoy: a terminal ledger carrying the literal words 'open' and 'in-flight' in trigger_detail still resolves RESOLVED, so the gate is column-addressed and not row-pattern-matched / all five verdict states drive distinct fixtures and are asserted on the STATE_AI_GATE global rather than the detail prose — UNRESOLVED (A) · RESOLVED (B, B2) · NOT-RECORDED (C unattested blocks, C2 attested passes WARN with the operator-actor attestation EMITTED carrying its cause and the spec subtype) · EMPTY-LEDGER (D unattested blocks, D2 attested round-trips the second cause) · UNCLASSIFIABLE (M blocks and NAMES the offending row and its raw value, with a specificity limb proving the enumerator selects the unreadable set and not the terminal one, and the all-terminal ledger re-driven on the same harness as its paired negative control) / E the two SURFACE states must resolve DISTINCT values, because comparing detail strings passes on any two different sentences / E2 an unlicensed attestation cause does NOT clear a SURFACE state / F EXECUTES the two dispatch lines lifted VERBATIM from this file's own text, refusing to pass unless each needle resolves to exactly one top-level line, under three mutually-controlling limbs — F1 blocking gate leaves the close UNFIRED at exit 3, F2 SENSITIVITY a passing gate does fire it (without which F1's clean result is meaningless), F3 NEGATIVE CONTROL a constructed '|| true' line must let the close through (without which a fail-closed gate is indistinguishable from a no-op one) — so capability-to-fail is re-demonstrated on EVERY run, not only under one-time mutation / F4 whole-block invariant: every top-level dispatch line carries the fail-closed guard, with an anti-vacuity floor on the parse and a specificity control proving the filter rejects an unguarded line / G doc<->code parity on the canonical Procedure 7a predicate across the fixture set, with an anti-vacuity floor on the extraction and a sensitivity arm requiring >=5 distinct STATEs over a fixture count DERIVED from the loop rather than restated in the message / M-N-O-Q-R-S-T MEMBERSHIP: the residue of the recognised set is its own BLOCKING state rather than the implicit else of a two-value comparison, which counted a typo, a case variant, a foreign vocabulary and an out-of-range field as RESOLVED — M an unadmitted value blocks and names itself, with the all-terminal ledger as its paired negative control / N case-folding NORMALISES rather than rejects, so an uppercase OPEN resolves UNRESOLVED and a fold-and-reject implementation cannot pass M / O the two section-2.1a status aliases stay ADMITTED, without which every legacy re-run blocks / Q the ARITY class in BOTH its mechanisms, the one witnessed live: at arity<=10 field 11 does not exist and reads EMPTY, at arity 11 the row-terminating pipe stays glued to the last field and reads 'open |' NON-empty, and the detail carries fields:N so a dropped column is distinguishable from a mistyped word / R an unreadable ledger cannot be attested away, the structural sibling of L / S row 6 renders the fifth state WITH its counts instead of falling to the default that asserts the gate did not run, with the still-reachable default as its control / T PRECEDENCE: a ledger carrying both classes renders UNRESOLVED and carries BOTH enumerations in one detail, because the state selects the operator's remedy and reversing it would drop the open enumeration from the ledgers that most need it / H --dry-run never returns non-zero yet still EVALUATES, and names the condition that would FAIL at --apply / I an idempotent re-run over an already-closed milestone, where an UNRESOLVED verdict is the close-before-verdict shape itself / J --no-merge still evaluates and records rather than blocks / K Verification row 6 reads the Phase-12.9 GLOBAL — unset renders UNVERIFIED never a green cell, mutating the global moves the cell, and phase_run_verification is asserted NOT to re-evaluate the predicate after the close / L an attestation does NOT clear an UNRESOLVED verdict — an open row is dispositioned, never attested away / P operator-instance path tokenisation, with a sensitivity arm proving the leak probe can match its own needle"
+  _st_claim 4e-c-j "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT; #6255, arms c-j — this clause ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when the arms leave no witness: TERMINAL STATES — (e) an ALREADY-MERGED PR PASSes on the FIRST read with ZERO merge attempts and its detail carries the elapsed figure AC-4 is graded on, which no earlier version of this phase emitted at all / (f) a CLOSED-unmerged PR FAILs and its detail NAMES the closed-without-merging case, driven on the deliberately MERGEABLE-looking closed shape because the CONFLICTING one trips the pre-existing arm by accident, and asserted on the detail because a bare FAIL is satisfied by the PRE-FIX timeout path / (g) THE PER-ITERATION PIN: a merge landing MID-POLL is recognised on the SECOND read, so a pre-loop-only implementation passes (e) and fails here — budgeted at MERGE_TIMEOUT=2 because the bound admits ceil(TIMEOUT/STEP) iterations and a 1/1 arm would redden against a CORRECT implementation / RE-PROBE — (h) a failed gh pr merge over a PR that DID merge PASSes with the merge ATTEMPTED once and a detail naming the unobserved-merge case, (h2) its NEGATIVE CONTROL: the same failed merge over a STILL-OPEN PR must still FAIL, without which an implementation that PASSes on any merge failure satisfies (h) / (i) THE WIDTH PIN over the shipped text of the one shared reader, three-field --json list and three-field --jq template, behind an anti-vacuity floor on the extraction and TWO specificity controls on constructed FOUR-field lines that both needles must reject / BUDGET EXHAUSTION — (j) AC-2's timeout limb, which every arm above leaves ungraded: a PR BLOCKED on every read must spend the budget and then FAIL with a detail NAMING the timeout ('merge state still=') and ZERO merge attempts, asserted on the detail because a bare FAIL is satisfied by (f)'s CLOSED arm and by the CONFLICTING HALT, and on the merge counter because removing the post-loop guard falls straight through to gh pr merge and launders the spent budget into a PASS — measured: with that guard replaced by 'if false' the whole suite stayed at exit 0 / and every arm c-j counts BOTH pr view and pr merge, because post-fix a PASS is reachable through the terminal arm and no longer proves on its own that a merge was attempted)"
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
@@ -14109,17 +15272,18 @@ EOF
   echo "  plan-identity close gate validated (ADR-092 Phase 9.3 — PI-0 clean PASS / PI-1 a this-version placement finding BLOCKS / PI-1b the expected-path needle carries INDEPENDENT reach (every finding class today also names the version, so PI-1 alone proves nothing about it) / PI-2 audit-baseline control: another release does NOT block / PI-3 exit-3 fails loud / PI-4 THE UNMASKING ARM: a plan NAMED FOR THE WRONG VERSION emits its ACTUAL path, which the expected-path needle cannot match — only the version-keyed needle catches it, so a single-needle caller fails here / PI-4b same shape for MAJOR-DIR / PI-4c both version-needle boundary guards / PI-5 version-less SKIPs / PI-6 + PI-7 needle INDEPENDENCE in both directions — and PI-7 is the standing measurement this phase exists for: a plans-path finding provably does NOT reach the note-path needle, so homing a plan limb inside check_note_content() is fail-open / PI-8 advisories are filtered before the needles, so a known residual cannot false-block / PI-9 missing tooling FAILs / PI-10 the phase is DISPATCHED and in the right window (transition_release_log < 9.3 < commit_chore_pr), with a fabricated-name control / PI-11 the hand-maintained usage()/--help phase roster carries the 9.3 row, with the shipped 9.2 row as its control)" >&2
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  Surface-1 provenance token validated (#4732 — BOTH ARMS of the detection question, offline on fixtures: (e) CREATED on the State-0 create path / (f) NO-OP on a State-2 fixture whose body is extracted with the phase's OWN expression and asserted non-empty, so the no-op is genuine rather than a '' vs '' comparison / (g) EDITED on a State-1 differing-body fixture / (h) SPECIFICITY: neither found arm reports CREATED, without which a stub emitting CREATED unconditionally satisfies (e) and the suite is vacuous / (i) AGGREGATION NON-REGRESSION, the load-bearing arm: the create path keeps outcome token PASS, so a drift-tool exit 3 still reaches the WARN limb at :6224 and not the N/A limb at :6222 — this arm FAILS if anyone later promotes CREATED to its own mark_phase token and silently inverts :6221)" >&2
-  echo "  §5.1 empty-body guard + conformance-fixture binding validated (#4912, group 4h-e..j — six arms; this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): (e) an EMPTY strip aborts the EDIT path and marks publish FAIL, asserted on the STUB'S ARGV FILE — gh release edit must never have been INVOKED, because reporting after an irreversible overwrite is a report and not a guard, and GitHub keeps no Release-body history to revert / (f) the ANTI-VACUITY twin for (e) over the SAME stub and version with a well-formed note: the edit must be REACHED, the H1 must survive the strip and the frontmatter must NOT — without it (e) is satisfied by a stub that cannot invoke gh at all, and the raw-YAML-publish defect goes ungraded / (g) the CREATE path is the second call site and takes the same rule, asserted on its own argv file rather than on (e)'s / (h) the anti-vacuity twin for (g), same shape, so neither empty-body arm can pass by never reaching gh / (i) the sourced shell transform is bound to the SAME committed fixture that binds both Python mirrors, resolved from SCRIPT_DIR and never REPO_ROOT because the arms above reassign REPO_ROOT to a sandbox, behind a >=7-case iteration floor so a truncated or absent fixture cannot report clean by iterating zero times / (j) the TRANSFORM-PRESENT guard, graded on the DETAIL rather than on the verdict and that is the whole arm: with the guard removed an undefined function still yields an empty capture, so the empty-body backstop fires and all three verdict assertions pass on unguarded code — measured, not assumed — leaving the detail the only discriminator; the restore is then proven, else every later arm in the suite would be measuring an unset function" >&2
+  _st_claim 4h-e-j "  §5.1 empty-body guard + conformance-fixture binding validated (#4912, group 4h-e..j — six arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): (e) an EMPTY strip aborts the EDIT path and marks publish FAIL, asserted on the STUB'S ARGV FILE — gh release edit must never have been INVOKED, because reporting after an irreversible overwrite is a report and not a guard, and GitHub keeps no Release-body history to revert / (f) the ANTI-VACUITY twin for (e) over the SAME stub and version with a well-formed note: the edit must be REACHED, the H1 must survive the strip and the frontmatter must NOT — without it (e) is satisfied by a stub that cannot invoke gh at all, and the raw-YAML-publish defect goes ungraded / (g) the CREATE path is the second call site and takes the same rule, asserted on its own argv file rather than on (e)'s / (h) the anti-vacuity twin for (g), same shape, so neither empty-body arm can pass by never reaching gh / (i) the sourced shell transform is bound to the SAME committed fixture that binds both Python mirrors, resolved from SCRIPT_DIR and never REPO_ROOT because the arms above reassign REPO_ROOT to a sandbox, behind a >=7-case iteration floor so a truncated or absent fixture cannot report clean by iterating zero times / (j) the TRANSFORM-PRESENT guard, graded on the DETAIL rather than on the verdict and that is the whole arm: with the guard removed an undefined function still yields an empty capture, so the empty-body backstop fires and all three verdict assertions pass on unguarded code — measured, not assumed — leaving the detail the only discriminator; the restore is then proven, else every later arm in the suite would be measuring an unset function / (k)(l)(m) THE TITLE DIMENSION, the arms that make AC-3's title-equality predicate an EXECUTED check rather than an echo inside a markdown fence: (k) SENSITIVITY — a canonical BODY with a stale posted title must still reach gh release edit carrying --title and the NOTE-DERIVED value, asserted on the stub's ARGV FILE because a phase can record any detail string it likes and only the argv shows what was sent; this is the exact input the pre-change no-op condition returned SKIPPED on, which is how a wrong title survived every close / (l) SPECIFICITY over the SAME fixture family with only the posted title changed to agree: the argv file must stay ABSENT and the token must stay SKIPPED — non-vacuous precisely because (k) proved this family CAN reach the edit, and pinning the token is what catches a withhold routed through _s1_outcome_override, which BOTH terminal mark_phase calls read and which would silently flip the no-op branch too / (m) WITHHOLD — a note with no usable H1 must still refresh the BODY while --title is ABSENT from the argv rather than empty (\`--title \"\"\` blanks the posted title, the one-way degradation the rule exists to prevent), and the outcome token must stay PASS: ADR-148 :91 forbids moving it, and phase 15.6 branches on pub_result != PASS, so a WARN here would report an edited Release as 'Surface 1 not emitted this run' and suppress the body-drift verdict on exactly the malformed-note input where it matters most. All three fixtures' view stubs are OPERAND-AWARE (--json body vs --json name); the undiscriminated shape they replaced returned the whole body as the posted title, which would have reddened (f) and graded (g)'s title dimension against a value no Release ever carries"
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  close-out report phase set is RECORD-DERIVED validated (#4773 — every recorded phase renders against a denominator parsed from this file's own mark_phase subjects (pre-fix: 3 missing — inject_velocity_field / append_release_learnings / audit_epic_rollup) / a phase in NO enumeration still renders (AC-2) / an unmarked name does NOT render (anti-vacuity) / post_gate_passage_proof renders AND is asserted definition-less, so a definition-derived set cannot silently drop it / a double-marked name renders ONE row carrying the FIRST result / the halted marker fires on a FAIL-terminated run and is absent on a clean one / DISPATCH<->RECORD cross-check: every dispatched phase is a record subject, with vacuity floors on both parses plus sensitivity and specificity arms — the one invariant no seeded arm can reach / JSON twin carries the same de-duplicated set with pre-existing keys intact)" >&2
   echo "  Gate-Passage-Proof **Chore PR:** field renders ONCE on BOTH paths (#4322 — b1 POPULATED path, the path the pre-existing report arms never exercised: exactly one **Chore PR:** line carrying the number once, and the doubled form absent / b2 UNSET path, the previously-covered one, renders the fallback verbatim with no '#' / b3 SPECIFICITY on a NON-numeric fixture, because '#3697' contains '3697' so 'no bare number' is unfalsifiable on a numeric input: the value occurs exactly once on the line, counted in PURE BASH by length-delta rather than by grep_count -o, which counts LINES on this suite's BSD grep and so returns the PASS value on the doubled form — paired with the anti-vacuity control asserting the identical computation returns 2 over the pre-fix expansion / b4 EXECUTABLE SENSITIVITY: the pre-fix construct is expanded from a single-quoted source fixture and must BOTH reproduce the doubling AND be rejected by b1's matcher, without which b1's green result is uninformative / b5 REINTRODUCTION GUARD: the production region above self_test carries ZERO same-variable paired set/unset expansions on CHORE_PR_NUMBER, with an anti-vacuity control asserting the same matcher returns 1 on the known-bad source form, so the zero is a measurement rather than a broken probe / b6 the out-of-scope --no-merge deferral message's solitary set-arm is asserted unchanged in BOTH directions, so the fix did not generalize into a correct site / b7 AC-5: with the **Chore PR:** line stripped, two renders differing only in CHORE_PR_NUMBER are byte-identical, preceded by the anti-vacuity arm that the unstripped renders differ — b7 is invariant to a render-line revert BY DESIGN, so the executed mutation-kill set is b1/b3/b5)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
   echo "  JSON report renders valid JSON" >&2
-  echo "  usage block extractable" >&2
+  _st_claim t7-usage "  usage block extractable and not truncated, exit-2 dispatch set named in the render (#5762, Test 7 — this line ENUMERATES the arm's limbs and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this arm when the limbs leave no witness): HEAD anchor 'Usage:' / TAIL anchor the exit-codes block's '3 = ' entry, which is the last line usage() renders, replacing the '--self-test' needle that bound at render row 4 and therefore covered nothing below it / LIMB C the exit-2 dispatch set EXTRACTED from the guarded top-level dispatch and asserted present in the rendered exit-2 entry, with an anti-vacuity floor on the extracted set, a floor-30 exit-3 control proving the extractor works, and a non-empty check on the rendered entry so the naming loop cannot pass over nothing"
   echo "  corpus paths resolve (RELEASE_LOG/INDEX/DIGEST + notes dir)" >&2
   echo "  corpus append-ledger merge-immunity validated (#3108 AC1 — union two-branch append CLEAN + both rows kept / non-union control CONFLICTS / state-column union CORRUPTS → LOG+REVERSIONS exclusion)" >&2
-  echo "  phase_assert_output_set validated (#5288, group m — 11 arms; this line is the group's conformant-arm extraction, without which a passing run is indistinguishable from a run in which the group never executed): m1 THE SEAM — the required-if cutoff is READ out of core/deploy/deploy.sh rather than copied, asserted against a SECOND INDEPENDENT extractor over the same file (awk, not the shipped sed) with an anti-vacuity floor on the oracle, plus a SENSITIVITY arm on an ARMED fixture that a hardcoded default fails, and two SPECIFICITY arms (no assignment / two assignments) that must both resolve UNREADABLE and never a silent default / m2 AN UNEVALUABLE PREDICATE BLOCKS: both required members PRESENT and the only fault is that the membership test could not run — the phase FAILs, returns 3, and reports INDETERMINATE, with a same-fixture one-variable CONTROL proving a readable dormant seam PASSes, so the block is attributable to the seam and not to a gate that always fails / m3 AC-3 a required member's absence blocks and NAMES itself, both members driven, with the present twin as the paired positive / m4 AC-5 membership vs outcome: the SAME absent telemetry field blocks under an ARMED cutover and resolves a REPORTED N-A under a dormant one, one variable apart / m5 THE MARKER IS EVIDENCE, NEVER AN EXEMPTION — differential over one fixture where the only change is that a real **Not-produced:** marker is recorded: the verdict must NOT move, with a SENSITIVITY arm proving the marker is genuinely present (else the arm passes vacuously), an assert that the gate REPORTED reading it (an invisible marker would prove nothing), and a converse SPECIFICITY arm where the member is supplied and the same marker is inert / m6 EMIT ON ABSENCE at the real producer site: a non-executable synthesizer still SKIPs but now records the absence as corpus bytes at its DECLARED anchor, the line immediately after **Result:**, with a working-producer control proving the marker tracks the capability condition and does not fire every run / m7 MODE: --dry-run returns 0 and marks WARN naming the condition that FAILS at --apply, anti-vacuity: the same fixture at --apply returns 3 and FAILs / m8 THE CLASSIFIER IS TOTAL AND FAILS CLOSED: an UNRECORDED producing phase (get_phase's not-found sentinel returns at exit 0, so it is a value and not an error) classifies INDETERMINATE and surfaces, with a PASS-record control proving real discrimination, and the ambiguous SKIPPED result shown to be resolved by the TREE — the identical result string classifies would-present over a present member and would-absent over an absent one, so the classifier is not row-pattern-matching detail prose / m9 the hand-maintained usage()/--help phase roster carries the 9.56 row, with the shipped 9.55 row as its interpretability control / m10 READ-ONLY by content hash across a PASSing run, with an anti-vacuity arm proving the same instrument DOES move on a known write / m11 EXACTLY ONE guarded top-level dispatch line, positioned AFTER assert_derived_surfaces and BEFORE commit_chore_pr (so the stamp cannot commit ahead of the assert), with vacuity floors on all three needles and a fabricated-name specificity control" >&2
+  _st_claim m "  phase_assert_output_set validated (#5288, group m — 11 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): m1 THE SEAM — the required-if cutoff is READ out of core/deploy/deploy.sh rather than copied, asserted against a SECOND INDEPENDENT extractor over the same file (awk, not the shipped sed) with an anti-vacuity floor on the oracle, plus a SENSITIVITY arm on an ARMED fixture that a hardcoded default fails, and two SPECIFICITY arms (no assignment / two assignments) that must both resolve UNREADABLE and never a silent default / m2 AN UNEVALUABLE PREDICATE BLOCKS: both required members PRESENT and the only fault is that the membership test could not run — the phase FAILs, returns 3, and reports INDETERMINATE, with a same-fixture one-variable CONTROL proving a readable dormant seam PASSes, so the block is attributable to the seam and not to a gate that always fails / m3 AC-3 a required member's absence blocks and NAMES itself, both members driven, with the present twin as the paired positive / m4 AC-5 membership vs outcome: the SAME absent telemetry field blocks under an ARMED cutover and resolves a REPORTED N-A under a dormant one, one variable apart / m5 THE MARKER IS EVIDENCE, NEVER AN EXEMPTION — differential over one fixture where the only change is that a real **Not-produced:** marker is recorded: the verdict must NOT move, with a SENSITIVITY arm proving the marker is genuinely present (else the arm passes vacuously), an assert that the gate REPORTED reading it (an invisible marker would prove nothing), and a converse SPECIFICITY arm where the member is supplied and the same marker is inert / m6 EMIT ON ABSENCE at the real producer site: a non-executable synthesizer still SKIPs but now records the absence as corpus bytes at its DECLARED anchor, the line immediately after **Result:**, with a working-producer control proving the marker tracks the capability condition and does not fire every run / m7 MODE: --dry-run returns 0 and marks WARN naming the condition that FAILS at --apply, anti-vacuity: the same fixture at --apply returns 3 and FAILs / m8 THE CLASSIFIER IS TOTAL AND FAILS CLOSED: an UNRECORDED producing phase (get_phase's not-found sentinel returns at exit 0, so it is a value and not an error) classifies INDETERMINATE and surfaces, with a PASS-record control proving real discrimination, and the ambiguous SKIPPED result shown to be resolved by the TREE — the identical result string classifies would-present over a present member and would-absent over an absent one, so the classifier is not row-pattern-matching detail prose / m9 the hand-maintained usage()/--help phase roster carries the 9.56 row, with the shipped 9.55 row as its interpretability control / m10 READ-ONLY by content hash across a PASSing run, with an anti-vacuity arm proving the same instrument DOES move on a known write / m11 EXACTLY ONE guarded top-level dispatch line, positioned AFTER assert_derived_surfaces and BEFORE commit_chore_pr (so the stamp cannot commit ahead of the assert), with vacuity floors on all three needles and a fabricated-name specificity control"
   echo "  phase_pattern_scan wiring validated (#3121 — default ON (source-parsed, not live-global) / --no-pattern-scan suppresses with the honest reason / --with-pattern-scan still accepted / NO /dev/null discard / phase detail carries the PARSED counts with a moved-control anti-vacuity arm / captured body reaches the close-out report, and the section is ABSENT when nothing was captured)" >&2
+  _st_claim TK "  operator.toml key-read tolerance validated (#5649, group TK — 4 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): TK-1 the CLASS invariant over a WHOLE-FILE parse — every key read tolerates an ABSENT optional key, with an anti-vacuity floor of 4 and the offending line numbers named on failure; the whole-file scan is load-bearing rather than stylistic, because the arg-parse region and check_paths() sit 170 lines BELOW self_test()'s closing brace and a region-scoped parse reads healthy while blind to them / TK-2 CAPABILITY TO FAIL in both directions on a constructed call site: the tolerance filter must NOT count an unguarded specimen as tolerant, and the population parse MUST recognise the specimen at all, so neither an everything-matches nor a nothing-matches filter can satisfy TK-1 / TK-3 the head-pipe reintroduction guard, paired with a specimen the filter must match — the folded grep -m1 form is what keeps this class out of the repo-integrity sigpipe-idiom job, which scans the added-lines delta / TK-3b THE FIXTURE-EXCLUSION PROOF: a specimen held in a single-quoted assignment is asserted INVISIBLE to TK-1's parse, so 'fixtures excluded by construction' is a measurement rather than a claim and this group cannot inflate its own population / TK-4 THE BEHAVIOURAL DIFFERENTIAL, the only arm that fails on the unpatched file: the PRODUCTION line is EXTRACTED from this file rather than retyped and run against a hermetic operator.toml that EXISTS and omits the key, with the tolerance-stripped twin over the SAME fixture asserted to still abort — run in a SEPARATE bash process because '( set -e … ) || rc=\$?' provably does not observe a set -e abort on bash 3.2, which is why the nearby AI-F subshell harness is safe only for its explicit-exit subject"
   exit 0
 }
 
