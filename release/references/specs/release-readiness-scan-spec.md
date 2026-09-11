@@ -166,6 +166,30 @@ with this dimension's state-4 PASS, which is measured at Phase A6, BEFORE that
 transition. Two non-overlapping instants asking two different questions: this dimension
 names states for the briefing and duplicates neither gate.
 
+**State 4 consults no merge-state term; the precedence order is what makes that
+safe.** State 4's predicate reads the required-row buckets and `isDraft` and
+nothing else, so taken alone it would render PASS on a pull request that cannot
+merge. The ordering is what prevents that. State 2's population floor — the
+shortfall test in its row above, which *Fail-closed posture* above invokes to a
+different end — is evaluated first, so a release whose required contexts have not
+all reported is classified PARTIAL before state 4 is ever tested. Mergeability
+itself is asserted by the Gate 9 criterion named under *Draft state is expected,
+not deficient* above. Neither mechanism is restated here: state 4 borrows its
+safety from both, in the same way state 5 borrows its pass set rather than
+authoring one.
+
+**That safety is inherited from trigger configuration, not asserted here.** The
+floor shields state 4 only while a pull request that cannot merge also fails to
+produce a complete set of reported required contexts — and whether that holds is a
+property of how those contexts are triggered, not of anything in the table above.
+One carrier, `.github/workflows/security.yml`, declares its required contexts
+under a `pull_request:` trigger scoped to `branches: [main]`. Retrigger a required
+context so that it reports against the branch head irrespective of merge state, or
+move `draft-blocked` ahead of the population floor, and every required row can
+read `pass` on an unmergeable pull request while state 4 still renders PASS. Both
+edits are made elsewhere — one in a workflow file, one in the table above — so
+this is the paragraph that records the dependency between them.
+
 **Reachability, stated rather than implied.** At Phase A6 the release PR is draft by
 specification, so a healthy release resolves to state 4 and states 5 and 6 are reached
 only on a Stage-9 re-entry after the draft-to-ready transition. They are specified
