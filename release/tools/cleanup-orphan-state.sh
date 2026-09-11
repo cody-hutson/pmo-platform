@@ -2613,10 +2613,24 @@ selftest_fixed_point() {
   # from SCRIPT_DIR/../..: a copy anywhere else computes a different repo root and
   # stops being the same program. Dot-prefixed so no *.sh glob (shell or Python) can
   # discover it, PID-scoped, and removed on every exit path including teardown.
+  # THE STRIP GUARD'S FIRST LIMB IS ANCHORED TO A WHOLE LINE, and that is the whole
+  # point of the `-qxF` rather than a bare `-qF`. The substituted text also appears in
+  # the `sed` program below and in this guard's own needle, so a SUBSTRING search finds
+  # it in the copy whether or not the substitution applied — measured (True, True)
+  # across the substituted and unsubstituted copies, i.e. a limb that cannot be false.
+  # It read correct only because limb 2 carried it. Anchored whole-line, the needle can
+  # match only a line the substitution actually produced: measured False unsubstituted,
+  # True substituted. The specificity control immediately below asserts that
+  # non-match against this file's own source on every run, so re-loosening the needle
+  # to the substring form reddens here instead of silently restoring the dead limb.
   if [[ "$fail" -eq 0 ]]; then
     mut="${SCRIPT_DIR}/.cleanup-selftest-mut-$$.sh"
+    if grep -qxF '  : # projection disabled (P2 sensitivity arm)' "$script_abs"; then
+      echo "self-test: fixed-point check FAILED — P2 strip-guard specificity: the anchored needle matches a WHOLE LINE of this script's own unsubstituted source, so limb 1 below cannot be false and the strip guard would pass on a sed that did nothing (#6207)" >&2
+      fail=1
+    fi
     sed 's/^  projected_freed_branches$/  : # projection disabled (P2 sensitivity arm)/' "$script_abs" > "$mut"
-    if grep -qF 'projection disabled (P2 sensitivity arm)' "$mut" && ! grep -qE '^  projected_freed_branches$' "$mut"; then
+    if grep -qxF '  : # projection disabled (P2 sensitivity arm)' "$mut" && ! grep -qE '^  projected_freed_branches$' "$mut"; then
       drc=0
       mut_out=$(bash "$mut" --release-close "$slug" --dry-run --json 2>/dev/null) || drc=1
       if [[ "$drc" -ne 0 ]]; then
