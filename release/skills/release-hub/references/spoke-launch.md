@@ -1,7 +1,9 @@
 <!-- reference-durability: allow-link -->
 # Mode O — Spoke Launch
 
-How Mode O spawns spokes. Elaborates `## Mode O` in [`../SKILL.md`](../SKILL.md); cites [`hub-spoke-bridge.md`](../../../references/how-to/hub-spoke-bridge.md) § Spoke Launch Mechanisms for the verbatim parameter contract + the empirical anchors.
+How Mode O spawns spokes. Elaborates `## Mode O` in [`../SKILL.md`](../SKILL.md); cites `release/references/how-to/hub-spoke-bridge.md` § Spoke Launch Mechanisms for the verbatim parameter contract + the empirical anchors.
+
+> **Path convention in this file.** A repo path written as **text** (`core/…`, `release/…`) names a file that is **not deployed with this skill** — it resolves in the repository and would fail from the installed tree, so it is deliberately not a link. A **markdown link** names a file that *is* deployed beside this one and resolves at runtime. Every clause this file tells the hub to carry verbatim is stated here; the cited canonical homes are provenance the hub reads in the repository, not at launch time.
 
 ## Spawn, not skill-chain
 
@@ -32,7 +34,7 @@ Every spoke prompt Mode O renders MUST carry the run-directory clause verbatim: 
 
 **Path form — the hub's own obligation, and a different question from the one above.** The run-directory clause governs *where* a spoke's scratch goes and that it is unique. It says nothing about the form of the **other** paths Mode O writes into a brief: the repo working copy, a corpus location, a cited file, a command a spoke is told to run. Those are the hub's own emissions. Every one of them uses a sanctioned form per `core/standards/analysis-workspace-standard.md` § 6.1 — repo-relative, `$HOME`-relative, the sanctioned default-expansion, or a registered operator-instance token. An absolute machine path carrying a username segment, and a bare relative operator-instance path, are never emitted. Where no sanctioned form fits — a harness-supplied ephemeral directory, say — emit the relative name, never the resolved absolute path.
 
-**Paths the hub writes TO — the other half of that same obligation.** The rule above governs the paths Mode O *emits*. The paths Mode O *writes to* are governed too, and by exactly one location: every body the hub stages before posting — issue and PR bodies, decision-record and stage comments, milestone-description revisions, cross-milestone notices — is written inside the release run's staging directory under the operator-instance hub-state path, and nowhere else, for the life of the run. That staging ends at the release close's orphan-state cleanup step, and a body the operator means to keep past the run is moved to the operator's own area rather than left in it. Canonical clause, its lifecycle, and its honest scope: [`hub-spoke-bridge.md`](../../../references/how-to/hub-spoke-bridge.md) § Hub Staging Discipline. Cite it; do not restate it here.
+**Paths the hub writes TO — the other half of that same obligation.** The rule above governs the paths Mode O *emits*. The paths Mode O *writes to* are governed too, and by exactly one location: every body the hub stages before posting — issue and PR bodies, decision-record and stage comments, milestone-description revisions, cross-milestone notices — is written inside the release run's staging directory under the operator-instance hub-state path, and nowhere else, for the life of the run. That staging ends at the release close's orphan-state cleanup step, and a body the operator means to keep past the run is moved to the operator's own area rather than left in it. Canonical clause, its lifecycle, and its honest scope: `release/references/how-to/hub-spoke-bridge.md` § Hub Staging Discipline. Cite it; do not restate it here.
 
 **Why the hub is the fix point, not the spoke.** A brief carries a path into a spoke; the spoke echoes it into a public comment; that echo is IRREVERSIBLE, because editing a published comment does not scrub its edit history. Repairing the brief repairs every downstream spoke at once. Repairing the echo repairs one comment that is already public. The observed instance was 19 occurrences across 8 public issues in a single release, all of them injected by the orchestrator and echoed back.
 
@@ -84,7 +86,7 @@ Auto-launch is bound to the stage's Autonomy Tier: spawn autonomously for Tier-2
 
 ## Recursion prohibition
 
-A spawned spoke MUST NOT invoke the `Agent` tool or `spawn_task`. The hub is the only caller of spoke-launch primitives. (Full posture: [`subagent-security-posture.md`](../../../../core/standards/subagent-security-posture.md).)
+A spawned spoke MUST NOT invoke the `Agent` tool or `spawn_task`. The hub is the only caller of spoke-launch primitives. (Full posture: `core/standards/subagent-security-posture.md`.)
 
 ## Hook-response guard
 

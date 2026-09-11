@@ -39,9 +39,10 @@ Stage-8 six-value per-criterion enum (PARTIAL carries the mandatory unmet-remain
 Mode I's observational conformance-drift / cross-release-fragmentation / conformant /
 no-governing-baseline classification (no verdicts) with recorded 1–5 dimension scores and an
 orthogonal severity-axis × confidence-tag model (severity is never diluted by low baseline
-confidence); Mode J's observational per-seam grade vocabulary plus the `no-evidence`
-classification, which is **never** rendered as a passing grade — an unemitted seam produces no
-rows, and no rows is indistinguishable from no failures unless the distinction is stated.
+confidence); Mode J's observational per-seam grade vocabulary plus its non-graded coverage
+classifications `uninstrumented` and `unexercised`, neither of which is **ever** rendered as a
+passing grade — a seam no corpus rule declares a producer for can emit no rows, and no rows is
+indistinguishable from no failures unless the distinction is stated.
 A PARTIAL-family value outside those defined vocabularies remains the cop-out this
 principle forbids.
 
@@ -838,14 +839,6 @@ surface, §7b of the mode-spec) + the in-chat echo. It **never** creates a work 
 the backlog or registry, or edits any other tracked file. Findings are observations until
 operator triage — the mode auto-files nothing.
 
-**Provisioning state — check this first.** This mode ships ahead of its content SSOT: the host
-decision registers the mode, its spec, and its cadence protocol; the capability build authors
-`references/decision-audit-dimension-rubric.md` (the coverage-seam set, per-seam grade
-vocabulary, and coverage-index formula). **While that rubric is absent, a Mode J invocation
-reports its unprovisioned state naming the missing file and stops.** It does not improvise a
-seam set and does not emit a partial scorecard — a fabricated baseline is worse than an absent
-one, because a later run would silently measure drift against noise.
-
 **Process** (schemas + detail in `references/decision-audit-mode-spec.md` — cited, not
 restated):
 1. Resolve the rubric path; on absence, emit the unprovisioned notice and terminate.
@@ -860,8 +853,10 @@ restated):
    oracle cardinality appears in this skill, the mode-spec, the rubric, or the cadence
    protocol.**
 4. Collect the decision surface from the four sources in priority order (mode-spec §4).
-5. Score each seam against the rubric; a seam with zero evidence rows reports `no-evidence`
-   with its emitting surface named — **never a passing grade**.
+5. Using the rubric's ordered coverage predicate, score every scored row; one with zero evidence
+   rows resolves to `uninstrumented`, `unexercised`, or `measured`/`partial` depending on whether
+   a producer is declared and whether the window owed it occasions, and reports with its emitting
+   surface named — a non-graded state is **never a passing grade**.
 6. Validate evidence citations against the four-form bar (mode-spec §5); fix failures before
    emitting; record the aggregate rate.
 7. Emit the dated audit folder at
@@ -877,8 +872,8 @@ restated):
 findings are report-only, surfaced for human routing.
 
 See `references/decision-audit-mode-spec.md` (machinery),
-`references/decision-audit-dimension-rubric.md` (seam set + grade vocabulary + index formula
-SSOT; authored by the capability build), and
+`references/decision-audit-dimension-rubric.md` (the seam set, the coverage-state and grade
+vocabularies, the index formula and its ceiling companion — content SSOT), and
 `../../../release/references/protocols/decision-audit-cadence.md` (when-to-run). Host decision
 of record: `../../ADRs/ADR-103-decision-audit-host-qa-auditor-mode-j.md`.
 
@@ -1120,20 +1115,24 @@ produces **three** surfaces:
 1. the **dated audit folder** at
    `<OPERATOR_INSTANCE_ANALYSIS_PATH>/decision-audit-${AUDIT_DATE_UTC}/` (operator-instance,
    git-ignored) — `SUMMARY.md` (the resolved window with **both merge anchors**, the oracle pin
-   (per-source content hashes + derivation date + derived counts), the coverage scorecard, the
-   classification counts, the `no-evidence` seam count with the blind-versus-clean distinction
-   stated, and the evidence-bar rate), `findings-register.md` (the `{finding-id, release, seam,
+   (per-source path + content hash + entry count + entry-title set, the roster membership set,
+   the derivation date) with any roster-delta notice, the coverage scorecard, the classification
+   counts, the coverage-state distribution with the `uninstrumented` and `unexercised` counts
+   stated **separately** and the blind-versus-quiet distinction made, the coverage index,
+   the instrumentation ceiling,
+   and the evidence-bar rate), `findings-register.md` (the `{finding-id, release, seam,
    oracle, classification, severity, confidence, evidence, root-cause}` rows + the
    `## Systemic Patterns` table + the single `## Coverage Gap` aggregate row), and
    `issue-drafts/NNN-kebab-name.md` in observation format; schemas: mode-spec §7a;
 2. a committed overwrite of **`release/releases/decision-health-summary.md`** — the tracked
    headline hand-off surface that gives a tracked acceptance criterion a tracked oracle and lets
    a run on a fresh clone resolve where the previous window ended (mode-spec §7b);
-3. the **in-chat SUMMARY echo**: the resolved window + oracle pin, the coverage index, the
-   per-seam grades, the `no-evidence` seam count stated as blind rather than clean, the
-   systemic-pattern count, the evidence-bar rate, and a pointer to the folder + the committed
-   surface. No prescriptive verbs; observation drafts carry reversibility tiers; there is no
-   gate verdict to tier.
+3. the **in-chat SUMMARY echo**: the resolved window + oracle pin (membership included), the
+   coverage index and the instrumentation ceiling, the per-seam grades, the `uninstrumented` and
+   `unexercised` counts stated separately — the former reported as blind and the latter as quiet
+   — the systemic-pattern count, the evidence-bar rate, and a pointer to the folder + the
+   committed surface. No prescriptive verbs; observation drafts carry reversibility tiers; there
+   is no gate verdict to tier.
 
 ## Reversibility Discipline
 
@@ -1731,6 +1730,81 @@ roster live must itself read that roster live rather than hardcoding it.
   the decomposition-review gate criterion exists; no per-issue predicate fires
   in live runs (evidence: …)" plus an observation draft. Junior writes "we
   should strengthen the gate" and the artifact becomes an untriaged to-do list.
+
+### Oracle roster derived by a predicate the run does not record — PROC
+
+- **Signature (observable signal):** A Mode J run emits an oracle pin carrying
+  per-source content hashes and entry counts but **no roster membership set**,
+  so two runs' pins cannot be diffed for which sources were scored.
+- **Conditional:** do NOT emit a run whose pin records content without recording
+  membership, because the cadence protocol's continuity rule makes adding an
+  oracle source an oracle change, and a pin that cannot be diffed for membership
+  makes that rule unenforceable — two runs then compute indices over different
+  rosters and the difference reads as decision-health movement rather than as the
+  roster change it is.
+- **Root cause:** Hashes and counts feel like the complete freshness anchor
+  because they are what the sibling audit mode pins, and the sibling's roster is
+  a fixed corpus location rather than a predicate-derived set. Membership is
+  invisible until it changes.
+- **Mitigation:** Record path, content hash, entry count and entry-title set per
+  source, plus the roster membership set as a whole; read the prior pin from the
+  committed summary and emit a roster-delta notice naming any source added or
+  removed. A run that cannot read a prior pin says so rather than omitting the
+  comparison.
+- **Principal response vs. junior response:** Principal pins membership and emits
+  the delta, so a new oracle source announces itself. Junior pins the content,
+  the roster silently widens, and the next run's lower index is triaged as a
+  decision-health regression that never happened.
+
+### A non-graded coverage state rendered as a passing grade — OUT
+
+- **Signature (observable signal):** A seam whose coverage state is
+  `uninstrumented` or `unexercised` carries a grade in the scorecard, the
+  findings register, or the in-chat echo — or the two are collapsed into one
+  count that the summary describes as clean.
+- **Conditional:** do NOT assign a grade to a seam that is not `measured`, and do
+  not report `uninstrumented` and `unexercised` as one number, because the event stream is
+  the only per-decision source: a seam with no declared producer emits nothing, no
+  rows is indistinguishable from no failures, and grading it inverts the audit's
+  meaning by reporting silence as health. The two states are also not the same
+  fact — `uninstrumented` is a live blind spot and belongs in the residual-risk
+  register, while `unexercised` is an instrumented seam the window owed nothing.
+- **Root cause:** A scorecard row with an empty grade cell reads as incomplete, so
+  the pull is to fill it; and one "not measured" bucket is tidier than two, so the
+  pull is to merge them. Both instincts optimize the artifact's appearance against
+  the thing it exists to report.
+- **Mitigation:** Resolve the coverage state by the rubric's ordered predicate
+  first and let a non-`measured` seam carry **no grade at all**; report the two
+  non-graded counts as separate fields in both emitted surfaces; state which one
+  is blind and which is quiet rather than leaving the reader to infer it.
+- **Principal response vs. junior response:** Principal emits an empty grade cell
+  beside a named emitting surface and a register row, and the gap is legible.
+  Junior scores it, or merges the buckets, and a run over a partly-blind stream
+  reports coverage it never measured.
+
+### Derivation control arm skipped when the roster is small — INPUT
+
+- **Signature (observable signal):** A run proceeds past oracle derivation with no
+  recorded assertion that the section-scoped entry count is strictly less than the
+  whole-file heading count for at least one source — typically on a run whose
+  derived roster came back small enough to eyeball.
+- **Conditional:** do NOT proceed past oracle derivation without the bounding
+  assertion, because a section matcher that has silently degenerated to a
+  file-wide match returns a plausible, larger, wrong oracle set — and a derivation
+  whose bounding was never demonstrated is byte-indistinguishable in the emitted
+  artifacts from one that was.
+- **Root cause:** The control arm feels like ceremony when the result looks
+  reasonable, and a small roster looks checkable by inspection. Inspection
+  confirms the set is plausible; it cannot confirm the boundary did any work.
+- **Mitigation:** Run the assertion on every derivation regardless of roster size
+  and record its result in the pin; report INDETERMINATE when the section-scoped
+  and whole-file counts are equal everywhere. The characterization fixtures carry
+  both arms — a degenerate corpus that must refuse to run, and a non-degenerate one
+  that must proceed — so the control is exercised in both directions.
+- **Principal response vs. junior response:** Principal records the arm and its
+  observed result, so a later reader can tell a bounded derivation from an
+  unbounded one. Junior skips it on a small roster, and the first run against a
+  restructured source scores against a set the probe never bounded.
 
 ## Reference Docs
 
