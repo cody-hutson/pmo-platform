@@ -738,8 +738,15 @@ if [[ "$_rc_nopred" -eq 3 ]] \
 else
   fail "L predicate cause: rc=${_rc_nopred} (expected 3) — ${_msg_nopred}"
 fi
-# SPECIFICITY (predicate) — silent on the OTHER cause. This is the arm that goes
-# RED on the pre-widening harness, where this message WAS the sentinel message.
+# SPECIFICITY (predicate) — silent on the OTHER cause. TWO conjuncts, because
+# wrong-cause blame is a PROSE property and only one of its forms is a tag: the
+# tag conjunct catches a regression that re-LABELS this message, and the legacy-
+# phrase conjunct catches one that keeps the UNRESOLVED-SYMBOL tag and blames the
+# sentinels in the prose beneath it — the shape a tag-only arm reports as green.
+# On the pre-widening harness the arm that goes RED is the SENSITIVITY one above,
+# because that message named no symbol. This arm goes red there too, but only by
+# the legacy-phrase conjunct: the pre-widening text ("missing or inverted
+# sentinel markers") carries no tag for the first conjunct to match.
 if ! /usr/bin/grep -qF -- 'SENTINEL-BOUNDS' <<<"$_msg_nopred" \
    && ! /usr/bin/grep -qiF -- 'sentinel markers' <<<"$_msg_nopred"; then
   pass "L SPECIFICITY (predicate) — the unresolved-symbol diagnosis carries neither the SENTINEL-BOUNDS tag nor the pre-widening phrase 'sentinel markers'; the two causes route the reader to two different fixes rather than to one wrong one"
