@@ -124,6 +124,13 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** EXPENSIVE (once the C2 type layer + downstream consume the entity it is a contract; pre-consumption MODERATE).
 **File:** [ADR-018-work-item-type-layer.md](ADR-018-work-item-type-layer.md)
 
+### ADR-195 — Criterion evaluability is a per-check measured property, and it gates admission
+
+**Status:** Accepted (ratified at the `authoring-bar-and-consumers` Collective Review scope-lock).
+**Decision:** Whether a type-layer criteria check can be judged reproducibly is a **per-check measured property, orthogonal to its `level`** — the level says how a check projects into a machine-schema, not whether its judgment reproduces. The disposition (`gate-capable` / `gate-capable-under-conditions` / `advisory-only`, or `NOT-EVALUATED` while unmeasured) rides the check's own `x-pmo-criteria-judgment` annotation, maps onto the shipped gate-efficacy disposition ladder rather than a parallel one, and is measured against a binary falsification/specificity arm pair required unanimous across context-isolated runs — **no agreement threshold is introduced**, because the consuming reduction is ALL-PASS / ANY-FAIL and has no arm for a fractional score. The load-bearing consequence: a check dispositioned `advisory-only` or `NOT-EVALUATED` **must not be admitted** to an any-fail criterion set, for two distinct reasons — an unrenderable judgment makes the aggregate structurally incapable of its clean verdict, while an inconsistent-but-definite judgment makes it nondeterministic and therefore re-rollable.
+**Reversibility:** MODERATE (a recorded verdict is revisable by re-running the protocol; EXPENSIVE once the consumers read it and the pack surface becomes a live read contract — the same crossing ADR-069 names).
+**File:** [ADR-195-l3-judgment-criteria-evaluability.md](ADR-195-l3-judgment-criteria-evaluability.md)
+
 ## Automation-governance ADRs
 
 ### ADR-020 — Agent-script promotion ladder: form-anchored five-rung enum (AS0–AS4)
