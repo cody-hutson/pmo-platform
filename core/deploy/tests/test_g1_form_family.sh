@@ -740,8 +740,9 @@ else
 fi
 # SPECIFICITY (predicate) — silent on the OTHER cause. This is the arm that goes
 # RED on the pre-widening harness, where this message WAS the sentinel message.
-if ! /usr/bin/grep -qF -- 'SENTINEL-BOUNDS' <<<"$_msg_nopred"; then
-  pass "L SPECIFICITY (predicate) — the unresolved-symbol diagnosis never carries the SENTINEL-BOUNDS tag; the two causes route the reader to two different fixes rather than to one wrong one"
+if ! /usr/bin/grep -qF -- 'SENTINEL-BOUNDS' <<<"$_msg_nopred" \
+   && ! /usr/bin/grep -qiF -- 'sentinel markers' <<<"$_msg_nopred"; then
+  pass "L SPECIFICITY (predicate) — the unresolved-symbol diagnosis carries neither the SENTINEL-BOUNDS tag nor the pre-widening phrase 'sentinel markers'; the two causes route the reader to two different fixes rather than to one wrong one"
 else
   fail "L the unresolved-symbol diagnosis blames the sentinel bounds — the wrong-cause defect is back: ${_msg_nopred}"
 fi
