@@ -5,7 +5,7 @@
 
 ## Purpose
 
-This document is the canonical **sequence** of project-lifecycle gates — eleven gates, **LG-0 (Idea Screen)** through **LG-10 (Closure)** — that a managed project passes through from idea to closed. Each gate carries entry criteria, exit criteria, key decisions, authority holder, artifacts required, and an escalation path. The §4 transition rule states the machine-checkable BLOCK; **§4.1 defines the tri-state verdict semantics** (the `PASS / CONDITIONAL PASS / FAIL` verdict mapped onto the §4 criterion engine) and **§4.2 binds each gate to the `T(n→n+1)` transition coordinate** owned by `lifecycle-stages.md §5.2`, plus the no-advance-past-unmet-gate / no-skip-a-gate rule. It is read by the delivery-engine skill: **Mode F (DoD & Release Readiness Gate)** applies the per-gate exit criteria, the §4 transition rule across LG-1…LG-10, and the §4.1 verdict + §4.2 binding; **Mode G (RAID / Decision / Milestone Update)** attributes gate decisions to the correct lifecycle gate and authority holder and records the §4.1 verdict; **Mode C (DoR Gate)** references it for context to situate DoR as LG-4 (the §4.2 `T(6→7)` binding).
+This document is the canonical **sequence** of project-lifecycle gates — eleven gates, **LG-0 (Idea Screen)** through **LG-10 (Closure)** — that a managed project passes through from idea to closed. Each gate carries entry criteria, exit criteria, key decisions, authority holder, artifacts required, and an escalation path. The §4 transition rule states the machine-checkable BLOCK; **§4.1 defines the tri-state verdict semantics** (the `PASS / CONDITIONAL PASS / FAIL` verdict mapped onto the §4 criterion engine), **§4.2 binds each gate to the `T(n→n+1)` transition coordinate** owned by `lifecycle-stages.md §5.2`, plus the no-advance-past-unmet-gate / no-skip-a-gate rule, and **§4.3 states which of a resolved methodology kit's declared criteria join the §4 member set and how the remainder is reported**. It is read by the delivery-engine skill: **Mode F (DoD & Release Readiness Gate)** applies the per-gate exit criteria, the §4 transition rule across LG-1…LG-10, and the §4.1 verdict + §4.2 binding; **Mode G (RAID / Decision / Milestone Update)** attributes gate decisions to the correct lifecycle gate and authority holder and records the §4.1 verdict; **Mode C (DoR Gate)** references it for context to situate DoR as LG-4 (the §4.2 `T(6→7)` binding).
 
 **Boundary vs. `gate-checklists.md` (the sibling doc).** `gate-checklists.md` owns the gate-**TYPE** taxonomy — what KINDS of gates exist (Phase / Quality / Flow / Approval / Hypothesis), the per-type checklist templates, go-live readiness dimensions, risk-based calibration, methodology variation, and gate anti-patterns. This doc owns the lifecycle-gate **INSTANCE sequence** — which gates THIS project lifecycle has, in order, and the entry/exit/authority/artifacts/escalation for each. They are different axes. This doc **cross-references** `gate-checklists.md` for every checklist template and gate-type classification; it never restates them. See [`gate-checklists.md`](gate-checklists.md).
 
@@ -257,12 +257,12 @@ To run any of these handoffs, open the linked template in `gate-checklists.md` a
 
 ## 4. Gate Transition Rule
 
-This is the machine-checkable rule that satisfies the acceptance criterion: *at a gate transition with unmet exit criteria, the agent blocks the transition with an evidence-backed rejection citing the specific violated exit criterion.* §4 defines the per-criterion evaluation engine and the BLOCK; **§4.1 maps the engine onto the `PASS / CONDITIONAL PASS / FAIL` verdict vocabulary** the skill renders; **§4.2 binds each gate to its `T(n→n+1)` transition coordinate** (owned by `lifecycle-stages.md §5.2`) and states the no-advance-past-unmet-gate / no-skip-a-gate rule.
+This is the machine-checkable rule that satisfies the acceptance criterion: *at a gate transition with unmet exit criteria, the agent blocks the transition with an evidence-backed rejection citing the specific violated exit criterion.* §4 defines the per-criterion evaluation engine and the BLOCK; **§4.1 maps the engine onto the `PASS / CONDITIONAL PASS / FAIL` verdict vocabulary** the skill renders; **§4.2 binds each gate to its `T(n→n+1)` transition coordinate** (owned by `lifecycle-stages.md §5.2`) and states the no-advance-past-unmet-gate / no-skip-a-gate rule; **§4.3 states the admission and reporting rule for a resolved methodology kit's declared criteria** — which of them join this engine's member set, and how the rest are reported.
 
 When an agent is asked to advance work from Gate N to Gate N+1:
 
-1. Locate Gate N's **Exit criteria** block (§2, the `[LG-N-EX-*]` list).
-2. Evaluate EACH `[LG-N-EX-k]` against available evidence as **PASS / FAIL / NO-EVIDENCE**.
+1. Locate Gate N's **Exit criteria** block (§2, the `[LG-N-EX-*]` list), and resolve the kit for this work item's kind; where a kit resolves, locate its `criteria.readiness` (LG-4) or `criteria.done` (LG-5) block per §4.3.
+2. Evaluate EACH `[LG-N-EX-k]` against available evidence as **PASS / FAIL / NO-EVIDENCE**, including any admitted resolved-kit check per §4.3.
 3. If ALL are PASS → transition **ALLOWED**.
 4. If ANY is FAIL or NO-EVIDENCE → transition **BLOCKED**. Emit an evidence-backed rejection naming the FIRST violated criterion by ID:
    > "Gate N→N+1 BLOCKED: [LG-N-EX-k] unmet — <criterion text>. Evidence: <what was checked and what was missing or failing>. To unblock: <the specific remediation>."
@@ -286,9 +286,9 @@ The per-gate verdict is the closed three-value set **🟢 PASS / 🟡 CONDITIONA
 
 | Verdict (what the skill emits) | §4 engine condition (what produces it) | `WHEN…THEN…` decision rule | What it permits / blocks | Reversibility framing (→ SKILL.md `## Reversibility Discipline`) |
 |---|---|---|---|---|
-| 🟢 **PASS** | ALL `[LG-N-EX-k]` evaluate PASS (§4 step 3) → transition **ALLOWED** | WHEN every `[LG-N-EX-k]` is PASS THEN render PASS — advance the work item across the gate's `T(n→n+1)` (§4.2) | Transition **ALLOWED** — the work item advances to the next gate boundary | the advance inherits the downstream gate's tier; label per role |
-| 🟡 **CONDITIONAL PASS** | every `[LG-N-EX-k]` is *evidenced* and one or more is *not-yet-observable-but-on-track*, **AND** the gate type's checklist in [`gate-checklists.md §2`](gate-checklists.md) explicitly sanctions a CONDITIONAL outcome (§4 step 5 — `PASS WITH CONDITIONS`) | WHEN every criterion is evidenced, at least one is on-track-but-not-yet-observable, AND the gate type permits a CONDITIONAL outcome THEN render CONDITIONAL PASS — advance with the open condition logged as a tracked RAID item (owner + due date) | Transition **ALLOWED WITH CONDITIONS** — advance permitted; the open condition is logged as a tracked RAID item with an owner + due date and does **not** silently disappear | **MODERATE** — the advance triggers rework if the condition fails; pair with a confidence level |
-| 🔴 **FAIL** | ANY `[LG-N-EX-k]` evaluates FAIL **or** NO-EVIDENCE (§4 step 4) → transition **BLOCKED** | WHEN any `[LG-N-EX-k]` is FAIL or NO-EVIDENCE THEN render FAIL — BLOCK and emit the evidence-backed rejection naming the FIRST violated `[LG-N-EX-k]` + its `T(n→n+1)` (§4.2) + the remediation | Transition **BLOCKED** — the work item does NOT advance; emit the §4 evidence-format rejection | **CHEAP/MODERATE** — returns work, does not destroy it (§4 reversibility framing); pair with a confidence level |
+| 🟢 **PASS** | ALL criteria in the §4 member set — `[LG-N-EX-k]` plus any admitted resolved-kit check per §4.3 — evaluate PASS (§4 step 3) → transition **ALLOWED** | WHEN every criterion in that member set is PASS THEN render PASS — advance the work item across the gate's `T(n→n+1)` (§4.2) | Transition **ALLOWED** — the work item advances to the next gate boundary | the advance inherits the downstream gate's tier; label per role |
+| 🟡 **CONDITIONAL PASS** | every criterion in the §4 member set (`[LG-N-EX-k]` plus any admitted resolved-kit check per §4.3) is *evidenced* and one or more is *not-yet-observable-but-on-track*, **AND** the gate type's checklist in [`gate-checklists.md §2`](gate-checklists.md) explicitly sanctions a CONDITIONAL outcome (§4 step 5 — `PASS WITH CONDITIONS`) | WHEN every criterion is evidenced, at least one is on-track-but-not-yet-observable, AND the gate type permits a CONDITIONAL outcome THEN render CONDITIONAL PASS — advance with the open condition logged as a tracked RAID item (owner + due date) | Transition **ALLOWED WITH CONDITIONS** — advance permitted; the open condition is logged as a tracked RAID item with an owner + due date and does **not** silently disappear | **MODERATE** — the advance triggers rework if the condition fails; pair with a confidence level |
+| 🔴 **FAIL** | ANY criterion in the §4 member set — `[LG-N-EX-k]` plus any admitted resolved-kit check per §4.3 — evaluates FAIL **or** NO-EVIDENCE (§4 step 4) → transition **BLOCKED** | WHEN any criterion in that member set is FAIL or NO-EVIDENCE THEN render FAIL — BLOCK and emit the evidence-backed rejection naming the FIRST violated criterion by ID + its `T(n→n+1)` (§4.2) + the remediation | Transition **BLOCKED** — the work item does NOT advance; emit the §4 evidence-format rejection | **CHEAP/MODERATE** — returns work, does not destroy it (§4 reversibility framing); pair with a confidence level |
 
 **Verdict mapping (engine ↔ verdict, the canonical reconciliation):** `ALLOWED` (all criteria PASS) **is** PASS; `PASS WITH CONDITIONS` (§4 step 5) **is** CONDITIONAL PASS; `BLOCKED` (any FAIL/NO-EVIDENCE criterion, §4 step 4) **is** FAIL. `BLOCKED` and `FAIL` are the **same** outcome named in two layers — not two different results.
 
@@ -324,7 +324,7 @@ The binding (inherited from [`lifecycle-stages.md §3`](lifecycle-stages.md) —
 
 **Boundary-point honesty (do not fabricate a coordinate).** The §3 seam is "intentionally **not** one-gate-per-stage-boundary" ([`lifecycle-stages.md §3`](lifecycle-stages.md)): LG-0/LG-1/LG-2 are project-/portfolio-altitude decisions that do **not** sit on a single work-item stage transition, and LG-10 is terminal. For these gates the BLOCK still cites the violated `[LG-N-EX-k]` for every gate (they all have exit criteria in §2), but it notes **"project-altitude boundary-point — no single `T(n→n+1)`"** rather than forcing a transition coordinate the seam does not assert. **The same honesty binds the Axis-1 column:** a project-altitude gate advances **no** work-item Axis-1 edge, so its cell reads `—`. Do not fabricate one — the Work Item machine is a work-item-altitude object, and LG-6 is a work-item gate that §3.10 simply assigns no edge to.
 
-**The Axis-1 emission is downstream of the verdict, never an input to it.** The §4 transition rule and the §4.1 verdict render from the gate's `[LG-N-EX-k]` exit block alone; the Axis-1 advance is emitted *after* a `PASS` / `CONDITIONAL PASS` and is emitted *not at all* on `FAIL` / `NO-EVIDENCE`. It therefore joins no scored set and can neither create nor suppress a verdict this table could not already render. The transition it emits is validated downstream (`../../../../core/schemas/work-item-type-schema.md` §5.2) — that is where an illegal edge is caught, not here.
+**The Axis-1 emission is downstream of the verdict, never an input to it.** The §4 transition rule and the §4.1 verdict render from the gate's criterion members alone — the `[LG-N-EX-k]` exit block plus any admitted resolved-kit check per §4.3, and nothing else; the Axis-1 advance is emitted *after* a `PASS` / `CONDITIONAL PASS` and is emitted *not at all* on `FAIL` / `NO-EVIDENCE`. It therefore joins no scored set and can neither create nor suppress a verdict this table could not already render. The transition it emits is validated downstream (`../../../../core/schemas/work-item-type-schema.md` §5.2) — that is where an illegal edge is caught, not here.
 
 **No-advance-past-unmet-gate / no-skip-a-gate rule (normative).** Composing with [`lifecycle-stages.md §5.2`](lifecycle-stages.md) (which makes every transition predicate BLOCKING):
 
@@ -332,6 +332,88 @@ The binding (inherited from [`lifecycle-stages.md §3`](lifecycle-stages.md) —
 2. A request to **skip an intervening gate** — advance from a boundary past one or more gates whose exit predicates have not been evaluated/met — is **BLOCKED**: name **each** skipped or unsatisfied gate's unmet predicate **in order**, and advance only one legal gate transition at a time. For the work-item gates **LG-4 → LG-5 → LG-6** (at `T(6→7)`, `T(8→9)`, `T(9→10)`), this composes directly with `lifecycle-stages.md §5.2`'s no-skip-ahead rule — the gate check and the stage-transition predicate are the same boundary.
 
 **Worked instance.** §4's worked example (advancing an increment **LG-5 → LG-6** when the regression suite is failing) is the worked instance of this rule at **`T(8→9)`**: `[LG-5-EX-4]` evaluates FAIL → verdict **FAIL** (§4.1) → transition **BLOCKED**, the rejection naming `[LG-5-EX-4]` **and** `T(8→9)`. (The LG-6 / `[LG-6-EX-2]` QA-gate P1 block at `T(9→10)` is the worked AC-critical instance preserved in SKILL.md Mode F and `lifecycle-stages.md §5.1`.)
+
+---
+
+## 4.3 Resolved-kit criteria — admission and reporting
+
+§4 reduces over the gate's `[LG-N-EX-k]` exit block. Where a **methodology kit** resolves for the work item, that kit's own declared criteria for the item's kind are candidates for the same reduction. This section states which of them **join** the member set, which are **reported instead of evaluated**, and what the gate emits when the kit, the kind or the block cannot be read. It changes the reduction's **membership** only: no §4 step is added or renumbered, and the §4.1 verdict set is untouched.
+
+**Resolving a kit is a two-part selection, and naming only the first is how a gate reads the wrong criterion set and still renders a confident verdict.** The **pack** is selected by the operator's `delivery_approach`, joined to the manifest's `[meta].applies_to` — the Methodology Awareness Protocol read in [`OPERATIONS.md`](../../../../core/governance/OPERATIONS.md), performed **per invocation and never cached**. The **kind** is selected by the work item's `type:<kind_id>` label, the label-surface projection of the `work_item_type` discriminator ([`label-taxonomy.md`](../../../../core/specs/label-taxonomy.md) § Work-Item-Kind Labels). A `delivery_approach` resolves a **pack**, never a kind — one manifest declares several kinds whose criteria sets differ in both content and size. **Negative path:** where no `type:<kind_id>` resolves, take the **unresolved** outcome below. Never infer the kind from surrounding context.
+
+**Read the manifest; never delegate the read to a parser.** This skill is agent-executed, so there is no runner to build here. Read the resolved manifest's `[kinds.criteria.*]` block directly. Do **not** implement this section as a call into the shipped pack reader: on an inline-table array that reader returns fragments **and reports a clean parse**, so a mechanical implementation would evaluate shredded input while appearing to have worked. The prohibition binds the demonstrative fixture under `../evals/fixtures/` exactly as it binds the read path.
+
+**The three outcomes.** The discriminator is the **block-level `source`**, declared at [`work-item-type-schema.md`](../../../../core/schemas/work-item-type-schema.md) §1.2.1 *Content provenance*: a `[kinds.criteria.*]` or `[kinds.fields]` table whose array is present and empty MUST carry a `source`, and that key is what distinguishes a reasoned empty bar from an unauthored one. Emptiness alone never decides it.
+
+| Outcome | Condition | Gate behaviour |
+|---|---|---|
+| **resolved-and-populated** | a kit resolved for the kind, and its `criteria.readiness` (LG-4) or `criteria.done` (LG-5) block carries at least one check | evaluate the **admitted** subset as gate criteria alongside the `[LG-N-EX-k]` block; **report** the non-admitted remainder |
+| **resolved-and-reasoned-empty** | a kit resolved and the relevant block is **present and empty**, carrying a block-level `source` | **the emptiness is the content.** State the practice basis the `source` gives; contribute **no** criterion; do **not** substitute a generic set; emit **no** unresolved report |
+| **unresolved** | no kit resolved, no `type:<kind_id>` resolved, or the block is absent or unreadable with **no** `source` | evaluate the `[LG-N-EX-k]` block exactly as §4 already does, and emit **one** `NOT-EVALUATED` report line — never a verdict, never a silent default |
+
+A reasoned-empty block is a **declaration, not a gap**. Falling back to a generic checklist there substitutes this doc's criteria for a kind whose methodology deliberately prescribes no such bar — a silent default wearing a sensible costume, and the failure the middle outcome exists to prevent.
+
+**The admission predicate.**
+
+> A resolved kind's check joins the gate's per-criterion evaluation **only when** it is `automatable = true`, **or** the evaluability record `{{ADR:l3-judgment-criteria-evaluability}}` dispositions it `gate-capable`, **or** dispositions it `gate-capable-under-conditions` **and** the named precondition holds. **Every other check — including one the record does not disposition at all — is reported, never evaluated.**
+
+Absence of a disposition is **non-admission**, not admission by default. The predicate names no check id and no kind, so a pack that adds either extends the population without amending this rule. The record is cited as the single verdict identifier and **none of its per-check dispositions is restated here**.
+
+**Why the default is non-admission, stated per disjunct because the disjuncts are different failures.** §4 step 4 rounds `NO-EVIDENCE` to FAIL, so a member that cannot be evaluated does not go quiet when admitted — it changes what the aggregate can return. A check that renders **no judgment at all** makes the aggregate structurally incapable of ALLOWED for any item whose evidence is absent. A check that renders a **definite verdict inconsistently across runs** never reaches that state; it makes the aggregate **nondeterministic**, which is a re-rollable gate — a blocked transition re-requested until it passes, the gate-washing surface §4 step 5 exists to close. Both bar admission. Neither may be reported as the other, and **"not admitted" must never be rendered as "permanently blocking"** — only the first disjunct has that shape.
+
+**Two riders on the predicate:**
+
+- The disposition's carrier is the **record**, because the `x-pmo-criteria-judgment` annotation that is to carry it is an output of the §3.1 step-5 projection and that derivation has no runner today. **Once the derivation has a runner the annotation becomes the carrier**, and this clause reads the disposition from there instead; the predicate above is unchanged by that move.
+- A record consulted at gate time is **read per invocation, never cached** — the same discipline `delivery_approach` already carries.
+
+**Admitted cardinality is a property of the resolved kit, not of this rule.** It is read from the kit at gate time and no count is restated here, because a number written here would be a second copy of one the manifest already declares. Two consequences follow, stated because a reader who does not find them stated will assume otherwise:
+
+- A block whose admitted subset is **empty** still emits the report **with its denominator** and contributes no criterion. An empty admitted subset is a reported state, never a silent pass.
+- An archetype whose declared checks are **all** non-admitted contributes nothing to either gate while still reporting on both. That is the rule working, not the kit failing to resolve.
+
+**Reporting — `NO-EVIDENCE` and `NOT-EVALUATED` are different objects.** Conflating them is the defect this section exists to prevent.
+
+| Token | Subject | Reduction |
+|---|---|---|
+| `NO-EVIDENCE` (§4 step 2, §4.1) | the criterion **was evaluated against the work item** and no evidence was found | rounds to **FAIL** → BLOCKED |
+| `NOT-EVALUATED` | the **criterion itself could not be established** — the kit, the kind or the block could not be read | **withheld** — no verdict for that criterion; the gate's verdict comes from the members it could read |
+
+`NOT-EVALUATED` is adopted verbatim from [`gate-criteria-spec.md`](../../../../core/schemas/gate-criteria-spec.md) § Step 0, which also fixes its anti-vacuity shape: the gate emits **one** finding naming the cause, *"never once per issue."*
+
+**The report is one block, never one line per check.** It names the **kind**, the **key** (`criteria.readiness` / `criteria.done` / `criteria.gate`) and the **denominator** — checks read / admitted / reported. A consumer that emits a report for every kind is indistinguishable from one that works, absent a denominator.
+
+**A non-admitted check is reported with its disposition carried verbatim** from the record — `advisory-only`, `NOT-EVALUATED`, or absent — and never flattened into a single reason string. Where the disposition is `advisory-only`, the record additionally names which disjunct fired; carry that too, because the two imply opposite remediations (a decidability repair for an unrenderable judgment, a reproducibility repair for an inconsistent one) and a report that cannot tell them apart routes both to the wrong owner.
+
+**Reserve `NOT-EVALUATED` for the unresolved outcome.** A non-admitted check whose block resolved and parsed **was** read; it simply is not a member, and it is reported with its disposition rather than as `NOT-EVALUATED`. The record uses the same spelling for a check it has **not measured** — that is a disposition value on the record's surface, not this gate's report token. Same word, two subjects; keep them distinct in the emitted text.
+
+**`NOT-EVALUATED` is a report token, never a gate verdict.** §4.1 closes the verdict set at exactly three values and its naming guard forbids expansion. The report block sits **beside** the verdict, in the same relation the `Axis-1 advance this PASS authorizes` footers in [`gate-checklists.md §2.2`](gate-checklists.md) already have to their templates. If `NOT-EVALUATED` ever appears in a `PASS` / `CONDITIONAL PASS` / `FAIL` position, the emission is wrong.
+
+**Decision tree.**
+
+```
+work item at gate LG-N
+  |
+  |-- resolve pack  (delivery_approach -> [meta].applies_to)   -- per invocation,
+  |-- resolve kind  (type:<kind_id>)                           -- never cached
+  |
+  |-- either unresolved? ------------------------------> UNRESOLVED
+  |                                                      evaluate [LG-N-EX-k] as today
+  |                                                      emit ONE NOT-EVALUATED line
+  |                                                      (kind . key . denominator)
+  |
+  `-- read [kinds.criteria.<key>] in the manifest
+        |
+        |-- checks[] empty --+-- block-level source? ---> REASONED-EMPTY
+        |                    |                            state the practice basis
+        |                    |                            contribute no criterion
+        |                    |                            emit no unresolved report
+        |                    `-- no source? -----------> UNRESOLVED (above)
+        |
+        `-- checks[] populated --> per check, apply the admission predicate
+              |-- admitted     --> joins the §4 member set; evaluated PASS / FAIL / NO-EVIDENCE
+              `-- not admitted --> reported with its disposition verbatim
+                                   (never evaluated; never NO-EVIDENCE; never NOT-EVALUATED)
+```
 
 ---
 
@@ -345,7 +427,7 @@ The binding (inherited from [`lifecycle-stages.md §3`](lifecycle-stages.md) —
 | [`dependency-rules.md`](dependency-rules.md) | Dependency types + escalation triggers, consumed at LG-3 (dependency register) and LG-4 (dependency clearance). |
 | [`estimation-standards.md`](estimation-standards.md) · [`capacity-model.md`](capacity-model.md) (same dir) | Estimation and capacity references consumed at LG-1/LG-3 (capacity confirmation) and LG-4 (sizing). See § Provenance. |
 | [`lifecycle-stages.md`](lifecycle-stages.md) | The 15-stage temporal axis. **Owns** the `T(n→n+1)` transition convention (§5.2) and the §3 stage→gate seam this doc's §4.2 binds to as a back-reference. The de-dup boundary: `lifecycle-stages.md` owns stages + transitions; this doc owns gate entry/exit/authority/escalation + the §4 BLOCK + §4.1 verdict semantics. |
-| delivery-engine `SKILL.md` (`../SKILL.md`) | The consumer skill — Mode F applies these gates' exit criteria + the §4 transition rule across LG-1…LG-10 + the §4.1 verdict + §4.2 binding; Mode G attributes gate decisions + records the §4.1 verdict; Mode C references for context (the §4.2 `T(6→7)` LG-4 binding). |
+| delivery-engine `SKILL.md` (`../SKILL.md`) | The consumer skill — Mode F applies these gates' exit criteria + the §4 transition rule across LG-1…LG-10 + the §4.1 verdict + §4.2 binding + the §4.3 resolved-kit admission and reporting rule; Mode G attributes gate decisions + records the §4.1 verdict; Mode C applies §4.3 at the LG-4 DoR gate and references this doc for context (the §4.2 `T(6→7)` LG-4 binding). |
 
 **Sibling-list reconciliation (out of scope here).** Three other corpus docs carry divergent, partial project-lifecycle gate lists today (`pmo-process-designer/references/traceability-matrix.md`, `ppm-agent/references/artifact-gap-detection.md`, `comms-writer/references/channel-formats.md`). Reconciling them to this canonical eleven-gate sequence is tracked separately and is NOT performed in this doc.
 
@@ -357,3 +439,4 @@ The binding (inherited from [`lifecycle-stages.md §3`](lifecycle-stages.md) —
 |---|---|---|
 | 1.0 | 2026-06-13 | Initial authoring — canonical eleven-gate project-lifecycle sequence (LG-0 Idea Screen → LG-10 Closure), per-gate 6-field blocks with `LG-N-EX-k` exit-criterion IDs, the §4 gate-transition BLOCK rule, and the four critical-handoff pointers. Provenance `UNSOURCED-DOMAIN`. Authored under the delivery-capacity-and-lifecycle-gating release (eleven-gate A2 model per Collective Review operator override). |
 | 1.1 | 2026-06-15 | Added §4.1 Tri-State Verdict Semantics (the `🟢 PASS / 🟡 CONDITIONAL PASS / 🔴 FAIL` verdict mapped onto the §4 criterion engine — `ALLOWED`=PASS, `PASS WITH CONDITIONS`=CONDITIONAL PASS, `BLOCKED`=FAIL; CONDITIONAL PASS gate-type-gated to Approval gates + the LG-6 documented-exception; NO-EVIDENCE→FAIL; the closed-three-value naming guard) and §4.2 Gate→Transition Binding (each gate's `T(n→n+1)` coordinate inherited as a back-reference from `lifecycle-stages.md §3`/§5.2 — LG-3 T(5→6), LG-4 T(6→7), LG-5 T(8→9), LG-6 T(9→10), LG-7 T(10→11), LG-8 T(11→12), LG-9 T(14→15); LG-0/LG-1/LG-2 marked project-altitude boundary-point, LG-10 terminal; the no-advance-past-unmet-gate / no-skip-a-gate rule composing with `lifecycle-stages.md §5.2`). Purpose + §4 intro updated; a `lifecycle-stages.md` cross-ref row added. The §4 engine, the eleven gates + their `[LG-N-EX-k]`, and the §3 H1–H4 pointers are unchanged; no new field, no gate redefinition. Authored under the 02-FNH-est-lifecycle-status-hardening release (the delivery-engine 10-gate lifecycle-enforcement story). |
+| 1.2 | 2026-09-11 | Added §4.3 Resolved-kit criteria — admission and reporting: the three-outcome branch (resolved-and-populated / resolved-and-reasoned-empty / unresolved) discriminated on the block-level `source` per `work-item-type-schema.md` §1.2.1 *Content provenance*; the admission predicate, whose disposition carrier is the evaluability record and whose default is non-admission, with the two rider clauses (the annotation becomes the carrier once its derivation has a runner; the record is read per invocation, never cached); the two-part pack-and-kind resolution and its negative path; the agent-read prohibition; the `NO-EVIDENCE` / `NOT-EVALUATED` distinction with `NOT-EVALUATED` adopted verbatim from `gate-criteria-spec.md` § Step 0 as a report token beside the verdict; the one-block report shape naming the kind, the key and the denominator, carrying each non-admitted check's disposition verbatim; and the decision-tree flow block. §4 steps 1–2 now name the resolved kit and the admitted-check member set — no step added, removed or renumbered. §4.1's PASS / CONDITIONAL PASS / FAIL rows now quantify over the §4 member set rather than over the `[LG-N-EX-k]` exit block alone, and §4.2's Axis-1 downstream clause is reconciled to the same set; the verdict set stays closed at three values and the naming guard, the NO-EVIDENCE→FAIL rule and the CONDITIONAL-PASS gate-type gating are byte-unchanged. Purpose + §4 intro + the `SKILL.md` cross-reference row updated. The eleven gates, their `[LG-N-EX-k]` exit blocks and the §3 H1–H4 pointers are byte-unchanged; no new field, no gate redefinition, no new verdict value. Authored under the authoring-bar-and-consumers release (the readiness-and-done-gate resolved-kit consumer). |

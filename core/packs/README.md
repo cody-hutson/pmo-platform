@@ -384,3 +384,16 @@ real deployment kit.
   rollup reaches a container tier through that tier's own `portfolio_id` /
   `program_id` / `project_id` classifier, never through a kind declared there — which
   is why covering every organizational level needs no kind above the Work-Item one.
+- **What good looks like for an item of a declared kind** — the expected structure, the
+  required content, and the depth appropriate to the kind's altitude — is stated by the
+  work-item authoring standard in
+  [`../standards/work-item-authoring-standard.md`](../standards/work-item-authoring-standard.md).
+  It is the authoring guidance for the space the configurable/fixed boundary deliberately
+  leaves unbounded, and it is the reader's entry point from this corpus into that bar. It
+  **names no kind**: it states the dimensions and the ordered procedure that assigns a
+  declaration to one of them, and the per-kind values stay here, in the manifests. **The
+  rules are defined there and are not restated here**, the same pointer discipline the
+  lines above apply to the grammar and to the entity roster. What this line adds on this
+  side of the pointer: a pack author reading a manifest is reading one half of that bar,
+  and the standard is the other half — which is why an authoring question that the
+  manifest cannot answer is answered there rather than by widening the manifest.
