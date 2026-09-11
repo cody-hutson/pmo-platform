@@ -754,6 +754,22 @@ else
   fail "L the unresolved-symbol diagnosis blames the sentinel bounds — the wrong-cause defect is back: ${_msg_nopred}"
 fi
 
+# UNMAPPED (third branch) — the `*)` arm of build_failure_reason. Every call site
+# passes a status in {2,3}, so no arm above ever executes it, and the claim that a
+# future cause surfaces as unmapped rather than silently inheriting a mapped
+# diagnosis rested on reading those call sites. This row OBSERVES it instead.
+# 1 is the right probe value: it is the single code the pre-widening contract
+# returned, so the row doubles as a guard against a partial revert to it.
+_msg_unmapped="$(build_failure_reason 1 "$MUT_CLEAN")"
+if /usr/bin/grep -qF -- 'UNMAPPED-STATUS' <<<"$_msg_unmapped" \
+   && /usr/bin/grep -qF -- 'returned 1' <<<"$_msg_unmapped" \
+   && ! /usr/bin/grep -qF -- 'SENTINEL-BOUNDS' <<<"$_msg_unmapped" \
+   && ! /usr/bin/grep -qF -- 'UNRESOLVED-SYMBOL' <<<"$_msg_unmapped"; then
+  pass "L UNMAPPED (third branch) — status 1 is diagnosed as UNMAPPED-STATUS naming the code it returned, and inherits NEITHER mapped cause's tag; a cause added without a diagnosis surfaces instead of borrowing one"
+else
+  fail "L an unmapped status did not surface as its own cause — ${_msg_unmapped}"
+fi
+
 echo ""
 echo "─────────────────────────────────────────────────────────────────────────"
 printf 'Result: %d passed, %d failed\n' "$PASS_COUNT" "$FAIL_COUNT"
