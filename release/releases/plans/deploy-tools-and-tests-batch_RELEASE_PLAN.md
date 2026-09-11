@@ -2,7 +2,7 @@
 title: Release Plan — deploy-tools-and-tests-batch (deploy tools and tests resolve repo, root, project and dimension correctly at their edges)
 type: release-plan
 plan_type: release
-status: IN PROGRESS
+status: ACTIVE
 release: versioned (bump-class minor; the concrete number binds only at the Stage-12 atomic claim)
 milestone: deploy-tools-and-tests-batch
 release_class: routine
