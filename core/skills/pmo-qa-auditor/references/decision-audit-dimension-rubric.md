@@ -77,9 +77,9 @@ entering the block and escaping every seam's denominator unnoticed (§4.8).
 Disjointness holds by the admission predicate's third conjunct (§4.6) and is checkable by
 intersecting the seven selector sets pairwise. Totality holds because DS1's selector is a
 **complement**: it claims every `decision` subtype the other rows do not, so a subtype added
-to the schema lands in DS1 rather than falling through unmeasured. Neither is a prose claim —
-both are exercised by the fixture families, and the source-completeness family additionally
-asserts that the union of the seams' matched rows equals the block's own parsed row set.
+to the schema lands in DS1 rather than falling through unmeasured. Both are stated as
+machine-checkable assertions rather than as prose judgments, and §4.8 specifies the fixture
+family that is required to exercise them.
 
 **Why DS1 is one seam rather than two.** The operator-rendered routing decisions and the hub's
 rule-determined recorded determinations share the **same** locus, `decision`/`d-class`, and the
@@ -450,11 +450,22 @@ nothing is miscounted.
 
 Resolving membership from the block by delimiter and stable key closes both, and closes the
 class rather than the instances — an obligation added under the block's own extension seam
-reaches the matched rows without an edit here. The source-completeness fixture family is the
-arm that keeps it closed: it parses the block between its delimiters, asserts that the union of
-the seams' matched rows **equals** the parsed row set, asserts the same for the provenance enum,
-and carries a negative control in which a row removed from a copy of the block must make the
-fixture fail.
+reaches the matched rows without an edit here.
+
+**The required source-completeness fixture family, specified here and not yet present.** Citing
+the block by key removes the hand-copy; it does not by itself prove the resolution is complete,
+so the arm that keeps this closed is a fixture family that **parses the block between its
+delimiters**, asserts the union of the seams' matched rows **equals** the parsed row set,
+asserts the same for the provenance enum against the payload convention, and carries a
+**negative control** in which a row deleted from a copy of the block must make the family fail.
+A parser for the block already exists and is self-tested, so the family is cheap to add.
+
+**Until that family lands this section states an obligation rather than a shipped control, and
+it says so deliberately.** The distinction is the whole subject of §4.9: a control that reads as
+enforcement while functioning as a no-op is worse than no control at all. Recording the family
+as required — and as absent — keeps that gap countable instead of invisible; asserting it as
+present would reproduce, inside this rubric, exactly the false-clean the two omissions above
+already produced once.
 
 ### 4.9 Relation to the deploy-time decision-emission check
 
