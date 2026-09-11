@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""_frontmatter.py — the single shared YAML-frontmatter block reader.
+"""_frontmatter.py — the single shared YAML-frontmatter block reader AND the
+single shared corpus-traversal predicate for the deploy-tool family.
 
 This is the ONE place the deploy-tool family parses a doc's frontmatter block,
 so two checks that both reason about "does this doc carry frontmatter, and what
@@ -27,6 +28,16 @@ colon and the value is stripped of one matching pair of surrounding quotes
 ("…" or '…'). Keeping that idiom byte-identical here is the F1 consistency
 guarantee: a doc Check 18b treats as "has frontmatter" is the same doc Check 50
 treats as "has frontmatter," because both ask THIS module.
+
+F1 COVERS TRAVERSAL TOO. The same guarantee spans a second axis: not only "what
+keys does this doc carry" but "is this doc in the corpus at all". is_corpus_path()
+below is the ONE traversal predicate the deploy-tool corpus walkers share, so a
+file is in the corpus for all of them or out of it for all of them — the same
+terms, one axis over. Three walkers previously carried that rule privately (two
+byte-identical copies and one omission) and disagreed on dot-leading segments;
+they now ask THIS module, exactly as they already ask it what a frontmatter block
+is. That is why this module is BOTH a reader and a traversal predicate, and why
+its name understates it.
 
 FROZEN SEMANTICS
 ----------------
@@ -169,6 +180,18 @@ def read_anchor(doc_path: Path) -> tuple[str | None, str]:
     return None, "frontmatter-no-key"
 
 
+def is_corpus_path(path: Path, root: Path) -> bool:
+    """True when `path` is inside the corpus rooted at `root` — i.e. NO segment of
+    its root-relative path begins with a dot. This is the ONE traversal predicate
+    the deploy-tool corpus walkers share, so a file is in the corpus for all of
+    them or out of it for all of them (the F1 consistency guarantee, applied to
+    traversal). Dot-leading DIRECTORY segments (`.git/`, `.body-backups/`) and
+    dot-leading FILENAMES (`.draft.md`) are BOTH excluded — the filename is a
+    segment of the relative path like any other. Raises ValueError for a path
+    outside `root`, exactly as the inline expressions it replaces did."""
+    return not any(part.startswith(".") for part in path.relative_to(root).parts)
+
+
 def _self_test() -> int:
     import tempfile
 
@@ -283,9 +306,44 @@ def _self_test() -> int:
             "counts as flush-left, it does not remove the indentation filter"
         )
 
+        # (6) is_corpus_path — the shared traversal predicate. BOTH dot-leading
+        # shapes are excluded: a dot-leading DIRECTORY segment and a dot-leading
+        # FILENAME. The issue body names only the directory shape; the filename
+        # shape is over-returned identically, and a half-fix covering only
+        # directories is invisible to the two walkers' own self-tests.
+        assert is_corpus_path(base / "a" / "b" / "doc.md", base) is True, (
+            "a plain nested path is in the corpus"
+        )
+        assert is_corpus_path(base / ".body-backups" / "doc.md", base) is False, (
+            "a dot-leading DIRECTORY segment puts the path out of corpus"
+        )
+        assert is_corpus_path(base / ".draft.md", base) is False, (
+            "a dot-leading FILENAME is out of corpus — the filename is a segment "
+            "of the relative path like any other"
+        )
+        # SPECIFICITY — an INTERNAL, non-leading dot is ordinary content. This arm
+        # stops a future "strip anything with a dot" regression from passing.
+        assert is_corpus_path(base / "beta_steerco.txt.meta.yml", base) is True, (
+            "SPECIFICITY: an internal, non-leading dot does NOT exclude a path"
+        )
+        # The preserved error contract: a path outside `root` raises, exactly as
+        # the inline relative_to() expressions this predicate replaces did.
+        try:
+            is_corpus_path(Path("/somewhere/else/doc.md"), base)
+            raise AssertionError("a path outside root must raise ValueError")
+        except ValueError:
+            pass
+
     print("_frontmatter self-test OK")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(_self_test())
+    # Explicit argv dispatch: the self-test discovery predicate reaches this
+    # module through the `--self-test` token, so with the token only in the
+    # docstring a docstring rewrite silently drops it from the manifest floor
+    # while its row stays on disk. A bare invocation stays an alias.
+    if "--self-test" in sys.argv or len(sys.argv) == 1:
+        sys.exit(_self_test())
+    print("usage: _frontmatter.py [--self-test]", file=sys.stderr)
+    sys.exit(2)
