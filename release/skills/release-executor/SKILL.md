@@ -502,14 +502,44 @@ All three paths also resolve `--latest` **explicitly** on the create branch rath
 
    # Read current state via gh release view
    if gh release view "v<X.Y>" --repo {REPO} >/dev/null 2>&1; then
-     # State 1 or 2 — release exists; compare body
+     # State 1 or 2 — release exists; compare BODY and TITLE.
+     # Mode F is the § 5.6 route for a post-VERIFIED correction, and a corrected note
+     # H1 is one of those corrections — so this path must be able to carry a title.
+     # Passing only --notes is what let a title composed before the note existed
+     # survive every subsequent re-emit.
      EXISTING_BODY=$(gh release view "v<X.Y>" --repo {REPO} --json body --jq .body)
-     if [[ "$EXISTING_BODY" == "$CANONICAL_BODY" ]]; then
-       echo "PASS — release v<X.Y> already at canonical state (State 2 no-op)"
+     # A SEPARATE read, not `--json body,name`: fixtures that discriminate on the
+     # literal "--json body" also match the combined form and would answer a title
+     # read with the body.
+     EXISTING_TITLE=$(gh release view "v<X.Y>" --repo {REPO} --json name --jq .name)
+     # Title composition MIRRORS automated-closeout.sh `_surface1_title()`, which is
+     # this predicate's registered runner-def in gate-efficacy-standard.md. Keep the
+     # two in step token-for-token: an inline copy that drifts is the same defect the
+     # § 5.1 note above records for the body transform, one dimension over.
+     H1=$(grep -m1 '^# ' "$NOTES_PATH" | sed 's/^# //')
+     # The trailing trim is load-bearing, not cosmetic. The projector's own H1 accessor
+     # (generate_release_index.py read_note()) strips, so an untrimmed copy composes a
+     # DIFFERENT "canonical" title from one note — each path then reads the other's as
+     # non-canonical and re-edits it forever.
+     H1="${H1%"${H1##*[![:space:]]}"}"
+     # FM-4: an H1 equal to the bare version means the extraction degenerated.
+     CANONICAL_TITLE=""
+     if [[ -n "$H1" && "$H1" != "v<X.Y>" ]]; then CANONICAL_TITLE="v<X.Y> — $H1"; fi
+     if [[ "$EXISTING_BODY" == "$CANONICAL_BODY" \
+        && ( "$EXISTING_TITLE" == "$CANONICAL_TITLE" || -z "$CANONICAL_TITLE" ) ]]; then
+       echo "PASS — release v<X.Y> already at canonical state on body and title (State 2 no-op)"
      else
-       # State 1 → State 2 transition via idempotent gh release edit
-       gh release edit "v<X.Y>" --repo {REPO} --notes "$CANONICAL_BODY"
-       echo "EDITED — release v<X.Y> body refreshed from canonical notes"
+       # State 1 → State 2 transition via idempotent gh release edit.
+       # WITHHOLD: with no usable H1, omit --title entirely. Never pass an empty one —
+       # `--title ""` blanks the posted title, so a malformed note would DOWNGRADE a
+       # good published title. Refreshing the body is still correct and still happens.
+       if [[ -z "$CANONICAL_TITLE" ]]; then
+         gh release edit "v<X.Y>" --repo {REPO} --notes "$CANONICAL_BODY"
+         echo "EDITED — release v<X.Y> body refreshed; title WITHHELD (no usable '# ' H1 in $NOTES_PATH — correct the note H1 and re-run)"
+       else
+         gh release edit "v<X.Y>" --repo {REPO} --notes "$CANONICAL_BODY" --title "$CANONICAL_TITLE"
+         echo "EDITED — release v<X.Y> body and title refreshed from canonical notes"
+       fi
      fi
    else
      # State 0 — release does not exist; create
@@ -635,7 +665,7 @@ execution summary with warnings/issues. Every decision-class item must carry a
 - Mode C targeted fix recommendation — when beyond the active snapshot window, the skill proposes a targeted fix instead of full rollback.
 - Mode D `Close Release` report — close-out summary (chore PR merged, Milestone closed, RELEASE_LOG VERIFIED, manual-close list with D-1 rationale for the auto-close anomaly where a PR's `closes #N` references did not auto-close all release issues, requiring manual closure). The summary is the operator's audit trail of what Stage 13 did and is the artifact the operator references when answering "did the release close cleanly?".
 - Mode D auto-close anomaly remediation — when Phase 4 detection finds open release issues, the manual-close list is a proposed action (operator-authorized D-1 pattern for the observed auto-close anomaly where some release issues stayed open despite a `closes #N` reference). Operator approves the list at Step 4 Apply gate before script Phase 14 executes the `gh issue close --comment` calls.
-- Mode D pre-flight halt decisions — the script halts at Phase 2 (exit 2) on three classes of condition, and the class determines the disposition. **Not-yet-ready** (`gh auth` unavailable, working tree not clean, Stage 12 chore PR hasn't landed so the DEPLOYED row is missing): re-run once the condition clears, or escalate Tier 2 [SCOPE CHANGE]; the `stage-13-close.md` Phase A8 hand-assembly fallback applies to this class. **Missing input** (an unfilled scaffold token in this version's release note, the Phase-A7 `release-synthesis/learnings-triple` row not captured): supply the input and re-run — the fallback does NOT apply, because hand-assembly would produce by hand the very artifact the gate refuses. **Defect** (invoked from the primary checkout, a milestone slug resolving to other than exactly one RELEASE_LOG row, a scaffold-token set the lint tool cannot read): repair and re-run — the fallback does not apply here either. An absent annotated version tag is **not** a halt reason: pre-flight records the tag, it does not gate on it. In every class the skill presents the failure for operator judgment.
+- Mode D pre-flight halt decisions — pre-flight halts on three classes of condition, and the class determines the disposition. **Exit 2 is the entry-gate code, not pre-flight's alone**, so a bare exit 2 never identifies pre-flight as the halt site: `phase_detect_open_issues` dispatches it too, and so do the two guards **outside the phase ladder** — the instance-path resolver, which fires at load time genuinely ahead of everything, and `workspace_boundary_check`, whose one call site sits after argument parsing and before `phase_preflight`. Resolve which gate refused from the run's own output, never from the exit code; the three classes below are pre-flight's own conditions. **Not-yet-ready** (`gh auth` unavailable, working tree not clean, Stage 12 chore PR hasn't landed so the DEPLOYED row is missing): re-run once the condition clears, or escalate Tier 2 [SCOPE CHANGE]; the `stage-13-close.md` Phase A8 hand-assembly fallback applies to this class. **Missing input** (an unfilled scaffold token in this version's release note, the Phase-A7 `release-synthesis/learnings-triple` row not captured): supply the input and re-run — the fallback does NOT apply, because hand-assembly would produce by hand the very artifact the gate refuses. **Defect** (invoked from the primary checkout, a milestone slug resolving to other than exactly one RELEASE_LOG row, a scaffold-token set the lint tool cannot read): repair and re-run — the fallback does not apply here either. An absent annotated version tag is **not** a halt reason: pre-flight records the tag, it does not gate on it. In every class the skill presents the failure for operator judgment.
 
 Note: the *act of executing an approved RI / file modification per the plan* is not itself a decision-class output of this skill — the plan was the decision.
 

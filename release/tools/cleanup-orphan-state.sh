@@ -61,7 +61,13 @@
 #         --ledger <path>      Point at a re-version ledger other than the default
 #                              (release/releases/RELEASE_REVERSIONS.md).
 #   MODE (one of, default --dry-run):
-#     --dry-run                Enumerate + report; no mutation (default)
+#     --dry-run                Enumerate + report; no mutation (default). The report
+#                              PROJECTS the apply's resolve pass: a branch whose only
+#                              worktree holders are all in this run's REMOVE set is
+#                              reported "WILL-DRAIN — freed by same-run worktree
+#                              removal" and counted as removable, so the enumerated
+#                              total is the apply's outcome and can be relayed as an
+#                              approval scope
 #     --apply                  Execute removals after enumeration (opt-in). The apply
 #                              phase runs in order: (1) remove REMOVE-action branches /
 #                              worktrees via git porcelain; (2) resolve — one bounded
@@ -74,7 +80,11 @@
 #                              remote-tracking refs (origin/<branch>) whose server-side
 #                              branch was already deleted (e.g. on PR merge), via
 #                              `git remote prune`, so the report's remote view matches
-#                              reality. Steps 2-4 are no-ops in --dry-run.
+#                              reality. Steps 3-4 are no-ops in --dry-run; step 2
+#                              runs there as a PROJECTION that removes nothing —
+#                              it relabels the branches the apply would drain, so
+#                              the dry-run total states what the apply will do
+#                              rather than what is removable in the current state.
 #   OUTPUT (one of, default --markdown):
 #     --markdown               Human-readable report (default)
 #     --json                   Machine-readable
@@ -82,9 +92,20 @@
 #     --force                  Allow git branch -D + git worktree remove --force; requires --apply
 #     SELF — the script's own runtime worktree is never removed (a new SELF action
 #     class; --force does not override)
+#     LOCKED — a worktree git reports locked is skipped ("SKIP — worktree locked
+#     (pid N)" / "(holder unknown)"). --force does not override, and could not:
+#     git refuses removal of a locked tree at both force levels this tool can
+#     produce (it wants -f -f); `git worktree unlock <path>` is the remedy.
+#     Detected from the porcelain `locked` line, independently of any process's
+#     working directory
 #     LIVE — worktrees held by a live process are skipped ("SKIP — live session
-#     (pid …)"; re-checked at apply time); fail-closed when lsof is unavailable;
-#     --force does not override
+#     (pid …)"; re-checked at apply time); --force does not override. The signal
+#     is a process WORKING-DIRECTORY scan, so it sees a holder sitting inside the
+#     tree and NOT one holding only a lock registration — the LOCKED class above
+#     is what covers that. Fail-closed on BOTH limbs: when lsof is absent, AND
+#     when lsof runs but returns a map missing the script's own cwd (the
+#     self-canary). Either leaves every residual REMOVE converted to
+#     "SKIP — liveness oracle unavailable (fail-closed)"
 #   META:
 #     --help, -h               Usage
 #     --self-test              Validate detection logic + apply path + post-apply verify +
@@ -145,7 +166,20 @@ WORKSPACE_ROOT="${WORKSPACE_ROOT:-${CLAUDE_WORKSPACE_ROOT:-}}"
 if [[ -z "$WORKSPACE_ROOT" ]]; then
   _operator_toml="${HOME}/.config/pmo-platform/operator.toml"
   if [[ -r "$_operator_toml" ]]; then
-    _wr=$(grep -m1 -E '^claude_workspace_root' "$_operator_toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+    # `|| true` spans the whole substitution. claude_workspace_root is OPTIONAL, so
+    # an operator.toml that EXISTS and omits it makes this grep exit 1, `pipefail`
+    # carries that out of the substitution and `set -e` (line 122) aborts at LOAD
+    # time — before argument parsing, on EVERY invocation including --self-test —
+    # with exit 1 and no output. The default two lines down is what makes the key
+    # optional; without the tolerance that default is unreachable.
+    #
+    # TOLERANCE ONLY here — deliberately NOT the two-part fold applied to the same
+    # class in automated-closeout.sh. These three sites already carry `grep -m1` and
+    # never piped into `head`, so the SIGPIPE half of that fold has no referent in
+    # this file. Two remediation shapes, one class; applying the other one here
+    # would be a rewrite with nothing to fix. selftest_key_read_tolerance() below
+    # asserts the invariant that IS shared.
+    _wr=$(grep -m1 -E '^claude_workspace_root' "$_operator_toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
     [[ -n "$_wr" ]] && WORKSPACE_ROOT="$_wr"
   fi
 fi
@@ -157,8 +191,13 @@ PROTECT_LIST="$WORKSPACE_ROOT/.claude/cleanup-protect-list.txt"
 # Operators can override REPO_SLUG to point cleanup at a fork.
 REPO_SLUG="${REPO_SLUG:-}"
 if [[ -z "$REPO_SLUG" ]] && [[ -r "${HOME}/.config/pmo-platform/operator.toml" ]]; then
-  _gh=$(grep -m1 -E '^operator_github' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
-  _repo=$(grep -m1 -E '^pmo_platform_repo_name' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+  # `|| true` for the same reason as the claude_workspace_root read above: both keys
+  # are OPTIONAL, and without the tolerance a present-but-key-less operator.toml
+  # aborts this tool at LOAD time with exit 1 and no output, making the documented
+  # "pmo-platform" fallback two lines down unreachable. Tolerance only — see above
+  # for why the SIGPIPE half of the sibling's fold has no referent in this file.
+  _gh=$(grep -m1 -E '^operator_github' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
+  _repo=$(grep -m1 -E '^pmo_platform_repo_name' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
   [[ -z "$_repo" ]] && _repo="pmo-platform"
   [[ -n "$_gh" ]] && REPO_SLUG="${_gh}/${_repo}"
 fi
@@ -415,6 +454,41 @@ branch_for_worktree() {
   awk -v p="$wpath" 'BEGIN{found=0} /^worktree /{if (found) exit; if ($2==p) found=1; next} found && /^branch /{print $2; exit}' <<<"$WT_SNAPSHOT"
 }
 
+# The `locked …` line git emits inside a worktree block, or empty when the tree
+# carries none. Enumeration-time BY DESIGN: this reads the same WT_SNAPSHOT tier
+# branch_for_worktree reads, and every detect_* pass refreshes the snapshot before
+# it classifies, so the fact is as fresh as the enumeration that consumes it. There
+# is deliberately NO apply-time consumer, and the reason is stated here rather than
+# pointed at: a lock taken AFTER classification is caught by git itself, which
+# refuses `worktree remove` on a locked tree at both force levels this tool can
+# produce, and classify_worktree_refusal names that refusal `locked` rather than
+# letting it read as a dirty tree. Liveness needs an apply-time re-read because
+# porcelain does NOT refuse a clean live-held tree; a lock needs none because
+# porcelain does refuse. Here-string input — no live pipe for an early awk-exit to
+# SIGPIPE. [WTPIPEGUARD]
+worktree_lock_line() {
+  local wpath="$1"
+  [[ "$WT_SNAPSHOT_BUILT" == "1" ]] || refresh_wt_snapshot
+  awk -v p="$wpath" 'BEGIN{found=0} /^worktree /{if (found) exit; if ($2==p) found=1; next} found && /^locked/{print; exit}' <<<"$WT_SNAPSHOT"
+}
+
+# Holder pid parsed out of a lock line, or empty when none parses. Git specifies
+# NO format for a lock reason — it is free-form text written by whatever process
+# took the lock — so only an all-digit run following the literal `pid ` is
+# accepted and NOTHING else from the reason is ever propagated. That bound is
+# load-bearing rather than tidy: the value this feeds reaches a candidate row's
+# action field, which is emitted into JSON unescaped and is parsed positionally
+# out of a TAB-delimited tuple, so a stray quote or TAB carried out of a lock
+# reason would corrupt both. The trap case is a reason reading "(pid unknown)":
+# it yields empty, never a bogus pid. Parameter expansion only (bash 3.2).
+lock_holder_pid() {
+  local reason="$1" pid
+  pid="${reason##*pid }"
+  [[ "$pid" == "$reason" ]] && return 0
+  pid="${pid%%[!0-9]*}"
+  printf '%s' "$pid"
+}
+
 # Returns 0 if a worktree is currently attached to the branch. Always LIVE — the
 # resolve pass re-checks this against post-removal state, so it must reflect
 # current reality, not the enumeration snapshot. The here-string is fed by a
@@ -423,6 +497,31 @@ branch_for_worktree() {
 branch_has_worktree() {
   local branch="$1"
   grep -q "^branch refs/heads/${branch}$" <<<"$(git worktree list --porcelain 2>/dev/null)"
+}
+
+# Classify a `git worktree remove` refusal stream into ONE token from a closed
+# set. ONLY the token is ever written into a candidate row. That bound is the
+# whole point of having a classifier rather than carrying git's message: the
+# row's action field is emitted into JSON unescaped and is parsed positionally
+# out of a TAB-delimited tuple, while git's locked-tree refusal quotes the lock
+# reason verbatim — free-form text written by whatever process took the lock.
+# The stream itself goes to stderr only, where it is already prefixed `git: `.
+#
+# The set is closed at the shapes git actually produces on this path, measured
+# rather than assumed (git 2.50.1):
+#   locked   fatal: cannot remove a locked working tree, lock reason: <free-form>
+#   dirty    fatal: '<path>' contains modified or untracked files, use --force …
+#   other    anything else, including a message a later git reworded
+# A registered worktree whose DIRECTORY is gone (git's `prunable` class) is
+# deliberately absent: measured, git removes such a registration and exits 0, so
+# it is not a refusal shape at all and a `not-found` token here would name a
+# state that cannot reach this code.
+classify_worktree_refusal() {
+  case "$1" in
+    *"locked working tree"*)                  printf 'locked' ;;
+    *"contains modified or untracked files"*) printf 'dirty' ;;
+    *)                                        printf 'other' ;;
+  esac
 }
 
 # Returns disk size in MB for a worktree path (rounded).
@@ -694,6 +793,7 @@ classify_remote() {
 classify_worktree() {
   local path="$1" branch="$2"
   local status="clean" disk action="REMOVE" cand_phys existing detached_ahead
+  local wt_lock lock_pid lock_label=""
 
   # Dedup guard (v1.11 operator scope call): under the default --all scope,
   # detect_spawn_task and detect_historical can both row the same worktree;
@@ -712,8 +812,22 @@ classify_worktree() {
   worktree_is_clean "$path" || status="dirty"
   disk=$(worktree_size_mb "$path")
 
-  # Clause precedence (v1.11 combined design spec, D-3): protective context
-  # classes first (primary → SELF → live), tree-state classes second (dirty →
+  # Lock label resolved up-front so the precedence chain below stays one
+  # assignment per clause. Both forms are wholly script-controlled strings; no
+  # byte of the free-form lock reason reaches the row (see lock_holder_pid).
+  wt_lock=$(worktree_lock_line "$path")
+  if [[ -n "$wt_lock" ]]; then
+    lock_pid=$(lock_holder_pid "$wt_lock")
+    if [[ -n "$lock_pid" ]]; then
+      lock_label="SKIP — worktree locked (pid ${lock_pid})"
+    else
+      lock_label="SKIP — worktree locked (holder unknown)"
+    fi
+  fi
+
+  # Clause precedence (v1.11 combined design spec, D-3; #6411 inserts LOCKED):
+  # protective context classes first (primary → SELF → locked → live), tree-state
+  # classes second (dirty →
   # protected → not-merged). A dirty SELF tree reports SELF; a dirty live-held
   # tree reports the live session. Protective classes are facts about WHO holds
   # the tree, are stable across tree-state changes, and are never overridden by
@@ -728,6 +842,27 @@ classify_worktree() {
     action="SKIP — primary checkout"
   elif [[ -n "$SCRIPT_WORKTREE" && "$cand_phys" == "$SCRIPT_WORKTREE" ]]; then
     action="SELF — script's own runtime worktree (protected)"
+  elif [[ -n "$lock_label" ]]; then
+    # #6411. A lock is held by REGISTRATION in the repository's worktree
+    # metadata, not by any process's working directory, so "locked AND no cwd
+    # holder" is a reachable state — and it is the steady end-state of a
+    # completed-but-still-locked agent worktree, whose lock holder sits outside
+    # the tree. Before this clause such a tree fell through every protective
+    # clause to the initialised REMOVE, and the apply phase then reported a
+    # dirty tree that was not dirty.
+    #
+    # The class is REMOVABILITY, not liveness, and it precedes the live clause
+    # for that reason: git refuses `worktree remove` on a locked tree at BOTH
+    # force levels this tool can produce (plain, and single --force; it wants
+    # -f -f — measured on git 2.50.1, whose one-line -h help says otherwise and
+    # is wrong). The tree therefore cannot be removed whatever a liveness read
+    # says, and labelling it by liveness would report a removability finding as
+    # a liveness finding. Note this does NOT invert git-workflow.md
+    # § Sweep-deletion safety clause (c): that clause is about lock ABSENCE
+    # proving nothing, and it still holds — lock PRESENCE proving unremovable
+    # is the other direction, and the cwd oracle below is retained unchanged
+    # for the holder that never locked.
+    action="$lock_label"
   elif [[ "$ORACLE_STATE" == "ok" ]] && worktree_is_live "$cand_phys"; then
     action="SKIP — live session (${LIVE_HIT})"
   elif [[ "$status" == "dirty" ]]; then
@@ -1224,7 +1359,7 @@ emit_markdown() {
   local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   local lc=${#LOCAL_BRANCH_CANDIDATES[@]} rc=${#REMOTE_BRANCH_CANDIDATES[@]} wc=${#WORKTREE_CANDIDATES[@]}
   local pc=${#PRUNED_TRACKING_REFS[@]}
-  local lr=0 rr=0 wr=0 disk_total=0 bfails=0 wfails=0 sc=0 lvc=0 fcc=0 a ref
+  local lr=0 rr=0 wr=0 disk_total=0 bfails=0 wfails=0 sc=0 lvc=0 fcc=0 lkc=0 pd=0 a ref
 
   # Mode-aware report vocabulary. In --apply, apply_removals (which now runs BEFORE this
   # emitter) has rewritten each acted-on candidate's action field to REMOVED (deleted) or
@@ -1238,6 +1373,13 @@ emit_markdown() {
     a=$(awk -F'\t' '{print $6}' <<<"$r")
     [[ "$a" == "$want" ]] && ((lr++)) || true
     [[ "$a" == FAILED* ]] && ((bfails++)) || true
+    # #6207. A projected drain counts into lr — the SAME variable the removable
+    # figure and the skipped-by-subtraction figure both read — so the Summary line,
+    # the removable total and the skipped total are all correct with NO formula
+    # edited. A separate counter added to the removable side and forgotten in the
+    # subtraction is how a report ends up asserting removable + skipped != total.
+    # pd carries only the explanatory split for the Totals line below.
+    [[ "$a" == WILL-DRAIN* ]] && { ((lr++)) || true; ((pd++)) || true; }
   done
   for r in "${REMOTE_BRANCH_CANDIDATES[@]:-}"; do
     [[ -z "$r" ]] && continue
@@ -1253,6 +1395,7 @@ emit_markdown() {
     [[ "$action" == FAILED* ]] && ((wfails++)) || true
     case "$action" in
       SELF*) ((sc++)) || true ;;
+      "SKIP — worktree locked"*) ((lkc++)) || true ;;
       "SKIP — live session"*) ((lvc++)) || true ;;
       "SKIP — liveness oracle unavailable"*) ((fcc++)) || true ;;
     esac
@@ -1269,7 +1412,7 @@ emit_markdown() {
 - **Remote branches:** $rc total ($rr $verb)
 - **Stale remote-tracking refs:** $pc $([[ "$MODE" == "apply" ]] && echo "pruned" || echo "stale (run --apply to prune)")
 - **Worktrees:** $wc total ($wr $verb, ≈${disk_total} MB disk $recov)
-- **Protected worktrees:** $sc SELF (script's own runtime), $lvc held by live sessions$([[ "$ORACLE_BUILT" -eq 1 && "$ORACLE_STATE" != "ok" ]] && echo " — liveness oracle UNAVAILABLE (fail-closed; $fcc removal(s) blocked)")
+- **Protected worktrees:** $sc SELF (script's own runtime), $lkc locked, $lvc held by live sessions$([[ "$ORACLE_BUILT" -eq 1 && "$ORACLE_STATE" != "ok" ]] && echo " — liveness oracle UNAVAILABLE (fail-closed; $fcc removal(s) blocked)")
 
 ## Detail — Local branches
 
@@ -1355,11 +1498,24 @@ EOF
   fi
   echo "## Totals"
   echo "- $((lr + rr)) branches $noun, $((lc + rc - lr - rr - bfails)) skipped, $wr worktrees $noun, ≈${disk_total} MB $recov$([[ "$MODE" == "apply" ]] && echo ", $pc stale tracking ref(s) pruned")"
-  if [[ "$MODE" == "apply" && $((bfails + wfails)) -gt 0 ]]; then
-    echo "- ⚠ $((bfails + wfails)) removal(s) FAILED — see the PASS/FAIL log on stderr; a git safety guard refused (\`git branch -d\` on an unmerged branch, or \`git worktree remove\` on a dirty tree). Re-run with \`--force\` only if the deletion is intentional."
+  # #6411. Branch failures and worktree failures are reported SEPARATELY, each
+  # naming its own refusal surface. The single sentence these replace summed the
+  # two counts and then offered one speculative cause from each surface — so a
+  # locked worktree was reported as a dirty one, and an operator went looking for
+  # uncommitted work that did not exist. Neither line guesses now: the branch line
+  # names the only guard `git branch -d` applies, and the worktree line points at
+  # the per-row cause the apply phase captured from git itself.
+  if [[ "$MODE" == "apply" && "$bfails" -gt 0 ]]; then
+    echo "- ⚠ $bfails branch/ref removal(s) FAILED — \`git branch -d\` (or the remote-ref delete) refused; see the PASS/FAIL log on stderr. Re-run with \`--force\` only if the deletion is intentional."
+  fi
+  if [[ "$MODE" == "apply" && "$wfails" -gt 0 ]]; then
+    echo "- ⚠ $wfails worktree removal(s) FAILED — each row's Action names the cause git gave (\`locked\` / \`dirty\` / \`other\`), never a guess. Locked and dirty trees are both classified SKIP before apply, so a refusal here means the tree changed state after classification. \`--force\` does not reach a locked tree — git wants \`-f -f\`, which this tool never emits; run \`git worktree unlock <path>\` instead."
   fi
   if [[ "$sc" -gt 0 ]]; then
     echo "- $sc worktree(s) protected as script's own runtime (SELF)"
+  fi
+  if [[ "$lkc" -gt 0 ]]; then
+    echo "- $lkc worktree(s) skipped — locked. \`--force\` does not reach these: git wants \`-f -f\` for a locked tree and this tool emits at most one. Run \`git worktree unlock <path>\` first if removal is intended."
   fi
   if [[ "$lvc" -gt 0 ]]; then
     echo "- $lvc worktree(s) skipped — held by live sessions"
@@ -1367,8 +1523,18 @@ EOF
   if [[ "$fcc" -gt 0 ]]; then
     echo "- $fcc removal(s) blocked — liveness oracle unavailable (fail-closed)"
   fi
-  if [[ "$FREED_RESOLVED" -gt 0 ]]; then
+  if [[ "$MODE" == "apply" && "$FREED_RESOLVED" -gt 0 ]]; then
     echo "- $FREED_RESOLVED branch(es) removed after being freed by this run's worktree removals (resolve pass)"
+  fi
+  # #6207. The dry-run twin. Counted from the emitted rows (pd), not from the pass's
+  # own tally, so the number a reader relays as an approval scope is the number of
+  # WILL-DRAIN rows they can count in the table above. The trailing clause is the
+  # bound the report must not exceed: the projection is exact for the state this
+  # report read, and a worktree attached or a commit pushed between the dry-run and
+  # the apply can still change the outcome — the same TOCTOU every REMOVE row in
+  # every dry-run already carries, stated because this line is read as an approval.
+  if [[ "$MODE" == "dry-run" && "$pd" -gt 0 ]]; then
+    echo "- $pd branch(es) will be drained after being freed by this run's worktree removals (projected resolve pass) — included in the removable count above, and projected from the state this report read"
   fi
   # Plain `if` — NOT `[[ … ]] && echo`. As the function's last statement, a short-circuit
   # test that evaluates false returns non-zero, making emit_markdown return non-zero; under
@@ -1442,13 +1608,18 @@ emit_json() {
 # SKIP rows are left untouched. The index is tracked with a counter (not "${!arr[@]}")
 # to stay safe on bash 3.2 under `set -u` and to match the array idiom used elsewhere.
 # Returns 0 unconditionally so the caller (under set -e) proceeds to emit the report.
-# Pipeline exit status (git → sed) is git's, not sed's, because `set -o pipefail` is on.
+# Pipeline exit status (git → sed, gh → sed) is the generator's, not sed's, because
+# `set -o pipefail` is on — this still governs the branch, remote-ref and prune
+# removals. The WORKTREE removal deliberately does NOT use that shape: it captures
+# git's stream in a command substitution so the refusal cause survives into the row
+# (#6411). A substitution is not a pipeline, so it carries neither the
+# pipefail-status question nor the [WTPIPEGUARD] SIGPIPE one.
 apply_removals() {
   echo "── Apply phase — executing REMOVE actions ──" >&2
   local wt_flag=""
   if [[ "$FORCE" == "1" ]]; then wt_flag="--force"; fi
 
-  local r name path action idx unique del_flag
+  local r name path action idx unique del_flag wt_err wt_cause
 
   idx=-1
   for r in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
@@ -1535,12 +1706,24 @@ apply_removals() {
     [[ -z "$r" ]] && continue
     path=$(awk -F'\t' '{print $1}' <<<"$r"); action=$(awk -F'\t' '{print $5}' <<<"$r")
     [[ "$action" != "REMOVE" ]] && { echo "SKIPPED worktree $path — $action" >&2; continue; }
-    if git worktree remove $wt_flag "$path" 2>&1 | sed 's/^/  git: /' >&2; then
+    # #6411. Command substitution, NOT `git … | sed`: the per-target cause was
+    # previously available here and thrown away, leaving the report to guess at
+    # emit time. Capturing through a pipe would have to be read back for its
+    # status, and this file carries a named prior defect from restructuring
+    # exactly this construct ([WTPIPEGUARD], the exit-141-at-scale defect) — a
+    # substitution has no pipeline and no second reader, so neither the
+    # exit-status contract nor the SIGPIPE property is in play. The status of
+    # `var=$(cmd)` is cmd's.
+    wt_err=""
+    if wt_err=$(git worktree remove $wt_flag "$path" 2>&1); then
+      [[ -n "$wt_err" ]] && sed 's/^/  git: /' <<<"$wt_err" >&2
       echo "PASS worktree $path removed" >&2
       WORKTREE_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"REMOVED"
     else
-      echo "FAIL worktree $path — git worktree remove refused (likely uncommitted state); use --force if intentional" >&2
-      WORKTREE_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"FAILED — git worktree remove refused"
+      sed 's/^/  git: /' <<<"$wt_err" >&2
+      wt_cause=$(classify_worktree_refusal "$wt_err")
+      echo "FAIL worktree $path — git worktree remove refused ($wt_cause)" >&2
+      WORKTREE_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"FAILED — worktree remove refused ($wt_cause)"
     fi
   done
 
@@ -1743,63 +1926,171 @@ ledger_mark_retained() {
 # ONE bounded re-evaluation pass: worktree removal frees branches; branch
 # removal frees nothing further, so a single pass reaches the fixed point for
 # the enumerated input. Invariant: ONLY worktrees this run actually REMOVED
-# free their branches — SELF / live-session / dirty / FAILED worktrees keep
-# their branches attached-and-skipped. Runs between apply_removals and
-# verify_apply; verify then re-checks pass-2 REMOVED rows exactly like pass-1
-# rows. Returns 0 unconditionally (set -e discipline).
+# free their branches — SELF / locked / live-session / dirty / FAILED worktrees
+# keep their branches attached-and-skipped.
+#
+# The pass has TWO consumers (#6207). resolve_freed_branches EXECUTES it in
+# --apply, running between apply_removals and verify_apply; verify then re-checks
+# pass-2 REMOVED rows exactly like pass-1 rows. projected_freed_branches PROJECTS
+# it in --dry-run, relabelling the rows it would drain and removing nothing.
+# Both return 0 unconditionally (set -e discipline).
 FREED_RESOLVED=0
 
-resolve_freed_branches() {
-  echo "── Resolve phase — re-evaluating branches freed by this run's worktree removals (single bounded pass) ──" >&2
-  local r wbranch waction freed del_flag
-  freed=()
+# ─── Shared freed-branch predicate (#6207) ───────────────────────────────────
+#
+# "Which branches does this run free?" had exactly ONE executable home and that
+# home was a mutation, so --dry-run could not answer it without a second copy of
+# the rule — and a second copy of a predicate is a second thing that can disagree
+# with the first. The question is split here into three reusable parts, so the
+# projection and the execution decide from the SAME code: a freed-set derivation,
+# a row lookup, and the gates. The two passes below differ ONLY in their terminal
+# action, which is also why they stay two functions rather than one mode-switched
+# one: the dry-run path then contains no branch-deletion call at all and cannot
+# delete under any parameter bug.
+#
+# ONE parameter carries the mode — <removed_token>, the WORKTREE_CANDIDATES action
+# value meaning "this run removed / will remove this worktree": REMOVED in --apply
+# (already gone), REMOVE in --dry-run (projected to go). The DERIVATION reads it as
+# well as the holder gate, which is why the derivation is extracted rather than
+# copied: a copy left filtering on a hardcoded REMOVED — a value no worktree row
+# carries in --dry-run — yields an EMPTY projection that reads as a silent no-op
+# while three acceptance criteria pass vacuously.
+
+# Branch names whose worktree row carries <removed_token> and whose ref still
+# exists. One name per line on stdout; empty output when the set is empty.
+freed_set_for_run() {
+  local removed_token="$1" r wbranch waction
   for r in "${WORKTREE_CANDIDATES[@]:-}"; do
     [[ -z "$r" ]] && continue
     waction=$(awk -F'\t' '{print $5}' <<<"$r")
-    [[ "$waction" != "REMOVED" ]] && continue
+    [[ "$waction" != "$removed_token" ]] && continue
     wbranch=$(awk -F'\t' '{print $2}' <<<"$r")
     [[ -z "$wbranch" ]] && continue
     if git show-ref --verify --quiet "refs/heads/${wbranch}"; then
-      freed+=("$wbranch")
+      printf '%s\n' "$wbranch"
     fi
   done
+}
+
+# Row lookup for a freed branch. The answer travels in TWO globals and this is
+# called DIRECTLY, never in a command substitution: the unrowed --historical path
+# classifies fresh and APPENDS to LOCAL_BRANCH_CANDIDATES, and a subshell would
+# strand both the append and the index (same reason tag_protection_state returns
+# through globals). FREED_ROW_IDX is the array index; FREED_ROW is the row.
+FREED_ROW_IDX=-1
+FREED_ROW=""
+freed_row_for_branch() {
+  local b="$1" c i name
+  FREED_ROW_IDX=-1; FREED_ROW=""; i=-1
+  for c in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
+    ((i++)) || true
+    [[ -z "$c" ]] && continue
+    name=$(awk -F'\t' '{print $1}' <<<"$c")
+    if [[ "$name" == "$b" ]]; then FREED_ROW_IDX=$i; FREED_ROW="$c"; return 0; fi
+  done
+  # Unrowed (the --historical case): classify fresh against current state.
+  classify_local "$b" 0
+  FREED_ROW_IDX=$(( ${#LOCAL_BRANCH_CANDIDATES[@]} - 1 ))
+  FREED_ROW="${LOCAL_BRANCH_CANDIDATES[$FREED_ROW_IDX]}"
+  return 0
+}
+
+# Gate 4 — does every worktree still holding <branch> belong to this run's removal
+# set? A branch-keyed COUNT comparison, deliberately NOT a path join: this tool
+# already carries physical_path() because a worktree path is reachable by more than
+# one spelling (a symlinked /tmp or $HOME), so a path join would find no matching
+# row on such a host, the projection would report zero, and the defect this exists
+# to fix would survive its own fix. Branch is the attribute the question is already
+# phrased in, so it needs no normalisation.
+#
+#   holders(B)  — `branch refs/heads/B` lines in the worktree snapshot
+#   removing(B) — WORKTREE_CANDIDATES rows for B whose action is <removed_token>
+#   passes when holders(B) <= removing(B): no holder of B remains OUTSIDE the set
+#
+# In --dry-run nothing has been removed, so holders(B) is every current holder and
+# the comparison IS the projection: an extra live-session or locked holder makes
+# holders exceed removing and the gate refuses, exactly as the apply would.
+# In --apply the snapshot is refreshed at pass entry — i.e. AFTER the removals — so
+# a removed holder is already absent and holders(B) counts only survivors, the same
+# answer branch_has_worktree gives. The apply path additionally keeps that LIVE
+# check (see branch_freed_by_this_run's live_guard), which is strictly stronger, so
+# this gate can only ever pass an apply case THROUGH to it and never decides one.
+# That is what makes the apply path's observable behaviour unchanged by
+# construction rather than by case analysis.
+#
+# Consumes WT_SNAPSHOT through the established built-flag guard and a here-string —
+# never a live pipe into a reader that closes early. [WTPIPEGUARD]
+branch_holders_all_in_removal_set() {
+  local branch="$1" removed_token="$2" r holders removing
+  [[ "$WT_SNAPSHOT_BUILT" == "1" ]] || refresh_wt_snapshot
+  holders=$(grep -c "^branch refs/heads/${branch}$" <<<"$WT_SNAPSHOT" || true)
+  [[ -z "$holders" ]] && holders=0
+  removing=0
+  for r in "${WORKTREE_CANDIDATES[@]:-}"; do
+    [[ -z "$r" ]] && continue
+    [[ "$(awk -F'\t' '{print $2}' <<<"$r")" != "$branch" ]] && continue
+    [[ "$(awk -F'\t' '{print $5}' <<<"$r")" == "$removed_token" ]] && { ((removing++)) || true; }
+  done
+  [[ "$holders" -le "$removing" ]]
+}
+
+# The gates, shared by both passes. Sets no globals.
+#   rc 0 — this run frees <branch> and it is removable
+#   rc 1 — the row IS the attachment skip but a gate refused; the reason is already
+#          reported here, so the caller continues without a second message
+#   rc 2 — the row carries some other action: NOT this predicate's business. Every
+#          other recorded action is honoured as-is — a "SKIP — PR not merged" or
+#          "SKIP — unique commits exist" row is never re-litigated, and a row already
+#          reading REMOVE is pass-1's business.
+# <live_guard> is 1 in --apply ONLY. After gate 4 passes, the LIVE branch_has_worktree
+# read decides, because the invariant on that function says the resolve pass must see
+# post-removal reality and not an enumeration snapshot — which also catches the one
+# case a snapshot cannot: a holder attaching AFTER enumeration.
+branch_freed_by_this_run() {
+  local b="$1" removed_token="$2" recorded_action="$3" live_guard="$4" unique
+  [[ "$recorded_action" != "SKIP — active worktree attached" ]] && return 2
+  if is_protected "$b"; then
+    echo "SKIPPED resolve $b — protected" >&2; return 1
+  fi
+  if ! branch_holders_all_in_removal_set "$b" "$removed_token"; then
+    echo "SKIPPED resolve $b — still attached to a worktree" >&2; return 1
+  fi
+  if [[ "$live_guard" == "1" ]] && branch_has_worktree "$b"; then
+    echo "SKIPPED resolve $b — still attached to a worktree" >&2; return 1
+  fi
+  unique=$(git rev-list --count "${REMOTE_NAME}/${MAIN_BRANCH}..${b}" 2>/dev/null || echo "?")
+  if [[ "$unique" != "0" ]]; then
+    echo "SKIPPED resolve $b — unique commits exist ($unique)" >&2; return 1
+  fi
+  return 0
+}
+
+resolve_freed_branches() {
+  echo "── Resolve phase — re-evaluating branches freed by this run's worktree removals (single bounded pass) ──" >&2
+  local b action rc del_flag idx row
+  local freed=()
+  # Refreshed at pass entry, matching the detect_* convention — and here that
+  # refresh IS the post-removal read the resolve pass is required to make.
+  refresh_wt_snapshot
+  while IFS= read -r b; do
+    [[ -z "$b" ]] && continue
+    freed+=("$b")
+  done <<<"$(freed_set_for_run "REMOVED")"
   if [[ ${#freed[@]} -eq 0 ]]; then
     echo "PASS resolve — no branches freed by this run's worktree removals" >&2
     return 0
   fi
 
-  local b i c idx row name action unique
   for b in "${freed[@]:-}"; do
     [[ -z "$b" ]] && continue
-    idx=-1; row=""; i=-1
-    for c in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
-      ((i++)) || true
-      [[ -z "$c" ]] && continue
-      name=$(awk -F'\t' '{print $1}' <<<"$c")
-      if [[ "$name" == "$b" ]]; then idx=$i; row="$c"; break; fi
-    done
-
-    if [[ $idx -lt 0 ]]; then
-      # Unrowed (the --historical case): classify fresh — post-removal state.
-      classify_local "$b" 0
-      idx=$(( ${#LOCAL_BRANCH_CANDIDATES[@]} - 1 ))
-      row="${LOCAL_BRANCH_CANDIDATES[$idx]}"
-    fi
-
+    freed_row_for_branch "$b"
+    idx="$FREED_ROW_IDX"; row="$FREED_ROW"
     action=$(awk -F'\t' '{print $6}' <<<"$row")
-    if [[ "$action" == "SKIP — active worktree attached" ]]; then
-      # Re-evaluate the recorded skip against live post-removal state.
-      if is_protected "$b"; then
-        echo "SKIPPED resolve $b — protected" >&2; continue
-      fi
-      if branch_has_worktree "$b"; then
-        echo "SKIPPED resolve $b — still attached to a worktree" >&2; continue
-      fi
-      unique=$(git rev-list --count "${REMOTE_NAME}/${MAIN_BRANCH}..${b}" 2>/dev/null || echo "?")
-      if [[ "$unique" != "0" ]]; then
-        echo "SKIPPED resolve $b — unique commits exist ($unique)" >&2; continue
-      fi
+    branch_freed_by_this_run "$b" "REMOVED" "$action" 1 && rc=0 || rc=$?
+    if [[ "$rc" -eq 0 ]]; then
       action="REMOVE"
+    elif [[ "$rc" -eq 1 ]]; then
+      continue                       # gate refused; reason already reported
     fi
     if [[ "$action" != "REMOVE" ]]; then
       echo "SKIPPED resolve $b — $action" >&2; continue
@@ -1825,6 +2116,52 @@ resolve_freed_branches() {
       echo "FAIL resolve $b — git branch refused; use --force if intentional" >&2
       LOCAL_BRANCH_CANDIDATES[$idx]="${row%$'\t'*}"$'\t'"FAILED — git branch refused"
     fi
+  done
+  return 0
+}
+
+# --dry-run sibling of the pass above (#6207). A dry-run states what the apply will
+# do; before this, it stated what was removable in the CURRENT state, and the two
+# diverge exactly when the run is a fixed point — removing a worktree dissolves the
+# "active worktree attached" skip and the resolve pass then drains the branch in the
+# same run. The report is the artifact an approval is granted against, so it under-
+# reported in the direction that matters.
+#
+# Identical to resolve_freed_branches except for the terminal action: it relabels the
+# row instead of deleting the branch. There is deliberately NO branch-deletion call
+# anywhere in this function — that, not a mode flag, is what makes the projection
+# structurally incapable of removing anything. Returns 0 unconditionally.
+projected_freed_branches() {
+  echo "── Projection phase — branches this run's worktree removals would free (nothing is removed) ──" >&2
+  local b action rc idx row
+  local freed=()
+  refresh_wt_snapshot
+  while IFS= read -r b; do
+    [[ -z "$b" ]] && continue
+    freed+=("$b")
+  done <<<"$(freed_set_for_run "REMOVE")"
+  if [[ ${#freed[@]} -eq 0 ]]; then
+    echo "PASS projection — no branches would be freed by this run's worktree removals" >&2
+    return 0
+  fi
+
+  for b in "${freed[@]:-}"; do
+    [[ -z "$b" ]] && continue
+    freed_row_for_branch "$b"
+    idx="$FREED_ROW_IDX"; row="$FREED_ROW"
+    action=$(awk -F'\t' '{print $6}' <<<"$row")
+    branch_freed_by_this_run "$b" "REMOVE" "$action" 0 && rc=0 || rc=$?
+    if [[ "$rc" -eq 0 ]]; then
+      action="REMOVE"
+    elif [[ "$rc" -eq 1 ]]; then
+      continue                       # gate refused; reason already reported
+    fi
+    if [[ "$action" != "REMOVE" ]]; then
+      echo "SKIPPED projection $b — $action" >&2; continue
+    fi
+    echo "PASS projection $b will be drained (freed by same-run worktree removal)" >&2
+    LOCAL_BRANCH_CANDIDATES[$idx]="${row%$'\t'*}"$'\t'"WILL-DRAIN — freed by same-run worktree removal"
+    ((FREED_RESOLVED++)) || true
   done
   return 0
 }
@@ -1938,7 +2275,7 @@ verify_apply() {
 # never exceed its denominator. Every recording site either returns immediately or
 # returns after its cleanup, and the only two sites that do not end their check
 # (selftest_verify_and_prune) are mutually exclusive branches of a single if/else.
-SELFTEST_CHECK_COUNT=16
+SELFTEST_CHECK_COUNT=20
 SELFTEST_SKIPS=()
 
 # Records a check-level SKIP and emits the historical message shape VERBATIM:
@@ -2188,12 +2525,22 @@ selftest_liveness_gate() {
 # Slug-scoped --release-close bounds the inner apply to fixture objects; the
 # inner prune is reconciliation-class (existing selftest_verify_and_prune
 # precedent).
+#
+# #6207 extends the SAME fixture rather than adding a second one — two fixtures for
+# one equality claim can drift; one cannot. Three invocations, in order: P1 --dry-run
+# (must PROJECT the drain, and must mutate nothing), P2 --dry-run against a copy with
+# the projection dispatch stripped (must STOP projecting it — the arm that makes P1
+# falsifiable), then the original --apply (must PERFORM it). The fixture worktree is
+# created UNLOCKED by the plain `git worktree add` above, which is load-bearing: the
+# locked class is excluded from REMOVE, so a locked fixture would make this check read
+# as its own failure.
 selftest_fixed_point() {
   if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
     selftest_skip "fixed-point check" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref"
     return 0
   fi
   local script_abs slug branch wt base out fail=0
+  local dry mut mut_out drc=0
   base=$(git merge-base HEAD "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
   if [[ -z "$base" ]]; then
     selftest_skip "fixed-point check" "no merge-base between HEAD and ${REMOTE_NAME}/${MAIN_BRANCH}"
@@ -2214,9 +2561,101 @@ selftest_fixed_point() {
     return 0
   fi
 
-  out=$("$script_abs" --release-close "$slug" --apply --json 2>/dev/null) || fail=1
-  if [[ "$fail" -eq 1 ]]; then
+  # ── Precondition (#6207). The arms below assert on the fixture; an arm that passes
+  # because the fixture was never created is the vacuous pass this suite exists to
+  # catch, so the fixture's existence is READ rather than assumed.
+  if [[ ! -d "$wt" ]] || ! git show-ref --verify --quiet "refs/heads/${branch}"; then
+    echo "self-test: fixed-point check FAILED — fixture worktree or branch absent before the projection arm" >&2
+    fail=1
+  fi
+
+  # ── Arm P1 (#6207). ONE fixture, TWO invocations: --dry-run must PROJECT the drain
+  # that the --apply arm below then performs, so the equality claim is made on a single
+  # fixture and cannot drift across two. AC-4's equality is therefore two-sided and NOT
+  # satisfiable by an empty projection.
+  #
+  # Every arm in this function sets fail=1 and FALLS THROUGH. Teardown below is
+  # unconditional and deferred and the single exit 1 sits after it, so an arm that
+  # exited early would strand .claude/worktrees/<slug> and chore/<slug> in the
+  # operator's checkout — the orphan-cleanup tool leaking orphan state from its own
+  # self-test. Do not "simplify" any arm here into an exit.
+  if [[ "$fail" -eq 0 ]]; then
+    drc=0
+    dry=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || drc=1
+    if [[ "$drc" -ne 0 ]]; then
+      echo "self-test: fixed-point check FAILED — inner --dry-run exited non-zero" >&2
+      fail=1
+    else
+      if ! grep -q '"action":"WILL-DRAIN' <<<"$(grep -F "\"name\":\"${branch}\"" <<<"$dry" || true)"; then
+        echo "self-test: fixed-point check FAILED — --dry-run did not project freed branch '$branch' as WILL-DRAIN (#6207 regression: the dry-run understates the apply it describes)" >&2
+        fail=1
+      fi
+      # The dry-run's own mutates-nothing contract, asserted rather than assumed.
+      if ! git show-ref --verify --quiet "refs/heads/${branch}"; then
+        echo "self-test: fixed-point check FAILED — --dry-run removed branch '$branch'" >&2
+        fail=1
+      fi
+      if [[ ! -d "$wt" ]]; then
+        echo "self-test: fixed-point check FAILED — --dry-run removed worktree '$wt'" >&2
+        fail=1
+      fi
+    fi
+  fi
+
+  # ── Arm P2 (#6207, AC-4 sensitivity). P1 asserting WILL-DRAIN proves nothing unless
+  # that assertion FAILS when the projection is removed — otherwise it could be
+  # measuring something that holds anyway. Copy the script, strip the projection
+  # dispatch from the COPY, and require P1's assertion to fail against it.
+  #
+  # copy-and-mutate rather than an env-switch, so no test-only branch ships inside the
+  # production path — this tool's whole design idiom is to have no suppress flag for
+  # the resolve pass. The copy sits beside the original because REPO_ROOT is derived
+  # from SCRIPT_DIR/../..: a copy anywhere else computes a different repo root and
+  # stops being the same program. Dot-prefixed so no *.sh glob (shell or Python) can
+  # discover it, PID-scoped, and removed on every exit path including teardown.
+  # THE STRIP GUARD'S FIRST LIMB IS ANCHORED TO A WHOLE LINE, and that is the whole
+  # point of the `-qxF` rather than a bare `-qF`. The substituted text also appears in
+  # the `sed` program below and in this guard's own needle, so a SUBSTRING search finds
+  # it in the copy whether or not the substitution applied — measured (True, True)
+  # across the substituted and unsubstituted copies, i.e. a limb that cannot be false.
+  # It read correct only because limb 2 carried it. Anchored whole-line, the needle can
+  # match only a line the substitution actually produced: measured False unsubstituted,
+  # True substituted. The specificity control immediately below asserts that
+  # non-match against this file's own source on every run, so re-loosening the needle
+  # to the substring form reddens here instead of silently restoring the dead limb.
+  if [[ "$fail" -eq 0 ]]; then
+    mut="${SCRIPT_DIR}/.cleanup-selftest-mut-$$.sh"
+    if grep -qxF '  : # projection disabled (P2 sensitivity arm)' "$script_abs"; then
+      echo "self-test: fixed-point check FAILED — P2 strip-guard specificity: the anchored needle matches a WHOLE LINE of this script's own unsubstituted source, so limb 1 below cannot be false and the strip guard would pass on a sed that did nothing (#6207)" >&2
+      fail=1
+    fi
+    sed 's/^  projected_freed_branches$/  : # projection disabled (P2 sensitivity arm)/' "$script_abs" > "$mut"
+    if grep -qxF '  : # projection disabled (P2 sensitivity arm)' "$mut" && ! grep -qE '^  projected_freed_branches$' "$mut"; then
+      drc=0
+      mut_out=$(bash "$mut" --release-close "$slug" --dry-run --json 2>/dev/null) || drc=1
+      if [[ "$drc" -ne 0 ]]; then
+        echo "self-test: fixed-point check FAILED — projection-stripped copy exited non-zero; the sensitivity arm cannot be read" >&2
+        fail=1
+      elif grep -q '"action":"WILL-DRAIN' <<<"$(grep -F "\"name\":\"${branch}\"" <<<"$mut_out" || true)"; then
+        echo "self-test: fixed-point check FAILED — sensitivity arm did NOT fire: '$branch' still reads WILL-DRAIN with the projection dispatch removed, so P1 is not measuring the projection" >&2
+        fail=1
+      fi
+    else
+      echo "self-test: fixed-point check FAILED — could not strip the projection dispatch from the throwaway copy; a sensitivity arm that did not mutate proves nothing" >&2
+      fail=1
+    fi
+    rm -f "$mut" 2>/dev/null || true
+  fi
+
+  # Own rc, not the shared accumulator (#6207): with P1/P2 above feeding the same
+  # `fail`, reusing it here would report an apply that exited ZERO as "inner --apply
+  # exited non-zero" — a report asserting a failure that did not happen, in a change
+  # whose whole subject is a report that misstates what a run did.
+  drc=0
+  out=$("$script_abs" --release-close "$slug" --apply --json 2>/dev/null) || drc=1
+  if [[ "$drc" -ne 0 ]]; then
     echo "self-test: fixed-point check FAILED — inner --apply exited non-zero" >&2
+    fail=1
   else
     if git show-ref --verify --quiet "refs/heads/${branch}"; then
       echo "self-test: fixed-point check FAILED — freed branch '$branch' survived the same --apply run (#53 regression)" >&2
@@ -2234,8 +2673,12 @@ selftest_fixed_point() {
 
   git worktree remove --force "$wt" >/dev/null 2>&1 || true
   git branch -D "$branch" >/dev/null 2>&1 || true
+  # Belt-and-braces for the P2 copy: already removed on its own path, repeated here so
+  # no arm added later between the two can strand it. PID-scoped, so this can only ever
+  # name this run's own file.
+  rm -f "${SCRIPT_DIR}/.cleanup-selftest-mut-$$.sh" 2>/dev/null || true
   if [[ "$fail" -ne 0 ]]; then exit 1; fi
-  echo "self-test: fixed-point check PASS — worktree + freed branch removed in one --apply" >&2
+  echo "self-test: fixed-point check PASS — worktree + freed branch removed in one --apply; --dry-run projected that drain on the same fixture (P1) and stopped projecting it when the projection was stripped (P2)" >&2
   return 0
 }
 
@@ -2547,6 +2990,248 @@ selftest_pr_map_identity() {
 # that drops a protective line fails the suite instead of silently regressing (the #1678
 # defect class). Also asserts the Hook-compatibility divider stays OUTSIDE --help (the
 # window's end-anchor holds). Pure read of --help output; net-zero.
+# #6411 group LK — the LOCKED protective class, end-to-end through the REAL
+# script with its OWN control arm in the SAME run. Two throwaway worktrees are
+# created on branches based at merge-base(HEAD, <remote>/<main>) so both are
+# REMOVE-eligible by every other clause (zero unique commits vs the mainline,
+# and deletable from any legal invocation state — the selftest_fixed_point
+# baseline choice, reused here for the same reason). One is locked, one is not.
+#
+# Why a REAL lock rather than a synthetic porcelain block: the mechanism under
+# test is the parse of git's own `locked` line and its position in the
+# precedence chain, and a hand-written block would test the parser against a
+# shape this suite asserted rather than against the one git emits. The hazard a
+# real lock carries is teardown — every other teardown in this file is a single
+# `--force` with `|| true`, and a single `--force` provably CANNOT remove a
+# locked tree, so a lock fixture built from that template would leak an
+# unremovable worktree into the operator's workspace silently. This teardown
+# therefore UNLOCKS first, on every exit path, before removing.
+#
+# Arms:
+#   LK-1 dry-run: the locked tree reads `SKIP — worktree locked …`
+#   LK-2 CONTROL, same run: the unlocked clean tree still reads REMOVE, so the
+#        classifier is not simply skipping everything
+#   LK-3 THE PROTECTIVE CLAIM: under a REAL `--apply --force` the locked tree
+#        still SKIPs and its directory SURVIVES — which is what
+#        core/rules/git-workflow.md § PR Process step 10 asserts about the
+#        protective classes. `--dry-run --force` is deliberately NOT the shape
+#        used: the double-opt-in guard rejects that combination and exits
+#        non-zero with no report, so an arm built on it would assert against an
+#        empty capture and pass on any implementation
+#   LK-4 ANTI-VACUITY for LK-3, same run: the unlocked control tree IS removed,
+#        without which "the locked tree survived" is satisfied by an apply that
+#        removed nothing at all
+selftest_locked_worktree() {
+  if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    selftest_skip "locked-worktree check" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref"
+    return 0
+  fi
+  local script_abs slug base wt_lk wt_ct br_lk br_ct out fail=0
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  slug="cleanup-selftest-lock-$$"
+  br_lk="chore/${slug}-locked"
+  br_ct="chore/${slug}-ctrl"
+  wt_lk="${REPO_ROOT}/.claude/worktrees/${slug}-locked"
+  wt_ct="${REPO_ROOT}/.claude/worktrees/${slug}-ctrl"
+  base=$(git merge-base HEAD "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
+  if [[ -z "$base" ]]; then
+    selftest_skip "locked-worktree check" "no merge-base with ${REMOTE_NAME}/${MAIN_BRANCH}"
+    return 0
+  fi
+  if ! git worktree add -b "$br_lk" "$wt_lk" "$base" >/dev/null 2>&1; then
+    selftest_skip "locked-worktree check" "could not create throwaway worktree"
+    return 0
+  fi
+  if ! git worktree add -b "$br_ct" "$wt_ct" "$base" >/dev/null 2>&1; then
+    git worktree remove --force "$wt_lk" >/dev/null 2>&1 || true
+    git branch -D "$br_lk" >/dev/null 2>&1 || true
+    selftest_skip "locked-worktree check" "could not create control worktree"
+    return 0
+  fi
+  if ! git worktree lock --reason "cleanup-selftest fixture (pid $$ )" "$wt_lk" >/dev/null 2>&1; then
+    git worktree remove --force "$wt_lk" >/dev/null 2>&1 || true
+    git worktree remove --force "$wt_ct" >/dev/null 2>&1 || true
+    git branch -D "$br_lk" >/dev/null 2>&1 || true
+    git branch -D "$br_ct" >/dev/null 2>&1 || true
+    selftest_skip "locked-worktree check" "git worktree lock unavailable on this host"
+    return 0
+  fi
+
+  out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
+  if [[ "$fail" -eq 1 ]]; then
+    echo "self-test: locked-worktree FAILED — inner dry-run exited non-zero" >&2
+  else
+    # LK-1
+    if ! grep -q '"action":"SKIP — worktree locked' <<<"$(grep -F "${slug}-locked" <<<"$out" || true)"; then
+      echo "self-test: locked-worktree FAILED — locked tree not labeled locked (LK-1)" >&2
+      fail=1
+    fi
+    # LK-2 CONTROL
+    if ! grep -q '"action":"REMOVE"' <<<"$(grep -F "${slug}-ctrl" <<<"$out" || true)"; then
+      echo "self-test: locked-worktree FAILED — unlocked clean control tree did not read REMOVE (LK-2); the classifier may be skipping everything" >&2
+      fail=1
+    fi
+  fi
+
+  # LK-3 + LK-4 — one REAL `--apply --force` run carries both
+  if [[ "$fail" -eq 0 ]]; then
+    out=$("$script_abs" --release-close "$slug" --apply --force --json 2>/dev/null) || true
+    if ! grep -q '"action":"SKIP — worktree locked' <<<"$(grep -F "${slug}-locked" <<<"$out" || true)"; then
+      echo "self-test: locked-worktree FAILED — --apply --force did not skip the locked tree (LK-3)" >&2
+      fail=1
+    elif [[ ! -d "$wt_lk" ]]; then
+      echo "self-test: locked-worktree FAILED — locked tree directory did not survive --apply --force (LK-3)" >&2
+      fail=1
+    elif [[ -d "$wt_ct" ]]; then
+      echo "self-test: locked-worktree FAILED — the unlocked control tree also survived, so LK-3 proves nothing about the lock (LK-4)" >&2
+      fail=1
+    fi
+  fi
+
+  git worktree unlock "$wt_lk" >/dev/null 2>&1 || true
+  git worktree remove "$wt_lk" >/dev/null 2>&1 || git worktree remove --force "$wt_lk" >/dev/null 2>&1 || true
+  git worktree remove "$wt_ct" >/dev/null 2>&1 || git worktree remove --force "$wt_ct" >/dev/null 2>&1 || true
+  git branch -D "$br_lk" >/dev/null 2>&1 || true
+  git branch -D "$br_ct" >/dev/null 2>&1 || true
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: locked-worktree check PASS — LK-1 a locked tree SKIPs with no cwd holder / LK-2 an unlocked clean tree in the SAME run still REMOVEs / LK-3 --apply --force does not override the class and the tree survives / LK-4 the control tree is removed in that same run, so LK-3 is not vacuous" >&2
+  return 0
+}
+
+# #6411 group GN — the GLOBAL null-lsof case already fails closed, and this arm
+# makes that a measured property rather than a claim in a comment. The header
+# described the fail-closed limb as covering an ABSENT lsof binary; the code has
+# always carried a second limb, a self-canary that requires the script's own cwd
+# to appear in the map. An lsof that RUNS and returns nothing fails that canary
+# and leaves ORACLE_STATE unavailable, which converts every residual REMOVE to
+# the fail-closed skip.
+#
+# Note what is deliberately NOT built: a PER-CANDIDATE null result is a correct
+# negative, not a probe failure. Failing closed on one would skip every clean
+# unlocked worktree — the exact state group LK's control arm asserts must still
+# read REMOVE.
+#
+# Arms:
+#   GN-1 an lsof stand-in that runs, exits 0 and emits nothing leaves
+#        ORACLE_STATE != "ok"
+#   GN-2 SENSITIVITY: the real binary, same code path, restores "ok" — without
+#        which GN-1 is satisfied by an oracle that never works at all
+selftest_liveness_global_null() {
+  if [[ ! -x /usr/bin/true ]]; then
+    selftest_skip "liveness global-null check" "no /usr/bin/true to stand in for an lsof that emits nothing"
+    return 0
+  fi
+  local fail=0 real_resolver saved_built="$ORACLE_BUILT"
+  real_resolver=$(declare -f resolve_lsof_bin)
+  if [[ -z "$real_resolver" ]]; then
+    selftest_skip "liveness global-null check" "could not capture resolve_lsof_bin for restore"
+    return 0
+  fi
+
+  # The RESOLVER is stubbed, never the builder: build_liveness_map calls
+  # resolve_lsof_bin itself, so assigning LSOF_BIN from outside is overwritten
+  # and the arm would measure the real binary while believing it measured an
+  # empty one. Everything under test — the read loop, the self-canary, the
+  # ORACLE_STATE verdict — is the shipped code.
+  resolve_lsof_bin() { LSOF_BIN=/usr/bin/true; }
+  build_liveness_map >/dev/null 2>&1 || true
+  if [[ "$ORACLE_STATE" == "ok" ]]; then
+    echo "self-test: liveness global-null FAILED — an lsof that RUNS and emits nothing left the oracle reading ok (GN-1)" >&2
+    fail=1
+  fi
+  if [[ "${#LIVE_CWD_ENTRIES[@]}" -ne 0 ]]; then
+    echo "self-test: liveness global-null FAILED — the stub produced ${#LIVE_CWD_ENTRIES[@]} entries, so GN-1 did not exercise the null case (GN-1)" >&2
+    fail=1
+  fi
+
+  eval "$real_resolver"
+  build_liveness_map >/dev/null 2>&1 || true
+  if [[ "$ORACLE_STATE" != "ok" ]]; then
+    echo "self-test: liveness global-null FAILED — the real resolver did not restore a healthy oracle, so GN-1 proves nothing (GN-2)" >&2
+    fail=1
+  fi
+  ORACLE_BUILT="$saved_built"
+  ensure_liveness_map >/dev/null 2>&1 || true
+
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: liveness global-null check PASS — GN-1 an lsof that RUNS and returns an EMPTY map fails closed via the self-canary (the limb the header described only as 'lsof unavailable') / GN-2 the real resolver restores ok, so GN-1 is not an oracle that never worked" >&2
+  return 0
+}
+
+# #6411 group FL — the two failure lines are DISTINGUISHABLE. Before this card
+# the report summed branch and worktree failures into one sentence and offered
+# one speculative cause from each surface, so a locked worktree was reported as
+# a dirty one. Driven on synthetic candidate rows — the file's existing
+# synthetic-survivor idiom — because after this card's classifier change both
+# named worktree refusal shapes are unreachable through the classifier, so the
+# reachable-by-race row cannot be produced on demand.
+#
+# Arms:
+#   FL-1 with BOTH a failed branch and a failed worktree, two distinct lines are
+#        emitted and they differ
+#   FL-2 SPECIFICITY: with only a worktree failure, the branch line is absent —
+#        without which FL-1 is satisfied by an emitter that always prints both
+#   FL-3 the refusal classifier is TOTAL over its closed set and maps git's real
+#        messages, verbatim, to the right token — including the measured fact
+#        that a prunable (missing-directory) worktree is NOT a refusal shape
+selftest_failure_line_split() {
+  local out fail=0 saved_mode="$MODE"
+  local -a saved_local saved_wt
+  saved_local=("${LOCAL_BRANCH_CANDIDATES[@]:-}")
+  saved_wt=("${WORKTREE_CANDIDATES[@]:-}")
+
+  MODE="apply"
+  LOCAL_BRANCH_CANDIDATES=("selftest-fl-branch	0	2026-01-01		(none)	FAILED — git branch refused")
+  WORKTREE_CANDIDATES=("/selftest/fl/wt	selftest-fl-wt	clean	0	FAILED — worktree remove refused (locked)")
+  out=$(emit_markdown 2>/dev/null || true)
+  local bline wline
+  bline=$(grep -c "branch/ref removal(s) FAILED" <<<"$out" || true)
+  wline=$(grep -c "worktree removal(s) FAILED" <<<"$out" || true)
+  if [[ "$bline" != "1" || "$wline" != "1" ]]; then
+    echo "self-test: failure-line split FAILED — expected one branch line and one worktree line, got ${bline}/${wline} (FL-1)" >&2
+    fail=1
+  fi
+  if [[ "$fail" -eq 0 ]] && ! grep -q '(`locked` / `dirty` / `other`)' <<<"$out"; then
+    echo "self-test: failure-line split FAILED — the worktree line does not point at the per-row cause (FL-1)" >&2
+    fail=1
+  fi
+
+  # FL-2 SPECIFICITY
+  if [[ "$fail" -eq 0 ]]; then
+    LOCAL_BRANCH_CANDIDATES=()
+    out=$(emit_markdown 2>/dev/null || true)
+    if grep -q "branch/ref removal(s) FAILED" <<<"$out"; then
+      echo "self-test: failure-line split FAILED — the branch line rendered with no branch failure (FL-2)" >&2
+      fail=1
+    fi
+    if ! grep -q "worktree removal(s) FAILED" <<<"$out"; then
+      echo "self-test: failure-line split FAILED — the worktree line vanished with the branch rows, so FL-1 was measuring one shared line (FL-2)" >&2
+      fail=1
+    fi
+  fi
+
+  MODE="$saved_mode"
+  LOCAL_BRANCH_CANDIDATES=("${saved_local[@]:-}")
+  WORKTREE_CANDIDATES=("${saved_wt[@]:-}")
+
+  # FL-3 — classifier totality over git's real message shapes (git 2.50.1)
+  if [[ "$fail" -eq 0 ]]; then
+    local c
+    c=$(classify_worktree_refusal "fatal: cannot remove a locked working tree, lock reason: anything at all")
+    [[ "$c" == "locked" ]] || { echo "self-test: failure-line split FAILED — locked refusal classified '$c' (FL-3)" >&2; fail=1; }
+    c=$(classify_worktree_refusal "fatal: '/x/y' contains modified or untracked files, use --force to delete it")
+    [[ "$c" == "dirty" ]] || { echo "self-test: failure-line split FAILED — dirty refusal classified '$c' (FL-3)" >&2; fail=1; }
+    c=$(classify_worktree_refusal "fatal: something git has not said before")
+    [[ "$c" == "other" ]] || { echo "self-test: failure-line split FAILED — unknown refusal classified '$c' (FL-3)" >&2; fail=1; }
+    c=$(classify_worktree_refusal "")
+    [[ "$c" == "other" ]] || { echo "self-test: failure-line split FAILED — empty stream classified '$c' rather than other (FL-3)" >&2; fail=1; }
+  fi
+
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: failure-line split check PASS — FL-1 branch and worktree failures render as two distinct lines / FL-2 each is absent when its own surface has no failure / FL-3 the refusal classifier is total over its closed set" >&2
+  return 0
+}
+
 selftest_help_surface() {
   local script_abs help fail=0 tok
   script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
@@ -3153,6 +3838,124 @@ selftest_gh_bin_resolves() {
   return 0
 }
 
+# Operator-config key-read tolerance guard (#5649). The sibling of group TK in
+# automated-closeout.sh: same defect class, deliberately a DIFFERENT remediation
+# shape, and one shared invariant that both files can be held to.
+#
+# THE INVARIANT. Every read of an OPTIONAL key out of operator.toml must tolerate
+# that key being ABSENT. Without the tolerance `grep` exits 1, `pipefail` carries
+# that status out of the command substitution, and the `set -euo pipefail` near the
+# top of this file aborts at LOAD time — before argument parsing, on EVERY
+# invocation including --self-test — with exit 1 and no output at all. All three
+# sites in this file shipped that way.
+#
+# TWO SHAPES, ONE CLASS. automated-closeout.sh needed a two-part fold (`| head -1`
+# folded into `grep -m1`, PLUS the tolerance). These three sites already carried
+# `grep -m1` and never piped into `head`, so only the tolerance half has a referent
+# here. That is why this arm asserts the TOLERANCE invariant and not the folded
+# form: an arm demanding byte-identity with the sibling's fix would fail on a
+# correct one.
+#
+# WHOLE-SOURCE, following selftest_no_live_worktree_pipes() above. That is
+# load-bearing rather than stylistic: self_test() below is a DISPATCHER, and ~93
+# lines of production code — usage(), the arg-parse loop, the boundary check, the
+# dispatch and the scope case — sit BELOW its closing brace. A region-scoped parse
+# would satisfy any anti-vacuity floor on the three sites near the top of the file
+# and still be blind to all of it.
+#
+# FIXTURES EXCLUDED BY CONSTRUCTION. The precedent arm above uses a WTPIPEGUARD tag
+# its own matcher filters out. This one needs no tag: the parse anchors on
+# `_<name>=$(`, so every specimen below — each held in a single-quoted assignment
+# whose character after `=` is a quote — is invisible to it, and so is every line of
+# this function (its locals carry no leading underscore). An anchor cannot be
+# forgotten the way a tag can, and K-3 asserts the invisibility rather than
+# assuming it.
+selftest_key_read_tolerance() {
+  local src pop tol bad spec fx line new old rc_new=0 rc_old=0
+  src="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  pop="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' "$src")"
+  tol="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "|| true") {n++} END {print n+0}' "$src")"
+
+  # (K-1) ANTI-VACUITY FLOOR, then the invariant. The floor stops a renamed variable
+  #       or a reformatted call site from emptying the population and reading clean.
+  if [[ "${pop:-0}" -lt 3 ]]; then
+    echo "self-test: key-read tolerance guard FAILED — the parse found only ${pop:-0} key-read site(s) in ${src}; the tolerance invariant would be vacuous" >&2
+    exit 1
+  fi
+  if [[ "${pop:-0}" -ne "${tol:-0}" ]]; then
+    bad="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && !index($0, "|| true") {printf "%d ", FNR}' "$src")"
+    echo "self-test: key-read tolerance guard FAILED — ${tol:-0}/${pop:-0} operator.toml key reads tolerate an ABSENT key; an intolerant read aborts this tool at LOAD time when an OPTIONAL key is missing. Unguarded line(s): ${bad:-none}" >&2
+    exit 1
+  fi
+
+  # (K-2) CAPABILITY TO FAIL, both directions, on a constructed call site. Without
+  #       it K-1 is satisfied by a filter that calls everything tolerant, or by a
+  #       parse that recognises nothing at all.
+  spec="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "|| true") {n++} END {print n+0}' <<<'  _z=$(grep -m1 -E "^k" f | awk -F= "{print}")')"
+  if [[ "${spec:-1}" -ne 0 ]]; then
+    echo "self-test: key-read tolerance guard FAILED — the tolerance filter counted an UNGUARDED specimen as tolerant; K-1's clean result is uninformative" >&2
+    exit 1
+  fi
+  spec="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' <<<'  _z=$(grep -m1 -E "^k" f | awk -F= "{print}")')"
+  if [[ "${spec:-0}" -ne 1 ]]; then
+    echo "self-test: key-read tolerance guard FAILED — the key-read parse did NOT recognise a constructed call site; it is not reading the shape it claims to, so K-1's population is not the population" >&2
+    exit 1
+  fi
+
+  # (K-3) THE FIXTURE-EXCLUSION PROOF. A specimen HELD in a single-quoted assignment
+  #       must be invisible to K-1's parse; that is what makes "excluded by
+  #       construction" a measurement rather than a claim, and what keeps this arm
+  #       from inflating its own population and then grading it.
+  spec="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' <<<"  local kr_bad='  _z=\$(grep -m1 -E \"^k\" f | awk -F= \"{print}\")'")"
+  if [[ "${spec:-1}" -ne 0 ]]; then
+    echo "self-test: key-read tolerance guard FAILED — a specimen HELD in a single-quoted assignment was counted as a real call site; the fixtures are not excluded by construction and K-1's population is contaminated" >&2
+    exit 1
+  fi
+
+  # (K-4) THE BEHAVIOURAL DIFFERENTIAL — the arm that fails on the unpatched file.
+  #       K-1..K-3 grade the text. This one RUNS the production line, EXTRACTED from
+  #       this file rather than retyped, against a hermetic operator.toml that EXISTS
+  #       and omits the key — the exact state that aborted the tool — and asserts it
+  #       survives. Its paired arm strips the tolerance from that same extracted line
+  #       and asserts the SAME fixture still aborts; without that control a green K-4
+  #       cannot be told from a fixture that never reproduced the defect.
+  #
+  #       Each half runs in a SEPARATE bash process, deliberately. `( set -e … ) ||
+  #       rc=$?` does NOT observe a set -e abort on bash 3.2: the subshell inherits
+  #       the enclosing AND-OR list's -e suppression and an explicit `set -e` inside
+  #       does not restore it. Measured on both shapes before this arm was written.
+  fx="$(mktemp -d -t keyread-selftest.XXXXXX)"
+  mkdir -p "$fx/.config/pmo-platform"
+  printf 'some_unrelated_key = "x"\n' > "$fx/.config/pmo-platform/operator.toml"
+  line="$(awk '!f && match($0, /^[ \t]*_gh=\$\(/) {print; f=1}' "$src")"
+  if [[ -z "$line" ]]; then
+    rm -rf "$fx" 2>/dev/null || true
+    echo "self-test: key-read tolerance guard FAILED — the production key-read line did not extract from ${src}; the behavioural arm would assert nothing" >&2
+    exit 1
+  fi
+  new="${line//\$\{HOME\}/$fx}"
+  old="${new/ || true)/)}"
+  if [[ "$old" == "$new" ]]; then
+    rm -rf "$fx" 2>/dev/null || true
+    echo "self-test: key-read tolerance guard FAILED — stripping the tolerance from the extracted line changed nothing, so both arms would run identical programs and the differential is empty" >&2
+    exit 1
+  fi
+  /bin/bash -c "$(printf 'set -euo pipefail\n%s\n[[ -z "${_gh:-}" ]] || exit 9\n' "$new")" || rc_new=$?
+  /bin/bash -c "$(printf 'set -euo pipefail\n%s\n' "$old")" || rc_old=$?
+  rm -rf "$fx" 2>/dev/null || true
+  if [[ "$rc_new" -ne 0 ]]; then
+    echo "self-test: key-read tolerance guard FAILED — the shipped key read does NOT survive an operator.toml that exists and omits the key (rc ${rc_new}); that is the load-time abort this guard exists to close" >&2
+    exit 1
+  fi
+  if [[ "$rc_old" -eq 0 ]]; then
+    echo "self-test: key-read tolerance guard FAILED — the SAME fixture with the tolerance stripped did NOT abort (rc 0); the fixture does not reproduce the defect, so this check's clean result is a broken probe rather than evidence" >&2
+    exit 1
+  fi
+
+  echo "self-test: key-read tolerance guard PASS — ${tol}/${pop} operator.toml key reads tolerate an absent optional key (whole-source parse, anti-vacuity floor 3, fixtures excluded by construction and that exclusion asserted); the extracted production line survives a present-but-key-less config while its tolerance-stripped twin over the same fixture still aborts" >&2
+  return 0
+}
+
 self_test() {
   echo "self-test: running detection logic against current workspace (read-only)..." >&2
   workspace_boundary_check
@@ -3188,8 +3991,16 @@ self_test() {
   selftest_agent_detached_sweep
   echo "self-test: exercising worktree-list pipe guard (no live early-closing pipes; idiom survives scale)..." >&2
   selftest_no_live_worktree_pipes
+  echo "self-test: exercising operator-config key-read tolerance (every optional-key read survives the key being absent; whole-source, behavioural differential) (#5649)..." >&2
+  selftest_key_read_tolerance
   echo "self-test: exercising orphan-tag reap (authority gate, real-reap-observed, double-opt-in, canonical-guard, verify-after, ledger write-back)..." >&2
   selftest_orphan_tag_reap
+  echo "self-test: locked-worktree classification (#6411 group LK)" >&2
+  selftest_locked_worktree
+  echo "self-test: liveness global-null fail-closed (#6411 group GN)" >&2
+  selftest_liveness_global_null
+  echo "self-test: failure-line split (#6411 group FL)" >&2
+  selftest_failure_line_split
   echo "self-test: exercising --help protective-guarantee surface (--force / SELF / --self-test) (#669)..." >&2
   selftest_help_surface
   selftest_skip_ledger
@@ -3274,6 +4085,16 @@ if [[ "$MODE" == "apply" && "$SCOPE" != "reap-orphan-tags" ]]; then
   resolve_freed_branches
   verify_apply
   prune_remote_tracking
+fi
+
+# Dry-run sibling of phase (2) — the PROJECTION (#6207). Phases (1), (3) and (4)
+# are genuinely no-ops without an apply, but phase (2)'s OUTCOME is knowable from
+# the enumerated state, so the dry-run reports it instead of understating the
+# apply it describes. Scope-gated off reap-orphan-tags for the same reason the
+# apply block is: the tag accumulator has no interaction with the branch/worktree
+# fixed point. Removes nothing; returns 0.
+if [[ "$MODE" == "dry-run" && "$SCOPE" != "reap-orphan-tags" ]]; then
+  projected_freed_branches
 fi
 
 # Reap sibling — scope-gated, with its own verify (AC4). Only the --reap-orphan-tags
