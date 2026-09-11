@@ -3,7 +3,9 @@
 
 Elaborates `## Mode O — Orchestrate Release` in [`../SKILL.md`](../SKILL.md). The SKILL.md is the authoritative contract; this file is the executable playbook the hub follows to drive a milestone through Stages 4→13.
 
-**Built from, coexists with, and cites — not copies — [`hub-spoke-bridge.md`](../../../references/how-to/hub-spoke-bridge.md) `## For the Hub Agent`.** The manual hub remains valid and unchanged; Mode O is its triggerable form. Where a block below names a `hub-spoke-bridge.md` section, the hub READS that section for the verbatim template/detail at runtime — the orchestration logic here is the skill's own; the reusable templates stay in the doc.
+**Built from, coexists with, and cites — not copies — `release/references/how-to/hub-spoke-bridge.md` `## For the Hub Agent`.** The manual hub remains valid and unchanged; Mode O is its triggerable form. Where a block below names a `hub-spoke-bridge.md` section, the hub READS that section for the verbatim template/detail at runtime — the orchestration logic here is the skill's own; the reusable templates stay in the doc.
+
+> **Why that path is written as text rather than as a link.** `hub-spoke-bridge.md` is **not deployed** — it is not one of this skill's packaged reference files — so a markdown link to it resolves in the repository and fails from the installed skill tree. Writing the repo-relative path as text states the dependency honestly without asserting a navigable hop that does not exist at runtime. The dependency itself is real and is a **declared residual**: the templates named below are read from the repository. What is NOT residual is gate classification — Gate 0's two classification inputs now live beside Gate 0 in [`decision-briefing.md`](decision-briefing.md), inside the deployed tree, precisely so the hub never needs an undeployed file to decide whether to open an operator gate. Same convention applies to every `core/…` and `release/…` path written as text in this file.
 
 ## The run loop
 
@@ -15,7 +17,7 @@ The hub holds the state machine + compact handoff summaries; the spokes hold the
 
 ## Procedure 0b — Resume first (every invocation)
 
-Before any routing, read hub-state and decide resume-vs-start. **Canonical spec: [`hub-session-continuity.md`](../../../../core/standards/hub-session-continuity.md)** — the 3-surface state schema (pending-approvals / event-log / sessions), the 9-step Resume Procedure (incl. drift detection), and the composite session-ID. The hub imports it; it is not restated here.
+Before any routing, read hub-state and decide resume-vs-start. **Canonical spec: `core/standards/hub-session-continuity.md`** — the 3-surface state schema (pending-approvals / event-log / sessions), the 9-step Resume Procedure (incl. drift detection), and the composite session-ID. The hub imports it; it is not restated here.
 - A run is in flight (open sub-tasks / pending approvals for the milestone) → resume at its next unsatisfied gate.
 - Else → start fresh at Procedure 0.
 
@@ -43,7 +45,7 @@ After plan approval the hub creates the release's **stage sub-tasks** via `gh is
 The control-flow core. The hub:
 1. Lists sub-tasks; identifies the **dependency-met actionable subset** (never spawns an unmet-dependency sub-task).
 2. Runs the **Collective Review check** before any Stage-6 routing (fires when ≥2 issues have Solutioning active and all Stage-5 sub-tasks are closed → operator scope-lock GATE).
-3. Runs the action-item scan ([`hub-action-tracking.md`](../../../../core/standards/hub-action-tracking.md)).
+3. Runs the action-item scan (`core/standards/hub-action-tracking.md`).
 4. Before **every** spawn: runs the **quota-budget gate** — wave *or* singleton, at every stage including the write-serialized 6/13 — and honors the **parallelism class**, which is the stage-scoped half of the pair ([`spoke-launch.md`](spoke-launch.md)). A wave renders the full four-value verdict; a singleton renders the reduced PROCEED/DEFER form. The verdict is rendered on every launch, PROCEED included — the gate emits no event, so an unrendered verdict is indistinguishable from a gate that never ran.
 5. **Per-wave concurrent-PR check (pre-spawn):** before spawning a build spoke for issue #N, query open PRs referencing that issue (`gh pr list --state open --search "#N"` or equivalent; N = the target issue number). If an open PR already references it, **surface to the operator — proceed / adopt / skip — BEFORE spawning**, never deferred to the Stage 7/8 coherence review. **Re-run every wave** (not once at Stage 4): the open-PR population changes mid-run, so a clean planning-time scan does not carry ([`spoke-launch.md`](spoke-launch.md)).
 6. **Per-launch spoke-brief path scan (pre-spawn):** scans the **rendered** brief — not the template — with `core/deploy/tools/path-leak-patterns.sh --scan-file`, and does not spawn on a non-exempt hit. Exit 2 (unreadable file, or a copy of the primitive predating the arm) is UNKNOWN, not clean; assert the arm exists before trusting a verdict. This is the fourth standing pre-spawn guard ([`spoke-launch.md`](spoke-launch.md)).
@@ -318,9 +320,9 @@ operator attestation and do **not** block, and only an unresolved row blocks. A 
 whose emitter has not yet reached it therefore closes honestly through the attestation
 path, leaving an auditable trace instead of a silent pass.
 
-## Procedure 5 — Gate handling (the two hard human gates)
+## Procedure 5 — Gate handling (the `STOP`-disposition touchpoints)
 
-**Do NOT spawn a spoke — gates are operator decisions.** The hub reads the prior outputs, runs the action-item scan + (Stage-9 only) the Release Readiness Scan + the goal-conformance check, and presents:
+**Do NOT spawn a spoke — gates are operator decisions.** Which touchpoints stop here is read from the **Hub Gate Register** below — the rows whose `Disposition` is `STOP` or `STOP-IF` — not from a count restated in this heading. The hub reads the prior outputs, runs the action-item scan + (Stage-9 only) the Release Readiness Scan + the goal-conformance check, and presents:
 - **Stage 9 — Plan Review (GO / NO-GO):** the release-authorization decision. The hub assembles the evidence; the operator renders GO/NO-GO. **NEVER auto-crossed.**
 - **Stage 12 — Execute:** merge + deploy authorization. **NEVER auto-crossed** — the operator renders the Execute decision (not a spoke). **Once authorized, the hub routes the Stage-12 *mechanics* through the spawned `pmo-release-manager` tail** — **B1** (merge) + **B3** (atomic version-claim / signed-tag via `claim-version.sh`) + **B5** (the DEPLOYED RELEASE_LOG-row chore PR), run via `release-executor` — **never a bare `gh pr merge` by the hub** (the orchestrator running stage mechanics directly is the ADR-019 fat-orchestrator anti-pattern; "No stage mechanics" per SKILL.md `## What This Skill Does NOT Do`). **Guard:** a merged release left with no DEPLOYED RELEASE_LOG row + no version tag **blocks / flags before close-out with a remediation prompt** (not a bare preflight FAIL) — this catches a Stage-12 that landed merge-only.
 
@@ -338,22 +340,74 @@ When all sub-tasks are closed, the hub:
 - **HARD GATE (7a):** the action-item resolution gate — all open / in-flight action items resolved before Milestone close (`hub-action-tracking.md`).
 - Records the gate-passage proof; closes the Milestone; spawns the orphan-state cleanup chip (operator approves its `--apply` at a Tier-1 gate).
 
-## The gate set — where Mode O STOPS for the operator
+## The Hub Gate Register — the authoritative touchpoint enumeration
 
-| Gate | Procedure | Nature |
-|---|---|---|
-| Plan + Outcome Statement approval | 0 | judgment |
-| Scaffold review | 1 | judgment |
-| Collective Review scope-lock | 2 | judgment (release-level) |
-| Quota-budget SERIALIZE / DEFER / REDUCE | 2 (5.5) | surfaced when non-PROCEED |
-| **Stage 9 — GO / NO-GO** | 5 | **release-authorization gate** |
-| **Stage 12 — Execute** | 5 | **deploy authorization** |
-| Tier 2/3 inter-stage escalation · Tier 0 premise rejection · D-class | 4 | judgment (as they fire) |
-| Early-merge approval | 6 | judgment |
-| Action-item resolution (7a) | 7 | HARD gate before close |
-| Post-deploy `--apply` (orphan cleanup) | 7 | Tier-1 recommend |
+This block is the **single source** for every hub touchpoint at which the operator
+may be engaged. It is read on three different columns by three different consumers,
+and those three readings were previously maintained as separate lists that could —
+and did — disagree:
+
+- **Gate 0** (`decision-briefing.md`) reads the **Gate-eligible** column to decide
+  whether a candidate action may be rendered as an operator gate at all.
+- **Procedure 5** reads the **Disposition** column to decide whether the hub stops
+  or executes-and-reports at a touchpoint it has reached.
+- **The emission contract** below reads the **Emission key** column to resolve which
+  event a touchpoint owes.
+
+<!-- GATE-REGISTER:BEGIN -->
+| # | Touchpoint | Proc | Acting party | Disposition | Autonomy Tier | Gate-eligible | Emission key |
+|---|---|---|---|---|---|---|---|
+| 1 | Plan + Outcome Statement approval | 0 | operator | **STOP** | 0 — Manual | yes | `plan-approval` · `outcome-statement` |
+| 2 | Scaffold completeness (Step 6.5) | 1 | **hub** | **EXECUTE-AND-REPORT** — escalate on deviation via row 6 | 2 — Bounded Auto | **no** | `scaffold-review` |
+| 3 | Collective Review scope-lock | 2 | operator | **STOP** | 0 — Manual | yes | `collective-review` |
+| 4 | Quota-budget non-PROCEED | 2 (5.5) | hub on `SERIALIZE` / `REDUCE` · operator on `DEFER` | **EXECUTE-AND-REPORT** on `SERIALIZE` / `REDUCE` · **STOP** on `DEFER` | 2 — Bounded Auto (`DEFER` escalates) | `DEFER` only | `quota-budget` |
+| 5 | Stage-4 judgment recurring-D | 0 | operator | **STOP** | 0 — Manual | yes | `plan-approval` |
+| 6 | Autonomy-Tier 2/3 inter-stage escalation | 4 | operator | **STOP** | 1 — Recommend | yes | `inter-stage-escalation` |
+| 7 | Tier-0 Premise Rejection | 4 | operator | **STOP** | 0 — Manual | yes | — |
+| 8 | **Stage 9 — GO / NO-GO** | 5 | operator | **STOP** | 0 — Manual (Irreducible Human Task 4) | yes | `stage-9-go` |
+| 9 | **Stage 12 — Execute** | 5 | operator | **STOP** | 0 — Manual (Irreducible Human Task 5) | yes | `stage-12-execute` |
+| 10 | Early merge | 6 | operator | **STOP** | 1 — Recommend | yes | `early-merge` |
+| 11 | Action-item resolution (7a) | 7 | operator | **STOP-IF** an unresolved row is present, **or** the ledger reads `NOT-RECORDED` / `EMPTY-LEDGER` and so requires attestation; else EXECUTE-AND-REPORT | 1 — Recommend (the attestation limb is irreducibly human — the hub cannot attest to its own ledger) | yes | `action-item-close` · `7a-attestation` |
+| 12 | Post-deploy `--apply` (orphan cleanup) | 7 | operator | **STOP** | 1 — Recommend | yes | `orphan-cleanup-apply` |
+<!-- GATE-REGISTER:END -->
+
+**Reading the columns.** `Disposition` ∈ `STOP` · `EXECUTE-AND-REPORT` ·
+`STOP-IF <condition>`. `Autonomy Tier` is always the **Autonomy Tier** convention
+(`autonomy-tiers.md`), never the Inter-Stage-Feedback routing Tier — the two point
+opposite directions at this action class, which is why the column is named rather
+than left to a bare numeral in prose. An **Emission key** resolves to the `gate`
+column of the `EMISSION-CONTRACT` block below; a `—` means the contract carries no
+row for that touchpoint today, which is a measured gap rather than an omission —
+adding one is an `EMISSION-CONTRACT` row addition under its own extension seam.
+
+**The escape hatch, carried once here rather than restated per surface.** A
+genuinely novel or ambiguous situation the framework does not resolve is
+gate-eligible. A candidate the hub cannot classify against this register is
+**treated as gate-eligible** — failing safe toward operator visibility — and is
+flagged in the briefing as an unclassified touchpoint so the register can be
+extended.
 
 Rule-determined values (e.g. D-Version next-free) are **recorded determinations, not gates** (SKILL.md FM "rule-determined call as an operator gate").
+
+**Why one table replaced two lists.** The reserved genuine-judgment touchpoints and
+the set of places Mode O stops were maintained as two enumerations of different
+length, in different shapes, across seven surfaces. They were never two facts: the
+reserved set **is** the rows whose `Disposition` is `STOP` or `STOP-IF`, and the
+stop set is the same rows. The two could not be compared row-for-row only because
+one surface conflated three distinct Procedure-4 touchpoints (rows 5, 6 and 7 here)
+behind a single entry. Splitting that entry is what makes the lists commensurable.
+
+**Citations carry no cardinality.** Every surface that cites this register names
+*"the touchpoints enumerated in the Hub Gate Register"* and states **no count**. A
+restated count is a cascade liability that re-creates this defect the next time a
+gate is added; the register alone carries the figure, and there it is the row count
+rather than a prose assertion.
+
+**Extension seam.** A change that adds a hub touchpoint adds its row *inside* the
+`GATE-REGISTER` delimiters, carrying all eight columns, and — where the touchpoint
+owes an event — adds the matching `EMISSION-CONTRACT` row rather than leaving the
+key unresolvable. It MUST NOT create a parallel table: exactly one delimited
+`GATE-REGISTER` block exists in this file, and every other surface cites it.
 
 ### The emission contract
 
