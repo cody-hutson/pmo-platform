@@ -413,6 +413,20 @@ N/A — enumerated over the three classes a migration could take in this release
 
 (Populated by each Engineering spoke as its slice lands; completed before the PR is transitioned to ready at Stage 9.)
 
+### Artifact-Acceptance Record
+
+**Mode: ADDITIVE.** This release resolves deployable-class — it ships skill and package changes — and *also* declares task-artifact deliverables, so the record rides alongside the deployable close path rather than substituting for it. One row per declared task-artifact deliverable.
+
+| `deliverable` | `canonical_path` | `landing_commit` | `acceptance_verdict` | `acceptor` |
+|---|---|---|---|---|
+| #6364 — criterion evaluability recorded as a per-check measured property | `core/ADRs/ADR-195-l3-judgment-criteria-evaluability.md` | `01e61c8b` | **PENDING** — rendered at the Stage-8 acceptance review, ratified at the Stage-9 gate | Stage-8 acceptance review → operator at Stage 9 |
+| #6379 — consumer contract for the resolved kit | (populated by that card's spoke) | — | PENDING | ↑ |
+| #6367 — per-kind authoring standard | (populated by that card's spoke) | — | PENDING | ↑ |
+
+**`acceptance_verdict` is PENDING by construction at Stage 6, and is not self-certified here.** Engineering lands the artifact and records where it landed; the verdict is rendered by a gate Engineering does not sit on. A spoke writing `ACCEPTED` against its own deliverable would be self-referential validation, and the Stage-13 gate that reads this block would then be reading Engineering's own opinion of its own work. The row is populated with the facts a later gate needs — the path and the landing commit — and the verdict cell names the gate that owes it.
+
+**`canonical_path` verification at Stage 6 is branch-side.** The Stage-13 check resolves each path against the mainline; pre-merge that read cannot succeed by construction, so the Stage-6 assertion is that the path resolves on the release branch at the stated landing commit. The mainline read is the Stage-13 gate's own, and is not pre-claimed here.
+
 ## Deployment Execution Log
 
 (Populated during Stage 12.)
