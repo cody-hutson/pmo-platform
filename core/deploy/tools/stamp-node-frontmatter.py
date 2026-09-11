@@ -389,8 +389,29 @@ def _is_project_root_governance(rel_path):
 
 
 def _project_of(rel_path):
-    """The project name = the first path segment under the corpus root (original case)."""
-    return rel_path.parts[0] if rel_path.parts else ""
+    """The project name = the first path segment under the corpus root (original case),
+    or "" when the path has no project directory above the file.
+
+    A project name is a DIRECTORY segment, so the derivation requires at least one
+    directory above the filename. At depth 1 `parts[0]` IS the filename, and returning
+    it made the edge planner emit a BELONGS_TO pointing at the file itself.
+
+    Keyed on path ARITY, never on the name and never on the stem. At depth 1
+    `parts[0] == rel_path.name` identically, so the arity test subsumes a name test on
+    the only shape that self-references, while a name test would ALSO suppress the
+    legitimate binding of a depth>=2 file whose basename equals its project directory's
+    name. A stem test matches neither shape (measured: for `CLAUDE.md`, `== name` is
+    True and `== stem` is False).
+
+    EXTENDED IN PLACE and never renamed: backfill-relationship-edges.py binds this
+    symbol at import (`_project_of = _node._project_of`) AND treats a falsy return as
+    the signal that ends its edge plan, so a change here changes that tool's WHOLE plan
+    for the file -- not merely its BELONGS_TO. That is the decided contract, not a side
+    effect: a path with no project directory is never stamped by this module either, so
+    any edge sourced from it would be unresolvable.
+    """
+    parts = rel_path.parts
+    return parts[0] if len(parts) > 1 else ""
 
 
 def _classify_type(stem_lower, domain, default_type, authoritative=False):
@@ -1116,6 +1137,39 @@ def run_self_test():
             failures.append(f"(i) coverage: sub-bin row ({bin_key}, {sub_key}) "
                             "has no literal case")
 
+    # --- (j) _project_of arity contract -------------------------------------------
+    # The project is a DIRECTORY segment. Depth 1 -> "" (no project); depth >=2 ->
+    # parts[0]. Asserted at the DEFINITION site because backfill-relationship-edges.py
+    # binds this symbol and a falsy return ends its edge plan: without this arm,
+    # breaking _project_of leaves THIS self-test green while breaking that tool.
+    if _project_of(Path("CLAUDE.md")) != "":
+        failures.append("(j) depth-1 path must yield no project")
+    if _project_of(Path("Acme/PROJECT.md")) != "Acme":
+        failures.append("(j) depth-2 path must yield its project directory")
+    if _project_of(Path("Acme/01-Governance/charter.md")) != "Acme":
+        failures.append("(j) depth-3 path must yield its project directory")
+    # Negative control: a depth-2 file whose basename EQUALS its project directory's
+    # name keeps its binding. A name-identity guard would wrongly suppress this;
+    # measured RED under that predicate, green under arity.
+    if _project_of(Path("Bee.md/Bee.md")) != "Bee.md":
+        failures.append("(j) name-identity false positive: depth-2 binding suppressed")
+    # AC-3 discrimination as a REFERENCE-IMPLEMENTATION DIFFERENTIAL rather than a
+    # restatement of the recorded fact. _ac3_fixture is a VARIABLE, not a literal,
+    # because the differential is only valid where stem != name -- on a suffix-less
+    # basename a stem-keyed predicate and an arity-keyed one AGREE and the arm would
+    # fire on a correct implementation. The guard below is that precondition.
+    _ac3_fixture = Path("CLAUDE.md")
+    if _ac3_fixture.stem == _ac3_fixture.name:
+        failures.append("(j) AC-3 fixture invalid: its stem must differ from its name")
+
+    def _stem_keyed(rel):                  # the predicate AC-3 rules out
+        p = rel.parts
+        return "" if (p and p[0] == rel.stem) else (p[0] if p else "")
+
+    if _stem_keyed(_ac3_fixture) == _project_of(_ac3_fixture):
+        failures.append("(j) shipped predicate agrees with a stem-keyed one on the "
+                        "defect case -- AC-3's asymmetry no longer discriminates")
+
     if failures:
         print("self-test FAIL:", file=sys.stderr)
         for f in failures:
@@ -1123,7 +1177,8 @@ def run_self_test():
         return 1
     print("stamp-node-frontmatter self-test OK "
           "(a full-core-set / b case-norm / c exclusion / d Archive-scope / e idempotent / "
-          "f orphan / g type-domain-validity / h stage-12-gate / i ADR-080-taxonomy)")
+          "f orphan / g type-domain-validity / h stage-12-gate / i ADR-080-taxonomy / "
+          "j project-arity)")
     return 0
 
 
