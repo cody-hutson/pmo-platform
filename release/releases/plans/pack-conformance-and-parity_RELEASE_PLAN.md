@@ -60,7 +60,7 @@ The first Engineering spoke under SINGLE topology re-runs the authoritative-vers
 
 **`${AUDIT_DATE_UTC}` resolution.** Resolved once at this commit via `date -u +%Y-%m-%d` → **`2026-09-10`**. Its single consumer is the `date:` frontmatter field and the dated `source_observations:` entries of the architecture decision record this release adds. No other artifact in this release hardcodes a date in a load-bearing position. Local civil date at resolution time was 2026-09-10 (Thursday); the UTC anchor and the civil date agree, and the agreement is stated rather than assumed.
 
-**Architecture-decision-record number re-verification at Commit 0.** `python3 release/tools/renumber-adr.py --detect` at this base reports `ANCHOR 194 origin/main` · `NEXT-FREE 195` · `CLAIMED-SET-BRANCH-ONLY 195 (detection only — never binds)`. The hub-assigned number **195** is confirmed against a fresh anchor read; the branch-only claim is detection-only and does not bind. Prose citations stay tokenized as `{{ADR:pack-content-lint-sibling-vs-extend}}` until the Stage-12 stamp; the literal number appears only in the record's filename, title and frontmatter.
+**Architecture-decision-record number re-verification at Commit 0.** `python3 release/tools/renumber-adr.py --detect` at this base reports `ANCHOR 194 origin/main` · `NEXT-FREE 195` · `CLAIMED-SET-BRANCH-ONLY 195 (detection only — never binds)`. The hub-assigned number **195** is confirmed against a fresh anchor read; the branch-only claim is detection-only and does not bind. Prose citations stay tokenized as `ADR-195` until the Stage-12 stamp; the literal number appears only in the record's filename, title and frontmatter.
 
 ---
 

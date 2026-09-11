@@ -20,7 +20,7 @@ supersedes: none
 
 **Accepted** — designed at the `pack-conformance-and-parity` Stage 5 Solutioning pass, surfaced to the operator as a reversibility-band decision because the first control declaration spends a property the corpus cannot get back, and carried into Engineering as decided.
 
-**Numbering provenance.** Authored at the next free number computed from the mainline anchor, from a single anchor read shared with the sibling record this release also authors, so that two spokes could not compute next-free independently and collide. A branch-only claim is detection-only and never binds for mainline purposes; if the mainline advances before merge, the merge-time renumberer moves this record and in-release prose citing the slug token `{{ADR:first-pack-control-declaration}}` resolves correctly either way.
+**Numbering provenance.** Authored at the next free number computed from the mainline anchor, from a single anchor read shared with the sibling record this release also authors, so that two spokes could not compute next-free independently and collide. A branch-only claim is detection-only and never binds for mainline purposes; if the mainline advances before merge, the merge-time renumberer moves this record and in-release prose citing the slug token `ADR-196` resolves correctly either way.
 
 ## Context
 

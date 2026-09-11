@@ -22,7 +22,7 @@ supersedes: none
 
 **Accepted** — rendered at the `pack-conformance-and-parity` Stage 5 Solutioning pass and carried into Engineering unchanged. The record exists because the determination was **forced by measurement**, not chosen by preference, and the next author reaching for the obvious shortcut needs to find the measured reason not to.
 
-**Numbering provenance.** Authored at the next free number computed from the mainline anchor plus one, from a single anchor read shared with the sibling record this same release may author, so that two spokes could not compute next-free independently and collide. A branch-only claim on this number is detection-only and never binds for mainline purposes; if the mainline advances before merge, the merge-time renumberer moves this record and in-release prose citing the slug token `{{ADR:pack-content-lint-sibling-vs-extend}}` resolves correctly either way.
+**Numbering provenance.** Authored at the next free number computed from the mainline anchor plus one, from a single anchor read shared with the sibling record this same release may author, so that two spokes could not compute next-free independently and collide. A branch-only claim on this number is detection-only and never binds for mainline purposes; if the mainline advances before merge, the merge-time renumberer moves this record and in-release prose citing the slug token `ADR-195` resolves correctly either way.
 
 ## Context
 
