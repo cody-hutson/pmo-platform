@@ -75,7 +75,7 @@ At `r = 3` the bar is deliberately asymmetric: a coin-flip check clears both arm
 
 Three layers, composed. Each answers a different question, and the three singles were each dominated because each answers only one of the three things a reproducibility verdict requires.
 
-**Layer D — decidability pre-partition** (no runs; classification from the statements). The partition is a **hypothesis, not a verdict**: a check classified decidable on structural grounds still runs Layers E and B. It is applied as an **ordered two-question procedure**, which is disjoint by construction, rather than as three named classes:
+**Layer D — decidability pre-partition** (no runs; classification from the statements). The partition is a **hypothesis, not a verdict**: a check classified decidable on structural grounds still runs Layers E and B. It is applied as an **ordered two-question procedure**, which is disjoint by construction, rather than as a set of named classes matched by inspection:
 
 1. *Is the check's predicate wholly a property of data the platform declares — an edge, or a field's presence or literal value — such that the predicate is decided by reading that data and comparing it to a stated constant, **with no residue**?* If **no** → `interpretive`.
 2. If **yes**: *does deciding it require traversing at least one edge?* **Yes** → `graph-decidable` (traversal dominates). **No** → `field-decidable`.
