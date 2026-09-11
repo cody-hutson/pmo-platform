@@ -33,19 +33,20 @@ release/releases/
 ├── RELEASE_REVERSIONS.md        ← Re-version ledger (abandoned-version recovery record)
 ├── plans/                       ← Release plans, foldered by major version
 │   ├── _unversioned/            ← Plans for version-less releases (slug-keyed)
-│   ├── v1/  v2/  v3/            ← One folder per major version
-├── notes/                       ← User-facing release notes, same foldering as plans/
-│   ├── _unversioned/
-│   ├── v1/  v2/  v3/
+│   └── v<MAJOR>/                ← One folder per major version (v1/, v2/, …)
+├── notes/                       ← User-facing release notes, FLAT — not foldered like plans/
+│   └── _unversioned/            ← The one permitted subfolder (version-less, slug-keyed)
 └── hub-state/                   ← release-hub orchestration state
 
 packages/
 └── [skill].skill                ← Production .skill packages (one per deployed skill)
 ```
 
-**Naming convention:** `[version]_RELEASE_PLAN.md` / `[version]_RELEASE_NOTES.md` — foldered by
-major version (`plans/v3/`, `notes/v3/`), with `_unversioned/` holding the slug-keyed artifacts for
-version-less releases.
+**Naming convention:** `[version]_RELEASE_PLAN.md` / `[version]_RELEASE_NOTES.md`, with
+`_unversioned/` holding the slug-keyed artifacts for version-less releases. **Plans** are foldered
+by major version (`plans/v<MAJOR>/`). **Notes are flat** at the `notes/` root and are **not**
+sharded by major version — that scheme governs `plans/` only (ADR-092), and `_unversioned/` is the
+one permitted `notes/` subfolder per `release/references/standards/release-notes-standard.md`.
 
 **Plans fold at the claim, not at major-version close-out.** A `versioned` release's plan is
 **slug-keyed while it is in flight** — `plans/<slug>_RELEASE_PLAN.md`, flat at the `plans/` root
@@ -56,8 +57,10 @@ placeholder to the won number (ADR-092; see § Versioning Phase 1). Foldering a 
 A `version-less` release has no number to bind: its plan stays slug-keyed permanently under
 `_unversioned/` and the rename never fires.
 
-Flat files at the **`notes/` root** are the recent-release working set; note foldering does happen
-as major versions close out.
+**Notes never fold.** Every versioned note is written flat to the **`notes/` root** and stays
+there — there is no major-version close-out step for notes, and no `notes/v<MAJOR>/` bucket. The
+sole exception is a `version-less` release, whose note is written to `notes/_unversioned/`; that is
+the **one permitted** `notes/` subfolder, and no other is permitted.
 
 **Snapshots:** the `_snapshots/` and `_archive/` directories described by earlier revisions of this
 protocol do not exist in the repository. Pre-change snapshots are the **Cowork-path** mechanism (see

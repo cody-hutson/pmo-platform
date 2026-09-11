@@ -225,8 +225,21 @@ not to ship, but both bound what the clamp actually guarantees:
    bridge paths — because those are decidable from the tool-call payload (per
    `core/config/operator.toml.template` § ENFORCEMENT POSTURE). Mode C's hazardous
    action is **`gh issue create`**, which is **neither** a governance-file write
-   **nor** a cross-domain bridge path, so it is **not payload-detectable — the hook
-   never sees it**. Mode C's Tier-0 floor is therefore a **skill-level self-limit
+   **nor** a cross-domain bridge path — so the C5 hook,
+   `core/hooks/block-autonomy-ceiling.sh`, does not classify it as one of the classes
+   it gates, and does not fire on it. **That is a statement about that hook, not
+   about every hook.** A different hook, `core/hooks/block-gh-path-leak.sh`, *does*
+   match `gh (issue|pr) (create|edit|comment)` and *does* read the authored body. Two
+   conditions bound what it is worth: it ships mode **`warn`**, so where it runs it
+   warns rather than blocks; and per its own header and
+   `core/rules/bypass-mode-readiness.md`, it is **not active at any mode** on an
+   instance whose PreToolUse wiring has not been re-homed — which includes any
+   session rooted in the repo or a worktree. So neither hook gates this floor, and
+   the deeper reason is **semantic, not lexical**: a sanctioned Mode C create and a
+   bypassing create are byte-identical tool calls, so no hook design reaches the
+   distinction (per
+   [ADR-162](../../../core/ADRs/ADR-162-obligation-limb-is-a-form-not-a-fourth-gate-class.md)).
+   Mode C's Tier-0 floor is therefore a **skill-level self-limit
    only**; there is no mechanical enforcement behind it. This is precisely why the
    auto-create surface is deliberately held to `bounded_auto` only and why the
    Tier-0 classifier below runs on the skill side, unconditionally, before any
@@ -733,13 +746,15 @@ handling.
   per-action max for a Tier-0 item is **manual** regardless of the dial — and because
   **there is no mechanical backstop for this create**: the C5 hook (CLOSED)
   hard-blocks only payload-detectable Tier-0 (governance-file writes / cross-domain
-  bridge paths), and Mode C's `gh issue create` is not payload-detectable, so the
-  hook never fires on it. The Tier-0 floor is a skill-level self-limit; if the
-  classifier is skipped, nothing else catches the miss.
+  bridge paths), and Mode C's `gh issue create` is neither, so that hook does not
+  gate this create (§ Honest safety read records which hooks do and do not reach it,
+  with their modes and coverage conditions). The Tier-0 floor is a skill-level
+  self-limit; if the classifier is skipped, nothing else catches the miss.
 - **Root cause:** Misreading `bounded_auto` as a blanket create-license rather than a
   ceiling clamped by the irreducible floor — compounded by an assumption that "the
-  hook will catch a bad create," which is false for the non-payload-detectable
-  `gh issue create` path.
+  hook will catch a bad create," which is false for the `gh issue create` path: it is
+  neither of the payload-detectable Tier-0 classes (governance-file writes /
+  cross-domain bridge paths) that the C5 enforcement hook gates.
 - **Mitigation:** Run the Tier-0 classification (Mode C § The Tier-0 never-auto floor)
   on the *implied item* **unconditionally**, before the create branch; on any Tier-0
   hit, force the `recommend` (surface-only) path and route the surfaced proposal for
