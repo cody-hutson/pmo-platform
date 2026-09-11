@@ -2549,8 +2549,8 @@ fi
 
 | # | Condition | `STATE` | Verdict | Operator surface |
 |---|---|---|---|---|
-| 1 | ledger file absent | `NOT-RECORDED` | **SURFACE** | "No action-item ledger exists for this release. Either no commitments were made, or the Procedure 4a emit step was skipped. Attest which." → requires explicit operator attestation to pass |
-| 2 | file present, 0 AI rows | `EMPTY-LEDGER` | **SURFACE** | same attestation; distinguishes "initialized, never appended" from (1) |
+| 1 | ledger file absent | `NOT-RECORDED` | **SURFACE** | "No action-item ledger exists for this release. Either no commitments were made, or the Procedure 4a emit step was skipped. Attest which." → requires explicit operator attestation to pass. **The prompt carries a measured recommended cause and the basis for it**, so the attestation rests on evidence rather than on recollection: the hub applies the signal table in `core/standards/hub-action-tracking.md` § 4 to this release's own routing-point sweep renderings, and `automated-closeout.sh` prints what it can measure from the event log — recommending **nothing**, and printing why, where its basis cannot separate the two causes. The operator still attests. The measurement is the evidence behind the choice, never the choice |
+| 2 | file present, 0 AI rows | `EMPTY-LEDGER` | **SURFACE** | same attestation, carrying the same measured recommended cause and basis; distinguishes "initialized, never appended" from (1) |
 | 3 | ≥1 row, 0 open/in-flight | `RESOLVED` | **PASS** | *the only silent pass* — report `N/N resolved` |
 | 4 | ≥1 open or in-flight | `UNRESOLVED` | **BLOCK** | enumerate each unresolved `AI-NNN` with owner + trigger |
 
