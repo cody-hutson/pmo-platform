@@ -227,7 +227,7 @@ When zero rows trigger, the subsection reads "No action items triggered at this 
 
 ## 6. Cutover
 
-Each of the THREE NEW protocols shipping in this standard carries the cutover clause separately. The umbrella cutover sentence applies to the standard's existence; the protocol-specific cutovers govern individual surfaces.
+Each of the THREE NEW protocols shipping in this standard carries the cutover clause separately. The umbrella cutover sentence applies to the standard's existence; the protocol-specific cutovers govern individual surfaces. **`THREE` names the protocols this standard *introduced* — a historical statement about this standard's own introducing release, not a ceiling on this section.** A protocol-grade obligation added to this standard by a later release carries its own **named** cutover clause below, and changes no count here.
 
 **Umbrella cutover.** Applies to all releases entering Stage 5 going forward. The release that shipped this standard is exempt — reflexive-pipeline-loop discipline (a standard cannot fire on its own Stage 5 / 6 / 7 / 8 / 12 / 13 hub action-item-tracking operations without creating a loop; that release's own hub action-item-tracking pattern uses the pre-cutover discretionary practice — sub-task comments, Decision Briefing inline mentions). Pre-existing in-flight releases are grandfathered.
 
@@ -236,6 +236,12 @@ Each of the THREE NEW protocols shipping in this standard carries the cutover cl
 **Protocol 2 — Pipeline-event-log subtype additions (`action-item-*` 5 subtypes).** Cutover applies to all event-log emissions going forward. The release that shipped these subtypes is exempt — reflexive-pipeline-loop discipline. That release's own Stage 13 audit-trail captures (per the audit-trail protocol) MAY emit these subtypes if the operator manually invokes them, but the standard does NOT require it.
 
 **Protocol 3 — Review-cadence binding (§ 4, 5 routing points including Procedure 7 hard gate).** Cutover applies to hub sessions on all releases entering Stage 5 going forward. The release that shipped this cadence-binding is exempt — reflexive-pipeline-loop discipline (a cadence-binding cannot fire on its own release's Stage 13 Close action-item-resolution gate without creating a loop; that release's own Procedure 7 close uses the pre-cutover practice — operator-discretion review).
+
+**Sweep cutover (§ 4 Composition block — the commitment sweep).** The sweep obligation is **warn-mode-initial**, and unlike the four clauses above it carries **no introducing-release exemption**, because it cannot have one. This standard is **not deployed** — it loads from the repo tree, so by the second limb of the release-hub orchestration playbook's § 4a.4 the obligation is in force **from the merge, including for the release that ships it**. That is a property of the load path, not a grant.
+
+The asymmetry is what makes warn-mode required rather than merely prudent. The sweep's **definition** lands here, in a non-deployed file, and binds on merge; the **invocation** that triggers it — Procedure 4a step 5 — ships inside the deployed skill package and binds only at the next deploy. Between those two moments the obligation is live with no forcing function behind it, which is the exact defect class the sweep exists to close, reproduced by its own rollout. Warn-mode is what makes that window survivable: for the shipping release's remaining routing points, a routing point that advances with no rendered sweep is **reported, not blocked**, and § 4's omission-is-a-structural-defect clause acquires blocking force for releases entering Stage 5 after this one. Graduation warn → enforce follows the standard shakedown in [`bypass-mode-readiness.md`](../rules/bypass-mode-readiness.md).
+
+This clause is **named rather than numbered into the Protocol 1–3 series**, and the choice is load-bearing in both directions. Numbering it `Protocol 4` would require the `THREE` above to read `FOUR` — a count cascade this revision otherwise does not fire — and would make that sentence assert the sweep shipped in this standard's introducing release, which is false. Leaving it unnamed inside § 4 would have hidden a cutover posture in a section nobody reads for cutover.
 
 ## 7. Cross-References
 
