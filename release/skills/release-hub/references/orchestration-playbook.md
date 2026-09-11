@@ -367,7 +367,7 @@ and did — disagree:
 | 8 | **Stage 9 — GO / NO-GO** | 5 | operator | **STOP** | 0 — Manual (Irreducible Human Task 4) | yes | `stage-9-go` |
 | 9 | **Stage 12 — Execute** | 5 | operator | **STOP** | 0 — Manual (Irreducible Human Task 5) | yes | `stage-12-execute` |
 | 10 | Early merge | 6 | operator | **STOP** | 1 — Recommend | yes | `early-merge` |
-| 11 | Action-item resolution (7a) | 7 | operator | **STOP-IF** an unresolved row is present, **or** the ledger reads `NOT-RECORDED` / `EMPTY-LEDGER` and so requires attestation; else EXECUTE-AND-REPORT | 1 — Recommend (the attestation limb is irreducibly human — the hub cannot attest to its own ledger) | yes | `action-item-close` · `7a-attestation` |
+| 11 | Action-item resolution (7a) | 7 | operator | **STOP-IF** the action-item ledger's status predicate is unsatisfied; else EXECUTE-AND-REPORT. **The predicate itself is not restated here** — it is defined once in `core/standards/hub-action-tracking.md`, so a change to how ledger status is read requires no edit to this register | 1 — Recommend (the attestation limb is irreducibly human — the hub cannot attest to its own ledger) | yes | `action-item-close` · `7a-attestation` |
 | 12 | Post-deploy `--apply` (orphan cleanup) | 7 | operator | **STOP** | 1 — Recommend | yes | `orphan-cleanup-apply` |
 <!-- GATE-REGISTER:END -->
 
