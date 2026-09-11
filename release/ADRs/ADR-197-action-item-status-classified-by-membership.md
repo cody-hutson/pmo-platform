@@ -1,5 +1,5 @@
 ---
-title: "ADR-195 — The action-item gate classifies status by membership; the residue is a state, never a verdict"
+title: "ADR-197 — The action-item gate classifies status by membership; the residue is a state, never a verdict"
 status: Accepted
 date: 2026-09-07
 release: closeout-correctness-batch
@@ -16,13 +16,15 @@ source_observations:
   - "Reflexive safety measured before arming the second blocking state: 0 of the 8 affected ledgers belongs to an open milestone, and the introducing release's own ledger does not exist, so its verdict is NOT-RECORDED."
 ---
 
-# ADR-195 — The action-item gate classifies status by membership; the residue is a state, never a verdict
+# ADR-197 — The action-item gate classifies status by membership; the residue is a state, never a verdict
 
 ## Status
 
 **Accepted.** Authored at Engineering for the `closeout-correctness-batch` release, alongside the predicate correction, the standard's read-rule amendment, and the self-test arms that grade both.
 
 **Numbering provenance.** Claimed as **195** against an anchor of **194** on `origin/main`, read from the repository's own ADR-numbering tool rather than computed as one past the highest number visible on this branch. Branch-local claims do not bind; the number binds at the Stage-12 claim, and in-release prose cites this record by slug rather than by number.
+
+**Numbering provenance — `195 → 197`.** Held **ADR-195** branch-local; renumbered to **ADR-197** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 195. In-release citations that read "ADR-195" denote this record.
 
 ## Context
 

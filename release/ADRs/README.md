@@ -82,7 +82,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-181](ADR-181-adr-citations-bind-at-the-claim-not-at-authorship.md) | ADR citations bind at the claim, not at authorship; the sweep's exemption is regions that record a number, and where it cannot decide it names rather than rewrites | Proposed | 2026-09-01 | adr-corpus-integrity |
 | [ADR-183](ADR-183-behavioral-regression-floor-and-major-release-binding-boundary.md) | The behavioural-regression pass-rate floor and the boundary the gate binds at | Accepted | 2026-09-02 | regression-corpus-gates-releases |
 | [ADR-192](ADR-192-allowlist-form-set-four-canonical-fifth-form-is-a-widening.md) | Four allowlist invocation forms remain canonical; the suffix glob is a widening, not a completion | Accepted | 2026-09-05 | release-tools-invocable-gates-enforced |
-| [ADR-195](ADR-195-action-item-status-classified-by-membership.md) | The action-item gate classifies status by membership; the residue is a state, never a verdict | Accepted | 2026-09-07 | closeout-correctness-batch |
+| [ADR-197](ADR-197-action-item-status-classified-by-membership.md) | The action-item gate classifies status by membership; the residue is a state, never a verdict | Accepted | 2026-09-07 | closeout-correctness-batch |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.
