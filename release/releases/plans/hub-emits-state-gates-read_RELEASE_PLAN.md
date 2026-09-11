@@ -313,6 +313,38 @@ No file requires a scope split. Every within-release contention resolves by comm
 
 **Baseline-pin temporal limitation, stated rather than buried.** This audit is pinned at `a3083858` and the sibling is a draft that may merge at any time before Stage 9. Because it will change files this release edits, the stale-pin self-invalidation trigger **is expected to fire at Stage 9 entry** — a prediction this plan makes, not a residual it hopes against.
 
+#### Re-baseline re-measurement — the sibling merged before Stage 9
+
+**Measured at:** `origin/main` @ `ea424cc1` · release head `65f2dd6c` (the post-merge head, before this subsection's commit) · open-PR population read at `2026-09-11T21:43:20Z`. The prediction above held, one stage early. The sibling merged during Stage 6, and the operator decided to re-baseline the branch at Stage 6 so that the last card builds on post-merge `main`. The Stage-4 roster above is left as the measurement it was, on the reasoning DEV-10 records.
+
+**What `main` carried in.** The re-baseline merged two first-parent merges into this branch:
+- `closeout-correctness-batch`, merged as `b255f99a` and claimed as `v4.63`. Its net change is **22** files. **6** are in this release's write set and **3** are in its read set.
+- A `v4.62` Stage-13 corpus chore, `ea424cc1`. Its net change is **7** release-corpus files. **0** are in this release's write set.
+
+`release/tools/automated-closeout.sh` was not in the Stage-4 intersection. It is not among the § File Change Matrix rows; it entered this release's change set with the close-time measurement commit.
+
+| File | Class | Resolution |
+|---|---|---|
+| `release/references/how-to/hub-spoke-bridge.md` | `line-range-overlap` — **conflicted, 1 region** | An adjacency conflict in the § Procedure 7a decision table. Rows 1–2 come from this branch. Rows 3–5, and the two paragraphs after the table, come from `main`. No row was edited by both sides, and the result equals the line-level union of both. **INT-2 MET.** Control: resolving the conflict to the sibling's side alone is NOT MET on the rows-1–2 check. |
+| `release/tools/automated-closeout.sh` | `line-range-overlap` — **conflicted, 2 regions** | The self-test fixture reset is a union: this branch's reader restore, plus every `STATE_AI_*` reset either side carries. The claim lines take `main`'s witness-gated form. Self-test group M (five arms) is registered with the witness gates in its own commit. At the pure-merge commit, disabling one M arm left the suite green, with stderr byte-identical to a healthy run. After registration, the same mutation fails and names group M. |
+| `core/standards/hub-action-tracking.md` | `line-range-overlap` — auto-merged | A line-level union with no overlapping hunk. **INT-3 MET**: the § 4 routing-point-5 row is `main`'s text, the Composition block carries this release's sweep subsection byte-identical, and neither states a gate-state count the other contradicts. |
+| `release/skills/release-hub/references/orchestration-playbook.md` | `line-range-overlap` — auto-merged | A line-level union with no overlapping hunk and no hand-edit. The `EMISSION-CONTRACT` block holds **18** data rows before and after, byte-identical. The Procedure 4a step-5 sweep binding is intact. |
+| `packages/release-hub.skill` + `.sha256` | binary | Taken from `main`, the sibling's build, and never hand-resolved. The package stays stale against this branch's source until the release's single rebuild from post-merge source, which is the last Limb-A card's. |
+| `release/skills/release-executor/SKILL.md` | `read-edit` | The decision health-check's oracle source changed under it, as RSK-7 predicted. No committed artifact of this release pins its content hash, because the pin is taken at run time, so there is nothing to reconcile. |
+| `release/ADRs/ADR-197-action-item-status-classified-by-membership.md` | `read-edit` (renumbered) | The sibling renumbered its membership record at its version claim. The § Read-only inputs row now points at the post-claim path, found by slug. |
+
+**Open-PR population: 4.** GraphQL `totalCount` reads 4 and the list read returns 4. Each PR's file list matches the host's `changed_files` count, so no list is truncated. One of the four is this release's own PR. The other three were checked against this release's write set and its read set:
+
+| In-flight PR | Files | ∩ write set | ∩ read set |
+|---|---|---|---|
+| `deploy-tools-and-tests-batch` | 23 | **0** | **0** |
+| `authoring-bar-and-consumers` | 16 | **0** | **0** |
+| `chore/v4.63-stage-12-release-log` | 2 | **0** | **0** |
+
+The **write set** is **33** paths. It is the union of the branch's net change against `main` (29 paths) and the plan's declared add/edit rows, including DEV-15 (24 paths). The union keeps rows that are planned but not yet landed in scope: the event-log schema file and the `release-hub` package pair. Method: `LC_ALL=C sort -u` into `comm -12`, never `sort -n`. **Planted-path control, same pipeline:** one write-set path appended to a real PR's file list is reported, count 1, so each zero above is a measured zero. Specificity: three paths outside the write set return 0.
+
+**Version slot.** `v4.61`, `v4.62` and `v4.63` are tagged on `origin`; the sibling holds `v4.63`. The next free version for bump-class `minor` reads `v4.64` at this measurement. As before, it binds only at the Stage-12 atomic claim, and nothing in this plan is restamped.
+
 ---
 
 ## Risk Register
