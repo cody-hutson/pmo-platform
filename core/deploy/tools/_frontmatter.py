@@ -31,21 +31,33 @@ treats as "has frontmatter," because both ask THIS module.
 
 F1 COVERS TRAVERSAL TOO. The same guarantee spans a second axis: not only "what
 keys does this doc carry" but "is this doc in the corpus at all". is_corpus_path()
-below is the ONE traversal predicate the deploy-tool corpus walkers share, so a
-file is in the corpus for all of them or out of it for all of them — the same
-terms, one axis over. Three walkers previously carried that rule privately (two
-byte-identical copies and one omission) and disagreed on dot-leading segments;
-they now ask THIS module, exactly as they already ask it what a frontmatter block
-is. That is why this module is BOTH a reader and a traversal predicate, and why
-its name understates it.
+below is the ONE traversal predicate the THREE deploy-tool corpus walkers share,
+so a file is in the corpus for all of them or out of it for all of them — the
+same terms, one axis over. Those three previously carried that rule privately
+(two byte-identical copies and one omission) and disagreed on dot-leading
+segments; they now ask THIS module, exactly as they already ask it what a
+frontmatter block is. That is why this module is BOTH a reader and a traversal
+predicate, and why its name understates it.
+
+The population is stated as THREE deliberately, not left open. A bare "the
+deploy-tool corpus walkers" quantifies over a set nothing bounds, and the set is
+larger than the three: check-work-hierarchy.py also walks *.md under this tree
+and prunes dot-leading DIRECTORIES only, without asking this module. It is a
+governance-prose lint surface rather than a node-corpus walker, so it is out of
+this predicate's population by design — but that is a fact to state, not one to
+leave a universal silently asserting the opposite of.
 
 FROZEN SEMANTICS
 ----------------
 The clauses below state what this module DOES, not what a YAML parser would do.
 They are frozen deliberately: every one of them is a property six consumers
 already depend on, so changing one changes all six resolved-value sets at once
-and silently. Each clause is anchored by a named assertion in _self_test case
-(5), so a future well-meaning tightening fails a test rather than shipping.
+and silently. Each clause is anchored by a named assertion in _self_test — F-1
+in cases (1), (2) and (5), F-2 / F-3 / F-4 in case (5), F-5 in case (1) — so a
+future well-meaning tightening fails a test rather than shipping. The case
+numbers are stated because a reader has to be able to CHECK the claim in
+seconds; an unlocated "it is tested somewhere" is the shape of assurance this
+block exists to replace.
 
 F-1  Frontmatter exists IFF the file's FIRST line, stripped, is exactly "---",
      and the block runs to the next line whose strip() is "---". A file whose
@@ -183,9 +195,11 @@ def read_anchor(doc_path: Path) -> tuple[str | None, str]:
 def is_corpus_path(path: Path, root: Path) -> bool:
     """True when `path` is inside the corpus rooted at `root` — i.e. NO segment of
     its root-relative path begins with a dot. This is the ONE traversal predicate
-    the deploy-tool corpus walkers share, so a file is in the corpus for all of
-    them or out of it for all of them (the F1 consistency guarantee, applied to
-    traversal). Dot-leading DIRECTORY segments (`.git/`, `.body-backups/`) and
+    the THREE deploy-tool corpus walkers share, so a file is in the corpus for
+    all of them or out of it for all of them (the F1 consistency guarantee,
+    applied to traversal). The count bounds the claim: see the module docstring
+    for the further *.md walker (check-work-hierarchy.py) that is deliberately
+    outside this population. Dot-leading DIRECTORY segments (`.git/`, `.body-backups/`) and
     dot-leading FILENAMES (`.draft.md`) are BOTH excluded — the filename is a
     segment of the relative path like any other. Raises ValueError for a path
     outside `root`, exactly as the inline expressions it replaces did."""
@@ -235,8 +249,10 @@ def _self_test() -> int:
         anchor3, astat3 = read_anchor(d2)  # no frontmatter
         assert astat3 == "no-frontmatter", astat3
 
-        # (5) FROZEN SEMANTICS — the docstring's F-2, F-3 and F-4 clauses,
-        # anchored as assertions rather than prose.
+        # (5) FROZEN SEMANTICS — the docstring's F-1, F-2, F-3 and F-4 clauses,
+        # anchored as assertions rather than prose. (F-5 is anchored in case (1),
+        # and F-1's first-line-is-a-fence half in cases (1) and (2); this case
+        # carries F-1's two FENCE-BOUNDARY clauses, which no other case reaches.)
         #
         # READ THIS BEFORE "FIXING" A FAILURE HERE. These assertions exist to
         # FAIL a future comment-strip (or a repair of the dead internal-space
@@ -304,6 +320,48 @@ def _self_test() -> int:
         assert "- x.md" not in keys6, (
             "SPECIFICITY: an INDENTED line is still excluded — F-2 widens what "
             "counts as flush-left, it does not remove the indentation filter"
+        )
+
+        # F-1 — the two FENCE-BOUNDARY clauses. They are pinned HERE because no
+        # other case reaches them: every fixture above either opens with a fence
+        # or carries no later fence at all, so a mutation to either boundary
+        # leaves all of them green. Both clauses are properties six consumers
+        # have resolved values under since this module shipped.
+        #
+        # First arm — frontmatter exists IFF the FIRST line is a fence, HOWEVER
+        # MANY fences appear later. A tightening that scans for the first "---"
+        # instead of testing line 0 (the tolerate-a-leading-blank-line repair) is
+        # exactly what this arm fails.
+        d7 = base / "late-fence.md"
+        d7.write_text(
+            "\n---\ntitle: NotFrontmatter\n---\n# Body\n", encoding="utf-8"
+        )
+        keys7, status7 = read_frontmatter(d7)
+        assert status7 == "no-frontmatter" and keys7 == {}, (
+            "F-1: a first line that is not '---' means NO frontmatter, however "
+            "many fences follow; a later fence does not start a block. Got "
+            f"{status7!r} / {keys7!r}"
+        )
+
+        # Second arm — the block ENDS at the next "---". A flush-left key line
+        # BELOW the closing fence is body text, not frontmatter. The in-block
+        # assertion beside it is the SENSITIVITY arm: without it, a reader that
+        # admitted nothing at all would satisfy the absence claim vacuously.
+        d8 = base / "after-fence.md"
+        d8.write_text(
+            "---\ntitle: Inside\n---\nafter_fence: leaked\n# Body\n",
+            encoding="utf-8",
+        )
+        keys8, status8 = read_frontmatter(d8)
+        assert status8 == "ok" and keys8.get("title") == "Inside", (
+            "SENSITIVITY: the block ABOVE the fence must still parse, or the "
+            f"absence assertion below passes on a reader that admits nothing. "
+            f"Got {status8!r} / {keys8!r}"
+        )
+        assert "after_fence" not in keys8, (
+            "F-1: the block runs only to the next '---'; a flush-left "
+            "'key: value' line below the closing fence is body text and must "
+            "NOT become a top-level key"
         )
 
         # (6) is_corpus_path — the shared traversal predicate. BOTH dot-leading
