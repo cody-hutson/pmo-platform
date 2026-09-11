@@ -318,6 +318,19 @@ on:
       # AER-1 note names it as an AER-1 input; the glob here subsumes it for Arm F.
       - 'release/references/pipeline/**'
       - 'core/config/allowlists/script-execution-allowlist.txt'
+      # Scenario-G input (#6251): release-notes-standard.md §2.4 PUBLISHES the
+      # banned-jargon list, and lint_release_corpus.py --self-test asserts its
+      # enforcing patterns against that table row for row. Without this entry a PR
+      # that adds a §2.4 row and nothing else would not trigger the arm built to
+      # catch a published-but-unenforced row — the same trigger-vs-verdict
+      # disagreement the CIAC-3, selftest-discovery, R8, VIC and Arm F entries
+      # above each close for their own inputs.
+      # What it buys is REACHABILITY, not enforcement, and the difference matters:
+      # this workflow is posture=advisory (see :3) and no job of it is a
+      # branch-protection context, so the arm now RUNS on the edit it exists to
+      # catch but does not block the merge. There is no branch-protection-enforced
+      # home for this invariant today; that gap is tracked separately.
+      - 'release/references/standards/release-notes-standard.md'
   push:
     branches: [main]
     paths:
@@ -355,6 +368,10 @@ on:
       - 'core/config/allowlists/script-execution-allowlist.txt'
       # VIC engine member — see the pull_request block above.
       - 'core/deploy/deploy.sh'
+      # Scenario-G input (#6251) — see the pull_request block above. Rostered in
+      # BOTH lists deliberately: they are two holders of one roster, and adding to
+      # one alone is the same divergence class #6251 exists to remove.
+      - 'release/references/standards/release-notes-standard.md'
 
 permissions:
   contents: read
