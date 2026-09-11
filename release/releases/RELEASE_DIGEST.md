@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.63 (2026-09-11) — The release close-out now proves what it reports
+
 ### v4.62 (2026-09-11) — A pack that says nothing about a kind it declares is now findable
 ### v4.61 (2026-09-11) — Governance documents stop describing the platform from memory
 
