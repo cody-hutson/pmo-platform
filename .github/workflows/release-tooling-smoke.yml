@@ -1273,12 +1273,30 @@ jobs:
           python3 release/tools/check-selftest-coverage.py --reconcile --root "$probe" > "$probe/control.out" 2>&1
           control_rc=$?
           set -e
-          if [ "$control_rc" -ne 0 ]; then
-            echo "::error::Control arm FAILED — --reconcile does not pass on the UNMUTATED probe copy (exit $control_rc), so the narrowing arm below would prove nothing."
+          # PINNED TO THE EXACT EXPECTED CODE, not widened to a range. This probe tree
+          # copies core/deploy/allowlists but Arm F's allowlist lives under
+          # core/config/allowlists, so the tree deliberately CANNOT measure Arm F and the
+          # unmutated copy verdicts NOT-EVALUATED (3). Pinning states that known
+          # unfaithfulness as an expectation instead of tolerating a range: `-eq 1` would
+          # accept 0, 2, 3 and 4 alike, so if someone later completes the probe tree the
+          # control would silently start measuring something else and no arm would notice.
+          # It also keeps this file from teaching that 3 is an acceptable baseline while
+          # the gate-decision step below maps 3 to red.
+          if [ "$control_rc" -ne 3 ]; then
+            echo "::error::Control arm — expected exit 3 (Arm F NOT-EVALUATED: this probe tree deliberately omits core/config/allowlists, so Arm F cannot measure here). Got $control_rc. The tree changed shape; re-derive what the control proves before trusting the narrowing arm below."
             sed -n '1,60p' "$probe/control.out"
             exit 1
           fi
-          echo "Control OK — the unmutated manifest reconciles."
+          # The control's real predicate: no Arm B(i) finding is ALREADY present, so the
+          # narrowing arm's red below is attributable to the mutation. The exit code alone
+          # never asserted this — probe 1 has carried the equivalent arm since it was
+          # written and this control did not.
+          if grep -q 'Arm B(i) MANIFEST FLOOR' "$probe/control.out"; then
+            echo "::error::Control arm — Arm B(i) is ALREADY firing on the UNMUTATED probe copy, so the narrowing arm below would prove nothing."
+            sed -n '1,60p' "$probe/control.out"
+            exit 1
+          fi
+          echo "Control OK — the unmutated manifest reconciles Arm B (exit 3: Arm F is NOT-EVALUATED on this tree by construction)."
 
           # The victim path is DERIVED from the manifest, never named here. Hardcoding a
           # tool name in this workflow would re-introduce, in the probe, the very
@@ -1314,8 +1332,16 @@ jobs:
           probe_rc=$?
           set -e
 
-          if [ "$probe_rc" -eq 0 ]; then
-            echo "::error::Anti-narrowing guard FAILED — deleting a '# scope:' directive did not fail --reconcile. Narrowing discovery would silently green a failing tool; this gate is blind."
+          # Requires the BLOCKING member specifically, not merely "non-zero". Under the
+          # partitioned exit space non-zero is no longer synonymous with "an arm that must
+          # hold has regressed": 3 is NOT-EVALUATED and 4 is the expected residual, and
+          # neither would demonstrate that the narrowing was caught. The assertion is
+          # deliberately tight so a future change that alters which member this mutation
+          # produces is LOUD rather than absorbed. The two specificity arms below have
+          # asserted the Arm B(i) finding and the named victim since this probe was
+          # written; this arm tightens the CODE, which is the part that was loose.
+          if [ "$probe_rc" -ne 1 ]; then
+            echo "::error::Anti-narrowing guard FAILED — deleting a '# scope:' directive did not produce the BLOCKING verdict (exit 1); got $probe_rc. Narrowing discovery would silently green a failing tool; this gate is blind."
             sed -n '1,60p' "$probe/probe.out"
             exit 1
           fi
@@ -1332,7 +1358,12 @@ jobs:
           echo "Anti-narrowing guard OK (exit $probe_rc) — a narrowed scope failed Arm B(i) and named every dropped path."
 
       - name: The meta-assertions (--reconcile)
-        # THIS STEP MUST STAY LAST IN THIS JOB. Do not re-sort it back up next to Arm A
+        id: reconcile
+        # THIS STEP AND ITS GATE-DECISION SIBLING MUST STAY LAST IN THIS JOB, IN THIS
+        # ORDER. The ordering guarantee below is STRENGTHENED, not weakened: this step now
+        # always exits 0 (the verdict rides $GITHUB_OUTPUT), so it cannot skip a later
+        # step at all, and the single step that can fail is the last one in the job.
+        # Do not re-sort it back up next to Arm A
         # because it reads as an "Arm A / Arm B" pair — that adjacency is what broke.
         # Arm F rides this step and is DESIGNED to stay red until the `.py` population
         # drains (see the Arm F paragraph below). Under Actions' default step semantics
@@ -1365,19 +1396,61 @@ jobs:
         # Arm E (HARD) reconciles core/deploy/tools/ against its README inventory over
         # the DIRECTORY listing — never the self-test manifest, whose population is
         # smaller by design.
-        # Arm F (HARD in the engine, ADVISORY here) asserts that every invocation a
-        # pipeline spec PRESCRIBES is admitted by the script-execution allowlist,
-        # adjudicated by the hook's own match rule rather than by a row count. IT
-        # REPORTS FINDINGS ON ARRIVAL AND IS NOT EXPECTED GREEN: most of what it names
-        # is a .py tool, and the allowlist's non-shell section is deliberately empty
-        # pending BLOCK-DESTRUCTIVE-022's drain, so those are unmatchable by
-        # construction rather than unregistered by oversight. A red from Arm F is the
-        # arm WORKING. This job is posture=advisory and is not a required context; do
-        # NOT register it as one until that population is drained, or the roster gains
-        # a context that cannot pass.
+        # Arm F asserts that every invocation a pipeline spec PRESCRIBES is admitted by
+        # the script-execution allowlist, adjudicated by the hook's own match rule rather
+        # than by a row count. ITS SEVERITY IS PER FINDING, NOT PER ARM, and that is what
+        # makes "ADVISORY here" mechanically true rather than aspirational. It reports
+        # findings on arrival: most of what it names is a .py tool, and the allowlist's
+        # non-shell section is deliberately empty pending BLOCK-DESTRUCTIVE-022's drain,
+        # so those are unmatchable by construction rather than unregistered by oversight.
+        # Those findings verdict EXPECTED-RESIDUAL and this job reports SUCCESS with a
+        # warning. A finding that is remediable now — its suffix domain already carries
+        # rows, or its operand is not on disk at all — verdicts BLOCKING and this job
+        # FAILS, exactly as an Arm B or Arm E regression does. So a residual can no longer
+        # mask a regression, which is the property the two states previously lacked.
+        # This job remains posture=advisory and is NOT a required context; do NOT register
+        # it as one until that population is drained.
         # No predicate, glob or roster enters this YAML: the thin caller below reaches
-        # every arm with no functional change.
-        run: python3 release/tools/check-selftest-coverage.py --reconcile
+        # every arm with no functional change, and the gate-decision step that follows
+        # dispatches on the INTEGER alone.
+        run: |
+          set -uo pipefail
+          set +e
+          OUT="$(python3 release/tools/check-selftest-coverage.py --reconcile 2>&1)"; RC=$?
+          set -e
+          printf '%s\n' "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "rc=$RC" >> "$GITHUB_OUTPUT"
+
+      - name: Gate decision (verdict -> job conclusion)
+        env:
+          RC: ${{ steps.reconcile.outputs.rc }}
+        # THIN, DELIBERATELY. The verdict rides the INTEGER. This step re-parses no
+        # predicate, no glob, no roster and no count — the discipline this job's header
+        # states — and it is the same producer/gate-decision shape
+        # .github/workflows/skill-package-freshness.yml already runs in this repository.
+        # The contract table is the EXIT CODES block in
+        # release/tools/check-selftest-coverage.py, which is the authoring home.
+        run: |
+          set -euo pipefail
+          case "$RC" in
+            0) echo '## :white_check_mark: CLEAN — every arm reconciles' | tee -a "$GITHUB_STEP_SUMMARY"
+               exit 0 ;;
+            4) echo '## :warning: EXPECTED RESIDUAL only — not a regression' | tee -a "$GITHUB_STEP_SUMMARY"
+               echo 'Every Arm F finding in this run is unmatchable BY CONSTRUCTION: the operand is on disk and its suffix domain carries no allowlist row, pending BLOCK-DESTRUCTIVE-022 draining the non-shell population. No arm that must hold has regressed. This population is expected to be non-empty until that drain completes; it is named on every run so it stays countable.' | tee -a "$GITHUB_STEP_SUMMARY"
+               echo '::warning::selftest-discovery: EXPECTED RESIDUAL only — no arm that must hold has regressed'
+               exit 0 ;;
+            3) echo '## :x: an arm COULD NOT MEASURE — not a pass' | tee -a "$GITHUB_STEP_SUMMARY"
+               echo 'NOT-EVALUATED is a WITHHELD verdict, never a clean one: an input an arm depends on was absent, so nothing was asserted. On the real checkout this is STRUCTURALLY UNREACHABLE — both inputs are tracked files — so reaching it means the is_real_tree guard is broken. Fail closed.' | tee -a "$GITHUB_STEP_SUMMARY"
+               echo 'Disposition note: three shipped consumers of this convention map 3 to green-with-warning; this one maps it to red. The rule that reconciles them is recorded at the convention authoring home, the cmd_check_package_freshness contract table in core/deploy/deploy.sh — a consumer resolves 3 to non-blocking where an enforce sentinel can later escalate the same verdict, and to blocking where it carries no sentinel and 3 is therefore terminal. This probe carries no sentinel.' | tee -a "$GITHUB_STEP_SUMMARY"
+               echo '::error::selftest-discovery: NOT-EVALUATED on the real checkout — a withheld verdict, never a clean one'
+               exit 1 ;;
+            1) echo '## :x: selftest-discovery FAILED — an arm that must hold has regressed' | tee -a "$GITHUB_STEP_SUMMARY"
+               echo 'BLOCKING: Arm A/B/E, the runner partition, or an Arm F finding that is remediable now (its suffix domain carries rows) or names a path that is not on disk (a dangling spec reference). Read the annotations above for the named operands and sites.' | tee -a "$GITHUB_STEP_SUMMARY"
+               exit 1 ;;
+            *) echo "## :x: selftest-discovery FAILED — unexpected exit $RC" | tee -a "$GITHUB_STEP_SUMMARY"
+               echo '2 is usage / configuration error (argparse owns it); anything else is outside the declared contract. Fail closed rather than guess.' | tee -a "$GITHUB_STEP_SUMMARY"
+               exit 1 ;;
+          esac
 
   finops-selftest:
     name: FinOps usage-extractor script self-tests (Ubuntu)
