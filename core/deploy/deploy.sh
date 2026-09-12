@@ -3476,6 +3476,54 @@ _c32_compute_verdict() {
   return 0
 }
 
+# _c32_verdict_exit_code <verdict-token> <enforce-token>
+#   THE verdict -> exit mapping for --check-release-corpus, factored to top level so it is
+#   single-sourced (DD1 — one body, two readers) and directly assertable by --self-test
+#   WITHOUT invoking the whole probe. Division of labour: cmd_check_release_corpus owns the
+#   operator-facing LOG TEXT; this function owns the INTEGER. The contract table on
+#   cmd_check_release_corpus is this function rendered as prose — where they disagree, this
+#   function is the authority and the table is the defect.
+#
+#   THE INVARIANT (PV-7): exit 0 has EXACTLY ONE producer, CLEAN, under EVERY sentinel
+#   state. No measured-degraded verdict (INCOMPLETE) and no unmeasured verdict (SKIP) may
+#   share a code with the clean one. The sentinel is an ESCALATION dial, not a suppression
+#   dial: it may raise a verdict from advisory to blocking, and it may never lower one onto
+#   0. Before this partition, CLEAN, SKIP and INCOMPLETE-under-warn all exited 0, so
+#   .github/workflows/release-corpus-completeness.yml published a completeness claim on a
+#   run that verdicted INCOMPLETE 4 230 — the live false-green this function removes.
+#
+#   WHY THE ADVISORY CODES ARE NOT 0. warn-mode's meaning is "do not BLOCK the merge",
+#   which is a property of the CALLER's response, not of what the engine FOUND. Encoding
+#   "don't block" as "found nothing" collapses the two.
+#
+#   SKIP IS SENTINEL-AWARE HERE, and that DIVERGES from _de_verdict_exit_code's SKIP on
+#   purpose rather than by inconsistency. Check 61 maps SKIP to 3 under every sentinel
+#   because one of its causes — the pipeline event log is operator-instance and git-ignored
+#   — is STRUCTURALLY UNREACHABLE to fix in CI, so blocking on it would turn the flip into
+#   a permanent red. Check 32 has no such cause: both its SKIP arms fire only on
+#   release/releases/RELEASE_LOG.md being ABSENT or UNPARSEABLE, and that file is TRACKED,
+#   so it is present and parseable on any CI checkout. A CI SKIP therefore means the pull
+#   request deleted the ledger or broke its header — an in-PR-fixable repo defect, not a
+#   structural absence. Importing Check 61's remedy here would ship a gate that goes quiet
+#   the instant its ledger is deleted while still reporting non-red: the
+#   control-that-cannot-fail class Check 61's own NOSET arm exists to close. Bound worth
+#   recording rather than leaving implicit — the argument's strength is a property of THIS
+#   gate's checkout configuration (a full actions/checkout, no sparse-checkout, no filter)
+#   as much as of the file being tracked; narrow the checkout and this must be re-derived.
+_c32_verdict_exit_code() {
+  local _c32_tok="${1:-}" _c32_enf="${2:-warn}"
+  case "$_c32_tok" in
+    CLEAN) printf '0\n' ;;
+    INCOMPLETE)
+      if [[ "$_c32_enf" == "enforce" ]]; then printf '1\n'; else printf '2\n'; fi ;;
+    SKIP)
+      # SENTINEL-AWARE, unlike Check 61's SKIP — see the divergence note above and the
+      # SKIP clause on the cmd_check_release_corpus contract table.
+      if [[ "$_c32_enf" == "enforce" ]]; then printf '1\n'; else printf '3\n'; fi ;;
+    *) printf '1\n' ;;       # fail-closed, sentinel-agnostic
+  esac
+}
+
 # ─── Skill mode-declaration extraction (D1) — shared by Check 35 and Check 5(d) ──
 # THE SUBJECT BOUND, defined ONCE. A frontmatter mode DECLARATION is a `Modes:` /
 # `Mode:` token appearing INSIDE the YAML frontmatter block — between the opening
@@ -11688,9 +11736,14 @@ sys.stdout.write("".join(out) + "|")
   #             deploy-time enforce-flip is a separate concern owned elsewhere.)
   #   invariant: every RELEASE_LOG row at/after the cutover implies its INDEX row +
   #              DIGEST entry + NOTES file (+ tag + published Release post-cutover).
-  #   falsification: a RELEASE_LOG row present with its INDEX/DIGEST/NOTES absent -> the
-  #                  gate reports INCOMPLETE (warn: summary + exit 0; enforce: red + exit 1).
-  #                  A complete output-set for every in-scope row -> CLEAN/green.
+  #   falsification: a RELEASE_LOG row present with its INDEX row / DIGEST entry / NOTES
+  #                  file absent -> this gate reports INCOMPLETE and exits NON-ZERO under
+  #                  EVERY sentinel value (warn: advisory exit 2, reported not blocking;
+  #                  enforce: blocking exit 1). Delete release/releases/RELEASE_LOG.md, or
+  #                  strip Version/State from its header -> SKIP, exit 3 under warn and
+  #                  exit 1 under enforce — NEVER 0, because an unread ledger is not a
+  #                  clean one. A complete output-set for every in-scope row -> CLEAN, the
+  #                  SOLE producer of exit 0.
   #
   # Per the release-corpus completeness forcing-function. Stage 13 Close produces four
   # release-corpus artifacts — RELEASE_LOG row, RELEASE_INDEX row, RELEASE_DIGEST entry,
@@ -17575,7 +17628,10 @@ EOF
   # where an unreadable header yields an EMPTY row set that verdicts CLEAN: a pass
   # produced by not looking, which is the exact failure class this change closes.
   # Without RC-3 a sixth divergent row selector could be added tomorrow and every other
-  # arm would still pass.
+  # arm would still pass. RC-9d is the fourth: it is the control arm for RC-9c's PV-7
+  # population predicate, which asserts `violations -eq 0` — a zero-is-pass shape, so
+  # without RC-9d a predicate that never evaluated would be indistinguishable from a
+  # partition that holds. KILLS: a PV-7 check that cannot fail.
   echo "self-test: starting assertion group RC (RELEASE_LOG row classes, #5234)" >&2
   local _rct; _rct="$(/usr/bin/mktemp -d -t releaserowclass-selftest.XXXXXX)"
   local _rclog="$_rct/RELEASE_LOG.md"
@@ -17757,8 +17813,112 @@ EOF
   _rct_after="$(/usr/bin/sed -E 's/.*\/ ([0-9]+) total LOG data row\(s\).*/\1/' <<<"$_rcd_after")"
   [[ $((_rct_after - _rct_total)) -eq 1 ]] || { echo "FAIL: RC-8 adding one data row must move the emitted denominator by exactly 1 (was $_rct_total, now $_rct_after)"; failures=$((failures+1)); }
 
+  # ── RC-9 — THE EXIT-CODE SPACE for Check 32 (#7193). PV-7: a degraded or unmeasured
+  # state NEVER shares a member with the clean state. Every arm ABOVE asserts a verdict
+  # TOKEN by calling _c32_compute_verdict directly, so this group could not — and did not
+  # — see the verdict -> EXIT mapping at all. That blind spot is where the defect lived:
+  # CLEAN, SKIP and INCOMPLETE-under-warn all exited 0, so
+  # .github/workflows/release-corpus-completeness.yml's `0)` branch printed a completeness
+  # claim on a run that verdicted INCOMPLETE 4 230. These arms assert the mapping itself,
+  # through the same _c32_verdict_exit_code body the probe exits on.
+  _rc_exit_is() {   # <expected> <verdict-token> <enforce-token> <arm-label>
+    local _e="$1" _t="$2" _s="$3" _lbl="$4" _got
+    _got="$(_c32_verdict_exit_code "$_t" "$_s")"
+    [[ "$_got" == "$_e" ]] || { echo "FAIL: RC-9 $_lbl — verdict '$_t' under sentinel '$_s' must exit $_e, got $_got"; failures=$((failures+1)); }
+  }
+
+  # THE INVARIANT, asserted directly: 0 has exactly ONE producer, under BOTH sentinels.
+  _rc_exit_is 0 CLEAN          warn    "CLEAN/warn is the clean code"
+  _rc_exit_is 0 CLEAN          enforce "CLEAN/enforce stays 0 (enforce must not punish a clean run)"
+  # ANTI-COLLAPSE — the two pairs that were exit 0 before #7193 and must never be again.
+  _rc_exit_is 2 INCOMPLETE     warn    "INCOMPLETE/warn is ADVISORY-nonzero, never 0"
+  _rc_exit_is 3 SKIP           warn    "SKIP/warn is NOT-EVALUATED-nonzero, never 0"
+  # ESCALATION, not suppression: the sentinel may raise severity, never lower it onto 0.
+  _rc_exit_is 1 INCOMPLETE     enforce "INCOMPLETE/enforce BLOCKS"
+  _rc_exit_is 1 SKIP           enforce "SKIP/enforce BLOCKS — a green gate must mean the ledger was READ"
+  # Fail-closed on an unrecognised verdict, under either sentinel.
+  _rc_exit_is 1 __unexpected__ warn    "unrecognised verdict fails closed"
+  _rc_exit_is 1 __unexpected__ enforce "unrecognised verdict fails closed under enforce"
+
+  # RC-9b — ANTI-VACUITY for the eight arms above, and the arm that PINS the Check-61
+  # divergence. Those eight are all of the form "this token maps to this integer", which a
+  # mapping returning a CONSTANT would fail — but a mapping returning the RIGHT constant
+  # per token while IGNORING the sentinel would pass every one of them. Asserted as a
+  # distinctness relation rather than as more literals, per the DE-10b precedent. KILLS: a
+  # mapping that never reads the sentinel. The SKIP limb additionally pins the design
+  # decision — it is exactly the assertion Check 61's sentinel-AGNOSTIC mapping would FAIL,
+  # so a future edit "harmonising" Check 32 with its sibling turns this arm red instead of
+  # drifting silently.
+  [[ "$(_c32_verdict_exit_code INCOMPLETE warn)" != "$(_c32_verdict_exit_code INCOMPLETE enforce)" ]] \
+    || { echo "FAIL: RC-9b INCOMPLETE must map differently under warn vs enforce (the sentinel is not being read)"; failures=$((failures+1)); }
+  [[ "$(_c32_verdict_exit_code SKIP warn)" != "$(_c32_verdict_exit_code SKIP enforce)" ]] \
+    || { echo "FAIL: RC-9b SKIP must map differently under warn vs enforce — Check 32's SKIP is sentinel-AWARE by design, unlike Check 61's"; failures=$((failures+1)); }
+
+  # _rc_pv7_violations <mapping-fn-name>
+  #   PV-7 as a POPULATION property over the whole (verdict x sentinel) space, in BOTH
+  #   directions: a non-CLEAN pair producing 0 is a violation, and a CLEAN pair NOT
+  #   producing 0 is equally one. Returns the violation count; 0 means PV-7 holds.
+  #   Takes the mapping BY NAME so the identical predicate can be run against a
+  #   deliberately collapsed mapping — which is what makes its zero mean something.
+  _rc_pv7_violations() {
+    local _fn="$1" _t _s _code _v=0
+    for _t in CLEAN INCOMPLETE SKIP __unexpected__; do
+      for _s in warn enforce; do
+        _code="$("$_fn" "$_t" "$_s")"
+        if [[ "$_t" == "CLEAN" ]]; then
+          if [[ "$_code" != "0" ]]; then _v=$((_v + 1)); fi
+        else
+          if [[ "$_code" == "0" ]]; then _v=$((_v + 1)); fi
+        fi
+      done
+    done
+    printf '%s\n' "$_v"
+  }
+
+  # The collapsed mapping RC-9d runs the predicate against: byte-identical to the real one
+  # EXCEPT that SKIP/warn returns 0 — the exact pre-fix collapse this change closes.
+  _rc_c32_collapsed_map() {
+    local _t="${1:-}" _s="${2:-warn}"
+    case "$_t" in
+      CLEAN) printf '0\n' ;;
+      INCOMPLETE) if [[ "$_s" == "enforce" ]]; then printf '1\n'; else printf '2\n'; fi ;;
+      SKIP)       if [[ "$_s" == "enforce" ]]; then printf '1\n'; else printf '0\n'; fi ;;
+      *) printf '1\n' ;;
+    esac
+  }
+
+  # RC-9c — THE POPULATION PROPERTY. Across every (verdict x sentinel) pair, zero
+  # violations in BOTH directions, plus a companion count asserting that exactly TWO of the
+  # eight pairs produce 0. KILLS: a degraded or unmeasured verdict collapsing onto the
+  # clean code anywhere in the space, including a future verdict token added with no case
+  # arm — it lands on *) -> 1 and is caught here rather than silently joining the clean set.
+  local _rc_pv7 _rc_zero_producers _rt _rs
+  _rc_pv7="$(_rc_pv7_violations _c32_verdict_exit_code)"
+  [[ "$_rc_pv7" -eq 0 ]] \
+    || { echo "FAIL: RC-9c PV-7 violated — $_rc_pv7 (verdict x sentinel) pair(s) break the partition: a non-CLEAN pair produced 0, or a CLEAN pair did not"; failures=$((failures+1)); }
+  _rc_zero_producers=0
+  for _rt in CLEAN INCOMPLETE SKIP __unexpected__; do
+    for _rs in warn enforce; do
+      [[ "$(_c32_verdict_exit_code "$_rt" "$_rs")" == "0" ]] && _rc_zero_producers=$((_rc_zero_producers+1))
+    done
+  done
+  [[ "$_rc_zero_producers" -eq 2 ]] \
+    || { echo "FAIL: RC-9c exit 0 must have exactly 2 producers (CLEAN x {warn,enforce}); found $_rc_zero_producers — a degraded verdict has collapsed onto the clean code (PV-7)"; failures=$((failures+1)); }
+
+  # RC-9d — THE SENSITIVITY ARM for RC-9c's first limb, and it is NOT redundant with the
+  # zero-producer count beside it. The reason is a POLARITY difference, not a weakness in
+  # the DE-10c precedent above: DE-10c asserts a POSITIVE expected count (-eq 2), so a dead
+  # predicate yields 0, 0 -eq 2 fails, and DE-10c FAILS — it was never vulnerable this way.
+  # RC-9c's first limb INVERTS that polarity to `violations -eq 0`, where a dead predicate
+  # returns the PASS value. A zero-is-pass assertion cannot distinguish "the partition
+  # holds" from "the predicate never evaluated", so it needs a control arm that a
+  # positive-count assertion does not. This is that arm: the IDENTICAL predicate, run
+  # against a mapping that deliberately collapses SKIP/warn onto 0.
+  [[ "$(_rc_pv7_violations _rc_c32_collapsed_map)" -ge 1 ]] \
+    || { echo "FAIL: RC-9d control — the PV-7 predicate returned 0 violations against a mapping that DELIBERATELY collapses SKIP/warn onto 0. The predicate is broken, so RC-9c's zero proves nothing"; failures=$((failures+1)); }
+
   /bin/rm -rf "$_rct" 2>/dev/null || true
-  unset -f _rc_verdict _rc_denom
+  unset -f _rc_verdict _rc_denom _rc_exit_is _rc_pv7_violations _rc_c32_collapsed_map
 
   # ─── Assertion group VF — version-freeness claimed-set column pinning [#3724] ──
   #
@@ -19229,17 +19389,60 @@ cmd_check_required_subset() {
 # Runs ONLY Check 32's release-corpus completeness verdict (not the full --check
 # suite) and maps the verdict to an EXIT CODE for the CI gate. Warn-vs-enforce at the
 # CI surface is decided by the committed .github/release-corpus-completeness.enforce
-# sentinel — during the warn-mode window an INCOMPLETE verdict is reported but
-# swallowed (exit 0); flip the token to 'enforce' after shakedown to block. Mirrors
+# sentinel — the probe reads it here and honours it INTERNALLY, so the CI caller
+# dispatches on the returned integer alone and never re-reads the sentinel file. Mirrors
 # cmd_check_close_completeness's sentinel-aware contract. Surface = "gate": fail-closed
 # (an offline anchor for the post-cutover published-Release sub-check is a finding, not
 # degraded to N/A). This gate is the SINGLE canonical required-context for Check 32
 # (the --check-required-subset runner EXCLUDES Check 32, so it is never double-gated).
 #
-#   exit 0  — CLEAN (every in-scope row complete) / SKIP (LOG absent — nothing to
-#             assert), OR INCOMPLETE but the sentinel is warn (true verdict reported).
-#   exit 1  — INCOMPLETE AND the sentinel is enforce, OR an unexpected verdict
-#             (fail-closed regardless of the sentinel).
+# VERDICT -> EXIT CONTRACT (this table is _c32_verdict_exit_code rendered as prose; where
+# the two disagree, THE FUNCTION IS THE AUTHORITY AND THIS TABLE IS THE DEFECT). THE
+# INVARIANT IS PV-7: a degraded or unmeasured state NEVER shares a member with the clean
+# state. Exit 0 has EXACTLY ONE producer — CLEAN — under EVERY sentinel state. A sentinel
+# may RAISE a verdict's severity (advisory -> blocking); it may never LOWER one onto 0.
+#
+#   verdict         sentinel token   exit   caller reads it as
+#   -------------   --------------   ----   ----------------------------------------------
+#   CLEAN           any              0      pass — every in-scope row carries its full
+#                                           Stage-13 output set. SOLE OCCUPANT OF 0.
+#   INCOMPLETE      != enforce       2      ADVISORY finding: MEASURED and incomplete,
+#                                           reported, not blocking. Never 0 — a probe that
+#                                           says INCOMPLETE in prose and OK in $? invites a
+#                                           caller to conclude the opposite of the truth.
+#   INCOMPLETE      enforce          1      BLOCKING finding — the gate must fail closed
+#   SKIP            != enforce       3      ADVISORY NOT-EVALUATED: RELEASE_LOG.md was
+#                                           absent or its header unparseable, so NOTHING
+#                                           was measured. Distinct from 2 because the
+#                                           REMEDY differs — restore or repair the ledger,
+#                                           rather than backfill the corpus.
+#   SKIP            enforce          1      BLOCKING — a green gate must mean the ledger
+#                                           was actually READ. See the SKIP clause below.
+#   <other>         any              1      unexpected verdict — fail-closed, sentinel-agnostic
+#
+# NEITHER 3 NOR 2 IS A NEW CONVENTION. Both mirror cmd_check_package_freshness, whose
+# contract table is the tree-wide authoring home: FRESH 0 / STALE advisory 2 /
+# NOT-EVALUATED 3 / blocking 1, with the advisory 2 itself following
+# core/deploy/tools/cross-module-audit.sh (2 = "violations detected (advisory)" vs
+# 1 = BLOCKER). cmd_check_decision_emission already extends the same set, and
+# .github/workflows/skill-package-freshness.yml already branches on these integers with
+# the wording this gate reuses.
+#
+# The alternative — parsing the printed verdict token in YAML — is rejected for the reason
+# the sibling tables already state: a token parser in the workflow is a SECOND reader of
+# the predicate and drifts from this one. Enforcement POLICY stays in the sentinel, of
+# which this probe remains the single reader.
+#
+# SKIP IS SENTINEL-AWARE, and that is a deliberate DIVERGENCE from Check 61's SKIP rather
+# than an inconsistency between siblings. Check 61's SKIP is agnostic because one of its
+# causes is structurally unreachable to fix in CI (a git-ignored event log), so blocking
+# on it would make its flip a permanent red. Check 32's two SKIP causes are RELEASE_LOG.md
+# ABSENT and RELEASE_LOG.md UNPARSEABLE, and that file is TRACKED — present on every CI
+# checkout — so a CI SKIP means the pull request removed or broke the ledger, which its
+# author can fix in the pull request. Under an agnostic SKIP at flip-to-enforce, deleting
+# the ledger would exit 3, the caller would treat 3 as advisory, and the gate would
+# silently stop asserting anything while reporting non-red. Full reasoning, including the
+# checkout-configuration bound, lives on _c32_verdict_exit_code.
 cmd_check_release_corpus() {
   validate_workspace
   detect_install_path || true
@@ -19257,25 +19460,32 @@ cmd_check_release_corpus() {
   case "$tok" in
     CLEAN)
       log "release-corpus: ${verdict#CLEAN } logged release(s) on/after the cutover carry the full corpus set — OK"
-      exit 0
+      exit "$(_c32_verdict_exit_code CLEAN "$rc_enforce")"
       ;;
     SKIP)
-      log "release-corpus: SKIP — ${verdict#SKIP } (nothing to assert)"
-      exit 0
+      log "release-corpus: SKIP — ${verdict#SKIP }"
+      log "  NOT-EVALUATED — this is a WITHHELD verdict, never a clean one. The run certifies"
+      log "  nothing about corpus completeness; the cause is printed above."
+      if [[ "$rc_enforce" == "enforce" ]]; then
+        log "  ENFORCE-MODE (sentinel '$rc_enforce_file' token == enforce): a green gate must mean the ledger was actually READ — exit 1."
+        exit "$(_c32_verdict_exit_code SKIP enforce)"
+      fi
+      log "  WARN-MODE (sentinel '$rc_enforce_file' token != enforce): reporting the withheld verdict as ADVISORY — exit 3, non-zero so no caller can read an unmeasured run as clean, and distinct from the INCOMPLETE advisory 2 (a real finding). The remedy differs too: restore or repair release/releases/RELEASE_LOG.md, rather than backfill the corpus."
+      exit "$(_c32_verdict_exit_code SKIP warn)"
       ;;
     INCOMPLETE)
       log "release-corpus: INCOMPLETE — ${verdict#INCOMPLETE } (findings count / checked-row count; see detail above)"
       log "  A close dropped a Stage-13 release-corpus output (INDEX row / DIGEST entry / NOTES file [+ tag / Release])."
       log "  Backfill per release/references/pipeline/stage-13-close.md Phase B."
       if [[ "$rc_enforce" == "enforce" ]]; then
-        exit 1
+        exit "$(_c32_verdict_exit_code INCOMPLETE enforce)"
       fi
-      log "  WARN-MODE (sentinel '$rc_enforce_file' token != enforce): reporting the true verdict but NOT blocking — flip the token to 'enforce' after shakedown."
-      exit 0
+      log "  WARN-MODE (sentinel '$rc_enforce_file' token != enforce): reporting the true verdict as ADVISORY — exit 2, so no caller can read an INCOMPLETE run as clean, and distinct from the blocking exit 1 and from the SKIP 3 (nothing measured). The flip to 'enforce' is an operator decision recorded in core/standards/gate-efficacy-standard.md, never auto-promoted by hit count."
+      exit "$(_c32_verdict_exit_code INCOMPLETE warn)"
       ;;
     *)
       log "release-corpus: unexpected verdict '$verdict' — fail-closed"
-      exit 1
+      exit "$(_c32_verdict_exit_code __unexpected__ "$rc_enforce")"
       ;;
   esac
 }
@@ -19869,8 +20079,10 @@ main() {
       ;;
     --check-release-corpus)
       # Single-check CI release-corpus-completeness probe (#1484): runs ONLY Check 32's
-      # verdict and exits per the verdict (0 CLEAN/SKIP, 1 INCOMPLETE — sentinel-gated
-      # at .github/release-corpus-completeness.enforce; fail-closed at the gate surface).
+      # verdict and exits per the verdict (0 CLEAN and NOTHING ELSE EVER, 2 INCOMPLETE
+      # advisory, 3 SKIP NOT-EVALUATED advisory, 1 for either under enforce or an
+      # unexpected verdict — sentinel-gated at .github/release-corpus-completeness.enforce;
+      # fail-closed at the gate surface).
       # The Check 32 logic ALSO fires inside the full --check suite — one shared body
       # (_c32_compute_verdict), no copy. Used by .github/workflows/release-corpus-completeness.yml.
       cmd_check_release_corpus
@@ -19919,7 +20131,7 @@ main() {
       echo "  --check-version-freeness     Pre-merge version-freeness probe (Check 41 only; exits 1 on a claimed/undecidable candidate) (#1677)"
       echo "  --check-close-completeness   Close-completeness probe (Check 48 only; exits 1 on a VERIFIED row missing a Stage-13 output) (#1290)"
       echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73, 77, 78); honors .github/deploy-check-ci.enforce (#1485)"
-      echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; exits 1 on an INCOMPLETE row set when enforce) (#1484)"
+      echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; CLEAN=0 and NOTHING ELSE EVER EXITS 0, INCOMPLETE=2 advisory, SKIP=3 NOT-EVALUATED (RELEASE_LOG absent or unparseable — withheld, never a pass), INCOMPLETE/SKIP=1 when enforce, unexpected=1) (#1484)"
       echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; CLEAN=0 and NOTHING ELSE EVER EXITS 0, INCOMPLETE=2 advisory, SKIP=3 NOT-EVALUATED (withheld, never a pass), NOSET=4 advisory (gate asserted nothing — repo defect), INCOMPLETE/NOSET=1 when enforce, unexpected=1) (#4026)"
       echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, NOT-EVALUATED=3 advisory / 1 when enforce, unexpected=1) (#2656)"
       echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"

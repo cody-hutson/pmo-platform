@@ -12,8 +12,13 @@ name: Release-corpus completeness (pre-merge Stage-13 corpus gate)
 #              for Check 32 (the required-subset runner EXCLUDES Check 32 — no
 #              double-gating, R6).
 #   falsification: a RELEASE_LOG row present with its INDEX row / DIGEST entry / NOTES
-#                  file absent -> this gate reports INCOMPLETE (warn-mode: summary +
-#                  exit 0; enforce: red + exit 1). A complete output-set -> CLEAN/green.
+#                  file absent -> this gate reports INCOMPLETE and exits NON-ZERO under
+#                  EVERY sentinel value (warn: advisory exit 2, reported not blocking;
+#                  enforce: blocking exit 1). Delete release/releases/RELEASE_LOG.md, or
+#                  strip Version/State from its header -> SKIP, exit 3 under warn and
+#                  exit 1 under enforce — NEVER 0, because an unread ledger is not a
+#                  clean one. A complete output-set for every in-scope row -> CLEAN, the
+#                  SOLE producer of exit 0.
 # Path-filtered to release/releases/**, so ADVISORY by skip-semantics: absence on an
 # unrelated PR MUST NOT block. Ships warn-mode-initial (reports, does not block) — the
 # ledger currently carries pre-existing corpus findings that must be drained/allowlisted
@@ -45,9 +50,11 @@ name: Release-corpus completeness (pre-merge Stage-13 corpus gate)
 # core/rules/git-workflow.md § Repository-Integrity Gates.)
 #
 # THIN caller of the single engine. --check-release-corpus runs ONLY Check 32's shared
-# _c32_compute_verdict "gate" body and honors the .enforce sentinel internally (warn
-# swallows INCOMPLETE into exit 0; enforce propagates exit 1; an unexpected verdict
-# fail-closes). NO predicate is re-encoded in this YAML (single-engine, CIAC-2).
+# _c32_compute_verdict "gate" body and honors the .enforce sentinel internally, returning
+# 0 CLEAN / 2 INCOMPLETE-advisory / 3 SKIP-advisory (NOT-EVALUATED) / 1 blocking-or-
+# fail-closed. The caller dispatches on that integer and NEVER re-reads the sentinel: the
+# engine has already applied it, so codes 2 and 3 can only exist under a non-enforce
+# sentinel. NO predicate is re-encoded in this YAML (single-engine, CIAC-2).
 #
 # Platform: macos-latest — mirrors version-freeness.yml + deploy-check-ci.yml.
 #
@@ -91,12 +98,17 @@ jobs:
       - name: Run release-corpus check (single check, via the deploy.sh engine)
         id: check
         # THIN caller. The probe reads .github/release-corpus-completeness.enforce
-        # itself: warn swallows INCOMPLETE into exit 0 (reported), enforce propagates
-        # exit 1; an unexpected verdict fail-closes.
+        # itself and returns 0 CLEAN / 2 INCOMPLETE-advisory / 3 SKIP-advisory /
+        # 1 blocking-or-fail-closed. Nothing here re-reads the sentinel.
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
+          # DO NOT REMOVE `set +e`. A NON-ZERO exit is now the ORDINARY outcome of this
+          # probe — the live ledger verdicts INCOMPLETE, which is advisory exit 2 — so
+          # without `set +e` this step fails before the Gate decision step ever evaluates,
+          # and the job goes red for a reason the summary never states. It reads like
+          # defensive boilerplate and is load-bearing.
           set +e
           OUT="$(bash core/deploy/deploy.sh --check-release-corpus 2>&1)"; RC=$?
           set -e
@@ -108,16 +120,72 @@ jobs:
           RC: ${{ steps.check.outputs.rc }}
         run: |
           set -euo pipefail
-          if [ "$RC" -eq 0 ]; then
-            echo ":white_check_mark: release-corpus: every in-scope release has its INDEX + DIGEST + NOTES (or a finding was reported in warn-mode)" \
-              | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          {
-            echo "## :x: release-corpus completeness gate FAILED (enforce mode) or fail-closed"
-            echo ""
-            echo "A RELEASE_LOG row is missing its INDEX row / DIGEST entry / NOTES file (or post-cutover tag / Release),"
-            echo "with the enforce sentinel active — OR the verdict was unexpected (fail-closed)."
-            echo "Backfill the missing output(s) per release/references/pipeline/stage-13-close.md Phase B before merge."
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-          exit 1
+          case "$RC" in
+            0)
+              # 0 IS CLEAN'S ALONE, under every sentinel state (PV-7, enforced by the engine's
+              # _c32_verdict_exit_code and asserted by self-test RC-9c, whose control arm RC-9d
+              # proves that assertion can fail). Before #7193 this code was shared with SKIP and
+              # with INCOMPLETE under the shipped `warn` sentinel, which made the line below a
+              # false completeness claim on the ORDINARY invocation — the engine verdicted
+              # INCOMPLETE 4 230 and exited 0. The claim is true only because nothing else can
+              # produce this code; do not add a branch that reaches it.
+              echo ":white_check_mark: release-corpus: every in-scope release has its INDEX + DIGEST + NOTES" \
+                | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+              ;;
+            2)
+              {
+                echo "## :warning: release-corpus completeness reported an ADVISORY FINDING (measured)"
+                echo ""
+                echo "A RELEASE_LOG row at/after the corpus cutover is missing its INDEX row / DIGEST"
+                echo "entry / NOTES file (or its post-cutover tag / published Release). The gate"
+                echo "**measured** the corpus and found it incomplete; the enforce sentinel is not"
+                echo "active, so this is reported rather than blocking."
+                echo ""
+                echo "**This is not a pass.** Exit 2 is the advisory-finding code — distinct from 0"
+                echo "(clean), from 3 (nothing measured) and from 1 (blocking). The remedy is to"
+                echo "**backfill the missing output(s)** per"
+                echo "release/references/pipeline/stage-13-close.md Phase B — never to waive the"
+                echo "finding. The findings and the denominator are named in the probe output above."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::warning::release-corpus: INCOMPLETE — a measured finding, reported not blocking; never read exit 2 as clean"
+              exit 0
+              ;;
+            3)
+              {
+                echo "## :grey_question: release-corpus completeness was NOT EVALUATED (not a clean result)"
+                echo ""
+                echo "release/releases/RELEASE_LOG.md was **absent, or its header was unparseable**, so"
+                echo "ZERO rows were enumerated and this run certifies **nothing** about corpus"
+                echo "completeness. **It is NOT a pass** — and its remedy differs from an advisory"
+                echo "finding: restore or repair the ledger, rather than backfill the corpus."
+                echo ""
+                echo "That file is tracked, so on an ordinary checkout this state means the pull"
+                echo "request removed it or broke its Version/State header — fixable in the pull request."
+                echo ""
+                echo "Exit 3 is reachable only while the enforce sentinel holds a non-enforce token."
+                echo "Under enforce the same verdict exits 1 and this job is RED."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::warning::release-corpus: NOT-EVALUATED — the ledger was absent or unparseable; a withheld verdict, never a clean one"
+              exit 0
+              ;;
+            *)
+              {
+                echo "## :x: release-corpus completeness gate FAILED (enforce mode) or fail-closed"
+                echo ""
+                echo "One of three things happened:"
+                echo "  (a) a RELEASE_LOG row is missing its INDEX row / DIGEST entry / NOTES file"
+                echo "      (or post-cutover tag / Release) with the enforce sentinel active;"
+                echo "  (b) the ledger was absent or unparseable with the enforce sentinel active"
+                echo "      (NOT-EVALUATED — a withheld verdict, never a clean one); or"
+                echo "  (c) the verdict was unexpected (fail-closed)."
+                echo "Probe exit code: $RC."
+                echo ""
+                echo "Remedy for (a): backfill the missing output(s) per"
+                echo "release/references/pipeline/stage-13-close.md Phase B before merge."
+                echo "Remedy for (b): restore or repair release/releases/RELEASE_LOG.md — do not merge"
+                echo "on an unmeasured gate."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 1
+              ;;
+          esac

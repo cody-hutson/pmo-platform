@@ -7,8 +7,11 @@
 # (release-corpus-completeness.yml) additionally consumes the probe's exit code.
 #
 # The first non-comment, non-blank line is the mode token:
-#   warn      → report only (exit-0); an INCOMPLETE finding is surfaced but does not block.
-#   enforce   → block on an INCOMPLETE verdict (exit-1 propagates to the CI caller).
+#   warn      → report only; an INCOMPLETE finding is surfaced on ADVISORY exit 2 and a
+#               SKIP (ledger absent or unparseable) on ADVISORY exit 3 — non-zero and
+#               never 0, so no caller can read either as clean. Neither blocks.
+#   enforce   → block: an INCOMPLETE verdict AND a SKIP verdict both propagate exit 1
+#               to the CI caller. A green gate must mean the ledger was read and complete.
 #
 # Ships DORMANT (warn) during the calibration window, per the warn-mode-initial
 # posture and the reflexive-pipeline-loop discipline. NOTE: the release ledger
