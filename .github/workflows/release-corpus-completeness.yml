@@ -153,7 +153,7 @@ jobs:
               ;;
             3)
               {
-                echo "## :grey_question: release-corpus completeness was NOT EVALUATED (not a clean result)"
+                echo "## :grey_question: release-corpus completeness was NOT-EVALUATED (not a clean result)"
                 echo ""
                 echo "release/releases/RELEASE_LOG.md was **absent, or its header was unparseable**, so"
                 echo "ZERO rows were enumerated and this run certifies **nothing** about corpus"
