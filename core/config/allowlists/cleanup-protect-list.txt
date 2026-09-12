@@ -5,17 +5,44 @@
 #
 # Format:
 #   - One pattern per line
-#   - Comments start with # (first non-whitespace char)
+#   - Comments start with # (first non-whitespace char). Put a comment on its
+#     OWN LINE, above the pattern it explains — that is the documented form.
 #   - Blank lines ignored
 #   - Bash glob semantics (shell case matching): claude/* matches all claude/ prefixed branches
+#
+# Comment placement, and why it matters:
+#   A trailing inline comment IS stripped, but only where whitespace precedes
+#   the #. A # with no whitespace before it is kept as part of the pattern,
+#   because # is legal in a branch name and the feature/#N-description
+#   convention in core/rules/git-workflow.md depends on it:
+#
+#     release/my-branch   # stripped — whitespace precedes the #
+#     feature/#42-thing   # kept whole — the # belongs to the branch name
+#
+#   Prefer the own-line form anyway. It is unambiguous, and it is the form the
+#   examples below use.
 #
 # Always-protected (built into the script, never need to list here):
 #   main, master, HEAD
 #
-# Typical operator additions:
-#   backup/*                      # operator-parked WIP convention
-#   chore/parked-*                # operator-parked chore branches
-#   feature/<specific-name>       # exact-match
+# Typical operator additions — comment on its own line, pattern bare beneath it:
+#
+#   # operator-parked WIP convention
+#   backup/*
+#
+#   # operator-parked chore branches
+#   chore/parked-*
+#
+#   # in-flight release; remove this entry when the milestone closes
+#   release/some-milestone-slug
+#
+#   # exact-match on one branch
+#   feature/some-specific-name
+#
+# If an entry can never match a branch — a pattern containing whitespace, which
+# is illegal in a branch name — the script emits a WARN naming its line number
+# rather than accepting it in silence. An entry that protects nothing while
+# appearing to protect something is the failure this guard exists to prevent.
 #
 # Add entries with a standard text editor. Allowlist additions document
 # WHY the path is allowlisted, not WHY the operator wants to silence sweeps.
