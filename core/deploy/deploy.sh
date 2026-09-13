@@ -19519,6 +19519,24 @@ cmd_check_release_corpus() {
 # (2 = "violations detected (advisory)" vs 1 = BLOCKER). Enforcement POLICY stays in the
 # sentinel, which this probe remains the single reader of; the CI caller dispatches on the
 # integer and never re-parses the sentinel file.
+#
+# HOW A CONSUMER DISPOSES OF NOT-EVALUATED (3) — the DERIVATION, stated here once so the
+# instances agree by rule rather than by coincidence. A consumer resolves 3 to a
+# NON-BLOCKING conclusion where an enforce sentinel can later escalate the same verdict to
+# 1, and to a BLOCKING conclusion where the probe carries NO sentinel — in that case 3 is
+# terminal and there is no later escalation to wait for. This table and the Check 32 and
+# Check 61 tables are the first case; release/tools/check-selftest-coverage.py --reconcile,
+# which has no sentinel, is the second, and its consuming gate maps 3 to red for exactly
+# this reason. The rule was written down after a reviewer observed that three shipped
+# consumers resolved 3 one way and a fourth resolved it the other, with the discriminator
+# recorded nowhere a reader of the convention would look.
+#
+# EXIT 2 IS NOT AVAILABLE TO EVERY EXTENDER. This table's advisory member is 2, but a
+# Python extender whose CLI is argparse cannot use it: argparse exits 2 on a usage error,
+# so 2 is structurally reserved there for configuration error. check-selftest-coverage.py
+# displaces its advisory member to 4 on that ground and keeps 3 at its exact convention
+# meaning. An extender that diverges numerically should say which member it displaced and
+# why, at its own point of use.
 cmd_check_package_freshness() {
   validate_workspace
   detect_install_path || true
