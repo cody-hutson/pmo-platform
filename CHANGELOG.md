@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.64] - 2026-09-13
+
+A check that had failed eighteen runs in a row now passes while still reporting the same finding — fixed, not silenced.
+
+[Full notes](release/releases/notes/v4.64_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.64)
+
 ## [v4.63] - 2026-09-11
 
 Close-out checks that reported success without proving anything now prove it, and the ones that still cannot are named rather than left to look green.
