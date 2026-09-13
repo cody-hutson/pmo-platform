@@ -475,7 +475,7 @@ say which state occurred. `deploy.sh --check-release-corpus` (Check 32) and
 `check-selftest-coverage.py --reconcile` each gain a partitioned exit space in which `0`
 has exactly one producer, and Arm F's reader-facing annotation now carries the posture
 that previously reached only the runtime log. The operator-visible effect is that a
-release-tooling job which had reported `failure` on six consecutive `main` runs concludes
+release-tooling job which had reported `failure` on 18 consecutive `main` runs concludes
 `success` on this branch **while its expected finding still reports in full** — fixed
 rather than silenced, which is the distinction the whole release exists to make legible.
 
@@ -485,7 +485,7 @@ rather than silenced, which is the distinction the whole release exists to make 
 |---|---|---|
 | #7193 | Check 32's exit space partitioned `0` CLEAN / `2` INCOMPLETE advisory / `3` SKIP not-evaluated / `1` blocking, with the merge-blocking consumer re-wired to a four-arm `case` in the same commit; the live false green (`INCOMPLETE — 4 230`, exit `0`) now exits `2` | DONE |
 | #7440 | `mode_reconcile`'s eight assertion sites replaced by a finding-class ledger over a 5-member exit map, partitioned INSIDE Arm F so a by-construction residual and a genuine Arm B/E regression never share a member; severity is a total order, so blocking always dominates a co-occurring residual | DONE |
-| #7201 | Arm F's residual annotation moves to the amber channel and leads with the verdict's own name, so the annotation list alone distinguishes an expected residual from a genuine regression; the runtime posture note is byte-unchanged | DONE |
+| #7201 | Arm F's residual annotation moves to the amber channel and leads with the verdict's own name, so the annotation list alone distinguishes an expected residual from a genuine regression; the runtime posture note is corrected to match that partition rather than left instructing a reader to expect a red that no longer occurs (DEV-13) | DONE |
 
 ### Key decisions
 
