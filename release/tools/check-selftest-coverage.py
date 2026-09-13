@@ -1263,14 +1263,24 @@ def mode_reconcile(ctx: Ctx) -> int:
             # without opening the workflow, the engine header, or the standard.
             #
             # It is guarded on the RESIDUAL group rather than on the whole unreachable
-            # set: with the classes separated, printing "EXPECTED to stay red" over a
+            # set: with the classes separated, printing a residual posture over a
             # BLOCKING-only run would tell a reader that a genuine regression is expected
             # — the masking defect this release removes, re-introduced in the log channel.
-            # The text itself is byte-unchanged.
+            #
+            # THE SENTENCE WAS CORRECTED AT DEV-13, and only where a sibling card in this
+            # release falsified it: it read "is EXPECTED to stay red until the `.py`
+            # population above drains", which held while the whole arm rode one exit code
+            # and became false the moment the verdict partition landed and a residual-only
+            # run began concluding success. Left standing it would instruct a reader to
+            # expect a red that no longer occurs — this release's own defect surviving in
+            # this release's own output. What replaced it states the discriminating fact
+            # instead, so the note now tells a reader that a red is worth reading.
             print(
                 "  ARM F POSTURE: the selftest-discovery job is ADVISORY, is NOT a required "
-                "context, and is EXPECTED to stay red until the `.py` population above drains "
-                "— this is the arm reporting, not a broken gate."
+                "context, and the `.py` population above is unmatchable BY CONSTRUCTION and "
+                "not remediable today — the job's conclusion now SEPARATES that residual from "
+                "a genuine regression, so this is the arm reporting, not a broken gate, and a "
+                "red on this job is never this population."
             )
 
         if not unreachable:
@@ -2077,6 +2087,21 @@ def _selftest() -> int:
             and "RECONCILE VERDICT: EXPECTED-RESIDUAL" in out
             and "ARM F POSTURE" in out
             and "ARM B PASSED" in out
+            # THE POSTURE'S CLAIM, not merely its marker. The marker conjunct above
+            # passes on ANY sentence carrying those three words, so it graded that the
+            # note was PRESENT and never what the note SAID — which is exactly how the
+            # note went on asserting "EXPECTED to stay red" across the whole life of the
+            # verdict partition that falsified it, with this control green throughout. A
+            # marker-only assertion is what let a true statement rot into a false one
+            # under a passing test, so the claim is pinned here alongside the marker.
+            #
+            # The positive limb is the load-bearing one: reverting the sentence, or
+            # rewording it back into an expected-red instruction, fails it. The negative
+            # limb pins the single clause the partition falsified, and it is a READABLE
+            # zero rather than a vacuous one only because the positive limb fires on the
+            # same buffer — that is this conjunct pair's own control arm.
+            and "a red on this job is never this population" in out
+            and "stay red" not in out
             # THE ANNOTATION SURFACE ITSELF, which nothing graded before. The posture
             # used to reach only the runtime log line asserted above, so this fixture
             # passed while a reader of the annotation list alone still met an
@@ -2093,7 +2118,9 @@ def _selftest() -> int:
             "CONSTRUCTION (operand on disk, its suffix domain empty) verdicts "
             "EXPECTED-RESIDUAL and exits 4 — its OWN member, shared with nothing — and "
             "says so ON THE ANNOTATION, amber and posture-leading, so the surface a CI "
-            "reader actually sees agrees with the exit member",
+            "reader actually sees agrees with the exit member; and the posture note's "
+            "own CLAIM agrees with the partition too, naming this population as never "
+            "the cause of a red instead of instructing the reader to expect one",
         )
     finally:
         fx.close()
