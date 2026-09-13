@@ -1150,8 +1150,15 @@ def mode_reconcile(ctx: Ctx) -> int:
         )
         unreachable: dict[str, list[tuple[str, int, str]]] = {}
         suppressed: list[str] = []
+        # Counted rather than derived. len(invocations) - len(suppressed) would be
+        # arithmetically identical TODAY, and would silently over-report the moment a
+        # fourth disposition is added to the loop below — the pass line's honesty would
+        # then depend on nobody extending the partition. An explicit counter cannot
+        # acquire that coupling.
+        admitted = 0
         for operand, sites in sorted(invocations.items()):
             if any(fnmatch.fnmatchcase(operand, pat) for pat in patterns):
+                admitted += 1
                 continue
             # Suppression costs a written reason, exactly as Arms C and E require. The
             # key is the operand AS THE SPEC SPELLS IT, because that is the string the
@@ -1284,9 +1291,35 @@ def mode_reconcile(ctx: Ctx) -> int:
             )
 
         if not unreachable:
+            # WHAT THIS LINE REPORTS IS A PARTITION, NOT A TOTAL. The loop above sends
+            # every operand down exactly one of three paths — matched by an allowlist
+            # row, suppressed by a written exclusion, or unreachable — and only the
+            # FIRST of those is admitted. The sentence here used to read "all
+            # {len(invocations)} spec-prescribed invocation(s) are admitted by the
+            # allowlist", which counted the suppressed operands among the admitted and
+            # was therefore FALSE on every run that suppressed anything: on an
+            # all-suppressed tree (T-52's shape) it asserted that all N were admitted
+            # when NONE of them were. A suppressed operand was DISPOSITIONED, which is
+            # a different fact from being reachable — the reason was written down and
+            # accepted, not matched by a row — and collapsing the two reproduces this
+            # release's own defect, a degraded state reading as a clean one, inside the
+            # arm's own pass line.
+            #
+            # BOTH COUNTS PRINT UNCONDITIONALLY, the zeros included. A clause that
+            # appears only when it is non-zero cannot be read as a measurement: its
+            # absence is then ambiguous between "none" and "not counted". This arm DID
+            # measure, so it states both numbers; omitting a counter rather than zeroing
+            # it belongs to the not-run status above, which is this line's exact
+            # inverse.
+            #
+            # The exit code is deliberately untouched. Whether a suppressed operand
+            # should also move the VERDICT is a separate question from whether the
+            # sentence describing it is true, and only the sentence is settled here.
             print(
-                f"ARM F PASSED — all {len(invocations)} spec-prescribed invocation(s) are "
-                f"admitted by the allowlist."
+                f"ARM F PASSED — no spec-prescribed invocation is unreachable: "
+                f"{admitted} of {len(invocations)} admitted by a matching allowlist "
+                f"row, {len(suppressed)} suppressed by a written exclusion "
+                f"(dispositioned, not admitted)."
             )
 
     print(f"RECONCILE VERDICT: {verdict} (exit {_V_EXIT[verdict]})")
@@ -1865,9 +1898,19 @@ def _selftest() -> int:
             rc = mode_reconcile(Ctx(fx.root))
         out = buf.getvalue()
         check(
-            rc == 0 and "ARM F PASSED" in out,
+            rc == 0
+            and "ARM F PASSED" in out
+            # The pass line's two counters, asserted on the CLEAN side of the pair that
+            # T-57 completes. This tree admits its one operand and suppresses nothing,
+            # so the honest reading is 1 admitted / 0 suppressed. Asserting the ZERO is
+            # the load-bearing half: it is what pins the counters as unconditional, and
+            # a message that printed the suppressed count only when it was non-zero
+            # would pass T-57 and fail here.
+            and "1 of 1 admitted by a matching allowlist row" in out
+            and "0 suppressed by a written exclusion" in out,
             "T-55 CONTROL: a spec-prescribed invocation WITH a matching allowlist row "
-            "passes Arm F, so a later red is attributable to the arm and not the tree",
+            "passes Arm F and is counted as ADMITTED (1 of 1, 0 suppressed), so a later "
+            "red is attributable to the arm and not the tree",
         )
     finally:
         fx.close()
@@ -1943,6 +1986,48 @@ def _selftest() -> int:
             rc == 0 and "ARM F SUPPRESSED" in out and "illustrative command" in out,
             "T-52 an exclusions entry WITH a written reason suppresses an Arm F finding, "
             "and the suppression is echoed rather than silent",
+        )
+    finally:
+        fx.close()
+
+    # T-57: the SUBJECT of the pass line's honesty, and T-55 above is its control — the
+    # two trees differ by exactly ONE fact, whether the operand is admitted by a row or
+    # suppressed by a written reason, and the pass line must say which happened.
+    #
+    # This tree is T-52's, re-used deliberately: T-52 already proved the suppression is
+    # ECHOED, and the defect this arm exists to catch survived alongside that echo for
+    # the whole life of the arm. Nothing in T-52 reads the pass line, so a run in which
+    # every operand was suppressed and NONE admitted still printed "all 1
+    # spec-prescribed invocation(s) are admitted by the allowlist" — a false sentence,
+    # green, under an arm that was already asserting the suppression beside it. An echo
+    # is not a verdict; this arm reads the verdict.
+    fx = _Fixture()
+    try:
+        _armf_base(fx)
+        fx.spec("stage-01.md", ["bash release/tools/mandated.sh"])
+        fx.allowlist(["release/tools/something-else.sh"])
+        fx.write(
+            EXCLUSIONS_REL,
+            "release/tools/mandated.sh  # illustrative command, not a real mandate\n",
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 0
+            and "ARM F PASSED" in out
+            # The counts, separated. Nothing was admitted here.
+            and "0 of 1 admitted by a matching allowlist row" in out
+            and "1 suppressed by a written exclusion" in out
+            # AND THE SUPERSEDED CLAIM IS GONE. Without this limb the arm would still
+            # pass against a message that printed the honest counters and then repeated
+            # the false total beside them — a partial revert, which is the likelier
+            # regression than a wholesale one.
+            and "all 1 spec-prescribed invocation" not in out,
+            "T-57 a run whose every Arm F operand was SUPPRESSED does not report them as "
+            "admitted — the pass line separates the two populations (0 of 1 admitted, 1 "
+            "suppressed) and no longer claims all N were admitted by the allowlist",
         )
     finally:
         fx.close()
