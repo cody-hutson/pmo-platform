@@ -438,7 +438,51 @@ This is a one-time plan-time estimate and is **not** the load-bearing gate. Chec
 
 ## Change Description
 
-(Authored by the Stage-6 Engineering spoke at PR-creation time per the release protocol's Change Description Protocol, once the last card lands. Operator-facing, pre-merge, six sub-sections. Distinct from the user-facing release note authored at Stage 13 Close.)
+### Outcome
+
+Two probes that published a non-failing conclusion over degraded or unmeasured state now
+say which state occurred. `deploy.sh --check-release-corpus` (Check 32) and
+`check-selftest-coverage.py --reconcile` each gain a partitioned exit space in which `0`
+has exactly one producer, and Arm F's reader-facing annotation now carries the posture
+that previously reached only the runtime log. The operator-visible effect is that a
+release-tooling job which had reported `failure` on six consecutive `main` runs concludes
+`success` on this branch **while its expected finding still reports in full** — fixed
+rather than silenced, which is the distinction the whole release exists to make legible.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #7193 | Check 32's exit space partitioned `0` CLEAN / `2` INCOMPLETE advisory / `3` SKIP not-evaluated / `1` blocking, with the merge-blocking consumer re-wired to a four-arm `case` in the same commit; the live false green (`INCOMPLETE — 4 230`, exit `0`) now exits `2` | DONE |
+| #7440 | `mode_reconcile`'s eight assertion sites replaced by a finding-class ledger over a 5-member exit map, partitioned INSIDE Arm F so a by-construction residual and a genuine Arm B/E regression never share a member; severity is a total order, so blocking always dominates a co-occurring residual | DONE |
+| #7201 | Arm F's residual annotation moves to the amber channel and leads with the verdict's own name, so the annotation list alone distinguishes an expected residual from a genuine regression; the runtime posture note is byte-unchanged | DONE |
+
+### Key decisions
+
+- **D-1 — plan approved as briefed.** Commits three departures from the milestone as written: sequence re-ordered to `#7193 -> #7440 -> #7201`; #7201 kept a separate card under AI-001; Scope table corrected to 9 pts. See § Operator Decisions.
+- **D-ReleaseClass — `routine` to `novel`.** The offered off-ramp (ratifying #7440's mechanism as a template application of the existing exit-contract convention) was explicitly declined, so the D-class decision stands and `novel` dominates. See § Release Class declaration.
+- **D-CollectiveReview — scope-lock HOLDS.** All three Phase A6.5 findings folded into Stage 6; no re-design, no scope change, no premise rejection.
+- **AI-001 — RESOLVED on branch (b): #7201 implemented, not waived.** #7440's mechanism does make the job conclusion discriminating, but the branch's operative clause "so no annotation prefix is needed" is falsified by CIAC-2 — the two channels would agree in class while the message text still read as alarm. Two deltas from the branch's literal wording are recorded rather than glossed: the annotation is **amber, not red**, and the emitter is `warn()`, not `err()`.
+- **AI-002 — OPEN, hard gate before milestone close.** A6.5 Findings F1 and F3 originated in adversarial review rather than intake, so no card's acceptance criteria grade them. F1 is graded by fixtures T-65 / T-66 plus a mutation pair; F3 by the `-ne 3` control pin in the consuming workflow's probe 2.
+- **D-Version `v4.64` · D-Concurrency P0 fully-serial.** Rule-determined; the version binds at the Stage-12 atomic claim, and the prohibition on rewriting the shared branch held throughout — all six commits are fast-forward additions.
+
+### Reversibility
+
+**MODERATE — HIGH confidence.** Reverting the two-parent merge commit restores the prior behaviour cleanly, and per-member reverts are available on a fix branch; the literal commands are in § Whole-Release Rollback and § Per-Issue Rollback above. The revert is **not neutral**: it re-arms two gates that publish a non-failing conclusion over degraded state. #7193's engine change and its consumer re-wiring are a matched pair and revert as a unit or not at all. The version tag is retained on any rollback — `refs/tags/v*` is host-protected, and the tag stands as the record that a version was claimed and then withdrawn.
+
+### Downstream impact
+
+- **Two new exit members acquire consumers, not just numbers.** Every member of both partitions is read by a named consumer, enumerated rather than assumed; an exit code nothing branches on is the same defect wearing a new number.
+- **The residual class sunsets itself.** One `.py` row landing in the script-execution allowlist reclassifies the same operand from EXPECTED-RESIDUAL to BLOCKING with no code change, so no exemption file and no dated sunset comment outlives its premise.
+- **#6114 (`nothing-passes-on-nothing`) inherits a one-token seam.** Arm D's site carries an explicit ledger call marked as that card's edge: a later Arm D writer changes one constant, and only a genuinely new class touches the severity or exit maps.
+- **Carry-forward to Stage 9:** A6.5 FM-3 — a *suppressed* Arm F finding still returns `0`, leaving the exempted limb of CIAC-1 open beside the unmeasured limb this release closes; the unopened Stage-5 ADR recommendation; and the PR #7404 adjacency re-check at Phase A6.6.
+- **No deployment propagation.** Zero paths under any `skills/`, `packages/`, `core/rules/` or `core/hooks/` tree — inapplicable by construction, not deferred.
+
+### Cross-references
+
+- Release plan: this file, top section
+- Milestone: `expected-red-never-masks-regression`
+- User-facing release notes: `release/releases/notes/<version>_RELEASE_NOTES.md`, authored at Stage 13 Close per the release-notes standard; the version resolves at the Stage-12 atomic claim
 
 ---
 
