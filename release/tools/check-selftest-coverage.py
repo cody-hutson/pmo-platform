@@ -1225,7 +1225,26 @@ def mode_reconcile(ctx: Ctx) -> int:
 
         if residual:
             record(_V_EXPECTED_RESIDUAL)
-            err(
+            # THE POSTURE REACHES THE ANNOTATION, not only the log below. Two changes
+            # make it legible to a reader who never opens the run log:
+            #
+            #   CHANNEL. The emitter is warn(), so the annotation is amber and AGREES
+            #   IN CLASS with the exit member recorded one line above. err() here
+            #   would put alarm on the annotation surface while the exit code said
+            #   calm — the two channels disagreeing about which state occurred.
+            #
+            #   TEXT. The message LEADS with the verdict's own name, spelled exactly
+            #   as _V_EXPECTED_RESIDUAL and the `RECONCILE VERDICT:` line spell it, so
+            #   the annotation-list entry and the verdict line cannot be read as two
+            #   different states, and the marker is the FIRST thing an annotation list
+            #   renders rather than something a reader must scroll to find.
+            #
+            # The BLOCKING writer twenty lines above keeps err() and carries no marker,
+            # deliberately: an advisory posture on a remediable finding would be this
+            # release's own defect, re-created one surface further out.
+            warn(
+                f"EXPECTED-RESIDUAL (advisory — this job is not a required context, "
+                f"and this finding is not remediable today): "
                 f"Arm F MANDATE REACHABILITY — {len(residual)} invocation(s) that a "
                 f"pipeline spec MANDATES match no allowlist pattern, so the agent executing "
                 f"that stage cannot run what the spec tells it to run. The allowlist "
@@ -1857,9 +1876,20 @@ def _selftest() -> int:
             rc == 1
             and "MANDATE REACHABILITY" in out
             and "release/tools/mandated.sh" in out
-            and "stage-01.md:" in out,
+            and "stage-01.md:" in out
+            # CHANNEL + POSTURE, asserted since the residual writer became advisory.
+            # The bare substring above now appears in BOTH Arm F writers, so on its own
+            # it can no longer tell a red finding from an amber one — it would pass
+            # unchanged if this finding were mis-emitted as an expected residual. A
+            # BLOCKING finding must reach the reader on the ERROR channel and must NOT
+            # wear the posture marker: an advisory prefix over a remediable finding is
+            # exactly this release's defect, pointing the other way.
+            and "[err] Arm F MANDATE REACHABILITY" in out
+            and "EXPECTED-RESIDUAL (advisory" not in out,
             "T-50 a spec-prescribed invocation matching NO allowlist row FAILS Arm F and "
-            "is NAMED with its spec file and line",
+            "is NAMED with its spec file and line — on the ERROR channel and carrying NO "
+            "advisory posture marker, so a genuine regression can never be read as an "
+            "expected residual",
         )
     finally:
         fx.close()
@@ -2046,10 +2076,24 @@ def _selftest() -> int:
             rc == 4
             and "RECONCILE VERDICT: EXPECTED-RESIDUAL" in out
             and "ARM F POSTURE" in out
-            and "ARM B PASSED" in out,
+            and "ARM B PASSED" in out
+            # THE ANNOTATION SURFACE ITSELF, which nothing graded before. The posture
+            # used to reach only the runtime log line asserted above, so this fixture
+            # passed while a reader of the annotation list alone still met an
+            # undifferentiated red. Both halves are pinned in one literal: the leading
+            # `[warn] ` is the amber channel (`::warning::` once annotations are on),
+            # and what immediately follows is the marker, in FIRST position, spelled
+            # exactly as the verdict line above spells it.
+            and "[warn] EXPECTED-RESIDUAL (advisory" in out
+            # ...and it reaches the reader on that channel ONLY. Restoring err() here
+            # would satisfy no conjunct above and fail this one, so the emitter is
+            # load-bearing rather than incidental.
+            and "[err] Arm F MANDATE REACHABILITY" not in out,
             "T-60C CONTROL: a tree whose only Arm F finding is unmatchable BY "
             "CONSTRUCTION (operand on disk, its suffix domain empty) verdicts "
-            "EXPECTED-RESIDUAL and exits 4 — its OWN member, shared with nothing",
+            "EXPECTED-RESIDUAL and exits 4 — its OWN member, shared with nothing — and "
+            "says so ON THE ANNOTATION, amber and posture-leading, so the surface a CI "
+            "reader actually sees agrees with the exit member",
         )
     finally:
         fx.close()
