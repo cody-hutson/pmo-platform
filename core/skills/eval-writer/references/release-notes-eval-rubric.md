@@ -50,7 +50,7 @@ Each check produces a single token `PASS` or `FAIL` with a one-sentence rational
 | ID | Check | Method | PASS criterion |
 |---|---|---|---|
 | L9 | Section 6a presence | Section 6a header present + ≥1 bullet OR explicit "No user-visible behavior changes — see operator detail below" placeholder string match | one branch satisfied |
-| L10 | Banned-jargon scan in Section 6a | Section 6a content (between section header and next `##` header) grep for §2.4 banned-jargon list (14 literal terms + 4 regex patterns) | zero matches |
+| L10 | Banned-jargon scan in Section 6a | Section 6a content (between section header and next `##` header) grep for the §2.4 banned-jargon list. The enforced pattern set is not restated here — §2.4 is the published list, the lint holds the patterns, and the lint's `--self-test` asserts the two agree row for row | zero matches |
 | L11 | "Why it matters" beat per bullet | each Section 6a bullet contains `\*Why it matters:\*` literal OR `<!-- impact:foundational -->` HTML-comment marker | every bullet matches one branch |
 | L12 | File-path purity in 6a | Section 6a bullet bodies grep for `pmo-platform/` or `.claude/` outside markdown-link parentheses | zero matches |
 | L13 | Whole-body link purity (published Surface 1) | every markdown-link target in the published (frontmatter-stripped) body is absolute — `https://`, `#`, or `mailto:`; repo-relative targets (`../`, `release/`, `core/`, `docs/`, `.claude/`, `pmo-platform/`) render broken on the GitHub Release page (release-notes-standard.md §5.1/§5.3 Surface-1 link rule) | zero repo-relative targets |
