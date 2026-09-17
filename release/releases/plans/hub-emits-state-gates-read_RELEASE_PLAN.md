@@ -202,26 +202,37 @@ Dependency-ordered. Waves are sequencing units, not approval gates.
 ## File Change Matrix
 
 ```
-# ── ADD (4) ──
+# ── ADD (10) ──
 core/skills/pmo-qa-auditor/references/decision-audit-dimension-rubric.md      add
 core/skills/pmo-qa-auditor/evals/decision-audit-characterization-fixtures.md  add
 release/releases/decision-health-summary.md                                   add
 release/releases/plans/hub-emits-state-gates-read_RELEASE_PLAN.md             add
+release/ADRs/ADR-198-commitment-emission-forced-at-the-routing-point.md       add
+release/tools/tests/fixtures/event-record/log-m4.md                                                     add
+release/tools/tests/fixtures/event-record/hub-state-tree/fixture-clean-release/action-items.md          add
+release/tools/tests/fixtures/event-record/hub-state-tree/fixture-closed-no-ledger/sessions.md           add
+release/tools/tests/fixtures/event-record/hub-state-tree/fixture-inflight-no-ledger/sessions.md         add
+release/tools/tests/fixtures/event-record/hub-state-tree/fixture-quiet-no-ledger/sessions.md            add
 
-# ── EDIT (17) ──
+# ── EDIT (22) ──
 core/skills/pmo-qa-auditor/SKILL.md                                           edit
 core/skills/pmo-qa-auditor/references/decision-audit-mode-spec.md             edit
 release/references/protocols/decision-audit-cadence.md                        edit
 release/skills/release-hub/SKILL.md                                           edit
 release/skills/release-hub/references/orchestration-playbook.md               edit
 release/skills/release-hub/references/decision-briefing.md                    edit
+release/skills/release-hub/references/milestone-readiness-checklist.md        edit
+release/skills/release-hub/references/readiness-map-template.md               edit
+release/skills/release-hub/references/spoke-launch.md                         edit
 release/references/how-to/hub-spoke-bridge.md                                 edit
-release/references/standards/pipeline-event-log-schema.md                     edit
+release/governance/release-process.md                                         edit
 release/tools/check-event-record-integrity.sh                                 edit
+release/tools/automated-closeout.sh                                           edit
 core/ADRs/ADR-053-pre-gate-eligibility-forcing-function.md                    edit
 core/disciplines/autonomous-execution-model.md                                edit
-core/standards/hub-session-continuity.md                                      edit
+core/schemas/touchpoint-phaseout-schema.md                                    edit
 core/standards/hub-action-tracking.md                                         edit
+.github/workflows/link-check.yml                                              edit
 packages/pmo-qa-auditor.skill                                                 edit
 packages/pmo-qa-auditor.skill.sha256                                          edit
 packages/release-hub.skill                                                    edit
@@ -229,7 +240,23 @@ packages/release-hub.skill.sha256                                             ed
 
 # ── DELETE (0) ──
 # none — this release declares no rename, relocation, or deletion.
+
+# ── RETIRED after the Stage-4 declaration (0 files touched) ──
+# core/standards/hub-session-continuity.md            declared edit; resolved to NOT EDITED
+# release/references/standards/pipeline-event-log-schema.md  declared edit; resolved to NOT EDITED
 ```
+
+### Matrix reconciliation against the branch (AI-014)
+
+**Re-derived at the last Engineering card rather than transcribed**, because Stage 9's delivery check reads this matrix and a matrix that disagrees with the branch fails a card for a defect it does not have. Method: the declared row set parsed out of the fenced block above, compared against `git diff --name-status origin/main...HEAD`, over a **34-path union** (21 declared before this reconciliation, 30 on the branch, 17 already agreeing, **0 class mismatches**). Controls: a path the matrix certainly holds returned 10 plan occurrences; a synthetic path returned 0 in both populations, so neither side of the comparison is a dead read.
+
+| Finding | Count | Disposition |
+|---|---|---|
+| On the branch, absent from the matrix rows, **and named nowhere in the plan by path** | **8** — the three deployed `release-hub` reference files (`milestone-readiness-checklist.md`, `readiness-map-template.md`, `spoke-launch.md`) and the five event-record fixtures | **ADDED as rows.** The reference files landed under the DEV-16 override; the fixtures are the evidence the event-record screen is graded against. Their basenames appear in the plan's prose, which is why the omission read as covered — a basename is not a declared path. |
+| On the branch, absent from the matrix rows, **but already ratified in the Deviation Log** | **4** — `link-check.yml` and `touchpoint-phaseout-schema.md` and `release-process.md` (all three DEV-15), and `automated-closeout.sh` (named in § Re-baseline) | **ADDED as rows.** Ratification in a deviation row is not a matrix row; the delivery check reads the matrix. |
+| On the branch, this card's own addition | **1** — the ADR | **ADDED as a row**, under the +1-file scope override recorded at DEV-23. |
+| **Declared, not on the branch** | **2** — `hub-session-continuity.md` and `pipeline-event-log-schema.md` | **RETIRED to the comment block above rather than deleted**, so the Stage-4 declaration stays auditable. The schema row is the `CONDITIONAL:rec-choice-delta-emitter` promotion that the late-add card's own A1.5 later resolved to NOT-EDITED — the emission contract is the single registry for the obligation, so a second declaration there would be the duplicate-source defect. `hub-session-continuity.md` was declared and no change proved necessary. |
+| Declared, not yet on the branch **at the time of this reconciliation** | **2** — `packages/release-hub.skill` and its `.sha256` | **RETAINED.** They land with the single package rebuild, which is the last commit of this card. |
 
 ### CONDITIONAL rows — both fired, both promoted in this commit
 
@@ -242,9 +269,11 @@ The Stage-4 matrix carried two `CONDITIONAL` rows whose conditions resolved at S
 
 **Matrix arithmetic against the Stage-4 baseline, stated so the delta is checkable rather than asserted.** Stage-4 declared **20** rows (5 add = 4 concrete + 1 conditional; 15 edit = 14 concrete + 1 conditional). Live: add 5 − 1 (the conditional retires into an existing edit row) = **4**; edit 15 − 1 (the conditional retires) + 1 (`pipeline-event-log-schema.md`, its resolution) + 1 (`decision-audit-cadence.md`, the operator's retirement-site decision) + 1 (`check-event-record-integrity.sh`, the operator's decision to keep the population screen) = **17**. Total **21**, a net **+1** against the Stage-4 baseline with **zero files added** beyond the Stage-4 add set. This reproduces the net the operator rendered at the second Collective Review, arrived at independently from the row set rather than transcribed as a figure.
 
+**This arithmetic is the Stage-4-to-Stage-5 promotion accounting and is left as the record it was.** The live row count is **32** (10 add + 22 edit), reconciled against the branch at the last Engineering card; § Matrix reconciliation against the branch above carries that comparison with its denominator and its two controls, and names every row added, retired, or retained since.
+
 ### New-executable companion obligations
 
-**N/A — enumerated over all 21 add/edit rows.** Exactly one row is a `*.sh` path, `release/tools/check-event-record-integrity.sh`, and it is an **`edit`** of a file already tracked at `origin/main` rather than an `add`. The obligation fires on an `add` row for a tracked executable, so it does not fire here; and the companion is in any case already discharged — that script already carries its four invocation forms in `core/config/allowlists/script-execution-allowlist.txt` (bracket-token, worktree-glob, dot-relative, and bare repo-relative). The enumeration is stated rather than the bare N/A, so a reader can see which population was walked and why the one candidate row does not qualify.
+**N/A — enumerated over all 32 add/edit rows.** Exactly two rows are `*.sh` paths — `release/tools/check-event-record-integrity.sh` and `release/tools/automated-closeout.sh` — and both are **`edit`s** of files already tracked at `origin/main` rather than `add`s. The obligation fires on an `add` row for a tracked executable, so it does not fire on either; and the companion is in any case already discharged for both — each already carries its invocation forms in `core/config/allowlists/script-execution-allowlist.txt`, measured at this reconciliation against a control that returns zero for a script that is not listed. The enumeration is stated rather than the bare N/A, so a reader can see which population was walked and why neither candidate row qualifies. **The second `*.sh` row entered at the AI-014 reconciliation**, which is exactly the cascade a count restated beside a row set is there to catch.
 
 ### Read-only inputs
 
@@ -533,8 +562,10 @@ N/A — enumerated over the classes that could produce one: no data schema chang
 | **DEV-18 – DEV-20** | Recorded in the #5278 Stage-6 Engineering output on sub-task #7318, not in this log. DEV-19 is the operator decision behind AI-008, discharged under #5282 below. | The #5278 Engineering spoke; DEV-18 and DEV-19 operator-ratified at that disposition | **POINTER ONLY — transcription is the hub's.** Numbered here so the sequence reads as intact rather than skipped. The substance lives at its source and is not paraphrased into a second copy. |
 | **DEV-21** | **The #5282 Stage-6 brief omitted three ratified amendment deltas that bind E1, and framed AI-005's form as an open choice.** The brief carried the joint design's seven E1 elements. The consolidated Stage-5 amendment pass, ratified at the second Collective Review render, adds to E1 the **catch-up limb** (AM-T4), the **named** warn-mode cutover clause with its clarifying half-sentence (AM-T1), and **M3's three-row attestation table as a hub obligation** (AM-T3b). The brief offered AI-005 as either "a new Protocol 4" or "an amendment under Protocol 3"; AM-T1 had already decided a third form — named, not numbered — under which the `THREE` count stays true. | The ratified amendment pass, which the brief's primary design input predates | **IMPLEMENTED PER THE AMENDMENT; surfaced.** The amendment is the later authority, and the live ledger corroborates the catch-up limb's premise — this release's first three commitments, AI-001 to AI-003, carry `source_stage 4`: created at Procedure 0, which no sweep point covers. Executing the brief as written would have shipped a sweep blind to Procedure 0 and a cutover clause that forces a count cascade. |
 | **DEV-22** | **E3 cites the attestation signal table rather than restating it** in decision-table rows 1–2. The brief specified the design's three-row table as those rows' content. | Amendment AM-T3b, the shipped E4 tool, and the duplicate-source discipline | **MINOR ADJUSTMENT, with rationale.** AM-T3b relocated the table to the standard because all three of its rows read what a sweep *rendered*, which a close-time tool cannot see. A decision-table cell cannot hold a three-row table without duplicating it. And the shipped tool is a **four**-outcome classifier — two of its outcomes are explicit no-recommendation states — so prose restating three rows would have misdescribed the code in the same commit range. The cells name both producers and cite the standard. |
-| **DEV-23** | **E6 — the ADR — is not authored.** The joint design names one, slug `commitment-emission-forced-at-the-routing-point`, to be authored at Engineering. | Engineering determination at the #5282 commits — **surfaced for hub disposition, not self-decided**, on the DEV-17 precedent | **OPEN — routed to the hub.** The ratified § File Change Matrix carries **no** ADR add row, § Agent-Editability Read lists no ADR path for #5282, and the record is not on the branch — the #5278 spoke did not author it. Authoring it would be outside the locked write set, which is the situation DEV-17 records for #5232. The substance is not lost: the determination, its rejected alternatives and its measurements sit in the standard's § 4 and in the joint design. **The slug appears nowhere in the tree in stamp-token form**, so nothing orphans if the answer is no. **Promotion condition:** an authoring pass over content already written (**CHEAP / HIGH**), its number read at that time from `renumber-adr.py --detect` against the `origin/main` anchor. |
-| **DEV-24** | **The amendment's E1 delta row lists MJ-2's canonicality sentence; it is left to #7392's F1.** | Amendment MJ-2's own text, which scopes the sentence to F1 | **DEFERRED TO THE OWNING CARD, by construction.** The sentence states that the choice-delta row is canonical for the detector and its prose payload is narrative. Its subject — the `recommendation-choice-delta` branch of the sweep — does not exist until #7392 adds it, so authoring it now would write a sentence about absent content into #7392's surface. The subsection is shaped so that branch lands beside it without re-opening this text. |
+| **DEV-23** | **E6 — the ADR — is not authored.** The joint design names one, slug `commitment-emission-forced-at-the-routing-point`, to be authored at Engineering. | Engineering determination at the #5282 commits — **surfaced for hub disposition, not self-decided**, on the DEV-17 precedent | **OPEN — routed to the hub.** The ratified § File Change Matrix carries **no** ADR add row, § Agent-Editability Read lists no ADR path for #5282, and the record is not on the branch — the #5278 spoke did not author it. Authoring it would be outside the locked write set, which is the situation DEV-17 records for #5232. The substance is not lost: the determination, its rejected alternatives and its measurements sit in the standard's § 4 and in the joint design. **The slug appears nowhere in the tree in stamp-token form**, so nothing orphans if the answer is no. **Promotion condition:** an authoring pass over content already written (**CHEAP / HIGH**), its number read at that time from `renumber-adr.py --detect` against the `origin/main` anchor. **RESOLVED — the operator ruled YES at Stage 6; see DEV-25.** |
+| **DEV-24** | **The amendment's E1 delta row lists MJ-2's canonicality sentence; it is left to #7392's F1.** | Amendment MJ-2's own text, which scopes the sentence to F1 | **DEFERRED TO THE OWNING CARD, by construction.** The sentence states that the choice-delta row is canonical for the detector and its prose payload is narrative. Its subject — the `recommendation-choice-delta` branch of the sweep — does not exist until #7392 adds it, so authoring it now would write a sentence about absent content into #7392's surface. The subsection is shaped so that branch lands beside it without re-opening this text. **CLOSED at #7392's F1**, which carries the sentence in the branch it introduces. |
+| **DEV-25** | **DEV-23 resolves: the ADR IS authored, as a one-file scope override.** | Operator decision **D-S6-ADR**, rendered at Stage 6 on the question DEV-23 routed up | **RESOLVED — +1 file against the ratified write set, recorded here as the override it is.** The record is authored by the last Engineering card at `release/ADRs/ADR-198-commitment-emission-forced-at-the-routing-point.md`, slug unchanged, and carries the joint design's four determinations plus this card's three. Number **claimed as 198 against an anchor of 197 on `origin/main`**, read from `renumber-adr.py --detect` rather than computed as one past any branch's highest; branch-only claims on that number exist elsewhere and do not bind, and a multi-branch collision is a governed condition the renumber tool resolves at merge. Following DEV-17's precedent **no unstamped `{{ADR:…}}` token is introduced**, so `--stamp --check` stays at zero residual; the record is cited by real path, the form the joint design sanctions for a link. Matrix effect: **+1 add row**. |
+| **DEV-26** | **The § File Change Matrix disagreed with the branch on 15 of a 34-path union.** | AI-014, re-derived at the last Engineering card because Stage 9's delivery check reads this matrix | **RECONCILED IN PLACE.** 13 paths on the branch carried no matrix row — 8 of them named nowhere in the plan by path (three deployed `release-hub` reference files landed under the DEV-16 override, and five event-record fixtures), 4 already ratified in this log or in § Re-baseline but never promoted to rows, and 1 the ADR above. All 13 are now rows. 2 declared rows proved NOT EDITED and are **retired to a comment block rather than deleted**, so the Stage-4 declaration stays auditable. The count cascade this caused is carried too: § New-executable companion obligations moves from 21 rows to 32 and from one `*.sh` candidate to two. § Matrix reconciliation against the branch states the method, the denominator and both controls. |
 
 ---
 
