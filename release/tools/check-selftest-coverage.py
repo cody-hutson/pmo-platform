@@ -50,19 +50,23 @@ THE ARMS
     E  DOC COVERAGE    HARD   every top-level *.py/*.sh in core/deploy/tools/ carries
                               exactly one core/deploy/tools/README.md inventory row,
                               and every row names a tool that exists
-    F  MANDATE REACH.  HARD   every invocation a release/references/pipeline/*.md spec
-                              PRESCRIBES is admitted by the script-execution allowlist,
+    F  MANDATE REACH.  PER-    every invocation a release/references/pipeline/*.md spec
+                       FINDING PRESCRIBES is admitted by the script-execution allowlist,
                               adjudicated by the hook's own match rule
 
-    Arm F REPORTS FINDINGS ON ARRIVAL and is not expected green: most of what it names is
-    a `.py` tool, and the allowlist's non-shell section is deliberately empty pending
+    SEVERITY IS PER-FINDING, NOT PER-ARM — that is what Arm F's row above records. Arm F
+    REPORTS FINDINGS ON ARRIVAL and is not expected green: most of what it names is a
+    `.py` tool, and the allowlist's non-shell section is deliberately empty pending
     BLOCK-DESTRUCTIVE-022's drain, so those are unmatchable by construction rather than
-    unregistered by oversight. Arm F is HARD INSIDE this engine — the exit code below
-    admits no per-arm severity — and ADVISORY OUTSIDE it, because the selftest-discovery
-    job is posture=advisory and is not a required context. Both are true and they are not
-    in tension: the ceiling is the workflow's posture, not the arm's. Do NOT register that
-    job as a required context until the non-shell population is drained; doing so would
-    register a context that cannot pass. See the ARM F constants block.
+    unregistered by oversight. The exit code below now ADMITS that distinction: a
+    by-construction residual verdicts EXPECTED-RESIDUAL and takes its own member, while a
+    remediable Arm F finding — one whose suffix domain already carries rows, or whose
+    operand is not on disk at all — verdicts BLOCKING alongside Arms B and E. A residual
+    can therefore never mask a regression, and a residual-only run lets the
+    selftest-discovery job report success with a warning rather than a failure. The job
+    stays posture=advisory and is still NOT a required context; do not register it as one
+    until the non-shell population is drained. See the ARM F constants block and the
+    VERDICT SPACE block.
 
     Arm E's population is a SECOND, independently-declared one: the DIRECTORY, never
     the self-test manifest, whose population is smaller by design. See the ARM E
@@ -80,10 +84,35 @@ THE ARMS
     that was narrowed.
 
 EXIT CODES
-    0  pass (warnings may still have been emitted)
-    1  gate failure (an arm failed, or a self-test assertion failed)
-    2  usage / configuration error (bad arguments, unparseable manifest or exclusions,
-       zero-yield scope directive)
+    --reconcile maps its VERDICT to an exit code through the table below. THE INVARIANT
+    IS PV-7: a degraded or unmeasured state NEVER shares a member with the clean state,
+    and 0 has EXACTLY ONE producer. This table is _V_EXIT rendered as prose; where the
+    two disagree, THE TABLE IS THE DEFECT and the dict is the authority.
+
+    verdict             exit   caller reads it as
+    -----------------   ----   ---------------------------------------------------------
+    CLEAN                 0    every arm reconciled. SOLE OCCUPANT OF 0.
+    BLOCKING              1    an arm that must hold has regressed — or an Arm F finding
+                               is remediable now (its suffix domain carries rows) or names
+                               a path not on disk (a dangling spec reference). Also the
+                               code a failed --self-test assertion returns.
+    (configuration)       2    usage / configuration error (bad arguments, unparseable
+                               manifest or exclusions, zero-yield scope directive). NOT a
+                               verdict member: argparse OWNS 2 for parse errors, which is
+                               precisely why the advisory member below is 4 and not the
+                               tree-wide convention's 2.
+    NOT-EVALUATED         3    an arm could not measure — an input was absent, so nothing
+                               was asserted. A WITHHELD verdict, never a clean one. Exact
+                               match to the tree-wide convention.
+    EXPECTED-RESIDUAL     4    the ONLY findings are unmatchable BY CONSTRUCTION: the
+                               operand is on disk and its suffix domain is empty pending
+                               BLOCK-DESTRUCTIVE-022's drain. Degraded, not regressed —
+                               the consuming job maps this to success-with-a-warning.
+
+    NEITHER 3 NOR THE PARTITION IS A NEW CONVENTION. Both mirror
+    cmd_check_package_freshness's contract table, the tree-wide authoring home, which
+    cmd_check_decision_emission and cmd_check_release_corpus already extend.
+
     Exit 5 is deliberately NOT used: release/tools/domain-blast-radius.sh already
     owns exit 5 in this tree, and a shared harness that treats 5 as a distinct
     condition must not collide with it.
@@ -186,15 +215,24 @@ _DOC_ROW_KEY_RE = re.compile(r"^\|\s*`([^`]+)`")
 # --------------------------------------------------------------------------------
 # ARM F — mandate reachability: can an agent run what a pipeline spec tells it to run?
 # --------------------------------------------------------------------------------
-# ARM F REPORTS FINDINGS ON ARRIVAL AND IS NOT EXPECTED GREEN. DO NOT REGISTER THE
-# selftest-discovery JOB AS A REQUIRED CONTEXT UNTIL THE NON-SHELL POPULATION IS DRAINED.
+# ARM F REPORTS FINDINGS ON ARRIVAL AND ITS RESIDUAL CLASS IS NOT EXPECTED TO EMPTY UNTIL
+# THE NON-SHELL POPULATION IS DRAINED. DO NOT REGISTER THE selftest-discovery JOB AS A
+# REQUIRED CONTEXT UNTIL THEN.
 # Most of what this arm names today is a `.py` tool. Every non-comment row in the
 # allowlist ends `.sh`; the non-shell section is DELIBERATELY EMPTY at introduction and
 # is to be filled from drain evidence during BLOCK-DESTRUCTIVE-022's warn phase, NOT
 # pre-populated from a corpus survey (core/rules/bypass-mode-readiness/block-destructive.md).
 # So a `.py` finding here is unmatchable BY CONSTRUCTION and is not remediable by adding
 # a row. Naming the population on every in-scope PR is this arm's job; draining it is the
-# graduation reviewer's. A red selftest-discovery from Arm F is the arm WORKING.
+# graduation reviewer's.
+#
+# WHICH FINDINGS ARE RESIDUAL IS DERIVED, NEVER HARDCODED — see allowlist_suffix_domains().
+# The residual class is exactly those operands whose SUFFIX DOMAIN carries no allowlist
+# row and which EXIST ON DISK. Everything else this arm names is BLOCKING, including an
+# operand naming a path that is not there: that is a dangling spec reference, and treating
+# it as a by-construction residual would let a genuine defect ride the expected-red member
+# and take the job green. The two classes exit on different members (4 vs 1), so a
+# residual-only run is a success-with-a-warning while a regression is a failure.
 #
 # WHAT IS ASSERTED IS THE MATCHER, NOT A ROW COUNT. A row count is an unfaithful proxy
 # and the originating card proved it twice: compute-release-velocity.sh HAD a row and was
@@ -237,6 +275,34 @@ ARM_F_DIRECT_RE = re.compile(
 )
 _ARM_F_FENCE_RE = re.compile(r"^\s*(?:```|~~~)")
 _ARM_F_TICK_SPAN_RE = re.compile(r"`+([^`\n]+)`+")
+
+# --------------------------------------------------------------------------------
+# mode_reconcile's VERDICT SPACE
+# --------------------------------------------------------------------------------
+# THE INVARIANT IS PV-7: a degraded or unmeasured state NEVER shares a member with the
+# clean state, and exit 0 has EXACTLY ONE producer. Before this partition every arm wrote
+# one shared `failed` boolean and the function returned `1 if failed else 0`, so Arm F's
+# by-construction residual and a genuine Arm B/E regression were the SAME non-zero member
+# — the job's conclusion carried no information about which had occurred.
+#
+# Severity is a TOTAL ORDER, so a run's verdict is the MAXIMUM class recorded and the
+# reduction is deterministic regardless of the order the arms happen to run in. A
+# co-occurring BLOCKING finding therefore always dominates a residual one, which is the
+# whole point: the residual can never mask the regression.
+_V_CLEAN = "CLEAN"
+_V_EXPECTED_RESIDUAL = "EXPECTED-RESIDUAL"
+_V_NOT_EVALUATED = "NOT-EVALUATED"
+_V_BLOCKING = "BLOCKING"
+_V_SEVERITY = {_V_CLEAN: 0, _V_EXPECTED_RESIDUAL: 1, _V_NOT_EVALUATED: 2, _V_BLOCKING: 3}
+_V_EXIT = {
+    _V_CLEAN: 0,             # SOLE OCCUPANT of 0.
+    _V_BLOCKING: 1,
+    _V_NOT_EVALUATED: 3,     # exact match to the tree-wide convention.
+    _V_EXPECTED_RESIDUAL: 4, # the advisory-finding member. It is NOT the convention's 2:
+                             # argparse exits 2 on a usage error, so 2 is structurally
+                             # reserved for configuration error in this tool and cannot
+                             # also carry the advisory meaning. See EXIT CODES above.
+}
 
 # --------------------------------------------------------------------------------
 # ADVERTISE — the predicate
@@ -536,6 +602,43 @@ def allowlist_patterns(root: Path) -> list[str]:
     return out
 
 
+def _suffix(operand: str) -> str:
+    """The operand's suffix, lowercased, including the dot ('' when it has none)."""
+    base = operand.rsplit("/", 1)[-1]
+    return ("." + base.rsplit(".", 1)[-1]).lower() if "." in base else ""
+
+
+def allowlist_suffix_domains(root: Path) -> set[str]:
+    """Arm F's residual discriminator: the suffix domains the allowlist has ROWS IN.
+
+    THE RESIDUAL CLASS IS DERIVED FROM THIS, NEVER HARDCODED TO `.py`. A row's operand
+    suffix is the matcher's domain. An operand whose suffix has NO row at all cannot be
+    matched by ANY row, so no remediation exists for it today; the moment one row lands in
+    that suffix domain the same operand becomes remediable and reclassifies to BLOCKING
+    with NO CODE CHANGE. The class SUNSETS ITSELF as BLOCK-DESTRUCTIVE-022's drain
+    proceeds — no exemption file, no allowlist entry, no dated comment outliving its
+    premise.
+
+    The domain is read from EVERY non-comment row, TOKEN-BEARING ROWS INCLUDED, and not
+    only from the repo-relative rows allowlist_patterns() returns. That is deliberately
+    the conservative direction: a wider row-set can only ADD domains, which SHRINKS the
+    residual class, so the classifier fails toward BLOCKING. Both row-sets yield {.sh}
+    today, so this is forward-safety rather than present behaviour.
+    """
+    path = root / ALLOWLIST_REL
+    if not path.is_file():
+        return set()
+    domains = set()
+    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        suf = _suffix(line.split()[0])
+        if suf:
+            domains.add(suf)
+    return domains
+
+
 def _code_spans(text: str):
     """Yield (lineno, chunk) for fenced blocks and backticked spans.
 
@@ -809,7 +912,18 @@ def mode_reconcile(ctx: Ctx) -> int:
     root = ctx.root
     discovered = set(ctx.discovered)
     expected = list(ctx.expected)
-    failed = False
+
+    # THE FINDING-CLASS LEDGER, replacing the single `failed` boolean this function used
+    # to share across all of its arms. Every arm records the CLASS of what it found; the
+    # run's verdict is the maximum class over the total order, so no arm can lower another
+    # arm's finding and the reduction does not depend on arm order.
+    verdict = _V_CLEAN
+
+    def record(cls: str) -> None:
+        nonlocal verdict
+        if _V_SEVERITY[cls] > _V_SEVERITY[verdict]:
+            verdict = cls
+
     ctx.audit_exclusions()
 
     # ---- Arm B (i): anti-narrowing. A manifest path still on disk MUST be discovered.
@@ -818,7 +932,7 @@ def mode_reconcile(ctx: Ctx) -> int:
     ]
     vanished = [rel for rel in expected if not (root / rel).is_file()]
     if dropped:
-        failed = True
+        record(_V_BLOCKING)
         err(
             f"Arm B(i) MANIFEST FLOOR — {len(dropped)} committed path(s) still exist on "
             f"disk but are NO LONGER DISCOVERED. Either a '# scope:' directive was "
@@ -837,7 +951,7 @@ def mode_reconcile(ctx: Ctx) -> int:
     # ---- Arm B (ii): a new advertiser must land in the manifest in the same PR.
     unlisted = sorted(discovered - set(expected))
     if unlisted:
-        failed = True
+        record(_V_BLOCKING)
         err(
             f"Arm B(ii) MANIFEST FLOOR — {len(unlisted)} discovered tool(s) are not in "
             f"the committed manifest. Run: python3 {Path(__file__).name} --emit-manifest"
@@ -859,6 +973,10 @@ def mode_reconcile(ctx: Ctx) -> int:
             continue
         uncovered.append(rel)
     if uncovered:
+        # WARN-only: Arm C's finding does NOT move the verdict today. The no-op is
+        # written down rather than left implicit-by-omission, so the arm's exit
+        # contribution is legible at the site and a later change to it is one token.
+        record(_V_CLEAN)
         warn(
             f"Arm C REPO-WIDE COVERAGE — {len(uncovered)} tool(s) advertise --self-test "
             f"but are neither discovered, invoked by a named workflow step, nor listed "
@@ -879,6 +997,13 @@ def mode_reconcile(ctx: Ctx) -> int:
         rel for rel in suites if not referenced_by_workflow(rel, wf_text)
     ]
     if unwired:
+        # WARN-only, same as Arm C. THIS IS THE #6114 SEAM: that card's stated defect is
+        # that Arm D cannot fail, so its fix is a NEW WRITER into this exit space. The
+        # partition is built so that writer needs no table change — swapping this one
+        # token to _V_BLOCKING (or to _V_EXPECTED_RESIDUAL, if the arm should stay
+        # advisory) expresses it. Only a genuinely NEW class would touch _V_SEVERITY and
+        # _V_EXIT, and that is the correct place for such a change to be visible.
+        record(_V_CLEAN)
         warn(
             f"Arm D TEST-SUITE COVERAGE — {len(unwired)} committed test suite(s) are "
             f"referenced by no workflow. These are OUTSIDE the --self-test discovery "
@@ -893,7 +1018,7 @@ def mode_reconcile(ctx: Ctx) -> int:
     buckets = partition_by_runner(root, ctx.discovered)
     total = sum(len(v) for v in buckets.values())
     if total != len(ctx.discovered):
-        failed = True
+        record(_V_BLOCKING)
         err(
             f"runner partition is not total: {total} bucketed vs "
             f"{len(ctx.discovered)} discovered"
@@ -909,7 +1034,7 @@ def mode_reconcile(ctx: Ctx) -> int:
     is_real_tree = root == Path(__file__).resolve().parents[2]
     if not doc_readme.is_file():
         if is_real_tree:
-            failed = True
+            record(_V_BLOCKING)
             err(
                 f"Arm E DOC COVERAGE — {DOC_COVERAGE_README_REL} is missing from the real "
                 f"checkout. The rule it states is what this arm enforces; with the file "
@@ -919,6 +1044,10 @@ def mode_reconcile(ctx: Ctx) -> int:
         else:
             # PV-7 Register A: NOT-EVALUATED is emitted POSITIVELY and the counters are
             # OMITTED rather than zeroed, so a fixture tree can never read as 'clean'.
+            # It is also recorded in the LEDGER: before the partition this branch wrote
+            # nothing, so an unmeasured run returned 0 and shared the clean member — the
+            # latent PV-7 violation the exit space now closes.
+            record(_V_NOT_EVALUATED)
             print(
                 f"ARM E SCAN not-run — no {DOC_COVERAGE_README_REL} under --root {root}; "
                 f"population and row counts are ABSENT, not zero."
@@ -934,7 +1063,7 @@ def mode_reconcile(ctx: Ctx) -> int:
             f"unique={len(set(rows))}"
         )
         if undocumented or orphan or duplicate:
-            failed = True
+            record(_V_BLOCKING)
             err(
                 f"Arm E DOC COVERAGE — {DOC_COVERAGE_README_REL} § Coverage rule is "
                 f"violated: {len(undocumented)} undocumented tool(s), {len(orphan)} orphan "
@@ -975,7 +1104,7 @@ def mode_reconcile(ctx: Ctx) -> int:
         )
         unexplained = delta - (excluded_here | non_dispatchers)
         if unexplained:
-            failed = True
+            record(_V_BLOCKING)
             err(
                 f"Arm E DENOMINATOR IDENTITY — {len(unexplained)} tool(s) sit in the "
                 f"directory but not in the self-test manifest for a reason that is neither "
@@ -985,15 +1114,17 @@ def mode_reconcile(ctx: Ctx) -> int:
                 f"manifest lines: {', '.join(sorted(unexplained))}"
             )
 
-    # ---- Arm F (HARD): every invocation a pipeline spec PRESCRIBES is admitted by the
-    # script-execution allowlist. Asserts the MATCHER over the specs' own literal
-    # commands, never a row count — see the ARM F constants block for why the count is an
-    # unfaithful proxy and for the two declared boundaries (repo-relative rows only,
-    # pipeline spec corpus only).
+    # ---- Arm F (severity PER FINDING, not per arm): every invocation a pipeline spec
+    # PRESCRIBES is admitted by the script-execution allowlist. Asserts the MATCHER over
+    # the specs' own literal commands, never a row count — see the ARM F constants block
+    # for why the count is an unfaithful proxy and for the two declared boundaries
+    # (repo-relative rows only, pipeline spec corpus only). A finding here is BLOCKING or
+    # EXPECTED-RESIDUAL depending on the operand, never on the arm — see THE RESIDUAL
+    # SPLIT below.
     allow_path = root / ALLOWLIST_REL
     if not allow_path.is_file():
         if is_real_tree:
-            failed = True
+            record(_V_BLOCKING)
             err(
                 f"Arm F MANDATE REACHABILITY — {ALLOWLIST_REL} is missing from the real "
                 f"checkout. The allowlist is one of this arm's two inputs; with it absent "
@@ -1003,6 +1134,8 @@ def mode_reconcile(ctx: Ctx) -> int:
         else:
             # PV-7 Register A: NOT-EVALUATED is emitted POSITIVELY and the counters are
             # OMITTED rather than zeroed, so a fixture tree can never read as 'clean'.
+            # Recorded in the LEDGER for the same reason as Arm E's twin above.
+            record(_V_NOT_EVALUATED)
             print(
                 f"ARM F SCAN not-run — no {ALLOWLIST_REL} under --root {root}; "
                 f"invocation and pattern counts are ABSENT, not zero."
@@ -1017,8 +1150,15 @@ def mode_reconcile(ctx: Ctx) -> int:
         )
         unreachable: dict[str, list[tuple[str, int, str]]] = {}
         suppressed: list[str] = []
+        # Counted rather than derived. len(invocations) - len(suppressed) would be
+        # arithmetically identical TODAY, and would silently over-report the moment a
+        # fourth disposition is added to the loop below — the pass line's honesty would
+        # then depend on nobody extending the partition. An explicit counter cannot
+        # acquire that coupling.
+        admitted = 0
         for operand, sites in sorted(invocations.items()):
             if any(fnmatch.fnmatchcase(operand, pat) for pat in patterns):
+                admitted += 1
                 continue
             # Suppression costs a written reason, exactly as Arms C and E require. The
             # key is the operand AS THE SPEC SPELLS IT, because that is the string the
@@ -1029,40 +1169,161 @@ def mode_reconcile(ctx: Ctx) -> int:
             unreachable[operand] = sites
         for row in suppressed:
             print(f"  ARM F SUPPRESSED: {row}")
-        if unreachable:
-            failed = True
-            err(
-                f"Arm F MANDATE REACHABILITY — {len(unreachable)} invocation(s) that a "
-                f"pipeline spec MANDATES match no allowlist pattern, so the agent executing "
-                f"that stage cannot run what the spec tells it to run. The allowlist "
-                f"obligation fires when a script becomes AGENT-EXECUTED, not only when a "
-                f"script is added. A `.py` operand is unmatchable by construction today "
-                f"(the non-shell section is deliberately empty pending its drain) and is "
-                f"NOT remediable by adding a row — it is named here so the population is "
-                f"countable before the interpreter arm graduates, not on the day it does."
-            )
-            for operand, sites in sorted(unreachable.items()):
+
+        # ---- THE RESIDUAL SPLIT. Arm F's unreachable set is NOT one class. It can hold
+        # a by-construction residual (an operand in a suffix domain the allowlist has no
+        # rows in, deliberately, pending BLOCK-DESTRUCTIVE-022's drain) BESIDE a genuinely
+        # remediable finding. Demoting the whole ARM would re-create the masking defect
+        # one level down, so the partition sits INSIDE the arm, per finding.
+        #
+        # THE PREDICATE FAILS TOWARD BLOCKING ON EVERY LIMB. Absence of a matching row is
+        # the symptom the held class and the defect class SHARE, so membership is not
+        # inferred from that symptom alone:
+        #
+        #   (1) EMPTY-DOMAIN GUARD. An allowlist that exists but parses to zero rows
+        #       yields an empty domain set, under which EVERY operand would read as
+        #       residual and the whole arm would silently go advisory — a fail-CLOSED
+        #       degenerate state (today: nothing matches, everything blocks) inverted
+        #       into a fail-OPEN one. Guarded explicitly: no domains, nothing is exempt.
+        #   (2) POPULATED DOMAIN -> REMEDIABLE. A row exists in this operand's suffix
+        #       domain, so a row could admit it. That is a finding, not a residual, and
+        #       this limb is what makes the class SUNSET ITSELF as the drain proceeds.
+        #   (3) EXISTENCE. An operand that does not resolve to a file on disk is a
+        #       DANGLING REFERENCE — a renamed, moved or misspelled tool — not something
+        #       the drain will ever admit. `unreachable` is built from fnmatch failure
+        #       alone and carries no existence limb, so without this a spec naming a
+        #       deleted `.py` tool would classify EXPECTED-RESIDUAL, exit 4 and take the
+        #       job GREEN while annotated "not remediable by adding a row". That is the
+        #       masking defect this release exists to remove, re-created at suffix
+        #       granularity, and it is why existence is checked HERE and not left to the
+        #       arm that never checked it.
+        domains = allowlist_suffix_domains(root)
+
+        def _is_residual(operand: str) -> bool:
+            if not domains:
+                return False
+            if _suffix(operand) in domains:
+                return False
+            return (root / operand).is_file()
+
+        residual = {op: s for op, s in unreachable.items() if _is_residual(op)}
+        blocking = {op: s for op, s in unreachable.items() if not _is_residual(op)}
+
+        def _name_sites(group):
+            for operand, sites in sorted(group.items()):
                 spec_rel, lineno, cmd = sites[0]
                 extra = f" (+{len(sites) - 1} more site(s))" if len(sites) > 1 else ""
                 print(f"  UNREACHABLE: {operand}{extra}")
                 print(f"      {spec_rel}:{lineno}  {cmd}")
+
+        if blocking:
+            record(_V_BLOCKING)
+            err(
+                f"Arm F MANDATE REACHABILITY — {len(blocking)} invocation(s) that a "
+                f"pipeline spec MANDATES match no allowlist pattern, so the agent executing "
+                f"that stage cannot run what the spec tells it to run. The allowlist "
+                f"obligation fires when a script becomes AGENT-EXECUTED, not only when a "
+                f"script is added. Each of these IS remediable now — either the operand's "
+                f"suffix domain already carries rows (so a row admits it), or the operand "
+                f"names a path that is not on disk, which is a dangling spec reference to "
+                f"repair rather than a population waiting on a drain."
+            )
+            _name_sites(blocking)
+
+        if residual:
+            record(_V_EXPECTED_RESIDUAL)
+            # THE POSTURE REACHES THE ANNOTATION, not only the log below. Two changes
+            # make it legible to a reader who never opens the run log:
+            #
+            #   CHANNEL. The emitter is warn(), so the annotation is amber and AGREES
+            #   IN CLASS with the exit member recorded one line above. err() here
+            #   would put alarm on the annotation surface while the exit code said
+            #   calm — the two channels disagreeing about which state occurred.
+            #
+            #   TEXT. The message LEADS with the verdict's own name, spelled exactly
+            #   as _V_EXPECTED_RESIDUAL and the `RECONCILE VERDICT:` line spell it, so
+            #   the annotation-list entry and the verdict line cannot be read as two
+            #   different states, and the marker is the FIRST thing an annotation list
+            #   renders rather than something a reader must scroll to find.
+            #
+            # The BLOCKING writer twenty lines above keeps err() and carries no marker,
+            # deliberately: an advisory posture on a remediable finding would be this
+            # release's own defect, re-created one surface further out.
+            warn(
+                f"EXPECTED-RESIDUAL (advisory — this job is not a required context, "
+                f"and this finding is not remediable today): "
+                f"Arm F MANDATE REACHABILITY — {len(residual)} invocation(s) that a "
+                f"pipeline spec MANDATES match no allowlist pattern, so the agent executing "
+                f"that stage cannot run what the spec tells it to run. The allowlist "
+                f"obligation fires when a script becomes AGENT-EXECUTED, not only when a "
+                f"script is added. Each operand below exists on disk and its suffix domain "
+                f"is EMPTY — deliberately so, pending BLOCK-DESTRUCTIVE-022's drain — so it "
+                f"is unmatchable by construction and NOT remediable by adding a row. Named "
+                f"here so the population is countable before the interpreter arm graduates, "
+                f"not on the day it does."
+            )
+            _name_sites(residual)
             # POSTURE, EMITTED AT RUNTIME. The same note is written in three source
             # locations and was in NONE of them reachable by a CI reader, who sees only
             # this output — so a reader met an ::error:: with no way to tell an expected
             # red from a real one. Stating it here is what makes the finding legible
             # without opening the workflow, the engine header, or the standard.
+            #
+            # It is guarded on the RESIDUAL group rather than on the whole unreachable
+            # set: with the classes separated, printing a residual posture over a
+            # BLOCKING-only run would tell a reader that a genuine regression is expected
+            # — the masking defect this release removes, re-introduced in the log channel.
+            #
+            # THE SENTENCE WAS CORRECTED AT DEV-13, and only where a sibling card in this
+            # release falsified it: it read "is EXPECTED to stay red until the `.py`
+            # population above drains", which held while the whole arm rode one exit code
+            # and became false the moment the verdict partition landed and a residual-only
+            # run began concluding success. Left standing it would instruct a reader to
+            # expect a red that no longer occurs — this release's own defect surviving in
+            # this release's own output. What replaced it states the discriminating fact
+            # instead, so the note now tells a reader that a red is worth reading.
             print(
                 "  ARM F POSTURE: the selftest-discovery job is ADVISORY, is NOT a required "
-                "context, and is EXPECTED to stay red until the `.py` population above drains "
-                "— this is the arm reporting, not a broken gate."
-            )
-        else:
-            print(
-                f"ARM F PASSED — all {len(invocations)} spec-prescribed invocation(s) are "
-                f"admitted by the allowlist."
+                "context, and the `.py` population above is unmatchable BY CONSTRUCTION and "
+                "not remediable today — the job's conclusion now SEPARATES that residual from "
+                "a genuine regression, so this is the arm reporting, not a broken gate, and a "
+                "red on this job is never this population."
             )
 
-    return 1 if failed else 0
+        if not unreachable:
+            # WHAT THIS LINE REPORTS IS A PARTITION, NOT A TOTAL. The loop above sends
+            # every operand down exactly one of three paths — matched by an allowlist
+            # row, suppressed by a written exclusion, or unreachable — and only the
+            # FIRST of those is admitted. The sentence here used to read "all
+            # {len(invocations)} spec-prescribed invocation(s) are admitted by the
+            # allowlist", which counted the suppressed operands among the admitted and
+            # was therefore FALSE on every run that suppressed anything: on an
+            # all-suppressed tree (T-52's shape) it asserted that all N were admitted
+            # when NONE of them were. A suppressed operand was DISPOSITIONED, which is
+            # a different fact from being reachable — the reason was written down and
+            # accepted, not matched by a row — and collapsing the two reproduces this
+            # release's own defect, a degraded state reading as a clean one, inside the
+            # arm's own pass line.
+            #
+            # BOTH COUNTS PRINT UNCONDITIONALLY, the zeros included. A clause that
+            # appears only when it is non-zero cannot be read as a measurement: its
+            # absence is then ambiguous between "none" and "not counted". This arm DID
+            # measure, so it states both numbers; omitting a counter rather than zeroing
+            # it belongs to the not-run status above, which is this line's exact
+            # inverse.
+            #
+            # The exit code is deliberately untouched. Whether a suppressed operand
+            # should also move the VERDICT is a separate question from whether the
+            # sentence describing it is true, and only the sentence is settled here.
+            print(
+                f"ARM F PASSED — no spec-prescribed invocation is unreachable: "
+                f"{admitted} of {len(invocations)} admitted by a matching allowlist "
+                f"row, {len(suppressed)} suppressed by a written exclusion "
+                f"(dispositioned, not admitted)."
+            )
+
+    print(f"RECONCILE VERDICT: {verdict} (exit {_V_EXIT[verdict]})")
+    return _V_EXIT[verdict]
 
 
 def render_manifest(scopes, per_scope) -> str:
@@ -1310,6 +1571,11 @@ def _selftest() -> int:
         fx.close()
 
     # ---- Arm B(i) control: the same manifest with its scope intact passes.
+    # rc is 3, not 0: this tree writes neither a README nor an allowlist, so Arms E and F
+    # report NOT-EVALUATED. Before the verdict partition an unmeasured run returned 0 and
+    # this control read "clean" while two arms had measured nothing — the latent PV-7
+    # violation the exit space now closes. The Arm B marker is asserted alongside the code
+    # so the control still attributes to Arm B rather than to the tree's incompleteness.
     fx = _Fixture()
     try:
         fx.write("release/tools/a.sh", _PASS_SH)
@@ -1318,7 +1584,15 @@ def _selftest() -> int:
             ["release/tools/*.sh", "core/deploy/tools/*.py"],
             ["release/tools/a.sh", "core/deploy/tools/b.py"],
         )
-        check(mode_reconcile(Ctx(fx.root)) == 0, "T-16 CONTROL: an un-narrowed scope passes Arm B")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 3 and "ARM B PASSED" in out,
+            "T-16 CONTROL: an un-narrowed scope passes Arm B, and the run reports "
+            "NOT-EVALUATED (3) rather than clean because Arms E and F have no inputs here",
+        )
     finally:
         fx.close()
 
@@ -1350,9 +1624,15 @@ def _selftest() -> int:
     try:
         fx.write("release/tools/a.sh", _PASS_SH)
         fx.manifest(["release/tools/*.sh"], ["release/tools/a.sh", "release/tools/deleted.sh"])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
         check(
-            mode_reconcile(Ctx(fx.root)) == 0,
-            "T-19 a manifest path whose file was deleted is informational, not a failure",
+            rc == 3 and "ARM B PASSED" in out and "no longer exist on disk" in out,
+            "T-19 a manifest path whose file was deleted is informational, not a BLOCKING "
+            "failure — Arm B still passes and the deletion is reported as a note (rc is 3 "
+            "because this tree gives Arms E and F nothing to measure, not because of Arm B)",
         )
     finally:
         fx.close()
@@ -1400,9 +1680,15 @@ def _selftest() -> int:
         fx.write("core/deploy/tools/undocumented.sh", _PASS_SH)
         fx.manifest(["core/deploy/tools/*.sh"], ["core/deploy/tools/undocumented.sh"])
         fx.readme(["undocumented.sh"])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
         check(
-            mode_reconcile(Ctx(fx.root)) == 0,
-            "T-41 CONTROL: the identical tree WITH the row passes, so T-40 is attributable",
+            rc == 3 and "ARM E PASSED" in out and "UNDOCUMENTED:" not in out,
+            "T-41 CONTROL: the identical tree WITH the row passes Arm E, so T-40 is "
+            "attributable (rc is 3 because this tree writes no allowlist, so Arm F is "
+            "NOT-EVALUATED — a withheld verdict, never a clean one)",
         )
     finally:
         fx.close()
@@ -1452,10 +1738,15 @@ def _selftest() -> int:
         fx.write("core/deploy/tools/real.sh", _PASS_SH)
         fx.manifest(["core/deploy/tools/*.sh"], ["core/deploy/tools/real.sh"])
         fx.readme(["real.sh"])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
         check(
-            mode_reconcile(Ctx(fx.root)) == 0,
-            "T-48 CONTROL: the same tree with ONE row passes, so T-47 is attributable "
-            "to the duplicate and not to the tree",
+            rc == 3 and "ARM E PASSED" in out and "DUPLICATE ROW:" not in out,
+            "T-48 CONTROL: the same tree with ONE row passes Arm E, so T-47 is "
+            "attributable to the duplicate and not to the tree (rc is 3 for the "
+            "NOT-EVALUATED Arm F, which this tree gives no allowlist)",
         )
     finally:
         fx.close()
@@ -1529,9 +1820,11 @@ def _selftest() -> int:
             rc = mode_reconcile(Ctx(fx.root))
         out = buf.getvalue()
         check(
-            rc == 0 and "ARM E SCAN not-run" in out and "ARM E PASSED" not in out,
-            "T-44 a missing README under --root reports not-run (ABSENT, not zero) "
-            "and does not move the exit code",
+            rc == 3 and "ARM E SCAN not-run" in out and "ARM E PASSED" not in out,
+            "T-44 a missing README under --root reports not-run (ABSENT, not zero) AND "
+            "moves the exit code to NOT-EVALUATED (3) — this fixture asserted rc == 0 "
+            "before the verdict partition, which is to say the suite documented the "
+            "unmeasured-shares-the-clean-member defect as expected behaviour",
         )
     finally:
         fx.close()
@@ -1571,10 +1864,15 @@ def _selftest() -> int:
             ["core/deploy/tools/dropped.sh", "release/tools/a.sh"],
         )
         fx.readme(["dropped.sh"])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
         check(
-            mode_reconcile(Ctx(fx.root)) == 0,
-            "T-46 CONTROL: the same tool ON the manifest floor passes, so T-45 is "
-            "attributable to the identity and not to the tree",
+            rc == 3 and "DENOMINATOR IDENTITY" not in out and "ARM E PASSED" in out,
+            "T-46 CONTROL: the same tool ON the manifest floor passes the identity, so "
+            "T-45 is attributable to the identity and not to the tree (rc is 3 for the "
+            "NOT-EVALUATED Arm F, which this tree gives no allowlist)",
         )
     finally:
         fx.close()
@@ -1600,9 +1898,19 @@ def _selftest() -> int:
             rc = mode_reconcile(Ctx(fx.root))
         out = buf.getvalue()
         check(
-            rc == 0 and "ARM F PASSED" in out,
+            rc == 0
+            and "ARM F PASSED" in out
+            # The pass line's two counters, asserted on the CLEAN side of the pair that
+            # T-57 completes. This tree admits its one operand and suppresses nothing,
+            # so the honest reading is 1 admitted / 0 suppressed. Asserting the ZERO is
+            # the load-bearing half: it is what pins the counters as unconditional, and
+            # a message that printed the suppressed count only when it was non-zero
+            # would pass T-57 and fail here.
+            and "1 of 1 admitted by a matching allowlist row" in out
+            and "0 suppressed by a written exclusion" in out,
             "T-55 CONTROL: a spec-prescribed invocation WITH a matching allowlist row "
-            "passes Arm F, so a later red is attributable to the arm and not the tree",
+            "passes Arm F and is counted as ADMITTED (1 of 1, 0 suppressed), so a later "
+            "red is attributable to the arm and not the tree",
         )
     finally:
         fx.close()
@@ -1621,9 +1929,20 @@ def _selftest() -> int:
             rc == 1
             and "MANDATE REACHABILITY" in out
             and "release/tools/mandated.sh" in out
-            and "stage-01.md:" in out,
+            and "stage-01.md:" in out
+            # CHANNEL + POSTURE, asserted since the residual writer became advisory.
+            # The bare substring above now appears in BOTH Arm F writers, so on its own
+            # it can no longer tell a red finding from an amber one — it would pass
+            # unchanged if this finding were mis-emitted as an expected residual. A
+            # BLOCKING finding must reach the reader on the ERROR channel and must NOT
+            # wear the posture marker: an advisory prefix over a remediable finding is
+            # exactly this release's defect, pointing the other way.
+            and "[err] Arm F MANDATE REACHABILITY" in out
+            and "EXPECTED-RESIDUAL (advisory" not in out,
             "T-50 a spec-prescribed invocation matching NO allowlist row FAILS Arm F and "
-            "is NAMED with its spec file and line",
+            "is NAMED with its spec file and line — on the ERROR channel and carrying NO "
+            "advisory posture marker, so a genuine regression can never be read as an "
+            "expected residual",
         )
     finally:
         fx.close()
@@ -1667,6 +1986,48 @@ def _selftest() -> int:
             rc == 0 and "ARM F SUPPRESSED" in out and "illustrative command" in out,
             "T-52 an exclusions entry WITH a written reason suppresses an Arm F finding, "
             "and the suppression is echoed rather than silent",
+        )
+    finally:
+        fx.close()
+
+    # T-57: the SUBJECT of the pass line's honesty, and T-55 above is its control — the
+    # two trees differ by exactly ONE fact, whether the operand is admitted by a row or
+    # suppressed by a written reason, and the pass line must say which happened.
+    #
+    # This tree is T-52's, re-used deliberately: T-52 already proved the suppression is
+    # ECHOED, and the defect this arm exists to catch survived alongside that echo for
+    # the whole life of the arm. Nothing in T-52 reads the pass line, so a run in which
+    # every operand was suppressed and NONE admitted still printed "all 1
+    # spec-prescribed invocation(s) are admitted by the allowlist" — a false sentence,
+    # green, under an arm that was already asserting the suppression beside it. An echo
+    # is not a verdict; this arm reads the verdict.
+    fx = _Fixture()
+    try:
+        _armf_base(fx)
+        fx.spec("stage-01.md", ["bash release/tools/mandated.sh"])
+        fx.allowlist(["release/tools/something-else.sh"])
+        fx.write(
+            EXCLUSIONS_REL,
+            "release/tools/mandated.sh  # illustrative command, not a real mandate\n",
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 0
+            and "ARM F PASSED" in out
+            # The counts, separated. Nothing was admitted here.
+            and "0 of 1 admitted by a matching allowlist row" in out
+            and "1 suppressed by a written exclusion" in out
+            # AND THE SUPERSEDED CLAIM IS GONE. Without this limb the arm would still
+            # pass against a message that printed the honest counters and then repeated
+            # the false total beside them — a partial revert, which is the likelier
+            # regression than a wholesale one.
+            and "all 1 spec-prescribed invocation" not in out,
+            "T-57 a run whose every Arm F operand was SUPPRESSED does not report them as "
+            "admitted — the pass line separates the two populations (0 of 1 admitted, 1 "
+            "suppressed) and no longer claims all N were admitted by the allowlist",
         )
     finally:
         fx.close()
@@ -1757,9 +2118,250 @@ def _selftest() -> int:
             rc = mode_reconcile(Ctx(fx.root))
         out = buf.getvalue()
         check(
-            rc == 0 and "ARM F SCAN not-run" in out and "ABSENT, not zero" in out,
-            "T-56 a missing allowlist under --root reports not-run (ABSENT, not zero) "
-            "rather than a clean Arm F pass",
+            rc == 3 and "ARM F SCAN not-run" in out and "ABSENT, not zero" in out,
+            "T-56 a missing allowlist under --root reports not-run (ABSENT, not zero) AND "
+            "moves the exit code to NOT-EVALUATED (3) rather than a clean Arm F pass — "
+            "the Arm F twin of T-44's latent PV-7 violation",
+        )
+    finally:
+        fx.close()
+
+    # ---- THE VERDICT PARTITION. Same control/subject discipline as the arms above: each
+    # subject differs from T-60C by exactly ONE fact, so a change in the exit code is
+    # attributable to the classifier and not to the tree.
+    #
+    # A NON-ADVERTISING body is used for the residual operand on purpose. It keeps the
+    # `.py` file out of Arm C's advertiser population, so these fixtures grade Arm F's
+    # classifier rather than a second arm's finding arriving alongside it.
+    _RESIDUAL_PY = "#!/usr/bin/env python3\nprint('a tool that dispatches nothing')\n"
+
+    def _residual_base(fx, operand="release/tools/residual-tool.py", exists=True,
+                       allow=("release/tools/a.sh",)):
+        """A tree whose ONLY Arm F finding is by construction: a spec mandates `operand`,
+        the allowlist carries rows in the `.sh` domain only, and (by default) the operand
+        is on disk. Arms B and E reconcile, so the verdict comes from Arm F alone.
+
+        keeper.sh exists so that T-60 can strip a.sh's dispatch WITHOUT emptying the
+        `release/tools/*.sh` scope — a scope matching zero advertisers is a ConfigError,
+        which would abort the run before the arm under test could report."""
+        fx.write("release/tools/a.sh", _PASS_SH)
+        fx.write("release/tools/keeper.sh", _PASS_SH)
+        fx.manifest(
+            ["release/tools/*.sh"], ["release/tools/a.sh", "release/tools/keeper.sh"]
+        )
+        fx.readme([])
+        if exists:
+            fx.write(operand, _RESIDUAL_PY)
+        fx.spec("stage-01.md", [f"python3 {operand} --detect"])
+        fx.write(
+            ALLOWLIST_REL,
+            "# fixture allowlist\n" + "".join(f"{p}\n" for p in allow),
+        )
+
+    # T-60C: THE CONTROL for the whole partition. Residual-only, so the run is degraded
+    # but nothing blocking is present. Without this, every red below grades nothing.
+    fx = _Fixture()
+    try:
+        _residual_base(fx)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 4
+            and "RECONCILE VERDICT: EXPECTED-RESIDUAL" in out
+            and "ARM F POSTURE" in out
+            and "ARM B PASSED" in out
+            # THE POSTURE'S CLAIM, not merely its marker. The marker conjunct above
+            # passes on ANY sentence carrying those three words, so it graded that the
+            # note was PRESENT and never what the note SAID — which is exactly how the
+            # note went on asserting "EXPECTED to stay red" across the whole life of the
+            # verdict partition that falsified it, with this control green throughout. A
+            # marker-only assertion is what let a true statement rot into a false one
+            # under a passing test, so the claim is pinned here alongside the marker.
+            #
+            # The positive limb is the load-bearing one: reverting the sentence, or
+            # rewording it back into an expected-red instruction, fails it. The negative
+            # limb pins the single clause the partition falsified, and it is a READABLE
+            # zero rather than a vacuous one only because the positive limb fires on the
+            # same buffer — that is this conjunct pair's own control arm.
+            and "a red on this job is never this population" in out
+            and "stay red" not in out
+            # THE ANNOTATION SURFACE ITSELF, which nothing graded before. The posture
+            # used to reach only the runtime log line asserted above, so this fixture
+            # passed while a reader of the annotation list alone still met an
+            # undifferentiated red. Both halves are pinned in one literal: the leading
+            # `[warn] ` is the amber channel (`::warning::` once annotations are on),
+            # and what immediately follows is the marker, in FIRST position, spelled
+            # exactly as the verdict line above spells it.
+            and "[warn] EXPECTED-RESIDUAL (advisory" in out
+            # ...and it reaches the reader on that channel ONLY. Restoring err() here
+            # would satisfy no conjunct above and fail this one, so the emitter is
+            # load-bearing rather than incidental.
+            and "[err] Arm F MANDATE REACHABILITY" not in out,
+            "T-60C CONTROL: a tree whose only Arm F finding is unmatchable BY "
+            "CONSTRUCTION (operand on disk, its suffix domain empty) verdicts "
+            "EXPECTED-RESIDUAL and exits 4 — its OWN member, shared with nothing — and "
+            "says so ON THE ANNOTATION, amber and posture-leading, so the surface a CI "
+            "reader actually sees agrees with the exit member; and the posture note's "
+            "own CLAIM agrees with the partition too, naming this population as never "
+            "the cause of a red instead of instructing the reader to expect one",
+        )
+    finally:
+        fx.close()
+
+    # T-60: one fact differs from T-60C — the discovered tool loses its --self-test
+    # dispatch while staying in the manifest and on disk, so Arm B(i) fires. `4 != 1` IS
+    # the acceptance criterion: the job's conclusion now moves when an arm that must hold
+    # regresses. This is the DISPATCH-REMOVAL route into Arm B(i); the CI precision probe
+    # exercises only the scope-narrowing route, so the two together cover both.
+    fx = _Fixture()
+    try:
+        _residual_base(fx)
+        fx.write("release/tools/a.sh", _COMMENT_ONLY_SH)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 1
+            and "Arm B(i) MANIFEST FLOOR" in out
+            and "DROPPED: release/tools/a.sh" in out
+            and "RECONCILE VERDICT: BLOCKING" in out
+            and "ARM F POSTURE" in out,
+            "T-60 a genuine Arm B(i) regression changes the verdict from EXPECTED-RESIDUAL "
+            "to BLOCKING (4 -> 1) — and because the residual is STILL PRESENT in the same "
+            "run, this also asserts that BLOCKING DOMINATES a co-occurring residual, which "
+            "is the total order's whole job",
+        )
+    finally:
+        fx.close()
+
+    # T-61: the Arm E twin of T-60. One fact differs from T-60C — a directory tool with
+    # no README row.
+    fx = _Fixture()
+    try:
+        _residual_base(fx)
+        fx.write("core/deploy/tools/undocumented.sh", _PASS_SH)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 1
+            and "Arm E DOC COVERAGE" in out
+            and "UNDOCUMENTED: undocumented.sh" in out
+            and "RECONCILE VERDICT: BLOCKING" in out,
+            "T-61 a genuine Arm E regression changes the verdict from EXPECTED-RESIDUAL "
+            "to BLOCKING (4 -> 1) alongside an unchanged residual",
+        )
+    finally:
+        fx.close()
+
+    # T-62: CIAC-1 as a POPULATION PROPERTY over the exit table itself, plus the
+    # sensitivity arm that makes the property gradable.
+    _collapsed = dict(_V_EXIT)
+    _collapsed[_V_EXPECTED_RESIDUAL] = 0
+    check(
+        len([k for k, v in _V_EXIT.items() if v == 0]) == 1
+        and len(set(_V_EXIT.values())) == len(_V_EXIT)
+        and set(_V_EXIT) == set(_V_SEVERITY)
+        # SENSITIVITY ARM, and it MUST fire: the identical assertion over a deliberately
+        # collapsed copy has to FAIL, or the property above is asserting nothing.
+        and len([k for k, v in _collapsed.items() if v == 0]) != 1,
+        "T-62 CIAC-1: exit 0 has exactly ONE producer in _V_EXIT, no two verdicts share a "
+        "member, and every verdict is ranked — with a collapsed-table control arm that "
+        "fires, so the population property is falsifiable rather than decorative",
+    )
+
+    # T-63: the DISCRIMINATOR's own control/subject pair. Two trees differing in ONE
+    # fact — the mandated operand's SUFFIX — against the same `.sh`-populated allowlist.
+    fx = _Fixture()
+    try:
+        _residual_base(fx, operand="release/tools/mandated-sibling.sh")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc_sh = mode_reconcile(Ctx(fx.root))
+        out_sh = buf.getvalue()
+    finally:
+        fx.close()
+    fx = _Fixture()
+    try:
+        _residual_base(fx, operand="release/tools/mandated-sibling.py")
+        rc_py = mode_reconcile(Ctx(fx.root))
+    finally:
+        fx.close()
+    check(
+        rc_sh == 1 and rc_py == 4 and "IS remediable now" in out_sh,
+        "T-63 the residual discriminator is the OPERAND'S SUFFIX DOMAIN, not the arm: an "
+        "unmatched `.sh` operand against a `.sh`-populated allowlist is BLOCKING (a row "
+        "could admit it) while the same tree with a `.py` operand is EXPECTED-RESIDUAL",
+    )
+
+    # T-64: the SELF-SUNSET property. T-63's `.py` tree, one fact changed — the allowlist
+    # gains a row in the `.py` domain. The same operand reclassifies to BLOCKING with NO
+    # CODE CHANGE, which is why the residual class needs no exemption file and no dated
+    # sunset comment that outlives its premise.
+    fx = _Fixture()
+    try:
+        _residual_base(
+            fx,
+            operand="release/tools/mandated-sibling.py",
+            allow=("release/tools/a.sh", "release/tools/some-other-tool.py"),
+        )
+        rc = mode_reconcile(Ctx(fx.root))
+        check(
+            rc == 1,
+            "T-64 one `.py` row landing in the allowlist reclassifies the SAME unmatched "
+            "`.py` operand from EXPECTED-RESIDUAL to BLOCKING with no code change — the "
+            "residual class sunsets itself as the drain proceeds",
+        )
+    finally:
+        fx.close()
+
+    # T-65: THE FAIL-OPEN CLOSURE, limb 1 — operand existence. One fact differs from
+    # T-60C: the mandated `.py` operand is NOT on disk. Without the existence limb this
+    # tree is indistinguishable from T-60C to the classifier — suffix domain empty, so
+    # "residual" — and a genuine DANGLING SPEC REFERENCE (a renamed, moved or misspelled
+    # tool, red today) would exit 4 and take the job GREEN while annotated "not remediable
+    # by adding a row". T-60C is this fixture's control: same tree, operand present, 4.
+    fx = _Fixture()
+    try:
+        _residual_base(fx, exists=False)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 1
+            and "RECONCILE VERDICT: BLOCKING" in out
+            and "not on disk" in out
+            and "ARM F POSTURE" not in out,
+            "T-65 a spec mandating a `.py` operand that does NOT EXIST classifies BLOCKING, "
+            "not EXPECTED-RESIDUAL — a dangling reference is a defect to repair, never a "
+            "population waiting on a drain, and the expected-red posture note is withheld",
+        )
+    finally:
+        fx.close()
+
+    # T-66: THE FAIL-OPEN CLOSURE, limb 2 — the empty-domain guard. One fact differs from
+    # T-60C: the allowlist exists but parses to ZERO rows. Unguarded, the domain set is
+    # empty, EVERY operand reads as residual, and the whole arm silently goes advisory —
+    # inverting the fail-toward-BLOCKING rule. Today's unpartitioned tool fails CLOSED on
+    # this tree (nothing matches, everything blocks); the guard is what stops the
+    # partition from converting that into a fail-OPEN state.
+    fx = _Fixture()
+    try:
+        _residual_base(fx)
+        fx.write(ALLOWLIST_REL, "# every row here is a comment\n# so the row set is EMPTY\n")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(Ctx(fx.root))
+        out = buf.getvalue()
+        check(
+            rc == 1 and "RECONCILE VERDICT: BLOCKING" in out and "ARM F POSTURE" not in out,
+            "T-66 an allowlist that parses to ZERO rows exempts NOTHING — the empty domain "
+            "set fails toward BLOCKING rather than making every operand advisory",
         )
     finally:
         fx.close()
@@ -1780,7 +2382,15 @@ def _selftest() -> int:
             "T-23 an excluded path is suppressed from the discovered set",
         )
         check(mode_run(ctx, "ubuntu") == 0, "T-24 Arm A is green once the false positive is excluded")
-        check(mode_reconcile(ctx) == 0, "T-25 Arm B reconciles against the post-exclusion set")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mode_reconcile(ctx)
+        out = buf.getvalue()
+        check(
+            rc == 3 and "ARM B PASSED" in out,
+            "T-25 Arm B reconciles against the post-exclusion set (rc is 3 for the two "
+            "arms this tree gives no inputs, not for Arm B)",
+        )
     finally:
         fx.close()
 

@@ -7,6 +7,8 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.64 | expected-red-never-masks-regression | 2026-09-13 | — | #7462 | [notes/v4.64_RELEASE_NOTES.md](notes/v4.64_RELEASE_NOTES.md) |
+| v4.63 | closeout-correctness-batch | 2026-09-11 | — | #7253 | [notes/v4.63_RELEASE_NOTES.md](notes/v4.63_RELEASE_NOTES.md) |
 | v4.62 | pack-conformance-and-parity | 2026-09-11 | — | #7400 | [notes/v4.62_RELEASE_NOTES.md](notes/v4.62_RELEASE_NOTES.md) |
 | v4.61 | governance-pointer-fixes | 2026-09-11 | — | #7401 | [notes/v4.61_RELEASE_NOTES.md](notes/v4.61_RELEASE_NOTES.md) |
 | v4.60 | deploy-checks-hardening-batch | 2026-09-06 | — | #7205 | [notes/v4.60_RELEASE_NOTES.md](notes/v4.60_RELEASE_NOTES.md) |
