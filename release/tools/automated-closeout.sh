@@ -5860,11 +5860,11 @@ phase_reparse_ledgers() {
 # arm (F) therefore EXECUTES the two dispatch lines lifted verbatim from this
 # file's own text, with a constructed `|| true` degenerate as its negative control.
 #
-# THREE-VALUED, DELIBERATELY (hub-action-tracking.md § 4 routing point 5). A gate
-# that only counts unresolved rows cannot tell "every commitment was resolved" from
-# "no commitment was ever recorded" — and a release that never emitted an action
-# item is exactly the release whose emit step was skipped. Two counts over the
-# whole population separate them:
+# FIVE-VALUED OVER THREE VERDICTS, DELIBERATELY (hub-action-tracking.md § 4
+# routing point 5). A gate that only counts unresolved rows cannot tell "every
+# commitment was resolved" from "no commitment was ever recorded" — and a release
+# that never emitted an action item is exactly the release whose emit step was
+# skipped. Three counts over the whole population separate them:
 #
 #   NOT-RECORDED   ledger file absent          -> SURFACE (attestation required)
 #   EMPTY-LEDGER   file present, 0 AI rows     -> SURFACE (attestation required)
@@ -14420,7 +14420,7 @@ READERSTUB
   #     states must not collapse into one, or the gate is 2-valued again. Comparing
   #     detail strings would pass on any two distinct sentences; comparing the
   #     globals compares the thing row 6 and every consumer actually read.
-  _st_arm AI AI-E; [[ "$_ai_c_state" != "$STATE_AI_GATE" ]] || { echo "FAIL: AI-E — NOT-RECORDED and EMPTY-LEDGER must resolve DISTINCT STATE_AI_GATE values; both read '$STATE_AI_GATE' and the 3-valued gate has collapsed"; failures=$((failures+1)); }
+  _st_arm AI AI-E; [[ "$_ai_c_state" != "$STATE_AI_GATE" ]] || { echo "FAIL: AI-E — NOT-RECORDED and EMPTY-LEDGER must resolve DISTINCT STATE_AI_GATE values; both read '$STATE_AI_GATE' and the 5-valued gate has collapsed"; failures=$((failures+1)); }
   [[ "$(_ai_verification_cell)" == *"EMPTY-LEDGER"* ]] || { echo "FAIL: AI-E — the row-6 cell must carry the resolved STATE, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
 
   # (C'/D') ATTESTED SURFACE — passes, AND the attestation is EMITTED. The spec
