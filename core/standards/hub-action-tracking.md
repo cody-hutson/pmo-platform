@@ -270,6 +270,46 @@ L2's second clause is the discriminator, and it is what makes the follow-up-card
 
 This table is the **hub's** rule, and it sits here because every one of its rows reads what a sweep *rendered* — evidence the hub holds and a close-time tool cannot see, since the briefing renders in chat. The Stage-13 close-out tool measures what the event log can support and **declines to recommend** where its basis cannot separate the two causes; the two instruments are complements, and the operator still attests either way. **The measurement is the evidence behind the choice, never the choice.**
 
+**The second branch — choice deltas.** Everything above decides whether a **commitment** is owed. The sweep's question has a second subject: a recommendation the hub or a spoke put to the operator, and the choice the operator returned. That pair is **already fully observable** — a rendered recommendation is an output and a returned choice is an operator utterance, so neither half is a state the agent must recognise in itself — and yet nothing asks for it either. The result is that divergences are written down, in quantity, as free prose inside other subtypes' payloads, where the look-back read-model cannot query them. **The measured population establishes that the phenomenon is frequent and currently unreadable; this branch makes future instances readable, at a stated volume cost, and recovers none of the historical ones.** This is **one mechanism with two branches, not a second sweep**: the sweep asks whether a record is owed at this routing point, and the record's substrate — a ledger row here, an event-log row there — is downstream of that answer.
+
+```markdown
+**Choice deltas owed this routing point:**
+
+| rec | chose | delta | via | Which limb of the test it satisfies |
+|---|---|---|---|---|
+| bundle-A+B | bundle-A-only | diverged | stage4-bundle | C1 recommendation rendered · C2 choice returned |
+```
+
+**The test this branch applies (C1/C2).** Lettered apart from the commitment branch's limbs so the limb column stays unambiguous, and applied — as they are — to **the routing point's own outputs**. Both must hold:
+
+> **C1 — Recommendation rendered.** The hub or a spoke put a recommendation, a recommended disposition, or an option set carrying a recommendation to the operator. **A rule-determined value does not satisfy C1** — the release-hub orchestration playbook's gate register already rules such values *"recorded determinations, not gates"*, and that exclusion is what keeps the branch's volume bounded by a stated rule rather than by judgment.
+> **C2 — Choice returned.** The operator rendered a choice on that recommendation. A recommendation put but **not yet answered** carries to the next sweep; it is not emitted here.
+
+Both hold ⇒ a row is owed, with `delta:` computed by comparing `rec:` to `chose:`.
+
+**The two branches are alternatives, not conjuncts — and one clause governs both.** A record is owed at a routing point when **either** branch's limbs both hold; neither branch's failure suppresses the other, and a routing point can owe both. That disjunction is what makes this one mechanism rather than two, and it is why the **omission-is-a-structural-defect** clause stated above for the commitment branch is stated **once, for the sweep**, and governs this branch too rather than acquiring a second copy here. For the same reason this branch adds no cutover posture and no window of its own: the **catch-up limb** above and the named **Sweep cutover** clause in § 6 are properties of the sweep, so they reach both branches as written.
+
+**`delta:aligned` is owed too, and suppressing it would break the reader rather than quieten it.** The zero-delta state is recorded explicitly, never silently omitted — the explicit-zero-state discipline stated in [`pipeline-event-log-schema.md`](../../release/references/standards/pipeline-event-log-schema.md) § 3, where the parallel `no-learning` row exists so that *"the retro ran and found nothing"* is distinguishable from *"the retro never ran"*, and which names `delta:aligned` as the same discipline. An aligned rendering is the evidence that the sweep fired; without it, a routing point that swept and found alignment and a routing point that never swept are the same silence.
+
+**Three renderings are admissible for this branch:**
+
+1. **The table**, when ≥ 1 delta is owed.
+2. `"Choice-delta sweep run — no recommendation met a rendered choice at this routing point."`
+3. `"Choice-delta sweep run — N UNDECIDED candidate(s) surfaced for operator disposition: <candidate>."`
+
+| # | Scenario | C1 | C2 | Verdict |
+|---|---|---|---|---|
+| 1 | Hub recommends bundling two cards at Stage 4; operator takes one of them | ✔ | ✔ | **ROW** — `delta:diverged`, `via:stage4-bundle` |
+| 2 | Hub computes the next-free version and reports it | ✘ **rule-determined** — a recorded determination, not a recommendation | ✔ a value was accepted | **NO ROW** |
+| 3 | Hub recommends GO at the plan-review gate; operator returns GO | ✔ | ✔ | **ROW** — `delta:aligned`, `via:hub-d-gate`. The aligned row **is** the point: it is the evidence the sweep fired at a gate that always renders a recommendation |
+| **control** | Hub states in prose that *"the narrower scope is safer"* without labelling a recommendation; operator picks the broader scope | **ambiguous** — whether the utterance was a recommendation is not decidable from the output alone | ✔ | **`UNDECIDED`** → rendering 3, operator dispositions |
+
+`UNDECIDED` here is the **same token, same register, same remedy** as above — a briefing rendering surfaced for operator disposition, entering no gate verdict. Minting a second residue name inside one subsection is what would conflate them.
+
+**Which record is canonical.** A divergence that also appears as prose inside another row's payload now exists in two places. **The delta row is canonical for the detector; a prose payload describing the same divergence is narrative.** Where the two disagree, a gate reads the delta row. Nothing here deprecates the prose — it says which record answers the question a reader is asking.
+
+**Where this branch fires, and where the obligation attaches.** The **rendering** fires at the same **four** routing points as the commitment branch, under the same catch-up window; **no routing point is added and no count in this section changes.** The **obligation** attaches at **Procedure 4a**, whose header binds every operator-rendered decision and every hub-rendered determination, so it reaches Procedures 0, 1 and 6 as well without any of them becoming a sweep point. **Out of scope by ownership:** the `via:session-retro` provenance is owned by the `session-retro` skill's own emission contract, which conditions its hindsight path on the live path having emitted none; this branch covers the five hub-side provenance values and stops there.
+
 **Procedure 7 hard-gate rationale:** Open action items at release close are by definition a "to-do list without resolution" — CLAUDE.md "Push-to-resolve" universal preference (*"Resolve actionable items as far as possible. [OPERATOR_NAME] reviews completed work — not to-do lists."*) makes this prohibited at release boundary. The hard gate forces operator disposition (`done` / `cancelled` / `superseded`) before Milestone close. Carry-forward via `superseded` is an acceptable resolution; leaving `open` rows past Milestone close is the prohibited state.
 
 ## 5. Cross-Cutting Composition Notes
