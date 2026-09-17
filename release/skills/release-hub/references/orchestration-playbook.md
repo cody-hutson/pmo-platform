@@ -77,6 +77,12 @@ before routing continues. Neither alone is sufficient (`core/standards/hub-sessi
    is `core/disciplines/decision-discipline.md` § 3.1, which owns the merit test
    that decides whether the fork emits at all — routine template routing emits
    nothing, and that silence is correct.
+   For the recommendation-vs-choice delta (`decision`/`recommendation-choice-delta`)
+   the trigger source is `core/standards/hub-action-tracking.md` § 4's choice-delta
+   sweep, which owns the two-limb test that decides whether a row is owed — this is
+   the same step, not a second procedure. `via:session-retro` is out of this step's
+   scope: that provenance is owned by
+   `core/skills/session-retro/references/emission-contract.md`.
 3. Set `--subject` to the decision's scope (`milestone:#N` / `issue:#N` / `sub-task:#N`).
    Open `--payload` with the release-stable token `ms:#<milestone-number>;` **unless the
    target `(event_type, event_subtype)` carries a registered closed payload vocabulary**
@@ -461,6 +467,7 @@ when their gate fires.
 | self-repair | 4 | self-repair | retry | hub | CONDITIONAL |
 | delegation-fork | 2 | decision | delegation | hub | CONDITIONAL |
 | decision-supersession | 4a | decision | decision-superseded | hub | CONDITIONAL |
+| recommendation-choice | 4a | decision | recommendation-choice-delta | operator | CONDITIONAL |
 <!-- EMISSION-CONTRACT:END -->
 
 **Why exactly three `MUST` rows.** The partition predicate is *structural guarantee in a
@@ -469,6 +476,17 @@ Procedure 0 plan approval; Procedure 5 Stage-12 is unreachable without a Stage-9
 Procedure 7 close is unreachable without Stage-12 Execute. Those three are total over
 completed releases. Every other gate has a reachable path that skips it, so asserting on it
 would produce false failures.
+
+**Why `recommendation-choice` ships `CONDITIONAL`, and what would promote it.** Not because
+the moments it covers are skippable — plan approval and the Stage-9 GO are not — but for
+**transition safety**. `MUST` rows are asserted per completed release by the deploy-time
+close-out check, so promoting this class now would retroactively obligate every historical
+release, none of which carries a delta row. The row therefore ships `CONDITIONAL` with its
+**promotion condition recorded beside it**: it becomes eligible for `MUST` once every release
+from this cutover forward carries at least one `recommendation-choice-delta` row. Recording
+the condition is what keeps the class promotable at all — without it an obligation whose
+premise is *an emission obligation with no forcing function* would be structurally unable to
+ever acquire mechanical enforcement.
 
 **Extension seam.** A downstream slice that adds an emitting gate adds its row *inside* the
 `EMISSION-CONTRACT` delimiters — tagged `CONDITIONAL` unless it is total over completed
