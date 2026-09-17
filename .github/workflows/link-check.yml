@@ -155,6 +155,33 @@ jobs:
 
   deployed-root-link-check:
     name: Deployed-skill reference reachability (reconstructed runtime root)
+    # gate-efficacy: posture=advisory  enforcement=ci-enforce:"Deployed-skill reference reachability (reconstructed runtime root)" (WARN_MODE='true' — an unresolvable deployed reference is reported and the job exits 0; the known-answer fixture and a zero-file scan target hard-fail independent of it)  always-reports=yes
+    #   invariant: every markdown reference inside the DEPLOYED `release-hub` skill
+    #              resolves from a reconstructed runtime skills root — the installed
+    #              topology, in which the skill's own directory is the top of its world
+    #              and its siblings are the other skills — not merely from the
+    #              repository tree the sibling job scans.
+    #   falsification: repoint a reference under release/skills/release-hub/references/
+    #                  at `../../../core/...` and rebuild the package -> the scan reports
+    #                  it unresolvable. Under WARN_MODE='true' the job exits 0; with
+    #                  WARN_MODE='false' the same finding is RED. Delete a planted break
+    #                  from the known-answer fixture (sensitivity), or make the engine
+    #                  over-report on it (specificity), -> the job FAILS regardless of
+    #                  WARN_MODE, as does a `--target-paths` entry resolving to zero
+    #                  files (exit 3) or a reconstructed root missing release-hub/SKILL.md.
+    #   posture note: `advisory` on both axes, and NOT the sibling job's posture. That
+    #                 declaration is `required(warn-mode-initial)` bound to a registered
+    #                 branch-protection context and held in CORRECT-THEN-HOLD; this job's
+    #                 check-run is net-new and therefore absent from main's live
+    #                 required_status_checks.contexts, which a PR cannot register — so
+    #                 Requirement (b') makes `required` unavailable here, exactly as it
+    #                 does for the hook-dep-hardening gate in security.yml. The two jobs
+    #                 also grade different populations: the sibling grades the REPOSITORY
+    #                 tree, this one grades the DEPLOYED tree. The fixture step is the arm
+    #                 that genuinely enforces today — a warn-mode scan is blind to a
+    #                 detector regression, so a mis-detecting engine reading green is
+    #                 indistinguishable from a clean deployed corpus, and its failure is
+    #                 not a warn-able finding.
     runs-on: ubuntu-latest
     # SECURITY NOTE: this job consumes NO workflow-event input. Every value below
     # is a fixed literal or a runner-provided variable (RUNNER_TEMP, GITHUB_ENV,
