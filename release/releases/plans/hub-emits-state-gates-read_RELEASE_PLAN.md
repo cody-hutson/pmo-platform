@@ -672,7 +672,48 @@ Numbered from **V14** so no row collides: the #5232 block above restarted at V5,
 
 ## Change Description
 
-(Authored by the Stage-6 Engineering spoke at PR-creation time per [`release/governance/RELEASE_PROTOCOL.md`](/release/governance/RELEASE_PROTOCOL.md) § Change Description Protocol — operator-facing voice, six sub-sections. Distinct from the user-facing release note authored at Stage 13 per [`release/references/standards/release-notes-standard.md`](/release/references/standards/release-notes-standard.md). Populated once the last card lands, before the PR is transitioned to ready-for-review at the Stage-9 gate.)
+*Authored at the last Engineering card per [`release/governance/RELEASE_PROTOCOL.md`](/release/governance/RELEASE_PROTOCOL.md) § Change Description Protocol — operator-facing voice, six sub-sections, committed before the PR transitions to ready-for-review at the Stage-9 gate. Distinct from the user-facing release note authored at Stage 13 per [`release/references/standards/release-notes-standard.md`](/release/references/standards/release-notes-standard.md).*
+
+### Outcome
+
+The hub now writes the state its own gates read, and the completeness of that record is measurable rather than asserted. Two obligations that previously fired only when an agent recognised something about itself — opening an action-item row for a durable commitment, and emitting a row when an operator's choice diverges from a recommendation — are relocated to a **sweep** rendered at each routing point, where an omitted rendering is a structural defect a reader sees. Alongside it, the hub's operator-stop points collapse from several disagreeing enumerations into one delimited gate register, and a repeatable decision-health audit grades per-seam coverage against an oracle set derived at run time rather than frozen into an artifact.
+
+### Issues resolved
+
+| # | Outcome | Status |
+|---|---|---|
+| #4027 | A repeatable decision-health audit: the run machinery, the dimension rubric's column contract and two-axis model, characterization fixtures, the committed summary, and the retirement of the provisioning-state declarations | DONE |
+| #4028 | The per-seam rows and their anchors inside that rubric, each baseline-source cell citing its authority by delimiter and stable key rather than by line number, plus the run-over-run index | DONE |
+| #5232 | One delimited Hub Gate Register, with Gate 0 relocated into the deployed contract and the parallel touchpoint enumerations collapsed into citations of it | DONE |
+| #5278 | The state surfaces the gates read, the close-time attestation given a measured cause to stand on, and the population screen the structural check cannot see | DONE |
+| #5282 | The commitment sweep — the write-side forcing function, its catch-up window, and the named warn-mode cutover clause that makes binding-on-merge survivable | DONE |
+| #7392 | A declared emission obligation for the recommendation-choice delta: the second sweep branch, the `EMISSION-CONTRACT` row, and the Procedure 4a step-2 clause | DONE |
+
+### Key decisions
+
+- **D-C — SINGLE branch topology, P0 fully-serial.** One release branch, one draft PR opened at Commit 0 so CI runs while later cards land, one merge. Four of six cards write into two shared files, so serialization is what the contention map supports rather than a default.
+- **D-B — the event-record integrity tool's M4 arm is withdrawn**, removing a declared file from the change matrix rather than shipping a screen whose population mixes two lifecycles with opposite correct verdicts.
+- **The choice-delta obligation ships `CONDITIONAL` on transition safety, not on reachability.** The reachability derivation the design first offered is contradicted by its own volume floor; promoting the class now would retroactively obligate every historical release under the close-out check. The **promotion condition** is recorded beside the row, so the class stays promotable.
+- **D-S6-ADR — the ADR is authored**, as a one-file scope override against the ratified write set, resolving a question two Engineering cards correctly routed up rather than self-deciding.
+- **The sweep binds on merge and therefore ships warn-mode**, under a clause *named* rather than numbered into the standard's protocol series, so no count cascades and no sentence falsely claims the sweep shipped in that standard's introducing release.
+
+### Reversibility
+
+**CHEAP · confidence HIGH** — every surface is prose or an additive row; rollback is `git revert` of the card's commits plus one package rebuild, with per-issue methods enumerated in § Rollback Strategy. The one durable residue is any event row already written under the new obligation, and an extra correctly-shaped row in an append-only log is readable rather than harmful.
+
+### Downstream impact
+
+- **The close-time gate acquires something to read.** Releases entering Stage 5 after this one render the sweep at each routing point, so the action-item ledger is written by a forcing function instead of by instruction.
+- **The `recommendation-choice-delta` class becomes promotable.** Its promotion condition is recorded with its row: eligible for `MUST` once every release from this cutover forward carries at least one delta row.
+- **Carried forward, not closed:** the payload convention for that subtype is still unregistered in the event-log vocabulary registry, so write-side label validation does not fire on it; and three operator gates render recommendations outside the sweep's four routing points, reached by the catch-up window at worst at close rather than in-run.
+- **Affected surfaces at the next deploy:** the `release-hub` package ships the amended playbook and SKILL.md, so the invocation half of the sweep binds for hub sessions from that deploy; the standard half binds from the merge.
+
+### Cross-references
+
+- Release plan: this file, `release/releases/plans/hub-emits-state-gates-read_RELEASE_PLAN.md` — § Scope, § Verification Evidence, § Deviation Log.
+- Milestone: `hub-emits-state-gates-read`, whose description carries the Stage-3 Release Outcome Statement this section reports delivery against.
+- Architecture record: [`ADR-198`](/release/ADRs/ADR-198-commitment-emission-forced-at-the-routing-point.md) — the routing-point forcing-function decision and its rejected alternatives.
+- User-facing release note: authored at Stage 13 into `release/releases/notes/`, keyed to the version claimed at Stage 12.
 
 ---
 
