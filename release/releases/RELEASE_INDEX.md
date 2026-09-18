@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.66 | authoring-bar-and-consumers | 2026-09-18 | — | #7410 | [notes/v4.66_RELEASE_NOTES.md](notes/v4.66_RELEASE_NOTES.md) |
 | v4.65 | deploy-tools-and-tests-batch | 2026-09-18 | — | #7404 | [notes/v4.65_RELEASE_NOTES.md](notes/v4.65_RELEASE_NOTES.md) |
 | v4.64 | expected-red-never-masks-regression | 2026-09-13 | — | #7462 | [notes/v4.64_RELEASE_NOTES.md](notes/v4.64_RELEASE_NOTES.md) |
 | v4.63 | closeout-correctness-batch | 2026-09-11 | — | #7253 | [notes/v4.63_RELEASE_NOTES.md](notes/v4.63_RELEASE_NOTES.md) |
