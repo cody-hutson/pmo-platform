@@ -110,6 +110,7 @@ ADR-197 (`frontmatter-laxity-is-constrained-at-the-consumer`) → **ADR-198** by
 ADR-197 (`l3-judgment-criteria-evaluability`) → **ADR-200** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 197; the record's Status section carries the provenance note.
 ADR-198 (`per-kind-authoring-bar-is-a-reading-not-a-carrier`) → **ADR-201** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 198; the record's Status section carries the provenance note.
 ADR-198 (`commitment-emission-forced-at-the-routing-point`) → **ADR-199** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 198; the record's Status section carries the provenance note.
+ADR-199 (`commitment-emission-forced-at-the-routing-point`) → **ADR-202** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 199; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 

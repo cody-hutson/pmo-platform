@@ -1,5 +1,5 @@
 ---
-title: "ADR-199 — An emission obligation is forced at the routing point, not at the moment the agent recognises it"
+title: "ADR-202 — An emission obligation is forced at the routing point, not at the moment the agent recognises it"
 status: Accepted
 date: 2026-09-17
 release: hub-emits-state-gates-read
@@ -16,7 +16,7 @@ source_observations:
   - "Catch-up-limb corroboration from the live ledger: the introducing release's first three commitments all carry source_stage 4, created at Procedure 0 — a routing point no sweep point covers, which is exactly the case a point-scoped rendering would have missed."
 ---
 
-# ADR-199 — An emission obligation is forced at the routing point, not at the moment the agent recognises it
+# ADR-202 — An emission obligation is forced at the routing point, not at the moment the agent recognises it
 
 ## Status
 
@@ -27,6 +27,8 @@ source_observations:
 **Authoring provenance.** The joint design named this record and the ratified File Change Matrix omitted it, so the first Engineering card correctly declined to author outside its locked write set and routed the question up. The operator ruled at Stage 6 that the record is authored here, as a one-file scope override; the decision is recorded in the release plan's Deviation Log.
 
 **Numbering provenance — `198 → 199`.** Held **ADR-198** branch-local; renumbered to **ADR-199** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 198. In-release citations that read "ADR-198" denote this record.
+
+**Numbering provenance — `199 → 202`.** Held **ADR-199** branch-local; renumbered to **ADR-202** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 199. In-release citations that read "ADR-199" denote this record.
 
 ## Context
 
