@@ -170,9 +170,9 @@ measurement gap and a measured zero.
   so a run that assigned nothing would pass it — which is exactly the gap this fixture was
   written to close, reproduced inside the fixture. Naming the state makes the label exact and
   the family's *deterministic; exact* heading true of it. Where rows **did** arrive, or another
-  occasion class resolved determinately above zero, order 1 claims the seam first and the
-  expected output is `measured`; this input excludes both so that the residue is what is being
-  tested.
+  occasion class resolved determinately above zero, the ordered predicate's `measured` order —
+  evaluated before every other — claims the seam and the expected output is `measured`; this
+  input excludes both so that the residue is what is being tested.
 - **Why this fixture exists:** it is the denominator-side negative control. Without it,
   *"not observable from here"* and *"measured, and it was zero"* share one value, and a seam
   that was blind in exactly this window would exit the register asserting it was merely quiet.
