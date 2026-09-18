@@ -116,7 +116,28 @@ WORKSPACE_ROOT="${WORKSPACE_ROOT:-${CLAUDE_WORKSPACE_ROOT:-}}"
 if [[ -z "$WORKSPACE_ROOT" ]]; then
   _operator_toml="${HOME}/.config/pmo-platform/operator.toml"
   if [[ -r "$_operator_toml" ]]; then
-    _wr=$(grep -E '^claude_workspace_root' "$_operator_toml" 2>/dev/null | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+    # SIGPIPE-REWRITE + `|| true` — the two-part fold automated-closeout.sh carries
+    # on the identical key read. See that file's claude_workspace_root block for the
+    # full rationale, which was PROVEN by breaking that script and is not restated.
+    #
+    # WHAT THE `|| true` CLOSES. `claude_workspace_root` is OPTIONAL. An
+    # operator.toml that EXISTS and omits it makes this `grep` exit 1, `pipefail`
+    # carries that status out of the substitution, and the `set -euo pipefail` above
+    # aborts at LOAD time — before argument parsing, so on EVERY invocation
+    # including --self-test and --help — with exit 1 and ZERO bytes on stdout AND
+    # stderr. Measured on this file before the fix, not inferred. The `2>/dev/null`
+    # is NOT a guard: it suppresses grep's stderr, never its exit status. The
+    # documented default two lines down is what makes the key optional; without the
+    # tolerance that default is unreachable.
+    #
+    # THE `head` FOLD IS NOT CLAIMED to fix an abort on a SUCCESSFUL read — `grep`
+    # reads the file directly, so it is the leftmost producer and no upstream writer
+    # is left for an early-closing reader to signal. It folds because the enforcing
+    # `sigpipe-idiom` job scans the ADDED-LINES delta and lists `head` among the
+    # short-circuiting readers it matches, so `|| true` alone would leave a matched
+    # idiom sitting on a CHANGED line; and for uniformity, so selftest_key_read_
+    # tolerance() below keys on ONE predicate instead of a disjunction.
+    _wr=$(grep -m1 -E '^claude_workspace_root' "$_operator_toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
     [[ -n "$_wr" ]] && WORKSPACE_ROOT="$_wr"
   fi
 fi
@@ -147,8 +168,19 @@ resolve_repo_slug() {
   [[ -n "$url" ]] && REPO_SLUG=$(parse_slug_from_url "$url")
   if [[ -z "$REPO_SLUG" ]] && [[ -r "${HOME}/.config/pmo-platform/operator.toml" ]]; then
     local _gh _repo
-    _gh=$(grep -E '^operator_github' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
-    _repo=$(grep -E '^pmo_platform_repo_name' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | head -1 | awk -F= '{gsub(/[" ]/,"",$2); print $2}')
+    # Same two-part fold, same reason as the claude_workspace_root read above. Both
+    # keys are OPTIONAL and this function runs inside `fetch_population`, so without
+    # the tolerance an operator.toml that omits either one aborts the whole audit
+    # with exit 1 and no output — after the network reads have already been paid for,
+    # and with the documented "pmo-platform" fallback below rendered unreachable.
+    #
+    # The `local` declaration above is SEPARATE from these assignments on purpose,
+    # and that is what makes the tolerance load-bearing here: `local _gh=$(…)` is a
+    # declaration command whose own status masks the substitution's, so it would NOT
+    # abort; a bare `_gh=$(…)` is a simple command and does. Measured on bash 3.2,
+    # the shell this file's `#!/usr/bin/env bash` resolves to on the release host.
+    _gh=$(grep -m1 -E '^operator_github' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
+    _repo=$(grep -m1 -E '^pmo_platform_repo_name' "${HOME}/.config/pmo-platform/operator.toml" 2>/dev/null | awk -F= '{gsub(/[" ]/,"",$2); print $2}' || true)
     [[ -z "$_repo" ]] && _repo="pmo-platform"
     [[ -n "$_gh" ]] && REPO_SLUG="${_gh}/${_repo}"
   fi
@@ -668,6 +700,95 @@ print(v if isinstance(v, str) else json.dumps(v))
   _assert "report carries commit anchor" "1" "$(printf '%s' "$report" | grep -c 'Commit anchor' || true)"
   _assert "report carries denominator" "1" "$(printf '%s' "$report" | grep -c 'Denominator' || true)"
   _assert "report states it gates nothing" "1" "$(printf '%s' "$report" | grep -c 'audit gates nothing' || true)"
+
+  # 13. OPERATOR-CONFIG KEY-READ TOLERANCE — the class invariant, not the instance.
+  #     Every read of an OPTIONAL key out of operator.toml must tolerate that key
+  #     being ABSENT. Without the tolerance `grep` exits 1, `pipefail` carries that
+  #     status out of the command substitution, and the `set -euo pipefail` at the
+  #     top of this file aborts at LOAD time — before argument parsing, on EVERY
+  #     invocation including this --self-test — with exit 1 and no output at all.
+  #     All three sites in this file shipped that way.
+  #
+  #     WHOLE-SOURCE, and that is load-bearing rather than stylistic. Two of the
+  #     three subjects sit in the load-time preamble ABOVE this function and the
+  #     third inside resolve_repo_slug(), also above it; ~90 lines of production
+  #     code (arg parse, boundary check, dispatch) sit BELOW its closing brace. A
+  #     region-scoped parse would satisfy the floor and still be blind to all of it.
+  #
+  #     FIXTURES EXCLUDED BY CONSTRUCTION — no allowlist, no marker, no region cut.
+  #     The parse anchors on `_<name>=$(`, so a specimen held in a single-quoted
+  #     assignment cannot match (the character after `=` is a quote, not `$`), and
+  #     neither can any line of this arm (its locals carry no leading underscore).
+  #     K-3 asserts that invisibility rather than assuming it.
+  local kr_src kr_pop kr_tol kr_head kr_bad kr_spec kr_path kr_line kr_new kr_old
+  local kr_rc_new=0 kr_rc_old=0
+  kr_src="${BASH_SOURCE[0]}"
+  kr_pop="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' "$kr_src")"
+  kr_tol="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "|| true") {n++} END {print n+0}' "$kr_src")"
+  kr_head="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "head") {n++} END {print n+0}' "$kr_src")"
+
+  # (K-1) ANTI-VACUITY FLOOR, then the invariant. The floor is what stops a renamed
+  #       variable or a reformatted call site from emptying the population and
+  #       reporting clean.
+  #       It asserts UNCONDITIONALLY rather than only on breach, so a healthy run
+  #       leaves a visible witness that the floor was evaluated at all.
+  _assert "K-1 anti-vacuity — this file carries >=3 key-read sites (found ${kr_pop:-0})" "ok" "$([[ "${kr_pop:-0}" -ge 3 ]] && echo ok || echo vacuous)"
+  kr_bad="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && !index($0, "|| true") {printf "%d ", FNR}' "$kr_src")"
+  _assert "K-1 every operator.toml key read tolerates an ABSENT key (unguarded line(s): ${kr_bad:-none})" "${kr_pop:-0}" "${kr_tol:-0}"
+
+  # (K-2) CAPABILITY TO FAIL, both directions, on a constructed call site. Without
+  #       it K-1 is satisfied by a filter that calls everything tolerant, or by a
+  #       parse that recognises nothing at all.
+  kr_spec="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "|| true") {n++} END {print n+0}' <<<'  _z=$(grep -m1 -E "^k" f | awk -F= "{print}")')"
+  _assert "K-2 specificity — an UNGUARDED specimen is not counted tolerant" "0" "${kr_spec:-1}"
+  kr_spec="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' <<<'  _z=$(grep -m1 -E "^k" f | awk -F= "{print}")')"
+  _assert "K-2 sensitivity — the parse recognises a constructed call site" "1" "${kr_spec:-0}"
+
+  # (K-3) FIXTURE-EXCLUSION PROOF + the head-pipe reintroduction guard. The folded
+  #       `grep -m1` form is what keeps these lines out of the enforcing
+  #       `sigpipe-idiom` job, which scans the added-lines delta and lists `head`
+  #       among the short-circuiting readers it matches; reintroducing `| head -1`
+  #       would redden that gate and nothing here, absent this arm.
+  kr_spec="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") {n++} END {print n+0}' <<<"  local kr_x='  _z=\$(grep -m1 -E \"^k\" f | awk -F= \"{print}\")'")"
+  _assert "K-3 a single-quoted specimen is invisible to the parse" "0" "${kr_spec:-1}"
+  kr_spec="$(awk 'match($0, /^[ \t]*_[a-z_]+=\$\(/) && index($0, "grep") && index($0, "awk -F=") && index($0, "head") {n++} END {print n+0}' <<<'  _z=$(grep -E "^k" f | head -1 | awk -F= "{print}")')"
+  _assert "K-3 sensitivity — the head-pipe filter matches a head-piping specimen" "1" "${kr_spec:-0}"
+  _assert "K-3 no key read pipes into head" "0" "${kr_head:-0}"
+
+  # (K-4) THE BEHAVIOURAL DIFFERENTIAL — the arm that FAILS on the unpatched file.
+  #       K-1..K-3 are structural: they grade the text. This one RUNS the production
+  #       line, EXTRACTED from this file rather than retyped, against a config that
+  #       EXISTS, is READABLE and carries no keys — the exact state that aborted the
+  #       tool — and asserts it survives. Its paired arm strips the tolerance from
+  #       that same extracted line and asserts the SAME fixture still aborts. That
+  #       is the sensitivity control: without it a green K-4 cannot be told apart
+  #       from a fixture that never reproduced the defect.
+  #
+  #       THE FIXTURE IS `/dev/null`, not a temp tree, because this file's Hook
+  #       compatibility contract forbids temp files and any rm/rmdir/unlink. An
+  #       empty readable file is a faithful present-but-key-less operator.toml:
+  #       `[[ -r ]]` passes and `grep` exits 1. The sibling guards in
+  #       automated-closeout.sh and cleanup-orphan-state.sh use mktemp because
+  #       neither carries that constraint.
+  #
+  #       RUN IN A SEPARATE bash PROCESS, deliberately. `( set -e … ) || rc=$?` does
+  #       NOT observe a set -e abort on bash 3.2: the subshell inherits the
+  #       enclosing AND-OR list's -e suppression and an explicit `set -e` inside
+  #       does not restore it. Measured on both shapes before this arm was written.
+  kr_path='${HOME}/.config/pmo-platform/operator.toml'
+  kr_line="$(awk '!f && match($0, /^[ \t]*_gh=\$\(/) {print; f=1}' "$kr_src")"
+  if [[ -z "$kr_line" ]]; then
+    _assert "K-4 anti-vacuity — the production key-read line extracts from this file" "non-empty" "empty"
+  else
+    kr_new="${kr_line/$kr_path//dev/null}"
+    kr_old="${kr_new/ || true)/)}"
+    _assert "K-4 anti-vacuity — pointing the extracted line at the fixture changes it" "changed" "$([[ "$kr_new" != "$kr_line" ]] && echo changed || echo unchanged)"
+    _assert "K-4 anti-vacuity — stripping the tolerance changes the program" "changed" "$([[ "$kr_old" != "$kr_new" ]] && echo changed || echo unchanged)"
+    /bin/bash -c "$(printf 'set -euo pipefail\n%s\n[[ -z "${_gh:-}" ]] || exit 9\n' "$kr_new")" || kr_rc_new=$?
+    /bin/bash -c "$(printf 'set -euo pipefail\n%s\n' "$kr_old")" || kr_rc_old=$?
+    _assert "K-4 the shipped key read survives a present-but-key-less config" "0" "$kr_rc_new"
+    _assert "K-4 sensitivity — the same fixture ABORTS with the tolerance stripped" "aborts" "$([[ "$kr_rc_old" -ne 0 ]] && echo aborts || echo "survived(rc 0)")"
+  fi
 
   if [[ "$failures" -eq 0 ]]; then
     echo "audit-epic-rollup-close.sh --self-test: PASS (all classifier fixtures)" >&2

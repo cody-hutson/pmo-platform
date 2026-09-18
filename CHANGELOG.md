@@ -20,6 +20,29 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.64] - 2026-09-13
+
+A check that had failed eighteen runs in a row now passes while still reporting the same finding — fixed, not silenced.
+
+[Full notes](release/releases/notes/v4.64_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.64)
+
+## [v4.63] - 2026-09-11
+
+Close-out checks that reported success without proving anything now prove it, and the ones that still cannot are named rather than left to look green.
+
+[Full notes](release/releases/notes/v4.63_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.63)
+
+## [v4.62] - 2026-09-11
+
+A pack that declares a work-item kind and then fills in nothing for it is now findable, and the Kanban pull-limit gate is written out instead of left blank.
+
+[Full notes](release/releases/notes/v4.62_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.62)
+## [v4.61] - 2026-09-11
+
+Four governance documents that described superseded behaviour now name the rule or the live mechanism they depend on.
+
+[Full notes](release/releases/notes/v4.61_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.61)
+
 ## [v4.60] - 2026-09-06
 
 Deploy checks that reported success while verifying nothing now have to prove they looked, and 662 unreadable log records were recovered.

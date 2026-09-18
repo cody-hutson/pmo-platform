@@ -102,6 +102,7 @@ ADR-187 (`pack-default-is-the-declared-kind-set`) → **ADR-190** by `release/to
 ADR-191 (`allowlist-form-set-four-canonical-fifth-form-is-a-widening`) → **ADR-192** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 191; the record's Status section carries the provenance note.
 ADR-191 (`advisory-emit-asserts-only-its-own-scope`) → **ADR-193** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 191; the record's Status section carries the provenance note.
 ADR-192 (`deploy-detection-is-a-ground-truth-comparison`) → **ADR-194** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 192; the record's Status section carries the provenance note.
+ADR-195 (`action-item-status-classified-by-membership`) → **ADR-197** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 195; the record's Status section carries the provenance note.
 ADR-195 (`l3-judgment-criteria-evaluability`) → **ADR-197** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 195; the record's Status section carries the provenance note.
 ADR-196 (`per-kind-authoring-bar-is-a-reading-not-a-carrier`) → **ADR-198** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 196; the record's Status section carries the provenance note.
 

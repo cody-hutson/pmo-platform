@@ -15,8 +15,14 @@ set -uo pipefail
 #   transcription) and exercises it, so the doc IS the unit under test.
 #
 # GROUPS
-#   (G1) 4-VALUE COVERAGE — the gate's decision table has four states
-#        (NOT-RECORDED / EMPTY-LEDGER / RESOLVED / UNRESOLVED). Assert each.
+#   (G1) 5-VALUE COVERAGE — the gate's decision table has five states
+#        (NOT-RECORDED / EMPTY-LEDGER / RESOLVED / UNRESOLVED /
+#        UNCLASSIFIABLE). Assert each. The fifth exists because the predicate
+#        classifies `status` by MEMBERSHIP in a recognised set — the § 2.3 enum
+#        plus the two § 2.1a status aliases, case-folded — rather than by a
+#        two-value comparison whose `else` branch meant `terminal`. That `else`
+#        counted a typo, a case variant, a foreign vocabulary and an
+#        out-of-range field as RESOLVED, which is a silent PASS of a HARD GATE.
 #   (G2) ESCAPED-PIPE SAFETY — the regression this suite was written for. A
 #        `\|` in any free-text column ahead of `status` must not shift the
 #        column read. Includes the single-row silent-pass case, the multi-row
@@ -119,7 +125,7 @@ expect() {  # expect <label> <DIR> <state> <total> <unres>
 }
 
 # ---------------------------------------------------------------------------
-echo "G1 — 4-value decision-table coverage"
+echo "G1 — 5-value decision-table coverage"
 # ---------------------------------------------------------------------------
 expect "state 1: ledger absent -> NOT-RECORDED" "$WORK/no-such-dir" NOT-RECORDED 0 0
 
@@ -150,6 +156,71 @@ $(row AI-002 'plain' in-flight)
 EOF
 )
 expect "state 4: one in-flight row -> UNRESOLVED" "$D" UNRESOLVED 2 1
+
+# State 5. Four arms, because "the residue blocks" is only one of the four things
+# a membership classifier has to get right, and the other three are each a
+# distinct way to be wrong while passing the first.
+D=$(mkfix g1-unclassifiable <<EOF
+$(row AI-001 'plain' bogus-status)
+$(row AI-002 'plain' done)
+EOF
+)
+expect "state 5: a value the enum does not admit -> UNCLASSIFIABLE" "$D" UNCLASSIFIABLE 2 0
+
+# NORMALISES, does not reject. Without this arm a fold-and-reject implementation
+# passes the arm above — it blocks, just with the wrong state and the wrong
+# operator remedy.
+D=$(mkfix g1-upper <<EOF
+$(row AI-001 'plain' OPEN)
+$(row AI-002 'plain' Done)
+EOF
+)
+expect "case variants fold to the enum -> UNRESOLVED, not UNCLASSIFIABLE" "$D" UNRESOLVED 2 1
+
+# The § 2.1a status aliases stay ADMITTED. Live ledgers carry hundreds of
+# `resolved` rows; a recognised set narrowed to the § 2.3 enum would block every
+# legacy re-run and contradict the standard this gate enforces.
+D=$(mkfix g1-alias <<EOF
+$(row AI-001 'plain' resolved)
+$(row AI-002 'plain' withdrawn)
+EOF
+)
+expect "the two § 2.1a status aliases read as terminal -> RESOLVED" "$D" RESOLVED 2 0
+
+# PRECEDENCE. A real ledger carries both classes — measured, 3 of the 8
+# operator-instance ledgers with an unadmitted status also carry open rows. The
+# open rows win the STATE, because the state selects the operator's remedy.
+D=$(mkfix g1-both <<EOF
+$(row AI-001 'plain' open)
+$(row AI-002 'plain' bogus-status)
+EOF
+)
+expect "open + unclassifiable in one ledger -> UNRESOLVED wins" "$D" UNRESOLVED 2 1
+
+# THE ARITY CLASS — written literally, because row() always emits the conformant
+# 13 columns and this is precisely the non-conformant case. Two mechanisms, and
+# describing only one of them writes a test that never reaches the other.
+#
+#   arity <= 10 : there is no field 11, so $11 is EMPTY. This is the shape
+#                 witnessed live: rows at arities 7 and 8 under a 13-column
+#                 header, which the pre-fix predicate read as RESOLVED.
+#   arity 11    : the row-terminating " |" never matches the " | " separator, so
+#                 it stays glued to the LAST field and $11 reads `open |` —
+#                 NON-empty, and still unreadable, because field 11 of an
+#                 11-column row is not the status column of a 13-column schema.
+D=$(mkfix g1-shortrow <<'EOF'
+| AI-001 | 2026-07-27T00:00:00Z | Stage 5 | #4064 | reminder | resolved | did it |
+| AI-002 | 2026-07-27T00:00:00Z | Stage 5 | #4064 | reminder | open | not yet | still |
+EOF
+)
+expect "short rows: no field 11 at all -> UNCLASSIFIABLE" "$D" UNCLASSIFIABLE 2 0
+
+D=$(mkfix g1-arity11 <<'EOF'
+| AI-001 | 2026-07-27T00:00:00Z | Stage 5 | #4064 | reminder | hub | a | event | after Stage 5 | file:x.md | done |
+| AI-002 | 2026-07-27T00:00:00Z | Stage 5 | #4064 | reminder | hub | b | event | after Stage 5 | file:x.md | open |
+EOF
+)
+expect "arity 11: \$11 carries the glued row pipe -> UNCLASSIFIABLE" "$D" UNCLASSIFIABLE 2 0
 
 # ---------------------------------------------------------------------------
 echo
@@ -239,6 +310,38 @@ if grep -qE "awk -F' \\\\\| '" "$PRED"; then
   bad "predicate uses -F' \\| ' — awk reduces this to ERE alternation; use ' [|] '"
 else
   ok "predicate avoids the unsafe -F' \\| ' spelling"
+fi
+
+# FORM ASSERTIONS ON THE MEMBERSHIP CLASSIFIER, the same shape as the FS
+# assertions above. G1's value arms grade behaviour on fixtures; these grade the
+# two constructs the behaviour rests on, so a later refactor that quietly drops
+# either one reddens here rather than at the next real close.
+if grep -q 'tolower(' "$PRED"; then
+  ok "shipped predicate case-folds the status before comparing"
+else
+  bad "shipped predicate no longer calls tolower( — OPEN and open can render opposite verdicts again"
+fi
+if grep -q 'STATE=UNCLASSIFIABLE' "$PRED"; then
+  ok "shipped predicate carries the unclassifiable state (the residue is not an else)"
+else
+  bad "shipped predicate has no UNCLASSIFIABLE branch — the residue has gone back to being counted resolved"
+fi
+# NEGATIVE CONTROL for both: the pre-fix comparison had NEITHER construct, and a
+# grep that cannot tell the two forms apart would report clean on the defective
+# predicate. Assert the same matcher rejects the known-bad form.
+#
+# A HERE-STRING, not a pipe. This file runs under `pipefail`, so feeding the
+# fixture through `printf … | grep -q` inverts this very control: on the day the
+# matcher DOES match — the failure this arm exists to catch — grep short-circuits,
+# the writer takes a broken pipe, the pipeline reports non-zero, and the `if`
+# falls to the else branch and prints the reassuring CONTROL pass. The safe form
+# is the one the two arms above already use: give grep its input directly.
+OLDFORM='      $1 ~ /^\| *AI-[0-9]+ *$/ { t++; gsub(/ /,"",$11);
+                                 if ($11=="open" || $11=="in-flight") u++ }'
+if grep -q 'tolower(' <<<"$OLDFORM"; then
+  bad "the tolower( matcher also matches the pre-fix predicate; the arm above proves nothing"
+else
+  ok "CONTROL the tolower( matcher rejects the pre-fix comparison form"
 fi
 
 # ---------------------------------------------------------------------------
