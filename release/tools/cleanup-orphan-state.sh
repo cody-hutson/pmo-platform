@@ -279,11 +279,50 @@ workspace_boundary_check() {
   esac
 }
 
+# Reads the operator protect-list into PROTECT_PATTERNS, one glob pattern per
+# entry. Two hardening clauses sit between the read and the append, because a
+# pattern this loader accepts is matched by is_protected() with an UNQUOTED
+# `case "$branch" in $p)` — so a malformed entry is not rejected, it silently
+# becomes a glob that matches no branch and protects nothing.
+#
+#  (1) STRIP a trailing inline comment, ANCHORED ON WHITESPACE-then-`#`. The
+#      skip-guard below only catches a line whose FIRST non-whitespace char is
+#      `#`; without this clause `release/x      # why` loads verbatim and is
+#      inert. The anchor is load-bearing and is NOT a bare `#`: `#` is a legal
+#      refname character and `feature/` + `#` + `N-description` is this repo's
+#      documented branch convention (core/rules/git-workflow.md § Branching
+#      Convention), so a `${line%%#*}` strip would unprotect exactly those
+#      branches — the same silent failure, relocated. `[^#]*` forbids crossing
+#      an earlier `#`, so the strip binds at the FIRST ` #` and a name whose
+#      `#` carries no preceding whitespace never enters the branch at all.
+#
+#  (2) WARN on a pattern that is PROVABLY inert. Whitespace is illegal in a
+#      refname (`git check-ref-format`), so a pattern still containing internal
+#      whitespace after the strip and trim can match no branch that can exist.
+#      That makes the report exact rather than heuristic — it has no false
+#      positives, where a warning keyed on a bare `#` would fire on every
+#      legitimate entry following the convention above. The entry is still
+#      appended: nothing is silently dropped, and the operator is told where.
+#
+# selftest_protect_list_parse() asserts both clauses plus the unchanged handling
+# of the own-line-comment form, and carries the anti-vacuity arms that keep a
+# green result from being a loader that matches everything or warns on everything.
 load_protect_list() {
   PROTECT_PATTERNS=()
   if [[ -f "$PROTECT_LIST" ]]; then
+    local line lineno=0
     while IFS= read -r line; do
+      lineno=$((lineno + 1))
       [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+      if [[ "$line" =~ ^([^#]*[^[:space:]#])[[:space:]]+# ]]; then
+        line="${BASH_REMATCH[1]}"
+      fi
+      line="${line#"${line%%[![:space:]]*}"}"
+      line="${line%"${line##*[![:space:]]}"}"
+      [[ -z "$line" ]] && continue
+      if [[ "$line" =~ [[:space:]] ]]; then
+        echo "WARN: ${PROTECT_LIST} line ${lineno}: pattern '${line}' contains whitespace, which is illegal in a branch name — this entry can never match and protects nothing" >&2
+      fi
       PROTECT_PATTERNS+=("$line")
     done < "$PROTECT_LIST"
   fi
@@ -2275,7 +2314,7 @@ verify_apply() {
 # never exceed its denominator. Every recording site either returns immediately or
 # returns after its cleanup, and the only two sites that do not end their check
 # (selftest_verify_and_prune) are mutually exclusive branches of a single if/else.
-SELFTEST_CHECK_COUNT=20
+SELFTEST_CHECK_COUNT=21
 SELFTEST_SKIPS=()
 
 # Records a check-level SKIP and emits the historical message shape VERBATIM:
@@ -3956,6 +3995,119 @@ selftest_key_read_tolerance() {
   return 0
 }
 
+# ─── Protect-list parser ─────────────────────────────────────────────────────
+#
+# load_protect_list() reads each non-comment line VERBATIM into PROTECT_PATTERNS,
+# and is_protected() matches with an UNQUOTED `case "$branch" in $p)`. An entry
+# carrying a TRAILING inline comment — the form the managed header's own example
+# block modelled — therefore becomes the glob pattern `release/x      # why`.
+# That is valid glob syntax, so nothing rejects it; it simply matches no branch.
+# No error, no warning, exit 0, and the branch reads UNPROTECTED. Observed on
+# three in-flight release branches, which were saved only by the independent
+# `branch not fully merged` guard — had their commits already landed on main,
+# approved protection would have silently become removal.
+#
+# The strip is anchored on WHITESPACE-then-`#`, never on a bare `#`. `#` is a
+# LEGAL refname character and the `feature/` + `#` + `N-description` form is this
+# repo's own documented branch convention (core/rules/git-workflow.md § Branching
+# Convention), so a `${line%%#*}` strip would silently unprotect exactly those
+# branches — the same failure class at a new site. PL-3 is the arm holding that
+# line, and it fails against the naive strip.
+#
+# Residual inertness is REPORTED rather than guessed at. Whitespace is ILLEGAL in
+# a refname (`git check-ref-format`), so a pattern still containing internal
+# whitespace after the strip can never match any branch and is provably inert —
+# a WARN there has zero false positives, where a WARN on a bare `#` would fire on
+# every legitimate feature-branch entry that follows the convention above.
+selftest_protect_list_parse() {
+  local fail=0 fx saved_list warn
+  local -a saved_patterns
+  saved_list="$PROTECT_LIST"
+  saved_patterns=("${PROTECT_PATTERNS[@]:-}")
+
+  fx="$(mktemp -d -t protectlist-selftest.XXXXXX)" || {
+    selftest_skip "protect-list parse check" "could not create fixture dir"
+    return 0
+  }
+
+  # (PL-1) THE DEFECT ARM — an entry with a trailing inline comment must protect
+  #        its branch. Fails against the verbatim-read parser.
+  printf 'release/pl-fixture      # why this is protected\n' > "$fx/inline.txt"
+  PROTECT_LIST="$fx/inline.txt"
+  load_protect_list 2>/dev/null
+  if ! is_protected "release/pl-fixture"; then
+    echo "self-test: protect-list parse FAILED — an entry with a trailing inline comment did not protect its branch; the pattern loaded verbatim as '${PROTECT_PATTERNS[0]:-}' and can match nothing (PL-1)" >&2
+    fail=1
+  fi
+
+  # (PL-2) THE REGRESSION ARM — a comment on its own line above a bare pattern is
+  #        the documented form and must stay BYTE-IDENTICAL, pattern text included.
+  printf '# why this is protected\nrelease/pl-fixture\n' > "$fx/ownline.txt"
+  PROTECT_LIST="$fx/ownline.txt"
+  load_protect_list 2>/dev/null
+  if [[ "${#PROTECT_PATTERNS[@]}" -ne 1 || "${PROTECT_PATTERNS[0]:-}" != "release/pl-fixture" ]]; then
+    echo "self-test: protect-list parse FAILED — the own-line-comment form loaded ${#PROTECT_PATTERNS[@]} pattern(s) as '${PROTECT_PATTERNS[0]:-}', not the single verbatim 'release/pl-fixture'; existing behaviour regressed (PL-2)" >&2
+    fail=1
+  fi
+  if ! is_protected "release/pl-fixture"; then
+    echo "self-test: protect-list parse FAILED — the own-line-comment form did not protect its branch; existing behaviour regressed (PL-2)" >&2
+    fail=1
+  fi
+
+  # (PL-3) THE CONVENTION ARM — `#` is legal in a refname and this repo's own
+  #        branch convention uses it. A strip anchored on the bare `#` character
+  #        rather than on whitespace-then-`#` unprotects these, which is the same
+  #        silent failure this check exists to close, relocated.
+  printf 'feature/#123-pl-fixture\n' > "$fx/hashname.txt"
+  PROTECT_LIST="$fx/hashname.txt"
+  load_protect_list 2>/dev/null
+  if ! is_protected "feature/#123-pl-fixture"; then
+    echo "self-test: protect-list parse FAILED — a branch name containing a literal '#' with no preceding whitespace lost its protection; the comment strip is anchored on the bare '#' rather than on whitespace-then-'#' (PL-3)" >&2
+    fail=1
+  fi
+
+  # (PL-4) THE LOUD-RESIDUAL ARM — whitespace is illegal in a refname, so a pattern
+  #        that still contains internal whitespace after the strip is PROVABLY inert
+  #        and must be reported with its line number rather than accepted in silence.
+  printf '# leading comment line\nrelease/pl fixture with spaces\n' > "$fx/inert.txt"
+  PROTECT_LIST="$fx/inert.txt"
+  load_protect_list 2>"$fx/warn.txt"
+  warn="$(cat "$fx/warn.txt" 2>/dev/null || true)"
+  if ! grep -q "WARN" <<<"$warn"; then
+    echo "self-test: protect-list parse FAILED — a pattern containing internal whitespace can never match a refname, yet load_protect_list emitted no WARN; the entry is inert in silence (PL-4)" >&2
+    fail=1
+  elif ! grep -q "2" <<<"$warn"; then
+    echo "self-test: protect-list parse FAILED — the WARN does not name line 2, where the inert entry sits; an operator cannot locate it (PL-4)" >&2
+    fail=1
+  fi
+
+  # (PL-5) THE SPECIFICITY ARM. Without it, PL-1..PL-3 are all satisfied by an
+  #        is_protected() that returns 0 unconditionally, and their green is a
+  #        broken probe rather than evidence.
+  PROTECT_LIST="$fx/ownline.txt"
+  load_protect_list 2>/dev/null
+  if is_protected "release/pl-not-listed"; then
+    echo "self-test: protect-list parse FAILED — a branch absent from the protect-list read PROTECTED; is_protected() matches unconditionally, so the PL-1..PL-3 results are uninformative (PL-5)" >&2
+    fail=1
+  fi
+
+  # (PL-6) THE CONTROL ARM for PL-4: the same parse over a clean list must emit NO
+  #        WARN, or PL-4 is satisfied by a parser that warns on every line.
+  load_protect_list 2>"$fx/warn2.txt"
+  if [[ -s "$fx/warn2.txt" ]]; then
+    echo "self-test: protect-list parse FAILED — a clean protect-list emitted output on stderr ('$(cat "$fx/warn2.txt")'); PL-4's WARN is unconditional and carries no signal (PL-6)" >&2
+    fail=1
+  fi
+
+  rm -rf "$fx" 2>/dev/null || true
+  PROTECT_LIST="$saved_list"
+  PROTECT_PATTERNS=("${saved_patterns[@]:-}")
+
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: protect-list parse check PASS — PL-1 trailing inline comment protects / PL-2 own-line comment byte-identical / PL-3 literal '#' in a refname survives the strip / PL-4 provably-inert pattern WARNs with its line number / PL-5 an unlisted branch still reads unprotected / PL-6 a clean list warns nothing" >&2
+  return 0
+}
+
 self_test() {
   echo "self-test: running detection logic against current workspace (read-only)..." >&2
   workspace_boundary_check
@@ -4003,6 +4155,8 @@ self_test() {
   selftest_failure_line_split
   echo "self-test: exercising --help protective-guarantee surface (--force / SELF / --self-test) (#669)..." >&2
   selftest_help_surface
+  echo "self-test: exercising protect-list parser (inline-comment strip + inert-pattern WARN)..." >&2
+  selftest_protect_list_parse
   selftest_skip_ledger
   echo "self-test: PASS" >&2
   exit 0
