@@ -22,28 +22,31 @@
 
 | Field | Value |
 |---|---|
-| Status | **RUN 1 COMPLETE** — six seams measured and graded `partial`, one `uninstrumented`; 10 findings, 4 systemic patterns |
+| Status | **RUN 2 COMPLETE (independent re-run of the same window)** — six seams `measured` and graded `partial`, one `uninstrumented`; 8 findings, 3 systemic patterns |
 | Audit date (UTC) | 2026-09-18 |
 | Resolved window — `from_release` | v4.60 (`deploy-checks-hardening-batch`) |
 | Resolved window — `from` merge anchor | `aea98ac15f84813a847ffcc666d3926fa7f23c00` |
 | Resolved window — `to_release` | v4.65 (`deploy-tools-and-tests-batch`) |
 | Resolved window — `to` merge anchor | `0c4f0a4d6210bff9413c2ff1ab2f8bd1d438a2da` |
-| Releases spanned | 5 |
-| Decision-health posture | **Observable but incompletely recorded.** Every seam the platform can see was measurable over this window, and none of the six reached full capture: each carries at least one occasion the window owed and no row evidences. One seam is a standing blind spot. |
-| `coverage_index` | **0/7 = 0.000** (counts only `measured` + `captured` seams) |
-| `instrumentation_ceiling` | **6/7 = 0.857** (every seam with a declared producer; no window term) |
+| Releases spanned | 5 (v4.61, v4.62, v4.63, v4.64, v4.65 — ordered by merge anchor, verified by ancestry with a reverse control arm) |
+| Decision-health posture | **Observable, incompletely recorded, and the gap concentrates at one gate.** Every seam the platform can see was measurable over this window and none reached full capture. The Stage-9 GO gate is the locus of the window's highest-severity finding and of its largest systemic pattern: v4.65 carries no gate-verdict row at all, and no release in the window carries a recommendation-choice delta at any GO firing. One seam is a standing blind spot. |
+| `coverage_index` | **0/7 = 0.000** (counts only `measured` + `captured` seams; a lower bound on decision-observability, not a health score) |
+| `instrumentation_ceiling` | **6/7 ≈ 0.857** (every seam with a declared producer; no window term) |
 | Coverage distribution — `captured` | 0 |
 | Coverage distribution — `partial` | 6 |
-| Coverage distribution — `unexercised` | 0 |
-| Coverage distribution — `undecidable` | 0 |
-| Coverage distribution — `uninstrumented` | 1 (DS7) |
-| Index re-based this run? | **YES** — first run under this rubric; no prior identifier set exists to trend against, so the index is rendered `re-based` rather than compared |
+| Coverage distribution — `unexercised` | 0 — *quiet*; none occurred |
+| Coverage distribution — `undecidable` | 0 — *blind for this window only*; none occurred |
+| Coverage distribution — `uninstrumented` | 1 (DS7) — *standing blind*; carried by the residual-risk register |
+| Classification counts | `unrecorded-decision` 3 · `malformed-record` 2 · `non-terminal-disposition` 1 · `absent-evidence-surface` 1 · `oracle-coverage-gap` 1 |
+| Undeclared-producer detection | neither arm fired — per-seam arm not fired (the only `¬instrumented` seam returned zero rows); aggregate arm not fired (0.000 ≯ 0.857) |
+| Index re-based this run? | **NO** — the seam-identifier set `{DS1…DS7}` is unchanged against the prior pin, so § 3.3's guard does not fire. (The prior run rendered `re-based` under § 3.4's one-time first-run clause, which does not reach this run.) |
 | Oracle pin — roster membership | `build-reviewer`, `implementation-planner`, `pipeline-triage`, `pmo-architect`, `pmo-data-engineer`, `pmo-devops-sre`, `pmo-principal-engineer`, `pmo-qa-lead`, `pmo-release-manager`, `pmo-skill-editor`, `pmo-skill-refiner`, `pmo-software-engineer`, `release-executor`, `release-hub`, `release-planner`, `roadmap-curator` |
-| Oracle pin — per-source path · content hash · entry count · entry-title set | recorded in full in the run folder's `SUMMARY.md` § 2; per-source hashes and counts in the table below |
+| Oracle pin — per-source path · content hash · entry count · entry-title set | entry-title sets recorded in full in the run folder's `SUMMARY.md` § Oracle derivation and pin; per-source hashes and counts in the table below |
 | Oracle pin — derivation date | 2026-09-18 |
-| Roster-delta notice | none computable — no prior pin existed (the surface read `AWAITING FIRST RUN`) |
-| Evidence-bar pass rate | 10 of 10 findings sampled |
-| Systemic patterns | 4 |
+| Oracle pin — derivation control | bounding control **PASS** on all 16 sources (section-scoped count strictly < whole-file heading count everywhere; zero degenerate) |
+| Roster-delta notice | **no delta** — membership identical to the prior pin, none added, none removed; per-source content hashes also identical, so the oracle has not drifted in content |
+| Evidence-bar pass rate | **8 of 8 (100%)**; zero unpinnable observations |
+| Systemic patterns | 3 — the Stage-9 gate recording nothing; recovery recorded at the symptom locus not the election locus; the Stage-13 Surface-1 deferral taken on every release |
 | Latest analysis folder | `analysis/decision-audit-2026-09-18/` (operator-instance, git-ignored) |
 
 ### Oracle pin — per source
@@ -69,15 +72,19 @@
 
 ### Per-seam result
 
-| Seam | coverage state | grade |
-|---|---|---|
-| **DS1** | `measured` | partial |
-| **DS2** | `measured` | partial |
-| **DS3** | `measured` | partial |
-| **DS4** | `measured` | partial |
-| **DS5** | `measured` | partial |
-| **DS6** | `measured` | partial |
-| **DS7** | `uninstrumented` | — (no grade — a non-graded state is never a passing grade) |
+| Seam | `rows(s,W)` | `occasions(s,W)` | coverage state | grade |
+|---|---|---|---|---|
+| **DS1** | 218 | ≥ 10 | `measured` | partial |
+| **DS2** | 22 | ≥ 5 | `measured` | partial |
+| **DS3** | 80 events + 15 ledger | ≥ 15 | `measured` | partial |
+| **DS4** | 0 | 4 | `measured` | partial |
+| **DS5** | 2 | 4 | `measured` | partial |
+| **DS6** | 3 | 3 | `measured` | partial |
+| **DS7** | 0 | — | `uninstrumented` | — (no grade — a non-graded state is never a passing grade) |
+
+**DS4 is the instrumented-owed-and-silent case**, routed to `measured`/`partial` by § 2.1's first
+predicate rather than to `unexercised` or `uninstrumented`, so a live emission gap reads as a shortfall
+rather than as an absence.
 
 ## How to read this surface
 
