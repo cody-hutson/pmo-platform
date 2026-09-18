@@ -66,7 +66,7 @@ entering the block and escaping every seam's denominator unnoticed (§4.8).
 |---|---|---|---|---|---|
 | **DS1** | **Routing-point decision** — a decision rendered at a hub routing point is recorded with its outcome | operator-gate ∪ deterministic-rule · operator-in-loop | event log · `decision`/\* less the subtypes DS3, DS4 and DS6 claim | **select:** `event_type=decision` ∧ `event_subtype` ∉ (the DS3, DS4 and DS6 selectors) · **denom:** the shared rule over every matched row, with no occasion class beyond it | the `EMISSION-CONTRACT` block, the rows whose `event_type` · `event_subtype` match this seam's selector, keyed by each row's `gate` value; plus the per-stage Audit-Trail-Capture tables for the `decision` subtypes the block delegates to a stage spec |
 | **DS2** | **Gate verdict** — a stage or release gate's verdict is recorded with its evaluation | composed-specialist ∪ operator-gate · operator-in-loop at the release gate | event log · `gate-outcome`/\* | **select:** `event_type=gate-outcome` · **denom:** the shared rule, plus one occasion per stage-gate the release actually traversed whose stage spec assigns it a `gate-outcome` row | the `EMISSION-CONTRACT` block, rows matching this seam's selector, keyed by `gate`; the per-stage Audit-Trail-Capture tables; [`core/schemas/gate-evaluation-spec.md`](../../../schemas/gate-evaluation-spec.md) § the verdict contract |
-| **DS3** | **Finding raise-and-disposition** — every finding raised is tiered and resolved to a sink, and the disposition is recorded | operator-gate ∪ composed-specialist · operator-in-loop | event log · `escalation`/\*, `scope-change`/\*, `iteration`/\*, `decision`/ the action-item lifecycle subtypes together with `queued-pending-approval`, `approval-deferred` and `empirical-verification-finding`; **and** the hub-state action-item ledger for the window's milestones | **select:** the union of those loci, plus the ledger's action-item rows · **denom:** the shared rule, plus one occasion per tiered finding the window's deviation logs and stage sub-tasks record | the `EMISSION-CONTRACT` block, rows matching this seam's selector, keyed by `gate`; [`core/standards/hub-action-tracking.md`](../../../standards/hub-action-tracking.md) § the action-item scan cadence and its close-time attestation gate; [`release/skills/release-hub/SKILL.md`](../../../../release/skills/release-hub/SKILL.md) § the sink-disposition invariant this seam measures |
+| **DS3** | **Finding raise-and-disposition** — every finding raised is tiered and resolved to a sink, and the disposition is recorded | operator-gate ∪ composed-specialist · operator-in-loop | event log · `escalation`/\*, `scope-change`/\*, `iteration`/\*, `decision`/ the action-item lifecycle subtypes together with `queued-pending-approval`, `approval-deferred` and `empirical-verification-finding`; **and** the hub-state action-item ledger for the window's milestones | **select:** the union of those loci, **less any row whose payload carries the sweep zero-state token** (see below), plus the ledger's action-item rows · **denom:** the shared rule, plus one occasion per tiered finding the window's deviation logs and stage sub-tasks record | the `EMISSION-CONTRACT` block, rows matching this seam's selector, keyed by `gate`; [`core/standards/hub-action-tracking.md`](../../../standards/hub-action-tracking.md) § the action-item scan cadence and its close-time attestation gate; [`release/skills/release-hub/SKILL.md`](../../../../release/skills/release-hub/SKILL.md) § the sink-disposition invariant this seam measures |
 | **DS4** | **Recommendation-choice delta** — the agent's prior recommendation is recorded against the rendered choice, the zero-delta case included | operator-gate · operator-in-loop | event log · `decision`/`recommendation-choice-delta` | **select:** `event_type=decision` ∧ `event_subtype=recommendation-choice-delta` · **denom:** the shared rule over every matched row, with **no occasion class beyond it** — one occasion per firing of the matched `recommendation-choice` gate, resolved by that gate's own firing test, **whatever `via:` value the firing carries**. A `via:session-retro` row is **alternate evidence for a firing the live path missed, never an additional occasion**: it is the same firing reached by a second route, so counting it again would let one decision moment owe two rows | the `recommendation-choice-delta` payload convention in [`release/references/standards/pipeline-event-log-schema.md`](../../../../release/references/standards/pipeline-event-log-schema.md), keyed by the subtype name — its `via:` provenance enum and its rule that the aligned state is recorded explicitly and never silently omitted; plus the `EMISSION-CONTRACT` block rows matching this seam's selector, keyed by `gate` |
 | **DS5** | **Self-repair election** — each retry, escalate or rollback is recorded at the moment it is elected | deterministic-rule · **no operator in the loop** (rollback excepted — operator-authorized) | event log · `self-repair`/\* | **select:** `event_type=self-repair` · **denom:** the shared rule, plus one occasion per recovery the window's own record independently evidences — a suite failure routed back to Engineering, an escalation row, an iteration pass beyond the first, a recorded spoke re-spawn | the `EMISSION-CONTRACT` block, rows matching this seam's selector, keyed by `gate`; [`core/disciplines/autonomous-execution-model.md`](../../../disciplines/autonomous-execution-model.md) § Emission — the governing rule that matched row delegates to, which is where the `escalate` and `rollback` loci are named |
 | **DS6** | **Delegation fork** — each spawn-versus-hub-direct merit fork is recorded with the merit condition that fired | deterministic-rule · **no operator in the loop** | event log · `decision`/`delegation` | **select:** `event_type=decision` ∧ `event_subtype=delegation` · **denom:** the shared rule, restricted to the **independently-evidenced** merit forks. Routine template routing is **not** in the denominator — silence there is correct by rule, not a shortfall | the `EMISSION-CONTRACT` block, the row matching this seam's selector, keyed by `gate`; [`core/disciplines/decision-discipline.md`](../../../disciplines/decision-discipline.md) § the delegation merit test and its reviewability clause, which is the rule that decides which forks are owed a row |
@@ -75,11 +75,33 @@ entering the block and escaping every seam's denominator unnoticed (§4.8).
 **Totality and disjointness — stated so they can be falsified.** Every decision-bearing
 `(event_type · event_subtype)` the schema enum carries belongs to **exactly one** row above.
 Disjointness holds by the admission predicate's third conjunct (§4.6) and is checkable by
-intersecting the seven selector sets pairwise. Totality holds because DS1's selector is a
+intersecting the rows' selector sets pairwise. Totality holds because DS1's selector is a
 **complement**: it claims every `decision` subtype the other rows do not, so a subtype added
 to the schema lands in DS1 rather than falling through unmeasured. Both are stated as
-machine-checkable assertions rather than as prose judgments, and §4.8 specifies the fixture
-family that is required to exercise them.
+machine-checkable assertions rather than as prose judgments.
+
+**The fixture family that would exercise them is required and not yet present, and this
+paragraph says so rather than pointing at a family that tests something else.** §4.8 specifies
+a **source-completeness** family — the union of the seams' matched rows equals the block parsed
+between its delimiters — which is a genuinely different property: a table can resolve every row
+the block carries and still leave a schema locus claimed by no row (a totality failure) or
+claimed by two (a disjointness failure), because the block and the schema enum are different
+populations. The assertions above are therefore **checkable but unchecked**. Recording that,
+rather than citing §4.8's family as though it covered them, is the same discipline §4.8 applies
+to its own absent family: an obligation named and marked absent stays countable, while one
+asserted closed by a pointer to the wrong control is invisible.
+
+**DS3's sweep zero-state exclusion, and why the seam would otherwise read false-clean.** The
+action-item lifecycle's open transition and the commitment sweep's **zero-state** ride the same
+locus: the governing standard routes a sweep that opened nothing to a row on the *same* subtype
+a real open transition uses, distinguished only by a payload token, and says in terms that such
+a row *"is the sweep zero-state and not a T1 transition — it opens no action item"*. A selector
+reading the lifecycle by subtype alone therefore pulls both, and the zero-state rows would enter
+`rows(s,W)` as though findings had been raised and dispositioned. That is a **false-clean rather
+than a miscount**: the seam's numerator fills with rows recording that nothing was owed, and a
+window in which real findings went unrecorded could still grade `captured`. The exclusion is
+stated on the selector because the distinction is a property of the payload, not of the locus —
+the same reading the release's own close-out classifier applies to these rows.
 
 **Why DS1 is one seam rather than two.** The operator-rendered routing decisions and the hub's
 rule-determined recorded determinations share the **same** locus, `decision`/`d-class`, and the
@@ -457,8 +479,19 @@ the block by key removes the hand-copy; it does not by itself prove the resoluti
 so the arm that keeps this closed is a fixture family that **parses the block between its
 delimiters**, asserts the union of the seams' matched rows **equals** the parsed row set,
 asserts the same for the provenance enum against the payload convention, and carries a
-**negative control** in which a row deleted from a copy of the block must make the family fail.
+**negative control** in which an **orphan row** — a row whose locus matches no seam's selector,
+appended to a copy of the block — must make the family fail.
 A parser for the block already exists and is self-tested, so the family is cheap to add.
+
+**Why the control is an appended orphan rather than a deleted row, stated because the deletion
+form is the one an author reaches for first.** Deleting a row from a copy of the block does not
+make the equality fail, and the reason is this section's own mechanism working as designed: the
+seams resolve their matched rows **from the block at run time**, so a deleted row leaves both
+sides of the equality at once and the assertion still holds. Measured on the block as it stands,
+the deletion form fires on **none** of the rows it can be applied to — a control that cannot
+fail, which is precisely the no-op §4.9 warns about. An orphan row breaks the equality in the
+direction the assertion is about: the block carries an obligation, and no seam's denominator
+claims it.
 
 **Until that family lands this section states an obligation rather than a shipped control, and
 it says so deliberately.** The distinction is the whole subject of §4.9: a control that reads as

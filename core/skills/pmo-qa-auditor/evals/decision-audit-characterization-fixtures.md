@@ -223,9 +223,19 @@ measurement gap and a measured zero.
 
 ## Family CEIL — the ceiling term (deterministic; exact)
 
-### F-CEIL-01 — a blind class present → index below ceiling
+### F-CEIL-01 — a blind class present → both terms render below full
 - **Input:** a distribution carrying a seam with no declared writer.
-- **Expected output:** `coverage_index < instrumentation_ceiling`.
+- **Expected output:** the ceiling renders **below full**, and the index **cannot reach full**:
+  `coverage_index ≤ instrumentation_ceiling`, and `instrumentation_ceiling` is **strictly below
+  full**.
+- **Why the relation between the two terms is `≤` and not `<`:** the blind seam is excluded from
+  **both** numerators and counted in **both** denominators, so it lowers the two terms together.
+  When every *instrumented* seam is additionally `captured`, the two are **equal** — so a
+  strict `<` between them would fail a correct run on its best reachable window, which is a
+  control that fires on the right answer. What a blind class does guarantee is the
+  below-full limb: full capture is unreachable while a seam no rule declares a writer for is
+  present. That is the claim this fixture pins; **F-CEIL-02** is its positive arm, and
+  **F-CEIL-04** — not this fixture — is where the two terms crossing is exercised.
 
 ### F-CEIL-02 — no blind class → ceiling renders full
 - **Input:** a distribution in which every seam has a declared writer.

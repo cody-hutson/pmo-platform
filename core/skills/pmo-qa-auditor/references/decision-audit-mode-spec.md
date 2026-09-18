@@ -154,7 +154,7 @@ below).
 |---|---|---|
 | `DS1` | the `decision` family, less the subtypes `DS3`, `DS4` and `DS6` claim | — |
 | `DS2` | the `gate-outcome` family | — |
-| `DS3` | the `escalation`, `scope-change` and `iteration` families, plus the `decision` subtypes this seam claims | the hub-state action-item ledger for the window's milestones |
+| `DS3` | the `escalation`, `scope-change` and `iteration` families, plus the `decision` subtypes this seam claims — **filtered on the payload** to drop the commitment sweep's zero-state rows, which ride the lifecycle's open subtype and record that a sweep owed nothing rather than that a finding was raised | the hub-state action-item ledger for the window's milestones |
 | `DS4` | the `decision` family restricted to this seam's subtype | the payload convention's provenance enum, read at run time to **interpret each returned row's `via:` value**. The occasion count comes from the matched gate's firings under the rubric's shared rule, never from this enum — a `via:session-retro` row evidences a firing the live path missed rather than adding one |
 | `DS5` | the `self-repair` family | — |
 | `DS6` | the `decision` family restricted to this seam's subtype | — |
