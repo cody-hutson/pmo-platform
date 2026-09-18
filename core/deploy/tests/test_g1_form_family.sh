@@ -42,14 +42,18 @@ DEPLOY_SH="${SCRIPT_DIR}/../deploy.sh"
 SRC_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 KIND_TOOL="${SRC_ROOT}/core/deploy/tools/check-work-hierarchy.py"
 
-# The three symbols `build_runner` resolves out of deploy.sh, named ONCE. The
-# extraction and the failure message both read them here, so a message can never
-# disagree with the thing actually searched for — a diagnostic whose text has
-# drifted from its own predicate is precisely the defect this file reports on,
-# and restating these literals in the message would reproduce it.
+# The literals `build_runner` searches deploy.sh for, named ONCE. The extraction
+# and the failure messages both read them here, so a message cannot name a marker
+# or a definition line other than the one actually searched for, and arm L's
+# sensitivity rows assert each one appears in its message. That is ALL this
+# guarantees. What a message says about the CAUSE is prose, and prose can still be
+# wrong about the input in front of it: a definition left intact but not written
+# exactly as searched once drew a message blaming a rename or a move. Cause
+# clauses are graded separately, in arm L.
 C22_BEGIN_MARKER='>>> C22-EVAL-BEGIN'
 C22_END_MARKER='>>> C22-EVAL-END'
 G1_03_PREDICATE='_g1_03_evaluate'
+G1_03_DEF_LINE="${G1_03_PREDICATE}() {"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -87,7 +91,7 @@ build_runner() {
   # are synthesised. Never stub it: a stub would grade a re-implementation,
   # which is the exact failure this harness exists to prevent. Empty
   # extraction fails loudly, like a moved sentinel.
-  _g103=$(/usr/bin/sed -n "/^${G1_03_PREDICATE}() {\$/,/^}\$/p" "$_src")
+  _g103=$(/usr/bin/sed -n "/^${G1_03_DEF_LINE}\$/,/^}\$/p" "$_src")
   [[ -n "$_g103" ]] || return 3
   {
     echo '#!/usr/bin/env bash'
@@ -121,17 +125,19 @@ build_runner() {
 #
 # Each branch opens with an UPPERCASE cause tag and then names BOTH the file it
 # was reading and the symbol it could not resolve, so the reader can act without
-# opening this harness. The tag — not any single word of the prose — is what
-# arm L's specificity arms match on: the UNRESOLVED-SYMBOL prose deliberately
-# mentions the sentinels in order to rule them OUT for the reader, so a bare
-# search for "sentinel" could not tell the two messages apart, and a tag can.
+# opening this harness. The tag is what arm L's specificity arms match on first,
+# and each adds one more exact string naming the other cause (a symbol on one
+# side, a legacy phrase on the other). A tag rather than a word about the cause,
+# because the UNRESOLVED-SYMBOL prose deliberately mentions the markers in order
+# to rule them OUT for the reader, and a search for such a word would flag the
+# very sentence that exonerates them.
 build_failure_reason() {
   # $1 = build_runner's return code, $2 = the deploy.sh it was reading
   case "$1" in
     2) printf 'SENTINEL-BOUNDS: marker %s and/or %s is absent, inverted, or out of order in %s' \
          "$C22_BEGIN_MARKER" "$C22_END_MARKER" "$2" ;;
-    3) printf 'UNRESOLVED-SYMBOL: no %s() definition found in %s — the C22-EVAL bounds resolved cleanly, so the markers are not the cause; the splice target was renamed or moved' \
-         "$G1_03_PREDICATE" "$2" ;;
+    3) printf 'UNRESOLVED-SYMBOL: no line in %s reads exactly "%s" — the C22-EVAL bounds resolved cleanly, so the markers are not the cause; the definition was renamed, moved, or reformatted' \
+         "$2" "$G1_03_DEF_LINE" ;;
     *) printf 'UNMAPPED-STATUS: build_runner returned %s while reading %s — a cause was added without a diagnosis' \
          "$1" "$2" ;;
   esac
@@ -682,8 +688,11 @@ fi
 # The guard was loud and never silent, so nothing was hidden — but a reader whose
 # splice target had merely been renamed went and stared at a sentinel pair that
 # was intact. The two causes have two different fixes, which is why each branch
-# below carries a SPECIFICITY arm asserting it stays silent on the other: a
-# corrected message that merely fires proves coverage, not discrimination.
+# below carries a SPECIFICITY arm: a corrected message that merely fires proves
+# coverage, not discrimination. Each specificity arm is two string conjuncts —
+# the other cause's tag, and one other string naming that cause, are absent. That
+# checks those strings, not that the prose is silent on the other cause; each arm
+# names what it leaves unchecked.
 MUT_DIR="$TMPD/mutants"
 mkdir -p "$MUT_DIR"
 MUT_CLEAN="$MUT_DIR/deploy_clean.sh"
@@ -694,7 +703,7 @@ cp "$DEPLOY_SH" "$MUT_CLEAN"
 # leave both markers intact — that intactness is the whole point, because it is
 # the shape on which the old message was not merely vague but actively wrong.
 /usr/bin/grep -vF -- "$C22_BEGIN_MARKER" "$MUT_CLEAN" > "$MUT_NOSENT"
-/usr/bin/sed "s/^${G1_03_PREDICATE}() {\$/${G1_03_PREDICATE}_renamed_by_arm_l() {/" \
+/usr/bin/sed "s/^${G1_03_DEF_LINE}\$/${G1_03_PREDICATE}_renamed_by_arm_l() {/" \
   "$MUT_CLEAN" > "$MUT_NOPRED"
 
 build_runner "$MUT_CLEAN"  "$MUT_DIR/r_clean.sh";  _rc_clean=$?
@@ -708,7 +717,7 @@ _msg_nopred="$(build_failure_reason "$_rc_nopred" "$MUT_NOPRED")"
 # sensitivity arms below would pass while measuring nothing at all.
 _nopred_begin=$(/usr/bin/grep -cF -- "$C22_BEGIN_MARKER" "$MUT_NOPRED")
 _nopred_end=$(/usr/bin/grep -cF -- "$C22_END_MARKER" "$MUT_NOPRED")
-_nopred_sym=$(/usr/bin/grep -c "^${G1_03_PREDICATE}() {\$" "$MUT_NOPRED")
+_nopred_sym=$(/usr/bin/grep -c "^${G1_03_DEF_LINE}\$" "$MUT_NOPRED")
 if [[ "$_rc_clean" -eq 0 ]] \
    && [[ -s "$MUT_NOSENT" && -s "$MUT_NOPRED" ]] \
    && [[ "$_nopred_begin" -ge 1 && "$_nopred_end" -ge 1 && "$_nopred_sym" -eq 0 ]]; then
@@ -720,15 +729,19 @@ fi
 # SENSITIVITY (sentinel cause) — fires on its OWN cause, naming file and symbol.
 if [[ "$_rc_nosent" -eq 2 ]] \
    && /usr/bin/grep -qF -- "$C22_BEGIN_MARKER" <<<"$_msg_nosent" \
+   && /usr/bin/grep -qF -- "$C22_END_MARKER" <<<"$_msg_nosent" \
    && /usr/bin/grep -qF -- "$MUT_NOSENT" <<<"$_msg_nosent"; then
   pass "L SENSITIVITY (sentinel) — a deploy.sh missing its BEGIN marker returns rc=2, and the diagnosis names the marker pair AND the file it read"
 else
   fail "L sentinel cause: rc=${_rc_nosent} (expected 2) — ${_msg_nosent}"
 fi
-# SPECIFICITY (sentinel) — silent on the OTHER cause.
+# SPECIFICITY (sentinel) — two conjuncts: no UNRESOLVED-SYMBOL tag, and no
+# ${G1_03_PREDICATE} name. Blame for the predicate written in other words ("or the
+# splice target was renamed") passes both; that residual is accepted on the same
+# ground as the predicate side's, below.
 if ! /usr/bin/grep -qF -- 'UNRESOLVED-SYMBOL' <<<"$_msg_nosent" \
    && ! /usr/bin/grep -qF -- "$G1_03_PREDICATE" <<<"$_msg_nosent"; then
-  pass "L SPECIFICITY (sentinel) — the sentinel diagnosis never carries the UNRESOLVED-SYMBOL tag and never names ${G1_03_PREDICATE}; a broken marker is not reported as a renamed splice target"
+  pass "L SPECIFICITY (sentinel) — the sentinel diagnosis carries neither the UNRESOLVED-SYMBOL tag nor the name ${G1_03_PREDICATE} (predicate blame in other words is not checked)"
 else
   fail "L the sentinel diagnosis leaked the predicate cause — ${_msg_nosent}"
 fi
@@ -737,24 +750,53 @@ fi
 # widening, this input returned the single code 1 and rendered the sentinel text
 # on a tree whose sentinels are provably intact (asserted by the CONTROL above).
 if [[ "$_rc_nopred" -eq 3 ]] \
-   && /usr/bin/grep -qF -- "$G1_03_PREDICATE" <<<"$_msg_nopred" \
+   && /usr/bin/grep -qF -- "$G1_03_DEF_LINE" <<<"$_msg_nopred" \
    && /usr/bin/grep -qF -- "$MUT_NOPRED" <<<"$_msg_nopred"; then
-  pass "L SENSITIVITY (predicate) — a deploy.sh whose ${G1_03_PREDICATE} definition was renamed, sentinels intact, returns rc=3 and the diagnosis names the unresolved symbol AND the file it read"
+  pass "L SENSITIVITY (predicate) — a deploy.sh whose ${G1_03_PREDICATE} definition was renamed, sentinels intact, returns rc=3 and the diagnosis names the exact line it searched for ('${G1_03_DEF_LINE}') AND the file it read"
 else
   fail "L predicate cause: rc=${_rc_nopred} (expected 3) — ${_msg_nopred}"
 fi
-# SPECIFICITY (predicate) — silent on the OTHER cause. TWO conjuncts, because
-# wrong-cause blame is a PROSE property and only one of its forms is a tag: the
-# tag conjunct catches a regression that re-LABELS this message, and the legacy-
-# phrase conjunct catches one that keeps the UNRESOLVED-SYMBOL tag and blames the
-# sentinels in the prose beneath it — the shape a tag-only arm reports as green.
-# On the pre-widening harness the arm that goes RED is the SENSITIVITY one above,
-# because that message named no symbol. This arm goes red there too, but only by
-# the legacy-phrase conjunct: the pre-widening text ("missing or inverted
-# sentinel markers") carries no tag for the first conjunct to match.
+# REFORMAT — rc=3 means only "no line reads exactly the definition line", and a
+# definition can be INTACT and still miss that exact match. The diagnosis once
+# blamed a rename or a move on exactly that input, sending the reader to look for
+# a definition that was sitting in plain view. This row drives the intact case: a
+# space before the parentheses. It asserts the diagnosis names the exact line
+# searched for and lists 'reformatted' among the causes. The cause list is
+# guidance after the detected condition, not a diagnosis of which cause applies:
+# 'renamed' is driven by the row above and 'reformatted' by this one, while
+# 'moved' — out of the file — leaves the same observable as a rename, no such
+# line, and is not driven separately.
+MUT_REFORMAT="$MUT_DIR/deploy_reformatted.sh"
+/usr/bin/sed "s/^${G1_03_DEF_LINE}\$/${G1_03_PREDICATE} () {/" \
+  "$MUT_CLEAN" > "$MUT_REFORMAT"
+build_runner "$MUT_REFORMAT" "$MUT_DIR/r_reformat.sh"; _rc_reformat=$?
+_msg_reformat="$(build_failure_reason "$_rc_reformat" "$MUT_REFORMAT")"
+_reformat_intact=$(/usr/bin/grep -c "^${G1_03_PREDICATE} () {\$" "$MUT_REFORMAT")
+_reformat_exact=$(/usr/bin/grep -c "^${G1_03_DEF_LINE}\$" "$MUT_REFORMAT")
+if [[ "$_reformat_intact" -eq 1 && "$_reformat_exact" -eq 0 ]] \
+   && [[ "$_rc_reformat" -eq 3 ]] \
+   && /usr/bin/grep -qF -- "$G1_03_DEF_LINE" <<<"$_msg_reformat" \
+   && /usr/bin/grep -qF -- 'reformatted' <<<"$_msg_reformat"; then
+  pass "L REFORMAT — a definition left intact but written '${G1_03_PREDICATE} () {' returns rc=3, and the diagnosis names the exact line it searched for and lists 'reformatted' among the causes"
+else
+  fail "L reformatted-definition cause: fixture intact=${_reformat_intact} exact=${_reformat_exact}, rc=${_rc_reformat} (expected 3) — ${_msg_reformat}"
+fi
+# SPECIFICITY (predicate) — two conjuncts: the tag conjunct catches a regression
+# that re-LABELS this message as the sentinel cause, and the phrase conjunct
+# catches one that keeps the UNRESOLVED-SYMBOL tag but reuses the pre-widening
+# phrase 'sentinel markers'. That is all it catches. Blame for the sentinels in
+# any other words ("check the C22-EVAL sentinel pair next") passes both — a
+# residual, accepted because no finite string check decides blame written in
+# prose, and these two conjuncts cover the two regression shapes that have
+# actually existed: a re-label and the legacy phrase.
+# With the pre-widening text installed on this cause, the SENSITIVITY and REFORMAT
+# rows above go RED, because that message named no definition line. This arm goes
+# red there too, but only by the legacy-phrase conjunct: the pre-widening text
+# ("missing or inverted sentinel markers") carries no tag for the first conjunct
+# to match.
 if ! /usr/bin/grep -qF -- 'SENTINEL-BOUNDS' <<<"$_msg_nopred" \
    && ! /usr/bin/grep -qiF -- 'sentinel markers' <<<"$_msg_nopred"; then
-  pass "L SPECIFICITY (predicate) — the unresolved-symbol diagnosis carries neither the SENTINEL-BOUNDS tag nor the pre-widening phrase 'sentinel markers'; the two causes route the reader to two different fixes rather than to one wrong one"
+  pass "L SPECIFICITY (predicate) — the unresolved-symbol diagnosis carries neither the SENTINEL-BOUNDS tag nor the pre-widening phrase 'sentinel markers' (sentinel blame in other words is not checked)"
 else
   fail "L the unresolved-symbol diagnosis blames the sentinel bounds — the wrong-cause defect is back: ${_msg_nopred}"
 fi
