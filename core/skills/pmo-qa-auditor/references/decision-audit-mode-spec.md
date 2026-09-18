@@ -318,8 +318,9 @@ arm nothing exercises is indistinguishable from one that cannot fire:
 
 The classification family additionally covers a recorded and evidenced decision (expect
 conformant), an undetected named failure mode (expect a finding), a zero-row seam **whose
-ordered-predicate route is a non-graded state** — no declared writer, or a declared writer and
-determinately no owed occasions — (expect that non-graded state and **no grade**), and a
+ordered-predicate route is a non-graded state** — no declared writer, a declared writer and
+determinately no owed occasions, or a declared writer whose owed occasions this window could
+not determine — (expect that non-graded state and **no grade**), and a
 two-release recurrence (expect exactly one systemic pattern). The zero-row condition is
 qualified rather than stated flat, because the **instrumented and owed** zero-row seam renders
 `measured` / `partial`: the coverage family's own required negative control pins it, and an

@@ -201,7 +201,7 @@ measurement gap and a measured zero.
   the coverage family: a zero-row seam that **is** instrumented and **was** owed occasions
   renders `measured` / `partial`, which is a grade. That case is the most actionable state the
   audit produces, and routing it here would return it to the benign class the coverage axis was
-  widened to keep it out of. This fixture pins the two zero-row cases that genuinely take no
+  widened to keep it out of. This fixture pins the zero-row cases that genuinely take no
   grade; F-COV-03 pins the one that does.
 
 ### F-CLS-04 — two-release recurrence → exactly one systemic pattern
