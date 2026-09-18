@@ -861,7 +861,7 @@ assert_arm_a_call_site() {
      && /usr/bin/cmp -s "$2" "$_cell/core/deploy/deploy.sh" \
      && [[ "$_crc" -eq 1 ]] \
      && /usr/bin/grep -qx 'Result: 0 passed, 1 failed' "$_cell/child.out" \
-     && [[ "$(printf '%s\n' "$_row" | /usr/bin/grep -c .)" -eq 1 ]] \
+     && [[ "$(/usr/bin/grep -c '^  FAIL  A ' "$_cell/child.out")" -eq 1 ]] \
      && /usr/bin/grep -qF -- "$_want" <<<"$_row"; then
     pass "L ARM-A CALL SITE ($1) — arm A itself, run as a child on a deploy.sh with $4, aborted there (exit 1, nothing else run) and printed the helper's rc=$3 diagnosis verbatim, naming the file it read"
   else
