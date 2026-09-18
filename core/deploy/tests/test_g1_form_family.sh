@@ -112,9 +112,12 @@ build_runner() {
 
 # The diagnosis for a non-zero `build_runner` return. Kept as a FUNCTION rather
 # than as inline text at the call site so arm L can assert the message the
-# harness actually prints; an arm that restated the text would grade a copy of
-# the diagnostic instead of the diagnostic, which is the same substitution this
-# file refuses to make when it splices the shipped predicate rather than a stub.
+# harness actually prints: its per-cause rows grade this function, and its
+# ARM-A CALL SITE rows run arm A itself and require the row arm A prints to carry
+# this function's output verbatim. An arm that restated the text would grade a
+# copy of the diagnostic instead of the diagnostic, which is the same
+# substitution this file refuses to make when it splices the shipped predicate
+# rather than a stub.
 #
 # Each branch opens with an UPPERCASE cause tag and then names BOTH the file it
 # was reading and the symbol it could not resolve, so the reader can act without
@@ -670,8 +673,10 @@ fi
 # ── L. Arm A's two failure causes are DISTINGUISHABLE ───────────────────────
 # Arm A aborts the run on failure, so its branches are unreachable in-process.
 # They are driven here instead, against MUTATED COPIES of deploy.sh — one copy
-# per cause — and the assertions read `build_failure_reason`'s own output, so
-# what is graded is the text the harness prints rather than a restatement of it.
+# per cause. The per-cause rows read `build_failure_reason`'s own output rather
+# than a restatement of it; they grade the helper, not arm A's use of it. The
+# ARM-A CALL SITE rows at the end run arm A itself on the same mutants, so the
+# text arm A actually prints is graded too.
 #
 # Why this arm exists: a single `else` reported BOTH causes as a sentinel fault.
 # The guard was loud and never silent, so nothing was hidden — but a reader whose
@@ -769,6 +774,60 @@ if /usr/bin/grep -qF -- 'UNMAPPED-STATUS' <<<"$_msg_unmapped" \
 else
   fail "L an unmapped status did not surface as its own cause — ${_msg_unmapped}"
 fi
+
+# ARM-A CALL SITE — the rows above grade `build_failure_reason`; these grade ARM A.
+# Every row above calls the helper directly, so none of them can see arm A stop
+# delegating to it: with arm A's `else` text put back to its pre-widening form,
+# every one of them stayed green while arm A printed the original wrong-cause
+# message word for word on a renamed definition. So arm A is RUN here, not read.
+# This file is copied into a scratch tree whose deploy.sh is one mutant, and
+# executed as a child. The child's arm A is this file's arm A byte for byte; it
+# reads the mutant, aborts before any other arm runs, and the row requires the
+# arm-A FAIL line the child printed to carry the helper's diagnosis for that
+# mutant's code, verbatim, naming the file the child read. Each row demands its
+# own code's text, so the two rows are each other's specificity arm: an arm A
+# that printed one diagnosis for both causes fails one of them.
+# The child is marked (G1_FF_ARM_A_CHILD) so that a child whose arm A did NOT
+# abort cannot spawn a child of its own. In that state these rows FAIL rather than
+# skip, so the marker leaking into a real run turns it red, never green.
+_self="${SCRIPT_DIR}/$(/usr/bin/basename "${BASH_SOURCE[0]}")"
+run_arm_a_child() {
+  # $1 = mutant deploy.sh, $2 = scratch tree root. Leaves the child's output in
+  # "$2/child.out" and its exit code in "$2/child.rc".
+  mkdir -p "$2/core/deploy/tests"
+  cp "$_self" "$2/core/deploy/tests/"
+  cp "$1" "$2/core/deploy/deploy.sh"
+  G1_FF_ARM_A_CHILD=1 bash "$2/core/deploy/tests/$(/usr/bin/basename "$_self")" \
+    > "$2/child.out" 2>&1
+  echo "$?" > "$2/child.rc"
+}
+# $1 = label, $2 = mutant deploy.sh, $3 = the build_runner code that mutant yields,
+# $4 = what the mutant breaks
+assert_arm_a_call_site() {
+  local _cell="$MUT_DIR/arm_a_$1" _want _row _crc
+  if [[ -n "${G1_FF_ARM_A_CHILD:-}" ]]; then
+    fail "L ARM-A CALL SITE ($1) — not evaluated: this process is itself an arm-A child (G1_FF_ARM_A_CHILD is set), so its own arm A did not abort; a real run must never inherit that marker"
+    return
+  fi
+  run_arm_a_child "$2" "$_cell"
+  _crc=$(cat "$_cell/child.rc")
+  # The child computes DEPLOY_SH exactly this way; computing it identically here is
+  # what lets the row demand the file name verbatim rather than a fragment of it.
+  _want="$(build_failure_reason "$3" "$(cd "$_cell/core/deploy/tests" && pwd)/../deploy.sh")"
+  _row="$(/usr/bin/grep '^  FAIL  A ' "$_cell/child.out" || true)"
+  if /usr/bin/cmp -s "$_self" "$_cell/core/deploy/tests/$(/usr/bin/basename "$_self")" \
+     && /usr/bin/cmp -s "$2" "$_cell/core/deploy/deploy.sh" \
+     && [[ "$_crc" -eq 1 ]] \
+     && /usr/bin/grep -qx 'Result: 0 passed, 1 failed' "$_cell/child.out" \
+     && [[ "$(printf '%s\n' "$_row" | /usr/bin/grep -c .)" -eq 1 ]] \
+     && /usr/bin/grep -qF -- "$_want" <<<"$_row"; then
+    pass "L ARM-A CALL SITE ($1) — arm A itself, run as a child on a deploy.sh with $4, aborted there (exit 1, nothing else run) and printed the helper's rc=$3 diagnosis verbatim, naming the file it read"
+  else
+    fail "L ARM-A CALL SITE ($1) — arm A, run as a child on a deploy.sh with $4, did not print the helper's rc=$3 diagnosis (child exit ${_crc}): ${_row:-<no arm-A FAIL row>}"
+  fi
+}
+assert_arm_a_call_site predicate "$MUT_NOPRED" 3 "its ${G1_03_PREDICATE} definition renamed"
+assert_arm_a_call_site sentinel  "$MUT_NOSENT" 2 "its BEGIN marker dropped"
 
 echo ""
 echo "─────────────────────────────────────────────────────────────────────────"
