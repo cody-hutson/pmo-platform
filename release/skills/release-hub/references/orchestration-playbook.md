@@ -454,9 +454,9 @@ when their gate fires.
 | stage-12-execute | 5 | decision | d-class | operator | MUST |
 | outcome-statement | 0 | decision | outcome-statement-authored | operator | CONDITIONAL |
 | d-version | 0 | decision | d-class | hub | CONDITIONAL |
-| scaffold-review | 1 | decision | d-class | operator | CONDITIONAL |
+| scaffold-review | 1 | decision | d-class | hub | CONDITIONAL |
 | collective-review | 2 | decision | scope-lock | operator | CONDITIONAL |
-| quota-budget | 2 | decision | d-class | operator | CONDITIONAL |
+| quota-budget | 2 | decision | d-class | operator — the `DEFER` actor only; `GATE-REGISTER` row 4 splits the acting party, and on `SERIALIZE` / `REDUCE` the hub executes and reports | CONDITIONAL |
 | inter-stage-escalation | 4 | escalation | tier-2 | hub | CONDITIONAL |
 | version-claim | 5 | decision | d-class | hub | CONDITIONAL |
 | early-merge | 6 | decision | d-class | operator | CONDITIONAL |
