@@ -182,7 +182,7 @@ Three findings are worth the column even at that grade.
 
 1. **The ordered procedure is decidable where the three-class criterion was not.** Applied as three named classes with no precedence rule and no completeness qualifier, the criterion left 7 of these 21 with no determinate class — 5 that satisfy two classes on their face, and 2 that turn on whether "field-decidable" means reading a field or judging what the field describes. The ordered form resolves all 21: asking the no-residue question *first* sends both presence-versus-satisfaction checks to `interpretive`, and traversal-precedence resolves all five multi-class cases.
 2. **`field-decidable` is empty, and that is the informative half.** Both checks a literal reading would have landed there — *"every entry in `acceptance_criteria` is met"* and *"the epic states which product outcome it advances"* — name a genuinely declared field whose *presence* a machine-evaluable check already tests. What the judgment-level check adds is precisely the residue: whether the criteria are **met**, whether the stated outcome **is** a product outcome. The declared field is the subject of the judgment, never its resolution.
-3. **Both control checks land `interpretive`, patterning with the judgment set rather than with the machine-evaluable `L2` check.** Read with their shared `automatable = false`, this is the evidence that **the operative axis is `automatable`, not `level`** — which is the divergence the census surfaced and which the per-kind authoring bar must settle.
+3. **Both control checks land `interpretive`, patterning with the judgment set rather than with the machine-evaluable `L2` check.** Read with their shared `automatable = false`, this is a diagnostic indication that **the operative axis is `automatable`, not `level`** — which is the divergence the census surfaced and which the per-kind authoring bar must settle.
 
 **Layer E — falsification-pair confound lookup.** Every check in the frame was evaluated against the full declared check set as measured at the baseline recorded in `source_observations:` — in-frame and out-of-frame members alike.
 
@@ -195,6 +195,8 @@ Three findings are worth the column even at that grade.
 | Clear the size field | the machine-evaluable story-estimable check | the story-small check is **not** broken — an absent estimate makes a story unestimated, not large | ISOLATABLE, by mutating scope prose rather than the field |
 | Remove the implementation-approach clause | the story-negotiable check | none, provided the mutation *adds* prescriptive implementation prose rather than removing a declared field | ISOLATABLE |
 | Every remaining in-frame check | — | no shared declared field or edge | ISOLATABLE |
+
+**Grade: `[INFERRED]` — single un-replicated rater, the residual the partition column above carries.** It covers the lookup, the confounded pairs and the predicted vacuous-pass interaction below; the run-derived confirmation that follows them states its own basis. It is not the grade of a judgment rendered against an Appendix A binding, which A.4 sets per binding from its evidence classes.
 
 **Two confounded pairs, both cross-level**, and both confound a judgment-level check with the machine-evaluable check over the same field. This is a structural property of the declared set rather than an artifact of one mutation choice: where a machine-evaluable check tests a field's *presence* and a judgment-level check tests its *adequacy*, clearing the field breaks both and a flip is not attributable.
 
