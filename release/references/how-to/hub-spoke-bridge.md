@@ -60,7 +60,7 @@ After triage and bundling produce an approved Milestone with assigned issues.
 4. **Review scaffolding** — hub uses the plan to create the release's sub-task set (per-issue for Stages 5–8, release-scoped for Stages 4/9–13), you approve
 5. **Launch spokes** — hub auto-launches spokes via the Agent tool within authorized scope (no per-spoke click required, per ADR (a) Stage-Conditional Launch Policy in § Spoke Launch Mechanisms); hub falls back to copy/paste prompts when an Agent-tool fallback condition applies or you explicitly request the prompt
 6. **Review spoke output** — read the sub-task comment, approve or request iteration
-7. **Render gate decisions** — at Stage 9 and 12, the hub presents the decision to you
+7. **Render gate decisions** — at every touchpoint the Hub Gate Register marks `STOP` or `STOP-IF` ([`orchestration-playbook.md`](../../skills/release-hub/references/orchestration-playbook.md)), the hub presents the decision to you
 8. **Close release** — hub verifies all sub-tasks closed, Milestone complete
 
 ### Hub Prompt
@@ -158,7 +158,7 @@ The hub satisfies **Gate 0 (gate-eligibility) plus the five sufficiency gates, t
 
 #### Channel: main-thread chat (canonical)
 
-**Engagement channel — main-thread chat (canonical):** Every operator-engagement event the hub surfaces — the Decision Briefing for spoke completion (Procedure 4), and **every touchpoint enumerated in the Hub Gate Register** ([`orchestration-playbook.md`](../../skills/release-hub/references/orchestration-playbook.md)), whose governing specs are cited on the register's own rows rather than re-listed here (per [`decision-discipline.md § 3`](../../../core/disciplines/decision-discipline.md) for the D-class discipline, and [`triage-design-rereview.md § 9`](../standards/triage-design-rereview.md)), early-merge approval (Procedure 6), and post-deploy disposition (Procedure 7 Step 6 `--apply` gate) — surfaces as a structured Decision Briefing **in the main-thread Claude Code chat session** via `AskUserQuestion` or equivalent in-chat mechanism. Operator engagement does NOT propagate to chips (chips are spawn-only), GitHub Issue comments (those are post-decision audit trail per [`hub-session-continuity.md § Decision Log Mechanism`](../../../core/standards/hub-session-continuity.md)), Obsidian edits, or external channels.
+**Engagement channel — main-thread chat (canonical):** Every operator-engagement event the hub surfaces — the Decision Briefing for spoke completion (Procedure 4) and **every touchpoint enumerated in the Hub Gate Register** ([`orchestration-playbook.md`](../../skills/release-hub/references/orchestration-playbook.md)) — surfaces as a structured Decision Briefing **in the main-thread Claude Code chat session** via `AskUserQuestion` or equivalent in-chat mechanism. The register records each touchpoint's disposition; it has no column for the spec that governs a touchpoint, so those specs stay canonical where they are defined — the D-class discipline in [`decision-discipline.md § 3`](../../../core/disciplines/decision-discipline.md), and the always-escalate default for a Tier-0 premise rejection in [`triage-design-rereview.md § 9`](../standards/triage-design-rereview.md). Operator engagement does NOT propagate to chips (chips are spawn-only), GitHub Issue comments (those are post-decision audit trail per [`hub-session-continuity.md § Decision Log Mechanism`](../../../core/standards/hub-session-continuity.md)), Obsidian edits, or external channels.
 
 **Routine engagement vs spawn (operator-facing classification):**
 
@@ -166,15 +166,8 @@ The hub satisfies **Gate 0 (gate-eligibility) plus the five sufficiency gates, t
 |---|---|---|
 | Spoke prompt approval (operator clicks chip to launch) | NOT routine — this IS the chip's purpose | chip click (one-click launch; not "engagement" per se) |
 | Spoke output review (Decision Briefing at Procedure 4) | Routine engagement | **main-thread chat** |
-| Stage 9 GO/NO-GO | Routine engagement (gate) | **main-thread chat** |
-| Stage 12 Execute authorization | Routine engagement (gate) | **main-thread chat** |
-| Collective Review scope-lock | Routine engagement (release-level gate) | **main-thread chat** |
+| Every Hub Gate Register touchpoint whose `Disposition` is `STOP` or `STOP-IF` ([`orchestration-playbook.md`](../../skills/release-hub/references/orchestration-playbook.md)) — each gate and escalation the hub stops for, read from the register and not re-listed here | Routine engagement (gate or escalation) | **main-thread chat** |
 | Tier 1 [ADJUST] | NOT engagement (hub/spoke commits autonomously per `release/governance/release-process.md § Inter-Stage Feedback Protocol`) | N/A (no operator engagement) |
-| Tier 2 [SCOPE CHANGE] | Routine engagement (escalation) | **main-thread chat** |
-| Tier 3 [PLAN REJECTION] | Routine engagement (escalation) | **main-thread chat** |
-| D-class decision | Routine engagement (gate) | **main-thread chat** |
-| Tier 0 Premise Rejection | Routine engagement (always-escalate per `triage-design-rereview.md § 9` Phase 1 default) | **main-thread chat** |
-| Post-deploy `--apply` approval (Procedure 7 Step 6 orphan-cleanup; release-executor Mode D automated close-out) | Routine engagement (`--apply` is the Tier 1 Recommend gate per CLAUDE.md Autonomy Tier table) | **main-thread chat** |
 | Decision RECORDED comment on sub-task (post-decision) | NOT engagement (audit trail) | GH comment (dual-surface per `hub-session-continuity.md`) |
 | Event-log emission (post-decision) | NOT engagement (audit trail) | `pipeline-event-log.md` (dual-surface per `hub-session-continuity.md`) |
 
@@ -2001,7 +1994,7 @@ next: {one of the closed-enum values per § next: closed enum below}
 |---|---|---|
 | `route:stage-{N}-{name}` | Spoke PASSED; downstream stage sub-task is ready (e.g., Stage 5 closing → routes to Stage 6 sub-task) | Procedure 2 routes to the named stage open sub-task for the same issue (e.g., `route:stage-6-engineering` / `route:stage-7-dev-testing` / `route:stage-8-qa-testing` / `route:stage-9-plan-review` / `route:stage-12-execute` / `route:stage-13-close`) |
 | `iterate:stage-{N}` | Spoke FAILED and prior-stage rework is needed (e.g., Stage 7 DT routes back to Stage 6 Engineering with Tier 1 finding) | Procedure 2 re-spawns the named upstream stage spoke per the DT↔Engineering iteration loop |
-| `block:operator-decision-at-stage-{N}` | Spoke produced findings requiring operator judgment at a defined pipeline gate (Stage 9 / 12 / Collective Review scope-lock) | Procedure 4 surfaces Decision Briefing per Procedure 5 (gate handling); operator renders decision at the named gate |
+| `block:operator-decision-at-stage-{N}` | Spoke produced findings requiring operator judgment at a gate — a touchpoint the Hub Gate Register marks `STOP` or `STOP-IF` ([`orchestration-playbook.md`](../../skills/release-hub/references/orchestration-playbook.md)) | Procedure 4 surfaces Decision Briefing per Procedure 5 (gate handling); operator renders decision at the named gate |
 | `block:dependency-#{M}` | Spoke cannot proceed until issue #M (or PR #M) lands; substrate dep is unmet | Hub holds the sub-task; re-routes after the dependency closes per `iterate:` re-spawn convention |
 | `complete:sub-task-done` | Terminal sub-task state — no downstream routing remains (e.g., Stage 13 close completed) | Procedure 4 records completion; no further routing for this issue |
 
@@ -2156,7 +2149,7 @@ A spoke that spawns its own next chip bypasses the Hub's orchestration role and 
 
 ### Procedure 5: Gate Handling
 
-**Trigger:** Next actionable stage is a gate (Stage 9 Plan Review, Stage 12 Execute).
+**Trigger:** Next actionable stage is a gate — a Hub Gate Register row whose `Proc` is 5 ([`orchestration-playbook.md`](../../skills/release-hub/references/orchestration-playbook.md)).
 
 **Pre-condition (main-thread-only narrowing):** Every Decision Briefing rendered at a gate surfaces in the **main-thread Claude Code chat session** via `AskUserQuestion` or equivalent in-chat mechanism per the [Operating Principle § Channel subsection](#channel-main-thread-chat-canonical). The gate decision itself is rendered in main-thread chat; the post-decision record lands as a sub-task comment per Step 4 + a `pipeline-event-log.md` row per the dual-surface convention.
 
@@ -2810,7 +2803,8 @@ for routine work; Agent-tool invocation happens internally
 without per-spoke operator action. Operator engagement
 compresses to: (1) main-thread Decision Briefings for Tier 0
 gates, (2) main-thread approval of bundled spoke outputs at
-framework gates (scope-lock, Stage 9 GO, Stage 12 authorization).
+framework gates — the touchpoints enumerated in the Hub Gate Register
+([`orchestration-playbook.md`](../../skills/release-hub/references/orchestration-playbook.md)).
 The `spawn_task` tool retains its operator-facing
 out-of-scope-flagging role per its own tool description — the
 mandate scope-clarifies, it does not deprecate `spawn_task`
@@ -2929,7 +2923,8 @@ Per the Stage 5 ADR, Dimension 7: per-invocation operator override is **always a
 
 ### Not used for (excluded by design)
 
-- Procedure 5 gates (Stage 9 Plan Review, Stage 12 Execute) —
+- Procedure 5 gates (the Hub Gate Register rows whose `Proc` is 5 —
+  [`orchestration-playbook.md`](../../skills/release-hub/references/orchestration-playbook.md)) —
   gates are operator decisions; no spoke is launched.
 - Procedure 1 Scaffolding — sub-task creation via `gh issue
   create`, not spoke launch.
