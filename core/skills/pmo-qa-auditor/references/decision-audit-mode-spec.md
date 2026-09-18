@@ -205,14 +205,22 @@ named. Sample the emitted set before writing and record the aggregate pass rate 
 
 A run emits the review-discipline six-deliverable set into the dated audit folder. The six are
 defined in `review-discipline-principles.md` and are not restated here; the mode-specific
-bindings are:
+bindings are below, **each with the named home §7a gives it**. A deliverable with no named
+home is one a run can omit without any reader noticing, so every one of them has a home:
 
 - **Findings** carry the full root-cause chain, a severity, and a confidence, on the two-axis
   model — severity on its own axis, confidence on an orthogonal axis, so a high-severity
   finding under a low-confidence oracle surfaces as high-and-low rather than being diluted to
-  medium.
+  medium. *Home:* `findings-register.md`.
+- **Critical-path findings** are a distinct list of finding-ids drawn from the findings
+  register, selected by the blocking-effect judgment the review discipline requires rather than
+  by a severity filter, with that judgment stated for each listed finding. A window with no
+  blocking finding renders the section with that statement rather than omitting it, so an
+  empty list is distinguishable from a skipped deliverable. *Home:* the
+  `## Critical-Path Findings` section of `SUMMARY.md`.
 - **Systemic patterns** are the cross-release recurrences: the same decision failure signature
-  in two or more releases in the window.
+  in two or more releases in the window. *Home:* the `## Systemic Patterns` table in
+  `findings-register.md`.
 - **The residual risk register** carries every seam reporting `uninstrumented`, because a seam
   the platform cannot see is a residual risk rather than a finding. It also carries every seam
   reporting `undecidable`: a writer exists, but the surface that would say what was owed could
@@ -220,8 +228,18 @@ bindings are:
   unmeasured risk behind. It does **not** carry an `unexercised` seam — a writer exists and the
   window determinately owed nothing, so there is no unmeasured risk to register. The two
   register-carrying states are distinguished in the render rather than merged: one is a standing
-  blind spot, the other is blind for this window only.
+  blind spot, the other is blind for this window only. *Home:* the `## Residual Risk Register`
+  section of `SUMMARY.md`, an entry per carried seam in the shape the review discipline
+  requires of a residual risk. The findings register's `## Coverage Gap` row aggregates the
+  same membership, so the two cannot disagree without one of them being wrong.
+- **The complexity assessment** evaluates the decision machinery the window exercised — the
+  gates, sweeps and recorded decision surfaces it ran through — for proportionality to the
+  decisions that machinery carried. It is observational under the mutation posture below:
+  machinery grown beyond its goals is reported as observed state plus evidence, never as a
+  simplification to make. *Home:* the `## Complexity Assessment` section of `SUMMARY.md`.
 - **Remediation priority** is ordered but never prescriptive — see the mutation posture below.
+  *Home:* the `## Remediation Priority` section of `SUMMARY.md`, finding-ids in order with a
+  short justification for each ordering decision.
 
 ## 7. Artifact schemas
 
@@ -241,7 +259,11 @@ literal token appears in this spec by design; a resolved date written into a spe
   counts, the coverage-state distribution with the `uninstrumented`, `undecidable` and
   `unexercised` counts each reported **separately** and the blind / blind-for-this-window /
   quiet distinction stated, the coverage index, the instrumentation ceiling, and the
-  evidence-bar pass rate.
+  evidence-bar pass rate. It also carries a named section for each deliverable §6 homes here —
+  `## Critical-Path Findings`, `## Residual Risk Register`, `## Complexity Assessment` and
+  `## Remediation Priority` — each rendered whenever the folder is emitted, empty-with-a-statement
+  where the window gave it nothing, because an absent section cannot be told apart from a
+  skipped one.
 - **findings-register.md** — one row per finding:
   `| finding-id | release (version + merge anchor) | seam | oracle (invariant / named failure mode) | classification | severity | confidence | evidence | root-cause |`,
   plus a `## Systemic Patterns` table for cross-release recurrences and a single

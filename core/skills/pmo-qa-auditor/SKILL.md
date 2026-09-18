@@ -1125,6 +1125,8 @@ produces **three** surfaces:
    `unexercised` counts each stated **separately** and the blind / blind-for-this-window / quiet
    distinction made, the coverage index,
    the instrumentation ceiling,
+   the `## Critical-Path Findings`, `## Residual Risk Register`, `## Complexity Assessment` and
+   `## Remediation Priority` sections — mode-spec §6 binds every deliverable to its home,
    and the evidence-bar rate), `findings-register.md` (the `{finding-id, release, seam,
    oracle, classification, severity, confidence, evidence, root-cause}` rows + the
    `## Systemic Patterns` table + the single `## Coverage Gap` aggregate row, which carries the
