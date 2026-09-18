@@ -392,7 +392,7 @@ BANNED_JARGON_REGEX = [
     # fires on the adverb "reflexively" in v2.05's Section 6a — plain-language
     # prose of exactly the kind §2.4 asks an author to write — and would turn a
     # clean corpus red on a false positive. The bounded form returns 0 over that
-    # same 227-note population while still firing on "reflexive", "Reflexive",
+    # same note corpus while still firing on "reflexive", "Reflexive",
     # "reflexive-pipeline loop" and "reflexive-pipeline self-exemption". Arm G-6
     # is the executable record of the choice: a later "simplify it to a literal"
     # refactor turns that arm red instead of silently regressing v2.05.
@@ -400,34 +400,50 @@ BANNED_JARGON_REGEX = [
     # KNOWN RESIDUAL — check 10 scans the UNSTRIPPED Section 6a, so this pattern,
     # and every other pattern in both lists, also fires on text a reader of the
     # note never sees; the sibling check 12 strips inline links before its own
-    # scan, so the two checks disagree about what counts as prose. Two earlier
-    # revisions of this note each stated the scope and each was wrong — first
-    # "this entry alone", then "three patterns", which holds for a bare link
-    # destination or a heading anchor but not for the HTML comment in its own
-    # example, nor for a link destination written in angle brackets. The reach is
-    # therefore pinned by self-test arm G-8 rather than restated here as a count.
-    # Per surface, as G-8 asserts:
+    # scan, so the two checks disagree about what counts as prose. Earlier
+    # revisions of this note each stated the reach and each was wrong — first
+    # "this entry alone"; then a fixed NUMBER of patterns, which was right only for
+    # the surfaces that cannot carry a space, and only for as long as the pattern
+    # lists stood still; then a surface list that left carriers out entirely. The
+    # reach is pinned by self-test arm G-8, per surface and BY RULE, not by count:
     #   * inside an HTML comment — every pattern;
     #   * a link destination in the angle-bracket form, which admits spaces —
     #     every pattern;
+    #   * a raw-HTML attribute value, and a markdown link title, both of which
+    #     also admit spaces — every pattern;
     #   * a bare link destination or a heading-anchor fragment, neither of which
     #     can carry a space — only a pattern whose specimen carries none.
+    # Every surface above is driven by a G-8 arm that pushes each pattern's own
+    # specimen through the REAL check_note_content(), so this list and those arms
+    # move together or G-8 goes red. WHAT THE LIST IS NOT is exhaustive: it
+    # enumerates the invisible carriers that have been TRIED, and the raw-HTML
+    # attribute value and the markdown link title entered it only because a later
+    # read went looking for what the earlier list had missed. A carrier
+    # nobody has thought of is neither listed nor armed, and neither this note nor
+    # G-8 can tell you that one does not exist. NO COUNT APPEARS HERE ON PURPOSE:
+    # both of the counts that used to (how many patterns reach the space-free
+    # surfaces, and the size of the clean note corpus) were falsified while every
+    # arm stayed green, which is the whole argument for stating a rule instead.
     # Concretely: a bullet carrying "<!-- reflexive: internal marker -->", or
-    # linking to ".../core/rules/reflexive-pipeline-guard.md", yields a finding
-    # whose remedy text asks the author to apply a plain-language replacement to
-    # a string that is not prose. Reachability measured when this row was added:
-    # no tracked file path carried the bare token, 4 of 227 notes carried any
-    # Section 6a markdown link, and 18 of 227 a Section 6a HTML comment.
+    # linking to ".../core/rules/reflexive-pipeline-guard.md", or carrying
+    # '<span title="reflexive">', yields a finding whose remedy text asks the
+    # author to apply a plain-language replacement to a string that is not prose.
+    # Reachability is low and not nil: no tracked file path carries the bare
+    # token, and only a minority of notes carry a Section 6a HTML comment or
+    # inline link at all — few, but real, which is why this is recorded rather
+    # than dismissed.
     # THE REMEDY IS NOT check 12's link_strip_re, which an earlier revision
     # named: that expression removes a whole inline link — its reader-visible
-    # TEXT along with its destination, a new false negative — and leaves HTML
-    # comments where they are. A remedy has to strip comments and link
-    # destinations while keeping link text, and any remedy changes the scan
-    # INPUT for every pattern and re-opens the 227-note clean baseline that three
-    # shipped consumers (deploy.sh Check 20, the Stage-13 close gate, Check 48)
-    # currently rely on by construction. The residual is therefore RECORDED here
-    # rather than traded for that — a named limitation, not an oversight, and
-    # one a follow-up must size from G-8's surfaces, not from any one pattern.
+    # TEXT along with its destination, a new false negative — and it leaves HTML
+    # comments and HTML attributes untouched (measured: applied to a bullet
+    # carrying either, it changes nothing). A remedy has to strip comments, link
+    # destinations AND attribute values while keeping link text, and any remedy
+    # changes the scan INPUT for every pattern and re-opens the clean
+    # `--check note-content` baseline that shipped consumers (deploy.sh Check 20,
+    # the Stage-13 close gate, Check 48) rely on by construction. The residual is
+    # therefore RECORDED here rather than traded for that — a named limitation,
+    # not an oversight, and one a follow-up must size from G-8's surfaces, not
+    # from any one pattern.
     (re.compile(r"\breflexive\b", re.IGNORECASE), "reflexive"),
 ]
 
@@ -2711,13 +2727,18 @@ def _self_test() -> int:
 
     # G-8 — the KNOWN RESIDUAL recorded beside the row-9 pattern, made executable.
     # Check 10 scans the UNSTRIPPED Section 6a, so it also reads text a reader of the
-    # note never sees. Two earlier revisions of that note each restated how far that
+    # note never sees. Earlier revisions of that note each restated how far that
     # reaches, and each was wrong; this arm pins it instead, per surface, by driving
-    # every pattern's specimen through the REAL check_note_content() from four
-    # non-prose surfaces. It is a TRIPWIRE for a recorded limitation, not an
-    # endorsement of it: it goes red when the residual CHANGES — including when
-    # check 10 is fixed — and the remedy then is to re-measure, rewrite that note,
-    # and re-point or retire this arm. Prose is G-7's surface, not this one's.
+    # every pattern's specimen through the REAL check_note_content() from each
+    # non-prose surface in `g8_surfaces` below — the arms and that dict are the
+    # reach, and the note beside row 9 describes them without a count, after a
+    # count there was falsified twice with every arm still green. It is a TRIPWIRE
+    # for a recorded limitation, not an endorsement of it: it goes red when the
+    # residual changes ON A SURFACE IT DRIVES — including when check 10 is fixed —
+    # and the remedy then is to re-measure, rewrite that note, and re-point or
+    # retire this arm. It says NOTHING about a surface not in the dict: both
+    # surfaces added here were found by reading, not by an arm going red. Prose is
+    # G-7's surface, not this one's.
     def _g8_hyphenate(s: str) -> str:
         return re.sub(r"\s+", "-", s.strip())
 
@@ -2728,6 +2749,17 @@ def _self_test() -> int:
     g8_surfaces = {
         "html-comment": lambda t: f"<!-- {t} -->",
         "angle-bracket link destination": lambda t: f"[the rule](<../core/rules/{t}.md>)",
+        # A raw-HTML attribute value. Added after an independent verification found
+        # the note's surface list incomplete: an attribute value admits spaces, so
+        # every pattern reaches it, and check 12's link_strip_re — the remedy that
+        # note rejects — does not touch it either.
+        "raw-HTML attribute value": lambda t: f'<span title="{t}">the rule</span>',
+        # A markdown link title, measured while adding the surface above and added
+        # with it rather than left as a second gap of the same shape. It is the one
+        # carrier here that check 12's link_strip_re DOES remove, since it sits
+        # inside the parentheses — which is the disagreement between the two checks
+        # stated in its sharpest form.
+        "markdown link title": lambda t: f'[the rule](../core/rules/guard.md "{t}")',
         "bare link destination": lambda t: f"[the rule](../core/rules/{_g8_hyphenate(t)}.md)",
         "heading-anchor fragment": lambda t: f"[below](#{_g8_slug(t)})",
     }
@@ -2777,9 +2809,12 @@ def _self_test() -> int:
     def _g8_detail(surface: str, expected: set[str]) -> str:
         got = g8_fired.get(surface, set())
         if got == expected:
-            return f"{len(got)}/{len(g8_keys)} pattern(s) fired, as the row-9 note records"
-        return (f"{len(got)}/{len(g8_keys)} fired; FIRING BUT NOT RECORDED={sorted(got - expected)} "
-                f"RECORDED BUT NOT FIRING={sorted(expected - got)} — the residual changed: "
+            # What this reports is what THIS arm expected and observed. It does not
+            # read the row-9 note, and an earlier wording that claimed agreement
+            # with it was printing a PASS beside a note the arm had never seen.
+            return f"{len(got)}/{len(g8_keys)} pattern(s) fired, the set this arm expects for this surface"
+        return (f"{len(got)}/{len(g8_keys)} fired; FIRING BUT NOT EXPECTED={sorted(got - expected)} "
+                f"EXPECTED BUT NOT FIRING={sorted(expected - got)} — the residual changed: "
                 "re-measure, rewrite the row-9 KNOWN RESIDUAL note, re-point this arm")
 
     arm("G-8a KNOWN RESIDUAL tripwire — from inside an HTML comment in Section 6a, every pattern fires",
@@ -2787,6 +2822,12 @@ def _self_test() -> int:
     arm("G-8b KNOWN RESIDUAL tripwire — from an angle-bracket link destination, every pattern fires",
         g8_fired.get("angle-bracket link destination") == g8_keys,
         _g8_detail("angle-bracket link destination", g8_keys))
+    arm("G-8e KNOWN RESIDUAL tripwire — from a raw-HTML attribute value, every pattern fires",
+        g8_fired.get("raw-HTML attribute value") == g8_keys,
+        _g8_detail("raw-HTML attribute value", g8_keys))
+    arm("G-8f KNOWN RESIDUAL tripwire — from a markdown link title, every pattern fires",
+        g8_fired.get("markdown link title") == g8_keys,
+        _g8_detail("markdown link title", g8_keys))
     arm("G-8c KNOWN RESIDUAL tripwire — from a bare link destination or a heading-anchor fragment, "
         "exactly the patterns whose specimen carries no whitespace fire",
         g8_fired.get("bare link destination") == g8_ws_free
@@ -2794,7 +2835,7 @@ def _self_test() -> int:
         f"whitespace-free specimens {sorted(g8_ws_free)}; bare destination: "
         + _g8_detail("bare link destination", g8_ws_free)
         + "; heading anchor: " + _g8_detail("heading-anchor fragment", g8_ws_free))
-    arm("G-8d specificity — the same four surfaces carrying no §2.4 term produce no banned-jargon finding",
+    arm("G-8d specificity — the same non-prose surfaces carrying no §2.4 term produce no banned-jargon finding",
         len(g8_control) == len(g8_surfaces) and all(n == 0 for n in g8_control.values()),
         "; ".join(f"{s}: {n}" for s, n in g8_control.items())
         + " finding(s) on a surface carrying an ordinary aside")
