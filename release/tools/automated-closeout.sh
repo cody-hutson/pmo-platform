@@ -14589,7 +14589,18 @@ READERSTUB
   _st_arm AI AI-R; [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-R — --attest-action-items must NOT clear an UNCLASSIFIABLE verdict; an unreadable status is normalised, not attested away (rc $_ai_rc)"; failures=$((failures+1)); }
   ATTEST_ACTION_ITEMS=""
 
-  # (M) THE MEASURED RECOMMENDED CAUSE — 8 arms.
+  # (M) THE MEASURED RECOMMENDED CAUSE — 10 arms.
+  #
+  # ALL FOUR REFUSAL PATHS ARE ARMED, and that is the property this group holds
+  # rather than an arm count. The classifier refuses in four distinct places — no
+  # release key, an unusable reader, a reader whose answer is not a count, and a
+  # log that cannot separate the two causes — and a refusal that no arm drives is
+  # a refusal that can be deleted silently. Two of the four were unarmed and were
+  # measured so: with the no-release-key guard replaced by `if false`, and again
+  # with the three non-integer guards defaulted to 0 instead of to the empty
+  # string, this suite stayed at exit 0 with zero FAIL lines. In both mutants a
+  # probe that could not answer was rendered as a measured absence — the exact
+  # inversion (M4) exists to refuse — so (M9) and (M10) drive those two paths.
   #
   # BIND TO THE RECOMMENDATION CLAUSE, NEVER TO THE WHOLE DETAIL. The blocking FAIL
   # detail ALREADY names both causes in its remediation sentence ("Re-run with
@@ -14601,9 +14612,11 @@ READERSTUB
   # emits exactly once, and each positive arm is paired with a specificity arm
   # asserting the OTHER cause is NOT what was recommended.
   #
-  # VERDICT-INVARIANCE IS ASSERTED IN EVERY ARM, not stated in a comment. M1-M4 and
-  # M6-M8 each drive the same UNATTESTED NOT-RECORDED fixture at --apply and require
-  # rc 3 with STATE_AI_GATE unchanged; M5 drives the same fixture ATTESTED and requires rc 0,
+  # VERDICT-INVARIANCE IS ASSERTED IN EVERY ARM, not stated in a comment. M1-M4,
+  # M6-M8 and M10 each drive the same UNATTESTED NOT-RECORDED fixture at --apply and
+  # require rc 3 with STATE_AI_GATE unchanged; M9 reaches the same unattested
+  # NOT-RECORDED state from an unresolvable directory rather than from that fixture,
+  # and requires the same rc 3; M5 drives the same fixture ATTESTED and requires rc 0,
   # because there the attestation is what clears the block and the measurement is only
   # evidence beside it. Both shapes assert the same property from opposite sides: the
   # verdict is whatever the fixture's attestation state already made it, and no
@@ -14725,8 +14738,122 @@ READERSTUB
   _st_arm M M8; _ai_m_check M8 'MEASURED RECOMMENDATION: none' \
                  'MEASURED RECOMMENDATION: --attest-action-items'
   /usr/bin/grep -qF 'no usable count' <<<"$_ai_m" || { echo "FAIL: AI-M8 — the detail must NAME the unusable probe, or an inconsistent reader is indistinguishable from a measured absence, got '$_ai_m'"; failures=$((failures+1)); }
+
+  # (M9) A QUERY WITH NO RELEASE KEY IS NOT A ZERO. Every fixture above hands the
+  #      classifier a release key, so the first refusal path — the one that fires
+  #      when neither STATE_MILESTONE_SLUG nor VERSION resolves — was never driven.
+  #      The reader here is deliberately the (M1) reader, the one that WOULD answer
+  #      emit-skipped: with the guard disarmed the classifier queries an unkeyed
+  #      reader, receives whatever that reader says about some other release or
+  #      about all of them, and prints a confident cause anyway. A reader stub that
+  #      answered nothing would make this arm pass over the disarmed guard too, so
+  #      the answering reader is the fixture and not a convenience. Measured: with
+  #      the guard replaced by `if false` the whole suite stayed at exit 0.
+  local _ai_m9_ver="$VERSION"
+  VERSION=""
+  _ai_mk_reader 1 9
+  _ai_drive ""; _ai_rc="$_AI_RC"; _ai_m="$(get_phase action_item_gate)"
+  _st_arm M M9; _ai_m_check M9 'MEASURED RECOMMENDATION: none' \
+                 'MEASURED RECOMMENDATION: --attest-action-items'
+  /usr/bin/grep -qF 'resolved no release key to query' <<<"$_ai_m" || { echo "FAIL: AI-M9 — the detail must NAME the missing release key as the reason no cause was recommended; an unkeyed query is not a measurement of THIS release, got '$_ai_m'"; failures=$((failures+1)); }
+  VERSION="$_ai_m9_ver"
+
+  # (M10) A READER THAT DID NOT ANSWER WITH A COUNT HAS NOT COUNTED. (M8) drives the
+  #      SUBSET limb of the usable-count guard; the NON-INTEGER limb — the one that
+  #      catches a reader returning an error, a notice, or nothing at all — had no
+  #      arm at all, and defaulting the three guards that implement it to 0 left the
+  #      suite at exit 0 with zero FAIL lines. Measured. That mutant renders a
+  #      rate-limited reader as `no-commitments`, PROVEN-looking and wrong, which is
+  #      (M4)'s failure shape reached through a reader that exists and runs.
+  #
+  #      FOUR LIMBS, AND THE FIRST THREE ARE WHY. The guard is a DISJUNCTION over
+  #      three separately-read counts, so a single fixture that breaks all three is
+  #      satisfied by any one guard surviving: measured, a mutant defaulting only
+  #      `_open` to 0 — or only `_dec` — left an all-queries-broken fixture still
+  #      refusing, and the arm green. Each of the first three limbs therefore breaks
+  #      exactly ONE query and leaves the other two answering integers, so each
+  #      guard has a fixture only it can refuse and a one-guard mutant reddens here
+  #      by name. Limb (d) then breaks every query at once and is the only limb that
+  #      pins the two properties the READ depends on rather than the guard: the LAST
+  #      stdout line is what is taken, and the integer match is ANCHORED rather than
+  #      a contains-a-digit test.
+  #
+  #      `_ai_mk_reader` cannot express these: its counts are baked in as integers by
+  #      construction, which is exactly the property that makes every other M arm
+  #      state its own input. This stub takes the query to break as its argument, and
+  #      matches the payload filter FIRST for the same reason the shipped stub does —
+  #      the zero-state query also carries the action-item-opened subtype.
+  _ai_mk_reader_nonint() {   # _ai_mk_reader_nonint <open|zero|dec>
+    local _b="$1" _o='1' _z='0' _d='9'
+    case "$_b" in
+      open) _o='error: HTTP 429 rate limit exceeded' ;;
+      zero) _z='error: HTTP 429 rate limit exceeded' ;;
+      dec)  _d='error: HTTP 429 rate limit exceeded' ;;
+    esac
+    /bin/cat > "$_ai_tmp/reader-nonint" <<READERNONINT
+#!/bin/sh
+case "\$*" in
+  *"--payload-contains sweep:none-owed "*|*"--payload-contains sweep:none-owed")
+                        printf '%s\n' '${_z}' ;;
+  *--payload-contains*) printf '%s\n' 'unexpected-payload-filter' ;;
+  *action-item-opened*) printf '%s\n' '${_o}' ;;
+  *)                    printf '%s\n' '${_d}' ;;
+esac
+exit 0
+READERNONINT
+    /bin/chmod +x "$_ai_tmp/reader-nonint"
+    AI_EVENT_READER="$_ai_tmp/reader-nonint"
+  }
+
+  # (a) the action-item-opened query alone answers a non-integer. Without the guard
+  #     on `_open` the subtraction runs against an empty minuend and 1 real
+  #     zero-state row reads as a commitment count of 0 beside 9 decision rows.
+  _ai_mk_reader_nonint open
+  _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"; _ai_m="$(get_phase action_item_gate)"
+  _st_arm M M10; _ai_m_check M10a 'MEASURED RECOMMENDATION: none' \
+                 'MEASURED RECOMMENDATION: --attest-action-items'
+  /usr/bin/grep -qF 'no usable count' <<<"$_ai_m" || { echo "FAIL: AI-M10a — with ONLY the action-item-opened query answering a non-integer the detail must still NAME the unusable probe; this is the fixture the \$_open guard alone refuses, got '$_ai_m'"; failures=$((failures+1)); }
+
+  # (b) the zero-state query alone. The subtrahend is the count a defaulted guard
+  #     turns into a silent 0, which inflates the commitment count to the raw one —
+  #     (M6)'s defect reached through the reader instead of through the arithmetic.
+  _ai_mk_reader_nonint zero
+  _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"; _ai_m="$(get_phase action_item_gate)"
+  _ai_m_check M10b 'MEASURED RECOMMENDATION: none' \
+                 'MEASURED RECOMMENDATION: --attest-action-items'
+  /usr/bin/grep -qF 'no usable count' <<<"$_ai_m" || { echo "FAIL: AI-M10b — with ONLY the sweep:none-owed query answering a non-integer the detail must still NAME the unusable probe; this is the fixture the \$_zero guard alone refuses, got '$_ai_m'"; failures=$((failures+1)); }
+
+  # (c) the decision-count query alone. This is the one that decides between the
+  #     no-commitments cause and the residue, so a defaulted 0 here is the single
+  #     mutation that turns an unread log into a confident `no-commitments`.
+  _ai_mk_reader_nonint dec
+  _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"; _ai_m="$(get_phase action_item_gate)"
+  _ai_m_check M10c 'MEASURED RECOMMENDATION: none' \
+                 'MEASURED RECOMMENDATION: --attest-action-items'
+  /usr/bin/grep -qF 'no usable count' <<<"$_ai_m" || { echo "FAIL: AI-M10c — with ONLY the decision-count query answering a non-integer the detail must still NAME the unusable probe; this is the fixture the \$_dec guard alone refuses, got '$_ai_m'"; failures=$((failures+1)); }
+
+  # (d) EVERY query answers the rate-limit error, on TWO stdout lines: a bare
+  #     integer first, then the error, whose text carries digits inside a
+  #     non-numeric value. The whole-reader outage, and the only limb that grades
+  #     the READ rather than a guard: a first-line read would take the 7 for a count
+  #     and a contains-a-digit test would take the 429 line for one. Both are
+  #     measured to redden this limb. A reader's answer is its LAST stdout line, so
+  #     a count printed before an error is not an answer.
+  /bin/cat > "$_ai_tmp/reader-nonint" <<'READERNONINT'
+#!/bin/sh
+printf '%s\n' '7'
+printf '%s\n' 'error: HTTP 429 rate limit exceeded'
+exit 0
+READERNONINT
+  /bin/chmod +x "$_ai_tmp/reader-nonint"
+  AI_EVENT_READER="$_ai_tmp/reader-nonint"
+  _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"; _ai_m="$(get_phase action_item_gate)"
+  _ai_m_check M10d 'MEASURED RECOMMENDATION: none' \
+                 'MEASURED RECOMMENDATION: --attest-action-items'
+  /usr/bin/grep -qF 'no usable count' <<<"$_ai_m" || { echo "FAIL: AI-M10d — a reader answering an error on EVERY query must be named as unusable; a run that took the leading 7 or the 429 line for a count would report a measurement over a probe whose answer was an error, got '$_ai_m'"; failures=$((failures+1)); }
+
   _ai_mk_reader 0 0
-  _st_witness M 8
+  _st_witness M 10
 
   # (H) DRY-RUN — evaluates, records, never halts, and says what it WOULD do.
   MODE="dry-run"
@@ -15555,7 +15682,7 @@ EOF
   _st_claim 4d-settle "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache); check-5 settle POLL validated (#4416, legs f-j PLUS the F-01 remediation leg i.2 — six arms, not five; this clause ENUMERATES the settle group's legs and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when legs f-j and i.2 leave no witness: f AC2 an injected 5-read search-index lag, longer than the pre-change single-retry window, still converges to PASS and RENDERS its settle figure in both the row and the phase detail — the v4.02 failure reproduced and closed / g AC3 THE NON-VACUITY CONTROL, same fixture with the budget shrunk BELOW the lag: exhaustion must read PARTIAL and NAME the budget, never PASS, so f is proven capable of failing / h AC1 structural self-parse behind an anti-vacuity floor — the attempt bound exists AND is a loop terminal AND the poll loop exists, with the pre-change 'Retry ONCE' form asserted ABSENT so no limb is satisfiable by the old code / i AC4 an out-of-scope straggler is still reported at once, asserted on the CHECK-5-SCOPED instrument ('check-5 settled at poll 0/15') because a PARTIAL row alone cannot distinguish reported-now from reported-after-the-whole-budget, and because the stub's own 'calls' counter is PHASE-scoped rather than check-5-scoped — the gate-passage-proof rung issues a third 'issue list' after check 5 has rendered — so that counter carries an independent CEILING arm (<= 3 = detect + check-5 + gate-passage-proof) stated as the bound it really is; leg (f)'s 'poll 5/15' is the moving control that makes the zero a real reading / i.2 THE F-01 REMEDIATION ARM, and the only one that discriminates the render guard: leg (i) grades the exhaustion suffix but can only ever exercise it at polls=0, where it is unreachable BY CONSTRUCTION under either guard, which is how '-gt 0' survived it. i.2 drives the one separating state — an out-of-scope straggler surfacing MID-POLL, in-scope #401 holding the poll open across a 3-read lag while #999 breaks the loop at 3 of 15 attempts with the budget never waited — behind an anti-vacuity floor on 'poll 3/15' whose moving controls are (f)'s 'poll 5/15' and (i)'s 'poll 0/15'. Twelve fixtures under both guards: 12/12 pass under the loop's own '-ge' terminal, exactly one fails under '-gt 0' / j AC5 the group stays hermetic and instant at DELAY=0, which only an ATTEMPT bound makes structurally possible)"
   echo "  post_gate_passage_proof three-rung target ladder validated (#3819 — T-13 rung 1 resolves a CLOSED Stage-13 sub-task via --state all and does NOT fall through to the PR / rung 2 posts to the release PR naming the OBSERVED rung-1 reason / rung 3 MANUAL names BOTH attempted targets; T-14 two collect_open_release_issues calls in one run keep EXCLUDED_DETAIL undoubled, COLLECTED_OPEN_ISSUES identical and resolve_stage13_subtask stable, with a non-empty-exclusion anti-vacuity control)" >&2
   _st_claim AI "  phase_action_item_gate validated (#4439, group AI — 28 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): A and B are each other's control over ONE differential harness where only the ledger changes — a gate that never blocks fails A, one that always blocks fails B, one reading the wrong path resolves NOT-RECORDED for both and fails BOTH / B2 decoy: a terminal ledger carrying the literal words 'open' and 'in-flight' in trigger_detail still resolves RESOLVED, so the gate is column-addressed and not row-pattern-matched / all five verdict states drive distinct fixtures and are asserted on the STATE_AI_GATE global rather than the detail prose — UNRESOLVED (A) · RESOLVED (B, B2) · NOT-RECORDED (C unattested blocks, C2 attested passes WARN with the operator-actor attestation EMITTED carrying its cause and the spec subtype) · EMPTY-LEDGER (D unattested blocks, D2 attested round-trips the second cause) · UNCLASSIFIABLE (M blocks and NAMES the offending row and its raw value, with a specificity limb proving the enumerator selects the unreadable set and not the terminal one, and the all-terminal ledger re-driven on the same harness as its paired negative control) / E the two SURFACE states must resolve DISTINCT values, because comparing detail strings passes on any two different sentences / E2 an unlicensed attestation cause does NOT clear a SURFACE state / F EXECUTES the two dispatch lines lifted VERBATIM from this file's own text, refusing to pass unless each needle resolves to exactly one top-level line, under three mutually-controlling limbs — F1 blocking gate leaves the close UNFIRED at exit 3, F2 SENSITIVITY a passing gate does fire it (without which F1's clean result is meaningless), F3 NEGATIVE CONTROL a constructed '|| true' line must let the close through (without which a fail-closed gate is indistinguishable from a no-op one) — so capability-to-fail is re-demonstrated on EVERY run, not only under one-time mutation / F4 whole-block invariant: every top-level dispatch line carries the fail-closed guard, with an anti-vacuity floor on the parse and a specificity control proving the filter rejects an unguarded line / G doc<->code parity on the canonical Procedure 7a predicate across the fixture set, with an anti-vacuity floor on the extraction and a sensitivity arm requiring >=5 distinct STATEs over a fixture count DERIVED from the loop rather than restated in the message / M-N-O-Q-R-S-T MEMBERSHIP: the residue of the recognised set is its own BLOCKING state rather than the implicit else of a two-value comparison, which counted a typo, a case variant, a foreign vocabulary and an out-of-range field as RESOLVED — M an unadmitted value blocks and names itself, with the all-terminal ledger as its paired negative control / N case-folding NORMALISES rather than rejects, so an uppercase OPEN resolves UNRESOLVED and a fold-and-reject implementation cannot pass M / O the two section-2.1a status aliases stay ADMITTED, without which every legacy re-run blocks / Q the ARITY class in BOTH its mechanisms, the one witnessed live: at arity<=10 field 11 does not exist and reads EMPTY, at arity 11 the row-terminating pipe stays glued to the last field and reads 'open |' NON-empty, and the detail carries fields:N so a dropped column is distinguishable from a mistyped word / R an unreadable ledger cannot be attested away, the structural sibling of L / S row 6 renders the fifth state WITH its counts instead of falling to the default that asserts the gate did not run, with the still-reachable default as its control / T PRECEDENCE: a ledger carrying both classes renders UNRESOLVED and carries BOTH enumerations in one detail, because the state selects the operator's remedy and reversing it would drop the open enumeration from the ledgers that most need it / H --dry-run never returns non-zero yet still EVALUATES, and names the condition that would FAIL at --apply / I an idempotent re-run over an already-closed milestone, where an UNRESOLVED verdict is the close-before-verdict shape itself / J --no-merge still evaluates and records rather than blocks / K Verification row 6 reads the Phase-12.9 GLOBAL — unset renders UNVERIFIED never a green cell, mutating the global moves the cell, and phase_run_verification is asserted NOT to re-evaluate the predicate after the close / L an attestation does NOT clear an UNRESOLVED verdict — an open row is dispositioned, never attested away / P operator-instance path tokenisation, with a sensitivity arm proving the leak probe can match its own needle"
-  _st_claim M "  phase_action_item_gate MEASURED recommended --attest-action-items cause validated (group M — 8 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): every arm binds to the literal 'MEASURED RECOMMENDATION: ' prefix rather than to the whole detail, because the blocking FAIL text already names BOTH causes in its remediation sentence and a whole-detail search for either one therefore passes over an inverted classifier — the vacuous-arm shape, refused here by construction — M1 a commitment emitted with an empty ledger recommends emit-skipped and provably not the other cause / M2 its differential control, same fixture and mode with only the log counts changed, recommends no-commitments and provably not the other / M3 the residue gets its own outcome: decisions rendered with nothing emitted is the shape a swept-and-owed-nothing release and a never-swept release BOTH produce, so the classifier recommends NEITHER cause instead of guessing / M4 an unreadable probe is not a zero — a missing reader recommends nothing and NAMES the reader, without which a broken reader would silently recommend no-commitments on every close / M5 a measurement that DISAGREES with an attestation already given is recorded and still passes, with the specificity arm that an AGREEING measurement renders no disagreement notice / M6 THE SWEEP ZERO-STATE IS NOT A COMMITMENT: action-item-opened rows that all carry the sweep:none-owed payload token — what a release that swept every routing point and owed nothing emits — recommend NEITHER cause and never emit-skipped, and the basis NAMES the zero-state rows; red against a classifier that counts every action-item-opened row / M7 its specificity twin: ONE real commitment beside zero-state rows still recommends emit-skipped and renders the commitment count rather than the raw count, so an over-correction that stops counting whenever a zero-state row is present fails here, and a threshold drift to -ge 2 fails here as well as in M1 / M8 a zero-state count larger than the action-item-opened set it is a subset of is not a count — the classifier recommends nothing and NAMES the unusable probe rather than subtracting its way to a negative commitment count, without which the subset guard is unarmed / and every M arm re-asserts the verdict its fixture's attestation state already fixed — rc 3 with STATE_AI_GATE unchanged on the unattested M1-M4 and M6-M8, rc 0 on the attested M5 — so 'the recommendation decides nothing' is measured on each run rather than asserted once"
+  _st_claim M "  phase_action_item_gate MEASURED recommended --attest-action-items cause validated (group M — 10 arms, one for each of the classifier's four refusal paths plus the six cause arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): every arm binds to the literal 'MEASURED RECOMMENDATION: ' prefix rather than to the whole detail, because the blocking FAIL text already names BOTH causes in its remediation sentence and a whole-detail search for either one therefore passes over an inverted classifier — the vacuous-arm shape, refused here by construction — M1 a commitment emitted with an empty ledger recommends emit-skipped and provably not the other cause / M2 its differential control, same fixture and mode with only the log counts changed, recommends no-commitments and provably not the other / M3 the residue gets its own outcome: decisions rendered with nothing emitted is the shape a swept-and-owed-nothing release and a never-swept release BOTH produce, so the classifier recommends NEITHER cause instead of guessing / M4 an unreadable probe is not a zero — a missing reader recommends nothing and NAMES the reader, without which a broken reader would silently recommend no-commitments on every close / M5 a measurement that DISAGREES with an attestation already given is recorded and still passes, with the specificity arm that an AGREEING measurement renders no disagreement notice / M6 THE SWEEP ZERO-STATE IS NOT A COMMITMENT: action-item-opened rows that all carry the sweep:none-owed payload token — what a release that swept every routing point and owed nothing emits — recommend NEITHER cause and never emit-skipped, and the basis NAMES the zero-state rows; red against a classifier that counts every action-item-opened row / M7 its specificity twin: ONE real commitment beside zero-state rows still recommends emit-skipped and renders the commitment count rather than the raw count, so an over-correction that stops counting whenever a zero-state row is present fails here, and a threshold drift to -ge 2 fails here as well as in M1 / M8 a zero-state count larger than the action-item-opened set it is a subset of is not a count — the classifier recommends nothing and NAMES the unusable probe rather than subtracting its way to a negative commitment count, without which the subset guard is unarmed / M9 A QUERY WITH NO RELEASE KEY IS NOT A ZERO — every other arm hands the classifier a key, so the first refusal path went undriven; the arm drives an unresolvable key against the M1 reader, the one that WOULD answer emit-skipped, so a disarmed guard prints a confident cause built from a query that names no release rather than simply printing nothing, and the detail must NAME the missing key / M10 A READER THAT DID NOT ANSWER WITH A COUNT HAS NOT COUNTED — M8 drives only the subset limb of the usable-count guard, leaving the non-integer limb unarmed; four limbs, because that limb is a DISJUNCTION over three separately-read counts and one fixture breaking all three is satisfied by any single guard surviving (measured: a mutant defaulting only the action-item-opened read to 0 left an all-queries-broken fixture still refusing), so limbs a-b-c each break exactly ONE query and leave the other two answering integers, giving every guard a fixture only it can refuse, while limb d breaks every query and is the only one that grades the READ rather than the guard — a bare integer on the first stdout line and an error carrying digits inside a non-numeric value on the last, so a first-line read or a contains-a-digit test reddens — and all four require the classifier to NAME the unusable probe instead of defaulting an unanswered count to 0 / M9 and M10 are the two arms this release adds, each measured RED against its own one-line mutant and GREEN unmutated, because before them the no-release-key guard could be replaced by an always-false test and the three non-integer guards defaulted to 0 with this suite still at exit 0 and zero FAIL lines / and every M arm re-asserts the verdict its fixture's attestation state already fixed — rc 3 with STATE_AI_GATE unchanged on the unattested M1-M4, M6-M8 and M10, rc 3 on M9 which reaches that same unattested state from an unresolvable directory, rc 0 on the attested M5 — so 'the recommendation decides nothing' is measured on each run rather than asserted once"
   _st_claim 4e-c-j "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT; #6255, arms c-j — this clause ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when the arms leave no witness: TERMINAL STATES — (e) an ALREADY-MERGED PR PASSes on the FIRST read with ZERO merge attempts and its detail carries the elapsed figure AC-4 is graded on, which no earlier version of this phase emitted at all / (f) a CLOSED-unmerged PR FAILs and its detail NAMES the closed-without-merging case, driven on the deliberately MERGEABLE-looking closed shape because the CONFLICTING one trips the pre-existing arm by accident, and asserted on the detail because a bare FAIL is satisfied by the PRE-FIX timeout path / (g) THE PER-ITERATION PIN: a merge landing MID-POLL is recognised on the SECOND read, so a pre-loop-only implementation passes (e) and fails here — budgeted at MERGE_TIMEOUT=2 because the bound admits ceil(TIMEOUT/STEP) iterations and a 1/1 arm would redden against a CORRECT implementation / RE-PROBE — (h) a failed gh pr merge over a PR that DID merge PASSes with the merge ATTEMPTED once and a detail naming the unobserved-merge case, (h2) its NEGATIVE CONTROL: the same failed merge over a STILL-OPEN PR must still FAIL, without which an implementation that PASSes on any merge failure satisfies (h) / (i) THE WIDTH PIN over the shipped text of the one shared reader, three-field --json list and three-field --jq template, behind an anti-vacuity floor on the extraction and TWO specificity controls on constructed FOUR-field lines that both needles must reject / BUDGET EXHAUSTION — (j) AC-2's timeout limb, which every arm above leaves ungraded: a PR BLOCKED on every read must spend the budget and then FAIL with a detail NAMING the timeout ('merge state still=') and ZERO merge attempts, asserted on the detail because a bare FAIL is satisfied by (f)'s CLOSED arm and by the CONFLICTING HALT, and on the merge counter because removing the post-loop guard falls straight through to gh pr merge and launders the spent budget into a PASS — measured: with that guard replaced by 'if false' the whole suite stayed at exit 0 / and every arm c-j counts BOTH pr view and pr merge, because post-fix a PASS is reachable through the terminal arm and no longer proves on its own that a merge was attempted)"
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
