@@ -22,29 +22,62 @@
 
 | Field | Value |
 |---|---|
-| Status | **AWAITING FIRST RUN** — no decision-health audit has run on this instance yet |
-| Audit date (UTC) | _(none)_ |
-| Resolved window — `from_release` | _(none)_ |
-| Resolved window — `from` merge anchor | _(none)_ |
-| Resolved window — `to_release` | _(none)_ |
-| Resolved window — `to` merge anchor | _(none)_ |
-| Releases spanned | _(none)_ |
-| Decision-health posture | _(none — awaiting first run)_ |
-| `coverage_index` | _(none)_ |
-| `instrumentation_ceiling` | _(none)_ |
-| Coverage distribution — `captured` | _(none)_ |
-| Coverage distribution — `partial` | _(none)_ |
-| Coverage distribution — `unexercised` | _(none)_ |
-| Coverage distribution — `undecidable` | _(none)_ |
-| Coverage distribution — `uninstrumented` | _(none)_ |
-| Index re-based this run? | _(none)_ — set when the rubric's seam-id set changed since the prior run |
-| Oracle pin — roster membership | _(none)_ |
-| Oracle pin — per-source path · content hash · entry count · entry-title set | _(none)_ |
-| Oracle pin — derivation date | _(none)_ |
-| Roster-delta notice | _(none)_ — names any oracle source added or removed since the prior pin |
-| Evidence-bar pass rate | _(none)_ |
-| Systemic patterns | _(none)_ |
-| Latest analysis folder | _(none — the dated decision-audit folder is produced at first run)_ |
+| Status | **RUN 1 COMPLETE** — six seams measured and graded `partial`, one `uninstrumented`; 10 findings, 4 systemic patterns |
+| Audit date (UTC) | 2026-09-18 |
+| Resolved window — `from_release` | v4.60 (`deploy-checks-hardening-batch`) |
+| Resolved window — `from` merge anchor | `aea98ac15f84813a847ffcc666d3926fa7f23c00` |
+| Resolved window — `to_release` | v4.65 (`deploy-tools-and-tests-batch`) |
+| Resolved window — `to` merge anchor | `0c4f0a4d6210bff9413c2ff1ab2f8bd1d438a2da` |
+| Releases spanned | 5 |
+| Decision-health posture | **Observable but incompletely recorded.** Every seam the platform can see was measurable over this window, and none of the six reached full capture: each carries at least one occasion the window owed and no row evidences. One seam is a standing blind spot. |
+| `coverage_index` | **0/7 = 0.000** (counts only `measured` + `captured` seams) |
+| `instrumentation_ceiling` | **6/7 = 0.857** (every seam with a declared producer; no window term) |
+| Coverage distribution — `captured` | 0 |
+| Coverage distribution — `partial` | 6 |
+| Coverage distribution — `unexercised` | 0 |
+| Coverage distribution — `undecidable` | 0 |
+| Coverage distribution — `uninstrumented` | 1 (DS7) |
+| Index re-based this run? | **YES** — first run under this rubric; no prior identifier set exists to trend against, so the index is rendered `re-based` rather than compared |
+| Oracle pin — roster membership | `build-reviewer`, `implementation-planner`, `pipeline-triage`, `pmo-architect`, `pmo-data-engineer`, `pmo-devops-sre`, `pmo-principal-engineer`, `pmo-qa-lead`, `pmo-release-manager`, `pmo-skill-editor`, `pmo-skill-refiner`, `pmo-software-engineer`, `release-executor`, `release-hub`, `release-planner`, `roadmap-curator` |
+| Oracle pin — per-source path · content hash · entry count · entry-title set | recorded in full in the run folder's `SUMMARY.md` § 2; per-source hashes and counts in the table below |
+| Oracle pin — derivation date | 2026-09-18 |
+| Roster-delta notice | none computable — no prior pin existed (the surface read `AWAITING FIRST RUN`) |
+| Evidence-bar pass rate | 10 of 10 findings sampled |
+| Systemic patterns | 4 |
+| Latest analysis folder | `analysis/decision-audit-2026-09-18/` (operator-instance, git-ignored) |
+
+### Oracle pin — per source
+
+| Oracle source | content sha256 | entry count |
+|---|---|---|
+| `release/skills/build-reviewer/SKILL.md` | `9409b358bb3b36c2` | 7 |
+| `release/skills/implementation-planner/SKILL.md` | `1f2d2550c5dcd098` | 6 |
+| `release/skills/pipeline-triage/SKILL.md` | `0cdffa8e4971a039` | 4 |
+| `release/skills/pmo-architect/SKILL.md` | `3470b4187afff597` | 4 |
+| `release/skills/pmo-data-engineer/SKILL.md` | `4e54f014213dde53` | 4 |
+| `release/skills/pmo-devops-sre/SKILL.md` | `0900659e4ab101fd` | 3 |
+| `release/skills/pmo-principal-engineer/SKILL.md` | `46b5aa7b1e3ae21f` | 4 |
+| `release/skills/pmo-qa-lead/SKILL.md` | `8bd5ec00975113db` | 4 |
+| `release/skills/pmo-release-manager/SKILL.md` | `0ac2078b2178e380` | 4 |
+| `release/skills/pmo-skill-editor/SKILL.md` | `d7992351414dc01d` | 6 |
+| `release/skills/pmo-skill-refiner/SKILL.md` | `99e4966a83dfdc7b` | 6 |
+| `release/skills/pmo-software-engineer/SKILL.md` | `ff360c227b864ea8` | 4 |
+| `release/skills/release-executor/SKILL.md` | `3be07cbd8d85f281` | 13 |
+| `release/skills/release-hub/SKILL.md` | `379af3079936c3f0` | 9 |
+| `release/skills/release-planner/SKILL.md` | `1e403b00bbdfdf40` | 17 |
+| `release/skills/roadmap-curator/SKILL.md` | `4b9383855ff24b8b` | 5 |
+
+### Per-seam result
+
+| Seam | coverage state | grade |
+|---|---|---|
+| **DS1** | `measured` | partial |
+| **DS2** | `measured` | partial |
+| **DS3** | `measured` | partial |
+| **DS4** | `measured` | partial |
+| **DS5** | `measured` | partial |
+| **DS6** | `measured` | partial |
+| **DS7** | `uninstrumented` | — (no grade — a non-graded state is never a passing grade) |
 
 ## How to read this surface
 
