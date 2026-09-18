@@ -45,7 +45,16 @@ altitude → type-emphasis table lives in `references/type-map.md`.
 ## "Over-defined" is relative to altitude
 
 Over-definition differs by altitude. The clarity gate reads this rule to decide what
-counts as "beyond intake-ready":
+counts as "beyond intake-ready".
+
+**The three altitude bullets below are the neutral-registry floor** — the depth
+guidance that applies when no methodology kit resolves for the intake scope. That is
+what they always were: `references/type-map.md` already describes the altitude →
+field-emphasis table they key off as "the invariant floor that projection overlays."
+When a kit **does** resolve, the bar is the resolved kind's own declarations instead,
+read per the `appropriate depth` dimension of
+`core/standards/work-item-authoring-standard.md` — Phase 3 states that read — and the
+floor is not consulted.
 
 - **Initiative / business altitude:** over-defined = the item commits child-level
   mechanism or task breakdown (the children belong in later slicing); intake-ready =
@@ -57,9 +66,22 @@ counts as "beyond intake-ready":
   reproduction, environment, affected files; over-defined here means prescribing the
   fix's internal design (the HOW), not capturing reproduction precision.
 
-The single test the agent applies: **over-definition = detail that belongs to a later
-stage at this altitude** (slicing for initiatives; Solutioning for stories and tasks),
-captured as if it were intake's job. This is symmetric to under-definition; both are
+The tests the agent applies are not stated here, and they do not share an owner.
+
+- **Per kind** — over-definition and under-definition, measured against *this* kind's
+  altitude, are the `appropriate depth` dimension of
+  `core/standards/work-item-authoring-standard.md`. Apply it to the resolved kind's
+  own declarations when a kit resolves; Phase 3 states that read. That standard's
+  § 3 says in terms that both halves of its test are per-kind.
+- **Across kinds** — whether the proposed change commits a HOW at intake at all,
+  whatever kind it is, is `release/references/how-to/intake-style-guide.md` § 4's
+  over-definition test, applied under the WHAT-framing this file enforces below. The
+  story and task floor bullets above state exactly that test.
+
+Both are cited rather than restated, so each rule keeps one home. **When no kit
+resolves, the floor bullets above state the bar directly** — the per-kind test takes
+its input from a kind's own criteria statements and there are none to read, while the
+cross-kind test never depended on a resolved kit. Over- and under-definition are both
 quality failures the 5-test catches.
 
 ## The four-phase loop (Mode A)
@@ -108,8 +130,10 @@ active methodology for the intake scope and derive this invocation's kind regist
    project-level mutable (Methodology Awareness Protocol Rule 1).
 6. **Unresolved is a caveat, not a default.** When neither field resolves at any
    rung, use the documented consumer fallback: the methodology-neutral invariant
-   registry, logging `[platform-config: methodology unresolved; using the neutral
-   intake registry]` in the run output.
+   registry **and its altitude floor as the depth guidance** — both halves of the
+   fallback, not the field set alone — logging
+   `[platform-config: methodology unresolved; using the neutral intake registry
+   and its altitude floor for depth]` in the run output.
 
 This step is the interactive loop's resolution surface (Modes A and B consume it;
 the ambient path keeps its own narrower implied-type contract).
@@ -193,10 +217,69 @@ never a duplicated inline list), using the domain-adaptive technique selector in
 `references/technique-library.md`. For a methodology-resolved kind, compose the
 field ask from the kind's declared field set (the inherited Work-Item core plus the
 kind's `kind_specific` fields, per the kind-derivation contract in
-`references/type-map.md`); the emission template's required structured fields still
-ride per the field-derivation contract, and the 5-test remains the invariant
-clarity gate either way. Apply the 5-test rule live (see below) so the
-emerging item is neither under- nor over-defined for its altitude.
+`references/type-map.md`) — that is the ask's **expected structure and required
+content**, the standard's first two dimensions — and shape the ask's **depth** from
+the same kind's own declarations, per the `appropriate depth` dimension of
+`core/standards/work-item-authoring-standard.md`. The emission template's required
+structured fields still ride per the field-derivation contract,
+and the 5-test remains the invariant clarity gate either way. Apply the 5-test rule
+live (see below) so the emerging item is neither under- nor over-defined for its
+altitude.
+
+**Which declarations carry the depth.** That dimension names two realizers and both
+are read. The standard is the rule's one home, and what follows is a **summary
+carried here so the rule can be applied literally at elicitation time** — not a
+second statement of it. **Where this summary and the standard diverge, § 2.2 of the
+standard governs**; re-read it there rather than relying on these bullets.
+
+- **The kind's `criteria.*.checks[]` entries that land in the depth dimension** —
+  what this kind is made responsible for deciding, and what it leaves to a
+  neighbour. Which entries those are is decided by that standard's § 2.2 ordered
+  procedure, applied per entry and stopping at the first yes: an entry asserting
+  over the item's **shape** is structure; an entry turning on whether a declared
+  field or edge is **present and populated** is content; only an entry falling
+  through both bounds depth. Do not read every criteria statement as depth — the
+  ordering is what keeps the three dimensions disjoint, and collapsing it pulls
+  shape- and presence-asserting checks into the depth bar.
+- **The block-level `source` on a declaration the kind left empty on purpose** —
+  the practice basis for declaring nothing at this altitude. The discriminator is
+  the **array**, never the block: the block's declaration array (`checks` /
+  `kind_specific`) is present and empty, and the block carries a `source`
+  (`core/schemas/work-item-type-schema.md` § 1.2.1 *Content provenance*). A
+  `criteria.*` block always carries `criteria_version` and a `fields` block always
+  carries `core`, so no block is ever itself empty; reading for an empty block
+  finds nothing.
+
+Depth therefore resolves three ways, and the middle one is the one to get right:
+
+| Outcome | Condition | Behaviour |
+|---|---|---|
+| **resolved** | a kit resolved, and the kind carries at least one depth-dimension `criteria.*.checks[]` entry | shape the ask's depth from those statements; the neutral floor is **not** consulted |
+| **reasoned-empty** | a kit resolved, and the relevant declaration array is present and empty with a block-level `source` | **the emptiness is the guidance.** Do not substitute the neutral floor — state the basis the `source` gives, and ask nothing the resolved practice does not require. A reasoned empty set is content, not absence |
+| **unresolved** | no kit resolved, **or** a declaration is absent or unreadable with no `source` | fall back to the neutral floor — the three altitude bullets above — **with the caveat**, never silently |
+
+**Evaluate the table per realizer instance, not once per kind.** These rows are not a
+first-match ladder over kinds. Run them over each declaration the kind carries — each
+`criteria.*` facet and the `fields` block — and apply every row that fires. A kind can
+land in `resolved` **and** `reasoned-empty` at the same time, and in the shipped packs
+that is the ordinary case rather than an edge one: populated depth entries in one
+array, a reasoned-empty array with a block-level `source` in another. Read
+`resolved`'s *"the kind carries at least one depth-dimension entry"* as a claim about
+the array being read, and shape the ask from the resolved statements **while** stating
+the basis each empty array's `source` gives. Stopping at `resolved` because the kind
+matched it somewhere suppresses every reasoned-empty statement that kind declares,
+which is the one outcome this table exists to protect.
+
+**How the manifest is read.** Resolve the eligible pack set and the kind union
+through the oracle `references/type-map.md` already names; that mode returns
+declaration-level provenance only and never a check statement. Read the depth
+statements themselves from the resolved manifest **directly** — the platform reader's
+**default** mode fragments the `checks[]` inline-table arrays, returning split
+`statement` values while reporting a clean parse, so a fragment-shaped depth bar would
+read as a successful one. A content-capturing mode that returns the statements whole
+exists and is **opt-in**, so the default is what an uninstructed read gets; the
+instruction stands because a reader that cannot tell which mode produced its input
+cannot tell a whole statement from a fragment either.
 
 **Re-elicit any unclear item once, following the define process.** If a captured
 field is vague, ambiguous, or fails a test, loop back on that specific field and
