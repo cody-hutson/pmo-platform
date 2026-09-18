@@ -14449,9 +14449,10 @@ READERSTUB
   [[ "$STATE_AI_GATE" == "EMPTY-LEDGER" ]] || { echo "FAIL: AI-D — STATE_AI_GATE must be EMPTY-LEDGER, got '$STATE_AI_GATE'"; failures=$((failures+1)); }
 
   # (E) DISCRIMINATOR — asserted on the VERDICT, not on the prose. The two SURFACE
-  #     states must not collapse into one, or the gate is 2-valued again. Comparing
-  #     detail strings would pass on any two distinct sentences; comparing the
-  #     globals compares the thing row 6 and every consumer actually read.
+  #     states must not collapse into one, or the five-valued gate reads as
+  #     four-valued. Comparing detail strings would pass on any two distinct
+  #     sentences; comparing the globals compares the thing row 6 and every
+  #     consumer actually read.
   _st_arm AI AI-E; [[ "$_ai_c_state" != "$STATE_AI_GATE" ]] || { echo "FAIL: AI-E — NOT-RECORDED and EMPTY-LEDGER must resolve DISTINCT STATE_AI_GATE values; both read '$STATE_AI_GATE' and the 5-valued gate has collapsed"; failures=$((failures+1)); }
   [[ "$(_ai_verification_cell)" == *"EMPTY-LEDGER"* ]] || { echo "FAIL: AI-E — the row-6 cell must carry the resolved STATE, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
 
