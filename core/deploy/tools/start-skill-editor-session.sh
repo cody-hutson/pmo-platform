@@ -44,11 +44,51 @@ set -euo pipefail
 # this file, not because the skill was unresolvable), and a same-named script sitting at
 # the post-`cd` path would have been executed in this one's place.
 #
-# `BASH_SOURCE[0]` is this file's own path however it was addressed; made absolute here,
-# it stays valid across every later `cd`. `$0` is still correct in the usage strings at
-# the bottom — those echo back what the caller typed, which is what a usage line shows.
-SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
-readonly SELF
+# `BASH_SOURCE[0]` holds the path this file was invoked BY. The two lines below make it
+# absolute. What that buys is stated as narrowly as it was measured:
+#
+#   - It holds for an invocation path that names this file from the invoking directory —
+#     absolute, `./`-prefixed, or bare relative — including with a hostile `CDPATH`
+#     exported. Self-test arm C1 runs this file as a child in exactly that environment.
+#   - It does NOT hold for `bash <bare-name>` resolved through bash's own PATH search for
+#     the script: that word carries no slash, `dirname` of a slash-less operand is `.`
+#     (observed on this host), so the result is `$PWD/<basename>`, correct only when the
+#     file happens to sit in the caller's directory. Measured on the expression, not on
+#     the running tool: the PATH manipulation that arm needs is denied by
+#     BLOCK-DESTRUCTIVE-020, and that denial was not routed around.
+#
+# Two properties of the shape below, and what each rests on:
+#
+#   - `CDPATH=''` on the `cd`. A bare relative dirname (`core/deploy/tools`) is a CDPATH
+#     search operand, so with an entry that resolves it, POSIX has `cd` print the directory
+#     it picked — and that directory need not be the invoking one. The print lands inside
+#     the capture, and `SELF` becomes a two-line value that is not a path. Reproduced at
+#     `CDPATH=.:~:/usr` (bash(1)'s own sample value): the bare-relative form returned
+#     FAIL/1 there while `./` and absolute returned PASS/0 — the addressing dependence
+#     this file exists to remove, returning by another door. Arm C1 is the regression
+#     guard: it goes red when this `CDPATH=''` is removed, and red again when the `cd`'s
+#     print is merely silenced rather than disabled.
+#   - The split into two assignments. Under `set -e` an assignment's status is that of its
+#     LAST command substitution, so concatenating `/$(basename …)` onto the same line
+#     discards a failing `cd` and freezes `SELF` at `/start-skill-editor-session.sh`.
+#     Measured on the two expressions here (the combined form survives `set -e` at rc 0;
+#     the split form aborts at rc 1), and it is the shape the in-repo precedent
+#     `core/deploy/tools/check-issue-ref-validity.sh` already uses. NO ARM COVERS THIS
+#     ONE: arm C1 stays green if the two lines are recombined, because CDPATH-safety and
+#     `set -e` coverage are different properties.
+#
+# `$0` is still correct in the usage strings at the bottom — those echo back what the
+# caller typed, which is what a usage line shows.
+SELF_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+SELF="${SELF_DIR}/$(basename -- "${BASH_SOURCE[0]}")"
+readonly SELF_DIR SELF
+
+# Arm C1's child marker (see self_test). It is honoured ONLY when the variable names a
+# file that exists and carries this exact line, so a marker leaked into a real run — an
+# exported variable, a stale environment — is ignored and that run still executes C1.
+# Recursion is bounded at one level either way, because the child the arm spawns always
+# carries a marker it can verify.
+readonly C1_CHILD_TOKEN='start-skill-editor-session.sh --self-test: arm C1 child'
 
 readonly TTL_SECONDS=1800  # MUST match SENTINEL_TTL_SECONDS in block-skill-direct-edit.sh
 readonly ROOTS="core operations release"
@@ -124,7 +164,24 @@ end_session() {
 
 # --- self-test: exercises the round trip AND the negative arms, on a scratch corpus ------
 self_test() {
-  local tmp rc=0 fails=0
+  local tmp rc=0 fails=0 child=0
+  # Am I the child arm C1 spawned? Only a marker that proves it came from a C1 arm counts;
+  # anything else is treated as absent, so an unverifiable marker cannot skip C1.
+  if [ -n "${SSE_SELFTEST_C1_CHILD:-}" ] && [ -f "${SSE_SELFTEST_C1_CHILD}" ] &&
+     [ "$(cat "${SSE_SELFTEST_C1_CHILD}")" = "$C1_CHILD_TOKEN" ]; then
+    child=1
+  fi
+
+  # A0 — SELF names THIS file. Every arm below re-invokes "$SELF" from inside a directory
+  # it has `cd`'d into, so all of them go dark in the same way when the resolution above
+  # returns something that is not this file: they fail with "no such file", which reads as
+  # a broken fixture rather than as a broken resolution. This arm names the cause instead.
+  # It runs before any `cd`, so `${BASH_SOURCE[0]}` still resolves from the invoking
+  # directory and `-ef` compares the two by inode.
+  if [ ! "$SELF" -ef "${BASH_SOURCE[0]}" ]; then
+    printf 'FAIL A0: SELF does not name this file: [%s]\n' "$SELF"; fails=$((fails+1))
+  fi
+
   tmp="$(mktemp -d)"
   # Double-quoted so $tmp expands NOW, at trap-set time. With single quotes the
   # expansion is deferred to trap-fire time, by which point this function has
@@ -168,8 +225,64 @@ self_test() {
     echo "FAIL B2: a sentinel exists after a failed mint"; fails=$((fails+1))
   fi
 
+  # C1 — the SELF resolution stays independent of how this file was addressed AND of
+  # CDPATH. The arms above cannot see either property: the discovery runner, and every
+  # other automated caller, invoke this file by ABSOLUTE path, which is the one form in
+  # which both the original `$0` defect and the CDPATH defect are invisible. So this arm
+  # builds the environment that exposes them and runs this same file in it as a child:
+  #
+  #   - addressed by a BARE RELATIVE path (`tools/<this file>`), from this file's
+  #     grandparent directory;
+  #   - with a `CDPATH` exported whose FIRST entry resolves that bare `tools` — to a
+  #     decoy directory holding a same-named no-op. A resolution that consults CDPATH
+  #     therefore either captures `cd`'s echo of the directory (a two-line, non-path
+  #     SELF) or silently points at the decoy. The decoy records that it ran, so
+  #     silencing the echo — `cd … >/dev/null`, the obvious way to "fix" the two-line
+  #     value — is caught too, rather than reading green.
+  #
+  # The child runs the same arms and must pass. Its own C1 is skipped via the verified
+  # marker, so the recursion is one level deep.
+  if [ "$child" -eq 0 ]; then
+    local c1_sub c1_dir c1_rel c1_decoy c1_token c1_ran c1_out c1_rc=0
+    c1_sub="$(basename "$(dirname "$SELF")")"
+    c1_dir="$(dirname "$(dirname "$SELF")")"
+    c1_rel="${c1_sub}/$(basename "$SELF")"
+    c1_decoy="${tmp}/cdpath-decoy"
+    c1_token="${tmp}/c1-child-token"
+    c1_ran="${tmp}/cdpath-decoy-ran"
+    mkdir -p "${c1_decoy}/${c1_sub}"
+    cat > "${c1_decoy}/${c1_rel}" <<EOF
+#!/usr/bin/env bash
+# Decoy: stands where a CDPATH entry would land \`cd ${c1_sub}\`. It must never run.
+printf 'ran\n' >> "${c1_ran}"
+exit 0
+EOF
+    printf '%s\n' "$C1_CHILD_TOKEN" > "$c1_token"
+    if [ ! -f "${c1_dir}/${c1_rel}" ]; then
+      echo "FAIL C1: cannot address this file as '${c1_rel}' from '${c1_dir}'"; fails=$((fails+1))
+    else
+      c1_out="$( cd "$c1_dir" && SSE_SELFTEST_C1_CHILD="$c1_token" CDPATH="${c1_decoy}:." \
+                 bash "$c1_rel" --self-test 2>&1 )" || c1_rc=$?
+      if [ "$c1_rc" -ne 0 ]; then
+        echo "FAIL C1: relative invocation under an exported CDPATH exited ${c1_rc}, want 0"
+        echo "  C1 child output follows:"
+        printf '%s\n' "$c1_out"
+        fails=$((fails+1))
+      fi
+      if [ -f "$c1_ran" ]; then
+        echo "FAIL C1: a CDPATH entry decided where SELF points — the decoy ran"; fails=$((fails+1))
+      fi
+    fi
+  fi
+
   if [ "$fails" -eq 0 ]; then
-    echo "self-test: PASS — 3 positive arms, 2 negative arms, 0 failures"
+    # No arm count here: the count that used to be printed was not measured, and it was
+    # wrong on a host without jq, where A2 does not run at all.
+    if [ "$child" -eq 1 ]; then
+      echo "self-test: PASS — 0 failures (arm C1 child; C1 itself not run here)"
+    else
+      echo "self-test: PASS — 0 failures"
+    fi
     return 0
   fi
   echo "self-test: FAIL — ${fails} failure(s)"
