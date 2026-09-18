@@ -14592,7 +14592,12 @@ READERSTUB
   # (M1) PROVEN emit-skipped — a commitment was emitted and the ledger holds nothing.
   #      This is the contradiction the gate can name precisely, and the upgrade from
   #      attested-blind to measured that two prior closes wanted and could not have.
-  _ai_mk_reader 2 9
+  #      ON THE BOUNDARY, deliberately: ONE action-item-opened row is the smallest
+  #      count the emit-skipped branch admits, and (M2)/(M3) hold the other side at
+  #      zero. An interior count cannot see that threshold move — at two rows a drift
+  #      to `-ge 2` still recommends emit-skipped and this arm stays green — so the
+  #      1 is the fixture, not a placeholder for any positive count.
+  _ai_mk_reader 1 9
   _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"; _ai_m="$(get_phase action_item_gate)"
   _st_arm M M1; _ai_m_check M1 'MEASURED RECOMMENDATION: --attest-action-items emit-skipped' \
                  'MEASURED RECOMMENDATION: --attest-action-items no-commitments'
@@ -14609,7 +14614,13 @@ READERSTUB
   #      was ever emitted — which is what a swept-and-owed-nothing release and a
   #      never-swept release BOTH look like in the log. Folding this into either
   #      cause would be a guess printed beside the word "recommended".
-  _ai_mk_reader 0 5
+  #      ON THE BOUNDARY, deliberately: ONE decision row is the smallest residue, one
+  #      step past (M2)'s zero, so the no-commitments threshold has an arm on each
+  #      side. An interior count cannot see that threshold widen — at five rows a
+  #      drift to `-le 1` still reads as residue and this arm stays green, while the
+  #      drifted tool prints no-commitments for a release with one decision row: the
+  #      guess this arm exists to refuse. The 1 is the fixture, not a placeholder.
+  _ai_mk_reader 0 1
   _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"; _ai_m="$(get_phase action_item_gate)"
   _st_arm M M3; _ai_m_check M3 'MEASURED RECOMMENDATION: none' \
                  'MEASURED RECOMMENDATION: --attest-action-items'
