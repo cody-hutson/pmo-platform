@@ -82,7 +82,7 @@ This is the **fourth** standing pre-spawn guard, composing with the quota-budget
 
 ## Stage-Conditional Launch Policy (when to spawn vs gate)
 
-Auto-launch is bound to the stage's Autonomy Tier: spawn autonomously for Tier-2/3 stages; **preserve the operator gate at Tier-0 — Stage 9 (Plan Review) and Stage 12 (Execute) are NEVER auto-launched.** (Stage-to-Autonomy-Tier table: `hub-spoke-bridge.md` § Stage-Conditional Launch Policy.)
+Auto-launch is bound to the stage's Autonomy Tier: spawn autonomously for Tier-2/3 stages; **preserve the operator gate at Tier-0 — the Procedure 5 gates (the Hub Gate Register rows whose `Proc` is 5 — `orchestration-playbook.md`) are NEVER auto-launched.** (Stage-to-Autonomy-Tier table: `hub-spoke-bridge.md` § Stage-Conditional Launch Policy.)
 
 ## Recursion prohibition
 
