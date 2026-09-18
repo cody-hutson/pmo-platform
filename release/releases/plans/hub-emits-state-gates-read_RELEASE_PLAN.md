@@ -215,7 +215,7 @@ release/tools/tests/fixtures/event-record/hub-state-tree/fixture-closed-no-ledge
 release/tools/tests/fixtures/event-record/hub-state-tree/fixture-inflight-no-ledger/sessions.md         add
 release/tools/tests/fixtures/event-record/hub-state-tree/fixture-quiet-no-ledger/sessions.md            add
 
-# ── EDIT (24) ──
+# ── EDIT (25) ──
 core/skills/pmo-qa-auditor/SKILL.md                                           edit
 core/skills/pmo-qa-auditor/references/decision-audit-mode-spec.md             edit
 release/references/protocols/decision-audit-cadence.md                        edit
@@ -234,6 +234,7 @@ core/ADRs/README.md                                                           ed
 core/disciplines/autonomous-execution-model.md                                edit
 core/schemas/touchpoint-phaseout-schema.md                                    edit
 core/standards/hub-action-tracking.md                                         edit
+core/deploy/allowlists/count-structure-baseline.txt                           edit
 .github/workflows/link-check.yml                                              edit
 packages/pmo-qa-auditor.skill                                                 edit
 packages/pmo-qa-auditor.skill.sha256                                          edit
@@ -259,11 +260,11 @@ The Stage-4 matrix carried two `CONDITIONAL` rows whose conditions resolved at S
 
 **Matrix arithmetic against the Stage-4 baseline, stated so the delta is checkable rather than asserted.** Stage-4 declared **20** rows (5 add = 4 concrete + 1 conditional; 15 edit = 14 concrete + 1 conditional). Live: add 5 − 1 (the conditional retires into an existing edit row) = **4**; edit 15 − 1 (the conditional retires) + 1 (`pipeline-event-log-schema.md`, its resolution) + 1 (`decision-audit-cadence.md`, the operator's retirement-site decision) + 1 (`check-event-record-integrity.sh`, the operator's decision to keep the population screen) = **17**. Total **21**, a net **+1** against the Stage-4 baseline with **zero files added** beyond the Stage-4 add set. This reproduces the net the operator rendered at the second Collective Review, arrived at independently from the row set rather than transcribed as a figure.
 
-**This arithmetic is the Stage-4-to-Stage-5 promotion accounting and is left as the record it was.** The live row count is **34** (10 add + 24 edit). **33** were reconciled against the branch at the last Engineering card; § Matrix reconciliation against the branch, relocated under § Deviation Log beside DEV-26, carries that comparison with its denominator and its two controls, and names every row added, retired, or retained up to it. The 34th, `core/ADRs/README.md`, entered at Stage-6 Iteration D, when the ADR renumber appended this release's entry to that file's § Renumber log.
+**This arithmetic is the Stage-4-to-Stage-5 promotion accounting and is left as the record it was.** The live row count is **35** (10 add + 25 edit). **33** were reconciled against the branch at the last Engineering card; § Matrix reconciliation against the branch, relocated under § Deviation Log beside DEV-26, carries that comparison with its denominator and its two controls, and names every row added, retired, or retained up to it. The 34th, `core/ADRs/README.md`, entered at Stage-6 Iteration D, when the ADR renumber appended this release's entry to that file's § Renumber log. The 35th, `core/deploy/allowlists/count-structure-baseline.txt`, entered in the second part of that iteration, when the two `count-structure` sites this release introduced were read and classified as probe over-matches (DEV-33).
 
 ### New-executable companion obligations
 
-**N/A — enumerated over all 34 add/edit rows.** Exactly two rows are `*.sh` paths — `release/tools/check-event-record-integrity.sh` and `release/tools/automated-closeout.sh` — and both are **`edit`s** of files already tracked at `origin/main` rather than `add`s. The obligation fires on an `add` row for a tracked executable, so it does not fire on either; and the companion is in any case already discharged for both — each already carries its invocation forms in `core/config/allowlists/script-execution-allowlist.txt`, measured at this reconciliation against a control that returns zero for a script that is not listed. The enumeration is stated rather than the bare N/A, so a reader can see which population was walked and why neither candidate row qualifies. **The second `*.sh` row entered at the AI-014 reconciliation**, which is exactly the cascade a count restated beside a row set is there to catch.
+**N/A — enumerated over all 35 add/edit rows.** Exactly two rows are `*.sh` paths — `release/tools/check-event-record-integrity.sh` and `release/tools/automated-closeout.sh` — and both are **`edit`s** of files already tracked at `origin/main` rather than `add`s. The obligation fires on an `add` row for a tracked executable, so it does not fire on either; and the companion is in any case already discharged for both — each already carries its invocation forms in `core/config/allowlists/script-execution-allowlist.txt`, measured at this reconciliation against a control that returns zero for a script that is not listed. The enumeration is stated rather than the bare N/A, so a reader can see which population was walked and why neither candidate row qualifies. **The second `*.sh` row entered at the AI-014 reconciliation**, which is exactly the cascade a count restated beside a row set is there to catch.
 
 ### Read-only inputs
 

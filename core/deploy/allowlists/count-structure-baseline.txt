@@ -30,6 +30,21 @@
 #   known:#NNNN                              a pair whose fix is owned by a named
 #                                            tracking issue; the fix lands on that
 #                                            issue's card, not here.
+#   over-match:<why>                         a HAND-ADDED entry for a pair the probe
+#                                            flags where the prose is CORRECT: the
+#                                            number it read is not a count of the
+#                                            structure beneath it. Unlike the bulk
+#                                            tags above this IS a measured judgment,
+#                                            which is legitimate only because the
+#                                            site was read one by one rather than
+#                                            derived — so the tag states WHY in its
+#                                            own text, and the reason travels with
+#                                            the row through --emit-baseline.
+#                                            The alternative is reworking correct
+#                                            prose to satisfy a probe that misread
+#                                            it, which corrupts the corpus to make
+#                                            a gate green. Never add one of these
+#                                            without reading the site.
 #
 # REGENERATE: core/deploy/tools/check-count-structure.py --no-baseline --emit-baseline
 # ENTRIES: 72
@@ -67,6 +82,11 @@ core/standards/c2-intake-sweep-path-a.md	74d0b9662b95ca41	pre-existing:list
 core/standards/design-artifact-standard.md	9f11f59cd0ded60e	pre-existing:list
 core/standards/entity-lifecycle-protocol-shared-portfolio.md	cf90762262abd3e2	pre-existing:list
 core/standards/failure-mode-standard.md	8b7a8f73ec477705	pre-existing:list
+# over-match, read at the site: "the closed two-value set `no-commitments` / `emit-skipped`" is the
+# cardinality of the attested-cause enum, and the probe binds "two" to the enum value no-commitments as
+# its plural head noun. The table beneath it enumerates the three OBSERVATIONS that map onto those two
+# causes, two of them onto emit-skipped, so both numbers are true, of different sets.
+core/standards/hub-action-tracking.md	6b6e18d8086a7e1e	over-match:2-counts-the-cause-enum-not-the-observation-rows
 core/standards/initiative-roadmap-framework.md	0ccfc25d465d04fa	pre-existing:table
 core/standards/km-governance-framework.md	160acf2d8cd2ba81	pre-existing:list
 core/standards/public-repo-vs-operator-instance-taxonomy.md	01ff8760ef0604e3	pre-existing:table
@@ -85,7 +105,6 @@ operations/skills/weekly-status-rollup/SKILL.md	65ae87d077c95982	pre-existing:ta
 release/ADRs/ADR-024-cross-release-impact-model.md	5dd90f2f8a8fb13c	pre-existing:list
 release/governance/release-process.md	793f5463c7015b0f	pre-existing:table
 release/references/how-to/design-artifact-backfill-completion-condition.md	283b3c923ccd89a2	pre-existing:list
-release/references/how-to/hub-spoke-bridge.md	a74e27dbb0e8be13	pre-existing:list
 release/references/pipeline/stage-13-close.md	264019ab33515dbb	pre-existing:table
 release/references/protocols/architecture-conformance-cadence.md	1b22da692e306b0f	pre-existing:list
 release/references/protocols/architecture-conformance-cadence.md	1ea1c05747487ba6	pre-existing:list
@@ -104,3 +123,8 @@ release/skills/pmo-skill-editor/SKILL.md	014ddbb6f6cedfb0	pre-existing:list
 release/skills/pmo-skill-refiner/references/pmo-platform-context.md	e5c9ebb526f3c6ce	pre-existing:table
 release/skills/release-executor/references/execution-checklist.md	4bc806cacbacbbc1	pre-existing:table
 release/skills/release-executor/references/progressive-rollout.md	9107decf4c60974e	pre-existing:table
+# over-match, read at the site: "(the `## Output Contract` requirement 5 enumeration)" names requirement
+# NUMBER 5 of that contract, an ordinal. The two bullets beneath it are the two modes' tiers. The probe
+# binds the 5 to `specs`, a directory segment of the backticked path core/specs/reversibility-protocol.md
+# that replaced a link to the same file, and reads "5 specs". Measured: with the link form it binds nothing.
+release/skills/release-hub/SKILL.md	9501c82e23e67a73	over-match:5-is-an-ordinal-Output-Contract-requirement-5-not-a-count
