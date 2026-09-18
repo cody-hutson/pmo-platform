@@ -60,10 +60,27 @@ check() { if [ "$2" = "$3" ]; then ok "$1 (= $3)"; else bad "$1 — expected [$3
 
 # Source the SAME library the workflow sources. If this file ever stops defining the
 # functions the gate calls, the suite dies here rather than passing vacuously.
+#
+# `declare -F`, NOT the `type "$fn" | head -1 | grep -q 'function'` this replaces.
+# That idiom is a writer piped into short-circuiting readers, in PREDICATE position:
+# `head -1` and `grep -q` each stop at their first line, so the writer can still be
+# writing when the pipe closes — and under the `set -uo pipefail` at the top of this
+# file the writer's broken-pipe status becomes the PIPELINE's status. A SUCCESSFUL
+# match therefore reports failure, `!` inverts it, and the guard announces a missing
+# function that is demonstrably defined. Measured: forcing the writer past the pipe
+# buffer gives PIPESTATUS=[141 0 0] — grep matched, the pipeline still reported 141.
+# Where SIGPIPE is inherited as SIG_IGN, which is what a hosted-runner step gets, the
+# writer returns 1 instead of 141, which is why this class is diagnosed by a non-zero
+# status on a short-circuiting pipeline and never by hunting for 141.
+#
+# `declare -F` has no pipe, so there is no upstream status to promote over it. It is
+# also STRICTER than the grep it replaces: true only for a function, false for a
+# builtin, an alias, or a PATH file whose name merely contains the word "function".
+# Do not "simplify" this back into a pipeline.
 # shellcheck source=/dev/null
 . "$LIB"
 for fn in esc_lines adr_deciders_carveout_suppresses depersonalization_line_verdict; do
-  if ! type "$fn" 2>/dev/null | head -1 | grep -q 'function'; then
+  if ! declare -F "$fn" >/dev/null; then
     echo "FATAL: $LIB did not define $fn"; exit 1
   fi
 done

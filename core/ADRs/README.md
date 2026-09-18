@@ -105,6 +105,8 @@ ADR-192 (`deploy-detection-is-a-ground-truth-comparison`) → **ADR-194** by `re
 ADR-195 (`action-item-status-classified-by-membership`) → **ADR-197** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 195; the record's Status section carries the provenance note.
 ADR-195 (`l3-judgment-criteria-evaluability`) → **ADR-197** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 195; the record's Status section carries the provenance note.
 ADR-196 (`per-kind-authoring-bar-is-a-reading-not-a-carrier`) → **ADR-198** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 196; the record's Status section carries the provenance note.
+ADR-195 (`frontmatter-laxity-is-constrained-at-the-consumer`) → **ADR-197** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 195; the record's Status section carries the provenance note.
+ADR-197 (`frontmatter-laxity-is-constrained-at-the-consumer`) → **ADR-198** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 197; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 
