@@ -1,3 +1,13 @@
+<!-- reference-durability: allow-link -->
+<!-- Declared because: the Class L links in the two FC-4 gate footers below target
+     gate-definitions.md, a sibling reference file inside this same skill package. The
+     target ships, deploys and moves with this file, so the reference cannot rot
+     independently of it, and the sibling boundary note forbids restating the admission
+     predicate here as an inline summary. The two siblings that carry the same links,
+     gate-definitions.md and SKILL.md, each already declare this class. The marker is
+     bare because the gate matches the allow token followed only by whitespace; this
+     rationale therefore sits alongside it rather than inside it. -->
+
 # Gate Checklists
 
 ## Purpose
@@ -74,6 +84,8 @@ If the answer is unclear, default to the gate type matching the decision authori
 
 **Axis-1 advance this PASS authorizes.** A DoR exit `PASS` / `CONDITIONAL PASS` authorizes the Work Item Axis-1 advance `WorkItem-backlog → WorkItem-ready`, projected by the label row `work-status: ready`. The advance is **emitted, not applied** -- delivery-engine emits the transition and Tracker Manager performs the validated write; the label is **named, never applied** by this skill. The machine and its qualifying evidence are owned by `../../../../core/standards/entity-lifecycle-protocol.md` §3.10. **This is a footer on the template, not a criterion** -- the checklist items above are unchanged, and the advance is downstream of the verdict rather than an input to it.
 
+**Resolved-kit readiness criteria are evaluated alongside this template.** Where the work item's methodology kit resolves for its kind, that kit's `criteria.readiness` block contributes its **admitted** checks to the same DoR evaluation, per [`gate-definitions.md §4.3`](gate-definitions.md) -- which owns the admission predicate, the report for the non-admitted remainder, and the two-part pack-and-kind resolution with its negative path. Where the resolved block is **present and empty** carrying a documented block-level `source`, that emptiness is the practice basis: **no** template item above substitutes for it, and no unresolved report is emitted. A block whose admitted subset is empty contributes no criterion and still reports, with its denominator. **This is a footer on the template, not a criterion** -- the checklist items above are unchanged. Unlike the Axis-1 footer, what this footer names **is** an input to the verdict rather than downstream of it: an admitted kit check joins the scored set alongside the template items, and neither set replaces the other.
+
 #### Definition of Done (DoD) -- Exit from Execution
 
 | # | Criterion | Pass Criteria |
@@ -87,6 +99,8 @@ If the answer is unclear, default to the gate type matching the decision authori
 | 7 | PO accepted | Product Owner has inspected and accepted the increment |
 
 **Axis-1 advance this PASS authorizes.** A DoD exit `PASS` / `CONDITIONAL PASS` authorizes the Work Item Axis-1 advance `WorkItem-in-review → WorkItem-done`, projected by the label row `work-status: done` (the preceding `WorkItem-in-progress → WorkItem-in-review` advance fires at gate-open, when the completion claim is raised). `WorkItem-done` is **terminal** in §3.10, so this advance carries the evidence bar of a terminal action. The advance is **emitted, not applied** -- delivery-engine emits the transition and Tracker Manager performs the validated write; the label is **named, never applied** by this skill. **This is a footer on the template, not a criterion** -- the checklist items above are unchanged.
+
+**Resolved-kit done criteria are evaluated alongside this template.** Where the work item's methodology kit resolves for its kind, that kit's `criteria.done` block contributes its **admitted** checks to the same DoD evaluation, per [`gate-definitions.md §4.3`](gate-definitions.md) -- which owns the admission predicate, the report for the non-admitted remainder, and the two-part pack-and-kind resolution with its negative path. Where the resolved block is **present and empty** carrying a documented block-level `source`, that emptiness is the practice basis: **no** template item above substitutes for it, and no unresolved report is emitted. A block whose admitted subset is empty contributes no criterion and still reports, with its denominator -- on shipped pack content that is the ordinary case for this block, so the report is what a DoD run should expect to see rather than an exception. **This is a footer on the template, not a criterion** -- the checklist items above are unchanged. Unlike the Axis-1 footer, what this footer names **is** an input to the verdict rather than downstream of it: an admitted kit check joins the scored set alongside the template items, and neither set replaces the other.
 
 ### 2.3 Flow Gate Checklist
 

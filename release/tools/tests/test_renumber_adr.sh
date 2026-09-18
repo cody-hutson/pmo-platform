@@ -712,10 +712,11 @@ author_B origin14 wt-B14 4
 #   * it goes in `core/ADRs/README.md`, the HAND-MAINTAINED index — never inside a
 #     projected region, because a hand-edited derived cell correctly FAILS the
 #     projection check (A3d already asserts that failure);
-#   * it goes on its OWN line below the `**Renumber log.**` bold-run heading,
-#     because `append_renumber_log` writes only to the heading line itself
-#     (`lines[idx] = lines[idx].rstrip() + sentence`), so a following line is never
-#     disturbed by the tool's own appends;
+#   * it goes on its OWN line directly below the `**Renumber log.**` bold-run
+#     heading — the one-entry-per-line shape the log has — which puts it inside
+#     the log: `append_renumber_log` inserts each later entry as a new line after
+#     the log's last entry and never rewrites one already there, so this line is
+#     never disturbed by the tool's own appends, and it precedes them;
 #   * it carries no comma-run of three or more `ADR-NNN`, so `resort_inline_list`'s
 #     `ADR-\d+(?:,\s*ADR-\d+){2,}` cannot match and silently reorder it;
 #   * it names ADR-006 as a number a DIFFERENT record once held, which is precisely
@@ -867,12 +868,19 @@ assert_eq "A14d plan-note.md: the dry run predicted EVERY token present" \
 assert_eq "A14d plan-note.md: and the apply path swept every one" "$POST_PLAN" "0"
 
 # --- A14f LINEAGE — append-only, nothing overwritten --------------------------
-# COUNTED AS TOKENS, NEVER AS LINES. `append_renumber_log` writes every entry onto
-# the SAME line (`lines[idx] = lines[idx].rstrip() + sentence`), so the § Renumber
-# log is ONE accumulating line and a `grep -c` here would report 1 no matter how
-# many hops landed — a counter that cannot fail.
-assert_eq "A14f the § Renumber log carries all THREE tool entries plus the sibling's, on one accumulating line" \
+# Counted as TOKENS and as LINES, and the pair is the point: the token count says
+# every entry survived, the line count says each is a line of its own. The writer
+# used to concatenate every move onto the heading's line, so a line counter here
+# could not tell one hop from three. It writes one entry per line now, after the
+# log's last entry, so the order the lines appear in is the order they were logged.
+assert_eq "A14f the § Renumber log carries all THREE tool entries plus the sibling's" \
   "$(grep -o 'by `release/tools/renumber-adr\.py` at merge time' core/ADRs/README.md | wc -l | tr -d ' ')" "4"
+assert_eq "A14f ...each on a line of its own — four entries, four lines" \
+  "$(grep -c 'by `release/tools/renumber-adr\.py` at merge time' core/ADRs/README.md)" "4"
+assert_eq "A14f ...in the order they were logged — the sibling's first, then hops 1, 2, 3" \
+  "$(grep 'by `release/tools/renumber-adr\.py` at merge time' core/ADRs/README.md \
+     | grep -o '(`[^`]*`) → \*\*ADR-[0-9]*\*\*' | paste -s -d ' ' -)" \
+  '(`sibling-record`) → **ADR-011** (`bravo`) → **ADR-005** (`bravo`) → **ADR-006** (`bravo`) → **ADR-007**'
 assert_eq "A14f the record's ## Status reads as a THREE-hop lineage, nothing overwritten" \
   "$(grep -o '\*\*Numbering provenance — `[0-9][0-9][0-9] → [0-9][0-9][0-9]`\.\*\*' release/ADRs/ADR-007-bravo.md | wc -l | tr -d ' ')" "3"
 assert_eq "A14f the lineage is chronological (the first hop is still first)" \

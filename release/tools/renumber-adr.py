@@ -1128,21 +1128,81 @@ def insert_provenance(text, note, old, new):
     return "\n".join(lines), "written"
 
 
-def append_renumber_log(text, old, new, slug, cause):
-    """Append one sentence to the § Renumber log. Append-only, never a rewrite."""
+def _renumber_log_end(lines, start):
+    """Index just past the last line of the § Renumber log headed at ``start``.
+
+    The log is the region ``_classify`` treats as the renumber-log AMBIGUOUS
+    section, so it ends where that region ends: at the next markdown heading or
+    bold-run heading outside a fence, or at end of file. A blank line does not end
+    it — the classifier keeps the region open across one. Trailing blank lines are
+    left outside, so an append lands after the last entry and ahead of the blank
+    line that separates the log from whatever follows.
+    """
+    end = len(lines)
+    in_fence = False
+    for i in range(start + 1, len(lines)):
+        stripped = lines[i].strip()
+        if MD_FENCE_RE.match(stripped):
+            in_fence = not in_fence
+            continue
+        if not in_fence and (MD_HEADING_RE.match(lines[i])
+                             or BOLD_RUN_HEADING_RE.match(stripped)):
+            end = i
+            break
+    while end > start + 1 and lines[end - 1].strip() == "":
+        end -= 1
+    return end
+
+
+def _renumber_log_insert_at(text):
+    """0-based line index where the next § Renumber log entry goes; None if no log.
+
+    ONE definition, read by the writer and by R4's bookkeeping alike, so the line
+    R6 is told was inserted cannot disagree with the line that actually was.
+    """
     m = RENUMBER_LOG_HEADING_RE.search(text)
     if not m:
+        return None
+    return _renumber_log_end(text.split("\n"), text[: m.start()].count("\n"))
+
+
+def append_renumber_log(text, old, new, slug, cause):
+    """Append one entry to the § Renumber log. Append-only, never a rewrite.
+
+    ONE ENTRY PER LINE, CHRONOLOGICAL: the entry becomes a new line after the
+    log's last existing entry (``_renumber_log_end`` says where the log ends).
+    It used to be concatenated onto the heading's own line, which broke the
+    promise above — every move rewrote that line — and made the log a single
+    line growing by one sentence per renumber. A branch that had split the log
+    one-per-line and a mainline that kept appending then edited the same line on
+    both sides, and conflicted on it at every sync.
+
+    Chronological rather than newest-first, because the log is an append-only
+    audit trail read oldest-first: appending after the last entry leaves every
+    existing line, and its position, untouched.
+
+    Idempotent on the move. The guard tests the same string it always has — the
+    old sentence carried a leading space for the concatenation and was stripped
+    before the test — so a move already logged is recognised in either layout: on
+    a line of its own, or inside a single-line log written by the old writer.
+
+    Inserting a line moves every line below it, and R6 reads the written file
+    through a line mask numbered in HEAD's coordinates. R4 therefore records where
+    this entry went, and R6 carries the mask across it — see
+    ``_mask_across_log_insert``.
+    """
+    at = _renumber_log_insert_at(text)
+    if at is None:
         return text, False
     sentence = (
-        f" ADR-{old:03d} (`{slug}`) → **ADR-{new:03d}** by "
+        f"ADR-{old:03d} (`{slug}`) → **ADR-{new:03d}** by "
         f"`release/tools/renumber-adr.py` at merge time, because {cause}; "
         "the record's Status section carries the provenance note."
     )
-    if sentence.strip() in text:
+    if sentence in text:
         return text, False   # idempotent: never log the same move twice
     lines = text.split("\n")
-    idx = text[: m.start()].count("\n")
-    lines[idx] = lines[idx].rstrip() + sentence
+    lines.insert(at, sentence)
     return "\n".join(lines), True
 
 
@@ -1372,6 +1432,23 @@ def _bare_sweep_mask(ref, root, rel, index_surfaces):
     if rel not in index_surfaces:
         return None
     return _branch_added_lines(ref, root, rel)
+
+
+def _mask_across_log_insert(mask, inserted):
+    """Carry a HEAD-numbered line mask across R4's § Renumber log insert.
+
+    ``_branch_added_lines`` numbers lines as HEAD has them, and that equals the
+    working tree only until something changes the file's line count. R4's log
+    append is the one step that does, on an index surface: it inserts exactly one
+    line, ``inserted`` (1-based, in the written file). Every HEAD line from there
+    down now sits one lower. Read through the uncarried mask, R6 grades the line
+    ABOVE each one the branch wrote — which, when a foreign entry sits there, is a
+    foreign ``ADR-<old>`` read as a dangling citation, and a correct move reverted.
+    The inserted line is the tool's own, not the branch's, so it stays out.
+    """
+    if mask is None or inserted is None:
+        return mask
+    return {n if n < inserted else n + 1 for n in mask}
 
 
 def _foreign_token_count(body, old, mask):
@@ -1780,6 +1857,11 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
     #                           had just triggered. So R4 INVOKES the projector.
     #                           R2 has already renamed the file, so the moved row
     #                           falls out of the projection; nothing is rewritten.
+    #
+    # `log_inserted` records, per file, the 1-based line the § Renumber log append
+    # wrote. It is the one line-count change R4 makes, and R6 needs it to read the
+    # written file through a mask numbered in HEAD's coordinates.
+    log_inserted = {}
     for rel in _index_files(root):
         target = root / rel
         body = target.read_text(encoding="utf-8")
@@ -1829,7 +1911,10 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
                     f"this index should carry ADR-{new:03d}, add its entry by hand.")
         body = resort_adr_table(body)
         body = resort_inline_list(body)
+        log_at = _renumber_log_insert_at(body)
         body, logged = append_renumber_log(body, old, new, slug, cause)
+        if logged:
+            log_inserted[rel] = log_at + 1
         if body != original:
             target.write_text(body, encoding="utf-8")
             touched.add(rel)
@@ -1909,7 +1994,10 @@ def do_renumber(old, new, ref, root, apply_changes, extra_paths, log,
         # it?". A fourth reason to exclude a line, alongside RECORD, AMBIGUOUS and
         # the projected region — and the only one keyed on provenance rather than
         # on content.
-        mask = _bare_sweep_mask(ref, root, rel, index_surfaces)
+        # ...and read in the WRITTEN file's coordinates: R4's log append moved
+        # every line below it, so the HEAD-numbered mask is carried across it.
+        mask = _mask_across_log_insert(
+            _bare_sweep_mask(ref, root, rel, index_surfaces), log_inserted.get(rel))
         scanned = []
         for i, (ln, verdict, carve) in enumerate(
                 zip(lines, verdicts, carveouts), start=1):
@@ -2762,6 +2850,93 @@ def self_test():
        [is_historical_numbering_line(ln) for ln in body2.split("\n")
         if "Numbering provenance" in ln], [True, True])
 
+    # ---- the § Renumber log append: one entry per line, chronological ------
+    # The writer used to concatenate every move onto the heading's own line, so
+    # the log was ONE line that grew by a sentence per renumber. A branch that
+    # split it one-per-line and a mainline that kept appending then edited the
+    # same line on both sides and conflicted on it at every sync. The layout arms
+    # below fail against that writer; the idempotence and sweep arms pass under
+    # both, and pin what the change must not disturb.
+    rl_tail = ("by `release/tools/renumber-adr.py` at merge time, because {c}; "
+               "the record's Status section carries the provenance note.")
+    rl_seed = "ADR-001 (`seed`) → **ADR-002** " + rl_tail.format(c="s")
+    rl_mv1 = "ADR-004 (`bravo`) → **ADR-005** " + rl_tail.format(c="c1")
+    rl_mv2 = "ADR-005 (`bravo`) → **ADR-006** " + rl_tail.format(c="c2")
+    rl0 = ("# Core ADRs\n\n**Renumber log.** Earliest entry, recorded by hand.\n"
+           + rl_seed + "\n\n## Cross-numbering\n\n| ADR-001 | core |\n")
+    rl1, rl_w1 = append_renumber_log(rl0, 4, 5, "bravo", "c1")
+    rl2, rl_w2 = append_renumber_log(rl1, 5, 6, "bravo", "c2")
+    rl2_lines = rl2.split("\n")
+    # THE REGRESSION: two successive renumbers are two NEW LINES, not one line
+    # carrying both. The concatenating writer adds zero lines here.
+    eq("renumber-log/two-moves-are-two-new-lines",
+       (rl_w1, rl_w2, len(rl2_lines) - len(rl0.split("\n"))), (True, True, 2))
+    eq("renumber-log/one-entry-per-line",
+       max(len(RENUMBER_LOG_SENTENCE_RE.findall(ln)) for ln in rl2_lines), 1)
+    # The declared insertion point, pinned whole: after the LAST existing entry,
+    # in call order, ahead of the blank line and the heading that close the log.
+    eq("renumber-log/chronological-after-the-last-entry", rl2,
+       ("# Core ADRs\n\n**Renumber log.** Earliest entry, recorded by hand.\n"
+        + rl_seed + "\n" + rl_mv1 + "\n" + rl_mv2
+        + "\n\n## Cross-numbering\n\n| ADR-001 | core |\n"))
+    # Append-only as a PROPERTY: take the two new lines back out and the original
+    # is what remains. The concatenating writer fails this because it rewrote the
+    # heading line — breaking its own docstring's "never a rewrite".
+    eq("renumber-log/every-earlier-line-is-untouched",
+       "\n".join(ln for ln in rl2_lines if ln not in (rl_mv1, rl_mv2)), rl0)
+    # The log ends where `_classify`'s renumber-log region ends. A bold-run heading
+    # closes that region with no `#` heading in sight, so an entry written past it
+    # would land OUTSIDE the region; it must land ahead of it.
+    rl_bold = "**Renumber log.** " + rl_seed + "\n\n**Enforcement.** x\n"
+    eq("renumber-log/a-bold-run-heading-closes-the-log",
+       append_renumber_log(rl_bold, 4, 5, "bravo", "c1")[0],
+       "**Renumber log.** " + rl_seed + "\n" + rl_mv1 + "\n\n**Enforcement.** x\n")
+    # ...and with nothing after it, the log runs to end of file, whose final
+    # newline survives the append.
+    eq("renumber-log/end-of-file-log-keeps-the-final-newline",
+       append_renumber_log("**Renumber log.** x.\n", 4, 5, "bravo", "c1")[0],
+       "**Renumber log.** x.\n" + rl_mv1 + "\n")
+    # IDEMPOTENCE — the same arguments twice: the first call writes, the second is
+    # a no-op byte for byte, and says so.
+    rl1_again, rl_w1_again = append_renumber_log(rl1, 4, 5, "bravo", "c1")
+    eq("renumber-log/identical-second-call-is-a-no-op",
+       (rl_w1, rl_w1_again, rl1_again == rl1), (True, False, True))
+    # ...including over a log still in the OLD single-line layout, where the move
+    # sits inside a line rather than on one of its own. Mainline's log is in that
+    # layout until this change lands, so a move it already holds must not be
+    # logged a second time on a line of its own.
+    rl_legacy = "**Renumber log.** " + rl_seed + " " + rl_mv1 + "\n"
+    eq("renumber-log/idempotent-over-the-legacy-single-line-layout",
+       append_renumber_log(rl_legacy, 4, 5, "bravo", "c1"), (rl_legacy, False))
+    # SAFETY — a line of its own is still a RECORD, so a later sweep of the same
+    # number leaves the audit trail alone.
+    rl2_verdicts = classify_lines(rl2)
+    eq("renumber-log/each-entry-line-is-a-record",
+       [rl2_verdicts[i] for i, ln in enumerate(rl2_lines) if ln in (rl_mv1, rl_mv2)],
+       [RECORD, RECORD])
+    eq("renumber-log/a-later-sweep-rewrites-no-entry", rc2(rl2, 5, 6)[1], 0)
+    # THE COORDINATE COST of a line of its own. R4 tells R6 where the entry went,
+    # so the answer R4 records must be where the writer actually put it — asserted
+    # rather than assumed, because they are computed by one helper, not two.
+    eq("renumber-log/insert-point-agrees-with-the-writer",
+       (_renumber_log_insert_at(rl0), rl1.split("\n").index(rl_mv1)
+        if rl_mv1 in rl1.split("\n") else None), (4, 4))
+    eq("renumber-log/no-log-no-insert-point", _renumber_log_insert_at("# x\n"), None)
+    # R6 reads the written file through a mask HEAD numbered. The fixture's ACT 16
+    # shape, in miniature: the branch wrote lines BELOW the log, a foreign entry
+    # sits just above them, and the append lands above both. Uncarried, the mask's
+    # first line now holds the foreign entry, whose ADR-<old> reads as dangling and
+    # reverts a correct move.
+    eq("renumber-log/mask-carried-below-the-insert",
+       _mask_across_log_insert({18, 19}, 6), {19, 20})
+    eq("renumber-log/mask-unmoved-above-the-insert",
+       _mask_across_log_insert({3, 5}, 6), {3, 5})
+    eq("renumber-log/the-inserted-line-is-never-the-branch's",
+       6 in _mask_across_log_insert({5, 6, 7}, 6), False)
+    eq("renumber-log/no-insert-or-no-mask-passes-through",
+       (_mask_across_log_insert({18, 19}, None), _mask_across_log_insert(None, 6)),
+       ({18, 19}, None))
+
     # ---- R1's delta predicate (the N>=2 deadlock) --------------------------
     # The union at a three-duplicate reconciliation, in the shape the live
     # release faces: the mainline holds 1..4, the branch holds different files
@@ -2829,7 +3004,11 @@ def self_test():
             print("  - " + f)
         return 1
     print("renumber-adr self-test: PASS (citation boundaries / path-exact / "
-          "re-sort / provenance / R1 delta predicate / minimal assignment / "
+          "re-sort / provenance / renumber-log append: one entry per line + "
+          "chronological + region-closing boundary + end of file + idempotent "
+          "in both layouts + entry lines are records + insert point agrees "
+          "with the writer + HEAD-numbered mask carried across the insert / "
+          "R1 delta predicate / minimal assignment / "
           "three-valued classifier: shim-agreement + wrapped-continuation with "
           "its broken-paragraph and block-opener negative controls + "
           "paragraph-extent position gate with its mid-paragraph sensitivity "
