@@ -35,6 +35,7 @@
 | Coverage distribution — `captured` | _(none)_ |
 | Coverage distribution — `partial` | _(none)_ |
 | Coverage distribution — `unexercised` | _(none)_ |
+| Coverage distribution — `undecidable` | _(none)_ |
 | Coverage distribution — `uninstrumented` | _(none)_ |
 | Index re-based this run? | _(none)_ — set when the rubric's seam-id set changed since the prior run |
 | Oracle pin — roster membership | _(none)_ |
@@ -47,18 +48,24 @@
 
 ## How to read this surface
 
-**The non-graded coverage classes are reported separately, and only `uninstrumented` is blind.**
-This is the distinction the whole surface exists to preserve, so it is stated here rather than
-left to the reader:
+**The non-graded coverage classes are reported separately, and they are blind in different
+ways.** This is the distinction the whole surface exists to preserve, so it is stated here
+rather than left to the reader. Each answers a different question about a silent seam:
 
 - **`uninstrumented`** — no corpus rule names a writer for any of the seam's loci. The platform
-  cannot see this decision class at all. This is the **blind** class, and it is what the
+  cannot see this decision class at all. This is the **standing blind** class, and it is what the
   residual-risk register carries.
-- **`unexercised`** — a writer is declared and the window simply owed the seam no occasions.
-  Nothing was missed. This is **quiet, not blind**, and it is not a residual risk.
+- **`undecidable`** — a writer **is** declared and no rows arrived, but the surface that would
+  say what the window owed could not be read at audit time, so there is no denominator to
+  compare the silence against. This is **blind for this window only**: it also carries
+  residual-risk register membership, and a later run over a readable window resolves the seam
+  normally.
+- **`unexercised`** — a writer is declared and the window determinately owed the seam no
+  occasions. Nothing was missed. This is **quiet, not blind**, and it is not a residual risk.
 
-Collapsing the two into one number would report a live blind spot and an uneventful window as
-the same state. Neither takes a grade at all: a grade belongs only to a `measured` seam.
+Collapsing any of them into one number would report a live blind spot, an unreadable denominator
+and an uneventful window as the same state. None takes a grade at all: a grade belongs only to a
+`measured` seam.
 
 **The headline index is a lower bound on decision-observability, by design.** `coverage_index`
 counts only fully-captured seams, so a seam that is instrumented but recorded incompletely

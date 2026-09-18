@@ -123,16 +123,23 @@ measurement gap and a measured zero.
 - **Expected output:** coverage state **`uninstrumented`**, and **no grade at all**.
 - **Ground-truth label (candidate):** `uninstrumented`.
 
-### F-COV-02 — writer declared, no occasions, no rows → `unexercised`
-- **Input:** a seam with a declared writer and a window owing it no occasions.
+### F-COV-02 — writer declared, a determinate zero occasions, no rows → `unexercised`
+- **Input:** a seam with a declared writer and a window owing it no occasions, where **every**
+  occasion class resolved — the zero is measured, not a gap.
 - **Expected output:** coverage state **`unexercised`**, and **no grade at all**. It is **not**
   carried in the residual-risk register — nothing was owed.
 - **Ground-truth label (candidate):** `unexercised`.
+- **The determinacy qualifier is the fixture's boundary against F-COV-05.** A zero arrived at
+  because a class could not be read is not this input: that seam renders `undecidable` and keeps
+  register membership. Stated here because the two inputs are indistinguishable in a run that
+  does not separate a measured zero from an unread one, which is the whole subject of §2.3.
 
 ### F-COV-03 — writer declared, occasions owed, zero rows → `measured` / `partial` (REQUIRED NEGATIVE CONTROL)
-- **Input:** a seam with a declared writer, a window owing it occasions, and no rows arriving.
+- **Input:** a seam with a declared writer, a window owing it occasions — a **determinate**
+  positive count — and no rows arriving.
 - **Expected output:** coverage state **`measured`**, grade **`partial`**. It must **not**
-  render `unexercised` and must **not** render `uninstrumented`.
+  render `unexercised`, must **not** render `uninstrumented`, and must **not** render
+  `undecidable`: the denominator here was read, and it was positive.
 - **Ground-truth label (candidate):** `measured` / `partial`.
 - **Why this fixture is required rather than optional:** this is the emitter existing, rows
   being owed, and none arriving — the most actionable state the audit produces. Both other
@@ -149,13 +156,23 @@ measurement gap and a measured zero.
   by a separate qualifier.
 - **Ground-truth label (candidate):** `uninstrumented`.
 
-### F-COV-05 — an occasion class that cannot be read → not `unexercised`
-- **Input:** a seam with a declared writer, whose occasion classes include at least one whose
-  evidencing surface is not retrievable at audit time.
+### F-COV-05 — an occasion class that cannot be read → `undecidable`
+- **Input:** a seam with a declared writer and **no rows**, whose occasion classes include at
+  least one whose evidencing surface is not retrievable at audit time, and none of whose
+  remaining classes resolves determinately above zero.
 - **Expected output:** that occasion class resolves **`indeterminate`**, never zero; the seam
-  therefore may **not** render `unexercised`, and it **retains** residual-risk register
-  membership.
-- **Ground-truth label (candidate):** not `unexercised`; register membership retained.
+  renders coverage state **`undecidable`** — the ordered predicate's terminal residue — with
+  **no grade at all**, and it **retains** residual-risk register membership. It must **not**
+  render `unexercised`, and it must **not** be left without a state.
+- **Ground-truth label (candidate):** `undecidable`; no grade; register membership retained.
+- **Why the expected output names a state rather than only forbidding one.** A fixture whose
+  expected output is *"not `unexercised`"* admits every other value, including no value at all,
+  so a run that assigned nothing would pass it — which is exactly the gap this fixture was
+  written to close, reproduced inside the fixture. Naming the state makes the label exact and
+  the family's *deterministic; exact* heading true of it. Where rows **did** arrive, or another
+  occasion class resolved determinately above zero, order 1 claims the seam first and the
+  expected output is `measured`; this input excludes both so that the residue is what is being
+  tested.
 - **Why this fixture exists:** it is the denominator-side negative control. Without it,
   *"not observable from here"* and *"measured, and it was zero"* share one value, and a seam
   that was blind in exactly this window would exit the register asserting it was merely quiet.

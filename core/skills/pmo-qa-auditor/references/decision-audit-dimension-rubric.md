@@ -128,7 +128,29 @@ The values are total and disjoint by construction. Evaluate in order; the first 
 |---|---|---|---|
 | 1 | **`measured`** | `rows(s,W) > 0` **∨** ( `instrumented(s)` **∧** `occasions(s,W) > 0` ) | **yes** — `captured` \| `partial` |
 | 2 | **`uninstrumented`** | not `measured` **∧** `¬instrumented(s)` | **no** |
-| 3 | **`unexercised`** | not `measured` **∧** `instrumented(s)` **∧** `occasions(s,W) = 0` | **no** |
+| 3 | **`unexercised`** | not `measured` **∧** `instrumented(s)` **∧** `occasions(s,W)` is a **determinate** zero (§2.3) | **no** |
+| 4 | **`undecidable`** | **no predicate — the terminal residue.** A seam reaching this order is instrumented, returned no rows, and has no determinate occasion count to compare them against, because at least one of its occasion classes resolved `indeterminate` (§2.3) | **no** |
+
+**Order 4 carries no predicate, and that is what makes the totality claim true rather than
+asserted.** Every order above it states a condition that can fail; a vocabulary made only of
+those orders is total just in case their conditions happen to exhaust the input space, which is
+a property nobody was checking. Order 4 is reached by falling through, so no input can leave the
+predicate without a value — the claim above is now a construction rather than a hope.
+
+**What lands there, and why it had nowhere else to go.** A seam that is instrumented, returned
+no rows, and cannot have its denominator read fails order 1 (its `occasions(s,W) > 0` limb is
+not established, only unknown), fails order 2 (a writer *is* declared), and is **forbidden**
+order 3 by §2.3, which bars a seam carrying an `indeterminate` occasion class from rendering
+`unexercised`. Before order 4 existed, that combination was assigned nothing at all while the
+axis described itself as total. Naming the residue is the only resolution that neither invents a
+measurement the run did not make nor folds the case into a neighbouring verdict that would read
+as a finding (`partial`) or as benign (`unexercised`).
+
+**`undecidable` is a statement about this window, not about the seam.** `uninstrumented` says
+the platform cannot see the decision class at all; `undecidable` says this run could not read
+what the window owed. The seam is instrumented, it counts toward the instrumentation ceiling
+(§3.2), and a later run over a window whose evidencing surfaces *are* retrievable resolves it
+normally. It contributes nothing to the index numerator, because nothing was measured.
 
 `measured` reads *"the seam was measurable over this window"*, not *"evidence arrived"*.
 Evidence presence lives entirely on the grade axis, where `captured` versus `partial` already
@@ -137,20 +159,26 @@ distinguishes it.
 **Why the first predicate carries a disjunct — the state that has nowhere else to go.** Take a
 seam that is instrumented, whose window owed it occasions, and for which no rows arrived: the
 emitter exists, rows were owed, and none came. That is the most actionable state this audit
-produces, and both other placements read benign — `unexercised` says nothing happened, which
-inverts the truth, and `uninstrumented` says known blind spot, which excuses a live emission
-failure. The disjunct routes it to `measured` / `partial`, where a reader sees it as a shortfall
-and where the findings register carries it.
+produces, and the alternative placements all read benign — `unexercised` says nothing happened,
+which inverts the truth; `uninstrumented` says known blind spot, which excuses a live emission
+failure; and `undecidable` says the denominator could not be read, which is false here, since it
+was read and it was positive. The disjunct routes it to `measured` / `partial`, where a reader
+sees it as a shortfall and where the findings register carries it.
 
 **A non-graded state is never a passing grade.** That constraint is inherited verbatim and is
-not weakened by there being more than one such state: neither `uninstrumented` nor `unexercised`
-is ever written as a grade, in the emitted artifacts or in prose.
+not weakened by the vocabulary carrying more than one such state: no non-graded value —
+`uninstrumented`, `unexercised` or `undecidable` — is ever written as a grade, in the emitted
+artifacts or in prose.
 
-**Of the non-graded states, only `uninstrumented` is blind.** It means the platform cannot
-see this decision class at all, and it is what the residual-risk register carries.
-`unexercised` means a writer exists and the window simply owed nothing — quiet, not blind, and
-not a residual risk. Reporting them as one number would render a live blind spot and an
-uneventful window identically.
+**The non-graded states differ in what a reader may conclude from them, and they are reported
+separately for that reason.** `uninstrumented` is **blind**: no writer is declared, the platform
+cannot see this decision class at all, and it is what the residual-risk register carries.
+`undecidable` is **blind for this window only**: a writer is declared, but the surface that
+would say what was owed could not be read, so the run reached no measurement and the seam
+**retains** register membership (§2.3). `unexercised` is **quiet**: a writer exists and the
+window genuinely owed nothing — nothing was missed, and it is not a residual risk. Reporting any
+two of them as one number would render a live blind spot, an unreadable denominator and an
+uneventful window identically, which is the collapse this axis exists to prevent.
 
 ### 2.2 `instrumented(s)` — the declared-producer test
 
@@ -188,6 +216,13 @@ its evidence-key cell.
 **A seam carrying any `indeterminate` occasion class may not render `unexercised`, and it
 retains residual-risk register membership.** An occasion class resolves `indeterminate` — never
 a measured zero — whenever its evidencing surface is not retrievable at audit time.
+
+**Where such a seam does render is §2.1's order 4, `undecidable`** — unless rows arrived, or
+some other occasion class resolved determinately above zero, either of which carries it to
+`measured` at order 1. The bar above states what the seam may not be; order 4 states what it
+**is**, so the rule resolves rather than only forbidding. A determinate `occasions(s,W) = 0` is
+what order 3 requires, and it is exactly the reading this section separates from the
+measurement gap.
 
 This is the denominator-side twin of §2.2's rule, and it exists because the two ways of arriving
 at zero are not the same fact. *Nothing was owed* is a measurement; *the surface that would say

@@ -182,12 +182,16 @@ stated. This is the single most important honesty constraint in the mode: a cove
 computed over a partly-blind stream reads as health when it is measuring silence.
 
 **Zero rows does not resolve to one state, and the rubric decides which.** A seam with no rows
-is `uninstrumented` when no corpus rule declares a writer for any of its loci, and `unexercised`
-when a writer exists and the window owed it nothing; and a seam that is instrumented, was owed
-occasions, and produced nothing is **`measured` / `partial`** — a shortfall, not an absence.
-Only the first of those is blind. Whichever state applies, the seam reports **with its emitting
-surface named**, and a non-graded state is **never** rendered as a passing grade. The ordered
-predicate that assigns the state lives in the rubric and is not restated here.
+is `uninstrumented` when no corpus rule declares a writer for any of its loci; `unexercised`
+when a writer exists and the window determinately owed it nothing; `undecidable` when a writer
+exists and the window's obligation **cannot be read at audit time**, so there is no denominator
+to compare the absent rows against; and a seam that is instrumented, was owed occasions, and
+produced nothing is **`measured` / `partial`** — a shortfall, not an absence. The first is blind
+because the platform cannot see the class; the third is blind only for this window, and it keeps
+its residual-risk register membership for that reason. Whichever state applies, the seam reports
+**with its emitting surface named**, and a non-graded state is **never** rendered as a passing
+grade. The ordered predicate that assigns the state lives in the rubric and is not restated
+here.
 
 ## 5. Evidence bar
 
@@ -210,12 +214,13 @@ bindings are:
 - **Systemic patterns** are the cross-release recurrences: the same decision failure signature
   in two or more releases in the window.
 - **The residual risk register** carries every seam reporting `uninstrumented`, because a seam
-  the platform cannot see is a residual risk rather than a finding. It does **not** carry an
-  `unexercised` seam — a writer exists and nothing was owed, so there is no unmeasured risk to
-  register. The one qualification is the measurement gap: a seam carrying any `indeterminate`
-  occasion class may not render `unexercised` and **retains** register membership, because
-  *the surface that would say what was owed cannot be read from here* is not the same fact as
-  *nothing was owed*.
+  the platform cannot see is a residual risk rather than a finding. It also carries every seam
+  reporting `undecidable`: a writer exists, but the surface that would say what was owed could
+  not be read from here, which is not the same fact as *nothing was owed* and leaves a genuinely
+  unmeasured risk behind. It does **not** carry an `unexercised` seam — a writer exists and the
+  window determinately owed nothing, so there is no unmeasured risk to register. The two
+  register-carrying states are distinguished in the render rather than merged: one is a standing
+  blind spot, the other is blind for this window only.
 - **Remediation priority** is ordered but never prescriptive — see the mutation posture below.
 
 ## 7. Artifact schemas
@@ -233,15 +238,18 @@ literal token appears in this spec by design; a resolved date written into a spe
   window (both bounds and both merge anchors), the oracle pin (per-source path, content hash,
   entry count and entry-title set; the roster membership set; the derivation date), any
   roster-delta notice, the coverage scorecard rendered from the rubric, the classification
-  counts, the coverage-state distribution with the `uninstrumented` and `unexercised` counts
-  reported **separately** and the blind-versus-quiet distinction stated, the coverage index, the
-  instrumentation ceiling, and the evidence-bar pass rate.
+  counts, the coverage-state distribution with the `uninstrumented`, `undecidable` and
+  `unexercised` counts each reported **separately** and the blind / blind-for-this-window /
+  quiet distinction stated, the coverage index, the instrumentation ceiling, and the
+  evidence-bar pass rate.
 - **findings-register.md** — one row per finding:
   `| finding-id | release (version + merge anchor) | seam | oracle (invariant / named failure mode) | classification | severity | confidence | evidence | root-cause |`,
   plus a `## Systemic Patterns` table for cross-release recurrences and a single
-  `## Coverage Gap` aggregate row for the `uninstrumented` seams. An `unexercised` seam is not a
-  coverage gap — its writer exists and the window owed it nothing — and it is reported in the
-  distribution rather than in that row.
+  `## Coverage Gap` aggregate row for the seams the register carries — the `uninstrumented` and
+  the `undecidable` — each naming which of the two it is, so a standing blind spot and an
+  unreadable denominator do not merge inside the aggregate. An `unexercised` seam is not a
+  coverage gap — its writer exists and the window determinately owed it nothing — and it is
+  reported in the distribution rather than in that row.
 - **issue-drafts/NNN-kebab-name.md** — observation format, three fields, ready for operator
   triage; never auto-filed.
 
@@ -249,9 +257,15 @@ literal token appears in this spec by design; a resolved date written into a spe
 tracked, present on every clone, seeded with an awaiting-first-run state and **overwritten**
 by each run (single-record-overwrite, like a status snapshot). It carries the decision-health
 posture, the coverage index, the **instrumentation ceiling**, the classification counts, the
-coverage-state distribution with the `uninstrumented` and `unexercised` counts reported
-**separately**, the oracle pin including its roster membership, the resolved window, the audit
-date, and a pointer to the latest folder in (a).
+coverage-state distribution with the `uninstrumented`, `undecidable` and `unexercised` counts
+each reported **separately**, the oracle pin including its roster membership, the resolved
+window, the audit date, and a pointer to the latest folder in (a).
+
+**The distribution renders one bucket per non-graded value, never a merged "not measured"
+count.** Each non-graded value answers a different question a reader asks of a silent seam —
+*can the platform see this class at all*, *could this run read what was owed*, *was anything
+owed* — and a merged bucket answers none of them. Adding a value to the coverage vocabulary
+therefore adds a bucket here; it does not widen an existing one.
 
 **The ceiling is a rendered field, not a note.** A reader must be able to see the reachable
 bound beside the index without reconstructing it, because a persistently sub-maximal index
@@ -293,7 +307,8 @@ arm nothing exercises is indistinguishable from one that cannot fire:
   `unexercised` and never `uninstrumented`. Without it, the state the coverage axis exists to
   expose can silently regress into a benign class.
 - **an occasion class that cannot be read** — must resolve `indeterminate` rather than zero, so
-  the seam may not render `unexercised` and keeps its register membership.
+  the seam may not render `unexercised`, renders the residue value `undecidable` where no other
+  order claims it, and keeps its register membership.
 - **evidence from an undeclared producer** — must surface a finding rather than an arithmetic
   error, which is the branch that makes the index-versus-ceiling relation a detector.
 
