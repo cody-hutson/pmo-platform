@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.65 (2026-09-18) — Nine tools and checks that reported a wrong answer now report the right one
+
 ### v4.64 (2026-09-13) — A check that always failed now passes — with its finding intact
 
 ### v4.63 (2026-09-11) — The release close-out now proves what it reports
