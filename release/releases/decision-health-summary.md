@@ -82,9 +82,14 @@ is the instrumentation gap being reported honestly. A reader comparing observabi
 windows reads the ceiling and the distribution; a reader asking how much of what happened got
 recorded reads the index.
 
-**`coverage_index` exceeding `instrumentation_ceiling` is a finding, not an arithmetic error.**
-The relation is a detector rather than an invariant: a run observing it violated has found
-evidence arriving from a producer no corpus rule declares. Surface it.
+**Evidence from an undeclared producer is a finding, not an arithmetic error, and it is detected
+on two arms.** Per seam, rows arriving for a seam no corpus rule declares a writer for is the
+direct reading and fires on that seam alone. In aggregate, `coverage_index` exceeding
+`instrumentation_ceiling` is a detector rather than an invariant — the relation does not hold by
+construction, and a run observing it violated has found the same thing across the distribution.
+The per-seam arm is the sensitive one: the aggregate arm can only fire when the captured count
+exceeds the instrumented count, so it goes quiet as instrumentation lands, which is the opposite
+of what a reader watching for undeclared emission needs. Surface either.
 
 **A re-based index does not trend.** When the rubric's seam-id set changes between runs, the
 run renders the index as re-based and states the seam delta rather than trending across the

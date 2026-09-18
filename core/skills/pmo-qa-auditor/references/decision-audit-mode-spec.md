@@ -310,7 +310,11 @@ arm nothing exercises is indistinguishable from one that cannot fire:
   the seam may not render `unexercised`, renders the residue value `undecidable` where no other
   order claims it, and keeps its register membership.
 - **evidence from an undeclared producer** — must surface a finding rather than an arithmetic
-  error, which is the branch that makes the index-versus-ceiling relation a detector.
+  error. The rubric detects it on **two arms**: per seam, where rows arrive for a seam no corpus
+  rule declares a writer for, and in aggregate, where the index exceeds the ceiling. The per-seam
+  arm is the one that fires on the natural form of this input at any instrumentation level; the
+  aggregate arm is what makes the index-versus-ceiling relation a detector rather than an
+  invariant.
 
 The classification family additionally covers a recorded and evidenced decision (expect
 conformant), an undetected named failure mode (expect a finding), a zero-row seam **whose

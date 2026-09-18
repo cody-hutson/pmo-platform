@@ -307,10 +307,30 @@ term through that value's own predicate, so a seam with no declared writer that 
 in an active window would enter the ceiling and drop out of a quiet one: two runs, identical
 instrumentation, different ceilings.
 
-**`coverage_index > instrumentation_ceiling` is a detector, not an arithmetic error.** The
-relation does not hold by construction under this definition, and that is the point: a run
-observing it violated has found evidence arriving from a producer **no corpus rule declares**.
-Surface it as a finding. Neither term is clamped.
+**Undeclared-producer detection runs per seam, and the ratio relation is the aggregate arm
+beside it.** A run surfaces a finding naming the undeclared producer when **either** arm fires:
+
+- **The per-seam arm — `rows(s,W) > 0` ∧ `¬instrumented(s)`.** Evidence arrived for a seam no
+  corpus rule declares a writer for. This is the direct reading of the condition, and it is
+  decided on that seam alone.
+- **The aggregate arm — `coverage_index > instrumentation_ceiling`.** The relation does not hold
+  by construction under this definition, and a run observing it violated has likewise found
+  evidence from a producer no corpus rule declares. Neither term is clamped, and a violation is
+  a finding rather than an arithmetic error.
+
+**Why the per-seam arm is the load-bearing one, stated because the ratio alone reads as
+sufficient.** The aggregate arm can only fire when the captured count *exceeds* the instrumented
+count, so its sensitivity depends on how much of the roster is already instrumented rather than
+on whether an undeclared producer emitted. Enumerated over the grade assignments reachable at
+the instrumentation this rubric ships against, it fires on a **single** assignment — the one
+where every seam is captured — while the same enumeration run against a roster with most seams
+uninstrumented fires on the large majority. A detector whose sensitivity moves inversely with
+the instrumentation it is meant to complement is not one: as instrumentation lands, the
+aggregate arm goes quiet precisely where undeclared emission would still be a defect. The
+per-seam arm has no such dependency — one seam's rows against one seam's declaration — so it
+fires on the natural form of the input regardless of the rest of the roster. The aggregate arm
+is retained because it also catches the case where no single seam looks anomalous and the
+distribution as a whole cannot be reconciled.
 
 ### 3.3 Comparability guard
 
