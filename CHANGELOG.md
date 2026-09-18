@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.65] - 2026-09-18
+
+Nine deploy tools and checks that returned a confident wrong answer in one situation now return what they actually measured.
+
+[Full notes](release/releases/notes/v4.65_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.65)
+
 ## [v4.64] - 2026-09-13
 
 A check that had failed eighteen runs in a row now passes while still reporting the same finding — fixed, not silenced.
