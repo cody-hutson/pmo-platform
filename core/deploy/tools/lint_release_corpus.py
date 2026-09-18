@@ -491,14 +491,57 @@ BANNED_JARGON_ROW_OF = {
 # §2.4 rows deliberately NOT enforced, each mapped to the reason it is not.
 # EMPTY BY DESIGN today — every published row is enforced. A future row that
 # cannot be mechanically enforced is registered HERE rather than dropped, because
-# a dropped row is invisible and a registered one fails nothing while staying
-# readable to anyone comparing the table against the code. A row appearing in
-# neither this registry nor BANNED_JARGON_ROW_OF fails arm G-3.
+# a dropped row is invisible. A row appearing in neither this registry nor
+# BANNED_JARGON_ROW_OF fails arm G-3.
+#
+# REGISTRATION HERE IS NOT SUFFICIENT. This registry is readable only to someone
+# reading this file, and #6251 is the failure where the standard and the lint
+# disagreed and an author reading the standard had no way to see it. An entry
+# here that is not ALSO marked in §2.4's own table reproduces that failure
+# exactly — it is a deliberate exclusion visible only in the code. So the
+# excluded row carries BANNED_JARGON_EXCLUSION_MARKER in §2.4 as well, and arm
+# G-9a requires the marked set and this registry's key set to be EQUAL.
 #
 # While the registry is empty, arm G-4 (every reason is a non-empty string) would
 # pass vacuously over zero entries. Arm G-5b is its sensitivity arm: it re-runs
 # G-4's predicate against a synthetic empty-reason entry and REQUIRES it to fail.
+# G-9a and G-9b are vacuous for the same reason and G-9c is theirs.
 BANNED_JARGON_ROW_EXCLUSIONS: dict[str, str] = {}
+
+# The visible form a deliberate exclusion takes in §2.4 itself: this literal at
+# the START of the row's second cell, followed by the reason it is not enforced.
+#
+# The pairing is graded in BOTH directions, and the second direction is not
+# symmetry for its own sake. A registered-but-unmarked row is the #6251 defect
+# restated — the table bans a term the lint never checks. A marked-but-
+# unregistered row is that same disagreement pointing the other way — the table
+# tells a reader nothing checks a term the lint does in fact fire on. Both are a
+# red arm.
+BANNED_JARGON_EXCLUSION_MARKER = "NOT ENFORCED"
+
+
+def _is_exclusion_marked(cell: str) -> bool:
+    """True when a §2.4 second cell carries the exclusion marker.
+
+    Anchored at the START of the cell and CASE-SENSITIVE, so an ordinary
+    plain-language equivalent that happens to contain those words in prose does
+    not read as a marker. Arm G-9c drives a synthetic ordinary cell through this
+    predicate and requires it to return False.
+    """
+    return cell.strip().startswith(BANNED_JARGON_EXCLUSION_MARKER)
+
+
+def _exclusion_marker_reason(cell: str) -> str:
+    """The reason stated after the marker, or '' when the cell carries no marker
+    or states nothing after it.
+
+    The reason here and the reason in BANNED_JARGON_ROW_EXCLUSIONS are two
+    human-authored strings and NOTHING asserts they say the same thing. What is
+    asserted is that each is non-empty — G-9b here, G-4 there.
+    """
+    if not _is_exclusion_marked(cell):
+        return ""
+    return cell.strip()[len(BANNED_JARGON_EXCLUSION_MARKER):].lstrip(" \t-–—:;,.").strip()
 
 # An injectable specimen per enforcing pattern, keyed identically to
 # BANNED_JARGON_ROW_OF. Arm G-7 drives each specimen through the REAL
@@ -1906,18 +1949,22 @@ def _write_note(root: Path, rel: str, plan_link: str | None = None, lead: str = 
     return path
 
 
-def _parse_banned_jargon_rows(text: str) -> list[str]:
-    """Extract §2.4's first-column row labels from release-notes-standard.md.
+def _parse_banned_jargon_row_cells(text: str) -> list[tuple[str, str]]:
+    """Extract §2.4's body rows from release-notes-standard.md as (label, cell-2).
 
-    Returns the body-row labels in document order, or `[]` when the section or its
+    Returns the body rows in document order, or `[]` when the section or its
     table cannot be found or does not have the published shape. Callers treat `[]`
     as a FAILURE, never as a skip: an unparseable table compared against the
     pattern lists would yield two empty sets, report PARITY, and be
     byte-indistinguishable from a working check — which is the exact defect class
     this apparatus exists to remove.
 
-    Labels are returned VERBATIM. No normalization is applied, because the join
-    key is the cell text as a human authored it (see BANNED_JARGON_ROW_OF).
+    Both cells are returned VERBATIM. No normalization is applied, because the
+    join key is the cell text as a human authored it (see BANNED_JARGON_ROW_OF).
+
+    This is the ONE grammar: `_parse_banned_jargon_rows` is its first-column
+    projection, so the row set the parity arms compare and the second cells the
+    exclusion-marker arms read cannot come from two parsers that disagree.
     """
     lines = text.splitlines()
     start = None
@@ -1927,7 +1974,7 @@ def _parse_banned_jargon_rows(text: str) -> list[str]:
             break
     if start is None:
         return []
-    rows: list[str] = []
+    rows: list[list[str]] = []
     for line in lines[start + 1:]:
         s = line.strip()
         if s.startswith("### "):
@@ -1936,16 +1983,31 @@ def _parse_banned_jargon_rows(text: str) -> list[str]:
             continue
         cells = [c.strip() for c in s.strip("|").split("|")]
         if cells:
-            rows.append(cells[0])
+            rows.append(cells)
     # The first two rows MUST be the published header and separator. An
     # unexpected shape is a parse failure rather than a row, so a retitled
     # column or a reshaped table fails loudly instead of silently shifting
     # every label by one.
-    if len(rows) < 3 or rows[0] != "Banned in 6a" or not set(rows[1]) <= set("-: "):
+    if len(rows) < 3 or rows[0][0] != "Banned in 6a" or not set(rows[1][0]) <= set("-: "):
         return []
     body_rows = rows[2:]
-    # A blank first cell means the table is not the shape assumed above.
-    return [] if any(not r for r in body_rows) else body_rows
+    # A blank first cell means the table is not the shape assumed above. So does
+    # a body row with no second cell — and that one is load-bearing rather than
+    # tidiness: the second cell is WHERE a deliberate exclusion is marked, so a
+    # row that cannot carry one must fail the parse rather than read as a row
+    # whose marker is merely absent.
+    if any(not r[0] or len(r) < 2 for r in body_rows):
+        return []
+    return [(r[0], r[1]) for r in body_rows]
+
+
+def _parse_banned_jargon_rows(text: str) -> list[str]:
+    """§2.4's first-column row labels in document order.
+
+    A projection of `_parse_banned_jargon_row_cells`; `[]` carries that
+    function's failure contract unchanged.
+    """
+    return [label for label, _ in _parse_banned_jargon_row_cells(text)]
 
 
 def _self_test() -> int:
@@ -2552,18 +2614,30 @@ def _self_test() -> int:
         """The G-4 predicate, likewise named so G-5b re-runs it rather than a copy."""
         return all(isinstance(v, str) and v.strip() for v in exclusions.values())
 
-    def _render_24(rows: list[str]) -> str:
-        """Render row labels back into a §2.4-shaped table, for the anti-vacuity arms."""
+    def _render_24(rows) -> str:
+        """Render rows back into a §2.4-shaped table, for the anti-vacuity arms.
+
+        An entry is either a bare label, whose second cell renders synthetic, or
+        an explicit (label, second-cell) pair — which is how the G-9c arms render
+        a row that carries an exclusion marker and push it through the real
+        parser rather than hand-building a parsed structure.
+        """
         out = ["### 2.4 Banned-jargon list", "",
                "| Banned in 6a | Plain-language equivalent for 6a |", "|---|---|"]
-        out += [f"| {r} | (synthetic) |" for r in rows]
+        for r in rows:
+            label, cell = r if isinstance(r, tuple) else (r, "(synthetic)")
+            out.append(f"| {label} | {cell} |")
         return "\n".join(out) + "\n\n### 2.5 Next section\n"
 
     # Resolved BEFORE Scenario G's globals swap below, so the path is the live
     # repository's standard and not the synthetic corpus root.
     std_path = WORKSPACE_ROOT / "release" / "references" / "standards" / "release-notes-standard.md"
     std_text = std_path.read_text(encoding="utf-8") if std_path.is_file() else ""
-    table_rows = _parse_banned_jargon_rows(std_text)
+    # ONE parse, two views: the labels the parity arms compare and the second
+    # cells the exclusion-marker arms read come from the same call, so they
+    # cannot disagree about what the table says.
+    table_cells = _parse_banned_jargon_row_cells(std_text)
+    table_rows = [label for label, _ in table_cells]
 
     # G-1 fails CLOSED. An absent or unparseable table is a finding, never a skip:
     # a skip would compare two empty sets, report parity, and be
@@ -2839,6 +2913,90 @@ def _self_test() -> int:
         len(g8_control) == len(g8_surfaces) and all(n == 0 for n in g8_control.values()),
         "; ".join(f"{s}: {n}" for s, n in g8_control.items())
         + " finding(s) on a surface carrying an ordinary aside")
+
+    # ── G-9 — a deliberate exclusion is visible in §2.4, not only in the code ──
+    # #6251's own Documentation Impact: "any deliberate exclusion needs to be
+    # visible in the table rather than only in the code". G-3 accepts registry
+    # membership and G-4 accepts a registry reason, so BOTH stay green on a row
+    # that is registered and unmarked — measured, they do. That state is the
+    # shipped defect restated: the standard bans a term, the lint never fires on
+    # it, and an author reading the standard cannot see that the two disagree.
+    # These arms grade the PAIRING, in both directions (see the note beside
+    # BANNED_JARGON_EXCLUSION_MARKER for why the second direction is not
+    # symmetry for its own sake).
+    #
+    # G-9a and G-9b are VACUOUS while the registry is empty and no row is marked,
+    # exactly as G-4 is. G-9c is their sensitivity arm, and it re-runs THESE
+    # predicates over the REAL parser rather than copies of them.
+    marked = {label: cell for label, cell in table_cells if _is_exclusion_marked(cell)}
+
+    def _marker_parity(cells, exclusions) -> bool:
+        """The G-9a predicate. Named so G-9c re-runs THIS code, not a copy."""
+        return {lbl for lbl, c in cells if _is_exclusion_marked(c)} == set(exclusions)
+
+    def _marker_reasons_ok(cells) -> bool:
+        """The G-9b predicate, likewise named so G-9c re-runs it rather than a copy."""
+        return all(_exclusion_marker_reason(c) for _, c in cells if _is_exclusion_marked(c))
+
+    registered_unmarked = sorted(set(BANNED_JARGON_ROW_EXCLUSIONS) - set(marked))
+    marked_unregistered = sorted(set(marked) - set(BANNED_JARGON_ROW_EXCLUSIONS))
+    arm("G-9a every registered exclusion is MARKED in §2.4, and every marked row is registered",
+        _marker_parity(table_cells, BANNED_JARGON_ROW_EXCLUSIONS),
+        f"{len(marked)} marked row(s) of {len(table_cells)} == "
+        f"{len(BANNED_JARGON_ROW_EXCLUSIONS)} registered; "
+        + (f"REGISTERED-BUT-UNMARKED={registered_unmarked} "
+           f"MARKED-BUT-UNREGISTERED={marked_unregistered}"
+           if (registered_unmarked or marked_unregistered)
+           else "sets equal" + ("" if marked else
+                                " — VACUOUS while both are empty; G-9c is the "
+                                "sensitivity control")))
+
+    reasonless = sorted(lbl for lbl, c in marked.items() if not _exclusion_marker_reason(c))
+    arm("G-9b every marked row states its reason in §2.4 itself",
+        _marker_reasons_ok(table_cells),
+        f"{len(marked)} marked row(s); "
+        + (f"MARKED WITH NO STATED REASON: {reasonless}" if reasonless
+           else ("VACUOUS while no row is marked; G-9c is the sensitivity control. "
+                 if not marked else "every marked row states a reason. ")
+           + "The registry's own reason is a separate string and nothing asserts "
+             "the two say the same thing"))
+
+    # G-9c — anti-vacuity for G-9a and G-9b. Each case is RENDERED as a §2.4
+    # table and pushed through the REAL parser, so what gets discriminated is the
+    # whole parse -> detect -> compare pipeline rather than the comparison alone.
+    # The sentinel must not already be a published row, or the "+1" table is
+    # +1 LINE and +0 SET and the arm fails for a reason unrelated to the property.
+    _msentinel = "synthetic-excluded-row"
+    while _msentinel in table_rows:
+        _msentinel += "-x"
+    _ordinary_rows = [(r, "(synthetic)") for r in table_rows]
+    _reason_cell = f"{BANNED_JARGON_EXCLUSION_MARKER} — a synthetic stated reason"
+    # (a) registered, NOT marked — the #6251 defect. MUST fail parity.
+    c_unmarked = _parse_banned_jargon_row_cells(_render_24(table_rows + [_msentinel]))
+    # (b) marked AND registered — MUST pass parity and the reason predicate.
+    c_marked = _parse_banned_jargon_row_cells(
+        _render_24(_ordinary_rows + [(_msentinel, _reason_cell)]))
+    # (c) marked with the marker alone — MUST fail the reason predicate.
+    c_reasonless = _parse_banned_jargon_row_cells(
+        _render_24(_ordinary_rows + [(_msentinel, BANNED_JARGON_EXCLUSION_MARKER)]))
+    _one = {_msentinel: "a stated reason"}
+    detected = sorted(lbl for lbl, c in c_marked if _is_exclusion_marked(c))
+    ordinary_hits = sorted(lbl for lbl, c in c_unmarked if _is_exclusion_marked(c))
+    arm("G-9c anti-vacuity — registered-but-unmarked FAILS, marked-but-unregistered FAILS, "
+        "the matched pair PASSES, and a marker with no reason FAILS",
+        not _marker_parity(c_unmarked, _one)
+        and not _marker_parity(c_marked, {})
+        and _marker_parity(c_marked, _one)
+        and _marker_reasons_ok(c_marked)
+        and not _marker_reasons_ok(c_reasonless)
+        and detected == [_msentinel]
+        and not ordinary_hits,
+        f"through the real parser: the detector finds {detected} in the marked "
+        f"table and {ordinary_hits or 'nothing'} across {len(c_unmarked)} "
+        "ordinary-celled row(s), so it discriminates the MARKER and not the row; "
+        "registered-but-unmarked -> UNEQUAL; marked-but-unregistered -> UNEQUAL; "
+        "matched pair -> EQUAL; marker with no reason after it -> reason "
+        "predicate FAILS while the same marker plus a reason PASSES")
 
     print(f"\n{checked} arm(s) run, {len(failures)} failure(s)"
           + (f": {failures}" if failures else ""))
