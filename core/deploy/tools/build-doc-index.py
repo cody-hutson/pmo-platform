@@ -72,7 +72,7 @@ from pathlib import Path
 # The ONE shared frontmatter reader (F1). This file lives beside it in
 # core/deploy/tools/; the sys.path insert makes --self-test / direct invocation robust.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _frontmatter import read_frontmatter, _strip_quotes  # noqa: E402
+from _frontmatter import read_frontmatter, _strip_quotes, is_corpus_path  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -385,8 +385,7 @@ def discover_files(root: Path) -> list:
     for p in root.rglob("*"):
         if not p.is_file():
             continue
-        rel_parts = p.relative_to(root).parts
-        if any(part.startswith(".") for part in rel_parts):
+        if not is_corpus_path(p, root):
             continue
         name = p.name
         if name.endswith(SIDECAR_SUFFIX):
