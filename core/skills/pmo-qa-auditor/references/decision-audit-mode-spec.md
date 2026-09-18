@@ -155,7 +155,7 @@ below).
 | `DS1` | the `decision` family, less the subtypes `DS3`, `DS4` and `DS6` claim | — |
 | `DS2` | the `gate-outcome` family | — |
 | `DS3` | the `escalation`, `scope-change` and `iteration` families, plus the `decision` subtypes this seam claims | the hub-state action-item ledger for the window's milestones |
-| `DS4` | the `decision` family restricted to this seam's subtype | the payload convention's provenance enum, read at run time to resolve the occasion classes |
+| `DS4` | the `decision` family restricted to this seam's subtype | the payload convention's provenance enum, read at run time to **interpret each returned row's `via:` value**. The occasion count comes from the matched gate's firings under the rubric's shared rule, never from this enum — a `via:session-retro` row evidences a firing the live path missed rather than adding one |
 | `DS5` | the `self-repair` family | — |
 | `DS6` | the `decision` family restricted to this seam's subtype | — |
 | `DS7` | the `spoke-launch` family | the hub's rendered admission-verdict line for each launch in the window |
@@ -298,6 +298,10 @@ arm nothing exercises is indistinguishable from one that cannot fire:
   error, which is the branch that makes the index-versus-ceiling relation a detector.
 
 The classification family additionally covers a recorded and evidenced decision (expect
-conformant), an undetected named failure mode (expect a finding), a zero-row seam (expect a
-non-graded state and **no grade**), and a two-release recurrence (expect exactly one systemic
-pattern).
+conformant), an undetected named failure mode (expect a finding), a zero-row seam **whose
+ordered-predicate route is a non-graded state** — no declared writer, or a declared writer and
+determinately no owed occasions — (expect that non-graded state and **no grade**), and a
+two-release recurrence (expect exactly one systemic pattern). The zero-row condition is
+qualified rather than stated flat, because the **instrumented and owed** zero-row seam renders
+`measured` / `partial`: the coverage family's own required negative control pins it, and an
+unqualified *"a zero-row seam takes no grade"* here would contradict that control on one input.

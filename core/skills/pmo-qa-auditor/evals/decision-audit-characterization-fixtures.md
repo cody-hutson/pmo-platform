@@ -173,10 +173,19 @@ measurement gap and a measured zero.
 - **Expected output:** a **finding** carrying the full root-cause chain, a severity, and an
   orthogonal confidence tag.
 
-### F-CLS-03 — no rows means no grade
-- **Input:** a window in which a seam produced no evidence rows.
+### F-CLS-03 — no rows, and nothing owed that could have produced one → no grade
+- **Input:** a window in which a seam produced no evidence rows **and** the ordered predicate
+  routes it to a non-graded state — either no corpus rule declares a writer for any of its loci,
+  or a writer is declared and the window determinately owed it no occasions.
 - **Expected output:** the seam carries a non-graded coverage state and **no grade**. A run that
   renders any non-graded state as a passing grade fails this fixture.
+- **The input is conditioned deliberately, and the boundary is the point.** An unconditional
+  *"no rows means no grade"* reading contradicts **F-COV-03**, the required negative control in
+  the coverage family: a zero-row seam that **is** instrumented and **was** owed occasions
+  renders `measured` / `partial`, which is a grade. That case is the most actionable state the
+  audit produces, and routing it here would return it to the benign class the coverage axis was
+  widened to keep it out of. This fixture pins the two zero-row cases that genuinely take no
+  grade; F-COV-03 pins the one that does.
 
 ### F-CLS-04 — two-release recurrence → exactly one systemic pattern
 - **Input:** the same decision failure signature in two releases in the window.
