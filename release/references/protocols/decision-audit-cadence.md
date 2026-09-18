@@ -119,8 +119,9 @@ release/releases/decision-health-summary.md
 Unlike the analysis folder, this small headline surface is **committed** — present on every
 clone, seeded with an awaiting-first-run state, overwritten by each run
 (single-record-overwrite). It carries the decision-health posture, the coverage index, the
-classification counts, the count of seams reporting no evidence, the oracle pin, the resolved
-window, the audit date, and a pointer to the latest analysis folder.
+instrumentation ceiling, the classification counts, the coverage-state distribution with the
+`uninstrumented`, `undecidable` and `unexercised` counts each reported **separately**, the
+oracle pin, the resolved window, the audit date, and a pointer to the latest analysis folder.
 
 **Why the committed surface is load-bearing.** The analysis folder is git-ignored, so anything
 that cites only the folder — a tracked acceptance criterion, a downstream consumer, or the
