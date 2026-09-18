@@ -6077,28 +6077,42 @@ _ai_emit_attestation() {
 # `else` happens to reach. Three signals are readable from the log; one case is
 # genuinely unreadable and says so:
 #
-#   >=1 action-item-opened row AND no ledger row on disk
+#   >=1 COMMITMENT row AND no ledger row on disk
 #       -> emit-skipped, PROVEN. The emit happened and the ledger did not. That is a
 #          contradiction the gate can name precisely, and it is the upgrade from
 #          inferred to provable that both prior closes wanted and could not have.
-#   0 action-item-opened rows AND 0 decision-class rows
+#   0 commitment rows AND 0 decision-class rows
 #       -> no-commitments. Nothing was rendered at any routing point that a sweep
 #          could have found.
-#   0 action-item-opened rows BUT >=1 decision-class row
+#   0 commitment rows BUT >=1 decision-class row
 #       -> NO RECOMMENDATION. A release that swept every routing point and owed
 #          nothing, and a release that never swept at all, BOTH read zero here. The
 #          log cannot separate them; the routing-point briefings can. Saying so is
 #          strictly better than guessing, because a guess printed beside the word
 #          "recommended" is the blind attestation this change exists to end.
-#   the reader is absent, or returns no integer
+#   the reader is absent, or returns no usable count
 #       -> NO RECOMMENDATION, probe reported unusable. An unreadable probe is not a
 #          zero, and a zero it cannot distinguish from a dead reader is not evidence.
+#
+# A COMMITMENT ROW IS AN action-item-opened ROW THAT IS NOT THE SWEEP ZERO-STATE. The
+# commitment sweep (core/standards/hub-action-tracking.md § 4) records a routing point
+# whose sweep opened nothing as a decision / action-item-opened row carrying the
+# payload token sweep:none-owed: the zero-state rides the subtype a real T1 transition
+# uses rather than minting its own. That row records that a sweep RAN and owed
+# nothing; it opens no AI-NNN. Counting it as a commitment inverted it — a release
+# that followed the standard exactly (swept, owed nothing, correctly wrote no ledger)
+# was told emit-skipped, PROVEN. So the commitment count is the action-item-opened
+# count MINUS the rows whose payload carries the token, read with the reader's
+# fixed-string --payload-contains filter over the same release and subtype, which
+# makes the subtrahend a subset of the minuend by construction. A zero-state row is
+# still EVIDENCE — it proves at least one sweep ran — but it cannot prove every
+# routing point swept, so it moves no recommendation and is named in the basis.
 #
 # Never fails: every read is guarded, so a missing reader or an unreadable log
 # degrades to "no recommendation" and never aborts a close the operator has
 # legitimately attested.
 _ai_recommended_cause() {
-  local _slug="${STATE_MILESTONE_SLUG:-$VERSION}" _open="" _dec=""
+  local _slug="${STATE_MILESTONE_SLUG:-$VERSION}" _open="" _zero="" _dec="" _commit=""
   if [[ -z "$_slug" ]]; then
     /usr/bin/printf '|UNAVAILABLE — this run resolved no release key to query, so no cause is recommended; the attestation stands on the operator own reading of the routing-point briefings'
     return 0
@@ -6112,24 +6126,33 @@ _ai_recommended_cause() {
   # anything else is treated as unusable rather than as a count.
   _open="$("$AI_EVENT_READER" --release "$_slug" --event-type decision \
              --event-subtype action-item-opened --count 2>/dev/null || true)"
+  _zero="$("$AI_EVENT_READER" --release "$_slug" --event-type decision \
+             --event-subtype action-item-opened --payload-contains 'sweep:none-owed' \
+             --count 2>/dev/null || true)"
   _dec="$("$AI_EVENT_READER" --release "$_slug" --event-type decision --count 2>/dev/null || true)"
   _open="${_open##*$'\n'}"
+  _zero="${_zero##*$'\n'}"
   _dec="${_dec##*$'\n'}"
   [[ "$_open" =~ ^[0-9]+$ ]] || _open=""
+  [[ "$_zero" =~ ^[0-9]+$ ]] || _zero=""
   [[ "$_dec"  =~ ^[0-9]+$ ]] || _dec=""
-  if [[ -z "$_open" || -z "$_dec" ]]; then
-    /usr/bin/printf '|UNAVAILABLE — the pipeline-event reader returned no integer count, so no cause is recommended; an unreadable probe is not a zero'
+  # The zero-state count is a SUBSET of the action-item-opened count — same release,
+  # same subtype, one more filter — so a reader reporting more of the one than of the
+  # other is not reporting counts, and a negative commitment count is not a zero.
+  if [[ -z "$_open" || -z "$_zero" || -z "$_dec" ]] || [[ "$_zero" -gt "$_open" ]]; then
+    /usr/bin/printf '|UNAVAILABLE — the pipeline-event reader returned no usable count (a non-integer, or more sweep:none-owed rows than the action-item-opened rows they are a subset of), so no cause is recommended; an unreadable probe is not a zero'
     return 0
   fi
-  if [[ "$_open" -ge 1 ]]; then
-    /usr/bin/printf 'emit-skipped|PROVEN: %s decision/action-item-opened row(s) are recorded for this release and the ledger holds no AI-NNN row. A commitment was emitted with no ledger entry behind it, which is the emit step rather than the absence of commitments' "$_open"
+  _commit=$(( _open - _zero ))
+  if [[ "$_commit" -ge 1 ]]; then
+    /usr/bin/printf 'emit-skipped|PROVEN: %s decision/action-item-opened commitment row(s) are recorded for this release (%s sweep:none-owed zero-state row(s) excluded — each records a sweep that owed nothing, not a commitment) and the ledger holds no AI-NNN row. A commitment was emitted with no ledger entry behind it, which is the emit step rather than the absence of commitments' "$_commit" "$_zero"
     return 0
   fi
   if [[ "$_dec" -eq 0 ]]; then
     /usr/bin/printf 'no-commitments|%s decision-class row(s) are recorded for this release, so nothing was rendered at any routing point that a commitment sweep could have found' "$_dec"
     return 0
   fi
-  /usr/bin/printf '|INDETERMINATE FROM THE LOG — %s decision-class row(s) and 0 action-item-opened row(s). A release that swept every routing point and owed nothing, and a release that never swept at all, both read zero here; the log cannot separate them and the routing-point briefings can. No cause is recommended' "$_dec"
+  /usr/bin/printf '|INDETERMINATE FROM THE LOG — %s decision-class row(s), 0 commitment row(s) and %s sweep:none-owed zero-state row(s). A zero-state row records a sweep that ran and owed nothing, never a commitment, and a routing point that never swept leaves no row at all — so a release that swept every routing point and owed nothing, and a release that skipped some or all of its sweeps, both read zero commitments here; the log cannot separate them and the routing-point briefings can. No cause is recommended' "$_dec" "$_zero"
   return 0
 }
 
@@ -14345,11 +14368,20 @@ AISTUB
   # below stays hermetic — the real reader would read the operator's live event log,
   # which is neither reproducible nor offline. Same real-file rationale as the writer
   # stub above (the phase guards its reader with `[[ -x ]]`). Group (M) re-points it
-  # per arm; the two counts are baked in as literals so each arm states its own input.
-  _ai_mk_reader() {   # _ai_mk_reader <action-item-opened-count> <decision-count>
+  # per arm; the counts are baked in as literals so each arm states its own input.
+  # The third count answers the zero-state query — the action-item-opened rows whose
+  # payload carries sweep:none-owed — and defaults to 0, so an arm that omits it
+  # states a log with no zero-state rows. The payload filter is matched EXACTLY, token
+  # and position, and any OTHER payload filter answers a non-integer: a classifier
+  # that asks the wrong question then reads UNAVAILABLE and reddens the arms that
+  # expect a cause, instead of silently receiving a count meant for a different query.
+  _ai_mk_reader() {   # _ai_mk_reader <action-item-opened-count> <decision-count> [<sweep:none-owed-count>]
     /bin/cat > "$_ai_tmp/reader-stub" <<READERSTUB
 #!/bin/sh
 case "\$*" in
+  *"--payload-contains sweep:none-owed "*|*"--payload-contains sweep:none-owed")
+                        printf '%s\n' '${3:-0}' ;;
+  *--payload-contains*) printf '%s\n' 'unexpected-payload-filter' ;;
   *action-item-opened*) printf '%s\n' '$1' ;;
   *)                    printf '%s\n' '$2' ;;
 esac
@@ -14557,7 +14589,7 @@ READERSTUB
   _st_arm AI AI-R; [[ "$_ai_rc" -eq 3 ]] || { echo "FAIL: AI-R — --attest-action-items must NOT clear an UNCLASSIFIABLE verdict; an unreadable status is normalised, not attested away (rc $_ai_rc)"; failures=$((failures+1)); }
   ATTEST_ACTION_ITEMS=""
 
-  # (M) THE MEASURED RECOMMENDED CAUSE — 5 arms.
+  # (M) THE MEASURED RECOMMENDED CAUSE — 7 arms.
   #
   # BIND TO THE RECOMMENDATION CLAUSE, NEVER TO THE WHOLE DETAIL. The blocking FAIL
   # detail ALREADY names both causes in its remediation sentence ("Re-run with
@@ -14569,9 +14601,9 @@ READERSTUB
   # emits exactly once, and each positive arm is paired with a specificity arm
   # asserting the OTHER cause is NOT what was recommended.
   #
-  # VERDICT-INVARIANCE IS ASSERTED IN EVERY ARM, not stated in a comment. M1-M4 each
-  # drive the same UNATTESTED NOT-RECORDED fixture at --apply and require rc 3 with
-  # STATE_AI_GATE unchanged; M5 drives the same fixture ATTESTED and requires rc 0,
+  # VERDICT-INVARIANCE IS ASSERTED IN EVERY ARM, not stated in a comment. M1-M4, M6
+  # and M7 each drive the same UNATTESTED NOT-RECORDED fixture at --apply and require
+  # rc 3 with STATE_AI_GATE unchanged; M5 drives the same fixture ATTESTED and requires rc 0,
   # because there the attestation is what clears the block and the measurement is only
   # evidence beside it. Both shapes assert the same property from opposite sides: the
   # verdict is whatever the fixture's attestation state already made it, and no
@@ -14650,7 +14682,38 @@ READERSTUB
   /usr/bin/grep -qF 'THE MEASUREMENT DISAGREES WITH THE ATTESTATION' <<<"$_ai_m" && { echo "FAIL: AI-M5 specificity — an AGREEING measurement must not render the disagreement notice, or the notice carries no information, got '$_ai_m'"; failures=$((failures+1)); }
   ATTEST_ACTION_ITEMS=""
   _ai_mk_reader 0 0
-  _st_witness M 5
+
+  # (M6) THE SWEEP ZERO-STATE IS NOT A COMMITMENT. A routing point whose commitment
+  #      sweep opened nothing emits decision / action-item-opened carrying the payload
+  #      token sweep:none-owed (core/standards/hub-action-tracking.md § 4) — the same
+  #      subtype a real T1 transition uses. A release that follows that standard
+  #      exactly, every sweep owing nothing and correctly no ledger, reads here as 3
+  #      action-item-opened rows that are ALL the zero-state. Counting them was the
+  #      defect: the classifier printed emit-skipped, PROVEN, over a compliant release.
+  #      It must recommend NEITHER cause — a zero-state row proves a sweep ran, not
+  #      that every routing point swept — and its basis must NAME the zero-state
+  #      rows, which is what makes the row readable at close at all. RED against the
+  #      unfixed classifier, which counts all 3 rows as commitments.
+  _ai_mk_reader 3 5 3
+  _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"; _ai_m="$(get_phase action_item_gate)"
+  _st_arm M M6; _ai_m_check M6 'MEASURED RECOMMENDATION: none' \
+                 'MEASURED RECOMMENDATION: --attest-action-items emit-skipped'
+  /usr/bin/grep -qF '3 sweep:none-owed zero-state row(s)' <<<"$_ai_m" || { echo "FAIL: AI-M6 — the basis must NAME the zero-state rows, or a compliant release's sweeps are invisible at close, got '$_ai_m'"; failures=$((failures+1)); }
+
+  # (M7) M6's SPECIFICITY TWIN — ONE real commitment beside zero-state rows still
+  #      proves emit-skipped. Without it M6 passes an over-correction that stops
+  #      counting commitments whenever a zero-state row is present, which would hide
+  #      a skipped emit behind any sweep that owed nothing. ON THE BOUNDARY: exactly
+  #      one commitment remains after the subtraction, so a drift of the threshold to
+  #      `-ge 2` reddens here as well as in (M1). The rendered count must be the
+  #      COMMITMENT count, 1, and not the raw action-item-opened count, 3.
+  _ai_mk_reader 3 9 2
+  _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"; _ai_m="$(get_phase action_item_gate)"
+  _st_arm M M7; _ai_m_check M7 'MEASURED RECOMMENDATION: --attest-action-items emit-skipped' \
+                 'MEASURED RECOMMENDATION: --attest-action-items no-commitments'
+  /usr/bin/grep -qF 'PROVEN: 1 decision/action-item-opened commitment row(s)' <<<"$_ai_m" || { echo "FAIL: AI-M7 — the PROVEN basis must count COMMITMENT rows (action-item-opened minus the zero-state), got '$_ai_m'"; failures=$((failures+1)); }
+  _ai_mk_reader 0 0
+  _st_witness M 7
 
   # (H) DRY-RUN — evaluates, records, never halts, and says what it WOULD do.
   MODE="dry-run"
@@ -15479,7 +15542,7 @@ EOF
   _st_claim 4d-settle "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache); check-5 settle POLL validated (#4416, legs f-j PLUS the F-01 remediation leg i.2 — six arms, not five; this clause ENUMERATES the settle group's legs and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when legs f-j and i.2 leave no witness: f AC2 an injected 5-read search-index lag, longer than the pre-change single-retry window, still converges to PASS and RENDERS its settle figure in both the row and the phase detail — the v4.02 failure reproduced and closed / g AC3 THE NON-VACUITY CONTROL, same fixture with the budget shrunk BELOW the lag: exhaustion must read PARTIAL and NAME the budget, never PASS, so f is proven capable of failing / h AC1 structural self-parse behind an anti-vacuity floor — the attempt bound exists AND is a loop terminal AND the poll loop exists, with the pre-change 'Retry ONCE' form asserted ABSENT so no limb is satisfiable by the old code / i AC4 an out-of-scope straggler is still reported at once, asserted on the CHECK-5-SCOPED instrument ('check-5 settled at poll 0/15') because a PARTIAL row alone cannot distinguish reported-now from reported-after-the-whole-budget, and because the stub's own 'calls' counter is PHASE-scoped rather than check-5-scoped — the gate-passage-proof rung issues a third 'issue list' after check 5 has rendered — so that counter carries an independent CEILING arm (<= 3 = detect + check-5 + gate-passage-proof) stated as the bound it really is; leg (f)'s 'poll 5/15' is the moving control that makes the zero a real reading / i.2 THE F-01 REMEDIATION ARM, and the only one that discriminates the render guard: leg (i) grades the exhaustion suffix but can only ever exercise it at polls=0, where it is unreachable BY CONSTRUCTION under either guard, which is how '-gt 0' survived it. i.2 drives the one separating state — an out-of-scope straggler surfacing MID-POLL, in-scope #401 holding the poll open across a 3-read lag while #999 breaks the loop at 3 of 15 attempts with the budget never waited — behind an anti-vacuity floor on 'poll 3/15' whose moving controls are (f)'s 'poll 5/15' and (i)'s 'poll 0/15'. Twelve fixtures under both guards: 12/12 pass under the loop's own '-ge' terminal, exactly one fails under '-gt 0' / j AC5 the group stays hermetic and instant at DELAY=0, which only an ATTEMPT bound makes structurally possible)"
   echo "  post_gate_passage_proof three-rung target ladder validated (#3819 — T-13 rung 1 resolves a CLOSED Stage-13 sub-task via --state all and does NOT fall through to the PR / rung 2 posts to the release PR naming the OBSERVED rung-1 reason / rung 3 MANUAL names BOTH attempted targets; T-14 two collect_open_release_issues calls in one run keep EXCLUDED_DETAIL undoubled, COLLECTED_OPEN_ISSUES identical and resolve_stage13_subtask stable, with a non-empty-exclusion anti-vacuity control)" >&2
   _st_claim AI "  phase_action_item_gate validated (#4439, group AI — 28 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): A and B are each other's control over ONE differential harness where only the ledger changes — a gate that never blocks fails A, one that always blocks fails B, one reading the wrong path resolves NOT-RECORDED for both and fails BOTH / B2 decoy: a terminal ledger carrying the literal words 'open' and 'in-flight' in trigger_detail still resolves RESOLVED, so the gate is column-addressed and not row-pattern-matched / all five verdict states drive distinct fixtures and are asserted on the STATE_AI_GATE global rather than the detail prose — UNRESOLVED (A) · RESOLVED (B, B2) · NOT-RECORDED (C unattested blocks, C2 attested passes WARN with the operator-actor attestation EMITTED carrying its cause and the spec subtype) · EMPTY-LEDGER (D unattested blocks, D2 attested round-trips the second cause) · UNCLASSIFIABLE (M blocks and NAMES the offending row and its raw value, with a specificity limb proving the enumerator selects the unreadable set and not the terminal one, and the all-terminal ledger re-driven on the same harness as its paired negative control) / E the two SURFACE states must resolve DISTINCT values, because comparing detail strings passes on any two different sentences / E2 an unlicensed attestation cause does NOT clear a SURFACE state / F EXECUTES the two dispatch lines lifted VERBATIM from this file's own text, refusing to pass unless each needle resolves to exactly one top-level line, under three mutually-controlling limbs — F1 blocking gate leaves the close UNFIRED at exit 3, F2 SENSITIVITY a passing gate does fire it (without which F1's clean result is meaningless), F3 NEGATIVE CONTROL a constructed '|| true' line must let the close through (without which a fail-closed gate is indistinguishable from a no-op one) — so capability-to-fail is re-demonstrated on EVERY run, not only under one-time mutation / F4 whole-block invariant: every top-level dispatch line carries the fail-closed guard, with an anti-vacuity floor on the parse and a specificity control proving the filter rejects an unguarded line / G doc<->code parity on the canonical Procedure 7a predicate across the fixture set, with an anti-vacuity floor on the extraction and a sensitivity arm requiring >=5 distinct STATEs over a fixture count DERIVED from the loop rather than restated in the message / M-N-O-Q-R-S-T MEMBERSHIP: the residue of the recognised set is its own BLOCKING state rather than the implicit else of a two-value comparison, which counted a typo, a case variant, a foreign vocabulary and an out-of-range field as RESOLVED — M an unadmitted value blocks and names itself, with the all-terminal ledger as its paired negative control / N case-folding NORMALISES rather than rejects, so an uppercase OPEN resolves UNRESOLVED and a fold-and-reject implementation cannot pass M / O the two section-2.1a status aliases stay ADMITTED, without which every legacy re-run blocks / Q the ARITY class in BOTH its mechanisms, the one witnessed live: at arity<=10 field 11 does not exist and reads EMPTY, at arity 11 the row-terminating pipe stays glued to the last field and reads 'open |' NON-empty, and the detail carries fields:N so a dropped column is distinguishable from a mistyped word / R an unreadable ledger cannot be attested away, the structural sibling of L / S row 6 renders the fifth state WITH its counts instead of falling to the default that asserts the gate did not run, with the still-reachable default as its control / T PRECEDENCE: a ledger carrying both classes renders UNRESOLVED and carries BOTH enumerations in one detail, because the state selects the operator's remedy and reversing it would drop the open enumeration from the ledgers that most need it / H --dry-run never returns non-zero yet still EVALUATES, and names the condition that would FAIL at --apply / I an idempotent re-run over an already-closed milestone, where an UNRESOLVED verdict is the close-before-verdict shape itself / J --no-merge still evaluates and records rather than blocks / K Verification row 6 reads the Phase-12.9 GLOBAL — unset renders UNVERIFIED never a green cell, mutating the global moves the cell, and phase_run_verification is asserted NOT to re-evaluate the predicate after the close / L an attestation does NOT clear an UNRESOLVED verdict — an open row is dispositioned, never attested away / P operator-instance path tokenisation, with a sensitivity arm proving the leak probe can match its own needle"
-  _st_claim M "  phase_action_item_gate MEASURED recommended --attest-action-items cause validated (group M — 5 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): every arm binds to the literal 'MEASURED RECOMMENDATION: ' prefix rather than to the whole detail, because the blocking FAIL text already names BOTH causes in its remediation sentence and a whole-detail search for either one therefore passes over an inverted classifier — the vacuous-arm shape, refused here by construction — M1 a commitment emitted with an empty ledger recommends emit-skipped and provably not the other cause / M2 its differential control, same fixture and mode with only the log counts changed, recommends no-commitments and provably not the other / M3 the residue gets its own outcome: decisions rendered with nothing emitted is the shape a swept-and-owed-nothing release and a never-swept release BOTH produce, so the classifier recommends NEITHER cause instead of guessing / M4 an unreadable probe is not a zero — a missing reader recommends nothing and NAMES the reader, without which a broken reader would silently recommend no-commitments on every close / M5 a measurement that DISAGREES with an attestation already given is recorded and still passes, with the specificity arm that an AGREEING measurement renders no disagreement notice / and every M arm re-asserts the verdict its fixture's attestation state already fixed — rc 3 with STATE_AI_GATE unchanged on the unattested M1-M4, rc 0 on the attested M5 — so 'the recommendation decides nothing' is measured on each run rather than asserted once"
+  _st_claim M "  phase_action_item_gate MEASURED recommended --attest-action-items cause validated (group M — 7 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): every arm binds to the literal 'MEASURED RECOMMENDATION: ' prefix rather than to the whole detail, because the blocking FAIL text already names BOTH causes in its remediation sentence and a whole-detail search for either one therefore passes over an inverted classifier — the vacuous-arm shape, refused here by construction — M1 a commitment emitted with an empty ledger recommends emit-skipped and provably not the other cause / M2 its differential control, same fixture and mode with only the log counts changed, recommends no-commitments and provably not the other / M3 the residue gets its own outcome: decisions rendered with nothing emitted is the shape a swept-and-owed-nothing release and a never-swept release BOTH produce, so the classifier recommends NEITHER cause instead of guessing / M4 an unreadable probe is not a zero — a missing reader recommends nothing and NAMES the reader, without which a broken reader would silently recommend no-commitments on every close / M5 a measurement that DISAGREES with an attestation already given is recorded and still passes, with the specificity arm that an AGREEING measurement renders no disagreement notice / M6 THE SWEEP ZERO-STATE IS NOT A COMMITMENT: action-item-opened rows that all carry the sweep:none-owed payload token — what a release that swept every routing point and owed nothing emits — recommend NEITHER cause and never emit-skipped, and the basis NAMES the zero-state rows; red against a classifier that counts every action-item-opened row / M7 its specificity twin: ONE real commitment beside zero-state rows still recommends emit-skipped and renders the commitment count rather than the raw count, so an over-correction that stops counting whenever a zero-state row is present fails here, and a threshold drift to -ge 2 fails here as well as in M1 / and every M arm re-asserts the verdict its fixture's attestation state already fixed — rc 3 with STATE_AI_GATE unchanged on the unattested M1-M4, M6 and M7, rc 0 on the attested M5 — so 'the recommendation decides nothing' is measured on each run rather than asserted once"
   _st_claim 4e-c-j "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT; #6255, arms c-j — this clause ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when the arms leave no witness: TERMINAL STATES — (e) an ALREADY-MERGED PR PASSes on the FIRST read with ZERO merge attempts and its detail carries the elapsed figure AC-4 is graded on, which no earlier version of this phase emitted at all / (f) a CLOSED-unmerged PR FAILs and its detail NAMES the closed-without-merging case, driven on the deliberately MERGEABLE-looking closed shape because the CONFLICTING one trips the pre-existing arm by accident, and asserted on the detail because a bare FAIL is satisfied by the PRE-FIX timeout path / (g) THE PER-ITERATION PIN: a merge landing MID-POLL is recognised on the SECOND read, so a pre-loop-only implementation passes (e) and fails here — budgeted at MERGE_TIMEOUT=2 because the bound admits ceil(TIMEOUT/STEP) iterations and a 1/1 arm would redden against a CORRECT implementation / RE-PROBE — (h) a failed gh pr merge over a PR that DID merge PASSes with the merge ATTEMPTED once and a detail naming the unobserved-merge case, (h2) its NEGATIVE CONTROL: the same failed merge over a STILL-OPEN PR must still FAIL, without which an implementation that PASSes on any merge failure satisfies (h) / (i) THE WIDTH PIN over the shipped text of the one shared reader, three-field --json list and three-field --jq template, behind an anti-vacuity floor on the extraction and TWO specificity controls on constructed FOUR-field lines that both needles must reject / BUDGET EXHAUSTION — (j) AC-2's timeout limb, which every arm above leaves ungraded: a PR BLOCKED on every read must spend the budget and then FAIL with a detail NAMING the timeout ('merge state still=') and ZERO merge attempts, asserted on the detail because a bare FAIL is satisfied by (f)'s CLOSED arm and by the CONFLICTING HALT, and on the merge counter because removing the post-loop guard falls straight through to gh pr merge and launders the spent budget into a PASS — measured: with that guard replaced by 'if false' the whole suite stayed at exit 0 / and every arm c-j counts BOTH pr view and pr merge, because post-fix a PASS is reachable through the terminal arm and no longer proves on its own that a merge was attempted)"
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
