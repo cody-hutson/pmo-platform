@@ -525,15 +525,25 @@ def _is_exclusion_marked(cell: str) -> bool:
 
     Anchored at the START of the cell and CASE-SENSITIVE, so an ordinary
     plain-language equivalent that happens to contain those words in prose does
-    not read as a marker. Arm G-9c drives a synthetic ordinary cell through this
-    predicate and requires it to return False.
+    not read as a marker. Arm G-9c drives NEAR-MISS cells through this predicate
+    and requires each to return False — cells differing from the marker in
+    exactly ONE dimension (its case; its anchoring; the length of its literal),
+    so that loosening any one of the three reds that arm. A control differing on
+    every dimension at once would discriminate none of them, which is what this
+    docstring claimed before the controls existed.
     """
     return cell.strip().startswith(BANNED_JARGON_EXCLUSION_MARKER)
 
 
 def _exclusion_marker_reason(cell: str) -> str:
-    """The reason stated after the marker, or '' when the cell carries no marker
-    or states nothing after it.
+    """The reason VISIBLE after the marker, or '' when the cell carries no marker
+    or states nothing a reader of the RENDERED table can see.
+
+    HTML comments are stripped before the emptiness test. §2.4 tells a reader to
+    learn an exclusion's reason by reading the table, so `NOT ENFORCED <!-- … -->`
+    satisfies the letter of "non-empty" while defeating the property that
+    sentence asserts; it now reads as no reason at all. G-9c case (d) is the arm
+    that fails if this stripping is removed.
 
     The reason here and the reason in BANNED_JARGON_ROW_EXCLUSIONS are two
     human-authored strings and NOTHING asserts they say the same thing. What is
@@ -541,7 +551,9 @@ def _exclusion_marker_reason(cell: str) -> str:
     """
     if not _is_exclusion_marked(cell):
         return ""
-    return cell.strip()[len(BANNED_JARGON_EXCLUSION_MARKER):].lstrip(" \t-–—:;,.").strip()
+    tail = cell.strip()[len(BANNED_JARGON_EXCLUSION_MARKER):]
+    tail = re.sub(r"<!--.*?-->", "", tail, flags=re.DOTALL)
+    return tail.lstrip(" \t-–—:;,.").strip()
 
 # An injectable specimen per enforcing pattern, keyed identically to
 # BANNED_JARGON_ROW_OF. Arm G-7 drives each specimen through the REAL
@@ -2971,32 +2983,64 @@ def _self_test() -> int:
         _msentinel += "-x"
     _ordinary_rows = [(r, "(synthetic)") for r in table_rows]
     _reason_cell = f"{BANNED_JARGON_EXCLUSION_MARKER} — a synthetic stated reason"
-    # (a) registered, NOT marked — the #6251 defect. MUST fail parity.
-    c_unmarked = _parse_banned_jargon_row_cells(_render_24(table_rows + [_msentinel]))
+    # NEAR-MISS cells, each differing from the marker in EXACTLY ONE dimension.
+    # A control differing on every dimension at once (an ordinary "(synthetic)"
+    # cell) cannot discriminate any single one, so it cannot establish the
+    # anchoring, the case-sensitivity, or the literal that _is_exclusion_marked's
+    # docstring claims. These can: each reds this arm under one loosening and
+    # stays silent under the other two.
+    _mk = BANNED_JARGON_EXCLUSION_MARKER
+    _near_miss = [
+        # case only — reds if the predicate stops being case-sensitive
+        (_msentinel + "-nm-case", f"{_mk.lower()} — lowercase, so not the marker"),
+        # anchoring only — reds if the predicate stops anchoring at the start
+        (_msentinel + "-nm-anchor", f"See below — {_mk} is quoted here, not asserted"),
+        # literal length only — reds if the literal is shortened to its first word
+        (_msentinel + "-nm-literal", f"{_mk.split()[0]} a marker — the literal is longer"),
+    ]
+    # (a) registered, NOT marked — the #6251 defect. MUST fail parity. The
+    # near-misses ride along here: they are ordinary cells and MUST stay undetected.
+    c_unmarked = _parse_banned_jargon_row_cells(
+        _render_24(table_rows + [_msentinel] + _near_miss))
     # (b) marked AND registered — MUST pass parity and the reason predicate.
     c_marked = _parse_banned_jargon_row_cells(
         _render_24(_ordinary_rows + [(_msentinel, _reason_cell)]))
     # (c) marked with the marker alone — MUST fail the reason predicate.
     c_reasonless = _parse_banned_jargon_row_cells(
         _render_24(_ordinary_rows + [(_msentinel, BANNED_JARGON_EXCLUSION_MARKER)]))
+    # (d) marked, but with a reason a reader of the rendered table CANNOT see —
+    # MUST fail the reason predicate. §2.4 says the reason is readable in the
+    # table itself, so an HTML-comment reason is no reason.
+    c_invisible = _parse_banned_jargon_row_cells(
+        _render_24(_ordinary_rows
+                   + [(_msentinel, f"{BANNED_JARGON_EXCLUSION_MARKER} <!-- hidden -->")]))
     _one = {_msentinel: "a stated reason"}
     detected = sorted(lbl for lbl, c in c_marked if _is_exclusion_marked(c))
     ordinary_hits = sorted(lbl for lbl, c in c_unmarked if _is_exclusion_marked(c))
+    near_miss_hits = sorted(lbl for lbl, c in c_unmarked
+                            if _is_exclusion_marked(c) and lbl.startswith(_msentinel + "-nm-"))
     arm("G-9c anti-vacuity — registered-but-unmarked FAILS, marked-but-unregistered FAILS, "
-        "the matched pair PASSES, and a marker with no reason FAILS",
+        "the matched pair PASSES, a marker with no reason FAILS, a marker whose reason is "
+        "invisible in the table FAILS, and each one-dimension NEAR-MISS stays undetected",
         not _marker_parity(c_unmarked, _one)
         and not _marker_parity(c_marked, {})
         and _marker_parity(c_marked, _one)
         and _marker_reasons_ok(c_marked)
         and not _marker_reasons_ok(c_reasonless)
+        and not _marker_reasons_ok(c_invisible)
         and detected == [_msentinel]
-        and not ordinary_hits,
+        and not ordinary_hits
+        and not near_miss_hits,
         f"through the real parser: the detector finds {detected} in the marked "
         f"table and {ordinary_hits or 'nothing'} across {len(c_unmarked)} "
         "ordinary-celled row(s), so it discriminates the MARKER and not the row; "
         "registered-but-unmarked -> UNEQUAL; marked-but-unregistered -> UNEQUAL; "
         "matched pair -> EQUAL; marker with no reason after it -> reason "
-        "predicate FAILS while the same marker plus a reason PASSES")
+        "predicate FAILS while the same marker plus a reason PASSES; "
+        f"marker whose only reason is an HTML comment -> reason predicate FAILS; "
+        f"near-miss cells detected as markers: {near_miss_hits or 'none'} of "
+        f"{len(_near_miss)} (one differs by case, one by anchoring, one by the "
+        "length of the literal, so loosening any single property reds this arm)")
 
     print(f"\n{checked} arm(s) run, {len(failures)} failure(s)"
           + (f": {failures}" if failures else ""))
