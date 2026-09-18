@@ -13,7 +13,23 @@
 | **PR** | #7410 (draft at Stage 6; transitioned to ready at the Stage 9 gate) |
 | **Milestone** | authoring-bar-and-consumers |
 
-**Baseline pin (Survival element 9).** `origin/main` = `a30838589583bcddf5f88183cfff1a8ea2475300` (`a3083858`). Every measurement in this plan is pinned here unless a row states otherwise. Stage-9 Phase A6.5 diffs mid-pipeline divergence against this SHA.
+**Baseline pin (Survival element 9).** Two baselines, separated here because one commit was doing both jobs and they move for different reasons.
+
+- **Measurement pin — unchanged.** `origin/main` = `a30838589583bcddf5f88183cfff1a8ea2475300` (`a3083858`). Every measurement in this plan is pinned here unless a row states otherwise. This is a historical anchor and is *meant* to be stale: a figure recorded against it stays reproducible precisely because the SHA does not move.
+- **Divergence baseline — RE-BASELINED to `6709bca6d1328c2c85e7d4bc10ab39f6e9eb17af` (`6709bca6`)**, the merge-base of `origin/main` and this branch's head, which is also the second parent of the branch's last sync merge `68e93c54` — i.e. the mainline commit this branch has actually absorbed. Stage-9 Phase A6.5 diffs mid-pipeline divergence against **this** SHA.
+
+**The divergence baseline is stated as a predicate, not as a SHA to trust.** It is `git merge-base origin/main HEAD`, re-derived at read time. Pinning a literal here would rot at the next sync, and a stale divergence baseline is the specific defect this row exists to prevent — it reports divergence the branch has already absorbed.
+
+**G-PR8 (mid-pipeline divergence re-check, File dimension) — recorded.** Re-derived at this reconciliation over the § File Change Matrix declared path set (21 paths), per [`release-process.md`](/release/governance/release-process.md) § Mid-Pipeline Divergence Re-Check — `git log <baseline>..origin/main -- <declared paths>`.
+
+| Baseline | Post-baseline commits on `origin/main` | Of those, touching a declared path | Verdict |
+|---|---|---|---|
+| `a3083858` (the superseded pin) | **187** | **14** | `DIVERGED-RELEASE-FILES-TOUCHED` — HALT-eligible |
+| **`6709bca6` (the merge-base, in force)** | **4** | **0** | **`DIVERGED-RELEASE-FILES-UNTOUCHED`** — informational note, advance to Phase A7 |
+
+**Operator disposition on the superseded reading: ABSORBED.** The `DIVERGED-RELEASE-FILES-TOUCHED` verdict at `a3083858` is an artefact of the baseline, not a live collision. **All 14** touching commits are ancestors of this branch's head — measured `14 of 14`, against a control arm confirming the test discriminates (the current `origin/main` tip is **not** an ancestor of the head). Every one of them therefore arrived through a sync merge and is already in the branch; **0** of them landed after the last sync, which is the same measurement as the `0` in the table's second row. The HALT exists to stop a release from merging over a sibling's unabsorbed change, and there is no unabsorbed change.
+
+**The verdict recorded is `DIVERGED-RELEASE-FILES-UNTOUCHED`, not `CLEAN`, and the distinction is the spec's own.** `CLEAN` requires **zero** post-baseline commits; four exist (the `v4.65` Stage-13 close-out chores, which land under `release/releases/` and touch no declared path). Both verdicts are non-HALT and both advance to Phase A7, so the disposition is unaffected — but recording `CLEAN` over a non-empty population would be the vacuous-pass shape this release exists to eliminate. **This verdict is the most perishable figure in the plan:** it is a function of `origin/main`'s tip and will move on the next merge to mainline. Re-run the predicate rather than reading the table.
 
 **Provenance label.** `domain_practice: { source: N/A — pipeline-internal release, date: 2026-09-10, domain: governance }`
 
