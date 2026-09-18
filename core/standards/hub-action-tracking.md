@@ -181,7 +181,7 @@ This standard rides the hub-session-continuity substrate verbatim. No parallel p
 
    | AI-NNN transition | `pipeline-event-log` event_type | event_subtype | actor |
    |---|---|---|---|
-   | T1 — (none) → `open` | `decision` | `action-item-opened` | `hub` or `spoke:#N` (per source) |
+   | T1 — (none) → `open` | `decision` | `action-item-opened` (a row whose payload carries `sweep:none-owed` is § 4's sweep zero-state and not a T1 transition — it opens no `AI-NNN`) | `hub` or `spoke:#N` (per source) |
    | T2 — `open` → `in-flight` | `decision` | `action-item-started` | `hub` or `operator` |
    | T3 — `in-flight` → `done` | `decision` | `action-item-resolved` | `hub` or `operator` |
    | T4/T5 — `*` → `cancelled` | `decision` | `action-item-cancelled` | `operator` |
