@@ -261,7 +261,7 @@ This is the machine-checkable rule that satisfies the acceptance criterion: *at 
 
 When an agent is asked to advance work from Gate N to Gate N+1:
 
-1. Locate Gate N's **Exit criteria** block (§2, the `[LG-N-EX-*]` list), and resolve the kit for this work item's kind; where a kit resolves, locate its `criteria.readiness` (LG-4) or `criteria.done` (LG-5) block per §4.3.
+1. Locate Gate N's **Exit criteria** block (§2, the `[LG-N-EX-*]` list), and resolve the kit for this work item's kind; where a kit resolves, locate the criteria block that §4.3's **read scope** binds to the transition being evaluated — readiness, done, or gate-class. §4.3 owns that binding; this step does not restate which key applies.
 2. Evaluate EACH `[LG-N-EX-k]` against available evidence as **PASS / FAIL / NO-EVIDENCE**, including any admitted resolved-kit check per §4.3.
 3. If ALL are PASS → transition **ALLOWED**.
 4. If ANY is FAIL or NO-EVIDENCE → transition **BLOCKED**. Emit an evidence-backed rejection naming the FIRST violated criterion by ID:
@@ -343,11 +343,37 @@ The binding (inherited from [`lifecycle-stages.md §3`](lifecycle-stages.md) —
 
 **Read the manifest; never delegate the read to a parser.** This skill is agent-executed, so there is no runner to build here. Read the resolved manifest's `[kinds.criteria.*]` block directly. Do **not** implement this section as a call into the shipped pack reader: on an inline-table array that reader returns fragments **and reports a clean parse**, so a mechanical implementation would evaluate shredded input while appearing to have worked. The prohibition binds the demonstrative fixture under `../evals/fixtures/` exactly as it binds the read path.
 
+**The read scope.** This section reads a kit's criteria at exactly three keys:
+
+| Key | Read when the transition being evaluated is… | Gate coordinate |
+|---|---|---|
+| `criteria.readiness` | a **readiness** transition — the item is being admitted to work | LG-4 Sprint DoR, `T(6→7)` (§4.2) |
+| `criteria.done` | a **done** transition — the item is being called complete | LG-5 Dev Complete, `T(8→9)` (§4.2) |
+| `criteria.gate` | a **gate-class** transition — one the resolved kind declares a per-item gate for, guarding the Axis-1 edge that check's own `guards_transition` names | whichever `LG-N` that edge sits at (§4.2) |
+
+Which key is read is **fixed by the transition being evaluated, never chosen**, and exactly one is read per evaluation: the keys are never unioned, a readiness gate does not read `criteria.gate`, and a gate-class transition does not read `criteria.readiness`. `[kinds.fields]` is **not** in this read scope — it is a declaration surface, not a criteria facet. The §1.2.1 provenance rule cited below spans both, which is why the discriminator names `fields` and this scope does not; a reasoned-empty `fields` block is a real declaration that this section never reads.
+
+**This clause is the single statement of the read scope.** §4 step 1, the outcome table below, the report-key enumeration, and the `SKILL.md` Mode C and Mode F steps all bind to it rather than re-enumerating it; where one of them names a key, it names the one this clause binds to that step's own transition. Two readings of the scope is how a gate reads the wrong block and still renders a confident verdict — the same failure the two-part selection above exists to prevent, one level up.
+
+**Admitting `criteria.gate` is a behaviour change to a shipped gate, and that is the point.** Before this clause the section was read at the readiness and done transitions only, so at a gate-class transition no key was read and a resolved kit contributed nothing at all. It now contributes whatever the admission predicate below admits. On the corpus shipped with this change the only declared gate check that predicate reaches is kanban's WIP pull-limit (`automatable = true`, guarding `ready -> in-progress`), which therefore joins the §4 member set where it previously could not. The **predicate** is unchanged and still names no check id and no kind — a pack that adds or retires a gate check moves that set without amending anything here.
+
+**What the domain looks like on the corpus shipped with this change.** Recorded because "the middle arm is unreachable" and "the arm is reachable and nothing at this gate currently takes it" are different states, and only the second is true after this clause. **No shipped `criteria.readiness` or `criteria.done` block is reasoned-empty** — every one of them is populated — so at the readiness and done transitions this section was previously read from, the reasoned-empty arm had no live instance to take. The shipped packs carry five reasoned-empty blocks:
+
+| Pack · kind | Facet | In this section's read scope |
+|---|---|---|
+| scrum · epic | `criteria.gate` | yes — at a gate-class transition |
+| scrum · story | `criteria.gate` | yes — at a gate-class transition |
+| scrum · task | `criteria.gate` | yes — at a gate-class transition |
+| scrum · task | `fields` | no — `fields` is not a criteria facet |
+| kanban · card | `fields` | no — `fields` is not a criteria facet |
+
+That table is **descriptive of the corpus at this change, not normative.** It constrains nothing and admits nothing: a pack that later authors a reasoned-empty readiness or done block makes the middle arm live at that gate with no amendment here, and a pack that populates one of the three gate blocks above retires an instance the same way. It is a dated observation about the corpus, never a second copy of a rule.
+
 **The three outcomes.** The discriminator is the **block-level `source`**, declared at [`work-item-type-schema.md`](../../../../core/schemas/work-item-type-schema.md) §1.2.1 *Content provenance*: a `[kinds.criteria.*]` or `[kinds.fields]` table whose array is present and empty MUST carry a `source`, and that key is what distinguishes a reasoned empty bar from an unauthored one. Emptiness alone never decides it.
 
 | Outcome | Condition | Gate behaviour |
 |---|---|---|
-| **resolved-and-populated** | a kit resolved for the kind, and its `criteria.readiness` (LG-4) or `criteria.done` (LG-5) block carries at least one check | evaluate the **admitted** subset as gate criteria alongside the `[LG-N-EX-k]` block; **report** the non-admitted remainder |
+| **resolved-and-populated** | a kit resolved for the kind, and the block the read scope binds to this transition carries at least one check | evaluate the **admitted** subset as gate criteria alongside the `[LG-N-EX-k]` block; **report** the non-admitted remainder |
 | **resolved-and-reasoned-empty** | a kit resolved and the relevant block is **present and empty**, carrying a block-level `source` | **the emptiness is the content.** State the practice basis the `source` gives; contribute **no** criterion; do **not** substitute a generic set; emit **no** unresolved report |
 | **unresolved** | no kit resolved, no `type:<kind_id>` resolved, or the block is absent or unreadable with **no** `source` | evaluate the `[LG-N-EX-k]` block exactly as §4 already does, and emit **one** `NOT-EVALUATED` report line — never a verdict, never a silent default |
 
@@ -380,7 +406,7 @@ Absence of a disposition is **non-admission**, not admission by default. The pre
 
 `NOT-EVALUATED` is adopted verbatim from [`gate-criteria-spec.md`](../../../../core/schemas/gate-criteria-spec.md) § Step 0, which also fixes its anti-vacuity shape: the gate emits **one** finding naming the cause, *"never once per issue."*
 
-**The report is one block, never one line per check.** It names the **kind**, the **key** (`criteria.readiness` / `criteria.done` / `criteria.gate`) and the **denominator** — checks read / admitted / reported. A consumer that emits a report for every kind is indistinguishable from one that works, absent a denominator.
+**The report is one block, never one line per check.** It names the **kind**, the **key** — whichever of the read scope's three the transition bound, reported as read rather than as a fourth vocabulary — and the **denominator**: checks read / admitted / reported. A consumer that emits a report for every kind is indistinguishable from one that works, absent a denominator.
 
 **A non-admitted check is reported with its disposition carried verbatim** from the record — `advisory-only`, `NOT-EVALUATED`, or absent — and never flattened into a single reason string. Where the disposition is `advisory-only`, the record additionally names which disjunct fired; carry that too, because the two imply opposite remediations (a decidability repair for an unrenderable judgment, a reproducibility repair for an inconsistent one) and a report that cannot tell them apart routes both to the wrong owner.
 
