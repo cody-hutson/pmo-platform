@@ -89,7 +89,7 @@ Two further forces bound the answer. **The enforcement surface is in motion**: r
 
 - [ADR-069](ADR-069-methodology-pack-composing-unit.md) — establishes the pack as the composing unit and keeps the grammar archetype-invariant while concrete rows live in the selected packs; this record states the consumer-side reading of that grammar.
 - [ADR-070](ADR-070-methodology-pack-composition-grammar.md) — the pack-composition layer, including the label contribution facet whose one-directional binding is the asymmetric limb registered here.
-- [ADR-198](ADR-198-per-kind-authoring-bar-is-a-reading-not-a-carrier.md) — the sibling determination from the same design pass that a per-kind bar is a *reading* of declared grammar rather than a new carrier; this record applies the same extend-over-create move to the consumer side.
+- [ADR-201](ADR-201-per-kind-authoring-bar-is-a-reading-not-a-carrier.md) — the sibling determination from the same design pass that a per-kind bar is a *reading* of declared grammar rather than a new carrier; this record applies the same extend-over-create move to the consumer side.
 - [ADR-181](../../release/ADRs/ADR-181-adr-citations-bind-at-the-claim-not-at-authorship.md) — why this record's branch-authored citations use a slug token rather than a literal number.
 
 ## References

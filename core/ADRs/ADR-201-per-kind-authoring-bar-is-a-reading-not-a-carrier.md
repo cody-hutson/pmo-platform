@@ -1,5 +1,5 @@
 ---
-title: ADR-198 — The per-kind authoring bar is a reading of the declared grammar, not a new carrier
+title: ADR-201 — The per-kind authoring bar is a reading of the declared grammar, not a new carrier
 status: Accepted
 date: 2026-09-11
 release: authoring-bar-and-consumers
@@ -14,13 +14,15 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-198 — The per-kind authoring bar is a reading of the declared grammar, not a new carrier
+# ADR-201 — The per-kind authoring bar is a reading of the declared grammar, not a new carrier
 
 ## Status
 
 Accepted. Ratified at the Stage-5 Collective Review scope-lock for the `authoring-bar-and-consumers` release, with two structural findings from the independent Phase-A6.5 adversarial review routed Tier-1 and applied inside the design shape rather than reopening it.
 
 **Numbering provenance — `196 → 198`.** Held **ADR-196** branch-local; renumbered to **ADR-198** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 196. In-release citations that read "ADR-196" denote this record.
+
+**Numbering provenance — `198 → 201`.** Held **ADR-198** branch-local; renumbered to **ADR-201** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 198. In-release citations that read "ADR-198" denote this record.
 
 ## Context
 

@@ -108,6 +108,7 @@ ADR-196 (`per-kind-authoring-bar-is-a-reading-not-a-carrier`) → **ADR-198** by
 ADR-195 (`frontmatter-laxity-is-constrained-at-the-consumer`) → **ADR-197** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 195; the record's Status section carries the provenance note.
 ADR-197 (`frontmatter-laxity-is-constrained-at-the-consumer`) → **ADR-198** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 197; the record's Status section carries the provenance note.
 ADR-197 (`l3-judgment-criteria-evaluability`) → **ADR-200** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 197; the record's Status section carries the provenance note.
+ADR-198 (`per-kind-authoring-bar-is-a-reading-not-a-carrier`) → **ADR-201** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 198; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 
@@ -222,12 +223,12 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** MODERATE (a recorded verdict is revisable by re-running the protocol; EXPENSIVE once the consumers read it and the pack surface becomes a live read contract — the same crossing ADR-069 names).
 **File:** [ADR-200-l3-judgment-criteria-evaluability.md](ADR-200-l3-judgment-criteria-evaluability.md)
 
-### ADR-198 — The per-kind authoring bar is a reading of the declared grammar, not a new carrier
+### ADR-201 — The per-kind authoring bar is a reading of the declared grammar, not a new carrier
 
 **Status:** Accepted (ratified at the `authoring-bar-and-consumers` Collective Review scope-lock).
 **Decision:** What good looks like for an item of a declared kind is stated as an **archetype-invariant reading of declarations the type-pack grammar already carries** — three dimensions (expected structure, required content, appropriate depth), each mapped to already-declared per-kind keys — and **no carrier is added**: no grammar key, no pack-member file class, no value in any shipped manifest. Assignment of a declaration to a dimension is an **ordered procedure** (shape, then presence, then altitude-and-adequacy), which is disjoint by construction where a set of named dimensions matched by inspection is not; the two precedence rules are the load-bearing part. Three consequences are recorded rather than absorbed: the bar is necessarily a **two-part artifact** (the standard states the reading, the manifests carry the values) because a per-kind depth statement would have to name a kind, which ADR-069 D3 forbids in the public corpus; a dimension reading **zero inside a populated array** is an **accepted residual**, never discharged by the block-level provenance key, which the grammar scopes to a present-and-empty table and forbids inheriting across; and the **depth test is check-derived**, because no declared key expresses a kind's altitude. The durable half is the executed placement sequent — **NOT PLACED** for a `Kind`-level authoring-depth key, for want of any reader shipped or specified, independently reproduced, with Counter-test A recorded N/A and the join question's prospective limb named as the re-entry condition.
 **Reversibility:** MODERATE (pre-consumption a revert restores the tree exactly; EXPENSIVE once the elicitation and gate consumers cite the standard and the reading becomes a contract — the same crossing ADR-069 names, taken in the same merge).
-**File:** [ADR-198-per-kind-authoring-bar-is-a-reading-not-a-carrier.md](ADR-198-per-kind-authoring-bar-is-a-reading-not-a-carrier.md)
+**File:** [ADR-201-per-kind-authoring-bar-is-a-reading-not-a-carrier.md](ADR-201-per-kind-authoring-bar-is-a-reading-not-a-carrier.md)
 
 ### ADR-199 — The pack consumer contract is tiered, and its middle tier is read defensively
 
