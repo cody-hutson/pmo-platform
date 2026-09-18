@@ -308,6 +308,8 @@ AC-4 is not amended by this decision. Its verdict method is restated separately 
 
 A subsequent card on this branch that authors an ADR re-runs `--detect` and reads its own `CLAIM` row, which evaluates the **simulated merge result** and reports the correct `next=` for a second in-tree record. It does not re-derive a number by hand.
 
+**Pre-claim numbering (operator ruling `D-6`).** The literal ADR numbers this plan gives this release's own records are pre-claim and stay as written — the Stage-12 renumber sweep excluded this file, and only its slug-keyed citation tokens are stamped at the claim; the post-claim numbers are recorded in each record's § Status numbering-provenance note and in `core/ADRs/README.md` § Renumber log.
+
 ### Agent-Editability Read
 
 **Derivation** — controls read at commit `a3083858`:
