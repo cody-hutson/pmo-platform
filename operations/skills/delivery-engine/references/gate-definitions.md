@@ -381,7 +381,7 @@ A reasoned-empty block is a **declaration, not a gap**. Falling back to a generi
 
 **The admission predicate.**
 
-> A resolved kind's check joins the gate's per-criterion evaluation **only when** it is `automatable = true`, **or** the evaluability record `{{ADR:l3-judgment-criteria-evaluability}}` dispositions it `gate-capable`, **or** dispositions it `gate-capable-under-conditions` **and** the named precondition holds. **Every other check — including one the record does not disposition at all — is reported, never evaluated.**
+> A resolved kind's check joins the gate's per-criterion evaluation **only when** it is `automatable = true`, **or** the evaluability record `ADR-200` dispositions it `gate-capable`, **or** dispositions it `gate-capable-under-conditions` **and** the named precondition holds. **Every other check — including one the record does not disposition at all — is reported, never evaluated.**
 
 Absence of a disposition is **non-admission**, not admission by default. The predicate names no check id and no kind, so a pack that adds either extends the population without amending this rule. The record is cited as the single verdict identifier and **none of its per-check dispositions is restated here**.
 
