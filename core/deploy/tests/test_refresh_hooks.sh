@@ -67,12 +67,79 @@ mkdir -p "${CFGROOT}"
 
 PASS=0
 FAIL=0
+SKIP=0
 report() {
   local name="$1" passed="$2" detail="${3:-}"
   if [ "${passed}" = "1" ]; then printf '  PASS: %s\n' "${name}"; PASS=$((PASS + 1))
   else printf '  FAIL: %s\n' "${name}"; [ -n "${detail}" ] && printf '         %s\n' "${detail}"; FAIL=$((FAIL + 1)); fi
 }
 sha() { shasum -a 256 "$1" | awk '{print $1}'; }
+
+# ============================================================================
+# HISTORICAL-FIXTURE PRECONDITION — the environment probe, and why a SKIP exists here
+# ============================================================================
+#
+# Cases 13/14/15 plant a REAL historical revision of a hook's own source path as the
+# DEPLOYED bytes, so the publisher's history discriminator has a genuine stale-platform
+# copy to recognise. That fixture is constructible only where the repository carries the
+# history it names. CI checks this suite out at depth 1, so it is not constructible there,
+# and five arms carrying AC-1 / AC-2 / AC-4 / AC-9 failed closed for an ENVIRONMENT reason
+# while reading as a build defect.
+#
+# DEEPENING WAS MEASURED AND REJECTED as the remedy, on two independent grounds:
+#   1. The nearest revision of core/hooks/block-egress.sh whose content differs from
+#      current source is ~1757 commits behind HEAD. No bounded `git fetch --deepen`
+#      reaches it; only a full `--unshallow` would, which is a whole-history network
+#      fetch executed from inside a test suite.
+#   2. It would not help even then. The production discriminator hook_history_classify()
+#      in setup-workspace.sh returns UNCLASSIFIED-DEPTH — and its caller PRESERVES —
+#      whenever `git rev-parse --is-shallow-repository` is anything but `false`. A partial
+#      deepen leaves that `true`. The STALE verdict these arms assert is therefore
+#      unreachable in a shallow checkout BY THE SHIPPED CODE'S OWN DESIGN, not merely
+#      unplantable by the fixture. A fixture that deepened far enough to plant would still
+#      be asserting against a classifier that had already declined to classify.
+#
+# So the arms are recorded SKIP, with the reason printed per arm AND a banner on the
+# summary. A SKIP IS NOT A PASS: it says the subject was not measured here and names what
+# would measure it. That distinction is this release's whole thesis applied to its own
+# test suite — a run that cannot check something must not report success for it.
+#
+# The skip is conditioned on the ENVIRONMENT PROBE ALONE, never on "the fixture failed for
+# some reason". On a full-history checkout HIST_REASON is empty, every arm below routes to
+# the ordinary report(), and a genuine regression that breaks fixture construction still
+# FAILS. Widening this condition to "plant_historical returned non-zero" would convert the
+# skip into a hiding place for real defects.
+HIST_REASON=""
+hist_precondition_probe() {
+  local shallow
+  if ! command -v git >/dev/null 2>&1; then
+    HIST_REASON="git is not available, so no historical revision can be planted"; return 0
+  fi
+  if ! git -C "${REPO_ROOT}" rev-parse --git-dir >/dev/null 2>&1; then
+    HIST_REASON="the test tree is not a git checkout (e.g. a git-archive extraction), so it carries no history to plant from"
+    return 0
+  fi
+  shallow="$(git -C "${REPO_ROOT}" rev-parse --is-shallow-repository 2>/dev/null)" || shallow="true"
+  if [ "${shallow}" != "false" ]; then
+    HIST_REASON="the checkout is SHALLOW — hook_history_classify() returns UNCLASSIFIED-DEPTH on a shallow source repo by design, so the STALE verdict these arms assert cannot be reached here at any depth short of full history. Run with a full-history checkout (fetch-depth: 0) to measure them."
+    return 0
+  fi
+  HIST_REASON=""
+}
+hist_precondition_probe
+
+skip_arm() {
+  printf '  SKIP: %s\n' "$1"
+  printf '        NOT MEASURED — %s\n' "$2"
+  SKIP=$((SKIP + 1))
+}
+
+# report_hist <name> <passed> <detail> — report(), except that when the historical fixture
+# is unconstructible for the environmental reason probed above, the arm is recorded SKIP
+# rather than FAIL. Used ONLY by the arms that require a planted historical revision.
+report_hist() {
+  if [ -n "${HIST_REASON}" ]; then skip_arm "$1" "${HIST_REASON}"; else report "$1" "$2" "${3:-}"; fi
+}
 
 # Operator mode-file seeds -- the install-if-missing preserve COHORT.
 #
@@ -1040,9 +1107,9 @@ l_recorded_before="$(baseline_of "${WS}" block-egress.sh)"
 if [ -n "${L_REV}" ] && [ "${l_deployed_before}" != "${SRC_EGRESS}" ] \
    && [ "${l_recorded_before}" != "${l_deployed_before}" ] \
    && [ "${l_recorded_before}" != "${SRC_EGRESS}" ]; then
-  report "13-L-pre: fixture L is genuinely LATCHED (recorded != deployed != source; deployed IS a real revision)" 1
+  report_hist "13-L-pre: fixture L is genuinely LATCHED (recorded != deployed != source; deployed IS a real revision)" 1
 else
-  report "13-L-pre: fixture L is genuinely LATCHED (recorded != deployed != source; deployed IS a real revision)" 0 \
+  report_hist "13-L-pre: fixture L is genuinely LATCHED (recorded != deployed != source; deployed IS a real revision)" 0 \
     "rev=${L_REV:-none} recorded=${l_recorded_before:0:8} deployed=${l_deployed_before:0:8} source=${SRC_EGRESS:0:8} — the arms below are vacuous unless all three differ"
 fi
 
@@ -1053,9 +1120,9 @@ l_deployed_after="$(sha "${WS}/.claude/hooks/block-egress.sh")"
 # must recognise them as one and refresh. Baseline equality alone cannot: it says only
 # "different from the record", and the record is stale on every maintained instance.
 if grep -q 'REFRESHED: block-egress.sh' <<<"${OUTL}" && [ "${l_deployed_after}" = "${SRC_EGRESS}" ]; then
-  report "13-L (AC-1): a LATCHED stale PLATFORM copy is REFRESHED to source" 1
+  report_hist "13-L (AC-1): a LATCHED stale PLATFORM copy is REFRESHED to source" 1
 else
-  report "13-L (AC-1): a LATCHED stale PLATFORM copy is REFRESHED to source" 0 \
+  report_hist "13-L (AC-1): a LATCHED stale PLATFORM copy is REFRESHED to source" 0 \
     "exit=${rcL}; deployed ${l_deployed_after:0:8} vs source ${SRC_EGRESS:0:8} — the merged fix did not reach the workspace"
 fi
 
@@ -1086,9 +1153,9 @@ fi
 l_verdict=none; grep -q 'REFRESHED: block-egress.sh' <<<"${OUTL}" && l_verdict=REFRESHED
 e_verdict=none; grep -q 'PRESERVED (operator-edited): block-egress.sh' <<<"${OUTE}" && e_verdict=PRESERVED
 if [ "${l_verdict}" = "REFRESHED" ] && [ "${e_verdict}" = "PRESERVED" ]; then
-  report "13-control (AC-4): the SAME instrument returns DIFFERENT verdicts on L and E" 1
+  report_hist "13-control (AC-4): the SAME instrument returns DIFFERENT verdicts on L and E" 1
 else
-  report "13-control (AC-4): the SAME instrument returns DIFFERENT verdicts on L and E" 0 \
+  report_hist "13-control (AC-4): the SAME instrument returns DIFFERENT verdicts on L and E" 0 \
     "L=${l_verdict} E=${e_verdict} — a discriminator that cannot reach both verdicts is not a discriminator"
 fi
 
@@ -1107,9 +1174,9 @@ O2="$(refresh "${WS}")" || true
 n_pres2="$(grep -c 'PRESERVED (operator-edited): block-egress.sh' <<<"${O2}")" || n_pres2=0
 if [ -n "${S1_REV}" ] && grep -q 'REFRESHED: block-egress.sh' <<<"${O1}" \
    && [ "${b_after1}" = "${SRC_EGRESS}" ] && [ "${n_pres2}" = "0" ]; then
-  report "14-S1 (AC-2/AC-9): run 1 REFRESHES and ADVANCES the baseline; run 2 emits no PRESERVED" 1
+  report_hist "14-S1 (AC-2/AC-9): run 1 REFRESHES and ADVANCES the baseline; run 2 emits no PRESERVED" 1
 else
-  report "14-S1 (AC-2/AC-9): run 1 REFRESHES and ADVANCES the baseline; run 2 emits no PRESERVED" 0 \
+  report_hist "14-S1 (AC-2/AC-9): run 1 REFRESHES and ADVANCES the baseline; run 2 emits no PRESERVED" 0 \
     "rev=${S1_REV:-none} baseline-after-run-1=${b_after1:0:8} source=${SRC_EGRESS:0:8} preserved-on-run-2=${n_pres2}"
 fi
 
@@ -1204,9 +1271,9 @@ be_after="$(baseline_of "${WS}" block-egress.sh)"
 bd_src="$(sha "${REPO_ROOT}/core/hooks/block-destructive.sh")"
 
 if [ -n "${D_REV}" ] && [ "${bd_after}" = "${bd_src}" ]; then
-  report "15d (AC-2): the baseline IS advanced for a hook this run DEPLOYED" 1
+  report_hist "15d (AC-2): the baseline IS advanced for a hook this run DEPLOYED" 1
 else
-  report "15d (AC-2): the baseline IS advanced for a hook this run DEPLOYED" 0 \
+  report_hist "15d (AC-2): the baseline IS advanced for a hook this run DEPLOYED" 0 \
     "rev=${D_REV:-none} recorded=${bd_after:0:8} source=${bd_src:0:8} — the baseline stays stale against the bundle it describes"
 fi
 
@@ -1357,6 +1424,20 @@ else
 fi
 
 printf '\n======================================================================\n'
-printf 'test_refresh_hooks.sh: %d passed, %d failed (bash %s)\n' "${PASS}" "${FAIL}" "${BASH_VERSION}"
+printf 'test_refresh_hooks.sh: %d passed, %d failed, %d skipped (bash %s)\n' \
+  "${PASS}" "${FAIL}" "${SKIP}" "${BASH_VERSION}"
 printf '======================================================================\n'
+
+# A skipped arm is UNMEASURED, and an unmeasured arm must not read as a clean run. The
+# count is on the summary line above so a conclusion-only reader of CI sees it without
+# opening the log, and the banner below names which acceptance criteria went unmeasured
+# and what would measure them. Exit status stays keyed to FAIL: a skip is not a defect in
+# the code under test, it is an absence of evidence — and saying so out loud is the point.
+if [ "${SKIP}" -gt 0 ]; then
+  printf '\n!! NOT FULL COVERAGE: %d arm(s) were SKIPPED and did NOT measure their subject.\n' "${SKIP}"
+  printf '!! Reason: %s\n' "${HIST_REASON}"
+  printf '!! Unmeasured here: AC-1, AC-2, AC-4, AC-9 — the Case 13/14/15 arms that require a\n'
+  printf '!! planted historical revision (13-L-pre, 13-L, 13-control, 14-S1, 15d).\n'
+  printf '!! These arms PASS on a full-history checkout; this run is not evidence either way.\n'
+fi
 [ "${FAIL}" -eq 0 ]
