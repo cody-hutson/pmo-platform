@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.66] - 2026-09-18
+
+Intake now asks for what your chosen methodology's kind actually needs, and readiness and done gates evaluate its real criteria.
+
+[Full notes](release/releases/notes/v4.66_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.66)
+
 ## [v4.65] - 2026-09-18
 
 Nine deploy tools and checks that returned a confident wrong answer in one situation now return what they actually measured.
