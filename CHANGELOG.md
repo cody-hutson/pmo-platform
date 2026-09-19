@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.67] - 2026-09-19
+
+You can now audit how release decisions were made, and the hub records each commitment at the point it makes it.
+
+[Full notes](release/releases/notes/v4.67_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.67)
+
 ## [v4.66] - 2026-09-18
 
 Intake now asks for what your chosen methodology's kind actually needs, and readiness and done gates evaluate its real criteria.
