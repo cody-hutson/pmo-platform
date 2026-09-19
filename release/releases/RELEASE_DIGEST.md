@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.67 (2026-09-19) — Release decisions are now auditable, and the hub writes down what it commits to
+
 ### v4.66 (2026-09-18) — Your methodology now shapes what intake asks and what gates check
 
 ### v4.65 (2026-09-18) — Nine tools and checks that reported a wrong answer now report the right one
