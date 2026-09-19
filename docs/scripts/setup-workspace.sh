@@ -59,6 +59,11 @@
 #   69  — EX_UNAVAILABLE (missing prerequisite)
 #   73  — EX_CANTCREAT (mkdir/cp failed)
 #   74  — EX_IOERR (write failure)
+#   75  — EX_TEMPFAIL (--refresh-hooks DECLINED >=1 hook: the bundle is coherent, but a
+#         deployed control is not the merged version. Distinct from the failed-to-run
+#         codes above, which mean the refresh did not complete; this one means it
+#         completed and left something behind. Raised AFTER the success mark, so it
+#         never rolls the refreshed bundle back. --reconcile-hooks is the remedy.)
 #   78  — EX_CONFIG (non-Darwin platform; cross-platform deferred)
 #   130 — SIGINT (operator Ctrl-C)
 
@@ -218,6 +223,16 @@ Options:
                           restored file is verified by recomputed SHA-256 before success is
                           claimed. Takes its own snapshot first, so a bad restore is itself
                           recoverable.
+  --reconcile-hooks       Force the deployed security-hook bundle back to SOURCE, without a
+                          full re-bootstrap. The recovery path for a hook --refresh-hooks
+                          reports as DIVERGENT: it consults neither the recorded baseline
+                          nor git history, because overriding them is what it is for. Same
+                          scope as --refresh-hooks -- hooks, co-shipped primitives and lib/
+                          only; no scaffold, token, template or skill phases. Takes the same
+                          durable pre-write snapshot, so a reconcile is itself recoverable
+                          via --restore-hooks. Use --refresh-hooks for routine updates; a
+                          stale PLATFORM copy is refreshed by that path automatically and
+                          needs no force.
   --list-hook-snapshots   List the durable hook-bundle snapshots and their file counts.
   --rehome-hook-wiring    Merge the PreToolUse hook wiring from
                           core/settings.json.template into the USER-scope settings
@@ -495,6 +510,8 @@ parse_argv() {
         esac ;;
       --list-hook-snapshots)
         LIST_HOOK_SNAPSHOTS=1; shift ;;
+      --reconcile-hooks)
+        RECONCILE_HOOKS=1; shift ;;
       --rehome-hook-wiring)
         REHOME_HOOK_WIRING=1; shift ;;
       --user-settings)
@@ -2165,6 +2182,84 @@ prune_durable_hook_snapshots() {
 }
 
 # --- Section 15: Hook install with checksum drift detection ---
+
+# The walk cap, adopted from the deploy checker's own drift classifier rather than chosen
+# here, so the two copies of this algorithm cannot disagree about where a search stops.
+readonly HOOK_HISTORY_WALK_CAP=60
+
+# hook_history_classify <repo-relative source path> <deployed sha256>
+#   -> "<VERDICT> <explanation>" on stdout, always exit 0.
+#
+# THE SECOND ORACLE. The recorded checksum baseline answers "does the deployed file still
+# match what the installer last wrote?" -- which is a fine question and the wrong one, because
+# the baseline is written only by a FULL installer run while the bundle is advanced by the
+# update path. On any maintained instance the two diverge, and from that point a baseline
+# mismatch says nothing about whether the deployed bytes are an operator's work or simply an
+# older platform version. Git history answers the question the baseline cannot.
+#
+# SEMANTICS ARE ADOPTED VERBATIM from classify_drift in the deploy checker -- the same three
+# verdicts, the same cap, and the same rule that an unfinished search is not a finding. That
+# is deliberate duplication, registered rather than hidden: extracting a shared primitive would
+# require editing a file this release declares explicit non-scope, and a new shared executable
+# would carry an allowlist-and-CI companion obligation. Adopting the semantics word for word is
+# what keeps the two copies from returning opposite verdicts on one input. The successor
+# extraction is named in this release's ADR.
+#
+# EVERY DEGRADED OUTCOME RESOLVES TO UNCLASSIFIED-DEPTH, and the caller preserves on it. A
+# shallow clone, an absent git, a source tree that is not a checkout, an unreadable history, or
+# a history deeper than the cap all land on exactly the behaviour that shipped before this
+# function existed. That direction is the whole safety argument: this change can only WIDEN
+# what is recognised as refreshable, never narrow what is preserved.
+hook_history_classify() {
+  local rel="$1" deployed_sha="$2"
+  local revs rev total=0 seen=0 blob_sha behind shallow
+
+  if ! command -v git >/dev/null 2>&1; then
+    printf 'UNCLASSIFIED-DEPTH git is not available, so the history search did not run\n'
+    return 0
+  fi
+  if ! git -C "${SOURCE_REPO}" rev-parse --git-dir >/dev/null 2>&1; then
+    printf 'UNCLASSIFIED-DEPTH the source tree is not a git checkout, so there is no history to search\n'
+    return 0
+  fi
+  shallow="$(git -C "${SOURCE_REPO}" rev-parse --is-shallow-repository 2>/dev/null)" || shallow="true"
+  if [ "${shallow}" != "false" ]; then
+    printf 'UNCLASSIFIED-DEPTH the source repository is a shallow clone, so its history is truncated by construction\n'
+    return 0
+  fi
+  revs="$(git -C "${SOURCE_REPO}" log --format=%H --follow -- "${rel}" 2>/dev/null)" || revs=""
+  if [ -z "${revs}" ]; then
+    printf 'UNCLASSIFIED-DEPTH no revisions found for %s\n' "${rel}"
+    return 0
+  fi
+  total="$(printf '%s\n' "${revs}" | grep -c .)" || total=0
+
+  # Charset-constrained by --format=%H (40 hex chars), so word-splitting the set is safe and
+  # bash 3.2-portable -- the same idiom assert_hook_lib_closure already uses.
+  for rev in ${revs}; do
+    seen=$((seen + 1))
+    [ "${seen}" -le "${HOOK_HISTORY_WALK_CAP}" ] || break
+    blob_sha="$(git -C "${SOURCE_REPO}" show "${rev}:${rel}" 2>/dev/null | shasum -a 256 | awk '{print $1}')" || continue
+    [ -n "${blob_sha}" ] || continue
+    if [ "${blob_sha}" = "${deployed_sha}" ]; then
+      behind="$(git -C "${SOURCE_REPO}" rev-list --count "${rev}..HEAD" -- "${rel}" 2>/dev/null)" || behind=""
+      [ -n "${behind}" ] || behind="?"
+      printf 'STALE the deployed bytes ARE %s@%s, %s source commit(s) behind — a stale PLATFORM copy, not an operator edit\n' \
+        "${rel}" "$(printf '%s' "${rev}" | cut -c1-12)" "${behind}"
+      return 0
+    fi
+  done
+
+  if [ "${total}" -gt "${HOOK_HISTORY_WALK_CAP}" ]; then
+    printf 'UNCLASSIFIED-DEPTH no match in the most recent %s of %s revisions of %s — the search was truncated, so this is NOT a divergence finding\n' \
+      "${HOOK_HISTORY_WALK_CAP}" "${total}" "${rel}"
+    return 0
+  fi
+  printf 'DIVERGENT the deployed bytes match no revision of %s in its full %s-commit history — treat as an operator decision\n' \
+    "${rel}" "${total}"
+  return 0
+}
+
 install_hook_with_checksum() {
   local source_hook="$1"
   local basename target source_sha
@@ -2229,6 +2324,25 @@ install_hook_with_checksum() {
   # silently clobber). Confined to refresh mode; the interactive prompt path below (used by
   # the fresh / rebootstrap flows) is unchanged, so a full re-run keeps its exact semantics.
   if [ "${REFRESH_HOOKS}" -eq 1 ]; then
+    # RECOVERY role, and deliberately ahead of both oracles. --reconcile-hooks is what an
+    # operator invokes AFTER the discriminator has honestly reported a divergence it alone
+    # can adjudicate, so it consults neither the baseline nor history -- consulting them is
+    # what it exists to override. It is never set by a plain refresh, which is the separation
+    # that lets a force path and an evidence-based discriminator coexist without the force
+    # path becoming the discriminator.
+    if [ "${RECONCILE_HOOKS_FORCE}" -eq 1 ]; then
+      if [ "${DRY_RUN}" -eq 1 ]; then
+        info "[dry-run] would RECONCILE: ${basename} (${target_sha:0:8} → ${source_sha:0:8})"
+        return 0
+      fi
+      record_write_rollback "${target}"
+      cp "${source_hook}" "${target}"
+      chmod +x "${target}"
+      json_set "${CHECKSUMS_FILE}" "${basename}" "${source_sha}"
+      note_hook_deployed "${basename}"
+      info "RECONCILED: ${basename} (${target_sha:0:8} → ${source_sha:0:8}) — forced to source by operator request"
+      return 0
+    fi
     local recorded_sha
     recorded_sha=$(json_get "${CHECKSUMS_FILE}" "${basename}")
     if [ -z "${recorded_sha}" ] || [ "${recorded_sha}" = "${target_sha}" ]; then
@@ -2250,7 +2364,41 @@ install_hook_with_checksum() {
       info "REFRESHED: ${basename} (${target_sha:0:8} → ${source_sha:0:8})"
       return 0
     fi
-    warn "PRESERVED (operator-edited): ${basename} diverged from its recorded baseline; not overwritten. Re-run docs/scripts/setup-workspace.sh to reconcile."
+
+    # The baseline said "different from the record". That is NOT the same as "an operator
+    # edited this", because the record is stale on any maintained instance -- which is the
+    # whole defect. Consult a SECOND oracle before refusing.
+    #
+    # ONLY ON THIS BRANCH, and that scoping is what bounds the cost: the refresh arm above is
+    # already decided, a healthy hook returned via the in-sync arm long before here, and the
+    # walk is over ONE hook's own history. A healthy instance consults no history at all.
+    local verdict_line verdict why
+    verdict_line="$(hook_history_classify "core/hooks/${basename}" "${target_sha}")"
+    verdict="${verdict_line%% *}"
+    why="${verdict_line#* }"
+
+    if [ "${verdict}" = "STALE" ]; then
+      if [ "${DRY_RUN}" -eq 1 ]; then
+        info "[dry-run] would REFRESH: ${basename} (${target_sha:0:8} → ${source_sha:0:8}) — ${why}"
+        return 0
+      fi
+      record_write_rollback "${target}"
+      cp "${source_hook}" "${target}"
+      chmod +x "${target}"
+      json_set "${CHECKSUMS_FILE}" "${basename}" "${source_sha}"
+      note_hook_deployed "${basename}"
+      info "REFRESHED: ${basename} (${target_sha:0:8} → ${source_sha:0:8}) — ${why}"
+      return 0
+    fi
+
+    # DIVERGENT or UNCLASSIFIED-DEPTH. Both preserve, and the distinction is in the message
+    # rather than in the action: an unfinished search must not be reported as a finding.
+    #
+    # The remedy this names has to be one that CHANGES the outcome. The message this replaces
+    # said "re-run setup-workspace.sh to reconcile", and a re-run provably does not -- it takes
+    # this same branch and preserves again, which is what made the failure silent AND
+    # self-perpetuating.
+    warn "PRESERVED (operator-edited): ${basename} — ${why}. Not overwritten. To force it back to source: docs/scripts/setup-workspace.sh --reconcile-hooks --workspace-root ${WORKSPACE_ROOT} --source-repo ${SOURCE_REPO}. A plain --refresh-hooks re-run will preserve it again."
     json_set "${CHECKSUMS_FILE}" "${basename}" "${target_sha}"
     note_hook_declined "${basename}"
     return 0
@@ -3537,9 +3685,86 @@ assert_hook_lib_closure() {
 # substitute templates, or redeploy skills. The hook-tier allowlists are composition-surface
 # files refreshed by update.sh's regenerate_managed_sections, not here. This is the path
 # update.sh delegates to so a hook/helper security fix reaches an already-installed workspace.
+
+# assert_hook_bundle_current — the post-refresh WHOLE-BUNDLE currency post-condition.
+#
+# The closure assertion above answers "can every deployed hook load what it references?".
+# This answers the different question the defect actually turns on: "is every deployed hook
+# the MERGED version?". A run can satisfy closure completely while leaving a security control
+# on superseded bytes -- that is the reported failure, and "the script reached the end" is not
+# an answer to it.
+#
+# A DECLINED hook is a LEGITIMATE mismatch. A preserved operator edit differs from source by
+# definition, so an assertion that reddened on it would make every preserve a failure and this
+# post-condition would have to be removed within one release. The declined set is therefore
+# ACCOUNTED FOR and reported, not ignored: the count is printed on every run, so a reader can
+# tell "nothing was left behind" from "one thing was, and here it is".
+#
+# The population is the SOURCE hook set, not the deployed directory. A deployed-only file has
+# no source counterpart to be current with, and install_hook_with_checksum never processed it.
+assert_hook_bundle_current() {
+  if [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would assert whole-bundle currency against ${SOURCE_REPO}/core/hooks/"
+    return 0
+  fi
+  local hooks_dir="${WORKSPACE_ROOT}/.claude/hooks"
+  local source_hook basename target compared=0 accounted=0 stale=""
+  local src_sha tgt_sha
+
+  for source_hook in "${SOURCE_REPO}/core/hooks/"*.sh; do
+    [ -f "${source_hook}" ] || continue
+    basename=$(basename "${source_hook}")
+    target="${hooks_dir}/${basename}"
+    [ -f "${target}" ] || { stale="${stale} ${basename}(absent)"; continue; }
+    compared=$((compared + 1))
+    src_sha=$(shasum -a 256 "${source_hook}" | awk '{print $1}')
+    tgt_sha=$(shasum -a 256 "${target}" | awk '{print $1}')
+    [ "${src_sha}" = "${tgt_sha}" ] && continue
+    case " ${REFRESH_DECLINED_NAMES} " in
+      *" ${basename} "*) accounted=$((accounted + 1)); continue ;;
+    esac
+    stale="${stale} ${basename}"
+  done
+
+  # A zero population is a FAILED PROBE, not a clean result -- the same doctrine
+  # assert_hook_lib_closure applies to its own derived set. Reporting "every hook matches
+  # source" over nothing measured is how this post-condition would rot silently.
+  if [ "${compared}" -eq 0 ]; then
+    err "Hook-bundle currency: compared ZERO hooks against ${SOURCE_REPO}/core/hooks/"
+    err "  A healthy bundle always has hooks to compare, so this is a FAILED PROBE, not a"
+    err "  clean result. Refusing to report a post-condition that was never tested."
+    exit 74
+  fi
+
+  if [ -n "${stale}" ]; then
+    err "Hook-bundle currency FAILED — deployed hook(s) are not the merged version and were not declined:"
+    err "  ${stale}"
+    err "  Each of those is enforcing superseded bytes while this run reports success, which is"
+    err "  the exact silence this assertion exists to remove."
+    exit 74
+  fi
+  info "Hook-bundle currency: PASS (${compared} hook(s) compared; ${accounted} accounted for by a recorded decline)"
+}
+
+# reconcile_hooks_flow — the RECOVERY entry point (#5251 AC-5).
+#
+# Deliberately a thin wrapper rather than a parallel flow: it sets the force flag and reuses
+# refresh_hooks_flow whole, so the durable snapshot, the co-deploy list, the closure
+# post-condition, the currency post-condition and the persister are single-sourced. A second
+# copy of that sequence is the drift trap this file has already been bitten by twice.
+reconcile_hooks_flow() {
+  RECONCILE_HOOKS_FORCE=1
+  REFRESH_HOOKS=1
+  refresh_hooks_flow "reconcile-hooks"
+}
+
 refresh_hooks_flow() {
-  INSTALL_MODE="refresh-hooks"
-  info "REFRESH-HOOKS flow — re-deploy the security-hook bundle only"
+  INSTALL_MODE="${1:-refresh-hooks}"
+  if [ "${RECONCILE_HOOKS_FORCE}" -eq 1 ]; then
+    info "RECONCILE-HOOKS flow — force the security-hook bundle back to source"
+  else
+    info "REFRESH-HOOKS flow — re-deploy the security-hook bundle only"
+  fi
   if [ ! -d "${WORKSPACE_ROOT}/.claude/hooks" ]; then
     err "No deployed hooks at ${WORKSPACE_ROOT}/.claude/hooks — run a full setup-workspace.sh first."
     exit 1
@@ -3567,10 +3792,40 @@ refresh_hooks_flow() {
   # no post-condition of any kind. This is the narrow post-condition that actually matters
   # for the hook bundle, and it runs BEFORE the success mark below.
   assert_hook_lib_closure
+  # Its sibling: closure asks whether every deployed hook can LOAD what it references;
+  # currency asks whether every deployed hook IS the merged version. Both abort before the
+  # success mark, so a failure rolls back rather than shipping a half-current bundle.
+  assert_hook_bundle_current
   # Mark success so the EXIT-trap cleanup does NOT roll back the refreshed bundle. If
-  # install_hooks or the closure assertion aborts, this is not reached and the pre-write
+  # install_hooks or either post-condition aborts, this is not reached and the pre-write
   # bytes are restored, as intended.
   INSTALL_COMPLETE=1
+
+  # THE DECLINE SIGNAL (#5251 AC-3), and the two limbs are INDEPENDENT on purpose.
+  #
+  # The summary line is machine-readable and carries the names; a caller that logs stdout and
+  # drops the status still sees it. The exit status carries no names but survives a caller
+  # that discards output. The reported defect is that NEITHER existed: the decline was an
+  # inline warning inside a run that exited 0, so both the operator and update.sh read success
+  # over a security control left on superseded bytes.
+  #
+  # SITED AFTER INSTALL_COMPLETE=1, which is what makes a non-zero exit safe here. cleanup()
+  # tests INSTALL_COMPLETE FIRST and returns before any exit-code case, so this status cannot
+  # roll back the hooks that DID refresh -- the bundle is coherent, and saying so is the point.
+  #
+  # RETURNED, NOT EXITED, and accumulated in a counter rather than returned from
+  # install_hook_with_checksum: `set -Eeuo pipefail` is in force and that function is called
+  # bare from install_hooks, so a non-zero return there would abort the whole run mid-bundle.
+  #
+  # NO DRY-RUN EXEMPTION, and the asymmetry with assert_hooks_executable in update.sh is
+  # deliberate. That gate exempts a preview because a real run REPAIRS the condition, so
+  # reporting it would name a blocker that will not exist. A decline is the opposite: a real
+  # run declines identically. A preview that hid it would be the silence this release removes.
+  if [ "${REFRESH_DECLINED_COUNT}" -gt 0 ]; then
+    warn "DECLINED: ${REFRESH_DECLINED_COUNT} hook(s) not updated (${REFRESH_DECLINED_NAMES# }) — see the PRESERVED lines above for each one's classification and remedy"
+    return 75
+  fi
+  return 0
 }
 
 # --- Section 22b-1: List durable hook-bundle snapshots (#5662) ---
@@ -4475,9 +4730,22 @@ main() {
     return 0
   fi
 
+  # PROPAGATE, do not hardcode. These two flows are the only ones that can complete
+  # successfully AND still have something to report -- a declined hook leaves the bundle
+  # coherent but a control superseded. A hardcoded `return 0` here would discard exactly the
+  # status the decline signal exists to deliver, which is how the failure stayed silent.
+  # The `|| rc=$?` form is required rather than stylistic: `set -e` is in force, and a bare
+  # call would abort before the status could be read back.
+  if [ "${RECONCILE_HOOKS}" -eq 1 ]; then
+    local reconcile_rc=0
+    reconcile_hooks_flow || reconcile_rc=$?
+    return "${reconcile_rc}"
+  fi
+
   if [ "${REFRESH_HOOKS}" -eq 1 ]; then
-    refresh_hooks_flow
-    return 0
+    local refresh_rc=0
+    refresh_hooks_flow || refresh_rc=$?
+    return "${refresh_rc}"
   fi
 
   if [ "${REFRESH_SETTINGS}" -eq 1 ]; then
