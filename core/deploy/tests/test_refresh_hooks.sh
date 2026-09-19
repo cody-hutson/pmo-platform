@@ -1278,6 +1278,76 @@ case "${OUT15c}" in
       "the accounting reports a constant rather than tracking the decline set" ;;
 esac
 
+printf '\nCase 17: update.sh Phase 5c SURFACES a declined hook instead of swallowing it (AC-12)\n'
+# SCOPE, STATED RATHER THAN IMPLIED. These are SOURCE-ORDER assertions over update.sh, not a
+# live update run. Driving ./update.sh end to end needs a full sandboxed instance -- operator
+# config, a composition surface, a skills roster -- and against anything less it exits in
+# preflight, so an arm built that way would report on preflight rather than on Phase 5c.
+#
+# Source order is not a weaker proxy HERE, it is the property itself. The defect this case
+# pins is an ORDERING defect: the non-zero branch's `return 0` sat ABOVE the read that sets
+# the deployed flag, so a run that refreshed several hooks and declined one returned before
+# recording that it had deployed anything -- and the EX_NOCHANGE reduction at the foot of the
+# file then reported "no changes" over a workspace that was genuinely written to. Where the
+# read sits relative to the branch IS the bug and IS the fix.
+UPD="${REPO_ROOT}/update.sh"
+
+ln_flag="$(grep -n 'PHASE5_DEPLOYED=1' "${UPD}" | grep -v 'redeploy' | head -n 1 | cut -d: -f1)"
+ln_incomplete="$(grep -n 'rc}" -eq "${EX_INCOMPLETE}' "${UPD}" | head -n 1 | cut -d: -f1)"
+ln_generic="$(grep -n 'Hook refresh returned non-zero' "${UPD}" | head -n 1 | cut -d: -f1)"
+ln_terminal="$(grep -n 'HOOK_REFRESH_DECLINED}" -eq 1' "${UPD}" | head -n 1 | cut -d: -f1)"
+ln_nochange="$(grep -n 'exit "${EX_NOCHANGE}"' "${UPD}" | head -n 1 | cut -d: -f1)"
+
+# 17-control — the reader resolves. Every line number above must be non-empty, or the arms
+# below would be comparing empty strings and passing for free. A zero from a reader that
+# never matched is indistinguishable from a real absence, which is what this arm separates.
+if [ -n "${ln_flag}" ] && [ -n "${ln_incomplete}" ] && [ -n "${ln_generic}" ] \
+   && [ -n "${ln_terminal}" ] && [ -n "${ln_nochange}" ]; then
+  report "17-control: every Phase-5c landmark RESOLVES in update.sh (the reader is live)" 1
+else
+  report "17-control: every Phase-5c landmark RESOLVES in update.sh (the reader is live)" 0 \
+    "flag=${ln_flag:-none} incomplete=${ln_incomplete:-none} generic=${ln_generic:-none} terminal=${ln_terminal:-none} nochange=${ln_nochange:-none} — the arms below are vacuous unless all five resolve"
+fi
+
+# 17a (R9) — the deployed flag is computed BEFORE either rc branch can return.
+if [ -n "${ln_flag}" ] && [ -n "${ln_incomplete}" ] && [ -n "${ln_generic}" ] \
+   && [ "${ln_flag}" -lt "${ln_incomplete}" ] && [ "${ln_flag}" -lt "${ln_generic}" ]; then
+  report "17a (R9): PHASE5_DEPLOYED is computed BEFORE Phase 5c branches on the delegate's status" 1
+else
+  report "17a (R9): PHASE5_DEPLOYED is computed BEFORE Phase 5c branches on the delegate's status" 0 \
+    "flag at ${ln_flag:-none}, EX_INCOMPLETE branch at ${ln_incomplete:-none}, generic branch at ${ln_generic:-none} — a mixed refresh-plus-decline run loses the flag and can report EX_NOCHANGE over a real deployment"
+fi
+
+# 17b (AC-12) — the decline status is DISCRIMINATED from a failed-to-run status. Folding
+# every non-zero into one warn-and-continue is what made the decline unhearable end to end.
+if [ -n "${ln_incomplete}" ] && [ -n "${ln_generic}" ] && [ "${ln_incomplete}" -lt "${ln_generic}" ]; then
+  report "17b (AC-12): Phase 5c discriminates the DECLINE status from a failed-to-run status" 1
+else
+  report "17b (AC-12): Phase 5c discriminates the DECLINE status from a failed-to-run status" 0 \
+    "the EX_INCOMPLETE arm must precede the catch-all non-zero arm or it is unreachable"
+fi
+
+# 17c (AC-12) — a TERMINAL non-zero path exists for the decline, and it is evaluated before
+# the EX_NOCHANGE reduction: a run that changed nothing AND left a control superseded must
+# report the decline rather than stopping at "no changes".
+if [ -n "${ln_terminal}" ] && [ -n "${ln_nochange}" ] && [ "${ln_terminal}" -lt "${ln_nochange}" ]; then
+  report "17c (AC-12): the terminal decline status precedes the EX_NOCHANGE reduction" 1
+else
+  report "17c (AC-12): the terminal decline status precedes the EX_NOCHANGE reduction" 0 \
+    "terminal=${ln_terminal:-none} nochange=${ln_nochange:-none}"
+fi
+
+# 17d (AC-12 specificity) — Phase 5c ASSERTS on the delegate's code; it does not re-implement
+# the decision. A second opinion computed here could disagree with the first, and the
+# disagreement would be undetectable. Reads the refresh_hooks function body only.
+p5c="$(awk '/^refresh_hooks\(\) \{/,/^\}/' "${UPD}")"
+if ! grep -qE 'shasum|hook_checksums|git .*log|classify' <<<"${p5c}"; then
+  report "17d (AC-12): Phase 5c asserts on the delegate's status and re-implements no classification" 1
+else
+  report "17d (AC-12): Phase 5c asserts on the delegate's status and re-implements no classification" 0 \
+    "Phase 5c grew its own hash comparison, baseline read or history walk — a second opinion that can silently disagree with the first"
+fi
+
 printf '\n======================================================================\n'
 printf 'test_refresh_hooks.sh: %d passed, %d failed (bash %s)\n' "${PASS}" "${FAIL}" "${BASH_VERSION}"
 printf '======================================================================\n'
