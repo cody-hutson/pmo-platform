@@ -134,10 +134,27 @@ RECONCILE_ANSWERS=""        # JSON of prompt answers for undefaulted keys (#5739
 RESTORE_HOOKS=0
 RESTORE_GENERATION=""       # empty = newest durable generation (#5662)
 LIST_HOOK_SNAPSHOTS=0
+RECONCILE_HOOKS=0
 FORCE_REGEN=0
 NON_INTERACTIVE=0
 DRY_RUN=0
 INSTALL_COMPLETE=0
+
+# Refresh-flow bookkeeping (#5251). Three space-delimited/counter globals, set by
+# install_hook_with_checksum and read by refresh_hooks_flow and its post-conditions.
+#
+# RECONCILE_HOOKS_FORCE is the RECOVERY role, not the discriminator: it is set only by
+# reconcile_hooks_flow, never by a plain refresh, and it makes the refresh-mode block
+# overwrite without consulting either oracle. That separation is the whole reason the
+# force path and the git-history discriminator can coexist -- one decides on evidence,
+# the other executes an operator's decision about a copy only the operator can adjudicate.
+#
+# REFRESH_DEPLOYED_HOOKS is the FIELD SCOPE of persist_hook_checksums_to_state, and it is
+# load-bearing rather than an optimization. See that function's header.
+RECONCILE_HOOKS_FORCE=0
+REFRESH_DEPLOYED_HOOKS=""   # space-delimited basenames this run actually deployed
+REFRESH_DECLINED_NAMES=""   # space-delimited basenames this run declined to update
+REFRESH_DECLINED_COUNT=0
 
 # settings.json baseline (ADR-121 §Decision 2). Two hashes with ADR-014's exact
 # semantics, relocated from an in-file marker fence — which JSON cannot carry
@@ -3193,6 +3210,52 @@ with open(path, "w") as f:
   info "Recorded settings baselines in ${STATE_FILE}"
 }
 
+# !!! DELIBERATELY WRONG, AND TEMPORARY. !!!
+#
+# This is the WHOLE-MAP persister -- the shape the Stage-4 plan prescribed, landed here
+# ONLY so the suite arm that catches it can be observed RED before the correct one ships.
+# It writes the ENTIRE in-memory checksum map back to the state document, including the
+# PRESERVE branch's re-anchor to the DEPLOYED bytes. Composed with the refresh predicate,
+# that makes the SECOND refresh overwrite whatever the first one preserved: an operator
+# edit is not protected, its destruction is deferred by exactly one run.
+#
+# An arm authored against a publisher that already behaves correctly passes for free and
+# measures nothing. Case 14's S-2 arm is authored against THIS function, observed failing,
+# and only then does the field-scoped persister replace it.
+persist_hook_checksums_to_state() {
+  if [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would record hook checksum baselines in ${STATE_FILE}"
+    return 0
+  fi
+  if [ ! -f "${STATE_FILE}" ]; then
+    warn "No state file at ${STATE_FILE}; hook checksum baselines not recorded."
+    return 0
+  fi
+  S_STATE="${STATE_FILE}" \
+  S_CHECKSUMS_FILE="${CHECKSUMS_FILE}" \
+  python3 -c '
+import json
+import os
+
+env = os.environ
+path = env["S_STATE"]
+with open(path, "r") as f:
+    state = json.load(f)
+with open(env["S_CHECKSUMS_FILE"], "r") as f:
+    live = json.load(f)
+
+state["hook_checksums"] = live
+
+with open(path, "w") as f:
+    json.dump(state, f, indent=2)
+    f.write("\n")
+' || {
+    warn "Could not record hook checksum baselines in ${STATE_FILE}."
+    return 0
+  }
+  info "Recorded hook checksum baselines in ${STATE_FILE}"
+}
+
 # --- Section 19: Re-bootstrap (branch b) — populate maps from existing state ---
 read_existing_state() {
   if [ ! -f "${STATE_FILE}" ]; then
@@ -3435,6 +3498,11 @@ refresh_hooks_flow() {
   # -> apply the platform version" (the security-priority default).
   read_existing_state || warn "Could not read existing state; refreshing all hooks from source."
   install_hooks
+  # Advance the recorded baseline for what this run deployed (#5251). Without this the
+  # baseline is written only by a FULL installer run while the bundle is advanced by the
+  # update path, so the two diverge on any maintained instance and every later refresh
+  # misclassifies a platform-updated hook as an operator edit.
+  persist_hook_checksums_to_state
   # The verification gate fresh_install and rebootstrap both run does not reach this flow
   # (it asserts tokens, settings.json and dir scaffolding this flow deliberately skips), so
   # until now the ONE flow that upgrades an already-installed workspace was the one flow with

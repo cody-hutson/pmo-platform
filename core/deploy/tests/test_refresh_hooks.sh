@@ -951,6 +951,333 @@ else
 fi
 printf '    [counts] rebootstrapped=%s file(s) -> damaged=%s -> recovered=%s\n' \
   "${post_n12}" "${dmg_n12}" "${rec_n12}"
+
+# ============================================================================
+# Cases 13-16 (#5251) — the PLATFORM-VERSION axis.
+#
+# WHY THESE FIXTURES DID NOT EXIST. Every workspace above is built by deploy_ws, which
+# records baseline = source SHA for every hook. With deployed also equal to source, every
+# hook returns via the `source_sha = target_sha` arm and the REFRESH_HOOKS block is never
+# entered at all. The two cases that do reach it (Case 1-3, Case 9/11) plant baseline =
+# DEPLOYED, which is the REFRESHABLE case -- not the latch. So no arm in this file, before
+# these, exercised a latched baseline, and none ran two refreshes against a fixture that
+# could reach the preserve branch.
+#
+# THE TWO FIXTURES:
+#   L (latched) — deployed content is a REAL historical revision of the hook's own source
+#                 path, and the recorded baseline is a THIRD value matching neither
+#                 deployed nor source. This is the genuine reported defect.
+#   E (edited)  — an operator marker appended to a hook, baseline left at the source SHA.
+#                 The content is in NO commit, which is what makes it a real edit.
+# The distinction between L and E IS the discriminator; an assertion on either alone is
+# satisfied by a publisher that always refreshes, or always preserves.
+# ============================================================================
+
+# plant_historical <ws> <hook-basename> — overwrite the DEPLOYED hook with a real historical
+# revision of its own source path: the most recent revision whose content differs from
+# current source. Echoes the revision; returns non-zero when no differing revision exists
+# within the search window, so a fixture that could not be built is REPORTED rather than
+# mistaken for one that was.
+plant_historical() {
+  local ws="$1" h="$2" rel cur rev blob
+  rel="core/hooks/$2"
+  cur="$(sha "${REPO_ROOT}/${rel}")"
+  for rev in $(git -C "${REPO_ROOT}" log --format=%H -n 25 -- "${rel}" 2>/dev/null); do
+    blob="$(git -C "${REPO_ROOT}" show "${rev}:${rel}" 2>/dev/null | shasum -a 256 | awk '{print $1}')"
+    [ -n "${blob}" ] || continue
+    [ "${blob}" != "${cur}" ] || continue
+    git -C "${REPO_ROOT}" show "${rev}:${rel}" > "${ws}/.claude/hooks/${h}" 2>/dev/null || return 1
+    printf '%s' "${rev}"
+    return 0
+  done
+  return 1
+}
+
+# plant_third_baseline <ws> <hook-basename> — record a baseline matching NEITHER the
+# deployed bytes NOR source. An all-zero digest is used deliberately: it is well-formed for
+# the reader and no real file hashes to it, so the fixture cannot accidentally coincide with
+# either real value the way a copied-and-tweaked digest could.
+plant_third_baseline() {
+  python3 - "$1/.claude/.workspace-setup.state" "$2" <<'PY'
+import json, sys
+st, h = sys.argv[1], sys.argv[2]
+d = json.load(open(st)); cs = d.get("hook_checksums", {})
+cs[h] = "0" * 64
+d["hook_checksums"] = cs; json.dump(d, open(st, "w"))
+PY
+}
+
+# baseline_of <ws> <hook-basename> — the PERSISTED baseline, read back from the state file.
+# The persister's whole subject is this value, so it is read from disk rather than inferred
+# from a log line.
+baseline_of() {
+  python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("hook_checksums") or {}).get(sys.argv[2],""))' \
+    "$1/.claude/.workspace-setup.state" "$2" 2>/dev/null || true
+}
+
+SRC_EGRESS="$(sha "${REPO_ROOT}/core/hooks/block-egress.sh")"
+
+printf '\nCase 13: the platform-version axis — a stale PLATFORM copy refreshes, a genuine operator edit preserves\n'
+
+WS="${SBX}/ws13L"; deploy_ws "${WS}"
+L_REV="$(plant_historical "${WS}" block-egress.sh)" || L_REV=""
+plant_third_baseline "${WS}" block-egress.sh
+l_deployed_before="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+l_recorded_before="$(baseline_of "${WS}" block-egress.sh)"
+
+# 13-L-pre — FIXTURE PRECONDITION. Three DISTINCT values is what "latched" means. Without
+# this the arm below could be measuring the ordinary refreshable case (recorded = deployed),
+# which every existing fixture already covers and which the shipped predicate already
+# handles, and it would prove nothing about the reported defect.
+if [ -n "${L_REV}" ] && [ "${l_deployed_before}" != "${SRC_EGRESS}" ] \
+   && [ "${l_recorded_before}" != "${l_deployed_before}" ] \
+   && [ "${l_recorded_before}" != "${SRC_EGRESS}" ]; then
+  report "13-L-pre: fixture L is genuinely LATCHED (recorded != deployed != source; deployed IS a real revision)" 1
+else
+  report "13-L-pre: fixture L is genuinely LATCHED (recorded != deployed != source; deployed IS a real revision)" 0 \
+    "rev=${L_REV:-none} recorded=${l_recorded_before:0:8} deployed=${l_deployed_before:0:8} source=${SRC_EGRESS:0:8} — the arms below are vacuous unless all three differ"
+fi
+
+rcL=0; OUTL="$(refresh "${WS}")" || rcL=$?
+l_deployed_after="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+
+# 13-L — MUST-FLAG ARM (AC-1). The deployed bytes ARE a platform version, so the publisher
+# must recognise them as one and refresh. Baseline equality alone cannot: it says only
+# "different from the record", and the record is stale on every maintained instance.
+if grep -q 'REFRESHED: block-egress.sh' <<<"${OUTL}" && [ "${l_deployed_after}" = "${SRC_EGRESS}" ]; then
+  report "13-L (AC-1): a LATCHED stale PLATFORM copy is REFRESHED to source" 1
+else
+  report "13-L (AC-1): a LATCHED stale PLATFORM copy is REFRESHED to source" 0 \
+    "exit=${rcL}; deployed ${l_deployed_after:0:8} vs source ${SRC_EGRESS:0:8} — the merged fix did not reach the workspace"
+fi
+
+WS_E="${SBX}/ws13E"; deploy_ws "${WS_E}"
+printf '\n# OPERATOR EDIT - fixture E\n' >> "${WS_E}/.claude/hooks/block-egress.sh"
+e_deployed_before="$(sha "${WS_E}/.claude/hooks/block-egress.sh")"
+rcE=0; OUTE="$(refresh "${WS_E}")" || rcE=$?
+
+# 13-E-pre — anti-vacuity. If the seeded edit equalled source, "preserved" and "overwritten"
+# would leave identical bytes and the arm below would pass in both directions.
+[ "${e_deployed_before}" != "${SRC_EGRESS}" ] \
+  && report "13-E-pre: the seeded edit DIFFERS from source (preserve and overwrite are distinguishable)" 1 \
+  || report "13-E-pre: the seeded edit DIFFERS from source (preserve and overwrite are distinguishable)" 0
+
+# 13-E — MUST-NOT-FLAG ARM (AC-4). Content in no commit is an operator decision.
+if grep -q 'PRESERVED (operator-edited): block-egress.sh' <<<"${OUTE}" \
+   && grep -q 'OPERATOR EDIT - fixture E' "${WS_E}/.claude/hooks/block-egress.sh"; then
+  report "13-E (AC-4): a GENUINE operator edit is preserved, marker intact" 1
+else
+  report "13-E (AC-4): a GENUINE operator edit is preserved, marker intact" 0 \
+    "exit=${rcE} — the edit was clobbered or not warned"
+fi
+
+# 13-control — AC-4's CONTROL-ARM CLAUSE, and the reason the pair above is evidence rather
+# than assertion. Same instrument, same hook name, two fixtures, two DIFFERENT verdicts. A
+# publisher that always refreshes satisfies 13-L; one that always preserves satisfies 13-E;
+# only a real discriminator satisfies both, and this arm is what says so.
+l_verdict=none; grep -q 'REFRESHED: block-egress.sh' <<<"${OUTL}" && l_verdict=REFRESHED
+e_verdict=none; grep -q 'PRESERVED (operator-edited): block-egress.sh' <<<"${OUTE}" && e_verdict=PRESERVED
+if [ "${l_verdict}" = "REFRESHED" ] && [ "${e_verdict}" = "PRESERVED" ]; then
+  report "13-control (AC-4): the SAME instrument returns DIFFERENT verdicts on L and E" 1
+else
+  report "13-control (AC-4): the SAME instrument returns DIFFERENT verdicts on L and E" 0 \
+    "L=${l_verdict} E=${e_verdict} — a discriminator that cannot reach both verdicts is not a discriminator"
+fi
+
+printf '\nCase 14: two-refresh SEQUENCES — the arms a single refresh structurally cannot reach\n'
+
+# --- S-1 REPUBLISH (fixture L). Run 1 refreshes AND advances the baseline; run 2 finds the
+# hook in sync and emits no second PRESERVED. The property under test is the baseline
+# advance: without a persister the refresh still works, but the state file keeps the stale
+# third value forever and every run re-derives the same answer from history.
+WS="${SBX}/ws14S1"; deploy_ws "${WS}"
+S1_REV="$(plant_historical "${WS}" block-egress.sh)" || S1_REV=""
+plant_third_baseline "${WS}" block-egress.sh
+O1="$(refresh "${WS}")" || true
+b_after1="$(baseline_of "${WS}" block-egress.sh)"
+O2="$(refresh "${WS}")" || true
+n_pres2="$(grep -c 'PRESERVED (operator-edited): block-egress.sh' <<<"${O2}")" || n_pres2=0
+if [ -n "${S1_REV}" ] && grep -q 'REFRESHED: block-egress.sh' <<<"${O1}" \
+   && [ "${b_after1}" = "${SRC_EGRESS}" ] && [ "${n_pres2}" = "0" ]; then
+  report "14-S1 (AC-2/AC-9): run 1 REFRESHES and ADVANCES the baseline; run 2 emits no PRESERVED" 1
+else
+  report "14-S1 (AC-2/AC-9): run 1 REFRESHES and ADVANCES the baseline; run 2 emits no PRESERVED" 0 \
+    "rev=${S1_REV:-none} baseline-after-run-1=${b_after1:0:8} source=${SRC_EGRESS:0:8} preserved-on-run-2=${n_pres2}"
+fi
+
+# --- S-2 STABILITY (fixture E) — THE ANTI-REGRESSION ARM, and the most important in this file.
+#
+# The preserve branch does not only warn: it RE-ANCHORS the recorded baseline to the DEPLOYED
+# bytes. Compose that with the refresh predicate one line above it -- which overwrites when
+# recorded == deployed -- and a persister that writes the WHOLE checksum map back to the state
+# document makes the SECOND refresh overwrite what the first one preserved. The operator edit
+# is not protected; its destruction is deferred by exactly one run.
+#
+# A SINGLE REFRESH CANNOT SEE THIS. Case 4 runs one refresh and stays green while the clobber
+# ships. This arm was authored against a deliberately whole-map persister and OBSERVED FAILING
+# before the field-scoped one landed -- an arm that was never RED measures nothing.
+WS="${SBX}/ws14S2"; deploy_ws "${WS}"
+printf '\n# OPERATOR EDIT - fixture E (S-2)\n' >> "${WS}/.claude/hooks/block-egress.sh"
+e_sha="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+P1="$(refresh "${WS}")" || true
+mid_sha="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+P2="$(refresh "${WS}")" || true
+end_sha="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+if [ "${mid_sha}" = "${e_sha}" ] && [ "${end_sha}" = "${e_sha}" ] \
+   && grep -q 'PRESERVED (operator-edited): block-egress.sh' <<<"${P2}" \
+   && grep -q 'OPERATOR EDIT - fixture E (S-2)' "${WS}/.claude/hooks/block-egress.sh"; then
+  report "14-S2 (AC-9): an operator edit survives a SECOND refresh (no deferred clobber)" 1
+else
+  report "14-S2 (AC-9): an operator edit survives a SECOND refresh (no deferred clobber)" 0 \
+    "seeded ${e_sha:0:8} -> after run 1 ${mid_sha:0:8} -> after run 2 ${end_sha:0:8}; a whole-map persister writes the preserve branch's re-anchor, so run 2 reads recorded == deployed and overwrites"
+fi
+
+# --- S-3 IDEMPOTENCE (healthy) — contract item 5 held across a REPEAT. Case 5 pins it for one
+# run; a persister that wrote the wrong value would make run 2 of a healthy workspace start
+# refreshing, which is the EX_NOCHANGE contract breaking one release later.
+WS="${SBX}/ws14S3"; deploy_ws "${WS}"
+Q1="$(refresh "${WS}")" || true
+Q2="$(refresh "${WS}")" || true
+n_q="$(grep -c 'REFRESHED:' <<<"${Q2}")" || n_q=0
+[ "${n_q}" = "0" ] \
+  && report "14-S3: a healthy workspace refreshed TWICE still emits 0 REFRESHED" 1 \
+  || report "14-S3: a healthy workspace refreshed TWICE still emits 0 REFRESHED" 0 "got ${n_q}"
+
+printf '\nCase 15: the decline is LOUD — summary line + non-zero status (AC-3) · the baseline advance is FIELD-SCOPED (AC-2/AC-9)\n'
+
+WS="${SBX}/ws15"; deploy_ws "${WS}"
+printf '\n# OPERATOR EDIT - fixture E (decline)\n' >> "${WS}/.claude/hooks/block-egress.sh"
+rc15=0; OUT15="$(refresh "${WS}")" || rc15=$?
+
+# 15a (AC-3) — the reported defect in one assertion: the run that left a security control on
+# a superseded version must not read as success.
+[ "${rc15}" -ne 0 ] \
+  && report "15a (AC-3): a refresh that DECLINES a hook does not exit 0" 1 \
+  || report "15a (AC-3): a refresh that DECLINES a hook does not exit 0" 0 \
+     "exit 0 — the decline is visible only as an inline warning, which is the reported defect"
+
+# 15b (AC-3) — the summary line is the INDEPENDENT limb. Exit status is machine-readable but
+# carries no names; a caller that logs stdout and drops the status still sees this.
+grep -q 'DECLINED: 1 hook(s) not updated' <<<"${OUT15}" \
+  && report "15b (AC-3): the decline emits a machine-readable SUMMARY line naming the count" 1 \
+  || report "15b (AC-3): the decline emits a machine-readable SUMMARY line naming the count" 0
+
+case "${OUT15}" in
+  *"DECLINED: 1 hook(s) not updated (block-egress.sh)"*)
+    report "15c (AC-3): the summary line NAMES the declined hook" 1 ;;
+  *)
+    report "15c (AC-3): the summary line NAMES the declined hook" 0 \
+      "a count with no names is not actionable" ;;
+esac
+
+# 15-specificity — a CLEAN refresh must exit 0 and emit NO decline signal. Without this,
+# 15a/15b are satisfied equally by a publisher that declines unconditionally, which would
+# turn every healthy update red.
+WS="${SBX}/ws15c"; deploy_ws "${WS}"
+rc15c=0; OUT15c="$(refresh "${WS}")" || rc15c=$?
+if [ "${rc15c}" -eq 0 ] && ! grep -q 'DECLINED:' <<<"${OUT15c}"; then
+  report "15-specificity: a CLEAN refresh exits 0 and emits NO decline signal" 1
+else
+  report "15-specificity: a CLEAN refresh exits 0 and emits NO decline signal" 0 \
+    "exit=${rc15c} — the decline arms above are over-matching, not discriminating"
+fi
+
+# --- MIXED fixture: one hook latched (deployed), one hook edited (declined), in ONE run.
+# This is what separates a field-scoped persister from a whole-map one: both advance the
+# deployed hook's baseline, and only the field-scoped one leaves the DECLINED hook's alone.
+WS="${SBX}/ws15d"; deploy_ws "${WS}"
+D_REV="$(plant_historical "${WS}" block-destructive.sh)" || D_REV=""
+plant_third_baseline "${WS}" block-destructive.sh
+printf '\n# OPERATOR EDIT - fixture E (mixed)\n' >> "${WS}/.claude/hooks/block-egress.sh"
+edit_sha="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+rc15d=0; OUT15d="$(refresh "${WS}")" || rc15d=$?
+bd_after="$(baseline_of "${WS}" block-destructive.sh)"
+be_after="$(baseline_of "${WS}" block-egress.sh)"
+bd_src="$(sha "${REPO_ROOT}/core/hooks/block-destructive.sh")"
+
+if [ -n "${D_REV}" ] && [ "${bd_after}" = "${bd_src}" ]; then
+  report "15d (AC-2): the baseline IS advanced for a hook this run DEPLOYED" 1
+else
+  report "15d (AC-2): the baseline IS advanced for a hook this run DEPLOYED" 0 \
+    "rev=${D_REV:-none} recorded=${bd_after:0:8} source=${bd_src:0:8} — the baseline stays stale against the bundle it describes"
+fi
+
+# 15e (AC-9) — THE FIELD-SCOPING ASSERTION. The preserve branch's re-anchor must not reach
+# the state file. Persisting it is what converts "preserved" into "clobbered next run".
+if [ "${be_after}" != "${edit_sha}" ] && [ "${be_after}" = "${SRC_EGRESS}" ]; then
+  report "15e (AC-9): the baseline is NOT advanced for the hook this run DECLINED (field-scoped)" 1
+else
+  report "15e (AC-9): the baseline is NOT advanced for the hook this run DECLINED (field-scoped)" 0 \
+    "recorded=${be_after:0:8} deployed-edit=${edit_sha:0:8} source=${SRC_EGRESS:0:8} — a whole-map persister writes the deployed-edit value here, and the next refresh reads it as permission to overwrite"
+fi
+
+printf '\nCase 16: --reconcile-hooks converges a DIVERGENT copy (AC-5/AC-10/AC-11) · whole-bundle currency assertion (AC-7)\n'
+
+WS="${SBX}/ws16"; deploy_ws "${WS}"
+printf '\n# OPERATOR EDIT - fixture E (reconcile)\n' >> "${WS}/.claude/hooks/block-egress.sh"
+pre16="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+rc16a=0; OUT16a="$(refresh "${WS}")" || rc16a=$?
+mid16="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+
+# 16a (AC-10) — the printed remedy must name a flag that EXISTS and that changes the outcome.
+# The shipped message said "re-run setup-workspace.sh to reconcile", and this same run is the
+# proof that it does not: the state is byte-identical after the run that printed it.
+if [ "${mid16}" = "${pre16}" ] && grep -q -- '--reconcile-hooks' <<<"${OUT16a}"; then
+  report "16a (AC-10): the PRESERVED message names --reconcile-hooks as a remedy that converges" 1
+else
+  report "16a (AC-10): the PRESERVED message names --reconcile-hooks as a remedy that converges" 0 \
+    "a printed remedy that leaves the state unchanged is not a remedy"
+fi
+
+# 16b (AC-5/AC-11) — run EXACTLY the remedy the message names; the state must actually change.
+# This is AC-11's demonstration end to end: plant, observe the preservation, apply the named
+# remedy, show the state moved.
+rc16b=0
+OUT16b="$(bash "${SETUP}" --reconcile-hooks --workspace-root "${WS}" --source-repo "${REPO_ROOT}" --config-root "${CFGROOT}" 2>&1)" || rc16b=$?
+post16="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+if [ "${rc16b}" -eq 0 ] && [ "${post16}" = "${SRC_EGRESS}" ] && [ "${post16}" != "${pre16}" ]; then
+  report "16b (AC-5/AC-11): --reconcile-hooks converges the divergent copy to source without a full bootstrap" 1
+else
+  report "16b (AC-5/AC-11): --reconcile-hooks converges the divergent copy to source without a full bootstrap" 0 \
+    "exit=${rc16b}; ${pre16:0:8} -> ${post16:0:8} (source ${SRC_EGRESS:0:8})"
+fi
+
+# 16c (AC-7) — the whole-bundle currency assertion reports itself AND reports a non-zero
+# population. A 0-of-0 "every hook matches source" is a failed probe, not a clean result --
+# the same doctrine Case 10d applies to the closure post-condition.
+case "${OUT16b}" in
+  *"Hook-bundle currency: PASS"*)
+    case "${OUT16b}" in
+      *"(0 hook"*) report "16c (AC-7): the bundle currency assertion is measured, not vacuous" 0 "population was empty" ;;
+      *) report "16c (AC-7): the bundle currency assertion is measured, not vacuous" 1 ;;
+    esac ;;
+  *) report "16c (AC-7): the bundle currency assertion is measured, not vacuous" 0 "no currency PASS line emitted" ;;
+esac
+
+# 16d / 16e (AC-7 accounting) — the two-sided discrimination available at this interface.
+# A PRESERVED operator edit is a LEGITIMATE mismatch against source, so an assertion that
+# reddened on it would make every preserve a failure; one that ignored mismatches entirely
+# would assert nothing. The accounting must therefore TRACK the decline set: 1 on the run
+# that declined one hook, 0 on the clean run.
+#
+# BOUND STATED: the assertion's ABORT path is not reachable through the public flags -- an
+# UNACCOUNTED mismatch requires a copy that silently failed, which no flag produces. These
+# two arms pin the accounting, not the abort, and say so rather than implying coverage.
+case "${OUT16a}" in
+  *"1 accounted for by a recorded decline"*)
+    report "16d (AC-7): a DECLINED hook is ACCOUNTED FOR by the bundle assertion, not failed" 1 ;;
+  *)
+    report "16d (AC-7): a DECLINED hook is ACCOUNTED FOR by the bundle assertion, not failed" 0 \
+      "the assertion did not report the declined hook in its accounting" ;;
+esac
+case "${OUT15c}" in
+  *"0 accounted for by a recorded decline"*)
+    report "16e (AC-7 specificity): a CLEAN refresh accounts for ZERO declines" 1 ;;
+  *)
+    report "16e (AC-7 specificity): a CLEAN refresh accounts for ZERO declines" 0 \
+      "the accounting reports a constant rather than tracking the decline set" ;;
+esac
+
 printf '\n======================================================================\n'
 printf 'test_refresh_hooks.sh: %d passed, %d failed (bash %s)\n' "${PASS}" "${FAIL}" "${BASH_VERSION}"
 printf '======================================================================\n'
