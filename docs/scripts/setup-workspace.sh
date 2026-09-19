@@ -2180,6 +2180,7 @@ install_hook_with_checksum() {
     cp "${source_hook}" "${target}"
     chmod +x "${target}"
     json_set "${CHECKSUMS_FILE}" "${basename}" "${source_sha}"
+    note_hook_deployed "${basename}"
     info "INSTALLED: ${basename}"
     printf 'rm-file:%s\n' "${target}" >> "${ROLLBACK_OPS_FILE}"
     return 0
@@ -2215,6 +2216,7 @@ install_hook_with_checksum() {
       fi
     fi
     json_set "${CHECKSUMS_FILE}" "${basename}" "${source_sha}"
+    note_hook_deployed "${basename}"
     info "SYNC: ${basename} (unchanged)"
     return 0
   fi
@@ -2244,11 +2246,13 @@ install_hook_with_checksum() {
       cp "${source_hook}" "${target}"
       chmod +x "${target}"
       json_set "${CHECKSUMS_FILE}" "${basename}" "${source_sha}"
+      note_hook_deployed "${basename}"
       info "REFRESHED: ${basename} (${target_sha:0:8} → ${source_sha:0:8})"
       return 0
     fi
     warn "PRESERVED (operator-edited): ${basename} diverged from its recorded baseline; not overwritten. Re-run docs/scripts/setup-workspace.sh to reconcile."
     json_set "${CHECKSUMS_FILE}" "${basename}" "${target_sha}"
+    note_hook_declined "${basename}"
     return 0
   fi
 
@@ -3210,29 +3214,70 @@ with open(path, "w") as f:
   info "Recorded settings baselines in ${STATE_FILE}"
 }
 
-# !!! DELIBERATELY WRONG, AND TEMPORARY. !!!
+# note_hook_deployed / note_hook_declined — the two outcome ledgers the refresh flow reads.
 #
-# This is the WHOLE-MAP persister -- the shape the Stage-4 plan prescribed, landed here
-# ONLY so the suite arm that catches it can be observed RED before the correct one ships.
-# It writes the ENTIRE in-memory checksum map back to the state document, including the
-# PRESERVE branch's re-anchor to the DEPLOYED bytes. Composed with the refresh predicate,
-# that makes the SECOND refresh overwrite whatever the first one preserved: an operator
-# edit is not protected, its destruction is deferred by exactly one run.
+# DEPLOYED means this run put the platform version on disk, or confirmed it already was:
+# INSTALLED, REFRESHED, SYNC and MODE-REPAIRED. Those are exactly the hooks whose recorded
+# baseline is now known-correct, and exactly the field scope of the persister below.
 #
-# An arm authored against a publisher that already behaves correctly passes for free and
-# measures nothing. Case 14's S-2 arm is authored against THIS function, observed failing,
-# and only then does the field-scoped persister replace it.
+# DECLINED means this run left a control on something other than the merged version. It is
+# the decline SUMMARY's population and the currency assertion's accounted-for set. A hook
+# is never in both: the branches that call these are mutually exclusive by construction.
+note_hook_deployed() {
+  case " ${REFRESH_DEPLOYED_HOOKS} " in
+    *" $1 "*) return 0 ;;
+  esac
+  REFRESH_DEPLOYED_HOOKS="${REFRESH_DEPLOYED_HOOKS} $1"
+}
+note_hook_declined() {
+  case " ${REFRESH_DECLINED_NAMES} " in
+    *" $1 "*) return 0 ;;
+  esac
+  REFRESH_DECLINED_NAMES="${REFRESH_DECLINED_NAMES} $1"
+  REFRESH_DECLINED_COUNT=$((REFRESH_DECLINED_COUNT + 1))
+}
+
+# Surgical, FIELD-SCOPED persistence of the hook checksum baselines (#5251). The sibling
+# persist_settings_baseline_to_state above already deserved; this is the one that never
+# shipped, which is why the baseline self-latches.
+#
+# WHY NOT write_state_file: the same reason its sibling gives, verbatim in that header --
+# that function REBUILDS the whole state document from per-run scratch, and a refresh flow
+# populates only three of those files. Calling it here would overwrite a fully-verified
+# artifact record with all-false and blank the recorded directory layout. That is why
+# refresh_hooks_flow does not call it, and reversing that decision is not the fix.
+#
+# WHY FIELD-SCOPED RATHER THAN WHOLE-MAP, which is the load-bearing constraint and NOT an
+# optimization. The PRESERVE branch of install_hook_with_checksum does not only warn: it
+# re-anchors the in-memory baseline to the DEPLOYED bytes. Compose that with the refresh
+# predicate one line above it -- which overwrites when recorded == deployed -- and a
+# persister that wrote the WHOLE map would make the NEXT refresh overwrite whatever this
+# one preserved. A genuine operator edit would not be protected; its destruction would be
+# deferred by exactly one run, and a single-refresh test could never see it.
+#
+# So this writes ONLY the keys for hooks this run actually deployed. The preserve branch's
+# re-anchor stays in memory, where it is harmless and where the interactive/skip path still
+# legitimately records an acknowledged operator decision through write_state_file.
+#
+# Case 14's S-2 arm is the standing proof: it was authored against a deliberately whole-map
+# persister, observed failing, and only then did this function replace it.
 persist_hook_checksums_to_state() {
   if [ "${DRY_RUN}" -eq 1 ]; then
     info "[dry-run] would record hook checksum baselines in ${STATE_FILE}"
     return 0
   fi
   if [ ! -f "${STATE_FILE}" ]; then
-    warn "No state file at ${STATE_FILE}; hook checksum baselines not recorded."
+    warn "No state file at ${STATE_FILE}; hook checksum baselines not recorded (the next refresh classifies from history)."
     return 0
   fi
-  S_STATE="${STATE_FILE}" \
+  if [ -z "$(printf '%s' "${REFRESH_DEPLOYED_HOOKS}" | tr -d ' ')" ]; then
+    info "No hook deployed this run; hook checksum baselines left untouched."
+    return 0
+  fi
+  local persisted
+  persisted=$(S_STATE="${STATE_FILE}" \
   S_CHECKSUMS_FILE="${CHECKSUMS_FILE}" \
+  S_DEPLOYED="${REFRESH_DEPLOYED_HOOKS}" \
   python3 -c '
 import json
 import os
@@ -3244,16 +3289,29 @@ with open(path, "r") as f:
 with open(env["S_CHECKSUMS_FILE"], "r") as f:
     live = json.load(f)
 
-state["hook_checksums"] = live
+names = [n for n in env["S_DEPLOYED"].split() if n]
+recorded = state.get("hook_checksums") or {}
+advanced = 0
+for name in names:
+    value = live.get(name)
+    if not value:
+        continue
+    if recorded.get(name) != value:
+        advanced += 1
+    recorded[name] = value
+state["hook_checksums"] = recorded
 
 with open(path, "w") as f:
     json.dump(state, f, indent=2)
     f.write("\n")
-' || {
-    warn "Could not record hook checksum baselines in ${STATE_FILE}."
+
+print(advanced)
+print(len(names))
+') || {
+    warn "Could not record hook checksum baselines in ${STATE_FILE}; the next refresh classifies from history."
     return 0
   }
-  info "Recorded hook checksum baselines in ${STATE_FILE}"
+  info "Recorded hook checksum baselines in ${STATE_FILE} ($(printf '%s\n' "${persisted}" | sed -n '2p') deployed this run; $(printf '%s\n' "${persisted}" | sed -n '1p') baseline(s) advanced)"
 }
 
 # --- Section 19: Re-bootstrap (branch b) — populate maps from existing state ---
