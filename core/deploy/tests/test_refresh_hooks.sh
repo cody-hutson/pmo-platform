@@ -147,13 +147,17 @@ printf '\nCase 1-3: stale hook refreshed · missing hook libs co-deployed (awk +
 # reported rather than mistaken for a pass.
 #
 # FALSIFIED BY MUTATION, NOT ARGUED. Rename ${MODE_TEMPLATE} away and re-run: THIS
-# assertion fails ALONE — 50 passed / 1 failed — while `.mode preserved (operator
+# assertion fails ALONE — 74 passed / 1 failed — while `.mode preserved (operator
 # choice)` further below still reports PASS, because the seed the refresh never
 # touched still equals MODE_SEED. That surviving PASS is precisely the vacuous pass
 # this precondition exists to report, so the mutation demonstrates both arms at once.
-# Unmutated on the same tree: 51 passed / 0 failed. (Both totals RE-MEASURED when the
-# confinement guard under Case 4 landed — the 49/50 pair it replaces predates that arm,
-# and the 44/45 pair before it predates .mode's three siblings.)
+# Unmutated on the same tree: 75 passed / 0 failed. (Both totals RE-MEASURED when the
+# Case 13-17 platform-version arms landed — the 50/51 pair they replace predates those
+# arms, the 49/50 pair before it predates the Case-4 confinement guard, and the 44/45
+# pair before that predates .mode's three siblings. RE-MEASURED means exactly that:
+# both halves were re-run on this tree, never derived by adding the new arm count to
+# the old totals, because an arithmetic update cannot notice that a mutation stopped
+# being caught.)
 [ -f "${MODE_TEMPLATE}" ] \
   && report "mode template present (fixture precondition)" 1 \
   || report "mode template present (fixture precondition)" 0 "absent: ${MODE_TEMPLATE}"
@@ -275,15 +279,19 @@ WS="${SBX}/ws2"; deploy_ws "${WS}"
 # are deliberately NOT in deploy_ws, because their ABSENCE everywhere else is what exercises
 # install_mode_template_if_missing's INSTALL branch -- the `cp` and the `rm-file` rollback op
 # Cases 9d / 11 / 12 consume. Until this arm, that rationale lived in a comment and was
-# enforced by NOTHING. Both halves measured on the same tree rather than computed: BEFORE
-# this arm, moving the three writes into deploy_ws ran 50 passed / 0 failed with a
+# enforced by NOTHING. Both halves measured on the same tree rather than computed: WITHOUT
+# this arm, moving the three writes into deploy_ws runs 74 passed / 0 failed with a
 # BYTE-IDENTICAL arm list — the `[counts]` diagnostics DID shift (bundle 29 -> 32, removals
 # 7 -> 4 and 8 -> 5, a drop of exactly the three) and nothing reads them, because every
 # `[counts]` line is a bare printf and not a report. WITH this arm the same move runs
-# 50 passed / 1 failed and exactly ONE of 51 arms changes: this one. That is the whole
+# 74 passed / 1 failed and exactly ONE of 75 arms changes: this one. That is the whole
 # difference between a silent retirement and a named failure, and it is the same doctrine
 # the AC-3 arm above states -- a guarantee that is never observed is indistinguishable from
 # one that has quietly stopped holding.
+#
+# The counterfactual half is re-measured by EXCISING this arm and applying the same move,
+# not by subtracting one from the mutated total. Subtraction would report the number this
+# arm's own absence is supposed to produce, which is the vacuity it exists to catch.
 #
 # SITED at the FIRST non-Case-1-3 workspace, so a retirement fails as early as it is
 # observable and BEFORE this workspace's refresh consumes the state. The invariant is a

@@ -83,7 +83,9 @@ Verdict:     CLEAN — v4.67.1 is free; no HALT
 
 `release/tools/claim-version.sh --verify-stamp hook-publisher-republishes` — run after this file was written and before it was committed. Required exit **0**. Result recorded in § Verification Evidence.
 
-The verb runs the SAME pre-flight the Stage-12 claim runs before the compare-and-swap, so a Commit-0 PROCEED rehearses the real claim rather than a lookalike. This plan carries **exactly one** `{{RELEASE_VERSION}}` token — the Header `**Version**` cell — so the stamp has a single, verifiable resolution site, and the cell contains the token and no other text per the plan template's machine-read-stamp-manifest rule.
+The verb runs the SAME pre-flight the Stage-12 claim runs before the compare-and-swap, so a Commit-0 PROCEED rehearses the real claim rather than a lookalike. This plan carries **exactly one** double-brace `RELEASE_VERSION` placeholder — the Header `**Version**` cell — so the stamp has a single, verifiable resolution site, and the cell contains the placeholder and no other text per the plan template's machine-read-stamp-manifest rule.
+
+**Why this section NAMES the placeholder instead of reproducing it.** The claim tool resolves the token by global substitution across the whole file, with no classifier separating a *record* site from a *citation* site. A prose mention written in the literal braced form is therefore rewritten too, and this plan would ship sentences reading *"carries exactly one `v4.67.x` token"*. Measured on this file while authoring it: the literal form occurred **4** times — one record and three citations — and the three citations were rewritten to the named form, leaving the record site as the single resolution target the rule requires. The tool gap is pre-existing and out of this release's scope; the authoring convention that avoids it is the one used here.
 
 ### Commit-0 Survival Set
 
@@ -95,7 +97,7 @@ Every element the Stage-4 gate determined that a named downstream consumer reads
 | 2 | File Change Matrix (machine-readable, fence-delimited) | § File Change Matrix |
 | 3 | Cross-Issue Acceptance Criteria | § Cross-Issue Acceptance Criteria — **structurally empty at n=1**, declared rather than omitted |
 | 4 | Verification Plan | § Verification Plan |
-| 5 | `{{RELEASE_VERSION}}` stamp manifest | § Header `**Version**` cell — **APPLICABLE** under D3 |
+| 5 | Release-version stamp manifest (the double-brace `RELEASE_VERSION` placeholder, named rather than reproduced — see the note below) | § Header `**Version**` cell — **APPLICABLE** under D3 |
 | 6 | Stage Applicability Matrix | § Stage Applicability Matrix |
 | 7 | Release Class declaration | § Release Class declaration |
 | 8 | Implementation Sequence | § Implementation Sequence |
@@ -351,15 +353,17 @@ Stage-4 Checkpoint A estimate for a `hotfix` at n=1: Stages 5 / 6 / 7 / 8 as sin
 | **DEV-4** | **One path added to the operator-locked File Change Matrix:** `core/ADRs/ADR-203-hook-refresh-discriminator-composition.md`. Stage 5 named the record under the slug-token discipline and created no ADR issue; the matrix ratified at the Stage-4 gate carried no path for it | Stage-6 sub-task instruction, which directs that the record be authored at Commit 0 | **APPLIED.** The row is in § File Change Matrix under *Decision record*; the number is claimed against the mainline anchor |
 | **DEV-5** | **One path declined from the matrix:** `core/standards/subagent-security-posture.md`, which Stage 5 proposed adding as the canonical home of the coverage-boundary statement | Hub disposition — a scope addition against an operator-locked matrix is the operator's call. Engineering executes the stated fallback | **FALLBACK EXECUTED.** The currency caveat is written into the approved path only, count-preserving; the canonical-home sync is named as a successor item and the amendment is carried to the Stage-9 gate, where the operator can still pull it in before merge |
 | **DEV-6** | **The `hotfix` class re-test fired** on the Stage-4 plan's own trigger, because Stage 5 selected the git-history discriminator | Hub deferral | **CARRIED to Stage 9**, where review depth is consumed |
+| **DEV-7** | **Implementation-sequence steps 3–6 landed in ONE commit** rather than four. They share one code block and one pair of outcome ledgers: the discriminator decides the preserve branch, the decline summary reads the set that branch populates, the currency assertion reads the same set to account for a legitimate mismatch, and the reconcile flow is a force arm sited inside the same refresh block | Engineering judgement, surfaced rather than taken silently | **APPLIED — minor.** Split apart, the intermediate commits would have been red for reasons unrelated to the limb under test, which destroys the attribution the RED-first discipline exists to create. The RED→GREEN pairing is preserved at the arm level: every affected arm was observed RED at the fixtures commit and GREEN after, and each arm names the criterion it serves |
+| **DEV-8** | **The AC-12 arms are SOURCE-ORDER assertions over `update.sh`, not a live update run.** Driving `./update.sh` end to end needs a full sandboxed instance and exits in preflight against anything less, so an arm built that way would report on preflight rather than on Phase 5c | Engineering judgement, with the bound written into the suite source | **APPLIED — minor, and not a weaker proxy for the property under test.** The defect is an ORDERING defect: where the deployed-flag read sits relative to the `rc` branch IS the bug and IS the fix. The arms were observed RED by restoring the pre-fix file beneath them. Live end-to-end exercise of Phase 5c is Stage-7/8 scope |
 
 ---
 
 ## Documentation Impact
 
-| Issue | Declared docs | Status | Notes |
-|---|---|---|---|
-| #5251 | `core/rules/bypass-mode-readiness/block-destructive.md` — the coverage-boundary note | **UPDATED** | Count-preserving currency caveat. The FOUR cardinality is untouched: conditions 1–4 decide whether the control *runs at all*, whereas this defect is that it runs and enforces a superseded version. The card itself calls it a fifth *failure mode*, not a fifth condition |
-| #5251 | `release/references/pipeline/stage-12-execute.md` · `stage-13-close.md` | **UPDATED** | AC-8 — the hook-bundle propagation clause, landing as the third sibling of an existing convention rather than a new section |
+| Issue | Declared docs | Status | Commit | Notes |
+|---|---|---|---|---|
+| #5251 | `core/rules/bypass-mode-readiness/block-destructive.md` — the coverage-boundary note | **UPDATED** | `086615a9` | Count-preserving currency caveat. The FOUR cardinality is untouched — **measured, not asserted**: cardinality-bearing phrases count **3 before and 3 after**. Conditions 1–4 decide whether the control *runs at all*, whereas this defect is that it runs and enforces a superseded version; the card itself calls it a fifth *failure mode*, not a fifth condition |
+| #5251 | `release/references/pipeline/stage-12-execute.md` · `stage-13-close.md` | **UPDATED** | `086615a9` | AC-8 — the hook-bundle propagation clause, landing as the third sibling of an existing convention rather than a new section. Stage 13 gains a conditional `B-OPS4.5` beat that records N/A-with-reason when no hook source changed, so the no-op is honest rather than silent |
 
 ---
 
@@ -370,12 +374,68 @@ Stage-4 Checkpoint A estimate for a `hotfix` at n=1: Stages 5 / 6 / 7 / 8 as sin
 | Check | Result |
 |---|---|
 | **Pre-change suite baseline** (the control arm for every new arm) | `bash core/deploy/tests/test_refresh_hooks.sh` at the pinned baseline → **51 passed, 0 failed**, exit 0, bash 3.2.57 |
-| **Commit-0 manifest half** | `release/tools/claim-version.sh --verify-stamp hook-publisher-republishes` → recorded in the Commit-0 commit's own verification run |
+| **Post-change suite** | Same invocation on the delivered tree → **75 passed, 0 failed**, exit 0. **AC-6 satisfied on a stated denominator:** 75 ≥ the pre-change count of 51; the release adds **24** arms |
+| **RED-then-GREEN, per limb** | Every new arm was observed RED before its fix. `d0930d15` → 56/14 (the fixtures commit, against a deliberately whole-map persister); `f6f04800` → 58/12 (field-scoped persister); `ffe64e97` → 70/0 (discriminator, reconcile, decline, currency); `d85b4683` → 75/0 (AC-12 arms, observed RED at 71/4 against the restored pre-fix `update.sh`) |
+| **Commit-0 version half** | `git fetch --tags origin`; next-free for bump-class `patch` on patch-base `v4.67` = **`v4.67.1`**, free across all three `claimed_set()` arms. Denominator 209 published Releases (re-read at `--limit 5000` after a first read at `--limit 200` returned exactly 200), 16 `v4.6*` origin tags, 1 RELEASE_LOG row. Sensitivity: the same three readers on the `v4.67` slot return 1, 16 and 6 — all live, so the zero on `.1` is a real negative. **No HALT** |
+| **Commit-0 manifest half** | `release/tools/claim-version.sh --verify-stamp hook-publisher-republishes` → **exit 0**, *"manifest resolvable; plan-only manifest"*. Exactly one double-brace `RELEASE_VERSION` placeholder in this file (the Header `**Version**` cell), so the stamp has a single verifiable resolution site. **Self-caught during C4:** the first draft carried the literal braced form at three prose sites as well, which the claim tool's global substitution would have rewritten into the prose at Stage 12; measured at 4 occurrences, corrected to 1 |
+| **AC-8 control arm** | `refresh-hooks` occurrences in the two pipeline shards: **0 and 0** at the baseline, **1 and 1** after. Sensitivity on the same reader and token over `update.sh` and `deploy.sh` → 4 lines each, so the pre-change zero is a real negative and the post-change match is attributable |
+| **AC-9 control arm** | `persist_hook_checksums_to_state` occurrences in `docs/scripts/setup-workspace.sh`: **0** at the baseline; after, 1 definition plus 1 call from `refresh_hooks_flow`. Sensitivity: `hook_checksums` at the baseline → non-zero, so the reader resolves |
+| **Doc-link integrity** | The link-resolver primitive over all four changed/added markdown files with `--require-targets` → **no findings**, exit 0. `check-release-links.py --plan-depth-lint` → **no findings**; its own `--self-test` passes and asserts that lint *"scopes and fires correctly"*, which is the sensitivity arm for that zero |
+| **Mutation re-measurement** (both totals re-observed, never arithmetic) | Mode-template rename → **74 passed / 1 failed**, the precondition arm failing alone while the preserve arm still passes vacuously, which is exactly the pair the comment describes. Cohort-seed move → **74 passed / 1 failed**, the confinement guard failing alone. The same move with the guard **excised** → **74 passed / 0 failed**, the silent-retirement state the guard converts into a named failure. Unmutated → **75 passed / 0 failed** |
 | **ADR index freshness** | **N/A — this release adds no record under `release/ADRs/`.** The one ADR added is under `core/ADRs/`, which has no projector and no projected region, so no index regeneration is triggered. The honest no-op, recorded rather than silent |
-| **ADR number integrity** | Claimed **203** against a mainline anchor of **202**, read from the repository's own detector on `origin/main` rather than from a branch-local maximum |
+| **ADR number integrity** | Claimed **203** against a mainline anchor of **202**, read from the repository's own detector on `origin/main` rather than from a branch-local maximum. Detector reports `CLAIM ADR-203 … BINDS`; the integrity checker reports **PASS (203 ADRs, contiguous 001..203, no duplicates)**. The ADR durability lint over the new record reports **COUNT 0** |
 | **Mirror-pair parity** | **N/A — no mirror-pair member is added, removed or renamed.** `core/rules/bypass-mode-readiness/block-destructive.md` is not a member of the mirrored set |
 | **Skill-package freshness** | **N/A — no path in the change matrix sits under a rostered skill tree, and none is a packaging input.** Resolved against the roster rather than eyeballed |
-| **Runtime suite** | `test_refresh_hooks.sh` is the mapped suite for this code path; re-run after each slice and recorded per slice below |
+| **Shell syntax** | `bash -n` over both edited production scripts → clean |
+| **Runtime suite** | `test_refresh_hooks.sh` is the mapped suite for this code path, run after every slice; the per-slice counts are in the RED-then-GREEN row above |
+
+**One probe was mis-read and is recorded rather than quietly re-run.** The release-links checker prints *"0 broken links across 0 files"*, and the second number is **files carrying findings**, not files scanned. Read as a scan count it looks like a vacuous zero, and it was — until the reading was checked against the tool's own source. The zero is genuine; the first reading of it was not evidence.
+
+---
+
+## Change Description
+
+*Authored at Stage 6 Phase C1 per RELEASE_PROTOCOL § Change Description Protocol. Operator-facing.*
+
+### Outcome
+
+**A merged security-hook fix now reaches the running instance, and a hook that is deliberately left behind says so.**
+
+Before this release, `--refresh-hooks` would overwrite a deployed hook only while its content still hashed to the value the installer last recorded. That baseline is written by a full installer run; the bundle it describes is advanced by the update path. The two drift apart on any instance that is actually maintained — on the instance where this was found, the recorded value, the deployed file and the repository source were three different hashes. From that point the publisher read every platform-updated hook as an operator edit, declined to touch it, and **exited zero**. The full-update path delegated to the same code and inherited the same outcome. Both documented ways to update hooks were inoperative, and both reported success.
+
+Three things change:
+
+- **The baseline stops going stale.** The path that deploys a hook now records it, so the self-latch cannot form going forward.
+- **An already-latched instance is repaired without operator judgement.** When the baseline says "different", the publisher asks the source repository's own history whether the deployed bytes are simply an older platform version. If they are, it updates. If they match no revision, it preserves — that is a genuine operator edit and it is not the publisher's to overwrite.
+- **A decline is loud.** The run names each hook it left behind and exits non-zero, and `./update.sh` surfaces that instead of folding it into a warning.
+
+### Issues resolved
+
+One content member: the hook-publisher defect card, against its twelve-criterion reconciled acceptance set. Every criterion has a named verification method and a landed arm; the suite grew from 51 arms to 75.
+
+### Key decisions
+
+**The persister is field-scoped, and that is the decision that changed the design.** The planned fix was to write the checksum map back to the state file after a refresh. Reading the preserve branch closely shows it does not only warn — it re-anchors the baseline to the *deployed* bytes. Persist the whole map and the *next* refresh reads that re-anchor as permission to overwrite, so a genuine operator edit is not protected, its destruction is merely deferred by one run. The release carries the proof as a standing regression arm: it was authored against a deliberately whole-map persister, observed destroying an edit on run 2, and only then did the correct implementation land.
+
+**The discriminator is adopted, not invented.** A three-valued history classifier with exactly the needed semantics already shipped in the deploy checker, and its own header names this misclassification. The verdicts, the walk cap and the rule that an unfinished search is not a finding are taken verbatim, so the two copies cannot disagree. The duplication is registered with a named successor extraction rather than hidden.
+
+**The force path is a recovery role, not the discriminator.** The two folded source cards appeared to prescribe opposing remedies. They are answers to different questions — what *decides*, and what an operator *does* about a divergence only they can adjudicate — so both ship, each with its role stated.
+
+**Fail-safe direction.** Every degraded outcome — no `git`, a shallow clone, a source tree that is not a checkout, a history deeper than the cap — preserves. This release can only widen what is recognised as refreshable; it can never narrow what is preserved.
+
+### Reversibility
+
+**CHEAP · confidence HIGH.** Additive edits to tracked files plus two new markdown files, one branch, one merge: `git revert -m 1` restores `main` byte-for-byte. No schema change, no file-format change, no package rebuild, no data migration. Instance-side, the refresh already captures a durable pre-write bundle snapshot and `--restore-hooks` recovers from it. The version tag is retained and recorded rather than deleted if the release is withdrawn.
+
+### Downstream impact
+
+`./update.sh` gains one terminal status it did not previously have: a run that completes but leaves a security control superseded now exits non-zero rather than reporting success. That is the intended behaviour change and the one a caller might notice — a script that treats any non-zero from `./update.sh` as a failed update will now see a status meaning *"the update applied, and one named control did not"*. The `EX_NOCHANGE` contract is unchanged in intent and strictly more accurate in practice: a mixed run that refreshed some hooks and declined one previously lost its deployed flag and could report "no changes" over real work.
+
+No deployed copy, mirror or package is affected; this release declares no Layer-2 propagation target.
+
+### Cross-references
+
+The decision record for the composition is `core/ADRs/ADR-203-hook-refresh-discriminator-composition.md` on this branch. The pipeline guidance for propagating a hook-bundle change — and for reading the refresh's exit status — is in the Stage-12 and Stage-13 shards, and the currency caveat is in the `block-destructive` registry entry.
 
 ---
 
