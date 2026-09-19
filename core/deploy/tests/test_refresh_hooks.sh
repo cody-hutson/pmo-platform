@@ -1367,11 +1367,23 @@ printf '\nCase 17: update.sh Phase 5c SURFACES a declined hook instead of swallo
 # read sits relative to the branch IS the bug and IS the fix.
 UPD="${REPO_ROOT}/update.sh"
 
-ln_flag="$(grep -n 'PHASE5_DEPLOYED=1' "${UPD}" | grep -v 'redeploy' | head -n 1 | cut -d: -f1)"
-ln_incomplete="$(grep -n 'rc}" -eq "${EX_INCOMPLETE}' "${UPD}" | head -n 1 | cut -d: -f1)"
-ln_generic="$(grep -n 'Hook refresh returned non-zero' "${UPD}" | head -n 1 | cut -d: -f1)"
-ln_terminal="$(grep -n 'HOOK_REFRESH_DECLINED}" -eq 1' "${UPD}" | head -n 1 | cut -d: -f1)"
-ln_nochange="$(grep -n 'exit "${EX_NOCHANGE}"' "${UPD}" | head -n 1 | cut -d: -f1)"
+# ONE awk PER READ, NOT `grep … | head -n 1`. The piped form is the SIGPIPE idiom the
+# repo-integrity gate forbids on added lines: head closes after the first line, the
+# upstream grep dies on the broken pipe, and under `pipefail` (set at the top of this
+# file) that status becomes the pipeline's — so a SUCCESSFUL read reports failure. It is
+# 141 only where SIGPIPE is fatal; on a GitHub-hosted runner the shell inherits SIG_IGN
+# and the writer returns 1 instead, indistinguishable from "found nothing".
+#
+# The sanctioned `-m1` rewrite does NOT apply to the first read: `-m1` folds into the
+# LAST grep only, and folding it into the first would discard the very line the
+# `redeploy` filter exists to keep. awk does both the match and the exclusion in one
+# pass, prints NR directly (so `cut` goes too), and takes no pipe at all — which is why
+# the gate's IDIOM_A, whose pattern requires a pipe before `awk`, does not fire on it.
+ln_flag="$(awk '/PHASE5_DEPLOYED=1/ && !/redeploy/ { print NR; exit }' "${UPD}")"
+ln_incomplete="$(awk 'index($0, "rc}\" -eq \"${EX_INCOMPLETE}") { print NR; exit }' "${UPD}")"
+ln_generic="$(awk '/Hook refresh returned non-zero/ { print NR; exit }' "${UPD}")"
+ln_terminal="$(awk 'index($0, "HOOK_REFRESH_DECLINED}\" -eq 1") { print NR; exit }' "${UPD}")"
+ln_nochange="$(awk 'index($0, "exit \"${EX_NOCHANGE}\"") { print NR; exit }' "${UPD}")"
 
 # 17-control — the reader resolves. Every line number above must be non-empty, or the arms
 # below would be comparing empty strings and passing for free. A zero from a reader that
