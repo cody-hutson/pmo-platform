@@ -1231,6 +1231,39 @@ rc15=0; OUT15="$(refresh "${WS}")" || rc15=$?
   || report "15a (AC-3): a refresh that DECLINES a hook does not exit 0" 0 \
      "exit 0 — the decline is visible only as an inline warning, which is the reported defect"
 
+# 15a-code (AC-3/AC-12) — PIN THE VALUE, not merely its non-zeroness. 15a above asserts
+# `rc != 0`, which four other guards in setup-workspace.sh also satisfy: the script returns
+# a bare literal 74 in four places and 66 in one. If the decline return drifted to any of
+# them, 15a would stay green while the DOCUMENTED discriminator silently inverted — 75 is
+# what Stage 12/13 teaches operators to read as "the bundle deployed and one named control
+# was deliberately left behind", and any other non-zero as "the refresh failed to run".
+# That is the AC-12 failure class one level up: a status whose meaning is carried by prose
+# and by nothing executable.
+[ "${rc15}" -eq 75 ] \
+  && report "15a-code (AC-3/AC-12): the decline status is EXACTLY 75, not merely non-zero" 1 \
+  || report "15a-code (AC-3/AC-12): the decline status is EXACTLY 75, not merely non-zero" 0 \
+     "exit=${rc15} — setup-workspace.sh returns 74 in four other guards and 66 in one; a drift to any of them keeps 15a green and inverts the documented 75-vs-other discriminator"
+
+# 15f (AC-12) — THE CROSS-FILE CONTRACT, held by a test rather than by prose. update.sh
+# declares `readonly EX_INCOMPLETE=75` and BRANCHES on it to decide whether the delegate
+# declined or failed. Nothing asserted that the two constants agree. They live in different
+# files, neither reads the other, and a change to either alone is invisible: the suite would
+# stay green while update.sh's decline branch stopped matching the value the delegate
+# actually returns, and a declined hook would be reported as an ordinary execution failure.
+# Read from update.sh's source rather than re-stated here — a literal 75 on both sides of
+# this comparison would assert nothing about the file that has to agree.
+#
+# The reader is one awk with no pipe, for the SIGPIPE reason recorded at the Case-17 block.
+# The -n guard is anti-vacuity: an awk that matched nothing yields an empty string, and
+# `[ "" = "" ]` would pass this arm for free on a reader that had silently stopped working.
+ex_incomplete="$(awk -F= '/^readonly EX_INCOMPLETE=/ { print $2; exit }' "${REPO_ROOT}/update.sh")"
+if [ -n "${ex_incomplete}" ] && [ "${ex_incomplete}" = "${rc15}" ]; then
+  report "15f (AC-12): update.sh EX_INCOMPLETE equals the status the delegate actually returned" 1
+else
+  report "15f (AC-12): update.sh EX_INCOMPLETE equals the status the delegate actually returned" 0 \
+    "update.sh EX_INCOMPLETE=${ex_incomplete:-<unread>} vs delegate return ${rc15} — update.sh Phase 5c branches on its own constant, so a disagreement makes it report a DECLINE as an ordinary failure"
+fi
+
 # 15b (AC-3) — the summary line is the INDEPENDENT limb. Exit status is machine-readable but
 # carries no names; a caller that logs stdout and drops the status still sees this.
 grep -q 'DECLINED: 1 hook(s) not updated' <<<"${OUT15}" \
