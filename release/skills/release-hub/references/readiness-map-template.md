@@ -5,6 +5,8 @@ Elaborates Output-Contract requirement 7 in [`../SKILL.md`](../SKILL.md). The SK
 this file is the worked structure, theme mechanism, legend derivation, and literal scaffold.
 **The map renders the briefing. It owns no check, computes no value, and decides nothing.**
 
+> **Path convention in this file.** A repo path written as **text** (`core/…`, `release/…`) names a file that is **not deployed with this skill** — it resolves in the repository and would fail from the installed tree, so it is deliberately not a link. A **markdown link** names a file that *is* deployed beside this one and resolves at runtime.
+
 ## 1. What the map is (and is not)
 
 The readiness map is a **runtime output element** — a per-run, transient render of one Mode R emission.
@@ -12,7 +14,7 @@ It is **not** a design artifact: it anchors no platform state, it is never refre
 persisted as a `.svg` file in the repository**. The scaffold lives here, in markdown, fully agent-readable.
 
 **Scope determination vs. the design-artifact standard (on the record, so it is not re-litigated).**
-[`design-artifact-standard.md`](../../../../core/standards/design-artifact-standard.md) rejects SVG as a
+`core/standards/design-artifact-standard.md` rejects SVG as a
 durable source-of-truth format, on the stated rationale that SVG is file-based and less agent-readable in
 source form — git-diffable but not git-readable. **That rejection does not reach this element, and the
 reason is scope, not exemption.** That standard governs artifacts which *anchor the current state of the

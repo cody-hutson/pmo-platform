@@ -38,11 +38,13 @@ rule. Read the mode-spec and rubric for the how; read this for the cadence. `[IN
 Splitting cadence from machinery keeps each layer independently editable — a new trigger never
 forces a machinery edit, and vice versa.
 
-**Provisioning note.** The mode and this cadence protocol ship with the host decision; the
-dimension rubric ships with the capability build. Until the rubric lands, an invocation reports
-its unprovisioned state and stops rather than improvising a seam set — see the mode-spec §0. A
-scheduled sentinel firing before that point surfaces the unprovisioned state, which is the
-correct signal, not a failure.
+**Runtime absence guard (not a provisioning state).** The dimension rubric has landed, so the
+mode is provisioned and this protocol's triggers are live. The guard it leaves behind is a
+different thing and is retained: an invocation that cannot resolve the rubric — a partial
+deploy, a mirror that did not sync, a package built before the rubric landed — reports that
+absence and stops rather than improvising a seam set, per the mode-spec §3. A scheduled
+sentinel firing against such an install surfaces the absence, which is the correct signal, not
+a failure.
 
 **Axis boundary.** This is one of **five sibling audit-cadence axes** (see §7):
 
@@ -117,8 +119,9 @@ release/releases/decision-health-summary.md
 Unlike the analysis folder, this small headline surface is **committed** — present on every
 clone, seeded with an awaiting-first-run state, overwritten by each run
 (single-record-overwrite). It carries the decision-health posture, the coverage index, the
-classification counts, the count of seams reporting no evidence, the oracle pin, the resolved
-window, the audit date, and a pointer to the latest analysis folder.
+instrumentation ceiling, the classification counts, the coverage-state distribution with the
+`uninstrumented`, `undecidable` and `unexercised` counts each reported **separately**, the
+oracle pin, the resolved window, the audit date, and a pointer to the latest analysis folder.
 
 **Why the committed surface is load-bearing.** The analysis folder is git-ignored, so anything
 that cites only the folder — a tracked acceptance criterion, a downstream consumer, or the
@@ -190,7 +193,7 @@ This cadence is one axis of a five-axis audit-cadence set; all five mutually cro
 - **Sibling — structural axis:** [`structural-audit-cadence.md`](structural-audit-cadence.md) (Diátaxis / NARA / ISO 15489 / Keep-a-Changelog).
 - **Sibling — Anthropic Base-vs-Build axis:** [`platform-health-audit-framework.md`](platform-health-audit-framework.md) §2 (Anthropic skill-catalog overlap cadence).
 - **Machinery (how-to-run):** [`decision-audit-mode-spec.md`](../../../core/skills/pmo-qa-auditor/references/decision-audit-mode-spec.md) — the run mechanics this cadence schedules.
-- **Content SSOT (what-is-scored):** `decision-audit-dimension-rubric.md`, in the same skill `references/` directory — the coverage-seam set, per-seam grade vocabulary, and coverage-index formula. Authored by the capability build; cited here by path rather than by link until it lands.
+- **Content SSOT (what-is-scored):** [`decision-audit-dimension-rubric.md`](../../../core/skills/pmo-qa-auditor/references/decision-audit-dimension-rubric.md), in the same skill `references/` directory — the coverage-seam set, per-seam grade vocabulary, and coverage-index formula. Authored by the capability build.
 - **Output convention:** [`analysis-workspace-standard.md`](../../../core/standards/analysis-workspace-standard.md) — the analysis-folder home, frontmatter, and sunset rule.
 - **Host decision of record:** [ADR-103](../../../core/ADRs/ADR-103-decision-audit-host-qa-auditor-mode-j.md) — why this axis hosts as a mode of the existing QA-auditor skill rather than as a standalone skill.
 

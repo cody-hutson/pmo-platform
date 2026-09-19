@@ -5,6 +5,8 @@ Elaborates the `## Composition` contract in [`../SKILL.md`](../SKILL.md). The SK
 this file is the worked checklist, composition map, disposition table, and output schema. **Every check
 is owned by a composed skill/spec — the hub sequences and rolls up; it implements no check here.**
 
+> **Path convention in this file.** A repo path written as **text** (`core/…`, `release/…`) names a file that is **not deployed with this skill** — it resolves in the repository and would fail from the installed tree, so it is deliberately not a link. A **markdown link** names a file that *is* deployed beside this one and resolves at runtime. Every composed owner named below is invoked as a skill or cited as an authority; none of them is read from disk by this file.
+
 ## The nine checklist groups
 
 | # | Group | Sub-checks | Owning skill / spec (composed) |
@@ -15,16 +17,16 @@ is owned by a composed skill/spec — the hub sequences and rolls up; it impleme
 | **4** | Architecture | `4a` PT-3 best-practices / ADR conflict · `4b` PT-4 learnings contradiction · `4c` design-readiness | `triage-design-rereview` PT-3 / PT-4 |
 | **5** | Duplication | `5a` **PT-2 subsumption** (already shipped) · `5b` similarity vs backlog · `5c` intra-milestone overlap | `triage-design-rereview` PT-2 + triage-analysis similarity |
 | **6** | Bundle coherence | Release Outcome Statement present · coherent theme (not bin-packed) · size band 15–25 pts · **`backward-dep-walk-performed`** — did the composition run doctrine **Step 3**, walking each member's deps backward to discover *unbundled* prerequisites? Distinct from group 2, which validates the graph of what is **already** bundled and so cannot tell a walk that found nothing from a walk that never ran · **`older-milestone-prerequisite-check`** — did it run doctrine **Step 4**, scanning already-open older milestones for prerequisites the slice depends on? | `bundle-composition-doctrine` |
-| **7** | Methodology-neutrality & structural-cascade | `7a` **methodology-neutrality** — does the work hardcode a methodology archetype into the methodology-neutral toolkit, vs. ship it as a config-selected pack? · `7b` **structural-cascade** — if the work proposes a rename/restructure, compute its blast radius and reconcile it against the agreed operational-taxonomy direction (meaning lives in frontmatter, not folder location) | `bundle-composition-doctrine` (frame-pluggability) + [`ADR-033`](../../../../core/ADRs/ADR-033-methodology-conditional-skill-activation.md) |
+| **7** | Methodology-neutrality & structural-cascade | `7a` **methodology-neutrality** — does the work hardcode a methodology archetype into the methodology-neutral toolkit, vs. ship it as a config-selected pack? · `7b` **structural-cascade** — if the work proposes a rename/restructure, compute its blast radius and reconcile it against the agreed operational-taxonomy direction (meaning lives in frontmatter, not folder location) | `bundle-composition-doctrine` (frame-pluggability) + ADR-033 (`core/ADRs/ADR-033-methodology-conditional-skill-activation.md`) |
 | **8** | Backlog-altitude ownership & subsumption | `8a` **candidate-epic narrowing** — resolve the open epics sharing the card's `project:` label (a scoping filter; **emits no finding on its own**) · `8b` **native parent** — is the card a native sub-issue child of a candidate epic (read the card's child→parent edge directly) · `8c` **epic-composition pull-in** — is the card enumerated in a candidate epic's composition / pull-in table · `8d` **cross-epic similarity** — re-read group 5 `5b`'s similarity hits for the *ownership* signal (a similar OPEN issue under another epic), citing that owner rather than re-running similarity | `release-planner` (its backlog read **extended to cross-epic ownership** — owns `8a`–`8c`) + group 5 `5b`'s existing similarity owner (owns `8d`) |
-| **9** | Problem-validity & abstraction-altitude | `9a` **problem-validity** — classify each card's problem-evidence provenance (`PV-A` observed-pain · `PV-B` framework-driven · `PV-C` article-imported · `PV-D` unsourced); a single push-classified card is **logged, not escalated** — the finding is bundle-level **push-dominance** (`PV-B`+`PV-C`+`PV-D` ≥ ½ the cards) · `9b` **abstraction-altitude** — does the card's stated remediation sit at the abstraction band the live architecture should own? Compare the card's implied band against the nearest platform seam's (`point-fix` / `extend-seam` / `new-abstraction`) and emit the mismatch direction (too-low / too-high). **EXCLUDES the methodology-archetype sub-case, which is group `7a`'s** (see the routing rule below). Distinct from group 8's *backlog* altitude (the hierarchy ladder) — this is *abstraction* altitude (seam bands). | [`triage-design-rereview`](../../../references/standards/triage-design-rereview.md) **§ 11** (its premise re-review **extended** with the premise-provenance + abstraction-altitude lens), which cites [`design-exploration.md`](../../../references/standards/design-exploration.md) §2 for the band vocabulary |
+| **9** | Problem-validity & abstraction-altitude | `9a` **problem-validity** — classify each card's problem-evidence provenance (`PV-A` observed-pain · `PV-B` framework-driven · `PV-C` article-imported · `PV-D` unsourced); a single push-classified card is **logged, not escalated** — the finding is bundle-level **push-dominance** (`PV-B`+`PV-C`+`PV-D` ≥ ½ the cards) · `9b` **abstraction-altitude** — does the card's stated remediation sit at the abstraction band the live architecture should own? Compare the card's implied band against the nearest platform seam's (`point-fix` / `extend-seam` / `new-abstraction`) and emit the mismatch direction (too-low / too-high). **EXCLUDES the methodology-archetype sub-case, which is group `7a`'s** (see the routing rule below). Distinct from group 8's *backlog* altitude (the hierarchy ladder) — this is *abstraction* altitude (seam bands). | `release/references/standards/triage-design-rereview.md` **§ 11** (its premise re-review **extended** with the premise-provenance + abstraction-altitude lens), which cites `release/references/standards/design-exploration.md` §2 for the band vocabulary |
 
 Groups 1 + 5 = the **triage-analysis capability** (a planned EXTEND on `intake-desk` + `delivery-engine`);
 until it ships, the hub chains `intake-desk` + `delivery-engine` directly. Groups 3 + 4 + the PT-2 of group 5
 = `triage-design-rereview`. Group 2 = `release-planner`. Group 6 = `bundle-composition-doctrine` — composing its § 3 Steps **1** (Outcome Statement), **3** (backward dep walk), **4** (older-milestone prerequisites) and **5** (size band); the group cites those steps and carries no check logic of its own (ADR-019 compose-not-absorb), and it is the named runner for that method's class-3-O gate-coverage register row, so deleting a step token here turns `deploy.sh --check` Check 62 red rather than silently returning the method's dependency half to running only when someone remembers it.
 Group 7 = `bundle-composition-doctrine` (its **frame-pluggability** discipline — methodology is config-selected,
 not hardcoded) + **ADR-033** (methodology-conditional activation) — a **compose-only** architecture-conformance
-gate carrying **zero inline logic** ([ADR-019](../../../../core/ADRs/ADR-019-specialists-compose-not-absorb.md)):
+gate carrying **zero inline logic** (ADR-019 (`core/ADRs/ADR-019-specialists-compose-not-absorb.md`)):
 the group cites the composed owner's rule, it does not restate it.
 Group 8 = `release-planner` (its cross-milestone backlog read **extended** to cross-epic ownership) for `8a`–`8c`,
 plus group 5 `5b`'s existing similarity owner for `8d` — a **compose-only** backlog-altitude ownership gate carrying
@@ -33,19 +35,19 @@ A finding requires a **card-specific** ownership edge (`8b`, `8c`, or a named si
 via `8d`); a shared `project:` label alone is never a finding.
 Group 9 = `triage-design-rereview` **§ 11** (its premise re-review **extended** with the premise-provenance +
 abstraction-altitude lens) — a **compose-only** problem-validity and altitude gate carrying **zero inline logic**
-([ADR-019](../../../../core/ADRs/ADR-019-specialists-compose-not-absorb.md)): the group cites the composed owner's
+(ADR-019 (`core/ADRs/ADR-019-specialists-compose-not-absorb.md`)): the group cites the composed owner's
 classes and citation discipline, it does not restate them. **The `7a` ↔ `9b` routing rule (one property, checked
 once, so exactly one group claims any finding):** route to **`7a`** iff the too-low subject is a named
 delivery/governance **methodology archetype** — an entry in, or a `Custom`-row candidate for,
-[`methodology-archetype-matrix.md`](../../../references/specs/methodology-archetype-matrix.md) § 3 — whose correct
+`release/references/specs/methodology-archetype-matrix.md` § 3 — whose correct
 home is a config-selected pack behind the `delivery_approach` selector
-([ADR-033](../../../../core/ADRs/ADR-033-methodology-conditional-skill-activation.md)); route to **`9b`** for every
+(ADR-033 (`core/ADRs/ADR-033-methodology-conditional-skill-activation.md`)); route to **`9b`** for every
 other band mismatch. `9b` emits nothing when `7a` claims the finding. A card that trips both carries two findings and
 one disposition (per the precedence ladder below).
 
 ## Output schema (per requirement)
 
-Mode R emits, **per card**, a [`triage-design-rereview`](../../../references/standards/triage-design-rereview.md)
+Mode R emits, **per card**, a `release/references/standards/triage-design-rereview.md`
 **§ 1 re-review artifact** — the **8 header-metadata fields** plus the **six-column per-requirement table**
 (`Requirement · D1 finding · D2 finding · D3 finding · Classification · Delta or Premise-Problem Type`), one
 row per release-scoped requirement (AC / proposed-change / risk). The row shape is **cited to § 1, never

@@ -180,7 +180,7 @@ The inventory is an analysis-class deliverable — the output of a **census** (n
 - **Sampling frame (census, exhaustive — five sources, triangulated):**
   1. The 13 pipeline stage specs `release/references/pipeline/stage-01..13-*.md` — each "Phase B (Human)" block, stage-transition gate, or operator-decision block.
   2. `core/specs/engagement-charter.md` §2 — the When/Where/What/How touchpoint declarations (the canonical touchpoint-contract surface).
-  3. `release/references/how-to/hub-spoke-bridge.md` — the Decision-Briefing procedures and the enumeration of operator touchpoints reserved for genuine judgment gates (Stage 9 GO/NO-GO, Stage 4 D-decisions, Collective Review scope-lock, Tier-0 premise rejection, inter-stage feedback).
+  3. `release/skills/release-hub/references/orchestration-playbook.md` — the **Hub Gate Register**, the delimited block enumerating the hub's operator touchpoints with an acting party and a stop-or-execute disposition for each; the reserved genuine-judgment set is its `STOP` / `STOP-IF` rows. Read the block rather than a restated list — it is the single enumeration, and `release/references/how-to/hub-spoke-bridge.md` (the Decision-Briefing procedures) now cites it rather than carrying a copy.
   4. `core/specs/autonomy-tiers.md` — the irreducible-human-tasks list (rows that get `irreducible_human: true`).
   5. `release/governance/release-process.md` — the Collective Review Protocol and Inter-Stage Feedback Protocol gates.
 - **Coverage target:** ≥1 touchpoint per pipeline stage (the AC1 floor, ≥13 rows). The frame is bounded and small enough to enumerate exhaustively.

@@ -60,7 +60,7 @@ After triage and bundling produce an approved Milestone with assigned issues.
 4. **Review scaffolding** — hub uses the plan to create the release's sub-task set (per-issue for Stages 5–8, release-scoped for Stages 4/9–13), you approve
 5. **Launch spokes** — hub auto-launches spokes via the Agent tool within authorized scope (no per-spoke click required, per ADR (a) Stage-Conditional Launch Policy in § Spoke Launch Mechanisms); hub falls back to copy/paste prompts when an Agent-tool fallback condition applies or you explicitly request the prompt
 6. **Review spoke output** — read the sub-task comment, approve or request iteration
-7. **Render gate decisions** — at Stage 9 and 12, the hub presents the decision to you
+7. **Render gate decisions** — at every touchpoint the Hub Gate Register marks `STOP` or `STOP-IF` ([`orchestration-playbook.md`](../../skills/release-hub/references/orchestration-playbook.md)), the hub presents the decision to you
 8. **Close release** — hub verifies all sub-tasks closed, Milestone complete
 
 ### Hub Prompt
@@ -127,13 +127,11 @@ This pattern applies across all procedures:
 
 A Decision Briefing is *information-sufficient* before it is rendered: the operator can render every decision in it without the hub going back to read a spec it should already have loaded, and without an unstated option surfacing after the operator has answered. This sub-section is the **construction precondition** on every briefing produced under this Operating Principle — load and enumerate first, render second, call `AskUserQuestion` third. It applies the Localization Check (Mechanism 1) of [`decision-discipline.md` § 2.1](../../../core/disciplines/decision-discipline.md) to the briefing's option space and the operator's stance; it does not redefine that mechanism — § 2.1 remains the parent discipline for localizing a decision against platform-specific context.
 
-The hub satisfies **Gate 0 (gate-eligibility) plus the five sufficiency gates** before the `AskUserQuestion` call (or equivalent in-chat mechanism per the [Channel subsection](#channel-main-thread-chat-canonical)) fires. Gate 0 runs **first** and is a literal precondition logically prior to the numbered sufficiency gates — it does not renumber them; gates 1–5 keep their numbers, and the sufficiency gates only fire for a candidate that *survives* Gate 0:
+The hub satisfies **Gate 0 (gate-eligibility) plus the five sufficiency gates, then Gate 6 (prompt obligation)** before and around the `AskUserQuestion` call (or equivalent in-chat mechanism per the [Channel subsection](#channel-main-thread-chat-canonical)). Gate 0 runs **first** and is a literal precondition logically prior to the numbered sufficiency gates — it does not renumber them; gates 1–5 keep their numbers, and the sufficiency gates only fire for a candidate that *survives* Gate 0.
 
-0. **Gate-eligibility precondition (MUST-pass, runs before gates 1–5).** Before constructing a Decision Briefing or issuing an `AskUserQuestion` (or equivalent in-chat mechanism), the hub MUST classify the candidate action and confirm it is **gate-eligible**. The classification has two inputs, consulted in order: (1) the **Stage-to-Autonomy-Tier mapping** (§ Stage-Conditional Launch Policy) — resolve the candidate action's **Autonomy Tier**; an action whose effective tier is **Autonomy Tier 2 (Bounded Auto)** or **Autonomy Tier 3 (Autonomous, within an approved-plan / Standing-GO scope)** is **NON-gate-eligible** (the hub executes it and reports the observable state change); and (2) the **Standing-GO Authorization list** (§ Procedure 7 Standing-GO Authorization Model) — any action enumerated there as **Tier-1 mechanical work under the standing Stage 9 GO** (merge, tag push, chore-PR merge, Step-4 verification reads, gate-passage proof comment, **Milestone close**) is **NON-gate-eligible** after Stage 9 GO. **Gate-eligible (proceed to gates 1–5) iff** the action is one of the reserved genuine-judgment touchpoints — **Stage 9 GO/NO-GO, Stage 12 Execute authorization, Stage 4 judgment recurring-Ds, Collective Review scope-lock, Autonomy-Tier 2/3 inter-stage escalations, Tier 0 Premise Rejection, post-deploy `--apply` disposition** (the single canonical enumeration is [`autonomous-execution-model.md` § Reserve operator decision points](../../../core/disciplines/autonomous-execution-model.md)) — OR a genuinely novel/ambiguous situation the framework does not resolve.
-   - **"Tier" disambiguation (mandatory in the durable text).** "Tier" in this gate means **Autonomy Tier** (`autonomy-tiers.md`); an **Inter-Stage-Feedback Tier-2 scope change** or **Tier-3 plan rejection** (per [`release-process.md` § Inter-Stage Feedback Protocol](../../governance/release-process.md)) is **gate-eligible** per the reserved list — it escalates / produces a Decision Briefing — and is **NOT** a Bounded-Auto execution. The two Tier conventions point opposite directions at this action class; never write a bare "Tier 2/3" here.
-   - **Two MUST-pass exits:** (a) **NON-gate-eligible** → suppress the gate, execute the action under its standing authorization, and emit the declarative report form *"Doing X because [rule / Standing-GO row]. Next: Y"* (per [`autonomous-execution-model.md` § disposition phrasing](../../../core/disciplines/autonomous-execution-model.md)), recording per the Decision Log Mechanism if a decision was implied. (b) **Gate-eligible** → proceed to gate 1. A candidate the hub cannot classify against either input is **treated as gate-eligible** (fail-safe toward operator visibility) AND flagged in the briefing as an unclassified touchpoint so the inventory can be extended.
-   - **Reversibility cross-check (inherited).** Even an Autonomy-Tier-2/3-classified action that is **IRREVERSIBLE** cannot be auto-executed under Gate 0 — it re-enters the gate-eligible path per `autonomy-tiers.md` Boundary Test 3 (the same carve-out the Stage-Conditional decision tree carries at step 5). Gate 0 does not weaken the irreducible-human floor.
-   - **Warn→enforce posture.** Gate 0 ships **warn-mode-initial**, consistent with the gate-3 `[STRUCTURAL-DEFECT: unrendered-gate]` precedent below, and rides the `shadow→warn→enforce` ladder; its telemetry is the unauthorized-gate metric ([`decision-discipline.md` § 6](../../../core/disciplines/decision-discipline.md), metric 5, target 0/release). In **shadow**, a suppressed-eligibility hit is logged only. In **warn**, the hub executes the action and emits the suppressed-gate notice — **except** that for a NON-gate-eligible action whose **reversibility is MODERATE or worse**, the hub emits the suppressed-gate notice **before** executing (*"suppressing gate for X under [Standing-GO row]; proceeding unless you object"*), so the control's weakest mode is weakest only where a mistake is cheap to undo; CHEAP mechanical state-flips keep the execute-then-notice behavior. In **enforce**, an attempt to render a NON-gate-eligible gate HALTS and converts to execute+report. Gate 0 is the read-side **enforcement** of the Standing-GO model (a declare/enforce pair) — it changes no Standing-GO content and references it by name; re-presenting a NON-gate-eligible action as a gate is the `FM-2` tier-inflation / governance-theater failure (`autonomy-tiers.md`).
+0. **Gate-eligibility precondition (MUST-pass, runs before gates 1–5).** Before constructing a Decision Briefing or issuing an `AskUserQuestion`, the hub classifies the candidate action and confirms it is **gate-eligible**. **The definition is not restated here.** It lives once, in the deployed engagement contract — [`decision-briefing.md` § Gate 0](../../skills/release-hub/references/decision-briefing.md) — together with the two classification inputs it reads (the Stage-to-Autonomy-Tier mapping and the Standing-GO Authorization list), so the hub can classify from the installed skill tree without reading this file. Which touchpoints are gate-eligible is read from the **Hub Gate Register** ([`orchestration-playbook.md`](../../skills/release-hub/references/orchestration-playbook.md)) — the `Gate-eligible` column — and from nowhere else; **this subsection states no count and carries no copy of that list.**
+   - **Why the copy is gone.** This file previously enumerated the reserved touchpoints inline and named `autonomous-execution-model.md` § Reserve operator decision points as *"the single canonical enumeration"*. That claim was wrong on three counts at once: that section is a general-agent class predicate rather than a touchpoint roster, it omitted three members of the list it was cited for, and it carried one non-member. The register is now the single enumeration, and this subsection cites it rather than maintaining a parallel copy.
+   - **Gate 6 — prompt obligation** closes the taxonomy at the other end: a turn that names a decision as the operator's must end in a prompt, a declared deferral naming an operator-facing consolidation touchpoint, or a Gate-0 reclassification executed and reported. Defined with Gate 0 in the deployed contract; not restated here.
 1. **Pre-load referenced spec content.** Before drafting the briefing, the hub reads the actual content of every spec, governance rule, schema, register entry, or prior decision the briefing will cite — not the title, not a remembered summary. A decision framed against a citation the hub has not opened this session is under-loaded. (This is the briefing-construction application of the adversarial-evaluation R1 requirement above: the verification artifact cannot be cited if the source was never read.)
 2. **Enumerate the full option space, including stance-implied options.** The hub lists every option the decision admits — not only the options it recommends. This explicitly includes options the operator's own prior stance, correction, or directive implies (e.g., if the operator has previously preferred the least-destructive disposition, "park-in-container" is an option that must appear even when the hub recommends a different one). Presenting a curated subset that omits a live option the operator would plausibly choose is under-loading the option space.
 3. **Render the full briefing in chat *before* the `AskUserQuestion` call.** The complete briefing — decisions, options, recommendation, rationale, verification evidence — is printed as a chat turn *before* the structured-prompt call fires. The `AskUserQuestion` options are a selection affordance over a briefing the operator has already read in full, never the first place the operator sees the decision content. A gate whose immediately-preceding chat turn lacks the rendered full briefing is a structural defect — tag `[STRUCTURAL-DEFECT: unrendered-gate]`, consistent with the structural-defect marker convention used elsewhere in this document (e.g., the return-value-conformance gate). Warn-mode initial: the marker is logged and the briefing flagged for the operator; flip-to-enforce: the hub HALTS the gate and re-renders the full briefing before re-issuing the prompt.
@@ -160,7 +158,7 @@ The hub satisfies **Gate 0 (gate-eligibility) plus the five sufficiency gates** 
 
 #### Channel: main-thread chat (canonical)
 
-**Engagement channel — main-thread chat (canonical):** Every operator-engagement event the hub surfaces — Decision Briefing for spoke completion (Procedure 4), routine gate handling (Procedure 5: Stage 9 Plan Review, Stage 12 Execute), Tier 2/3 inter-stage escalations (per [`release/governance/release-process.md` § Inter-Stage Feedback Protocol](../../governance/release-process.md)), D-class decisions (per [`decision-discipline.md § 3`](../../../core/disciplines/decision-discipline.md)), Collective Review scope-lock (per [`release/governance/release-process.md` § Collective Review Protocol](../../governance/release-process.md)), Tier 0 Premise Rejection (per [`triage-design-rereview.md § 9`](../standards/triage-design-rereview.md)), early-merge approval (Procedure 6), and post-deploy disposition (Procedure 7 Step 6 `--apply` gate) — surfaces as a structured Decision Briefing **in the main-thread Claude Code chat session** via `AskUserQuestion` or equivalent in-chat mechanism. Operator engagement does NOT propagate to chips (chips are spawn-only), GitHub Issue comments (those are post-decision audit trail per [`hub-session-continuity.md § Decision Log Mechanism`](../../../core/standards/hub-session-continuity.md)), Obsidian edits, or external channels.
+**Engagement channel — main-thread chat (canonical):** Every operator-engagement event the hub surfaces — the Decision Briefing for spoke completion (Procedure 4) and **every touchpoint enumerated in the Hub Gate Register** ([`orchestration-playbook.md`](../../skills/release-hub/references/orchestration-playbook.md)) — surfaces as a structured Decision Briefing **in the main-thread Claude Code chat session** via `AskUserQuestion` or equivalent in-chat mechanism. The register records each touchpoint's disposition; it has no column for the spec that governs a touchpoint, so those specs stay canonical where they are defined — the D-class discipline in [`decision-discipline.md § 3`](../../../core/disciplines/decision-discipline.md), and the always-escalate default for a Tier-0 premise rejection in [`triage-design-rereview.md § 9`](../standards/triage-design-rereview.md). Operator engagement does NOT propagate to chips (chips are spawn-only), GitHub Issue comments (those are post-decision audit trail per [`hub-session-continuity.md § Decision Log Mechanism`](../../../core/standards/hub-session-continuity.md)), Obsidian edits, or external channels.
 
 **Routine engagement vs spawn (operator-facing classification):**
 
@@ -168,15 +166,8 @@ The hub satisfies **Gate 0 (gate-eligibility) plus the five sufficiency gates** 
 |---|---|---|
 | Spoke prompt approval (operator clicks chip to launch) | NOT routine — this IS the chip's purpose | chip click (one-click launch; not "engagement" per se) |
 | Spoke output review (Decision Briefing at Procedure 4) | Routine engagement | **main-thread chat** |
-| Stage 9 GO/NO-GO | Routine engagement (gate) | **main-thread chat** |
-| Stage 12 Execute authorization | Routine engagement (gate) | **main-thread chat** |
-| Collective Review scope-lock | Routine engagement (release-level gate) | **main-thread chat** |
+| Every Hub Gate Register touchpoint whose `Disposition` is `STOP` or `STOP-IF` ([`orchestration-playbook.md`](../../skills/release-hub/references/orchestration-playbook.md)) — each gate and escalation the hub stops for, read from the register and not re-listed here | Routine engagement (gate or escalation) | **main-thread chat** |
 | Tier 1 [ADJUST] | NOT engagement (hub/spoke commits autonomously per `release/governance/release-process.md § Inter-Stage Feedback Protocol`) | N/A (no operator engagement) |
-| Tier 2 [SCOPE CHANGE] | Routine engagement (escalation) | **main-thread chat** |
-| Tier 3 [PLAN REJECTION] | Routine engagement (escalation) | **main-thread chat** |
-| D-class decision | Routine engagement (gate) | **main-thread chat** |
-| Tier 0 Premise Rejection | Routine engagement (always-escalate per `triage-design-rereview.md § 9` Phase 1 default) | **main-thread chat** |
-| Post-deploy `--apply` approval (Procedure 7 Step 6 orphan-cleanup; release-executor Mode D automated close-out) | Routine engagement (`--apply` is the Tier 1 Recommend gate per CLAUDE.md Autonomy Tier table) | **main-thread chat** |
 | Decision RECORDED comment on sub-task (post-decision) | NOT engagement (audit trail) | GH comment (dual-surface per `hub-session-continuity.md`) |
 | Event-log emission (post-decision) | NOT engagement (audit trail) | `pipeline-event-log.md` (dual-surface per `hub-session-continuity.md`) |
 
@@ -2003,7 +1994,7 @@ next: {one of the closed-enum values per § next: closed enum below}
 |---|---|---|
 | `route:stage-{N}-{name}` | Spoke PASSED; downstream stage sub-task is ready (e.g., Stage 5 closing → routes to Stage 6 sub-task) | Procedure 2 routes to the named stage open sub-task for the same issue (e.g., `route:stage-6-engineering` / `route:stage-7-dev-testing` / `route:stage-8-qa-testing` / `route:stage-9-plan-review` / `route:stage-12-execute` / `route:stage-13-close`) |
 | `iterate:stage-{N}` | Spoke FAILED and prior-stage rework is needed (e.g., Stage 7 DT routes back to Stage 6 Engineering with Tier 1 finding) | Procedure 2 re-spawns the named upstream stage spoke per the DT↔Engineering iteration loop |
-| `block:operator-decision-at-stage-{N}` | Spoke produced findings requiring operator judgment at a defined pipeline gate (Stage 9 / 12 / Collective Review scope-lock) | Procedure 4 surfaces Decision Briefing per Procedure 5 (gate handling); operator renders decision at the named gate |
+| `block:operator-decision-at-stage-{N}` | Spoke produced findings requiring operator judgment at a gate — a touchpoint the Hub Gate Register marks `STOP` or `STOP-IF` ([`orchestration-playbook.md`](../../skills/release-hub/references/orchestration-playbook.md)) | Procedure 4 surfaces Decision Briefing per Procedure 5 (gate handling); operator renders decision at the named gate |
 | `block:dependency-#{M}` | Spoke cannot proceed until issue #M (or PR #M) lands; substrate dep is unmet | Hub holds the sub-task; re-routes after the dependency closes per `iterate:` re-spawn convention |
 | `complete:sub-task-done` | Terminal sub-task state — no downstream routing remains (e.g., Stage 13 close completed) | Procedure 4 records completion; no further routing for this issue |
 
@@ -2158,7 +2149,7 @@ A spoke that spawns its own next chip bypasses the Hub's orchestration role and 
 
 ### Procedure 5: Gate Handling
 
-**Trigger:** Next actionable stage is a gate (Stage 9 Plan Review, Stage 12 Execute).
+**Trigger:** Next actionable stage is a gate — a Hub Gate Register row whose `Proc` is 5 ([`orchestration-playbook.md`](../../skills/release-hub/references/orchestration-playbook.md)).
 
 **Pre-condition (main-thread-only narrowing):** Every Decision Briefing rendered at a gate surfaces in the **main-thread Claude Code chat session** via `AskUserQuestion` or equivalent in-chat mechanism per the [Operating Principle § Channel subsection](#channel-main-thread-chat-canonical). The gate decision itself is rendered in main-thread chat; the post-decision record lands as a sub-task comment per Step 4 + a `pipeline-event-log.md` row per the dual-surface convention.
 
@@ -2231,18 +2222,9 @@ This ordering generalizes to any sub-task whose output spec says "document and c
 
 Stage 9 GO is the operator's irreducible release-authorization decision — it authorizes whole-package execution of every mechanical state-flip downstream of GO, not a per-step gate. Per the governance-theater discipline ("Approved authorizes whole-plan execution, not per-stage gates") and the milestone-close-is-hub-Tier-1 discipline (operator challenge: *"why do I need to do this work?"*), the hub executes the following post-Stage-9-GO actions as **Tier-1 mechanical work under the standing GO authorization** — no per-step operator gate, no operator request:
 
-| Action | Mechanism | Tier |
-|---|---|---|
-| Merge release PR to main | `gh pr merge <PR>` | Tier-1 (already executed at Stage 12 per `pipeline/stage-12-execute.md` Phase B) |
-| Signed-annotated tag push | `git tag -a -m "v<X.Y>-<milestone-slug> — <N> issues; release SHA = merge of PR #<n>" v<X.Y> "$MERGE_SHA" && git push origin v<X.Y>` | Tier-1 (already executed at Stage 12 per `pipeline/stage-12-execute.md` Phase B3) |
-| Stage 12 chore PR merge (RELEASE_LOG row + visible-H4 Deployment Log) | `gh pr create` + `gh pr merge` for `chore(v<X.Y>): Stage 12 — RELEASE_LOG row + visible-H4 Deployment Log` | Tier-1 (already executed at Stage 12 per `pipeline/stage-12-execute.md` Phase B5) |
-| Stage 13 chore PR merge (INDEX + DIGEST + RELEASE_NOTES + RELEASE_LOG VERIFIED transition) | `gh pr create` + `gh pr merge` for `chore(v<X.Y>): Stage 13 — INDEX + DIGEST + RELEASE_NOTES` | Tier-1 (executed in Step 4 verification pre-conditions per `pipeline/stage-13-close.md § Phase B commit mechanism`) |
-| Step 4 completion-verification reads | Five enumerated `gh api` / `git log` / `gh issue list` commands per the Step 4 bash block | Tier-1 (Step 4) |
-| Step 4 gate-passage proof comment recording | `gh issue comment <stage-13-subtask> --body "<Verification table + UTC timestamp + merge-SHA>"` | Tier-1 (Step 4) |
-| Milestone close | `gh api repos/{REPO}/milestones/<N> -X PATCH -f state=closed` | **Tier-1 (Step 5) — codified by this protocol amendment** |
-| Step 6 orphan-state cleanup chip spawn | `mcp__ccd_session__spawn_task` with cleanup script invocation; operator-approves the dry-run report at Tier-1 Recommend gate before `--apply` | Tier-2 within Tier-1 (the chip spawn is hub Tier-1; the `--apply` is the operator's Tier-1-Recommend gate per CLAUDE.md Autonomy Tier table) |
+The eight authorized actions, their mechanisms and their tiers are enumerated **once**, in the deployed engagement contract — [`decision-briefing.md` § Gate 0, Input 2](../../skills/release-hub/references/decision-briefing.md). They are not copied here: Gate 0 is the surface that reads them, it runs from the installed skill tree, and a second copy in this file is exactly the drift this protocol now forbids.
 
-The actually-consequential, hard-to-reverse step (merge to main) executes under the Stage 9 GO at Stage 12; everything downstream is reversible mechanical state recording. **Operator touchpoints are reserved for genuine judgment gates** (Stage 9 GO/NO-GO, Stage 4 D-decisions, Collective Review scope-lock, Tier 0 Premise Rejection, Tier 2/3 inter-stage feedback per `release-process.md § Inter-Stage Feedback Protocol`) — never for reversible mechanical state recording. Re-presenting a routine routing decision as a new operator gate after Stage 9 GO violates the governance-theater principle.
+The actually-consequential, hard-to-reverse step (merge to main) executes under the Stage 9 GO at Stage 12; everything downstream is reversible mechanical state recording. **Operator touchpoints are reserved for genuine judgment gates** — the touchpoints enumerated in the **Hub Gate Register** ([`orchestration-playbook.md`](../../skills/release-hub/references/orchestration-playbook.md)) whose `Disposition` is `STOP` or `STOP-IF`, stated there and not re-listed here — never for reversible mechanical state recording. Re-presenting a routine routing decision as a new operator gate after Stage 9 GO violates the governance-theater principle.
 
 **Operator agency carve-out:** The operator MAY perform any post-Stage-9-GO mechanical state-flip manually if they choose (e.g., closing the Milestone in the GitHub UI; merging a chore PR via the UI). The codification eliminates the *requirement* / *request*, not the *option*. Hub does not request these actions; it executes them and reports observable state changes.
 
@@ -2573,8 +2555,8 @@ fi
 
 | # | Condition | `STATE` | Verdict | Operator surface |
 |---|---|---|---|---|
-| 1 | ledger file absent | `NOT-RECORDED` | **SURFACE** | "No action-item ledger exists for this release. Either no commitments were made, or the Procedure 4a emit step was skipped. Attest which." → requires explicit operator attestation to pass |
-| 2 | file present, 0 AI rows | `EMPTY-LEDGER` | **SURFACE** | same attestation; distinguishes "initialized, never appended" from (1) |
+| 1 | ledger file absent | `NOT-RECORDED` | **SURFACE** | "No action-item ledger exists for this release. Either no commitments were made, or the Procedure 4a emit step was skipped. Attest which." → requires explicit operator attestation to pass. **The prompt carries a measured recommended cause and the basis for it**, so the attestation rests on evidence rather than on recollection: the hub applies the signal table in `core/standards/hub-action-tracking.md` § 4 to this release's own routing-point sweep renderings, and `automated-closeout.sh` prints what it can measure from the event log — recommending **nothing**, and printing why, where its basis cannot separate the two causes. The operator still attests. The measurement is the evidence behind the choice, never the choice |
+| 2 | file present, 0 AI rows | `EMPTY-LEDGER` | **SURFACE** | same attestation, carrying the same measured recommended cause and basis; distinguishes "initialized, never appended" from (1) |
 | 3 | ≥1 row, every status classifiable, 0 open/in-flight | `RESOLVED` | **PASS** | *the only silent pass* — report `N/N resolved` |
 | 4 | ≥1 open or in-flight | `UNRESOLVED` | **BLOCK** | enumerate each unresolved `AI-NNN` with owner + trigger; where the same ledger also carries unclassifiable rows, append their count and enumeration to the same detail |
 | 5 | 0 open/in-flight, ≥1 status the gate cannot classify | `UNCLASSIFIABLE` | **BLOCK** | enumerate each offending `AI-NNN` with its raw status value and its field count; the remedy is to normalise the value, not to disposition the row |
@@ -2703,7 +2685,7 @@ Tier classification per [`autonomy-tiers.md`](../../../core/specs/autonomy-tiers
 ```
 Per-stage spoke launch decision:
 
-1. CONSULT Stage-to-Autonomy-Tier mapping (table below).
+1. CONSULT Stage-to-Autonomy-Tier mapping (cited below; canonical in decision-briefing.md Gate 0 Input 1).
 
 2. IF stage's Autonomy Tier ∈ {Tier 2 Bounded Auto, Tier 3 Autonomous} AND
    the spoke's scope is within the stage's pre-authorized cascade scope:
@@ -2730,22 +2712,7 @@ Per-stage spoke launch decision:
    → EXPENSIVE actions require explicit standing authorization citation
 ```
 
-**Stage-to-Autonomy-Tier mapping (canonical table; consumed by Step 1 of decision tree):**
-
-| Stage | Autonomy Tier (pre-gate / post-gate) | Auto-launch via Agent tool? |
-|---|---|---|
-| Stage 2 Triage | Tier 2 | YES |
-| Stage 3 Bundle | Tier 2 | YES |
-| Stage 4 Planning | Tier 2 | YES |
-| Stage 5 Solutioning | Tier 2 | YES |
-| Stage 6 Engineering | Tier 0 (pre-scope-lock) → Tier 3 (post-scope-lock) | NO before Collective Review approval; YES after |
-| Stage 7 Dev Testing | Tier 2 | YES |
-| Stage 8 QA Testing | Tier 2 | YES |
-| **Stage 9 Plan Review** | **Tier 0 (Manual; permanent — Irreducible Human Task #4)** | **NEVER** |
-| Stage 10 Dry Run (compressed) | (N/A — git-native) | N/A |
-| Stage 11 Snapshot (compressed) | (N/A — git-native) | N/A |
-| **Stage 12 Execute** | **Tier 0 (gate; Irreducible Human Task #5) → Tier 3 (post-authorization)** | **NEVER at gate; YES for post-authorization deploy steps** |
-| Stage 13 Close | Tier 3 (post Stage 12) | YES |
+**Stage-to-Autonomy-Tier mapping — cited, not copied.** The per-stage table Step 1 consults is enumerated **once**, in the deployed engagement contract: [`decision-briefing.md` § Gate 0, Input 1](../../skills/release-hub/references/decision-briefing.md). Gate 0 is its other reader and runs from the installed skill tree, so the table lives where both readers reach it rather than in two places that can disagree.
 
 **Composition with [`autonomous-execution-model.md`](../../../core/disciplines/autonomous-execution-model.md):**
 This decision tree IS the per-stage "WHO acts under what
@@ -2836,7 +2803,8 @@ for routine work; Agent-tool invocation happens internally
 without per-spoke operator action. Operator engagement
 compresses to: (1) main-thread Decision Briefings for Tier 0
 gates, (2) main-thread approval of bundled spoke outputs at
-framework gates (scope-lock, Stage 9 GO, Stage 12 authorization).
+framework gates — the touchpoints enumerated in the Hub Gate Register
+([`orchestration-playbook.md`](../../skills/release-hub/references/orchestration-playbook.md)).
 The `spawn_task` tool retains its operator-facing
 out-of-scope-flagging role per its own tool description — the
 mandate scope-clarifies, it does not deprecate `spawn_task`
@@ -2955,7 +2923,8 @@ Per the Stage 5 ADR, Dimension 7: per-invocation operator override is **always a
 
 ### Not used for (excluded by design)
 
-- Procedure 5 gates (Stage 9 Plan Review, Stage 12 Execute) —
+- Procedure 5 gates (the Hub Gate Register rows whose `Proc` is 5 —
+  [`orchestration-playbook.md`](../../skills/release-hub/references/orchestration-playbook.md)) —
   gates are operator decisions; no spoke is launched.
 - Procedure 1 Scaffolding — sub-task creation via `gh issue
   create`, not spoke launch.
