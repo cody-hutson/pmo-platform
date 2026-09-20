@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.67.1 (2026-09-20) — Hook fixes now reach your instance, and partial updates stop reporting success
+
 ### v4.67 (2026-09-19) — Release decisions are now auditable, and the hub writes down what it commits to
 
 ### v4.66 (2026-09-18) — Your methodology now shapes what intake asks and what gates check
