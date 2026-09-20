@@ -214,17 +214,22 @@ printf '\nCase 1-3: stale hook refreshed · missing hook libs co-deployed (awk +
 # reported rather than mistaken for a pass.
 #
 # FALSIFIED BY MUTATION, NOT ARGUED. Rename ${MODE_TEMPLATE} away and re-run: THIS
-# assertion fails ALONE — 74 passed / 1 failed — while `.mode preserved (operator
-# choice)` further below still reports PASS, because the seed the refresh never
-# touched still equals MODE_SEED. That surviving PASS is precisely the vacuous pass
-# this precondition exists to report, so the mutation demonstrates both arms at once.
-# Unmutated on the same tree: 75 passed / 0 failed. (Both totals RE-MEASURED when the
-# Case 13-17 platform-version arms landed — the 50/51 pair they replace predates those
-# arms, the 49/50 pair before it predates the Case-4 confinement guard, and the 44/45
-# pair before that predates .mode's three siblings. RE-MEASURED means exactly that:
-# both halves were re-run on this tree, never derived by adding the new arm count to
-# the old totals, because an arithmetic update cannot notice that a mutation stopped
-# being caught.)
+# assertion fails ALONE, while `.mode preserved (operator choice)` further below still
+# reports PASS, because the seed the refresh never touched still equals MODE_SEED. That
+# surviving PASS is precisely the vacuous pass this precondition exists to report, so
+# the mutation demonstrates both arms at once.
+#
+# Unmutated on THIS tree: 77 passed / 0 failed — re-measured here after the DT-1 and
+# DT-5 arms landed. The MUTATED half of the pair was last measured at 74 passed /
+# 1 failed on the 75-arm tree and is NOT re-run here, so it is recorded as the
+# superseded pair rather than renumbered: the 74/75 pair predates the DT arms, the
+# 50/51 pair before it predates the Case 13-17 platform-version arms, the 49/50 pair
+# before that predates the Case-4 confinement guard, and the 44/45 pair before that
+# predates .mode's three siblings. RE-MEASURED means exactly that: a half is re-run on
+# the tree it is quoted against, never derived by adding the new arm count to the old
+# total, because an arithmetic update cannot notice that a mutation stopped being
+# caught. A half that has not been re-run is therefore said to predate the tree rather
+# than being carried forward as if it had.
 [ -f "${MODE_TEMPLATE}" ] \
   && report "mode template present (fixture precondition)" 1 \
   || report "mode template present (fixture precondition)" 0 "absent: ${MODE_TEMPLATE}"
@@ -351,10 +356,18 @@ WS="${SBX}/ws2"; deploy_ws "${WS}"
 # BYTE-IDENTICAL arm list — the `[counts]` diagnostics DID shift (bundle 29 -> 32, removals
 # 7 -> 4 and 8 -> 5, a drop of exactly the three) and nothing reads them, because every
 # `[counts]` line is a bare printf and not a report. WITH this arm the same move runs
-# 74 passed / 1 failed and exactly ONE of 75 arms changes: this one. That is the whole
+# 74 passed / 1 failed and exactly ONE arm changes: this one. That is the whole
 # difference between a silent retirement and a named failure, and it is the same doctrine
 # the AC-3 arm above states -- a guarantee that is never observed is indistinguishable from
 # one that has quietly stopped holding.
+#
+# BOTH halves of that pair were measured on the 75-arm tree and are NOT re-run here; this
+# tree delivers 77 arms unmutated (re-measured). The denominator is deliberately dropped
+# from the sentence above rather than advanced to 77, because "exactly ONE arm changes" is
+# the claim the mutation establishes and it holds at any arm count, whereas quoting a
+# denominator the mutated halves were never measured against would assert a pair that was
+# not observed. Per the RE-MEASURED rule stated at the Case 1-3 precondition, a half that
+# has not been re-run is said to predate the tree, never renumbered to match it.
 #
 # The counterfactual half is re-measured by EXCISING this arm and applying the same move,
 # not by subtracting one from the mutated total. Subtraction would report the number this
