@@ -178,6 +178,7 @@ update.sh                                                edit
 
 # ── Verification ──
 core/deploy/tests/test_refresh_hooks.sh                  edit
+.github/workflows/install-tests.yml                      edit
 
 # ── Documentation ──
 core/rules/bypass-mode-readiness/block-destructive.md    edit
@@ -198,7 +199,6 @@ core/deploy/deploy.sh                                    READ
 core/hooks/block-autonomy-ceiling.sh                     READ
 core/hooks/block-skill-direct-edit.sh                    READ
 core/config/allowlists/script-execution-allowlist.txt    READ
-.github/workflows/install-tests.yml                      READ
 ```
 
 #### Release-wide explicit non-scope
@@ -212,6 +212,8 @@ core/standards/subagent-security-posture.md              NOT EDITED
 **The CONDITIONAL row is resolved and promoted in this commit.** The Stage-4 matrix carried `CONDITIONAL:stage5-selects-new-flag  docs/scripts/setup-workspace.sh  edit`. Stage 5 **did** select a new CLI flag (`--reconcile-hooks`), so the condition fired and the row is promoted into the unconditional set here, in the same commit as its resolution, per the authoring contract. It names a path already unconditionally present, so **no new path enters the matrix by that promotion**.
 
 **One path was added and one was declined — both recorded rather than made silently.** `core/ADRs/ADR-203-…md` is **added** on the Stage-6 instruction that the discriminator-composition record be authored at Commit 0; § Deviation Log carries the row with its authority. `core/standards/subagent-security-posture.md` is the amendment Stage 5 proposed and the hub deferred: it is **declined for this release** and moved into explicit non-scope, with the canonical-home sync named as a successor item.
+
+**One path moved from READ-only to edit-permitted, scoped.** `.github/workflows/install-tests.yml` was declared **READ** in the matrix the operator locked at the Stage-4 gate. It is now an `edit` row under *Verification*, **bounded to the checkout-depth change and nothing else** — a single `fetch-depth: 0` on the `shell-tests` job's `actions/checkout` step, which is the only job in the file that runs `test_refresh_hooks.sh`. Nothing else in the workflow is in scope: no step, no matrix, no trigger, no permission. The other three jobs keep their shallow checkouts, so the cost stays job-scoped. § Deviation Log carries the row with its authority and the finding that justified it.
 
 **Zero `add` rows for executables** → the new-executable companion obligation (an allowlist row + CI wiring) does **not** fire. The two `add` rows are a markdown ADR and this plan. `test_refresh_hooks.sh` is an `edit` of an already-allowlisted, already-CI-wired script.
 
@@ -355,6 +357,7 @@ Stage-4 Checkpoint A estimate for a `hotfix` at n=1: Stages 5 / 6 / 7 / 8 as sin
 | **DEV-6** | **The `hotfix` class re-test fired** on the Stage-4 plan's own trigger, because Stage 5 selected the git-history discriminator | Hub deferral | **CARRIED to Stage 9**, where review depth is consumed |
 | **DEV-7** | **Implementation-sequence steps 3–6 landed in ONE commit** rather than four. They share one code block and one pair of outcome ledgers: the discriminator decides the preserve branch, the decline summary reads the set that branch populates, the currency assertion reads the same set to account for a legitimate mismatch, and the reconcile flow is a force arm sited inside the same refresh block | Engineering judgement, surfaced rather than taken silently | **APPLIED — minor.** Split apart, the intermediate commits would have been red for reasons unrelated to the limb under test, which destroys the attribution the RED-first discipline exists to create. The RED→GREEN pairing is preserved at the arm level: every affected arm was observed RED at the fixtures commit and GREEN after, and each arm names the criterion it serves |
 | **DEV-8** | **The AC-12 arms are SOURCE-ORDER assertions over `update.sh`, not a live update run.** Driving `./update.sh` end to end needs a full sandboxed instance and exits in preflight against anything less, so an arm built that way would report on preflight rather than on Phase 5c | Engineering judgement, with the bound written into the suite source | **APPLIED — minor, and not a weaker proxy for the property under test.** The defect is an ORDERING defect: where the deployed-flag read sits relative to the `rc` branch IS the bug and IS the fix. The arms were observed RED by restoring the pre-fix file beneath them. Live end-to-end exercise of Phase 5c is Stage-7/8 scope |
+| **DEV-9** | **One path moved from READ-only to edit-permitted in the operator-locked File Change Matrix:** `.github/workflows/install-tests.yml`, scoped to the checkout depth and nothing else — `fetch-depth: 0` on the `shell-tests` job, the only job in the file that runs `test_refresh_hooks.sh` | Operator decision D6, rendered at the Stage-6 iteration-2 routing point, amending the matrix ratified at the Stage-4 gate. Same class of record as DEV-4 (a path added) and DEV-5 (a path declined), resolved the other way | **APPLIED.** The finding that justified it: `hook_history_classify()` guards on `git rev-parse --is-shallow-repository` and returns `UNCLASSIFIED-DEPTH` for any answer but `false` — a **binary test on shallowness, not a depth threshold** — so no partial `--deepen` reaches the `STALE` verdict the five `report_hist` arms assert, and no in-suite fix exists. The gap was **OBSERVED, not inferred**: at head `63817750` the required `Shell harness (macOS)` check read GREEN while its log reported `72 passed, 0 failed, 5 skipped` plus `!! NOT FULL COVERAGE`, so a colour-only read recorded a pass over five unmeasured subjects — among them `13-L`, the latched-platform scenario this release is named after, and `13-control`, the arm proving the classifier discriminates. The suite's loud-skip mechanism is **RETAINED unchanged** as the compensating control for any environment that is still shallow; with full history it stops firing rather than being weakened |
 
 ---
 
