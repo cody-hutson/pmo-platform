@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.67.1] - 2026-09-20
+
+Merged hook fixes now actually reach your instance, and an update that leaves a control out of date no longer reports success.
+
+[Full notes](release/releases/notes/v4.67.1_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.67.1)
+
 ## [v4.67] - 2026-09-19
 
 You can now audit how release decisions were made, and the hub records each commitment at the point it makes it.
