@@ -68,6 +68,13 @@ mkdir -p "${CFGROOT}"
 PASS=0
 FAIL=0
 SKIP=0
+# REFRESH_HOOKS_ALLOW_SKIP — the ONLY thing that lets a SKIPPED arm leave this suite with
+# exit 0. Unset (the default), a run with SKIP > 0 exits non-zero even when FAIL is 0: an arm
+# that did not measure its subject must not be reported as a clean run to a reader who sees
+# only the exit status — see the terminal block. A runner that is DELIBERATELY shallow and
+# accepts the unmeasured arms sets it to 1 on purpose; the skips are still reported, and the
+# exit status is then keyed to FAIL alone, exactly as it was before this rule existed.
+REFRESH_HOOKS_ALLOW_SKIP="${REFRESH_HOOKS_ALLOW_SKIP:-}"
 report() {
   local name="$1" passed="$2" detail="${3:-}"
   if [ "${passed}" = "1" ]; then printf '  PASS: %s\n' "${name}"; PASS=$((PASS + 1))
@@ -109,6 +116,14 @@ sha() { shasum -a 256 "$1" | awk '{print $1}'; }
 # the ordinary report(), and a genuine regression that breaks fixture construction still
 # FAILS. Widening this condition to "plant_historical returned non-zero" would convert the
 # skip into a hiding place for real defects.
+#
+# AND A SKIP IS NOT A CLEAN EXIT EITHER. The terminal expression exits non-zero when SKIP > 0
+# unless REFRESH_HOOKS_ALLOW_SKIP=1 was set on purpose. The banner alone was disclosure, not
+# enforcement: with the exit keyed to FAIL only, removing the single `fetch-depth: 0` line
+# from the CI job that runs this suite routed these five arms to SKIP while the required
+# check stayed GREEN with AC-1 / AC-2 / AC-4 / AC-9 unmeasured — observed in CI, not
+# hypothesised. A gate that reports success while its subject goes unmeasured is the same
+# failure class the publisher under test had, and this suite does not get to keep it.
 HIST_REASON=""
 hist_precondition_probe() {
   local shallow
@@ -1489,13 +1504,28 @@ printf '======================================================================\n
 # A skipped arm is UNMEASURED, and an unmeasured arm must not read as a clean run. The
 # count is on the summary line above so a conclusion-only reader of CI sees it without
 # opening the log, and the banner below names which acceptance criteria went unmeasured
-# and what would measure them. Exit status stays keyed to FAIL: a skip is not a defect in
-# the code under test, it is an absence of evidence — and saying so out loud is the point.
+# and what would measure them. A skip is not a defect in the code under test, it is an
+# absence of evidence — and an absence of evidence is not a pass, so the EXIT STATUS says
+# so as well: the run fails on SKIP > 0 unless REFRESH_HOOKS_ALLOW_SKIP=1 permits it.
+# Keying the exit to FAIL alone was the earlier shape, and it was measured wrong in CI:
+# the banner printed, the required check stayed green, and four acceptance criteria went
+# unmeasured behind it.
+#
+# To exercise this rule on a full-history checkout without touching the tree, make the
+# environment probe fail on purpose: GIT_DIR=<a path that does not exist> makes the
+# `rev-parse --git-dir` read fail, the five arms route to SKIP, and the suite must exit
+# non-zero without the permit and 0 with it — the same 72 / 0 / 5 both ways.
 if [ "${SKIP}" -gt 0 ]; then
   printf '\n!! NOT FULL COVERAGE: %d arm(s) were SKIPPED and did NOT measure their subject.\n' "${SKIP}"
   printf '!! Reason: %s\n' "${HIST_REASON}"
   printf '!! Unmeasured here: AC-1, AC-2, AC-4, AC-9 — the Case 13/14/15 arms that require a\n'
   printf '!! planted historical revision (13-L-pre, 13-L, 13-control, 14-S1, 15d).\n'
   printf '!! These arms PASS on a full-history checkout; this run is not evidence either way.\n'
+  if [ "${REFRESH_HOOKS_ALLOW_SKIP}" = "1" ]; then
+    printf '!! REFRESH_HOOKS_ALLOW_SKIP=1 is set: the skip is PERMITTED for this run, and the exit status is keyed to FAIL alone.\n'
+  else
+    printf '!! FAILING this run because of it: an unmeasured arm does not exit 0. A deliberately shallow runner sets REFRESH_HOOKS_ALLOW_SKIP=1 to permit the skip.\n'
+  fi
 fi
-[ "${FAIL}" -eq 0 ]
+# Exit: FAIL must be 0, AND either nothing was skipped or the skip was explicitly permitted.
+[ "${FAIL}" -eq 0 ] && { [ "${SKIP}" -eq 0 ] || [ "${REFRESH_HOOKS_ALLOW_SKIP}" = "1" ]; }
