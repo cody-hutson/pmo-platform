@@ -278,22 +278,24 @@ One branch `release/hook-publisher-republishes` off `origin/main`; one PR, opene
 
 ## Verification Plan
 
-`SUITE` = `bash core/deploy/tests/test_refresh_hooks.sh`.
+**Every method cell carries its command LITERALLY, with its operands.** A cell is dispatchable by the plan-driven verification executor `release/tools/verify-release-plan.sh` and reproducible from the cell alone, without resolving a token defined in the prose around the table. The earlier `SUITE` alias is **retired** for that reason: an alias resolved only in this paragraph is not a method a reader — or the executor — can run from the row.
 
 | AC | Verification Method | Expected Result |
 |---|---|---|
-| **AC-1** | `SUITE` — the latched-baseline arm on fixture **L** | `REFRESHED:` emitted for the latched hook; deployed hash = source hash |
-| **AC-2** | Read `hook_checksums[H]` from the state file after a refresh | Equals the **source** hash, not the pre-refresh baseline |
-| **AC-3** | `SUITE` — the decline-status arm | Non-zero status **and** a summary line naming the declined count |
-| **AC-4** | `SUITE` — the platform-version-axis pair | must-flag (**L**) → `REFRESHED`; must-not-flag (**E**) → `PRESERVED` · control: both arms drive the same instrument and return **different** verdicts |
-| **AC-5** | `--reconcile-hooks` against a DIVERGENT fixture | The divergent instance converges to source without a full bootstrap |
-| **AC-6** | `SUITE` (full) | 0 failed; arm count ≥ its pre-change count of **51** |
-| **AC-7** | The post-refresh bundle assertion's own output | Every deployed hook hash-equals source or is a recorded decline · control: plant one unexplained mismatch → non-zero |
-| **AC-8** | `grep -n 'refresh-hooks'` over the two pipeline shards | ≥1 match naming the invocation · control: the same grep at the baseline returns **0** in both shards, so a post-change non-zero is attributable |
+| **AC-1** | `bash core/deploy/tests/test_refresh_hooks.sh` — the latched-baseline arm on fixture **L** | `REFRESHED:` emitted for the latched hook; deployed hash = source hash |
+| **AC-2** | `bash core/deploy/tests/test_refresh_hooks.sh` — the arm reading `hook_checksums[H]` from the state file after a refresh | Equals the **source** hash, not the pre-refresh baseline |
+| **AC-3** | `bash core/deploy/tests/test_refresh_hooks.sh` — the decline-status arm | Non-zero status **and** a summary line naming the declined count |
+| **AC-4** | `bash core/deploy/tests/test_refresh_hooks.sh` — the platform-version-axis pair | must-flag (**L**) → `REFRESHED`; must-not-flag (**E**) → `PRESERVED` · control: both arms drive the same instrument and return **different** verdicts |
+| **AC-5** | `bash core/deploy/tests/test_refresh_hooks.sh` — the `--reconcile-hooks`-against-a-DIVERGENT-fixture arm | The divergent instance converges to source without a full bootstrap |
+| **AC-6** | `bash core/deploy/tests/test_refresh_hooks.sh` (full run) | 0 failed; arm count ≥ its pre-change count of **51** |
+| **AC-7** | `bash core/deploy/tests/test_refresh_hooks.sh` — the post-refresh bundle-currency assertion arms | Every deployed hook hash-equals source or is a recorded decline · control: plant one unexplained mismatch → non-zero |
+| **AC-8** | `grep -n 'refresh-hooks' release/references/pipeline/stage-12-execute.md release/references/pipeline/stage-13-close.md` | ≥1 match naming the invocation · control: the same grep at the baseline returns **0** in both shards, so a post-change non-zero is attributable |
 | **AC-9** | `grep -n 'persist_hook_checksums_to_state' docs/scripts/setup-workspace.sh` | ≥1 definition + ≥1 call from `refresh_hooks_flow` · control: the same grep at the baseline returns **0**, with `hook_checksums` → 4 as the live sensitivity arm |
-| **AC-10** | Capture the `PRESERVED` text; run exactly the remedy it names | The remedy changes the observed state |
-| **AC-11** | `SUITE` — the plant-stale-baseline demonstration arm | Pre-state and post-state hashes differ; both recorded |
-| **AC-12** | A fixture with one declined hook, driven through Phase 5c's discrimination | The decline is visible in the caller's own status, not only in the delegated script's inline warn |
+| **AC-10** | `bash core/deploy/tests/test_refresh_hooks.sh` — the arm that captures the `PRESERVED` text and runs exactly the remedy it names | The remedy changes the observed state |
+| **AC-11** | `bash core/deploy/tests/test_refresh_hooks.sh` — the plant-stale-baseline demonstration arm | Pre-state and post-state hashes differ; both recorded |
+| **AC-12** | `bash core/deploy/tests/test_refresh_hooks.sh` — the Phase-5c discrimination arms on a fixture carrying one declined hook | The decline is visible in the caller's own status, not only in the delegated script's inline warn |
+
+**A literal `bash …` cell is dispatchable but is NOT executed by the executor, by that tool's own design.** Its `RUNNABLE_VERBS` set is deliberately closed to read-only queries (`grep test ls head wc cat`), on the stated principle that a verification harness driven by an authored artifact must not acquire a code-execution channel when the same pull request can author both. The suite rows are therefore expected to read as an honest, reasoned SKIP or ERROR naming the verb rather than as a PASS; their mechanical guarantee lives in the suite's own CI-invoked run (`Shell harness (macOS)`), which is a gate in its own right. The two `grep` rows are the cells this executor does run.
 
 **The whole plan's control arm is step 1 of the Implementation Sequence.** Every new suite arm is authored and observed **RED** before the fix lands, then GREEN after. An arm that was never RED is not evidence that the fix did anything.
 
