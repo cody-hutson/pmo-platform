@@ -92,6 +92,16 @@ MISSING_HOOK_TIER_SURFACES=""
 # main returns EX_NOCHANGE. (See redeploy_skills for the full rationale.)
 PHASE5_DEPLOYED=0
 
+# Set by refresh_hooks when the delegate reports EX_INCOMPLETE — the refresh RAN and left at
+# least one deployed control on something other than the merged version (#5251 AC-12).
+#
+# A SEPARATE FLAG FROM PHASE5_DEPLOYED because the two answer different questions and a
+# single run can answer both: "did this update change the workspace?" and "is a security
+# control still superseded?". A mixed run refreshes several hooks and declines one, and it
+# must report EX_OK's "something happened" AND the terminal non-zero. Collapsing them into
+# one flag is what makes either answer wrong.
+HOOK_REFRESH_DECLINED=0
+
 # --- Logging ---
 log()  { printf '%s\n' "$*" >&2; }
 info() { printf 'INFO: %s\n' "$*" >&2; }
@@ -913,11 +923,6 @@ refresh_hooks() {
   bash "${setup}" --refresh-hooks --workspace-root "${WORKSPACE_ROOT}" --source-repo "${REPO_ROOT}" ${dry_flag} \
     >"${refresh_out}" 2>&1 || rc=$?
   cat "${refresh_out}" >&2
-  if [ "${rc}" -ne 0 ]; then
-    rm -f "${refresh_out}"
-    warn "Hook refresh returned non-zero (${rc}); continuing update."
-    return 0
-  fi
   # Flip the "did something" flag only on a REFRESHED hook — a hook whose deployed content
   # actually differed from source. The co-shipped primitives are re-copied by install_hooks'
   # plain `cp` on EVERY run (they log INSTALLED even when byte-identical), so keying off their
@@ -928,9 +933,50 @@ refresh_hooks() {
   # changes the workspace, so a run that did it must not report "no changes". Unlike
   # the primitives' INSTALLED lines this cannot fire on a healthy run — the repair
   # branch is reached only when a deployed hook was actually found non-executable —
-  # so it cannot turn every update into a non-no-op.
-  if grep -qE 'REFRESHED:|MODE-REPAIRED:' "${refresh_out}"; then
+  # so it cannot turn every update into a non-no-op. RECONCILED joins them for the same
+  # reason: it is a forced write of the platform version, which changes the workspace.
+  #
+  # COMPUTED BEFORE THE `rc` BRANCH, and the ordering is the fix rather than tidiness.
+  # This read used to sit BELOW the non-zero branch's `return 0`, so a run that refreshed
+  # several hooks AND declined one returned before ever setting the flag — and the
+  # EX_NOCHANGE reduction at the foot of this file would then report "no changes" over a
+  # workspace that was genuinely deployed into. The captured output is valid regardless of
+  # exit status (the `cat` above already prints it unconditionally), so there is no reason
+  # to read it later and one real defect in doing so.
+  if grep -qE 'REFRESHED:|MODE-REPAIRED:|RECONCILED:' "${refresh_out}"; then
     PHASE5_DEPLOYED=1
+  fi
+  # DISCRIMINATE the two conditions the old single branch conflated (#5251 AC-12).
+  #
+  # EX_INCOMPLETE from the delegate means the refresh RAN and DECLINED: the bundle is
+  # coherent, but at least one deployed control is not the merged version. Folding that into
+  # "continuing update" is precisely the silence this release removes — the delegate can now
+  # exit non-zero to say so, and a caller that downgrades every non-zero to a warning makes
+  # that impossible to hear.
+  #
+  # ASSERT, DO NOT RE-IMPLEMENT. This branch discriminates on the delegate's own exit CODE.
+  # It performs no hash comparison, no history walk and no baseline read — the same posture
+  # assert_hooks_executable takes above, and the one install_hook_with_checksum's own header
+  # asks callers for. A second opinion computed here could disagree with the first, and the
+  # disagreement would be undetectable.
+  #
+  # NON-FATAL HERE, TERMINAL AT THE FOOT. The run continues so a decline does not suppress
+  # the settings refresh or the version snapshot; the status is surfaced after every phase
+  # completes. Any OTHER non-zero still means the refresh failed to RUN, and keeps its
+  # existing warn-and-continue posture unchanged.
+  if [ "${rc}" -eq "${EX_INCOMPLETE}" ]; then
+    rm -f "${refresh_out}"
+    HOOK_REFRESH_DECLINED=1
+    warn "Hook refresh DECLINED at least one hook — a deployed security control is NOT the merged version."
+    warn "The bundle is coherent and the rest of this update continues, but the declined hook(s)"
+    warn "keep enforcing superseded bytes. See the PRESERVED / DECLINED lines above for each"
+    warn "one's classification and the remedy it names."
+    return 0
+  fi
+  if [ "${rc}" -ne 0 ]; then
+    rm -f "${refresh_out}"
+    warn "Hook refresh returned non-zero (${rc}); continuing update."
+    return 0
   fi
   rm -f "${refresh_out}"
 }
@@ -1102,6 +1148,33 @@ fi
 # skill versions, DOES deploy >=1 skill (PHASE5_DEPLOYED=1), so it is a real
 # change and must return EX_OK, not 64. A genuine no-op deploys nothing
 # (PHASE5_DEPLOYED stays 0) and correctly returns EX_NOCHANGE.
+# A DECLINED SECURITY HOOK IS TERMINAL (#5251 AC-12), and it is tested FIRST.
+#
+# Until this branch existed, update.sh had no non-zero terminal path for this class at all:
+# it ended at EX_OK or EX_NOCHANGE, so an operator reading only the exit code could not
+# discover that a control was left on superseded bytes. That is the reported defect at its
+# outermost surface — both documented ways to update hooks reported success over a fix that
+# never landed.
+#
+# EX_INCOMPLETE, shared with assert_hooks_executable rather than given a new value. Both are
+# one operator-facing condition — a deployed control is present but not operable as the
+# merged version — and both take the same remedy. A second code would split one condition
+# across two values for no diagnostic gain.
+#
+# ORDERED AFTER EVERY PHASE, so the decline never suppresses the settings refresh, the
+# version snapshot or the skill redeploy: the non-fatal posture the Phase-5c comment protects
+# is preserved for everything except the final status. And ordered BEFORE the EX_NOCHANGE
+# reduction, because a decline is a finding whether or not anything was deployed — a run that
+# changed nothing and left a control superseded must not report "no changes" and stop there.
+if [ "${HOOK_REFRESH_DECLINED}" -eq 1 ]; then
+  err "Update complete, but a deployed security control is NOT the merged version."
+  err "At least one hook was DECLINED during the refresh and keeps enforcing superseded bytes."
+  err "This is not a failed update: everything else in this run applied. It is the one thing"
+  err "that did not, surfaced here because an exit code is the only signal some callers read."
+  err "See the PRESERVED / DECLINED lines earlier in this run for the names and the remedy."
+  exit "${EX_INCOMPLETE}"
+fi
+
 if [ "${REGENERATED_COUNT}" -eq 0 ] && [ "${PHASE5_DEPLOYED}" -eq 0 ]; then
   info "Update complete (no changes — composition surface already current)."
   exit "${EX_NOCHANGE}"

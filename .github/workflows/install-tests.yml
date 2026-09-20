@@ -163,6 +163,32 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history, for THIS job only. test_refresh_hooks.sh carries five
+          # history-dependent arms (13-L-pre, 13-L, 13-control, 14-S1, 15d) whose
+          # subject is setup-workspace.sh's hook_history_classify(), and that
+          # function guards on `git rev-parse --is-shallow-repository`, returning
+          # UNCLASSIFIED-DEPTH whenever the answer is anything but `false`. That is
+          # a BINARY test on shallowness, not a depth threshold — so no partial
+          # `--deepen` reaches the STALE verdict those arms assert; only a full
+          # clone does. Under the default depth-1 checkout this job read GREEN at
+          # `72 passed, 0 failed, 5 skipped` with a NOT FULL COVERAGE banner: honest,
+          # but five subjects unmeasured, among them the latched-platform scenario
+          # this release is named after and the control arm proving the classifier
+          # DISCRIMINATES rather than returning one answer to everything.
+          #
+          # This does not override the selftest-discovery doctrine stated in
+          # release-tooling-smoke.yml ("a tool that later does need history is a tool
+          # whose self-test is not hermetic; the fix is at that tool, not a blanket
+          # fetch-depth: 0"). Here git history IS the subject under test, not an
+          # incidental dependency the tool could be rewritten to drop — the fix has
+          # nowhere else to land. The cost stays job-scoped: the other three jobs in
+          # this file keep their shallow checkouts.
+          #
+          # The suite's loud-skip mechanism is deliberately RETAINED as the
+          # compensating control for any environment that is still shallow. With
+          # full history it simply stops firing; it is not weakened.
+          fetch-depth: 0
 
       - name: Verify prerequisites
         run: |

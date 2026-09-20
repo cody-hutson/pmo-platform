@@ -67,12 +67,94 @@ mkdir -p "${CFGROOT}"
 
 PASS=0
 FAIL=0
+SKIP=0
+# REFRESH_HOOKS_ALLOW_SKIP — the ONLY thing that lets a SKIPPED arm leave this suite with
+# exit 0. Unset (the default), a run with SKIP > 0 exits non-zero even when FAIL is 0: an arm
+# that did not measure its subject must not be reported as a clean run to a reader who sees
+# only the exit status — see the terminal block. A runner that is DELIBERATELY shallow and
+# accepts the unmeasured arms sets it to 1 on purpose; the skips are still reported, and the
+# exit status is then keyed to FAIL alone, exactly as it was before this rule existed.
+REFRESH_HOOKS_ALLOW_SKIP="${REFRESH_HOOKS_ALLOW_SKIP:-}"
 report() {
   local name="$1" passed="$2" detail="${3:-}"
   if [ "${passed}" = "1" ]; then printf '  PASS: %s\n' "${name}"; PASS=$((PASS + 1))
   else printf '  FAIL: %s\n' "${name}"; [ -n "${detail}" ] && printf '         %s\n' "${detail}"; FAIL=$((FAIL + 1)); fi
 }
 sha() { shasum -a 256 "$1" | awk '{print $1}'; }
+
+# ============================================================================
+# HISTORICAL-FIXTURE PRECONDITION — the environment probe, and why a SKIP exists here
+# ============================================================================
+#
+# Cases 13/14/15 plant a REAL historical revision of a hook's own source path as the
+# DEPLOYED bytes, so the publisher's history discriminator has a genuine stale-platform
+# copy to recognise. That fixture is constructible only where the repository carries the
+# history it names. CI checks this suite out at depth 1, so it is not constructible there,
+# and five arms carrying AC-1 / AC-2 / AC-4 / AC-9 failed closed for an ENVIRONMENT reason
+# while reading as a build defect.
+#
+# DEEPENING WAS MEASURED AND REJECTED as the remedy, on two independent grounds:
+#   1. The nearest revision of core/hooks/block-egress.sh whose content differs from
+#      current source is ~1757 commits behind HEAD. No bounded `git fetch --deepen`
+#      reaches it; only a full `--unshallow` would, which is a whole-history network
+#      fetch executed from inside a test suite.
+#   2. It would not help even then. The production discriminator hook_history_classify()
+#      in setup-workspace.sh returns UNCLASSIFIED-DEPTH — and its caller PRESERVES —
+#      whenever `git rev-parse --is-shallow-repository` is anything but `false`. A partial
+#      deepen leaves that `true`. The STALE verdict these arms assert is therefore
+#      unreachable in a shallow checkout BY THE SHIPPED CODE'S OWN DESIGN, not merely
+#      unplantable by the fixture. A fixture that deepened far enough to plant would still
+#      be asserting against a classifier that had already declined to classify.
+#
+# So the arms are recorded SKIP, with the reason printed per arm AND a banner on the
+# summary. A SKIP IS NOT A PASS: it says the subject was not measured here and names what
+# would measure it. That distinction is this release's whole thesis applied to its own
+# test suite — a run that cannot check something must not report success for it.
+#
+# The skip is conditioned on the ENVIRONMENT PROBE ALONE, never on "the fixture failed for
+# some reason". On a full-history checkout HIST_REASON is empty, every arm below routes to
+# the ordinary report(), and a genuine regression that breaks fixture construction still
+# FAILS. Widening this condition to "plant_historical returned non-zero" would convert the
+# skip into a hiding place for real defects.
+#
+# AND A SKIP IS NOT A CLEAN EXIT EITHER. The terminal expression exits non-zero when SKIP > 0
+# unless REFRESH_HOOKS_ALLOW_SKIP=1 was set on purpose. The banner alone was disclosure, not
+# enforcement: with the exit keyed to FAIL only, removing the single `fetch-depth: 0` line
+# from the CI job that runs this suite routed these five arms to SKIP while the required
+# check stayed GREEN with AC-1 / AC-2 / AC-4 / AC-9 unmeasured — observed in CI, not
+# hypothesised. A gate that reports success while its subject goes unmeasured is the same
+# failure class the publisher under test had, and this suite does not get to keep it.
+HIST_REASON=""
+hist_precondition_probe() {
+  local shallow
+  if ! command -v git >/dev/null 2>&1; then
+    HIST_REASON="git is not available, so no historical revision can be planted"; return 0
+  fi
+  if ! git -C "${REPO_ROOT}" rev-parse --git-dir >/dev/null 2>&1; then
+    HIST_REASON="the test tree is not a git checkout (e.g. a git-archive extraction), so it carries no history to plant from"
+    return 0
+  fi
+  shallow="$(git -C "${REPO_ROOT}" rev-parse --is-shallow-repository 2>/dev/null)" || shallow="true"
+  if [ "${shallow}" != "false" ]; then
+    HIST_REASON="the checkout is SHALLOW — hook_history_classify() returns UNCLASSIFIED-DEPTH on a shallow source repo by design, so the STALE verdict these arms assert cannot be reached here at any depth short of full history. Run with a full-history checkout (fetch-depth: 0) to measure them."
+    return 0
+  fi
+  HIST_REASON=""
+}
+hist_precondition_probe
+
+skip_arm() {
+  printf '  SKIP: %s\n' "$1"
+  printf '        NOT MEASURED — %s\n' "$2"
+  SKIP=$((SKIP + 1))
+}
+
+# report_hist <name> <passed> <detail> — report(), except that when the historical fixture
+# is unconstructible for the environmental reason probed above, the arm is recorded SKIP
+# rather than FAIL. Used ONLY by the arms that require a planted historical revision.
+report_hist() {
+  if [ -n "${HIST_REASON}" ]; then skip_arm "$1" "${HIST_REASON}"; else report "$1" "$2" "${3:-}"; fi
+}
 
 # Operator mode-file seeds -- the install-if-missing preserve COHORT.
 #
@@ -147,13 +229,22 @@ printf '\nCase 1-3: stale hook refreshed · missing hook libs co-deployed (awk +
 # reported rather than mistaken for a pass.
 #
 # FALSIFIED BY MUTATION, NOT ARGUED. Rename ${MODE_TEMPLATE} away and re-run: THIS
-# assertion fails ALONE — 50 passed / 1 failed — while `.mode preserved (operator
-# choice)` further below still reports PASS, because the seed the refresh never
-# touched still equals MODE_SEED. That surviving PASS is precisely the vacuous pass
-# this precondition exists to report, so the mutation demonstrates both arms at once.
-# Unmutated on the same tree: 51 passed / 0 failed. (Both totals RE-MEASURED when the
-# confinement guard under Case 4 landed — the 49/50 pair it replaces predates that arm,
-# and the 44/45 pair before it predates .mode's three siblings.)
+# assertion fails ALONE, while `.mode preserved (operator choice)` further below still
+# reports PASS, because the seed the refresh never touched still equals MODE_SEED. That
+# surviving PASS is precisely the vacuous pass this precondition exists to report, so
+# the mutation demonstrates both arms at once.
+#
+# Unmutated on THIS tree: 77 passed / 0 failed — re-measured here after the DT-1 and
+# DT-5 arms landed. The MUTATED half of the pair was last measured at 74 passed /
+# 1 failed on the 75-arm tree and is NOT re-run here, so it is recorded as the
+# superseded pair rather than renumbered: the 74/75 pair predates the DT arms, the
+# 50/51 pair before it predates the Case 13-17 platform-version arms, the 49/50 pair
+# before that predates the Case-4 confinement guard, and the 44/45 pair before that
+# predates .mode's three siblings. RE-MEASURED means exactly that: a half is re-run on
+# the tree it is quoted against, never derived by adding the new arm count to the old
+# total, because an arithmetic update cannot notice that a mutation stopped being
+# caught. A half that has not been re-run is therefore said to predate the tree rather
+# than being carried forward as if it had.
 [ -f "${MODE_TEMPLATE}" ] \
   && report "mode template present (fixture precondition)" 1 \
   || report "mode template present (fixture precondition)" 0 "absent: ${MODE_TEMPLATE}"
@@ -275,15 +366,27 @@ WS="${SBX}/ws2"; deploy_ws "${WS}"
 # are deliberately NOT in deploy_ws, because their ABSENCE everywhere else is what exercises
 # install_mode_template_if_missing's INSTALL branch -- the `cp` and the `rm-file` rollback op
 # Cases 9d / 11 / 12 consume. Until this arm, that rationale lived in a comment and was
-# enforced by NOTHING. Both halves measured on the same tree rather than computed: BEFORE
-# this arm, moving the three writes into deploy_ws ran 50 passed / 0 failed with a
+# enforced by NOTHING. Both halves measured on the same tree rather than computed: WITHOUT
+# this arm, moving the three writes into deploy_ws runs 74 passed / 0 failed with a
 # BYTE-IDENTICAL arm list — the `[counts]` diagnostics DID shift (bundle 29 -> 32, removals
 # 7 -> 4 and 8 -> 5, a drop of exactly the three) and nothing reads them, because every
 # `[counts]` line is a bare printf and not a report. WITH this arm the same move runs
-# 50 passed / 1 failed and exactly ONE of 51 arms changes: this one. That is the whole
+# 74 passed / 1 failed and exactly ONE arm changes: this one. That is the whole
 # difference between a silent retirement and a named failure, and it is the same doctrine
 # the AC-3 arm above states -- a guarantee that is never observed is indistinguishable from
 # one that has quietly stopped holding.
+#
+# BOTH halves of that pair were measured on the 75-arm tree and are NOT re-run here; this
+# tree delivers 77 arms unmutated (re-measured). The denominator is deliberately dropped
+# from the sentence above rather than advanced to 77, because "exactly ONE arm changes" is
+# the claim the mutation establishes and it holds at any arm count, whereas quoting a
+# denominator the mutated halves were never measured against would assert a pair that was
+# not observed. Per the RE-MEASURED rule stated at the Case 1-3 precondition, a half that
+# has not been re-run is said to predate the tree, never renumbered to match it.
+#
+# The counterfactual half is re-measured by EXCISING this arm and applying the same move,
+# not by subtracting one from the mutated total. Subtraction would report the number this
+# arm's own absence is supposed to produce, which is the vacuity it exists to catch.
 #
 # SITED at the FIRST non-Case-1-3 workspace, so a retirement fails as early as it is
 # observable and BEFORE this workspace's refresh consumes the state. The invariant is a
@@ -951,7 +1054,478 @@ else
 fi
 printf '    [counts] rebootstrapped=%s file(s) -> damaged=%s -> recovered=%s\n' \
   "${post_n12}" "${dmg_n12}" "${rec_n12}"
+
+# ============================================================================
+# Cases 13-16 (#5251) — the PLATFORM-VERSION axis.
+#
+# WHY THESE FIXTURES DID NOT EXIST. Every workspace above is built by deploy_ws, which
+# records baseline = source SHA for every hook. With deployed also equal to source, every
+# hook returns via the `source_sha = target_sha` arm and the REFRESH_HOOKS block is never
+# entered at all. The two cases that do reach it (Case 1-3, Case 9/11) plant baseline =
+# DEPLOYED, which is the REFRESHABLE case -- not the latch. So no arm in this file, before
+# these, exercised a latched baseline, and none ran two refreshes against a fixture that
+# could reach the preserve branch.
+#
+# THE TWO FIXTURES:
+#   L (latched) — deployed content is a REAL historical revision of the hook's own source
+#                 path, and the recorded baseline is a THIRD value matching neither
+#                 deployed nor source. This is the genuine reported defect.
+#   E (edited)  — an operator marker appended to a hook, baseline left at the source SHA.
+#                 The content is in NO commit, which is what makes it a real edit.
+# The distinction between L and E IS the discriminator; an assertion on either alone is
+# satisfied by a publisher that always refreshes, or always preserves.
+# ============================================================================
+
+# plant_historical <ws> <hook-basename> — overwrite the DEPLOYED hook with a real historical
+# revision of its own source path: the most recent revision whose content differs from
+# current source. Echoes the revision; returns non-zero when no differing revision exists
+# within the search window, so a fixture that could not be built is REPORTED rather than
+# mistaken for one that was.
+plant_historical() {
+  local ws="$1" h="$2" rel cur rev blob
+  rel="core/hooks/$2"
+  cur="$(sha "${REPO_ROOT}/${rel}")"
+  for rev in $(git -C "${REPO_ROOT}" log --format=%H -n 25 -- "${rel}" 2>/dev/null); do
+    blob="$(git -C "${REPO_ROOT}" show "${rev}:${rel}" 2>/dev/null | shasum -a 256 | awk '{print $1}')"
+    [ -n "${blob}" ] || continue
+    [ "${blob}" != "${cur}" ] || continue
+    git -C "${REPO_ROOT}" show "${rev}:${rel}" > "${ws}/.claude/hooks/${h}" 2>/dev/null || return 1
+    printf '%s' "${rev}"
+    return 0
+  done
+  return 1
+}
+
+# plant_third_baseline <ws> <hook-basename> — record a baseline matching NEITHER the
+# deployed bytes NOR source. An all-zero digest is used deliberately: it is well-formed for
+# the reader and no real file hashes to it, so the fixture cannot accidentally coincide with
+# either real value the way a copied-and-tweaked digest could.
+plant_third_baseline() {
+  python3 - "$1/.claude/.workspace-setup.state" "$2" <<'PY'
+import json, sys
+st, h = sys.argv[1], sys.argv[2]
+d = json.load(open(st)); cs = d.get("hook_checksums", {})
+cs[h] = "0" * 64
+d["hook_checksums"] = cs; json.dump(d, open(st, "w"))
+PY
+}
+
+# baseline_of <ws> <hook-basename> — the PERSISTED baseline, read back from the state file.
+# The persister's whole subject is this value, so it is read from disk rather than inferred
+# from a log line.
+baseline_of() {
+  python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("hook_checksums") or {}).get(sys.argv[2],""))' \
+    "$1/.claude/.workspace-setup.state" "$2" 2>/dev/null || true
+}
+
+SRC_EGRESS="$(sha "${REPO_ROOT}/core/hooks/block-egress.sh")"
+
+printf '\nCase 13: the platform-version axis — a stale PLATFORM copy refreshes, a genuine operator edit preserves\n'
+
+WS="${SBX}/ws13L"; deploy_ws "${WS}"
+L_REV="$(plant_historical "${WS}" block-egress.sh)" || L_REV=""
+plant_third_baseline "${WS}" block-egress.sh
+l_deployed_before="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+l_recorded_before="$(baseline_of "${WS}" block-egress.sh)"
+
+# 13-L-pre — FIXTURE PRECONDITION. Three DISTINCT values is what "latched" means. Without
+# this the arm below could be measuring the ordinary refreshable case (recorded = deployed),
+# which every existing fixture already covers and which the shipped predicate already
+# handles, and it would prove nothing about the reported defect.
+if [ -n "${L_REV}" ] && [ "${l_deployed_before}" != "${SRC_EGRESS}" ] \
+   && [ "${l_recorded_before}" != "${l_deployed_before}" ] \
+   && [ "${l_recorded_before}" != "${SRC_EGRESS}" ]; then
+  report_hist "13-L-pre: fixture L is genuinely LATCHED (recorded != deployed != source; deployed IS a real revision)" 1
+else
+  report_hist "13-L-pre: fixture L is genuinely LATCHED (recorded != deployed != source; deployed IS a real revision)" 0 \
+    "rev=${L_REV:-none} recorded=${l_recorded_before:0:8} deployed=${l_deployed_before:0:8} source=${SRC_EGRESS:0:8} — the arms below are vacuous unless all three differ"
+fi
+
+rcL=0; OUTL="$(refresh "${WS}")" || rcL=$?
+l_deployed_after="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+
+# 13-L — MUST-FLAG ARM (AC-1). The deployed bytes ARE a platform version, so the publisher
+# must recognise them as one and refresh. Baseline equality alone cannot: it says only
+# "different from the record", and the record is stale on every maintained instance.
+if grep -q 'REFRESHED: block-egress.sh' <<<"${OUTL}" && [ "${l_deployed_after}" = "${SRC_EGRESS}" ]; then
+  report_hist "13-L (AC-1): a LATCHED stale PLATFORM copy is REFRESHED to source" 1
+else
+  report_hist "13-L (AC-1): a LATCHED stale PLATFORM copy is REFRESHED to source" 0 \
+    "exit=${rcL}; deployed ${l_deployed_after:0:8} vs source ${SRC_EGRESS:0:8} — the merged fix did not reach the workspace"
+fi
+
+WS_E="${SBX}/ws13E"; deploy_ws "${WS_E}"
+printf '\n# OPERATOR EDIT - fixture E\n' >> "${WS_E}/.claude/hooks/block-egress.sh"
+e_deployed_before="$(sha "${WS_E}/.claude/hooks/block-egress.sh")"
+rcE=0; OUTE="$(refresh "${WS_E}")" || rcE=$?
+
+# 13-E-pre — anti-vacuity. If the seeded edit equalled source, "preserved" and "overwritten"
+# would leave identical bytes and the arm below would pass in both directions.
+[ "${e_deployed_before}" != "${SRC_EGRESS}" ] \
+  && report "13-E-pre: the seeded edit DIFFERS from source (preserve and overwrite are distinguishable)" 1 \
+  || report "13-E-pre: the seeded edit DIFFERS from source (preserve and overwrite are distinguishable)" 0
+
+# 13-E — MUST-NOT-FLAG ARM (AC-4). Content in no commit is an operator decision.
+if grep -q 'PRESERVED (operator-edited): block-egress.sh' <<<"${OUTE}" \
+   && grep -q 'OPERATOR EDIT - fixture E' "${WS_E}/.claude/hooks/block-egress.sh"; then
+  report "13-E (AC-4): a GENUINE operator edit is preserved, marker intact" 1
+else
+  report "13-E (AC-4): a GENUINE operator edit is preserved, marker intact" 0 \
+    "exit=${rcE} — the edit was clobbered or not warned"
+fi
+
+# 13-control — AC-4's CONTROL-ARM CLAUSE, and the reason the pair above is evidence rather
+# than assertion. Same instrument, same hook name, two fixtures, two DIFFERENT verdicts. A
+# publisher that always refreshes satisfies 13-L; one that always preserves satisfies 13-E;
+# only a real discriminator satisfies both, and this arm is what says so.
+l_verdict=none; grep -q 'REFRESHED: block-egress.sh' <<<"${OUTL}" && l_verdict=REFRESHED
+e_verdict=none; grep -q 'PRESERVED (operator-edited): block-egress.sh' <<<"${OUTE}" && e_verdict=PRESERVED
+if [ "${l_verdict}" = "REFRESHED" ] && [ "${e_verdict}" = "PRESERVED" ]; then
+  report_hist "13-control (AC-4): the SAME instrument returns DIFFERENT verdicts on L and E" 1
+else
+  report_hist "13-control (AC-4): the SAME instrument returns DIFFERENT verdicts on L and E" 0 \
+    "L=${l_verdict} E=${e_verdict} — a discriminator that cannot reach both verdicts is not a discriminator"
+fi
+
+printf '\nCase 14: two-refresh SEQUENCES — the arms a single refresh structurally cannot reach\n'
+
+# --- S-1 REPUBLISH (fixture L). Run 1 refreshes AND advances the baseline; run 2 finds the
+# hook in sync and emits no second PRESERVED. The property under test is the baseline
+# advance: without a persister the refresh still works, but the state file keeps the stale
+# third value forever and every run re-derives the same answer from history.
+WS="${SBX}/ws14S1"; deploy_ws "${WS}"
+S1_REV="$(plant_historical "${WS}" block-egress.sh)" || S1_REV=""
+plant_third_baseline "${WS}" block-egress.sh
+O1="$(refresh "${WS}")" || true
+b_after1="$(baseline_of "${WS}" block-egress.sh)"
+O2="$(refresh "${WS}")" || true
+n_pres2="$(grep -c 'PRESERVED (operator-edited): block-egress.sh' <<<"${O2}")" || n_pres2=0
+if [ -n "${S1_REV}" ] && grep -q 'REFRESHED: block-egress.sh' <<<"${O1}" \
+   && [ "${b_after1}" = "${SRC_EGRESS}" ] && [ "${n_pres2}" = "0" ]; then
+  report_hist "14-S1 (AC-2/AC-9): run 1 REFRESHES and ADVANCES the baseline; run 2 emits no PRESERVED" 1
+else
+  report_hist "14-S1 (AC-2/AC-9): run 1 REFRESHES and ADVANCES the baseline; run 2 emits no PRESERVED" 0 \
+    "rev=${S1_REV:-none} baseline-after-run-1=${b_after1:0:8} source=${SRC_EGRESS:0:8} preserved-on-run-2=${n_pres2}"
+fi
+
+# --- S-2 STABILITY (fixture E) — THE ANTI-REGRESSION ARM, and the most important in this file.
+#
+# The preserve branch does not only warn: it RE-ANCHORS the recorded baseline to the DEPLOYED
+# bytes. Compose that with the refresh predicate one line above it -- which overwrites when
+# recorded == deployed -- and a persister that writes the WHOLE checksum map back to the state
+# document makes the SECOND refresh overwrite what the first one preserved. The operator edit
+# is not protected; its destruction is deferred by exactly one run.
+#
+# A SINGLE REFRESH CANNOT SEE THIS. Case 4 runs one refresh and stays green while the clobber
+# ships. This arm was authored against a deliberately whole-map persister and OBSERVED FAILING
+# before the field-scoped one landed -- an arm that was never RED measures nothing.
+WS="${SBX}/ws14S2"; deploy_ws "${WS}"
+printf '\n# OPERATOR EDIT - fixture E (S-2)\n' >> "${WS}/.claude/hooks/block-egress.sh"
+e_sha="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+P1="$(refresh "${WS}")" || true
+mid_sha="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+P2="$(refresh "${WS}")" || true
+end_sha="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+if [ "${mid_sha}" = "${e_sha}" ] && [ "${end_sha}" = "${e_sha}" ] \
+   && grep -q 'PRESERVED (operator-edited): block-egress.sh' <<<"${P2}" \
+   && grep -q 'OPERATOR EDIT - fixture E (S-2)' "${WS}/.claude/hooks/block-egress.sh"; then
+  report "14-S2 (AC-9): an operator edit survives a SECOND refresh (no deferred clobber)" 1
+else
+  report "14-S2 (AC-9): an operator edit survives a SECOND refresh (no deferred clobber)" 0 \
+    "seeded ${e_sha:0:8} -> after run 1 ${mid_sha:0:8} -> after run 2 ${end_sha:0:8}; a whole-map persister writes the preserve branch's re-anchor, so run 2 reads recorded == deployed and overwrites"
+fi
+
+# --- S-3 IDEMPOTENCE (healthy) — contract item 5 held across a REPEAT. Case 5 pins it for one
+# run; a persister that wrote the wrong value would make run 2 of a healthy workspace start
+# refreshing, which is the EX_NOCHANGE contract breaking one release later.
+WS="${SBX}/ws14S3"; deploy_ws "${WS}"
+Q1="$(refresh "${WS}")" || true
+Q2="$(refresh "${WS}")" || true
+n_q="$(grep -c 'REFRESHED:' <<<"${Q2}")" || n_q=0
+[ "${n_q}" = "0" ] \
+  && report "14-S3: a healthy workspace refreshed TWICE still emits 0 REFRESHED" 1 \
+  || report "14-S3: a healthy workspace refreshed TWICE still emits 0 REFRESHED" 0 "got ${n_q}"
+
+printf '\nCase 15: the decline is LOUD — summary line + non-zero status (AC-3) · the baseline advance is FIELD-SCOPED (AC-2/AC-9)\n'
+
+WS="${SBX}/ws15"; deploy_ws "${WS}"
+printf '\n# OPERATOR EDIT - fixture E (decline)\n' >> "${WS}/.claude/hooks/block-egress.sh"
+rc15=0; OUT15="$(refresh "${WS}")" || rc15=$?
+
+# 15a (AC-3) — the reported defect in one assertion: the run that left a security control on
+# a superseded version must not read as success.
+[ "${rc15}" -ne 0 ] \
+  && report "15a (AC-3): a refresh that DECLINES a hook does not exit 0" 1 \
+  || report "15a (AC-3): a refresh that DECLINES a hook does not exit 0" 0 \
+     "exit 0 — the decline is visible only as an inline warning, which is the reported defect"
+
+# 15a-code (AC-3/AC-12) — PIN THE VALUE, not merely its non-zeroness. 15a above asserts
+# `rc != 0`, which four other guards in setup-workspace.sh also satisfy: the script returns
+# a bare literal 74 in four places and 66 in one. If the decline return drifted to any of
+# them, 15a would stay green while the DOCUMENTED discriminator silently inverted — 75 is
+# what Stage 12/13 teaches operators to read as "the bundle deployed and one named control
+# was deliberately left behind", and any other non-zero as "the refresh failed to run".
+# That is the AC-12 failure class one level up: a status whose meaning is carried by prose
+# and by nothing executable.
+[ "${rc15}" -eq 75 ] \
+  && report "15a-code (AC-3/AC-12): the decline status is EXACTLY 75, not merely non-zero" 1 \
+  || report "15a-code (AC-3/AC-12): the decline status is EXACTLY 75, not merely non-zero" 0 \
+     "exit=${rc15} — setup-workspace.sh returns 74 in four other guards and 66 in one; a drift to any of them keeps 15a green and inverts the documented 75-vs-other discriminator"
+
+# 15f (AC-12) — THE CROSS-FILE CONTRACT, held by a test rather than by prose. update.sh
+# declares `readonly EX_INCOMPLETE=75` and BRANCHES on it to decide whether the delegate
+# declined or failed. Nothing asserted that the two constants agree. They live in different
+# files, neither reads the other, and a change to either alone is invisible: the suite would
+# stay green while update.sh's decline branch stopped matching the value the delegate
+# actually returns, and a declined hook would be reported as an ordinary execution failure.
+# Read from update.sh's source rather than re-stated here — a literal 75 on both sides of
+# this comparison would assert nothing about the file that has to agree.
+#
+# The reader is one awk with no pipe, for the SIGPIPE reason recorded at the Case-17 block.
+# The -n guard is anti-vacuity: an awk that matched nothing yields an empty string, and
+# `[ "" = "" ]` would pass this arm for free on a reader that had silently stopped working.
+ex_incomplete="$(awk -F= '/^readonly EX_INCOMPLETE=/ { print $2; exit }' "${REPO_ROOT}/update.sh")"
+if [ -n "${ex_incomplete}" ] && [ "${ex_incomplete}" = "${rc15}" ]; then
+  report "15f (AC-12): update.sh EX_INCOMPLETE equals the status the delegate actually returned" 1
+else
+  report "15f (AC-12): update.sh EX_INCOMPLETE equals the status the delegate actually returned" 0 \
+    "update.sh EX_INCOMPLETE=${ex_incomplete:-<unread>} vs delegate return ${rc15} — update.sh Phase 5c branches on its own constant, so a disagreement makes it report a DECLINE as an ordinary failure"
+fi
+
+# 15b (AC-3) — the summary line is the INDEPENDENT limb. Exit status is machine-readable but
+# carries no names; a caller that logs stdout and drops the status still sees this.
+grep -q 'DECLINED: 1 hook(s) not updated' <<<"${OUT15}" \
+  && report "15b (AC-3): the decline emits a machine-readable SUMMARY line naming the count" 1 \
+  || report "15b (AC-3): the decline emits a machine-readable SUMMARY line naming the count" 0
+
+case "${OUT15}" in
+  *"DECLINED: 1 hook(s) not updated (block-egress.sh)"*)
+    report "15c (AC-3): the summary line NAMES the declined hook" 1 ;;
+  *)
+    report "15c (AC-3): the summary line NAMES the declined hook" 0 \
+      "a count with no names is not actionable" ;;
+esac
+
+# 15-specificity — a CLEAN refresh must exit 0 and emit NO decline signal. Without this,
+# 15a/15b are satisfied equally by a publisher that declines unconditionally, which would
+# turn every healthy update red.
+WS="${SBX}/ws15c"; deploy_ws "${WS}"
+rc15c=0; OUT15c="$(refresh "${WS}")" || rc15c=$?
+if [ "${rc15c}" -eq 0 ] && ! grep -q 'DECLINED:' <<<"${OUT15c}"; then
+  report "15-specificity: a CLEAN refresh exits 0 and emits NO decline signal" 1
+else
+  report "15-specificity: a CLEAN refresh exits 0 and emits NO decline signal" 0 \
+    "exit=${rc15c} — the decline arms above are over-matching, not discriminating"
+fi
+
+# --- MIXED fixture: one hook latched (deployed), one hook edited (declined), in ONE run.
+# This is what separates a field-scoped persister from a whole-map one: both advance the
+# deployed hook's baseline, and only the field-scoped one leaves the DECLINED hook's alone.
+WS="${SBX}/ws15d"; deploy_ws "${WS}"
+D_REV="$(plant_historical "${WS}" block-destructive.sh)" || D_REV=""
+plant_third_baseline "${WS}" block-destructive.sh
+printf '\n# OPERATOR EDIT - fixture E (mixed)\n' >> "${WS}/.claude/hooks/block-egress.sh"
+edit_sha="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+rc15d=0; OUT15d="$(refresh "${WS}")" || rc15d=$?
+bd_after="$(baseline_of "${WS}" block-destructive.sh)"
+be_after="$(baseline_of "${WS}" block-egress.sh)"
+bd_src="$(sha "${REPO_ROOT}/core/hooks/block-destructive.sh")"
+
+if [ -n "${D_REV}" ] && [ "${bd_after}" = "${bd_src}" ]; then
+  report_hist "15d (AC-2): the baseline IS advanced for a hook this run DEPLOYED" 1
+else
+  report_hist "15d (AC-2): the baseline IS advanced for a hook this run DEPLOYED" 0 \
+    "rev=${D_REV:-none} recorded=${bd_after:0:8} source=${bd_src:0:8} — the baseline stays stale against the bundle it describes"
+fi
+
+# 15e (AC-9) — THE FIELD-SCOPING ASSERTION. The preserve branch's re-anchor must not reach
+# the state file. Persisting it is what converts "preserved" into "clobbered next run".
+if [ "${be_after}" != "${edit_sha}" ] && [ "${be_after}" = "${SRC_EGRESS}" ]; then
+  report "15e (AC-9): the baseline is NOT advanced for the hook this run DECLINED (field-scoped)" 1
+else
+  report "15e (AC-9): the baseline is NOT advanced for the hook this run DECLINED (field-scoped)" 0 \
+    "recorded=${be_after:0:8} deployed-edit=${edit_sha:0:8} source=${SRC_EGRESS:0:8} — a whole-map persister writes the deployed-edit value here, and the next refresh reads it as permission to overwrite"
+fi
+
+printf '\nCase 16: --reconcile-hooks converges a DIVERGENT copy (AC-5/AC-10/AC-11) · whole-bundle currency assertion (AC-7)\n'
+
+WS="${SBX}/ws16"; deploy_ws "${WS}"
+printf '\n# OPERATOR EDIT - fixture E (reconcile)\n' >> "${WS}/.claude/hooks/block-egress.sh"
+pre16="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+rc16a=0; OUT16a="$(refresh "${WS}")" || rc16a=$?
+mid16="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+
+# 16a (AC-10) — the printed remedy must name a flag that EXISTS and that changes the outcome.
+# The shipped message said "re-run setup-workspace.sh to reconcile", and this same run is the
+# proof that it does not: the state is byte-identical after the run that printed it.
+if [ "${mid16}" = "${pre16}" ] && grep -q -- '--reconcile-hooks' <<<"${OUT16a}"; then
+  report "16a (AC-10): the PRESERVED message names --reconcile-hooks as a remedy that converges" 1
+else
+  report "16a (AC-10): the PRESERVED message names --reconcile-hooks as a remedy that converges" 0 \
+    "a printed remedy that leaves the state unchanged is not a remedy"
+fi
+
+# 16b (AC-5/AC-11) — run EXACTLY the remedy the message names; the state must actually change.
+# This is AC-11's demonstration end to end: plant, observe the preservation, apply the named
+# remedy, show the state moved.
+rc16b=0
+OUT16b="$(bash "${SETUP}" --reconcile-hooks --workspace-root "${WS}" --source-repo "${REPO_ROOT}" --config-root "${CFGROOT}" 2>&1)" || rc16b=$?
+post16="$(sha "${WS}/.claude/hooks/block-egress.sh")"
+if [ "${rc16b}" -eq 0 ] && [ "${post16}" = "${SRC_EGRESS}" ] && [ "${post16}" != "${pre16}" ]; then
+  report "16b (AC-5/AC-11): --reconcile-hooks converges the divergent copy to source without a full bootstrap" 1
+else
+  report "16b (AC-5/AC-11): --reconcile-hooks converges the divergent copy to source without a full bootstrap" 0 \
+    "exit=${rc16b}; ${pre16:0:8} -> ${post16:0:8} (source ${SRC_EGRESS:0:8})"
+fi
+
+# 16c (AC-7) — the whole-bundle currency assertion reports itself AND reports a non-zero
+# population. A 0-of-0 "every hook matches source" is a failed probe, not a clean result --
+# the same doctrine Case 10d applies to the closure post-condition.
+case "${OUT16b}" in
+  *"Hook-bundle currency: PASS"*)
+    case "${OUT16b}" in
+      *"(0 hook"*) report "16c (AC-7): the bundle currency assertion is measured, not vacuous" 0 "population was empty" ;;
+      *) report "16c (AC-7): the bundle currency assertion is measured, not vacuous" 1 ;;
+    esac ;;
+  *) report "16c (AC-7): the bundle currency assertion is measured, not vacuous" 0 "no currency PASS line emitted" ;;
+esac
+
+# 16d / 16e (AC-7 accounting) — the two-sided discrimination available at this interface.
+# A PRESERVED operator edit is a LEGITIMATE mismatch against source, so an assertion that
+# reddened on it would make every preserve a failure; one that ignored mismatches entirely
+# would assert nothing. The accounting must therefore TRACK the decline set: 1 on the run
+# that declined one hook, 0 on the clean run.
+#
+# BOUND STATED: the assertion's ABORT path is not reachable through the public flags -- an
+# UNACCOUNTED mismatch requires a copy that silently failed, which no flag produces. These
+# two arms pin the accounting, not the abort, and say so rather than implying coverage.
+case "${OUT16a}" in
+  *"1 accounted for by a recorded decline"*)
+    report "16d (AC-7): a DECLINED hook is ACCOUNTED FOR by the bundle assertion, not failed" 1 ;;
+  *)
+    report "16d (AC-7): a DECLINED hook is ACCOUNTED FOR by the bundle assertion, not failed" 0 \
+      "the assertion did not report the declined hook in its accounting" ;;
+esac
+case "${OUT15c}" in
+  *"0 accounted for by a recorded decline"*)
+    report "16e (AC-7 specificity): a CLEAN refresh accounts for ZERO declines" 1 ;;
+  *)
+    report "16e (AC-7 specificity): a CLEAN refresh accounts for ZERO declines" 0 \
+      "the accounting reports a constant rather than tracking the decline set" ;;
+esac
+
+printf '\nCase 17: update.sh Phase 5c SURFACES a declined hook instead of swallowing it (AC-12)\n'
+# SCOPE, STATED RATHER THAN IMPLIED. These are SOURCE-ORDER assertions over update.sh, not a
+# live update run. Driving ./update.sh end to end needs a full sandboxed instance -- operator
+# config, a composition surface, a skills roster -- and against anything less it exits in
+# preflight, so an arm built that way would report on preflight rather than on Phase 5c.
+#
+# Source order is not a weaker proxy HERE, it is the property itself. The defect this case
+# pins is an ORDERING defect: the non-zero branch's `return 0` sat ABOVE the read that sets
+# the deployed flag, so a run that refreshed several hooks and declined one returned before
+# recording that it had deployed anything -- and the EX_NOCHANGE reduction at the foot of the
+# file then reported "no changes" over a workspace that was genuinely written to. Where the
+# read sits relative to the branch IS the bug and IS the fix.
+UPD="${REPO_ROOT}/update.sh"
+
+# ONE awk PER READ, NOT `grep … | head -n 1`. The piped form is the SIGPIPE idiom the
+# repo-integrity gate forbids on added lines: head closes after the first line, the
+# upstream grep dies on the broken pipe, and under `pipefail` (set at the top of this
+# file) that status becomes the pipeline's — so a SUCCESSFUL read reports failure. It is
+# 141 only where SIGPIPE is fatal; on a GitHub-hosted runner the shell inherits SIG_IGN
+# and the writer returns 1 instead, indistinguishable from "found nothing".
+#
+# The sanctioned `-m1` rewrite does NOT apply to the first read: `-m1` folds into the
+# LAST grep only, and folding it into the first would discard the very line the
+# `redeploy` filter exists to keep. awk does both the match and the exclusion in one
+# pass, prints NR directly (so `cut` goes too), and takes no pipe at all — which is why
+# the gate's IDIOM_A, whose pattern requires a pipe before `awk`, does not fire on it.
+ln_flag="$(awk '/PHASE5_DEPLOYED=1/ && !/redeploy/ { print NR; exit }' "${UPD}")"
+ln_incomplete="$(awk 'index($0, "rc}\" -eq \"${EX_INCOMPLETE}") { print NR; exit }' "${UPD}")"
+ln_generic="$(awk '/Hook refresh returned non-zero/ { print NR; exit }' "${UPD}")"
+ln_terminal="$(awk 'index($0, "HOOK_REFRESH_DECLINED}\" -eq 1") { print NR; exit }' "${UPD}")"
+ln_nochange="$(awk 'index($0, "exit \"${EX_NOCHANGE}\"") { print NR; exit }' "${UPD}")"
+
+# 17-control — the reader resolves. Every line number above must be non-empty, or the arms
+# below would be comparing empty strings and passing for free. A zero from a reader that
+# never matched is indistinguishable from a real absence, which is what this arm separates.
+if [ -n "${ln_flag}" ] && [ -n "${ln_incomplete}" ] && [ -n "${ln_generic}" ] \
+   && [ -n "${ln_terminal}" ] && [ -n "${ln_nochange}" ]; then
+  report "17-control: every Phase-5c landmark RESOLVES in update.sh (the reader is live)" 1
+else
+  report "17-control: every Phase-5c landmark RESOLVES in update.sh (the reader is live)" 0 \
+    "flag=${ln_flag:-none} incomplete=${ln_incomplete:-none} generic=${ln_generic:-none} terminal=${ln_terminal:-none} nochange=${ln_nochange:-none} — the arms below are vacuous unless all five resolve"
+fi
+
+# 17a (R9) — the deployed flag is computed BEFORE either rc branch can return.
+if [ -n "${ln_flag}" ] && [ -n "${ln_incomplete}" ] && [ -n "${ln_generic}" ] \
+   && [ "${ln_flag}" -lt "${ln_incomplete}" ] && [ "${ln_flag}" -lt "${ln_generic}" ]; then
+  report "17a (R9): PHASE5_DEPLOYED is computed BEFORE Phase 5c branches on the delegate's status" 1
+else
+  report "17a (R9): PHASE5_DEPLOYED is computed BEFORE Phase 5c branches on the delegate's status" 0 \
+    "flag at ${ln_flag:-none}, EX_INCOMPLETE branch at ${ln_incomplete:-none}, generic branch at ${ln_generic:-none} — a mixed refresh-plus-decline run loses the flag and can report EX_NOCHANGE over a real deployment"
+fi
+
+# 17b (AC-12) — the decline status is DISCRIMINATED from a failed-to-run status. Folding
+# every non-zero into one warn-and-continue is what made the decline unhearable end to end.
+if [ -n "${ln_incomplete}" ] && [ -n "${ln_generic}" ] && [ "${ln_incomplete}" -lt "${ln_generic}" ]; then
+  report "17b (AC-12): Phase 5c discriminates the DECLINE status from a failed-to-run status" 1
+else
+  report "17b (AC-12): Phase 5c discriminates the DECLINE status from a failed-to-run status" 0 \
+    "the EX_INCOMPLETE arm must precede the catch-all non-zero arm or it is unreachable"
+fi
+
+# 17c (AC-12) — a TERMINAL non-zero path exists for the decline, and it is evaluated before
+# the EX_NOCHANGE reduction: a run that changed nothing AND left a control superseded must
+# report the decline rather than stopping at "no changes".
+if [ -n "${ln_terminal}" ] && [ -n "${ln_nochange}" ] && [ "${ln_terminal}" -lt "${ln_nochange}" ]; then
+  report "17c (AC-12): the terminal decline status precedes the EX_NOCHANGE reduction" 1
+else
+  report "17c (AC-12): the terminal decline status precedes the EX_NOCHANGE reduction" 0 \
+    "terminal=${ln_terminal:-none} nochange=${ln_nochange:-none}"
+fi
+
+# 17d (AC-12 specificity) — Phase 5c ASSERTS on the delegate's code; it does not re-implement
+# the decision. A second opinion computed here could disagree with the first, and the
+# disagreement would be undetectable. Reads the refresh_hooks function body only.
+p5c="$(awk '/^refresh_hooks\(\) \{/,/^\}/' "${UPD}")"
+if ! grep -qE 'shasum|hook_checksums|git .*log|classify' <<<"${p5c}"; then
+  report "17d (AC-12): Phase 5c asserts on the delegate's status and re-implements no classification" 1
+else
+  report "17d (AC-12): Phase 5c asserts on the delegate's status and re-implements no classification" 0 \
+    "Phase 5c grew its own hash comparison, baseline read or history walk — a second opinion that can silently disagree with the first"
+fi
+
 printf '\n======================================================================\n'
-printf 'test_refresh_hooks.sh: %d passed, %d failed (bash %s)\n' "${PASS}" "${FAIL}" "${BASH_VERSION}"
+printf 'test_refresh_hooks.sh: %d passed, %d failed, %d skipped (bash %s)\n' \
+  "${PASS}" "${FAIL}" "${SKIP}" "${BASH_VERSION}"
 printf '======================================================================\n'
-[ "${FAIL}" -eq 0 ]
+
+# A skipped arm is UNMEASURED, and an unmeasured arm must not read as a clean run. The
+# count is on the summary line above so a conclusion-only reader of CI sees it without
+# opening the log, and the banner below names which acceptance criteria went unmeasured
+# and what would measure them. A skip is not a defect in the code under test, it is an
+# absence of evidence — and an absence of evidence is not a pass, so the EXIT STATUS says
+# so as well: the run fails on SKIP > 0 unless REFRESH_HOOKS_ALLOW_SKIP=1 permits it.
+# Keying the exit to FAIL alone was the earlier shape, and it was measured wrong in CI:
+# the banner printed, the required check stayed green, and four acceptance criteria went
+# unmeasured behind it.
+#
+# To exercise this rule on a full-history checkout without touching the tree, make the
+# environment probe fail on purpose: GIT_DIR=<a path that does not exist> makes the
+# `rev-parse --git-dir` read fail, the five arms route to SKIP, and the suite must exit
+# non-zero without the permit and 0 with it — the same 72 / 0 / 5 both ways.
+if [ "${SKIP}" -gt 0 ]; then
+  printf '\n!! NOT FULL COVERAGE: %d arm(s) were SKIPPED and did NOT measure their subject.\n' "${SKIP}"
+  printf '!! Reason: %s\n' "${HIST_REASON}"
+  printf '!! Unmeasured here: AC-1, AC-2, AC-4, AC-9 — the Case 13/14/15 arms that require a\n'
+  printf '!! planted historical revision (13-L-pre, 13-L, 13-control, 14-S1, 15d).\n'
+  printf '!! These arms PASS on a full-history checkout; this run is not evidence either way.\n'
+  if [ "${REFRESH_HOOKS_ALLOW_SKIP}" = "1" ]; then
+    printf '!! REFRESH_HOOKS_ALLOW_SKIP=1 is set: the skip is PERMITTED for this run, and the exit status is keyed to FAIL alone.\n'
+  else
+    printf '!! FAILING this run because of it: an unmeasured arm does not exit 0. A deliberately shallow runner sets REFRESH_HOOKS_ALLOW_SKIP=1 to permit the skip.\n'
+  fi
+fi
+# Exit: FAIL must be 0, AND either nothing was skipped or the skip was explicitly permitted.
+[ "${FAIL}" -eq 0 ] && { [ "${SKIP}" -eq 0 ] || [ "${REFRESH_HOOKS_ALLOW_SKIP}" = "1" ]; }
