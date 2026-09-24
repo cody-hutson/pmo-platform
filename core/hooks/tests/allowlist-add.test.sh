@@ -454,6 +454,172 @@ else
   RESIDUALS="${RESIDUALS}RESIDUAL: T-9 region-selection arms SKIPPED — compose.py not resolvable from ${HOOK_DIR}.\n"
 fi
 
+# ---------------------------------------------------------------------------
+# T-10..T-19  --scope on the egress allowlist (the row-scope directive).
+#
+# egress-allowlist.txt serves two match domains, and a row is confined to one by a
+# `# egress-scope: host|gh-api-path` directive on the line DIRECTLY above it (the
+# allowlist's own header states the grammar). A row with no directive is matched in
+# both. These arms run in their OWN sandbox: a copy of the helper at
+# <sbx>/.claude/hooks/, so its known-allowlist set resolves to <sbx>/.claude/*.txt and
+# the ambient allowlist the arms above use is never touched.
+#
+# Upgrade in place is the property the helper's own notice promises: after a bare add,
+# re-running with --scope must leave ONE row, now declared — never a declared twin
+# beside a bare row that is still matched in both domains. It edits only inside the
+# OPERATOR ADDITIONS region (T-18): the managed section belongs to the composer, and an
+# edit there is tampering the next update detects.
+# ---------------------------------------------------------------------------
+echo ""
+echo "T-10..T-19 --scope on the egress allowlist"
+echo "---"
+SC_ROOT="$(/usr/bin/mktemp -d)"
+SC_HOOKS="${SC_ROOT}/.claude/hooks"
+/bin/mkdir -p "$SC_HOOKS"
+/bin/cp "$HELPER" "${SC_HOOKS}/allowlist-add.sh"
+/bin/chmod +x "${SC_HOOKS}/allowlist-add.sh"
+SC_HELPER="${SC_HOOKS}/allowlist-add.sh"
+SC_EGRESS="${SC_ROOT}/.claude/egress-allowlist.txt"
+SC_MCP="${SC_ROOT}/.claude/mcp-write-allowlist.txt"
+SC_LOG="${SC_HOOKS}/allowlist-additions.log"
+
+# The production region shape: a declared managed row, then BEGIN / placeholder / END.
+seed_egress() {
+  /usr/bin/printf '# Test egress allowlist\n# egress-scope: host\napi.example.test\n%s\n%s\n%s\n' \
+    "$BEGIN_M" "$PLACEHOLDER" "$END_M" > "$SC_EGRESS"
+}
+# The line directly above the first line equal to $1 (empty when none), and line $1.
+above_of() { _S="$1" /usr/bin/awk '$0 == ENVIRON["_S"] { print prev; exit } { prev = $0 }' "$2"; }
+line_at()  { _N="$1" /usr/bin/awk 'NR == ENVIRON["_N"] + 0 { print; exit }' "$2"; }
+
+# T-10 — a declared add writes the directive and the entry as an adjacent pair, directly
+# above END, and the pair survives the authoritative extractor.
+seed_egress
+t10_rc=0
+"$SC_HELPER" "$SC_EGRESS" 'repos/t10-org/*' --scope gh-api-path >/dev/null 2>&1 || t10_rc="$?"
+t10_x="$(line_of 'repos/t10-org/*' "$SC_EGRESS")"
+t10_e="$(line_of "$END_M" "$SC_EGRESS")"
+t10_a="$(above_of 'repos/t10-org/*' "$SC_EGRESS")"
+chk "$([ "$t10_rc" = 0 ] && [ -n "$t10_x" ] && [ "$t10_a" = '# egress-scope: gh-api-path' ] && [ "$t10_x" = "$((t10_e - 1))" ] && echo 1 || echo 0)" \
+  "T-10 --scope gh-api-path writes '# egress-scope: gh-api-path' then the entry, directly above END" \
+  "T-10 expected rc 0 and the adjacent pair above END; got rc=${t10_rc} entry-line='${t10_x}' END=${t10_e} line-above='${t10_a}'"
+if [ "$HAVE_COMPOSE" = 1 ]; then
+  t10_xt="$(extract "$SC_EGRESS")"
+  case "$t10_xt" in
+    *'# egress-scope: gh-api-path'*'repos/t10-org/*'*) ok "T-10 the directive and the entry both survive compose.py extract" ;;
+    *) bad "T-10 the pair did not survive extraction; extractor returned: ${t10_xt}" ;;
+  esac
+else
+  RESIDUALS="${RESIDUALS}RESIDUAL: T-10 end-to-end extraction arm SKIPPED — compose.py not resolvable from ${HOOK_DIR}.\n"
+fi
+
+# T-11 — re-adding the same declared pair is a no-op that exits 0.
+t11_rc=0
+"$SC_HELPER" "$SC_EGRESS" 'repos/t10-org/*' --scope gh-api-path >/dev/null 2>&1 || t11_rc="$?"
+chk "$([ "$t11_rc" = 0 ] && [ "$(count_of 'repos/t10-org/*' "$SC_EGRESS")" = 1 ] && [ "$(count_of '# egress-scope: gh-api-path' "$SC_EGRESS")" = 1 ] && echo 1 || echo 0)" \
+  "T-11 re-adding the same declared pair is idempotent (one entry, one directive, exit 0)" \
+  "T-11 re-add gave rc=${t11_rc}, $(count_of 'repos/t10-org/*' "$SC_EGRESS") entries and $(count_of '# egress-scope: gh-api-path' "$SC_EGRESS") directives"
+
+# T-12 — an undeclared add still lands above END, carries no directive, and the helper
+# says on stderr how the row will be matched.
+seed_egress
+t12_rc=0
+t12_err="$("$SC_HELPER" "$SC_EGRESS" 'bare-t12.example.test' 2>&1 >/dev/null)" || t12_rc="$?"
+t12_x="$(line_of 'bare-t12.example.test' "$SC_EGRESS")"
+t12_e="$(line_of "$END_M" "$SC_EGRESS")"
+t12_a="$(above_of 'bare-t12.example.test' "$SC_EGRESS")"
+case "$t12_a" in '# egress-scope:'*) t12_decl=1 ;; *) t12_decl=0 ;; esac
+case "$t12_err" in *NOTICE:*--scope*) t12_note=1 ;; *) t12_note=0 ;; esac
+chk "$([ "$t12_rc" = 0 ] && [ -n "$t12_x" ] && [ "$t12_x" = "$((t12_e - 1))" ] && [ "$t12_decl" = 0 ] && [ "$t12_note" = 1 ] && echo 1 || echo 0)" \
+  "T-12 an add with no --scope is written undeclared above END, with a NOTICE naming --scope" \
+  "T-12 expected rc 0, an undeclared entry above END and a NOTICE; got rc=${t12_rc} line-above='${t12_a}' stderr='${t12_err}'"
+
+# T-13 — an unknown scope value is refused and the file is untouched.
+seed_egress
+/bin/cp "$SC_EGRESS" "${SC_ROOT}/t13.before"
+t13_rc=0
+"$SC_HELPER" "$SC_EGRESS" 'bogus-t13.example.test' --scope bogus >/dev/null 2>&1 || t13_rc="$?"
+chk "$([ "$t13_rc" = 1 ] && /usr/bin/cmp -s "${SC_ROOT}/t13.before" "$SC_EGRESS" && echo 1 || echo 0)" \
+  "T-13 --scope bogus exits 1 and leaves the file byte-identical" \
+  "T-13 expected rc 1 and an unchanged file; got rc=${t13_rc}"
+
+# T-14 — --scope is an egress-allowlist flag; against any other allowlist it is refused.
+/usr/bin/printf '# Test mcp allowlist\nmcp__t14__one\n' > "$SC_MCP"
+/bin/cp "$SC_MCP" "${SC_ROOT}/t14.before"
+t14_rc=0
+"$SC_HELPER" "$SC_MCP" 'mcp__t14__two' --scope host >/dev/null 2>&1 || t14_rc="$?"
+chk "$([ "$t14_rc" = 1 ] && /usr/bin/cmp -s "${SC_ROOT}/t14.before" "$SC_MCP" && echo 1 || echo 0)" \
+  "T-14 --scope against a non-egress allowlist exits 1 and leaves that file byte-identical" \
+  "T-14 expected rc 1 and an unchanged file; got rc=${t14_rc}"
+
+# T-15 — --reason and --scope parse in either order, and the additions log records both.
+seed_egress
+"$SC_HELPER" "$SC_EGRESS" 't15a.example.test' --reason why --scope host >/dev/null 2>&1 || true
+t15a_log="$(/usr/bin/tail -n 1 "$SC_LOG" 2>/dev/null || true)"
+t15a_a="$(above_of 't15a.example.test' "$SC_EGRESS")"
+"$SC_HELPER" "$SC_EGRESS" 't15b.example.test' --scope host --reason why >/dev/null 2>&1 || true
+t15b_log="$(/usr/bin/tail -n 1 "$SC_LOG" 2>/dev/null || true)"
+t15b_a="$(above_of 't15b.example.test' "$SC_EGRESS")"
+t15_ok=1
+case "$t15a_log" in *t15a.example.test*why*scope=host*) ;; *) t15_ok=0 ;; esac
+case "$t15b_log" in *t15b.example.test*why*scope=host*) ;; *) t15_ok=0 ;; esac
+[ "$t15a_a" = '# egress-scope: host' ] || t15_ok=0
+[ "$t15b_a" = '# egress-scope: host' ] || t15_ok=0
+chk "$t15_ok" \
+  "T-15 --reason/--scope parse in either order; the log line carries the reason and scope=host" \
+  "T-15 order-independence failed; logs: '${t15a_log}' / '${t15b_log}'; lines above: '${t15a_a}' / '${t15b_a}'"
+
+# T-16 — when a directive dangles directly above the insertion point, an undeclared add
+# writes a blank line first, so the new row stays undeclared as the notice says.
+/usr/bin/printf '# Test egress allowlist\n%s\n# egress-scope: host\n%s\n' "$BEGIN_M" "$END_M" > "$SC_EGRESS"
+"$SC_HELPER" "$SC_EGRESS" 't16.example.test' >/dev/null 2>&1 || true
+t16_x="$(line_of 't16.example.test' "$SC_EGRESS")"
+t16_a1="$(line_at "$(( ${t16_x:-0} - 1 ))" "$SC_EGRESS")"
+t16_a2="$(line_at "$(( ${t16_x:-0} - 2 ))" "$SC_EGRESS")"
+chk "$([ -n "$t16_x" ] && [ "$t16_x" -gt 2 ] && [ -z "$t16_a1" ] && [ "$t16_a2" = '# egress-scope: host' ] && echo 1 || echo 0)" \
+  "T-16 a dangling directive above the insertion point is separated from the new row by a blank line" \
+  "T-16 expected the new row, a blank line above it, and the dangling directive above that; got entry-line='${t16_x}' above='${t16_a1}' two-above='${t16_a2}'"
+
+# T-17 — upgrade in place: a --scope re-add of an existing BARE row declares that row
+# rather than adding a second one.
+seed_egress
+"$SC_HELPER" "$SC_EGRESS" 'repos/t17-org/*' >/dev/null 2>&1 || true
+t17_rc=0
+"$SC_HELPER" "$SC_EGRESS" 'repos/t17-org/*' --scope gh-api-path >/dev/null 2>&1 || t17_rc="$?"
+t17_a="$(above_of 'repos/t17-org/*' "$SC_EGRESS")"
+t17_x="$(line_of 'repos/t17-org/*' "$SC_EGRESS")"
+t17_b="$(line_of "$BEGIN_M" "$SC_EGRESS")"
+t17_e="$(line_of "$END_M" "$SC_EGRESS")"
+chk "$([ "$t17_rc" = 0 ] && [ "$(count_of 'repos/t17-org/*' "$SC_EGRESS")" = 1 ] && [ "$t17_a" = '# egress-scope: gh-api-path' ] && [ -n "$t17_x" ] && [ "$t17_x" -gt "$t17_b" ] && [ "$t17_x" -lt "$t17_e" ] && echo 1 || echo 0)" \
+  "T-17 a --scope re-add upgrades the bare row in place: one row, now declared, still inside the region" \
+  "T-17 expected one declared row inside the region; got rc=${t17_rc} rows=$(count_of 'repos/t17-org/*' "$SC_EGRESS") line-above='${t17_a}'"
+
+# T-18 — the upgrade never edits OUTSIDE the OPERATOR ADDITIONS region. A bare row in the
+# managed section is left exactly as it was; the declared pair lands in the region.
+/usr/bin/printf '# Test egress allowlist\nsvc-t18.example.test\n%s\n%s\n%s\n' \
+  "$BEGIN_M" "$PLACEHOLDER" "$END_M" > "$SC_EGRESS"
+/usr/bin/awk -v b="$BEGIN_M" '$0 == b { exit } { print }' "$SC_EGRESS" > "${SC_ROOT}/t18.managed.before"
+"$SC_HELPER" "$SC_EGRESS" 'svc-t18.example.test' --scope host >/dev/null 2>&1 || true
+/usr/bin/awk -v b="$BEGIN_M" '$0 == b { exit } { print }' "$SC_EGRESS" > "${SC_ROOT}/t18.managed.after"
+t18_region="$(/usr/bin/awk -v b="$BEGIN_M" -v e="$END_M" '
+  $0 == b { inr = 1; next } $0 == e { inr = 0 }
+  inr && prev == "# egress-scope: host" && $0 == "svc-t18.example.test" { n++ }
+  { prev = $0 } END { print n + 0 }' "$SC_EGRESS")"
+chk "$(/usr/bin/cmp -s "${SC_ROOT}/t18.managed.before" "${SC_ROOT}/t18.managed.after" && [ "$t18_region" = 1 ] && echo 1 || echo 0)" \
+  "T-18 upgrade in place is confined to the region: the managed section is byte-identical and the declared pair lands in the region" \
+  "T-18 the managed section changed or no declared pair landed in the region (declared pairs in region: ${t18_region})"
+
+# T-19 — on a marker-less egress file (no region, so no managed section either) the
+# whole file is the helper's to edit, and the bare row is upgraded where it sits.
+/usr/bin/printf '# Test egress allowlist\nsvc-t19.example.test\nother-t19.example.test\n' > "$SC_EGRESS"
+t19_rc=0
+"$SC_HELPER" "$SC_EGRESS" 'svc-t19.example.test' --scope host >/dev/null 2>&1 || t19_rc="$?"
+chk "$([ "$t19_rc" = 0 ] && [ "$(count_of 'svc-t19.example.test' "$SC_EGRESS")" = 1 ] && [ "$(above_of 'svc-t19.example.test' "$SC_EGRESS")" = '# egress-scope: host' ] && [ "$(above_of 'other-t19.example.test' "$SC_EGRESS")" = 'svc-t19.example.test' ] && echo 1 || echo 0)" \
+  "T-19 on a marker-less egress file the bare row is declared where it sits" \
+  "T-19 expected one declared row in place; got rc=${t19_rc} rows=$(count_of 'svc-t19.example.test' "$SC_EGRESS") line-above='$(above_of 'svc-t19.example.test' "$SC_EGRESS")'"
+
+/bin/rm -rf "$SC_ROOT"
+
 # ----- Summary -----
 
 echo ""

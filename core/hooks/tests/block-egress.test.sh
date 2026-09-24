@@ -848,6 +848,508 @@ fi
 
 /bin/rm -rf "$E007_M_ROOT"
 
+# =====================================================================
+# AC-E007-D* — allowlist row scope: a row is consulted only in its own match domain
+# =====================================================================
+# egress-allowlist.txt serves two match domains: the host of a curl upload
+# (BLOCK-EGRESS-004) and the resolved path of a gh api write (BLOCK-EGRESS-007). A
+# bash `case` glob's `*` crosses `/`, so a host wildcard such as *.github.com used to
+# allowlist any gh api write whose path merely ENDS in host-shaped text, and a query
+# string makes every write endpoint end that way. These arms pin the contract the
+# allowlist header states: every managed row carries a `# egress-scope:` directive
+# and is consulted only in that domain; a row with no directive is consulted in both;
+# and at the gh-api path site a pattern whose FIRST path segment carries a glob is
+# never a candidate, declared or not.
+#
+# HERMETIC BY CONSTRUCTION (CIAC-2), like the AC-E007-M* block above, and one step
+# further. Each sandbox carries its own allowlists, its own .mode and its own logs;
+# the payload cwd points inside it; and every hook invocation pins the scope root
+# (PMO_SCOPE_GUARD_ROOT) to the sandbox and the master-enable config root
+# (PMO_PLATFORM_CONFIG_ROOT) to an empty sandbox directory, so neither the runner's
+# exports nor an operator environment exporting CLAUDE_WORKSPACE_ROOT can make these
+# arms vacuous. Logs are counted in RECORDS (jq -s length), never in lines: the
+# enforce and warn writers emit jq's pretty form, several lines per record.
+#
+# Every gh api payload spells its method flag explicitly (`-X DELETE`, `-X POST`).
+# The shorthand `gh api DELETE <path>` reads DELETE as the path and the invocation as
+# a read, so an arm written that way is never adjudicated at all.
+#
+# The whole family — including AC-5's method, the D7 arms — can be pointed at a
+# DEPLOYED hook tier after a republish, without editing this file:
+#   E007_D_HOOK_SRC_DIR        directory holding block-egress.sh, allowlist-add.sh and
+#                              lib/ (default: this suite's own hook directory)
+#   E007_D_COMPOSED_ALLOWLIST  a composed egress allowlist to copy as the D4/D7
+#                              sandbox allowlist (default: composed here from the
+#                              source template)
+#   PMO_TEST_GITHUB_HANDLE     the owner the deployed file resolved the operator
+#                              token to (the D7 managed near-miss writes under it)
+echo ""
+echo "egress allowlist row scope — each row consulted only in its own domain (AC-E007-D*)"
+echo "---"
+
+E007_D_HOOK_SRC="${E007_D_HOOK_SRC_DIR:-$HOOK_DIR}"
+E007_D_HANDLE="$GH_HANDLE"
+
+# The managed rows come from the SOURCE template, resolved the way allowlist-add.test.sh
+# resolves compose.py: source-relative first, then the CI layout's pointer back to the
+# source repo, then the git top level. Skip-and-disclose when none resolves — a fixture
+# built from anything else would test this suite against itself.
+E007_D_TEMPLATE=""
+if [ -f "${HOOK_DIR}/../config/allowlists/egress-allowlist.txt" ]; then
+  E007_D_TEMPLATE="${HOOK_DIR}/../config/allowlists/egress-allowlist.txt"
+fi
+if [ -z "$E007_D_TEMPLATE" ] && [ -f "${HOOK_DIR}/tests/.source-repo-root" ]; then
+  IFS= read -r _d_src_root < "${HOOK_DIR}/tests/.source-repo-root" || true
+  if [ -n "${_d_src_root:-}" ] && [ -f "${_d_src_root}/core/config/allowlists/egress-allowlist.txt" ]; then
+    E007_D_TEMPLATE="${_d_src_root}/core/config/allowlists/egress-allowlist.txt"
+  fi
+fi
+if [ -z "$E007_D_TEMPLATE" ]; then
+  _d_top="$(cd "$HOOK_DIR" 2>/dev/null && /usr/bin/git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$_d_top" ] && [ -f "${_d_top}/core/config/allowlists/egress-allowlist.txt" ]; then
+    E007_D_TEMPLATE="${_d_top}/core/config/allowlists/egress-allowlist.txt"
+  fi
+fi
+
+# e007_d_sandbox <root> — a hook runtime under <root>/.claude: the hook, the helper,
+# every lib, its own .mode, and an empty config root for the master-enable lookup.
+e007_d_sandbox() {
+  local hooks="$1/.claude/hooks"
+  /bin/mkdir -p "${hooks}/lib" "$1/.cfg"
+  /bin/cp "${E007_D_HOOK_SRC}/block-egress.sh" "${hooks}/block-egress.sh"
+  /bin/cp "${E007_D_HOOK_SRC}/allowlist-add.sh" "${hooks}/allowlist-add.sh"
+  /bin/cp "${E007_D_HOOK_SRC}/lib/"*.sh  "${hooks}/lib/" 2>/dev/null || true
+  /bin/cp "${E007_D_HOOK_SRC}/lib/"*.awk "${hooks}/lib/" 2>/dev/null || true
+  /bin/chmod +x "${hooks}/block-egress.sh" "${hooks}/allowlist-add.sh"
+  /usr/bin/printf 'enforce' > "${hooks}/.mode"
+}
+
+# The token-resolved template, and the PRE-CHANGE shape: the same rows with every scope
+# directive removed. For matching purposes that is exactly the row set the matcher saw
+# before directives existed, and building it needs no git history (shallow-clone safe).
+e007_d_materialize() { /usr/bin/sed "s#\[OPERATOR_GITHUB\]#${E007_D_HANDLE}#g" "$E007_D_TEMPLATE" > "$1"; }
+e007_d_prechange()   { /usr/bin/sed -e "s#\[OPERATOR_GITHUB\]#${E007_D_HANDLE}#g" -e '/^# egress-scope:/d' "$E007_D_TEMPLATE" > "$1"; }
+
+# e007_d_compose <managed-body> <dest> — the deployed composed shape, with the exact
+# fence strings core/deploy/compose.py writes and its empty-region placeholder.
+e007_d_compose() {
+  {
+    /usr/bin/printf '%s\n' '# === BEGIN MANAGED SECTION (regenerated by update.sh; do not edit) ==='
+    /usr/bin/printf '%s\n' '# managed_sha: 0000000000000000000000000000000000000000000000000000000000000000'
+    /usr/bin/printf '%s\n' '# installed_sha: 0000000000000000000000000000000000000000000000000000000000000000'
+    /usr/bin/printf '%s\n' '# managed_at: 1970-01-01T00:00:00Z'
+    /usr/bin/awk '{ print }' "$1"
+    /usr/bin/printf '%s\n' '# === END MANAGED SECTION ===' '' \
+      '# === BEGIN OPERATOR ADDITIONS (preserved across updates) ===' \
+      '# Add custom entries below. update.sh never touches this section.' \
+      '# === END OPERATOR ADDITIONS ==='
+  } > "$2"
+}
+
+e007_d_bash()     { /usr/bin/jq -n --arg cmd "$1" --arg cwd "$2" '{tool_name: "Bash", tool_input: {command: $cmd}, cwd: $cwd}'; }
+e007_d_webfetch() { /usr/bin/jq -n --arg url "$1" --arg cwd "$2" '{tool_name: "WebFetch", tool_input: {url: $url}, cwd: $cwd}'; }
+
+# Record count of a JSONL log: 0 when absent or empty, -1 when unparseable.
+e007_d_records() {
+  if [ -s "$1" ]; then
+    /usr/bin/jq -s 'length' "$1" 2>/dev/null || /usr/bin/printf '%s\n' '-1'
+  else
+    /usr/bin/printf '0\n'
+  fi
+}
+
+# One field set of the LAST record of a log, as "phase|cause|rule|evidence".
+e007_d_last() {
+  if [ -s "$1" ]; then
+    /usr/bin/jq -s -r '.[-1] | "\(.phase // "")|\(.cause // "")|\(.rule // "")|\(.evidence // "")"' "$1" 2>/dev/null || true
+  fi
+}
+
+# e007_d_run <root> <mode> <payload> — run one payload through the sandbox hook; sets
+# E007_D_EXIT, E007_D_ERR and the record deltas E007_D_BLK / E007_D_WRN.
+E007_D_EXIT=0
+E007_D_ERR=""
+E007_D_BLK=0
+E007_D_WRN=0
+e007_d_run() {
+  local root="$1" mode="$2" payload="$3" hooks="$1/.claude/hooks" tmp b0 b1 w0 w1
+  /usr/bin/printf '%s' "$mode" > "${hooks}/.mode"
+  b0="$(e007_d_records "${hooks}/block-log.jsonl")"
+  w0="$(e007_d_records "${hooks}/egress-warn-log.jsonl")"
+  tmp="$(/usr/bin/mktemp)"
+  E007_D_EXIT=0
+  /usr/bin/printf '%s' "$payload" \
+    | PMO_SCOPE_GUARD_ROOT="$root" PMO_PLATFORM_CONFIG_ROOT="${root}/.cfg" /bin/bash "${hooks}/block-egress.sh" 2>"$tmp" >/dev/null \
+    || E007_D_EXIT="$?"
+  E007_D_ERR="$(/bin/cat "$tmp")"
+  /bin/rm -f "$tmp"
+  b1="$(e007_d_records "${hooks}/block-log.jsonl")"
+  w1="$(e007_d_records "${hooks}/egress-warn-log.jsonl")"
+  E007_D_BLK=$(( b1 - b0 ))
+  E007_D_WRN=$(( w1 - w0 ))
+}
+
+e007_d_pass() { /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1)); }
+e007_d_fail() { /usr/bin/printf 'FAIL: %s\n  %s\n' "$1" "$2"; FAIL=$((FAIL + 1)); }
+
+# e007_d_expect <name> <root> <mode> <command> <exit> <block-delta> <warn-delta> [<stderr ERE>]
+# A delta of "-" is not asserted.
+e007_d_expect() {
+  local name="$1" root="$2" mode="$3" cmd="$4" want_exit="$5" want_blk="$6" want_wrn="$7" want_re="${8:-}" why=""
+  e007_d_run "$root" "$mode" "$(e007_d_bash "$cmd" "$root")"
+  [ "$E007_D_EXIT" = "$want_exit" ] || why="${why} exit=${E007_D_EXIT} (want ${want_exit});"
+  [ "$want_blk" = "-" ] || [ "$E007_D_BLK" = "$want_blk" ] || why="${why} block-log records +${E007_D_BLK} (want +${want_blk});"
+  [ "$want_wrn" = "-" ] || [ "$E007_D_WRN" = "$want_wrn" ] || why="${why} warn-log records +${E007_D_WRN} (want +${want_wrn});"
+  if [ -n "$want_re" ] && ! /usr/bin/grep -qE "$want_re" <<<"$E007_D_ERR"; then why="${why} stderr lacks /${want_re}/;"; fi
+  if [ -z "$why" ]; then e007_d_pass "$name"; else e007_d_fail "$name" "${why} stderr: ${E007_D_ERR}"; fi
+}
+
+# e007_d_census <file> — the structural census D5a runs. Sets E007_D_ROWS, E007_D_DECL,
+# E007_D_UNDECL, E007_D_VIOL and E007_D_WHY. A row is declared when the line directly
+# above it is exactly `# egress-scope: host` or `# egress-scope: gh-api-path`; any other
+# `# egress-scope:` value is an invalid directive. A host row carries no `/`. A path row
+# carries no glob in its first segment, and a repos/ orgs/ users/ row pins its account
+# segment literally. A `# ===` line is a fence, which belongs to the composer, never to
+# the template.
+e007_d_census() {
+  local line prev="" scope seg rest acct
+  E007_D_ROWS=0; E007_D_DECL=0; E007_D_UNDECL=0; E007_D_VIOL=0; E007_D_WHY=""
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      '# ==='*) E007_D_VIOL=$((E007_D_VIOL + 1)); E007_D_WHY="${E007_D_WHY} fence-line:${line};" ;;
+    esac
+    case "$line" in
+      ''|'#'*) prev="$line"; continue ;;
+    esac
+    E007_D_ROWS=$((E007_D_ROWS + 1))
+    case "$prev" in
+      '# egress-scope: host')        scope=host ;;
+      '# egress-scope: gh-api-path') scope=gh-api-path ;;
+      '# egress-scope:'*)            scope=invalid ;;
+      *)                             scope="" ;;
+    esac
+    case "$scope" in
+      '')
+        E007_D_UNDECL=$((E007_D_UNDECL + 1)); E007_D_WHY="${E007_D_WHY} undeclared:${line};" ;;
+      invalid)
+        E007_D_VIOL=$((E007_D_VIOL + 1)); E007_D_WHY="${E007_D_WHY} invalid-directive:${line};" ;;
+      host)
+        E007_D_DECL=$((E007_D_DECL + 1))
+        case "$line" in
+          */*) E007_D_VIOL=$((E007_D_VIOL + 1)); E007_D_WHY="${E007_D_WHY} host-row-with-slash:${line};" ;;
+        esac
+        ;;
+      gh-api-path)
+        E007_D_DECL=$((E007_D_DECL + 1))
+        seg="${line#/}"
+        seg="${seg%%/*}"
+        case "$seg" in
+          *'*'*|*'?'*|*'['*) E007_D_VIOL=$((E007_D_VIOL + 1)); E007_D_WHY="${E007_D_WHY} glob-first-segment:${line};" ;;
+        esac
+        case "$line" in
+          repos/*|orgs/*|users/*)
+            rest="${line#*/}"
+            acct="${rest%%/*}"
+            case "$acct" in
+              ''|*'*'*|*'?'*|*'['*) E007_D_VIOL=$((E007_D_VIOL + 1)); E007_D_WHY="${E007_D_WHY} account-not-literal:${line};" ;;
+            esac
+            ;;
+        esac
+        ;;
+    esac
+    prev="$line"
+  done < "$1"
+}
+
+if [ -z "$E007_D_TEMPLATE" ]; then
+  /usr/bin/printf 'RESIDUAL: AC-E007-D* arms SKIPPED — the egress allowlist source template is not resolvable from %s; nothing in this family was measured.\n' "$HOOK_DIR"
+else
+  E007_D_N="$(/usr/bin/mktemp -d)"   # the new template, as the managed section ships it
+  E007_D_K="$(/usr/bin/mktemp -d)"   # the pre-change shape: new hook, old file
+  E007_D_C="$(/usr/bin/mktemp -d)"   # composed: managed section + planted operator region
+  E007_D_R="$(/usr/bin/mktemp -d)"   # composed: the undeclared-slashless residual
+  E007_D_T="$(/usr/bin/mktemp -d)"   # a mistyped directive
+  E007_D_S="$(/usr/bin/mktemp -d)"   # the single-domain ssh and WebFetch files
+  for _d_root in "$E007_D_N" "$E007_D_K" "$E007_D_C" "$E007_D_R" "$E007_D_T" "$E007_D_S"; do
+    e007_d_sandbox "$_d_root"
+  done
+  e007_d_materialize "${E007_D_N}/.claude/egress-allowlist.txt"
+  e007_d_prechange   "${E007_D_K}/.claude/egress-allowlist.txt"
+
+  # ---- AC-1 / AC-2: the reported construction, and the query-string widening of it ----
+  e007_d_expect "AC-E007-D1: gh api -X DELETE to a path ENDING in a host-row suffix is denied" \
+    "$E007_D_N" enforce 'gh api -X DELETE repos/evil-org/secret/z.github.com' 2 1 0 'BLOCK-EGRESS-007'
+  _d1_last="$(e007_d_last "${E007_D_N}/.claude/hooks/block-log.jsonl")"
+  case "$_d1_last" in
+    *'path=repos/evil-org/secret/z.github.com cause=not-allowlisted'*)
+      e007_d_pass "AC-E007-D1e: the D1 block-log record carries the denied path and cause=not-allowlisted" ;;
+    *)
+      e007_d_fail "AC-E007-D1e: the D1 block-log record carries the denied path and cause=not-allowlisted" "last record: ${_d1_last}" ;;
+  esac
+
+  e007_d_expect "AC-E007-D1q: a query string cannot make any endpoint end in host-shaped text" \
+    "$E007_D_N" enforce "gh api -X POST 'repos/evil-org/secret/issues?x=a.github.com' -f title=t" 2 1 0 'BLOCK-EGRESS-007'
+
+  # The implicit-POST spelling of D1's path is a WIDENING (D5-3): it is shadow-logged
+  # and allowed, exactly like every non-allowlisted path at that rung. Before the fix
+  # the host row allowed it silently, so the warn log did not move at all.
+  e007_d_expect "AC-E007-D1s: implicit-POST spelling is evaluated and shadow-logged (a widening position)" \
+    "$E007_D_N" enforce 'gh api repos/evil-org/secret/z.github.com -f a=b' 0 0 1
+  _d1s_last="$(e007_d_last "${E007_D_N}/.claude/hooks/egress-warn-log.jsonl")"
+  case "$_d1s_last" in
+    'shadow|not-allowlisted|BLOCK-EGRESS-007|'*)
+      e007_d_pass "AC-E007-D1s2: that record is a shadow would-fire record with cause not-allowlisted" ;;
+    *)
+      e007_d_fail "AC-E007-D1s2: that record is a shadow would-fire record with cause not-allowlisted" "last record: ${_d1s_last}" ;;
+  esac
+
+  e007_d_expect "AC-E007-D1w: at .mode=warn the D1 write is allowed and leaves a warn-log record" \
+    "$E007_D_N" warn 'gh api -X DELETE repos/evil-org/secret/z.github.com' 0 0 1 'WARN \(would-block'
+  _d1w_last="$(e007_d_last "${E007_D_N}/.claude/hooks/egress-warn-log.jsonl")"
+  case "$_d1w_last" in
+    '||BLOCK-EGRESS-007|path=repos/evil-org/secret/z.github.com cause=not-allowlisted')
+      e007_d_pass "AC-E007-D1w2: that record is a warn-mode refusal record (no phase key) naming the path and cause" ;;
+    *)
+      e007_d_fail "AC-E007-D1w2: that record is a warn-mode refusal record (no phase key) naming the path and cause" "last record: ${_d1w_last}" ;;
+  esac
+
+  # ---- AC-3: a genuine host still passes — armed-red-then-revert ----
+  # Already-correct behaviour cannot be observed RED on the shipped hook, so the arm is
+  # made to fail on purpose: remove the one row that grants the host, predict the deny,
+  # observe it, restore the row, predict the allow, observe it. The payload's host is
+  # granted by exactly one row, so the mutation is clean.
+  e007_d_expect "AC-E007-D2: curl upload to a managed host row allows" \
+    "$E007_D_N" enforce 'curl -X POST https://api.anthropic.com/v1/x -d @b.json' 0 0 0
+  _d2_file="${E007_D_N}/.claude/egress-allowlist.txt"
+  /bin/cp "$_d2_file" "${E007_D_N}/allowlist.orig"
+  _d2_dir="$(/usr/bin/awk 'prev ~ /^# egress-scope:/ && $0 == "api.anthropic.com" { d = 1 } { prev = $0 } END { print d + 0 }' "${E007_D_N}/allowlist.orig")"
+  /usr/bin/awk '
+    { line[NR] = $0 }
+    END {
+      for (i = 1; i <= NR; i++) {
+        if (line[i] == "api.anthropic.com") {
+          drop[i] = 1
+          if (i > 1 && line[i - 1] ~ /^# egress-scope:/) drop[i - 1] = 1
+        }
+      }
+      for (i = 1; i <= NR; i++) if (!(i in drop)) print line[i]
+    }' "${E007_D_N}/allowlist.orig" > "$_d2_file"
+  _d2_removed=$(( $(/usr/bin/wc -l < "${E007_D_N}/allowlist.orig") - $(/usr/bin/wc -l < "$_d2_file") ))
+  _d2_left="$(/usr/bin/awk '$0 == "api.anthropic.com" { n++ } END { print n + 0 }' "$_d2_file")"
+  if [ "$_d2_left" = 0 ] && [ "$_d2_removed" = "$(( 1 + _d2_dir ))" ]; then
+    e007_d_pass "AC-E007-D2m1: armed-red guard — the mutation removed that row and only its own directive"
+  else
+    e007_d_fail "AC-E007-D2m1: armed-red guard — the mutation removed that row and only its own directive" \
+      "rows left=${_d2_left} lines removed=${_d2_removed} directive-above=${_d2_dir}"
+  fi
+  /usr/bin/printf 'PREDICT: AC-E007-D2m2 — with the row removed, exit 2 naming BLOCK-EGRESS-004\n'
+  e007_d_expect "AC-E007-D2m2: armed red — with that row removed the same upload is denied" \
+    "$E007_D_N" enforce 'curl -X POST https://api.anthropic.com/v1/x -d @b.json' 2 1 0 'BLOCK-EGRESS-004'
+  /bin/cp "${E007_D_N}/allowlist.orig" "$_d2_file"
+  /usr/bin/printf 'PREDICT: AC-E007-D2m3 — with the row restored, exit 0\n'
+  e007_d_expect "AC-E007-D2m3: reverted — with the row restored the upload allows again" \
+    "$E007_D_N" enforce 'curl -X POST https://api.anthropic.com/v1/x -d @b.json' 0 0 0
+
+  e007_d_expect "AC-E007-D2g: curl upload to the managed GitHub API host allows" \
+    "$E007_D_N" enforce 'curl -X POST https://api.github.com/repos/x/y/issues -d @b.json' 0 0 0
+
+  # ---- the reverse direction: a path row is never consulted at a host position ----
+  e007_d_expect "AC-E007-D3: a curl upload to a host named like a slashless path row is denied" \
+    "$E007_D_N" enforce 'curl -X POST https://graphql/x -d @b.json' 2 1 0 'BLOCK-EGRESS-004'
+  e007_d_expect "AC-E007-D3c: the same slashless row still grants its gh api write" \
+    "$E007_D_N" enforce 'gh api graphql -X POST -f query=q' 0 0 0
+
+  # ---- AC-4: the header and the matcher agree — structural census, then behaviour ----
+  e007_d_census "$_d2_file"
+  if [ "$E007_D_ROWS" -gt 0 ] && [ "$E007_D_DECL" = "$E007_D_ROWS" ] && [ "$E007_D_UNDECL" = 0 ] && [ "$E007_D_VIOL" = 0 ]; then
+    e007_d_pass "AC-E007-D5a: every managed row carries a valid scope directive and obeys its domain's shape (${E007_D_ROWS} rows)"
+  else
+    e007_d_fail "AC-E007-D5a: every managed row carries a valid scope directive and obeys its domain's shape" \
+      "rows=${E007_D_ROWS} declared=${E007_D_DECL} undeclared=${E007_D_UNDECL} violations=${E007_D_VIOL}:${E007_D_WHY}"
+  fi
+  # The census's own controls. Sensitivity for the undeclared counter: the pre-change
+  # shape must read every row undeclared. Sensitivity for the violation counter: a
+  # planted fixture breaking each rule once must read exactly four violations.
+  e007_d_census "${E007_D_K}/.claude/egress-allowlist.txt"
+  if [ "$E007_D_ROWS" -gt 0 ] && [ "$E007_D_UNDECL" = "$E007_D_ROWS" ]; then
+    e007_d_pass "AC-E007-D5a-c1: census control — the pre-change shape reads every row undeclared (${E007_D_ROWS} of ${E007_D_ROWS})"
+  else
+    e007_d_fail "AC-E007-D5a-c1: census control — the pre-change shape reads every row undeclared" \
+      "rows=${E007_D_ROWS} undeclared=${E007_D_UNDECL} — the undeclared counter is dead, so D5a's zero proves nothing"
+  fi
+  /usr/bin/printf '%s\n' '# egress-scope: host' 'repos/x/y' '# egress-scope: gh-api-path' '*.evil.example.test' \
+    '# egress-scope: hosts' 'typo.example.test' '# egress-scope: gh-api-path' 'repos/*/y' > "${E007_D_N}/census-planted.txt"
+  e007_d_census "${E007_D_N}/census-planted.txt"
+  if [ "$E007_D_VIOL" = 4 ]; then
+    e007_d_pass "AC-E007-D5a-c2: census control — a planted fixture breaking each rule once reads 4 violations"
+  else
+    e007_d_fail "AC-E007-D5a-c2: census control — a planted fixture breaking each rule once reads 4 violations" \
+      "violations=${E007_D_VIOL}:${E007_D_WHY} — the violation counter is dead or miscounts, so D5a's zero proves nothing"
+  fi
+
+  # D5b — for every managed row, the header's claim executed: probe the row's value
+  # (each `*` replaced by `zz`) as a curl upload host AND as a gh api write path, and
+  # require it to be granted in exactly one domain, the one its directive declares.
+  _d5b_bad=""
+  _d5b_rows=0
+  _d5b_prev=""
+  while IFS= read -r _d5b_row || [ -n "$_d5b_row" ]; do
+    case "$_d5b_row" in
+      ''|'#'*) _d5b_prev="$_d5b_row"; continue ;;
+    esac
+    _d5b_rows=$((_d5b_rows + 1))
+    case "$_d5b_prev" in
+      '# egress-scope: host')        _d5b_scope=host ;;
+      '# egress-scope: gh-api-path') _d5b_scope=gh-api-path ;;
+      *)                             _d5b_scope=none ;;
+    esac
+    _d5b_val="${_d5b_row//\*/zz}"
+    e007_d_run "$E007_D_N" enforce "$(e007_d_bash "curl -X POST https://${_d5b_val}/ -d x" "$E007_D_N")"
+    _d5b_host=0; [ "$E007_D_EXIT" = 0 ] && _d5b_host=1
+    e007_d_run "$E007_D_N" enforce "$(e007_d_bash "gh api -X POST ${_d5b_val} -f a=b" "$E007_D_N")"
+    _d5b_path=0; [ "$E007_D_EXIT" = 0 ] && _d5b_path=1
+    case "${_d5b_scope}:${_d5b_host}${_d5b_path}" in
+      host:10|gh-api-path:01) ;;
+      *) _d5b_bad="${_d5b_bad} ${_d5b_row}[declared=${_d5b_scope} host-grant=${_d5b_host} path-grant=${_d5b_path}]" ;;
+    esac
+    _d5b_prev="$_d5b_row"
+  done < "$_d2_file"
+  if [ "$_d5b_rows" -gt 0 ] && [ -z "$_d5b_bad" ]; then
+    e007_d_pass "AC-E007-D5b: every managed row is consulted in exactly its declared domain (${_d5b_rows} rows, both probes each)"
+  else
+    e007_d_fail "AC-E007-D5b: every managed row is consulted in exactly its declared domain" \
+      "rows=${_d5b_rows} disagreeing:${_d5b_bad}"
+  fi
+
+  # ---- R4: the single-domain files (-011 ssh, -013 WebFetch) pass no domain ----
+  /usr/bin/printf '%s\n' '*@jump.example.test' > "${E007_D_S}/.claude/ssh-allowlist.txt"
+  /usr/bin/printf '%s\n' '# egress-scope: gh-api-path' 'docs.example.test' > "${E007_D_S}/.claude/webfetch-allowlist.txt"
+  e007_d_expect "AC-E007-D6s: ssh to a host the ssh allowlist grants allows" \
+    "$E007_D_S" enforce 'ssh deploy@jump.example.test' 0 0 0
+  e007_d_expect "AC-E007-D6s-c: control — ssh to a host it does not grant is denied" \
+    "$E007_D_S" enforce 'ssh deploy@other.example.test' 2 1 0 'BLOCK-EGRESS-011'
+  e007_d_run "$E007_D_S" enforce "$(e007_d_webfetch 'https://docs.example.test/x' "$E007_D_S")"
+  if [ "$E007_D_EXIT" = 0 ]; then
+    e007_d_pass "AC-E007-D6w: a scope directive in the single-domain WebFetch file is an ordinary comment"
+  else
+    e007_d_fail "AC-E007-D6w: a scope directive in the single-domain WebFetch file is an ordinary comment" "exit=${E007_D_EXIT} stderr: ${E007_D_ERR}"
+  fi
+  e007_d_run "$E007_D_S" enforce "$(e007_d_webfetch 'https://other.example.test/x' "$E007_D_S")"
+  if [ "$E007_D_EXIT" = 2 ] && /usr/bin/grep -q 'BLOCK-EGRESS-013' <<<"$E007_D_ERR"; then
+    e007_d_pass "AC-E007-D6w-c: control — WebFetch to a domain that file does not grant is denied"
+  else
+    e007_d_fail "AC-E007-D6w-c: control — WebFetch to a domain that file does not grant is denied" "exit=${E007_D_EXIT} stderr: ${E007_D_ERR}"
+  fi
+
+  # ---- a mistyped directive fails closed ----
+  /usr/bin/printf '%s\n' '# egress-scope: hosts' 'svc.typo.example.test' > "${E007_D_T}/.claude/egress-allowlist.txt"
+  e007_d_expect "AC-E007-D8: a mistyped scope directive makes its row match nothing (fails closed)" \
+    "$E007_D_T" enforce 'curl -X POST https://svc.typo.example.test/u -d x' 2 1 0 'BLOCK-EGRESS-004'
+  /usr/bin/printf '%s\n' '# egress-scope: host' 'svc.typo.example.test' > "${E007_D_T}/.claude/egress-allowlist.txt"
+  e007_d_expect "AC-E007-D8c: control — the same row under a correct directive allows" \
+    "$E007_D_T" enforce 'curl -X POST https://svc.typo.example.test/u -d x' 0 0 0
+
+  # ---- publish-order skew: the new hook reading the pre-change file ----
+  e007_d_expect "AC-E007-D9: new hook, pre-change file — the guard alone still denies the construction" \
+    "$E007_D_K" enforce 'gh api -X DELETE repos/evil-org/secret/z.github.com' 2 1 0 'BLOCK-EGRESS-007'
+  e007_d_expect "AC-E007-D9h: new hook, pre-change file — a managed host still passes" \
+    "$E007_D_K" enforce 'curl -X POST https://api.github.com/repos/x/y/issues -d @b.json' 0 0 0
+  e007_d_expect "AC-E007-D9p: new hook, pre-change file — a slashless path row still grants its write" \
+    "$E007_D_K" enforce 'gh api graphql -X POST -f query=q' 0 0 0
+
+  # ---- the operator-additions region, planted through the sandboxed helper ----
+  if [ -n "${E007_D_COMPOSED_ALLOWLIST:-}" ]; then
+    /bin/cp "$E007_D_COMPOSED_ALLOWLIST" "${E007_D_C}/.claude/egress-allowlist.txt"
+  else
+    e007_d_materialize "${E007_D_C}/managed.txt"
+    e007_d_compose "${E007_D_C}/managed.txt" "${E007_D_C}/.claude/egress-allowlist.txt"
+  fi
+  _d_c_file="${E007_D_C}/.claude/egress-allowlist.txt"
+  _d_c_help="${E007_D_C}/.claude/hooks/allowlist-add.sh"
+  "$_d_c_help" "$_d_c_file" '*.corp.example.test' >/dev/null 2>&1 || true
+  "$_d_c_help" "$_d_c_file" 'repos/pmo-test-org/*' --scope gh-api-path >/dev/null 2>&1 || true
+  "$_d_c_help" "$_d_c_file" 'gists' >/dev/null 2>&1 || true
+  _d_c_region="$(/usr/bin/awk '
+    /^# === BEGIN OPERATOR ADDITIONS/ { inr = 1; next }
+    /^# === END OPERATOR ADDITIONS/   { inr = 0 }
+    inr && ($0 == "*.corp.example.test" || $0 == "repos/pmo-test-org/*" || $0 == "gists") { n++ }
+    END { print n + 0 }' "$_d_c_file")"
+  if [ "$_d_c_region" = 3 ]; then
+    e007_d_pass "AC-E007-D4-plant: the three operator rows landed inside the OPERATOR ADDITIONS region"
+  else
+    e007_d_fail "AC-E007-D4-plant: the three operator rows landed inside the OPERATOR ADDITIONS region" \
+      "rows found inside the region: ${_d_c_region} — every D4/D7 arm below would read the wrong file"
+  fi
+  e007_d_expect "AC-E007-D4a: an undeclared operator host wildcard cannot grant a gh api write" \
+    "$E007_D_C" enforce 'gh api -X DELETE repos/evil-org/secret/z.corp.example.test' 2 1 0 'BLOCK-EGRESS-007'
+  e007_d_expect "AC-E007-D4b: the same undeclared operator wildcard still grants its curl host" \
+    "$E007_D_C" enforce 'curl -X POST https://svc.corp.example.test/u -d x' 0 0 0
+  e007_d_expect "AC-E007-D4c: an operator path row added with --scope gh-api-path grants its write" \
+    "$E007_D_C" enforce 'gh api -X POST repos/pmo-test-org/r/issues -f t=x' 0 0 0
+  e007_d_expect "AC-E007-D4d: an undeclared slashless operator literal still grants its gh api write" \
+    "$E007_D_C" enforce 'gh api -X POST gists -f d=x' 0 0 0
+
+  # ---- AC-5's method: both regions x both modes x the three payloads ----
+  # Per region: the Reproduction-Steps write ending in that region's host suffix, a curl
+  # upload to that region's host row, and a near-miss gh api write to that region's
+  # path row that does NOT end in host-shaped text. enforce: exit 2 / 0 / 0 with
+  # block-log records +1 / 0 / 0; warn: exit 0 / 0 / 0 with warn-log records +1 / 0 / 0;
+  # the near-miss leaves no deny record in either mode.
+  for _d7_region in managed operator; do
+    if [ "$_d7_region" = managed ]; then
+      _d7_repro='gh api -X DELETE repos/evil-org/secret/z.github.com'
+      _d7_curl='curl -X POST https://api.github.com/repos/x/y/issues -d @b.json'
+      _d7_near="gh api -X POST repos/${E007_D_HANDLE}/pmo-platform/issues -f title=t"
+    else
+      _d7_repro='gh api -X DELETE repos/evil-org/secret/z.corp.example.test'
+      _d7_curl='curl -X POST https://svc.corp.example.test/u -d x'
+      _d7_near='gh api -X POST repos/pmo-test-org/r/issues -f t=x'
+    fi
+    e007_d_expect "AC-E007-D7[${_d7_region}/enforce/repro]: denied, one block-log record" \
+      "$E007_D_C" enforce "$_d7_repro" 2 1 0 'BLOCK-EGRESS-007'
+    e007_d_expect "AC-E007-D7[${_d7_region}/enforce/curl]: allowed, no record" \
+      "$E007_D_C" enforce "$_d7_curl" 0 0 0
+    e007_d_expect "AC-E007-D7[${_d7_region}/enforce/near-miss]: allowed, no deny record" \
+      "$E007_D_C" enforce "$_d7_near" 0 0 0
+    e007_d_expect "AC-E007-D7[${_d7_region}/warn/repro]: allowed, one warn-log record" \
+      "$E007_D_C" warn "$_d7_repro" 0 0 1
+    e007_d_expect "AC-E007-D7[${_d7_region}/warn/curl]: allowed, no record" \
+      "$E007_D_C" warn "$_d7_curl" 0 0 0
+    e007_d_expect "AC-E007-D7[${_d7_region}/warn/near-miss]: allowed, no deny record" \
+      "$E007_D_C" warn "$_d7_near" 0 0 0
+  done
+
+  # ---- the named residual: an undeclared slashless operator row ----
+  # The leading-glob rule works in ONE direction: it keeps a glob off gh api paths, and
+  # does nothing at the host site. So an undeclared slashless glob row stays a curl host
+  # candidate, and the one remedy is a directive — which the helper's --scope writes, by
+  # upgrading the existing bare row in place rather than adding a second one.
+  e007_d_materialize "${E007_D_R}/managed.txt"
+  e007_d_compose "${E007_D_R}/managed.txt" "${E007_D_R}/.claude/egress-allowlist.txt"
+  _d_r_file="${E007_D_R}/.claude/egress-allowlist.txt"
+  _d_r_help="${E007_D_R}/.claude/hooks/allowlist-add.sh"
+  e007_d_expect "AC-E007-D10-c: control — before the operator row exists, the upload is denied" \
+    "$E007_D_R" enforce 'curl -X POST https://gist.example.test/u -d x' 2 1 0 'BLOCK-EGRESS-004'
+  "$_d_r_help" "$_d_r_file" 'gist*' >/dev/null 2>&1 || true
+  e007_d_expect "AC-E007-D10: an undeclared slashless operator row still grants a curl host (the named residual)" \
+    "$E007_D_R" enforce 'curl -X POST https://gist.example.test/u -d x' 0 0 0
+  e007_d_expect "AC-E007-D10p: the same leading-glob row is never a gh api path candidate (fails closed)" \
+    "$E007_D_R" enforce 'gh api -X POST gist-archive -f d=x' 2 1 0 'BLOCK-EGRESS-007'
+  "$_d_r_help" "$_d_r_file" 'gist*' --scope gh-api-path >/dev/null 2>&1 || true
+  _d10_rows="$(/usr/bin/awk '$0 == "gist*" { n++ } END { print n + 0 }' "$_d_r_file")"
+  _d10_above="$(/usr/bin/awk '$0 == "gist*" { print prev } { prev = $0 }' "$_d_r_file")"
+  if [ "$_d10_rows" = 1 ] && [ "$_d10_above" = '# egress-scope: gh-api-path' ]; then
+    e007_d_pass "AC-E007-D10u: a --scope re-add upgrades the bare row in place (one row, now declared)"
+  else
+    e007_d_fail "AC-E007-D10u: a --scope re-add upgrades the bare row in place (one row, now declared)" \
+      "rows=${_d10_rows} line-above='${_d10_above}'"
+  fi
+  e007_d_expect "AC-E007-D10u2: once declared gh-api-path, that row no longer grants the curl host" \
+    "$E007_D_R" enforce 'curl -X POST https://gist.example.test/u -d x' 2 1 0 'BLOCK-EGRESS-004'
+
+  /bin/rm -rf "$E007_D_N" "$E007_D_K" "$E007_D_C" "$E007_D_R" "$E007_D_T" "$E007_D_S"
+fi
+
 # ----- Raw network tools (BLOCK-EGRESS-008/009/010/011) -----
 
 echo ""
