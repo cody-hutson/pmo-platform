@@ -243,12 +243,12 @@ core/deploy/deploy.sh  edit
 core/rules/bypass-mode-readiness/block-autonomy-ceiling.md  edit
 core/rules/bypass-mode-readiness.md  edit
 
-# ── #6200 — promoted from CONDITIONAL at Commit 0 (conditions resolved at Stage 5) ──
-# was CONDITIONAL:new-adr — D-Mechanism-Doc-Home selected a new ADR superseding ADR-149 in part; NNN is claimed by #6200's slice against the mainline anchor
+# ── #6200 — promoted into the unconditional set at Commit 0 (their Stage-5 conditions resolved) ──
+# condition new-adr resolved: D-Mechanism-Doc-Home selected a new ADR superseding ADR-149 in part; NNN is claimed by #6200's slice against the mainline anchor
 core/ADRs/ADR-NNN-cross-domain-classification-is-repository-membership.md  add
-# was CONDITIONAL:adr-lineage-pointer — a frontmatter superseded_by pointer only; status stays Accepted
+# condition adr-lineage-pointer resolved: a frontmatter superseded_by pointer only; status stays Accepted
 core/ADRs/ADR-149-cross-domain-bridge-writes-are-not-symmetric.md  edit
-# was CONDITIONAL:item-7a-mechanism — one Enforcement sentence each for items 7 and 7a
+# condition item-7a-mechanism resolved: one Enforcement sentence each for items 7 and 7a
 core/specs/autonomy-tiers.md  edit
 ```
 
@@ -276,9 +276,9 @@ docs/scripts/validate-install.sh  NOT EDITED
 core/config/allowlists/script-execution-allowlist.txt  NOT EDITED
 core/rules/operations-bridge.md  NOT EDITED
 core/rules/git-workflow.md  NOT EDITED
-# dropped CONDITIONAL:new-adr row — the core ADR README is a curated thematic document, not a per-ADR index (DEV-14)
+# dropped Stage-4 row (condition new-adr): the core ADR README is a curated thematic document, not a per-ADR index (DEV-14)
 core/ADRs/README.md  NOT EDITED
-# dropped CONDITIONAL:hard-dependency-lib row — the refresh suite's generic readability arm covers a new lib by construction (DEV-14)
+# dropped Stage-4 row (condition hard-dependency-lib): the refresh suite's generic readability arm covers a new lib by construction (DEV-14)
 core/deploy/tests/test_refresh_hooks.sh  NOT EDITED
 ```
 
@@ -647,7 +647,7 @@ Class: novel
 | DEV-11 | `block-autonomy-ceiling.test.sh` | `${TEST_WS}/pmo-platform/.git` seeded at suite setup. Ten arms are re-fixtured by setup only; payloads and names are unchanged, and 0 are removed or renamed: `-002 high-risk (projects cwd → pmo-platform), mode=enforce → BLOCK` · `… mode=warn → BLOCK` · `… mode=off → BLOCK` · `-002 no longer claims the low-risk direction (rule id is -004, not -002)` · `-004 low-risk (pmo-platform cwd → projects), mode=enforce → BLOCK` · `-004 override names the relaunch remedy, not CLAUDE_HOOK_BYPASS` · `-004 low-risk, mode=warn → ALLOW + WARN (friction removed)` · `-004 warn arm appended to autonomy-warn-log.jsonl (…)` · `-002 under master-OFF → STILL BLOCKS (the floor is above the master gate)` · `H1 control: same cwd, Write payload → -004 fires (proves the arms above reach it)` | D-Classification-Semantics = REPLACE (R1) | Lands with #6200's slice |
 | DEV-12 | `block-autonomy-ceiling.test.sh` | The `W-7 differential` is re-targeted to the lib copy; its name is unchanged | CR round-1 determination F5 | Lands in #6200's GREEN commit (Change 4b) |
 | DEV-13 | `block-draft-files.test.sh` | `id_run` and the anchor-axis invocation pin `CLAUDE_WORKSPACE_ROOT`, re-fixturing the 12 `id_pair` arms, the `AC6 control: non-repo cwd …` arm and the `anchor axis: unresolvable anchor ABSTAINS …` arm by environment only; names unchanged; the 12 baseline `test_case` arms untouched | D-Anchor = C3 | Lands with #6200's slice |
-| DEV-14 | #6200 File Change Matrix | Promote `core/ADRs/ADR-NNN-cross-domain-classification-is-repository-membership.md`, the ADR-149 pointer and `core/specs/autonomy-tiers.md`. **NOT DELIVERED:** `core/ADRs/README.md` (row token `CONDITIONAL:new-adr` — the core ADR README is a curated thematic document, not a per-ADR index) and `core/deploy/tests/test_refresh_hooks.sh` (row token `CONDITIONAL:hard-dependency-lib` — the refresh suite's generic readability arm covers a new lib by construction). #6200 delivers 13 paths | CONDITIONAL-row resolution (#6200 design) | APPLIED in § File Change Matrix at Commit 0 |
+| DEV-14 | #6200 File Change Matrix | Promote `core/ADRs/ADR-NNN-cross-domain-classification-is-repository-membership.md` (an unconditional ADD obligation of #6200's slice), the ADR-149 pointer and `core/specs/autonomy-tiers.md` into the unconditional set. Drop two Stage-4 **edit** rows, which this release does not edit: `core/ADRs/README.md` (condition token `new-adr` — the core ADR README is a curated thematic document, not a per-ADR index) and `core/deploy/tests/test_refresh_hooks.sh` (condition token `hard-dependency-lib` — the refresh suite's generic readability arm covers a new lib by construction); both now sit in the matrix's explicit non-scope block. #6200 delivers 13 paths | Conditional-row resolution (#6200 design) | APPLIED in § File Change Matrix at Commit 0; row-label wording corrected by DEV-31 |
 | DEV-15 | Plan read-only inputs; #6200 AC-4 row | Add `release/tools/tests/test_agent_editability_read.sh` (parser constraint C-5, CI `release-tooling-smoke.yml`). Correct the AC-4 row: an unreadable pointer is climbed past, not read as "1" | CR round-1 determinations F4, F6 | APPLIED at Commit 0 |
 | DEV-16 | #6200 AC-4 | "for the same platform git directory" clarification | CR-Q3; #6200 design F1 | APPLIED to the card body |
 | DEV-17 | #6199 AC-4 | Graded at #6199's GREEN commit | CR-Q3; #6200 design F3 | APPLIED to the card body and § Verification Plan |
@@ -664,6 +664,7 @@ Class: novel
 | DEV-28 | `-002` working-directory reading; arm set | Collective Review round 2 ratified R-1 (the resolved working directory is always compared; only the operations root is resolved conditionally), R-2 (a `projects/`-rooted session cannot write into any platform worktree, including one under `projects/` — wider than baseline for that layout only, never narrower; recorded in the fragment row and ADR E-4) and R-3 (arms D-5f, X-16e and X-19 added; totals 110 / 141 / 35 / 1603 / 1637) | CR2-Ratify | Carried by DEV-18, DEV-19 and DEV-20 |
 | DEV-29 | Operational Deployment Manifest row 4; IP-4; R13 | Corrected at Commit 0: `core/rules/bypass-mode-readiness.md` is **not** a rules-mirror pair member — it is absent from `mirror_pair_set()` in `core/deploy/deploy.sh` — so it has no deployed copy and no Check-9 obligation; the Stage-4 text named a Check-9 re-lay for it. The CI layout materializes a copy inside its sandbox only | Commit-0 transcription finding; a Tier-1 [ADJUST] that removes a non-existent Stage-12/13 step and changes no scope | APPLIED in § Operational Deployment Manifest, § Integration Points and § Risk Register |
 | DEV-30 | CIAC-4 subject regex | Transcribed with the shared `scope_guard_` stem factored out of the alternation (`^[-+]scope_guard_(gate\|in_scope\|root\|resolve_cwd)\(\)`, pipes escaped for this table cell), which matches exactly the lines the Stage-4 alternation matches — observed on a probe of 4 must-match diff lines and 3 near-misses, both forms returning the same 4 lines. The Stage-4 spelling places a bracket expression directly before a parenthesis, which the dead-file-reference checker (`release/tools/check-release-links.py`, which strips neither code spans nor fences before extracting links) would read as a link to a non-existent file and fail on this plan's added lines | Commit-0 transcription finding; the predicate, its target and its expected result are unchanged | APPLIED in § Cross-Issue Acceptance Criteria |
+| DEV-31 | § File Change Matrix labels; DEV-14 | Corrected after #6199's GREEN commit, by the spoke that authored Commit 0. The Commit-0 in-fence comment labels over the three promoted rows and the two dropped rows carried the word for a conditional row, which the `fcm-delivery` parser reads as a block label (case-insensitively), so the promoted rows still parsed as conditional (`conditional=1`, `obligations=2`); and DEV-14 co-located the undelivered-ADD token with the new ADR's path, which the parser reads as an exemption record for that ADR. Both would have exempted #6200's new ADR from the declared-vs-delivered check. The labels now name the resolved condition tokens without that word, and DEV-14 records the two dropped rows as not-edited edit rows. Observed with `release/tools/verify-release-plan.sh` at #6199's GREEN head: before, `obligations=2 conditional=1` and the ADR row graded as a recorded deviation; after, `obligations=3 conditional=0` and the ADR row graded as a pending ADD | Rule 5 of the File Change Matrix authoring contract (a fired conditional is promoted in the same commit); a Tier-1 [ADJUST] to this spoke's own Commit-0 transcription | APPLIED |
 
 ---
 
@@ -671,7 +672,7 @@ Class: novel
 
 | Issue | Declared docs | Status | Commit | Notes |
 |---|---|---|---|---|
-| #6199 | `core/rules/bypass-mode-readiness/block-autonomy-ceiling.md` — the rule's registry row, describing both inputs; mirrored into `core/rules/bypass-mode-readiness.md` | UPDATED at #6199's GREEN commit | recorded in the PR body | The merged `-002` row (step 1), the re-scoped parity paragraph, and the caveat sentence |
+| #6199 | `core/rules/bypass-mode-readiness/block-autonomy-ceiling.md` — the rule's registry row, describing both inputs; mirrored into `core/rules/bypass-mode-readiness.md` | UPDATED | `3d2051b1` | The merged `-002` row (step 1), the re-scoped parity paragraph, and the caveat sentence |
 | #6200 | `core/rules/bypass-mode-readiness/block-autonomy-ceiling.md` + the index; the new ADR; the ADR-149 pointer; `core/specs/autonomy-tiers.md` | lands with #6200's docs commit | — | The ADR covering the direction split names the mechanism (membership) that establishes "cannot reach the repository" |
 
 ---
@@ -685,6 +686,17 @@ Class: novel
 | **Commit-0 version half** | `git fetch --tags origin`; next-free for bump-class `minor` = **`v4.68`** via the adapter's own `--dry-run`, free on the binding tag arm (0 `refs/tags/v4.68*`; control `refs/tags/v4.67*` → 4) and corroborated by published Releases (0 of 210) and the RELEASE_LOG at `origin/main` (0; control 16). **No HALT** |
 | **Commit-0 manifest half** | `release/tools/claim-version.sh --verify-stamp autonomy-ceiling-domains-resolve-canonically` → **exit 0**, *"verify-stamp OK — … carries a resolvable stamp manifest; plan-only manifest (0 --stamp-file target(s))"*; pre-flight line: the manifest stales 0 packages. Exactly one double-brace `RELEASE_VERSION` placeholder in this file (the Header `**Version**` cell) — counted at 1 by a fixed-string count of the braced form, with the bare token name counted at 4 on the same file as the reader's sensitivity arm (the record site plus three named mentions, this row's included). Re-run after this row was written: exit 0 |
 | **Pre-change harness baseline** (the control arm for every new arm) | CI sandbox at `0c759aaf` → `AGGREGATE: PASS=1581  FAIL=0` across 24 suites; `block-autonomy-ceiling.test.sh — Total: 88  PASS: 88  FAIL: 0`; 88 unique autonomy arm names |
+| **#6199 RED** (`63a08c03`, against the unmodified hook) | CI sandbox → autonomy `Total: 110  PASS: 95  FAIL: 15`, the failing arms exactly D-1, D-2, D-3, D-4, D-5, D-5b, D-5d, D-5e, D-5f, D-6, D-7b, D-9, D-9b, D-10, D-11b and the passing arms D-1b, D-4b, D-5c, D-6b, D-7, D-8, D-11 — the recorded vector, observed rather than derived. Every other suite unchanged (aggregate 1588 / 15); 0 baseline autonomy arm names missing (sensitivity: 7 added names) |
+| **#6199 GREEN — AC-4 graded here** (`3d2051b1`) | CI sandbox → `block-autonomy-ceiling.test.sh — Total: 110  PASS: 110  FAIL: 0`; the other 23 suites' summary lines byte-identical to the baseline run (23 of 23 lines compared); `AGGREGATE: PASS=1603  FAIL=0`; autonomy arm-name diff 0 removed, 22 added, all `D-*`. A later commit that touches only this plan changes no suite input |
+| **#6199 AC-1 greps** (at `3d2051b1`) | `resolve_cwd_path`: the definition, the `# D9:` line inside it, and exactly 1 call site, inside `if [ -n "$target_domain" ]`; `scope_guard_gate "$CWD"` → 1 (baseline 1); `case "$CWD" in` → 1, the spelling reading (baseline 1, the retired raw-cwd case) |
+| **Check 38** | `deploy.sh --check-required-subset` → `hook-registry-index-freshness — OK (FRESH)`. Sensitivity arm: with one mirrored index line reverted, the same run reads `FAIL (STALE)`; restored → FRESH. The three mirrored lines are byte-identical to their fragment lines (`cmp`) |
+| **#6199 docs** | `the write target, and the working directory` → 1 and `the rule **fails closed** on it` → 1, in the fragment and in the index; `domain roots` in the fragment → 0 (1 at `0c759aaf`) |
+| **Hook marker and parser invariants** | `# D9:` and `# D10:` each on exactly 1 line; the H1 differential's `sed` patterns still match exactly 2 lines; the `# W7:` line and `readonly PYTHON3` line untouched; `case "$ABS_TARGET" in` count unchanged at 4 (no new `-001` block for the editability parser) |
+| **Hook dependency hardening** | `core/hooks/tests/check-hook-dep-hardening.sh` → OK |
+| **Skill-package freshness** | the 5 changed paths piped to `build-skill-packages.sh --skills-for-paths` on STDIN → no skill (sensitivity: `release/skills/release-planner/SKILL.md` → `release-planner`), so no package rebuild is owed |
+| **`deploy.sh --check`** (full, at the GREEN tree) | Check 14 `no broken cross-refs in scope`; Check 38 `in sync with its sources`; Check 79 publisher closure holds both directions (its byte-parity arm is advisory: the deployed `block-autonomy-ceiling.sh` is one source commit behind, expected until the Stage-12 hook refresh). Exit 1 on two FAIL lines that cite no path in this release — `release-body-drift` (published Release bodies vs their notes, host state) and `count-structure` (`core/references/reference/operator-instance-home-and-isolation-key.md`, `release/references/standards/release-notes-standard.md`) |
+| **Plan executor** | `release/tools/verify-release-plan.sh` at the GREEN head: #6199 AC-1 PASS; the CI-sandbox rows read `unclassified` ERROR by the executor's design (the required `Hook test harness (macOS)` check is their gate); `fcm-delivery` reads `obligations=3 conditional=0` after DEV-31, with the plan delivered and the helper and the new ADR pending #6200's slice; CIAC-4 PASS |
+| **Runtime suite** (selection-map row `core/hooks/**`) | the CI-faithful hook harness above; the `test-run` event is appended by the hub (the event log is an operator-instance surface outside this spoke's write scope) |
 | **ADR index freshness** | N/A for #6199 — this slice adds no record under `release/ADRs/`; #6200's ADR is under `core/ADRs/`, which has no projector |
 
 ---
@@ -701,7 +713,7 @@ Class: novel
 
 | # | Outcome (one line) | Status |
 |---|---|---|
-| #6199 | The working directory goes through the target's own resolver; an unresolvable one fails `-002` closed and nothing else; 22 new working-directory arms, three of them mutation differentials | DONE at #6199's GREEN commit |
+| #6199 | The working directory goes through the target's own resolver; an unresolvable one fails `-002` closed and nothing else; 22 new working-directory arms, three of them mutation differentials | DONE — GREEN at `3d2051b1` |
 | #6200 | One membership helper for `-001` stage 2, `-002`/`-004` and `block-draft-files`; relocated-worktree arms | lands next on this branch (Stage-6 sub-task #7569) |
 
 ### Key decisions
