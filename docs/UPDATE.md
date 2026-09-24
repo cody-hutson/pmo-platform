@@ -142,15 +142,26 @@ To extend an allowlist (e.g., add a new permitted host to `egress-allowlist.txt`
 2. Add entries **inside the OPERATOR ADDITIONS fence** (between `=== BEGIN OPERATOR ADDITIONS ===` and `=== END OPERATOR ADDITIONS ===`).
 3. Save. `update.sh` on future runs will preserve your additions verbatim.
 
+**`egress-allowlist.txt` serves two match domains.** A row is either a curl upload **host** (`BLOCK-EGRESS-004`) or a `gh api` write **path** (`BLOCK-EGRESS-007`). Only curl is checked against the host rows: wget uploads are denied unconditionally (`BLOCK-EGRESS-005`), and no row can permit one. To confine a row to one domain, put a scope directive on the line directly above it:
+
+```text
+# egress-scope: host
+my-internal-host.example.com
+# egress-scope: gh-api-path
+repos/my-org/*
+```
+
+A row with no directive above it is matched in both domains, exactly as before directives existed. One exception applies whatever the directive: a pattern whose first path segment contains `*`, `?` or `[` (for example `*.example.com`) is never matched against a `gh api` path, so a host wildcard can never grant a GitHub write. That exception works in one direction only and does nothing at the host check, so an undeclared row with no `/` — a glob such as `gist*` or a word such as `gists` — is still matched as a curl host. Give every row you add a directive.
+
 Editing **inside the MANAGED SECTION fence** is detected as tampering at the next `update.sh` (the live managed body stops matching the stored `installed_sha` anchor): your hand-edited file is backed up to `~/Claude/.backup-tampered-<timestamp>/` and the managed section is regenerated (per [`composition-surface-spec.md` §2.5](../core/standards/composition-surface-spec.md)). Always add operator content to the OPERATOR ADDITIONS section instead.
 
 Programmatic addition is also supported:
 
 ```bash
-./.claude/hooks/allowlist-add.sh .claude/egress-allowlist.txt 'my-internal-host.example.com'
+./.claude/hooks/allowlist-add.sh .claude/egress-allowlist.txt 'my-internal-host.example.com' --scope host
 ```
 
-This appends to the OPERATOR ADDITIONS section automatically.
+This writes the directive and the entry into the OPERATOR ADDITIONS section. Without `--scope` the row is still added, with no directive, and the helper prints how it will be matched. Running the same command again with `--scope` on a row you added without one declares that row in place.
 
 ---
 
