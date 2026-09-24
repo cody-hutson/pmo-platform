@@ -4,7 +4,7 @@
 # Part of: the bypass-permissions-readiness hardening.
 #
 # Usage:
-#   ./.claude/hooks/allowlist-add.sh <allowlist-file> <entry> [--reason "why"]
+#   ./.claude/hooks/allowlist-add.sh <allowlist-file> <entry> [--reason "why"] [--scope host|gh-api-path]
 #
 # Validation:
 #   - Allowlist file must be one of the known, hook-managed allowlists
@@ -21,6 +21,23 @@
 #     (the historical behavior). A target that carries marker text but no region
 #     compose.py will honour gets the append AND a warning on stderr.
 #   - The helper never synthesizes a marker fence; compose.py owns the fence.
+#
+# Scope (egress-allowlist.txt only):
+#   - `--scope host` or `--scope gh-api-path` writes the directive line
+#     `# egress-scope: <domain>` and the entry as an ADJACENT pair, inside the
+#     OPERATOR ADDITIONS region. The directive binds only the line below it
+#     (see the egress allowlist's header). Re-adding the same pair is a no-op.
+#   - When the entry is already present as a BARE row (no directive directly above
+#     it), `--scope` declares that row where it sits — upgrade in place, never a
+#     declared twin beside a bare row still matched in both domains. The upgrade
+#     edits only where the helper may write: inside the OPERATOR ADDITIONS region, or
+#     anywhere in a file that carries no marker text at all. A bare row in a managed
+#     section is left alone (the composer owns it) and the pair lands in the region.
+#   - Without --scope the entry is written with no directive, and a NOTICE on stderr
+#     says how it will be matched. When the line above the insertion point is a
+#     directive, a blank line is written first so the new row stays undeclared, as
+#     the notice says.
+#   - --scope against any other allowlist is an error.
 
 set -euo pipefail
 
@@ -52,7 +69,7 @@ readonly KNOWN_ALLOWLISTS=(
 )
 
 usage() {
-  "$PRINTF" 'Usage: %s <allowlist-file> <entry> [--reason "why"]\n' "$0"
+  "$PRINTF" 'Usage: %s <allowlist-file> <entry> [--reason "why"] [--scope host|gh-api-path]\n' "$0"
   "$PRINTF" '\nKnown allowlists:\n'
   for a in "${KNOWN_ALLOWLISTS[@]}"; do
     "$PRINTF" '  - %s\n' "$a"
@@ -64,7 +81,16 @@ usage() {
 
 ALLOWLIST_FILE="$1"
 ENTRY="$2"
-REASON="${4:-(no reason given)}"
+REASON="(no reason given)"
+SCOPE=""
+shift 2
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --reason) if [ $# -ge 2 ]; then REASON="$2"; shift; fi ;;
+    --scope)  if [ $# -ge 2 ]; then SCOPE="$2"; shift; else SCOPE="<missing>"; fi ;;
+  esac
+  shift   # any other word is skipped, as the positional parse always skipped $3
+done
 
 # Resolve allowlist file to absolute path
 if [ -f "$ALLOWLIST_FILE" ]; then
@@ -94,6 +120,22 @@ if [ "$is_known" != 1 ]; then
   usage
 fi
 
+# --scope applies to the egress allowlist alone: it is the one file two rules read.
+IS_EGRESS=0
+if [ "$ALLOWLIST_ABS" = "${CLAUDE_DIR}/egress-allowlist.txt" ]; then IS_EGRESS=1; fi
+DIRECTIVE=""
+if [ -n "$SCOPE" ]; then
+  if [ "$IS_EGRESS" != 1 ]; then
+    "$PRINTF" 'ERROR: --scope applies only to %s\n' "${CLAUDE_DIR}/egress-allowlist.txt" >&2
+    exit 1
+  fi
+  case "$SCOPE" in
+    host|gh-api-path) ;;
+    *) "$PRINTF" 'ERROR: --scope must be host or gh-api-path (got: %s)\n' "$SCOPE" >&2; exit 1 ;;
+  esac
+  DIRECTIVE="# egress-scope: ${SCOPE}"
+fi
+
 # Validate entry
 if [ -z "$ENTRY" ]; then
   "$PRINTF" 'ERROR: empty entry\n' >&2
@@ -108,8 +150,9 @@ case "$ENTRY" in
     ;;
 esac
 
-# Check if entry already present (comment-aware)
-if [ -f "$ALLOWLIST_ABS" ] && "$GREP" -Fxq "$ENTRY" "$ALLOWLIST_ABS"; then
+# Check if entry already present (comment-aware). A --scope add is decided further
+# down, once the region is known, because it may have to declare an existing bare row.
+if [ -z "$DIRECTIVE" ] && [ -f "$ALLOWLIST_ABS" ] && "$GREP" -Fxq "$ENTRY" "$ALLOWLIST_ABS"; then
   "$PRINTF" 'Entry already present in %s:\n  %s\n' "$ALLOWLIST_ABS" "$ENTRY" >&2
   exit 0  # idempotent — not an error
 fi
@@ -184,9 +227,6 @@ find_operator_region() {
   ' "$1"
 }
 
-# Atomic append via temp-file rename
-TMP="$("$MKTEMP" "${ALLOWLIST_ABS}.XXXXXX")"
-
 begin_ln=0
 end_ln=0
 has_markers=0
@@ -196,7 +236,52 @@ $(find_operator_region "$ALLOWLIST_ABS")
 EOF
 fi
 
-if [ "$end_ln" -gt 0 ]; then
+# A --scope add is decided here, once the region is known. A BARE copy of the entry —
+# one with no directive on the line directly above it — is declared where it sits
+# (upgrade in place); otherwise an existing declared pair makes the add a no-op.
+#
+# The upgrade edits only where this helper is allowed to write, which is the span it
+# would insert into anyway: the OPERATOR ADDITIONS region when the file has one, the
+# whole file when it carries no marker text at all (no managed section to protect),
+# and NOWHERE when its fence is broken. A bare row in a managed section is therefore
+# never touched — the composer owns that section, and an edit there is tampering the
+# next update detects and discards — and the declared pair lands in the region instead.
+UPGRADE=0
+span_lo=0
+span_hi=0
+if [ -n "$DIRECTIVE" ] && [ -f "$ALLOWLIST_ABS" ]; then
+  if [ "$end_ln" -gt 0 ]; then
+    span_lo="$begin_ln"
+    span_hi="$end_ln"
+  elif [ "$has_markers" = 0 ]; then
+    span_hi="$("$AWK" 'END { print NR + 1 }' "$ALLOWLIST_ABS")"
+  fi
+  bare="$(ENTRY="$ENTRY" "$AWK" -v lo="$span_lo" -v hi="$span_hi" '
+    NR > lo && NR < hi && $0 == ENVIRON["ENTRY"] && prev !~ /^# egress-scope:/ { n++ }
+    { prev = $0 }
+    END { print n + 0 }' "$ALLOWLIST_ABS")"
+  if [ "$bare" -gt 0 ]; then
+    UPGRADE=1
+  elif DIRECTIVE="$DIRECTIVE" ENTRY="$ENTRY" "$AWK" '
+         prev == ENVIRON["DIRECTIVE"] && $0 == ENVIRON["ENTRY"] { hit = 1 }
+         { prev = $0 }
+         END { exit hit ? 0 : 1 }' "$ALLOWLIST_ABS"; then
+    "$PRINTF" 'Entry already present in %s under %s:\n  %s\n' "$ALLOWLIST_ABS" "$DIRECTIVE" "$ENTRY" >&2
+    exit 0  # idempotent — not an error
+  fi
+fi
+
+# Atomic write via temp-file rename
+TMP="$("$MKTEMP" "${ALLOWLIST_ABS}.XXXXXX")"
+
+if [ "$UPGRADE" = 1 ]; then
+  # Declare each bare copy inside the span where it sits: the directive goes on the
+  # line directly above the row, so the row keeps its place in the region's addition
+  # chronology. ENVIRON, never `awk -v`, for the byte-faithfulness stated below.
+  ENTRY="$ENTRY" DIRECTIVE="$DIRECTIVE" "$AWK" -v lo="$span_lo" -v hi="$span_hi" '
+    NR > lo && NR < hi && $0 == ENVIRON["ENTRY"] && prev !~ /^# egress-scope:/ { print ENVIRON["DIRECTIVE"] }
+    { print; prev = $0 }' "$ALLOWLIST_ABS" > "$TMP"
+elif [ "$end_ln" -gt 0 ]; then
   # Insert immediately before the END marker — inside the region compose.py's
   # extract_operator_additions() preserves across a regeneration, and at the
   # BOTTOM of it so region order equals addition chronology (the property that
@@ -211,8 +296,18 @@ if [ "$end_ln" -gt 0 ]; then
   # value, so a backslash-bearing entry (a glob in shell-injection-allowlist.txt,
   # a path in fs-boundary-allowlist.txt) would be silently mangled. ENVIRON is
   # byte-faithful.
-  ENTRY="$ENTRY" "$AWK" -v at="$end_ln" \
-    'NR == at { print ENVIRON["ENTRY"] } { print }' "$ALLOWLIST_ABS" > "$TMP"
+  #
+  # With --scope the directive prints first, so the pair is adjacent. Without it, on
+  # the egress file, a directive dangling directly above the insertion point is
+  # separated from the new row by a blank line, so the row stays undeclared as the
+  # notice below says.
+  ENTRY="$ENTRY" DIRECTIVE="$DIRECTIVE" EGRESS="$IS_EGRESS" "$AWK" -v at="$end_ln" '
+    NR == at {
+      if (ENVIRON["EGRESS"] == "1" && ENVIRON["DIRECTIVE"] == "" && prev ~ /^# egress-scope:/) print ""
+      if (ENVIRON["DIRECTIVE"] != "") print ENVIRON["DIRECTIVE"]
+      print ENVIRON["ENTRY"]
+    }
+    { print; prev = $0 }' "$ALLOWLIST_ABS" > "$TMP"
 else
   # No usable region. Degrade to the historical EOF append — never synthesize a
   # marker fence: compose.py owns that fence AND its dialect (ADR-122, chosen per
@@ -232,12 +327,34 @@ else
   if [ -s "$TMP" ] && [ "$(/usr/bin/tail -c 1 "$TMP")" != "" ]; then
     "$PRINTF" '\n' >> "$TMP"
   fi
+  if [ "$IS_EGRESS" = 1 ] && [ -z "$DIRECTIVE" ] && [ -s "$TMP" ]; then
+    last="$(/usr/bin/tail -n 1 "$TMP")"
+    case "$last" in '# egress-scope:'*) "$PRINTF" '\n' >> "$TMP" ;; esac
+  fi
+  if [ -n "$DIRECTIVE" ]; then "$PRINTF" '%s\n' "$DIRECTIVE" >> "$TMP"; fi
   "$PRINTF" '%s\n' "$ENTRY" >> "$TMP"
 fi
 "$MV" "$TMP" "$ALLOWLIST_ABS"
 
-# Log the addition
+# Log the addition. A scoped add carries a fifth field; the four-field line is
+# otherwise unchanged, and nothing parses this log.
 ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ)"
-"$PRINTF" '%s\t%s\t%s\t%s\n' "$ts" "$ALLOWLIST_ABS" "$ENTRY" "$REASON" >> "$ADDITIONS_LOG" 2>/dev/null || true
+if [ -n "$SCOPE" ]; then
+  "$PRINTF" '%s\t%s\t%s\t%s\tscope=%s\n' "$ts" "$ALLOWLIST_ABS" "$ENTRY" "$REASON" "$SCOPE" >> "$ADDITIONS_LOG" 2>/dev/null || true
+else
+  "$PRINTF" '%s\t%s\t%s\t%s\n' "$ts" "$ALLOWLIST_ABS" "$ENTRY" "$REASON" >> "$ADDITIONS_LOG" 2>/dev/null || true
+fi
 
-"$PRINTF" 'Added to %s:\n  %s\n' "$ALLOWLIST_ABS" "$ENTRY"
+if [ "$UPGRADE" = 1 ]; then
+  "$PRINTF" 'Declared existing entry in %s under %s:\n  %s\n' "$ALLOWLIST_ABS" "$DIRECTIVE" "$ENTRY"
+else
+  "$PRINTF" 'Added to %s:\n  %s\n' "$ALLOWLIST_ABS" "$ENTRY"
+fi
+
+# A row with no directive is matched in both of the egress file's domains. Say so,
+# and name the remedy — which works, because a --scope re-add declares this row in place.
+if [ "$IS_EGRESS" = 1 ] && [ -z "$SCOPE" ]; then
+  "$PRINTF" 'NOTICE: %s carries no scope directive, so it is matched as a curl upload host AND as a gh-api path\n' "$ENTRY" >&2
+  "$PRINTF" '        (as a gh-api path only if its first path segment carries no glob character).\n' >&2
+  "$PRINTF" '        To confine it to one domain, re-run with --scope host or --scope gh-api-path.\n' >&2
+fi

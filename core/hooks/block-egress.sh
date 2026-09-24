@@ -47,6 +47,8 @@ readonly MODE_FILE="${HOOK_DIR}/.mode"
 readonly EGRESS_ALLOWLIST="${HOOK_DIR}/../egress-allowlist.txt"
 readonly WEBFETCH_ALLOWLIST="${HOOK_DIR}/../webfetch-allowlist.txt"
 readonly SSH_ALLOWLIST="${HOOK_DIR}/../ssh-allowlist.txt"
+# Line prefix of a row-scope directive in egress-allowlist.txt (read by is_allowlisted).
+readonly EGRESS_SCOPE_DIRECTIVE='# egress-scope:'
 
 # --- ABSOLUTE-PATH-AWARE ANCHOR ---
 # Canonical anchor pattern that captures the 5 macOS/Linux absolute-path
@@ -260,16 +262,63 @@ matches() {
   "$PRINTF" '%s' "$COMMAND_CMDPOS" | "$GREP" -qE "$1"
 }
 
-# Check a value against a glob-pattern allowlist file (bash case globbing)
+# Check a value against a glob-pattern allowlist file (bash case globbing).
+#
+#   is_allowlisted <value> <allowlist> [<domain>]
+#
+# No <domain>: every non-comment row is a candidate. This is the form the single-domain
+# files use (ssh-allowlist.txt at -011, webfetch-allowlist.txt at -013), and it returns
+# the verdicts the loop this function replaced returned: a scope directive begins with
+# `#`, so it is a comment here exactly as it always was.
+#
+# <domain> given (`host` at -004, `gh-api-path` at -007): egress-allowlist.txt serves two
+# match domains, and a row is a candidate only in its own. The allowlist's header states
+# the grammar; this function applies it:
+#   * `# egress-scope: host` / `# egress-scope: gh-api-path` declares the domain of the
+#     ONE row on the line immediately below it. Any other line in that position (blank,
+#     comment, another directive) discards it, so a scope never carries onto a later row.
+#   * A directive naming any other value makes that row match NOWHERE — fail closed.
+#   * A row with no directive above it is a candidate in BOTH domains: the pre-change
+#     behaviour, so an operator row written before directives existed keeps its grant.
+#   * At `gh-api-path`, a pattern whose FIRST path segment carries a glob character is
+#     never a candidate, declared or not. A host wildcard reaches a path only by
+#     absorbing the whole front of it, and a query string lets any write end in
+#     host-shaped text (`issues?x=a.github.com`), so a leading glob is the one shape
+#     that must never grant a gh api write.
 is_allowlisted() {
   local value="$1"
   local allowlist="$2"
+  local domain="${3:-}"
   [ -f "$allowlist" ] || return 1
-  local pattern
+  local pattern pending="" scope first_seg
   while IFS= read -r pattern || [ -n "$pattern" ]; do
+    scope="$pending"
+    pending=""
     case "$pattern" in
+      "$EGRESS_SCOPE_DIRECTIVE"*)
+        pending="${pattern#"$EGRESS_SCOPE_DIRECTIVE"}"
+        pending="${pending#"${pending%%[![:space:]]*}"}"
+        pending="${pending%"${pending##*[![:space:]]}"}"
+        case "$pending" in
+          host|gh-api-path) ;;
+          *) pending="invalid" ;;
+        esac
+        continue
+        ;;
       ''|'#'*) continue;;
     esac
+    if [ -n "$domain" ]; then
+      if [ -n "$scope" ] && [ "$scope" != "$domain" ]; then
+        continue
+      fi
+      if [ "$domain" = "gh-api-path" ]; then
+        first_seg="${pattern#/}"
+        first_seg="${first_seg%%/*}"
+        case "$first_seg" in
+          *'*'*|*'?'*|*'['*) continue ;;
+        esac
+      fi
+    fi
     # shellcheck disable=SC2254
     case "$value" in
       $pattern) return 0;;
@@ -542,15 +591,17 @@ egress_old_reachable_gh_api() {
 # or a leading `:name`. The AUTHORITY PREFIX is the first THREE path segments:
 # GitHub REST paths are `repos/{owner}/{repo}/...`, `orgs/{org}/...` and
 # `users/{user}/...`, so the first three segments are exactly what decides WHICH
-# repository a write reaches — and every path pattern in the allowlist fixes those
-# three literally. The threshold is read off the allowlist's own shape, not chosen.
+# repository a write reaches. The threshold is at least as strict as any path
+# pattern's literal prefix: a path pattern must pin the account literally (the
+# allowlist header's prefix-anchoring rule), and the account sits inside the first
+# three segments.
 #
 #   unevaluable IN the authority  -> return 1; the caller denies, naming the cause
 #   unevaluable BELOW it          -> substitute `*` and adjudicate normally
 #
 # The second half is sound because every allowlist path pattern is prefix-anchored:
-# the literal prefix is fixed, so whatever the variable expands to, the path still
-# begins inside an allowlisted repository. It is also what keeps a bulk loop over
+# its literal prefix pins the account, so whatever the variable expands to, the path
+# still begins inside an allowlisted account. It is also what keeps a bulk loop over
 # issue numbers working.
 #
 # A blanket deny on any variable-bearing path was rejected on evidence: it would
@@ -752,7 +803,7 @@ case "$TOOL_NAME" in
       # Extract target URL
       target_url="$("$PRINTF" '%s' "$COMMAND" | "$GREP" -oE 'https?://[^[:space:]"'"'"';&|]+' | /usr/bin/head -1 || "$PRINTF" '')"
       target_host="$(extract_host "${target_url:-}")"
-      if [ -z "$target_host" ] || ! is_allowlisted "$target_host" "$EGRESS_ALLOWLIST"; then
+      if [ -z "$target_host" ] || ! is_allowlisted "$target_host" "$EGRESS_ALLOWLIST" host; then
         apply_block "BLOCK-EGRESS-004" \
           "curl POST/PUT/upload to non-allowlisted host denied (target: ${target_host:-unknown})." \
           "add host to .claude/egress-allowlist.txt via allowlist-add.sh, or set CLAUDE_HOOK_BYPASS=1" \
@@ -1023,7 +1074,7 @@ case "$TOOL_NAME" in
           continue
         fi
 
-        if ! is_allowlisted "$egress_norm_path" "$EGRESS_ALLOWLIST"; then
+        if ! is_allowlisted "$egress_norm_path" "$EGRESS_ALLOWLIST" gh-api-path; then
           egress_007_verdict "not-allowlisted" "$egress_norm_path" "$egress_widening"
         fi
       done <<< "$egress_segs"
