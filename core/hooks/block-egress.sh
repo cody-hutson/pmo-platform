@@ -210,16 +210,19 @@ if command -v scope_guard_gate >/dev/null 2>&1; then scope_guard_gate "$CWD"; fi
 #                                 (the running bash), or `unknown`
 #                 shell_parse     that parser's verdict (`-n`: read, never executed):
 #                                 `ok` = accepted, so the refusal was false; `error` =
-#                                 rejected, so the command could not run either;
+#                                 rejected BY THAT PARSER — the shell that runs the
+#                                 command may still accept it (bash and zsh diverge);
 #                                 `skipped` = above the size cap, not checked;
 #                                 `unavailable` = the parser is missing or gave no verdict
 #                 heredoc         the heredoc delimiter quoting it uses: none | quoted |
-#                                 unquoted | both, or `skipped` above the cap
+#                                 unquoted | both, `skipped` above the cap, or
+#                                 `unavailable` when the scan could not run
 #   hook_build  the first 16 hex of the git blob id of the hook file that wrote the
 #               record, so a record names its producer across redeploys
 #               (`git log --raw --no-abbrev -- core/hooks/block-egress.sh` resolves it)
 # A specificity reading classifies the class by `features.shell_parse`, scoped by
-# `features.oracle`: `error` -> true-positive, `ok` -> benign-shape, `skipped` or
+# `features.oracle`: `error` -> rejected by the recorded oracle (a true positive where
+# that oracle's grammar is the executing shell's), `ok` -> benign-shape, `skipped` or
 # `unavailable` -> unclassified.
 #
 # Both keys are optional; every other record keeps the plain template, and every
@@ -227,9 +230,12 @@ if command -v scope_guard_gate >/dev/null 2>&1; then scope_guard_gate "$CWD"; fi
 # apply_block is entered, and apply_block takes its exit from the mode alone. The write
 # path is failure-proof because it must be: under `set -e` a failing command inside a
 # function ends this hook with status 1, which PreToolUse treats as NON-blocking, so an
-# unguarded step here would lose the deny that follows it. A record whose features
-# cannot be written is written with `hook_build` alone, and one that cannot carry either
-# is written plain.
+# unguarded step here would lose the deny that follows it. The feature path is bounded in
+# TIME as well as status — each computation is linear in the command and capped — because
+# a hook that outlasts its timeout does not block either. A record whose features cannot
+# be computed carries the not-computed set (every member `unavailable`, the oracle
+# `unknown`); one whose features cannot be written is written with `hook_build` alone;
+# and one that cannot carry either is written plain.
 log_block() {
   local rule_id="$1"
   local evidence="${2:-}"
@@ -756,7 +762,7 @@ readonly EGRESS_007_FEATURES_SCHEMA_VERSION=1
 readonly EGRESS_007_PARSE_ORACLE="${BASH:-/bin/bash}"
 # Characters. ONE bound for the whole feature path, applied once, because both
 # computations read the same caller-sized input: above it neither runs, and both report
-# `skipped`.
+# `skipped`. Both are linear in the command, so the cap bounds their cost as well.
 readonly EGRESS_007_PARSE_CAP=1048576
 
 # Which parser judges the syntax. The oracle is the running bash, so its version is known
@@ -799,32 +805,39 @@ egress_shell_parse() {
 # is not counted, and the delimiter WORD is never recorded — only its quoting.
 # Approximate by design (a `<<` inside quotes or arithmetic counts too): the oracle, not
 # this scan, decides whether a refusal was correct. The caller applies the size cap.
+#
+# LINEAR in the command's length, so the cap bounds the scan's cost and not only its
+# input: two extended-regex searches, byte-wise in the C locale, each stopping at its first
+# match. The per-occurrence scan these replace rescanned and re-copied the remainder at
+# every operator, which is superlinear under a multibyte locale — tens of seconds on the
+# deny path for a well-formed command of 60K characters — and a hook that outlasts its
+# timeout does not block.
+#
+# The two expressions state, operator by operator, the scan that loop was written to
+# perform. A maximal run of `<` opens a heredoc only when its length is two more than a
+# multiple of three: each `<<<` is a here-string, consumed whole from the left. Then come
+# one optional `-` — the `<<-` operator's, only directly after the run — then blanks, then
+# the delimiter word, which runs to whitespace or to one of ; & | < > ( ), where the shell's
+# own tokenizer ends it. (As bash 3.2 ran the loop's one-bracket terminator set, its word
+# did not end at `>`, `(` or `)`, so a syntax error such as `<<(x` read `unquoted`; it reads
+# `none` here.) The word is QUOTED when it carries a single quote, a double quote or a
+# backslash anywhere, and UNQUOTED when it is non-empty and carries none of them.
+readonly EGRESS_007_HEREDOC_QUOTED_ERE='(^|[^<])(<<<)*<<-?[[:blank:]]*[^[:space:];&|<>()]*['"'"'"\]'
+readonly EGRESS_007_HEREDOC_UNQUOTED_ERE='(^|[^<])(<<<)*<<(-[[:blank:]]*[^[:space:];&|<>()'"'"'"\]+|[[:blank:]]+[^[:space:];&|<>()'"'"'"\]+|[^-[:space:];&|<>()'"'"'"\][^[:space:];&|<>()'"'"'"\]*)([[:space:];&|<>()]|$)'
+# Only the searches' own counts map to a class: `-c -m 1` prints 1 on a match and 0 on
+# none, and a search that could not run prints neither, so it reads `unavailable` — never
+# a class. The command travels as a here-string, never argv.
 egress_heredoc_kind() {
-  local rest="$1" after word q=0 u=0
-  while : ; do
-    case "$rest" in
-      *'<<'*) ;;
-      *) break ;;
-    esac
-    after="${rest#*<<}"
-    case "$after" in
-      '<'*) rest="${after#<}"; continue ;;
-    esac
-    after="${after#-}"
-    after="${after#"${after%%[![:blank:]]*}"}"
-    word="${after%%[[:space:];&|<>()]*}"
-    case "$word" in
-      '') ;;
-      *[\'\"\\]*) q=1 ;;
-      *) u=1 ;;
-    esac
-    rest="$after"
-  done
-  if [ "$q" -eq 1 ] && [ "$u" -eq 1 ]; then "$PRINTF" 'both'
-  elif [ "$q" -eq 1 ]; then "$PRINTF" 'quoted'
-  elif [ "$u" -eq 1 ]; then "$PRINTF" 'unquoted'
-  else "$PRINTF" 'none'
-  fi
+  local q="" u=""
+  q="$(LC_ALL=C "$GREP" -c -m 1 -E -e "$EGRESS_007_HEREDOC_QUOTED_ERE" <<<"$1" 2>/dev/null)" || true
+  u="$(LC_ALL=C "$GREP" -c -m 1 -E -e "$EGRESS_007_HEREDOC_UNQUOTED_ERE" <<<"$1" 2>/dev/null)" || true
+  case "${q}:${u}" in
+    1:1) "$PRINTF" 'both' ;;
+    1:0) "$PRINTF" 'quoted' ;;
+    0:1) "$PRINTF" 'unquoted' ;;
+    0:0) "$PRINTF" 'none' ;;
+    *)   "$PRINTF" 'unavailable' ;;
+  esac
   return 0
 }
 
@@ -847,15 +860,22 @@ egress_hook_build() {
   return 0
 }
 
-# The feature object as compact JSON for jq --argjson; empty when it cannot be built,
-# which leaves the plain record in place. The size cap is applied HERE, once, to the
-# whole feature path.
+# The feature set of a record whose features could not be computed at all: every member
+# says so, so the record still carries a defined set beside hook_build.
+readonly EGRESS_007_FEATURES_NOT_COMPUTED="{\"schema_version\":${EGRESS_007_FEATURES_SCHEMA_VERSION},\"oracle\":\"unknown\",\"shell_parse\":\"unavailable\",\"heredoc\":\"unavailable\"}"
+
+# The feature object as compact JSON for jq --argjson; empty when it cannot be built, and
+# the verdict then records the not-computed set above. The size cap is applied HERE, once,
+# to the whole feature path. Each member is checked against its vocabulary before it is
+# rendered, so a helper that printed nothing — or anything else — reads `unavailable`.
 egress_007_unparseable_features() {
   local cmd="$1" parse="skipped" heredoc="skipped" oracle
   if [ "${#cmd}" -le "$EGRESS_007_PARSE_CAP" ]; then
     parse="$(egress_shell_parse "$cmd")" || parse="unavailable"
-    heredoc="$(egress_heredoc_kind "$cmd")" || true
+    heredoc="$(egress_heredoc_kind "$cmd")" || heredoc="unavailable"
   fi
+  case "$parse" in ok|error|skipped|unavailable) ;; *) parse="unavailable" ;; esac
+  case "$heredoc" in none|quoted|unquoted|both|skipped|unavailable) ;; *) heredoc="unavailable" ;; esac
   oracle="$(egress_parse_oracle_label)" || oracle="unknown"
   "$JQ" -nc --argjson v "$EGRESS_007_FEATURES_SCHEMA_VERSION" \
     --arg o "$oracle" --arg p "$parse" --arg h "$heredoc" \
@@ -900,6 +920,10 @@ egress_007_verdict() {
     unparseable)
       reason="gh api write denied: the command carries an unterminated quote and cannot be evaluated."
       override="close the quote — an unbalanced quote outside a comment means the command cannot execute in this form either. Or set CLAUDE_HOOK_BYPASS=1"
+      # This class never goes featureless: a set that could not be computed is recorded as
+      # not computed, so the record keeps hook_build and cannot be taken, by key, for one
+      # written before the set existed.
+      [ -n "$features" ] || features="$EGRESS_007_FEATURES_NOT_COMPUTED"
       ;;
     no-path)
       reason="gh api write denied: no API path operand found after 'gh api'."

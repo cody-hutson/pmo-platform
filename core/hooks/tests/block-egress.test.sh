@@ -1581,7 +1581,7 @@ fi
 E007_V_SHAPE='(has("phase") | not)
   and (.features.schema_version == 1)
   and (.features.shell_parse as $v | any(("ok","error","skipped","unavailable"); . == $v))
-  and (.features.heredoc as $v | any(("none","quoted","unquoted","both","skipped"); . == $v))
+  and (.features.heredoc as $v | any(("none","quoted","unquoted","both","skipped","unavailable"); . == $v))
   and (.features.oracle == $oracle)
   and ((.hook_build // "") | test("^[0-9a-f]{16}$"))
   and (.hook_build == $build)'
@@ -1753,6 +1753,15 @@ for _v_mode in enforce warn; do
     "$E007_V_R" "$_v_mode" '(.features == {"schema_version":1,"oracle":"unknown","shell_parse":"unavailable","heredoc":"unavailable"}) and ((.hook_build // "") | test("^[0-9a-f]{16}$"))'
 done
 
+# V7j — one of the scan's two searches cannot run. A missing, killed or timed-out search
+# prints no count, and only a count maps to a class, so the member reads `unavailable`.
+E007_V_R="${E007_V_BASE}/v7j"
+e007_v_mutate "$E007_V_R" 's|q="$(LC_ALL=C "$GREP" -c -m 1|q="$(LC_ALL=C /nonexistent/grep -c -m 1|'
+e007_v_guard "AC-E007-V7j-guard: the failing-search copy differs in one line, parses, and still enforces -001" "${E007_V_R}/mut.sh" "$E007_V_R" enforce
+/usr/bin/printf 'PREDICT: AC-E007-V7j — a heredoc search that cannot run: exit 2, heredoc unavailable, shell_parse keeps its verdict\n'
+e007_v_mutant_arm "AC-E007-V7j: a heredoc search that prints no count records unavailable, never a class" \
+  "$E007_V_R" enforce '.features.heredoc == "unavailable" and .features.shell_parse == "error"'
+
 # V8 (scope containment) — the feature keys ride the unparseable class only: the other
 # -007 causes and another rule's record keep exactly the plain template's key set.
 E007_V_R="${E007_V_BASE}/v8"
@@ -1814,8 +1823,15 @@ fi
 # per-occurrence rescans of the whole remainder were measured superlinear. They do not time
 # the whole hook, whose -007 scanner has a cost of its own.
 #
-# e007_v_ref_kind is the reference model: the pre-fix scan's algorithm, verbatim (its
-# output through the printf builtin). The replacement must agree with it on every command.
+# e007_v_ref_kind is the reference model: the pre-fix scan's algorithm, verbatim but for
+# one line, with its output through the printf builtin. The replacement must agree with it
+# on every command. The one line is the delimiter word's cut. The pre-fix scan wrote its
+# terminator set as one bracket expression, and as bash 3.2 runs that expression the word
+# does not end at `>`, `(` or `)` — this arm's first runs against the replacement found
+# commands that disagree only there. The shell's own tokenizer ends the word at those
+# characters, so each such command is a syntax error to it, and `none` is the faithful
+# reading. The model therefore cuts the word at each terminator in turn, each one a
+# backslash-escaped literal, and so states the set the pre-fix scan was written to apply.
 e007_v_ref_kind() {
   local rest="$1" after word q=0 u=0
   while : ; do
@@ -1829,7 +1845,9 @@ e007_v_ref_kind() {
     esac
     after="${after#-}"
     after="${after#"${after%%[![:blank:]]*}"}"
-    word="${after%%[[:space:];&|<>()]*}"
+    word="${after%%[[:space:]]*}"
+    word=${word%%\;*}; word=${word%%\&*}; word=${word%%\|*}; word=${word%%\<*}
+    word=${word%%\>*}; word=${word%%\(*}; word=${word%%\)*}
     case "$word" in
       '') ;;
       *[\'\"\\]*) q=1 ;;
@@ -1894,7 +1912,8 @@ for _v_c in "$E007_V_H1" "$E007_V_H2" "$E007_V_H3" "$E007_V_H4" "$E007_V_H5" "$E
   "cat <<<<<'x'" 'cat <<<<<<x' 'cat <<<<<<<x' 'cat <<<<<<<<x' "cat <<- 'x'" 'cat << -x' "cat <<  -'x'" \
   "cat <<-x'y'" "cat <<x-'y'" 'cat <<;x' 'cat <<-' '<<x' "x<<'y'" 'a <<E"O"F' 'echo "a<<b"' \
   "cat <<-"$'\t'"'x'" '(cat <<x)' 'cat <<x|y' 'cat <<x&' 'cat <<x>y' 'cat <<x<y' "cat <<'x'<<y" \
-  'cat <<'$'\n''x' 'cat <<x'$'\n''body'$'\n''x' 'cat <<--x' 'cat <<-<<x' 'a<<<<<' '<<<x <<y'; do
+  'cat <<'$'\n''x' 'cat <<x'$'\n''body'$'\n''x' 'cat <<--x' 'cat <<-<<x' 'a<<<<<' '<<<x <<y' \
+  'cat <<end' 'cat <<(x' 'cat <<>x' 'cat <<)x' "cat <<a/'b'" "cat <<6'x'" "cat <<3'x'"; do
   /usr/bin/printf '%s\0' "$_v_c" >> "$E007_V_CASES"
   _v_hand=$(( _v_hand + 1 ))
 done
@@ -1907,17 +1926,25 @@ while [ "$_v_n" -lt 200 ]; do
   /usr/bin/printf '%s\0' "$_v_c" >> "$E007_V_CASES"
   _v_n=$(( _v_n + 1 ))
 done
-while IFS= read -r -d '' _v_c; do e007_v_ref_kind "$_v_c"; printf '\n'; done < "$E007_V_CASES" > "${E007_V_R}/ref.out"
-LC_ALL=en_US.UTF-8 /bin/bash -c '. "$1" || exit 3; while IFS= read -r -d "" c; do egress_heredoc_kind "$c"; printf "\n"; done < "$2"' \
+# Each side prints "<case number> <verdict>", so a disagreement names its case.
+_v_i=0
+while IFS= read -r -d '' _v_c; do _v_i=$(( _v_i + 1 )); printf '%s %s\n' "$_v_i" "$(e007_v_ref_kind "$_v_c")"; done < "$E007_V_CASES" > "${E007_V_R}/ref.out"
+LC_ALL=en_US.UTF-8 /bin/bash -c '. "$1" || exit 3; i=0; while IFS= read -r -d "" c; do i=$(( i + 1 )); printf "%s %s\n" "$i" "$(egress_heredoc_kind "$c")"; done < "$2"' \
   _ "$E007_V_SCAN" "$E007_V_CASES" > "${E007_V_R}/hook.out" 2>/dev/null
 _v_total="$(/usr/bin/wc -l < "${E007_V_R}/ref.out" | /usr/bin/tr -d ' ')"
 _v_diff="$(/usr/bin/diff "${E007_V_R}/ref.out" "${E007_V_R}/hook.out" | /usr/bin/grep -c '^[<>]')"
-_v_seen="$(/usr/bin/sort -u "${E007_V_R}/ref.out" | /usr/bin/tr '\n' ' ')"
+_v_seen="$(/usr/bin/cut -d ' ' -f 2 "${E007_V_R}/ref.out" | /usr/bin/sort -u | /usr/bin/tr '\n' ' ')"
 if [ "$_v_total" = $(( _v_hand + 200 )) ] && [ "$_v_diff" = 0 ] && [ "$_v_seen" = 'both none quoted unquoted ' ]; then
   e007_d_pass "AC-E007-V6b: the hook's heredoc scan agrees with the pre-fix scan on ${_v_total} commands (${_v_hand} edge cases, 200 seeded) — every class represented"
 else
+  _v_bad=""; _v_i=0
+  while IFS= read -r -d '' _v_c; do
+    _v_i=$(( _v_i + 1 ))
+    _v_r="$(/usr/bin/grep -m 1 "^${_v_i} " "${E007_V_R}/ref.out")"; _v_h="$(/usr/bin/grep -m 1 "^${_v_i} " "${E007_V_R}/hook.out")"
+    [ "$_v_r" = "$_v_h" ] || _v_bad="${_v_bad} case ${_v_i} $(printf '%q' "$_v_c"): reference=${_v_r#* } hook=${_v_h#* };"
+  done < "$E007_V_CASES"
   e007_d_fail "AC-E007-V6b: the hook's heredoc scan agrees with the pre-fix scan" \
-    "commands=${_v_total} (want $(( _v_hand + 200 ))) differing lines=${_v_diff} classes seen=[${_v_seen}] first difference: $(/usr/bin/diff "${E007_V_R}/ref.out" "${E007_V_R}/hook.out" | /usr/bin/head -4 | /usr/bin/tr '\n' ' ')"
+    "commands=${_v_total} (want $(( _v_hand + 200 ))) differing lines=${_v_diff} classes seen=[${_v_seen}]${_v_bad}"
 fi
 
 # V10-ctl (the instrument's sensitivity) — the reference model on the 60K payload must be
