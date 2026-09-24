@@ -1730,6 +1730,29 @@ else
   e007_d_fail "AC-E007-V7g: the block-log input_digest is the 16-hex sha256 prefix of the compact tool input" "record=${_v_got:-none} recomputed=${_v_dg:-none}"
 fi
 
+# V7h — the heredoc scan fails before it prints. The deny stands, and the record carries an
+# in-vocabulary value for the member the scan could not compute, never an empty string.
+E007_V_R="${E007_V_BASE}/v7h"
+e007_v_mutate "$E007_V_R" 's|^egress_heredoc_kind() {$|egress_heredoc_kind() { return 3;|'
+e007_v_guard "AC-E007-V7h-guard: the failing-heredoc-scan copy differs in one line, parses, and still enforces -001" "${E007_V_R}/mut.sh" "$E007_V_R" enforce
+/usr/bin/printf 'PREDICT: AC-E007-V7h — the heredoc scan fails: the deny stands, heredoc reads unavailable, shell_parse keeps its verdict\n'
+for _v_mode in enforce warn; do
+  e007_v_mutant_arm "AC-E007-V7h (${_v_mode}): a heredoc scan that fails records heredoc unavailable, never an empty value" \
+    "$E007_V_R" "$_v_mode" '.features.heredoc == "unavailable" and .features.shell_parse == "error"'
+done
+
+# V7i — the feature object cannot be rendered at all. The deny stands, and the record still
+# carries hook_build and a defined feature set — every member in its vocabulary, saying the
+# set could not be computed — so it cannot be taken by key for a pre-fix record.
+E007_V_R="${E007_V_BASE}/v7i"
+e007_v_mutate "$E007_V_R" 's|"\$JQ" -nc --argjson v|"/nonexistent/jq" -nc --argjson v|'
+e007_v_guard "AC-E007-V7i-guard: the failing-features-render copy differs in one line, parses, and still enforces -001" "${E007_V_R}/mut.sh" "$E007_V_R" enforce
+/usr/bin/printf 'PREDICT: AC-E007-V7i — the features cannot be rendered: the deny stands; the record keeps hook_build and carries the not-computed feature set\n'
+for _v_mode in enforce warn; do
+  e007_v_mutant_arm "AC-E007-V7i (${_v_mode}): a feature set that cannot be computed still rides the record, in vocabulary, beside hook_build" \
+    "$E007_V_R" "$_v_mode" '(.features == {"schema_version":1,"oracle":"unknown","shell_parse":"unavailable","heredoc":"unavailable"}) and ((.hook_build // "") | test("^[0-9a-f]{16}$"))'
+done
+
 # V8 (scope containment) — the feature keys ride the unparseable class only: the other
 # -007 causes and another rule's record keep exactly the plain template's key set.
 E007_V_R="${E007_V_BASE}/v8"
@@ -1781,6 +1804,149 @@ if [ -z "$_v_bad" ]; then
   e007_d_pass "AC-E007-V9: the -007 refusal-record contract — one record per cause, cause token recoverable, path kept, field set on unparseable only, no command text"
 else
   e007_d_fail "AC-E007-V9: the -007 refusal-record contract" "$_v_bad"
+fi
+
+# V6b / V10 — the heredoc scan's COST and its AGREEMENT with the scan it replaced. The
+# feature path runs on the way into apply_block under every mode, and a hook that outlasts
+# its timeout does not block, so the scan's cost is part of the deny's contract. These arms
+# run the scan itself, extracted from the hook under test with the tool constants it reads,
+# in the multibyte locale the hook runs in — the locale in which the pre-fix scan's
+# per-occurrence rescans of the whole remainder were measured superlinear. They do not time
+# the whole hook, whose -007 scanner has a cost of its own.
+#
+# e007_v_ref_kind is the reference model: the pre-fix scan's algorithm, verbatim (its
+# output through the printf builtin). The replacement must agree with it on every command.
+e007_v_ref_kind() {
+  local rest="$1" after word q=0 u=0
+  while : ; do
+    case "$rest" in
+      *'<<'*) ;;
+      *) break ;;
+    esac
+    after="${rest#*<<}"
+    case "$after" in
+      '<'*) rest="${after#<}"; continue ;;
+    esac
+    after="${after#-}"
+    after="${after#"${after%%[![:blank:]]*}"}"
+    word="${after%%[[:space:];&|<>()]*}"
+    case "$word" in
+      '') ;;
+      *[\'\"\\]*) q=1 ;;
+      *) u=1 ;;
+    esac
+    rest="$after"
+  done
+  if [ "$q" -eq 1 ] && [ "$u" -eq 1 ]; then printf 'both'
+  elif [ "$q" -eq 1 ]; then printf 'quoted'
+  elif [ "$u" -eq 1 ]; then printf 'unquoted'
+  else printf 'none'
+  fi
+  return 0
+}
+E007_V_R="${E007_V_BASE}/v10"
+/bin/mkdir -p "$E007_V_R"
+E007_V_SCAN="${E007_V_R}/scan.sh"
+/usr/bin/sed -n -e '/^readonly GREP=/p' -e '/^readonly PRINTF=/p' -e '/^readonly EGRESS_007_HEREDOC_/p' \
+  -e '/^egress_heredoc_kind() {$/,/^}$/p' "${E007_D_HOOK_SRC}/block-egress.sh" > "$E007_V_SCAN"
+E007_V_REFDEF="${E007_V_R}/ref.sh"
+declare -f e007_v_ref_kind > "$E007_V_REFDEF"
+# e007_v_timed <definitions> <function> <command-file> <limit, tenths of a second> — the
+# function, sourced from <definitions> in a fresh bash under the multibyte locale, reads the
+# command from <command-file>; a watchdog stops it at <limit>. Sets E007_V_KIND (its verdict)
+# and E007_V_DS (tenths of a second elapsed, or -1 when stopped at the limit).
+e007_v_timed() {
+  local out="${E007_V_R}/kind.out" pid n=0
+  /bin/rm -f "$out"
+  LC_ALL=en_US.UTF-8 /bin/bash -c '. "$1" || exit 3; c="$(/bin/cat "$3")" || exit 3; "$2" "$c"' _ "$1" "$2" "$3" > "$out" 2>/dev/null &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$n" -ge "$4" ]; then
+      kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
+      E007_V_KIND=""; E007_V_DS=-1; return 0
+    fi
+    /bin/sleep 0.1; n=$(( n + 1 ))
+  done
+  wait "$pid" 2>/dev/null
+  E007_V_KIND="$(/bin/cat "$out" 2>/dev/null)"; E007_V_DS="$n"
+}
+# The 60K payload is the Stage-7 latency record's shape: the V6 H5 command plus 10,000
+# here-strings — well-formed (both parsers accept it), refused by the scanner, `both` by
+# construction. The cap payload is the shipped cap's worth of `<`, whose run length leaves
+# no heredoc operator: `none`, with both scans reading every byte.
+_v_amp=' <<< a'
+for _v_i in 1 2 3 4; do _v_amp="${_v_amp}${_v_amp}${_v_amp}${_v_amp}${_v_amp}${_v_amp}${_v_amp}${_v_amp}${_v_amp}${_v_amp}"; done
+/usr/bin/printf '%s' "${E007_V_H5}${_v_amp}" > "${E007_V_R}/amp.cmd"
+/usr/bin/printf '%*s' 1048576 '' | /usr/bin/tr ' ' '<' > "${E007_V_R}/cap.cmd"
+_v_amplen="$(/usr/bin/wc -c < "${E007_V_R}/amp.cmd" | /usr/bin/tr -d ' ')"
+_v_caplen="$(/usr/bin/wc -c < "${E007_V_R}/cap.cmd" | /usr/bin/tr -d ' ')"
+E007_V_LIMIT="${E007_V_SCAN_LIMIT_DS:-10}"   # tenths of a second: the design's 1 s feature-path budget
+
+# V6b (agreement) — the hook's scan and the reference model classify the same commands the
+# same way: hand-picked edge cases (the V6 fixtures, here-string runs of every length class,
+# the dash, blanks, every terminator, words quoted anywhere, several lines), then seeded
+# random ones over the scan's structural alphabet.
+E007_V_CASES="${E007_V_R}/cases.bin"
+: > "$E007_V_CASES"
+_v_hand=0
+for _v_c in "$E007_V_H1" "$E007_V_H2" "$E007_V_H3" "$E007_V_H4" "$E007_V_H5" "$E007_V_TP" "$E007_V_FP" \
+  "cat <<'EOF'" 'cat <<"EOF"' 'cat <<-\EOF' 'cat <<EOF' "cat <<EOF x <<'Y'" 'cat <<< word' "cat <<<<'x'" \
+  "cat <<<<<'x'" 'cat <<<<<<x' 'cat <<<<<<<x' 'cat <<<<<<<<x' "cat <<- 'x'" 'cat << -x' "cat <<  -'x'" \
+  "cat <<-x'y'" "cat <<x-'y'" 'cat <<;x' 'cat <<-' '<<x' "x<<'y'" 'a <<E"O"F' 'echo "a<<b"' \
+  "cat <<-"$'\t'"'x'" '(cat <<x)' 'cat <<x|y' 'cat <<x&' 'cat <<x>y' 'cat <<x<y' "cat <<'x'<<y" \
+  'cat <<'$'\n''x' 'cat <<x'$'\n''body'$'\n''x' 'cat <<--x' 'cat <<-<<x' 'a<<<<<' '<<<x <<y'; do
+  /usr/bin/printf '%s\0' "$_v_c" >> "$E007_V_CASES"
+  _v_hand=$(( _v_hand + 1 ))
+done
+RANDOM=6201
+_v_alpha='<<<<<-  x;>(|&'"'"'"\'$'\t\n'
+_v_n=0
+while [ "$_v_n" -lt 200 ]; do
+  _v_len=$(( RANDOM % 10 + 1 )); _v_c=""
+  while [ "${#_v_c}" -lt "$_v_len" ]; do _v_c="${_v_c}${_v_alpha:$(( RANDOM % ${#_v_alpha} )):1}"; done
+  /usr/bin/printf '%s\0' "$_v_c" >> "$E007_V_CASES"
+  _v_n=$(( _v_n + 1 ))
+done
+while IFS= read -r -d '' _v_c; do e007_v_ref_kind "$_v_c"; printf '\n'; done < "$E007_V_CASES" > "${E007_V_R}/ref.out"
+LC_ALL=en_US.UTF-8 /bin/bash -c '. "$1" || exit 3; while IFS= read -r -d "" c; do egress_heredoc_kind "$c"; printf "\n"; done < "$2"' \
+  _ "$E007_V_SCAN" "$E007_V_CASES" > "${E007_V_R}/hook.out" 2>/dev/null
+_v_total="$(/usr/bin/wc -l < "${E007_V_R}/ref.out" | /usr/bin/tr -d ' ')"
+_v_diff="$(/usr/bin/diff "${E007_V_R}/ref.out" "${E007_V_R}/hook.out" | /usr/bin/grep -c '^[<>]')"
+_v_seen="$(/usr/bin/sort -u "${E007_V_R}/ref.out" | /usr/bin/tr '\n' ' ')"
+if [ "$_v_total" = $(( _v_hand + 200 )) ] && [ "$_v_diff" = 0 ] && [ "$_v_seen" = 'both none quoted unquoted ' ]; then
+  e007_d_pass "AC-E007-V6b: the hook's heredoc scan agrees with the pre-fix scan on ${_v_total} commands (${_v_hand} edge cases, 200 seeded) — every class represented"
+else
+  e007_d_fail "AC-E007-V6b: the hook's heredoc scan agrees with the pre-fix scan" \
+    "commands=${_v_total} (want $(( _v_hand + 200 ))) differing lines=${_v_diff} classes seen=[${_v_seen}] first difference: $(/usr/bin/diff "${E007_V_R}/ref.out" "${E007_V_R}/hook.out" | /usr/bin/head -4 | /usr/bin/tr '\n' ' ')"
+fi
+
+# V10-ctl (the instrument's sensitivity) — the reference model on the 60K payload must be
+# STOPPED at the limit: the watchdog and the locale reproduce the pre-fix cost, so a pass
+# below is a measurement, not an instrument that cannot see a slow scan.
+/usr/bin/printf 'PREDICT: AC-E007-V10-ctl — the pre-fix scan on the %s-character payload is stopped at the %s-tenths limit\n' "$_v_amplen" "$E007_V_LIMIT"
+e007_v_timed "$E007_V_REFDEF" e007_v_ref_kind "${E007_V_R}/amp.cmd" "$E007_V_LIMIT"
+if [ "$E007_V_DS" = -1 ]; then
+  e007_d_pass "AC-E007-V10-ctl: the pre-fix scan outlasts ${E007_V_LIMIT} tenths of a second on the ${_v_amplen}-character payload — the instrument sees the cost"
+else
+  e007_d_fail "AC-E007-V10-ctl: the pre-fix scan is stopped at the limit" "it finished in ${E007_V_DS} tenths with '${E007_V_KIND}' — the locale or watchdog cannot reproduce the cost, so V10a/V10b prove nothing (BROKEN PROBE)"
+fi
+
+# V10a (F-01) — the hook's scan on the same 60K payload finishes inside the limit and reads
+# `both`. V10b — at the shipped cap, inside twice the limit.
+/usr/bin/printf 'PREDICT: AC-E007-V10a — the hook scan on the %s-character payload finishes within %s tenths and reads both\n' "$_v_amplen" "$E007_V_LIMIT"
+e007_v_timed "$E007_V_SCAN" egress_heredoc_kind "${E007_V_R}/amp.cmd" "$E007_V_LIMIT"
+if [ "$E007_V_DS" != -1 ] && [ "$E007_V_KIND" = both ]; then
+  e007_d_pass "AC-E007-V10a: the heredoc scan of a ${_v_amplen}-character command finishes in ${E007_V_DS} tenths of a second (limit ${E007_V_LIMIT}) and reads both"
+else
+  e007_d_fail "AC-E007-V10a: the heredoc scan of a ${_v_amplen}-character command finishes inside the limit" "elapsed=${E007_V_DS} tenths (-1 = stopped at ${E007_V_LIMIT}) verdict='${E007_V_KIND}' (want both)"
+fi
+_v_cap2=$(( E007_V_LIMIT * 2 ))
+/usr/bin/printf 'PREDICT: AC-E007-V10b — the hook scan on the %s-character cap payload finishes within %s tenths and reads none\n' "$_v_caplen" "$_v_cap2"
+e007_v_timed "$E007_V_SCAN" egress_heredoc_kind "${E007_V_R}/cap.cmd" "$_v_cap2"
+if [ "$E007_V_DS" != -1 ] && [ "$E007_V_KIND" = none ]; then
+  e007_d_pass "AC-E007-V10b: the heredoc scan of a command at the shipped cap (${_v_caplen} characters) finishes in ${E007_V_DS} tenths of a second (limit ${_v_cap2}) and reads none"
+else
+  e007_d_fail "AC-E007-V10b: the heredoc scan of a command at the shipped cap finishes inside twice the limit" "elapsed=${E007_V_DS} tenths (-1 = stopped at ${_v_cap2}) verdict='${E007_V_KIND}' (want none)"
 fi
 
 /bin/rm -rf "$E007_V_BASE"
