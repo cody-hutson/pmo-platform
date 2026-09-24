@@ -47,6 +47,12 @@ if [ ! -x "$HOOK" ]; then echo "FAIL: hook not executable at $HOOK" >&2; echo "T
 # which resolve_path returns the raw string untouched). Resolving here is what makes
 # the anchored assertions genuine rather than accidentally-passing.
 TEST_WS="$(cd "$(/usr/bin/mktemp -d)" && pwd -P)"
+# (#6200) The platform checkout under the pinned workspace is a repository from the first arm.
+# Cross-domain classification is repository MEMBERSHIP (lib/platform-membership.sh), so a `.git`-less
+# ${TEST_WS}/pmo-platform is — correctly — not the platform, and the -002/-004 arms before Suite W
+# would test an empty anchor instead of the rule. Suite W's seed below used to supply this directory
+# incidentally; it is now seeded explicitly, where every arm can see it.
+/bin/mkdir -p "${TEST_WS}/pmo-platform/.git"
 TEST_HOME="$(/usr/bin/mktemp -d)"
 /bin/mkdir -p "${TEST_HOME}/.cache/pmo-platform"
 CACHE_FILE="${TEST_HOME}/.cache/pmo-platform/autonomy-ceiling"
@@ -1221,6 +1227,266 @@ else
 fi
 
 /bin/rm -rf "$A_SANDBOX"
+
+# =====================================================================
+# SUITE X — relocated worktrees: repository MEMBERSHIP decides the domain (#6200)
+# =====================================================================
+# -002 and -004 used to place a path by PREFIX: pmo-platform when it began with
+# ${PRIMARY_ROOT}/pmo-platform. A working tree of this repository can live anywhere, so a
+# projects-rooted session writing into a relocated platform worktree met no floor at all, and a
+# platform session inside one never drew -004. Membership — the walk -001's second stage already
+# used, now the shared helper lib/platform-membership.sh — decides the platform side of both
+# rules. Every block arm has a foreign-worktree twin that must ALLOW; the four anchor shapes Suite
+# N arms for PRIMARY_ROOT are re-armed for the helper's own anchor; the helper-ABSENT posture is
+# armed in the shipped warn mode; and two mutants — the retired prefix answer (X-15) and #6199's
+# cwd resolution deleted (X-19) — prove the pair arms discriminate.
+echo ""
+echo "Suite X — relocated worktrees: membership, not location, decides the domain (#6200)"
+echo "---"
+set_mode enforce
+set_ceiling 2
+
+# In-root relocated worktree: inside TEST_WS, outside TEST_WS/pmo-platform, so -004 is reachable
+# standalone too (the scope root is TEST_WS there).
+/bin/mkdir -p "${TEST_WS}/pmo-platform/.git/worktrees/wt2" "${TEST_WS}/relocated-wt/core"
+/usr/bin/printf 'gitdir: %s\n' "${TEST_WS}/pmo-platform/.git/worktrees/wt2" > "${TEST_WS}/relocated-wt/.git"
+# The same shape, pointing into ANOTHER repository.
+/bin/mkdir -p "${TEST_WS}/foreign-repo2/.git/worktrees/f" "${TEST_WS}/foreign-wt2"
+/usr/bin/printf 'gitdir: %s\n' "${TEST_WS}/foreign-repo2/.git/worktrees/f" > "${TEST_WS}/foreign-wt2/.git"
+# A pointer file with no pointer line.
+/bin/mkdir -p "${W_SCRATCH}/corrupt"
+/usr/bin/printf 'not a pointer\n' > "${W_SCRATCH}/corrupt/.git"
+# A platform worktree whose documents sit deeper than the 64-level bound.
+/bin/mkdir -p "${W_SCRATCH}/deepwt"
+/usr/bin/printf 'gitdir: %s\n' "${TEST_WS}/pmo-platform/.git/worktrees/wt1" > "${W_SCRATCH}/deepwt/.git"
+X_DEEP="${W_SCRATCH}/deepwt"; _xi=0
+while [ "$_xi" -lt 70 ]; do X_DEEP="${X_DEEP}/d"; _xi=$((_xi + 1)); done
+# CIAC-1: an alias of a SUBDIRECTORY of the relocated worktree. A root alias would be recognized
+# through the link without the resolved cwd, so it could not discriminate #6199's mutant.
+/bin/ln -s "${TEST_WS}/relocated-wt/core" "${TEST_WS}/alias-relwt-core"
+# R12: a --separate-git-dir checkout, and a symlinked checkout segment, each in its own workspace.
+X_SEP_WS="$(cd "$(/usr/bin/mktemp -d)" && pwd -P)"
+/bin/mkdir -p "${X_SEP_WS}/sep.git/worktrees/wtx" "${X_SEP_WS}/pmo-platform/core" "${X_SEP_WS}/projects/P" "${X_SEP_WS}/wtx"
+/usr/bin/printf 'gitdir: %s\n' "${X_SEP_WS}/sep.git" > "${X_SEP_WS}/pmo-platform/.git"
+/usr/bin/printf 'gitdir: %s\n' "${X_SEP_WS}/sep.git/worktrees/wtx" > "${X_SEP_WS}/wtx/.git"
+X_LNK_WS="$(cd "$(/usr/bin/mktemp -d)" && pwd -P)"; X_REAL="$(cd "$(/usr/bin/mktemp -d)" && pwd -P)"
+/bin/mkdir -p "${X_REAL}/.git" "${X_REAL}/core" "${X_LNK_WS}/projects/P"
+/bin/ln -s "$X_REAL" "${X_LNK_WS}/pmo-platform"
+# No repository at the anchor.
+X_NOREPO_WS="$(cd "$(/usr/bin/mktemp -d)" && pwd -P)"
+/bin/mkdir -p "${X_NOREPO_WS}/pmo-platform/core" "${X_NOREPO_WS}/projects/P"
+
+# The disclosure-direction payload X-1, reused by the anchor-shape, helper-absent and mutant arms.
+X1_PAYLOAD="$(write_payload "${W_SCRATCH}/wt/core/foo.md" "${TEST_WS}/projects/Default")"
+
+run_hook_env "$X1_PAYLOAD" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "X-1 disclosure: projects cwd → out-of-root relocated platform worktree → BLOCK (-002)" 2 "BLOCK-AUTONOMY-002"
+
+run_hook_env "$(write_payload "${W_SCRATCH}/foreign-wt/core/foo.md" "${TEST_WS}/projects/Default")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "X-2 disclosure twin: projects cwd → a DIFFERENT repository's worktree → ALLOW" 0 ""
+
+run_hook_env "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/relocated-wt")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "X-3 demoted: cwd IS an in-root relocated worktree root (directory-entry form) → projects/ write, enforce → BLOCK (-004)" 2 "BLOCK-AUTONOMY-004"
+
+run_hook_env "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/foreign-wt2")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "X-4 demoted twin: cwd IS an in-root worktree of a DIFFERENT repository → projects/ write → ALLOW (no -004)" 0 ""
+
+run_hook_env "$(write_payload "${W_SCRATCH}/corrupt/x.md" "${TEST_WS}/projects/Default")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "X-5 undeterminable target (pointer without a pointer line) from a projects cwd → BLOCK (-002 fails closed)" 2 "BLOCK-AUTONOMY-002.*UNDETERMINABLE"
+
+# X-6 — three governance documents the helper answers UNDETERMINABLE for. -001 must read that as
+# not-a-member, exactly as the inline walk cleared each of them (AC-4); one PASS line for the three.
+x6_bad=""
+run_hook_env "$(write_payload "${W_SCRATCH}/corrupt/CLAUDE.md" "${W_SCRATCH}/corrupt")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+[ "$RHE_EXIT" = 0 ] || x6_bad="${x6_bad} corrupt-pointer(exit=${RHE_EXIT})"
+run_hook_env "$(write_payload "rel/nowhere/CLAUDE.md" "${W_SCRATCH}")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+[ "$RHE_EXIT" = 0 ] || x6_bad="${x6_bad} relative(exit=${RHE_EXIT})"
+run_hook_env "$(write_payload "${X_DEEP}/CLAUDE.md" "${W_SCRATCH}")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+[ "$RHE_EXIT" = 0 ] || x6_bad="${x6_bad} beyond-bound(exit=${RHE_EXIT})"
+if [ -z "$x6_bad" ]; then
+  echo "PASS: X-6 -001 reads undeterminable as not-a-member: corrupt-pointer, relative and beyond-bound governance documents → ALLOW"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: X-6 -001 reads undeterminable as not-a-member (did NOT allow:%s)\n' "$x6_bad"; FAIL=$((FAIL + 1))
+fi
+
+run_hook_env "$(write_payload "${W_SCRATCH}/deepwt/d/d/d/CLAUDE.md" "${W_SCRATCH}")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "X-6 control: the same worktree's governance document WITHIN the bound → BLOCK (-001)" 2 "BLOCK-AUTONOMY-001"
+
+run_hook_env "$(write_payload "${X_NOREPO_WS}/pmo-platform/core/foo.md" "${X_NOREPO_WS}/projects/P")" CLAUDE_WORKSPACE_ROOT="$X_NOREPO_WS"
+assert_hook "X-7 no platform repository at the anchor: projects cwd → <root>/pmo-platform write → ALLOW (nothing is a member)" 0 ""
+
+run_hook_env "$(write_payload "${X_SEP_WS}/pmo-platform/core/foo.md" "${X_SEP_WS}/projects/P")" CLAUDE_WORKSPACE_ROOT="$X_SEP_WS"
+assert_hook "X-8 R12 --separate-git-dir checkout: projects cwd → a write into the primary checkout → BLOCK (-002)" 2 "BLOCK-AUTONOMY-002"
+
+run_hook_env "$(write_payload "${X_SEP_WS}/wtx/CLAUDE.md" "${X_SEP_WS}/wtx")" CLAUDE_WORKSPACE_ROOT="$X_SEP_WS"
+assert_hook "X-9 R12 --separate-git-dir checkout: a governance document in its relocated worktree → BLOCK (-001)" 2 "BLOCK-AUTONOMY-001"
+
+run_hook_env "$(write_payload "${X_LNK_WS}/pmo-platform/core/foo.md" "${X_LNK_WS}/projects/P")" CLAUDE_WORKSPACE_ROOT="$X_LNK_WS"
+assert_hook "X-10 R12 symlinked checkout segment: projects cwd → a write through the checkout → BLOCK (-002)" 2 "BLOCK-AUTONOMY-002"
+
+run_hook_env "$X1_PAYLOAD" CLAUDE_WORKSPACE_ROOT="${TEST_WS}/"
+assert_hook "X-11 anchor shape: trailing slash → X-1 still BLOCKS (-002)" 2 "BLOCK-AUTONOMY-002"
+
+run_hook_env "$X1_PAYLOAD" CLAUDE_WORKSPACE_ROOT="${TEST_WS}/."
+assert_hook "X-12 anchor shape: trailing '/.' → X-1 still BLOCKS (-002)" 2 "BLOCK-AUTONOMY-002"
+
+run_hook_env "$X1_PAYLOAD" CLAUDE_WORKSPACE_ROOT="$N_ALIAS"
+assert_hook "X-13 anchor shape: symlinked alias → X-1 still BLOCKS (-002)" 2 "BLOCK-AUTONOMY-002"
+
+# X-14 — the relative anchor, resolved against the hook process's own cwd (the N-4 idiom).
+x14_err="$(/usr/bin/mktemp)"; x14_exit=0
+( cd "$N_PARENT" && /usr/bin/printf '%s' "$X1_PAYLOAD" \
+    | HOME="$TEST_HOME" CLAUDE_WORKSPACE_ROOT="$N_BASE" /bin/bash "$HOOK" 2>"$x14_err" >/dev/null ) || x14_exit="$?"
+x14_stderr="$(/bin/cat "$x14_err")"; /bin/rm -f "$x14_err"
+if [ "$x14_exit" = 2 ] && [ -n "$x14_stderr" ] && /usr/bin/grep -qE "BLOCK-AUTONOMY-002" <<<"$x14_stderr"; then
+  echo "PASS: X-14 anchor shape: relative → X-1 still BLOCKS (-002)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: X-14 anchor shape: relative (exit=%s expected=2, want BLOCK-AUTONOMY-002)\n  stderr: %s\n' \
+    "$x14_exit" "$x14_stderr"; FAIL=$((FAIL + 1))
+fi
+
+# X-15 — the prefix-restoring mutant.
+PX_SANDBOX="$(/usr/bin/mktemp -d)"; /bin/mkdir -p "${PX_SANDBOX}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh "${PX_SANDBOX}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK_DIR}/lib/"*.awk "${PX_SANDBOX}/lib/" 2>/dev/null || true
+/bin/cp "$HOOK" "${PX_SANDBOX}/block-autonomy-ceiling.sh"; /bin/chmod +x "${PX_SANDBOX}/block-autonomy-ceiling.sh"
+/usr/bin/printf 'enforce' > "${PX_SANDBOX}/.autonomy-mode"
+# The mutant: the helper answers by the retired PREFIX rule instead of by membership. The hook is
+# byte-identical; only the helper's answer changes, so any divergence is attributable to
+# membership-vs-prefix and to nothing else.
+/usr/bin/printf '%s\n' \
+  'platform_membership_anchor() { printf %s "${PRIMARY_ROOT}/pmo-platform/.git"; }' \
+  'platform_membership_of() { case "$1" in "${PRIMARY_ROOT}/pmo-platform"|"${PRIMARY_ROOT}/pmo-platform/"*) return 0 ;; esac; return 1; }' \
+  > "${PX_SANDBOX}/lib/platform-membership.sh"
+# px_run payload — run against the mutant sandbox; sets RHE_EXIT / RHE_STDERR.
+px_run() {
+  local err; err="$(/usr/bin/mktemp)"; RHE_EXIT=0
+  /usr/bin/printf '%s' "$1" | HOME="$TEST_HOME" /bin/bash "${PX_SANDBOX}/block-autonomy-ceiling.sh" 2>"$err" >/dev/null || RHE_EXIT="$?"
+  RHE_STDERR="$(/bin/cat "$err")"; /bin/rm -f "$err"
+}
+px_walk="$(/usr/bin/grep -c WORKTREE_WALK_MAX "${PX_SANDBOX}/lib/platform-membership.sh" 2>/dev/null || true)"
+px_bad=""
+px_run "$X1_PAYLOAD"
+[ "$RHE_EXIT" = 0 ] || px_bad="${px_bad} X-1(exit=${RHE_EXIT})"
+px_run "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/relocated-wt")"
+[ "$RHE_EXIT" = 0 ] || px_bad="${px_bad} X-3(exit=${RHE_EXIT})"
+px_run "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/relocated-wt/core")"
+[ "$RHE_EXIT" = 0 ] || px_bad="${px_bad} X-17(exit=${RHE_EXIT})"
+px_run "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/alias-relwt-core")"
+[ "$RHE_EXIT" = 0 ] || px_bad="${px_bad} X-18(exit=${RHE_EXIT})"
+px_live=0
+px_run "$XD_HIGH_RISK"
+if [ "$RHE_EXIT" = 2 ] && /usr/bin/grep -qE 'BLOCK-AUTONOMY-002' <<<"$RHE_STDERR"; then px_live=1; fi
+/bin/rm -rf "$PX_SANDBOX"
+if [ "$px_walk" = 0 ] && [ -z "$px_bad" ] && [ "$px_live" = 1 ]; then
+  echo "PASS: X-15 prefix-restoring mutant: X-1, X-3, X-17 and X-18 ALLOWED against the prefix answer; an in-checkout write still BLOCKED (mutant live)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: X-15 prefix-restoring mutant (stub walk tokens=%s expected=0; not allowed:%s; mutant live=%s expected=1)\n' \
+    "$px_walk" "$px_bad" "$px_live"; FAIL=$((FAIL + 1))
+fi
+
+# X-16 — the helper-ABSENT posture. `.autonomy-mode=warn` is the shipped default, and a floor must
+# still fail closed there. The sandbox carries every lib EXCEPT the membership helper.
+LA_SANDBOX="$(/usr/bin/mktemp -d)"; /bin/mkdir -p "${LA_SANDBOX}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh "${LA_SANDBOX}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK_DIR}/lib/"*.awk "${LA_SANDBOX}/lib/" 2>/dev/null || true
+/bin/rm -f "${LA_SANDBOX}/lib/platform-membership.sh"
+/bin/cp "$HOOK" "${LA_SANDBOX}/block-autonomy-ceiling.sh"; /bin/chmod +x "${LA_SANDBOX}/block-autonomy-ceiling.sh"
+/usr/bin/printf 'warn' > "${LA_SANDBOX}/.autonomy-mode"
+# Guard: with the helper still present the sandbox is not the absence posture, and every X-16 arm
+# reports unusable rather than passing.
+la_ok=0
+if [ ! -e "${LA_SANDBOX}/lib/platform-membership.sh" ]; then la_ok=1; fi
+# la_run payload — run against the helper-absent sandbox; sets RHE_EXIT / RHE_STDERR.
+la_run() {
+  local err; err="$(/usr/bin/mktemp)"; RHE_EXIT=0
+  /usr/bin/printf '%s' "$1" | HOME="$TEST_HOME" /bin/bash "${LA_SANDBOX}/block-autonomy-ceiling.sh" 2>"$err" >/dev/null || RHE_EXIT="$?"
+  RHE_STDERR="$(/bin/cat "$err")"; /bin/rm -f "$err"
+}
+# la_assert name expected_exit [expected_pattern] — assert_hook behind the absence guard.
+la_assert() {
+  if [ "$la_ok" = 1 ]; then
+    assert_hook "$1" "$2" "${3:-}"
+  else
+    /usr/bin/printf 'FAIL: %s (unusable — the helper is present in the helper-absent sandbox)\n' "$1"; FAIL=$((FAIL + 1))
+  fi
+}
+la_run "$(write_payload "${W_SCRATCH}/product-repo/CLAUDE.md" "${W_SCRATCH}/product-repo")"
+la_assert "X-16a helper absent: a foreign repo's CLAUDE.md (W-4 allows it) → BLOCK (-001 fails closed, LIB-MISSING)" 2 "BLOCK-AUTONOMY-001.*LIB-MISSING"
+la_run "$(write_payload "${TEST_WS}/projects/Default/x.md" "${TEST_WS}/projects/Default")"
+la_assert "X-16b helper absent: projects cwd → projects/ write (same domain) → ALLOW (no lockout)" 0 ""
+la_run "$X1_PAYLOAD"
+la_assert "X-16c helper absent: projects cwd → out-of-root relocated worktree → BLOCK (-002 fails closed)" 2 "BLOCK-AUTONOMY-002.*LIB-MISSING"
+la_run "$(bash_payload 'ls -la /tmp' "${TEST_WS}/pmo-platform")"
+la_assert "X-16d helper absent: Bash payload → ALLOW (only Write/Edit questions depend on it)" 0 ""
+la_run "$(write_payload "${TEST_WS}/pmo-platform/core/foo.md" "${TEST_WS}/pmo-platform")"
+if [ "$la_ok" = 1 ] && [ "$RHE_EXIT" = 0 ] && ! /usr/bin/grep -q 'BLOCK-AUTONOMY-00' <<<"$RHE_STDERR"; then
+  echo "PASS: X-16e helper absent: pmo-platform cwd → an ordinary write into its own checkout → ALLOW (a missing helper locks no engineering session out)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: X-16e helper absent: engineering write into its own checkout (usable=%s exit=%s expected=0 with no BLOCK-AUTONOMY-00 in stderr)\n  stderr: %s\n' \
+    "$la_ok" "$RHE_EXIT" "$RHE_STDERR"; FAIL=$((FAIL + 1))
+fi
+
+run_hook_env "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/relocated-wt/core")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "X-17 CIAC-1a: cwd = a subdirectory of the in-root relocated worktree → projects/ write, enforce → BLOCK (-004)" 2 "BLOCK-AUTONOMY-004"
+
+run_hook_env "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/alias-relwt-core")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "X-18 CIAC-1b: the same cwd spelled through a symlink alias → identical verdict (-004)" 2 "BLOCK-AUTONOMY-004"
+
+# X-19 - CIAC-1's SECOND mutant: #6199's cwd resolution deleted from a sandbox copy of the hook.
+# X-18 spells its cwd through a symlink to a SUBDIRECTORY of the relocated worktree, so without
+# resolution the walk's lexical prefixes never reach the worktree root and -004 flips to ALLOW.
+# X-17, the physical spelling, is the liveness control and must still BLOCK.
+X19_SANDBOX="$(/usr/bin/mktemp -d)"; /bin/mkdir -p "${X19_SANDBOX}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh "${X19_SANDBOX}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK_DIR}/lib/"*.awk "${X19_SANDBOX}/lib/" 2>/dev/null || true
+/usr/bin/sed -e '/# D9: cwd resolution/d' "$HOOK" > "${X19_SANDBOX}/block-autonomy-ceiling.sh"
+/bin/chmod +x "${X19_SANDBOX}/block-autonomy-ceiling.sh"; /usr/bin/printf 'enforce' > "${X19_SANDBOX}/.autonomy-mode"
+x19_removed=$(( $(/usr/bin/wc -l < "$HOOK") - $(/usr/bin/wc -l < "${X19_SANDBOX}/block-autonomy-ceiling.sh") ))
+x19_18=0; /usr/bin/printf '%s' "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/alias-relwt-core")" \
+  | HOME="$TEST_HOME" /bin/bash "${X19_SANDBOX}/block-autonomy-ceiling.sh" >/dev/null 2>&1 || x19_18="$?"
+x19_17=0; x19_17_err="$(/usr/bin/printf '%s' "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/relocated-wt/core")" \
+  | HOME="$TEST_HOME" /bin/bash "${X19_SANDBOX}/block-autonomy-ceiling.sh" 2>&1 >/dev/null)" || x19_17="$?"
+/bin/rm -rf "$X19_SANDBOX"
+if [ "$x19_removed" = 1 ] && [ "$x19_18" = 0 ] && [ "$x19_17" = 2 ] && /usr/bin/grep -qE 'BLOCK-AUTONOMY-004' <<<"$x19_17_err"; then
+  echo "PASS: X-19 CIAC-1 vs the cwd-resolution mutant: X-18's alias ALLOWED, X-17's physical spelling still BLOCKS (-004)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: X-19 CIAC-1 cwd-resolution mutant (removed=%s expected=1, X-18 exit=%s expected=0, X-17 exit=%s expected=2)\n' "$x19_removed" "$x19_18" "$x19_17"; FAIL=$((FAIL + 1))
+fi
+
+echo ""
+echo "Suite M — the membership helper's contract, sourced in-suite (#6200)"
+echo "---"
+M_LIB="${HOOK_DIR}/lib/platform-membership.sh"
+M_OUT="$(
+  CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+  . "$M_LIB" 2>/dev/null || { /usr/bin/printf 'LOAD=fail\n'; exit 0; }
+  m_rc() { local r=0; platform_membership_of "$1" "$2" || r=$?; /usr/bin/printf '%s' "$r"; }
+  a="$(platform_membership_anchor)" || a=""
+  /usr/bin/printf 'ANCHOR=%s\n' "$a"
+  /usr/bin/printf 'M1=%s\n'  "$(m_rc "${W_SCRATCH}/wt" "$a")"
+  /usr/bin/printf 'M2=%s\n'  "$(m_rc "${W_SCRATCH}/foreign-wt" "$a")"
+  /usr/bin/printf 'M3=%s\n'  "$(m_rc "${W_SCRATCH}/loose" "$a")"
+  /usr/bin/printf 'M4a=%s\n' "$(m_rc "relative/dir" "$a")"
+  /usr/bin/printf 'M4b=%s\n' "$(m_rc "${W_SCRATCH}/wt" "")"
+  /usr/bin/printf 'M5a=%s\n' "$(m_rc "$X_DEEP" "$a")"
+  /usr/bin/printf 'M5b=%s\n' "$(m_rc "${W_SCRATCH}/deepwt/d/d/d" "$a")"
+  /usr/bin/printf 'M6=%s\n'  "$(m_rc "${W_SCRATCH}/corrupt" "$a")"
+)"
+m_get() { local l; while IFS= read -r l; do case "$l" in "$1="*) /usr/bin/printf '%s' "${l#*=}"; return 0 ;; esac; done <<<"$M_OUT"; }
+m_assert() {  # name got want
+  if [ "$2" = "$3" ]; then /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else /usr/bin/printf 'FAIL: %s (got=%s want=%s)\n' "$1" "$2" "$3"; FAIL=$((FAIL + 1)); fi
+}
+m_assert "M-0 helper anchor: CLAUDE_WORKSPACE_ROOT resolves to the checkout's physical .git" "$(m_get ANCHOR)" "${TEST_WS}/pmo-platform/.git"
+m_assert "M-1 member: a relocated worktree root, directory-entry form → 0" "$(m_get M1)" "0"
+m_assert "M-2 not a member: a DIFFERENT repository's worktree → 1" "$(m_get M2)" "1"
+m_assert "M-3 not a member: no working tree up to the filesystem root → 1" "$(m_get M3)" "1"
+m_assert "M-4 undeterminable: a relative start and an empty anchor → 2 and 2" "$(m_get M4a)$(m_get M4b)" "22"
+m_assert "M-5 bound retained: beyond 64 levels → 2; the same worktree within the bound → 0" "$(m_get M5a)$(m_get M5b)" "20"
+m_assert "M-6 undeterminable: a pointer file with no pointer line → 2" "$(m_get M6)" "2"
+
+/bin/rm -rf "$LA_SANDBOX" "$X_SEP_WS" "$X_LNK_WS" "$X_REAL" "$X_NOREPO_WS"
 /bin/rm -rf "$W_SCRATCH"
 
 # =====================================================================
