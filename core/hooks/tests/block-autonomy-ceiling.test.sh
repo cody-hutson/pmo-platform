@@ -1224,6 +1224,213 @@ fi
 /bin/rm -rf "$W_SCRATCH"
 
 # =====================================================================
+# SUITE D — the working-DIRECTORY axis (#6199)
+# =====================================================================
+# -002/-004 decide on TWO inputs. The target was always resolved; the working directory was
+# read raw, and all 51 Write/Edit payloads above use a canonical absolute cwd — so a
+# projects-rooted session whose cwd was spelled through a symlink or a traversal escaped the
+# Tier-0 disclosure floor with no arm able to notice. Verdict-changing shapes carry the
+# verdict; value-only shapes (a trailing / or /. classifies identically raw or resolved) carry
+# the RESOLVED VALUE, read back from the block-log row. -002 also reads the working directory
+# AS SPELLED, and that reading can only add a block: D-1b, D-5c and D-11 are the arms a
+# resolved-only reading would turn to ALLOW. Every allow-arm has a block-arm on the same
+# target. D-9 / D-9b / D-10 are the mutation differentials.
+echo ""
+echo "Suite D — the working-directory axis (#6199)"
+echo "---"
+set_mode "enforce"
+set_ceiling 2
+D_PLAT="${TEST_WS}/pmo-platform/core/foo.md"
+D_PROJ="${TEST_WS}/projects/Default/notes.md"
+/bin/mkdir -p "${TEST_WS}/projects/Default" "${TEST_WS}/pmo-platform/core" "${TEST_WS}/pmo-platform/.git"
+/usr/bin/printf 'x\n' > "$D_PLAT"
+[ -L "${TEST_WS}/pmo-platform/d-opslink" ] || /bin/ln -s "${TEST_WS}/projects" "${TEST_WS}/pmo-platform/d-opslink"
+[ -L "${TEST_WS}/projects/d-repolink" ]   || /bin/ln -s "${TEST_WS}/pmo-platform" "${TEST_WS}/projects/d-repolink"
+[ -L "${TEST_WS}/projects/d-corelink" ]   || /bin/ln -s "${TEST_WS}/pmo-platform/core" "${TEST_WS}/projects/d-corelink"
+D_ALIAS_PARENT="$(/usr/bin/mktemp -d)"; D_WS_ALIAS="${D_ALIAS_PARENT}/ws-alias"
+/bin/ln -s "$TEST_WS" "$D_WS_ALIAS"                    # the workspace reached through a symlink
+D_MASTER_OFF="$(/usr/bin/mktemp -d)"
+
+write_payload_nocwd() { /usr/bin/jq -n --arg fp "$1" '{tool_name: "Write", tool_input: {file_path: $fp, content: "x"}}'; }
+# run_hook_at hook dir payload [VAR=VAL...] — process cwd = dir ("" = inherit). Sets RHE_*.
+run_hook_at() {
+  local hook="$1" dir="$2" payload="$3"; shift 3
+  local err; err="$(/usr/bin/mktemp)"; RHE_EXIT=0
+  if [ -n "$dir" ]; then
+    ( cd "$dir" && /usr/bin/printf '%s' "$payload" | HOME="$TEST_HOME" /usr/bin/env ${1+"$@"} /bin/bash "$hook" 2>"$err" >/dev/null ) || RHE_EXIT="$?"
+  else
+    /usr/bin/printf '%s' "$payload" | HOME="$TEST_HOME" /usr/bin/env ${1+"$@"} /bin/bash "$hook" 2>"$err" >/dev/null || RHE_EXIT="$?"
+  fi
+  RHE_STDERR="$(/bin/cat "$err")"; /bin/rm -f "$err"
+}
+# run_hook_nopwd hook payload [VAR=VAL...] — $PWD UNSET in the hook's own process: the hook is
+# SOURCED by a shell that unset it first ($0 = hook path, so HOOK_DIR resolves as usual). An
+# executed script cannot have an empty $PWD — bash re-derives it from getcwd at startup.
+run_hook_nopwd() {
+  local hook="$1" payload="$2"; shift 2
+  local err; err="$(/usr/bin/mktemp)"; RHE_EXIT=0
+  /usr/bin/printf '%s' "$payload" | HOME="$TEST_HOME" /usr/bin/env ${1+"$@"} /bin/bash -c 'unset PWD; . "$0"' "$hook" 2>"$err" >/dev/null || RHE_EXIT="$?"
+  RHE_STDERR="$(/bin/cat "$err")"; /bin/rm -f "$err"
+}
+assert_hook_clean() {   # exit 0 AND no rule of this hook fired
+  if [ "$RHE_EXIT" = 0 ] && ! /usr/bin/grep -qE 'BLOCK-AUTONOMY-00[0-9]' <<<"$RHE_STDERR"; then
+    /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s (exit=%s expected=0 with no rule fired)\n  stderr: %s\n' "$1" "$RHE_EXIT" "$RHE_STDERR"; FAIL=$((FAIL + 1))
+  fi
+}
+d_rows()  { if [ -f "$1" ]; then /usr/bin/jq -s 'length' "$1" 2>/dev/null || echo 0; else echo 0; fi; }
+d_field() { /usr/bin/jq -s -r --arg f "$2" '.[-1] | if has($f) then .[$f] else "<absent>" end' "$1" 2>/dev/null; }   # pretty-printed rows: slurp, never tail
+# d_sandbox dir [sed-expr...] — copy the hook + libs into dir (optionally sed-mutated), enforce mode.
+d_sandbox() {
+  local box="$1"; shift
+  /bin/mkdir -p "${box}/lib"
+  /bin/cp "${HOOK_DIR}/lib/"*.sh "${box}/lib/" 2>/dev/null || true
+  /bin/cp "${HOOK_DIR}/lib/"*.awk "${box}/lib/" 2>/dev/null || true
+  if [ "$#" -gt 0 ]; then /usr/bin/sed "$@" "$HOOK" > "${box}/block-autonomy-ceiling.sh"; else /bin/cp "$HOOK" "${box}/block-autonomy-ceiling.sh"; fi
+  /bin/chmod +x "${box}/block-autonomy-ceiling.sh"; /usr/bin/printf 'enforce' > "${box}/.autonomy-mode"
+}
+# Log arms run on a byte-identical copy with a FRESH log (the shared log may carry other runs'
+# rows, not all of them guaranteed-valid JSON); the cmp guard keeps "the file under test" true.
+D_LOGBOX="$(/usr/bin/mktemp -d)"; d_sandbox "$D_LOGBOX"
+D_LB="${D_LOGBOX}/block-autonomy-ceiling.sh"; D_LBLOG="${D_LOGBOX}/block-log.jsonl"
+d_identical=0; /usr/bin/cmp -s "$HOOK" "$D_LB" && d_identical=1
+d_assert_row() {  # name exit pattern want_cwd want_cwd_resolved — also exactly one new row
+  local name="$1" want_exit="$2" want_pat="$3" want_cwd="$4" want_res="$5"
+  local n; n="$(d_rows "$D_LBLOG")"; local gc gr; gc="$(d_field "$D_LBLOG" cwd)"; gr="$(d_field "$D_LBLOG" cwd_resolved)"
+  if [ "$d_identical" = 1 ] && [ "$RHE_EXIT" = "$want_exit" ] && /usr/bin/grep -qE "$want_pat" <<<"$RHE_STDERR" \
+     && [ "$n" = $((D_ROWS0 + 1)) ] && [ "$gc" = "$want_cwd" ] && [ "$gr" = "$want_res" ]; then
+    /usr/bin/printf 'PASS: %s\n' "$name"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s (identical=%s exit=%s want=%s rows %s→%s want +1 cwd=[%s] want [%s] cwd_resolved=[%s] want [%s])\n  stderr: %s\n' \
+      "$name" "$d_identical" "$RHE_EXIT" "$want_exit" "$D_ROWS0" "$n" "$gc" "$want_cwd" "$gr" "$want_res" "$RHE_STDERR"; FAIL=$((FAIL + 1))
+  fi
+}
+D_OPS='BLOCK-AUTONOMY-002.*Operations cwd writing into pmo-platform'        # the projects-branch -002
+D_UNRES='BLOCK-AUTONOMY-002.*working directory that could not be resolved'   # the fail-closed arm
+W="CLAUDE_WORKSPACE_ROOT=${TEST_WS}"
+
+run_hook_at "$HOOK" "" "$(write_payload "$D_PLAT" "${TEST_WS}/pmo-platform/../projects/Default")" "$W"
+assert_hook "D-1 traversal cwd pmo-platform/../projects → -002 (classified where it lands)" 2 "$D_OPS"
+run_hook_at "$HOOK" "" "$(write_payload "$D_PLAT" "${TEST_WS}/projects/../pmo-platform")" "$W"
+assert_hook "D-1b traversal cwd spelled under projects/ that resolves into pmo-platform → -002 (the spelling reading only blocks)" 2 "$D_OPS"
+D_ROWS0="$(d_rows "$D_LBLOG")"; run_hook_at "$D_LB" "" "$(write_payload "$D_PLAT" "${TEST_WS}/projects/Default/")" "$W"
+d_assert_row "D-2 trailing-/ cwd → -002, log row: cwd as sent, cwd_resolved canonical" 2 "$D_OPS" "${TEST_WS}/projects/Default/" "${TEST_WS}/projects/Default"
+D_ROWS0="$(d_rows "$D_LBLOG")"; run_hook_at "$D_LB" "" "$(write_payload "$D_PLAT" "${TEST_WS}/projects/Default/.")" "$W"
+d_assert_row "D-3 trailing-/. cwd → -002, log row: cwd as sent, cwd_resolved canonical" 2 "$D_OPS" "${TEST_WS}/projects/Default/." "${TEST_WS}/projects/Default"
+D_ROWS0="$(d_rows "$D_LBLOG")"; run_hook_at "$D_LB" "$TEST_WS" "$(write_payload "$D_PLAT" "projects/Default")" "$W"
+d_assert_row "D-4 relative cwd projects/Default → -002, resolved against the hook process cwd" 2 "$D_OPS" "projects/Default" "${TEST_WS}/projects/Default"
+run_hook_at "$HOOK" "$TEST_WS" "$(write_payload "$D_PLAT" "pmo-platform")" "$W"
+assert_hook_clean "D-4b relative cwd pmo-platform → ALLOW (resolved, not treated as unresolvable)"
+D_ROWS0="$(d_rows "$D_LBLOG")"; run_hook_at "$D_LB" "" "$(write_payload "$D_PLAT" "${D_WS_ALIAS}/projects/Default")" "$W"
+d_assert_row "D-5 cwd through a symlinked alias of the workspace → -002 (the realistic alias)" 2 "$D_OPS" "${D_WS_ALIAS}/projects/Default" "${TEST_WS}/projects/Default"
+run_hook_at "$HOOK" "" "$(write_payload "$D_PLAT" "${TEST_WS}/pmo-platform/d-opslink/Default")" "$W"
+assert_hook "D-5b in-tree alias reading pmo-platform, landing in projects/ → -002" 2 "$D_OPS"
+run_hook_at "$HOOK" "" "$(write_payload "$D_PLAT" "${TEST_WS}/projects/d-repolink")" "$W"
+assert_hook "D-5c in-tree alias spelled under projects/ that lands in pmo-platform → -002 (the spelling reading only blocks)" 2 "$D_OPS"
+D_ROWS0="$(d_rows "$D_LBLOG")"; run_hook_at "$D_LB" "" "$(write_payload "$D_PROJ" "${TEST_WS}/projects/d-repolink")" "$W"
+d_assert_row "D-5d same alias writing projects/ → -004 (the resolved cwd feeds -004 too)" 2 "BLOCK-AUTONOMY-004" "${TEST_WS}/projects/d-repolink" "${TEST_WS}/pmo-platform"
+run_hook_at "$HOOK" "" "$(write_payload "$D_PROJ" "${TEST_WS}/projects/d-corelink")" "$W"
+assert_hook "D-5f alias of a pmo-platform SUBDIRECTORY spelled under projects/, writing projects/ → -004 (resolution, not the spelling, places the cwd)" 2 "BLOCK-AUTONOMY-004"
+D_NOPY="$(/usr/bin/mktemp -d)"; d_sandbox "$D_NOPY" -e 's#^readonly PYTHON3="/usr/bin/python3"#readonly PYTHON3="/nonexistent/python3"#'
+d_nopy=0; /usr/bin/grep -q '/nonexistent/python3' "${D_NOPY}/block-autonomy-ceiling.sh" && d_nopy=1
+run_hook_at "${D_NOPY}/block-autonomy-ceiling.sh" "" "$(write_payload "$D_PLAT" "${D_WS_ALIAS}/projects/Default")" "$W"
+if [ "$d_nopy" = 1 ]; then assert_hook "D-5e python3 unusable → aliased cwd STILL resolves (-002)" 2 "$D_OPS"; else echo "FAIL: D-5e python-less sandbox not edited"; FAIL=$((FAIL + 1)); fi
+d_nopwd_ok=0; [ -z "$(/bin/bash -c 'unset PWD; printf %s "${PWD:-}"')" ] && d_nopwd_ok=1   # fixture precondition
+/usr/bin/printf 'off' > "${D_LOGBOX}/.autonomy-mode"   # D-6 runs on the copy: ITS mode file is the one set to the most permissive posture
+D_ROWS0="$(d_rows "$D_LBLOG")"; run_hook_nopwd "$D_LB" "$(write_payload_nocwd "$D_PLAT")" "$W" "PMO_PLATFORM_CONFIG_ROOT=${D_MASTER_OFF}"
+/usr/bin/printf 'enforce' > "${D_LOGBOX}/.autonomy-mode"
+if [ "$d_nopwd_ok" = 1 ]; then d_assert_row "D-6 unresolvable cwd (payload omits it, PWD empty) → -002 fails closed, even mode=off + master-OFF" 2 "$D_UNRES" "" ""; else echo "FAIL: D-6 fixture precondition — PWD still readable after unset"; FAIL=$((FAIL + 1)); fi
+run_hook_nopwd "$HOOK" "$(write_payload_nocwd "$D_PROJ")" "$W"
+assert_hook_clean "D-6b unresolvable cwd + projects/ target → ALLOW (fail-closed binds -002 only)"
+run_hook_at "$HOOK" "${TEST_WS}/pmo-platform" "$(write_payload_nocwd "$D_PLAT")" "$W"
+assert_hook_clean "D-7 payload omits cwd → PWD fallback (pmo-platform) → ALLOW, not fail-closed"
+run_hook_at "$HOOK" "${TEST_WS}/projects/Default" "$(write_payload_nocwd "$D_PLAT")" "$W"
+assert_hook "D-7b payload omits cwd → PWD fallback (projects/) is classified → -002" 2 "$D_OPS"
+D_ROWS0="$(d_rows "$D_LBLOG")"; run_hook_at "$D_LB" "" "$(edit_payload "${TEST_WS}/pmo-platform/core/governance/OPERATIONS.md" "${TEST_WS}/projects/Default/")" "$W"
+d_assert_row "D-8 a -001 row carries cwd as sent and NO cwd_resolved (only -002/-004 rows do)" 2 "BLOCK-AUTONOMY-001" "${TEST_WS}/projects/Default/" "<absent>"
+
+# D-11 / D-11b - projects/ ITSELF a symlink out of the workspace root (CR-Q2). The logical
+# spelling is caught by both readings; the physical spelling only by comparing against the
+# operations root RESOLVED the same way - D-11b is the arm that pins that resolution.
+D_SYM_WS="$(cd "$(/usr/bin/mktemp -d)" && pwd -P)"; D_SYM_EXT="$(cd "$(/usr/bin/mktemp -d)" && pwd -P)"
+/bin/mkdir -p "${D_SYM_WS}/pmo-platform/.git" "${D_SYM_WS}/pmo-platform/core" "${D_SYM_EXT}/projects/P"
+/bin/ln -s "${D_SYM_EXT}/projects" "${D_SYM_WS}/projects"
+D_SYM_T="${D_SYM_WS}/pmo-platform/core/foo.md"
+d11_ok=0; [ -L "${D_SYM_WS}/projects" ] && [ "$(cd "${D_SYM_WS}/projects/P" && pwd -P)" = "${D_SYM_EXT}/projects/P" ] && d11_ok=1
+run_hook_at "$HOOK" "" "$(write_payload "$D_SYM_T" "${D_SYM_WS}/projects/P")" "CLAUDE_WORKSPACE_ROOT=${D_SYM_WS}"
+if [ "$d11_ok" = 1 ]; then assert_hook "D-11 projects/ symlinked out of the root, cwd spelled LOGICALLY → -002" 2 "$D_OPS"; else echo "FAIL: D-11 fixture precondition — projects/ symlink not in place"; FAIL=$((FAIL + 1)); fi
+run_hook_at "$HOOK" "" "$(write_payload "$D_SYM_T" "${D_SYM_EXT}/projects/P")" "CLAUDE_WORKSPACE_ROOT=${D_SYM_WS}"
+if [ "$d11_ok" = 1 ]; then assert_hook "D-11b the same, cwd spelled PHYSICALLY → -002 (the operations root is resolved before comparing)" 2 "$D_OPS"; else echo "FAIL: D-11b fixture precondition — projects/ symlink not in place"; FAIL=$((FAIL + 1)); fi
+/bin/rm -rf "$D_SYM_WS" "$D_SYM_EXT"
+
+# D-9 / D-9b — the raw-cwd mutant (the cwd resolution line deleted, nothing else).
+# The must-diverge set is the shapes whose verdict or logged cwd_resolved changes when the raw
+# spelling replaces the resolved one AFTER #6200's membership walk lands too: a spelling already
+# under projects/ is blocked by the spelling reading either way, and a root alias is recovered
+# by the walk without resolution, so neither can discriminate here.
+D_MUT="$(/usr/bin/mktemp -d)"; d_sandbox "$D_MUT" -e '/# D9: cwd resolution/d'
+DM="${D_MUT}/block-autonomy-ceiling.sh"; DMLOG="${D_MUT}/block-log.jsonl"
+d9_removed=$(( $(/usr/bin/wc -l < "$HOOK") - $(/usr/bin/wc -l < "$DM") )); d9_bad=""
+d9_expect() {  # name dir payload want_exit [want_cwd_resolved]
+  local name="$1" dir="$2" payload="$3" want="$4" want_res="${5-__none__}"
+  run_hook_at "$DM" "$dir" "$payload" "$W"
+  if [ "$RHE_EXIT" != "$want" ]; then d9_bad="${d9_bad} ${name}(exit=${RHE_EXIT})"; return 0; fi
+  if [ "$want_res" != "__none__" ] && [ "$(d_field "$DMLOG" cwd_resolved)" != "$want_res" ]; then d9_bad="${d9_bad} ${name}(cwd_resolved)"; fi
+  return 0
+}
+d9_expect D-1  ""         "$(write_payload "$D_PLAT" "${TEST_WS}/pmo-platform/../projects/Default")" 0
+d9_expect D-2  ""         "$(write_payload "$D_PLAT" "${TEST_WS}/projects/Default/")"                 2 "${TEST_WS}/projects/Default/"
+d9_expect D-3  ""         "$(write_payload "$D_PLAT" "${TEST_WS}/projects/Default/.")"                2 "${TEST_WS}/projects/Default/."
+d9_expect D-4  "$TEST_WS" "$(write_payload "$D_PLAT" "projects/Default")"                            2 ""
+d9_expect D-4b "$TEST_WS" "$(write_payload "$D_PLAT" "pmo-platform")"                                2
+d9_expect D-5  ""         "$(write_payload "$D_PLAT" "${D_WS_ALIAS}/projects/Default")"               0
+d9_expect D-5b ""         "$(write_payload "$D_PLAT" "${TEST_WS}/pmo-platform/d-opslink/Default")"    0
+d9_expect D-5f ""         "$(write_payload "$D_PROJ" "${TEST_WS}/projects/d-corelink")"               0
+if [ "$d9_removed" = 1 ] && [ -z "$d9_bad" ]; then
+  echo "PASS: D-9 differential — cwd resolution deleted: every must-diverge cwd arm diverges"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: D-9 differential (lines removed=%s expected=1; did NOT diverge:%s)\n' "$d9_removed" "$d9_bad"; FAIL=$((FAIL + 1))
+fi
+D_MUT2="$(/usr/bin/mktemp -d)"; d_sandbox "$D_MUT2" -e '/# D9: cwd resolution/d' -e 's#^readonly PYTHON3="/usr/bin/python3"#readonly PYTHON3="/nonexistent/python3"#'
+DM2="${D_MUT2}/block-autonomy-ceiling.sh"; d9b_bad=""
+d9b_ok=0; [ $(( $(/usr/bin/wc -l < "$HOOK") - $(/usr/bin/wc -l < "$DM2") )) = 1 ] && /usr/bin/grep -q '/nonexistent/python3' "$DM2" \
+  && [ -L "${TEST_WS}/projects/repolink" ] && [ -L "${TEST_WS}/projects/gov.md" ] && [ -L "${TEST_WS}/pmo-platform/opslink" ] && d9b_ok=1
+d9b_expect() {  # name hook dir payload want_exit want_rule [VAR=VAL...]
+  local name="$1" hook="$2" dir="$3" payload="$4" want="$5" rule="$6"; shift 6
+  run_hook_at "$hook" "$dir" "$payload" ${1+"$@"}
+  if [ "$RHE_EXIT" != "$want" ] || ! /usr/bin/grep -qE "$rule" <<<"$RHE_STDERR"; then d9b_bad="${d9b_bad} ${name}(exit=${RHE_EXIT})"; fi
+  return 0
+}
+d9b_expect A-1 "$DM"  "" "$(write_payload "${TEST_WS}/projects/../pmo-platform/core/foo.md" "${TEST_WS}/projects/Default")" 2 BLOCK-AUTONOMY-002 "$W"
+d9b_expect A-2 "$DM"  "" "$(edit_payload "${TEST_WS}/projects/Default/../../pmo-platform/core/governance/OPERATIONS.md" "${TEST_WS}/projects/Default")" 2 BLOCK-AUTONOMY-001 "$W"
+d9b_expect A-3 "$DM"  "" "$(write_payload "${TEST_WS}/projects/repolink/core/foo.md" "${TEST_WS}/projects/Default")" 2 BLOCK-AUTONOMY-002 "$W"
+d9b_expect A-4 "$DM"  "" "$(edit_payload "${TEST_WS}/projects/gov.md" "${TEST_WS}/projects/Default")" 2 BLOCK-AUTONOMY-001 "$W"
+d9b_expect A-5 "$DM"  "" "$(write_payload "${TEST_WS}/pmo-platform/opslink/Default/notes.md" "${TEST_WS}/pmo-platform")" 2 BLOCK-AUTONOMY-004 "$W"
+d9b_expect A-6 "$DM2" "" "$(write_payload "${TEST_WS}/projects/../pmo-platform/core/foo.md" "${TEST_WS}/projects/Default")" 2 BLOCK-AUTONOMY-002 "$W"
+d9b_expect A-7 "$DM2" "" "$(edit_payload "${TEST_WS}/projects/gov.md" "${TEST_WS}/projects/Default")" 2 BLOCK-AUTONOMY-001 "$W"
+d9b_expect N-0 "$DM"  "" "$N_PAYLOAD" 2 BLOCK-AUTONOMY-001 "$W"
+d9b_expect N-1 "$DM"  "" "$N_PAYLOAD" 2 BLOCK-AUTONOMY-001 "CLAUDE_WORKSPACE_ROOT=${TEST_WS}/"
+d9b_expect N-2 "$DM"  "" "$N_PAYLOAD" 2 BLOCK-AUTONOMY-001 "CLAUDE_WORKSPACE_ROOT=${TEST_WS}/."
+d9b_expect N-3 "$DM"  "" "$N_PAYLOAD" 2 BLOCK-AUTONOMY-001 "CLAUDE_WORKSPACE_ROOT=${N_ALIAS}"
+d9b_expect N-4 "$DM"  "$N_PARENT" "$N_PAYLOAD" 2 BLOCK-AUTONOMY-001 "CLAUDE_WORKSPACE_ROOT=${N_BASE}"
+if [ "$d9_removed" = 1 ] && [ "$d9b_ok" = 1 ] && [ -z "$d9b_bad" ]; then
+  echo "PASS: D-9b differential — cwd resolution deleted: all 12 target-axis arms unchanged"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: D-9b differential (removed=%s composite/fixtures ok=%s; changed:%s)\n' "$d9_removed" "$d9b_ok" "$d9b_bad"; FAIL=$((FAIL + 1))
+fi
+# D-10 — the no-fallback mutant: the omitted-cwd write D-7 lets through must now BLOCK.
+D_MUT3="$(/usr/bin/mktemp -d)"; d_sandbox "$D_MUT3" -e '/# D10: pwd fallback/d'
+d10_removed=$(( $(/usr/bin/wc -l < "$HOOK") - $(/usr/bin/wc -l < "${D_MUT3}/block-autonomy-ceiling.sh") ))
+run_hook_at "${D_MUT3}/block-autonomy-ceiling.sh" "${TEST_WS}/pmo-platform" "$(write_payload_nocwd "$D_PLAT")" "$W"
+if [ "$d10_removed" = 1 ] && [ "$RHE_EXIT" = 2 ] && /usr/bin/grep -qE "$D_UNRES" <<<"$RHE_STDERR"; then
+  echo "PASS: D-10 differential — PWD fallback deleted: D-7's payload BLOCKS"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: D-10 differential (lines removed=%s expected=1, exit=%s expected=2)\n  stderr: %s\n' "$d10_removed" "$RHE_EXIT" "$RHE_STDERR"; FAIL=$((FAIL + 1))
+fi
+/bin/rm -rf "$D_LOGBOX" "$D_NOPY" "$D_MUT" "$D_MUT2" "$D_MUT3" "$D_ALIAS_PARENT" "$D_MASTER_OFF"
+
+# =====================================================================
 # Summary
 # =====================================================================
 echo ""
