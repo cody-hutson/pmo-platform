@@ -1027,13 +1027,17 @@ assert_hook "W-7 relative gitdir pointer still resolves to this repo → BLOCK (
 # ALLOWED against it. A fixture is worth having only if some reachable implementation
 # fails it.
 W7_SANDBOX="$(/usr/bin/mktemp -d)"
+W7_LIB="${HOOK_DIR}/lib/platform-membership.sh"
 /bin/mkdir -p "${W7_SANDBOX}/lib"
 /bin/cp "${HOOK_DIR}/lib/"*.sh "${W7_SANDBOX}/lib/" 2>/dev/null || true
 /bin/cp "${HOOK_DIR}/lib/"*.awk "${W7_SANDBOX}/lib/" 2>/dev/null || true
-/usr/bin/sed -e '/# W7: relative-pointer join/d' "$HOOK" > "${W7_SANDBOX}/block-autonomy-ceiling.sh"
+# (#6200) The walk moved into the shared helper, so the naive implementation is built by deleting the
+# relative-pointer join from the SANDBOX COPY OF THE HELPER. The hook itself is copied verbatim.
+/bin/cp "$HOOK" "${W7_SANDBOX}/block-autonomy-ceiling.sh"
+/usr/bin/sed -e '/# W7: relative-pointer join/d' "$W7_LIB" > "${W7_SANDBOX}/lib/platform-membership.sh"
 /bin/chmod +x "${W7_SANDBOX}/block-autonomy-ceiling.sh"
 /usr/bin/printf 'enforce' > "${W7_SANDBOX}/.autonomy-mode"
-w7_removed=$(( $(/usr/bin/wc -l < "$HOOK") - $(/usr/bin/wc -l < "${W7_SANDBOX}/block-autonomy-ceiling.sh") ))
+w7_removed=$(( $(/usr/bin/wc -l < "$W7_LIB") - $(/usr/bin/wc -l < "${W7_SANDBOX}/lib/platform-membership.sh") ))
 w7_err="$(/usr/bin/mktemp)"; w7_exit=0
 /usr/bin/printf '%s' "$(write_payload "${W_RELWT}/CLAUDE.md" "$W_RELWT")" \
   | HOME="$TEST_HOME" /bin/bash "${W7_SANDBOX}/block-autonomy-ceiling.sh" 2>"$w7_err" >/dev/null || w7_exit="$?"

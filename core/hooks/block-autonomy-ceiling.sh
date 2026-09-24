@@ -231,11 +231,13 @@ readonly MODE_FILE="${HOOK_DIR}/.autonomy-mode"
 # function or they cannot meet. Consumed RAW, four benign shapes of
 # CLAUDE_WORKSPACE_ROOT — a trailing slash, a trailing `/.`, a relative path, and a
 # symlinked alias — each make EVERY anchored pattern miss. The failure is TOTAL rather
-# than partial: the -001 governance floor, the -002 disclosure floor, -004 and the
-# ceiling's projects/ mapping are all anchored on this one value, so a single trailing
-# slash disables the hook outright while every log line still reads normal. Anchoring the
-# -001 document entries took the anchored-entry count from 3 to 11 and widened that
-# exposure accordingly. An anchored pattern with a mis-resolving anchor is worse than an
+# than partial: the -001 location arms, the projects/ side of -002/-004, and the ceiling's
+# projects/ mapping are all anchored on this one value, so a single trailing slash disables
+# them outright while every log line still reads normal. The platform side of -002/-004 and
+# -001's second stage use the membership anchor instead, which lib/platform-membership.sh
+# resolves from the same variable and which is armed on the same four shapes (Suite X,
+# X-11..X-14). Anchoring the -001 document entries took the anchored-entry count from 3 to
+# 11 and widened that exposure accordingly. An anchored pattern with a mis-resolving anchor is worse than an
 # unanchored one, because it reads as safe. resolve_path() is therefore defined ABOVE
 # this line, and the four shapes are armed in Suite N of the test file.
 # The working directory is the THIRD input and goes through the same function, via
@@ -516,91 +518,69 @@ resolve_ceiling_num() {
   level_to_num "$(resolve_level_direct)"
 }
 
-# --- REPOSITORY MEMBERSHIP (second stage of the -001 governance set) ---
-# is_platform_worktree <resolved-absolute-path> → 0 when the path sits inside a working
-# tree OF THIS REPOSITORY, wherever on disk that tree happens to live; 1 otherwise.
-# (resolve_path, which this uses for the relative-pointer form, is defined near the top
-# of the file so that ${PRIMARY_ROOT} can be resolved by it.)
+# --- REPOSITORY MEMBERSHIP — one shared helper (#6200) ---
+# Membership, not location, decides whether a path belongs to this platform. A working tree of this
+# repository counts wherever on disk it lives, and an unrelated repository never does. The question
+# is answered by ONE implementation, shared with block-draft-files.sh: lib/platform-membership.sh,
+# whose header carries the contract, the anchor rule and the walk's shapes. This hook keeps no
+# membership implementation of its own. It maps the helper's answers onto its rules, and each rule
+# keeps its own failure direction:
 #
-# WHY A SECOND MECHANISM AT ALL. Anchoring the -001 document entries to
-# ${PRIMARY_ROOT}/pmo-platform correctly ended the era when a file merely NAMED CLAUDE.md
-# was blocked wherever on disk it sat — an unrelated product repository's root doc was
-# being treated as this platform's charter, and always_block left no configuration that
-# could permit the write. But the anchor it chose is the platform CHECKOUT, which covers
-# every worktree NESTED under the checkout and no worktree anywhere else. Linked worktrees
-# are routinely created elsewhere: a spawned session receives one under its own scratchpad.
+#   answer              -001 stage 2    target (-002/-004)                cwd, for -004
+#   0 member            BLOCK           pmo-platform                      pmo-platform
+#   1 not a member      no block        projects/ prefix, else none       projects/ (resolved), else none
+#   2 undeterminable    no block        projects/ prefix, else            projects/ (resolved), else none
+#                                       pmo-platform (fails -002 closed)
+#   helper unavailable  BLOCK (fails    as 2                              as 2
+#                       closed)
 #
-# The on-disk copy in such a tree is transient, which is what made the gap look tolerable.
-# The COMMIT made from that copy is not, and it pushes to the same public repository this
-# floor exists to guard. Transience of the working tree is not transience of the
-# disclosure, and it is the disclosure axis these rules model.
+# The working directory's -002 side is NOT a helper answer: it is location, read twice (payload
+# spelling; resolved path) - see the -002 comment. No answer in this table can move it, so a
+# missing helper cannot block a platform-engineering session's ordinary writes. An empty resolved
+# working directory is #6199's "unresolvable" state, not an answer here.
 #
-# No path prefix can close this, because the whole content of the gap is that the location
-# is arbitrary. What is NOT arbitrary is repository MEMBERSHIP: a linked worktree's `.git`
-# is a one-line pointer at an administrative directory inside the checkout's own .git, and
-# a primary checkout's `.git` IS that directory. That is the invariant tested here.
+# LOADED LAZILY, NOT MODE-COUPLED. pm_load runs only inside the Write|Edit branch, after -001
+# stage 1, so Bash and mcp calls never load the helper and never depend on it. The guard has the
+# dependency-resolver guard's shape — readable, parses (`bash -n`), sources, both functions present
+# — because a corrupt helper sourced unguarded would abort this hook, and an aborted PreToolUse hook
+# fails OPEN. Unlike that guard, a failure here does not degrade by mode. The rules this helper
+# serves are the mode-independent floor, so its absence fails THEIR questions closed.
+# CLAUDE_HOOK_BYPASS still clears it, because the bypass exits before the Write|Edit branch.
 #
-# IT DOES NOT REOPEN THE DEFECT THE ANCHORING FIXED. An unrelated repository resolves to
-# its OWN administrative directory and is rejected here exactly as the anchored patterns
-# reject it. NEAREST TREE WINS: the walk stops at the first `.git` it meets and returns a
-# verdict there rather than continuing upward, so a foreign repository checked out inside a
-# platform worktree is allowed — git cannot track its contents through the platform repo,
-# so its root doc is not platform governance. Suite W arms all four shapes: a foreign
-# repo's root doc, a foreign WORKTREE whose .git file is identical in form, a nested
-# foreign repo inside a platform worktree, and a loose copy in no repository at all.
-#
-# COST. This is entered only for a Write/Edit whose resolved basename is already one of
-# the three governance documents AND which the anchored patterns did not match — a handful
-# of calls in a session, never the hot path that every Bash and mcp call takes. The walk
-# itself is a bounded upward loop of `[ -d ]` / `[ -f ]` tests with NO subprocess per
-# level (parameter expansion, not dirname), plus at most one small file read.
-readonly WORKTREE_WALK_MAX=64
-is_platform_worktree() {
-  local platform_gitdir="${PRIMARY_ROOT}/pmo-platform/.git"
-  local dir="${1%/*}"          # start at the target's directory; the target is a file
-  local depth=0
-  local gitdir line
-  # Membership is only decidable for an absolute path. A relative one means resolution
-  # failed outright — in which case the anchored patterns above could not have matched
-  # either, and fall-through is already the pre-existing behaviour. Stated as a guard
-  # rather than left to the walk bound, which would otherwise strip nothing from a
-  # slash-free string and spin to WORKTREE_WALK_MAX.
-  case "$dir" in /*) ;; *) return 1 ;; esac
-  while [ -n "$dir" ] && [ "$depth" -lt "$WORKTREE_WALK_MAX" ]; do
-    if [ -d "${dir}/.git" ]; then
-      # A primary checkout. Nearest tree wins: a foreign repo met first is a REJECTION,
-      # never a "keep looking further up".
-      if [ "${dir}/.git" = "$platform_gitdir" ]; then return 0; fi
-      return 1
-    fi
-    if [ -f "${dir}/.git" ] && [ -r "${dir}/.git" ]; then
-      gitdir=""
-      while IFS= read -r line || [ -n "$line" ]; do
-        case "$line" in
-          "gitdir: "*) gitdir="${line#gitdir: }"; break ;;
-        esac
-      done < "${dir}/.git"
-      if [ -n "$gitdir" ]; then
-        # git 2.48+ may write this pointer RELATIVE to the worktree (worktree.
-        # useRelativePaths / `git worktree add --relative-paths`). A membership test that
-        # only understood the absolute form would silently allow every worktree on such an
-        # instance, so both forms are resolved through the same resolver the target used
-        # and the two meet on physical paths. Armed as W-7 rather than assumed.
-        case "$gitdir" in
-          /*) ;;
-          *)  gitdir="${dir}/${gitdir}" ;;   # W7: relative-pointer join
-        esac
-        gitdir="$(resolve_path "$gitdir")"
-        case "$gitdir" in
-          "$platform_gitdir"|"${platform_gitdir}/"*) return 0 ;;
-        esac
-      fi
-      return 1
-    fi
-    dir="${dir%/*}"
-    depth=$((depth + 1))
-  done
-  return 1
+# COST. Per Write/Edit: one anchor resolution (one or two subshells) and one walk over the target's
+# directory; a second walk, over the resolved working directory, runs only when the target lies in
+# a domain. A walk is a bounded loop of `[ -d ]` / `[ -f ]` tests with no subprocess per level and
+# at most one canonicalizing subshell where a `.git` entry is met. This replaces the python3 fork
+# the old inline walk spent on every relative pointer.
+readonly PLATFORM_MEMBERSHIP_LIB="${HOOK_DIR}/lib/platform-membership.sh"
+PM_LIB_OK=0
+PM_ANCHOR=""
+PM_RC=1
+
+# pm_load — source the helper once and resolve the anchor. Never exits; always returns 0.
+pm_load() {
+  if [ -r "$PLATFORM_MEMBERSHIP_LIB" ] \
+     && "${BASH:-/bin/bash}" -n "$PLATFORM_MEMBERSHIP_LIB" 2>/dev/null \
+     && . "$PLATFORM_MEMBERSHIP_LIB" 2>/dev/null \
+     && command -v platform_membership_of >/dev/null 2>&1 \
+     && command -v platform_membership_anchor >/dev/null 2>&1; then
+    PM_LIB_OK=1
+    PM_ANCHOR="$(platform_membership_anchor)" || PM_ANCHOR=""
+  fi
+  return 0
+}
+
+# pm_member DIR — set PM_RC to this hook's membership code for the physical directory DIR: the
+# helper's answer when it is loaded, 1 when there is no platform repository at the anchor, and 2
+# when the helper is unavailable. Any status outside 0/1/2 reads as 2. Always returns 0.
+pm_member() {
+  PM_RC=1
+  if [ "$PM_LIB_OK" != 1 ]; then PM_RC=2; return 0; fi
+  if [ -z "$PM_ANCHOR" ]; then return 0; fi
+  PM_RC=0
+  platform_membership_of "${1:-}" "$PM_ANCHOR" || PM_RC=$?
+  case "$PM_RC" in 0|1|2) ;; *) PM_RC=2 ;; esac
+  return 0
 }
 
 # ==========================================================================
@@ -721,9 +701,9 @@ if [ -n "$ABS_TARGET" ]; then
       # same-named file anywhere else falls through" are each true in isolation and read
       # together as "all worktrees are covered" — which is false for any worktree created
       # outside ${PRIMARY_ROOT}/pmo-platform, the shape a spawned session actually gets.
-      # That case is covered by the SECOND STAGE below (is_platform_worktree), which tests
-      # repository membership rather than location. This floor grants no worktree
-      # exemption; before that stage existed, it silently had one.
+      # That case is covered by the SECOND STAGE below, which asks the shared membership helper
+      # (lib/platform-membership.sh) — repository membership rather than location. This floor
+      # grants no worktree exemption; before that stage existed, it silently had one.
       #
       # The location anchoring narrows the rule deliberately. A CLAUDE.md that is NOT at
       # one of these locations AND not inside a working tree of this repository — another
@@ -760,6 +740,15 @@ if [ -n "$ABS_TARGET" ]; then
           ;;
       esac
 
+      # --- Membership (#6200): load the shared helper and place the TARGET's directory once.
+      #     -001 stage 2 and the target side of -002/-004 read this one answer, so the two rules
+      #     cannot classify one working copy differently. The working directory is placed later,
+      #     inside the target-domain gate, from #6199's resolved value (ABS_CWD) - never here. ---
+      pm_load
+      PM_TARGET_DIR="${ABS_TARGET%/*}"
+      if [ -z "$PM_TARGET_DIR" ]; then PM_TARGET_DIR="/"; fi
+      pm_member "$PM_TARGET_DIR"; PM_TARGET_RC="$PM_RC"
+
       # --- BLOCK-AUTONOMY-001, SECOND STAGE: working trees of THIS repository that
       #     live OUTSIDE the checkout anchor ---
       # The anchored case above is the fast path and settles ${PRIMARY_ROOT} and every path
@@ -773,9 +762,19 @@ if [ -n "$ABS_TARGET" ]; then
       # tracks no .claude/ files at all, so there is no worktree copy of them to reach.
       # Stating that here rather than leaving it to be inferred: the coverage this stage
       # adds is exactly CLAUDE.md, OPERATIONS.md and RELEASE_PROTOCOL.md.
+      #
+      # PARSER NOTE: release/tools/tests/test_agent_editability_read.sh derives the Tier-0
+      # basename union from the single-line arm below at run time. Keep that arm on one line,
+      # keep this block free of a nested case/esac, and keep every `)` line in it free of a
+      # file basename before the `)`.
       case "$ABS_TARGET" in
         */CLAUDE.md|*/OPERATIONS.md|*/RELEASE_PROTOCOL.md)
-          if is_platform_worktree "$ABS_TARGET"; then
+          if [ "$PM_LIB_OK" != 1 ]; then
+            always_block "BLOCK-AUTONOMY-001" \
+              "LIB-MISSING: governance-file modification cannot be cleared by repository membership, because lib/platform-membership.sh is unavailable or invalid; this floor fails closed rather than reading not-a-member. Target: ${ABS_TARGET}" \
+              "reinstall the hook bundle — docs/scripts/setup-workspace.sh --refresh-hooks, which update.sh delegates to — to restore the helper; set CLAUDE_HOOK_BYPASS=1 only if you ARE the operator acting intentionally"
+          fi
+          if [ "$PM_TARGET_RC" = 0 ]; then
             always_block "BLOCK-AUTONOMY-001" \
               "governance-file modification is an irreducible Tier-0 action (operator-only per 'No ungoverned changes'); blocked regardless of automation_level. This target sits in a working tree of the platform repository located outside ${PRIMARY_ROOT}/pmo-platform — the working copy is transient, the commit it feeds is not. Target: ${ABS_TARGET}" \
               "governance changes require Issue + plan + operator approval — make the change through the governed flow, or set CLAUDE_HOOK_BYPASS=1 only if you ARE the operator acting intentionally"
@@ -786,9 +785,14 @@ if [ -n "$ABS_TARGET" ]; then
       # --- BLOCK-AUTONOMY-002 — Tier-0 item 7, HIGH-RISK DIRECTION ONLY ---
       # Layer separation between Engineering (pmo-platform) and Operations (projects),
       # detected by a PAIR - the target's domain and the working directory's side:
-      #   * the TARGET is pmo-platform or projects by where its RESOLVED path sits - the domain root
-      #     itself OR any subpath (the trailing-slash glob alone would miss a target that IS exactly
-      #     `${ROOT}/pmo-platform`);
+      #   * the TARGET is pmo-platform when it sits in any working tree of this repository,
+      #     wherever that tree lives (REPOSITORY MEMBERSHIP, placed above); otherwise projects
+      #     when its resolved path is under the operations root - the root itself OR any subpath
+      #     (the trailing-slash glob alone would miss a target that IS exactly `${ROOT}/projects`).
+      #     Membership comes first, so for every working tree of this checkout's repository a
+      #     write "into projects/" is by construction a write into no platform working tree: a
+      #     platform worktree nested under projects/ is classified pmo-platform. A separate clone
+      #     of the platform remote is a different repository to git and is not a member.
       #   * the WORKING DIRECTORY is on the operations side when EITHER reading puts it under
       #     projects/: its payload spelling under ${PRIMARY_ROOT}/projects, or its RESOLVED path
       #     (resolve_cwd_path - the target's own resolver) under the operations root resolved the
@@ -819,21 +823,27 @@ if [ -n "$ABS_TARGET" ]; then
       # an inequality test would silently re-admit the other direction if a third domain
       # were ever added.
       target_domain=""
-      case "$ABS_TARGET" in
-        "${PRIMARY_ROOT}/pmo-platform"|"${PRIMARY_ROOT}/pmo-platform/"*) target_domain="pmo-platform" ;;
-        "${PRIMARY_ROOT}/projects"|"${PRIMARY_ROOT}/projects/"*) target_domain="projects" ;;
-      esac
+      if [ "$PM_TARGET_RC" = 0 ]; then
+        target_domain="pmo-platform"
+      else
+        case "$ABS_TARGET" in
+          "${PRIMARY_ROOT}/projects"|"${PRIMARY_ROOT}/projects/"*) target_domain="projects" ;;
+        esac
+        if [ -z "$target_domain" ] && [ "$PM_TARGET_RC" = 2 ]; then
+          target_domain="pmo-platform"   # undeterminable outside projects/ fails -002 closed
+        fi
+      fi
 
       # --- The working directory: resolved once (#6199), then read for two questions ---
       # Resolved only when the target lies in a domain - the only writes whose verdict the working
       # directory can change (-002 needs a pmo-platform target, -004 a projects one). Two facts,
       # one question each, because the two rules ask different things of the same directory:
       #   cwd_domain         - its DOMAIN: "unresolvable" (no absolute resolution: -002 fails
-      #                        closed on it, nothing else acts on it), "pmo-platform" (resolved
-      #                        under ${PRIMARY_ROOT}/pmo-platform, read by -004), "projects" (not
-      #                        a member, resolved under the operations root), or "" (neither).
-      #                        An undeterminable membership answer is NEVER "unresolvable": that
-      #                        value means only that ABS_CWD is empty.
+      #                        closed on it, nothing else acts on it), "pmo-platform" (it sits in a
+      #                        working tree of this repository - REPOSITORY MEMBERSHIP, read by
+      #                        -004), "projects" (not a member, resolved under the operations
+      #                        root), or "" (neither). An undeterminable membership answer is NEVER
+      #                        "unresolvable": that value means only that ABS_CWD is empty.
       #   cwd_under_projects - -002's OPERATIONS SIDE: 1 when EITHER reading puts it under
       #                        projects/ - ABS_CWD against the operations root resolved the same
       #                        way, or its payload spelling. Location only: the helper is never
@@ -842,6 +852,7 @@ if [ -n "$ABS_TARGET" ]; then
       # The scope gate below keeps receiving the RAW payload value.
       cwd_domain=""
       cwd_under_projects=0
+      PM_CWD_RC=1
       if [ -n "$target_domain" ]; then
         ABS_CWD="$(resolve_cwd_path "$CWD")" || ABS_CWD=""
         if [ -z "$ABS_CWD" ]; then
@@ -856,9 +867,8 @@ if [ -n "$ABS_TARGET" ]; then
           case "$ABS_CWD" in
             "$projects_root"|"$projects_root/"*) cwd_under_projects=1 ;;   # reading 1: resolved
           esac
-          case "$ABS_CWD" in
-            "${PRIMARY_ROOT}/pmo-platform"|"${PRIMARY_ROOT}/pmo-platform/"*) cwd_domain="pmo-platform" ;;
-          esac
+          pm_member "$ABS_CWD"; PM_CWD_RC="$PM_RC"
+          if [ "$PM_CWD_RC" = 0 ]; then cwd_domain="pmo-platform"; fi
           if [ -z "$cwd_domain" ] && [ "$cwd_under_projects" = 1 ]; then cwd_domain="projects"; fi
           case "$CWD" in
             "${PRIMARY_ROOT}/projects"|"${PRIMARY_ROOT}/projects/"*) cwd_under_projects=1 ;;   # reading 2: as spelled
@@ -867,9 +877,19 @@ if [ -n "$ABS_TARGET" ]; then
       fi
 
       if [ "$cwd_under_projects" = 1 ] && [ "$target_domain" = "pmo-platform" ]; then
+        if [ "$PM_TARGET_RC" = 0 ]; then
+          always_block "BLOCK-AUTONOMY-002" \
+            "cross-domain bridge write into the tracked platform repository is an irreducible Tier-0 action (Layer separation; an Operations cwd writing into pmo-platform/, where the content becomes committable and pushable on a public repository); blocked regardless of automation_level or mode. Target: ${ABS_TARGET}" \
+            "platform-engineering changes belong to an engineering session — relaunch in the pmo-platform checkout and make the change there, where it is reviewable as a diff; if you ARE the operator acting intentionally, CLAUDE_HOOK_BYPASS=1 disables every security hook for this one call"
+        fi
+        if [ "$PM_LIB_OK" != 1 ]; then
+          always_block "BLOCK-AUTONOMY-002" \
+            "LIB-MISSING: cross-domain bridge write from an Operations working directory into a target whose repository membership cannot be determined, because lib/platform-membership.sh is unavailable or invalid; this Tier-0 floor fails closed rather than reading the target as outside the platform repository. Target: ${ABS_TARGET}" \
+            "reinstall the hook bundle — docs/scripts/setup-workspace.sh --refresh-hooks, which update.sh delegates to — to restore the helper; until it is restored, a session rooted under projects/ cannot write outside projects/. Set CLAUDE_HOOK_BYPASS=1 only if you ARE the operator acting intentionally"
+        fi
         always_block "BLOCK-AUTONOMY-002" \
-          "cross-domain bridge write into the tracked platform repository is an irreducible Tier-0 action (Layer separation; an Operations cwd writing into pmo-platform/, where the content becomes committable and pushable on a public repository); blocked regardless of automation_level or mode. Target: ${ABS_TARGET}" \
-          "platform-engineering changes belong to an engineering session — relaunch in the pmo-platform checkout and make the change there, where it is reviewable as a diff; if you ARE the operator acting intentionally, CLAUDE_HOOK_BYPASS=1 disables every security hook for this one call"
+          "UNDETERMINABLE: cross-domain bridge write from an Operations working directory into a target whose repository membership could not be determined (a .git pointer file with no pointer line, a path beyond the walk bound, or a target that did not resolve to an absolute path); this Tier-0 floor fails closed rather than reading the target as outside the platform repository. Target: ${ABS_TARGET}" \
+          "repair or remove the corrupt .git pointer above the target, or make the change from a session rooted outside projects/ if it is platform-engineering work; set CLAUDE_HOOK_BYPASS=1 only if you ARE the operator acting intentionally"
       fi
 
       # --- BLOCK-AUTONOMY-002, fail-closed arm (#6199) ---

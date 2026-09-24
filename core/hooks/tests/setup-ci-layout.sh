@@ -220,6 +220,22 @@ else
   log "setup-ci-layout: WARNING workspace-scope gate missing at ${SCOPEGUARD_SRC}"
 fi
 
+# 1f') Co-locate the shared repository-membership helper at .claude/hooks/lib/, mirroring the
+#      deployed posture (setup-workspace.sh co-deploys it there, #6200). block-autonomy-ceiling.sh
+#      and block-draft-files.sh source it for every membership question. WITHOUT this the CI sandbox
+#      would diverge from a correct install. block-autonomy-ceiling would take its
+#      helper-unavailable branch (the -001 second stage fails closed; the cross-domain target reads
+#      undeterminable), and block-draft-files would abstain at its identity gate. CI would then test
+#      the absence posture instead of the rule. Same CI-fidelity class as the co-locations above.
+MEMBERSHIPLIB_SRC="${HOOKS_SRC}/lib/platform-membership.sh"
+if [ -f "${MEMBERSHIPLIB_SRC}" ]; then
+  mkdir -p "${HOOKS_DST}/lib"
+  cp "${MEMBERSHIPLIB_SRC}" "${HOOKS_DST}/lib/"
+  log "setup-ci-layout: co-located repository-membership helper -> ${HOOKS_DST}/lib/platform-membership.sh"
+else
+  log "setup-ci-layout: WARNING repository-membership helper missing at ${MEMBERSHIPLIB_SRC}"
+fi
+
 # 1g) Mirror the bypass-mode readiness rules corpus at .claude/rules/, matching the
 #     DEPLOYED layout: deploy.sh's rules-mirror pair set copies
 #     core/rules/bypass-mode-readiness.md to $DEPLOY_ROOT/.claude/rules/bypass-mode-readiness.md
