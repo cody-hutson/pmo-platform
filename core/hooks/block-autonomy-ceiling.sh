@@ -108,8 +108,8 @@ readonly PYTHON3="/usr/bin/python3"
 
 # --- PATH RESOLUTION (Write/Edit file_path → absolute) ---
 # Defined HERE, above ${PRIMARY_ROOT}, rather than beside the rules that consume it: the
-# anchor and the target must be resolved by the SAME function or they cannot meet. See
-# the ANCHOR/TARGET RESOLUTION PARITY note on PRIMARY_ROOT below.
+# anchor, the target and the working directory must be resolved by the SAME function or
+# they cannot meet. See the ANCHOR/TARGET RESOLUTION PARITY note on PRIMARY_ROOT below.
 
 # resolve_path_shell — dependency-free physical resolution using only the pinned tool
 # path. Resolves the parent chain with `cd … && pwd -P` (which collapses `..` and every
@@ -185,6 +185,34 @@ resolve_path() {
   "$PRINTF" '%s' "$abs"
 }
 
+# resolve_cwd_path <payload-cwd> — the session working directory through the SAME resolver the
+# target and the anchor use (see ANCHOR/TARGET RESOLUTION PARITY on PRIMARY_ROOT below). The cwd
+# is the verdict's second input; resolving only the target let an aliased, traversal-bearing,
+# relative or trailing-separator spelling of the cwd be adjudicated as text beside a
+# canonicalized target. Echoes an absolute path, or NOTHING when the cwd is unresolvable.
+#
+# THE $PWD FALLBACK COMES FIRST. An empty payload value falls back to the hook process's own
+# $PWD — the harness runs a PreToolUse hook with the session's cwd as the process cwd, the same
+# second reading lib/scope-guard.sh and block-draft-files.sh already use. The idiom is repeated
+# here rather than called from that lib ON PURPOSE: this runs inside the Tier-0 floor, before the
+# lib is sourced, and the lib's absence is designed not to gate anything. Only when both
+# readings are empty, or the resolver yields no absolute path, is the value unresolvable — and
+# only BLOCK-AUTONOMY-002 acts on that.
+#
+# COST. resolve_path forks python3 for an existing path, so this runs only inside the Write|Edit
+# branch and only for a target in one of the two domains. No Bash or mcp call pays for it.
+resolve_cwd_path() {
+  local raw="${1:-}"
+  [ -n "$raw" ] || raw="${PWD:-}"     # D10: pwd fallback — the D-10 differential deletes this line
+  [ -n "$raw" ] || return 0           # both readings empty → unresolvable (prints nothing)
+  local abs="$raw"
+  abs="$(resolve_path "$raw")"        # D9: cwd resolution — the D-9 differential deletes this line
+  case "$abs" in
+    /*) "$PRINTF" '%s' "$abs" ;;      # resolved
+  esac                                # anything else → unresolvable (prints nothing)
+  return 0
+}
+
 # --- METADATA ---
 readonly HOOK_NAME="block-autonomy-ceiling"
 HOOK_DIR_RAW="$(cd "$(dirname "$0")" && pwd -P)"
@@ -210,6 +238,9 @@ readonly MODE_FILE="${HOOK_DIR}/.autonomy-mode"
 # exposure accordingly. An anchored pattern with a mis-resolving anchor is worse than an
 # unanchored one, because it reads as safe. resolve_path() is therefore defined ABOVE
 # this line, and the four shapes are armed in Suite N of the test file.
+# The working directory is the THIRD input and goes through the same function, via
+# resolve_cwd_path above; its projects/ comparison uses the operations root resolved the same
+# way when that root is a symlink. Its shapes are armed in Suite D of the test file.
 PRIMARY_ROOT_RAW="$(resolve_path "${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}")"
 readonly PRIMARY_ROOT="$PRIMARY_ROOT_RAW"
 
@@ -356,6 +387,11 @@ log_warn() {
     >> "$WARN_LOG" 2>/dev/null || true
 }
 
+# log_block — this hook's row in the SHARED block log. `cwd` is the payload value AS RECEIVED,
+# the field every hook writing this log records and the one its readers are told is read from
+# the payload. `cwd_resolved` is added only on rows whose verdict consumed the working directory
+# (BLOCK-AUTONOMY-002 / -004): the resolved value the verdict used, or "" when the cwd was
+# unresolvable and -002 failed closed. It carries the same evidentiary limit as `cwd`.
 log_block() {
   local rule_id="$1"
   local ts; ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
@@ -364,7 +400,9 @@ log_block() {
   # shellcheck disable=SC2016  # jq filter — single quotes intentional
   "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
     --arg tool "$TOOL_NAME" --arg digest "$input_digest" --arg cwd "$CWD" \
-    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, input_digest:$digest, cwd:$cwd}' \
+    --arg cwd_resolved "${ABS_CWD:-}" \
+    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, input_digest:$digest, cwd:$cwd}
+     + (if ($rule == "BLOCK-AUTONOMY-002" or $rule == "BLOCK-AUTONOMY-004") then {cwd_resolved:$cwd_resolved} else {} end)' \
     >> "$BLOCK_LOG" 2>/dev/null || true
 }
 
@@ -618,6 +656,10 @@ fi
 # silently depend on a line eighty lines above it.
 target_domain=""   # H1: see above — read below the gates, so it cannot be branch-local
 cwd_domain=""      # H1: see above — read below the gates, so it cannot be branch-local
+# ABS_CWD is IP-1: the resolved working directory the cwd classification consumes — an absolute
+# path, or EMPTY meaning unresolvable. Assigned only inside the Write|Edit branch, but read by
+# log_block, which also runs on the -001 and ceiling paths that never assign it.
+ABS_CWD=""         # H1-class: read by log_block outside the branch that assigns it
 
 if [ -n "$ABS_TARGET" ]; then
   case "$TOOL_NAME" in
@@ -743,10 +785,17 @@ if [ -n "$ABS_TARGET" ]; then
 
       # --- BLOCK-AUTONOMY-002 — Tier-0 item 7, HIGH-RISK DIRECTION ONLY ---
       # Layer separation between Engineering (pmo-platform) and Operations (projects),
-      # detected by cwd-domain ↔ target-domain mismatch. Path-boundary match against the
-      # two domain roots under the workspace. Match the domain ROOT itself OR any subpath
-      # (the trailing-slash glob alone would miss a cwd/target that IS exactly
-      # `${ROOT}/pmo-platform`).
+      # detected by a PAIR - the target's domain and the working directory's side:
+      #   * the TARGET is pmo-platform or projects by where its RESOLVED path sits - the domain root
+      #     itself OR any subpath (the trailing-slash glob alone would miss a target that IS exactly
+      #     `${ROOT}/pmo-platform`);
+      #   * the WORKING DIRECTORY is on the operations side when EITHER reading puts it under
+      #     projects/: its payload spelling under ${PRIMARY_ROOT}/projects, or its RESOLVED path
+      #     (resolve_cwd_path - the target's own resolver) under the operations root resolved the
+      #     same way. Both readings are used only to BLOCK, never to allow, and membership masks
+      #     neither, so a projects-spelled working directory that resolves into a platform tree is
+      #     still the operations side. A working directory that cannot be resolved fails closed
+      #     on this rule alone (see the fail-closed arm after it).
       #
       # THE TWO DIRECTIONS ARE NOT THE SAME CONTROL — see #5293.
       # The domains are SIBLING directories, not nested: pmo-platform is a git repo and
@@ -774,15 +823,68 @@ if [ -n "$ABS_TARGET" ]; then
         "${PRIMARY_ROOT}/pmo-platform"|"${PRIMARY_ROOT}/pmo-platform/"*) target_domain="pmo-platform" ;;
         "${PRIMARY_ROOT}/projects"|"${PRIMARY_ROOT}/projects/"*) target_domain="projects" ;;
       esac
+
+      # --- The working directory: resolved once (#6199), then read for two questions ---
+      # Resolved only when the target lies in a domain - the only writes whose verdict the working
+      # directory can change (-002 needs a pmo-platform target, -004 a projects one). Two facts,
+      # one question each, because the two rules ask different things of the same directory:
+      #   cwd_domain         - its DOMAIN: "unresolvable" (no absolute resolution: -002 fails
+      #                        closed on it, nothing else acts on it), "pmo-platform" (resolved
+      #                        under ${PRIMARY_ROOT}/pmo-platform, read by -004), "projects" (not
+      #                        a member, resolved under the operations root), or "" (neither).
+      #                        An undeterminable membership answer is NEVER "unresolvable": that
+      #                        value means only that ABS_CWD is empty.
+      #   cwd_under_projects - -002's OPERATIONS SIDE: 1 when EITHER reading puts it under
+      #                        projects/ - ABS_CWD against the operations root resolved the same
+      #                        way, or its payload spelling. Location only: the helper is never
+      #                        consulted, so a missing helper cannot move -002's working-directory
+      #                        side, and membership cannot mask it.
+      # The scope gate below keeps receiving the RAW payload value.
       cwd_domain=""
-      case "$CWD" in
-        "${PRIMARY_ROOT}/pmo-platform"|"${PRIMARY_ROOT}/pmo-platform/"*) cwd_domain="pmo-platform" ;;
-        "${PRIMARY_ROOT}/projects"|"${PRIMARY_ROOT}/projects/"*) cwd_domain="projects" ;;
-      esac
-      if [ "$cwd_domain" = "projects" ] && [ "$target_domain" = "pmo-platform" ]; then
+      cwd_under_projects=0
+      if [ -n "$target_domain" ]; then
+        ABS_CWD="$(resolve_cwd_path "$CWD")" || ABS_CWD=""
+        if [ -z "$ABS_CWD" ]; then
+          cwd_domain="unresolvable"
+        else
+          # The operations root, spelled the way ABS_CWD is: resolved only when it is a symlink,
+          # so the default layout pays no extra resolver call.
+          projects_root="${PRIMARY_ROOT}/projects"
+          if [ -L "$projects_root" ]; then
+            projects_root="$(resolve_path "$projects_root")" || projects_root="${PRIMARY_ROOT}/projects"
+          fi
+          case "$ABS_CWD" in
+            "$projects_root"|"$projects_root/"*) cwd_under_projects=1 ;;   # reading 1: resolved
+          esac
+          case "$ABS_CWD" in
+            "${PRIMARY_ROOT}/pmo-platform"|"${PRIMARY_ROOT}/pmo-platform/"*) cwd_domain="pmo-platform" ;;
+          esac
+          if [ -z "$cwd_domain" ] && [ "$cwd_under_projects" = 1 ]; then cwd_domain="projects"; fi
+          case "$CWD" in
+            "${PRIMARY_ROOT}/projects"|"${PRIMARY_ROOT}/projects/"*) cwd_under_projects=1 ;;   # reading 2: as spelled
+          esac
+        fi
+      fi
+
+      if [ "$cwd_under_projects" = 1 ] && [ "$target_domain" = "pmo-platform" ]; then
         always_block "BLOCK-AUTONOMY-002" \
           "cross-domain bridge write into the tracked platform repository is an irreducible Tier-0 action (Layer separation; an Operations cwd writing into pmo-platform/, where the content becomes committable and pushable on a public repository); blocked regardless of automation_level or mode. Target: ${ABS_TARGET}" \
           "platform-engineering changes belong to an engineering session — relaunch in the pmo-platform checkout and make the change there, where it is reviewable as a diff; if you ARE the operator acting intentionally, CLAUDE_HOOK_BYPASS=1 disables every security hook for this one call"
+      fi
+
+      # --- BLOCK-AUTONOMY-002, fail-closed arm (#6199) ---
+      # A check that cannot read its input still checks. With the working directory unresolvable
+      # the Operations direction cannot be ruled out, and this floor exists for the direction that
+      # can put content into a public repository — so the write is blocked instead of the unreadable
+      # value being trusted as "neither domain". This binds -002 ONLY: -004 does not fire on it, and
+      # the scope gate keeps its own INVERTED direction (lib/scope-guard.sh clause 1) — opposite
+      # directions stay in separate branches. Reached only when the payload cwd AND the process
+      # $PWD are both empty, or the resolver yields no absolute path — never for a payload that
+      # merely omits cwd.
+      if [ "$cwd_domain" = "unresolvable" ] && [ "$target_domain" = "pmo-platform" ]; then
+        always_block "BLOCK-AUTONOMY-002" \
+          "cross-domain bridge write into the tracked platform repository from a working directory that could not be resolved (the payload cwd and the hook process's working directory are both empty, or neither resolves to an absolute path), so the Operations direction cannot be ruled out; this Tier-0 floor fails closed rather than trusting an unreadable value. Target: ${ABS_TARGET}" \
+          "relaunch the session from a working directory that exists — the pmo-platform checkout for platform-engineering work — so the direction can be evaluated; if you ARE the operator acting intentionally, CLAUDE_HOOK_BYPASS=1 disables every security hook for this one call"
       fi
       ;;
   esac
@@ -814,6 +916,10 @@ if command -v master_enable_gate >/dev/null 2>&1; then master_enable_gate "$MAST
 # only — BLOCK-AUTONOMY-004 as well as the STEP-2 ceiling (#5293; -004 IS session-scoped
 # by nature, since a session outside the governed tree has no layer boundary to observe).
 # Precedence for this hook: bypass -> floor -> master -> SCOPE -> -004 -> ceiling.
+# It receives the RAW payload cwd, deliberately: the resolved value (ABS_CWD) feeds only the
+# domain classification above, and the two consumers fail in OPPOSITE directions on an
+# undeterminable working directory — -002 closed, this gate inert — so they must not share a
+# value or a branch.
 # Inverted fail direction on the cwd axis, NOT on the lib axis. See lib/scope-guard.sh. ---
 readonly SCOPE_GUARD_LIB="${HOOK_DIR}/lib/scope-guard.sh"
 if [ -r "$SCOPE_GUARD_LIB" ]; then . "$SCOPE_GUARD_LIB" 2>/dev/null || true; fi
