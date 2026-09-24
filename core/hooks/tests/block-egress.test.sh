@@ -1388,8 +1388,8 @@ E007_V_P="repos/v-test-owner/v-test-repo/issues/1/comments"
 E007_V_TP="gh api -X POST ${E007_V_P} -f body='E007VSENTINEL cannot close"
 E007_V_FP="gh api -X POST ${E007_V_P} -F body=@- <<'EOF'"$'\n'"E007VSENTINEL it's fine"$'\n'"EOF"
 E007_V_FP2="gh api -X POST ${E007_V_P} -f body=E007VSENTINEL\\'s"
-E007_V_NM_A="gh api -X POST ${E007_V_P} -f body='abc def"
-E007_V_NM_B="gh api -X POST ${E007_V_P} -f body='xyz uvw"
+E007_V_NM_A="gh api -X POST ${E007_V_P} -f body='E007VSENTINEL abc def"
+E007_V_NM_B="gh api -X POST ${E007_V_P} -f body='E007VSENTINEL xyz uvw"
 E007_V_H1="gh api -X POST ${E007_V_P} -F body=@- <<'EOF'"$'\n'"it's quoted"$'\n'"EOF"
 E007_V_H2="gh api -X POST ${E007_V_P} -F body=@- <<\"EOF\""$'\n'"it's quoted"$'\n'"EOF"
 E007_V_H3="gh api -X POST ${E007_V_P} -F body=@- <<-\\EOF"$'\n\t'"it's quoted"$'\n\t'"EOF"
@@ -1603,17 +1603,22 @@ fi
 
 # V5 (the usability predicate's near-miss) — two structurally identical malformed
 # commands, differing only in literal text of the same length, yield records that differ
-# in NO feature field, in both writers.
+# in NO feature field, in both writers. Both carry the planted sentinel too, so after
+# this arm that mode's log holds all four of the predicate's payloads — and must hold
+# no sentinel, while the rule id (the control) is present.
 for _v_mode in enforce warn; do
   if [ "$_v_mode" = enforce ]; then _v_log="$(e007_v_blk "$E007_V_ROOT")"; _v_want=2; else _v_log="$(e007_v_wrn "$E007_V_ROOT")"; _v_want=0; fi
   e007_v_run "$E007_V_ROOT" "$_v_mode" "$E007_V_NM_A"; _v_x1="$E007_D_EXIT"; _v_u1=$(( E007_V_UB + E007_V_UW )); _v_a="$(e007_v_last "$_v_log")"
   e007_v_run "$E007_V_ROOT" "$_v_mode" "$E007_V_NM_B"; _v_x2="$E007_D_EXIT"; _v_u2=$(( E007_V_UB + E007_V_UW )); _v_b="$(e007_v_last "$_v_log")"
+  _v_hit="$(e007_v_count E007VSENTINEL "$_v_log")"; _v_ctl="$(e007_v_count BLOCK-EGRESS-007 "$_v_log")"
   if [ "$_v_x1" = "$_v_want" ] && [ "$_v_x2" = "$_v_want" ] && [ "$_v_u1" = 1 ] && [ "$_v_u2" = 1 ] \
      && [ "$(e007_v_get "$_v_a" 'has("features")')" = true ] && [ "$(e007_v_get "$_v_b" 'has("features")')" = true ] \
-     && [ "$(e007_v_nonid "$_v_a")" = "$(e007_v_nonid "$_v_b")" ]; then
-    e007_d_pass "AC-E007-V5 (${_v_mode}): a near-miss pair differing only in literal text yields zero differing non-identity fields"
+     && [ "$(e007_v_nonid "$_v_a")" = "$(e007_v_nonid "$_v_b")" ] \
+     && [ "$_v_hit" = 0 ] && [ "$_v_ctl" -ge 4 ]; then
+    e007_d_pass "AC-E007-V5 (${_v_mode}): a near-miss pair differing only in literal text yields zero differing non-identity fields, and no record carries the sentinel"
   else
-    e007_d_fail "AC-E007-V5 (${_v_mode}): a near-miss pair yields zero differing non-identity fields" "exits ${_v_x1}/${_v_x2} (want ${_v_want}) records +${_v_u1}/+${_v_u2} a=${_v_a:-none} b=${_v_b:-none}"
+    e007_d_fail "AC-E007-V5 (${_v_mode}): a near-miss pair yields zero differing non-identity fields, and no record carries the sentinel" \
+      "exits ${_v_x1}/${_v_x2} (want ${_v_want}) records +${_v_u1}/+${_v_u2} sentinel lines=${_v_hit} (want 0) rule-id lines=${_v_ctl} (want >=4) a=${_v_a:-none} b=${_v_b:-none}"
   fi
 done
 
