@@ -1,6 +1,6 @@
 ---
 title: ADR-205 — A refusal record carries the command's structure, never the command
-status: Proposed — design locked at the egress-hook-batch Stage-5 Collective Review scope-lock; the Proposed-to-Accepted transition belongs to the Stage 13 Close ratification beat
+status: Accepted — operator-ratified at the egress-hook-batch Stage 13 Close ratification beat, 2026-09-25; the design was locked at the release's Stage-5 Collective Review scope-lock
 date: 2026-09-24
 release: egress-hook-batch
 deciders: "Workspace owner (operator) — design locked at the release's Stage-5 Collective Review scope-lock, with the independent adversarial review's refinements folded in; design by the Stage 5 Solutioning spoke (three design explorations: encoding, vocabulary, producer identity); authored by the Stage 6 Engineering spoke"
@@ -20,7 +20,7 @@ supersedes: none
 
 ## Status
 
-**Proposed.** The design was locked by the operator at the egress-hook-batch Stage-5 Collective Review scope-lock, together with the independent adversarial review's refinements; this record was authored at Stage 6 Engineering after that lock. The `Proposed → Accepted` transition is the Stage 13 Close ratification beat's to perform.
+**Accepted** — operator-ratified at the egress-hook-batch Stage 13 Close ratification beat, 2026-09-25, as one record of a decision rendered per record. The design was locked by the operator at the release's Stage-5 Collective Review scope-lock, together with the independent adversarial review's refinements; this record was authored at Stage 6 Engineering after that lock and read `Proposed` until the Stage 13 gate that owns the transition. The decision this record documents shipped in **v4.69**.
 
 **Numbering provenance.** Claimed as **205** against an anchor of **203** on `origin/main`, read from the repository's own ADR-numbering detector. The release branch then carried this release's other record at 204, so this one took the next number and the sequence stayed gap-free. The number binds at the Stage-12 claim; should the mainline claim it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. When the release branch was synchronized with the mainline at Stage 6, the mainline had claimed 204 for a different record: 205 was then the next free number above the anchor, so this record held its number and carries no hop note, and this release's other record moved to 206. In-release prose cites this record by its slug token, which carries no number shape and resolves at the claim.
 
