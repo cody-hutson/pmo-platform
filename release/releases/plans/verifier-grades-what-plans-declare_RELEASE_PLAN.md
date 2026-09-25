@@ -36,7 +36,7 @@ reversibility: MODERATE / Confidence HIGH — one branch and one merge, so rever
 | **Release Manager** | Agent-assisted (release-hub Mode O) |
 | **Status** | Executing (Stage 6 Engineering) |
 | **Branch** | `release/verifier-grades-what-plans-declare` |
-| **PR** | Opened in **draft** by the first Stage-6 spoke immediately after this commit; the next slice records its number here. It transitions to ready-for-review at the Stage-9 gate. |
+| **PR** | **#7839** — opened in **draft** by the first Stage-6 spoke right after Engineering Commit 0; it transitions to ready-for-review at the Stage-9 gate. |
 | **Milestone** | `verifier-grades-what-plans-declare` (ms#405) |
 
 `domain_practice: { source: N/A — pipeline-internal release, date: 2026-09-24, domain: software }`
@@ -390,7 +390,7 @@ Result:      0 open PRs at 2026-09-24T14:37:26Z; re-measured at the delta, 0 at 
 Verdict:     CLEAN as a probe, VACUOUS for contention at N=0 - a pinned baseline; the hub re-checks per wave
 ```
 
-**Cross-PR at Commit 0 (an observation; Stage-9 A6.5/A6.6 render the verdicts).** One open PR: draft #7638 (`release/egress-hook-batch`, ms#392). Its 12 changed files share **0** paths with this matrix (its ADR records, the core ADR index, the egress hook and its tests, the egress allowlist, the rules registry, `docs/UPDATE.md`, its own plan). It shares two slots: the version slot (both carry provisional `v4.69`) and the ADR-number slot (it holds 205 and 206). Between the Stage-4 pin and the branch point, `main` advanced by 18 commits touching 20 files (the ms#386 `v4.68` release and its close-out); **0** of them are paths in this matrix.
+**Cross-PR at Commit 0 (an observation; Stage-9 A6.5/A6.6 render the verdicts).** One open PR: draft #7638 (`release/egress-hook-batch`, ms#392). Its 12 changed files share **0** paths with this matrix (its ADR records, the core ADR index, the egress hook and its tests, the egress allowlist, the rules registry, `docs/UPDATE.md`, its own plan). It shares two slots: the version slot (both carry provisional `v4.69`) and the ADR-number slot (it holds 205 and 206). Between the Stage-4 pin and the branch point, `main` advanced by 18 commits touching 20 files (the ms#386 `v4.68` release and its close-out). **None of them is an add or edit target in this matrix.** One is a read-only input — `core/hooks/block-autonomy-ceiling.sh`, which gained the ms#386 membership helper — and it was re-read at the branch point for § Agent-Editability Read.
 
 **Same-file siblings outside the milestone** (the delta's table, reconfirmed at the Collective Review, D43):
 
@@ -644,7 +644,7 @@ Each entry is single-limb, names an explicit file and uses `-F`. Each was parsed
 
 ### Baseline SHA
 
-`0c759aaf992726c2cba5e43400ca6daa4056fdf3` — `origin/main` pinned at Stage-4 Phase A0 (2026-09-24, Thursday) and re-read, unchanged, at the delta. The release branch is cut from `8e0ee08450a5e1d64f352279a3ab0f4a6ce46f6d`, the `origin/main` head at Commit 0; the 18 commits between the two touch 0 paths in this matrix.
+`0c759aaf992726c2cba5e43400ca6daa4056fdf3` — `origin/main` pinned at Stage-4 Phase A0 (2026-09-24, Thursday) and re-read, unchanged, at the delta. The release branch is cut from `8e0ee08450a5e1d64f352279a3ab0f4a6ce46f6d`, the `origin/main` head at Commit 0; the 18 commits between the two touch no add or edit target in this matrix, and one read-only input (`core/hooks/block-autonomy-ceiling.sh`), re-read at the branch point.
 
 ### In-Flight Release Roster
 
@@ -770,6 +770,7 @@ Rows DEV-1..DEV-10 carry one row per Phase A6.5 review: the routing of its Minor
 | DEV-21 | § Release-Level Verification | The masked-exit non-regression measure, the stub form of `deploy.sh`, and the plan population pinned by path list (D39); the laundering guard (D46); the Stage-4 predictions superseded by each design's own | D39; D46 | APPLIED |
 | DEV-22 | § Implementation Sequence | Each Stage-6 slice adds Evidence-Grounding rows for the canonicalizations its decisions introduced | D42 | APPLIED as a standing obligation on steps 1–10 |
 | DEV-23 | Provisional display version | `v4.68` → `v4.69`: ms#386 claimed `v4.68`, and the claim key was re-minted to `4.69.0`; re-verified free at Commit 0 | D43; the Commit-0 re-verify | APPLIED in § Header and § Commit-0 Version Re-Verify Record |
+| DEV-24 | § Contention Map, § Cross-PR Overlap Audit, § Baseline Pin | Corrected right after Commit 0 by the spoke that authored it. Three sentences said the 18 commits between the Stage-4 pin and the branch point touched 0 paths in the matrix. A set-intersection probe of those 20 files against the 50 declared paths found one: `core/hooks/block-autonomy-ceiling.sh`, a **read-only input**, which the Agent-Editability derivation had already re-read at the branch point. No add or edit target changed | A Tier-1 [ADJUST] to this spoke's own Commit-0 transcription; a factual correction that changes no scope | APPLIED |
 
 ---
 
@@ -800,7 +801,7 @@ Each row lands with its card's slice; the slice records the status and the commi
 |---|---|
 | **Commit-0 version half** | recorded in § Commit-0 Version Re-Verify Record: `v4.69` recomputed next-free and free on the binding tag arm; PROCEED |
 | **Commit-0 manifest half** | `release/tools/claim-version.sh --verify-stamp verifier-grades-what-plans-declare` → **exit 0**, *"verify-stamp OK — … carries a resolvable stamp manifest; plan-only manifest (0 --stamp-file target(s)); package-consequence checks not exercised"*; pre-flight line: the manifest stales 0 packages. Control on the same verb: a slug with no pre-claim plan → exit 1 (*"NO PRE-CLAIM PLAN"*). Exactly one double-brace `RELEASE_VERSION` placeholder in this file (the Header `**Version**` cell), counted at 1 by a fixed-string count of the braced form. Re-run after this row was written: exit 0 |
-| **Hermetic self-verify (C4, Commit 0)** | Stub root = a `git archive` of the branch head `8e0ee084` plus this file, with `core/deploy/deploy.sh` and `release/tools/append-pipeline-event.sh` each prefixed by an `exit 97` line (the original text kept after it); the executor invoked by its repo-relative path with `--root` on the stub. Roll-up: **`4 PASS / 36 FAIL / 12 SKIP / 1 ERROR — over 42 per-issue row(s); 11 declared-deferred`**, exit 3. Per-issue rows: 42/42 indexed, **0 ERROR**, 11 declared-deferred SKIP, 30 FAIL (arm labels absent — RED by design; #6837 AC-3 reads `count=1 (wanted == 0)`, its predicted pre-#6180 state), 1 PASS (#6848 AC-3, proved armed-red-then-revert at step 5). CIACs: 6/6 emitted, all FAIL (the pre-fix state). The one ERROR is `FCM-COVERAGE diff-unresolvable` — the stub is not a git tree, and the family never reads an absent diff as an empty one. Provenance: COVERAGE, PRESENCE and GRAMMAR PASS (`form=X date=2026-09-24`); DELTA PASS (`prov-no-loss`, 4 comment elements) on a second run supplied the Stage-4 plan comment |
+| **Hermetic self-verify (C4, Commit 0)** | Stub root = a `git archive` of the branch head `8e0ee084` plus this file, with `core/deploy/deploy.sh` and `release/tools/append-pipeline-event.sh` each prefixed by an `exit 97` line (the original text kept after it); the executor invoked by its repo-relative path with `--root` on the stub. Roll-up: **`4 PASS / 36 FAIL / 12 SKIP / 1 ERROR — over 42 per-issue row(s); 11 declared-deferred`**, exit 3. Per-issue rows: 42/42 indexed, **0 ERROR**, 11 declared-deferred SKIP, 30 FAIL (arm labels absent — RED by design; #6837 AC-3 reads `count=1 (wanted == 0)`, its predicted pre-#6180 state), 1 PASS (#6848 AC-3, proved armed-red-then-revert at step 5). CIACs: 6/6 emitted, all FAIL (the pre-fix state). The one ERROR is `FCM-COVERAGE diff-unresolvable` — the stub is not a git tree, and the family never reads an absent diff as an empty one. Provenance: COVERAGE, PRESENCE and GRAMMAR PASS (`form=X date=2026-09-24`); DELTA PASS (`prov-no-loss`, 4 comment elements) on a second run supplied the Stage-4 plan comment. Controls on the same executor and stub, each a run-directory copy with one planted row: an empty method cell → the roll-up reads `2 ERROR — over 43 per-issue row(s)`; an operand-less grep placed first → 1 of 43 per-issue records emitted (the #7531 defect, live at the branch point). So the 0-ERROR and 0-lost readings on this file are real |
 | **File Change Matrix parse** | The executor's determinism seam on a run-directory copy of this file outside the corpus, with an empty delivered set: `declared=50 interpreted=50 obligations=6 excluded=9 conditional=0 uninterpreted=0 pathless=0 prose_led=0`; the six obligations are this plan, the fixtures glob and the four ADR records. Control on the same copy: the D-6180 ADR row's label rewritten to carry the word for a conditional row → `obligations=5 conditional=1`, so the parser reads the labels and the promoted rows parse as unconditional |
 | **AC binding** | `release/tools/check-ac-binding.py --ordinals-only` on this file → `VERDICT BOUND` (10 issues; each baseline equals `ac_baseline`); `--fetch` against the live issue bodies → **42/42 BOUND** |
 | **Links and durability constructs** | `release/tools/check-release-links.py --roots release --files <this plan> --check-anchors --images` → 0 broken; `--plan-depth-lint` → 0 depth-sensitive links. Control: the checker's own `check_file` on a run-directory copy carrying one planted workspace-rooted link to a missing file → 1. Markdown-link sequences 0, cutover-idiom matches 0 (the reference-durability hook's pattern, fence-stripped), raw GitHub URLs 0; each reader returns 1 on a planted input |
@@ -858,7 +859,7 @@ Each row lands with its card's slice; the slice records the status and the commi
 
 ## Baseline Pin
 
-`origin/main` @ **`0c759aaf`** (`0c759aaf992726c2cba5e43400ca6daa4056fdf3`), measured at Stage-4 Phase A0 and re-read unchanged at the delta. The release branch is cut at Engineering Commit 0 from `8e0ee08450a5e1d64f352279a3ab0f4a6ce46f6d`; the 18 commits between the two touch 0 paths in the File Change Matrix. Read by the Stage-9 mid-pipeline divergence re-check.
+`origin/main` @ **`0c759aaf`** (`0c759aaf992726c2cba5e43400ca6daa4056fdf3`), measured at Stage-4 Phase A0 and re-read unchanged at the delta. The release branch is cut at Engineering Commit 0 from `8e0ee08450a5e1d64f352279a3ab0f4a6ce46f6d`; the 18 commits between the two touch no add or edit target in the File Change Matrix, and one read-only input (`core/hooks/block-autonomy-ceiling.sh`), re-read at the branch point. Read by the Stage-9 mid-pipeline divergence re-check.
 
 ---
 
