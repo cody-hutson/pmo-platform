@@ -111,6 +111,14 @@ set -euo pipefail
 #        verdict that stays non-failing keeps it green. One fixture row per
 #        historical SKIP shape, a non-synthetic replay graded per row, and two
 #        seeded failures, each proved to apply at exactly the sites it names.
+#  (G14) PREDICATE CLASS IS A READER ANNOTATION (V6180-AC5) — the executor grades
+#        a row from its method cell alone. No surface of it claims a class hint,
+#        the per-issue parser resolves no class value (the CIAC Predicate field
+#        and the header word stay), and every row grades identically with and
+#        without a Predicate class column: a row is routed away from the executor
+#        only by the declared-deferred form in its method cell. One seeded failure
+#        re-introduces a class read, proved to apply at exactly one site, and must
+#        move a row.
 #
 # Offline + deterministic: fixtures are committed under tests/fixtures/ and all
 # methods are fast local greps against the repo tree (no deploy.sh --check here —
@@ -2457,6 +2465,106 @@ if mutant_ran "G13-M2 V6236-AC4"; then
 fi
 
 rm -rf "$MUTD6"
+
+# ===========================================================================
+# G14 — PREDICATE CLASS IS A READER ANNOTATION (V6180-AC5): a row is graded from
+#       its Verification method cell alone.
+#
+# {{ADR:a-rows-grading-route-is-declared-in-its-method-cell}} removed the
+# classifier's dormant class-hint path rather than wiring it: its only caller had
+# passed an empty class since the executor's first commit, so the column plans
+# author never shaped a verdict. A row is routed away from the executor only by a
+# declaration IN its method cell, in the one declared-deferred form (bracket or
+# phrase spelling). (a) is RED on the pre-removal tool. (b) is GREEN on both
+# tools, because the hint was unreachable before too — so (c) re-introduces a class
+# read and must move a row: a green arm alone is not evidence.
+# ===========================================================================
+echo
+echo "G14 — #6180: the Predicate class column is a reader annotation (V6180-AC5)"
+
+FIX_CINERT="release/tools/tests/fixtures/verify-plan-class-inert.md"
+FIX_CINERTCTL="release/tools/tests/fixtures/verify-plan-class-inert-control.md"
+G14_ROWS="AC-1 AC-2 AC-3 AC-4"
+
+# --- G14-0: DENOMINATOR FIRST — both twins still declare their four rows. ---
+G14_N="$(grep -c -F '| AC-' "$REPO_ROOT/$FIX_CINERT" || true)"
+G14_NC="$(grep -c -F '| AC-' "$REPO_ROOT/$FIX_CINERTCTL" || true)"
+[ "${G14_N:-0}" -eq 4 ] && [ "${G14_NC:-0}" -eq 4 ] \
+  && ok "G14-0 V6180-AC5b both twins still declare their 4 rows (without them every arm below is vacuous)" \
+  || bad "G14-0 V6180-AC5b the twins declare ${G14_N:-0} and ${G14_NC:-0} rows (expected 4 and 4); the arms below would grade nothing"
+
+# --- G14-1..G14-4: (a) the shipped tool carries no class-hint path. ---
+PVP_BODY="$(sed -n '/^parse_verification_plan()/,/^}/p' "$VERIFY")"
+PCI_BODY="$(sed -n '/^parse_ciac()/,/^}/p' "$VERIFY")"
+[ "$(grep -c '' <<<"$PVP_BODY")" -ge 150 ] || bad "G14 V6180-AC5a the per-issue parser body did not extract; the zero below would be vacuous"
+G14_HINT="$(grep -c -F 'predicate-class hint' "$VERIFY" || true)"
+[ "$G14_HINT" = "0" ] \
+  && ok "G14-1 V6180-AC5a no surface of the executor claims a predicate-class hint" \
+  || bad "G14-1 V6180-AC5a the executor still claims a predicate-class hint on $G14_HINT line(s)"
+G14_PVP="$(grep -c -F 'col_pred' <<<"$PVP_BODY" || true)"
+[ "$G14_PVP" = "0" ] \
+  && ok "G14-2 V6180-AC5a the per-issue parser resolves no class value" \
+  || bad "G14-2 V6180-AC5a the per-issue parser still resolves a class value ($G14_PVP col_pred line(s))"
+[ "$(grep -c -F 'col_pred' <<<"$PCI_BODY" || true)" -ge 1 ] \
+  && ok "G14-3 V6180-AC5a CONTROL — the CIAC parser still reads its own Predicate field (a different field, kept)" \
+  || bad "G14-3 V6180-AC5a the CIAC Predicate field was removed too — over-deletion"
+[ "$(grep -c -F 'if (h_method == 0 && (h_ac > 0 || h_expected > 0 || h_pred > 0)) {' "$VERIFY" || true)" = "1" ] \
+  && ok "G14-4 V6180-AC5a ADR-168's discriminator is intact — the header word still counts toward the unindexable latch" \
+  || bad "G14-4 V6180-AC5a ADR-168's discriminator line changed"
+
+# --- G14-5..G14-9: (b) every row grades identically with and without the column. ---
+vrp_run "$VERIFY" "$FIX_CINERT";    J_CI="$VRP_JSON"
+vrp_run "$VERIFY" "$FIX_CINERTCTL"; J_CIC="$VRP_JSON"
+G14_DIFF=""
+for g14a in $G14_ROWS; do
+  g14f="$(family_of "$J_CI" "$g14a")/$(verdict_of "$J_CI" "$g14a")"
+  g14c="$(family_of "$J_CIC" "$g14a")/$(verdict_of "$J_CIC" "$g14a")"
+  case "$g14f" in /*|*/) G14_DIFF="$G14_DIFF $g14a=absent"; continue ;; esac
+  [ "$g14f" = "$g14c" ] || G14_DIFF="$G14_DIFF $g14a=$g14f/vs/$g14c"
+done
+[ -z "$G14_DIFF" ] && [ "$(rows_of "$J_CI")" = "4" ] && [ "$(rows_of "$J_CIC")" = "4" ] \
+  && ok "G14-5 V6180-AC5b every row is present and grades identically with and without the class column (4 of 4 indexed in each twin)" \
+  || bad "G14-5 V6180-AC5b rows absent or moved by the class column:${G14_DIFF:- none}; indexed $(rows_of "$J_CI") and $(rows_of "$J_CIC") (expected 4 and 4)"
+[ "$(family_of "$J_CI" AC-1)/$(verdict_of "$J_CI" AC-1)" = "deferred/SKIP" ] \
+  && ok "G14-6 V6180-AC5b AC-1 the declared-deferred form in the method cell, bracket spelling → deferred/SKIP" \
+  || bad "G14-6 V6180-AC5b AC-1 got $(family_of "$J_CI" AC-1)/$(verdict_of "$J_CI" AC-1) (expected deferred/SKIP)"
+[ "$(family_of "$J_CI" AC-2)/$(verdict_of "$J_CI" AC-2)" = "deferred/SKIP" ] \
+  && ok "G14-7 V6180-AC5b AC-2 the declared-deferred form in the method cell, phrase spelling → deferred/SKIP" \
+  || bad "G14-7 V6180-AC5b AC-2 got $(family_of "$J_CI" AC-2)/$(verdict_of "$J_CI" AC-2) (expected deferred/SKIP)"
+G14_V3="$(verdict_of "$J_CI" AC-3)"
+[ -n "$G14_V3" ] && [ "$G14_V3" != "PASS" ] \
+  && ok "G14-8 V6180-AC5b AC-3 a class cell alone earns nothing — present and not PASS ($(family_of "$J_CI" AC-3)/$G14_V3)" \
+  || bad "G14-8 V6180-AC5b AC-3 read '${G14_V3:-absent}' (expected present and not PASS)"
+[ "$(family_of "$J_CI" AC-4)/$(verdict_of "$J_CI" AC-4)" = "per-issue/PASS" ] \
+  && ok "G14-9 V6180-AC5b AC-4 a class never displaces a runnable probe → per-issue/PASS" \
+  || bad "G14-9 V6180-AC5b AC-4 got $(family_of "$J_CI" AC-4)/$(verdict_of "$J_CI" AC-4) (expected per-issue/PASS)"
+
+# --- G14-M: (c) SEEDED FAILURE — a class read re-introduced ahead of the keyword arms. ---
+# The mutant prefixes a runtime-suite subtype token to the method of every row whose
+# class cell reads runtime or behavioral, so the column routes again. It is proved to
+# apply at EXACTLY one site (a substitution never adds or removes a line, so a
+# line-by-line comparison counts its sites), and it must then move AC-3 between the
+# twins. AC-3's control family is checked as present and different rather than
+# pinned, so a later residual that re-routes a command-less row keeps the arm green.
+MUTD6180="$(mktemp -d -t verify-plan-6180-mut.XXXXXX)"
+MUT6180="$MUTD6180/class-read.sh"
+sed -E 's@^      rec\(issue, ac, "PENDING", method, expected\)$@      rec(issue, ac, "PENDING", ((h_pred > 0 \&\& h_pred <= n \&\& tolower(F[h_pred]) ~ /runtime|behavioral/) ? "suite-skip; " : "") method, expected)@' "$VERIFY" > "$MUT6180"
+chmod +x "$MUT6180"
+G14_SITES="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$MUT6180")"
+if [ "$G14_SITES" -ne 1 ]; then
+  bad "G14-M V6180-AC5c mutation applied at $G14_SITES site(s), expected exactly 1; (b) would be graded against the wrong change, or none"
+else
+  ok "G14-M V6180-AC5c mutation applied at exactly 1 site: a class-cell read re-introduced ahead of the keyword arms"
+  vrp_run "$MUT6180" "$FIX_CINERTCTL"; JM_CIC="$VRP_JSON"
+  vrp_run "$MUT6180" "$FIX_CINERT";    JM_CI="$VRP_JSON"
+  if mutant_ran "G14-M V6180-AC5c"; then
+    G14_MF3="$(family_of "$JM_CI" AC-3)"; G14_MC3="$(family_of "$JM_CIC" AC-3)"
+    [ "$G14_MF3" = "runtime-suite" ] && [ -n "$G14_MC3" ] && [ "$G14_MC3" != "$G14_MF3" ] \
+      && ok "G14-M V6180-AC5c mutation detected — with a class read restored, AC-3 grades $G14_MF3 with the column and $G14_MC3 without it, so G14-5 flips" \
+      || bad "G14-M V6180-AC5c SURVIVED — AC-3 reads '${G14_MF3:-absent}' with the column and '${G14_MC3:-absent}' without it; the class read moved nothing, so V6180-AC5b proves nothing"
+  fi
+fi
+rm -rf "$MUTD6180"
 
 # ---------------------------------------------------------------------------
 # Summary
