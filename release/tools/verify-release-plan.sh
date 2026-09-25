@@ -69,7 +69,22 @@ readonly CLI_VERSION="0.2.1"
 # over a denominator that had silently lost rows. That is the counters becoming
 # correct, not the contract changing: every field name, verdict value and record
 # shape a consumer reads is untouched.
-readonly SCHEMA_VERSION="4"
+# 4 -> 5: the verdict roll-up gains a MEASUREMENT STATE. When a dispatch loop
+# reads fewer records than the parser produced (the FD-0 completeness tripwire
+# below), the `**Verdict roll-up:**` line carries the DEGRADED marker with "read K
+# of N", and the run exits EXIT_INTERNAL rather than EXIT_CHECK_FAILED, because
+# the verifier lost records and the plan did not fail. The JSON `rollup` object
+# gains `stream_state` (`fetched` / `truncated`), `records_parsed` and
+# `records_read` on every run, so a consumer can branch on the state before it
+# reads a counter. By the precedent of 3 -> 4, an additive roll-up change is a
+# bump. Riding it, with no further bump owed by the method-cell-empty precedent
+# above: the observed reasons `stdin-reader:<verb>`, `device-operand:<path>` and
+# `unmodelled-option:<opt>` on an existing ERROR, and the `stream-truncated`
+# family on the completeness record -- VALUES in existing fields. Rows that used
+# to vanish after a stdin-reading method cell now appear: that is the counters
+# becoming correct, not the contract changing. A later change in the same release
+# records itself here as a contributor to 4 -> 5 rather than bumping again.
+readonly SCHEMA_VERSION="5"
 
 # ---------------------------------------------------------------------------
 # REC_FS -- the parser->dispatcher record field separator. ASCII 0x1F (UNIT
@@ -105,6 +120,80 @@ readonly SCHEMA_VERSION="4"
 readonly REC_FS=$'\037'
 
 # ---------------------------------------------------------------------------
+# FD-0 -- nothing this executor spawns may read the record stream it iterates.
+#
+# Both dispatch loops in main() iterate a here-string on fd 0
+# (`done <<< "$records"`), and a child inherits fd 0 unless something rebinds
+# it. A plan-authored method is such a child: `grep -c -F "X"` with no file
+# operand reads stdin -- the loop's own remaining records -- so the loop's next
+# `read` hits EOF and every row after that cell vanishes with no record, while
+# the roll-up still reports the parser's full denominator. The cell itself is
+# graded on the records it swallowed. Measured over the 215-plan corpus at the
+# Stage-4 pin: 45 rows lost across 7 plans (39 per-issue, 6 cross-issue),
+# triggered by 9 method cells, 2 of which reported PASS on the swallowed records.
+# A stdin-reading child outside the verb route does the same: a deploy --check
+# stub that read its stdin left 1 of 4 rows AND a clean exit 0.
+#
+# THE RULE, STATED ONCE. A loop that iterates a record stream on fd 0 runs its
+# BODY with fd 0 on the null device:
+#     while IFS=... read -r ...; do {
+#       ...
+#     } </dev/null; done <<< "$records"
+# `read` is then the only reader of the stream, and every child the body spawns
+# -- a dispatched verb, the deploy --check child, the event writer, and any child
+# a later family adds -- inherits the null device: never the queue, and never the
+# caller's own stdin (a terminal on which a reader would block). Keep `do {` and
+# `} </dev/null; done` on both loops, and keep each loop's read counter as the
+# FIRST statement of its body.
+#
+# WHY THE BODY, AND NOT THE VERB OR A DEDICATED DESCRIPTOR. Both were measured
+# and REJECTED:
+#   - `</dev/null` on the verb inside eval_free_run closes one route only; the
+#     deploy --check child above is outside it.
+#   - moving the stream to its own descriptor (`read -u 3` / `3<<<`) frees fd 0
+#     but hands fd 3 to every child: a method reading /dev/fd/3 dropped 3 of 6
+#     rows. Closing it at the dispatch call (`3<&-` on a function) does not help
+#     -- bash parks the closed descriptor on a saved copy (fd 11 on bash 3.2)
+#     that exec'd children still inherit.
+# Rebinding fd 0 for the body leaves no inheritable copy of the stream, because
+# bash keeps its saved copy of fd 0 close-on-exec. That is a property of the bash
+# and not of this file, so it is MEASURED rather than assumed per version: the
+# suite's reachability arm runs this loop form on the bash that runs the suite
+# (on CI, the runner's) and fails if an exec'd child in the body sees any
+# descriptor its baseline does not.
+#
+# SCOPE -- every loop in this file whose fd 0 is redirected while its body runs,
+# whatever the form: here-string, here-document, or file. The two dispatch loops
+# take the rule. The other six are EXEMPT BY MEASUREMENT, because nothing in
+# their bodies can read fd 0:
+#   - count_from_output's two here-string loops: builtins only, no child at all.
+#   - extract_command's here-document loop: its only children are sed and awk
+#     inside a pipeline, whose input is the pipe.
+#   - fcm_match_adds' file-fed loop: builtins only.
+#   - handle_fcm_delivery's here-string loop: fixed commands whose input is bound
+#     explicitly -- grep on `<<<`, awk on a file operand, sed on a pipe.
+#   - emit_md's here-string loop: awk on a file operand or on a pipe.
+# A new loop -- or a new child in an exempt one -- that spawns a child with
+# unbound input takes the body form.
+#
+# TWO FURTHER GUARDS MAKE THE RULE HOLD WHERE THE REDIRECT DOES NOT REACH.
+#   - reads_stdin_cmd refuses a reader before it runs whenever its input would be
+#     stdin, and whenever its closed model cannot show that it would not (an
+#     option it does not model; a path under /dev/ or /proc/). The cell is then
+#     never graded on the null device either: ERROR, with the refusal named --
+#     stdin-reader:<verb>, device-operand:<path> or unmodelled-option:<opt> --
+#     and rendered as a refusal rather than as a matcher outcome.
+#   - each dispatch loop counts the records it read, and main() emits a
+#     stream-truncated ERROR when that count falls short of the parser's. The
+#     roll-up then carries the DEGRADED marker with "read K of N", and the run
+#     exits EXIT_INTERNAL (1) rather than EXIT_CHECK_FAILED (3): the verifier
+#     lost records, the plan did not fail. THE TRIPWIRE'S BOUNDARY, declared: it
+#     detects a SHORTENED stream, not a CORRUPTED one. A reader that consumes
+#     part of a record -- a byte count, say -- leaves the read count unchanged
+#     while the next record is misread, and nothing here catches that.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
 # Pinned PATH for tool discipline (per bypass-mode-readiness.md posture).
 # ---------------------------------------------------------------------------
 PATH="/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"
@@ -133,6 +222,18 @@ readonly VERDICT_ERROR="ERROR"
 # emitters run on the right-hand side of a pipeline, which inherits globals.
 # ---------------------------------------------------------------------------
 PER_ISSUE_ROWS=0
+
+# ---------------------------------------------------------------------------
+# STREAM_DEGRADED / STREAM_PARSED / STREAM_READ — the FD-0 completeness
+# tripwire's MEASUREMENT STATE (see FD-0). Set by main() once both dispatch loops
+# have run, and read by emit_md / emit_json and by main()'s exit, globals for the
+# same reason PER_ISSUE_ROWS is. STREAM_DEGRADED stays empty while every loop
+# read every record the parser produced; otherwise it carries one "read K of N
+# parsed ... records" clause per loop that fell short, and the run is DEGRADED.
+# ---------------------------------------------------------------------------
+STREAM_DEGRADED=""
+STREAM_PARSED=0
+STREAM_READ=0
 
 # ---------------------------------------------------------------------------
 # Argument-parsing state
@@ -234,7 +335,8 @@ CHECK FAMILIES (dispatched by predicate-class hint, else method keyword)
 
 EXIT CODES
   0  all checks PASS or SKIP
-  1  internal error
+  1  internal error — including a DEGRADED verdict stream: a dispatch loop
+     read fewer records than the parser produced, and the roll-up says so
   2  bad plan target (path missing / not a regular file)
   3  one or more checks FAIL or ERROR
 
@@ -849,8 +951,7 @@ handle_per_issue() {
   cstatus="$(printf '%s' "$cres" | cut -f1)"
   cval="$(printf '%s' "$cres" | cut -f2)"
   if [ "$cstatus" != "OK" ]; then
-    printf '%s\t%s\n' "$VERDICT_ERROR" \
-      "count-unreadable:$cval (the matcher produced no readable result; this is NOT a zero)"
+    printf '%s\t%s\n' "$VERDICT_ERROR" "$(unreadable_observed "$cval")"
     return
   fi
 
@@ -900,6 +1001,150 @@ tokenize_cmd() {
   return 0
 }
 
+# stdin_input_refusal <verb> <input> — the ONE input rule reads_stdin_cmd applies
+# to everything a command would READ: a file operand, or the value of an option
+# that names an input file. Prints the refusal and returns 0 when the input is
+# stdin or a device; returns 1 for an ordinary path.
+#   `-`                    stdin itself -> stdin-reader:<verb>
+#   under /dev/ or /proc/  a device or a descriptor, never a repository file ->
+#                          device-operand:<input>. ONE rule for every spelling
+#                          of stdin and of a descriptor (/dev/stdin, /dev/fd/N,
+#                          /dev//stdin, //dev/fd/0, /proc/self/fd/0) rather than
+#                          a list of spellings; repeated slashes are collapsed
+#                          before the test, and the input is reported as written.
+stdin_input_refusal() {
+  local p="$2" two='//' one='/'
+  if [ "$p" = "-" ]; then printf 'stdin-reader:%s' "$1"; return 0; fi
+  while case "$p" in *//*) true ;; *) false ;; esac; do p="${p//$two/$one}"; done
+  case "$p" in /dev|/dev/*|/proc|/proc/*) printf 'device-operand:%s' "$2"; return 0 ;; esac
+  return 1
+}
+
+# reads_stdin_cmd — TRUE (status 0) when an allowlisted READER verb (grep, head,
+# wc, cat) would take its input from stdin — or when this model cannot show that
+# it would not. It prints the refusal reason, which count_from_output hands on:
+#   stdin-reader:<verb>       no input file is named: no operand at all, the
+#                             operand `-`, or (grep) a pattern file given as `-`
+#   device-operand:<input>    an input under /dev/ or /proc/ (stdin_input_refusal)
+#   unmodelled-option:<opt>   an option this model does not know, so it cannot
+#                             tell whether the option takes the next word -- and
+#                             a taken word misread as a file operand is exactly how
+#                             a stdin reader would pass for a file reader
+# Under FD-0 a stdin reader's stdin is the null device, so a count taken there is
+# a count over nothing; eval_free_run refuses the command instead (status 4) and
+# count_from_output names it. test and ls never read stdin and are not modelled.
+#
+# THE MODEL IS CLOSED, AND IT KNOWS EACH OPTION'S ARITY, because an option's
+# separate argument is not an operand: `grep -m 1 x` names no file, and reading
+# `1` or `x` as one would hide exactly the case this exists for.
+#   grep  argument-taking letters e f m A B C d D; long options by NAME, in
+#         either spelling (--name=value or --name value), except --context,
+#         whose separate form takes the next word on one platform and not on
+#         another, so only its attached form is modelled. The first operand is
+#         the pattern unless -e / -f / --regexp / --file supplied one; with
+#         -r / -R, --recursive or -d recurse and no operand it searches the
+#         working directory, not stdin; with no pattern at all it fails on usage
+#         before it reads anything.
+#   head  argument-taking letters n c; the obsolete -N form is a flag
+#   wc    flags c l m w L
+#   cat   flags b e n s t u v
+# head, wc and cat model only the options every platform's copy shares, and no
+# long option at all: an option one platform lacks is a usage error there, and
+# those three report a usage error as exit 1, which the count reader takes for a
+# legitimate zero. grep reports usage as exit 2, which reads as ERROR, so its
+# table can carry either platform's letters.
+# Measured over the 454 reader commands the 217-plan corpus dispatched when this
+# was written, against a ground truth that ran each one with stdin on the null
+# device and on a directory: it refuses all 16 that read stdin and none of the
+# other 437 -- 26 of which are a pattern-less grep, which a bare "no operand" rule
+# would have refused -- and no corpus command meets the unmodelled or device rule.
+# RESIDUAL, declared: the model is LEXICAL. A repository path that reaches a
+# device through `..` segments or a committed symlink is not refused; the FD-0
+# redirect still keeps that child off the record stream, and the tripwire still
+# reports a shortened one.
+reads_stdin_cmd() {
+  tokenize_cmd "$1" || return 1
+  local verb="${TOKENS[0]:-}" n=${#TOKENS[@]} i=1 t c k name val eq want="" opts=1
+  local need_pat=0 have_pat=0 files=0 recursive=0 argshort="" flagshort=""
+  case "$verb" in
+    grep) need_pat=1; argshort="efmABCdD"
+          flagshort="abcEFGHhIiJLlMnOoPpqRrSsTUuVvwXxyZz0123456789" ;;
+    head) argshort="nc"; flagshort="0123456789" ;;
+    wc)   flagshort="clmwL" ;;
+    cat)  flagshort="benstuv" ;;
+    *)    return 1 ;;
+  esac
+  while [ "$i" -lt "$n" ]; do
+    t="${TOKENS[$i]}"; i=$((i+1))
+    if [ -n "$want" ]; then                     # the previous option's separate argument
+      case "$want" in
+        e) have_pat=1 ;;
+        f) have_pat=1; if stdin_input_refusal "$verb" "$t"; then return 0; fi ;;
+        F) if stdin_input_refusal "$verb" "$t"; then return 0; fi ;;
+        d) if [ "$t" = recurse ]; then recursive=1; fi ;;
+      esac
+      want=""; continue
+    fi
+    if [ "$opts" -eq 1 ]; then
+      case "$t" in
+        --) opts=0; continue ;;
+        -)  : ;;                                # the stdin operand: the operand arm below
+        --?*)
+          name="${t#--}"; name="${name%%=*}"; val=""; eq=""
+          case "$t" in *=*) val="${t#*=}"; eq=1 ;; esac
+          case "$verb:$name" in
+            grep:regexp)       if [ -n "$eq" ]; then have_pat=1; else want=e; fi ;;
+            grep:file)         if [ -z "$eq" ]; then want=f
+                               else have_pat=1; if stdin_input_refusal "$verb" "$val"; then return 0; fi; fi ;;
+            grep:exclude-from) if [ -z "$eq" ]; then want=F
+                               elif stdin_input_refusal "$verb" "$val"; then return 0; fi ;;
+            grep:directories)  if [ -z "$eq" ]; then want=d
+                               elif [ "$val" = recurse ]; then recursive=1; fi ;;
+            grep:max-count|grep:after-context|grep:before-context|grep:binary-files|grep:devices|grep:label|grep:include|grep:exclude|grep:exclude-dir|grep:include-dir|grep:group-separator)
+                               if [ -z "$eq" ]; then want=x; fi ;;
+            grep:context)      if [ -z "$eq" ]; then printf 'unmodelled-option:--%s' "$name"; return 0; fi ;;
+            grep:recursive|grep:dereference-recursive) recursive=1 ;;
+            grep:count|grep:ignore-case|grep:no-ignore-case|grep:invert-match|grep:word-regexp|grep:line-regexp|grep:files-with-matches|grep:files-without-match|grep:only-matching|grep:quiet|grep:silent|grep:no-messages|grep:byte-offset|grep:line-number|grep:line-buffered|grep:with-filename|grep:no-filename|grep:extended-regexp|grep:fixed-strings|grep:basic-regexp|grep:perl-regexp|grep:text|grep:binary|grep:null|grep:null-data|grep:initial-tab|grep:no-group-separator|grep:color|grep:colour) : ;;
+            *) printf 'unmodelled-option:--%s' "$name"; return 0 ;;
+          esac
+          continue ;;
+        -?*)
+          k=1
+          while [ "$k" -lt "${#t}" ]; do
+            c="${t:$k:1}"; k=$((k+1))
+            case "$argshort" in
+              *"$c"*)                           # takes an argument: the rest of the cluster, else the next word
+                if [ "$k" -lt "${#t}" ]; then
+                  val="${t:$k}"
+                  case "$c" in
+                    e) have_pat=1 ;;
+                    f) have_pat=1; if stdin_input_refusal "$verb" "$val"; then return 0; fi ;;
+                    d) if [ "$val" = recurse ]; then recursive=1; fi ;;
+                  esac
+                else
+                  want="$c"
+                fi
+                break ;;
+            esac
+            case "$flagshort" in
+              *"$c"*) case "$c" in r|R) recursive=1 ;; esac ;;
+              *)      printf 'unmodelled-option:-%s' "$c"; return 0 ;;
+            esac
+          done
+          continue ;;
+      esac
+    fi
+    if [ "$need_pat" -eq 1 ] && [ "$have_pat" -eq 0 ]; then have_pat=1; continue; fi
+    if stdin_input_refusal "$verb" "$t"; then return 0; fi
+    files=$((files+1))
+  done
+  if [ "$files" -gt 0 ]; then return 1; fi
+  if [ "$need_pat" -eq 1 ] && [ "$have_pat" -eq 0 ]; then return 1; fi
+  if [ "$verb" = grep ] && [ "$recursive" -eq 1 ]; then return 1; fi
+  printf 'stdin-reader:%s' "$verb"
+  return 0
+}
+
 # eval_free_run — run a whitelisted command WITHOUT the shell `eval` of a
 # plan-derived string. The command is quote-aware-tokenized and its tokens are
 # passed straight to the binary as separate arguments, so a shell operator
@@ -921,6 +1166,12 @@ eval_free_run() {
       *'$('*|*'`'*) return 3 ;;
     esac
   done
+  # A reader whose input is -- or cannot be shown not to be -- stdin is refused
+  # before it runs, with its own status, so count_from_output names it instead of
+  # grading a count over the null device (FD-0). reads_stdin_cmd re-tokenizes the
+  # same string, so TOKENS is unchanged by the call. It precedes `args` because on
+  # bash 3.2 a zero-argument verb otherwise aborts in the "${args[@]}" expansion.
+  if reads_stdin_cmd "$cmd" >/dev/null; then return 4; fi
   local args=( "${TOKENS[@]:1}" )
   case "$verb" in
     grep) grep "${args[@]}" ;;
@@ -982,13 +1233,19 @@ count_mode_cmd() {
 #     0, and an "expect zero" criterion rendering PASS. A silent FALSE PASS
 #     inside the tool that grades the release's own verification plan. grep's
 #     codes discriminate exactly: 0 matched, 1 a LEGITIMATE zero, >= 2 the
-#     matcher could not run (as does eval_free_run's own 3 refusal).
+#     matcher could not run (as does eval_free_run's own 3 refusal). Status 4
+#     is eval_free_run REFUSING a reader before it ran (FD-0, reads_stdin_cmd):
+#     it is named by its reason, never numbered, because no matcher ran.
 #
 # Prints "OK<TAB><count>" or "ERROR<TAB><reason>". Never returns non-zero.
 # ---------------------------------------------------------------------------
 count_from_output() {
-  local cmd="$1" out="$2" rc="$3" t line count=0
+  local cmd="$1" out="$2" rc="$3" t line count=0 why
   case "$rc" in ''|*[!0-9]*) printf 'ERROR\tnon-numeric-exit-status'; return 0 ;; esac
+  if [ "$rc" -eq 4 ]; then
+    why="$(reads_stdin_cmd "$cmd" || true)"
+    printf 'ERROR\t%s' "${why:-matcher-exit-4}"; return 0
+  fi
   if [ "$rc" -ge 2 ]; then printf 'ERROR\tmatcher-exit-%s' "$rc"; return 0; fi
   if count_mode_cmd "$cmd"; then
     while IFS= read -r line; do
@@ -1007,6 +1264,27 @@ count_from_output() {
   done <<<"$out"
   printf 'OK\t%s' "$count"
   return 0
+}
+
+# unreadable_observed <reason> — the ONE renderer for a count_from_output ERROR,
+# shared by both handlers so the two cannot drift. A command that RAN and yielded
+# no readable result keeps the matcher-outcome text. A command eval_free_run
+# REFUSED before it ran is rendered as the refusal it is, naming the remedy: it
+# never ran, so "the matcher produced no readable result" would be false, and
+# what the author has to fix is the method, not a matcher. Keep each arm on one
+# line: the suite's mutation arm reaches this rendering by one anchored
+# substitution.
+unreadable_observed() {
+  case "$1" in
+    stdin-reader:*)
+      printf '%s (not run — the method names no input file inside its backticks, so the command would read stdin; a file named only in the prose is not read)' "$1" ;;
+    device-operand:*)
+      printf '%s (not run — a method reads repository files, and a path under /dev/ or /proc/ is a device or a descriptor)' "$1" ;;
+    unmodelled-option:*)
+      printf '%s (not run — the executor cannot tell whether this option takes the next word, so it cannot show that the command names an input file; use an option it models)' "$1" ;;
+    *)
+      printf 'count-unreadable:%s (the matcher produced no readable result; this is NOT a zero)' "$1" ;;
+  esac
 }
 
 # integration: run a Cross-Issue AC entry's declared method (SOLE runner — this
@@ -1048,8 +1326,7 @@ handle_integration() {
   cstatus="$(printf '%s' "$cres" | cut -f1)"
   cval="$(printf '%s' "$cres" | cut -f2)"
   if [ "$cstatus" != "OK" ]; then
-    printf '%s\t%s\n' "$VERDICT_ERROR" \
-      "count-unreadable:$cval (the matcher produced no readable result; this is NOT a zero)"
+    printf '%s\t%s\n' "$VERDICT_ERROR" "$(unreadable_observed "$cval")"
     return
   fi
   if [ -n "$threshold" ]; then
@@ -2352,12 +2629,18 @@ emit_md() {
   # count. PER_ISSUE_ROWS is set by main() at the parser boundary - it cannot
   # be recovered from the stream here, because several families are reachable
   # both from a per-issue row and from a source that is not one.
-  local d
+  local d deg=""
   d="$(printf '%s\n' "$records" | awk -F'\t' '$3=="deferred"{c++} END{print c+0}')"
+  # A DEGRADED stream ANNOTATES the roll-up rather than completing it (FD-0): the
+  # counts are real, but over only the records that reached dispatch. Empty on a
+  # complete stream, so every other roll-up line is byte-identical.
+  if [ -n "${STREAM_DEGRADED:-}" ]; then
+    deg=" — **DEGRADED:** ${STREAM_DEGRADED} (the verdict stream is partial, so the counts above cover only the records that reached dispatch; an absent row is NOT a pass)"
+  fi
   if [ "${PER_ISSUE_ROWS:-0}" -eq 0 ]; then
-    printf '**Verdict roll-up:** %s PASS / %s FAIL / %s SKIP / %s ERROR — **no per-issue verification table found** (0 rows indexed; the verdict counts above are over a ZERO denominator)\n' "$p" "$f" "$s" "$e"
+    printf '**Verdict roll-up:** %s PASS / %s FAIL / %s SKIP / %s ERROR — **no per-issue verification table found** (0 rows indexed; the verdict counts above are over a ZERO denominator)%s\n' "$p" "$f" "$s" "$e" "$deg"
   else
-    printf '**Verdict roll-up:** %s PASS / %s FAIL / %s SKIP / %s ERROR — over %s per-issue row(s); %s declared-deferred\n' "$p" "$f" "$s" "$e" "$PER_ISSUE_ROWS" "$d"
+    printf '**Verdict roll-up:** %s PASS / %s FAIL / %s SKIP / %s ERROR — over %s per-issue row(s); %s declared-deferred%s\n' "$p" "$f" "$s" "$e" "$PER_ISSUE_ROWS" "$d" "$deg"
   fi
 }
 
@@ -2378,10 +2661,14 @@ emit_json() {
   # Same denominator contract as emit_md. `declared_deferred` is reported but
   # is NOT an invariant: it moves every time a card renders a deferred AC row
   # executable. `per_issue_rows` is the stable one; bind regression arms to it.
-  local d
+  local d st="fetched"
   d="$(printf '%s\n' "$records" | awk -F'\t' '$3=="deferred"{c++} END{print c+0}')"
-  printf '  "rollup": {"pass": %s, "fail": %s, "skip": %s, "error": %s, "per_issue_rows": %s, "declared_deferred": %s}\n}\n' \
-    "$p" "$f" "$s" "$e" "${PER_ISSUE_ROWS:-0}" "$d"
+  # The FD-0 measurement state, on EVERY run, so a consumer can branch on it
+  # before it reads a counter: `fetched` when both dispatch loops read every
+  # record the parser produced, `truncated` when one fell short (see FD-0).
+  if [ -n "${STREAM_DEGRADED:-}" ]; then st="truncated"; fi
+  printf '  "rollup": {"pass": %s, "fail": %s, "skip": %s, "error": %s, "per_issue_rows": %s, "declared_deferred": %s, "stream_state": "%s", "records_parsed": %s, "records_read": %s}\n}\n' \
+    "$p" "$f" "$s" "$e" "${PER_ISSUE_ROWS:-0}" "$d" "$st" "${STREAM_PARSED:-0}" "${STREAM_READ:-0}"
 }
 
 emit_table() {
@@ -2462,9 +2749,17 @@ main() {
   local stream=""
   local issue id family method expected verdict_observed verdict observed
 
+  # Records read per loop, against records parsed -- the FD-0 completeness
+  # tripwire. Each counter is the FIRST statement of its loop body, so a record
+  # that reached the body is counted before anything in it can skip the record.
+  local pi_read=0 pi_total=0 ci_read=0 ci_total=0
+
   # Per-issue records: fields = issue \t ac \t PENDING \t method \t expected
   if [ -n "$per_issue_records" ]; then
-    while IFS="$REC_FS" read -r issue id _pending method expected; do
+    pi_total="$(printf '%s\n' "$per_issue_records" | awk 'END { print NR }')"
+    # FD-0: the body runs on the null device; only `read` consumes the stream.
+    while IFS="$REC_FS" read -r issue id _pending method expected; do {
+      pi_read=$((pi_read + 1))
       [ -z "$issue$method" ] && continue
       # The parser marks a row it refused to index with an explicit family rather
       # than the PENDING marker, so the shell classifier is never handed cells it
@@ -2480,12 +2775,20 @@ main() {
       observed="$(printf '%s' "$verdict_observed" | cut -f2)"
       stream="${stream}${issue}	${id}	${family}	${method}	${expected}	${verdict}	${observed}
 "
-    done <<< "$per_issue_records"
+    } </dev/null; done <<< "$per_issue_records"
+  fi
+  if [ "$pi_read" -lt "$pi_total" ]; then
+    stream="${stream}(plan)	STREAM	stream-truncated	per-issue dispatch loop	read ${pi_total} of ${pi_total}	${VERDICT_ERROR}	verdict-stream-truncated (read ${pi_read} of ${pi_total} parsed per-issue records; every record after record ${pi_read} was lost before dispatch — an absent row is NOT a pass)
+"
+    STREAM_DEGRADED="read ${pi_read} of ${pi_total} parsed per-issue records"
   fi
 
   # CIAC records: fields = id \t issues \t integration \t method \t predicate
   if [ -n "$ciac_records" ]; then
-    while IFS="$REC_FS" read -r id issue family method expected; do
+    ci_total="$(printf '%s\n' "$ciac_records" | awk 'END { print NR }')"
+    # FD-0: the body runs on the null device; only `read` consumes the stream.
+    while IFS="$REC_FS" read -r id issue family method expected; do {
+      ci_read=$((ci_read + 1))
       [ -z "$id" ] && continue
       # family is "integration", or "parity-error" for a row the parser refused
       # to index; group CIAC rows under an "integration" pseudo-issue label
@@ -2500,8 +2803,15 @@ main() {
       local span_note="spans ${issue}"
       stream="${stream}CIAC (integration)	${id}	${family}	${method}	${span_note}	${verdict}	${observed}
 "
-    done <<< "$ciac_records"
+    } </dev/null; done <<< "$ciac_records"
   fi
+  if [ "$ci_read" -lt "$ci_total" ]; then
+    stream="${stream}CIAC (integration)	CIAC-STREAM	stream-truncated	cross-issue dispatch loop	read ${ci_total} of ${ci_total}	${VERDICT_ERROR}	verdict-stream-truncated (read ${ci_read} of ${ci_total} parsed cross-issue records; every record after record ${ci_read} was lost before dispatch — an absent row is NOT a pass)
+"
+    STREAM_DEGRADED="${STREAM_DEGRADED:+$STREAM_DEGRADED; }read ${ci_read} of ${ci_total} parsed cross-issue records"
+  fi
+  STREAM_PARSED=$((pi_total + ci_total))
+  STREAM_READ=$((pi_read + ci_read))
 
   # 2c) fcm-delivery — the THIRD record source.
   #
@@ -2553,7 +2863,15 @@ main() {
     table) printf '%s' "$stream" | emit_table ;;
   esac
 
-  # 4) Exit non-zero if any FAIL or ERROR verdict is present (CI-consumable).
+  # 4) Exit. A DEGRADED stream is the EXECUTOR's failure, not the plan's: the rows
+  #    it lost were never measured, so the run exits EXIT_INTERNAL -- a distinct
+  #    code that carries the state across the process boundary -- ahead of the
+  #    plan-failure code (see FD-0).
+  if [ -n "$STREAM_DEGRADED" ]; then
+    err "verdict stream DEGRADED — ${STREAM_DEGRADED}; exit ${EXIT_INTERNAL} (internal): records were lost before dispatch, so this run is not a verdict on the plan"
+    exit "$EXIT_INTERNAL"
+  fi
+  # Otherwise exit non-zero if any FAIL or ERROR verdict is present (CI-consumable).
   if printf '%s' "$stream" | awk -F'\t' '$6=="FAIL"||$6=="ERROR"{found=1} END{exit !found}'; then
     exit "$EXIT_CHECK_FAILED"
   fi
