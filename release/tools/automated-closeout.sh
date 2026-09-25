@@ -13,7 +13,13 @@
 # commit mechanism + hub-spoke-bridge.md Procedure 7. Per the
 # Stage 5 spec (relayed; canonical content).
 #
-# Phases (sequenced; each idempotent — re-running is safe):
+# Phases (sequenced). Re-running after a halt is the supported recovery, but this
+# list does NOT assert that every phase is idempotent: that blanket claim was never
+# pinned by an arm and was falsified at phase 5 (#7182) and phase 11 (#7436). Re-run
+# behaviour that --self-test DOES pin:
+#   phase 5  — from the worktree already on the chore branch, a re-run converges
+#              (SKIPPED); while ANOTHER worktree holds the branch it FAILs with
+#              git's refusal, before phase 6 can commit (group CB)
 #   1  parse_args         CLI validation
 #   2  preflight          gh auth, clean tree, worktree cwd, DEPLOYED row + unique slug match, tag RECORDED (not gated), no scaffold residue in the note, Phase-A7 learnings-triple captured
 #   3  read_state         RELEASE_LOG row + visible-H4 Deployment Log + Milestone state + release-PR MERGE_SHA (#1682)
@@ -1484,6 +1490,32 @@ check_parser_clean() {
   return 0
 }
 
+# One-line, table-safe, public-safe projection of a captured diagnostic for a
+# mark_phase detail (#7182). A detail is a `RESULT|detail` record AND a markdown
+# table row (header mode rule, constraint 2), and the close-out report is pasted
+# into a PUBLIC sub-task. So: CR and LF become spaces, '|' becomes '/', "$REPO_ROOT"
+# becomes <repo> and then "$HOME" becomes <home> (REPO_ROOT first, because it
+# normally sits under HOME), capped at 800 characters. The markers are deliberately
+# not '~': a tilde in a ${…//…/…} replacement is bash-version-dependent. The
+# patterns are quoted so they match literally. Deliberately NOT named phase_* (the
+# dispatchable namespace).
+#
+# REDACT, THEN CAP — and the cap belongs to THIS function. The redaction is a
+# literal-substring replace, so a caller that truncates first can cut a path
+# mid-string, and the fragment, no longer containing "$HOME", ships raw. Hand it the
+# whole capture, or a raw window of at least 4096 bytes, never a pre-capped one.
+# Route a captured diagnostic through here rather than hand-rolling a projection, so
+# the report carries one vocabulary (self-test CB-5, CB-10).
+_detail_one_line() {
+  local _s="${1:-}"
+  _s="${_s//$'\r'/ }"
+  _s="${_s//$'\n'/ }"
+  _s="${_s//|//}"
+  [[ -n "${REPO_ROOT:-}" ]] && _s="${_s//"$REPO_ROOT"/<repo>}"
+  [[ -n "${HOME:-}" ]] && _s="${_s//"$HOME"/<home>}"
+  /usr/bin/printf '%s' "${_s:0:800}"
+}
+
 mark_phase() {
   PHASE_NAMES+=("$1")
   PHASE_RESULTS+=("$2")
@@ -1955,6 +1987,17 @@ phase_detect_open_issues() {
 }
 
 # ─── Phase 5: create_chore_branch ────────────────────────────────────────────
+#
+# RE-RUNNABLE, NOT EXISTENCE-IDEMPOTENT (#7182). The phase's contracted effect is a
+# STATE TRANSITION (HEAD on $CHORE_BRANCH), so its verdict is written from the
+# post-state, never from a precondition probe. rev-parse only SELECTS the git
+# operation: switch to an existing local branch, or create one from origin/main.
+# That operation's exit status decides FAIL, and a HEAD read-back decides success.
+# The defect this replaces marked SKIPPED on "branch exists" and then ran the
+# checkout with its failure discarded. A branch held by another worktree left HEAD
+# where it was, and every later phase committed onto the session's own branch. git's
+# refusal is now a FAIL carrying git's own words, and the dispatch guard aborts the
+# run before phase 6 writes anything.
 
 phase_create_chore_branch() {
   CHORE_BRANCH="chore/${VERSION}-stage-13-corpus-update"
@@ -1964,20 +2007,35 @@ phase_create_chore_branch() {
     return 0
   fi
 
-  # Idempotent: skip if branch already exists locally
-  if $GIT -C "$REPO_ROOT" rev-parse --verify "$CHORE_BRANCH" >/dev/null 2>&1; then
-    mark_phase "create_chore_branch" "SKIPPED" "branch $CHORE_BRANCH already exists locally"
-    $GIT -C "$REPO_ROOT" checkout "$CHORE_BRANCH" >/dev/null 2>&1 || true
-    return 0
+  local _ccb_existed=0 _ccb_op _ccb_out="" _ccb_rc=0 _ccb_head=""
+  if $GIT -C "$REPO_ROOT" rev-parse --verify --quiet "refs/heads/${CHORE_BRANCH}" >/dev/null 2>&1; then
+    _ccb_existed=1
+    _ccb_op="git checkout ${CHORE_BRANCH}"
+    _ccb_out="$($GIT -C "$REPO_ROOT" checkout "$CHORE_BRANCH" 2>&1)" || _ccb_rc=$?
+  else
+    # Branch from origin/main (Stage 13 chore PR per pipeline/stage-13-close.md)
+    _ccb_op="git checkout -b ${CHORE_BRANCH} origin/main"
+    _ccb_out="$($GIT -C "$REPO_ROOT" checkout -b "$CHORE_BRANCH" origin/main 2>&1)" || _ccb_rc=$?
+  fi
+  if [[ "$_ccb_rc" -ne 0 ]]; then
+    mark_phase "create_chore_branch" "FAIL" "${_ccb_op} exited ${_ccb_rc}: $(_detail_one_line "$_ccb_out") — HEAD was not moved; if another worktree holds the branch, free it (git worktree list names the holder) and re-run"
+    return 3
   fi
 
-  # Branch from origin/main (Stage 13 chore PR per pipeline/stage-13-close.md)
-  if $GIT -C "$REPO_ROOT" checkout -b "$CHORE_BRANCH" origin/main >/dev/null 2>&1; then
-    mark_phase "create_chore_branch" "PASS" "created $CHORE_BRANCH from origin/main"
-    return 0
+  # Post-state read-back: the verdict is about where HEAD IS, not about what the
+  # command was asked to do.
+  _ccb_head="$($GIT -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD 2>/dev/null)" || _ccb_head=""
+  if [[ "$_ccb_head" != "$CHORE_BRANCH" ]]; then
+    mark_phase "create_chore_branch" "FAIL" "${_ccb_op} exited 0 but HEAD reads '${_ccb_head:-<detached>}', not ${CHORE_BRANCH} — refusing to let phase 6 commit onto the wrong branch"
+    return 3
   fi
-  mark_phase "create_chore_branch" "FAIL" "git checkout -b failed"
-  return 3
+
+  if [[ "$_ccb_existed" -eq 1 ]]; then
+    mark_phase "create_chore_branch" "SKIPPED" "branch ${CHORE_BRANCH} already existed locally — checked out and read back as HEAD; creation skipped"
+  else
+    mark_phase "create_chore_branch" "PASS" "created ${CHORE_BRANCH} from origin/main; read back as HEAD"
+  fi
+  return 0
 }
 
 # ─── Phase 6: transition_release_log (DEPLOYED → VERIFIED) ───────────────────
@@ -7666,7 +7724,7 @@ EOF
     echo
   fi
   # --no-merge (#2919): the post-merge-dependent phases deferred (see the guard
-  # clauses in phases 13/14/15.5/15.6). Emit the deferred set + the exact idempotent
+  # clauses in phases 13/14/15.5/15.6). Emit the deferred set + the exact
   # follow-up command so the operator has a single unambiguous next step — the step
   # whose absence forced a manual milestone reopen/re-close on the v3.45 close.
   if [[ "$NO_MERGE" -eq 1 ]]; then
@@ -7690,7 +7748,7 @@ EOF
     echo "automated-closeout.sh --pr ${PR_NUMBER} --version ${VERSION} --milestone ${MILESTONE} --apply${_excl_hint}"
     echo '```'
     echo
-    echo "Re-run WITHOUT \`--no-merge\` (preserve any \`--outcome\` / \`--close-comment\` flags from this run). Idempotent: the already-landed corpus SKIPs, then milestone close + Release publish run."
+    echo "Re-run WITHOUT \`--no-merge\` (preserve any \`--outcome\` / \`--close-comment\` flags from this run): milestone close + Release publish then run. Re-running is the supported recovery, but this report does not assert that every phase is idempotent — the re-run behaviour \`--self-test\` pins is listed under \"Phases (sequenced)\" in \`--help\`."
     echo
   fi
   # Cross-release pattern scan (phase 16.5). The body is emitted here rather than
