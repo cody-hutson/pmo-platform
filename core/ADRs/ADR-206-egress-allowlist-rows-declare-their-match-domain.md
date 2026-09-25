@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: ADR-204 — Egress allowlist rows declare their match domain; a leading glob never grants a gh-api write
+title: ADR-206 — Egress allowlist rows declare their match domain; a leading glob never grants a gh-api write
 status: Accepted — ratified at the egress-hook-batch Stage-5 Collective Review scope-lock
 date: 2026-09-24
 release: egress-hook-batch
@@ -16,7 +16,7 @@ source_observations:
   - "The independent adversarial review found the draft's claim that the guard closes the class for every row overstated: the leading-glob guard runs only at the gh-api path site, so an undeclared slashless row stays a host candidate. The claim was corrected and the residual named at the scope-lock."
 ---
 
-# ADR-204 — Egress allowlist rows declare their match domain; a leading glob never grants a gh-api write
+# ADR-206 — Egress allowlist rows declare their match domain; a leading glob never grants a gh-api write
 
 ## Status
 
@@ -25,6 +25,8 @@ source_observations:
 **Numbering provenance.** Claimed as **204** against an anchor of **203** on `origin/main`, read from the repository's own ADR-numbering detector rather than computed as one past the highest number visible on any branch. The number binds at the Stage-12 claim; should the mainline claim it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. In-release prose cites this record by its slug token, which carries no number shape and resolves at the claim.
 
 **Authoring provenance.** The Stage-5 design named this record; the File Change Matrix ratified at the Stage-4 gate carried no path for it, so the release plan's Deviation Log records the added row with its authority.
+
+**Numbering provenance — `204 → 206`.** Held **ADR-204** branch-local; renumbered to **ADR-206** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 204. In-release citations that read "ADR-204" denote this record.
 
 ## Context
 

@@ -3,7 +3,7 @@ title: Release Plan — egress-hook-batch (egress allowlist rows are consulted o
 type: release-plan
 plan_type: release
 status: ACTIVE
-release: versioned (bump-class minor; provisional display v4.68; the concrete number binds at the Stage-12 atomic claim)
+release: versioned (bump-class minor; provisional display v4.69; the concrete number binds at the Stage-12 atomic claim)
 milestone: egress-hook-batch
 release_class: novel
 reversibility: CHEAP / Confidence HIGH — every row is a bounded edit to tracked files plus new markdown records on one branch with one merge, so `git revert -m 1` of the merge restores `main` byte-for-byte; the allowlist change is revert-safe because a scope directive is a comment line to the prior matcher. The one qualification is recorded in § Rollback Strategy: a claimed version tag is retained and recorded rather than deleted.
@@ -12,7 +12,7 @@ reversibility: CHEAP / Confidence HIGH — every row is a bounded edit to tracke
 
 **Milestone:** `egress-hook-batch` · Stage-4 sub-task **#7546** = the approved plan (parts 1–2), the hub's R1 adversarial evaluation, the Stage-4 gate **Decision Recorded** comment, the scaffolding record and the release-level Collective Review record · **#7553** = #5592's Stage-5 design (parts 1–3), its independent adversarial review and its Collective Review scope-lock · **#7554** = #6201's Stage-5 design (parts 1–2), its adversarial review and its scope-lock · **#7555** = the Stage-6 Engineering sub-task that authored this file · **#7556** = #6201's Stage-6 Engineering sub-task, whose spoke transcribed the second card's sections at slices 2b–2c.
 
-**Version identity:** **versioned** — bump-class **`minor`**, provisional display **`v4.68`**. Recorded as a determination (not a click-gate) at the Stage-4 gate; the concrete `vX.Y` binds only at the Stage-12 atomic claim per ADR-092, so the plan file and the branch stay slug-primary while in flight and the Header `**Version**` cell carries the unresolved stamp placeholder. The Commit-0 re-verify ran in full, both halves — see § Commit-0 Version Re-Verify Record.
+**Version identity:** **versioned** — bump-class **`minor`**, provisional display **`v4.69`**. Recorded as a determination (not a click-gate) at the Stage-4 gate; the concrete `vX.Y` binds only at the Stage-12 atomic claim per ADR-092, so the plan file and the branch stay slug-primary while in flight and the Header `**Version**` cell carries the unresolved stamp placeholder. The Commit-0 re-verify ran in full, both halves — see § Commit-0 Version Re-Verify Record. The display was `v4.68` through Stage 8; the mainline claimed that slot, and the Stage-6 sync round moved the label to the recomputed next-free (DEV-30).
 
 **Topology:** D-C **SINGLE** — one release branch (`release/egress-hook-batch`), one PR opened in draft at Commit 0 so CI runs while the later slices land, one merge, base `main`. This plan lands as **Engineering Commit 0**, authored by #5592's Engineering spoke; #6201's Engineering spoke runs after it on the same branch.
 
@@ -29,7 +29,7 @@ reversibility: CHEAP / Confidence HIGH — every row is a bounded edit to tracke
 | Field | Value |
 |-------|-------|
 | **Version** | {{RELEASE_VERSION}} |
-| **Bump Class** | minor — provisional display v4.68; binds at the Stage-12 atomic claim |
+| **Bump Class** | minor — provisional display v4.69; binds at the Stage-12 atomic claim |
 | **Date Created** | 2026-09-24 (Thursday) |
 | **Release Manager** | Agent-assisted (release-hub Mode O) |
 | **Status** | Executing (Stage 6 Engineering) |
@@ -130,7 +130,7 @@ Every element the Stage-4 gate determined that a named downstream consumer reads
 | **D-Adjust A–D** | Applied before scaffolding: A — #5592's criteria reworded, AC-5 added; B — #6201's criteria reworded, AC-3 re-scoped to the measured population (304 warn-log would-block records and 4 block-log denials as of 2026-09-24), AC-4 sharpened to "a field other than `ts`, `input_digest` and `cwd`", AC-5 added; C — the milestone description (Outcome Statement, release-class rationale, `## Release Identity`, `## Parallelization Map`); D — #6201's Environment and Actual Behavior corrected to warn-mode would-block records. #6201 Severity **P2** confirmed |
 | **D-C Branch Topology** | **SINGLE** — one branch, one PR, one merge |
 | **D-Concurrency Posture** | **P0** fully-serial |
-| **D-Version** | Recorded determination: `versioned` · bump-class `minor` · provisional display `v4.68`; re-verified at Commit 0 (above) and bound only at the Stage-12 claim |
+| **D-Version** | Recorded determination: `versioned` · bump-class `minor` · provisional display `v4.69` (recorded as `v4.68`, re-verified at Commit 0 above; moved to the recomputed next-free at the Stage-6 sync round under the operator's Stage-9 halt decision — DEV-30); bound only at the Stage-12 claim |
 | **AI-001** (hub commitment) | Once FS-6201 settles, post its location on #6194 with the writer-mode correction (informational; #6194's body is not edited from this release) |
 
 ### Stage 5 — #5592, locked at its Collective Review scope-lock (operator, 2026-09-24)
@@ -249,9 +249,11 @@ core/rules/bypass-mode-readiness.md                                          edi
 docs/UPDATE.md                                                               edit
 
 # ── Decision records (both originated at Stage 5 — DEV-1, DEV-2) ──
-core/ADRs/ADR-204-egress-allowlist-rows-declare-their-match-domain.md        add
-# numbered at creation by #6201's Engineering spoke: anchor 203 on origin/main, 204 held by the record above
+core/ADRs/ADR-206-egress-allowlist-rows-declare-their-match-domain.md        add
+# numbered at creation by #6201's Engineering spoke (anchor 203, with 204 then held by the record above); held at 205 through the Stage-6 sync round, where the mainline anchor became 204 (DEV-28)
 core/ADRs/ADR-205-a-refusal-record-carries-structure-never-the-command.md    add
+# one § Renumber log line, appended by renumber-adr.py step R4 when the record above moved at the sync round (DEV-29); no index row
+core/ADRs/README.md                                                          edit
 
 # ── Release corpus ──
 release/releases/plans/egress-hook-batch_RELEASE_PLAN.md                     add
@@ -284,11 +286,10 @@ core/hooks/lib/                                              NOT EDITED
 core/deploy/deploy.sh                                        NOT EDITED
 core/config/allowlists/script-execution-allowlist.txt        NOT EDITED
 core/config/allowlists/webfetch-allowlist.txt                NOT EDITED
-core/ADRs/README.md                                          NOT EDITED
 ```
 
 - **No new executable**, so the new-executable companion obligation does **not** fire: the `add` rows are two markdown ADRs and this plan, and both edited suites are existing, allowlisted, CI-wired files.
-- **`core/ADRs/` adds no index obligation.** The release-module ADR index is generated only for `release/ADRs/`; `core/ADRs/README.md` is a curated thematic document with no projector, so a `core/`-only ADR addition trips no projection trigger. The whole-tree `adr-number-integrity` job still asserts the gap-free sequence, which is why ADR-204 was claimed against the mainline anchor (203) rather than a branch-local maximum.
+- **`core/ADRs/` adds no index obligation.** The release-module ADR index is generated only for `release/ADRs/`; `core/ADRs/README.md` is a curated thematic document with no projector, so a `core/`-only ADR addition trips no projection trigger. The whole-tree `adr-number-integrity` job still asserts the gap-free sequence, which is why each of this release's records is numbered against the mainline anchor rather than a branch-local maximum. The README's one edit is the renumber tool's § Renumber log line for the move at the Stage-6 sync round (DEV-29), not an index row.
 - **The generated index is not a mirror-pair member** (`mirror_pair_set()` carries 9 rows and it is not one), so no Check-9 obligation attaches and no deployed copy exists.
 - **The webfetch allowlist header** carries the same comment-rule misstatement the egress header is corrected for here (Stage-5 finding); it is a next-release item, not this release's.
 
@@ -303,8 +304,9 @@ Transcribed from the Stage-4 derivation, controls read at commit `0c759aaf`, and
 | #5592 · #6201 | `core/hooks/tests/block-egress.test.sh` · `core/hooks/tests/allowlist-add.test.sh` | ∅ | ∅ — conjunct 1 false | `unconstrained` |
 | #5592 · #6201 | `core/rules/bypass-mode-readiness/block-egress.md` + the generated index | ∅ — not a mirror-pair member | ∅ — conjunct 1 false | `unconstrained` |
 | #5592 | `docs/UPDATE.md` | ∅ | ∅ — conjunct 1 false | `unconstrained` |
-| #5592 · #6201 | `core/ADRs/ADR-204-…md` · `core/ADRs/ADR-205-…md` | ∅ | ∅ — conjunct 1 false | `unconstrained` |
+| #5592 · #6201 | `core/ADRs/ADR-206-…md` · `core/ADRs/ADR-205-…md` | ∅ | ∅ — conjunct 1 false | `unconstrained` |
 | release | `release/releases/plans/egress-hook-batch_RELEASE_PLAN.md` | ∅ | ∅ — conjunct 1 false | `unconstrained` |
+| release (Stage-6 sync round) | `core/ADRs/README.md` — the renumber tool's § Renumber log line (DEV-29) | ∅ — not in `BLOCK-AUTONOMY-001`'s governance set | ∅ — conjunct 1 false | `unconstrained` |
 
 **Card class `unconstrained` for both; execution path: ordinary Engineering spoke.** An `unconstrained` row means no control refuses the write — never that the change is ungoverned.
 
@@ -493,8 +495,8 @@ Re-read at Commit 0: both issue bodies carry exactly five `- [ ]` criteria each.
 
 | # | Deviation | Authority | Disposition |
 |---|---|---|---|
-| **DEV-1** | **One path added to the operator-locked File Change Matrix:** `core/ADRs/ADR-204-egress-allowlist-rows-declare-their-match-domain.md`. It originated at Stage 5 (#5592's design named the record under the slug-token discipline); the matrix ratified at the Stage-4 gate carried no path for it | #5592's Collective Review scope-lock ("ADR — authored at Engineering") | **APPLIED** at `8652a57d`. The row is in § File Change Matrix under *Decision records*; the number is claimed against the mainline anchor (203 → 204), and the detector reports it `BINDS` |
-| **DEV-2** | **A second path added:** `core/ADRs/ADR-205-a-refusal-record-carries-structure-never-the-command.md`, originated at Stage 5 in #6201's design | #6201's Collective Review scope-lock | **APPLIED** at `a8da701f`. Declared at Commit 0 in the `NNN` placeholder form the matrix contract recognizes; numbered at creation against the mainline anchor — 203, with 204 held by this release's other record, so 205 — and the detector reports it `BINDS` |
+| **DEV-1** | **One path added to the operator-locked File Change Matrix:** `core/ADRs/ADR-206-egress-allowlist-rows-declare-their-match-domain.md` (first added as `ADR-204-…`). It originated at Stage 5 (#5592's design named the record under the slug-token discipline); the matrix ratified at the Stage-4 gate carried no path for it | #5592's Collective Review scope-lock ("ADR — authored at Engineering") | **APPLIED** at `8652a57d`. The row is in § File Change Matrix under *Decision records*; the number was claimed against the mainline anchor (203 → 204), and the detector reported it `BINDS`. **Moved 204 → 206 at the Stage-6 sync round:** the mainline claimed 204 for a different record first, so the row now names the moved file (DEV-28) |
+| **DEV-2** | **A second path added:** `core/ADRs/ADR-205-a-refusal-record-carries-structure-never-the-command.md`, originated at Stage 5 in #6201's design | #6201's Collective Review scope-lock | **APPLIED** at `a8da701f`. Declared at Commit 0 in the `NNN` placeholder form the matrix contract recognizes; numbered at creation against the mainline anchor — 203, with 204 held by this release's other record, so 205 — and the detector reports it `BINDS`. **Held at 205 through the Stage-6 sync round:** the mainline anchor became 204 (a different record) and 205 was the next free number above it, so the detector still reports it `BINDS` and the renumber tool's minimal assignment moved only the other record (DEV-28) |
 | **DEV-3** | `CONDITIONAL:D5-1-OPTION-B` — **NOT DELIVERED** (3 rows: `core/config/allowlists/<per-domain-allowlist>.txt` add, `core/deploy/composition-surface-manifest.sh` edit, `core/rules/bypass-mode-readiness/_cross-cutting.md` edit). The condition resolved **false**: D5-1 = (A), not option (b) | #5592's Collective Review scope-lock (D5-1 A) | **RECORDED.** No file under the three rows is touched; the `_cross-cutting.md` allowlist table stays accurate (its counts of 8 and 9 are unchanged) |
 | **DEV-4** | `CONDITIONAL:D5-1-FRAGMENT-SCOPE` (2 rows: the fragment and its generated index) and `CONDITIONAL:D5-2-HELPER-SCOPE` (3 rows: the helper, its suite, `docs/UPDATE.md`) are **promoted in this commit** — both conditions resolved true at the Collective Review, before Commit 0 | The matrix authoring contract (a fired conditional is promoted in the same commit its condition resolves) | **APPLIED.** The rows are unconditional in § File Change Matrix, each carrying an in-fence comment naming its source token |
 | **DEV-5** | The Stage-4 plan's CONDITIONAL docs slice (slice 3) is folded into slices 1b and 2b — each card edits the fragment and regenerates the index in its own fix slice | Stage-5 designs (both cards edit the fragment; the second edit regenerates again) | **APPLIED** — § Implementation Sequence |
@@ -519,6 +521,10 @@ Re-read at Commit 0: both issue bodies carry exactly five `- [ ]` criteria each.
 | **DEV-24** | **Two in-vocabulary values added inside schema version 1:** `heredoc` gains `unavailable` (the scan could not run, F-03), and a record whose features cannot be computed carries the not-computed set (F-02). The field set has not deployed, so no consumer has read version 1 yet, and neither addition warrants a bump | Stage 7's recommendation 2 ("an in-vocabulary `heredoc` fallback carried through the hook comment, ADR, fragment and V4's value set before FS-6201 reaches #6194") | **APPLIED** — the hook comment, the ADR, the registry fragment and its index, V4's value set and § FS-6201 carry both. The hub's AI-001 note to #6194 should name `unavailable` as a `heredoc` value |
 | **DEV-25** | **The scan now reads bytes in the C locale**, where the pre-fix scan read characters in whatever locale the hook inherited. A non-ASCII whitespace character next to a delimiter word is therefore part of the word — as the shell's own tokenizer, which splits on ASCII blanks only, treats it — where before the result depended on the session locale `[INFERRED — not measured; every V fixture and seeded command is ASCII]` | Stage-6 engineering judgement: a locale-independent, linear scan | **RECORDED** — within the design's "approximate by design" scan; the oracle, not this member, decides a refusal's correctness |
 | **DEV-26** | **The iteration's commits carry the release-commit form, not Phase E's `fix(dt):` form with its `[ADJUST]` tag.** Each iteration commit reads `release(egress-hook-batch): iteration 1 — …` and names the card; the stage-6 shard's Phase E prescribes `fix(dt):` for DT-iteration commits | Stage-6 shard § 5 Phase E; the spoke read that clause after its first commits were pushed | **RECORDED** — not rewritten: rewriting signed, pushed commits on the shared release branch would need a force-push for a naming convention. The lineage is unambiguous — each commit names the iteration and #6201, and slice 2d with § Verification Evidence lists them |
+| **DEV-27** | **Stage-6 sync round — the mainline merged into the release branch.** After Stage 8, `origin/main` advanced from the pin `0c759aaf` to `5c915524` (another release's merge and its Stage-12 close-out). Of the 15 files it changed, one is in this release's File Change Matrix — the generated hook-registry index — and it also claimed ADR number 204. Stage 9 halted at entry on it (G-PR8 = DIVERGED-RELEASE-FILES-TOUCHED). The mainline is merged as one signed merge commit, never a rebase or a force-push; git merged the index's disjoint hunks without a conflict, and the merged index was then proven equal to the generator's output from the merged fragments (Check 38 in sync, with a planted fragment line reading DRIFT). § Baseline pin now names the synchronized base and keeps the original pin beside it, because the Stage-9 re-check reads the pin | The operator's Stage-9 halt decision (sync item) | **APPLIED** at `d65f6c9b` (parents `a69fb746` and `5c915524`) |
+| **DEV-28** | **The egress record moved 204 → 206, and the refusal record held 205.** Both records needed the next free numbers above the mainline's new anchor, 205 and 206. `renumber-adr.py --detect` reported the egress record `DUPLICATE` with next 206, and the refusal record `BINDS` at 205: the tool's minimal assignment holds a claim that already sits inside the free range, so exactly one record moves. The order-preserving alternative is unreachable — moving 205 → 206 first is refused because it would open a gap at 205. The move ran as the tool's dry run, then `--apply`: the file renamed, 6 citations rewritten (the record's title and heading; in this plan, the File Change Matrix row, the Agent-Editability row, one prose sentence and one evidence row), the `## Status` provenance note appended, zero dangling. A hand pass then classified every remaining reference form: the prose sentence, which the mechanical rewrite had made false, is reworded; the evidence row, which quotes the tool's slice-1b output, is restored to that output and marked as a record; the refusal record's provenance paragraph and the matrix comment gain the sync-round outcome; DEV-1 and DEV-2 carry the move. No branch-changed file carried a mainline citation of 204, so no `--exclude-path` was needed | The operator's Stage-9 halt decision (renumber item) · `release/tools/renumber-adr.py` | **APPLIED** at the round's S2 commit (§ Verification Evidence) |
+| **DEV-29** | **`core/ADRs/README.md` leaves the release-wide non-scope and enters the File Change Matrix as `edit`.** The renumber tool's step R4 appends one line to that file's § Renumber log for every move it performs; the log is the audit trail of every ADR renumber. The record has no curated entry there, which the tool reports and leaves alone, so the line is the file's only change. Predicted before the run by applying the tool's own R4 functions to an in-memory copy (one appended line, no table or list re-sort), then observed | `release/tools/renumber-adr.py` step R4 | **APPLIED** at the S2 commit — one line |
+| **DEV-30** | **Provisional display `v4.68` → `v4.69`.** The mainline's release claimed `v4.68`; `claim-version.sh --bump minor --sha <origin/main> --dry-run` recomputes `v4.69` with no tag pushed, and the tag arm reads `v4.68` occupied and `v4.69` free. The present-tense labels move — the frontmatter, the Version identity line, the Bump Class cell and the D-Version row — while the Commit-0 re-verify record keeps its `v4.68` reading as the record of that instant. The Header `**Version**` cell keeps its stamp placeholder | The operator's Stage-9 halt decision (version-label item) | **APPLIED** at the S2 commit; the version still binds only at the Stage-12 claim, and `claim-version.sh --verify-stamp egress-hook-batch` exits 0 |
 
 ---
 
@@ -555,7 +561,7 @@ Re-read at Commit 0: both issue bodies carry exactly five `- [ ]` criteria each.
 | **Allowlist invariants** | the 15 rows are identical to `origin/main`'s, in order; 15 directive lines, each directly above a row; no line begins with `# ===` |
 | **Index freshness (Check 38)** | `build-hook-registry.py --check` → drift (exit 1) after the fragment edit, before regeneration; in sync (exit 0) after; the index gains exactly the fragment's 22 lines |
 | **Pre-merge required subset** | `deploy.sh --check-required-subset` → hook-registry index FRESH · bundle-metrics gate integrity PASS · mirror-pair parity PASS · rules budget PASS |
-| **ADR number integrity** | `check-adr-numbers.py` → PASS (204 ADRs, contiguous 001..204, no duplicates); `renumber-adr.py --detect` → `CLAIM ADR-204 … BINDS` |
+| **ADR number integrity** | `check-adr-numbers.py` → PASS (204 ADRs, contiguous 001..204, no duplicates); `renumber-adr.py --detect` → `CLAIM ADR-204 … BINDS` <!-- adr-record --> |
 | **ADR durability** | `check-adr-durability.py --files <the new record> --diff-base origin/main` → SCANNED 1, COUNT 0; its `--self-test` → 138 / 138 |
 | **Issue-reference validity** | `check-issue-ref-validity.sh --base origin/main --head HEAD --resolver gh` → every `#N` in the changed markdown resolves in-repo and sits in a reference block; its `--self-test` (the 8-cell S/Z matrix plus a mutation arm) → PASS |
 | **Dead-file reference and plan depth** | `check-release-links.py` over the five changed markdown files with the CI flags → 0 broken; `--plan-depth-lint` over this plan → 0; its `--self-test` → OK (the lint scopes and fires correctly) |
@@ -649,7 +655,9 @@ Each managed row now carries a `# egress-scope: host` or `# egress-scope: gh-api
 
 ## Baseline pin
 
-`origin/main` @ **`0c759aaf`** (`0c759aaf992726c2cba5e43400ca6daa4056fdf3`), measured at Stage-4 Phase A0, re-confirmed by the hub's R1 evaluation and by both Stage-5 designs (0 commits since the pin), and re-confirmed unmoved at Engineering Commit 0 — the release branch is cut from exactly this commit. Read by the Stage-9 mid-pipeline divergence re-check.
+`origin/main` @ **`5c915524`** (`5c9155246df8374ef954c465e95e10518a33c023`) — the release branch's synchronized base since the Stage-6 sync round, which merged exactly this commit into the branch (DEV-27). Read by the Stage-9 mid-pipeline divergence re-check.
+
+**The original pin, Stage 4 through Stage 8:** `0c759aaf` (`0c759aaf992726c2cba5e43400ca6daa4056fdf3`), measured at Stage-4 Phase A0, re-confirmed by the hub's R1 evaluation and by both Stage-5 designs (0 commits since the pin), and re-confirmed unmoved at Engineering Commit 0 — the release branch was cut from exactly that commit. The mainline then advanced to `5c915524`, touching the generated hook-registry index, and the Stage-9 entry re-check halted on it (G-PR8 = DIVERGED-RELEASE-FILES-TOUCHED).
 
 ---
 
