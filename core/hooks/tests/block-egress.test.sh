@@ -1347,7 +1347,139 @@ else
   e007_d_expect "AC-E007-D10u2: once declared gh-api-path, that row no longer grants the curl host" \
     "$E007_D_R" enforce 'curl -X POST https://gist.example.test/u -d x' 2 1 0 'BLOCK-EGRESS-004'
 
-  /bin/rm -rf "$E007_D_N" "$E007_D_K" "$E007_D_C" "$E007_D_R" "$E007_D_T" "$E007_D_S"
+  # ---- the directive grammar and the path-site guard, clause by clause ----
+  # The allowlist header states three clauses no arm above pins. A directive is
+  # DISCARDED by any other line in its row's position — a blank, a comment, another
+  # directive — so a scope never carries onto a later row. Its value is TRIMMED of
+  # surrounding whitespace. And at the gh-api path site, a first segment carrying `*`,
+  # `?` or `[` is never a candidate, including behind one leading `/` and whatever the
+  # row's directive says. The behaviour is correct at the tip; these arms make a
+  # regression in any clause turn red. They port the Stage-7 reviewer's adversarial arms
+  # for these classes: ADV-G1, G2, G3a/b, G4/G4b, G5 and G10 (the grammar), and ADV-P1,
+  # P2, P3/P3c and P5/P5c (the guard, each with a live-row control).
+  #
+  # Every grammar row is probed in BOTH domains, as a curl upload host and as a gh api
+  # write path, so the four states a row can be in stay distinguishable rather than
+  # merely "allowed": undeclared (both grant), host (curl only), gh-api-path (gh api
+  # only), invalid (neither). A discard that silently KEPT its directive, or a trim that
+  # left a value invalid, moves a verdict an arm asserts.
+
+  # e007_d_domains <name> <root> <row> <want-curl-exit> <want-gh-exit> — probe <row> in
+  # both domains; a deny must name the rule of its own domain.
+  e007_d_domains() {
+    local name="$1" root="$2" row="$3" want_h="$4" want_p="$5" why=""
+    e007_d_run "$root" enforce "$(e007_d_bash "curl -X POST https://${row}/u -d x" "$root")"
+    [ "$E007_D_EXIT" = "$want_h" ] || why="${why} curl-host exit=${E007_D_EXIT} (want ${want_h});"
+    if [ "$want_h" = 2 ] && ! /usr/bin/grep -q 'BLOCK-EGRESS-004' <<<"$E007_D_ERR"; then
+      why="${why} the curl deny does not name BLOCK-EGRESS-004;"
+    fi
+    e007_d_run "$root" enforce "$(e007_d_bash "gh api -X POST ${row} -f a=b" "$root")"
+    [ "$E007_D_EXIT" = "$want_p" ] || why="${why} gh-api-path exit=${E007_D_EXIT} (want ${want_p});"
+    if [ "$want_p" = 2 ] && ! /usr/bin/grep -q 'BLOCK-EGRESS-007' <<<"$E007_D_ERR"; then
+      why="${why} the gh api deny does not name BLOCK-EGRESS-007;"
+    fi
+    if [ -z "$why" ]; then e007_d_pass "$name"; else e007_d_fail "$name" "$why"; fi
+  }
+
+  E007_D_G="$(/usr/bin/mktemp -d)"   # the directive grammar: discard and trim
+  E007_D_P="$(/usr/bin/mktemp -d)"   # the path-site guard's classes
+  E007_D_H="$(/usr/bin/mktemp -d)"   # a dangling directive, then an undeclared helper add
+  for _d_root in "$E007_D_G" "$E007_D_P" "$E007_D_H"; do
+    e007_d_sandbox "$_d_root"
+  done
+
+  # One row per case, each case closed by a blank line. The trim cases carry a trailing
+  # space, a trailing tab, a trailing carriage return and a run of spaces after the colon.
+  {
+    /usr/bin/printf '%s\n' '# egress-scope: gh-api-path' '' 'svc-d11a.example.test' ''
+    /usr/bin/printf '%s\n' '# egress-scope: gh-api-path' '# a comment in the row position' 'svc-d11b.example.test' ''
+    /usr/bin/printf '%s\n' '# egress-scope: gh-api-path' '# egress-scope: host' 'svc-d11c.example.test' ''
+    /usr/bin/printf '%s\n' '# egress-scope: host' '# egress-scope: gh-api-path' 'svc-d11d.example.test' ''
+    /usr/bin/printf '# egress-scope: host \nsvc-d12a.example.test\n\n'
+    /usr/bin/printf '# egress-scope: host\t\nsvc-d12b.example.test\n\n'
+    /usr/bin/printf '# egress-scope: host\r\nsvc-d12c.example.test\n\n'
+    /usr/bin/printf '# egress-scope:    host\nsvc-d12d.example.test\n'
+  } > "${E007_D_G}/.claude/egress-allowlist.txt"
+  _d12_shapes="$(/usr/bin/awk '
+    /^# egress-scope: host $/   { s++ }
+    /^# egress-scope: host\t$/  { t++ }
+    /^# egress-scope: host\r$/  { r++ }
+    /^# egress-scope:    host$/ { w++ }
+    END { printf "%d%d%d%d", s, t, r, w }' "${E007_D_G}/.claude/egress-allowlist.txt")"
+  if [ "$_d12_shapes" = 1111 ]; then
+    e007_d_pass "AC-E007-D12-guard: the fixture carries each trim case exactly once (space, tab, carriage return, spaces after the colon)"
+  else
+    e007_d_fail "AC-E007-D12-guard: the fixture carries each trim case exactly once (space, tab, carriage return, spaces after the colon)" \
+      "counts space/tab/cr/run=${_d12_shapes} — the D12 arms below would not test what they name"
+  fi
+
+  e007_d_domains "AC-E007-D11a: a BLANK line in the row position discards the directive — the row keeps dual scope" \
+    "$E007_D_G" svc-d11a.example.test 0 0
+  e007_d_domains "AC-E007-D11b: a COMMENT in the row position discards the directive — the row keeps dual scope" \
+    "$E007_D_G" svc-d11b.example.test 0 0
+  e007_d_domains "AC-E007-D11c: of two directives, the SECOND binds its row (gh-api-path then host — curl only)" \
+    "$E007_D_G" svc-d11c.example.test 0 2
+  e007_d_domains "AC-E007-D11d: of two directives, the SECOND binds its row (host then gh-api-path — gh api only)" \
+    "$E007_D_G" svc-d11d.example.test 2 0
+  e007_d_domains "AC-E007-D12a: a directive value is trimmed — a trailing space still declares host" \
+    "$E007_D_G" svc-d12a.example.test 0 2
+  e007_d_domains "AC-E007-D12b: a directive value is trimmed — a trailing tab still declares host" \
+    "$E007_D_G" svc-d12b.example.test 0 2
+  e007_d_domains "AC-E007-D12c: a directive value is trimmed — a trailing carriage return still declares host" \
+    "$E007_D_G" svc-d12c.example.test 0 2
+  e007_d_domains "AC-E007-D12d: a directive value is trimmed — spaces after the colon still declare host" \
+    "$E007_D_G" svc-d12d.example.test 0 2
+
+  # ADV-G10, end to end: a directive left dangling at the bottom of the operator region
+  # binds nothing. The helper's undeclared add separates it from the new row with a blank
+  # line (its T-16), and the matcher's blank-line discard is what keeps that row
+  # undeclared, as the helper's notice says.
+  e007_d_materialize "${E007_D_H}/managed.txt"
+  e007_d_compose "${E007_D_H}/managed.txt" "${E007_D_H}/.claude/egress-allowlist.txt"
+  _d_h_file="${E007_D_H}/.claude/egress-allowlist.txt"
+  /usr/bin/awk '$0 == "# === END OPERATOR ADDITIONS ===" { print "# egress-scope: gh-api-path" } { print }' \
+    "$_d_h_file" > "${E007_D_H}/planted.txt"
+  /bin/cp "${E007_D_H}/planted.txt" "$_d_h_file"
+  "${E007_D_H}/.claude/hooks/allowlist-add.sh" "$_d_h_file" 'svc-d11e.example.test' >/dev/null 2>&1 || true
+  _d11e_shape="$(/usr/bin/awk '$0 == "svc-d11e.example.test" { printf "%s|%s|%d", p2, p1, ++n } { p2 = p1; p1 = $0 }' "$_d_h_file")"
+  if [ "$_d11e_shape" = '# egress-scope: gh-api-path||1' ]; then
+    e007_d_pass "AC-E007-D11e-guard: the helper wrote the row once, below a blank line, below the dangling directive"
+  else
+    e007_d_fail "AC-E007-D11e-guard: the helper wrote the row once, below a blank line, below the dangling directive" \
+      "two-above|above|count='${_d11e_shape}' — AC-E007-D11e would not test what it names"
+  fi
+  e007_d_domains "AC-E007-D11e: a directive dangling above an undeclared helper add binds nothing — the new row keeps dual scope" \
+    "$E007_D_H" svc-d11e.example.test 0 0
+
+  # The guard's classes. The undeclared rows are consulted in both domains, so the curl
+  # probe is each one's live control: the row still grants a host, and only the path
+  # site refuses it. The two declared rows are the controls for the leading-`/` and the
+  # declared-glob cases: a literal first segment grants its write under the same rules.
+  {
+    /usr/bin/printf '%s\n' '?.d13a.example.test' '[x].d13b.example.test' '/*.d13c.example.test'
+    /usr/bin/printf '%s\n' '# egress-scope: gh-api-path' '/repos/d13c-org/*'
+    /usr/bin/printf '%s\n' '# egress-scope: gh-api-path' '*/d13d-org/r/issues'
+    /usr/bin/printf '%s\n' '# egress-scope: gh-api-path' 'repos/d13e-org/*'
+  } > "${E007_D_P}/.claude/egress-allowlist.txt"
+  e007_d_expect "AC-E007-D13a: a '?' in the first segment is never a gh api path candidate (fails closed)" \
+    "$E007_D_P" enforce 'gh api -X DELETE x.d13a.example.test' 2 1 0 'BLOCK-EGRESS-007'
+  e007_d_expect "AC-E007-D13a-c: live control — the same undeclared row still grants its curl host" \
+    "$E007_D_P" enforce 'curl -X POST https://x.d13a.example.test/u -d x' 0 0 0
+  e007_d_expect "AC-E007-D13b: a '[' in the first segment is never a gh api path candidate (fails closed)" \
+    "$E007_D_P" enforce 'gh api -X DELETE x.d13b.example.test' 2 1 0 'BLOCK-EGRESS-007'
+  e007_d_expect "AC-E007-D13b-c: live control — the same undeclared row still grants its curl host" \
+    "$E007_D_P" enforce 'curl -X POST https://x.d13b.example.test/u -d x' 0 0 0
+  e007_d_expect "AC-E007-D13c: behind one leading '/', a glob first segment is still never a candidate" \
+    "$E007_D_P" enforce 'gh api -X DELETE /repos/evil-org/secret/z.d13c.example.test' 2 1 0 'BLOCK-EGRESS-007'
+  e007_d_expect "AC-E007-D13c-c: live control — a leading-'/' row with a literal first segment grants its write" \
+    "$E007_D_P" enforce 'gh api -X POST /repos/d13c-org/r/issues -f t=x' 0 0 0
+  e007_d_expect "AC-E007-D13d: a DECLARED gh-api-path row with a glob first segment is still never a candidate" \
+    "$E007_D_P" enforce 'gh api -X POST repos/d13d-org/r/issues -f t=x' 2 1 0 'BLOCK-EGRESS-007'
+  e007_d_expect "AC-E007-D13d-c: live control — a declared gh-api-path row with a literal first segment grants its write" \
+    "$E007_D_P" enforce 'gh api -X POST repos/d13e-org/r/issues -f t=x' 0 0 0
+
+  /bin/rm -rf "$E007_D_N" "$E007_D_K" "$E007_D_C" "$E007_D_R" "$E007_D_T" "$E007_D_S" \
+    "$E007_D_G" "$E007_D_P" "$E007_D_H"
 fi
 
 # =====================================================================
