@@ -67,7 +67,8 @@
 #                              reported "WILL-DRAIN — freed by same-run worktree
 #                              removal" and counted as removable, so the enumerated
 #                              total is the apply's outcome and can be relayed as an
-#                              approval scope
+#                              approval scope. It also PROJECTS the apply's prune
+#                              (step 4 below)
 #     --apply                  Execute removals after enumeration (opt-in). The apply
 #                              phase runs in order: (1) remove REMOVE-action branches /
 #                              worktrees via git porcelain; (2) resolve — one bounded
@@ -79,12 +80,17 @@
 #                              (never silently claim success); (4) prune — drop stale
 #                              remote-tracking refs (origin/<branch>) whose server-side
 #                              branch was already deleted (e.g. on PR merge), via
-#                              `git remote prune`, so the report's remote view matches
-#                              reality. Steps 3-4 are no-ops in --dry-run; step 2
-#                              runs there as a PROJECTION that removes nothing —
-#                              it relabels the branches the apply would drain, so
-#                              the dry-run total states what the apply will do
-#                              rather than what is removable in the current state.
+#                              `git remote prune`, then read each enumerated ref back
+#                              (a ref still present is reported "FAILED — survived
+#                              prune" and counted separately), so the report's remote
+#                              view matches reality. Step 3 is a no-op in --dry-run.
+#                              Steps 2 and 4 run there as PROJECTIONS that remove
+#                              nothing: step 2 relabels the branches the apply would
+#                              drain; step 4 lists the stale remote-tracking refs the
+#                              apply would prune — stale now (PRUNE), or made stale by
+#                              this run's own remote-branch removals (WILL-PRUNE) — so
+#                              the dry-run states what the apply will do rather than
+#                              what is removable in the current state.
 #   OUTPUT (one of, default --markdown):
 #     --markdown               Human-readable report (default)
 #     --json                   Machine-readable
@@ -109,12 +115,12 @@
 #   META:
 #     --help, -h               Usage
 #     --self-test              Validate detection logic + apply path + post-apply verify +
-#                              stale-ref prune + SELF-guard, liveness, fixed-point, and
-#                              orphan-tag-reap fixtures (via isolated throwaway branches /
-#                              a PID-scoped FIXTURE bare remote / a throwaway ledger +
-#                              synthetic survivor candidate + synthetic live holder,
-#                              net-zero state; the reap NEVER touches the real origin);
-#                              exit 0 on success
+#                              stale-ref prune + prune projection + SELF-guard, liveness,
+#                              fixed-point, and orphan-tag-reap fixtures (via isolated
+#                              throwaway branches / a PID-scoped FIXTURE bare remote / a
+#                              throwaway ledger + synthetic survivor candidate + synthetic
+#                              live holder, net-zero state; the reap NEVER touches the
+#                              real origin); exit 0 on success
 #
 # Hook compatibility (verified per Stage 5 spec §Evidence-Grounding):
 #   - All deletions via git porcelain (broad exemption per Hub Decision 1) —
@@ -741,12 +747,29 @@ LOCAL_BRANCH_CANDIDATES=()    # name<TAB>unique_commits<TAB>last_date<TAB>pr_num
 REMOTE_BRANCH_CANDIDATES=()   # name<TAB>pr_number<TAB>pr_state<TAB>action
 WORKTREE_CANDIDATES=()        # path<TAB>branch<TAB>status<TAB>disk_mb<TAB>action
 
-# Populated by prune_remote_tracking (--apply only): stale remote-tracking refs
-# (refs/remotes/<remote>/*) that git pruned because their server-side branch was
-# already deleted (the usual case: branch auto-deleted on PR merge). One short-name
-# per element (e.g., release/v1.03-foo). The emitter reports these so the report's
-# remote view matches reality after server-side merge deletions.
+# Populated by enumerate_stale_tracking_refs in BOTH modes (#7437): under --apply by
+# prune_remote_tracking (the refs git reported stale, which the prune then acts on),
+# under --dry-run by project_stale_tracking_refs (the refs the apply WOULD prune — the
+# projection). Stale means refs/remotes/<remote>/* whose server-side branch was already
+# deleted (the usual case: branch auto-deleted on PR merge). One short-name per element
+# (e.g., release/v1.03-foo). The emitter reports these so the report's remote view
+# matches reality after server-side merge deletions.
 PRUNED_TRACKING_REFS=()
+# The --dry-run subset of PRUNED_TRACKING_REFS that is stale only because THIS run's
+# phase (1) deletes its server-side branch (a REMOTE_BRANCH_CANDIDATES row reading
+# REMOVE whose local tracking ref exists). Rendered WILL-PRUNE. Empty under --apply,
+# where phase (1) has already made those refs stale and git enumerates them itself.
+PRUNE_INDUCED_REFS=()
+# The --apply subset of PRUNED_TRACKING_REFS still present when read back after the
+# mutating prune (#7437). Rendered "FAILED — survived prune" and counted separately:
+# the apply ASSERTS what it pruned rather than reporting its pre-prune enumeration as
+# the outcome — the verify_apply idiom, applied to tracking refs. Empty under --dry-run.
+PRUNE_SURVIVORS=()
+# Tri-state in the liveness-oracle vocabulary: not-consulted (the enumeration never
+# ran — the reap scope, or a dispatch that skipped it), ok (git answered), unavailable
+# (`git remote prune --dry-run` exited non-zero: the remote could not be read — NOT a
+# zero). Written only by enumerate_stale_tracking_refs.
+STALE_ENUM_STATE="not-consulted"
 
 classify_local() {
   local branch="$1" require_pr="${2:-0}"
@@ -1397,7 +1420,7 @@ detect_orphan_tags() {
 emit_markdown() {
   local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   local lc=${#LOCAL_BRANCH_CANDIDATES[@]} rc=${#REMOTE_BRANCH_CANDIDATES[@]} wc=${#WORKTREE_CANDIDATES[@]}
-  local pc=${#PRUNED_TRACKING_REFS[@]}
+  local pc=${#PRUNED_TRACKING_REFS[@]} pi=${#PRUNE_INDUCED_REFS[@]} ps=${#PRUNE_SURVIVORS[@]} pline ptot=""
   local lr=0 rr=0 wr=0 disk_total=0 bfails=0 wfails=0 sc=0 lvc=0 fcc=0 lkc=0 pd=0 a ref
 
   # Mode-aware report vocabulary. In --apply, apply_removals (which now runs BEFORE this
@@ -1440,6 +1463,26 @@ emit_markdown() {
     esac
   done
 
+  # Stale remote-tracking refs line (#7437). Plain if/elif only: an assignment whose
+  # $(…) ends in a false && would trip set -e. An unread remote says UNAVAILABLE, never
+  # a zero it did not read; in --apply a ref still present after the prune is counted
+  # apart from the pruned ones.
+  if [[ "$STALE_ENUM_STATE" == "unavailable" ]]; then
+    pline="UNAVAILABLE — \`git remote prune --dry-run\` could not read \`$REMOTE_NAME\` (unavailable is not zero)"
+    ptot=", stale tracking refs UNAVAILABLE (not zero)"
+  elif [[ "$STALE_ENUM_STATE" == "not-consulted" ]]; then
+    pline="not consulted in this scope"
+  elif [[ "$MODE" == "apply" ]]; then
+    pline="$((pc - ps)) pruned"; ptot=", $((pc - ps)) stale tracking ref(s) pruned"
+    if [[ "$ps" -gt 0 ]]; then
+      pline="$pline, $ps FAILED — survived prune"; ptot="$ptot, $ps FAILED — survived prune"
+    fi
+  elif [[ "$pi" -gt 0 ]]; then
+    pline="$pc would be pruned ($pi after this run's remote-branch removals)"; ptot=", $pc stale tracking ref(s) would be pruned"
+  else
+    pline="$pc would be pruned"; ptot=", $pc stale tracking ref(s) would be pruned"
+  fi
+
   cat <<EOF
 # Orphan-State Cleanup Report — $ts
 
@@ -1449,7 +1492,7 @@ emit_markdown() {
 ## Summary
 - **Local branches:** $lc total ($lr $verb)
 - **Remote branches:** $rc total ($rr $verb)
-- **Stale remote-tracking refs:** $pc $([[ "$MODE" == "apply" ]] && echo "pruned" || echo "stale (run --apply to prune)")
+- **Stale remote-tracking refs:** $pline
 - **Worktrees:** $wc total ($wr $verb, ≈${disk_total} MB disk $recov)
 - **Protected worktrees:** $sc SELF (script's own runtime), $lkc locked, $lvc held by live sessions$([[ "$ORACLE_BUILT" -eq 1 && "$ORACLE_STATE" != "ok" ]] && echo " — liveness oracle UNAVAILABLE (fail-closed; $fcc removal(s) blocked)")
 
@@ -1474,25 +1517,32 @@ EOF
     echo "$r" | awk -F'\t' '{printf "| `%s` | %s | %s | %s |\n",$1,$2,$3,$4}'
   done
   echo
-  # Stale remote-tracking refs — only populated in --apply (prune_remote_tracking).
-  # These are local origin/<branch> entries whose server-side branch was already
-  # deleted (typically on PR merge); `git branch -r` listed them until pruned.
+  # Stale remote-tracking refs — populated in BOTH modes (#7437): the refs pruned
+  # (--apply) or the refs the apply would prune (--dry-run projection). These are local
+  # origin/<branch> entries whose server-side branch was already deleted (typically on
+  # PR merge). Same two-column row shape in both modes; only the Action cell is
+  # mode-aware, and in --apply it reads back what the prune left.
   if [[ "$pc" -gt 0 ]]; then
-    cat <<EOF
-## Detail — Stale remote-tracking refs pruned
-
-| Tracking ref | Action |
-|---|---|
-EOF
+    if [[ "$MODE" == "apply" ]]; then
+      printf '## Detail — Stale remote-tracking refs pruned\n\n'
+    else
+      printf '## Detail — Stale remote-tracking refs (projected prune)\n\n'
+    fi
+    printf '| Tracking ref | Action |\n|---|---|\n'
     for ref in "${PRUNED_TRACKING_REFS[@]}"; do
-      # shellcheck disable=SC2016  # single-quoted printf FORMAT; $REMOTE_NAME/$ref are args
-      printf '| `%s/%s` | PRUNED |\n' "$REMOTE_NAME" "$ref"
+      # shellcheck disable=SC2016  # single-quoted printf FORMAT; values are args
+      printf '| `%s/%s` | %s |\n' "$REMOTE_NAME" "$ref" "$(prune_row_action "$ref")"
     done
     echo
-  elif [[ "$MODE" == "dry-run" ]]; then
+  elif [[ "$MODE" == "dry-run" && "$STALE_ENUM_STATE" == "ok" ]]; then
     echo "## Detail — Stale remote-tracking refs"
     echo
-    echo "_Pruned only in \`--apply\`; run \`--apply\` to reconcile stale \`$REMOTE_NAME/*\` tracking refs._"
+    echo "_None projected: \`git remote prune --dry-run\` listed no stale \`$REMOTE_NAME/*\` ref, and this run removes no remote branch that has a local tracking ref._"
+    echo
+  elif [[ "$MODE" == "dry-run" && "$STALE_ENUM_STATE" == "unavailable" ]]; then
+    echo "## Detail — Stale remote-tracking refs"
+    echo
+    echo "_Not projected: \`git remote prune --dry-run\` could not read \`$REMOTE_NAME\`. This is an unread state, not a zero — the apply may still prune._"
     echo
   fi
   cat <<EOF
@@ -1536,7 +1586,7 @@ EOF
     echo
   fi
   echo "## Totals"
-  echo "- $((lr + rr)) branches $noun, $((lc + rc - lr - rr - bfails)) skipped, $wr worktrees $noun, ≈${disk_total} MB $recov$([[ "$MODE" == "apply" ]] && echo ", $pc stale tracking ref(s) pruned")"
+  echo "- $((lr + rr)) branches $noun, $((lc + rc - lr - rr - bfails)) skipped, $wr worktrees $noun, ≈${disk_total} MB $recov${ptot}"
   # #6411. Branch failures and worktree failures are reported SEPARATELY, each
   # naming its own refusal surface. The single sentence these replace summed the
   # two counts and then offered one speculative cause from each surface — so a
@@ -1549,6 +1599,11 @@ EOF
   fi
   if [[ "$MODE" == "apply" && "$wfails" -gt 0 ]]; then
     echo "- ⚠ $wfails worktree removal(s) FAILED — each row's Action names the cause git gave (\`locked\` / \`dirty\` / \`other\`), never a guess. Locked and dirty trees are both classified SKIP before apply, so a refusal here means the tree changed state after classification. \`--force\` does not reach a locked tree — git wants \`-f -f\`, which this tool never emits; run \`git worktree unlock <path>\` instead."
+  fi
+  # #7437. A tracking ref still present when read back after the prune is counted
+  # apart from the pruned ones, never folded into them.
+  if [[ "$MODE" == "apply" && "$ps" -gt 0 ]]; then
+    echo "- ⚠ $ps stale tracking ref(s) FAILED — survived prune: each was still present when read back after \`git remote prune\`; see the prune log on stderr"
   fi
   if [[ "$sc" -gt 0 ]]; then
     echo "- $sc worktree(s) protected as script's own runtime (SELF)"
@@ -1575,6 +1630,11 @@ EOF
   if [[ "$MODE" == "dry-run" && "$pd" -gt 0 ]]; then
     echo "- $pd branch(es) will be drained after being freed by this run's worktree removals (projected resolve pass) — included in the removable count above, and projected from the state this report read"
   fi
+  # #7437. The prune's twin of the line above: WILL-PRUNE rows are a static prediction
+  # from this run's REMOVE rows, so the line states the bound the same way.
+  if [[ "$MODE" == "dry-run" && "$pi" -gt 0 ]]; then
+    echo "- $pi stale tracking ref(s) projected from this run's own remote-branch removals (WILL-PRUNE) — included in the would-be-pruned count above, and projected from the state this report read"
+  fi
   # Plain `if` — NOT `[[ … ]] && echo`. As the function's last statement, a short-circuit
   # test that evaluates false returns non-zero, making emit_markdown return non-zero; under
   # `set -e` that aborted the caller before the apply phase (the v1.02 apply-path no-op
@@ -1591,7 +1651,7 @@ emit_json() {
   # state rather than overclaiming degradation (or health).
   local oracle_field="$ORACLE_STATE"
   if [[ "$ORACLE_BUILT" -eq 0 ]]; then oracle_field="not-consulted"; fi
-  printf '{"timestamp":"%s","scope":"%s","milestone_slug":"%s","mode":"%s","force":%s,"liveness_oracle":"%s",\n' "$ts" "$SCOPE" "$MILESTONE_SLUG" "$MODE" "$FORCE" "$oracle_field"
+  printf '{"timestamp":"%s","scope":"%s","milestone_slug":"%s","mode":"%s","force":%s,"liveness_oracle":"%s","tracking_ref_enumeration":"%s",\n' "$ts" "$SCOPE" "$MILESTONE_SLUG" "$MODE" "$FORCE" "$oracle_field" "$STALE_ENUM_STATE"
   printf '  "local_branches":[\n'
   local first=1
   for r in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
@@ -1619,7 +1679,7 @@ emit_json() {
     [[ -z "$ref" ]] && continue
     [[ $first -eq 0 ]] && printf ',\n'; first=0
     # shellcheck disable=SC2016  # single-quoted printf FORMAT; $REMOTE_NAME/$ref are args
-    printf '    "%s/%s"' "$REMOTE_NAME" "$ref"
+    printf '    {"ref":"%s/%s","action":"%s"}' "$REMOTE_NAME" "$ref" "$(prune_row_action "$ref")"
   done
   printf '\n  ],\n  "orphan_tags":[\n'
   first=1
@@ -2205,7 +2265,7 @@ projected_freed_branches() {
   return 0
 }
 
-# ─── Stale remote-tracking prune (--apply only) ──────────────────────────────
+# ─── Stale remote-tracking refs: enumeration (both modes) + prune (--apply) ───
 
 # Remove stale remote-tracking refs (refs/remotes/<remote>/*) whose server-side
 # branch no longer exists — the common case being a branch auto-deleted on PR
@@ -2217,38 +2277,132 @@ projected_freed_branches() {
 #
 # Mechanism: `git remote prune <remote>` — git porcelain, no rm/rmdir/unlink. It is
 # read-only against the server (no ref deletion server-side) and only drops local
-# tracking refs git already knows are gone. Runs in --apply only (dry-run mutates
-# nothing). `--dry-run` of git itself is used first to enumerate what WOULD be
-# pruned so the accumulator is populated even when the subsequent prune is a no-op.
-prune_remote_tracking() {
-  echo "── Prune phase — reconciling stale remote-tracking refs ──" >&2
-  PRUNED_TRACKING_REFS=()
+# tracking refs git already knows are gone. The mutating prune runs in --apply only;
+# the enumeration below is git's own non-mutating `--dry-run` and runs in both modes.
 
-  # Enumerate stale tracking refs first (git's own dry-run; non-mutating). Output
-  # lines look like " * [would prune] origin/release/v1.03-foo"; capture the
-  # short-name after the remote prefix. Tolerate absent remote / offline (|| true).
-  local line ref
+# Shared, NON-MUTATING enumeration (#7437) — split out of the apply-only prune so the
+# dry-run can PROJECT the prune the way projected_freed_branches projects the resolve
+# pass (#6207). Output lines look like " * [would prune] origin/release/v1.03-foo";
+# capture the short-name after the remote prefix. git translates that porcelain text,
+# so the call pins LC_ALL=C: a parse of a translated line would match nothing and
+# report `ok` over a zero it never read. A non-zero exit means the remote could not
+# be read: record `unavailable`, never an empty set that reads as zero. Captured into
+# a variable and fed by here-string — no live pipe. Returns 0.
+enumerate_stale_tracking_refs() {
+  local out="" line ref rc=0
+  PRUNED_TRACKING_REFS=()
+  out=$(LC_ALL=C git remote prune "$REMOTE_NAME" --dry-run 2>/dev/null) || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    STALE_ENUM_STATE="unavailable"
+    return 0
+  fi
+  STALE_ENUM_STATE="ok"
   while IFS= read -r line; do
     case "$line" in
       *"[would prune]"*|*"[pruned]"*)
         ref="${line##* }"                       # last whitespace-delimited token
         ref="${ref#"${REMOTE_NAME}/"}"          # strip "origin/"
-        [[ -n "$ref" ]] && PRUNED_TRACKING_REFS+=("$ref")
+        if [[ -n "$ref" ]]; then PRUNED_TRACKING_REFS+=("$ref"); fi
         ;;
     esac
-  done < <(git remote prune "$REMOTE_NAME" --dry-run 2>/dev/null || true)
+  done <<<"$out"
+  return 0
+}
 
+# --dry-run sibling of the prune below (#7437). States what phase (4) will prune:
+#   (i)  refs stale NOW — git's own enumeration, a read of mode-invariant current
+#        state (rendered PRUNE);
+#   (ii) refs THIS run's phase (1) will make stale by deleting their server-side
+#        branch — a REMOTE_BRANCH_CANDIDATES row reading REMOVE whose local
+#        refs/remotes/<remote>/<name> exists (rendered WILL-PRUNE). A STATIC prediction
+#        from the enumerated plan, never a read of a post-removal state the dry-run
+#        declined to create (ADR-158).
+# There is deliberately NO mutating `git remote prune` in this function — that, not a
+# mode flag, is what makes the projection structurally incapable of pruning. When the
+# enumeration is unavailable, (ii) is NOT projected on its own: a partial set would read
+# as complete. Returns 0 unconditionally.
+project_stale_tracking_refs() {
+  echo "── Prune projection — stale remote-tracking refs the apply would prune (nothing is pruned) ──" >&2
+  local r name action e dup
+  PRUNE_INDUCED_REFS=()
+  PRUNE_SURVIVORS=()
+  enumerate_stale_tracking_refs
+  if [[ "$STALE_ENUM_STATE" != "ok" ]]; then
+    echo "WARN projection — git remote prune --dry-run could not read ${REMOTE_NAME}; the prune is NOT projected (unavailable, not zero)" >&2
+    return 0
+  fi
+  for r in "${REMOTE_BRANCH_CANDIDATES[@]:-}"; do
+    [[ -z "$r" ]] && continue
+    action=$(awk -F'\t' '{print $4}' <<<"$r")
+    [[ "$action" != "REMOVE" ]] && continue
+    name=$(awk -F'\t' '{print $1}' <<<"$r")
+    [[ -z "$name" ]] && continue
+    git show-ref --verify --quiet "refs/remotes/${REMOTE_NAME}/${name}" || continue
+    dup=0
+    for e in "${PRUNED_TRACKING_REFS[@]:-}"; do
+      if [[ "$e" == "$name" ]]; then dup=1; break; fi
+    done
+    [[ "$dup" -eq 1 ]] && continue
+    PRUNED_TRACKING_REFS+=("$name")
+    PRUNE_INDUCED_REFS+=("$name")
+  done
+  echo "PASS projection — ${#PRUNED_TRACKING_REFS[@]} stale remote-tracking ref(s) would be pruned (${#PRUNE_INDUCED_REFS[@]} after this run's remote-branch removals)" >&2
+  return 0
+}
+
+# The apply's prune (phase 4). It enumerates through the shared enumeration, prunes,
+# then READS BACK every enumerated ref (#7437): a ref still present is recorded in
+# PRUNE_SURVIVORS and reported "FAILED — survived prune", so the report states the
+# outcome it read rather than the list it started from — the apply-asserts half of
+# ADR-158, which verify_apply already gives branches and worktrees. Returns 0.
+prune_remote_tracking() {
+  echo "── Prune phase — reconciling stale remote-tracking refs ──" >&2
+  local ref
+  PRUNE_INDUCED_REFS=()
+  PRUNE_SURVIVORS=()
+  enumerate_stale_tracking_refs
+  if [[ "$STALE_ENUM_STATE" != "ok" ]]; then
+    echo "WARN prune — git remote prune --dry-run could not read ${REMOTE_NAME}; nothing pruned (unavailable, not zero)" >&2
+    return 0
+  fi
   if [[ ${#PRUNED_TRACKING_REFS[@]} -eq 0 ]]; then
     echo "PASS prune — no stale remote-tracking refs (local view already matches remote)" >&2
     return 0
   fi
 
-  # Execute the prune (idempotent; safe if the dry-run list raced to empty).
-  if git remote prune "$REMOTE_NAME" 2>&1 | sed 's/^/  git: /' >&2; then
-    echo "PASS prune — removed ${#PRUNED_TRACKING_REFS[@]} stale remote-tracking ref(s)" >&2
-  else
-    echo "FAIL prune — git remote prune refused; stale tracking refs may persist" >&2
+  # Execute the prune (idempotent; safe if the dry-run list raced to empty). Its exit
+  # status is reported but does not decide the outcome — the read-back below does.
+  if ! git remote prune "$REMOTE_NAME" 2>&1 | sed 's/^/  git: /' >&2; then
+    echo "FAIL prune — git remote prune refused; the read-back below reports which refs survived" >&2
   fi
+  for ref in "${PRUNED_TRACKING_REFS[@]}"; do
+    if git show-ref --verify --quiet "refs/remotes/${REMOTE_NAME}/${ref}"; then
+      PRUNE_SURVIVORS+=("$ref")
+    fi
+  done
+  if [[ ${#PRUNE_SURVIVORS[@]} -eq 0 ]]; then
+    echo "PASS prune — removed ${#PRUNED_TRACKING_REFS[@]} stale remote-tracking ref(s), each read back gone" >&2
+  else
+    echo "WARN prune — ${#PRUNE_SURVIVORS[@]} of ${#PRUNED_TRACKING_REFS[@]} enumerated ref(s) still present after the prune; reported FAILED — survived prune" >&2
+  fi
+  return 0
+}
+
+# Action cell for one PRUNED_TRACKING_REFS member — the only mode-aware cell of the
+# row, shared by both emitters so markdown and JSON cannot disagree. Returns 0.
+prune_row_action() {
+  local ref="$1" e
+  if [[ "$MODE" == "apply" ]]; then
+    for e in "${PRUNE_SURVIVORS[@]:-}"; do
+      if [[ "$e" == "$ref" ]]; then echo "FAILED — survived prune"; return 0; fi
+    done
+    echo "PRUNED"
+    return 0
+  fi
+  for e in "${PRUNE_INDUCED_REFS[@]:-}"; do
+    if [[ "$e" == "$ref" ]]; then echo "WILL-PRUNE — stale after same-run remote-branch removal"; return 0; fi
+  done
+  echo "PRUNE"
   return 0
 }
 
@@ -2548,6 +2702,7 @@ selftest_verify_and_prune() {
   # its call site pins LC_ALL=C: an `ok` state must mean "parsed", never "answered in
   # another language". Anchored to the WHOLE line, so this guard's own needle — which
   # sits inside a longer line — cannot satisfy it.
+  # shellcheck disable=SC2016  # a literal source line, matched whole-line; nothing expands
   if ! grep -qxF '  out=$(LC_ALL=C git remote prune "$REMOTE_NAME" --dry-run 2>/dev/null) || rc=$?' "$script_abs"; then
     echo "self-test: prune-projection check FAILED — Q2: the enumeration's prune-output parse does not pin LC_ALL=C (a translated locale would read as zero)" >&2
     pfail=1
@@ -4488,7 +4643,8 @@ esac
 # re-evaluation pass removing local branches freed by this run's worktree removals
 # (fixed point in a single invocation — #53); (3) verify_apply re-checks REMOVED
 # targets (incl. resolve-pass removals) and reclassifies any survivor to SKIPPED
-# (AC4); (4) prune_remote_tracking reconciles the local remote-tracking view (AC3).
+# (AC4); (4) prune_remote_tracking reconciles the local remote-tracking view (AC3)
+# and reads each enumerated ref back, so a survivor is reported, not assumed (#7437).
 # All four run in --apply only and return 0 so emit still runs after them under
 # set -e. Plain `if` (not `[[ … ]] && …`) keeps control flow obvious and immune to
 # set -e short-circuit semantics.
@@ -4505,14 +4661,17 @@ if [[ "$MODE" == "apply" && "$SCOPE" != "reap-orphan-tags" ]]; then
   prune_remote_tracking
 fi
 
-# Dry-run sibling of phase (2) — the PROJECTION (#6207). Phases (1), (3) and (4)
-# are genuinely no-ops without an apply, but phase (2)'s OUTCOME is knowable from
-# the enumerated state, so the dry-run reports it instead of understating the
-# apply it describes. Scope-gated off reap-orphan-tags for the same reason the
-# apply block is: the tag accumulator has no interaction with the branch/worktree
-# fixed point. Removes nothing; returns 0.
+# Dry-run siblings of phases (2) and (4) — the PROJECTIONS (#6207, #7437). Phases (1)
+# and (3) are no-ops without an apply (phase 1's planned rows already read REMOVE;
+# phase 3 re-checks a post-apply state that does not exist), but the OUTCOMES of
+# phases (2) and (4) are knowable from the enumerated state, so the dry-run reports
+# them instead of understating the apply it describes. Scope-gated off
+# reap-orphan-tags for the same reason the apply block is. Removes and prunes
+# nothing; both return 0 — the dry-run's exit status never depends on them (close-out
+# phase 16 reads only that status).
 if [[ "$MODE" == "dry-run" && "$SCOPE" != "reap-orphan-tags" ]]; then
   projected_freed_branches
+  project_stale_tracking_refs
 fi
 
 # Reap sibling — scope-gated, with its own verify (AC4). Only the --reap-orphan-tags
