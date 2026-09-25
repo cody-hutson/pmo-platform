@@ -210,6 +210,76 @@ Topology SINGLE, posture P0: one branch, one PR, commits in this order. Every re
 
 Then Stage 7 runs the **self-hosting differential**: the pre-release versus the head executor over the pinned plan corpus (stub root, so it is hermetic), with every changed row attributed to a card (§ Verification Plan → Release-Level Verification).
 
+### Step 1 (#7531) — as landed
+
+Commits: `6360031a` (suite group G12 and its two fixtures, RED on the pre-fix executor) · `a3683b80` (the fix, with the `SCHEMA_VERSION` bump) · the plan update that carries this section. Scope: D18 option (d) with its in-slice fixes, D19's tripwire framing, D37's first-limb reading and D40's bump.
+
+- **Mechanism.** Both dispatch loops in `main()` run their body with fd 0 on the null device. `eval_free_run` refuses a reader whose input is, or cannot be shown not to be, stdin (status 4), and `count_from_output` names the refusal: `stdin-reader:<verb>`, `device-operand:<input>` or `unmodelled-option:<opt>`. A first-limb stdin reader reads ERROR `stdin-reader:<verb>` (D37). Each loop counts the records it read; a short count emits a `stream-truncated` ERROR, the md roll-up carries the DEGRADED marker with "read K of N", the JSON roll-up reports `stream_state` `truncated`, and the run exits 1 (D19).
+- **FM-1.** One shared renderer, `unreadable_observed`, used by both handlers, renders a refusal as a refusal with its remedy (`stdin-reader:grep (not run — …)`). A command that ran and failed keeps the matcher text byte-for-byte.
+- **FM-3.** The FD-0 doctrine scopes every loop whose fd 0 is redirected, whatever the form, and names the six it exempts by measurement with the basis for each: `count_from_output`'s two loops, `extract_command`'s here-document loop, `fcm_match_adds`' file-fed loop, `handle_fcm_delivery`'s loop and `emit_md`'s loop.
+- **CD-2.** `reads_stdin_cmd` is a closed, arity-aware model, and a helper, `stdin_input_refusal`, holds its one input rule: `-`, or any input under `/dev/` or `/proc/`, with repeated slashes collapsed first. Four resolutions the design text did not settle:
+  - an unknown long option is refused in either spelling, `--name=value` or `--name value`, not only the separate one;
+  - the separate form of grep's `--context` is refused as unmodelled, because GNU grep takes the next word and BSD grep 2.6.0 does not (measured); its attached form is modelled;
+  - head, wc and cat model only the options every platform's copy shares, and no long option, because those three report a usage error as exit 1, which the count reader takes for a legitimate zero;
+  - a `/dev/fd/N` operand is refused under CD-2, where the design's earlier unit table listed `cat /dev/fd/3` as must-pass.
+- **PR-2: the reachability arm, not the declared residual.** G12-12 runs the executor's loop form on the bash that runs the suite and fails if an exec'd child sees any descriptor its baseline does not; G12-12b is its sensitivity pair, one inherited copy on fd 9, seen and read through (3 records). Chosen because it turns OQ-1 from an inference into a measurement on every CI run, at no cost to the runtime tripwire. Measured on bash 3.2.57, both locally and on the macOS CI job, which runs bash 3.2.57 rather than the newer bash the design inferred; both clean. No job runs the suite under bash 5, so bash 5 stays unmeasured: the arm measures whatever bash the suite runs on, and the tripwire reports a shortened stream at runtime.
+- **PR-1.** G12-R grades v3.65.1 per criterion — AC-3, AC-5 and AC-9 each ERROR `stdin-reader:grep` — plus 11 of 11 rows emitted, never as a refusal count.
+- **D40.** `SCHEMA_VERSION` 4 → 5 with its 4 → 5 note, which asks #6848 and #6854 to record themselves there as later contributors.
+- **R2.** The child-route arm's sync row names its invocation in backticks — source-to-deployed via `deploy.sh --check` — and the arm asserts that the deploy child ran (G12-8) before it asserts 4 of 4 rows (G12-9).
+- **The arms.** G12 carries 34 assertions; the design estimated about 35. Beyond the design's arms: a FM-1 control (G12-7), a `stream_state` arm (G12-10), the loop-form check (G12-11), the reachability pair, a status-4 unit (G12-15), and two more mutations — M4 renders the refusal as a matcher outcome, M5 removes the device rule. M1 and M3 assert exit 1, not the design's exit 3 (D19). The verb fixture carries CD-2's two refusal classes, a device path and an unmodelled option, so it has 15 rows rather than the design's 11.
+- **`RUNNABLE_VERBS`.** Byte-identical: the line's sha256 is `8fcbe4d4` before and after the slice.
+- **Rule for later slices.** Keep `do {` and `} </dev/null; done` on both loops, and each loop's read counter as the first statement of its body. G12's mutation arms anchor on the two loop closers, the refusal line in `eval_free_run`, the renderer's `stdin-reader` arm and the device rule, and the harness fails when a mutation stops taking — so a slice that rewrites one of those lines updates its arm in the same commit.
+
+### Step 1 (#7531) — Evidence-Grounding (D42)
+
+The canonicalizations D18 and D19 introduced, beyond the four the Stage-5 design grounded (`stdin-reader:<verb>`, status 4, the `stream-truncated` family, and the fixture names with G12). Every survey ran on 2026-09-25 at `e92543a9`, the branch head before this slice.
+
+**E1 — the refusal reasons `device-operand:<input>` and `unmodelled-option:<opt>` (CD-2).**
+
+| Source | Variant observed | Count | Evidence |
+|---|---|---|---|
+| executor emit sites | `<kebab-reason>:<subject>`, e.g. `tool-invocation-outside-executor-allowlist:$verb`, `placeholder-unresolvable:$path` | 16 sites, 14 tokens | `grep -oE '[a-z]+(-[a-z]+)+:\$[{]?[a-zA-Z_]+' release/tools/verify-release-plan.sh` |
+| the Stage-5 design's canonicalization #1 | `stdin-reader:<verb>` | 1 | the #7586 design's Evidence-Grounding |
+
+Survey denominator: 16 reason-token sites. Control: the survey returns `tool-invocation-outside-executor-allowlist:$verb` (2 sites). Canonical choice: `device-operand:<input>` and `unmodelled-option:<opt>`, each carrying its subject as written. Justification: documented rationale — D18 adopted CD-2 (the #7586 decision record); both follow the file's reason grammar and name the class, not one spelling of it. Out-of-scope drift: none.
+
+**E2 — the refusal's rendered text (FM-1).**
+
+| Source | Variant observed | Count | Evidence |
+|---|---|---|---|
+| executor observed strings with an explanation after the reason | `<reason> (<explanation>)` | 8 sites | `grep -oE '[a-z]+(-[a-z]+)+:\$[{]?[a-zA-Z_]+[}]? \([a-z]+ [a-z]+' release/tools/verify-release-plan.sh` |
+| the not-run precedent | `tool-invocation-outside-executor-allowlist:$verb (not executed here; …)` | 2 | the same survey |
+| the matcher wrapper | `count-unreadable:$cval (the matcher produced no readable result; …)` | 2 | the same survey |
+
+Survey denominator: 8 sites. Control: the survey returns the matcher wrapper (2 sites). Canonical choice: `<reason> (not run — <remedy>)` for the three refusal classes; the matcher wrapper stays for a command that ran. Justification: documented rationale — D18 adopted FM-1 from the #7639 review; the form follows the file's own not-executed precedent. Out-of-scope drift: none.
+
+**E3 — the measurement-state tokens (D19).**
+
+| Source | Variant observed | Count | Evidence |
+|---|---|---|---|
+| tracked `.sh` and `.py` emitters, Register B | `DEGRADED` | 30 files | `grep -rlw -F DEGRADED --include='*.sh' --include='*.py' core release operations` |
+| the same emitters, Register A literals | `"degraded"` 41 · `"not-run"` 35 · `"fixture"` 31 · `"fetched"` 28 · `"truncated"` 21 | 156 literals | `grep -rhoE '"(fetched\|truncated\|degraded\|not-run\|fixture)"' --include='*.sh' --include='*.py' core release` |
+
+Survey denominator: the tracked `.sh` and `.py` files under `core/`, `release/` and `operations/`. Control: `"fetched"` returns 28. Canonical choice: the md roll-up carries `**DEGRADED:**`, the Register B token for "measured, but partial"; the JSON roll-up carries `stream_state` `fetched` or `truncated`, the Register A members for "examined in full" and "examined, but a sample" — not `degraded`, which Register A keeps for a read that failed and left the population unmeasured. Justification: documented rationale — PV-7a in § 8.1 of the review-discipline principles, adopted for this tripwire by D19. Out-of-scope drift: none.
+
+**E4 — the exit code of a DEGRADED run (D19).**
+
+| Source | Variant observed | Count | Evidence |
+|---|---|---|---|
+| this executor's exit constants | `EXIT_OK` 0 · `EXIT_INTERNAL` 1 · `EXIT_BAD_TARGET` 2 · `EXIT_CHECK_FAILED` 3 | 4 | `grep -c '^readonly EXIT_' release/tools/verify-release-plan.sh` returns 4 |
+| the tree-wide measurement-state convention | an unmeasured result exits 3 — NOT-EVALUATED in one, "input failure / broken probe" in the other | 2 tools | the EXIT CODES headers of `release/tools/check-selftest-coverage.py` and `core/deploy/tools/check-pv7-vocabulary.sh` |
+
+Survey denominator: 4 constants and 2 convention-bearing tools. Control: the constant count returns 4. Canonical choice: exit 1, `EXIT_INTERNAL`. Justification: documented rationale — D19 (the #7586 decision record): the verifier lost records, so this is not a verdict on the plan, and 3 is already this tool's plan-failure code. Out-of-scope drift: the tree-wide convention spends 3 on an unmeasured result, while this executor has spent 3 on "one or more checks FAIL or ERROR" since its first schema. A DEGRADED run is a partial measurement, not a withheld one, so exit 1 does not borrow the convention's meaning, but a reader comparing exit 3 across tools reads two different facts — accepted-residual, recorded here and not introduced by this slice.
+
+**E5 — the closed option model (CD-2).**
+
+| Source | Variant observed | Count | Evidence |
+|---|---|---|---|
+| reader commands the corpus dispatches, by the executor's own extraction | option and operand shapes | 454 commands in 217 plans | the census below |
+| platform behaviour, BSD grep 2.6.0 on macOS | `--context 1 x f` takes no separate word; `cat -A` is illegal (exit 1); `wc -L` and `head -2` work | 4 probes | direct runs |
+
+Survey: the executor's own `parse_verification_plan`, `classify_family`, `extract_command` and `parse_ciac`, eval-extracted as the suite does, over every plan under `release/releases/plans/`; each dispatched reader classified by `reads_stdin_cmd`; ground truth from running the same argv at a stub root with stdin on `/dev/null` and on a directory. Survey denominator: 454 reader commands (plus 10 `test`/`ls` and 1 untokenizable). Control: ground truth flags 16 stdin readers in 8 plans. Canonical choice: the per-verb tables in `reads_stdin_cmd`, with anything else refused as `unmodelled-option`. Justification: documented rationale — D18 adopted CD-2 from the #7639 review; the corpus cost is measured: 16 true positives, 0 false negatives, 0 false positives, 437 true negatives, and 0 `unmodelled-option` or `device-operand` refusals. The specificity population, 26 pattern-less greps, all run. Out-of-scope drift: the design's G-1 still holds for file operands — `wc`, `cat` and `head` exit 1 on an unreadable file, which the count reader takes for a legitimate zero. The closed model keeps those three to portable options, so no platform-divergent option reaches that path; the finding stays routed where the design routed it.
+
 ---
 
 ## Stage Applicability Matrix
@@ -353,12 +423,12 @@ release/ADRs/ADR-181-adr-citations-bind-at-the-claim-not-at-authorship.md  READ
 | `classify_family` | #6180, #6893, #6848 (+#6854/#6685 under remove) | Stage 4 |
 | parse awk record | #6180, #6893, #6837 (remove) | Stage 4 |
 | dispatch loop `:2476` | #6180, #6893 | Stage 4 |
-| `extract_command` / `handle_per_issue` | #6837, #6848 | Stage 4 |
-| `handle_integration` | #6848, #6236 | Stage 4 |
+| `extract_command` / `handle_per_issue` | #6837, #6848 · #7531 (the non-OK render call only, FM-1; DEV-25) | Stage 4; step 1 |
+| `handle_integration` | #6848, #6236 · #7531 (the non-OK render call only, FM-1; DEV-25) | Stage 4; step 1 |
 | `dispatch_check` | #6848, #6854 | Stage 4 |
 | `emit_md` / `emit_json` roll-up | #6854, #6848 · #7531 (D19's DEGRADED clause) | Stage 4; #6854 R10 |
 | header `SCHEMA_VERSION` | **#7531 carries the one 4 → 5 bump**; #6848 and #6854 record themselves as later contributors; #6180 owes none | Stage 4, restated by D40 |
-| `usage` | #6180, #6893, #6848, #7531 (AC-3, co-discharged), #6837 | Stage 4; delta; #6837 R6 |
+| `usage` | #6180, #6893, #6848, #7531 (AC-3, co-discharged; and the EXIT CODES line for D19, landed at step 1), #6837 | Stage 4; delta; #6837 R6; step 1 |
 | `eval_free_run` `:911–934` | #7531 (isolation) · #6837 AC-4 · #6848 · #6854 (reader exit and operand rules) | delta; #6854 R10 |
 | per-issue dispatch loop `:2466–2483` | #7531 · #6180, #6893 (call site `:2476` inside the body) | delta |
 | CIAC dispatch loop `:2488–2503` | #7531 · #6848, #6236 | delta |
@@ -367,6 +437,8 @@ release/ADRs/ADR-181-adr-citations-bind-at-the-claim-not-at-authorship.md  READ
 | `count_from_output` | #7531, #6854, #6848 | #7531 R5; #6854 R10 |
 | the version-metadata block | #7531, #6180, #6848, #6854 | #7531 R5; #6854 R10 |
 | the FD-0 doctrine block | #7531 | #7531 R5 |
+| the refusal model (`stdin_input_refusal`, `reads_stdin_cmd`) and the renderer (`unreadable_observed`) — new at step 1 | #7531 · #6854 (its reader exit and operand rules sit beside them) | step 1 |
+| the `main()` exit block | #7531 (the EXIT_INTERNAL branch for a DEGRADED stream, D19; DEV-25) | step 1 |
 | `extract_command` / `extract_threshold` | #6837 (consumed by #6848 and #6236) | #6837 R6 |
 | the hook after each DEFERRED arm | #6837 | #6837 R6 |
 | the suite loader `:290–295` | #6837 | #6837 R6 |
@@ -771,6 +843,7 @@ Rows DEV-1..DEV-10 carry one row per Phase A6.5 review: the routing of its Minor
 | DEV-22 | § Implementation Sequence | Each Stage-6 slice adds Evidence-Grounding rows for the canonicalizations its decisions introduced | D42 | APPLIED as a standing obligation on steps 1–10 |
 | DEV-23 | Provisional display version | `v4.68` → `v4.69`: ms#386 claimed `v4.68`, and the claim key was re-minted to `4.69.0`; re-verified free at Commit 0 | D43; the Commit-0 re-verify | APPLIED in § Header and § Commit-0 Version Re-Verify Record |
 | DEV-24 | § Contention Map, § Cross-PR Overlap Audit, § Baseline Pin | Corrected right after Commit 0 by the spoke that authored it. Three sentences said the 18 commits between the Stage-4 pin and the branch point touched 0 paths in the matrix. A set-intersection probe of those 20 files against the 50 declared paths found one: `core/hooks/block-autonomy-ceiling.sh`, a **read-only input**, which the Agent-Editability derivation had already re-read at the branch point. No add or edit target changed | A Tier-1 [ADJUST] to this spoke's own Commit-0 transcription; a factual correction that changes no scope | APPLIED |
+| DEV-25 | `release/tools/verify-release-plan.sh`, regions outside #7531's Contention Map rows (step 1) | Three small edits outside the rows #7531 held: the non-OK branch of `handle_per_issue` and of `handle_integration` now calls the shared renderer `unreadable_observed`, one line each, in regions held by #6837/#6848 and #6848/#6236; and the `main()` exit block, an unlisted region, gains the EXIT_INTERNAL branch for a DEGRADED stream. The Contention Map now names #7531 on those regions, and adds rows for the refusal model and the renderer that step 1 introduced | D18 adopted FM-1, whose remedy renders the refusal in the handlers; D19 set the exit. A minor adjustment under Stage 6 B3; serial order (P0) resolves the overlap with the later slices | APPLIED at `a3683b80` |
 
 ---
 
@@ -780,7 +853,7 @@ Each row lands with its card's slice; the slice records the status and the commi
 
 | Issue | Declared docs | Status | Commit | Notes |
 |---|---|---|---|---|
-| #7531 | `--help` agrees with dispatch (co-discharged under D-6180) | lands with step 3 | — | Graded on V7531-AC3 |
+| #7531 | `--help` agrees with dispatch (co-discharged under D-6180) | lands with step 3 | step 1: `a3683b80` | Graded on V7531-AC3. Step 1 also updated `--help`'s EXIT CODES block (exit 1 now covers a DEGRADED verdict stream, D19) and added the executor's in-file FD-0 doctrine; the declared predicate-column text stays step 3's |
 | #6180 | stage-04 AC-Binding Limb 1 (`:491`); the D-6180 ADR (#7641) | lands with step 2 | — | Card declares no Documentation Impact section; the design's Changes 2 and 5 carry it |
 | #6893 | the classifier doctrine and the `usage()` per-issue line; Decision 6 in #7641 | lands with step 3 | — | — |
 | #6837 | stage-04 Limb 1 bullet (after the #6180 edit) | lands with step 4 | — | AC-3 grades the authoring surfaces |
@@ -806,6 +879,14 @@ Each row lands with its card's slice; the slice records the status and the commi
 | **AC binding** | `release/tools/check-ac-binding.py --ordinals-only` on this file → `VERDICT BOUND` (10 issues; each baseline equals `ac_baseline`); `--fetch` against the live issue bodies → **42/42 BOUND** |
 | **Links and durability constructs** | `release/tools/check-release-links.py --roots release --files <this plan> --check-anchors --images` → 0 broken; `--plan-depth-lint` → 0 depth-sensitive links. Control: the checker's own `check_file` on a run-directory copy carrying one planted workspace-rooted link to a missing file → 1. Markdown-link sequences 0, cutover-idiom matches 0 (the reference-durability hook's pattern, fence-stripped), raw GitHub URLs 0; each reader returns 1 on a planted input |
 | **ADR index** | This release adds records under `release/ADRs/`: the index is regenerated in each slice that adds one (§ File Change Matrix); no record exists yet at Commit 0 |
+| **Step 1 (#7531) — the suite, RED then GREEN** | Stub root = a `git archive` of the branch with `core/deploy/deploy.sh` and `release/tools/append-pipeline-event.sh` each prefixed by a logging `exit 97` line. Baseline (the unmodified suite) 215 passed / 2 failed. RED — the G12 arms (`6360031a`) on the pre-fix executor: **220 / 31**, the prediction stated before the run. GREEN (`a3683b80`): **249 / 2**, likewise predicted. The 2 are P1 and M9's control, which fail identically on the unmodified suite because the always-on FCM family reads `diff-unresolvable` outside a repository; every one of the 217 pre-existing assertions keeps its outcome. The stub log stayed empty on every suite run; its sensitivity arm, a one-sync-row plan, logged 1 line. CI on `a3683b80`: **253 passed / 0 failed** (macOS job, bash 3.2.57) |
+| **Step 1 — RED and GREEN per fixture** | Drain fixture: 3 of 6 rows and 2 of 3 CIACs, the planted cells graded `count=3` and `count=1` → 6 of 6 and 3 of 3, both cells ERROR `stdin-reader:grep`. Verb matrix: 2 of 15 and 2 of 7 → 15 of 15 and 7 of 7, 10 named refusals. Child route: 1 of 4 rows with exit 0 → 4 of 4 with exit 0. v3.65.1: 3 of 11 → 11 of 11, with AC-3, AC-5 and AC-9 each ERROR `stdin-reader:grep` |
+| **Step 1 — `RUNNABLE_VERBS`** | sha256 of the line: `8fcbe4d4…` before and after the slice; the literal occurs exactly once. Control: a one-byte edit of the line moves the hash |
+| **Step 1 — this plan, through the executor (C4, hermetic)** | Fixed executor on this file in the stub root: `**Verdict roll-up:** 7 PASS / 33 FAIL / 12 SKIP / 1 ERROR — over 42 per-issue row(s); 11 declared-deferred`; JSON roll-up `stream_state` fetched, 48 of 48 records read. The pre-fix executor on the same file reads 4 / 36 / 12 / 1, the Commit-0 figure. Exactly 3 records change, all this slice's: #7531 AC-1 and AC-2 (FAIL → PASS, the arm labels now present) and CIAC-4 (FAIL → PASS, `SCHEMA_VERSION="5"` counted once). #7531 AC-3 and CIAC-6 stay FAIL until steps 3 and 4 land their arms. The one ERROR is `FCM-COVERAGE diff-unresolvable`, from the stub not being a repository |
+| **Step 1 — runtime suite (map row 4)** | `release/tools/verify-release-plan.sh` selects row 4; the tests, fixtures and this plan match no row. Row 4's runner, `check-selftest-coverage.py --run`, does not exercise the verifier: 0 of its 77 discovered tools reference it (control: the suite references it 49 times) — the residual #6876 closes. CI on `a3683b80`: **74 of 74** in the ubuntu partition. Locally, against the stub root: 69 of 74, the 5 failures each a stub artifact (4 need a repository; 1 is the inert event-writer stub). One `test-run/suite-pass` event emitted and read back |
+| **Step 1 — C3 package cascade** | `core/deploy/tools/build-skill-packages.sh --skills-for-paths`, with this slice's 5 paths on stdin: 0 skills. Control: `operations/skills/intake-desk/SKILL.md` returns `intake-desk`. No package is rebuilt |
+| **Step 1 — links** | `python3 core/deploy/tools/check-doc-links.py --require-targets` over this plan and the two new fixtures: 0 findings. Control: a run-directory copy with one planted broken link returns 1 |
+| **Step 1 — ADR index** | N/A — this slice adds no record under `release/ADRs/` |
 
 ---
 
