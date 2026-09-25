@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.68] - 2026-09-25
+
+Operations sessions can no longer write into a relocated platform working copy, and a shortcut path no longer changes the guard's answer.
+
+[Full notes](release/releases/notes/v4.68_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.68)
+
 ## [v4.67.1] - 2026-09-20
 
 Merged hook fixes now actually reach your instance, and an update that leaves a control out of date no longer reports success.
