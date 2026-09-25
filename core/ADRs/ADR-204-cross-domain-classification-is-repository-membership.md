@@ -1,6 +1,6 @@
 ---
 title: "ADR-204 — Cross-domain classification is repository membership, resolved through one shared helper"
-status: Proposed (flips to Accepted at the Stage 9 review)
+status: Accepted (operator-ratified at the autonomy-ceiling-domains-resolve-canonically Stage-13 close, 2026-09-25)
 date: 2026-09-24
 release: autonomy-ceiling-domains-resolve-canonically
 deciders: "operator (Collective Review scope-lock) + Stage 5 Solutioning spoke (option space, trade-off matrix, design) + Stage 6 Engineering spoke (build, measurement)"
@@ -18,7 +18,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Stage 5 Solutioning for the `autonomy-ceiling-domains-resolve-canonically` release, and written to disk in that release's Engineering stage under the number claimed there against the mainline anchor. It flips to Accepted at the Stage 9 review.
+**Accepted** — operator-ratified at the `autonomy-ceiling-domains-resolve-canonically` Stage-13 close, 2026-09-25. Authored at Stage 5 Solutioning for that release, and written to disk in its Engineering stage under the number claimed there against the mainline anchor. The decision this record documents shipped in **v4.68**.
 
 **Supersedes in part:** ADR-149. Only its classification mechanism is superseded: how a write's working directory and target are assigned to the `pmo-platform` or `projects` domain. The following stand unchanged:
 - ADR-149's direction split;
