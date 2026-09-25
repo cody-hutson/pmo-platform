@@ -382,7 +382,10 @@ USAGE
 
 OPTIONS
   --format=FORMAT   Output presenter: md | json | table
-                    Default: md (the PR-body Verification Evidence shape)
+                    Default: md (the PR-body Verification Evidence shape;
+                    rows are grouped under their issue, a row that carries
+                    no issue value under (plan), so every row the roll-up
+                    counts appears in a table)
   --root=PATH       Repo root for resolving relative check paths + sibling tools
                     Default: \$(git rev-parse --show-toplevel)
   --emit-events     Actually write test-run events via the pipeline-event
