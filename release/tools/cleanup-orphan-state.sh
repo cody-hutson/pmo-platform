@@ -2388,10 +2388,60 @@ selftest_apply_path() {
   return 0
 }
 
+# #7437 — prune-projection fixture helper. Runs the prune phase of <mode> ("dry-run" =
+# project_stale_tracking_refs, "apply" = prune_remote_tracking) INSIDE fixture repo
+# <dir>, in a subshell (no caller global is touched), with REMOTE_BRANCH_CANDIDATES
+# seeded to <seed_row> (or empty). Every accumulator the phase reads starts at its
+# declared initial state, so a row the caller's shell accumulated earlier cannot leak
+# into the fixture. Prints one "<ref><TAB><action>" line per ref, then
+# "STATE<TAB><state>", then the markdown report.
+selftest_prune_run_in() {
+  local dir="$1" mode="$2" seed_row="${3:-}"
+  (
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+    cd "$dir" || exit 1
+    MODE="$mode"; REMOTE_NAME="origin"; SCOPE="release-close"
+    LOCAL_BRANCH_CANDIDATES=(); WORKTREE_CANDIDATES=(); REMOTE_BRANCH_CANDIDATES=()
+    PRUNED_TRACKING_REFS=(); PRUNE_INDUCED_REFS=(); PRUNE_SURVIVORS=(); STALE_ENUM_STATE="not-consulted"
+    if [[ -n "$seed_row" ]]; then REMOTE_BRANCH_CANDIDATES=("$seed_row"); fi
+    if [[ "$mode" == "apply" ]]; then prune_remote_tracking >/dev/null 2>&1; else project_stale_tracking_refs >/dev/null 2>&1; fi
+    local r
+    for r in "${PRUNED_TRACKING_REFS[@]:-}"; do
+      if [[ -n "$r" ]]; then printf '%s\t%s\n' "$r" "$(prune_row_action "$r")"; fi
+    done
+    printf 'STATE\t%s\n' "$STALE_ENUM_STATE"
+    emit_markdown 2>/dev/null
+  )
+}
+
+# 0 iff <output> is the projection of the fixture: state ok, EXACTLY two ref rows,
+# <stale> as PRUNE and <live> as WILL-PRUNE, and the markdown carries both in the
+# shared two-column row shape. An empty projection returns 1 (#7437 AC-3).
+selftest_prune_projection_matches() {
+  local out="$1" stale="$2" live="$3" n
+  n=$(grep -c "^cleanup-selftest-prune-" <<<"$out" || true)
+  [[ "$n" == "2" ]] || return 1
+  grep -qxF "STATE"$'\t'"ok" <<<"$out" || return 1
+  grep -qxF "${stale}"$'\t'"PRUNE" <<<"$out" || return 1
+  grep -qxF "${live}"$'\t'"WILL-PRUNE — stale after same-run remote-branch removal" <<<"$out" || return 1
+  grep -qxF "| \`origin/${stale}\` | PRUNE |" <<<"$out" || return 1
+  grep -qxF "| \`origin/${live}\` | WILL-PRUNE — stale after same-run remote-branch removal |" <<<"$out" || return 1
+  return 0
+}
+
 # AC4 + AC3 regression guard. verify_apply must reclassify a "REMOVED" candidate whose
 # branch actually SURVIVED to SKIPPED-with-reason (never silently claim success); and
 # prune_remote_tracking must run set -e-safe and return 0 even with no stale refs. Both
 # operate on synthetic in-memory candidates / a real isolated branch — net-zero state.
+#
+# #7437 grades the prune PROJECTION on a hermetic fixture — a local bare remote and a
+# clone, never the real origin — that carries one ref stale now and one this run's own
+# remote-branch removal makes stale: Q1 reads the fixture instead of assuming it; Q2
+# the dry-run projects both refs (PRUNE / WILL-PRUNE) and mutates nothing, and the
+# enumeration pins LC_ALL=C; Q4 an empty projection fails Q2's predicate; Q3 the apply
+# prunes exactly the projected set (2 = 2); Q7 a ref that survives the prune reads
+# "FAILED — survived prune" and is counted separately; Q6 an unreadable remote reads
+# UNAVAILABLE, not zero; Q5 the production dry-run dispatch is reached and exits 0.
 selftest_verify_and_prune() {
   local base tmp saved_mode="$MODE"
 
@@ -2435,8 +2485,222 @@ selftest_verify_and_prune() {
   MODE="$saved_mode"
   echo "self-test: prune-path check PASS — prune_remote_tracking set -e-safe (${#PRUNED_TRACKING_REFS[@]} stale ref(s) enumerated)" >&2
 
+  # ── #7437: the prune PROJECTION, graded on a hermetic fixture ──
+  # The real-origin run above proves only set -e safety: a repository with no stale
+  # ref gives an EMPTY enumeration, which is indistinguishable from a projection that
+  # never ran. So the projection is graded on a fixture that CARRIES stale refs, built
+  # from a local bare remote and a clone (never the real origin) under the bounded
+  # PID-scoped temp dir the orphan-tag fixture also uses — this check runs first and
+  # tears it down. Every arm sets pfail=1 and FALLS THROUGH; teardown is unconditional
+  # and the single exit 1 sits after it (the selftest_fixed_point discipline). No arm
+  # SKIPs: an unbuilt fixture is the vacuous pass this check exists to refuse.
+  local pfx pfail=0 pfix=0 stale live none seed pseed="" proj="" mutp appl surv unav
+  local pcol acol n dout mout mutd drc script_abs nearmiss
+  pfx="${TMPDIR:-/tmp}/cleanup-selftest-$$"
+  stale="cleanup-selftest-prune-stale-$$"
+  live="cleanup-selftest-prune-live-$$"
+  none="cleanup-selftest-prune-none-$$"
+  seed="${live}"$'\t'"(none)"$'\t'"(none)"$'\t'"REMOVE"
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  if ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+       mkdir -p "$pfx" \
+         && git init -q "$pfx/seed" \
+         && git init -q --bare "$pfx/prune-remote.git" \
+         && ptree=$(git -C "$pfx/seed" mktree </dev/null) \
+         && pseed=$(git -C "$pfx/seed" -c user.name=cleanup-selftest -c user.email=cleanup-selftest commit-tree --no-gpg-sign -m fixture "$ptree") \
+         && git -C "$pfx/seed" push -q "$pfx/prune-remote.git" "${pseed}:refs/heads/${stale}" "${pseed}:refs/heads/${live}" \
+         && git clone -q --no-checkout "$pfx/prune-remote.git" "$pfx/prune-work" \
+         && git --git-dir="$pfx/prune-remote.git" update-ref -d "refs/heads/${stale}" ) >/dev/null 2>&1; then
+    pfix=1
+  else
+    echo "self-test: prune-projection check FAILED — could not build the hermetic prune fixture under the PID-scoped temp dir; an unbuilt fixture is the vacuous pass this check refuses" >&2
+    pfail=1
+  fi
+
+  # Q1 — precondition (non-vacuity): READ the fixture rather than assume it.
+  if [[ "$pfix" -eq 1 ]]; then
+    if ! git --git-dir="$pfx/prune-work/.git" show-ref --verify --quiet "refs/remotes/origin/${stale}" \
+       || ! git --git-dir="$pfx/prune-work/.git" show-ref --verify --quiet "refs/remotes/origin/${live}" \
+       || git --git-dir="$pfx/prune-remote.git" show-ref --verify --quiet "refs/heads/${stale}" \
+       || ! git --git-dir="$pfx/prune-remote.git" show-ref --verify --quiet "refs/heads/${live}"; then
+      echo "self-test: prune-projection check FAILED — Q1: fixture not built as declared (1 stale + 1 live tracking ref) — an unbuilt fixture is the vacuous pass this check refuses" >&2
+      pfail=1; pfix=0
+    fi
+    pseed=$(git --git-dir="$pfx/prune-work/.git" rev-parse --verify --quiet "refs/remotes/origin/${live}" 2>/dev/null || true)
+  fi
+
+  # Q2 — dry arm (AC-1): seeded with the REMOTE row phase (1) would act on, the dry-run
+  # lists the stale-now ref as PRUNE and the ref phase (1) will make stale as
+  # WILL-PRUNE, in the apply's row shape — and mutates nothing.
+  if [[ "$pfix" -eq 1 ]]; then
+    proj=$(selftest_prune_run_in "$pfx/prune-work" dry-run "$seed") || true
+    if ! selftest_prune_projection_matches "$proj" "$stale" "$live"; then
+      echo "self-test: prune-projection check FAILED — Q2: --dry-run did not project the fixture's prune (want ${stale} PRUNE + ${live} WILL-PRUNE in the shared row shape, state ok; #7437 AC-1)" >&2
+      pfail=1
+    fi
+    if ! git --git-dir="$pfx/prune-work/.git" show-ref --verify --quiet "refs/remotes/origin/${stale}" \
+       || ! git --git-dir="$pfx/prune-work/.git" show-ref --verify --quiet "refs/remotes/origin/${live}"; then
+      echo "self-test: prune-projection check FAILED — Q2: --dry-run removed a tracking ref (the projection must mutate nothing)" >&2
+      pfail=1
+    fi
+  fi
+  # Q2 (source) — the enumeration parses git's porcelain text, which git translates, so
+  # its call site pins LC_ALL=C: an `ok` state must mean "parsed", never "answered in
+  # another language". Anchored to the WHOLE line, so this guard's own needle — which
+  # sits inside a longer line — cannot satisfy it.
+  if ! grep -qxF '  out=$(LC_ALL=C git remote prune "$REMOTE_NAME" --dry-run 2>/dev/null) || rc=$?' "$script_abs"; then
+    echo "self-test: prune-projection check FAILED — Q2: the enumeration's prune-output parse does not pin LC_ALL=C (a translated locale would read as zero)" >&2
+    pfail=1
+  fi
+
+  # Q4 — sensitivity (AC-3), BEFORE Q3 so it reads the same fixture state. The
+  # pre-#7437 dry-run enumerated nothing; stubbed to that behaviour, Q2's predicate
+  # MUST reject it, or Q2 would pass on an empty projection.
+  if [[ "$pfix" -eq 1 ]]; then
+    mutp=$( ( project_stale_tracking_refs() { PRUNED_TRACKING_REFS=(); PRUNE_INDUCED_REFS=(); STALE_ENUM_STATE="ok"; return 0; }
+              selftest_prune_run_in "$pfx/prune-work" dry-run "$seed" ) 2>/dev/null ) || true
+    if selftest_prune_projection_matches "$mutp" "$stale" "$live"; then
+      echo "self-test: prune-projection check FAILED — Q4: sensitivity arm did NOT fire — Q2's predicate passed on an EMPTY projection (#7437 AC-3)" >&2
+      pfail=1
+    fi
+  fi
+
+  # Q3 — apply arm on the identical fixture (AC-2). Phase (1)'s server-side removal of
+  # ${live} is simulated (the REST delete a hermetic test cannot make); then the REAL
+  # prune runs. Projected set = pruned set, 2 = 2, every row PRUNED, and both refs are
+  # READ gone from state.
+  if [[ "$pfix" -eq 1 ]]; then
+    git --git-dir="$pfx/prune-remote.git" update-ref -d "refs/heads/${live}" >/dev/null 2>&1 || true
+    appl=$(selftest_prune_run_in "$pfx/prune-work" apply "") || true
+    pcol=$(awk -F'\t' '/^cleanup-selftest-prune-/{print $1}' <<<"$proj" | LC_ALL=C sort)
+    acol=$(awk -F'\t' '/^cleanup-selftest-prune-/{print $1}' <<<"$appl" | LC_ALL=C sort)
+    n=$(awk -F'\t' '/^cleanup-selftest-prune-/{c++} END{print c+0}' <<<"$appl")
+    if [[ -z "$pcol" || "$pcol" != "$acol" || "$n" != "2" ]]; then
+      echo "self-test: prune-projection check FAILED — Q3: the projected set is not the pruned set (want 2 = 2; projected [$(tr '\n' ' ' <<<"$pcol")], pruned [$(tr '\n' ' ' <<<"$acol")]; #7437 AC-2)" >&2
+      pfail=1
+    fi
+    if [[ "$(awk -F'\t' '/^cleanup-selftest-prune-/ && $2 != "PRUNED"{c++} END{print c+0}' <<<"$appl")" != "0" ]] \
+       || ! grep -qxF "| \`origin/${stale}\` | PRUNED |" <<<"$appl"; then
+      echo "self-test: prune-projection check FAILED — Q3: an apply row does not read PRUNED" >&2
+      pfail=1
+    fi
+    if git --git-dir="$pfx/prune-work/.git" show-ref --verify --quiet "refs/remotes/origin/${stale}" \
+       || git --git-dir="$pfx/prune-work/.git" show-ref --verify --quiet "refs/remotes/origin/${live}"; then
+      echo "self-test: prune-projection check FAILED — Q3: a tracking ref survived the real prune" >&2
+      pfail=1
+    fi
+  fi
+
+  # Q7 — read-back: the apply ASSERTS what it pruned. Both refs are recreated as stale
+  # (neither server branch exists any more), and the mutating prune is stubbed to a
+  # PARTIAL prune that removes ${stale} only while still exiting 0 — git claiming a
+  # success it did not fully deliver. The report must read ${stale} PRUNED and ${live}
+  # "FAILED — survived prune", and count the two separately.
+  if [[ "$pfix" -eq 1 && -n "$pseed" ]]; then
+    git --git-dir="$pfx/prune-work/.git" update-ref "refs/remotes/origin/${stale}" "$pseed" >/dev/null 2>&1 || true
+    git --git-dir="$pfx/prune-work/.git" update-ref "refs/remotes/origin/${live}" "$pseed" >/dev/null 2>&1 || true
+    surv=$( ( git() {
+                if [[ "${1:-}" == "remote" && "${2:-}" == "prune" && "$#" -eq 3 ]]; then
+                  command git update-ref -d "refs/remotes/origin/${stale}"
+                  return 0
+                fi
+                command git "$@"
+              }
+              selftest_prune_run_in "$pfx/prune-work" apply "" ) 2>/dev/null ) || true
+    if ! grep -qxF "${stale}"$'\t'"PRUNED" <<<"$surv" \
+       || ! grep -qxF "${live}"$'\t'"FAILED — survived prune" <<<"$surv" \
+       || ! grep -qxF "| \`origin/${live}\` | FAILED — survived prune |" <<<"$surv" \
+       || ! grep -qF -- "- **Stale remote-tracking refs:** 1 pruned, 1 FAILED — survived prune" <<<"$surv"; then
+      echo "self-test: prune-projection check FAILED — Q7: a ref still present after the prune was not reported 'FAILED — survived prune' and counted apart from the pruned one" >&2
+      pfail=1
+    fi
+    if ! git --git-dir="$pfx/prune-work/.git" show-ref --verify --quiet "refs/remotes/origin/${live}"; then
+      echo "self-test: prune-projection check FAILED — Q7: the stubbed partial prune removed ${live}; the read-back fixture is not what it claims" >&2
+      pfail=1
+    fi
+  elif [[ "$pfix" -eq 1 ]]; then
+    echo "self-test: prune-projection check FAILED — Q7: could not read the fixture's seed commit to recreate the tracking refs" >&2
+    pfail=1
+  fi
+
+  # Q6 — an unreadable remote reads UNAVAILABLE, never a zero it did not read. Q2's
+  # `ok` over a readable remote is this arm's specificity control.
+  if [[ "$pfix" -eq 1 ]]; then
+    git --git-dir="$pfx/prune-work/.git" remote set-url origin "$pfx/no-such-remote.git" >/dev/null 2>&1 || true
+    unav=$(selftest_prune_run_in "$pfx/prune-work" dry-run "") || true
+    n=$(awk -F'\t' '/^cleanup-selftest-prune-/{c++} END{print c+0}' <<<"$unav")
+    if ! grep -qxF "STATE"$'\t'"unavailable" <<<"$unav" || [[ "$n" != "0" ]] \
+       || ! grep -qF -- "- **Stale remote-tracking refs:** UNAVAILABLE — " <<<"$unav" \
+       || grep -qF "would be pruned" <<<"$unav"; then
+      echo "self-test: prune-projection check FAILED — Q6: an unreadable remote did not read UNAVAILABLE (unavailable is not zero)" >&2
+      pfail=1
+    fi
+  fi
+
+  # Q5 — the production dry-run dispatch is REACHED end to end, and the dry-run's exit
+  # status stays 0 whatever the projection reads (INT-a: close-out phase 16 reads only
+  # that status). Every needle is KEYED to the field it grades, because the same JSON
+  # carries a bare `not-consulted` under liveness_oracle; the planted near-miss below
+  # proves a keyed needle is not satisfied by another key's value.
+  drc=0
+  dout=$("$script_abs" --release-close "$none" --dry-run --json 2>/dev/null) || drc=1
+  if [[ "$drc" -ne 0 ]]; then
+    echo "self-test: prune-projection check FAILED — Q5: the inner --release-close --dry-run exited non-zero (INT-a: its exit status must stay 0)" >&2
+    pfail=1
+  else
+    if ! grep -qF '"tracking_ref_enumeration":"ok"' <<<"$dout" && ! grep -qF '"tracking_ref_enumeration":"unavailable"' <<<"$dout"; then
+      echo "self-test: prune-projection check FAILED — Q5: the production dry-run dispatch did not consult the enumeration (no keyed ok or unavailable state)" >&2
+      pfail=1
+    fi
+    if grep -qF '"tracking_ref_enumeration":"not-consulted"' <<<"$dout"; then
+      echo "self-test: prune-projection check FAILED — Q5: the unstripped dry-run reads not-consulted" >&2
+      pfail=1
+    fi
+  fi
+  nearmiss='{"liveness_oracle":"not-consulted","tracking_ref_enumeration":"ok"}'
+  if ! grep -qF 'not-consulted' <<<"$nearmiss" \
+     || grep -qF '"tracking_ref_enumeration":"not-consulted"' <<<"$nearmiss" \
+     || ! grep -qF '"tracking_ref_enumeration":"ok"' <<<"$nearmiss"; then
+    echo "self-test: prune-projection check FAILED — Q5 specificity: the keyed needle does not separate the enumeration's state from another key's not-consulted" >&2
+    pfail=1
+  fi
+  # Q5 (sensitivity) — strip the dispatch line from a COPY (the P2 idiom, beside the
+  # original so REPO_ROOT resolves the same); the copy must read not-consulted, so the
+  # positive limb above is measuring the dispatch and not something that holds anyway.
+  mutd="${SCRIPT_DIR}/.cleanup-selftest-mut-prune-$$.sh"
+  if grep -qxF '  : # prune projection disabled (dispatch sensitivity arm)' "$script_abs"; then
+    echo "self-test: prune-projection check FAILED — Q5 strip-guard specificity: the anchored needle matches a whole line of this script's own unsubstituted source" >&2
+    pfail=1
+  fi
+  sed 's/^  project_stale_tracking_refs$/  : # prune projection disabled (dispatch sensitivity arm)/' "$script_abs" > "$mutd" 2>/dev/null || true
+  if grep -qxF '  : # prune projection disabled (dispatch sensitivity arm)' "$mutd" 2>/dev/null && ! grep -qE '^  project_stale_tracking_refs$' "$mutd"; then
+    drc=0
+    mout=$(bash "$mutd" --release-close "$none" --dry-run --json 2>/dev/null) || drc=1
+    if [[ "$drc" -ne 0 ]]; then
+      echo "self-test: prune-projection check FAILED — Q5: the dispatch-stripped copy exited non-zero; the sensitivity arm cannot be read" >&2
+      pfail=1
+    elif ! grep -qF '"tracking_ref_enumeration":"not-consulted"' <<<"$mout"; then
+      echo "self-test: prune-projection check FAILED — Q5: sensitivity arm did NOT fire — the dispatch-stripped copy still reports the enumeration consulted" >&2
+      pfail=1
+    fi
+  else
+    echo "self-test: prune-projection check FAILED — Q5: could not strip the prune-projection dispatch from the throwaway copy; a sensitivity arm that did not mutate proves nothing" >&2
+    pfail=1
+  fi
+  rm -f "$mutd" 2>/dev/null || true
+
+  # Teardown — unconditional, bounded to the PID-scoped fixture dir (the case-guard
+  # refuses any other shape) and to this run's own mutation copy.
+  case "$pfx" in
+    "${TMPDIR:-/tmp}/cleanup-selftest-$$") /bin/rm -rf "$pfx" 2>/dev/null || true ;;
+  esac
+  rm -f "${SCRIPT_DIR}/.cleanup-selftest-mut-prune-$$.sh" 2>/dev/null || true
+
   # Reset accumulators the seeded checks dirtied, so a caller can reuse them cleanly.
   LOCAL_BRANCH_CANDIDATES=(); REMOTE_BRANCH_CANDIDATES=(); WORKTREE_CANDIDATES=(); PRUNED_TRACKING_REFS=()
+  PRUNE_INDUCED_REFS=(); PRUNE_SURVIVORS=(); STALE_ENUM_STATE="not-consulted"
+  if [[ "$pfail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: prune-projection check PASS — Q1 fixture read (1 stale + 1 induced) / Q2 dry PRUNE + WILL-PRUNE, mutates nothing, LC_ALL=C pinned / Q4 an empty projection fails the predicate / Q3 apply PRUNED = projected (2 = 2), refs gone / Q7 a ref that survives the prune reads FAILED — survived prune, counted separately / Q6 an unreadable remote reads UNAVAILABLE, not zero / Q5 dispatch reached (exit 0), keyed needles, stripped dispatch reads not-consulted" >&2
   return 0
 }
 
