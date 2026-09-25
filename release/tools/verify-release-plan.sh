@@ -43,11 +43,12 @@ readonly CLI_VERSION="0.2.1"
 # the same reason. No verdict value is added and no record field is renamed, so
 # the Gate-6 verification-evidence grep contract is preserved across the bump.
 # 3 -> 4: the verdict roll-up gains its DENOMINATOR. The `**Verdict roll-up:**`
-# line now carries the per-issue row count the four verdict counters were
-# computed over, and the JSON `rollup` object gains `per_issue_rows` +
-# `declared_deferred`. Without it, `0 ERROR` over a plan carrying NO per-issue
-# table is byte-identical to `0 ERROR` over a plan whose rows all classified
-# cleanly. The `fcm-delivery` coverage record additionally gains `prose_led=`.
+# line now carries the per-issue row count (the counters themselves span every
+# record in the stream; 4 -> 5 states that population), and the JSON `rollup`
+# object gains `per_issue_rows` + `declared_deferred`. Without it, `0 ERROR` over
+# a plan carrying NO per-issue table is byte-identical to `0 ERROR` over a plan
+# whose rows all classified cleanly. The `fcm-delivery` coverage record
+# additionally gains `prose_led=`.
 # Both are ADDITIVE: no verdict value is added and no record field is renamed,
 # so the Gate-6 verification-evidence grep contract survives this bump too.
 # 3 -> 4 (SECOND CONTRIBUTOR TO THE SAME BUMP -- no further bump is owed):
@@ -123,6 +124,20 @@ readonly CLI_VERSION="0.2.1"
 # families and verdicts -- a row the oracle used to grade by a prose word now takes the
 # outcome its own command earns -- and no record field, family value or verdict value
 # is added: the counters becoming correct, by the precedent above.
+# 4 -> 5 (A LATER CONTRIBUTOR TO THE SAME BUMP -- no further bump is owed): the verdict
+# roll-up states the population its counters are taken over, and keeps what the run did
+# not grade apart from what it could not evaluate. The counters have always spanned
+# EVERY record in the stream -- per-issue rows, cross-issue criteria and the always-on
+# families -- and the line now says so; it also names who decided each SKIP
+# (declared-deferred / no command in method / other). The JSON `rollup` object gains
+# `records`, `cross_issue_records`, `always_on_records`, `no_command` and `skip_other`,
+# and `declared_deferred` counts the observed reason rather than the family. Riding it,
+# with no further bump owed by the precedents above: a row no family arm claims takes the
+# per-issue family and its handler's verdict instead of an unclassified ERROR (a family
+# VALUE retired; no field added), and the observed reasons `no-operand:<verb>`,
+# `matcher-exit-1` and `no-comparator:<verb>` ride existing ERROR records -- VALUES in
+# existing fields. The markdown block renders a record with no issue value under a
+# `(plan)` header: a presenter change that moves no stream byte and no JSON value.
 readonly SCHEMA_VERSION="5"
 
 # ---------------------------------------------------------------------------
@@ -389,9 +404,14 @@ OPTIONS
   -h, --help        Show this help and exit
   --version         Show CLI version + schema version and exit
 
-CHECK FAMILIES (dispatched from the Verification method cell alone: a declared deferral, then a runnable probe or a scope assertion, then an integration keyword, then a declared deploy check, else method keyword)
+CHECK FAMILIES (dispatched from the Verification method cell alone: a declared deferral, then a runnable probe or a scope assertion, then an integration keyword, then a declared deploy check, else method keyword, else the per-issue handler)
   per-issue      file existence + content assertions  (any runnable probe:
-                                                       ${RUNNABLE_VERBS})
+                 -- and the residual: a row no other   ${RUNNABLE_VERBS};
+                 family claims is inspected here       a row naming no
+                                                       command it runs is
+                                                       a named SKIP, and
+                                                       only a backticked
+                                                       span is a command)
   scope          a confinement assertion over the     (git diff --name-only
                  RELEASE diff — every change the       origin/main...HEAD --
                  release makes, not one card's         <pathspec>... and one
@@ -446,7 +466,10 @@ MULTI-COMMAND METHODS
 VERDICTS
   PASS        the check ran, and what it asserts holds
   FAIL        the check ran, and what it asserts does not hold
-  SKIP        not this runner's job (a declared deferral), or no command to run
+  SKIP        not this runner's job (a declared deferral), or no command to
+              run: a named read, a judge-rubric, or prose that merely opens
+              with a verb, whether or not a family claimed the row; its
+              criterion is graded where the method says
   UNRUNNABLE  can't run here: a command the method names is a tool outside
               the verb set, the designated command carries shell syntax (a
               pipe, a list, a redirect, a substitution), a scope assertion has
@@ -454,7 +477,27 @@ VERDICTS
               command did not. Never executed, never a pass, and it does not
               fail the run; the tool named is a tool the method invokes, never
               a label or a file
-  ERROR       could not read or evaluate the row
+  ERROR       could not read the row, or tried to evaluate it and could not:
+              an unreadable table row, an empty method cell, a probe whose
+              input could not be read, a command naming no operand, or a
+              command with no comparator whose exit status is not its claim
+
+READER SEMANTICS (one table, per verb, read by every reader of a result)
+  verb  exit 1      operand         count read as          no comparator
+  grep  a zero      a pattern       -c: the count field;   exit 0 is PASS
+                                    else matching lines
+  test  a zero      an expression   (it prints nothing)    exit 0 is PASS
+  ls    unreadable  a path          entries (lines)        PASS only as an
+                                                           existence check
+  head  unreadable  a file          lines                  not graded
+  wc    unreadable  a file          its first field        not graded
+  cat   unreadable  a file          lines                  not graded
+  An unreadable exit 1 reads ERROR matcher-exit-1. A command naming no
+  operand -- grep with no pattern, test with no expression or a primary
+  with no operand, ls with no path -- is not run: ERROR no-operand:<verb>
+  (head, wc and cat with no file read stdin-reader:<verb> first). With no
+  comparator, a result the table does not grade -- cat, head, wc, or ls
+  listing a directory -- reads ERROR no-comparator:<verb>.
 
 EXIT CODES
   0  no check FAILed or ERRORed (PASS, SKIP and UNRUNNABLE only; every
@@ -720,8 +763,10 @@ classify_family() {
     # probe before any arm here, so a method carrying one is executed even
     # when it also names a subtype. A method with neither reaches step 3,
     # which names a recognised tool command it carries; one naming no tool
-    # either reaches `unclassified` and is an ERROR, which is honest: this
-    # executor cannot tell what such a row is asking for.
+    # either reaches the residual (step 4) and is inspected by the per-issue
+    # handler: a runnable command runs, a tool is declined by name, and a
+    # method with no command is a named SKIP -- never a PASS without an
+    # executed check.
     *suite-skip*|*suite-fail*)                                              echo "runtime-suite"; return ;;
   esac
 
@@ -737,8 +782,15 @@ classify_family() {
   lead="$(printf '%s' "$cmd" | awk '{print $1}')"
   if [ -n "$lead" ] && ! is_runnable_verb "$lead"; then echo "unrunnable"; return; fi
 
-  # 4) Unclassifiable → the caller emits ERROR (fail loud; never drop a check).
-  echo "unclassified"
+  # 4) THE RESIDUAL -- a method no step above claims is INSPECTED, never guessed and
+  #    never reported unreadable. The per-issue handler runs a runnable command, declines
+  #    a tool by name, or names a method with no command (a named read, a judge-rubric,
+  #    prose that merely opens with a verb) -- a named SKIP, graded where its criterion
+  #    is graded. A missing keyword no longer changes the verdict. ERROR stays reserved
+  #    for a row the executor tried to evaluate and could not, and a family no handler
+  #    owns is an internal inconsistency (dispatch_check). The line is KEPT ON ONE LINE
+  #    ON PURPOSE: the suite's mutation arm G19 M1 reverts it by one substitution.
+  echo "per-issue"   # residual: inspected by the per-issue handler, never guessed
 }
 
 # ---------------------------------------------------------------------------
@@ -1117,9 +1169,12 @@ span_shell_operator() {
 # span_shell_operator finds no shell syntax in it. This is a shape test, not a promise
 # that the probe runs faithfully. Faithfulness is decided where the span runs, by the
 # gates on the dispatch path: eval_free_run refuses a reader whose input is, or cannot
-# be shown not to be, stdin (reads_stdin_cmd, status 4), and count_from_output reads
-# a matcher that could not run as ERROR rather than as a count. A handler that adds an
-# operand or exit rule adds it there, not here. A bare verb (`grep` alone) names a
+# be shown not to be, stdin (reads_stdin_cmd, status 4), and a command that names no
+# operand its verb needs (names_no_operand, status 5); count_from_output reads a
+# matcher that could not run, and an exit 1 that is not a zero for its verb, as ERROR
+# rather than as a count; and with no comparator, an exit 0 the reader table does not
+# make the claim is not a pass (exit_zero_grades). Those operand and exit rules live in
+# the one reader table (reader_rule), not here. A bare verb (`grep` alone) names a
 # tool in prose and is not a probe.
 is_runnable_probe() {
   tokenize_cmd "$1" || return 1
@@ -1521,8 +1576,9 @@ EOF_GRADE
             else
               lv="$VERDICT_FAIL"; lo="count=$cval (wanted ${R_op[$i]} ${R_want[$i]})"
             fi
-          elif [ "$rc" -eq 0 ]; then lv="$VERDICT_PASS"; lo="command-succeeded"
-          else lv="$VERDICT_FAIL"; lo="command-exit-$rc"
+          elif [ "$rc" -ne 0 ]; then lv="$VERDICT_FAIL"; lo="command-exit-$rc"
+          elif exit_zero_grades "$span"; then lv="$VERDICT_PASS"; lo="command-succeeded"
+          else lv="$VERDICT_ERROR"; lo="$(unreadable_observed "no-comparator:$verb")"
           fi
         fi
         list="${list:+$list; }limb $((i + 1)) $verb $lv $lo" ;;
@@ -1580,12 +1636,36 @@ EOF_CMDS
   printf '%s\t%s' "$k" "$list"
 }
 
+# per_issue_command <method> -- THE PER-ISSUE GUARD: the command the per-issue handler
+# may run, which is extract_command's pick only when that pick is a backtick span of the
+# method. extract_command falls back to the whole cell when the cell opens with an
+# allowlisted verb, because a table-form CIAC cell reaches the cross-issue handler with
+# its backticks already stripped (parse_ciac). A per-issue method is never de-backticked,
+# so that fallback here would run prose that merely opens with a verb -- "grep the
+# criterion in the spec", "test the decision records the chosen branch" -- as a command,
+# and grade the matcher's failure on its words. A span never carries a backtick, and the
+# whole-cell fallback of a cell that has one always does, so a cell with no backtick, or
+# a pick carrying one, names no command here: unbackticked prose never runs. The
+# classifier's probe step already reads only a backticked span; this is the same rule
+# at the handler, which the residual now reaches with rows no keyword claimed.
+per_issue_command() {
+  local cmd
+  case "$1" in *'`'*) ;; *) return 0 ;; esac
+  cmd="$(extract_command "$1")"
+  case "$cmd" in *'`'*) return 0 ;; esac
+  printf '%s' "$cmd"
+}
+
 # per-issue: extract a runnable predicate from the method string and run it.
 # Supports the two dominant shapes: `grep ... ≥ N` / `grep -c ... N` and
 # `test -f <path>`. Anything else with an executable command substring is run
 # in a restricted way (command allowlist); a command outside the allowlist is
 # UNRUNNABLE, naming the tool; a method with no command is SKIP (honest — no
-# fabricated PASS for a check that carries no runnable method).
+# fabricated PASS for a check that carries no runnable method). It is also the
+# classifier's RESIDUAL: a row no family arm claims is inspected here, so a
+# method that names nothing to run reads that SKIP whether or not a keyword
+# routed it, and ERROR stays reserved for a row it tried to evaluate and could
+# not. It runs only a backtick span (per_issue_command).
 handle_per_issue() {
   local method="$1" expected="$2"
   # Honest no-op: a declared-deferred method is a SKIP with a reason. (The
@@ -1604,8 +1684,11 @@ handle_per_issue() {
   limbs="$(method_limbs "$method")"
   if limbs_are_multi "$limbs"; then grade_limbs "$limbs"; return; fi
 
+  # Only a backtick span is a command here (per_issue_command, the per-issue guard).
+  # KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G19 M7 removes the guard by
+  # one substitution.
   local cmd
-  cmd="$(extract_command "$method")"
+  cmd="$(per_issue_command "$method")"
   if [ -z "$cmd" ]; then
     # No runnable command embedded → cannot execute honestly.
     printf '%s\t%s\n' "$VERDICT_SKIP" "no-executable-command-in-method"; return
@@ -1663,13 +1746,18 @@ handle_per_issue() {
     return
   fi
 
-  # No threshold: rc 0 -> PASS, rc 1 -> FAIL (a legitimate no-match). rc >= 2 was
-  # already converted to ERROR above, so a probe that could not run no longer
-  # reads as a plain failed assertion.
-  if [ "$rc" -eq 0 ]; then
+  # No threshold: rc 1 -> FAIL (a legitimate no-match or false: only grep and test
+  # reach here with it -- for the other verbs count_from_output read exit 1 as an
+  # unreadable operand), and rc >= 2 was already converted to ERROR above. rc 0 is a
+  # PASS only where the reader table makes exit 0 the claim (exit_zero_grades): for
+  # cat, head, wc and an ls listing a directory it says only that the input could be
+  # read, so the claim was not evaluated -- ERROR no-comparator:<verb>.
+  if [ "$rc" -ne 0 ]; then
+    printf '%s\t%s\n' "$VERDICT_FAIL" "command-exit-$rc"
+  elif exit_zero_grades "$cmd"; then
     printf '%s\t%s\n' "$VERDICT_PASS" "command-succeeded"
   else
-    printf '%s\t%s\n' "$VERDICT_FAIL" "command-exit-$rc"
+    printf '%s\t%s\n' "$VERDICT_ERROR" "$(unreadable_observed "no-comparator:$verb")"
   fi
 }
 
@@ -1742,7 +1830,9 @@ stdin_input_refusal() {
 #         the pattern unless -e / -f / --regexp / --file supplied one; with
 #         -r / -R, --recursive or -d recurse and no operand it searches the
 #         working directory, not stdin; with no pattern at all it fails on usage
-#         before it reads anything.
+#         before it reads anything, so it is no stdin reader: status 2, printing
+#         no-operand:grep, which the reader table's operand rule reads
+#         (names_no_operand) so that such a grep is refused before it runs.
 #   head  argument-taking letters n c; the obsolete -N form is a flag
 #   wc    flags c l m w L
 #   cat   flags b e n s t u v
@@ -1837,10 +1927,146 @@ reads_stdin_cmd() {
     files=$((files+1))
   done
   if [ "$files" -gt 0 ]; then return 1; fi
-  if [ "$need_pat" -eq 1 ] && [ "$have_pat" -eq 0 ]; then return 1; fi
+  if [ "$need_pat" -eq 1 ] && [ "$have_pat" -eq 0 ]; then printf 'no-operand:%s' "$verb"; return 2; fi
   if [ "$verb" = grep ] && [ "$recursive" -eq 1 ]; then return 1; fi
   printf 'stdin-reader:%s' "$verb"
   return 0
+}
+
+# ---------------------------------------------------------------------------
+# THE READER-SEMANTICS TABLE -- what each allowlisted verb's exit status and output
+# MEAN, stated once, one row per verb. Every reader of a command's result asks it here
+# rather than carrying a point rule of its own: eval_free_run (a command naming no
+# operand its verb needs is refused before it runs, status 5), count_from_output (what
+# exit 1 means; how a count is read) and the handlers' no-comparator reading
+# (exit_zero_grades: whether exit 0 is itself the claim).
+#
+#   verb  exit 1        operand the command must name   a count is read as           no comparator: exit 0
+#   grep  a zero        a pattern (a pattern with no    -c / --count: the last ":"   is the claim (a line
+#         (no match)    file is stdin-reader:grep)      field, summed; else lines    matched): PASS
+#   test  a zero        an expression, and a unary      lines (test prints none)     is the claim (the
+#         (false)       primary's operand                                           expression held): PASS
+#   ls    unreadable    a path                          lines (one per entry)        is the claim only as an
+#         operand                                                                    existence check
+#   head  unreadable    a file (else stdin-reader)      lines                        is not the claim
+#   wc    unreadable    a file (else stdin-reader)      its first field, on the      is not the claim
+#                                                       last line (several files:
+#                                                       the total)
+#   cat   unreadable    a file (else stdin-reader)      lines                        is not the claim
+#
+# WHY EACH COLUMN IS NEEDED, measured before this table existed:
+#   - exit 1. ls, head, wc and cat exit 1 when an operand cannot be read, and a count
+#     of 0 there is exactly the false PASS count_from_output exists to refuse:
+#     `head -n 1 <missing>` expect 0 read PASS count=0. Only grep (no match) and test
+#     (false) mean a legitimate zero by it. Anything else reads ERROR matcher-exit-1.
+#   - operand. A command naming no operand ran on nothing or on usage: `test -d` alone
+#     is test's one-argument form, true for any word, so it read PASS on a directory
+#     that does not exist; `ls -1` alone lists the working directory; a grep given no
+#     pattern fails on usage. Such a command is refused before it runs, and reads
+#     ERROR no-operand:<verb>. head, wc and cat with no file are refused first, and more
+#     specifically, as stdin readers (reads_stdin_cmd). grep's pattern is found by the
+#     one grep option model there, which returns 2 when grep names none.
+#   - exit 0 with no comparator. A method that states no comparator is graded on its
+#     exit status, and that status is the claim only where the table says so. cat,
+#     head and wc exit 0 whenever their input was readable, whatever the method claims
+#     about its content (`cat <file>` -- expect `warn` read PASS on a file saying
+#     enforce), and ls exits 0 whenever its operands exist, so an ls that lists a
+#     directory says nothing about what is in it. Those read ERROR no-comparator:<verb>:
+#     the executor tried to evaluate the claim and could not. An ls naming only files,
+#     or carrying -d, IS an existence check, and its exit 0 is the claim.
+#   - the count. wc prints its count in its first field, so reading its output lines
+#     read `wc -l <three-line file>` as count=1; only grep has a count flag, so a -c on
+#     head (bytes) or ls (ctime order) is not a count mode.
+# A seventh verb, or a flag that changes a verb's reading, is a row or a cell here,
+# never a new point rule in a reader. reader_rule prints one cell; it returns 1, and
+# prints nothing, for a verb outside the table. Each row is KEPT ON ONE LINE, and every
+# reader reads the table through this one function: the suite reads every cell (G19).
+# ---------------------------------------------------------------------------
+reader_rule() {
+  local e1 op cnt e0
+  case "$1" in
+    grep) e1=zero;       op=pattern;    cnt=count-flag;  e0=claim ;;
+    test) e1=zero;       op=expression; cnt=lines;       e0=claim ;;
+    ls)   e1=unreadable; op=path;       cnt=lines;       e0=existence ;;
+    head) e1=unreadable; op=file;       cnt=lines;       e0=not-the-claim ;;
+    wc)   e1=unreadable; op=file;       cnt=first-field; e0=not-the-claim ;;
+    cat)  e1=unreadable; op=file;       cnt=lines;       e0=not-the-claim ;;
+    *)    return 1 ;;
+  esac
+  case "$2" in
+    exit1)   printf '%s' "$e1" ;;
+    operand) printf '%s' "$op" ;;
+    count)   printf '%s' "$cnt" ;;
+    exit0)   printf '%s' "$e0" ;;
+    *)       return 1 ;;
+  esac
+}
+
+# names_no_operand <cmd> -- the table's operand column: TRUE when the command names no
+# operand its verb needs, so eval_free_run refuses it before it runs (status 5) and
+# count_from_output reads ERROR no-operand:<verb>. grep: no pattern, as the one grep
+# option model reads it (reads_stdin_cmd returns 2). test: no expression at all, or an
+# expression ending in a unary primary with no operand (`test -f`, `test ! -d`). ls: no
+# path, flags aside. head, wc and cat: never here -- with no file they read stdin, and
+# reads_stdin_cmd refuses them first. A test expression that is present but malformed
+# is left to test itself, which exits 2 on it: ERROR matcher-exit-2.
+names_no_operand() {
+  local verb n i=1 t rs=0
+  tokenize_cmd "$1" || return 1
+  verb="${TOKENS[0]:-}"; n=${#TOKENS[@]}
+  case "$(reader_rule "$verb" operand)" in
+    pattern)
+      reads_stdin_cmd "$1" >/dev/null || rs=$?
+      [ "$rs" -eq 2 ] ;;
+    expression)
+      while [ "$i" -lt "$n" ] && [ "${TOKENS[$i]}" = '!' ]; do i=$((i + 1)); done
+      [ "$i" -lt "$n" ] || return 0
+      case "${TOKENS[$((n - 1))]}" in -[bcdefghkLnOGNprsStuwxz]) return 0 ;; esac
+      return 1 ;;
+    path)
+      while [ "$i" -lt "$n" ]; do
+        t="${TOKENS[$i]}"; i=$((i + 1))
+        case "$t" in
+          --)  [ "$i" -lt "$n" ] && return 1; return 0 ;;
+          -?*) continue ;;
+          *)   return 1 ;;
+        esac
+      done
+      return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# exit_zero_grades <cmd> -- the table's no-comparator column: TRUE when the exit 0 of a
+# command that states no comparator IS its claim, so the row reads PASS. grep (a line
+# matched) and test (the expression held) always; ls only as an existence check -- an
+# operand that is a directory, with no -d, lists that directory, and its exit 0 says
+# only that the directory exists. cat, head and wc never: their exit 0 says only that
+# the input could be read. A relative operand is resolved against the repository root,
+# where the command ran.
+exit_zero_grades() {
+  local verb n i=1 t p opts=1 listing=0
+  tokenize_cmd "$1" || return 1
+  verb="${TOKENS[0]:-}"; n=${#TOKENS[@]}
+  case "$(reader_rule "$verb" exit0)" in
+    claim) return 0 ;;
+    existence)
+      while [ "$i" -lt "$n" ]; do
+        t="${TOKENS[$i]}"; i=$((i + 1))
+        if [ "$opts" -eq 1 ]; then
+          case "$t" in
+            --)  opts=0; continue ;;
+            -?*) case "${t#-}" in *d*) return 0 ;; esac; continue ;;
+          esac
+        fi
+        case "$t" in /*) p="$t" ;; *) p="$REPO_ROOT/$t" ;; esac
+        if [ -d "$p" ]; then listing=1; fi
+      done
+      [ "$listing" -eq 1 ] || return 0 ;;
+  esac
+  # KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G19 M5 grades every exit 0
+  # again by one substitution.
+  return 1   # no comparator: this exit 0 is not the claim
 }
 
 # eval_free_run — run a whitelisted command WITHOUT the shell `eval` of a
@@ -1870,6 +2096,14 @@ eval_free_run() {
   # same string, so TOKENS is unchanged by the call. It precedes `args` because on
   # bash 3.2 a zero-argument verb otherwise aborts in the "${args[@]}" expansion.
   if reads_stdin_cmd "$cmd" >/dev/null; then return 4; fi
+  # A command naming no operand its verb needs is refused next, with its own status,
+  # so count_from_output names it (no-operand:<verb>) instead of grading a run on
+  # nothing or on usage (the reader table's operand column, names_no_operand). It sits
+  # after the stdin refusal, so head, wc and cat with no file keep that more specific
+  # reason, and before `args`, so no zero-argument verb reaches the expansion either.
+  # KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G19 M4 removes it by one
+  # substitution.
+  if names_no_operand "$cmd"; then return 5; fi
   local args=( "${TOKENS[@]:1}" )
   case "$verb" in
     grep) grep "${args[@]}" ;;
@@ -1888,11 +2122,14 @@ eval_free_run() {
 # (`42:7`) is genuinely ambiguous under shape inference, and guessing wrong is
 # precisely how a row with real hits came to report zero. Covers the long form
 # and every short-option cluster carrying `c` (-c, -cE, -rc, -ch). Scanning stops
-# at `--`, after which a token is an operand rather than a flag.
+# at `--`, after which a token is an operand rather than a flag. Only a verb whose
+# reader-table count column is its count flag has a count mode (grep): a -c on head
+# counts bytes and on ls sorts by time, and neither prints a count.
 count_mode_cmd() {
   local cmd="$1" t
   tokenize_cmd "$cmd" || return 1
   [ "${#TOKENS[@]}" -ge 2 ] || return 1
+  [ "$(reader_rule "${TOKENS[0]}" count)" = count-flag ] || return 1
   for t in "${TOKENS[@]:1}"; do
     case "$t" in
       --)      return 1 ;;
@@ -1935,16 +2172,31 @@ count_mode_cmd() {
 #     is eval_free_run REFUSING a reader before it ran (FD-0, reads_stdin_cmd):
 #     it is named by its reason, never numbered, because no matcher ran.
 #
+# WHAT EACH STATUS AND OUTPUT MEAN PER VERB IS THE READER TABLE'S (reader_rule),
+# not this function's: exit 1 is a legitimate zero only where the table says so
+# (grep, test) and ERROR matcher-exit-1 elsewhere; status 5 is eval_free_run
+# refusing a command that names no operand (no-operand:<verb>); and a count is read
+# as the table's count column says -- grep's count flag, wc's first field, or lines.
+#
 # Prints "OK<TAB><count>" or "ERROR<TAB><reason>". Never returns non-zero.
 # ---------------------------------------------------------------------------
 count_from_output() {
-  local cmd="$1" out="$2" rc="$3" t line count=0 why
+  local cmd="$1" out="$2" rc="$3" t line count=0 why verb
+  verb="${cmd#"${cmd%%[![:space:]]*}"}"; verb="${verb%%[[:space:]]*}"
   case "$rc" in ''|*[!0-9]*) printf 'ERROR\tnon-numeric-exit-status'; return 0 ;; esac
   if [ "$rc" -eq 4 ]; then
     why="$(reads_stdin_cmd "$cmd" || true)"
     printf 'ERROR\t%s' "${why:-matcher-exit-4}"; return 0
   fi
+  if [ "$rc" -eq 5 ]; then printf 'ERROR\tno-operand:%s' "$verb"; return 0; fi
+  # Exit 1 is a legitimate zero only for the verbs the reader table reads it so. KEPT ON
+  # ONE LINE ON PURPOSE: the suite's mutation arm G19 M3 removes it by one substitution.
+  if [ "$rc" -eq 1 ] && [ "$(reader_rule "$verb" exit1)" != zero ]; then printf 'ERROR\tmatcher-exit-1'; return 0; fi
   if [ "$rc" -ge 2 ]; then printf 'ERROR\tmatcher-exit-%s' "$rc"; return 0; fi
+  # wc prints its count in its first field -- on its last line, the total, when it
+  # names several files -- so its output lines are not its count. KEPT ON ONE LINE ON
+  # PURPOSE: the suite's mutation arm G19 M6 removes it by one substitution.
+  if [ "$(reader_rule "$verb" count)" = first-field ]; then t="${out##*$'\n'}"; t="${t#"${t%%[![:space:]]*}"}"; t="${t%%[[:space:]]*}"; case "$t" in ''|*[!0-9]*) printf 'ERROR\tnon-integer-count-field'; return 0 ;; esac; printf 'OK\t%s' "$t"; return 0; fi
   if count_mode_cmd "$cmd"; then
     while IFS= read -r line; do
       [ -n "$line" ] || continue
@@ -1980,6 +2232,10 @@ unreadable_observed() {
       printf '%s (not run — a method reads repository files, and a path under /dev/ or /proc/ is a device or a descriptor)' "$1" ;;
     unmodelled-option:*)
       printf '%s (not run — the executor cannot tell whether this option takes the next word, so it cannot show that the command names an input file; use an option it models)' "$1" ;;
+    no-operand:*)
+      printf '%s (not run — the command names no operand its verb needs: grep a pattern, test an expression whose primary carries its operand, ls a path; name it inside the backticks)' "$1" ;;
+    no-comparator:*)
+      printf '%s (ran, but not graded — the method states no comparator, and for this command exit 0 says only that its input could be read, not that the claim holds; state a comparator such as expect N, or write the claim with grep or test)' "$1" ;;
     *)
       printf 'count-unreadable:%s (the matcher produced no readable result; this is NOT a zero)' "$1" ;;
   esac
@@ -2062,8 +2318,11 @@ handle_integration() {
     fi
     return
   fi
-  if [ "$rc" -eq 0 ]; then printf '%s\t%s\n' "$VERDICT_PASS" "integration-method-succeeded"
-  else printf '%s\t%s\n' "$VERDICT_FAIL" "integration-method-exit-$rc"; fi
+  # No threshold: the same reading as handle_per_issue -- exit 0 is a PASS only where
+  # the reader table makes it the claim (exit_zero_grades).
+  if [ "$rc" -ne 0 ]; then printf '%s\t%s\n' "$VERDICT_FAIL" "integration-method-exit-$rc"
+  elif exit_zero_grades "$cmd"; then printf '%s\t%s\n' "$VERDICT_PASS" "integration-method-succeeded"
+  else printf '%s\t%s\n' "$VERDICT_ERROR" "$(unreadable_observed "no-comparator:$verb")"; fi
 }
 
 # deploy_check_exit_code — run deploy --check AT MOST ONCE per executor invocation
@@ -2244,7 +2503,9 @@ handle_unrunnable() {
   printf '%s\t%s\n' "$VERDICT_UNRUNNABLE" "tool-invocation-outside-executor-allowlist:$tool (not executed here; its mechanical guarantee belongs in that tool's own self-test)"
 }
 
-# Dispatch: family -> handler. Fail loud on an unclassified family.
+# Dispatch: family -> handler. Fail loud on a family no handler owns: classify_family's
+# residual always names one, so reaching the `*)` arm is an internal inconsistency, never
+# an unreadable row.
 dispatch_check() {
   local family="$1" method="$2" expected="$3" version="$4"
   case "$family" in
@@ -2273,7 +2534,7 @@ dispatch_check() {
     sync)           handle_deploy_check "sync" "$method" ;;
     regression)     handle_deploy_check "regression" "$method" ;;
     runtime-suite)  handle_runtime_suite "$method" "$version" ;;
-    *)              printf '%s\t%s\n' "$VERDICT_ERROR" "unclassified-method (no family match)" ;;
+    *)              printf '%s\t%s\n' "$VERDICT_ERROR" "unknown-family:$family (internal inconsistency: the classifier returned a family no handler owns)" ;;
   esac
 }
 
@@ -3615,13 +3876,47 @@ handle_provenance_survival() {
 # Component 5 — emit_evidence(): render verdict records in the requested format.
 # Records arrive on stdin as: issue \t id \t family \t method \t expected \t verdict \t observed
 # ===========================================================================
+
+# rollup_counts -- THE roll-up reader, shared by emit_md, emit_json and main()'s note (a
+# count computed in two places ships its defect twice). The stream arrives on stdin;
+# prints, space-separated: P F S U E (the five verdicts), R (every record -- the
+# population P..E span), C A (cross-issue and always-on records), D X O (the SKIPs:
+# declared-deferred, no command in method, other; D+X+O == S). THE PARENTHETICAL IS NOT
+# A PARTITION BY CONSTRUCTION: R == N + C + A (N the parser's per-issue rows) holds on a
+# complete stream, and a table-unindexable block record or a stream-truncated record
+# belongs to none of the three -- the DEGRADED clause names the second. A NEW
+# no-command reason must join the X pattern, or it counts as other.
+rollup_counts() {
+  awk -F'\t' '
+    NF {
+      r++
+      if ($1 == "CIAC (integration)") c++
+      else if ($3 == "fcm-delivery" || $3 == "provenance-survival") a++
+      if      ($6 == "PASS")       p++
+      else if ($6 == "FAIL")       f++
+      else if ($6 == "UNRUNNABLE") u++
+      else if ($6 == "ERROR")      e++
+      else if ($6 == "SKIP") {
+        s++
+        if      ($7 ~ /^declared-deferred/) d++
+        else if ($7 ~ /^(no-executable-command-in-method|documented-decision-method)/) x++
+        else o++
+      }
+    }
+    END { printf "%d %d %d %d %d %d %d %d %d %d %d\n", p, f, s, u, e, r, c, a, d, x, o }'
+}
+
 emit_md() {
-  # Group by issue, preserving first-seen issue order.
+  # Group by issue, preserving first-seen issue order. A record that carries no issue
+  # value is shown under a `(plan)` header rather than dropped -- the roll-up below
+  # counts it, so every counted record appears in a table -- and it shares that
+  # bucket with the records the parser already attributes to `(plan)`. The key is KEPT
+  # ON ONE LINE ON PURPOSE: the suite's mutation arm G19 M8 reverts it by one
+  # substitution.
   local records; records="$(cat)"
   local issues
-  issues="$(printf '%s\n' "$records" | awk -F'\t' 'NF{ if(!seen[$1]++) print $1 }')"
+  issues="$(printf '%s\n' "$records" | awk -F'\t' 'NF{ k = ($1 == "" ? "(plan)" : $1); if(!seen[k]++) print k }')"
   printf '### Verification Evidence\n\n'
-  local p=0 f=0 s=0 u=0 e=0
   local iss
   while IFS= read -r iss; do
     [ -z "$iss" ] && continue
@@ -3630,7 +3925,7 @@ emit_md() {
     printf '**%s%s**\n' "$iss" "$title"
     printf '| Check | Family | Method (reproducible) | Expected | Observed | Verdict |\n'
     printf '|---|---|---|---|---|---|\n'
-    printf '%s\n' "$records" | awk -F'\t' -v want="$iss" -v dash="-" 'NF && $1==want {
+    printf '%s\n' "$records" | awk -F'\t' -v want="$iss" -v dash="-" 'NF && ($1 == "" ? "(plan)" : $1) == want {
       cid=$2; if (cid=="") cid=dash
       fam=$3; meth=$4
       expd=$5; if (expd=="") expd=dash
@@ -3641,26 +3936,24 @@ emit_md() {
     }'
     printf '\n'
   done <<< "$issues"
-  # Roll-up.
-  p="$(printf '%s\n' "$records" | awk -F'\t' '$6=="PASS"{c++} END{print c+0}')"
-  f="$(printf '%s\n' "$records" | awk -F'\t' '$6=="FAIL"{c++} END{print c+0}')"
-  s="$(printf '%s\n' "$records" | awk -F'\t' '$6=="SKIP"{c++} END{print c+0}')"
-  # UNRUNNABLE has its OWN counter: without it such a row enters no counter, and the
-  # roll-up under-counts the records it was computed over, silently. With it, the five
-  # counts sum to the records emitted.
-  u="$(printf '%s\n' "$records" | awk -F'\t' '$6=="UNRUNNABLE"{c++} END{print c+0}')"
-  e="$(printf '%s\n' "$records" | awk -F'\t' '$6=="ERROR"{c++} END{print c+0}')"
-  # THE ROLL-UP CARRIES ITS DENOMINATOR.
+  # THE ROLL-UP STATES ITS POPULATION, AND KEEPS WHAT THIS RUN DID NOT GRADE APART FROM
+  # WHAT IT COULD NOT EVALUATE.
   #
-  # `0 ERROR` alone is uninterpretable. A plan carrying NO per-issue
-  # verification table scores 0 ERROR and exits 0, byte-identical on this line
-  # to a plan whose 26 rows all classified cleanly. Any consumer asserting
-  # `error == 0` is therefore asserting nothing unless it also knows the row
-  # count. PER_ISSUE_ROWS is set by main() at the parser boundary - it cannot
-  # be recovered from the stream here, because several families are reachable
-  # both from a per-issue row and from a source that is not one.
-  local d deg=""
-  d="$(printf '%s\n' "$records" | awk -F'\t' '$3=="deferred"{c++} END{print c+0}')"
+  # `0 ERROR` alone is uninterpretable. A plan carrying NO per-issue verification table
+  # scores 0 ERROR and exits 0, byte-identical on a bare counter line to a plan whose 26
+  # rows all classified cleanly, so the line names its population: the R records its five
+  # counters span (P+F+S+U+E == R, UNRUNNABLE included, so no row falls out of the
+  # counts), and within them the N per-issue rows the parser indexed, the C cross-issue
+  # criteria and the A always-on records. PER_ISSUE_ROWS is set by main() at the parser
+  # boundary -- it cannot be recovered from the stream here, because several families
+  # are reachable both from a per-issue row and from a source that is not one. The split
+  # then says who decided each SKIP (D declared-deferred, X no command in method, O
+  # other) and sets SKIP and UNRUNNABLE -- not graded by this run -- apart from ERROR,
+  # the only non-FAIL clause that fails the run.
+  local p f s u e r c a d x o deg="" pop split
+  read -r p f s u e r c a d x o <<<"$(printf '%s\n' "$records" | rollup_counts)"
+  pop="over ${r} record(s) (${PER_ISSUE_ROWS:-0} per-issue row(s), ${c} cross-issue, ${a} always-on)"
+  split="not graded by this run: ${s} SKIP (${d} declared-deferred, ${x} no command in method, ${o} other) and ${u} UNRUNNABLE; could not evaluate: ${e} ERROR"
   # A DEGRADED stream ANNOTATES the roll-up rather than completing it (FD-0): the
   # counts are real, but over only the records that reached dispatch. Empty on a
   # complete stream, so every other roll-up line is byte-identical.
@@ -3668,9 +3961,9 @@ emit_md() {
     deg=" — **DEGRADED:** ${STREAM_DEGRADED} (the verdict stream is partial, so the counts above cover only the records that reached dispatch; an absent row is NOT a pass)"
   fi
   if [ "${PER_ISSUE_ROWS:-0}" -eq 0 ]; then
-    printf '**Verdict roll-up:** %s PASS / %s FAIL / %s SKIP / %s UNRUNNABLE / %s ERROR — **no per-issue verification table found** (0 rows indexed; the verdict counts above are over a ZERO denominator)%s\n' "$p" "$f" "$s" "$u" "$e" "$deg"
+    printf '**Verdict roll-up:** %s PASS / %s FAIL / %s SKIP / %s UNRUNNABLE / %s ERROR %s — **no per-issue verification table found** (0 rows indexed: none of these counts covers a per-issue criterion); %s%s\n' "$p" "$f" "$s" "$u" "$e" "$pop" "$split" "$deg"
   else
-    printf '**Verdict roll-up:** %s PASS / %s FAIL / %s SKIP / %s UNRUNNABLE / %s ERROR — over %s per-issue row(s); %s declared-deferred%s\n' "$p" "$f" "$s" "$u" "$e" "$PER_ISSUE_ROWS" "$d" "$deg"
+    printf '**Verdict roll-up:** %s PASS / %s FAIL / %s SKIP / %s UNRUNNABLE / %s ERROR %s — %s%s\n' "$p" "$f" "$s" "$u" "$e" "$pop" "$split" "$deg"
   fi
 }
 
@@ -3683,23 +3976,20 @@ emit_json() {
     printf "    {\"issue\":\"%s\",\"id\":\"%s\",\"family\":\"%s\",\"method\":\"%s\",\"expected\":\"%s\",\"observed\":\"%s\",\"verdict\":\"%s\"}", $1,$2,$3,$4,$5,$7,$6
   }'
   printf '\n  ],\n'
-  local p f s u e
-  p="$(printf '%s\n' "$records" | awk -F'\t' '$6=="PASS"{c++} END{print c+0}')"
-  f="$(printf '%s\n' "$records" | awk -F'\t' '$6=="FAIL"{c++} END{print c+0}')"
-  s="$(printf '%s\n' "$records" | awk -F'\t' '$6=="SKIP"{c++} END{print c+0}')"
-  u="$(printf '%s\n' "$records" | awk -F'\t' '$6=="UNRUNNABLE"{c++} END{print c+0}')"
-  e="$(printf '%s\n' "$records" | awk -F'\t' '$6=="ERROR"{c++} END{print c+0}')"
-  # Same denominator contract as emit_md. `declared_deferred` is reported but
-  # is NOT an invariant: it moves every time a card renders a deferred AC row
-  # executable. `per_issue_rows` is the stable one; bind regression arms to it.
-  local d st="fetched"
-  d="$(printf '%s\n' "$records" | awk -F'\t' '$3=="deferred"{c++} END{print c+0}')"
+  # Same population and split as emit_md, through the one reader (rollup_counts):
+  # pass + fail + skip + unrunnable + error == records, and declared_deferred +
+  # no_command + skip_other == skip. `declared_deferred` counts the observed reason,
+  # so a deferral a handler guard declines counts too; it is reported but is NOT an
+  # invariant: it moves every time a card renders a deferred AC row executable.
+  # `per_issue_rows` is the stable one; bind regression arms to it.
+  local p f s u e r c a d x o st="fetched"
+  read -r p f s u e r c a d x o <<<"$(printf '%s\n' "$records" | rollup_counts)"
   # The FD-0 measurement state, on EVERY run, so a consumer can branch on it
   # before it reads a counter: `fetched` when both dispatch loops read every
   # record the parser produced, `truncated` when one fell short (see FD-0).
   if [ -n "${STREAM_DEGRADED:-}" ]; then st="truncated"; fi
-  printf '  "rollup": {"pass": %s, "fail": %s, "skip": %s, "unrunnable": %s, "error": %s, "per_issue_rows": %s, "declared_deferred": %s, "stream_state": "%s", "records_parsed": %s, "records_read": %s}\n}\n' \
-    "$p" "$f" "$s" "$u" "$e" "${PER_ISSUE_ROWS:-0}" "$d" "$st" "${STREAM_PARSED:-0}" "${STREAM_READ:-0}"
+  printf '  "rollup": {"pass": %s, "fail": %s, "skip": %s, "unrunnable": %s, "error": %s, "records": %s, "per_issue_rows": %s, "cross_issue_records": %s, "always_on_records": %s, "declared_deferred": %s, "no_command": %s, "skip_other": %s, "stream_state": "%s", "records_parsed": %s, "records_read": %s}\n}\n' \
+    "$p" "$f" "$s" "$u" "$e" "$r" "${PER_ISSUE_ROWS:-0}" "$c" "$a" "$d" "$x" "$o" "$st" "${STREAM_PARSED:-0}" "${STREAM_READ:-0}"
 }
 
 emit_table() {
@@ -3888,16 +4178,17 @@ main() {
   # class this tool exists to name, sitting inside the tool. Re-pointed onto
   # the population it was actually written about.
   if [ "$PER_ISSUE_ROWS" -eq 0 ]; then
-    err "no per-issue verification checks parsed from $(basename "$PLAN_ABS") — is the Verification Plan section present and table-shaped? 0 rows were indexed, so the verdict roll-up below has a ZERO denominator and its ERROR count is vacuous."
+    err "no per-issue verification checks parsed from $(basename "$PLAN_ABS") — is the Verification Plan section present and table-shaped? 0 rows were indexed, so no count in the roll-up below covers a per-issue criterion."
   fi
 
-  # UNRUNNABLE rows are named on stderr as well as counted in the roll-up: they are
-  # outside the exit predicate below, so a clean exit does not cover them, and the
-  # note says so where a reader of the exit status will see it.
-  local unrun_n
-  unrun_n="$(printf '%s' "$stream" | awk -F'\t' '$6=="UNRUNNABLE"{c++} END{print c+0}')"
-  if [ "$unrun_n" -gt 0 ]; then
-    note "$unrun_n check(s) were NOT executed here (UNRUNNABLE); each names the tool or the reason it could not run. This run's exit status does not cover them: their guarantee is carried by the surface each one names, or by nothing."
+  # The rows this run did not grade are named on stderr as well as counted in the
+  # roll-up: a row with no command in its method and no declaration (a named SKIP), and
+  # an UNRUNNABLE row. Both are outside the exit predicate below, so a clean exit does not
+  # cover them, and the note says so where a reader of the exit status will see it.
+  local _p _f _s nu _e _r _c _a _d nx _o
+  read -r _p _f _s nu _e _r _c _a _d nx _o <<<"$(printf '%s' "$stream" | rollup_counts)"
+  if [ "$nx" -gt 0 ] || [ "$nu" -gt 0 ]; then
+    note "$((nx + nu)) check(s) were not graded by this run: $nx with no command in method and no declaration, $nu UNRUNNABLE. This run's exit status covers none of them: a row with no command is graded where its criterion is graded (declare that runner: [DEFERRED — <reason>]), and an UNRUNNABLE row names the tool or the reason it could not run -- its guarantee is carried by the surface it names, or by nothing."
   fi
 
   # 3) Emit in the requested format.

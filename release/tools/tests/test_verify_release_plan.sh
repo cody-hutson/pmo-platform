@@ -909,8 +909,11 @@ case "$(observed_of "$J_CNT" AC-5)" in
 esac
 [ "$RC_CNT" -eq 3 ] && ok "G8-7 the count ERROR reaches the exit predicate (exit 3)" || bad "G8-7 expected exit 3, got $RC_CNT"
 
-# --- Unit arms on the shared reader, extracted from the shipped file. ---
+# --- Unit arms on the shared reader, extracted from the shipped file. The reader
+#     reads what each verb's status and output mean from the reader table, so the
+#     table is extracted with it. ---
 eval "$(sed -n '/^tokenize_cmd()/,/^}/p'      "$VERIFY")"
+eval "$(sed -n '/^reader_rule()/,/^}/p'       "$VERIFY")"
 eval "$(sed -n '/^count_mode_cmd()/,/^}/p'    "$VERIFY")"
 eval "$(sed -n '/^count_from_output()/,/^}/p' "$VERIFY")"
 
@@ -1525,9 +1528,9 @@ PI_HITS="$(grep -c 'VERDICT_PASS' <<<"$PI_BODY" || true)"
   || bad "R-1b verdicts differ: AC-1 '$(verdict_of "$J_HJ" AC-1)' vs AC-2 '$(verdict_of "$J_HJ" AC-2)'"
 
 # R-2 THE CARD AC. A method carrying `exercise`, no fail-word and no executable
-# probe must not report PASS. It reaches `unclassified`, which is an ERROR: this
-# executor genuinely cannot tell what the row is asking for, and saying so is
-# the honest answer. Never a fabricated green.
+# probe must not report PASS. It reaches the classifier's residual and grades SKIP
+# no-executable-command-in-method: the executor read the method and found nothing it
+# runs. Never a fabricated green.
 [ "$(verdict_of "$J_HJ" AC-3)" != "PASS" ] \
   && ok "R-2 an 'exercise' method with no fail-word and no probe is NOT PASS (got '$(verdict_of "$J_HJ" AC-3)')" \
   || bad "R-2 an 'exercise' method still reports PASS — the fabricated-verdict path is open"
@@ -1543,7 +1546,7 @@ PI_HITS="$(grep -c 'VERDICT_PASS' <<<"$PI_BODY" || true)"
   && ok "R-3b a declared suite-fail still FAILs — the floor does not swallow a recorded failure" \
   || bad "R-3b AC-5 expected runtime-suite/FAIL, got '$(family_of "$J_HJ" AC-5)'/'$(verdict_of "$J_HJ" AC-5)'"
 [ "$RC_HJ" -eq 3 ] \
-  && ok "R-3c the FAIL and the ERROR reach the exit predicate (exit 3)" \
+  && ok "R-3c the FAIL reaches the exit predicate (exit 3)" \
   || bad "R-3c expected exit 3 from the hijack fixture, got $RC_HJ"
 
 # R-M1 — SEEDED FAILURE on the floor. Raise it and R-2 must flip.
@@ -1601,7 +1604,7 @@ set -e
 grep -q 'no per-issue verification table found' <<<"$MD_NT" \
   && ok "D-2 the md roll-up STATES the empty denominator rather than rendering a clean-looking zero" \
   || bad "D-2 the md roll-up does not name the empty denominator: '$(tail -1 <<<"$MD_NT")'"
-grep -qE 'over 4 per-issue row\(s\)' <<<"$("$VERIFY" --no-color --format=md --root "$REPO_ROOT" "$REPO_ROOT/$FIX_TRAP" 2>/dev/null)" \
+grep -qF '(4 per-issue row(s), ' <<<"$("$VERIFY" --no-color --format=md --root "$REPO_ROOT" "$REPO_ROOT/$FIX_TRAP" 2>/dev/null)" \
   && ok "D-2b CONTROL — a plan that DOES carry a table renders its row count instead of the empty-denominator statement" \
   || bad "D-2b the with-table md roll-up does not carry its row count"
 
@@ -3392,8 +3395,8 @@ m17 "V6848-AC2 M1" g17-m1-no-residual-step 1 's/^  if \[ -n "\$lead" \] && ! is_
 if [ "$MUT_TOOK" = 1 ]; then
   vrp_run "$MUT_PATH" "$FIX_UNRUN"; JM17_1="$VRP_JSON"
   if mutant_ran "V6848-AC2 M1"; then
-    [ "$(fv17 "$JM17_1" AC-1)" = unclassified/ERROR ] \
-      && ok "V6848-AC2 M1 detected — without the residual step an awk method with no keyword is unclassifiable again (ERROR)" \
+    [ "$(fv17 "$JM17_1" AC-1)" = per-issue/UNRUNNABLE ] && g17_has "$JM17_1" AC-1 "tool-invocation-outside-executor-allowlist:awk" \
+      && ok "V6848-AC2 M1 detected — without the residual step an awk method with no keyword is no longer the unrunnable family's: it falls to the per-issue residual, whose handler declines the same tool (per-issue/UNRUNNABLE)" \
       || bad "V6848-AC2 M1 SURVIVED — AC-1 $(fv17 "$JM17_1" AC-1)"
   fi
 fi
@@ -3484,8 +3487,8 @@ rm -rf "$MUTD6848" "$SEAMD6848"
 # another command reads the can't-run slot when the check passes and FAIL when it
 # fails. A designated command carrying shell syntax outside quotes is not run: it
 # reads UNRUNNABLE, naming the operator. A command-less row the route releases is
-# asserted only to leave the oracle and never PASS: at this step it is
-# unclassifiable, and the per-issue residual gives it its named SKIP.
+# asserted only to leave the oracle and never PASS: it read the unclassified ERROR
+# until the per-issue residual landed, and reads its named SKIP from then on.
 #
 # The plan is written into two temp stub roots, one whose deploy check exits 0 and
 # one whose check exits 1 (the FAIL limb). No record read here carries a brace, so
