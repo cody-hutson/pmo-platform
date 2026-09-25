@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.69 | egress-hook-batch | 2026-09-25 | — | #7638 | [notes/v4.69_RELEASE_NOTES.md](notes/v4.69_RELEASE_NOTES.md) |
 | v4.68 | autonomy-ceiling-domains-resolve-canonically | 2026-09-25 | — | #7642 | [notes/v4.68_RELEASE_NOTES.md](notes/v4.68_RELEASE_NOTES.md) |
 | v4.67.1 | hook-publisher-republishes | 2026-09-20 | — | #7519 | [notes/v4.67.1_RELEASE_NOTES.md](notes/v4.67.1_RELEASE_NOTES.md) |
 | v4.67 | hub-emits-state-gates-read | 2026-09-19 | — | #7416 | [notes/v4.67_RELEASE_NOTES.md](notes/v4.67_RELEASE_NOTES.md) |
