@@ -14799,13 +14799,16 @@ PY
   # only (see the selftest-runner directive at the top of this file), where /usr/bin/grep
   # is BSD grep 2.6.0 and -P exits 2 — which, under grep_count's own `|| true` plus its
   # default-zero, renders exactly 0 and ships a broken probe INSIDE the test.
-  local _cp_saved_out="$OUTPUT" _cp_saved_pr="$CHORE_PR_NUMBER" _cp_saved_nm="$NO_MERGE"
+  local _cp_saved_out="$OUTPUT" _cp_saved_pr="$CHORE_PR_NUMBER" _cp_saved_nm="$NO_MERGE" _cp_saved_oc="$CHORE_PR_OUTCOME"
   local _cp_rep _cp_n _cp_line _cp_occ _cp_pre _cp_prod _cp_paired _cp_ctl _cp_a _cp_b _cp_as _cp_bs
   local _cp_tok _cp_rest _cp_dbl _cp_ctl_occ
   # The pre-fix construct as SOURCE text, single-quoted so it never expands here, and the
   # ONE fixture (b3), (b4) and (b5) all read — so the source form and the expanded form
   # cannot drift apart.
-  local _cp_src='**Chore PR:** ${CHORE_PR_NUMBER:+#${CHORE_PR_NUMBER}}${CHORE_PR_NUMBER:-N/A — dry-run or not-yet-created}'
+  # (#5769) The fallback limb's text is elided to N/A: no arm expands it (b3/b4 set the
+  # number; b5 reads the SOURCE form through a regex that stops before the fallback),
+  # and the retired collapsed string must count 0 across this file (CIAC-2).
+  local _cp_src='**Chore PR:** ${CHORE_PR_NUMBER:+#${CHORE_PR_NUMBER}}${CHORE_PR_NUMBER:-N/A}'
   local _cp_rx='\$\{CHORE_PR_NUMBER:\+.*\}\$\{CHORE_PR_NUMBER:-'
   OUTPUT="markdown"; NO_MERGE=0
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
@@ -14813,22 +14816,22 @@ PY
 
   # (b1) POPULATED path (AC-1) — THE PREVIOUSLY-UNCOVERED PATH. Exactly one
   #      **Chore PR:** line, and it carries the number exactly once.
-  CHORE_PR_NUMBER="3697"
+  CHORE_PR_OUTCOME="created"; CHORE_PR_NUMBER="3697"
   _cp_rep="$(generate_markdown_report 2>/dev/null)"
   _cp_n="$(grep_count -E '^\*\*Chore PR:\*\* ' <<< "$_cp_rep")"
   [[ "$_cp_n" -eq 1 ]] || { echo "FAIL: #4322 — the report must carry exactly ONE **Chore PR:** line, got ${_cp_n}"; failures=$((failures+1)); }
-  /usr/bin/grep -qxF '**Chore PR:** #3697' <<< "$_cp_rep" \
-    || { echo "FAIL: #4322 — populated path must render '**Chore PR:** #3697' exactly"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF '**Chore PR:** #3697 — created by this run' <<< "$_cp_rep" \
+    || { echo "FAIL: #4322 — populated path must render '**Chore PR:** #3697 — created by this run' exactly"; failures=$((failures+1)); }
   if /usr/bin/grep -qF '36973697' <<< "$_cp_rep"; then
     echo "FAIL: #4322 — the doubled rendering is back; the set-arm and unset-arm are both contributing"; failures=$((failures+1))
   fi
 
   # (b2) UNSET path (AC-2) — the previously-covered path. The fallback verbatim,
   #      with no '#' prefix and no bare number.
-  CHORE_PR_NUMBER=""
+  CHORE_PR_OUTCOME=""; CHORE_PR_NUMBER=""
   _cp_rep="$(generate_markdown_report 2>/dev/null)"
-  /usr/bin/grep -qxF '**Chore PR:** N/A — dry-run or not-yet-created' <<< "$_cp_rep" \
-    || { echo "FAIL: #4322 — unset path must render the fallback verbatim, with no '#' prefix"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF '**Chore PR:** not created — create_chore_pr did not run in this run' <<< "$_cp_rep" \
+    || { echo "FAIL: #4322 — unset path (phase 11 never ran, #5769) must render the not-yet-created state verbatim, with no '#' prefix"; failures=$((failures+1)); }
 
   # (b3) SPECIFICITY (AC-3) — a fabricated value matches exactly ONE arm, never both
   #      and never neither. A numeric fixture cannot show this: '#3697' contains '3697',
@@ -14843,9 +14846,9 @@ PY
   #      -o, and the helper's own contract comment describes a LINE count. The
   #      length-delta form below needs no external tool and no pipe, so neither the
   #      BSD/GNU divergence nor the SIGPIPE-idiom gate can reach it.
-  CHORE_PR_NUMBER="zz4322"
+  CHORE_PR_OUTCOME="created"; CHORE_PR_NUMBER="zz4322"
   _cp_rep="$(generate_markdown_report 2>/dev/null)"
-  /usr/bin/grep -qxF '**Chore PR:** #zz4322' <<< "$_cp_rep" \
+  /usr/bin/grep -qxF '**Chore PR:** #zz4322 — created by this run' <<< "$_cp_rep" \
     || { echo "FAIL: #4322 — specificity: a fabricated value must render under the prefixed arm, exactly"; failures=$((failures+1)); }
   _cp_tok='zz4322'
   _cp_line="$(/usr/bin/grep -E '^\*\*Chore PR:\*\* ' <<< "$_cp_rep" || true)"
@@ -14869,7 +14872,7 @@ PY
   _cp_pre="$(eval "printf %s \"$_cp_src\"")"
   /usr/bin/grep -qF '36973697' <<< "$_cp_pre" \
     || { echo "FAIL: #4322 sensitivity — the pre-fix fixture no longer reproduces the doubled rendering; this arm can no longer tell a fixed line from a broken one"; failures=$((failures+1)); }
-  if /usr/bin/grep -qxF '**Chore PR:** #3697' <<< "$_cp_pre"; then
+  if /usr/bin/grep -qxF '**Chore PR:** #3697 — created by this run' <<< "$_cp_pre"; then
     echo "FAIL: #4322 sensitivity — the (b1) matcher ACCEPTED the pre-fix rendering; (b1)'s green result is uninformative"; failures=$((failures+1))
   fi
 
@@ -14908,7 +14911,7 @@ PY
   #      byte-identical (the run timestamp is sampled once at load), so this is exact
   #      rather than approximate. The anti-vacuity arm comes FIRST: without it, "stripped
   #      remainders are equal" is satisfied by two identical renders.
-  NO_MERGE=0
+  NO_MERGE=0; CHORE_PR_OUTCOME="created"
   CHORE_PR_NUMBER="3697"; _cp_a="$(generate_markdown_report 2>/dev/null)"
   CHORE_PR_NUMBER="";     _cp_b="$(generate_markdown_report 2>/dev/null)"
   [[ "$_cp_a" != "$_cp_b" ]] \
@@ -14918,7 +14921,114 @@ PY
   [[ "$_cp_as" == "$_cp_bs" ]] \
     || { echo "FAIL: #4322 AC-5 — a field other than **Chore PR:** changed with CHORE_PR_NUMBER; the fix has collateral"; failures=$((failures+1)); }
 
-  OUTPUT="$_cp_saved_out"; CHORE_PR_NUMBER="$_cp_saved_pr"; NO_MERGE="$_cp_saved_nm"
+  OUTPUT="$_cp_saved_out"; CHORE_PR_NUMBER="$_cp_saved_pr"; NO_MERGE="$_cp_saved_nm"; CHORE_PR_OUTCOME="$_cp_saved_oc"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # ── Test HF: the header's chore-PR field renders EVERY outcome phase 11 records
+  #    (#5769, CIAC-2) — offline, no fixture repository: the field is a pure function
+  #    of CHORE_PR_OUTCOME, CHORE_PR_NUMBER and the phase record. Each arm reads the
+  #    line through the REAL report, not the helper alone, so a header line that
+  #    stopped calling the helper is caught too. HF-8b holds the JSON twin to the same
+  #    seven states (Plan amendment 1 items 7 and 11).
+  local _hf_s_out="$OUTPUT" _hf_s_pr="$CHORE_PR_NUMBER" _hf_s_oc="$CHORE_PR_OUTCOME" _hf_s_mode="$MODE" _hf_s_nm="$NO_MERGE"
+  local _hf_l _hf_all="" _hf_prod _hf_set _hf_arms _hf_v _hf_miss _hf_n _hf_json_bad=""
+  OUTPUT="markdown"; NO_MERGE=0; MODE="apply"
+  _hf_field() {   # $1 outcome, $2 number -> the rendered **Chore PR:** line
+    CHORE_PR_OUTCOME="$1"; CHORE_PR_NUMBER="$2"
+    /usr/bin/grep -E '^\*\*Chore PR:\*\* ' <<<"$(generate_markdown_report 2>/dev/null)" || true
+  }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  mark_phase "zz_hf_probe" "PASS" "seeded by group HF"
+
+  # HF-1 — the CIAC-2 runtime limb: all 7 recorded states render their OWN exact line, 7 distinct.
+  _hf_l="$(_hf_field created 5769)"
+  _st_arm HF HF-1; [[ "$_hf_l" == '**Chore PR:** #5769 — created by this run' ]] || { echo "FAIL: HF-1 created — got '$_hf_l'"; failures=$((failures+1)); }
+  _hf_all="${_hf_all}${_hf_l}"$'\n'
+  _hf_l="$(_hf_field existing-open 5769)"; _hf_all="${_hf_all}${_hf_l}"$'\n'
+  [[ "$_hf_l" == '**Chore PR:** #5769 — already open for this branch; reused' ]] || { echo "FAIL: HF-1 existing-open — got '$_hf_l'"; failures=$((failures+1)); }
+  _hf_l="$(_hf_field resumed-already-merged 5769)"; _hf_all="${_hf_all}${_hf_l}"$'\n'
+  [[ "$_hf_l" == '**Chore PR:** #5769 — already merged; resumed run' ]] || { echo "FAIL: HF-1 resumed-already-merged — got '$_hf_l'"; failures=$((failures+1)); }
+  _hf_l="$(_hf_field skipped-as-idempotent '')"; _hf_all="${_hf_all}${_hf_l}"$'\n'
+  [[ "$_hf_l" == '**Chore PR:** none needed — skipped as idempotent; the close outputs were already on main' ]] || { echo "FAIL: HF-1 skipped-as-idempotent — got '$_hf_l'"; failures=$((failures+1)); }
+  _hf_l="$(_hf_field dry-run '')"; _hf_all="${_hf_all}${_hf_l}"$'\n'
+  [[ "$_hf_l" == '**Chore PR:** not created — dry-run' ]] || { echo "FAIL: HF-1 dry-run — got '$_hf_l'"; failures=$((failures+1)); }
+  _hf_l="$(_hf_field failed '')"; _hf_all="${_hf_all}${_hf_l}"$'\n'
+  [[ "$_hf_l" == '**Chore PR:** FAILED at create_chore_pr — see Phase Outcomes' ]] || { echo "FAIL: HF-1 failed — got '$_hf_l'"; failures=$((failures+1)); }
+  _hf_l="$(_hf_field '' '')"; _hf_all="${_hf_all}${_hf_l}"$'\n'
+  [[ "$_hf_l" == '**Chore PR:** not created — create_chore_pr did not run in this run' ]] || { echo "FAIL: HF-1 not-yet-created — got '$_hf_l'"; failures=$((failures+1)); }
+  _hf_n="$(grep_count -E . <<<"$(/usr/bin/sort -u <<<"$_hf_all")")"
+  [[ "$_hf_n" -eq 7 ]] || { echo "FAIL: HF-1 — the 7 recorded states must render 7 DISTINCT lines, got ${_hf_n}"; failures=$((failures+1)); }
+
+  # HF-2 — AC-2: an idempotent skip on an --apply run reads as a SUCCESS (no N/A, no dry-run, no FAILED).
+  _hf_l="$(_hf_field skipped-as-idempotent '')"
+  _st_arm HF HF-2; [[ "$_hf_l" == *"none needed"* && "$_hf_l" != *"N/A"* && "$_hf_l" != *"dry-run"* && "$_hf_l" != *"FAILED"* ]] || { echo "FAIL: HF-2 (AC-2) — the idempotent skip must read as success; got '$_hf_l'"; failures=$((failures+1)); }
+
+  # HF-3 — AC-3 control: dry-run and not-yet-created stay distinct from each other AND from the skip.
+  _st_arm HF HF-3; [[ "$(_hf_field dry-run '')" != "$(_hf_field '' '')" && "$(_hf_field dry-run '')" != "$_hf_l" && "$(_hf_field '' '')" != "$_hf_l" ]] || { echo "FAIL: HF-3 (AC-3) — dry-run, not-yet-created and the idempotent skip must be three distinct lines"; failures=$((failures+1)); }
+
+  # HF-4 — CIAC-2 polarity over the whole partition: no success as N/A or failure; no failure as a skip.
+  _st_arm HF HF-4; for _hf_v in created existing-open resumed-already-merged skipped-as-idempotent; do
+    _hf_l="$(_hf_field "$_hf_v" 5769)"
+    [[ "$_hf_l" != *"N/A"* && "$_hf_l" != *"FAILED"* && "$_hf_l" != *"not created"* ]] || { echo "FAIL: HF-4 — success outcome '$_hf_v' renders as non-success: '$_hf_l'"; failures=$((failures+1)); }
+  done
+  _hf_l="$(_hf_field failed 5769)"
+  [[ "$_hf_l" == *"FAILED"* && "$_hf_l" != *"skipped"* && "$_hf_l" != *"none needed"* ]] || { echo "FAIL: HF-4 — the failed outcome must never read as a skip: '$_hf_l'"; failures=$((failures+1)); }
+
+  # HF-5 — the #7182 seam: a run halted at phase 5 names WHERE, and is never dry-run or N/A wording.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  mark_phase "create_chore_branch" "FAIL" "git checkout chore/v9.84-stage-13-corpus-update exited 128: refused"
+  _hf_l="$(_hf_field '' '')"
+  _st_arm HF HF-5; [[ "$_hf_l" == '**Chore PR:** not created — the run halted at create_chore_branch (FAIL) before create_chore_pr' ]] || { echo "FAIL: HF-5 — a run halted at create_chore_branch must say so in the header; got '$_hf_l'"; failures=$((failures+1)); }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  mark_phase "zz_hf_probe" "PASS" "seeded by group HF"
+
+  # HF-6 — PARTITION PARITY (structural): every value the production region assigns to
+  #        CHORE_PR_OUTCOME has an arm in _chore_pr_header_field. A new phase-11 outcome
+  #        without a rendering fails here, naming itself.
+  _hf_prod="$(/usr/bin/sed -n '1,/^self_test() {/p' "${BASH_SOURCE[0]}" || true)"
+  _hf_set="$(/usr/bin/grep -oE 'CHORE_PR_OUTCOME="[a-z-]+"' <<<"$_hf_prod" | /usr/bin/sed -E 's/^CHORE_PR_OUTCOME="([a-z-]+)"$/\1/' | /usr/bin/sort -u || true)"
+  _hf_arms="$(/usr/bin/awk '/^_chore_pr_header_field\(\) \{$/{f=1} f{print} f&&/^\}$/{exit}' "${BASH_SOURCE[0]}" | /usr/bin/grep -oE '^[[:space:]]+[a-z-]+\)' | /usr/bin/tr -d ' )' | /usr/bin/sort -u || true)"
+  _st_arm HF HF-6; [[ "$(grep_count -E . <<<"$_hf_set")" -ge 6 ]] || { echo "FAIL: HF-6 anti-vacuity — found fewer than 6 CHORE_PR_OUTCOME assignments in the production region; the parity check would be vacuous"; failures=$((failures+1)); }
+  _hf_miss=""
+  for _hf_v in $_hf_set; do /usr/bin/grep -qxF "$_hf_v" <<<"$_hf_arms" || _hf_miss="${_hf_miss} ${_hf_v}"; done
+  [[ -z "$_hf_miss" ]] || { echo "FAIL: HF-6 — phase 11 can record outcome(s)${_hf_miss} that the header does not render"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF "zz-not-an-outcome" <<<"$_hf_arms" && { echo "FAIL: HF-6 control — the arm extraction matched a fabricated value; the parity check cannot detect a missing arm"; failures=$((failures+1)); }
+
+  # HF-7 — an unknown value renders VISIBLY unrecognised, never as a plausible state.
+  _hf_l="$(_hf_field zz-not-an-outcome 5769)"
+  _st_arm HF HF-7; [[ "$_hf_l" == "**Chore PR:** unrecognised outcome 'zz-not-an-outcome' (see Phase Outcomes)" ]] || { echo "FAIL: HF-7 — an unknown outcome must render as unrecognised; got '$_hf_l'"; failures=$((failures+1)); }
+
+  # HF-8 — END TO END on the one phase-11 path that needs no network: the REAL phase in
+  #        --dry-run records DRY-RUN and outcome dry-run, and the header then names the SAME outcome.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  MODE="dry-run"; CHORE_PR_OUTCOME=""; CHORE_PR_NUMBER=""
+  phase_create_chore_pr >/dev/null 2>&1 || true
+  _hf_l="$(/usr/bin/grep -E '^\*\*Chore PR:\*\* ' <<<"$(generate_markdown_report 2>/dev/null)" || true)"
+  _st_arm HF HF-8; [[ "$(get_phase create_chore_pr)" == DRY-RUN\|* && "$CHORE_PR_OUTCOME" == "dry-run" && "$_hf_l" == '**Chore PR:** not created — dry-run' ]] || { echo "FAIL: HF-8 — the dry-run phase row and the header must name the same outcome; got row='$(get_phase create_chore_pr)' outcome='$CHORE_PR_OUTCOME' header='$_hf_l'"; failures=$((failures+1)); }
+
+  # HF-8b — THE JSON TWIN carries the SAME partition (Plan amendment 1 items 7 and 11): for each of
+  #          the seven states, --json's chore_pr_outcome names the recorded outcome (empty renders
+  #          not-yet-created), and chore_pr stays the number or null. The skip carries no number, so
+  #          its chore_pr is null while its outcome still names a success.
+  _hf_json_bad=""
+  OUTPUT="json"
+  _st_arm HF HF-8b; for _hf_v in created existing-open resumed-already-merged skipped-as-idempotent dry-run failed ""; do
+    _hf_n=""; [[ "$_hf_v" == created || "$_hf_v" == existing-open || "$_hf_v" == resumed-already-merged ]] && _hf_n="5769"
+    CHORE_PR_OUTCOME="$_hf_v"; CHORE_PR_NUMBER="$_hf_n"
+    _hf_l="$(generate_json_report 2>/dev/null || true)"
+    /usr/bin/python3 - "$_hf_l" "${_hf_v:-not-yet-created}" "$_hf_n" <<'PY' >/dev/null 2>&1 || _hf_json_bad="${_hf_json_bad} ${_hf_v:-<empty>}"
+import sys, json
+d = json.loads(sys.argv[1])
+want_oc, want_pr = sys.argv[2], sys.argv[3]
+assert d.get("chore_pr_outcome") == want_oc, (d.get("chore_pr_outcome"), want_oc)
+assert d.get("chore_pr") == (int(want_pr) if want_pr else None), (d.get("chore_pr"), want_pr)
+PY
+  done
+  OUTPUT="markdown"
+  [[ -z "$_hf_json_bad" ]] || { echo "FAIL: HF-8b — the JSON twin's chore_pr_outcome does not carry the recorded outcome for:${_hf_json_bad}"; failures=$((failures+1)); }
+
+  _st_witness HF 9
+  OUTPUT="$_hf_s_out"; CHORE_PR_NUMBER="$_hf_s_pr"; CHORE_PR_OUTCOME="$_hf_s_oc"; MODE="$_hf_s_mode"; NO_MERGE="$_hf_s_nm"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # ── Test AI: phase_action_item_gate (Procedure 7a HARD GATE, #4439) ─────────
@@ -16420,6 +16530,7 @@ EOF
   _st_claim 4e-c-j "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT; #6255, arms c-j — this clause ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when the arms leave no witness: TERMINAL STATES — (e) an ALREADY-MERGED PR PASSes on the FIRST read with ZERO merge attempts and its detail carries the elapsed figure AC-4 is graded on, which no earlier version of this phase emitted at all / (f) a CLOSED-unmerged PR FAILs and its detail NAMES the closed-without-merging case, driven on the deliberately MERGEABLE-looking closed shape because the CONFLICTING one trips the pre-existing arm by accident, and asserted on the detail because a bare FAIL is satisfied by the PRE-FIX timeout path / (g) THE PER-ITERATION PIN: a merge landing MID-POLL is recognised on the SECOND read, so a pre-loop-only implementation passes (e) and fails here — budgeted at MERGE_TIMEOUT=2 because the bound admits ceil(TIMEOUT/STEP) iterations and a 1/1 arm would redden against a CORRECT implementation / RE-PROBE — (h) a failed gh pr merge over a PR that DID merge PASSes with the merge ATTEMPTED once and a detail naming the unobserved-merge case, (h2) its NEGATIVE CONTROL: the same failed merge over a STILL-OPEN PR must still FAIL, without which an implementation that PASSes on any merge failure satisfies (h) / (i) THE WIDTH PIN over the shipped text of the one shared reader, three-field --json list and three-field --jq template, behind an anti-vacuity floor on the extraction and TWO specificity controls on constructed FOUR-field lines that both needles must reject / BUDGET EXHAUSTION — (j) AC-2's timeout limb, which every arm above leaves ungraded: a PR BLOCKED on every read must spend the budget and then FAIL with a detail NAMING the timeout ('merge state still=') and ZERO merge attempts, asserted on the detail because a bare FAIL is satisfied by (f)'s CLOSED arm and by the CONFLICTING HALT, and on the merge counter because removing the post-loop guard falls straight through to gh pr merge and launders the spent budget into a PASS — measured: with that guard replaced by 'if false' the whole suite stayed at exit 0 / and every arm c-j counts BOTH pr view and pr merge, because post-fix a PASS is reachable through the terminal arm and no longer proves on its own that a merge was attempted)"
   _st_claim CB "  phase_create_chore_branch fail-loud validated (#7182, group CB — 10 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): CB-1 create path PASS with HEAD read back / CB-2 a FREE existing branch SKIPPED with HEAD on it, the RED arm's control / CB-3 a same-worktree re-run converges, the header's phase-5 pin / CB-4 THE RED ARM: a branch HELD by a second worktree FAILs with rc 3 carrying git's refusal (holder named) and HEAD not moved / CB-5 that detail is one pipe-free line with a holder path under HOME rendered <home> / CB-6 the two SHIPPED dispatch lines, executed with the real phase: held → exit 3 and phase 6 never runs / CB-7 its sensitivity control: free → phase 6 runs / CB-8 AC-3: no '|| true' anywhere in the phase, with a pre-fix control / CB-9 class guard: zero success verdicts written before a swallowed git op across the production region, with sensitivity and specificity fixtures / CB-10 the shared projection's whole vocabulary on one input — CR and LF to spaces, '|' to '/', the repository root to <repo> and then HOME to <home> — redacted BEFORE the 800-character cap, so a home path straddling character 800 renders <home> and leaves no path fragment, with the arm's predicate shown on every run to reject a cap-first projection, a raw '|' and HOME redacted before the repository root"
   _st_claim CR "  phase_create_chore_pr resumes over its own merged chore PR (#7436, group CR — 16 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): CR-1 CIAC-3's runtime arm — a MERGED, branch-deleted PR with a STALE origin/main resolves to resumed-already-merged through the owner-qualified REST read (state=all) with no GraphQL call, no create and no branch re-creation, containment proven against the PR's own refs/pull head, and phase 12 then renders its MERGED terminal-PASS arm on the first read with zero merges (AC-2 reached, not present) / CR-2 the FRESH-ref path through the zero-commit guard reaches the SAME arm with no GraphQL call / CR-3 control: outputs on main with NO PR keep the idempotent skip / CR-4 AC-3 never-created reaches the create and fails loud / CR-5 AC-3 a merged PR on another version's head is invisible / CR-6 CLOSED-unmerged leads to a fresh create, never to done / CR-7 containment: a commit made after the merge is not in the merged PR's head, so it FAILs with nothing pushed or created / CR-8 an OPEN PR is reused unchanged / CR-9 CIAC-3 static: no head-keyed --state open chore-PR lookup in the production region, by regex so this file never carries the plan's literal needle, with a control fixture / CR-10 a failed push FAILs before any create / CR-11 an unreadable partition FAILs carrying the host's message, never reads as none / CR-12 a SQUASH merge, whose chore commit is not an ancestor of main, still resumes: containment is against the PR's own head / CR-13 SECURITY: a fork's same-named OPEN PR never binds, on the zero-commit path or the main path / CR-14 the zero-commit guard reuses an OPEN PR instead of reporting none needed / CR-15 a push rejected only because the remote head is AHEAD of the local tip is not a failure / CR-16 phase 11's REST reader and phase 12's reader agree on open, merged and closed-unmerged PRs"
+  _st_claim HF "  the report header's chore-PR field renders every outcome phase 11 records (#5769, group HF — 9 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): HF-1 CIAC-2's runtime limb — each of the seven recorded states renders its own exact line, seven distinct lines, read through the real report / HF-2 AC-2 an idempotent skip on an --apply run reads as a success, never N/A, dry-run or FAILED / HF-3 AC-3 dry-run, not-yet-created and the idempotent skip are three distinct lines / HF-4 polarity over the partition: no success renders as N/A, FAILED or not created, and the failed outcome never renders as a skip / HF-5 the #7182 seam: a run halted at create_chore_branch names where it halted, never dry-run or N/A wording / HF-6 partition parity: every value the production region assigns to CHORE_PR_OUTCOME has an arm in the renderer, with an anti-vacuity floor of six and an extraction control / HF-7 an unknown value renders visibly unrecognised, never as a plausible state / HF-8 end to end on the real phase in --dry-run: the phase row, the recorded outcome and the header name the same outcome / HF-8b the JSON twin's chore_pr_outcome carries the same seven states, with chore_pr the number or null"
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
@@ -16439,7 +16550,7 @@ EOF
   _st_claim 4h-e-j "  §5.1 empty-body guard + conformance-fixture binding validated (#4912, group 4h-e..j — six arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): (e) an EMPTY strip aborts the EDIT path and marks publish FAIL, asserted on the STUB'S ARGV FILE — gh release edit must never have been INVOKED, because reporting after an irreversible overwrite is a report and not a guard, and GitHub keeps no Release-body history to revert / (f) the ANTI-VACUITY twin for (e) over the SAME stub and version with a well-formed note: the edit must be REACHED, the H1 must survive the strip and the frontmatter must NOT — without it (e) is satisfied by a stub that cannot invoke gh at all, and the raw-YAML-publish defect goes ungraded / (g) the CREATE path is the second call site and takes the same rule, asserted on its own argv file rather than on (e)'s / (h) the anti-vacuity twin for (g), same shape, so neither empty-body arm can pass by never reaching gh / (i) the sourced shell transform is bound to the SAME committed fixture that binds both Python mirrors, resolved from SCRIPT_DIR and never REPO_ROOT because the arms above reassign REPO_ROOT to a sandbox, behind a >=7-case iteration floor so a truncated or absent fixture cannot report clean by iterating zero times / (j) the TRANSFORM-PRESENT guard, graded on the DETAIL rather than on the verdict and that is the whole arm: with the guard removed an undefined function still yields an empty capture, so the empty-body backstop fires and all three verdict assertions pass on unguarded code — measured, not assumed — leaving the detail the only discriminator; the restore is then proven, else every later arm in the suite would be measuring an unset function / (k)(l)(m) THE TITLE DIMENSION, the arms that make AC-3's title-equality predicate an EXECUTED check rather than an echo inside a markdown fence: (k) SENSITIVITY — a canonical BODY with a stale posted title must still reach gh release edit carrying --title and the NOTE-DERIVED value, asserted on the stub's ARGV FILE because a phase can record any detail string it likes and only the argv shows what was sent; this is the exact input the pre-change no-op condition returned SKIPPED on, which is how a wrong title survived every close / (l) SPECIFICITY over the SAME fixture family with only the posted title changed to agree: the argv file must stay ABSENT and the token must stay SKIPPED — non-vacuous precisely because (k) proved this family CAN reach the edit, and pinning the token is what catches a withhold routed through _s1_outcome_override, which BOTH terminal mark_phase calls read and which would silently flip the no-op branch too / (m) WITHHOLD — a note with no usable H1 must still refresh the BODY while --title is ABSENT from the argv rather than empty (\`--title \"\"\` blanks the posted title, the one-way degradation the rule exists to prevent), and the outcome token must stay PASS: ADR-148 :91 forbids moving it, and phase 15.6 branches on pub_result != PASS, so a WARN here would report an edited Release as 'Surface 1 not emitted this run' and suppress the body-drift verdict on exactly the malformed-note input where it matters most. All three fixtures' view stubs are OPERAND-AWARE (--json body vs --json name); the undiscriminated shape they replaced returned the whole body as the posted title, which would have reddened (f) and graded (g)'s title dimension against a value no Release ever carries"
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  close-out report phase set is RECORD-DERIVED validated (#4773 — every recorded phase renders against a denominator parsed from this file's own mark_phase subjects (pre-fix: 3 missing — inject_velocity_field / append_release_learnings / audit_epic_rollup) / a phase in NO enumeration still renders (AC-2) / an unmarked name does NOT render (anti-vacuity) / post_gate_passage_proof renders AND is asserted definition-less, so a definition-derived set cannot silently drop it / a double-marked name renders ONE row carrying the FIRST result / the halted marker fires on a FAIL-terminated run and is absent on a clean one / DISPATCH<->RECORD cross-check: every dispatched phase is a record subject, with vacuity floors on both parses plus sensitivity and specificity arms — the one invariant no seeded arm can reach / JSON twin carries the same de-duplicated set with pre-existing keys intact)" >&2
-  echo "  Gate-Passage-Proof **Chore PR:** field renders ONCE on BOTH paths (#4322 — b1 POPULATED path, the path the pre-existing report arms never exercised: exactly one **Chore PR:** line carrying the number once, and the doubled form absent / b2 UNSET path, the previously-covered one, renders the fallback verbatim with no '#' / b3 SPECIFICITY on a NON-numeric fixture, because '#3697' contains '3697' so 'no bare number' is unfalsifiable on a numeric input: the value occurs exactly once on the line, counted in PURE BASH by length-delta rather than by grep_count -o, which counts LINES on this suite's BSD grep and so returns the PASS value on the doubled form — paired with the anti-vacuity control asserting the identical computation returns 2 over the pre-fix expansion / b4 EXECUTABLE SENSITIVITY: the pre-fix construct is expanded from a single-quoted source fixture and must BOTH reproduce the doubling AND be rejected by b1's matcher, without which b1's green result is uninformative / b5 REINTRODUCTION GUARD: the production region above self_test carries ZERO same-variable paired set/unset expansions on CHORE_PR_NUMBER, with an anti-vacuity control asserting the same matcher returns 1 on the known-bad source form, so the zero is a measurement rather than a broken probe / b6 the out-of-scope --no-merge deferral message's solitary set-arm is asserted unchanged in BOTH directions, so the fix did not generalize into a correct site / b7 AC-5: with the **Chore PR:** line stripped, two renders differing only in CHORE_PR_NUMBER are byte-identical, preceded by the anti-vacuity arm that the unstripped renders differ — b7 is invariant to a render-line revert BY DESIGN, so the executed mutation-kill set is b1/b3/b5)" >&2
+  echo "  Gate-Passage-Proof **Chore PR:** field renders ONCE on BOTH paths (#4322 — b1 POPULATED path, the path the pre-existing report arms never exercised: exactly one **Chore PR:** line carrying the number once, and the doubled form absent / b2 UNSET path (phase 11 never ran) renders the not-yet-created state verbatim with no '#' (#5769 retired the collapsed fallback) / b3 SPECIFICITY on a NON-numeric fixture, because '#3697' contains '3697' so 'no bare number' is unfalsifiable on a numeric input: the value occurs exactly once on the line, counted in PURE BASH by length-delta rather than by grep_count -o, which counts LINES on this suite's BSD grep and so returns the PASS value on the doubled form — paired with the anti-vacuity control asserting the identical computation returns 2 over the pre-fix expansion / b4 EXECUTABLE SENSITIVITY: the pre-fix construct is expanded from a single-quoted source fixture and must BOTH reproduce the doubling AND be rejected by b1's matcher, without which b1's green result is uninformative / b5 REINTRODUCTION GUARD: the production region above self_test carries ZERO same-variable paired set/unset expansions on CHORE_PR_NUMBER, with an anti-vacuity control asserting the same matcher returns 1 on the known-bad source form, so the zero is a measurement rather than a broken probe / b6 the out-of-scope --no-merge deferral message's solitary set-arm is asserted unchanged in BOTH directions, so the fix did not generalize into a correct site / b7 AC-5: with the **Chore PR:** line stripped, two renders differing only in CHORE_PR_NUMBER are byte-identical, preceded by the anti-vacuity arm that the unstripped renders differ — b7 is invariant to a render-line revert BY DESIGN, so the executed mutation-kill set is b1/b3/b5)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
   echo "  JSON report renders valid JSON" >&2
   _st_claim t7-usage "  usage block extractable and not truncated, exit-2 dispatch set named in the render (#5762, Test 7 — this line ENUMERATES the arm's limbs and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this arm when the limbs leave no witness): HEAD anchor 'Usage:' / TAIL anchor the exit-codes block's '3 = ' entry, which is the last line usage() renders, replacing the '--self-test' needle that bound at render row 4 and therefore covered nothing below it / LIMB C the exit-2 dispatch set EXTRACTED from the guarded top-level dispatch and asserted present in the rendered exit-2 entry, with an anti-vacuity floor on the extracted set, a floor-30 exit-3 control proving the extractor works, and a non-empty check on the rendered entry so the naming loop cannot pass over nothing"
