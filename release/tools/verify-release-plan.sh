@@ -84,6 +84,11 @@ readonly CLI_VERSION="0.2.1"
 # to vanish after a stdin-reading method cell now appear: that is the counters
 # becoming correct, not the contract changing. A later change in the same release
 # records itself here as a contributor to 4 -> 5 rather than bumping again.
+# NO BUMP IS OWED for retiring the classifier's dormant first argument. It took a
+# class value from a plan column and no caller ever supplied one, so removing the
+# parameter, its arm and the parser-side value resolution moves no row and adds no
+# record field, family value or verdict value: every emitted byte and every exit
+# code is unchanged.
 readonly SCHEMA_VERSION="5"
 
 # ---------------------------------------------------------------------------
@@ -307,7 +312,7 @@ OPTIONS
   -h, --help        Show this help and exit
   --version         Show CLI version + schema version and exit
 
-CHECK FAMILIES (dispatched by predicate-class hint, else method keyword)
+CHECK FAMILIES (dispatched from the Verification method cell alone: a declared route, else method keyword)
   per-issue      file existence + content assertions  (grep / test -f)
   integration    Cross-Issue Acceptance Criteria      (reads the plan's CIAC
                  section; runs each entry's declared method — SOLE runner)
@@ -468,12 +473,29 @@ _extract_section() {
   ' "$file"
 }
 
-# Classify a check record's family from a predicate-class hint + method keywords.
-# $1 = predicate-class-hint (may be empty), $2 = method string.
+# Classify a check record's family from its Verification method cell ALONE.
+# $1 = method string.
+#
+# THE METHOD CELL IS THE ONLY INPUT, AND THAT IS THE CONTRACT. A row this executor
+# is not the runner for is declared IN this cell, in the one declared-deferred form
+# step 0 reads — `[DEFERRED — <reason>]`, or "declared, verification deferred to
+# <runner>" — and nowhere else. `suite-skip` and `suite-fail` are runtime-suite
+# SUBTYPE tokens, for a row that is actually about a suite run; they are not a
+# general declaration, because an uppercase FAIL anywhere in such a method routes
+# the subtype to FAIL. A plan may carry a Predicate class column as a reader
+# annotation; it is not read here. A class hint was once accepted as a first
+# argument and never supplied by any caller, so that path was removed rather than
+# wired: wired ahead of the keyword arms it sent rows to an oracle that tested none
+# of their claims, and it would have let a class cell displace a runnable probe.
+#
+# THE RESIDUAL, DECLARED. Step 0 reads the WHOLE lowercased cell, so a deferred
+# phrase inside a backticked probe — the probe's own search pattern — is read as a
+# declaration and displaces that probe: the row grades SKIP declared-deferred and
+# its command never runs. {{ADR:a-rows-grading-route-is-declared-in-its-method-cell}}
+# records the residual and where it is resolved.
 classify_family() {
-  local hint method
-  hint="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
-  method="$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')"
+  local method
+  method="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
 
   # 0) Declared-deferred method → the honesty contract routes it to a family-
   #    agnostic SKIP (never a fabricated PASS, never a false ERROR). A method is
@@ -485,16 +507,7 @@ classify_family() {
       echo "deferred"; return ;;
   esac
 
-  # 1) Explicit predicate-class hint (enriched Stage-4 plan form) wins.
-  case "$hint" in
-    *integration*|*cross-issue*)          echo "integration";   return ;;
-    *regression*)                         echo "regression";    return ;;
-    *sync*)                               echo "sync";          return ;;
-    *runtime*|*suite*|*behavioral*)       echo "runtime-suite"; return ;;
-    *file-path*|*file-state*|*content*)   echo "per-issue";     return ;;
-  esac
-
-  # 2) Fallback: keyword-match the method string.
+  # 1) Keyword-match the method string.
   case "$method" in
     *cross-issue*|*ciac*|*integration*)                echo "integration";   return ;;
     *deploy.sh*--check*|*deploy*--check*|*byte-diff*|*byte-equivalent*|*unchanged*)
@@ -530,7 +543,7 @@ classify_family() {
     *suite-skip*|*suite-fail*)                                              echo "runtime-suite"; return ;;
   esac
 
-  # 3) Unclassifiable → the caller emits ERROR (fail loud; never drop a check).
+  # 2) Unclassifiable → the caller emits ERROR (fail loud; never drop a check).
   echo "unclassified"
 }
 
@@ -627,7 +640,7 @@ parse_verification_plan() {
     function reset_cols() {
       flush_unindexable()
       have_issue_col = 0; col_issue = 0
-      col_ac = 0; col_pred = 0; col_method = 0; col_expected = 0; hdr_n = 0
+      col_ac = 0; col_method = 0; col_expected = 0; hdr_n = 0
       block_row = 0
     }
     BEGIN { cur_issue = ""; reset_cols() }
@@ -722,7 +735,7 @@ parse_verification_plan() {
         if (h_hits >= 1) {
           is_header = 1
           have_issue_col = (h_issue > 0) ? 1 : 0
-          col_issue = h_issue; col_ac = h_ac; col_pred = h_pred
+          col_issue = h_issue; col_ac = h_ac
           col_method = h_method; col_expected = h_expected
           hdr_n = n
           # THE RESIDUAL, AND ITS DISCRIMINATOR. This header declares
@@ -768,15 +781,11 @@ parse_verification_plan() {
       }
       method   = (col_method   <= n) ? trim(F[col_method])   : ""
       expected = (col_expected <= n && col_expected > 0) ? trim(F[col_expected]) : ""
-      # NOTE — col_pred is resolved here and DELIBERATELY not emitted. The
-      # classifier accepts a predicate-class hint as its first argument and its
-      # single call site passes the empty string, so that branch is unreachable
-      # while 17 plans author the column that would feed it. Wiring it is a
-      # BEHAVIOUR change, not this repair: measured over the corpus it moves 42
-      # of 298 classifications, 9 of them between two live handlers, and it adds
-      # a field to this record contract. Left resolved and named so the next
-      # editor sees the seam rather than rediscovering it.
-      pred     = (col_pred     <= n && col_pred     > 0) ? trim(F[col_pred])     : ""
+      # A header cell naming a predicate is a SCHEMA WORD and nothing more: it
+      # counts toward header detection and toward the unindexable latch above.
+      # Its data cells are never read. A row declares how it is graded in its
+      # method cell, so this parser resolves no class value and hands the
+      # classifier none - a class column is a reader annotation.
       ac       = (col_ac       <= n && col_ac       > 0) ? trim(F[col_ac])       : ""
       issue    = have_issue_col && (col_issue <= n) ? trim(F[col_issue]) : cur_issue
       if (issue == "") issue = cur_issue
@@ -2070,7 +2079,7 @@ fcm_pattern_resolvable() {
 #
 # The git invocation is a NATIVE code path with a FIXED command. It does not route
 # through `eval_free_run`, and `git` MUST NOT be added to RUNNABLE_VERBS — that set
-# is closed on purpose (:363-371): a verification harness driven by an authored
+# is closed on purpose (see the RUNNABLE_VERBS doctrine above): a verification harness driven by an authored
 # artifact must not acquire a code-execution channel. This family reads authored
 # DATA and runs a fixed command; the allowlist governs authored COMMANDS. The
 # distinction is precisely why widening the verb set is unnecessary here.
@@ -2768,7 +2777,7 @@ main() {
       # collapses, so the marker is read at the position it was written to.
       case "$_pending" in
         parity-error|table-unindexable|method-cell-empty) family="$_pending" ;;
-        *) family="$(classify_family "" "$method")" ;;
+        *) family="$(classify_family "$method")" ;;
       esac
       verdict_observed="$(dispatch_check "$family" "$method" "$expected" "$plan_version")"
       verdict="$(printf '%s' "$verdict_observed" | cut -f1)"
