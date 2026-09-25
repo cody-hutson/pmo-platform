@@ -10,7 +10,7 @@ reversibility: CHEAP / Confidence HIGH — one revert of the single release merg
 ---
 # Release Plan — `closeout-verification-rows-consistent`
 
-**Milestone:** `closeout-verification-rows-consistent` (ms#395) · Stage-4 sub-task **#7682** = the approved plan (Parts 1–3), the Stage-4 gate **Decision Recorded** comment, the scaffolding record, the Stage-5 wave-shape and cross-release `--retro` ownership records, the **Collective Review** scope-lock with **Plan amendment 1** and its follow-up observation cards, the Stage-6 shape record and the Commit-0 pre-flight determinations · **#7685 · #7689 · #7693 · #7697 · #7701 · #7705 · #7709 · #7713 · #7717 · #7721** = the ten Stage-5 designs, each with its independent adversarial review and its lock record · **#7686** = the Stage-6 Engineering sub-task whose spoke (E1) authored this file.
+**Milestone:** `closeout-verification-rows-consistent` (ms#395) · Stage-4 sub-task **#7682** = the approved plan (Parts 1–3), the Stage-4 gate **Decision Recorded** comment, the scaffolding record, the Stage-5 wave-shape and cross-release `--retro` ownership records, the **Collective Review** scope-lock with **Plan amendment 1** and its follow-up observation cards, the Stage-6 shape record, the Commit-0 pre-flight determinations and the Stage-6 routing briefing's **D-Idempotence-Corpus** record with **Plan amendment 2** · **#7685 · #7689 · #7693 · #7697 · #7701 · #7705 · #7709 · #7713 · #7717 · #7721** = the ten Stage-5 designs, each with its independent adversarial review and its lock record · **#7686** = the Stage-6 Engineering sub-task whose spoke (E1) authored this file.
 
 **Version identity:** **versioned** — bump-class **`minor`**, provisional display **`v4.70`**. Recorded as a determination (not a click-gate) at the Stage-4 gate, where the rule computed `v4.69`. `egress-hook-batch` then claimed `v4.69` at its merge, so the hub's Commit-0 pre-flight re-derived `v4.70`, and the Commit-0 re-verify below re-ran both halves against fresh host state (DEV-1). The concrete `vX.Y` binds only at the Stage-12 atomic claim, so the plan file and the branch stay slug-primary while in flight and the Header `**Version**` cell carries the unresolved stamp placeholder.
 
@@ -20,7 +20,7 @@ reversibility: CHEAP / Confidence HIGH — one revert of the single release merg
 
 **Release class:** `novel` — re-rendered from the Stage-3 `routine` declaration at the Stage-4 D-ReleaseClass gate. Stage 9 review depth **Deep**. See § Release Class declaration.
 
-> **Provenance.** This file transcribes the Stage-4 Release Planning output posted on #7682 (Parts 1–3) and the Stage-4 gate **Decision Recorded** comment on it, with **Plan amendment 1** from the Collective Review applied as replacement text: where an amendment item changes plan text, the section carries the amended text, not both versions. It is reconciled to the ten Stage-5 lock records and to the Commit-0 pre-flight determinations. **Where a later disposition superseded a Stage-4 value, the transcribed section carries the ratified value and § Deviation Log records the delta with its authority.** Every thread comment consumed was `OWNER`-authored (Comment-Ingestion Trust Boundary).
+> **Provenance.** This file transcribes the Stage-4 Release Planning output posted on #7682 (Parts 1–3) and the Stage-4 gate **Decision Recorded** comment on it, with **Plan amendment 1** from the Collective Review and **Plan amendment 2** from the Stage-6 routing briefing applied as replacement text: where an amendment item changes plan text, the section carries the amended text, not both versions. It is reconciled to the ten Stage-5 lock records and to the Commit-0 pre-flight determinations. **Where a later disposition superseded a Stage-4 value, the transcribed section carries the ratified value and § Deviation Log records the delta with its authority.** Every thread comment consumed was `OWNER`-authored (Comment-Ingestion Trust Boundary).
 
 ---
 
@@ -90,9 +90,9 @@ Every element the Stage-4 gate determined that a named downstream consumer reads
 | # | Survival element | Carried at |
 |---|---|---|
 | 1 | `domain_practice` label (`source` · `date` · in-label `domain`; Form X, so no Mode-B rationale is required) with its rationale sentence | § Header |
-| 2 | File Change Matrix (machine-readable, fence-delimited), amended per Plan amendment 1 item 12 | § File Change Matrix |
+| 2 | File Change Matrix (machine-readable, fence-delimited), amended per Plan amendment 1 item 12 and Plan amendment 2 item 2 | § File Change Matrix |
 | 3 | Cross-Issue Acceptance Criteria (`CIAC-1..5`), CIAC-2 at seven states per item 11 | § Cross-Issue Acceptance Criteria |
-| 4 | Verification Plan (37 per-issue rows, amended per items 1–10, with the AC baseline) | § Verification Plan |
+| 4 | Verification Plan (38 per-issue rows over the 37 criteria, amended per Plan amendment 1 items 1–10 and Plan amendment 2 item 5, which gives #7182 AC-5 a second, corpus row; with the AC baseline) | § Verification Plan |
 | 5 | Release-version stamp manifest (the double-brace `RELEASE_VERSION` placeholder, named rather than reproduced) | § Header `**Version**` cell |
 | 6 | Stage Applicability Matrix | § Stage Applicability Matrix |
 | 7 | Release Class declaration | § Release Class declaration |
@@ -108,7 +108,7 @@ Every element the Stage-4 gate determined that a named downstream consumer reads
 | Slice | Issue | Problem | Size | Priority (as the card declares it) |
 |---|---|---|---|---|
 | 1 | #7437 | `cleanup-orphan-state.sh --dry-run` does not project the prune phase — 0 stale projected where apply prunes 1 | S | not declared on the card |
-| 2 | #7182 | close-out `create_chore_branch` reports SKIPPED for a checkout it failed to perform | S | P2 |
+| 2 · 2c | #7182 | close-out `create_chore_branch` reports SKIPPED for a checkout it failed to perform; slice 2c rewords the six corpus statements of the re-run claim the driver withdrew (Plan amendment 2) | M (S at Stage 4; re-sized by Plan amendment 2) | P2 |
 | 3 | #7436 | `automated-closeout.sh` cannot be resumed after its own chore-PR merge, so the MERGED terminal-PASS arm is unreachable | M (S at Stage 4; re-sized at the Collective Review) | not declared on the card |
 | 4 | #5769 | the close-out report header misdescribes a legitimately skipped chore PR on an apply run | XS | P4 |
 | 5 | #5910 | the Procedure 7a attestation is never recorded — the emitter omits a required flag and swallows its own failure | S | P1 |
@@ -118,13 +118,13 @@ Every element the Stage-4 gate determined that a named downstream consumer reads
 | 8 | #6892 | Close-Class-Telemetry is injected before the retro register is produced, so Indicators 1–2 can only read N/A | S | P3 |
 | 9 | #6257 | the `verify-release-plan.sh` FCM check emits a false FAIL when run after the release merges | M | not declared on the card |
 
-**Size:** raw **25** points (XS = 1 · S = 2 · M = 4, per `bundle-composition-doctrine.md` § 3 Step 5); effective **29** under `novel`'s × 1.15, kept under the recorded G3-15 rationale (§ Release Class declaration).
+**Size:** raw **27** points (XS = 1 · S = 2 · M = 4, per `bundle-composition-doctrine.md` § 3 Step 5); effective **31** under `novel`'s × 1.15, kept under the recorded G3-15 rationale as Plan amendment 2 item 4 extends it (§ Release Class declaration).
 
 **Acceptance criteria.** 37 across the ten cards, all of them in the `### Acceptance Criteria` checkbox form since the Stage-4 Tier-1 [ADJUST] converted the three cards authored in other forms. They were re-read at Commit 0 (§ Verification Plan → AC baseline). The criteria's single home is each issue body; § Verification Plan binds each one by ordinal and never restates it.
 
 **Members closed before Stage 4.** #4703 and #5768 were closed as already fixed on 2026-09-20 and listed OUT by that day's bundle amendment; the Stage-4 currency refresh then removed the milestone from both. Read at Commit 0, both are CLOSED and carry no milestone. They carry no work here and are referenced plainly, never as close targets.
 
-**Explicit non-scope.** #5586 (`telemetry-is-computable`) keeps the telemetry tool's own edits under D-Retro-Owner hold K. No skill file and no package change under the accepted re-home. See § File Change Matrix → Release-wide explicit non-scope.
+**Explicit non-scope.** #5586 (`telemetry-is-computable`) keeps the telemetry tool's own edits under D-Retro-Owner hold K. No release-hub skill file and no release-hub package change under the accepted re-home; the one skill edit and package rebuild in scope are release-executor's, in slice 2c under Plan amendment 2. See § File Change Matrix → Release-wide explicit non-scope.
 
 ### Stage-4 Phase A0 re-review (summary)
 
@@ -286,6 +286,64 @@ Rule executions under the Stage-4 and Collective Review authorizations; none of 
 | **Baseline** | Release branch base `1c3f17db`; Stage-4 pin `8e0ee084`. 26 commits and 13 files landed since the pin, all from `egress-hook-batch`'s merge and its Stage-12 chore; none is in this release's write set, so the designs' line citations stand | Holds — 26 commits, 13 files, **0** in the write set; one read-only input, `RELEASE_LOG.md`, moved (§ Baseline pin, DEV-3) |
 | **Editability currency** | Every card stays `unconstrained`. Plan amendment 1 changed four cards' write sets: #7437 (+ `stage-13-close.md`); #7465 (+ its ADR and the generated release-ADR index); #5284 (+ its ADR, the ADR-076 pointer and the index; − `hub-spoke-bridge.md`); #6892 (+ `close-class-telemetry.md`; − `compute-close-class-telemetry.sh`). Stage-4 § 5.9 was re-run over those paths at `1c3f17db`; neither control hook has changed since the Stage-4 read at `8e0ee084`. This refresh was owed at the Collective Review turn and was recorded before any Stage-6 brief | Holds — § Implementation Sequence → Agent-Editability Read (DEV-4) |
 
+### Stage-6 routing briefing — D-Idempotence-Corpus, with Plan amendment 2 (operator, 2026-09-25)
+
+Rendered by the operator at the Stage-6 routing briefing after spoke E2's slices 2–4, and recorded on #7682 (an `OWNER`-authored comment). It widens #7182 by one slice, 2c, which Engineering spoke E2b lands after slice 4 and before slice 5.
+
+| Decision | Options | Recommended | Chosen | Delta |
+|---|---|---|---|---|
+| D-Idempotence-Corpus | B: fix the two `stage-13-close.md` sites in slice 6, and file a card for the other four · A: file a card for all six · C: widen this release to all six | B | **C — widen this release to all six** | diverged |
+| Usage-window band before the next launch | fresh · partial · near-tail | — (operator input) | **fresh** | — |
+
+**The finding** (verbatim). After slices 2 and 3, the close-out driver's header withdraws the blanket claim that every phase is idempotent. It now lists only the re-run behaviour its `--self-test` pins: phase 5, and phase 11. Six corpus statements, in five files, still restate the withdrawn claim. The hub read all six at `origin/main`.
+
+#### Plan amendment 2 — replaces the corresponding plan text
+
+The items below are verbatim. Each **replaces** the plan text it names, and the sections of this file carry the amended text: § Scope and § Release Class declaration (item 4), § File Change Matrix and § Contention Map (item 2), § Implementation Sequence → Agent-Editability Read (item 3), § Verification Plan (item 5), § Operational Deployment Manifest with the deploy-target sentences of § Delivery Strategy and § Rollback Strategy (item 6), and § Implementation Sequence (item 7). Item 1 is the slice itself.
+
+1. **#7182 AC-5, widened (slice 2c).**
+   - The six statements are reworded to the driver's framing: re-running the close-out after a halt is the supported recovery, and the driver asserts re-run behaviour only where its `--self-test` pins it, as listed in its header and `--help`.
+   - The sites are:
+     - `release/governance/release-process.md`, the automated close-out paragraph;
+     - `release/skills/release-executor/SKILL.md`, Mode D's Retry branch;
+     - `release/references/pipeline/stage-13-close.md`, Phases A7 and A8;
+     - `release/references/how-to/hub-spoke-bridge.md`, the merge-ahead close-out paragraph;
+     - `core/schemas/gate-criteria-spec.md`, the G-CL3 remedy.
+   - Each site is reworded in its own voice. None is deleted.
+2. **File Change Matrix.**
+   - Adds `release/governance/release-process.md  edit`, `release/skills/release-executor/SKILL.md  edit` and `core/schemas/gate-criteria-spec.md  edit`.
+   - Adds `packages/release-executor.skill  edit` and `packages/release-executor.skill.sha256  edit`. These are build output of the skill, produced by `build-skill-packages.sh` and never hand-edited.
+   - Adds `release/references/how-to/hub-spoke-bridge.md  edit`, which leaves the non-scope block. C5 is still not retired; this edit has a different basis.
+   - The `stage-13-close.md` row's label gains #7182's Phase A7 and A8 sites.
+3. **Agent-Editability Read.**
+   - `release/skills/release-executor/SKILL.md` meets all three conjuncts: it matches the scope regex, the skill carries the arming key, and it is absent from the one-entry exemption list. Its class is therefore **`sanctioned-session-required`**, with execution path `sanctioned-session: pmo-skill-editor Mode A`.
+   - The session is minted by `core/deploy/tools/start-skill-editor-session.sh release-executor`. The skill edits are batched inside its 30-minute window, and the commit carries a `Skill-Editor-Audit-Trail:` trailer.
+   - The two package rows take the class of their source. The other four paths are `unconstrained`.
+   - #7182's card class becomes `sanctioned-session-required`. The two control hooks are unchanged since the Stage-4 read.
+4. **Size.** #7182 moves from S to M. The raw total is 27 and the effective total is 31 (× 1.15), six over the G3-15 ceiling. The recorded keep-with-rationale extends: one tool and one cause class, and the sweep keeps the release's documentation consistent with the tool it ships.
+5. **Verification Plan.**
+   - A new row, #7182 AC-5 (corpus): a named read of the six sites, plus a phrase probe over the five files for the withdrawn claim's phrasings.
+   - Its control is the same probe at `8e0ee084`.
+   - Expected: each site carries the qualified framing, and the probe reads 0 where the control reads the pre-fix count.
+6. **Operational Deployment Manifest.** It gains the `release-executor` skill, deployed with its package by `./deploy.sh --deploy` after merge. Package freshness is asserted in the same PR.
+7. **Implementation Sequence.** Slice 2c (#7182) lands next, through spoke E2b, before slice 5.
+
+#### Authorization-scope enumeration (verbatim)
+
+This decision covers:
+- **Slice 2c on the release branch.** The six rewordings; the skill edit inside a sanctioned session; the package rebuild; Plan amendment 2 transcribed into the plan, with its deviation rows.
+- **The hub's bookkeeping.**
+  - This record and its event rows.
+  - #7690 reopened for slice 2c, with its editability stamp refreshed from the amended row.
+  - #7182's size label moved from S to M.
+  - The milestone description's Scope table updated.
+
+It does **not** cover:
+- any change to the driver's behaviour;
+- any corpus statement beyond the six (E2's broader read found no seventh);
+- deploying the skill before merge;
+- the phase-11 dry-run prediction wording, which goes to its own card.
+
 ---
 
 ## Implementation Sequence
@@ -299,13 +357,14 @@ One branch (`release/closeout-verification-rows-consistent`), P0, slices in orde
 | 2 | chore branch fails loud | #7182 | `automated-closeout.sh` (phase 5, header `:16`, self-test) | Earliest phase touched. It settles the idempotence claim #7436 also bears on; item 10 widens the sweep to the Deferred follow-up text |
 | 3 | resume across the chore-PR merge | #7436 | `automated-closeout.sh` (phase 11, self-test) | Its fixture traverses phase 5. It defines the outcome partition step 4 renders. Item 4 binds it (size M) |
 | 4 | report header chore-PR field | #5769 | `automated-closeout.sh` (`:7580`, the JSON report twin, self-test `:14069-14188`) | Consumes step 3's partition. The collapsed-string pins change in the same commit. Items 7 and 11 bind it |
+| 2c | the corpus's blanket re-run claim reworded to the driver's framing | #7182 | `release/governance/release-process.md` (governance file) · `release/skills/release-executor/SKILL.md` (Mode D's Retry branch, in a pmo-skill-editor Mode A session; `packages/release-executor.skill` and its `.sha256` sidecar rebuilt in the same commit) · `release/references/pipeline/stage-13-close.md` (Phases A7 and A8) · `release/references/how-to/hub-spoke-bridge.md` (merge-ahead close-out) · `core/schemas/gate-criteria-spec.md` (the G-CL3 pre-commit completeness remedy) | Plan amendment 2 (D-Idempotence-Corpus C) widens #7182 AC-5 from the driver's own text, which slices 2 and 3 qualified, to the six corpus statements that still restate the withdrawn claim. It lands after step 4 and before step 5 (item 7), out of slice order by design. Documentation and skill text only: no tool code changes |
 | 5 | attestation emitter | #5910 | `automated-closeout.sh` (12.9 emitter, call site, group AI) | Independent. Placed here to keep the 12.x region together. Item 5 binds it |
 | 6 | 15.55 deferral/prediction + declared post-merge membership | #7465 | `automated-closeout.sh` (13 / 14 / 15.5 / 15.55 / 15.6, report Deferred section, self-test), `stage-13-close.md` Phase B note, the new record {{ADR:post-merge-phases-declare-their-no-merge-behaviour}}, and `release/ADRs/README.md` regenerated by `generate-adr-index.py --write` | Largest refactor of the shared file. It follows the resume fix so the follow-up it prescribes works (CIAC-3). Item 3 binds it; ADR-158 stays byte-untouched |
 | 7 | Phase C5 per D-PhaseC5 E2 | #5284 + #4768 | `stage-13-close.md` C5; the lock phase 15.2 `lock_milestone_threads` in `automated-closeout.sh`; the new record {{ADR:lock-at-close-is-a-close-out-phase-over-every-milestone-thread}}; the ADR-076 `superseded_by` pointer; `release/ADRs/README.md` regenerated | After step 6, so the new post-merge lock phase is declared through #7465's predicate from birth (CIAC-5). Items 1 and 2 bind it |
 | 8 | telemetry ordering + declared precondition | #6892 | `automated-closeout.sh` (6.8 + dispatch), `stage-13-close.md` § A7.2, `close-class-telemetry.md` § 3.2 | Serializes the dispatch-list and header edits after step 7. Cross-milestone coordination per D-Telemetry-Pair K, held at Stage 5; no edit to `compute-close-class-telemetry.sh`. Item 6 binds it |
 | 9 | FCM range + tree-presence discrimination | #6257 | `verify-release-plan.sh`, `tests/test_verify_release_plan.sh` | Last: it re-baselines on the sibling's merged verifier, follows that release's contract, and re-checks re-plan points R-P1..R-P7. Item 9 binds it; no `SCHEMA_VERSION` bump is owed |
 
-**Spoke mapping (D-Stage6-Shape A):** E1 — steps 0–1 · E2 — steps 2–4 · E3 — steps 5–6 · E4 — steps 7–8 · E5 — step 9, launched only after `verifier-grades-what-plans-declare` merges, and re-checking re-plan points R-P1..R-P7 against the merged verifier before its RED arms.
+**Spoke mapping (D-Stage6-Shape A):** E1 — steps 0–1 · E2 — steps 2–4 · E2b — step 2c (Plan amendment 2 item 7) · E3 — steps 5–6 · E4 — steps 7–8 · E5 — step 9, launched only after `verifier-grades-what-plans-declare` merges, and re-checking re-plan points R-P1..R-P7 against the merged verifier before its RED arms.
 
 **Landed.** Step 0 at `fa5c3fb8`. Step 1 at `898270d4` (1a — the RED arms), `d41acd9e` (1b — the fix, with the phase-16 comment and PASS note and the § Phase C4 sentence) and `69b07d96` (the prune projection's function name, DEV-24). Step 2 at `5a402ab4` (2a — the RED arms, group CB) and `72fce875` (2b — the fix: phase 5 reads its verdict from the checkout, the shared projection `_detail_one_line`, the header's idempotence claim and the report's `--no-merge` follow-up sentence), with `5a7b19f1` (CB-10 exercises the projection's whole vocabulary, DEV-25). Step 3 at `f78549b1` (3a — the RED arms, group CR) and `5227d3a0` (3b — the fix: phase 11 resolves its own chore PR over OPEN, MERGED and CLOSED through the owner-qualified REST binding `_host_chore_pr_candidates`, tests a merged PR's containment against that PR's own head, reads its push, and records every outcome in `CHORE_PR_OUTCOME`; DEV-27 to DEV-29). Step 4 at `99ccbc52` (4a — the RED arms, group HF, and the #4322 group's expected strings) and `eb7bd570` (4b — the fix: the header's chore-PR field renders the outcome phase 11 recorded, through `_chore_pr_header_field`, and the JSON twin carries the same partition as `chore_pr_outcome`; DEV-30). § Verification Evidence carries each slice's RED and GREEN observations and its C4 checks.
 
@@ -342,11 +401,24 @@ Transcribed from the Stage-4 derivation, controls read at commit `8e0ee084`, and
   - The exemption list resolves at the deployed hook directory's parent (`<deploy-root>/.claude/skill-editor-exemption-list.txt`): **present, 1 entry** (re-read at Commit 0). Sensitivity arm: `pmo-skill-refiner-selftest-canary` → 1. `release-hub` → 0.
 - **Classification probe at Commit 0:** the 11 write-set paths below, matched against the projected Tier-0 union and against `SKILL_SCOPE_RE` → **0** Tier-0 matches and **0** skill-scope matches. Controls on the same matchers: `release/governance/RELEASE_PROTOCOL.md` and `core/governance/OPERATIONS.md` match Tier-0; `release/skills/release-hub/SKILL.md` and `release/skills/release-hub/references/orchestration-playbook.md` match the skill scope.
 
+**Slice-2c re-read (Plan amendment 2 item 3)** — controls read at the branch tip `d21254fa` by Engineering spoke E2b, before any slice-2c write:
+
+- **Currency of the controls:** `git diff --name-only 8e0ee084 HEAD -- core/hooks/block-autonomy-ceiling.sh core/hooks/block-skill-direct-edit.sh` → **0** lines, and the same diff against `origin/main` (`35dbf418`) → **0** lines, so both hooks are byte-unchanged since the Stage-4 read. Control: `core/hooks/block-egress.sh` over the same window → 1 line.
+- **`SKILL_SCOPE_RE`, as read** (`core/hooks/block-skill-direct-edit.sh`): `SKILL_SCOPE_RE='(^|/)(operations|release|core|pmo-platform)/skills/[^/]+/(SKILL\.md|references?/.+\.md)$'` — unchanged from the Commit-0 read.
+- **The arming grep, as read:** `if [ -f "$SKILL_MD" ] && ! "$GREP" -qE '^skill_discipline_migrated_v10_2:[[:space:]]*true[[:space:]]*$' "$SKILL_MD"; then` followed by `exit 0  # not yet gated`.
+- **The exemption-list path, as read:** `readonly EXEMPTION_LIST="${HOOK_DIR}/../skill-editor-exemption-list.txt"`, which resolves at the deployed hook directory's parent (`<deploy-root>/.claude/skill-editor-exemption-list.txt`): **present, 1 entry**, `pmo-skill-refiner-selftest-canary`.
+- **The three conjuncts for `release/skills/release-executor/SKILL.md`:** (1) the path matches `SKILL_SCOPE_RE` (controls: `release/skills/release-hub/SKILL.md`, a `release-hub` references file and a `release-executor` references file match; the four corpus files, the two package paths and this plan do not); (2) the file carries **1** arming line (control: the canary's `SKILL.md` carries 0, so the reader discriminates); (3) an exact-line match of `release-executor` against the exemption list → **0** (controls: the canary → 1, `release-hub` → 0). **All three are true, which agrees with the hub's read.** The class is `sanctioned-session-required`, execution path `sanctioned-session: pmo-skill-editor Mode A`.
+- **Tier-0 floor:** the 8 slice-2c write-set paths against the projected union → **0** matches (controls: `release/governance/RELEASE_PROTOCOL.md` and `core/governance/OPERATIONS.md` match).
+
 | Card | Write-set path | Tier-0 ∩ | Skill-gate ∩ | Path class | Card class | Execution path |
 |---|---|---|---|---|---|---|
 | Commit 0 | `release/releases/plans/closeout-verification-rows-consistent_RELEASE_PLAN.md` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
 | #7437 | `release/tools/cleanup-orphan-state.sh` · `release/tools/automated-closeout.sh` (the phase-16 comment and PASS note) · `release/references/pipeline/stage-13-close.md` (one § Phase C4 sentence) | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
-| #7182 · #7436 · #5769 · #5910 | `release/tools/automated-closeout.sh` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #7182 (slice 2) | `release/tools/automated-closeout.sh` | no | no (conjunct 1) | unconstrained | sanctioned-session-required (Plan amendment 2) | ordinary Engineering spoke |
+| #7182 (slice 2c) | `release/skills/release-executor/SKILL.md` | no | **yes** (all three conjuncts) | sanctioned-session-required | sanctioned-session-required | sanctioned-session: pmo-skill-editor Mode A |
+| #7182 (slice 2c) | `packages/release-executor.skill` · `packages/release-executor.skill.sha256` (build output of the row above) | no | no (conjunct 1) | sanctioned-session-required (the class of its source) | sanctioned-session-required | rebuilt by `build-skill-packages.sh` into the same session's commit |
+| #7182 (slice 2c) | `release/governance/release-process.md` · `release/references/pipeline/stage-13-close.md` · `release/references/how-to/hub-spoke-bridge.md` · `core/schemas/gate-criteria-spec.md` | no | no (conjunct 1) | unconstrained | sanctioned-session-required | ordinary Engineering spoke; `release-process.md` under the governance-file editing protocol |
+| #7436 · #5769 · #5910 | `release/tools/automated-closeout.sh` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
 | #7465 | `release/tools/automated-closeout.sh` · `release/references/pipeline/stage-13-close.md` · the new record {{ADR:post-merge-phases-declare-their-no-merge-behaviour}} under `release/ADRs/` · `release/ADRs/README.md` (generated index) | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
 | #5284 + #4768 | `release/references/pipeline/stage-13-close.md` · `release/tools/automated-closeout.sh` · the new record {{ADR:lock-at-close-is-a-close-out-phase-over-every-milestone-thread}} under `release/ADRs/` · `release/ADRs/ADR-076-comment-author-association-trust-boundary.md` (its `superseded_by` pointer) · `release/ADRs/README.md` (generated index) | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
 | #6892 | `release/tools/automated-closeout.sh` · `release/references/pipeline/stage-13-close.md` · `release/references/standards/close-class-telemetry.md` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
@@ -354,7 +426,7 @@ Transcribed from the Stage-4 derivation, controls read at commit `8e0ee084`, and
 
 **Rows removed from the Stage-4 read.** The two rows that applied only if the #6892 re-home were declined — `release/skills/release-hub/references/orchestration-playbook.md` (`sanctioned-session-required`: conjunct 1 matches the scope regex, conjunct 2 true, conjunct 3 true) and `packages/release-hub.skill` (build output of that row) — are removed. The re-home stood at Stage 4, and Plan amendment 1 item 12 dropped both paths from the matrix. #6892's row also loses `compute-close-class-telemetry.sh`, dropped under hold K.
 
-**Card classes:** every card is `unconstrained`. No path is `tier-0-floored` or `sanctioned-session-required`. An `unconstrained` row means no control refuses the write; it does not mean the change is ungoverned.
+**Card classes:** every card is `unconstrained` except #7182, which Plan amendment 2 makes `sanctioned-session-required` through one path, `release/skills/release-executor/SKILL.md`, and the two build-output rows that take its class. No path is `tier-0-floored`. An `unconstrained` row means no control refuses the write; it does not mean the change is ungoverned.
 
 ---
 
@@ -409,7 +481,7 @@ Release-scoped: Stage 9 #7725 · Stage 10 #7726 (closed — compressed, git-nati
 
 ## File Change Matrix
 
-One path per line, `<path>  <VERB>`, fence-delimited for deterministic extraction. **Plan amendment 1 item 12 is applied in this commit** (authoring rules 3 and 5): every Stage-4 CONDITIONAL row resolved at or before the Collective Review, so each row whose condition fired is promoted here with its concrete path, and each row whose condition did not fire is dropped from the obligation set and carried in the separately labelled non-scope block (DEV-5 to DEV-13). The two decision records carry the numbers the Commit-0 pre-flight allocated against the mainline anchor 206; the literal number appears only in these path rows, and every prose citation uses the slug token.
+One path per line, `<path>  <VERB>`, fence-delimited for deterministic extraction. **Plan amendment 1 item 12 is applied in this commit** (authoring rules 3 and 5): every Stage-4 CONDITIONAL row resolved at or before the Collective Review, so each row whose condition fired is promoted here with its concrete path, and each row whose condition did not fire is dropped from the obligation set and carried in the separately labelled non-scope block (DEV-5 to DEV-13). The two decision records carry the numbers the Commit-0 pre-flight allocated against the mainline anchor 206; the literal number appears only in these path rows, and every prose citation uses the slug token. **Plan amendment 2 item 2 is applied at slice 2c's plan commit:** it adds three corpus rows, moves `release/references/how-to/hub-spoke-bridge.md` out of the non-scope block on a new basis, adds the two build-output rows of the `release-executor` skill, and gives the `stage-13-close.md` row #7182's Phase A7 and A8 sites (DEV-31).
 
 ```
 # ── Engineering Commit 0 (plan transcription) ──
@@ -421,11 +493,21 @@ release/tools/cleanup-orphan-state.sh  edit
 # ── #7182 / #7436 / #5769 / #5910 / #7465 / #6892 / #5284 — close-out driver (#7437: the phase-16 comment and PASS note only) ──
 release/tools/automated-closeout.sh  edit
 
-# ── #5284 + #4768 (C5) · #7465 (Phase B deferred-set note) · #6892 (§ Phase A7.2, re-homed) · #7437 (§ Phase C4 sentence) ──
+# ── #5284 + #4768 (C5) · #7465 (Phase B deferred-set note) · #6892 (§ Phase A7.2, re-homed) · #7437 (§ Phase C4 sentence) · #7182 (Phases A7 and A8, slice 2c) ──
 release/references/pipeline/stage-13-close.md  edit
 
 # ── #6892 — § 3.2 emit-mechanism sentence (normative; omits --retro) ──
 release/references/standards/close-class-telemetry.md  edit
+
+# ── #7182 slice 2c (Plan amendment 2) — the corpus's blanket re-run claim reworded to the driver's framing ──
+release/governance/release-process.md  edit
+release/skills/release-executor/SKILL.md  edit
+release/references/how-to/hub-spoke-bridge.md  edit
+core/schemas/gate-criteria-spec.md  edit
+
+# ── build output of release/skills/release-executor/SKILL.md — produced by build-skill-packages.sh, never hand-edited ──
+packages/release-executor.skill  edit
+packages/release-executor.skill.sha256  edit
 
 # ── #6257 — FCM range + tree-presence discrimination ──
 release/tools/verify-release-plan.sh  edit
@@ -456,16 +538,15 @@ core/hooks/block-skill-direct-edit.sh  READ
 
 ```
 release/tools/compute-close-class-telemetry.sh  NOT EDITED
-release/references/how-to/hub-spoke-bridge.md  NOT EDITED
 release/ADRs/ADR-158-dry-run-predicts-apply-asserts-mode-branch-placement.md  NOT EDITED
 release/skills/release-hub/references/orchestration-playbook.md  NOT EDITED
 packages/release-hub.skill  NOT EDITED
 ```
 
 - `release/tools/compute-close-class-telemetry.sh` — under D-Telemetry-Pair K, held at Stage 5, the tool-side edits belong to #5586 (DEV-10).
-- `release/references/how-to/hub-spoke-bridge.md` — C5 is enforced, not retired, so the retirement cascade does not fire (DEV-11).
+- `release/references/how-to/hub-spoke-bridge.md` — **moved into the matrix by Plan amendment 2 item 2, on a different basis.** DEV-11 still holds: C5 is enforced, not retired, so the retirement cascade does not fire, and nothing in the file changes on that account. The file is edited instead for #7182's slice 2c, which rewords the merge-ahead close-out paragraph's blanket re-run claim (DEV-31).
 - `release/ADRs/ADR-158-dry-run-predicts-apply-asserts-mode-branch-placement.md` — stays byte-untouched; #7465's decision is recorded in its own new record (DEV-12).
-- `release/skills/release-hub/references/orchestration-playbook.md` and `packages/release-hub.skill` — the #6892 re-home was accepted at Stage 4, so the release makes no skill edit and no package rebuild (DEV-13).
+- `release/skills/release-hub/references/orchestration-playbook.md` and `packages/release-hub.skill` — the #6892 re-home was accepted at Stage 4, so the release makes no release-hub skill edit and no release-hub package rebuild (DEV-13). The release's one skill edit and package rebuild are `release-executor`'s, in slice 2c under Plan amendment 2.
 - **New executables:** there are 0 `add` rows for a `*.sh`, so no `script-execution-allowlist.txt` companion row and no CI-wiring statement is owed.
 - **ADR numbers:** the two `add` rows carry the numbers the pre-flight allocated (anchor 206, +1 and +2). A number binds only at merge. The `verifier-grades-what-plans-declare` branch holds both numbers branch-only at Commit 0; whichever release merges second renumbers at its Stage-12 A.5.7 with `renumber-adr.py`, which rewrites these path rows, and `renumber-adr.py --stamp` resolves every slug token as the last step of the claim (R12).
 - **The generated index is edited only by its generator** in the slices that add a record, and `generate-adr-index.py --verify` → `COUNT 0` confirms it.
@@ -485,12 +566,13 @@ packages/release-hub.skill  NOT EDITED
 
 ### Contention Map
 
-**Within the release, by file** (Stage-4 probe P3: 7 of 10 records name `automated-closeout.sh` in their fix locus; amended per Plan amendment 1 item 12):
+**Within the release, by file** (Stage-4 probe P3: 7 of 10 records name `automated-closeout.sh` in their fix locus; amended per Plan amendment 1 item 12 and Plan amendment 2 item 2):
 
 | File | Cards |
 |---|---|
 | `release/tools/automated-closeout.sh` | #7182, #7436, #5769, #5910, #7465, #6892, #5284 (the lock phase, enforced under E2), and #7437 (the phase-16 comment and PASS note only) |
-| `release/references/pipeline/stage-13-close.md` | #5284 + #4768 (Phase C5 `:540-557`), #7465 (Phase B deferred-set note), #6892 (§ Phase A7.2 `:68`, after the re-home), #7437 (one § Phase C4 sentence) |
+| `release/references/pipeline/stage-13-close.md` | #5284 + #4768 (Phase C5 `:540-557`), #7465 (Phase B deferred-set note), #6892 (§ Phase A7.2 `:68`, after the re-home), #7437 (one § Phase C4 sentence), #7182 (the Phase A7 entry-precondition paragraph `:58` and the Phase A8 paragraph `:165`, slice 2c) |
+| `release/governance/release-process.md` · `release/skills/release-executor/SKILL.md` (with `packages/release-executor.skill` and its sidecar) · `release/references/how-to/hub-spoke-bridge.md` · `core/schemas/gate-criteria-spec.md` | #7182 (slice 2c) alone; no other card in this release edits them |
 | `release/tools/cleanup-orphan-state.sh` | #7437 |
 | `release/tools/verify-release-plan.sh` + `release/tools/tests/test_verify_release_plan.sh` | #6257 |
 | `release/references/standards/close-class-telemetry.md` | #6892 (§ 3.2) |
@@ -597,7 +679,7 @@ Hard edges: none (0 native edges; 0 external blockers).
 | R16 | Closed members #4703 / #5768 still carry the milestone: 6 planned points with no delivered work | L | L | **Resolved:** the milestone was removed from both under the Stage-4 approval (read at Commit 0) | 4 / 13 |
 | R17 | Parallelization Map absent, so Stage-9 A6.6 has no prior map to diff against | L | M | **Resolved:** the hub amended the milestone description, which now carries the map and item 13's coupling | 4 |
 
-**Rollback complexity:** LOW. It is one revert of one merge. The residue is host-state thread locks under E2 (R13) and a tag that is retained, never deleted (Tag Retention). There are no deploy targets under the accepted re-home.
+**Rollback complexity:** LOW. It is one revert of one merge. The residue is host-state thread locks under E2 (R13) and a tag that is retained, never deleted (Tag Retention). The one deploy target, the `release-executor` skill (Plan amendment 2 item 6), is re-synced by a re-deploy after the revert.
 
 ---
 
@@ -611,7 +693,7 @@ Hard edges: none (0 native edges; 0 external blockers).
   - It runs the Commit-0 version re-verify (fetch tags, recompute next-free) and `claim-version.sh --verify-stamp closeout-verification-rows-consistent`. All intra-repo links in the plan use the workspace-rooted `/…` form.
 - **Slices 1–9** follow the Implementation Sequence. Each is RED → fix → GREEN, re-runs the touched tool's self-test, and gets CIAC-1 at the end. There is no force-push, and there is no merge with any red check unread. Commit messages carry the `release(closeout-verification-rows-consistent):` prefix and reference the source card.
 - **PR body:** parser-clean. Close-family verbs adjacent to an issue number appear nowhere in the body: the ten content members are referenced with `References`, and they are transitioned to closed at Stage 13 by the release close-out's structured close, not by an auto-close keyword at merge (DEV-18). The two members already closed get a plain reference.
-- **Operational Deployment Manifest: none under the accepted re-home.** See § Operational Deployment Manifest.
+- **Operational Deployment Manifest: one row, under Plan amendment 2 item 6** — the `release-executor` skill, deployed with its package after merge and never before. See § Operational Deployment Manifest.
 - **Stage 13 (reflexive, R5).** This release's close runs the tools it modifies. Order: the tools' self-tests, then `--dry-run`, then `--no-merge --apply`, then merge, then resume `--apply` (the Success Indicator). The C5 cutover exempts this release, with a voluntary live-fire recommended.
 
 ---
@@ -640,6 +722,7 @@ Hard edges: none (0 native edges; 0 external blockers).
 | #7182 | AC-3 | named read of `phase_create_chore_branch` (`:1959-1982` at the pin) | no checkout exit status discarded · control: the same read at `8e0ee084` shows the swallowed checkout at `:1970` |
 | #7182 | AC-4 | self-test RED arm plus free-branch control in one run | RED aborts at `create_chore_branch`; control PASS |
 | #7182 | AC-5 | `grep -c -F '(sequenced; each idempotent — re-running is safe)' release/tools/automated-closeout.sh` plus a named read of the claim and of the Deferred follow-up text (item 10) | 0 if qualified (control at `8e0ee084` → 1), or 1 when upheld with arms covering phases 5 and 11; the Deferred follow-up text's blanket claim is reconciled the same way |
+| #7182 | AC-5 (corpus) | Plan amendment 2 item 5. A named read of the six sites — the automated close-out paragraph of `release-process.md`, Mode D's Retry branch in the `release-executor` skill, the Phase A7 entry-precondition and Phase A8 paragraphs of `stage-13-close.md`, the merge-ahead close-out paragraph of `hub-spoke-bridge.md`, and the G-CL3 pre-commit completeness remedy row of `gate-criteria-spec.md` — plus slice 2c's structured phrase probe: a python read of the five files that locates each site by its own opening text and reports, per site, (a) whether the withdrawn claim's phrasings are present (idempotent per phase, each idempotent, a re-run or re-entry called safe, the script or close-out called idempotent, a set of idempotent phases) and (b) whether the qualified framing is present (the supported recovery, `--self-test` and `--help` together). The probe's source and its runs are recorded in the Stage-6 output comment on #7690 and in § Verification Evidence | (a) absent at 6 of 6 and (b) present at 6 of 6, with every site's anchor unique · sensitivity control: the same probe at `8e0ee084` → (a) present at 6 of 6 · specificity control: the driver header's phase-5 and phase-11 re-run entries, its report sentence and three per-phase idempotence statements elsewhere → (a) 0 on each |
 | #7182 | AC-6 | `bash core/deploy/deploy.sh --check`, reading its `  FAIL:` lines against the pre-existing set at the release base | no `  FAIL:` line names a path in this FCM · control: the base run shows its pre-existing FAIL lines (instrument reads FAILs) |
 | #6892 | AC-1 | fixture close that produces a register; read the injected `**Close-Class-Telemetry:**` field. The five existing arms that pin phase 6.8 to PASS run on register-producing fixtures, or re-expect WARN on the missing-register path (item 6) | Indicators 1–2 carry computed values (D-Telemetry-Pair K, held at Stage 5: #6892 passes the resolved register path) |
 | #6892 | AC-2 | same fixture with no register | the field reads `N/A — no retro register found for <version>` · control: the AC-1 fixture → computed values |
@@ -666,7 +749,7 @@ Hard edges: none (0 native edges; 0 external blockers).
 
 `ac_baseline: { #7465: 5, #7437: 3, #7436: 3, #7182: 6, #6892: 3, #6257: 3, #5910: 4, #5769: 3, #5284: 4, #4768: 3, read_at: 8e0ee084, re-read: 1c3f17db }`
 
-- **Counts:** 37 criteria in total, unchanged at Commit 0.
+- **Counts:** 37 criteria in total, unchanged at Commit 0. Plan amendment 2 adds no criterion: it widens #7182 AC-5's verification scope, so AC-5 is bound by two rows above, the in-tool row and the corpus row. The card's AC-5 text is unchanged; the widening is carried by this plan.
 - **Form:** at Stage 4, 26 were in `### Acceptance Criteria` checkbox form; #7465 (5) used a numbered list, and #7436 / #7437 (6) used `## Acceptance` bullets. Tier-1 [ADJUST] 4 converted those 11 with their text unchanged, and the re-read at Commit 0 finds **37 of 37** checkbox criteria, each card carrying exactly one `### Acceptance Criteria` heading. Ordinals are therefore bound by the checkbox list. **Amending a criterion obliges updating its bound row in the same change.**
 - **Domain classification:** software, per the `domain_practice` label in § Header.
 
@@ -680,7 +763,7 @@ The checks below are the ones this plan and the Stage-6 C4 step already name; th
 - [ ] `bash core/deploy/deploy.sh --check`: no new `  FAIL:` line attributable to this release's paths (Check 14, doc links, runs inside it)
 - [ ] The plan-driven executor over this plan; `claim-version.sh --verify-stamp closeout-verification-rows-consistent` → exit 0 until the claim
 - [ ] ADR beats in slices 6 and 7: `python3 release/tools/generate-adr-index.py --verify` → `COUNT 0`; ADR-number integrity; ADR durability on the added records
-- [ ] Skill-package freshness: `build-skill-packages.sh --skills-for-paths`, paths on STDIN, names no skill
+- [ ] Skill-package freshness: `build-skill-packages.sh --skills-for-paths`, paths on STDIN, names only `release-executor` (slice 2c, Plan amendment 2), whose package and `.sha256` sidecar are rebuilt in the same PR; `deploy.sh --check-package-freshness` passes
 
 ---
 
@@ -714,8 +797,8 @@ The checks below are the ones this plan and the Stage-6 C4 step already name; th
 **`novel`** — re-rendered from the Stage-3 `routine` declaration at the Stage-4 D-ReleaseClass gate. Multi-trigger resolution: routine trigger (d) fails (D-PhaseC5 and D-Telemetry-Pair are release-specific, not recurring), and **novel trigger (b)** fires on D-PhaseC5 (≥ 1 D-class decision). Routine (b) also fails, because ADR-158 had 1 commit on `origin/main`; novel (c) now fires too, since two Stage-5 ADRs are authored.
 
 - **Differentiation posture:** Engagement **Standard** · Stage 9 review **Deep** · Stage 5 bias **ALL** · outcome window **30-day**.
-- **Size bound:** `effective_pts: raw 25 × 1.15 = 28.75 → 29 — ABOVE band 15-25 by 4`. At Stage 4 it read raw 23 × 1.15 = 26.45 → 26; #7436's S → M re-size at the Collective Review raised it.
-- **G3-15 disposition: keep, with rationale** — "ten cards share one tool and one cause class; a split doubles close-out-tool contention across two releases." Recorded at the Stage-4 gate and re-affirmed at the Collective Review.
+- **Size bound:** `effective_pts: raw 27 × 1.15 = 31.05 → 31 — ABOVE band 15-25 by 6`. At Stage 4 it read raw 23 × 1.15 = 26.45 → 26. #7436's S → M re-size at the Collective Review raised it to raw 25 → 29, and #7182's S → M re-size under Plan amendment 2 item 4 raised it to raw 27 → 31.
+- **G3-15 disposition: keep, with rationale** — "ten cards share one tool and one cause class; a split doubles close-out-tool contention across two releases." Recorded at the Stage-4 gate, re-affirmed at the Collective Review, and extended by Plan amendment 2 item 4: "one tool and one cause class, and the sweep keeps the release's documentation consistent with the tool it ships."
 - **Weights:** read from the documented default in `platform-config.toml.template [bundling].release_class_capacity_weights`.
 
 ---
@@ -736,10 +819,10 @@ The approved, hub-condensed statement, verbatim from the Stage-4 decision record
 
 ## Rollback Strategy
 
-1. **Unit:** revert the single release merge commit (D-C SINGLE). That restores all three tools, the stage spec, the standard's § 3.2 and the ADR surfaces together. CHEAP.
+1. **Unit:** revert the single release merge commit (D-C SINGLE). That restores all three tools, the stage spec, the standard's § 3.2, the ADR surfaces, and slice 2c's four corpus files and `release-executor` skill with its package, together. CHEAP.
 2. **Host-state residue:** under E2, thread locks applied by post-merge closes survive the revert. The inverse is a per-thread unlock (REST `DELETE …/lock`). The forward-only cutover limits this to closes after the merge.
 3. **Version tag:** retained, never deleted (Tag Retention). The rollback is recorded against it.
-4. **Deploy targets:** none under the accepted re-home, so there is nothing to re-deploy.
+4. **Deploy targets:** one, under Plan amendment 2 item 6 — the `release-executor` skill. After a revert, `./deploy.sh --deploy release-executor` re-syncs its deployed copy to the restored source.
 5. **Superseding ADR:** the record {{ADR:lock-at-close-is-a-close-out-phase-over-every-milestone-thread}} reverts with the PR, together with ADR-076's `superseded_by` pointer, and ADR-076 decision 3 stands unchanged. The record {{ADR:post-merge-phases-declare-their-no-merge-behaviour}} reverts the same way; ADR-158 was never touched.
 
 **Whole release:** a partial revert per slice; a full restore by reverting the merge; a forward fix preferred for anything well understood.
@@ -748,9 +831,13 @@ The approved, hub-condensed statement, verbatim from the Stage-4 decision record
 
 ## Operational Deployment Manifest
 
-**None under the accepted re-home.** Enumerated over the four `deploy.sh --deploy` classes after Plan amendment 1: 0 paths under any `skills/` tree, 0 under `packages/`, 0 under `core/rules/`, 0 under `core/hooks/`. The `release/tools/` scripts are neither rostered skills nor packages (v4.63 precedent), and the two decision records, the release-ADR index, `stage-13-close.md` and `close-class-telemetry.md` are repository-only surfaces with no deployed copy.
+**One row, under Plan amendment 2 item 6.** Enumerated over the four `deploy.sh --deploy` classes after Plan amendment 2: 1 path under a `skills/` tree (`release/skills/release-executor/SKILL.md`), 2 under `packages/` (its package and `.sha256` sidecar), 0 under `core/rules/`, 0 under `core/hooks/`. The `release/tools/` scripts are neither rostered skills nor packages (v4.63 precedent), and the two decision records, the release-ADR index, `stage-13-close.md`, `close-class-telemetry.md`, `release-process.md`, `hub-spoke-bridge.md` and `gate-criteria-spec.md` are repository-only surfaces with no deployed copy.
 
-**`deliverable_state: deployed-copy-synced`** for every card's deliverable — reached when its change is committed on the release branch, because the release declares no propagation target (the tools run from the repository, and no deployed copy exists to sync).
+| # | Target | Mechanism | When | Verification |
+|---|---|---|---|---|
+| ODM-1 | the `release-executor` skill — `release/skills/release-executor/` and `packages/release-executor.skill` | `./deploy.sh --deploy release-executor`: the S-2 copy to the Cowork install path and the user-local mirror (the primary checkout's post-merge hook runs the same targeted deploy for a merge to `main`) | after the release merges, never before: Plan amendment 2 does not cover a pre-merge deploy | by content, not by exit status alone: the deployed `SKILL.md` and references compared against the merged source, and `./deploy.sh --check` read for drift on the skill. Package freshness is asserted pre-merge in the same PR by `deploy.sh --check-package-freshness` |
+
+**`deliverable_state: deployed-copy-synced`** for every card's deliverable, reached when its change is committed on the release branch, because those deliverables declare no propagation target (the tools run from the repository, and no deployed copy exists to sync) — **except #7182's slice-2c skill edit**, whose propagation target is ODM-1. The second half of its exit condition, the Layer-2 copy synced per C3, becomes due at the post-merge deploy; until then that deliverable has not reached `deployed-copy-synced`. Slice 2c's four corpus files have no deployed copy and reach it on commit.
 
 **Schema migrations:** N/A — enumerated over {event-log rows, report fields, JSON report keys, plan and ADR frontmatter}. The JSON report changes (#7437's `pruned_tracking_refs` element type and its new `tracking_ref_enumeration` key; #5769's seven outcome states) have 0 in-repo consumers at the pin (#7437's design, probe P-1), and log rows stay append-only.
 
@@ -811,6 +898,12 @@ The approved, hub-condensed statement, verbatim from the Stage-4 decision record
 | **DEV-28** | **#7436 delivers sixteen CR arms where its design froze eleven.** The five added arms are the amendment's. CR-12: a squash merge whose chore commit is not an ancestor of main still resumes, because containment is tested against the PR's own head. CR-13: a fork's same-named pull request never binds, on the zero-commit path or the main path. CR-14: the zero-commit guard reuses an open PR. CR-15: a push rejected only because the remote head is ahead of the local tip is not a failure. CR-16: the two readers agree. CR-1 and CR-7 are re-targeted to the ancestry test, and the fixture keeps each merged PR's head at `refs/pull/<n>/head`, as the host does. The gh stub serves both readers from one table of pull requests and filters REST reads by owner the way the host does, so a lookup that drops the owner binds the fork row. The controls' outcome assertions are split from their behaviour assertions, so the RED run shows each control's behaviour passing on the unchanged phase | Plan amendment 1 item 4; the #7436 adversarial review FM-1, FM-3, FM-4, CD-1 and CD-2; the Stage-6 brief | **APPLIED** at `f78549b1`. The group declares sixteen arms at its witness call |
 | **DEV-29** | **Five implementation details go beyond the design text, all within item 4's intent.** The success detail's PR URL is routed through `_detail_one_line` like every other capture: `gh pr create` merges stderr, so a success can carry warning lines, and INT-2 forbids a raw PR URL in any detail. Both fetches, the containment read of `refs/pull/<n>/head` and the push-ancestry read of the remote branch, pass `--no-tags`, so each writes only `FETCH_HEAD`. The binding refuses a slug that is not `owner/repo`-shaped, so the owner qualifier can never degrade into an unqualified lookup. The containment FAIL names how many commits the merged head lacks. The header's phase-11 pin adds "whatever the merge method", and the outcome global's comment calls the global the one record of phase 11's outcome without claiming the report header renders it; slice 4 lands that | Plan amendment 1 item 4; INT-2 | **APPLIED — minor** at `5227d3a0` |
 | **DEV-30** | **#5769's JSON twin (Change 5, taken at the Collective Review) lands in its single-import form, and its arm enumerates all seven states.** The design added a separate `import os` line below `import sys, json`. The delivered heredoc carries one import line, `import sys, json, os`, which is the end state #7465's slice-6 edit asks for, so that edit is already done; applying it again is what would duplicate the import (S-12, and FM-6 in #7465's design). The design's HF-8b checked one state, the idempotent skip with a null number. The delivered HF-8b checks each of the seven states: `chore_pr_outcome` names the recorded outcome (empty renders `not-yet-created`) and `chore_pr` is the number or null. That is the JSON limb of CIAC-2 as amended (item 11). The group therefore declares nine arms, and its claim line enumerates HF-8b; the claim's wording is otherwise the design's in substance. An unused local the design declared (`_hf_succ`) is not carried | Plan amendment 1 items 7 and 11; S-12 | **APPLIED — minor** at `99ccbc52` (HF-8b and the claim) and `eb7bd570` (the import line) |
+| **DEV-31** | **Scope widened: #7182 AC-5 now covers six corpus statements of the re-run claim the driver withdrew (slice 2c).** The operator chose D-Idempotence-Corpus **C**, widen this release to all six, where the hub recommended **B**, fix the two `stage-13-close.md` sites in slice 6 and file a card for the other four. The choice diverges from the recommendation; it overrides no gate. The File Change Matrix gains three corpus rows and two build-output rows, and `hub-spoke-bridge.md` leaves the non-scope block on a new basis while DEV-11's basis (C5 is not retired) stands unchanged | The operator's D-Idempotence-Corpus decision and Plan amendment 2 items 1 and 2 (the Decision Recorded comment on #7682) | **APPLIED** — § Decision Record, § Scope, § File Change Matrix and § Contention Map at slice 2c's plan commit; the six rewordings land in slice 2c's content commits |
+| **DEV-32** | **#7182's card class changes from `unconstrained` to `sanctioned-session-required`.** One path in its widened write set, `release/skills/release-executor/SKILL.md`, meets all three conjuncts of the sanctioned-session gate, and the two package rows take its class. Slice 2c's re-read at `d21254fa` agrees with the hub's read on every conjunct, and both control hooks are unchanged since the Stage-4 read | Plan amendment 2 item 3 | **APPLIED** — § Implementation Sequence → Agent-Editability Read. The skill edit runs only inside a minted pmo-skill-editor Mode A session, and its commit carries the `Skill-Editor-Audit-Trail:` trailer |
+| **DEV-33** | **#7182 re-sized S → M: the release's raw total moves 25 → 27 and its effective total 29 → 31**, six over the G3-15 ceiling. The keep-with-rationale extends: one tool and one cause class, and the sweep keeps the release's documentation consistent with the tool it ships | Plan amendment 2 item 4; the hub moved #7182's size label under the decision's bookkeeping | **APPLIED** — § Scope and § Release Class declaration. The card reads `size:M` when read at slice 2c |
+| **DEV-34** | **Slice 2c lands out of slice order: after slice 4 and before slice 5**, not beside slice 2. Slices 2–4 had landed through spoke E2 when the routing briefing widened #7182, and landing 2c before slice 5 keeps the P0 serial order with spoke E3 launching after it | Plan amendment 2 item 7; D-Stage6-Shape A, extended by spoke E2b | **APPLIED** — § Implementation Sequence carries step 2c between steps 4 and 5 |
+| **DEV-35** | **Sub-task #7690 reopened for slice 2c.** The hub closed #7690 after consuming slice 2 (its Decision Recorded comment there) and reopened it for the widened AC-5, with its editability stamp refreshed to `sanctioned-session-required — sanctioned-session: pmo-skill-editor Mode A`. Read at slice 2c: OPEN, with that stamp in its body | The decision's hub bookkeeping (Plan amendment 2's authorization-scope enumeration) | **RECORDED** — slice 2c's output comment posts on #7690, which stays open for the hub |
+| **DEV-36** | **Plan sentences that Plan amendment 2 contradicts or leaves stale are reconciled in the same commit**, beyond the sections the amendment names: the opening milestone and provenance lines now name the amendment; the Commit-0 Survival Set's matrix and Verification Plan rows name it too; § Scope's non-scope sentence ("no skill file and no package change") is scoped to the release-hub re-home; the AC-baseline counts bullet states that AC-5 now has two rows and no criterion was added; the release-level skill-package freshness check no longer expects "names no skill"; and § Rollback Strategy's unit sentence and its rollback-complexity note now include the slice-2c files and the one deploy target. Each states the amended fact, and no other sentence changes. The deploy-target sentences of § Delivery Strategy and § Rollback Strategy are item 6's own, as the amendment record states | `core/disciplines/reconcile-dont-annotate.md`; Plan amendment 2 items 2, 5 and 6 | **APPLIED — minor** at slice 2c's plan commit |
 
 ---
 
