@@ -7807,6 +7807,35 @@ phase_audit_epic_rollup() {
 
 # ─── Phase 17/18: generate_report ────────────────────────────────────────────
 
+# The report header's chore-PR field (#5769). It RENDERS CHORE_PR_OUTCOME, the value
+# phase_create_chore_pr records at every exit (#7436), and derives nothing. The field
+# it replaces was a two-branch test on CHORE_PR_NUMBER alone, so an idempotent skip on
+# an --apply run rendered as a dry-run or a not-yet-created PR, neither of which it
+# was. One arm per recorded outcome: a success never renders as N/A, and a failure
+# never renders as a skip. A value this function does not know renders VISIBLY
+# unrecognised rather than as a plausible state; self-test group HF asserts that every
+# value phase 11 assigns has an arm here. Deliberately NOT named phase_*.
+_chore_pr_header_field() {
+  local _n="${CHORE_PR_NUMBER:-}" _last
+  case "${CHORE_PR_OUTCOME:-}" in
+    created)                echo "#${_n:-?} — created by this run" ;;
+    existing-open)          echo "#${_n:-?} — already open for this branch; reused" ;;
+    resumed-already-merged) echo "#${_n:-?} — already merged; resumed run" ;;
+    skipped-as-idempotent)  echo "none needed — skipped as idempotent; the close outputs were already on main" ;;
+    dry-run)                echo "not created — dry-run" ;;
+    failed)                 echo "FAILED at create_chore_pr — see Phase Outcomes" ;;
+    "")
+      # Phase 11 never ran: the run halted earlier. Name where, from the phase record.
+      _last=$(( ${#PHASE_NAMES[@]} - 1 ))
+      if [[ "$_last" -ge 0 && "${PHASE_RESULTS[$_last]}" == "FAIL" ]]; then
+        echo "not created — the run halted at ${PHASE_NAMES[$_last]} (FAIL) before create_chore_pr"
+      else
+        echo "not created — create_chore_pr did not run in this run"
+      fi ;;
+    *)                      echo "unrecognised outcome '${CHORE_PR_OUTCOME}' (see Phase Outcomes)" ;;
+  esac
+}
+
 generate_markdown_report() {
   local slug="$STATE_MILESTONE_SLUG"
   [[ -z "$slug" ]] && slug="$VERSION"
@@ -7818,7 +7847,7 @@ generate_markdown_report() {
 **Mode:** ${MODE}
 **Release PR:** #${PR_NUMBER}
 **Milestone:** ${slug} (#${MILESTONE})
-**Chore PR:** $([[ -n "$CHORE_PR_NUMBER" ]] && echo "#${CHORE_PR_NUMBER}" || echo "N/A — dry-run or not-yet-created")
+**Chore PR:** $(_chore_pr_header_field)
 
 ## State
 
@@ -7985,11 +8014,11 @@ generate_json_report() {
     is_first_phase_occurrence "$_pj_i" || continue
     _pj_rec+=("${PHASE_NAMES[$_pj_i]}" "${PHASE_RESULTS[$_pj_i]}" "${PHASE_DETAILS[$_pj_i]}")
   done
-  /usr/bin/python3 - "$RUN_TS" "$MODE" "$PR_NUMBER" "$VERSION" "$MILESTONE" "$slug" \
+  CHORE_PR_OUTCOME_JSON="${CHORE_PR_OUTCOME:-not-yet-created}" /usr/bin/python3 - "$RUN_TS" "$MODE" "$PR_NUMBER" "$VERSION" "$MILESTONE" "$slug" \
     "$STATE_LOG_ROW_STATE" "$STATE_MILESTONE_STATE" "$STATE_TAG_EXISTS" \
     "$STATE_CYCLE_TIME" "$OPEN_ISSUE_COUNT" "$CHORE_PR_NUMBER" "$OPEN_ISSUE_LIST" "$NO_MERGE" \
     "${_pj_rec[@]}" <<'PY'
-import sys, json
+import sys, json, os
 ts, mode, pr, version, milestone, slug, log_state, ms_state, tag, cycle, open_n, chore_pr, open_list, no_merge = sys.argv[1:15]
 issues = [int(x) for x in open_list.split("\n") if x.strip()]
 # Phase outcomes: argv[15] is the triple count, then flat (name, result, detail)
@@ -8013,6 +8042,7 @@ payload = {
     "release_log": {"row_state": log_state, "tag_present": bool(int(tag))},
     "cycle_time": cycle,
     "chore_pr": int(chore_pr) if chore_pr.isdigit() else None,
+    "chore_pr_outcome": os.environ.get("CHORE_PR_OUTCOME_JSON", "not-yet-created"),
     "d1_manual_close_candidates": {"count": int(open_n), "issues": issues},
     "deferred_under_no_merge": deferred,
     "phases": phases,
