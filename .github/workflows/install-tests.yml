@@ -830,14 +830,18 @@ jobs:
         # drift in the subject only when they are executed against it.
         #
         # WHY THIS JOB and not the closeout-smoke job in release-tooling-smoke.yml,
-        # where the sibling release/tools/tests/ suites live. Two reasons stand, the
-        # second decisive; a third has been RETIRED and is recorded as retired rather
-        # than deleted, because it was once called decisive and a reader who remembers
-        # it deserves to know what happened to it:
-        #   1. Governed routing. The runtime suite-selection map routes core/deploy/**
-        #      to the deploy run: steps in THIS workflow. The narrower row that could
-        #      have claimed it globs core/deploy/tools/*.sh, and `*` does not cross `/`,
-        #      so it does not reach this tests/ subtree.
+        # where the sibling release/tools/tests/ suites live. One reason stands, and
+        # it is decisive; two have been RETIRED and are recorded as retired rather than
+        # deleted, because each was once given for this placement and a reader who
+        # remembers one deserves to know what happened to it:
+        #   1. Governed routing — RETIRED, no longer true. This reason read: the
+        #      runtime suite-selection map routes core/deploy/** to the deploy run:
+        #      steps in THIS workflow, and the narrower row that could have claimed
+        #      the suite globs core/deploy/tools/*.sh, whose `*` does not cross `/`.
+        #      The map has since gained a row for the tool test suites, whose
+        #      core/deploy/tools/tests/*.sh pattern claims this suite and runs it by
+        #      its own bare invocation, so the map no longer places it in either
+        #      workflow.
         #   2. Genre — DECISIVE. shell-tests is already the established home for
         #      deploy.sh check-fixture-efficacy suites (Checks 22, 31, 36, 39, 45); this
         #      is the Check 16 member of that family. "Close-out automation smoke" is
