@@ -116,6 +116,13 @@ readonly CLI_VERSION="0.2.1"
 # family value is not a contract change of its own. The exit rule is unchanged --
 # non-zero only on FAIL or ERROR -- and the reason is recorded where the verdict enum
 # is declared.
+# NO BUMP IS OWED for reaching the deploy-check oracle by declaration only
+# (classify_family: a row's designated command must BE `deploy.sh --check`), for
+# grading a declared row that names another command by the partial rule, or for
+# refusing a designated command that carries shell syntax. Rows move between EXISTING
+# families and verdicts -- a row the oracle used to grade by a prose word now takes the
+# outcome its own command earns -- and no record field, family value or verdict value
+# is added: the counters becoming correct, by the precedent above.
 readonly SCHEMA_VERSION="5"
 
 # ---------------------------------------------------------------------------
@@ -248,9 +255,10 @@ readonly EXIT_CHECK_FAILED=3
 #   SKIP        not this runner's job, or nothing to run: the plan declared the row
 #               deferred, or its method names no command.
 #   UNRUNNABLE  can't run here: the row was read, and a command it names cannot run
-#               in this executor -- a recognised tool outside RUNNABLE_VERBS, or a
-#               native scope assertion with nothing to grade here -- or its designated
-#               command ran while another command it names did not.
+#               in this executor -- a recognised tool outside RUNNABLE_VERBS, a
+#               designated command carrying shell syntax, or a native scope assertion
+#               with nothing to grade here -- or its designated command ran while
+#               another command it names did not.
 #   ERROR       could not read or evaluate: input this parser cannot make sense of, or
 #               a command that ran and produced no readable result.
 # Stage 9 maps the emitted values onto the Stage-8 per-criterion enum; the runtime
@@ -381,7 +389,7 @@ OPTIONS
   -h, --help        Show this help and exit
   --version         Show CLI version + schema version and exit
 
-CHECK FAMILIES (dispatched from the Verification method cell alone: a declared deferral, then a runnable probe or a scope assertion, else method keyword)
+CHECK FAMILIES (dispatched from the Verification method cell alone: a declared deferral, then a runnable probe or a scope assertion, then an integration keyword, then a declared deploy check, else method keyword)
   per-issue      file existence + content assertions  (any runnable probe:
                                                        ${RUNNABLE_VERBS})
   scope          a confinement assertion over the     (git diff --name-only
@@ -399,8 +407,13 @@ CHECK FAMILIES (dispatched from the Verification method cell alone: a declared d
                                                        set above)
   integration    Cross-Issue Acceptance Criteria      (reads the plan's CIAC
                  section; runs each entry's declared method — SOLE runner)
-  regression     unchanged-files-intact               (deploy --check byte-diff)
-  sync           source <-> deployed                  (deploy --check)
+  regression     unchanged-files-intact               (deploy --check byte-diff;
+                                                       only a row whose command
+                                                       IS deploy.sh --check and
+                                                       that names a regression word)
+  sync           source <-> deployed                  (deploy --check; only a row
+                                                       whose command IS
+                                                       deploy.sh --check)
   runtime-suite  behavioral/runtime dispatch          (test-run event via
                  append-pipeline-event.sh)
   fcm-delivery   declared File Change Matrix ADDs     (git diff --name-status;
@@ -435,10 +448,12 @@ VERDICTS
   FAIL        the check ran, and what it asserts does not hold
   SKIP        not this runner's job (a declared deferral), or no command to run
   UNRUNNABLE  can't run here: a command the method names is a tool outside
-              the verb set, a scope assertion has nothing to grade here, or
-              the designated command ran and another command did not. Never
-              executed, never a pass, and it does not fail the run; the tool
-              named is a tool the method invokes, never a label or a file
+              the verb set, the designated command carries shell syntax (a
+              pipe, a list, a redirect, a substitution), a scope assertion has
+              nothing to grade here, or the designated command ran and another
+              command did not. Never executed, never a pass, and it does not
+              fail the run; the tool named is a tool the method invokes, never
+              a label or a file
   ERROR       could not read or evaluate the row
 
 EXIT CODES
@@ -598,8 +613,10 @@ _extract_section() {
 # led by an allowlisted verb, because inside one a phrase is that command's search
 # pattern, not a declaration. A row naming both a runnable probe and the
 # `deploy.sh --check` span is graded by the probe: the deploy check does not run.
-# {{ADR:a-rows-grading-route-is-declared-in-its-method-cell}} records this as its
-# Decision 6.
+# The deploy-check oracle itself is reached by declaration only: a row goes to it
+# only when its designated command IS the backticked invocation.
+# {{ADR:a-rows-grading-route-is-declared-in-its-method-cell}} records the first as its
+# Decision 6 and the second as its Decision 7.
 classify_family() {
   local raw_method="$1" method prose probe cmd
   method="$(printf '%s' "$raw_method" | tr '[:upper:]' '[:lower:]')"
@@ -654,16 +671,33 @@ classify_family() {
   if [ -n "$cmd" ] && scope_spec_of "$cmd" "$raw_method" >/dev/null; then echo "scope"; return; fi
 
   # 2) Keyword-match the method string -- rows with no runnable probe: command-less
-  #    prose, and commands this executor does not run.
+  #    prose, and commands this executor does not run. The integration keyword comes
+  #    first, ahead of the declared deploy route below.
   case "$method" in
     *cross-issue*|*ciac*|*integration*)                echo "integration";   return ;;
-    *deploy.sh*--check*|*deploy*--check*|*byte-diff*|*byte-equivalent*|*unchanged*)
-        # deploy --check covers both sync and regression; a "regression"/"unchanged"
-        # word routes to regression, else the source<->deployed reading is sync.
-        case "$method" in
-          *regression*|*unchanged*|*byte-diff*|*byte-equivalent*|*intact*) echo "regression"; return ;;
-          *) echo "sync"; return ;;
-        esac ;;
+  esac
+
+  # THE DEPLOY-CHECK ORACLE IS REACHED BY DECLARATION, NEVER BY PROSE.
+  #
+  # handle_deploy_check grades by the exit status of deploy.sh --check alone, which
+  # reads nothing a row asserts: the verdict is the row's only when the row's command
+  # IS that check (declares_deploy_check: the designated command is the backticked
+  # invocation). This arm used to be claimed by *deploy*--check*|*byte-diff*|
+  # *byte-equivalent*|*unchanged*, so a prose word chose. Measured when this was
+  # written (216 plans): after the runnable-probe step 44 rows reached it and 22 did
+  # not designate its invocation -- 10 command-less rows routed by a word such as
+  # "unchanged", 4 --check-<mode> runs the glob matched as a prefix, 7 other tools a
+  # word or a mention carried here, 1 pipeline. Each took a verdict for a claim the
+  # oracle never tested. Such a row now falls to the arms below and takes the outcome
+  # its own command earns. The integration arm stays above, so no row moves in. The
+  # words keep one job: among DECLARED rows a regression word selects regression, else
+  # sync. The declared route's exit status still covers the whole run, and a warn-mode
+  # check never fails it, so a row claiming one Check's findings is not graded by it.
+  # KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G18 M5 restores the prose
+  # route by one substitution.
+  if declares_deploy_check "$raw_method"; then case "$method" in *regression*|*unchanged*|*byte-diff*|*byte-equivalent*|*intact*) echo "regression" ;; *) echo "sync" ;; esac; return; fi
+
+  case "$method" in
     *grep*|*"test -f"*|*anchor*|*present*|*"≥"*|*">="*)                     echo "per-issue";     return ;;
     # RUNTIME-SUITE IS REACHED BY DECLARATION, NEVER BY PROSE, AND NEVER
     # AHEAD OF AN EXECUTABLE ROW.
@@ -1110,6 +1144,37 @@ runnable_probe_of() {
   return 0
 }
 
+# is_deploy_check_invocation <span> -- TRUE when <span> is exactly what the deploy-check
+# oracle runs: an optional `bash`, then the oracle's own path -- core/deploy/deploy.sh or
+# ./core/deploy/deploy.sh, or the root shim deploy.sh or ./deploy.sh -- and --check as
+# the only argument, with no shell operator outside quotes (span_shell_operator). A
+# --check-<mode>, a second argument, shell syntax, or any other file that happens to be
+# named deploy.sh is a different command: the oracle runs one resolved path, so the
+# route is anchored to that path and its shorthands, never to the basename.
+is_deploy_check_invocation() {
+  local i=0 path arg
+  if span_shell_operator "$1" >/dev/null; then return 1; fi
+  tokenize_cmd "$1" || return 1
+  if [ "${TOKENS[0]:-}" = bash ]; then i=1; fi
+  [ "${#TOKENS[@]}" -eq $((i + 2)) ] || return 1
+  path="${TOKENS[$i]}"; arg="${TOKENS[$((i + 1))]}"
+  case "$path" in core/deploy/deploy.sh|./core/deploy/deploy.sh|deploy.sh|./deploy.sh) : ;; *) return 1 ;; esac
+  # KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G18 M7 relaxes it by one substitution.
+  [ "$arg" = --check ]
+}
+
+# declares_deploy_check <method> -- TRUE when the row's designated command
+# (extract_command's pick, the span every handler runs or declines) IS the oracle's
+# invocation, written as a backticked span. A mention beside another command, a prose
+# spelling, a later span, or a pipeline led by the invocation declares nothing.
+declares_deploy_check() {
+  local cmd
+  cmd="$(extract_command "$1")"
+  case "$1" in *"\`$cmd\`"*) : ;; *) return 1 ;; esac
+  # KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G18 M6 widens it by one substitution.
+  [ -n "$cmd" ] && is_deploy_check_invocation "$cmd"
+}
+
 # method_outside_verb_spans <method> -- the method with EVERY backtick span whose
 # leading token is an allowlisted verb blanked: the span and its backticks become one
 # space. A phrase inside such a span is that command's own argument -- its search
@@ -1418,7 +1483,7 @@ limbs_are_multi() {
 # <observed>" for the one that ran, "limb <k> <verb> did not run (<reason>)" for
 # each one that did not -- and a can't-run row leads with "partial-execution:".
 grade_limbs() {
-  local limbs="$1" rec rest span verb why lv="" lo="" list="" n=0 i out rc cres cstatus cval T=$'\t'
+  local limbs="$1" rec rest span verb why sop lv="" lo="" list="" n=0 i out rc cres cstatus cval T=$'\t'
   local -a R_role=() R_op=() R_want=() R_span=()
   while IFS= read -r rec; do {
     [ -n "$rec" ] || continue
@@ -1437,6 +1502,10 @@ EOF_GRADE
       designated)
         if [ "${R_op[$i]}" = '?' ]; then
           lv="$VERDICT_ERROR"; lo="comparator-ambiguous (the prose after this command states comparators that disagree)"
+        elif sop="$(span_shell_operator "$span")"; then
+          # Shell syntax outside quotes: the designated command is not run either
+          # (the handlers' refusal), so no command in the method ran.
+          lv="$VERDICT_UNRUNNABLE"; lo="$(shell_operator_observed "$sop")"
         else
           set +e
           out="$( cd "$REPO_ROOT" && eval_free_run "$span" 2>/dev/null )"
@@ -1473,6 +1542,8 @@ EOF_GRADE
   elif [ "$lv" = "$VERDICT_PASS" ]; then
     printf '%s\t%s\n' "$VERDICT_PARTIAL_SLOT" \
       "partial-execution: limbs run 1 of $n: $list — a command that did not run is not a pass"
+  elif [ "$lv" = "$VERDICT_UNRUNNABLE" ]; then
+    printf '%s\t%s\n' "$lv" "limbs run 0 of $n: $list"
   else
     printf '%s\t%s\n' "$lv" "limbs run 1 of $n: $list"
   fi
@@ -1550,6 +1621,15 @@ handle_per_issue() {
   if ! is_runnable_verb "$verb"; then
     handle_unrunnable "$method"; return
   fi
+
+  # A designated command carrying shell syntax outside quotes is not run: this
+  # executor runs no shell, so the operator would reach the verb as a literal
+  # argument and the command graded would not be the one its author wrote. The test
+  # is span_shell_operator, the one shared quote-aware predicate. KEPT ON ONE LINE ON
+  # PURPOSE, in both handlers: the suite's mutation arm G18 M8 removes the refusal by
+  # one substitution.
+  local sop
+  if sop="$(span_shell_operator "$cmd")"; then printf '%s\t%s\n' "$VERDICT_UNRUNNABLE" "$(shell_operator_observed "$sop")"; return; fi
 
   local threshold op want; threshold="$(extract_threshold "$method")"
   op="$(printf '%s' "$threshold" | cut -f1)"; want="$(printf '%s' "$threshold" | cut -f2)"
@@ -1905,6 +1985,24 @@ unreadable_observed() {
   esac
 }
 
+# shell_operator_observed <operator> — the ONE rendering of the handlers' refusal of a
+# designated command carrying shell syntax, shared by both handlers and by the
+# designated command of a multi-command method, so the three cannot drift. The
+# operator is named as span_shell_operator prints it. That test reports a command
+# substitution written either as `$(` or as a backtick as `$(`, and the reason says so
+# rather than guessing which spelling the author used; an unterminated quote is named
+# by its quote character.
+shell_operator_observed() {
+  case "$1" in
+    '$(')
+      printf 'shell-operator:%s (not run — a command substitution, written as $( or as a backtick: this executor runs no shell, so it would reach the command as a literal argument)' "$1" ;;
+    \'|\")
+      printf 'shell-operator:%s (not run — an unterminated quote: the command cannot be split into the words its author meant)' "$1" ;;
+    *)
+      printf 'shell-operator:%s (not run — this executor runs no shell, so a pipe, a list, a redirect or a substitution would reach the command as a literal argument; name one command, or use the declared-deferred form)' "$1" ;;
+  esac
+}
+
 # integration: run a Cross-Issue AC entry's declared method (SOLE runner — this
 # executor is the sole runner of CIAC methods and the sole emitter of their
 # verdicts; Stage-9 reads the emitted verdict read-only, never re-running it).
@@ -1934,6 +2032,9 @@ handle_integration() {
   if ! is_runnable_verb "$verb"; then
     handle_unrunnable "$method"; return
   fi
+  # A designated command carrying shell syntax is not run (see handle_per_issue).
+  local sop
+  if sop="$(span_shell_operator "$cmd")"; then printf '%s\t%s\n' "$VERDICT_UNRUNNABLE" "$(shell_operator_observed "$sop")"; return; fi
   local out rc count threshold op want
   set +e
   out="$( cd "$REPO_ROOT" && eval_free_run "$cmd" 2>/dev/null )"
@@ -1984,21 +2085,42 @@ deploy_check_exit_code() {
   return 0
 }
 
-# sync + regression: delegate to deploy --check (source<->deployed byte-diff).
+# sync + regression: delegate to deploy --check (source<->deployed byte-diff), for a row
+# whose command IS deploy.sh --check (classify_family).
 # We do NOT re-implement diffing; the deploy check IS the sync/regression oracle.
+# A declared row that ALSO names another command follows the partition's partial rule
+# (command_list): when the check passes, the row reads the can't-run slot and names the
+# command that did not run; when it fails, FAIL stands and the list still names it.
+# $1 = family (sync | regression), $2 = method string.
 handle_deploy_check() {
-  local family="$1"
+  local family="$1" method="${2:-}" rc verdict obs cmd cl n list T=$'\t'
   if [ ! -x "$DEPLOY_CHECK" ] && [ ! -f "$DEPLOY_CHECK" ]; then
     printf '%s\t%s\n' "$VERDICT_ERROR" "deploy.sh --check not found at $DEPLOY_CHECK"; return 0
   fi
-  local rc
   rc="$(deploy_check_exit_code)"
   # deploy --check exits 0 when source and deployed copies are in sync.
   if [ "$rc" -eq 0 ] 2>/dev/null; then
-    printf '%s\t%s\n' "$VERDICT_PASS" "deploy --check clean (in-sync)"
+    verdict="$VERDICT_PASS"; obs="deploy --check clean (in-sync)"
   else
-    printf '%s\t%s\n' "$VERDICT_FAIL" "deploy --check non-clean (exit $rc); ${family} — see deploy.sh --check output"
+    verdict="$VERDICT_FAIL"; obs="deploy --check non-clean (exit $rc); ${family} — see deploy.sh --check output"
   fi
+  n=0
+  if [ -n "$method" ]; then
+    cmd="$(extract_command "$method")"
+    cl="$(command_list "$method" "$cmd" "$verdict $obs")"
+    n="${cl%%"$T"*}"; list="${cl#*"$T"}"
+  fi
+  # KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G18 M9 removes the partial
+  # rule by one substitution.
+  if [ -n "$method" ] && [ "$n" -ge 2 ]; then
+    if [ "$verdict" = "$VERDICT_PASS" ]; then
+      printf '%s\t%s\n' "$VERDICT_PARTIAL_SLOT" "partial-execution: limbs run 1 of $n: $list — a command that did not run is not a pass"
+    else
+      printf '%s\t%s\n' "$verdict" "limbs run 1 of $n: $list"
+    fi
+    return 0
+  fi
+  printf '%s\t%s\n' "$verdict" "$obs"
   return 0
 }
 
@@ -2148,8 +2270,8 @@ dispatch_check() {
     scope)          handle_scope "$method" ;;
     unrunnable)     handle_unrunnable "$method" ;;
     integration)    handle_integration "$method" ;;
-    sync)           handle_deploy_check "sync" ;;
-    regression)     handle_deploy_check "regression" ;;
+    sync)           handle_deploy_check "sync" "$method" ;;
+    regression)     handle_deploy_check "regression" "$method" ;;
     runtime-suite)  handle_runtime_suite "$method" "$version" ;;
     *)              printf '%s\t%s\n' "$VERDICT_ERROR" "unclassified-method (no family match)" ;;
   esac

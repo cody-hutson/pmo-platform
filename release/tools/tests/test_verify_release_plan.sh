@@ -3400,8 +3400,12 @@ m17 "V6848-AC2 M3" g17-m3-no-identifier-guard 1 's/^  if \[ "\$identifier" -eq 1
 if [ "$MUT_TOOK" = 1 ]; then
   vrp_run "$MUT_PATH" "$FIX_UNRUN"; JM17_3="$VRP_JSON"
   if mutant_ran "V6848-AC2 M3"; then
-    [ "$(fv17 "$JM17_3" CIAC-2)" = integration/ERROR ] && g17_has "$JM17_3" CIAC-2 "matcher-exit-3" \
-      && ok "V6848-AC2 M3 detected — without the identifier guard the prose that opens with 'grep' runs as a bare command and reads ERROR" \
+    # The prose is then taken as a bare command: the handlers' refusal reads its
+    # backticks as shell syntax (a substitution), and before that refusal the verb ran
+    # and could not be read. Either way the documented decision is lost.
+    case "$(g13_observed "$JM17_3" CIAC-2)" in "shell-operator:"*|*"matcher-exit-"*) G17_M3=1 ;; *) G17_M3=0 ;; esac
+    [ "$G17_M3" = 1 ] && [ "$(g13_verdict "$JM17_3" CIAC-2)" != SKIP ] \
+      && ok "V6848-AC2 M3 detected — without the identifier guard the prose that opens with 'grep' is taken as a bare command, not a documented decision ($(fv17 "$JM17_3" CIAC-2))" \
       || bad "V6848-AC2 M3 SURVIVED — CIAC-2 $(fv17 "$JM17_3" CIAC-2) '$(g13_observed "$JM17_3" CIAC-2)'"
   fi
 fi
@@ -3648,8 +3652,10 @@ m18 "V6893-AC4 M6" gd-m6-mention-declares 1 's/^  \[ -n "\$cmd" \] && is_deploy_
 if [ "$MUT_TOOK" = 1 ]; then
   g18_run "$MUT_PATH"; JM6="$VRP_JSON"
   if mutant_ran "V6893-AC4 M6"; then
-    [ "$(fv18 "$JM6" AC-6)" = sync/PASS ] \
-      && ok "V6893-AC4 M6 detected — a mention beside another command must not declare the route" \
+    # Reaching the oracle at all is the defect: the partial rule then reads the row's
+    # other command as not run, so the verdict is the slot rather than PASS.
+    [ "$(family_of "$JM6" AC-6)" = sync ] \
+      && ok "V6893-AC4 M6 detected — a mention beside another command must not declare the route: with it, AC-6 reaches the oracle ($(fv18 "$JM6" AC-6))" \
       || bad "V6893-AC4 M6 SURVIVED — AC-6 $(fv18 "$JM6" AC-6)"
   fi
 fi
@@ -3662,7 +3668,7 @@ if [ "$MUT_TOOK" = 1 ]; then
       || bad "V6893-AC4 M7 SURVIVED — AC-4 $(fv18 "$JM7" AC-4)"
   fi
 fi
-m18 "V6848-AC2 M8" gd-m8-no-operator-refusal 2 's/if op="\$\(span_shell_operator "\$cmd"\)"; then/if false; then/'
+m18 "V6848-AC2 M8" gd-m8-no-operator-refusal 2 's/if sop="\$\(span_shell_operator "\$cmd"\)"; then/if false; then/'
 if [ "$MUT_TOOK" = 1 ]; then
   g18_run "$MUT_PATH"; JM8="$VRP_JSON"
   if mutant_ran "V6848-AC2 M8"; then
