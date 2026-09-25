@@ -25,6 +25,10 @@ set -euo pipefail
 #   (G4) CIAC EXECUTION — the integration handler runs CIAC-1's grep method
 #        (quote-aware; a pattern with a `|` alternation and spaces stays one arg)
 #        and grades it on the co-occurrence threshold.
+#   (G5) DEPLOY-CHECK DELEGATION — the sync and regression families delegate to
+#        deploy.sh --check, here a fast stub: a non-zero exit renders FAIL and an
+#        overall exit 3 rather than an internal error, and the check runs once per
+#        invocation however many sync and regression rows share it.
 #   (G6) FCM DELIVERY — declared File-Change-Matrix ADDs vs the merged diff.
 #        Eleven fixture arms covering the verdict lattice, ONE non-synthetic
 #        historical replay against the release that motivated the family, and
@@ -87,6 +91,18 @@ set -euo pipefail
 #        FAIL) is meaningless without P7 (Forms A/B/X, all PASS), because a
 #        predicate that rejects everything satisfies P6 alone. Same for P9 and
 #        its truncated-token control.
+#  (G11) RECORD FORMAT + HEADER DIALECTS — the 0x1F parser-to-dispatcher
+#        delimiter (an empty AC or Expected field no longer shifts the record
+#        one position left), the widened method-column dialects, and the named
+#        ERRORs for an unindexable table and an empty Method cell. Seven
+#        mutation arms (G11-M).
+#  (G12) FD-0 (V7531-AC1 / V7531-AC2) — a method cell cannot read the record
+#        stream the executor iterates: a stdin reader is a named refusal, every
+#        indexed row emits, a stdin-reading child cannot drain the loop, and a
+#        loop that reads short is a named ERROR with a DEGRADED roll-up and an
+#        internal exit. A reachability arm measures, on the bash running this
+#        suite, that an exec'd child in the loop form sees no copy of the stream.
+#        Five mutation arms, one non-synthetic replay graded per criterion.
 #
 # Offline + deterministic: fixtures are committed under tests/fixtures/ and all
 # methods are fast local greps against the repo tree (no deploy.sh --check here —
@@ -1816,6 +1832,447 @@ vrp_run "$MUT_PATH" "$FIX_CIACPAR"; JM_CP="$VRP_JSON"
   || bad "G11-M7 SURVIVED — CIAC record count unchanged ($(grep -c '"id":"CIAC-' <<<"$JM_CP" || true)); the -F cascade is untested"
 
 rm -rf "$MUTD4"
+
+# ===========================================================================
+# G12 — FD-0 (V7531-AC1 / V7531-AC2): a method cell cannot read the record
+#       stream the executor iterates.
+#
+# Both dispatch loops in main() iterate a here-string on fd 0. A method with no
+# file operand read the loop's OWN remaining records: every row after it
+# vanished with no record while the roll-up still reported the parser's full
+# denominator, and the cell itself was graded on the records it swallowed. A
+# stdin-reading child outside the verb route did the same and left a clean exit.
+# Every arm below carries its criterion label, and every guard is paired with a
+# seeded failure that must flip it.
+# ===========================================================================
+echo
+echo "G12 — FD-0: a method cell cannot read the record stream (V7531-AC1 / V7531-AC2)"
+
+FIX_DRAIN="release/tools/tests/fixtures/verify-plan-stdin-drain.md"
+FIX_VERBS="release/tools/tests/fixtures/verify-plan-stdin-verbs.md"
+
+# ciacs_of <json> — emitted CIAC-N records. CIAC-STREAM is deliberately NOT one:
+# the tripwire's own record must never be counted as a recovered row.
+# strunc_of <json> — completeness records the FD-0 tripwire emitted.
+ciacs_of()  { grep -c '"id":"CIAC-[0-9]' <<<"$1" || true; }
+strunc_of() { grep -c '"family":"stream-truncated"' <<<"$1" || true; }
+
+# g12_refused <json> <id> <reason> — the row is an ERROR, its observed value
+# names the reason, and it reads as a REFUSAL (the command never ran) rather than
+# through the matcher-outcome text a command that ran and failed carries.
+g12_refused() {
+  local obs; obs="$(observed_of "$1" "$2")"
+  [ "$(verdict_of "$1" "$2")" = ERROR ] || return 1
+  case "$obs" in "$3 (not run — "*) : ;; *) return 1 ;; esac
+  case "$obs" in *"the matcher produced no readable result"*) return 1 ;; esac
+  return 0
+}
+
+# The detector, extracted from the shipped file (tokenize_cmd was loaded in G8).
+eval "$(sed -n '/^stdin_input_refusal()/,/^}/p' "$VERIFY")"
+eval "$(sed -n '/^reads_stdin_cmd()/,/^}/p'     "$VERIFY")"
+G12_DET=0
+if type reads_stdin_cmd >/dev/null 2>&1 && type stdin_input_refusal >/dev/null 2>&1; then G12_DET=1; fi
+
+# --- G12-0: SENSITIVITY — the detector exists, and the fixture still plants. ---
+if [ "$G12_DET" -eq 1 ] && [ "$(reads_stdin_cmd 'grep -c -F "AC-"' || true)" = "stdin-reader:grep" ]; then
+  ok "G12-0 V7531-AC1 SENSITIVITY — the detector is defined and names an operand-less grep (stdin-reader:grep)"
+else
+  bad "G12-0 V7531-AC1 reads_stdin_cmd is undefined or does not name an operand-less grep; every arm that depends on it grades nothing"
+fi
+G12_PLANTED="$(grep -c -F 'grep -c -F "AC-"' "$REPO_ROOT/$FIX_DRAIN" || true)"
+[ "${G12_PLANTED:-0}" -ge 1 ] \
+  && ok "G12-0b V7531-AC2 the drain fixture still carries its planted operand-less grep (without it every arm below is vacuous)" \
+  || bad "G12-0b V7531-AC2 the drain fixture no longer carries its planted cell; the arms below would grade nothing"
+
+# --- G12-1..G12-3: the drain fixture (V7531-AC2). ---
+vrp_run "$VERIFY" "$FIX_DRAIN"; J_DRAIN="$VRP_JSON"; RC_DRAIN="$VRP_RC"
+[ "$(rows_of "$J_DRAIN")" = "6" ] && [ "$(acs_of "$J_DRAIN")" = "6" ] && [ "$(ciacs_of "$J_DRAIN")" = "3" ] \
+  && ok "G12-1 V7531-AC2 every indexed row emits past the planted cells — 6 of 6 per-issue records and 3 of 3 CIACs" \
+  || bad "G12-1 V7531-AC2 indexed=$(rows_of "$J_DRAIN") emitted AC=$(acs_of "$J_DRAIN") CIAC=$(ciacs_of "$J_DRAIN") (expected 6/6/3): a planted cell drained its loop"
+if g12_refused "$J_DRAIN" AC-3 "stdin-reader:grep" && g12_refused "$J_DRAIN" CIAC-2 "stdin-reader:grep" \
+   && case "$(observed_of "$J_DRAIN" AC-3)" in *"a file named only in the prose is not read"*) true ;; *) false ;; esac; then
+  ok "G12-2 V7531-AC2 each planted cell is a NAMED ERROR rendered as a refusal with its remedy — never a count over the records it swallowed, nor over the null device"
+else
+  bad "G12-2 V7531-AC2 AC-3 '$(verdict_of "$J_DRAIN" AC-3)' / '$(observed_of "$J_DRAIN" AC-3)' — CIAC-2 '$(verdict_of "$J_DRAIN" CIAC-2)' / '$(observed_of "$J_DRAIN" CIAC-2)'"
+fi
+G12_CTL=0
+for g12id in AC-1 AC-2 AC-4 AC-5 AC-6 CIAC-1 CIAC-3; do
+  if [ "$(verdict_of "$J_DRAIN" "$g12id")" = PASS ]; then G12_CTL=$((G12_CTL + 1)); fi
+done
+[ "$G12_CTL" -eq 7 ] && [ "$(strunc_of "$J_DRAIN")" = "0" ] && [ "$RC_DRAIN" -eq 3 ] \
+  && ok "G12-3 V7531-AC2 CONTROLS — all 7 control rows PASS, no completeness record fires, and the named ERROR reaches exit 3" \
+  || bad "G12-3 V7531-AC2 controls PASS=$G12_CTL of 7, stream-truncated=$(strunc_of "$J_DRAIN"), rc=$RC_DRAIN (expected 7/0/3)"
+
+# --- G12-4..G12-6: every stdin-capable verb, and each refusal class (V7531-AC1). ---
+vrp_run "$VERIFY" "$FIX_VERBS"; J_VERBS="$VRP_JSON"; RC_VERBS="$VRP_RC"
+[ "$(acs_of "$J_VERBS")" = "15" ] && [ "$(ciacs_of "$J_VERBS")" = "7" ] \
+  && ok "G12-4 V7531-AC1 every row after each planted reader emits, in both loops — 15 of 15 per-issue records and 7 of 7 CIACs" \
+  || bad "G12-4 V7531-AC1 emitted AC=$(acs_of "$J_VERBS") CIAC=$(ciacs_of "$J_VERBS") (expected 15 and 7)"
+G12_REF=0
+for g12pair in "AC-2 stdin-reader:grep" "AC-4 stdin-reader:head" "AC-6 stdin-reader:wc" "AC-8 stdin-reader:cat" \
+               "AC-10 stdin-reader:grep" "AC-12 device-operand:/dev/stdin" "AC-14 unmodelled-option:--not-an-option" \
+               "CIAC-2 stdin-reader:grep" "CIAC-4 stdin-reader:head" "CIAC-6 stdin-reader:cat"; do
+  g12id="${g12pair%% *}"; g12why="${g12pair#* }"
+  if g12_refused "$J_VERBS" "$g12id" "$g12why"; then G12_REF=$((G12_REF + 1))
+  else printf '       %s: %s / %s (wanted %s)\n' "$g12id" "$(verdict_of "$J_VERBS" "$g12id")" "$(observed_of "$J_VERBS" "$g12id")" "$g12why"; fi
+done
+[ "$G12_REF" -eq 10 ] \
+  && ok "G12-5 V7531-AC1 all 10 planted readers are NAMED refusals — grep, head, wc, cat, the stdin operand, a device path and an unmodelled option, in both loops" \
+  || bad "G12-5 V7531-AC1 only $G12_REF of 10 planted readers were refused with their reason"
+G12_CTL=0
+for g12id in AC-1 AC-3 AC-5 AC-7 AC-9 AC-11 AC-13 AC-15 CIAC-1 CIAC-3 CIAC-5 CIAC-7; do
+  if [ "$(verdict_of "$J_VERBS" "$g12id")" = PASS ]; then G12_CTL=$((G12_CTL + 1)); fi
+done
+[ "$G12_CTL" -eq 12 ] && [ "$(strunc_of "$J_VERBS")" = "0" ] && [ "$RC_VERBS" -eq 3 ] \
+  && ok "G12-6 V7531-AC1 CONTROLS — all 12 control rows PASS, no completeness record fires, exit 3" \
+  || bad "G12-6 V7531-AC1 controls PASS=$G12_CTL of 12, stream-truncated=$(strunc_of "$J_VERBS"), rc=$RC_VERBS (expected 12/0/3)"
+
+# --- G12-7: CONTROL — a command that RAN and failed keeps the matcher text. ---
+# The refusal's own rendering must not leak onto a matcher that genuinely ran.
+case "$(observed_of "$J_CNT" AC-5)" in
+  "count-unreadable:matcher-exit-2 (the matcher produced no readable result; this is NOT a zero)")
+    ok "G12-7 V7531-AC2 CONTROL — a matcher that ran and exited 2 keeps the matcher-outcome text; only a command that never ran reads as a refusal" ;;
+  *) bad "G12-7 V7531-AC2 the matcher-outcome text changed for a command that ran: '$(observed_of "$J_CNT" AC-5)'" ;;
+esac
+
+# --- G12-8..G12-10: the CHILD route (V7531-AC1). ---
+# A deploy --check child that READS ITS STDIN, ahead of three rows. Before the
+# fix it drained the loop and the run still exited 0: a silent green.
+G12_STUB="$(mktemp -d -t verify-plan-7531-stub.XXXXXX)"
+mkdir -p "$G12_STUB/core/deploy" "$G12_STUB/release/tools" "$G12_STUB/plan"
+cp "$VERIFY" "$G12_STUB/release/tools/"
+G12_RAN="$G12_STUB/deploy-child-ran"
+printf '#!/usr/bin/env bash\ncat >/dev/null\n: > "%s"\nexit 0\n' "$G12_RAN" > "$G12_STUB/core/deploy/deploy.sh"
+chmod +x "$G12_STUB/core/deploy/deploy.sh"
+# The sync row names its invocation IN BACKTICKS. That keeps its declared route
+# to the deploy-check oracle under the keyword-precedence carve-out, so the row
+# still spawns the child; written in prose, a later routing change would leave
+# this arm, and the mutation paired with it, vacuous.
+cat > "$G12_STUB/plan/p.md" <<'EOF'
+# stub plan — a stdin-reading deploy child ahead of three rows
+## Verification Plan
+**#602 — the child route**
+| AC | Predicate class | Verification method | Expected result |
+|---|---|---|---|
+| AC-1 | sync | source-to-deployed via `deploy.sh --check` | in-sync |
+| AC-2 | file-path+state | `test -f release/tools/verify-release-plan.sh` | control |
+| AC-3 | file-path+state | `test -f release/tools/verify-release-plan.sh` | control |
+| AC-4 | file-path+state | `test -f release/tools/verify-release-plan.sh` | control |
+EOF
+# g12_child <tool> [<format>] — run a tool on the child-route plan inside the stub
+# root; sets VRP_JSON / VRP_RC in the CURRENT shell, for the reason vrp_run does.
+g12_child() {
+  rm -f "$G12_RAN"
+  set +e
+  VRP_JSON="$("$1" --no-color --format="${2:-json}" --root "$G12_STUB" "$G12_STUB/plan/p.md" 2>/dev/null)"
+  VRP_RC=$?
+  set -e
+}
+g12_child "$G12_STUB/release/tools/verify-release-plan.sh"; J_CHILD="$VRP_JSON"; RC_CHILD="$VRP_RC"
+[ -f "$G12_RAN" ] && [ "$(family_of "$J_CHILD" AC-1)" = "sync" ] \
+  && ok "G12-8 V7531-AC1 CHILD-ROUTE SENSITIVITY — the backticked sync row reached the deploy-check oracle and its stdin-reading child RAN" \
+  || bad "G12-8 V7531-AC1 the deploy child never ran (AC-1 family '$(family_of "$J_CHILD" AC-1)'); G12-9 would be vacuous"
+[ "$(acs_of "$J_CHILD")" = "4" ] && [ "$(strunc_of "$J_CHILD")" = "0" ] && [ "$RC_CHILD" -eq 0 ] \
+  && ok "G12-9 V7531-AC1 a stdin-reading child OUTSIDE the verb route cannot drain the loop — 4 of 4 rows, clean exit 0" \
+  || bad "G12-9 V7531-AC1 child route emitted AC=$(acs_of "$J_CHILD") stream-truncated=$(strunc_of "$J_CHILD") rc=$RC_CHILD (expected 4/0/0)"
+grep -q -F '"stream_state": "fetched"' <<<"$J_CHILD" \
+  && ok "G12-10 V7531-AC1 a complete stream says so — the JSON roll-up reports stream_state fetched" \
+  || bad "G12-10 V7531-AC1 the JSON roll-up does not report stream_state fetched on a complete stream"
+
+# --- G12-11/G12-12: REACHABILITY, measured on the bash running this suite (V7531-AC1). ---
+# The FD-0 rule relies on bash keeping its saved copy of fd 0 close-on-exec while
+# the loop body is redirected. That is a property of the bash, not of this file,
+# so it is MEASURED here — on CI, on the runner's bash — rather than assumed per
+# version. An exec'd child lists its own descriptors inside the executor's loop
+# form and outside it; a descriptor the loop adds is a copy the child could read.
+G12_LOOPS="$(grep -c -F '} </dev/null; done <<< "$per_issue_records"' "$VERIFY" || true)"
+G12_LOOPS="$G12_LOOPS/$(grep -c -F '} </dev/null; done <<< "$ciac_records"' "$VERIFY" || true)"
+[ "$G12_LOOPS" = "1/1" ] \
+  && ok "G12-11 V7531-AC1 both dispatch loops carry the FD-0 form the arm below measures" \
+  || bad "G12-11 V7531-AC1 the dispatch loops do not carry the FD-0 form (per-issue/CIAC = $G12_LOOPS, expected 1/1)"
+g12_fds() { ls /dev/fd 2>/dev/null | tr '\n' ' '; }
+g12_extra() {   # <baseline set> <observed set> -> descriptors observed but not in the baseline
+  local base=" $1 " fd out=""
+  for fd in $2; do case "$base" in *" $fd "*) : ;; *) out="$out $fd" ;; esac; done
+  printf '%s' "$out"
+}
+G12_MK="R$$K"   # built at run time, so this file's own text can never match it
+G12_RECS="$(printf '%s-1\n%s-2\n%s-3\n%s-4' "$G12_MK" "$G12_MK" "$G12_MK" "$G12_MK")"
+G12_BASE="$(g12_fds)"
+# SUBJECT — the executor's loop form.
+G12_N=0; G12_SEEN=""
+while IFS= read -r _g12rec; do {
+  G12_N=$((G12_N + 1))
+  if [ -z "$G12_SEEN" ]; then G12_SEEN="$(g12_fds)"; fi
+} </dev/null; done <<< "$G12_RECS"
+G12_XTRA="$(g12_extra "$G12_BASE" "$G12_SEEN")"
+# SENSITIVITY — the same loop with one explicitly INHERITED copy of the stream.
+G12_SXTRA=""; G12_SREACH=0
+while IFS= read -r _g12rec; do {
+  if [ -z "$G12_SXTRA" ]; then
+    G12_SXTRA="$(g12_extra "$G12_BASE" "$(g12_fds)")"
+    for g12fd in $G12_SXTRA; do
+      g12hits="$(cat "/dev/fd/$g12fd" 2>/dev/null | grep -c "$G12_MK" || true)"
+      G12_SREACH=$((G12_SREACH + ${g12hits:-0}))
+    done
+  fi
+} 9<&0 </dev/null; done <<< "$G12_RECS"
+if [ -z "$G12_XTRA" ] && [ "$G12_N" -eq 4 ]; then
+  ok "G12-12 V7531-AC1 REACHABILITY (bash $BASH_VERSION) — an exec'd child inside the FD-0 loop form sees only its baseline descriptors [$G12_BASE], and the loop read 4 of 4"
+else
+  bad "G12-12 V7531-AC1 REACHABILITY (bash $BASH_VERSION) — the child sees extra descriptor(s) [$G12_XTRA] and the loop read $G12_N of 4: this bash leaves an inheritable copy of the stream"
+fi
+if [ -n "$G12_SXTRA" ] && [ "$G12_SREACH" -ge 1 ]; then
+  ok "G12-12b V7531-AC1 REACHABILITY SENSITIVITY — the same probe sees an inherited copy [$G12_SXTRA] and reads $G12_SREACH record(s) through it, so an empty result above is a real absence"
+else
+  bad "G12-12b V7531-AC1 the probe did not detect a deliberately inherited copy (extra [$G12_SXTRA], reach $G12_SREACH); G12-12 is a broken probe"
+fi
+
+# --- G12-13..G12-15: the detector, unit by unit (V7531-AC1 / V7531-AC2). ---
+# THE MODEL IS CLOSED, so both directions are asserted: every must-flag command is
+# refused with its reason, and no must-pass command is refused. A detector that
+# refused everything would satisfy the first table alone.
+G12_MUST_FLAG="$(cat <<'EOF'
+stdin-reader:grep %% grep -c -F "AC-"
+stdin-reader:grep %% grep -m 1 x
+stdin-reader:grep %% grep -c -m1 x
+stdin-reader:grep %% grep -ec
+stdin-reader:grep %% grep -c -e x
+stdin-reader:grep %% grep -c -f patterns.txt
+stdin-reader:grep %% grep -c -f - release/tools/verify-release-plan.sh
+stdin-reader:grep %% grep -c x -
+stdin-reader:grep %% grep -c -- x
+stdin-reader:grep %% grep -c --regexp x
+stdin-reader:grep %% grep -c --regexp=x
+stdin-reader:grep %% grep -c --max-count 1 x
+stdin-reader:grep %% grep -c --file=- release/tools/verify-release-plan.sh
+stdin-reader:grep %% grep -c --exclude-from=- x release
+stdin-reader:grep %% grep -c -A 2 x
+stdin-reader:grep %% grep -c --include=*.md x
+stdin-reader:grep %% grep -c --label L x
+stdin-reader:head %% head -n 1
+stdin-reader:head %% head -5
+stdin-reader:head %% head
+stdin-reader:wc %% wc -l
+stdin-reader:wc %% wc
+stdin-reader:cat %% cat
+stdin-reader:cat %% cat -u
+stdin-reader:cat %% cat -
+device-operand:/dev/stdin %% grep -c x /dev/stdin
+device-operand:/dev/fd/0 %% grep -c x /dev/fd/0
+device-operand:/dev/fd/3 %% cat /dev/fd/3
+device-operand://dev/stdin %% cat //dev/stdin
+device-operand:/dev//stdin %% cat /dev//stdin
+device-operand:/proc/self/fd/0 %% wc -l /proc/self/fd/0
+device-operand:/dev/zero %% head -n 1 /dev/zero
+device-operand:/dev/stdin %% grep -c -f /dev/stdin release/tools/verify-release-plan.sh
+device-operand:/dev/fd/0 %% grep -c --file=/dev/fd/0 release/tools/verify-release-plan.sh
+device-operand:/dev/stdin %% grep -c --exclude-from /dev/stdin x release
+unmodelled-option:--not-an-option %% grep -c --not-an-option x release/tools/verify-release-plan.sh
+unmodelled-option:-K %% grep -c -K x release/tools/verify-release-plan.sh
+unmodelled-option:-K %% grep -cK x release/tools/verify-release-plan.sh
+unmodelled-option:--context %% grep -c --context 1 x release/tools/verify-release-plan.sh
+unmodelled-option:-q %% head -q release/tools/verify-release-plan.sh
+unmodelled-option:-A %% cat -A release/tools/verify-release-plan.sh
+unmodelled-option:--lines %% wc --lines release/tools/verify-release-plan.sh
+unmodelled-option:--bytes %% head --bytes 5 release/tools/verify-release-plan.sh
+EOF
+)"
+G12_MUST_PASS="$(cat <<'EOF'
+grep -c -F "AC-" release/tools/verify-release-plan.sh
+grep -m 1 x release/tools/verify-release-plan.sh
+grep -c -e x release/tools/verify-release-plan.sh
+grep -c -e x -e y release/tools/verify-release-plan.sh
+grep -c -f patterns.txt release/tools/verify-release-plan.sh
+grep -r -c x
+grep -rc x
+grep -R -c x
+grep -c -d recurse x
+grep -c -drecurse x
+grep -c --directories=recurse x
+grep -c --directories recurse x
+grep -c --recursive x
+grep
+grep -c
+grep -c -e
+grep -c -- -x release/tools/verify-release-plan.sh
+grep -c --include=*.md -r x release
+grep -c --exclude-dir=ADRs -r x release
+grep --count x release/tools/verify-release-plan.sh
+grep -c --context=1 x release/tools/verify-release-plan.sh
+grep -c --color x release/tools/verify-release-plan.sh
+grep -c --color=never x release/tools/verify-release-plan.sh
+grep -c -5 x release/tools/verify-release-plan.sh
+grep -c -A 2 x release/tools/verify-release-plan.sh
+grep -c -B2 x release/tools/verify-release-plan.sh
+grep -c -i -w -v x release/tools/verify-release-plan.sh
+grep -c x release/tools/verify-release-plan.sh release/tools/claim-version.sh
+grep -c x dev/stdin
+grep -c x release/dev-notes.md
+grep -n "Author-association trust boundary" release/governance/release-process.md
+grep -rn "no review comments arrive" --include="*.md" --exclude-dir=ADRs --exclude-dir=releases core/ release/
+head -n 1 release/tools/verify-release-plan.sh
+head -n1 release/tools/verify-release-plan.sh
+head -5 release/tools/verify-release-plan.sh
+head -c 10 release/tools/verify-release-plan.sh
+wc -l release/tools/verify-release-plan.sh
+wc -L release/tools/verify-release-plan.sh
+cat release/tools/verify-release-plan.sh
+cat -n release/tools/verify-release-plan.sh
+test -f /dev/null
+test -f release/tools/verify-release-plan.sh
+ls /dev/fd
+ls release/ADRs/ADR-076-*
+EOF
+)"
+if [ "$G12_DET" -eq 1 ]; then
+  G12_FN=0; G12_FMISS=0
+  while IFS= read -r g12line; do
+    [ -n "$g12line" ] || continue
+    g12why="${g12line%% %% *}"; g12cmd="${g12line#* %% }"
+    G12_FN=$((G12_FN + 1))
+    if g12got="$(reads_stdin_cmd "$g12cmd")" && [ "$g12got" = "$g12why" ]; then :; else
+      G12_FMISS=$((G12_FMISS + 1)); printf '       must-flag MISS: [%s] got [%s] want [%s]\n' "$g12cmd" "${g12got:-}" "$g12why"
+    fi
+  done <<< "$G12_MUST_FLAG"
+  [ "$G12_FMISS" -eq 0 ] && [ "$G12_FN" -eq 43 ] \
+    && ok "G12-13 V7531-AC1 UNIT — all $G12_FN must-flag commands are refused, each with its reason (stdin-reader / device-operand / unmodelled-option)" \
+    || bad "G12-13 V7531-AC1 UNIT — $G12_FMISS of $G12_FN must-flag commands were missed or misnamed (expected 0 of 43)"
+  G12_PN=0; G12_PFP=0
+  while IFS= read -r g12cmd; do
+    [ -n "$g12cmd" ] || continue
+    G12_PN=$((G12_PN + 1))
+    if g12got="$(reads_stdin_cmd "$g12cmd")"; then
+      G12_PFP=$((G12_PFP + 1)); printf '       must-pass FALSE REFUSAL: [%s] -> [%s]\n' "$g12cmd" "$g12got"
+    fi
+  done <<< "$G12_MUST_PASS"
+  [ "$G12_PFP" -eq 0 ] && [ "$G12_PN" -eq 44 ] \
+    && ok "G12-14 V7531-AC1 UNIT SPECIFICITY — none of the $G12_PN must-pass commands is refused (a detector that refused everything fails here)" \
+    || bad "G12-14 V7531-AC1 UNIT — $G12_PFP of $G12_PN must-pass commands were refused (expected 0 of 44)"
+  [ "$(count_from_output 'grep -c -F "AC-"' '' 4 | cut -f2)" = "stdin-reader:grep" ] \
+    && ok "G12-15 V7531-AC2 the single exit-status reader names status 4 as the refusal it is (stdin-reader:grep), never as matcher-exit-4" \
+    || bad "G12-15 V7531-AC2 count_from_output reads status 4 as '$(count_from_output 'grep -c -F "AC-"' '' 4 | cut -f2)'"
+else
+  bad "G12-13 V7531-AC1 UNIT — reads_stdin_cmd is undefined; the must-flag table cannot run"
+  bad "G12-14 V7531-AC1 UNIT SPECIFICITY — reads_stdin_cmd is undefined; the must-pass table cannot run"
+  bad "G12-15 V7531-AC2 count_from_output's status-4 reading cannot be graded without the detector"
+fi
+
+# --- G12-R: NON-SYNTHETIC replay (V7531-AC2), graded PER CRITERION. ---
+# v3.65.1 is a live plan whose AC-3, AC-5 and AC-9 each name a grep with no file;
+# the first of them used to take every later row with it. The arm names those
+# three criteria instead of counting refusals, so a later change to how a row's
+# other limbs are graded cannot move it.
+REAL7531="release/releases/plans/v3.65.1_RELEASE_PLAN.md"
+if [ ! -f "$REPO_ROOT/$REAL7531" ]; then
+  bad "G12-R PRECONDITION — replay target absent: $REAL7531 (relocated or renamed? the arms below cannot grade)"
+else
+  # DENOMINATOR FIRST: a replay of a plan that no longer carries the shape is vacuous.
+  G12R_SHAPE="$(grep -c -F '`grep -n "unrequested"`' "$REPO_ROOT/$REAL7531" || true)"
+  if [ "${G12R_SHAPE:-0}" -lt 1 ]; then
+    bad "G12-R VACUOUS — the replay target no longer carries its operand-less grep; this arm asserts nothing"
+  else
+    vrp_run "$VERIFY" "$REAL7531"; J_R7531="$VRP_JSON"
+    printf '       replay: %s indexed=%s emitted=%s stream-truncated=%s\n' \
+      "$REAL7531" "$(rows_of "$J_R7531")" "$(acs_of "$J_R7531")" "$(strunc_of "$J_R7531")"
+    [ "$(rows_of "$J_R7531")" = "11" ] && [ "$(acs_of "$J_R7531")" = "11" ] && [ "$(strunc_of "$J_R7531")" = "0" ] \
+      && ok "G12-R V7531-AC2 NON-SYNTHETIC — every indexed row of a live plan emits (11 of 11), with no completeness record" \
+      || bad "G12-R V7531-AC2 v3.65.1 indexed=$(rows_of "$J_R7531") emitted=$(acs_of "$J_R7531") stream-truncated=$(strunc_of "$J_R7531") (expected 11/11/0)"
+    for g12id in AC-3 AC-5 AC-9; do
+      if g12_refused "$J_R7531" "$g12id" "stdin-reader:grep"; then
+        ok "G12-R V7531-AC2 v3.65.1 $g12id — its operand-less grep is a NAMED refusal (stdin-reader:grep)"
+      else
+        bad "G12-R V7531-AC2 v3.65.1 $g12id '$(verdict_of "$J_R7531" "$g12id")' / '$(observed_of "$J_R7531" "$g12id")' (expected ERROR stdin-reader:grep)"
+      fi
+    done
+  fi
+fi
+
+# ===========================================================================
+# G12-M — SEEDED FAILURES. Each reverts one FD-0 guard and names the answer its
+# paired arm must move to; each first proves the mutation took.
+# ===========================================================================
+MUTD5="$(mktemp -d -t verify-plan-7531-mut.XXXXXX)"
+m7531() {
+  local name="$1"; shift
+  local dst="$MUTD5/$name.sh" e
+  cp "$VERIFY" "$dst"
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  if cmp -s "$VERIFY" "$dst"; then
+    bad "$name — MUTATION DID NOT TAKE (mutant is byte-identical); the paired arm would pass vacuously"
+  else
+    ok "$name — mutation applied (mutant bytes differ from the shipped tool)"
+  fi
+}
+G12_UNREDIRECT_PI='s/\} <\/dev\/null; done <<< "\$per_issue_records"/}; done <<< "$per_issue_records"/'
+G12_UNREDIRECT_CI='s/\} <\/dev\/null; done <<< "\$ciac_records"/}; done <<< "$ciac_records"/'
+G12_UNREFUSE='s/if reads_stdin_cmd "\$cmd" >\/dev\/null; then return 4; fi/if false; then return 4; fi/'
+
+# M1 — the per-issue body redirect removed: the child route drains again, and the
+# TRIPWIRE must name it — a STREAM ERROR, a DEGRADED roll-up, exit 1 (not 3).
+m7531 g12-m1-per-issue-body-unredirected "$G12_UNREDIRECT_PI"
+g12_child "$MUT_PATH"; JM1="$VRP_JSON"; RCM1="$VRP_RC"
+case "$(observed_of "$JM1" STREAM)" in *"read 1 of 4 parsed per-issue records"*) G12M1_OBS=1 ;; *) G12M1_OBS=0 ;; esac
+[ "$(acs_of "$JM1")" = "1" ] && [ "$(field_by_id "$JM1" STREAM verdict)" = "ERROR" ] && [ "$G12M1_OBS" -eq 1 ] && [ "$RCM1" -eq 1 ] \
+  && ok "G12-M1 V7531-AC1 mutation detected — without the body redirect the child drains the loop (1 of 4) and the tripwire names it: a STREAM ERROR reading 'read 1 of 4', exit 1 (internal) rather than a silent green" \
+  || bad "G12-M1 V7531-AC1 emitted AC=$(acs_of "$JM1") STREAM '$(field_by_id "$JM1" STREAM verdict)' / '$(observed_of "$JM1" STREAM)' rc=$RCM1 (expected 1 / ERROR 'read 1 of 4' / 1)"
+grep -q -F '"stream_state": "truncated"' <<<"$JM1" \
+  && ok "G12-M1b V7531-AC1 the drained run's JSON roll-up reports stream_state truncated" \
+  || bad "G12-M1b V7531-AC1 the drained run's JSON roll-up does not report stream_state truncated"
+g12_child "$MUT_PATH" md; MDM1="$VRP_JSON"
+grep -q -F '**DEGRADED:** read 1 of 4 parsed per-issue records' <<<"$MDM1" \
+  && ok "G12-M1c V7531-AC1 the md roll-up carries the DEGRADED marker and 'read 1 of 4' — a partial measurement is annotated, never presented as a clean count" \
+  || bad "G12-M1c V7531-AC1 the md roll-up does not carry the DEGRADED marker: '$(grep -F 'Verdict roll-up' <<<"$MDM1" || true)'"
+
+# M2 — the refusal removed, the redirects kept: isolation alone holds (6 of 6),
+# but the planted cell PASSes on the null device. That grade-on-nothing false PASS
+# is what the refusal exists to close.
+m7531 g12-m2-refusal-removed "$G12_UNREFUSE"
+vrp_run "$MUT_PATH" "$FIX_DRAIN"; JM2="$VRP_JSON"
+if mutant_ran "G12-M2"; then
+  [ "$(acs_of "$JM2")" = "6" ] && [ "$(verdict_of "$JM2" AC-3)" = "PASS" ] && [ "$(observed_of "$JM2" AC-3)" = "count=0 (== 0)" ] \
+    && ok "G12-M2 V7531-AC2 mutation detected — without the refusal every row still emits (6 of 6) but the planted cell PASSes 'count=0 (== 0)' on the null device" \
+    || bad "G12-M2 V7531-AC2 emitted AC=$(acs_of "$JM2"), AC-3 '$(verdict_of "$JM2" AC-3)' / '$(observed_of "$JM2" AC-3)' (expected 6 and PASS 'count=0 (== 0)')"
+fi
+
+# M3 — the refusal AND both body redirects removed: the pre-fix shape. The
+# tripwire is then the only guard left, and it must fire on BOTH loops.
+m7531 g12-m3-refusal-and-both-redirects-removed "$G12_UNREFUSE" "$G12_UNREDIRECT_PI" "$G12_UNREDIRECT_CI"
+vrp_run "$MUT_PATH" "$FIX_DRAIN"; JM3="$VRP_JSON"; RCM3="$VRP_RC"
+if mutant_ran "G12-M3"; then
+  [ "$(acs_of "$JM3")" = "3" ] && [ "$(ciacs_of "$JM3")" = "2" ] && [ "$(strunc_of "$JM3")" = "2" ] && [ "$RCM3" -eq 1 ] \
+    && ok "G12-M3 V7531-AC2 mutation detected — in the pre-fix shape both loops lose rows again (3 of 6, 2 of 3), and the tripwire names both losses and exits 1" \
+    || bad "G12-M3 V7531-AC2 emitted AC=$(acs_of "$JM3") CIAC=$(ciacs_of "$JM3") stream-truncated=$(strunc_of "$JM3") rc=$RCM3 (expected 3/2/2/1)"
+fi
+
+# M4 — the refusal's own rendering removed: the planted cell falls back to the
+# matcher-outcome text, which asserts that a matcher ran. G12-2 must flip.
+m7531 g12-m4-refusal-rendered-as-matcher-outcome 's/^    stdin-reader:\*\)$/    stdin-reader-unrendered:*)/'
+vrp_run "$MUT_PATH" "$FIX_DRAIN"; JM4="$VRP_JSON"
+if mutant_ran "G12-M4"; then
+  case "$(observed_of "$JM4" AC-3)" in
+    "count-unreadable:stdin-reader:grep (the matcher produced no readable result"*)
+      ok "G12-M4 V7531-AC2 mutation detected — without its own rendering the refusal reads as a matcher that ran and failed, and G12-2 flips" ;;
+    *) bad "G12-M4 V7531-AC2 AC-3 observed '$(observed_of "$JM4" AC-3)' under the mutant; G12-2 observes nothing" ;;
+  esac
+fi
+
+# M5 — the device rule removed: a method naming /dev/stdin runs, reads the null
+# device and PASSes — the same false PASS, reached through a path rather than an
+# absent operand.
+m7531 g12-m5-device-rule-removed 's@case "\$p" in /dev\|/dev/\*\|/proc\|/proc/\*\)@case "$p" in /no-such-device-root/*)@'
+vrp_run "$MUT_PATH" "$FIX_VERBS"; JM5="$VRP_JSON"
+if mutant_ran "G12-M5"; then
+  [ "$(verdict_of "$JM5" AC-12)" = "PASS" ] && [ "$(observed_of "$JM5" AC-12)" = "count=0 (== 0)" ] \
+    && ok "G12-M5 V7531-AC1 mutation detected — without the device rule a method reading /dev/stdin PASSes 'count=0 (== 0)' on the null device" \
+    || bad "G12-M5 V7531-AC1 AC-12 '$(verdict_of "$JM5" AC-12)' / '$(observed_of "$JM5" AC-12)' under the mutant (expected PASS 'count=0 (== 0)')"
+fi
+
+rm -rf "$MUTD5" "$G12_STUB"
 
 # ---------------------------------------------------------------------------
 # Summary
