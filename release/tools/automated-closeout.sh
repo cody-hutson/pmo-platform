@@ -10813,6 +10813,334 @@ STUB
     /bin/rm -rf "$_cb_tmp" 2>/dev/null || true
   fi
 
+  # ── Test CR: phase_create_chore_pr resumes over its own merged chore PR (#7436) —
+  #    offline and hermetic: a bare file-path origin, and a gh stub that emulates the
+  #    host from ONE table of pull requests, so phase 11's REST reader and phase 12's
+  #    reader are driven by the same rows (CR-16 asserts they agree). The operator's
+  #    merge is made from a SEPARATE clone (a merge commit, the PR's head kept at
+  #    refs/pull/<n>/head, then the branch deleted, as the host does), so the work
+  #    clone's origin/main stays STALE until a phase fetches: the CIAC-3 state. CR-1
+  #    is CIAC-3's runtime arm for this card (#7465's NM-CIAC3 is the 15.55 half).
+  #    ARM ORDER IS LOAD-BEARING: CR-1 needs the stale ref before anything fetches;
+  #    CR-2, CR-3, CR-14 and CR-13's first limb need the fresh one; CR-13's second
+  #    limb re-stales it with update-ref; CR-15 must run before CR-7 adds its late
+  #    commit; CR-12 builds its own squash-merged branch last.
+  if [[ -x "$GIT" ]]; then
+    local _cr_s_gh="$GH" _cr_s_root="$REPO_ROOT" _cr_s_mode="$MODE" _cr_s_ver="$VERSION" _cr_s_br="$CHORE_BRANCH"
+    local _cr_s_num="$CHORE_PR_NUMBER" _cr_s_skip="$CHORE_PR_SKIPPED" _cr_s_out="${CHORE_PR_OUTCOME:-}" _cr_s_nm="$NO_MERGE"
+    local _cr_s_to="$MERGE_TIMEOUT" _cr_s_step="$MERGE_POLL_STEP" _cr_s_slug="$REPO_SLUG" _cr_s_ms="$STATE_MILESTONE_SLUG"
+    local _cr_s_oic="$OPEN_ISSUE_COUNT" _cr_s_pr="$PR_NUMBER" _cr_s_mil="$MILESTONE"
+    local _cr_tmp _cr_origin _cr_work _cr_merge _cr_br _cr_br84 _cr_stale _cr_setup=0 _cr_rc _cr_d _cr_rem0 _cr_rem1
+    local _cr_t1 _cr_t2 _cr_tok _cr_rd _cr_seen _cr_row _cr_n _cr_isanc
+    local _cr_m1='4401 x chore/v9.83-stage-13-corpus-update closed 2026-09-25T10:00:00Z MERGED/UNKNOWN/UNKNOWN'
+    local _cr_c2='4402 x chore/v9.83-stage-13-corpus-update closed - CLOSED/MERGEABLE/BLOCKED'
+    local _cr_o4='4404 x chore/v9.83-stage-13-corpus-update open - OPEN/MERGEABLE/CLEAN'
+    local _cr_f6='4406 forker chore/v9.83-stage-13-corpus-update open - OPEN/MERGEABLE/CLEAN'
+    _cr_tmp="$(cd "$(/usr/bin/mktemp -d -t chorepr-resume-selftest.XXXXXX)" && pwd -P)"
+    _cr_origin="$_cr_tmp/origin.git"; _cr_work="$_cr_tmp/work"; _cr_merge="$_cr_tmp/merge-side"
+    _cr_br="chore/v9.83-stage-13-corpus-update"; _cr_br84="chore/v9.84-stage-13-corpus-update"
+    (
+      set -e
+      $GIT init --bare -q "$_cr_origin"
+      $GIT init -q -b main "$_cr_work" 2>/dev/null || { $GIT init -q "$_cr_work"; $GIT -C "$_cr_work" checkout -q -b main; }
+      /bin/mkdir -p "$_cr_work/release/releases/notes"
+      /usr/bin/printf '# RELEASE_DIGEST\n\n## Knowledge Corpus\n\n' > "$_cr_work/release/releases/RELEASE_DIGEST.md"
+      /usr/bin/printf '# RELEASE_INDEX\n\n| Version | Milestone | Date | Theme | Release PR | Release Notes |\n|---|---|---|---|---|---|\n' > "$_cr_work/release/releases/RELEASE_INDEX.md"
+      $GIT -C "$_cr_work" add -A
+      $GIT -C "$_cr_work" -c user.email=t@t -c user.name=t commit -qm baseline
+      $GIT -C "$_cr_work" remote add origin "$_cr_origin"
+      $GIT -C "$_cr_work" push -q origin main
+      $GIT -C "$_cr_work" fetch -q origin
+      $GIT -C "$_cr_work" checkout -q -b "$_cr_br" origin/main
+      /usr/bin/printf '### v9.83 (2026-09-25) — cr fixture\n' >> "$_cr_work/release/releases/RELEASE_DIGEST.md"
+      /usr/bin/printf '| v9.83 | cr-fixture | 2026-09-25 | — | #1 | notes |\n' >> "$_cr_work/release/releases/RELEASE_INDEX.md"
+      /usr/bin/printf 'notes\n' > "$_cr_work/release/releases/notes/v9.83_RELEASE_NOTES.md"
+      $GIT -C "$_cr_work" add -A
+      $GIT -C "$_cr_work" -c user.email=t@t -c user.name=t commit -qm chore
+      $GIT -C "$_cr_work" push -q origin "$_cr_br"
+      $GIT -C "$_cr_work" push -q origin "$_cr_br:refs/pull/4401/head"
+      $GIT clone -q "$_cr_origin" "$_cr_merge"
+      $GIT -C "$_cr_merge" -c user.email=t@t -c user.name=t merge -q --no-ff "origin/$_cr_br" -m "merge chore"
+      $GIT -C "$_cr_merge" push -q origin main
+      $GIT -C "$_cr_merge" push -q origin --delete "$_cr_br"
+    ) >/dev/null 2>&1 || _cr_setup=$?
+    _cr_stale="$($GIT -C "$_cr_work" rev-parse --verify --quiet refs/remotes/origin/main 2>/dev/null || true)"
+    _cr_t1="$($GIT -C "$_cr_work" rev-parse --verify --quiet "refs/heads/$_cr_br" 2>/dev/null || true)"
+    [[ -n "$_cr_stale" && -n "$_cr_t1" ]] || _cr_setup=1
+    # The gh stub. ONE table, $_cr_tmp/prs, one row per pull request: number owner branch
+    # state merged_at composite. A REST `api …/pulls?head=H&state=S` read returns the rows
+    # whose owner:branch equals H; a head carrying NO owner matches the branch under ANY
+    # owner, which is exactly what an unqualified lookup gets, so a regression that drops
+    # the owner binds the fork row and CR-13 reddens. `pr list --head B`, the pre-#7436
+    # GraphQL lookup, matches the branch under any owner too, because gh cannot
+    # owner-qualify it. `pr view N` is phase 12's reader. Every GraphQL-backed call (pr
+    # list, pr view, api graphql) is counted, so an arm can assert the resolve path made none.
+    /bin/cat > "$_cr_tmp/gh-stub.sh" <<STUB
+#!/usr/bin/env bash
+d="$_cr_tmp"
+gq() { c="\$(/bin/cat "\$d/gql-ctr" 2>/dev/null || echo 0)"; /usr/bin/printf '%s' "\$((c+1))" > "\$d/gql-ctr"; }
+if [[ "\$1" == "api" ]]; then
+  u=""
+  for a in "\$@"; do
+    case "\$a" in
+      graphql) gq ;;
+      *pulls\?*) u="\$a" ;;
+    esac
+  done
+  [[ -n "\$u" ]] || exit 0
+  h=""; s=""; q="\${u#*\?}"
+  while [[ -n "\$q" ]]; do
+    p="\${q%%&*}"
+    case "\$p" in head=*) h="\${p#head=}" ;; state=*) s="\${p#state=}" ;; esac
+    if [[ "\$q" == *"&"* ]]; then q="\${q#*&}"; else q=""; fi
+  done
+  /usr/bin/printf 'api %s %s\n' "\$h" "\$s" >> "\$d/list-args"
+  if [[ -f "\$d/list-rc" ]]; then /usr/bin/printf 'stub REST failure: HTTP 502\n' >&2; exit "\$(/bin/cat "\$d/list-rc")"; fi
+  /usr/bin/awk -v h="\$h" -v s="\$s" '((\$2 ":" \$3) == h || (index(h, ":") == 0 && \$3 == h)) && (s == "all" || s == \$4) { print \$1, \$4, \$5 }' "\$d/prs"
+  exit 0
+fi
+if [[ "\$1" == "pr" && "\$2" == "list" ]]; then
+  gq
+  h=""; s=""; p=""
+  for a in "\$@"; do [[ "\$p" == "--head" ]] && h="\$a"; [[ "\$p" == "--state" ]] && s="\$a"; p="\$a"; done
+  /usr/bin/printf 'pr-list %s %s\n' "\$h" "\$s" >> "\$d/list-args"
+  if [[ -f "\$d/list-rc" ]]; then /usr/bin/printf 'stub list failure\n' >&2; exit "\$(/bin/cat "\$d/list-rc")"; fi
+  /usr/bin/awk -v h="\$h" -v s="\$s" '\$3 == h && (s == "all" || s == \$4) { print \$1 }' "\$d/prs"
+  exit 0
+fi
+if [[ "\$1" == "pr" && "\$2" == "view" ]]; then
+  gq
+  /usr/bin/awk -v n="\$3" '\$1 == n { print \$6; f = 1 } END { exit f ? 0 : 1 }' "\$d/prs"; exit \$?
+fi
+if [[ "\$1" == "pr" && "\$2" == "create" ]]; then
+  c="\$(/bin/cat "\$d/create-ctr" 2>/dev/null || echo 0)"; /usr/bin/printf '%s' "\$((c+1))" > "\$d/create-ctr"
+  /bin/cat "\$d/create-out" 2>/dev/null; exit "\$(/bin/cat "\$d/create-rc" 2>/dev/null || echo 0)"
+fi
+if [[ "\$1" == "pr" && "\$2" == "merge" ]]; then
+  m="\$(/bin/cat "\$d/merge-ctr" 2>/dev/null || echo 0)"; /usr/bin/printf '%s' "\$((m+1))" > "\$d/merge-ctr"; exit 0
+fi
+exit 0
+STUB
+    /bin/chmod +x "$_cr_tmp/gh-stub.sh"
+    if [[ "$_cr_setup" -ne 0 ]]; then
+      echo "FAIL: CR fixture — the hermetic origin/work/merge-side repositories could not be built (rc=$_cr_setup); no CR arm can run, and the witness gate will name group CR"; failures=$((failures+1))
+    else
+      GH="$_cr_tmp/gh-stub.sh"; REPO_ROOT="$_cr_work"; MODE="apply"; VERSION="v9.83"; CHORE_BRANCH="$_cr_br"
+      NO_MERGE=0; MERGE_TIMEOUT=2; MERGE_POLL_STEP=1; REPO_SLUG="x/y"; STATE_MILESTONE_SLUG="cr-fixture"
+      OPEN_ISSUE_COUNT=0; PR_NUMBER="1"; MILESTONE="1"
+      _cr_reset() {   # per-arm state; $1 = the PR table's rows (may be empty)
+        PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+        CHORE_PR_NUMBER=""; CHORE_PR_SKIPPED=0; CHORE_PR_OUTCOME=""
+        if [[ -n "${1:-}" ]]; then /usr/bin/printf '%s\n' "$1" > "$_cr_tmp/prs"; else : > "$_cr_tmp/prs"; fi
+        : > "$_cr_tmp/list-args"
+        /usr/bin/printf '0' > "$_cr_tmp/create-ctr"; /usr/bin/printf '0' > "$_cr_tmp/merge-ctr"; /usr/bin/printf '0' > "$_cr_tmp/gql-ctr"
+        /bin/rm -f "$_cr_tmp/list-rc"
+      }
+      _cr_run() { _cr_rc=0; phase_create_chore_pr >/dev/null 2>&1 || _cr_rc=$?; _cr_d="${PHASE_DETAILS[0]:-}"; }
+      _cr_ctr() { /bin/cat "$_cr_tmp/$1" 2>/dev/null || echo 0; }
+
+      # CR-1 — AC-1/AC-2 on a STALE ref, merge-commit merge (CIAC-3's runtime arm): a MERGED PR, its branch
+      #        deleted, origin/main predating the merge. Containment is proven against the PR's own head.
+      _cr_reset "$_cr_m1"
+      _st_arm CR CR-1; [[ "$($GIT -C "$_cr_work" rev-list --count "origin/main..$_cr_br" 2>/dev/null || echo 0)" -ge 1 ]] || { echo "FAIL: CR-1 fixture — origin/main is not stale (0 commits behind the chore branch), so this arm would test the fresh path twice"; failures=$((failures+1)); }
+      _cr_run
+      [[ "$_cr_rc" -eq 0 && "${PHASE_RESULTS[0]:-}" == "SKIPPED" && "$CHORE_PR_NUMBER" == "4401" && "$CHORE_PR_SKIPPED" -eq 0 ]] || { echo "FAIL: CR-1 — a resume over a MERGED chore PR with a STALE origin/main must resolve it (rc 0, SKIPPED, #4401, SKIPPED-flag 0); got rc=$_cr_rc result='${PHASE_RESULTS[0]:-}' pr='$CHORE_PR_NUMBER' skipped=$CHORE_PR_SKIPPED detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "resumed-already-merged" ]] || { echo "FAIL: CR-1 — the resume must record outcome resumed-already-merged; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+      [[ "$(_cr_ctr create-ctr)" -eq 0 ]] || { echo "FAIL: CR-1 — gh pr create was reached for an already-merged PR"; failures=$((failures+1)); }
+      [[ -z "$($GIT -C "$_cr_work" ls-remote --heads origin "$_cr_br" 2>/dev/null || true)" ]] || { echo "FAIL: CR-1 — the remote chore branch deleted by the merge was re-created (a push ran before resolution)"; failures=$((failures+1)); }
+      /usr/bin/grep -qxF "api x:$_cr_br all" "$_cr_tmp/list-args" || { echo "FAIL: CR-1 — the lookup must be the owner-qualified REST read of the exact head with state=all; saw '$(/bin/cat "$_cr_tmp/list-args")'"; failures=$((failures+1)); }
+      [[ "$(_cr_ctr gql-ctr)" -eq 0 ]] || { echo "FAIL: CR-1 — phase 11's resolve path made $(_cr_ctr gql-ctr) GraphQL call(s); it must read the partition over REST only"; failures=$((failures+1)); }
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      _cr_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _cr_rc=$?
+      [[ "$_cr_rc" -eq 0 && "$(get_phase await_merge_chore_pr)" == PASS\|*"was ALREADY MERGED — recognised after 0s"* && "$(_cr_ctr merge-ctr)" -eq 0 ]] || { echo "FAIL: CR-1 (AC-2, reached) — phase 12 must render its MERGED terminal-PASS arm on the first read with zero merges; got rc=$_cr_rc '$(get_phase await_merge_chore_pr)' merges=$(_cr_ctr merge-ctr)"; failures=$((failures+1)); }
+
+      # CR-2 — AC-1 on a FRESH ref: the zero-commit guard fires and must still reach the MERGED arm,
+      #        through the same REST resolver, with no GraphQL call on this idempotent path.
+      $GIT -C "$_cr_work" fetch -q origin >/dev/null 2>&1 || true
+      _cr_reset "$_cr_m1"
+      _st_arm CR CR-2; [[ "$($GIT -C "$_cr_work" rev-list --count "origin/main..$_cr_br" 2>/dev/null || echo 1)" -eq 0 ]] || { echo "FAIL: CR-2 fixture — origin/main is not fresh, so the zero-commit guard path is not exercised"; failures=$((failures+1)); }
+      _cr_run
+      [[ "$_cr_rc" -eq 0 && "$CHORE_PR_NUMBER" == "4401" && "$CHORE_PR_SKIPPED" -eq 0 && "$_cr_d" == *"0 commits ahead"* ]] || { echo "FAIL: CR-2 — with a FRESH ref the guard must consult the resolver and resume (#4401, SKIPPED-flag 0); got rc=$_cr_rc pr='$CHORE_PR_NUMBER' skipped=$CHORE_PR_SKIPPED detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "resumed-already-merged" ]] || { echo "FAIL: CR-2 — the fresh-ref resume must record outcome resumed-already-merged; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+      [[ "$(_cr_ctr gql-ctr)" -eq 0 ]] || { echo "FAIL: CR-2 — the idempotent path made $(_cr_ctr gql-ctr) GraphQL call(s); it must make none"; failures=$((failures+1)); }
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      _cr_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _cr_rc=$?
+      [[ "$_cr_rc" -eq 0 && "$(get_phase await_merge_chore_pr)" == PASS\|*"was ALREADY MERGED"* && "$(_cr_ctr merge-ctr)" -eq 0 ]] || { echo "FAIL: CR-2 — the fresh-ref path must render the SAME MERGED arm as CR-1; got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+
+      # CR-3 — control: the genuine idempotent skip (outputs on main, NO PR for this branch) is preserved.
+      _cr_reset ""
+      _cr_run
+      _st_arm CR CR-3; [[ "$_cr_rc" -eq 0 && "${PHASE_RESULTS[0]:-}" == "SKIPPED" && "$CHORE_PR_SKIPPED" -eq 1 && -z "$CHORE_PR_NUMBER" ]] || { echo "FAIL: CR-3 — with no PR for the branch and the outputs on main, the idempotent skip must stand (rc 0, SKIPPED, SKIPPED-flag 1, no number); got rc=$_cr_rc result='${PHASE_RESULTS[0]:-}' skipped=$CHORE_PR_SKIPPED pr='$CHORE_PR_NUMBER'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "skipped-as-idempotent" ]] || { echo "FAIL: CR-3 — the idempotent skip must record outcome skipped-as-idempotent; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+
+      # CR-14 — the zero-commit guard's OPEN arm: zero commits ahead and the outputs on main, but an
+      #         OPEN PR for this branch. It is live work: reused and left for phase 12, never reported
+      #         as "none needed".
+      _cr_reset "$_cr_o4"
+      _cr_run
+      _st_arm CR CR-14; [[ "$_cr_rc" -eq 0 && "${PHASE_RESULTS[0]:-}" == "SKIPPED" && "$CHORE_PR_NUMBER" == "4404" && "$CHORE_PR_SKIPPED" -eq 0 && "$_cr_d" == *"already exists for branch"* && "$(_cr_ctr create-ctr)" -eq 0 ]] || { echo "FAIL: CR-14 — an OPEN PR on the zero-commit path must be reused (SKIPPED, #4404, SKIPPED-flag 0, no create), not skipped as idempotent; got rc=$_cr_rc pr='$CHORE_PR_NUMBER' skipped=$CHORE_PR_SKIPPED detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "existing-open" ]] || { echo "FAIL: CR-14 — the reuse must record outcome existing-open; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+      [[ "$(_cr_ctr gql-ctr)" -eq 0 ]] || { echo "FAIL: CR-14 — the zero-commit path made $(_cr_ctr gql-ctr) GraphQL call(s)"; failures=$((failures+1)); }
+
+      # CR-13 — OWNER QUALIFICATION (public-repository security): a FORK's pull request on a same-named
+      #         branch must never bind as this run's chore PR, on either path. (a) Fresh ref, zero-commit
+      #         guard: the fork's OPEN PR is invisible, so the idempotent skip stands. (b) Stale ref, main
+      #         path: the fork's OPEN PR is invisible, so this run creates its own. An unqualified lookup —
+      #         the pre-#7436 GraphQL one, or REST without the owner — binds #4406 in both, and phase 12
+      #         would then poll and merge the fork's PR with the operator's credentials.
+      _cr_reset "$_cr_f6"
+      _cr_run
+      _st_arm CR CR-13; [[ "$_cr_rc" -eq 0 && "$CHORE_PR_NUMBER" != "4406" && "$CHORE_PR_OUTCOME" == "skipped-as-idempotent" ]] || { echo "FAIL: CR-13 (a) SECURITY — a fork's same-named OPEN PR must not bind as this run's chore PR on the zero-commit path; got rc=$_cr_rc outcome='$CHORE_PR_OUTCOME' pr='$CHORE_PR_NUMBER'"; failures=$((failures+1)); }
+      /usr/bin/grep -qxF "api x:$_cr_br all" "$_cr_tmp/list-args" || { echo "FAIL: CR-13 (a) — the lookup must carry this repository's owner (head=x:<branch>); saw '$(/bin/cat "$_cr_tmp/list-args")'"; failures=$((failures+1)); }
+      $GIT -C "$_cr_work" update-ref refs/remotes/origin/main "$_cr_stale" >/dev/null 2>&1 || true
+      _cr_reset "$_cr_f6"
+      /usr/bin/printf 'https://github.com/x/y/pull/4407\n' > "$_cr_tmp/create-out"; /usr/bin/printf '0' > "$_cr_tmp/create-rc"
+      _cr_run
+      [[ "$_cr_rc" -eq 0 && "$CHORE_PR_NUMBER" == "4407" && "$CHORE_PR_OUTCOME" == "created" && "$(_cr_ctr create-ctr)" -eq 1 && "$_cr_d" != *4406* ]] || { echo "FAIL: CR-13 (b) SECURITY — with only a fork's same-named OPEN PR present, this run must create its OWN chore PR (created, #4407) and never reuse #4406; got rc=$_cr_rc outcome='$CHORE_PR_OUTCOME' pr='$CHORE_PR_NUMBER' creates=$(_cr_ctr create-ctr) detail='$_cr_d'"; failures=$((failures+1)); }
+
+      # CR-4 — AC-3 control, NEVER CREATED (stale ref, no PR anywhere): the create is attempted and its failure is LOUD.
+      _cr_reset ""
+      /usr/bin/printf 'no commits between main and the head branch\n' > "$_cr_tmp/create-out"; /usr/bin/printf '1' > "$_cr_tmp/create-rc"
+      _cr_run
+      _st_arm CR CR-4; [[ "$_cr_rc" -eq 3 && "${PHASE_RESULTS[0]:-}" == "FAIL" && -z "$CHORE_PR_NUMBER" && "$(_cr_ctr create-ctr)" -eq 1 && "$_cr_d" == *"gh pr create failed:"* ]] || { echo "FAIL: CR-4 (AC-3) — a genuinely absent PR must reach the create and fail LOUD (rc 3, FAIL, 1 create, the create's error in the detail); got rc=$_cr_rc result='${PHASE_RESULTS[0]:-}' creates=$(_cr_ctr create-ctr) detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "failed" ]] || { echo "FAIL: CR-4 — a failed create must record outcome failed; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+
+      # CR-5 — AC-3 control, WRONG SLUG: a MERGED PR exists only for ANOTHER version's head; it must be invisible.
+      _cr_reset "4401 x chore/v9.82-stage-13-corpus-update closed 2026-09-25T10:00:00Z MERGED/UNKNOWN/UNKNOWN"
+      _cr_run
+      _st_arm CR CR-5; [[ "$_cr_rc" -eq 3 && "$CHORE_PR_NUMBER" != "4401" && "$(_cr_ctr create-ctr)" -eq 1 ]] || { echo "FAIL: CR-5 (AC-3) — a merged PR on a DIFFERENT head must not be read as this run's (rc 3 through the failing create, never #4401); got rc=$_cr_rc pr='$CHORE_PR_NUMBER' creates=$(_cr_ctr create-ctr)"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "failed" ]] || { echo "FAIL: CR-5 — the failed create must record outcome failed; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+      /usr/bin/grep -qxF "api x:$_cr_br all" "$_cr_tmp/list-args" || { echo "FAIL: CR-5 — the lookup did not ask for THIS head, owner-qualified ($_cr_br); saw '$(/bin/cat "$_cr_tmp/list-args")'"; failures=$((failures+1)); }
+
+      # CR-6 — CLOSED is not MERGED at this site either: a closed-unmerged PR leads to a fresh create.
+      _cr_reset "$_cr_c2"
+      /usr/bin/printf 'https://github.com/x/y/pull/4403\n' > "$_cr_tmp/create-out"; /usr/bin/printf '0' > "$_cr_tmp/create-rc"
+      _cr_run
+      _st_arm CR CR-6; [[ "$_cr_rc" -eq 0 && "${PHASE_RESULTS[0]:-}" == "PASS" && "$CHORE_PR_NUMBER" == "4403" ]] || { echo "FAIL: CR-6 — only a CLOSED-unmerged PR must lead to a fresh create (PASS, #4403); got rc=$_cr_rc result='${PHASE_RESULTS[0]:-}' pr='$CHORE_PR_NUMBER' detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "created" ]] || { echo "FAIL: CR-6 — the fresh create must record outcome created; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+
+      # CR-8 — OPEN is preserved: an existing open PR is reused, never duplicated, and its detail is unchanged.
+      _cr_reset "$_cr_o4"
+      _cr_run
+      _st_arm CR CR-8; [[ "$_cr_rc" -eq 0 && "$CHORE_PR_NUMBER" == "4404" && "$(_cr_ctr create-ctr)" -eq 0 && "$_cr_d" == "PR #4404 already exists for branch" ]] || { echo "FAIL: CR-8 — an OPEN PR must be reused (#4404, 0 creates, detail unchanged); got rc=$_cr_rc pr='$CHORE_PR_NUMBER' creates=$(_cr_ctr create-ctr) detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "existing-open" ]] || { echo "FAIL: CR-8 — the reuse must record outcome existing-open; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+
+      # CR-16 — READER AGREEMENT: phase 11 reads the partition over REST, phase 12 through
+      #         _chore_pr_terminal_state. Driven from the SAME rows, the two must name the same state
+      #         for an open, a merged and a closed-unmerged PR — and those must be three distinct
+      #         states, or the comparison is vacuous.
+      _cr_seen=""
+      _st_arm CR CR-16; for _cr_row in "$_cr_o4" "$_cr_m1" "$_cr_c2"; do
+        _cr_reset "$_cr_row"
+        _cr_n="${_cr_row%% *}"
+        _cr_tok="$(_chore_pr_resolve 2>/dev/null || true)"
+        _cr_rd="$(_chore_pr_terminal_state "$_cr_n" 2>/dev/null || true)"
+        [[ -n "$_cr_tok" && "${_cr_tok%% *}" == "${_cr_rd%%/*}" && "${_cr_tok#* }" == "$_cr_n" ]] || { echo "FAIL: CR-16 — phase 11's REST reader ('$_cr_tok') and phase 12's reader ('$_cr_rd') disagree on PR #$_cr_n"; failures=$((failures+1)); }
+        _cr_seen="${_cr_seen} ${_cr_tok%% *}"
+      done
+      [[ "$_cr_seen" == " OPEN MERGED CLOSED" ]] || { echo "FAIL: CR-16 anti-vacuity — the rows must cover OPEN, MERGED and CLOSED; the REST reader named '$_cr_seen'"; failures=$((failures+1)); }
+
+      # CR-15 — the push's ANCESTRY REFINEMENT, the control the fail-loud push must not trip: the push is
+      #         REJECTED because the remote branch moved AHEAD of the local tip (the host's "Update
+      #         branch"), but that head already carries every local commit — reuse the open PR, never FAIL.
+      (
+        set -e
+        $GIT -C "$_cr_merge" fetch -q origin
+        $GIT -C "$_cr_merge" checkout -q -B cr-ahead "origin/$_cr_br"
+        /usr/bin/printf 'update-branch\n' > "$_cr_merge/ahead.txt"
+        $GIT -C "$_cr_merge" add ahead.txt
+        $GIT -C "$_cr_merge" -c user.email=t@t -c user.name=t commit -qm "update branch"
+        $GIT -C "$_cr_merge" push -q origin "cr-ahead:refs/heads/$_cr_br"
+      ) >/dev/null 2>&1 || true
+      _cr_isanc=0; $GIT -C "$_cr_merge" merge-base --is-ancestor "$_cr_t1" refs/heads/cr-ahead >/dev/null 2>&1 || _cr_isanc=$?
+      _cr_reset "$_cr_o4"
+      _cr_run
+      _st_arm CR CR-15; [[ "$_cr_isanc" -eq 0 && "$($GIT -C "$_cr_merge" rev-parse --verify --quiet refs/heads/cr-ahead 2>/dev/null || true)" != "$_cr_t1" ]] || { echo "FAIL: CR-15 fixture — the remote chore branch is not strictly AHEAD of the local tip, so the push is not rejected and the refinement is not exercised"; failures=$((failures+1)); }
+      [[ "$_cr_rc" -eq 0 && "$CHORE_PR_NUMBER" == "4404" && "$(_cr_ctr create-ctr)" -eq 0 && "$_cr_d" == *"already contains the local tip"* ]] || { echo "FAIL: CR-15 — a push rejected only because the remote head is AHEAD of the local tip must not FAIL: reuse #4404 with the refinement named in the detail; got rc=$_cr_rc pr='$CHORE_PR_NUMBER' creates=$(_cr_ctr create-ctr) detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "existing-open" ]] || { echo "FAIL: CR-15 — the reuse must record outcome existing-open; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+
+      # CR-7 — CONTAINMENT against the merged PR's OWN head: the PR MERGED, but the local branch gained a
+      #        commit afterwards, so the local tip is not an ancestor of refs/pull/4401/head -> FAIL, naming
+      #        the count, with nothing pushed and nothing created.
+      /usr/bin/printf 'late\n' > "$_cr_work/late.txt"
+      $GIT -C "$_cr_work" add late.txt >/dev/null 2>&1 || true
+      $GIT -C "$_cr_work" -c user.email=t@t -c user.name=t commit -qm late >/dev/null 2>&1 || true
+      _cr_rem0="$($GIT -C "$_cr_work" ls-remote --heads origin "$_cr_br" 2>/dev/null || true)"
+      _cr_reset "$_cr_m1"
+      _cr_run
+      _cr_rem1="$($GIT -C "$_cr_work" ls-remote --heads origin "$_cr_br" 2>/dev/null || true)"
+      _st_arm CR CR-7; [[ "$_cr_rc" -eq 3 && "${PHASE_RESULTS[0]:-}" == "FAIL" && "$_cr_d" == *"carries 1 commit(s) its merged head does not"* && "$(_cr_ctr create-ctr)" -eq 0 && "$_cr_rem0" == "$_cr_rem1" ]] || { echo "FAIL: CR-7 — a MERGED PR whose local branch gained a commit after the merge must FAIL naming it, with no push and no create; got rc=$_cr_rc detail='$_cr_d' remote-before='$_cr_rem0' after='$_cr_rem1'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "failed" ]] || { echo "FAIL: CR-7 — the containment failure must record outcome failed; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+
+      # CR-10 — the push FAILS LOUD: an unreachable origin makes the push fail, and its remote head
+      #         cannot be read either, so the phase FAILs before any create, with a one-line detail.
+      $GIT -C "$_cr_work" remote set-url origin "$_cr_tmp/no-such-origin.git" >/dev/null 2>&1 || true
+      _cr_reset ""
+      _cr_run
+      $GIT -C "$_cr_work" remote set-url origin "$_cr_origin" >/dev/null 2>&1 || true
+      _st_arm CR CR-10; [[ "$_cr_rc" -eq 3 && "$_cr_d" == *"git push -u origin"* && "$(_cr_ctr create-ctr)" -eq 0 && "$_cr_d" != *'|'* && "$_cr_d" != *$'\n'* ]] || { echo "FAIL: CR-10 — a failed push must FAIL loud before the create, with a one-line detail; got rc=$_cr_rc creates=$(_cr_ctr create-ctr) detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "failed" ]] || { echo "FAIL: CR-10 — the failed push must record outcome failed; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+
+      # CR-11 — an unreadable partition is a FAIL carrying the host's own message, never "none".
+      _cr_reset ""
+      /usr/bin/printf '1' > "$_cr_tmp/list-rc"
+      _cr_run
+      _st_arm CR CR-11; [[ "$_cr_rc" -eq 3 && "$_cr_d" == *"cannot resolve the chore PR"* && "$_cr_d" == *"stub REST failure: HTTP 502"* && "$(_cr_ctr create-ctr)" -eq 0 ]] || { echo "FAIL: CR-11 — a failed PR lookup must FAIL (rc 3) with the host's message and must not reach the create; got rc=$_cr_rc creates=$(_cr_ctr create-ctr) detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "failed" ]] || { echo "FAIL: CR-11 — the unreadable partition must record outcome failed; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+      /bin/rm -f "$_cr_tmp/list-rc"
+
+      # CR-12 — MERGE-METHOD AGNOSTIC: a SQUASH merge. main gains ONE new commit carrying the chore
+      #         branch's content, so the chore commit is NOT an ancestor of main — containment measured
+      #         against main would FAIL here even after refreshing origin/main — yet the local tip IS an
+      #         ancestor of the merged PR's own head, which is what containment tests. It must resume.
+      _cr_setup=0
+      (
+        set -e
+        $GIT -C "$_cr_work" fetch -q origin
+        $GIT -C "$_cr_work" checkout -q -b "$_cr_br84" origin/main
+        /usr/bin/printf '### v9.84 (2026-09-25) — cr squash fixture\n' >> "$_cr_work/release/releases/RELEASE_DIGEST.md"
+        $GIT -C "$_cr_work" add -A
+        $GIT -C "$_cr_work" -c user.email=t@t -c user.name=t commit -qm chore84
+        $GIT -C "$_cr_work" push -q origin "$_cr_br84"
+        $GIT -C "$_cr_work" push -q origin "$_cr_br84:refs/pull/4405/head"
+        $GIT -C "$_cr_merge" fetch -q origin
+        $GIT -C "$_cr_merge" checkout -q main
+        $GIT -C "$_cr_merge" merge -q --ff-only origin/main
+        $GIT -C "$_cr_merge" merge -q --squash "origin/$_cr_br84"
+        $GIT -C "$_cr_merge" -c user.email=t@t -c user.name=t commit -qm "squash chore84"
+        $GIT -C "$_cr_merge" push -q origin main
+        $GIT -C "$_cr_merge" push -q origin --delete "$_cr_br84"
+        $GIT -C "$_cr_work" fetch -q origin
+      ) >/dev/null 2>&1 || _cr_setup=$?
+      _cr_t2="$($GIT -C "$_cr_work" rev-parse --verify --quiet "refs/heads/$_cr_br84" 2>/dev/null || true)"
+      _cr_isanc=0; $GIT -C "$_cr_work" merge-base --is-ancestor "${_cr_t2:-HEAD}" refs/remotes/origin/main >/dev/null 2>&1 || _cr_isanc=$?
+      VERSION="v9.84"; CHORE_BRANCH="$_cr_br84"
+      _cr_reset "4405 x $_cr_br84 closed 2026-09-25T11:00:00Z MERGED/UNKNOWN/UNKNOWN"
+      _cr_run
+      _st_arm CR CR-12; [[ "$_cr_setup" -eq 0 && -n "$_cr_t2" && "$_cr_isanc" -eq 1 ]] || { echo "FAIL: CR-12 fixture — the squash merge was not built, or the chore tip IS an ancestor of the refreshed origin/main (setup rc=$_cr_setup, ancestry rc=$_cr_isanc), so this arm would not tell the merge methods apart"; failures=$((failures+1)); }
+      [[ "$_cr_rc" -eq 0 && "${PHASE_RESULTS[0]:-}" == "SKIPPED" && "$CHORE_PR_NUMBER" == "4405" && "$(_cr_ctr create-ctr)" -eq 0 && "$_cr_d" == *"refs/pull/4405/head"* ]] || { echo "FAIL: CR-12 — a SQUASH-merged chore PR must resume through containment against its own head (SKIPPED, #4405, no create); got rc=$_cr_rc result='${PHASE_RESULTS[0]:-}' pr='$CHORE_PR_NUMBER' detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "resumed-already-merged" ]] || { echo "FAIL: CR-12 — the squash resume must record outcome resumed-already-merged; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+      VERSION="v9.83"; CHORE_BRANCH="$_cr_br"
+
+      # CR-9 — CIAC-3, STATIC: the production region carries no head-keyed `--state open` chore-PR lookup.
+      #   A REGEX, not the plan's literal needle: this file must not contain that needle anywhere, or
+      #   CIAC-3's whole-file `grep -c -F` would count this arm instead of the code. The control
+      #   fixture likewise omits the `--repo` operand, so it matches the regex but not the needle.
+      local _cr_prod _cr_rx='pr list .*--head "\$CHORE_BRANCH" .*--state open'
+      _cr_prod="$(/usr/bin/sed -n '1,/^self_test() {/p' "${BASH_SOURCE[0]}" || true)"
+      _st_arm CR CR-9; [[ "$(grep_count -E "$_cr_rx" <<<"$_cr_prod")" -eq 0 ]] || { echo "FAIL: CR-9 (CIAC-3) — the production region still resolves the chore PR with --state open"; failures=$((failures+1)); }
+      [[ "$(grep_count -E "$_cr_rx" <<<'  x="$($GH pr list --head "$CHORE_BRANCH" --state open --json number)"')" -eq 1 ]] || { echo "FAIL: CR-9 control — the matcher missed a head-keyed --state open lookup; its zero above proves nothing"; failures=$((failures+1)); }
+
+      _st_witness CR 16
+    fi
+    GH="$_cr_s_gh"; REPO_ROOT="$_cr_s_root"; MODE="$_cr_s_mode"; VERSION="$_cr_s_ver"; CHORE_BRANCH="$_cr_s_br"
+    CHORE_PR_NUMBER="$_cr_s_num"; CHORE_PR_SKIPPED="$_cr_s_skip"; CHORE_PR_OUTCOME="$_cr_s_out"; NO_MERGE="$_cr_s_nm"
+    MERGE_TIMEOUT="$_cr_s_to"; MERGE_POLL_STEP="$_cr_s_step"; REPO_SLUG="$_cr_s_slug"; STATE_MILESTONE_SLUG="$_cr_s_ms"
+    OPEN_ISSUE_COUNT="$_cr_s_oic"; PR_NUMBER="$_cr_s_pr"; MILESTONE="$_cr_s_mil"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    /bin/rm -rf "$_cr_tmp" 2>/dev/null || true
+  fi
+
   # Test 4e: phase_await_merge_chore_pr budget + escape modes (#1705) — offline,
   # hermetic. Asserts: the zero-commit SKIP propagation (CHORE_PR_SKIPPED=1 →
   # await SKIPPED, un-stranding terminal phases); --no-merge → await SKIPPED;
@@ -15910,6 +16238,7 @@ EOF
   _st_claim M "  phase_action_item_gate MEASURED recommended --attest-action-items cause validated (group M — 10 arms, one for each of the classifier's four refusal paths plus the six cause arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): every arm binds to the literal 'MEASURED RECOMMENDATION: ' prefix rather than to the whole detail, because the blocking FAIL text already names BOTH causes in its remediation sentence and a whole-detail search for either one therefore passes over an inverted classifier — the vacuous-arm shape, refused here by construction — M1 a commitment emitted with an empty ledger recommends emit-skipped and provably not the other cause / M2 its differential control, same fixture and mode with only the log counts changed, recommends no-commitments and provably not the other / M3 the residue gets its own outcome: decisions rendered with nothing emitted is the shape a swept-and-owed-nothing release and a never-swept release BOTH produce, so the classifier recommends NEITHER cause instead of guessing / M4 an unreadable probe is not a zero — a missing reader recommends nothing and NAMES the reader, without which a broken reader would silently recommend no-commitments on every close / M5 a measurement that DISAGREES with an attestation already given is recorded and still passes, with the specificity arm that an AGREEING measurement renders no disagreement notice / M6 THE SWEEP ZERO-STATE IS NOT A COMMITMENT: action-item-opened rows that all carry the sweep:none-owed payload token — what a release that swept every routing point and owed nothing emits — recommend NEITHER cause and never emit-skipped, and the basis NAMES the zero-state rows; red against a classifier that counts every action-item-opened row / M7 its specificity twin: ONE real commitment beside zero-state rows still recommends emit-skipped and renders the commitment count rather than the raw count, so an over-correction that stops counting whenever a zero-state row is present fails here, and a threshold drift to -ge 2 fails here as well as in M1 / M8 a zero-state count larger than the action-item-opened set it is a subset of is not a count — the classifier recommends nothing and NAMES the unusable probe rather than subtracting its way to a negative commitment count, without which the subset guard is unarmed / M9 A QUERY WITH NO RELEASE KEY IS NOT A ZERO — every other arm hands the classifier a key, so the first refusal path went undriven; the arm drives an unresolvable key against the M1 reader, the one that WOULD answer emit-skipped, so a disarmed guard prints a confident cause built from a query that names no release rather than simply printing nothing, and the detail must NAME the missing key / M10 A READER THAT DID NOT ANSWER WITH A COUNT HAS NOT COUNTED — M8 drives only the subset limb of the usable-count guard, leaving the non-integer limb unarmed; four limbs, because that limb is a DISJUNCTION over three separately-read counts and one fixture breaking all three is satisfied by any single guard surviving (measured: a mutant defaulting only the action-item-opened read to 0 left an all-queries-broken fixture still refusing), so limbs a-b-c each break exactly ONE query and leave the other two answering integers, giving every guard a fixture only it can refuse, while limb d breaks every query and is the only one that grades the READ rather than the guard — a bare integer on the first stdout line and an error carrying digits inside a non-numeric value on the last, so a first-line read or a contains-a-digit test reddens — and all four require the classifier to NAME the unusable probe instead of defaulting an unanswered count to 0 / M9 and M10 are the two arms this release adds, each measured RED against its own one-line mutant and GREEN unmutated, because before them the no-release-key guard could be replaced by an always-false test and the three non-integer guards defaulted to 0 with this suite still at exit 0 and zero FAIL lines / and every M arm re-asserts the verdict its fixture's attestation state already fixed — rc 3 with STATE_AI_GATE unchanged on the unattested M1-M4, M6-M8 and M10, rc 3 on M9 which reaches that same unattested state from an unresolvable directory, rc 0 on the attested M5 — so 'the recommendation decides nothing' is measured on each run rather than asserted once"
   _st_claim 4e-c-j "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT; #6255, arms c-j — this clause ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when the arms leave no witness: TERMINAL STATES — (e) an ALREADY-MERGED PR PASSes on the FIRST read with ZERO merge attempts and its detail carries the elapsed figure AC-4 is graded on, which no earlier version of this phase emitted at all / (f) a CLOSED-unmerged PR FAILs and its detail NAMES the closed-without-merging case, driven on the deliberately MERGEABLE-looking closed shape because the CONFLICTING one trips the pre-existing arm by accident, and asserted on the detail because a bare FAIL is satisfied by the PRE-FIX timeout path / (g) THE PER-ITERATION PIN: a merge landing MID-POLL is recognised on the SECOND read, so a pre-loop-only implementation passes (e) and fails here — budgeted at MERGE_TIMEOUT=2 because the bound admits ceil(TIMEOUT/STEP) iterations and a 1/1 arm would redden against a CORRECT implementation / RE-PROBE — (h) a failed gh pr merge over a PR that DID merge PASSes with the merge ATTEMPTED once and a detail naming the unobserved-merge case, (h2) its NEGATIVE CONTROL: the same failed merge over a STILL-OPEN PR must still FAIL, without which an implementation that PASSes on any merge failure satisfies (h) / (i) THE WIDTH PIN over the shipped text of the one shared reader, three-field --json list and three-field --jq template, behind an anti-vacuity floor on the extraction and TWO specificity controls on constructed FOUR-field lines that both needles must reject / BUDGET EXHAUSTION — (j) AC-2's timeout limb, which every arm above leaves ungraded: a PR BLOCKED on every read must spend the budget and then FAIL with a detail NAMING the timeout ('merge state still=') and ZERO merge attempts, asserted on the detail because a bare FAIL is satisfied by (f)'s CLOSED arm and by the CONFLICTING HALT, and on the merge counter because removing the post-loop guard falls straight through to gh pr merge and launders the spent budget into a PASS — measured: with that guard replaced by 'if false' the whole suite stayed at exit 0 / and every arm c-j counts BOTH pr view and pr merge, because post-fix a PASS is reachable through the terminal arm and no longer proves on its own that a merge was attempted)"
   _st_claim CB "  phase_create_chore_branch fail-loud validated (#7182, group CB — 10 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): CB-1 create path PASS with HEAD read back / CB-2 a FREE existing branch SKIPPED with HEAD on it, the RED arm's control / CB-3 a same-worktree re-run converges, the header's phase-5 pin / CB-4 THE RED ARM: a branch HELD by a second worktree FAILs with rc 3 carrying git's refusal (holder named) and HEAD not moved / CB-5 that detail is one pipe-free line with a holder path under HOME rendered <home> / CB-6 the two SHIPPED dispatch lines, executed with the real phase: held → exit 3 and phase 6 never runs / CB-7 its sensitivity control: free → phase 6 runs / CB-8 AC-3: no '|| true' anywhere in the phase, with a pre-fix control / CB-9 class guard: zero success verdicts written before a swallowed git op across the production region, with sensitivity and specificity fixtures / CB-10 the shared projection's whole vocabulary on one input — CR and LF to spaces, '|' to '/', the repository root to <repo> and then HOME to <home> — redacted BEFORE the 800-character cap, so a home path straddling character 800 renders <home> and leaves no path fragment, with the arm's predicate shown on every run to reject a cap-first projection, a raw '|' and HOME redacted before the repository root"
+  _st_claim CR "  phase_create_chore_pr resumes over its own merged chore PR (#7436, group CR — 16 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): CR-1 CIAC-3's runtime arm — a MERGED, branch-deleted PR with a STALE origin/main resolves to resumed-already-merged through the owner-qualified REST read (state=all) with no GraphQL call, no create and no branch re-creation, containment proven against the PR's own refs/pull head, and phase 12 then renders its MERGED terminal-PASS arm on the first read with zero merges (AC-2 reached, not present) / CR-2 the FRESH-ref path through the zero-commit guard reaches the SAME arm with no GraphQL call / CR-3 control: outputs on main with NO PR keep the idempotent skip / CR-4 AC-3 never-created reaches the create and fails loud / CR-5 AC-3 a merged PR on another version's head is invisible / CR-6 CLOSED-unmerged leads to a fresh create, never to done / CR-7 containment: a commit made after the merge is not in the merged PR's head, so it FAILs with nothing pushed or created / CR-8 an OPEN PR is reused unchanged / CR-9 CIAC-3 static: no head-keyed --state open chore-PR lookup in the production region, by regex so this file never carries the plan's literal needle, with a control fixture / CR-10 a failed push FAILs before any create / CR-11 an unreadable partition FAILs carrying the host's message, never reads as none / CR-12 a SQUASH merge, whose chore commit is not an ancestor of main, still resumes: containment is against the PR's own head / CR-13 SECURITY: a fork's same-named OPEN PR never binds, on the zero-commit path or the main path / CR-14 the zero-commit guard reuses an OPEN PR instead of reporting none needed / CR-15 a push rejected only because the remote head is AHEAD of the local tip is not a failure / CR-16 phase 11's REST reader and phase 12's reader agree on open, merged and closed-unmerged PRs"
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
