@@ -14,7 +14,9 @@
 > after it going missing. Before the fix the first planted grep (AC-2, CIAC-2) reads
 > the rest of its loop's records and every later row vanishes. After it, every row
 > emits, each planted row is a named ERROR carrying its refusal reason, and every
-> control row grades PASS.
+> control row grades PASS. The one exception is AC-8: its `cat` carries no argument
+> at all, and a bare verb names a tool in prose rather than a command, so that row
+> names no command and reads a named SKIP; nothing in it reads stdin.
 
 ## Verification Plan
 

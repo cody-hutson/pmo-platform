@@ -128,6 +128,17 @@ set -euo pipefail
 #        could-not-read stays ERROR beside a declared SKIP, and --help describes the
 #        dispatch and claims no class hint. Five seeded failures, each proved to
 #        apply at exactly its sites. G10's R-M2 is split in two for the same change.
+#  (G16) A METHOD NAMING SEVERAL COMMANDS IS GRADED ON ITS DESIGNATED COMMAND
+#        (V6837-AC4, V7531-CIAC6) — the designated command (the first allowlisted
+#        verb that carries an argument) runs against the comparator stated after
+#        it, and every other command the method names is reported as "did not run
+#        (<reason>)"; a row with a command that did not run never reads PASS, and
+#        takes the can't-run slot the executor binds, whose value the arms derive
+#        rather than pin. A bare verb is prose, the shared comparator vocabulary
+#        reads markdown emphasis around N and nothing wider, and an operand-less
+#        further command never runs, so no later row is lost. G12-5 reads the
+#        stdin-verb fixture's bare cat under the same bare-verb rule. Five seeded
+#        failures and seams, each proved to apply at exactly its sites.
 #
 # Offline + deterministic: fixtures are committed under tests/fixtures/ and all
 # methods are fast local greps against the repo tree (no deploy.sh --check here —
@@ -329,6 +340,12 @@ rm -rf "$STUB_DIR"
 # Each arm below carries a control that must move the other way.
 # ---------------------------------------------------------------------------
 eval "$(sed -n '/^RUNNABLE_VERBS=/,/^}/p'      "$VERIFY")"
+# extract_command reads spans through method_spans, which asks span_invokes_tool;
+# extract_threshold reads the comparator vocabulary from the CMP_*_ALT constants.
+# Load all three first, or the arms below grade functions that cannot run.
+eval "$(sed -n '/^readonly CMP_[A-Z]*_ALT=/p'  "$VERIFY" | sed 's/^readonly //')"
+eval "$(sed -n '/^span_invokes_tool()/,/^}/p'  "$VERIFY")"
+eval "$(sed -n '/^method_spans()/,/^}/p'       "$VERIFY")"
 eval "$(sed -n '/^is_runnable_verb()/,/^}/p'   "$VERIFY")"
 eval "$(sed -n '/^looks_like_command()/,/^}/p' "$VERIFY")"
 eval "$(sed -n '/^extract_command()/,/^}/p'    "$VERIFY")"
@@ -1901,7 +1918,14 @@ strunc_of() { grep -c '"family":"stream-truncated"' <<<"$1" || true; }
 g12_refused() {
   local obs; obs="$(observed_of "$1" "$2")"
   [ "$(verdict_of "$1" "$2")" = ERROR ] || return 1
-  case "$obs" in "$3 (not run — "*) : ;; *) return 1 ;; esac
+  case "$obs" in
+    "$3 (not run — "*) : ;;
+    # A method naming several commands lists them, and its designated command's
+    # refusal is named in that list with the same remedy (the executor's METHOD
+    # LIMBS): still a refusal, never a count.
+    "limbs run 1 of "*"ERROR $3 (not run — "*) : ;;
+    *) return 1 ;;
+  esac
   case "$obs" in *"the matcher produced no readable result"*) return 1 ;; esac
   return 0
 }
@@ -1948,16 +1972,23 @@ vrp_run "$VERIFY" "$FIX_VERBS"; J_VERBS="$VRP_JSON"; RC_VERBS="$VRP_RC"
   && ok "G12-4 V7531-AC1 every row after each planted reader emits, in both loops — 15 of 15 per-issue records and 7 of 7 CIACs" \
   || bad "G12-4 V7531-AC1 emitted AC=$(acs_of "$J_VERBS") CIAC=$(ciacs_of "$J_VERBS") (expected 15 and 7)"
 G12_REF=0
-for g12pair in "AC-2 stdin-reader:grep" "AC-4 stdin-reader:head" "AC-6 stdin-reader:wc" "AC-8 stdin-reader:cat" \
+for g12pair in "AC-2 stdin-reader:grep" "AC-4 stdin-reader:head" "AC-6 stdin-reader:wc" \
                "AC-10 stdin-reader:grep" "AC-12 device-operand:/dev/stdin" "AC-14 unmodelled-option:--not-an-option" \
                "CIAC-2 stdin-reader:grep" "CIAC-4 stdin-reader:head" "CIAC-6 stdin-reader:cat"; do
   g12id="${g12pair%% *}"; g12why="${g12pair#* }"
   if g12_refused "$J_VERBS" "$g12id" "$g12why"; then G12_REF=$((G12_REF + 1))
   else printf '       %s: %s / %s (wanted %s)\n' "$g12id" "$(verdict_of "$J_VERBS" "$g12id")" "$(observed_of "$J_VERBS" "$g12id")" "$g12why"; fi
 done
-[ "$G12_REF" -eq 10 ] \
-  && ok "G12-5 V7531-AC1 all 10 planted readers are NAMED refusals — grep, head, wc, cat, the stdin operand, a device path and an unmodelled option, in both loops" \
-  || bad "G12-5 V7531-AC1 only $G12_REF of 10 planted readers were refused with their reason"
+[ "$G12_REF" -eq 9 ] \
+  && ok "G12-5 V7531-AC1 all 9 planted readers are NAMED refusals — grep, head, wc, cat, the stdin operand, a device path and an unmodelled option, in both loops" \
+  || bad "G12-5 V7531-AC1 only $G12_REF of 9 planted readers were refused with their reason"
+# AC-8 plants `cat` with no argument at all. A bare verb names a tool in prose and is
+# never the command (the executor's METHOD LIMBS rule), so the row names no command:
+# a named SKIP, and nothing reads stdin. The detector's own zero-argument case stays
+# pinned in G12-13, and cat's refusal in a dispatch loop in CIAC-6 above.
+[ "$(verdict_of "$J_VERBS" AC-8)" = SKIP ] && [ "$(observed_of "$J_VERBS" AC-8)" = "no-executable-command-in-method" ] \
+  && ok "G12-5b V7531-AC1 a bare cat is prose, not a stdin reader: AC-8 names no command (SKIP no-executable-command-in-method)" \
+  || bad "G12-5b V7531-AC1 AC-8 '$(verdict_of "$J_VERBS" AC-8)' / '$(observed_of "$J_VERBS" AC-8)' (expected SKIP no-executable-command-in-method)"
 G12_CTL=0
 for g12id in AC-1 AC-3 AC-5 AC-7 AC-9 AC-11 AC-13 AC-15 CIAC-1 CIAC-3 CIAC-5 CIAC-7; do
   if [ "$(verdict_of "$J_VERBS" "$g12id")" = PASS ]; then G12_CTL=$((G12_CTL + 1)); fi
@@ -2817,6 +2848,233 @@ if [ "$MUT_TOOK" = 1 ]; then
   fi
 fi
 rm -rf "$G15STUB" "$MUTD6893"
+
+# ===========================================================================
+# G16 — A METHOD NAMING SEVERAL COMMANDS IS GRADED ON ITS DESIGNATED COMMAND
+#       (V6837-AC4, V7531-CIAC6).
+#
+# The per-issue and integration handlers run the designated command — the first
+# allowlisted verb that carries an argument — against the comparator stated after
+# it, and name every other command the method carries as "did not run (<reason>)".
+# A row with a command that did not run never reads PASS: it takes the can't-run
+# slot the executor binds as VERDICT_PARTIAL_SLOT, and every arm here DERIVES the
+# slot's value from that one line rather than pinning it, so a re-binding of the
+# slot keeps the arms meaningful. A bare verb is prose. The shared comparator
+# vocabulary reads markdown emphasis around N and nothing wider. An operand-less
+# further command is never run, so no row after it is lost.
+#
+# The fixture's counts come from its own data section. Every arm first requires
+# the record it grades to be present, and every record read here carries no brace,
+# so the shared readers see each one. Each seeded failure is proved to apply at
+# exactly the sites it names, and only a mutation that took is graded.
+# ===========================================================================
+echo
+echo "G16 — #6837: a method naming several commands is graded on its designated command (V6837-AC4, V7531-CIAC6)"
+MUTD6837="$(mktemp -d -t verify-plan-6837-mut.XXXXXX)"
+FIX_LIMB="release/tools/tests/fixtures/verify-plan-multi-limb.md"
+eval "$(sed -n '/^comparator_phrases()/,/^}/p' "$VERIFY")"
+eval "$(sed -n '/^limb_comparator()/,/^}/p'    "$VERIFY")"
+# The slot's value, derived from its one binding line: the name after $VERDICT_.
+PARTIAL_SLOT="$(sed -n 's/^readonly VERDICT_PARTIAL_SLOT="\$VERDICT_\([A-Z]*\)".*/\1/p' "$VERIFY")"
+# fv16 <json> <id> — "family/verdict"; reads "/" for an absent record, which no arm expects.
+fv16() { printf '%s/%s' "$(family_of "$1" "$2")" "$(verdict_of "$1" "$2")"; }
+# g16_slot <json> <id> — TRUE only when the slot is derived and the record reads it.
+g16_slot() { [ -n "$PARTIAL_SLOT" ] && [ "$(verdict_of "$1" "$2")" = "$PARTIAL_SLOT" ]; }
+# g16_has <json> <id> <text> — TRUE only when the record's observed text carries <text>.
+g16_has() { case "$(observed_of "$1" "$2")" in *"$3"*) return 0 ;; *) return 1 ;; esac; }
+# g16_partial <json> <id> — the slot, with the observed text leading "partial-execution:".
+g16_partial() { g16_slot "$1" "$2" && case "$(observed_of "$1" "$2")" in "partial-execution: limbs run 1 of "*) return 0 ;; *) return 1 ;; esac; }
+# m16 <label> <stem> <sites> <sed-expr>... — publish the mutant in MUT_PATH, count the
+# lines it changed (a substitution never adds or removes a line), and set MUT_TOOK
+# only when it applied at exactly <sites> lines. An arm whose mutation did not take
+# is not graded: its answer would be the shipped tool's, a vacuous detection.
+m16() {
+  local label="$1" stem="$2" want="$3" dst n e
+  shift 3
+  dst="$MUTD6837/$stem.sh"
+  cp "$VERIFY" "$dst"
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  n="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$dst")"
+  if [ "$n" -eq "$want" ]; then
+    MUT_TOOK=1; ok "$label — mutation applied at exactly $want site(s): the mutant differs from the shipped tool in $n line(s)"
+  else
+    MUT_TOOK=0; bad "$label — mutation applied at $n site(s), expected exactly $want; its arm is not graded"
+  fi
+}
+
+vrp_run "$VERIFY" "$FIX_LIMB"; J16="$VRP_JSON"; RC16="$VRP_RC"
+# --- G16-0: DENOMINATOR FIRST — the fixture still plants, and every row emits. ---
+G16_PAIRED="$(grep -c -F 'paired arm' "$REPO_ROOT/$FIX_LIMB" || true)"
+[ "${G16_PAIRED:-0}" -ge 3 ] && [ "$(acs_of "$J16")" = "14" ] && [ "$(ciacs_of "$J16")" = "5" ] \
+  && ok "G16-0 SENSITIVITY — the fixture plants its multi-command rows ($G16_PAIRED 'paired arm' lines) and all 14 rows and 5 CIACs emit" \
+  || bad "G16-0 fixture 'paired arm' lines=$G16_PAIRED, emitted AC=$(acs_of "$J16") CIAC=$(ciacs_of "$J16") (expected >= 3, 14 and 5)"
+
+# --- V6837-AC4: the designated command is graded on its own comparator; the rest are named, never passed. ---
+if [ -n "$PARTIAL_SLOT" ] && [ "$PARTIAL_SLOT" != PASS ] \
+   && [ "$(grep -c -E "^readonly VERDICT_${PARTIAL_SLOT}=" "$VERIFY" || true)" = "1" ]; then
+  ok "V6837-AC4 — the can't-run slot is bound once, to a verdict the file declares that is not PASS ($PARTIAL_SLOT)"
+else
+  bad "V6837-AC4 — VERDICT_PARTIAL_SLOT is unbound, bound to PASS, or bound to an undeclared verdict ('$PARTIAL_SLOT')"
+fi
+g16_partial "$J16" AC-1 && g16_has "$J16" AC-1 "limb 1 grep PASS count=2 (== 2); limb 2 grep did not run (only the designated command runs)" \
+  && ok "V6837-AC4 a — two commands, the designated one holds: the slot, naming the command that ran and the one that did not" \
+  || bad "V6837-AC4 a — AC-1 $(fv16 "$J16" AC-1) '$(observed_of "$J16" AC-1)'"
+G16_V2="$(verdict_of "$J16" AC-2)"; G16_C2="$(verdict_of "$J16" CIAC-2)"
+[ -n "$G16_V2" ] && [ "$G16_V2" != PASS ] && [ -n "$G16_C2" ] && [ "$G16_C2" != PASS ] \
+   && g16_has "$J16" AC-2 "limb 2 grep did not run" && g16_has "$J16" CIAC-2 "limb 2 grep did not run" \
+  && ok "V6837-AC4 b — a false value in a NON-FIRST command: the row does not read PASS, in either loop, and names that command as not run" \
+  || bad "V6837-AC4 b — AC-2 '$G16_V2' / CIAC-2 '$G16_C2' '$(observed_of "$J16" AC-2)'"
+[ "$(fv16 "$J16" AC-3)" = "per-issue/FAIL" ] \
+  && ok "V6837-AC4 c CONTROL — the same false value in the FIRST command already FAILs" \
+  || bad "V6837-AC4 c — AC-3 $(fv16 "$J16" AC-3)"
+g16_has "$J16" AC-3 "limbs run 1 of 2: limb 1 grep FAIL count=2 (wanted == 3); limb 2 grep did not run" \
+  && ok "V6837-AC4 d — a comparator binds to the command it follows: AC-3's designated command is graded against its own 'expect 3', not the next command's" \
+  || bad "V6837-AC4 d — AC-3 '$(observed_of "$J16" AC-3)'"
+g16_partial "$J16" AC-4 && g16_has "$J16" AC-4 "limb 2 grep did not run (only the designated command runs)" \
+  && ok "V6837-AC4 e — a second command with no comparator the vocabulary reads is named as not run, never passed" \
+  || bad "V6837-AC4 e — AC-4 $(fv16 "$J16" AC-4) '$(observed_of "$J16" AC-4)'"
+g16_partial "$J16" AC-7 && g16_has "$J16" AC-7 "limb 1 grep PASS count=0 (== 0)" \
+   && [ "$(fv16 "$J16" AC-8)" = "per-issue/FAIL" ] && g16_has "$J16" AC-8 "limb 1 grep FAIL count=2 (wanted == 0)" \
+  && ok "V6837-AC4 f — a null is graded on its own 'expect 0': AC-7's holds (the control did not run), and AC-8's violated null FAILs where the whole-cell reading passed it" \
+  || bad "V6837-AC4 f — AC-7 $(fv16 "$J16" AC-7) '$(observed_of "$J16" AC-7)'; AC-8 $(fv16 "$J16" AC-8) '$(observed_of "$J16" AC-8)'"
+[ "$(fv16 "$J16" AC-10)" = "per-issue/PASS" ] && [ "$(observed_of "$J16" AC-10)" = "count=2 (== 2)" ] \
+   && [ "$(observed_of "$J16" AC-9)" = "command-succeeded" ] && [ "$(observed_of "$J16" CIAC-5)" = "integration-method-succeeded" ] \
+  && ok "V6837-AC4 g CONTROL — a method naming one command is graded exactly as before (AC-9, AC-10, CIAC-5)" \
+  || bad "V6837-AC4 g — AC-10 $(fv16 "$J16" AC-10) '$(observed_of "$J16" AC-10)'; AC-9 '$(observed_of "$J16" AC-9)'; CIAC-5 '$(observed_of "$J16" CIAC-5)'"
+g16_partial "$J16" CIAC-1 && g16_has "$J16" CIAC-1 "limb 2 grep did not run (only the designated command runs)" \
+  && ok "V6837-AC4 h — the cross-issue handler takes the same path: CIAC-1 reads the slot and names its unrun command" \
+  || bad "V6837-AC4 h — CIAC-1 $(fv16 "$J16" CIAC-1) '$(observed_of "$J16" CIAC-1)'"
+[ "$(fv16 "$J16" AC-13)" = "per-issue/PASS" ] && [ "$(observed_of "$J16" AC-13)" = "count=1 (== 1)" ] \
+  && ok "V6837-AC4 i — a bare verb is prose: AC-13's leading bare grep is skipped and its probe is the designated command" \
+  || bad "V6837-AC4 i — AC-13 $(fv16 "$J16" AC-13) '$(observed_of "$J16" AC-13)'"
+[ "$(fv16 "$J16" AC-14)" = "per-issue/PASS" ] && [ "$(observed_of "$J16" AC-14)" = "count=1 (== 1)" ] \
+  && ok "V6837-AC4 j CONTROL — a tool span is prose while the tool predicate names no tool: AC-14 grades as one command" \
+  || bad "V6837-AC4 j — AC-14 $(fv16 "$J16" AC-14) '$(observed_of "$J16" AC-14)'"
+
+# --- The shared comparator vocabulary: emphasis around N is read, and nothing wider. ---
+[ "$(fv16 "$J16" AC-11)" = "per-issue/PASS" ] && [ "$(observed_of "$J16" AC-11)" = "count=0 (== 0)" ] \
+  && ok "V6837-AC4 k — a comparator whose N carries markdown emphasis is read: 'expect **0**' grades count=0 (== 0)" \
+  || bad "V6837-AC4 k — AC-11 $(fv16 "$J16" AC-11) '$(observed_of "$J16" AC-11)'"
+[ "$(fv16 "$J16" AC-12)" = "per-issue/FAIL" ] && [ "$(observed_of "$J16" AC-12)" = "command-exit-1" ] \
+  && ok "V6837-AC4 l CONTROL — 'returns 0' is not a comparator: the row is graded on the exit status, which reads a zero count as FAIL" \
+  || bad "V6837-AC4 l — AC-12 $(fv16 "$J16" AC-12) '$(observed_of "$J16" AC-12)'"
+
+# --- V7531-CIAC6: an operand-less further command never runs, so no later row is lost. ---
+g16_partial "$J16" AC-5 && g16_partial "$J16" CIAC-3 \
+   && g16_has "$J16" AC-5 "limb 2 grep did not run (names no input)" && g16_has "$J16" CIAC-3 "limb 2 grep did not run (names no input)" \
+  && ok "V7531-CIAC6 a — a further command naming no input is named 'did not run (names no input)', never passed, in both loops" \
+  || bad "V7531-CIAC6 a — AC-5 $(fv16 "$J16" AC-5) '$(observed_of "$J16" AC-5)'; CIAC-3 $(fv16 "$J16" CIAC-3)"
+g16_partial "$J16" AC-6 && g16_partial "$J16" CIAC-4 \
+   && g16_has "$J16" AC-6 "limb 2 grep did not run (names no input)" && g16_has "$J16" CIAC-4 "limb 2 grep did not run (names no input)" \
+  && ok "V7531-CIAC6 b — one with a comparator of its own is not run either: it names no input, so nothing reads stdin" \
+  || bad "V7531-CIAC6 b — AC-6 $(fv16 "$J16" AC-6) '$(observed_of "$J16" AC-6)'; CIAC-4 $(fv16 "$J16" CIAC-4)"
+G16_LATE=0
+for g16id in AC-7 AC-8 AC-9 AC-10 AC-11 AC-12 AC-13 AC-14 CIAC-5; do
+  [ -n "$(verdict_of "$J16" "$g16id")" ] && G16_LATE=$((G16_LATE + 1))
+done
+[ "$G16_LATE" -eq 9 ] && [ "$(verdict_of "$J16" AC-9)" = PASS ] && [ "$(verdict_of "$J16" CIAC-5)" = PASS ] \
+   && [ "$(strunc_of "$J16")" = "0" ] && grep -q -F '"stream_state": "fetched"' <<<"$J16" && [ "$RC16" -eq 3 ] \
+  && ok "V7531-CIAC6 c — every limb that runs goes through the stdin-isolated dispatch, so no row after the planted cells is lost: 9 of 9 emit, the controls after them PASS, and the stream reads fetched; exit 3" \
+  || bad "V7531-CIAC6 c — later rows present=$G16_LATE of 9, AC-9 '$(verdict_of "$J16" AC-9)', CIAC-5 '$(verdict_of "$J16" CIAC-5)', stream-truncated=$(strunc_of "$J16"), rc=$RC16"
+
+# --- V6837-AC4: the one splitter, the one vocabulary, and the bare-verb rule, unit by unit. ---
+EC16_OK=1
+t_ec16() { [ "$(extract_command "$1")" = "$2" ] || { EC16_OK=0; printf '       extract_command mismatch: [%s] -> [%s], wanted [%s]\n' "$1" "$(extract_command "$1")" "$2"; }; }
+t_ec16 'run `--self-test` (expect exit 0); then `grep -c -E "X" some/file.md` — expect exactly 3' 'grep -c -E "X" some/file.md'
+t_ec16 '`grep -c x f` then `grep -c y f`' 'grep -c x f'
+t_ec16 '``grep -c x f``' ''
+t_ec16 'prose only, no spans' ''
+t_ec16 'grep -c bare f' 'grep -c bare f'
+t_ec16 '`python3 tools/x.py` and `awk 1 f`' 'python3 tools/x.py'
+t_ec16 '`PARSE-07` then `release/x.sh`' 'PARSE-07'
+t_ec16 '`grep`' ''
+t_ec16 '`grep` the register, then `grep -c x f` expect 1' 'grep -c x f'
+t_ec16 'trailing `' ''
+t_ec16 '`  grep -c spaced f`' '  grep -c spaced f'
+[ "$EC16_OK" = 1 ] \
+  && ok "V6837-AC4 m — extract_command reads spans through the one splitter and skips a bare verb (11 pinned cases)" \
+  || bad "V6837-AC4 m — extract_command departs from a pinned case (above)"
+if type comparator_phrases >/dev/null 2>&1 && type limb_comparator >/dev/null 2>&1; then
+  G16_CP="$(comparator_phrases 'at least 2, ≤ 3, expect zero, exactly 4' | tr '\t\n' ' |')"
+  G16_EM="$(comparator_phrases 'expect **0**; at least __3__; ≥ *5*' | tr '\t\n' ' |')"
+  G16_NW="$(comparator_phrases 'returns 0 and = 2 and → 4 and expects 1' | tr '\t\n' ' |')"
+  [ "$G16_CP" = ">= 2|<= 3|== 0|== 4|" ] && [ "$G16_EM" = "== 0|>= 3|>= 5|" ] && [ -z "$G16_NW" ] \
+    && ok "V6837-AC4 n — comparator_phrases reads every phrase in order, emphasis around N included, and no wider form" \
+    || bad "V6837-AC4 n — comparator_phrases read [$G16_CP] [$G16_EM] [$G16_NW]"
+  [ "$(limb_comparator 'at least 3; again at least 3' | tr '\t' ' ')" = ">= 3" ] && [ "$(limb_comparator 'expect 0 (at most 3 others)')" = "ambiguous" ] \
+    && ok "V6837-AC4 o — limb_comparator counts a repeat once and reads two that disagree as ambiguous" \
+    || bad "V6837-AC4 o — limb_comparator read '$(limb_comparator 'at least 3; again at least 3')' / '$(limb_comparator 'expect 0 (at most 3 others)')'"
+else
+  bad "V6837-AC4 n — comparator_phrases or limb_comparator is not defined in the executor"
+  bad "V6837-AC4 o — limb_comparator is not defined in the executor"
+fi
+G16_ET="$(sed -n '/^extract_threshold()/,/^}/p' "$VERIFY")"; G16_PH="$(sed -n '/^comparator_phrases()/,/^}/p' "$VERIFY")"
+G16_ETN="$(grep -o -E 'CMP_(GE|LE|EQ|EMPH)_ALT' <<<"$G16_ET" | sort -u | grep -c . || true)"
+G16_PHN="$(grep -o -E 'CMP_(GE|LE|EQ|EMPH)_ALT' <<<"$G16_PH" | sort -u | grep -c . || true)"
+[ "$G16_ETN" = "4" ] && [ "$G16_PHN" = "4" ] \
+   && [ "$(grep -c -F 'at least' <<<"$G16_ET" || true)" = "0" ] && [ "$(grep -c -F 'at least' <<<"$G16_PH" || true)" = "0" ] \
+  && ok "V6837-AC4 p — one vocabulary: extract_threshold and comparator_phrases each read all four CMP_*_ALT constants and carry no comparator literal of their own" \
+  || bad "V6837-AC4 p — constants read: extract_threshold $G16_ETN of 4, comparator_phrases $G16_PHN of 4 (or a body still carries its own 'at least')"
+H16="$("$VERIFY" --help 2>&1 || true)"
+[ "$(grep -c -F 'MULTI-COMMAND METHODS' <<<"$H16" || true)" = "1" ] && [ "$(grep -c -F 'did not run' <<<"$H16" || true)" -ge 1 ] \
+   && [ "$(grep -c -F 'designated command' <<<"$H16" || true)" -ge 1 ] \
+  && ok "V6837-AC4 q — --help states how a multi-command method is graded (the designated command; the rest did not run)" \
+  || bad "V6837-AC4 q — --help carries no MULTI-COMMAND METHODS section naming the designated command and 'did not run'"
+
+# --- SEEDED FAILURES. Each reverts one limb and names the answer it must move to. ---
+m16 "V6837-AC4 M1" g16-m1-unhooked 2 's/^  if limbs_are_multi "\$limbs"; then grade_limbs "\$limbs"; return; fi$/  :/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_LIMB"; JM16_1="$VRP_JSON"
+  if mutant_ran "V6837-AC4 M1"; then
+    [ "$(verdict_of "$JM16_1" AC-2)" = PASS ] && [ "$(verdict_of "$JM16_1" AC-8)" = PASS ] && [ "$(verdict_of "$JM16_1" CIAC-2)" = PASS ] \
+      && ok "V6837-AC4 M1 detected — without the multi-command path the false second command PASSes again, and so does the violated null" \
+      || bad "V6837-AC4 M1 SURVIVED — AC-2 $(fv16 "$JM16_1" AC-2), AC-8 $(fv16 "$JM16_1" AC-8), CIAC-2 $(fv16 "$JM16_1" CIAC-2)"
+  fi
+fi
+m16 "V6837-AC4 M2" g16-m2-whole-cell 1 's/cmp="\$\(limb_comparator "\$\{L_prose\[\$i\]\}"\)"/cmp="$(limb_comparator "$method")"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_LIMB"; JM16_2="$VRP_JSON"
+  if mutant_ran "V6837-AC4 M2"; then
+    [ "$(verdict_of "$JM16_2" AC-8)" = ERROR ] && g16_has "$JM16_2" AC-8 "comparator-ambiguous" \
+      && ok "V6837-AC4 M2 detected — read from the whole cell, the designated command meets two comparators and AC-8 cannot be graded on its own null" \
+      || bad "V6837-AC4 M2 SURVIVED — AC-8 $(fv16 "$JM16_2" AC-8) '$(observed_of "$JM16_2" AC-8)'"
+  fi
+fi
+m16 "V7531-CIAC6 M3" g16-m3-further-runs-unisolated 3 \
+  's/^      stdin\)$/      stdin) eval_free_run "$span" >\/dev\/null 2>\&1 || true/' \
+  's/if reads_stdin_cmd "\$cmd" >\/dev\/null; then return 4; fi/if false; then return 4; fi/' \
+  's/\} <\/dev\/null; done <<< "\$per_issue_records"/}; done <<< "$per_issue_records"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_LIMB"; JM16_3="$VRP_JSON"; RCM16_3="$VRP_RC"
+  if mutant_ran "V7531-CIAC6 M3"; then
+    [ "$(acs_of "$JM16_3")" -lt 14 ] && [ "$(strunc_of "$JM16_3")" -ge 1 ] && [ "$(ciacs_of "$JM16_3")" = "5" ] && [ "$RCM16_3" -eq 1 ] \
+      && ok "V7531-CIAC6 M3 detected — a further command run outside the stdin-isolated dispatch drains the per-issue loop ($(acs_of "$JM16_3") of 14 rows; the CIAC loop, still isolated, keeps 5 of 5) and the tripwire exits 1" \
+      || bad "V7531-CIAC6 M3 SURVIVED — AC=$(acs_of "$JM16_3") CIAC=$(ciacs_of "$JM16_3") stream-truncated=$(strunc_of "$JM16_3") rc=$RCM16_3"
+  fi
+fi
+m16 "V6837-AC4 M4" g16-m4-bare-verb-is-a-command 1 's/ bare-verb\) continue ;; esac$/ bare-verb) printf "%s" "$span"; return ;; esac/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_LIMB"; JM16_4="$VRP_JSON"
+  if mutant_ran "V6837-AC4 M4"; then
+    G16_M4="$(verdict_of "$JM16_4" AC-13)"
+    [ -n "$G16_M4" ] && [ "$G16_M4" != PASS ] \
+      && ok "V6837-AC4 M4 detected — with a bare verb taken as the command, AC-13 runs 'grep' with no argument and no longer PASSes ($G16_M4)" \
+      || bad "V6837-AC4 M4 SURVIVED — AC-13 $(fv16 "$JM16_4" AC-13) '$(observed_of "$JM16_4" AC-13)'"
+  fi
+fi
+m16 "V6837-AC4 M5" g16-m5-tool-catalog-seam 1 's/^span_invokes_tool\(\) \{$/span_invokes_tool() { case "$1" in "python3 "*) printf python3 ;; esac/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_LIMB"; JM16_5="$VRP_JSON"
+  if mutant_ran "V6837-AC4 M5"; then
+    g16_partial "$JM16_5" AC-14 && g16_has "$JM16_5" AC-14 "limb 1 python3 did not run (outside the verb set); limb 2 grep PASS count=1 (== 1)" \
+      && ok "V6837-AC4 M5 — once the tool predicate names a tool, the tool span is a command that did not run (outside the verb set) and the row reads the slot: the one seam a catalog replaces" \
+      || bad "V6837-AC4 M5 — AC-14 under a named tool $(fv16 "$JM16_5" AC-14) '$(observed_of "$JM16_5" AC-14)'"
+  fi
+fi
+rm -rf "$MUTD6837"
 
 # ---------------------------------------------------------------------------
 # Summary
