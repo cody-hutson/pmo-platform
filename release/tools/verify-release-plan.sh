@@ -94,6 +94,16 @@ readonly CLI_VERSION="0.2.1"
 # led by an allowlisted verb. Rows move between EXISTING families and verdicts; no
 # record field, family value or verdict value is added. A probe that prose used to
 # displace now runs: the counters becoming correct, by the precedent above.
+# NO BUMP IS OWED for grading a method that names several commands on its designated
+# command and naming every other command as not run (METHOD LIMBS below). No record
+# field, family value or verdict value is added: such a row takes the can't-run outcome
+# the enum already carries (VERDICT_PARTIAL_SLOT) when its designated command passes,
+# and the command list rides the existing observed field. Rows move between EXISTING
+# verdicts -- a designated-command PASS that was never the whole method's verdict stops
+# reading PASS, a comparator written for a later command stops grading the designated
+# one, a bare tool name is no longer run as a command, and a comparator whose number
+# carries markdown emphasis is read -- which is the counters becoming correct, by the
+# precedent above.
 readonly SCHEMA_VERSION="5"
 
 # ---------------------------------------------------------------------------
@@ -174,11 +184,12 @@ readonly REC_FS=$'\037'
 #
 # SCOPE -- every loop in this file whose fd 0 is redirected while its body runs,
 # whatever the form: here-string, here-document, or file. The two dispatch loops
-# take the rule. The other six are EXEMPT BY MEASUREMENT, because nothing in
-# their bodies can read fd 0:
+# take the rule, and so do the four loops that read a method's split spans or its
+# commands (extract_command, method_limbs, limbs_are_multi and grade_limbs): their
+# bodies are builtins today, and the body form keeps a child added to them later
+# off fd 0. The other five are EXEMPT BY MEASUREMENT, because nothing in their
+# bodies can read fd 0:
 #   - count_from_output's two here-string loops: builtins only, no child at all.
-#   - extract_command's here-document loop: its only children are sed and awk
-#     inside a pipeline, whose input is the pipe.
 #   - fcm_match_adds' file-fed loop: builtins only.
 #   - handle_fcm_delivery's here-string loop: fixed commands whose input is bound
 #     explicitly -- grep on `<<<`, awk on a file operand, sed on a pipe.
@@ -224,6 +235,15 @@ readonly VERDICT_PASS="PASS"
 readonly VERDICT_FAIL="FAIL"
 readonly VERDICT_SKIP="SKIP"
 readonly VERDICT_ERROR="ERROR"
+
+# VERDICT_PARTIAL_SLOT -- the verdict a row takes when its method names a command this
+# executor did not run and the command that did run passed: the can't-run-here slot of
+# the outcome partition, never PASS and never a value of its own. It is bound to the
+# value that slot carries in this file; a change that gives the slot its own value
+# re-binds this one line and touches nothing else. KEPT ON ONE LINE ON PURPOSE: the
+# suite derives the slot's value from this line by one anchored pattern, so its arms
+# follow a re-binding rather than pinning today's value.
+readonly VERDICT_PARTIAL_SLOT="$VERDICT_SKIP"
 
 # ---------------------------------------------------------------------------
 # PER_ISSUE_ROWS — the roll-up denominator: how many rows
@@ -343,6 +363,14 @@ CHECK FAMILIES (dispatched from the Verification method cell alone: a declared d
                                                        The absolute limb is what
                                                        makes it non-vacuous when
                                                        BOTH surfaces are empty)
+
+MULTI-COMMAND METHODS
+  A method naming two or more commands is graded on its designated command:
+  its first allowlisted command that carries an argument, read against the
+  comparator that follows that command (at least N, at most N, exactly N,
+  expect N; a null is expect 0). Every other command it names is reported as
+  did not run, with its reason, and a row with a command that did not run
+  never reads PASS. A bare tool name (grep alone) is prose, never a command.
 
 EXIT CODES
   0  all checks PASS or SKIP
@@ -881,24 +909,28 @@ looks_like_command() {
 # extract_command — pull the runnable command out of a method string.
 #
 # It scans EVERY backtick-quoted span and returns the FIRST one whose leading
-# token is an allowlisted verb; if none is, it returns the first COMMAND-SHAPED
-# span so the caller can report the verb it declined to run. Taking the first
-# span unconditionally was a defect: an authored method that mentions a flag or a
-# symbol in backticks before its actual probe (*Method:* run `--self-test`; then
-# `grep …`) yielded `--self-test` as the "verb" and reported ERROR — a malformed-
-# input verdict for a well-formed method. Falls back to the bare string when it
-# already starts with an allowlisted verb (the shape the CIAC parser hands over,
-# having stripped its own backticks). Prints the command or nothing.
+# token is an allowlisted verb and that carries an argument -- the DESIGNATED
+# command; if none is, it returns the first COMMAND-SHAPED span so the caller can
+# report the verb it declined to run. Taking the first span unconditionally was a
+# defect: an authored method that mentions a flag or a symbol in backticks before
+# its actual probe (*Method:* run `--self-test`; then `grep …`) yielded
+# `--self-test` as the "verb" and reported ERROR — a malformed-input verdict for a
+# well-formed method. Falls back to the bare string when it already starts with an
+# allowlisted verb (the shape the CIAC parser hands over, having stripped its own
+# backticks). Prints the command or nothing. It reads the spans through
+# method_spans, the one backtick splitter (METHOD LIMBS below); a bare verb (a
+# tool named in prose, `grep` alone, with no argument) is never the command.
 extract_command() {
-  local method="$1" span first fallback="" line
-  while IFS= read -r span; do
-    [ -n "$span" ] || continue
-    first="$(printf '%s' "$span" | sed -e 's/^[[:space:]]*//' | awk '{print $1}')"
-    if is_runnable_verb "$first"; then printf '%s' "$span"; return; fi
-    if [ -z "$fallback" ] && looks_like_command "$first"; then fallback="$span"; fi
-  done <<EOF
-$(printf '%s' "$method" | tr '\`' '\n' | awk 'NR % 2 == 0')
-EOF
+  local method="$1" rec rest cls tok span fallback="" first T=$'\t'
+  while IFS= read -r rec; do {
+    [ -n "$rec" ] || continue
+    rest="${rec#*"$T"}"; cls="${rest%%"$T"*}"; rest="${rest#*"$T"}"
+    tok="${rest%%"$T"*}"; rest="${rest#*"$T"}"; span="${rest#*"$T"}"
+    case "$cls" in runnable) printf '%s' "$span"; return ;; bare-verb) continue ;; esac
+    if [ -z "$fallback" ] && looks_like_command "$tok"; then fallback="$span"; fi
+  } </dev/null; done <<EOF_SPANS
+$(method_spans "$method")
+EOF_SPANS
   if [ -n "$fallback" ]; then printf '%s' "$fallback"; return; fi
   first="$(printf '%s' "$method" | sed -e 's/^[[:space:]]*//' | awk '{print $1}')"
   if is_runnable_verb "$first"; then
@@ -1005,20 +1037,33 @@ method_outside_verb_spans() {
 # this roll-up read 0 PASS.
 #   >= N   "≥ N", ">= N", "at least N"
 #   <= N   "≤ N", "<= N", "at most N", "no more than N"
-#   == N   "exactly N", "= N", "expect N" (and "expect zero" / "expect 0")
+#   == N   "exactly N", "expect N", and "expect zero" / "expect none" as == 0
+# N may carry ONE markdown emphasis run between the comparator and the number
+# ("expect **0**", "at least __3__"): an author emphasising the number asserted
+# otherwise states no comparator at all. The vocabulary widens no further: "= N",
+# "→ N" and "returns N" are not read -- real cells use the same forms for a baseline
+# ("= 2") or an exit code ("returns 0"), so reading them would grade a count against a
+# number that is not one.
+# The alternations live ONCE, in the CMP_*_ALT constants below; comparator_phrases
+# (METHOD LIMBS) reads the same constants, so the one-command path and the
+# designated-command path cannot disagree about what a comparator is.
 # NOTE ON THE REGEX DIALECT: every alternation below uses `sed -E` (ERE). BSD sed
 # does NOT support `\|` in a basic regular expression, so a BRE alternation here
 # silently matches nothing and every threshold reads as "absent" — which presents
 # as a rows-pass-on-exit-code roll-up rather than as an error. The original two
 # comparators avoided this by using two separate BRE calls; the comparator set is
 # wide enough now that ERE is the honest way to write it.
+readonly CMP_GE_ALT='≥|>=|at least'
+readonly CMP_LE_ALT='≤|<=|at most|no more than'
+readonly CMP_EQ_ALT='exactly|expect'
+readonly CMP_EMPH_ALT='\*\*|__|\*'
 extract_threshold() {
   local method="$1" n
-  n="$(printf '%s' "$method" | sed -nE 's/.*(≥|>=|at least)[ ]*([0-9]+).*/\2/p' | head -1)"
+  n="$(printf '%s' "$method" | sed -nE "s/.*(${CMP_GE_ALT})[ ]*(${CMP_EMPH_ALT})?([0-9]+).*/\\3/p" | sed -n '1p')"
   [ -n "$n" ] && { printf '>=\t%s' "$n"; return; }
-  n="$(printf '%s' "$method" | sed -nE 's/.*(≤|<=|at most|no more than)[ ]*([0-9]+).*/\2/p' | head -1)"
+  n="$(printf '%s' "$method" | sed -nE "s/.*(${CMP_LE_ALT})[ ]*(${CMP_EMPH_ALT})?([0-9]+).*/\\3/p" | sed -n '1p')"
   [ -n "$n" ] && { printf '<=\t%s' "$n"; return; }
-  n="$(printf '%s' "$method" | sed -nE 's/.*(exactly|expect)[ ]*([0-9]+).*/\2/p' | head -1)"
+  n="$(printf '%s' "$method" | sed -nE "s/.*(${CMP_EQ_ALT})[ ]*(${CMP_EMPH_ALT})?([0-9]+).*/\\3/p" | sed -n '1p')"
   [ -n "$n" ] && { printf '==\t%s' "$n"; return; }
   case "$method" in
     *"expect zero"*|*"expect none"*) printf '==\t0'; return ;;
@@ -1034,6 +1079,256 @@ compare_threshold() {
     '==') [ "$count" -eq "$want" ] 2>/dev/null && printf 'PASS' || printf 'FAIL' ;;
     *)    printf 'FAIL' ;;
   esac
+}
+
+# ---------------------------------------------------------------------------
+# METHOD LIMBS -- a method that names more than one command is graded on its
+# DESIGNATED command, and every other command it names is reported as not run.
+#
+# THE DEFECT THIS CLOSES. The per-issue and integration handlers ran ONE command
+# (the first allowlisted backticked span) and read ONE comparator from the whole
+# cell (extract_threshold, which prefers >= over <= over == and takes the last
+# occurrence of each). A method naming several commands was graded on its first
+# command alone and reported as if every command had run: a false second command
+# still read PASS, and a comparator written for a later command graded the first
+# -- so "`A` expect 0; control: `B` at least 1" graded A against ">= 1" and could
+# PASS a violated null.
+#
+# WHAT RUNS. The designated command -- the span extract_command picks: the first
+# allowlisted verb that carries an argument -- runs exactly as a one-command
+# method's does, and is graded on ITS OWN comparator: the one stated in the prose
+# after it, up to the next command, never inside backticks. A designated command
+# that states no comparator keeps the one-command path's exit-status reading, so a
+# null needs "expect 0" or "expect zero" (`grep -c` exits 1 on a zero count, which
+# that reading takes for a failure); one that states two comparators that disagree
+# is an ERROR. A bare verb (`grep` alone) names a tool in prose: it is never the
+# command and never a limb.
+#
+# WHAT DOES NOT RUN. Every other command the method names is reported as "did not
+# run (<reason>)", naming the most basic reason: it could not run as written (a
+# reader with no input file reads "names no input"; one whose input is a device, or
+# an option the reader model does not know, names that refusal), it is a tool
+# outside the verb set, or else only the designated command runs. A row with a
+# command that did not run NEVER reads PASS. Running the further commands too was
+# measured over the 215-plan corpus and NOT TAKEN: it would fully grade 1 corpus
+# row, 5 of the 12 commands it would newly run cannot run correctly as written (an
+# elided operand; a comparator bound to the wrong command), and no sanctioned
+# authoring form asks for a further command with a comparator of its own. Naming
+# them needs none of that, and running them later undoes nothing here.
+#
+# THE VERDICT: FAIL if the designated command failed; else ERROR if it could not be
+# read; else the can't-run outcome VERDICT_PARTIAL_SLOT, the observed text naming
+# the command that ran and each command that did not. A method naming one command,
+# or none, never reaches this path: its grading is the one-command path's.
+#
+# FD-0: every limb that runs goes through the stdin-isolated dispatch. Only the
+# designated command runs, through eval_free_run inside the dispatch loop's body, so
+# it keeps the stdin refusal and the null fd 0; no further command is ever spawned,
+# so an operand-less one in any position truncates no later row.
+# ---------------------------------------------------------------------------
+
+# span_invokes_tool <span> -- prints the tool a span invokes when that tool is
+# outside RUNNABLE_VERBS, else nothing. THE one predicate deciding whether a
+# backticked span that is not an allowlisted command is a command at all; it is
+# kept separate so a tool catalog replaces this body and nothing else. Until that
+# catalog exists no such span is a tool invocation: it is prose, it does not make a
+# method multi-command, and it is not reported as a command that did not run.
+span_invokes_tool() {
+  return 0
+}
+
+# method_spans <method> -- THE backtick splitter. One record per non-empty backtick
+# span, in order:
+#   <ordinal> TAB <class> TAB <leading-token> TAB <prose-after> TAB <span>
+# class: runnable (an allowlisted verb with at least one argument) · bare-verb (an
+# allowlisted verb alone) · not-runnable (a tool span_invokes_tool names) · mention
+# (anything else). <prose-after> is the text between this span and the next
+# backtick, tabs flattened; <span> is last so it may hold any byte but a newline.
+# The spans are the ones a split on backticks yields -- the even pieces, an unclosed
+# last one included -- so every reader that asks where a method's spans are asks
+# here: extract_command, the limb reader and any authoring lint split a method
+# through this one function, and no two readers can split it two ways.
+method_spans() {
+  local method="$1" i=1 n=0 span tok words cls prose T=$'\t'
+  local -a seg=() w=()
+  IFS='`' read -r -a seg <<< "$method" || true
+  while [ "$i" -lt "${#seg[@]}" ]; do
+    span="${seg[$i]}"; prose="${seg[$((i + 1))]:-}"; i=$((i + 2))
+    [ -n "$span" ] || continue
+    n=$((n + 1))
+    w=(); read -r -a w <<< "$span" || true
+    tok="${w[0]:-}"; words=${#w[@]}
+    if is_runnable_verb "$tok"; then
+      if [ "$words" -ge 2 ]; then cls=runnable; else cls=bare-verb; fi
+    elif [ -n "$(span_invokes_tool "$span")" ]; then cls=not-runnable
+    else cls=mention; fi
+    printf '%s\t%s\t%s\t%s\t%s\n' "$n" "$cls" "$tok" "${prose//$T/ }" "$span"
+  done
+}
+
+# comparator_phrases <text> -- every comparator phrase in <text>, in order, one per
+# line as "<op> TAB <n>", read through the one vocabulary above (the CMP_*_ALT
+# constants, with the same emphasis tolerance as extract_threshold). THE shared
+# comparator reader: a reader that needs a cell's comparators calls this rather
+# than carrying its own copy of the vocabulary.
+comparator_phrases() {
+  printf '%s' "$1" \
+    | sed -E -e "s/(${CMP_GE_ALT})[ ]*(${CMP_EMPH_ALT})?([0-9]+)/@@C>=:\\3@@/g" \
+             -e "s/(${CMP_LE_ALT})[ ]*(${CMP_EMPH_ALT})?([0-9]+)/@@C<=:\\3@@/g" \
+             -e "s/(${CMP_EQ_ALT})[ ]*(${CMP_EMPH_ALT})?([0-9]+)/@@C==:\\3@@/g" \
+             -e 's/expect (zero|none)/@@C==:0@@/g' \
+    | { grep -oE '@@C(>=|<=|==):[0-9]+@@' || true; } \
+    | sed -e 's/^@@C//' -e 's/@@$//' | tr ':' '\t'
+}
+
+# limb_comparator <prose> -- the comparator one command carries: "<op> TAB <n>" when
+# <prose> states exactly one (repeats of the same one count once), "ambiguous" when
+# it states two that disagree, nothing when it states none.
+limb_comparator() {
+  local found n
+  found="$(comparator_phrases "$1" | sort -u)"
+  n="$(printf '%s' "$found" | awk 'NF { c++ } END { print c+0 }')"
+  case "$n" in
+    0) : ;;
+    1) printf '%s' "$found" ;;
+    *) printf 'ambiguous' ;;
+  esac
+}
+
+# method_limbs <method> -- the per-command reading of a method, built on
+# method_spans. One record per COMMAND span -- a runnable span, or a tool
+# span_invokes_tool names -- in order:
+#   <ordinal> TAB <class> TAB <role> TAB <op> TAB <n> TAB <span>
+# role -- runs: designated (the span extract_command picks); does not run: stdin (a
+# further reader reads_stdin_cmd refuses -- it names no input file, or one the
+# model cannot show is a file) · tool (a span span_invokes_tool names) · further
+# (any other command). <op> and <n> are the designated command's own comparator,
+# read from the prose after it up to the next command ("-" when it states none; "?"
+# when it states two that disagree), and "-" on every other record: a command that
+# does not run is not graded, so its comparator is not read. A bare verb and a
+# mention are prose, never a command: a mention's own text is never read, and the
+# prose after it still belongs to the command before it.
+method_limbs() {
+  local method="$1" designated rec rest ord cls prose span role cmp op n dseen=0 k i T=$'\t'
+  local -a L_ord=() L_cls=() L_span=() L_prose=() L_des=()
+  designated="$(extract_command "$method")"
+  while IFS= read -r rec; do {
+    [ -n "$rec" ] || continue
+    ord="${rec%%"$T"*}"; rest="${rec#*"$T"}"
+    cls="${rest%%"$T"*}"; rest="${rest#*"$T"}"
+    rest="${rest#*"$T"}"
+    prose="${rest%%"$T"*}"; span="${rest#*"$T"}"
+    if [ "$dseen" -eq 0 ] && [ "$cls" = runnable ] && [ "$span" = "$designated" ]; then
+      dseen=1; k=${#L_ord[@]}; L_des[$k]=1
+    elif [ "$cls" = runnable ] || [ "$cls" = not-runnable ]; then
+      k=${#L_ord[@]}; L_des[$k]=0
+    else
+      if [ "${#L_ord[@]}" -gt 0 ]; then
+        k=$(( ${#L_ord[@]} - 1 )); L_prose[$k]="${L_prose[$k]} $prose"
+      fi
+      continue
+    fi
+    L_ord[$k]="$ord"; L_cls[$k]="$cls"; L_span[$k]="$span"; L_prose[$k]="$prose"
+  } </dev/null; done <<EOF_LIMBS
+$(method_spans "$method")
+EOF_LIMBS
+  i=0
+  while [ "$i" -lt "${#L_ord[@]}" ]; do
+    op='-'; n='-'
+    if [ "${L_des[$i]}" -eq 1 ]; then
+      role=designated
+      cmp="$(limb_comparator "${L_prose[$i]}")"
+      case "$cmp" in
+        '') : ;;
+        ambiguous) op='?' ;;
+        *) op="${cmp%%"$T"*}"; n="${cmp#*"$T"}" ;;
+      esac
+    elif [ "${L_cls[$i]}" = not-runnable ]; then role=tool
+    elif reads_stdin_cmd "${L_span[$i]}" >/dev/null; then role=stdin
+    else role=further; fi
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${L_ord[$i]}" "${L_cls[$i]}" "$role" "$op" "$n" "${L_span[$i]}"
+    i=$((i + 1))
+  done
+}
+
+# limbs_are_multi <limbs> -- true when the method names two or more commands and one
+# of them is the designated command: the only case the limb path grades.
+limbs_are_multi() {
+  local rec rest n=0 d=0 T=$'\t'
+  while IFS= read -r rec; do {
+    [ -n "$rec" ] || continue
+    n=$((n + 1))
+    rest="${rec#*"$T"}"; rest="${rest#*"$T"}"
+    case "$rest" in designated"$T"*) d=1 ;; esac
+  } </dev/null; done <<< "$1"
+  [ "$n" -ge 2 ] && [ "$d" -eq 1 ]
+}
+
+# grade_limbs <limbs> -- run the designated command through eval_free_run against its
+# own comparator, name every other command as not run with its reason, and reduce
+# (METHOD LIMBS). Prints "<verdict> TAB <observed>". The observed text lists every
+# command in order after "limbs run 1 of <N>:" -- "limb <k> <verb> <verdict>
+# <observed>" for the one that ran, "limb <k> <verb> did not run (<reason>)" for
+# each one that did not -- and a can't-run row leads with "partial-execution:".
+grade_limbs() {
+  local limbs="$1" rec rest span verb why lv="" lo="" list="" n=0 i out rc cres cstatus cval T=$'\t'
+  local -a R_role=() R_op=() R_want=() R_span=()
+  while IFS= read -r rec; do {
+    [ -n "$rec" ] || continue
+    rest="${rec#*"$T"}"; rest="${rest#*"$T"}"
+    R_role[$n]="${rest%%"$T"*}"; rest="${rest#*"$T"}"
+    R_op[$n]="${rest%%"$T"*}"; rest="${rest#*"$T"}"
+    R_want[$n]="${rest%%"$T"*}"; R_span[$n]="${rest#*"$T"}"
+    n=$((n + 1))
+  } </dev/null; done <<EOF_GRADE
+$limbs
+EOF_GRADE
+  i=0
+  while [ "$i" -lt "$n" ]; do
+    span="${R_span[$i]}"; verb="${span#"${span%%[![:space:]]*}"}"; verb="${verb%% *}"
+    case "${R_role[$i]}" in
+      designated)
+        if [ "${R_op[$i]}" = '?' ]; then
+          lv="$VERDICT_ERROR"; lo="comparator-ambiguous (the prose after this command states comparators that disagree)"
+        else
+          set +e
+          out="$( cd "$REPO_ROOT" && eval_free_run "$span" 2>/dev/null )"
+          rc=$?
+          set -e
+          cres="$(count_from_output "$span" "$out" "$rc")"
+          cstatus="${cres%%"$T"*}"; cval="${cres#*"$T"}"
+          if [ "$cstatus" != "OK" ]; then
+            lv="$VERDICT_ERROR"; lo="$(unreadable_observed "$cval")"
+          elif [ "${R_op[$i]}" != '-' ]; then
+            if [ "$(compare_threshold "$cval" "${R_op[$i]}" "${R_want[$i]}")" = PASS ]; then
+              lv="$VERDICT_PASS"; lo="count=$cval (${R_op[$i]} ${R_want[$i]})"
+            else
+              lv="$VERDICT_FAIL"; lo="count=$cval (wanted ${R_op[$i]} ${R_want[$i]})"
+            fi
+          elif [ "$rc" -eq 0 ]; then lv="$VERDICT_PASS"; lo="command-succeeded"
+          else lv="$VERDICT_FAIL"; lo="command-exit-$rc"
+          fi
+        fi
+        list="${list:+$list; }limb $((i + 1)) $verb $lv $lo" ;;
+      stdin)
+        why="$(reads_stdin_cmd "$span" || true)"
+        case "$why" in stdin-reader:*|'') why="names no input" ;; esac
+        list="${list:+$list; }limb $((i + 1)) $verb did not run ($why)" ;;
+      tool)
+        list="${list:+$list; }limb $((i + 1)) $verb did not run (outside the verb set)" ;;
+      *)
+        list="${list:+$list; }limb $((i + 1)) $verb did not run (only the designated command runs)" ;;
+    esac
+    i=$((i + 1))
+  done
+  if [ -z "$lv" ]; then
+    printf '%s\t%s\n' "$VERDICT_ERROR" "multi-command-without-designated-command (internal inconsistency: limbs_are_multi admits only a method with one)"
+  elif [ "$lv" = "$VERDICT_PASS" ]; then
+    printf '%s\t%s\n' "$VERDICT_PARTIAL_SLOT" \
+      "partial-execution: limbs run 1 of $n: $list — a command that did not run is not a pass"
+  else
+    printf '%s\t%s\n' "$lv" "limbs run 1 of $n: $list"
+  fi
 }
 
 # per-issue: extract a runnable predicate from the method string and run it.
@@ -1052,6 +1347,12 @@ handle_per_issue() {
     *DEFERRED*|*declared,\ verification\ deferred*|*deferred\ to\ #*)
       printf '%s\t%s\n' "$VERDICT_SKIP" "declared-deferred"; return ;;
   esac
+
+  # A method naming two or more commands is graded on its designated command, and
+  # every other command is named as not run (METHOD LIMBS).
+  local limbs
+  limbs="$(method_limbs "$method")"
+  if limbs_are_multi "$limbs"; then grade_limbs "$limbs"; return; fi
 
   local cmd
   cmd="$(extract_command "$method")"
@@ -1437,6 +1738,11 @@ handle_integration() {
     *DEFERRED*|*declared,\ verification\ deferred*|*deferred\ to\ #*)
       printf '%s\t%s\n' "$VERDICT_SKIP" "declared-deferred"; return ;;
   esac
+  # A method naming two or more commands is graded on its designated command, and
+  # every other command is named as not run (METHOD LIMBS).
+  local limbs
+  limbs="$(method_limbs "$method")"
+  if limbs_are_multi "$limbs"; then grade_limbs "$limbs"; return; fi
   # A CIAC method is a reproducible command (grep / anchor) OR a prose
   # "confirm the recorded no-overlap decision" fallback.
   local cmd
