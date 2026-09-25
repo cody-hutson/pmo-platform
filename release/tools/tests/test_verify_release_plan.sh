@@ -148,6 +148,18 @@ set -euo pipefail
 #        vacuous or mis-bound input reads UNRUNNABLE. RUNNABLE_VERBS is unchanged,
 #        armed red. One non-synthetic replay over a real commit's diff, and eight
 #        seeded failures, each proved to apply at exactly its sites.
+#  (G18) THE DEPLOY-CHECK ORACLE IS REACHED BY DECLARATION, NEVER BY PROSE
+#        (V6893-AC2/AC3/AC4, #6893's round 2; V6848-AC2 for the handlers' refusal) —
+#        a row takes deploy.sh --check's exit status only when its designated command
+#        IS that check, written as a backticked span. A prose word, a --check-<mode>
+#        run, a pipeline led by the invocation, another file named deploy.sh, or the
+#        check beside another command routes no row there; an integration keyword
+#        still comes first, and a runnable probe outranks the route. A declared row
+#        that also names another command reads the can't-run slot when the check
+#        passes and FAIL when it fails, and a designated command carrying shell syntax
+#        is UNRUNNABLE, naming the operator. Two temp stub roots (a check that exits 0
+#        and one that exits 1), and five seeded failures, each proved to apply at
+#        exactly its sites.
 #  (G19) NOT THIS RUNNER'S JOB IS A NAMED SKIP; COULD-NOT-EVALUATE STAYS ERROR; THE
 #        ROLL-UP STATES ITS POPULATION (V6854-AC1..AC4) — a row no family claims is
 #        inspected by the per-issue handler, so a method with no command reads the
@@ -158,6 +170,18 @@ set -euo pipefail
 #        span, sets not-graded apart from could-not-evaluate, and shows every counted
 #        record in a table, a record with no issue value under (plan). Ten seeded
 #        failures, each proved to apply at exactly its sites.
+#  (G20) A DOCUMENTED-DECISION METHOD ON A PER-ISSUE ROW GRADES A NAMED SKIP
+#        (V6685-AC1..AC4) — a named read of a named surface, with no command this
+#        executor runs, is the declared-deferred SKIP when the method cell declares
+#        it (step 0) and the per-issue no-command SKIP when it does not (the
+#        classifier's residual); the cross-issue form keeps the integration family's
+#        documented-decision SKIP, unchanged. A genuinely malformed per-issue method is
+#        never a named SKIP on either route, and the padding the card names (a
+#        backticked test primary with no operand) is refused, never a PASS. The card's
+#        own v4.46 rows replay, read by issue and id together. Five seeded failures,
+#        each proved to apply at exactly its sites, and a route precondition that
+#        observes the residual-route control on its route before the mutation that
+#        depends on it is graded.
 #
 # Offline + deterministic: fixtures are committed under tests/fixtures/ and all
 # methods are fast local greps against the repo tree (no deploy.sh --check here —
@@ -3993,6 +4017,265 @@ if [ "$MUT_TOOK" = 1 ]; then
   fi
 fi
 rm -rf "$MUTD6854"
+
+# ===========================================================================
+# G20 — A DOCUMENTED-DECISION METHOD ON A PER-ISSUE ROW GRADES A NAMED SKIP
+#       (V6685-AC1, V6685-AC2, V6685-AC3, V6685-AC4).
+#
+# A per-issue row whose method is a documented decision — a named read of a named
+# surface, with no command this executor runs — reads a named SKIP: declared in the
+# method cell, the declared-deferred SKIP through the classifier's step 0; left
+# undeclared, the per-issue no-command SKIP through the classifier's residual, which
+# inspects the row rather than reporting it unreadable. The cross-issue form keeps the
+# integration family's documented-decision SKIP, byte-identical. A genuinely malformed
+# per-issue method is never a named SKIP on either route, and the padding the card
+# names — a backticked test primary with no operand — is refused, never a PASS. The
+# three rows the card cites, and its own plan's CIAC-1, replay from that plan.
+#
+# The group adds no executor code: every rule it grades landed in an earlier slice of
+# the release, and it grades them on the card's own evidence. Two issues in one plan
+# can share an AC id (v4.46 carries two AC-3 rows), so every record is read by its
+# issue and its id together, from its own line and in either field order: a record
+# whose text carries a brace is invisible to the shared readers. Every arm first
+# requires the record it grades. Each seeded failure is proved to apply at exactly its
+# sites and only one that took is graded, and the residual-route control is observed on
+# its route before the mutation that depends on it is graded.
+# ===========================================================================
+echo
+echo "G20 — #6685: a documented-decision method on a per-issue row grades a named SKIP (V6685-AC1/AC2/AC3/AC4)"
+MUTD6685="$(mktemp -d -t verify-plan-6685-mut.XXXXXX)"
+FIX_DD="release/tools/tests/fixtures/verify-plan-documented-decision.md"
+FIX_DDC="release/tools/tests/fixtures/verify-plan-documented-decision-control.md"
+REAL6685="release/releases/plans/v4/v4.46_RELEASE_PLAN.md"
+G20_CIAC="CIAC (integration)"
+# g20_line <json> <issue> <id> — the record for that issue AND that id, from its own line,
+# whichever of the two fields comes first; empty for an absent record. The JSON presenter
+# escapes every quote inside a field, so an unescaped `"issue":"` or `"id":"` is the field.
+g20_line() {
+  local l
+  l="$(grep -F "\"issue\":\"$2\"" <<<"$1" || true)"
+  l="$(grep -F "\"id\":\"$3\"" <<<"$l" || true)"
+  printf '%s' "${l%%$'\n'*}"
+}
+# g20_field <record-line> <field> — one field of one record line (an escaped quote ends it).
+g20_field() { local v; v="$(sed -n "s/.*\"$2\":\"\([^\"]*\)\".*/\1/p" <<<"$1")"; printf '%s' "${v%%$'\n'*}"; }
+# g20_fvo <json> <issue> <id> — "family/verdict/observed"; "//" for an absent record, which no arm expects.
+g20_fvo() {
+  local r
+  r="$(g20_line "$1" "$2" "$3")"
+  printf '%s/%s/%s' "$(g20_field "$r" family)" "$(g20_field "$r" verdict)" "$(g20_field "$r" observed)"
+}
+# g20_fv <json> <issue> <id> <field> — one field of one issue-qualified record.
+g20_fv() { g20_field "$(g20_line "$1" "$2" "$3")" "$4"; }
+# m20 <label> <stem> <sites> <sed-expr>... — m19's contract: the mutant in MUT_PATH, and
+# MUT_TOOK only when it applied at exactly <sites> lines.
+m20() {
+  local label="$1" stem="$2" want="$3" dst n e
+  shift 3
+  dst="$MUTD6685/$stem.sh"
+  cp "$VERIFY" "$dst"
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  n="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$dst")"
+  if [ "$n" -eq "$want" ]; then
+    MUT_TOOK=1; ok "$label — mutation applied at exactly $want site(s): the mutant differs from the shipped tool in $n line(s)"
+  else
+    MUT_TOOK=0; bad "$label — mutation applied at $n site(s), expected exactly $want; its arm is not graded"
+  fi
+}
+
+vrp_run "$VERIFY" "$FIX_DD";  J20="$VRP_JSON";  RC20="$VRP_RC"
+vrp_run "$VERIFY" "$FIX_DDC"; J20C="$VRP_JSON"; RC20C="$VRP_RC"
+
+# --- V6685-AC4: both fixtures are in the test corpus, and each parses as planted. ---
+if [ -f "$REPO_ROOT/$FIX_DD" ] && [ -f "$REPO_ROOT/$FIX_DDC" ]; then
+  ok "V6685-AC4 — both fixtures are in the test corpus"
+else
+  bad "V6685-AC4 — a fixture is missing: $FIX_DD / $FIX_DDC"
+fi
+[ "$(rows_of "$J20")" = 3 ] && [ "$(rows_of "$J20C")" = 3 ] && [ "$(ciacs_of "$J20")" = 1 ] \
+  && ok "V6685-AC4 — both fixtures parse as planted: 3 + 3 per-issue rows and the main fixture's CIAC-1, so no arm below is vacuous" \
+  || bad "V6685-AC4 — a fixture did not parse as planted: $(rows_of "$J20") / $(rows_of "$J20C") per-issue rows and $(ciacs_of "$J20") CIAC (want 3 / 3 and 1)"
+
+# --- V6685-AC1 AUTHORING: every documented-decision row stays a named read on every route. ---
+# None carries a backticked span, so the declared rows carry no command span for step 0 to
+# step over, and none opens with an allowlisted verb word: such prose was once read as a
+# command, and still is in a cross-issue cell, so the fixture keeps the wording unambiguous.
+G20_VERBS=" $(sed -n "s/^RUNNABLE_VERBS='\(.*\)'\$/\1/p" "$VERIFY") "
+G20_AUTH=1
+for g20a in AC-1 AC-2 AC-3; do
+  g20m="$(sed -n "s/^| $g20a | \([^|]*\) |.*/\1/p" "$REPO_ROOT/$FIX_DD")"
+  case "$g20m" in ''|*'`'*) G20_AUTH=0 ;; esac
+  case "$G20_VERBS" in *" ${g20m%% *} "*) G20_AUTH=0 ;; esac
+done
+if [ -n "${G20_VERBS// /}" ] && [ "$G20_AUTH" = 1 ]; then
+  ok "V6685-AC1 AUTHORING — the fixture's three documented-decision rows carry no backticked span and none opens with an allowlisted verb word, so each is a named read on every route"
+else
+  bad "V6685-AC1 AUTHORING — a documented-decision row of $FIX_DD carries a backticked span or opens with an allowlisted verb word (or the verb set could not be read); restore the named-read wording"
+fi
+
+# --- V6685-AC1, the declared limb: step 0 routes the declared-deferred form to its named SKIP. ---
+for g20a in AC-1 AC-2; do
+  G20_GOT="$(g20_fvo "$J20" '#964' "$g20a")"
+  [ "$G20_GOT" = "deferred/SKIP/declared-deferred" ] \
+    && ok "V6685-AC1 $g20a — a declared documented-decision method is the declared-deferred SKIP (step 0)" \
+    || bad "V6685-AC1 $g20a — got '$G20_GOT' (want deferred/SKIP/declared-deferred)"
+done
+
+# --- V6685-AC1, the undeclared limb (co-discharged on the classifier residual): the card's own shape. ---
+G20_GOT="$(g20_fvo "$J20" '#964' AC-3)"
+[ "$G20_GOT" = "per-issue/SKIP/no-executable-command-in-method" ] \
+  && ok "V6685-AC1 AC-3 — an undeclared documented-decision method is the per-issue no-command SKIP, never an ERROR" \
+  || bad "V6685-AC1 AC-3 — got '$G20_GOT' (want per-issue/SKIP/no-executable-command-in-method)"
+[ "$RC20" -eq 0 ] \
+  && ok "V6685-AC1 — a plan whose rows are documented-decision methods does not fail the run (exit 0)" \
+  || bad "V6685-AC1 — the documented-decision fixture exits $RC20 (want 0: no row failed or could not be read)"
+
+# --- V6685-AC1 + V6685-AC2, NON-SYNTHETIC: the plan the card cites. Denominator first. ---
+if [ ! -f "$REPO_ROOT/$REAL6685" ]; then
+  bad "V6685-AC1 PRECONDITION — replay target absent: $REAL6685 (relocated or renamed?)"
+else
+  G20_DEN=0
+  for g20k in '| #3616 | AC-3 |' '| #3616 | AC-4 |' '| #2577 | AC-6 |' '**CIAC-1 '; do
+    if [ "$(grep -c -F -- "$g20k" "$REPO_ROOT/$REAL6685" || true)" -ge 1 ]; then G20_DEN=$((G20_DEN + 1)); fi
+  done
+  if [ "$G20_DEN" -ne 4 ]; then
+    bad "V6685-AC1 VACUOUS — the replay target declares $G20_DEN of the 4 entries the card cites (#3616 AC-3, #3616 AC-4, #2577 AC-6, CIAC-1)"
+  else
+    vrp_run "$VERIFY" "$REAL6685"; J20R="$VRP_JSON"
+    G20_N=0
+    for g20p in '#3616 AC-3' '#3616 AC-4' '#2577 AC-6'; do
+      if [ "$(g20_fvo "$J20R" "${g20p% *}" "${g20p#* }")" = "per-issue/SKIP/no-executable-command-in-method" ]; then G20_N=$((G20_N + 1)); fi
+    done
+    [ "$G20_N" -eq 3 ] \
+      && ok "V6685-AC1 NON-SYNTHETIC — the 3 rows the card cites on v4.46 (#3616 AC-3, #3616 AC-4, #2577 AC-6) read the per-issue no-command SKIP: none is an ERROR, and none names a tool" \
+      || bad "V6685-AC1 NON-SYNTHETIC — $G20_N of the 3 cited v4.46 rows read the per-issue no-command SKIP: #3616 AC-3 '$(g20_fvo "$J20R" '#3616' AC-3)'; #3616 AC-4 '$(g20_fvo "$J20R" '#3616' AC-4)'; #2577 AC-6 '$(g20_fvo "$J20R" '#2577' AC-6)'"
+    G20_V2577="$(g20_fv "$J20R" '#2577' AC-3 verdict)"
+    [ "$(g20_fv "$J20R" '#2577' AC-3 family)" = per-issue ] && [ -n "$G20_V2577" ] && [ "$(g20_fv "$J20R" '#2577' AC-3 observed)" != no-executable-command-in-method ] \
+      && ok "V6685-AC1 NON-SYNTHETIC CONTROL — the reader keys on the issue: #2577 AC-3, which shares its AC id with the cited #3616 AC-3, reads its own record ($G20_V2577)" \
+      || bad "V6685-AC1 NON-SYNTHETIC CONTROL — #2577 AC-3 reads '$(g20_fvo "$J20R" '#2577' AC-3)': the issue-qualified reader returned the wrong record or none"
+    G20_GOT="$(g20_fvo "$J20R" "$G20_CIAC" CIAC-1)"
+    [ "$G20_GOT" = "integration/SKIP/documented-decision-method (no runnable command)" ] \
+      && ok "V6685-AC2 NON-SYNTHETIC — v4.46's own CIAC-1 keeps the integration documented-decision SKIP" \
+      || bad "V6685-AC2 NON-SYNTHETIC — v4.46 CIAC-1 moved: '$G20_GOT'"
+  fi
+fi
+
+# --- V6685-AC2: the integration family is unchanged on the fixture's CIAC-1-shaped entry. ---
+G20_GOT="$(g20_fvo "$J20" "$G20_CIAC" CIAC-1)"
+[ "$G20_GOT" = "integration/SKIP/documented-decision-method (no runnable command)" ] \
+  && ok "V6685-AC2 — a CIAC-1-shaped cross-issue criterion keeps the integration documented-decision SKIP, byte-identical" \
+  || bad "V6685-AC2 — fixture CIAC-1 moved: '$G20_GOT'"
+
+# --- V6685-AC3: a malformed per-issue method is never a named SKIP on either route; the padding is refused. ---
+# Control AC-1 and AC-2 carry an unterminated quote, so the per-issue handler cannot split
+# the command into its author's words and refuses it before it runs. Each is asserted to
+# reach the handler and to read neither a SKIP nor a PASS: ERROR or UNRUNNABLE, the
+# partition's could-not-evaluate and can't-run-here, never pinned to one of the two.
+G20_V="$(g20_fv "$J20C" '#967' AC-1 verdict)"
+if [ "$(g20_fv "$J20C" '#967' AC-1 family)" = per-issue ] && { [ "$G20_V" = ERROR ] || [ "$G20_V" = UNRUNNABLE ]; }; then
+  ok "V6685-AC3 AC-1 — a malformed command on the keyword route reaches the per-issue handler and is never a named SKIP or a PASS ($G20_V)"
+else
+  bad "V6685-AC3 AC-1 — got '$(g20_fvo "$J20C" '#967' AC-1)' (want per-issue, and ERROR or UNRUNNABLE)"
+fi
+G20_V="$(g20_fv "$J20C" '#967' AC-2 verdict)"
+if [ "$(g20_fv "$J20C" '#967' AC-2 family)" = per-issue ] && { [ "$G20_V" = ERROR ] || [ "$G20_V" = UNRUNNABLE ]; }; then
+  ok "V6685-AC3 AC-2 — a malformed command on the residual route is inspected by the per-issue handler and is never a named SKIP or a PASS ($G20_V)"
+else
+  bad "V6685-AC3 AC-2 — got '$(g20_fvo "$J20C" '#967' AC-2)' (want per-issue, and ERROR or UNRUNNABLE)"
+fi
+G20_GOT="$(g20_fvo "$J20C" '#967' AC-3)"
+case "$G20_GOT" in
+  per-issue/ERROR/no-operand:test*) ok "V6685-AC3 AC-3 — the padding the card names (a backticked test primary with no operand) is refused as naming no operand (ERROR no-operand:test), never a PASS" ;;
+  *) bad "V6685-AC3 AC-3 — got '$G20_GOT' (want per-issue/ERROR/no-operand:test...)" ;;
+esac
+[ "$RC20C" -eq 3 ] \
+  && ok "V6685-AC3 — the control fixture reaches the exit predicate (exit 3)" \
+  || bad "V6685-AC3 — the control fixture exits $RC20C (want 3)"
+
+# --- SEEDED FAILURES. Each removes one rule and names the answer it must move to. ---
+# G20_CF scopes an edit to classify_family, whose one two-space `echo` line is its residual.
+G20_CF='/^classify_family\(\) \{/,/^\}/ '
+# M1 — step 0's declared route removed: the declared rows leave the deferred family.
+m20 "V6685-AC1 M1" g20-m1-no-declared-route 1 's/^      echo "deferred"; return ;;$/      : ;;/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_DD"; JM20_1="$VRP_JSON"
+  if mutant_ran "V6685-AC1 M1"; then
+    G20_F1="$(g20_fv "$JM20_1" '#964' AC-1 family)"; G20_F2="$(g20_fv "$JM20_1" '#964' AC-2 family)"
+    [ -n "$G20_F1" ] && [ "$G20_F1" != deferred ] && [ -n "$G20_F2" ] && [ "$G20_F2" != deferred ] \
+      && ok "V6685-AC1 M1 detected — without step 0 the declared rows leave the deferred family ($G20_F1, $G20_F2): the declared-limb arms observe step 0" \
+      || bad "V6685-AC1 M1 SURVIVED — AC-1 family '$G20_F1', AC-2 family '$G20_F2'"
+  fi
+fi
+# M2 — the classifier's residual reverted: the undeclared row is an ERROR again, and the plan fails.
+m20 "V6685-AC1 M2" g20-m2-residual-reverted 1 "${G20_CF}"'s/^  echo "[a-z-]+"(.*)$/  echo "unclassified"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_DD"; JM20_2="$VRP_JSON"; RCM20_2="$VRP_RC"
+  if mutant_ran "V6685-AC1 M2"; then
+    [ "$(g20_fv "$JM20_2" '#964' AC-3 family)/$(g20_fv "$JM20_2" '#964' AC-3 verdict)" = unclassified/ERROR ] && [ "$RCM20_2" -eq 3 ] \
+      && ok "V6685-AC1 M2 detected — without the residual the undeclared row is unclassifiable again (AC-3 ERROR) and the plan exits 3: the undeclared-limb arms observe the residual" \
+      || bad "V6685-AC1 M2 SURVIVED — AC-3 '$(g20_fvo "$JM20_2" '#964' AC-3)', rc $RCM20_2"
+  fi
+fi
+# ROUTE PRECONDITION — M3 grades a SKIP-everything residual through control AC-2, so control
+# AC-2 must reach the residual on this head. With the residual renamed to a sentinel family,
+# a row the residual reaches carries that name; a step ahead of it that claimed control AC-2
+# would leave it its own family, and M3 would then observe nothing.
+G20_ROUTE=0
+m20 "V6685-AC3 ROUTE" g20-route-sentinel 1 "${G20_CF}"'s/^  echo "[a-z-]+"(.*)$/  echo "residual-route"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_DDC"; JM20_R="$VRP_JSON"
+  if mutant_ran "V6685-AC3 ROUTE"; then
+    G20_RF2="$(g20_fv "$JM20_R" '#967' AC-2 family)"; G20_RF1="$(g20_fv "$JM20_R" '#967' AC-1 family)"
+    if [ "$G20_RF2" = residual-route ] && [ -n "$G20_RF1" ] && [ "$G20_RF1" != residual-route ]; then
+      G20_ROUTE=1
+      ok "V6685-AC3 ROUTE PRECONDITION — control AC-2 reaches the classifier's residual on this head (a sentinel residual renames it) and control AC-1 does not (a keyword claims it), so M3 grades the route it names"
+    else
+      bad "V6685-AC3 ROUTE PRECONDITION FAILED — with the residual renamed to a sentinel, control AC-2 reads family '${G20_RF2:-absent}' and AC-1 '${G20_RF1:-absent}': control AC-2 no longer reaches the residual on this head. Re-author control AC-2 so that no step ahead of the residual claims it (no routing word, no runnable probe, no recognised tool), or M3 cannot observe a SKIP-everything residual. M3 is not graded"
+    fi
+  fi
+fi
+# M3 — the degenerate fix, "make every row the residual reaches a SKIP": the control must catch it.
+if [ "$G20_ROUTE" = 1 ]; then
+  m20 "V6685-AC3 M3" g20-m3-residual-skips-everything 1 "${G20_CF}"'s/^  echo "[a-z-]+"(.*)$/  echo "deferred"/'
+  if [ "$MUT_TOOK" = 1 ]; then
+    vrp_run "$MUT_PATH" "$FIX_DDC"; JM20_3="$VRP_JSON"
+    if mutant_ran "V6685-AC3 M3"; then
+      [ "$(g20_fv "$JM20_3" '#967' AC-2 verdict)" = SKIP ] \
+        && ok "V6685-AC3 M3 detected — a residual that makes every row it reaches a SKIP turns the residual-route control SKIP, so the control catches it" \
+        || bad "V6685-AC3 M3 SURVIVED — control AC-2 '$(g20_fvo "$JM20_3" '#967' AC-2)'"
+      G20_M3V="$(g20_fv "$JM20_3" '#967' AC-1 verdict)"
+      [ "$(g20_fv "$JM20_3" '#967' AC-1 family)" = per-issue ] && [ -n "$G20_M3V" ] && [ "$G20_M3V" != SKIP ] \
+        && ok "V6685-AC3 M3 CONTROL — the keyword-route row is untouched by a residual-only mutation (per-issue, $G20_M3V)" \
+        || bad "V6685-AC3 M3 CONTROL — the mutation reached the keyword route too: AC-1 '$(g20_fvo "$JM20_3" '#967' AC-1)'"
+    fi
+  fi
+fi
+# M4 — the integration hatch turned into an ERROR: the V6685-AC2 arms read the handler's own verdict.
+m20 "V6685-AC2 M4" g20-m4-hatch-errors 1 's/"\$VERDICT_SKIP" "documented-decision-method \(no runnable command\)"/"$VERDICT_ERROR" "documented-decision-method (no runnable command)"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_DD"; JM20_4="$VRP_JSON"
+  if mutant_ran "V6685-AC2 M4"; then
+    [ "$(g20_fv "$JM20_4" "$G20_CIAC" CIAC-1 verdict)" = ERROR ] \
+      && ok "V6685-AC2 M4 detected — with the integration hatch made an ERROR, CIAC-1 reads ERROR: the arm reads the handler's own verdict" \
+      || bad "V6685-AC2 M4 SURVIVED — CIAC-1 '$(g20_fvo "$JM20_4" "$G20_CIAC" CIAC-1)'"
+  fi
+fi
+# M5 — the operand rule's unary-primary arm removed (the reader table's operand column for
+# test, as landed): the padded method reads a fabricated PASS again, and the control no
+# longer fails the run.
+m20 "V6685-AC3 M5" g20-m5-unary-primary-operand 1 's/(in -\[bcdefghkLnOGNprsStuwxz\]\)) return 0 ;; esac$/\1 : ;; esac/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_DDC"; JM20_5="$VRP_JSON"; RCM20_5="$VRP_RC"
+  if mutant_ran "V6685-AC3 M5"; then
+    [ "$(g20_fv "$JM20_5" '#967' AC-3 verdict)" = PASS ] && [ "$RCM20_5" -eq 0 ] \
+      && ok "V6685-AC3 M5 detected — without the unary-primary operand rule the padded method is a fabricated PASS again, and the control exits 0" \
+      || bad "V6685-AC3 M5 SURVIVED — control AC-3 '$(g20_fvo "$JM20_5" '#967' AC-3)', rc $RCM20_5"
+  fi
+fi
+rm -rf "$MUTD6685"
 
 # ---------------------------------------------------------------------------
 # Summary
