@@ -103,6 +103,14 @@ set -euo pipefail
 #        internal exit. A reachability arm measures, on the bash running this
 #        suite, that an exec'd child in the loop form sees no copy of the stream.
 #        Five mutation arms, one non-synthetic replay graded per criterion.
+#  (G13) NON-RETROACTIVITY (V6236-AC4) — a row this executor declines by design
+#        stays outside the exit-failing set. A plan whose every row declines (a
+#        refused tool, an identifier in the command position, no runnable
+#        command, a declared deferral in either spelling) exits 0, and no declined
+#        row reads FAIL or ERROR — asserted per row, never as "= SKIP", so a later
+#        verdict that stays non-failing keeps it green. One fixture row per
+#        historical SKIP shape, a non-synthetic replay graded per row, and two
+#        seeded failures, each proved to apply at exactly the sites it names.
 #
 # Offline + deterministic: fixtures are committed under tests/fixtures/ and all
 # methods are fast local greps against the repo tree (no deploy.sh --check here —
@@ -2273,6 +2281,182 @@ if mutant_ran "G12-M5"; then
 fi
 
 rm -rf "$MUTD5" "$G12_STUB"
+
+# ===========================================================================
+# G13 — NON-RETROACTIVITY (V6236-AC4): a row this executor declines by design
+#       never joins the exit-failing set.
+#
+# Declining is not failing. A refused tool, an identifier in the command
+# position, a method with no runnable command and a declared deferral each say
+# that this executor is not the runner for the row, and every historical plan
+# that declined that way exits 0. A later change that renames or re-classes a
+# decline (a "cannot run here" verdict, say) must keep it outside main()'s
+# exit-failing set, or it turns those plans' exit 0 into 3: a fix that turns
+# every prior release's QC3.5 red is worse than the gap it closes. The fixture
+# carries one row per historical SKIP shape; the replay grades a live plan whose
+# five CIACs all decline. Both read PER ROW that no decline is FAIL or ERROR —
+# never "= SKIP", so a later verdict that stays non-failing keeps them green.
+# Each seeded failure is proved to apply at exactly the sites it names, then
+# must move its arm to a named answer.
+# ===========================================================================
+echo
+echo "G13 — non-retroactivity: a declined row never fails the plan (V6236-AC4)"
+
+FIX_HIST="release/tools/tests/fixtures/verify-plan-historical-skips.md"
+G13_AC="AC-1 AC-2 AC-3 AC-4 AC-5"
+G13_CIAC="CIAC-1 CIAC-2 CIAC-3 CIAC-4 CIAC-5"
+
+# g13_records <json> — every emitted record (each carries exactly one verdict field).
+# covs_of <json>     — the always-on families' coverage records.
+g13_records() { grep -c '"verdict":"' <<<"$1" || true; }
+covs_of()     { grep -c '"id":"[A-Z]*-COVERAGE"' <<<"$1" || true; }
+
+# g13_verdict / g13_observed <json> <id> — one field of one record, read from the
+# record's own LINE. verdict_of and observed_of isolate a record with `[^{}]*`, so
+# a record whose text carries a brace is invisible to them and reads as absent:
+# v4.43's CIAC-3 method quotes a set in braces. The JSON presenter writes one record
+# per line and escapes every quote inside a field, so the record's line and each
+# unescaped `"<field>":"` delimiter are unambiguous. A duplicated id yields its
+# first record.
+g13_verdict() {
+  local line v
+  line="$(grep -F "\"id\":\"$2\"" <<<"$1" || true)"
+  v="$(sed -n 's/.*"verdict":"\([A-Z]*\)".*/\1/p' <<<"$line")"
+  printf '%s' "${v%%$'\n'*}"
+}
+g13_observed() {
+  local line v
+  line="$(grep -F "\"id\":\"$2\"" <<<"$1" || true)"
+  v="$(sed -n 's/.*"observed":"\([^"]*\)".*/\1/p' <<<"$line")"
+  printf '%s' "${v%%$'\n'*}"
+}
+
+# g13_failing <json> <id>... — prints " id=verdict" for each named row that is
+# ABSENT or reads FAIL or ERROR, and nothing when every one is present and
+# non-failing. An absent row counts: a row that vanished did not stay clean.
+g13_failing() {
+  local json="$1" id v out=""
+  shift
+  for id in "$@"; do
+    v="$(g13_verdict "$json" "$id")"
+    case "$v" in ''|FAIL|ERROR) out="$out $id=${v:-absent}" ;; esac
+  done
+  printf '%s' "$out"
+}
+
+# --- G13-0: DENOMINATOR FIRST — the fixture still declares every declined row. ---
+G13_ROWS="$(grep -c -F '| AC-' "$REPO_ROOT/$FIX_HIST" || true)"
+G13_ENTRIES="$(grep -c -F '**CIAC-' "$REPO_ROOT/$FIX_HIST" || true)"
+[ "${G13_ROWS:-0}" -eq 5 ] && [ "${G13_ENTRIES:-0}" -eq 5 ] \
+  && ok "G13-0 V6236-AC4 the fixture still declares its 5 declined per-issue rows and 5 declined CIACs (without them every arm below is vacuous)" \
+  || bad "G13-0 V6236-AC4 the fixture declares ${G13_ROWS:-0} per-issue rows and ${G13_ENTRIES:-0} CIACs (expected 5 and 5); the arms below would grade nothing"
+
+# --- G13-1..G13-3: the fixture on the shipped tool (V6236-AC4). ---
+vrp_run "$VERIFY" "$FIX_HIST"; J_HIST="$VRP_JSON"; RC_HIST="$VRP_RC"
+printf '       g13 historical-skips: records=%s (AC %s, CIAC %s, coverage %s) PASS=%s FAIL=%s ERROR=%s SKIP=%s rc=%s\n' \
+  "$(g13_records "$J_HIST")" "$(acs_of "$J_HIST")" "$(ciacs_of "$J_HIST")" "$(covs_of "$J_HIST")" \
+  "$(count_verdict "$J_HIST" PASS)" "$(count_verdict "$J_HIST" FAIL)" "$(count_verdict "$J_HIST" ERROR)" \
+  "$(count_verdict "$J_HIST" SKIP)" "$RC_HIST"
+[ "$(g13_records "$J_HIST")" = "12" ] && [ "$(acs_of "$J_HIST")" = "5" ] && [ "$(ciacs_of "$J_HIST")" = "5" ] && [ "$(covs_of "$J_HIST")" = "2" ] \
+  && ok "G13-1 V6236-AC4 the fixture yields 12 records — 5 per-issue, 5 CIAC and the 2 always-on coverage records" \
+  || bad "G13-1 V6236-AC4 records=$(g13_records "$J_HIST") (AC $(acs_of "$J_HIST"), CIAC $(ciacs_of "$J_HIST"), coverage $(covs_of "$J_HIST")); expected 12 (5, 5, 2)"
+G13_BAD="$(g13_failing "$J_HIST" $G13_AC $G13_CIAC)"
+[ -z "$G13_BAD" ] && [ "$(count_verdict "$J_HIST" FAIL)" = "0" ] && [ "$(count_verdict "$J_HIST" ERROR)" = "0" ] \
+  && ok "G13-2 V6236-AC4 no declined row reads FAIL or ERROR — AC-1..AC-5 and CIAC-1..CIAC-5 each present and non-failing, and the record set carries 0 FAIL and 0 ERROR" \
+  || bad "G13-2 V6236-AC4 rows absent or failing:${G13_BAD:- none}; FAIL=$(count_verdict "$J_HIST" FAIL) ERROR=$(count_verdict "$J_HIST" ERROR) (expected 0 and 0)"
+[ "$RC_HIST" -eq 0 ] \
+  && ok "G13-3 V6236-AC4 a plan whose every row declines by design exits 0 — a decline stays outside the exit-failing set" \
+  || bad "G13-3 V6236-AC4 a plan whose every row declines exits $RC_HIST (expected 0): a decline reached the exit-failing set"
+
+# --- G13-R: NON-SYNTHETIC replay (V6236-AC4), graded PER ROW, never by exit code. ---
+# v4.43's five CIACs are the ones #6236 was filed from: three name a tool the
+# executor refuses and two carry no runnable command. The arm reads each row and
+# not the exit, because the plan's always-on families read the environment (the
+# delivery family cannot resolve a diff outside a repository), so the plan's exit
+# says nothing about its declines.
+REAL6236="release/releases/plans/v4/v4.43_RELEASE_PLAN.md"
+if [ ! -f "$REPO_ROOT/$REAL6236" ]; then
+  bad "G13-R V6236-AC4 PRECONDITION — replay target absent: $REAL6236 (relocated or renamed? the arm cannot grade)"
+else
+  # DENOMINATOR FIRST: a replay of a plan that no longer declares its CIACs is vacuous.
+  G13R_ENTRIES="$(grep -c -F '**CIAC-' "$REPO_ROOT/$REAL6236" || true)"
+  if [ "${G13R_ENTRIES:-0}" -lt 5 ]; then
+    bad "G13-R V6236-AC4 VACUOUS — the replay target declares ${G13R_ENTRIES:-0} bold CIAC entries (expected 5); this arm asserts nothing"
+  else
+    vrp_run "$VERIFY" "$REAL6236"; J_R6236="$VRP_JSON"
+    printf '       g13 replay: %s CIAC-1..CIAC-5 = %s %s %s %s %s (rc %s, not graded)\n' "$REAL6236" \
+      "$(g13_verdict "$J_R6236" CIAC-1)" "$(g13_verdict "$J_R6236" CIAC-2)" "$(g13_verdict "$J_R6236" CIAC-3)" \
+      "$(g13_verdict "$J_R6236" CIAC-4)" "$(g13_verdict "$J_R6236" CIAC-5)" "$VRP_RC"
+    for g13id in $G13_CIAC; do
+      if [ -z "$(g13_failing "$J_R6236" "$g13id")" ]; then
+        ok "G13-R V6236-AC4 NON-SYNTHETIC — v4.43 $g13id emits and declines without failing ($(g13_verdict "$J_R6236" "$g13id"))"
+      else
+        bad "G13-R V6236-AC4 v4.43 $g13id '$(g13_verdict "$J_R6236" "$g13id")' / '$(g13_observed "$J_R6236" "$g13id")' (expected present and neither FAIL nor ERROR)"
+      fi
+    done
+  fi
+fi
+
+# ===========================================================================
+# G13-M — SEEDED FAILURES. Each is proved to apply at EXACTLY the sites it names:
+# a sed that matches nothing leaves a byte-identical copy and a vacuous green, and
+# one that matches more than intended changes something else as well. Each must
+# then move its arm to a named answer.
+# ===========================================================================
+MUTD6="$(mktemp -d -t verify-plan-6236-mut.XXXXXX)"
+# m6236 <label> <stem> <sites> <sed-expr> — publish the mutant in MUT_PATH, as the
+# earlier groups' helpers do, and count the lines it changed. A substitution never
+# adds or removes a line, so a line-by-line comparison counts its sites.
+m6236() {
+  local label="$1" stem="$2" want="$3" e="$4" dst n
+  dst="$MUTD6/$stem.sh"
+  cp "$VERIFY" "$dst"
+  sed -i.bak -E "$e" "$dst"
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  n="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$dst")"
+  if [ "$n" -eq "$want" ]; then
+    ok "$label — mutation applied at exactly $want site(s): the mutant differs from the shipped tool in $n line(s)"
+  else
+    bad "$label — mutation applied at $n site(s), expected exactly $want; the paired arm would grade the wrong change"
+  fi
+}
+
+# M1 — a decline joins the failing set. main()'s exit predicate names only FAIL
+# and ERROR; adding SKIP is the change V6236-AC4 exists to stop, and the fixture,
+# every row of which declines, must then exit 3 on the same non-failing records.
+m6236 "G13-M1 V6236-AC4" g13-m1-decline-joins-failing-set 1 \
+  's/\$6=="FAIL"\|\|\$6=="ERROR"\{found=1\}/$6=="FAIL"\|\|$6=="ERROR"\|\|$6=="SKIP"{found=1}/'
+vrp_run "$MUT_PATH" "$FIX_HIST"; JM6236_1="$VRP_JSON"; RCM6236_1="$VRP_RC"
+if mutant_ran "G13-M1 V6236-AC4"; then
+  [ "$RCM6236_1" -eq 3 ] && [ "$(g13_records "$JM6236_1")" = "12" ] && [ -z "$(g13_failing "$JM6236_1" $G13_AC $G13_CIAC)" ] \
+    && ok "G13-M1 V6236-AC4 mutation detected — with a decline in the exit-failing set the same 12 non-failing records exit 3, so G13-3 flips" \
+    || bad "G13-M1 V6236-AC4 rc=$RCM6236_1 records=$(g13_records "$JM6236_1") failing rows:$(g13_failing "$JM6236_1" $G13_AC $G13_CIAC) (expected 3, 12 and none)"
+fi
+
+# M2 — the verb check disabled in both handlers. The refused-tool rows then reach
+# eval_free_run, which runs nothing for a verb outside its set (`*) return 3`), so
+# each reads ERROR as a matcher that could not run and the plan exits 3: a decline
+# turned into a failure by a change to how the row is graded, not to the exit rule.
+m6236 "G13-M2 V6236-AC4" g13-m2-verb-check-disabled 2 \
+  's/  if ! is_runnable_verb "\$verb"; then/  if false; then/'
+vrp_run "$MUT_PATH" "$FIX_HIST"; JM6236_2="$VRP_JSON"; RCM6236_2="$VRP_RC"
+if mutant_ran "G13-M2 V6236-AC4"; then
+  G13M2_HIT=0
+  for g13id in AC-1 AC-2 CIAC-1 CIAC-2; do
+    case "$(g13_verdict "$JM6236_2" "$g13id")/$(g13_observed "$JM6236_2" "$g13id")" in
+      "ERROR/count-unreadable:matcher-exit-3 (the matcher produced no readable result"*) G13M2_HIT=$((G13M2_HIT + 1)) ;;
+      *) printf '       g13 %s: %s / %s\n' "$g13id" "$(g13_verdict "$JM6236_2" "$g13id")" "$(g13_observed "$JM6236_2" "$g13id")" ;;
+    esac
+  done
+  G13M2_REST="$(g13_failing "$JM6236_2" AC-3 AC-4 AC-5 CIAC-3 CIAC-4 CIAC-5)"
+  [ "$G13M2_HIT" -eq 4 ] && [ -z "$G13M2_REST" ] && [ "$(count_verdict "$JM6236_2" ERROR)" = "4" ] && [ "$RCM6236_2" -eq 3 ] \
+    && ok "G13-M2 V6236-AC4 mutation detected — with the verb check disabled the four refused-tool rows (AC-1, AC-2, CIAC-1, CIAC-2) read ERROR count-unreadable:matcher-exit-3, no other row moves, and the plan exits 3, so G13-2 and G13-3 flip" \
+    || bad "G13-M2 V6236-AC4 $G13M2_HIT of 4 refused-tool rows read ERROR matcher-exit-3, other rows failing:${G13M2_REST:- none}, ERROR=$(count_verdict "$JM6236_2" ERROR), rc=$RCM6236_2 (expected 4, none, 4 and 3)"
+fi
+
+rm -rf "$MUTD6"
 
 # ---------------------------------------------------------------------------
 # Summary

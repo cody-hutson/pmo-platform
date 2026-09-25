@@ -280,6 +280,42 @@ Survey denominator: 4 constants and 2 convention-bearing tools. Control: the con
 
 Survey: the executor's own `parse_verification_plan`, `classify_family`, `extract_command` and `parse_ciac`, eval-extracted as the suite does, over every plan under `release/releases/plans/`; each dispatched reader classified by `reads_stdin_cmd`; ground truth from running the same argv at a stub root with stdin on `/dev/null` and on a directory. Survey denominator: 454 reader commands (plus 10 `test`/`ls` and 1 untokenizable). Control: ground truth flags 16 stdin readers in 8 plans. Canonical choice: the per-verb tables in `reads_stdin_cmd`, with anything else refused as `unmodelled-option`. Justification: documented rationale — D18 adopted CD-2 from the #7639 review; the corpus cost is measured: 16 true positives, 0 false negatives, 0 false positives, 437 true negatives, and 0 `unmodelled-option` or `device-operand` refusals. The specificity population, 26 pattern-less greps, all run. Out-of-scope drift: the design's G-1 still holds for file operands — `wc`, `cat` and `head` exit 1 on an unreadable file, which the count reader takes for a legitimate zero. The closed model keeps those three to portable options, so no platform-divergent option reaches that path; the finding stays routed where the design routed it.
 
+### Step 1b (#6236) — as landed
+
+One commit, after #7531's slice (D44, authorized by D49): the `V6236-AC4` arm set, its fixture, and these notes. Scope: the #6236 design's Change 2c and its Change 3 rows `V6236-AC4`, `AC4 replay`, `AC4 M1` and `AC4 M2` (D25). The executor is unchanged.
+
+- **The fixture.** `release/tools/tests/fixtures/verify-plan-historical-skips.md` carries Change 2c's text: the issue-reference override on line 1, the fixture comment, the H1 and a one-line blockquote naming the arm. It then has one per-issue row per historical SKIP shape: a refused tool, an identifier in the command position, no runnable command, and a declared deferral in both spellings (the phrase and the bracket). Its five CIACs are two refused tools, prose, a method on the entry's next line, and a declared deferral. It has no Predicate class column, so D-6180 does not touch it. The override line adds no record: the fixture yields 12 records with the line and 12 without it.
+- **Suite group `G13`.** It is the id free at this step's parent commit `925cbd16`, where the suite uses G1 to G12 and never `G13`. It has a header entry, and every message carries `G13` and `V6236-AC4`. Its 13 assertions:
+  - G13-0 checks, denominator first, that the fixture still declares its 5 per-issue rows and 5 CIACs.
+  - G13-1 to G13-3 run the fixture on the shipped tool. They require 12 records (5 per-issue, 5 CIAC and the 2 always-on coverage records). None of AC-1 to AC-5 or CIAC-1 to CIAC-5 may be absent, FAIL or ERROR. The record set must hold 0 FAIL and 0 ERROR, and the run must exit 0.
+  - G13-R, five times, checks v4.43's CIAC-1 to CIAC-5. Each must be present and neither FAIL nor ERROR, read per row and never by the exit code. That plan's stub-root run exits 3 through the delivery family alone.
+  - G13-M1 adds SKIP to the exit predicate. It is proved to apply at exactly 1 site, then detected: the same 12 non-failing records exit 3.
+  - G13-M2 disables the verb check. It is proved to apply at exactly 2 sites, one per handler, then detected: AC-1, AC-2, CIAC-1 and CIAC-2 read ERROR `count-unreadable:matcher-exit-3`, no other row moves, and the run exits 3.
+- **Every arm grades "neither FAIL nor ERROR", never "= SKIP".** A later verdict that keeps a decline non-failing therefore keeps the arms green. The M1 and M2 pair proves that the arms observe the exit predicate and the verb check. INT-3 grades the fixture's exit 0 on #6848's commit.
+- **Two helpers are group-local rather than shared (DEV-26).**
+  - `g13_verdict` and `g13_observed` read a record from its own line. The shared `verdict_of` and `observed_of` isolate a record with `[^{}]*`, so a record whose text carries a brace reads as absent. v4.43's CIAC-3 method quotes a set in braces, and the first run of G13-R failed on exactly that row.
+  - `m6236` is the suite's mutate-and-prove shape plus the exact-site count this step requires. Every group after G9-M carries its own copy of that shape, because the directory `mutate_proved` writes to is removed at the end of G9-M.
+- **Left for step 10**, whose lint arms take the group id that is free at their own parent commit:
+  - `AC4 M3`, which needs #6848's can't-run token (step 5);
+  - Change 1a, with its doctrine comment and the FM-6 correction;
+  - the `--ciac-lint` mode, the `lint_run` and `lint_of` helpers, the `V6236-AC1` group and its two fixtures;
+  - every governance text.
+- **Group ids for later slices.** The plan's step-2 row, DEV-2 and #6893 AC-1's Expected cell name `G13` for #6180's group. D41 and § Integration Points name `G14` for #6893's. Those ids were set before D44 placed this step ahead of step 2. Under the design's rule each slice takes the id free at its own parent commit, so #6180's group is `G14` on this commit. The rows that name the earlier ids belong to their own slices and are not edited here.
+- **Rule for later slices.** G13-M1 anchors on the exit predicate's `$6=="FAIL"||$6=="ERROR"{found=1}` in `main()`. G13-M2 anchors on the two handlers' `if ! is_runnable_verb "$verb"; then`. Their site counts fail loudly when either text moves, so a slice that rewrites one of those lines updates G13-M in the same commit.
+
+### Step 1b (#6236) — Evidence-Grounding (D42)
+
+One canonicalization this step introduced, beyond the fixture name and the arm label that the #6236 design grounded (its canonicalization #5). The survey ran on 2026-09-25 at `925cbd16`, the branch head before this step.
+
+**E1 — the suite group id `G13`.**
+
+| Source | Variant observed | Count | Evidence |
+|---|---|---|---|
+| group ids the suite uses | `G1` to `G12` | 12 ids; `G12` occurs 205 times | a token census of `release/tools/tests/test_verify_release_plan.sh` |
+| `G13` in the suite | — | 0 | the same census |
+
+Survey denominator: the suite's 2,289 lines. Control: `G12` returns 205. Canonical choice: `G13`. Justification: documented rationale — the #6236 design takes each slice's group id at its parent commit, never hard-coded (its canonicalization #5, after the #6180 review's FM-1). Out-of-scope drift: the plan's step-2 row, DEV-2 and #6893 AC-1's Expected cell name `G13` for #6180, and D41 and § Integration Points name `G14` for #6893 — routed to the hub. The group's helper names follow the suite's own precedent (`m<issue>`, `g<group>_*`, `MUTD<n>`), so they add no vocabulary.
+
 ---
 
 ## Stage Applicability Matrix
@@ -844,6 +880,7 @@ Rows DEV-1..DEV-10 carry one row per Phase A6.5 review: the routing of its Minor
 | DEV-23 | Provisional display version | `v4.68` → `v4.69`: ms#386 claimed `v4.68`, and the claim key was re-minted to `4.69.0`; re-verified free at Commit 0 | D43; the Commit-0 re-verify | APPLIED in § Header and § Commit-0 Version Re-Verify Record |
 | DEV-24 | § Contention Map, § Cross-PR Overlap Audit, § Baseline Pin | Corrected right after Commit 0 by the spoke that authored it. Three sentences said the 18 commits between the Stage-4 pin and the branch point touched 0 paths in the matrix. A set-intersection probe of those 20 files against the 50 declared paths found one: `core/hooks/block-autonomy-ceiling.sh`, a **read-only input**, which the Agent-Editability derivation had already re-read at the branch point. No add or edit target changed | A Tier-1 [ADJUST] to this spoke's own Commit-0 transcription; a factual correction that changes no scope | APPLIED |
 | DEV-25 | `release/tools/verify-release-plan.sh`, regions outside #7531's Contention Map rows (step 1) | Three small edits outside the rows #7531 held: the non-OK branch of `handle_per_issue` and of `handle_integration` now calls the shared renderer `unreadable_observed`, one line each, in regions held by #6837/#6848 and #6848/#6236; and the `main()` exit block, an unlisted region, gains the EXIT_INTERNAL branch for a DEGRADED stream. The Contention Map now names #7531 on those regions, and adds rows for the refusal model and the renderer that step 1 introduced | D18 adopted FM-1, whose remedy renders the refusal in the handlers; D19 set the exit. A minor adjustment under Stage 6 B3; serial order (P0) resolves the overlap with the later slices | APPLIED at `a3683b80` |
+| DEV-26 | `release/tools/tests/test_verify_release_plan.sh`, suite group G13 (step 1b) | Two helpers are group-local where the #6236 design named shared ones. G13 reads each record from its own line (`g13_verdict`, `g13_observed`) rather than through `verdict_of` / `observed_of`, and carries its own mutate-and-prove copy (`m6236`) rather than `mutate_proved` | Measured: the shared readers isolate a record with `[^{}]*`, so v4.43's CIAC-3, whose method quotes a set in braces, reads as absent, and the first G13-R run failed on that row. The directory `mutate_proved` writes to is removed at the end of G9-M, which is why G10 to G12 each carry their own copy; `m6236` adds the exact-site count step 1b requires. A minor adjustment under Stage 6 B3, inside the suite's matrix row | APPLIED in the step-1b commit |
 
 ---
 
@@ -862,7 +899,7 @@ Each row lands with its card's slice; the slice records the status and the commi
 | #6685 | none expected (card: parity with an existing disposition); its Decision line in #7647 | lands with step 7 | — | NONE unless the slice adds text |
 | #6876 | the runtime-suite selection map; stage-06/07/08 citations by role; the ADR (#7672) | lands with step 8 | — | The map is itself the documentation surface |
 | #7494 | stage-07/08 payload fields; the criterion-namespace section; the binder help; eval-writer P1/P2; the ADR (#7676) | lands with step 9 | — | Card declares no Documentation Impact section |
-| #6236 | stage-04 CIAC authoring text; `release-process.md` QC3.5 reading table; stage-09 A3.6; G-PR10 / G4-06 in `gate-criteria-spec.md`; its Decision lines in #7647 | lands with step 10 | — | Card declares no Documentation Impact section |
+| #6236 | stage-04 CIAC authoring text; `release-process.md` QC3.5 reading table; stage-09 A3.6; G-PR10 / G4-06 in `gate-criteria-spec.md`; its Decision lines in #7647 | lands with step 10 | — | Card declares no Documentation Impact section. Step 1b (the V6236-AC4 arm set and its fixture) lands no declared doc |
 
 ---
 
@@ -887,6 +924,13 @@ Each row lands with its card's slice; the slice records the status and the commi
 | **Step 1 — C3 package cascade** | `core/deploy/tools/build-skill-packages.sh --skills-for-paths`, with this slice's 5 paths on stdin: 0 skills. Control: `operations/skills/intake-desk/SKILL.md` returns `intake-desk`. No package is rebuilt |
 | **Step 1 — links** | `python3 core/deploy/tools/check-doc-links.py --require-targets` over this plan and the two new fixtures: 0 findings. Control: a run-directory copy with one planted broken link returns 1 |
 | **Step 1 — ADR index** | N/A — this slice adds no record under `release/ADRs/` |
+| **Step 1b (#6236) — the suite** | Stub root: a `git archive` of `925cbd16`, with `core/deploy/deploy.sh` and `release/tools/append-pipeline-event.sh` each prefixed by a logging `exit 97` line. The unmodified suite gives 249 passed / 2 failed. With G13 it gives **262 passed / 2 failed**: the 13 new assertions all pass. The 2 failures are P1 and M9's control, which fail identically on the unmodified suite because the stub is not a repository. All 251 earlier outcome lines are unchanged, in outcome and in text. The stub log stayed empty on every run. The suite ran on bash 3.2.57 |
+| **Step 1b — V6236-AC4 and its arms, each predicted before its run** | Each result below matched the prediction written before the run. The fixture on the shipped tool: 12 records (5 AC, 5 CIAC, 2 coverage), all 12 SKIP, exit 0. The fixture without its override line gives the same 12 records. v4.43 on the shipped tool: CIAC-1 to CIAC-5 all SKIP (three refused tools and two documented-decision rows); the run exits 3 through the delivery family alone. M1 applies at 1 site and moves the exit from 0 to 3 on the same 12 records. M2 applies at 2 sites: AC-1, AC-2, CIAC-1 and CIAC-2 read ERROR `count-unreadable:matcher-exit-3`, the other six rows are unchanged, and the run exits 3 |
+| **Step 1b — this plan's #6236 AC-4 row, through the executor (C4, hermetic)** | The same stub root, with the head executor run on this file. Against the suite at `925cbd16`: `7 PASS / 33 FAIL / 12 SKIP / 1 ERROR — over 42 per-issue row(s); 11 declared-deferred`, with #6236 AC-4 FAIL `count=0 (wanted >= 1)`. With G13: `8 PASS / 32 FAIL / 12 SKIP / 1 ERROR — over 42 per-issue row(s); 11 declared-deferred`, with #6236 AC-4 PASS `count=26 (>= 1)`. Exactly that one record changes; the JSON roll-up reads `stream_state` fetched and 48 of 48 records. These notes add no parsed row: the edited file yields the same 53 records, and only the provenance record's line count moves (960 to 1004) |
+| **Step 1b — C3 package cascade** | `core/deploy/tools/build-skill-packages.sh --skills-for-paths`, with the step's 3 paths on stdin, returns 0 skills. Control: `operations/skills/intake-desk/SKILL.md` returns `intake-desk`. No package is rebuilt |
+| **Step 1b — links** | `python3 core/deploy/tools/check-doc-links.py --require-targets` over the new fixture and this plan: 0 findings, exit 0. Control: a run-directory copy of the fixture with one planted broken link returns 1 finding, exit 1 |
+| **Step 1b — runtime suite (map row)** | None of the step's three paths matches a map row: the suite and the fixture sit under `release/tools/tests/`, which row 4's `release/tools/*.sh` does not reach (the residual #6876 closes), and the plan is not code. The selection is therefore row 6, the honest `test-run/suite-skip`, and the explicit suite run above is this step's runtime evidence (R8). Control: the same resolver sends `release/tools/verify-release-plan.sh` to row 4 |
+| **Step 1b — ADR index** | N/A — this step adds no record under `release/ADRs/` |
 
 ---
 
