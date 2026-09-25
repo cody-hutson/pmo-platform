@@ -89,6 +89,11 @@ readonly CLI_VERSION="0.2.1"
 # parameter, its arm and the parser-side value resolution moves no row and adds no
 # record field, family value or verdict value: every emitted byte and every exit
 # code is unchanged.
+# NO BUMP IS OWED for resolving a runnable probe ahead of the prose keyword arms
+# (classify_family step 1), or for reading a declared deferral outside every span
+# led by an allowlisted verb. Rows move between EXISTING families and verdicts; no
+# record field, family value or verdict value is added. A probe that prose used to
+# displace now runs: the counters becoming correct, by the precedent above.
 readonly SCHEMA_VERSION="5"
 
 # ---------------------------------------------------------------------------
@@ -312,8 +317,9 @@ OPTIONS
   -h, --help        Show this help and exit
   --version         Show CLI version + schema version and exit
 
-CHECK FAMILIES (dispatched from the Verification method cell alone: a declared route, else method keyword)
-  per-issue      file existence + content assertions  (grep / test -f)
+CHECK FAMILIES (dispatched from the Verification method cell alone: a declared deferral, then a runnable probe, else method keyword)
+  per-issue      file existence + content assertions  (any runnable probe:
+                                                       ${RUNNABLE_VERBS})
   integration    Cross-Issue Acceptance Criteria      (reads the plan's CIAC
                  section; runs each entry's declared method — SOLE runner)
   regression     unchanged-files-intact               (deploy --check byte-diff)
@@ -488,26 +494,58 @@ _extract_section() {
 # wired: wired ahead of the keyword arms it sent rows to an oracle that tested none
 # of their claims, and it would have let a class cell displace a runnable probe.
 #
-# THE RESIDUAL, DECLARED. Step 0 reads the WHOLE lowercased cell, so a deferred
-# phrase inside a backticked probe — the probe's own search pattern — is read as a
-# declaration and displaces that probe: the row grades SKIP declared-deferred and
-# its command never runs. {{ADR:a-rows-grading-route-is-declared-in-its-method-cell}}
-# records the residual and where it is resolved.
+# WITHIN THE CELL, A RUNNABLE PROBE OUTRANKS PROSE. Step 1 hands a row whose
+# designated command is a probe this executor runs to the handler that runs it,
+# before any keyword is read; and step 0 reads a declared deferral outside every span
+# led by an allowlisted verb, because inside one a phrase is that command's search
+# pattern, not a declaration. A row naming both a runnable probe and the
+# `deploy.sh --check` span is graded by the probe: the deploy check does not run.
+# {{ADR:a-rows-grading-route-is-declared-in-its-method-cell}} records this as its
+# Decision 6.
 classify_family() {
-  local method
-  method="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  local raw_method="$1" method prose probe
+  method="$(printf '%s' "$raw_method" | tr '[:upper:]' '[:lower:]')"
 
   # 0) Declared-deferred method → the honesty contract routes it to a family-
   #    agnostic SKIP (never a fabricated PASS, never a false ERROR). A method is
   #    deferred when it is bracket-tagged [DEFERRED …] or says "verification
   #    deferred to #<executor>". This precedes family classification because a
   #    deferred check is a SKIP regardless of which family it would run under.
-  case "$method" in
+  #    It is read OUTSIDE every span led by an allowlisted verb
+  #    (method_outside_verb_spans): inside one, a phrase is that command's own
+  #    argument -- its search pattern -- never a declaration. A declaration
+  #    outside those spans still wins. The prose line is KEPT ON ONE LINE ON
+  #    PURPOSE: the suite's mutation arm G15 M2 reverts it by one substitution.
+  prose="$(method_outside_verb_spans "$raw_method" | tr '[:upper:]' '[:lower:]')"
+  case "$prose" in
     *"[deferred"*|*declared,\ verification\ deferred*|*verification\ deferred*|*deferred\ to\ #*)
       echo "deferred"; return ;;
   esac
 
-  # 1) Keyword-match the method string.
+  # 1) A RUNNABLE PROBE IS EXECUTED, NEVER ROUTED BY PROSE.
+  #
+  # When the command this executor would run for the row -- extract_command's pick,
+  # a closed backtick span -- has the shape of a probe it runs (is_runnable_probe:
+  # an allowlisted verb, at least one argument, no shell operator outside quotes),
+  # the row goes to the per-issue handler ahead of every keyword arm below. Keywords
+  # used to decide first, so the word "unchanged" beside a `grep -c` sent the row to
+  # the deploy --check oracle, which tests none of its claim and PASSes on a clean
+  # workspace: a probe that would FAIL was graded by something else. Measured when
+  # this step was written: the keyword arms sent 7 corpus rows carrying such a probe
+  # elsewhere -- 2 to regression and 1 to sync, where the probe never ran, 1 to an
+  # unclassified ERROR, and 3 relabelled integration with the same probe.
+  #
+  # THE PRECEDENCE, STATED. A row that names both a runnable probe and the
+  # `deploy.sh --check` span is graded by the probe; the deploy check does not run
+  # for it. A command this executor does not run -- a tool, a pipeline, a bare verb
+  # -- keeps the keyword route. The step's test line is KEPT ON ONE LINE ON PURPOSE:
+  # the suite's mutation arms G15 M1 and G10 R-M2b remove it by one anchored
+  # substitution.
+  probe="$(runnable_probe_of "$raw_method")"
+  if [ -n "$probe" ]; then echo "per-issue"; return; fi
+
+  # 2) Keyword-match the method string -- rows with no runnable probe: command-less
+  #    prose, and commands this executor does not run.
   case "$method" in
     *cross-issue*|*ciac*|*integration*)                echo "integration";   return ;;
     *deploy.sh*--check*|*deploy*--check*|*byte-diff*|*byte-equivalent*|*unchanged*)
@@ -535,15 +573,15 @@ classify_family() {
     #
     # The surviving tokens are the test-run SUBTYPES themselves - the event
     # schema vocabulary an author writes to DECLARE an outcome, not words that
-    # occur in ordinary English about a check. The arm also sits BELOW the
-    # executable arm, so a method carrying a runnable probe is executed even
+    # occur in ordinary English about a check. Step 1 resolves every runnable
+    # probe before any arm here, so a method carrying one is executed even
     # when it also names a subtype. A method with neither reaches
     # `unclassified` and is an ERROR, which is honest: this executor cannot
     # tell what such a row is asking for.
     *suite-skip*|*suite-fail*)                                              echo "runtime-suite"; return ;;
   esac
 
-  # 2) Unclassifiable → the caller emits ERROR (fail loud; never drop a check).
+  # 3) Unclassifiable → the caller emits ERROR (fail loud; never drop a check).
   echo "unclassified"
 }
 
@@ -868,6 +906,95 @@ EOF
   fi
 }
 
+# span_shell_operator <span> -- THE quote-aware shell-syntax test, ONE copy for every
+# reader that asks whether a span is shell syntax this executor does not run: the
+# classifier's probe step here, and the handlers, the scope step and the CIAC lint
+# as they adopt it. None of them keeps a private operator list. eval_free_run runs no
+# shell, so a pipe, a command list, a redirect or a substitution would reach the verb
+# as a literal argument -- not the command its author wrote. The span is scanned RAW,
+# outside quotes: a quoted '|', '>= 1' or '<!--' is a pattern, and tokenize_cmd,
+# which strips the quotes, cannot tell it from an operator. Prints the operator found
+# (an unterminated quote counts, and prints its quote character) and returns 0;
+# returns 1 when the span carries none.
+span_shell_operator() {
+  local s="$1" i=0 n=${#1} ch q=""
+  case "$s" in *'$('*|*'`'*) printf '%s' '$('; return 0 ;; esac
+  while [ "$i" -lt "$n" ]; do
+    ch="${s:$i:1}"
+    if [ -n "$q" ]; then
+      if [ "$ch" = "$q" ]; then q=""; fi
+    else
+      # The quote arm is KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G15 M5
+      # makes the scan quote-blind by one substitution on that line.
+      case "$ch" in
+        \'|\") q="$ch" ;;
+        '|'|'&'|';'|'<'|'>') printf '%s' "$ch"; return 0 ;;
+      esac
+    fi
+    i=$((i + 1))
+  done
+  if [ -n "$q" ]; then printf '%s' "$q"; return 0; fi
+  return 1
+}
+
+# is_runnable_probe <span> -- TRUE when a span has the SHAPE of a probe this executor
+# runs: its leading token is an allowlisted verb, it names at least one argument, and
+# span_shell_operator finds no shell syntax in it. This is a shape test, not a promise
+# that the probe runs faithfully. Faithfulness is decided where the span runs, by the
+# gates on the dispatch path: eval_free_run refuses a reader whose input is, or cannot
+# be shown not to be, stdin (reads_stdin_cmd, status 4), and count_from_output reads
+# a matcher that could not run as ERROR rather than as a count. A handler that adds an
+# operand or exit rule adds it there, not here. A bare verb (`grep` alone) names a
+# tool in prose and is not a probe.
+is_runnable_probe() {
+  tokenize_cmd "$1" || return 1
+  [ "${#TOKENS[@]}" -ge 2 ] || return 1
+  is_runnable_verb "${TOKENS[0]}" || return 1
+  if span_shell_operator "$1" >/dev/null; then return 1; fi
+  return 0
+}
+
+# runnable_probe_of <method> -- prints the probe this executor would run for the row
+# -- the span extract_command picks -- when that pick is a closed backtick span and
+# is_runnable_probe accepts it, else nothing. Only a backticked span qualifies: prose
+# that merely opens with a verb is prose, and so is extract_command's bare-string
+# fallback.
+runnable_probe_of() {
+  local cmd
+  case "$1" in *'`'*) ;; *) return 0 ;; esac
+  cmd="$(extract_command "$1")"
+  [ -n "$cmd" ] || return 0
+  case "$1" in *"\`$cmd\`"*) ;; *) return 0 ;; esac
+  if is_runnable_probe "$cmd"; then printf '%s' "$cmd"; fi
+  return 0
+}
+
+# method_outside_verb_spans <method> -- the method with EVERY backtick span whose
+# leading token is an allowlisted verb blanked: the span and its backticks become one
+# space. A phrase inside such a span is that command's own argument -- its search
+# pattern -- never prose about the row, so every declared-deferral reader
+# (classify_family step 0 and both handlers' guards) reads this and never the raw
+# cell. The rule follows the span's KIND, not the routing pick, so a later change to
+# which span routes a row cannot change which rows are deferred. The spans are the
+# ones extract_command reads -- the even pieces of a split on backticks, an unclosed
+# last one included -- so the two cannot disagree about where a span is. A
+# declaration outside every such span, in prose or in a span led by anything else
+# (`[DEFERRED — <reason>]`), is kept. The cell reaches awk through the environment,
+# which awk does not escape-process, and awk reads no stdin.
+method_outside_verb_spans() {
+  case "$1" in *'`'*) ;; *) printf '%s' "$1"; return 0 ;; esac
+  VRP_SPAN_CELL="$1" VRP_SPAN_VERBS="$RUNNABLE_VERBS" awk 'BEGIN {
+    n = split(ENVIRON["VRP_SPAN_CELL"], p, "`"); out = ""
+    for (i = 1; i <= n; i++) {
+      if (i % 2 == 1) { out = out p[i]; continue }
+      split(p[i], w)
+      if (w[1] != "" && index(" " ENVIRON["VRP_SPAN_VERBS"] " ", " " w[1] " ") > 0) { out = out " "; continue }
+      out = out "`" p[i] (i < n ? "`" : "")
+    }
+    printf "%s", out
+  }'
+}
+
 # extract_threshold — pull a numeric threshold and its COMPARATOR out of a method.
 # Prints "<op>\t<n>", or nothing when the method states no threshold.
 #
@@ -919,7 +1046,9 @@ handle_per_issue() {
   # Honest no-op: a declared-deferred method is a SKIP with a reason. (The
   # classifier already routes most DEFERRED methods to the deferred family; this
   # is the belt-and-suspenders guard for a per-issue-classified deferred row.)
-  case "$method" in
+  # Read outside every span led by an allowlisted verb, as classify_family step 0
+  # is: a phrase inside the probe is its pattern, not a declaration.
+  case "$(method_outside_verb_spans "$method")" in
     *DEFERRED*|*declared,\ verification\ deferred*|*deferred\ to\ #*)
       printf '%s\t%s\n' "$VERDICT_SKIP" "declared-deferred"; return ;;
   esac
@@ -1302,7 +1431,9 @@ unreadable_observed() {
 # $1 = full method text parsed from the CIAC entry (command + any ≥N threshold).
 handle_integration() {
   local method="$1"
-  case "$method" in
+  # Read outside every span led by an allowlisted verb, as classify_family step 0
+  # is: a phrase inside a command is its pattern, not a declaration.
+  case "$(method_outside_verb_spans "$method")" in
     *DEFERRED*|*declared,\ verification\ deferred*|*deferred\ to\ #*)
       printf '%s\t%s\n' "$VERDICT_SKIP" "declared-deferred"; return ;;
   esac
