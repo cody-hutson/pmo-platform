@@ -157,7 +157,7 @@ CHEAP to revert the code: records already written keep their keys, and new ones 
 - ADR-150 — a hook drain gained a partition field so two populations could be told apart; the precedent for a record that describes its own class.
 - ADR-167 — drains are git-ignored and invisible to CI, so a record has to describe itself.
 - ADR-187 — command position is canonicalized, not parsed: the approximation this record makes auditable.
-- {{ADR:egress-allowlist-rows-declare-their-match-domain}} — the same release's allowlist row-scope decision, which leaves this rule's writers untouched.
+- ADR-206 — the same release's allowlist row-scope decision, which leaves this rule's writers untouched.
 
 ## References
 
