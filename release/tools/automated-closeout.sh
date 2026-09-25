@@ -20,6 +20,10 @@
 #   phase 5  — from the worktree already on the chore branch, a re-run converges
 #              (SKIPPED); while ANOTHER worktree holds the branch it FAILs with
 #              git's refusal, before phase 6 can commit (group CB)
+#   phase 11 — a resumed run whose chore PR already MERGED resolves it over the full
+#              OPEN/MERGED/CLOSED partition and SKIPs to phase 12, whose MERGED arm
+#              renders terminal PASS, whatever the age of the local origin/main ref
+#              and whatever the merge method (group CR)
 #   1  parse_args         CLI validation
 #   2  preflight          gh auth, clean tree, worktree cwd, DEPLOYED row + unique slug match, tag RECORDED (not gated), no scaffold residue in the note, Phase-A7 learnings-triple captured
 #   3  read_state         RELEASE_LOG row + visible-H4 Deployment Log + Milestone state + release-PR MERGE_SHA (#1682)
@@ -44,7 +48,7 @@
 #   9.9 ledger_guard       pre-commit §220 I1/I2 read-modify-write guard on the 4 append-only ledgers (#1680)
 #   9.95 rebuild_skill_packages  rebuild changed skills' .skill packages into the chore commit (content-sidecar-gated; N/A when no skill source changed)
 #   10 commit_chore_pr     git add + git commit (parser-clean message)
-#   11 create_chore_pr     gh pr create with safe-phrasing body throughout
+#   11 create_chore_pr     resolve this repository's own PR for the chore branch over OPEN/MERGED/CLOSED first (REST, owner-qualified; #7436), else gh pr create with safe-phrasing body throughout
 #   12 await_merge_chore_pr poll state+mergeable+mergeStateStatus (#1705: CI-realistic budget, default 300s;
 #                          skipped by no-merge mode; BLOCKED/UNSTABLE keep-polling. #6255: MERGED = terminal
 #                          PASS, CLOSED = terminal FAIL, and a failed merge re-probes state before FAILing)
@@ -758,6 +762,13 @@ EXCLUDED_DETAIL=""        # collect_open_release_issues side channel (#3587): th
                          # phase_run_verification ignores it.
 CHORE_BRANCH=""
 CHORE_PR_NUMBER=""
+CHORE_PR_OUTCOME=""       # set by phase_create_chore_pr at EVERY exit (#7436), one of:
+                          # created · existing-open · resumed-already-merged ·
+                          # skipped-as-idempotent · dry-run · failed. Empty = phase 11
+                          # never ran in this run (it halted earlier). It is the one
+                          # record of phase 11's outcome, so a consumer renders it rather
+                          # than re-deriving the outcome from CHORE_PR_NUMBER and
+                          # CHORE_PR_SKIPPED, which cannot tell the outcomes apart.
 VERIFICATION_RESULTS=""
 STATE_AI_GATE=""          # Procedure 7a verdict computed at Phase 12.9, BEFORE the
                           # milestone close. One of the gate's five states:
@@ -5531,12 +5542,90 @@ EOF
   return 3
 }
 
+# ─── Repo-host binding: chore-PR candidates (#7436) ──────────────────────────
+#
+# THE SEAM. release/references/pipeline/stage-13-close.md § 1 ("Host-operation
+# adapter seam") says a new host-touching close-out step extends the repo-host
+# adapter seam rather than inlining a host tool as THE mechanism. A `_host_*`
+# function is this driver's binding for one such operation: it owns the transport
+# and the projection, and its caller owns the semantics. Every `_host_*` binding
+# keeps four conventions: REST through `$GH api` only (the GraphQL pool is the one
+# exhausted while close-out runs); a one-line output contract, stated below; the
+# caller reads its exit status; and it is deliberately NOT named phase_* (that is
+# the dispatchable namespace, and `grep '^phase_'` over this file is a live form).
+#
+# OWNER-QUALIFIED, and that is a SECURITY property, not a filter preference. This
+# repository is public and accepts pull requests from forks, and a fork can carry a
+# branch with this run's exact chore-branch name. `head=<owner>:<branch>` binds the
+# lookup to THIS repository's owner, so a fork's same-named branch never resolves as
+# this run's chore PR, which phase 12 would otherwise poll and merge. A slug that is
+# not owner/repo-shaped is refused, never degraded to an unqualified lookup.
+#
+# Output contract: one line per candidate, "<number> <state> <merged_at-or-dash>",
+# where state is REST's open or closed; exit non-zero, with the host's message on
+# stderr, when the candidate set could not be read.
+_host_chore_pr_candidates() {
+  local _branch="$1" _owner="${REPO_SLUG%%/*}" _name="${REPO_SLUG#*/}"
+  if [[ "$REPO_SLUG" != */* || -z "$_owner" || -z "$_name" || "$_name" == */* ]]; then
+    /usr/bin/printf "REPO_SLUG '%s' is not owner/repo-shaped, so the chore-PR lookup cannot be owner-qualified\n" "$REPO_SLUG" >&2
+    return 2
+  fi
+  $GH api --paginate "repos/${REPO_SLUG}/pulls?head=${_owner}:${_branch}&state=all&per_page=100" \
+    --jq '.[] | "\(.number) \(.state) \(.merged_at // "-")"'
+}
+
+# Resolve the chore PR for $CHORE_BRANCH over its FULL terminal partition (#7436).
+# Prints ONE line: "OPEN <n>" | "MERGED <n>" | "CLOSED <n>" | "NONE" | "ERROR <reason>".
+# The candidates come from the owner-qualified REST binding above, so the resolve
+# path makes no GraphQL call. REST's state is open or closed, and merged_at
+# separates a merged PR from a closed-unmerged one: the same OPEN / MERGED / CLOSED
+# partition phase 12 reads through _chore_pr_terminal_state, and self-test arm CR-16
+# drives both readers from one fixture and asserts they agree. Precedence: an OPEN
+# PR is live work and wins; else the most recent MERGED; else the most recent
+# CLOSED; else NONE. The pre-#7436 `--state open` probe answered "none" for a MERGED
+# PR too, so a resumed run aborted above the phase whose MERGED arm exists for it.
+_chore_pr_resolve() {
+  local _cands _err _line _n _st _ma _open="" _merged="" _closed=""
+  _err="$(/usr/bin/mktemp -t closeout-prlist.XXXXXX)"
+  if ! _cands="$(_host_chore_pr_candidates "$CHORE_BRANCH" 2>"$_err")"; then
+    /usr/bin/printf 'ERROR the chore-PR candidate lookup failed: %s' "$(_detail_one_line "$(/usr/bin/head -c 4096 "$_err" 2>/dev/null)")"
+    /bin/rm -f "$_err"; return 0
+  fi
+  /bin/rm -f "$_err"
+  while IFS= read -r _line; do
+    [[ -n "$_line" ]] || continue
+    _n=""; _st=""; _ma=""
+    read -r _n _st _ma <<<"$_line"
+    if ! [[ "$_n" =~ ^[0-9]+$ ]]; then
+      /usr/bin/printf 'ERROR the candidate lookup returned an unreadable entry: %s' "$(_detail_one_line "$_line")"; return 0
+    fi
+    case "$_st" in
+      open)
+        if [[ -z "$_open" || "$_n" -gt "$_open" ]]; then _open="$_n"; fi ;;
+      closed)
+        if [[ -n "$_ma" && "$_ma" != "-" && "$_ma" != "null" ]]; then
+          if [[ -z "$_merged" || "$_n" -gt "$_merged" ]]; then _merged="$_n"; fi
+        else
+          if [[ -z "$_closed" || "$_n" -gt "$_closed" ]]; then _closed="$_n"; fi
+        fi ;;
+      *)
+        /usr/bin/printf 'ERROR PR #%s state unreadable (%s)' "$_n" "$(_detail_one_line "$_line")"; return 0 ;;
+    esac
+  done <<<"$_cands"
+  if   [[ -n "$_open"   ]]; then /usr/bin/printf 'OPEN %s' "$_open"
+  elif [[ -n "$_merged" ]]; then /usr/bin/printf 'MERGED %s' "$_merged"
+  elif [[ -n "$_closed" ]]; then /usr/bin/printf 'CLOSED %s' "$_closed"
+  else /usr/bin/printf 'NONE'
+  fi
+}
+
 phase_create_chore_pr() {
   local body
   body="$(build_chore_pr_body)"
 
   # Pre-submit parser-clean check (D9 forcing function)
   if ! check_parser_clean "$body"; then
+    CHORE_PR_OUTCOME="failed"
     mark_phase "create_chore_pr" "FAIL" "chore PR body contains close-family verbs + #N — parser-clean discipline violated (D9)"
     return 3
   fi
@@ -5553,45 +5642,129 @@ phase_create_chore_pr() {
   #       loudly rather than skip into a broken publish (publish reads the NOTES
   #       file and would FAIL or publish an empty body).
   # The check only runs in --apply (dry-run never pushes/commits).
+  # A chore PR that already MERGED is the third zero-commit cause (#7436): a resumed
+  # run whose PR merged and whose local origin/main is FRESH lands here. Before
+  # calling it an idempotent SKIP, ask the resolver, over REST, so this path still
+  # makes no GraphQL call. commits_ahead=0 against origin/main already proves
+  # containment on this path, so no fetch is needed. An OPEN PR here is still live
+  # work for this branch: it is reused and left for phase 12, never reported as
+  # "none needed".
   if [[ "$MODE" != "dry-run" ]]; then
     local commits_ahead
     commits_ahead="$(git_net -C "$REPO_ROOT" rev-list --count "origin/main..${CHORE_BRANCH}" 2>/dev/null || echo 0)"
     if [[ "$commits_ahead" -eq 0 ]]; then
       # Corpus-presence-on-main gate: only SKIP benignly if the close outputs are
       # actually already on main (idempotent re-run), else FAIL loud.
-      local _dig_on_main _idx_on_main _notes_on_main _corpus_present=1
+      local _dig_on_main _idx_on_main _notes_on_main _corpus_present=1 _zr
       _dig_on_main="$(git_net -C "$REPO_ROOT" show "origin/main:release/releases/RELEASE_DIGEST.md" 2>/dev/null | /usr/bin/grep -cE "^### ${VERSION//./\\.}[[:space:](]" || true)"
       _idx_on_main="$(git_net -C "$REPO_ROOT" show "origin/main:release/releases/RELEASE_INDEX.md" 2>/dev/null | /usr/bin/grep -cE "^\|[[:space:]]*${VERSION//./\\.}[[:space:]]*\|" || true)"
       _notes_on_main="$(git_net -C "$REPO_ROOT" cat-file -e "origin/main:release/releases/$(notes_rel_path)" 2>/dev/null && echo 1 || echo 0)"
       [[ "${_dig_on_main:-0}" -ge 1 && "${_idx_on_main:-0}" -ge 1 && "${_notes_on_main:-0}" -ge 1 ]] || _corpus_present=0
       if [[ "$_corpus_present" -eq 1 ]]; then
-        CHORE_PR_SKIPPED=1
+        _zr="$(_chore_pr_resolve)"
+        case "$_zr" in
+          "MERGED "*)
+            CHORE_PR_NUMBER="${_zr#MERGED }"; CHORE_PR_OUTCOME="resumed-already-merged"
+            mark_phase "create_chore_pr" "SKIPPED" "chore PR #${CHORE_PR_NUMBER} already MERGED and ${CHORE_BRANCH} is contained in origin/main (0 commits ahead) — resumed run; nothing to create; phase 12 confirms the terminal state"
+            return 0 ;;
+          "OPEN "*)
+            CHORE_PR_NUMBER="${_zr#OPEN }"; CHORE_PR_OUTCOME="existing-open"
+            mark_phase "create_chore_pr" "SKIPPED" "PR #${CHORE_PR_NUMBER} already exists for branch and is still OPEN, although ${CHORE_BRANCH} is 0 commits ahead of origin/main and the close outputs are on main — reused; phase 12 resolves it"
+            return 0 ;;
+          "ERROR "*)
+            CHORE_PR_OUTCOME="failed"
+            mark_phase "create_chore_pr" "FAIL" "0 commits ahead and the close outputs are on main, but the chore PR could not be resolved over its terminal partition — ${_zr#ERROR } — refusing to report an idempotent skip for a PR whose state was not read"
+            return 3 ;;
+        esac
+        CHORE_PR_SKIPPED=1; CHORE_PR_OUTCOME="skipped-as-idempotent"
         mark_phase "create_chore_pr" "SKIPPED" "0 commits ahead of origin/main and the close outputs (DIGEST H3 + INDEX row + NOTES) are already present on main — idempotent re-run; terminal phases proceed"
         return 0
       fi
+      CHORE_PR_OUTCOME="failed"
       mark_phase "create_chore_pr" "FAIL" "0 commits ahead of origin/main but the close outputs are NOT on main (DIGEST=${_dig_on_main:-0}/INDEX=${_idx_on_main:-0}/NOTES=${_notes_on_main:-0}) — the scaffold/commit phases no-op'd on a FIRST run (a real bug); failing loud rather than skipping into a broken publish"
       return 3
     fi
   fi
 
   if [[ "$MODE" == "dry-run" ]]; then
+    CHORE_PR_OUTCOME="dry-run"
     mark_phase "create_chore_pr" "DRY-RUN" "body parser-clean PASS; would: gh pr create --title 'chore(${VERSION}): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG'"
     return 0
   fi
 
-  # Push branch (git_net layers the gh-backed credential helper so a locked
-  # Keychain degrades gracefully instead of hanging on credential resolution).
-  git_net -C "$REPO_ROOT" push -u origin "$CHORE_BRANCH" >/dev/null 2>&1 || true
+  # Resolve BEFORE any push or create (#7436). A resumed run whose chore PR already
+  # MERGED must neither re-create the branch phase 12's --delete-branch removed (the
+  # push used to run first) nor reach `gh pr create`, which can only fail and so
+  # aborted the run ABOVE the phase whose MERGED arm (#6255) exists for this case.
+  local _cr _cr_n _cr_fetch _cr_head _cr_anc _cr_extra
+  _cr="$(_chore_pr_resolve)"
+  case "$_cr" in
+    "ERROR "*)
+      CHORE_PR_OUTCOME="failed"
+      mark_phase "create_chore_pr" "FAIL" "cannot resolve the chore PR for ${CHORE_BRANCH} over its terminal partition — ${_cr#ERROR }"
+      return 3 ;;
+    "MERGED "*)
+      _cr_n="${_cr#MERGED }"
+      # CONTAINMENT, against the merged PR's OWN head. MERGED is complete only if the
+      # local chore tip reached the merged PR, and the host keeps that head at
+      # refs/pull/<n>/head after the branch is deleted. main is the wrong reference: a
+      # squash or rebase merge never makes the chore commits ancestors of main, while
+      # every merge method leaves the local tip an ancestor of the head it merged. A
+      # commit made after the merge is not, and FAILs.
+      if ! _cr_fetch="$(git_net -C "$REPO_ROOT" fetch --no-tags origin "refs/pull/${_cr_n}/head" 2>&1)"; then
+        CHORE_PR_OUTCOME="failed"
+        mark_phase "create_chore_pr" "FAIL" "chore PR #${_cr_n} is MERGED, but its head (refs/pull/${_cr_n}/head) could not be fetched to confirm ${CHORE_BRANCH} is contained in it: $(_detail_one_line "$_cr_fetch")"
+        return 3
+      fi
+      _cr_head="$($GIT -C "$REPO_ROOT" rev-parse --verify --quiet FETCH_HEAD 2>/dev/null)" || _cr_head=""
+      _cr_anc=128
+      if [[ -n "$_cr_head" ]]; then
+        _cr_anc=0; $GIT -C "$REPO_ROOT" merge-base --is-ancestor "refs/heads/${CHORE_BRANCH}" "$_cr_head" >/dev/null 2>&1 || _cr_anc=$?
+      fi
+      if [[ "$_cr_anc" -eq 0 ]]; then
+        CHORE_PR_NUMBER="$_cr_n"; CHORE_PR_OUTCOME="resumed-already-merged"
+        mark_phase "create_chore_pr" "SKIPPED" "chore PR #${_cr_n} already MERGED and ${CHORE_BRANCH} is contained in its head (refs/pull/${_cr_n}/head) — resumed run; nothing to create or push; phase 12 confirms the terminal state"
+        return 0
+      fi
+      if [[ "$_cr_anc" -eq 1 ]]; then
+        _cr_extra="$($GIT -C "$REPO_ROOT" rev-list --count "${_cr_head}..refs/heads/${CHORE_BRANCH}" 2>/dev/null)" || _cr_extra=""
+        CHORE_PR_OUTCOME="failed"
+        mark_phase "create_chore_pr" "FAIL" "chore PR #${_cr_n} is already MERGED, but ${CHORE_BRANCH} carries ${_cr_extra:-an uncounted number of} commit(s) its merged head does not — this run produced close outputs after that merge and they are NOT in it; open a follow-up PR by hand (this tool does not reopen a merged chore branch)"
+      else
+        CHORE_PR_OUTCOME="failed"
+        mark_phase "create_chore_pr" "FAIL" "chore PR #${_cr_n} is MERGED, but whether ${CHORE_BRANCH} is contained in its head could not be read (git merge-base exit ${_cr_anc})"
+      fi
+      return 3 ;;
+  esac
 
-  # Idempotency: skip if PR already exists for branch
-  local existing_pr
-  existing_pr="$($GH pr list --repo "$REPO_SLUG" --head "$CHORE_BRANCH" --state open --json number --jq '.[0].number // ""' 2>/dev/null || echo "")"
-  if [[ -n "$existing_pr" ]]; then
-    CHORE_PR_NUMBER="$existing_pr"
-    mark_phase "create_chore_pr" "SKIPPED" "PR #$existing_pr already exists for branch"
+  # The push's result is READ (Plan amendment 1 item 4). An OPEN PR reused over a
+  # failed push would be merged by phase 12 without this run's commits, all green.
+  # ANCESTRY REFINEMENT: a push rejected because the remote branch is merely AHEAD of
+  # the local tip (for example after the host's "Update branch") already carries
+  # every local commit, so it is not a failure. git_net layers the gh-backed
+  # credential helper, so a locked Keychain degrades instead of hanging.
+  local _cr_push _cr_prc=0 _cr_pnote=""
+  _cr_push="$(git_net -C "$REPO_ROOT" push -u origin "$CHORE_BRANCH" 2>&1)" || _cr_prc=$?
+  if [[ "$_cr_prc" -ne 0 ]]; then
+    if git_net -C "$REPO_ROOT" fetch --no-tags origin "refs/heads/${CHORE_BRANCH}" >/dev/null 2>&1 \
+      && $GIT -C "$REPO_ROOT" merge-base --is-ancestor "refs/heads/${CHORE_BRANCH}" FETCH_HEAD >/dev/null 2>&1; then
+      _cr_pnote=" (the push was rejected, but the remote branch already contains the local tip: it is ahead, for example after the host's Update branch)"
+    else
+      CHORE_PR_OUTCOME="failed"
+      mark_phase "create_chore_pr" "FAIL" "git push -u origin ${CHORE_BRANCH} failed: $(_detail_one_line "$_cr_push") — the chore PR's head would not carry this run's commits"
+      return 3
+    fi
+  fi
+
+  if [[ "$_cr" == "OPEN "* ]]; then
+    CHORE_PR_NUMBER="${_cr#OPEN }"; CHORE_PR_OUTCOME="existing-open"
+    mark_phase "create_chore_pr" "SKIPPED" "PR #${CHORE_PR_NUMBER} already exists for branch${_cr_pnote}"
     return 0
   fi
 
+  # NONE, or only CLOSED-unmerged PR(s): create a fresh one. A closed-unmerged PR is
+  # not a completed close (phase 12 treats CLOSED as terminal FAIL), so it is never
+  # read as done here.
   local tmp_body
   tmp_body="$(/usr/bin/mktemp -t closeout-body.XXXXXX)"
   /usr/bin/printf '%s\n' "$body" > "$tmp_body"
@@ -5604,12 +5777,14 @@ phase_create_chore_pr() {
     --milestone "${STATE_MILESTONE_SLUG}" \
     --assignee "@me" 2>&1)" || {
       /bin/rm -f "$tmp_body"
-      mark_phase "create_chore_pr" "FAIL" "gh pr create failed: $pr_url"
+      CHORE_PR_OUTCOME="failed"
+      mark_phase "create_chore_pr" "FAIL" "gh pr create failed: $(_detail_one_line "$pr_url")"
       return 3
     }
   /bin/rm -f "$tmp_body"
   CHORE_PR_NUMBER="$(/usr/bin/printf '%s' "$pr_url" | /usr/bin/grep -oE '[0-9]+$' | /usr/bin/tail -1)"
-  mark_phase "create_chore_pr" "PASS" "created PR #${CHORE_PR_NUMBER} ($pr_url)"
+  CHORE_PR_OUTCOME="created"
+  mark_phase "create_chore_pr" "PASS" "created PR #${CHORE_PR_NUMBER} ($(_detail_one_line "$pr_url"))${_cr_pnote}"
   return 0
 }
 
@@ -5618,6 +5793,12 @@ phase_create_chore_pr() {
 # drift apart — the same shared-predicate shape adopted elsewhere in this batch for
 # the same reason, and the opposite of the two verbatim copies of the
 # `state,baseRefName` read this file already carries.
+#
+# Phase 11 reads the same OPEN / MERGED / CLOSED partition through a SECOND reader,
+# _chore_pr_resolve over the REST binding _host_chore_pr_candidates (#7436), because
+# its resolve path must make no GraphQL call and must be owner-qualified. Two readers
+# of one fact is the drift this comment warns about, so self-test arm CR-16 drives
+# both from the same fixture rows and asserts they agree on every state.
 #
 # WHY `state` IS THE FIELD. `state` in {OPEN, CLOSED, MERGED} is a total, terminal
 # partition, and it is already how this file decides that a PR merged (`--json
