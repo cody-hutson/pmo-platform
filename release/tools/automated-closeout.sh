@@ -10591,6 +10591,150 @@ STUB
   COLLECTED_OPEN_ISSUES=""; EXCLUDED_DETAIL=""
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # ── Test CB: phase_create_chore_branch fails loud on a checkout it could not
+  #    make (#7182) — offline and hermetic: a bare file-path origin, no gh, no
+  #    network. THE RED ARM is the chore branch HELD by a second worktree; its
+  #    controls are the branch absent (CB-1), free (CB-2) and already current
+  #    (CB-3). The fixture root is canonicalised with `pwd -P`: macOS /var is a
+  #    symlink to /private/var, and git names a worktree by its real path, so an
+  #    uncanonicalised root would make CB-5's <home> limb miss for a reason that has
+  #    nothing to do with the code under test.
+  if [[ -x "$GIT" ]]; then
+    local _cb_saved_root="$REPO_ROOT" _cb_saved_mode="$MODE" _cb_saved_version="$VERSION"
+    local _cb_saved_branch="$CHORE_BRANCH" _cb_saved_home="$HOME"
+    local _cb_tmp _cb_origin _cb_work _cb_held _cb_br _cb_rc _cb_det _cb_head _cb_setup=0
+    local _cb_br_ln _cb_log_ln _cb_br_txt _cb_log_txt _cb_dst _cb_fun _cb_n _cb_vbo _cb_pre _cb_post
+    local _cb_in _cb_out
+    _cb_tmp="$(cd "$(/usr/bin/mktemp -d -t chorebranch-selftest.XXXXXX)" && pwd -P)"
+    _cb_origin="$_cb_tmp/origin.git"; _cb_work="$_cb_tmp/work"; _cb_held="$_cb_tmp/held-wt-cb7182"
+    _cb_br="chore/v9.82-stage-13-corpus-update"
+    (
+      set -e
+      $GIT init --bare -q "$_cb_origin"
+      $GIT init -q -b main "$_cb_work" 2>/dev/null || { $GIT init -q "$_cb_work"; $GIT -C "$_cb_work" checkout -q -b main; }
+      /usr/bin/printf 'baseline\n' > "$_cb_work/f.txt"
+      $GIT -C "$_cb_work" add f.txt
+      $GIT -C "$_cb_work" -c user.email=t@t -c user.name=t commit -qm baseline
+      $GIT -C "$_cb_work" remote add origin "$_cb_origin"
+      $GIT -C "$_cb_work" push -q origin main
+      $GIT -C "$_cb_work" fetch -q origin
+    ) >/dev/null 2>&1 || _cb_setup=$?
+    $GIT -C "$_cb_work" rev-parse --verify --quiet refs/remotes/origin/main >/dev/null 2>&1 || _cb_setup=1
+    if [[ "$_cb_setup" -ne 0 ]]; then
+      echo "FAIL: CB fixture — the hermetic origin/work repositories could not be built (rc=$_cb_setup); no CB arm can run, and the witness gate will name group CB"; failures=$((failures+1))
+    else
+      REPO_ROOT="$_cb_work"; MODE="apply"; VERSION="v9.82"
+
+      # CB-1 — CREATE path (control): branch absent → PASS, HEAD read back on it.
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      _cb_rc=0; phase_create_chore_branch >/dev/null 2>&1 || _cb_rc=$?
+      _cb_head="$($GIT -C "$_cb_work" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+      _st_arm CB CB-1; [[ "$_cb_rc" -eq 0 && "${PHASE_RESULTS[0]:-}" == "PASS" && "$_cb_head" == "$_cb_br" ]] || { echo "FAIL: CB-1 — an ABSENT chore branch must be created from origin/main (rc 0, PASS, HEAD on it); got rc=$_cb_rc result='${PHASE_RESULTS[0]:-}' HEAD='$_cb_head'"; failures=$((failures+1)); }
+
+      # CB-2 — FREE existing branch (the RED arm's control): HEAD elsewhere, branch free → SKIPPED, HEAD on it.
+      $GIT -C "$_cb_work" checkout -q main >/dev/null 2>&1 || true
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      _cb_rc=0; phase_create_chore_branch >/dev/null 2>&1 || _cb_rc=$?
+      _cb_head="$($GIT -C "$_cb_work" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+      _st_arm CB CB-2; [[ "$_cb_rc" -eq 0 && "${PHASE_RESULTS[0]:-}" == "SKIPPED" && "$_cb_head" == "$_cb_br" ]] || { echo "FAIL: CB-2 (the RED arm's control) — a FREE existing chore branch must be checked out (rc 0, SKIPPED, HEAD on it); got rc=$_cb_rc result='${PHASE_RESULTS[0]:-}' HEAD='$_cb_head'"; failures=$((failures+1)); }
+
+      # CB-3 — SAME-WORKTREE RE-RUN (the header's phase-5 pin): HEAD already on it → SKIPPED, HEAD unchanged.
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      _cb_rc=0; phase_create_chore_branch >/dev/null 2>&1 || _cb_rc=$?
+      _cb_head="$($GIT -C "$_cb_work" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+      _st_arm CB CB-3; [[ "$_cb_rc" -eq 0 && "${PHASE_RESULTS[0]:-}" == "SKIPPED" && "$_cb_head" == "$_cb_br" ]] || { echo "FAIL: CB-3 — a re-run from the worktree ALREADY on the chore branch must converge (rc 0, SKIPPED, HEAD unchanged); got rc=$_cb_rc result='${PHASE_RESULTS[0]:-}' HEAD='$_cb_head'"; failures=$((failures+1)); }
+
+      # CB-4 — THE RED ARM: the branch HELD by a second worktree → FAIL rc 3 carrying git's refusal; HEAD NOT moved.
+      $GIT -C "$_cb_work" checkout -q main >/dev/null 2>&1 || true
+      $GIT -C "$_cb_work" worktree add -q "$_cb_held" "$_cb_br" >/dev/null 2>&1 || true
+      _st_arm CB CB-4; /usr/bin/grep -qxF "branch refs/heads/$_cb_br" <<<"$($GIT -C "$_cb_work" worktree list --porcelain 2>/dev/null || true)" \
+        || { echo "FAIL: CB-4 fixture — no second worktree holds $_cb_br, so the RED arm cannot reach git's refusal"; failures=$((failures+1)); }
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      _cb_rc=0; phase_create_chore_branch >/dev/null 2>&1 || _cb_rc=$?
+      _cb_det="${PHASE_DETAILS[0]:-}"
+      _cb_head="$($GIT -C "$_cb_work" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+      [[ "$_cb_rc" -eq 3 && "${PHASE_RESULTS[0]:-}" == "FAIL" ]] || { echo "FAIL: CB-4 THE RED ARM — a chore branch HELD by a second worktree must FAIL with rc 3 (the pre-fix phase reported SKIPPED, rc 0); got rc=$_cb_rc result='${PHASE_RESULTS[0]:-}'"; failures=$((failures+1)); }
+      [[ "$_cb_det" == *held-wt-cb7182* ]] || { echo "FAIL: CB-4 — the FAIL detail must carry git's refusal, which names the holding worktree in both git's 'already checked out at' and 'already used by worktree at' wording; got '$_cb_det'"; failures=$((failures+1)); }
+      [[ "$_cb_head" == "main" ]] || { echo "FAIL: CB-4 — HEAD must stay where it was (main) when git refuses the checkout; got '$_cb_head'"; failures=$((failures+1)); }
+
+      # CB-5 — DETAIL HYGIENE: one line, no '|', and a holder path under HOME redacted to <home>.
+      #        Read PHASE_DETAILS directly, never via get_phase (its RESULT|DETAIL split mis-reads a pipe).
+      _st_arm CB CB-5; [[ -n "$_cb_det" && "$_cb_det" != *$'\n'* && "$_cb_det" != *$'\r'* && "$_cb_det" != *'|'* ]] || { echo "FAIL: CB-5 — git's refusal must be flattened to ONE pipe-free line (a detail is a RESULT|detail record and a markdown row); got '$_cb_det'"; failures=$((failures+1)); }
+      HOME="$_cb_tmp"
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      phase_create_chore_branch >/dev/null 2>&1 || true
+      HOME="$_cb_saved_home"
+      _cb_det="${PHASE_DETAILS[0]:-}"
+      [[ "$_cb_det" == *'<home>/held-wt-cb7182'* && "$_cb_det" != *"$_cb_tmp"* ]] || { echo "FAIL: CB-5 — a holder path under HOME must render as <home>/… and the raw path must not appear (the report reaches a PUBLIC sub-task); got '$_cb_det'"; failures=$((failures+1)); }
+
+      # CB-6 / CB-7 — THE ABORT IS WIRED (AC-2): execute the two SHIPPED dispatch lines, lifted verbatim,
+      #   with the REAL phase 5 and a witness stub for phase 6 (the AI-F harness shape).
+      _cb_br_ln="$(/usr/bin/grep -nE '^phase_create_chore_branch ' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 || true)"
+      _cb_log_ln="$(/usr/bin/grep -nE '^phase_transition_release_log ' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 || true)"
+      if ! [[ "$_cb_br_ln" =~ ^[0-9]+$ && "$_cb_log_ln" =~ ^[0-9]+$ ]]; then
+        echo "FAIL: CB-6 anti-vacuity — a dispatch needle did not resolve to exactly ONE top-level line (branch='$_cb_br_ln' log='$_cb_log_ln')"; failures=$((failures+1))
+      else
+        _cb_br_txt="$(/usr/bin/sed -n "${_cb_br_ln}p" "${BASH_SOURCE[0]}")"
+        _cb_log_txt="$(/usr/bin/sed -n "${_cb_log_ln}p" "${BASH_SOURCE[0]}")"
+        _cb_exec_dispatch() {   # $1 = witness path; prints the dispatch block's exit status
+          local _dw="$1" _dst=0
+          (
+            CB_DISPATCH_W="$_dw"
+            generate_report() { :; }
+            phase_transition_release_log() { /usr/bin/printf 'RAN\n' >> "$CB_DISPATCH_W"; return 0; }
+            eval "$_cb_br_txt"
+            eval "$_cb_log_txt"
+            exit 0
+          ) >/dev/null 2>&1 || _dst=$?
+          /usr/bin/printf '%s' "$_dst"
+        }
+        # CB-6: the branch is still HELD (from CB-4) → the shipped line halts with 3; phase 6 never runs.
+        _cb_dst="$(_cb_exec_dispatch "$_cb_tmp/w-held.txt")"
+        _st_arm CB CB-6; [[ "$_cb_dst" -eq 3 && ! -e "$_cb_tmp/w-held.txt" ]] || { echo "FAIL: CB-6 — with the chore branch held, the SHIPPED dispatch must exit 3 at create_chore_branch and phase 6 must NOT run; got exit=$_cb_dst"; failures=$((failures+1)); }
+        # CB-7: SENSITIVITY — free the branch (detach the holder); the same harness must now reach phase 6.
+        $GIT -C "$_cb_held" checkout -q --detach >/dev/null 2>&1 || true
+        $GIT -C "$_cb_work" checkout -q main >/dev/null 2>&1 || true
+        _cb_dst="$(_cb_exec_dispatch "$_cb_tmp/w-free.txt")"
+        _st_arm CB CB-7; { [[ "$_cb_dst" -eq 0 ]] && /usr/bin/grep -qF 'RAN' "$_cb_tmp/w-free.txt" 2>/dev/null; } || { echo "FAIL: CB-7 sensitivity — with the branch free the harness must run phase 6 and exit 0 (got exit=$_cb_dst); without this, CB-6's absent witness proves nothing"; failures=$((failures+1)); }
+      fi
+
+      # CB-8 — AC-3, STATIC, phase-scoped: no '|| true' anywhere in phase_create_chore_branch.
+      _cb_fun="$(/usr/bin/awk '/^phase_create_chore_branch\(\) \{$/{f=1} f{print} f&&/^\}$/{exit}' "${BASH_SOURCE[0]}")"
+      _st_arm CB CB-8; [[ "$(grep_count -F 'mark_phase "create_chore_branch" "FAIL"' <<<"$_cb_fun")" -ge 1 ]] || { echo "FAIL: CB-8 anti-vacuity — the extraction of phase_create_chore_branch found no FAIL mark; the zero below would be a broken probe"; failures=$((failures+1)); }
+      _cb_n="$(grep_count -F '|| true' <<<"$_cb_fun")"
+      [[ "$_cb_n" -eq 0 ]] || { echo "FAIL: CB-8 (AC-3) — phase_create_chore_branch carries ${_cb_n} '|| true'; a checkout failure must never be discarded in this phase"; failures=$((failures+1)); }
+      [[ "$(grep_count -F '|| true' <<<'    $GIT -C "$REPO_ROOT" checkout "$CHORE_BRANCH" >/dev/null 2>&1 || true')" -eq 1 ]] || { echo "FAIL: CB-8 control — the '|| true' matcher missed the pre-fix line; its zero above proves nothing"; failures=$((failures+1)); }
+
+      # CB-9 — CLASS GUARD, production-wide: no success verdict written BEFORE a swallowed git op
+      #        (the #7182 shape). ONE program serves the subject and both fixtures.
+      _cb_vbo='/^self_test\(\) \{/{exit} /^}/{a=0} /mark_phase "[^"]+" "(PASS|SKIPPED)"/{a=1; next} a && /^[[:space:]]*return([[:space:]]|;|$)/{a=0} a && /(\$GIT|git_net)[[:space:]]/ && /\|\|[[:space:]]*(true|echo|:)/{n++; a=0} END{print n+0}'
+      _cb_pre=$'f() {\n  mark_phase "x" "SKIPPED" "d"\n  $GIT -C "$R" checkout "$B" >/dev/null 2>&1 || true\n  return 0\n}'
+      _cb_post=$'f() {\n  if ! o="$($GIT -C "$R" checkout "$B" 2>&1)"; then\n    mark_phase "x" "FAIL" "$o"; return 3\n  fi\n  mark_phase "x" "PASS" "d"\n  return 0\n}'
+      _st_arm CB CB-9; [[ "$(/usr/bin/awk "$_cb_vbo" <<<"$_cb_pre")" -eq 1 ]] || { echo "FAIL: CB-9 control — the verdict-before-op matcher missed the known pre-fix shape; a zero below would be a broken probe"; failures=$((failures+1)); }
+      [[ "$(/usr/bin/awk "$_cb_vbo" <<<"$_cb_post")" -eq 0 ]] || { echo "FAIL: CB-9 specificity — the matcher flagged the op-THEN-verdict shape, which is the correct form"; failures=$((failures+1)); }
+      _cb_n="$(/usr/bin/awk "$_cb_vbo" "${BASH_SOURCE[0]}")"
+      [[ "$_cb_n" -eq 0 ]] || { echo "FAIL: CB-9 (class guard) — ${_cb_n} success verdict(s) in the production region are written BEFORE a swallowed git op (mark SKIPPED/PASS, then '|| true' on the op that would establish it)"; failures=$((failures+1)); }
+
+      # CB-10 — REDACT, THEN CAP. _detail_one_line is the release's shared diagnostic projection,
+      #         and its redaction is a literal-substring replace: a cap applied FIRST cuts a home path
+      #         mid-string, the fragment no longer contains the substring, and it ships raw to a PUBLIC
+      #         sub-task. A 900-character input whose home path begins at character 790 must come out
+      #         within 800 characters, carrying <home> and no path fragment at all.
+      HOME="$_cb_tmp"
+      _cb_in="$(/usr/bin/printf '%0789d' 0)${HOME}$(/usr/bin/printf '%0200d' 0)"; _cb_in="${_cb_in:0:900}"
+      _cb_out="$(_detail_one_line "$_cb_in" 2>/dev/null)" || _cb_out=""
+      HOME="$_cb_saved_home"
+      _st_arm CB CB-10; [[ "${#_cb_in}" -eq 900 && "${_cb_in:789:8}" == "${_cb_tmp:0:8}" ]] || { echo "FAIL: CB-10 fixture — the input must be 900 characters with the home path starting at character 790 (got ${#_cb_in} characters)"; failures=$((failures+1)); }
+      [[ "$_cb_out" == *'<home>'* && "$_cb_out" != *'/'* && "${#_cb_out}" -le 800 ]] || { echo "FAIL: CB-10 — _detail_one_line must REDACT before it CAPS: a home path straddling character 800 must render <home> and leave no path fragment, within 800 characters; got ${#_cb_out} characters"; failures=$((failures+1)); }
+
+      _st_witness CB 10
+    fi
+    REPO_ROOT="$_cb_saved_root"; MODE="$_cb_saved_mode"; VERSION="$_cb_saved_version"
+    CHORE_BRANCH="$_cb_saved_branch"; HOME="$_cb_saved_home"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    /bin/rm -rf "$_cb_tmp" 2>/dev/null || true
+  fi
+
   # Test 4e: phase_await_merge_chore_pr budget + escape modes (#1705) — offline,
   # hermetic. Asserts: the zero-commit SKIP propagation (CHORE_PR_SKIPPED=1 →
   # await SKIPPED, un-stranding terminal phases); --no-merge → await SKIPPED;
@@ -15687,6 +15831,7 @@ EOF
   _st_claim AI "  phase_action_item_gate validated (#4439, group AI — 28 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): A and B are each other's control over ONE differential harness where only the ledger changes — a gate that never blocks fails A, one that always blocks fails B, one reading the wrong path resolves NOT-RECORDED for both and fails BOTH / B2 decoy: a terminal ledger carrying the literal words 'open' and 'in-flight' in trigger_detail still resolves RESOLVED, so the gate is column-addressed and not row-pattern-matched / all five verdict states drive distinct fixtures and are asserted on the STATE_AI_GATE global rather than the detail prose — UNRESOLVED (A) · RESOLVED (B, B2) · NOT-RECORDED (C unattested blocks, C2 attested passes WARN with the operator-actor attestation EMITTED carrying its cause and the spec subtype) · EMPTY-LEDGER (D unattested blocks, D2 attested round-trips the second cause) · UNCLASSIFIABLE (M blocks and NAMES the offending row and its raw value, with a specificity limb proving the enumerator selects the unreadable set and not the terminal one, and the all-terminal ledger re-driven on the same harness as its paired negative control) / E the two SURFACE states must resolve DISTINCT values, because comparing detail strings passes on any two different sentences / E2 an unlicensed attestation cause does NOT clear a SURFACE state / F EXECUTES the two dispatch lines lifted VERBATIM from this file's own text, refusing to pass unless each needle resolves to exactly one top-level line, under three mutually-controlling limbs — F1 blocking gate leaves the close UNFIRED at exit 3, F2 SENSITIVITY a passing gate does fire it (without which F1's clean result is meaningless), F3 NEGATIVE CONTROL a constructed '|| true' line must let the close through (without which a fail-closed gate is indistinguishable from a no-op one) — so capability-to-fail is re-demonstrated on EVERY run, not only under one-time mutation / F4 whole-block invariant: every top-level dispatch line carries the fail-closed guard, with an anti-vacuity floor on the parse and a specificity control proving the filter rejects an unguarded line / G doc<->code parity on the canonical Procedure 7a predicate across the fixture set, with an anti-vacuity floor on the extraction and a sensitivity arm requiring >=5 distinct STATEs over a fixture count DERIVED from the loop rather than restated in the message / M-N-O-Q-R-S-T MEMBERSHIP: the residue of the recognised set is its own BLOCKING state rather than the implicit else of a two-value comparison, which counted a typo, a case variant, a foreign vocabulary and an out-of-range field as RESOLVED — M an unadmitted value blocks and names itself, with the all-terminal ledger as its paired negative control / N case-folding NORMALISES rather than rejects, so an uppercase OPEN resolves UNRESOLVED and a fold-and-reject implementation cannot pass M / O the two section-2.1a status aliases stay ADMITTED, without which every legacy re-run blocks / Q the ARITY class in BOTH its mechanisms, the one witnessed live: at arity<=10 field 11 does not exist and reads EMPTY, at arity 11 the row-terminating pipe stays glued to the last field and reads 'open |' NON-empty, and the detail carries fields:N so a dropped column is distinguishable from a mistyped word / R an unreadable ledger cannot be attested away, the structural sibling of L / S row 6 renders the fifth state WITH its counts instead of falling to the default that asserts the gate did not run, with the still-reachable default as its control / T PRECEDENCE: a ledger carrying both classes renders UNRESOLVED and carries BOTH enumerations in one detail, because the state selects the operator's remedy and reversing it would drop the open enumeration from the ledgers that most need it / H --dry-run never returns non-zero yet still EVALUATES, and names the condition that would FAIL at --apply / I an idempotent re-run over an already-closed milestone, where an UNRESOLVED verdict is the close-before-verdict shape itself / J --no-merge still evaluates and records rather than blocks / K Verification row 6 reads the Phase-12.9 GLOBAL — unset renders UNVERIFIED never a green cell, mutating the global moves the cell, and phase_run_verification is asserted NOT to re-evaluate the predicate after the close / L an attestation does NOT clear an UNRESOLVED verdict — an open row is dispositioned, never attested away / P operator-instance path tokenisation, with a sensitivity arm proving the leak probe can match its own needle"
   _st_claim M "  phase_action_item_gate MEASURED recommended --attest-action-items cause validated (group M — 10 arms, one for each of the classifier's four refusal paths plus the six cause arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): every arm binds to the literal 'MEASURED RECOMMENDATION: ' prefix rather than to the whole detail, because the blocking FAIL text already names BOTH causes in its remediation sentence and a whole-detail search for either one therefore passes over an inverted classifier — the vacuous-arm shape, refused here by construction — M1 a commitment emitted with an empty ledger recommends emit-skipped and provably not the other cause / M2 its differential control, same fixture and mode with only the log counts changed, recommends no-commitments and provably not the other / M3 the residue gets its own outcome: decisions rendered with nothing emitted is the shape a swept-and-owed-nothing release and a never-swept release BOTH produce, so the classifier recommends NEITHER cause instead of guessing / M4 an unreadable probe is not a zero — a missing reader recommends nothing and NAMES the reader, without which a broken reader would silently recommend no-commitments on every close / M5 a measurement that DISAGREES with an attestation already given is recorded and still passes, with the specificity arm that an AGREEING measurement renders no disagreement notice / M6 THE SWEEP ZERO-STATE IS NOT A COMMITMENT: action-item-opened rows that all carry the sweep:none-owed payload token — what a release that swept every routing point and owed nothing emits — recommend NEITHER cause and never emit-skipped, and the basis NAMES the zero-state rows; red against a classifier that counts every action-item-opened row / M7 its specificity twin: ONE real commitment beside zero-state rows still recommends emit-skipped and renders the commitment count rather than the raw count, so an over-correction that stops counting whenever a zero-state row is present fails here, and a threshold drift to -ge 2 fails here as well as in M1 / M8 a zero-state count larger than the action-item-opened set it is a subset of is not a count — the classifier recommends nothing and NAMES the unusable probe rather than subtracting its way to a negative commitment count, without which the subset guard is unarmed / M9 A QUERY WITH NO RELEASE KEY IS NOT A ZERO — every other arm hands the classifier a key, so the first refusal path went undriven; the arm drives an unresolvable key against the M1 reader, the one that WOULD answer emit-skipped, so a disarmed guard prints a confident cause built from a query that names no release rather than simply printing nothing, and the detail must NAME the missing key / M10 A READER THAT DID NOT ANSWER WITH A COUNT HAS NOT COUNTED — M8 drives only the subset limb of the usable-count guard, leaving the non-integer limb unarmed; four limbs, because that limb is a DISJUNCTION over three separately-read counts and one fixture breaking all three is satisfied by any single guard surviving (measured: a mutant defaulting only the action-item-opened read to 0 left an all-queries-broken fixture still refusing), so limbs a-b-c each break exactly ONE query and leave the other two answering integers, giving every guard a fixture only it can refuse, while limb d breaks every query and is the only one that grades the READ rather than the guard — a bare integer on the first stdout line and an error carrying digits inside a non-numeric value on the last, so a first-line read or a contains-a-digit test reddens — and all four require the classifier to NAME the unusable probe instead of defaulting an unanswered count to 0 / M9 and M10 are the two arms this release adds, each measured RED against its own one-line mutant and GREEN unmutated, because before them the no-release-key guard could be replaced by an always-false test and the three non-integer guards defaulted to 0 with this suite still at exit 0 and zero FAIL lines / and every M arm re-asserts the verdict its fixture's attestation state already fixed — rc 3 with STATE_AI_GATE unchanged on the unattested M1-M4, M6-M8 and M10, rc 3 on M9 which reaches that same unattested state from an unresolvable directory, rc 0 on the attested M5 — so 'the recommendation decides nothing' is measured on each run rather than asserted once"
   _st_claim 4e-c-j "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT; #6255, arms c-j — this clause ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when the arms leave no witness: TERMINAL STATES — (e) an ALREADY-MERGED PR PASSes on the FIRST read with ZERO merge attempts and its detail carries the elapsed figure AC-4 is graded on, which no earlier version of this phase emitted at all / (f) a CLOSED-unmerged PR FAILs and its detail NAMES the closed-without-merging case, driven on the deliberately MERGEABLE-looking closed shape because the CONFLICTING one trips the pre-existing arm by accident, and asserted on the detail because a bare FAIL is satisfied by the PRE-FIX timeout path / (g) THE PER-ITERATION PIN: a merge landing MID-POLL is recognised on the SECOND read, so a pre-loop-only implementation passes (e) and fails here — budgeted at MERGE_TIMEOUT=2 because the bound admits ceil(TIMEOUT/STEP) iterations and a 1/1 arm would redden against a CORRECT implementation / RE-PROBE — (h) a failed gh pr merge over a PR that DID merge PASSes with the merge ATTEMPTED once and a detail naming the unobserved-merge case, (h2) its NEGATIVE CONTROL: the same failed merge over a STILL-OPEN PR must still FAIL, without which an implementation that PASSes on any merge failure satisfies (h) / (i) THE WIDTH PIN over the shipped text of the one shared reader, three-field --json list and three-field --jq template, behind an anti-vacuity floor on the extraction and TWO specificity controls on constructed FOUR-field lines that both needles must reject / BUDGET EXHAUSTION — (j) AC-2's timeout limb, which every arm above leaves ungraded: a PR BLOCKED on every read must spend the budget and then FAIL with a detail NAMING the timeout ('merge state still=') and ZERO merge attempts, asserted on the detail because a bare FAIL is satisfied by (f)'s CLOSED arm and by the CONFLICTING HALT, and on the merge counter because removing the post-loop guard falls straight through to gh pr merge and launders the spent budget into a PASS — measured: with that guard replaced by 'if false' the whole suite stayed at exit 0 / and every arm c-j counts BOTH pr view and pr merge, because post-fix a PASS is reachable through the terminal arm and no longer proves on its own that a merge was attempted)"
+  _st_claim CB "  phase_create_chore_branch fail-loud validated (#7182, group CB — 10 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): CB-1 create path PASS with HEAD read back / CB-2 a FREE existing branch SKIPPED with HEAD on it, the RED arm's control / CB-3 a same-worktree re-run converges, the header's phase-5 pin / CB-4 THE RED ARM: a branch HELD by a second worktree FAILs with rc 3 carrying git's refusal (holder named) and HEAD not moved / CB-5 that detail is one pipe-free line with a holder path under HOME rendered <home> / CB-6 the two SHIPPED dispatch lines, executed with the real phase: held → exit 3 and phase 6 never runs / CB-7 its sensitivity control: free → phase 6 runs / CB-8 AC-3: no '|| true' anywhere in the phase, with a pre-fix control / CB-9 class guard: zero success verdicts written before a swallowed git op across the production region, with sensitivity and specificity fixtures / CB-10 the shared projection redacts BEFORE it caps: a home path straddling character 800 renders <home> and leaves no path fragment"
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
