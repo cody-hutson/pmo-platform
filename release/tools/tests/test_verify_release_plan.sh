@@ -311,8 +311,8 @@ cat > "$STUB_DIR/plan/p.md" <<'EOF'
 **#601 — deploy families**
 | AC | Predicate class | Verification method | Expected result |
 |---|---|---|---|
-| AC-1 | regression | run deploy.sh --check byte-diff regression against unchanged files | unchanged |
-| AC-2 | sync | source-to-deployed via deploy.sh --check | in-sync |
+| AC-1 | regression | run `deploy.sh --check` byte-diff regression against unchanged files | unchanged |
+| AC-2 | sync | source-to-deployed via `deploy.sh --check` | in-sync |
 EOF
 # Drift case: stub deploy exits 1.
 printf '#!/usr/bin/env bash\nexit 1\n' > "$STUB_DIR/core/deploy/deploy.sh"; chmod +x "$STUB_DIR/core/deploy/deploy.sh"
@@ -2676,15 +2676,15 @@ cat > "$G15STUB/plan/p.md" <<'EOF'
 | AC-4 | `grep -c -F 'deferred to #' plan/p.md` at least 1 | PASS: a phrase inside the probe is its pattern |
 | AC-5 | `grep -c -F 'RUNNABLE_VERBS=' release/tools/verify-release-plan.sh` at least 1; recorded for the cross-issue integration read | PASS, family per-issue |
 | AC-6 | [DEFERRED — graded by the Stage 8 reader] `grep -c -F 'zz-absent-probe-token' release/tools/verify-release-plan.sh` at least 1 | SKIP: a declaration outside the probe still wins |
-| AC-7 | `grep` the deploy log for drift; the hook arms stay unchanged | not per-issue: a bare verb is not a probe |
-| AC-8 | `ls release/tools \| wc -l` at least 1; the tree stays unchanged | not per-issue: a pipeline is not a probe this executor runs |
+| AC-7 | `grep` the deploy log for drift, recorded for the cross-issue integration read | not per-issue: a bare verb is not a probe |
+| AC-8 | `ls release/tools \| wc -l` at least 1, recorded for the cross-issue integration read | not per-issue: a pipeline is not a probe this executor runs |
 
 **#961 — rows with no runnable probe keep the keyword fallback**
 
 | AC | Verification method | Expected result |
 |---|---|---|
 | AC-9 | source-to-deployed sync via `deploy.sh --check` | sync |
-| AC-10 | the other arms stay byte-identical: unchanged | regression |
+| AC-10 | `deploy.sh --check`: the other arms stay byte-identical, unchanged | regression |
 | AC-11 | cross-issue integration read of the recorded decision | integration, documented-decision SKIP |
 | AC-12 | the declared outcome of this suite run is suite-skip | runtime-suite SKIP |
 
@@ -2783,7 +2783,7 @@ esac
 # --- V6893-AC3: rows with no runnable probe keep the keyword fallback (each control carries a routing keyword). ---
 if [ "$(fv15 "$J15" AC-9)" = "sync/PASS" ] && [ "$(fv15 "$J15" AC-10)" = "regression/PASS" ] \
    && [ "$(fv15 "$J15" AC-11)" = "integration/SKIP" ] && [ "$(fv15 "$J15" AC-12)" = "runtime-suite/SKIP" ]; then
-  ok "V6893-AC3 — command-less rows keep sync / regression / integration / runtime-suite"
+  ok "V6893-AC3 — rows with no runnable probe keep their declared route or keyword arm: sync and regression by the declared deploy check, integration and runtime-suite by keyword"
 else
   bad "V6893-AC3 — the keyword fallback moved for a row with no runnable probe: $(fv15 "$J15" AC-9) $(fv15 "$J15" AC-10) $(fv15 "$J15" AC-11) $(fv15 "$J15" AC-12)"
 fi
@@ -2820,9 +2820,12 @@ m15 "V6893-AC4 M1" g15-m1-no-probe-step 1 's/^  if \[ -n "\$probe" \]; then echo
 if [ "$MUT_TOOK" = 1 ]; then
   g15_run "$MUT_PATH"; JM15_1="$VRP_JSON"
   if mutant_ran "V6893-AC4 M1"; then
-    [ "$(fv15 "$JM15_1" AC-1)" = "regression/PASS" ] && [ "$(fv15 "$JM15_1" AC-3)" = "runtime-suite/SKIP" ] \
-      && ok "V6893-AC4 M1 detected — without the probe step the failing probe is graded PASS by the deploy oracle again" \
-      || bad "V6893-AC4 M1 SURVIVED — AC-1 $(fv15 "$JM15_1" AC-1), AC-3 $(fv15 "$JM15_1" AC-3)"
+    [ "$(fv15 "$JM15_1" AC-5)" = "integration/PASS" ] && [ "$(fv15 "$JM15_1" AC-3)" = "runtime-suite/SKIP" ] \
+      && ok "V6893-AC4 M1 detected — without the probe step, the integration and runtime-suite keywords steal a probe again" \
+      || bad "V6893-AC4 M1 SURVIVED — AC-5 $(fv15 "$JM15_1" AC-5), AC-3 $(fv15 "$JM15_1" AC-3)"
+    [ "$(family_of "$JM15_1" AC-1)" = per-issue ] \
+      && ok "V6893-AC4 M1 — the deploy route is closed a second way: without the probe step, 'unchanged' still does not reach the oracle, because the oracle is reached by declaration only" \
+      || bad "V6893-AC4 M1 — without the probe step AC-1 reached $(fv15 "$JM15_1" AC-1)"
     G15_SAME=1
     for g15a in AC-9 AC-10 AC-11 AC-12; do [ "$(fv15 "$JM15_1" "$g15a")" = "$(fv15 "$J15" "$g15a")" ] || G15_SAME=0; done
     [ "$G15_SAME" = 1 ] \
@@ -2863,9 +2866,9 @@ m15 "V6893-AC2 M5" g15-m5-quote-blind 1 's/ q="\$ch" ;;$/ : ;;/'
 if [ "$MUT_TOOK" = 1 ]; then
   g15_run "$MUT_PATH"; JM15_5="$VRP_JSON"
   if mutant_ran "V6893-AC2 M5"; then
-    [ "$(fv15 "$JM15_5" AC-16)" = "regression/PASS" ] \
-      && ok "V6893-AC2 M5 detected — a quote-blind operator scan reads the quoted marker as an operator and hands the failing probe to the deploy oracle" \
-      || bad "V6893-AC2 M5 SURVIVED — AC-16 $(fv15 "$JM15_5" AC-16)"
+    [ "$(fv15 "$JM15_5" AC-16)" = "per-issue/UNRUNNABLE" ] && [ "$(observed_of "$JM15_5" AC-16)" != "count=1 (wanted == 0)" ] \
+      && ok "V6893-AC2 M5 detected — a quote-blind operator scan reads the quoted marker as an operator: the failing probe no longer runs, and the handler refuses it as shell syntax" \
+      || bad "V6893-AC2 M5 SURVIVED — AC-16 $(fv15 "$JM15_5" AC-16) '$(observed_of "$JM15_5" AC-16)'"
   fi
 fi
 rm -rf "$G15STUB" "$MUTD6893"
@@ -3450,6 +3453,235 @@ if [ "$MUT_TOOK" = 1 ]; then
   fi
 fi
 rm -rf "$MUTD6848" "$SEAMD6848"
+
+# ===========================================================================
+# G18 — THE DEPLOY-CHECK ORACLE IS REACHED BY DECLARATION, NEVER BY PROSE
+#       (V6893-AC2, V6893-AC3, V6893-AC4: #6893's round 2, landed in #6848's
+#       slice; V6848-AC2 for the handlers' shell-operator refusal).
+#
+# deploy.sh --check grades by its exit status alone, which reads nothing a row
+# asserts, so its verdict is the row's only when the row's designated command IS
+# that check, written as a backticked span: an optional bash, the oracle's own path
+# or the root shim, and --check as the only argument. A prose word, a
+# --check-<mode> run, a pipeline led by the invocation, another file named
+# deploy.sh, or the check beside another command routes no row there, and such a
+# row takes the outcome its own command earns. An integration keyword still comes
+# first, and a runnable probe outranks the route. A declared row that also names
+# another command reads the can't-run slot when the check passes and FAIL when it
+# fails. A designated command carrying shell syntax outside quotes is not run: it
+# reads UNRUNNABLE, naming the operator. A command-less row the route releases is
+# asserted only to leave the oracle and never PASS: at this step it is
+# unclassifiable, and the per-issue residual gives it its named SKIP.
+#
+# The plan is written into two temp stub roots, one whose deploy check exits 0 and
+# one whose check exits 1 (the FAIL limb). No record read here carries a brace, so
+# the shared readers see each one, and every negated assertion first requires its
+# record. Each seeded failure is proved to apply at exactly its sites, and only one
+# that took is graded.
+# ===========================================================================
+echo
+echo "G18 — #6893 round 2: the deploy-check oracle is reached by declaration, never by prose (V6893-AC2/AC3/AC4, V6848-AC2)"
+G18STUB="$(mktemp -d -t verify-plan-6893b-stub.XXXXXX)"; G18FAIL="$(mktemp -d -t verify-plan-6893b-fail.XXXXXX)"; MUTD45="$(mktemp -d -t verify-plan-6893b-mut.XXXXXX)"
+for g18d in "$G18STUB" "$G18FAIL"; do
+  mkdir -p "$g18d/core/deploy" "$g18d/release/tools" "$g18d/plan"
+  cp "$VERIFY" "$g18d/release/tools/"
+done
+printf '#!/usr/bin/env bash\nexit 0\n' > "$G18STUB/core/deploy/deploy.sh"; chmod +x "$G18STUB/core/deploy/deploy.sh"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$G18FAIL/core/deploy/deploy.sh"; chmod +x "$G18FAIL/core/deploy/deploy.sh"
+cat > "$G18STUB/plan/p.md" <<'EOF'
+# vTEST Release Plan — the deploy-check oracle is reached by declaration, never by prose (G18)
+
+## Verification Plan
+
+**#970 — a row the deploy check does not grade never reaches it**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-1 | the other arms stay byte-identical: unchanged | no command: not the oracle |
+| AC-2 | the two digests are byte-equivalent across the rebuild | no command: not the oracle |
+| AC-3 | the `release-hub` package stays unchanged after the rebuild | a mention is not a command |
+| AC-4 | `bash core/deploy/deploy.sh --check-package-freshness` exits 0 | a different check: UNRUNNABLE |
+| AC-5 | `python3 release/tools/check-adr-numbers.py` reports the numbering unchanged | another tool: UNRUNNABLE |
+| AC-6 | `python3 release/tools/check-adr-numbers.py` grades this; `bash core/deploy/deploy.sh --check` does not | the designated command is python3 |
+| AC-7 | `bash core/deploy/deploy.sh --check 2>&1 \| grep -c leak` expect 0 | a pipeline is not the invocation |
+| AC-8 | run deploy.sh --check and read the mirror section | prose is not a declaration |
+| AC-9 | `./deploy.sh --deploy` after merge, then `./deploy.sh --check` | the designated command deploys |
+| AC-17 | `bash release/tools/tests/fixtures/structural-move/deploy.sh --check` | another file named deploy.sh is not the oracle |
+
+**#971 — a row whose command is the deploy check keeps its route**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-10 | `bash core/deploy/deploy.sh --check` | sync, graded by the oracle |
+| AC-11 | `core/deploy/deploy.sh --check` Check 14 over the changed files | sync, graded by the oracle |
+| AC-12 | Run `./deploy.sh --check` on the branch | sync, graded by the oracle |
+| AC-13 | `deploy.sh --check`: the other arms stay byte-identical, unchanged | regression, graded by the oracle |
+| AC-14 | `bash core/deploy/deploy.sh --check`; `python3 release/tools/check-adr-numbers.py` | sync: the declared command is first, and the other did not run |
+| AC-15 | `grep -c -F 'RUNNABLE_VERBS=' release/tools/verify-release-plan.sh` at least 1, then `bash core/deploy/deploy.sh --check` | per-issue: the probe outranks the route |
+| AC-16 | the recorded decision, read for the cross-issue integration; `bash core/deploy/deploy.sh --check` | integration: that arm still comes first |
+
+**#972 — a designated command carrying shell syntax is not run**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-18 | `ls release/tools \| wc -l` present | UNRUNNABLE, naming the pipe |
+| AC-19 | `grep -c -F '\|' release/tools/verify-release-plan.sh` present | a quoted operator character is literal: the probe runs |
+| AC-20 | `grep -c -F RUNNABLE_VERBS release/tools/verify-release-plan.sh > out.txt` present | UNRUNNABLE, naming the redirect |
+| AC-21 | `ls release/tools \| wc -l` at least 1, and `grep -c -F RUNNABLE_VERBS release/tools/verify-release-plan.sh` at least 1 | the designated command is not run: never a pass |
+
+## Cross-Issue Acceptance Criteria
+
+- [ ] **CIAC-1 (#972 × #973 on `fixture`):** a pipeline in the cross-issue handler. *Method:* `ls release/tools | wc -l` at least 1.
+EOF
+cp "$G18STUB/plan/p.md" "$G18FAIL/plan/p.md"
+# g18_run <tool> [<root>] — sets VRP_JSON + VRP_RC in the CURRENT shell (vrp_run's contract).
+g18_run() { local r="${2:-$G18STUB}"; set +e; VRP_JSON="$("$1" --format=json --root "$r" "$r/plan/p.md" 2>/dev/null)"; VRP_RC=$?; set -e; }
+# fv18 <json> <id> — "family/verdict"; reads "/" for an absent record, which no arm expects.
+fv18() { printf '%s/%s' "$(family_of "$1" "$2")" "$(verdict_of "$1" "$2")"; }
+# not_oracle <json> <id> — TRUE only when the record is PRESENT and its family is neither sync nor regression.
+not_oracle() { case "$(family_of "$1" "$2")" in ''|sync|regression) return 1 ;; *) return 0 ;; esac; }
+# g18_has <json> <id> <text> — TRUE only when the record's observed text carries <text>.
+g18_has() { case "$(observed_of "$1" "$2")" in *"$3"*) return 0 ;; *) return 1 ;; esac; }
+# m18 <label> <stem> <sites> <sed-expr>... — the suite's mutate-and-prove shape, sites counted.
+m18() {
+  local label="$1" stem="$2" want="$3" dst n e
+  shift 3
+  dst="$MUTD45/$stem.sh"
+  cp "$VERIFY" "$dst"
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  n="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$dst")"
+  if [ "$n" -eq "$want" ]; then
+    MUT_TOOK=1; ok "$label — mutation applied at exactly $want site(s): the mutant differs from the shipped tool in $n line(s)"
+  else
+    MUT_TOOK=0; bad "$label — mutation applied at $n site(s), expected exactly $want; its arm is not graded"
+  fi
+}
+# The slot's value, derived from its one binding line (G16's derivation, restated here
+# so this group stands on its own).
+G18_SLOT="$(sed -n 's/^readonly VERDICT_PARTIAL_SLOT="\$VERDICT_\([A-Z]*\)".*/\1/p' "$VERIFY")"
+
+g18_run "$VERIFY"; JD="$VRP_JSON"
+# --- G18-0: DENOMINATOR FIRST — every stub-plan row and the CIAC emit. ---
+[ "$(acs_of "$JD")" = "21" ] && [ "$(ciacs_of "$JD")" = "1" ] \
+  && ok "G18-0 SENSITIVITY — all 21 stub-plan rows and the CIAC emit (the arms below grade real records)" \
+  || bad "G18-0 expected 21 AC records and 1 CIAC, got $(acs_of "$JD") and $(ciacs_of "$JD")"
+
+# --- V6893-AC2 D45-a: a row with no command is not the oracle's, and never PASS. ---
+for a in AC-1 AC-2 AC-3 AC-8; do
+  if not_oracle "$JD" "$a" && [ "$(verdict_of "$JD" "$a")" != PASS ] \
+     && case "$(observed_of "$JD" "$a")" in "no-executable-command-in-method"|"unclassified-method"*) true ;; *) false ;; esac; then
+    ok "V6893-AC2 D45-a — $a (no command) is not the oracle's and reads no verdict it did not earn ($(fv18 "$JD" "$a"))"
+  else
+    bad "V6893-AC2 D45-a — $a got $(fv18 "$JD" "$a") '$(observed_of "$JD" "$a")'"
+  fi
+done
+# --- V6893-AC2 D45-bc: a row whose designated command is another command takes that command's outcome. ---
+for pr in AC-4:bash AC-5:python3 AC-6:python3 AC-9:deploy.sh AC-17:bash; do a="${pr%%:*}"; tl="${pr#*:}"
+  if not_oracle "$JD" "$a" && [ "$(verdict_of "$JD" "$a")" = UNRUNNABLE ] && g18_has "$JD" "$a" "allowlist:$tl "; then
+    ok "V6893-AC2 D45-bc — $a is UNRUNNABLE naming $tl, never the oracle's verdict"
+  else
+    bad "V6893-AC2 D45-bc — $a got $(fv18 "$JD" "$a") '$(observed_of "$JD" "$a")'"
+  fi
+done
+not_oracle "$JD" AC-7 && [ "$(verdict_of "$JD" AC-7)" = UNRUNNABLE ] \
+  && ok "V6893-AC2 D45-bc — a pipeline led by the invocation is not the invocation ($(fv18 "$JD" AC-7))" \
+  || bad "V6893-AC2 D45-bc — AC-7 got $(fv18 "$JD" AC-7) '$(observed_of "$JD" AC-7)'"
+
+# --- V6893-AC3 D45-d/e/f: the declared route keeps its rows; a probe and an integration keyword come first. ---
+G_OK=1
+for a in AC-10 AC-11 AC-12; do [ "$(fv18 "$JD" "$a")" = sync/PASS ] || G_OK=0; done
+[ "$(fv18 "$JD" AC-13)" = regression/PASS ] || G_OK=0
+[ "$(family_of "$JD" AC-14)" = sync ] || G_OK=0
+case "$(observed_of "$JD" AC-10)" in "deploy --check clean"*) : ;; *) G_OK=0 ;; esac
+[ "$G_OK" = 1 ] \
+  && ok "V6893-AC3 D45-d — a row whose command IS deploy.sh --check keeps the oracle in every spelling (regression by word)" \
+  || bad "V6893-AC3 D45-d — the declared route moved: $(fv18 "$JD" AC-10) $(fv18 "$JD" AC-11) $(fv18 "$JD" AC-12) $(fv18 "$JD" AC-13) $(fv18 "$JD" AC-14)"
+case "$(observed_of "$JD" AC-15)" in "deploy --check"*) P15=0 ;; *) P15=1 ;; esac
+[ "$(family_of "$JD" AC-15)" = per-issue ] && [ "$P15" = 1 ] \
+  && ok "V6893-AC3 D45-e — a runnable probe still outranks the declared route" \
+  || bad "V6893-AC3 D45-e — AC-15 got $(fv18 "$JD" AC-15) '$(observed_of "$JD" AC-15)'"
+[ "$(family_of "$JD" AC-16)" = integration ] \
+  && ok "V6893-AC3 D45-f — an integration keyword still comes first: no row moves INTO the oracle" \
+  || bad "V6893-AC3 D45-f — AC-16 got $(fv18 "$JD" AC-16)"
+
+# --- V6893-AC2 D52: a declared row naming another command reads the slot on a PASS, and FAIL stands. ---
+[ -n "$G18_SLOT" ] && [ "$G18_SLOT" != PASS ] && [ "$(fv18 "$JD" AC-14)" = "sync/$G18_SLOT" ] \
+   && g18_has "$JD" AC-14 "limb 1 bash PASS deploy --check clean" && g18_has "$JD" AC-14 "limb 2 python3 did not run (outside the verb set)" \
+  && ok "V6893-AC2 D52 — a declared deploy check beside another command: the check passes, the other command did not run, so the row reads the can't-run slot ($G18_SLOT), never PASS" \
+  || bad "V6893-AC2 D52 — AC-14 $(fv18 "$JD" AC-14) '$(observed_of "$JD" AC-14)' (slot '$G18_SLOT')"
+g18_run "$VERIFY" "$G18FAIL"; JDF="$VRP_JSON"
+[ "$(fv18 "$JDF" AC-14)" = sync/FAIL ] && g18_has "$JDF" AC-14 "limb 2 python3 did not run (outside the verb set)" && [ "$(fv18 "$JDF" AC-10)" = sync/FAIL ] \
+  && ok "V6893-AC2 D52 — when the declared check fails, the row FAILs (it still names the command that did not run); control: the one-command row FAILs too" \
+  || bad "V6893-AC2 D52 — under a failing check AC-14 $(fv18 "$JDF" AC-14) '$(observed_of "$JDF" AC-14)', AC-10 $(fv18 "$JDF" AC-10)"
+
+# --- V6848-AC2 refusal: a designated command carrying shell syntax outside quotes is not run. ---
+[ "$(fv18 "$JD" AC-18)" = per-issue/UNRUNNABLE ] && g18_has "$JD" AC-18 "shell-operator:| " \
+  && ok "V6848-AC2 refusal — a pipeline this executor would have run with the pipe as a literal argument is refused: UNRUNNABLE, naming the pipe" \
+  || bad "V6848-AC2 refusal — AC-18 got $(fv18 "$JD" AC-18) '$(observed_of "$JD" AC-18)'"
+[ "$(fv18 "$JD" AC-19)" = per-issue/PASS ] \
+  && ok "V6848-AC2 refusal CONTROL — a quoted operator character is literal, so its probe runs and PASSes" \
+  || bad "V6848-AC2 refusal CONTROL — AC-19 got $(fv18 "$JD" AC-19) '$(observed_of "$JD" AC-19)'"
+[ "$(fv18 "$JD" AC-20)" = per-issue/UNRUNNABLE ] && g18_has "$JD" AC-20 "shell-operator:> " \
+  && ok "V6848-AC2 refusal — a redirect is refused too: UNRUNNABLE, naming it" \
+  || bad "V6848-AC2 refusal — AC-20 got $(fv18 "$JD" AC-20) '$(observed_of "$JD" AC-20)'"
+[ "$(fv18 "$JD" AC-21)" = per-issue/UNRUNNABLE ] && g18_has "$JD" AC-21 "limbs run 0 of 2" && g18_has "$JD" AC-21 "shell-operator:|" \
+  && ok "V6848-AC2 refusal — a designated command with a pipe is not run in a multi-command method either: no command ran, never PASS" \
+  || bad "V6848-AC2 refusal — AC-21 got $(fv18 "$JD" AC-21) '$(observed_of "$JD" AC-21)'"
+[ "$(fv18 "$JD" CIAC-1)" = integration/UNRUNNABLE ] && g18_has "$JD" CIAC-1 "shell-operator:|" \
+  && ok "V6848-AC2 refusal — the cross-issue handler refuses it the same way" \
+  || bad "V6848-AC2 refusal — CIAC-1 got $(fv18 "$JD" CIAC-1) '$(observed_of "$JD" CIAC-1)'"
+
+# --- SEEDED FAILURES. Each reverts one limb and names the answer it must move to. ---
+m18 "V6893-AC4 M5" gd-m5-prose-route-restored 1 's/^  if declares_deploy_check "\$raw_method"; then/  if declares_deploy_check "$raw_method" || case "$method" in *deploy*--check*|*byte-diff*|*byte-equivalent*|*unchanged*) true ;; *) false ;; esac; then/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g18_run "$MUT_PATH"; JM5="$VRP_JSON"
+  if mutant_ran "V6893-AC4 M5"; then
+    [ "$(fv18 "$JM5" AC-1)" = regression/PASS ] && [ "$(fv18 "$JM5" AC-4)" = sync/PASS ] \
+      && ok "V6893-AC4 M5 detected — with the prose route restored, 'unchanged' and a --check-<mode> reach the oracle again" \
+      || bad "V6893-AC4 M5 SURVIVED — AC-1 $(fv18 "$JM5" AC-1), AC-4 $(fv18 "$JM5" AC-4)"
+  fi
+fi
+m18 "V6893-AC4 M6" gd-m6-mention-declares 1 's/^  \[ -n "\$cmd" \] && is_deploy_check_invocation "\$cmd"$/  case "$1" in *"deploy.sh --check"*) true ;; *) false ;; esac/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g18_run "$MUT_PATH"; JM6="$VRP_JSON"
+  if mutant_ran "V6893-AC4 M6"; then
+    [ "$(fv18 "$JM6" AC-6)" = sync/PASS ] \
+      && ok "V6893-AC4 M6 detected — a mention beside another command must not declare the route" \
+      || bad "V6893-AC4 M6 SURVIVED — AC-6 $(fv18 "$JM6" AC-6)"
+  fi
+fi
+m18 "V6893-AC4 M7" gd-m7-check-prefix 1 's/^  \[ "\$arg" = --check \]$/  case "$arg" in --check*) true ;; *) false ;; esac/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g18_run "$MUT_PATH"; JM7="$VRP_JSON"
+  if mutant_ran "V6893-AC4 M7"; then
+    [ "$(fv18 "$JM7" AC-4)" = sync/PASS ] \
+      && ok "V6893-AC4 M7 detected — a --check-<mode> is a different check" \
+      || bad "V6893-AC4 M7 SURVIVED — AC-4 $(fv18 "$JM7" AC-4)"
+  fi
+fi
+m18 "V6848-AC2 M8" gd-m8-no-operator-refusal 2 's/if op="\$\(span_shell_operator "\$cmd"\)"; then/if false; then/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g18_run "$MUT_PATH"; JM8="$VRP_JSON"
+  if mutant_ran "V6848-AC2 M8"; then
+    [ -n "$(verdict_of "$JM8" AC-18)" ] && ! g18_has "$JM8" AC-18 "shell-operator:" && [ "$(verdict_of "$JM8" AC-18)" != UNRUNNABLE ] \
+       && ! g18_has "$JM8" CIAC-1 "shell-operator:" \
+      && ok "V6848-AC2 M8 detected — without the handlers' refusal the pipeline runs with the pipe as a literal argument ($(fv18 "$JM8" AC-18)), in both handlers" \
+      || bad "V6848-AC2 M8 SURVIVED — AC-18 $(fv18 "$JM8" AC-18) '$(observed_of "$JM8" AC-18)'; CIAC-1 '$(observed_of "$JM8" CIAC-1)'"
+  fi
+fi
+m18 "V6893-AC2 M9" gd-m9-no-partial-rule 1 's/^  if \[ -n "\$method" \] && \[ "\$n" -ge 2 \]; then$/  if false; then/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g18_run "$MUT_PATH"; JM9="$VRP_JSON"
+  if mutant_ran "V6893-AC2 M9"; then
+    [ "$(fv18 "$JM9" AC-14)" = sync/PASS ] \
+      && ok "V6893-AC2 M9 detected — without the partial rule a declared check beside a command that did not run PASSes again" \
+      || bad "V6893-AC2 M9 SURVIVED — AC-14 $(fv18 "$JM9" AC-14)"
+  fi
+fi
+rm -rf "$G18STUB" "$G18FAIL" "$MUTD45"
 
 # ---------------------------------------------------------------------------
 # Summary
