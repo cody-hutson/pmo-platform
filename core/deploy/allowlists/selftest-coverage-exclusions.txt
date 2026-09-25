@@ -57,6 +57,7 @@ core/skills/finops-usage-extractor/scripts/extract-usage.sh  # covered by the fi
 core/skills/finops-usage-extractor/scripts/rollup-attribution.sh  # covered by the finops-selftest job in release-tooling-smoke.yml
 core/skills/finops-usage-extractor/scripts/report-usage.sh  # covered by the finops-selftest job in release-tooling-smoke.yml
 core/skills/finops-usage-extractor/scripts/estimate-usage.sh  # covered by the finops-selftest job in release-tooling-smoke.yml
+core/skills/finops-usage-extractor/scripts/provider-usage-connector.sh  # out of declared scope — skill-owned script, no CI executor today
 core/skills/context-budget-auditor/scripts/measure-context-budget.sh  # out of declared scope — skill-owned script, no CI executor today
 core/skills/pmo-qa-auditor/scripts/fitness-audit-search-primitives.sh  # out of declared scope — skill-owned script, no CI executor today
 core/skills/skill-compliance-auditor/scripts/measure-skill-compliance.sh  # out of declared scope — skill-owned script, no CI executor today
