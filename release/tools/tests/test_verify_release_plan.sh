@@ -119,6 +119,15 @@ set -euo pipefail
 #        only by the declared-deferred form in its method cell. One seeded failure
 #        re-introduces a class read, proved to apply at exactly one site, and must
 #        move a row.
+#  (G15) A RUNNABLE PROBE IS EXECUTED, NEVER ROUTED BY PROSE (V6893-AC2/AC3/AC4,
+#        V6837-AC2, V7531-AC3) — a row whose designated command is a probe this
+#        executor runs is graded by that probe ahead of every keyword arm, whatever
+#        its prose says; a phrase inside a span led by an allowlisted verb is that
+#        command's pattern, never a declaration; a quoted operator character is
+#        literal. Rows with no runnable probe keep the keyword fallback,
+#        could-not-read stays ERROR beside a declared SKIP, and --help describes the
+#        dispatch and claims no class hint. Five seeded failures, each proved to
+#        apply at exactly its sites. G10's R-M2 is split in two for the same change.
 #
 # Offline + deterministic: fixtures are committed under tests/fixtures/ and all
 # methods are fast local greps against the repo tree (no deploy.sh --check here —
@@ -1508,15 +1517,28 @@ vrp_run "$MUT_PATH" "$FIX_HIJACK"; JM_HJ="$VRP_JSON"
   && ok "R-M1 mutation detected — with the floor raised the declared suite-skip fabricates a PASS again" \
   || bad "R-M1 SURVIVED — AC-4 is '$(verdict_of "$JM_HJ" AC-4)' with the floor raised; R-3 observes nothing"
 
-# R-M2 — SEEDED FAILURE on the retired route. Re-insert the prose keyword arm
-# ABOVE the executable arm, which is exactly the shape that stole the row, and
-# R-1 must flip. Position is the defect, so the mutation restores the position.
-m6383 g10-m3-keyword-route-restored 's#^    \*grep\*#    *runtime*suite*|*test-run*|*dispatch*the*runtime*|*suite-*|*exercise*) echo "runtime-suite"; return ;;\
+# R-M2 — SEEDED FAILURES on the retired route, in two layers, because a runnable
+# probe is now resolved ahead of every keyword arm (classify_family step 1).
+# R-M2a re-inserts the prose keyword arm ALONE, above the executable arm, which is
+# exactly the shape that stole the row: AC-2 must STAY per-issue, because the probe
+# step resolves it first — the new layer holds. R-M2b re-inserts the arm AND
+# removes the probe step: AC-2 must be stolen again while AC-1 is not — the
+# original detection, so R-1 still observes the keyword arm's position. Position
+# is the defect, so each mutation restores the position.
+G10_PROSE_ROUTE='s#^    \*grep\*#    *runtime*suite*|*test-run*|*dispatch*the*runtime*|*suite-*|*exercise*) echo "runtime-suite"; return ;;\
     *grep*#'
+m6383 g10-m3a-keyword-route-only "$G10_PROSE_ROUTE"
+vrp_run "$MUT_PATH" "$FIX_HIJACK"; JM_HJ2A="$VRP_JSON"
+if mutant_ran "R-M2a"; then
+  [ "$(family_of "$JM_HJ2A" AC-2)" = "per-issue" ] \
+    && ok "R-M2a with only the prose keyword route restored, AC-2 stays per-issue — the probe step resolves it first" \
+    || bad "R-M2a AC-2 reads '$(family_of "$JM_HJ2A" AC-2)' with only the prose route restored — a keyword still steals a runnable probe"
+fi
+m6383 g10-m3-keyword-route-restored "$G10_PROSE_ROUTE" 's/^  if \[ -n "\$probe" \]; then echo "per-issue"; return; fi$/  :/'
 vrp_run "$MUT_PATH" "$FIX_HIJACK"; JM_HJ2="$VRP_JSON"
 [ "$(family_of "$JM_HJ2" AC-1)" = "per-issue" ] && [ "$(family_of "$JM_HJ2" AC-2)" = "runtime-suite" ] \
-  && ok "R-M2 mutation detected — with the keyword route restored above the executable arm, AC-2 is stolen again while AC-1 is not" \
-  || bad "R-M2 SURVIVED — AC-1 '$(family_of "$JM_HJ2" AC-1)' / AC-2 '$(family_of "$JM_HJ2" AC-2)'; R-1 observes nothing"
+  && ok "R-M2b mutation detected — with the keyword route restored above the executable arm and the probe step removed, AC-2 is stolen again while AC-1 is not" \
+  || bad "R-M2b SURVIVED — AC-1 '$(family_of "$JM_HJ2" AC-1)' / AC-2 '$(family_of "$JM_HJ2" AC-2)'; R-1 observes nothing"
 
 # --- D: the roll-up denominator ---------------------------------------------
 vrp_run "$VERIFY" "$FIX_NOTABLE"; J_NT="$VRP_JSON"; RC_NT="$VRP_RC"
@@ -2565,6 +2587,236 @@ else
   fi
 fi
 rm -rf "$MUTD6180"
+
+# ===========================================================================
+# G15 — A RUNNABLE PROBE IS EXECUTED, NEVER ROUTED BY PROSE (V6893-AC2/AC3/AC4,
+#       V6837-AC2, V7531-AC3).
+#
+# classify_family hands a row whose designated command — extract_command's pick,
+# a backticked span — is a probe this executor runs (an allowlisted verb, at least
+# one argument, no shell operator outside quotes; span_shell_operator is the one
+# quote-aware test) to the per-issue handler AHEAD of every keyword arm, and every
+# declared-deferral reader reads the cell with each span led by an allowlisted verb
+# blanked. So a prose word cannot hand a failing probe to the deploy oracle, a
+# subtype token cannot divert a head probe, a phrase inside a probe is its pattern,
+# and a quoted operator character is literal. Rows with no runnable probe keep the
+# keyword fallback, could-not-read stays ERROR beside a declared SKIP, and --help
+# describes the dispatch it performs.
+#
+# The plan is written into a temp stub root whose deploy check exits 0, so a row
+# the oracle grades reads PASS there and a probe that FAILs is visibly not the
+# oracle's verdict. Its tables keep the design's AC-1..AC-15 numbering; AC-16..AC-18
+# are the quoted-pattern and deploy-span rows. Every record read here carries no
+# brace, so the shared family_of / verdict_of / observed_of readers see each one,
+# and every negated assertion first requires its record to be present. Each seeded
+# failure is proved to apply at exactly the sites it names, and only a mutation
+# that took is graded.
+# ===========================================================================
+echo
+echo "G15 — #6893: a runnable probe is executed, never routed by prose (V6893-AC2/AC3/AC4, V6837-AC2, V7531-AC3)"
+G15STUB="$(mktemp -d -t verify-plan-6893-stub.XXXXXX)"; MUTD6893="$(mktemp -d -t verify-plan-6893-mut.XXXXXX)"
+mkdir -p "$G15STUB/core/deploy" "$G15STUB/release/tools" "$G15STUB/plan"
+cp "$VERIFY" "$G15STUB/release/tools/"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$G15STUB/core/deploy/deploy.sh"; chmod +x "$G15STUB/core/deploy/deploy.sh"
+cat > "$G15STUB/plan/p.md" <<'EOF'
+# vTEST Release Plan — a runnable probe is executed, never routed by prose (G15)
+
+## Verification Plan
+
+**#960 — a runnable probe is never displaced by prose**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-1 | `grep -c -F 'zz-absent-probe-token' release/tools/verify-release-plan.sh` at least 1; the design around it stands unchanged | FAIL: the probe runs and finds nothing |
+| AC-2 | `grep -c -F 'RUNNABLE_VERBS=' release/tools/verify-release-plan.sh` at least 1, then a byte-diff via deploy.sh --check | PASS: the probe runs |
+| AC-3 | `head -n 1 release/tools/verify-release-plan.sh` at least 1; the declared outcome of the suite run is suite-skip | PASS: the probe runs |
+| AC-4 | `grep -c -F 'deferred to #' plan/p.md` at least 1 | PASS: a phrase inside the probe is its pattern |
+| AC-5 | `grep -c -F 'RUNNABLE_VERBS=' release/tools/verify-release-plan.sh` at least 1; recorded for the cross-issue integration read | PASS, family per-issue |
+| AC-6 | [DEFERRED — graded by the Stage 8 reader] `grep -c -F 'zz-absent-probe-token' release/tools/verify-release-plan.sh` at least 1 | SKIP: a declaration outside the probe still wins |
+| AC-7 | `grep` the deploy log for drift; the hook arms stay unchanged | not per-issue: a bare verb is not a probe |
+| AC-8 | `ls release/tools \| wc -l` at least 1; the tree stays unchanged | not per-issue: a pipeline is not a probe this executor runs |
+
+**#961 — rows with no runnable probe keep the keyword fallback**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-9 | source-to-deployed sync via `deploy.sh --check` | sync |
+| AC-10 | the other arms stay byte-identical: unchanged | regression |
+| AC-11 | cross-issue integration read of the recorded decision | integration, documented-decision SKIP |
+| AC-12 | the declared outcome of this suite run is suite-skip | runtime-suite SKIP |
+
+**#962 — could not evaluate, beside not this runner's job**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-13 | declared, verification deferred to the Stage 8 named read of the decision record | SKIP: declared in the method cell |
+| AC-14 | `grep -c -F 'x' release/tools/tests/fixtures/verify-plan-no-such-fixture.md` expect 0 | ERROR: the probe input could not be read |
+| AC-15 |  | ERROR: an empty method cell |
+
+**#963 — a quoted pattern is literal, and a probe outranks the deploy-check span**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-16 | `grep -c -F '<!-- zz-marker-a' plan/p.md` expect 0; the hook arms stay unchanged | FAIL: a quoted operator character is literal, so the probe runs |
+| AC-17 | `grep -c -F '<!-- zz-marker-b deferred to #' plan/p.md` at least 1 | PASS: a phrase inside a quoted-marker probe is its pattern |
+| AC-18 | `bash core/deploy/deploy.sh --check` exits 0, and `grep -c -F 'RUNNABLE_VERBS=' release/tools/verify-release-plan.sh` at least 1 | PASS: the probe grades the row; the deploy check does not run |
+EOF
+# g15_run <tool> — sets VRP_JSON + VRP_RC in the CURRENT shell (vrp_run's contract).
+g15_run() { set +e; VRP_JSON="$("$1" --format=json --root "$G15STUB" "$G15STUB/plan/p.md" 2>/dev/null)"; VRP_RC=$?; set -e; }
+# fv15 <json> <id> — "family/verdict"; reads "/" for an absent record, which no arm expects.
+fv15() { printf '%s/%s' "$(family_of "$1" "$2")" "$(verdict_of "$1" "$2")"; }
+# g15_present_not <json> <id> <family> — TRUE only when the record is PRESENT and its
+# family is not <family>: an absent record never passes a negated assertion.
+g15_present_not() { local f; f="$(family_of "$1" "$2")"; [ -n "$f" ] && [ "$f" != "$3" ]; }
+# m15 <label> <stem> <sites> <sed-expr> — publish the mutant in MUT_PATH, count the
+# lines it changed (a substitution never adds or removes a line), and set MUT_TOOK
+# only when it applied at exactly <sites> lines. An arm whose mutation did not take
+# is not graded: its answer would be the shipped tool's, a vacuous detection.
+MUT_TOOK=0
+m15() {
+  local label="$1" stem="$2" want="$3" e="$4" dst n
+  dst="$MUTD6893/$stem.sh"
+  cp "$VERIFY" "$dst"
+  sed -i.bak -E "$e" "$dst"
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  n="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$dst")"
+  if [ "$n" -eq "$want" ]; then
+    MUT_TOOK=1; ok "$label — mutation applied at exactly $want site(s): the mutant differs from the shipped tool in $n line(s)"
+  else
+    MUT_TOOK=0; bad "$label — mutation applied at $n site(s), expected exactly $want; its arm is not graded"
+  fi
+}
+
+g15_run "$VERIFY"; J15="$VRP_JSON"; RC15="$VRP_RC"
+# --- G15-0: DENOMINATOR FIRST — every stub-plan row emits. ---
+[ "$(grep -c '"id":"AC-' <<<"$J15" || true)" -eq 18 ] \
+  && ok "G15-0 SENSITIVITY — all 18 stub-plan rows emit (the arms below grade real records)" \
+  || bad "G15-0 expected 18 AC records, got $(grep -c '"id":"AC-' <<<"$J15" || true)"
+
+# --- V6893-AC2: no prose displaces a runnable probe; a declaration outside it still wins. ---
+[ "$(fv15 "$J15" AC-1)" = "per-issue/FAIL" ] && [ "$(observed_of "$J15" AC-1)" = "count=0 (wanted >= 1)" ] \
+  && ok "V6893-AC2 a — 'unchanged' no longer sends a failing probe to the deploy oracle: it runs and FAILs" \
+  || bad "V6893-AC2 a — AC-1 got $(fv15 "$J15" AC-1) '$(observed_of "$J15" AC-1)'"
+[ "$(fv15 "$J15" AC-2)" = "per-issue/PASS" ] \
+  && ok "V6893-AC2 b — byte-diff and deploy.sh --check prose do not displace the probe" \
+  || bad "V6893-AC2 b — AC-2 got $(fv15 "$J15" AC-2)"
+[ "$(fv15 "$J15" AC-3)" = "per-issue/PASS" ] \
+  && ok "V6893-AC2 c — a subtype token does not displace a head probe" \
+  || bad "V6893-AC2 c — AC-3 got $(fv15 "$J15" AC-3)"
+[ "$(fv15 "$J15" AC-4)" = "per-issue/PASS" ] \
+  && ok "V6893-AC2 d — a deferral phrase inside the probe is its pattern" \
+  || bad "V6893-AC2 d — AC-4 got $(fv15 "$J15" AC-4)"
+[ "$(fv15 "$J15" AC-5)" = "per-issue/PASS" ] \
+  && ok "V6893-AC2 e — an 'integration' word no longer relabels a probe" \
+  || bad "V6893-AC2 e — AC-5 got $(fv15 "$J15" AC-5)"
+[ "$(fv15 "$J15" AC-6)" = "deferred/SKIP" ] \
+  && ok "V6893-AC2 f CONTROL — a declaration outside the probe still wins" \
+  || bad "V6893-AC2 f — AC-6 got $(fv15 "$J15" AC-6)"
+g15_present_not "$J15" AC-7 per-issue && g15_present_not "$J15" AC-8 per-issue \
+  && ok "V6893-AC2 g BOUNDARY — a bare verb and a pipeline are not probes (AC-7 $(fv15 "$J15" AC-7), AC-8 $(fv15 "$J15" AC-8))" \
+  || bad "V6893-AC2 g — AC-7 $(fv15 "$J15" AC-7) / AC-8 $(fv15 "$J15" AC-8): absent, or claimed as probes"
+[ "$(fv15 "$J15" AC-16)" = "per-issue/FAIL" ] && [ "$(observed_of "$J15" AC-16)" = "count=1 (wanted == 0)" ] \
+  && ok "V6893-AC2 h — a quoted marker is a pattern, not an operator: the failing probe beside 'unchanged' runs and FAILs" \
+  || bad "V6893-AC2 h — AC-16 got $(fv15 "$J15" AC-16) '$(observed_of "$J15" AC-16)'"
+[ "$(fv15 "$J15" AC-17)" = "per-issue/PASS" ] \
+  && ok "V6893-AC2 i — a deferral phrase inside a quoted-marker probe is its pattern, not a declaration" \
+  || bad "V6893-AC2 i — AC-17 got $(fv15 "$J15" AC-17)"
+case "$(observed_of "$J15" AC-18)" in count=*) G15_P18=1 ;; *) G15_P18=0 ;; esac
+[ "$(fv15 "$J15" AC-18)" = "per-issue/PASS" ] && [ "$G15_P18" = 1 ] \
+  && ok "V6893-AC2 j — a probe beside the deploy.sh --check span grades the row; the deploy check does not ($(observed_of "$J15" AC-18))" \
+  || bad "V6893-AC2 j — AC-18 got $(fv15 "$J15" AC-18) '$(observed_of "$J15" AC-18)'"
+
+# --- V6893-AC3: rows with no runnable probe keep the keyword fallback (each control carries a routing keyword). ---
+if [ "$(fv15 "$J15" AC-9)" = "sync/PASS" ] && [ "$(fv15 "$J15" AC-10)" = "regression/PASS" ] \
+   && [ "$(fv15 "$J15" AC-11)" = "integration/SKIP" ] && [ "$(fv15 "$J15" AC-12)" = "runtime-suite/SKIP" ]; then
+  ok "V6893-AC3 — command-less rows keep sync / regression / integration / runtime-suite"
+else
+  bad "V6893-AC3 — the keyword fallback moved for a row with no runnable probe: $(fv15 "$J15" AC-9) $(fv15 "$J15" AC-10) $(fv15 "$J15" AC-11) $(fv15 "$J15" AC-12)"
+fi
+
+# --- V6837-AC2: could not evaluate stays ERROR, beside a declared SKIP. ---
+[ "$(fv15 "$J15" AC-13)" = "deferred/SKIP" ] \
+  && ok "V6837-AC2 a — a prose row declared in its method cell is a named SKIP" \
+  || bad "V6837-AC2 a — AC-13 got $(fv15 "$J15" AC-13)"
+case "$(observed_of "$J15" AC-14)" in
+  *count-unreadable:matcher-exit-2*)
+    [ "$(verdict_of "$J15" AC-14)" = ERROR ] \
+      && ok "V6837-AC2 b — a probe whose input cannot be read is still ERROR" \
+      || bad "V6837-AC2 b — AC-14 names the unreadable input but reads $(verdict_of "$J15" AC-14)" ;;
+  *) bad "V6837-AC2 b — AC-14 observed '$(observed_of "$J15" AC-14)'" ;;
+esac
+[ "$(fv15 "$J15" AC-15)" = "method-cell-empty/ERROR" ] && [ "$RC15" -eq 3 ] \
+  && ok "V6837-AC2 c — an empty method cell is ERROR; rc 3" \
+  || bad "V6837-AC2 c — AC-15 $(fv15 "$J15" AC-15), rc $RC15"
+
+# --- V7531-AC3: --help describes the dispatch the classifier performs. ---
+H15="$("$VERIFY" --help 2>&1 || true)"
+[ "$(grep -c -F 'CHECK FAMILIES' <<<"$H15" || true)" -eq 1 ] \
+  && ok "V7531-AC3 SENSITIVITY — the help carries its CHECK FAMILIES line" \
+  || bad "V7531-AC3 — no CHECK FAMILIES line in --help"
+[ "$(grep -c -i -E 'predicate[- ]class|class hint|class column' <<<"$H15" || true)" -eq 0 ] \
+  && ok "V7531-AC3 — --help makes no predicate-class claim" \
+  || bad "V7531-AC3 — --help claims predicate-class dispatch"
+[ "$(grep -c -F 'method cell' <<<"$H15" || true)" -ge 1 ] && [ "$(grep -c -F 'runnable probe' <<<"$H15" || true)" -ge 1 ] \
+  && ok "V7531-AC3 — --help names the dispatch the classifier performs (the method cell; a runnable probe)" \
+  || bad "V7531-AC3 — --help does not describe the dispatch (method cell / runnable probe)"
+
+# --- V6893-AC4: SEEDED FAILURES. Each reverts one limb and names the answer it must move. ---
+m15 "V6893-AC4 M1" g15-m1-no-probe-step 1 's/^  if \[ -n "\$probe" \]; then echo "per-issue"; return; fi$/  :/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g15_run "$MUT_PATH"; JM15_1="$VRP_JSON"
+  if mutant_ran "V6893-AC4 M1"; then
+    [ "$(fv15 "$JM15_1" AC-1)" = "regression/PASS" ] && [ "$(fv15 "$JM15_1" AC-3)" = "runtime-suite/SKIP" ] \
+      && ok "V6893-AC4 M1 detected — without the probe step the failing probe is graded PASS by the deploy oracle again" \
+      || bad "V6893-AC4 M1 SURVIVED — AC-1 $(fv15 "$JM15_1" AC-1), AC-3 $(fv15 "$JM15_1" AC-3)"
+    G15_SAME=1
+    for g15a in AC-9 AC-10 AC-11 AC-12; do [ "$(fv15 "$JM15_1" "$g15a")" = "$(fv15 "$J15" "$g15a")" ] || G15_SAME=0; done
+    [ "$G15_SAME" = 1 ] \
+      && ok "V6893-AC4 M1 CONTROL — the step touches only rows with a runnable probe" \
+      || bad "V6893-AC4 M1 CONTROL — a command-less row moved"
+  fi
+fi
+m15 "V6893-AC4 M2" g15-m2-step0-raw 1 's/^  prose="\$\(method_outside_verb_spans .*$/  prose="$method"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g15_run "$MUT_PATH"; JM15_2="$VRP_JSON"
+  if mutant_ran "V6893-AC4 M2"; then
+    [ "$(fv15 "$JM15_2" AC-4)" = "deferred/SKIP" ] && [ "$(fv15 "$JM15_2" AC-17)" = "deferred/SKIP" ] \
+      && ok "V6893-AC4 M2 detected — step 0 on the raw cell lets an in-probe phrase displace the probe again" \
+      || bad "V6893-AC4 M2 SURVIVED — AC-4 $(fv15 "$JM15_2" AC-4), AC-17 $(fv15 "$JM15_2" AC-17)"
+  fi
+fi
+m15 "V6893-AC4 M3" g15-m3-guard-raw 2 's/case "\$\(method_outside_verb_spans "\$method"\)" in/case "$method" in/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g15_run "$MUT_PATH"; JM15_3="$VRP_JSON"
+  if mutant_ran "V6893-AC4 M3"; then
+    [ "$(fv15 "$JM15_3" AC-4)" = "per-issue/SKIP" ] && [ "$(observed_of "$JM15_3" AC-4)" = "declared-deferred" ] \
+      && ok "V6893-AC4 M3 detected — a raw-cell handler guard skips the routed probe again" \
+      || bad "V6893-AC4 M3 SURVIVED — AC-4 $(fv15 "$JM15_3" AC-4) '$(observed_of "$JM15_3" AC-4)'"
+  fi
+fi
+m15 "V7531-AC3 M4" g15-m4-help-claim 1 's/CHECK FAMILIES \(dispatched from the Verification method cell alone[^)]*\)/CHECK FAMILIES (dispatched by predicate-class hint, else method keyword)/'
+if [ "$MUT_TOOK" = 1 ]; then
+  HM15_4="$("$MUT_PATH" --help 2>&1 || true)"
+  if [ "$(grep -c -F 'CHECK FAMILIES' <<<"$HM15_4" || true)" -eq 1 ]; then
+    [ "$(grep -c -i -E 'predicate[- ]class|class hint|class column' <<<"$HM15_4" || true)" -eq 1 ] \
+      && ok "V7531-AC3 M4 detected — the old wording restored reads 1" \
+      || bad "V7531-AC3 M4 SURVIVED — the restored claim reads $(grep -c -i -E 'predicate[- ]class|class hint|class column' <<<"$HM15_4" || true)"
+  else
+    bad "V7531-AC3 M4 NOT GRADEABLE — the mutant printed no CHECK FAMILIES line"
+  fi
+fi
+m15 "V6893-AC2 M5" g15-m5-quote-blind 1 's/ q="\$ch" ;;$/ : ;;/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g15_run "$MUT_PATH"; JM15_5="$VRP_JSON"
+  if mutant_ran "V6893-AC2 M5"; then
+    [ "$(fv15 "$JM15_5" AC-16)" = "regression/PASS" ] \
+      && ok "V6893-AC2 M5 detected — a quote-blind operator scan reads the quoted marker as an operator and hands the failing probe to the deploy oracle" \
+      || bad "V6893-AC2 M5 SURVIVED — AC-16 $(fv15 "$JM15_5" AC-16)"
+  fi
+fi
+rm -rf "$G15STUB" "$MUTD6893"
 
 # ---------------------------------------------------------------------------
 # Summary
