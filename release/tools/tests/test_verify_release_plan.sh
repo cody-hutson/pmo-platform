@@ -139,6 +139,15 @@ set -euo pipefail
 #        further command never runs, so no later row is lost. G12-5 reads the
 #        stdin-verb fixture's bare cat under the same bare-verb rule. Five seeded
 #        failures and seams, each proved to apply at exactly its sites.
+#  (G17) A METHOD THIS EXECUTOR CANNOT RUN IS UNRUNNABLE, AND A SCOPE ASSERTION RUNS
+#        NATIVELY (V6848-AC1..AC4) — UNRUNNABLE is a fifth verdict, never PASS and
+#        outside the exit predicate; a tool is named only from an invocation-shaped
+#        span, so a mention never reads UNRUNNABLE; a runnable probe beside a tool
+#        reads the can't-run slot and names both; a `git diff` scope assertion is
+#        graded natively against the release diff a test seam supplies, and every
+#        vacuous or mis-bound input reads UNRUNNABLE. RUNNABLE_VERBS is unchanged,
+#        armed red. One non-synthetic replay over a real commit's diff, and eight
+#        seeded failures, each proved to apply at exactly its sites.
 #
 # Offline + deterministic: fixtures are committed under tests/fixtures/ and all
 # methods are fast local greps against the repo tree (no deploy.sh --check here —
@@ -3075,6 +3084,357 @@ if [ "$MUT_TOOK" = 1 ]; then
   fi
 fi
 rm -rf "$MUTD6837"
+
+# ===========================================================================
+# G17 — A METHOD THIS EXECUTOR CANNOT RUN IS REPORTED UNRUNNABLE, AND A SCOPE
+#       ASSERTION RUNS NATIVELY (V6848-AC1, V6848-AC2, V6848-AC3, V6848-AC4).
+#
+# UNRUNNABLE is the fifth verdict, can't-run-here: the row was read, and a command
+# it names cannot run in this executor. It is never PASS and it stays outside
+# main()'s exit predicate, so a plan whose rows only decline still exits 0. A tool
+# is named only from an invocation-shaped span (span_invokes_tool), so a label, a
+# file name or a word the method merely mentions is never named, and a mention-only
+# row never reads UNRUNNABLE. A method naming a runnable probe and a tool reads the
+# can't-run slot and names both. A `git diff` scope assertion runs natively: its
+# pathspecs are data, matched in-process against the release diff a test seam
+# supplies, and every vacuous or mis-bound input reads UNRUNNABLE rather than PASS.
+# RUNNABLE_VERBS is unchanged, proved armed-red-then-revert.
+#
+# The unrunnable fixture's awk rows carry a brace, which hides a record from the
+# shared readers, so every record here is read from its own line (g17_family with
+# G13's g13_verdict and g13_observed). Every arm first requires the record it grades
+# to be present. Each seeded failure is proved to apply at exactly the sites it
+# names, and only a mutation that took is graded.
+# ===========================================================================
+echo
+echo "G17 — #6848: a method this executor cannot run is UNRUNNABLE, and a scope assertion runs natively (V6848-AC1/AC2/AC3/AC4)"
+MUTD6848="$(mktemp -d -t verify-plan-6848-mut.XXXXXX)"
+SEAMD6848="$(mktemp -d -t verify-plan-6848-seam.XXXXXX)"
+FIX_SCOPE="release/tools/tests/fixtures/verify-plan-scope.md"
+FIX_UNRUN="release/tools/tests/fixtures/verify-plan-unrunnable.md"
+printf 'M\trelease/tools/verify-release-plan.sh\nM\trelease/tools/tests/test_verify_release_plan.sh\nM\trelease/references/pipeline/stage-04-planning.md\n' > "$SEAMD6848/mixed.tsv"
+printf 'M\trelease/tools/verify-release-plan.sh\nM\trelease/tools/tests/test_verify_release_plan.sh\n' > "$SEAMD6848/clean.tsv"
+: > "$SEAMD6848/empty.tsv"
+# g17_seam <tool> <fixture> <seam> — vrp_run's contract (VRP_JSON + VRP_RC in the
+# CURRENT shell), with the delivered set read from a test seam instead of git.
+g17_seam() {
+  set +e
+  VRP_JSON="$("$1" --format=json --root "$REPO_ROOT" --fcm-diff-file "$3" "$REPO_ROOT/$2" 2>/dev/null)"
+  VRP_RC=$?
+  set -e
+}
+# g17_family <json> <id> — the family of one record, read from the record's own line.
+g17_family() {
+  local line v
+  line="$(grep -F "\"id\":\"$2\"" <<<"$1" || true)"
+  v="$(sed -n 's/.*"family":"\([a-z-]*\)".*/\1/p' <<<"$line")"
+  printf '%s' "${v%%$'\n'*}"
+}
+# fv17 <json> <id> — "family/verdict"; reads "/" for an absent record, which no arm expects.
+fv17() { printf '%s/%s' "$(g17_family "$1" "$2")" "$(g13_verdict "$1" "$2")"; }
+# g17_has <json> <id> <text> — TRUE only when the record's observed text carries <text>.
+g17_has() { case "$(g13_observed "$1" "$2")" in *"$3"*) return 0 ;; *) return 1 ;; esac; }
+# g17_names <json> <id> <word>... — TRUE when the record's observed text carries any <word>.
+g17_names() { local j="$1" i="$2" w; shift 2; for w in "$@"; do g17_has "$j" "$i" "$w" && return 0; done; return 1; }
+# m17 <label> <stem> <sites> <sed-expr>... — publish the mutant in MUT_PATH, count the
+# lines it changed (a substitution never adds or removes a line), and set MUT_TOOK
+# only when it applied at exactly <sites> lines.
+m17() {
+  local label="$1" stem="$2" want="$3" dst n e
+  shift 3
+  dst="$MUTD6848/$stem.sh"
+  cp "$VERIFY" "$dst"
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  n="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$dst")"
+  if [ "$n" -eq "$want" ]; then
+    MUT_TOOK=1; ok "$label — mutation applied at exactly $want site(s): the mutant differs from the shipped tool in $n line(s)"
+  else
+    MUT_TOOK=0; bad "$label — mutation applied at $n site(s), expected exactly $want; its arm is not graded"
+  fi
+}
+
+g17_seam "$VERIFY" "$FIX_SCOPE" "$SEAMD6848/mixed.tsv"; J17M="$VRP_JSON"; RC17M="$VRP_RC"
+vrp_run "$VERIFY" "$FIX_UNRUN"; J17U="$VRP_JSON"; RC17U="$VRP_RC"
+E17U="$("$VERIFY" --format=json --root "$REPO_ROOT" "$REPO_ROOT/$FIX_UNRUN" 2>&1 >/dev/null || true)"
+
+# --- G17-0: DENOMINATOR FIRST — both fixtures still declare their rows, and every one emits. ---
+G17_SROWS="$(grep -c -F '| AC-' "$REPO_ROOT/$FIX_SCOPE" || true)"
+G17_UROWS="$(grep -c -F '| AC-' "$REPO_ROOT/$FIX_UNRUN" || true)"
+G17_UCIAC="$(grep -c -F '**CIAC-' "$REPO_ROOT/$FIX_UNRUN" || true)"
+[ "${G17_SROWS:-0}" -eq 13 ] && [ "${G17_UROWS:-0}" -eq 10 ] && [ "${G17_UCIAC:-0}" -eq 4 ] \
+   && [ "$(acs_of "$J17M")" = "13" ] && [ "$(acs_of "$J17U")" = "10" ] && [ "$(ciacs_of "$J17U")" = "4" ] \
+  && ok "G17-0 SENSITIVITY — the scope fixture declares and emits 13 rows, and the unrunnable fixture 10 rows and 4 CIACs (the arms below grade real records)" \
+  || bad "G17-0 declared scope=${G17_SROWS:-0} unrunnable=${G17_UROWS:-0}+${G17_UCIAC:-0}, emitted $(acs_of "$J17M") and $(acs_of "$J17U")+$(ciacs_of "$J17U") (expected 13 and 10+4)"
+
+# --- V6848-AC1: a scope assertion dispatches to its own family and executes; a failing one FAILs. ---
+G17_A=1
+for g17a in AC-1 AC-2 AC-5; do
+  { [ "$(fv17 "$J17M" "$g17a")" = scope/PASS ] && [ "$(g13_observed "$J17M" "$g17a")" = "scope count=0 (== 0) over 3 changed path(s) in the release diff" ]; } || G17_A=0
+done
+[ "$G17_A" = 1 ] \
+  && ok "V6848-AC1 a — a scope assertion dispatches to the scope family and executes: AC-1, AC-2 (an exclusion) and AC-5 (a glob) read count=0 (== 0) over the 3 changed paths" \
+  || bad "V6848-AC1 a — AC-1 $(fv17 "$J17M" AC-1) '$(g13_observed "$J17M" AC-1)'; AC-2 $(fv17 "$J17M" AC-2); AC-5 $(fv17 "$J17M" AC-5)"
+[ "$(fv17 "$J17M" AC-3)" = scope/PASS ] && g17_has "$J17M" AC-3 "scope count=2 (== 2) over 3 changed path(s)" \
+  && ok "V6848-AC1 b CONTROL — the same instrument reaches the changed paths: AC-3 reads count=2 (== 2)" \
+  || bad "V6848-AC1 b — AC-3 $(fv17 "$J17M" AC-3) '$(g13_observed "$J17M" AC-3)'"
+[ "$(fv17 "$J17M" AC-4)" = scope/FAIL ] && g17_has "$J17M" AC-4 "scope count=1 (wanted == 0)" \
+   && g17_has "$J17M" AC-4 "release/references/pipeline/stage-04-planning.md" && [ "$RC17M" -eq 3 ] \
+  && ok "V6848-AC1 c CONTROL — a violated scope assertion FAILs, naming the path that broke it, and the plan exits 3: the family is not inert" \
+  || bad "V6848-AC1 c — AC-4 $(fv17 "$J17M" AC-4) '$(g13_observed "$J17M" AC-4)', rc $RC17M"
+G17_D=1
+for g17a in AC-6 AC-7 AC-8; do
+  { [ "$(g13_verdict "$J17M" "$g17a")" = UNRUNNABLE ] && g17_has "$J17M" "$g17a" "tool-invocation-outside-executor-allowlist:git "; } || G17_D=0
+done
+[ "$G17_D" = 1 ] \
+  && ok "V6848-AC1 d — a pipeline, a pinned range and a comparator-less git diff are outside the grammar: each reads UNRUNNABLE naming git, never PASS" \
+  || bad "V6848-AC1 d — AC-6 $(fv17 "$J17M" AC-6), AC-7 $(fv17 "$J17M" AC-7), AC-8 $(fv17 "$J17M" AC-8)"
+g17_seam "$VERIFY" "$FIX_SCOPE" "$SEAMD6848/empty.tsv"; J17E="$VRP_JSON"
+G17_E=1
+for g17a in AC-1 AC-2 AC-3 AC-4 AC-5; do
+  { [ "$(fv17 "$J17E" "$g17a")" = scope/UNRUNNABLE ] && g17_has "$J17E" "$g17a" "scope-diff-empty"; } || G17_E=0
+done
+[ "$G17_E" = 1 ] && [ "$(grep -c '"family":"scope".*"verdict":"PASS"' <<<"$J17E" || true)" = "0" ] \
+  && ok "V6848-AC1 e — an empty release diff is vacuous, never a pass: AC-1..AC-5 read UNRUNNABLE scope-diff-empty, and no scope row PASSes" \
+  || bad "V6848-AC1 e — AC-1 $(fv17 "$J17E" AC-1) '$(g13_observed "$J17E" AC-1)'; scope PASS records: $(grep -c '"family":"scope".*"verdict":"PASS"' <<<"$J17E" || true)"
+mkdir -p "$SEAMD6848/live/release/releases/plans"
+cp "$REPO_ROOT/$FIX_SCOPE" "$SEAMD6848/live/release/releases/plans/p.md"
+set +e
+J17L="$("$VERIFY" --format=json --root "$REPO_ROOT" --fcm-diff-file "$SEAMD6848/mixed.tsv" "$SEAMD6848/live/release/releases/plans/p.md" 2>/dev/null)"
+set -e
+[ "$(fv17 "$J17L" AC-1)" = scope/ERROR ] && g17_has "$J17L" AC-1 "scope-fixture-mode-on-live-plan" \
+  && ok "V6848-AC1 f — the test seam is refused against a plan under release/releases/plans/: a real release is never graded on an authored diff (ERROR)" \
+  || bad "V6848-AC1 f — AC-1 on a live-plan path with the seam: $(fv17 "$J17L" AC-1) '$(g13_observed "$J17L" AC-1)'"
+
+# --- V6848-AC1 g: NON-SYNTHETIC — a real commit's diff, through the same fixed git call. ---
+# 6fea3536 changed 4 paths: the executor, the suite and two new fixtures. The arm reads
+# the delivered set git reports for that one commit, so it grades the family's git path
+# rather than the seam. An unreachable commit (a shallow clone, or a tree that is not a
+# repository) degrades to a stated skip plus the honest reading, never a false pass.
+cat > "$SEAMD6848/real.md" <<'EOF'
+# vTEST Release Plan — a scope assertion over a real commit's diff (G17)
+
+## Verification Plan
+
+**#983 — the scope family on a real diff**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-1 | `git diff --name-only origin/main...HEAD -- release/tools/verify-release-plan.sh` expect 1 | PASS: the commit changed the executor |
+| AC-2 | `git diff --name-only origin/main...HEAD -- release/tools/tests/` expect 0 | FAIL: the commit changed 3 paths under tests/ |
+EOF
+set +e
+J17G="$("$VERIFY" --format=json --root "$REPO_ROOT" --merge-base '6fea3536^' --head 6fea3536 "$SEAMD6848/real.md" 2>/dev/null)"
+set -e
+if git -C "$REPO_ROOT" cat-file -e '6fea3536^{commit}' 2>/dev/null; then
+  [ "$(fv17 "$J17G" AC-1)" = scope/PASS ] && g17_has "$J17G" AC-1 "scope count=1 (== 1) over 4 changed path(s)" \
+     && [ "$(fv17 "$J17G" AC-2)" = scope/FAIL ] && g17_has "$J17G" AC-2 "scope count=3 (wanted == 0) over 4 changed path(s)" \
+    && ok "V6848-AC1 g NON-SYNTHETIC — over a real commit's diff the family reads count=1 (== 1) and FAILs count=3 (wanted == 0), through the fixed git call" \
+    || bad "V6848-AC1 g — AC-1 $(fv17 "$J17G" AC-1) '$(g13_observed "$J17G" AC-1)'; AC-2 $(fv17 "$J17G" AC-2) '$(g13_observed "$J17G" AC-2)'"
+else
+  [ "$(fv17 "$J17G" AC-1)" = scope/UNRUNNABLE ] && g17_has "$J17G" AC-1 "scope-diff-unresolvable" \
+     && [ "$(fv17 "$J17G" AC-2)" = scope/UNRUNNABLE ] \
+    && ok "V6848-AC1 g SKIP — historical-commit-unreachable (a shallow clone, or not a repository): both rows read UNRUNNABLE scope-diff-unresolvable, degraded honestly, not passed" \
+    || bad "V6848-AC1 g — the commit is unreachable, yet AC-1 $(fv17 "$J17G" AC-1) '$(g13_observed "$J17G" AC-1)'; AC-2 $(fv17 "$J17G" AC-2)"
+fi
+
+# --- V6848-AC1 h: the three guards, each on its own row (D23); the third is scoped to == and <=. ---
+[ "$(fv17 "$J17M" AC-9)" = scope/UNRUNNABLE ] && g17_has "$J17M" AC-9 "scope-comparator-ambiguous" \
+  && ok "V6848-AC1 h1 — two comparators that disagree grade the assertion on neither: UNRUNNABLE scope-comparator-ambiguous" \
+  || bad "V6848-AC1 h1 — AC-9 $(fv17 "$J17M" AC-9) '$(g13_observed "$J17M" AC-9)'"
+[ "$(fv17 "$J17M" AC-10)" = scope/UNRUNNABLE ] && g17_has "$J17M" AC-10 "scope-pathspec-placeholder:<skill-dir>" \
+  && ok "V6848-AC1 h2 — a placeholder pathspec names no path: UNRUNNABLE scope-pathspec-placeholder" \
+  || bad "V6848-AC1 h2 — AC-10 $(fv17 "$J17M" AC-10) '$(g13_observed "$J17M" AC-10)'"
+[ "$(fv17 "$J17M" AC-11)" = scope/UNRUNNABLE ] && g17_has "$J17M" AC-11 "scope-pathspec-selects-nothing:core/skils/" \
+  && ok "V6848-AC1 h3 — an expect-0 pathspec that selects no existing and no delivered path is vacuous: UNRUNNABLE scope-pathspec-selects-nothing" \
+  || bad "V6848-AC1 h3 — AC-11 $(fv17 "$J17M" AC-11) '$(g13_observed "$J17M" AC-11)'"
+[ "$(fv17 "$J17M" AC-12)" = scope/PASS ] && g17_has "$J17M" AC-12 "scope count=0 (>= 0)" \
+  && ok "V6848-AC1 h4 CONTROL — the selects-nothing guard reads only an == or <= assertion: the same pathspec under at least 0 is graded" \
+  || bad "V6848-AC1 h4 — AC-12 $(fv17 "$J17M" AC-12) '$(g13_observed "$J17M" AC-12)'"
+# --- V6848-AC1 i: the partition's partial rule reaches the scope family too (D37). ---
+[ -n "$PARTIAL_SLOT" ] && [ "$(g13_verdict "$J17M" AC-13)" = "$PARTIAL_SLOT" ] && [ "$PARTIAL_SLOT" != PASS ] \
+   && g17_has "$J17M" AC-13 "limb 1 git PASS scope count=0 (== 0)" && g17_has "$J17M" AC-13 "limb 2 python3 did not run (outside the verb set)" \
+  && ok "V6848-AC1 i — a scope assertion beside a command that did not run reads the can't-run slot ($PARTIAL_SLOT), naming the command that ran and the one that did not" \
+  || bad "V6848-AC1 i — AC-13 $(fv17 "$J17M" AC-13) '$(g13_observed "$J17M" AC-13)'"
+
+# --- V6848-AC2: a method this executor cannot run is UNRUNNABLE, naming a tool it invokes. ---
+[ "$(fv17 "$J17U" AC-1)" = unrunnable/UNRUNNABLE ] && g17_has "$J17U" AC-1 "tool-invocation-outside-executor-allowlist:awk " \
+  && ok "V6848-AC2 a — an awk method with no family keyword reaches the residual step and reads UNRUNNABLE naming awk, never PASS" \
+  || bad "V6848-AC2 a — AC-1 $(fv17 "$J17U" AC-1) '$(g13_observed "$J17U" AC-1)'"
+{ [ "$(fv17 "$J17U" AC-2)" = per-issue/UNRUNNABLE ] && g17_has "$J17U" AC-2 "allowlist:awk " \
+  && [ "$(g13_verdict "$J17U" AC-3)" = UNRUNNABLE ] && g17_has "$J17U" AC-3 "allowlist:python3 " \
+  && [ "$(fv17 "$J17U" CIAC-1)" = integration/UNRUNNABLE ] && g17_has "$J17U" CIAC-1 "allowlist:python3 " \
+  && [ "$(fv17 "$J17U" AC-5)" = per-issue/UNRUNNABLE ] && g17_has "$J17U" AC-5 "allowlist:bash "; } \
+  && ok "V6848-AC2 b — every route declines at the one decline point: awk with a keyword, an interpreter, the cross-issue handler, and the tool after an identifier (bash, not G-CL)" \
+  || bad "V6848-AC2 b — AC-2 $(fv17 "$J17U" AC-2); AC-3 $(fv17 "$J17U" AC-3) '$(g13_observed "$J17U" AC-3)'; CIAC-1 $(fv17 "$J17U" CIAC-1); AC-5 $(fv17 "$J17U" AC-5) '$(g13_observed "$J17U" AC-5)'"
+[ "$(fv17 "$J17U" AC-4)" = per-issue/SKIP ] && [ "$(g13_observed "$J17U" AC-4)" = "no-executable-command-in-method" ] \
+   && ! g17_names "$J17U" AC-4 PARSE-07 PARSE-12a PARSE-14a PMO_SCOPE_GUARD_ROOT G-CL _pmo status \
+  && ok "V6848-AC2 c — identifiers are never named as a tool: a method made only of labels is a method with no command" \
+  || bad "V6848-AC2 c — AC-4 $(fv17 "$J17U" AC-4) '$(g13_observed "$J17U" AC-4)'"
+[ "$(fv17 "$J17U" CIAC-2)" = integration/SKIP ] && [ "$(g13_observed "$J17U" CIAC-2)" = "documented-decision-method (no runnable command)" ] \
+  && ok "V6848-AC2 d — prose around an identifier is never run as a bare command: CIAC-2 is a documented decision, not executed" \
+  || bad "V6848-AC2 d — CIAC-2 $(fv17 "$J17U" CIAC-2) '$(g13_observed "$J17U" CIAC-2)'"
+[ "$(fv17 "$J17U" AC-6)" = per-issue/PASS ] && [ "$(fv17 "$J17U" CIAC-3)" = integration/PASS ] \
+  && ok "V6848-AC2 e CONTROL — a runnable probe still executes in both loops (AC-6, CIAC-3)" \
+  || bad "V6848-AC2 e — AC-6 $(fv17 "$J17U" AC-6), CIAC-3 $(fv17 "$J17U" CIAC-3)"
+# f — THE COMMAND-SHAPE TEST, unit by unit: a tool is named only from an invocation-shaped span.
+G17_F=1
+t_sit17() { [ "$(span_invokes_tool "$1" "${3:-}" 2>/dev/null || true)" = "$2" ] || { G17_F=0; printf '       span_invokes_tool mismatch: [%s] -> [%s], wanted [%s]\n' "$1" "$(span_invokes_tool "$1" "${3:-}" 2>/dev/null || true)" "$2"; }; }
+for g17s in PARSE-07 PARSE-12a PARSE-14a PMO_SCOPE_GUARD_ROOT G-CL _pmo status PORTFOLIO.md 539c4440 resolve_check_mode main warn '../x.sh' case source set 'core/hooks/block-destructive.sh' 'grep -c x f'; do
+  t_sit17 "$g17s" ''
+done
+t_sit17 "awk 'END{print NR}' core/CLAUDE.md.template" awk
+t_sit17 'python3' python3
+t_sit17 'python3 release/tools/check-adr-numbers.py' python3
+t_sit17 'release/tools/automated-closeout.sh --self-test' automated-closeout.sh
+t_sit17 './qa.sh --quick' qa.sh
+t_sit17 'set -u' set
+t_sit17 'case' '' whole
+t_sit17 'release/tools/x.sh' x.sh whole
+[ "$G17_F" = 1 ] \
+  && ok "V6848-AC2 f — the command-shape test: 19 identifiers and mentions name nothing (labels, a file name, a hash, a keyword or builtin with no argument, a script path mentioned in prose, an allowlisted command); 7 invocation-shaped spans name their tool" \
+  || bad "V6848-AC2 f — span_invokes_tool departs from a pinned case (above)"
+# g — the roll-up counts UNRUNNABLE in both presenters, and the five counters sum to the records.
+G17_MD="$("$VERIFY" --format=md --root "$REPO_ROOT" "$REPO_ROOT/$FIX_UNRUN" 2>/dev/null || true)"
+G17_RP="$(sed -n 's/.*"rollup": {"pass": \([0-9]*\), "fail": \([0-9]*\), "skip": \([0-9]*\), "unrunnable": \([0-9]*\), "error": \([0-9]*\).*/\1 \2 \3 \4 \5/p' <<<"$J17U")"
+G17_U="$(count_verdict "$J17U" UNRUNNABLE)"
+G17_SUM="$(awk '{ print $1 + $2 + $3 + $4 + $5 }' <<<"${G17_RP:-x}")"
+[ "$G17_U" = "8" ] && [ "$(awk '{ print $4 }' <<<"${G17_RP:-x}")" = "8" ] && [ "$G17_SUM" = "$(g13_records "$J17U")" ] \
+   && [ "$(grep -c -F '/ 8 UNRUNNABLE /' <<<"$G17_MD" || true)" = "1" ] \
+  && ok "V6848-AC2 g — UNRUNNABLE has its own counter: 8 records, 'unrunnable': 8 in JSON, '8 UNRUNNABLE' in the markdown roll-up, and the five counters sum to the $G17_SUM records emitted" \
+  || bad "V6848-AC2 g — UNRUNNABLE records=$G17_U, JSON rollup [${G17_RP:-absent}] (sum $G17_SUM of $(g13_records "$J17U") records), md line: $(grep -F 'Verdict roll-up' <<<"$G17_MD" || true)"
+[ "$RC17U" -eq 0 ] && grep -q -F 'UNRUNNABLE' <<<"$E17U" \
+  && ok "V6848-AC2 h — UNRUNNABLE does not fail the run (exit 0) and is noted on stderr, so a clean exit is not read as every check having run" \
+  || bad "V6848-AC2 h — rc $RC17U; stderr '${E17U:-<empty>}'"
+{ [ -n "$(g13_verdict "$J17U" AC-7)" ] && [ "$(g13_verdict "$J17U" AC-7)" != UNRUNNABLE ] && ! g17_names "$J17U" AC-7 case source \
+  && [ -n "$(g13_verdict "$J17U" AC-8)" ] && [ "$(g13_verdict "$J17U" AC-8)" != UNRUNNABLE ] && ! g17_names "$J17U" AC-8 block-destructive; } \
+  && ok "V6848-AC2 i SPECIFICITY — a mention-only span never grades UNRUNNABLE: a keyword or field name with no argument, and a script path mentioned in prose, are not commands" \
+  || bad "V6848-AC2 i — AC-7 $(fv17 "$J17U" AC-7) '$(g13_observed "$J17U" AC-7)'; AC-8 $(fv17 "$J17U" AC-8) '$(g13_observed "$J17U" AC-8)'"
+# j — the RESIDUAL step keys on the same test: a mention-only row with no keyword is not
+# UNRUNNABLE; a tool row with no keyword is (its control).
+cat > "$SEAMD6848/resid.md" <<'EOF'
+# vTEST Release Plan — the residual step keys on the command-shape test (G17)
+
+## Verification Plan
+
+**#984 — rows no keyword arm claims**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-1 | the hand-maintained `case` arms and the `core/hooks/block-destructive.sh` control stay in place | mentions only: not a command |
+| AC-2 | `awk 'END{print NR}' core/CLAUDE.md.template` expect 4 | control: a tool the residual step names |
+EOF
+set +e
+J17R="$("$VERIFY" --format=json --root "$REPO_ROOT" "$SEAMD6848/resid.md" 2>/dev/null)"
+set -e
+{ [ -n "$(g13_verdict "$J17R" AC-1)" ] && [ "$(g13_verdict "$J17R" AC-1)" != UNRUNNABLE ] && [ "$(g17_family "$J17R" AC-1)" != unrunnable ] \
+  && [ "$(fv17 "$J17R" AC-2)" = unrunnable/UNRUNNABLE ]; } \
+  && ok "V6848-AC2 j SPECIFICITY — the residual step keys on the command-shape test: a mention-only row no keyword claims is not UNRUNNABLE ($(fv17 "$J17R" AC-1)), and a tool row is (AC-2)" \
+  || bad "V6848-AC2 j — AC-1 $(fv17 "$J17R" AC-1) '$(g13_observed "$J17R" AC-1)'; AC-2 $(fv17 "$J17R" AC-2)"
+# k — INT-4: a runnable probe beside a tool, in either order and in either loop, reads the
+# can't-run slot and names both commands; it is never PASS.
+{ [ -n "$PARTIAL_SLOT" ] && [ "$PARTIAL_SLOT" != PASS ] \
+  && [ "$(g13_verdict "$J17U" AC-9)" = "$PARTIAL_SLOT" ] && g17_has "$J17U" AC-9 "limb 1 grep PASS count=" && g17_has "$J17U" AC-9 "limb 2 awk did not run (outside the verb set)" \
+  && [ "$(g13_verdict "$J17U" AC-10)" = "$PARTIAL_SLOT" ] && g17_has "$J17U" AC-10 "limb 1 awk did not run (outside the verb set); limb 2 grep PASS count=" \
+  && [ "$(g13_verdict "$J17U" CIAC-4)" = "$PARTIAL_SLOT" ] && g17_has "$J17U" CIAC-4 "limb 2 awk did not run (outside the verb set)"; } \
+  && ok "V6848-AC2 k — INT-4: a grep and an awk in one method read the can't-run slot ($PARTIAL_SLOT) in both orders and both loops, naming both commands; never PASS" \
+  || bad "V6848-AC2 k — AC-9 $(fv17 "$J17U" AC-9) '$(g13_observed "$J17U" AC-9)'; AC-10 $(fv17 "$J17U" AC-10); CIAC-4 $(fv17 "$J17U" CIAC-4)"
+
+# --- V6848-AC3: RUNNABLE_VERBS is unchanged — the plan row's literal, proved armed-red-then-revert. ---
+G17_LIT="RUNNABLE_VERBS='grep test ls head wc cat'"
+G17_L0="$(grep -c -F "$G17_LIT" "$VERIFY" || true)"
+m17 "V6848-AC3 armed red" g17-ac3-verb-set-widened 1 "s/^RUNNABLE_VERBS='grep test ls head wc cat'\$/RUNNABLE_VERBS='grep test ls head wc cat awk git'/"
+G17_L1="$(grep -c -F "$G17_LIT" "$MUT_PATH" || true)"
+[ "$G17_L0" = "1" ] && [ "$MUT_TOOK" = 1 ] && [ "$G17_L1" = "0" ] \
+  && ok "V6848-AC3 — RUNNABLE_VERBS is unchanged: the plan row's literal counts 1 in the shipped tool and 0 in a copy whose verb set is widened (armed red; the shipped tool is untouched)" \
+  || bad "V6848-AC3 — the literal counts $G17_L0 in the shipped tool and ${G17_L1:-?} in the widened copy (expected 1 and 0)"
+
+# --- V6848-AC4: a plan whose rows assert scope reaches a clean exit. ---
+g17_seam "$VERIFY" "$FIX_SCOPE" "$SEAMD6848/clean.tsv"; J17C="$VRP_JSON"; RC17C="$VRP_RC"
+G17_C=1
+for g17a in AC-1 AC-2 AC-3 AC-4 AC-5; do [ "$(fv17 "$J17C" "$g17a")" = scope/PASS ] || G17_C=0; done
+[ "$G17_C" = 1 ] && [ "$RC17C" -eq 0 ] && [ "$RC17M" -eq 3 ] \
+  && ok "V6848-AC4 — on a release diff that honours every scope row the plan exits 0 (AC-1..AC-5 PASS); control: the mixed diff exits 3" \
+  || bad "V6848-AC4 — clean rc $RC17C (AC-4 $(fv17 "$J17C" AC-4)); mixed rc $RC17M (expected 0 and 3)"
+
+# --- SEEDED FAILURES. Each removes one observing step and names the answer it must move to. ---
+m17 "V6848-AC2 M1" g17-m1-no-residual-step 1 's/^  if \[ -n "\$lead" \] && ! is_runnable_verb "\$lead"; then echo "unrunnable"; return; fi$/  :/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_UNRUN"; JM17_1="$VRP_JSON"
+  if mutant_ran "V6848-AC2 M1"; then
+    [ "$(fv17 "$JM17_1" AC-1)" = unclassified/ERROR ] \
+      && ok "V6848-AC2 M1 detected — without the residual step an awk method with no keyword is unclassifiable again (ERROR)" \
+      || bad "V6848-AC2 M1 SURVIVED — AC-1 $(fv17 "$JM17_1" AC-1)"
+  fi
+fi
+m17 "V6848-AC2 M2" g17-m2-decline-skips 1 's/"\$VERDICT_UNRUNNABLE" "tool-invocation-outside-executor-allowlist:\$tool/"$VERDICT_SKIP" "tool-invocation-outside-executor-allowlist:$tool/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_UNRUN"; JM17_2="$VRP_JSON"
+  if mutant_ran "V6848-AC2 M2"; then
+    [ "$(g13_verdict "$JM17_2" AC-1)" = SKIP ] && [ "$(g13_verdict "$JM17_2" CIAC-1)" = SKIP ] \
+      && ok "V6848-AC2 M2 detected — a decline that reads SKIP is indistinguishable from a declared deferral again (AC-1, CIAC-1)" \
+      || bad "V6848-AC2 M2 SURVIVED — AC-1 $(fv17 "$JM17_2" AC-1), CIAC-1 $(fv17 "$JM17_2" CIAC-1)"
+  fi
+fi
+m17 "V6848-AC2 M3" g17-m3-no-identifier-guard 1 's/^  if \[ "\$identifier" -eq 1 \]; then return; fi$/  :/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_UNRUN"; JM17_3="$VRP_JSON"
+  if mutant_ran "V6848-AC2 M3"; then
+    [ "$(fv17 "$JM17_3" CIAC-2)" = integration/ERROR ] && g17_has "$JM17_3" CIAC-2 "matcher-exit-3" \
+      && ok "V6848-AC2 M3 detected — without the identifier guard the prose that opens with 'grep' runs as a bare command and reads ERROR" \
+      || bad "V6848-AC2 M3 SURVIVED — CIAC-2 $(fv17 "$JM17_3" CIAC-2) '$(g13_observed "$JM17_3" CIAC-2)'"
+  fi
+fi
+m17 "V6848-AC1 M5" g17-m5-no-exclusion 1 's/^      -\*\) if scope_pattern_matches "\$path" "\$\{s#-\}"; then return 1; fi ;;$/      -*) : ;;/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g17_seam "$MUT_PATH" "$FIX_SCOPE" "$SEAMD6848/mixed.tsv"; JM17_5="$VRP_JSON"
+  if mutant_ran "V6848-AC1 M5"; then
+    [ "$(fv17 "$JM17_5" AC-2)" = scope/FAIL ] && g17_has "$JM17_5" AC-2 "scope count=3 (wanted == 0)" \
+      && ok "V6848-AC1 M5 detected — with the exclusion a no-op, AC-2 counts every path and FAILs: the exclusion is observed" \
+      || bad "V6848-AC1 M5 SURVIVED — AC-2 $(fv17 "$JM17_5" AC-2) '$(g13_observed "$JM17_5" AC-2)'"
+  fi
+fi
+m17 "V6848-AC1 M6" g17-m6-empty-diff-passes 1 's/"\$VERDICT_UNRUNNABLE" "scope-diff-empty/"$VERDICT_PASS" "scope-diff-empty/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g17_seam "$MUT_PATH" "$FIX_SCOPE" "$SEAMD6848/empty.tsv"; JM17_6="$VRP_JSON"
+  if mutant_ran "V6848-AC1 M6"; then
+    [ "$(fv17 "$JM17_6" AC-1)" = scope/PASS ] \
+      && ok "V6848-AC1 M6 detected — an empty diff that reads PASS is caught: arm e sees a scope PASS on nothing" \
+      || bad "V6848-AC1 M6 SURVIVED — AC-1 $(fv17 "$JM17_6" AC-1)"
+  fi
+fi
+m17 "V6848-AC1 M7" g17-m7-whole-cell-comparator 1 's/^  cmpr="\$\(limb_comparator "\$method"\)"$/  cmpr="$(extract_threshold "$method")"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g17_seam "$MUT_PATH" "$FIX_SCOPE" "$SEAMD6848/mixed.tsv"; JM17_7="$VRP_JSON"
+  if mutant_ran "V6848-AC1 M7"; then
+    [ "$(fv17 "$JM17_7" AC-9)" = scope/PASS ] && g17_has "$JM17_7" AC-9 "scope count=1 (>= 1)" \
+      && ok "V6848-AC1 M7 detected — read through the whole-cell priority reader, a comparator written for something else grades the violated null PASS: the ambiguity guard is what stops it" \
+      || bad "V6848-AC1 M7 SURVIVED — AC-9 $(fv17 "$JM17_7" AC-9) '$(g13_observed "$JM17_7" AC-9)'"
+  fi
+fi
+m17 "V6848-AC1 M8" g17-m8-placeholder-as-path 2 \
+  's/out="\$\{out\}\?\$\{p\}"/out="${out}+${p}"/' \
+  's/if ! scope_pathspec_selects "\$\{s#\+\}" "\$paths"; then/if false; then/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g17_seam "$MUT_PATH" "$FIX_SCOPE" "$SEAMD6848/mixed.tsv"; JM17_8="$VRP_JSON"
+  if mutant_ran "V6848-AC1 M8"; then
+    [ "$(fv17 "$JM17_8" AC-10)" = scope/PASS ] && g17_has "$JM17_8" AC-10 "scope count=0 (== 0)" \
+      && ok "V6848-AC1 M8 detected — a placeholder read as a literal path matches nothing and its expect 0 PASSes: the placeholder refusal is observed" \
+      || bad "V6848-AC1 M8 SURVIVED — AC-10 $(fv17 "$JM17_8" AC-10) '$(g13_observed "$JM17_8" AC-10)'"
+  fi
+fi
+m17 "V6848-AC1 M9" g17-m9-no-selects-nothing-guard 1 's/if ! scope_pathspec_selects "\$\{s#\+\}" "\$paths"; then/if false; then/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g17_seam "$MUT_PATH" "$FIX_SCOPE" "$SEAMD6848/mixed.tsv"; JM17_9="$VRP_JSON"
+  if mutant_ran "V6848-AC1 M9"; then
+    [ "$(fv17 "$JM17_9" AC-11)" = scope/PASS ] && g17_has "$JM17_9" AC-11 "scope count=0 (== 0)" \
+      && ok "V6848-AC1 M9 detected — without the selects-nothing guard a typo'd pathspec makes 'nothing changed there' PASS" \
+      || bad "V6848-AC1 M9 SURVIVED — AC-11 $(fv17 "$JM17_9" AC-11) '$(g13_observed "$JM17_9" AC-11)'"
+  fi
+fi
+rm -rf "$MUTD6848" "$SEAMD6848"
 
 # ---------------------------------------------------------------------------
 # Summary
