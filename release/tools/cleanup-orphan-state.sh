@@ -749,7 +749,7 @@ WORKTREE_CANDIDATES=()        # path<TAB>branch<TAB>status<TAB>disk_mb<TAB>actio
 
 # Populated by enumerate_stale_tracking_refs in BOTH modes (#7437): under --apply by
 # prune_remote_tracking (the refs git reported stale, which the prune then acts on),
-# under --dry-run by project_stale_tracking_refs (the refs the apply WOULD prune — the
+# under --dry-run by projected_stale_tracking_refs (the refs the apply WOULD prune — the
 # projection). Stale means refs/remotes/<remote>/* whose server-side branch was already
 # deleted (the usual case: branch auto-deleted on PR merge). One short-name per element
 # (e.g., release/v1.03-foo). The emitter reports these so the report's remote view
@@ -2321,7 +2321,7 @@ enumerate_stale_tracking_refs() {
 # mode flag, is what makes the projection structurally incapable of pruning. When the
 # enumeration is unavailable, (ii) is NOT projected on its own: a partial set would read
 # as complete. Returns 0 unconditionally.
-project_stale_tracking_refs() {
+projected_stale_tracking_refs() {
   echo "── Prune projection — stale remote-tracking refs the apply would prune (nothing is pruned) ──" >&2
   local r name action e dup
   PRUNE_INDUCED_REFS=()
@@ -2543,7 +2543,7 @@ selftest_apply_path() {
 }
 
 # #7437 — prune-projection fixture helper. Runs the prune phase of <mode> ("dry-run" =
-# project_stale_tracking_refs, "apply" = prune_remote_tracking) INSIDE fixture repo
+# projected_stale_tracking_refs, "apply" = prune_remote_tracking) INSIDE fixture repo
 # <dir>, in a subshell (no caller global is touched), with REMOTE_BRANCH_CANDIDATES
 # seeded to <seed_row> (or empty). Every accumulator the phase reads starts at its
 # declared initial state, so a row the caller's shell accumulated earlier cannot leak
@@ -2558,7 +2558,7 @@ selftest_prune_run_in() {
     LOCAL_BRANCH_CANDIDATES=(); WORKTREE_CANDIDATES=(); REMOTE_BRANCH_CANDIDATES=()
     PRUNED_TRACKING_REFS=(); PRUNE_INDUCED_REFS=(); PRUNE_SURVIVORS=(); STALE_ENUM_STATE="not-consulted"
     if [[ -n "$seed_row" ]]; then REMOTE_BRANCH_CANDIDATES=("$seed_row"); fi
-    if [[ "$mode" == "apply" ]]; then prune_remote_tracking >/dev/null 2>&1; else project_stale_tracking_refs >/dev/null 2>&1; fi
+    if [[ "$mode" == "apply" ]]; then prune_remote_tracking >/dev/null 2>&1; else projected_stale_tracking_refs >/dev/null 2>&1; fi
     local r
     for r in "${PRUNED_TRACKING_REFS[@]:-}"; do
       if [[ -n "$r" ]]; then printf '%s\t%s\n' "$r" "$(prune_row_action "$r")"; fi
@@ -2712,7 +2712,7 @@ selftest_verify_and_prune() {
   # pre-#7437 dry-run enumerated nothing; stubbed to that behaviour, Q2's predicate
   # MUST reject it, or Q2 would pass on an empty projection.
   if [[ "$pfix" -eq 1 ]]; then
-    mutp=$( ( project_stale_tracking_refs() { PRUNED_TRACKING_REFS=(); PRUNE_INDUCED_REFS=(); STALE_ENUM_STATE="ok"; return 0; }
+    mutp=$( ( projected_stale_tracking_refs() { PRUNED_TRACKING_REFS=(); PRUNE_INDUCED_REFS=(); STALE_ENUM_STATE="ok"; return 0; }
               selftest_prune_run_in "$pfx/prune-work" dry-run "$seed" ) 2>/dev/null ) || true
     if selftest_prune_projection_matches "$mutp" "$stale" "$live"; then
       echo "self-test: prune-projection check FAILED — Q4: sensitivity arm did NOT fire — Q2's predicate passed on an EMPTY projection (#7437 AC-3)" >&2
@@ -2827,8 +2827,8 @@ selftest_verify_and_prune() {
     echo "self-test: prune-projection check FAILED — Q5 strip-guard specificity: the anchored needle matches a whole line of this script's own unsubstituted source" >&2
     pfail=1
   fi
-  sed 's/^  project_stale_tracking_refs$/  : # prune projection disabled (dispatch sensitivity arm)/' "$script_abs" > "$mutd" 2>/dev/null || true
-  if grep -qxF '  : # prune projection disabled (dispatch sensitivity arm)' "$mutd" 2>/dev/null && ! grep -qE '^  project_stale_tracking_refs$' "$mutd"; then
+  sed 's/^  projected_stale_tracking_refs$/  : # prune projection disabled (dispatch sensitivity arm)/' "$script_abs" > "$mutd" 2>/dev/null || true
+  if grep -qxF '  : # prune projection disabled (dispatch sensitivity arm)' "$mutd" 2>/dev/null && ! grep -qE '^  projected_stale_tracking_refs$' "$mutd"; then
     drc=0
     mout=$(bash "$mutd" --release-close "$none" --dry-run --json 2>/dev/null) || drc=1
     if [[ "$drc" -ne 0 ]]; then
@@ -4671,7 +4671,7 @@ fi
 # phase 16 reads only that status).
 if [[ "$MODE" == "dry-run" && "$SCOPE" != "reap-orphan-tags" ]]; then
   projected_freed_branches
-  project_stale_tracking_refs
+  projected_stale_tracking_refs
 fi
 
 # Reap sibling — scope-gated, with its own verify (AC4). Only the --reap-orphan-tags
