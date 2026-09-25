@@ -36,7 +36,7 @@
 | AC-11 | `grep -c -E 'LIMB[-]GAMMA' release/tools/tests/fixtures/verify-plan-multi-limb.md` expect **0** | one command whose null carries markdown emphasis: read as expect 0, PASS |
 | AC-12 | `grep -c -E 'LIMB[-]GAMMA' release/tools/tests/fixtures/verify-plan-multi-limb.md` returns 0 | returns N is not a comparator: graded on the exit status, which reads a zero count as FAIL |
 | AC-13 | `grep` names the tool in prose; the probe is `grep -c -E 'LIMB[-]BETA' release/tools/tests/fixtures/verify-plan-multi-limb.md` expect 1 | a bare verb is prose: the probe is the designated command, PASS |
-| AC-14 | `python3 release/tools/verify-release-plan.sh --version` names a tool; the probe is `grep -c -E 'LIMB[-]BETA' release/tools/tests/fixtures/verify-plan-multi-limb.md` expect 1 | a tool span is prose until the tool predicate names it: one command, PASS |
+| AC-14 | `python3 release/tools/verify-release-plan.sh --version` names a tool; the probe is `grep -c -E 'LIMB[-]BETA' release/tools/tests/fixtures/verify-plan-multi-limb.md` expect 1 | a tool span the catalog names is a command that does not run: the probe is designated and holds, and the row reads the can't-run slot, never PASS |
 
 ## Cross-Issue Acceptance Criteria (fixture-scoped)
 

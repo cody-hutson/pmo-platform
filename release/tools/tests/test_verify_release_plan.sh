@@ -2509,21 +2509,24 @@ fi
 # eval_free_run, which runs nothing for a verb outside its set (`*) return 3`), so
 # each reads ERROR as a matcher that could not run and the plan exits 3: a decline
 # turned into a failure by a change to how the row is graded, not to the exit rule.
+# AC-2's backticked `PORTFOLIO.md` is an identifier, which the command-shape test
+# never reads as a command: the row is a method with no command and never reaches
+# the verb check, so the refused-tool rows are AC-1, CIAC-1 and CIAC-2.
 m6236 "G13-M2 V6236-AC4" g13-m2-verb-check-disabled 2 \
   's/  if ! is_runnable_verb "\$verb"; then/  if false; then/'
 vrp_run "$MUT_PATH" "$FIX_HIST"; JM6236_2="$VRP_JSON"; RCM6236_2="$VRP_RC"
 if mutant_ran "G13-M2 V6236-AC4"; then
   G13M2_HIT=0
-  for g13id in AC-1 AC-2 CIAC-1 CIAC-2; do
+  for g13id in AC-1 CIAC-1 CIAC-2; do
     case "$(g13_verdict "$JM6236_2" "$g13id")/$(g13_observed "$JM6236_2" "$g13id")" in
       "ERROR/count-unreadable:matcher-exit-3 (the matcher produced no readable result"*) G13M2_HIT=$((G13M2_HIT + 1)) ;;
       *) printf '       g13 %s: %s / %s\n' "$g13id" "$(g13_verdict "$JM6236_2" "$g13id")" "$(g13_observed "$JM6236_2" "$g13id")" ;;
     esac
   done
-  G13M2_REST="$(g13_failing "$JM6236_2" AC-3 AC-4 AC-5 CIAC-3 CIAC-4 CIAC-5)"
-  [ "$G13M2_HIT" -eq 4 ] && [ -z "$G13M2_REST" ] && [ "$(count_verdict "$JM6236_2" ERROR)" = "4" ] && [ "$RCM6236_2" -eq 3 ] \
-    && ok "G13-M2 V6236-AC4 mutation detected — with the verb check disabled the four refused-tool rows (AC-1, AC-2, CIAC-1, CIAC-2) read ERROR count-unreadable:matcher-exit-3, no other row moves, and the plan exits 3, so G13-2 and G13-3 flip" \
-    || bad "G13-M2 V6236-AC4 $G13M2_HIT of 4 refused-tool rows read ERROR matcher-exit-3, other rows failing:${G13M2_REST:- none}, ERROR=$(count_verdict "$JM6236_2" ERROR), rc=$RCM6236_2 (expected 4, none, 4 and 3)"
+  G13M2_REST="$(g13_failing "$JM6236_2" AC-2 AC-3 AC-4 AC-5 CIAC-3 CIAC-4 CIAC-5)"
+  [ "$G13M2_HIT" -eq 3 ] && [ -z "$G13M2_REST" ] && [ "$(count_verdict "$JM6236_2" ERROR)" = "3" ] && [ "$RCM6236_2" -eq 3 ] \
+    && ok "G13-M2 V6236-AC4 mutation detected — with the verb check disabled the three refused-tool rows (AC-1, CIAC-1, CIAC-2) read ERROR count-unreadable:matcher-exit-3, no other row moves, and the plan exits 3, so G13-2 and G13-3 flip" \
+    || bad "G13-M2 V6236-AC4 $G13M2_HIT of 3 refused-tool rows read ERROR matcher-exit-3, other rows failing:${G13M2_REST:- none}, ERROR=$(count_verdict "$JM6236_2" ERROR), rc=$RCM6236_2 (expected 3, none, 3 and 3)"
 fi
 
 rm -rf "$MUTD6"
@@ -2699,7 +2702,7 @@ cat > "$G15STUB/plan/p.md" <<'EOF'
 |---|---|---|
 | AC-16 | `grep -c -F '<!-- zz-marker-a' plan/p.md` expect 0; the hook arms stay unchanged | FAIL: a quoted operator character is literal, so the probe runs |
 | AC-17 | `grep -c -F '<!-- zz-marker-b deferred to #' plan/p.md` at least 1 | PASS: a phrase inside a quoted-marker probe is its pattern |
-| AC-18 | `bash core/deploy/deploy.sh --check` exits 0, and `grep -c -F 'RUNNABLE_VERBS=' release/tools/verify-release-plan.sh` at least 1 | PASS: the probe grades the row; the deploy check does not run |
+| AC-18 | `bash core/deploy/deploy.sh --check` exits 0, and `grep -c -F 'RUNNABLE_VERBS=' release/tools/verify-release-plan.sh` at least 1 | the can't-run slot: the probe grades the row, and the deploy check is named as a command that did not run |
 EOF
 # g15_run <tool> — sets VRP_JSON + VRP_RC in the CURRENT shell (vrp_run's contract).
 g15_run() { set +e; VRP_JSON="$("$1" --format=json --root "$G15STUB" "$G15STUB/plan/p.md" 2>/dev/null)"; VRP_RC=$?; set -e; }
@@ -2763,10 +2766,19 @@ g15_present_not "$J15" AC-7 per-issue && g15_present_not "$J15" AC-8 per-issue \
 [ "$(fv15 "$J15" AC-17)" = "per-issue/PASS" ] \
   && ok "V6893-AC2 i — a deferral phrase inside a quoted-marker probe is its pattern, not a declaration" \
   || bad "V6893-AC2 i — AC-17 got $(fv15 "$J15" AC-17)"
-case "$(observed_of "$J15" AC-18)" in count=*) G15_P18=1 ;; *) G15_P18=0 ;; esac
-[ "$(fv15 "$J15" AC-18)" = "per-issue/PASS" ] && [ "$G15_P18" = 1 ] \
-  && ok "V6893-AC2 j — a probe beside the deploy.sh --check span grades the row; the deploy check does not ($(observed_of "$J15" AC-18))" \
-  || bad "V6893-AC2 j — AC-18 got $(fv15 "$J15" AC-18) '$(observed_of "$J15" AC-18)'"
+# Once the tool catalog names the deploy-check span a command (its bash is an
+# interpreter with arguments), the row names two commands: the probe is designated
+# and runs, and the deploy check is named as a command that did not run, so the row
+# reads the can't-run slot rather than PASS. The slot's value is derived from its one
+# binding line in the executor, as G16's arms derive it.
+G15_SLOT="$(sed -n 's/^readonly VERDICT_PARTIAL_SLOT="\$VERDICT_\([A-Z]*\)".*/\1/p' "$VERIFY")"
+case "$(observed_of "$J15" AC-18)" in
+  *"limb 1 bash did not run (outside the verb set); limb 2 grep PASS count="*) G15_P18=1 ;;
+  *) G15_P18=0 ;;
+esac
+[ -n "$G15_SLOT" ] && [ "$G15_SLOT" != PASS ] && [ "$(fv15 "$J15" AC-18)" = "per-issue/$G15_SLOT" ] && [ "$G15_P18" = 1 ] \
+  && ok "V6893-AC2 j — a probe beside the deploy.sh --check span grades the row, and the deploy check does not run: it is named as a command that did not run, so the row reads the can't-run slot ($G15_SLOT)" \
+  || bad "V6893-AC2 j — AC-18 got $(fv15 "$J15" AC-18) '$(observed_of "$J15" AC-18)' (slot '$G15_SLOT')"
 
 # --- V6893-AC3: rows with no runnable probe keep the keyword fallback (each control carries a routing keyword). ---
 if [ "$(fv15 "$J15" AC-9)" = "sync/PASS" ] && [ "$(fv15 "$J15" AC-10)" = "regression/PASS" ] \
@@ -2959,8 +2971,8 @@ g16_partial "$J16" CIAC-1 && g16_has "$J16" CIAC-1 "limb 2 grep did not run (onl
 [ "$(fv16 "$J16" AC-13)" = "per-issue/PASS" ] && [ "$(observed_of "$J16" AC-13)" = "count=1 (== 1)" ] \
   && ok "V6837-AC4 i — a bare verb is prose: AC-13's leading bare grep is skipped and its probe is the designated command" \
   || bad "V6837-AC4 i — AC-13 $(fv16 "$J16" AC-13) '$(observed_of "$J16" AC-13)'"
-[ "$(fv16 "$J16" AC-14)" = "per-issue/PASS" ] && [ "$(observed_of "$J16" AC-14)" = "count=1 (== 1)" ] \
-  && ok "V6837-AC4 j CONTROL — a tool span is prose while the tool predicate names no tool: AC-14 grades as one command" \
+g16_partial "$J16" AC-14 && g16_has "$J16" AC-14 "limb 1 python3 did not run (outside the verb set); limb 2 grep PASS count=1 (== 1)" \
+  && ok "V6837-AC4 j — a tool span the catalog names is a command that did not run: AC-14 reads the slot, naming python3 'did not run (outside the verb set)' beside the probe that ran" \
   || bad "V6837-AC4 j — AC-14 $(fv16 "$J16" AC-14) '$(observed_of "$J16" AC-14)'"
 
 # --- The shared comparator vocabulary: emphasis around N is read, and nothing wider. ---
@@ -2998,7 +3010,7 @@ t_ec16 '``grep -c x f``' ''
 t_ec16 'prose only, no spans' ''
 t_ec16 'grep -c bare f' 'grep -c bare f'
 t_ec16 '`python3 tools/x.py` and `awk 1 f`' 'python3 tools/x.py'
-t_ec16 '`PARSE-07` then `release/x.sh`' 'PARSE-07'
+t_ec16 '`PARSE-07` then `release/x.sh`' ''
 t_ec16 '`grep`' ''
 t_ec16 '`grep` the register, then `grep -c x f` expect 1' 'grep -c x f'
 t_ec16 'trailing `' ''
@@ -3074,13 +3086,16 @@ if [ "$MUT_TOOK" = 1 ]; then
       || bad "V6837-AC4 M4 SURVIVED — AC-13 $(fv16 "$JM16_4" AC-13) '$(observed_of "$JM16_4" AC-13)'"
   fi
 fi
-m16 "V6837-AC4 M5" g16-m5-tool-catalog-seam 1 's/^span_invokes_tool\(\) \{$/span_invokes_tool() { case "$1" in "python3 "*) printf python3 ;; esac/'
+# M5 — the tool catalog removed: span_invokes_tool returns before its body, so it
+# names no tool, as the stub it replaced did. The tool span is prose again and AC-14
+# grades as one command, which proves arm j reads the catalog and not something else.
+m16 "V6837-AC4 M5" g16-m5-no-tool-catalog 1 's/^span_invokes_tool\(\) \{$/span_invokes_tool() { return 0/'
 if [ "$MUT_TOOK" = 1 ]; then
   vrp_run "$MUT_PATH" "$FIX_LIMB"; JM16_5="$VRP_JSON"
   if mutant_ran "V6837-AC4 M5"; then
-    g16_partial "$JM16_5" AC-14 && g16_has "$JM16_5" AC-14 "limb 1 python3 did not run (outside the verb set); limb 2 grep PASS count=1 (== 1)" \
-      && ok "V6837-AC4 M5 — once the tool predicate names a tool, the tool span is a command that did not run (outside the verb set) and the row reads the slot: the one seam a catalog replaces" \
-      || bad "V6837-AC4 M5 — AC-14 under a named tool $(fv16 "$JM16_5" AC-14) '$(observed_of "$JM16_5" AC-14)'"
+    [ "$(fv16 "$JM16_5" AC-14)" = "per-issue/PASS" ] && [ "$(observed_of "$JM16_5" AC-14)" = "count=1 (== 1)" ] \
+      && ok "V6837-AC4 M5 detected — without the tool catalog the tool span is prose again and AC-14 PASSes on its probe alone: the catalog is the one seam that makes it a command" \
+      || bad "V6837-AC4 M5 SURVIVED — AC-14 without the catalog $(fv16 "$JM16_5" AC-14) '$(observed_of "$JM16_5" AC-14)'"
   fi
 fi
 rm -rf "$MUTD6837"

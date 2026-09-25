@@ -8,7 +8,7 @@ set -euo pipefail
 # step (and Dev Testing re-run) consume — per-issue PASS/FAIL, preserving the
 # Gate-6 verification-evidence grep contract.
 #
-# Design: a THIN dispatcher over a five-family registry. The script owns
+# Design: a THIN dispatcher over a check-family registry. The script owns
 # parse + dispatch + emit only. It DELEGATES the surfaces sibling cards own
 # rather than re-implementing them:
 #   - the sync + regression families shell the deploy source↔deployed check;
@@ -24,8 +24,8 @@ set -euo pipefail
 # Usage:
 #   ./verify-release-plan.sh [OPTIONS] <release_plan.md>
 #
-# Exit codes: 0 all PASS/SKIP · 1 internal error · 2 bad plan target ·
-#             3 one or more checks FAIL/ERROR.
+# Exit codes: 0 no check FAILed or ERRORed (PASS / SKIP / UNRUNNABLE only) ·
+#             1 internal error · 2 bad plan target · 3 one or more checks FAIL/ERROR.
 
 # ---------------------------------------------------------------------------
 # Version metadata (the contract IS the schema, not the implementation).
@@ -104,6 +104,18 @@ readonly CLI_VERSION="0.2.1"
 # one, a bare tool name is no longer run as a command, and a comparator whose number
 # carries markdown emphasis is read -- which is the counters becoming correct, by the
 # precedent above.
+# 4 -> 5 (A LATER CONTRIBUTOR TO THE SAME BUMP -- no further bump is owed): the verdict
+# enum gains UNRUNNABLE, the can't-run-here slot of the outcome partition -- a command
+# the row names that cannot run in this executor (a recognised tool outside
+# RUNNABLE_VERBS, a native scope assertion with nothing to grade here), or a designated
+# command that ran while another command the row names did not (VERDICT_PARTIAL_SLOT).
+# A new VERDICT value is exactly what this constant exists to make detectable, and the
+# release's one 4 -> 5 bump carries it. The roll-up gains an UNRUNNABLE counter and the
+# JSON `rollup` object an `unrunnable` key, so no such row can fall out of the counts.
+# Two family VALUES arrive with it, `scope` and `unrunnable`; by the precedent above a
+# family value is not a contract change of its own. The exit rule is unchanged --
+# non-zero only on FAIL or ERROR -- and the reason is recorded where the verdict enum
+# is declared.
 readonly SCHEMA_VERSION="5"
 
 # ---------------------------------------------------------------------------
@@ -184,11 +196,13 @@ readonly REC_FS=$'\037'
 #
 # SCOPE -- every loop in this file whose fd 0 is redirected while its body runs,
 # whatever the form: here-string, here-document, or file. The two dispatch loops
-# take the rule, and so do the four loops that read a method's split spans or its
-# commands (extract_command, method_limbs, limbs_are_multi and grade_limbs): their
-# bodies are builtins today, and the body form keeps a child added to them later
-# off fd 0. The other five are EXEMPT BY MEASUREMENT, because nothing in their
-# bodies can read fd 0:
+# take the rule, and so do the five loops that read a method's split spans or its
+# commands (extract_command, method_limbs, limbs_are_multi, grade_limbs and
+# command_list) and the five that read a scope assertion's pathspecs or the
+# release diff it grades (scope_path_selected, scope_pathspec_selects, and
+# handle_scope's three): their bodies spawn no child that reads fd 0 today, and the
+# body form keeps any child they spawn, now or later, off it. The other five are
+# EXEMPT BY MEASUREMENT, because nothing in their bodies can read fd 0:
 #   - count_from_output's two here-string loops: builtins only, no child at all.
 #   - fcm_match_adds' file-fed loop: builtins only.
 #   - handle_fcm_delivery's here-string loop: fixed commands whose input is bound
@@ -228,22 +242,48 @@ readonly EXIT_BAD_TARGET=2
 readonly EXIT_CHECK_FAILED=3
 
 # ---------------------------------------------------------------------------
-# Verdict enum (the Stage-8 per-criterion verdict values, reused verbatim; the
-# runtime family additionally maps the test-run suite-* subtypes onto them).
+# Verdict enum -- FIVE values, one partition, and every reader keys on the value:
+#   PASS        the check ran, and what it asserts holds.
+#   FAIL        the check ran, and what it asserts does not hold.
+#   SKIP        not this runner's job, or nothing to run: the plan declared the row
+#               deferred, or its method names no command.
+#   UNRUNNABLE  can't run here: the row was read, and a command it names cannot run
+#               in this executor -- a recognised tool outside RUNNABLE_VERBS, or a
+#               native scope assertion with nothing to grade here -- or its designated
+#               command ran while another command it names did not.
+#   ERROR       could not read or evaluate: input this parser cannot make sense of, or
+#               a command that ran and produced no readable result.
+# Stage 9 maps the emitted values onto the Stage-8 per-criterion enum; the runtime
+# family additionally maps the test-run suite-* subtypes onto them.
+#
+# WHY UNRUNNABLE IS A VALUE OF ITS OWN. A method needing a tool outside the verb set
+# used to read SKIP -- the verdict a plan uses to declare a row another runner's job --
+# so a plan whose most rigorous criterion never ran read like one that deferred a
+# judgement call, and every reader that keys on the verdict (the exit predicate, the
+# Stage-9 reading, the roll-up) could not tell them apart. It is not SKIP, because the
+# plan declared nothing; it is not ERROR, because the input WAS read.
+#
+# WHY IT DOES NOT FAIL THE RUN. main()'s exit predicate names FAIL and ERROR only, and
+# UNRUNNABLE stays outside it ON PURPOSE: exit 0 never meant "every check executed",
+# and a failing token turns historical plans red by relabel alone -- 8 plans that exit
+# 0 would exit 3, measured when this value was introduced. Its visibility is its own
+# counter in both roll-ups and a stderr note naming how many rows did not execute; each
+# consuming gate decides what it costs there.
 # ---------------------------------------------------------------------------
 readonly VERDICT_PASS="PASS"
 readonly VERDICT_FAIL="FAIL"
 readonly VERDICT_SKIP="SKIP"
+readonly VERDICT_UNRUNNABLE="UNRUNNABLE"
 readonly VERDICT_ERROR="ERROR"
 
 # VERDICT_PARTIAL_SLOT -- the verdict a row takes when its method names a command this
 # executor did not run and the command that did run passed: the can't-run-here slot of
-# the outcome partition, never PASS and never a value of its own. It is bound to the
-# value that slot carries in this file; a change that gives the slot its own value
-# re-binds this one line and touches nothing else. KEPT ON ONE LINE ON PURPOSE: the
-# suite derives the slot's value from this line by one anchored pattern, so its arms
-# follow a re-binding rather than pinning today's value.
-readonly VERDICT_PARTIAL_SLOT="$VERDICT_SKIP"
+# the outcome partition, never PASS and never a value of its own. It is bound to
+# UNRUNNABLE, the value that slot carries in this file; a change that gives the slot
+# another value re-binds this one line and touches nothing else. KEPT ON ONE LINE ON
+# PURPOSE: the suite derives the slot's value from this line by one anchored pattern,
+# so its arms follow a re-binding rather than pinning today's value.
+readonly VERDICT_PARTIAL_SLOT="$VERDICT_UNRUNNABLE"
 
 # ---------------------------------------------------------------------------
 # PER_ISSUE_ROWS — the roll-up denominator: how many rows
@@ -288,6 +328,7 @@ declare -a TOKENS=()
 DEPLOY_CHECK=""          # core/deploy/deploy.sh --check  (sync + regression)
 EVENT_WRITER=""          # release/tools/append-pipeline-event.sh  (runtime-suite)
 DEPLOY_CHECK_CACHE=""    # per-run memo file for the deploy --check exit code
+SCOPE_DIFF_CACHE=""      # per-run memo file for the release diff the scope family grades
 
 # ---------------------------------------------------------------------------
 # Color helpers (match the release/tools convention).
@@ -304,6 +345,7 @@ c_green() { if use_color; then printf '\033[32m'; fi; }
 c_reset() { if use_color; then printf '\033[0m'; fi; }
 
 err() { printf '%serror:%s %s\n' "$(c_red)" "$(c_reset)" "$*" >&2; }
+note() { printf 'note: %s\n' "$*" >&2; }
 
 # ---------------------------------------------------------------------------
 # Usage
@@ -323,13 +365,15 @@ OPTIONS
   --emit-events     Actually write test-run events via the pipeline-event
                     writer for runtime-suite checks (default: describe only,
                     no event log write)
-  --merge-base REF  Base ref for the fcm-delivery diff range
+  --merge-base REF  Base ref for the release diff range, which the fcm-delivery
+                    and scope families both read
                     Default: \$(git merge-base origin/main HEAD)
-  --head REF        Head ref for the fcm-delivery diff range (default: HEAD)
-  --fcm-diff-file P TEST-ONLY determinism seam: read the delivered set from a
-                    <status>TAB<path> file instead of git. REFUSED (ERROR) when
-                    the plan target lives under release/releases/plans/ — a real
-                    release must never be graded against an authored diff set.
+  --head REF        Head ref for the release diff range (default: HEAD)
+  --fcm-diff-file P TEST-ONLY determinism seam: read the delivered set, for the
+                    fcm-delivery and scope families, from a <status>TAB<path>
+                    file instead of git. REFUSED (ERROR) when the plan target
+                    lives under release/releases/plans/ — a real release must
+                    never be graded against an authored diff set.
   --stage4-comment P   Path to a file containing the Stage-4 planning sub-task
                     comment, for the provenance DELTA limb. Absent → the delta
                     limb emits a NAMED SKIP; it never emits PASS.
@@ -337,9 +381,22 @@ OPTIONS
   -h, --help        Show this help and exit
   --version         Show CLI version + schema version and exit
 
-CHECK FAMILIES (dispatched from the Verification method cell alone: a declared deferral, then a runnable probe, else method keyword)
+CHECK FAMILIES (dispatched from the Verification method cell alone: a declared deferral, then a runnable probe or a scope assertion, else method keyword)
   per-issue      file existence + content assertions  (any runnable probe:
                                                        ${RUNNABLE_VERBS})
+  scope          a confinement assertion over the     (git diff --name-only
+                 RELEASE diff — every change the       origin/main...HEAD --
+                 release makes, not one card's         <pathspec>... and one
+                 commits                               comparator. The SAME
+                                                       fixed git call
+                                                       fcm-delivery makes; the
+                                                       pathspecs are DATA,
+                                                       matched in-process, and
+                                                       no authored byte reaches
+                                                       git)
+  unrunnable     a recognised tool command no other   (named, never run: the
+                 family claims                         tool is outside the verb
+                                                       set above)
   integration    Cross-Issue Acceptance Criteria      (reads the plan's CIAC
                  section; runs each entry's declared method — SOLE runner)
   regression     unchanged-files-intact               (deploy --check byte-diff)
@@ -370,10 +427,23 @@ MULTI-COMMAND METHODS
   comparator that follows that command (at least N, at most N, exactly N,
   expect N; a null is expect 0). Every other command it names is reported as
   did not run, with its reason, and a row with a command that did not run
-  never reads PASS. A bare tool name (grep alone) is prose, never a command.
+  never reads PASS: it reads UNRUNNABLE. A bare tool name (grep alone) is
+  prose, never a command.
+
+VERDICTS
+  PASS        the check ran, and what it asserts holds
+  FAIL        the check ran, and what it asserts does not hold
+  SKIP        not this runner's job (a declared deferral), or no command to run
+  UNRUNNABLE  can't run here: a command the method names is a tool outside
+              the verb set, a scope assertion has nothing to grade here, or
+              the designated command ran and another command did not. Never
+              executed, never a pass, and it does not fail the run; the tool
+              named is a tool the method invokes, never a label or a file
+  ERROR       could not read or evaluate the row
 
 EXIT CODES
-  0  all checks PASS or SKIP
+  0  no check FAILed or ERRORed (PASS, SKIP and UNRUNNABLE only; every
+     UNRUNNABLE row is counted in the roll-up and noted on stderr)
   1  internal error — including a DEGRADED verdict stream: a dispatch loop
      read fewer records than the parser produced, and the roll-up says so
   2  bad plan target (path missing / not a regular file)
@@ -531,7 +601,7 @@ _extract_section() {
 # {{ADR:a-rows-grading-route-is-declared-in-its-method-cell}} records this as its
 # Decision 6.
 classify_family() {
-  local raw_method="$1" method prose probe
+  local raw_method="$1" method prose probe cmd
   method="$(printf '%s' "$raw_method" | tr '[:upper:]' '[:lower:]')"
 
   # 0) Declared-deferred method → the honesty contract routes it to a family-
@@ -565,12 +635,23 @@ classify_family() {
   #
   # THE PRECEDENCE, STATED. A row that names both a runnable probe and the
   # `deploy.sh --check` span is graded by the probe; the deploy check does not run
-  # for it. A command this executor does not run -- a tool, a pipeline, a bare verb
-  # -- keeps the keyword route. The step's test line is KEPT ON ONE LINE ON PURPOSE:
-  # the suite's mutation arms G15 M1 and G10 R-M2b remove it by one anchored
-  # substitution.
+  # for it, and the handler names it as a command that did not run (outside the verb
+  # set), so the row never reads PASS (METHOD LIMBS). A command this executor does
+  # not run -- a tool, a pipeline, a bare verb -- keeps the keyword route. The step's
+  # test line is KEPT ON ONE LINE ON PURPOSE: the suite's mutation arms G15 M1 and
+  # G10 R-M2b remove it by one anchored substitution.
   probe="$(runnable_probe_of "$raw_method")"
   if [ -n "$probe" ]; then echo "per-issue"; return; fi
+
+  # 1b) A NATIVE SCOPE ASSERTION ROUTES BY ITS COMMAND, AHEAD OF PROSE. When the
+  #     designated command -- extract_command's pick, here a span invoking a tool --
+  #     parses as the scope family's closed grammar (scope_spec_of: `git diff` over
+  #     the release range, pathspecs as data, a comparator), the row goes to the
+  #     scope family before any keyword is read. No executing row is taken: a row
+  #     carrying a runnable probe left at step 1, and extract_command prefers a
+  #     runnable span, so this pick is a tool span only when the row has no probe.
+  cmd="$(extract_command "$raw_method")"
+  if [ -n "$cmd" ] && scope_spec_of "$cmd" "$raw_method" >/dev/null; then echo "scope"; return; fi
 
   # 2) Keyword-match the method string -- rows with no runnable probe: command-less
   #    prose, and commands this executor does not run.
@@ -603,13 +684,26 @@ classify_family() {
     # schema vocabulary an author writes to DECLARE an outcome, not words that
     # occur in ordinary English about a check. Step 1 resolves every runnable
     # probe before any arm here, so a method carrying one is executed even
-    # when it also names a subtype. A method with neither reaches
-    # `unclassified` and is an ERROR, which is honest: this executor cannot
-    # tell what such a row is asking for.
+    # when it also names a subtype. A method with neither reaches step 3,
+    # which names a recognised tool command it carries; one naming no tool
+    # either reaches `unclassified` and is an ERROR, which is honest: this
+    # executor cannot tell what such a row is asking for.
     *suite-skip*|*suite-fail*)                                              echo "runtime-suite"; return ;;
   esac
 
-  # 3) Unclassifiable → the caller emits ERROR (fail loud; never drop a check).
+  # 3) A RECOGNISED TOOL COMMAND THAT NO ARM CLAIMED IS CAN'T-RUN-HERE, NOT
+  #    UNCLASSIFIABLE. extract_command returns a span whose leading token is not an
+  #    allowlisted verb only when span_invokes_tool names it -- an invocation-shaped
+  #    span of a catalogued tool or a script -- so the row WAS read: it names a
+  #    command this executor will not run. ERROR means "could not read", so such a
+  #    row goes to the unrunnable family, which names the tool. A method with no
+  #    such span still reaches step 4. The step's test line is KEPT ON ONE LINE ON
+  #    PURPOSE: the suite's mutation arm G17 M1 removes it by one substitution.
+  local lead
+  lead="$(printf '%s' "$cmd" | awk '{print $1}')"
+  if [ -n "$lead" ] && ! is_runnable_verb "$lead"; then echo "unrunnable"; return; fi
+
+  # 4) Unclassifiable → the caller emits ERROR (fail loud; never drop a check).
   echo "unclassified"
 }
 
@@ -888,7 +982,7 @@ parse_verification_plan() {
 # not acquire a code-execution channel: "the plan names which tool to run" is not
 # a trust boundary when the same pull request can author both. A criterion whose
 # substance needs a tool invocation is therefore NOT executed here — it is
-# reported as an honest, reasoned SKIP naming the verb, and its mechanical
+# reported UNRUNNABLE, naming the tool (span_invokes_tool), and its mechanical
 # guarantee is expected to live in that tool's own CI-invoked self-test, which is
 # a gate in its own right.
 RUNNABLE_VERBS='grep test ls head wc cat'
@@ -897,8 +991,12 @@ is_runnable_verb() {
   case " $RUNNABLE_VERBS " in *" $1 "*) return 0 ;; *) return 1 ;; esac
 }
 
-# looks_like_command — a span is command-shaped when its leading token is a bare
-# word (a verb), not a flag, a path fragment, a section reference or prose.
+# looks_like_command — TRUE when a token is WORD-SHAPED: a bare word, not a flag, a
+# path fragment, a section reference or prose. It recognises a word-shaped
+# IDENTIFIER and no longer decides whether a span is a command: that is
+# span_invokes_tool's question. extract_command reads a word-shaped span that invokes
+# no tool as an identifier -- a label, a file name, a hash -- which is prose about
+# that identifier, and never names it as the tool a row needs.
 looks_like_command() {
   case "$1" in
     ''|-*|/*|.*|\#*) return 1 ;;
@@ -910,28 +1008,39 @@ looks_like_command() {
 #
 # It scans EVERY backtick-quoted span and returns the FIRST one whose leading
 # token is an allowlisted verb and that carries an argument -- the DESIGNATED
-# command; if none is, it returns the first COMMAND-SHAPED span so the caller can
-# report the verb it declined to run. Taking the first span unconditionally was a
-# defect: an authored method that mentions a flag or a symbol in backticks before
-# its actual probe (*Method:* run `--self-test`; then `grep …`) yielded
-# `--self-test` as the "verb" and reported ERROR — a malformed-input verdict for a
-# well-formed method. Falls back to the bare string when it already starts with an
-# allowlisted verb (the shape the CIAC parser hands over, having stripped its own
-# backticks). Prints the command or nothing. It reads the spans through
-# method_spans, the one backtick splitter (METHOD LIMBS below); a bare verb (a
-# tool named in prose, `grep` alone, with no argument) is never the command.
+# command; if none is, it returns the first span that INVOKES A TOOL
+# (span_invokes_tool) so the caller can report the tool it declined to run. Taking
+# the first span unconditionally was a defect: an authored method that mentions a
+# flag or a symbol in backticks before its actual probe (*Method:* run
+# `--self-test`; then `grep …`) yielded `--self-test` as the "verb" and reported
+# ERROR — a malformed-input verdict for a well-formed method. A backticked
+# IDENTIFIER — a word-shaped span that invokes no tool: a label, a file name, a hash
+# — is prose about that identifier: it is never returned, so no refusal names it as
+# the tool a row needs, and it blocks the bare-string path below, so prose that
+# merely opens with a verb is never run beside it. Falls back to the bare string when
+# it already starts with an allowlisted verb (the shape the CIAC parser hands over,
+# having stripped its own backticks). Prints the command or nothing. It reads the
+# spans through method_spans, the one backtick splitter (METHOD LIMBS below); a bare
+# verb (a tool named in prose, `grep` alone, with no argument) is never the command.
 extract_command() {
-  local method="$1" rec rest cls tok span fallback="" first T=$'\t'
+  local method="$1" rec rest cls tok span fallback="" identifier=0 first T=$'\t'
   while IFS= read -r rec; do {
     [ -n "$rec" ] || continue
     rest="${rec#*"$T"}"; cls="${rest%%"$T"*}"; rest="${rest#*"$T"}"
     tok="${rest%%"$T"*}"; rest="${rest#*"$T"}"; span="${rest#*"$T"}"
     case "$cls" in runnable) printf '%s' "$span"; return ;; bare-verb) continue ;; esac
-    if [ -z "$fallback" ] && looks_like_command "$tok"; then fallback="$span"; fi
+    if [ -z "$fallback" ]; then
+      if [ "$cls" = not-runnable ]; then fallback="$span"
+      elif looks_like_command "$tok"; then identifier=1; fi
+    fi
   } </dev/null; done <<EOF_SPANS
 $(method_spans "$method")
 EOF_SPANS
   if [ -n "$fallback" ]; then printf '%s' "$fallback"; return; fi
+  # An identifier blocks the bare-string path: prose that opens with a verb beside a
+  # backticked label is prose about that label, not a command to run. KEPT ON ONE LINE
+  # ON PURPOSE: the suite's mutation arm G17 M3 removes it by one substitution.
+  if [ "$identifier" -eq 1 ]; then return; fi
   first="$(printf '%s' "$method" | sed -e 's/^[[:space:]]*//' | awk '{print $1}')"
   if is_runnable_verb "$first"; then
     printf '%s' "$(printf '%s' "$method" | sed -e 's/^[[:space:]]*//')"
@@ -1127,13 +1236,47 @@ compare_threshold() {
 # so an operand-less one in any position truncates no later row.
 # ---------------------------------------------------------------------------
 
-# span_invokes_tool <span> -- prints the tool a span invokes when that tool is
-# outside RUNNABLE_VERBS, else nothing. THE one predicate deciding whether a
-# backticked span that is not an allowlisted command is a command at all; it is
-# kept separate so a tool catalog replaces this body and nothing else. Until that
-# catalog exists no such span is a tool invocation: it is prose, it does not make a
-# method multi-command, and it is not reported as a command that did not run.
+# span_invokes_tool <span> [<whole>] -- prints the tool a span invokes when that
+# tool is outside RUNNABLE_VERBS, else nothing. THE one predicate deciding whether a
+# backticked span that is not an allowlisted command is a command at all: a span it
+# names is a command this executor will not run (UNRUNNABLE, naming the tool), and
+# every span it does not name is prose. <whole> is non-empty when the span is the
+# method's whole text, which method_spans decides.
+#
+# NAMED BY SHAPE, NOT BY WORD. A tool word is a command only when the span is
+# INVOCATION-SHAPED: it carries two or more tokens, or it is a bare interpreter, or
+# it is the whole method. A shell keyword or builtin also needs an argument, whatever
+# else holds. So `awk 'END{print NR}' f` and `python3` alone are commands, while a
+# backticked `case` arm, a `source` field or a control arm's `script.sh` path
+# mentioned in prose are not: naming them "the tool this row needs" was the defect
+# the shape test closes. The tool is the span's leading token when it is in the
+# closed catalog below, or the basename of a script path (a relative path, `./`
+# optional, no `..`, ending .sh .bash .py .pl .rb .js .mjs .ts).
+#
+# THE CATALOG IS CLOSED, AND ITS BOUNDARY IS STATED. Its words are RECOGNISED BY NAME
+# AND NEVER RUN -- RUNNABLE_VERBS stays the only set this executor executes, and a
+# name found here widens nothing. A real tool missing from it reads as a method with
+# no command until it is added: never a pass, never a failure, and fixed by one word.
+# A lexical or PATH-based test was rejected: the first admits English words, and the
+# second would make a verdict depend on which tools the grading host has installed.
 span_invokes_tool() {
+  local t n tools interp words re='^(\./)?([A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.(sh|bash|py|pl|rb|js|mjs|ts)$'
+  local -a w=()
+  tools='bash sh zsh dash ksh python python3 perl ruby node source . eval exec env xargs for while until if case time cd export set unset exit return local read git gh awk gawk sed tr cut sort uniq comm diff cmp paste join find jq yq tee printf echo stat file du xxd od base64 tail shasum sha256sum md5 md5sum column realpath readlink basename dirname date curl wget make npm npx pytest shellcheck cp mv rm mkdir touch chmod ln claude sqlite3 openssl osascript'
+  interp='bash sh zsh dash ksh python python3 perl ruby node'
+  words='source . eval exec for while until if case time cd export set unset exit return local read printf echo'
+  read -r -a w <<< "$1" || true
+  t="${w[0]:-}"; n=${#w[@]}
+  [ -n "$t" ] || return 0
+  if is_runnable_verb "$t"; then return 0; fi
+  case " $tools " in
+    *" $t "*)
+      case " $words " in *" $t "*) [ "$n" -ge 2 ] || return 0 ;; esac
+      case " $interp " in *" $t "*) : ;; *) [ "$n" -ge 2 ] || [ -n "${2:-}" ] || return 0 ;; esac
+      printf '%s' "$t"; return 0 ;;
+  esac
+  case "$t" in *..*) return 0 ;; esac
+  if [[ "$t" =~ $re ]] && { [ "$n" -ge 2 ] || [ -n "${2:-}" ]; }; then printf '%s' "${t##*/}"; fi
   return 0
 }
 
@@ -1147,11 +1290,15 @@ span_invokes_tool() {
 # The spans are the ones a split on backticks yields -- the even pieces, an unclosed
 # last one included -- so every reader that asks where a method's spans are asks
 # here: extract_command, the limb reader and any authoring lint split a method
-# through this one function, and no two readers can split it two ways.
+# through this one function, and no two readers can split it two ways. A method
+# that is ONE span and nothing else -- whitespace and closing punctuation aside -- is
+# that span's whole text, which span_invokes_tool reads as invocation-shaped.
 method_spans() {
-  local method="$1" i=1 n=0 span tok words cls prose T=$'\t'
+  local method="$1" i=1 n=0 span tok words cls prose whole="" rem T=$'\t'
   local -a seg=() w=()
   IFS='`' read -r -a seg <<< "$method" || true
+  rem="${seg[0]:-}${seg[2]:-}"; rem="${rem//[[:space:].;:,]/}"
+  if [ "${#seg[@]}" -le 3 ] && [ -z "$rem" ]; then whole=1; fi
   while [ "$i" -lt "${#seg[@]}" ]; do
     span="${seg[$i]}"; prose="${seg[$((i + 1))]:-}"; i=$((i + 2))
     [ -n "$span" ] || continue
@@ -1160,7 +1307,7 @@ method_spans() {
     tok="${w[0]:-}"; words=${#w[@]}
     if is_runnable_verb "$tok"; then
       if [ "$words" -ge 2 ]; then cls=runnable; else cls=bare-verb; fi
-    elif [ -n "$(span_invokes_tool "$span")" ]; then cls=not-runnable
+    elif [ -n "$(span_invokes_tool "$span" "$whole")" ]; then cls=not-runnable
     else cls=mention; fi
     printf '%s\t%s\t%s\t%s\t%s\n' "$n" "$cls" "$tok" "${prose//$T/ }" "$span"
   done
@@ -1331,11 +1478,43 @@ EOF_GRADE
   fi
 }
 
+# command_list <method> <designated> <designated-text> -- the partition's partial rule
+# for a family whose designated command is not an allowlisted verb (the scope family's
+# assertion; the deploy check). Lists the method's commands in order, as grade_limbs
+# names them -- "limb <k> <verb> <designated-text>" for the designated one and "limb
+# <k> <verb> did not run (<reason>)" for every other -- and prints "<N> TAB <list>",
+# N the number of commands. N below 2 means the row names no command beside the
+# designated one. A reason is the most basic one, as in grade_limbs: a tool outside
+# the verb set; a reader that names no input; else only the designated command runs.
+command_list() {
+  local method="$1" designated="$2" dtext="$3" rec rest cls span verb why list="" k=0 dseen=0 T=$'\t'
+  while IFS= read -r rec; do {
+    [ -n "$rec" ] || continue
+    rest="${rec#*"$T"}"; cls="${rest%%"$T"*}"
+    rest="${rest#*"$T"}"; rest="${rest#*"$T"}"; span="${rest#*"$T"}"
+    case "$cls" in runnable|not-runnable) ;; *) continue ;; esac
+    k=$((k + 1))
+    verb="${span#"${span%%[![:space:]]*}"}"; verb="${verb%% *}"
+    if [ "$dseen" -eq 0 ] && [ "$span" = "$designated" ]; then
+      dseen=1; list="${list:+$list; }limb $k $verb $dtext"; continue
+    fi
+    if [ "$cls" = not-runnable ]; then why="outside the verb set"
+    elif why="$(reads_stdin_cmd "$span")"; then
+      case "$why" in stdin-reader:*|'') why="names no input" ;; esac
+    else why="only the designated command runs"; fi
+    list="${list:+$list; }limb $k $verb did not run ($why)"
+  } </dev/null; done <<EOF_CMDS
+$(method_spans "$method")
+EOF_CMDS
+  printf '%s\t%s' "$k" "$list"
+}
+
 # per-issue: extract a runnable predicate from the method string and run it.
 # Supports the two dominant shapes: `grep ... ≥ N` / `grep -c ... N` and
 # `test -f <path>`. Anything else with an executable command substring is run
-# in a restricted way (command allowlist), else SKIP (honest — no fabricated
-# PASS for a check that carries no runnable method).
+# in a restricted way (command allowlist); a command outside the allowlist is
+# UNRUNNABLE, naming the tool; a method with no command is SKIP (honest — no
+# fabricated PASS for a check that carries no runnable method).
 handle_per_issue() {
   local method="$1" expected="$2"
   # Honest no-op: a declared-deferred method is a SKIP with a reason. (The
@@ -1361,15 +1540,15 @@ handle_per_issue() {
     printf '%s\t%s\n' "$VERDICT_SKIP" "no-executable-command-in-method"; return
   fi
 
-  # Allowlist the leading verb. Outside the read-only query set is an honest
-  # SKIP naming the verb, not an ERROR: the executor declining to run a tool is
-  # a statement about the executor, not a defect in the method. ERROR is reserved
-  # for input this parser cannot make sense of.
+  # Allowlist the leading verb. Outside the read-only query set is UNRUNNABLE,
+  # naming the tool -- neither ERROR nor SKIP: the executor declining to run a
+  # tool is a statement about the executor, not a defect in the method (ERROR is
+  # reserved for input this parser cannot make sense of), and the plan declared
+  # nothing (SKIP is the plan's declaration). handle_unrunnable is the one
+  # decline point every route shares.
   local verb; verb="$(printf '%s' "$cmd" | awk '{print $1}')"
   if ! is_runnable_verb "$verb"; then
-    printf '%s\t%s\n' "$VERDICT_SKIP" \
-      "tool-invocation-outside-executor-allowlist:$verb (not executed here; its mechanical guarantee belongs in that tool's own self-test)"
-    return
+    handle_unrunnable "$method"; return
   fi
 
   local threshold op want; threshold="$(extract_threshold "$method")"
@@ -1753,9 +1932,7 @@ handle_integration() {
   fi
   local verb; verb="$(printf '%s' "$cmd" | awk '{print $1}')"
   if ! is_runnable_verb "$verb"; then
-    printf '%s\t%s\n' "$VERDICT_SKIP" \
-      "tool-invocation-outside-executor-allowlist:$verb (not executed here; its mechanical guarantee belongs in that tool's own self-test)"
-    return
+    handle_unrunnable "$method"; return
   fi
   local out rc count threshold op want
   set +e
@@ -1916,6 +2093,35 @@ handle_runtime_suite() {
   esac
 }
 
+# unrunnable: THE one decline point. A row whose command is a recognised tool
+# outside RUNNABLE_VERBS reaches here from three routes -- the classifier's residual
+# step, and the verb check in handle_per_issue and in handle_integration -- and all
+# three emit the same verdict and the same reason, so the three cannot drift. The
+# tool is named from the command span (span_invokes_tool: a catalogued tool, or a
+# script's basename), never from a label, a file name or a word the method only
+# mentions. The reason token is the one the refusal carried when it read SKIP, so a
+# reader that matches the reason still matches it; only the verdict changed. A cross-
+# issue method whose command is a native scope assertion is graded here rather than
+# declined: that method never passes through the classifier, so this is where it
+# meets the scope family.
+# $1 = method string.
+handle_unrunnable() {
+  local method="$1" cmd tool
+  cmd="$(extract_command "$method")"
+  if [ -n "$cmd" ] && scope_spec_of "$cmd" "$method" >/dev/null; then
+    handle_scope "$method"; return
+  fi
+  tool="$(span_invokes_tool "$cmd" whole)"
+  if [ -z "$tool" ]; then
+    printf '%s\t%s\n' "$VERDICT_ERROR" "decline-without-tool (internal inconsistency: a declined row names no tool the method invokes)"
+    return
+  fi
+  # KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G17 M2 turns the verdict back
+  # to SKIP by one anchored substitution, and a line-based mutator cannot reach a verdict
+  # split across a continuation.
+  printf '%s\t%s\n' "$VERDICT_UNRUNNABLE" "tool-invocation-outside-executor-allowlist:$tool (not executed here; its mechanical guarantee belongs in that tool's own self-test)"
+}
+
 # Dispatch: family -> handler. Fail loud on an unclassified family.
 dispatch_check() {
   local family="$1" method="$2" expected="$3" version="$4"
@@ -1939,6 +2145,8 @@ dispatch_check() {
                     printf '%s\t%s\n' "$VERDICT_ERROR" \
                       "method-cell-empty ($expected) — the row declares a check and names no method to run it: $method" ;;
     per-issue)      handle_per_issue "$method" "$expected" ;;
+    scope)          handle_scope "$method" ;;
+    unrunnable)     handle_unrunnable "$method" ;;
     integration)    handle_integration "$method" ;;
     sync)           handle_deploy_check "sync" ;;
     regression)     handle_deploy_check "regression" ;;
@@ -2767,6 +2975,256 @@ handle_fcm_delivery() {
 }
 
 # ===========================================================================
+# Component 6b — scope: a confinement assertion graded against the RELEASE diff.
+#
+# WHY THIS EXISTS. "Changes are confined to <path>" is a recurring, load-bearing
+# acceptance criterion, and it had no family: a `git diff` scope assertion reached
+# `unclassified` and read ERROR, so a plan's most rigorous row read the same as an
+# unreadable one. It is executed through the fcm-delivery family's own FIXED git
+# call (fcm_resolve_diff, used unmodified; see its reconciliation note) and never
+# through RUNNABLE_VERBS: `git` is not in that set and is not added to it, because
+# a verification harness driven by an authored artifact must not acquire a
+# code-execution channel. The authored command is read as DATA, in a closed grammar:
+#   git diff [--name-only|--name-status|--stat|--no-renames]... <range> [-- <pathspec>...]
+# followed by ONE comparator. <range> is the release diff -- `origin/main...HEAD` or
+# `origin/main..HEAD`, either end an author's `<placeholder>` -- and it is resolved
+# the way fcm-delivery resolves it, whatever the author spelled. The pathspecs are
+# matched IN-PROCESS against the delivered set, so no plan-authored byte reaches git:
+# `:(top)` is dropped; `:!X`, `:^X` and `:(exclude)X` exclude; any other magic, an
+# absolute path, a `..` segment, shell syntax (span_shell_operator, the one shared
+# test), a pinned or single revision, another option, or no comparator at all is
+# outside the grammar, and such a row keeps the tool decline, UNRUNNABLE naming git.
+#
+# WHAT IT GRADES: THE RELEASE DIFF, ALL OF IT. The delivered set is every path the
+# release changes between its merge base and its head -- every card's commits, not
+# only the card whose row it is. A per-card confinement claim written as a scope row
+# therefore FAILs when a sibling card touches the path; state such a claim another
+# way.
+#
+# A VACUOUS OR MIS-BOUND INPUT IS NEVER A PASS. Each of these reads UNRUNNABLE, with
+# its reason, rather than a verdict: a diff that is absent or cannot be resolved
+# here; an empty one; a method whose comparators disagree (limb_comparator, the one
+# comparator vocabulary -- a comparator written for something else would otherwise
+# grade the assertion); a `<placeholder>` pathspec, which names nothing; and, for an
+# `==` or `<=` assertion, an included pathspec that selects no existing and no
+# delivered path -- a typo would otherwise make "nothing changed under X" true of a
+# path that does not exist. Every graded count carries its denominator, the size of
+# the diff it was read over. A method naming another command beside the assertion
+# follows the partition's partial rule (command_list): a PASS reads the can't-run
+# slot and names the command that did not run; a FAIL stands.
+# ===========================================================================
+
+# scope_spec_of <cmd> <method> -- TRUE, printing the pathspecs one per line, when
+# <cmd> is a scope assertion in the closed grammar above and <method> states a
+# comparator. Each line is `+<pathspec>` (included), `-<pathspec>` (excluded) or
+# `?<pathspec>` (a placeholder, which handle_scope refuses by name). The shell-syntax
+# test reads the span with each `<placeholder>` token replaced by a plain word, so an
+# author's `<base>` or `<skill-dir>` is not read as a redirect; the grammar then
+# reads the raw token. The pathspec arms are KEPT ONE PER LINE ON PURPOSE: the
+# suite's mutation arm G17 M8 reads a placeholder as a literal path by one
+# substitution.
+scope_spec_of() {
+  local cmd="$1" method="$2" i=2 n t p out="" range="" seen_dd=0
+  local rre='^(origin/main|<[A-Za-z0-9_-]+>)[.][.][.]?(HEAD|<[A-Za-z0-9_-]+>)$'
+  [ -n "$cmd" ] || return 1
+  tokenize_cmd "$cmd" || return 1
+  n=${#TOKENS[@]}
+  if [ "$n" -lt 3 ] || [ "${TOKENS[0]}" != git ] || [ "${TOKENS[1]}" != diff ]; then return 1; fi
+  if span_shell_operator "$(printf '%s' "$cmd" | sed -E 's/<[A-Za-z0-9_-]+>/P/g')" >/dev/null; then return 1; fi
+  while [ "$i" -lt "$n" ]; do
+    t="${TOKENS[$i]}"; i=$((i + 1))
+    if [ "$seen_dd" -eq 0 ]; then
+      case "$t" in
+        --) seen_dd=1 ;;
+        --name-only|--name-status|--stat|--no-renames) : ;;
+        *) if [ -z "$range" ] && [[ "$t" =~ $rre ]]; then range="$t"; else return 1; fi ;;
+      esac
+      continue
+    fi
+    p="${t#:(top)}"
+    case "$p" in
+      ''|/*|..|../*|*/../*|*/..) return 1 ;;
+      *'<'*|*'>'*)   out="${out}?${p}"$'\n' ;;
+      ':!'*|':^'*)   out="${out}-${p#:?}"$'\n' ;;
+      ':(exclude)'*) out="${out}-${p#:(exclude)}"$'\n' ;;
+      :*)            return 1 ;;
+      *)             out="${out}+${p}"$'\n' ;;
+    esac
+  done
+  [ -n "$range" ] || return 1
+  [ -n "$(limb_comparator "$method")" ] || return 1
+  printf '%s' "$out"
+  return 0
+}
+
+# scope_pattern_matches <path> <pattern> -- a git pathspec's default reading, in
+# process: a pattern carrying a glob character matches as a shell `case` pattern does
+# (so `*` crosses `/`, as it does in a git pathspec); any other pattern matches the
+# path itself, or anything under it as a directory; `.` or an empty pattern matches
+# every path.
+scope_pattern_matches() {
+  local path="$1" pat="${2#./}"
+  case "$pat" in
+    ''|.) return 0 ;;
+    *'*'*|*'?'*|*'['*)
+      # shellcheck disable=SC2254
+      case "$path" in $pat) return 0 ;; esac
+      return 1 ;;
+  esac
+  pat="${pat%/}"
+  if [ "$path" = "$pat" ]; then return 0; fi
+  case "$path" in "$pat"/*) return 0 ;; esac
+  return 1
+}
+
+# scope_path_selected <path> <specs> -- TRUE when the delivered <path> is selected by
+# the pathspec list: excluded by no `-` pathspec, and matched by a `+` one when any is
+# given (no `+` pathspec selects every path the exclusions leave). The exclusion arm
+# is KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G17 M5 makes it a no-op.
+scope_path_selected() {
+  local path="$1" specs="$2" s any_plus=0 plus_hit=0
+  while IFS= read -r s; do {
+    [ -n "$s" ] || continue
+    case "$s" in
+      -*) if scope_pattern_matches "$path" "${s#-}"; then return 1; fi ;;
+      +*) any_plus=1
+          if scope_pattern_matches "$path" "${s#+}"; then plus_hit=1; fi ;;
+    esac
+  } </dev/null; done <<EOF_SCOPE_SEL
+$specs
+EOF_SCOPE_SEL
+  [ "$any_plus" -eq 0 ] || [ "$plus_hit" -eq 1 ]
+}
+
+# scope_pathspec_selects <pathspec> <paths> -- TRUE when an included pathspec selects
+# at least one delivered path, or at least one path in the tree: a literal or
+# directory pathspec is tested for existence; a glob one against every path under
+# the root (find -path, whose `*` crosses `/` as a git pathspec's does).
+scope_pathspec_selects() {
+  local pat="$1" paths="$2" q
+  while IFS= read -r q; do {
+    [ -n "$q" ] || continue
+    if scope_pattern_matches "$q" "$pat"; then return 0; fi
+  } </dev/null; done <<EOF_SCOPE_SELECTS
+$paths
+EOF_SCOPE_SELECTS
+  pat="${pat#./}"
+  case "$pat" in
+    ''|.) return 0 ;;
+    *'*'*|*'?'*|*'['*)
+      if [ -n "$( cd "$REPO_ROOT" && find . -path ./.git -prune -o -path "./$pat" -print 2>/dev/null )" ]; then return 0; fi
+      return 1 ;;
+  esac
+  [ -e "$REPO_ROOT/${pat%/}" ]
+}
+
+# scope_delivered_set -- print the release diff the scope family grades: a status line
+# ("ok", or fcm_resolve_diff's status token), then one delivered path per line. The
+# diff is resolved AT MOST ONCE per run and cached in SCOPE_DIFF_CACHE (a per-run file
+# set in main), so the result survives the subshells the handlers run in. It calls
+# fcm_resolve_diff DIRECTLY -- that function sets globals (see its note) -- and
+# removes the two files it creates, as handle_fcm_delivery does.
+scope_delivered_set() {
+  local st out=""
+  if [ -n "${SCOPE_DIFF_CACHE:-}" ] && [ -s "$SCOPE_DIFF_CACHE" ]; then cat "$SCOPE_DIFF_CACHE"; return 0; fi
+  fcm_resolve_diff
+  st="$FCM_DIFF_STATUS"
+  if [ "$st" = ok ]; then
+    out="$(awk -F'\t' 'NF >= 2 && $2 != "" { print $2 }' "$FCM_ANY_FILE" | sort -u)"
+  fi
+  rm -f "$FCM_ADDS_FILE" "$FCM_ANY_FILE"
+  if [ -n "${SCOPE_DIFF_CACHE:-}" ]; then printf '%s\n%s' "$st" "$out" > "$SCOPE_DIFF_CACHE"; fi
+  printf '%s\n%s' "$st" "$out"
+  return 0
+}
+
+# scope: grade one scope assertion against the release diff (Component 6b).
+# $1 = method string. Prints "<verdict> TAB <observed>". Each guard's refusal and the
+# comparator read are KEPT ON ONE LINE ON PURPOSE: the suite's mutation arms G17
+# M6-M9 each reach one of them by a single anchored substitution.
+handle_scope() {
+  local method="$1" cmd specs cmpr op want delivered st paths s p total=0 hits=0 shown="" verdict obs cl n list
+  local T=$'\t' NL=$'\n'
+  cmd="$(extract_command "$method")"
+  if ! specs="$(scope_spec_of "$cmd" "$method")"; then
+    printf '%s\t%s\n' "$VERDICT_UNRUNNABLE" \
+      "tool-invocation-outside-executor-allowlist:git (not executed here; its mechanical guarantee belongs in that tool's own self-test)"
+    return
+  fi
+  if [ -n "$ARG_FCM_DIFF_FILE" ]; then
+    case "$PLAN_ABS" in
+      */release/releases/plans/*)
+        printf '%s\t%s\n' "$VERDICT_ERROR" "scope-fixture-mode-on-live-plan (--fcm-diff-file refused against a plan under release/releases/plans/)"
+        return ;;
+    esac
+  fi
+  cmpr="$(limb_comparator "$method")"
+  if [ "$cmpr" = ambiguous ]; then
+    printf '%s\t%s\n' "$VERDICT_UNRUNNABLE" "scope-comparator-ambiguous (the method states comparators that disagree; a scope assertion is graded on exactly one, so none of them grades it)"
+    return
+  fi
+  op="${cmpr%%"$T"*}"; want="${cmpr#*"$T"}"
+  while IFS= read -r s; do {
+    case "$s" in
+      '?'*) printf '%s\t%s\n' "$VERDICT_UNRUNNABLE" "scope-pathspec-placeholder:${s#?} (a placeholder names no path, so the assertion is graded on nothing: not a pass)"
+            return ;;
+    esac
+  } </dev/null; done <<EOF_SCOPE_PH
+$specs
+EOF_SCOPE_PH
+  delivered="$(scope_delivered_set)"
+  st="${delivered%%"$NL"*}"
+  if [ "$st" != ok ]; then
+    printf '%s\t%s\n' "$VERDICT_UNRUNNABLE" "scope-diff-unresolvable (the release diff could not be resolved here; an absent diff is never read as an empty one)"
+    return
+  fi
+  case "$delivered" in *"$NL"*) paths="${delivered#*"$NL"}" ;; *) paths="" ;; esac
+  while IFS= read -r p; do {
+    [ -n "$p" ] || continue
+    total=$((total + 1))
+    if scope_path_selected "$p" "$specs"; then
+      hits=$((hits + 1))
+      if [ "$hits" -le 5 ]; then shown="${shown:+$shown, }$p"; fi
+    fi
+  } </dev/null; done <<EOF_SCOPE_PATHS
+$paths
+EOF_SCOPE_PATHS
+  if [ "$total" -eq 0 ]; then
+    printf '%s\t%s\n' "$VERDICT_UNRUNNABLE" "scope-diff-empty (the release diff is empty here, so a scope assertion is vacuous: not a pass)"
+    return
+  fi
+  case "$op" in
+    '=='|'<=')
+      while IFS= read -r s; do {
+        case "$s" in
+          +*) if ! scope_pathspec_selects "${s#+}" "$paths"; then
+                printf '%s\t%s\n' "$VERDICT_UNRUNNABLE" "scope-pathspec-selects-nothing:${s#+} (no existing and no delivered path matches it, so an assertion that nothing changed there is vacuous: not a pass)"
+                return
+              fi ;;
+        esac
+      } </dev/null; done <<EOF_SCOPE_NOTHING
+$specs
+EOF_SCOPE_NOTHING
+      ;;
+  esac
+  verdict="$(compare_threshold "$hits" "$op" "$want")"
+  if [ "$verdict" = PASS ]; then obs="scope count=$hits ($op $want) over $total changed path(s) in the release diff"
+  else obs="scope count=$hits (wanted $op $want) over $total changed path(s) in the release diff"; fi
+  if [ -n "$shown" ]; then obs="$obs: $shown"; fi
+  cl="$(command_list "$method" "$cmd" "$verdict $obs")"
+  n="${cl%%"$T"*}"; list="${cl#*"$T"}"
+  if [ "$n" -ge 2 ]; then
+    if [ "$verdict" = PASS ]; then
+      printf '%s\t%s\n' "$VERDICT_PARTIAL_SLOT" "partial-execution: limbs run 1 of $n: $list — a command that did not run is not a pass"
+    else
+      printf '%s\t%s\n' "$verdict" "limbs run 1 of $n: $list"
+    fi
+    return
+  fi
+  printf '%s\t%s\n' "$verdict" "$obs"
+}
+
+# ===========================================================================
 # Component 7 — provenance-survival: the domain_practice provenance label,
 # asserted ABSOLUTELY on the plan file and, when the Stage-4 comment is supplied,
 # as a set-difference across the Commit-0 transcription boundary.
@@ -3041,7 +3499,7 @@ emit_md() {
   local issues
   issues="$(printf '%s\n' "$records" | awk -F'\t' 'NF{ if(!seen[$1]++) print $1 }')"
   printf '### Verification Evidence\n\n'
-  local p=0 f=0 s=0 e=0
+  local p=0 f=0 s=0 u=0 e=0
   local iss
   while IFS= read -r iss; do
     [ -z "$iss" ] && continue
@@ -3065,6 +3523,10 @@ emit_md() {
   p="$(printf '%s\n' "$records" | awk -F'\t' '$6=="PASS"{c++} END{print c+0}')"
   f="$(printf '%s\n' "$records" | awk -F'\t' '$6=="FAIL"{c++} END{print c+0}')"
   s="$(printf '%s\n' "$records" | awk -F'\t' '$6=="SKIP"{c++} END{print c+0}')"
+  # UNRUNNABLE has its OWN counter: without it such a row enters no counter, and the
+  # roll-up under-counts the records it was computed over, silently. With it, the five
+  # counts sum to the records emitted.
+  u="$(printf '%s\n' "$records" | awk -F'\t' '$6=="UNRUNNABLE"{c++} END{print c+0}')"
   e="$(printf '%s\n' "$records" | awk -F'\t' '$6=="ERROR"{c++} END{print c+0}')"
   # THE ROLL-UP CARRIES ITS DENOMINATOR.
   #
@@ -3084,9 +3546,9 @@ emit_md() {
     deg=" — **DEGRADED:** ${STREAM_DEGRADED} (the verdict stream is partial, so the counts above cover only the records that reached dispatch; an absent row is NOT a pass)"
   fi
   if [ "${PER_ISSUE_ROWS:-0}" -eq 0 ]; then
-    printf '**Verdict roll-up:** %s PASS / %s FAIL / %s SKIP / %s ERROR — **no per-issue verification table found** (0 rows indexed; the verdict counts above are over a ZERO denominator)%s\n' "$p" "$f" "$s" "$e" "$deg"
+    printf '**Verdict roll-up:** %s PASS / %s FAIL / %s SKIP / %s UNRUNNABLE / %s ERROR — **no per-issue verification table found** (0 rows indexed; the verdict counts above are over a ZERO denominator)%s\n' "$p" "$f" "$s" "$u" "$e" "$deg"
   else
-    printf '**Verdict roll-up:** %s PASS / %s FAIL / %s SKIP / %s ERROR — over %s per-issue row(s); %s declared-deferred%s\n' "$p" "$f" "$s" "$e" "$PER_ISSUE_ROWS" "$d" "$deg"
+    printf '**Verdict roll-up:** %s PASS / %s FAIL / %s SKIP / %s UNRUNNABLE / %s ERROR — over %s per-issue row(s); %s declared-deferred%s\n' "$p" "$f" "$s" "$u" "$e" "$PER_ISSUE_ROWS" "$d" "$deg"
   fi
 }
 
@@ -3099,10 +3561,11 @@ emit_json() {
     printf "    {\"issue\":\"%s\",\"id\":\"%s\",\"family\":\"%s\",\"method\":\"%s\",\"expected\":\"%s\",\"observed\":\"%s\",\"verdict\":\"%s\"}", $1,$2,$3,$4,$5,$7,$6
   }'
   printf '\n  ],\n'
-  local p f s e
+  local p f s u e
   p="$(printf '%s\n' "$records" | awk -F'\t' '$6=="PASS"{c++} END{print c+0}')"
   f="$(printf '%s\n' "$records" | awk -F'\t' '$6=="FAIL"{c++} END{print c+0}')"
   s="$(printf '%s\n' "$records" | awk -F'\t' '$6=="SKIP"{c++} END{print c+0}')"
+  u="$(printf '%s\n' "$records" | awk -F'\t' '$6=="UNRUNNABLE"{c++} END{print c+0}')"
   e="$(printf '%s\n' "$records" | awk -F'\t' '$6=="ERROR"{c++} END{print c+0}')"
   # Same denominator contract as emit_md. `declared_deferred` is reported but
   # is NOT an invariant: it moves every time a card renders a deferred AC row
@@ -3113,14 +3576,16 @@ emit_json() {
   # before it reads a counter: `fetched` when both dispatch loops read every
   # record the parser produced, `truncated` when one fell short (see FD-0).
   if [ -n "${STREAM_DEGRADED:-}" ]; then st="truncated"; fi
-  printf '  "rollup": {"pass": %s, "fail": %s, "skip": %s, "error": %s, "per_issue_rows": %s, "declared_deferred": %s, "stream_state": "%s", "records_parsed": %s, "records_read": %s}\n}\n' \
-    "$p" "$f" "$s" "$e" "${PER_ISSUE_ROWS:-0}" "$d" "$st" "${STREAM_PARSED:-0}" "${STREAM_READ:-0}"
+  printf '  "rollup": {"pass": %s, "fail": %s, "skip": %s, "unrunnable": %s, "error": %s, "per_issue_rows": %s, "declared_deferred": %s, "stream_state": "%s", "records_parsed": %s, "records_read": %s}\n}\n' \
+    "$p" "$f" "$s" "$u" "$e" "${PER_ISSUE_ROWS:-0}" "$d" "$st" "${STREAM_PARSED:-0}" "${STREAM_READ:-0}"
 }
 
 emit_table() {
   local records; records="$(cat)"
   printf '%sVerification Evidence%s\n' "$(c_bold)" "$(c_reset)"
-  printf '%s\n' "$records" | awk -F'\t' 'NF{ printf "  %-8s %-14s %-6s %s\n", $1, $3, $6, $4 }'
+  # The verdict column is as wide as the widest verdict, UNRUNNABLE (10 characters),
+  # so every row's method starts in the same column.
+  printf '%s\n' "$records" | awk -F'\t' 'NF{ printf "  %-8s %-14s %-10s %s\n", $1, $3, $6, $4 }'
 }
 
 # ---------------------------------------------------------------------------
@@ -3156,11 +3621,13 @@ main() {
   resolve_sibling_tools
   resolve_plan
 
-  # Per-run memo file for the deploy --check result (so a plan with several
-  # sync/regression rows runs the heavy check once). Cleaned on exit.
+  # Per-run memo files for the deploy --check result (so a plan with several
+  # sync/regression rows runs the heavy check once) and for the release diff the
+  # scope family grades (resolved at most once). Both cleaned on exit.
   DEPLOY_CHECK_CACHE="$(mktemp -t verify-release-plan-deploycheck.XXXXXX)"
+  SCOPE_DIFF_CACHE="$(mktemp -t verify-release-plan-scopediff.XXXXXX)"
   # shellcheck disable=SC2064
-  trap "rm -f '$DEPLOY_CHECK_CACHE'" EXIT
+  trap "rm -f '$DEPLOY_CHECK_CACHE' '$SCOPE_DIFF_CACHE'" EXIT
 
   # Release join key for the runtime-suite event: the MILESTONE SLUG, per
   # pipeline-event-log-schema.md § 2a. This used to parse `v<maj>.<min>` out of
@@ -3302,6 +3769,15 @@ main() {
     err "no per-issue verification checks parsed from $(basename "$PLAN_ABS") — is the Verification Plan section present and table-shaped? 0 rows were indexed, so the verdict roll-up below has a ZERO denominator and its ERROR count is vacuous."
   fi
 
+  # UNRUNNABLE rows are named on stderr as well as counted in the roll-up: they are
+  # outside the exit predicate below, so a clean exit does not cover them, and the
+  # note says so where a reader of the exit status will see it.
+  local unrun_n
+  unrun_n="$(printf '%s' "$stream" | awk -F'\t' '$6=="UNRUNNABLE"{c++} END{print c+0}')"
+  if [ "$unrun_n" -gt 0 ]; then
+    note "$unrun_n check(s) were NOT executed here (UNRUNNABLE); each names the tool or the reason it could not run. This run's exit status does not cover them: their guarantee is carried by the surface each one names, or by nothing."
+  fi
+
   # 3) Emit in the requested format.
   case "$ARG_FORMAT" in
     md)    printf '%s' "$stream" | emit_md ;;
@@ -3318,6 +3794,8 @@ main() {
     exit "$EXIT_INTERNAL"
   fi
   # Otherwise exit non-zero if any FAIL or ERROR verdict is present (CI-consumable).
+  # UNRUNNABLE and SKIP are absent from this predicate on purpose (the verdict enum
+  # doctrine above): a relabel must not turn a historical plan red.
   if printf '%s' "$stream" | awk -F'\t' '$6=="FAIL"||$6=="ERROR"{found=1} END{exit !found}'; then
     exit "$EXIT_CHECK_FAILED"
   fi
