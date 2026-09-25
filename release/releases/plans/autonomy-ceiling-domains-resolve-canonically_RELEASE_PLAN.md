@@ -1,0 +1,784 @@
+---
+title: Release Plan — autonomy-ceiling-domains-resolve-canonically (the autonomy-ceiling hook classifies the working directory and the write target through one canonical resolution)
+type: release-plan
+plan_type: release
+status: ACTIVE
+release: versioned (bump-class minor; provisional display v4.68; the concrete number binds at the Stage-12 atomic claim)
+milestone: autonomy-ceiling-domains-resolve-canonically
+release_class: novel
+reversibility: MODERATE / Confidence HIGH — single branch and single merge, so `git revert -m 1` of the merge restores `main` byte-for-byte; the qualification is runtime propagation (a hook-tier refresh, an orphan-lib cleanup and a hash re-verify after a revert), recorded in § Rollback Strategy. A claimed version tag is retained and recorded rather than deleted.
+---
+# Release Plan — `autonomy-ceiling-domains-resolve-canonically`
+
+**Milestone:** `autonomy-ceiling-domains-resolve-canonically` · hub sub-task **#7545** = the Stage-4 plan of record (Parts 1–2), the Stage-4 plan-approval **Decision Recorded** comment, and both **Collective Review** decision records · **#7563** / **#7565** = the Stage-5 designs for #6199 / #6200 · **#7584** / **#7585** = their adversarial reviews · **#7634** = the composed seam spec (the single literal spec for the shared region of `core/hooks/block-autonomy-ceiling.sh`) · **#7633** = the ADR draft issue · **#7567** = the Stage-6 Engineering sub-task that authored this file (Engineering Commit 0 + #6199) · **#7569** = the Stage-6 Engineering sub-task for #6200.
+
+**Version identity:** **versioned** — bump-class **`minor`**, provisional display **`v4.68`**. Recorded as a determination (not a click-gate) at the Stage-4 gate; the concrete number binds only at the Stage-12 atomic claim per ADR-092, so the plan file and the branch stay slug-primary while in flight and the Header `**Version**` cell carries the unresolved stamp placeholder. The Commit-0 re-verify ran in full, both halves — see § Commit-0 Version Re-Verify Record.
+
+**Topology:** D-C **SINGLE** — one release branch (`release/autonomy-ceiling-domains-resolve-canonically`), one PR, one merge, base `main`. This plan lands as **Engineering Commit 0**; the PR is opened in draft once #6199's GREEN commit lands, so CI runs while #6200's slice lands on the same branch.
+
+**Concurrency posture:** **P0 fully-serial** (D-Concurrency, ratified at the Stage-4 gate): Commit 0, then #6199's RED and GREEN, then #6200's RED, GREEN and docs commits, one Engineering spoke at a time. Every non-serial posture prohibits force-push (including `--force-with-lease`) on the shared release branch; P0 is in force, so the prohibition is moot and recorded for completeness.
+
+**Release class:** `novel` — confirmed at the Stage-4 gate. Differentiation posture: engagement density **Standard** · Stage-9 review depth **Deep** · Stage-5 activation bias **ALL** · Stage-13 outcome window **30-day**.
+
+**Scope lock:** hard-locked through Stage 9 by the Collective Review round-2 decision; an override needs a Decision Briefing with an impact assessment.
+
+> **Provenance.** This file transcribes the Stage-4 Release Planning output on hub sub-task #7545 (Part 1/2 and Part 2/2) together with the Stage-4 plan-approval Decision Recorded comment (D1–D4, DEV-1..DEV-10, the AC-Binding row updates) and both Collective Review records (round 1: ADJUST; round 2: SCOPE LOCKED), reconciled to the Stage-5 designs on #7563 and #7565 and to the composed seam spec on #7634. **Where a later disposition superseded a Stage-4 value, the transcribed section carries the ratified value and § Deviation Log records the delta with its authority.** Where #7563 or #7565 differ from #7634 on the shared region of `core/hooks/block-autonomy-ceiling.sh`, #7634 governs. Authored at Engineering Commit 0 by the first Stage-6 Engineering spoke (#7567).
+
+---
+
+## Header
+
+| Field | Value |
+|-------|-------|
+| **Version** | {{RELEASE_VERSION}} |
+| **Bump Class** | `minor` — the durable determination (change type: protocol text addition or modification; precedent: a new shared hook library under a minor bump). Provisional display `v4.68`, recomputed free at Commit 0 against fresh authoritative host state; it sets the floor and binds no concrete number. |
+| **Date Created** | 2026-09-24 (Thursday) |
+| **Release Manager** | Agent-assisted (release-hub Mode O) |
+| **Status** | Executing (Stage 6 Engineering) |
+| **Branch** | `release/autonomy-ceiling-domains-resolve-canonically` |
+| **PR** | **#7642** — opened in **draft** by the first Stage-6 spoke after #6199's GREEN commit, and carrying #6200's slice on the same branch; it transitions to ready-for-review at the Stage-9 gate. |
+| **Milestone** | `autonomy-ceiling-domains-resolve-canonically` |
+
+`domain_practice: { source: N/A — pipeline-internal release, date: 2026-09-24, domain: security }`
+
+**Domain classification (A3).** Form **X** (sourcing-exempt): every File Change Matrix row is an internal `pmo-platform` artifact — hooks, hook tests, the installer, the deploy map, the rules registry and an ADR — so no external body of practice is consumed. The dominant deliverable corrects a security control's classification (Tier-0 floor inputs and a disclosure-direction rule), so the class is **`security`** and `core/standards/domain-best-practices/security.md` governs; the secondary domain is `software` (shell-library extraction and test fixtures). Transcribed unchanged from Stage-4 Phase A1.5 and carried forward unchanged by both Stage-5 designs.
+
+### Date Variable
+
+`${AUDIT_DATE_UTC}` = **`2026-09-24`**, resolved at Engineering Commit 0 via `date -u +%Y-%m-%d`. The release carries one load-bearing dated identifier: the `date:` field of #6200's new ADR (`core/ADRs/ADR-204-cross-domain-classification-is-repository-membership.md`). #6200's Engineering slice wrote this resolved value there (`date: 2026-09-24`); no other dated identifier is created.
+
+---
+
+## Commit-0 Version Re-Verify Record
+
+Run in full at Engineering Commit 0, both halves, per the Stage-6 first-spoke procedure (the hub-spoke bridge's single-branch canonical-location rule).
+
+### Version half (steps 1–3, pre-write)
+
+| Step | Action | Observed |
+|---|---|---|
+| **1** | `git fetch --tags origin` and `git fetch origin main` | exit 0; `origin/main` = `0c759aaf992726c2cba5e43400ca6daa4056fdf3`, unmoved since the Stage-4 baseline pin |
+| **2** | Recompute next-free for bump-class **`minor`** through the adapter itself: `release/tools/claim-version.sh --sha 0c759aaf992726c2cba5e43400ca6daa4056fdf3 --bump minor --dry-run` (the adapter's own `anchor()` + `claimed_set()`; no tag pushed) | **`v4.68`** — equal to the recorded provisional display |
+| **3** | PROCEED only if the tag arm reads the slot free (the tag arm binds; published Releases and the ledger corroborate and never authorize) | **tag arm free; PROCEED** |
+
+**Probe record for the step-3 zero** (per `core/disciplines/review-discipline-principles.md` § 8, elements PV-0..PV-7):
+
+```
+Probe:       git ls-remote --tags origin 'refs/tags/v4.68*' | wc -l
+             gh release list --limit 5000 --json tagName   -> tagName startswith "v4.68"
+             git show origin/main:release/releases/RELEASE_LOG.md | grep -c 'v4\.68'
+Denominator: 212 v* origin tags (dereferenced ^{} lines excluded); 210 published Releases
+             (read at --limit 5000); the RELEASE_LOG at origin/main
+Control - sensitivity: the SAME readers on the neighbouring v4.67 slot — origin tags
+             'refs/tags/v4.67*' -> 4 lines; published releases starting "v4.67" ->
+             ["v4.67.1","v4.67"]; RELEASE_LOG 'v4\.67' -> 16 lines. All three arms
+             non-zero, so all three readers resolve and a zero on v4.68 is a real negative
+Control - specificity: NOT TRIGGERED — a slot-occupancy question over an exact tuple has no
+             near-miss class; v4.67 is a different tuple, not a near-miss of v4.68
+Extraction:  full ls-remote output; full 210-row release list; full RELEASE_LOG match set
+Result:      0 occupants of the (4,68) slot on every arm
+Verdict:     CLEAN — v4.68 is free on the binding tag arm; no HALT
+```
+
+**In-flight sibling observed at Commit 0 (not a HALT).** Open PR #7638 (`release/egress-hook-batch`, draft, created 2026-09-24T17:36:25Z) carries the same provisional display `v4.68` at bump-class `minor`. This is the Tier-S version-slot edge the milestone's Parallelization Map names; it is resolved by the Stage-12 atomic claim (merge order = tag order), and the Stage-9 A6.6 roster re-measure is where its contention verdict is rendered. The Stage-4 roster (below) measured n=0 because the sibling's PR did not yet exist.
+
+### Manifest half (step 3b, post-write / pre-commit)
+
+`release/tools/claim-version.sh --verify-stamp autonomy-ceiling-domains-resolve-canonically` — run after this file was written and before it was committed. Required exit **0**. Result recorded in § Verification Evidence.
+
+This plan carries **exactly one** double-brace `RELEASE_VERSION` placeholder — the Header `**Version**` cell — and every other mention names the placeholder rather than reproducing it. The claim tool resolves the token by global substitution across the whole file, so a literal prose citation would be rewritten at Stage 12 along with the record site.
+
+### Commit-0 Survival Set
+
+Every element the Stage-4 gate determined that a named downstream consumer reads **from this file**. A transcription that drops one is a spec violation, not an oversight.
+
+| # | Survival element | Carried at |
+|---|---|---|
+| 1 | `domain_practice` label (`source` · `date` · in-label `domain`; Form X, no Mode-B rationale required) | § Header |
+| 2 | File Change Matrix (machine-readable, fence-delimited) | § File Change Matrix |
+| 3 | Cross-Issue Acceptance Criteria (`CIAC-1`..`CIAC-4`, CIAC-4's control arm corrected per DEV-10) | § Cross-Issue Acceptance Criteria |
+| 4 | Verification Plan (the Stage-4 rows as refined by both Stage-5 designs, the Stage-4 gate's AC-Binding updates, and the composed seam spec's replacement rows) | § Verification Plan |
+| 5 | Release-version stamp manifest (the double-brace `RELEASE_VERSION` placeholder, named rather than reproduced) | § Header `**Version**` cell |
+| 6 | Stage Applicability Matrix | § Stage Applicability Matrix |
+| 7 | Release Class declaration | § Release Class Declaration |
+| 8 | Implementation Sequence | § Implementation Sequence |
+| 9 | Baseline pin (`origin/main` SHA) | § Baseline Pin |
+
+---
+
+## Scope
+
+### Issues Included
+
+| # | Issue | Title | Priority | Category | Labels |
+|---|-------|-------|----------|----------|--------|
+| 1 | #6199 | The governance-file control normalizes its target but reads the working directory raw, and no fixture arms that axis | P2 | Security / control correctness | `improvement`, `cluster: security`, `project:platform-quality`, `size:S` |
+| 2 | #6200 | Two sibling rules test repository membership on different axes, and the weaker one carries the security demotion | P2 | Security / architectural consistency | `improvement`, `cluster: security`, `project:platform-quality`, `size:M` |
+
+**Composition lock:** locked at Stage-4 Planning entry, 2026-09-24. The acceptance criteria of both cards were amended on 2026-09-24 under the Stage-4 gate (D4-a) and the Collective Review round-1 decision (CR-Q3); checkbox counts are unchanged (4 and 8), so the AC ordinals and § Verification Plan's AC baseline stay valid.
+
+### Release Outcome Statement (D3-amended)
+
+> **AFTER:** `block-autonomy-ceiling` classifies the working directory and the write target through one canonical resolution — the same `resolve_path`, and one shared membership helper under `core/hooks/lib/` that `block-draft-files` also calls — so a relocated (inside the governed workspace root) or symlink-spelled worktree of the platform repo gets the same verdict as its canonical spelling, in both hooks; outside the governed workspace root, `block-draft-files` stays inert at its workspace-scope gate by design.
+>
+> **BEFORE:** the cwd is read raw (`:333`) while the target is resolved, and `cwd_domain`/`target_domain` (`:772-781`) answer platform membership with their own path-identity compare instead of the existing gitdir walk (`:519-566`), so an out-of-location working copy is classified no-domain and the rule fires or stands down wrongly. Separately, `block-draft-files` answers the same membership question with its own `git rev-parse --git-common-dir` predicate (`:135-160`), anchored differently.
+>
+> **Actor(s):** any session writing under a platform worktree. **Success Indicator:** fixture arms for canonical, symlinked, and relocated worktree spellings return identical verdicts, including a projects-rooted write into a relocated platform worktree, which blocks at the Tier-0 floor (`-002`); a mutation that re-introduces the raw compare turns the suite red.
+
+Line anchors in the statement are as of the baseline `0c759aaf`; #6199's commits shift them before #6200's, so every later edit anchors by content.
+
+### Exclusions
+
+N/A — enumerated over {deferred cards, split cards, cards moved to another milestone}; none present in this release. Two coordination-only neighbours are named and deliberately not moved: #7184 (milestone `detectors-match-the-property-not-the-spelling`, edits the same hook near the mcp write-verb test) and #7497 (milestone `install-resolves-identically`, owns the `BLOCK-DESTRUCTIVE-019` path-prefix residual in `block-destructive.sh`).
+
+---
+
+## Dependency Graph
+
+### Topologically Sorted Sequence
+
+| Position | Issue | Priority | Status | Dependencies (in-release) | Edge Type |
+|---|---|---|---|---|---|
+| 1 | #6199 | P2 | bundled | (none — root) | — |
+| 2 | #6200 | P2 | bundled | #6199 | DEPENDS_ON |
+
+- **Direction:** #6200 depends on #6199 — #6200's working-directory membership classification consumes the resolved working directory #6199 introduces (IP-1). The native mirror `#6200 blocked-by #6199` was applied at the Stage-4 gate (D4-b).
+- **Cycles:** zero (2 nodes, 1 edge). **Cross-milestone G3-07: PASS** — 1 in-release edge checked, 0 cross-milestone violations. #7184 and #7497 are coordination edges that build-block this release in neither direction.
+- **Tie-breaker trace:** none needed; the graph is a single chain.
+
+### Artifact Relationship Graph
+
+| Source | Type | Target | Direction | Derived from |
+|---|---|---|---|---|
+| #6200 | DEPENDS_ON | #6199 | #6200 → #6199 | body-declared internal sequence; native `blocked-by` mirror |
+| #6200 | GENERATES | `core/hooks/lib/platform-membership.sh` | #6200 → file | File Change Matrix (add) |
+| #6200 | GENERATES | `core/ADRs/ADR-204-cross-domain-classification-is-repository-membership.md` | #6200 → file | File Change Matrix (add; supersedes ADR-149 in part) |
+
+---
+
+## Implementation Sequence
+
+Everything lands on `release/autonomy-ceiling-domains-resolve-canonically` as serial commits (P0). Each slice is built **assertion-first**: author the arms, observe them fail against the unmodified code (RED), then land the fix (GREEN). Commit order per the composed seam spec's commit sequence:
+
+| Commit | Content | Card |
+|---|---|---|
+| **Commit 0** | This plan file, carrying DEV-1..DEV-10 (Stage 4), DEV-11..DEV-15 (#6200 design), DEV-16..DEV-26 (seam spec), one row per remaining Collective Review adjustment, the three AC-Binding updates from the Stage-4 gate, and the seam spec's replacement Verification rows; the Commit-0 re-verify ran both halves | — |
+| **#6199 RED** | Suite D in `core/hooks/tests/block-autonomy-ceiling.test.sh` per #6199's design (Change 2) with the seam spec's test deltas. Observe the 22-arm RED/PASS vector below | #6199 |
+| **#6199 GREEN** | #6199's design Change 1 (the hook) with the seam spec's slice-A region as its working-directory block and `-002` condition, plus the seam spec's forced text edits; Changes 3 and 4 (the registry fragment and the hand-mirrored generated index) with the merged `-002` row (step 1) and the re-scoped parity paragraph. **#6199 AC-4 is graded here.** | #6199 |
+| **#6200 RED** | #6200's design Changes 4a/4c/4d with the seam spec's Suite X deltas; Change 5 with the draft-files deltas (FM-2 pin, FM-5 comments, the strengthened AC-8 arm and its stub-helper twin). **Change 4b (the W-7 re-target) is not in this commit.** Observe the 34-arm vector below | #6200 |
+| **#6200 GREEN** | #6200's design Changes 1, 2a (with the seam spec's mapping comment), 2b, 2d, 2g, 3, **4b**, 6, 7, 8, plus the seam spec's slice-B deltas to the shared region | #6200 |
+| **#6200 docs** | Change 9a, the merged `-002` row (step 2), the scoped `-004` row, the split membership-contract paragraph, Change 10, Change 11 (the new ADR, with ADR edits E-1..E-5), Change 12 (the ADR-149 pointer), Change 13 (the `autonomy-tiers.md` sentences, with item 7a scoped) | #6200 |
+
+**Afterwards** (verification only, no commits): Stage 7 Dev Testing per card, Stage 8 QA per card, then Stage 9 Plan Review (Deep).
+
+### Slice 1 — #6199: canonicalize the working-directory input (complexity Medium; dependencies: none)
+
+- **RED.** A new Suite D (the working-**D**irectory axis) of **22 arms** covering every shape in the amended AC-2 set, plus three mutation differentials: D-9 (the cwd resolution deleted), D-9b (the same mutant against the 12 target-axis arms) and D-10 (the `$PWD` fallback deleted). Expected vector against the unmodified hook:
+  - **RED (15):** D-1, D-2, D-3, D-4, D-5, D-5b, D-5d, D-5e, D-5f, D-6, D-7b, D-9, D-9b, D-10, D-11b.
+  - **PASS (7):** D-1b, D-4b, D-5c, D-6b, D-7, D-8, D-11. D-1b, D-5c and D-11 pass on the unmodified hook because its raw prefix already blocks them; they are the never-narrow guards (a resolved-only reading would turn each to ALLOW).
+- **GREEN.** In `core/hooks/block-autonomy-ceiling.sh`: a thin in-file wrapper `resolve_cwd_path` over the target's own `resolve_path` (the `$PWD` fallback first; empty or non-absolute ⇒ unresolvable); lazy resolution only inside the Write|Edit branch and only for a target in a domain (`ABS_CWD`, declared unconditionally); `cwd_domain` gains the named third value `unresolvable`; `-002` reads the working directory's operations side by location twice (payload spelling, or resolved path against the operations root resolved when it is a symlink) and fails closed on `unresolvable` alone; the block log keeps the raw payload `cwd` and adds `cwd_resolved` on `-002`/`-004` rows only; the scope gate keeps the raw payload value. Registry fragment and generated index: the merged `-002` row (step 1), the re-scoped parity paragraph, and the caveat sentence; Check 38 must read FRESH.
+- **Expected totals at #6199's GREEN:** autonomy suite 88 → **110** (all PASS); every other suite identical to baseline; harness aggregate **1603** PASS / 0 FAIL across 24 suites.
+
+### Slice 2 — #6200: route classification through one membership helper (complexity High; depends on Slice 1)
+
+- **RED.** Suite X (relocated-worktree arms: the disclosure direction `-002`, the demoted direction `-004`, a cwd that is exactly a worktree root, foreign-worktree twins, the helper-absent arms X-16a..X-16e, the CIAC-1 pair X-17/X-18, the prefix-restoring mutant X-15 and the cwd-resolution mutant X-19) and Suite M (helper unit arms) in the autonomy suite; the three new draft-files arms. Expected vector against the hooks at #6199's GREEN:
+  - **Autonomy RED (22):** X-1, X-3, X-5, X-7, X-9, X-10, X-11, X-12, X-13, X-14, X-16a, X-16c, X-17, X-18, X-19, M-0, M-1, M-2, M-3, M-4, M-5, M-6.
+  - **Autonomy PASS (9):** X-2, X-4, X-6, X-6 control, X-8, X-15, X-16b, X-16d, X-16e.
+  - **Draft-files RED (2):** the AC-8 twin; the AC-8 helper-level arm. **Draft-files PASS (1):** the AC-8 hook-level arm (its discrimination comes from the twin).
+  - Every existing arm PASSES at RED (the W-7 differential still targets the hook, because Change 4b moved to GREEN).
+- **GREEN.** New `core/hooks/lib/platform-membership.sh` (`platform_membership_anchor`, `platform_membership_of`; tri-state 0 member · 1 not a member · 2 undeterminable; directory-entry form; physical start; builtins only; no fail branch; `WORKTREE_WALK_MAX=64`); both hooks source it through `${HOOK_DIR}/lib/platform-membership.sh`; membership replaces the `pmo-platform` prefix (REPLACE), evaluated before the `projects/` prefix; `block-draft-files`' `_bdf_common_dir` is retired in favour of the helper; the lib is registered in `setup-ci-layout.sh`, the installer's co-deploy block and `hook_publish_set()`.
+- **Expected totals at the PR head:** autonomy **141** (110 + 31); draft-files **35**; aggregate **1637** PASS / 0 FAIL.
+
+---
+
+## Stage Applicability Matrix
+
+Stage 5 activation, checked per card against the six activation triggers:
+
+| Issue | T1 | T2 | T3 | T4 | T5 | T6 | Verdict | Rationale |
+|---|---|---|---|---|---|---|---|---|
+| #6199 | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ | ACTIVATE | T3: the fail-closed contract and the log-record contract. T4: log raw vs resolved, and global vs lazy resolution. T5: 2 governance files, below the ≥3 threshold |
+| #6200 | ✓ | ✗ | ✓ | ✓ | ✗ | ✓ | ACTIVATE | T1: a new `core/hooks/lib/` helper with a named contract. T3: the helper name plus the one-anchor rule. T4: two anchor options and replace-vs-union. T6: the card's own lib-registration assumption (Stage 4 found two unnamed surfaces) |
+
+**Release-level verdict: ACTIVATE** for both cards; Collective Review fired (two issues with Solutioning activated) and locked scope in two rounds.
+
+| Stage | #6199 | #6200 | Note |
+|---|---|---|---|
+| 5 Solutioning | ✓ | ✓ | Ran as two parallel spokes plus one joint seam-reconciliation spoke (CR round 1) |
+| 6 Engineering | ✓ | ✓ | P0 serial: Commit 0 and #6199 (#7567), then #6200 (#7569) |
+| 7 Dev Testing | ✓ | ✓ | Functional hook change — a real, independent pass; Stage 7 measures the R4 timing delta |
+| 8 QA | ✓ | ✓ | Per-AC verdicts against § Verification Plan; INT-1..INT-4 graded per card |
+| 9 Plan Review | ✓ (release) | ✓ (release) | Deep (class `novel`); A6.5 / A6.6 re-measure against the baseline pin and the in-flight roster |
+| 10 Dry Run | platform-satisfied | platform-satisfied | The PR diff is the dry run; hook propagation is a git-native copy, matching none of Stage 10's non-compress scenarios |
+| 11 Snapshot | platform-satisfied | platform-satisfied | Git history is the snapshot |
+| 12 Execute | ✓ | ✓ | Merge, atomic claim with explicit `--stamp-slug`, hook-tier refresh, hash verify |
+| 13 Close | ✓ | ✓ | #6199 and #6200 are transitioned to closed at Stage 13 (not by an auto-close keyword on merge); 30-day outcome window |
+
+---
+
+## File Change Matrix
+
+One path per line, `<path>  <VERB>`, fence-delimited for deterministic extraction. The Stage-4 placeholder `<membership-helper>` is replaced by the Stage-5 name `platform-membership`. The three CONDITIONAL rows whose conditions resolved at Stage 5 are promoted into the unconditional set in this commit (authoring rule 5); the two dropped CONDITIONAL rows are recorded below and in DEV-14.
+
+```
+# ── Engineering Commit 0 (plan transcription) ──
+release/releases/plans/autonomy-ceiling-domains-resolve-canonically_RELEASE_PLAN.md  add
+
+# ── #6199 — canonicalize the working-directory input ──
+core/hooks/block-autonomy-ceiling.sh  edit
+core/hooks/tests/block-autonomy-ceiling.test.sh  edit
+core/rules/bypass-mode-readiness/block-autonomy-ceiling.md  edit
+# generator output of the fragment above (build-hook-registry.py), hand-mirrored with the generator's link-depth rewrite
+core/rules/bypass-mode-readiness.md  edit
+
+# ── #6200 — one membership helper ──
+core/hooks/lib/platform-membership.sh  add
+core/hooks/block-autonomy-ceiling.sh  edit
+core/hooks/block-draft-files.sh  edit
+core/hooks/tests/block-autonomy-ceiling.test.sh  edit
+core/hooks/tests/block-draft-files.test.sh  edit
+core/hooks/tests/setup-ci-layout.sh  edit
+docs/scripts/setup-workspace.sh  edit
+core/deploy/deploy.sh  edit
+core/rules/bypass-mode-readiness/block-autonomy-ceiling.md  edit
+core/rules/bypass-mode-readiness.md  edit
+
+# ── #6200 — promoted into the unconditional set at Commit 0 (their Stage-5 conditions resolved) ──
+# condition new-adr resolved: D-Mechanism-Doc-Home selected a new ADR superseding ADR-149 in part; its number was claimed by #6200's slice against the mainline anchor (203 + 1)
+core/ADRs/ADR-204-cross-domain-classification-is-repository-membership.md  add
+# condition adr-lineage-pointer resolved: a frontmatter superseded_by pointer only; status stays Accepted
+core/ADRs/ADR-149-cross-domain-bridge-writes-are-not-symmetric.md  edit
+# condition item-7a-mechanism resolved: one Enforcement sentence each for items 7 and 7a
+core/specs/autonomy-tiers.md  edit
+```
+
+#### Read-only inputs
+
+```
+core/hooks/lib/scope-guard.sh  READ
+core/hooks/lib/master-enable.sh  READ
+core/hooks/lib/dep-resolve.sh  READ
+core/hooks/tests/test-runner.sh  READ
+core/hooks/tests/scope-guard.test.sh  READ
+core/hooks/tests/subagent-hook-inheritance.test.sh  READ
+core/hooks/tests/prime-autonomy-ceiling-cache.test.sh  READ
+core/hooks/block-skill-direct-edit.sh  READ
+core/deploy/tools/build-hook-registry.py  READ
+core/ADRs/ADR-031-autonomy-ceiling-unified-payload-triggered-hook.md  READ
+release/tools/tests/test_agent_editability_read.sh  READ
+```
+
+#### Release-wide explicit non-scope
+
+```
+core/hooks/block-destructive.sh  NOT EDITED
+docs/scripts/validate-install.sh  NOT EDITED
+core/config/allowlists/script-execution-allowlist.txt  NOT EDITED
+core/rules/operations-bridge.md  NOT EDITED
+core/rules/git-workflow.md  NOT EDITED
+# dropped Stage-4 row (condition new-adr): the core ADR README is a curated thematic document, not a per-ADR index (DEV-14)
+core/ADRs/README.md  NOT EDITED
+# dropped Stage-4 row (condition hard-dependency-lib): the refresh suite's generic readability arm covers a new lib by construction (DEV-14)
+core/deploy/tests/test_refresh_hooks.sh  NOT EDITED
+```
+
+**Delivered path count.** 14 distinct unconditional paths: this plan, #6199's 4, and #6200's 13 (the 10 Stage-4 unconditional rows plus the 3 promoted rows), of which 4 are shared with #6199.
+
+**The new-executable companion obligation is evaluated and does not fire.** `core/hooks/lib/platform-membership.sh` is a library sourced only from inside hook processes, never a CLI invoked through the Bash tool; none of the existing `core/hooks/lib/` files carries a script-execution allowlist row (0 non-comment `hooks/lib` rows; control: 16 rows name `core/hooks/tests`). CI wiring: the lib is exercised by `setup-ci-layout.sh` and `test-runner.sh` in the `hook-tests` job of `.github/workflows/install-tests.yml`. The AC-8 helper-level arm sources the lib inside the test-suite process, not from a Bash-tool invocation, so no allowlist form is owed.
+
+**`core/ADRs/` adds no index obligation.** The release-module ADR index is generated only for `release/ADRs/`; `core/ADRs/README.md` has no projector. The whole-tree `adr-number-integrity` job still asserts the gap-free sequence, which is why the new ADR's number is claimed against the mainline anchor rather than a branch-local maximum.
+
+**Downstream chore-PR artifacts** (separate PRs, not the release PR): the Stage-12 `RELEASE_LOG` row, plus the Stage-13 INDEX, DIGEST and release notes.
+
+### File Contention Map
+
+| File | Issues | Intent Mix | Severity | Recommendation |
+|---|---|---|---|---|
+| `core/hooks/block-autonomy-ceiling.sh` | #6199, #6200 | edit×2 | BINARY | Serial. #6200 applies only the seam spec's slice-B deltas to the region #6199 leaves |
+| `core/hooks/tests/block-autonomy-ceiling.test.sh` | #6199, #6200 | edit×2 | BINARY | Serial. #6200's fixture seed (DEV-11) lands after #6199's Suite D |
+| `core/rules/bypass-mode-readiness/block-autonomy-ceiling.md` | #6199, #6200 | edit×2 | BINARY | Serial; the merged `-002` row lands in two steps so #6200 replaces one sentence and cannot drop #6199's |
+| `core/rules/bypass-mode-readiness.md` (generated) | #6199, #6200 | edit×2 | BINARY | Mirror in the same commit as each fragment edit; Check 38 FRESH after each |
+
+**Parse-quality:** 2 issues parsed cleanly · 0 deferred · 0 parse-failed. The other 10 distinct unconditional paths, and the 2 dropped rows, have a single owner (severity NONE).
+
+### Agent-Editability Read
+
+**Derivation** — controls read at commit `0c759aaf`:
+- Tier-0 floor: `core/hooks/block-autonomy-ceiling.sh` — every `case` block whose arms invoke `always_block "BLOCK-AUTONOMY-001"`: **2** blocks observed. Block 1 (the location stage, 11 arms): the workspace charter, the operations context anchor at `<workspace>/projects/CLAUDE.md`, the checkout's `CLAUDE.md` / `OPERATIONS.md` / `RELEASE_PROTOCOL.md` at the root and at any depth beneath it, `<workspace>/.claude/settings.json`, and everything under `<workspace>/.claude/hooks/` and `<workspace>/.claude/rules/`. Block 2 (the repository-membership stage, guarded by `is_platform_worktree`): the three basenames `CLAUDE.md`, `OPERATIONS.md`, `RELEASE_PROTOCOL.md`.
+- Sanctioned-session gate: `core/hooks/block-skill-direct-edit.sh` — `SKILL_SCOPE_RE` = `(^|/)(operations|release|core|pmo-platform)/skills/[^/]+/(SKILL\.md|references?/.+\.md)$`; arming key = `skill_discipline_migrated_v10_2: true`; exemption list resolved at `$HOME/Claude/.claude/skill-editor-exemption-list.txt` — present (1 entry).
+
+| Card | Write-set path | Tier-0 ∩ | Skill-gate ∩ | Path class | Card class | Execution path |
+|------|----------------|----------|--------------|-----------|-----------|----------------|
+| (Commit 0) | `release/releases/plans/autonomy-ceiling-domains-resolve-canonically_RELEASE_PLAN.md` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6199 | `core/hooks/block-autonomy-ceiling.sh` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6199 | `core/hooks/tests/block-autonomy-ceiling.test.sh` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6199 | `core/rules/bypass-mode-readiness/block-autonomy-ceiling.md` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6199 | `core/rules/bypass-mode-readiness.md` (generated; class of its source) | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6200 | `core/hooks/lib/platform-membership.sh` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6200 | `core/hooks/block-autonomy-ceiling.sh` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6200 | `core/hooks/block-draft-files.sh` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6200 | `core/hooks/tests/block-autonomy-ceiling.test.sh` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6200 | `core/hooks/tests/block-draft-files.test.sh` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6200 | `core/hooks/tests/setup-ci-layout.sh` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6200 | `docs/scripts/setup-workspace.sh` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6200 | `core/deploy/deploy.sh` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6200 | `core/rules/bypass-mode-readiness/block-autonomy-ceiling.md` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6200 | `core/rules/bypass-mode-readiness.md` (generated) | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6200 | `core/ADRs/ADR-204-cross-domain-classification-is-repository-membership.md` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6200 | `core/ADRs/ADR-149-cross-domain-bridge-writes-are-not-symmetric.md` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6200 | `core/specs/autonomy-tiers.md` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+
+**The all-`unconstrained` result is a discriminating negative.** The derived Tier-0 set is non-empty (3 tracked governance files, plus the membership-stage basenames) and the skill scope regex matches real skill paths, yet no write-set path intersects either set. **Caveat:** #6200 edits the *mechanism* the `-001` floor consults (the relocated walk). That does not floor the write — the in-repo hook source is not a governance path — but it raises the risk class (R3, CIAC-3). Editing ADR-149 and `autonomy-tiers.md` is not mechanically gated but remains governed; this milestone's issues and plan satisfy "No ungoverned changes". The editability parser (`release/tools/tests/test_agent_editability_read.sh`, parser constraint C-5) must keep reading exactly 2 `-001` blocks: no change in this release adds a `case "$ABS_TARGET"` block that invokes `-001`.
+
+---
+
+## Integration Points
+
+- **IP-1: #6199 → #6200, the resolved working directory** (restated by the seam spec; #6199's IP-1 obligation 4 is struck, DEV-20). `ABS_CWD` holds an absolute path naming a directory, with every existing component physical, or is empty meaning unresolvable; it is produced by `resolve_cwd_path "$CWD"` inside the Write|Edit branch, only when `target_domain` is non-empty, and declared unconditionally. **`unresolvable` means exactly one thing:** `ABS_CWD` is empty (the payload `cwd` and `$PWD` both empty, or no absolute resolution). An undeterminable **membership** answer for a resolved working directory — including a helper that is unavailable — maps to `cwd_domain=projects` when `ABS_CWD` is under the operations root, otherwise to `""`; it never maps to `unresolvable` or `pmo-platform`. #6200's working-directory membership consumes `ABS_CWD` and nothing else.
+- **IP-2: the helper and its two callers.** `block-autonomy-ceiling.sh` calls it for `-001` stage 2 (Tier-0), for `target_domain` (read by `-002` and `-004`), and for the working directory's `-004` side; `block-draft-files.sh` calls it at its layer-4 identity gate (warn-posture workflow). The callers fail in opposite directions, so the helper owns no fail branch (AC-6).
+- **IP-3: the helper and the deploy surfaces.** The installer co-deploy block (guarded by the Section-22a2 hook-library closure post-condition, which exits 74 when a referenced lib was not co-deployed); `hook_publish_set()` (checked by Check 79 ARMA/ARMB); `setup-ci-layout.sh` (the CI sandbox); `validate-install.sh` A3c derives the requirement from the `${HOOK_DIR}/lib/<name>` form (no edit).
+- **IP-4: the registry chain.** The per-hook fragment feeds the generated index through `build-hook-registry.py` (Check 38). The index is **not** a rules-mirror pair member — corrected from the Stage-4 text, DEV-29 — so no Check-9 obligation attaches; the CI layout materializes a copy inside its sandbox only.
+- **IP-5: `lib/scope-guard.sh`.** Unchanged; its input contract is preserved — `scope_guard_gate` keeps receiving the raw payload `cwd` (CIAC-4). The Stage-5 anchor decision (C3) does not consume `PMO_SCOPE_GUARD_ROOT`.
+- **IP-6: the mechanism-premise surfaces.** ADR-149 (a `superseded_by:` pointer only), the new ADR, `core/specs/autonomy-tiers.md` items 7 and 7a, and the registry fragment's membership paragraph (D-Mechanism-Doc-Home = M4).
+- **IP-7: the test-harness environment.** `test-runner.sh` exports `PMO_SCOPE_GUARD_ROOT="/"` and a master-ON config root. The autonomy suite anchors on `CLAUDE_WORKSPACE_ROOT`; under the C3 anchor the draft-files identity arms pin `CLAUDE_WORKSPACE_ROOT` too (DEV-13, DEV-24).
+- **IP-8: concurrent work.** #7184 edits the same hook near the mcp write-verb test; this release moves that line twice, so #7184 anchors by content. #7497 owns the `BLOCK-DESTRUCTIVE-019` prefix residual; the new helper is the seam it can adopt later without moving into this scope.
+
+### Integration Acceptance Criteria — the #6199 → #6200 edge (the seam spec's INT-1..INT-4, replacing #6200's design text)
+
+- [ ] **INT-1 (vs #6199), on `core/hooks/block-autonomy-ceiling.sh` — the working-directory input, its placement and its encoding.** The only working-directory argument passed to `pm_member` is `ABS_CWD`, and that call sits inside `if [ -n "$target_domain" ]; then`, in the branch where `ABS_CWD` is non-empty, after the `ABS_CWD="$(resolve_cwd_path …)"` assignment; `pm_load` and the target's membership call sit directly after `-001` stage 1's `esac`, and no working-directory membership call precedes the gate; the raw payload `$CWD` is never passed to the helper and is read by exactly two consumers after the payload parse (`-002`'s spelling reading and `scope_guard_gate "$CWD"`); an empty `ABS_CWD` yields `cwd_domain="unresolvable"` and makes no membership call. *Gradable:* `grep -c -E 'pm_member "\$' core/hooks/block-autonomy-ceiling.sh` → 2; `grep -c -F 'case "$CWD" in'` → 1; `grep -c -F 'scope_guard_gate "$CWD"'` → 1. *Grades at Stage 8 Phase B.*
+- [ ] **INT-2 (vs #6199), on `core/hooks/tests/block-autonomy-ceiling.test.sh` — mutation discrimination survives the composition.** At the PR head the D-9 differential PASSES over the must-diverge set (D-1, D-2, D-3, D-4, D-4b, D-5, D-5b, D-5f) and the D-9b differential PASSES; neither lists D-1b, D-5c or D-5d; X-19 PASSES (against #6199's cwd-resolution mutant, X-18 exits 0 and X-17 exits 2 with `BLOCK-AUTONOMY-004`); X-15 PASSES. Together these discharge CIAC-1's "removing either the cwd resolution or the helper call turns at least one arm of the pair red". *Grades at Stage 8 Phase B.*
+- [ ] **INT-3 (vs #6199), on the `-002` predicate and the working-directory state.** The composed `-002` fires when `target_domain = pmo-platform` AND (`cwd_under_projects = 1` OR `cwd_domain = unresolvable`); `cwd_under_projects` is the two location readings and is never set from a membership answer; #6200 changes only how `target_domain` is assigned, how `cwd_domain`'s `pmo-platform` value is assigned (membership on `ABS_CWD`), and the `-002` reason for an undeterminable target; #6199's fail-closed arm and its reason text are byte-identical to #6199's GREEN; an undeterminable working-directory membership answer never produces `unresolvable`. *Evidence:* D-6, D-1b, D-5c, D-11, D-11b, X-1 and X-5 exit 2 with `BLOCK-AUTONOMY-002` (X-5 carrying `UNDETERMINABLE`); X-16e exits 0; `git diff` from #6199's GREEN to the PR head shows no changed line inside the fail-closed `always_block` call. *Grades at Stage 8 Phase B.*
+- [ ] **INT-4 (vs #6199), on the registry fragment and the generated index.** #6199's parity paragraph (both inputs resolved by the hook's resolver; the working directory's `projects/` comparison uses the operations root resolved the same way) and #6200's membership paragraph (the target by membership; the working directory by membership for `-004` only and by the two location readings for `-002`) are mutually consistent and neither restates the other's mechanism. The `-002` row carries #6199's fail-closed sentence verbatim (`grep -c -F 'the rule **fails closed** on it'` → 1 in each file) and 0 occurrences of `domain roots`; the committed index mirrors both, and Check 38 is FRESH after #6200's docs commit. *Grades at Stage 8 Phase B.*
+
+---
+
+## Composed Seam Spec — the shared region of `core/hooks/block-autonomy-ceiling.sh`
+
+The composed seam spec on #7634 (Part 3) is **the single literal Stage-6 spec** for the region from the line after `-001` stage 1's `esac` through the line before the `;;` that closes the Write|Edit branch (CR round 2, CR2-Lock). Its literal code lands in the hook itself; this section carries its normative structure so every later stage can read it from the branch. It supersedes, for the shared region only, #6199's design H-f/H-g and #6200's design Changes 2c/2e/2f.
+
+**Placement at the PR head:** (1) `-001` stage 1 (location arms) · (2) `pm_load` → `PM_TARGET_RC` · (3) `-001` stage 2 (membership, including the `LIB-MISSING` reason) · (4) `target_domain` (membership first; undeterminable outside `projects/` → `pmo-platform`) · (5) the `[ -n "$target_domain" ]` gate: `ABS_CWD` → empty ⇒ `unresolvable`; otherwise the resolved reading → the working directory's membership → `cwd_domain` → the spelling reading · (6) `-002` (reason split by `PM_TARGET_RC`), then #6199's fail-closed arm · (7) `;;`, the master gate, the scope gate (`scope_guard_gate "$CWD"`, raw), `-004`.
+
+| Variable | Values | Assigned | Read by |
+|---|---|---|---|
+| `PM_TARGET_RC` | `0` member · `1` not a member · `2` undeterminable or helper unavailable | once, after stage 1 (#6200) | `-001` stage 2, `target_domain`, the `-002` reason split |
+| `target_domain` | `""` · `pmo-platform` · `projects` | after stage 2 | the gate, `-002`, the fail-closed arm, `-004` |
+| `ABS_CWD` | absolute path · `""` = unresolvable | inside the gate (#6199) | membership, the resolved reading, `log_block` (`cwd_resolved`) |
+| `PM_CWD_RC` | `0` · `1` · `2` (default `1`) | inside the gate, non-empty `ABS_CWD` (#6200) | `cwd_domain` |
+| `cwd_domain` | `""` · `pmo-platform` · `projects` · `unresolvable` | inside the gate | the fail-closed arm (`unresolvable`), `-004` (`pmo-platform`) |
+| `cwd_under_projects` | `0` · `1` | inside the gate, non-empty `ABS_CWD` | `-002` only |
+| `projects_root` | `${PRIMARY_ROOT}/projects`, resolved only when it is a symlink | inside the gate | the resolved reading |
+
+| Rule | Fires when | Mode / master / scope |
+|---|---|---|
+| `-001` stage 2 | basename ∈ {`CLAUDE.md`, `OPERATIONS.md`, `RELEASE_PROTOCOL.md`} ∧ (helper unavailable → `LIB-MISSING` reason, **or** `PM_TARGET_RC=0` → shipped reason) | always-block, above master |
+| `-002` | `target_domain=pmo-platform` ∧ `cwd_under_projects=1`; reason: shipped if `PM_TARGET_RC=0`, `LIB-MISSING:` if the helper is unavailable, `UNDETERMINABLE:` otherwise | always-block, above master |
+| `-002` fail-closed | `target_domain=pmo-platform` ∧ `cwd_domain=unresolvable` (#6199's arm, text unchanged) | always-block, above master |
+| `-004` | `cwd_domain=pmo-platform` ∧ `target_domain=projects` | mode-gated, below master and scope |
+
+**Slice split.** *#6199's GREEN (slice A)* writes no `pm_load` / `PM_TARGET_RC` stanza and leaves stage 2 as shipped; the `-002` comment carries the composed text with a location-worded TARGET bullet; `target_domain` keeps the shipped prefix `case`; the working-directory block is the composed block without `PM_CWD_RC=1` and with a `pmo-platform` prefix `case` on `ABS_CWD` in place of the two membership lines (its header reads "resolved under `${PRIMARY_ROOT}/pmo-platform`, read by -004"); the `-002` block wraps only the shipped `always_block` in `if [ "$cwd_under_projects" = 1 ] && [ "$target_domain" = "pmo-platform" ]`, followed by #6199's fail-closed arm verbatim. *#6200's GREEN (slice B)* applies exactly these deltas and nothing else: insert the `pm_load` / `PM_TARGET_RC` stanza after stage 1's `esac`; replace the stage-2 `case` per #6200's Change 2d; replace the TARGET bullet; replace the target `case` with the membership-first `target_domain` block; add `PM_CWD_RC=1` and replace the 3-line prefix `case` with the two membership lines (header reversed); wrap the shipped `always_block` in `if [ "$PM_TARGET_RC" = 0 ]` and append the `LIB-MISSING:` and `UNDETERMINABLE:` calls. `CWD_RESOLVED` appears nowhere; IP-1's name is `ABS_CWD`.
+
+**Invariants Stage 6 preserves in the region:** the three `always_block` exits are ordered as specified, since each call exits; no `case "$ABS_TARGET"` block in the region invokes `-001` (C-5); the region contains neither `# D9:` nor `# D10:` (#6199's markers); it contains none of #6200's forbidden membership tokens; at the PR head `pm_member "$` appears on exactly two lines (INT-1).
+
+**The D-9 must-diverge set, re-derived:** D-1, D-2, D-3, D-4, D-4b, D-5, D-5b, D-5f. D-1b and D-5c leave the set (the spelling reading blocks them in both hooks, so their rows passed vacuously); D-5d leaves it (the membership walk recovers a root alias without resolution); D-5f joins it (a subdirectory alias writing `projects/` keeps the `-004` axis mutation-armed). The set passes at #6199's GREEN and at #6200's GREEN alike.
+
+**Corrected alias rule** (replaces #6200's design F2(b) and #7585's restatement of it): a cwd-axis mutation arm discriminates #6199's resolution only when its verdict, or the logged `cwd_resolved`, changes when the raw spelling replaces the resolved one. For a `-002` arm (platform target) the working directory must resolve under `projects/` while **not** being spelled under `${PRIMARY_ROOT}/projects` — a traversal landing in `projects/`, a relative spelling, a workspace alias, or an in-tree alias landing in `projects/`; a spelling already under `projects/` never discriminates on the verdict and can discriminate only on the logged value (D-2, D-3). For a `-004` arm (`projects/` target) no lexical prefix of the raw spelling may kernel-resolve to a platform tree root — a subdirectory alias reached through a symlink (D-5f, X-18); a root alias, a traversal landing on or inside a tree, and an `alias/..` spelling are all recovered by the walk and cannot discriminate.
+
+**The merged `-002` registry row.** *Step 1 (#6199's docs, in this release's #6199 GREEN commit)* replaces the fragment's `-002` row (and the index's byte-identical mirror) in full with the text now committed there: the pair of the target's domain and the working directory's side; the working directory on the `projects/` side when either reading places it under `<workspace>/projects/` (payload spelling, or resolved path against the operations root resolved the same way), even when it resolves into the platform, neither reading ever used to allow; and an unresolvable working directory on which "the rule **fails closed** on it, and no other rule does". *Step 2 (#6200's docs)* replaces only the sentence "The target is `pmo-platform` or `projects` by where its resolved path sits." with the repository-membership sentence naming `lib/platform-membership.sh`. `grep -c -F 'domain roots'` on the fragment reads 0 from step 1 onward (CIAC-2; 1 at `0c759aaf`).
+
+**Forced sibling text edits.** *#6199:* the hook's parity-note addition reads that the working directory's `projects/` comparison uses the operations root resolved the same way when that root is a symlink; the fragment's parity paragraph opens by naming both inputs (the write target, and the working directory) compared against a prefix built on `${PRIMARY_ROOT}`, adds that the `projects` segment is resolved when it is a symbolic link, and closes by stating that for `-002` the working directory is also read as spelled and that reading can only add a block, never remove one. *#6200:* the `-004` row is scoped to "every working tree of this checkout's repository"; the membership-contract table's working-directory column becomes "cwd, for `-004`", followed by three sentences stating that the `-002` side is not a helper answer, that an empty resolved working directory is the separate `unresolvable` state, and that while the helper is missing a session rooted under `projects/` cannot write outside `projects/`; `autonomy-tiers.md` item 7a is scoped to working trees of this checkout's repository, with a separate clone named as not covered; ADR edits E-1..E-5 (Decision 2 rewritten for membership-first targets and location-read `-002` working directories; Decision 3's working-directory column relabelled for `-004` with the `unresolvable` paragraph; Decision 5's `-002` block naming the missing helper; two Consequences bullets and two Accepted residuals, one of them the separate-clone residual; the Verification list extended with the projects-spelled-but-platform-resolving and the symlinked-`projects/` arms).
+
+---
+
+## Risk Register
+
+| # | Risk | Likelihood | Impact | Mitigation (named by the gate that catches it) · Stage-5 disposition | Owner |
+|---|---|---|---|---|---|
+| R1 | Replacing the prefix with the walk flips 10 existing assertions that use a `.git`-less `${TEST_WS}/pmo-platform` | High (under REPLACE) | High | **Mitigated:** `${TEST_WS}/pmo-platform/.git` seeded at suite setup; the 10 arms are re-fixtured by setup only and listed by name in DEV-11. CIAC-3's arm-name diff catches silent removals | Stage 6 (#6200) |
+| R2 | The anchor choice breaks the other hook's fixtures | High | High | **Mitigated by D-Anchor = C3:** the autonomy suite needs no anchor edit; the draft-files suite needs 2 environment pins (DEV-13, DEV-24); the baseline stays hermetic. CIAC-3 | Stage 6 (#6200) |
+| R3 | The `-001` Tier-0 floor's stage-2 predicate moves into a lib; a lib-absence or contract defect would silently weaken governance-file protection | Medium | High | **Mitigated:** lazy, mode-independent fail-closed for the floor question when the helper is missing, armed by X-16a/X-16c; Suite W (W-1..W-9 plus the W-7 differential, re-targeted to the lib copy) stays green. CIAC-3 | Stage 6 / 7 |
+| R4 | Hot-path cost: a `python3` fork per resolution | Medium | Medium | **Mitigated (#6199, B3):** resolution runs only inside the Write\|Edit branch and only for a target in a domain; no Bash or mcp call pays for it. Stage 7 measures a timing delta (20 Bash payloads base vs head; 20 platform-target Write payloads) | Stage 6 / 7 |
+| R5 | Registration surfaces missing from #6200's declared files | Medium | High | **Specified:** the installer co-deploy block, `hook_publish_set()` and `setup-ci-layout.sh` are unconditional FCM rows; the Section-22a2 closure post-condition (exit 74) and Check 79 ARMA/ARMB each catch an omission | Stage 6 / 7 |
+| R6 | A stale generated index (the generator is not agent-runnable directly; the index is not a verbatim copy in general) | Medium | Medium | Hand-mirror with the generator's link-depth rewrite in the same commit; the three `#6199` lines carry no link, so they mirror byte-identically. Check 38 must print `in sync with its sources`; if STALE, fall back to an operator-side regeneration handoff | Stage 6 / 7 |
+| R7 | ADR immutability | Medium | Medium | **Resolved:** a new ADR superseding ADR-149 in part, plus a reciprocal `superseded_by:` pointer only; the number is claimed at Engineering against the mainline anchor; the ADR-number-integrity job catches collisions | Stage 6 (#6200) |
+| R8 | Fail-closed over-blocks (every Write/Edit into the platform from an omitted-cwd payload) | Low | High | **Mitigated (#6199):** the `$PWD` fallback applies before a value counts as unresolvable, and fail-closed binds `-002` only; D-7 and the D-10 differential prove it. CIAC-4 keeps the scope contract | Stage 6 (#6199) |
+| R9 | Concurrent same-file edits (#7184, #6896, #4994, #7034, #5274); moving the walk shifts #7184's anchor | Low | Medium | Region-disjoint; Stage-9 A6.5/A6.6 re-measure; anchor edits by content, not line number | Hub (Stage 9) |
+| R10 | Version-slot contention on the provisional `v4.68` | Medium | Low | The atomic claim resolves order (merge order = tag order); Stage 12 passes `--stamp-slug` explicitly. **Observed live at Commit 0:** PR #7638 (egress-hook-batch) carries the same provisional display | Stage 12 |
+| R11 | #6200 AC-8 and the Outcome's "in both hooks" are unobservable for an out-of-root cwd | High | Medium | **Resolved by D-AC8-Reachability = (A):** in-root recognition plus a helper-level arm; out-of-root inertness documented (DEV-8, DEV-9) | Operator (rendered) |
+| R12 | A symlinked or `--separate-git-dir` checkout reads as not-a-member for the unresolved walk | Low | Medium | **Resolved by the resolved anchor (C3);** armed by X-8/X-9/X-10 | Stage 6 (#6200) |
+| R13 | Post-merge propagation: hooks and the new lib reach the live instance only through the installer refresh path | Low | Medium | Verify by hash against source; Check 79 parity after deploy. (The Stage-4 text also named a Check-9 rules-mirror re-lay; the registry index is not a mirror-pair member — DEV-29) | Stage 12 / 13 |
+| R14 | The SIGPIPE-idiom job flags new `"$PRINTF" … \| "$GREP" -q` pipelines under `pipefail` | Low | Low | New code uses `case` / `[[ ]]` matching and here-strings, never a pipe into a short-circuiting reader | Stage 6 |
+| R15 | Scope growth vs sizing (#6200 delivers 13 paths against 6 originally declared) | Medium | Low | #6200 stays `size:M` (operator D1); the band disposition does not change | Operator (rendered) |
+| R16-a (#6199 design) | The first-order blast-radius count of 60 has no 90th-percentile baseline | — | — | Triaged as name-reference chains; no behavioural consumer beyond those enumerated | — |
+| R17-a (#6199 design) | Suite-letter or fragment-row collision with #6200 | Low | Low | **Resolved:** #6200 uses suites X and M; the `-002` row is merged in two steps | — |
+| R18-a (#6199 design) | A deleted cwd two or more levels under a symlinked ancestor stays textual (gap G1) | Low | Low | Accepted, matching the target's treatment; routed as an observation | Hub |
+| R16-b (#6200 design) | The editability-test parser turns a CI job red | Medium | High | Parser constraint C-5 plus the `test_agent_editability_read.sh` verification row | Stage 6 / 7 |
+| R17-b (#6200 design) | The W-7 differential's target moves into the lib | High | Medium | Change 4b re-targets it to the lib copy (DEV-12), in #6200's GREEN commit | Stage 6 (#6200) |
+| R18-b (#6200 design) | Helper internals not spiked | Low | High | RED-first through Suite M, X-11..X-14 and X-16 | Stage 6 (#6200) |
+| R19-b (#6200 design) | #6199's mutation arm masked by #6200's walk | Medium | Medium | **Resolved by the seam spec:** the re-derived D-9 set and X-19 (DEV-18); INT-2 | Stage 6 / 8 |
+
+**Rollback complexity:** Medium — see § Rollback Strategy.
+
+---
+
+## Delivery Strategy
+
+| Aspect | Decision |
+|---|---|
+| **Implementation approach** | Sequential, dependency-ordered (P0): Commit 0, then #6199 (RED, GREEN), then #6200 (RED, GREEN, docs) |
+| **Commit strategy** | Commit 0 carries the plan. Each slice carries an assertion commit (RED) followed by a fix commit (GREEN). Each fragment edit carries its index mirror in the same commit. Commit messages carry the `autonomy-ceiling-domains-resolve-canonically:` prefix and name the source card |
+| **Review approach** | Single PR for the whole milestone, one merge; no per-slice merges; never merge red CI |
+| **Branch** | `release/autonomy-ceiling-domains-resolve-canonically` |
+| **Deployment mechanism** | (1) Git merge. (2) Stage-12 atomic version claim with explicit `--stamp-slug autonomy-ceiling-domains-resolve-canonically`. (3) Sync the primary to `origin/main`. (4) Hook-tier refresh through `update.sh`, which delegates to the installer refresh path. (5) Verify by hash |
+| **Stacked-base cleanup posture** | N/A — enumerated over {Option A base-shift, Option B defer to D0}; a single branch has no stacked bases |
+| **PR body** | Parser-clean: close-family keywords adjacent to an issue number appear only in the Issue References block, which carries `References` lines — the cards are transitioned to closed at Stage 13, not on merge |
+
+### Operational Deployment Manifest
+
+| # | Source (Layer 1) | Target (runtime) | Mechanism | Verification |
+|---|---|---|---|---|
+| 1 | `core/hooks/block-autonomy-ceiling.sh` | `$HOME/Claude/.claude/hooks/block-autonomy-ceiling.sh` | installer refresh (via `update.sh`) | `shasum -a 256` source == target |
+| 2 | `core/hooks/block-draft-files.sh` | `$HOME/Claude/.claude/hooks/block-draft-files.sh` | installer refresh | hash equal |
+| 3 | `core/hooks/lib/platform-membership.sh` | `$HOME/Claude/.claude/hooks/lib/platform-membership.sh` | installer co-deploy block | hash equal, plus Check 79 PASS |
+| 4 | `core/rules/bypass-mode-readiness.md` + its fragment | **repository-only** — not a mirror-pair member, so no deployed copy (DEV-29) | none required | Check 38 FRESH on the merged tree |
+
+**`deliverable_state`:** the hook deliverables reach `deployed-copy-synced` at Stage 12 (rows 1–3); the registry fragment and index are repository-only (row 4), the "declares no propagation target" limb of the same state.
+
+**Schema migrations:** N/A — enumerated over {tracker schemas, frontmatter schemas, `operator.toml` / `platform-config` keys, state-file schema}; none present in this release. The block log gains an additive `cwd_resolved` key on `-002`/`-004` rows; readers ignore an unknown key, and `cwd` keeps its payload meaning.
+
+---
+
+## Verification Plan
+
+"CI sandbox" below means: `bash core/hooks/tests/setup-ci-layout.sh --sandbox <dir>` from the worktree root, then run the named suite from `<dir>` as `bash .claude/hooks/tests/<suite>.test.sh`, or the whole harness as `bash .claude/hooks/tests/test-runner.sh`.
+
+### Per-Issue Verification
+
+| Issue | AC | Verification Method | Expected Result |
+|---|---|---|---|
+| #6199 | AC-1 | (i) `grep -n -E 'resolve_cwd_path\|resolve_path "\$raw"' core/hooks/block-autonomy-ceiling.sh`; (ii) `grep -c -F 'scope_guard_gate "$CWD"' core/hooks/block-autonomy-ceiling.sh`; (iii) CI sandbox → `block-autonomy-ceiling.test.sh` arms D-6, D-6b, D-7, D-7b, D-10, D-1b, D-5c, D-11, D-11b; (iv) `grep -c -F 'case "$CWD" in' core/hooks/block-autonomy-ceiling.sh` | (i) ignoring comment lines: the `resolve_cwd_path` definition, the `# D9:` line inside it, and exactly 1 call site, which sits within `if [ -n "$target_domain" ]`. (ii) 1 · control: the same grep at `0c759aaf` → 1 (the scope gate keeps the raw payload value). (iii) all 9 PASS — D-6 (unresolvable, platform target) exits 2 with the `-002` fail-closed reason; D-7 (omitted cwd resolving through the `$PWD` fallback) does not block; a raw spelling under `projects/` only ever adds a block. (iv) 1, inside the target-domain gate — the spelling reading is the only raw read that classifies · control at `0c759aaf` → 1 (the retired raw-cwd `case`) |
+| #6199 | AC-2 | CI sandbox → `block-autonomy-ceiling.test.sh`, Suite D | Shapes map to arms, all PASS: traversal D-1/D-1b · trailing `/` D-2 · trailing `/.` D-3 · relative D-4/D-4b · symlinked alias D-5/D-5b/D-5c/D-5d/D-5e/D-5f/D-11/D-11b · unresolvable D-6/D-6b. Baseline: 0 of 51 Write/Edit payloads used a cwd-axis shape |
+| #6199 | AC-3 | CI sandbox → `block-autonomy-ceiling.test.sh` arms D-9 and D-9b (a sandbox `sed` deletes the one `# D9: cwd resolution` line, guarded by lines-removed = 1) | D-9: 1 line removed; the 8 must-diverge rows (D-1, D-2, D-3, D-4, D-4b, D-5, D-5b, D-5f) diverge in verdict or in the logged `cwd_resolved`. D-9b: 12 of 12 target-axis arms (A-1..A-7, N-0..N-4) unchanged against the mutant · control: the same arms against the shipped hook → all PASS |
+| #6199 | AC-4 | CI sandbox → `test-runner.sh` **at #6199's GREEN commit** (its slice head on the release branch), per-suite summary lines compared against the `0c759aaf` baseline; sorted `^PASS: ` arm-name diff of the autonomy suite | `block-autonomy-ceiling.test.sh — Total: 110  PASS: 110  FAIL: 0`; the other 23 suites identical to baseline; `AGGREGATE: PASS=1603  FAIL=0`; arm-name diff 0 removed, 22 added (all `D-*`) · control: the baseline run at `0c759aaf` → autonomy 88/88, aggregate 1581/0 over 24 suites |
+| #6200 | AC-1 | `grep -n -e 'rev-parse --git-common-dir' -e 'gitdir: ' -e 'WORKTREE_WALK_MAX' core/hooks/block-autonomy-ceiling.sh core/hooks/block-draft-files.sh` | 0 lines · control: the same grep at `0c759aaf` → 5 lines (`block-draft-files.sh:140`; `block-autonomy-ceiling.sh:519,529,531,542`); the same grep on `core/hooks/lib/platform-membership.sh` → ≥1 |
+| #6200 | AC-2 | CI sandbox → X-1 (`-002`) and W-1..W-3 (`-001`) on relocated trees; twins X-2 and W-6 | Both BLOCK with their rule IDs · control: both foreign-worktree twins ALLOW |
+| #6200 | AC-3 | CI sandbox → X-3 (the demoted direction: relocated platform cwd writes `projects/`, `.autonomy-mode=enforce`) and X-1 (the disclosure direction: a `projects/` cwd writing into a relocated platform-worktree target), plus the prefix-restoring mutant X-15 | Shipped hook: X-3 exits 2 with `BLOCK-AUTONOMY-004` and X-1 exits 2 with `BLOCK-AUTONOMY-002` (the membership answer). Prefix mutant: exit 0 for each (the prefix answer), while `XD_HIGH_RISK` still exits 2 (the mutant is live) |
+| #6200 | AC-4 | `grep -c -F 'WORKTREE_WALK_MAX=64' core/hooks/lib/platform-membership.sh`; CI sandbox → Suite W, M-4, M-5, X-6 and its control | 1; W-1..W-9 plus the W-7 differential PASS; relative and beyond-bound inputs read 2 to the helper and never block `-001`; the within-bound twin blocks; an unreadable `.git` pointer is climbed past, not classified not-a-member |
+| #6200 | AC-5 | `grep -c -F '${HOOK_DIR}/lib/platform-membership.sh' core/hooks/block-autonomy-ceiling.sh core/hooks/block-draft-files.sh`; then `grep -c -e '^is_platform_worktree()' -e '^_bdf_common_dir()' core/hooks/block-autonomy-ceiling.sh core/hooks/block-draft-files.sh` | 1 source line in each hook, and 0 local membership functions · control: the second grep at `0c759aaf` → 1 in each hook |
+| #6200 | AC-6 | `grep -c -e 'exit [0-9]' -e 'always_block' -e 'apply_block' core/hooks/lib/platform-membership.sh`; CI sandbox → the draft-files "anchor axis: unresolvable anchor ABSTAINS" arm, the AC1 identity pairs, X-5, X-16c, X-16e | The helper has 0 fail branches · control: the same grep on `core/hooks/lib/scope-guard.sh` → ≥1. The abstain arm exits 2; the identity pairs PASS; X-5 exits 2 with `UNDETERMINABLE`; X-16c exits 2 with `LIB-MISSING`; X-16e exits 0 with no `BLOCK-AUTONOMY-00` in stderr |
+| #6200 | AC-7 | Read the #6200 Stage-5 design (6 candidates across 3 altitude bands, decision C3); then `grep -n -e 'pmo-platform/\.git' -e 'PLATFORM_CHECKOUT_DIRNAME=' -e 'platform_gitdir=' core/hooks/block-autonomy-ceiling.sh core/hooks/block-draft-files.sh core/hooks/lib/*.sh` | The design records ≥2 options at distinct altitude bands plus the chosen anchor; every grep match is in `core/hooks/lib/platform-membership.sh`, with 0 in either hook · control: at `0c759aaf` → 2 matching lines across the 2 hooks (`block-autonomy-ceiling.sh:521`, `block-draft-files.sh:53`) |
+| #6200 | AC-8 | CI sandbox → `block-draft-files.test.sh`; diff its sorted `^PASS: ` arm names against the `0c759aaf` run | 35 PASS / 0 FAIL; all 32 baseline names present; exactly 3 added names — the in-root relocated-worktree (hook-level) arm, its stub-helper twin, and the helper-level membership arm · control: added names ≥ 2 |
+
+**AC-Binding row updates (Stage-4 gate, limb 1) — each carried in the rows above.** *#6199 AC-1:* an omitted-cwd arm that resolves through the `$PWD` fallback and does not block (D-7). *#6200 AC-3:* the disclosure-direction arm — a `projects/` cwd writing into a relocated platform-worktree target exits 2 with `BLOCK-AUTONOMY-002`, and the prefix-restoring mutant exits 0 (X-1 with X-15). *#6200 AC-8:* the new arms are the in-root relocated-worktree arm and the helper-level membership arm; control: added arm names ≥ 2 (the seam spec adds the stub-helper twin, making it exactly 3).
+
+`ac_baseline: { #6199: 4, #6200: 8, read_at: 0c759aaf992726c2cba5e43400ca6daa4056fdf3 }` — re-read at Commit 0 against the amended bodies: 4 and 8 checkboxes, unchanged.
+
+### Release-Level Verification
+
+- [ ] **File integrity:** the FCM delivery check (`fcm-delivery` family) passes over the 14 unconditional paths.
+- [ ] **Content correctness:** CIAC-1..CIAC-4 (Stage 9 QC3.5); INT-1..INT-4 (Stage 8 Phase B).
+- [ ] **Cross-reference validity:** the link check over the changed markdown files; this plan carries no markdown link; Check 38 prints `in sync with its sources` after every fragment edit.
+- [ ] **Hook runtime:** the full harness reads FAIL=0 at each GREEN head; `deploy.sh --check` shows Checks 38 and 79 with no new `  FAIL:` line.
+- [ ] **#6199 docs:** `grep -c -F 'the write target, and the working directory'` and `grep -c -F 'the rule **fails closed** on it'` → 1 each, in the fragment and in the index.
+- [ ] **#6199 log decision:** D-2, D-3, D-4, D-5, D-5d, D-6 and D-8 PASS (the block log keeps the raw `cwd` and carries `cwd_resolved` on `-002`/`-004` rows only).
+- [ ] **#6199 R4 (Stage-7 measurement):** 20 identical Bash payloads base vs head — the delta is within noise, with no `resolve_cwd_path` call on that path; 20 platform-target Write payloads — roughly one `python3` start per call.
+- [ ] **#6200 editability parser:** `bash release/tools/tests/test_agent_editability_read.sh` → `30 passed, 0 failed`; `D1` reports 2 blocks; `D2` lists exactly `CLAUDE.md OPERATIONS.md RELEASE_PROTOCOL.md`.
+- [ ] **#6200 deploy surfaces:** `deploy.sh --check` Checks 79 and 38 with no new `  FAIL:`; an installer refresh into a sandbox prints `Hook-library closure: PASS` at Section 22a2.
+- [ ] **Arm totals (informational; CIAC-3 is name-based):** autonomy 110 at #6199's GREEN and 141 at the PR head; draft-files 35; harness aggregate 1603, then 1637.
+- [ ] **Skill invocation:** N/A — no skill surface. **Output-contract compliance:** N/A — no skill output contract changes.
+
+---
+
+## Cross-Issue Acceptance Criteria
+
+**Cross-Issue Acceptance Criteria**
+- [ ] **CIAC-1 (#6199 × #6200 on the `block-autonomy-ceiling.sh` working-directory classification path):** the working directory's side of cross-domain classification is decided by membership over the *resolved* working directory. A working directory spelled through a symlink alias of a relocated platform worktree, writing into `projects/` under enforce, returns the same verdict (`BLOCK-AUTONOMY-004`) as the canonical spelling of that working directory, and removing either the working-directory resolution or the helper call turns at least one arm of the pair red. *Method:* from a sandbox root built by `bash core/hooks/tests/setup-ci-layout.sh --sandbox <dir>`, run `bash .claude/hooks/tests/block-autonomy-ceiling.test.sh`; the pair is X-17 (the physical spelling) and X-18 (a subdirectory alias), both `-004`; X-15 runs the helper-call mutant and X-19 the working-directory-resolution mutant; X-17, X-18, X-15 and X-19 must all PASS. *Graded at Stage 9 QC3.5 on the merged PR.*
+- [ ] **CIAC-2 (#6199 × #6200 on `core/rules/bypass-mode-readiness/block-autonomy-ceiling.md` + the generated index):** the fragment's parity paragraph names both inputs (the working directory and the target); the `-002`/`-004` rows name repository membership; and the committed index is fresh. *Method:* `bash core/deploy/deploy.sh --check 2>&1 | grep -c -F 'core/rules/bypass-mode-readiness.md is in sync with its sources'` → 1. `grep -c -F 'domain roots' core/rules/bypass-mode-readiness/block-autonomy-ceiling.md` → 0 · control: the same grep at `0c759aaf` → 1. *Graded at Stage 9 QC3.5 on the merged PR.*
+- [ ] **CIAC-3 (#6199 × #6200 on the hook-suite arm population):** no pre-existing arm in `block-autonomy-ceiling.test.sh` or `block-draft-files.test.sh` is removed or renamed, except arms re-fixtured and listed by name in the Deviation Log (DEV-11, DEV-12, DEV-13 — each re-fixtures by setup or environment and keeps its name). Suite W (W-1..W-9 and the W-7 differential), Suite N and Suite A all PASS, and the harness aggregate is FAIL=0. *Method:* run the CI-faithful harness (`setup-ci-layout.sh --sandbox <dir>` then `bash .claude/hooks/tests/test-runner.sh` from `<dir>`) at the PR head and at `0c759aaf`; diff the sorted `^PASS: ` arm-name sets of the two suites: removed names → 0 · control: added names → non-zero (this release's new arms). *Graded at Stage 9 QC3.5 on the merged PR.*
+- [ ] **CIAC-4 (#6199 × #6200 on the `core/hooks/lib/scope-guard.sh` contract):** `scope_guard_gate` still receives the raw payload `cwd`; `scope-guard.sh`'s public functions keep their signatures; `scope-guard.test.sh` stays 23/23 with an unchanged arm-name set. *Method:* `git diff 0c759aaf -- core/hooks/lib/scope-guard.sh | grep -c -E '^[-+]scope_guard_(gate|in_scope|root|resolve_cwd)\(\)'` → 0 · control (same instrument, same target — DEV-10): `grep -c -E '^(scope_guard_gate|scope_guard_in_scope|scope_guard_root|scope_guard_resolve_cwd)\(\)' core/hooks/lib/scope-guard.sh` → 4 at `0c759aaf` and non-zero at the PR head. Also confirm the harness line `scope-guard.test.sh — Total: 23  PASS: 23  FAIL: 0`. The subject regex is the Stage-4 alternation with the shared `scope_guard_` stem factored out — it matches exactly the same lines — because the dead-file-reference checker reads a bracket expression followed by a parenthesis as a link even inside a code span (DEV-30). *Graded at Stage 9 QC3.5 on the merged PR.*
+
+---
+
+## Rollback Strategy
+
+### Per-Issue Rollback
+
+| Issue | Rollback Method | Rollback Complexity |
+|-------|----------------|-------------------|
+| #6199 | `git revert` of its commits. Revert #6200's commits first: #6200 consumes #6199's resolved working directory | Low when isolated; Medium once #6200 is on top |
+| #6200 | `git revert` of its commits, restoring the prefix classification and the local walk — a known-safe baseline | Medium: 13 paths touching the installer, the deploy map and the CI layout, plus an ADR |
+
+### Whole-Release Rollback
+
+| Strategy | Trigger | Procedure |
+|----------|---------|-----------|
+| **Full Restore** | Systemic hook misclassification after deploy | (1) Revert the merge commit (single PR). (2) Sync the primary. (3) Re-run the hook refresh through `update.sh`, and verify every hook's deployed hash equals source. (4) Trash the orphan `$HOME/Claude/.claude/hooks/lib/platform-membership.sh`: after the revert nothing sources it, and Check 79 ARMB would report it deployed-unclassified |
+| **Partial Revert** | An isolated #6200 defect | Revert #6200's commits only; #6199's working-directory canonicalization stands alone |
+| **Forward Fix** | A minor, well-understood defect | A fix branch per the rollback protocol |
+
+**The claimed version tag is retained on rollback:** revert the merge and record the rollback; version tags are host-protected and are never deleted on the remote. **Reversibility: MODERATE / Confidence: HIGH** — the git revert itself is cheap; the runtime hook redeploy and the orphan-lib cleanup add steps; there is no data loss.
+
+---
+
+## Quota Budget
+
+**Verdict:** PASS (per `quota-budget-protocol.md` Checkpoint A)
+**Parallel-eligible spokes per parallel stage (from the Stage Applicability Matrix):** Stage 5: 2 · Stage 7: 2 · Stage 8: 2
+**Per-spoke cost estimate:** size:S = lowest; size:M = low–moderate (source: the size-bucket ordinal band heuristic; no telemetry cutover for either bucket).
+**Assumed/stated remaining usage-window envelope:** UNSTATED — the conservative default applies (Checkpoint B `W_max` = 2 under UNSTATED).
+**Estimated cumulative draw % (worst parallel batch):** about 10% — two spokes at about 5% each, for any of Stage 5 / 7 / 8. Stage 6 is serial (P0).
+**Routing:** PASS: proceed. Each parallel batch (2) is within the UNSTATED `W_max` of 2.
+**Note:** Checkpoint B re-validates at every `Agent`-tool launch — wave or singleton, every stage — with PROCEED/SERIALIZE/DEFER/REDUCE-scope for a wave and PROCEED/DEFER for a singleton, and additionally gates on the host-API pool axis, combined DEFER-dominant; STAGGER is a secondary rate-limit-only defense, not a usage-window mitigation. Bands, the cumulative-draw budget and the host-API floor are `[CALIBRATE-AFTER-3]` MEDIUM.
+
+---
+
+## Cross-PR Overlap Audit
+
+- **Scope and baseline.** Audited at Stage 4 against `0c759aaf` for two populations: open PRs, and planned siblings (the open cards of the four concurrently-open sibling milestones).
+- **Open PRs at Stage 4: 0 repo-wide** (control on the same instrument: `gh pr list --state merged --limit 3` → 3). Append-pattern / overlap_class: N/A — enumerated over {`append-pattern`, `line-range-overlap`, `single-pr`}; with no open PR there were no hunk-range arrays to classify.
+- **Structural blast radius (A4 sub-audit):** this release's mover-set is ∅ (no rename, relocate or delete row; moving a function between files is not a file mover), so the only Tier-S edge is the version slot `Δversion/minor-after-v4.67.1` (R10).
+
+**Planned-sibling overlap** (card-declared Affected Files, 31 issues across 4 milestones; control: the `block-egress` token hit all 3 ms#392 cards):
+
+| Sibling card | Milestone | Shared path | Region | overlap_class (planned) |
+|---|---|---|---|---|
+| #7184 | ms#413 | `core/hooks/block-autonomy-ceiling.sh` | the mcp write-verb test vs this release's payload parse, walk and domain classification | region-disjoint |
+| #6896 | ms#338 | `core/hooks/tests/setup-ci-layout.sh` | the default sandbox vs a new lib copy block | region-disjoint |
+| #4994 | ms#338 | `docs/scripts/setup-workspace.sh` | three unrelated sites vs a new co-deploy block | region-disjoint |
+| #7034 | ms#413 | `core/deploy/deploy.sh` | an unrelated check vs `hook_publish_set()` | region-disjoint |
+| #5274 | ms#338 | `core/deploy/deploy.sh` | exemption-list consumers vs `hook_publish_set()` | region-disjoint (by declared function) |
+
+**Commit-0 observation (not re-audited here; Stage 9 A6.6 renders the verdict).** Open PR #7638 (ms#392 `egress-hook-batch`, draft) now exists. Its delivered file set includes `core/rules/bypass-mode-readiness.md` — the generated registry index this release also edits (a different hook's section, so region-disjoint) — and an ADR numbered 204 under `core/ADRs/`, which is the next-free core ADR number at the mainline anchor; whichever of the two releases merges second renumbers (#6200 claims its number at Engineering against the mainline anchor). The milestone's Parallelization Map recorded ms#392 as parallel-safe on card-declared files only.
+
+### Baseline SHA
+
+`0c759aaf992726c2cba5e43400ca6daa4056fdf3`: `origin/main` pinned 2026-09-24T13:40Z (Thursday) at Stage 4 — the merge of PR #7530, committed 2026-09-20 (Sunday). It is this plan's release base and the input for Stage-9 A6.5; re-confirmed unmoved at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record), and the release branch is cut from exactly this commit.
+
+### In-Flight Release Roster
+
+**Measured at:** `0c759aaf` · `2026-09-24T14:17:05Z` · **Population:** n=0 sibling(s)
+
+| Slug | PR | Head SHA | Bump-class | Carried label | Recomputed next-free | EDITSET ∩ FCM |
+|---|---|---|---|---|---|---|
+| none in flight at `0c759aaf` / 2026-09-24T14:17:05Z | — | — | — | — | — | — |
+
+**How the population was measured.** Open PRs with a `release/*` head (drafts included) plus remote `release/*` heads carrying no PR: 0 open PRs; `git ls-remote --heads origin` returned 2 heads (`main`, `chore/v4.63-stage-13-corpus-update`), so 0 `release/*` heads (control: `main` present). The roster is a pinned Stage-4 measurement and carries no verdict; Stage-9 Phase A6.6 re-measures this population fresh. At Commit 0 the population is no longer empty (PR #7638, above) — recorded as an observation, not re-rendered as a roster row, because the roster is Stage 4's baseline input to A6.6.
+
+---
+
+## Release Class Declaration
+
+Class: novel
+
+**Rationale:** Novel (b) fires — a D-class decision, the platform-anchor choice, is recorded with ≥2 options per #6200 AC-7. Novel (c) fires as well — recording the mechanism premise against Accepted ADR-149 is a REVISE edit, which forced a new superseding ADR. Novel (a) does not fire literally (a hook library is not a reference doc, schema or skill). Routine fails on (a) both cards are P2, (c) a new file, and (d) D-class decisions exist. Cross-cutting does not fire (0 stage files, 0 of the 6 rule-defining surfaces, 1 DAG edge). Hotfix (a) is arguable, but the anti-pattern disqualifies it: the release introduces a new structural pattern. Novel wins under multi-trigger resolution, confirming the milestone's `## Release Class` (routine → novel, re-classified 2026-09-23 (Wednesday), operator-approved).
+
+**Differentiation posture:** engagement density Standard · Stage-9 review depth Deep · Stage-5 activation bias ALL · Stage-13 outcome window 30-day. **Size check:** raw 6 pts (S=2, M=4); effective = round_half_up(6 × 1.15) = 7 — below the 15–25 band by design (single-cluster shape).
+
+---
+
+## Tier-A Activated Design Artifacts
+
+- **#6199:** not activated — no process-flow, architecture or concept document is involved; the block-log row is defined inline by each writer, and the new `cwd_resolved` field is documented in the registry fragment.
+- **#6200:** a data-flow artifact — the helper's contract table (helper answer × `-001` stage 2 × the target of `-002`/`-004` × the working directory for `-004` × the `block-draft-files` identity gate), carried by the registry fragment's "Repository membership" paragraph (#6200's Change 9d, with the seam spec's column split).
+
+---
+
+## Decision Record
+
+### Stage-4 plan-approval gate (operator, 2026-09-24)
+
+| Decision | Verdict |
+|---|---|
+| **D1** — approve the Stage-4 plan (ratifies D-C SINGLE and D-Concurrency P0) | Approve as planned; #6200 stays `size:M` |
+| **D2** — D-AC8-Reachability | (A): #6200 AC-8 and the Outcome scoped to "inside the governed workspace root", plus a helper-level arm |
+| **D3** — Release Outcome Statement | Approve with all three amendments (in-root scoping with out-of-root inertness stated; BEFORE anchors updated; the `-002` disclosure direction added to the Success Indicator) |
+| **D4** — Tier-1 adjustments | a + b + c + d: the AC amendments on both cards; the native `#6200 blocked-by #6199` mirror; the milestone's Parallelization Map; four observations filed |
+| **D-ReleaseClass** (recorded determination) | `novel` |
+| **D-Version** (recorded determination) | bump-class `minor`; provisional display `v4.68`; re-verified at Commit 0 and bound only at the Stage-12 claim |
+| **D-C Branch Topology** | (A) SINGLE — one release branch, serial commits, one PR |
+| **D-Concurrency Posture** | (A) P0 fully-serial |
+
+### Stage 5 — decisions routed from Stage 4 and decided there
+
+| Decision | Outcome | Reversibility / Confidence |
+|---|---|---|
+| **D-CWD-Fail-Closed** (#6199) | (a) **A2:** unresolvable only when the payload `cwd` and the hook process's `$PWD` are both empty, or the resolver returns no absolute path — the `$PWD` fallback first. (b) **B3:** resolved lazily inside the Write\|Edit branch, only for a target in a domain. (c) **C3:** the block log keeps the raw `cwd` and adds `cwd_resolved` on `-002`/`-004` rows only. (d) **d1:** `ABS_CWD`, declared unconditionally; `cwd_domain` gains `unresolvable`; `-002` fails closed on it, `-004` does not, and the scope gate keeps the raw value. Mechanism **M2** (a thin in-file wrapper over `resolve_path`), chosen over eager resolution, the scope-guard canonicalizer, a new resolver lib, and two unioned readings | MODERATE / HIGH |
+| **D-Anchor** (#6200) | **C3** — a helper-owned anchor: `$CLAUDE_WORKSPACE_ROOT`, else `${HOOK_DIR}/../..`, else `$HOME/Claude` (the scope lib's order without its sandbox override), plus the checkout's own `.git` resolved to a physical git directory. Six candidates across three altitude bands | MODERATE / HIGH |
+| **D-Classification-Semantics** (#6200) | **REPLACE** — membership first; the `pmo-platform` prefix retired as a classifier; `projects/` stays the location test for the operations domain; every helper answer maps to a verdict per rule | MODERATE / HIGH |
+| **D-Helper-Contract** (#6200) | Tri-state return codes (0 member · 1 not a member · 2 undeterminable) plus a separate anchor function; directory-entry form; physical start; builtins only; no fail branch; lazy, question-scoped fail-closed for the Tier-0 caller when the helper is missing; `block-draft-files` abstains; name `platform-membership.sh` | MODERATE / HIGH |
+| **D-Mechanism-Doc-Home** (#6200) | **M4** — a new ADR superseding ADR-149 in part, plus a `superseded_by:` pointer; one Enforcement sentence each for `autonomy-tiers.md` items 7 and 7a; the registry fragment's `-001`/`-002`/`-004` rows and a membership paragraph carrying the contract table | MODERATE, rising toward EXPENSIVE once the ADR is Accepted / HIGH |
+
+### Collective Review — round 1: ADJUST (operator, 2026-09-24)
+
+| Decision | Verdict |
+|---|---|
+| **CR-Q1** — scope-lock | Adjust: re-open Stage 5 for ONE joint seam-reconciliation spoke on the shared region of `core/hooks/block-autonomy-ceiling.sh`; everything else in both designs stands; then re-convene |
+| **CR-Q2** — the `projects/` side of `-002` | Block when the raw spelling OR the resolved working directory is under `projects/`; the resolved check resolves the operations root only when `projects` is a symlink; add the symlinked-`projects/` arm pair |
+| **CR-Q3** — AC adjustments | #6199 AC-4 graded at #6199's GREEN commit; #6200 AC-4 clarified for the resolved anchor ("for the same platform git directory") |
+| **CR-Q4** — ADR | File #6200's drafted ADR now as an `adr` issue with no milestone (the composition lock stays intact); its number is claimed at Engineering |
+| Recorded determinations | F4: `release/tools/tests/test_agent_editability_read.sh` joins the read-only inputs with its parser constraint C-5. F5: the W-7 differential is re-targeted to the lib copy (re-fixtured, name unchanged). F6: the AC-4 row is corrected — an unreadable `.git` pointer is climbed past, not classified not-a-member |
+
+**Seam-reconciliation scope:** (1) one composed classification block; (2) strike #6199's IP-1 obligation 4; (3) re-derive #6199's D-9 must-diverge set and correct #6200's alias rule against the walk's actual semantics; (4) merge the `-002` registry row text so #6199's fail-closed sentence survives #6200's rewrite and "domain roots" is not reintroduced; (5) fold CR-Q2's dual check into the composed block.
+
+### Collective Review — round 2: SCOPE LOCKED (operator, 2026-09-24)
+
+| Decision | Verdict |
+|---|---|
+| **CR2-Lock** — scope-lock | Lock scope. The composed seam spec on #7634 is the single literal Stage-6 spec for the shared region of `core/hooks/block-autonomy-ceiling.sh`; every other element of the #6199 and #6200 designs stands as posted |
+| **CR2-Ratify** — R-1, R-2, R-3 | All three ratified. **R-1:** the resolved working directory is always compared; only the operations root is resolved conditionally (when `projects` is a symlink). **R-2:** a `projects/`-rooted session cannot write into any platform worktree, including one under `projects/` — wider than baseline for that layout only, never narrower. **R-3:** arms D-5f, X-16e and X-19 are added |
+
+**N-way consistency at lock:** all rows aligned — the resolved-cwd interface, the undeterminable-answer mapping (obligation 4 struck; never `unresolvable`), D-9's must-diverge set, the `-002` registry row text, the suite letters, and #6199 AC-4 grading. **Expected test totals:** autonomy 88 → 110 at #6199's GREEN and 141 at the PR head; draft-files 35; aggregate 1603, then 1637.
+
+---
+
+## Deviation Log
+
+| # | Surface | Change | Basis | Disposition |
+|---|---|---|---|---|
+| DEV-1 | #6199 AC-1 | Fail-closed binds `-002` only; the `$PWD` fallback precedes "unresolvable" | Stage-4 A0.6 C2 delta; operator D4-a | APPLIED to the card body |
+| DEV-2 | #6199 AC-2 | The cwd shape set is named | Stage-4 A0.6 C2 delta; operator D4-a | APPLIED to the card body |
+| DEV-3 | #6199 AC-4 | Baseline recorded: 1581 PASS / 0 FAIL across 24 suites at `0c759aaf`; autonomy 88/88 | Stage-4 A0.6 C2 delta; hub re-ran the harness; operator D4-a | APPLIED; re-measured at Commit 0 (§ Verification Evidence) |
+| DEV-4 | #6200 Affected Files | Adds `docs/scripts/setup-workspace.sh`, `core/deploy/deploy.sh`, and the two registry docs | Stage-4 A0.6 G1-04 FLAG; operator D4-a | APPLIED to the card body |
+| DEV-5 | #6200 AC-1 and AC-2 | The three implementation sites, both rules, and the expected location are named | Stage-4 A0.6 C2 delta; operator D4-a | APPLIED to the card body |
+| DEV-6 | #6200 AC-3 | Disclosure-direction (`-002`) arm added | Stage-4 A0.6 C2 delta; operator D4-a | APPLIED to the card body |
+| DEV-7 | #6200 AC-4 | Tri-state preservation stated; bound of 64 retained | Stage-4 A0.6 C2 delta; operator D4-a | APPLIED to the card body |
+| DEV-8 | #6200 AC-8 | In-root recognition plus a helper-level arm; out-of-root inertness documented | Operator D2 = (A) | APPLIED to the card body |
+| DEV-9 | Milestone Outcome Statement | Three amendments | Operator D3 | APPLIED to the milestone description; transcribed in § Scope |
+| DEV-10 | Plan CIAC-4 | Control arm moved to the same target: `grep -c -E '^(scope_guard_gate\|scope_guard_in_scope\|scope_guard_root\|scope_guard_resolve_cwd)\(\)' core/hooks/lib/scope-guard.sh` (pipes escaped for this table cell) — must return 4 at `0c759aaf` and stay non-zero at the PR head | AC-Binding limb 2 — hub correction | APPLIED in § Cross-Issue Acceptance Criteria; re-measured at Commit 0 → 4 |
+| DEV-11 | `block-autonomy-ceiling.test.sh` | `${TEST_WS}/pmo-platform/.git` seeded at suite setup. Ten arms are re-fixtured by setup only; payloads and names are unchanged, and 0 are removed or renamed: `-002 high-risk (projects cwd → pmo-platform), mode=enforce → BLOCK` · `… mode=warn → BLOCK` · `… mode=off → BLOCK` · `-002 no longer claims the low-risk direction (rule id is -004, not -002)` · `-004 low-risk (pmo-platform cwd → projects), mode=enforce → BLOCK` · `-004 override names the relaunch remedy, not CLAUDE_HOOK_BYPASS` · `-004 low-risk, mode=warn → ALLOW + WARN (friction removed)` · `-004 warn arm appended to autonomy-warn-log.jsonl (…)` · `-002 under master-OFF → STILL BLOCKS (the floor is above the master gate)` · `H1 control: same cwd, Write payload → -004 fires (proves the arms above reach it)` | D-Classification-Semantics = REPLACE (R1) | APPLIED in #6200 RED (`3ca46bd2`); the ten arms PASS at RED and at GREEN with their names unchanged |
+| DEV-12 | `block-autonomy-ceiling.test.sh` | The `W-7 differential` is re-targeted to the lib copy; its name is unchanged | CR round-1 determination F5 | APPLIED in #6200 GREEN (`41b22d81`); the differential removes exactly 1 line from the helper copy and PASSES |
+| DEV-13 | `block-draft-files.test.sh` | `id_run` and the anchor-axis invocation pin `CLAUDE_WORKSPACE_ROOT`, re-fixturing the 12 `id_pair` arms, the `AC6 control: non-repo cwd …` arm and the `anchor axis: unresolvable anchor ABSTAINS …` arm by environment only; names unchanged; the 12 baseline `test_case` arms untouched | D-Anchor = C3 | APPLIED in #6200 RED (`3ca46bd2`); every re-fixtured arm is listed by name in DEV-33 |
+| DEV-14 | #6200 File Change Matrix | Promote `core/ADRs/ADR-NNN-cross-domain-classification-is-repository-membership.md` (an unconditional ADD obligation of #6200's slice), the ADR-149 pointer and `core/specs/autonomy-tiers.md` into the unconditional set. Drop two Stage-4 **edit** rows, which this release does not edit: `core/ADRs/README.md` (condition token `new-adr` — the core ADR README is a curated thematic document, not a per-ADR index) and `core/deploy/tests/test_refresh_hooks.sh` (condition token `hard-dependency-lib` — the refresh suite's generic readability arm covers a new lib by construction); both now sit in the matrix's explicit non-scope block. #6200 delivers 13 paths | Conditional-row resolution (#6200 design) | APPLIED in § File Change Matrix at Commit 0; row-label wording corrected by DEV-31 |
+| DEV-15 | Plan read-only inputs; #6200 AC-4 row | Add `release/tools/tests/test_agent_editability_read.sh` (parser constraint C-5, CI `release-tooling-smoke.yml`). Correct the AC-4 row: an unreadable pointer is climbed past, not read as "1" | CR round-1 determinations F4, F6 | APPLIED at Commit 0 |
+| DEV-16 | #6200 AC-4 | "for the same platform git directory" clarification | CR-Q3; #6200 design F1 | APPLIED to the card body |
+| DEV-17 | #6199 AC-4 | Graded at #6199's GREEN commit | CR-Q3; #6200 design F3 | APPLIED to the card body and § Verification Plan |
+| DEV-18 | Both suites' mutation arms | The CIAC-1 pair aliases a subdirectory (X-17/X-18); D-9's must-diverge set re-derived to D-1, D-2, D-3, D-4, D-4b, D-5, D-5b, D-5f; the D-1b/D-5c/D-5d differential rows removed; D-5f added; the D-9 arm name made count-free; X-19 added | #6200 design F2 (corrected); #7585 PR-1; #7584 PR-3 / CD-2 | #6199's half APPLIED at `63a08c03`; #6200's half (X-17/X-18 and X-19) APPLIED at `3ca46bd2` |
+| DEV-19 | #6199 design Changes 1 and 2 | CR-Q2 folded: two working-directory readings for `-002` (slice A); the `-002` condition reads `cwd_under_projects`; D-1b/D-5c renamed and flipped to BLOCK; D-11/D-11b added | CR-Q2; #7584 CD-1 | Lands in #6199's RED and GREEN commits |
+| DEV-20 | IP-1 contract | #6199's obligation 4 struck; the replacement mapping (an undeterminable working-directory membership answer is never `unresolvable`); X-16e added | CR item 2; #7584 F-1; #7585 FM-1c | APPLIED in § Integration Points; X-16e APPLIED at `3ca46bd2` |
+| DEV-21 | The shared region | #6200 design Changes 2c/2e/2f superseded by the composed end state plus the slice-B deltas; `CWD_RESOLVED` → `ABS_CWD` | CR item 1; #7585 FM-1a/b, CD-1; #7584 F-2 | APPLIED at `41b22d81`: the region is the composed end state, and `CWD_RESOLVED` appears nowhere |
+| DEV-22 | `-002` reasons; X-5/X-16c; fragment paragraph 9d | The FM-4 reason split (`LIB-MISSING:` / `UNDETERMINABLE:`) and the consequence sentence | #7585 FM-4 | APPLIED: the X-5 / X-16c text asserts at `3ca46bd2`, the reasons at `41b22d81`, the consequence sentence at `05261cd6` |
+| DEV-23 | #6200 RED commit | Per-arm vector recorded; Change 4b moved to GREEN; the AC-8 arm strengthened; the AC-8 twin added | #7585 FM-3 | APPLIED at `3ca46bd2` (4b at `41b22d81`); the observed RED vector equals the recorded one (§ Verification Evidence) |
+| DEV-24 | `block-draft-files.test.sh` `test_case` | `CLAUDE_WORKSPACE_ROOT` pinned to an anchor-free directory (extends DEV-13) | #7585 FM-2 | APPLIED at `3ca46bd2`; every re-fixtured arm is listed by name in DEV-33 |
+| DEV-25 | `block-draft-files.test.sh` comments | Retired-predicate prose re-scoped; arm names unchanged | #7585 FM-5 | APPLIED at `3ca46bd2` |
+| DEV-26 | Hook comment 2e / fragment row 9c / ADR Decision 2 / `autonomy-tiers.md` 7a; ADR residuals | "cannot reach" scoped to working trees of this checkout's repository; the separate-clone residual added | #7585 PR-2 | APPLIED: the hook comment at `41b22d81`; the fragment row, the ADR and the spec at `05261cd6` |
+| DEV-27 | #6200's ADR | The ADR draft is filed as an `adr` issue (#7633) with no milestone, so the composition lock stays intact; its number is claimed at Engineering by #6200's slice against the mainline anchor, and its file carries the seam spec's edits E-1..E-5 | CR-Q4 | The issue is filed; the file landed at `05261cd6` as ADR-204, with edits E-1..E-5 |
+| DEV-28 | `-002` working-directory reading; arm set | Collective Review round 2 ratified R-1 (the resolved working directory is always compared; only the operations root is resolved conditionally), R-2 (a `projects/`-rooted session cannot write into any platform worktree, including one under `projects/` — wider than baseline for that layout only, never narrower; recorded in the fragment row and ADR E-4) and R-3 (arms D-5f, X-16e and X-19 added; totals 110 / 141 / 35 / 1603 / 1637) | CR2-Ratify | Carried by DEV-18, DEV-19 and DEV-20 |
+| DEV-29 | Operational Deployment Manifest row 4; IP-4; R13 | Corrected at Commit 0: `core/rules/bypass-mode-readiness.md` is **not** a rules-mirror pair member — it is absent from `mirror_pair_set()` in `core/deploy/deploy.sh` — so it has no deployed copy and no Check-9 obligation; the Stage-4 text named a Check-9 re-lay for it. The CI layout materializes a copy inside its sandbox only | Commit-0 transcription finding; a Tier-1 [ADJUST] that removes a non-existent Stage-12/13 step and changes no scope | APPLIED in § Operational Deployment Manifest, § Integration Points and § Risk Register |
+| DEV-30 | CIAC-4 subject regex | Transcribed with the shared `scope_guard_` stem factored out of the alternation (`^[-+]scope_guard_(gate\|in_scope\|root\|resolve_cwd)\(\)`, pipes escaped for this table cell), which matches exactly the lines the Stage-4 alternation matches — observed on a probe of 4 must-match diff lines and 3 near-misses, both forms returning the same 4 lines. The Stage-4 spelling places a bracket expression directly before a parenthesis, which the dead-file-reference checker (`release/tools/check-release-links.py`, which strips neither code spans nor fences before extracting links) would read as a link to a non-existent file and fail on this plan's added lines | Commit-0 transcription finding; the predicate, its target and its expected result are unchanged | APPLIED in § Cross-Issue Acceptance Criteria |
+| DEV-31 | § File Change Matrix labels; DEV-14 | Corrected after #6199's GREEN commit, by the spoke that authored Commit 0. The Commit-0 in-fence comment labels over the three promoted rows and the two dropped rows carried the word for a conditional row, which the `fcm-delivery` parser reads as a block label (case-insensitively), so the promoted rows still parsed as conditional (`conditional=1`, `obligations=2`); and DEV-14 co-located the undelivered-ADD token with the new ADR's path, which the parser reads as an exemption record for that ADR. Both would have exempted #6200's new ADR from the declared-vs-delivered check. The labels now name the resolved condition tokens without that word, and DEV-14 records the two dropped rows as not-edited edit rows. Observed with `release/tools/verify-release-plan.sh` at #6199's GREEN head: before, `obligations=2 conditional=1` and the ADR row graded as a recorded deviation; after, `obligations=3 conditional=0` and the ADR row graded as a pending ADD | Rule 5 of the File Change Matrix authoring contract (a fired conditional is promoted in the same commit); a Tier-1 [ADJUST] to this spoke's own Commit-0 transcription | APPLIED |
+| DEV-32 | ADR-204 `## Status` | One phrase corrected. The seam spec leaves the Status section untouched, but the drafted sentence said the record was written "under the number claimed at Commit 0". The number was claimed by #6200's own slice against the mainline anchor (DEV-27, the slice brief), so the phrase reads "under the number claimed there against the mainline anchor". No other Status wording changed | Factual correction to a record that becomes immutable at the Stage-9 flip; a Tier-1 [ADJUST] that changes no decision | APPLIED at `05261cd6` |
+| DEV-33 | `block-draft-files.test.sh` | The arms DEV-13 and DEV-24 re-fixture by environment only, named here. Through `test_case`'s pin (DEV-24), the 12 baseline arms: `enforce: docs/proposals/ draft (the incident) BLOCKED` · `enforce: draft segment under governed root BLOCKED` · `enforce: stray top-level file BLOCKED` · `enforce: normal governed write ALLOWED` · `enforce: release/ governed write ALLOWED` · `enforce: tracked top-level (README) ALLOWED` · `enforce: git-ignored personal/ ALLOWED` · `enforce: git-ignored governance/roadmaps (PR-1) ALLOWED` · `enforce: git-ignored steering-committee (PR-1) ALLOWED` · `warn: draft WARNs not blocks` · `warn: governed write silent` · `off: draft not flagged`. Through `id_run`'s pin (DEV-13), the 12 identity pairs: `AC1 enforce: nested repo .claude/commands/ Write ALLOWED` · `AC1 enforce: nested repo root-level doc Edit ALLOWED` · `AC1 enforce: nested repo ordinary source file ALLOWED` · `AC1 enforce: nested repo MultiEdit ALLOWED` · `AC1 warn: nested repo .claude/commands/ Write SILENT` · `AC1 warn: nested repo ordinary source file SILENT` · `AC2: docs/proposals draft still BLOCKED (control: governed path allowed)` · `AC2: draft segment under a governed root still BLOCKED` · `AC2: stray new top-level file still BLOCKED` · `membership: platform worktree (different toplevel, same common dir) still enforced` · `relative-path trap: enforcement from a platform SUBDIRECTORY is unchanged` · `nearest tree wins: foreign repo nested INSIDE the checkout is not the platform` — and `AC6 control: non-repo cwd exits 0 via the line-81 fail-open (measures nothing)`. Through the anchor-axis invocation's pin: `anchor axis: unresolvable anchor ABSTAINS (rule still enforced, no kill switch)`. Payloads, expected verdicts and names are unchanged; none is removed or renamed | R1 — every re-fixtured arm recorded by name (DEV-13 and DEV-24 stated these as counts) | APPLIED at `3ca46bd2`; the name-set probe in § Verification Evidence reads 0 removed |
+
+---
+
+## Documentation Impact
+
+| Issue | Declared docs | Status | Commit | Notes |
+|---|---|---|---|---|
+| #6199 | `core/rules/bypass-mode-readiness/block-autonomy-ceiling.md` — the rule's registry row, describing both inputs; mirrored into `core/rules/bypass-mode-readiness.md` | UPDATED | `3d2051b1` | The merged `-002` row (step 1), the re-scoped parity paragraph, and the caveat sentence |
+| #6200 | `core/rules/bypass-mode-readiness/block-autonomy-ceiling.md` + the index; the new ADR; the ADR-149 pointer; `core/specs/autonomy-tiers.md` | UPDATED | `05261cd6` | ADR-204 is created and names the mechanism that establishes "cannot reach the repository": repository membership through the shared helper, scoped to working trees of this checkout's repository. ADR-149 gains only the reciprocal `superseded_by:` pointer. The `-001`/`-002`/`-004` rows name membership, a new paragraph carries the helper's contract table, and items 7 and 7a of the spec each gain one Enforcement sentence |
+
+---
+
+## Verification Evidence
+
+*Populated at Stage 6 C4 self-verification; extended at Stage 7 and Stage 8.*
+
+| Check | Result |
+|---|---|
+| **Commit-0 version half** | `git fetch --tags origin`; next-free for bump-class `minor` = **`v4.68`** via the adapter's own `--dry-run`, free on the binding tag arm (0 `refs/tags/v4.68*`; control `refs/tags/v4.67*` → 4) and corroborated by published Releases (0 of 210) and the RELEASE_LOG at `origin/main` (0; control 16). **No HALT** |
+| **Commit-0 manifest half** | `release/tools/claim-version.sh --verify-stamp autonomy-ceiling-domains-resolve-canonically` → **exit 0**, *"verify-stamp OK — … carries a resolvable stamp manifest; plan-only manifest (0 --stamp-file target(s))"*; pre-flight line: the manifest stales 0 packages. Exactly one double-brace `RELEASE_VERSION` placeholder in this file (the Header `**Version**` cell) — counted at 1 by a fixed-string count of the braced form, with the bare token name counted at 4 on the same file as the reader's sensitivity arm (the record site plus three named mentions, this row's included). Re-run after this row was written: exit 0 |
+| **Pre-change harness baseline** (the control arm for every new arm) | CI sandbox at `0c759aaf` → `AGGREGATE: PASS=1581  FAIL=0` across 24 suites; `block-autonomy-ceiling.test.sh — Total: 88  PASS: 88  FAIL: 0`; 88 unique autonomy arm names |
+| **#6199 RED** (`63a08c03`, against the unmodified hook) | CI sandbox → autonomy `Total: 110  PASS: 95  FAIL: 15`, the failing arms exactly D-1, D-2, D-3, D-4, D-5, D-5b, D-5d, D-5e, D-5f, D-6, D-7b, D-9, D-9b, D-10, D-11b and the passing arms D-1b, D-4b, D-5c, D-6b, D-7, D-8, D-11 — the recorded vector, observed rather than derived. Every other suite unchanged (aggregate 1588 / 15); 0 baseline autonomy arm names missing (sensitivity: 7 added names) |
+| **#6199 GREEN — AC-4 graded here** (`3d2051b1`) | CI sandbox → `block-autonomy-ceiling.test.sh — Total: 110  PASS: 110  FAIL: 0`; the other 23 suites' summary lines byte-identical to the baseline run (23 of 23 lines compared); `AGGREGATE: PASS=1603  FAIL=0`; autonomy arm-name diff 0 removed, 22 added, all `D-*`. A later commit that touches only this plan changes no suite input |
+| **#6199 AC-1 greps** (at `3d2051b1`) | `resolve_cwd_path`: the definition, the `# D9:` line inside it, and exactly 1 call site, inside `if [ -n "$target_domain" ]`; `scope_guard_gate "$CWD"` → 1 (baseline 1); `case "$CWD" in` → 1, the spelling reading (baseline 1, the retired raw-cwd case) |
+| **Check 38** | `deploy.sh --check-required-subset` → `hook-registry-index-freshness — OK (FRESH)`. Sensitivity arm: with one mirrored index line reverted, the same run reads `FAIL (STALE)`; restored → FRESH. The three mirrored lines are byte-identical to their fragment lines (`cmp`) |
+| **#6199 docs** | `the write target, and the working directory` → 1 and `the rule **fails closed** on it` → 1, in the fragment and in the index; `domain roots` in the fragment → 0 (1 at `0c759aaf`) |
+| **Hook marker and parser invariants** | `# D9:` and `# D10:` each on exactly 1 line; the H1 differential's `sed` patterns still match exactly 2 lines; the `# W7:` line and `readonly PYTHON3` line untouched; `case "$ABS_TARGET" in` count unchanged at 4 (no new `-001` block for the editability parser) |
+| **Hook dependency hardening** | `core/hooks/tests/check-hook-dep-hardening.sh` → OK |
+| **Skill-package freshness** | the 5 changed paths piped to `build-skill-packages.sh --skills-for-paths` on STDIN → no skill (sensitivity: `release/skills/release-planner/SKILL.md` → `release-planner`), so no package rebuild is owed |
+| **`deploy.sh --check`** (full, at the GREEN tree) | Check 14 `no broken cross-refs in scope`; Check 38 `in sync with its sources`; Check 79 publisher closure holds both directions (its byte-parity arm is advisory: the deployed `block-autonomy-ceiling.sh` is one source commit behind, expected until the Stage-12 hook refresh). Exit 1 on two FAIL lines that cite no path in this release — `release-body-drift` (published Release bodies vs their notes, host state) and `count-structure` (`core/references/reference/operator-instance-home-and-isolation-key.md`, `release/references/standards/release-notes-standard.md`) |
+| **Plan executor** | `release/tools/verify-release-plan.sh` at the GREEN head: #6199 AC-1 PASS; the CI-sandbox rows read `unclassified` ERROR by the executor's design (the required `Hook test harness (macOS)` check is their gate); `fcm-delivery` reads `obligations=3 conditional=0` after DEV-31, with the plan delivered and the helper and the new ADR pending #6200's slice; CIAC-4 PASS |
+| **Runtime suite** (selection-map row `core/hooks/**`) | the CI-faithful hook harness above; the `test-run` event is appended by the hub (the event log is an operator-instance surface outside this spoke's write scope) |
+| **ADR index freshness** | ADR index: N/A — this release adds no record under `release/ADRs/`; ADR-204 is under `core/ADRs/`, which has no projector |
+| **#6200 RED** (`3ca46bd2`, against the hooks at #6199's GREEN) | CI sandbox → autonomy `Total: 141  PASS: 119  FAIL: 22`, failing exactly X-1, X-3, X-5, X-7, X-9, X-10, X-11, X-12, X-13, X-14, X-16a, X-16c, X-17, X-18, X-19 and M-0..M-6, with the new arms X-2, X-4, X-6, X-6 control, X-8, X-15, X-16b, X-16d and X-16e passing. Draft-files `Total: 35  PASS: 33  FAIL: 2`, failing the AC-8 twin and the AC-8 helper-level arm, with the AC-8 hook-level arm passing. Both vectors equal the recorded one, observed rather than derived. Every existing arm passes; the other 22 suites' summary lines are byte-identical to the branch tip's; `AGGREGATE: PASS=1613  FAIL=24` |
+| **#6200 GREEN** (`41b22d81`) | CI sandbox → `block-autonomy-ceiling.test.sh — Total: 141  PASS: 141  FAIL: 0`; `block-draft-files.test.sh — Total: 35  PASS: 35  FAIL: 0`; the other 22 suites byte-identical to the branch tip (`cmp`); `AGGREGATE: PASS=1637  FAIL=0`. Arm-name probe over standalone logs, with run-varying log-line counts normalized: autonomy 0 of 110 baseline names removed and 31 added, all X- or M-; draft-files 0 of 32 removed and exactly 3 added, the AC-8 trio |
+| **#6200 AC greps** (at `41b22d81`) | AC-1: 0 lines in the two hooks (control at `0c759aaf` → 5 lines, `block-draft-files.sh:140` and `block-autonomy-ceiling.sh:519,529,531,542`; the lib → 3). AC-4: `WORKTREE_WALK_MAX=64` → 1. AC-5: one lib-reference line per hook and 0 local membership functions (control → 1 each). AC-6: 0 fail tokens in the lib (control `scope-guard.sh` → 4). AC-7: the only match across both hooks and every `core/hooks/lib/` file is the lib's own `PLATFORM_CHECKOUT_DIRNAME` (control → 2). INT-1: `pm_member "$` on 2 lines, `case "$CWD" in` 1, `scope_guard_gate "$CWD"` 1 |
+| **C-5 editability parser** | `release/tools/tests/test_agent_editability_read.sh` → `AER-1: 30 passed, 0 failed`; D1 reports 2 blocks; D2 lists exactly `CLAUDE.md OPERATIONS.md RELEASE_PROTOCOL.md` |
+| **Hook dependency hardening** (#6200) | `core/hooks/tests/check-hook-dep-hardening.sh` → OK |
+| **Deploy surfaces** (#6200) | `deploy.sh --check-required-subset` → all 4 load-bearing checks OK (Check 38 FRESH; mirror-pair parity PASS). `core/deploy/tests/test_refresh_hooks.sh` → 77 passed, 0 failed, including the Case-10 hook-library closure arms. With both hooks now referencing the new lib, a healthy refresh that passes the closure means the co-deploy block satisfies it `[INFERRED]` from the outcome — the installer's own log lines are captured inside the test |
+| **Reference cascade** (deleted identifiers) | `git grep --untracked -E 'is_platform_worktree\|_bdf_common_dir'` over the tree minus `release/releases/` → pre 8 / post 0 (sensitivity: the same engine finds `platform_membership_of` in 5 files, the untracked lib included). The hits under `release/releases/` are point-in-time records — this plan's `0c759aaf` derivation and its AC-5 probe subject, and four closed releases' plans — and are preserved |
+| **#6200 docs** (`05261cd6`) | Check 38 FRESH; STALE with one mirrored index line reverted; FRESH once restored. The four rule rows are byte-identical between fragment and index (`cmp`). `domain roots` in the fragment → 0 (control at `0c759aaf` → 1); `the rule **fails closed** on it` → 1 in each file; the `-002` row names **repository membership** and the `-004` row carries "Membership is evaluated first"; 0 link-shaped tokens on added lines |
+| **ADR number** | `renumber-adr.py --detect` → anchor 203 at `origin/main`, next-free 204, and this tree's claim `ADR-204` BINDS; the whole-tree sequence is gap-free 001..204 with 0 duplicates. The in-flight sibling #7638 also claims 204 and 205 on its branch, so whichever release merges second renumbers |
+| **ADR lint and issue-reference gate** | `release/tools/check-adr-durability.py` over ADR-204 and ADR-149 → `SCANNED 2`, `COUNT 0` (its self-test 138/138). `core/deploy/tools/check-issue-ref-validity.sh --path` on ADR-204 → every reference resolves in-repo and sits in a reference block (sensitivity: a run-directory copy with one reference planted in `## Context` fails the gate) |
+| **Skill-package freshness** (#6200) | the slice's 14 paths on STDIN to `build-skill-packages.sh --skills-for-paths` → no skill (sensitivity: `release/skills/release-planner/SKILL.md` → `release-planner`), so no package rebuild is owed |
+| **Full `deploy.sh --check`** (docs tree, `05261cd6`) | Check 14 `no broken cross-refs in scope`; Check 38 `in sync with its sources`; Check 79's closure arm holds both directions — 14 derived publish acts equal 15 declared publishable rows less 1 optional, so the new co-deploy act pairs with the new row. Its advisory byte-parity arm lists the new lib as not yet deployed and the two changed hooks as stale platform copies, expected until the Stage-12 refresh. Exit 1 on two FAIL lines that cite no path in this release: `release-body-drift` (host state) and `count-structure` (`core/references/reference/operator-instance-home-and-isolation-key.md`, `release/references/standards/release-notes-standard.md`) |
+| **Plan executor** (#6200 slice) | `release/tools/verify-release-plan.sh --format=md` → `fcm-delivery`: `obligations=3 conditional=0`, and all three ADDs are delivered — the plan, `core/hooks/lib/platform-membership.sh` and ADR-204 — so 0 are pending. #6200 per-issue: AC-4 and AC-5 PASS; AC-1 and AC-6 read FAIL and AC-7 reads ERROR from the executor's method grammar, not from the tree (next row); AC-2, AC-3 and AC-8 read `unclassified` ERROR by the executor's design. CIAC-1 and CIAC-3 SKIP (their commands fall outside the executor's verb allowlist); CIAC-4 PASS; CIAC-2 FAIL (next row). Roll-up: 11 PASS / 3 FAIL / 3 SKIP / 7 ERROR over 12 per-issue rows |
+| **Executor-grammar verdicts, with the direct evidence** | When a method's text carries none of the executor's comparators (≥, ≤, at least, at most, exactly, expect), it grades the row by exit status alone. A right-arrow before a zero is not one of them, so a correct zero-match `grep` — exit 1 — reads FAIL. That is #6200 AC-1 (direct: 0 lines) and AC-6 (direct: 0; control 4). It is also CIAC-2: `bash` is outside the verb allowlist `grep test ls head wc cat`, so the deploy-check limb never runs, and the first runnable span is the `domain roots` grep (direct: Check 38 reads `in sync with its sources` in the full check and FRESH in the required subset; `domain roots` 0, control 1). AC-7's `core/hooks/lib/*.sh` reaches `grep` unexpanded and exits 2, hence ERROR (direct: the only match is the lib's own constant) |
+
+---
+
+## Change Description
+
+*Authored at Stage 6 Phase C1 per the RELEASE_PROTOCOL Change Description Protocol. Operator-facing. #6199's rows were written by its Engineering slice and #6200's by its own, on the same branch.*
+
+### Outcome
+
+**The autonomy-ceiling hook now reads the session's working directory the same way it reads the write target, and fails closed on the one rule whose failure is disclosure when it cannot read it at all.** Before this release the hook resolved the target through `realpath` but compared the working directory as raw text, so a `projects/`-rooted session whose working directory was spelled through a symlink, a traversal, a relative path or a workspace alias could write into the tracked, public platform repository without meeting the Tier-0 floor — and no fixture armed that axis.
+
+**Both cross-domain rules and `block-draft-files` now decide "is this the platform repository?" through one shared helper, by repository membership rather than by path prefix.** A relocated worktree of the platform (inside the governed workspace root) or a symlink-spelled one gets the same verdict as its canonical spelling, and a `projects/`-rooted write into a platform worktree stored outside the checkout now blocks at the Tier-0 floor instead of passing it.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #6199 | The working directory goes through the target's own resolver; an unresolvable one fails `-002` closed and nothing else; 22 new working-directory arms, three of them mutation differentials | DONE — GREEN at `3d2051b1` |
+| #6200 | One membership helper, `core/hooks/lib/platform-membership.sh`, for `-001` stage 2, `-002`/`-004` and `block-draft-files`; 34 new arms, two of them mutants; ADR-204 | DONE — GREEN at `41b22d81`, docs at `05261cd6` |
+
+### Key decisions
+
+- **D-CWD-Fail-Closed:** unresolvable only when both the payload `cwd` and `$PWD` are empty or no absolute path results; resolved lazily, only where the working directory can change the verdict; the log keeps the raw `cwd` and adds `cwd_resolved`.
+- **CR-Q2 / R-1 / R-2:** `-002` reads the working directory's operations side by location, twice — as spelled and as resolved — and uses both readings only to block, so no alias can narrow the floor below its baseline.
+- **D-Anchor C3, REPLACE, tri-state helper, M4 documentation home:** the helper's anchor locates itself and ignores the scope sandbox override; membership replaces the `pmo-platform` prefix and is asked before the `projects/` prefix; the helper answers member, not a member or undeterminable and owns no failure branch; the mechanism is recorded in ADR-204. See § Decision Record.
+
+### Reversibility
+
+**MODERATE — HIGH confidence.** `git revert -m 1` of the single merge restores `main`; runtime recovery is a hook-tier refresh with a hash re-verify, plus trashing the orphaned deployed helper. The version tag is retained and recorded rather than deleted if the release is withdrawn.
+
+### Downstream impact
+
+- A Write/Edit into the platform repository from a session whose working directory cannot be resolved at all is now refused at the Tier-0 floor; an omitted payload `cwd` resolves through the hook process's own working directory first, so ordinary sessions are unaffected.
+- A `projects/`-rooted session can no longer write into any working tree of the platform repository — including one stored outside the checkout, or one placed under `projects/`. The sanctioned exit is to relaunch outside `projects/`.
+- A write into a `<workspace>/pmo-platform` directory that is not a git repository no longer blocks at `-002`: nothing written there can be committed.
+- If the helper is missing from a deployed bundle, a governance-document write outside the checkout, and any `projects/`-rooted write outside `projects/`, are refused with a `LIB-MISSING` reason naming the reinstall remedy. Ordinary engineering writes are unaffected.
+- The hook bundle gains one co-deployed library, delivered by the installer refresh path and held by the hook-library closure and Check 79.
+- Block-log readers see one additional key, `cwd_resolved`, on `-002`/`-004` rows only; `cwd` keeps its payload meaning for every hook writing the shared log.
+- #7184 must anchor its edit by content: this release moves the lines it names.
+
+### Cross-references
+
+The composed seam spec for the shared hook region is #7634; the Stage-5 designs are #7563 and #7565; the mechanism record is ADR-204, drafted on #7633; the user-facing release note is authored at Stage 13 under `release/releases/notes/`.
+
+---
+
+## Baseline Pin
+
+`origin/main` @ **`0c759aaf`** (`0c759aaf992726c2cba5e43400ca6daa4056fdf3`), measured at Stage-4 Phase A0 and re-confirmed unmoved at Engineering Commit 0; the release branch is cut from exactly this commit. Read by the Stage-9 mid-pipeline divergence re-check.
+
+---
+
+## Issue References
+
+<!-- repo-integrity: allow-issue-ref — limb 1: a release plan's member and sub-task enumeration IS its subject matter; the numbers are the release's own scope and provenance, not prose citations -->
+
+Both content members are transitioned to closed at Stage 13 by the close-out on the merged PR, not by an auto-close keyword in the PR body.
+
+- **#6199** — the governance-file control normalizes its target but reads the working directory raw, and no fixture arms that axis. Four acceptance criteria (amended 2026-09-24).
+- **#6200** — two sibling rules test repository membership on different axes, and the weaker one carries the security demotion. Eight acceptance criteria (amended 2026-09-24).
+- **#7545** — the Stage-4 planning sub-task: the plan of record, the plan-approval decision record, and both Collective Review decision records.
+- **#7563 · #7565** — the Stage-5 Solutioning sub-tasks carrying the #6199 and #6200 designs.
+- **#7584 · #7585** — the Stage-5 adversarial design reviews of those designs.
+- **#7634** — the Stage-5 seam-reconciliation sub-task carrying the composed seam spec.
+- **#7633** — the ADR draft issue for #6200's mechanism record.
+- **#7567 · #7569** — the Stage-6 Engineering sub-tasks for Commit 0 plus #6199, and for #6200.
+- **#7184 · #7497** — coordination-only neighbours on the same hook and the `BLOCK-DESTRUCTIVE-019` residual.
+- **#7638** — the in-flight sibling release PR observed at Commit 0 (shared provisional version slot; shared generated index).

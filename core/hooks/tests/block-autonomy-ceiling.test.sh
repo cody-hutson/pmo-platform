@@ -47,6 +47,12 @@ if [ ! -x "$HOOK" ]; then echo "FAIL: hook not executable at $HOOK" >&2; echo "T
 # which resolve_path returns the raw string untouched). Resolving here is what makes
 # the anchored assertions genuine rather than accidentally-passing.
 TEST_WS="$(cd "$(/usr/bin/mktemp -d)" && pwd -P)"
+# (#6200) The platform checkout under the pinned workspace is a repository from the first arm.
+# Cross-domain classification is repository MEMBERSHIP (lib/platform-membership.sh), so a `.git`-less
+# ${TEST_WS}/pmo-platform is — correctly — not the platform, and the -002/-004 arms before Suite W
+# would test an empty anchor instead of the rule. Suite W's seed below used to supply this directory
+# incidentally; it is now seeded explicitly, where every arm can see it.
+/bin/mkdir -p "${TEST_WS}/pmo-platform/.git"
 TEST_HOME="$(/usr/bin/mktemp -d)"
 /bin/mkdir -p "${TEST_HOME}/.cache/pmo-platform"
 CACHE_FILE="${TEST_HOME}/.cache/pmo-platform/autonomy-ceiling"
@@ -1021,13 +1027,17 @@ assert_hook "W-7 relative gitdir pointer still resolves to this repo → BLOCK (
 # ALLOWED against it. A fixture is worth having only if some reachable implementation
 # fails it.
 W7_SANDBOX="$(/usr/bin/mktemp -d)"
+W7_LIB="${HOOK_DIR}/lib/platform-membership.sh"
 /bin/mkdir -p "${W7_SANDBOX}/lib"
 /bin/cp "${HOOK_DIR}/lib/"*.sh "${W7_SANDBOX}/lib/" 2>/dev/null || true
 /bin/cp "${HOOK_DIR}/lib/"*.awk "${W7_SANDBOX}/lib/" 2>/dev/null || true
-/usr/bin/sed -e '/# W7: relative-pointer join/d' "$HOOK" > "${W7_SANDBOX}/block-autonomy-ceiling.sh"
+# (#6200) The walk moved into the shared helper, so the naive implementation is built by deleting the
+# relative-pointer join from the SANDBOX COPY OF THE HELPER. The hook itself is copied verbatim.
+/bin/cp "$HOOK" "${W7_SANDBOX}/block-autonomy-ceiling.sh"
+/usr/bin/sed -e '/# W7: relative-pointer join/d' "$W7_LIB" > "${W7_SANDBOX}/lib/platform-membership.sh"
 /bin/chmod +x "${W7_SANDBOX}/block-autonomy-ceiling.sh"
 /usr/bin/printf 'enforce' > "${W7_SANDBOX}/.autonomy-mode"
-w7_removed=$(( $(/usr/bin/wc -l < "$HOOK") - $(/usr/bin/wc -l < "${W7_SANDBOX}/block-autonomy-ceiling.sh") ))
+w7_removed=$(( $(/usr/bin/wc -l < "$W7_LIB") - $(/usr/bin/wc -l < "${W7_SANDBOX}/lib/platform-membership.sh") ))
 w7_err="$(/usr/bin/mktemp)"; w7_exit=0
 /usr/bin/printf '%s' "$(write_payload "${W_RELWT}/CLAUDE.md" "$W_RELWT")" \
   | HOME="$TEST_HOME" /bin/bash "${W7_SANDBOX}/block-autonomy-ceiling.sh" 2>"$w7_err" >/dev/null || w7_exit="$?"
@@ -1221,7 +1231,474 @@ else
 fi
 
 /bin/rm -rf "$A_SANDBOX"
+
+# =====================================================================
+# SUITE X — relocated worktrees: repository MEMBERSHIP decides the domain (#6200)
+# =====================================================================
+# -002 and -004 used to place a path by PREFIX: pmo-platform when it began with
+# ${PRIMARY_ROOT}/pmo-platform. A working tree of this repository can live anywhere, so a
+# projects-rooted session writing into a relocated platform worktree met no floor at all, and a
+# platform session inside one never drew -004. Membership — the walk -001's second stage already
+# used, now the shared helper lib/platform-membership.sh — decides the platform side of both
+# rules. Every block arm has a foreign-worktree twin that must ALLOW; the four anchor shapes Suite
+# N arms for PRIMARY_ROOT are re-armed for the helper's own anchor; the helper-ABSENT posture is
+# armed in the shipped warn mode; and two mutants — the retired prefix answer (X-15) and #6199's
+# cwd resolution deleted (X-19) — prove the pair arms discriminate.
+echo ""
+echo "Suite X — relocated worktrees: membership, not location, decides the domain (#6200)"
+echo "---"
+set_mode enforce
+set_ceiling 2
+
+# In-root relocated worktree: inside TEST_WS, outside TEST_WS/pmo-platform, so -004 is reachable
+# standalone too (the scope root is TEST_WS there).
+/bin/mkdir -p "${TEST_WS}/pmo-platform/.git/worktrees/wt2" "${TEST_WS}/relocated-wt/core"
+/usr/bin/printf 'gitdir: %s\n' "${TEST_WS}/pmo-platform/.git/worktrees/wt2" > "${TEST_WS}/relocated-wt/.git"
+# The same shape, pointing into ANOTHER repository.
+/bin/mkdir -p "${TEST_WS}/foreign-repo2/.git/worktrees/f" "${TEST_WS}/foreign-wt2"
+/usr/bin/printf 'gitdir: %s\n' "${TEST_WS}/foreign-repo2/.git/worktrees/f" > "${TEST_WS}/foreign-wt2/.git"
+# A pointer file with no pointer line.
+/bin/mkdir -p "${W_SCRATCH}/corrupt"
+/usr/bin/printf 'not a pointer\n' > "${W_SCRATCH}/corrupt/.git"
+# A platform worktree whose documents sit deeper than the 64-level bound.
+/bin/mkdir -p "${W_SCRATCH}/deepwt"
+/usr/bin/printf 'gitdir: %s\n' "${TEST_WS}/pmo-platform/.git/worktrees/wt1" > "${W_SCRATCH}/deepwt/.git"
+X_DEEP="${W_SCRATCH}/deepwt"; _xi=0
+while [ "$_xi" -lt 70 ]; do X_DEEP="${X_DEEP}/d"; _xi=$((_xi + 1)); done
+# CIAC-1: an alias of a SUBDIRECTORY of the relocated worktree. A root alias would be recognized
+# through the link without the resolved cwd, so it could not discriminate #6199's mutant.
+/bin/ln -s "${TEST_WS}/relocated-wt/core" "${TEST_WS}/alias-relwt-core"
+# R12: a --separate-git-dir checkout, and a symlinked checkout segment, each in its own workspace.
+X_SEP_WS="$(cd "$(/usr/bin/mktemp -d)" && pwd -P)"
+/bin/mkdir -p "${X_SEP_WS}/sep.git/worktrees/wtx" "${X_SEP_WS}/pmo-platform/core" "${X_SEP_WS}/projects/P" "${X_SEP_WS}/wtx"
+/usr/bin/printf 'gitdir: %s\n' "${X_SEP_WS}/sep.git" > "${X_SEP_WS}/pmo-platform/.git"
+/usr/bin/printf 'gitdir: %s\n' "${X_SEP_WS}/sep.git/worktrees/wtx" > "${X_SEP_WS}/wtx/.git"
+X_LNK_WS="$(cd "$(/usr/bin/mktemp -d)" && pwd -P)"; X_REAL="$(cd "$(/usr/bin/mktemp -d)" && pwd -P)"
+/bin/mkdir -p "${X_REAL}/.git" "${X_REAL}/core" "${X_LNK_WS}/projects/P"
+/bin/ln -s "$X_REAL" "${X_LNK_WS}/pmo-platform"
+# No repository at the anchor.
+X_NOREPO_WS="$(cd "$(/usr/bin/mktemp -d)" && pwd -P)"
+/bin/mkdir -p "${X_NOREPO_WS}/pmo-platform/core" "${X_NOREPO_WS}/projects/P"
+
+# The disclosure-direction payload X-1, reused by the anchor-shape, helper-absent and mutant arms.
+X1_PAYLOAD="$(write_payload "${W_SCRATCH}/wt/core/foo.md" "${TEST_WS}/projects/Default")"
+
+run_hook_env "$X1_PAYLOAD" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "X-1 disclosure: projects cwd → out-of-root relocated platform worktree → BLOCK (-002)" 2 "BLOCK-AUTONOMY-002"
+
+run_hook_env "$(write_payload "${W_SCRATCH}/foreign-wt/core/foo.md" "${TEST_WS}/projects/Default")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "X-2 disclosure twin: projects cwd → a DIFFERENT repository's worktree → ALLOW" 0 ""
+
+run_hook_env "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/relocated-wt")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "X-3 demoted: cwd IS an in-root relocated worktree root (directory-entry form) → projects/ write, enforce → BLOCK (-004)" 2 "BLOCK-AUTONOMY-004"
+
+run_hook_env "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/foreign-wt2")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "X-4 demoted twin: cwd IS an in-root worktree of a DIFFERENT repository → projects/ write → ALLOW (no -004)" 0 ""
+
+run_hook_env "$(write_payload "${W_SCRATCH}/corrupt/x.md" "${TEST_WS}/projects/Default")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "X-5 undeterminable target (pointer without a pointer line) from a projects cwd → BLOCK (-002 fails closed)" 2 "BLOCK-AUTONOMY-002.*UNDETERMINABLE"
+
+# X-6 — three governance documents the helper answers UNDETERMINABLE for. -001 must read that as
+# not-a-member, exactly as the inline walk cleared each of them (AC-4); one PASS line for the three.
+x6_bad=""
+run_hook_env "$(write_payload "${W_SCRATCH}/corrupt/CLAUDE.md" "${W_SCRATCH}/corrupt")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+[ "$RHE_EXIT" = 0 ] || x6_bad="${x6_bad} corrupt-pointer(exit=${RHE_EXIT})"
+run_hook_env "$(write_payload "rel/nowhere/CLAUDE.md" "${W_SCRATCH}")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+[ "$RHE_EXIT" = 0 ] || x6_bad="${x6_bad} relative(exit=${RHE_EXIT})"
+run_hook_env "$(write_payload "${X_DEEP}/CLAUDE.md" "${W_SCRATCH}")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+[ "$RHE_EXIT" = 0 ] || x6_bad="${x6_bad} beyond-bound(exit=${RHE_EXIT})"
+if [ -z "$x6_bad" ]; then
+  echo "PASS: X-6 -001 reads undeterminable as not-a-member: corrupt-pointer, relative and beyond-bound governance documents → ALLOW"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: X-6 -001 reads undeterminable as not-a-member (did NOT allow:%s)\n' "$x6_bad"; FAIL=$((FAIL + 1))
+fi
+
+run_hook_env "$(write_payload "${W_SCRATCH}/deepwt/d/d/d/CLAUDE.md" "${W_SCRATCH}")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "X-6 control: the same worktree's governance document WITHIN the bound → BLOCK (-001)" 2 "BLOCK-AUTONOMY-001"
+
+run_hook_env "$(write_payload "${X_NOREPO_WS}/pmo-platform/core/foo.md" "${X_NOREPO_WS}/projects/P")" CLAUDE_WORKSPACE_ROOT="$X_NOREPO_WS"
+assert_hook "X-7 no platform repository at the anchor: projects cwd → <root>/pmo-platform write → ALLOW (nothing is a member)" 0 ""
+
+run_hook_env "$(write_payload "${X_SEP_WS}/pmo-platform/core/foo.md" "${X_SEP_WS}/projects/P")" CLAUDE_WORKSPACE_ROOT="$X_SEP_WS"
+assert_hook "X-8 R12 --separate-git-dir checkout: projects cwd → a write into the primary checkout → BLOCK (-002)" 2 "BLOCK-AUTONOMY-002"
+
+run_hook_env "$(write_payload "${X_SEP_WS}/wtx/CLAUDE.md" "${X_SEP_WS}/wtx")" CLAUDE_WORKSPACE_ROOT="$X_SEP_WS"
+assert_hook "X-9 R12 --separate-git-dir checkout: a governance document in its relocated worktree → BLOCK (-001)" 2 "BLOCK-AUTONOMY-001"
+
+run_hook_env "$(write_payload "${X_LNK_WS}/pmo-platform/core/foo.md" "${X_LNK_WS}/projects/P")" CLAUDE_WORKSPACE_ROOT="$X_LNK_WS"
+assert_hook "X-10 R12 symlinked checkout segment: projects cwd → a write through the checkout → BLOCK (-002)" 2 "BLOCK-AUTONOMY-002"
+
+run_hook_env "$X1_PAYLOAD" CLAUDE_WORKSPACE_ROOT="${TEST_WS}/"
+assert_hook "X-11 anchor shape: trailing slash → X-1 still BLOCKS (-002)" 2 "BLOCK-AUTONOMY-002"
+
+run_hook_env "$X1_PAYLOAD" CLAUDE_WORKSPACE_ROOT="${TEST_WS}/."
+assert_hook "X-12 anchor shape: trailing '/.' → X-1 still BLOCKS (-002)" 2 "BLOCK-AUTONOMY-002"
+
+run_hook_env "$X1_PAYLOAD" CLAUDE_WORKSPACE_ROOT="$N_ALIAS"
+assert_hook "X-13 anchor shape: symlinked alias → X-1 still BLOCKS (-002)" 2 "BLOCK-AUTONOMY-002"
+
+# X-14 — the relative anchor, resolved against the hook process's own cwd (the N-4 idiom).
+x14_err="$(/usr/bin/mktemp)"; x14_exit=0
+( cd "$N_PARENT" && /usr/bin/printf '%s' "$X1_PAYLOAD" \
+    | HOME="$TEST_HOME" CLAUDE_WORKSPACE_ROOT="$N_BASE" /bin/bash "$HOOK" 2>"$x14_err" >/dev/null ) || x14_exit="$?"
+x14_stderr="$(/bin/cat "$x14_err")"; /bin/rm -f "$x14_err"
+if [ "$x14_exit" = 2 ] && [ -n "$x14_stderr" ] && /usr/bin/grep -qE "BLOCK-AUTONOMY-002" <<<"$x14_stderr"; then
+  echo "PASS: X-14 anchor shape: relative → X-1 still BLOCKS (-002)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: X-14 anchor shape: relative (exit=%s expected=2, want BLOCK-AUTONOMY-002)\n  stderr: %s\n' \
+    "$x14_exit" "$x14_stderr"; FAIL=$((FAIL + 1))
+fi
+
+# X-15 — the prefix-restoring mutant.
+PX_SANDBOX="$(/usr/bin/mktemp -d)"; /bin/mkdir -p "${PX_SANDBOX}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh "${PX_SANDBOX}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK_DIR}/lib/"*.awk "${PX_SANDBOX}/lib/" 2>/dev/null || true
+/bin/cp "$HOOK" "${PX_SANDBOX}/block-autonomy-ceiling.sh"; /bin/chmod +x "${PX_SANDBOX}/block-autonomy-ceiling.sh"
+/usr/bin/printf 'enforce' > "${PX_SANDBOX}/.autonomy-mode"
+# The mutant: the helper answers by the retired PREFIX rule instead of by membership. The hook is
+# byte-identical; only the helper's answer changes, so any divergence is attributable to
+# membership-vs-prefix and to nothing else.
+/usr/bin/printf '%s\n' \
+  'platform_membership_anchor() { printf %s "${PRIMARY_ROOT}/pmo-platform/.git"; }' \
+  'platform_membership_of() { case "$1" in "${PRIMARY_ROOT}/pmo-platform"|"${PRIMARY_ROOT}/pmo-platform/"*) return 0 ;; esac; return 1; }' \
+  > "${PX_SANDBOX}/lib/platform-membership.sh"
+# px_run payload — run against the mutant sandbox; sets RHE_EXIT / RHE_STDERR.
+px_run() {
+  local err; err="$(/usr/bin/mktemp)"; RHE_EXIT=0
+  /usr/bin/printf '%s' "$1" | HOME="$TEST_HOME" /bin/bash "${PX_SANDBOX}/block-autonomy-ceiling.sh" 2>"$err" >/dev/null || RHE_EXIT="$?"
+  RHE_STDERR="$(/bin/cat "$err")"; /bin/rm -f "$err"
+}
+px_walk="$(/usr/bin/grep -c WORKTREE_WALK_MAX "${PX_SANDBOX}/lib/platform-membership.sh" 2>/dev/null || true)"
+px_bad=""
+px_run "$X1_PAYLOAD"
+[ "$RHE_EXIT" = 0 ] || px_bad="${px_bad} X-1(exit=${RHE_EXIT})"
+px_run "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/relocated-wt")"
+[ "$RHE_EXIT" = 0 ] || px_bad="${px_bad} X-3(exit=${RHE_EXIT})"
+px_run "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/relocated-wt/core")"
+[ "$RHE_EXIT" = 0 ] || px_bad="${px_bad} X-17(exit=${RHE_EXIT})"
+px_run "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/alias-relwt-core")"
+[ "$RHE_EXIT" = 0 ] || px_bad="${px_bad} X-18(exit=${RHE_EXIT})"
+px_live=0
+px_run "$XD_HIGH_RISK"
+if [ "$RHE_EXIT" = 2 ] && /usr/bin/grep -qE 'BLOCK-AUTONOMY-002' <<<"$RHE_STDERR"; then px_live=1; fi
+/bin/rm -rf "$PX_SANDBOX"
+if [ "$px_walk" = 0 ] && [ -z "$px_bad" ] && [ "$px_live" = 1 ]; then
+  echo "PASS: X-15 prefix-restoring mutant: X-1, X-3, X-17 and X-18 ALLOWED against the prefix answer; an in-checkout write still BLOCKED (mutant live)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: X-15 prefix-restoring mutant (stub walk tokens=%s expected=0; not allowed:%s; mutant live=%s expected=1)\n' \
+    "$px_walk" "$px_bad" "$px_live"; FAIL=$((FAIL + 1))
+fi
+
+# X-16 — the helper-ABSENT posture. `.autonomy-mode=warn` is the shipped default, and a floor must
+# still fail closed there. The sandbox carries every lib EXCEPT the membership helper.
+LA_SANDBOX="$(/usr/bin/mktemp -d)"; /bin/mkdir -p "${LA_SANDBOX}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh "${LA_SANDBOX}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK_DIR}/lib/"*.awk "${LA_SANDBOX}/lib/" 2>/dev/null || true
+/bin/rm -f "${LA_SANDBOX}/lib/platform-membership.sh"
+/bin/cp "$HOOK" "${LA_SANDBOX}/block-autonomy-ceiling.sh"; /bin/chmod +x "${LA_SANDBOX}/block-autonomy-ceiling.sh"
+/usr/bin/printf 'warn' > "${LA_SANDBOX}/.autonomy-mode"
+# Guard: with the helper still present the sandbox is not the absence posture, and every X-16 arm
+# reports unusable rather than passing.
+la_ok=0
+if [ ! -e "${LA_SANDBOX}/lib/platform-membership.sh" ]; then la_ok=1; fi
+# la_run payload — run against the helper-absent sandbox; sets RHE_EXIT / RHE_STDERR.
+la_run() {
+  local err; err="$(/usr/bin/mktemp)"; RHE_EXIT=0
+  /usr/bin/printf '%s' "$1" | HOME="$TEST_HOME" /bin/bash "${LA_SANDBOX}/block-autonomy-ceiling.sh" 2>"$err" >/dev/null || RHE_EXIT="$?"
+  RHE_STDERR="$(/bin/cat "$err")"; /bin/rm -f "$err"
+}
+# la_assert name expected_exit [expected_pattern] — assert_hook behind the absence guard.
+la_assert() {
+  if [ "$la_ok" = 1 ]; then
+    assert_hook "$1" "$2" "${3:-}"
+  else
+    /usr/bin/printf 'FAIL: %s (unusable — the helper is present in the helper-absent sandbox)\n' "$1"; FAIL=$((FAIL + 1))
+  fi
+}
+la_run "$(write_payload "${W_SCRATCH}/product-repo/CLAUDE.md" "${W_SCRATCH}/product-repo")"
+la_assert "X-16a helper absent: a foreign repo's CLAUDE.md (W-4 allows it) → BLOCK (-001 fails closed, LIB-MISSING)" 2 "BLOCK-AUTONOMY-001.*LIB-MISSING"
+la_run "$(write_payload "${TEST_WS}/projects/Default/x.md" "${TEST_WS}/projects/Default")"
+la_assert "X-16b helper absent: projects cwd → projects/ write (same domain) → ALLOW (no lockout)" 0 ""
+la_run "$X1_PAYLOAD"
+la_assert "X-16c helper absent: projects cwd → out-of-root relocated worktree → BLOCK (-002 fails closed)" 2 "BLOCK-AUTONOMY-002.*LIB-MISSING"
+la_run "$(bash_payload 'ls -la /tmp' "${TEST_WS}/pmo-platform")"
+la_assert "X-16d helper absent: Bash payload → ALLOW (only Write/Edit questions depend on it)" 0 ""
+la_run "$(write_payload "${TEST_WS}/pmo-platform/core/foo.md" "${TEST_WS}/pmo-platform")"
+if [ "$la_ok" = 1 ] && [ "$RHE_EXIT" = 0 ] && ! /usr/bin/grep -q 'BLOCK-AUTONOMY-00' <<<"$RHE_STDERR"; then
+  echo "PASS: X-16e helper absent: pmo-platform cwd → an ordinary write into its own checkout → ALLOW (a missing helper locks no engineering session out)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: X-16e helper absent: engineering write into its own checkout (usable=%s exit=%s expected=0 with no BLOCK-AUTONOMY-00 in stderr)\n  stderr: %s\n' \
+    "$la_ok" "$RHE_EXIT" "$RHE_STDERR"; FAIL=$((FAIL + 1))
+fi
+
+run_hook_env "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/relocated-wt/core")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "X-17 CIAC-1a: cwd = a subdirectory of the in-root relocated worktree → projects/ write, enforce → BLOCK (-004)" 2 "BLOCK-AUTONOMY-004"
+
+run_hook_env "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/alias-relwt-core")" CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+assert_hook "X-18 CIAC-1b: the same cwd spelled through a symlink alias → identical verdict (-004)" 2 "BLOCK-AUTONOMY-004"
+
+# X-19 - CIAC-1's SECOND mutant: #6199's cwd resolution deleted from a sandbox copy of the hook.
+# X-18 spells its cwd through a symlink to a SUBDIRECTORY of the relocated worktree, so without
+# resolution the walk's lexical prefixes never reach the worktree root and -004 flips to ALLOW.
+# X-17, the physical spelling, is the liveness control and must still BLOCK.
+X19_SANDBOX="$(/usr/bin/mktemp -d)"; /bin/mkdir -p "${X19_SANDBOX}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh "${X19_SANDBOX}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK_DIR}/lib/"*.awk "${X19_SANDBOX}/lib/" 2>/dev/null || true
+/usr/bin/sed -e '/# D9: cwd resolution/d' "$HOOK" > "${X19_SANDBOX}/block-autonomy-ceiling.sh"
+/bin/chmod +x "${X19_SANDBOX}/block-autonomy-ceiling.sh"; /usr/bin/printf 'enforce' > "${X19_SANDBOX}/.autonomy-mode"
+x19_removed=$(( $(/usr/bin/wc -l < "$HOOK") - $(/usr/bin/wc -l < "${X19_SANDBOX}/block-autonomy-ceiling.sh") ))
+x19_18=0; /usr/bin/printf '%s' "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/alias-relwt-core")" \
+  | HOME="$TEST_HOME" /bin/bash "${X19_SANDBOX}/block-autonomy-ceiling.sh" >/dev/null 2>&1 || x19_18="$?"
+x19_17=0; x19_17_err="$(/usr/bin/printf '%s' "$(write_payload "${TEST_WS}/projects/Default/notes.md" "${TEST_WS}/relocated-wt/core")" \
+  | HOME="$TEST_HOME" /bin/bash "${X19_SANDBOX}/block-autonomy-ceiling.sh" 2>&1 >/dev/null)" || x19_17="$?"
+/bin/rm -rf "$X19_SANDBOX"
+if [ "$x19_removed" = 1 ] && [ "$x19_18" = 0 ] && [ "$x19_17" = 2 ] && /usr/bin/grep -qE 'BLOCK-AUTONOMY-004' <<<"$x19_17_err"; then
+  echo "PASS: X-19 CIAC-1 vs the cwd-resolution mutant: X-18's alias ALLOWED, X-17's physical spelling still BLOCKS (-004)"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: X-19 CIAC-1 cwd-resolution mutant (removed=%s expected=1, X-18 exit=%s expected=0, X-17 exit=%s expected=2)\n' "$x19_removed" "$x19_18" "$x19_17"; FAIL=$((FAIL + 1))
+fi
+
+echo ""
+echo "Suite M — the membership helper's contract, sourced in-suite (#6200)"
+echo "---"
+M_LIB="${HOOK_DIR}/lib/platform-membership.sh"
+M_OUT="$(
+  CLAUDE_WORKSPACE_ROOT="$TEST_WS"
+  . "$M_LIB" 2>/dev/null || { /usr/bin/printf 'LOAD=fail\n'; exit 0; }
+  m_rc() { local r=0; platform_membership_of "$1" "$2" || r=$?; /usr/bin/printf '%s' "$r"; }
+  a="$(platform_membership_anchor)" || a=""
+  /usr/bin/printf 'ANCHOR=%s\n' "$a"
+  /usr/bin/printf 'M1=%s\n'  "$(m_rc "${W_SCRATCH}/wt" "$a")"
+  /usr/bin/printf 'M2=%s\n'  "$(m_rc "${W_SCRATCH}/foreign-wt" "$a")"
+  /usr/bin/printf 'M3=%s\n'  "$(m_rc "${W_SCRATCH}/loose" "$a")"
+  /usr/bin/printf 'M4a=%s\n' "$(m_rc "relative/dir" "$a")"
+  /usr/bin/printf 'M4b=%s\n' "$(m_rc "${W_SCRATCH}/wt" "")"
+  /usr/bin/printf 'M5a=%s\n' "$(m_rc "$X_DEEP" "$a")"
+  /usr/bin/printf 'M5b=%s\n' "$(m_rc "${W_SCRATCH}/deepwt/d/d/d" "$a")"
+  /usr/bin/printf 'M6=%s\n'  "$(m_rc "${W_SCRATCH}/corrupt" "$a")"
+)"
+m_get() { local l; while IFS= read -r l; do case "$l" in "$1="*) /usr/bin/printf '%s' "${l#*=}"; return 0 ;; esac; done <<<"$M_OUT"; }
+m_assert() {  # name got want
+  if [ "$2" = "$3" ]; then /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else /usr/bin/printf 'FAIL: %s (got=%s want=%s)\n' "$1" "$2" "$3"; FAIL=$((FAIL + 1)); fi
+}
+m_assert "M-0 helper anchor: CLAUDE_WORKSPACE_ROOT resolves to the checkout's physical .git" "$(m_get ANCHOR)" "${TEST_WS}/pmo-platform/.git"
+m_assert "M-1 member: a relocated worktree root, directory-entry form → 0" "$(m_get M1)" "0"
+m_assert "M-2 not a member: a DIFFERENT repository's worktree → 1" "$(m_get M2)" "1"
+m_assert "M-3 not a member: no working tree up to the filesystem root → 1" "$(m_get M3)" "1"
+m_assert "M-4 undeterminable: a relative start and an empty anchor → 2 and 2" "$(m_get M4a)$(m_get M4b)" "22"
+m_assert "M-5 bound retained: beyond 64 levels → 2; the same worktree within the bound → 0" "$(m_get M5a)$(m_get M5b)" "20"
+m_assert "M-6 undeterminable: a pointer file with no pointer line → 2" "$(m_get M6)" "2"
+
+/bin/rm -rf "$LA_SANDBOX" "$X_SEP_WS" "$X_LNK_WS" "$X_REAL" "$X_NOREPO_WS"
 /bin/rm -rf "$W_SCRATCH"
+
+# =====================================================================
+# SUITE D — the working-DIRECTORY axis (#6199)
+# =====================================================================
+# -002/-004 decide on TWO inputs. The target was always resolved; the working directory was
+# read raw, and all 51 Write/Edit payloads above use a canonical absolute cwd — so a
+# projects-rooted session whose cwd was spelled through a symlink or a traversal escaped the
+# Tier-0 disclosure floor with no arm able to notice. Verdict-changing shapes carry the
+# verdict; value-only shapes (a trailing / or /. classifies identically raw or resolved) carry
+# the RESOLVED VALUE, read back from the block-log row. -002 also reads the working directory
+# AS SPELLED, and that reading can only add a block: D-1b, D-5c and D-11 are the arms a
+# resolved-only reading would turn to ALLOW. Every allow-arm has a block-arm on the same
+# target. D-9 / D-9b / D-10 are the mutation differentials.
+echo ""
+echo "Suite D — the working-directory axis (#6199)"
+echo "---"
+set_mode "enforce"
+set_ceiling 2
+D_PLAT="${TEST_WS}/pmo-platform/core/foo.md"
+D_PROJ="${TEST_WS}/projects/Default/notes.md"
+/bin/mkdir -p "${TEST_WS}/projects/Default" "${TEST_WS}/pmo-platform/core" "${TEST_WS}/pmo-platform/.git"
+/usr/bin/printf 'x\n' > "$D_PLAT"
+[ -L "${TEST_WS}/pmo-platform/d-opslink" ] || /bin/ln -s "${TEST_WS}/projects" "${TEST_WS}/pmo-platform/d-opslink"
+[ -L "${TEST_WS}/projects/d-repolink" ]   || /bin/ln -s "${TEST_WS}/pmo-platform" "${TEST_WS}/projects/d-repolink"
+[ -L "${TEST_WS}/projects/d-corelink" ]   || /bin/ln -s "${TEST_WS}/pmo-platform/core" "${TEST_WS}/projects/d-corelink"
+D_ALIAS_PARENT="$(/usr/bin/mktemp -d)"; D_WS_ALIAS="${D_ALIAS_PARENT}/ws-alias"
+/bin/ln -s "$TEST_WS" "$D_WS_ALIAS"                    # the workspace reached through a symlink
+D_MASTER_OFF="$(/usr/bin/mktemp -d)"
+
+write_payload_nocwd() { /usr/bin/jq -n --arg fp "$1" '{tool_name: "Write", tool_input: {file_path: $fp, content: "x"}}'; }
+# run_hook_at hook dir payload [VAR=VAL...] — process cwd = dir ("" = inherit). Sets RHE_*.
+run_hook_at() {
+  local hook="$1" dir="$2" payload="$3"; shift 3
+  local err; err="$(/usr/bin/mktemp)"; RHE_EXIT=0
+  if [ -n "$dir" ]; then
+    ( cd "$dir" && /usr/bin/printf '%s' "$payload" | HOME="$TEST_HOME" /usr/bin/env ${1+"$@"} /bin/bash "$hook" 2>"$err" >/dev/null ) || RHE_EXIT="$?"
+  else
+    /usr/bin/printf '%s' "$payload" | HOME="$TEST_HOME" /usr/bin/env ${1+"$@"} /bin/bash "$hook" 2>"$err" >/dev/null || RHE_EXIT="$?"
+  fi
+  RHE_STDERR="$(/bin/cat "$err")"; /bin/rm -f "$err"
+}
+# run_hook_nopwd hook payload [VAR=VAL...] — $PWD UNSET in the hook's own process: the hook is
+# SOURCED by a shell that unset it first ($0 = hook path, so HOOK_DIR resolves as usual). An
+# executed script cannot have an empty $PWD — bash re-derives it from getcwd at startup.
+run_hook_nopwd() {
+  local hook="$1" payload="$2"; shift 2
+  local err; err="$(/usr/bin/mktemp)"; RHE_EXIT=0
+  /usr/bin/printf '%s' "$payload" | HOME="$TEST_HOME" /usr/bin/env ${1+"$@"} /bin/bash -c 'unset PWD; . "$0"' "$hook" 2>"$err" >/dev/null || RHE_EXIT="$?"
+  RHE_STDERR="$(/bin/cat "$err")"; /bin/rm -f "$err"
+}
+assert_hook_clean() {   # exit 0 AND no rule of this hook fired
+  if [ "$RHE_EXIT" = 0 ] && ! /usr/bin/grep -qE 'BLOCK-AUTONOMY-00[0-9]' <<<"$RHE_STDERR"; then
+    /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s (exit=%s expected=0 with no rule fired)\n  stderr: %s\n' "$1" "$RHE_EXIT" "$RHE_STDERR"; FAIL=$((FAIL + 1))
+  fi
+}
+d_rows()  { if [ -f "$1" ]; then /usr/bin/jq -s 'length' "$1" 2>/dev/null || echo 0; else echo 0; fi; }
+d_field() { /usr/bin/jq -s -r --arg f "$2" '.[-1] | if has($f) then .[$f] else "<absent>" end' "$1" 2>/dev/null; }   # pretty-printed rows: slurp, never tail
+# d_sandbox dir [sed-expr...] — copy the hook + libs into dir (optionally sed-mutated), enforce mode.
+d_sandbox() {
+  local box="$1"; shift
+  /bin/mkdir -p "${box}/lib"
+  /bin/cp "${HOOK_DIR}/lib/"*.sh "${box}/lib/" 2>/dev/null || true
+  /bin/cp "${HOOK_DIR}/lib/"*.awk "${box}/lib/" 2>/dev/null || true
+  if [ "$#" -gt 0 ]; then /usr/bin/sed "$@" "$HOOK" > "${box}/block-autonomy-ceiling.sh"; else /bin/cp "$HOOK" "${box}/block-autonomy-ceiling.sh"; fi
+  /bin/chmod +x "${box}/block-autonomy-ceiling.sh"; /usr/bin/printf 'enforce' > "${box}/.autonomy-mode"
+}
+# Log arms run on a byte-identical copy with a FRESH log (the shared log may carry other runs'
+# rows, not all of them guaranteed-valid JSON); the cmp guard keeps "the file under test" true.
+D_LOGBOX="$(/usr/bin/mktemp -d)"; d_sandbox "$D_LOGBOX"
+D_LB="${D_LOGBOX}/block-autonomy-ceiling.sh"; D_LBLOG="${D_LOGBOX}/block-log.jsonl"
+d_identical=0; /usr/bin/cmp -s "$HOOK" "$D_LB" && d_identical=1
+d_assert_row() {  # name exit pattern want_cwd want_cwd_resolved — also exactly one new row
+  local name="$1" want_exit="$2" want_pat="$3" want_cwd="$4" want_res="$5"
+  local n; n="$(d_rows "$D_LBLOG")"; local gc gr; gc="$(d_field "$D_LBLOG" cwd)"; gr="$(d_field "$D_LBLOG" cwd_resolved)"
+  if [ "$d_identical" = 1 ] && [ "$RHE_EXIT" = "$want_exit" ] && /usr/bin/grep -qE "$want_pat" <<<"$RHE_STDERR" \
+     && [ "$n" = $((D_ROWS0 + 1)) ] && [ "$gc" = "$want_cwd" ] && [ "$gr" = "$want_res" ]; then
+    /usr/bin/printf 'PASS: %s\n' "$name"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s (identical=%s exit=%s want=%s rows %s→%s want +1 cwd=[%s] want [%s] cwd_resolved=[%s] want [%s])\n  stderr: %s\n' \
+      "$name" "$d_identical" "$RHE_EXIT" "$want_exit" "$D_ROWS0" "$n" "$gc" "$want_cwd" "$gr" "$want_res" "$RHE_STDERR"; FAIL=$((FAIL + 1))
+  fi
+}
+D_OPS='BLOCK-AUTONOMY-002.*Operations cwd writing into pmo-platform'        # the projects-branch -002
+D_UNRES='BLOCK-AUTONOMY-002.*working directory that could not be resolved'   # the fail-closed arm
+W="CLAUDE_WORKSPACE_ROOT=${TEST_WS}"
+
+run_hook_at "$HOOK" "" "$(write_payload "$D_PLAT" "${TEST_WS}/pmo-platform/../projects/Default")" "$W"
+assert_hook "D-1 traversal cwd pmo-platform/../projects → -002 (classified where it lands)" 2 "$D_OPS"
+run_hook_at "$HOOK" "" "$(write_payload "$D_PLAT" "${TEST_WS}/projects/../pmo-platform")" "$W"
+assert_hook "D-1b traversal cwd spelled under projects/ that resolves into pmo-platform → -002 (the spelling reading only blocks)" 2 "$D_OPS"
+D_ROWS0="$(d_rows "$D_LBLOG")"; run_hook_at "$D_LB" "" "$(write_payload "$D_PLAT" "${TEST_WS}/projects/Default/")" "$W"
+d_assert_row "D-2 trailing-/ cwd → -002, log row: cwd as sent, cwd_resolved canonical" 2 "$D_OPS" "${TEST_WS}/projects/Default/" "${TEST_WS}/projects/Default"
+D_ROWS0="$(d_rows "$D_LBLOG")"; run_hook_at "$D_LB" "" "$(write_payload "$D_PLAT" "${TEST_WS}/projects/Default/.")" "$W"
+d_assert_row "D-3 trailing-/. cwd → -002, log row: cwd as sent, cwd_resolved canonical" 2 "$D_OPS" "${TEST_WS}/projects/Default/." "${TEST_WS}/projects/Default"
+D_ROWS0="$(d_rows "$D_LBLOG")"; run_hook_at "$D_LB" "$TEST_WS" "$(write_payload "$D_PLAT" "projects/Default")" "$W"
+d_assert_row "D-4 relative cwd projects/Default → -002, resolved against the hook process cwd" 2 "$D_OPS" "projects/Default" "${TEST_WS}/projects/Default"
+run_hook_at "$HOOK" "$TEST_WS" "$(write_payload "$D_PLAT" "pmo-platform")" "$W"
+assert_hook_clean "D-4b relative cwd pmo-platform → ALLOW (resolved, not treated as unresolvable)"
+D_ROWS0="$(d_rows "$D_LBLOG")"; run_hook_at "$D_LB" "" "$(write_payload "$D_PLAT" "${D_WS_ALIAS}/projects/Default")" "$W"
+d_assert_row "D-5 cwd through a symlinked alias of the workspace → -002 (the realistic alias)" 2 "$D_OPS" "${D_WS_ALIAS}/projects/Default" "${TEST_WS}/projects/Default"
+run_hook_at "$HOOK" "" "$(write_payload "$D_PLAT" "${TEST_WS}/pmo-platform/d-opslink/Default")" "$W"
+assert_hook "D-5b in-tree alias reading pmo-platform, landing in projects/ → -002" 2 "$D_OPS"
+run_hook_at "$HOOK" "" "$(write_payload "$D_PLAT" "${TEST_WS}/projects/d-repolink")" "$W"
+assert_hook "D-5c in-tree alias spelled under projects/ that lands in pmo-platform → -002 (the spelling reading only blocks)" 2 "$D_OPS"
+D_ROWS0="$(d_rows "$D_LBLOG")"; run_hook_at "$D_LB" "" "$(write_payload "$D_PROJ" "${TEST_WS}/projects/d-repolink")" "$W"
+d_assert_row "D-5d same alias writing projects/ → -004 (the resolved cwd feeds -004 too)" 2 "BLOCK-AUTONOMY-004" "${TEST_WS}/projects/d-repolink" "${TEST_WS}/pmo-platform"
+run_hook_at "$HOOK" "" "$(write_payload "$D_PROJ" "${TEST_WS}/projects/d-corelink")" "$W"
+assert_hook "D-5f alias of a pmo-platform SUBDIRECTORY spelled under projects/, writing projects/ → -004 (resolution, not the spelling, places the cwd)" 2 "BLOCK-AUTONOMY-004"
+D_NOPY="$(/usr/bin/mktemp -d)"; d_sandbox "$D_NOPY" -e 's#^readonly PYTHON3="/usr/bin/python3"#readonly PYTHON3="/nonexistent/python3"#'
+d_nopy=0; /usr/bin/grep -q '/nonexistent/python3' "${D_NOPY}/block-autonomy-ceiling.sh" && d_nopy=1
+run_hook_at "${D_NOPY}/block-autonomy-ceiling.sh" "" "$(write_payload "$D_PLAT" "${D_WS_ALIAS}/projects/Default")" "$W"
+if [ "$d_nopy" = 1 ]; then assert_hook "D-5e python3 unusable → aliased cwd STILL resolves (-002)" 2 "$D_OPS"; else echo "FAIL: D-5e python-less sandbox not edited"; FAIL=$((FAIL + 1)); fi
+d_nopwd_ok=0; [ -z "$(/bin/bash -c 'unset PWD; printf %s "${PWD:-}"')" ] && d_nopwd_ok=1   # fixture precondition
+/usr/bin/printf 'off' > "${D_LOGBOX}/.autonomy-mode"   # D-6 runs on the copy: ITS mode file is the one set to the most permissive posture
+D_ROWS0="$(d_rows "$D_LBLOG")"; run_hook_nopwd "$D_LB" "$(write_payload_nocwd "$D_PLAT")" "$W" "PMO_PLATFORM_CONFIG_ROOT=${D_MASTER_OFF}"
+/usr/bin/printf 'enforce' > "${D_LOGBOX}/.autonomy-mode"
+if [ "$d_nopwd_ok" = 1 ]; then d_assert_row "D-6 unresolvable cwd (payload omits it, PWD empty) → -002 fails closed, even mode=off + master-OFF" 2 "$D_UNRES" "" ""; else echo "FAIL: D-6 fixture precondition — PWD still readable after unset"; FAIL=$((FAIL + 1)); fi
+run_hook_nopwd "$HOOK" "$(write_payload_nocwd "$D_PROJ")" "$W"
+assert_hook_clean "D-6b unresolvable cwd + projects/ target → ALLOW (fail-closed binds -002 only)"
+run_hook_at "$HOOK" "${TEST_WS}/pmo-platform" "$(write_payload_nocwd "$D_PLAT")" "$W"
+assert_hook_clean "D-7 payload omits cwd → PWD fallback (pmo-platform) → ALLOW, not fail-closed"
+run_hook_at "$HOOK" "${TEST_WS}/projects/Default" "$(write_payload_nocwd "$D_PLAT")" "$W"
+assert_hook "D-7b payload omits cwd → PWD fallback (projects/) is classified → -002" 2 "$D_OPS"
+D_ROWS0="$(d_rows "$D_LBLOG")"; run_hook_at "$D_LB" "" "$(edit_payload "${TEST_WS}/pmo-platform/core/governance/OPERATIONS.md" "${TEST_WS}/projects/Default/")" "$W"
+d_assert_row "D-8 a -001 row carries cwd as sent and NO cwd_resolved (only -002/-004 rows do)" 2 "BLOCK-AUTONOMY-001" "${TEST_WS}/projects/Default/" "<absent>"
+
+# D-11 / D-11b - projects/ ITSELF a symlink out of the workspace root (CR-Q2). The logical
+# spelling is caught by both readings; the physical spelling only by comparing against the
+# operations root RESOLVED the same way - D-11b is the arm that pins that resolution.
+D_SYM_WS="$(cd "$(/usr/bin/mktemp -d)" && pwd -P)"; D_SYM_EXT="$(cd "$(/usr/bin/mktemp -d)" && pwd -P)"
+/bin/mkdir -p "${D_SYM_WS}/pmo-platform/.git" "${D_SYM_WS}/pmo-platform/core" "${D_SYM_EXT}/projects/P"
+/bin/ln -s "${D_SYM_EXT}/projects" "${D_SYM_WS}/projects"
+D_SYM_T="${D_SYM_WS}/pmo-platform/core/foo.md"
+d11_ok=0; [ -L "${D_SYM_WS}/projects" ] && [ "$(cd "${D_SYM_WS}/projects/P" && pwd -P)" = "${D_SYM_EXT}/projects/P" ] && d11_ok=1
+run_hook_at "$HOOK" "" "$(write_payload "$D_SYM_T" "${D_SYM_WS}/projects/P")" "CLAUDE_WORKSPACE_ROOT=${D_SYM_WS}"
+if [ "$d11_ok" = 1 ]; then assert_hook "D-11 projects/ symlinked out of the root, cwd spelled LOGICALLY → -002" 2 "$D_OPS"; else echo "FAIL: D-11 fixture precondition — projects/ symlink not in place"; FAIL=$((FAIL + 1)); fi
+run_hook_at "$HOOK" "" "$(write_payload "$D_SYM_T" "${D_SYM_EXT}/projects/P")" "CLAUDE_WORKSPACE_ROOT=${D_SYM_WS}"
+if [ "$d11_ok" = 1 ]; then assert_hook "D-11b the same, cwd spelled PHYSICALLY → -002 (the operations root is resolved before comparing)" 2 "$D_OPS"; else echo "FAIL: D-11b fixture precondition — projects/ symlink not in place"; FAIL=$((FAIL + 1)); fi
+/bin/rm -rf "$D_SYM_WS" "$D_SYM_EXT"
+
+# D-9 / D-9b — the raw-cwd mutant (the cwd resolution line deleted, nothing else).
+# The must-diverge set is the shapes whose verdict or logged cwd_resolved changes when the raw
+# spelling replaces the resolved one AFTER #6200's membership walk lands too: a spelling already
+# under projects/ is blocked by the spelling reading either way, and a root alias is recovered
+# by the walk without resolution, so neither can discriminate here.
+D_MUT="$(/usr/bin/mktemp -d)"; d_sandbox "$D_MUT" -e '/# D9: cwd resolution/d'
+DM="${D_MUT}/block-autonomy-ceiling.sh"; DMLOG="${D_MUT}/block-log.jsonl"
+d9_removed=$(( $(/usr/bin/wc -l < "$HOOK") - $(/usr/bin/wc -l < "$DM") )); d9_bad=""
+d9_expect() {  # name dir payload want_exit [want_cwd_resolved]
+  local name="$1" dir="$2" payload="$3" want="$4" want_res="${5-__none__}"
+  run_hook_at "$DM" "$dir" "$payload" "$W"
+  if [ "$RHE_EXIT" != "$want" ]; then d9_bad="${d9_bad} ${name}(exit=${RHE_EXIT})"; return 0; fi
+  if [ "$want_res" != "__none__" ] && [ "$(d_field "$DMLOG" cwd_resolved)" != "$want_res" ]; then d9_bad="${d9_bad} ${name}(cwd_resolved)"; fi
+  return 0
+}
+d9_expect D-1  ""         "$(write_payload "$D_PLAT" "${TEST_WS}/pmo-platform/../projects/Default")" 0
+d9_expect D-2  ""         "$(write_payload "$D_PLAT" "${TEST_WS}/projects/Default/")"                 2 "${TEST_WS}/projects/Default/"
+d9_expect D-3  ""         "$(write_payload "$D_PLAT" "${TEST_WS}/projects/Default/.")"                2 "${TEST_WS}/projects/Default/."
+d9_expect D-4  "$TEST_WS" "$(write_payload "$D_PLAT" "projects/Default")"                            2 ""
+d9_expect D-4b "$TEST_WS" "$(write_payload "$D_PLAT" "pmo-platform")"                                2
+d9_expect D-5  ""         "$(write_payload "$D_PLAT" "${D_WS_ALIAS}/projects/Default")"               0
+d9_expect D-5b ""         "$(write_payload "$D_PLAT" "${TEST_WS}/pmo-platform/d-opslink/Default")"    0
+d9_expect D-5f ""         "$(write_payload "$D_PROJ" "${TEST_WS}/projects/d-corelink")"               0
+if [ "$d9_removed" = 1 ] && [ -z "$d9_bad" ]; then
+  echo "PASS: D-9 differential — cwd resolution deleted: every must-diverge cwd arm diverges"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: D-9 differential (lines removed=%s expected=1; did NOT diverge:%s)\n' "$d9_removed" "$d9_bad"; FAIL=$((FAIL + 1))
+fi
+D_MUT2="$(/usr/bin/mktemp -d)"; d_sandbox "$D_MUT2" -e '/# D9: cwd resolution/d' -e 's#^readonly PYTHON3="/usr/bin/python3"#readonly PYTHON3="/nonexistent/python3"#'
+DM2="${D_MUT2}/block-autonomy-ceiling.sh"; d9b_bad=""
+d9b_ok=0; [ $(( $(/usr/bin/wc -l < "$HOOK") - $(/usr/bin/wc -l < "$DM2") )) = 1 ] && /usr/bin/grep -q '/nonexistent/python3' "$DM2" \
+  && [ -L "${TEST_WS}/projects/repolink" ] && [ -L "${TEST_WS}/projects/gov.md" ] && [ -L "${TEST_WS}/pmo-platform/opslink" ] && d9b_ok=1
+d9b_expect() {  # name hook dir payload want_exit want_rule [VAR=VAL...]
+  local name="$1" hook="$2" dir="$3" payload="$4" want="$5" rule="$6"; shift 6
+  run_hook_at "$hook" "$dir" "$payload" ${1+"$@"}
+  if [ "$RHE_EXIT" != "$want" ] || ! /usr/bin/grep -qE "$rule" <<<"$RHE_STDERR"; then d9b_bad="${d9b_bad} ${name}(exit=${RHE_EXIT})"; fi
+  return 0
+}
+d9b_expect A-1 "$DM"  "" "$(write_payload "${TEST_WS}/projects/../pmo-platform/core/foo.md" "${TEST_WS}/projects/Default")" 2 BLOCK-AUTONOMY-002 "$W"
+d9b_expect A-2 "$DM"  "" "$(edit_payload "${TEST_WS}/projects/Default/../../pmo-platform/core/governance/OPERATIONS.md" "${TEST_WS}/projects/Default")" 2 BLOCK-AUTONOMY-001 "$W"
+d9b_expect A-3 "$DM"  "" "$(write_payload "${TEST_WS}/projects/repolink/core/foo.md" "${TEST_WS}/projects/Default")" 2 BLOCK-AUTONOMY-002 "$W"
+d9b_expect A-4 "$DM"  "" "$(edit_payload "${TEST_WS}/projects/gov.md" "${TEST_WS}/projects/Default")" 2 BLOCK-AUTONOMY-001 "$W"
+d9b_expect A-5 "$DM"  "" "$(write_payload "${TEST_WS}/pmo-platform/opslink/Default/notes.md" "${TEST_WS}/pmo-platform")" 2 BLOCK-AUTONOMY-004 "$W"
+d9b_expect A-6 "$DM2" "" "$(write_payload "${TEST_WS}/projects/../pmo-platform/core/foo.md" "${TEST_WS}/projects/Default")" 2 BLOCK-AUTONOMY-002 "$W"
+d9b_expect A-7 "$DM2" "" "$(edit_payload "${TEST_WS}/projects/gov.md" "${TEST_WS}/projects/Default")" 2 BLOCK-AUTONOMY-001 "$W"
+d9b_expect N-0 "$DM"  "" "$N_PAYLOAD" 2 BLOCK-AUTONOMY-001 "$W"
+d9b_expect N-1 "$DM"  "" "$N_PAYLOAD" 2 BLOCK-AUTONOMY-001 "CLAUDE_WORKSPACE_ROOT=${TEST_WS}/"
+d9b_expect N-2 "$DM"  "" "$N_PAYLOAD" 2 BLOCK-AUTONOMY-001 "CLAUDE_WORKSPACE_ROOT=${TEST_WS}/."
+d9b_expect N-3 "$DM"  "" "$N_PAYLOAD" 2 BLOCK-AUTONOMY-001 "CLAUDE_WORKSPACE_ROOT=${N_ALIAS}"
+d9b_expect N-4 "$DM"  "$N_PARENT" "$N_PAYLOAD" 2 BLOCK-AUTONOMY-001 "CLAUDE_WORKSPACE_ROOT=${N_BASE}"
+if [ "$d9_removed" = 1 ] && [ "$d9b_ok" = 1 ] && [ -z "$d9b_bad" ]; then
+  echo "PASS: D-9b differential — cwd resolution deleted: all 12 target-axis arms unchanged"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: D-9b differential (removed=%s composite/fixtures ok=%s; changed:%s)\n' "$d9_removed" "$d9b_ok" "$d9b_bad"; FAIL=$((FAIL + 1))
+fi
+# D-10 — the no-fallback mutant: the omitted-cwd write D-7 lets through must now BLOCK.
+D_MUT3="$(/usr/bin/mktemp -d)"; d_sandbox "$D_MUT3" -e '/# D10: pwd fallback/d'
+d10_removed=$(( $(/usr/bin/wc -l < "$HOOK") - $(/usr/bin/wc -l < "${D_MUT3}/block-autonomy-ceiling.sh") ))
+run_hook_at "${D_MUT3}/block-autonomy-ceiling.sh" "${TEST_WS}/pmo-platform" "$(write_payload_nocwd "$D_PLAT")" "$W"
+if [ "$d10_removed" = 1 ] && [ "$RHE_EXIT" = 2 ] && /usr/bin/grep -qE "$D_UNRES" <<<"$RHE_STDERR"; then
+  echo "PASS: D-10 differential — PWD fallback deleted: D-7's payload BLOCKS"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: D-10 differential (lines removed=%s expected=1, exit=%s expected=2)\n  stderr: %s\n' "$d10_removed" "$RHE_EXIT" "$RHE_STDERR"; FAIL=$((FAIL + 1))
+fi
+/bin/rm -rf "$D_LOGBOX" "$D_NOPY" "$D_MUT" "$D_MUT2" "$D_MUT3" "$D_ALIAS_PARENT" "$D_MASTER_OFF"
 
 # =====================================================================
 # Summary

@@ -5076,6 +5076,7 @@ hook_publish_set() {
     "core/hooks/lib/fragile-ref-patterns.sh|||lib/fragile-ref-patterns.sh|||co-deployed-lib|||exact"
     "core/hooks/lib/master-enable.sh|||lib/master-enable.sh|||co-deployed-lib|||exact"
     "core/hooks/lib/scope-guard.sh|||lib/scope-guard.sh|||co-deployed-lib|||exact"
+    "core/hooks/lib/platform-membership.sh|||lib/platform-membership.sh|||co-deployed-lib|||exact"
     "core/hooks/.mode.template|||.mode|||mode-template|||presence"
     "core/hooks/deploy-check.mode.template|||deploy-check.mode|||mode-template|||presence"
     "core/hooks/.gh-path-leak-mode.template|||.gh-path-leak-mode|||mode-template|||presence"

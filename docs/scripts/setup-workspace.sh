@@ -2758,6 +2758,27 @@ install_hooks() {
     info "INSTALLED: scope-guard.sh (block-* workspace-scope gate)"
   fi
 
+  # Co-deploy the shared repository-membership helper into .claude/hooks/lib/ (#6200).
+  # block-autonomy-ceiling.sh and block-draft-files.sh source it for every "is this path in a working
+  # tree of the platform?" question. A MISSING copy is NOT fail-toward-current-behavior for the
+  # Tier-0 floor: block-autonomy-ceiling fails its governance and disclosure questions CLOSED without
+  # it (only block-draft-files abstains). The Section 22a2 closure post-condition, which derives this
+  # requirement from the deployed hooks, therefore refuses a refresh that omits it. Sourced lib, not a
+  # registered hook (no block-* name), so the hook-registry checks correctly ignore it. Reached by
+  # every flow (fresh / rebootstrap / the refresh-hooks path update.sh delegates to).
+  local memberlib_src="${SOURCE_REPO}/core/hooks/lib/platform-membership.sh"
+  local memberlib_dst="${WORKSPACE_ROOT}/.claude/hooks/lib/platform-membership.sh"
+  if [ ! -r "${memberlib_src}" ]; then
+    warn "platform-membership.sh not found at ${memberlib_src}; block-autonomy-ceiling will fail its membership questions closed and block-draft-files will abstain at its identity gate"
+  elif [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would co-deploy platform-membership.sh → ${memberlib_dst}"
+  else
+    mkdir -p "${WORKSPACE_ROOT}/.claude/hooks/lib"
+    record_write_rollback "${memberlib_dst}"
+    cp "${memberlib_src}" "${memberlib_dst}"
+    info "INSTALLED: platform-membership.sh (shared repository-membership helper)"
+  fi
+
   # Surface the enforcement point rather than performing it (#4436). The hooks installed
   # above are loaded ONLY by sessions whose project root resolves to the workspace root —
   # a session rooted in the repo or a worktree resolves no settings file with a hooks key

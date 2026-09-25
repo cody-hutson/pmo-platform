@@ -28,11 +28,16 @@ REPO="$(mktemp -d 2>/dev/null)"
     > .gitignore
 )
 REPO="$(cd "$REPO" && pwd -P)"   # canonicalize (macOS mktemp returns a /private symlink) to match `git rev-parse --show-toplevel`
+# (#6200, FM-2) The identity anchor reads CLAUDE_WORKSPACE_ROOT (never the scope override), so a
+# shell exporting it at a workspace holding pmo-platform/ would make this fixture repo read as
+# foreign. Pin it to a directory created here, which holds no pmo-platform/ by construction.
+TC_NOANCHOR_WS="$(mktemp -d 2>/dev/null)"; TC_NOANCHOR_WS="$(cd "$TC_NOANCHOR_WS" && pwd -P)"
 
 ORIGINAL_MODE=""; [ -f "$MODE_FILE" ] && ORIGINAL_MODE="$(cat "$MODE_FILE")"
 cleanup() {
   if [ -n "$ORIGINAL_MODE" ]; then /usr/bin/printf '%s' "$ORIGINAL_MODE" > "$MODE_FILE"; else /bin/rm -f "$MODE_FILE"; fi
   [ -n "${REPO:-}" ] && /bin/rm -rf "$REPO"
+  [ -n "${TC_NOANCHOR_WS:-}" ] && /bin/rm -rf "$TC_NOANCHOR_WS"
 }
 trap cleanup EXIT
 
@@ -44,7 +49,7 @@ test_case() {
   local name="$1" rel="$2" expected_exit="$3" pattern="${4:-}"
   local payload; payload="$(/usr/bin/printf '{"tool_name":"Write","cwd":"%s","tool_input":{"file_path":"%s/%s"}}' "$REPO" "$REPO" "$rel")"
   local tmp; tmp="$(/usr/bin/mktemp)"; local rc=0
-  /usr/bin/printf '%s' "$payload" | /bin/bash "$HOOK" 2>"$tmp" >/dev/null || rc="$?"
+  /usr/bin/printf '%s' "$payload" | /usr/bin/env "CLAUDE_WORKSPACE_ROOT=${TC_NOANCHOR_WS}" /bin/bash "$HOOK" 2>"$tmp" >/dev/null || rc="$?"
   local err; err="$(/bin/cat "$tmp")"; /bin/rm -f "$tmp"
   local ok=1
   [ "$rc" != "$expected_exit" ] && ok=0
@@ -126,8 +131,10 @@ id_run() {
   local tool="$1" repo="$2" rel="$3" payload tmp
   payload="$(/usr/bin/printf '{"tool_name":"%s","cwd":"%s","tool_input":{"file_path":"%s/%s"}}' "$tool" "$repo" "$repo" "$rel")"
   tmp="$(/usr/bin/mktemp)"; ID_RC=0
+  # (#6200) The identity anchor is lib/platform-membership.sh's, which reads CLAUDE_WORKSPACE_ROOT —
+  # never the scope override — so every identity arm pins both variables to the same fixture root.
   /usr/bin/printf '%s' "$payload" \
-    | /usr/bin/env "PMO_SCOPE_GUARD_ROOT=${ID_WS}" "PMO_PLATFORM_CONFIG_ROOT=${ID_CFG}" \
+    | /usr/bin/env "PMO_SCOPE_GUARD_ROOT=${ID_WS}" "CLAUDE_WORKSPACE_ROOT=${ID_WS}" "PMO_PLATFORM_CONFIG_ROOT=${ID_CFG}" \
         /bin/bash "$HOOK" 2>"$tmp" >/dev/null || ID_RC="$?"
   ID_ERR="$(/bin/cat "$tmp")"; /bin/rm -f "$tmp"
 }
@@ -214,11 +221,12 @@ id_pair "AC2: stray new top-level file still BLOCKED" \
   "Write" 2 "$ID_PLAT" "README.md" "$ID_PLAT" "random-idea.md"
 
 # --- Membership, not path shape: a platform WORKTREE is still the platform ----------
-# This is WHY the predicate compares --git-common-dir and not --show-toplevel. A linked
-# worktree reports a DIFFERENT toplevel but the SAME common dir. The worktree below sits
+# The identity gate asks the shared membership helper (lib/platform-membership.sh), whose walk
+# follows a linked worktree's `.git` pointer to the platform's git directory — so a worktree
+# with a DIFFERENT toplevel is still the platform. The worktree below sits
 # beside the checkout under the same governed root, so it is in workspace scope and layer 4
 # is the only thing deciding: a toplevel-based predicate would read it as a foreign repo and
-# silently stop enforcing there, while the shipped predicate keeps enforcing. The twin here
+# silently stop enforcing there, while the membership walk keeps enforcing. The twin here
 # is the WORKTREE, so its firing is what proves membership was recognized.
 _id_wt="${ID_WS}/platform-worktree"
 _id_wt_made=1
@@ -231,7 +239,7 @@ _id_wt_made=1
 ) >/dev/null 2>&1 && _id_wt_made=0
 if [ "$_id_wt_made" = "0" ] && [ -d "$_id_wt" ]; then
   # Guard the premise: the worktree must genuinely report a different toplevel, or the arm
-  # proves nothing about common-dir-vs-toplevel.
+  # proves nothing about membership-vs-toplevel.
   _id_wt_top="$(cd "$_id_wt" && /usr/bin/git rev-parse --show-toplevel 2>/dev/null || echo "")"
   id_ok "membership premise: worktree toplevel differs from the checkout's" \
     "$([ -n "$_id_wt_top" ] && [ "$_id_wt_top" != "$ID_PLAT" ] && echo 0 || echo 1)" \
@@ -244,13 +252,88 @@ else
   FAIL=$((FAIL+1))
 fi
 
+# --- AC-8 (#6200): ONE in-root relocated worktree, recognized by BOTH hooks through the helper ---
+# The worktree above sits outside the platform checkout but inside the governed workspace root: the
+# shape AC-8 is scoped to. Both hooks now answer "is this the platform?" through
+# lib/platform-membership.sh, so one fixture must draw the platform verdict from each. This hook's
+# identity gate lets BLOCK-DRAFT-001 apply, and block-autonomy-ceiling.sh's -001 second stage
+# refuses a governance document there. A worktree OUTSIDE the root is out of this hook's scope by
+# design (the scope gate exits first); that is documented, not asserted as recognition.
+AUTONOMY_HOOK="${HOOK_DIR}/block-autonomy-ceiling.sh"
+_ac8_name="AC-8 in-root relocated worktree: both hooks recognize it through the shared helper (BLOCK-DRAFT-001 + BLOCK-AUTONOMY-001)"
+if [ "$_id_wt_made" = "0" ] && [ -d "$_id_wt" ] && [ -x "$AUTONOMY_HOOK" ]; then
+  set_mode enforce
+  id_run "Write" "$_id_wt" "docs/proposals/ac8.md"; _ac8_d_rc="$ID_RC"; _ac8_d_err="$ID_ERR"
+  _ac8_home="$(mktemp -d 2>/dev/null)"; _ac8_a_rc=0
+  _ac8_a_err="$(/usr/bin/printf '{"tool_name":"Write","cwd":"%s","tool_input":{"file_path":"%s/CLAUDE.md","content":"x"}}' "$_id_wt" "$_id_wt" \
+    | /usr/bin/env HOME="$_ac8_home" "CLAUDE_WORKSPACE_ROOT=${ID_WS}" "PMO_SCOPE_GUARD_ROOT=${ID_WS}" "PMO_PLATFORM_CONFIG_ROOT=${ID_CFG}" \
+        /bin/bash "$AUTONOMY_HOOK" 2>&1 >/dev/null)" || _ac8_a_rc="$?"
+  [ -n "${_ac8_home:-}" ] && /bin/rm -rf "$_ac8_home"
+  if [ "$_ac8_d_rc" = "2" ] && /usr/bin/grep -q 'BLOCK-DRAFT-001' <<<"$_ac8_d_err" \
+     && [ "$_ac8_a_rc" = "2" ] && /usr/bin/grep -q 'BLOCK-AUTONOMY-001' <<<"$_ac8_a_err" && /usr/bin/grep -q 'located outside' <<<"$_ac8_a_err" && ! /usr/bin/grep -q 'LIB-MISSING' <<<"$_ac8_a_err"; then
+    /usr/bin/printf 'PASS: %s\n' "$_ac8_name"; PASS=$((PASS+1))
+  else
+    /usr/bin/printf 'FAIL: %s (draft exit=%s stderr=%s | autonomy exit=%s stderr=%s)\n' "$_ac8_name" "$_ac8_d_rc" "$_ac8_d_err" "$_ac8_a_rc" "$_ac8_a_err"; FAIL=$((FAIL+1))
+  fi
+else
+  /usr/bin/printf 'FAIL: %s (worktree fixture or autonomy hook unavailable — arm unusable)\n' "$_ac8_name"; FAIL=$((FAIL+1))
+fi
+
+# --- AC-8 twin (#6200, FM-3): a STUB helper answering "not a member" - both hooks must go
+# non-blocking, which proves each one asks the shared helper rather than its own code. ---
+_ac8s_name="AC-8 twin: a stub helper answering not-a-member → both hooks non-blocking (both route through the shared helper)"
+_ac8s_box="$(mktemp -d 2>/dev/null)"
+if [ -n "$_ac8s_box" ] && [ "$_id_wt_made" = "0" ] && [ -d "$_id_wt" ] && [ -x "$AUTONOMY_HOOK" ]; then
+  /bin/mkdir -p "${_ac8s_box}/lib"
+  /bin/cp "${HOOK_DIR}/lib/"*.sh "${_ac8s_box}/lib/" 2>/dev/null || true
+  /bin/cp "${HOOK_DIR}/lib/"*.awk "${_ac8s_box}/lib/" 2>/dev/null || true
+  /bin/cp "$HOOK" "${_ac8s_box}/block-draft-files.sh"; /bin/cp "$AUTONOMY_HOOK" "${_ac8s_box}/block-autonomy-ceiling.sh"
+  /bin/chmod +x "${_ac8s_box}/block-draft-files.sh" "${_ac8s_box}/block-autonomy-ceiling.sh"
+  /usr/bin/printf 'enforce' > "${_ac8s_box}/.mode"; /usr/bin/printf 'enforce' > "${_ac8s_box}/.autonomy-mode"
+  _ac8s_anchor="$( ( cd -P -- "${ID_PLAT}/.git" && pwd -P ) 2>/dev/null )" || _ac8s_anchor=""
+  /usr/bin/printf '%s\n' "platform_membership_anchor() { printf '%s' '${_ac8s_anchor}'; }" \
+    'platform_membership_of() { return 1; }' > "${_ac8s_box}/lib/platform-membership.sh"
+  _ac8s_home="$(mktemp -d 2>/dev/null)"; _ac8s_d_rc=0; _ac8s_a_rc=0
+  _ac8s_d_err="$(/usr/bin/printf '{"tool_name":"Write","cwd":"%s","tool_input":{"file_path":"%s/docs/proposals/ac8.md"}}' "$_id_wt" "$_id_wt" \
+    | /usr/bin/env "CLAUDE_WORKSPACE_ROOT=${ID_WS}" "PMO_SCOPE_GUARD_ROOT=${ID_WS}" "PMO_PLATFORM_CONFIG_ROOT=${ID_CFG}" \
+        /bin/bash "${_ac8s_box}/block-draft-files.sh" 2>&1 >/dev/null)" || _ac8s_d_rc="$?"
+  _ac8s_a_err="$(/usr/bin/printf '{"tool_name":"Write","cwd":"%s","tool_input":{"file_path":"%s/CLAUDE.md","content":"x"}}' "$_id_wt" "$_id_wt" \
+    | /usr/bin/env HOME="$_ac8s_home" "CLAUDE_WORKSPACE_ROOT=${ID_WS}" "PMO_SCOPE_GUARD_ROOT=${ID_WS}" "PMO_PLATFORM_CONFIG_ROOT=${ID_CFG}" \
+        /bin/bash "${_ac8s_box}/block-autonomy-ceiling.sh" 2>&1 >/dev/null)" || _ac8s_a_rc="$?"
+  [ -n "${_ac8s_home:-}" ] && /bin/rm -rf "$_ac8s_home"; /bin/rm -rf "$_ac8s_box"
+  if [ "$_ac8s_d_rc" = "0" ] && ! /usr/bin/grep -q 'BLOCK-DRAFT-001' <<<"$_ac8s_d_err" \
+     && [ "$_ac8s_a_rc" = "0" ] && ! /usr/bin/grep -q 'BLOCK-AUTONOMY-00' <<<"$_ac8s_a_err"; then
+    /usr/bin/printf 'PASS: %s\n' "$_ac8s_name"; PASS=$((PASS+1))
+  else
+    /usr/bin/printf 'FAIL: %s (draft exit=%s stderr=%s | autonomy exit=%s stderr=%s)\n' "$_ac8s_name" "$_ac8s_d_rc" "$_ac8s_d_err" "$_ac8s_a_rc" "$_ac8s_a_err"; FAIL=$((FAIL+1))
+  fi
+else
+  /usr/bin/printf 'FAIL: %s (fixture, sandbox or autonomy hook unavailable — arm unusable)\n' "$_ac8s_name"; FAIL=$((FAIL+1))
+fi
+
+# --- AC-8 (#6200): the same answer from the helper itself, sourced in-suite ---
+_id_helper="${HOOK_DIR}/lib/platform-membership.sh"
+_id_h_got="<not run>"
+if [ -r "$_id_helper" ] && [ "$_id_wt_made" = "0" ] && [ -d "$_id_wt" ]; then
+  _id_h_got="$(
+    CLAUDE_WORKSPACE_ROOT="$ID_WS"
+    . "$_id_helper" 2>/dev/null || { printf 'load-failed'; exit 0; }
+    _a="$(platform_membership_anchor)" || _a=""
+    _want="$( ( cd -P -- "${ID_PLAT}/.git" && pwd -P ) 2>/dev/null )" || _want=""
+    _w=0; platform_membership_of "$( ( cd -P -- "$_id_wt" && pwd -P ) 2>/dev/null )" "$_a" || _w=$?
+    _f=0; platform_membership_of "$( ( cd -P -- "$ID_FOREIGN" && pwd -P ) 2>/dev/null )" "$_a" || _f=$?
+    if [ -n "$_a" ] && [ "$_a" = "$_want" ]; then _ok="anchor-ok"; else _ok="anchor-bad:${_a}"; fi
+    printf '%s wt=%s foreign=%s' "$_ok" "$_w" "$_f"
+  )" || true
+fi
+id_ok "AC-8 helper-level: the helper, sourced in-suite, answers member for the in-root relocated worktree and not-a-member for the nested foreign repo" \
+  "$([ "$_id_h_got" = "anchor-ok wt=0 foreign=1" ] && echo 0 || echo 1)" "got: $_id_h_got"
+
 # --- The relative-path trap the normalization exists for --------------------------
-# git reports --git-common-dir RELATIVE when the invocation is inside the repository, so
-# from a SUBDIRECTORY of the checkout the raw value is "../.git" rather than an absolute
-# path. A predicate that string-compared the raw values would classify the platform's own
-# subdirectories as a foreign repo and silently stop enforcing there — the exact failure
-# git-post-merge-deploy.sh's Guard A documents. Enforcement from a subdirectory is
-# therefore its own arm, not an assumed consequence of the checkout-root arm above.
+# Retained as a git-behaviour fixture: the hook no longer asks git for identity (the shared
+# helper walks from the physical cwd), so the premise arm below records why a git-based
+# predicate needed normalization. The id_pair after it is the hook-level arm: enforcement
+# from a platform SUBDIRECTORY must be unchanged.
 /bin/mkdir -p "${ID_PLAT}/core/rules"
 _id_raw_sub="$(cd "${ID_PLAT}/core/rules" && /usr/bin/git rev-parse --git-common-dir 2>/dev/null || echo "")"
 # Computed with a plain case rather than inside $( ), where the first ")" would close the
@@ -267,10 +350,10 @@ id_pair "relative-path trap: enforcement from a platform SUBDIRECTORY is unchang
   "Write" 2 "${ID_PLAT}/core/rules" "core/rules/git-workflow.md" "${ID_PLAT}/core/rules" "docs/proposals/enhancement.md"
 
 # --- Nearest tree wins: a foreign repo INSIDE the checkout is still foreign ---------
-# The predicate resolves the common dir of the repository containing $CWD, and git stops at
-# the nearest .git. A repo vendored inside the platform checkout therefore resolves to its
-# OWN administrative directory and is correctly not-platform — the containing path does not
-# confer identity. Asserted because the gate's comment claims it.
+# The shared helper's walk stops at the nearest `.git` above the physical cwd (nearest tree
+# wins), so a repo vendored inside the checkout resolves to its OWN administrative directory
+# and is correctly not-platform — the containing path does not confer identity. Asserted
+# because the gate's comment claims it.
 /bin/mkdir -p "${ID_PLAT}/vendor/inner-repo"
 ( cd "${ID_PLAT}/vendor/inner-repo" && /usr/bin/git init -q ) >/dev/null 2>&1
 id_pair "nearest tree wins: foreign repo nested INSIDE the checkout is not the platform" \
@@ -290,7 +373,7 @@ id_ok "anchor-axis premise: the second root holds no pmo-platform checkout" \
 set_mode enforce
 _id_norc=0
 /usr/bin/printf '{"tool_name":"Write","cwd":"%s/some-repo","tool_input":{"file_path":"%s/some-repo/docs/proposals/enhancement.md"}}' "$ID_WS2" "$ID_WS2" \
-  | /usr/bin/env "PMO_SCOPE_GUARD_ROOT=${ID_WS2}" "PMO_PLATFORM_CONFIG_ROOT=${ID_CFG}" \
+  | /usr/bin/env "PMO_SCOPE_GUARD_ROOT=${ID_WS2}" "CLAUDE_WORKSPACE_ROOT=${ID_WS2}" "PMO_PLATFORM_CONFIG_ROOT=${ID_CFG}" \
       /bin/bash "$HOOK" >/dev/null 2>&1 || _id_norc="$?"
 id_ok "anchor axis: unresolvable anchor ABSTAINS (rule still enforced, no kill switch)" \
   "$([ "$_id_norc" = "2" ] && echo 0 || echo 1)" "expected exit 2, got $_id_norc"
