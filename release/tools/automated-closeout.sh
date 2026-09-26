@@ -63,6 +63,11 @@
 #   13 post_close_milestone gh api -X PATCH state=closed (#2919: DEFERS under --no-merge)
 #   14 manual_close_release_issues operator-authorized D-1 with structured comment (#2919: DEFERS under --no-merge)
 #   15 run_verification + post_gate_passage_proof per the gate-passage-proof template
+#   15.2 lock_milestone_threads  Phase C5 lock-at-close over EVERY milestone thread, issues and PRs (#5284; DEFERS under --no-merge)
+#                          through the REST lock endpoint with lock_reason=resolved, never GraphQL. ALWAYS records one row:
+#                          PASS (the locked list) / SKIPPED (an explicit zero) / FAIL (per-thread errors, a re-read mismatch,
+#                          a count mismatch). NON-BLOCKING: returns 0 on every path. Count check: enumerated == open_issues +
+#                          closed_issues, all three PR-inclusive (#4768)
 #   15.5 publish_github_release gh release create | edit (Layer-1 dual-write Surface 1; #2919: DEFERS under --no-merge, as does 15.6 check_release_body_drift) — BACKSTOP for Stage 12 Phase B5.5, which owns the emit; the edit path converges BODY and TITLE; records SURFACE1-STATE=CREATED|EDITED|NO-OP and SURFACE1-TITLE=MATCH|CONVERGED|WITHHELD
 #   15.55 assert_anchor_hygiene  SET-based annotated-tag <-> published-Release parity + tagger identity (dated exemption sets) — the own tag is partitioned out by VERSION and asserted by its own limb (#2919 membership: DEFERS under --no-merge)
 #   15.6 check_release_body_drift  post-emit §5.1 published-body drift assert (gated genuine drift BLOCKS; #2919: DEFERS under --no-merge)
@@ -714,6 +719,7 @@ NO_MERGE_PHASE_BEHAVIOUR=(
   "post_close_milestone defer Milestone @MILESTONE@ left OPEN"
   "manual_close_release_issues defer D-1 anomaly issue-close deferred"
   "run_verification run"
+  "lock_milestone_threads defer Phase C5 thread locks not applied"
   "publish_github_release defer Surface 1 (GitHub Release) not emitted"
   "assert_anchor_hygiene defer release-anchor parity not asserted — its Surface-1 input is not yet published"
   "check_release_body_drift defer no published Release to drift-check"
@@ -7099,6 +7105,167 @@ ${_body}" 2>&1)"; then
   return 0
 }
 
+# ─── Repo-host bindings: Phase C5 thread lock (#5284) ────────────────────────
+#
+# THE SEAM, as for _host_chore_pr_candidates: stage-13-close.md § 1 says a new
+# host-touching close-out step extends the repo-host adapter seam rather than
+# inlining a host tool as THE mechanism. These three bind the abstract operations
+# Phase C5 names (threads-on-milestone, milestone item total, and thread-lock with a
+# resolution reason) to GitHub ONCE, so the phase body below carries no host syntax.
+# They keep the `_host_*` conventions: REST through `$GH api` only, because the
+# GraphQL pool is the one exhausted while close-out runs, so neither `gh issue lock`
+# nor `gh pr lock` is used; a one-line output contract, stated on each; the caller
+# reads the exit status; and deliberately NOT named phase_*.
+#
+# PR-INCLUSIVE ON BOTH SIDES. The host models a pull request as an issue, so the REST
+# issues listing returns issues AND pull requests, and the milestone's open_issues and
+# closed_issues counters count both. That is what makes the phase's count check like
+# with like. An issues-only listing (`gh issue list`) against these counters reads
+# the release's own pull requests as a phantom gap (#4768).
+
+# Output contract: one line per thread on milestone $1,
+# "<number><TAB><issue|pr><TAB><locked|unlocked>"; exit non-zero, with the host's
+# message on stderr, when the thread set could not be read.
+_host_threads_on_milestone() {
+  $GH api --paginate "repos/${REPO_SLUG}/issues?milestone=${1}&state=all&per_page=100" \
+    --jq '.[] | [(.number|tostring), (if .pull_request then "pr" else "issue" end), (if .locked then "locked" else "unlocked" end)] | @tsv'
+}
+
+# Output contract: one line, "<open_issues> <closed_issues>" for milestone $1, both
+# counters PR-inclusive; exit non-zero, with the host's message on stderr, when the
+# milestone could not be read.
+_host_milestone_item_counts() {
+  $GH api "repos/${REPO_SLUG}/milestones/${1}" --jq '"\(.open_issues) \(.closed_issues)"'
+}
+
+# Output contract: nothing on stdout; locks thread $1 (an issue or a pull request)
+# with lock reason $2; exit non-zero, with the host's message on stderr, on failure.
+_host_thread_lock() {
+  $GH api -X PUT "repos/${REPO_SLUG}/issues/${1}/lock" -f lock_reason="${2}" >/dev/null
+}
+
+# ─── Phase 15.2: lock_milestone_threads (Phase C5 lock-at-close) ─────────────
+#
+# Replaces the manual Phase C5 checklist step, per
+# {{ADR:lock-at-close-is-a-close-out-phase-over-every-milestone-thread}}. Locks EVERY
+# thread on the milestone (issues and pull requests, the release PR and the Stage 13
+# chore PR included) with lock_reason=resolved, through the three bindings above.
+# FORWARD-ONLY: it locks the closing milestone's threads; no earlier close is
+# retrofitted.
+#
+# ALWAYS RECORDS ONE ROW, so a no-op reads differently from a phase that never ran
+# (an absent row): PASS with the locked list; SKIPPED with an explicit zero (no
+# threads, or every thread already locked); FAIL with the per-thread errors, a
+# thread the re-read still shows unlocked, or a count mismatch. Already-locked
+# threads are skipped by the enumeration's own locked field, so a repeat run makes
+# no lock call (LK/e).
+#
+# NON-BLOCKING: returns 0 on EVERY path, so its dispatch `||` limb is unreachable,
+# and Milestone close (phase 13) has already run. PLACEMENT IS LOAD-BEARING: it is
+# dispatched after phase 15, the driver's last comment-posting phase, and is never
+# the LAST phase, so generate_markdown_report's halted marker cannot read its FAIL
+# row as "Run halted" (self-test LK/n pins the order).
+#
+# MODE BRANCHES (ADR-158). Declared `defer` in NO_MERGE_PHASE_BEHAVIOUR, so the
+# deferral is the FIRST statement, above the mode test: under --no-merge the --apply
+# behaviour is to defer, so a prediction there would be false. The dry-run
+# prediction is STATIC and sits above the first host read.
+#
+# Diagnostics take the host message's first line in pure bash and hand it to
+# _detail_one_line, so a detail is one pipe-free, home-redacted line wherever the
+# report is relayed.
+phase_lock_milestone_threads() {
+  _nm_defer "lock_milestone_threads" "the threads of milestone #${MILESTONE} are locked by the follow-up --apply run without --no-merge" && return 0
+
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "lock_milestone_threads" "DRY-RUN" "would enumerate every thread on milestone #${MILESTONE} (issues and pull requests, the REST issues listing, state=all), lock each unlocked one through PUT issues/<n>/lock with lock_reason=resolved, check the enumerated total against open_issues + closed_issues, and read the post-state back (non-blocking)"
+    return 0
+  fi
+
+  local _enum _rc=0
+  _enum="$(_host_threads_on_milestone "$MILESTONE" 2>&1)" || _rc=$?
+  if [[ "$_rc" -ne 0 ]]; then
+    mark_phase "lock_milestone_threads" "FAIL" "thread enumeration failed for milestone #${MILESTONE} (rc=${_rc}): $(_detail_one_line "${_enum%%$'\n'*}") — nothing locked; non-blocking, surface to the operator"
+    return 0
+  fi
+
+  # Only a well-formed thread line counts; anything else the host wrote is not a
+  # thread, and the count check below catches a thread that went missing.
+  local _n_total=0 _n_issue=0 _n_pr=0 _n_already=0 _num _kind _lst
+  local -a _targets=() _newly=() _errs=()
+  while IFS=$'\t' read -r _num _kind _lst; do
+    if [[ ! "$_num" =~ ^[0-9]+$ ]]; then continue; fi
+    _n_total=$((_n_total + 1))
+    if [[ "$_kind" == "pr" ]]; then _n_pr=$((_n_pr + 1)); else _n_issue=$((_n_issue + 1)); fi
+    if [[ "$_lst" == "locked" ]]; then _n_already=$((_n_already + 1)); else _targets+=("$_num"); fi
+  done <<< "$_enum"
+
+  # Count check, like with like: the enumerated total against the milestone's
+  # open_issues + closed_issues, all three PR-inclusive.
+  local _cnt _crc=0 _open _closed _count_ok=1 _count_note
+  _cnt="$(_host_milestone_item_counts "$MILESTONE" 2>&1)" || _crc=$?
+  _open="${_cnt%% *}"; _closed="${_cnt##* }"
+  if [[ "$_crc" -ne 0 || ! "$_open" =~ ^[0-9]+$ || ! "$_closed" =~ ^[0-9]+$ ]]; then
+    _count_ok=0; _count_note="count check UNVERIFIED (the milestone counters could not be read)"
+  elif [[ "$_n_total" -eq $((_open + _closed)) ]]; then
+    _count_note="count check ${_n_total} == open_issues ${_open} + closed_issues ${_closed} (PR-inclusive on both sides)"
+  else
+    _count_ok=0; _count_note="count MISMATCH: enumerated ${_n_total} != open_issues ${_open} + closed_issues ${_closed}"
+  fi
+
+  if [[ "$_n_total" -eq 0 ]]; then
+    if [[ "$_count_ok" -eq 1 ]]; then
+      mark_phase "lock_milestone_threads" "SKIPPED" "0 threads to lock — milestone #${MILESTONE} enumerates 0 items (${_count_note})"
+    else
+      mark_phase "lock_milestone_threads" "FAIL" "0 threads enumerated, but ${_count_note}; nothing locked; non-blocking, surface to the operator"
+    fi
+    return 0
+  fi
+
+  local _i _err
+  for ((_i = 0; _i < ${#_targets[@]}; _i++)); do
+    if _err="$(_host_thread_lock "${_targets[$_i]}" "resolved" 2>&1)"; then
+      _newly+=("${_targets[$_i]}")
+    else
+      _errs+=("#${_targets[$_i]}: $(_detail_one_line "${_err%%$'\n'*}")")
+    fi
+  done
+
+  # Read the post-state back before any PASS (write first, speak second), with one
+  # bounded replication-lag retry through the existing VERIFY_RECHECK_DELAY knob.
+  local _still="" _pass _rb _rbrc _rb_unlocked
+  if [[ "${#_newly[@]}" -gt 0 ]]; then
+    for _pass in 1 2; do
+      _rbrc=0; _still=""; _rb_unlocked=" "
+      _rb="$(_host_threads_on_milestone "$MILESTONE" 2>&1)" || _rbrc=$?
+      if [[ "$_rbrc" -ne 0 ]]; then
+        _still=" (the re-read failed, rc=${_rbrc})"
+      else
+        while IFS=$'\t' read -r _num _kind _lst; do
+          if [[ "$_num" =~ ^[0-9]+$ && "$_lst" == "unlocked" ]]; then _rb_unlocked+="${_num} "; fi
+        done <<< "$_rb"
+        for ((_i = 0; _i < ${#_newly[@]}; _i++)); do
+          if [[ "$_rb_unlocked" == *" ${_newly[$_i]} "* ]]; then _still+=" #${_newly[$_i]}"; fi
+        done
+      fi
+      if [[ -z "$_still" ]]; then break; fi
+      if [[ "$_pass" -eq 1 ]]; then /bin/sleep "${VERIFY_RECHECK_DELAY}"; fi
+    done
+  fi
+
+  local _list="" _errtxt=""
+  for ((_i = 0; _i < ${#_newly[@]}; _i++)); do _list+="${_list:+, }#${_newly[$_i]}"; done
+  for ((_i = 0; _i < ${#_errs[@]}; _i++)); do _errtxt+="${_errtxt:+; }${_errs[$_i]}"; done
+  if [[ "${#_errs[@]}" -gt 0 || -n "$_still" || "$_count_ok" -eq 0 ]]; then
+    mark_phase "lock_milestone_threads" "FAIL" "${_errtxt:+lock FAILED on ${#_errs[@]} of ${#_targets[@]} unlocked thread(s) [${_errtxt}]; }${_still:+still unlocked after re-read:${_still}; }lock calls succeeded on ${#_newly[@]}, already locked ${_n_already} (${_n_issue} issues + ${_n_pr} PRs); ${_count_note}; non-blocking, surface to the operator"
+  elif [[ "${#_newly[@]}" -eq 0 ]]; then
+    mark_phase "lock_milestone_threads" "SKIPPED" "0 threads newly locked — all ${_n_total} threads on milestone #${MILESTONE} already locked (${_n_issue} issues + ${_n_pr} PRs); ${_count_note}"
+  else
+    mark_phase "lock_milestone_threads" "PASS" "locked ${#_newly[@]} thread(s), ${_n_already} already locked — all ${_n_total} threads on milestone #${MILESTONE} now locked (${_n_issue} issues + ${_n_pr} PRs); ${_count_note}; newly locked: ${_list}"
+  fi
+  return 0
+}
+
 # ─── Phase 15.5: publish_github_release (Layer-1 dual-write Surface 1) ───────────
 #
 # Publishes the canonical public release-notes surface (Surface 1) via GitHub Releases API.
@@ -8125,7 +8292,7 @@ EOF
   echo
   echo "Rows are the phases this run executed, in execution order. A phase absent from the table did not run — the table is a record of execution, not a declaration of the planned sequence. The full declared sequence is in \`--help\`."
   # A halted run states the fact of truncation, not just the semantics of absence.
-  # 32 of the 33 in-run generate_report call sites are abort paths
+  # Every in-run generate_report call site except the final one is an abort path
   # (`phase_X || { generate_report; exit N; }`), so the truncated run is the
   # DOMINANT artifact a reader sees, and a derived table alone cannot separate
   # "did not run" from "does not exist". Derived purely from the record — no
@@ -17665,6 +17832,7 @@ phase_action_item_gate || { generate_report; exit 3; }                # Phase 12
 phase_post_close_milestone || { generate_report; exit 3; }
 phase_manual_close_release_issues || { generate_report; exit 3; }
 phase_run_verification || { generate_report; exit 3; }
+phase_lock_milestone_threads || { generate_report; exit 3; }          # Phase 15.2 — Phase C5 lock-at-close over every milestone thread (issues + PRs, REST); NON-BLOCKING (returns 0 on every path) and never the last dispatched phase, so its FAIL row cannot trip the halted marker
 phase_publish_github_release || { generate_report; exit 3; }          # Phase 15.5 — Layer-1 dual-write Surface 1
 phase_assert_anchor_hygiene || { generate_report; exit 3; }           # Phase 15.55 — AC4/AC5: set-based tag<->Release parity + tagger identity; the own tag is its own limb — asserted after 15.5 at --apply, predicted at --dry-run, deferred under --no-merge
 phase_check_release_body_drift || { generate_report; exit 3; }        # Phase 15.6 — post-emit §5.1 drift assert (genuine drift inside the cutoff scope BLOCKS; capability-absent / artifact-missing stay non-blocking)
