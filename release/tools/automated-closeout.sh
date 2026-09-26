@@ -799,6 +799,12 @@ STATE_AI_EMIT="n/a"       # attestation-emission outcome: n/a | emitted | dry-ru
                           # EMITTED, not merely accepted; when the emit cannot land
                           # this value says so rather than leaving the close looking
                           # attested-and-recorded when only half of that is true.
+STATE_AI_EMIT_RC=""       # the event writer's exit status when STATE_AI_EMIT is
+                          # failed:writer-returned-nonzero (#5910)
+STATE_AI_EMIT_ERR=""      # the writer's own diagnostic — one line, no '|', repo/home
+                          # paths redacted, through _detail_one_line — or the
+                          # emitter's own reason for a failed:<reason> it decided
+                          # without calling the writer (#5910)
 MERGE_SHA=""              # release-PR merge commit (#1682). Captured ONCE at
                          # read-state from the RELEASE PR (not the chore PR — the
                          # release content merged via the release PR, and the
@@ -6267,29 +6273,81 @@ _ai_resolve_dir() {
   /usr/bin/printf '%s' "${_slugdir:-$_verdir}"
 }
 
-# Emit the operator attestation the SURFACE clause requires. Sets STATE_AI_EMIT.
-# Never aborts the run: an unwritable event log must not block a close the operator
-# has legitimately attested — but the outcome is RECORDED either way, so "attested
-# and durably traced" and "attested, trace failed" stay distinguishable outputs.
+# Emit the operator attestation the SURFACE clause requires. Sets STATE_AI_EMIT,
+# STATE_AI_EMIT_RC and STATE_AI_EMIT_ERR. Never aborts the run: an unwritable event
+# log must not block a close the operator has legitimately attested — but the
+# outcome is RECORDED either way, WITH the writer's own diagnostic, so "attested and
+# durably traced" and "attested, trace failed because <reason>" stay distinguishable.
+#
+# THE WRITER'S CONTRACT (append-pipeline-event.sh): --reversibility AND --outcome are
+# both required — it dies on the first, then on the second — and --version must be a
+# release JOIN KEY, the milestone slug, never a release version, which its § 2a gate
+# refuses. Self-test group AI arm U runs the REAL writer's --dry-run over this argv,
+# so a caller/writer drift fails the suite instead of the audit trail (#5910).
+#
+# CHEAP / resolved: the row records an operator attestation that cleared a SURFACE
+# state. Reversing it is a milestone reopen plus a re-run with the other cause, and
+# the SURFACE state is resolved by the attestation itself.
+#
+# The writer's diagnostic goes through _detail_one_line, which redacts and THEN caps,
+# handed a raw window of 4096 bytes and never a pre-capped one: a cap applied first
+# can cut a home path mid-string, and the fragment then ships raw into a report that
+# is pasted onto a public sub-task.
 _ai_emit_attestation() {
-  local _cause="$1" _slug="${STATE_MILESTONE_SLUG:-$VERSION}"
+  local _cause="$1" _slug="${STATE_MILESTONE_SLUG:-}"
+  STATE_AI_EMIT_RC=""; STATE_AI_EMIT_ERR=""
   if [[ ! -x "$AI_EVENT_WRITER" ]]; then
     STATE_AI_EMIT="failed:writer-not-executable"
+    STATE_AI_EMIT_ERR="the pipeline-event writer is not executable at its resolved path"
     return 0
   fi
   if [[ "$MODE" == "dry-run" ]]; then
     STATE_AI_EMIT="dry-run"
     return 0
   fi
-  if "$AI_EVENT_WRITER" --version "$_slug" --stage 13 \
+  # No slug, no row. The writer admits only the milestone slug as the release join
+  # key and refuses a release version by construction — so never hand it one.
+  if [[ -z "$_slug" ]]; then
+    STATE_AI_EMIT="failed:no-release-key"
+    STATE_AI_EMIT_ERR="no milestone slug was resolved for this close, and the event writer admits only the slug as the release join key (a release version is refused)"
+    return 0
+  fi
+  # stderr is CAPTURED, not discarded — the phase_inject_velocity_field idiom. The
+  # writer's message names the exact contract it refused; a token alone cannot. The
+  # writer's stdout ("appended: …" or "[DRY-RUN] …") is not a diagnostic.
+  local _errf _rc=0
+  _errf="$(/usr/bin/mktemp -t aiemit-stderr.XXXXXX 2>/dev/null)" || _errf="/dev/null"
+  "$AI_EVENT_WRITER" --version "$_slug" --stage 13 \
        --event-type decision --event-subtype empirical-verification-finding \
        --actor operator --subject "milestone:#${MILESTONE}" \
+       --reversibility CHEAP --outcome resolved \
        --payload "procedure-7a-attestation; state:${STATE_AI_GATE}; attested-cause:${_cause}" \
-       >/dev/null 2>&1; then
+       >/dev/null 2>"$_errf" || _rc=$?
+  if [[ "$_rc" -eq 0 ]]; then
     STATE_AI_EMIT="emitted"
   else
     STATE_AI_EMIT="failed:writer-returned-nonzero"
+    STATE_AI_EMIT_RC="$_rc"
+    STATE_AI_EMIT_ERR="$(_detail_one_line "$(/usr/bin/head -c 4096 "$_errf" 2>/dev/null)")"
+    [[ -n "$STATE_AI_EMIT_ERR" ]] || STATE_AI_EMIT_ERR="(no diagnostic was captured from the writer's stderr)"
   fi
+  [[ "$_errf" == "/dev/null" ]] || /bin/rm -f "$_errf" 2>/dev/null || true
+  return 0
+}
+
+# ONE projection of the emit outcome, read by BOTH the 12.9 detail and Verification
+# row 6, so the two surfaces cannot disagree about the trace. Empty on emitted /
+# dry-run / n/a. No I/O and no '|': STATE_AI_EMIT_ERR is already one line through
+# _detail_one_line, or a fixed reason the emitter wrote. Deliberately not phase_*.
+_ai_emit_tail() {   # full|short
+  case "$STATE_AI_EMIT" in
+    failed:*)
+      if [[ "${1:-full}" == "short" ]]; then
+        /usr/bin/printf ' — TRACE NOT CONFIRMED%s' "${STATE_AI_EMIT_RC:+, writer rc=${STATE_AI_EMIT_RC}}"
+      else
+        /usr/bin/printf ' — ATTESTATION TRACE NOT CONFIRMED%s: %s' "${STATE_AI_EMIT_RC:+, writer rc=${STATE_AI_EMIT_RC}}" "${STATE_AI_EMIT_ERR:-no diagnostic captured}"
+      fi ;;
+  esac
   return 0
 }
 
@@ -6405,7 +6463,7 @@ _ai_recommended_cause() {
 # evaluation inside phase_run_verification.
 _ai_verification_cell() {
   local _attest=" (attestation required)"
-  [[ -n "$ATTEST_ACTION_ITEMS" ]] && _attest=" (attested: ${ATTEST_ACTION_ITEMS}; emit=${STATE_AI_EMIT})"
+  [[ -n "$ATTEST_ACTION_ITEMS" ]] && _attest=" (attested: ${ATTEST_ACTION_ITEMS}; emit=${STATE_AI_EMIT}$(_ai_emit_tail short))"
   case "${STATE_AI_GATE:-}" in
     RESOLVED)      /usr/bin/printf 'RESOLVED (%s/%s)' "$STATE_AI_TOTAL" "$STATE_AI_TOTAL" ;;
     UNRESOLVED)    /usr/bin/printf 'BLOCKED (%s unresolved of %s)' "$STATE_AI_UNRES" "$STATE_AI_TOTAL" ;;
@@ -6433,7 +6491,7 @@ phase_action_item_gate() {
   STATE_AI_TOTAL="$_total"
   STATE_AI_UNRES="$_unres"
   STATE_AI_BAD="$_bad"
-  STATE_AI_EMIT="n/a"
+  STATE_AI_EMIT="n/a"; STATE_AI_EMIT_RC=""; STATE_AI_EMIT_ERR=""
 
   # TOKENISED, NEVER ABSOLUTE. The ledger lives under the operator-instance root, so
   # its absolute path embeds the operator's home directory — and this detail string
@@ -6535,7 +6593,7 @@ phase_action_item_gate() {
         if [[ -n "$_rec_cause" && "$_rec_cause" != "$ATTEST_ACTION_ITEMS" ]]; then
           _rec_agree=" THE MEASUREMENT DISAGREES WITH THE ATTESTATION — the attested cause stands and the close is not affected, but the disagreement is on the record."
         fi
-        mark_phase "action_item_gate" "WARN" "Procedure 7a: ${_state} — SURFACED, attested by operator as '${ATTEST_ACTION_ITEMS}' (attestation-emitted=${STATE_AI_EMIT}); ${_cause_text} ${_rec_text}${_rec_agree}"
+        mark_phase "action_item_gate" "WARN" "Procedure 7a: ${_state} — SURFACED, attested by operator as '${ATTEST_ACTION_ITEMS}' (attestation-emitted=${STATE_AI_EMIT}$(_ai_emit_tail full)); ${_cause_text} ${_rec_text}${_rec_agree}"
         return 0
       fi
       if [[ "$_blocking" -eq 1 ]]; then
