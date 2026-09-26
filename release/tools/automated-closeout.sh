@@ -11657,7 +11657,7 @@ STUB
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # Test 4e.2: --no-merge post-merge phase-gating (#2919) — offline, hermetic.
-  # Asserts the four post-merge-dependent phases DEFER (SKIP with a "no-merge" detail)
+  # Asserts every row the table declares `defer` DEFERS (SKIP with a "no-merge" detail)
   # under NO_MERGE=1 EVEN WHEN their normal precondition to act is met (open milestone,
   # open issues) — i.e. the guard is unconditional under --no-merge and fires before any
   # network preflight. Then a NO_MERGE=0 negative check (dry-run, hermetic) confirms the
@@ -11667,20 +11667,43 @@ STUB
   local _nm_saved_nomerge="$NO_MERGE" _nm_saved_mode="$MODE" _nm_saved_gh="$GH"
   local _nm_saved_mstate="$STATE_MILESTONE_STATE" _nm_saved_oic="$OPEN_ISSUE_COUNT"
   local _nm_saved_oil="$OPEN_ISSUE_LIST" _nm_saved_cpn="$CHORE_PR_NUMBER" _nm_saved_ms="$MILESTONE"
+  local _nm_saved_skip="$CHORE_PR_SKIPPED" _nm_saved_cpo="$CHORE_PR_OUTCOME"
   # A false GH proves the assertions never touch the network: a correct guard returns
   # before any $GH / git_net call, so a phase that reached one would error, not SKIP.
   GH="/bin/false"; CHORE_PR_NUMBER="8888"; MILESTONE="9999"; CLOSE_COMMENTS=()
 
-  # (a) NO_MERGE=1 → all four phases DEFER (SKIPPED + "no-merge" detail), even with an
-  #     OPEN milestone and OPEN issues (preconditions that would otherwise act).
+  # (a) NO_MERGE=1 → every row the table declares `defer` DEFERS (SKIPPED + "no-merge"
+  #     detail), even with an OPEN milestone and OPEN issues (preconditions that would
+  #     otherwise act). The population is READ from NO_MERGE_PHASE_BEHAVIOUR behind a
+  #     floor, so a member the table gains is driven here with no edit to this loop.
   NO_MERGE=1; MODE="apply"; STATE_MILESTONE_STATE="open"; OPEN_ISSUE_COUNT=2; OPEN_ISSUE_LIST=$'401\n402'
-  local _nm_ph
-  for _nm_ph in post_close_milestone manual_close_release_issues publish_github_release check_release_body_drift; do
+  local _nm_ph _nm_defer_rows _nm_skip_rows
+  _nm_defer_rows="$(_nm_members defer 2>/dev/null || true)"
+  [[ "$(grep_count . <<<"$_nm_defer_rows")" -ge 5 ]] || { echo "FAIL: 4e.2 — the table declares fewer than 5 defer rows; the defer loop would under-cover"; failures=$((failures+1)); }
+  while IFS= read -r _nm_ph; do
+    [[ -z "$_nm_ph" ]] && continue
     PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
     "phase_${_nm_ph}" >/dev/null 2>&1
     [[ "$(get_phase "$_nm_ph" | /usr/bin/cut -d'|' -f1)" == "SKIPPED" ]] || { echo "FAIL: $_nm_ph must SKIP (defer) under --no-merge, got '$(get_phase "$_nm_ph")'"; failures=$((failures+1)); }
     get_phase "$_nm_ph" | /usr/bin/grep -qiF 'no-merge' || { echo "FAIL: $_nm_ph defer detail must cite --no-merge, got '$(get_phase "$_nm_ph")'"; failures=$((failures+1)); }
-  done
+  done <<<"$_nm_defer_rows"
+
+  # (a.2) NO_MERGE=1 → every row the table declares `skip` SKIPs, citing the flag and
+  #       WITHOUT the deferral sentinel: its input is the merge this run did not
+  #       perform, so nothing is owed on the re-run and the report does not list it.
+  #       CHORE_PR_SKIPPED=0 keeps each phase off its zero-commit branch.
+  _nm_skip_rows="$(_nm_members skip 2>/dev/null || true)"
+  [[ "$(grep_count . <<<"$_nm_skip_rows")" -ge 2 ]] || { echo "FAIL: 4e.2 — the table declares fewer than 2 skip rows; the skip loop would under-cover"; failures=$((failures+1)); }
+  CHORE_PR_SKIPPED=0; CHORE_PR_OUTCOME="created"
+  while IFS= read -r _nm_ph; do
+    [[ -z "$_nm_ph" ]] && continue
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    "phase_${_nm_ph}" >/dev/null 2>&1 || true
+    [[ "$(get_phase "$_nm_ph")" == SKIPPED\|* ]] || { echo "FAIL: 4e.2 — $_nm_ph is declared skip and must SKIP under --no-merge, got '$(get_phase "$_nm_ph")'"; failures=$((failures+1)); }
+    [[ "$(get_phase "$_nm_ph")" == *"--no-merge"* ]] || { echo "FAIL: 4e.2 — $_nm_ph skip detail must cite --no-merge, got '$(get_phase "$_nm_ph")'"; failures=$((failures+1)); }
+    [[ "$(get_phase "$_nm_ph")" != *"DEFERRED under --no-merge"* ]] || { echo "FAIL: 4e.2 — $_nm_ph is declared skip, not defer, so it must not carry the deferral sentinel, got '$(get_phase "$_nm_ph")'"; failures=$((failures+1)); }
+  done <<<"$_nm_skip_rows"
+  CHORE_PR_SKIPPED="$_nm_saved_skip"; CHORE_PR_OUTCOME="$_nm_saved_cpo"
 
   # (b) NO_MERGE=0 negative check (dry-run, hermetic): post_close_milestone +
   #     manual_close_release_issues must NOT emit the defer sentinel on the normal path
@@ -14495,6 +14518,368 @@ FOLOG
   /bin/rm -rf "$_ah_tmp" 2>/dev/null || true
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # ── Test NM: --no-merge behaviour declared once, and phase 15.55's own-tag limb (#7465) ──
+  #
+  # WHAT THIS GROUP PROVES. Membership in the --no-merge deferred set used to be
+  # restated on eight surfaces, and phase 15.55 was the post-merge phase none of them
+  # listed: a --no-merge close halted there on a Release the publish phase had itself
+  # deferred, and a dry-run halted on a Release the dry-run had itself declined to
+  # publish. The membership now lives once, in NO_MERGE_PHASE_BEHAVIOUR, and every
+  # surface derives from it. The arms prove the deferral as the runner meets it
+  # (NM-1, with NM-1c showing the harness CAN observe a stranded run), 15.55's own-tag
+  # limb in each mode (NM-2a..NM-4e, NM-CIAC3), each derivation from the table
+  # (NM-5a..NM-5c), the first-statement contract structurally (NM-5d), and phase 12's
+  # --no-merge detail on a resumed run (NM-12).
+  #
+  # Hermetic: a local git fixture and a gh stub, no network and no credentials. Every
+  # fixture Release list carries v3.28, a RECORDED exemption (a published Release on a
+  # lightweight tag), so the list is never empty: an empty list takes the phase's
+  # "could not check" branch, which would let an arm pass without reaching its limb.
+  local _ng_s_root="$REPO_ROOT" _ng_s_gh="$GH" _ng_s_idx="$RELEASE_INDEX" _ng_s_log="$RELEASE_LOG"
+  local _ng_s_mode="$MODE" _ng_s_nomerge="$NO_MERGE" _ng_s_ver="$VERSION" _ng_s_ms="$MILESTONE"
+  local _ng_s_skip="$CHORE_PR_SKIPPED" _ng_s_out="$OUTPUT" _ng_s_cpo="$CHORE_PR_OUTCOME" _ng_s_cpn="$CHORE_PR_NUMBER"
+  local _ng_had_table=0
+  local -a _ng_s_table=()
+  if declare -p NO_MERGE_PHASE_BEHAVIOUR >/dev/null 2>&1; then
+    _ng_had_table=1; _ng_s_table=("${NO_MERGE_PHASE_BEHAVIOUR[@]}")
+  fi
+  local _ng_tmp; _ng_tmp="$(/usr/bin/mktemp -d -t nomerge-selftest.XXXXXX)"
+  local _ng_repo="$_ng_tmp/repo"
+  # Signing disabled on every fixture command, and the tagger identity is the same
+  # noreply fixture identity the AC5 arms above use, which the tagger limb admits.
+  local _ng_nosign=(-c tag.gpgsign=false -c commit.gpgsign=false)
+  local _ng_who=(-c user.email=a@users.noreply.github.com -c user.name=a)
+  # One commit, the sibling tag v9.70 and the closing release's own tag v9.71, both
+  # annotated. Built with no inherited git environment, so a GIT_DIR from a hook or
+  # another worktree cannot point a fixture command at the real repository.
+  (
+    set +e
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+    $GIT -c init.defaultBranch=main init -q "$_ng_repo"
+    /usr/bin/printf 'x\n' > "$_ng_repo/f.txt"
+    $GIT -C "$_ng_repo" add f.txt
+    $GIT -C "$_ng_repo" "${_ng_nosign[@]}" "${_ng_who[@]}" commit -q -m c1
+    $GIT -C "$_ng_repo" "${_ng_nosign[@]}" "${_ng_who[@]}" tag -a v9.70 -m t
+    $GIT -C "$_ng_repo" "${_ng_nosign[@]}" "${_ng_who[@]}" tag -a v9.71 -m t
+  ) >/dev/null 2>&1 || true
+  # FIXTURE PRECONDITIONS — a fixture that did not build FAILs the suite and is never
+  # skipped: every arm below would otherwise pass or fail for the wrong reason.
+  [[ -d "$_ng_repo/.git" && "$(annotated_tags_of "$_ng_repo" 2>/dev/null || true)" == $'v9.70\nv9.71' ]] || { echo "FAIL: NM fixture — the local repository must carry exactly the annotated tags v9.70 and v9.71; every arm below would be vacuous"; failures=$((failures+1)); }
+  [[ -z "$(tagger_hygiene_violations "$_ng_repo" 2>/dev/null || true)" ]] || { echo "FAIL: NM fixture — the fixture tags must pass the tagger-identity limb, or every arm reads that limb's finding instead of its own"; failures=$((failures+1)); }
+  # The gh stub answers `release list` from a file each arm writes, and nothing else.
+  /bin/cat > "$_ng_tmp/gh-stub" <<NGGH
+#!/bin/sh
+if [ "\$1" = "release" ] && [ "\$2" = "list" ]; then /bin/cat "$_ng_tmp/rel"; exit 0; fi
+exit 1
+NGGH
+  /bin/chmod +x "$_ng_tmp/gh-stub"
+  REPO_ROOT="$_ng_repo"; GH="$_ng_tmp/gh-stub"; VERSION="v9.71"; MILESTONE="9999"
+  RELEASE_INDEX="$_ng_tmp/IDX"; RELEASE_LOG="$_ng_tmp/LOG"
+
+  # Drive phase 15.55 once. $1 mode, $2 NO_MERGE, $3 the closing release's ledger
+  # state, $4 the published-Release list (newline-separated), $5 an optional phase
+  # 15.5 record "RESULT|DETAIL". The sibling v9.70 always reads VERIFIED, and INDEX and
+  # LOG carry the same two rows, so the ledger limb is clean in every arm.
+  _ng_drive() {
+    MODE="$1"; NO_MERGE="$2"
+    /usr/bin/printf '| v9.70 | nm-sibling | x | x | sha | v9.70 | VERIFIED | 2026-01-01 |\n| v9.71 | nm-own | x | x | sha | v9.71 | %s | 2026-01-02 |\n' "$3" > "$_ng_tmp/LOG"
+    /bin/cp "$_ng_tmp/LOG" "$_ng_tmp/IDX"
+    /usr/bin/printf '%s\n' "$4" > "$_ng_tmp/rel.u"; /usr/bin/sort -o "$_ng_tmp/rel" "$_ng_tmp/rel.u"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    [[ -z "${5:-}" ]] || mark_phase "publish_github_release" "${5%%|*}" "${5#*|}"
+    _NG_RC=0; phase_assert_anchor_hygiene >/dev/null 2>&1 || _NG_RC=$?
+    _NG_REC="$(get_phase assert_anchor_hygiene)"
+  }
+  local _ng_dry15='DRY-RUN|would invoke the view-then-create-or-edit state machine'
+  local _ng_pass15='PASS|Surface 1 converged by this run'
+
+  # (NM-1, AC-1) THE RUNNER UNDER --no-merge. The dispatch lines from phase 15.5
+  # through 16.7 are lifted VERBATIM from this file's own text (each needle must
+  # resolve to exactly one line) and executed with the REAL 15.5, 15.55 and 15.6, a
+  # stubbed report, and witnesses on 16, 16.5 and 16.7. The closing release's row reads
+  # VERIFIED — the state phase 6 leaves it in on an --apply pass — and its Release is
+  # unpublished: the state #7465 halted on.
+  local _ng_l0 _ng_l1 _ng_block="" _ng_st _ng_w="$_ng_tmp/w1"
+  _ng_l0="$(/usr/bin/grep -nE '^phase_publish_github_release ' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 || true)"
+  _ng_l1="$(/usr/bin/grep -nE '^phase_audit_epic_rollup ' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 || true)"
+  if [[ "$_ng_l0" =~ ^[0-9]+$ && "$_ng_l1" =~ ^[0-9]+$ && "$_ng_l0" -lt "$_ng_l1" ]]; then
+    _ng_block="$(/usr/bin/sed -n "${_ng_l0},${_ng_l1}p" "${BASH_SOURCE[0]}")"
+  fi
+  # Execute the lifted block. $1 NO_MERGE, $2 1 to stub phase 15.5 as a converged
+  # publish, $3 the witness directory. Emits the block's own exit status.
+  _ng_exec_block() {
+    local _st=0
+    /bin/mkdir -p "$3"
+    (
+      NO_MERGE="$1"; _NG_W="$3"
+      generate_report() { :; }
+      phase_invoke_orphan_cleanup() { /usr/bin/printf 'orphan\n' >> "$_NG_W/downstream"; return 0; }
+      phase_pattern_scan() { /usr/bin/printf 'pattern\n' >> "$_NG_W/downstream"; return 0; }
+      phase_audit_epic_rollup() { /usr/bin/printf 'epic\n' >> "$_NG_W/downstream"; return 0; }
+      if [[ "$2" -eq 1 ]]; then
+        phase_publish_github_release() { mark_phase "publish_github_release" "PASS" "Surface 1 converged by this run"; return 0; }
+      fi
+      eval "$_ng_block"
+      get_phase assert_anchor_hygiene > "$_NG_W/r1555"
+      get_phase check_release_body_drift > "$_NG_W/r156"
+      exit 0
+    ) >/dev/null 2>&1 || _st=$?
+    /usr/bin/printf '%s' "$_st"
+  }
+  MODE="apply"
+  /usr/bin/printf '| v9.70 | nm-sibling | x | x | sha | v9.70 | VERIFIED | 2026-01-01 |\n| v9.71 | nm-own | x | x | sha | v9.71 | VERIFIED | 2026-01-02 |\n' > "$_ng_tmp/LOG"
+  /bin/cp "$_ng_tmp/LOG" "$_ng_tmp/IDX"
+  /usr/bin/printf 'v3.28\nv9.70\n' > "$_ng_tmp/rel"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _ng_st="$(_ng_exec_block 1 0 "$_ng_w")"
+  _st_arm NM NM-1; [[ -n "$_ng_block" ]] || { echo "FAIL: NM-1 anti-vacuity — the dispatch lines from phase 15.5 through 16.7 did not lift as one range (start '$_ng_l0', end '$_ng_l1'); the arm would execute nothing"; failures=$((failures+1)); }
+  [[ "$_ng_st" == "0" ]] || { echo "FAIL: NM-1 (AC-1) — under --no-merge the run must pass phase 15.55 and reach Phase 16, got exit $_ng_st"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_ng_w/r1555" 2>/dev/null || true)" == "SKIPPED|DEFERRED under --no-merge"* ]] || { echo "FAIL: NM-1 (AC-1) — phase 15.55 must record a deferral, got '$(/bin/cat "$_ng_w/r1555" 2>/dev/null || true)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_ng_w/r156" 2>/dev/null || true)" == "SKIPPED|DEFERRED under --no-merge"* ]] || { echo "FAIL: NM-1 (AC-1) — phase 15.6 must record a deferral, got '$(/bin/cat "$_ng_w/r156" 2>/dev/null || true)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_ng_w/downstream" 2>/dev/null || true)" == $'orphan\npattern\nepic' ]] || { echo "FAIL: NM-1 (AC-1) — phases 16, 16.5 and 16.7 must each run, got '$(/bin/cat "$_ng_w/downstream" 2>/dev/null || true)'"; failures=$((failures+1)); }
+
+  # (NM-1c) CONTROL: the same lifted text on a merge run, with the publish stubbed as
+  # converged and the own Release still unpublished, halts at 15.55 with exit 3 and
+  # the phases after it do NOT run — so NM-1's reach is the deferral's doing, not a
+  # harness that never strands.
+  _ng_w="$_ng_tmp/w1c"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _ng_st="$(_ng_exec_block 0 1 "$_ng_w")"
+  _st_arm NM NM-1c; [[ "$_ng_st" == "3" ]] || { echo "FAIL: NM-1c control — a merge run over an unpublished own Release must halt at 15.55 with exit 3, got exit $_ng_st"; failures=$((failures+1)); }
+  [[ ! -s "$_ng_w/downstream" ]] || { echo "FAIL: NM-1c control — the phases after a halted 15.55 ran; this harness cannot observe stranding, so NM-1 proves nothing"; failures=$((failures+1)); }
+
+  # (NM-2a / NM-2b, AC-2) --dry-run PREDICTS the own-tag gap in the one state the
+  # publish phase's own no-op produces, in BOTH ledger states: the row DEPLOYED (a first
+  # dry-run) and VERIFIED (a dry-run after an --apply pass flipped it).
+  _ng_drive dry-run 0 DEPLOYED $'v3.28\nv9.70' "$_ng_dry15"
+  _st_arm NM NM-2a; [[ "$_NG_RC" -eq 0 ]] || { echo "FAIL: NM-2a (AC-2) — a dry-run whose own Release gap is this script's own no-op must not halt, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+  [[ "$_NG_REC" == *"OWN-TAG PREDICTED"* && "$_NG_REC" != *"OWN-TAG-MISSING-RELEASE"* ]] || { echo "FAIL: NM-2a (AC-2) — the dry-run must RECORD the own-tag prediction, not pass silently or report it, got '$_NG_REC'"; failures=$((failures+1)); }
+  _ng_drive dry-run 0 VERIFIED $'v3.28\nv9.70' "$_ng_dry15"
+  _st_arm NM NM-2b; [[ "$_NG_RC" -eq 0 ]] || { echo "FAIL: NM-2b (AC-2) — the same dry-run over a VERIFIED row must not halt either, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+  [[ "$_NG_REC" == *"OWN-TAG PREDICTED"* ]] || { echo "FAIL: NM-2b (AC-2) — the dry-run must record the own-tag prediction, got '$_NG_REC'"; failures=$((failures+1)); }
+
+  # (NM-3 / NM-3c, AC-3) --apply still ASSERTS: a sibling gap FAILs (the sensitivity
+  # arm the criterion asks for), and the clean fixture PASSes naming the own tag's state.
+  _ng_drive apply 0 VERIFIED $'v3.28\nv9.71'
+  _st_arm NM NM-3; [[ "$_NG_RC" -ne 0 && "$_NG_REC" == FAIL\|* && "$_NG_REC" == *"MISSING-RELEASE v9.70"* ]] || { echo "FAIL: NM-3 (AC-3) — a sibling tag with no published Release must still FAIL at --apply, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+  _ng_drive apply 0 VERIFIED $'v3.28\nv9.70\nv9.71'
+  _st_arm NM NM-3c; [[ "$_NG_RC" -eq 0 && "$_NG_REC" == PASS\|* && "$_NG_REC" == *"own tag v9.71: IN-STEP"* ]] || { echo "FAIL: NM-3c — a clean fixture must PASS and name the own tag's state, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+
+  # (NM-4a, AC-4 — the plan's row, graded at the parity population) the own tag is
+  # partitioned out of the sibling population by its VERSION, so an unpublished own
+  # Release reads no finding there; the control on the same fixture is a sibling gap.
+  local _ng_ap
+  /usr/bin/printf 'v9.70\nv9.71\n' > "$_ng_tmp/ann4"
+  /usr/bin/printf 'v3.28\nv9.70\n' > "$_ng_tmp/rel4"
+  : > "$_ng_tmp/inflight4"
+  _ng_ap="$(anchor_parity_violations "$_ng_tmp/ann4" "$_ng_tmp/rel4" "$_ng_tmp/inflight4" "v9.71" 2>/dev/null || true)"
+  _st_arm NM NM-4a; [[ "$_ng_ap" != *"v9.71"* ]] || { echo "FAIL: NM-4a (AC-4) — the closing release's own tag must be partitioned out of the sibling population, got: $_ng_ap"; failures=$((failures+1)); }
+  /usr/bin/printf 'v3.28\n' > "$_ng_tmp/rel4"
+  _ng_ap="$(anchor_parity_violations "$_ng_tmp/ann4" "$_ng_tmp/rel4" "$_ng_tmp/inflight4" "v9.71" 2>/dev/null || true)"
+  [[ "$(grep_count . <<<"$_ng_ap")" == "1" && "$_ng_ap" == "MISSING-RELEASE v9.70 "* ]] || { echo "FAIL: NM-4a control — the same fixture with the sibling's Release removed must report exactly that one gap, got: $_ng_ap"; failures=$((failures+1)); }
+
+  # (NM-4b) NO MASKING at --apply. The own row reads DEPLOYED, so the in-flight set
+  # carries v9.71 — and the own limb reads NEITHER exemption set, so a genuine own gap
+  # after a converged publish still halts.
+  _ng_drive apply 0 DEPLOYED $'v3.28\nv9.70' "$_ng_pass15"
+  _st_arm NM NM-4b; [[ "$_NG_RC" -ne 0 && "$_NG_REC" == *"OWN-TAG-MISSING-RELEASE v9.71"* ]] || { echo "FAIL: NM-4b — an own tag with no Release after 15.5 must FAIL at --apply even while the in-flight set names it, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+  # ...and the own limb's second token: a published Release for the closing version with
+  # no annotated tag behind it is reported under the own label, and the sibling
+  # population no longer carries that version at all.
+  local _ng_bare
+  VERSION="v9.72"
+  _ng_drive apply 0 VERIFIED $'v3.28\nv9.70\nv9.71\nv9.72' "$_ng_pass15"
+  _ng_bare="${_NG_REC//OWN-TAG-MISSING-ANNOTATED-TAG v9.72/}"
+  [[ "$_NG_RC" -ne 0 && "$_NG_REC" == *"OWN-TAG-MISSING-ANNOTATED-TAG v9.72"* && "$_ng_bare" != *"MISSING-ANNOTATED-TAG v9.72"* ]] || { echo "FAIL: NM-4b — a closing version with a published Release and no annotated tag must FAIL under the own label only, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+  VERSION="v9.71"
+
+  # (NM-4c) THE PREDICATE, one positive against one negative per conjunct, plus the own
+  # pair's four states from the classifier the limb reads.
+  _st_arm NM NM-4c; own_anchor_gap_is_this_close "MISSING-RELEASE" "dry-run" "DRY-RUN|x" 2>/dev/null || { echo "FAIL: NM-4c — the bounded state (own Release missing, dry-run, 15.5 recorded DRY-RUN) must predict"; failures=$((failures+1)); }
+  if own_anchor_gap_is_this_close "IN-STEP" "dry-run" "DRY-RUN|x" 2>/dev/null; then echo "FAIL: NM-4c — conjunct (1): an own pair in step must never predict"; failures=$((failures+1)); fi
+  if own_anchor_gap_is_this_close "MISSING-RELEASE" "apply" "DRY-RUN|x" 2>/dev/null; then echo "FAIL: NM-4c — conjunct (2): --apply must never predict"; failures=$((failures+1)); fi
+  if own_anchor_gap_is_this_close "MISSING-RELEASE" "dry-run" "PASS|x" 2>/dev/null; then echo "FAIL: NM-4c — conjunct (3): a 15.5 that did not no-op must never be predicted over"; failures=$((failures+1)); fi
+  if own_anchor_gap_is_this_close "MISSING-RELEASE" "dry-run" "" 2>/dev/null; then echo "FAIL: NM-4c — conjunct (3): no 15.5 record at all must never predict"; failures=$((failures+1)); fi
+  /usr/bin/printf 'v9.71\n' > "$_ng_tmp/o1"; : > "$_ng_tmp/o0"
+  [[ "$(own_anchor_state "$_ng_tmp/o1" "$_ng_tmp/o1" v9.71 2>/dev/null || true)" == "IN-STEP" \
+     && "$(own_anchor_state "$_ng_tmp/o1" "$_ng_tmp/o0" v9.71 2>/dev/null || true)" == "MISSING-RELEASE" \
+     && "$(own_anchor_state "$_ng_tmp/o0" "$_ng_tmp/o1" v9.71 2>/dev/null || true)" == "MISSING-ANNOTATED-TAG" \
+     && "$(own_anchor_state "$_ng_tmp/o0" "$_ng_tmp/o0" v9.71 2>/dev/null || true)" == "ABSENT" ]] || { echo "FAIL: NM-4c — own_anchor_state must classify the own pair's four states IN-STEP / MISSING-RELEASE / MISSING-ANNOTATED-TAG / ABSENT"; failures=$((failures+1)); }
+
+  # (NM-4d) conjunct (3) in the phase: a dry-run with NO 15.5 record reports the own gap
+  # rather than predicting it — and the DEPLOYED row does not mask it either.
+  _ng_drive dry-run 0 DEPLOYED $'v3.28\nv9.70'
+  _st_arm NM NM-4d; [[ "$_NG_RC" -ne 0 && "$_NG_REC" == *"OWN-TAG-MISSING-RELEASE v9.71"* ]] || { echo "FAIL: NM-4d — without a 15.5 DRY-RUN record in this run the own gap is not this script's no-op and must be reported, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+
+  # (NM-4e) CO-TENANCY: a predicted own gap does not mask a genuine sibling gap in the
+  # same dry-run, and the finding names the sibling only.
+  _ng_drive dry-run 0 VERIFIED 'v3.28' "$_ng_dry15"
+  _st_arm NM NM-4e; [[ "$_NG_RC" -ne 0 && "$_NG_REC" == *"MISSING-RELEASE v9.70"* ]] || { echo "FAIL: NM-4e — a sibling gap must still FAIL beside a predicted own gap, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+  [[ "$_NG_REC" != *"v9.71"* ]] || { echo "FAIL: NM-4e — the finding must name the sibling only; the own tag is predicted, not reported, got '$_NG_REC'"; failures=$((failures+1)); }
+
+  # (NM-CIAC3) THE WORKFLOW'S TWO HALVES. Pass 1, --no-merge --apply with the own
+  # Release unpublished, defers 15.55. Pass 2, the resumed --apply after the merge and
+  # the publish, asserts it for real and passes; NM-3 is its sensitivity control.
+  _ng_drive apply 1 VERIFIED $'v3.28\nv9.70'
+  _st_arm NM NM-CIAC3; [[ "$_NG_RC" -eq 0 && "$_NG_REC" == "SKIPPED|DEFERRED under --no-merge"* ]] || { echo "FAIL: NM-CIAC3 pass 1 — --no-merge must defer 15.55, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+  _ng_drive apply 0 VERIFIED $'v3.28\nv9.70\nv9.71' "$_ng_pass15"
+  [[ "$_NG_RC" -eq 0 && "$_NG_REC" == PASS\|* && "$_NG_REC" == *"own tag v9.71: IN-STEP"* ]] || { echo "FAIL: NM-CIAC3 pass 2 — the resumed --apply must assert 15.55 for real and pass, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+
+  # (NM-5a, AC-5) COMPLETENESS, derived from this file's own dispatch text with the
+  # dispatch<->record arm's parse. A post-merge phase with no row fails; the controls
+  # prove the reader names a synthetic one, ignores one before the pivot, and refuses a
+  # text with no pivot rather than reading it as "all declared".
+  local _ng_src _ng_u _ng_names _ng_post="" _ng_seen=0 _ng_n _ng_row _ng_rn _ng_rb _ng_rc2
+  _ng_src="$(/bin/cat "${BASH_SOURCE[0]}")"
+  _ng_names="$(/usr/bin/grep -oE '^phase_[a-z0-9_]+ \|\|' <<<"$_ng_src" | /usr/bin/sed 's/^phase_//;s/ ||$//' || true)"
+  while IFS= read -r _ng_n; do
+    [[ -z "$_ng_n" ]] && continue
+    if [[ "$_ng_n" == "await_merge_chore_pr" ]]; then _ng_seen=1; fi
+    if [[ "$_ng_seen" -eq 1 ]]; then _ng_post="${_ng_post}${_ng_n}"$'\n'; fi
+  done <<<"$_ng_names"
+  _ng_u="$(_nm_undeclared "$_ng_src" 2>/dev/null || true)"
+  _st_arm NM NM-5a; [[ "$(grep_count . <<<"$_ng_post")" -ge 12 ]] || { echo "FAIL: NM-5a anti-vacuity — the dispatch parse found $(grep_count . <<<"$_ng_post") post-merge phases, below the floor of 12"; failures=$((failures+1)); }
+  [[ -z "$_ng_u" ]] || { echo "FAIL: NM-5a (AC-5) — post-merge phase(s) dispatched with NO row in NO_MERGE_PHASE_BEHAVIOUR: $_ng_u"; failures=$((failures+1)); }
+  _ng_u="$(_nm_undeclared "${_ng_src}"$'\nphase_zz_synthetic_post_merge || { generate_report; exit 3; }' 2>/dev/null || true)"
+  [[ "$_ng_u" == "zz_synthetic_post_merge" ]] || { echo "FAIL: NM-5a sensitivity — a synthetic post-merge phase with no row must be named, got '$_ng_u'"; failures=$((failures+1)); }
+  _ng_u="$(_nm_undeclared "$(/usr/bin/awk '/^phase_await_merge_chore_pr /{print "phase_zz_synthetic_pre_merge || { generate_report; exit 3; }"} {print}' <<<"$_ng_src")" 2>/dev/null || true)"
+  [[ -z "$_ng_u" ]] || { echo "FAIL: NM-5a specificity — a phase dispatched BEFORE the merge owes no row, got '$_ng_u'"; failures=$((failures+1)); }
+  _ng_u="$(_nm_undeclared "$(/usr/bin/grep -v '^phase_await_merge_chore_pr ' <<<"$_ng_src")" 2>/dev/null || true)"
+  [[ "$_ng_u" == "NO-PIVOT" ]] || { echo "FAIL: NM-5a — a dispatch text with no merge phase must read NO-PIVOT, never an empty (all-declared) answer, got '$_ng_u'"; failures=$((failures+1)); }
+  if declare -p NO_MERGE_PHASE_BEHAVIOUR >/dev/null 2>&1; then
+    for _ng_row in "${NO_MERGE_PHASE_BEHAVIOUR[@]}"; do
+      read -r _ng_rn _ng_rb _ng_rc2 <<<"$_ng_row"
+      /usr/bin/grep -qx -- "$_ng_rn" <<<"$_ng_post" || { echo "FAIL: NM-5a — row '$_ng_rn' names no phase dispatched at or after the merge"; failures=$((failures+1)); }
+      case "$_ng_rb" in run|skip|record|defer) ;; *) echo "FAIL: NM-5a — row '$_ng_rn' declares '$_ng_rb', outside the closed set run / skip / record / defer"; failures=$((failures+1)) ;; esac
+    done
+  else
+    echo "FAIL: NM-5a — NO_MERGE_PHASE_BEHAVIOUR is not declared; post-merge membership has no declaration to read"; failures=$((failures+1))
+  fi
+
+  # (NM-5b) BOTH REPORTS DERIVE THEIR DEFERRED LIST FROM THE TABLE: one markdown bullet
+  # per `defer` row and none for any other row, the pre-existing bullets byte-identical,
+  # and the JSON array equal to the table's `defer` rows. A row appended to the table
+  # appears in both renders with no renderer edit; at NO_MERGE=0 neither carries a list.
+  local _ng_md _ng_bul _ng_want _ng_js _ng_jd
+  NO_MERGE=1; MILESTONE="9999"; MODE="apply"; OUTPUT="markdown"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _ng_want="$(_nm_members defer 2>/dev/null || true)"
+  _ng_md="$(generate_markdown_report 2>/dev/null || true)"
+  _ng_bul="$(/usr/bin/awk '/^## Deferred Under --no-merge/{f=1;next} f&&/^\*\*Follow-up/{f=0} f&&/^- /{print}' <<<"$_ng_md")"
+  _st_arm NM NM-5b; [[ "$(grep_count . <<<"$_ng_want")" -ge 5 && "$(grep_count . <<<"$_ng_bul")" == "$(grep_count . <<<"$_ng_want")" ]] || { echo "FAIL: NM-5b — the Deferred section must carry exactly one bullet per defer row (rows: $(grep_count . <<<"$_ng_want"), bullets: $(grep_count . <<<"$_ng_bul"))"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- "- \`assert_anchor_hygiene\` — release-anchor parity not asserted — its Surface-1 input is not yet published" <<<"$_ng_bul" || { echo "FAIL: NM-5b — the Deferred section must list phase 15.55, got: $_ng_bul"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- "- \`post_close_milestone\` — Milestone #9999 left OPEN" <<<"$_ng_bul" || { echo "FAIL: NM-5b — the milestone bullet must stay byte-identical, got: $_ng_bul"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- "- \`manual_close_release_issues\` — D-1 anomaly issue-close deferred" <<<"$_ng_bul" || { echo "FAIL: NM-5b — the issue-close bullet must stay byte-identical"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- "- \`publish_github_release\` — Surface 1 (GitHub Release) not emitted" <<<"$_ng_bul" || { echo "FAIL: NM-5b — the publish bullet must stay byte-identical"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- "- \`check_release_body_drift\` — no published Release to drift-check" <<<"$_ng_bul" || { echo "FAIL: NM-5b — the drift bullet must stay byte-identical"; failures=$((failures+1)); }
+  [[ "$_ng_bul" != *"await_merge_chore_pr"* && "$_ng_bul" != *"run_verification"* && "$_ng_bul" != *"action_item_gate"* ]] || { echo "FAIL: NM-5b — a non-defer row was rendered as deferred: $_ng_bul"; failures=$((failures+1)); }
+  OUTPUT="json"
+  _ng_js="$(generate_json_report 2>/dev/null || true)"
+  _ng_jd="$(/usr/bin/python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin).get("deferred_under_no_merge", [])))' <<<"$_ng_js" 2>/dev/null || true)"
+  [[ -n "$_ng_want" && "$_ng_jd" == "$(/usr/bin/tr '\n' ' ' <<<"$_ng_want" | /usr/bin/sed 's/ *$//')" ]] || { echo "FAIL: NM-5b — the JSON deferred_under_no_merge array must equal the table's defer rows, got '$_ng_jd'"; failures=$((failures+1)); }
+  # Sensitivity: a row appended to the table is rendered by both, with no renderer edit.
+  NO_MERGE_PHASE_BEHAVIOUR+=("zz_probe defer probe text")
+  OUTPUT="markdown"; _ng_md="$(generate_markdown_report 2>/dev/null || true)"
+  OUTPUT="json"; _ng_js="$(generate_json_report 2>/dev/null || true)"
+  _ng_jd="$(/usr/bin/python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin).get("deferred_under_no_merge", [])))' <<<"$_ng_js" 2>/dev/null || true)"
+  /usr/bin/grep -qxF -- "- \`zz_probe\` — probe text" <<<"$_ng_md" || { echo "FAIL: NM-5b sensitivity — a row appended to the table must appear as a markdown bullet with no renderer edit"; failures=$((failures+1)); }
+  [[ " $_ng_jd " == *" zz_probe "* ]] || { echo "FAIL: NM-5b sensitivity — a row appended to the table must appear in the JSON array, got '$_ng_jd'"; failures=$((failures+1)); }
+  if [[ "$_ng_had_table" -eq 1 ]]; then NO_MERGE_PHASE_BEHAVIOUR=("${_ng_s_table[@]}"); else unset NO_MERGE_PHASE_BEHAVIOUR; fi
+  # Control: NO_MERGE=0 renders no deferred list in either report.
+  NO_MERGE=0; OUTPUT="markdown"; _ng_md="$(generate_markdown_report 2>/dev/null || true)"
+  OUTPUT="json"; _ng_js="$(generate_json_report 2>/dev/null || true)"
+  _ng_jd="$(/usr/bin/python3 -c 'import json,sys; print(len(json.load(sys.stdin).get("deferred_under_no_merge", ["x"])))' <<<"$_ng_js" 2>/dev/null || true)"
+  [[ "$_ng_md" != *"## Deferred Under --no-merge"* && "$_ng_jd" == "0" ]] || { echo "FAIL: NM-5b control — at NO_MERGE=0 neither report may carry a deferred list (JSON length '$_ng_jd')"; failures=$((failures+1)); }
+
+  # (NM-5c) HELP PARITY. Every `defer` row's phase name shares a --help line with
+  # `DEFERS under --no-merge` — the name-line convention the table's header comment
+  # states, because --help renders the header line by line. The control shows the
+  # predicate can answer no.
+  local _ng_help
+  _ng_help="$(usage 2>/dev/null || true)"
+  _ng_want="$(_nm_members defer 2>/dev/null || true)"
+  _ng_hit_of() {   # <name> -> 0 when one --help line carries both the name and the token
+    local _l
+    while IFS= read -r _l; do
+      if [[ "$_l" == *"$1"* && "$_l" == *"DEFERS under --no-merge"* ]]; then return 0; fi
+    done <<<"$_ng_help"
+    return 1
+  }
+  _st_arm NM NM-5c; [[ "$(grep_count . <<<"$_ng_want")" -ge 5 ]] || { echo "FAIL: NM-5c anti-vacuity — the table declares fewer than 5 defer rows; help parity would check almost nothing"; failures=$((failures+1)); }
+  while IFS= read -r _ng_n; do
+    [[ -z "$_ng_n" ]] && continue
+    _ng_hit_of "$_ng_n" || { echo "FAIL: NM-5c — no --help line carries both '$_ng_n' and 'DEFERS under --no-merge'; put the token on the row's phase-name line"; failures=$((failures+1)); }
+  done <<<"$_ng_want"
+  ! _ng_hit_of "zz_not_a_phase" || { echo "FAIL: NM-5c control — the help-parity predicate matched a name --help does not carry; it cannot fail"; failures=$((failures+1)); }
+
+  # (NM-5d) THE FIRST STATEMENT, checked structurally (Plan amendment 1 item 3). A
+  # `defer` phase that defers through its own hand-written NO_MERGE guard records the
+  # same observable as the declared deferral and passes every behavioural arm above,
+  # while the table stops being its source. So each `defer` row's phase must OPEN with
+  # `_nm_defer "<name>" "<detail>" && return 0`, read from `declare -f` (comments
+  # stripped, so prose can neither satisfy nor defeat it). Three controls on every run
+  # show the predicate can answer no: a constructed body opening with a hand guard, a
+  # MUTATED COPY of a real defer phase whose first statement is replaced by the pre-fix
+  # hand guard, and a deferral that names another phase.
+  _ng_first_ok() {   # <declare -f text> <phase-record-name> -> 0 when the first statement is the declared deferral
+    local _fs
+    _fs="$(/usr/bin/awk 'f && NF {print; exit} /^\{[[:space:]]*$/ {f=1}' <<<"$1")"
+    _fs="${_fs#"${_fs%%[![:space:]]*}"}"
+    case "$_fs" in
+      "_nm_defer \"$2\" \""*"\" && return 0"|"_nm_defer \"$2\" \""*"\" && return 0;") return 0 ;;
+    esac
+    return 1
+  }
+  local _ng_body _ng_mut
+  _ng_want="$(_nm_members defer 2>/dev/null || true)"
+  _st_arm NM NM-5d; [[ "$(grep_count . <<<"$_ng_want")" -ge 5 ]] || { echo "FAIL: NM-5d anti-vacuity — the table declares fewer than 5 defer rows; the structural check would read almost nothing"; failures=$((failures+1)); }
+  while IFS= read -r _ng_n; do
+    [[ -z "$_ng_n" ]] && continue
+    _ng_body="$(declare -f "phase_${_ng_n}" 2>/dev/null || true)"
+    _ng_first_ok "$_ng_body" "$_ng_n" || { echo "FAIL: NM-5d — phase_${_ng_n} is declared defer but does not OPEN with _nm_defer \"${_ng_n}\" … && return 0"; failures=$((failures+1)); }
+  done <<<"$_ng_want"
+  # Control 1 — a constructed body whose first statement is a hand guard. The record
+  # subject is written as a positional parameter so this text adds no phantom subject
+  # to the mark_phase census the #4773 arms parse out of this file.
+  _ng_body=$'phase_zz () \n{ \n    if [[ "$NO_MERGE" -eq 1 ]]; then\n        mark_phase "$1" "SKIPPED" "DEFERRED under --no-merge — x";\n        return 0;\n    fi;\n    _nm_defer "zz" "x" && return 0\n}'
+  ! _ng_first_ok "$_ng_body" "zz" || { echo "FAIL: NM-5d control — the check accepted a phase that opens with a hand-written NO_MERGE guard"; failures=$((failures+1)); }
+  # Control 2 — the MUTATED COPY: phase 13's real body with its first statement
+  # replaced by the pre-fix guard. It must differ from the original and be rejected.
+  _ng_body="$(declare -f phase_post_close_milestone 2>/dev/null || true)"
+  _ng_mut="$(/usr/bin/awk 'f==1 && NF {print "    if [[ \"$NO_MERGE\" -eq 1 ]]; then return 0; fi;"; f=2; next} /^\{[[:space:]]*$/ && f==0 {f=1} {print}' <<<"$_ng_body")"
+  [[ -n "$_ng_body" && "$_ng_mut" != "$_ng_body" ]] || { echo "FAIL: NM-5d control — the mutation did not change the copy of phase 13; the mutated-copy control would measure nothing"; failures=$((failures+1)); }
+  ! _ng_first_ok "$_ng_mut" "post_close_milestone" || { echo "FAIL: NM-5d control — the check accepted a mutated copy of phase 13 whose first statement is a hand-written guard"; failures=$((failures+1)); }
+  # Control 3 — a deferral whose first argument names a different phase.
+  _ng_body=$'phase_zz () \n{ \n    _nm_defer "other_phase" "x" && return 0;\n}'
+  ! _ng_first_ok "$_ng_body" "zz" || { echo "FAIL: NM-5d control — the check accepted a deferral that names another phase"; failures=$((failures+1)); }
+
+  # (NM-12) PHASE 12'S --no-merge DETAIL IS STATE-TRUE. On a resumed --no-merge run
+  # whose chore PR phase 11 already found MERGED, the skip detail says so, read from the
+  # outcome phase 11 recorded — no host read — instead of "left open for operator
+  # merge". Control: a PR this run created is still reported left open, byte for byte.
+  local _ng_r12
+  NO_MERGE=1; MODE="apply"; CHORE_PR_SKIPPED=0; CHORE_PR_NUMBER="8810"; CHORE_PR_OUTCOME="resumed-already-merged"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_await_merge_chore_pr >/dev/null 2>&1 || true
+  _ng_r12="$(get_phase await_merge_chore_pr)"
+  _st_arm NM NM-12; [[ "$_ng_r12" == SKIPPED\|* && "$_ng_r12" == *"already MERGED"* && "$_ng_r12" != *"left open"* ]] || { echo "FAIL: NM-12 — a resumed --no-merge run over a chore PR phase 11 found MERGED must say so, not 'left open', got '$_ng_r12'"; failures=$((failures+1)); }
+  [[ "$_ng_r12" == *"--no-merge"* && "$_ng_r12" != *"DEFERRED under --no-merge"* ]] || { echo "FAIL: NM-12 — the skip row still cites --no-merge and carries no deferral sentinel, got '$_ng_r12'"; failures=$((failures+1)); }
+  CHORE_PR_OUTCOME="created"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_await_merge_chore_pr >/dev/null 2>&1 || true
+  _ng_r12="$(get_phase await_merge_chore_pr)"
+  [[ "$_ng_r12" == "SKIPPED|--no-merge: chore PR #8810 left open for operator merge (no poll/merge)" ]] || { echo "FAIL: NM-12 control — a chore PR this run created is left open under --no-merge and must be reported so, byte for byte, got '$_ng_r12'"; failures=$((failures+1)); }
+  _st_witness NM 17
+
+  unset -f _ng_drive _ng_exec_block _ng_hit_of _ng_first_ok 2>/dev/null || true
+  unset _NG_RC _NG_REC 2>/dev/null || true
+  /bin/rm -rf "$_ng_tmp" 2>/dev/null || true
+  if [[ "$_ng_had_table" -eq 1 ]]; then NO_MERGE_PHASE_BEHAVIOUR=("${_ng_s_table[@]}"); else unset NO_MERGE_PHASE_BEHAVIOUR 2>/dev/null || true; fi
+  REPO_ROOT="$_ng_s_root"; GH="$_ng_s_gh"; RELEASE_INDEX="$_ng_s_idx"; RELEASE_LOG="$_ng_s_log"
+  MODE="$_ng_s_mode"; NO_MERGE="$_ng_s_nomerge"; VERSION="$_ng_s_ver"; MILESTONE="$_ng_s_ms"
+  CHORE_PR_SKIPPED="$_ng_s_skip"; OUTPUT="$_ng_s_out"; CHORE_PR_OUTCOME="$_ng_s_cpo"; CHORE_PR_NUMBER="$_ng_s_cpn"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # ── #3121: pattern_scan default + report capture ───────────────────────────
   # The phase was previously opt-in behind a flag NO executable caller passed, so
   # it always resolved N/A; and it piped its report to /dev/null and marked PASS on
@@ -16725,7 +17110,8 @@ EOF
   _st_claim CB "  phase_create_chore_branch fail-loud validated (#7182, group CB — 10 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): CB-1 create path PASS with HEAD read back / CB-2 a FREE existing branch SKIPPED with HEAD on it, the RED arm's control / CB-3 a same-worktree re-run converges, the header's phase-5 pin / CB-4 THE RED ARM: a branch HELD by a second worktree FAILs with rc 3 carrying git's refusal (holder named) and HEAD not moved / CB-5 that detail is one pipe-free line with a holder path under HOME rendered <home> / CB-6 the two SHIPPED dispatch lines, executed with the real phase: held → exit 3 and phase 6 never runs / CB-7 its sensitivity control: free → phase 6 runs / CB-8 AC-3: no '|| true' anywhere in the phase, with a pre-fix control / CB-9 class guard: zero success verdicts written before a swallowed git op across the production region, with sensitivity and specificity fixtures / CB-10 the shared projection's whole vocabulary on one input — CR and LF to spaces, '|' to '/', the repository root to <repo> and then HOME to <home> — redacted BEFORE the 800-character cap, so a home path straddling character 800 renders <home> and leaves no path fragment, with the arm's predicate shown on every run to reject a cap-first projection, a raw '|' and HOME redacted before the repository root"
   _st_claim CR "  phase_create_chore_pr resumes over its own merged chore PR (#7436, group CR — 16 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): CR-1 CIAC-3's runtime arm — a MERGED, branch-deleted PR with a STALE origin/main resolves to resumed-already-merged through the owner-qualified REST read (state=all) with no GraphQL call, no create and no branch re-creation, containment proven against the PR's own refs/pull head, and phase 12 then renders its MERGED terminal-PASS arm on the first read with zero merges (AC-2 reached, not present) / CR-2 the FRESH-ref path through the zero-commit guard reaches the SAME arm with no GraphQL call / CR-3 control: outputs on main with NO PR keep the idempotent skip / CR-4 AC-3 never-created reaches the create and fails loud / CR-5 AC-3 a merged PR on another version's head is invisible / CR-6 CLOSED-unmerged leads to a fresh create, never to done / CR-7 containment: a commit made after the merge is not in the merged PR's head, so it FAILs with nothing pushed or created / CR-8 an OPEN PR is reused unchanged / CR-9 CIAC-3 static: no head-keyed --state open chore-PR lookup in the production region, by regex so this file never carries the plan's literal needle, with a control fixture / CR-10 a failed push FAILs before any create / CR-11 an unreadable partition FAILs carrying the host's message, never reads as none / CR-12 a SQUASH merge, whose chore commit is not an ancestor of main, still resumes: containment is against the PR's own head / CR-13 SECURITY: a fork's same-named OPEN PR never binds, on the zero-commit path or the main path / CR-14 the zero-commit guard reuses an OPEN PR instead of reporting none needed / CR-15 a push rejected only because the remote head is AHEAD of the local tip is not a failure / CR-16 phase 11's REST reader and phase 12's reader agree on open, merged and closed-unmerged PRs"
   _st_claim HF "  the report header's chore-PR field renders every outcome phase 11 records (#5769, group HF — 9 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): HF-1 CIAC-2's runtime limb — each of the seven recorded states renders its own exact line, seven distinct lines, read through the real report / HF-2 AC-2 an idempotent skip on an --apply run reads as a success, never N/A, dry-run or FAILED / HF-3 AC-3 dry-run, not-yet-created and the idempotent skip are three distinct lines / HF-4 polarity over the partition: no success renders as N/A, FAILED or not created, and the failed outcome never renders as a skip / HF-5 the #7182 seam: a run halted at create_chore_branch names where it halted, never dry-run or N/A wording / HF-6 partition parity: every value the production region assigns to CHORE_PR_OUTCOME has an arm in the renderer, with an anti-vacuity floor of six and an extraction control / HF-7 an unknown value renders visibly unrecognised, never as a plausible state / HF-8 end to end on the real phase in --dry-run: the phase row, the recorded outcome and the header name the same outcome / HF-8b the JSON twin's chore_pr_outcome carries the same seven states, with chore_pr the number or null"
-  echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
+  _st_claim NM "  --no-merge membership declared once + phase 15.55's own-tag limb validated (#7465, group NM — 17 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): NM-1 AC-1 — the dispatch lines from 15.5 through 16.7, lifted verbatim and executed under --no-merge with the own Release unpublished, defer 15.55 and 15.6 and reach 16, 16.5 and 16.7 / NM-1c its control: the same text on a merge run halts at 15.55 with exit 3 and strands the phases after it, so the harness can observe stranding / NM-2a NM-2b AC-2 — a dry-run predicts the own-tag gap its own publish no-op produces, over a DEPLOYED and a VERIFIED row, and records the prediction / NM-3 AC-3 — a sibling gap still FAILs at --apply, and NM-3c the clean fixture PASSes naming the own tag's state / NM-4a AC-4 at the parity population — the own tag is partitioned out by VERSION, with a sibling-gap control on the same fixture / NM-4b no masking — the in-flight set cannot hide a genuine own gap at --apply, and a closing version with a Release and no annotated tag is reported under the own label only / NM-4c the prediction predicate, one negative per conjunct, and the own pair's four states / NM-4d without a 15.5 dry-run record the own gap is reported / NM-4e a predicted own gap does not mask a sibling gap / NM-CIAC3 --no-merge defers 15.55 and the resumed --apply asserts it for real / NM-5a AC-5 — every post-merge dispatched phase has a row, with sensitivity, specificity and no-pivot controls, every row names a post-merge phase, and every value is in the closed set / NM-5b both reports derive their deferred list from the table, a row appended to it renders with no renderer edit, and NO_MERGE=0 renders none / NM-5c every defer row shares a --help line with DEFERS under --no-merge, with a control the predicate rejects / NM-5d every defer phase OPENS with the declared deferral, checked structurally against a constructed hand guard, a mutated copy of phase 13 and a deferral naming another phase / NM-12 phase 12's --no-merge detail says a chore PR phase 11 found MERGED is merged, with the byte-identical left-open control"
+  echo "  --no-merge post-merge behaviour validated (#2919 + NO_MERGE_PHASE_BEHAVIOUR — every defer row DEFERS under --no-merge even with an open milestone and issues, every skip row SKIPs citing the flag without the deferral sentinel; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
   echo "  phase_rebuild_skill_packages detection + files=() composition validated (#4722 — core/schemas sensitivity / core/standards control / rule-a direct-source / specificity negative / C1 dry-run WARN vs apply FAIL / delegation structure / P1 staging-array guard; #4755 — a5 _shared filter sensitivity (a non-skill dir under a skills/ root resolves NO candidate) / a6 _templates second-directory proving the filter is a roster-resolvability test and not a hardcoded _shared exclusion / a7 mixed set keeps the buildable candidate and drops the unbuildable one (anti-over-filtering) / d1 --apply anti-regression: a roster-resolvable skill that cannot build still returns 3, marks FAIL, and names ITSELF / d2 the converse in the same sandbox and mode: a filtered-out candidate reaches the N/A limb at rc 0 / c5 build-invocation shape — per-skill loop over \$candidates, --root passed on the BUILD call, failures accumulated by name in _rb_failed)" >&2
