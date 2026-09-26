@@ -32,6 +32,35 @@ SET {1..N}. Reading the baseline as a SET rather than a CARDINALITY is what turn
 from a number-vs-number comparison into an assertion with a gap, a duplicate and an
 out-of-range class.
 
+THE ISSUE BODY IS READ UNDER THE ACCEPTANCE-ASSERTION CONTRACT'S VOCABULARY — its
+parse rules P1 and P2, in the eval-writer skill's acceptance-assertion reference —
+not under a forked one. A criteria block opens at a heading whose text starts
+`Acceptance Criteria` or `Completion condition (verifiable)`, at any heading level,
+and the next heading of any level closes it. Its criteria are its top-level list
+items of one shape: its task-list lines when any are present; otherwise its ordered
+items; otherwise its plain `-`/`*` bullets. A nested item is detail of its parent, a
+plain bullet in a task-list block is an annotation, and a thematic break is no item.
+A heading outside the vocabulary opens nothing — `Cross-Issue Acceptance Criteria` is
+the named control — so a sibling list is never read as the card's own.
+
+THE DESIGN LIMB (MAP) RUNS ONLY ON A SUPPLIED SNAPSHOT. A Stage-5 design comment
+restates or refines a card's criteria under its own labels and has no fixed grammar,
+so the binder cannot read one. --design-file supplies it: per issue, each design
+entry's label, its text, and the issue ordinal it DECLARES it maps to (`maps_to`, or
+null for a design-only obligation). The issue list that declaration is checked
+against comes through --fetch or --criteria-file — the reader the plan limb uses —
+never from the design file. Each declared target is checked lexically, exactly as a
+plan row is: a declaration is a claim, and a mis-declared one reads UNBOUND.
+
+CRITERION NAMESPACE. An acceptance-criterion ordinal is unique only inside the list
+that counts it — the issue body, a Stage-5 design comment, or the release plan — so
+every emitted line ends in an `ns:` field. `ns:plan` marks a line about the plan's own
+rows; `ns:plan>issue` a plan row resolved to the issue list; `ns:design>issue` a
+declared design mapping checked against it. The VERDICT line names the resolutions
+that ran. The field is appended LAST, so every earlier field keeps its index. The
+namespaces, the reference forms and the `ns:` grammar are defined once, in the Stage-8
+QA spec's criterion-namespace section.
+
 WHAT THIS CHECK DOES NOT ASSERT, STATED PLAINLY. It cannot read intent. The binding
 limb is LEXICAL: a row binds when it echoes at least one of its criterion's
 DISCRIMINATIVE terms — the terms that separate that criterion from its siblings in the
@@ -58,19 +87,48 @@ VERDICT PRECEDENCE (headline token only):
 Every finding of every class is emitted as its own row regardless of which one supplies
 the headline, so a lower-precedence finding is never masked by a higher one.
 
-OUTPUT — TSV, one class per first field:
+OUTPUT — TSV, one class per first field; the LAST field of every line is its `ns:`:
 
-    SCAN            <plan>        <ac-rows>     <obl-rows>    <issues>
-    BASELINE        <#N>          <count>       <read_at>
-    COVERAGE        <#N>          <claimed>     <expected>    <missing|-> <extra|-> <dup|->
-    DISPLACED       <#N>          <OBL-k>       excluded-from-ac-set
-    BINDING         <#N>          <AC-k>        <BOUND|UNBOUND|WEAK-ORACLE|NOT-EVALUATED>  <detail>
-    BASELINE-DRIFT  <#N>          <declared>    <observed>
-    ORDINAL-GAP     <#N>          <class>       <detail>
-    UNBOUND         <#N>          <AC-k>        <criterion-head>
-    NOT-EVALUATED   <#N|->        <reason>
-    UNPARSEABLE     <reason>
-    VERDICT         <token>
+    SCAN            <plan>   <ac-rows>   <obl-rows>   <issues>                        ns:plan
+    BASELINE        <#N>     <count>     <read_at>                                    ns:plan
+    COVERAGE        <#N>     <claimed>   <expected>   <missing|-> <extra|-> <dup|->   ns:plan
+    DISPLACED       <#N>     <OBL-k>     excluded-from-ac-set                         ns:plan
+    BINDING         <#N>     <AC-k>      <BOUND|UNBOUND|WEAK-ORACLE|NOT-EVALUATED> <detail>
+                                                                                      ns:plan>issue
+    BASELINE-DRIFT  <#N>     <declared>  <observed>                                   ns:plan>issue
+    ORDINAL-GAP     <#N>     <class>     <detail>                ns:plan, or ns:design>issue
+    UNBOUND         <#N>     <label>     <head>            ns:plan>issue, or ns:design>issue
+    MAP             <#N>     <label|->   <AC-k|none|?>  <state>  <detail>             ns:design>issue
+    NOT-EVALUATED   <#N|->   <reason>                  ns:plan>issue, or ns:design>issue
+    UNVISITED       <#N>     <issue|design>  <detail>  ns:plan>issue, or ns:design>issue
+    UNPARSEABLE     <reason>                                                          ns:plan
+    OUT-OF-SCOPE    <reason>                                                          ns:plan
+    VERDICT         <token>                                  ns:<the resolutions that ran>
+
+MAP states. The declared target is checked: BOUND, WEAK-ORACLE (a degraded oracle,
+labelled) or UNBOUND. Not checked: NONE (declared design-only; informational),
+UNDECLARED (no `maps_to`), OUT-OF-RANGE (a target the issue list does not have), and
+UNRESTATED (an issue ordinal no design entry targets; informational, labelled `-`).
+UNDECLARED and OUT-OF-RANGE raise ORDINAL-GAP; UNBOUND raises UNBOUND.
+
+NOT-EVALUATED names which of its two causes withheld the verdict, and keeps the phrase
+"no criteria oracle": `(oracle-unavailable)` — no criteria were read for the issue (it
+is absent from the snapshot, or its fetch failed), so the check cannot run here;
+`(no-criteria-section)` — the body was read and carries no vocabulary heading with
+items under it, so there was nothing to read.
+
+UNVISITED is informational: a snapshot key the plan grades no row for, reported rather
+than dropped.
+
+READING EACH OUTCOME in the release's one outcome partition (the exit codes below are
+unchanged by it):
+
+    BOUND, WEAK-ORACLE                   pass                                  exit 0
+    UNBOUND, ORDINAL-GAP, BASELINE-DRIFT fail                                  exit 1
+    NOT-EVALUATED (oracle-unavailable)   can't run here: unverified, not pass  exit 1
+    NOT-EVALUATED (no-criteria-section)  could not read                        exit 1
+    OUT-OF-SCOPE                         a named SKIP: predates the schema     exit 0
+    UNPARSEABLE                          could not read: an input failure      exit 3
 
 Callers MUST route every unrecognised first-field value through a residual bucket: an
 unrecognised class is a FINDING, never an absence.
@@ -106,6 +164,16 @@ _ISSUE_CELL_RE = re.compile(r"^#(\d+)$")
 _LABEL_CELL_RE = re.compile(r"^(AC|OBL)[-‐-―\s]?(\d+)$", re.IGNORECASE)
 
 _ORDINAL_CLASSES = ("missing", "extra", "duplicate")
+
+# The criterion namespace each emitted line carries in its LAST field (the module
+# docstring's CRITERION NAMESPACE paragraph; the Stage-8 QA spec defines the grammar).
+_NS_PLAN = "ns:plan"
+_NS_PLAN_ISSUE = "ns:plan>issue"
+_NS_DESIGN_ISSUE = "ns:design>issue"
+
+# The two causes of a withheld verdict. Both keep the phrase "no criteria oracle".
+_UNAVAILABLE = "oracle-unavailable"
+_NO_SECTION = "no-criteria-section"
 
 # `_MIN_TERM_LEN` is a NOISE AND COST GUARD, NOT A CORRECTNESS GUARD, and the
 # distinction is measured rather than assumed: removing it leaves the self-test fully
@@ -310,7 +378,99 @@ def discriminative(criteria):
     return out, all_terms
 
 
-def analyse(plan_text, criteria_map=None, plan_name="-", ordinals_only=False):
+def _head(text):
+    return " ".join((text or "").split())[:110]
+
+
+def _lexical_bind(text, k, disc, full):
+    """(state, shared terms) for `text` claiming criterion `k` (1-based).
+
+    ONE RELATION GOVERNS BOTH LIMBS. A plan row claiming an issue ordinal and a design
+    entry declaring one bind the same way: by echoing a discriminative term of that
+    criterion, or — when sibling criteria are lexically indistinguishable — a term of
+    its full set, labelled WEAK-ORACLE rather than passed silently.
+    """
+    text_terms = terms(text)
+    oracle, state = disc[k - 1], "BOUND"
+    if not oracle:
+        oracle, state = full[k - 1], "WEAK-ORACLE"
+    shared = sorted(t for t in oracle if any(related(t, r) for r in text_terms))
+    return state, shared
+
+
+def _withheld(issue, criteria_map, what):
+    """The NOT-EVALUATED detail, naming which of its two causes withheld `what`.
+
+    An issue the snapshot does not carry — or whose fetch failed — had no criteria read
+    at all (`oracle-unavailable`); an issue carried with an empty list had its body read
+    and found no vocabulary heading with items under it (`no-criteria-section`).
+    """
+    reason = _NO_SECTION if issue in criteria_map else _UNAVAILABLE
+    return "no criteria oracle for this issue (%s) — %s withheld, not passed" % (reason, what)
+
+
+def _issue_key(issue):
+    return (0, int(issue)) if issue.isdigit() else (1, issue)
+
+
+def _design_limb(issue, entries, criteria_map, out, findings):
+    """Check each design entry's DECLARED issue ordinal against the issue list.
+
+    The declaration is the claim and the issue list is the evidence, read through the
+    binder's own reader and never taken from the design file — so declaring and
+    checking work from different inputs, as they do in the plan limb.
+    """
+    criteria = criteria_map.get(issue)
+    if not criteria:
+        findings["NOT-EVALUATED"] += 1
+        out.append(("NOT-EVALUATED", "#" + issue,
+                    _withheld(issue, criteria_map, "design mapping"), _NS_DESIGN_ISSUE))
+        return
+    disc, full = discriminative(criteria)
+    targeted = set()
+    for entry in entries:
+        label, head = entry["label"], _head(entry["text"])
+        if "maps_to" not in entry:
+            findings["ORDINAL-GAP"] += 1
+            out.append(("MAP", "#" + issue, label, "?", "UNDECLARED",
+                        "the entry declares no issue ordinal", _NS_DESIGN_ISSUE))
+            out.append(("ORDINAL-GAP", "#" + issue, "undeclared",
+                        "design %s declares no issue ordinal (maps_to)" % label,
+                        _NS_DESIGN_ISSUE))
+            continue
+        k = entry["maps_to"]
+        if k is None:
+            out.append(("MAP", "#" + issue, label, "none", "NONE", head, _NS_DESIGN_ISSUE))
+            continue
+        if not 1 <= k <= len(criteria):
+            findings["ORDINAL-GAP"] += 1
+            out.append(("MAP", "#" + issue, label, "AC-%d" % k, "OUT-OF-RANGE",
+                        "the issue list has %d criteria" % len(criteria), _NS_DESIGN_ISSUE))
+            out.append(("ORDINAL-GAP", "#" + issue, "out-of-range",
+                        "design %s maps to AC-%d; the issue list has %d criteria"
+                        % (label, k, len(criteria)), _NS_DESIGN_ISSUE))
+            continue
+        targeted.add(k)
+        state, shared = _lexical_bind(entry["text"], k, disc, full)
+        if shared:
+            out.append(("MAP", "#" + issue, label, "AC-%d" % k, state,
+                        ",".join(shared[:6]), _NS_DESIGN_ISSUE))
+        else:
+            findings["UNBOUND"] += 1
+            out.append(("MAP", "#" + issue, label, "AC-%d" % k, "UNBOUND",
+                        "no discriminative term of the target criterion appears in the entry",
+                        _NS_DESIGN_ISSUE))
+            out.append(("UNBOUND", "#" + issue, label, head, _NS_DESIGN_ISSUE))
+    # An issue ordinal no entry targets is reported, informationally: the design may
+    # simply not restate it, and the plan limb, not this one, owes it a row.
+    for k in range(1, len(criteria) + 1):
+        if k not in targeted:
+            out.append(("MAP", "#" + issue, "-", "AC-%d" % k, "UNRESTATED",
+                        _head(criteria[k - 1]), _NS_DESIGN_ISSUE))
+
+
+def analyse(plan_text, criteria_map=None, plan_name="-", ordinals_only=False,
+            design_map=None):
     """Return (rows_out, verdict, exit_code).
 
     `ordinals_only` runs the plan-local limb alone. It exists because the two limbs
@@ -319,6 +479,10 @@ def analyse(plan_text, criteria_map=None, plan_name="-", ordinals_only=False):
     the binding limb needs the issue bodies and can only run where they are readable.
     Without this split the CI surface would report NOT-EVALUATED on every run —
     a permanently degraded gate, which is the shape operators learn to ignore.
+
+    `design_map` ({issue: [{label, text, maps_to?}, ...]}) runs the design limb (MAP)
+    after the binding limb, against the same `criteria_map`. It never runs under
+    `ordinals_only`. Every emitted row ends in its `ns:` field.
     """
     criteria_map = criteria_map or {}
     out = []
@@ -347,14 +511,15 @@ def analyse(plan_text, criteria_map=None, plan_name="-", ordinals_only=False):
         if not rows and plan_shaped:
             out.append(("OUT-OF-SCOPE",
                         "no `### Per-Issue Verification` section and no `AC-`/`OBL-` "
-                        "rows — this plan predates the per-issue verification schema"))
-            out.append(("VERDICT", "OUT-OF-SCOPE"))
+                        "rows — this plan predates the per-issue verification schema",
+                        _NS_PLAN))
+            out.append(("VERDICT", "OUT-OF-SCOPE", _NS_PLAN))
             return out, "OUT-OF-SCOPE", 0
         out.append(("UNPARSEABLE",
                     "no `### Per-Issue Verification` heading; %d graded row(s) parsed, "
                     "plan-shaped=%s — neither an in-scope plan nor a readable one"
-                    % (len(rows), "yes" if plan_shaped else "no")))
-        out.append(("VERDICT", "UNPARSEABLE"))
+                    % (len(rows), "yes" if plan_shaped else "no"), _NS_PLAN))
+        out.append(("VERDICT", "UNPARSEABLE", _NS_PLAN))
         return out, "UNPARSEABLE", 3
     # OPT-IN TEST, and it runs BEFORE the vacuity guards for a reason. A plan can
     # carry a `## Verification Plan` section that holds only the release-level
@@ -367,24 +532,26 @@ def analyse(plan_text, criteria_map=None, plan_name="-", ordinals_only=False):
         out.append(("OUT-OF-SCOPE",
                     "a Verification Plan section carrying no graded `AC-`/`OBL-` row "
                     "and no `ac_baseline:` line — this plan grades no per-issue "
-                    "criteria"))
-        out.append(("VERDICT", "OUT-OF-SCOPE"))
+                    "criteria", _NS_PLAN))
+        out.append(("VERDICT", "OUT-OF-SCOPE", _NS_PLAN))
         return out, "OUT-OF-SCOPE", 0
     if not baseline:
         out.append(("UNPARSEABLE",
                     "%d graded row(s) but no `ac_baseline:` line — the criterion "
                     "ordinal set has no oracle, so no binding can be asserted"
-                    % len(rows)))
-        out.append(("VERDICT", "UNPARSEABLE"))
+                    % len(rows), _NS_PLAN))
+        out.append(("VERDICT", "UNPARSEABLE", _NS_PLAN))
         return out, "UNPARSEABLE", 3
     if not ac_rows:
         out.append(("UNPARSEABLE",
                     "zero `AC-` rows parsed under a declared baseline of %d issue(s) — "
-                    "an empty row set is not all-bindings-correct" % len(baseline)))
-        out.append(("VERDICT", "UNPARSEABLE"))
+                    "an empty row set is not all-bindings-correct" % len(baseline),
+                    _NS_PLAN))
+        out.append(("VERDICT", "UNPARSEABLE", _NS_PLAN))
         return out, "UNPARSEABLE", 3
 
-    out.append(("SCAN", plan_name, str(len(ac_rows)), str(len(obl_rows)), str(len(baseline))))
+    out.append(("SCAN", plan_name, str(len(ac_rows)), str(len(obl_rows)), str(len(baseline)),
+                _NS_PLAN))
 
     findings = {"BASELINE-DRIFT": 0, "ORDINAL-GAP": 0, "UNBOUND": 0, "NOT-EVALUATED": 0}
 
@@ -395,9 +562,9 @@ def analyse(plan_text, criteria_map=None, plan_name="-", ordinals_only=False):
             findings["ORDINAL-GAP"] += 1
             out.append(("ORDINAL-GAP", "#" + issue, "no-baseline",
                         "the plan grades this issue but `ac_baseline` does not name it, "
-                        "so its criterion ordinal set is undeclared"))
+                        "so its criterion ordinal set is undeclared", _NS_PLAN))
             continue
-        out.append(("BASELINE", "#" + issue, str(declared), read_at or "-"))
+        out.append(("BASELINE", "#" + issue, str(declared), read_at or "-", _NS_PLAN))
 
         claimed = [r["ordinal"] for r in ac_rows if r["issue"] == issue]
         expected = set(range(1, declared + 1))
@@ -409,17 +576,17 @@ def analyse(plan_text, criteria_map=None, plan_name="-", ordinals_only=False):
                     "1-%d" % declared if declared else "-",
                     ",".join(str(o) for o in missing) or "-",
                     ",".join(str(o) for o in extra) or "-",
-                    ",".join(str(o) for o in dup) or "-"))
+                    ",".join(str(o) for o in dup) or "-", _NS_PLAN))
         for cls, vals in zip(_ORDINAL_CLASSES, (missing, extra, dup)):
             if vals:
                 findings["ORDINAL-GAP"] += len(vals)
                 out.append(("ORDINAL-GAP", "#" + issue, cls,
-                            "ordinal(s) %s" % ",".join(str(v) for v in vals)))
+                            "ordinal(s) %s" % ",".join(str(v) for v in vals), _NS_PLAN))
 
         for row in sorted((r for r in obl_rows if r["issue"] == issue),
                           key=lambda r: r["ordinal"]):
             out.append(("DISPLACED", "#" + issue, "OBL-%d" % row["ordinal"],
-                        "excluded-from-ac-set"))
+                        "excluded-from-ac-set", _NS_PLAN))
 
         # --- Binding limb ------------------------------------------------------
         if ordinals_only:
@@ -428,11 +595,12 @@ def analyse(plan_text, criteria_map=None, plan_name="-", ordinals_only=False):
         if not criteria:
             findings["NOT-EVALUATED"] += 1
             out.append(("NOT-EVALUATED", "#" + issue,
-                        "no criteria oracle for this issue — binding withheld, not passed"))
+                        _withheld(issue, criteria_map, "binding"), _NS_PLAN_ISSUE))
             continue
         if len(criteria) != declared:
             findings["BASELINE-DRIFT"] += 1
-            out.append(("BASELINE-DRIFT", "#" + issue, str(declared), str(len(criteria))))
+            out.append(("BASELINE-DRIFT", "#" + issue, str(declared), str(len(criteria)),
+                        _NS_PLAN_ISSUE))
 
         disc, full = discriminative(criteria)
         for row in sorted((r for r in ac_rows if r["issue"] == issue),
@@ -442,31 +610,55 @@ def analyse(plan_text, criteria_map=None, plan_name="-", ordinals_only=False):
                 # Already counted as an ordinal gap; the binding limb has no
                 # criterion to compare against, so it withholds rather than passes.
                 out.append(("BINDING", "#" + issue, "AC-%d" % k, "NOT-EVALUATED",
-                            "no criterion at this ordinal"))
+                            "no criterion at this ordinal", _NS_PLAN_ISSUE))
                 continue
-            row_terms = terms(row["method"] + " " + row["expected"])
-            own_disc = disc[k - 1]
-            oracle, state = own_disc, "BOUND"
-            if not own_disc:
-                # Sibling criteria are lexically indistinguishable — the oracle is
-                # degraded. Say so; do not silently fall through to a pass.
-                oracle, state = full[k - 1], "WEAK-ORACLE"
-            shared = sorted(t for t in oracle if any(related(t, r) for r in row_terms))
+            # A degraded oracle (lexically indistinguishable siblings) is labelled
+            # WEAK-ORACLE by `_lexical_bind`, never silently passed.
+            state, shared = _lexical_bind(row["method"] + " " + row["expected"], k,
+                                          disc, full)
             if shared:
                 out.append(("BINDING", "#" + issue, "AC-%d" % k, state,
-                            ",".join(shared[:6])))
+                            ",".join(shared[:6]), _NS_PLAN_ISSUE))
             else:
                 findings["UNBOUND"] += 1
-                head = " ".join(criteria[k - 1].split())[:110]
                 out.append(("BINDING", "#" + issue, "AC-%d" % k, "UNBOUND",
-                            "no discriminative term of the criterion appears in the row"))
-                out.append(("UNBOUND", "#" + issue, "AC-%d" % k, head))
+                            "no discriminative term of the criterion appears in the row",
+                            _NS_PLAN_ISSUE))
+                out.append(("UNBOUND", "#" + issue, "AC-%d" % k, _head(criteria[k - 1]),
+                            _NS_PLAN_ISSUE))
 
+    # --- Design limb (MAP): only on a supplied design snapshot, never ordinals-only.
+    if design_map is not None and not ordinals_only:
+        for issue in issues:
+            if issue in design_map:
+                _design_limb(issue, design_map[issue], criteria_map, out, findings)
+
+    # A snapshot key the plan grades no row for is named, never silently dropped.
+    if not ordinals_only:
+        graded = set(issues)
+        for key in sorted(set(criteria_map) - graded, key=_issue_key):
+            out.append(("UNVISITED", "#" + key, "issue",
+                        "the plan grades no row for this issue, so its criteria "
+                        "(%d item(s)) were not compared" % len(criteria_map[key]),
+                        _NS_PLAN_ISSUE))
+        for key in sorted(set(design_map or {}) - graded, key=_issue_key):
+            out.append(("UNVISITED", "#" + key, "design",
+                        "the plan grades no row for this issue, so its design entries "
+                        "(%d item(s)) were not checked" % len(design_map[key]),
+                        _NS_DESIGN_ISSUE))
+
+    # VERDICT names the resolutions that ran.
+    if ordinals_only:
+        verdict_ns = _NS_PLAN
+    elif design_map is not None:
+        verdict_ns = _NS_PLAN_ISSUE + ",design>issue"
+    else:
+        verdict_ns = _NS_PLAN_ISSUE
     for token in ("BASELINE-DRIFT", "ORDINAL-GAP", "UNBOUND", "NOT-EVALUATED"):
         if findings[token]:
-            out.append(("VERDICT", token))
+            out.append(("VERDICT", token, verdict_ns))
             return out, token, 1
-    out.append(("VERDICT", "BOUND"))
+    out.append(("VERDICT", "BOUND", verdict_ns))
     return out, "BOUND", 0
 
 
@@ -478,23 +670,45 @@ def emit(rows, stream):
 # ---------------------------------------------------------------------------
 # Criteria oracle
 # ---------------------------------------------------------------------------
-_AC_HEADING_RE = re.compile(r"^#+\s*Acceptance Criteria", re.IGNORECASE)
-_AC_ITEM_RE = re.compile(r"^\s*[-*]\s*\[[ xX]\]\s*(.+)$")
+# Heading vocabulary: reused from the acceptance-assertion contract (P1), not forked —
+# `Acceptance Criteria` or `Completion condition (verifiable)`, any heading level,
+# matched from the start of the heading text (`… (testable)` matches;
+# `Cross-Issue Acceptance Criteria` does not).
+_AC_HEADING_RE = re.compile(
+    r"^#+\s*(?:Acceptance Criteria|Completion condition \(verifiable\))", re.IGNORECASE)
+_BLOCK_CLOSE_RE = re.compile(r"^#+\s")
+# Item shapes (P2), each anchored at column 0: a nested line is detail of its parent.
+_AC_ITEM_RE = re.compile(r"^[-*]\s*\[[ xX]\]\s*(.+)$")
+_ORDERED_ITEM_RE = re.compile(r"^\d+[.)][ \t]+(?:\[[ xX]\][ \t]+)?(\S.*)$")
+_BULLET_ITEM_RE = re.compile(r"^[-*][ \t]+(\S.*)$")
+_THEMATIC_BREAK_RE = re.compile(r"^([-*_])[ \t]*(?:\1[ \t]*){2,}$")
 
 
 def criteria_from_body(body):
-    crits, on = [], False
+    """The issue body's criteria, read as the acceptance-assertion contract reads them.
+
+    P1 — the first vocabulary heading opens the block, and the next heading of ANY
+    level closes it, a second vocabulary heading included: two lists are never
+    unioned. P2 — the block's criteria are its top-level items of one shape: its
+    task-list lines when any are present; otherwise its ordered items; otherwise its
+    plain bullets, a thematic break excepted. The rule is checkbox-dominant so that a
+    plain bullet beside checkboxes — a declined or superseded annotation — is never
+    counted as a criterion.
+    """
+    block, on = [], False
     for line in (body or "").splitlines():
-        if _AC_HEADING_RE.match(line.strip()):
-            on = True
+        if not on:
+            on = bool(_AC_HEADING_RE.match(line.strip()))
             continue
-        if on and re.match(r"^#+\s", line):
+        if _BLOCK_CLOSE_RE.match(line):
             break
-        if on:
-            m = _AC_ITEM_RE.match(line)
-            if m:
-                crits.append(m.group(1).strip())
-    return crits
+        block.append(line)
+    for item_re in (_AC_ITEM_RE, _ORDERED_ITEM_RE):
+        items = [m.group(1).strip() for m in map(item_re.match, block) if m]
+        if items:
+            return items
+    return [m.group(1).strip() for m in map(_BULLET_ITEM_RE.match, block)
+            if m and not _THEMATIC_BREAK_RE.match(m.group(0))]
 
 
 def fetch_criteria(issues, repo=None):
@@ -506,6 +720,10 @@ def fetch_criteria(issues, repo=None):
     needs to be a literal here. A hardcoded default would be operator-identifying
     data in a tracked `release/` file, which the repository-integrity
     depersonalization gate correctly refuses.
+
+    A body that was read and carries no criteria is stored as an EMPTY list, and only
+    a failed fetch leaves the issue absent, so the two causes of a withheld verdict
+    (`no-criteria-section` and `oracle-unavailable`) stay apart.
     """
     out = {}
     for issue in issues:
@@ -516,9 +734,7 @@ def fetch_criteria(issues, repo=None):
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             continue
-        crits = criteria_from_body(proc.stdout)
-        if crits:
-            out[issue] = crits
+        out[issue] = criteria_from_body(proc.stdout)
     return out
 
 
@@ -526,6 +742,49 @@ def load_criteria_file(path):
     with open(path, encoding="utf-8") as fh:
         raw = json.load(fh)
     return {str(k).lstrip("#"): list(v) for k, v in raw.items()}
+
+
+_DESIGN_LABEL_RE = re.compile(r"^(AC|INT)-[1-9][0-9]*$")
+
+
+def load_design_file(path):
+    """Read a design snapshot: {issue: [{"label", "text", "maps_to"?}, ...]}.
+
+    Each entry carries its OWN label — the design's `AC-N` or `INT-N` — because a label
+    derived from the entry's position would mislabel every integration criterion.
+    `maps_to` is the issue ordinal the entry declares it restates, or null for a
+    design-only obligation; an entry without the key is reported UNDECLARED. A
+    malformed snapshot raises ValueError (the caller exits 3): it is an input failure,
+    never an empty mapping.
+    """
+    with open(path, encoding="utf-8") as fh:
+        raw = json.load(fh)
+    if not isinstance(raw, dict):
+        raise ValueError("expected an object mapping each issue to a list of entries")
+    out = {}
+    for key, entries in raw.items():
+        issue = str(key).lstrip("#")
+        if not isinstance(entries, list):
+            raise ValueError("#%s: the design entries must be a list" % issue)
+        seen = set()
+        for pos, entry in enumerate(entries, 1):
+            if not isinstance(entry, dict):
+                raise ValueError("#%s entry %d: not an object" % (issue, pos))
+            label = entry.get("label")
+            if not isinstance(label, str) or not _DESIGN_LABEL_RE.match(label):
+                raise ValueError("#%s entry %d: `label` must be AC-<n> or INT-<n>" % (issue, pos))
+            if label in seen:
+                raise ValueError("#%s: the label %s appears twice" % (issue, label))
+            seen.add(label)
+            if not isinstance(entry.get("text"), str) or not entry["text"].strip():
+                raise ValueError("#%s %s: `text` must be the entry's criterion text"
+                                 % (issue, label))
+            target = entry.get("maps_to")
+            if target is not None and (isinstance(target, bool) or not isinstance(target, int)):
+                raise ValueError("#%s %s: `maps_to` must be an issue ordinal or null"
+                                 % (issue, label))
+        out[issue] = entries
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -1050,9 +1309,16 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("plan", nargs="?", help="release plan markdown file")
     parser.add_argument("--criteria-file",
-                        help="JSON {issue: [criterion, ...]} — the determinism seam")
+                        help="JSON {issue: [criterion, ...]} — the determinism seam; "
+                             "an issue mapped to [] reads as a body with no criteria "
+                             "section")
     parser.add_argument("--fetch", action="store_true",
                         help="read criteria live with `gh issue view` instead")
+    parser.add_argument("--design-file",
+                        help="JSON {issue: [{label, text, maps_to}, ...]} — a Stage-5 "
+                             "design's declared mapping onto the issue list, checked by "
+                             "the design limb (MAP); combines with --fetch or "
+                             "--criteria-file, which supply that issue list")
     parser.add_argument("--ordinals-only", action="store_true",
                         help="run the plan-local ordinal limb alone (offline, "
                              "deterministic — the CI surface)")
@@ -1076,6 +1342,14 @@ def main(argv=None):
     with open(args.plan, encoding="utf-8") as fh:
         text = fh.read()
 
+    design = None
+    if args.design_file:
+        try:
+            design = load_design_file(args.design_file)
+        except (OSError, ValueError) as exc:
+            sys.stderr.write("error: --design-file %s: %s\n" % (args.design_file, exc))
+            return 3
+
     criteria = {}
     if args.criteria_file:
         criteria = load_criteria_file(args.criteria_file)
@@ -1084,7 +1358,7 @@ def main(argv=None):
         criteria = fetch_criteria(sorted(baseline, key=int), args.repo)
 
     rows, _verdict, code = analyse(text, criteria, os.path.basename(args.plan),
-                                   ordinals_only=args.ordinals_only)
+                                   ordinals_only=args.ordinals_only, design_map=design)
     emit(rows, sys.stdout)
     return code
 
