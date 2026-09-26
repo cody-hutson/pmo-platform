@@ -17017,6 +17017,23 @@ cmd_check_version_freeness() {
 #                      historical rows; the reflexive-loop exemption holds).
 #   (4) state-scoped — a DEPLOYED-not-VERIFIED incomplete row ⇒ NOT counted (CLEAN);
 #                      the gate is VERIFIED-scoped (mid-close rows are skipped).
+#   (5)-(7) mis-arm  — a prefix-shortened, an exact-row and a no-match cutoff each name
+#                      the row they armed at, or say that nothing was asserted (#4176).
+#   (8)-(11) mapping — _cc_verdict_exit_code maps every (verdict x sentinel) pair as the
+#                      contract table says; the sentinel moves INCOMPLETE and SKIP and never
+#                      NOT-EVALUATED; exit 0 has exactly two producers (CLEAN x 2); and
+#                      (11) re-runs the PV-7 predicate on a deliberately collapsed map (#4318).
+#   (12) producer    — the probe body carries no exit statement; its one exit path prints
+#                      the transport handshake and exits with the mapping's integer.
+#   (13) end to end  — per sentinel (warn|enforce) the probe exits 0 for CLEAN, 2|1 for
+#                      INCOMPLETE, 3 for NOT-EVALUATED and 3|1 for SKIP, and prints a
+#                      handshake line equal to that exit.
+#   (14a)-(14m)      — a failed network instrument is NOT-EVALUATED on both surfaces, never
+#                      "absent"; a genuinely absent Release on a repository that answered is
+#                      still a finding; withheld rows fan in to one line; a finding dominates
+#                      an outage; the network-leg denominator balances.
+#   (15) consumer    — close-completeness.yml dispatches on the integer, never re-reads the
+#                      sentinel, and honours 2 and 3 only on the handshake.
 cmd_self_test() {
   echo "self-test: starting (close-completeness invariant, #1290 AC5)" >&2
   local failures=0
@@ -17155,6 +17172,445 @@ EOF
   _e="$(_cc_selftest_stderr "v0.01")"
   /usr/bin/grep -q 'WARNING — cutoff v0.01 matched NO LOG row' <<<"$_e" \
     || { echo "FAIL: a no-match cutoff must WARN that zero rows were asserted, got '$_e'"; failures=$((failures+1)); }
+
+  # ─── The exit contract and the network-leg instrument (#4318) — arms (8)-(15) ─────
+  # Arms (1)-(7) assert verdict TOKENS by calling _cc_compute_verdict directly, so this
+  # block could not see the verdict -> EXIT mapping at all, nor what the engine reports
+  # when its own network instrument fails. Both defects lived in that blind spot: CLEAN,
+  # SKIP and INCOMPLETE-under-warn all exited 0, so close-completeness.yml printed a
+  # completeness claim on an INCOMPLETE run; and a Surface-1 lookup that could not reach
+  # the repository was reported as "no published GitHub Release" for every network row.
+  #
+  # HERMETIC RULES. Every engine arm pins all four cutoffs, and every probe arm pins
+  # CLOSE_COMPLETENESS_ENFORCE_FILE, to synthetic values, so no committed default leaks
+  # live scope into the fixture. `gh` is a shell FUNCTION (command -v resolves it) whose
+  # answers each arm selects through two locals, so no arm touches the network or the
+  # checkout's real remote. The body-drift engine is one stub script per exit code,
+  # selected through CC_DRIFT. `gh release view` always fails the way a checkout whose
+  # remote is not a GitHub repository makes it fail: that is the real failure of a
+  # per-row lookup, and it is what makes arms (13)-(14) RED against an engine that still
+  # performs one. Every helper and the stub are unset at the end of the block.
+  echo "self-test: close-completeness exit contract + network-leg instrument, arms (8)-(15) (#4318)" >&2
+  local _ccn="$_t/net"
+  /bin/mkdir -p "$_ccn/notes"
+  local _cc_d
+  for _cc_d in 0 1 2 3 7; do
+    /usr/bin/printf '#!/usr/bin/env bash\nexit %s\n' "$_cc_d" > "$_t/drift${_cc_d}.sh"
+    /bin/chmod +x "$_t/drift${_cc_d}.sh"
+  done
+  # The network fixture: two VERIFIED versioned rows, each with its complete offline
+  # output-set, so the network leg is the only variable an arm moves.
+  _cc_st_net_reset() {
+    /bin/cat > "$_ccn/RELEASE_LOG.md" <<'EOF'
+# RELEASE_LOG (network-leg self-test fixture)
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.98 | v9.98-net | #1 | #2 | `abc` | `v9.98` | VERIFIED | 2026-06-28 |
+| v9.99 | v9.99-net | #1 | #2 | `def` | `v9.99` | VERIFIED | 2026-06-28 |
+EOF
+    /usr/bin/printf '# RELEASE_INDEX\n| v9.98 | v9.98-net | 2026-06-28 |\n| v9.99 | v9.99-net | 2026-06-28 |\n' > "$_ccn/RELEASE_INDEX.md"
+    /usr/bin/printf '# RELEASE_DIGEST\n### v9.98 (2026-06-28)\nEntry.\n### v9.99 (2026-06-28)\nEntry.\n' > "$_ccn/RELEASE_DIGEST.md"
+    /usr/bin/printf '# Changelog\n## [v9.99] - 2026-06-28\nEntry.\n## [v9.98] - 2026-06-28\nEntry.\n' > "$_ccn/CHANGELOG.md"
+    /usr/bin/printf '# v9.98 release notes\n' > "$_ccn/notes/v9.98_RELEASE_NOTES.md"
+    /usr/bin/printf '# v9.99 release notes\n' > "$_ccn/notes/v9.99_RELEASE_NOTES.md"
+    /usr/bin/printf 'v9.99\n' > "$_ccn/.version"
+  }
+  _cc_st_net_reset
+  # The gh stub. _cc_st_repo: ok | fail. _cc_st_list: __fail__ | __empty__ | the tag list.
+  local _cc_st_repo="ok" _cc_st_list=""
+  gh() {
+    case "${1:-} ${2:-}" in
+      "auth status") return 0 ;;
+      "api repos/{owner}/{repo}")
+        if [[ "$_cc_st_repo" == "ok" ]]; then /usr/bin/printf 'acme/widget\n'; return 0; fi
+        /usr/bin/printf 'unable to expand placeholder in path: none of the git remotes configured for this repository point to a known GitHub host\n' >&2
+        return 1 ;;
+      "api repos/acme/widget/releases")
+        case "$_cc_st_list" in
+          __fail__)  /usr/bin/printf 'gh: Service Unavailable (HTTP 503)\n' >&2; return 1 ;;
+          __empty__) return 0 ;;
+          *)         /usr/bin/printf '%s\n' "$_cc_st_list"; return 0 ;;
+        esac ;;
+      "release view")
+        /usr/bin/printf 'none of the git remotes configured for this repository point to a known GitHub host\n' >&2
+        return 1 ;;
+      *) return 1 ;;
+    esac
+  }
+  # _cc_st_net <surface> <row-cutoff> <network-cutoff> <drift-stub> <out|err>
+  #   The engine over the network fixture: stdout = the protocol line (out) or the engine's
+  #   stderr (err). Always inside a command substitution at the call site, so the engine's
+  #   exports and its nested helper never reach this shell.
+  _cc_st_net() {
+    if [[ "$5" == "err" ]]; then
+      CC_LOG="$_ccn/RELEASE_LOG.md" CC_INDEX="$_ccn/RELEASE_INDEX.md" CC_DIGEST="$_ccn/RELEASE_DIGEST.md" \
+      CC_CHANGELOG="$_ccn/CHANGELOG.md" CC_VERSIONFILE="$_ccn/.version" CC_NOTES_DIR="$_ccn/notes" \
+      CC_LINT="$_lint" CC_DRIFT="$4" CC_ALLOWLIST="$_t/none.txt" \
+      CLOSE_COMPLETENESS_CHECK_CUTOFF="$2" CLOSE_COMPLETENESS_RELEASE_CUTOFF="$3" \
+      CLOSE_COMPLETENESS_OUTPUTS_CUTOFF="__none__" CLOSE_COMPLETENESS_TELEMETRY_CUTOFF="__none__" \
+      _cc_compute_verdict "$1" 2>&1 >/dev/null
+    else
+      CC_LOG="$_ccn/RELEASE_LOG.md" CC_INDEX="$_ccn/RELEASE_INDEX.md" CC_DIGEST="$_ccn/RELEASE_DIGEST.md" \
+      CC_CHANGELOG="$_ccn/CHANGELOG.md" CC_VERSIONFILE="$_ccn/.version" CC_NOTES_DIR="$_ccn/notes" \
+      CC_LINT="$_lint" CC_DRIFT="$4" CC_ALLOWLIST="$_t/none.txt" \
+      CLOSE_COMPLETENESS_CHECK_CUTOFF="$2" CLOSE_COMPLETENESS_RELEASE_CUTOFF="$3" \
+      CLOSE_COMPLETENESS_OUTPUTS_CUTOFF="__none__" CLOSE_COMPLETENESS_TELEMETRY_CUTOFF="__none__" \
+      _cc_compute_verdict "$1" 2>/dev/null
+    fi
+  }
+  # _cc_st_count <fixed-string> <text> — how many lines of <text> carry <fixed-string>.
+  _cc_st_count() { /usr/bin/grep -cF -- "$1" <<<"$2" || true; }
+
+  # (8)-(11) THE MAPPING. _cc_verdict_exit_code is the probe's single producer of an exit
+  # integer, asserted directly rather than through the whole probe (DD1: one body, two
+  # readers). Arms (8)-(10) need it to exist; its absence is a failure, not a skip.
+  _cc_st_map_is() {   # <expected> <verdict-token> <enforce-token> <label>
+    local _got
+    _got="$(_cc_verdict_exit_code "$2" "$3")"
+    [[ "$_got" == "$1" ]] || { echo "FAIL: (8) $4 — verdict '$2' under sentinel '$3' must exit $1, got '$_got'"; failures=$((failures+1)); }
+  }
+  # _cc_st_pv7_violations <mapping-fn-name> — PV-7 as a POPULATION property over the whole
+  #   (verdict x sentinel) space, in both directions: a non-CLEAN pair producing 0 is a
+  #   violation, and so is a CLEAN pair producing anything else. Takes the mapping BY NAME so
+  #   the identical predicate can run against a deliberately collapsed mapping (arm (11)).
+  _cc_st_pv7_violations() {
+    local _fn="$1" _tk _sn _code _viol=0
+    for _tk in CLEAN INCOMPLETE NOT-EVALUATED SKIP __unexpected__; do
+      for _sn in warn enforce; do
+        _code="$("$_fn" "$_tk" "$_sn")"
+        if [[ "$_tk" == "CLEAN" ]]; then
+          [[ "$_code" == "0" ]] || _viol=$((_viol + 1))
+        else
+          [[ "$_code" != "0" ]] || _viol=$((_viol + 1))
+        fi
+      done
+    done
+    printf '%s\n' "$_viol"
+  }
+  # The collapsed mapping arm (11) runs the predicate against: the contracted map EXCEPT that
+  # INCOMPLETE/warn returns 0 — the exact collapse this card removes from the probe.
+  _cc_st_collapsed_map() {
+    local _tk="${1:-}" _sn="${2:-warn}"
+    case "$_tk" in
+      CLEAN) printf '0\n' ;;
+      INCOMPLETE) if [[ "$_sn" == "enforce" ]]; then printf '1\n'; else printf '0\n'; fi ;;
+      NOT-EVALUATED) printf '3\n' ;;
+      SKIP) if [[ "$_sn" == "enforce" ]]; then printf '1\n'; else printf '3\n'; fi ;;
+      *) printf '1\n' ;;
+    esac
+  }
+  if declare -F _cc_verdict_exit_code >/dev/null 2>&1; then
+    # (8) EXIT-MAP literals — every (verdict x sentinel) pair maps as contracted.
+    _cc_st_map_is 0 CLEAN          warn    "CLEAN/warn is the clean code"
+    _cc_st_map_is 0 CLEAN          enforce "CLEAN/enforce stays 0 (enforce must not punish a clean run)"
+    _cc_st_map_is 2 INCOMPLETE     warn    "INCOMPLETE/warn is ADVISORY non-zero, never 0"
+    _cc_st_map_is 1 INCOMPLETE     enforce "INCOMPLETE/enforce BLOCKS"
+    _cc_st_map_is 3 NOT-EVALUATED  warn    "NOT-EVALUATED/warn is the withheld code, never 0"
+    _cc_st_map_is 3 NOT-EVALUATED  enforce "NOT-EVALUATED/enforce stays 3 (a measurement outage never gates)"
+    _cc_st_map_is 3 SKIP           warn    "SKIP/warn is the withheld code, never 0"
+    _cc_st_map_is 1 SKIP           enforce "SKIP/enforce BLOCKS (a green gate must mean the ledger was READ)"
+    _cc_st_map_is 1 __unexpected__ warn    "an unrecognised verdict fails closed"
+    _cc_st_map_is 1 __unexpected__ enforce "an unrecognised verdict fails closed under enforce"
+    # (9) THE SENTINEL IS READ, AND READ ONLY WHERE THE CONTRACT SAYS. Arms (8) are all
+    #     "token maps to integer", which a map ignoring the sentinel but returning the right
+    #     warn constants would half-pass; these relations pin the dial itself. INCOMPLETE and
+    #     SKIP must move with the sentinel; NOT-EVALUATED must NOT (never gates, ADR-134 D5).
+    [[ "$(_cc_verdict_exit_code INCOMPLETE warn)" != "$(_cc_verdict_exit_code INCOMPLETE enforce)" ]] \
+      || { echo "FAIL: (9) INCOMPLETE must map differently under warn vs enforce (the sentinel is not being read)"; failures=$((failures+1)); }
+    [[ "$(_cc_verdict_exit_code SKIP warn)" != "$(_cc_verdict_exit_code SKIP enforce)" ]] \
+      || { echo "FAIL: (9) SKIP must map differently under warn vs enforce (the sentinel is not being read)"; failures=$((failures+1)); }
+    [[ "$(_cc_verdict_exit_code NOT-EVALUATED warn)" == "$(_cc_verdict_exit_code NOT-EVALUATED enforce)" ]] \
+      || { echo "FAIL: (9) NOT-EVALUATED must map identically under warn and enforce — a measurement outage never gates; escalation by cause is decided at the enforce flip"; failures=$((failures+1)); }
+    # (10) PV-7 AS A POPULATION PROPERTY — zero violations over all ten pairs, and exactly two
+    #      pairs producing 0. KILLS a degraded verdict collapsing onto the clean code anywhere,
+    #      including a future token that falls to *).
+    local _cc_pv7 _cc_zero=0 _cc_ptk _cc_psn
+    _cc_pv7="$(_cc_st_pv7_violations _cc_verdict_exit_code)"
+    [[ "$_cc_pv7" -eq 0 ]] \
+      || { echo "FAIL: (10) PV-7 violated — $_cc_pv7 (verdict x sentinel) pair(s) break the partition"; failures=$((failures+1)); }
+    for _cc_ptk in CLEAN INCOMPLETE NOT-EVALUATED SKIP __unexpected__; do
+      for _cc_psn in warn enforce; do
+        [[ "$(_cc_verdict_exit_code "$_cc_ptk" "$_cc_psn")" == "0" ]] && _cc_zero=$((_cc_zero + 1))
+      done
+    done
+    [[ "$_cc_zero" -eq 2 ]] \
+      || { echo "FAIL: (10) exit 0 must have exactly 2 producers (CLEAN x {warn,enforce}); found $_cc_zero"; failures=$((failures+1)); }
+  else
+    echo "FAIL: (8)-(10) _cc_verdict_exit_code is absent — the probe has no single mapping from verdict to exit code, so its exit contract cannot be asserted"; failures=$((failures+1))
+  fi
+  # (11) THE SENSITIVITY ARM. Arm (10)'s first limb passes on zero, so a predicate that never
+  #      evaluated would pass it too. The IDENTICAL predicate, run against a mapping that
+  #      collapses INCOMPLETE/warn onto 0, must report at least one violation. A mutation that
+  #      replaces _cc_st_pv7_violations with a constant zero fails this arm and no other.
+  [[ "$(_cc_st_pv7_violations _cc_st_collapsed_map)" -ge 1 ]] \
+    || { echo "FAIL: (11) control — the PV-7 predicate returned 0 violations against a mapping that DELIBERATELY collapses INCOMPLETE/warn onto 0; the predicate is broken, so arm (10)'s zero proves nothing"; failures=$((failures+1)); }
+
+  # (12) SINGLE PRODUCER, STRUCTURALLY. The probe body carries NO exit statement of its own:
+  #      every exit goes through _cc_exit_through_mapping, whose one exit takes the mapping's
+  #      integer and prints the transport handshake first. KILLS a literal exit re-added to
+  #      any arm, reachable or not.
+  _cc_st_exit_stmts() {   # <function-name> [digits] — statement-position exits in its body
+    local _body _rx='^[[:space:]]*exit([[:space:]]|;|$)'
+    [[ "${2:-}" == "digits" ]] && _rx='^[[:space:]]*exit[[:space:]]+[0-9]+[[:space:]]*;?[[:space:]]*$'
+    _body="$(declare -f "$1" 2>/dev/null || true)"
+    [[ -n "$_body" ]] || { printf 'absent\n'; return 0; }
+    /usr/bin/grep -cE "$_rx" <<<"$_body" || true
+  }
+  local _cc_lit _cc_any _cc_via
+  _cc_lit="$(_cc_st_exit_stmts cmd_check_close_completeness digits)"
+  _cc_any="$(_cc_st_exit_stmts cmd_check_close_completeness)"
+  _cc_via="$(_cc_st_count '_cc_exit_through_mapping' "$(declare -f cmd_check_close_completeness 2>/dev/null || true)")"
+  [[ "$_cc_lit" == "0" ]] \
+    || { echo "FAIL: (12) cmd_check_close_completeness carries $_cc_lit numeric-literal exit statement(s); 0 has one producer, the mapping"; failures=$((failures+1)); }
+  [[ "$_cc_any" == "0" && "${_cc_via:-0}" -ge 1 ]] \
+    || { echo "FAIL: (12) every probe exit must go through _cc_exit_through_mapping (exit statements in the body: $_cc_any; helper calls: ${_cc_via:-0})"; failures=$((failures+1)); }
+  if declare -F _cc_exit_through_mapping >/dev/null 2>&1; then
+    local _cc_hbody; _cc_hbody="$(declare -f _cc_exit_through_mapping)"
+    [[ "$(_cc_st_exit_stmts _cc_exit_through_mapping)" == "1" \
+       && "$(_cc_st_count '_cc_verdict_exit_code' "$_cc_hbody")" -ge 1 \
+       && "$(_cc_st_count 'close-completeness-exit:' "$_cc_hbody")" -ge 1 ]] \
+      || { echo "FAIL: (12) _cc_exit_through_mapping must hold exactly one exit, fed by _cc_verdict_exit_code, after printing the close-completeness-exit handshake"; failures=$((failures+1)); }
+  else
+    echo "FAIL: (12) _cc_exit_through_mapping is absent — the probe has no single exit path"; failures=$((failures+1))
+  fi
+  # (12b) sensitivity: a bare numeric exit IS counted. (12c) specificity: "exit 1" inside a
+  #       log string is NOT — the count reads statements, not prose.
+  _cc_st_synth_bad() { log "x"; exit 0; }
+  _cc_st_synth_ok() { log "  reported as ADVISORY — exit 1."; _cc_exit_through_mapping CLEAN warn; }
+  [[ "$(_cc_st_exit_stmts _cc_st_synth_bad digits)" -ge 1 ]] \
+    || { echo "FAIL: (12b) control — a function with a bare 'exit 0' statement must be counted; the structural probe is blind"; failures=$((failures+1)); }
+  [[ "$(_cc_st_exit_stmts _cc_st_synth_ok digits)" == "0" ]] \
+    || { echo "FAIL: (12c) specificity — 'exit 1' inside a log string must not be counted as an exit statement"; failures=$((failures+1)); }
+
+  # (13) THE PROBE END TO END, per synthetic sentinel. Each run is a subshell rooted at the
+  #      source tree (validate_workspace), with every corpus path and the sentinel pointed at
+  #      the sandbox. The exit is asserted, and so is the handshake line the consumer honours.
+  /usr/bin/printf 'warn\n'    > "$_t/enforce-warn"
+  /usr/bin/printf 'enforce\n' > "$_t/enforce-enforce"
+  _cc_st_probe() {   # <enforce-file> <row-cutoff> <network-cutoff>; stdout: "<rc> <handshake-or-none>"
+    local _prc=0 _pout _phs
+    _pout="$( cd "$_audit_src_root" && \
+      CC_LOG="$_ccn/RELEASE_LOG.md" CC_INDEX="$_ccn/RELEASE_INDEX.md" CC_DIGEST="$_ccn/RELEASE_DIGEST.md" \
+      CC_CHANGELOG="$_ccn/CHANGELOG.md" CC_VERSIONFILE="$_ccn/.version" CC_NOTES_DIR="$_ccn/notes" \
+      CC_LINT="$_lint" CC_DRIFT="$_t/drift0.sh" CC_ALLOWLIST="$_t/none.txt" \
+      CLOSE_COMPLETENESS_CHECK_CUTOFF="$2" CLOSE_COMPLETENESS_RELEASE_CUTOFF="$3" \
+      CLOSE_COMPLETENESS_OUTPUTS_CUTOFF="__none__" CLOSE_COMPLETENESS_TELEMETRY_CUTOFF="__none__" \
+      CLOSE_COMPLETENESS_ENFORCE_FILE="$1" \
+      cmd_check_close_completeness 2>/dev/null )" || _prc=$?
+    _phs="$(/usr/bin/sed -n 's/^close-completeness-exit: \([0-9][0-9]*\)$/\1/p' <<<"$_pout" | /usr/bin/tail -n 1)"
+    printf '%s %s\n' "$_prc" "${_phs:-none}"
+  }
+  _cc_st_probe_is() {   # <expected-rc> <enforce-file> <row-cutoff> <network-cutoff> <label>
+    local _res _prc _phs
+    _res="$(_cc_st_probe "$2" "$3" "$4")"; _prc="${_res%% *}"; _phs="${_res#* }"
+    [[ "$_prc" == "$1" ]] || { echo "FAIL: (13) $5 — the probe must exit $1, got $_prc"; failures=$((failures+1)); }
+    [[ "$_phs" == "$_prc" ]] || { echo "FAIL: (13) $5 — the handshake line must equal the exit code $_prc, got '$_phs'"; failures=$((failures+1)); }
+  }
+  _cc_st_net_reset; _cc_st_repo="ok"; _cc_st_list=$'v9.98\nv9.99'
+  _cc_st_probe_is 0 "$_t/enforce-warn"    v9.99    __none__ "CLEAN/warn"
+  _cc_st_probe_is 0 "$_t/enforce-enforce" v9.99    __none__ "CLEAN/enforce"
+  _cc_st_probe_is 3 "$_t/enforce-warn"    __none__ __none__ "SKIP/warn (gate re-dormanted)"
+  _cc_st_probe_is 1 "$_t/enforce-enforce" __none__ __none__ "SKIP/enforce"
+  _cc_st_repo="fail"
+  _cc_st_probe_is 3 "$_t/enforce-warn"    v9.99    v9.99    "NOT-EVALUATED/warn (the repository did not resolve)"
+  _cc_st_probe_is 3 "$_t/enforce-enforce" v9.99    v9.99    "NOT-EVALUATED/enforce (never gates)"
+  _cc_st_repo="ok"
+  /usr/bin/printf '# RELEASE_INDEX\n| v9.98 | v9.98-net | 2026-06-28 |\n' > "$_ccn/RELEASE_INDEX.md"
+  _cc_st_probe_is 2 "$_t/enforce-warn"    v9.99    __none__ "INCOMPLETE/warn (INDEX row missing)"
+  _cc_st_probe_is 1 "$_t/enforce-enforce" v9.99    __none__ "INCOMPLETE/enforce"
+  _cc_st_probe_is 2 "$_t/no-such-sentinel" v9.99   __none__ "INCOMPLETE with the sentinel file ABSENT reads as warn"
+  _cc_st_net_reset
+
+  # (14a)-(14m) THE NETWORK-LEG INSTRUMENT, through the shared engine. Row cutoff v9.99 and
+  # network cutoff v9.99 put exactly one versioned row in scope for every limb, unless the
+  # arm says otherwise.
+  local _cc_v _cc_e _cc_vg _cc_vl _cc_d0="$_t/drift0.sh"
+  # (14a) the repository does not resolve → withheld, never "absent".
+  _cc_st_repo="fail"; _cc_st_list=$'v9.99'
+  _cc_v="$(_cc_st_net gate v9.99 v9.99 "$_cc_d0" out)"; _cc_e="$(_cc_st_net gate v9.99 v9.99 "$_cc_d0" err)"
+  [[ "$_cc_v" == "NOT-EVALUATED 1 1 repo-unresolvable" ]] \
+    || { echo "FAIL: (14a) an unresolvable repository must verdict 'NOT-EVALUATED 1 1 repo-unresolvable', got '$_cc_v'"; failures=$((failures+1)); }
+  [[ "$(_cc_st_count 'no published GitHub Release' "$_cc_e")" -eq 0 ]] \
+    || { echo "FAIL: (14a) a lookup that could not reach the repository must never be reported as 'no published GitHub Release'"; failures=$((failures+1)); }
+  # (14k, second limb) PV-7b: the NOT-EVALUATED protocol line carries NO findings counter.
+  [[ "$(/usr/bin/awk '{print NF}' <<<"$_cc_v")" -eq 4 ]] \
+    || { echo "FAIL: (14k) the NOT-EVALUATED protocol line must carry exactly 4 fields (no findings counter — an unmeasured count is not 0), got '$_cc_v'"; failures=$((failures+1)); }
+  # (14d) surface invariance, first pair: the lifecycle surface verdicts identically.
+  _cc_vl="$(_cc_st_net lifecycle v9.99 v9.99 "$_cc_d0" out)"
+  [[ "$_cc_vl" == "$_cc_v" ]] \
+    || { echo "FAIL: (14d) the lifecycle surface must verdict an unresolvable repository exactly as the gate does ('$_cc_v'), got '$_cc_vl'"; failures=$((failures+1)); }
+  # (14b) the published-Releases read fails after the repository answered.
+  _cc_st_repo="ok"; _cc_st_list="__fail__"
+  _cc_v="$(_cc_st_net gate v9.99 v9.99 "$_cc_d0" out)"
+  [[ "$_cc_v" == "NOT-EVALUATED 1 1 release-read-failed" ]] \
+    || { echo "FAIL: (14b) a failed published-Releases read must verdict 'NOT-EVALUATED 1 1 release-read-failed', got '$_cc_v'"; failures=$((failures+1)); }
+  # (14c) gh unavailable (present but unauthenticated) on the gate surface.
+  _cc_st_list=$'v9.99'
+  gh() { return 1; }
+  _cc_vg="$(_cc_st_net gate v9.99 v9.99 "$_cc_d0" out)"
+  [[ "$_cc_vg" == "NOT-EVALUATED 1 1 gh-unavailable" ]] \
+    || { echo "FAIL: (14c) gh unavailable on the gate surface must verdict 'NOT-EVALUATED 1 1 gh-unavailable', got '$_cc_vg'"; failures=$((failures+1)); }
+  # (14d) surface invariance, second pair.
+  _cc_vl="$(_cc_st_net lifecycle v9.99 v9.99 "$_cc_d0" out)"
+  [[ "$_cc_vl" == "$_cc_vg" ]] \
+    || { echo "FAIL: (14d) the lifecycle surface must verdict gh-unavailable exactly as the gate does ('$_cc_vg'), got '$_cc_vl'"; failures=$((failures+1)); }
+  unset -f gh
+  gh() {
+    case "${1:-} ${2:-}" in
+      "auth status") return 0 ;;
+      "api repos/{owner}/{repo}")
+        if [[ "$_cc_st_repo" == "ok" ]]; then /usr/bin/printf 'acme/widget\n'; return 0; fi
+        /usr/bin/printf 'unable to expand placeholder in path: none of the git remotes configured for this repository point to a known GitHub host\n' >&2
+        return 1 ;;
+      "api repos/acme/widget/releases")
+        case "$_cc_st_list" in
+          __fail__)  /usr/bin/printf 'gh: Service Unavailable (HTTP 503)\n' >&2; return 1 ;;
+          __empty__) return 0 ;;
+          *)         /usr/bin/printf '%s\n' "$_cc_st_list"; return 0 ;;
+        esac ;;
+      "release view")
+        /usr/bin/printf 'none of the git remotes configured for this repository point to a known GitHub host\n' >&2
+        return 1 ;;
+      *) return 1 ;;
+    esac
+  }
+  # (14e) GENUINE ABSENCE — the repository answered and its set lacks the tag: still a finding.
+  _cc_st_repo="ok"; _cc_st_list=$'v9.98'
+  _cc_v="$(_cc_st_net gate v9.99 v9.99 "$_cc_d0" out)"; _cc_e="$(_cc_st_net gate v9.99 v9.99 "$_cc_d0" err)"
+  [[ "$_cc_v" == "INCOMPLETE 1 1" \
+     && "$(_cc_st_count 'v9.99: no published GitHub Release (Surface 1 absent on main)' "$_cc_e")" -eq 1 ]] \
+    || { echo "FAIL: (14e) a Release absent from a repository that answered must stay a finding: want 'INCOMPLETE 1 1' plus one absence line, got '$_cc_v'"; failures=$((failures+1)); }
+  # (14f) PRESENT — control.
+  _cc_st_list=$'v9.98\nv9.99'
+  _cc_v="$(_cc_st_net gate v9.99 v9.99 "$_cc_d0" out)"
+  [[ "$_cc_v" == "CLEAN 1" ]] \
+    || { echo "FAIL: (14f) control — a Release the answered set lists, with a matching body, must verdict 'CLEAN 1', got '$_cc_v'"; failures=$((failures+1)); }
+  # (14g) §5.1 DRIFT on a present Release — a finding, and the only one.
+  _cc_v="$(_cc_st_net gate v9.99 v9.99 "$_t/drift1.sh" out)"; _cc_e="$(_cc_st_net gate v9.99 v9.99 "$_t/drift1.sh" err)"
+  [[ "$_cc_v" == "INCOMPLETE 1 1" \
+     && "$(_cc_st_count 'v9.99: published Release body != frontmatter-stripped note (§5.1 drift)' "$_cc_e")" -eq 1 \
+     && "$(_cc_st_count 'no published GitHub Release' "$_cc_e")" -eq 0 ]] \
+    || { echo "FAIL: (14g) a drifted body on a present Release must be exactly one §5.1 finding ('INCOMPLETE 1 1'), got '$_cc_v'"; failures=$((failures+1)); }
+  # (14h) the drift engine could not compare (its exit 2) — withheld, never a finding.
+  _cc_v="$(_cc_st_net gate v9.99 v9.99 "$_t/drift2.sh" out)"
+  [[ "$_cc_v" == "NOT-EVALUATED 1 1 body-drift-na" ]] \
+    || { echo "FAIL: (14h) a drift engine that could not compare (exit 2) must verdict 'NOT-EVALUATED 1 1 body-drift-na', got '$_cc_v'"; failures=$((failures+1)); }
+  # (14i) an EMPTY published set — withheld, and no absence line.
+  _cc_st_list="__empty__"
+  _cc_v="$(_cc_st_net gate v9.99 v9.99 "$_cc_d0" out)"; _cc_e="$(_cc_st_net gate v9.99 v9.99 "$_cc_d0" err)"
+  [[ "$_cc_v" == "NOT-EVALUATED 1 1 release-set-empty" && "$(_cc_st_count 'no published GitHub Release' "$_cc_e")" -eq 0 ]] \
+    || { echo "FAIL: (14i) an empty published set must verdict 'NOT-EVALUATED 1 1 release-set-empty' with no absence line, got '$_cc_v'"; failures=$((failures+1)); }
+  # (14j) FAN-IN — two network rows, the repository failing: ONE aggregate line naming both,
+  #       and no per-row line at all.
+  _cc_st_repo="fail"; _cc_st_list=$'v9.98\nv9.99'
+  _cc_v="$(_cc_st_net gate v9.98 v9.98 "$_cc_d0" out)"; _cc_e="$(_cc_st_net gate v9.98 v9.98 "$_cc_d0" err)"
+  [[ "$_cc_v" == "NOT-EVALUATED 2 2 repo-unresolvable" \
+     && "$(_cc_st_count 'close-completeness: NOT-EVALUATED — the network leg' "$_cc_e")" -eq 1 \
+     && "$(_cc_st_count 'not measured for 2 of 2 network-scoped' "$_cc_e")" -eq 1 \
+     && "$(/usr/bin/grep -cE '^v9\.9[89]: ' <<<"$_cc_e" || true)" -eq 0 ]] \
+    || { echo "FAIL: (14j) two withheld rows must fan in to exactly one aggregate NOT-EVALUATED line naming 2 of 2, with no per-row line (verdict '$_cc_v')"; failures=$((failures+1)); }
+  # (14k) DOMINANCE — an INDEX row missing AND the repository failing: the finding wins, the
+  #       outage is named beside it (the aggregate line plus the DEGRADED rider), never hidden.
+  _cc_st_list=$'v9.99'
+  /usr/bin/printf '# RELEASE_INDEX\n| v9.98 | v9.98-net | 2026-06-28 |\n' > "$_ccn/RELEASE_INDEX.md"
+  _cc_v="$(_cc_st_net gate v9.99 v9.99 "$_cc_d0" out)"; _cc_e="$(_cc_st_net gate v9.99 v9.99 "$_cc_d0" err)"
+  [[ "$_cc_v" == "INCOMPLETE 1 1" \
+     && "$(_cc_st_count 'close-completeness: NOT-EVALUATED — the network leg' "$_cc_e")" -eq 1 \
+     && "$(_cc_st_count 'close-completeness: DEGRADED' "$_cc_e")" -eq 1 ]] \
+    || { echo "FAIL: (14k) a real finding beside an outage must verdict 'INCOMPLETE 1 1' and carry the aggregate NOT-EVALUATED line and the DEGRADED rider, got '$_cc_v'"; failures=$((failures+1)); }
+  _cc_st_net_reset
+  # (14l) the drift engine's MISSING (its exit 3) after (h) found the Release — withheld.
+  _cc_st_repo="ok"; _cc_st_list=$'v9.99'
+  _cc_v="$(_cc_st_net gate v9.99 v9.99 "$_t/drift3.sh" out)"
+  [[ "$_cc_v" == "NOT-EVALUATED 1 1 body-drift-missing" ]] \
+    || { echo "FAIL: (14l) a drift-engine exit 3 after the Release was found must verdict 'NOT-EVALUATED 1 1 body-drift-missing', got '$_cc_v'"; failures=$((failures+1)); }
+  # (14m) THE NETWORK-LEG DENOMINATOR — present + absent + NOT-EVALUATED == network-scoped, by
+  #       arithmetic, on a present, an absent and a withheld row alike.
+  _cc_st_net_denom_is() {   # <drift-stub> <expected-present> <expected-absent> <expected-withheld> <label>
+    local _dl _p _a _w _n
+    _dl="$(_cc_st_net gate v9.99 v9.99 "$1" err | /usr/bin/sed -n 's/^close-completeness: network leg — \([0-9]*\) present \/ \([0-9]*\) absent \/ \([0-9]*\) NOT-EVALUATED of \([0-9]*\) network-scoped.*/\1 \2 \3 \4/p')"
+    read -r _p _a _w _n <<<"${_dl:-x x x x}"
+    [[ "$_p $_a $_w" == "$2 $3 $4" && "$_n" == "1" ]] \
+      || { echo "FAIL: (14m) $5 — the network-leg denominator must read '$2 present / $3 absent / $4 NOT-EVALUATED of 1', got '${_dl:-no denominator line}'"; failures=$((failures+1)); }
+  }
+  _cc_st_net_denom_is "$_cc_d0"       1 0 0 "a present row"
+  _cc_st_net_denom_is "$_t/drift2.sh" 0 0 1 "a present row whose drift limb was withheld moves to NOT-EVALUATED"
+  _cc_st_list=$'v9.98'
+  _cc_st_net_denom_is "$_cc_d0"       0 1 0 "an absent row"
+  _cc_st_net_reset
+
+  # (15) THE CONSUMER, STRUCTURALLY. Inside the run: bodies of close-completeness.yml (shell
+  #      comment lines excluded): no binary test of RC against 0, no read of the sentinel file,
+  #      at least one `case "$RC" in`, and the transport handshake — the check step extracts
+  #      the probe's close-completeness-exit line and the gate step compares it with RC. KILLS
+  #      a binary consumer or a second sentinel reader coming back, and an advisory code
+  #      honoured without the handshake.
+  _cc_st_run_bodies() {   # <yaml> — every run: body, one line per line, shell comments dropped
+    /usr/bin/awk '
+      function ind(s) { match(s, /^ */); return RLENGTH }
+      inrun {
+        if ($0 ~ /^[ \t]*$/) next
+        if (ind($0) > runind) { if ($0 !~ /^[ \t]*#/) print; next }
+        inrun = 0
+      }
+      /^[ \t]*(- )?run:[ \t]*[|>]/ { inrun = 1; runind = ind($0); next }
+      /^[ \t]*(- )?run:[ \t]*[^|> \t]/ { s = $0; sub(/^[ \t]*(- )?run:[ \t]*/, "", s); if (s !~ /^#/) print s }
+    ' "$1" 2>/dev/null
+  }
+  _cc_st_consumer_violations() {   # <yaml> — "<binary-tests> <sentinel-reads> <case-dispatch> <handshake-extract> <handshake-compare>"
+    local _rb _sr
+    _rb="$(_cc_st_run_bodies "$1")"
+    _sr="$(/usr/bin/grep -F 'close-completeness.enforce' <<<"$_rb" || true)"
+    printf '%s %s %s %s %s\n' \
+      "$(/usr/bin/grep -cE '(\[|test)[^]]*\$\{?RC\}?"?[[:space:]]+-(eq|ne)[[:space:]]+0' <<<"$_rb" || true)" \
+      "$( [[ -n "$_sr" ]] && { /usr/bin/grep -cE '(cat|grep|head|tail|sed|awk|read|<)' <<<"$_sr" || true; } || printf '0')" \
+      "$(/usr/bin/grep -cE 'case[[:space:]]+"?\$\{?RC\}?"?[[:space:]]+in' <<<"$_rb" || true)" \
+      "$(/usr/bin/grep -cF 'close-completeness-exit' <<<"$_rb" || true)" \
+      "$(/usr/bin/grep -cE '\$\{?HANDSHAKE\}?"?[[:space:]]+(!?=|-eq|-ne)[[:space:]]+"?\$\{?RC\}?|\$\{?RC\}?"?[[:space:]]+(!?=|-eq|-ne)[[:space:]]+"?\$\{?HANDSHAKE\}?' <<<"$_rb" || true)"
+  }
+  local _cc_cv _cc_bt _cc_sr _cc_cs _cc_hx _cc_hc
+  _cc_cv="$(_cc_st_consumer_violations "$_audit_src_root/.github/workflows/close-completeness.yml")"
+  read -r _cc_bt _cc_sr _cc_cs _cc_hx _cc_hc <<<"$_cc_cv"
+  [[ "$_cc_bt" -eq 0 ]] || { echo "FAIL: (15) close-completeness.yml tests RC against 0 in a run: body ($_cc_bt site(s)) — a binary consumer cannot tell advisory 2 from withheld 3 from blocking 1"; failures=$((failures+1)); }
+  [[ "$_cc_sr" -eq 0 ]] || { echo "FAIL: (15) close-completeness.yml reads the enforce sentinel in a run: body ($_cc_sr site(s)) — the probe is its single reader"; failures=$((failures+1)); }
+  [[ "$_cc_cs" -ge 1 ]] || { echo "FAIL: (15) close-completeness.yml must dispatch on the probe's integer with a case on RC; found none"; failures=$((failures+1)); }
+  [[ "$_cc_hx" -ge 1 && "$_cc_hc" -ge 1 ]] || { echo "FAIL: (15) close-completeness.yml must extract the probe's close-completeness-exit handshake and compare it with RC before honouring an advisory code (extract sites: $_cc_hx; compare sites: $_cc_hc)"; failures=$((failures+1)); }
+  # (15b) sensitivity: a synthetic consumer with a binary test AND a sentinel read IS flagged.
+  /bin/cat > "$_t/consumer-bad.yml" <<'EOF'
+jobs:
+  gate:
+    steps:
+      - name: Gate
+        run: |
+          TOK="$(cat .github/close-completeness.enforce)"
+          if [ "$RC" -eq 0 ]; then echo clean; fi
+EOF
+  read -r _cc_bt _cc_sr _cc_cs _cc_hx _cc_hc <<<"$(_cc_st_consumer_violations "$_t/consumer-bad.yml")"
+  [[ "$_cc_bt" -ge 1 && "$_cc_sr" -ge 1 ]] \
+    || { echo "FAIL: (15b) control — a synthetic consumer with a binary RC test and a sentinel read must be flagged on both; the structural probe is blind (binary $_cc_bt, reads $_cc_sr)"; failures=$((failures+1)); }
+  # (15c) specificity: the sentinel named only in paths: and in comments is NOT a read.
+  /bin/cat > "$_t/consumer-ok.yml" <<'EOF'
+on:
+  pull_request:
+    paths:
+      - '.github/close-completeness.enforce'   # a trigger, not a read
+jobs:
+  gate:
+    steps:
+      - name: Gate
+        run: |
+          # the probe, not this step, reads .github/close-completeness.enforce
+          case "$RC" in
+            0) echo clean ;;
+          esac
+EOF
+  read -r _cc_bt _cc_sr _cc_cs _cc_hx _cc_hc <<<"$(_cc_st_consumer_violations "$_t/consumer-ok.yml")"
+  [[ "$_cc_bt" -eq 0 && "$_cc_sr" -eq 0 && "$_cc_cs" -ge 1 ]] \
+    || { echo "FAIL: (15c) specificity — the sentinel named in paths: and in a comment must not count as a read (binary $_cc_bt, reads $_cc_sr, case $_cc_cs)"; failures=$((failures+1)); }
+
+  unset -f gh _cc_st_net_reset _cc_st_net _cc_st_count _cc_st_map_is _cc_st_pv7_violations \
+    _cc_st_collapsed_map _cc_st_exit_stmts _cc_st_synth_bad _cc_st_synth_ok _cc_st_probe \
+    _cc_st_probe_is _cc_st_net_denom_is _cc_st_run_bodies _cc_st_consumer_violations
 
   /bin/rm -rf "$_t" 2>/dev/null || true
 
@@ -19044,6 +19500,7 @@ EOF
   echo "  close-completeness invariant validated (#1290 AC5; mis-arm group #4176):" >&2
   echo "    explicit-__none__ cutover SKIPs / abbreviated scaffold caught (INCOMPLETE) / complete set CLEAN / VERIFIED-scoped (DEPLOYED excluded, VERIFIED included)" >&2
   echo "    mis-arm (5) prefix-shortened cutoff WARNs naming the armed row / (6) exact-row cutoff does NOT warn but still names it / (7) no-match cutoff WARNs vacuous (zero rows asserted)" >&2
+  echo "    exit contract + network leg (#4318): (8) all ten (verdict x sentinel) pairs map as contracted / (9) the sentinel moves INCOMPLETE and SKIP and never NOT-EVALUATED / (10) PV-7 as a population property, exit 0 with exactly two producers / (11) SENSITIVITY — the same predicate reports a violation on a collapsed map / (12) the probe body carries no exit statement, its one exit path prints the handshake (12b/12c control + specificity) / (13) the probe end to end per sentinel, handshake equal to the exit / (14a-14d) a failed instrument is NOT-EVALUATED on both surfaces, never 'absent' / (14e) a genuinely absent Release is still a finding / (14f-14i, 14l) present, drift, drift-N/A, empty set, drift-MISSING / (14j) fan-in to one line / (14k) a finding dominates an outage + no findings counter / (14m) the network-leg denominator balances / (15) the consumer dispatches on the integer with the handshake (15b/15c control + specificity)" >&2
   echo "  Stage-13 output-set sub-checks (j velocity + k learnings) validated (#4452, group OS):" >&2
   echo "    OS-1 suppressed -> BOTH findings / OS-2 emitted -> zero / OS-3 bolded numerals -> grammar finding / OS-4 explicit-N/A conformant / OS-5 archived+co-located -> zero / OS-6 T4 wrong-surface write -> split-record / OS-7 field on both surfaces -> split-record / OS-8 dangling segment pointer -> finding / OS-9 learnings mis-placed names the heading found / OS-10 short field-set / OS-11 duplicate heading / OS-12 no-match outputs cutoff WARNs vacuous / OS-13 __none__ re-dormants (j)+(k) only. Every arm graded on the FINDING LINE — exit code, corpus-wide grep and 'the field parses' are all identical on OS-4/OS-5 and OS-6.
     Close-Class-Telemetry sub-check (l) (#4437): OS-14 GENUINE FAILURE — a row with velocity+learnings and no telemetry field fires (l) alone / OS-15 control — the same fixture with a measured field raises nothing / OS-16 slot-short field fails the ordered eight-slot grammar while presence passes / OS-17 ANTI-VACUITY — a byte-perfect all-N/A field is a finding, with OS-15 as its control / OS-18 split record (field in the hot stub, body in the segment) / OS-19 __none__ re-dormants (l) and ONLY (l) — the SHIPPED configuration / OS-20 no-match telemetry cutoff WARNs vacuous in its own voice / OS-21 prefix mis-arm WARNs naming the row it actually armed at." >&2
