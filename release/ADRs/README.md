@@ -87,6 +87,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-207](ADR-207-a-rows-grading-route-is-declared-in-its-method-cell.md) | A verification row's grading route is declared in its method cell; a Predicate class column is a reader annotation the executor does not read | Accepted | 2026-09-25 | verifier-grades-what-plans-declare |
 | [ADR-208](ADR-208-a-method-the-verifier-cannot-run-is-reported-unrunnable.md) | A method the plan verifier cannot run is reported UNRUNNABLE: a fifth verdict that does not fail the run, and the release's one outcome partition | Accepted | 2026-09-25 | verifier-grades-what-plans-declare |
 | [ADR-209](ADR-209-runtime-suite-selection-one-glob-grammar.md) | The runtime-suite selection map names one glob grammar and its reference resolver, and has rows for the suites it exists to select | Accepted | 2026-09-25 | verifier-grades-what-plans-declare |
+| [ADR-210](ADR-210-acceptance-verdicts-name-their-criterion-namespace.md) | An acceptance verdict names the criterion list its ordinal counts in; the issue body is the list of record | Accepted | 2026-09-26 | verifier-grades-what-plans-declare |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.
