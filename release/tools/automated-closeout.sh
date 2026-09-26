@@ -11899,6 +11899,175 @@ STUB
   OPEN_ISSUE_LIST="$_nm_saved_oil"; CHORE_PR_NUMBER="$_nm_saved_cpn"; MILESTONE="$_nm_saved_ms"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # Group LK (#5284 + #4768): phase 15.2 lock_milestone_threads, Phase C5 as a
+  # close-out phase. Offline and hermetic: every arm drives the phase through a gh
+  # stub (the T-13 pattern), and NO arm reaches the real host or locks a live thread.
+  # The stub serves the three `_host_*` REST bindings from files under LK_DIR:
+  #   fixture   one "<number><TAB><issue|pr>" line per thread on the milestone
+  #   locked    the numbers already locked; a successful lock call appends to it
+  #   counts    the milestone's "<open_issues> <closed_issues>"
+  #   put-fail  numbers whose lock call fails, with a message carrying a pipe and a HOME path
+  #   put-noop  numbers whose lock call reports success and locks nothing
+  #   enum-fail present = the thread listing fails, with the same message shape
+  # Every invocation is logged to LK_DIR/calls, so an arm can count lock calls and
+  # read the transport. The stub returns the listing already projected, the shape the
+  # binding's --jq produces; the jq programs themselves are read against the live
+  # host, read-only, in the slice's C4 record.
+  local _lk_saved_gh="$GH" _lk_saved_mode="$MODE" _lk_saved_nomerge="$NO_MERGE" _lk_saved_ms="$MILESTONE"
+  local _lk_saved_slug="$REPO_SLUG" _lk_saved_delay="$VERIFY_RECHECK_DELAY"
+  local _lk_tmp; _lk_tmp="$(/usr/bin/mktemp -d -t lock-selftest.XXXXXX)"
+  local _lk_stub="$_lk_tmp/gh-stub.sh" _lk_row="" _lk_rc=0 _lk_calls _lk_n _lk_puts _lk_line _lk_k _lk_i_rv _lk_i_lk _lk_disp
+  local _lk_five=$'101\tissue\n102\tissue\n103\tissue\n201\tpr\n202\tpr\n'
+  /bin/cat > "$_lk_stub" <<'STUB'
+#!/usr/bin/env bash
+d="$LK_DIR"
+/usr/bin/printf '%s\n' "$*" >> "$d/calls"
+[[ "$1" == "api" ]] || exit 0
+u=""
+for a in "$@"; do
+  case "$a" in repos/*) u="$a" ;; esac
+done
+case "$u" in
+  */issues\?milestone=*)
+    if [[ -f "$d/enum-fail" ]]; then /usr/bin/printf 'HTTP 502 | listing failed under %s/x\n' "$HOME" >&2; exit 1; fi
+    while IFS=$'\t' read -r n k; do
+      [[ -n "$n" ]] || continue
+      if /usr/bin/grep -qx -- "$n" "$d/locked" 2>/dev/null; then s=locked; else s=unlocked; fi
+      /usr/bin/printf '%s\t%s\t%s\n' "$n" "$k" "$s"
+    done < "$d/fixture"
+    exit 0 ;;
+  */milestones/*)
+    /bin/cat "$d/counts"; exit 0 ;;
+  */issues/*/lock)
+    n="${u%/lock}"; n="${n##*/}"
+    if /usr/bin/grep -qx -- "$n" "$d/put-fail" 2>/dev/null; then /usr/bin/printf 'HTTP 403 | lock refused for thread %s under %s/x\n' "$n" "$HOME" >&2; exit 1; fi
+    if /usr/bin/grep -qx -- "$n" "$d/put-noop" 2>/dev/null; then exit 0; fi
+    /usr/bin/printf '%s\n' "$n" >> "$d/locked"; exit 0 ;;
+esac
+exit 0
+STUB
+  /bin/chmod +x "$_lk_stub"
+  export LK_DIR="$_lk_tmp"
+  GH="$_lk_stub"; MODE="apply"; NO_MERGE=0; MILESTONE="9123"; REPO_SLUG="x/y"; VERIFY_RECHECK_DELAY=0
+  _lk_seed() {   # <fixture rows> <counts> <locked> <put-fail> <put-noop> <enum-fail 0|1>
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    /usr/bin/printf '%s' "$1" > "$LK_DIR/fixture"
+    /usr/bin/printf '%s\n' "$2" > "$LK_DIR/counts"
+    /usr/bin/printf '%s' "$3" > "$LK_DIR/locked"
+    /usr/bin/printf '%s' "$4" > "$LK_DIR/put-fail"
+    /usr/bin/printf '%s' "$5" > "$LK_DIR/put-noop"
+    /bin/rm -f "$LK_DIR/enum-fail"
+    if [[ "$6" == "1" ]]; then : > "$LK_DIR/enum-fail"; fi
+    : > "$LK_DIR/calls"
+  }
+  _lk_drive() {  # run the phase once: its return status lands in _lk_rc, its row in _lk_row
+    _lk_rc=0
+    phase_lock_milestone_threads >/dev/null 2>&1 || _lk_rc=$?
+    _lk_row="$(get_phase lock_milestone_threads)"
+  }
+
+  # (a) five unlocked threads, three issues and two pull requests: PASS, rc 0, and
+  #     the detail names every thread it locked and counts issues and PRs apart.
+  _lk_seed "$_lk_five" "0 5" "" "" "" 0; _lk_drive
+  _st_arm LK a-apply-pass; [[ "$_lk_rc" -eq 0 && "$_lk_row" == PASS\|* ]] || { echo "FAIL: LK/a — five unlocked threads (3 issues + 2 PRs) must PASS with rc 0, got rc ${_lk_rc}: '$_lk_row'"; failures=$((failures+1)); }
+  for _lk_n in 101 102 103 201 202; do
+    [[ "$_lk_row" == *"#${_lk_n}"* ]] || { echo "FAIL: LK/a — the PASS detail must name every newly locked thread; #${_lk_n} is missing: '$_lk_row'"; failures=$((failures+1)); }
+  done
+  [[ "$_lk_row" == *"(3 issues + 2 PRs)"* ]] || { echo "FAIL: LK/a — the detail must count issues and pull requests apart, got '$_lk_row'"; failures=$((failures+1)); }
+
+  # (b) PR-INCLUSIVE: one REST lock call per thread with lock_reason=resolved, the two
+  #     pull-request threads included (the same run as (a)).
+  _lk_calls="$(/bin/cat "$LK_DIR/calls")"
+  _lk_puts="$(grep_count -F 'api -X PUT ' "$LK_DIR/calls")"
+  _st_arm LK b-pr-inclusive; [[ "$_lk_puts" -eq 5 ]] || { echo "FAIL: LK/b — one lock call per thread, 5 expected, got ${_lk_puts}"; failures=$((failures+1)); }
+  for _lk_n in 101 102 103 201 202; do
+    [[ "$(grep_count -xF "api -X PUT repos/x/y/issues/${_lk_n}/lock -f lock_reason=resolved" "$LK_DIR/calls")" -eq 1 ]] || { echo "FAIL: LK/b — thread #${_lk_n} must be locked exactly once through the REST lock endpoint with lock_reason=resolved (201 and 202 are the pull-request threads)"; failures=$((failures+1)); }
+  done
+
+  # (c) REST ONLY: every call is `api`, and none is GraphQL or a lock verb. The
+  #     control shows the transport predicate matches a GraphQL-backed lock verb.
+  _st_arm LK c-rest-only; [[ -s "$LK_DIR/calls" ]] || { echo "FAIL: LK/c anti-vacuity — the stub logged no call, so the transport assertions below would read nothing"; failures=$((failures+1)); }
+  [[ "$(grep_count -v '^api ' "$LK_DIR/calls")" -eq 0 ]] || { echo "FAIL: LK/c — every host call must be a REST 'api' call, got: $(_detail_one_line "$_lk_calls")"; failures=$((failures+1)); }
+  [[ "$(grep_count -E 'graphql|issue lock|pr lock' "$LK_DIR/calls")" -eq 0 ]] || { echo "FAIL: LK/c — the lock path must make no GraphQL call and use no 'issue lock' or 'pr lock' verb"; failures=$((failures+1)); }
+  [[ "$(grep_count -E 'graphql|issue lock|pr lock' <<<"issue lock 101 --reason resolved")" -eq 1 ]] || { echo "FAIL: LK/c control — the transport predicate cannot see a GraphQL-backed lock verb, so its zero measures nothing"; failures=$((failures+1)); }
+
+  # (d) two threads already locked: skipped by the enumeration's own locked field, so
+  #     exactly three lock calls, none for the two already locked, and the detail counts them.
+  _lk_seed "$_lk_five" "0 5" $'101\n201\n' "" "" 0; _lk_drive
+  _lk_puts="$(grep_count -F 'api -X PUT ' "$LK_DIR/calls")"
+  _st_arm LK d-idempotent; [[ "$_lk_row" == PASS\|* && "$_lk_row" == *"2 already locked"* && "$_lk_puts" -eq 3 ]] || { echo "FAIL: LK/d — two pre-locked threads must be skipped: PASS, '2 already locked', 3 lock calls; got ${_lk_puts} calls: '$_lk_row'"; failures=$((failures+1)); }
+  [[ "$(grep_count -E '/issues/(101|201)/lock' "$LK_DIR/calls")" -eq 0 ]] || { echo "FAIL: LK/d — an already-locked thread must not be locked again"; failures=$((failures+1)); }
+
+  # (e) every thread already locked: SKIPPED with an explicit zero, and no lock call.
+  _lk_seed "$_lk_five" "0 5" $'101\n102\n103\n201\n202\n' "" "" 0; _lk_drive
+  _st_arm LK e-all-locked; [[ "$_lk_rc" -eq 0 && "$_lk_row" == SKIPPED\|* && "$_lk_row" == *"0 threads newly locked"* && "$(grep_count -F 'api -X PUT ' "$LK_DIR/calls")" -eq 0 ]] || { echo "FAIL: LK/e — five pre-locked threads must read SKIPPED '0 threads newly locked' with no lock call, got '$_lk_row'"; failures=$((failures+1)); }
+
+  # (f) an empty milestone: SKIPPED with an explicit zero, and no lock call.
+  _lk_seed "" "0 0" "" "" "" 0; _lk_drive
+  _st_arm LK f-empty; [[ "$_lk_rc" -eq 0 && "$_lk_row" == SKIPPED\|* && "$_lk_row" == *"0 threads to lock"* && "$(grep_count -F 'api -X PUT ' "$LK_DIR/calls")" -eq 0 ]] || { echo "FAIL: LK/f — an empty milestone must read SKIPPED '0 threads to lock' with no lock call, got '$_lk_row'"; failures=$((failures+1)); }
+
+  # (g) one failed lock call: FAIL naming that thread in a pipe-free, home-redacted
+  #     detail; the other four still lock; the phase still returns 0.
+  _lk_seed "$_lk_five" "0 5" "" $'102\n' "" 0; _lk_drive
+  _st_arm LK g-per-thread-fail; [[ "$_lk_rc" -eq 0 && "$_lk_row" == FAIL\|* && "$_lk_row" == *"#102"* ]] || { echo "FAIL: LK/g — a failed lock call on #102 must FAIL naming it and return 0, got rc ${_lk_rc}: '$_lk_row'"; failures=$((failures+1)); }
+  [[ "${_lk_row#*|}" != *"|"* && "$_lk_row" == *"<home>/x"* && "$_lk_row" != *"${HOME}/x"* ]] || { echo "FAIL: LK/g — the detail must carry the host's message pipe-free and home-redacted, got '$_lk_row'"; failures=$((failures+1)); }
+  [[ "$(grep_count -F 'api -X PUT ' "$LK_DIR/calls")" -eq 5 && "$(grep_count -xE '101|103|201|202' "$LK_DIR/locked")" -eq 4 ]] || { echo "FAIL: LK/g — the other four threads must still be locked after one lock call fails"; failures=$((failures+1)); }
+
+  # (h) #4768's FAIL arm: one issue missing from the enumeration against counters of
+  #     0 + 5 FAILs with the mismatch named, and the four enumerated threads still lock.
+  _lk_seed $'102\tissue\n103\tissue\n201\tpr\n202\tpr\n' "0 5" "" "" "" 0; _lk_drive
+  _st_arm LK h-count-mismatch; [[ "$_lk_rc" -eq 0 && "$_lk_row" == FAIL\|* && "$_lk_row" == *"count MISMATCH: enumerated 4 != open_issues 0 + closed_issues 5"* ]] || { echo "FAIL: LK/h — an enumeration one short of the PR-inclusive counters must FAIL naming both numbers and return 0, got '$_lk_row'"; failures=$((failures+1)); }
+  [[ "$(grep_count -F 'api -X PUT ' "$LK_DIR/calls")" -eq 4 ]] || { echo "FAIL: LK/h — the four enumerated threads must still be locked on a count mismatch"; failures=$((failures+1)); }
+
+  # (i) #4768's PASS arm: the like-with-like count reads 5 == 0 + 5. Control, from the
+  #     same fixture: its issues-only subset is 3, which is not 0 + 5, so an
+  #     issues-only enumeration against these counters would report a phantom gap.
+  _lk_seed "$_lk_five" "0 5" "" "" "" 0; _lk_drive
+  _st_arm LK i-like-with-like; [[ "$_lk_row" == PASS\|* && "$_lk_row" == *"count check 5 == open_issues 0 + closed_issues 5"* ]] || { echo "FAIL: LK/i — the PR-inclusive enumeration must equal open_issues + closed_issues (5 == 0 + 5), got '$_lk_row'"; failures=$((failures+1)); }
+  _lk_n="$(grep_count -E 'issue$' "$LK_DIR/fixture")"
+  [[ "$_lk_n" -eq 3 && "$_lk_n" -ne 5 ]] || { echo "FAIL: LK/i control — the fixture's issues-only subset must be 3, which an issues-only count would set against the counters' 5; got ${_lk_n}"; failures=$((failures+1)); }
+
+  # (j) --dry-run: a STATIC prediction, with no host call, no pipe and no would-FAIL token.
+  _lk_seed "$_lk_five" "0 5" "" "" "" 0; MODE="dry-run"; _lk_drive; MODE="apply"
+  _st_arm LK j-dryrun-static; [[ "$_lk_rc" -eq 0 && "$_lk_row" == DRY-RUN\|* && "${_lk_row#*|}" != *"|"* && "$_lk_row" != *"would FAIL"* ]] || { echo "FAIL: LK/j — the dry-run must record a DRY-RUN prediction with no pipe and no would-FAIL token, got '$_lk_row'"; failures=$((failures+1)); }
+  [[ ! -s "$LK_DIR/calls" ]] || { echo "FAIL: LK/j — the dry-run prediction is static and must make no host call, but the stub logged: $(_detail_one_line "$(/bin/cat "$LK_DIR/calls")")"; failures=$((failures+1)); }
+
+  # (k) --no-merge: the phase defers through the table's defer row, with no host call.
+  _lk_seed "$_lk_five" "0 5" "" "" "" 0; NO_MERGE=1; _lk_drive; NO_MERGE=0
+  _st_arm LK k-nomerge-defer; [[ "$_lk_rc" -eq 0 && "$_lk_row" == "SKIPPED|DEFERRED under --no-merge — "* ]] || { echo "FAIL: LK/k — under --no-merge the phase must defer through _nm_defer, got '$_lk_row'"; failures=$((failures+1)); }
+  [[ ! -s "$LK_DIR/calls" && "$(_nm_behaviour lock_milestone_threads)" == "defer" ]] || { echo "FAIL: LK/k — the deferral must come from a defer row in NO_MERGE_PHASE_BEHAVIOUR and make no host call"; failures=$((failures+1)); }
+
+  # (l) a failed enumeration: FAIL carrying the host's message redacted, nothing locked, rc 0.
+  _lk_seed "$_lk_five" "0 5" "" "" "" 1; _lk_drive
+  _st_arm LK l-enum-fail; [[ "$_lk_rc" -eq 0 && "$_lk_row" == FAIL\|* && "$_lk_row" == *"thread enumeration failed"* && "$(grep_count -F 'api -X PUT ' "$LK_DIR/calls")" -eq 0 ]] || { echo "FAIL: LK/l — a failed thread listing must FAIL with no lock call and return 0, got rc ${_lk_rc}: '$_lk_row'"; failures=$((failures+1)); }
+  [[ "${_lk_row#*|}" != *"|"* && "$_lk_row" == *"<home>/x"* && "$_lk_row" != *"${HOME}/x"* ]] || { echo "FAIL: LK/l — the enumeration failure must carry the host's message pipe-free and home-redacted, got '$_lk_row'"; failures=$((failures+1)); }
+
+  # (m) a lock call that reports success and locks nothing: the read-back catches it.
+  _lk_seed "$_lk_five" "0 5" "" "" $'103\n' 0; _lk_drive
+  _st_arm LK m-readback-mismatch; [[ "$_lk_rc" -eq 0 && "$_lk_row" == FAIL\|* && "$_lk_row" == *"still unlocked after re-read: #103"* ]] || { echo "FAIL: LK/m — a lock that did not take must FAIL on the read-back naming #103, got '$_lk_row'"; failures=$((failures+1)); }
+  [[ "$_lk_row" != *"re-read: #101"* && "$_lk_row" != *"#103 #"* ]] || { echo "FAIL: LK/m — only the thread the read-back still shows unlocked may be named, got '$_lk_row'"; failures=$((failures+1)); }
+
+  # (n) DISPATCH ORDER, read from this file's own dispatch text: after phase 15, and
+  #     before at least one other phase, so the halted marker, which reads only the
+  #     LAST row, can never read a non-blocking lock FAIL as "Run halted".
+  _lk_disp="$(/usr/bin/grep -oE '^phase_[a-z0-9_]+ \|\|' "${BASH_SOURCE[0]}" || true)"
+  _lk_k=0; _lk_i_rv=0; _lk_i_lk=0
+  while IFS= read -r _lk_line; do
+    [[ -n "$_lk_line" ]] || continue
+    _lk_k=$((_lk_k + 1))
+    if [[ "$_lk_line" == "phase_run_verification ||" ]]; then _lk_i_rv=$_lk_k; fi
+    if [[ "$_lk_line" == "phase_lock_milestone_threads ||" ]]; then _lk_i_lk=$_lk_k; fi
+  done <<<"$_lk_disp"
+  _st_arm LK n-dispatch-order; [[ "$_lk_k" -ge 25 && "$_lk_i_rv" -gt 0 && "$_lk_i_lk" -gt "$_lk_i_rv" && "$_lk_i_lk" -lt "$_lk_k" ]] || { echo "FAIL: LK/n — phase_lock_milestone_threads must be dispatched after phase_run_verification and before at least one other phase (dispatched ${_lk_k}; phase 15 at ${_lk_i_rv}; the lock phase at ${_lk_i_lk})"; failures=$((failures+1)); }
+  _st_witness LK 14
+
+  unset -f _lk_seed _lk_drive 2>/dev/null || true
+  unset LK_DIR
+  /bin/rm -rf "$_lk_tmp" 2>/dev/null || true
+  GH="$_lk_saved_gh"; MODE="$_lk_saved_mode"; NO_MERGE="$_lk_saved_nomerge"; MILESTONE="$_lk_saved_ms"
+  REPO_SLUG="$_lk_saved_slug"; VERIFY_RECHECK_DELAY="$_lk_saved_delay"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # Test 4f: phase_transition_release_log VERIFIED re-derivation guard (#1681) —
   # offline, hermetic. Stubs $GH so `pr view` reports the release-PR merge state,
   # then asserts: a VERIFIED row + MERGED-to-main PR → SKIPPED-as-PASS (legitimate
@@ -17304,6 +17473,7 @@ EOF
   _st_claim CR "  phase_create_chore_pr resumes over its own merged chore PR (#7436, group CR — 16 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): CR-1 CIAC-3's runtime arm — a MERGED, branch-deleted PR with a STALE origin/main resolves to resumed-already-merged through the owner-qualified REST read (state=all) with no GraphQL call, no create and no branch re-creation, containment proven against the PR's own refs/pull head, and phase 12 then renders its MERGED terminal-PASS arm on the first read with zero merges (AC-2 reached, not present) / CR-2 the FRESH-ref path through the zero-commit guard reaches the SAME arm with no GraphQL call / CR-3 control: outputs on main with NO PR keep the idempotent skip / CR-4 AC-3 never-created reaches the create and fails loud / CR-5 AC-3 a merged PR on another version's head is invisible / CR-6 CLOSED-unmerged leads to a fresh create, never to done / CR-7 containment: a commit made after the merge is not in the merged PR's head, so it FAILs with nothing pushed or created / CR-8 an OPEN PR is reused unchanged / CR-9 CIAC-3 static: no head-keyed --state open chore-PR lookup in the production region, by regex so this file never carries the plan's literal needle, with a control fixture / CR-10 a failed push FAILs before any create / CR-11 an unreadable partition FAILs carrying the host's message, never reads as none / CR-12 a SQUASH merge, whose chore commit is not an ancestor of main, still resumes: containment is against the PR's own head / CR-13 SECURITY: a fork's same-named OPEN PR never binds, on the zero-commit path or the main path / CR-14 the zero-commit guard reuses an OPEN PR instead of reporting none needed / CR-15 a push rejected only because the remote head is AHEAD of the local tip is not a failure / CR-16 phase 11's REST reader and phase 12's reader agree on open, merged and closed-unmerged PRs"
   _st_claim HF "  the report header's chore-PR field renders every outcome phase 11 records (#5769, group HF — 9 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): HF-1 CIAC-2's runtime limb — each of the seven recorded states renders its own exact line, seven distinct lines, read through the real report / HF-2 AC-2 an idempotent skip on an --apply run reads as a success, never N/A, dry-run or FAILED / HF-3 AC-3 dry-run, not-yet-created and the idempotent skip are three distinct lines / HF-4 polarity over the partition: no success renders as N/A, FAILED or not created, and the failed outcome never renders as a skip / HF-5 the #7182 seam: a run halted at create_chore_branch names where it halted, never dry-run or N/A wording / HF-6 partition parity: every value the production region assigns to CHORE_PR_OUTCOME has an arm in the renderer, with an anti-vacuity floor of six and an extraction control / HF-7 an unknown value renders visibly unrecognised, never as a plausible state / HF-8 end to end on the real phase in --dry-run: the phase row, the recorded outcome and the header name the same outcome / HF-8b the JSON twin's chore_pr_outcome carries the same seven states, with chore_pr the number or null"
   _st_claim NM "  --no-merge membership declared once + phase 15.55's own-tag limb validated (#7465, group NM — 17 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): NM-1 AC-1 — the dispatch lines from 15.5 through 16.7, lifted verbatim and executed under --no-merge with the own Release unpublished, defer 15.55 and 15.6 and reach 16, 16.5 and 16.7 / NM-1c its control: the same text on a merge run halts at 15.55 with exit 3 and strands the phases after it, so the harness can observe stranding / NM-2a NM-2b AC-2 — a dry-run predicts the own-tag gap its own publish no-op produces, over a DEPLOYED and a VERIFIED row, and records the prediction / NM-3 AC-3 — a sibling gap still FAILs at --apply, and NM-3c the clean fixture PASSes naming the own tag's state / NM-4a AC-4 at the parity population — the own tag is partitioned out by VERSION, with a sibling-gap control on the same fixture / NM-4b no masking — the in-flight set cannot hide a genuine own gap at --apply, and a closing version with a Release and no annotated tag is reported under the own label only / NM-4c the prediction predicate, one negative per conjunct, and the own pair's four states / NM-4d without a 15.5 dry-run record the own gap is reported / NM-4e a predicted own gap does not mask a sibling gap / NM-CIAC3 --no-merge defers 15.55 and the resumed --apply asserts it for real / NM-5a AC-5 — every post-merge dispatched phase has a row, with sensitivity, specificity and no-pivot controls, every row names a post-merge phase, and every value is in the closed set / NM-5b both reports derive their deferred list from the table, a row appended to it renders with no renderer edit, and NO_MERGE=0 renders none / NM-5c every defer row shares a --help line with DEFERS under --no-merge, with a control the predicate rejects / NM-5d every defer phase OPENS with the declared deferral, checked structurally against a constructed hand guard, a mutated copy of phase 13 and a deferral naming another phase / NM-12 phase 12's --no-merge detail says a chore PR phase 11 found MERGED is merged, with the byte-identical left-open control"
+  _st_claim LK "  phase_lock_milestone_threads validated (#5284 + #4768, group LK — 14 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): LK/a five unlocked threads, three issues and two pull requests, PASS with rc 0 and a detail that names every thread it locked / LK/b one REST lock call per thread with lock_reason=resolved, the two pull-request threads included / LK/c the lock path is REST only — every call an api call, none GraphQL and no issue-lock or pr-lock verb — with a control the transport predicate matches / LK/d two already-locked threads are skipped by the enumeration's own field, so three lock calls, and the detail counts them / LK/e every thread already locked reads SKIPPED with an explicit zero and makes no lock call / LK/f an empty milestone reads SKIPPED with an explicit zero / LK/g one failed lock call FAILs naming that thread in a pipe-free, home-redacted detail, the other four still lock, and the phase returns 0 / LK/h the count check's FAIL arm: an enumeration one issue short of the PR-inclusive counters FAILs naming both numbers, and the four enumerated threads still lock / LK/i its PASS arm: 5 == 0 + 5, with the control that the same fixture's issues-only subset (3) would read a phantom gap / LK/j --dry-run predicts statically, with no host call, no pipe and no would-FAIL token / LK/k --no-merge defers through the table's defer row with no host call / LK/l a failed enumeration FAILs with the host's message redacted, locks nothing and returns 0 / LK/m a lock call that reports success and locks nothing is caught by the read-back / LK/n the phase is dispatched after phase 15 and before at least one other phase, so the halted marker never reads its FAIL row as the last"
   echo "  --no-merge post-merge behaviour validated (#2919 + NO_MERGE_PHASE_BEHAVIOUR — every defer row DEFERS under --no-merge even with an open milestone and issues, every skip row SKIPs citing the flag without the deferral sentinel; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
