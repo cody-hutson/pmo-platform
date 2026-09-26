@@ -37,6 +37,45 @@ From the runtime-suite contract: [`runtime-suite-selection-map.md`](../standards
 
 Set at Stage 8: per-criterion verdict, acceptance score, Stage 7 escape count, overall verdict (ACCEPT/CONDITIONAL ACCEPT/REJECT/HOLD).
 
+#### Criterion namespace
+<!-- design-artifact: flow-class=data-flow; name=criterion-namespace; depicts=release/references/pipeline/stage-08-qa-testing.md,release/references/pipeline/stage-07-dev-testing.md,release/tools/check-ac-binding.py,core/schemas/stage-io-contracts.md,operations/templates/qa-acceptance-report-template.md -->
+
+An acceptance-criterion ordinal is unique only inside the list that counts it, and three lists count a card's criteria independently. Every verdict that crosses a stage boundary therefore names the list its ordinal counts — its **criterion namespace**.
+
+| Namespace | The list its ordinals count | Produced at | Labels | Ordinal rule |
+|---|---|---|---|---|
+| `issue` | the issue body's criteria, under the acceptance-criteria heading vocabulary | intake; amended at Stage 4 | `AC-N` | document order, 1-based (the acceptance-assertion parse contract) |
+| `design` | the Stage-5 design comment's restated or refined criteria, and its integration criteria | Stage 5 | `AC-N`, `INT-N` | the design's own order |
+| `plan` | the release plan's per-issue verification rows and its cross-issue criteria | Stage 4 | `AC-N`, `CIAC-N`, `OBL-N` | an `AC-` row claims the issue ordinal (stage-04 AC-Binding, Limb 1); `CIAC-` and `OBL-` count within the plan |
+
+| Consumer | Reads | Joins another list through |
+|---|---|---|
+| Stage 7 | any of the three, per row | `Maps-to` on each non-`issue` `AC-` row |
+| Stage 8 | `issue` (`AC-N`) and `design` (`INT-N`) | a Stage-7 row's `Maps-to` |
+| Stage 9 | `plan` (`CIAC-N`, and the executor's `AC-` rows) and Stage 8's `INT-N` verdicts | `release/tools/check-ac-binding.py` (`ns:plan>issue`) |
+
+**The issue body is the namespace of record for `AC-` ordinals.** It is this stage's primary QA source, the acceptance-assertion contract assigns `AC-N` from it, and the plan's `AC-` rows are bound to it. Its list is read under that contract's heading vocabulary and item rule (its parse rules P1 and P2): a heading whose text starts `Acceptance Criteria` or `Completion condition (verifiable)`, at any level, opens the list, and `check-ac-binding.py` reads the same vocabulary. A label's identifier class (`AC`, `INT`, `CIAC`, `OBL`) is a separate axis — the "disjoint namespace" the acceptance-assertion contract and stage-04 name — and never says which list an ordinal counts.
+
+**Writing a reference.** A criterion is identified by namespace, issue and label; in a payload row, by its `Namespace` and `Issue #` cells beside the label. In prose:
+
+- `#N AC-k` is an issue criterion. The unqualified form **is** the `issue` qualification.
+- `design #N AC-k` and `design #N INT-k` are design criteria.
+- `plan #N AC-k` is a plan's per-issue row, or an executor verdict on one. It may be written unqualified only where `check-ac-binding.py` reads that issue BOUND at the cited head: a bound plan row and the issue criterion it claims are then the same criterion. A plan's cross-issue criterion is `plan CIAC-k`.
+
+**The mapping.** A payload row whose `AC-` ordinal counts the `design` or `plan` list names in `Maps-to` the issue ordinal of the same criterion, or `none` when the issue list has no such criterion. Two identically-labelled verdicts grade the same criterion exactly when namespace, issue and label are all equal, or when both resolve through `Maps-to` to one issue ordinal. A `none` row is a design-only obligation: Stage 7 grades it against the design, and it is not an acceptance criterion here.
+
+**Who checks the mapping.** `check-ac-binding.py` resolves the `plan` list to the `issue` list on every run. Given a design snapshot (`--design-file`: each entry's own label, its text, and the issue ordinal it declares), it also checks each declared `design` mapping, against the issue list read through its own reader (`--fetch`, or a `--criteria-file` snapshot). A `design` row in the Stage-7 AC map quotes that check's MAP row in its Evidence cell, so this stage sees that the declaration it consumes is the one that was checked.
+
+**Where each payload names it.** A Stage-7 row can count any of the three lists, so the Stage-7 AC map carries `Namespace` and `Maps-to` on every row. The two payloads this stage produces — the Acceptance Report's matrix with its machine block, and the QA-return Failed-AC table — are fixed by identifier class: `AC-N` counts the issue body, and `INT-N` the card's Stage-5 integration list. Each therefore declares that mapping once, as `ns:AC=issue,INT=design`, in place of a column on every row, and the matrix column set stays closed. The namespace fields identify a criterion; they add no value to any verdict enum.
+
+**The `ns:` grammar — one field, one meaning, on every surface that writes it.** Its value is a comma-separated list of terms, and every term names a criterion namespace:
+
+- a bare namespace (`plan`) — the list the line's ordinals count;
+- a resolution (`plan>issue`, `design>issue`) — the line joins an ordinal in the first list to the second;
+- a class declaration (`AC=issue`, `INT=design`) — every label of that identifier class counts that list.
+
+The binder writes the first two forms, one on every line it emits, and its VERDICT line lists the resolutions that ran; a Stage-8 payload's declaration writes the third.
+
 ## 5. Process
 **Phase A — Entry Validation (Tier 1):** 5 steps — verify Stage 7 verdict (PASS or CONDITIONAL PASS required), PR still mergeable, quality report present with conformant Handoff Payload (per [DT↔QA Handoff Protocol §Forward Handoff](stage-07-dev-testing.md#dtqa-handoff-protocol)), all AC extractable from issues, and PR gate-state clean per the required-gate + mergeability read below. Missing or malformed Handoff Payload → post [ADJUST] signal per the inter-stage feedback protocol Tier 1; DT amends in-place (no full re-review required for format-only corrections).
 
@@ -325,6 +364,8 @@ A Phase E REJECT/HOLD splits on whether the gap is an **implementation defect** 
 Acceptance Report: acceptance matrix (per-criterion verdict), acceptance score, fitness assessment, Stage 7 escape log, lane distribution, overall verdict. Downstream: to Stage 9 (acceptance report + PR + DT report) or to Stage 7 (Lane 2 findings emitted as QA Return to Dev Testing payload per [DT↔QA Handoff Protocol §Return Path](stage-07-dev-testing.md#dtqa-handoff-protocol)).
 
 The Acceptance Report is rendered from the canonical template at [`operations/templates/qa-acceptance-report-template.md`](../../../operations/templates/qa-acceptance-report-template.md) — three reader tiers (verdict / detail / evidence) carrying these six sections, with a machine-parseable acceptance-matrix block whose columns and all-drift-out score are the co-design contract with the `acceptance` assertion type ([`core/skills/eval-writer/references/acceptance-assertion-type.md`](../../../core/skills/eval-writer/references/acceptance-assertion-type.md)).
+
+The report declares its criterion namespace (§ 4, *Criterion namespace*) once — in Tier 1, and as `ns:AC=issue,INT=design` in the machine block header — and a QA-return Failed-AC table carries the same declaration. Phase B joins a Stage-7 AC-map row to the issue criterion its `Maps-to` names before using it as input; a `Maps-to: none` row is not input to any issue criterion's verdict.
 
 Stage 8 does NOT produce: quality scores (Stage 7), design decisions (Stage 5), deployment actions (Stage 12).
 

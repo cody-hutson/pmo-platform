@@ -170,7 +170,7 @@ The conflicting row is grounded rather than hypothetical: every context in the r
 
 **Cutover discipline:** Applies to all releases going forward.
 
-**Phase B — Contract Review (Tier 1/2):** 3 checks — AC verification per issue (LLM-graded, Blocker), stage input consumption (LLM-graded, Warning), stage output completeness (Deterministic, Warning).
+**Phase B — Contract Review (Tier 1/2):** 3 checks — AC verification per issue (LLM-graded, Blocker), stage input consumption (LLM-graded, Warning), stage output completeness (Deterministic, Warning). The AC map names, per row, the list DT graded (its criterion namespace, per the Stage-8 spec's § Criterion namespace). A plan row's issue ordinal is confirmed with `release/tools/check-ac-binding.py` (`ns:plan>issue`), and a design mapping with the same tool on a design snapshot (`--design-file`, `ns:design>issue`), rather than re-derived by reading; a `design` row quotes that check's MAP row in its Evidence cell.
 
 **Phase C — Content Quality Review (Tier 2 Recommend):** 5 always-on scored dimensions + 1 conditional (domain-practice conformance). The 5 always-on dimensions — clarity (1-5, threshold 3), accuracy (1-5, threshold 3), internal consistency (1-5, threshold 4, Blocker), convention depth (1-5, threshold 3), escape detection (count) — score on every release. The conditional 6th dimension (domain-practice conformance, below) scores only when a domain guide applies for the deliverable's domain.
 
@@ -397,7 +397,7 @@ Stage 7's terminal report section is the **Handoff Payload** — a structured bl
 | Iteration count | Integer ≥ 0 | Iteration history | Calibration + escape analysis |
 | PR reference | SHA or `#N` or branch @ SHA | Branch state | Confirms PR still mergeable |
 | Files reviewed | List of repo-relative paths (with line ranges when scoped) | Phase A1 | Scope anchor for acceptance review |
-| AC map | Table: `AC · Issue # · Verdict (PASS / PARTIAL / NOT VERIFIED) · Evidence` | Phase B | Primary input for Phase B acceptance review |
+| AC map | Table: `AC · Issue # · Namespace · Maps-to · Verdict (PASS / PARTIAL / NOT VERIFIED) · Evidence` | Phase B | Primary input for Phase B acceptance review; `Namespace` and `Maps-to` identify the criterion (the Stage-8 spec's § Criterion namespace) |
 | Findings | Table: `F-ID · Severity · Dimension · Routing tier · Origin · Status · Evidence · Recommendation` | Phase D | Context for Phase B and escape detection |
 | Escape summary | Table: `Origin stage · Count` | Phase D | Stage 7 escape count + calibration |
 | Downstream attention | List of F-IDs flagged for Stage 8 scrutiny (may be `None`) | Phase E | Focuses Stage 8 review |
@@ -418,6 +418,7 @@ Stage 7's terminal report section is the **Handoff Payload** — a structured bl
 | Routing tier values | `Tier 1` / `Tier 2` / `Tier 3` / `—` (Notes) | Per the inter-stage feedback protocol and the iteration-loop classification |
 | Origin stage | `S4` / `S5` / `S6` / `S7 (pass N)` / `S8 (return)` | Enables escape provenance |
 | Test-results table | Columns exactly `Suite · Selected-by · Result · Pass/Fail · Env · Evidence · Event ts`; `Result` ∈ `PASS` / `FAIL` / `SKIP`; one row per selected suite, or a single `NONE — …` line | Deterministic extraction of the runtime-gate outcome |
+| Criterion reference | `Namespace` ∈ `issue` / `design` / `plan` on every AC-map row. On an `AC-` row whose namespace is not `issue`, `Maps-to` names the issue ordinal of the same criterion or reads `none`; every other row reads `—`. A `design` row quotes its `check-ac-binding.py` MAP row in the Evidence cell | An ordinal is unique only inside the list that counts it |
 
 **Severity vocabulary reconciliation (Phase D ↔ Findings table):** Phase D's `Blocker / Warning / Note` are verdict-severity buckets (3-bucket) used to render the overall pass/fail verdict. The Findings-table `Severity` column reports finding-level severity using the 5-bucket vocabulary (`Blocker / Major / Minor / Cosmetic / Informational`). DT skills emitting findings into the Handoff Payload MUST translate at report-assembly time as follows:
 
@@ -443,12 +444,13 @@ Phase D's verdict line continues to use the 3-bucket vocabulary; only the Findin
 - release/governance/release-process.md (mirror)
 
 **AC map:**
-| AC | Verdict | Evidence |
-|---|---|---|
-| AC1 | PASS | §Inter-Stage Feedback Protocol, lines 27-51 |
-| AC2 | PASS | Tier 1/2/3 definitions, lines 43-59 |
-| AC3 | PASS | Signal tags `[ADJUST]` / `[SCOPE CHANGE]` / `[PLAN REJECTION]` |
-| AC4 | PASS | Boundary generalization paragraph |
+| AC | Issue # | Namespace | Maps-to | Verdict | Evidence |
+|---|---|---|---|---|---|
+| AC-1 | #N | issue | — | PASS | §Inter-Stage Feedback Protocol, lines 27-51 |
+| AC-2 | #N | issue | — | PASS | Tier 1/2/3 definitions, lines 43-59 |
+| AC-3 | #N | issue | — | PASS | Signal tags `[ADJUST]` / `[SCOPE CHANGE]` / `[PLAN REJECTION]` |
+| AC-4 | #N | issue | — | PASS | Boundary generalization paragraph |
+| AC-5 | #N | design | none | PASS | the design's added obligation, graded against the design and not as an issue criterion; binder: `MAP #N AC-5 none NONE` |
 
 **Findings:**
 | F-ID | Severity | Dimension | Tier | Origin | Status | Evidence | Recommendation |
@@ -500,7 +502,7 @@ Stage 8 posts a structured `### QA Return to Dev Testing` section on the relevan
 |---|---|---|
 | Trigger lane | Enum: `Lane 2` (Lane 1 logs only; Lane 3 escalates to Stage 9) | Confirms routing reason |
 | QA finding ID | `QF-NN` | Stable reference across iterations |
-| Failed AC | Table: `AC · Issue # · Verdict (NOT MET / PARTIAL) · Evidence of gap` | DT's re-review anchor |
+| Failed AC | Table: `AC · Issue # · Verdict (NOT MET / PARTIAL) · Evidence of gap`, headed by the class-keyed declaration `ns:AC=issue,INT=design` | DT's re-review anchor — DT re-reviews each criterion in the list the declaration names for its label's class (the Stage-8 spec's § Criterion namespace) |
 | DT-side hypothesis | One line (optional) | Why QA thinks DT missed — aids calibration |
 | Requested scope | Always `Full re-review (per the loop protocol)` | Binds DT scope explicitly |
 | Return timestamp | ISO-8601 | Iteration history |
