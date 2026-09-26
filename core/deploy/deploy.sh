@@ -18439,6 +18439,27 @@ EOF
              | /usr/bin/grep -c 'no tag recorded' || true)"
   [[ "${_rc_ctl:-0}" -ge 1 ]] || { echo "FAIL: RC-5 control — the SAME empty-tag input on a VERSIONED row must produce a tag finding; it produced none, so the arm above proves nothing"; failures=$((failures+1)); }
 
+  # RC-5b — the version-only CHANGELOG limb (d) is DECLARED EXCLUDED for class `version-less`,
+  # and FIRES for class `versioned` on the identical input (#4318 AC-7). RC-5 cannot see limb
+  # (d): it points CC_CHANGELOG at a MISSING file, and a missing CHANGELOG is the pre-CHANGELOG
+  # N/A. Here the file EXISTS and carries neither section, so the class gate is the only thing
+  # between the input and a finding. KILLS: deleting (d)'s class gate. The versioned control
+  # proves the limb still reads the file.
+  local _rc_cl_vl _rc_cl_ctl
+  /usr/bin/printf '# Changelog\n## [v0.01] - 2026-01-01\nAn unrelated section.\n' > "$_rct/CHANGELOG.md"
+  _rc_cl_vl="$(CC_INDEX="$_rcindex" CC_DIGEST="$_rcdigest" CC_NOTES_DIR="$_rcnotes" \
+               CC_CHANGELOG="$_rct/CHANGELOG.md" CC_LINT="$_rct/no-such-lint.py" \
+               CC_LOG="$_rclog" \
+               _cc_row_findings lifecycle "$_rckey" "rc-slug-release" "(none)" 0 0 0 "version-less" "rc-slug-release" 2>/dev/null \
+               | /usr/bin/grep -c 'missing CHANGELOG' || true)"
+  [[ "${_rc_cl_vl:-0}" -eq 0 ]] || { echo "FAIL: RC-5b the CHANGELOG limb must be class-gated OUT for a version-less row (the CHANGELOG is keyed on a version, and the close-out writes no section for a version-less release), got $_rc_cl_vl finding(s)"; failures=$((failures+1)); }
+  _rc_cl_ctl="$(CC_INDEX="$_rcindex" CC_DIGEST="$_rcdigest" CC_NOTES_DIR="$_rcnotes" \
+                CC_CHANGELOG="$_rct/CHANGELOG.md" CC_LINT="$_rct/no-such-lint.py" \
+                CC_LOG="$_rclog" \
+                _cc_row_findings lifecycle "v9.80" "rc-versioned" "(none)" 0 0 0 "versioned" "v9.80" 2>/dev/null \
+                | /usr/bin/grep -c 'missing CHANGELOG' || true)"
+  [[ "${_rc_cl_ctl:-0}" -ge 1 ]] || { echo "FAIL: RC-5b control — the SAME existing CHANGELOG on a VERSIONED row must produce a CHANGELOG finding; it produced none, so the arm above proves nothing"; failures=$((failures+1)); }
+
   # RC-6 — no-regression on ordinary versioned rows, asserted at its root cause: for a
   # versioned row `row_key` and `corpus_key` are BYTE-IDENTICAL, so nothing about such a
   # row's resolution can move. KILLS: any marker-stripping rule that also rewrites a
@@ -19719,7 +19740,7 @@ EOF
   echo "  decision-emission minimum set validated (#4026, group DE):" >&2
   echo "    DE-1 dormant SKIP / DE-2 seeded zero-emission INCOMPLETE / DE-3 complete CLEAN 1 / DE-4 partial-set INCOMPLETE / DE-4b sibling-typed omission INCOMPLETE (kills the subtype-conjunct mutant) / DE-5 legacy-key-only INCOMPLETE / DE-6+DE-7 pre-cutover + DEPLOYED rows excluded / DE-7b VERIFIED flip counted / DE-8 rung-2 resolution / DE-9 absent asserted-set NOSET / DE-10 THE EXIT-CODE SPACE (#4216) — all ten (verdict x sentinel) pairs map as contracted, with DE-10b proving the sentinel is actually read (warn and enforce must differ for INCOMPLETE and NOSET) and DE-10c asserting PV-7 as a POPULATION property: exactly two of the ten pairs produce exit 0 and both are CLEAN, so a degraded verdict collapsing onto the clean code is caught even if it is a verdict token this group does not yet name" >&2
   echo "  RELEASE_LOG row classes validated (#5234, group RC):" >&2
-  echo "    RC-1 both row classes enumerated and resolving clean / RC-2 union invariant enumerated + declared-excluded + not-in-scope == total / RC-2b the same invariant holds under a cutoff-split partition / RC-3 zero version-anchored LOG-row selectors survive in executable source outside _rl_data_rows, with a matched-nowhere detector control / RC-4 a fully-escaped metacharacter key resolves its INDEX row, with a dot-only-escaping control and an unrelated-key specificity arm / RC-5 the tag limb is class-gated OUT for a version-less row, with a VERSIONED control that must still fire / RC-6 a versioned row's row_key and corpus_key are both the verbatim cell (byte-identical — the no-regression guarantee for the versioned population) + a no-match cutoff enumerates nothing / RC-7 an unreadable header returns non-zero AND emits a stderr diagnostic, with a well-formed control returning 0 / RC-8 adding one data row moves the emitted denominator by exactly 1 — the arm that kills a hardcoded or stale denominator." >&2
+  echo "    RC-1 both row classes enumerated and resolving clean / RC-2 union invariant enumerated + declared-excluded + not-in-scope == total / RC-2b the same invariant holds under a cutoff-split partition / RC-3 zero version-anchored LOG-row selectors survive in executable source outside _rl_data_rows, with a matched-nowhere detector control / RC-4 a fully-escaped metacharacter key resolves its INDEX row, with a dot-only-escaping control and an unrelated-key specificity arm / RC-5 the tag limb is class-gated OUT for a version-less row, with a VERSIONED control that must still fire / RC-5b the CHANGELOG limb (d) is class-gated OUT for a version-less row over an EXISTING CHANGELOG, with a VERSIONED control that must still fire (#4318) / RC-6 a versioned row's row_key and corpus_key are both the verbatim cell (byte-identical — the no-regression guarantee for the versioned population) + a no-match cutoff enumerates nothing / RC-7 an unreadable header returns non-zero AND emits a stderr diagnostic, with a well-formed control returning 0 / RC-8 adding one data row moves the emitted denominator by exactly 1 — the arm that kills a hardcoded or stale denominator." >&2
   echo "  complementary-pair ownership validated (#4178, group CP):" >&2
   echo "    CP-4 absent registry NOSET / CP-1 intact pair PASS / CP-2 leaked owned-section OWNERSHIP-DRIFT / CP-5 missing shared-section OWNERSHIP-DRIFT / CP-6 divergent shared-section SHARED-DIVERGENCE / CP-3 unregistered cross-tree pair UNREGISTERED-PAIR / CP-3b named README.md exclusion holds / CP-7 malformed record MALFORMED" >&2
   echo "  register runner-resolution validated (#4208, group RR):" >&2
