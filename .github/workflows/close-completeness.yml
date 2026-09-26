@@ -9,10 +9,16 @@ name: Close-completeness (pre-merge Stage-13 output-set gate)
 #              LOG-row-only close incident). The probe (Check 48) and this gate are
 #              scaffold-independent: they read main's state, not the execution path.
 #   falsification: on a PR that adds a VERIFIED RELEASE_LOG row (at/after the armed
-#                  cutover) without its INDEX/DIGEST/NOTES companions -> this gate
-#                  reports INCOMPLETE (warn-mode: summary + exit 0; enforce: red +
-#                  exit 1). A complete output-set -> green; an explicitly re-dormanted
-#                  cutover -> SKIP.
+#                  cutover) without its INDEX/DIGEST/NOTES companions -> the gate
+#                  reports INCOMPLETE and the probe exits NON-ZERO under EVERY
+#                  sentinel value (warn: advisory exit 2, reported not blocking;
+#                  enforce: blocking exit 1). Break the network instrument instead
+#                  (no gh, an unauthenticated gh, a remote that is not a GitHub
+#                  repository, a failed published-Release read) -> NOT-EVALUATED,
+#                  exit 3 under EVERY sentinel value and never blocking — never 0,
+#                  never a 'no published GitHub Release' finding. A complete
+#                  output-set -> CLEAN, the SOLE producer of exit 0; an explicitly
+#                  re-dormanted cutover -> SKIP, exit 3 under warn and 1 under enforce.
 # Path-filtered, so ADVISORY by skip-semantics: absence on an unrelated PR MUST NOT
 # block. ARMED by default — CLOSE_COMPLETENESS_CHECK_CUTOFF ships as a committed
 # default in deploy.sh, so _cc_compute_verdict returns a real verdict on every run;
@@ -37,9 +43,12 @@ name: Close-completeness (pre-merge Stage-13 output-set gate)
 # drift landing on main — NOT pre-merge prevention. "CI-enrolled" here must not be
 # read as "cannot happen again".
 # Ships warn-mode-initial: the committed .github/close-completeness.enforce sentinel
-# token governs blocking (warn reports, enforce blocks) and is read by the probe
-# itself; flipping it to `enforce` plus adding this job to required_status_checks
-# (branch protection, out-of-tree) arms the merge gate.
+# token governs blocking and is read by the probe itself — under warn every verdict
+# reports; under enforce INCOMPLETE and SKIP block, while NOT-EVALUATED (an instrument
+# outage) never does. Flipping it to `enforce` plus adding this job to
+# required_status_checks (branch protection, out-of-tree) arms the merge gate — and
+# only after the standing INCOMPLETE verdict is drained, per the preconditions the
+# sentinel file lists.
 #
 # GRADUATION CLAUSE — THE FLIP ALSO REQUIRES DELETING THE paths: FILTER BELOW, and
 # that third step is not optional. A path-filtered context registered in branch
@@ -63,10 +72,13 @@ name: Close-completeness (pre-merge Stage-13 output-set gate)
 #
 # THIN caller of the single engine (#3795 — the probe + sentinel already shipped
 # with #1290; this workflow wires the missing caller). --check-close-completeness
-# runs ONLY Check 48's shared _cc_compute_verdict "gate" body and honors the
-# .enforce sentinel internally (warn swallows INCOMPLETE into exit 0; enforce
-# propagates exit 1; an unexpected verdict fail-closes). NO predicate is re-encoded
-# in this YAML (single-engine discipline).
+# runs ONLY Check 48's shared _cc_compute_verdict "gate" body, honours the .enforce
+# sentinel internally, and returns 0 CLEAN / 2 INCOMPLETE-advisory / 3 NOT-EVALUATED
+# (under every sentinel) or SKIP-advisory / 1 blocking-or-fail-closed (#4318). The
+# caller dispatches on that integer and NEVER re-reads the sentinel, and it honours an
+# advisory 2 or 3 ONLY when the probe's `close-completeness-exit:` handshake line
+# equals the return code — a crash or a parse error prints no handshake and fails
+# closed. NO predicate is re-encoded in this YAML (single-engine discipline).
 #
 # Platform: macos-latest — mirrors version-freeness.yml + deploy-check-ci.yml.
 #
@@ -118,41 +130,116 @@ jobs:
           uname -s
           command -v bash
           command -v git
-          command -v gh || echo "::warning::gh not on PATH — the published-Release and body-drift sub-checks CANNOT run. The network cutover is now ARMED (CLOSE_COMPLETENESS_RELEASE_CUTOFF ships as a committed default in deploy.sh), so this gate IS network-dependent and this warning is materially consequential: the gate surface is fail-closed on an unreadable network anchor, so every in-scope VERIFIED row emits an 'unverifiable (gh offline at gate surface)' finding rather than being silently skipped. Under the current warn sentinel that is reported, not blocking; it would block under enforce."
+          command -v gh || echo "::warning::gh not on PATH — the network leg (published Release + §5.1 body-drift) CANNOT be measured. The network cutover is ARMED (CLOSE_COMPLETENESS_RELEASE_CUTOFF ships as a committed default in deploy.sh), so the gate reports NOT-EVALUATED for every network-scoped row — never a finding and never a pass, so this is not a clean result. That verdict exits 3 and blocks under no sentinel value."
           test -x /usr/bin/python3 || echo "::warning::/usr/bin/python3 missing — note-content lint delegation degrades"
 
       - name: Run close-completeness check (single check, via the deploy.sh engine)
         id: check
-        # THIN caller. The probe reads .github/close-completeness.enforce itself:
-        # warn swallows INCOMPLETE into exit 0 (reported), enforce propagates exit 1;
-        # an unexpected verdict fail-closes. The cutover ships ARMED (committed default
-        # in deploy.sh), so this step returns a real verdict; only an explicit
-        # __none__ re-dormant -> SKIP/exit 0.
+        # THIN caller. The probe reads the enforce sentinel itself and maps its verdict to
+        # 0 CLEAN / 2 INCOMPLETE advisory / 3 NOT-EVALUATED (under every sentinel) or SKIP
+        # advisory / 1 blocking under enforce, or an unexpected verdict. The cutover ships
+        # ARMED (committed default in deploy.sh), so this step returns a real verdict. It
+        # also records the probe's LAST `close-completeness-exit: <code>` line as the
+        # handshake the Gate decision step checks against RC (digits only, else `none`).
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
+          # DO NOT REMOVE `set +e`. A NON-ZERO exit is the ORDINARY outcome while the
+          # standing verdict is INCOMPLETE (advisory exit 2); without `set +e` this step
+          # fails before the Gate decision step evaluates.
           set +e
           OUT="$(bash core/deploy/deploy.sh --check-close-completeness 2>&1)"; RC=$?
           set -e
           printf '%s\n' "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
+          HANDSHAKE="$(sed -n 's/^close-completeness-exit: \([0-9][0-9]*\)$/\1/p' <<<"$OUT" | tail -n 1)"
           echo "rc=$RC" >> "$GITHUB_OUTPUT"
+          echo "handshake=${HANDSHAKE:-none}" >> "$GITHUB_OUTPUT"
 
       - name: Gate decision (warn-mode-initial)
         env:
           RC: ${{ steps.check.outputs.rc }}
+          HANDSHAKE: ${{ steps.check.outputs.handshake }}
         run: |
           set -euo pipefail
-          if [ "$RC" -eq 0 ]; then
-            echo ":white_check_mark: close-completeness: every in-scope VERIFIED release has its full Stage-13 output-set (or gate dormant / reported in warn-mode)" \
-              | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          {
-            echo "## :x: close-completeness gate FAILED (enforce mode) or fail-closed"
-            echo ""
-            echo "A VERIFIED RELEASE_LOG row is missing a Stage-13 output (INDEX / DIGEST / NOTES / tag / Release),"
-            echo "with the enforce sentinel active — OR the verdict was unexpected (fail-closed)."
-            echo "Backfill the missing output(s) per release/references/pipeline/stage-13-close.md Phase B before merge."
-          } | tee -a "$GITHUB_STEP_SUMMARY"
-          exit 1
+          case "$RC" in
+            0)
+              # 0 IS CLEAN'S ALONE under every sentinel state (PV-7; _cc_verdict_exit_code, asserted
+              # by deploy.sh --self-test close-completeness arms 8-11, whose sensitivity arm (11)
+              # proves the assertion can fail). Before #4318 the code was shared with SKIP and with
+              # INCOMPLETE under the shipped warn sentinel, so this line was a false completeness
+              # claim. It is true only because nothing else can produce this code; do not add a
+              # branch that reaches it.
+              echo ":white_check_mark: close-completeness: every in-scope VERIFIED release has its full Stage-13 output-set" \
+                | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+              ;;
+            2|3)
+              # An advisory code is honoured ONLY when the probe's verdict mapping issued it: the
+              # handshake line the probe prints before exiting must equal RC. A crash, a parse
+              # error or a failed sentinel read can exit 2 or 3 too, prints no handshake, and
+              # fails closed here.
+              if [ "$HANDSHAKE" != "$RC" ]; then
+                {
+                  echo "## :x: close-completeness probe exited $RC WITHOUT its verdict handshake"
+                  echo ""
+                  echo "Exit $RC was not issued by the probe's verdict mapping (handshake: $HANDSHAKE)."
+                  echo "A crash, a parse error or a failed sentinel read also exits non-zero; that is a"
+                  echo "broken gate, not an advisory verdict. Fix the probe and re-run."
+                } | tee -a "$GITHUB_STEP_SUMMARY"
+                exit 1
+              fi
+              if [ "$RC" -eq 2 ]; then
+                {
+                  echo "## :warning: close-completeness reported an ADVISORY FINDING (measured)"
+                  echo ""
+                  echo "A VERIFIED RELEASE_LOG row at/after the cutover is missing a Stage-13 output, or its"
+                  echo "published Release body has drifted from its note. The gate **measured** the corpus"
+                  echo "and found it incomplete; the enforce sentinel is not active, so this is reported"
+                  echo "rather than blocking."
+                  echo ""
+                  echo "**This is not a pass.** Exit 2 is the advisory-finding code — distinct from 0 (clean),"
+                  echo "from 3 (not evaluated) and from 1 (blocking). The remedies differ by finding:"
+                  echo "  - a missing output: backfill it per release/references/pipeline/stage-13-close.md Phase B;"
+                  echo "  - a §5.1 body drift: re-emit the published body from the note per"
+                  echo "    release/references/standards/release-notes-standard.md §5.6."
+                  echo "The findings, the denominator and any NOT-EVALUATED network rows are named in the"
+                  echo "probe output above."
+                } | tee -a "$GITHUB_STEP_SUMMARY"
+                echo "::warning::close-completeness: INCOMPLETE — a measured finding, reported not blocking; this is not a clean result, so never read exit 2 as clean"
+                exit 0
+              fi
+              {
+                echo "## :grey_question: close-completeness was NOT-EVALUATED (not a clean result)"
+                echo ""
+                echo "One of two withheld verdicts — the probe output above names which:"
+                echo "  (a) the network leg was not measured for one or more rows (gh unavailable or"
+                echo "      unauthenticated, a remote that is not a GitHub repository, or a failed"
+                echo "      published-Release read) and no other limb found anything. Restore the instrument"
+                echo "      and re-run; a failed lookup is never reported as a missing Release. This verdict"
+                echo "      exits 3 under every sentinel value and never blocks."
+                echo "  (b) the whole gate was withheld (SKIP): the cutoff was re-dormanted, or"
+                echo "      release/releases/RELEASE_LOG.md is absent or its header unparseable. Under the"
+                echo "      enforce sentinel this verdict exits 1 and this job is RED."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::warning::close-completeness: NOT-EVALUATED — a withheld verdict (network leg unmeasured, or gate skipped), so this is not a clean result"
+              exit 0
+              ;;
+            *)
+              {
+                echo "## :x: close-completeness gate FAILED (enforce mode) or fail-closed"
+                echo ""
+                echo "One of three things happened (named in the probe output above):"
+                echo "  (a) a VERIFIED RELEASE_LOG row is missing a Stage-13 output, or its published body"
+                echo "      drifted, with the enforce sentinel active;"
+                echo "  (b) the whole gate was withheld (SKIP) with the enforce sentinel active; or"
+                echo "  (c) the verdict was unexpected, or the probe failed before it could verdict (fail-closed)."
+                echo "Probe exit code: $RC."
+                echo ""
+                echo "Remedy for (a): backfill a missing output per release/references/pipeline/stage-13-close.md"
+                echo "Phase B, or re-emit a drifted body per release-notes-standard.md §5.6, before merge."
+                echo "Remedy for (b): restore or repair release/releases/RELEASE_LOG.md, or unset the __none__ re-dormant."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 1
+              ;;
+          esac

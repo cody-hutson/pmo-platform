@@ -6,9 +6,13 @@
 # sentinel is load-bearing on its own; a thin CI workflow can additionally consume
 # the probe's exit code once wired.
 #
-# The first non-comment, non-blank line is the mode token:
-#   warn      → report only (exit-0); a finding is surfaced but does not block.
-#   enforce   → block on an INCOMPLETE verdict (exit-1 propagates to any CI caller).
+# The first non-comment, non-blank line is the mode token. The probe maps every verdict
+# through _cc_verdict_exit_code; exit 0 is CLEAN's alone under either token.
+#   warn      → a finding reports on advisory exit 2 and a withheld verdict (network leg
+#               NOT-EVALUATED, or the gate SKIPped) on exit 3 — reported, not blocking.
+#   enforce   → INCOMPLETE and SKIP each exit 1 (red in CI; merge-blocking once the job
+#               is a required branch-protection context). NOT-EVALUATED still exits 3 and
+#               never blocks: a measurement outage cannot gate under either token.
 #
 # Stays `warn` during the calibration window, per the warn-mode-initial posture and
 # the reflexive-pipeline-loop discipline (the introducing release v2.37 closed under
@@ -19,17 +23,30 @@
 # ships as a committed default in deploy.sh, so the gate evaluates on every run rather
 # than SKIPping — that clause of the graduation path is DISCHARGED and is recorded here
 # rather than left as outstanding work. The cutoff was chosen as the oldest value with
-# zero standing findings, precisely so the warn log below starts CLEAN: a log
-# pre-poisoned by known legacy debt could never evidence the zero-false-positive
-# threshold, which would make this flip unevaluable.
+# zero standing findings, so the warn log started CLEAN when it was armed. It does not
+# read CLEAN now: findings have accrued since — published Release bodies that drifted
+# from their notes after release, and rows whose Phase-B Velocity field is missing or
+# fails its grammar — so the gate carries a standing INCOMPLETE verdict that the flip
+# below must drain first.
 #
-# REMAINING FLIP-TO-ENFORCE WORK (both required, neither done):
-#   1. Flip the token below to `enforce` after a >=3-day warn-log review with ZERO
-#      false positives.
-#   2. Add the `close-completeness` job to branch-protection required checks
+# REMAINING FLIP-TO-ENFORCE WORK (all four required, none done):
+#   1. DRAIN the standing verdict, or allowlist each residual row with a stated reason:
+#      re-emit every drifted published body from its note (the release-notes standard's
+#      §5.6 re-emit sweep) and backfill or grandfather the Velocity rows. A warn log that
+#      still carries known findings can never evidence step 2's zero-false-positive bar.
+#   2. Flip the token below to `enforce` after a >=3-day warn-log review with ZERO
+#      false positives. Read `"evaluated":false` rows in that log as measurement
+#      outages, not findings.
+#   3. Add the `close-completeness` job to branch-protection required checks
 #      (per core/standards/gate-efficacy-standard.md — a token flip alone does not
 #      make the context required).
-# No code change is needed to graduate.
+#   4. Delete the workflow's `paths:` filter (the GRADUATION CLAUSE in
+#      .github/workflows/close-completeness.yml): a path-filtered required context
+#      leaves every non-matching PR permanently pending.
+# At the flip, also decide whether any NOT-EVALUATED cause escalates. Only an input
+# failure a pull request can repair is a candidate; a host outage never gates. The
+# cause-to-class table on the probe (deploy.sh, cmd_check_close_completeness) is the
+# map that decision reads.
 #
 # (Content-flagged rather than presence-flagged so the file can ship now — the
 #  docs reference it — while the gate stays non-blocking; the version-freeness
