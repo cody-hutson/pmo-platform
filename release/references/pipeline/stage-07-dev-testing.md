@@ -100,7 +100,7 @@ grep -nE 'domain_practice[^{]{0,24}\{([^}]*[,{[:space:]])?domain:[[:space:]]*[A-
 | Label present, Mode B `UNSOURCED-DOMAIN` with rationale — but rationale does not name the unresolved domain | Note | Logged; no routing (the explicit UNSOURCED-DOMAIN flag with any rationale satisfies the disclosure obligation) |
 | Label present, but the mandatory in-label `domain:` class field is absent (or placed as a separate top-level key rather than inside `domain_practice`, or falling outside the label body because the body is wrapped across lines — a wrapped label satisfies presence and is reported here) | Warning | Tier 1 — Engineering adds the in-label `domain:` class field via `fix(dt):` commit, re-joining a wrapped body onto one line; the field is mandatory in every mode per Stage 4 §5.7 |
 
-**A8 Runtime-Suite Gate (Blocker, conditional):** When the PR touches a code path that maps to a runtime test suite per [`runtime-suite-selection-map.md`](../standards/runtime-suite-selection-map.md) (rows 1–5; row 6 is the explicit no-match fallback), Phase A runs the selected suite as a gate input and records the outcome as a `test-run` event. This is a Tier-1 deterministic check (a suite passes or fails — it is not an LLM-graded quality score, so it belongs in Phase A, not the Phase C scored dimensions). A doc/governance/spec-only PR matches the map's no-match row → A8 emits `test-run/suite-skip` and is a no-op gate (no ceremony). **Row 4 (tool self-tests) is CI-enforced, not hand-run:** the `selftest-discovery` job in `.github/workflows/release-tooling-smoke.yml` executes every discovered `--self-test` across the two release tool trees on any in-scope PR, so A8 cites an enforced gate for that row rather than a command someone claims to have run — and a self-test recorded as PASS with no CI evidence is now a finding, not a formality.
+**A8 Runtime-Suite Gate (Blocker, conditional):** When the PR touches a code path that maps to a runtime test suite per [`runtime-suite-selection-map.md`](../standards/runtime-suite-selection-map.md) (any row but its last; the last row is the explicit no-match fallback), Phase A runs the selected suite as a gate input and records the outcome as a `test-run` event. This is a Tier-1 deterministic check (a suite passes or fails — it is not an LLM-graded quality score, so it belongs in Phase A, not the Phase C scored dimensions). A doc/governance/spec-only PR matches the map's no-match row → A8 emits `test-run/suite-skip` and is a no-op gate (no ceremony). **Row 4 (tool self-tests) is CI-enforced, not hand-run:** the `selftest-discovery` job in `.github/workflows/release-tooling-smoke.yml` executes every discovered `--self-test` across the two release tool trees on any in-scope PR, so A8 cites an enforced gate for that row rather than a command someone claims to have run — and a self-test recorded as PASS with no CI evidence is now a finding, not a formality.
 
 **Execution environment:** the recipe is a function of the selected row's two sandbox axes — isolation and resolution-sensitivity — and is stated once, in [`runtime-suite-selection-map.md`](../standards/runtime-suite-selection-map.md) § 3. Read the row's `Sandbox` cell and apply what § 3 derives from it; do **not** assume a `HOME` override for every row. A bare `HOME` override applied to a **resolution-sensitive** row relocates the Python user base and removes a dependency the runner needs, so the suite fails before executing an assertion — that is a runner error, not a code failure, and it routes to the **A8-INFRA** row of the table below (Warning), never to A8-FAIL. **The discriminator is observable and is the whole of it: zero units executed.** A runner that started the suite and reported a failing unit is A8-FAIL regardless of the sandbox recipe. Two execution loci, same result surface: (1) **CI (authoritative)** — the deploy/hook suites run as discrete steps in `.github/workflows/install-tests.yml`, which applies no caller-side `HOME` override and pins the user site for the job; A8's preferred evidence is the CI run result (`projects_to:actions-run:<url>` in the event payload); (2) **Local DT fallback** — when CI evidence is unavailable at review time, the DT spoke runs the selected runner locally under the § 3 recipe for that row and records the pass/fail counts.
 
@@ -120,6 +120,8 @@ A failing runtime suite is the strongest possible "the code does not work" signa
 **S7-I04 Branch-freshness assertion (Blocker, deterministic):** Phase A asserts the release branch has no base-branch commits unreachable from `HEAD` — a branch that has fallen behind its base can merge stale. This is a Tier-1 deterministic check (the branch is fresh or it is not; it is not an LLM-graded score). It runs the executable runner [`assert_branch_fresh.py`](../../skills/pmo-skill-refiner/scripts/assert_branch_fresh.py) (`git log --oneline <base> ^HEAD`; empty → PASS/exit 0, non-empty → FAIL/exit 1 listing the unreachable commits). The graded/discoverable half is the `stage-07-branch-freshness` eval in the Stage-7 stage-gate eval set (`core/skills/eval-writer/evals/stage-gates/stage-07-dev-testing/evals.json`). A FAIL is a Blocker routed Tier 1 — Engineering rebases the branch onto its base and re-runs, per the DT↔Engineering Iteration Loop Protocol. **Cutover discipline:** applies to all releases going forward.
 
 **Plan-verification re-execution (optional, deterministic):** Dev Testing MAY re-run [`release/tools/verify-release-plan.sh`](../../tools/verify-release-plan.sh) against the release plan as an independent re-execution of the plan's per-issue / integration / regression / sync checks — the authoritative re-run of the Engineering self-verification whose evidence Phase A consumes. It sits alongside the A8 runtime-suite gate: A8 gates the runtime suites, while the plan-verification executor re-runs the whole plan's declared check set (dispatching the runtime-suite family through the same `test-run` event path A8 uses, so a re-run and an A8 run agree by construction). A non-zero exit (any FAIL/ERROR verdict) flags a check that no longer holds on the final PR SHA — routed like any Phase-A finding. The executor is also the sole runner of the plan's Cross-Issue Acceptance Criteria methods; the Stage-9 release-integration check reads those emitted verdicts read-only, so re-running here refreshes them against the PR head.
+
+**Verdict-laundering guard (Tier 1, deterministic):** when the re-execution is compared with an earlier run of the same plan — the Engineering self-verification runs, or the pre-release executor in the release's own differential — a row that graded FAIL or ERROR earlier and grades SKIP or UNRUNNABLE later is a finding, whatever moved it: the review names the change that moved the row and the rationale that change records, and a move nothing accounts for is routed like any other Phase-A finding. The comparison reads the executor's per-record stream (`--format=json` read line by line, or `--format=table`), never the markdown block.
 
 **Required-gate + mergeability read (three ordered predicates; P1 and P2 carry Blocker severity).** Phase A reads the release PR verdicts of the required branch-protection checks rather than re-implementing their detection. The `Issue-reference validity gate` is the worked example: it already scans exactly the changed-deliverable delta for the two classes it enforces — a bare `#N`-form issue reference placed outside a designated reference block and carrying no inline provenance marker, and a deprecated `IMP-NNN` reference — and it has already run on the current PR head, so its verdict cannot drift from what branch protection applies at merge. The three predicates below are evaluated in this order and the first match wins.
 
@@ -168,7 +170,7 @@ The conflicting row is grounded rather than hypothetical: every context in the r
 
 **Cutover discipline:** Applies to all releases going forward.
 
-**Phase B — Contract Review (Tier 1/2):** 3 checks — AC verification per issue (LLM-graded, Blocker), stage input consumption (LLM-graded, Warning), stage output completeness (Deterministic, Warning).
+**Phase B — Contract Review (Tier 1/2):** 3 checks — AC verification per issue (LLM-graded, Blocker), stage input consumption (LLM-graded, Warning), stage output completeness (Deterministic, Warning). The AC map names, per row, the list DT graded (its criterion namespace, per the Stage-8 spec's § Criterion namespace). A plan row's issue ordinal is confirmed with `release/tools/check-ac-binding.py` (`ns:plan>issue`), and a design mapping with the same tool on a design snapshot (`--design-file`, `ns:design>issue`), rather than re-derived by reading; a `design` row quotes that check's MAP row in its Evidence cell.
 
 **Phase C — Content Quality Review (Tier 2 Recommend):** 5 always-on scored dimensions + 1 conditional (domain-practice conformance). The 5 always-on dimensions — clarity (1-5, threshold 3), accuracy (1-5, threshold 3), internal consistency (1-5, threshold 4, Blocker), convention depth (1-5, threshold 3), escape detection (count) — score on every release. The conditional 6th dimension (domain-practice conformance, below) scores only when a domain guide applies for the deliverable's domain.
 
@@ -395,7 +397,7 @@ Stage 7's terminal report section is the **Handoff Payload** — a structured bl
 | Iteration count | Integer ≥ 0 | Iteration history | Calibration + escape analysis |
 | PR reference | SHA or `#N` or branch @ SHA | Branch state | Confirms PR still mergeable |
 | Files reviewed | List of repo-relative paths (with line ranges when scoped) | Phase A1 | Scope anchor for acceptance review |
-| AC map | Table: `AC · Issue # · Verdict (PASS / PARTIAL / NOT VERIFIED) · Evidence` | Phase B | Primary input for Phase B acceptance review |
+| AC map | Table: `AC · Issue # · Namespace · Maps-to · Verdict (PASS / PARTIAL / NOT VERIFIED) · Evidence` | Phase B | Primary input for Phase B acceptance review; `Namespace` and `Maps-to` identify the criterion (the Stage-8 spec's § Criterion namespace) |
 | Findings | Table: `F-ID · Severity · Dimension · Routing tier · Origin · Status · Evidence · Recommendation` | Phase D | Context for Phase B and escape detection |
 | Escape summary | Table: `Origin stage · Count` | Phase D | Stage 7 escape count + calibration |
 | Downstream attention | List of F-IDs flagged for Stage 8 scrutiny (may be `None`) | Phase E | Focuses Stage 8 review |
@@ -416,6 +418,7 @@ Stage 7's terminal report section is the **Handoff Payload** — a structured bl
 | Routing tier values | `Tier 1` / `Tier 2` / `Tier 3` / `—` (Notes) | Per the inter-stage feedback protocol and the iteration-loop classification |
 | Origin stage | `S4` / `S5` / `S6` / `S7 (pass N)` / `S8 (return)` | Enables escape provenance |
 | Test-results table | Columns exactly `Suite · Selected-by · Result · Pass/Fail · Env · Evidence · Event ts`; `Result` ∈ `PASS` / `FAIL` / `SKIP`; one row per selected suite, or a single `NONE — …` line | Deterministic extraction of the runtime-gate outcome |
+| Criterion reference | `Namespace` ∈ `issue` / `design` / `plan` on every AC-map row. On an `AC-` row whose namespace is not `issue`, `Maps-to` names the issue ordinal of the same criterion or reads `none`; every other row reads `—`. A `design` row quotes its `check-ac-binding.py` MAP row in the Evidence cell | An ordinal is unique only inside the list that counts it |
 
 **Severity vocabulary reconciliation (Phase D ↔ Findings table):** Phase D's `Blocker / Warning / Note` are verdict-severity buckets (3-bucket) used to render the overall pass/fail verdict. The Findings-table `Severity` column reports finding-level severity using the 5-bucket vocabulary (`Blocker / Major / Minor / Cosmetic / Informational`). DT skills emitting findings into the Handoff Payload MUST translate at report-assembly time as follows:
 
@@ -441,12 +444,13 @@ Phase D's verdict line continues to use the 3-bucket vocabulary; only the Findin
 - release/governance/release-process.md (mirror)
 
 **AC map:**
-| AC | Verdict | Evidence |
-|---|---|---|
-| AC1 | PASS | §Inter-Stage Feedback Protocol, lines 27-51 |
-| AC2 | PASS | Tier 1/2/3 definitions, lines 43-59 |
-| AC3 | PASS | Signal tags `[ADJUST]` / `[SCOPE CHANGE]` / `[PLAN REJECTION]` |
-| AC4 | PASS | Boundary generalization paragraph |
+| AC | Issue # | Namespace | Maps-to | Verdict | Evidence |
+|---|---|---|---|---|---|
+| AC-1 | #N | issue | — | PASS | §Inter-Stage Feedback Protocol, lines 27-51 |
+| AC-2 | #N | issue | — | PASS | Tier 1/2/3 definitions, lines 43-59 |
+| AC-3 | #N | issue | — | PASS | Signal tags `[ADJUST]` / `[SCOPE CHANGE]` / `[PLAN REJECTION]` |
+| AC-4 | #N | issue | — | PASS | Boundary generalization paragraph |
+| AC-5 | #N | design | none | PASS | the design's added obligation, graded against the design and not as an issue criterion; binder: `MAP #N AC-5 none NONE` |
 
 **Findings:**
 | F-ID | Severity | Dimension | Tier | Origin | Status | Evidence | Recommendation |
@@ -498,7 +502,7 @@ Stage 8 posts a structured `### QA Return to Dev Testing` section on the relevan
 |---|---|---|
 | Trigger lane | Enum: `Lane 2` (Lane 1 logs only; Lane 3 escalates to Stage 9) | Confirms routing reason |
 | QA finding ID | `QF-NN` | Stable reference across iterations |
-| Failed AC | Table: `AC · Issue # · Verdict (NOT MET / PARTIAL) · Evidence of gap` | DT's re-review anchor |
+| Failed AC | Table: `AC · Issue # · Verdict (NOT MET / PARTIAL) · Evidence of gap`, headed by the class-keyed declaration `ns:AC=issue,INT=design` | DT's re-review anchor — DT re-reviews each criterion in the list the declaration names for its label's class (the Stage-8 spec's § Criterion namespace) |
 | DT-side hypothesis | One line (optional) | Why QA thinks DT missed — aids calibration |
 | Requested scope | Always `Full re-review (per the loop protocol)` | Binds DT scope explicitly |
 | Return timestamp | ISO-8601 | Iteration history |

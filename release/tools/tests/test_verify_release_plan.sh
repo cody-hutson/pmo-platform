@@ -25,6 +25,10 @@ set -euo pipefail
 #   (G4) CIAC EXECUTION — the integration handler runs CIAC-1's grep method
 #        (quote-aware; a pattern with a `|` alternation and spaces stays one arg)
 #        and grades it on the co-occurrence threshold.
+#   (G5) DEPLOY-CHECK DELEGATION — the sync and regression families delegate to
+#        deploy.sh --check, here a fast stub: a non-zero exit renders FAIL and an
+#        overall exit 3 rather than an internal error, and the check runs once per
+#        invocation however many sync and regression rows share it.
 #   (G6) FCM DELIVERY — declared File-Change-Matrix ADDs vs the merged diff.
 #        Eleven fixture arms covering the verdict lattice, ONE non-synthetic
 #        historical replay against the release that motivated the family, and
@@ -87,6 +91,109 @@ set -euo pipefail
 #        FAIL) is meaningless without P7 (Forms A/B/X, all PASS), because a
 #        predicate that rejects everything satisfies P6 alone. Same for P9 and
 #        its truncated-token control.
+#  (G11) RECORD FORMAT + HEADER DIALECTS — the 0x1F parser-to-dispatcher
+#        delimiter (an empty AC or Expected field no longer shifts the record
+#        one position left), the widened method-column dialects, and the named
+#        ERRORs for an unindexable table and an empty Method cell. Seven
+#        mutation arms (G11-M).
+#  (G12) FD-0 (V7531-AC1 / V7531-AC2) — a method cell cannot read the record
+#        stream the executor iterates: a stdin reader is a named refusal, every
+#        indexed row emits, a stdin-reading child cannot drain the loop, and a
+#        loop that reads short is a named ERROR with a DEGRADED roll-up and an
+#        internal exit. A reachability arm measures, on the bash running this
+#        suite, that an exec'd child in the loop form sees no copy of the stream.
+#        Five mutation arms, one non-synthetic replay graded per criterion.
+#  (G13) NON-RETROACTIVITY (V6236-AC4) — a row this executor declines by design
+#        stays outside the exit-failing set. A plan whose every row declines (a
+#        refused tool, an identifier in the command position, no runnable
+#        command, a declared deferral in either spelling) exits 0, and no declined
+#        row reads FAIL or ERROR — asserted per row, never as "= SKIP", so a later
+#        verdict that stays non-failing keeps it green. One fixture row per
+#        historical SKIP shape, a non-synthetic replay graded per row, and three
+#        seeded failures, each proved to apply at exactly the sites it names: SKIP
+#        added to the exit predicate, the verb check disabled, and UNRUNNABLE added
+#        to the exit predicate.
+#  (G14) PREDICATE CLASS IS A READER ANNOTATION (V6180-AC5) — the executor grades
+#        a row from its method cell alone. No surface of it claims a class hint,
+#        the per-issue parser resolves no class value (the CIAC Predicate field
+#        and the header word stay), and every row grades identically with and
+#        without a Predicate class column: a row is routed away from the executor
+#        only by the declared-deferred form in its method cell. One seeded failure
+#        re-introduces a class read, proved to apply at exactly one site, and must
+#        move a row.
+#  (G15) A RUNNABLE PROBE IS EXECUTED, NEVER ROUTED BY PROSE (V6893-AC2/AC3/AC4,
+#        V6837-AC2, V7531-AC3) — a row whose designated command is a probe this
+#        executor runs is graded by that probe ahead of every keyword arm, whatever
+#        its prose says; a phrase inside a span led by an allowlisted verb is that
+#        command's pattern, never a declaration; a quoted operator character is
+#        literal. Rows with no runnable probe keep the keyword fallback,
+#        could-not-read stays ERROR beside a declared SKIP, and --help describes the
+#        dispatch and claims no class hint. Five seeded failures, each proved to
+#        apply at exactly its sites. G10's R-M2 is split in two for the same change.
+#  (G16) A METHOD NAMING SEVERAL COMMANDS IS GRADED ON ITS DESIGNATED COMMAND
+#        (V6837-AC4, V7531-CIAC6) — the designated command (the first allowlisted
+#        verb that carries an argument) runs against the comparator stated after
+#        it, and every other command the method names is reported as "did not run
+#        (<reason>)"; a row with a command that did not run never reads PASS, and
+#        takes the can't-run slot the executor binds, whose value the arms derive
+#        rather than pin. A bare verb is prose, the shared comparator vocabulary
+#        reads markdown emphasis around N and nothing wider, and an operand-less
+#        further command never runs, so no later row is lost. G12-5 reads the
+#        stdin-verb fixture's bare cat under the same bare-verb rule. Five seeded
+#        failures and seams, each proved to apply at exactly its sites.
+#  (G17) A METHOD THIS EXECUTOR CANNOT RUN IS UNRUNNABLE, AND A SCOPE ASSERTION RUNS
+#        NATIVELY (V6848-AC1..AC4) — UNRUNNABLE is a fifth verdict, never PASS and
+#        outside the exit predicate; a tool is named only from an invocation-shaped
+#        span, so a mention never reads UNRUNNABLE; a runnable probe beside a tool
+#        reads the can't-run slot and names both; a `git diff` scope assertion is
+#        graded natively against the release diff a test seam supplies, and every
+#        vacuous or mis-bound input reads UNRUNNABLE. RUNNABLE_VERBS is unchanged,
+#        armed red. One non-synthetic replay over a real commit's diff, and eight
+#        seeded failures, each proved to apply at exactly its sites.
+#  (G18) THE DEPLOY-CHECK ORACLE IS REACHED BY DECLARATION, NEVER BY PROSE
+#        (V6893-AC2/AC3/AC4, #6893's round 2; V6848-AC2 for the handlers' refusal) —
+#        a row takes deploy.sh --check's exit status only when its designated command
+#        IS that check, written as a backticked span. A prose word, a --check-<mode>
+#        run, a pipeline led by the invocation, another file named deploy.sh, or the
+#        check beside another command routes no row there; an integration keyword
+#        still comes first, and a runnable probe outranks the route. A declared row
+#        that also names another command reads the can't-run slot when the check
+#        passes and FAIL when it fails, and a designated command carrying shell syntax
+#        is UNRUNNABLE, naming the operator. Two temp stub roots (a check that exits 0
+#        and one that exits 1), and five seeded failures, each proved to apply at
+#        exactly its sites.
+#  (G19) NOT THIS RUNNER'S JOB IS A NAMED SKIP; COULD-NOT-EVALUATE STAYS ERROR; THE
+#        ROLL-UP STATES ITS POPULATION (V6854-AC1..AC4) — a row no family claims is
+#        inspected by the per-issue handler, so a method with no command reads the
+#        no-command SKIP and prose that merely opens with a verb never runs; ERROR is
+#        kept for a row the executor tried to evaluate and could not, read through one
+#        per-verb reader table (exit 1, operand, count, and whether exit 0 with no
+#        comparator is the claim); and the roll-up states the records its counters
+#        span, sets not-graded apart from could-not-evaluate, and shows every counted
+#        record in a table, a record with no issue value under (plan). Ten seeded
+#        failures, each proved to apply at exactly its sites.
+#  (G20) A DOCUMENTED-DECISION METHOD ON A PER-ISSUE ROW GRADES A NAMED SKIP
+#        (V6685-AC1..AC4) — a named read of a named surface, with no command this
+#        executor runs, is the declared-deferred SKIP when the method cell declares
+#        it (step 0) and the per-issue no-command SKIP when it does not (the
+#        classifier's residual); the cross-issue form keeps the integration family's
+#        documented-decision SKIP, unchanged. A genuinely malformed per-issue method is
+#        never a named SKIP on either route, and the padding the card names (a
+#        backticked test primary with no operand) is refused, never a PASS. The card's
+#        own v4.46 rows replay, read by issue and id together. Five seeded failures,
+#        each proved to apply at exactly its sites, and a route precondition that
+#        observes the residual-route control on its route before the mutation that
+#        depends on it is graded.
+#  (G21) THE CIAC AUTHORING LINT, AND WHAT A HANDLER READS FROM A SPAN IT CANNOT SPLIT
+#        OR THAT NO BACKTICK CLOSES (V6236-AC1) — --ciac-lint reads each cross-issue
+#        criterion as grading will and runs nothing: a control twin lints clean or
+#        declared with an evidence surface, a flag-set fixture carries one defect per
+#        entry, a regression fixture holds the shapes a shape-only lint read clean
+#        while the grader misgrades them, and a real plan replays. A designated command
+#        carrying an unterminated quote reads ERROR naming the quote, where a genuine
+#        operator stays UNRUNNABLE, and a command inside a span no backtick closes runs
+#        on no route; the lint reads both the way the handlers do. Seven seeded
+#        failures, each proved to apply at exactly its sites.
 #
 # Offline + deterministic: fixtures are committed under tests/fixtures/ and all
 # methods are fast local greps against the repo tree (no deploy.sh --check here —
@@ -250,8 +357,8 @@ cat > "$STUB_DIR/plan/p.md" <<'EOF'
 **#601 — deploy families**
 | AC | Predicate class | Verification method | Expected result |
 |---|---|---|---|
-| AC-1 | regression | run deploy.sh --check byte-diff regression against unchanged files | unchanged |
-| AC-2 | sync | source-to-deployed via deploy.sh --check | in-sync |
+| AC-1 | regression | run `deploy.sh --check` byte-diff regression against unchanged files | unchanged |
+| AC-2 | sync | source-to-deployed via `deploy.sh --check` | in-sync |
 EOF
 # Drift case: stub deploy exits 1.
 printf '#!/usr/bin/env bash\nexit 1\n' > "$STUB_DIR/core/deploy/deploy.sh"; chmod +x "$STUB_DIR/core/deploy/deploy.sh"
@@ -288,6 +395,12 @@ rm -rf "$STUB_DIR"
 # Each arm below carries a control that must move the other way.
 # ---------------------------------------------------------------------------
 eval "$(sed -n '/^RUNNABLE_VERBS=/,/^}/p'      "$VERIFY")"
+# extract_command reads spans through method_spans, which asks span_invokes_tool;
+# extract_threshold reads the comparator vocabulary from the CMP_*_ALT constants.
+# Load all three first, or the arms below grade functions that cannot run.
+eval "$(sed -n '/^readonly CMP_[A-Z]*_ALT=/p'  "$VERIFY" | sed 's/^readonly //')"
+eval "$(sed -n '/^span_invokes_tool()/,/^}/p'  "$VERIFY")"
+eval "$(sed -n '/^method_spans()/,/^}/p'       "$VERIFY")"
 eval "$(sed -n '/^is_runnable_verb()/,/^}/p'   "$VERIFY")"
 eval "$(sed -n '/^looks_like_command()/,/^}/p' "$VERIFY")"
 eval "$(sed -n '/^extract_command()/,/^}/p'    "$VERIFY")"
@@ -832,8 +945,11 @@ case "$(observed_of "$J_CNT" AC-5)" in
 esac
 [ "$RC_CNT" -eq 3 ] && ok "G8-7 the count ERROR reaches the exit predicate (exit 3)" || bad "G8-7 expected exit 3, got $RC_CNT"
 
-# --- Unit arms on the shared reader, extracted from the shipped file. ---
+# --- Unit arms on the shared reader, extracted from the shipped file. The reader
+#     reads what each verb's status and output mean from the reader table, so the
+#     table is extracted with it. ---
 eval "$(sed -n '/^tokenize_cmd()/,/^}/p'      "$VERIFY")"
+eval "$(sed -n '/^reader_rule()/,/^}/p'       "$VERIFY")"
 eval "$(sed -n '/^count_mode_cmd()/,/^}/p'    "$VERIFY")"
 eval "$(sed -n '/^count_from_output()/,/^}/p' "$VERIFY")"
 
@@ -1448,9 +1564,9 @@ PI_HITS="$(grep -c 'VERDICT_PASS' <<<"$PI_BODY" || true)"
   || bad "R-1b verdicts differ: AC-1 '$(verdict_of "$J_HJ" AC-1)' vs AC-2 '$(verdict_of "$J_HJ" AC-2)'"
 
 # R-2 THE CARD AC. A method carrying `exercise`, no fail-word and no executable
-# probe must not report PASS. It reaches `unclassified`, which is an ERROR: this
-# executor genuinely cannot tell what the row is asking for, and saying so is
-# the honest answer. Never a fabricated green.
+# probe must not report PASS. It reaches the classifier's residual and grades SKIP
+# no-executable-command-in-method: the executor read the method and found nothing it
+# runs. Never a fabricated green.
 [ "$(verdict_of "$J_HJ" AC-3)" != "PASS" ] \
   && ok "R-2 an 'exercise' method with no fail-word and no probe is NOT PASS (got '$(verdict_of "$J_HJ" AC-3)')" \
   || bad "R-2 an 'exercise' method still reports PASS — the fabricated-verdict path is open"
@@ -1466,7 +1582,7 @@ PI_HITS="$(grep -c 'VERDICT_PASS' <<<"$PI_BODY" || true)"
   && ok "R-3b a declared suite-fail still FAILs — the floor does not swallow a recorded failure" \
   || bad "R-3b AC-5 expected runtime-suite/FAIL, got '$(family_of "$J_HJ" AC-5)'/'$(verdict_of "$J_HJ" AC-5)'"
 [ "$RC_HJ" -eq 3 ] \
-  && ok "R-3c the FAIL and the ERROR reach the exit predicate (exit 3)" \
+  && ok "R-3c the FAIL reaches the exit predicate (exit 3)" \
   || bad "R-3c expected exit 3 from the hijack fixture, got $RC_HJ"
 
 # R-M1 — SEEDED FAILURE on the floor. Raise it and R-2 must flip.
@@ -1476,15 +1592,28 @@ vrp_run "$MUT_PATH" "$FIX_HIJACK"; JM_HJ="$VRP_JSON"
   && ok "R-M1 mutation detected — with the floor raised the declared suite-skip fabricates a PASS again" \
   || bad "R-M1 SURVIVED — AC-4 is '$(verdict_of "$JM_HJ" AC-4)' with the floor raised; R-3 observes nothing"
 
-# R-M2 — SEEDED FAILURE on the retired route. Re-insert the prose keyword arm
-# ABOVE the executable arm, which is exactly the shape that stole the row, and
-# R-1 must flip. Position is the defect, so the mutation restores the position.
-m6383 g10-m3-keyword-route-restored 's#^    \*grep\*#    *runtime*suite*|*test-run*|*dispatch*the*runtime*|*suite-*|*exercise*) echo "runtime-suite"; return ;;\
+# R-M2 — SEEDED FAILURES on the retired route, in two layers, because a runnable
+# probe is now resolved ahead of every keyword arm (classify_family step 1).
+# R-M2a re-inserts the prose keyword arm ALONE, above the executable arm, which is
+# exactly the shape that stole the row: AC-2 must STAY per-issue, because the probe
+# step resolves it first — the new layer holds. R-M2b re-inserts the arm AND
+# removes the probe step: AC-2 must be stolen again while AC-1 is not — the
+# original detection, so R-1 still observes the keyword arm's position. Position
+# is the defect, so each mutation restores the position.
+G10_PROSE_ROUTE='s#^    \*grep\*#    *runtime*suite*|*test-run*|*dispatch*the*runtime*|*suite-*|*exercise*) echo "runtime-suite"; return ;;\
     *grep*#'
+m6383 g10-m3a-keyword-route-only "$G10_PROSE_ROUTE"
+vrp_run "$MUT_PATH" "$FIX_HIJACK"; JM_HJ2A="$VRP_JSON"
+if mutant_ran "R-M2a"; then
+  [ "$(family_of "$JM_HJ2A" AC-2)" = "per-issue" ] \
+    && ok "R-M2a with only the prose keyword route restored, AC-2 stays per-issue — the probe step resolves it first" \
+    || bad "R-M2a AC-2 reads '$(family_of "$JM_HJ2A" AC-2)' with only the prose route restored — a keyword still steals a runnable probe"
+fi
+m6383 g10-m3-keyword-route-restored "$G10_PROSE_ROUTE" 's/^  if \[ -n "\$probe" \]; then echo "per-issue"; return; fi$/  :/'
 vrp_run "$MUT_PATH" "$FIX_HIJACK"; JM_HJ2="$VRP_JSON"
 [ "$(family_of "$JM_HJ2" AC-1)" = "per-issue" ] && [ "$(family_of "$JM_HJ2" AC-2)" = "runtime-suite" ] \
-  && ok "R-M2 mutation detected — with the keyword route restored above the executable arm, AC-2 is stolen again while AC-1 is not" \
-  || bad "R-M2 SURVIVED — AC-1 '$(family_of "$JM_HJ2" AC-1)' / AC-2 '$(family_of "$JM_HJ2" AC-2)'; R-1 observes nothing"
+  && ok "R-M2b mutation detected — with the keyword route restored above the executable arm and the probe step removed, AC-2 is stolen again while AC-1 is not" \
+  || bad "R-M2b SURVIVED — AC-1 '$(family_of "$JM_HJ2" AC-1)' / AC-2 '$(family_of "$JM_HJ2" AC-2)'; R-1 observes nothing"
 
 # --- D: the roll-up denominator ---------------------------------------------
 vrp_run "$VERIFY" "$FIX_NOTABLE"; J_NT="$VRP_JSON"; RC_NT="$VRP_RC"
@@ -1511,7 +1640,7 @@ set -e
 grep -q 'no per-issue verification table found' <<<"$MD_NT" \
   && ok "D-2 the md roll-up STATES the empty denominator rather than rendering a clean-looking zero" \
   || bad "D-2 the md roll-up does not name the empty denominator: '$(tail -1 <<<"$MD_NT")'"
-grep -qE 'over 4 per-issue row\(s\)' <<<"$("$VERIFY" --no-color --format=md --root "$REPO_ROOT" "$REPO_ROOT/$FIX_TRAP" 2>/dev/null)" \
+grep -qF '(4 per-issue row(s), ' <<<"$("$VERIFY" --no-color --format=md --root "$REPO_ROOT" "$REPO_ROOT/$FIX_TRAP" 2>/dev/null)" \
   && ok "D-2b CONTROL — a plan that DOES carry a table renders its row count instead of the empty-denominator statement" \
   || bad "D-2b the with-table md roll-up does not carry its row count"
 
@@ -1816,6 +1945,2643 @@ vrp_run "$MUT_PATH" "$FIX_CIACPAR"; JM_CP="$VRP_JSON"
   || bad "G11-M7 SURVIVED — CIAC record count unchanged ($(grep -c '"id":"CIAC-' <<<"$JM_CP" || true)); the -F cascade is untested"
 
 rm -rf "$MUTD4"
+
+# ===========================================================================
+# G12 — FD-0 (V7531-AC1 / V7531-AC2): a method cell cannot read the record
+#       stream the executor iterates.
+#
+# Both dispatch loops in main() iterate a here-string on fd 0. A method with no
+# file operand read the loop's OWN remaining records: every row after it
+# vanished with no record while the roll-up still reported the parser's full
+# denominator, and the cell itself was graded on the records it swallowed. A
+# stdin-reading child outside the verb route did the same and left a clean exit.
+# Every arm below carries its criterion label, and every guard is paired with a
+# seeded failure that must flip it.
+# ===========================================================================
+echo
+echo "G12 — FD-0: a method cell cannot read the record stream (V7531-AC1 / V7531-AC2)"
+
+FIX_DRAIN="release/tools/tests/fixtures/verify-plan-stdin-drain.md"
+FIX_VERBS="release/tools/tests/fixtures/verify-plan-stdin-verbs.md"
+
+# ciacs_of <json> — emitted CIAC-N records. CIAC-STREAM is deliberately NOT one:
+# the tripwire's own record must never be counted as a recovered row.
+# strunc_of <json> — completeness records the FD-0 tripwire emitted.
+ciacs_of()  { grep -c '"id":"CIAC-[0-9]' <<<"$1" || true; }
+strunc_of() { grep -c '"family":"stream-truncated"' <<<"$1" || true; }
+
+# g12_refused <json> <id> <reason> — the row is an ERROR, its observed value
+# names the reason, and it reads as a REFUSAL (the command never ran) rather than
+# through the matcher-outcome text a command that ran and failed carries.
+g12_refused() {
+  local obs; obs="$(observed_of "$1" "$2")"
+  [ "$(verdict_of "$1" "$2")" = ERROR ] || return 1
+  case "$obs" in
+    "$3 (not run — "*) : ;;
+    # A method naming several commands lists them, and its designated command's
+    # refusal is named in that list with the same remedy (the executor's METHOD
+    # LIMBS): still a refusal, never a count.
+    "limbs run 1 of "*"ERROR $3 (not run — "*) : ;;
+    *) return 1 ;;
+  esac
+  case "$obs" in *"the matcher produced no readable result"*) return 1 ;; esac
+  return 0
+}
+
+# The detector, extracted from the shipped file (tokenize_cmd was loaded in G8).
+eval "$(sed -n '/^stdin_input_refusal()/,/^}/p' "$VERIFY")"
+eval "$(sed -n '/^reads_stdin_cmd()/,/^}/p'     "$VERIFY")"
+G12_DET=0
+if type reads_stdin_cmd >/dev/null 2>&1 && type stdin_input_refusal >/dev/null 2>&1; then G12_DET=1; fi
+
+# --- G12-0: SENSITIVITY — the detector exists, and the fixture still plants. ---
+if [ "$G12_DET" -eq 1 ] && [ "$(reads_stdin_cmd 'grep -c -F "AC-"' || true)" = "stdin-reader:grep" ]; then
+  ok "G12-0 V7531-AC1 SENSITIVITY — the detector is defined and names an operand-less grep (stdin-reader:grep)"
+else
+  bad "G12-0 V7531-AC1 reads_stdin_cmd is undefined or does not name an operand-less grep; every arm that depends on it grades nothing"
+fi
+G12_PLANTED="$(grep -c -F 'grep -c -F "AC-"' "$REPO_ROOT/$FIX_DRAIN" || true)"
+[ "${G12_PLANTED:-0}" -ge 1 ] \
+  && ok "G12-0b V7531-AC2 the drain fixture still carries its planted operand-less grep (without it every arm below is vacuous)" \
+  || bad "G12-0b V7531-AC2 the drain fixture no longer carries its planted cell; the arms below would grade nothing"
+
+# --- G12-1..G12-3: the drain fixture (V7531-AC2). ---
+vrp_run "$VERIFY" "$FIX_DRAIN"; J_DRAIN="$VRP_JSON"; RC_DRAIN="$VRP_RC"
+[ "$(rows_of "$J_DRAIN")" = "6" ] && [ "$(acs_of "$J_DRAIN")" = "6" ] && [ "$(ciacs_of "$J_DRAIN")" = "3" ] \
+  && ok "G12-1 V7531-AC2 every indexed row emits past the planted cells — 6 of 6 per-issue records and 3 of 3 CIACs" \
+  || bad "G12-1 V7531-AC2 indexed=$(rows_of "$J_DRAIN") emitted AC=$(acs_of "$J_DRAIN") CIAC=$(ciacs_of "$J_DRAIN") (expected 6/6/3): a planted cell drained its loop"
+if g12_refused "$J_DRAIN" AC-3 "stdin-reader:grep" && g12_refused "$J_DRAIN" CIAC-2 "stdin-reader:grep" \
+   && case "$(observed_of "$J_DRAIN" AC-3)" in *"a file named only in the prose is not read"*) true ;; *) false ;; esac; then
+  ok "G12-2 V7531-AC2 each planted cell is a NAMED ERROR rendered as a refusal with its remedy — never a count over the records it swallowed, nor over the null device"
+else
+  bad "G12-2 V7531-AC2 AC-3 '$(verdict_of "$J_DRAIN" AC-3)' / '$(observed_of "$J_DRAIN" AC-3)' — CIAC-2 '$(verdict_of "$J_DRAIN" CIAC-2)' / '$(observed_of "$J_DRAIN" CIAC-2)'"
+fi
+G12_CTL=0
+for g12id in AC-1 AC-2 AC-4 AC-5 AC-6 CIAC-1 CIAC-3; do
+  if [ "$(verdict_of "$J_DRAIN" "$g12id")" = PASS ]; then G12_CTL=$((G12_CTL + 1)); fi
+done
+[ "$G12_CTL" -eq 7 ] && [ "$(strunc_of "$J_DRAIN")" = "0" ] && [ "$RC_DRAIN" -eq 3 ] \
+  && ok "G12-3 V7531-AC2 CONTROLS — all 7 control rows PASS, no completeness record fires, and the named ERROR reaches exit 3" \
+  || bad "G12-3 V7531-AC2 controls PASS=$G12_CTL of 7, stream-truncated=$(strunc_of "$J_DRAIN"), rc=$RC_DRAIN (expected 7/0/3)"
+
+# --- G12-4..G12-6: every stdin-capable verb, and each refusal class (V7531-AC1). ---
+vrp_run "$VERIFY" "$FIX_VERBS"; J_VERBS="$VRP_JSON"; RC_VERBS="$VRP_RC"
+[ "$(acs_of "$J_VERBS")" = "15" ] && [ "$(ciacs_of "$J_VERBS")" = "7" ] \
+  && ok "G12-4 V7531-AC1 every row after each planted reader emits, in both loops — 15 of 15 per-issue records and 7 of 7 CIACs" \
+  || bad "G12-4 V7531-AC1 emitted AC=$(acs_of "$J_VERBS") CIAC=$(ciacs_of "$J_VERBS") (expected 15 and 7)"
+G12_REF=0
+for g12pair in "AC-2 stdin-reader:grep" "AC-4 stdin-reader:head" "AC-6 stdin-reader:wc" \
+               "AC-10 stdin-reader:grep" "AC-12 device-operand:/dev/stdin" "AC-14 unmodelled-option:--not-an-option" \
+               "CIAC-2 stdin-reader:grep" "CIAC-4 stdin-reader:head" "CIAC-6 stdin-reader:cat"; do
+  g12id="${g12pair%% *}"; g12why="${g12pair#* }"
+  if g12_refused "$J_VERBS" "$g12id" "$g12why"; then G12_REF=$((G12_REF + 1))
+  else printf '       %s: %s / %s (wanted %s)\n' "$g12id" "$(verdict_of "$J_VERBS" "$g12id")" "$(observed_of "$J_VERBS" "$g12id")" "$g12why"; fi
+done
+[ "$G12_REF" -eq 9 ] \
+  && ok "G12-5 V7531-AC1 all 9 planted readers are NAMED refusals — grep, head, wc, cat, the stdin operand, a device path and an unmodelled option, in both loops" \
+  || bad "G12-5 V7531-AC1 only $G12_REF of 9 planted readers were refused with their reason"
+# AC-8 plants `cat` with no argument at all. A bare verb names a tool in prose and is
+# never the command (the executor's METHOD LIMBS rule), so the row names no command:
+# a named SKIP, and nothing reads stdin. The detector's own zero-argument case stays
+# pinned in G12-13, and cat's refusal in a dispatch loop in CIAC-6 above.
+[ "$(verdict_of "$J_VERBS" AC-8)" = SKIP ] && [ "$(observed_of "$J_VERBS" AC-8)" = "no-executable-command-in-method" ] \
+  && ok "G12-5b V7531-AC1 a bare cat is prose, not a stdin reader: AC-8 names no command (SKIP no-executable-command-in-method)" \
+  || bad "G12-5b V7531-AC1 AC-8 '$(verdict_of "$J_VERBS" AC-8)' / '$(observed_of "$J_VERBS" AC-8)' (expected SKIP no-executable-command-in-method)"
+G12_CTL=0
+for g12id in AC-1 AC-3 AC-5 AC-7 AC-9 AC-11 AC-13 AC-15 CIAC-1 CIAC-3 CIAC-5 CIAC-7; do
+  if [ "$(verdict_of "$J_VERBS" "$g12id")" = PASS ]; then G12_CTL=$((G12_CTL + 1)); fi
+done
+[ "$G12_CTL" -eq 12 ] && [ "$(strunc_of "$J_VERBS")" = "0" ] && [ "$RC_VERBS" -eq 3 ] \
+  && ok "G12-6 V7531-AC1 CONTROLS — all 12 control rows PASS, no completeness record fires, exit 3" \
+  || bad "G12-6 V7531-AC1 controls PASS=$G12_CTL of 12, stream-truncated=$(strunc_of "$J_VERBS"), rc=$RC_VERBS (expected 12/0/3)"
+
+# --- G12-7: CONTROL — a command that RAN and failed keeps the matcher text. ---
+# The refusal's own rendering must not leak onto a matcher that genuinely ran.
+case "$(observed_of "$J_CNT" AC-5)" in
+  "count-unreadable:matcher-exit-2 (the matcher produced no readable result; this is NOT a zero)")
+    ok "G12-7 V7531-AC2 CONTROL — a matcher that ran and exited 2 keeps the matcher-outcome text; only a command that never ran reads as a refusal" ;;
+  *) bad "G12-7 V7531-AC2 the matcher-outcome text changed for a command that ran: '$(observed_of "$J_CNT" AC-5)'" ;;
+esac
+
+# --- G12-8..G12-10: the CHILD route (V7531-AC1). ---
+# A deploy --check child that READS ITS STDIN, ahead of three rows. Before the
+# fix it drained the loop and the run still exited 0: a silent green.
+G12_STUB="$(mktemp -d -t verify-plan-7531-stub.XXXXXX)"
+mkdir -p "$G12_STUB/core/deploy" "$G12_STUB/release/tools" "$G12_STUB/plan"
+cp "$VERIFY" "$G12_STUB/release/tools/"
+G12_RAN="$G12_STUB/deploy-child-ran"
+printf '#!/usr/bin/env bash\ncat >/dev/null\n: > "%s"\nexit 0\n' "$G12_RAN" > "$G12_STUB/core/deploy/deploy.sh"
+chmod +x "$G12_STUB/core/deploy/deploy.sh"
+# The sync row names its invocation IN BACKTICKS. That keeps its declared route
+# to the deploy-check oracle under the keyword-precedence carve-out, so the row
+# still spawns the child; written in prose, a later routing change would leave
+# this arm, and the mutation paired with it, vacuous.
+cat > "$G12_STUB/plan/p.md" <<'EOF'
+# stub plan — a stdin-reading deploy child ahead of three rows
+## Verification Plan
+**#602 — the child route**
+| AC | Predicate class | Verification method | Expected result |
+|---|---|---|---|
+| AC-1 | sync | source-to-deployed via `deploy.sh --check` | in-sync |
+| AC-2 | file-path+state | `test -f release/tools/verify-release-plan.sh` | control |
+| AC-3 | file-path+state | `test -f release/tools/verify-release-plan.sh` | control |
+| AC-4 | file-path+state | `test -f release/tools/verify-release-plan.sh` | control |
+EOF
+# g12_child <tool> [<format>] — run a tool on the child-route plan inside the stub
+# root; sets VRP_JSON / VRP_RC in the CURRENT shell, for the reason vrp_run does.
+g12_child() {
+  rm -f "$G12_RAN"
+  set +e
+  VRP_JSON="$("$1" --no-color --format="${2:-json}" --root "$G12_STUB" "$G12_STUB/plan/p.md" 2>/dev/null)"
+  VRP_RC=$?
+  set -e
+}
+g12_child "$G12_STUB/release/tools/verify-release-plan.sh"; J_CHILD="$VRP_JSON"; RC_CHILD="$VRP_RC"
+[ -f "$G12_RAN" ] && [ "$(family_of "$J_CHILD" AC-1)" = "sync" ] \
+  && ok "G12-8 V7531-AC1 CHILD-ROUTE SENSITIVITY — the backticked sync row reached the deploy-check oracle and its stdin-reading child RAN" \
+  || bad "G12-8 V7531-AC1 the deploy child never ran (AC-1 family '$(family_of "$J_CHILD" AC-1)'); G12-9 would be vacuous"
+[ "$(acs_of "$J_CHILD")" = "4" ] && [ "$(strunc_of "$J_CHILD")" = "0" ] && [ "$RC_CHILD" -eq 0 ] \
+  && ok "G12-9 V7531-AC1 a stdin-reading child OUTSIDE the verb route cannot drain the loop — 4 of 4 rows, clean exit 0" \
+  || bad "G12-9 V7531-AC1 child route emitted AC=$(acs_of "$J_CHILD") stream-truncated=$(strunc_of "$J_CHILD") rc=$RC_CHILD (expected 4/0/0)"
+grep -q -F '"stream_state": "fetched"' <<<"$J_CHILD" \
+  && ok "G12-10 V7531-AC1 a complete stream says so — the JSON roll-up reports stream_state fetched" \
+  || bad "G12-10 V7531-AC1 the JSON roll-up does not report stream_state fetched on a complete stream"
+
+# --- G12-11/G12-12: REACHABILITY, measured on the bash running this suite (V7531-AC1). ---
+# The FD-0 rule relies on bash keeping its saved copy of fd 0 close-on-exec while
+# the loop body is redirected. That is a property of the bash, not of this file,
+# so it is MEASURED here — on CI, on the runner's bash — rather than assumed per
+# version. An exec'd child lists its own descriptors inside the executor's loop
+# form and outside it; a descriptor the loop adds is a copy the child could read.
+G12_LOOPS="$(grep -c -F '} </dev/null; done <<< "$per_issue_records"' "$VERIFY" || true)"
+G12_LOOPS="$G12_LOOPS/$(grep -c -F '} </dev/null; done <<< "$ciac_records"' "$VERIFY" || true)"
+[ "$G12_LOOPS" = "1/1" ] \
+  && ok "G12-11 V7531-AC1 both dispatch loops carry the FD-0 form the arm below measures" \
+  || bad "G12-11 V7531-AC1 the dispatch loops do not carry the FD-0 form (per-issue/CIAC = $G12_LOOPS, expected 1/1)"
+g12_fds() { ls /dev/fd 2>/dev/null | tr '\n' ' '; }
+g12_extra() {   # <baseline set> <observed set> -> descriptors observed but not in the baseline
+  local base=" $1 " fd out=""
+  for fd in $2; do case "$base" in *" $fd "*) : ;; *) out="$out $fd" ;; esac; done
+  printf '%s' "$out"
+}
+G12_MK="R$$K"   # built at run time, so this file's own text can never match it
+G12_RECS="$(printf '%s-1\n%s-2\n%s-3\n%s-4' "$G12_MK" "$G12_MK" "$G12_MK" "$G12_MK")"
+G12_BASE="$(g12_fds)"
+# SUBJECT — the executor's loop form.
+G12_N=0; G12_SEEN=""
+while IFS= read -r _g12rec; do {
+  G12_N=$((G12_N + 1))
+  if [ -z "$G12_SEEN" ]; then G12_SEEN="$(g12_fds)"; fi
+} </dev/null; done <<< "$G12_RECS"
+G12_XTRA="$(g12_extra "$G12_BASE" "$G12_SEEN")"
+# SENSITIVITY — the same loop with one explicitly INHERITED copy of the stream.
+G12_SXTRA=""; G12_SREACH=0
+while IFS= read -r _g12rec; do {
+  if [ -z "$G12_SXTRA" ]; then
+    G12_SXTRA="$(g12_extra "$G12_BASE" "$(g12_fds)")"
+    for g12fd in $G12_SXTRA; do
+      g12hits="$(cat "/dev/fd/$g12fd" 2>/dev/null | grep -c "$G12_MK" || true)"
+      G12_SREACH=$((G12_SREACH + ${g12hits:-0}))
+    done
+  fi
+} 9<&0 </dev/null; done <<< "$G12_RECS"
+if [ -z "$G12_XTRA" ] && [ "$G12_N" -eq 4 ]; then
+  ok "G12-12 V7531-AC1 REACHABILITY (bash $BASH_VERSION) — an exec'd child inside the FD-0 loop form sees only its baseline descriptors [$G12_BASE], and the loop read 4 of 4"
+else
+  bad "G12-12 V7531-AC1 REACHABILITY (bash $BASH_VERSION) — the child sees extra descriptor(s) [$G12_XTRA] and the loop read $G12_N of 4: this bash leaves an inheritable copy of the stream"
+fi
+if [ -n "$G12_SXTRA" ] && [ "$G12_SREACH" -ge 1 ]; then
+  ok "G12-12b V7531-AC1 REACHABILITY SENSITIVITY — the same probe sees an inherited copy [$G12_SXTRA] and reads $G12_SREACH record(s) through it, so an empty result above is a real absence"
+else
+  bad "G12-12b V7531-AC1 the probe did not detect a deliberately inherited copy (extra [$G12_SXTRA], reach $G12_SREACH); G12-12 is a broken probe"
+fi
+
+# --- G12-13..G12-15: the detector, unit by unit (V7531-AC1 / V7531-AC2). ---
+# THE MODEL IS CLOSED, so both directions are asserted: every must-flag command is
+# refused with its reason, and no must-pass command is refused. A detector that
+# refused everything would satisfy the first table alone.
+G12_MUST_FLAG="$(cat <<'EOF'
+stdin-reader:grep %% grep -c -F "AC-"
+stdin-reader:grep %% grep -m 1 x
+stdin-reader:grep %% grep -c -m1 x
+stdin-reader:grep %% grep -ec
+stdin-reader:grep %% grep -c -e x
+stdin-reader:grep %% grep -c -f patterns.txt
+stdin-reader:grep %% grep -c -f - release/tools/verify-release-plan.sh
+stdin-reader:grep %% grep -c x -
+stdin-reader:grep %% grep -c -- x
+stdin-reader:grep %% grep -c --regexp x
+stdin-reader:grep %% grep -c --regexp=x
+stdin-reader:grep %% grep -c --max-count 1 x
+stdin-reader:grep %% grep -c --file=- release/tools/verify-release-plan.sh
+stdin-reader:grep %% grep -c --exclude-from=- x release
+stdin-reader:grep %% grep -c -A 2 x
+stdin-reader:grep %% grep -c --include=*.md x
+stdin-reader:grep %% grep -c --label L x
+stdin-reader:head %% head -n 1
+stdin-reader:head %% head -5
+stdin-reader:head %% head
+stdin-reader:wc %% wc -l
+stdin-reader:wc %% wc
+stdin-reader:cat %% cat
+stdin-reader:cat %% cat -u
+stdin-reader:cat %% cat -
+device-operand:/dev/stdin %% grep -c x /dev/stdin
+device-operand:/dev/fd/0 %% grep -c x /dev/fd/0
+device-operand:/dev/fd/3 %% cat /dev/fd/3
+device-operand://dev/stdin %% cat //dev/stdin
+device-operand:/dev//stdin %% cat /dev//stdin
+device-operand:/proc/self/fd/0 %% wc -l /proc/self/fd/0
+device-operand:/dev/zero %% head -n 1 /dev/zero
+device-operand:/dev/stdin %% grep -c -f /dev/stdin release/tools/verify-release-plan.sh
+device-operand:/dev/fd/0 %% grep -c --file=/dev/fd/0 release/tools/verify-release-plan.sh
+device-operand:/dev/stdin %% grep -c --exclude-from /dev/stdin x release
+unmodelled-option:--not-an-option %% grep -c --not-an-option x release/tools/verify-release-plan.sh
+unmodelled-option:-K %% grep -c -K x release/tools/verify-release-plan.sh
+unmodelled-option:-K %% grep -cK x release/tools/verify-release-plan.sh
+unmodelled-option:--context %% grep -c --context 1 x release/tools/verify-release-plan.sh
+unmodelled-option:-q %% head -q release/tools/verify-release-plan.sh
+unmodelled-option:-A %% cat -A release/tools/verify-release-plan.sh
+unmodelled-option:--lines %% wc --lines release/tools/verify-release-plan.sh
+unmodelled-option:--bytes %% head --bytes 5 release/tools/verify-release-plan.sh
+EOF
+)"
+G12_MUST_PASS="$(cat <<'EOF'
+grep -c -F "AC-" release/tools/verify-release-plan.sh
+grep -m 1 x release/tools/verify-release-plan.sh
+grep -c -e x release/tools/verify-release-plan.sh
+grep -c -e x -e y release/tools/verify-release-plan.sh
+grep -c -f patterns.txt release/tools/verify-release-plan.sh
+grep -r -c x
+grep -rc x
+grep -R -c x
+grep -c -d recurse x
+grep -c -drecurse x
+grep -c --directories=recurse x
+grep -c --directories recurse x
+grep -c --recursive x
+grep
+grep -c
+grep -c -e
+grep -c -- -x release/tools/verify-release-plan.sh
+grep -c --include=*.md -r x release
+grep -c --exclude-dir=ADRs -r x release
+grep --count x release/tools/verify-release-plan.sh
+grep -c --context=1 x release/tools/verify-release-plan.sh
+grep -c --color x release/tools/verify-release-plan.sh
+grep -c --color=never x release/tools/verify-release-plan.sh
+grep -c -5 x release/tools/verify-release-plan.sh
+grep -c -A 2 x release/tools/verify-release-plan.sh
+grep -c -B2 x release/tools/verify-release-plan.sh
+grep -c -i -w -v x release/tools/verify-release-plan.sh
+grep -c x release/tools/verify-release-plan.sh release/tools/claim-version.sh
+grep -c x dev/stdin
+grep -c x release/dev-notes.md
+grep -n "Author-association trust boundary" release/governance/release-process.md
+grep -rn "no review comments arrive" --include="*.md" --exclude-dir=ADRs --exclude-dir=releases core/ release/
+head -n 1 release/tools/verify-release-plan.sh
+head -n1 release/tools/verify-release-plan.sh
+head -5 release/tools/verify-release-plan.sh
+head -c 10 release/tools/verify-release-plan.sh
+wc -l release/tools/verify-release-plan.sh
+wc -L release/tools/verify-release-plan.sh
+cat release/tools/verify-release-plan.sh
+cat -n release/tools/verify-release-plan.sh
+test -f /dev/null
+test -f release/tools/verify-release-plan.sh
+ls /dev/fd
+ls release/ADRs/ADR-076-*
+EOF
+)"
+if [ "$G12_DET" -eq 1 ]; then
+  G12_FN=0; G12_FMISS=0
+  while IFS= read -r g12line; do
+    [ -n "$g12line" ] || continue
+    g12why="${g12line%% %% *}"; g12cmd="${g12line#* %% }"
+    G12_FN=$((G12_FN + 1))
+    if g12got="$(reads_stdin_cmd "$g12cmd")" && [ "$g12got" = "$g12why" ]; then :; else
+      G12_FMISS=$((G12_FMISS + 1)); printf '       must-flag MISS: [%s] got [%s] want [%s]\n' "$g12cmd" "${g12got:-}" "$g12why"
+    fi
+  done <<< "$G12_MUST_FLAG"
+  [ "$G12_FMISS" -eq 0 ] && [ "$G12_FN" -eq 43 ] \
+    && ok "G12-13 V7531-AC1 UNIT — all $G12_FN must-flag commands are refused, each with its reason (stdin-reader / device-operand / unmodelled-option)" \
+    || bad "G12-13 V7531-AC1 UNIT — $G12_FMISS of $G12_FN must-flag commands were missed or misnamed (expected 0 of 43)"
+  G12_PN=0; G12_PFP=0
+  while IFS= read -r g12cmd; do
+    [ -n "$g12cmd" ] || continue
+    G12_PN=$((G12_PN + 1))
+    if g12got="$(reads_stdin_cmd "$g12cmd")"; then
+      G12_PFP=$((G12_PFP + 1)); printf '       must-pass FALSE REFUSAL: [%s] -> [%s]\n' "$g12cmd" "$g12got"
+    fi
+  done <<< "$G12_MUST_PASS"
+  [ "$G12_PFP" -eq 0 ] && [ "$G12_PN" -eq 44 ] \
+    && ok "G12-14 V7531-AC1 UNIT SPECIFICITY — none of the $G12_PN must-pass commands is refused (a detector that refused everything fails here)" \
+    || bad "G12-14 V7531-AC1 UNIT — $G12_PFP of $G12_PN must-pass commands were refused (expected 0 of 44)"
+  [ "$(count_from_output 'grep -c -F "AC-"' '' 4 | cut -f2)" = "stdin-reader:grep" ] \
+    && ok "G12-15 V7531-AC2 the single exit-status reader names status 4 as the refusal it is (stdin-reader:grep), never as matcher-exit-4" \
+    || bad "G12-15 V7531-AC2 count_from_output reads status 4 as '$(count_from_output 'grep -c -F "AC-"' '' 4 | cut -f2)'"
+else
+  bad "G12-13 V7531-AC1 UNIT — reads_stdin_cmd is undefined; the must-flag table cannot run"
+  bad "G12-14 V7531-AC1 UNIT SPECIFICITY — reads_stdin_cmd is undefined; the must-pass table cannot run"
+  bad "G12-15 V7531-AC2 count_from_output's status-4 reading cannot be graded without the detector"
+fi
+
+# --- G12-R: NON-SYNTHETIC replay (V7531-AC2), graded PER CRITERION. ---
+# v3.65.1 is a live plan whose AC-3, AC-5 and AC-9 each name a grep with no file;
+# the first of them used to take every later row with it. The arm names those
+# three criteria instead of counting refusals, so a later change to how a row's
+# other limbs are graded cannot move it.
+REAL7531="release/releases/plans/v3.65.1_RELEASE_PLAN.md"
+if [ ! -f "$REPO_ROOT/$REAL7531" ]; then
+  bad "G12-R PRECONDITION — replay target absent: $REAL7531 (relocated or renamed? the arms below cannot grade)"
+else
+  # DENOMINATOR FIRST: a replay of a plan that no longer carries the shape is vacuous.
+  G12R_SHAPE="$(grep -c -F '`grep -n "unrequested"`' "$REPO_ROOT/$REAL7531" || true)"
+  if [ "${G12R_SHAPE:-0}" -lt 1 ]; then
+    bad "G12-R VACUOUS — the replay target no longer carries its operand-less grep; this arm asserts nothing"
+  else
+    vrp_run "$VERIFY" "$REAL7531"; J_R7531="$VRP_JSON"
+    printf '       replay: %s indexed=%s emitted=%s stream-truncated=%s\n' \
+      "$REAL7531" "$(rows_of "$J_R7531")" "$(acs_of "$J_R7531")" "$(strunc_of "$J_R7531")"
+    [ "$(rows_of "$J_R7531")" = "11" ] && [ "$(acs_of "$J_R7531")" = "11" ] && [ "$(strunc_of "$J_R7531")" = "0" ] \
+      && ok "G12-R V7531-AC2 NON-SYNTHETIC — every indexed row of a live plan emits (11 of 11), with no completeness record" \
+      || bad "G12-R V7531-AC2 v3.65.1 indexed=$(rows_of "$J_R7531") emitted=$(acs_of "$J_R7531") stream-truncated=$(strunc_of "$J_R7531") (expected 11/11/0)"
+    for g12id in AC-3 AC-5 AC-9; do
+      if g12_refused "$J_R7531" "$g12id" "stdin-reader:grep"; then
+        ok "G12-R V7531-AC2 v3.65.1 $g12id — its operand-less grep is a NAMED refusal (stdin-reader:grep)"
+      else
+        bad "G12-R V7531-AC2 v3.65.1 $g12id '$(verdict_of "$J_R7531" "$g12id")' / '$(observed_of "$J_R7531" "$g12id")' (expected ERROR stdin-reader:grep)"
+      fi
+    done
+  fi
+fi
+
+# ===========================================================================
+# G12-M — SEEDED FAILURES. Each reverts one FD-0 guard and names the answer its
+# paired arm must move to; each first proves the mutation took.
+# ===========================================================================
+MUTD5="$(mktemp -d -t verify-plan-7531-mut.XXXXXX)"
+m7531() {
+  local name="$1"; shift
+  local dst="$MUTD5/$name.sh" e
+  cp "$VERIFY" "$dst"
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  if cmp -s "$VERIFY" "$dst"; then
+    bad "$name — MUTATION DID NOT TAKE (mutant is byte-identical); the paired arm would pass vacuously"
+  else
+    ok "$name — mutation applied (mutant bytes differ from the shipped tool)"
+  fi
+}
+G12_UNREDIRECT_PI='s/\} <\/dev\/null; done <<< "\$per_issue_records"/}; done <<< "$per_issue_records"/'
+G12_UNREDIRECT_CI='s/\} <\/dev\/null; done <<< "\$ciac_records"/}; done <<< "$ciac_records"/'
+G12_UNREFUSE='s/if reads_stdin_cmd "\$cmd" >\/dev\/null; then return 4; fi/if false; then return 4; fi/'
+
+# M1 — the per-issue body redirect removed: the child route drains again, and the
+# TRIPWIRE must name it — a STREAM ERROR, a DEGRADED roll-up, exit 1 (not 3).
+m7531 g12-m1-per-issue-body-unredirected "$G12_UNREDIRECT_PI"
+g12_child "$MUT_PATH"; JM1="$VRP_JSON"; RCM1="$VRP_RC"
+case "$(observed_of "$JM1" STREAM)" in *"read 1 of 4 parsed per-issue records"*) G12M1_OBS=1 ;; *) G12M1_OBS=0 ;; esac
+[ "$(acs_of "$JM1")" = "1" ] && [ "$(field_by_id "$JM1" STREAM verdict)" = "ERROR" ] && [ "$G12M1_OBS" -eq 1 ] && [ "$RCM1" -eq 1 ] \
+  && ok "G12-M1 V7531-AC1 mutation detected — without the body redirect the child drains the loop (1 of 4) and the tripwire names it: a STREAM ERROR reading 'read 1 of 4', exit 1 (internal) rather than a silent green" \
+  || bad "G12-M1 V7531-AC1 emitted AC=$(acs_of "$JM1") STREAM '$(field_by_id "$JM1" STREAM verdict)' / '$(observed_of "$JM1" STREAM)' rc=$RCM1 (expected 1 / ERROR 'read 1 of 4' / 1)"
+grep -q -F '"stream_state": "truncated"' <<<"$JM1" \
+  && ok "G12-M1b V7531-AC1 the drained run's JSON roll-up reports stream_state truncated" \
+  || bad "G12-M1b V7531-AC1 the drained run's JSON roll-up does not report stream_state truncated"
+g12_child "$MUT_PATH" md; MDM1="$VRP_JSON"
+grep -q -F '**DEGRADED:** read 1 of 4 parsed per-issue records' <<<"$MDM1" \
+  && ok "G12-M1c V7531-AC1 the md roll-up carries the DEGRADED marker and 'read 1 of 4' — a partial measurement is annotated, never presented as a clean count" \
+  || bad "G12-M1c V7531-AC1 the md roll-up does not carry the DEGRADED marker: '$(grep -F 'Verdict roll-up' <<<"$MDM1" || true)'"
+
+# M2 — the refusal removed, the redirects kept: isolation alone holds (6 of 6),
+# but the planted cell PASSes on the null device. That grade-on-nothing false PASS
+# is what the refusal exists to close.
+m7531 g12-m2-refusal-removed "$G12_UNREFUSE"
+vrp_run "$MUT_PATH" "$FIX_DRAIN"; JM2="$VRP_JSON"
+if mutant_ran "G12-M2"; then
+  [ "$(acs_of "$JM2")" = "6" ] && [ "$(verdict_of "$JM2" AC-3)" = "PASS" ] && [ "$(observed_of "$JM2" AC-3)" = "count=0 (== 0)" ] \
+    && ok "G12-M2 V7531-AC2 mutation detected — without the refusal every row still emits (6 of 6) but the planted cell PASSes 'count=0 (== 0)' on the null device" \
+    || bad "G12-M2 V7531-AC2 emitted AC=$(acs_of "$JM2"), AC-3 '$(verdict_of "$JM2" AC-3)' / '$(observed_of "$JM2" AC-3)' (expected 6 and PASS 'count=0 (== 0)')"
+fi
+
+# M3 — the refusal AND both body redirects removed: the pre-fix shape. The
+# tripwire is then the only guard left, and it must fire on BOTH loops.
+m7531 g12-m3-refusal-and-both-redirects-removed "$G12_UNREFUSE" "$G12_UNREDIRECT_PI" "$G12_UNREDIRECT_CI"
+vrp_run "$MUT_PATH" "$FIX_DRAIN"; JM3="$VRP_JSON"; RCM3="$VRP_RC"
+if mutant_ran "G12-M3"; then
+  [ "$(acs_of "$JM3")" = "3" ] && [ "$(ciacs_of "$JM3")" = "2" ] && [ "$(strunc_of "$JM3")" = "2" ] && [ "$RCM3" -eq 1 ] \
+    && ok "G12-M3 V7531-AC2 mutation detected — in the pre-fix shape both loops lose rows again (3 of 6, 2 of 3), and the tripwire names both losses and exits 1" \
+    || bad "G12-M3 V7531-AC2 emitted AC=$(acs_of "$JM3") CIAC=$(ciacs_of "$JM3") stream-truncated=$(strunc_of "$JM3") rc=$RCM3 (expected 3/2/2/1)"
+fi
+
+# M4 — the refusal's own rendering removed: the planted cell falls back to the
+# matcher-outcome text, which asserts that a matcher ran. G12-2 must flip.
+m7531 g12-m4-refusal-rendered-as-matcher-outcome 's/^    stdin-reader:\*\)$/    stdin-reader-unrendered:*)/'
+vrp_run "$MUT_PATH" "$FIX_DRAIN"; JM4="$VRP_JSON"
+if mutant_ran "G12-M4"; then
+  case "$(observed_of "$JM4" AC-3)" in
+    "count-unreadable:stdin-reader:grep (the matcher produced no readable result"*)
+      ok "G12-M4 V7531-AC2 mutation detected — without its own rendering the refusal reads as a matcher that ran and failed, and G12-2 flips" ;;
+    *) bad "G12-M4 V7531-AC2 AC-3 observed '$(observed_of "$JM4" AC-3)' under the mutant; G12-2 observes nothing" ;;
+  esac
+fi
+
+# M5 — the device rule removed: a method naming /dev/stdin runs, reads the null
+# device and PASSes — the same false PASS, reached through a path rather than an
+# absent operand.
+m7531 g12-m5-device-rule-removed 's@case "\$p" in /dev\|/dev/\*\|/proc\|/proc/\*\)@case "$p" in /no-such-device-root/*)@'
+vrp_run "$MUT_PATH" "$FIX_VERBS"; JM5="$VRP_JSON"
+if mutant_ran "G12-M5"; then
+  [ "$(verdict_of "$JM5" AC-12)" = "PASS" ] && [ "$(observed_of "$JM5" AC-12)" = "count=0 (== 0)" ] \
+    && ok "G12-M5 V7531-AC1 mutation detected — without the device rule a method reading /dev/stdin PASSes 'count=0 (== 0)' on the null device" \
+    || bad "G12-M5 V7531-AC1 AC-12 '$(verdict_of "$JM5" AC-12)' / '$(observed_of "$JM5" AC-12)' under the mutant (expected PASS 'count=0 (== 0)')"
+fi
+
+rm -rf "$MUTD5" "$G12_STUB"
+
+# ===========================================================================
+# G13 — NON-RETROACTIVITY (V6236-AC4): a row this executor declines by design
+#       never joins the exit-failing set.
+#
+# Declining is not failing. A refused tool, an identifier in the command
+# position, a method with no runnable command and a declared deferral each say
+# that this executor is not the runner for the row, and every historical plan
+# that declined that way exits 0. A later change that renames or re-classes a
+# decline (a "cannot run here" verdict, say) must keep it outside main()'s
+# exit-failing set, or it turns those plans' exit 0 into 3: a fix that turns
+# every prior release's QC3.5 red is worse than the gap it closes. The fixture
+# carries one row per historical SKIP shape; the replay grades a live plan whose
+# five CIACs all decline. Both read PER ROW that no decline is FAIL or ERROR —
+# never "= SKIP", so a later verdict that stays non-failing keeps them green.
+# Each seeded failure is proved to apply at exactly the sites it names, then
+# must move its arm to a named answer.
+# ===========================================================================
+echo
+echo "G13 — non-retroactivity: a declined row never fails the plan (V6236-AC4)"
+
+FIX_HIST="release/tools/tests/fixtures/verify-plan-historical-skips.md"
+G13_AC="AC-1 AC-2 AC-3 AC-4 AC-5"
+G13_CIAC="CIAC-1 CIAC-2 CIAC-3 CIAC-4 CIAC-5"
+
+# g13_records <json> — every emitted record (each carries exactly one verdict field).
+# covs_of <json>     — the always-on families' coverage records.
+g13_records() { grep -c '"verdict":"' <<<"$1" || true; }
+covs_of()     { grep -c '"id":"[A-Z]*-COVERAGE"' <<<"$1" || true; }
+
+# g13_verdict / g13_observed <json> <id> — one field of one record, read from the
+# record's own LINE. verdict_of and observed_of isolate a record with `[^{}]*`, so
+# a record whose text carries a brace is invisible to them and reads as absent:
+# v4.43's CIAC-3 method quotes a set in braces. The JSON presenter writes one record
+# per line and escapes every quote inside a field, so the record's line and each
+# unescaped `"<field>":"` delimiter are unambiguous. A duplicated id yields its
+# first record.
+g13_verdict() {
+  local line v
+  line="$(grep -F "\"id\":\"$2\"" <<<"$1" || true)"
+  v="$(sed -n 's/.*"verdict":"\([A-Z]*\)".*/\1/p' <<<"$line")"
+  printf '%s' "${v%%$'\n'*}"
+}
+g13_observed() {
+  local line v
+  line="$(grep -F "\"id\":\"$2\"" <<<"$1" || true)"
+  v="$(sed -n 's/.*"observed":"\([^"]*\)".*/\1/p' <<<"$line")"
+  printf '%s' "${v%%$'\n'*}"
+}
+
+# g13_failing <json> <id>... — prints " id=verdict" for each named row that is
+# ABSENT or reads FAIL or ERROR, and nothing when every one is present and
+# non-failing. An absent row counts: a row that vanished did not stay clean.
+g13_failing() {
+  local json="$1" id v out=""
+  shift
+  for id in "$@"; do
+    v="$(g13_verdict "$json" "$id")"
+    case "$v" in ''|FAIL|ERROR) out="$out $id=${v:-absent}" ;; esac
+  done
+  printf '%s' "$out"
+}
+
+# --- G13-0: DENOMINATOR FIRST — the fixture still declares every declined row. ---
+G13_ROWS="$(grep -c -F '| AC-' "$REPO_ROOT/$FIX_HIST" || true)"
+G13_ENTRIES="$(grep -c -F '**CIAC-' "$REPO_ROOT/$FIX_HIST" || true)"
+[ "${G13_ROWS:-0}" -eq 5 ] && [ "${G13_ENTRIES:-0}" -eq 5 ] \
+  && ok "G13-0 V6236-AC4 the fixture still declares its 5 declined per-issue rows and 5 declined CIACs (without them every arm below is vacuous)" \
+  || bad "G13-0 V6236-AC4 the fixture declares ${G13_ROWS:-0} per-issue rows and ${G13_ENTRIES:-0} CIACs (expected 5 and 5); the arms below would grade nothing"
+
+# --- G13-1..G13-3: the fixture on the shipped tool (V6236-AC4). ---
+vrp_run "$VERIFY" "$FIX_HIST"; J_HIST="$VRP_JSON"; RC_HIST="$VRP_RC"
+printf '       g13 historical-skips: records=%s (AC %s, CIAC %s, coverage %s) PASS=%s FAIL=%s ERROR=%s SKIP=%s rc=%s\n' \
+  "$(g13_records "$J_HIST")" "$(acs_of "$J_HIST")" "$(ciacs_of "$J_HIST")" "$(covs_of "$J_HIST")" \
+  "$(count_verdict "$J_HIST" PASS)" "$(count_verdict "$J_HIST" FAIL)" "$(count_verdict "$J_HIST" ERROR)" \
+  "$(count_verdict "$J_HIST" SKIP)" "$RC_HIST"
+[ "$(g13_records "$J_HIST")" = "12" ] && [ "$(acs_of "$J_HIST")" = "5" ] && [ "$(ciacs_of "$J_HIST")" = "5" ] && [ "$(covs_of "$J_HIST")" = "2" ] \
+  && ok "G13-1 V6236-AC4 the fixture yields 12 records — 5 per-issue, 5 CIAC and the 2 always-on coverage records" \
+  || bad "G13-1 V6236-AC4 records=$(g13_records "$J_HIST") (AC $(acs_of "$J_HIST"), CIAC $(ciacs_of "$J_HIST"), coverage $(covs_of "$J_HIST")); expected 12 (5, 5, 2)"
+G13_BAD="$(g13_failing "$J_HIST" $G13_AC $G13_CIAC)"
+[ -z "$G13_BAD" ] && [ "$(count_verdict "$J_HIST" FAIL)" = "0" ] && [ "$(count_verdict "$J_HIST" ERROR)" = "0" ] \
+  && ok "G13-2 V6236-AC4 no declined row reads FAIL or ERROR — AC-1..AC-5 and CIAC-1..CIAC-5 each present and non-failing, and the record set carries 0 FAIL and 0 ERROR" \
+  || bad "G13-2 V6236-AC4 rows absent or failing:${G13_BAD:- none}; FAIL=$(count_verdict "$J_HIST" FAIL) ERROR=$(count_verdict "$J_HIST" ERROR) (expected 0 and 0)"
+[ "$RC_HIST" -eq 0 ] \
+  && ok "G13-3 V6236-AC4 a plan whose every row declines by design exits 0 — a decline stays outside the exit-failing set" \
+  || bad "G13-3 V6236-AC4 a plan whose every row declines exits $RC_HIST (expected 0): a decline reached the exit-failing set"
+
+# --- G13-R: NON-SYNTHETIC replay (V6236-AC4), graded PER ROW, never by exit code. ---
+# v4.43's five CIACs are the ones #6236 was filed from: three name a tool the
+# executor refuses and two carry no runnable command. The arm reads each row and
+# not the exit, because the plan's always-on families read the environment (the
+# delivery family cannot resolve a diff outside a repository), so the plan's exit
+# says nothing about its declines.
+REAL6236="release/releases/plans/v4/v4.43_RELEASE_PLAN.md"
+if [ ! -f "$REPO_ROOT/$REAL6236" ]; then
+  bad "G13-R V6236-AC4 PRECONDITION — replay target absent: $REAL6236 (relocated or renamed? the arm cannot grade)"
+else
+  # DENOMINATOR FIRST: a replay of a plan that no longer declares its CIACs is vacuous.
+  G13R_ENTRIES="$(grep -c -F '**CIAC-' "$REPO_ROOT/$REAL6236" || true)"
+  if [ "${G13R_ENTRIES:-0}" -lt 5 ]; then
+    bad "G13-R V6236-AC4 VACUOUS — the replay target declares ${G13R_ENTRIES:-0} bold CIAC entries (expected 5); this arm asserts nothing"
+  else
+    vrp_run "$VERIFY" "$REAL6236"; J_R6236="$VRP_JSON"
+    printf '       g13 replay: %s CIAC-1..CIAC-5 = %s %s %s %s %s (rc %s, not graded)\n' "$REAL6236" \
+      "$(g13_verdict "$J_R6236" CIAC-1)" "$(g13_verdict "$J_R6236" CIAC-2)" "$(g13_verdict "$J_R6236" CIAC-3)" \
+      "$(g13_verdict "$J_R6236" CIAC-4)" "$(g13_verdict "$J_R6236" CIAC-5)" "$VRP_RC"
+    for g13id in $G13_CIAC; do
+      if [ -z "$(g13_failing "$J_R6236" "$g13id")" ]; then
+        ok "G13-R V6236-AC4 NON-SYNTHETIC — v4.43 $g13id emits and declines without failing ($(g13_verdict "$J_R6236" "$g13id"))"
+      else
+        bad "G13-R V6236-AC4 v4.43 $g13id '$(g13_verdict "$J_R6236" "$g13id")' / '$(g13_observed "$J_R6236" "$g13id")' (expected present and neither FAIL nor ERROR)"
+      fi
+    done
+  fi
+fi
+
+# ===========================================================================
+# G13-M — SEEDED FAILURES. Each is proved to apply at EXACTLY the sites it names:
+# a sed that matches nothing leaves a byte-identical copy and a vacuous green, and
+# one that matches more than intended changes something else as well. Each must
+# then move its arm to a named answer.
+# ===========================================================================
+MUTD6="$(mktemp -d -t verify-plan-6236-mut.XXXXXX)"
+# m6236 <label> <stem> <sites> <sed-expr> — publish the mutant in MUT_PATH, as the
+# earlier groups' helpers do, and count the lines it changed. A substitution never
+# adds or removes a line, so a line-by-line comparison counts its sites.
+m6236() {
+  local label="$1" stem="$2" want="$3" e="$4" dst n
+  dst="$MUTD6/$stem.sh"
+  cp "$VERIFY" "$dst"
+  sed -i.bak -E "$e" "$dst"
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  n="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$dst")"
+  if [ "$n" -eq "$want" ]; then
+    ok "$label — mutation applied at exactly $want site(s): the mutant differs from the shipped tool in $n line(s)"
+  else
+    bad "$label — mutation applied at $n site(s), expected exactly $want; the paired arm would grade the wrong change"
+  fi
+}
+
+# M1 — a decline joins the failing set. main()'s exit predicate names only FAIL
+# and ERROR; adding SKIP is the change V6236-AC4 exists to stop, and the fixture,
+# every row of which declines, must then exit 3 on the same non-failing records.
+m6236 "G13-M1 V6236-AC4" g13-m1-decline-joins-failing-set 1 \
+  's/\$6=="FAIL"\|\|\$6=="ERROR"\{found=1\}/$6=="FAIL"\|\|$6=="ERROR"\|\|$6=="SKIP"{found=1}/'
+vrp_run "$MUT_PATH" "$FIX_HIST"; JM6236_1="$VRP_JSON"; RCM6236_1="$VRP_RC"
+if mutant_ran "G13-M1 V6236-AC4"; then
+  [ "$RCM6236_1" -eq 3 ] && [ "$(g13_records "$JM6236_1")" = "12" ] && [ -z "$(g13_failing "$JM6236_1" $G13_AC $G13_CIAC)" ] \
+    && ok "G13-M1 V6236-AC4 mutation detected — with a decline in the exit-failing set the same 12 non-failing records exit 3, so G13-3 flips" \
+    || bad "G13-M1 V6236-AC4 rc=$RCM6236_1 records=$(g13_records "$JM6236_1") failing rows:$(g13_failing "$JM6236_1" $G13_AC $G13_CIAC) (expected 3, 12 and none)"
+fi
+
+# M2 — the verb check disabled in both handlers. The refused-tool rows then reach
+# eval_free_run, which runs nothing for a verb outside its set (`*) return 3`), so
+# each reads ERROR as a matcher that could not run and the plan exits 3: a decline
+# turned into a failure by a change to how the row is graded, not to the exit rule.
+# AC-2's backticked `PORTFOLIO.md` is an identifier, which the command-shape test
+# never reads as a command: the row is a method with no command and never reaches
+# the verb check, so the refused-tool rows are AC-1, CIAC-1 and CIAC-2.
+m6236 "G13-M2 V6236-AC4" g13-m2-verb-check-disabled 2 \
+  's/  if ! is_runnable_verb "\$verb"; then/  if false; then/'
+vrp_run "$MUT_PATH" "$FIX_HIST"; JM6236_2="$VRP_JSON"; RCM6236_2="$VRP_RC"
+if mutant_ran "G13-M2 V6236-AC4"; then
+  G13M2_HIT=0
+  for g13id in AC-1 CIAC-1 CIAC-2; do
+    case "$(g13_verdict "$JM6236_2" "$g13id")/$(g13_observed "$JM6236_2" "$g13id")" in
+      "ERROR/count-unreadable:matcher-exit-3 (the matcher produced no readable result"*) G13M2_HIT=$((G13M2_HIT + 1)) ;;
+      *) printf '       g13 %s: %s / %s\n' "$g13id" "$(g13_verdict "$JM6236_2" "$g13id")" "$(g13_observed "$JM6236_2" "$g13id")" ;;
+    esac
+  done
+  G13M2_REST="$(g13_failing "$JM6236_2" AC-2 AC-3 AC-4 AC-5 CIAC-3 CIAC-4 CIAC-5)"
+  [ "$G13M2_HIT" -eq 3 ] && [ -z "$G13M2_REST" ] && [ "$(count_verdict "$JM6236_2" ERROR)" = "3" ] && [ "$RCM6236_2" -eq 3 ] \
+    && ok "G13-M2 V6236-AC4 mutation detected — with the verb check disabled the three refused-tool rows (AC-1, CIAC-1, CIAC-2) read ERROR count-unreadable:matcher-exit-3, no other row moves, and the plan exits 3, so G13-2 and G13-3 flip" \
+    || bad "G13-M2 V6236-AC4 $G13M2_HIT of 3 refused-tool rows read ERROR matcher-exit-3, other rows failing:${G13M2_REST:- none}, ERROR=$(count_verdict "$JM6236_2" ERROR), rc=$RCM6236_2 (expected 3, none, 3 and 3)"
+fi
+
+# M3 — the can't-run verdict joins the failing set. UNRUNNABLE is a decline as well:
+# the fixture's three refused-tool rows (AC-1, CIAC-1, CIAC-2) read it, and main()'s
+# exit predicate leaves it out on purpose. Adding it is the change V6236-AC4 exists to
+# stop for whatever value a decline is renamed to, so the same 12 non-failing records
+# must then exit 3. It applies at the one site M1 does, and it is graded only where the
+# fixture carries an UNRUNNABLE row for it to act on.
+m6236 "G13-M3 V6236-AC4" g13-m3-unrunnable-joins-failing-set 1 \
+  's/\$6=="FAIL"\|\|\$6=="ERROR"\{found=1\}/$6=="FAIL"\|\|$6=="ERROR"\|\|$6=="UNRUNNABLE"{found=1}/'
+vrp_run "$MUT_PATH" "$FIX_HIST"; JM6236_3="$VRP_JSON"; RCM6236_3="$VRP_RC"
+if mutant_ran "G13-M3 V6236-AC4"; then
+  G13M3_U="$(count_verdict "$JM6236_3" UNRUNNABLE)"
+  [ "${G13M3_U:-0}" -ge 1 ] && [ "$RCM6236_3" -eq 3 ] && [ "$(g13_records "$JM6236_3")" = "12" ] && [ -z "$(g13_failing "$JM6236_3" $G13_AC $G13_CIAC)" ] \
+    && ok "G13-M3 V6236-AC4 mutation detected — with UNRUNNABLE in the exit-failing set the same 12 non-failing records ($G13M3_U of them UNRUNNABLE) exit 3, so G13-3 flips" \
+    || bad "G13-M3 V6236-AC4 UNRUNNABLE=${G13M3_U:-0} rc=$RCM6236_3 records=$(g13_records "$JM6236_3") failing rows:$(g13_failing "$JM6236_3" $G13_AC $G13_CIAC) (expected >= 1, 3, 12 and none)"
+fi
+
+rm -rf "$MUTD6"
+
+# ===========================================================================
+# G14 — PREDICATE CLASS IS A READER ANNOTATION (V6180-AC5): a row is graded from
+#       its Verification method cell alone.
+#
+# {{ADR:a-rows-grading-route-is-declared-in-its-method-cell}} removed the
+# classifier's dormant class-hint path rather than wiring it: its only caller had
+# passed an empty class since the executor's first commit, so the column plans
+# author never shaped a verdict. A row is routed away from the executor only by a
+# declaration IN its method cell, in the one declared-deferred form (bracket or
+# phrase spelling). (a) is RED on the pre-removal tool. (b) is GREEN on both
+# tools, because the hint was unreachable before too — so (c) re-introduces a class
+# read and must move a row: a green arm alone is not evidence.
+# ===========================================================================
+echo
+echo "G14 — #6180: the Predicate class column is a reader annotation (V6180-AC5)"
+
+FIX_CINERT="release/tools/tests/fixtures/verify-plan-class-inert.md"
+FIX_CINERTCTL="release/tools/tests/fixtures/verify-plan-class-inert-control.md"
+G14_ROWS="AC-1 AC-2 AC-3 AC-4"
+
+# --- G14-0: DENOMINATOR FIRST — both twins still declare their four rows. ---
+G14_N="$(grep -c -F '| AC-' "$REPO_ROOT/$FIX_CINERT" || true)"
+G14_NC="$(grep -c -F '| AC-' "$REPO_ROOT/$FIX_CINERTCTL" || true)"
+[ "${G14_N:-0}" -eq 4 ] && [ "${G14_NC:-0}" -eq 4 ] \
+  && ok "G14-0 V6180-AC5b both twins still declare their 4 rows (without them every arm below is vacuous)" \
+  || bad "G14-0 V6180-AC5b the twins declare ${G14_N:-0} and ${G14_NC:-0} rows (expected 4 and 4); the arms below would grade nothing"
+
+# --- G14-1..G14-4: (a) the shipped tool carries no class-hint path. ---
+PVP_BODY="$(sed -n '/^parse_verification_plan()/,/^}/p' "$VERIFY")"
+PCI_BODY="$(sed -n '/^parse_ciac()/,/^}/p' "$VERIFY")"
+[ "$(grep -c '' <<<"$PVP_BODY")" -ge 150 ] || bad "G14 V6180-AC5a the per-issue parser body did not extract; the zero below would be vacuous"
+G14_HINT="$(grep -c -F 'predicate-class hint' "$VERIFY" || true)"
+[ "$G14_HINT" = "0" ] \
+  && ok "G14-1 V6180-AC5a no surface of the executor claims a predicate-class hint" \
+  || bad "G14-1 V6180-AC5a the executor still claims a predicate-class hint on $G14_HINT line(s)"
+G14_PVP="$(grep -c -F 'col_pred' <<<"$PVP_BODY" || true)"
+[ "$G14_PVP" = "0" ] \
+  && ok "G14-2 V6180-AC5a the per-issue parser resolves no class value" \
+  || bad "G14-2 V6180-AC5a the per-issue parser still resolves a class value ($G14_PVP col_pred line(s))"
+[ "$(grep -c -F 'col_pred' <<<"$PCI_BODY" || true)" -ge 1 ] \
+  && ok "G14-3 V6180-AC5a CONTROL — the CIAC parser still reads its own Predicate field (a different field, kept)" \
+  || bad "G14-3 V6180-AC5a the CIAC Predicate field was removed too — over-deletion"
+[ "$(grep -c -F 'if (h_method == 0 && (h_ac > 0 || h_expected > 0 || h_pred > 0)) {' "$VERIFY" || true)" = "1" ] \
+  && ok "G14-4 V6180-AC5a ADR-168's discriminator is intact — the header word still counts toward the unindexable latch" \
+  || bad "G14-4 V6180-AC5a ADR-168's discriminator line changed"
+
+# --- G14-5..G14-9: (b) every row grades identically with and without the column. ---
+vrp_run "$VERIFY" "$FIX_CINERT";    J_CI="$VRP_JSON"
+vrp_run "$VERIFY" "$FIX_CINERTCTL"; J_CIC="$VRP_JSON"
+G14_DIFF=""
+for g14a in $G14_ROWS; do
+  g14f="$(family_of "$J_CI" "$g14a")/$(verdict_of "$J_CI" "$g14a")"
+  g14c="$(family_of "$J_CIC" "$g14a")/$(verdict_of "$J_CIC" "$g14a")"
+  case "$g14f" in /*|*/) G14_DIFF="$G14_DIFF $g14a=absent"; continue ;; esac
+  [ "$g14f" = "$g14c" ] || G14_DIFF="$G14_DIFF $g14a=$g14f/vs/$g14c"
+done
+[ -z "$G14_DIFF" ] && [ "$(rows_of "$J_CI")" = "4" ] && [ "$(rows_of "$J_CIC")" = "4" ] \
+  && ok "G14-5 V6180-AC5b every row is present and grades identically with and without the class column (4 of 4 indexed in each twin)" \
+  || bad "G14-5 V6180-AC5b rows absent or moved by the class column:${G14_DIFF:- none}; indexed $(rows_of "$J_CI") and $(rows_of "$J_CIC") (expected 4 and 4)"
+[ "$(family_of "$J_CI" AC-1)/$(verdict_of "$J_CI" AC-1)" = "deferred/SKIP" ] \
+  && ok "G14-6 V6180-AC5b AC-1 the declared-deferred form in the method cell, bracket spelling → deferred/SKIP" \
+  || bad "G14-6 V6180-AC5b AC-1 got $(family_of "$J_CI" AC-1)/$(verdict_of "$J_CI" AC-1) (expected deferred/SKIP)"
+[ "$(family_of "$J_CI" AC-2)/$(verdict_of "$J_CI" AC-2)" = "deferred/SKIP" ] \
+  && ok "G14-7 V6180-AC5b AC-2 the declared-deferred form in the method cell, phrase spelling → deferred/SKIP" \
+  || bad "G14-7 V6180-AC5b AC-2 got $(family_of "$J_CI" AC-2)/$(verdict_of "$J_CI" AC-2) (expected deferred/SKIP)"
+G14_V3="$(verdict_of "$J_CI" AC-3)"
+[ -n "$G14_V3" ] && [ "$G14_V3" != "PASS" ] \
+  && ok "G14-8 V6180-AC5b AC-3 a class cell alone earns nothing — present and not PASS ($(family_of "$J_CI" AC-3)/$G14_V3)" \
+  || bad "G14-8 V6180-AC5b AC-3 read '${G14_V3:-absent}' (expected present and not PASS)"
+[ "$(family_of "$J_CI" AC-4)/$(verdict_of "$J_CI" AC-4)" = "per-issue/PASS" ] \
+  && ok "G14-9 V6180-AC5b AC-4 a class never displaces a runnable probe → per-issue/PASS" \
+  || bad "G14-9 V6180-AC5b AC-4 got $(family_of "$J_CI" AC-4)/$(verdict_of "$J_CI" AC-4) (expected per-issue/PASS)"
+
+# --- G14-M: (c) SEEDED FAILURE — a class read re-introduced ahead of the keyword arms. ---
+# The mutant prefixes a runtime-suite subtype token to the method of every row whose
+# class cell reads runtime or behavioral, so the column routes again. It is proved to
+# apply at EXACTLY one site (a substitution never adds or removes a line, so a
+# line-by-line comparison counts its sites), and it must then move AC-3 between the
+# twins. AC-3's control family is checked as present and different rather than
+# pinned, so a later residual that re-routes a command-less row keeps the arm green.
+MUTD6180="$(mktemp -d -t verify-plan-6180-mut.XXXXXX)"
+MUT6180="$MUTD6180/class-read.sh"
+sed -E 's@^      rec\(issue, ac, "PENDING", method, expected\)$@      rec(issue, ac, "PENDING", ((h_pred > 0 \&\& h_pred <= n \&\& tolower(F[h_pred]) ~ /runtime|behavioral/) ? "suite-skip; " : "") method, expected)@' "$VERIFY" > "$MUT6180"
+chmod +x "$MUT6180"
+G14_SITES="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$MUT6180")"
+if [ "$G14_SITES" -ne 1 ]; then
+  bad "G14-M V6180-AC5c mutation applied at $G14_SITES site(s), expected exactly 1; (b) would be graded against the wrong change, or none"
+else
+  ok "G14-M V6180-AC5c mutation applied at exactly 1 site: a class-cell read re-introduced ahead of the keyword arms"
+  vrp_run "$MUT6180" "$FIX_CINERTCTL"; JM_CIC="$VRP_JSON"
+  vrp_run "$MUT6180" "$FIX_CINERT";    JM_CI="$VRP_JSON"
+  if mutant_ran "G14-M V6180-AC5c"; then
+    G14_MF3="$(family_of "$JM_CI" AC-3)"; G14_MC3="$(family_of "$JM_CIC" AC-3)"
+    [ "$G14_MF3" = "runtime-suite" ] && [ -n "$G14_MC3" ] && [ "$G14_MC3" != "$G14_MF3" ] \
+      && ok "G14-M V6180-AC5c mutation detected — with a class read restored, AC-3 grades $G14_MF3 with the column and $G14_MC3 without it, so G14-5 flips" \
+      || bad "G14-M V6180-AC5c SURVIVED — AC-3 reads '${G14_MF3:-absent}' with the column and '${G14_MC3:-absent}' without it; the class read moved nothing, so V6180-AC5b proves nothing"
+  fi
+fi
+rm -rf "$MUTD6180"
+
+# ===========================================================================
+# G15 — A RUNNABLE PROBE IS EXECUTED, NEVER ROUTED BY PROSE (V6893-AC2/AC3/AC4,
+#       V6837-AC2, V7531-AC3).
+#
+# classify_family hands a row whose designated command — extract_command's pick,
+# a backticked span — is a probe this executor runs (an allowlisted verb, at least
+# one argument, no shell operator outside quotes; span_shell_operator is the one
+# quote-aware test) to the per-issue handler AHEAD of every keyword arm, and every
+# declared-deferral reader reads the cell with each span led by an allowlisted verb
+# blanked. So a prose word cannot hand a failing probe to the deploy oracle, a
+# subtype token cannot divert a head probe, a phrase inside a probe is its pattern,
+# and a quoted operator character is literal. Rows with no runnable probe keep the
+# keyword fallback, could-not-read stays ERROR beside a declared SKIP, and --help
+# describes the dispatch it performs.
+#
+# The plan is written into a temp stub root whose deploy check exits 0, so a row
+# the oracle grades reads PASS there and a probe that FAILs is visibly not the
+# oracle's verdict. Its tables keep the design's AC-1..AC-15 numbering; AC-16..AC-18
+# are the quoted-pattern and deploy-span rows. Every record read here carries no
+# brace, so the shared family_of / verdict_of / observed_of readers see each one,
+# and every negated assertion first requires its record to be present. Each seeded
+# failure is proved to apply at exactly the sites it names, and only a mutation
+# that took is graded.
+# ===========================================================================
+echo
+echo "G15 — #6893: a runnable probe is executed, never routed by prose (V6893-AC2/AC3/AC4, V6837-AC2, V7531-AC3)"
+G15STUB="$(mktemp -d -t verify-plan-6893-stub.XXXXXX)"; MUTD6893="$(mktemp -d -t verify-plan-6893-mut.XXXXXX)"
+mkdir -p "$G15STUB/core/deploy" "$G15STUB/release/tools" "$G15STUB/plan"
+cp "$VERIFY" "$G15STUB/release/tools/"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$G15STUB/core/deploy/deploy.sh"; chmod +x "$G15STUB/core/deploy/deploy.sh"
+cat > "$G15STUB/plan/p.md" <<'EOF'
+# vTEST Release Plan — a runnable probe is executed, never routed by prose (G15)
+
+## Verification Plan
+
+**#960 — a runnable probe is never displaced by prose**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-1 | `grep -c -F 'zz-absent-probe-token' release/tools/verify-release-plan.sh` at least 1; the design around it stands unchanged | FAIL: the probe runs and finds nothing |
+| AC-2 | `grep -c -F 'RUNNABLE_VERBS=' release/tools/verify-release-plan.sh` at least 1, then a byte-diff via deploy.sh --check | PASS: the probe runs |
+| AC-3 | `head -n 1 release/tools/verify-release-plan.sh` at least 1; the declared outcome of the suite run is suite-skip | PASS: the probe runs |
+| AC-4 | `grep -c -F 'deferred to #' plan/p.md` at least 1 | PASS: a phrase inside the probe is its pattern |
+| AC-5 | `grep -c -F 'RUNNABLE_VERBS=' release/tools/verify-release-plan.sh` at least 1; recorded for the cross-issue integration read | PASS, family per-issue |
+| AC-6 | [DEFERRED — graded by the Stage 8 reader] `grep -c -F 'zz-absent-probe-token' release/tools/verify-release-plan.sh` at least 1 | SKIP: a declaration outside the probe still wins |
+| AC-7 | `grep` the deploy log for drift, recorded for the cross-issue integration read | not per-issue: a bare verb is not a probe |
+| AC-8 | `ls release/tools \| wc -l` at least 1, recorded for the cross-issue integration read | not per-issue: a pipeline is not a probe this executor runs |
+
+**#961 — rows with no runnable probe keep the keyword fallback**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-9 | source-to-deployed sync via `deploy.sh --check` | sync |
+| AC-10 | `deploy.sh --check`: the other arms stay byte-identical, unchanged | regression |
+| AC-11 | cross-issue integration read of the recorded decision | integration, documented-decision SKIP |
+| AC-12 | the declared outcome of this suite run is suite-skip | runtime-suite SKIP |
+
+**#962 — could not evaluate, beside not this runner's job**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-13 | declared, verification deferred to the Stage 8 named read of the decision record | SKIP: declared in the method cell |
+| AC-14 | `grep -c -F 'x' release/tools/tests/fixtures/verify-plan-no-such-fixture.md` expect 0 | ERROR: the probe input could not be read |
+| AC-15 |  | ERROR: an empty method cell |
+
+**#963 — a quoted pattern is literal, and a probe outranks the deploy-check span**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-16 | `grep -c -F '<!-- zz-marker-a' plan/p.md` expect 0; the hook arms stay unchanged | FAIL: a quoted operator character is literal, so the probe runs |
+| AC-17 | `grep -c -F '<!-- zz-marker-b deferred to #' plan/p.md` at least 1 | PASS: a phrase inside a quoted-marker probe is its pattern |
+| AC-18 | `bash core/deploy/deploy.sh --check` exits 0, and `grep -c -F 'RUNNABLE_VERBS=' release/tools/verify-release-plan.sh` at least 1 | the can't-run slot: the probe grades the row, and the deploy check is named as a command that did not run |
+EOF
+# g15_run <tool> — sets VRP_JSON + VRP_RC in the CURRENT shell (vrp_run's contract).
+g15_run() { set +e; VRP_JSON="$("$1" --format=json --root "$G15STUB" "$G15STUB/plan/p.md" 2>/dev/null)"; VRP_RC=$?; set -e; }
+# fv15 <json> <id> — "family/verdict"; reads "/" for an absent record, which no arm expects.
+fv15() { printf '%s/%s' "$(family_of "$1" "$2")" "$(verdict_of "$1" "$2")"; }
+# g15_present_not <json> <id> <family> — TRUE only when the record is PRESENT and its
+# family is not <family>: an absent record never passes a negated assertion.
+g15_present_not() { local f; f="$(family_of "$1" "$2")"; [ -n "$f" ] && [ "$f" != "$3" ]; }
+# m15 <label> <stem> <sites> <sed-expr> — publish the mutant in MUT_PATH, count the
+# lines it changed (a substitution never adds or removes a line), and set MUT_TOOK
+# only when it applied at exactly <sites> lines. An arm whose mutation did not take
+# is not graded: its answer would be the shipped tool's, a vacuous detection.
+MUT_TOOK=0
+m15() {
+  local label="$1" stem="$2" want="$3" e="$4" dst n
+  dst="$MUTD6893/$stem.sh"
+  cp "$VERIFY" "$dst"
+  sed -i.bak -E "$e" "$dst"
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  n="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$dst")"
+  if [ "$n" -eq "$want" ]; then
+    MUT_TOOK=1; ok "$label — mutation applied at exactly $want site(s): the mutant differs from the shipped tool in $n line(s)"
+  else
+    MUT_TOOK=0; bad "$label — mutation applied at $n site(s), expected exactly $want; its arm is not graded"
+  fi
+}
+
+g15_run "$VERIFY"; J15="$VRP_JSON"; RC15="$VRP_RC"
+# --- G15-0: DENOMINATOR FIRST — every stub-plan row emits. ---
+[ "$(grep -c '"id":"AC-' <<<"$J15" || true)" -eq 18 ] \
+  && ok "G15-0 SENSITIVITY — all 18 stub-plan rows emit (the arms below grade real records)" \
+  || bad "G15-0 expected 18 AC records, got $(grep -c '"id":"AC-' <<<"$J15" || true)"
+
+# --- V6893-AC2: no prose displaces a runnable probe; a declaration outside it still wins. ---
+[ "$(fv15 "$J15" AC-1)" = "per-issue/FAIL" ] && [ "$(observed_of "$J15" AC-1)" = "count=0 (wanted >= 1)" ] \
+  && ok "V6893-AC2 a — 'unchanged' no longer sends a failing probe to the deploy oracle: it runs and FAILs" \
+  || bad "V6893-AC2 a — AC-1 got $(fv15 "$J15" AC-1) '$(observed_of "$J15" AC-1)'"
+[ "$(fv15 "$J15" AC-2)" = "per-issue/PASS" ] \
+  && ok "V6893-AC2 b — byte-diff and deploy.sh --check prose do not displace the probe" \
+  || bad "V6893-AC2 b — AC-2 got $(fv15 "$J15" AC-2)"
+[ "$(fv15 "$J15" AC-3)" = "per-issue/PASS" ] \
+  && ok "V6893-AC2 c — a subtype token does not displace a head probe" \
+  || bad "V6893-AC2 c — AC-3 got $(fv15 "$J15" AC-3)"
+[ "$(fv15 "$J15" AC-4)" = "per-issue/PASS" ] \
+  && ok "V6893-AC2 d — a deferral phrase inside the probe is its pattern" \
+  || bad "V6893-AC2 d — AC-4 got $(fv15 "$J15" AC-4)"
+[ "$(fv15 "$J15" AC-5)" = "per-issue/PASS" ] \
+  && ok "V6893-AC2 e — an 'integration' word no longer relabels a probe" \
+  || bad "V6893-AC2 e — AC-5 got $(fv15 "$J15" AC-5)"
+[ "$(fv15 "$J15" AC-6)" = "deferred/SKIP" ] \
+  && ok "V6893-AC2 f CONTROL — a declaration outside the probe still wins" \
+  || bad "V6893-AC2 f — AC-6 got $(fv15 "$J15" AC-6)"
+g15_present_not "$J15" AC-7 per-issue && g15_present_not "$J15" AC-8 per-issue \
+  && ok "V6893-AC2 g BOUNDARY — a bare verb and a pipeline are not probes (AC-7 $(fv15 "$J15" AC-7), AC-8 $(fv15 "$J15" AC-8))" \
+  || bad "V6893-AC2 g — AC-7 $(fv15 "$J15" AC-7) / AC-8 $(fv15 "$J15" AC-8): absent, or claimed as probes"
+[ "$(fv15 "$J15" AC-16)" = "per-issue/FAIL" ] && [ "$(observed_of "$J15" AC-16)" = "count=1 (wanted == 0)" ] \
+  && ok "V6893-AC2 h — a quoted marker is a pattern, not an operator: the failing probe beside 'unchanged' runs and FAILs" \
+  || bad "V6893-AC2 h — AC-16 got $(fv15 "$J15" AC-16) '$(observed_of "$J15" AC-16)'"
+[ "$(fv15 "$J15" AC-17)" = "per-issue/PASS" ] \
+  && ok "V6893-AC2 i — a deferral phrase inside a quoted-marker probe is its pattern, not a declaration" \
+  || bad "V6893-AC2 i — AC-17 got $(fv15 "$J15" AC-17)"
+# Once the tool catalog names the deploy-check span a command (its bash is an
+# interpreter with arguments), the row names two commands: the probe is designated
+# and runs, and the deploy check is named as a command that did not run, so the row
+# reads the can't-run slot rather than PASS. The slot's value is derived from its one
+# binding line in the executor, as G16's arms derive it.
+G15_SLOT="$(sed -n 's/^readonly VERDICT_PARTIAL_SLOT="\$VERDICT_\([A-Z]*\)".*/\1/p' "$VERIFY")"
+case "$(observed_of "$J15" AC-18)" in
+  *"limb 1 bash did not run (outside the verb set); limb 2 grep PASS count="*) G15_P18=1 ;;
+  *) G15_P18=0 ;;
+esac
+[ -n "$G15_SLOT" ] && [ "$G15_SLOT" != PASS ] && [ "$(fv15 "$J15" AC-18)" = "per-issue/$G15_SLOT" ] && [ "$G15_P18" = 1 ] \
+  && ok "V6893-AC2 j — a probe beside the deploy.sh --check span grades the row, and the deploy check does not run: it is named as a command that did not run, so the row reads the can't-run slot ($G15_SLOT)" \
+  || bad "V6893-AC2 j — AC-18 got $(fv15 "$J15" AC-18) '$(observed_of "$J15" AC-18)' (slot '$G15_SLOT')"
+
+# --- V6893-AC3: rows with no runnable probe keep the keyword fallback (each control carries a routing keyword). ---
+if [ "$(fv15 "$J15" AC-9)" = "sync/PASS" ] && [ "$(fv15 "$J15" AC-10)" = "regression/PASS" ] \
+   && [ "$(fv15 "$J15" AC-11)" = "integration/SKIP" ] && [ "$(fv15 "$J15" AC-12)" = "runtime-suite/SKIP" ]; then
+  ok "V6893-AC3 — rows with no runnable probe keep their declared route or keyword arm: sync and regression by the declared deploy check, integration and runtime-suite by keyword"
+else
+  bad "V6893-AC3 — the keyword fallback moved for a row with no runnable probe: $(fv15 "$J15" AC-9) $(fv15 "$J15" AC-10) $(fv15 "$J15" AC-11) $(fv15 "$J15" AC-12)"
+fi
+
+# --- V6837-AC2: could not evaluate stays ERROR, beside a declared SKIP. ---
+[ "$(fv15 "$J15" AC-13)" = "deferred/SKIP" ] \
+  && ok "V6837-AC2 a — a prose row declared in its method cell is a named SKIP" \
+  || bad "V6837-AC2 a — AC-13 got $(fv15 "$J15" AC-13)"
+case "$(observed_of "$J15" AC-14)" in
+  *count-unreadable:matcher-exit-2*)
+    [ "$(verdict_of "$J15" AC-14)" = ERROR ] \
+      && ok "V6837-AC2 b — a probe whose input cannot be read is still ERROR" \
+      || bad "V6837-AC2 b — AC-14 names the unreadable input but reads $(verdict_of "$J15" AC-14)" ;;
+  *) bad "V6837-AC2 b — AC-14 observed '$(observed_of "$J15" AC-14)'" ;;
+esac
+[ "$(fv15 "$J15" AC-15)" = "method-cell-empty/ERROR" ] && [ "$RC15" -eq 3 ] \
+  && ok "V6837-AC2 c — an empty method cell is ERROR; rc 3" \
+  || bad "V6837-AC2 c — AC-15 $(fv15 "$J15" AC-15), rc $RC15"
+
+# --- V7531-AC3: --help describes the dispatch the classifier performs. ---
+H15="$("$VERIFY" --help 2>&1 || true)"
+[ "$(grep -c -F 'CHECK FAMILIES' <<<"$H15" || true)" -eq 1 ] \
+  && ok "V7531-AC3 SENSITIVITY — the help carries its CHECK FAMILIES line" \
+  || bad "V7531-AC3 — no CHECK FAMILIES line in --help"
+[ "$(grep -c -i -E 'predicate[- ]class|class hint|class column' <<<"$H15" || true)" -eq 0 ] \
+  && ok "V7531-AC3 — --help makes no predicate-class claim" \
+  || bad "V7531-AC3 — --help claims predicate-class dispatch"
+[ "$(grep -c -F 'method cell' <<<"$H15" || true)" -ge 1 ] && [ "$(grep -c -F 'runnable probe' <<<"$H15" || true)" -ge 1 ] \
+  && ok "V7531-AC3 — --help names the dispatch the classifier performs (the method cell; a runnable probe)" \
+  || bad "V7531-AC3 — --help does not describe the dispatch (method cell / runnable probe)"
+
+# --- V6893-AC4: SEEDED FAILURES. Each reverts one limb and names the answer it must move. ---
+m15 "V6893-AC4 M1" g15-m1-no-probe-step 1 's/^  if \[ -n "\$probe" \]; then echo "per-issue"; return; fi$/  :/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g15_run "$MUT_PATH"; JM15_1="$VRP_JSON"
+  if mutant_ran "V6893-AC4 M1"; then
+    [ "$(fv15 "$JM15_1" AC-5)" = "integration/PASS" ] && [ "$(fv15 "$JM15_1" AC-3)" = "runtime-suite/SKIP" ] \
+      && ok "V6893-AC4 M1 detected — without the probe step, the integration and runtime-suite keywords steal a probe again" \
+      || bad "V6893-AC4 M1 SURVIVED — AC-5 $(fv15 "$JM15_1" AC-5), AC-3 $(fv15 "$JM15_1" AC-3)"
+    [ "$(family_of "$JM15_1" AC-1)" = per-issue ] \
+      && ok "V6893-AC4 M1 — the deploy route is closed a second way: without the probe step, 'unchanged' still does not reach the oracle, because the oracle is reached by declaration only" \
+      || bad "V6893-AC4 M1 — without the probe step AC-1 reached $(fv15 "$JM15_1" AC-1)"
+    G15_SAME=1
+    for g15a in AC-9 AC-10 AC-11 AC-12; do [ "$(fv15 "$JM15_1" "$g15a")" = "$(fv15 "$J15" "$g15a")" ] || G15_SAME=0; done
+    [ "$G15_SAME" = 1 ] \
+      && ok "V6893-AC4 M1 CONTROL — the step touches only rows with a runnable probe" \
+      || bad "V6893-AC4 M1 CONTROL — a command-less row moved"
+  fi
+fi
+m15 "V6893-AC4 M2" g15-m2-step0-raw 1 's/^  prose="\$\(method_outside_verb_spans .*$/  prose="$method"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g15_run "$MUT_PATH"; JM15_2="$VRP_JSON"
+  if mutant_ran "V6893-AC4 M2"; then
+    [ "$(fv15 "$JM15_2" AC-4)" = "deferred/SKIP" ] && [ "$(fv15 "$JM15_2" AC-17)" = "deferred/SKIP" ] \
+      && ok "V6893-AC4 M2 detected — step 0 on the raw cell lets an in-probe phrase displace the probe again" \
+      || bad "V6893-AC4 M2 SURVIVED — AC-4 $(fv15 "$JM15_2" AC-4), AC-17 $(fv15 "$JM15_2" AC-17)"
+  fi
+fi
+m15 "V6893-AC4 M3" g15-m3-guard-raw 2 's/case "\$\(method_outside_verb_spans "\$method"\)" in/case "$method" in/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g15_run "$MUT_PATH"; JM15_3="$VRP_JSON"
+  if mutant_ran "V6893-AC4 M3"; then
+    [ "$(fv15 "$JM15_3" AC-4)" = "per-issue/SKIP" ] && [ "$(observed_of "$JM15_3" AC-4)" = "declared-deferred" ] \
+      && ok "V6893-AC4 M3 detected — a raw-cell handler guard skips the routed probe again" \
+      || bad "V6893-AC4 M3 SURVIVED — AC-4 $(fv15 "$JM15_3" AC-4) '$(observed_of "$JM15_3" AC-4)'"
+  fi
+fi
+m15 "V7531-AC3 M4" g15-m4-help-claim 1 's/CHECK FAMILIES \(dispatched from the Verification method cell alone[^)]*\)/CHECK FAMILIES (dispatched by predicate-class hint, else method keyword)/'
+if [ "$MUT_TOOK" = 1 ]; then
+  HM15_4="$("$MUT_PATH" --help 2>&1 || true)"
+  if [ "$(grep -c -F 'CHECK FAMILIES' <<<"$HM15_4" || true)" -eq 1 ]; then
+    [ "$(grep -c -i -E 'predicate[- ]class|class hint|class column' <<<"$HM15_4" || true)" -eq 1 ] \
+      && ok "V7531-AC3 M4 detected — the old wording restored reads 1" \
+      || bad "V7531-AC3 M4 SURVIVED — the restored claim reads $(grep -c -i -E 'predicate[- ]class|class hint|class column' <<<"$HM15_4" || true)"
+  else
+    bad "V7531-AC3 M4 NOT GRADEABLE — the mutant printed no CHECK FAMILIES line"
+  fi
+fi
+m15 "V6893-AC2 M5" g15-m5-quote-blind 1 's/ q="\$ch" ;;$/ : ;;/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g15_run "$MUT_PATH"; JM15_5="$VRP_JSON"
+  if mutant_ran "V6893-AC2 M5"; then
+    [ "$(fv15 "$JM15_5" AC-16)" = "per-issue/UNRUNNABLE" ] && [ "$(observed_of "$JM15_5" AC-16)" != "count=1 (wanted == 0)" ] \
+      && ok "V6893-AC2 M5 detected — a quote-blind operator scan reads the quoted marker as an operator: the failing probe no longer runs, and the handler refuses it as shell syntax" \
+      || bad "V6893-AC2 M5 SURVIVED — AC-16 $(fv15 "$JM15_5" AC-16) '$(observed_of "$JM15_5" AC-16)'"
+  fi
+fi
+rm -rf "$G15STUB" "$MUTD6893"
+
+# ===========================================================================
+# G16 — A METHOD NAMING SEVERAL COMMANDS IS GRADED ON ITS DESIGNATED COMMAND
+#       (V6837-AC4, V7531-CIAC6).
+#
+# The per-issue and integration handlers run the designated command — the first
+# allowlisted verb that carries an argument — against the comparator stated after
+# it, and name every other command the method carries as "did not run (<reason>)".
+# A row with a command that did not run never reads PASS: it takes the can't-run
+# slot the executor binds as VERDICT_PARTIAL_SLOT, and every arm here DERIVES the
+# slot's value from that one line rather than pinning it, so a re-binding of the
+# slot keeps the arms meaningful. A bare verb is prose. The shared comparator
+# vocabulary reads markdown emphasis around N and nothing wider. An operand-less
+# further command is never run, so no row after it is lost.
+#
+# The fixture's counts come from its own data section. Every arm first requires
+# the record it grades to be present, and every record read here carries no brace,
+# so the shared readers see each one. Each seeded failure is proved to apply at
+# exactly the sites it names, and only a mutation that took is graded.
+# ===========================================================================
+echo
+echo "G16 — #6837: a method naming several commands is graded on its designated command (V6837-AC4, V7531-CIAC6)"
+MUTD6837="$(mktemp -d -t verify-plan-6837-mut.XXXXXX)"
+FIX_LIMB="release/tools/tests/fixtures/verify-plan-multi-limb.md"
+eval "$(sed -n '/^comparator_phrases()/,/^}/p' "$VERIFY")"
+eval "$(sed -n '/^limb_comparator()/,/^}/p'    "$VERIFY")"
+# The slot's value, derived from its one binding line: the name after $VERDICT_.
+PARTIAL_SLOT="$(sed -n 's/^readonly VERDICT_PARTIAL_SLOT="\$VERDICT_\([A-Z]*\)".*/\1/p' "$VERIFY")"
+# fv16 <json> <id> — "family/verdict"; reads "/" for an absent record, which no arm expects.
+fv16() { printf '%s/%s' "$(family_of "$1" "$2")" "$(verdict_of "$1" "$2")"; }
+# g16_slot <json> <id> — TRUE only when the slot is derived and the record reads it.
+g16_slot() { [ -n "$PARTIAL_SLOT" ] && [ "$(verdict_of "$1" "$2")" = "$PARTIAL_SLOT" ]; }
+# g16_has <json> <id> <text> — TRUE only when the record's observed text carries <text>.
+g16_has() { case "$(observed_of "$1" "$2")" in *"$3"*) return 0 ;; *) return 1 ;; esac; }
+# g16_partial <json> <id> — the slot, with the observed text leading "partial-execution:".
+g16_partial() { g16_slot "$1" "$2" && case "$(observed_of "$1" "$2")" in "partial-execution: limbs run 1 of "*) return 0 ;; *) return 1 ;; esac; }
+# m16 <label> <stem> <sites> <sed-expr>... — publish the mutant in MUT_PATH, count the
+# lines it changed (a substitution never adds or removes a line), and set MUT_TOOK
+# only when it applied at exactly <sites> lines. An arm whose mutation did not take
+# is not graded: its answer would be the shipped tool's, a vacuous detection.
+m16() {
+  local label="$1" stem="$2" want="$3" dst n e
+  shift 3
+  dst="$MUTD6837/$stem.sh"
+  cp "$VERIFY" "$dst"
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  n="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$dst")"
+  if [ "$n" -eq "$want" ]; then
+    MUT_TOOK=1; ok "$label — mutation applied at exactly $want site(s): the mutant differs from the shipped tool in $n line(s)"
+  else
+    MUT_TOOK=0; bad "$label — mutation applied at $n site(s), expected exactly $want; its arm is not graded"
+  fi
+}
+
+vrp_run "$VERIFY" "$FIX_LIMB"; J16="$VRP_JSON"; RC16="$VRP_RC"
+# --- G16-0: DENOMINATOR FIRST — the fixture still plants, and every row emits. ---
+G16_PAIRED="$(grep -c -F 'paired arm' "$REPO_ROOT/$FIX_LIMB" || true)"
+[ "${G16_PAIRED:-0}" -ge 3 ] && [ "$(acs_of "$J16")" = "14" ] && [ "$(ciacs_of "$J16")" = "5" ] \
+  && ok "G16-0 SENSITIVITY — the fixture plants its multi-command rows ($G16_PAIRED 'paired arm' lines) and all 14 rows and 5 CIACs emit" \
+  || bad "G16-0 fixture 'paired arm' lines=$G16_PAIRED, emitted AC=$(acs_of "$J16") CIAC=$(ciacs_of "$J16") (expected >= 3, 14 and 5)"
+
+# --- V6837-AC4: the designated command is graded on its own comparator; the rest are named, never passed. ---
+if [ -n "$PARTIAL_SLOT" ] && [ "$PARTIAL_SLOT" != PASS ] \
+   && [ "$(grep -c -E "^readonly VERDICT_${PARTIAL_SLOT}=" "$VERIFY" || true)" = "1" ]; then
+  ok "V6837-AC4 — the can't-run slot is bound once, to a verdict the file declares that is not PASS ($PARTIAL_SLOT)"
+else
+  bad "V6837-AC4 — VERDICT_PARTIAL_SLOT is unbound, bound to PASS, or bound to an undeclared verdict ('$PARTIAL_SLOT')"
+fi
+g16_partial "$J16" AC-1 && g16_has "$J16" AC-1 "limb 1 grep PASS count=2 (== 2); limb 2 grep did not run (only the designated command runs)" \
+  && ok "V6837-AC4 a — two commands, the designated one holds: the slot, naming the command that ran and the one that did not" \
+  || bad "V6837-AC4 a — AC-1 $(fv16 "$J16" AC-1) '$(observed_of "$J16" AC-1)'"
+G16_V2="$(verdict_of "$J16" AC-2)"; G16_C2="$(verdict_of "$J16" CIAC-2)"
+[ -n "$G16_V2" ] && [ "$G16_V2" != PASS ] && [ -n "$G16_C2" ] && [ "$G16_C2" != PASS ] \
+   && g16_has "$J16" AC-2 "limb 2 grep did not run" && g16_has "$J16" CIAC-2 "limb 2 grep did not run" \
+  && ok "V6837-AC4 b — a false value in a NON-FIRST command: the row does not read PASS, in either loop, and names that command as not run" \
+  || bad "V6837-AC4 b — AC-2 '$G16_V2' / CIAC-2 '$G16_C2' '$(observed_of "$J16" AC-2)'"
+[ "$(fv16 "$J16" AC-3)" = "per-issue/FAIL" ] \
+  && ok "V6837-AC4 c CONTROL — the same false value in the FIRST command already FAILs" \
+  || bad "V6837-AC4 c — AC-3 $(fv16 "$J16" AC-3)"
+g16_has "$J16" AC-3 "limbs run 1 of 2: limb 1 grep FAIL count=2 (wanted == 3); limb 2 grep did not run" \
+  && ok "V6837-AC4 d — a comparator binds to the command it follows: AC-3's designated command is graded against its own 'expect 3', not the next command's" \
+  || bad "V6837-AC4 d — AC-3 '$(observed_of "$J16" AC-3)'"
+g16_partial "$J16" AC-4 && g16_has "$J16" AC-4 "limb 2 grep did not run (only the designated command runs)" \
+  && ok "V6837-AC4 e — a second command with no comparator the vocabulary reads is named as not run, never passed" \
+  || bad "V6837-AC4 e — AC-4 $(fv16 "$J16" AC-4) '$(observed_of "$J16" AC-4)'"
+g16_partial "$J16" AC-7 && g16_has "$J16" AC-7 "limb 1 grep PASS count=0 (== 0)" \
+   && [ "$(fv16 "$J16" AC-8)" = "per-issue/FAIL" ] && g16_has "$J16" AC-8 "limb 1 grep FAIL count=2 (wanted == 0)" \
+  && ok "V6837-AC4 f — a null is graded on its own 'expect 0': AC-7's holds (the control did not run), and AC-8's violated null FAILs where the whole-cell reading passed it" \
+  || bad "V6837-AC4 f — AC-7 $(fv16 "$J16" AC-7) '$(observed_of "$J16" AC-7)'; AC-8 $(fv16 "$J16" AC-8) '$(observed_of "$J16" AC-8)'"
+[ "$(fv16 "$J16" AC-10)" = "per-issue/PASS" ] && [ "$(observed_of "$J16" AC-10)" = "count=2 (== 2)" ] \
+   && [ "$(observed_of "$J16" AC-9)" = "command-succeeded" ] && [ "$(observed_of "$J16" CIAC-5)" = "integration-method-succeeded" ] \
+  && ok "V6837-AC4 g CONTROL — a method naming one command is graded exactly as before (AC-9, AC-10, CIAC-5)" \
+  || bad "V6837-AC4 g — AC-10 $(fv16 "$J16" AC-10) '$(observed_of "$J16" AC-10)'; AC-9 '$(observed_of "$J16" AC-9)'; CIAC-5 '$(observed_of "$J16" CIAC-5)'"
+g16_partial "$J16" CIAC-1 && g16_has "$J16" CIAC-1 "limb 2 grep did not run (only the designated command runs)" \
+  && ok "V6837-AC4 h — the cross-issue handler takes the same path: CIAC-1 reads the slot and names its unrun command" \
+  || bad "V6837-AC4 h — CIAC-1 $(fv16 "$J16" CIAC-1) '$(observed_of "$J16" CIAC-1)'"
+[ "$(fv16 "$J16" AC-13)" = "per-issue/PASS" ] && [ "$(observed_of "$J16" AC-13)" = "count=1 (== 1)" ] \
+  && ok "V6837-AC4 i — a bare verb is prose: AC-13's leading bare grep is skipped and its probe is the designated command" \
+  || bad "V6837-AC4 i — AC-13 $(fv16 "$J16" AC-13) '$(observed_of "$J16" AC-13)'"
+g16_partial "$J16" AC-14 && g16_has "$J16" AC-14 "limb 1 python3 did not run (outside the verb set); limb 2 grep PASS count=1 (== 1)" \
+  && ok "V6837-AC4 j — a tool span the catalog names is a command that did not run: AC-14 reads the slot, naming python3 'did not run (outside the verb set)' beside the probe that ran" \
+  || bad "V6837-AC4 j — AC-14 $(fv16 "$J16" AC-14) '$(observed_of "$J16" AC-14)'"
+
+# --- The shared comparator vocabulary: emphasis around N is read, and nothing wider. ---
+[ "$(fv16 "$J16" AC-11)" = "per-issue/PASS" ] && [ "$(observed_of "$J16" AC-11)" = "count=0 (== 0)" ] \
+  && ok "V6837-AC4 k — a comparator whose N carries markdown emphasis is read: 'expect **0**' grades count=0 (== 0)" \
+  || bad "V6837-AC4 k — AC-11 $(fv16 "$J16" AC-11) '$(observed_of "$J16" AC-11)'"
+[ "$(fv16 "$J16" AC-12)" = "per-issue/FAIL" ] && [ "$(observed_of "$J16" AC-12)" = "command-exit-1" ] \
+  && ok "V6837-AC4 l CONTROL — 'returns 0' is not a comparator: the row is graded on the exit status, which reads a zero count as FAIL" \
+  || bad "V6837-AC4 l — AC-12 $(fv16 "$J16" AC-12) '$(observed_of "$J16" AC-12)'"
+
+# --- V7531-CIAC6: an operand-less further command never runs, so no later row is lost. ---
+g16_partial "$J16" AC-5 && g16_partial "$J16" CIAC-3 \
+   && g16_has "$J16" AC-5 "limb 2 grep did not run (names no input)" && g16_has "$J16" CIAC-3 "limb 2 grep did not run (names no input)" \
+  && ok "V7531-CIAC6 a — a further command naming no input is named 'did not run (names no input)', never passed, in both loops" \
+  || bad "V7531-CIAC6 a — AC-5 $(fv16 "$J16" AC-5) '$(observed_of "$J16" AC-5)'; CIAC-3 $(fv16 "$J16" CIAC-3)"
+g16_partial "$J16" AC-6 && g16_partial "$J16" CIAC-4 \
+   && g16_has "$J16" AC-6 "limb 2 grep did not run (names no input)" && g16_has "$J16" CIAC-4 "limb 2 grep did not run (names no input)" \
+  && ok "V7531-CIAC6 b — one with a comparator of its own is not run either: it names no input, so nothing reads stdin" \
+  || bad "V7531-CIAC6 b — AC-6 $(fv16 "$J16" AC-6) '$(observed_of "$J16" AC-6)'; CIAC-4 $(fv16 "$J16" CIAC-4)"
+G16_LATE=0
+for g16id in AC-7 AC-8 AC-9 AC-10 AC-11 AC-12 AC-13 AC-14 CIAC-5; do
+  [ -n "$(verdict_of "$J16" "$g16id")" ] && G16_LATE=$((G16_LATE + 1))
+done
+[ "$G16_LATE" -eq 9 ] && [ "$(verdict_of "$J16" AC-9)" = PASS ] && [ "$(verdict_of "$J16" CIAC-5)" = PASS ] \
+   && [ "$(strunc_of "$J16")" = "0" ] && grep -q -F '"stream_state": "fetched"' <<<"$J16" && [ "$RC16" -eq 3 ] \
+  && ok "V7531-CIAC6 c — every limb that runs goes through the stdin-isolated dispatch, so no row after the planted cells is lost: 9 of 9 emit, the controls after them PASS, and the stream reads fetched; exit 3" \
+  || bad "V7531-CIAC6 c — later rows present=$G16_LATE of 9, AC-9 '$(verdict_of "$J16" AC-9)', CIAC-5 '$(verdict_of "$J16" CIAC-5)', stream-truncated=$(strunc_of "$J16"), rc=$RC16"
+
+# --- V6837-AC4: the one splitter, the one vocabulary, and the bare-verb rule, unit by unit. ---
+EC16_OK=1
+t_ec16() { [ "$(extract_command "$1")" = "$2" ] || { EC16_OK=0; printf '       extract_command mismatch: [%s] -> [%s], wanted [%s]\n' "$1" "$(extract_command "$1")" "$2"; }; }
+t_ec16 'run `--self-test` (expect exit 0); then `grep -c -E "X" some/file.md` — expect exactly 3' 'grep -c -E "X" some/file.md'
+t_ec16 '`grep -c x f` then `grep -c y f`' 'grep -c x f'
+t_ec16 '``grep -c x f``' ''
+t_ec16 'prose only, no spans' ''
+t_ec16 'grep -c bare f' 'grep -c bare f'
+t_ec16 '`python3 tools/x.py` and `awk 1 f`' 'python3 tools/x.py'
+t_ec16 '`PARSE-07` then `release/x.sh`' ''
+t_ec16 '`grep`' ''
+t_ec16 '`grep` the register, then `grep -c x f` expect 1' 'grep -c x f'
+t_ec16 'trailing `' ''
+t_ec16 '`  grep -c spaced f`' '  grep -c spaced f'
+[ "$EC16_OK" = 1 ] \
+  && ok "V6837-AC4 m — extract_command reads spans through the one splitter and skips a bare verb (11 pinned cases)" \
+  || bad "V6837-AC4 m — extract_command departs from a pinned case (above)"
+if type comparator_phrases >/dev/null 2>&1 && type limb_comparator >/dev/null 2>&1; then
+  G16_CP="$(comparator_phrases 'at least 2, ≤ 3, expect zero, exactly 4' | tr '\t\n' ' |')"
+  G16_EM="$(comparator_phrases 'expect **0**; at least __3__; ≥ *5*' | tr '\t\n' ' |')"
+  G16_NW="$(comparator_phrases 'returns 0 and = 2 and → 4 and expects 1' | tr '\t\n' ' |')"
+  [ "$G16_CP" = ">= 2|<= 3|== 0|== 4|" ] && [ "$G16_EM" = "== 0|>= 3|>= 5|" ] && [ -z "$G16_NW" ] \
+    && ok "V6837-AC4 n — comparator_phrases reads every phrase in order, emphasis around N included, and no wider form" \
+    || bad "V6837-AC4 n — comparator_phrases read [$G16_CP] [$G16_EM] [$G16_NW]"
+  [ "$(limb_comparator 'at least 3; again at least 3' | tr '\t' ' ')" = ">= 3" ] && [ "$(limb_comparator 'expect 0 (at most 3 others)')" = "ambiguous" ] \
+    && ok "V6837-AC4 o — limb_comparator counts a repeat once and reads two that disagree as ambiguous" \
+    || bad "V6837-AC4 o — limb_comparator read '$(limb_comparator 'at least 3; again at least 3')' / '$(limb_comparator 'expect 0 (at most 3 others)')'"
+else
+  bad "V6837-AC4 n — comparator_phrases or limb_comparator is not defined in the executor"
+  bad "V6837-AC4 o — limb_comparator is not defined in the executor"
+fi
+G16_ET="$(sed -n '/^extract_threshold()/,/^}/p' "$VERIFY")"; G16_PH="$(sed -n '/^comparator_phrases()/,/^}/p' "$VERIFY")"
+G16_ETN="$(grep -o -E 'CMP_(GE|LE|EQ|EMPH)_ALT' <<<"$G16_ET" | sort -u | grep -c . || true)"
+G16_PHN="$(grep -o -E 'CMP_(GE|LE|EQ|EMPH)_ALT' <<<"$G16_PH" | sort -u | grep -c . || true)"
+[ "$G16_ETN" = "4" ] && [ "$G16_PHN" = "4" ] \
+   && [ "$(grep -c -F 'at least' <<<"$G16_ET" || true)" = "0" ] && [ "$(grep -c -F 'at least' <<<"$G16_PH" || true)" = "0" ] \
+  && ok "V6837-AC4 p — one vocabulary: extract_threshold and comparator_phrases each read all four CMP_*_ALT constants and carry no comparator literal of their own" \
+  || bad "V6837-AC4 p — constants read: extract_threshold $G16_ETN of 4, comparator_phrases $G16_PHN of 4 (or a body still carries its own 'at least')"
+H16="$("$VERIFY" --help 2>&1 || true)"
+[ "$(grep -c -F 'MULTI-COMMAND METHODS' <<<"$H16" || true)" = "1" ] && [ "$(grep -c -F 'did not run' <<<"$H16" || true)" -ge 1 ] \
+   && [ "$(grep -c -F 'designated command' <<<"$H16" || true)" -ge 1 ] \
+  && ok "V6837-AC4 q — --help states how a multi-command method is graded (the designated command; the rest did not run)" \
+  || bad "V6837-AC4 q — --help carries no MULTI-COMMAND METHODS section naming the designated command and 'did not run'"
+
+# --- SEEDED FAILURES. Each reverts one limb and names the answer it must move to. ---
+m16 "V6837-AC4 M1" g16-m1-unhooked 2 's/^  if limbs_are_multi "\$limbs"; then grade_limbs "\$limbs"; return; fi$/  :/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_LIMB"; JM16_1="$VRP_JSON"
+  if mutant_ran "V6837-AC4 M1"; then
+    [ "$(verdict_of "$JM16_1" AC-2)" = PASS ] && [ "$(verdict_of "$JM16_1" AC-8)" = PASS ] && [ "$(verdict_of "$JM16_1" CIAC-2)" = PASS ] \
+      && ok "V6837-AC4 M1 detected — without the multi-command path the false second command PASSes again, and so does the violated null" \
+      || bad "V6837-AC4 M1 SURVIVED — AC-2 $(fv16 "$JM16_1" AC-2), AC-8 $(fv16 "$JM16_1" AC-8), CIAC-2 $(fv16 "$JM16_1" CIAC-2)"
+  fi
+fi
+m16 "V6837-AC4 M2" g16-m2-whole-cell 1 's/cmp="\$\(limb_comparator "\$\{L_prose\[\$i\]\}"\)"/cmp="$(limb_comparator "$method")"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_LIMB"; JM16_2="$VRP_JSON"
+  if mutant_ran "V6837-AC4 M2"; then
+    [ "$(verdict_of "$JM16_2" AC-8)" = ERROR ] && g16_has "$JM16_2" AC-8 "comparator-ambiguous" \
+      && ok "V6837-AC4 M2 detected — read from the whole cell, the designated command meets two comparators and AC-8 cannot be graded on its own null" \
+      || bad "V6837-AC4 M2 SURVIVED — AC-8 $(fv16 "$JM16_2" AC-8) '$(observed_of "$JM16_2" AC-8)'"
+  fi
+fi
+m16 "V7531-CIAC6 M3" g16-m3-further-runs-unisolated 3 \
+  's/^      stdin\)$/      stdin) eval_free_run "$span" >\/dev\/null 2>\&1 || true/' \
+  's/if reads_stdin_cmd "\$cmd" >\/dev\/null; then return 4; fi/if false; then return 4; fi/' \
+  's/\} <\/dev\/null; done <<< "\$per_issue_records"/}; done <<< "$per_issue_records"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_LIMB"; JM16_3="$VRP_JSON"; RCM16_3="$VRP_RC"
+  if mutant_ran "V7531-CIAC6 M3"; then
+    [ "$(acs_of "$JM16_3")" -lt 14 ] && [ "$(strunc_of "$JM16_3")" -ge 1 ] && [ "$(ciacs_of "$JM16_3")" = "5" ] && [ "$RCM16_3" -eq 1 ] \
+      && ok "V7531-CIAC6 M3 detected — a further command run outside the stdin-isolated dispatch drains the per-issue loop ($(acs_of "$JM16_3") of 14 rows; the CIAC loop, still isolated, keeps 5 of 5) and the tripwire exits 1" \
+      || bad "V7531-CIAC6 M3 SURVIVED — AC=$(acs_of "$JM16_3") CIAC=$(ciacs_of "$JM16_3") stream-truncated=$(strunc_of "$JM16_3") rc=$RCM16_3"
+  fi
+fi
+m16 "V6837-AC4 M4" g16-m4-bare-verb-is-a-command 1 's/ bare-verb\) continue ;; esac$/ bare-verb) printf "%s" "$span"; return ;; esac/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_LIMB"; JM16_4="$VRP_JSON"
+  if mutant_ran "V6837-AC4 M4"; then
+    G16_M4="$(verdict_of "$JM16_4" AC-13)"
+    [ -n "$G16_M4" ] && [ "$G16_M4" != PASS ] \
+      && ok "V6837-AC4 M4 detected — with a bare verb taken as the command, AC-13 runs 'grep' with no argument and no longer PASSes ($G16_M4)" \
+      || bad "V6837-AC4 M4 SURVIVED — AC-13 $(fv16 "$JM16_4" AC-13) '$(observed_of "$JM16_4" AC-13)'"
+  fi
+fi
+# M5 — the tool catalog removed: span_invokes_tool returns before its body, so it
+# names no tool, as the stub it replaced did. The tool span is prose again and AC-14
+# grades as one command, which proves arm j reads the catalog and not something else.
+m16 "V6837-AC4 M5" g16-m5-no-tool-catalog 1 's/^span_invokes_tool\(\) \{$/span_invokes_tool() { return 0/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_LIMB"; JM16_5="$VRP_JSON"
+  if mutant_ran "V6837-AC4 M5"; then
+    [ "$(fv16 "$JM16_5" AC-14)" = "per-issue/PASS" ] && [ "$(observed_of "$JM16_5" AC-14)" = "count=1 (== 1)" ] \
+      && ok "V6837-AC4 M5 detected — without the tool catalog the tool span is prose again and AC-14 PASSes on its probe alone: the catalog is the one seam that makes it a command" \
+      || bad "V6837-AC4 M5 SURVIVED — AC-14 without the catalog $(fv16 "$JM16_5" AC-14) '$(observed_of "$JM16_5" AC-14)'"
+  fi
+fi
+rm -rf "$MUTD6837"
+
+# ===========================================================================
+# G17 — A METHOD THIS EXECUTOR CANNOT RUN IS REPORTED UNRUNNABLE, AND A SCOPE
+#       ASSERTION RUNS NATIVELY (V6848-AC1, V6848-AC2, V6848-AC3, V6848-AC4).
+#
+# UNRUNNABLE is the fifth verdict, can't-run-here: the row was read, and a command
+# it names cannot run in this executor. It is never PASS and it stays outside
+# main()'s exit predicate, so a plan whose rows only decline still exits 0. A tool
+# is named only from an invocation-shaped span (span_invokes_tool), so a label, a
+# file name or a word the method merely mentions is never named, and a mention-only
+# row never reads UNRUNNABLE. A method naming a runnable probe and a tool reads the
+# can't-run slot and names both. A `git diff` scope assertion runs natively: its
+# pathspecs are data, matched in-process against the release diff a test seam
+# supplies, and every vacuous or mis-bound input reads UNRUNNABLE rather than PASS.
+# RUNNABLE_VERBS is unchanged, proved armed-red-then-revert.
+#
+# The unrunnable fixture's awk rows carry a brace, which hides a record from the
+# shared readers, so every record here is read from its own line (g17_family with
+# G13's g13_verdict and g13_observed). Every arm first requires the record it grades
+# to be present. Each seeded failure is proved to apply at exactly the sites it
+# names, and only a mutation that took is graded.
+# ===========================================================================
+echo
+echo "G17 — #6848: a method this executor cannot run is UNRUNNABLE, and a scope assertion runs natively (V6848-AC1/AC2/AC3/AC4)"
+MUTD6848="$(mktemp -d -t verify-plan-6848-mut.XXXXXX)"
+SEAMD6848="$(mktemp -d -t verify-plan-6848-seam.XXXXXX)"
+FIX_SCOPE="release/tools/tests/fixtures/verify-plan-scope.md"
+FIX_UNRUN="release/tools/tests/fixtures/verify-plan-unrunnable.md"
+printf 'M\trelease/tools/verify-release-plan.sh\nM\trelease/tools/tests/test_verify_release_plan.sh\nM\trelease/references/pipeline/stage-04-planning.md\n' > "$SEAMD6848/mixed.tsv"
+printf 'M\trelease/tools/verify-release-plan.sh\nM\trelease/tools/tests/test_verify_release_plan.sh\n' > "$SEAMD6848/clean.tsv"
+: > "$SEAMD6848/empty.tsv"
+# g17_seam <tool> <fixture> <seam> — vrp_run's contract (VRP_JSON + VRP_RC in the
+# CURRENT shell), with the delivered set read from a test seam instead of git.
+g17_seam() {
+  set +e
+  VRP_JSON="$("$1" --format=json --root "$REPO_ROOT" --fcm-diff-file "$3" "$REPO_ROOT/$2" 2>/dev/null)"
+  VRP_RC=$?
+  set -e
+}
+# g17_family <json> <id> — the family of one record, read from the record's own line.
+g17_family() {
+  local line v
+  line="$(grep -F "\"id\":\"$2\"" <<<"$1" || true)"
+  v="$(sed -n 's/.*"family":"\([a-z-]*\)".*/\1/p' <<<"$line")"
+  printf '%s' "${v%%$'\n'*}"
+}
+# fv17 <json> <id> — "family/verdict"; reads "/" for an absent record, which no arm expects.
+fv17() { printf '%s/%s' "$(g17_family "$1" "$2")" "$(g13_verdict "$1" "$2")"; }
+# g17_has <json> <id> <text> — TRUE only when the record's observed text carries <text>.
+g17_has() { case "$(g13_observed "$1" "$2")" in *"$3"*) return 0 ;; *) return 1 ;; esac; }
+# g17_names <json> <id> <word>... — TRUE when the record's observed text carries any <word>.
+g17_names() { local j="$1" i="$2" w; shift 2; for w in "$@"; do g17_has "$j" "$i" "$w" && return 0; done; return 1; }
+# m17 <label> <stem> <sites> <sed-expr>... — publish the mutant in MUT_PATH, count the
+# lines it changed (a substitution never adds or removes a line), and set MUT_TOOK
+# only when it applied at exactly <sites> lines.
+m17() {
+  local label="$1" stem="$2" want="$3" dst n e
+  shift 3
+  dst="$MUTD6848/$stem.sh"
+  cp "$VERIFY" "$dst"
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  n="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$dst")"
+  if [ "$n" -eq "$want" ]; then
+    MUT_TOOK=1; ok "$label — mutation applied at exactly $want site(s): the mutant differs from the shipped tool in $n line(s)"
+  else
+    MUT_TOOK=0; bad "$label — mutation applied at $n site(s), expected exactly $want; its arm is not graded"
+  fi
+}
+
+g17_seam "$VERIFY" "$FIX_SCOPE" "$SEAMD6848/mixed.tsv"; J17M="$VRP_JSON"; RC17M="$VRP_RC"
+vrp_run "$VERIFY" "$FIX_UNRUN"; J17U="$VRP_JSON"; RC17U="$VRP_RC"
+E17U="$("$VERIFY" --format=json --root "$REPO_ROOT" "$REPO_ROOT/$FIX_UNRUN" 2>&1 >/dev/null || true)"
+
+# --- G17-0: DENOMINATOR FIRST — both fixtures still declare their rows, and every one emits. ---
+G17_SROWS="$(grep -c -F '| AC-' "$REPO_ROOT/$FIX_SCOPE" || true)"
+G17_UROWS="$(grep -c -F '| AC-' "$REPO_ROOT/$FIX_UNRUN" || true)"
+G17_UCIAC="$(grep -c -F '**CIAC-' "$REPO_ROOT/$FIX_UNRUN" || true)"
+[ "${G17_SROWS:-0}" -eq 13 ] && [ "${G17_UROWS:-0}" -eq 10 ] && [ "${G17_UCIAC:-0}" -eq 4 ] \
+   && [ "$(acs_of "$J17M")" = "13" ] && [ "$(acs_of "$J17U")" = "10" ] && [ "$(ciacs_of "$J17U")" = "4" ] \
+  && ok "G17-0 SENSITIVITY — the scope fixture declares and emits 13 rows, and the unrunnable fixture 10 rows and 4 CIACs (the arms below grade real records)" \
+  || bad "G17-0 declared scope=${G17_SROWS:-0} unrunnable=${G17_UROWS:-0}+${G17_UCIAC:-0}, emitted $(acs_of "$J17M") and $(acs_of "$J17U")+$(ciacs_of "$J17U") (expected 13 and 10+4)"
+
+# --- V6848-AC1: a scope assertion dispatches to its own family and executes; a failing one FAILs. ---
+G17_A=1
+for g17a in AC-1 AC-2 AC-5; do
+  { [ "$(fv17 "$J17M" "$g17a")" = scope/PASS ] && [ "$(g13_observed "$J17M" "$g17a")" = "scope count=0 (== 0) over 3 changed path(s) in the release diff" ]; } || G17_A=0
+done
+[ "$G17_A" = 1 ] \
+  && ok "V6848-AC1 a — a scope assertion dispatches to the scope family and executes: AC-1, AC-2 (an exclusion) and AC-5 (a glob) read count=0 (== 0) over the 3 changed paths" \
+  || bad "V6848-AC1 a — AC-1 $(fv17 "$J17M" AC-1) '$(g13_observed "$J17M" AC-1)'; AC-2 $(fv17 "$J17M" AC-2); AC-5 $(fv17 "$J17M" AC-5)"
+[ "$(fv17 "$J17M" AC-3)" = scope/PASS ] && g17_has "$J17M" AC-3 "scope count=2 (== 2) over 3 changed path(s)" \
+  && ok "V6848-AC1 b CONTROL — the same instrument reaches the changed paths: AC-3 reads count=2 (== 2)" \
+  || bad "V6848-AC1 b — AC-3 $(fv17 "$J17M" AC-3) '$(g13_observed "$J17M" AC-3)'"
+[ "$(fv17 "$J17M" AC-4)" = scope/FAIL ] && g17_has "$J17M" AC-4 "scope count=1 (wanted == 0)" \
+   && g17_has "$J17M" AC-4 "release/references/pipeline/stage-04-planning.md" && [ "$RC17M" -eq 3 ] \
+  && ok "V6848-AC1 c CONTROL — a violated scope assertion FAILs, naming the path that broke it, and the plan exits 3: the family is not inert" \
+  || bad "V6848-AC1 c — AC-4 $(fv17 "$J17M" AC-4) '$(g13_observed "$J17M" AC-4)', rc $RC17M"
+G17_D=1
+for g17a in AC-6 AC-7 AC-8; do
+  { [ "$(g13_verdict "$J17M" "$g17a")" = UNRUNNABLE ] && g17_has "$J17M" "$g17a" "tool-invocation-outside-executor-allowlist:git "; } || G17_D=0
+done
+[ "$G17_D" = 1 ] \
+  && ok "V6848-AC1 d — a pipeline, a pinned range and a comparator-less git diff are outside the grammar: each reads UNRUNNABLE naming git, never PASS" \
+  || bad "V6848-AC1 d — AC-6 $(fv17 "$J17M" AC-6), AC-7 $(fv17 "$J17M" AC-7), AC-8 $(fv17 "$J17M" AC-8)"
+g17_seam "$VERIFY" "$FIX_SCOPE" "$SEAMD6848/empty.tsv"; J17E="$VRP_JSON"
+G17_E=1
+for g17a in AC-1 AC-2 AC-3 AC-4 AC-5; do
+  { [ "$(fv17 "$J17E" "$g17a")" = scope/UNRUNNABLE ] && g17_has "$J17E" "$g17a" "scope-diff-empty"; } || G17_E=0
+done
+[ "$G17_E" = 1 ] && [ "$(grep -c '"family":"scope".*"verdict":"PASS"' <<<"$J17E" || true)" = "0" ] \
+  && ok "V6848-AC1 e — an empty release diff is vacuous, never a pass: AC-1..AC-5 read UNRUNNABLE scope-diff-empty, and no scope row PASSes" \
+  || bad "V6848-AC1 e — AC-1 $(fv17 "$J17E" AC-1) '$(g13_observed "$J17E" AC-1)'; scope PASS records: $(grep -c '"family":"scope".*"verdict":"PASS"' <<<"$J17E" || true)"
+mkdir -p "$SEAMD6848/live/release/releases/plans"
+cp "$REPO_ROOT/$FIX_SCOPE" "$SEAMD6848/live/release/releases/plans/p.md"
+set +e
+J17L="$("$VERIFY" --format=json --root "$REPO_ROOT" --fcm-diff-file "$SEAMD6848/mixed.tsv" "$SEAMD6848/live/release/releases/plans/p.md" 2>/dev/null)"
+set -e
+[ "$(fv17 "$J17L" AC-1)" = scope/ERROR ] && g17_has "$J17L" AC-1 "scope-fixture-mode-on-live-plan" \
+  && ok "V6848-AC1 f — the test seam is refused against a plan under release/releases/plans/: a real release is never graded on an authored diff (ERROR)" \
+  || bad "V6848-AC1 f — AC-1 on a live-plan path with the seam: $(fv17 "$J17L" AC-1) '$(g13_observed "$J17L" AC-1)'"
+
+# --- V6848-AC1 g: NON-SYNTHETIC — a real commit's diff, through the same fixed git call. ---
+# 6fea3536 changed 4 paths: the executor, the suite and two new fixtures. The arm reads
+# the delivered set git reports for that one commit, so it grades the family's git path
+# rather than the seam. An unreachable commit (a shallow clone, or a tree that is not a
+# repository) degrades to a stated skip plus the honest reading, never a false pass.
+cat > "$SEAMD6848/real.md" <<'EOF'
+# vTEST Release Plan — a scope assertion over a real commit's diff (G17)
+
+## Verification Plan
+
+**#983 — the scope family on a real diff**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-1 | `git diff --name-only origin/main...HEAD -- release/tools/verify-release-plan.sh` expect 1 | PASS: the commit changed the executor |
+| AC-2 | `git diff --name-only origin/main...HEAD -- release/tools/tests/` expect 0 | FAIL: the commit changed 3 paths under tests/ |
+EOF
+set +e
+J17G="$("$VERIFY" --format=json --root "$REPO_ROOT" --merge-base '6fea3536^' --head 6fea3536 "$SEAMD6848/real.md" 2>/dev/null)"
+set -e
+if git -C "$REPO_ROOT" cat-file -e '6fea3536^{commit}' 2>/dev/null; then
+  [ "$(fv17 "$J17G" AC-1)" = scope/PASS ] && g17_has "$J17G" AC-1 "scope count=1 (== 1) over 4 changed path(s)" \
+     && [ "$(fv17 "$J17G" AC-2)" = scope/FAIL ] && g17_has "$J17G" AC-2 "scope count=3 (wanted == 0) over 4 changed path(s)" \
+    && ok "V6848-AC1 g NON-SYNTHETIC — over a real commit's diff the family reads count=1 (== 1) and FAILs count=3 (wanted == 0), through the fixed git call" \
+    || bad "V6848-AC1 g — AC-1 $(fv17 "$J17G" AC-1) '$(g13_observed "$J17G" AC-1)'; AC-2 $(fv17 "$J17G" AC-2) '$(g13_observed "$J17G" AC-2)'"
+else
+  [ "$(fv17 "$J17G" AC-1)" = scope/UNRUNNABLE ] && g17_has "$J17G" AC-1 "scope-diff-unresolvable" \
+     && [ "$(fv17 "$J17G" AC-2)" = scope/UNRUNNABLE ] \
+    && ok "V6848-AC1 g SKIP — historical-commit-unreachable (a shallow clone, or not a repository): both rows read UNRUNNABLE scope-diff-unresolvable, degraded honestly, not passed" \
+    || bad "V6848-AC1 g — the commit is unreachable, yet AC-1 $(fv17 "$J17G" AC-1) '$(g13_observed "$J17G" AC-1)'; AC-2 $(fv17 "$J17G" AC-2)"
+fi
+
+# --- V6848-AC1 h: the three guards, each on its own row (D23); the third is scoped to == and <=. ---
+[ "$(fv17 "$J17M" AC-9)" = scope/UNRUNNABLE ] && g17_has "$J17M" AC-9 "scope-comparator-ambiguous" \
+  && ok "V6848-AC1 h1 — two comparators that disagree grade the assertion on neither: UNRUNNABLE scope-comparator-ambiguous" \
+  || bad "V6848-AC1 h1 — AC-9 $(fv17 "$J17M" AC-9) '$(g13_observed "$J17M" AC-9)'"
+[ "$(fv17 "$J17M" AC-10)" = scope/UNRUNNABLE ] && g17_has "$J17M" AC-10 "scope-pathspec-placeholder:<skill-dir>" \
+  && ok "V6848-AC1 h2 — a placeholder pathspec names no path: UNRUNNABLE scope-pathspec-placeholder" \
+  || bad "V6848-AC1 h2 — AC-10 $(fv17 "$J17M" AC-10) '$(g13_observed "$J17M" AC-10)'"
+[ "$(fv17 "$J17M" AC-11)" = scope/UNRUNNABLE ] && g17_has "$J17M" AC-11 "scope-pathspec-selects-nothing:core/skils/" \
+  && ok "V6848-AC1 h3 — an expect-0 pathspec that selects no existing and no delivered path is vacuous: UNRUNNABLE scope-pathspec-selects-nothing" \
+  || bad "V6848-AC1 h3 — AC-11 $(fv17 "$J17M" AC-11) '$(g13_observed "$J17M" AC-11)'"
+[ "$(fv17 "$J17M" AC-12)" = scope/PASS ] && g17_has "$J17M" AC-12 "scope count=0 (>= 0)" \
+  && ok "V6848-AC1 h4 CONTROL — the selects-nothing guard reads only an == or <= assertion: the same pathspec under at least 0 is graded" \
+  || bad "V6848-AC1 h4 — AC-12 $(fv17 "$J17M" AC-12) '$(g13_observed "$J17M" AC-12)'"
+# --- V6848-AC1 i: the partition's partial rule reaches the scope family too (D37). ---
+[ -n "$PARTIAL_SLOT" ] && [ "$(g13_verdict "$J17M" AC-13)" = "$PARTIAL_SLOT" ] && [ "$PARTIAL_SLOT" != PASS ] \
+   && g17_has "$J17M" AC-13 "limb 1 git PASS scope count=0 (== 0)" && g17_has "$J17M" AC-13 "limb 2 python3 did not run (outside the verb set)" \
+  && ok "V6848-AC1 i — a scope assertion beside a command that did not run reads the can't-run slot ($PARTIAL_SLOT), naming the command that ran and the one that did not" \
+  || bad "V6848-AC1 i — AC-13 $(fv17 "$J17M" AC-13) '$(g13_observed "$J17M" AC-13)'"
+
+# --- V6848-AC2: a method this executor cannot run is UNRUNNABLE, naming a tool it invokes. ---
+[ "$(fv17 "$J17U" AC-1)" = unrunnable/UNRUNNABLE ] && g17_has "$J17U" AC-1 "tool-invocation-outside-executor-allowlist:awk " \
+  && ok "V6848-AC2 a — an awk method with no family keyword reaches the residual step and reads UNRUNNABLE naming awk, never PASS" \
+  || bad "V6848-AC2 a — AC-1 $(fv17 "$J17U" AC-1) '$(g13_observed "$J17U" AC-1)'"
+{ [ "$(fv17 "$J17U" AC-2)" = per-issue/UNRUNNABLE ] && g17_has "$J17U" AC-2 "allowlist:awk " \
+  && [ "$(g13_verdict "$J17U" AC-3)" = UNRUNNABLE ] && g17_has "$J17U" AC-3 "allowlist:python3 " \
+  && [ "$(fv17 "$J17U" CIAC-1)" = integration/UNRUNNABLE ] && g17_has "$J17U" CIAC-1 "allowlist:python3 " \
+  && [ "$(fv17 "$J17U" AC-5)" = per-issue/UNRUNNABLE ] && g17_has "$J17U" AC-5 "allowlist:bash "; } \
+  && ok "V6848-AC2 b — every route declines at the one decline point: awk with a keyword, an interpreter, the cross-issue handler, and the tool after an identifier (bash, not G-CL)" \
+  || bad "V6848-AC2 b — AC-2 $(fv17 "$J17U" AC-2); AC-3 $(fv17 "$J17U" AC-3) '$(g13_observed "$J17U" AC-3)'; CIAC-1 $(fv17 "$J17U" CIAC-1); AC-5 $(fv17 "$J17U" AC-5) '$(g13_observed "$J17U" AC-5)'"
+[ "$(fv17 "$J17U" AC-4)" = per-issue/SKIP ] && [ "$(g13_observed "$J17U" AC-4)" = "no-executable-command-in-method" ] \
+   && ! g17_names "$J17U" AC-4 PARSE-07 PARSE-12a PARSE-14a PMO_SCOPE_GUARD_ROOT G-CL _pmo status \
+  && ok "V6848-AC2 c — identifiers are never named as a tool: a method made only of labels is a method with no command" \
+  || bad "V6848-AC2 c — AC-4 $(fv17 "$J17U" AC-4) '$(g13_observed "$J17U" AC-4)'"
+[ "$(fv17 "$J17U" CIAC-2)" = integration/SKIP ] && [ "$(g13_observed "$J17U" CIAC-2)" = "documented-decision-method (no runnable command)" ] \
+  && ok "V6848-AC2 d — prose around an identifier is never run as a bare command: CIAC-2 is a documented decision, not executed" \
+  || bad "V6848-AC2 d — CIAC-2 $(fv17 "$J17U" CIAC-2) '$(g13_observed "$J17U" CIAC-2)'"
+[ "$(fv17 "$J17U" AC-6)" = per-issue/PASS ] && [ "$(fv17 "$J17U" CIAC-3)" = integration/PASS ] \
+  && ok "V6848-AC2 e CONTROL — a runnable probe still executes in both loops (AC-6, CIAC-3)" \
+  || bad "V6848-AC2 e — AC-6 $(fv17 "$J17U" AC-6), CIAC-3 $(fv17 "$J17U" CIAC-3)"
+# f — THE COMMAND-SHAPE TEST, unit by unit: a tool is named only from an invocation-shaped span.
+G17_F=1
+t_sit17() { [ "$(span_invokes_tool "$1" "${3:-}" 2>/dev/null || true)" = "$2" ] || { G17_F=0; printf '       span_invokes_tool mismatch: [%s] -> [%s], wanted [%s]\n' "$1" "$(span_invokes_tool "$1" "${3:-}" 2>/dev/null || true)" "$2"; }; }
+for g17s in PARSE-07 PARSE-12a PARSE-14a PMO_SCOPE_GUARD_ROOT G-CL _pmo status PORTFOLIO.md 539c4440 resolve_check_mode main warn '../x.sh' case source set 'core/hooks/block-destructive.sh' 'grep -c x f'; do
+  t_sit17 "$g17s" ''
+done
+t_sit17 "awk 'END{print NR}' core/CLAUDE.md.template" awk
+t_sit17 'python3' python3
+t_sit17 'python3 release/tools/check-adr-numbers.py' python3
+t_sit17 'release/tools/automated-closeout.sh --self-test' automated-closeout.sh
+t_sit17 './qa.sh --quick' qa.sh
+t_sit17 'set -u' set
+t_sit17 'case' '' whole
+t_sit17 'release/tools/x.sh' x.sh whole
+[ "$G17_F" = 1 ] \
+  && ok "V6848-AC2 f — the command-shape test: 19 identifiers and mentions name nothing (labels, a file name, a hash, a keyword or builtin with no argument, a script path mentioned in prose, an allowlisted command); 7 invocation-shaped spans name their tool" \
+  || bad "V6848-AC2 f — span_invokes_tool departs from a pinned case (above)"
+# g — the roll-up counts UNRUNNABLE in both presenters, and the five counters sum to the records.
+G17_MD="$("$VERIFY" --format=md --root "$REPO_ROOT" "$REPO_ROOT/$FIX_UNRUN" 2>/dev/null || true)"
+G17_RP="$(sed -n 's/.*"rollup": {"pass": \([0-9]*\), "fail": \([0-9]*\), "skip": \([0-9]*\), "unrunnable": \([0-9]*\), "error": \([0-9]*\).*/\1 \2 \3 \4 \5/p' <<<"$J17U")"
+G17_U="$(count_verdict "$J17U" UNRUNNABLE)"
+G17_SUM="$(awk '{ print $1 + $2 + $3 + $4 + $5 }' <<<"${G17_RP:-x}")"
+[ "$G17_U" = "8" ] && [ "$(awk '{ print $4 }' <<<"${G17_RP:-x}")" = "8" ] && [ "$G17_SUM" = "$(g13_records "$J17U")" ] \
+   && [ "$(grep -c -F '/ 8 UNRUNNABLE /' <<<"$G17_MD" || true)" = "1" ] \
+  && ok "V6848-AC2 g — UNRUNNABLE has its own counter: 8 records, 'unrunnable': 8 in JSON, '8 UNRUNNABLE' in the markdown roll-up, and the five counters sum to the $G17_SUM records emitted" \
+  || bad "V6848-AC2 g — UNRUNNABLE records=$G17_U, JSON rollup [${G17_RP:-absent}] (sum $G17_SUM of $(g13_records "$J17U") records), md line: $(grep -F 'Verdict roll-up' <<<"$G17_MD" || true)"
+[ "$RC17U" -eq 0 ] && grep -q -F 'UNRUNNABLE' <<<"$E17U" \
+  && ok "V6848-AC2 h — UNRUNNABLE does not fail the run (exit 0) and is noted on stderr, so a clean exit is not read as every check having run" \
+  || bad "V6848-AC2 h — rc $RC17U; stderr '${E17U:-<empty>}'"
+{ [ -n "$(g13_verdict "$J17U" AC-7)" ] && [ "$(g13_verdict "$J17U" AC-7)" != UNRUNNABLE ] && ! g17_names "$J17U" AC-7 case source \
+  && [ -n "$(g13_verdict "$J17U" AC-8)" ] && [ "$(g13_verdict "$J17U" AC-8)" != UNRUNNABLE ] && ! g17_names "$J17U" AC-8 block-destructive; } \
+  && ok "V6848-AC2 i SPECIFICITY — a mention-only span never grades UNRUNNABLE: a keyword or field name with no argument, and a script path mentioned in prose, are not commands" \
+  || bad "V6848-AC2 i — AC-7 $(fv17 "$J17U" AC-7) '$(g13_observed "$J17U" AC-7)'; AC-8 $(fv17 "$J17U" AC-8) '$(g13_observed "$J17U" AC-8)'"
+# j — the RESIDUAL step keys on the same test: a mention-only row with no keyword is not
+# UNRUNNABLE; a tool row with no keyword is (its control).
+cat > "$SEAMD6848/resid.md" <<'EOF'
+# vTEST Release Plan — the residual step keys on the command-shape test (G17)
+
+## Verification Plan
+
+**#984 — rows no keyword arm claims**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-1 | the hand-maintained `case` arms and the `core/hooks/block-destructive.sh` control stay in place | mentions only: not a command |
+| AC-2 | `awk 'END{print NR}' core/CLAUDE.md.template` expect 4 | control: a tool the residual step names |
+EOF
+set +e
+J17R="$("$VERIFY" --format=json --root "$REPO_ROOT" "$SEAMD6848/resid.md" 2>/dev/null)"
+set -e
+{ [ -n "$(g13_verdict "$J17R" AC-1)" ] && [ "$(g13_verdict "$J17R" AC-1)" != UNRUNNABLE ] && [ "$(g17_family "$J17R" AC-1)" != unrunnable ] \
+  && [ "$(fv17 "$J17R" AC-2)" = unrunnable/UNRUNNABLE ]; } \
+  && ok "V6848-AC2 j SPECIFICITY — the residual step keys on the command-shape test: a mention-only row no keyword claims is not UNRUNNABLE ($(fv17 "$J17R" AC-1)), and a tool row is (AC-2)" \
+  || bad "V6848-AC2 j — AC-1 $(fv17 "$J17R" AC-1) '$(g13_observed "$J17R" AC-1)'; AC-2 $(fv17 "$J17R" AC-2)"
+# k — INT-4: a runnable probe beside a tool, in either order and in either loop, reads the
+# can't-run slot and names both commands; it is never PASS.
+{ [ -n "$PARTIAL_SLOT" ] && [ "$PARTIAL_SLOT" != PASS ] \
+  && [ "$(g13_verdict "$J17U" AC-9)" = "$PARTIAL_SLOT" ] && g17_has "$J17U" AC-9 "limb 1 grep PASS count=" && g17_has "$J17U" AC-9 "limb 2 awk did not run (outside the verb set)" \
+  && [ "$(g13_verdict "$J17U" AC-10)" = "$PARTIAL_SLOT" ] && g17_has "$J17U" AC-10 "limb 1 awk did not run (outside the verb set); limb 2 grep PASS count=" \
+  && [ "$(g13_verdict "$J17U" CIAC-4)" = "$PARTIAL_SLOT" ] && g17_has "$J17U" CIAC-4 "limb 2 awk did not run (outside the verb set)"; } \
+  && ok "V6848-AC2 k — INT-4: a grep and an awk in one method read the can't-run slot ($PARTIAL_SLOT) in both orders and both loops, naming both commands; never PASS" \
+  || bad "V6848-AC2 k — AC-9 $(fv17 "$J17U" AC-9) '$(g13_observed "$J17U" AC-9)'; AC-10 $(fv17 "$J17U" AC-10); CIAC-4 $(fv17 "$J17U" CIAC-4)"
+
+# --- V6848-AC3: RUNNABLE_VERBS is unchanged — the plan row's literal, proved armed-red-then-revert. ---
+G17_LIT="RUNNABLE_VERBS='grep test ls head wc cat'"
+G17_L0="$(grep -c -F "$G17_LIT" "$VERIFY" || true)"
+m17 "V6848-AC3 armed red" g17-ac3-verb-set-widened 1 "s/^RUNNABLE_VERBS='grep test ls head wc cat'\$/RUNNABLE_VERBS='grep test ls head wc cat awk git'/"
+G17_L1="$(grep -c -F "$G17_LIT" "$MUT_PATH" || true)"
+[ "$G17_L0" = "1" ] && [ "$MUT_TOOK" = 1 ] && [ "$G17_L1" = "0" ] \
+  && ok "V6848-AC3 — RUNNABLE_VERBS is unchanged: the plan row's literal counts 1 in the shipped tool and 0 in a copy whose verb set is widened (armed red; the shipped tool is untouched)" \
+  || bad "V6848-AC3 — the literal counts $G17_L0 in the shipped tool and ${G17_L1:-?} in the widened copy (expected 1 and 0)"
+
+# --- V6848-AC4: a plan whose rows assert scope reaches a clean exit. ---
+g17_seam "$VERIFY" "$FIX_SCOPE" "$SEAMD6848/clean.tsv"; J17C="$VRP_JSON"; RC17C="$VRP_RC"
+G17_C=1
+for g17a in AC-1 AC-2 AC-3 AC-4 AC-5; do [ "$(fv17 "$J17C" "$g17a")" = scope/PASS ] || G17_C=0; done
+[ "$G17_C" = 1 ] && [ "$RC17C" -eq 0 ] && [ "$RC17M" -eq 3 ] \
+  && ok "V6848-AC4 — on a release diff that honours every scope row the plan exits 0 (AC-1..AC-5 PASS); control: the mixed diff exits 3" \
+  || bad "V6848-AC4 — clean rc $RC17C (AC-4 $(fv17 "$J17C" AC-4)); mixed rc $RC17M (expected 0 and 3)"
+
+# --- SEEDED FAILURES. Each removes one observing step and names the answer it must move to. ---
+m17 "V6848-AC2 M1" g17-m1-no-residual-step 1 's/^  if \[ -n "\$lead" \] && ! is_runnable_verb "\$lead"; then echo "unrunnable"; return; fi$/  :/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_UNRUN"; JM17_1="$VRP_JSON"
+  if mutant_ran "V6848-AC2 M1"; then
+    [ "$(fv17 "$JM17_1" AC-1)" = per-issue/UNRUNNABLE ] && g17_has "$JM17_1" AC-1 "tool-invocation-outside-executor-allowlist:awk" \
+      && ok "V6848-AC2 M1 detected — without the residual step an awk method with no keyword is no longer the unrunnable family's: it falls to the per-issue residual, whose handler declines the same tool (per-issue/UNRUNNABLE)" \
+      || bad "V6848-AC2 M1 SURVIVED — AC-1 $(fv17 "$JM17_1" AC-1)"
+  fi
+fi
+m17 "V6848-AC2 M2" g17-m2-decline-skips 1 's/"\$VERDICT_UNRUNNABLE" "tool-invocation-outside-executor-allowlist:\$tool/"$VERDICT_SKIP" "tool-invocation-outside-executor-allowlist:$tool/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_UNRUN"; JM17_2="$VRP_JSON"
+  if mutant_ran "V6848-AC2 M2"; then
+    [ "$(g13_verdict "$JM17_2" AC-1)" = SKIP ] && [ "$(g13_verdict "$JM17_2" CIAC-1)" = SKIP ] \
+      && ok "V6848-AC2 M2 detected — a decline that reads SKIP is indistinguishable from a declared deferral again (AC-1, CIAC-1)" \
+      || bad "V6848-AC2 M2 SURVIVED — AC-1 $(fv17 "$JM17_2" AC-1), CIAC-1 $(fv17 "$JM17_2" CIAC-1)"
+  fi
+fi
+m17 "V6848-AC2 M3" g17-m3-no-identifier-guard 1 's/^  if \[ "\$identifier" -eq 1 \]; then return; fi$/  :/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_UNRUN"; JM17_3="$VRP_JSON"
+  if mutant_ran "V6848-AC2 M3"; then
+    # The prose is then taken as a bare command: the handlers' refusal reads its
+    # backticks as shell syntax (a substitution), and before that refusal the verb ran
+    # and could not be read. Either way the documented decision is lost.
+    case "$(g13_observed "$JM17_3" CIAC-2)" in "shell-operator:"*|*"matcher-exit-"*) G17_M3=1 ;; *) G17_M3=0 ;; esac
+    [ "$G17_M3" = 1 ] && [ "$(g13_verdict "$JM17_3" CIAC-2)" != SKIP ] \
+      && ok "V6848-AC2 M3 detected — without the identifier guard the prose that opens with 'grep' is taken as a bare command, not a documented decision ($(fv17 "$JM17_3" CIAC-2))" \
+      || bad "V6848-AC2 M3 SURVIVED — CIAC-2 $(fv17 "$JM17_3" CIAC-2) '$(g13_observed "$JM17_3" CIAC-2)'"
+  fi
+fi
+m17 "V6848-AC1 M5" g17-m5-no-exclusion 1 's/^      -\*\) if scope_pattern_matches "\$path" "\$\{s#-\}"; then return 1; fi ;;$/      -*) : ;;/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g17_seam "$MUT_PATH" "$FIX_SCOPE" "$SEAMD6848/mixed.tsv"; JM17_5="$VRP_JSON"
+  if mutant_ran "V6848-AC1 M5"; then
+    [ "$(fv17 "$JM17_5" AC-2)" = scope/FAIL ] && g17_has "$JM17_5" AC-2 "scope count=3 (wanted == 0)" \
+      && ok "V6848-AC1 M5 detected — with the exclusion a no-op, AC-2 counts every path and FAILs: the exclusion is observed" \
+      || bad "V6848-AC1 M5 SURVIVED — AC-2 $(fv17 "$JM17_5" AC-2) '$(g13_observed "$JM17_5" AC-2)'"
+  fi
+fi
+m17 "V6848-AC1 M6" g17-m6-empty-diff-passes 1 's/"\$VERDICT_UNRUNNABLE" "scope-diff-empty/"$VERDICT_PASS" "scope-diff-empty/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g17_seam "$MUT_PATH" "$FIX_SCOPE" "$SEAMD6848/empty.tsv"; JM17_6="$VRP_JSON"
+  if mutant_ran "V6848-AC1 M6"; then
+    [ "$(fv17 "$JM17_6" AC-1)" = scope/PASS ] \
+      && ok "V6848-AC1 M6 detected — an empty diff that reads PASS is caught: arm e sees a scope PASS on nothing" \
+      || bad "V6848-AC1 M6 SURVIVED — AC-1 $(fv17 "$JM17_6" AC-1)"
+  fi
+fi
+m17 "V6848-AC1 M7" g17-m7-whole-cell-comparator 1 's/^  cmpr="\$\(limb_comparator "\$method"\)"$/  cmpr="$(extract_threshold "$method")"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g17_seam "$MUT_PATH" "$FIX_SCOPE" "$SEAMD6848/mixed.tsv"; JM17_7="$VRP_JSON"
+  if mutant_ran "V6848-AC1 M7"; then
+    [ "$(fv17 "$JM17_7" AC-9)" = scope/PASS ] && g17_has "$JM17_7" AC-9 "scope count=1 (>= 1)" \
+      && ok "V6848-AC1 M7 detected — read through the whole-cell priority reader, a comparator written for something else grades the violated null PASS: the ambiguity guard is what stops it" \
+      || bad "V6848-AC1 M7 SURVIVED — AC-9 $(fv17 "$JM17_7" AC-9) '$(g13_observed "$JM17_7" AC-9)'"
+  fi
+fi
+m17 "V6848-AC1 M8" g17-m8-placeholder-as-path 2 \
+  's/out="\$\{out\}\?\$\{p\}"/out="${out}+${p}"/' \
+  's/if ! scope_pathspec_selects "\$\{s#\+\}" "\$paths"; then/if false; then/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g17_seam "$MUT_PATH" "$FIX_SCOPE" "$SEAMD6848/mixed.tsv"; JM17_8="$VRP_JSON"
+  if mutant_ran "V6848-AC1 M8"; then
+    [ "$(fv17 "$JM17_8" AC-10)" = scope/PASS ] && g17_has "$JM17_8" AC-10 "scope count=0 (== 0)" \
+      && ok "V6848-AC1 M8 detected — a placeholder read as a literal path matches nothing and its expect 0 PASSes: the placeholder refusal is observed" \
+      || bad "V6848-AC1 M8 SURVIVED — AC-10 $(fv17 "$JM17_8" AC-10) '$(g13_observed "$JM17_8" AC-10)'"
+  fi
+fi
+m17 "V6848-AC1 M9" g17-m9-no-selects-nothing-guard 1 's/if ! scope_pathspec_selects "\$\{s#\+\}" "\$paths"; then/if false; then/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g17_seam "$MUT_PATH" "$FIX_SCOPE" "$SEAMD6848/mixed.tsv"; JM17_9="$VRP_JSON"
+  if mutant_ran "V6848-AC1 M9"; then
+    [ "$(fv17 "$JM17_9" AC-11)" = scope/PASS ] && g17_has "$JM17_9" AC-11 "scope count=0 (== 0)" \
+      && ok "V6848-AC1 M9 detected — without the selects-nothing guard a typo'd pathspec makes 'nothing changed there' PASS" \
+      || bad "V6848-AC1 M9 SURVIVED — AC-11 $(fv17 "$JM17_9" AC-11) '$(g13_observed "$JM17_9" AC-11)'"
+  fi
+fi
+rm -rf "$MUTD6848" "$SEAMD6848"
+
+# ===========================================================================
+# G18 — THE DEPLOY-CHECK ORACLE IS REACHED BY DECLARATION, NEVER BY PROSE
+#       (V6893-AC2, V6893-AC3, V6893-AC4: #6893's round 2, landed in #6848's
+#       slice; V6848-AC2 for the handlers' shell-operator refusal).
+#
+# deploy.sh --check grades by its exit status alone, which reads nothing a row
+# asserts, so its verdict is the row's only when the row's designated command IS
+# that check, written as a backticked span: an optional bash, the oracle's own path
+# or the root shim, and --check as the only argument. A prose word, a
+# --check-<mode> run, a pipeline led by the invocation, another file named
+# deploy.sh, or the check beside another command routes no row there, and such a
+# row takes the outcome its own command earns. An integration keyword still comes
+# first, and a runnable probe outranks the route. A declared row that also names
+# another command reads the can't-run slot when the check passes and FAIL when it
+# fails. A designated command carrying shell syntax outside quotes is not run: it
+# reads UNRUNNABLE, naming the operator. A command-less row the route releases is
+# asserted only to leave the oracle and never PASS: it read the unclassified ERROR
+# until the per-issue residual landed, and reads its named SKIP from then on.
+#
+# The plan is written into two temp stub roots, one whose deploy check exits 0 and
+# one whose check exits 1 (the FAIL limb). No record read here carries a brace, so
+# the shared readers see each one, and every negated assertion first requires its
+# record. Each seeded failure is proved to apply at exactly its sites, and only one
+# that took is graded.
+# ===========================================================================
+echo
+echo "G18 — #6893 round 2: the deploy-check oracle is reached by declaration, never by prose (V6893-AC2/AC3/AC4, V6848-AC2)"
+G18STUB="$(mktemp -d -t verify-plan-6893b-stub.XXXXXX)"; G18FAIL="$(mktemp -d -t verify-plan-6893b-fail.XXXXXX)"; MUTD45="$(mktemp -d -t verify-plan-6893b-mut.XXXXXX)"
+for g18d in "$G18STUB" "$G18FAIL"; do
+  mkdir -p "$g18d/core/deploy" "$g18d/release/tools" "$g18d/plan"
+  cp "$VERIFY" "$g18d/release/tools/"
+done
+printf '#!/usr/bin/env bash\nexit 0\n' > "$G18STUB/core/deploy/deploy.sh"; chmod +x "$G18STUB/core/deploy/deploy.sh"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$G18FAIL/core/deploy/deploy.sh"; chmod +x "$G18FAIL/core/deploy/deploy.sh"
+cat > "$G18STUB/plan/p.md" <<'EOF'
+# vTEST Release Plan — the deploy-check oracle is reached by declaration, never by prose (G18)
+
+## Verification Plan
+
+**#970 — a row the deploy check does not grade never reaches it**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-1 | the other arms stay byte-identical: unchanged | no command: not the oracle |
+| AC-2 | the two digests are byte-equivalent across the rebuild | no command: not the oracle |
+| AC-3 | the `release-hub` package stays unchanged after the rebuild | a mention is not a command |
+| AC-4 | `bash core/deploy/deploy.sh --check-package-freshness` exits 0 | a different check: UNRUNNABLE |
+| AC-5 | `python3 release/tools/check-adr-numbers.py` reports the numbering unchanged | another tool: UNRUNNABLE |
+| AC-6 | `python3 release/tools/check-adr-numbers.py` grades this; `bash core/deploy/deploy.sh --check` does not | the designated command is python3 |
+| AC-7 | `bash core/deploy/deploy.sh --check 2>&1 \| grep -c leak` expect 0 | a pipeline is not the invocation |
+| AC-8 | run deploy.sh --check and read the mirror section | prose is not a declaration |
+| AC-9 | `./deploy.sh --deploy` after merge, then `./deploy.sh --check` | the designated command deploys |
+| AC-17 | `bash release/tools/tests/fixtures/structural-move/deploy.sh --check` | another file named deploy.sh is not the oracle |
+
+**#971 — a row whose command is the deploy check keeps its route**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-10 | `bash core/deploy/deploy.sh --check` | sync, graded by the oracle |
+| AC-11 | `core/deploy/deploy.sh --check` Check 14 over the changed files | sync, graded by the oracle |
+| AC-12 | Run `./deploy.sh --check` on the branch | sync, graded by the oracle |
+| AC-13 | `deploy.sh --check`: the other arms stay byte-identical, unchanged | regression, graded by the oracle |
+| AC-14 | `bash core/deploy/deploy.sh --check`; `python3 release/tools/check-adr-numbers.py` | sync: the declared command is first, and the other did not run |
+| AC-15 | `grep -c -F 'RUNNABLE_VERBS=' release/tools/verify-release-plan.sh` at least 1, then `bash core/deploy/deploy.sh --check` | per-issue: the probe outranks the route |
+| AC-16 | the recorded decision, read for the cross-issue integration; `bash core/deploy/deploy.sh --check` | integration: that arm still comes first |
+
+**#972 — a designated command carrying shell syntax is not run**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-18 | `ls release/tools \| wc -l` present | UNRUNNABLE, naming the pipe |
+| AC-19 | `grep -c -F '\|' release/tools/verify-release-plan.sh` present | a quoted operator character is literal: the probe runs |
+| AC-20 | `grep -c -F RUNNABLE_VERBS release/tools/verify-release-plan.sh > out.txt` present | UNRUNNABLE, naming the redirect |
+| AC-21 | `ls release/tools \| wc -l` at least 1, and `grep -c -F RUNNABLE_VERBS release/tools/verify-release-plan.sh` at least 1 | the designated command is not run: never a pass |
+
+## Cross-Issue Acceptance Criteria
+
+- [ ] **CIAC-1 (#972 × #973 on `fixture`):** a pipeline in the cross-issue handler. *Method:* `ls release/tools | wc -l` at least 1.
+EOF
+cp "$G18STUB/plan/p.md" "$G18FAIL/plan/p.md"
+# g18_run <tool> [<root>] — sets VRP_JSON + VRP_RC in the CURRENT shell (vrp_run's contract).
+g18_run() { local r="${2:-$G18STUB}"; set +e; VRP_JSON="$("$1" --format=json --root "$r" "$r/plan/p.md" 2>/dev/null)"; VRP_RC=$?; set -e; }
+# fv18 <json> <id> — "family/verdict"; reads "/" for an absent record, which no arm expects.
+fv18() { printf '%s/%s' "$(family_of "$1" "$2")" "$(verdict_of "$1" "$2")"; }
+# not_oracle <json> <id> — TRUE only when the record is PRESENT and its family is neither sync nor regression.
+not_oracle() { case "$(family_of "$1" "$2")" in ''|sync|regression) return 1 ;; *) return 0 ;; esac; }
+# g18_has <json> <id> <text> — TRUE only when the record's observed text carries <text>.
+g18_has() { case "$(observed_of "$1" "$2")" in *"$3"*) return 0 ;; *) return 1 ;; esac; }
+# m18 <label> <stem> <sites> <sed-expr>... — the suite's mutate-and-prove shape, sites counted.
+m18() {
+  local label="$1" stem="$2" want="$3" dst n e
+  shift 3
+  dst="$MUTD45/$stem.sh"
+  cp "$VERIFY" "$dst"
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  n="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$dst")"
+  if [ "$n" -eq "$want" ]; then
+    MUT_TOOK=1; ok "$label — mutation applied at exactly $want site(s): the mutant differs from the shipped tool in $n line(s)"
+  else
+    MUT_TOOK=0; bad "$label — mutation applied at $n site(s), expected exactly $want; its arm is not graded"
+  fi
+}
+# The slot's value, derived from its one binding line (G16's derivation, restated here
+# so this group stands on its own).
+G18_SLOT="$(sed -n 's/^readonly VERDICT_PARTIAL_SLOT="\$VERDICT_\([A-Z]*\)".*/\1/p' "$VERIFY")"
+
+g18_run "$VERIFY"; JD="$VRP_JSON"
+# --- G18-0: DENOMINATOR FIRST — every stub-plan row and the CIAC emit. ---
+[ "$(acs_of "$JD")" = "21" ] && [ "$(ciacs_of "$JD")" = "1" ] \
+  && ok "G18-0 SENSITIVITY — all 21 stub-plan rows and the CIAC emit (the arms below grade real records)" \
+  || bad "G18-0 expected 21 AC records and 1 CIAC, got $(acs_of "$JD") and $(ciacs_of "$JD")"
+
+# --- V6893-AC2 D45-a: a row with no command is not the oracle's, and never PASS. ---
+for a in AC-1 AC-2 AC-3 AC-8; do
+  if not_oracle "$JD" "$a" && [ "$(verdict_of "$JD" "$a")" != PASS ] \
+     && case "$(observed_of "$JD" "$a")" in "no-executable-command-in-method"|"unclassified-method"*) true ;; *) false ;; esac; then
+    ok "V6893-AC2 D45-a — $a (no command) is not the oracle's and reads no verdict it did not earn ($(fv18 "$JD" "$a"))"
+  else
+    bad "V6893-AC2 D45-a — $a got $(fv18 "$JD" "$a") '$(observed_of "$JD" "$a")'"
+  fi
+done
+# --- V6893-AC2 D45-bc: a row whose designated command is another command takes that command's outcome. ---
+for pr in AC-4:bash AC-5:python3 AC-6:python3 AC-9:deploy.sh AC-17:bash; do a="${pr%%:*}"; tl="${pr#*:}"
+  if not_oracle "$JD" "$a" && [ "$(verdict_of "$JD" "$a")" = UNRUNNABLE ] && g18_has "$JD" "$a" "allowlist:$tl "; then
+    ok "V6893-AC2 D45-bc — $a is UNRUNNABLE naming $tl, never the oracle's verdict"
+  else
+    bad "V6893-AC2 D45-bc — $a got $(fv18 "$JD" "$a") '$(observed_of "$JD" "$a")'"
+  fi
+done
+not_oracle "$JD" AC-7 && [ "$(verdict_of "$JD" AC-7)" = UNRUNNABLE ] \
+  && ok "V6893-AC2 D45-bc — a pipeline led by the invocation is not the invocation ($(fv18 "$JD" AC-7))" \
+  || bad "V6893-AC2 D45-bc — AC-7 got $(fv18 "$JD" AC-7) '$(observed_of "$JD" AC-7)'"
+
+# --- V6893-AC3 D45-d/e/f: the declared route keeps its rows; a probe and an integration keyword come first. ---
+G_OK=1
+for a in AC-10 AC-11 AC-12; do [ "$(fv18 "$JD" "$a")" = sync/PASS ] || G_OK=0; done
+[ "$(fv18 "$JD" AC-13)" = regression/PASS ] || G_OK=0
+[ "$(family_of "$JD" AC-14)" = sync ] || G_OK=0
+case "$(observed_of "$JD" AC-10)" in "deploy --check clean"*) : ;; *) G_OK=0 ;; esac
+[ "$G_OK" = 1 ] \
+  && ok "V6893-AC3 D45-d — a row whose command IS deploy.sh --check keeps the oracle in every spelling (regression by word)" \
+  || bad "V6893-AC3 D45-d — the declared route moved: $(fv18 "$JD" AC-10) $(fv18 "$JD" AC-11) $(fv18 "$JD" AC-12) $(fv18 "$JD" AC-13) $(fv18 "$JD" AC-14)"
+case "$(observed_of "$JD" AC-15)" in "deploy --check"*) P15=0 ;; *) P15=1 ;; esac
+[ "$(family_of "$JD" AC-15)" = per-issue ] && [ "$P15" = 1 ] \
+  && ok "V6893-AC3 D45-e — a runnable probe still outranks the declared route" \
+  || bad "V6893-AC3 D45-e — AC-15 got $(fv18 "$JD" AC-15) '$(observed_of "$JD" AC-15)'"
+[ "$(family_of "$JD" AC-16)" = integration ] \
+  && ok "V6893-AC3 D45-f — an integration keyword still comes first: no row moves INTO the oracle" \
+  || bad "V6893-AC3 D45-f — AC-16 got $(fv18 "$JD" AC-16)"
+
+# --- V6893-AC2 D52: a declared row naming another command reads the slot on a PASS, and FAIL stands. ---
+[ -n "$G18_SLOT" ] && [ "$G18_SLOT" != PASS ] && [ "$(fv18 "$JD" AC-14)" = "sync/$G18_SLOT" ] \
+   && g18_has "$JD" AC-14 "limb 1 bash PASS deploy --check clean" && g18_has "$JD" AC-14 "limb 2 python3 did not run (outside the verb set)" \
+  && ok "V6893-AC2 D52 — a declared deploy check beside another command: the check passes, the other command did not run, so the row reads the can't-run slot ($G18_SLOT), never PASS" \
+  || bad "V6893-AC2 D52 — AC-14 $(fv18 "$JD" AC-14) '$(observed_of "$JD" AC-14)' (slot '$G18_SLOT')"
+g18_run "$VERIFY" "$G18FAIL"; JDF="$VRP_JSON"
+[ "$(fv18 "$JDF" AC-14)" = sync/FAIL ] && g18_has "$JDF" AC-14 "limb 2 python3 did not run (outside the verb set)" && [ "$(fv18 "$JDF" AC-10)" = sync/FAIL ] \
+  && ok "V6893-AC2 D52 — when the declared check fails, the row FAILs (it still names the command that did not run); control: the one-command row FAILs too" \
+  || bad "V6893-AC2 D52 — under a failing check AC-14 $(fv18 "$JDF" AC-14) '$(observed_of "$JDF" AC-14)', AC-10 $(fv18 "$JDF" AC-10)"
+
+# --- V6848-AC2 refusal: a designated command carrying shell syntax outside quotes is not run. ---
+[ "$(fv18 "$JD" AC-18)" = per-issue/UNRUNNABLE ] && g18_has "$JD" AC-18 "shell-operator:| " \
+  && ok "V6848-AC2 refusal — a pipeline this executor would have run with the pipe as a literal argument is refused: UNRUNNABLE, naming the pipe" \
+  || bad "V6848-AC2 refusal — AC-18 got $(fv18 "$JD" AC-18) '$(observed_of "$JD" AC-18)'"
+[ "$(fv18 "$JD" AC-19)" = per-issue/PASS ] \
+  && ok "V6848-AC2 refusal CONTROL — a quoted operator character is literal, so its probe runs and PASSes" \
+  || bad "V6848-AC2 refusal CONTROL — AC-19 got $(fv18 "$JD" AC-19) '$(observed_of "$JD" AC-19)'"
+[ "$(fv18 "$JD" AC-20)" = per-issue/UNRUNNABLE ] && g18_has "$JD" AC-20 "shell-operator:> " \
+  && ok "V6848-AC2 refusal — a redirect is refused too: UNRUNNABLE, naming it" \
+  || bad "V6848-AC2 refusal — AC-20 got $(fv18 "$JD" AC-20) '$(observed_of "$JD" AC-20)'"
+[ "$(fv18 "$JD" AC-21)" = per-issue/UNRUNNABLE ] && g18_has "$JD" AC-21 "limbs run 0 of 2" && g18_has "$JD" AC-21 "shell-operator:|" \
+  && ok "V6848-AC2 refusal — a designated command with a pipe is not run in a multi-command method either: no command ran, never PASS" \
+  || bad "V6848-AC2 refusal — AC-21 got $(fv18 "$JD" AC-21) '$(observed_of "$JD" AC-21)'"
+[ "$(fv18 "$JD" CIAC-1)" = integration/UNRUNNABLE ] && g18_has "$JD" CIAC-1 "shell-operator:|" \
+  && ok "V6848-AC2 refusal — the cross-issue handler refuses it the same way" \
+  || bad "V6848-AC2 refusal — CIAC-1 got $(fv18 "$JD" CIAC-1) '$(observed_of "$JD" CIAC-1)'"
+
+# --- SEEDED FAILURES. Each reverts one limb and names the answer it must move to. ---
+m18 "V6893-AC4 M5" gd-m5-prose-route-restored 1 's/^  if declares_deploy_check "\$raw_method"; then/  if declares_deploy_check "$raw_method" || case "$method" in *deploy*--check*|*byte-diff*|*byte-equivalent*|*unchanged*) true ;; *) false ;; esac; then/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g18_run "$MUT_PATH"; JM5="$VRP_JSON"
+  if mutant_ran "V6893-AC4 M5"; then
+    [ "$(fv18 "$JM5" AC-1)" = regression/PASS ] && [ "$(fv18 "$JM5" AC-4)" = sync/PASS ] \
+      && ok "V6893-AC4 M5 detected — with the prose route restored, 'unchanged' and a --check-<mode> reach the oracle again" \
+      || bad "V6893-AC4 M5 SURVIVED — AC-1 $(fv18 "$JM5" AC-1), AC-4 $(fv18 "$JM5" AC-4)"
+  fi
+fi
+m18 "V6893-AC4 M6" gd-m6-mention-declares 1 's/^  \[ -n "\$cmd" \] && is_deploy_check_invocation "\$cmd"$/  case "$1" in *"deploy.sh --check"*) true ;; *) false ;; esac/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g18_run "$MUT_PATH"; JM6="$VRP_JSON"
+  if mutant_ran "V6893-AC4 M6"; then
+    # Reaching the oracle at all is the defect: the partial rule then reads the row's
+    # other command as not run, so the verdict is the slot rather than PASS.
+    [ "$(family_of "$JM6" AC-6)" = sync ] \
+      && ok "V6893-AC4 M6 detected — a mention beside another command must not declare the route: with it, AC-6 reaches the oracle ($(fv18 "$JM6" AC-6))" \
+      || bad "V6893-AC4 M6 SURVIVED — AC-6 $(fv18 "$JM6" AC-6)"
+  fi
+fi
+m18 "V6893-AC4 M7" gd-m7-check-prefix 1 's/^  \[ "\$arg" = --check \]$/  case "$arg" in --check*) true ;; *) false ;; esac/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g18_run "$MUT_PATH"; JM7="$VRP_JSON"
+  if mutant_ran "V6893-AC4 M7"; then
+    [ "$(fv18 "$JM7" AC-4)" = sync/PASS ] \
+      && ok "V6893-AC4 M7 detected — a --check-<mode> is a different check" \
+      || bad "V6893-AC4 M7 SURVIVED — AC-4 $(fv18 "$JM7" AC-4)"
+  fi
+fi
+m18 "V6848-AC2 M8" gd-m8-no-operator-refusal 2 's/if sop="\$\(span_shell_operator "\$cmd"\)"; then/if false; then/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g18_run "$MUT_PATH"; JM8="$VRP_JSON"
+  if mutant_ran "V6848-AC2 M8"; then
+    [ -n "$(verdict_of "$JM8" AC-18)" ] && ! g18_has "$JM8" AC-18 "shell-operator:" && [ "$(verdict_of "$JM8" AC-18)" != UNRUNNABLE ] \
+       && ! g18_has "$JM8" CIAC-1 "shell-operator:" \
+      && ok "V6848-AC2 M8 detected — without the handlers' refusal the pipeline runs with the pipe as a literal argument ($(fv18 "$JM8" AC-18)), in both handlers" \
+      || bad "V6848-AC2 M8 SURVIVED — AC-18 $(fv18 "$JM8" AC-18) '$(observed_of "$JM8" AC-18)'; CIAC-1 '$(observed_of "$JM8" CIAC-1)'"
+  fi
+fi
+m18 "V6893-AC2 M9" gd-m9-no-partial-rule 1 's/^  if \[ -n "\$method" \] && \[ "\$n" -ge 2 \]; then$/  if false; then/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g18_run "$MUT_PATH"; JM9="$VRP_JSON"
+  if mutant_ran "V6893-AC2 M9"; then
+    [ "$(fv18 "$JM9" AC-14)" = sync/PASS ] \
+      && ok "V6893-AC2 M9 detected — without the partial rule a declared check beside a command that did not run PASSes again" \
+      || bad "V6893-AC2 M9 SURVIVED — AC-14 $(fv18 "$JM9" AC-14)"
+  fi
+fi
+rm -rf "$G18STUB" "$G18FAIL" "$MUTD45"
+
+# ===========================================================================
+# G19 — A ROW THIS EXECUTOR IS NOT THE RUNNER FOR IS A NAMED SKIP; ERROR IS KEPT FOR
+#       A ROW IT TRIED TO EVALUATE AND COULD NOT; THE ROLL-UP STATES ITS POPULATION
+#       (V6854-AC1, V6854-AC2, V6854-AC3, V6854-AC4).
+#
+# A row no family arm claims reaches the classifier's residual and is inspected by the
+# per-issue handler: a method with no command reads SKIP no-executable-command-in-method,
+# however it is worded, and the handler runs only a backticked span, so prose that merely
+# opens with a verb is a named read, never a command. ERROR is kept for a row the
+# executor tried to evaluate and could not, and what each allowlisted verb's result means
+# is read from one per-verb table: exit 1 is a zero only for grep and test; a command
+# naming no operand is refused before it runs; with no comparator, exit 0 is the claim
+# only for grep, test and an ls naming files; wc's count is its first field. The roll-up
+# states the records its counters span and the named split, and the markdown block
+# shows every record it counts, a record with no issue value under (plan).
+#
+# Every record here is read from its own line (G13's g13_verdict and g13_observed,
+# G17's g17_family), and every arm first requires the record it grades. A property that
+# already held at this group's parent is proved armed-red-then-revert by its seeded
+# failure. Each seeded failure is proved to apply at exactly the sites it names, and
+# only one that took is graded.
+# ===========================================================================
+echo
+echo "G19 — #6854: not this runner's job is a named SKIP, could-not-evaluate stays ERROR, and the roll-up states its population (V6854-AC1/AC2/AC3/AC4)"
+MUTD6854="$(mktemp -d -t verify-plan-6854-mut.XXXXXX)"
+FIX_NMR="release/tools/tests/fixtures/verify-plan-not-my-runner.md"
+# fv19 <json> <id> — "family/verdict" from the record's own line; "/" for an absent record.
+fv19() { printf '%s/%s' "$(g17_family "$1" "$2")" "$(g13_verdict "$1" "$2")"; }
+# g19_has <json> <id> <text> — TRUE only when the record's observed text carries <text>.
+g19_has() { case "$(g13_observed "$1" "$2")" in *"$3"*) return 0 ;; *) return 1 ;; esac; }
+# g19_rows <md> — the table data rows the markdown block renders: every table line but a header.
+g19_rows() { local n h; n="$(grep -c '^| ' <<<"$1" || true)"; h="$(grep -c -F '| Check | Family |' <<<"$1" || true)"; printf '%s' "$(( ${n:-0} - ${h:-0} ))"; }
+# g19_line <md> — the markdown roll-up line.
+g19_line() { grep -F '**Verdict roll-up:**' <<<"$1" || true; }
+# g19_key <json> <key> — one numeric field of the JSON roll-up object.
+g19_key() { sed -n "s/.*\"$2\": \([0-9][0-9]*\).*/\1/p" <<<"$(grep -F '"rollup":' <<<"$1" || true)"; }
+# g19_md <tool> <fixture> — the markdown block, in G19MD.
+g19_md() { set +e; G19MD="$("$1" --format=md --root "$REPO_ROOT" "$REPO_ROOT/$2" 2>/dev/null)"; set -e; }
+# m19 <label> <stem> <sites> <sed-expr>... — m17's contract: the mutant in MUT_PATH, and
+# MUT_TOOK only when it applied at exactly <sites> lines.
+m19() {
+  local label="$1" stem="$2" want="$3" dst n e
+  shift 3
+  dst="$MUTD6854/$stem.sh"
+  cp "$VERIFY" "$dst"
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  n="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$dst")"
+  if [ "$n" -eq "$want" ]; then
+    MUT_TOOK=1; ok "$label — mutation applied at exactly $want site(s): the mutant differs from the shipped tool in $n line(s)"
+  else
+    MUT_TOOK=0; bad "$label — mutation applied at $n site(s), expected exactly $want; its arm is not graded"
+  fi
+}
+
+vrp_run "$VERIFY" "$FIX_NMR"; J19="$VRP_JSON"; RC19="$VRP_RC"
+g19_md "$VERIFY" "$FIX_NMR"; MD19="$G19MD"
+E19="$("$VERIFY" --format=json --root "$REPO_ROOT" "$REPO_ROOT/$FIX_NMR" 2>&1 >/dev/null || true)"
+G19_LINE_WANT='**Verdict roll-up:** 6 PASS / 0 FAIL / 11 SKIP / 0 UNRUNNABLE / 10 ERROR over 27 record(s) (23 per-issue row(s), 2 cross-issue, 2 always-on) — not graded by this run: 11 SKIP (2 declared-deferred, 7 no command in method, 2 other) and 0 UNRUNNABLE; could not evaluate: 10 ERROR'
+
+# --- G19-0: DENOMINATOR FIRST — the fixture still declares its rows, and every one emits. ---
+G19_ROWS="$(grep -c -F '| AC-' "$REPO_ROOT/$FIX_NMR" || true)"
+G19_CIAC="$(grep -c -F '**CIAC-' "$REPO_ROOT/$FIX_NMR" || true)"
+[ "${G19_ROWS:-0}" -eq 23 ] && [ "${G19_CIAC:-0}" -eq 2 ] && [ "$(acs_of "$J19")" = "23" ] && [ "$(ciacs_of "$J19")" = "2" ] \
+  && ok "G19-0 SENSITIVITY — the fixture declares and emits 23 rows (AC-0..AC-22) and 2 CIACs (the arms below grade real records)" \
+  || bad "G19-0 the fixture declares ${G19_ROWS:-0} rows and ${G19_CIAC:-0} CIACs, and emits $(acs_of "$J19") and $(ciacs_of "$J19") (expected 23 and 2)"
+
+# --- V6854-AC1: a row this executor is not the runner for resolves to a named SKIP. ---
+[ "$(fv19 "$J19" AC-1)" = deferred/SKIP ] && [ "$(fv19 "$J19" AC-2)" = deferred/SKIP ] \
+   && [ "$(g13_observed "$J19" AC-1)" = declared-deferred ] && [ "$(g13_observed "$J19" AC-2)" = declared-deferred ] \
+  && ok "V6854-AC1 a — a row the plan declares another runner's reads deferred/SKIP, in both spellings (AC-1 bracket, AC-2 phrase)" \
+  || bad "V6854-AC1 a — AC-1 $(fv19 "$J19" AC-1), AC-2 $(fv19 "$J19" AC-2)"
+G19_B=1
+for g19a in AC-3 AC-4 AC-5; do
+  { [ "$(fv19 "$J19" "$g19a")" = per-issue/SKIP ] && [ "$(g13_observed "$J19" "$g19a")" = no-executable-command-in-method ]; } || G19_B=0
+done
+[ "$G19_B" = 1 ] \
+  && ok "V6854-AC1 b — a method no family claims and that names nothing to run (a judge-rubric read, a named read beside a path, a described behaviour) reads per-issue/SKIP no-executable-command-in-method, never ERROR" \
+  || bad "V6854-AC1 b — AC-3 $(fv19 "$J19" AC-3) '$(g13_observed "$J19" AC-3)'; AC-4 $(fv19 "$J19" AC-4); AC-5 $(fv19 "$J19" AC-5)"
+[ "$(fv19 "$J19" CIAC-1)" = integration/SKIP ] && g19_has "$J19" CIAC-1 "documented-decision-method" \
+  && ok "V6854-AC1 c — a cross-issue criterion with nothing to run keeps its named SKIP (documented-decision-method)" \
+  || bad "V6854-AC1 c — CIAC-1 $(fv19 "$J19" CIAC-1) '$(g13_observed "$J19" CIAC-1)'"
+G19_D=1
+for g19a in AC-18 AC-19 AC-20; do
+  { [ "$(fv19 "$J19" "$g19a")" = per-issue/SKIP ] && [ "$(g13_observed "$J19" "$g19a")" = no-executable-command-in-method ]; } || G19_D=0
+done
+[ "$G19_D" = 1 ] \
+  && ok "V6854-AC1 d — the per-issue guard: prose that opens with an allowlisted verb (keyword-routed, keyword-less, and beside a backticked path) is a named read, never run as a command" \
+  || bad "V6854-AC1 d — AC-18 $(fv19 "$J19" AC-18) '$(g13_observed "$J19" AC-18)'; AC-19 $(fv19 "$J19" AC-19); AC-20 $(fv19 "$J19" AC-20) '$(g13_observed "$J19" AC-20)'"
+
+# --- V6854-AC2: ERROR is reserved for a row the executor tried to evaluate and could not. ---
+[ "$(fv19 "$J19" AC-6)" = per-issue/PASS ] && [ "$(g13_observed "$J19" AC-6)" = "count=1 (>= 1)" ] \
+  && ok "V6854-AC2 a — a runnable probe no keyword claims is executed (AC-6 per-issue/PASS count=1), never reported unreadable; M1b and M1c below prove the residual holds it on its own" \
+  || bad "V6854-AC2 a — AC-6 $(fv19 "$J19" AC-6) '$(g13_observed "$J19" AC-6)'"
+G19_CF="$(awk '/^classify_family\(\) \{/,/^}/' "$VERIFY")"
+[ "$(grep -c -F 'echo "per-issue"' <<<"$G19_CF" || true)" -ge 1 ] && [ "$(grep -c -F 'echo "unclassified"' <<<"$G19_CF" || true)" -eq 0 ] \
+   && [ "$(grep -c -F 'unknown-family:' "$VERIFY" || true)" -ge 1 ] && [ "$(grep -c -F 'unclassified-method' "$VERIFY" || true)" -eq 0 ] \
+  && ok "V6854-AC2 b — the classifier has no unclassified terminus (its extracted body names per-issue, and never echoes unclassified), and dispatch's fallback reads an unknown family as an internal inconsistency" \
+  || bad "V6854-AC2 b — classify_family carries $(grep -c -F 'echo "unclassified"' <<<"$G19_CF" || true) unclassified terminus(es); unknown-family $(grep -c -F 'unknown-family:' "$VERIFY" || true), unclassified-method $(grep -c -F 'unclassified-method' "$VERIFY" || true)"
+G19_E=1; G19_EN=0
+for g19a in AC-7 AC-8 AC-9 AC-10 AC-11 AC-12 AC-13 AC-16 AC-22 CIAC-2; do
+  [ "$(g13_verdict "$J19" "$g19a")" = ERROR ] || G19_E=0
+  case "$(g13_observed "$J19" "$g19a")" in
+    count-unreadable:*|method-cell-empty*|no-operand:*|no-comparator:*|"limbs run 1 of 2: limb 1 cat ERROR no-comparator:"*) G19_EN=$((G19_EN + 1)) ;;
+  esac
+done
+[ "$G19_E" = 1 ] && [ "$G19_EN" -eq 10 ] && [ "$(count_verdict "$J19" ERROR)" = "10" ] && [ "$(grep -c -F 'unclassified-method' <<<"$J19" || true)" -eq 0 ] \
+  && ok "V6854-AC2 c — every ERROR is a row the executor tried to evaluate and could not, and names why (10 of 10: an unreadable input, an empty cell, an exit that is not a zero, no operand, no comparator); none reads unclassified-method" \
+  || bad "V6854-AC2 c — ERROR records $(count_verdict "$J19" ERROR), $G19_EN of 10 named; unclassified-method $(grep -c -F 'unclassified-method' <<<"$J19" || true)"
+
+# --- V6854-AC3: a genuinely broken method still reports ERROR, for every allowlisted reader. ---
+[ "$(fv19 "$J19" AC-7)" = per-issue/ERROR ] && g19_has "$J19" AC-7 "count-unreadable:matcher-exit-2" \
+   && [ "$(fv19 "$J19" AC-8)" = method-cell-empty/ERROR ] && [ "$RC19" -eq 3 ] \
+  && ok "V6854-AC3 a CONTROL — an unreadable probe input (AC-7, matcher-exit-2) and an empty method cell (AC-8) still read ERROR, and they reach the exit predicate (exit 3)" \
+  || bad "V6854-AC3 a — AC-7 $(fv19 "$J19" AC-7) '$(g13_observed "$J19" AC-7)'; AC-8 $(fv19 "$J19" AC-8); rc $RC19"
+[ "$(fv19 "$J19" AC-9)" = per-issue/ERROR ] && g19_has "$J19" AC-9 "matcher-exit-1" \
+  && ok "V6854-AC3 b — exit 1 is a zero for grep and test only: head on a file it cannot read reads ERROR matcher-exit-1, never PASS count=0" \
+  || bad "V6854-AC3 b — AC-9 $(fv19 "$J19" AC-9) '$(g13_observed "$J19" AC-9)'"
+[ "$(fv19 "$J19" AC-10)" = per-issue/ERROR ] && g19_has "$J19" AC-10 "no-operand:grep" \
+  && ok "V6854-AC3 c — a grep given no pattern names no operand and is refused before it runs (ERROR no-operand:grep)" \
+  || bad "V6854-AC3 c — AC-10 $(fv19 "$J19" AC-10) '$(g13_observed "$J19" AC-10)'"
+[ "$(fv19 "$J19" AC-13)" = per-issue/ERROR ] && g19_has "$J19" AC-13 "no-operand:test" \
+  && ok "V6854-AC3 d — operand-aware: a test unary primary with no operand is refused (ERROR no-operand:test), never PASS on a directory that does not exist" \
+  || bad "V6854-AC3 d — AC-13 $(fv19 "$J19" AC-13) '$(g13_observed "$J19" AC-13)'"
+[ "$(fv19 "$J19" AC-16)" = per-issue/ERROR ] && g19_has "$J19" AC-16 "no-operand:ls" \
+  && ok "V6854-AC3 e — an ls naming no path is refused (ERROR no-operand:ls), never a listing of the working directory graded PASS" \
+  || bad "V6854-AC3 e — AC-16 $(fv19 "$J19" AC-16) '$(g13_observed "$J19" AC-16)'"
+[ "$(fv19 "$J19" AC-11)" = per-issue/ERROR ] && g19_has "$J19" AC-11 "no-comparator:cat" \
+   && [ "$(fv19 "$J19" CIAC-2)" = integration/ERROR ] && g19_has "$J19" CIAC-2 "no-comparator:cat" \
+   && [ "$(fv19 "$J19" AC-22)" = per-issue/ERROR ] && g19_has "$J19" AC-22 "limb 1 cat ERROR no-comparator:cat" \
+  && ok "V6854-AC3 f — with no comparator, exit 0 of cat is not the claim: ERROR no-comparator:cat in the per-issue handler, the cross-issue handler and a designated command (AC-11, CIAC-2, AC-22)" \
+  || bad "V6854-AC3 f — AC-11 $(fv19 "$J19" AC-11); CIAC-2 $(fv19 "$J19" CIAC-2); AC-22 $(fv19 "$J19" AC-22) '$(g13_observed "$J19" AC-22)'"
+[ "$(fv19 "$J19" AC-12)" = per-issue/ERROR ] && g19_has "$J19" AC-12 "no-comparator:ls" \
+  && ok "V6854-AC3 g — an ls listing a directory, with no comparator, says only that the directory exists (ERROR no-comparator:ls)" \
+  || bad "V6854-AC3 g — AC-12 $(fv19 "$J19" AC-12) '$(g13_observed "$J19" AC-12)'"
+G19_LINES="$(wc -l < "$REPO_ROOT/$FIX_NMR" | tr -d ' ')"
+[ "$(fv19 "$J19" AC-14)" = per-issue/PASS ] && [ "$(g13_observed "$J19" AC-14)" = "count=${G19_LINES} (>= 10)" ] \
+  && ok "V6854-AC3 h — the count of wc is its first field: AC-14 reads count=${G19_LINES}, the fixture's own line count, not the one line wc prints" \
+  || bad "V6854-AC3 h — AC-14 $(fv19 "$J19" AC-14) '$(g13_observed "$J19" AC-14)' (expected count=${G19_LINES} (>= 10))"
+G19_I=1
+for g19a in AC-0 AC-15 AC-17 AC-21; do
+  { [ "$(fv19 "$J19" "$g19a")" = per-issue/PASS ] && [ "$(g13_observed "$J19" "$g19a")" = command-succeeded ]; } || G19_I=0
+done
+[ "$G19_I" = 1 ] \
+  && ok "V6854-AC3 i CONTROL — where exit 0 IS the claim the reading is unchanged: test -f on a file (AC-0, AC-17), an ls naming a file (AC-15) and a grep with no comparator (AC-21) read PASS" \
+  || bad "V6854-AC3 i — AC-0 $(fv19 "$J19" AC-0); AC-15 $(fv19 "$J19" AC-15); AC-17 $(fv19 "$J19" AC-17); AC-21 $(fv19 "$J19" AC-21)"
+eval "$(sed -n '/^reader_rule()/,/^}/p' "$VERIFY")"
+G19_TBL=""; G19_ALL=1
+if type reader_rule >/dev/null 2>&1; then
+  for g19v in grep test ls head wc cat; do
+    G19_TBL="${G19_TBL}${g19v}:$(reader_rule "$g19v" exit1 || true),$(reader_rule "$g19v" operand || true),$(reader_rule "$g19v" count || true),$(reader_rule "$g19v" exit0 || true);"
+  done
+  for g19v in $(sed -n "s/^RUNNABLE_VERBS='\(.*\)'\$/\1/p" "$VERIFY"); do
+    [ -n "$(reader_rule "$g19v" exit1 || true)" ] || G19_ALL=0
+  done
+  if reader_rule awk exit1 >/dev/null 2>&1; then G19_ALL=0; fi
+fi
+[ "$G19_TBL" = "grep:zero,pattern,count-flag,claim;test:zero,expression,lines,claim;ls:unreadable,path,lines,existence;head:unreadable,file,lines,not-the-claim;wc:unreadable,file,first-field,not-the-claim;cat:unreadable,file,lines,not-the-claim;" ] && [ "$G19_ALL" = 1 ] \
+  && ok "V6854-AC3 j — the reader table: one row per allowlisted verb (exit 1, operand, count, and whether exit 0 with no comparator is the claim), every cell as documented, and no row for a verb outside the set" \
+  || bad "V6854-AC3 j — the reader table reads '${G19_TBL:-<undefined>}' (every allowlisted verb covered: $G19_ALL)"
+
+# --- V6854-AC4: the roll-up separates not-my-runner from failed-to-evaluate, over its true population. ---
+[ "$(g19_line "$MD19")" = "$G19_LINE_WANT" ] \
+  && ok "V6854-AC4 a — the markdown roll-up states the 27 records its counters span, the per-issue, cross-issue and always-on populations, and the named split: not graded by this run (SKIP by who decided it, and UNRUNNABLE) apart from could not evaluate (ERROR)" \
+  || bad "V6854-AC4 a — the roll-up line reads '$(g19_line "$MD19")'"
+G19_P="$(g19_key "$J19" pass)"; G19_F="$(g19_key "$J19" fail)"; G19_S="$(g19_key "$J19" skip)"; G19_U="$(g19_key "$J19" unrunnable)"; G19_X="$(g19_key "$J19" error)"
+G19_R="$(g19_key "$J19" records)"; G19_N="$(g19_key "$J19" per_issue_rows)"; G19_C="$(g19_key "$J19" cross_issue_records)"; G19_A="$(g19_key "$J19" always_on_records)"
+G19_DD="$(g19_key "$J19" declared_deferred)"; G19_NC="$(g19_key "$J19" no_command)"; G19_SO="$(g19_key "$J19" skip_other)"
+if [ -n "$G19_R" ] && [ -n "$G19_C" ] && [ -n "$G19_A" ] && [ -n "$G19_NC" ] && [ -n "$G19_SO" ] \
+   && [ $((G19_P + G19_F + G19_S + G19_U + G19_X)) -eq "$G19_R" ] && [ "$G19_R" = "$(g13_records "$J19")" ] \
+   && [ $((G19_DD + G19_NC + G19_SO)) -eq "$G19_S" ] && [ $((G19_N + G19_C + G19_A)) -eq "$G19_R" ] \
+   && [ "$G19_DD/$G19_NC/$G19_SO" = "2/7/2" ]; then
+  ok "V6854-AC4 b — the JSON roll-up mirrors it: pass+fail+skip+unrunnable+error = records = the $G19_R records emitted; declared_deferred+no_command+skip_other = skip (2+7+2); per-issue+cross-issue+always-on = records"
+else
+  bad "V6854-AC4 b — rollup [$(grep -F '"rollup":' <<<"$J19" || true)] against $(g13_records "$J19") records"
+fi
+[ "$(g19_rows "$MD19")" = "$(g13_records "$J19")" ] && [ "$(grep -c -F -x '**(plan)**' <<<"$MD19" || true)" = "1" ] \
+   && [ "$(sed -n '/^\*\*(plan)\*\*$/,/^$/p' <<<"$MD19" | grep -c -F '| AC-0 |' || true)" = "1" ] \
+  && ok "V6854-AC4 c — every record the roll-up counts appears in a table: $(g19_rows "$MD19") rendered data rows = $(g13_records "$J19") records, and AC-0, which carries no issue value, renders under a (plan) header" \
+  || bad "V6854-AC4 c — rendered data rows $(g19_rows "$MD19") against $(g13_records "$J19") records; (plan) headers $(grep -c -F -x '**(plan)**' <<<"$MD19" || true)"
+g19_md "$VERIFY" "$FIX_CANON"; MD19C="$G19MD"
+[ "$(grep -c -F '**(plan)**' <<<"$MD19C" || true)" = "0" ] && [ "$(g19_rows "$MD19C")" = "$(g13_records "$CANON_JSON")" ] \
+  && ok "V6854-AC4 d CONTROL — a plan whose every record carries its issue renders no (plan) header, and its $(g19_rows "$MD19C") table rows still equal its records" \
+  || bad "V6854-AC4 d — the canonical fixture renders $(grep -c -F '**(plan)**' <<<"$MD19C" || true) (plan) header(s) and $(g19_rows "$MD19C") rows against $(g13_records "$CANON_JSON") records"
+grep -q -F 'not graded by this run: 7 with no command in method and no declaration, 0 UNRUNNABLE' <<<"$E19" \
+  && ok "V6854-AC4 e — stderr names what this run did not grade (7 with no command in method, 0 UNRUNNABLE), since the exit status covers none of it" \
+  || bad "V6854-AC4 e — stderr '${E19:-<empty>}'"
+
+# --- SEEDED FAILURES. Each removes one rule and names the answer it must move to. ---
+m19 "V6854-AC1 M1" g19-m1-residual-reverted 1 's/^  echo "per-issue"   # residual: .*$/  echo "unclassified"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_NMR"; JM19_1="$VRP_JSON"
+  if mutant_ran "V6854-AC1 M1"; then
+    g19_md "$MUT_PATH" "$FIX_NMR"
+    [ "$(fv19 "$JM19_1" AC-3)" = unclassified/ERROR ] && g19_has "$JM19_1" AC-3 "unknown-family:unclassified" && [ "$(g19_line "$G19MD")" != "$G19_LINE_WANT" ] \
+      && ok "V6854-AC1 M1 detected — without the residual a command-less row is unclassifiable again (AC-3 ERROR, met by dispatch's internal-inconsistency guard) and the roll-up moves" \
+      || bad "V6854-AC1 M1 SURVIVED — AC-3 $(fv19 "$JM19_1" AC-3) '$(g13_observed "$JM19_1" AC-3)'"
+  fi
+fi
+m19 "V6854-AC2 M1b" g19-m1b-probe-step-removed 1 's/^  if \[ -n "\$probe" \]; then echo "per-issue"; return; fi$/  :/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_NMR"; JM19_1B="$VRP_JSON"
+  if mutant_ran "V6854-AC2 M1b"; then
+    g19_md "$MUT_PATH" "$FIX_NMR"
+    [ "$(fv19 "$JM19_1B" AC-6)" = per-issue/PASS ] && [ "$(g19_line "$G19MD")" = "$G19_LINE_WANT" ] \
+      && ok "V6854-AC2 M1b — with the probe step removed the residual still executes AC-6 (per-issue/PASS), and the fixture's roll-up is unchanged: the residual alone gives every keyword-less row its verdict" \
+      || bad "V6854-AC2 M1b — without the probe step AC-6 reads $(fv19 "$JM19_1B" AC-6); roll-up '$(g19_line "$G19MD")'"
+  fi
+fi
+m19 "V6854-AC2 M1c" g19-m1c-probe-and-residual 2 's/^  if \[ -n "\$probe" \]; then echo "per-issue"; return; fi$/  :/' 's/^  echo "per-issue"   # residual: .*$/  echo "unclassified"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_NMR"; JM19_1C="$VRP_JSON"
+  if mutant_ran "V6854-AC2 M1c"; then
+    [ "$(fv19 "$JM19_1C" AC-6)" = unclassified/ERROR ] \
+      && ok "V6854-AC2 M1c detected — with the probe step and the residual both removed, a runnable probe no keyword claims is reported unreadable again (AC-6 ERROR): V6854-AC2 a, armed red" \
+      || bad "V6854-AC2 M1c SURVIVED — AC-6 $(fv19 "$JM19_1C" AC-6)"
+  fi
+fi
+m19 "V6854-AC3 M2" g19-m2-error-class-suppressed 1 's/ERROR\\tmatcher-exit-%s/OK\\t0%.0s/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_NMR"; JM19_2="$VRP_JSON"
+  if mutant_ran "V6854-AC3 M2"; then
+    [ -n "$(g13_verdict "$JM19_2" AC-7)" ] && [ "$(g13_verdict "$JM19_2" AC-7)" != ERROR ] \
+      && ok "V6854-AC3 M2 detected — with the matcher-exit class suppressed the broken method is no longer ERROR ($(fv19 "$JM19_2" AC-7)): the control observes the class" \
+      || bad "V6854-AC3 M2 SURVIVED — AC-7 $(fv19 "$JM19_2" AC-7)"
+  fi
+fi
+m19 "V6854-AC3 M3" g19-m3-exit-one-a-zero 1 's/^  if \[ "\$rc" -eq 1 \] && \[ "\$\(reader_rule "\$verb" exit1\)" != zero \]; then .*$/  :/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_NMR"; JM19_3="$VRP_JSON"
+  if mutant_ran "V6854-AC3 M3"; then
+    [ "$(fv19 "$JM19_3" AC-9)" = per-issue/PASS ] && [ "$(g13_observed "$JM19_3" AC-9)" = "count=0 (== 0)" ] \
+      && ok "V6854-AC3 M3 detected — without the exit-1 rule, head on a file it cannot read reads PASS count=0 again" \
+      || bad "V6854-AC3 M3 SURVIVED — AC-9 $(fv19 "$JM19_3" AC-9) '$(g13_observed "$JM19_3" AC-9)'"
+  fi
+fi
+m19 "V6854-AC3 M4" g19-m4-no-operand-rule 1 's/^  if names_no_operand "\$cmd"; then return 5; fi$/  :/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_NMR"; JM19_4="$VRP_JSON"
+  if mutant_ran "V6854-AC3 M4"; then
+    [ "$(fv19 "$JM19_4" AC-13)" = per-issue/PASS ] && [ "$(fv19 "$JM19_4" AC-16)" = per-issue/PASS ] \
+       && [ -n "$(g13_observed "$JM19_4" AC-10)" ] && ! g19_has "$JM19_4" AC-10 "no-operand:" \
+      && ok "V6854-AC3 M4 detected — without the operand rule a lone test primary and an operand-less ls read PASS again, and a pattern-less grep is graded by its usage error" \
+      || bad "V6854-AC3 M4 SURVIVED — AC-13 $(fv19 "$JM19_4" AC-13); AC-16 $(fv19 "$JM19_4" AC-16); AC-10 '$(g13_observed "$JM19_4" AC-10)'"
+  fi
+fi
+m19 "V6854-AC3 M5" g19-m5-every-exit-zero-graded 1 's/^  return 1   # no comparator: this exit 0 is not the claim$/  return 0/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_NMR"; JM19_5="$VRP_JSON"
+  if mutant_ran "V6854-AC3 M5"; then
+    [ "$(fv19 "$JM19_5" AC-11)" = per-issue/PASS ] && [ "$(fv19 "$JM19_5" AC-12)" = per-issue/PASS ] && [ "$(fv19 "$JM19_5" CIAC-2)" = integration/PASS ] \
+       && [ "$(g13_verdict "$JM19_5" AC-22)" = "$(sed -n 's/^readonly VERDICT_PARTIAL_SLOT="\$VERDICT_\([A-Z]*\)"$/\1/p' "$VERIFY")" ] \
+      && ok "V6854-AC3 M5 detected — without the exit-0 rule cat and a directory listing read PASS on a claim nobody evaluated, in both handlers and as a designated command" \
+      || bad "V6854-AC3 M5 SURVIVED — AC-11 $(fv19 "$JM19_5" AC-11); AC-12 $(fv19 "$JM19_5" AC-12); CIAC-2 $(fv19 "$JM19_5" CIAC-2); AC-22 $(fv19 "$JM19_5" AC-22)"
+  fi
+fi
+m19 "V6854-AC3 M6" g19-m6-wc-read-as-lines 1 's/^  if \[ "\$\(reader_rule "\$verb" count\)" = first-field \]; then .*$/  :/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_NMR"; JM19_6="$VRP_JSON"
+  if mutant_ran "V6854-AC3 M6"; then
+    [ "$(fv19 "$JM19_6" AC-14)" = per-issue/FAIL ] && [ "$(g13_observed "$JM19_6" AC-14)" = "count=1 (wanted >= 10)" ] \
+      && ok "V6854-AC3 M6 detected — without the first-field reading wc's one output line is read as its count again (AC-14 FAIL count=1)" \
+      || bad "V6854-AC3 M6 SURVIVED — AC-14 $(fv19 "$JM19_6" AC-14) '$(g13_observed "$JM19_6" AC-14)'"
+  fi
+fi
+m19 "V6854-AC1 M7" g19-m7-no-per-issue-guard 1 's/cmd="\$\(per_issue_command "\$method"\)"/cmd="$(extract_command "$method")"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_NMR"; JM19_7="$VRP_JSON"
+  if mutant_ran "V6854-AC1 M7"; then
+    [ "$(fv19 "$JM19_7" AC-18)" = per-issue/ERROR ] && [ "$(fv19 "$JM19_7" AC-19)" = per-issue/ERROR ] && [ "$(fv19 "$JM19_7" AC-20)" = per-issue/UNRUNNABLE ] \
+      && ok "V6854-AC1 M7 detected — without the per-issue guard prose that opens with a verb runs as a command again (AC-18 and AC-19 ERROR, AC-20 refused as a substitution)" \
+      || bad "V6854-AC1 M7 SURVIVED — AC-18 $(fv19 "$JM19_7" AC-18); AC-19 $(fv19 "$JM19_7" AC-19); AC-20 $(fv19 "$JM19_7" AC-20)"
+  fi
+fi
+m19 "V6854-AC4 M8" g19-m8-no-plan-bucket 1 's/k = \(\$1 == "" \? "\(plan\)" : \$1\)/k = $1/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_NMR"
+  if mutant_ran "V6854-AC4 M8"; then
+    g19_md "$MUT_PATH" "$FIX_NMR"; MDM19_8="$G19MD"
+    [ "$(g19_rows "$MDM19_8")" -lt "$(g13_records "$J19")" ] && [ "$(grep -c -F '| AC-0 |' <<<"$MDM19_8" || true)" = "0" ] \
+      && ok "V6854-AC4 M8 detected — without the (plan) bucket the unattributed record is counted and not shown ($(g19_rows "$MDM19_8") rows against $(g13_records "$J19") records)" \
+      || bad "V6854-AC4 M8 SURVIVED — $(g19_rows "$MDM19_8") rows against $(g13_records "$J19") records"
+    g19_md "$MUT_PATH" "$FIX_CANON"
+    [ -n "$G19MD" ] && [ "$G19MD" = "$MD19C" ] \
+      && ok "V6854-AC4 M8 CONTROL — on a plan with no unattributed record the bucket moves no byte: the canonical fixture's block is identical with and without it" \
+      || bad "V6854-AC4 M8 CONTROL — the canonical fixture's block differs with the bucket removed"
+  fi
+fi
+rm -rf "$MUTD6854"
+
+# ===========================================================================
+# G20 — A DOCUMENTED-DECISION METHOD ON A PER-ISSUE ROW GRADES A NAMED SKIP
+#       (V6685-AC1, V6685-AC2, V6685-AC3, V6685-AC4).
+#
+# A per-issue row whose method is a documented decision — a named read of a named
+# surface, with no command this executor runs — reads a named SKIP: declared in the
+# method cell, the declared-deferred SKIP through the classifier's step 0; left
+# undeclared, the per-issue no-command SKIP through the classifier's residual, which
+# inspects the row rather than reporting it unreadable. The cross-issue form keeps the
+# integration family's documented-decision SKIP, byte-identical. A genuinely malformed
+# per-issue method is never a named SKIP on either route, and the padding the card
+# names — a backticked test primary with no operand — is refused, never a PASS. The
+# three rows the card cites, and its own plan's CIAC-1, replay from that plan.
+#
+# The group adds no executor code: every rule it grades landed in an earlier slice of
+# the release, and it grades them on the card's own evidence. Two issues in one plan
+# can share an AC id (v4.46 carries two AC-3 rows), so every record is read by its
+# issue and its id together, from its own line and in either field order: a record
+# whose text carries a brace is invisible to the shared readers. Every arm first
+# requires the record it grades. Each seeded failure is proved to apply at exactly its
+# sites and only one that took is graded, and the residual-route control is observed on
+# its route before the mutation that depends on it is graded.
+# ===========================================================================
+echo
+echo "G20 — #6685: a documented-decision method on a per-issue row grades a named SKIP (V6685-AC1/AC2/AC3/AC4)"
+MUTD6685="$(mktemp -d -t verify-plan-6685-mut.XXXXXX)"
+FIX_DD="release/tools/tests/fixtures/verify-plan-documented-decision.md"
+FIX_DDC="release/tools/tests/fixtures/verify-plan-documented-decision-control.md"
+REAL6685="release/releases/plans/v4/v4.46_RELEASE_PLAN.md"
+G20_CIAC="CIAC (integration)"
+# g20_line <json> <issue> <id> — the record for that issue AND that id, from its own line,
+# whichever of the two fields comes first; empty for an absent record. The JSON presenter
+# escapes every quote inside a field, so an unescaped `"issue":"` or `"id":"` is the field.
+g20_line() {
+  local l
+  l="$(grep -F "\"issue\":\"$2\"" <<<"$1" || true)"
+  l="$(grep -F "\"id\":\"$3\"" <<<"$l" || true)"
+  printf '%s' "${l%%$'\n'*}"
+}
+# g20_field <record-line> <field> — one field of one record line (an escaped quote ends it).
+g20_field() { local v; v="$(sed -n "s/.*\"$2\":\"\([^\"]*\)\".*/\1/p" <<<"$1")"; printf '%s' "${v%%$'\n'*}"; }
+# g20_fvo <json> <issue> <id> — "family/verdict/observed"; "//" for an absent record, which no arm expects.
+g20_fvo() {
+  local r
+  r="$(g20_line "$1" "$2" "$3")"
+  printf '%s/%s/%s' "$(g20_field "$r" family)" "$(g20_field "$r" verdict)" "$(g20_field "$r" observed)"
+}
+# g20_fv <json> <issue> <id> <field> — one field of one issue-qualified record.
+g20_fv() { g20_field "$(g20_line "$1" "$2" "$3")" "$4"; }
+# m20 <label> <stem> <sites> <sed-expr>... — m19's contract: the mutant in MUT_PATH, and
+# MUT_TOOK only when it applied at exactly <sites> lines.
+m20() {
+  local label="$1" stem="$2" want="$3" dst n e
+  shift 3
+  dst="$MUTD6685/$stem.sh"
+  cp "$VERIFY" "$dst"
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  n="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$dst")"
+  if [ "$n" -eq "$want" ]; then
+    MUT_TOOK=1; ok "$label — mutation applied at exactly $want site(s): the mutant differs from the shipped tool in $n line(s)"
+  else
+    MUT_TOOK=0; bad "$label — mutation applied at $n site(s), expected exactly $want; its arm is not graded"
+  fi
+}
+
+vrp_run "$VERIFY" "$FIX_DD";  J20="$VRP_JSON";  RC20="$VRP_RC"
+vrp_run "$VERIFY" "$FIX_DDC"; J20C="$VRP_JSON"; RC20C="$VRP_RC"
+
+# --- V6685-AC4: both fixtures are in the test corpus, and each parses as planted. ---
+if [ -f "$REPO_ROOT/$FIX_DD" ] && [ -f "$REPO_ROOT/$FIX_DDC" ]; then
+  ok "V6685-AC4 — both fixtures are in the test corpus"
+else
+  bad "V6685-AC4 — a fixture is missing: $FIX_DD / $FIX_DDC"
+fi
+[ "$(rows_of "$J20")" = 3 ] && [ "$(rows_of "$J20C")" = 3 ] && [ "$(ciacs_of "$J20")" = 1 ] \
+  && ok "V6685-AC4 — both fixtures parse as planted: 3 + 3 per-issue rows and the main fixture's CIAC-1, so no arm below is vacuous" \
+  || bad "V6685-AC4 — a fixture did not parse as planted: $(rows_of "$J20") / $(rows_of "$J20C") per-issue rows and $(ciacs_of "$J20") CIAC (want 3 / 3 and 1)"
+
+# --- V6685-AC1 AUTHORING: every documented-decision row stays a named read on every route. ---
+# None carries a backticked span, so the declared rows carry no command span for step 0 to
+# step over, and none opens with an allowlisted verb word: such prose was once read as a
+# command, and still is in a cross-issue cell, so the fixture keeps the wording unambiguous.
+G20_VERBS=" $(sed -n "s/^RUNNABLE_VERBS='\(.*\)'\$/\1/p" "$VERIFY") "
+G20_AUTH=1
+for g20a in AC-1 AC-2 AC-3; do
+  g20m="$(sed -n "s/^| $g20a | \([^|]*\) |.*/\1/p" "$REPO_ROOT/$FIX_DD")"
+  case "$g20m" in ''|*'`'*) G20_AUTH=0 ;; esac
+  case "$G20_VERBS" in *" ${g20m%% *} "*) G20_AUTH=0 ;; esac
+done
+if [ -n "${G20_VERBS// /}" ] && [ "$G20_AUTH" = 1 ]; then
+  ok "V6685-AC1 AUTHORING — the fixture's three documented-decision rows carry no backticked span and none opens with an allowlisted verb word, so each is a named read on every route"
+else
+  bad "V6685-AC1 AUTHORING — a documented-decision row of $FIX_DD carries a backticked span or opens with an allowlisted verb word (or the verb set could not be read); restore the named-read wording"
+fi
+
+# --- V6685-AC1, the declared limb: step 0 routes the declared-deferred form to its named SKIP. ---
+for g20a in AC-1 AC-2; do
+  G20_GOT="$(g20_fvo "$J20" '#964' "$g20a")"
+  [ "$G20_GOT" = "deferred/SKIP/declared-deferred" ] \
+    && ok "V6685-AC1 $g20a — a declared documented-decision method is the declared-deferred SKIP (step 0)" \
+    || bad "V6685-AC1 $g20a — got '$G20_GOT' (want deferred/SKIP/declared-deferred)"
+done
+
+# --- V6685-AC1, the undeclared limb (co-discharged on the classifier residual): the card's own shape. ---
+G20_GOT="$(g20_fvo "$J20" '#964' AC-3)"
+[ "$G20_GOT" = "per-issue/SKIP/no-executable-command-in-method" ] \
+  && ok "V6685-AC1 AC-3 — an undeclared documented-decision method is the per-issue no-command SKIP, never an ERROR" \
+  || bad "V6685-AC1 AC-3 — got '$G20_GOT' (want per-issue/SKIP/no-executable-command-in-method)"
+[ "$RC20" -eq 0 ] \
+  && ok "V6685-AC1 — a plan whose rows are documented-decision methods does not fail the run (exit 0)" \
+  || bad "V6685-AC1 — the documented-decision fixture exits $RC20 (want 0: no row failed or could not be read)"
+
+# --- V6685-AC1 + V6685-AC2, NON-SYNTHETIC: the plan the card cites. Denominator first. ---
+if [ ! -f "$REPO_ROOT/$REAL6685" ]; then
+  bad "V6685-AC1 PRECONDITION — replay target absent: $REAL6685 (relocated or renamed?)"
+else
+  G20_DEN=0
+  for g20k in '| #3616 | AC-3 |' '| #3616 | AC-4 |' '| #2577 | AC-6 |' '**CIAC-1 '; do
+    if [ "$(grep -c -F -- "$g20k" "$REPO_ROOT/$REAL6685" || true)" -ge 1 ]; then G20_DEN=$((G20_DEN + 1)); fi
+  done
+  if [ "$G20_DEN" -ne 4 ]; then
+    bad "V6685-AC1 VACUOUS — the replay target declares $G20_DEN of the 4 entries the card cites (#3616 AC-3, #3616 AC-4, #2577 AC-6, CIAC-1)"
+  else
+    vrp_run "$VERIFY" "$REAL6685"; J20R="$VRP_JSON"
+    G20_N=0
+    for g20p in '#3616 AC-3' '#3616 AC-4' '#2577 AC-6'; do
+      if [ "$(g20_fvo "$J20R" "${g20p% *}" "${g20p#* }")" = "per-issue/SKIP/no-executable-command-in-method" ]; then G20_N=$((G20_N + 1)); fi
+    done
+    [ "$G20_N" -eq 3 ] \
+      && ok "V6685-AC1 NON-SYNTHETIC — the 3 rows the card cites on v4.46 (#3616 AC-3, #3616 AC-4, #2577 AC-6) read the per-issue no-command SKIP: none is an ERROR, and none names a tool" \
+      || bad "V6685-AC1 NON-SYNTHETIC — $G20_N of the 3 cited v4.46 rows read the per-issue no-command SKIP: #3616 AC-3 '$(g20_fvo "$J20R" '#3616' AC-3)'; #3616 AC-4 '$(g20_fvo "$J20R" '#3616' AC-4)'; #2577 AC-6 '$(g20_fvo "$J20R" '#2577' AC-6)'"
+    G20_V2577="$(g20_fv "$J20R" '#2577' AC-3 verdict)"
+    [ "$(g20_fv "$J20R" '#2577' AC-3 family)" = per-issue ] && [ -n "$G20_V2577" ] && [ "$(g20_fv "$J20R" '#2577' AC-3 observed)" != no-executable-command-in-method ] \
+      && ok "V6685-AC1 NON-SYNTHETIC CONTROL — the reader keys on the issue: #2577 AC-3, which shares its AC id with the cited #3616 AC-3, reads its own record ($G20_V2577)" \
+      || bad "V6685-AC1 NON-SYNTHETIC CONTROL — #2577 AC-3 reads '$(g20_fvo "$J20R" '#2577' AC-3)': the issue-qualified reader returned the wrong record or none"
+    G20_GOT="$(g20_fvo "$J20R" "$G20_CIAC" CIAC-1)"
+    [ "$G20_GOT" = "integration/SKIP/documented-decision-method (no runnable command)" ] \
+      && ok "V6685-AC2 NON-SYNTHETIC — v4.46's own CIAC-1 keeps the integration documented-decision SKIP" \
+      || bad "V6685-AC2 NON-SYNTHETIC — v4.46 CIAC-1 moved: '$G20_GOT'"
+  fi
+fi
+
+# --- V6685-AC2: the integration family is unchanged on the fixture's CIAC-1-shaped entry. ---
+G20_GOT="$(g20_fvo "$J20" "$G20_CIAC" CIAC-1)"
+[ "$G20_GOT" = "integration/SKIP/documented-decision-method (no runnable command)" ] \
+  && ok "V6685-AC2 — a CIAC-1-shaped cross-issue criterion keeps the integration documented-decision SKIP, byte-identical" \
+  || bad "V6685-AC2 — fixture CIAC-1 moved: '$G20_GOT'"
+
+# --- V6685-AC3: a malformed per-issue method is never a named SKIP on either route; the padding is refused. ---
+# Control AC-1 and AC-2 carry an unterminated quote, so the per-issue handler cannot split
+# the command into its author's words and refuses it before it runs. That is input the
+# executor could not read, so each is asserted to reach the handler and to read ERROR,
+# naming the unterminated quote: never a named SKIP, never a PASS, and not the can't-run
+# reading a genuine shell operator takes.
+G20_GOT="$(g20_fvo "$J20C" '#967' AC-1)"
+case "$G20_GOT" in
+  per-issue/ERROR/unterminated-quote:*) ok "V6685-AC3 AC-1 — a malformed command on the keyword route reaches the per-issue handler and reads ERROR, naming the unterminated quote: never a named SKIP or a PASS" ;;
+  *) bad "V6685-AC3 AC-1 — got '$G20_GOT' (want per-issue/ERROR/unterminated-quote:...)" ;;
+esac
+G20_GOT="$(g20_fvo "$J20C" '#967' AC-2)"
+case "$G20_GOT" in
+  per-issue/ERROR/unterminated-quote:*) ok "V6685-AC3 AC-2 — a malformed command on the residual route is inspected by the per-issue handler and reads ERROR, naming the unterminated quote: never a named SKIP or a PASS" ;;
+  *) bad "V6685-AC3 AC-2 — got '$G20_GOT' (want per-issue/ERROR/unterminated-quote:...)" ;;
+esac
+G20_GOT="$(g20_fvo "$J20C" '#967' AC-3)"
+case "$G20_GOT" in
+  per-issue/ERROR/no-operand:test*) ok "V6685-AC3 AC-3 — the padding the card names (a backticked test primary with no operand) is refused as naming no operand (ERROR no-operand:test), never a PASS" ;;
+  *) bad "V6685-AC3 AC-3 — got '$G20_GOT' (want per-issue/ERROR/no-operand:test...)" ;;
+esac
+[ "$RC20C" -eq 3 ] \
+  && ok "V6685-AC3 — the control fixture reaches the exit predicate (exit 3)" \
+  || bad "V6685-AC3 — the control fixture exits $RC20C (want 3)"
+
+# --- SEEDED FAILURES. Each removes one rule and names the answer it must move to. ---
+# G20_CF scopes an edit to classify_family, whose one two-space `echo` line is its residual.
+G20_CF='/^classify_family\(\) \{/,/^\}/ '
+# M1 — step 0's declared route removed: the declared rows leave the deferred family.
+m20 "V6685-AC1 M1" g20-m1-no-declared-route 1 's/^      echo "deferred"; return ;;$/      : ;;/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_DD"; JM20_1="$VRP_JSON"
+  if mutant_ran "V6685-AC1 M1"; then
+    G20_F1="$(g20_fv "$JM20_1" '#964' AC-1 family)"; G20_F2="$(g20_fv "$JM20_1" '#964' AC-2 family)"
+    [ -n "$G20_F1" ] && [ "$G20_F1" != deferred ] && [ -n "$G20_F2" ] && [ "$G20_F2" != deferred ] \
+      && ok "V6685-AC1 M1 detected — without step 0 the declared rows leave the deferred family ($G20_F1, $G20_F2): the declared-limb arms observe step 0" \
+      || bad "V6685-AC1 M1 SURVIVED — AC-1 family '$G20_F1', AC-2 family '$G20_F2'"
+  fi
+fi
+# M2 — the classifier's residual reverted: the undeclared row is an ERROR again, and the plan fails.
+m20 "V6685-AC1 M2" g20-m2-residual-reverted 1 "${G20_CF}"'s/^  echo "[a-z-]+"(.*)$/  echo "unclassified"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_DD"; JM20_2="$VRP_JSON"; RCM20_2="$VRP_RC"
+  if mutant_ran "V6685-AC1 M2"; then
+    [ "$(g20_fv "$JM20_2" '#964' AC-3 family)/$(g20_fv "$JM20_2" '#964' AC-3 verdict)" = unclassified/ERROR ] && [ "$RCM20_2" -eq 3 ] \
+      && ok "V6685-AC1 M2 detected — without the residual the undeclared row is unclassifiable again (AC-3 ERROR) and the plan exits 3: the undeclared-limb arms observe the residual" \
+      || bad "V6685-AC1 M2 SURVIVED — AC-3 '$(g20_fvo "$JM20_2" '#964' AC-3)', rc $RCM20_2"
+  fi
+fi
+# ROUTE PRECONDITION — M3 grades a SKIP-everything residual through control AC-2, so control
+# AC-2 must reach the residual on this head. With the residual renamed to a sentinel family,
+# a row the residual reaches carries that name; a step ahead of it that claimed control AC-2
+# would leave it its own family, and M3 would then observe nothing.
+G20_ROUTE=0
+m20 "V6685-AC3 ROUTE" g20-route-sentinel 1 "${G20_CF}"'s/^  echo "[a-z-]+"(.*)$/  echo "residual-route"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_DDC"; JM20_R="$VRP_JSON"
+  if mutant_ran "V6685-AC3 ROUTE"; then
+    G20_RF2="$(g20_fv "$JM20_R" '#967' AC-2 family)"; G20_RF1="$(g20_fv "$JM20_R" '#967' AC-1 family)"
+    if [ "$G20_RF2" = residual-route ] && [ -n "$G20_RF1" ] && [ "$G20_RF1" != residual-route ]; then
+      G20_ROUTE=1
+      ok "V6685-AC3 ROUTE PRECONDITION — control AC-2 reaches the classifier's residual on this head (a sentinel residual renames it) and control AC-1 does not (a keyword claims it), so M3 grades the route it names"
+    else
+      bad "V6685-AC3 ROUTE PRECONDITION FAILED — with the residual renamed to a sentinel, control AC-2 reads family '${G20_RF2:-absent}' and AC-1 '${G20_RF1:-absent}': control AC-2 no longer reaches the residual on this head. Re-author control AC-2 so that no step ahead of the residual claims it (no routing word, no runnable probe, no recognised tool), or M3 cannot observe a SKIP-everything residual. M3 is not graded"
+    fi
+  fi
+fi
+# M3 — the degenerate fix, "make every row the residual reaches a SKIP": the control must catch it.
+if [ "$G20_ROUTE" = 1 ]; then
+  m20 "V6685-AC3 M3" g20-m3-residual-skips-everything 1 "${G20_CF}"'s/^  echo "[a-z-]+"(.*)$/  echo "deferred"/'
+  if [ "$MUT_TOOK" = 1 ]; then
+    vrp_run "$MUT_PATH" "$FIX_DDC"; JM20_3="$VRP_JSON"
+    if mutant_ran "V6685-AC3 M3"; then
+      [ "$(g20_fv "$JM20_3" '#967' AC-2 verdict)" = SKIP ] \
+        && ok "V6685-AC3 M3 detected — a residual that makes every row it reaches a SKIP turns the residual-route control SKIP, so the control catches it" \
+        || bad "V6685-AC3 M3 SURVIVED — control AC-2 '$(g20_fvo "$JM20_3" '#967' AC-2)'"
+      G20_M3V="$(g20_fv "$JM20_3" '#967' AC-1 verdict)"
+      [ "$(g20_fv "$JM20_3" '#967' AC-1 family)" = per-issue ] && [ -n "$G20_M3V" ] && [ "$G20_M3V" != SKIP ] \
+        && ok "V6685-AC3 M3 CONTROL — the keyword-route row is untouched by a residual-only mutation (per-issue, $G20_M3V)" \
+        || bad "V6685-AC3 M3 CONTROL — the mutation reached the keyword route too: AC-1 '$(g20_fvo "$JM20_3" '#967' AC-1)'"
+    fi
+  fi
+fi
+# M4 — the integration hatch turned into an ERROR: the V6685-AC2 arms read the handler's own verdict.
+m20 "V6685-AC2 M4" g20-m4-hatch-errors 1 's/"\$VERDICT_SKIP" "documented-decision-method \(no runnable command\)"/"$VERDICT_ERROR" "documented-decision-method (no runnable command)"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_DD"; JM20_4="$VRP_JSON"
+  if mutant_ran "V6685-AC2 M4"; then
+    [ "$(g20_fv "$JM20_4" "$G20_CIAC" CIAC-1 verdict)" = ERROR ] \
+      && ok "V6685-AC2 M4 detected — with the integration hatch made an ERROR, CIAC-1 reads ERROR: the arm reads the handler's own verdict" \
+      || bad "V6685-AC2 M4 SURVIVED — CIAC-1 '$(g20_fvo "$JM20_4" "$G20_CIAC" CIAC-1)'"
+  fi
+fi
+# M5 — the operand rule's unary-primary arm removed (the reader table's operand column for
+# test, as landed): the padded method reads a fabricated PASS again, and the control loses
+# the one could-not-read row that is the padding's. The unterminated-quote rows read ERROR
+# as well, so the arm counts the control's ERROR rows -- exactly one fewer -- rather than
+# reading its exit, which those rows keep at 3.
+m20 "V6685-AC3 M5" g20-m5-unary-primary-operand 1 's/(in -\[bcdefghkLnOGNprsStuwxz\]\)) return 0 ;; esac$/\1 : ;; esac/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_DDC"; JM20_5="$VRP_JSON"; RCM20_5="$VRP_RC"
+  if mutant_ran "V6685-AC3 M5"; then
+    G20_E0="$(count_verdict "$J20C" ERROR)"; G20_E1="$(count_verdict "$JM20_5" ERROR)"
+    [ "$(g20_fv "$JM20_5" '#967' AC-3 verdict)" = PASS ] && [ "$G20_E1" -eq $((G20_E0 - 1)) ] \
+      && ok "V6685-AC3 M5 detected — without the unary-primary operand rule the padded method is a fabricated PASS again, and the control's ERROR rows fall by exactly that one ($G20_E0 -> $G20_E1)" \
+      || bad "V6685-AC3 M5 SURVIVED — control AC-3 '$(g20_fvo "$JM20_5" '#967' AC-3)', ERROR $G20_E0 -> $G20_E1, rc $RCM20_5"
+  fi
+fi
+rm -rf "$MUTD6685"
+
+# ===========================================================================
+# G21 — THE CIAC AUTHORING LINT (V6236-AC1), AND WHAT A HANDLER READS FROM A SPAN IT
+#       CANNOT SPLIT OR THAT NO BACKTICK CLOSES.
+#
+# The executor is the sole runner of every cross-issue criterion and Stage 9 reads what it
+# emits, so a CIAC it cannot grade as written is graded by no permitted party. --ciac-lint
+# reads each CIAC exactly as grading will, through the grading path's own parser and
+# readers, and runs nothing. The control twin lints clean or declared, naming an evidence
+# surface; the flag-set fixture carries one defect per entry; the regression fixture holds
+# the four shapes a shape-only lint read clean while the grader misgrades them, and the
+# grader's own verdicts show which; and a real plan replays. The lint's bodies call no
+# runner, and on a stub root whose deploy check and event writer leave a trace, a lint
+# run leaves none.
+#
+# Two handler rules the lint mirrors are graded here too. A designated command with an
+# unterminated quote cannot be split into its author's words: input the executor could
+# not read, so it reads ERROR naming the quote and fails the run, while a genuine shell
+# operator stays UNRUNNABLE. And a command inside a span no backtick closes is prose, so it
+# runs on no route: the per-issue keyword and residual routes, the cross-issue route, and
+# the designated command of a method naming several. Every record is read by its issue and
+# its id from its own line (g20_line). Each seeded failure is proved to apply at exactly
+# its sites, and only a mutation that took is graded.
+# ===========================================================================
+echo
+echo "G21 — #6236: the CIAC authoring lint, an unterminated quote, and a span no backtick closes (V6236-AC1)"
+MUTD6236B="$(mktemp -d -t verify-plan-6236b-mut.XXXXXX)"
+FIX_LINT="release/tools/tests/fixtures/verify-plan-ciac-lint.md"
+FIX_LINTC="release/tools/tests/fixtures/verify-plan-ciac-lint-control.md"
+FIX_LINTM="release/tools/tests/fixtures/verify-plan-ciac-lint-misgraded.md"
+FIX_SPAN="release/tools/tests/fixtures/verify-plan-span-syntax.md"
+REAL6236B="release/releases/plans/v4/v4.43_RELEASE_PLAN.md"
+LINT_OUT=""
+LINT_RC=0
+# lint_run <tool> <fixture-path> — sets LINT_OUT and LINT_RC in the CURRENT shell, for the
+# same reason vrp_run does: a subshell would assign LINT_RC and discard it.
+lint_run() {
+  set +e
+  LINT_OUT="$("$1" --ciac-lint --root "$REPO_ROOT" "$REPO_ROOT/$2" 2>/dev/null)"
+  LINT_RC=$?
+  set -e
+}
+# lint_of <lint-output> <id> — "<status> <flag>" of one CIAC, from its own line; empty when absent.
+lint_of() { local l; l="$(awk -F'\t' -v id="$2" '$1 == "CIAC-LINT" && $2 == id { print $3 " " $4 }' <<<"$1")"; printf '%s' "${l%%$'\n'*}"; }
+# lint_sum <lint-output> — the summary line's five counts, space-separated.
+lint_sum() { local l; l="$(awk -F'\t' '$1 == "CIAC-LINT-SUMMARY" { print $2 " " $3 " " $4 " " $5 " " $6 }' <<<"$1")"; printf '%s' "${l%%$'\n'*}"; }
+# m21 <label> <stem> <sites> <sed-expr>... — m20's contract: the mutant in MUT_PATH, and
+# MUT_TOOK only when it applied at exactly <sites> lines.
+m21() {
+  local label="$1" stem="$2" want="$3" dst n e
+  shift 3
+  dst="$MUTD6236B/$stem.sh"
+  cp "$VERIFY" "$dst"
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  n="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$dst")"
+  if [ "$n" -eq "$want" ]; then
+    MUT_TOOK=1; ok "$label — mutation applied at exactly $want site(s): the mutant differs from the shipped tool in $n line(s)"
+  else
+    MUT_TOOK=0; bad "$label — mutation applied at $n site(s), expected exactly $want; its arm is not graded"
+  fi
+}
+
+# --- G21-0: DENOMINATOR FIRST — each fixture still declares what the arms below grade. ---
+G21_DEN="$(grep -c -E '^- \[ \] (\*\*)?CIAC-[0-9]+' "$REPO_ROOT/$FIX_LINT" || true)/$(grep -c -F '**CIAC-' "$REPO_ROOT/$FIX_LINTC" || true)/$(grep -c -F '**CIAC-' "$REPO_ROOT/$FIX_LINTM" || true)/$(grep -c -F '| AC-' "$REPO_ROOT/$FIX_SPAN" || true)/$(grep -c -F '**CIAC-' "$REPO_ROOT/$FIX_SPAN" || true)"
+[ "$G21_DEN" = "22/9/4/5/4" ] \
+  && ok "G21-0 V6236-AC1 the fixtures still declare what the arms grade: 22 flag-set entries, 9 control, 4 regression, and 5 rows + 4 CIACs of span syntax (without them every arm below is vacuous)" \
+  || bad "G21-0 V6236-AC1 the fixtures declare $G21_DEN (want 22/9/4/5/4); the arms below would grade the wrong population"
+
+# --- V6236-AC1, the control twin: every entry lints clean, or declared naming its evidence. ---
+lint_run "$VERIFY" "$FIX_LINTC"; LOUT_C="$LINT_OUT"; LRC_C="$LINT_RC"
+G21_BAD=""
+for g21i in 1 2 3 4 5; do [ "$(lint_of "$LOUT_C" "CIAC-$g21i")" = "CLEAN -" ] || G21_BAD="$G21_BAD CIAC-$g21i=[$(lint_of "$LOUT_C" "CIAC-$g21i")]"; done
+for g21i in 6 7 8 9; do [ "$(lint_of "$LOUT_C" "CIAC-$g21i")" = "DECLARED -" ] || G21_BAD="$G21_BAD CIAC-$g21i=[$(lint_of "$LOUT_C" "CIAC-$g21i")]"; done
+[ "$LRC_C" -eq 0 ] && [ -z "$G21_BAD" ] && [ "$(lint_sum "$LOUT_C")" = "declared=9 parsed=9 clean=5 declared-deferral=4 flagged=0" ] \
+  && ok "V6236-AC1 CONTROL — the control twin lints with no flag and exits 0: a count, a test, a match, an emphasised null and a scope assertion read CLEAN, and declarations naming a path, an arm label, and a criterion for each spanned issue in each reference form read DECLARED" \
+  || bad "V6236-AC1 CONTROL — rc=$LRC_C, summary '$(lint_sum "$LOUT_C")', mismatches:${G21_BAD:- none} (want rc 0 and declared=9 parsed=9 clean=5 declared-deferral=4 flagged=0)"
+grep -q -F "$(printf 'CIAC-LINT-SET\tCIAC-1 CIAC-2 CIAC-3 CIAC-4 CIAC-5 CIAC-6 CIAC-7 CIAC-8 CIAC-9')" <<<"$LOUT_C" \
+  && ok "V6236-AC1 CONTROL — the lint prints the plan's declared CIAC set, which a Stage 9 reader needs to tell no CIAC from no record" \
+  || bad "V6236-AC1 CONTROL — the declared-set line is missing or wrong: '$(grep -F 'CIAC-LINT-SET' <<<"$LOUT_C" || true)'"
+
+# --- V6236-AC1, the flag set: each entry carries one defect, and the lint names it. ---
+lint_run "$VERIFY" "$FIX_LINT"; LOUT_F="$LINT_OUT"; LRC_F="$LINT_RC"
+G21_WANT='CIAC-1=CLEAN -|CIAC-2=FLAG not-runnable:python3|CIAC-3=FLAG no-runnable-command|CIAC-4=FLAG method-clause-displaced|CIAC-5=FLAG multi-limb|CIAC-6=FLAG stdin-reader:grep|CIAC-7=FLAG bare-verb:grep|CIAC-8=FLAG multi-limb|CIAC-9=FLAG multi-comparator|CIAC-10=FLAG no-method|CIAC-11=FLAG ciac-unparsed|CIAC-12=FLAG declared-without-evidence|CIAC-13=CLEAN -|CIAC-14=FLAG shell-operator:||CIAC-15=FLAG unterminated-quote:"|CIAC-16=FLAG no-threshold:grep|CIAC-17=FLAG no-comparator:cat|CIAC-18=FLAG no-operand:test|CIAC-19=FLAG no-runnable-command|CIAC-20=FLAG unbackticked-command|CIAC-21=FLAG evidence-misses-spanned-issue:#972|CIAC-22=FLAG declared-without-evidence'
+G21_BAD=""
+G21_N=0
+for g21i in $(seq 1 22); do
+  G21_EXP="${G21_WANT#*CIAC-$g21i=}"; G21_EXP="${G21_EXP%%|CIAC-*}"
+  G21_N=$((G21_N + 1))
+  [ "$(lint_of "$LOUT_F" "CIAC-$g21i")" = "$G21_EXP" ] || G21_BAD="$G21_BAD CIAC-$g21i=[$(lint_of "$LOUT_F" "CIAC-$g21i")] want [$G21_EXP];"
+done
+[ "$LRC_F" -eq 3 ] && [ "$G21_N" -eq 22 ] && [ -z "$G21_BAD" ] && [ "$(lint_sum "$LOUT_F")" = "declared=22 parsed=21 clean=2 declared-deferral=0 flagged=20" ] \
+  && ok "V6236-AC1 FLAGS — the lint names each entry's defect, 20 flags over 22 entries, and exits 3: a refused tool, prose, a displaced clause, several commands, a stdin reader, a bare verb, comparators that disagree, a wrapped method, an unbolded id, a bare declaration, a pipeline, an unterminated quote, a count with no comparator the grader reads, a reader whose exit is not its claim, a primary with no operand, an unclosed span, verb-initial prose, a declaration missing a spanned issue, and a reason in place of a surface" \
+  || bad "V6236-AC1 FLAGS — rc=$LRC_F, summary '$(lint_sum "$LOUT_F")', mismatches:${G21_BAD:- none} (want rc 3 and declared=22 parsed=21 clean=2 declared-deferral=0 flagged=20)"
+[ "$(lint_of "$LOUT_F" CIAC-13)" = "CLEAN -" ] \
+  && ok "V6236-AC1 DEFERRAL READ — a deferral phrase inside the probe is the probe's own pattern: the lint reads the deferral outside every span led by an allowlisted verb, as the executor does, so CIAC-13 lints CLEAN" \
+  || bad "V6236-AC1 DEFERRAL READ — CIAC-13 reads '$(lint_of "$LOUT_F" CIAC-13)' (want CLEAN -)"
+[ "$(lint_of "$LOUT_F" CIAC-20)" = "FLAG unbackticked-command" ] && [ "$(lint_of "$LOUT_F" CIAC-19)" = "FLAG no-runnable-command" ] \
+  && ok "V6236-AC1 COMMAND READ — verb-initial prose is flagged because the executor reads its words as a command, and a span no backtick closes is prose to the lint as it is to the handlers" \
+  || bad "V6236-AC1 COMMAND READ — CIAC-20 '$(lint_of "$LOUT_F" CIAC-20)', CIAC-19 '$(lint_of "$LOUT_F" CIAC-19)' (want FLAG unbackticked-command and FLAG no-runnable-command)"
+
+# --- V6236-AC1, the regression fixture: the lint flags exactly the CIACs the grader misgrades. ---
+lint_run "$VERIFY" "$FIX_LINTM"; LOUT_M="$LINT_OUT"; LRC_M="$LINT_RC"
+vrp_run "$VERIFY" "$FIX_LINTM"; J21M="$VRP_JSON"
+G21_LINT="$(lint_of "$LOUT_M" CIAC-1)|$(lint_of "$LOUT_M" CIAC-2)|$(lint_of "$LOUT_M" CIAC-3)|$(lint_of "$LOUT_M" CIAC-4)"
+G21_GRADE="$(g20_fvo "$J21M" "$G20_CIAC" CIAC-1)|$(g20_fvo "$J21M" "$G20_CIAC" CIAC-2)|$(g20_fvo "$J21M" "$G20_CIAC" CIAC-3)|$(g20_fvo "$J21M" "$G20_CIAC" CIAC-4)"
+[ "$G21_LINT" = "FLAG no-threshold:grep|CLEAN -|FLAG no-threshold:grep|FLAG no-threshold:grep" ] && [ "$LRC_M" -eq 3 ] \
+  && ok "V6236-AC1 REGRESSION — a count with no comparator the grader reads is flagged (CIAC-1, CIAC-3, CIAC-4), and an emphasised comparator the grader reads is clean (CIAC-2)" \
+  || bad "V6236-AC1 REGRESSION — lint '$G21_LINT', rc $LRC_M (want FLAG no-threshold:grep|CLEAN -|FLAG no-threshold:grep|FLAG no-threshold:grep, rc 3)"
+[ "$G21_GRADE" = "integration/FAIL/integration-method-exit-1|integration/PASS/co-occurrence count=0 (== 0)|integration/FAIL/integration-method-exit-1|integration/PASS/integration-method-succeeded" ] \
+  && ok "V6236-AC1 REGRESSION CONTROL — the grader misgrades exactly the three the lint flags: a zero that holds reads FAIL twice and a count that misses its bound reads PASS, while the clean one is graded on its comparator" \
+  || bad "V6236-AC1 REGRESSION CONTROL — the grader reads '$G21_GRADE'"
+
+# --- V6236-AC1, NON-SYNTHETIC: the release #6236 was filed from. Denominator first. ---
+if [ ! -f "$REPO_ROOT/$REAL6236B" ]; then
+  bad "V6236-AC1 PRECONDITION — replay target absent: $REAL6236B (relocated or renamed?)"
+elif [ "$(grep -c -F '**CIAC-' "$REPO_ROOT/$REAL6236B" || true)" -lt 5 ]; then
+  bad "V6236-AC1 VACUOUS — the replay target declares fewer than 5 bold CIAC entries"
+else
+  lint_run "$VERIFY" "$REAL6236B"
+  [ "$LINT_RC" -eq 3 ] && [ "$(lint_sum "$LINT_OUT")" = "declared=5 parsed=5 clean=0 declared-deferral=0 flagged=5" ] \
+    && [ "$(lint_of "$LINT_OUT" CIAC-1)" = "FLAG not-runnable:python3" ] && [ "$(lint_of "$LINT_OUT" CIAC-2)" = "FLAG not-runnable:deploy.sh" ] \
+    && ok "V6236-AC1 NON-SYNTHETIC — the plan the card cites lints 5 of 5 CIACs flagged at authoring, the tool refusals by the tool the grader names" \
+    || bad "V6236-AC1 NON-SYNTHETIC — rc $LINT_RC, summary '$(lint_sum "$LINT_OUT")', CIAC-1 '$(lint_of "$LINT_OUT" CIAC-1)', CIAC-2 '$(lint_of "$LINT_OUT" CIAC-2)'"
+fi
+
+# --- V6236-AC1 RUNS NOTHING: no runner in the lint's bodies, and no trace from a lint run. ---
+G21_BODIES="$(sed -n -e '/^_ciac_lint_say()/,/^}/p' -e '/^_ciac_lint_entry()/,/^}/p' -e '/^_ciac_lint_evidence()/,/^}/p' -e '/^_ciac_lint_one()/,/^}/p' -e '/^ciac_lint()/,/^}/p' "$VERIFY")"
+G21_RUNNERS="$(grep -c -E 'eval_free_run|handle_integration|handle_per_issue|grade_limbs|dispatch_check|deploy_check_exit_code|EVENT_WRITER|DEPLOY_CHECK' <<<"$G21_BODIES" || true)"
+G21_SENS="$(sed -n '/^handle_integration()/,/^}/p' "$VERIFY" | grep -c -F 'eval_free_run' || true)"
+[ "$(wc -l <<<"$G21_BODIES" | tr -d ' ')" -ge 60 ] && [ "$G21_RUNNERS" = 0 ] && [ "$G21_SENS" -ge 1 ] \
+  && ok "V6236-AC1 RUNS NOTHING — the lint's five bodies name no runner, no dispatch and no delegation target (sensitivity: the cross-issue handler's body names eval_free_run $G21_SENS time(s))" \
+  || bad "V6236-AC1 RUNS NOTHING — the lint's bodies name a runner $G21_RUNNERS time(s), or were not read ($(wc -l <<<"$G21_BODIES" | tr -d ' ') lines), or the sensitivity arm read $G21_SENS"
+G21_ONE="$(grep -c -E "IFS='\`'|split\([^)]*\"\`\"|tr '\`'" <<<"$G21_BODIES" || true)"
+G21_CALLS="$(grep -c -E 'method_spans|method_limbs|extract_command' <<<"$G21_BODIES" || true)"
+[ "$G21_ONE" = 0 ] && [ "$G21_CALLS" -ge 2 ] \
+  && ok "V6236-AC1 ONE SPLITTER — the lint splits no method itself: it reads spans and commands through method_spans, method_limbs and extract_command ($G21_CALLS call line(s))" \
+  || bad "V6236-AC1 ONE SPLITTER — the lint's bodies carry $G21_ONE backtick split(s) of their own and $G21_CALLS call line(s) to the shared splitter"
+G21STUB="$(mktemp -d -t verify-plan-6236b-stub.XXXXXX)"
+mkdir -p "$G21STUB/core/deploy" "$G21STUB/release/tools" "$G21STUB/plan"
+cp "$VERIFY" "$G21STUB/release/tools/"
+printf '#!/usr/bin/env bash\ntouch "%s/deploy-ran"\nexit 0\n' "$G21STUB" > "$G21STUB/core/deploy/deploy.sh"
+printf '#!/usr/bin/env bash\ntouch "%s/event-ran"\nexit 0\n' "$G21STUB" > "$G21STUB/release/tools/append-pipeline-event.sh"
+chmod +x "$G21STUB/core/deploy/deploy.sh" "$G21STUB/release/tools/append-pipeline-event.sh"
+cat > "$G21STUB/plan/p.md" <<'EOF'
+# stub plan
+## Verification Plan
+**#990 — a declared deploy row**
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-1 | `bash core/deploy/deploy.sh --check` | in-sync |
+## Cross-Issue Acceptance Criteria
+- [ ] **CIAC-1 (#990 × #991 on `stub`):** a deploy invocation. *Method:* `bash core/deploy/deploy.sh --check` exits 0.
+- [ ] **CIAC-2 (#990 × #991 on `stub`):** a runtime-suite declaration. *Method:* suite-skip for the stub runtime.
+- [ ] **CIAC-3 (#990 × #991 on `stub`):** a count. *Method:* `grep -c -F "CIAC-3" plan/p.md` at least 1.
+EOF
+set +e
+"$G21STUB/release/tools/verify-release-plan.sh" --ciac-lint --root "$G21STUB" "$G21STUB/plan/p.md" >/dev/null 2>&1 </dev/null
+G21_LRC=$?
+set -e
+G21_TRACE_LINT="$( [ -e "$G21STUB/deploy-ran" ] && printf deploy; [ -e "$G21STUB/event-ran" ] && printf event; true )"
+set +e
+"$G21STUB/release/tools/verify-release-plan.sh" --format=json --emit-events --root "$G21STUB" "$G21STUB/plan/p.md" >/dev/null 2>&1 </dev/null
+set -e
+G21_TRACE_RUN="$( [ -e "$G21STUB/deploy-ran" ] && printf deploy; true )"
+[ -z "$G21_TRACE_LINT" ] && [ "$G21_LRC" -eq 3 ] && [ "$G21_TRACE_RUN" = deploy ] \
+  && ok "V6236-AC1 RUNS NOTHING (dynamic) — a lint run over a plan naming the deploy check leaves no trace of the deploy check or the event writer, and a normal run of the same plan does run the deploy check (sensitivity)" \
+  || bad "V6236-AC1 RUNS NOTHING (dynamic) — lint trace '$G21_TRACE_LINT', lint rc $G21_LRC, normal-run trace '$G21_TRACE_RUN' (want none, 3, deploy)"
+rm -rf "$G21STUB"
+
+# --- D55: an unterminated quote reads ERROR naming the quote; a genuine operator stays UNRUNNABLE. ---
+vrp_run "$VERIFY" "$FIX_SPAN"; J21S="$VRP_JSON"; RC21S="$VRP_RC"
+G21_GOT="$(g20_fvo "$J21S" "$G20_CIAC" CIAC-1)"
+case "$G21_GOT" in
+  integration/ERROR/unterminated-quote:*) ok "G21 D55 CIAC-1 — an unterminated quote on the cross-issue route reads ERROR, naming the quote" ;;
+  *) bad "G21 D55 CIAC-1 — got '$G21_GOT' (want integration/ERROR/unterminated-quote:...)" ;;
+esac
+G21_GOT="$(g20_fvo "$J21S" "$G20_CIAC" CIAC-2)"
+case "$G21_GOT" in
+  "integration/ERROR/limbs run 0 of 2: limb 1 python3 did not run (outside the verb set); limb 2 grep ERROR unterminated-quote:"*) ok "G21 D55 CIAC-2 — as the designated command of a method naming two, an unterminated quote reads ERROR, and no command in the method ran" ;;
+  *) bad "G21 D55 CIAC-2 — got '$G21_GOT' (want integration/ERROR/limbs run 0 of 2: ... grep ERROR unterminated-quote:...)" ;;
+esac
+G21_GOT="$(g20_fvo "$J21S" '#985' AC-5)"
+case "$G21_GOT" in
+  "per-issue/UNRUNNABLE/shell-operator:|"*) ok "G21 D55 CONTROL — a genuine shell operator outside quotes stays UNRUNNABLE, naming the operator" ;;
+  *) bad "G21 D55 CONTROL — AC-5 got '$G21_GOT' (want per-issue/UNRUNNABLE/shell-operator:|...)" ;;
+esac
+[ "$RC21S" -eq 3 ] \
+  && ok "G21 D55 — the unterminated quote fails the run, like every other could-not-read row (exit 3)" \
+  || bad "G21 D55 — the span-syntax fixture exits $RC21S (want 3)"
+
+# --- D38: a command inside a span no backtick closes runs on no route. ---
+G21_A1="$(g20_fvo "$J21S" '#985' AC-1)"; G21_A2="$(g20_fvo "$J21S" '#985' AC-2)"
+[ "$G21_A1" = "per-issue/SKIP/no-executable-command-in-method" ] && [ "$G21_A2" = "per-issue/SKIP/no-executable-command-in-method" ] \
+  && ok "G21 D38 CLOSED SPAN — an unclosed span is prose on the per-issue keyword route (AC-1) and the residual route (AC-2): no command runs, and the row is the no-command SKIP" \
+  || bad "G21 D38 CLOSED SPAN — AC-1 '$G21_A1', AC-2 '$G21_A2' (want per-issue/SKIP/no-executable-command-in-method twice)"
+G21_GOT="$(g20_fvo "$J21S" '#985' AC-3)"
+case "$G21_GOT" in
+  */UNRUNNABLE/tool-invocation-outside-executor-allowlist:python3*) ok "G21 D38 CLOSED SPAN — beside a tool, an unclosed command is never the designated command: the tool is named and nothing runs (AC-3)" ;;
+  *) bad "G21 D38 CLOSED SPAN — AC-3 got '$G21_GOT' (want .../UNRUNNABLE/tool-invocation-outside-executor-allowlist:python3...)" ;;
+esac
+G21_GOT="$(g20_fvo "$J21S" "$G20_CIAC" CIAC-3)"
+[ "$G21_GOT" = "integration/SKIP/documented-decision-method (no runnable command)" ] \
+  && ok "G21 D38 CLOSED SPAN — on the cross-issue route an unclosed command is prose too (CIAC-3)" \
+  || bad "G21 D38 CLOSED SPAN — CIAC-3 got '$G21_GOT' (want integration/SKIP/documented-decision-method (no runnable command))"
+G21_C1="$(g20_fvo "$J21S" '#985' AC-4)"; G21_C2="$(g20_fv "$J21S" "$G20_CIAC" CIAC-4 verdict)"
+[ "$G21_C1" = "per-issue/PASS/command-succeeded" ] && [ "$G21_C2" = PASS ] \
+  && ok "G21 D38 CLOSED SPAN CONTROL — the same commands, closed, run and pass on both routes" \
+  || bad "G21 D38 CLOSED SPAN CONTROL — AC-4 '$G21_C1', CIAC-4 '$G21_C2' (want per-issue/PASS/command-succeeded and PASS)"
+
+# --- SEEDED FAILURES. Each removes one rule and names the answer it must move to. ---
+# M1 — the lint's verb check off: a refused tool falls through to the command readers.
+m21 "V6236-AC1 M1" g21-m1-lint-verb-check-off 1 's/  if ! is_runnable_verb "\$lead"; then/  if false; then/'
+if [ "$MUT_TOOK" = 1 ]; then
+  lint_run "$MUT_PATH" "$FIX_LINT"
+  G21_G="$(lint_of "$LINT_OUT" CIAC-2)"
+  [ -n "$G21_G" ] && [ "$G21_G" != "FLAG not-runnable:python3" ] \
+    && ok "V6236-AC1 M1 detected — without the lint's verb check the refused tool is no longer named ($G21_G)" \
+    || bad "V6236-AC1 M1 SURVIVED — CIAC-2 '$G21_G'"
+fi
+# M2 — the lint's declared-id scan blanked: an entry the grading parser never reads goes unnoticed.
+m21 "V6236-AC1 M2" g21-m2-id-scan-blanked 1 's/if \(match\(s, \/\^CIAC-\[0-9\]\+\/\)\) print substr\(s, RSTART, RLENGTH\)/if (match(s, \/^CIAC-[0-9]+\/)) print ""/'
+if [ "$MUT_TOOK" = 1 ]; then
+  lint_run "$MUT_PATH" "$FIX_LINT"
+  [ -z "$(lint_of "$LINT_OUT" CIAC-11)" ] && [ "$(lint_sum "$LINT_OUT")" = "declared=21 parsed=21 clean=2 declared-deferral=0 flagged=19" ] \
+    && ok "V6236-AC1 M2 detected — without the independent id scan the unbolded CIAC-11 is silently absent: 21 declared and 19 flagged" \
+    || bad "V6236-AC1 M2 SURVIVED — CIAC-11 '$(lint_of "$LINT_OUT" CIAC-11)', summary '$(lint_sum "$LINT_OUT")'"
+fi
+# M3 — the lint reads the deferral on the raw cell: the probe's own pattern reads as a declaration.
+m21 "V6236-AC1 M3" g21-m3-deferral-on-raw-cell 1 's/  outside="\$\(method_outside_verb_spans "\$method"\)"/  outside="$method"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  lint_run "$MUT_PATH" "$FIX_LINT"
+  G21_G="$(lint_of "$LINT_OUT" CIAC-13)"
+  [ -n "$G21_G" ] && [ "$G21_G" != "CLEAN -" ] \
+    && ok "V6236-AC1 M3 detected — read on the raw cell, the probe's own pattern reads as a declaration and CIAC-13 is no longer clean ($G21_G)" \
+    || bad "V6236-AC1 M3 SURVIVED — CIAC-13 '$G21_G'"
+fi
+# M4 — the rule for a count with no comparator off: the regression fixture's misgraded CIAC-1 lints clean.
+m21 "V6236-AC1 M4" g21-m4-no-threshold-off 1 's/if count_mode_cmd "\$cmd"; then _ciac_lint_say/if false; then _ciac_lint_say/'
+if [ "$MUT_TOOK" = 1 ]; then
+  lint_run "$MUT_PATH" "$FIX_LINTM"
+  [ "$(lint_of "$LINT_OUT" CIAC-1)" = "CLEAN -" ] \
+    && ok "V6236-AC1 M4 detected — without the rule the misgraded count lints CLEAN, which the grader then grades on its exit status" \
+    || bad "V6236-AC1 M4 SURVIVED — CIAC-1 '$(lint_of "$LINT_OUT" CIAC-1)'"
+fi
+# M5 — the closure line in the one splitter removed: an unclosed command runs again.
+m21 "G21 D38 M5" g21-m5-closure-removed 1 's/if \[ "\$\{#ticks\}" -le "\$\(\(i - 2\)\)" \]; then cls=mention/if false; then cls=mention/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_SPAN"; JM21_5="$VRP_JSON"
+  if mutant_ran "G21 D38 M5"; then
+    [ "$(g20_fv "$JM21_5" '#985' AC-1 verdict)" = PASS ] && [ "$(g20_fv "$JM21_5" '#985' AC-2 verdict)" = PASS ] && [ "$(g20_fv "$JM21_5" "$G20_CIAC" CIAC-3 verdict)" = PASS ] \
+      && ok "G21 D38 M5 detected — without the closure line the unclosed commands run and pass on the keyword, residual and cross-issue routes" \
+      || bad "G21 D38 M5 SURVIVED — AC-1 '$(g20_fvo "$JM21_5" '#985' AC-1)', AC-2 '$(g20_fvo "$JM21_5" '#985' AC-2)', CIAC-3 '$(g20_fvo "$JM21_5" "$G20_CIAC" CIAC-3)'"
+  fi
+fi
+# M6 — the refusal's quote arm read as can't-run-here: the quote no longer fails the run.
+m21 "G21 D55 M6" g21-m6-quote-as-unrunnable 1 's/"\$VERDICT_ERROR" "\$\(unreadable_observed "unterminated-quote:/"$VERDICT_UNRUNNABLE" "$(unreadable_observed "unterminated-quote:/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_SPAN"; JM21_6="$VRP_JSON"; RCM21_6="$VRP_RC"
+  if mutant_ran "G21 D55 M6"; then
+    [ "$(g20_fv "$JM21_6" "$G20_CIAC" CIAC-1 verdict)" = UNRUNNABLE ] && [ "$RCM21_6" -eq 0 ] \
+      && ok "G21 D55 M6 detected — with the quote read as can't-run-here, CIAC-1 reads UNRUNNABLE and the fixture exits 0: the D55 arms read the refusal's own verdict" \
+      || bad "G21 D55 M6 SURVIVED — CIAC-1 '$(g20_fvo "$JM21_6" "$G20_CIAC" CIAC-1)', rc $RCM21_6"
+  fi
+fi
+# M7 — the evidence rule's per-spanned-issue test removed: one issue's criterion vouches for two.
+m21 "V6236-AC1 M7" g21-m7-per-issue-evidence-off 1 's/\[ -z "\$miss" \] \|\| \{/true || {/'
+if [ "$MUT_TOOK" = 1 ]; then
+  lint_run "$MUT_PATH" "$FIX_LINT"
+  [ "$(lint_of "$LINT_OUT" CIAC-21)" = "DECLARED -" ] \
+    && ok "V6236-AC1 M7 detected — without the per-spanned-issue test one issue's criterion passes as the evidence for a CIAC over two" \
+    || bad "V6236-AC1 M7 SURVIVED — CIAC-21 '$(lint_of "$LINT_OUT" CIAC-21)'"
+fi
+rm -rf "$MUTD6236B"
 
 # ---------------------------------------------------------------------------
 # Summary

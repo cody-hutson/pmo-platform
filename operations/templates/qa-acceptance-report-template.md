@@ -6,7 +6,7 @@ canonical_path: operations/templates/qa-acceptance-report-template.md
 owner: [OPERATOR_NAME]
 review_status: DRAFT
 created: 2026-07-03
-updated: 2026-08-03
+updated: 2026-09-26
 generated_by: release-pipeline v4.06
 reviewer: N/A
 canon: PMBOK 7 §Quality + ISO/IEC/IEEE 29119-3 §Test Completion Report
@@ -132,6 +132,10 @@ never contains whitespace. A `grep '^id:'` yields every criterion; an
 
 - The `v1` version token makes the schema the contract: a later column addition
   is a `v2` a parser can branch on.
+- The header carries `ns:AC=issue,INT=design` — the criterion namespace each
+  identifier class counts (`stage-08-qa-testing.md` § Criterion namespace). It is
+  a header key, not a column, and its value is pipe-free and whitespace-free, so
+  the `v1` grammar holds.
 - The header's `score` and `met:n/total` are computed from the rows and **must**
   equal Tier 1's headline (the reader-contract invariant).
 - This block mirrors the `acceptance` assertion type's `grading.json`
@@ -180,6 +184,7 @@ the instance.
 
 **Overall verdict:** <ACCEPT | CONDITIONAL ACCEPT | REJECT | HOLD>
 **Acceptance score:** <met>/<total> criteria MET · score <0.000>
+**Criterion namespace:** `AC` → issue, `INT` → design — `AC-N` counts #<N>'s acceptance-criteria list; `INT-N` counts the card's Stage-5 integration list.
 
 _<one line — what this means: CONDITIONAL ACCEPT names the Override-Record count;
 REJECT names the blocking-criterion count.>_
@@ -233,7 +238,7 @@ its Operator Override Record.>
 ### Machine-readable acceptance block
 
 ```
-# acceptance-matrix v1 · issue:#<N> · release:v<X.Y> · verdict:<ACCEPT|CONDITIONAL_ACCEPT|REJECT|HOLD> · score:<0.000> · met:<n>/<total>
+# acceptance-matrix v1 · issue:#<N> · release:v<X.Y> · ns:AC=issue,INT=design · verdict:<ACCEPT|CONDITIONAL_ACCEPT|REJECT|HOLD> · score:<0.000> · met:<n>/<total>
 id:AC-1  | verdict:MET                       | severity:-       | disposition:-           | evidence:T3-1
 id:AC-2  | verdict:NOT_MET                    | severity:Blocker | disposition:fix-now     | evidence:T3-2
 id:AC-3  | verdict:PARTIAL                    | severity:Warning | disposition:defer:#NNN  | evidence:T3-3
@@ -259,3 +264,6 @@ id:INT-1 | verdict:REINTERPRET_WITH_RATIONALE | severity:-       | disposition:a
 - **Never invent a verdict value.** The `Verdict` column domain is exactly the
   six-value `stage-08-qa-testing.md` §5 enum. If a criterion needs a value the
   enum does not carry, that is an upstream finding, not a new column value.
+- **Name the namespace; never re-label.** A Stage-7 verdict on a design or plan
+  ordinal is not an issue verdict until its `Maps-to` resolves it, and a
+  `Maps-to: none` row grades no issue criterion.
