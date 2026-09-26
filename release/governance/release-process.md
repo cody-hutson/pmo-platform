@@ -690,24 +690,66 @@ QA role: confirms gate criteria are applied structurally, not optionally. Core c
 ### Checkpoint 3.5: Release-Integration QA (Stage 9)
 
 **Pipeline position:** Stage 9 (Plan Review), Phase A3.6 — after per-issue Stage 8 QA (Checkpoint 3), before the GO decision.
-**Purpose:** Confirm the release's Cross-Issue Acceptance Criteria (CIAC) — release-scoped cohesion predicates spanning ≥2 issues — are graded PASS on the merged PR, so integrated-artifact cohesion is gated rather than left to operator vigilance. The hub **reads the CIAC verdicts the release's verification-execution executor emitted** at Stage 6/7 (single-runner discipline — the executor runs each declared method once and emits the verdict; QC3.5 consumes the emitted verdict read-only, it does not re-run the method).
+**Purpose:** Confirm the release's Cross-Issue Acceptance Criteria (CIAC) — release-scoped cohesion predicates spanning ≥2 issues — read MET on the merged PR, so integrated-artifact cohesion is gated rather than left to operator vigilance. The hub **reads the CIAC verdicts the release's verification-execution executor emitted** at Stage 6/7 (single-runner discipline — the executor runs each declared method once and emits the verdict; QC3.5 consumes the emitted verdict read-only, it does not re-run the method).
 **Distinct from:** Checkpoint 3 (Stage 8, per-issue AC); Stage 9 Phase A3.5 `INT-N` chain validation (dependency-linked pairs). QC3.5 is the release-scoped, any-≥2-issue layer.
 
 | ID | Check | Type | Automation |
 |---|---|---|---|
 | QC3.5-01 | Every CIAC-N declared in the Stage-4 plan has an emitted verdict read against the merged PR | judgment | recommend |
-| QC3.5-02 | Each CIAC-N verdict uses the Stage-8 per-criterion verdict enum (no new values) | structural | auto |
+| QC3.5-02 | Each CIAC-N's emitted outcome is read into the Stage-8 per-criterion verdict enum through the reading table below (no new values) | structural | auto |
 | QC3.5-03 | Consumed CIAC verdicts are fresh — emitted against the final PR head SHA; a stale verdict (a later commit touched a CIAC-relevant file) re-triggers the verification-execution executor before the gate reads it (evidence-freshness guard, mirroring G-PR9 baseline-currency) | structural | auto |
-| QC3.5-04 | RELEASE-INCONSISTENT (≥1 CIAC NOT MET / unresolved PARTIAL) surfaces as a NO-GO recommendation input | judgment | recommend |
+| QC3.5-04 | A CIAC reading NOT MET at Phase A3.6, and RELEASE-INCONSISTENT at Phase C (≥1 CIAC NOT MET / unresolved PARTIAL), surface as a NO-GO recommendation input; a declared CIAC awaiting its operator grade surfaces as an operator action | judgment | recommend |
 
 | Aspect | Definition |
 |---|---|
-| **Pass** | All declared CIAC-N verdicts read PASS (RELEASE-CONSISTENT), OR the plan declares zero CIACs (N/A). |
+| **Pass** | Every CIAC-N the plan declares reads MET under the reading table below (RELEASE-CONSISTENT), OR the plan declares zero CIACs (N/A). |
 | **Fail** | RELEASE-INCONSISTENT — surface as NO-GO recommendation input; operator may override with recorded rationale (G-PR7 precedent). |
-| **Self-repair** | Hub compiles a per-CIAC finding (issues spanned, shared surface, predicate, observed vs. expected). A stale verdict re-triggers the verification-execution executor to re-emit against the final head SHA. A non-MET verdict routes to the finding-disposition framework; fix-now returns to Engineering. |
+| **Self-repair** | Hub compiles a per-CIAC finding (issues spanned, shared surface, predicate, observed vs. expected, and the reading-table row applied). A stale verdict re-triggers the verification-execution executor to re-emit against the final head SHA. A NOT MET routes by its row: a failed predicate → the finding-disposition framework (fix-now returns to Engineering); an unreadable method → a plan repair (Tier 1 [ADJUST]) or an executor fix, then re-emission; an undeclared decline → re-expression or declaration and re-emission, or an override whose rationale names the surface the guarantee was verified on. A declared CIAC left ungraded is graded by the operator from its named evidence before GO. |
 | **Escalation** | ≥1 RELEASE-INCONSISTENT unresolved at GO → operator NO-GO or documented override. |
 
 **Cross-issue AC checkpoint — cutover discipline:** Applies to releases entering Stage 9 strictly AFTER this checkpoint's introducing-release merge SHA (**v3.65**, ADR-073); the introducing release itself is exempt (reflexive-pipeline-loop discipline — it cannot fire its own new checkpoint, so v3.65 grades its own dog-food CIAC under pre-QC3.5 discipline). This is the release-scoped cross-issue AC layer of the QA Checkpoint Framework.
+
+#### Reading an emitted CIAC verdict
+
+<!-- design-artifact: flow-class=data-flow; name=ciac-verdict-reading; depicts=release/governance/release-process.md,release/references/pipeline/stage-09-plan-review.md,core/schemas/gate-criteria-spec.md -->
+
+The executor is the sole runner of every CIAC method; Stage 9 reads what it emitted and runs nothing. This table is the single home of that reading: Stage 9 Phase A3.6 and gate criterion G-PR10 apply it, and neither restates it. It reads each emitted outcome into the Stage-8 per-criterion enum, keyed on the executor's record and on the CIAC authoring lint read at the final head SHA (`--ciac-lint`, which runs no command), whose declared set and per-CIAC status the emitted record does not carry.
+
+| Emitted outcome | What it means | Reading | Blocks? | Discharge |
+|---|---|---|---|---|
+| PASS | the designated command ran and met its comparator | MET | no | — |
+| FAIL | the designated command ran and did not meet its comparator | NOT MET | yes | fix the release, or an override with recorded rationale |
+| ERROR | the executor could not read or evaluate the method or its input, a command with an unterminated quote among them | NOT MET | yes | repair the method or the executor and re-emit, or an override |
+| SKIP `declared-deferred`, on a CIAC the lint reads DECLARED | declined by design: grading was assigned at authoring to the Stage 9 operator, from the evidence surface the declaration names | *awaiting operator grade* at Phase A3.6; at Phase C, the operator's recorded grade (MET, NOT MET or PARTIAL) from that evidence at the final head SHA | at Phase C, if graded NOT MET, left PARTIAL, or ungraded | the hub presents the evidence read-only at Phase B as an operator action; the operator records one grade line per declared CIAC in the Decision Record |
+| `UNRUNNABLE` — a command the executor will not run, or a partially run CIAC, each command that did not run named "did not run (reason)" — and any other SKIP: no runnable command, or a declaration the lint flags as naming no evidence surface, or not one for each spanned issue | read, and verified by no permitted runner | NOT MET (unverified) | yes | re-express the method as one command the executor runs, or declare it naming its evidence, then re-emit; or an override whose rationale names the surface the guarantee was verified on |
+| a DEGRADED run: its roll-up reports K of N records read, and it exits 1 | the executor lost records, so the record set is partial | not read CIAC by CIAC | yes, until re-emitted | re-trigger the executor against the final head SHA, and read the complete stream |
+
+A declared CIAC with no emitted record, or one the lint flags `ciac-unparsed`, reads NOT MET; N/A means the plan declares no CIAC, read from the lint's declared set. Only a declared decline is dischargeable without an override. A decline never joins the executor's exit-failing set, whatever it is named, so this reading, not the exit code, is where a decline is weighed. It applies to a release whose Stage 9 begins after it is on the mainline; a decision record already rendered is not re-graded.
+
+```mermaid
+flowchart LR
+    lint["CIAC lint at the final head: declared set, declarations"] --> hub
+    exe["Executor (sole runner): outcome per CIAC"] --> hub{"Phase A3.6: hub reads, read-only"}
+    hub -->|PASS| met["MET"]
+    hub -->|"FAIL, ERROR, UNRUNNABLE, other SKIP, no record"| nm["NOT MET"]
+    hub -->|"SKIP declared-deferred, lint DECLARED"| aw["awaiting operator grade"]
+    hub -->|DEGRADED run| re["re-emit at the final head"]
+    re --> exe
+    aw --> ev["Phase B: named evidence, an operator action"]
+    ev --> op{"Phase C: operator records a grade"}
+    op -->|MET| met
+    op -->|"NOT MET, PARTIAL, ungraded"| nm
+    met --> agg{"G-PR10 at Phase C: all MET?"}
+    nm --> agg
+    agg -->|yes| con(["RELEASE-CONSISTENT"])
+    agg -->|no| inc(["RELEASE-INCONSISTENT: NO-GO input"])
+    classDef automated fill:#D4EDDA,stroke:#28A745,color:#155724;
+    classDef gate fill:#FFF3CD,stroke:#FFC107,color:#856404;
+    classDef external fill:#E2E3E5,stroke:#6C757D,color:#383D41;
+    class exe,lint,re,met,nm,aw automated;
+    class hub,ev,op,agg gate;
+    class con,inc external;
+```
 
 ### Checkpoint 4: Post-Deploy Verification (Stage 13)
 
