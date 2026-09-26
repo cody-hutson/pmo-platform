@@ -2031,7 +2031,7 @@ collect_open_release_issues() {
 # `collect_open_release_issues` this queries `--state all` — see the boundary note
 # on `_is_stage13_close_subtask`: the shared invariant is the predicate, not the
 # query. `--state open` is load-bearing for the collector's auto-close purpose and
-# WRONG here, because a Stage-13 sub-task closed by an earlier pass of an idempotent
+# WRONG here, because a Stage-13 sub-task closed by an earlier pass of a
 # run is still the correct durable home for the proof.
 #
 # STDOUT (always exactly one TAB-separated line, so the caller needs no global and
@@ -8165,7 +8165,15 @@ EOF
     done
     echo "## Deferred Under --no-merge"
     echo
-    echo "The Stage 13 chore PR${CHORE_PR_NUMBER:+ #${CHORE_PR_NUMBER}} was left open (\`--no-merge\`). Post-merge-dependent phases were deferred to preserve the Stage 13 sequencing invariant — the chore PR MUST land on main before milestone close / Release publish (release/references/pipeline/stage-13-close.md § Phase B):"
+    # The intro reads the outcome phase 11 RECORDED, with no host read (#7465 Plan
+    # amendment 5; the same source phase 12's --no-merge detail reads). On a resumed
+    # run whose chore PR phase 11 found already merged, "left open" would be false, so
+    # the intro says what is true. Every other outcome renders the sentence unchanged.
+    if [[ "${CHORE_PR_OUTCOME:-}" == "resumed-already-merged" ]]; then
+      echo "The Stage 13 chore PR${CHORE_PR_NUMBER:+ #${CHORE_PR_NUMBER}} is already merged — phase 11 resolved it on this resumed run. \`--no-merge\` defers the post-merge-dependent phases whatever the chore PR's state, so they did not run (release/references/pipeline/stage-13-close.md § Phase B):"
+    else
+      echo "The Stage 13 chore PR${CHORE_PR_NUMBER:+ #${CHORE_PR_NUMBER}} was left open (\`--no-merge\`). Post-merge-dependent phases were deferred to preserve the Stage 13 sequencing invariant — the chore PR MUST land on main before milestone close / Release publish (release/references/pipeline/stage-13-close.md § Phase B):"
+    fi
     echo
     local _nm_d
     while IFS= read -r _nm_d; do
