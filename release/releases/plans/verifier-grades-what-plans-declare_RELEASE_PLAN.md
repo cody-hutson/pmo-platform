@@ -1734,6 +1734,7 @@ Each row lands with its card's slice; the slice records the status and the commi
 | **Step 10 — C3 package cascade** | `build-skill-packages.sh --skills-for-paths` with the slice's 14 paths on stdin: 0 skills. Control: `operations/skills/intake-desk/SKILL.md` returns `intake-desk`. No package is rebuilt |
 | **Step 10 — links, reconcile, identity** | `check-doc-links.py --require-targets` over the five documents and the ADR: 0 findings (control: a run-directory copy of stage-04 with one planted broken link reports it). `check-release-links.py --check-anchors --images` over the same six: 0 broken, and 1 missing anchor, on stage-06's line 39, which this step did not touch (warn-mode). `check-selftest-coverage.py --reconcile` on stub roots of the parent and of this step: byte-identical output, EXPECTED-RESIDUAL (exit 4), 10 spec invocations on both, so the executor invocation stage-04, stage-06 and stage-09 now carry adds no Arm F finding. Identity and public-surface scan: 0 hits over the slice's 881 added code, fixture and document lines and its 172 commit-message lines, beyond each message's one noreply trailer (control: a planted line reads 5 of 5) |
 | **Step 10 — runtime suites (map rows 4 and 6)** | The reference resolver over the slice's diff (`git diff --name-only --no-renames 38f9bcd2 HEAD -- ':(top,glob)<pattern>'`): row 4 selects the executor, row 6 the suite, and rows 1–3, 5 and 7 nothing; the documents, fixtures, ADR and this plan take the no-match row. Row 6's runner, the suite's bare invocation (sandbox none), is the RED and GREEN runs above: 521 / 2. Row 4's runner, `check-selftest-coverage.py --run` under § 3's recipe for the row (`none (read-only)`, so no `HOME` override), in stub roots of the parent and of this head: 69 of 74 on both, the same 5 environment failures (4 need a repository; 1 is the inert event-writer stub), identical per-tool status lines. The executor is absent from its discovered set (0 mentions; control: `version-grammar` 4), so the suite is its runtime evidence. One `test-run/suite-pass` event emitted with `selected-by:glob-6` and read back: the log grew 7,993 → 7,994 lines, and its unique payload literal read 0 before the append and 1 after |
+| **Stage-6 close-out — the full self-verify** | The final plan, with the completed Change Description, through the final executor on a hermetic stub root: the parent's archive with every file this step changed, and `core/deploy/deploy.sh` and `release/tools/append-pipeline-event.sh` each prefixed by an `exit 97` line with the original text kept, so a probe that reads either file sees its real text (D39). Roll-up, predicted before the run: **`40 PASS / 0 FAIL / 12 SKIP / 0 UNRUNNABLE / 1 ERROR over 53 record(s) (42 per-issue row(s), 6 cross-issue, 5 always-on) — not graded by this run: 12 SKIP (11 declared-deferred, 0 no command in method, 1 other) and 0 UNRUNNABLE; could not evaluate: 1 ERROR`**; JSON `stream_state` fetched, 48 of 48 records read; the one ERROR is FCM-COVERAGE `diff-unresolvable`, from the stub not being a repository, and against the plan update's run only the provenance record's line count moves. The binder's live limb, `check-ac-binding.py --fetch`: **42 of 42 BOUND**, `VERDICT BOUND ns:plan>issue`, 10 baselines equal to `ac_baseline`, 0 NOT-EVALUATED. `--ciac-lint` on the final plan (G4-06's Stage-9 A3.6 reading point): 6 of 6 CLEAN, `declared=6 parsed=6 clean=6 declared-deferral=0 flagged=0`. CI on `1aa5cd07`: the macOS smoke job's suite **525 passed, 0 failed**, as predicted |
 
 ---
 
@@ -1743,22 +1744,22 @@ Each row lands with its card's slice; the slice records the status and the commi
 
 ### Outcome
 
-**The plan verifier and the AC binder will grade what a plan declares, and say plainly what they did not grade.** At this commit no behaviour has changed: this commit is the plan. As the slices land, a method cell stops being able to read the executor's own record stream; a row the executor is not the runner for resolves to a named SKIP; a method it cannot run is reported UNRUNNABLE, apart from a pass; ERROR is kept for input it could not read; the runtime-suite map selects runners that reach the suites it names; a CIAC is linted gradable at Stage 4; and an acceptance verdict names the criterion list its ordinal counts in.
+**The plan verifier and the AC binder grade what a plan declares, and say plainly what they did not grade.** All ten slices have landed: a method cell can no longer read the executor's own record stream; a row the executor is not the runner for resolves to a named SKIP; a method it cannot run is reported UNRUNNABLE, apart from a pass; ERROR is kept for input it could not read, an unterminated quote included; the runtime-suite map selects runners that reach the suites it names; a CIAC is linted gradable-or-declared at Stage 4 and read at Stage 9 through one table; and an acceptance verdict names the criterion list its ordinal counts in. The verifier's own plan reads 40 PASS, 0 FAIL, 11 declared deferrals and no UNRUNNABLE row on the final head, and its one ERROR is the stub root's missing diff, not a plan row.
 
 ### Issues resolved
 
 | # | Outcome (one line) | Status |
 |---|---|---|
-| #7531 | A method cell can no longer drain the record stream; stdin readers are refused before they run; a shortened stream is reported DEGRADED | pending — step 1 |
-| #6180 | The dormant class-hint path is removed; routes are declared in the method cell | pending — step 2 |
-| #6893 | A runnable probe is graded by its probe, whatever the prose says | pending — step 3 |
-| #6837 | A multi-command method is graded on its designated command and names the rest not run | pending — step 4 |
-| #6848 | A method the executor cannot run is UNRUNNABLE, naming a real tool; scope assertions get a native family; with #6893's round 2, a row reaches the deploy check only by declaring it | landed — step 5 |
-| #6854 | A command-less row is a named SKIP; the roll-up counts its true population | landed — step 6 |
-| #6685 | A documented-decision method on a per-issue row reaches its named SKIP | landed — step 7 |
-| #6876 | The selection map has one grammar and reaches the tool suites and skill scripts | landed — step 8 |
-| #7494 | Verdicts name their criterion namespace; the binder reads both heading forms | landed — step 9 |
-| #6236 | A CIAC is linted gradable-or-declared at Stage 4; QC3.5 reads every emitted outcome | pending — steps 1b and 10 |
+| #7531 | A method cell can no longer drain the record stream; stdin readers are refused before they run; a shortened stream is reported DEGRADED | DONE — landed at step 1 |
+| #6180 | The dormant class-hint path is removed; routes are declared in the method cell | DONE — landed at step 2 |
+| #6893 | A runnable probe is graded by its probe, whatever the prose says; its deploy-route limbs landed with #6848's slice (D50) | DONE — landed at step 3 |
+| #6837 | A multi-command method is graded on its designated command and names the rest not run | DONE — landed at step 4 |
+| #6848 | A method the executor cannot run is UNRUNNABLE, naming a real tool; scope assertions get a native family; with #6893's round 2, a row reaches the deploy check only by declaring it | DONE — landed at step 5 |
+| #6854 | A command-less row is a named SKIP; the roll-up counts its true population | DONE — landed at step 6 |
+| #6685 | A documented-decision method on a per-issue row reaches its named SKIP | DONE — landed at step 7 |
+| #6876 | The selection map has one grammar and reaches the tool suites and skill scripts | DONE — landed at step 8 |
+| #7494 | Verdicts name their criterion namespace; the binder reads both heading forms | DONE — landed at step 9 |
+| #6236 | A CIAC is linted gradable-or-declared at Stage 4; QC3.5 reads every emitted outcome through one table; an unterminated quote reads ERROR | DONE — landed at steps 1b and 10 |
 
 ### Key decisions
 
@@ -1766,6 +1767,8 @@ Each row lands with its card's slice; the slice records the status and the commi
 - **D18 / D19 / D40:** stdin isolation by body redirect plus refusal, with a DEGRADED tripwire; the one schema bump lands with #7531.
 - **D21–D24 / D37 / D47:** UNRUNNABLE as a fifth, non-failing verdict inside one reconciled outcome partition, recorded in one partition ADR.
 - **D50–D54:** #6893's round 2 lands in #6848's slice — the deploy check is reached by declaration only, and a declared row beside another command is partial.
+- **D26–D29 / D31–D32 / D38:** a row no family claims is a named SKIP, one roll-up counts its true population, one reader table says what each verb's result means, and a multi-command method is graded on its designated command; one shared quote-aware predicate and the per-issue guard decide what a command is.
+- **D25 / D55:** a CIAC is linted gradable-or-declared at authoring by the executor's own readers, running nothing, and Stage 9 reads every emitted outcome through one QC3.5 table, a declared CIAC graded by the operator from the evidence it names; an unterminated quote in a designated command is input the executor could not read, so it reads ERROR and fails the run.
 - **D33 / D35–D36:** one glob grammar for the selection map; criterion namespaces named where they vary.
 
 ### Reversibility
@@ -1775,8 +1778,9 @@ Each row lands with its card's slice; the slice records the status and the commi
 ### Downstream impact
 
 - Every later release's plan is graded by the changed executor at C4, Stage 7 and Stage 9 (schema 5).
-- Stage-7/8 payloads gain namespace fields; Stage 9 reads UNRUNNABLE as NOT MET (unverified).
-- Plan authors get a Stage-4 CIAC lint and one declared-deferred form.
+- Stage-7/8 payloads gain namespace fields; Stage 9 reads each CIAC through QC3.5's table, UNRUNNABLE as NOT MET (unverified) and a declared CIAC as an operator action at Phase B.
+- Plan authors get a Stage-4 CIAC lint (G4-06), read again at Stage 6 A1 and Stage 9 A3.6, and one declared-deferred form that names its evidence surface.
+- Carried forward: the 56 plan rows that state an expectation only as "= N", "→ N" or "returns N" (D48); OQ-2's authoring form for control arms, with the later-limb execution (D29, D48); eval-writer's `SKILL.md` `version:` and the report template's `version:`, which bind after the Stage-12 claim (D36).
 
 ### Cross-references
 
