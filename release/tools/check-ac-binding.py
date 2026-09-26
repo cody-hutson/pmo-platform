@@ -83,6 +83,8 @@ EXIT CODES (mirroring the check-roster extraction-contract convention):
 """
 
 import argparse
+import contextlib
+import io
 import json
 import os
 import re
@@ -627,8 +629,322 @@ def _vacuity_cases():
     ]
 
 
+# ---------------------------------------------------------------------------
+# Criterion-namespace, design-limb and heading-vocabulary arms. Each case name
+# carries its plan label (V7494-AC2 to V7494-AC5). Every fixture is a
+# `\n`-escaped single-line literal, so no fixture line opens a heading or a table
+# row in THIS file and the self-reference arm keeps reading it as UNPARSEABLE.
+# ---------------------------------------------------------------------------
+_NS_FIELD_RE = re.compile(
+    r"^ns:(plan|plan>issue|design>issue)(,(plan>issue|design>issue))*$")
+_UNDECLARED = object()
+_W = "The widget emits a checksum for every shard."
+_D = "The daemon rotates its journal at midnight."
+_ISSUE6 = [
+    _W,
+    _D,
+    "The exporter writes a manifest beside each archive.",
+    "The scheduler retries a failed upload three times.",
+    "The console prints its version banner on startup.",
+    "The cache evicts entries older than one week.",
+]
+_PLAN6_ROWS = [
+    "| #1 | AC-1 | `grep checksum w.py` | Every shard carries a checksum |\n",
+    "| #1 | AC-2 | `grep journal d.py` | The journal rotates at midnight |\n",
+    "| #1 | AC-3 | `grep manifest e.py` | Each archive gets a manifest beside it |\n",
+    "| #1 | AC-4 | `grep retry s.py` | A failed upload is retried three times |\n",
+    "| #1 | AC-5 | `grep banner c.py` | The version banner prints on startup |\n",
+    "| #1 | AC-6 | `grep evict k.py` | Cache entries older than a week are evicted |\n",
+]
+# The divergent design: seven restated criteria in the design's own order, plus an
+# integration criterion, each under its OWN label with the issue ordinal it declares.
+_DESIGN8 = (
+    ("AC-1", "Every shard the widget emits carries a checksum.", 1),
+    ("AC-2", "A failed upload is retried by the scheduler, three attempts at most.", 4),
+    ("AC-3", "The exporter manifest lists each archive member.", 3),
+    ("AC-4", "Journal rotation happens at midnight local time.", 2),
+    ("AC-5", "The version banner prints before any other console output.", 5),
+    ("AC-6", "The telemetry beacon ships disabled by default.", None),
+    ("AC-7", "Cache eviction drops entries older than seven days.", 6),
+    ("INT-1", "The exporter manifest names the checksum of every shard it lists.", None),
+)
+# A fetched body, read through the binder's own reader: an H2 `Completion condition
+# (verifiable)` heading over ordered items, the two forms the widened reader adds.
+_FETCHED_BODY = (
+    "## Summary\n\nA card.\n\n## Completion condition (verifiable)\n\n"
+    + "".join("%d. %s\n" % (i, c) for i, c in enumerate(_ISSUE6, 1))
+    + "\n## Notes\n\nNone.\n")
+# (case name, issue body) — the reader must return exactly [_W, _D], and the two
+# criteria must bind the two-row plan.
+_VOCABULARY_ARMS = (
+    ("V7494-AC4 an H3 `Acceptance Criteria` heading binds (the issue forms render H3)",
+     "## Summary\n\nA card.\n\n### Acceptance Criteria\n\n- [ ] %s\n- [ ] %s\n" % (_W, _D)),
+    ("V7494-AC4 an H2 `Completion condition (verifiable)` heading binds",
+     "## Completion condition (verifiable)\n\n- [ ] %s\n- [ ] %s\n\n## Notes\n\nNone.\n" % (_W, _D)),
+    ("V7494-AC4 `Acceptance Criteria (testable)` binds: the vocabulary is prefix-anchored",
+     "### Acceptance Criteria (testable)\n\n- [ ] %s\n- [ ] %s\n" % (_W, _D)),
+    ("V7494-AC4 an ordered-only block binds: its top-level ordered items are the criteria",
+     "### Acceptance Criteria\n\n1. %s\n2. %s\n" % (_W, _D)),
+    ("V7494-AC4 a bullet-only block binds: its plain bullets are the criteria",
+     "### Acceptance Criteria\n\n- %s\n- %s\n" % (_W, _D)),
+    ("V7494-AC4 checkboxes dominate: a plain **[DECLINED]** bullet in a task-list block is an annotation",
+     "### Acceptance Criteria\n\n- [ ] %s\n- **[DECLINED]** The legacy exporter also emits a checksum.\n"
+     "- [ ] %s\n" % (_W, _D)),
+    ("V7494-AC4 a nested task-list sub-item under an ordered parent is detail, not a criterion",
+     "### Acceptance Criteria\n\n1. %s\n   - [ ] a sub-step of the first criterion\n2. %s\n" % (_W, _D)),
+    ("V7494-AC4 a vocabulary heading directly after the block closes it: the first list only",
+     "### Acceptance Criteria\n\n- [ ] %s\n- [ ] %s\n### Acceptance Criteria (re-scoped)\n\n"
+     "- [ ] A re-scoped criterion that is not the card's first list.\n" % (_W, _D)),
+    ("V7494-AC4 a thematic break closing a bullet-only block is not a criterion",
+     "### Acceptance Criteria\n\n- %s\n- %s\n\n* * *\n" % (_W, _D)),
+)
+
+
+def _design(overrides=None):
+    """The divergent design as JSON-ready entries; `overrides` re-declares targets."""
+    overrides = overrides or {}
+    entries = []
+    for label, text, target in _DESIGN8:
+        entry = {"label": label, "text": text}
+        target = overrides.get(label, target)
+        if target is not _UNDECLARED:
+            entry["maps_to"] = target
+        entries.append(entry)
+    return entries
+
+
+def _write(root, name, payload):
+    path = os.path.join(root, name)
+    with open(path, "w", encoding="utf-8") as fh:
+        if isinstance(payload, str):
+            fh.write(payload)
+        else:
+            json.dump(payload, fh)
+    return path
+
+
+def _run_main(argv):
+    """Run main() in-process and capture it: (exit, rows split on tabs, stderr)."""
+    out, err = io.StringIO(), io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = main(argv)
+    except SystemExit as exc:  # argparse refuses an argument it does not know
+        code = exc.code if isinstance(exc.code, int) else 2
+    return code, [ln.split("\t") for ln in out.getvalue().splitlines() if ln], err.getvalue()
+
+
+def _rows_of(klass, rows):
+    return [[str(c) for c in r] for r in rows if r and r[0] == klass]
+
+
+def _expected_ns(row):
+    """The namespace a line of each class must carry: the class → value table."""
+    klass = row[0]
+    if klass in ("SCAN", "BASELINE", "COVERAGE", "DISPLACED", "UNPARSEABLE", "OUT-OF-SCOPE"):
+        return {"ns:plan"}
+    if klass == "ORDINAL-GAP":
+        return {"ns:design>issue"} if row[2] in ("undeclared", "out-of-range") else {"ns:plan"}
+    if klass in ("BINDING", "BASELINE-DRIFT"):
+        return {"ns:plan>issue"}
+    if klass == "MAP":
+        return {"ns:design>issue"}
+    if klass == "UNVISITED":
+        return {"ns:design>issue"} if row[2] == "design" else {"ns:plan>issue"}
+    if klass == "NOT-EVALUATED":
+        return {"ns:design>issue"} if "design mapping" in row[2] else {"ns:plan>issue"}
+    if klass == "UNBOUND":
+        return {"ns:plan>issue", "ns:design>issue"}
+    return set()  # an unrecognised class is a finding, never an absence
+
+
+def _namespace_arms():
+    """The #7494 arms: (cases run, failures)."""
+    ran, failures = 0, []
+
+    def check(name, ok, detail=""):
+        nonlocal ran
+        ran += 1
+        if not ok:
+            failures.append("%s%s" % (name, (" — " + detail) if detail else ""))
+
+    bound_plan = _plan(_PLAN6_ROWS[:2])
+    plan5 = _plan(_PLAN6_ROWS[:5], baseline="ac_baseline: { #1: 5, read_at: abc1234 }")
+    plan6 = _plan(_PLAN6_ROWS, baseline="ac_baseline: { #1: 6, read_at: abc1234 }")
+
+    with tempfile.TemporaryDirectory() as root:
+        plan5_path = _write(root, "plan5.md", plan5)
+        plan6_path = _write(root, "plan6.md", plan6)
+        crit_path = _write(root, "criteria.json",
+                           {"1": _ISSUE6, "3": ["The gizmo logs every request."]})
+
+        def design_run(overrides=None, plan_path=plan5_path, extra=None):
+            payload = {"1": _design(overrides)}
+            payload.update(extra or {})
+            design_path = _write(root, "design.json", payload)
+            return _run_main([plan_path, "--criteria-file", crit_path,
+                              "--design-file", design_path])
+
+        # --- V7494-AC2: the divergent card; the emitted mapping resolves every ordinal.
+        code, rows, _err = design_run(extra={"2": [{
+            "label": "AC-1", "text": "An entry for an issue the plan does not grade.",
+            "maps_to": None}]})
+        divergent_rows = rows
+        maps = {r[2]: r for r in _rows_of("MAP", rows) if r[1] == "#1" and r[2] != "-"}
+        verdict = _rows_of("VERDICT", rows)
+        check("V7494-AC2 the headline is BASELINE-DRIFT: the plan declares 5, the issue carries 6",
+              code == 1 and verdict and verdict[0][1] == "BASELINE-DRIFT"
+              and any(r[1:4] == ["#1", "5", "6"] for r in _rows_of("BASELINE-DRIFT", rows)),
+              "exit %s, verdict %s" % (code, verdict))
+        bindings = {r[2]: r[3] for r in _rows_of("BINDING", rows) if r[1] == "#1"}
+        check("V7494-AC2 every plan ordinal has a BOUND binding row",
+              bindings == {"AC-%d" % k: "BOUND" for k in range(1, 6)}, str(bindings))
+        targets = ["AC-%d" % k for k in range(1, 7)] + ["none"]
+        labels = [label for label, _text, _target in _DESIGN8]
+        check("V7494-AC2 every design label has exactly one MAP row, targeting AC-1..AC-6 or none",
+              sorted(maps) == sorted(labels)
+              and len([r for r in _rows_of("MAP", rows) if r[2] in labels]) == len(labels)
+              and all(r[3] in targets for r in maps.values()), str(sorted(maps)))
+        check("V7494-AC2 design AC-6 maps to none, and design AC-7 maps to issue AC-6",
+              maps.get("AC-6", [None] * 5)[3:5] == ["none", "NONE"]
+              and maps.get("AC-7", [None] * 5)[3:5] == ["AC-6", "BOUND"],
+              "%s / %s" % (maps.get("AC-6"), maps.get("AC-7")))
+        targeted = {r[3] for r in maps.values()}
+        unrestated = {r[3] for r in _rows_of("MAP", rows) if r[1] == "#1" and r[4] == "UNRESTATED"}
+        check("V7494-AC2 every issue ordinal is a declared target or reported UNRESTATED",
+              all(("AC-%d" % k) in targeted | unrestated for k in range(1, 7)),
+              "targeted %s, unrestated %s" % (sorted(targeted), sorted(unrestated)))
+        check("V7494-AC2 an integration criterion keeps its own label, never a positional AC-8",
+              "INT-1" in maps and maps["INT-1"][3] == "none" and "AC-8" not in maps,
+              str(sorted(maps)))
+        unvisited = {(r[1], r[2]) for r in _rows_of("UNVISITED", rows)}
+        check("V7494-AC2 snapshot keys the plan grades no row for are named, not dropped",
+              unvisited == {("#2", "design"), ("#3", "issue")}, str(sorted(unvisited)))
+
+        _code, rows, _err = design_run({"AC-6": 2})
+        check("V7494-AC2 falsified: a design entry mis-declared onto AC-2 reads UNBOUND on ns:design>issue",
+              any(r[1:3] == ["#1", "AC-6"] and r[-1] == "ns:design>issue"
+                  for r in _rows_of("UNBOUND", rows)), str(_rows_of("UNBOUND", rows)))
+        _code, rows, _err = design_run({"AC-6": 9})
+        check("V7494-AC2 falsified: a declared target past the issue list is an ORDINAL-GAP",
+              any(r[1:3] == ["#1", "out-of-range"] and r[-1] == "ns:design>issue"
+                  for r in _rows_of("ORDINAL-GAP", rows)), str(_rows_of("ORDINAL-GAP", rows)))
+        _code, rows, _err = design_run({"AC-6": _UNDECLARED})
+        check("V7494-AC2 falsified: a design entry declaring no target is UNDECLARED and an ORDINAL-GAP",
+              any(r[1:3] == ["#1", "AC-6"] and r[4] == "UNDECLARED" for r in _rows_of("MAP", rows))
+              and any(r[1:3] == ["#1", "undeclared"] for r in _rows_of("ORDINAL-GAP", rows)),
+              str(_rows_of("MAP", rows)))
+        code, rows, _err = design_run({"AC-7": None}, plan_path=plan6_path)
+        verdict = _rows_of("VERDICT", rows)
+        check("V7494-AC2 NONE and UNRESTATED are informational: a clean plan still reads BOUND",
+              code == 0 and verdict and verdict[0][1] == "BOUND"
+              and any(r[3:5] == ["AC-6", "UNRESTATED"] for r in _rows_of("MAP", rows)),
+              "exit %s, verdict %s" % (code, verdict))
+
+        # The issue list of a MAP run comes through the binder's own reader.
+        design_path = _write(root, "design.json", {"1": _design()})
+        real_fetch = globals()["fetch_criteria"]
+        globals()["fetch_criteria"] = lambda issues, repo=None: {
+            i: criteria_from_body(_FETCHED_BODY) for i in issues if i == "1"}
+        try:
+            _code, fetched, _err = _run_main([plan5_path, "--fetch", "--design-file", design_path])
+        finally:
+            globals()["fetch_criteria"] = real_fetch
+        _code, snapshot, _err = _run_main([plan5_path, "--criteria-file", crit_path,
+                                          "--design-file", design_path])
+        check("V7494-AC2 --design-file combines with --fetch: the same MAP rows as the snapshot run",
+              _rows_of("MAP", fetched) and _rows_of("MAP", fetched) == _rows_of("MAP", snapshot),
+              "fetch %d rows, snapshot %d rows" % (len(_rows_of("MAP", fetched)),
+                                                   len(_rows_of("MAP", snapshot))))
+        bad_path = _write(root, "bad-design.json", {"1": [{"text": "An entry with no label.",
+                                                           "maps_to": 1}]})
+        code, _rows, _err = _run_main([plan5_path, "--criteria-file", crit_path,
+                                       "--design-file", bad_path])
+        check("V7494-AC2 a design entry with no label is an input failure (exit 3), never a mapping",
+              code == 3, "exit %s" % code)
+
+    # --- V7494-AC3: every emitted line names the namespace it resolved.
+    runs = (
+        ("bound", analyse(bound_plan, _CRIT, "self-test")[0], "ns:plan>issue"),
+        ("ordinals-only", analyse(bound_plan, {}, "self-test", ordinals_only=True)[0], "ns:plan"),
+        ("vacuity", analyse(_plan([]), _CRIT, "self-test")[0], "ns:plan"),
+        ("out-of-scope", analyse("## Summary\n\nNo plan.\n", _CRIT, "self-test")[0], "ns:plan"),
+        ("withheld", analyse(bound_plan, {}, "self-test")[0], "ns:plan>issue"),
+        ("divergent", divergent_rows, "ns:plan>issue,design>issue"),
+    )
+    for name, rows, want_verdict_ns in runs:
+        rows = [[str(c) for c in r] for r in rows]
+        check("V7494-AC3 %s run: every line ends in a well-formed ns: field" % name,
+              rows and all(_NS_FIELD_RE.match(r[-1]) for r in rows),
+              "%d line(s)" % len(rows))
+        wrong = [r for r in rows if r[0] != "VERDICT" and r[-1] not in _expected_ns(r)]
+        verdict = [r for r in rows if r[0] == "VERDICT"]
+        check("V7494-AC3 %s run: each class carries its namespace; VERDICT names %s"
+              % (name, want_verdict_ns),
+              rows and not wrong and len(verdict) == 1 and verdict[0][-1] == want_verdict_ns,
+              "wrong %s, verdict %s" % (wrong[:2], verdict))
+    rows = analyse(_plan([_PLAN6_ROWS[0],
+                          "| #1 | AC-2 | `grep checksum w.py` | The shard checksum is emitted |\n"]),
+                   _CRIT, "self-test")[0]
+    check("V7494-AC3 a plan row bound to the wrong criterion is UNBOUND on ns:plan>issue",
+          any(r[0] == "UNBOUND" and r[-1] == "ns:plan>issue" for r in rows),
+          str([r for r in rows if r[0] == "UNBOUND"]))
+
+    # --- V7494-AC4: the heading vocabulary and the item rule, one fixture each.
+    for name, body in _VOCABULARY_ARMS:
+        read = criteria_from_body(body)
+        _rows, verdict, code = analyse(bound_plan, {"1": read}, "self-test")
+        check(name, read == [_W, _D] and (verdict, code) == ("BOUND", 0),
+              "read %r → %s/exit %d" % (read, verdict, code))
+
+    # --- V7494-AC5: a heading outside the vocabulary still reports no criteria oracle,
+    # and NOT-EVALUATED names which of its two causes withheld the verdict.
+    def withheld(criteria, reason):
+        rows, verdict, code = analyse(bound_plan, criteria, "self-test")
+        details = [str(r[2]) for r in rows if r[0] == "NOT-EVALUATED"]
+        return ((verdict, code) == ("NOT-EVALUATED", 1) and len(details) == 1
+                and "no criteria oracle" in details[0] and ("(%s)" % reason) in details[0],
+                "%s/exit %d %s" % (verdict, code, details))
+
+    cross = "### Cross-Issue Acceptance Criteria\n\n- [ ] %s\n- [ ] %s\n" % (_W, _D)
+    ok, detail = withheld({"1": criteria_from_body(cross)}, "no-criteria-section")
+    check("V7494-AC5 a `Cross-Issue Acceptance Criteria` heading opens no block: "
+          "no criteria oracle (no-criteria-section)", ok, detail)
+    _rows, verdict, code = analyse(bound_plan, {"1": criteria_from_body(cross.replace(
+        "Cross-Issue ", ""))}, "self-test")
+    check("V7494-AC5 the control's twin under `Acceptance Criteria` binds",
+          (verdict, code) == ("BOUND", 0), "%s/exit %d" % (verdict, code))
+    ok, detail = withheld({"1": criteria_from_body(
+        "## Completion condition\n\n- [ ] %s\n- [ ] %s\n" % (_W, _D))}, "no-criteria-section")
+    check("V7494-AC5 a bare `Completion condition` heading is outside the vocabulary "
+          "(no-criteria-section)", ok, detail)
+    ok, detail = withheld({}, "oracle-unavailable")
+    check("V7494-AC5 an issue absent from the snapshot: no criteria oracle (oracle-unavailable)",
+          ok, detail)
+
+    def fake_run(cmd, capture_output=True, text=True):
+        if cmd[3] == "1":
+            return subprocess.CompletedProcess(cmd, 0, cross, "")
+        return subprocess.CompletedProcess(cmd, 1, "", "could not resolve to an issue")
+
+    real_run = subprocess.run
+    subprocess.run = fake_run
+    try:
+        fetched = fetch_criteria(["1", "2"])
+    finally:
+        subprocess.run = real_run
+    check("V7494-AC5 the live reader keeps a body with no criteria section apart from a "
+          "failed fetch", fetched == {"1": []}, repr(fetched))
+
+    return ran, failures
+
+
 def self_test():
     failures, ran = [], 0
+
+    ns_ran, ns_failures = _namespace_arms()
+    ran += ns_ran
+    failures += ns_failures
 
     for name, plan, crits, want_verdict, want_exit in _cases() + _vacuity_cases():
         _rows, verdict, code = analyse(plan, crits, "self-test")
