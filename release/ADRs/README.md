@@ -85,6 +85,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-197](ADR-197-action-item-status-classified-by-membership.md) | The action-item gate classifies status by membership; the residue is a state, never a verdict | Accepted | 2026-09-07 | closeout-correctness-batch |
 | [ADR-202](ADR-202-commitment-emission-forced-at-the-routing-point.md) | An emission obligation is forced at the routing point, not at the moment the agent recognises it | Accepted | 2026-09-17 | hub-emits-state-gates-read |
 | [ADR-207](ADR-207-post-merge-phases-declare-their-no-merge-behaviour.md) | Post-merge phases declare their --no-merge behaviour once; the deferral, the reports and the tests derive from the declaration | Accepted | 2026-09-25 | closeout-verification-rows-consistent |
+| [ADR-208](ADR-208-lock-at-close-is-a-close-out-phase-over-every-milestone-thread.md) | Lock-at-close is a close-out phase over every milestone thread | Proposed | 2026-09-25 | closeout-verification-rows-consistent |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.
