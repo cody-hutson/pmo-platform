@@ -467,7 +467,7 @@ case "$MUT_OMIT_RESULT" in
     if [ -z "$MUT_OMIT_BIND" ]; then
       ok "E2c binding specificity — the binding predicate reports 0 violations on the resolver mutant (the revert is the self-test's to catch)"
     else
-      bad "E2c binding specificity — the binding predicate flagged the resolver mutant: $(printf '%s' "$MUT_OMIT_BIND" | /usr/bin/head -1)"
+      bad "E2c binding specificity — the binding predicate flagged the resolver mutant: ${MUT_OMIT_BIND%%$'\n'*}"
     fi
     ;;
   *)
@@ -498,8 +498,10 @@ case "$MUT_BIND_RESULT" in
     ok "E4a mutation-extraction control — the Indicator-5 live call site was replaced exactly once"
     chmod +x "$MUT_BIND"
     MUT_BIND_FIND="$(binding_findings "$MUT_BIND")"
-    if printf '%s' "$MUT_BIND_FIND" | /usr/bin/grep -qF 'register_slot_render rollup' \
-       && printf '%s' "$MUT_BIND_FIND" | /usr/bin/grep -qF 'ROLLUP_PRESENCE="N/A — no retro register found"'; then
+    # Here-strings rather than a writer piped into a quiet grep: under pipefail a reader that
+    # exits on its first match can fail the writer, and the pipeline then reports a match as a miss.
+    if /usr/bin/grep -qF 'register_slot_render rollup' <<<"$MUT_BIND_FIND" \
+       && /usr/bin/grep -qF 'ROLLUP_PRESENCE="N/A — no retro register found"' <<<"$MUT_BIND_FIND"; then
       ok "E4b binding sensitivity — the reinserted Indicator-5 literal reddens the binding predicate at that site ($(printf '%s\n' "$MUT_BIND_FIND" | /usr/bin/wc -l | /usr/bin/tr -d ' ') violations)"
     else
       bad "E4b binding sensitivity — the binding predicate did not name the reinserted Indicator-5 site: '${MUT_BIND_FIND:-<no violations>}'"
