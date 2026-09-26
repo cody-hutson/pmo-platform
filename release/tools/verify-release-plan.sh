@@ -34,7 +34,7 @@ set -euo pipefail
 # silent break. Bump SCHEMA_VERSION whenever the evidence-table shape, the
 # verdict enum, or the check-record fields change.
 # ---------------------------------------------------------------------------
-readonly CLI_VERSION="0.2.1"
+readonly CLI_VERSION="0.3.0"
 # 1 -> 2: the `fcm-delivery` check family enters the emitted stream from a THIRD
 # record source, so every consumer now sees records it has never seen before.
 # That is exactly what this constant exists to make detectable rather than silent.
@@ -138,6 +138,13 @@ readonly CLI_VERSION="0.2.1"
 # `matcher-exit-1` and `no-comparator:<verb>` ride existing ERROR records -- VALUES in
 # existing fields. The markdown block renders a record with no issue value under a
 # `(plan)` header: a presenter change that moves no stream byte and no JSON value.
+# NO BUMP IS OWED for the CIAC authoring lint (--ciac-lint): a separate mode that runs no
+# command and emits no Verification Evidence record, so every field, value and exit of a
+# normal run is unchanged. The CLI version moves instead, because the mode is new surface.
+# NO BUMP IS OWED for reading an unterminated quote in a designated command as ERROR rather
+# than UNRUNNABLE, or for reading a span no backtick closes as prose: rows move between
+# EXISTING verdicts, and the reason `unterminated-quote:<q>` rides an existing ERROR record --
+# a VALUE in an existing field, by the precedents above.
 readonly SCHEMA_VERSION="5"
 
 # ---------------------------------------------------------------------------
@@ -220,9 +227,10 @@ readonly REC_FS=$'\037'
 # whatever the form: here-string, here-document, or file. The two dispatch loops
 # take the rule, and so do the five loops that read a method's split spans or its
 # commands (extract_command, method_limbs, limbs_are_multi, grade_limbs and
-# command_list) and the five that read a scope assertion's pathspecs or the
+# command_list), the five that read a scope assertion's pathspecs or the
 # release diff it grades (scope_path_selected, scope_pathspec_selects, and
-# handle_scope's three): their bodies spawn no child that reads fd 0 today, and the
+# handle_scope's three), and the CIAC authoring lint's two (ciac_lint's declared ids
+# and its parsed records): their bodies spawn no child that reads fd 0 today, and the
 # body form keeps any child they spawn, now or later, off it. The other five are
 # EXEMPT BY MEASUREMENT, because nothing in their bodies can read fd 0:
 #   - count_from_output's two here-string loops: builtins only, no child at all.
@@ -271,13 +279,25 @@ readonly EXIT_CHECK_FAILED=3
 #               deferred, or its method names no command.
 #   UNRUNNABLE  can't run here: the row was read, and a command it names cannot run
 #               in this executor -- a recognised tool outside RUNNABLE_VERBS, a
-#               designated command carrying shell syntax, or a native scope assertion
-#               with nothing to grade here -- or its designated command ran while
-#               another command it names did not.
-#   ERROR       could not read or evaluate: input this parser cannot make sense of, or
+#               designated command carrying a shell operator outside quotes, or a native
+#               scope assertion with nothing to grade here -- or its designated command ran
+#               while another command it names did not.
+#   ERROR       could not read or evaluate: input this parser cannot make sense of -- an
+#               unreadable row, or a designated command with an unterminated quote -- or
 #               a command that ran and produced no readable result.
-# Stage 9 maps the emitted values onto the Stage-8 per-criterion enum; the runtime
-# family additionally maps the test-run suite-* subtypes onto them.
+# These are this executor's own values, not the Stage-8 per-criterion enum. Stage 9 reads
+# each emitted value into that enum through the one reading table in QA Checkpoint 3.5
+# (release-process.md), which no other reader restates; the runtime family additionally
+# maps the test-run suite-* subtypes onto the values above.
+#
+# NON-RETROACTIVITY. A row this executor declines by design -- a SKIP, an UNRUNNABLE, and
+# any later "cannot run here" value -- stays OUTSIDE the exit-failing set in main() step 4,
+# whatever it is renamed to: renaming declined rows must not turn a plan's exit 0 into 3.
+# A family that newly EXECUTES a row it used to decline grades PASS or FAIL only where it
+# can establish the evaluation context the method presumes, and otherwise emits the
+# cannot-run outcome. A decline is weighed at Stage 9, where QA Checkpoint 3.5 reads an
+# undeclared one as NOT MET, not at this exit. The suite's group G13 pins it, with a seeded
+# failure for each declined value: G13 M1 adds SKIP to the exit predicate, G13 M3 UNRUNNABLE.
 #
 # WHY UNRUNNABLE IS A VALUE OF ITS OWN. A method needing a tool outside the verb set
 # used to read SKIP -- the verdict a plan uses to declare a row another runner's job --
@@ -340,6 +360,7 @@ ARG_FCM_MERGE_BASE=""   # explicit base ref for the fcm-delivery diff range
 ARG_FCM_HEAD=""         # explicit head ref for the fcm-delivery diff range
 ARG_FCM_DIFF_FILE=""    # TEST-ONLY determinism seam; refused against a real plan
 ARG_STAGE4_COMMENT=""   # provenance DELTA limb evidence; absent -> NAMED SKIP, never PASS
+ARG_CIAC_LINT=0         # Stage-4 authoring mode: lint the CIAC section, run nothing
 
 # Scratch array populated by tokenize_cmd (quote-aware command splitter).
 declare -a TOKENS=()
@@ -403,6 +424,8 @@ OPTIONS
   --stage4-comment P   Path to a file containing the Stage-4 planning sub-task
                     comment, for the provenance DELTA limb. Absent → the delta
                     limb emits a NAMED SKIP; it never emits PASS.
+  --ciac-lint       Stage-4 authoring lint of the Cross-Issue Acceptance Criteria
+                    (gate criterion G4-06); runs nothing (see CIAC AUTHORING LINT)
   --no-color        Disable ANSI color in table output
   -h, --help        Show this help and exit
   --version         Show CLI version + schema version and exit
@@ -481,9 +504,10 @@ VERDICTS
               fail the run; the tool named is a tool the method invokes, never
               a label or a file
   ERROR       could not read the row, or tried to evaluate it and could not:
-              an unreadable table row, an empty method cell, a probe whose
-              input could not be read, a command naming no operand, or a
-              command with no comparator whose exit status is not its claim
+              an unreadable table row, an empty method cell, a command with
+              an unterminated quote, a probe whose input could not be read, a
+              command naming no operand, or a command with no comparator
+              whose exit status is not its claim
 
 READER SEMANTICS (one table, per verb, read by every reader of a result)
   verb  exit 1      operand         count read as          no comparator
@@ -508,7 +532,71 @@ EXIT CODES
   1  internal error — including a DEGRADED verdict stream: a dispatch loop
      read fewer records than the parser produced, and the roll-up says so
   2  bad plan target (path missing / not a regular file)
-  3  one or more checks FAIL or ERROR
+  3  one or more checks FAIL or ERROR (with --ciac-lint: one or more CIACs
+     flagged)
+
+CIAC AUTHORING LINT (--ciac-lint) - Stage 4, gate criterion G4-06
+  Reads the plan's Cross-Issue Acceptance Criteria as grading will -- the same
+  parser, the same span splitter, and the readers the cross-issue handler uses
+  -- and stops before execution: it runs no command, reads no deploy check,
+  writes no event and emits no Verification Evidence record. It is read at
+  three points: by the hub at Gate 1, at Stage 6 entry on the committed plan,
+  and at Stage 9 Phase A3.6 against the final head. It prints one line per
+  CIAC, CIAC-LINT <id> CLEAN|DECLARED|FLAG <flag>, then CIAC-LINT-SET (the
+  ids the plan declares) and CIAC-LINT-SUMMARY, and exits 0 when no CIAC is
+  flagged, else 3.
+  CLEAN     graded as written: one command the executor runs, naming its
+            input, with a comparator it reads, or none where the command's
+            exit status is the claim (grep, test, an ls naming files); or a
+            scope assertion
+  DECLARED  written "declared, verification deferred to <evidence>", naming
+            a surface: a repository path, a suite arm label, or a criterion
+            for each spanned issue (#N AC-k, design #N AC-k or INT-k, plan #N
+            AC-k); the Stage 9 operator grades it from that evidence
+  FLAG      no permitted party grades it as written. The flag is the first
+            the grading path meets, with its remedy:
+    ciac-unparsed              the grading parser never reads it: write the id
+                               bold, **CIAC-N (...):**, on one line
+    parity-error               the table row lacks its header's field count:
+                               escape a literal pipe inside the cell
+    no-method                  the entry's line carries no method: keep
+                               *Method:* on the entry's own line
+    method-marker-absent       add a *Method:* marker
+    method-clause-displaced    a "method" word earlier on the line opens the
+                               clause: reword it
+    declared-without-evidence  the declaration names no evidence surface
+    evidence-misses-spanned-issue:<#N>
+                               a per-issue criterion is named for some spanned
+                               issues only: name one for each, or a path or an
+                               arm label, which cover the release
+    multi-limb                 the method names more than one command and only
+                               one runs: keep one; a control goes after *Graded*
+    no-runnable-command        nothing the executor runs (a span no backtick
+                               closes is prose): write one command in
+                               backticks, or declare it
+    bare-verb:<verb>           a tool named with no argument is prose
+    unbackticked-command       the executor would run the clause's own words
+                               as a command: put the command in backticks
+    not-runnable:<tool>        a tool outside grep, test, ls, head, wc and cat:
+                               probe the label of the suite arm that asserts
+                               it, or declare it
+    scope-pathspec-placeholder:<p>
+                               a placeholder names no path: name the path
+    shell-operator:<op>        shell syntax outside quotes: name one command
+    unterminated-quote:<q>     the command cannot be split into words: close
+                               the quote
+    stdin-reader:<verb>        the command names no input file inside its
+                               backticks
+    device-operand:<input>     the input is a device, not a repository file
+    unmodelled-option:<opt>    use an option the executor models
+    no-operand:<verb>          grep needs a pattern, test an expression, ls a
+                               path
+    no-threshold:<verb>        a count with no comparator the grader reads, so
+                               its exit status is graded and a zero reads FAIL:
+                               write expect N, at least N or at most N
+    no-comparator:<verb>       this command's exit status is not its claim:
+                               state a comparator
+    multi-comparator           comparators that disagree: state one
 
 EXAMPLES
   # Emit the Verification Evidence block for a release plan (markdown to stdout)
@@ -546,6 +634,7 @@ parse_args() {
       --stage4-comment=*) ARG_STAGE4_COMMENT="${1#--stage4-comment=}" ;;
       --stage4-comment)   shift; ARG_STAGE4_COMMENT="${1:-}" ;;
       --no-color)     ARG_NO_COLOR=1 ;;
+      --ciac-lint)    ARG_CIAC_LINT=1 ;;
       --)             shift; break ;;
       -*)             err "unknown option: $1"; usage >&2; exit "$EXIT_INTERNAL" ;;
       *)              if [ -z "$ARG_PLAN" ]; then ARG_PLAN="$1"; else err "unexpected extra argument: $1"; exit "$EXIT_INTERNAL"; fi ;;
@@ -1138,12 +1227,13 @@ EOF_SPANS
 
 # span_shell_operator <span> -- THE quote-aware shell-syntax test, ONE copy for every
 # reader that asks whether a span is shell syntax this executor does not run: the
-# classifier's probe step here, and the handlers, the scope step and the CIAC lint
-# as they adopt it. None of them keeps a private operator list. eval_free_run runs no
-# shell, so a pipe, a command list, a redirect or a substitution would reach the verb
-# as a literal argument -- not the command its author wrote. The span is scanned RAW,
-# outside quotes: a quoted '|', '>= 1' or '<!--' is a pattern, and tokenize_cmd,
-# which strips the quotes, cannot tell it from an operator. Prints the operator found
+# classifier's probe step here, the handlers' refusal (shell_syntax_refusal, which reads
+# an operator as can't-run-here and an unterminated quote as could-not-read), the scope
+# step and the CIAC authoring lint. None of them keeps a private operator list.
+# eval_free_run runs no shell, so a pipe, a command list, a redirect or a substitution
+# would reach the verb as a literal argument -- not the command its author wrote. The
+# span is scanned RAW, outside quotes: a quoted '|', '>= 1' or '<!--' is a pattern, and
+# tokenize_cmd, which strips the quotes, cannot tell it from an operator. Prints the operator found
 # (an unterminated quote counts, and prints its quote character) and returns 0;
 # returns 1 when the span carries none.
 span_shell_operator() {
@@ -1412,12 +1502,21 @@ span_invokes_tool() {
 # backtick, tabs flattened; <span> is last so it may hold any byte but a newline.
 # The spans are the ones a split on backticks yields -- the even pieces, an unclosed
 # last one included -- so every reader that asks where a method's spans are asks
-# here: extract_command, the limb reader and any authoring lint split a method
+# here: extract_command, the limb reader and the CIAC authoring lint split a method
 # through this one function, and no two readers can split it two ways. A method
 # that is ONE span and nothing else -- whitespace and closing punctuation aside -- is
 # that span's whole text, which span_invokes_tool reads as invocation-shaped.
+#
+# ONLY A CLOSED SPAN IS A COMMAND. The last piece after an odd final backtick is not a
+# backticked span, so it is classed mention whatever its first word: a command written
+# there runs on no route -- neither handler, the designated command of a method naming
+# several, nor the lint -- and no route can pick it, because every pick is made here.
+# The probe step and the declared deploy route test the same closure on their own pick.
+# The closure line is KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G21 M5
+# removes it by one substitution.
 method_spans() {
   local method="$1" i=1 n=0 span tok words cls prose whole="" rem T=$'\t'
+  local ticks="${method//[!\`]/}"
   local -a seg=() w=()
   IFS='`' read -r -a seg <<< "$method" || true
   rem="${seg[0]:-}${seg[2]:-}"; rem="${rem//[[:space:].;:,]/}"
@@ -1428,7 +1527,8 @@ method_spans() {
     n=$((n + 1))
     w=(); read -r -a w <<< "$span" || true
     tok="${w[0]:-}"; words=${#w[@]}
-    if is_runnable_verb "$tok"; then
+    if [ "${#ticks}" -le "$((i - 2))" ]; then cls=mention   # unclosed: no backtick after it
+    elif is_runnable_verb "$tok"; then
       if [ "$words" -ge 2 ]; then cls=runnable; else cls=bare-verb; fi
     elif [ -n "$(span_invokes_tool "$span" "$whole")" ]; then cls=not-runnable
     else cls=mention; fi
@@ -1539,9 +1639,11 @@ limbs_are_multi() {
 # (METHOD LIMBS). Prints "<verdict> TAB <observed>". The observed text lists every
 # command in order after "limbs run 1 of <N>:" -- "limb <k> <verb> <verdict>
 # <observed>" for the one that ran, "limb <k> <verb> did not run (<reason>)" for
-# each one that did not -- and a can't-run row leads with "partial-execution:".
+# each one that did not -- and a can't-run row leads with "partial-execution:". When
+# the handlers' refusal stops the designated command itself, the list reads "limbs run
+# 0 of <N>:", and the verdict is the refusal's (shell_syntax_refusal).
 grade_limbs() {
-  local limbs="$1" rec rest span verb why sop lv="" lo="" list="" n=0 i out rc cres cstatus cval T=$'\t'
+  local limbs="$1" rec rest span verb why sop ref lv="" lo="" list="" n=0 i out rc cres cstatus cval refused=0 T=$'\t'
   local -a R_role=() R_op=() R_want=() R_span=()
   while IFS= read -r rec; do {
     [ -n "$rec" ] || continue
@@ -1561,9 +1663,9 @@ EOF_GRADE
         if [ "${R_op[$i]}" = '?' ]; then
           lv="$VERDICT_ERROR"; lo="comparator-ambiguous (the prose after this command states comparators that disagree)"
         elif sop="$(span_shell_operator "$span")"; then
-          # Shell syntax outside quotes: the designated command is not run either
-          # (the handlers' refusal), so no command in the method ran.
-          lv="$VERDICT_UNRUNNABLE"; lo="$(shell_operator_observed "$sop")"
+          # Shell syntax: the designated command is not run either (the handlers'
+          # refusal, shell_syntax_refusal), so no command in the method ran.
+          ref="$(shell_syntax_refusal "$sop")"; lv="${ref%%"$T"*}"; lo="${ref#*"$T"}"; refused=1
         else
           set +e
           out="$( cd "$REPO_ROOT" && eval_free_run "$span" 2>/dev/null )"
@@ -1601,7 +1703,7 @@ EOF_GRADE
   elif [ "$lv" = "$VERDICT_PASS" ]; then
     printf '%s\t%s\n' "$VERDICT_PARTIAL_SLOT" \
       "partial-execution: limbs run 1 of $n: $list — a command that did not run is not a pass"
-  elif [ "$lv" = "$VERDICT_UNRUNNABLE" ]; then
+  elif [ "$refused" -eq 1 ]; then
     printf '%s\t%s\n' "$lv" "limbs run 0 of $n: $list"
   else
     printf '%s\t%s\n' "$lv" "limbs run 1 of $n: $list"
@@ -1648,9 +1750,11 @@ EOF_CMDS
 # criterion in the spec", "test the decision records the chosen branch" -- as a command,
 # and grade the matcher's failure on its words. A span never carries a backtick, and the
 # whole-cell fallback of a cell that has one always does, so a cell with no backtick, or
-# a pick carrying one, names no command here: unbackticked prose never runs. The
-# classifier's probe step already reads only a backticked span; this is the same rule
-# at the handler, which the residual now reaches with rows no keyword claimed.
+# a pick carrying one, names no command here: unbackticked prose never runs. The span
+# must also be CLOSED: method_spans never offers the piece after an odd final backtick
+# as a command, so a command written there runs on no route. The classifier's probe step
+# already reads only a closed backticked span; this is the same rule at the handler,
+# which the residual now reaches with rows no keyword claimed.
 per_issue_command() {
   local cmd
   case "$1" in *'`'*) ;; *) return 0 ;; esac
@@ -1708,14 +1812,15 @@ handle_per_issue() {
     handle_unrunnable "$method"; return
   fi
 
-  # A designated command carrying shell syntax outside quotes is not run: this
-  # executor runs no shell, so the operator would reach the verb as a literal
-  # argument and the command graded would not be the one its author wrote. The test
-  # is span_shell_operator, the one shared quote-aware predicate. KEPT ON ONE LINE ON
-  # PURPOSE, in both handlers: the suite's mutation arm G18 M8 removes the refusal by
-  # one substitution.
+  # A designated command carrying shell syntax is not run: this executor runs no
+  # shell, so an operator outside quotes would reach the verb as a literal argument,
+  # and an unterminated quote leaves the command unsplittable into its author's words.
+  # The test is span_shell_operator, the one shared quote-aware predicate, and the
+  # verdict is shell_syntax_refusal's: UNRUNNABLE for an operator, ERROR for a quote.
+  # KEPT ON ONE LINE ON PURPOSE, in both handlers: the suite's mutation arm G18 M8
+  # removes the refusal by one substitution.
   local sop
-  if sop="$(span_shell_operator "$cmd")"; then printf '%s\t%s\n' "$VERDICT_UNRUNNABLE" "$(shell_operator_observed "$sop")"; return; fi
+  if sop="$(span_shell_operator "$cmd")"; then shell_syntax_refusal "$sop"; return; fi
 
   local threshold op want; threshold="$(extract_threshold "$method")"
   op="$(printf '%s' "$threshold" | cut -f1)"; want="$(printf '%s' "$threshold" | cut -f2)"
@@ -2239,26 +2344,48 @@ unreadable_observed() {
       printf '%s (not run — the command names no operand its verb needs: grep a pattern, test an expression whose primary carries its operand, ls a path; name it inside the backticks)' "$1" ;;
     no-comparator:*)
       printf '%s (ran, but not graded — the method states no comparator, and for this command exit 0 says only that its input could be read, not that the claim holds; state a comparator such as expect N, or write the claim with grep or test)' "$1" ;;
+    unterminated-quote:*)
+      printf '%s (not run — the command has an unterminated quote, so it cannot be split into the words its author meant; close the quote inside the backticks)' "$1" ;;
     *)
       printf 'count-unreadable:%s (the matcher produced no readable result; this is NOT a zero)' "$1" ;;
   esac
 }
 
 # shell_operator_observed <operator> — the ONE rendering of the handlers' refusal of a
-# designated command carrying shell syntax, shared by both handlers and by the
-# designated command of a multi-command method, so the three cannot drift. The
-# operator is named as span_shell_operator prints it. That test reports a command
+# designated command carrying a shell operator outside quotes, shared by both handlers
+# and by the designated command of a multi-command method, so the three cannot drift.
+# The operator is named as span_shell_operator prints it. That test reports a command
 # substitution written either as `$(` or as a backtick as `$(`, and the reason says so
-# rather than guessing which spelling the author used; an unterminated quote is named
-# by its quote character.
+# rather than guessing which spelling the author used. An unterminated quote, which the
+# same test reports by its quote character, never reaches here: shell_syntax_refusal
+# reads it as input that could not be read.
 shell_operator_observed() {
   case "$1" in
     '$(')
       printf 'shell-operator:%s (not run — a command substitution, written as $( or as a backtick: this executor runs no shell, so it would reach the command as a literal argument)' "$1" ;;
-    \'|\")
-      printf 'shell-operator:%s (not run — an unterminated quote: the command cannot be split into the words its author meant)' "$1" ;;
     *)
       printf 'shell-operator:%s (not run — this executor runs no shell, so a pipe, a list, a redirect or a substitution would reach the command as a literal argument; name one command, or use the declared-deferred form)' "$1" ;;
+  esac
+}
+
+# shell_syntax_refusal <what span_shell_operator printed> — THE handlers' refusal of a
+# designated command carrying shell syntax, printed "<verdict> TAB <observed>" for both
+# handlers and for the designated command of a multi-command method, so the three give a
+# reported span the same verdict. The shared predicate reports two different things, and
+# they take two different outcomes of the partition:
+#   - an operator outside quotes (a pipe, a list, a redirect, a substitution): the command
+#     was read, and this executor runs no shell, so it cannot run here -- UNRUNNABLE,
+#     shell-operator:<op>, which does not fail the run;
+#   - an unterminated quote: the command cannot be split into the words its author
+#     meant, which is input the executor could not read -- ERROR, unterminated-quote:<q>,
+#     which fails the run like every other could-not-read row.
+# The CIAC authoring lint flags each by the same token. The quote arm is KEPT ON ONE LINE
+# ON PURPOSE: the suite's mutation arm G21 M6 turns it back into the can't-run reading by
+# one substitution.
+shell_syntax_refusal() {
+  case "$1" in
+    \'|\") printf '%s\t%s\n' "$VERDICT_ERROR" "$(unreadable_observed "unterminated-quote:$1")" ;;
+    *) printf '%s\t%s\n' "$VERDICT_UNRUNNABLE" "$(shell_operator_observed "$1")" ;;
   esac
 }
 
@@ -2293,7 +2420,7 @@ handle_integration() {
   fi
   # A designated command carrying shell syntax is not run (see handle_per_issue).
   local sop
-  if sop="$(span_shell_operator "$cmd")"; then printf '%s\t%s\n' "$VERDICT_UNRUNNABLE" "$(shell_operator_observed "$sop")"; return; fi
+  if sop="$(span_shell_operator "$cmd")"; then shell_syntax_refusal "$sop"; return; fi
   local out rc count threshold op want
   set +e
   out="$( cd "$REPO_ROOT" && eval_free_run "$cmd" 2>/dev/null )"
@@ -2673,6 +2800,180 @@ parse_ciac() {
   # tab delimiter it worked only because tab is awk default whitespace. 0x1F is
   # not whitespace, so without -F the key would run to the first SPACE inside
   # the record and the de-dupe would silently stop de-duplicating.
+}
+
+# ===========================================================================
+# Component 1c — the CIAC authoring lint (--ciac-lint): Stage 4, gate criterion G4-06.
+#
+# WHY IT EXISTS. This executor is the sole runner of every CIAC method, and Stage 9 reads
+# what it emits without running anything. A CIAC this executor cannot grade as written is
+# therefore graded by no permitted party, and that used to surface at Stage 9, as a NO-GO
+# input on a release whose predicates held. The lint moves the discovery to authoring: it
+# reads each CIAC exactly as grading will and names the ones the grader will not grade as
+# written.
+#
+# ITS CLEAN IS THE GRADER'S, STOPPING BEFORE EXECUTION. It reads the section through
+# parse_ciac, the grading path's parser, then walks handle_integration's order: the
+# declared deferral, read outside every span led by an allowlisted verb
+# (method_outside_verb_spans); the command limbs (method_limbs); the designated command
+# (extract_command, over method_spans, the one splitter, so a span no backtick closes is
+# prose here too); the verb check; span_shell_operator, the shared predicate, with the
+# handlers' reading of an operator and of an unterminated quote; reads_stdin_cmd and
+# names_no_operand, eval_free_run's two refusals; and the comparator the grader will
+# apply (limb_comparator, extract_threshold, count_mode_cmd and exit_zero_grades, over the
+# one comparator vocabulary). It stops there: it runs no command, reads no deploy check,
+# writes no event and emits no Verification Evidence record. A CIAC it reads CLEAN is one
+# the grader grades as written, and each flag is the first the grading path would meet.
+#
+# A DECLARATION NAMES WHERE ITS GUARANTEE LIVES. A CIAC no command can grade is written in
+# the declared form, "declared, verification deferred to <evidence>", and the Stage 9
+# operator grades it from that evidence. The lint requires the declaration to name an
+# evidence surface: a repository path, a suite arm label, or a namespace-qualified
+# criterion -- one for each issue the CIAC spans, because one issue's criterion cannot
+# vouch for a predicate over several. A path or an arm label covers the release.
+#
+# The id scan is deliberately independent of parse_ciac, so an entry the grading parser
+# never reads is flagged rather than silently absent, and the lint prints the ids the plan
+# declares: a Stage 9 reader needs that set to tell "no CIAC declared" from "no record
+# emitted".
+# ===========================================================================
+
+# _ciac_lint_say <status> <flag> -- one lint reading, "<status> TAB <flag>".
+_ciac_lint_say() { printf '%s\t%s' "$1" "$2"; }
+
+# _ciac_lint_entry <entry> -- the parser hazard a bullet entry's own line carries, or
+# nothing. parse_ciac opens the Method clause at the FIRST "method" word on the line, so a
+# word ahead of the marker displaces the clause, and an entry with no marker is read from
+# its first backticked span. A table row (an entry that is not the bullet's own line) has
+# its Method column and carries neither hazard.
+_ciac_lint_entry() {
+  local a m
+  case "$1" in CIAC-[0-9]*) ;; *) return 0 ;; esac
+  a="$(awk '{ print (match($0, /[Mm]ethod/) ? RSTART : 0) }' <<<"$1")"
+  m="$(awk '{ print (match($0, /[Mm]ethod[*_]*:/) ? RSTART : 0) }' <<<"$1")"
+  if [ "$m" -eq 0 ]; then printf 'method-marker-absent'; elif [ "$a" -lt "$m" ]; then printf 'method-clause-displaced'; fi
+  return 0
+}
+
+# _ciac_lint_evidence <declaration> <issues> -- the flag a declaration earns, or nothing
+# when it names an evidence surface. <declaration> is the text after the declared form's
+# phrase; <issues> is the comma list of the issues the CIAC spans, as parse_ciac read it.
+# A repository path or a suite arm label covers the release. A namespace-qualified
+# criterion -- #N AC-k, design #N AC-k, design #N INT-k, plan #N AC-k -- is one issue's
+# evidence, so it covers the CIAC only when one is named for each spanned issue. The
+# per-issue test is KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G21 M7 removes it
+# by one substitution.
+_ciac_lint_evidence() {
+  local decl="$1" issues="$2" named iss miss="" NL=$'\n'
+  local re_path='[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]*\.[A-Za-z0-9]+' re_arm='V[0-9]+-[A-Z]+[0-9]+'
+  if [[ "$decl" =~ $re_path ]] || [[ "$decl" =~ $re_arm ]]; then return 0; fi
+  named="$(grep -oE '#[0-9]+ (AC|INT)-[0-9]+' <<<"$decl" || true)"
+  if [ -z "$named" ]; then printf 'declared-without-evidence'; return 0; fi
+  named="$NL$(awk '{ print $1 }' <<<"$named")$NL"
+  for iss in ${issues//,/ }; do case "$named" in *"$NL$iss$NL"*) : ;; *) miss="$miss,$iss" ;; esac; done
+  [ -z "$miss" ] || { printf 'evidence-misses-spanned-issue:%s' "${miss#,}"; return 0; }
+}
+
+# _ciac_lint_one <method> <entry> <issues> -- "<status> TAB <flag>" for one parsed CIAC:
+# CLEAN, DECLARED, or FLAG naming the first rule the grading path would meet. Each rule's
+# line reads the reader the grader reads. Three are KEPT ON ONE LINE ON PURPOSE: the
+# suite's mutation arms G21 M1 (the verb check), M3 (the deferral read) and M4 (the count
+# with no comparator) each reach one of them by one substitution.
+_ciac_lint_one() {
+  local method="$1" entry="$2" issues="$3" hz outside decl ev limbs cmd spans lead tool specs syn why p rs=0 NL=$'\n'
+  if [ -z "${method//[[:space:]]/}" ]; then _ciac_lint_say FLAG no-method; return 0; fi
+  hz="$(_ciac_lint_entry "$entry")"
+  if [ -n "$hz" ]; then _ciac_lint_say FLAG "$hz"; return 0; fi
+  outside="$(method_outside_verb_spans "$method")"
+  case "$outside" in
+    *DEFERRED*|*declared,\ verification\ deferred*|*deferred\ to\ #*)
+      case "$outside" in
+        *"declared, verification deferred to"*) decl="${outside#*declared, verification deferred to}" ;;
+        *DEFERRED*) decl="${outside#*DEFERRED}"; decl="${decl%%]*}" ;;
+        *"deferred to #"*) decl="#${outside#*deferred to #}" ;;
+        *) decl="" ;;
+      esac
+      ev="$(_ciac_lint_evidence "$decl" "$issues")"
+      if [ -n "$ev" ]; then _ciac_lint_say FLAG "$ev"; else _ciac_lint_say DECLARED -; fi
+      return 0 ;;
+  esac
+  limbs="$(method_limbs "$method")"
+  if limbs_are_multi "$limbs"; then _ciac_lint_say FLAG multi-limb; return 0; fi
+  cmd="$(extract_command "$method")"; spans="$(method_spans "$method")"
+  if [ -z "$cmd" ]; then
+    p="$(awk -F'\t' '$2 == "bare-verb" { print $3 }' <<<"$spans")"; p="${p%%"$NL"*}"
+    if [ -n "$p" ]; then _ciac_lint_say FLAG "bare-verb:$p"; else _ciac_lint_say FLAG no-runnable-command; fi
+    return 0
+  fi
+  # A bullet whose method carries no span has its command read from the clause's own words
+  # (extract_command's bare-string reading, which a table cell stripped of its backticks
+  # needs): the grader runs those words.
+  case "$entry" in CIAC-[0-9]*) if [ -z "$spans" ]; then _ciac_lint_say FLAG unbackticked-command; return 0; fi ;; esac
+  lead="${cmd#"${cmd%%[![:space:]]*}"}"; lead="${lead%%[[:space:]]*}"
+  if ! is_runnable_verb "$lead"; then
+    if specs="$(scope_spec_of "$cmd" "$method")"; then
+      case "$NL$specs" in *"$NL?"*) p="$NL$specs"; p="${p#*"$NL?"}"; _ciac_lint_say FLAG "scope-pathspec-placeholder:${p%%"$NL"*}"; return 0 ;; esac
+      if [ "$(limb_comparator "$method")" = ambiguous ]; then _ciac_lint_say FLAG multi-comparator; return 0; fi
+      _ciac_lint_say CLEAN -; return 0
+    fi
+    tool="$(span_invokes_tool "$cmd" whole)"
+    _ciac_lint_say FLAG "not-runnable:${tool:-$lead}"; return 0
+  fi
+  if syn="$(span_shell_operator "$cmd")"; then
+    case "$syn" in \'|\") _ciac_lint_say FLAG "unterminated-quote:$syn" ;; *) _ciac_lint_say FLAG "shell-operator:$syn" ;; esac
+    return 0
+  fi
+  why="$(reads_stdin_cmd "$cmd")" || rs=$?
+  if [ "$rs" -eq 0 ] || [ "$rs" -eq 2 ]; then _ciac_lint_say FLAG "$why"; return 0; fi
+  if names_no_operand "$cmd"; then _ciac_lint_say FLAG "no-operand:$lead"; return 0; fi
+  if [ "$(limb_comparator "$method")" = ambiguous ]; then _ciac_lint_say FLAG multi-comparator; return 0; fi
+  if [ -z "$(extract_threshold "$method")" ]; then
+    if count_mode_cmd "$cmd"; then _ciac_lint_say FLAG "no-threshold:$lead"; return 0; fi
+    if ! exit_zero_grades "$cmd"; then _ciac_lint_say FLAG "no-comparator:$lead"; return 0; fi
+  fi
+  _ciac_lint_say CLEAN -
+}
+
+# ciac_lint <plan> -- the mode's entry point: one CIAC-LINT line per CIAC, the plan's
+# declared set, and the summary. Returns 0 when no CIAC is flagged. The declared-id scan's
+# print is KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G21 M2 blanks it by one
+# substitution. Both loops take the FD-0 body form.
+ciac_lint() {
+  local file="$1" body declared records parsed ids id issues fam method entry res status flag idset=""
+  local n_decl=0 n_parsed=0 n_clean=0 n_decld=0 n_flag=0 NL=$'\n' T=$'\t'
+  body="$(_extract_section "$file" "Cross-Issue Acceptance Criteria")"
+  declared="$(printf '%s\n' "$body" | awk '{ s = $0; sub(/^[ \t]*[-*+][ \t]+/, "", s); sub(/^\[[ xX]\][ \t]+/, "", s); sub(/^\|[ \t]*/, "", s); sub(/^[*_ \t]+/, "", s)
+      if (match(s, /^CIAC-[0-9]+/)) print substr(s, RSTART, RLENGTH) }')"
+  records="$(parse_ciac "$file" || true)"
+  parsed="$(printf '%s\n' "$records" | awk -F"$REC_FS" 'NF { print $1 }')"
+  ids="$(printf '%s\n%s\n' "$declared" "$parsed" | awk 'NF' | sort -t- -k2,2n -u)"
+  while IFS= read -r id; do {
+    [ -n "$id" ] || continue
+    n_decl=$((n_decl + 1)); idset="${idset:+$idset }$id"
+    case "$NL$parsed$NL" in
+      *"$NL$id$NL"*) : ;;
+      *) printf 'CIAC-LINT\t%s\tFLAG\tciac-unparsed\n' "$id"; n_flag=$((n_flag + 1)) ;;
+    esac
+  } </dev/null; done <<< "$ids"
+  if [ -n "$records" ]; then
+    while IFS="$REC_FS" read -r id issues fam method entry; do {
+      [ -n "$id" ] || continue
+      n_parsed=$((n_parsed + 1))
+      if [ "$fam" = parity-error ]; then res="FLAG${T}parity-error"
+      else res="$(_ciac_lint_one "$method" "$entry" "$issues")"; fi
+      status="${res%%"$T"*}"; flag="${res#*"$T"}"
+      case "$status" in
+        CLEAN)    n_clean=$((n_clean + 1)) ;;
+        DECLARED) n_decld=$((n_decld + 1)) ;;
+        *)        n_flag=$((n_flag + 1)) ;;
+      esac
+      printf 'CIAC-LINT\t%s\t%s\t%s\n' "$id" "$status" "$flag"
+    } </dev/null; done <<< "$records"
+  fi
+  printf 'CIAC-LINT-SET\t%s\n' "${idset:--}"
+  printf 'CIAC-LINT-SUMMARY\tdeclared=%s\tparsed=%s\tclean=%s\tdeclared-deferral=%s\tflagged=%s\n' \
+    "$n_decl" "$n_parsed" "$n_clean" "$n_decld" "$n_flag"
+  [ "$n_flag" -eq 0 ]
 }
 
 # ===========================================================================
@@ -4035,6 +4336,13 @@ main() {
   resolve_root
   resolve_sibling_tools
   resolve_plan
+
+  # The CIAC authoring lint (Stage 4, gate criterion G4-06) answers here and exits. It
+  # reads the plan and runs nothing, so it needs no memo file, no release key and no
+  # dispatch, and it emits no Verification Evidence record.
+  if [ "$ARG_CIAC_LINT" -eq 1 ]; then
+    if ciac_lint "$PLAN_ABS"; then exit "$EXIT_OK"; else exit "$EXIT_CHECK_FAILED"; fi
+  fi
 
   # Per-run memo files for the deploy --check result (so a plan with several
   # sync/regression rows runs the heavy check once) and for the release diff the
