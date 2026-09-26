@@ -109,8 +109,10 @@ set -euo pipefail
 #        command, a declared deferral in either spelling) exits 0, and no declined
 #        row reads FAIL or ERROR — asserted per row, never as "= SKIP", so a later
 #        verdict that stays non-failing keeps it green. One fixture row per
-#        historical SKIP shape, a non-synthetic replay graded per row, and two
-#        seeded failures, each proved to apply at exactly the sites it names.
+#        historical SKIP shape, a non-synthetic replay graded per row, and three
+#        seeded failures, each proved to apply at exactly the sites it names: SKIP
+#        added to the exit predicate, the verb check disabled, and UNRUNNABLE added
+#        to the exit predicate.
 #  (G14) PREDICATE CLASS IS A READER ANNOTATION (V6180-AC5) — the executor grades
 #        a row from its method cell alone. No surface of it claims a class hint,
 #        the per-issue parser resolves no class value (the CIAC Predicate field
@@ -182,6 +184,16 @@ set -euo pipefail
 #        each proved to apply at exactly its sites, and a route precondition that
 #        observes the residual-route control on its route before the mutation that
 #        depends on it is graded.
+#  (G21) THE CIAC AUTHORING LINT, AND WHAT A HANDLER READS FROM A SPAN IT CANNOT SPLIT
+#        OR THAT NO BACKTICK CLOSES (V6236-AC1) — --ciac-lint reads each cross-issue
+#        criterion as grading will and runs nothing: a control twin lints clean or
+#        declared with an evidence surface, a flag-set fixture carries one defect per
+#        entry, a regression fixture holds the shapes a shape-only lint read clean
+#        while the grader misgrades them, and a real plan replays. A designated command
+#        carrying an unterminated quote reads ERROR naming the quote, where a genuine
+#        operator stays UNRUNNABLE, and a command inside a span no backtick closes runs
+#        on no route; the lint reads both the way the handlers do. Seven seeded
+#        failures, each proved to apply at exactly its sites.
 #
 # Offline + deterministic: fixtures are committed under tests/fixtures/ and all
 # methods are fast local greps against the repo tree (no deploy.sh --check here —
@@ -2566,6 +2578,22 @@ if mutant_ran "G13-M2 V6236-AC4"; then
     || bad "G13-M2 V6236-AC4 $G13M2_HIT of 3 refused-tool rows read ERROR matcher-exit-3, other rows failing:${G13M2_REST:- none}, ERROR=$(count_verdict "$JM6236_2" ERROR), rc=$RCM6236_2 (expected 3, none, 3 and 3)"
 fi
 
+# M3 — the can't-run verdict joins the failing set. UNRUNNABLE is a decline as well:
+# the fixture's three refused-tool rows (AC-1, CIAC-1, CIAC-2) read it, and main()'s
+# exit predicate leaves it out on purpose. Adding it is the change V6236-AC4 exists to
+# stop for whatever value a decline is renamed to, so the same 12 non-failing records
+# must then exit 3. It applies at the one site M1 does, and it is graded only where the
+# fixture carries an UNRUNNABLE row for it to act on.
+m6236 "G13-M3 V6236-AC4" g13-m3-unrunnable-joins-failing-set 1 \
+  's/\$6=="FAIL"\|\|\$6=="ERROR"\{found=1\}/$6=="FAIL"\|\|$6=="ERROR"\|\|$6=="UNRUNNABLE"{found=1}/'
+vrp_run "$MUT_PATH" "$FIX_HIST"; JM6236_3="$VRP_JSON"; RCM6236_3="$VRP_RC"
+if mutant_ran "G13-M3 V6236-AC4"; then
+  G13M3_U="$(count_verdict "$JM6236_3" UNRUNNABLE)"
+  [ "${G13M3_U:-0}" -ge 1 ] && [ "$RCM6236_3" -eq 3 ] && [ "$(g13_records "$JM6236_3")" = "12" ] && [ -z "$(g13_failing "$JM6236_3" $G13_AC $G13_CIAC)" ] \
+    && ok "G13-M3 V6236-AC4 mutation detected — with UNRUNNABLE in the exit-failing set the same 12 non-failing records ($G13M3_U of them UNRUNNABLE) exit 3, so G13-3 flips" \
+    || bad "G13-M3 V6236-AC4 UNRUNNABLE=${G13M3_U:-0} rc=$RCM6236_3 records=$(g13_records "$JM6236_3") failing rows:$(g13_failing "$JM6236_3" $G13_AC $G13_CIAC) (expected >= 1, 3, 12 and none)"
+fi
+
 rm -rf "$MUTD6"
 
 # ===========================================================================
@@ -4171,21 +4199,20 @@ G20_GOT="$(g20_fvo "$J20" "$G20_CIAC" CIAC-1)"
 
 # --- V6685-AC3: a malformed per-issue method is never a named SKIP on either route; the padding is refused. ---
 # Control AC-1 and AC-2 carry an unterminated quote, so the per-issue handler cannot split
-# the command into its author's words and refuses it before it runs. Each is asserted to
-# reach the handler and to read neither a SKIP nor a PASS: ERROR or UNRUNNABLE, the
-# partition's could-not-evaluate and can't-run-here, never pinned to one of the two.
-G20_V="$(g20_fv "$J20C" '#967' AC-1 verdict)"
-if [ "$(g20_fv "$J20C" '#967' AC-1 family)" = per-issue ] && { [ "$G20_V" = ERROR ] || [ "$G20_V" = UNRUNNABLE ]; }; then
-  ok "V6685-AC3 AC-1 — a malformed command on the keyword route reaches the per-issue handler and is never a named SKIP or a PASS ($G20_V)"
-else
-  bad "V6685-AC3 AC-1 — got '$(g20_fvo "$J20C" '#967' AC-1)' (want per-issue, and ERROR or UNRUNNABLE)"
-fi
-G20_V="$(g20_fv "$J20C" '#967' AC-2 verdict)"
-if [ "$(g20_fv "$J20C" '#967' AC-2 family)" = per-issue ] && { [ "$G20_V" = ERROR ] || [ "$G20_V" = UNRUNNABLE ]; }; then
-  ok "V6685-AC3 AC-2 — a malformed command on the residual route is inspected by the per-issue handler and is never a named SKIP or a PASS ($G20_V)"
-else
-  bad "V6685-AC3 AC-2 — got '$(g20_fvo "$J20C" '#967' AC-2)' (want per-issue, and ERROR or UNRUNNABLE)"
-fi
+# the command into its author's words and refuses it before it runs. That is input the
+# executor could not read, so each is asserted to reach the handler and to read ERROR,
+# naming the unterminated quote: never a named SKIP, never a PASS, and not the can't-run
+# reading a genuine shell operator takes.
+G20_GOT="$(g20_fvo "$J20C" '#967' AC-1)"
+case "$G20_GOT" in
+  per-issue/ERROR/unterminated-quote:*) ok "V6685-AC3 AC-1 — a malformed command on the keyword route reaches the per-issue handler and reads ERROR, naming the unterminated quote: never a named SKIP or a PASS" ;;
+  *) bad "V6685-AC3 AC-1 — got '$G20_GOT' (want per-issue/ERROR/unterminated-quote:...)" ;;
+esac
+G20_GOT="$(g20_fvo "$J20C" '#967' AC-2)"
+case "$G20_GOT" in
+  per-issue/ERROR/unterminated-quote:*) ok "V6685-AC3 AC-2 — a malformed command on the residual route is inspected by the per-issue handler and reads ERROR, naming the unterminated quote: never a named SKIP or a PASS" ;;
+  *) bad "V6685-AC3 AC-2 — got '$G20_GOT' (want per-issue/ERROR/unterminated-quote:...)" ;;
+esac
 G20_GOT="$(g20_fvo "$J20C" '#967' AC-3)"
 case "$G20_GOT" in
   per-issue/ERROR/no-operand:test*) ok "V6685-AC3 AC-3 — the padding the card names (a backticked test primary with no operand) is refused as naming no operand (ERROR no-operand:test), never a PASS" ;;
@@ -4264,18 +4291,297 @@ if [ "$MUT_TOOK" = 1 ]; then
   fi
 fi
 # M5 — the operand rule's unary-primary arm removed (the reader table's operand column for
-# test, as landed): the padded method reads a fabricated PASS again, and the control no
-# longer fails the run.
+# test, as landed): the padded method reads a fabricated PASS again, and the control loses
+# the one could-not-read row that is the padding's. The unterminated-quote rows read ERROR
+# as well, so the arm counts the control's ERROR rows -- exactly one fewer -- rather than
+# reading its exit, which those rows keep at 3.
 m20 "V6685-AC3 M5" g20-m5-unary-primary-operand 1 's/(in -\[bcdefghkLnOGNprsStuwxz\]\)) return 0 ;; esac$/\1 : ;; esac/'
 if [ "$MUT_TOOK" = 1 ]; then
   vrp_run "$MUT_PATH" "$FIX_DDC"; JM20_5="$VRP_JSON"; RCM20_5="$VRP_RC"
   if mutant_ran "V6685-AC3 M5"; then
-    [ "$(g20_fv "$JM20_5" '#967' AC-3 verdict)" = PASS ] && [ "$RCM20_5" -eq 0 ] \
-      && ok "V6685-AC3 M5 detected — without the unary-primary operand rule the padded method is a fabricated PASS again, and the control exits 0" \
-      || bad "V6685-AC3 M5 SURVIVED — control AC-3 '$(g20_fvo "$JM20_5" '#967' AC-3)', rc $RCM20_5"
+    G20_E0="$(count_verdict "$J20C" ERROR)"; G20_E1="$(count_verdict "$JM20_5" ERROR)"
+    [ "$(g20_fv "$JM20_5" '#967' AC-3 verdict)" = PASS ] && [ "$G20_E1" -eq $((G20_E0 - 1)) ] \
+      && ok "V6685-AC3 M5 detected — without the unary-primary operand rule the padded method is a fabricated PASS again, and the control's ERROR rows fall by exactly that one ($G20_E0 -> $G20_E1)" \
+      || bad "V6685-AC3 M5 SURVIVED — control AC-3 '$(g20_fvo "$JM20_5" '#967' AC-3)', ERROR $G20_E0 -> $G20_E1, rc $RCM20_5"
   fi
 fi
 rm -rf "$MUTD6685"
+
+# ===========================================================================
+# G21 — THE CIAC AUTHORING LINT (V6236-AC1), AND WHAT A HANDLER READS FROM A SPAN IT
+#       CANNOT SPLIT OR THAT NO BACKTICK CLOSES.
+#
+# The executor is the sole runner of every cross-issue criterion and Stage 9 reads what it
+# emits, so a CIAC it cannot grade as written is graded by no permitted party. --ciac-lint
+# reads each CIAC exactly as grading will, through the grading path's own parser and
+# readers, and runs nothing. The control twin lints clean or declared, naming an evidence
+# surface; the flag-set fixture carries one defect per entry; the regression fixture holds
+# the four shapes a shape-only lint read clean while the grader misgrades them, and the
+# grader's own verdicts show which; and a real plan replays. The lint's bodies call no
+# runner, and on a stub root whose deploy check and event writer leave a trace, a lint
+# run leaves none.
+#
+# Two handler rules the lint mirrors are graded here too. A designated command with an
+# unterminated quote cannot be split into its author's words: input the executor could
+# not read, so it reads ERROR naming the quote and fails the run, while a genuine shell
+# operator stays UNRUNNABLE. And a command inside a span no backtick closes is prose, so it
+# runs on no route: the per-issue keyword and residual routes, the cross-issue route, and
+# the designated command of a method naming several. Every record is read by its issue and
+# its id from its own line (g20_line). Each seeded failure is proved to apply at exactly
+# its sites, and only a mutation that took is graded.
+# ===========================================================================
+echo
+echo "G21 — #6236: the CIAC authoring lint, an unterminated quote, and a span no backtick closes (V6236-AC1)"
+MUTD6236B="$(mktemp -d -t verify-plan-6236b-mut.XXXXXX)"
+FIX_LINT="release/tools/tests/fixtures/verify-plan-ciac-lint.md"
+FIX_LINTC="release/tools/tests/fixtures/verify-plan-ciac-lint-control.md"
+FIX_LINTM="release/tools/tests/fixtures/verify-plan-ciac-lint-misgraded.md"
+FIX_SPAN="release/tools/tests/fixtures/verify-plan-span-syntax.md"
+REAL6236B="release/releases/plans/v4/v4.43_RELEASE_PLAN.md"
+LINT_OUT=""
+LINT_RC=0
+# lint_run <tool> <fixture-path> — sets LINT_OUT and LINT_RC in the CURRENT shell, for the
+# same reason vrp_run does: a subshell would assign LINT_RC and discard it.
+lint_run() {
+  set +e
+  LINT_OUT="$("$1" --ciac-lint --root "$REPO_ROOT" "$REPO_ROOT/$2" 2>/dev/null)"
+  LINT_RC=$?
+  set -e
+}
+# lint_of <lint-output> <id> — "<status> <flag>" of one CIAC, from its own line; empty when absent.
+lint_of() { local l; l="$(awk -F'\t' -v id="$2" '$1 == "CIAC-LINT" && $2 == id { print $3 " " $4 }' <<<"$1")"; printf '%s' "${l%%$'\n'*}"; }
+# lint_sum <lint-output> — the summary line's five counts, space-separated.
+lint_sum() { local l; l="$(awk -F'\t' '$1 == "CIAC-LINT-SUMMARY" { print $2 " " $3 " " $4 " " $5 " " $6 }' <<<"$1")"; printf '%s' "${l%%$'\n'*}"; }
+# m21 <label> <stem> <sites> <sed-expr>... — m20's contract: the mutant in MUT_PATH, and
+# MUT_TOOK only when it applied at exactly <sites> lines.
+m21() {
+  local label="$1" stem="$2" want="$3" dst n e
+  shift 3
+  dst="$MUTD6236B/$stem.sh"
+  cp "$VERIFY" "$dst"
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  n="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$dst")"
+  if [ "$n" -eq "$want" ]; then
+    MUT_TOOK=1; ok "$label — mutation applied at exactly $want site(s): the mutant differs from the shipped tool in $n line(s)"
+  else
+    MUT_TOOK=0; bad "$label — mutation applied at $n site(s), expected exactly $want; its arm is not graded"
+  fi
+}
+
+# --- G21-0: DENOMINATOR FIRST — each fixture still declares what the arms below grade. ---
+G21_DEN="$(grep -c -E '^- \[ \] (\*\*)?CIAC-[0-9]+' "$REPO_ROOT/$FIX_LINT" || true)/$(grep -c -F '**CIAC-' "$REPO_ROOT/$FIX_LINTC" || true)/$(grep -c -F '**CIAC-' "$REPO_ROOT/$FIX_LINTM" || true)/$(grep -c -F '| AC-' "$REPO_ROOT/$FIX_SPAN" || true)/$(grep -c -F '**CIAC-' "$REPO_ROOT/$FIX_SPAN" || true)"
+[ "$G21_DEN" = "22/9/4/5/4" ] \
+  && ok "G21-0 V6236-AC1 the fixtures still declare what the arms grade: 22 flag-set entries, 9 control, 4 regression, and 5 rows + 4 CIACs of span syntax (without them every arm below is vacuous)" \
+  || bad "G21-0 V6236-AC1 the fixtures declare $G21_DEN (want 22/9/4/5/4); the arms below would grade the wrong population"
+
+# --- V6236-AC1, the control twin: every entry lints clean, or declared naming its evidence. ---
+lint_run "$VERIFY" "$FIX_LINTC"; LOUT_C="$LINT_OUT"; LRC_C="$LINT_RC"
+G21_BAD=""
+for g21i in 1 2 3 4 5; do [ "$(lint_of "$LOUT_C" "CIAC-$g21i")" = "CLEAN -" ] || G21_BAD="$G21_BAD CIAC-$g21i=[$(lint_of "$LOUT_C" "CIAC-$g21i")]"; done
+for g21i in 6 7 8 9; do [ "$(lint_of "$LOUT_C" "CIAC-$g21i")" = "DECLARED -" ] || G21_BAD="$G21_BAD CIAC-$g21i=[$(lint_of "$LOUT_C" "CIAC-$g21i")]"; done
+[ "$LRC_C" -eq 0 ] && [ -z "$G21_BAD" ] && [ "$(lint_sum "$LOUT_C")" = "declared=9 parsed=9 clean=5 declared-deferral=4 flagged=0" ] \
+  && ok "V6236-AC1 CONTROL — the control twin lints with no flag and exits 0: a count, a test, a match, an emphasised null and a scope assertion read CLEAN, and declarations naming a path, an arm label, and a criterion for each spanned issue in each reference form read DECLARED" \
+  || bad "V6236-AC1 CONTROL — rc=$LRC_C, summary '$(lint_sum "$LOUT_C")', mismatches:${G21_BAD:- none} (want rc 0 and declared=9 parsed=9 clean=5 declared-deferral=4 flagged=0)"
+grep -q -F "$(printf 'CIAC-LINT-SET\tCIAC-1 CIAC-2 CIAC-3 CIAC-4 CIAC-5 CIAC-6 CIAC-7 CIAC-8 CIAC-9')" <<<"$LOUT_C" \
+  && ok "V6236-AC1 CONTROL — the lint prints the plan's declared CIAC set, which a Stage 9 reader needs to tell no CIAC from no record" \
+  || bad "V6236-AC1 CONTROL — the declared-set line is missing or wrong: '$(grep -F 'CIAC-LINT-SET' <<<"$LOUT_C" || true)'"
+
+# --- V6236-AC1, the flag set: each entry carries one defect, and the lint names it. ---
+lint_run "$VERIFY" "$FIX_LINT"; LOUT_F="$LINT_OUT"; LRC_F="$LINT_RC"
+G21_WANT='CIAC-1=CLEAN -|CIAC-2=FLAG not-runnable:python3|CIAC-3=FLAG no-runnable-command|CIAC-4=FLAG method-clause-displaced|CIAC-5=FLAG multi-limb|CIAC-6=FLAG stdin-reader:grep|CIAC-7=FLAG bare-verb:grep|CIAC-8=FLAG multi-limb|CIAC-9=FLAG multi-comparator|CIAC-10=FLAG no-method|CIAC-11=FLAG ciac-unparsed|CIAC-12=FLAG declared-without-evidence|CIAC-13=CLEAN -|CIAC-14=FLAG shell-operator:||CIAC-15=FLAG unterminated-quote:"|CIAC-16=FLAG no-threshold:grep|CIAC-17=FLAG no-comparator:cat|CIAC-18=FLAG no-operand:test|CIAC-19=FLAG no-runnable-command|CIAC-20=FLAG unbackticked-command|CIAC-21=FLAG evidence-misses-spanned-issue:#972|CIAC-22=FLAG declared-without-evidence'
+G21_BAD=""
+G21_N=0
+for g21i in $(seq 1 22); do
+  G21_EXP="${G21_WANT#*CIAC-$g21i=}"; G21_EXP="${G21_EXP%%|CIAC-*}"
+  G21_N=$((G21_N + 1))
+  [ "$(lint_of "$LOUT_F" "CIAC-$g21i")" = "$G21_EXP" ] || G21_BAD="$G21_BAD CIAC-$g21i=[$(lint_of "$LOUT_F" "CIAC-$g21i")] want [$G21_EXP];"
+done
+[ "$LRC_F" -eq 3 ] && [ "$G21_N" -eq 22 ] && [ -z "$G21_BAD" ] && [ "$(lint_sum "$LOUT_F")" = "declared=22 parsed=21 clean=2 declared-deferral=0 flagged=20" ] \
+  && ok "V6236-AC1 FLAGS — the lint names each entry's defect, 20 flags over 22 entries, and exits 3: a refused tool, prose, a displaced clause, several commands, a stdin reader, a bare verb, comparators that disagree, a wrapped method, an unbolded id, a bare declaration, a pipeline, an unterminated quote, a count with no comparator the grader reads, a reader whose exit is not its claim, a primary with no operand, an unclosed span, verb-initial prose, a declaration missing a spanned issue, and a reason in place of a surface" \
+  || bad "V6236-AC1 FLAGS — rc=$LRC_F, summary '$(lint_sum "$LOUT_F")', mismatches:${G21_BAD:- none} (want rc 3 and declared=22 parsed=21 clean=2 declared-deferral=0 flagged=20)"
+[ "$(lint_of "$LOUT_F" CIAC-13)" = "CLEAN -" ] \
+  && ok "V6236-AC1 DEFERRAL READ — a deferral phrase inside the probe is the probe's own pattern: the lint reads the deferral outside every span led by an allowlisted verb, as the executor does, so CIAC-13 lints CLEAN" \
+  || bad "V6236-AC1 DEFERRAL READ — CIAC-13 reads '$(lint_of "$LOUT_F" CIAC-13)' (want CLEAN -)"
+[ "$(lint_of "$LOUT_F" CIAC-20)" = "FLAG unbackticked-command" ] && [ "$(lint_of "$LOUT_F" CIAC-19)" = "FLAG no-runnable-command" ] \
+  && ok "V6236-AC1 COMMAND READ — verb-initial prose is flagged because the executor reads its words as a command, and a span no backtick closes is prose to the lint as it is to the handlers" \
+  || bad "V6236-AC1 COMMAND READ — CIAC-20 '$(lint_of "$LOUT_F" CIAC-20)', CIAC-19 '$(lint_of "$LOUT_F" CIAC-19)' (want FLAG unbackticked-command and FLAG no-runnable-command)"
+
+# --- V6236-AC1, the regression fixture: the lint flags exactly the CIACs the grader misgrades. ---
+lint_run "$VERIFY" "$FIX_LINTM"; LOUT_M="$LINT_OUT"; LRC_M="$LINT_RC"
+vrp_run "$VERIFY" "$FIX_LINTM"; J21M="$VRP_JSON"
+G21_LINT="$(lint_of "$LOUT_M" CIAC-1)|$(lint_of "$LOUT_M" CIAC-2)|$(lint_of "$LOUT_M" CIAC-3)|$(lint_of "$LOUT_M" CIAC-4)"
+G21_GRADE="$(g20_fvo "$J21M" "$G20_CIAC" CIAC-1)|$(g20_fvo "$J21M" "$G20_CIAC" CIAC-2)|$(g20_fvo "$J21M" "$G20_CIAC" CIAC-3)|$(g20_fvo "$J21M" "$G20_CIAC" CIAC-4)"
+[ "$G21_LINT" = "FLAG no-threshold:grep|CLEAN -|FLAG no-threshold:grep|FLAG no-threshold:grep" ] && [ "$LRC_M" -eq 3 ] \
+  && ok "V6236-AC1 REGRESSION — a count with no comparator the grader reads is flagged (CIAC-1, CIAC-3, CIAC-4), and an emphasised comparator the grader reads is clean (CIAC-2)" \
+  || bad "V6236-AC1 REGRESSION — lint '$G21_LINT', rc $LRC_M (want FLAG no-threshold:grep|CLEAN -|FLAG no-threshold:grep|FLAG no-threshold:grep, rc 3)"
+[ "$G21_GRADE" = "integration/FAIL/integration-method-exit-1|integration/PASS/co-occurrence count=0 (== 0)|integration/FAIL/integration-method-exit-1|integration/PASS/integration-method-succeeded" ] \
+  && ok "V6236-AC1 REGRESSION CONTROL — the grader misgrades exactly the three the lint flags: a zero that holds reads FAIL twice and a count that misses its bound reads PASS, while the clean one is graded on its comparator" \
+  || bad "V6236-AC1 REGRESSION CONTROL — the grader reads '$G21_GRADE'"
+
+# --- V6236-AC1, NON-SYNTHETIC: the release #6236 was filed from. Denominator first. ---
+if [ ! -f "$REPO_ROOT/$REAL6236B" ]; then
+  bad "V6236-AC1 PRECONDITION — replay target absent: $REAL6236B (relocated or renamed?)"
+elif [ "$(grep -c -F '**CIAC-' "$REPO_ROOT/$REAL6236B" || true)" -lt 5 ]; then
+  bad "V6236-AC1 VACUOUS — the replay target declares fewer than 5 bold CIAC entries"
+else
+  lint_run "$VERIFY" "$REAL6236B"
+  [ "$LINT_RC" -eq 3 ] && [ "$(lint_sum "$LINT_OUT")" = "declared=5 parsed=5 clean=0 declared-deferral=0 flagged=5" ] \
+    && [ "$(lint_of "$LINT_OUT" CIAC-1)" = "FLAG not-runnable:python3" ] && [ "$(lint_of "$LINT_OUT" CIAC-2)" = "FLAG not-runnable:deploy.sh" ] \
+    && ok "V6236-AC1 NON-SYNTHETIC — the plan the card cites lints 5 of 5 CIACs flagged at authoring, the tool refusals by the tool the grader names" \
+    || bad "V6236-AC1 NON-SYNTHETIC — rc $LINT_RC, summary '$(lint_sum "$LINT_OUT")', CIAC-1 '$(lint_of "$LINT_OUT" CIAC-1)', CIAC-2 '$(lint_of "$LINT_OUT" CIAC-2)'"
+fi
+
+# --- V6236-AC1 RUNS NOTHING: no runner in the lint's bodies, and no trace from a lint run. ---
+G21_BODIES="$(sed -n -e '/^_ciac_lint_say()/,/^}/p' -e '/^_ciac_lint_entry()/,/^}/p' -e '/^_ciac_lint_evidence()/,/^}/p' -e '/^_ciac_lint_one()/,/^}/p' -e '/^ciac_lint()/,/^}/p' "$VERIFY")"
+G21_RUNNERS="$(grep -c -E 'eval_free_run|handle_integration|handle_per_issue|grade_limbs|dispatch_check|deploy_check_exit_code|EVENT_WRITER|DEPLOY_CHECK' <<<"$G21_BODIES" || true)"
+G21_SENS="$(sed -n '/^handle_integration()/,/^}/p' "$VERIFY" | grep -c -F 'eval_free_run' || true)"
+[ "$(wc -l <<<"$G21_BODIES" | tr -d ' ')" -ge 60 ] && [ "$G21_RUNNERS" = 0 ] && [ "$G21_SENS" -ge 1 ] \
+  && ok "V6236-AC1 RUNS NOTHING — the lint's five bodies name no runner, no dispatch and no delegation target (sensitivity: the cross-issue handler's body names eval_free_run $G21_SENS time(s))" \
+  || bad "V6236-AC1 RUNS NOTHING — the lint's bodies name a runner $G21_RUNNERS time(s), or were not read ($(wc -l <<<"$G21_BODIES" | tr -d ' ') lines), or the sensitivity arm read $G21_SENS"
+G21_ONE="$(grep -c -E "IFS='\`'|split\([^)]*\"\`\"|tr '\`'" <<<"$G21_BODIES" || true)"
+G21_CALLS="$(grep -c -E 'method_spans|method_limbs|extract_command' <<<"$G21_BODIES" || true)"
+[ "$G21_ONE" = 0 ] && [ "$G21_CALLS" -ge 2 ] \
+  && ok "V6236-AC1 ONE SPLITTER — the lint splits no method itself: it reads spans and commands through method_spans, method_limbs and extract_command ($G21_CALLS call line(s))" \
+  || bad "V6236-AC1 ONE SPLITTER — the lint's bodies carry $G21_ONE backtick split(s) of their own and $G21_CALLS call line(s) to the shared splitter"
+G21STUB="$(mktemp -d -t verify-plan-6236b-stub.XXXXXX)"
+mkdir -p "$G21STUB/core/deploy" "$G21STUB/release/tools" "$G21STUB/plan"
+cp "$VERIFY" "$G21STUB/release/tools/"
+printf '#!/usr/bin/env bash\ntouch "%s/deploy-ran"\nexit 0\n' "$G21STUB" > "$G21STUB/core/deploy/deploy.sh"
+printf '#!/usr/bin/env bash\ntouch "%s/event-ran"\nexit 0\n' "$G21STUB" > "$G21STUB/release/tools/append-pipeline-event.sh"
+chmod +x "$G21STUB/core/deploy/deploy.sh" "$G21STUB/release/tools/append-pipeline-event.sh"
+cat > "$G21STUB/plan/p.md" <<'EOF'
+# stub plan
+## Verification Plan
+**#990 — a declared deploy row**
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-1 | `bash core/deploy/deploy.sh --check` | in-sync |
+## Cross-Issue Acceptance Criteria
+- [ ] **CIAC-1 (#990 × #991 on `stub`):** a deploy invocation. *Method:* `bash core/deploy/deploy.sh --check` exits 0.
+- [ ] **CIAC-2 (#990 × #991 on `stub`):** a runtime-suite declaration. *Method:* suite-skip for the stub runtime.
+- [ ] **CIAC-3 (#990 × #991 on `stub`):** a count. *Method:* `grep -c -F "CIAC-3" plan/p.md` at least 1.
+EOF
+set +e
+"$G21STUB/release/tools/verify-release-plan.sh" --ciac-lint --root "$G21STUB" "$G21STUB/plan/p.md" >/dev/null 2>&1 </dev/null
+G21_LRC=$?
+set -e
+G21_TRACE_LINT="$( [ -e "$G21STUB/deploy-ran" ] && printf deploy; [ -e "$G21STUB/event-ran" ] && printf event; true )"
+set +e
+"$G21STUB/release/tools/verify-release-plan.sh" --format=json --emit-events --root "$G21STUB" "$G21STUB/plan/p.md" >/dev/null 2>&1 </dev/null
+set -e
+G21_TRACE_RUN="$( [ -e "$G21STUB/deploy-ran" ] && printf deploy; true )"
+[ -z "$G21_TRACE_LINT" ] && [ "$G21_LRC" -eq 3 ] && [ "$G21_TRACE_RUN" = deploy ] \
+  && ok "V6236-AC1 RUNS NOTHING (dynamic) — a lint run over a plan naming the deploy check leaves no trace of the deploy check or the event writer, and a normal run of the same plan does run the deploy check (sensitivity)" \
+  || bad "V6236-AC1 RUNS NOTHING (dynamic) — lint trace '$G21_TRACE_LINT', lint rc $G21_LRC, normal-run trace '$G21_TRACE_RUN' (want none, 3, deploy)"
+rm -rf "$G21STUB"
+
+# --- D55: an unterminated quote reads ERROR naming the quote; a genuine operator stays UNRUNNABLE. ---
+vrp_run "$VERIFY" "$FIX_SPAN"; J21S="$VRP_JSON"; RC21S="$VRP_RC"
+G21_GOT="$(g20_fvo "$J21S" "$G20_CIAC" CIAC-1)"
+case "$G21_GOT" in
+  integration/ERROR/unterminated-quote:*) ok "G21 D55 CIAC-1 — an unterminated quote on the cross-issue route reads ERROR, naming the quote" ;;
+  *) bad "G21 D55 CIAC-1 — got '$G21_GOT' (want integration/ERROR/unterminated-quote:...)" ;;
+esac
+G21_GOT="$(g20_fvo "$J21S" "$G20_CIAC" CIAC-2)"
+case "$G21_GOT" in
+  "integration/ERROR/limbs run 0 of 2: limb 1 python3 did not run (outside the verb set); limb 2 grep ERROR unterminated-quote:"*) ok "G21 D55 CIAC-2 — as the designated command of a method naming two, an unterminated quote reads ERROR, and no command in the method ran" ;;
+  *) bad "G21 D55 CIAC-2 — got '$G21_GOT' (want integration/ERROR/limbs run 0 of 2: ... grep ERROR unterminated-quote:...)" ;;
+esac
+G21_GOT="$(g20_fvo "$J21S" '#985' AC-5)"
+case "$G21_GOT" in
+  "per-issue/UNRUNNABLE/shell-operator:|"*) ok "G21 D55 CONTROL — a genuine shell operator outside quotes stays UNRUNNABLE, naming the operator" ;;
+  *) bad "G21 D55 CONTROL — AC-5 got '$G21_GOT' (want per-issue/UNRUNNABLE/shell-operator:|...)" ;;
+esac
+[ "$RC21S" -eq 3 ] \
+  && ok "G21 D55 — the unterminated quote fails the run, like every other could-not-read row (exit 3)" \
+  || bad "G21 D55 — the span-syntax fixture exits $RC21S (want 3)"
+
+# --- D38: a command inside a span no backtick closes runs on no route. ---
+G21_A1="$(g20_fvo "$J21S" '#985' AC-1)"; G21_A2="$(g20_fvo "$J21S" '#985' AC-2)"
+[ "$G21_A1" = "per-issue/SKIP/no-executable-command-in-method" ] && [ "$G21_A2" = "per-issue/SKIP/no-executable-command-in-method" ] \
+  && ok "G21 D38 CLOSED SPAN — an unclosed span is prose on the per-issue keyword route (AC-1) and the residual route (AC-2): no command runs, and the row is the no-command SKIP" \
+  || bad "G21 D38 CLOSED SPAN — AC-1 '$G21_A1', AC-2 '$G21_A2' (want per-issue/SKIP/no-executable-command-in-method twice)"
+G21_GOT="$(g20_fvo "$J21S" '#985' AC-3)"
+case "$G21_GOT" in
+  */UNRUNNABLE/tool-invocation-outside-executor-allowlist:python3*) ok "G21 D38 CLOSED SPAN — beside a tool, an unclosed command is never the designated command: the tool is named and nothing runs (AC-3)" ;;
+  *) bad "G21 D38 CLOSED SPAN — AC-3 got '$G21_GOT' (want .../UNRUNNABLE/tool-invocation-outside-executor-allowlist:python3...)" ;;
+esac
+G21_GOT="$(g20_fvo "$J21S" "$G20_CIAC" CIAC-3)"
+[ "$G21_GOT" = "integration/SKIP/documented-decision-method (no runnable command)" ] \
+  && ok "G21 D38 CLOSED SPAN — on the cross-issue route an unclosed command is prose too (CIAC-3)" \
+  || bad "G21 D38 CLOSED SPAN — CIAC-3 got '$G21_GOT' (want integration/SKIP/documented-decision-method (no runnable command))"
+G21_C1="$(g20_fvo "$J21S" '#985' AC-4)"; G21_C2="$(g20_fv "$J21S" "$G20_CIAC" CIAC-4 verdict)"
+[ "$G21_C1" = "per-issue/PASS/command-succeeded" ] && [ "$G21_C2" = PASS ] \
+  && ok "G21 D38 CLOSED SPAN CONTROL — the same commands, closed, run and pass on both routes" \
+  || bad "G21 D38 CLOSED SPAN CONTROL — AC-4 '$G21_C1', CIAC-4 '$G21_C2' (want per-issue/PASS/command-succeeded and PASS)"
+
+# --- SEEDED FAILURES. Each removes one rule and names the answer it must move to. ---
+# M1 — the lint's verb check off: a refused tool falls through to the command readers.
+m21 "V6236-AC1 M1" g21-m1-lint-verb-check-off 1 's/  if ! is_runnable_verb "\$lead"; then/  if false; then/'
+if [ "$MUT_TOOK" = 1 ]; then
+  lint_run "$MUT_PATH" "$FIX_LINT"
+  G21_G="$(lint_of "$LINT_OUT" CIAC-2)"
+  [ -n "$G21_G" ] && [ "$G21_G" != "FLAG not-runnable:python3" ] \
+    && ok "V6236-AC1 M1 detected — without the lint's verb check the refused tool is no longer named ($G21_G)" \
+    || bad "V6236-AC1 M1 SURVIVED — CIAC-2 '$G21_G'"
+fi
+# M2 — the lint's declared-id scan blanked: an entry the grading parser never reads goes unnoticed.
+m21 "V6236-AC1 M2" g21-m2-id-scan-blanked 1 's/if \(match\(s, \/\^CIAC-\[0-9\]\+\/\)\) print substr\(s, RSTART, RLENGTH\)/if (match(s, \/^CIAC-[0-9]+\/)) print ""/'
+if [ "$MUT_TOOK" = 1 ]; then
+  lint_run "$MUT_PATH" "$FIX_LINT"
+  [ -z "$(lint_of "$LINT_OUT" CIAC-11)" ] && [ "$(lint_sum "$LINT_OUT")" = "declared=21 parsed=21 clean=2 declared-deferral=0 flagged=19" ] \
+    && ok "V6236-AC1 M2 detected — without the independent id scan the unbolded CIAC-11 is silently absent: 21 declared and 19 flagged" \
+    || bad "V6236-AC1 M2 SURVIVED — CIAC-11 '$(lint_of "$LINT_OUT" CIAC-11)', summary '$(lint_sum "$LINT_OUT")'"
+fi
+# M3 — the lint reads the deferral on the raw cell: the probe's own pattern reads as a declaration.
+m21 "V6236-AC1 M3" g21-m3-deferral-on-raw-cell 1 's/  outside="\$\(method_outside_verb_spans "\$method"\)"/  outside="$method"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  lint_run "$MUT_PATH" "$FIX_LINT"
+  G21_G="$(lint_of "$LINT_OUT" CIAC-13)"
+  [ -n "$G21_G" ] && [ "$G21_G" != "CLEAN -" ] \
+    && ok "V6236-AC1 M3 detected — read on the raw cell, the probe's own pattern reads as a declaration and CIAC-13 is no longer clean ($G21_G)" \
+    || bad "V6236-AC1 M3 SURVIVED — CIAC-13 '$G21_G'"
+fi
+# M4 — the rule for a count with no comparator off: the regression fixture's misgraded CIAC-1 lints clean.
+m21 "V6236-AC1 M4" g21-m4-no-threshold-off 1 's/if count_mode_cmd "\$cmd"; then _ciac_lint_say/if false; then _ciac_lint_say/'
+if [ "$MUT_TOOK" = 1 ]; then
+  lint_run "$MUT_PATH" "$FIX_LINTM"
+  [ "$(lint_of "$LINT_OUT" CIAC-1)" = "CLEAN -" ] \
+    && ok "V6236-AC1 M4 detected — without the rule the misgraded count lints CLEAN, which the grader then grades on its exit status" \
+    || bad "V6236-AC1 M4 SURVIVED — CIAC-1 '$(lint_of "$LINT_OUT" CIAC-1)'"
+fi
+# M5 — the closure line in the one splitter removed: an unclosed command runs again.
+m21 "G21 D38 M5" g21-m5-closure-removed 1 's/if \[ "\$\{#ticks\}" -le "\$\(\(i - 2\)\)" \]; then cls=mention/if false; then cls=mention/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_SPAN"; JM21_5="$VRP_JSON"
+  if mutant_ran "G21 D38 M5"; then
+    [ "$(g20_fv "$JM21_5" '#985' AC-1 verdict)" = PASS ] && [ "$(g20_fv "$JM21_5" '#985' AC-2 verdict)" = PASS ] && [ "$(g20_fv "$JM21_5" "$G20_CIAC" CIAC-3 verdict)" = PASS ] \
+      && ok "G21 D38 M5 detected — without the closure line the unclosed commands run and pass on the keyword, residual and cross-issue routes" \
+      || bad "G21 D38 M5 SURVIVED — AC-1 '$(g20_fvo "$JM21_5" '#985' AC-1)', AC-2 '$(g20_fvo "$JM21_5" '#985' AC-2)', CIAC-3 '$(g20_fvo "$JM21_5" "$G20_CIAC" CIAC-3)'"
+  fi
+fi
+# M6 — the refusal's quote arm read as can't-run-here: the quote no longer fails the run.
+m21 "G21 D55 M6" g21-m6-quote-as-unrunnable 1 's/"\$VERDICT_ERROR" "\$\(unreadable_observed "unterminated-quote:/"$VERDICT_UNRUNNABLE" "$(unreadable_observed "unterminated-quote:/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_SPAN"; JM21_6="$VRP_JSON"; RCM21_6="$VRP_RC"
+  if mutant_ran "G21 D55 M6"; then
+    [ "$(g20_fv "$JM21_6" "$G20_CIAC" CIAC-1 verdict)" = UNRUNNABLE ] && [ "$RCM21_6" -eq 0 ] \
+      && ok "G21 D55 M6 detected — with the quote read as can't-run-here, CIAC-1 reads UNRUNNABLE and the fixture exits 0: the D55 arms read the refusal's own verdict" \
+      || bad "G21 D55 M6 SURVIVED — CIAC-1 '$(g20_fvo "$JM21_6" "$G20_CIAC" CIAC-1)', rc $RCM21_6"
+  fi
+fi
+# M7 — the evidence rule's per-spanned-issue test removed: one issue's criterion vouches for two.
+m21 "V6236-AC1 M7" g21-m7-per-issue-evidence-off 1 's/\[ -z "\$miss" \] \|\| \{/true || {/'
+if [ "$MUT_TOOK" = 1 ]; then
+  lint_run "$MUT_PATH" "$FIX_LINT"
+  [ "$(lint_of "$LINT_OUT" CIAC-21)" = "DECLARED -" ] \
+    && ok "V6236-AC1 M7 detected — without the per-spanned-issue test one issue's criterion passes as the evidence for a CIAC over two" \
+    || bad "V6236-AC1 M7 SURVIVED — CIAC-21 '$(lint_of "$LINT_OUT" CIAC-21)'"
+fi
+rm -rf "$MUTD6236B"
 
 # ---------------------------------------------------------------------------
 # Summary
