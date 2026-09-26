@@ -1614,7 +1614,16 @@ _cc_row_findings() {
   # (d) CHANGELOG section present — N/A (no finding) pre-CHANGELOG (file absent),
   # mirroring automated-closeout.sh phase_append_changelog pre-CHANGELOG SKIP.
   # Corpus-keyed, same as the DIGEST.
-  if [[ -f "$_changelog" ]]; then
+  #
+  # VERSION-ONLY LIMB (#4318) — class `version-less` is DECLARED EXCLUDED, like (f) and
+  # (h)+(i). The CHANGELOG is keyed on `## [vX.Y]`, and the close-out writes nothing for a
+  # version-less release: automated-closeout.sh phase_append_changelog SKIPs it, and
+  # generate_release_index.py refuses to invent a slug-keyed entry. Asking such a row for a
+  # section asks for something its own close is forbidden to produce. The exclusion is
+  # COUNTED in the caller's DENOM line. Slug-keyed sections written for early version-less
+  # releases, before the close-out gained that skip, stay as history: the exclusion
+  # neither demands nor forbids them.
+  if [[ "$_class" == "versioned" && -f "$_changelog" ]]; then
     if ! /usr/bin/grep -qE "^## \[?${_ckey_re}\]?[[:space:]]" "$_changelog" 2>/dev/null; then
       printf '%s: missing CHANGELOG.md ## [%s] section\n' "$_ver" "$_ckey"
     fi
@@ -2362,12 +2371,13 @@ _cc_compute_verdict() {
   # fell into NEITHER would show up as a broken identity rather than as an absence
   # nobody notices. The version-less count is called out separately because that class
   # is enumerated for the class-independent limbs and DECLARED EXCLUDED for the
-  # version-only ones ((f) tag, (h) published Release, (i) body-drift); without this
+  # version-only ones ((d) CHANGELOG section, (f) tag, (h) published Release, (i)
+  # body-drift); without this
   # figure, "no findings on version-less rows" and "nothing looked at version-less
   # rows" produce byte-identical output.
   # STDERR ONLY — the stdout protocol line (CLEAN/INCOMPLETE/NOT-EVALUATED/SKIP) is parsed by
   # string surgery at all three call sites.
-  printf 'close-completeness: DENOM — %s row(s) enumerated (of which %s version-less: version-only limbs declared EXCLUDED, not silently skipped) / %s row(s) not in scope (pre-cutoff, non-VERIFIED, or allowlisted) / %s total LOG data row(s)\n' \
+  printf 'close-completeness: DENOM — %s row(s) enumerated (of which %s version-less: version-only limbs (d) CHANGELOG · (f) tag · (h) published Release · (i) body-drift declared EXCLUDED, not silently skipped) / %s row(s) not in scope (pre-cutoff, non-VERIFIED, or allowlisted) / %s total LOG data row(s)\n' \
     "$cc_targets" "$cc_vl_targets" "$((cc_rows_total - cc_targets))" "$cc_rows_total" >&2
 
   # (e-aggregate) .version stamp — must exist AND equal the most-recent VERIFIED
