@@ -47,6 +47,8 @@ readonly MODE_FILE="${HOOK_DIR}/.mode"
 readonly EGRESS_ALLOWLIST="${HOOK_DIR}/../egress-allowlist.txt"
 readonly WEBFETCH_ALLOWLIST="${HOOK_DIR}/../webfetch-allowlist.txt"
 readonly SSH_ALLOWLIST="${HOOK_DIR}/../ssh-allowlist.txt"
+# Line prefix of a row-scope directive in egress-allowlist.txt (read by is_allowlisted).
+readonly EGRESS_SCOPE_DIRECTIVE='# egress-scope:'
 
 # --- ABSOLUTE-PATH-AWARE ANCHOR ---
 # Canonical anchor pattern that captures the 5 macOS/Linux absolute-path
@@ -192,20 +194,73 @@ if command -v scope_guard_gate >/dev/null 2>&1; then scope_guard_gate "$CWD"; fi
 
 # --- BLOCK LOG HELPER ---
 #
-# `evidence` is the rule-specific detail apply_block already receives — the denied
-# path, the target host, the cause class. It used to be threaded into the WARN log
-# and dropped on the floor in enforce, where log_block was called with the rule id
-# alone. The record then said THAT something was denied but never WHAT, which makes
-# a block log unreadable at exactly the mode where it is the only observation
-# surface: an operator watching a shakedown could see a rule firing and had no way
-# to tell a genuine catch from a false positive. Additive — the field is optional,
-# and every existing consumer reads by key.
+# Every refusal record names the rule and the tool and carries `evidence` — the
+# rule-specific detail apply_block receives: the denied path, the target host, the cause
+# class. The block log (enforce) adds `input_digest` and `cwd`; the warn log (warn) adds
+# `reason`. Neither carries the command text: the digest is a one-way hash of the tool
+# input, and the warn log carries no digest at all.
+#
+# For most rules `evidence` is what lets an operator tell a genuine catch from a false
+# positive. For BLOCK-EGRESS-007 `unparseable` it cannot: that cause has no path, so its
+# evidence is always the constant `path=unknown cause=unparseable`. Records of that one
+# class therefore carry two more keys, in BOTH writers:
+#   features    the command's STRUCTURE — never its text, offsets or lengths:
+#                 schema_version  versions this set (the integer 1)
+#                 oracle          the parser that judged the syntax: `bash-<major>.<minor>`
+#                                 (the running bash), or `unknown`
+#                 shell_parse     that parser's verdict (`-n`: read, never executed):
+#                                 `ok` = accepted, so the refusal was false; `error` =
+#                                 rejected BY THAT PARSER — the shell that runs the
+#                                 command may still accept it (bash and zsh diverge);
+#                                 `skipped` = above the size cap, not checked;
+#                                 `unavailable` = the parser is missing or gave no verdict
+#                 heredoc         the heredoc delimiter quoting it uses: none | quoted |
+#                                 unquoted | both, `skipped` above the cap, or
+#                                 `unavailable` when the scan could not run
+#   hook_build  the first 16 hex of the git blob id of the hook file that wrote the
+#               record, so a record names its producer across redeploys
+#               (`git log --raw --no-abbrev -- core/hooks/block-egress.sh` resolves it)
+# A specificity reading classifies the class by `features.shell_parse`, scoped by
+# `features.oracle`: `error` -> rejected by the recorded oracle (a true positive where
+# that oracle's grammar is the executing shell's), `ok` -> benign-shape, `skipped` or
+# `unavailable` -> unclassified.
+#
+# Both keys are optional; every other record keeps the plain template, and every
+# consumer reads by key. Neither can change a verdict: the features are computed before
+# apply_block is entered, and apply_block takes its exit from the mode alone. The write
+# path is failure-proof because it must be: under `set -e` a failing command inside a
+# function ends this hook with status 1, which PreToolUse treats as NON-blocking, so an
+# unguarded step here would lose the deny that follows it. The feature path is bounded in
+# TIME as well as status — each computation is linear in the command and capped — because
+# a hook that outlasts its timeout does not block either. A record whose features cannot
+# be computed carries the not-computed set (every member `unavailable`, the oracle
+# `unknown`); one whose features cannot be written is written with `hook_build` alone;
+# and one that cannot carry either is written plain.
 log_block() {
   local rule_id="$1"
   local evidence="${2:-}"
+  local features="${3:-}"   # optional feature object — only the -007 unparseable class passes one
   local ts; ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-  local tool_input; tool_input="$("$PRINTF" '%s' "$INPUT" | "$JQ" -c '.tool_input // {}')"
-  local input_digest; input_digest="$("$PRINTF" '%s' "$tool_input" | /usr/bin/shasum -a 256 | "$GREP" -oE '^[a-f0-9]+' | /usr/bin/head -c 16)"
+  # Both digest steps are guarded. The 16 hex are cut by parameter expansion — the same
+  # bytes the former `| grep -oE | head -c 16` cut, with no pipe into a short-circuiting
+  # reader.
+  local tool_input; tool_input="$("$PRINTF" '%s' "$INPUT" | "$JQ" -c '.tool_input // {}')" || tool_input='{}'
+  local input_digest; input_digest="$("$PRINTF" '%s' "$tool_input" | /usr/bin/shasum -a 256)" || input_digest=""
+  input_digest="${input_digest%% *}"; input_digest="${input_digest:0:16}"
+  [ -n "$input_digest" ] || input_digest="unknown"
+  if [ -n "$features" ]; then
+    local build; build="$(egress_hook_build)" || build="unknown"
+    "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
+      --arg tool "$TOOL_NAME" --arg digest "$input_digest" --arg cwd "$CWD" \
+      --arg evidence "$evidence" --arg build "$build" --argjson features "$features" \
+      '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, input_digest:$digest, cwd:$cwd, evidence:$evidence, hook_build:$build, features:$features}' \
+      >> "$BLOCK_LOG" 2>/dev/null && return 0
+    "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
+      --arg tool "$TOOL_NAME" --arg digest "$input_digest" --arg cwd "$CWD" \
+      --arg evidence "$evidence" --arg build "$build" \
+      '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, input_digest:$digest, cwd:$cwd, evidence:$evidence, hook_build:$build}' \
+      >> "$BLOCK_LOG" 2>/dev/null && return 0
+  fi
   "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
     --arg tool "$TOOL_NAME" --arg digest "$input_digest" --arg cwd "$CWD" \
     --arg evidence "$evidence" \
@@ -218,7 +273,21 @@ log_warn() {
   local rule_id="$1"
   local reason="$2"
   local evidence="$3"  # tool-specific evidence (command digest, URL, etc.) — may contain digest, NOT raw
+  local features="${4:-}"   # optional feature object — only the -007 unparseable class passes one
   local ts; ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  if [ -n "$features" ]; then
+    local build; build="$(egress_hook_build)" || build="unknown"
+    "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
+      --arg tool "$TOOL_NAME" --arg reason "$reason" --arg evidence "$evidence" \
+      --arg build "$build" --argjson features "$features" \
+      '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, reason:$reason, evidence:$evidence, hook_build:$build, features:$features}' \
+      >> "$WARN_LOG" 2>/dev/null && return 0
+    "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
+      --arg tool "$TOOL_NAME" --arg reason "$reason" --arg evidence "$evidence" \
+      --arg build "$build" \
+      '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, reason:$reason, evidence:$evidence, hook_build:$build}' \
+      >> "$WARN_LOG" 2>/dev/null && return 0
+  fi
   "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
     --arg tool "$TOOL_NAME" --arg reason "$reason" --arg evidence "$evidence" \
     '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, reason:$reason, evidence:$evidence}' \
@@ -231,11 +300,12 @@ apply_block() {
   local reason="$2"
   local override="$3"
   local evidence="${4:-}"
+  local features="${5:-}"   # optional feature object — only the -007 unparseable class passes one
   local mode; mode="$(get_mode)"
 
   case "$mode" in
     warn)
-      log_warn "$rule_id" "$reason" "$evidence"
+      log_warn "$rule_id" "$reason" "$evidence" "$features"
       "$PRINTF" '[CLAUDE-HOOK:%s:%s] WARN (would-block, .mode=warn): %s\n' "$HOOK_NAME" "$rule_id" "$reason" >&2
       exit 0
       ;;
@@ -243,7 +313,7 @@ apply_block() {
       exit 0
       ;;
     enforce|*)
-      log_block "$rule_id" "$evidence"
+      log_block "$rule_id" "$evidence" "$features"
       "$PRINTF" '[CLAUDE-HOOK:%s:%s] BLOCKED: %s\nOverride: %s\n' "$HOOK_NAME" "$rule_id" "$reason" "$override" >&2
       exit 2
       ;;
@@ -260,16 +330,63 @@ matches() {
   "$PRINTF" '%s' "$COMMAND_CMDPOS" | "$GREP" -qE "$1"
 }
 
-# Check a value against a glob-pattern allowlist file (bash case globbing)
+# Check a value against a glob-pattern allowlist file (bash case globbing).
+#
+#   is_allowlisted <value> <allowlist> [<domain>]
+#
+# No <domain>: every non-comment row is a candidate. This is the form the single-domain
+# files use (ssh-allowlist.txt at -011, webfetch-allowlist.txt at -013), and it returns
+# the verdicts the loop this function replaced returned: a scope directive begins with
+# `#`, so it is a comment here exactly as it always was.
+#
+# <domain> given (`host` at -004, `gh-api-path` at -007): egress-allowlist.txt serves two
+# match domains, and a row is a candidate only in its own. The allowlist's header states
+# the grammar; this function applies it:
+#   * `# egress-scope: host` / `# egress-scope: gh-api-path` declares the domain of the
+#     ONE row on the line immediately below it. Any other line in that position (blank,
+#     comment, another directive) discards it, so a scope never carries onto a later row.
+#   * A directive naming any other value makes that row match NOWHERE — fail closed.
+#   * A row with no directive above it is a candidate in BOTH domains: the pre-change
+#     behaviour, so an operator row written before directives existed keeps its grant.
+#   * At `gh-api-path`, a pattern whose FIRST path segment carries a glob character is
+#     never a candidate, declared or not. A host wildcard reaches a path only by
+#     absorbing the whole front of it, and a query string lets any write end in
+#     host-shaped text (`issues?x=a.github.com`), so a leading glob is the one shape
+#     that must never grant a gh api write.
 is_allowlisted() {
   local value="$1"
   local allowlist="$2"
+  local domain="${3:-}"
   [ -f "$allowlist" ] || return 1
-  local pattern
+  local pattern pending="" scope first_seg
   while IFS= read -r pattern || [ -n "$pattern" ]; do
+    scope="$pending"
+    pending=""
     case "$pattern" in
+      "$EGRESS_SCOPE_DIRECTIVE"*)
+        pending="${pattern#"$EGRESS_SCOPE_DIRECTIVE"}"
+        pending="${pending#"${pending%%[![:space:]]*}"}"
+        pending="${pending%"${pending##*[![:space:]]}"}"
+        case "$pending" in
+          host|gh-api-path) ;;
+          *) pending="invalid" ;;
+        esac
+        continue
+        ;;
       ''|'#'*) continue;;
     esac
+    if [ -n "$domain" ]; then
+      if [ -n "$scope" ] && [ "$scope" != "$domain" ]; then
+        continue
+      fi
+      if [ "$domain" = "gh-api-path" ]; then
+        first_seg="${pattern#/}"
+        first_seg="${first_seg%%/*}"
+        case "$first_seg" in
+          *'*'*|*'?'*|*'['*) continue ;;
+        esac
+      fi
+    fi
     # shellcheck disable=SC2254
     case "$value" in
       $pattern) return 0;;
@@ -542,15 +659,17 @@ egress_old_reachable_gh_api() {
 # or a leading `:name`. The AUTHORITY PREFIX is the first THREE path segments:
 # GitHub REST paths are `repos/{owner}/{repo}/...`, `orgs/{org}/...` and
 # `users/{user}/...`, so the first three segments are exactly what decides WHICH
-# repository a write reaches — and every path pattern in the allowlist fixes those
-# three literally. The threshold is read off the allowlist's own shape, not chosen.
+# repository a write reaches. The threshold is at least as strict as any path
+# pattern's literal prefix: a path pattern must pin the account literally (the
+# allowlist header's prefix-anchoring rule), and the account sits inside the first
+# three segments.
 #
 #   unevaluable IN the authority  -> return 1; the caller denies, naming the cause
 #   unevaluable BELOW it          -> substitute `*` and adjudicate normally
 #
 # The second half is sound because every allowlist path pattern is prefix-anchored:
-# the literal prefix is fixed, so whatever the variable expands to, the path still
-# begins inside an allowlisted repository. It is also what keeps a bulk loop over
+# its literal prefix pins the account, so whatever the variable expands to, the path
+# still begins inside an allowlisted account. It is also what keeps a bulk loop over
 # issue numbers working.
 #
 # A blanket deny on any variable-bearing path was rejected on evidence: it would
@@ -629,6 +748,141 @@ log_would_fire() {
     >> "$WARN_LOG" 2>/dev/null || true
 }
 
+# ---- The `unparseable` refusal record's feature set ----
+#
+# An `unparseable` refusal has no path, so its evidence is a constant and cannot say
+# whether the refusal was right. These helpers record what CAN say it without the
+# command: enums, a version number, the parser that judged, and the producing build —
+# never command text, offsets, lengths or path fragments. Each prints exactly one value
+# and returns 0. That is load-bearing: they run on the way into apply_block, and under
+# `set -e` a failing command inside a function ends this hook with status 1, which
+# PreToolUse treats as NON-blocking — an enforce-mode deny would be lost. Every fallible
+# step therefore sits in a condition or carries a fallback.
+readonly EGRESS_007_FEATURES_SCHEMA_VERSION=1
+readonly EGRESS_007_PARSE_ORACLE="${BASH:-/bin/bash}"
+# Characters. ONE bound for the whole feature path, applied once, because both
+# computations read the same caller-sized input: above it neither runs, and both report
+# `skipped`. Both are linear in the command, so the cap bounds their cost as well.
+readonly EGRESS_007_PARSE_CAP=1048576
+
+# Which parser judges the syntax. The oracle is the running bash, so its version is known
+# without a subprocess; were the two ever to differ, the label reads `unknown` rather
+# than naming a parser that did not run.
+egress_parse_oracle_label() {
+  local maj="${BASH_VERSINFO[0]:-}" min="${BASH_VERSINFO[1]:-}"
+  case "$maj" in ''|*[!0-9]*) maj="" ;; esac
+  case "$min" in ''|*[!0-9]*) min="" ;; esac
+  if [ "$EGRESS_007_PARSE_ORACLE" = "${BASH:-}" ] && [ -n "$maj" ] && [ -n "$min" ]; then
+    "$PRINTF" 'bash-%s.%s' "$maj" "$min"
+  else
+    "$PRINTF" 'unknown'
+  fi
+  return 0
+}
+
+# Does the oracle accept the command's syntax? `-n` reads and never executes; `env -i`
+# hands the child no inherited BASH_ENV and no exported functions. The command travels
+# on stdin (a here-string), never argv, so its size and a leading `-` are inert. Only the
+# oracle's own verdicts map to verdict values — exit 0 is `ok`, exit 2 (bash's
+# syntax-error status) is `error`. Any other outcome — a failed redirection, a failed
+# exec, a signal — is an instrument failure and reads `unavailable`, never `error`: a
+# failed run must not read as proof that the refusal was right. The caller applies the
+# size cap.
+egress_shell_parse() {
+  local rc=0
+  if [ ! -x "$EGRESS_007_PARSE_ORACLE" ]; then "$PRINTF" 'unavailable'; return 0; fi
+  /usr/bin/env -i "$EGRESS_007_PARSE_ORACLE" -n >/dev/null 2>&1 <<<"$1" || rc=$?
+  case "$rc" in
+    0) "$PRINTF" 'ok' ;;
+    2) "$PRINTF" 'error' ;;
+    *) "$PRINTF" 'unavailable' ;;
+  esac
+  return 0
+}
+
+# Which heredoc delimiter quoting does the raw command use? A quoted delimiter makes the
+# body literal; an unquoted one leaves `$( )` live inside it. `<<<` is a here-string and
+# is not counted, and the delimiter WORD is never recorded — only its quoting.
+# Approximate by design (a `<<` inside quotes or arithmetic counts too): the oracle, not
+# this scan, decides whether a refusal was correct. The caller applies the size cap.
+#
+# LINEAR in the command's length, so the cap bounds the scan's cost and not only its
+# input: two extended-regex searches, byte-wise in the C locale, each stopping at its first
+# match. The per-occurrence scan these replace rescanned and re-copied the remainder at
+# every operator, which is superlinear under a multibyte locale — tens of seconds on the
+# deny path for a well-formed command of 60K characters — and a hook that outlasts its
+# timeout does not block.
+#
+# The two expressions state, operator by operator, the scan that loop was written to
+# perform. A maximal run of `<` opens a heredoc only when its length is two more than a
+# multiple of three: each `<<<` is a here-string, consumed whole from the left. Then come
+# one optional `-` — the `<<-` operator's, only directly after the run — then blanks, then
+# the delimiter word, which runs to whitespace or to one of ; & | < > ( ), where the shell's
+# own tokenizer ends it. (As bash 3.2 ran the loop's one-bracket terminator set, its word
+# did not end at `>`, `(` or `)`, so a syntax error such as `<<(x` read `unquoted`; it reads
+# `none` here.) The word is QUOTED when it carries a single quote, a double quote or a
+# backslash anywhere, and UNQUOTED when it is non-empty and carries none of them.
+readonly EGRESS_007_HEREDOC_QUOTED_ERE='(^|[^<])(<<<)*<<-?[[:blank:]]*[^[:space:];&|<>()]*['"'"'"\]'
+readonly EGRESS_007_HEREDOC_UNQUOTED_ERE='(^|[^<])(<<<)*<<(-[[:blank:]]*[^[:space:];&|<>()'"'"'"\]+|[[:blank:]]+[^[:space:];&|<>()'"'"'"\]+|[^-[:space:];&|<>()'"'"'"\][^[:space:];&|<>()'"'"'"\]*)([[:space:];&|<>()]|$)'
+# Only the searches' own counts map to a class: `-c -m 1` prints 1 on a match and 0 on
+# none, and a search that could not run prints neither, so it reads `unavailable` — never
+# a class. The command travels as a here-string, never argv.
+egress_heredoc_kind() {
+  local q="" u=""
+  q="$(LC_ALL=C "$GREP" -c -m 1 -E -e "$EGRESS_007_HEREDOC_QUOTED_ERE" <<<"$1" 2>/dev/null)" || true
+  u="$(LC_ALL=C "$GREP" -c -m 1 -E -e "$EGRESS_007_HEREDOC_UNQUOTED_ERE" <<<"$1" 2>/dev/null)" || true
+  case "${q}:${u}" in
+    1:1) "$PRINTF" 'both' ;;
+    1:0) "$PRINTF" 'quoted' ;;
+    0:1) "$PRINTF" 'unquoted' ;;
+    0:0) "$PRINTF" 'none' ;;
+    *)   "$PRINTF" 'unavailable' ;;
+  esac
+  return 0
+}
+
+# The git blob id of the running hook file, first 16 hex; `unknown` when any step fails.
+egress_hook_build() {
+  local self="${HOOK_DIR}/${0##*/}" n="" h=""
+  if [ -r "$self" ]; then
+    n="$(/usr/bin/wc -c 2>/dev/null < "$self")" || n=""
+    n="${n//[!0-9]/}"
+  fi
+  if [ -n "$n" ]; then
+    h="$({ "$PRINTF" 'blob %s\0' "$n"; "$CAT" "$self"; } 2>/dev/null | /usr/bin/shasum -a 1 2>/dev/null)" || h=""
+  fi
+  h="${h%% *}"
+  case "$h" in
+    [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*)
+      "$PRINTF" '%s' "${h:0:16}" ;;
+    *) "$PRINTF" 'unknown' ;;
+  esac
+  return 0
+}
+
+# The feature set of a record whose features could not be computed at all: every member
+# says so, so the record still carries a defined set beside hook_build.
+readonly EGRESS_007_FEATURES_NOT_COMPUTED="{\"schema_version\":${EGRESS_007_FEATURES_SCHEMA_VERSION},\"oracle\":\"unknown\",\"shell_parse\":\"unavailable\",\"heredoc\":\"unavailable\"}"
+
+# The feature object as compact JSON for jq --argjson; empty when it cannot be built, and
+# the verdict then records the not-computed set above. The size cap is applied HERE, once,
+# to the whole feature path. Each member is checked against its vocabulary before it is
+# rendered, so a helper that printed nothing — or anything else — reads `unavailable`.
+egress_007_unparseable_features() {
+  local cmd="$1" parse="skipped" heredoc="skipped" oracle
+  if [ "${#cmd}" -le "$EGRESS_007_PARSE_CAP" ]; then
+    parse="$(egress_shell_parse "$cmd")" || parse="unavailable"
+    heredoc="$(egress_heredoc_kind "$cmd")" || heredoc="unavailable"
+  fi
+  case "$parse" in ok|error|skipped|unavailable) ;; *) parse="unavailable" ;; esac
+  case "$heredoc" in none|quoted|unquoted|both|skipped|unavailable) ;; *) heredoc="unavailable" ;; esac
+  oracle="$(egress_parse_oracle_label)" || oracle="unknown"
+  "$JQ" -nc --argjson v "$EGRESS_007_FEATURES_SCHEMA_VERSION" \
+    --arg o "$oracle" --arg p "$parse" --arg h "$heredoc" \
+    '{schema_version:$v, oracle:$o, shell_parse:$p, heredoc:$h}' 2>/dev/null || true
+  return 0
+}
+
 # Deny (or shadow-log) one -007 verdict. FOUR causes, each carrying its OWN
 # remediation string.
 #
@@ -640,6 +894,7 @@ egress_007_verdict() {
   local cause="$1"
   local path="$2"
   local widening="$3"
+  local features="${4:-}"   # optional feature object — passed by the `unparseable` cause alone
   local reason override
 
   if [ "$widening" -eq 1 ]; then
@@ -665,6 +920,10 @@ egress_007_verdict() {
     unparseable)
       reason="gh api write denied: the command carries an unterminated quote and cannot be evaluated."
       override="close the quote — an unbalanced quote outside a comment means the command cannot execute in this form either. Or set CLAUDE_HOOK_BYPASS=1"
+      # This class never goes featureless: a set that could not be computed is recorded as
+      # not computed, so the record keeps hook_build and cannot be taken, by key, for one
+      # written before the set existed.
+      [ -n "$features" ] || features="$EGRESS_007_FEATURES_NOT_COMPUTED"
       ;;
     no-path)
       reason="gh api write denied: no API path operand found after 'gh api'."
@@ -675,7 +934,7 @@ egress_007_verdict() {
       override="add path to .claude/egress-allowlist.txt via allowlist-add.sh, or set CLAUDE_HOOK_BYPASS=1"
       ;;
   esac
-  apply_block "BLOCK-EGRESS-007" "$reason" "$override" "path=${path} cause=${cause}"
+  apply_block "BLOCK-EGRESS-007" "$reason" "$override" "path=${path} cause=${cause}" "$features"
 }
 
 # ==========================================================================
@@ -752,7 +1011,7 @@ case "$TOOL_NAME" in
       # Extract target URL
       target_url="$("$PRINTF" '%s' "$COMMAND" | "$GREP" -oE 'https?://[^[:space:]"'"'"';&|]+' | /usr/bin/head -1 || "$PRINTF" '')"
       target_host="$(extract_host "${target_url:-}")"
-      if [ -z "$target_host" ] || ! is_allowlisted "$target_host" "$EGRESS_ALLOWLIST"; then
+      if [ -z "$target_host" ] || ! is_allowlisted "$target_host" "$EGRESS_ALLOWLIST" host; then
         apply_block "BLOCK-EGRESS-004" \
           "curl POST/PUT/upload to non-allowlisted host denied (target: ${target_host:-unknown})." \
           "add host to .claude/egress-allowlist.txt via allowlist-add.sh, or set CLAUDE_HOOK_BYPASS=1" \
@@ -794,17 +1053,21 @@ case "$TOOL_NAME" in
     # would bury the logic a reviewer actually needs to read. The branch closes at
     # the `;;` / `esac` at the end of the rule.
     if ! egress_norm="$(egress_neutralize_quoted "$COMMAND")"; then
-      # An unterminated quote in COMMAND text — comment text can no longer produce
-      # one. Raised only when the command carries a `gh api` invocation at a command
-      # position the replaced matcher could have reached, so an unbalanced quote in
-      # an unrelated command is not this rule's business.
+      # The scanner found an unterminated quote in COMMAND text. Raised only when the
+      # command carries a `gh api` invocation at a command position the replaced matcher
+      # could have reached, so an unbalanced quote in an unrelated command is not this
+      # rule's business.
       #
-      # NOT a widening. The class is scoped to input that genuinely cannot execute
-      # as typed, so the deny costs nothing that the shell would not cost anyway —
-      # and gating it would do what the rollout ladder must never do: allow, on
-      # account of the rung, a case the replaced matcher denied.
+      # NOT a widening: it denies at every rung, because gating it would do what the
+      # rollout ladder must never do — allow, on account of the rung, a case the
+      # replaced matcher denied. The deny is free only for a genuinely malformed
+      # command, which cannot run either. What the scanner cannot tokenize is WIDER than
+      # what the shell cannot parse — a heredoc body, an escaped or nested quote, a
+      # comment the scanner does not recognize — so a well-formed command can be refused
+      # here too, and each record's `features.shell_parse` says which kind it was.
       if egress_old_reachable_gh_api "$COMMAND"; then
-        egress_007_verdict "unparseable" "unknown" 0
+        # The one cause whose evidence is a constant carries the feature set instead.
+        egress_007_verdict "unparseable" "unknown" 0 "$(egress_007_unparseable_features "$COMMAND")"
       fi
     else
       # Segment on the shell's command separators, in TWO classes — the distinction
@@ -1023,7 +1286,7 @@ case "$TOOL_NAME" in
           continue
         fi
 
-        if ! is_allowlisted "$egress_norm_path" "$EGRESS_ALLOWLIST"; then
+        if ! is_allowlisted "$egress_norm_path" "$EGRESS_ALLOWLIST" gh-api-path; then
           egress_007_verdict "not-allowlisted" "$egress_norm_path" "$egress_widening"
         fi
       done <<< "$egress_segs"
