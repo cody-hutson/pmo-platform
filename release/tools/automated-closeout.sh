@@ -34,6 +34,9 @@
 #   6.6 inject_velocity_field **Velocity:** field after **Cycle-Time:** in that block (stage-13-close.md Phase B-velocity; surface-resolved)
 #   6.7 append_release_learnings  sibling H4 `#### Release Learnings v<X.Y>` after the Deployment Log block (stage-13-close.md Phase A7; hot ledger only)
 #   6.8 inject_close_class_telemetry_field  **Close-Class-Telemetry:** field after **Outcome rationale:**/**Outcome:** in that block (close-class-telemetry.md § 3.2; surface-resolved; anchor STRING resolved through the same shared field-key grammar as 6.5, #4222)
+#                          DECLARED PRECONDITION: the Phase A7.2 learnings register, produced BEFORE this run; the path comes from
+#                          produce-learnings-register.sh --print-path and is passed as --retro. Unmet -> the field is still written
+#                          with the telemetry tool's own reading and the row is WARN (never a silent PASS)
 #   6.9 transition_plan_status  release-plan frontmatter `status:` ACTIVE → CLOSED (release-corpus-schema.md § Plan-status lifecycle; comment-tolerant reader, bounded to the leading fence). ORDERED AFTER 6 and BEFORE 9.3 — 9.3 backstops the WRITE only; the COMMIT is asserted by the phase-10 staging-completeness arms (#6258), since 9.3 runs above phase 10 and reads the working tree
 #   7  append_release_index    new row in RELEASE_INDEX.md
 #   8  append_release_digest   new entry under v<MAJOR>.* H2 in RELEASE_DIGEST.md
@@ -602,6 +605,7 @@ HUB_STATE_PATH="${HUB_STATE_PATH:-$(pmo_instance_path_for "$WORKSPACE_ROOT")/hub
 # above — a TOOL dependency guarded inline by its consuming phase, not a fifth
 # check_paths() row (that probe enumerates the four CORPUS paths).
 COMPUTE_CLOSE_CLASS_TELEMETRY="$SCRIPT_DIR/compute-close-class-telemetry.sh"
+PRODUCE_LEARNINGS_REGISTER="$SCRIPT_DIR/produce-learnings-register.sh"   # Phase 6.8's declared precondition: --print-path resolves the A7.2 register path (static; reads nothing)
 # Scaffold-residue token source (AC1 single-source seam). The token set has exactly
 # ONE definition — SCAFFOLD_RESIDUE_TOKENS in lint_release_corpus.py — and the shell
 # anchors read it from there via --print-scaffold-tokens. Retyping the literals in
@@ -3327,6 +3331,24 @@ phase_inject_close_class_telemetry_field() {
   fi
 
   local _cct_args=( "$VERSION" --milestone "$MILESTONE" )
+  # DECLARED PRECONDITION (#6892): the Phase A7.2 learnings register. It is produced by the
+  # Stage 13 spoke BEFORE this run (stage-13-close.md § Phase A7.2), so it is a mode-INVARIANT
+  # input — no phase of THIS run writes it — and reading it above the dry-run test keeps the
+  # dry-run bytes identical to --apply (ADR-158). The state is classified with -f on the SAME
+  # path passed as --retro, never by grepping the tool's N/A wording (which #5586 changes).
+  # The detail NEVER prints the resolved instance path.
+  local _retro="" _pre_state="unresolved" _pre_note=""
+  if [[ -x "$PRODUCE_LEARNINGS_REGISTER" ]]; then
+    _retro="$("$PRODUCE_LEARNINGS_REGISTER" "$VERSION" --print-path 2>/dev/null || true)"
+  fi
+  if [[ -n "$_retro" ]]; then
+    _cct_args+=( --retro "$_retro" )
+    if [[ -f "$_retro" ]]; then _pre_state="met"; else _pre_state="absent"; fi
+  fi
+  case "$_pre_state" in
+    absent)     _pre_note=" — DECLARED PRECONDITION UNMET: no Phase A7.2 learnings register exists for $VERSION at the resolved operator-instance register path, so Indicators 1, 2 and 5 read N/A. Produce it before the close-out runs (produce-learnings-register.sh $VERSION --milestone $MILESTONE --apply); once this field is written, a re-run SKIPs it rather than recomputing it." ;;
+    unresolved) _pre_note=" — DECLARED PRECONDITION UNRESOLVABLE: produce-learnings-register.sh --print-path returned no path (the tool is absent or its resolver failed), so no --retro was passed, and Indicators 1, 2 and 5 carry the telemetry tool's reading for a caller that supplied no register path." ;;
+  esac
   # Sentinel-preserved capture with explicit status propagation — the
   # emit_derived_entry / 6.6 idiom, for the same two reasons: `$( )` strips
   # trailing newlines, and `$?` after a pipeline reports the wrong status.
@@ -3394,7 +3416,7 @@ phase_inject_close_class_telemetry_field() {
   fi
 
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "inject_close_class_telemetry_field" "DRY-RUN" "would insert '$_line' after **Outcome rationale:** in the $VERSION Deployment Log block ($target_name)${_vac}"
+    mark_phase "inject_close_class_telemetry_field" "DRY-RUN" "would insert '$_line' after **Outcome rationale:** in the $VERSION Deployment Log block ($target_name)${_pre_note:+ (--apply would record WARN)${_pre_note}}${_vac}"
     return 0
   fi
 
@@ -3456,7 +3478,11 @@ phase_inject_close_class_telemetry_field() {
   # subject to the same staging omission (#4710).
   _record_touched_archive_segment "$target_log"
 
-  mark_phase "inject_close_class_telemetry_field" "PASS" "injected the **Close-Class-Telemetry:** field $_anchor_desc in the $VERSION Deployment Log block ($target_name): '$_line'${_vac}"
+  if [[ "$_pre_state" == "met" ]]; then
+    mark_phase "inject_close_class_telemetry_field" "PASS" "injected the **Close-Class-Telemetry:** field $_anchor_desc in the $VERSION Deployment Log block ($target_name): '$_line'${_vac}"
+  else
+    mark_phase "inject_close_class_telemetry_field" "WARN" "injected the **Close-Class-Telemetry:** field $_anchor_desc in the $VERSION Deployment Log block ($target_name): '$_line'${_pre_note}${_vac}"
+  fi
   return 0
 }
 
