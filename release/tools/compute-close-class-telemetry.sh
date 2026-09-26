@@ -24,7 +24,7 @@
 #   Indicator 4 pattern-emergence      : POINTER ONLY — deferred-to-aggregate; the
 #                                        rate is owned by synthesize-release-
 #                                        learnings.sh and never recomputed here.
-#   Indicator 5 rollup-presence        : present|absent|N/A — the Stage-13 A7.1
+#   Indicator 5 rollup-presence        : present|absent|N/A|NOT-EVALUATED — the Stage-13 A7.1
 #                                        recommendation<->choice roll-up, read from the
 #                                        retro / lessons register (the rate is DEFERRED,
 #                                        denominator undefined). MEASURED HERE, never
@@ -57,7 +57,7 @@
 # authored. A conjunction A AND B whose A is true BY CONSTRUCTION reduces to B, so this
 # tool measures B — the roll-up limb, which is operator-authored in a register no close-out
 # phase writes — and discharges A as a documented construction invariant rather than a
-# fabricated reading. Value domain: present | absent | N/A — no retro register found.
+# fabricated reading. Values: present | absent | N/A — no retro register found | NOT-EVALUATED.
 # The eight-slot grammar is untouched; only this slot's value domain widens (the standard
 # already permits `N/A (reason)` in any slot).
 #
@@ -73,12 +73,12 @@
 #   <version>          release version key (e.g. v1.00) — for the field label + register resolution.
 #   --milestone <N>    GitHub milestone NUMBER whose `status: deferred` membership is the
 #                      carry-forward-closure population (Indicator 3).
-#   --retro <path>     OPTIONAL explicit path to the version's retro register (Indicator 1).
-#                      When omitted, resolves the operator-instance register path by convention;
-#                      absent register -> Indicator 1 N/A.
+#   --retro <path>     path to the version's retro register (Indicators 1 and 5), resolved BY THE
+#                      CALLER (produce-learnings-register.sh <version> --print-path); there is NO
+#                      convention fallback. Omitted -> NOT-EVALUATED; supplied but absent -> N/A.
 #   --lessons <path>   OPTIONAL explicit path to the version's lessons register (Indicator 2).
 #                      Defaults to --retro's path (the template carries both blocks in one file);
-#                      absent -> Indicator 2 N/A.
+#                      absent -> Indicator 2 N/A; neither flag supplied -> NOT-EVALUATED.
 #   --outcome-present <any>   DEPRECATED, ACCEPTED-AND-IGNORED. It was a caller-supplied
 #                      Indicator-5 override; Indicator 5 is now measured here from the retro
 #                      register (see the note above), so a caller-supplied value would only
@@ -615,6 +615,87 @@ evidence_slot_state() {
   /usr/bin/printf '%s\t%s\t%s\t%s\n' "$ra" "$rb" "${reason:--}" "$slot"
 }
 
+# ─── Indicators 1, 2, 5: register-slot resolution (the caller-omission guard) ─
+# TWO functions, split on purpose. register_path_state holds the ONLY `-f` test for the three
+# register-fed slots; register_slot_render is PURE — it maps a state to its rendering and
+# touches nothing on disk. Indicator 1 resolves the retro path once and Indicator 5 renders
+# from that same answer instead of re-testing the file: two `-f` tests on one path are two
+# chances to disagree, and a disagreement would hand the resolved-state sentinel to the field
+# as a slot value. Both are called by the live emission path and driven directly by
+# --self-test, for the reason evidence_slot_state is a function: the RO/RA arms compare the
+# EMITTED strings, and a test that recomputed the branch would be a second copy of the
+# contract.
+#
+# WHY IT EXISTS. Two different conditions used to emit the SAME bytes, `N/A — no retro
+# register found`: a caller that passed no --retro path (the register was never looked for)
+# and a path that was supplied and holds no register (it was looked for and is genuinely
+# absent). Only the second is a fact about the release. The first is a fact about the caller,
+# and it read as "nobody reflected" on every release whose close-out omitted the flag. Per
+# review-discipline-principles.md § 8 PV-7 an unmeasured state never shares a member with the
+# clean state: the omission renders in Register B, NOT-EVALUATED plus the mandated clause, and
+# the clean absence keeps its spelling byte-for-byte, so no historical row changes meaning.
+#
+# THERE IS NO CONVENTION FALLBACK, deliberately. Resolving the path here when the caller omits
+# it would mask exactly the omission this guard makes observable, and would add a second
+# resolver for a path the register's own producer already resolves: the caller passes the
+# output of `produce-learnings-register.sh <version> --print-path` (Stage 13 § A7.2).
+# NO EXIT CODE IS ADDED for the omission either. The consumer routes any non-zero exit to FAIL
+# and writes no field at all, which would erase the record that shows the omission; an
+# unmeasured leg rides in-band, exactly as Indicator 6's does (PV-7c).
+#
+# NO REASON STRING MAY CONTAIN A SEMICOLON — the eight-slot field grammar splits on `; `. The
+# NOT-EVALUATED reasons carry no digit either: nothing was counted, so no counter may appear
+# (PV-7b).
+
+# args: <path>   EMPTY means the caller supplied none (for lessons: neither --lessons nor --retro)
+# Echoes exactly one state:
+#   resolved  the register exists; the caller composes the measured value
+#   absent    a path was supplied and holds no register: the CLEAN ABSENCE
+#   omitted   no path was supplied, so no register was looked for
+register_path_state() {
+  local path="$1"
+  if [[ -z "$path" ]]; then
+    echo "omitted"
+  elif [[ -f "$path" ]]; then
+    echo "resolved"
+  else
+    echo "absent"
+  fi
+}
+
+# args: <indicator: retro|lessons|rollup> <state from register_path_state> <version>
+# PURE. Echoes TAB-separated: <reason or -> \t <slot string or ->
+#   resolved  - / -  (the caller composes the measured value)
+#   absent    the clean-absence rendering, spelling unchanged
+#   omitted   the Register B NOT-EVALUATED rendering, carrying the mandated clause
+# An absent reason or slot is emitted as `-`, never as an empty field: `IFS=$'\t' read`
+# collapses consecutive tabs, the same hazard the evidence_slot_state note above records.
+register_slot_render() {
+  local ind="$1" st="$2" ver="$3" reason slot
+  local clause="this is not a clean result"
+  case "$st" in
+    resolved)
+      reason="-"; slot="-" ;;
+    absent)
+      case "$ind" in
+        retro)   reason="no retro register found for $ver" ;;
+        lessons) reason="no lessons register found" ;;
+        *)       reason="no retro register found" ;;
+      esac
+      slot="N/A — $reason" ;;
+    omitted)
+      if [[ "$ind" == "lessons" ]]; then
+        reason="no --lessons or --retro path was supplied, so no lessons register was looked for"
+      else
+        reason="no --retro path was supplied, so no retro register was looked for"
+      fi
+      slot="NOT-EVALUATED — $reason — $clause" ;;
+    *)
+      die "internal: register_slot_render was given the state '$st', which register_path_state never emits" 2 ;;
+  esac
+  /usr/bin/printf '%s\t%s\n' "$reason" "$slot"
+}
+
 # ─── Self-test mode (no gh / no network) ─────────────────────────────────────
 
 if [[ "${1:-}" == "--self-test" ]]; then
@@ -927,6 +1008,89 @@ if [[ "${1:-}" == "--self-test" ]]; then
     case "$SLOT_RA_SEEN" in *"|$_m|"*) : ;; *) die "self-test: Register A member '$_m' is unreachable — the mapping claims all five are reachable" ;; esac
   done
 
+  # Test 9: Indicators 1, 2, 5 REGISTER-SLOT RESOLUTION — the guard that stops a CALLER
+  #   OMISSION borrowing the CLEAN-ABSENCE rendering. Before it, a close-out that passed no
+  #   --retro path and a --retro path holding no register emitted the identical line, so an
+  #   omitted flag read as "nobody reflected" on every release. Every arm drives
+  #   register_path_state and register_slot_render, the two functions the live path calls, so
+  #   the arms compare EMITTED strings. THE ORDER BELOW IS PART OF THE CONTRACT: the RO/RA
+  #   inequality is asserted before any omission-shape arm, so the pre-fix collapse fails at
+  #   the inequality and nowhere else.
+  RG_MISSING="$TMPD/no_register_here.md"   # never created: a supplied path holding no register
+
+  # RR — RESOLVED. An existing register resolves, and the renderer leaves the value to the
+  #      caller for all three indicators.
+  RR_ST="$(register_path_state "$RETRO_FULL")"
+  [[ "$RR_ST" == "resolved" ]] || die "self-test: register-resolution(RR) resolved an existing register as '$RR_ST', expected resolved"
+  for _ind in retro lessons rollup; do
+    IFS=$'\t' read -r _rs _slot < <(register_slot_render "$_ind" "$RR_ST" v9.99)
+    [[ "$_rs" == "-" && "$_slot" == "-" ]] || die "self-test: register-resolution(RR $_ind) rendered '$_rs' / '$_slot', expected - / - (the caller composes a resolved value)"
+  done
+
+  # RA — ABSENT. A supplied path holding no register is the CLEAN ABSENCE, spelled exactly as
+  #      it was before this guard existed.
+  RA_ST="$(register_path_state "$RG_MISSING")"
+  IFS=$'\t' read -r _rs RA_STR < <(register_slot_render retro "$RA_ST" v9.99)
+  [[ "$RA_ST" == "absent" ]] || die "self-test: register-resolution(RA) resolved a missing register as '$RA_ST', expected absent"
+  [[ "$RA_STR" == "N/A — no retro register found for v9.99" ]] || die "self-test: register-resolution(RA) emitted '$RA_STR', expected the clean-absence rendering 'N/A — no retro register found for v9.99' byte-for-byte — a genuinely absent register keeps its spelling"
+
+  # RO — OMITTED, rendered here and shape-checked only after the inequality below.
+  RO_ST="$(register_path_state "")"
+  IFS=$'\t' read -r _rs RO_STR < <(register_slot_render retro "$RO_ST" v9.99)
+
+  # THE ASSERTION — the two states must DIFFER. This is the whole card in one line.
+  [[ "$RO_STR" != "$RA_STR" ]] || die "self-test: register-resolution — RO (caller supplied no --retro) and RA (register genuinely absent) emitted the IDENTICAL state '$RO_STR'. A caller omission is borrowing the clean-absence rendering, which is the fail-open this guard exists to close"
+
+  [[ "$RO_ST" == "omitted" ]] || die "self-test: register-resolution(RO) resolved an empty path as '$RO_ST', expected omitted"
+  [[ "$RO_STR" == "NOT-EVALUATED — "*" — this is not a clean result" ]] || die "self-test: register-resolution(RO) emitted '$RO_STR', expected the Register B NOT-EVALUATED rendering with the mandated clause"
+  # Indicators 2 and 5 carry the same split, each keeping its own clean-absence spelling.
+  IFS=$'\t' read -r _rs LA_STR < <(register_slot_render lessons "$RA_ST" v9.99)
+  IFS=$'\t' read -r _rs LO_STR < <(register_slot_render lessons "$RO_ST" v9.99)
+  [[ "$LA_STR" == "N/A — no lessons register found" ]] || die "self-test: register-resolution(LA) emitted '$LA_STR', expected 'N/A — no lessons register found' byte-for-byte"
+  [[ "$LO_STR" != "$LA_STR" ]] || die "self-test: register-resolution(lessons) — the omission and the absence emitted the IDENTICAL state '$LO_STR'"
+  IFS=$'\t' read -r _rs PA_STR < <(register_slot_render rollup "$RA_ST" v9.99)
+  IFS=$'\t' read -r _rs PO_STR < <(register_slot_render rollup "$RO_ST" v9.99)
+  [[ "$PA_STR" == "N/A — no retro register found" ]] || die "self-test: register-resolution(PA) emitted '$PA_STR', expected 'N/A — no retro register found' byte-for-byte"
+  [[ "$PO_STR" != "$PA_STR" ]] || die "self-test: register-resolution(rollup) — the omission and the absence emitted the IDENTICAL state '$PO_STR'"
+
+  # Test 9b: the REGISTER-SLOT GRAMMAR over every non-resolved rendering — 3 indicators x
+  #   {omitted, absent}, each resolved through register_path_state as the live path does.
+  #   Same discipline as Test 8b: non-emptiness first, no semicolon, the mandated clause and no
+  #   counter on every NOT-EVALUATED row, no clause on a clean absence, and an 8-slot field
+  #   line when the rendering is composed into all three register-fed slots at once.
+  RG_ROWS=0; RG_NE=0
+  for _ind in retro lessons rollup; do
+    for _p in "" "$RG_MISSING"; do
+      _st="$(register_path_state "$_p")"
+      IFS=$'\t' read -r _rs _slot < <(register_slot_render "$_ind" "$_st" v9.99)
+      RG_ROWS=$(( RG_ROWS + 1 ))
+      [[ -n "$_slot" && "$_slot" != "-" ]] || die "self-test: register-resolution(grammar) rendering $RG_ROWS ($_ind, $_st) is EMPTY — every assertion below is vacuous on an empty string, so this is a broken probe rather than a clean one"
+      case "$_slot" in
+        *";"*) die "self-test: register-resolution(grammar) state '$_slot' contains a SEMICOLON — the eight-slot field grammar splits on '; ' and this would silently corrupt the field" ;;
+      esac
+      case "$_st" in
+        omitted)
+          RG_NE=$(( RG_NE + 1 ))
+          [[ "$_slot" == "NOT-EVALUATED — "*" — this is not a clean result" ]] || die "self-test: register-resolution(grammar) omission state '$_slot' is not the Register B rendering with the mandated clause"
+          [[ "$_slot" != *[0-9]* ]] || die "self-test: register-resolution(grammar) omission state '$_slot' carries a digit — nothing was counted, so no counter may appear (PV-7b)"
+          ;;
+        absent)
+          [[ "$_slot" == "N/A — "* ]] || die "self-test: register-resolution(grammar) absence state '$_slot' does not render as a clean absence"
+          [[ "$_slot" != *"this is not a clean result"* ]] || die "self-test: register-resolution(grammar) clean absence '$_slot' carries the not-clean clause"
+          ;;
+        *) die "self-test: register-resolution(grammar) a non-resolved input resolved as '$_st'" ;;
+      esac
+      _line="**Close-Class-Telemetry:** retro-conformance ${_slot}; lessons-population ${_slot}; carry-forward-closure 2/3 (0.67); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence ${_slot}; evidence-preservation 12/13 (0.92); evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh"
+      _slots=1; _rest="$_line"
+      while [[ "$_rest" == *"; "* ]]; do _slots=$(( _slots + 1 )); _rest="${_rest#*"; "}"; done
+      [[ "$_slots" -eq 8 ]] || die "self-test: register-resolution(grammar) state '$_slot' composes a field line of $_slots slots, expected 8 — this state string splits the field"
+    done
+  done
+  [[ "$RG_ROWS" -eq 6 && "$RG_NE" -eq 3 ]] || die "self-test: register-resolution(grammar) walked $RG_ROWS renderings with $RG_NE NOT-EVALUATED rows, expected 6 and 3 — the extraction is broken and the zero-semicolon finding is not a finding"
+  # The renderer's domain is CLOSED: a state register_path_state never emits is an internal
+  # defect, and it must be refused rather than rendered as anything.
+  ( register_slot_render retro unknown v9.99 ) >/dev/null 2>&1 && die "self-test: register-resolution(closed domain) rendered an unknown state instead of refusing it"
+
   rm -rf "$TMPD"; trap - EXIT
   echo "self-test: PASS"
   echo "  ratio round-half-up validated (exact / below-half / at-half / above-half / zero-den)"
@@ -942,6 +1106,7 @@ if [[ "${1:-}" == "--self-test" ]]; then
   echo "  Indicator 6 denominator-integrity DL one-sided-difference validated (a labelled sub-task with a non-Stage title does NOT flag — the difference is |T' \\ L|, never symmetric)"
   echo "  Indicator 6 denominator-integrity partial-gap validated (a plausible rate over a wrong denominator degrades too: '$DP_STR')"
   echo "  Indicator 6 slot-6 state grammar validated ($SLOT_ROWS reachable renderings: 0 semicolons and an 8-slot field line each, the mandated clause on all $SLOT_TOKENED Register-B rows and on none of the $SLOT_CLEAN clean rows, tokens confined to NOT-EVALUATED|DEGRADED, all 5 Register-A members reachable)"
+  echo "  Indicators 1/2/5 register-resolution validated (RO caller-omission and RA register-absent emit DIFFERENT states: '$RO_STR' vs '$RA_STR'; the clean absence keeps its spelling; $RG_ROWS reachable renderings: 0 semicolons and an 8-slot field line each, the mandated clause and no counter on all $RG_NE NOT-EVALUATED rows; an unknown state is refused)"
   exit 0
 fi
 
@@ -993,32 +1158,36 @@ fi
 # ─── Indicator 1: retro-conformance ──────────────────────────────────────────
 
 RETRO_PRESENT="N/A"; RETRO_EXPECTED="N/A"; RETRO_RATIO="N/A"; RETRO_NA_REASON=""
-# RETRO_RESOLVED is the ONE resolution answer, reused by Indicator 5 below rather than
-# re-tested there — two `-f` tests on the same path are two chances to drift apart.
+# RETRO_STATE is the ONE resolution answer (resolved | absent | omitted), reused by Indicator 5
+# below rather than re-tested there — two `-f` tests on the same path are two chances to drift
+# apart. RETRO_RESOLVED stays as its boolean projection for the readers that branch on it.
+RETRO_STATE="$(register_path_state "$RETRO_PATH")"
+IFS=$'\t' read -r RETRO_NA_REASON RETRO_SLOT < <(register_slot_render retro "$RETRO_STATE" "$VERSION")
 RETRO_RESOLVED=0
-if [[ -n "$RETRO_PATH" && -f "$RETRO_PATH" ]]; then
+if [[ "$RETRO_STATE" == "resolved" ]]; then
   # exists -> parse (a register that exists but is unreadable is a source-integrity error)
   [[ -r "$RETRO_PATH" ]] || die "retro register exists but is unreadable: $RETRO_PATH" 2
-  RETRO_RESOLVED=1
+  RETRO_RESOLVED=1; RETRO_NA_REASON=""
   read -r RETRO_PRESENT RETRO_EXPECTED < <(count_retro_conformance "$RETRO_PATH")
   RETRO_RATIO="$(ratio_round_half_up "$RETRO_PRESENT" "$RETRO_EXPECTED")"
-else
-  RETRO_NA_REASON="no retro register found for $VERSION"
 fi
 
 # ─── Indicator 2: lessons-population ─────────────────────────────────────────
 
 LESS_POP="N/A"; LESS_PROMPTED="N/A"; LESS_RATIO="N/A"; LESS_NA_REASON=""
-if [[ -n "$LESSONS_PATH" && -f "$LESSONS_PATH" ]]; then
+# The same split as Indicator 1. LESSONS_PATH already defaults to RETRO_PATH above, so an EMPTY
+# path here means the caller supplied neither --lessons nor --retro.
+LESS_STATE="$(register_path_state "$LESSONS_PATH")"
+IFS=$'\t' read -r LESS_NA_REASON LESS_SLOT < <(register_slot_render lessons "$LESS_STATE" "$VERSION")
+if [[ "$LESS_STATE" == "resolved" ]]; then
   [[ -r "$LESSONS_PATH" ]] || die "lessons register exists but is unreadable: $LESSONS_PATH" 2
+  LESS_NA_REASON=""
   read -r LESS_POP LESS_PROMPTED < <(count_lessons_population "$LESSONS_PATH")
   if [[ "$LESS_PROMPTED" -eq 0 ]]; then
     LESS_RATIO="N/A"; LESS_NA_REASON="lessons register present but prompts zero rows"
   else
     LESS_RATIO="$(ratio_round_half_up "$LESS_POP" "$LESS_PROMPTED")"
   fi
-else
-  LESS_NA_REASON="no lessons register found"
 fi
 
 # ─── Indicator 3: carry-forward-closure (gh status: deferred over the milestone) ─
@@ -1075,15 +1244,18 @@ PATTERN_POINTER="deferred-to-aggregate (see synthesize-release-learnings.sh)"
 # MEASURED here from the retro register — the A7.1 roll-up limb, which is operator-authored
 # and which NO close-out phase writes. The `Outcome:` conjunct is discharged as a documented
 # construction invariant of phase 6.5, not probed; see the INDICATOR 5 note in the header for
-# why probing it would publish a fabricated metric. Three states, and the third one matters:
-# "no register resolved" is a different fact from "register present, roll-up missing", and
-# collapsing them would make an absent register read as a governance failure. The N/A limb
-# reuses Indicator 1's single resolution answer (RETRO_RESOLVED) rather than re-testing.
+# why probing it would publish a fabricated metric. Four states — present, absent, N/A and
+# NOT-EVALUATED — and both distinctions below them matter: "no register resolved" is a
+# different fact from "register present, roll-up missing", and collapsing them would make an
+# absent register read as a governance failure; NOT-EVALUATED (no path was supplied, so nothing
+# was looked for) is a different fact again from N/A (a supplied path held no register). Both
+# unresolved limbs are rendered by register_slot_render from Indicator 1's single resolution
+# answer (RETRO_STATE); the path is never re-tested here.
 
 if [[ "$RETRO_RESOLVED" -eq 1 ]]; then
   if rollup_marker_present "$RETRO_PATH"; then ROLLUP_PRESENCE="present"; else ROLLUP_PRESENCE="absent"; fi
 else
-  ROLLUP_PRESENCE="N/A — no retro register found"
+  IFS=$'\t' read -r _rp_reason ROLLUP_PRESENCE < <(register_slot_render rollup "$RETRO_STATE" "$VERSION")
 fi
 
 # ─── Indicator 6: phase-completion evidence preservation (read-model) + retained close-gate ─
@@ -1181,8 +1353,20 @@ fmt_rate() {
   fi
 }
 
-RETRO_STR="$(fmt_rate "$RETRO_RATIO" "$RETRO_PRESENT" "$RETRO_EXPECTED" "$RETRO_NA_REASON")"
-LESS_STR="$(fmt_rate "$LESS_RATIO" "$LESS_POP" "$LESS_PROMPTED" "$LESS_NA_REASON")"
+# Indicators 1 and 2 go through fmt_rate ONLY when their register resolved. An unresolved slot
+# carries its register_slot_render rendering verbatim: fmt_rate knows one unmeasured rendering
+# (`N/A — <reason>`), and an unresolved register-fed slot has two — the clean absence and the
+# Register B omission — which is exactly the distinction fmt_rate would collapse.
+if [[ "$RETRO_STATE" == "resolved" ]]; then
+  RETRO_STR="$(fmt_rate "$RETRO_RATIO" "$RETRO_PRESENT" "$RETRO_EXPECTED" "$RETRO_NA_REASON")"
+else
+  RETRO_STR="$RETRO_SLOT"
+fi
+if [[ "$LESS_STATE" == "resolved" ]]; then
+  LESS_STR="$(fmt_rate "$LESS_RATIO" "$LESS_POP" "$LESS_PROMPTED" "$LESS_NA_REASON")"
+else
+  LESS_STR="$LESS_SLOT"
+fi
 CF_STR="$(fmt_rate "$CF_RATIO" "$CF_CLOSED" "$CF_RAISED" "$CF_NA_REASON")"
 # EVID_STR is NOT built by fmt_rate: Indicator 6 carries three renderings, not two, and its
 # resolution has to be callable from --self-test — which runs long before fmt_rate is defined.
@@ -1196,15 +1380,20 @@ if [[ "$OUTPUT_FORMAT" == "json" ]]; then
     "$CF_RATIO" "$CF_CLOSED" "$CF_RAISED" "$CF_NA_REASON" \
     "$ROLLUP_PRESENCE" "$EVIDENCE_GATE" \
     "$EVID_RATIO" "$EVID_PRESERVED" "$EVID_SCAFFOLDED" "$EVID_NA_REASON" "$EVID_EXCLUDED" \
-    "$EVID_STATE" "$EVID_TOKEN" "$EVID_UNLABELLED" <<'PY'
+    "$EVID_STATE" "$EVID_TOKEN" "$EVID_UNLABELLED" \
+    "$RETRO_STATE" "$LESS_STATE" <<'PY'
 import json, sys
 a = sys.argv
 def na(v): return None if v == "N/A" else v
+# Register A / Register B for the register-fed slots: a caller omission measured nothing
+# (not-run / NOT-EVALUATED); a resolved register and a genuinely absent one were both looked
+# for (fetched, no Register B token). A consumer MUST branch on measurement_state first.
+def reg(s): return ("not-run", "NOT-EVALUATED") if s == "omitted" else ("fetched", None)
 out = {
   "version": a[1],
   "milestone": a[2],
-  "retro_conformance": {"ratio": na(a[3]), "present": na(a[4]), "expected": na(a[5]), "na_reason": a[6] or None},
-  "lessons_population": {"ratio": na(a[7]), "populated": na(a[8]), "prompted": na(a[9]), "na_reason": a[10] or None},
+  "retro_conformance": {"ratio": na(a[3]), "present": na(a[4]), "expected": na(a[5]), "na_reason": a[6] or None, "measurement_state": reg(a[25])[0], "state_token": reg(a[25])[1]},
+  "lessons_population": {"ratio": na(a[7]), "populated": na(a[8]), "prompted": na(a[9]), "na_reason": a[10] or None, "measurement_state": reg(a[26])[0], "state_token": reg(a[26])[1]},
   "carry_forward_closure": {"ratio": na(a[11]), "closed": na(a[12]), "raised": na(a[13]), "na_reason": a[14] or None},
   "pattern_emergence": "deferred-to-aggregate",
   "rollup_presence": a[15],
