@@ -10,7 +10,10 @@ verification evidence, and track any scoped-but-unshipped work as carry-forward 
 nothing is silently dropped.
 
 Mode D wraps the automated close-out script automated-closeout.sh, which sequences the
-Stage-13 Phase B chore-PR pattern as a set of idempotent phases. This checklist is the
+Stage-13 Phase B chore-PR pattern as a set of phases. Re-running the script after a halt
+is its supported recovery, but the script does not assert that every phase is idempotent:
+the re-run behaviour its `--self-test` pins is listed in its header, which `--help` prints.
+This checklist is the
 operator-and-agent-facing enumeration of WHAT the close-out must accomplish; the script
 is the mechanism that accomplishes most of it. Where the script already produces an item,
 this checklist names it so the item is explicit rather than buried in script internals —
