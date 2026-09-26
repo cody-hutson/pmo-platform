@@ -9478,6 +9478,14 @@ echo "retro-conformance 10/10 (1.00); lessons-population 8/10 (0.80); carry-forw
 EOF
   /bin/chmod +x "$_ockg_cct"
   COMPUTE_CLOSE_CLASS_TELEMETRY="$_ockg_cct"
+  # Phase 6.8's declared precondition (#6892): the 6.8 arms below run over a MET
+  # register, so k3's PASS stays a PASS, and no arm resolves the operator's
+  # instance root through the real producer's --print-path.
+  local _ockg_saved_plr="${PRODUCE_LEARNINGS_REGISTER-}" _ockg_plr="$_ockg_tmp/plr.sh"
+  /usr/bin/printf '# fixture register\n' > "$_ockg_tmp/register.md"
+  /usr/bin/printf '#!/bin/sh\necho "%s"\n' "$_ockg_tmp/register.md" > "$_ockg_plr"
+  /bin/chmod +x "$_ockg_plr"
+  PRODUCE_LEARNINGS_REGISTER="$_ockg_plr"
 
   # (k1) AC-1 — A QUALIFIED KEY IS RECOGNIZED AND REJECTED, never injected past.
   # The block keeps exactly one Outcome-family line and the record is byte-identical.
@@ -9741,6 +9749,7 @@ EOF
   RELEASE_LOG="$_ockg_saved_log"; VERSION="$_ockg_saved_ver"; MODE="$_ockg_saved_mode"
   OUTCOME="$_ockg_saved_outcome"; OUTCOME_RATIONALE="$_ockg_saved_rat"
   COMPUTE_CLOSE_CLASS_TELEMETRY="$_ockg_saved_tool"; MILESTONE="$_ockg_saved_ms"
+  PRODUCE_LEARNINGS_REGISTER="$_ockg_saved_plr"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # ── Test 4c.5: phase_inject_velocity_field (6.6) + phase_append_release_learnings (6.7)
@@ -10394,6 +10403,15 @@ EOF
   local _cc_tmp; _cc_tmp="$(/usr/bin/mktemp -d -t closeclass-selftest.XXXXXX)"
   MODE="apply"; MILESTONE="999"
   RELEASE_LOG="$_cc_tmp/RELEASE_LOG.md"
+  # Phase 6.8's declared precondition (#6892): the arms below drive 6.8 over a MET
+  # register, so a PASS they pin stays a PASS. The stub prints the path of a fixture
+  # register that exists, so no arm resolves the operator's instance root through
+  # the real producer's --print-path. Group TL, at the end, exercises the real one.
+  local _cc_saved_plr="${PRODUCE_LEARNINGS_REGISTER-}" _cc_plr="$_cc_tmp/plr.sh"
+  /usr/bin/printf '# fixture register\n' > "$_cc_tmp/register.md"
+  /usr/bin/printf '#!/bin/sh\necho "%s"\n' "$_cc_tmp/register.md" > "$_cc_plr"
+  /bin/chmod +x "$_cc_plr"
+  PRODUCE_LEARNINGS_REGISTER="$_cc_plr"
 
   local _cc_ok="$_cc_tmp/cct-ok.sh" _cc_vac="$_cc_tmp/cct-vac.sh" _cc_bad="$_cc_tmp/cct-bad.sh"
   local _cc_empty="$_cc_tmp/cct-empty.sh" _cc_e2="$_cc_tmp/cct-e2.sh" _cc_noexec="$_cc_tmp/cct-noexec.sh"
@@ -10696,11 +10714,109 @@ EOF
   # can never fire, which is indistinguishable from a clean file.
   /usr/bin/grep -qF "$_np_sub" <<<'    _x="$(_write_not_produced_marker a b c)"' || { echo "FAIL: (j.2) capability-to-fail — the command-substitution matcher does not match a constructed bad call site, so its two clean readings above measure nothing"; failures=$((failures+1)); }
 
+  # ── Group TL (#6892): phase 6.8's DECLARED PRECONDITION, the Phase A7.2 register.
+  # The register is produced BEFORE the close-out driver runs; 6.8 resolves its path
+  # with produce-learnings-register.sh --print-path (static, reads nothing), passes it
+  # as --retro, and classifies the precondition with -f on that SAME path. Met ->
+  # PASS; absent or unresolvable -> the field is still written, carrying the honest
+  # absent reading, and the row is WARN naming the unmet precondition. Offline and
+  # hermetic: the REAL producer runs under an exported temporary PMO_INSTANCE_PATH,
+  # so no arm reads or writes the operator's instance; the telemetry tool is a stub,
+  # as in the arms above, because the real one reaches gh — it records its argv and
+  # emits the measured § 3.2 line only when the --retro path it was handed exists.
+  local _tl_saved_plr="${PRODUCE_LEARNINGS_REGISTER-}" _tl_saved_inst="${PMO_INSTANCE_PATH-__tl_unset__}"
+  local _tl_inst="$_cc_tmp/instance" _tl_cct="$_cc_tmp/tl-cct.sh" _tl_triple="$_cc_tmp/tl-triple.md"
+  local _tl_row _tl_rc _tl_path _tl_argv
+  /bin/cat > "$_tl_cct" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" > "$TL_ARGV"
+v="$1"; retro=""
+while [ $# -gt 0 ]; do
+  case "$1" in --retro) retro="$2"; shift 2 ;; *) shift ;; esac
+done
+if [ -n "$retro" ] && [ -f "$retro" ]; then
+  echo "retro-conformance 10/10 (1.00); lessons-population 8/10 (0.80); carry-forward-closure 2/3 (0.67); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 12/13 (0.92); evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh"
+else
+  echo "retro-conformance N/A — no retro register found for $v; lessons-population N/A — no lessons register found; carry-forward-closure 2/3 (0.67); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence N/A — no retro register found; evidence-preservation 12/13 (0.92); evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh"
+fi
+EOF
+  /bin/chmod +x "$_tl_cct"
+  /usr/bin/printf '#### Release Learnings v9.96\n\n**Surprise:** a fixture surprise.\n**Would-change:** a fixture change.\n**Watch-for:** a fixture watch item.\n' > "$_tl_triple"
+  export PMO_INSTANCE_PATH="$_tl_inst" TL_ARGV="$_cc_tmp/tl-argv"
+  RELEASE_LOG="$_cc_tmp/RELEASE_LOG.md"; MODE="apply"; MILESTONE="999"; VERSION="v9.96"
+  COMPUTE_CLOSE_CLASS_TELEMETRY="$_tl_cct"
+  PRODUCE_LEARNINGS_REGISTER="$SCRIPT_DIR/produce-learnings-register.sh"
+  _tl_drive() {  # run 6.8 once over a fresh fixture ledger: rc -> _tl_rc, row -> _tl_row
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    : > "$TL_ARGV"
+    _tl_rc=0
+    phase_inject_close_class_telemetry_field >/dev/null 2>&1 || _tl_rc=$?
+    _tl_row="$(get_phase inject_close_class_telemetry_field)"
+  }
+
+  # (a) MET: the REAL producer writes the register first; 6.8 then PASSes and the
+  #     field carries the computed readings the register makes possible. The path
+  #     is resolved BEFORE anything is written, and the write runs only when that
+  #     path lies under the temporary root, so a resolver that stopped honouring
+  #     PMO_INSTANCE_PATH could not reach the operator's instance from this arm.
+  /bin/rm -rf "$_tl_inst"; /bin/mkdir -p "$_tl_inst"
+  _tl_path="$("$PRODUCE_LEARNINGS_REGISTER" v9.96 --print-path 2>/dev/null || true)"
+  if [[ -n "$_tl_path" && "$_tl_path" == "$_tl_inst"/* ]]; then
+    "$PRODUCE_LEARNINGS_REGISTER" v9.96 --milestone 9999 --triple-file "$_tl_triple" --apply >/dev/null 2>&1 || true
+  fi
+  _cc_write; _tl_drive
+  _st_arm TL a-met-real; [[ -n "$_tl_path" && -f "$_tl_path" && "$_tl_path" == "$_tl_inst"/* ]] || { echo "FAIL: TL/a floor — the real producer must write the register under the temporary instance root; the met arm would grade nothing"; failures=$((failures+1)); }
+  [[ "$_tl_rc" -eq 0 && "$_tl_row" == PASS\|* && "$_tl_row" == *"retro-conformance 10/10 (1.00)"* && "$_tl_row" == *"lessons-population 8/10 (0.80)"* ]] || { echo "FAIL: TL/a (AC-1) — with the register produced before 6.8, the row must PASS and the field carry the computed readings, got rc ${_tl_rc}: '$_tl_row'"; failures=$((failures+1)); }
+
+  # (b) WIRING: the telemetry tool is handed --retro <exactly the --print-path value>.
+  _tl_argv="$(/bin/cat "$TL_ARGV")"
+  _st_arm TL b-argv; [[ " $_tl_argv " == *" --retro ${_tl_path} "* ]] || { echo "FAIL: TL/b — 6.8 must pass --retro with the producer's --print-path value, got argv '$(_detail_one_line "$_tl_argv")'"; failures=$((failures+1)); }
+
+  # (c) ABSENT (AC-2): no register produced. The field is STILL written, with the
+  #     honest absent reading, the row is WARN naming the unmet precondition, and the
+  #     phase returns 0. Control: (a) above, the same fixture with the register.
+  /bin/rm -rf "$_tl_inst"; /bin/mkdir -p "$_tl_inst"
+  _cc_write; _tl_drive
+  _st_arm TL c-absent; [[ "$_tl_rc" -eq 0 && "$_tl_row" == WARN\|* && "$_tl_row" == *"DECLARED PRECONDITION UNMET"* && "$_tl_row" == *"retro-conformance N/A — no retro register found for v9.96"* ]] || { echo "FAIL: TL/c (AC-2) — an absent register must record WARN naming the unmet precondition and write the absent reading, got rc ${_tl_rc}: '$_tl_row'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 1 ]] || { echo "FAIL: TL/c — the field must still be written on the absent path (9.56's presence assertion depends on it)"; failures=$((failures+1)); }
+
+  # (f) NO PATH LEAK: the WARN detail names the unmet precondition without printing
+  #     the resolved instance path — close-out rows reach public comments.
+  _st_arm TL f-no-path-leak; [[ "$_tl_row" == WARN\|* && "$_tl_row" != *"$_tl_inst"* && "$_tl_row" != *"RELEASE_LEARNINGS_REGISTER"* ]] || { echo "FAIL: TL/f — the WARN detail must name the unmet precondition without printing the resolved register path, got '$_tl_row'"; failures=$((failures+1)); }
+
+  # (d) UNRESOLVABLE: --print-path returns nothing, so no --retro is passed; WARN.
+  PRODUCE_LEARNINGS_REGISTER="/bin/false"
+  _cc_write; _tl_drive
+  _tl_argv="$(/bin/cat "$TL_ARGV")"
+  _st_arm TL d-unresolvable; [[ "$_tl_rc" -eq 0 && "$_tl_row" == WARN\|* && "$_tl_row" == *"UNRESOLVABLE"* && " $_tl_argv " != *" --retro "* ]] || { echo "FAIL: TL/d — an unresolvable register path must record WARN UNRESOLVABLE and pass no --retro, got rc ${_tl_rc}: '$_tl_row' / argv '$(_detail_one_line "$_tl_argv")'"; failures=$((failures+1)); }
+  PRODUCE_LEARNINGS_REGISTER="$SCRIPT_DIR/produce-learnings-register.sh"
+
+  # (e) DRY-RUN over an absent register: DRY-RUN, names what --apply would record,
+  #     carries no would-FAIL token, and writes nothing.
+  /bin/rm -rf "$_tl_inst"; /bin/mkdir -p "$_tl_inst"
+  _cc_write; MODE="dry-run"; _tl_drive; MODE="apply"
+  _st_arm TL e-dryrun; [[ "$_tl_rc" -eq 0 && "$_tl_row" == DRY-RUN\|* && "$_tl_row" == *"--apply would record WARN"* && "$_tl_row" != *"would FAIL"* ]] || { echo "FAIL: TL/e — the dry-run must predict the WARN without a would-FAIL token, got '$_tl_row'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 0 ]] || { echo "FAIL: TL/e — the dry-run must write nothing"; failures=$((failures+1)); }
+
+  # (g) IDEMPOTENT: with the precondition still unmet, the first run writes the field
+  #     and records WARN; the second finds the field present and SKIPs, writing nothing.
+  _cc_write; _tl_drive
+  _st_arm TL g-idempotent; [[ "$_tl_row" == WARN\|* ]] || { echo "FAIL: TL/g — the first run over an absent register must record WARN, got '$_tl_row'"; failures=$((failures+1)); }
+  _tl_drive
+  [[ "$_tl_row" == SKIPPED\|* && "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 1 ]] || { echo "FAIL: TL/g — a field already present must SKIP whatever the precondition state, and must not be written twice, got '$_tl_row'"; failures=$((failures+1)); }
+  _st_witness TL 7
+
+  unset -f _tl_drive 2>/dev/null || true
+  unset TL_ARGV
+  if [[ "$_tl_saved_inst" == "__tl_unset__" ]]; then unset PMO_INSTANCE_PATH; else export PMO_INSTANCE_PATH="$_tl_saved_inst"; fi
+  PRODUCE_LEARNINGS_REGISTER="$_tl_saved_plr"
+
   /bin/rm -rf "$_cc_atmp" 2>/dev/null || true
   /bin/rm -rf "$_cc_tmp" 2>/dev/null || true
   unset -f _cc_write _cc_count _cc_seq
   RELEASE_LOG="$_cc_saved_log"; VERSION="$_cc_saved_ver"; MODE="$_cc_saved_mode"
   COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_saved_tool"; MILESTONE="$_cc_saved_ms"
+  PRODUCE_LEARNINGS_REGISTER="$_cc_saved_plr"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # Test 4d: phase_detect_open_issues exclude filter (#38, #3665) — offline, hermetic.
@@ -17641,6 +17757,7 @@ EOF
   _st_claim HF "  the report header's chore-PR field renders every outcome phase 11 records (#5769, group HF — 9 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): HF-1 CIAC-2's runtime limb — each of the seven recorded states renders its own exact line, seven distinct lines, read through the real report / HF-2 AC-2 an idempotent skip on an --apply run reads as a success, never N/A, dry-run or FAILED / HF-3 AC-3 dry-run, not-yet-created and the idempotent skip are three distinct lines / HF-4 polarity over the partition: no success renders as N/A, FAILED or not created, and the failed outcome never renders as a skip / HF-5 the #7182 seam: a run halted at create_chore_branch names where it halted, never dry-run or N/A wording / HF-6 partition parity: every value the production region assigns to CHORE_PR_OUTCOME has an arm in the renderer, with an anti-vacuity floor of six and an extraction control / HF-7 an unknown value renders visibly unrecognised, never as a plausible state / HF-8 end to end on the real phase in --dry-run: the phase row, the recorded outcome and the header name the same outcome / HF-8b the JSON twin's chore_pr_outcome carries the same seven states, with chore_pr the number or null"
   _st_claim NM "  --no-merge membership declared once + phase 15.55's own-tag limb validated (#7465, group NM — 17 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): NM-1 AC-1 — the dispatch lines from 15.5 through 16.7, lifted verbatim and executed under --no-merge with the own Release unpublished, defer 15.55 and 15.6 and reach 16, 16.5 and 16.7 / NM-1c its control: the same text on a merge run halts at 15.55 with exit 3 and strands the phases after it, so the harness can observe stranding / NM-2a NM-2b AC-2 — a dry-run predicts the own-tag gap its own publish no-op produces, over a DEPLOYED and a VERIFIED row, and records the prediction / NM-3 AC-3 — a sibling gap still FAILs at --apply, and NM-3c the clean fixture PASSes naming the own tag's state / NM-4a AC-4 at the parity population — the own tag is partitioned out by VERSION, with a sibling-gap control on the same fixture / NM-4b no masking — the in-flight set cannot hide a genuine own gap at --apply, and a closing version with a Release and no annotated tag is reported under the own label only / NM-4c the prediction predicate, one negative per conjunct, and the own pair's four states / NM-4d without a 15.5 dry-run record the own gap is reported / NM-4e a predicted own gap does not mask a sibling gap / NM-CIAC3 --no-merge defers 15.55 and the resumed --apply asserts it for real / NM-5a AC-5 — every post-merge dispatched phase has a row, with sensitivity, specificity and no-pivot controls, every row names a post-merge phase, and every value is in the closed set / NM-5b both reports derive their deferred list from the table, a row appended to it renders with no renderer edit, and NO_MERGE=0 renders none / NM-5c every defer row shares a --help line with DEFERS under --no-merge, with a control the predicate rejects / NM-5d every defer phase OPENS with the declared deferral, checked structurally against a constructed hand guard, a mutated copy of phase 13 and a deferral naming another phase / NM-12 phase 12's --no-merge detail says a chore PR phase 11 found MERGED is merged, with the byte-identical left-open control"
   _st_claim LK "  phase_lock_milestone_threads validated (#5284 + #4768, group LK — 14 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): LK/a five unlocked threads, three issues and two pull requests, PASS with rc 0 and a detail that names every thread it locked / LK/b one REST lock call per thread with lock_reason=resolved, the two pull-request threads included / LK/c the lock path is REST only — every call an api call, none GraphQL and no issue-lock or pr-lock verb — with a control the transport predicate matches / LK/d two already-locked threads are skipped by the enumeration's own field, so three lock calls, and the detail counts them / LK/e every thread already locked reads SKIPPED with an explicit zero and makes no lock call / LK/f an empty milestone reads SKIPPED with an explicit zero / LK/g one failed lock call FAILs naming that thread in a pipe-free, home-redacted detail, the other four still lock, and the phase returns 0 / LK/h the count check's FAIL arm: an enumeration one issue short of the PR-inclusive counters FAILs naming both numbers, and the four enumerated threads still lock / LK/i its PASS arm: 5 == 0 + 5, with the control that the same fixture's issues-only subset (3) would read a phantom gap / LK/j --dry-run predicts statically, with no host call, no pipe and no would-FAIL token / LK/k --no-merge defers through the table's defer row with no host call / LK/l a failed enumeration FAILs with the host's message redacted, locks nothing and returns 0 / LK/m a lock call that reports success and locks nothing is caught by the read-back / LK/n the phase is dispatched after phase 15 and before at least one other phase, so the halted marker never reads its FAIL row as the last"
+  _st_claim TL "  phase 6.8 declared register precondition validated (#6892, group TL — 7 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): TL/a the REAL register producer writes the Phase A7.2 register under a temporary instance root before 6.8 runs, and 6.8 PASSes with the computed readings the register makes possible / TL/b 6.8 hands the telemetry tool --retro with exactly the producer's --print-path value / TL/c with no register produced the field is still written with the honest absent reading, the row is WARN naming the unmet precondition, and the phase returns 0 / TL/d an unresolvable register path records WARN UNRESOLVABLE and passes no --retro / TL/e --dry-run over an absent register predicts the WARN with no would-FAIL token and writes nothing / TL/f the WARN detail never prints the resolved register path / TL/g with the precondition still unmet the first run writes the field and records WARN, and the re-run SKIPs without writing it twice"
   echo "  --no-merge post-merge behaviour validated (#2919 + NO_MERGE_PHASE_BEHAVIOUR — every defer row DEFERS under --no-merge even with an open milestone and issues, every skip row SKIPs citing the flag without the deferral sentinel; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
