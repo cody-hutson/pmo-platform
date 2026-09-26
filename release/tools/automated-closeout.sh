@@ -64,7 +64,7 @@
 #   14 manual_close_release_issues operator-authorized D-1 with structured comment (#2919: DEFERS under --no-merge)
 #   15 run_verification + post_gate_passage_proof per the gate-passage-proof template
 #   15.5 publish_github_release gh release create | edit (Layer-1 dual-write Surface 1; #2919: DEFERS under --no-merge, as does 15.6 check_release_body_drift) — BACKSTOP for Stage 12 Phase B5.5, which owns the emit; the edit path converges BODY and TITLE; records SURFACE1-STATE=CREATED|EDITED|NO-OP and SURFACE1-TITLE=MATCH|CONVERGED|WITHHELD
-#   15.55 assert_anchor_hygiene  SET-based annotated-tag <-> published-Release parity + tagger identity (dated exemption sets)
+#   15.55 assert_anchor_hygiene  SET-based annotated-tag <-> published-Release parity + tagger identity (dated exemption sets) — the own tag is partitioned out by VERSION and asserted by its own limb (#2919 membership: DEFERS under --no-merge)
 #   15.6 check_release_body_drift  post-emit §5.1 published-body drift assert (gated genuine drift BLOCKS; #2919: DEFERS under --no-merge)
 #   16 invoke_orphan_cleanup cleanup-orphan-state.sh --release-close <slug> --dry-run
 #   16.5 pattern_scan      synthesize-release-learnings.sh --mode pattern-detect (ON by default;
@@ -163,12 +163,14 @@
 #     --merge-timeout <N>      Chore-PR await-merge poll budget, seconds (#1705;
 #                              default 300 — CI-realistic, not the old 30s cap)
 #     --no-merge               Create the chore PR but do NOT poll/merge it (#1705);
-#                              exit cleanly leaving the PR for the operator. The
-#                              post-merge-dependent phases — post_close_milestone,
-#                              manual_close_release_issues, publish_github_release,
-#                              check_release_body_drift — DEFER under this flag
-#                              (#2919); re-run --apply after the chore PR merges to
-#                              complete milestone close + Release publish.
+#                              exit cleanly leaving the PR for the operator. Every
+#                              post-merge phase declares its behaviour under this
+#                              flag in NO_MERGE_PHASE_BEHAVIOUR (run / skip /
+#                              record / defer); the deferred ones are listed in
+#                              the report's "Deferred Under --no-merge" section
+#                              with the follow-up command (#2919). Re-run --apply
+#                              after the chore PR merges to complete milestone
+#                              close + Release publish.
 #     --attest-action-items <c> Operator attestation clearing a Procedure 7a SURFACE
 #                              state (#4439). Closed enum: no-commitments (this
 #                              release genuinely recorded no action items) or
@@ -674,6 +676,52 @@ MERGE_TIMEOUT=300        # --merge-timeout <N> (#1705). Await-merge poll budget 
                          # pending budget, not a CI-completion budget.
 NO_MERGE=0               # --no-merge (#1705). Create the chore PR but do NOT poll/merge
                          # it — exit cleanly leaving the PR for the operator to merge.
+
+# ─── --no-merge phase behaviour — THE declaration ────────────────────────────
+# Every phase dispatched AT OR AFTER phase_await_merge_chore_pr declares exactly
+# ONE behaviour under --no-merge. A phase dispatched before it cannot consume the
+# merge the flag suppresses, so it carries no row. This table is the single
+# source for: the deferral itself (_nm_defer, the FIRST statement of every `defer`
+# phase), the report's "Deferred Under --no-merge" bullets and the JSON
+# deferred_under_no_merge array (both derived here), and self-test group NM.
+# A post-merge phase dispatched WITHOUT a row fails group NM arm NM-5a.
+#
+# Values (closed set):
+#   run    — unaffected; runs exactly as on a merge run
+#   skip   — N/A by construction: its input is the merge this run did not perform;
+#            the phase records its own SKIPPED detail and nothing is owed
+#   record — evaluates and records; a verdict that would block at --apply is
+#            recorded non-blocking because the close it guards is deferred
+#   defer  — owed on the post-merge re-run; _nm_defer records the deferral and
+#            the report lists the phase with the consequence text on its row
+#
+# Row form: "<phase-record-name> <value> [consequence — defer rows only]". The name
+# is the dispatched function's name without phase_ (the key arm g already uses).
+# Consequence text carries no '|'; @MILESTONE@ renders as #<milestone number>.
+#
+# Two conventions every `defer` row owes, each checked by group NM:
+#   - its phase OPENS with `_nm_defer "<name>" "<detail>" && return 0` — a phase
+#     that defers through its own hand-written NO_MERGE guard records the same
+#     observable but fails NM-5d, because the table must stay the source;
+#   - its --help inventory row carries `DEFERS under --no-merge` ON THE LINE THAT
+#     NAMES THE PHASE — --help renders the header line by line, so a token on a
+#     continuation line is invisible to the per-line check, NM-5c.
+NO_MERGE_PHASE_BEHAVIOUR=(
+  "await_merge_chore_pr skip"
+  "sync_primary_checkout run"
+  "reparse_ledgers skip"
+  "action_item_gate record"
+  "post_close_milestone defer Milestone @MILESTONE@ left OPEN"
+  "manual_close_release_issues defer D-1 anomaly issue-close deferred"
+  "run_verification run"
+  "publish_github_release defer Surface 1 (GitHub Release) not emitted"
+  "assert_anchor_hygiene defer release-anchor parity not asserted — its Surface-1 input is not yet published"
+  "check_release_body_drift defer no published Release to drift-check"
+  "invoke_orphan_cleanup run"
+  "pattern_scan run"
+  "audit_epic_rollup run"
+)
+
 CHORE_PR_SKIPPED=0       # set by phase_create_chore_pr's zero-commit guard so
                          # phase_await_merge_chore_pr SKIPs gracefully (un-strands the
                          # terminal phases on the idempotent already-up-to-date path).
@@ -1552,6 +1600,65 @@ get_phase() {
   /usr/bin/printf '—|—\n'
 }
 
+# ─── --no-merge behaviour readers — the ONLY readers of NO_MERGE_PHASE_BEHAVIOUR ─
+_nm_behaviour() {   # <phase-record-name> -> declared value, or UNDECLARED
+  local _row _n _b _c
+  for _row in "${NO_MERGE_PHASE_BEHAVIOUR[@]}"; do
+    read -r _n _b _c <<<"$_row"
+    if [[ "$_n" == "$1" ]]; then /usr/bin/printf '%s' "$_b"; return 0; fi
+  done
+  /usr/bin/printf 'UNDECLARED'
+}
+
+_nm_members() {     # <value> -> the names declared with it, one per line, table order
+  local _row _n _b _c
+  for _row in "${NO_MERGE_PHASE_BEHAVIOUR[@]}"; do
+    read -r _n _b _c <<<"$_row"
+    if [[ "$_b" == "$1" ]]; then /usr/bin/printf '%s\n' "$_n"; fi
+  done
+  return 0
+}
+
+_nm_consequence() { # <phase-record-name> -> a defer row's report text
+  local _row _n _b _c _ms="#${MILESTONE}"
+  for _row in "${NO_MERGE_PHASE_BEHAVIOUR[@]}"; do
+    read -r _n _b _c <<<"$_row"
+    if [[ "$_n" == "$1" ]]; then /usr/bin/printf '%s' "${_c//@MILESTONE@/$_ms}"; return 0; fi
+  done
+  return 0
+}
+
+# THE --no-merge deferral. The FIRST statement of every phase the table declares
+# `defer`, above every guard, so it fires before any network call. Records SKIPPED
+# "DEFERRED under --no-merge — <detail>" and returns 0 (caller returns) iff
+# --no-merge is set AND the table declares the phase `defer`; else returns 1.
+# The TABLE decides: a phase calling this while declared anything else proceeds.
+_nm_defer() {       # <phase-record-name> <detail>
+  [[ "$NO_MERGE" -eq 1 ]] || return 1
+  [[ "$(_nm_behaviour "$1")" == "defer" ]] || return 1
+  mark_phase "$1" "SKIPPED" "DEFERRED under --no-merge — $2"
+  return 0
+}
+
+# Post-merge dispatched phases (at or after the pivot, in dispatch order) with NO
+# row, one per line. The parse is arm g's own (^phase_[a-z0-9_]+ \|\|). Emits
+# NO-PIVOT when the pivot is absent, so a parse that read nothing cannot pass as
+# "all declared". The text is read from a HERE-STRING, never handed to an external
+# command as an argument: this whole file exceeds the platform's argument-size
+# limit, and an external printf fed it fails and leaves the parse reading nothing.
+_nm_undeclared() {  # <dispatch-text>
+  local _names _n _seen=0
+  _names="$(/usr/bin/grep -oE '^phase_[a-z0-9_]+ \|\|' <<<"$1" | /usr/bin/sed 's/^phase_//;s/ ||$//' || true)"
+  while IFS= read -r _n; do
+    if [[ -z "$_n" ]]; then continue; fi
+    if [[ "$_n" == "await_merge_chore_pr" ]]; then _seen=1; fi
+    if [[ "$_seen" -ne 1 ]]; then continue; fi
+    if [[ "$(_nm_behaviour "$_n")" == "UNDECLARED" ]]; then /usr/bin/printf '%s\n' "$_n"; fi
+  done <<<"$_names"
+  if [[ "$_seen" -ne 1 ]]; then /usr/bin/printf 'NO-PIVOT\n'; fi
+  return 0
+}
+
 # True when phase-record index $1 holds the FIRST occurrence of its phase name.
 # Both report renderers walk the record through this predicate, so a name marked
 # more than once emits exactly ONE row carrying its FIRST result — the semantics
@@ -1725,7 +1832,7 @@ phase_preflight() {
   # unenumerated name shape that falls back to the Version (n=0), or a kebab-valued
   # column that shadows Milestone (n>=2) — is caught HERE, before any mutation, rather
   # than aborting 4 phases later at --apply or silently writing a bad INDEX cell. The
-  # state alternation is required because an idempotent re-run reads VERIFIED, not DEPLOYED.
+  # state alternation is required because a re-run reads VERIFIED, not DEPLOYED.
   local _slug_match_n
   _slug_match_n="$(log_row_match "$STATE_MILESTONE_SLUG" 'DEPLOYED|VERIFIED' count)"
   if [[ "$_slug_match_n" != "1" ]]; then
@@ -1846,7 +1953,7 @@ phase_read_state() {
 # uses it to EXCLUDE the sub-task from auto-close (a `--state open` query is
 # correct there — a closed sub-task cannot self-close), and `resolve_stage13_subtask`
 # uses it to FIND the sub-task as a comment target (a `--state open` query is WRONG
-# there — on an idempotent re-run or a `--no-merge` re-entry the sub-task may already
+# there — on a re-run or a `--no-merge` re-entry the sub-task may already
 # be closed, and a closed sub-task is still the correct durable home for the proof).
 # THE SHARED INVARIANT IS THE PREDICATE, NOT THE QUERY. Do not "unify" the two
 # callers onto one query state: that would either resurrect a closed sub-task into
@@ -4417,8 +4524,8 @@ phase_append_changelog() {
 # mode-blindness was the defect. So --dry-run PREDICTS the assertion and returns 0,
 # and --apply runs it byte-for-byte unchanged.
 #
-# Residual, accepted and named: --dry-run no longer PREVIEWS a residue finding on an
-# idempotent re-run (a close resumed after the entries already landed). The gate
+# Residual, accepted and named: --dry-run no longer PREVIEWS a residue finding on a
+# re-run (a close resumed after the entries already landed). The gate
 # itself loses nothing — the assertion still runs at --apply at 9.55, which is BEFORE
 # the chore commit at 9.95, so residue is still caught loud before anything is
 # committed, and Checks 32 + 48 remain the corpus-wide detector. What is lost is the
@@ -4666,7 +4773,7 @@ _block_field_present() {
 }
 
 # Tree-PRESENCE probe for ONE member. PRESENCE — not phase result — is the
-# --apply predicate deliberately: an idempotent re-run whose producing phase
+# --apply predicate deliberately: a re-run whose producing phase
 # SKIPPED *because the output was already there* must pass.
 _output_set_member_present() {
   case "$1" in
@@ -5156,8 +5263,8 @@ phase_ledger_guard() {
 # Staging: this phase WRITES + populates REBUILT_PACKAGES=(); it does not `git
 # add` (write/stage separation — commit_chore_pr stages via files=()).
 # --no-merge: pre-commit phase; does NOT defer (the chore PR is still created, so
-# the rebuild must ride its commit) — hence no NO_MERGE guard here and no entry
-# in either deferral list.
+# the rebuild must ride its commit) — hence no NO_MERGE guard here and no row in
+# NO_MERGE_PHASE_BEHAVIOUR, which covers only phases dispatched at or after the merge.
 
 phase_rebuild_skill_packages() {
   local builder="$REPO_ROOT/core/deploy/tools/build-skill-packages.sh"
@@ -5835,8 +5942,15 @@ phase_await_merge_chore_pr() {
   fi
 
   # --no-merge mode (#1705): create-only — leave the PR for the operator to merge.
+  # Declared `skip` in NO_MERGE_PHASE_BEHAVIOUR. The detail reads the outcome phase 11
+  # recorded, with no host read: on a resumed run whose chore PR phase 11 already
+  # found MERGED, "left open" would be false, so the detail says what is true.
   if [[ "$NO_MERGE" -eq 1 ]]; then
-    mark_phase "await_merge_chore_pr" "SKIPPED" "--no-merge: chore PR #${CHORE_PR_NUMBER:-?} left open for operator merge (no poll/merge)"
+    if [[ "${CHORE_PR_OUTCOME:-}" == "resumed-already-merged" ]]; then
+      mark_phase "await_merge_chore_pr" "SKIPPED" "--no-merge: chore PR #${CHORE_PR_NUMBER:-?} is already MERGED (phase 11 resolved it on this resumed run) — nothing to poll or merge; the phases after the merge still defer under this flag, so re-run --apply without it"
+    else
+      mark_phase "await_merge_chore_pr" "SKIPPED" "--no-merge: chore PR #${CHORE_PR_NUMBER:-?} left open for operator merge (no poll/merge)"
+    fi
     return 0
   fi
 
@@ -6160,8 +6274,10 @@ phase_reparse_ledgers() {
 #                carries the literal "would BLOCK at --apply" (the :3385 precedent).
 #   --no-merge   phase_post_close_milestone already DEFERS, so blocking would abort a
 #                run whose close was deferred anyway. The gate evaluates and records.
-#                It deliberately does NOT join the --no-merge deferred set — that set
-#                is hand-enumerated at five sites this file's own comment warns about.
+#                It is declared `record` in NO_MERGE_PHASE_BEHAVIOUR, deliberately not
+#                `defer`: the ledger verdict does not depend on the merge, so reading
+#                it on the --no-merge pass costs nothing and surfaces an unresolved
+#                ledger before the operator merges.
 #   already-closed  an idempotent re-run must not fail. It records instead — and when
 #                the recorded STATE is UNRESOLVED it NAMES that as the #304 shape,
 #                turning the re-run into a detector for the originating incident.
@@ -6620,10 +6736,8 @@ phase_post_close_milestone() {
   # would record a false audit state (main still shows DEPLOYED). Defer per the
   # stage-13-close.md § Phase B sequencing invariant ("chore PR MUST land on main
   # BEFORE Phase C C1 Milestone close"); the operator re-runs --apply post-merge.
-  if [[ "$NO_MERGE" -eq 1 ]]; then
-    mark_phase "post_close_milestone" "SKIPPED" "DEFERRED under --no-merge — chore PR #${CHORE_PR_NUMBER:-?} left open; milestone #${MILESTONE} close waits for it to land on main (re-run --apply after merge)"
-    return 0
-  fi
+  # Declared `defer` in NO_MERGE_PHASE_BEHAVIOUR.
+  _nm_defer "post_close_milestone" "chore PR #${CHORE_PR_NUMBER:-?} left open; milestone #${MILESTONE} close waits for it to land on main (re-run --apply after merge)" && return 0
 
   if [[ "$STATE_MILESTONE_STATE" == "closed" ]]; then
     mark_phase "post_close_milestone" "SKIPPED" "milestone already closed"
@@ -6650,11 +6764,8 @@ phase_manual_close_release_issues() {
   # --no-merge (#2919): D-1 manual issue-close is part of the post-milestone-close
   # ceremony, which itself defers until the chore PR lands on main. Defer here too so
   # the operator's single follow-up --apply (post-merge) performs milestone close +
-  # issue close together.
-  if [[ "$NO_MERGE" -eq 1 ]]; then
-    mark_phase "manual_close_release_issues" "SKIPPED" "DEFERRED under --no-merge — chore PR left open; D-1 issue close waits for milestone-close after merge (re-run --apply)"
-    return 0
-  fi
+  # issue close together. Declared `defer` in NO_MERGE_PHASE_BEHAVIOUR.
+  _nm_defer "manual_close_release_issues" "chore PR left open; D-1 issue close waits for milestone-close after merge (re-run --apply)" && return 0
 
   if [[ "$OPEN_ISSUE_COUNT" -eq 0 ]]; then
     mark_phase "manual_close_release_issues" "SKIPPED" "no open release issues to manually close"
@@ -7103,11 +7214,9 @@ phase_publish_github_release() {
   # Under --no-merge the note is still on the open chore branch, so publishing now
   # would bind a public Release to unmerged content. Defer BEFORE the tag/notes
   # preflights (avoids a needless network call) per the stage-13-close.md § Phase B
-  # sequencing invariant; the operator re-runs --apply post-merge.
-  if [[ "$NO_MERGE" -eq 1 ]]; then
-    mark_phase "publish_github_release" "SKIPPED" "DEFERRED under --no-merge — RELEASE_NOTES land on main only when the chore PR merges; Surface 1 publish waits (re-run --apply after merge)"
-    return 0
-  fi
+  # sequencing invariant; the operator re-runs --apply post-merge. Declared `defer`
+  # in NO_MERGE_PHASE_BEHAVIOUR.
+  _nm_defer "publish_github_release" "RELEASE_NOTES land on main only when the chore PR merges; Surface 1 publish waits (re-run --apply after merge)" && return 0
 
   # DRY-RUN branch — deliberately above all three aborting preflights, so the apply
   # path below is reached with exactly the control flow it had before. Detail carries
@@ -7404,10 +7513,17 @@ _drift_block_in_scope() {
 # It is expected ONLY for (a) a sibling release genuinely in flight inside that
 # Stage-12 window, or (b) a recorded historical exemption above. A MISSING-RELEASE on a
 # tag whose release has already closed is a real gap.
-# NOTE ON REACH: this phase runs AFTER phase 15.5, which converges Surface 1 for THIS
-# release — so this release's own tag can never appear here. This gate reports on
-# siblings and history; the current release's Surface-1 provenance is owned by
-# stage-13-close.md § Phase B5.6.
+# NOTE ON REACH: this release's own tag is PARTITIONED OUT of the sibling/history
+# population by construction — anchor_parity_violations skips the VERSION it is
+# handed — so it never appears in the sibling report, in any mode, rather than only
+# when phase 15.5 happened to publish first. The own tag is asserted by its own limb
+# (own_anchor_state + own_anchor_gap_is_this_close) under the mode rule at the top
+# of this file: for real at --apply, after 15.5 converges Surface 1; PREDICTED at
+# --dry-run only in the one state 15.5's own no-op produces; and, with the whole
+# phase, DEFERRED under --no-merge. Neither exclusion key masks a genuine own-tag
+# gap at --apply: the VERSION key removes the tag from the sibling population
+# only, and the #6857 in-flight set is consulted by the sibling population only.
+# The current release's Surface-1 provenance is owned by stage-13-close.md § Phase B5.6.
 ANCHOR_PARITY_EXEMPT_TAGS=(
   v3.31    # annotated tag, no published GitHub Release; Release-publication routed out of this card
   v3.65.1  # annotated tag, no published GitHub Release; Release-publication routed out of this card
@@ -7477,11 +7593,12 @@ inflight_release_tags() {
 }
 
 anchor_parity_violations() {
-  local ann_file="$1" rel_file="$2" inflight_file="${3:-}"
+  local ann_file="$1" rel_file="$2" inflight_file="${3:-}" own="${4:-}"
   local exempt; exempt="$(/usr/bin/printf '%s\n' "${ANCHOR_PARITY_EXEMPT_TAGS[@]}" | /usr/bin/sort -u)"
   local t
   while IFS= read -r t; do
     [[ -z "$t" ]] && continue
+    [[ -n "$own" && "$t" == "$own" ]] && continue   # the closing release's own tag never enters the sibling/history population (keyed on VERSION); its own limb asserts it
     if /usr/bin/printf '%s\n' "$exempt" | /usr/bin/grep -qxF "$t"; then continue; fi
     # #6857 — a sibling still inside its Stage-12/13 window is the expected benign
     # case, not drift. Scoped to THIS arm: a published Release on a lightweight tag
@@ -7492,9 +7609,38 @@ anchor_parity_violations() {
   done < <(/usr/bin/comm -23 "$ann_file" "$rel_file")
   while IFS= read -r t; do
     [[ -z "$t" ]] && continue
+    [[ -n "$own" && "$t" == "$own" ]] && continue   # the closing release's own tag never enters the sibling/history population (keyed on VERSION); its own limb asserts it
     if /usr/bin/printf '%s\n' "$exempt" | /usr/bin/grep -qxF "$t"; then continue; fi
     /usr/bin/printf 'MISSING-ANNOTATED-TAG %s (published GitHub Release with no annotated tag)\n' "$t"
   done < <(/usr/bin/comm -13 "$ann_file" "$rel_file")
+}
+
+# The closing release's own anchor pair: IN-STEP | MISSING-RELEASE |
+# MISSING-ANNOTATED-TAG | ABSENT. Files, not live probes, for the same offline-
+# testability reason as anchor_parity_violations.
+own_anchor_state() {   # <ann_file> <rel_file> <version>
+  local _a=0 _r=0
+  if /usr/bin/grep -qxF "$3" "$1" 2>/dev/null; then _a=1; fi
+  if /usr/bin/grep -qxF "$3" "$2" 2>/dev/null; then _r=1; fi
+  case "$_a$_r" in
+    11) /usr/bin/printf 'IN-STEP' ;;
+    10) /usr/bin/printf 'MISSING-RELEASE' ;;
+    01) /usr/bin/printf 'MISSING-ANNOTATED-TAG' ;;
+    *)  /usr/bin/printf 'ABSENT' ;;
+  esac
+}
+
+# The ONE bounded state in which the own tag's missing Release is this script's
+# own no-op and is PREDICTED rather than reported. Returns 0 to predict, 1 to
+# report. ADR-158 per-limb shape: a CONJUNCTION, never a mode-wide suppression.
+#   (1) the own pair is MISSING-RELEASE (annotated tag, no published Release)
+#   (2) MODE is dry-run
+#   (3) phase 15.5 recorded DRY-RUN this run — the no-op that produces the gap
+own_anchor_gap_is_this_close() {   # <own_state> <mode> <publish_record "RESULT|DETAIL">
+  [[ "$1" == "MISSING-RELEASE" ]] || return 1
+  [[ "$2" == "dry-run" ]] || return 1
+  [[ "${3%%|*}" == "DRY-RUN" ]] || return 1
+  return 0
 }
 
 # #5268 — the ONE bounded --dry-run state in which an INDEX/LOG version-row gap is
@@ -7545,6 +7691,9 @@ ledger_gap_is_this_close() {
 }
 
 phase_assert_anchor_hygiene() {
+  # Declared `defer` in NO_MERGE_PHASE_BEHAVIOUR: the FIRST statement, above the temp
+  # dir, so a deferral creates nothing and reaches no network call.
+  _nm_defer "assert_anchor_hygiene" "the tag<->Release parity it asserts reads the Surface 1 that phase 15.5 publishes, which --no-merge defers; siblings, history and this release's own tag are all asserted on the post-merge re-run (re-run --apply after merge)" && return 0
   local findings="" tmp
   tmp="$(/usr/bin/mktemp -d -t anchorhygiene.XXXXXX)"
 
@@ -7591,13 +7740,29 @@ phase_assert_anchor_hygiene() {
   # (3) AC4b — annotated-tag <-> published-Release set parity. NETWORK. A gh failure is
   # SKIPPED-with-a-loud-reason, never a silent pass: "could not check" and "checked and
   # clean" must never render the same.
-  local _net_note=""
+  local _net_note="" _own_txt="own tag ${VERSION}: not checked"
   annotated_tags_of "$REPO_ROOT" > "$tmp/ann"
   if $GH release list --limit 400 --json tagName -q '.[].tagName' 2>/dev/null | /usr/bin/sort > "$tmp/rel" \
      && [[ -s "$tmp/rel" ]]; then
     inflight_release_tags "$RELEASE_LOG" "$tmp/ann" > "$tmp/inflight" 2>/dev/null || : > "$tmp/inflight"
-    local _ap; _ap="$(anchor_parity_violations "$tmp/ann" "$tmp/rel" "$tmp/inflight")"
+    # (3a) siblings + history — the own tag is partitioned OUT by construction.
+    local _ap; _ap="$(anchor_parity_violations "$tmp/ann" "$tmp/rel" "$tmp/inflight" "$VERSION")"
     [[ -n "$_ap" ]] && findings="${findings}${_ap}"$'\n'
+    # (3b) the own tag — its own limb. Reads NEITHER exemption set: not the recorded
+    # exemptions, not the #6857 in-flight set. Assert at --apply; predict at
+    # --dry-run only in the bounded state; deferred with the phase under --no-merge.
+    local _own; _own="$(own_anchor_state "$tmp/ann" "$tmp/rel" "$VERSION")"
+    _own_txt="own tag ${VERSION}: ${_own}"
+    case "$_own" in
+      MISSING-RELEASE)
+        if own_anchor_gap_is_this_close "$_own" "$MODE" "$(get_phase publish_github_release)"; then
+          _own_txt="own tag ${VERSION}: OWN-TAG PREDICTED, not evaluated under --dry-run — its annotated tag has no published Release yet, and phase 15.5 converges Surface 1 for ${VERSION} at --apply while writing nothing here, so the gap is this script's own no-op; the own-tag assertion runs for real at --apply, after phase 15.5 publishes"
+        else
+          findings="${findings}OWN-TAG-MISSING-RELEASE ${VERSION} (this release's annotated tag has no published GitHub Release after phase 15.5)"$'\n'
+        fi ;;
+      MISSING-ANNOTATED-TAG)
+        findings="${findings}OWN-TAG-MISSING-ANNOTATED-TAG ${VERSION} (this release's published GitHub Release has no annotated tag)"$'\n' ;;
+    esac
   else
     _net_note="; tag<->Release set parity NOT CHECKED (gh release list unavailable — offline or credential-less)"
   fi
@@ -7619,9 +7784,9 @@ phase_assert_anchor_hygiene() {
   local _ledger_txt="INDEX ${_idx} == LOG ${_log} rows"
   [[ -n "$_parity_pred" ]] && _ledger_txt="INDEX ${_idx} vs LOG ${_log} rows${_parity_pred}"
   if [[ -n "$_net_note" ]]; then
-    mark_phase "assert_anchor_hygiene" "SKIPPED" "offline assertions clean (${_annn} annotated tags; ${_ledger_txt})${_net_note}"
+    mark_phase "assert_anchor_hygiene" "SKIPPED" "offline assertions clean (${_annn} annotated tags; ${_ledger_txt}; ${_own_txt})${_net_note}"
   else
-    mark_phase "assert_anchor_hygiene" "PASS" "release anchors in step (${_annn} annotated tags; tag<->Release sets equal modulo ${#ANCHOR_PARITY_EXEMPT_TAGS[@]} recorded exemptions; ${_ledger_txt})"
+    mark_phase "assert_anchor_hygiene" "PASS" "release anchors in step (${_annn} annotated tags; tag<->Release sets equal modulo ${#ANCHOR_PARITY_EXEMPT_TAGS[@]} recorded exemptions; ${_ledger_txt}; ${_own_txt})"
   fi
   return 0
 }
@@ -7668,11 +7833,9 @@ phase_check_release_body_drift() {
   # --no-merge (#2919): this detective phase compares the just-published Surface 1
   # Release body against the in-repo note. Under --no-merge publish_github_release
   # deferred, so there is no fresh Release to drift-check. Defer (avoids a needless
-  # network call); re-runs with the publish on the post-merge --apply.
-  if [[ "$NO_MERGE" -eq 1 ]]; then
-    mark_phase "check_release_body_drift" "SKIPPED" "DEFERRED under --no-merge — no Surface 1 published this run to drift-check (re-run --apply after merge)"
-    return 0
-  fi
+  # network call); re-runs with the publish on the post-merge --apply. Declared
+  # `defer` in NO_MERGE_PHASE_BEHAVIOUR.
+  _nm_defer "check_release_body_drift" "no Surface 1 published this run to drift-check (re-run --apply after merge)" && return 0
 
   if [[ ! -x "$DRIFT_CHECK_TOOL" ]]; then
     mark_phase "check_release_body_drift" "SKIPPED" "check-release-body-drift.sh not executable at $DRIFT_CHECK_TOOL"
@@ -7929,11 +8092,10 @@ EOF
   # audit_epic_rollup.
   #
   # SCOPE OF THAT CONTRACT — narrow on purpose. It holds for THIS table, not for
-  # the report as a whole. Two partial phase enumerations remain hardcoded and DO
-  # need hand-editing when a phase joins the --no-merge deferred set: the
-  # "Deferred Under --no-merge" bullets further down in this function, and the
-  # `deferred` literal in generate_json_report. Do NOT read this as "there is no
-  # report list to edit" — there is; it is simply not this one.
+  # the report as a whole. The --no-merge Deferred bullets further down, and the
+  # JSON twin's deferred_under_no_merge array, are DERIVED from
+  # NO_MERGE_PHASE_BEHAVIOUR. A phase joins the deferred set by its table row, and
+  # neither renderer is edited.
   #
   # WHY THE RECORD AND NOT THE phase_*() DEFINITIONS: the record is the only
   # in-file surface that observes EXECUTION rather than declaration. A definition
@@ -7991,8 +8153,8 @@ EOF
     done <<< "$OPEN_ISSUE_LIST"
     echo
   fi
-  # --no-merge (#2919): the post-merge-dependent phases deferred (see the guard
-  # clauses in phases 13/14/15.5/15.6). Emit the deferred set + the exact
+  # --no-merge (#2919): the post-merge-dependent phases deferred (the rows
+  # NO_MERGE_PHASE_BEHAVIOUR declares `defer`). Emit the deferred set + the exact
   # follow-up command so the operator has a single unambiguous next step — the step
   # whose absence forced a manual milestone reopen/re-close on the v3.45 close.
   if [[ "$NO_MERGE" -eq 1 ]]; then
@@ -8005,10 +8167,11 @@ EOF
     echo
     echo "The Stage 13 chore PR${CHORE_PR_NUMBER:+ #${CHORE_PR_NUMBER}} was left open (\`--no-merge\`). Post-merge-dependent phases were deferred to preserve the Stage 13 sequencing invariant — the chore PR MUST land on main before milestone close / Release publish (release/references/pipeline/stage-13-close.md § Phase B):"
     echo
-    echo "- \`post_close_milestone\` — Milestone #${MILESTONE} left OPEN"
-    echo "- \`manual_close_release_issues\` — D-1 anomaly issue-close deferred"
-    echo "- \`publish_github_release\` — Surface 1 (GitHub Release) not emitted"
-    echo "- \`check_release_body_drift\` — no published Release to drift-check"
+    local _nm_d
+    while IFS= read -r _nm_d; do
+      [[ -z "$_nm_d" ]] && continue
+      echo "- \`${_nm_d}\` — $(_nm_consequence "$_nm_d")"
+    done <<< "$(_nm_members defer)"
     echo
     echo "**Follow-up — after the chore PR merges (CI-green):**"
     echo
@@ -8017,6 +8180,8 @@ EOF
     echo '```'
     echo
     echo "Re-run WITHOUT \`--no-merge\` (preserve any \`--outcome\` / \`--close-comment\` flags from this run): milestone close + Release publish then run. Re-running is the supported recovery, but this report does not assert that every phase is idempotent — the re-run behaviour \`--self-test\` pins is listed under \"Phases (sequenced)\" in \`--help\`."
+    echo
+    echo "The merge method is yours to choose — merge commit, squash or rebase: the resumed run matches the merged chore PR against that PR's own head, so each of them resumes."
     echo
   fi
   # Cross-release pattern scan (phase 16.5). The body is emitted here rather than
@@ -8072,7 +8237,7 @@ generate_json_report() {
     is_first_phase_occurrence "$_pj_i" || continue
     _pj_rec+=("${PHASE_NAMES[$_pj_i]}" "${PHASE_RESULTS[$_pj_i]}" "${PHASE_DETAILS[$_pj_i]}")
   done
-  CHORE_PR_OUTCOME_JSON="${CHORE_PR_OUTCOME:-not-yet-created}" /usr/bin/python3 - "$RUN_TS" "$MODE" "$PR_NUMBER" "$VERSION" "$MILESTONE" "$slug" \
+  CHORE_PR_OUTCOME_JSON="${CHORE_PR_OUTCOME:-not-yet-created}" NM_DEFERRED="$(_nm_members defer)" /usr/bin/python3 - "$RUN_TS" "$MODE" "$PR_NUMBER" "$VERSION" "$MILESTONE" "$slug" \
     "$STATE_LOG_ROW_STATE" "$STATE_MILESTONE_STATE" "$STATE_TAG_EXISTS" \
     "$STATE_CYCLE_TIME" "$OPEN_ISSUE_COUNT" "$CHORE_PR_NUMBER" "$OPEN_ISSUE_LIST" "$NO_MERGE" \
     "${_pj_rec[@]}" <<'PY'
@@ -8089,8 +8254,10 @@ if len(_pf) != 3 * _pn:
 phases = [{"name": _pf[i], "result": _pf[i + 1], "detail": _pf[i + 2]} for i in range(0, len(_pf), 3)]
 # --no-merge (#2919): the post-merge-dependent phases defer; surface which ones so a
 # JSON consumer sees the same deferral the markdown report's "Deferred Under --no-merge"
-# section shows. Empty list on the normal (merge) path.
-deferred = ["post_close_milestone", "manual_close_release_issues", "publish_github_release", "check_release_body_drift"] if no_merge == "1" else []
+# section shows. DERIVED from NO_MERGE_PHASE_BEHAVIOUR's `defer` rows (passed as
+# NM_DEFERRED, one name per line), never listed here. Empty list on the normal
+# (merge) path.
+deferred = [p for p in os.environ.get("NM_DEFERRED", "").split() if p] if no_merge == "1" else []
 payload = {
     "timestamp": ts,
     "mode": mode,
@@ -10798,7 +10965,7 @@ STUB
   # hermetic, credential-free. REFLEXIVITY NOTE: this is the phase that runs at the
   # close-out of the very release that introduced it, so the ladder is tested against
   # the shape that actually broke (#264: gate sub-task absent from the milestone) and
-  # against the shape an idempotent re-run produces (sub-task already CLOSED).
+  # against the shape a re-run produces (sub-task already CLOSED).
   #
   #   T-13  rung 1 resolves a CLOSED Stage-13 sub-task — the arm that fails if the
   #         resolver inherits the collector's `--state open` query. Asserts the phase
@@ -17303,7 +17470,7 @@ phase_post_close_milestone || { generate_report; exit 3; }
 phase_manual_close_release_issues || { generate_report; exit 3; }
 phase_run_verification || { generate_report; exit 3; }
 phase_publish_github_release || { generate_report; exit 3; }          # Phase 15.5 — Layer-1 dual-write Surface 1
-phase_assert_anchor_hygiene || { generate_report; exit 3; }           # Phase 15.55 — AC4/AC5: set-based tag<->Release parity + tagger identity (both anchors exist by now)
+phase_assert_anchor_hygiene || { generate_report; exit 3; }           # Phase 15.55 — AC4/AC5: set-based tag<->Release parity + tagger identity; the own tag is its own limb — asserted after 15.5 at --apply, predicted at --dry-run, deferred under --no-merge
 phase_check_release_body_drift || { generate_report; exit 3; }        # Phase 15.6 — post-emit §5.1 drift assert (genuine drift inside the cutoff scope BLOCKS; capability-absent / artifact-missing stay non-blocking)
 phase_invoke_orphan_cleanup || { generate_report; exit 3; }
 phase_pattern_scan || { generate_report; exit 3; }
