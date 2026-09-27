@@ -11653,8 +11653,11 @@ STUB
   #    is CIAC-3's runtime arm for this card (#7465's NM-CIAC3 is the 15.55 half).
   #    ARM ORDER IS LOAD-BEARING: CR-1 needs the stale ref before anything fetches;
   #    CR-2, CR-3, CR-14 and CR-13's first limb need the fresh one; CR-13's second
-  #    limb re-stales it with update-ref; CR-15 must run before CR-7 adds its late
-  #    commit; CR-12 builds its own squash-merged branch last.
+  #    limb re-stales it with update-ref; CR-5 must run after CR-4, whose failing
+  #    create stub it inherits, because _cr_reset resets the PR table and the counters
+  #    but not create-out and create-rc (reordered, CR-5 reddens rather than passes);
+  #    CR-15 must run before CR-7 adds its late commit; CR-12 builds its own
+  #    squash-merged branch last.
   if [[ -x "$GIT" ]]; then
     local _cr_s_gh="$GH" _cr_s_root="$REPO_ROOT" _cr_s_mode="$MODE" _cr_s_ver="$VERSION" _cr_s_br="$CHORE_BRANCH"
     local _cr_s_num="$CHORE_PR_NUMBER" _cr_s_skip="$CHORE_PR_SKIPPED" _cr_s_out="${CHORE_PR_OUTCOME:-}" _cr_s_nm="$NO_MERGE"
