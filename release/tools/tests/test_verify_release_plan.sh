@@ -134,9 +134,10 @@ set -euo pipefail
 #        (V6837-AC4, V7531-CIAC6) — the designated command (the first allowlisted
 #        verb that carries an argument) runs against the comparator stated after
 #        it, and every other command the method names is reported as "did not run
-#        (<reason>)"; a row with a command that did not run never reads PASS, and
-#        takes the can't-run slot the executor binds, whose value the arms derive
-#        rather than pin. A bare verb is prose, the shared comparator vocabulary
+#        (<reason>)"; a row with a command that did not run never reads PASS: a FAIL
+#        or ERROR from the designated command stands, and a designated PASS takes
+#        the can't-run slot the executor binds, whose value the arms derive rather
+#        than pin. A bare verb is prose, the shared comparator vocabulary
 #        reads markdown emphasis around N and nothing wider, and an operand-less
 #        further command never runs, so no later row is lost. G12-5 reads the
 #        stdin-verb fixture's bare cat under the same bare-verb rule. Five seeded
@@ -2948,10 +2949,11 @@ rm -rf "$G15STUB" "$MUTD6893"
 # The per-issue and integration handlers run the designated command — the first
 # allowlisted verb that carries an argument — against the comparator stated after
 # it, and name every other command the method carries as "did not run (<reason>)".
-# A row with a command that did not run never reads PASS: it takes the can't-run
-# slot the executor binds as VERDICT_PARTIAL_SLOT, and every arm here DERIVES the
-# slot's value from that one line rather than pinning it, so a re-binding of the
-# slot keeps the arms meaningful. A bare verb is prose. The shared comparator
+# A row with a command that did not run never reads PASS: a FAIL or ERROR from the
+# designated command stands, and a designated PASS takes the can't-run slot the
+# executor binds as VERDICT_PARTIAL_SLOT. Every arm here DERIVES the slot's value
+# from that one line rather than pinning it, so a re-binding of the slot keeps the
+# arms meaningful. A bare verb is prose. The shared comparator
 # vocabulary reads markdown emphasis around N and nothing wider. An operand-less
 # further command is never run, so no row after it is lost.
 #

@@ -145,6 +145,10 @@ readonly CLI_VERSION="0.3.0"
 # than UNRUNNABLE, or for reading a span no backtick closes as prose: rows move between
 # EXISTING verdicts, and the reason `unterminated-quote:<q>` rides an existing ERROR record --
 # a VALUE in an existing field, by the precedents above.
+# NO BUMP IS OWED for reading a word spelled like a test primary as a primary only where one
+# can stand, or for reading a declared deferral written in a span no backtick closes: rows
+# move between EXISTING families and verdicts, and no record field, family value or verdict
+# value is added -- the counters becoming correct, by the precedents above.
 readonly SCHEMA_VERSION="5"
 
 # ---------------------------------------------------------------------------
@@ -430,10 +434,10 @@ OPTIONS
   -h, --help        Show this help and exit
   --version         Show CLI version + schema version and exit
 
-CHECK FAMILIES (dispatched from the Verification method cell alone: a declared deferral, then a runnable probe or a scope assertion, then an integration keyword, then a declared deploy check, else method keyword, else the per-issue handler)
+CHECK FAMILIES (dispatched from the Verification method cell alone: a declared deferral, then a runnable probe or a scope assertion, then an integration keyword, then a declared deploy check, else method keyword, then a recognised tool command as unrunnable, else the per-issue handler)
   per-issue      file existence + content assertions  (any runnable probe:
-                 -- and the residual: a row no other   ${RUNNABLE_VERBS};
-                 family claims is inspected here       a row naming no
+                 -- and the residual: a row no earlier ${RUNNABLE_VERBS};
+                 step claims is inspected here         a row naming no
                                                        command it runs is
                                                        a named SKIP, and
                                                        only a backticked
@@ -448,8 +452,8 @@ CHECK FAMILIES (dispatched from the Verification method cell alone: a declared d
                                                        matched in-process, and
                                                        no authored byte reaches
                                                        git)
-  unrunnable     a recognised tool command no other   (named, never run: the
-                 family claims                         tool is outside the verb
+  unrunnable     a recognised tool command no earlier (named, never run: the
+                 step claims                           tool is outside the verb
                                                        set above)
   integration    Cross-Issue Acceptance Criteria      (reads the plan's CIAC
                  section; runs each entry's declared method — SOLE runner)
@@ -486,8 +490,9 @@ MULTI-COMMAND METHODS
   comparator that follows that command (at least N, at most N, exactly N,
   expect N; a null is expect 0). Every other command it names is reported as
   did not run, with its reason, and a row with a command that did not run
-  never reads PASS: it reads UNRUNNABLE. A bare tool name (grep alone) is
-  prose, never a command.
+  never reads PASS: a FAIL or ERROR from the designated command stands, and a
+  designated PASS reads UNRUNNABLE. A bare tool name (grep alone) is prose,
+  never a command.
 
 VERDICTS
   PASS        the check ran, and what it asserts holds
@@ -1323,18 +1328,23 @@ declares_deploy_check() {
   [ -n "$cmd" ] && is_deploy_check_invocation "$cmd"
 }
 
-# method_outside_verb_spans <method> -- the method with EVERY backtick span whose
-# leading token is an allowlisted verb blanked: the span and its backticks become one
-# space. A phrase inside such a span is that command's own argument -- its search
+# method_outside_verb_spans <method> -- the method with EVERY closed backtick span
+# whose leading token is an allowlisted verb blanked: the span and its backticks become
+# one space. A phrase inside such a span is that command's own argument -- its search
 # pattern -- never prose about the row, so every declared-deferral reader
-# (classify_family step 0 and both handlers' guards) reads this and never the raw
-# cell. The rule follows the span's KIND, not the routing pick, so a later change to
-# which span routes a row cannot change which rows are deferred. The spans are the
-# ones extract_command reads -- the even pieces of a split on backticks, an unclosed
-# last one included -- so the two cannot disagree about where a span is. A
-# declaration outside every such span, in prose or in a span led by anything else
-# (`[DEFERRED — <reason>]`), is kept. The cell reaches awk through the environment,
-# which awk does not escape-process, and awk reads no stdin.
+# (classify_family step 0, both handlers' guards and the CIAC authoring lint) reads this
+# and never the raw cell. The rule follows the span's KIND, not the routing pick, so a
+# later change to which span routes a row cannot change which rows are deferred. The
+# spans are the ones method_spans reads -- the even pieces of a split on backticks, each
+# closed by a backtick after it -- so the two cannot disagree about where a span is. The
+# piece after an odd final backtick is not a span: method_spans classes it prose (ONLY
+# A CLOSED SPAN IS A COMMAND), so it is kept here, and a declaration written in it is
+# read, never hidden as a command's pattern. A declaration outside every blanked span,
+# in prose, in that unclosed piece or in a span led by anything else
+# (`[DEFERRED — <reason>]`), is kept.
+# The blank condition is KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G21 M8
+# drops its closure test by one substitution. The cell reaches awk through the
+# environment, which awk does not escape-process, and awk reads no stdin.
 method_outside_verb_spans() {
   case "$1" in *'`'*) ;; *) printf '%s' "$1"; return 0 ;; esac
   VRP_SPAN_CELL="$1" VRP_SPAN_VERBS="$RUNNABLE_VERBS" awk 'BEGIN {
@@ -1342,7 +1352,7 @@ method_outside_verb_spans() {
     for (i = 1; i <= n; i++) {
       if (i % 2 == 1) { out = out p[i]; continue }
       split(p[i], w)
-      if (w[1] != "" && index(" " ENVIRON["VRP_SPAN_VERBS"] " ", " " w[1] " ") > 0) { out = out " "; continue }
+      if (i < n && w[1] != "" && index(" " ENVIRON["VRP_SPAN_VERBS"] " ", " " w[1] " ") > 0) { out = out " "; continue }
       out = out "`" p[i] (i < n ? "`" : "")
     }
     printf "%s", out
@@ -1950,10 +1960,11 @@ stdin_input_refusal() {
 # legitimate zero. grep reports usage as exit 2, which reads as ERROR, so its
 # table can carry either platform's letters.
 # Measured over the 454 reader commands the 217-plan corpus dispatched when this
-# was written, against a ground truth that ran each one with stdin on the null
-# device and on a directory: it refuses all 16 that read stdin and none of the
-# other 437 -- 26 of which are a pattern-less grep, which a bare "no operand" rule
-# would have refused -- and no corpus command meets the unmodelled or device rule.
+# was written, one of which does not tokenize, against a ground truth that ran each
+# of the other 453 with stdin on the null device and on a directory: it refuses all
+# 16 that read stdin and none of the other 437 -- 26 of which are a pattern-less
+# grep, which a bare "no operand" rule would have refused -- and no corpus command
+# meets the unmodelled or device rule.
 # RESIDUAL, declared: the model is LEXICAL. A repository path that reaches a
 # device through `..` segments or a committed symlink is not refused; the FD-0
 # redirect still keeps that child off the record stream, and the tripwire still
@@ -2114,10 +2125,15 @@ reader_rule() {
 # operand its verb needs, so eval_free_run refuses it before it runs (status 5) and
 # count_from_output reads ERROR no-operand:<verb>. grep: no pattern, as the one grep
 # option model reads it (reads_stdin_cmd returns 2). test: no expression at all, or an
-# expression ending in a unary primary with no operand (`test -f`, `test ! -d`). ls: no
+# expression ending in a unary primary with no operand (`test -f`, `test ! -d`). A word
+# spelled like a primary is one only where a primary can stand -- opening the
+# expression, or after !, (, -a or -o -- so after a binary operator it is that
+# operator's operand (`test abc != -f`) and the command names its operand. ls: no
 # path, flags aside. head, wc and cat: never here -- with no file they read stdin, and
 # reads_stdin_cmd refuses them first. A test expression that is present but malformed
-# is left to test itself, which exits 2 on it: ERROR matcher-exit-2.
+# is left to test itself, which exits 2 on it: ERROR matcher-exit-2. The predecessor
+# test is KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G19 M9 removes it by
+# one substitution.
 names_no_operand() {
   local verb n i=1 t rs=0
   tokenize_cmd "$1" || return 1
@@ -2129,6 +2145,7 @@ names_no_operand() {
     expression)
       while [ "$i" -lt "$n" ] && [ "${TOKENS[$i]}" = '!' ]; do i=$((i + 1)); done
       [ "$i" -lt "$n" ] || return 0
+      if [ "$n" -gt 2 ]; then case "${TOKENS[$((n - 2))]}" in '!'|'('|-a|-o) ;; *) return 1 ;; esac; fi
       case "${TOKENS[$((n - 1))]}" in -[bcdefghkLnOGNprsStuwxz]) return 0 ;; esac
       return 1 ;;
     path)
