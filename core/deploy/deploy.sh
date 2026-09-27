@@ -7331,7 +7331,7 @@ _population_report() {
   if [[ -n "$_unres" ]]; then
     log "  DENOM: $_id — status=degraded declared=${_dec} resolved=${_res} examined=${_ex} exempted=${_xm}${_pairs:+ ${_pairs}} (root counts: declared/resolved; member counts: examined/exempted, of the measured subset only)"
     flag_not_evaluated "$_id" "status=degraded — ${_zero} declared root(s) yielded zero files and were not evaluated: ${_unres}; this is not a clean result"
-    POP_MARKER=" [DEGRADED — this verdict covers the ${_res} of ${_dec} declared root(s) that resolved; ${_zero} were not evaluated; this is not a clean result]"
+    POP_MARKER=" [DEGRADED — this verdict covers the ${_res} of ${_dec} declared root(s) that resolved, with ${_zero} not evaluated; this is not a clean result]"
     return 0
   fi
   log "  DENOM: $_id — status=fetched declared=${_dec} resolved=${_res} examined=${_ex} exempted=${_xm}${_pairs:+ ${_pairs}} (root counts: declared/resolved; member counts: examined/exempted)"
