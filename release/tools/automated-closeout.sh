@@ -7260,7 +7260,7 @@ phase_lock_milestone_threads() {
   _open="${_cnt%% *}"; _closed="${_cnt##* }"
   if [[ "$_crc" -ne 0 || ! "$_open" =~ ^[0-9]+$ || ! "$_closed" =~ ^[0-9]+$ ]]; then
     _count_ok=0; _count_note="count check UNVERIFIED (the milestone counters could not be read)"
-  elif [[ "$_n_total" -eq "$_closed" ]]; then
+  elif [[ "$_n_total" -eq $((_open + _closed)) ]]; then
     _count_note="count check ${_n_total} == open_issues ${_open} + closed_issues ${_closed} (PR-inclusive on both sides)"
   else
     _count_ok=0; _count_note="count MISMATCH: enumerated ${_n_total} != open_issues ${_open} + closed_issues ${_closed}"
