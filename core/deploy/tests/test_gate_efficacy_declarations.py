@@ -2419,15 +2419,17 @@ def census_harness(census_text: str, sources: dict[str, str], root: Path,
     if wired_by({"zz-census-mention.yml": constructed}):
         failures.append("CS-8b: a step that only NAMES the runners (constructed) wired their "
                         "members — a mention is being counted as an execution")
+    # The drawn step is SELECTED by a shape the predicate under test does not decide — it
+    # names a runner's tracked path AND a copy of that same path under a variable-rooted
+    # scratch directory — so a regression in the executor predicate cannot also hide the
+    # step this arm draws. Selecting with the predicate itself would let a mention-counting
+    # regression reclassify the near-miss as an execution and drop it from the arm.
     drawn = []
     for name in sorted(sources):
         for _, step_key, step in _workflow_steps(name, sources[name]):
-            code = _shell_code(step["run"])
-            text = "\n".join(code)
-            executed = {m.group("path") for line in code
-                        for m in EXEC_LITERAL_RE.finditer(line)}
-            if (INSTALL_RUNNER_REL in text or HOOK_SETUP_REL in text) and not (
-                    {INSTALL_RUNNER_REL, HOOK_SETUP_REL} & executed):
+            text = "\n".join(_shell_code(step["run"]))
+            if any(runner in text and re.search(r"\$\{?\w+\}?/" + re.escape(runner), text)
+                   for runner in (INSTALL_RUNNER_REL, HOOK_SETUP_REL)):
                 drawn.append((name, step_key, step["run"]))
     if drawn:
         name, step_key, run_text = drawn[0]
