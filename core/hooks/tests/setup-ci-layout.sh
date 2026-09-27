@@ -42,8 +42,11 @@
 #     --repo-root  Source repo root (default: three levels above this script).
 #     --sandbox    Sandbox root (default: a fresh mktemp -d).
 #   Prints the materialized tests directory on stdout (the only stdout line),
-#   so a caller can:   TESTS_DIR="$(bash setup-ci-layout.sh)"
-#                      bash "${TESTS_DIR}/test-runner.sh"
+#   so a caller can run:
+# >>> AGENT-INVOCATION-BEGIN — core/hooks/tests/setup-ci-layout.test.sh
+#   TESTS_DIR="$(bash setup-ci-layout.sh)"
+#   bash "${TESTS_DIR}/test-runner.sh"
+# >>> AGENT-INVOCATION-END
 #   All diagnostics go to stderr.
 #
 # Platform: macOS / Linux. bash 3.2-safe (no associative arrays).
