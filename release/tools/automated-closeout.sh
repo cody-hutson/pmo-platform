@@ -9887,10 +9887,13 @@ EOF
   # the register-fed slots NOT-EVALUATED; the detail must name THAT disposition and not the
   # absent-register one. VERDICT-AGNOSTIC BY DESIGN: phase 6.8's mark is shared with a
   # sibling change to its precondition handling, so this arm asserts the disposition text
-  # only, which rides whichever mark the phase records — never the mark itself.
+  # only, which rides whichever mark the phase records — never the mark itself. The
+  # vacuity-warning presence is this arm's own floor: it proves the fixture exercised the
+  # vacuous path, so a stub that ever computed a ratio cannot turn (d2) into a copy of (d3).
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   _cc_write; COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_omit"
   phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  /usr/bin/grep -qF 'carries NO computed ratio' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: (d2) floor — the vacuous omission fixture must take the vacuity branch, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
   /usr/bin/grep -qF 'are NOT-EVALUATED' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: (d2) a line whose register-fed slots are NOT-EVALUATED must carry the caller-omission disposition read from the emitted line, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
   ! /usr/bin/grep -qF 'no retro register resolved' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: (d2) a caller-omission line must NOT carry the absent-register disposition — no register was looked for, so none was found absent; got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
 
