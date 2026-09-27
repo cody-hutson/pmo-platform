@@ -89,10 +89,15 @@ name: Install tests
 #                                  absent-is-pass <=> a filter present, the two
 #                                  never co-occur, and every workflow carries a
 #                                  header; every job publishing a named check-run
-#                                  is named by one of its workflow's headers; and
-#                                  a posture=required declaration names
+#                                  is named by one of its workflow's headers; a
+#                                  posture=required declaration names
 #                                  branch-protection, the only surface that makes
-#                                  a red verdict block a merge (D-13).
+#                                  a red verdict block a merge (D-13); and every
+#                                  population declaration — on a workflow or a
+#                                  deploy.sh check — names roots that resolve to
+#                                  at least one tracked file under its filter,
+#                                  and on deploy.sh is the population the check's
+#                                  resolver scans and reports.
 #                                  Lives in THIS job because the ratchet
 #                                  must not itself be path-filtered — a gate on
 #                                  trigger conformance that a trigger change can
@@ -907,6 +912,14 @@ jobs:
         # very job reported green, because posture/enforcement agreement was the one
         # pairing it never graded. A missing predicate, not a wiring accident.
         #
+        # AND A FOURTH: every population declaration resolves, root by root, against the
+        # tracked tree under its declared filter, and on deploy.sh names the array its
+        # _population_resolve call scans and a _population_report call reports — so a
+        # check can no longer declare a surface its code swallows, the way Check 25's
+        # find list swallowed its never-existing roots behind 2>/dev/null. A zero-yield
+        # root already being removed sits on a self-auditing residual ledger, and every
+        # entry must still reproduce.
+        #
         # NOT VACUOUS BY CONSTRUCTION, and the harness runs by DEFAULT rather than behind
         # a flag — a falsification harness nothing passes a flag to runs once, at
         # implementation, and certifies nothing thereafter. Every invocation mutates
@@ -916,21 +929,27 @@ jobs:
         # branches deletable with the suite still green), a reach arm that mutates a
         # NON-FIRST declaration, two sensitivity arms on the per-job invariant —
         # orphaning a job by renaming its declared context, and breaking one leg of a
-        # matrix expansion — and two on the posture invariant, one per graded field
+        # matrix expansion — two on the posture invariant, one per graded field
         # (repointing a `required` declaration at a non-blocking surface, and promoting
-        # an advisory one to `required` without touching its enforcement), plus a
-        # specificity arm for each invariant, on the same non-empty input, that must
-        # stay clean. Arms are derived from the live population at run time, never from
-        # hardcoded workflow names, so a rename cannot silently empty one, and a
-        # partition too small to build an arm is a reported NOSET rather than a skip.
+        # an advisory one to `required` without touching its enforcement), and on the
+        # population invariant a missing-root arm, a synthetic empty-glob arm with its
+        # non-empty control, exemption-unit arms, a synthetic-ledger arm and two reach
+        # arms, plus a specificity arm for each invariant, on the same non-empty input,
+        # that must stay clean. Arms that prove a live population exists are derived
+        # from it at run time, never from hardcoded workflow names, so a rename cannot
+        # silently empty one, and a partition too small to build an arm is a reported
+        # NOSET rather than a skip; the population arms that prove the detector
+        # discriminates run on synthetic declarations, so an emptied ledger cannot
+        # empty them.
         #
         # Exit contract: 0 clean / 1 declared-vs-actual mismatch / 2 the harness could
         # not assert (fail-closed). Depends on the Ensure PyYAML step above: the trigger
         # read is STRUCTURAL, because a raw-text scan for 'paths:' over-counts comment
         # and run:-body occurrences. It exits 2 rather than guessing if yaml is missing.
         #
-        # Hermetic: reads the workflow files, mutates only in-memory copies, writes
-        # nothing. No gh, no network. Consumes no workflow event input.
+        # Hermetic: reads the workflow files and core/deploy/deploy.sh, lists tracked
+        # paths with git ls-files, mutates only in-memory copies, writes nothing. No gh,
+        # no network. Consumes no workflow event input.
         run: /usr/bin/python3 core/deploy/tests/test_gate_efficacy_declarations.py
 
   hook-tests:
