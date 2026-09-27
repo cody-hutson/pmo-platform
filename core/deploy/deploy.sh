@@ -20122,9 +20122,20 @@ EOF
   # line when the helper is absent, so a missing definition reads as one countable failure
   # rather than an abort under `set -e`.
   #
+  # BD-5 / BD-6 are the escalation pair. Exits 2 and 3 are not evaluated and never move ISSUES
+  # (BD-5). An exit the drift engine's 0/1/2/3 contract does not define is an INSTRUMENT
+  # FAILURE (Q3 (B)): the row is not evaluated — named under the cause undefined-exit, with
+  # its code, in the ONE NOT-EVAL line, and never a drift finding — and the check fails
+  # closed: exactly one issue through Check 47's mode-driven emitter under the shipped
+  # enforce posture, and no OK line, even beside a row that matched (BD-6). BD-6's exit comes
+  # from a stub engine that exits 7, handed to the tail as the loop's `*)` arm hands it. The
+  # stub is neither named nor bound as the engine, so the census's drift-engine record does
+  # not count it.
+  #
   # WHAT THIS GROUP CANNOT SEE: Check 47's loop — its row enumeration, its two declared
-  # exclusions and its per-row N/A lines — which is inline in cmd_check and reached only by
-  # a --check run. That path is recorded as a --check run, not asserted here.
+  # exclusions, its per-row N/A lines and its per-row exit dispatch, the `*)` arm included —
+  # which is inline in cmd_check and reached only by a --check run. That path is recorded as
+  # a --check run, not asserted here.
   echo "self-test: starting assertion group BD (Check 47 verdict tail, release-body drift)" >&2
 
   if ! declare -F _c47_report >/dev/null; then
@@ -20179,6 +20190,43 @@ EOF
     # BD-5 — STRUCTURAL NON-ESCALATION: four NOT-EVALUATED emits moved nothing.
     if [[ "$ISSUES" -ne 0 ]]; then _dp_fail "BD-5 a row not compared must never increment ISSUES, got $ISSUES"; fi
 
+    # BD-6 — AN UNDEFINED EXIT FAILS CLOSED (Q3 (B)). A stub drift engine exits 7, an exit the
+    # 0/1/2/3 contract does not define, and the tail receives that row as the loop's `*)` arm
+    # passes it: the trailing <undefined-exit> <undefined-exit rows> arguments. Asserted in both
+    # branches it reaches — beside a row that matched (degraded) and as the only row (not-run):
+    # the ONE NOT-EVAL line names the cause undefined-exit with the code, the row is counted as
+    # not compared and never as a drift finding, and the check fails closed — exactly one FAIL
+    # line worded as an instrument failure, ISSUES up by exactly one, and no OK line.
+    local RELEASE_BODY_DRIFT_MODE="enforce"
+    local _bd_eng="$_bdt/engine-stub.sh" _bd_x=0 _bd_i0 _bd_fl
+    printf '#!/bin/bash\nexit 7\n' > "$_bd_eng"
+    /bin/chmod +x "$_bd_eng"
+    "$_bd_eng" v9.05 --quiet || _bd_x=$?
+    if [[ "$_bd_x" -ne 7 ]]; then _dp_fail "BD-6 the stub drift engine must exit 7, an exit its 0/1/2/3 contract does not define, got $_bd_x"; fi
+    if ! declare -F flag_release_body_drift >/dev/null; then _dp_fail "BD-6 flag_release_body_drift is not defined at top level — the verdict tail reports an instrument failure through it"; fi
+
+    # (a) degraded: one row compared and matched, one undefined exit.
+    _bd_i0="$ISSUES"
+    _bd_rc=0; _c47_report 2 0 "" 0 "" 0 0 0 2 v9.00 1 "v9.05 (exit ${_bd_x})" > "$_bdt/bd6.out" 2>&1 || _bd_rc=$?
+    if [[ "$_bd_rc" -ne 0 ]]; then _dp_fail "BD-6 (degraded) a compared row beside an undefined exit must return 0 so the caller still flags any drift finding, got $_bd_rc"; fi
+    _bd_nl="$(_dp_line "$_bdt/bd6.out" 'NOT-EVAL:')"
+    if [[ "$(_dp_count "$_bdt/bd6.out" 'NOT-EVAL: release-body-drift')" != "1" || "$_bd_nl" != *"undefined-exit"* || "$_bd_nl" != *"v9.05 (exit 7)"* || "$_bd_nl" != *"this is not a clean result"* ]]; then _dp_fail "BD-6 (degraded) exactly one NOT-EVAL line must name the row under the cause undefined-exit with its code: $_bd_nl"; fi
+    if [[ "$(_dp_count "$_bdt/bd6.out" 'status=degraded enumerated=2 examined=1')" != "1" ]]; then _dp_fail "BD-6 (degraded) the DENOM record must count the undefined exit as not compared: status=degraded enumerated=2 examined=1"; fi
+    if [[ "$(_dp_count "$_bdt/bd6.out" 'body-drift finding')" != "0" || "$(_dp_count "$_bdt/bd6.out" 'unexpected exit')" != "0" ]]; then _dp_fail "BD-6 (degraded) an undefined exit must never read as a drift finding"; fi
+    _bd_fl="$(_dp_line "$_bdt/bd6.out" 'FAIL:  release-body-drift')"
+    if [[ "$(_dp_count "$_bdt/bd6.out" 'FAIL:  release-body-drift')" != "1" || "$_bd_fl" != *"instrument failure"* || "$_bd_fl" != *"v9.05 (exit 7)"* || "$_bd_fl" == *"finding"* ]]; then _dp_fail "BD-6 (degraded) the check must fail closed with exactly one FAIL line worded as an instrument failure naming the row: $_bd_fl"; fi
+    if [[ "$((ISSUES - _bd_i0))" -ne 1 ]]; then _dp_fail "BD-6 (degraded) an undefined exit must raise exactly one issue, got $((ISSUES - _bd_i0))"; fi
+    if [[ "$(_dp_count "$_bdt/bd6.out" 'OK:')" != "0" ]]; then _dp_fail "BD-6 (degraded) an undefined exit must withhold the OK line, even beside a row that matched"; fi
+
+    # (b) not-run: the undefined exit is the only row, so the instrument failure is emitted
+    # before the not-run return.
+    _bd_i0="$ISSUES"
+    _bd_rc=0; _c47_report 1 0 "" 0 "" 0 0 0 1 v9.00 1 "v9.06 (exit ${_bd_x})" > "$_bdt/bd6b.out" 2>&1 || _bd_rc=$?
+    if [[ "$_bd_rc" -ne 1 || "$(_dp_count "$_bdt/bd6b.out" 'status=not-run enumerated=1')" != "1" || "$(_dp_count "$_bdt/bd6b.out" 'OK:')" != "0" ]]; then _dp_fail "BD-6 (not-run) an undefined exit on the only row must return 1 with status=not-run and no OK line (rc $_bd_rc)"; fi
+    _bd_nl="$(_dp_line "$_bdt/bd6b.out" 'NOT-EVAL:')"
+    if [[ "$_bd_nl" != *"undefined-exit"* || "$_bd_nl" != *"v9.06 (exit 7)"* ]]; then _dp_fail "BD-6 (not-run) the NOT-EVAL line must name the row under the cause undefined-exit with its code: $_bd_nl"; fi
+    if [[ "$(_dp_count "$_bdt/bd6b.out" 'FAIL:  release-body-drift')" != "1" || "$((ISSUES - _bd_i0))" -ne 1 ]]; then _dp_fail "BD-6 (not-run) the instrument failure must still fail the check closed: one FAIL line and one issue"; fi
+
     /bin/rm -rf "$_bdt"
   fi
 
@@ -20215,7 +20263,7 @@ EOF
   echo "  declared population validated (Checks 25/31, group DP):" >&2
   echo "    DP-0 the hoisted pair is defined / DP-1 a fully-resolving root set reads status=fetched with all four counters, no NOT-EVAL line, no warn-log row and an empty marker / DP-2 a missing root and a present root matching nothing read status=degraded with counters for the measured subset, EXACTLY ONE NOT-EVAL line naming both roots and nothing else, one warn-log row, and a DEGRADED marker saying what the verdict covers — DP-1/DP-2 is the discrimination pair / DP-3 the synthetic check over an empty glob returns 1 (the clean token withheld) with examined/exempted ABSENT / DP-4 a population the exemption mechanism emptied returns 1 and names that cause / DP-5 --append with a two-pattern filter yields SKILL.md and references/*.md, never other.md / DP-6 three shortfall emits leave ISSUES untouched / DP-7 the NOT-EVAL line is flag_not_evaluated's own / DP-8 per-predicate pairs ride a measuring record and are ABSENT on not-run / DP-9 an empty root list survives set -u under bash 3.2. Every arm drives the real pair the checks call." >&2
   echo "  Check 47 verdict tail validated (release-body drift, group BD):" >&2
-  echo "    BD-0 the hoisted _c47_report is defined / BD-1 every enumerated row compared reads status=fetched with its row counters, both declared exclusions counted, the clean OK line with no DEGRADED marker, no NOT-EVAL line and no warn-log row / BD-2 two rows not compared (one exit 2, one exit 3) read status=degraded with counters for the compared rows, EXACTLY ONE NOT-EVAL line naming both under their exits and nothing about coverage, one warn-log row, and an OK line over 3 of 5 carrying the DEGRADED marker — BD-1/BD-2 is the discrimination pair / BD-3 every row not compared returns 1 with NO OK line (the pre-fix check printed that every row matched) and examined/exempted ABSENT / BD-3b a cutoff handing the engine no row returns 1 with no OK line / BD-4 findings beside a partial read still fan in and print no OK line / BD-5 four NOT-EVALUATED emits leave ISSUES untouched. Every arm drives the real _c47_report Check 47 calls." >&2
+  echo "    BD-0 the hoisted _c47_report is defined / BD-1 every enumerated row compared reads status=fetched with its row counters, both declared exclusions counted, the clean OK line with no DEGRADED marker, no NOT-EVAL line and no warn-log row / BD-2 two rows not compared (one exit 2, one exit 3) read status=degraded with counters for the compared rows, EXACTLY ONE NOT-EVAL line naming both under their exits and nothing about coverage, one warn-log row, and an OK line over 3 of 5 carrying the DEGRADED marker — BD-1/BD-2 is the discrimination pair / BD-3 every row not compared returns 1 with NO OK line (the pre-fix check printed that every row matched) and examined/exempted ABSENT / BD-3b a cutoff handing the engine no row returns 1 with no OK line / BD-4 findings beside a partial read still fan in and print no OK line / BD-5 four NOT-EVALUATED emits leave ISSUES untouched / BD-6 an undefined exit from a stub engine (exit 7) is an instrument failure — named undefined-exit with its code in the one NOT-EVAL line, counted not compared and never a drift finding — and the check fails closed with one FAIL line worded as an instrument failure, one issue and no OK line, in both the degraded and the not-run branch — BD-5/BD-6 is the escalation pair. Every arm drives the real _c47_report Check 47 calls." >&2
   return 0
 }
 
