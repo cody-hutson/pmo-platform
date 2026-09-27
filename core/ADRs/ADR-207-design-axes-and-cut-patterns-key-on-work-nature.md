@@ -178,7 +178,13 @@ Deliverable classes (registry concept 1) with delivered items in the pool: ⟦S6
 
 | V | Domain | State | Concept-1 class | Nature (secondary) | data | process-flow | structure-placement | behaviour-over-time | Uncovered surface |
 |---|---|---|---|---|---|---|---|---|---|
-⟦S6: one row per coded item from V-01 in set order; State is completed, not planned or open; Concept-1 class marks inferred values; then a summary line — items coded, delivered items per class, per-nature counts, items fitting no nature, multi-nature items and the owed-set widening they cause, candidates admitted, axis co-occurrence⟧
+| V-01 | Data | completed | governance | `integration-change` (`data-structure-change`, `new-capability`, `defect`) | E2 | E2 | E2 · E3-P | E2 | none |
+| V-02 | Software | completed | governance | `new-capability` | E2 | E2 | E2 | E2 | none |
+| V-03 | Governance | completed | governance | fits no nature → matches `behaviour-change` | E2 | E2 | E2 | E2 | none |
+| V-04 | Data | completed | governance | `defect` (`data-structure-change`) | E2 | E2 | E2 · E3-P | E2 | none |
+| V-05 | Software | completed | software | fits no nature → matches `restructure` | E1 | E2 | E2 | E2 | none |
+| V-06 | Governance | not planned | — (marked) | `investigation` (`defect`, `data-structure-change`) | E1 | E1 | E1 | E1 | none |
+⟦S6: the remaining rows from V-07 in set order; State is completed, not planned or open; Concept-1 class marks inferred values; then a summary line — items coded, delivered items per class, per-nature counts, items fitting no nature, multi-nature items and the owed-set widening they cause, candidates admitted, axis co-occurrence⟧
 
 ### Applying the model to the measured instance
 
@@ -220,4 +226,10 @@ MODERATE — revised in place or reverted before ratification; after it, superse
 - #7963 — the framing-to-cut card: each owed axis mapped to a slice or a stated reason, and the slice-body Framing carry section written at the cut
 - #5592 — the source of the `defect` and `new-capability` boundary examples: an allowlist's host patterns applied to write paths
 - #6201 — the source of the `data-structure-change` boundary example: versioned fields added to refusal records
-⟦S6: one line per coded item — "V-NN — #N — a noun phrase from its title"; one line per follow-up card the continuity table names⟧
+- V-01 — #5844 — one system of record per mirrored data element
+- V-02 — #4197 — a check for undeclared CSS custom-property consumers
+- V-03 — #4923 — G1-03's evidence predicate and the probe convention
+- V-04 — #5846 — mastered project health and the rollup contract's source mapping
+- V-05 — #3722 — DOM construction for the eval-review rows
+- V-06 — #5589 — the operator-instance home and the XDG read-path
+⟦S6: one line per remaining coded item from V-07 — "V-NN — #N — a noun phrase from its title"; one line per follow-up card the continuity table names⟧
