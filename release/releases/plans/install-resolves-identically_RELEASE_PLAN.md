@@ -32,7 +32,7 @@ reversibility: MODERATE / Confidence HIGH — every row is a bounded edit to tra
 | **Bump Class** | minor — provisional display v4.70 (the Stage-4 provisional v4.69 was claimed by `egress-hook-batch`); binds at the Stage-12 atomic claim |
 | **Date Created** | 2026-09-24 (Thursday) — the Stage-4 plan of record; transcribed at Engineering Commit 0 on 2026-09-26 (Saturday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub Mode O) |
-| **Status** | In progress — Stage 6 Engineering, Commit 0 |
+| **Status** | In progress — Stage 6 Engineering; Commit 0 and slice 1 (#6896) landed, slice 2 (#4993) next |
 | **Branch** | `release/install-resolves-identically`, created from `origin/main` `35dbf418` |
 | **PR** | Opened in **draft** at Commit 0 per the SINGLE topology; its number is recorded on #7766. It transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `install-resolves-identically` (#338) |
@@ -338,6 +338,7 @@ release/references/standards/runtime-suite-selection-map.md                     
 core/config/allowlists/script-execution-allowlist.txt                             EDIT  (layout comment; 0 rows)
 core/hooks/tests/test-runner.sh                                                   EDIT  (one comment)
 release/references/how-to/hub-spoke-bridge.md                                     EDIT  (the scoped Spoke Template carve-out, Q2 FM-7 a)
+core/hooks/tests/block-mcp-writes.test.sh                                         EDIT  (Tier-1 ADJUST at slice 1: a byte-exact restore of the allowlist and mode file it mutates, found by LAYOUT-FRESH-01; row ENG-6896-ADJ)
 
 # ── #4993 — regression verdict (Q7 D-5 a, scoped map text) ──
 core/deploy/tests/test_upgrade_config_durability.sh                               EDIT  (R-8 subject; SKIP on an empty subject; one exit path; R-8c; the resolver arm)
@@ -425,7 +426,7 @@ CONDITIONAL:MEMORY-DIR-FROM-PLATFORM-CONFIG  docs/platform-config-reference.md  
 ```
 
 - **Repository-root rows.** `update.sh` (three rows) and `.gitignore` carry no directory segment, so the plan-driven executor's first-segment enum reads them as `fence-unrecognized-path` (FCM-COVERAGE SKIP, `fcm-rows-uninterpreted`). Each is an EDIT, so no ADD obligation is lost.
-- **Counts.** 70 unconditional rows over 54 distinct paths: 5 ADDs (this plan, the new suite and three ADRs) and 49 edited paths. Nine CONDITIONAL rows are counted apart — two live (the ADR README and the optional lib arm) and the seven of the resolved-false block. Across every row, 60 distinct paths are declared. The allowlist's token population is **168 rows (171 lines)** at the pin (Q5).
+- **Counts.** 71 unconditional rows over 55 distinct paths: 5 ADDs (this plan, the new suite and three ADRs) and 50 edited paths. Nine CONDITIONAL rows are counted apart — two live (the ADR README and the optional lib arm) and the seven of the resolved-false block. Across every row, 61 distinct paths are declared. Commit 0 declared 70 rows, 54 paths, 49 of them edited and 60 in all; slice 1's Tier-1 row (ENG-6896-ADJ) adds the one edited path. The allowlist's token population is **168 rows (171 lines)** at the pin (Q5).
 - **New-executable companion obligation: does not fire.** `CONDITIONAL:RESOLVER-LIB-ADDED` resolved false — the resolver lands in `core/deploy/lib-instance-path.sh`, which the hook bundle already co-deploys. The one new shell file, `core/hooks/tests/setup-ci-layout.test.sh`, is a suite the runner discovers by its `*.test.sh` glob; no allowlist row changes (#7750).
 - **ADR rows.** The three `ADR-NNN` placeholders take literal numbers when their slices author them (Q3); the `NNN` form is the matrix contract's glob for a not-yet-numbered record, never a filename.
 
@@ -457,12 +458,12 @@ core/disciplines/memory-architecture.md                               NOT EDITED
 
 ### Agent-Editability Read
 
-Controls read at `8e0ee084` (Stage 4) and re-checked at `35dbf418`: `core/hooks/block-autonomy-ceiling.sh` and `core/hooks/block-skill-direct-edit.sh` are byte-unchanged between the two. **Tier-0 floor** (`BLOCK-AUTONOMY-001`, both `case` blocks) projected onto the tracked index at `35dbf418` survives as `core/governance/OPERATIONS.md`, `operations/OPERATIONS.md` and `release/governance/RELEASE_PROTOCOL.md` (the control union is non-empty). **Tier-0 ∩ write set = ∅** over all 60 declared paths, conditional rows included. **Skill gate:** no declared path carries a `*/skills/<name>/` segment, so conjunct 1 is false everywhere and conjuncts 2 and 3 do not decide.
+Controls read at `8e0ee084` (Stage 4) and re-checked at `35dbf418`: `core/hooks/block-autonomy-ceiling.sh` and `core/hooks/block-skill-direct-edit.sh` are byte-unchanged between the two. **Tier-0 floor** (`BLOCK-AUTONOMY-001`, both `case` blocks) projected onto the tracked index at `35dbf418` survives as `core/governance/OPERATIONS.md`, `operations/OPERATIONS.md` and `release/governance/RELEASE_PROTOCOL.md` (the control union is non-empty). **Tier-0 ∩ write set = ∅** over all 61 declared paths, conditional rows included (60 at Commit 0; slice 1's added path re-checked against the same union). **Skill gate:** no declared path carries a `*/skills/<name>/` segment, so conjunct 1 is false everywhere and conjuncts 2 and 3 do not decide.
 
 | Card | Write-set paths (add/edit, CONDITIONAL included) | Tier-0 ∩ | Skill-gate ∩ | Path class |
 |---|---|---|---|---|
 | release | `release/releases/plans/install-resolves-identically_RELEASE_PLAN.md` · `core/ADRs/README.md` | ∅ | ∅ (c1) | unconstrained |
-| #6896 | `core/hooks/tests/setup-ci-layout.sh` · `core/hooks/tests/setup-ci-layout.test.sh` · `core/deploy/tests/run-install-regression.sh` · `.github/workflows/install-tests.yml` · `.gitignore` · `release/references/standards/runtime-suite-selection-map.md` · `core/config/allowlists/script-execution-allowlist.txt` · `core/hooks/tests/test-runner.sh` · `release/references/how-to/hub-spoke-bridge.md` | ∅ | ∅ (c1) | unconstrained |
+| #6896 | `core/hooks/tests/setup-ci-layout.sh` · `core/hooks/tests/setup-ci-layout.test.sh` · `core/deploy/tests/run-install-regression.sh` · `.github/workflows/install-tests.yml` · `.gitignore` · `release/references/standards/runtime-suite-selection-map.md` · `core/config/allowlists/script-execution-allowlist.txt` · `core/hooks/tests/test-runner.sh` · `release/references/how-to/hub-spoke-bridge.md` · `core/hooks/tests/block-mcp-writes.test.sh` (Tier-1, slice 1) | ∅ | ∅ (c1) | unconstrained |
 | #4993 | `core/deploy/tests/test_upgrade_config_durability.sh` · `core/deploy/tests/run-install-regression.sh` · `release/references/standards/runtime-suite-selection-map.md` · `release/references/pipeline/stage-08-qa-testing.md` · `release/references/pipeline/stage-07-dev-testing.md` · `release/references/standards/pipeline-event-log-schema.md` | ∅ | ∅ (c1) | unconstrained |
 | #4994 | `docs/scripts/setup-workspace.sh` · `core/deploy/tests/test_upgrade_config_durability.sh` · `docs/INSTALL.md` | ∅ | ∅ (c1) | unconstrained |
 | #5265 | `core/deploy/compose.py` · `core/deploy/lib-composition.sh` · `update.sh` · `docs/scripts/setup-workspace.sh` · `core/standards/depersonalization-spec.md` · `core/deploy/tests/test_compose.py` · `core/config/allowlists/script-execution-allowlist.txt` · `core/deploy/tests/test_refresh_surfaces.sh` · `docs/UPDATE.md` · `core/deploy/qa/checks.py` · the `core/ADRs/` record · `core/deploy/tests/test_lib_composition.sh` | ∅ | ∅ (c1) | unconstrained |
@@ -574,7 +575,7 @@ Probe: the open-PR list (REST, `state=open`) → 4, all OWNER-authored; control:
 | Implementation approach | Sequential, P0 fully-serial, along the eight-slice chain; one spoke in flight at a time |
 | Commit strategy | Per slice, a RED commit (the arms), then a GREEN commit (the fix), with RED and GREEN read from the PR's check runs (Q1). The index is regenerated inside the fragment-editing commit. Commit messages carry the `release(install-resolves-identically):` prefix and name the card. This plan is Engineering Commit 0 |
 | Review approach | A single PR for the whole release (D-C SINGLE), opened in draft at Commit 0. The body is parser-clean: close-family verbs next to an issue number appear only in the dedicated Issue References block; the eight cards transition to closed at Stage 13 |
-| Deployment mechanism | Git merge + atomic version claim + hook-tier republish (`update.sh` → `setup-workspace.sh --refresh-hooks`, the co-deployed `lib-instance-path.sh` included) + composition-surface regeneration (`update.sh`; the HL-1 heal on the first post-release update) + the rules-mirror redeploy of `core/rules/skill-deployment.md` (`deploy.sh --deploy`). **No skill S-2 deploy and no package rebuild** — measured: `build-skill-packages.sh --skills-for-paths` over the 60 declared paths returns no skill |
+| Deployment mechanism | Git merge + atomic version claim + hook-tier republish (`update.sh` → `setup-workspace.sh --refresh-hooks`, the co-deployed `lib-instance-path.sh` included) + composition-surface regeneration (`update.sh`; the HL-1 heal on the first post-release update) + the rules-mirror redeploy of `core/rules/skill-deployment.md` (`deploy.sh --deploy`). **No skill S-2 deploy and no package rebuild** — measured: `build-skill-packages.sh --skills-for-paths` over the 61 declared paths returns no skill (re-measured at slice 1; 60 paths at Commit 0) |
 | Stacked-base cleanup posture | N/A — single branch |
 
 ---
@@ -809,6 +810,7 @@ Transcribed from the milestone description as refreshed at the Collective Review
 | **REV-7866** | #7866 → #6440 (comment 5839203338). Minor, weighed up by the Collective Review: FM-3 | as above | FM-3 APPLIED (Q17 (b)). Its Majors are decided: FM-1 by Q3; FM-2 by Q2 and Q17 (INT-1 rewritten); CD-1 NOT TAKEN (Q17 = α); CD-2 APPLIED (Q17 (b)) |
 | **RES** | Residuals the designs record as accepted (routing register RR-38): #7754 G-4; #7764's card drift; #7758's note that the Arm 6 backstop is not the real instance directory | evidence record § 11.1, RR-38 | **ACCEPTED** as residual |
 | **ENG-B0** | [ADJUST] Tier-1 — the Commit-0 frontmatter `status:` is set to `ACTIVE`, the enum's authorship value. Commit 0 wrote `IN PROGRESS — Stage 6 Engineering (Commit 0)`, a value outside the closed enum (`ACTIVE` · `CLOSED` · `ABANDONED`), so the plan-identity lint reported `PLAN-STATUS-ENUM` and the pull request's close-out smoke check read red. `ACTIVE` is the value written at plan authorship, and the Stage-13 close-out moves `ACTIVE` to `CLOSED` and refuses any other value | `release/references/standards/release-corpus-schema.md` § Plan-status lifecycle; the hub's Decision Recorded, #7766 comment 5857460457 | **APPLIED** — the frontmatter `status:` line only; the first commit of #6896's slice, ahead of its RED commit |
+| **ENG-6896-ADJ** | [ADJUST] Tier-1 — `core/hooks/tests/block-mcp-writes.test.sh`, outside #6896's declared files: its EXIT-trap restore now puts back byte-exact copies of the allowlist and the mode file it mutates. It restored through `$(cat …)`, which strips the trailing newline, so every harness run left the layout's `mcp-write-allowlist.txt` one byte short. A throwaway temp layout hid that; the reused checkout-root layout keeps it. `LAYOUT-FRESH-01` found it: after one full harness run, exactly 1 of 76 recorded layout files differed from its digest, and 0 of 76 differ after the fix. Tier 1, not Tier 2: no hook, arm ID, arm count or contract changes; the suite now does what its own save-and-restore comment says | Q2 FM-1, whose freshness contract names this residue class (suites that mutate the layout's allowlists and rely on an EXIT trap); `stage-06-engineering.md` § 5 B3 (a minor adjustment is committed with its rationale) | **APPLIED** — the GREEN commit; the FCM row in #6896's block; § Implementation Notes → Slice 1 |
 
 ---
 
@@ -818,7 +820,7 @@ Authored per slice at Stage 6 C1.5; status at Commit 0.
 
 | Issue | Declared docs | Status |
 |---|---|---|
-| #6896 | the helper's header and USAGE; selection-map row 3; the allowlist and runner comments; the Spoke Template carve-out in `release/references/how-to/hub-spoke-bridge.md` | PENDING (slice 1) |
+| #6896 | the helper's header and USAGE; selection-map row 3; the allowlist and runner comments; the Spoke Template carve-out in `release/references/how-to/hub-spoke-bridge.md` | UPDATED — GREEN commit `26287b92` (the `AGENT-INVOCATION` markers first landed, around the old commands, in RED `04d9af7f`) |
 | #4993 | selection-map row 5, § 3 and § 4 (the stamp contract); `stage-08-qa-testing.md` `:161` and `:174`; `stage-07-dev-testing.md` `:403` and `:477-478`; `pipeline-event-log-schema.md` `:225-226` | PENDING (slice 2) |
 | #4994 | `docs/INSTALL.md` § 5.5 (E66); the unattended-contract statements (usage, `install.sh`, INSTALL `:113` and `:139`) verify-only | PENDING (slice 3) |
 | #5265 | `core/standards/depersonalization-spec.md` `:44` and § 2; the allowlist token header; `docs/UPDATE.md` § 3.2 and the retitled § 6.1; the ADR | PENDING (slice 4) |
@@ -826,6 +828,53 @@ Authored per slice at Stage 6 C1.5; status at Commit 0.
 | #5274 | the ten-site reference graph; `docs/UPDATE.md` § 6.3a; the ADR | PENDING (slice 6) |
 | #7497 | the -019 fragment rows and paragraphs; `_cross-cutting.md` `:135` and `:217`; the index; `operating-model.md` `:262` and `:397` | PENDING (slice 7) |
 | #6440 | the BLOCK-TRASH fragment and the index; § 7's EVICT paragraph and flowchart; `autonomy-tiers.md` items 8 and 8a; the ADR | PENDING (slice 8) |
+
+---
+
+## Implementation Notes
+
+Authored per slice at Stage 6. Each slice names its commits, the prediction each commit stated before its check runs, and every interpretation it made of its rendered design. Check-run verdicts are read from the pull request (Q1) and recorded by the hub.
+
+### Slice 1 — #6896 (layout helper)
+
+**Commits** on `release/install-resolves-identically`, in order:
+
+| Step | Commit | Carries | Prediction stated in the commit, before its check runs |
+|---|---|---|---|
+| B0 | `a8e5b3b5` | The frontmatter `status:` set to `ACTIVE` (row ENG-B0) | `Close-out automation smoke (macOS)` turns green; no other check changes verdict |
+| RED | `04d9af7f` | The new suite `core/hooks/tests/setup-ci-layout.test.sh` (32 declared arm IDs), the two `.gitignore` entries, and the `AGENT-INVOCATION` markers around the helper's then-current documented commands (comment-only) | `Hook test harness (macOS)` and `Install/onboarding/update regression suite (macOS)` fail on the new suite: 25 of 32 arms fail and 7 pass (`LAYOUT-PRECOND` and the controls `LAYOUT-DOC-03b`, `LAYOUT-SITE-01`, `LAYOUT-DEFAULT-03`, `LAYOUT-GUARD-05`, `LAYOUT-GUARD-07`, `LAYOUT-GUARD-08`). The AC-1 arm `LAYOUT-DOC-01b` fails on the variable-bearing documented runner line (`BLOCK-DESTRUCTIVE-022`). Every other suite and check keeps its verdict |
+| GREEN | `26287b92` | The helper (the default site, D-Guard, the recorded footprint and its purge, the digest, D-Mirror, USAGE), both programmatic callers, row 3, the allowlist and runner comments, the Spoke Template carve-out, and the Tier-1 [ADJUST] to `block-mcp-writes.test.sh` (row ENG-6896-ADJ) | Both macOS jobs turn green: 32 of 32 arms, the harness at `AGGREGATE: PASS=1796 FAIL=0`; every other check keeps its verdict |
+| MUT | `dc6331aa` | Armed-red for AC-3: two literal allowlist rows that admit exactly the two control paths | Exactly three arms fail, in both macOS jobs: `LAYOUT-SITE-01`, `LAYOUT-DOC-02b` (its twin of the documented runner line is the same path) and `LAYOUT-DOC-03b`. The other 29 arms and every other suite pass; every other check keeps its GREEN verdict |
+| REV | `43c9af7f` | The revert of MUT. Its tree equals GREEN's (`5082d5ef`); MUT's tree (`931acf7c`) differs | Both macOS jobs are green again, as at GREEN |
+
+**Declared arm IDs (Q2 FM-5)**, the CIAC-6 set for this suite: `LAYOUT-PRECOND`; `LAYOUT-FRESH-01..04`; `LAYOUT-DOC-00`, `-01a`, `-01b`, `-02a`, `-02b`, `-03a`, `-03b`; `LAYOUT-SITE-01`; `LAYOUT-DEFAULT-01..03`; `LAYOUT-GUARD-01`, `-01b`, `-02..08`; `LAYOUT-PURGE-01..04`; `LAYOUT-FOOTPRINT-01`; `LAYOUT-IGNORE-01`; `LAYOUT-OWNER-01`. Thirty-two in all.
+
+**The recorded footprint: the interface #5274's step 3b writes through (Q2 FM-2).**
+- `layout_put copy <rel-dst> <rel-src>` copies `<repo>/<rel-src>` to `<sandbox>/<rel-dst>`.
+- `layout_put stdin <rel-dst> [<rel-src>]` writes stdin there. `<rel-src>` names the tracked input the content derives from; `-` or omitted means none.
+- `layout_mkdir <rel-dir>` creates a directory, recording each component it creates.
+- `<rel-dst>` is relative to the sandbox root and `<rel-src>` to the repository root. Both are plain: no leading `/`, and no empty, `.` or `..` segment.
+- Each call appends its record to `.claude/hooks/tests/.layout-footprint` before it writes: `f` or `d`, the destination, then the source or `-`, tab-separated.
+- The purge, the build digest (`.layout-digest`) and `LAYOUT-IGNORE-01` all read that list. A file step 3b writes through `layout_put` is therefore purged on rebuild, digested, and checked for ignore coverage, with no further edit.
+
+**Interpretations.** Where the Stage-5 design's text and the rendered decision differ, the decision governs.
+1. **D-Guard (Q2 FM-3; #7860 routed item 4).**
+   - The live Claude configuration directories are those of the declared workspace root (when set), of the account home's `Claude/`, and of the account home itself. The account home is read from the user database, never from `${HOME}`.
+   - The guard compares filesystem identity, not path strings. It refuses (exit 65) a sandbox that is a live root, and a sandbox whose `.claude/` is, or sits inside, a live `.claude/` — except under that directory's `worktrees/<name>/`.
+   - The design's `GUARD-03` graded a `${HOME}`-derived root, which Q2 retired. Two arms replace it. `LAYOUT-GUARD-03` aims at the account home with a repo root that holds no sources, so a broken guard stops at the missing sources instead of writing. `LAYOUT-GUARD-08` shows an overridden `HOME` is not a live root.
+   - FM-3's "at least warn" for a primary checkout is a NOTE line at the default site.
+2. **Ownership (Q2 FM-2).**
+   - Ownership is the marker `.layout-owner`, written before the first copy.
+   - A layout with no recorded footprint is refused with trash-then-rerun, not counted as owned. That covers every layout the pre-change helper built, whether or not it carries `.source-repo-root`, because the exact-list purge has no list to remove for it. Routing register RR-36 already names the operator housekeeping.
+   - The purge validates every record before it removes anything. It removes files one at a time, and recorded directories only when empty. It refuses a record that leaves the sandbox, or that resolves outside it through a link.
+3. **The design's `PURGE-01` is re-aimed.** It planted an unrecorded file and expected the purge to remove it, which an exact-list purge never does. `LAYOUT-PURGE-01` now grades the hazard the purge exists for: a suite and a hook deleted from the source since the last build. `LAYOUT-PURGE-02` grades the complement: an unrecorded file survives, and the freshness check flags it.
+4. **The freshness digest (Q2 FM-1).** It holds one line per recorded file — its layout path and hash, its source path and hash — plus the helper and the manifest as build inputs. `LAYOUT-FRESH-01` reads it for the running layout. `LAYOUT-FRESH-02..04` and `LAYOUT-PURGE-02` prove each staleness limb is reported: a changed copy, a changed source, a new source, an unrecorded file. The digest's first full-harness run surfaced one suite whose restore was not byte-exact (row ENG-6896-ADJ).
+5. **Ignore coverage (Q2 FM-2 (c)).** `LAYOUT-IGNORE-01` grades a default-site build's footprint, not the running layout's. An explicit sandbox also carries the readiness-corpus mirror, which a checkout-root build never writes (D-Mirror).
+6. **`LAYOUT-DOC-01` fails closed** on a documented line that is not a literal `bash <path>.sh` command. Admission as written is not decidable for a line the shell must expand first.
+7. **A readiness-corpus mirror left at the default site is refused** with trash-then-rerun. The doc-tie arms read `<layout>/.claude/rules/…` ahead of the corpus in place, so a stale mirror there would be graded instead of the source.
+8. **V-3 was run on the pre-change tree (FM-5 (a)).** The source-tree runner read `AGGREGATE: PASS=1618 FAIL=146`, with five suites failing, so row 3 carries the source-tree sentence. **V-5 was not run:** the loading premise stays at MEDIUM (Q13), and the D-Mirror comment says "may load".
+9. **Armed-red-then-revert is scoped to AC-3's arms.** AC-3 is the card criterion whose arms grade behaviour that was already correct before the fix. The other arms that pass before the fix (`LAYOUT-DEFAULT-03`, `LAYOUT-GUARD-05`, `-07`, `-08`) are controls that make their paired RED arms discriminate.
+10. **FM-7 (a)'s hub-directive half is brief text, not a file** (transcription interpretation 1). The Spoke Template half is the edit in `release/references/how-to/hub-spoke-bridge.md` § Run-Directory Discipline.
 
 ---
 
@@ -838,9 +887,14 @@ Authored per slice at Stage 6 C1.5; status at Commit 0.
 | **Commit-0 version half** | `git fetch --tags origin` and `git fetch origin main` (exit 0); the adapter's dry-run recomputes **`v4.70`** for bump-class `minor`; the slot is free on all three `claimed_set()` arms (probe record above). **No HALT** |
 | **Commit-0 manifest half** | `release/tools/claim-version.sh --verify-stamp install-resolves-identically` → **exit 0**, "verify-stamp OK — install-resolves-identically carries a resolvable stamp manifest; plan-only manifest (0 --stamp-file target(s)); package-consequence checks not exercised", after its pre-flight line "manifest stales 0 package(s)". Exactly one double-brace `RELEASE_VERSION` placeholder in this file (the Header `**Version**` cell) |
 | **Plan-driven executor at Commit 0** | `release/tools/verify-release-plan.sh --root=<hermetic stub> --format=md --stage4-comment <the Stage-4 plan comment, both parts> <this plan>`, where the stub is an archive of the branch base plus this file, with `core/deploy/deploy.sh` and `release/tools/append-pipeline-event.sh` replaced by inert stubs that exit non-zero; never against the repository root. **Verdict roll-up: 5 PASS / 1 FAIL / 10 SKIP / 30 ERROR — over 35 per-issue rows; 0 declared-deferred.** It indexes all 35 per-issue rows and all six CIACs. The 29 per-issue ERROR rows are `unclassified-method` by the executor's design (its runnable-verb set is closed to read-only queries; the `bash` suites are graded from CI). FCM-COVERAGE is ERROR `diff-unresolvable`, by construction: the stub has no git history. CIAC-5 FAILs because its `grep` reads the pre-fix fragment — 0 of the 3 required lines exist before #6440's slice. #6896 AC-2 PASSes (0 temp-root rows), and provenance survival reads 4 of 4 PASS. The PROV-DELTA PASS is not evidence on this host (its multi-line comparison does not run under the system awk); an independent read finds the Stage-4 comment's four survival elements — the label, the matrix, the CIACs, the Verification Plan — all present here, with the stamp placeholder the fifth |
-| **Skill-package freshness** | **N/A — measured:** `build-skill-packages.sh --skills-for-paths` over the 60 declared paths returns no skill; sensitivity: the same query over a skill's own `SKILL.md` returns that skill |
-| **Tier-0 projection** | the `BLOCK-AUTONOMY-001` union projected onto the tracked index at `35dbf418` is 3 paths; its intersection with the 60 declared paths is empty |
-| **Declared paths exist** | all 63 non-ADD paths the matrix names — edit rows, conditional edit rows, READ rows and NOT EDITED rows — are tracked at `35dbf418`; the 5 unconditional ADD paths and the one conditional ADD are absent there, as a create requires |
+| **Skill-package freshness** | **N/A — measured:** `build-skill-packages.sh --skills-for-paths` over the 61 declared paths returns no skill (re-measured at slice 1, paths on stdin; 60 paths at Commit 0); sensitivity: the same query over a skill's own `SKILL.md` returns that skill |
+| **Tier-0 projection** | the `BLOCK-AUTONOMY-001` union projected onto the tracked index at `35dbf418` is 3 paths; its intersection with the 61 declared paths is empty (slice 1's added path re-checked; control: a planted floor path is found) |
+| **Declared paths exist** | all 64 non-ADD paths the matrix names (63 at Commit 0, plus slice 1's Tier-1 row) — edit rows, conditional edit rows, READ rows and NOT EDITED rows — are tracked at `35dbf418`; the 5 unconditional ADD paths and the one conditional ADD are absent there, as a create requires |
+| **Slice 1 (#6896): AC-1, local** | From this spoke's worktree root: `bash core/hooks/tests/setup-ci-layout.sh`, then `bash .claude/hooks/tests/test-runner.sh`. The helper exits 0 and prints the worktree's `.claude/hooks/tests`. The runner reads `AGGREGATE: PASS=1796 FAIL=0`, with `setup-ci-layout.test.sh` at 32 of 32. Across the 12 live hook logs, 0 new rows are attributed to this working directory: 2 before and 2 after, while the whole population grew by 10 from other sessions. `git status --porcelain` shows no `.claude/` entry. The RED and GREEN of record are the pull request's check runs (Q1) |
+| **Slice 1 (#6896): AC-2** | `grep -c -e '^/tmp' -e '^/private/tmp' -e '^/var/folders' -e '^[$]TMPDIR' core/config/allowlists/script-execution-allowlist.txt` returns 0. The non-comment row diff against `071de30f` is empty over 357 rows, so only comments changed. Control: the layout-runner rows return 4 |
+| **Slice 1 (#6896): AC-3** | `LAYOUT-SITE-01` and `LAYOUT-DOC-03b` pass locally at GREEN. The pair was armed red at `dc6331aa` (locally 29 PASS / 3 FAIL: those two and `LAYOUT-DOC-02b`) and reverted at `43c9af7f`, whose tree equals GREEN's. The CI verdict on each SHA is the hub's to record |
+| **Slice 1 (#6896): V-4** | For all 24 pre-existing suites, the per-suite tallies at the checkout-root site equal the temp-layout tallies from CI's Install tests run on `a8e5b3b5`. Control: the same diff against the full 25-suite local list reports exactly the new suite |
+| **Slice 1 (#6896): C3** | `build-skill-packages.sh --skills-for-paths`, fed the slice's 11 changed paths on stdin, names no skill. Sensitivity: `operations/skills/intake-desk/SKILL.md` names `intake-desk` |
 
 ---
 
@@ -855,6 +909,6 @@ Authored per slice at Stage 6 C1.5; status at Commit 0.
 ## Issue References
 
 - **Members (transitioned to closed at Stage 13):** #6896 · #4993 · #4994 · #5265 · #6168 · #5274 · #7497 · #6440
-- **Planning and Stage 6:** #7684 (the Stage-4 plan and every decision record) · #7766 (this Commit 0)
+- **Planning and Stage 6:** #7684 (the Stage-4 plan and every decision record) · #7766 (Commit 0, and #6896's slice)
 - **Stage 5:** designs #7750 · #7752 · #7754 · #7756 · #7758 · #7760 · #7762 · #7764; reviews #7859 · #7860 · #7861 · #7862 · #7863 · #7864 · #7865 · #7866
 - **Related:** #6198 (co-discharge candidate) · #5633 (notice posted) · #5185 (ARCHIVE destination) · #4449 (AC2 residual, recorded at Stage 13) · #7638 (`egress-hook-batch`, merged) · #7839 · #7901 · #7895 · #7919 (in flight at Commit 0)
