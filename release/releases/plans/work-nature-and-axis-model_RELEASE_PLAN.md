@@ -32,7 +32,7 @@ reversibility: CHEAP / Confidence HIGH before the Stage-13 ratification gate —
 | **Bump Class** | minor — provisional display v4.70 (recorded determination at the Stage-4 gate; re-verified at Commit 0); binds at the Stage-12 atomic claim |
 | **Date Created** | 2026-09-27 (Sunday) |
 | **Release Manager** | Agent-assisted (release-hub Mode O) |
-| **Status** | Engineering (Stage 6) — Commit 0 landed; the record, its register rows and the validation study follow in plan order |
+| **Status** | Engineering (Stage 6) — Commit 0 and the record scaffold with its register rows landed; the validation study follows in batches of at most six coded items |
 | **Branch** | `release/work-nature-and-axis-model` |
 | **PR** | populated when the draft release PR opens (after the record and its register rows land) |
 | **Milestone** | `work-nature-and-axis-model` (milestone 426) |
@@ -169,12 +169,27 @@ RETURN TO SOLUTIONING, with: **D2** the calibration comparison is registered as 
 
 ### Amendments applied (Stage 6)
 
-Filled as each amendment lands; see § Change Description for the final state.
+`<record>` = `core/ADRs/ADR-207-design-axes-and-cut-patterns-key-on-work-nature.md`; `<standard>` = `core/standards/gate-efficacy-standard.md`; `<plan>` = this file.
 
-| Item | Landed in (file · section) | Commit |
-|---|---|---|
-| B1–B10, D2, D3, D5, D7 | pending — the record and register rows land in the next commit | — |
-| D6 (A″) · AI-005 widened · `ac_baseline` 23:01:38Z | this file · § Release Outcome Statement · § Action items · § Verification Plan | Commit 0 |
+| Item | Landed in (file · section) |
+|---|---|
+| **B1** | `<record>` § Classification procedure (step 5 verbatim; the **Authoritative sources** rule); `<plan>` § Validation Study Design → Coding scheme C1 (each `defect` code records its source and the basis for its authority) |
+| **B2** | `<record>` § Classification procedure (**Owed set**; "Why this order" now agrees with it); § Owed axes by nature (owed-axis rule excludes axes already owed through a surface nature); § Continuity rule (a slice's nature is among its parent's natures); `<plan>` § Validation Study Design → Analysis plan step 6 (union-widening count, MULTI rate and owed-set difference) |
+| **B3** | `<record>` § Owed axes by nature → Grades (E2-T defined by function; derived list with the five named sections); `<plan>` § Validation Study Design → Rubric and "Templates read" |
+| **B4** | `<plan>` § Verification Plan → Release-Level Verification (Check 62's own pattern with the HSR-1 control; AC-3 scoped to the extracted § Calibration trigger with its mutant); every check run on the artifact and on a mutant (§ Verification Evidence) |
+| **B5** | `<record>` § Work natures (`defect` and `data-structure-change` boundary examples and the `new-capability` widening clause replaced, sources under `## References`); § Row grading (k of nine and k′ of seven); § Validation set (the tuning disclosure); `<plan>` § Validation Study Design → threat V15; § Verification Plan D5 row (k and k′; read order); the Stage-8 codebook hand-off in the Stage-6 output |
+| **B6** | `<record>` § Continuity rule → the carry table (filled by the study commits) |
+| **B7** | `<record>` § Owed axes by nature (over-owed candidates need at least two delivered items; proven rows report their deliverable-class span); § Calibration trigger (limb (a)); `<standard>` Row A limb (a) |
+| **B8** | `<plan>` § Validation Study Design → Concept-1 rules (R-C1 through the `milestone` field; `scopemap.py` a cross-check); `<record>` § Validation set (classes found) |
+| **B9** | `<record>` § Nature is one key (n on each side; the B-side excludes E3-F); `<standard>` Row A framing line (`<concept-1 class>` field; framing-1 line marked "unresolved") |
+| **B10** | `<record>` § Decision opening sentence and § How the catalog and the toolkit share the key (conditional key sentence); `<plan>` § Release Outcome Statement (A″) |
+| **D2** | `<record>` § Continuity rule (**One carrier** paragraph); `<standard>` Row C (Act: write the slice's Framing carry section) |
+| **D3** | `<standard>` Row C (comparing observable; cannot emit until the carrier ships); Row B two-row variant |
+| **D5** | `<standard>` Row A framing line; `<record>` § Calibration trigger (the line carries the framed epic's deliverable class) |
+| **D6** | `<plan>` § Release Outcome Statement (A″) |
+| **D7** | `<record>` § Terms (overlap considerations include shared surfaces: topics at framing, files at the cut); § Continuity rule (engineering in the stage list); the carry table's Stage-6 row; `<standard>` Row C trigger list |
+| **D8** | as B1 |
+| **AI-005 widened** | `<plan>` § Action items; § Contention Map |
 
 ---
 
@@ -384,6 +399,70 @@ No verdict is rendered here; Stage 9 A6.6 re-measures.
 
 ---
 
+## Validation Study Design (the Stage-5 handoff as amended by B1–B10)
+
+The Stage-5 revision-2 Methodology-Design Handoff (#7971) is the design; this section carries it as the round-2 amendments changed it, so Stages 7 and 8 read one current copy. Fixed inputs are unchanged: the frame, the exclusions, the normalization, the strata, the quotas and the seeded 31-item draw.
+
+**Frame (fixed).** One tracker issue filed on the improvement form, created 2026-06-21T01:22:40Z (the Domain field's go-live) through 2026-09-27T15:46:56Z, whose first `Domain` heading carries a value normalizing to one of the form's seven values (case-insensitive exact match, else the leading token, flagged `annotated`; otherwise off-enum and outside every stratum). Excluded as circular evidence: #7959 and its five held cards (#7960, #7961, #7962, #7963, #7966). Strata by normalized value; quota min(stratum, 12); a larger stratum draws closed first, up to 8, the rest open; round-robin over Data, Software, Governance; seeds `random.Random("7959:<Stratum>:closed")` and `("7959:<Stratum>:open")`, each `.sample(sorted_numbers, k)`, on Python 3.11.15. N = 31; the minimum viable prefix is the first nine items. "Closed" means `state_reason: completed`; #2344 (V-08) and #5589 (V-06) are not planned — marked, coded, reported, and entered in no count.
+
+**Rubric (item × axis).**
+
+| Grade | Meaning | Counts as |
+|---|---|---|
+| E0 | nothing answers or names the axis question | E0 |
+| E1 framed | the item's own body, as filed or converted at triage, names or partly answers it; an open item's design passages grade at most E1 | E1 |
+| E2 delivered | a completed item's delivered design or change answers it in an item-specific passage, from the first source yielding one — closing PR body, the milestone's release PR body, commits citing the item, the item's Stage-5 output — outside a template-forced section | E2 |
+| E2-T template-forced | the only delivered passage sits in a section or field that the governing template requires for every item regardless of nature (B3; list below) | E1, in every rule |
+| E3-P pipeline refinement | the axis surface was added at a planned Stage 2–5 step inside a surface the framing named | E2 on a completed item, E1 otherwise; never counts for owed-ness |
+| E3-F framing corrective | the item's first framing was E0 on the axis, and a later record supplies it by an operator correction naming it, or a re-scope whose stated reason is that the framing missed it | counts for owed-ness; E2 on a completed item |
+
+**E2-T sections — derived from the templates, not closed (B3).** Templates read at Stage 6: `.github/ISSUE_TEMPLATE/improvement.yml` (its required fields), `release/skills/release-planner/references/release-plan-template.md`, `release/references/standards/solutioning-output-template.md` § 3, and `.github/PULL_REQUEST_TEMPLATE.md`. Sections required for every item regardless of nature that can carry axis-shaped text: the issue form's **Affected Files** and **Documentation Impact** fields; the plan's **File Change Matrix**, **Contention Map**, **Agent-Editability Read** and per-issue **Change Specification** file line; the Stage-5 output's **Blast Radius** bucket and its **`### Output for Stage 6`** block (row 7 of that template's comment frame); and the release PR template's **Documentation Impact** table, **Implementation** table and **Verification Evidence** block.
+
+**Minimum load-bearing grade (MD-G5).** E2 (including E3-P and E3-F on completed items) to prove a row or demonstrate class dependence; E3-F to make an axis owed; E1 and E2-T support "hypothesis" only.
+
+**Rules over the grades.**
+
+| Rule | Items counted | Evidence that counts |
+|---|---|---|
+| Owed-axis rule (R-a) | items of nature N, completed or open (never not planned) | an axis N does not owe becomes owed iff at least 2 items carry E3-F on it, each from its own correction record; an axis already in an item's owed set through a surface nature (B2) does not count toward it |
+| R-b | — | Stage 6 never removes an owed mark |
+| Over-owed candidate (reported, never removed) | completed items of N, **at least 2 (B7)** | an owed axis at E1 or below on every completed N-item, with E3-F on none; "untested" below 2 |
+| Proven row (non-investigation) | completed items of N | at least 3 items from at least 2 Domain strata; every owed axis at E2, E3-P or E3-F in at least 2 of them; no E3-F on an axis outside an item's owed set; **the row reports its concept-1 span beside its strata (B7)** |
+| Proven `investigation` | completed investigation items | at least 3 items from at least 2 strata whose framings state question, method and time box, with no E3-F on any axis |
+| Demonstration (one key or two) | completed items, by concept-1 class | step 7 below; **on the B side, no item carries E3-F on the axis (B9)** |
+
+**Coding scheme (one row per item).**
+
+- **C1 nature.** Run the record's procedure on each acceptance criterion (first yes wins per criterion); the item's primary nature is the one most criteria carry, ties to the earlier step; the others are secondary. No criteria → the proposed change as one unit. A criterion that verifies no change is not classified. Step 5 needs an authoritative statement (B1): a governed file, an ADR or a ratified release plan; an operator comment, directive or scanner alert only once a governed file adopts it — **each `defect` code records its source and the basis for its authority**. The item's **owed set** is the union of its primary nature's owed axes and those of every surface nature (steps 3–4) any classified criterion carries (B2). NO-FIT records the matching candidate. Crosswalk hints (type-map row, `type:` label, requirement type) are recorded; the procedure wins.
+- **C2 axis grades.** Quote each graded passage (at most 25 words, with source) and code it to one primary axis: the axis whose "answered when" object is the passage's main-clause object — an entity, field, key, value set or owner → `data`; a step, order, actor, hand-off, decision point or error path → `process-flow`; a part, its location, or what it composes with or depends on → `structure-placement`; a state, a transition, or persistence across a session, phase or version boundary → `behaviour-over-time`. Other axes the passage answers are secondary; grades count on the primary axis only.
+- **C3** an uncovered surface with its nearest established viewpoint, or "none". **C4** who set Domain (filer or triage conversion), when stated. **C5** concept-1 class by R-C1..R-C3. **C6** `state_reason`.
+
+**Concept-1 rules.** **R-C1 resolved** — through the item's `milestone` field, to that milestone's release plan (located through the release index), and its `domain_practice` label (B8); `scopemap.py`'s scope-row reading is a cross-check, and its disagreements are reported and never decide the class. **R-C2 inferred** (marked) — the milestone's plan carries no label, or no plan file exists, or the item was completed outside a milestone with a delivering commit identifiable: the class the delivered files fall in under Stage 4 § 5.7, with the basis stated. **R-C3 unresolved** — none of these; counted, never assigned.
+
+**Analysis plan.** (1) Census re-run over the fixed window, deltas reported; the set stays fixed. (1b) State-reason pass: `reason:"not planned"` and `reason:duplicate` searches over the window, with the controls #2344 and #5589 present and #5844 absent. (1c) Concept-1 pass over the pool's completed items by R-C1..R-C3. (2) Re-issue the testability table before coding. (3) Code in sequence order; commit the record's validation table after every batch of at most six items. (4) Time box: a valid prefix has at least three items per stratum (seq at least 9). (5) A candidate nature joins as a hypothesis row iff at least three unmarked NO-FIT items match it. (6) Apply R-a and R-b; grade the rows and the `investigation` row; report the over-owed candidates, the axis co-occurrence matrix, the MULTI rate with the owed-set difference the union causes, and the crosswalk divergence rate. (7) Demonstration, three-valued, per nature: *demonstrated* iff for classes A and B some axis is E2 or above in at least 2 completed N-items of A while at least 2 completed N-items of B show E0 on it and none of those carries E3-F on it; *tested, not demonstrated* iff some class pair has at least 2 completed N-items on each side and no axis meets that test; *not testable* otherwise; the n on each side is printed (B9). (8) Transcribe the AC-5 application with its in-sample label. (9) Transcribe the continuity carry table (B6 plus the Stage-6 row), re-reading each cited section. (10) The AC-6 check with its control arm. (11) Fill every slot; run the verification battery on the artifact and on a mutant (B4).
+
+**Validity threats (declared before findings).**
+
+| # | Threat | Mitigation |
+|---|---|---|
+| V1 | Selection and coverage: Governance is 88% of the frame; four strata empty; Data is one initiative | balanced quotas; "across domains" limited to the form's populated values |
+| V2 | Closed-first skew | at least a third of a large stratum's quota is open; "closed" means completed; marked items enter no count |
+| V3 | Construct: the form's Domain is optional and used as a topic label | strata stay the form's values; the one-key-or-two question runs on registry concept 1 |
+| V4 | Altitude: items are work-item level; the consumer is epic framing | nature holds at every altitude (#6420 R6); the epic-level test is the calibration framings |
+| V5 | Single coder | the codebook rules; quoted grades; Stage 8 blind re-codes the nine-item prefix; nature agreement below 7 of 9 → every row hypothesis |
+| V6 | Circularity | the six exclusions; V12 |
+| V7 | Instance access | #7540's summary and verbatim quote only; the consumer's records are not read |
+| V8 | Missing delivery links | the E2 chain; else E1 at most |
+| V9 | Moving population | fixed window, literal seeds, fixed list; Python 3.11.15; census and state-reason deltas reported |
+| V10 | Power | the demonstration is testable for at most one nature on one pair; the three-valued outcome |
+| V11 | MULTI order bias | per-criterion majority; the step order justified in the record; MULTI rate reported |
+| V12 | In-sample application: the four axes came from the measured instance | the record labels AC-5 an in-sample consistency check; the out-of-sample test is the calibration framings |
+| V13 | Template-forced and planned-refinement text inflates owed-ness | E2-T and E3-P never make an axis owed; the over-owed statistic |
+| V14 | Concept-1 label provenance: many plans carry no label | R-C2 marks inferred values; results resting on them say so |
+| **V15** | **The codebook was tuned on drawn items V-03, V-09 and V-12 (B5)** | their boundary examples were replaced with examples from outside the set (#5592, #6201); Stage 8 reports nature agreement as k of 9 (D5's floor applies) and as k′ of the 7 items left once V-03 and V-09 are set aside, and records its codes before opening the record, this plan or #7972 |
+
+---
+
 ## Verification Plan
 
 `ac_baseline: { #7959: 6, read_at: 35dbf41847df2c1deab792d2944e46ac6ddd26fd }` (body revision **2026-09-27T23:01:38Z**). An amendment to any of the six criteria obliges an update to its row in the same change. Each AC row points at a heading of the record; `<record>` below is `core/ADRs/ADR-207-design-axes-and-cut-patterns-key-on-work-nature.md` (its number is reconciled at merge by `renumber-adr.py`, whose branch-scoped citation sweep rewrites this path).
@@ -497,6 +576,9 @@ N/A — enumerated over skill trees, rules mirrors, hooks, templates, config, pa
 | DEV-3 | minor | `core/standards/gate-efficacy-standard.md` enters the matrix as an unconditional `edit` (Rows A, B, C), which Stage 4 did not plan. | Stage-5 round-1 D2 (a Tier-2 scope change, operator-approved) and round-2 D3 (Row C, two-row Row B). |
 | DEV-4 | minor | The `ac_baseline` body revision moves from the Stage-4 value (13:23:59Z, then 15:41:37Z at the Stage-4 gate) to **2026-09-27T23:01:38Z**. | Stage-5 round-1 D6/D7 (18:36:40Z) and round-2 D4/D7 (23:01:38Z). |
 | DEV-5 | minor | The Release Outcome Statement is A″, not the Stage-4 gate's A′. | Stage-5 round-2 D6. |
+| DEV-7 | minor | Row B (the two-row Version History variant) gains one clause beyond the Stage-5 literal: the continuity line "compares each slice's framing with its parent's and is emitted only once the slice-body Framing carry section it reads ships". Without it Row B would say a skipped continuity check shows as a stale date, which Row C (a′) now states is not true before the carrier ships. | Round-2 D3 (Row C's comparing observable states it cannot emit until the carrier ships); the literal predates D3. |
+| DEV-8 | informational | The study's read-only passes 1, 1b and 1c (census, state reason, concept 1) ran before the record and rows were committed, and their results enter the record in the study commits. No file was written before the scaffold commit. | Order of work; reads only. |
+| DEV-9 | minor | Pass 1c located each milestone's plan through `release/releases/RELEASE_INDEX.md` (milestone → version → plan file), because most plans declare no milestone field; where a milestone had no plan file (v2.41) or no milestone (ten items), R-C2 read the delivering commit that cites the item (`git log --all --grep`) rather than a closing comment's citation. | B8 names the `milestone` field as the path; the index is the corpus's own version ↔ milestone projection. Each inferred basis is recorded. |
 | DEV-6 | informational | A third sibling now claims ADR slot 207: #7919 (`controls-fail-loud`, head `7ff5a9cd`) adds a `core/ADRs/` record at slot 207 under its own slug, which the Stage-5 contention read (heads `99d36318`, `341c8c8`) did not show. The resolution is unchanged — author at the mainline next-free, renumber at merge. | Contention re-read at Commit 0 (hub brief: sibling heads re-read live). |
 
 ---
@@ -516,13 +598,18 @@ N/A — enumerated over skill trees, rules mirrors, hooks, templates, config, pa
 Populated at C4 self-verification (Stage 6), then re-run at Stage 7.
 
 - **Commit-0 step 3b** — `bash release/tools/claim-version.sh --verify-stamp work-nature-and-axis-model` → exit **0**, "verify-stamp OK — work-nature-and-axis-model carries a resolvable stamp manifest; plan-only manifest (0 --stamp-file target(s))". Sensitivity arm (PV-2a mutation form): the same file with the placeholder replaced by a literal version → exit **1**, "verify-stamp TOKEN-LESS PLAN"; the original was restored from a copy and re-counted at exactly one placeholder.
+- **Scaffold C4 (before the record's study commits; artifact and mutant, B4):**
+  - `python3 release/tools/check-adr-numbers.py` → "PASS (207 ADRs, contiguous 001..207, no duplicates)", exit 0. `python3 release/tools/renumber-adr.py --detect` → ANCHOR 206 (origin/main) · NEXT-FREE 207 · CLAIMED-SET-BRANCH-ONLY 207,208,209,210.
+  - `python3 release/tools/check-adr-durability.py --files <record> --diff-base origin/main` → SCANNED 1 · COUNT 0 (R5 and R6 active). Mutant (a fixture root holding the record with an issue reference seeded into `title:`) → R4 flagged, COUNT 1; the unmutated fixture → COUNT 0.
+  - `bash core/deploy/tools/check-issue-ref-validity.sh --resolver fixture --fixture-map <map> --path <record>` → exit 0 (the map lists each `#N` the record carries as `valid`, each confirmed an issue in this repository by a connector `issue_read`; CI runs the real resolver). Mutant (an issue reference seeded into § Context) → exit 1, flagged at line 23. On `<standard>` the gate reports the file's own `allow-issue-ref` marker and skips it, so the rows are checked directly: 0 issue references in the three new rows.
+  - Change 2: Check 62's own pattern over the three new rows → **0**; over the HSR-1 row → **1** (control). The superseded check `grep -cE 'runner-(def|src):'` would count **2** on the new rows (their "No `runner-def:` pointer is recorded" sentences) — the over-match B4 retired. Check 62's extraction (`_rr_compute_verdict`'s own `grep -o` patterns) over the standard at `origin/main` and on the branch → 31 `runner-def` + 3 `runner-src` declarations both times, byte-identical, so its count and verdict cannot move. Row A carries the three limbs, "Owner:", "Stage-13 close", the `<concept-1 class>` field and the framing-1 line.
 - **Plan links** — the plan carries no markdown link sequence (a count of the link-opening sequence over this file → 0), so the plan-depth lint has nothing to grade. `check-release-links.py --plan-depth-lint --files <this plan>` reported "0 files", a vacuous run, recorded as such rather than as a pass.
 
 ---
 
 ## Change Description
 
-Authored at Phase C1 once the record and the validation study land; until then this section records the in-flight state. **Outcome so far:** Engineering Commit 0 — this plan, transcribed from the approved Stage-4 plan with the Stage-5 deltas and the round-2 decisions.
+Authored at Phase C1 once the record and the validation study land; until then this section records the in-flight state. **Outcome so far:** Engineering Commit 0 — this plan, transcribed from the approved Stage-4 plan with the Stage-5 deltas and the round-2 decisions; then the record scaffold (`core/ADRs/ADR-207-design-axes-and-cut-patterns-key-on-work-nature.md`, `status: Proposed`) with B1–B10, D2, D3, D5 and D7 applied and its data slots open, and the three register rows in `core/standards/gate-efficacy-standard.md` (Rows A and C at the gate-coverage register tail, Row B at the Version History tail). The study passes 1, 1b and 1c ran and reproduced the Stage-5 frame, draw, state reasons and testability table with zero delta; their figures enter the record with the coded items.
 
 ---
 
