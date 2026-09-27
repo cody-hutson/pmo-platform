@@ -1027,9 +1027,20 @@ jobs:
 
       - name: Precision probe — a broken fixture MUST fail the suite
         # Gate-honesty proof (modeled on release-tooling-smoke.yml): a deliberately
-        # FAILING member must make the runner exit non-zero. Built in a throwaway
-        # tree; the real checkout is never mutated. If a failing member stops
-        # reddening the gate, this step fails the PR.
+        # FAILING member must make the runner exit non-zero, and be the member it names.
+        # Built in a throwaway tree; the real checkout is never mutated. If a failing
+        # member stops reddening the gate, this step fails the PR.
+        #
+        # THE PROBE COPY'S MEMBER ARRAY IS DERIVED, NEVER RESTATED. The copy replaces
+        # whatever REGRESSION_MEMBERS holds today with ONE member. An earlier copy deleted
+        # a hand-written list of members instead, so every member enrolled after that list
+        # was written stayed in the copy, absent from the throwaway tree; the runner then
+        # failed on those missing files whatever the fixture did, and this step could not
+        # fail (the stale-predicate shape). Two arms now run: a PASSING fixture alone must
+        # exit 0 — the control that proves the tree can go green at all — and the FAILING
+        # fixture alone must exit non-zero with itself as the only member under
+        # "Failed members:", so a red result is the detection, never a crash or a
+        # missing file.
         env:
           PMO_REGRESSION_EMIT: '0'
         run: |
@@ -1038,15 +1049,21 @@ jobs:
           trap 'rm -rf "$tmp"' EXIT
           mkdir -p "$tmp/core/deploy/tests" "$tmp/core/hooks/tests"
           echo "v0.0-probe" > "$tmp/.version"
-          # A single always-FAIL member.
+          # The subject: a member that always FAILS.
           cat > "$tmp/core/deploy/tests/test_broken_fixture.sh" <<'PROBE'
           #!/usr/bin/env bash
           printf '  FAIL: deliberately-broken fixture (precision probe)\n'
           printf 'test_broken_fixture.sh: 0 passed, 1 failed (probe)\n'
           exit 1
           PROBE
-          chmod +x "$tmp/core/deploy/tests/test_broken_fixture.sh"
-          # A stub hook floor that PASSES, so the probe isolates the broken member.
+          # The control: a member that always PASSES.
+          cat > "$tmp/core/deploy/tests/test_passing_fixture.sh" <<'PROBE'
+          #!/usr/bin/env bash
+          printf 'test_passing_fixture.sh: 1 passed, 0 failed (probe control)\n'
+          exit 0
+          PROBE
+          chmod +x "$tmp/core/deploy/tests/test_broken_fixture.sh" "$tmp/core/deploy/tests/test_passing_fixture.sh"
+          # A stub hook floor that PASSES, so each arm isolates its one member.
           cat > "$tmp/core/hooks/tests/setup-ci-layout.sh" <<'STUB'
           #!/usr/bin/env bash
           d="$(mktemp -d)"; mkdir -p "$d/.claude/hooks/tests"
@@ -1061,23 +1078,45 @@ jobs:
           chmod +x "$tmp/core/hooks/tests/setup-ci-layout.sh"
           : > "$tmp/core/hooks/tests/test-runner.sh"
           chmod +x "$tmp/core/hooks/tests/test-runner.sh"
-          # Probe runner: a copy whose manifest is ONLY the broken fixture.
-          sed -e 's#^REGRESSION_MEMBERS=(.*#REGRESSION_MEMBERS=(#' \
-              -e '/^REGRESSION_MEMBERS=($/a\
-            "test_broken_fixture.sh"
-          ' core/deploy/tests/run-install-regression.sh \
-            | sed '/^  "test_sandbox_roots.sh"/d;/^  "test_install_end_to_end.sh"/d;/^  "test_deploy_sandbox.sh"/d;/^  "test_upgrade_config_durability.sh"/d;/^  "test_install_exit_propagation.sh"/d;/^  "test_detect_install_path_spaces.sh"/d;/^  "test_lib_composition.sh"/d' \
-            > "$tmp/core/deploy/tests/run-install-regression.sh"
-          chmod +x "$tmp/core/deploy/tests/run-install-regression.sh"
-          set +e
-          PMO_REGRESSION_EMIT=0 bash "$tmp/core/deploy/tests/run-install-regression.sh" >/dev/null 2>&1
-          rc=$?
-          set -e
+          # Probe runner: the real runner with its member array REPLACED by one member.
+          probe_runner() {
+            python3 - core/deploy/tests/run-install-regression.sh "$1" \
+              > "$tmp/core/deploy/tests/run-install-regression.sh" <<'PY'
+          import re, sys
+          src = open(sys.argv[1], encoding="utf-8").read()
+          out, n = re.subn(r"(?ms)^REGRESSION_MEMBERS=\(\n.*?^\)$",
+                           'REGRESSION_MEMBERS=(\n  "%s"\n)' % sys.argv[2], src, count=1)
+          if n != 1:
+              sys.exit("precision probe: no REGRESSION_MEMBERS=( ... ) array in the runner, "
+                       "so the probe copy cannot be derived")
+          sys.stdout.write(out)
+          PY
+            chmod +x "$tmp/core/deploy/tests/run-install-regression.sh"
+          }
+          # CONTROL — the passing fixture alone MUST run and exit 0.
+          probe_runner test_passing_fixture.sh
+          ctl_rc=0
+          ctl_out="$(bash "$tmp/core/deploy/tests/run-install-regression.sh" 2>&1)" || ctl_rc=$?
+          if [ "$ctl_rc" -ne 0 ] || ! grep -Fq -- '----- member: test_passing_fixture.sh -----' <<<"$ctl_out"; then
+            printf '%s\n' "$ctl_out"
+            echo "::error::the probe runner did not run a passing member to exit 0 (exit $ctl_rc); a red result from the subject arm below would prove nothing."
+            exit 1
+          fi
+          # SUBJECT — the broken fixture alone MUST exit non-zero, as the only failed member.
+          probe_runner test_broken_fixture.sh
+          rc=0
+          out="$(bash "$tmp/core/deploy/tests/run-install-regression.sh" 2>&1)" || rc=$?
+          failed="$(sed -n '/^Failed members:$/,/^=/p' <<<"$out")"
           if [ "$rc" -eq 0 ]; then
             echo "::error::run-install-regression.sh returned 0 with a deliberately-broken member; the regression gate is not detecting failures."
             exit 1
           fi
-          echo "Precision probe OK — broken fixture correctly failed the suite (exit $rc)."
+          if ! grep -Fxq -- '  - test_broken_fixture.sh' <<<"$failed" || [ "$(grep -c '^  - ' <<<"$failed")" -ne 1 ]; then
+            printf '%s\n' "$out"
+            echo "::error::run-install-regression.sh exited $rc, but the broken fixture was not its only failed member; a red result not attributable to the detection proves nothing."
+            exit 1
+          fi
+          echo "Precision probe OK — the passing control exited 0, and the broken fixture failed the suite (exit $rc) as its only failed member."
 
   cross-platform:
     name: Cross-platform install/QA (${{ matrix.os }})
