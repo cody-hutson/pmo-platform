@@ -6484,7 +6484,7 @@ _ai_emit_attestation() {
   else
     STATE_AI_EMIT="failed:writer-returned-nonzero"
     STATE_AI_EMIT_RC="$_rc"
-    STATE_AI_EMIT_ERR="$(_detail_one_line "$(/usr/bin/head -c 4096 "$_errf" 2>/dev/null)")"
+    STATE_AI_EMIT_ERR="$(_detail_one_line "$(/usr/bin/head -c 800 "$_errf" 2>/dev/null)")"
     [[ -n "$STATE_AI_EMIT_ERR" ]] || STATE_AI_EMIT_ERR="(no diagnostic was captured from the writer's stderr)"
   fi
   [[ "$_errf" == "/dev/null" ]] || /bin/rm -f "$_errf" 2>/dev/null || true
