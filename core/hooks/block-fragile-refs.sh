@@ -68,12 +68,12 @@ readonly ALLOWLIST="${HOOK_DIR}/../reference-durability-allowlist.txt"
 # the positional logic cannot drift across the three surfaces). Resolves beside the hook.
 readonly POSITIONAL_LIB="${HOOK_DIR}/lib/positional-issueref.awk"
 # Shared detector-constant declarations (the sole declaration of LINK_RE / CUTOVER_RE /
-# URL_RE / REFBLOCK_RE / ISSUEREF_RE / HEXCOLOR_RE / MIN_SELFDESCRIBE_WORDS). The
-# fixture-runner and the reference-durability CI source this same file, so the three
-# surfaces read one set of bytes rather than three copies. Sourced below, AFTER the mode
-# read and the jq gate, so its own failure posture is mode-coupled (ADR-078 D6) and so a
-# jq-unresolvable layout still fails at the jq gate rather than here. Resolves beside the
-# hook, like DEP_LIB and POSITIONAL_LIB.
+# URL_RE / REFBLOCK_RE / ISSUEREF_RE / HEXCOLOR_RE / MIN_SELFDESCRIBE_WORDS, and of the
+# durable-corpus scope predicate is_durable). The fixture-runner and the reference-durability
+# CI source this same file, so the three surfaces read one set of bytes rather than three
+# copies. Sourced below, AFTER the mode read and the jq gate, so its own failure posture is
+# mode-coupled (ADR-078 D6) and so a jq-unresolvable layout still fails at the jq gate rather
+# than here. Resolves beside the hook, like DEP_LIB and POSITIONAL_LIB.
 readonly PATTERNS_LIB="${HOOK_DIR}/lib/fragile-ref-patterns.sh"
 
 # --- MODE DETECTION (shared harness .mode; warn|enforce|off) ---
@@ -211,11 +211,17 @@ fi
 # Placed AFTER the jq gate deliberately: a layout missing both jq and this primitive must
 # still fail at the jq gate, so the dependency-hardening tests that build such a layout keep
 # measuring what they name.
+#
+# The scope predicate is_durable comes from the same file and is checked with the constants.
+# A lib that defines the constants but not the predicate — a stale copy deployed beside a
+# newer hook — would otherwise pass here, and at the scope gate below an undefined function
+# returns non-zero, which reads as "not durable" and lets every durable-corpus write through
+# unexamined. The two files deploy together; this is what makes a skew between them loud.
 _patterns_ok=0
 if [ -r "$PATTERNS_LIB" ] && "${BASH:-/bin/bash}" -n "$PATTERNS_LIB" 2>/dev/null && . "$PATTERNS_LIB" 2>/dev/null; then
   if [ -n "${LINK_RE:-}" ] && [ -n "${CUTOVER_RE:-}" ] && [ -n "${URL_RE:-}" ] \
      && [ -n "${REFBLOCK_RE:-}" ] && [ -n "${ISSUEREF_RE:-}" ] && [ -n "${HEXCOLOR_RE:-}" ] \
-     && [ -n "${MIN_SELFDESCRIBE_WORDS:-}" ]; then
+     && [ -n "${MIN_SELFDESCRIBE_WORDS:-}" ] && command -v is_durable >/dev/null 2>&1; then
     _patterns_ok=1
   fi
 fi
@@ -260,26 +266,12 @@ FILE_PATH="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.file_path // empty'
 [ -z "$FILE_PATH" ] && exit 0
 
 # --- SCOPE CHECK — act ONLY on durable-corpus paths ---
-# Matches both absolute (worktree/primary) and repo-relative forms. Transient surfaces
-# (chat, GitHub comments, operator-instance gitignored tree, PR bodies) are structurally
-# out of reach — the hook only sees a Write/Edit file_path, so anything not matching a
-# durable glob below exits 0 untouched.
-case "$FILE_PATH" in
-  */core/rules/*.md|core/rules/*.md) ;;
-  */core/standards/*.md|core/standards/*.md) ;;
-  */core/specs/*.md|core/specs/*.md) ;;
-  */core/disciplines/*.md|core/disciplines/*.md) ;;
-  */core/schemas/*.md|core/schemas/*.md) ;;
-  */release/references/*.md|release/references/*.md) ;;
-  */release/governance/*.md|release/governance/*.md) ;;
-  */release/standards/*.md|release/standards/*.md) ;;
-  */release/specs/*.md|release/specs/*.md) ;;
-  */release/schemas/*.md|release/schemas/*.md) ;;
-  */skills/*/SKILL.md|skills/*/SKILL.md) ;;
-  */skills/*/references/*.md|skills/*/references/*.md) ;;
-  */release/releases/plans/*_RELEASE_PLAN.md|release/releases/plans/*_RELEASE_PLAN.md) ;;
-  *) exit 0 ;;
-esac
+# is_durable, from lib/fragile-ref-patterns.sh (the one declaration the reference-durability
+# CI also reads), matches both absolute (worktree/primary) and repo-relative forms. Transient
+# surfaces (chat, GitHub comments, operator-instance gitignored tree, PR bodies) are
+# structurally out of reach — the hook only sees a Write/Edit file_path, so anything
+# is_durable does not admit exits 0 untouched.
+is_durable "$FILE_PATH" || exit 0
 
 # --- ALLOWLIST-REACHABILITY GATE (mode-coupled, mirroring the primitive gates above) ---
 # Placed AFTER the durable-corpus scope gate deliberately: only a write this hook would
