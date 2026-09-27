@@ -242,25 +242,7 @@ WORKED_REFERENCE_POPULATIONS = frozenset({(DEPLOY_REL, "25"), (DEPLOY_REL, "31")
 # moves under any edit above it — and EVERY ENTRY MUST STILL REPRODUCE (declared AND
 # zero-yield). `main` reports an entry that no longer does as a finding, so an exemption
 # cannot outlive the fact it records.
-#
-# The four entries below are Check 25's: its scan list names four roots that have never
-# existed in any tracked state. Each entry retires in the change that removes its root —
-# or, for `.claude/rules`, repoints it to the rules corpus it meant.
-POPULATION_RESIDUALS: dict[tuple[str, str, str], str] = {
-    (DEPLOY_REL, "25", "release/schemas"):
-        "never existed in any tracked state; Check 25 reports it NOT-EVALUATED at "
-        "runtime; the change that removes it retires this entry",
-    (DEPLOY_REL, "25", "release/specs"):
-        "never existed in any tracked state; Check 25 reports it NOT-EVALUATED at "
-        "runtime; the change that removes it retires this entry",
-    (DEPLOY_REL, "25", "release/standards"):
-        "never existed in any tracked state; Check 25 reports it NOT-EVALUATED at "
-        "runtime; the change that removes it retires this entry",
-    (DEPLOY_REL, "25", ".claude/rules"):
-        "never existed in any tracked state — the pre-restructure path of the rules "
-        "corpus, now core/rules; Check 25 reports it NOT-EVALUATED at runtime; the "
-        "change that repoints it retires this entry",
-}
+POPULATION_RESIDUALS: dict[tuple[str, str, str], str] = {}
 
 
 def repo_root() -> Path:

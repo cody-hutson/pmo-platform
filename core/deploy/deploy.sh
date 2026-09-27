@@ -11302,7 +11302,7 @@ sys.stdout.write("".join(out) + "|")
   # ahead). Operator-approved pre-merge rename per Stage 9 Plan Review DT-DA-2
   # path (a). Implements the spec at
   # core/standards/universal-vs-localized-context.md §7. DC1-DC4 + DC6
-  # signature scan over Layer-1 corpus (governance + reference + .claude/rules/ +
+  # signature scan over Layer-1 corpus (governance + reference + core/rules/ +
   # skills/*/SKILL.md + skills/*/references/). Signal-not-verdict contract:
   # emits candidate signatures only; embedded-vs-teaching adjudication is the §5
   # review act (DC5 = the verdict dimension, applied by humans/skills to DC1-DC4
@@ -11441,10 +11441,7 @@ sys.stdout.write("".join(out) + "|")
       core/standards
       core/specs
       release/references
-      release/schemas
-      release/specs
-      release/standards
-      .claude/rules
+      core/rules
     )
     local -a c23_skill_roots=(
       operations/skills
