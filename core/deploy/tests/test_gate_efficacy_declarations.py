@@ -74,30 +74,60 @@ which is precisely why the reconciler that DOES read it is report-only. The two 
 complements: this arm asserts the claim is well-formed, the reconciler asserts it is
 true today.
 
+FOURTH INVARIANT — A DECLARED POPULATION RESOLVES, AND IS THE ONE THE CHECK SCANS
+--------------------------------------------------------------------------------
+Requirement (b) gives a gate whose verdict is a claim over a file-root population a
+`#   population:` continuation line — its roots, its member filter, its exemption
+unit — and Requirement (c) § Population shortfall audits it. This arm grades every such
+declaration, on a workflow or on a `core/deploy/deploy.sh` check, against a FOURTH
+oracle, the TRACKED TREE:
+
+    every declared root resolves to at least one tracked file under the declared
+    filter; on deploy.sh the declaration's `roots=@<array>` names the array its
+    check's `_population_resolve` call passes, with the same filter, and a
+    `_population_report` call reports the result
+
+A root that yields nothing is a finding unless it sits on POPULATION_RESIDUALS, whose
+every entry must still reproduce, and the worked-reference declarations (Checks 25 and
+31) must be present. What this arm cannot see — a gate that declares nothing, a narrowed
+declaration, a list/glob, sub-file or rows population — the standard enumerates; it is
+not implied here.
+
 EXIT CONTRACT
 -------------
     0  every workflow conforms AND the anti-vacuity harness passed
     1  at least one declared-vs-actual mismatch (a workflow with no header, a job
        publishing a check-run its workflow's headers do not name, a `required` posture
-       naming a surface that cannot block, or a stale residual-ledger entry)
+       naming a surface that cannot block, a stale residual-ledger entry, a malformed
+       or zero-yield population declaration, a declared population the check never
+       resolves or reports, an absent worked-reference declaration, or a stale
+       population-ledger entry)
     2  the harness itself could not assert — an unreadable population, a partition too
-       small to build a mutation arm, or a mutation the detector failed to flag.
-       Fail-closed: a probe that cannot demonstrate it discriminates reports 2 rather
-       than the clean it can no longer distinguish from a real one.
+       small to build a mutation arm, a mutation the detector failed to flag, an empty
+       population-declaration set, or a `git ls-files` failure. Fail-closed: a probe
+       that cannot demonstrate it discriminates reports 2 rather than the clean it can
+       no longer distinguish from a real one.
 
 THE HARNESS RUNS BY DEFAULT, ON EVERY INVOCATION — deliberately, and it is the whole
 reason to trust the zero. A falsification harness behind a flag nothing passes runs
 exactly once, at implementation, and thereafter certifies nothing. Every mutation arm
-below is derived from the LIVE population at run time rather than from hardcoded
-workflow names, so a rename cannot quietly empty it, and an empty partition is a
-reported NOSET rather than a skipped arm.
+below that proves a LIVE population exists is derived from that population at run time
+rather than from hardcoded workflow names, so a rename cannot quietly empty it, and an
+empty partition is a reported NOSET rather than a skipped arm. The population arms that
+prove the DETECTOR discriminates run on synthetic declarations instead, so reaching the
+state they police — an empty residual ledger, a narrowed exemption unit — cannot empty
+them.
 
-Hermetic: reads the workflow files, mutates only in-memory copies, writes nothing.
+Hermetic: reads the workflow files and `core/deploy/deploy.sh`, lists tracked paths with
+`git ls-files` (read-only), mutates only in-memory copies, writes nothing.
 """
 
 from __future__ import annotations
 
+import fnmatch
 import re
+import shlex
+import subprocess
 import sys
 from pathlib import Path
 
@@ -158,6 +188,41 @@ POSTURE_RESIDUALS: dict[tuple[str, str, str], str] = {
         "self-describes as ADVISORY by skip-semantics; unregistered in branch "
         "protection — needs an operator posture decision, not a header edit",
 }
+
+# ─── FOURTH INVARIANT — a declared population resolves, and is the one the check scans ──
+#
+# gate-efficacy-standard.md Requirement (b) (`population:`) and Requirement (c)
+# § Population shortfall. Every name from here to POPULATION_RESIDUALS is new, and the
+# functions that use them are too: the contract `reconcile-gate-posture.py` imports from
+# this module (`parse_headers`, `QUOTED_RE`, `declared_contexts`) is untouched, and
+# nothing new runs at import time.
+POPULATION_RE = re.compile(r"^\s*#\s{2,}population:\s*(?P<fields>.*)$")
+
+# The closed exemption-unit set, narrowest first. `file/class` is a per-file marker that
+# removes ONE predicate class from a file that stays examined for the others (Check 31's
+# override markers); `file` removes the file from every class. Both remove a whole file
+# from something, so both carry a justification after an em-dash.
+EXEMPT_UNITS = ("none", "line", "statement", "symbol", "record", "file/class", "file")
+JUSTIFIED_UNITS = ("file/class", "file")
+
+DEPLOY_REL = "core/deploy/deploy.sh"
+
+# A deploy.sh check header in any of its historical forms. A population declaration binds
+# to the nearest header above it, and its REGION runs to the next header.
+CHECK_HEADER_RE = re.compile(r"^\s*#\s*(?:─+\s*)?Check\s+(\d+[a-z]?)\s*(?::|—)")
+
+# The worked reference the standard's register names: each must carry a declaration.
+WORKED_REFERENCE_POPULATIONS = frozenset({(DEPLOY_REL, "25"), (DEPLOY_REL, "31")})
+
+# RESIDUALS — declared roots that resolve to ZERO tracked files and are NOT this change's
+# to remove. The check reports each one NOT-EVALUATED at runtime, never skips it, and the
+# change that removes or repoints a root retires its entry in the same commit.
+#
+# Same doctrine as POSTURE_RESIDUALS: keyed by (file, check, root) — never by line, which
+# moves under any edit above it — and EVERY ENTRY MUST STILL REPRODUCE (declared AND
+# zero-yield). `main` reports an entry that no longer does as a finding, so an exemption
+# cannot outlive the fact it records.
+POPULATION_RESIDUALS: dict[tuple[str, str, str], str] = {}
 
 
 def repo_root() -> Path:
@@ -342,8 +407,9 @@ def evaluate_posture(
     WHY THIS IS A SEPARATE FUNCTION, for the third time in this file: `evaluate` grades
     a declaration against its file's TRIGGER, `evaluate_jobs` grades a job against its
     file's DECLARATION SET, and this grades a declaration against ITSELF — two fields of
-    one header that must agree. Three oracles, three functions; widening either existing
-    return would change a contract for a reason unrelated to it.
+    one header that must agree. Four oracles, four functions (`evaluate_population` grades
+    a declaration against the tracked tree); widening any existing return would change a
+    contract for a reason unrelated to it.
 
     The second element is the set of residual-ledger keys this run actually matched. It
     is RETURNED rather than recomputed by the caller so the staleness check and the
@@ -756,6 +822,541 @@ def posture_harness(sources: dict[str, str]) -> list[str]:
     return failures
 
 
+class TrackedTreeError(RuntimeError):
+    """`git ls-files` failed, so the population arm has no tree to resolve against."""
+
+
+def tracked_files(root: Path) -> list[str]:
+    """Every tracked path, repo-relative, from ONE read-only `git ls-files -z`.
+
+    Called once per run from `main` and passed down, never at import: another tool imports
+    this module by path. A failure raises TrackedTreeError, which `main` turns into exit 2,
+    because resolving declared roots is this arm's whole content and a tree that could not
+    be listed is not an empty tree.
+    """
+    proc = subprocess.run(["git", "-C", str(root), "ls-files", "-z"],
+                          capture_output=True, check=False)
+    if proc.returncode != 0:
+        detail = proc.stderr.decode("utf-8", "replace").strip()
+        raise TrackedTreeError(detail or f"exit {proc.returncode}")
+    return [p for p in proc.stdout.decode("utf-8", "surrogateescape").split("\0") if p]
+
+
+def _population_fields(raw: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for token in re.split(r"\s{2,}", raw.strip()):
+        if "=" in token:
+            key, value = token.split("=", 1)
+            fields[key.strip()] = value.strip()
+    return fields
+
+
+def parse_population(text: str) -> list[tuple[int, dict[str, str]]]:
+    """EVERY `#   population:` declaration in a file, as (1-based line, field map).
+
+    The field grammar is `parse_headers`': fields separated by two or more spaces, each
+    `key=value`, so a single-spaced value — an `exempts=` justification — survives whole.
+    A separate function rather than a widening of `parse_headers`, whose return is part of
+    the contract another tool imports.
+    """
+    found: list[tuple[int, dict[str, str]]] = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        match = POPULATION_RE.match(line)
+        if match:
+            found.append((lineno, _population_fields(match.group("fields"))))
+    return found
+
+
+def deploy_declarations(
+    text: str,
+) -> list[tuple[str | None, int, dict[str, str], list[str], int]]:
+    """Each deploy.sh population declaration, bound to the check it sits in.
+
+    Returns (check id, 1-based line, fields, region lines, region start index). The check
+    is the nearest CHECK_HEADER_RE line above the declaration, and its region runs to the
+    next header, so the reach tests read the same block the declaration describes. A
+    declaration above every header binds to nothing (check id None), a finding upstream.
+    """
+    lines = text.splitlines()
+    headers = [(i, m.group(1)) for i, line in enumerate(lines)
+               for m in (CHECK_HEADER_RE.match(line),) if m]
+    out: list[tuple[str | None, int, dict[str, str], list[str], int]] = []
+    for lineno, fields in parse_population(text):
+        above = [h for h in headers if h[0] < lineno - 1]
+        if not above:
+            out.append((None, lineno, fields, [], 0))
+            continue
+        start, check_id = above[-1]
+        end = next((h[0] for h in headers if h[0] > start), len(lines))
+        out.append((check_id, lineno, fields, lines[start:end], start))
+    return out
+
+
+def array_literal(name: str, region: list[str]) -> list[str] | None:
+    """The elements of bash array `name` as the check defines it inside its region.
+
+    Reads `name=(`, optionally after `local`/`declare` and `-a`, up to the first unquoted,
+    uncommented `)`, then splits with shlex — so the quoted form (Check 31's
+    `"core/rules" …`) and the unquoted one-per-line form (Check 25's) read alike. None
+    when the array is absent or unterminated: a declaration naming an array its check does
+    not define cannot be resolved, and that is reported rather than guessed.
+    """
+    start_re = re.compile(r"^\s*(?:(?:local|declare)\s+(?:-a\s+)?)?"
+                          + re.escape(name) + r"=\((?P<rest>.*)$")
+    for index, line in enumerate(region):
+        match = start_re.match(line)
+        if not match:
+            continue
+        body = "\n".join([match.group("rest")] + region[index + 1:])
+        chars: list[str] = []
+        quote = ""
+        comment = False
+        for ch in body:
+            if comment:
+                if ch == "\n":
+                    comment = False
+                    chars.append(ch)
+            elif quote:
+                chars.append(ch)
+                if ch == quote:
+                    quote = ""
+            elif ch in "\"'":
+                quote = ch
+                chars.append(ch)
+            elif ch == "#":
+                comment = True
+            elif ch == ")":
+                try:
+                    return shlex.split("".join(chars))
+                except ValueError:
+                    return None
+            else:
+                chars.append(ch)
+        return None
+    return None
+
+
+def member_count(tracked: list[str], root: str, filt: str) -> int:
+    """Tracked files under `root` that the declared filter admits.
+
+    ONE GRAMMAR WITH THE RUNTIME RESOLVER, `_population_resolve` in deploy.sh, which is
+    `find`'s `-path` / `-name` split: a `|`-separated pattern containing `/` matches the
+    repo-relative path, any other the basename, and `*` admits every file. A root that is
+    itself a tracked file counts when the filter admits it, as `find` would list it.
+    """
+    patterns = [p for p in filt.split("|") if p]
+    prefix = root.rstrip("/") + "/"
+    count = 0
+    for path in tracked:
+        if path != root and not path.startswith(prefix):
+            continue
+        base = path.rsplit("/", 1)[-1]
+        if any(fnmatch.fnmatchcase(path if "/" in p else base, p) for p in patterns):
+            count += 1
+    return count
+
+
+def exempts_findings(site: str, value: str) -> list[str]:
+    """Findings for an `exempts=` value: a comma list of units from EXEMPT_UNITS, one per
+    exemption mechanism the gate carries, then — when any unit removes a whole file from
+    something — a justification after an em-dash."""
+    out: list[str] = []
+    units_part, _, rest = value.strip().partition(" ")
+    rest = rest.strip()
+    why = ""
+    if rest:
+        if rest[0] in "—-":
+            why = rest[1:].strip()
+        else:
+            out.append(f"{site}: `exempts=` carries text after its unit(s) that does not "
+                       f"follow an em-dash (`<unit> — <justification>`): {value!r}")
+    units = units_part.split(",")
+    outside = [u for u in units if u not in EXEMPT_UNITS]
+    if outside:
+        out.append(f"{site}: `exempts=` names unit(s) {outside!r} outside the closed set "
+                   f"({', '.join(EXEMPT_UNITS)})")
+    if any(u in JUSTIFIED_UNITS for u in units) and not why:
+        out.append(f"{site}: `exempts={units_part}` removes whole files but states no "
+                   f"justification after an em-dash — a whole-file exemption is admitted "
+                   f"only where the case is a property of the whole file, and the "
+                   f"declaration says why")
+    return out
+
+
+def declaration_findings(site: str, fields: dict[str, str]) -> list[str]:
+    """Well-formedness of one declaration: its three fields, a non-empty filter, and a
+    valid exemption-unit set."""
+    out = [f"{site}: `population:` declaration lacks `{key}=`"
+           for key in ("roots", "filter", "exempts") if key not in fields]
+    if "filter" in fields and not [p for p in fields["filter"].split("|") if p]:
+        out.append(f"{site}: `filter=` is empty — a declaration states its member "
+                   f"predicate")
+    if "exempts" in fields:
+        out += exempts_findings(site, fields["exempts"])
+    return out
+
+
+def _code(region: list[str]) -> list[str]:
+    """The region's CODE lines. Comments are excluded on purpose: a comment naming a
+    function is not a call, and counting one would let arm P8 — which removes the call —
+    pass against a region that still merely mentions it."""
+    return [ln for ln in region if ln.strip() and not ln.lstrip().startswith("#")]
+
+
+def _resolves(region: list[str], filt: str, array: str | None) -> bool:
+    """A `_population_resolve` call in the region passes the declared filter literal and,
+    for an `@<array>` declaration, that array — so the declared population is the scanned
+    one, character for character."""
+    ref = None if array is None else "${" + array + "[@]}"
+    for line in _code(region):
+        if "_population_resolve" not in line:
+            continue
+        if f"'{filt}'" not in line and f'"{filt}"' not in line:
+            continue
+        if ref is None or ref in line:
+            return True
+    return False
+
+
+def evaluate_population(
+    sources: dict[str, str],
+    deploy_text: str,
+    tracked: list[str],
+    ledger: dict[tuple[str, str, str], str] | None = None,
+) -> tuple[list[str], set[tuple[str, str, str]], int, int, int]:
+    """Return (findings, residual_keys_hit, declarations, declared_roots, resolving_roots).
+
+    THE INVARIANT: every `#   population:` declaration — on a workflow or on a deploy.sh
+    check — is well-formed, and every root it declares resolves to at least one TRACKED
+    file under its declared filter. On deploy.sh a `roots=@<array>` declaration names an
+    array its check defines, a `_population_resolve` call passes that array with the same
+    filter, and a `_population_report` call reports the result — so the declared
+    population IS the scanned one, and what was examined is emitted at runtime.
+
+    A FOURTH ORACLE, AND SO A FOURTH FUNCTION. The other three grade a declaration against
+    its file's trigger, a job against its file's declaration set, and a declaration
+    against itself; this one grades a declaration against the tracked tree and the code
+    beside it. Widening any existing return would change a contract for a reason
+    unrelated to it.
+
+    `ledger` defaults to POPULATION_RESIDUALS. It is a parameter so the anti-vacuity
+    harness can drive the ledger branch against a SYNTHETIC ledger on every invocation
+    (arm P6): an arm keyed to the live ledger would vanish exactly when that ledger reaches
+    its target state, empty. The hit set is RETURNED, as `evaluate_posture` returns its
+    own, so the staleness audit reads the same pass over the same population.
+    """
+    ledger = POPULATION_RESIDUALS if ledger is None else ledger
+    findings: list[str] = []
+    hits: set[tuple[str, str, str]] = set()
+    counts = {"decls": 0, "roots": 0, "resolving": 0}
+    declared_checks: set[str] = set()
+
+    def grade_roots(site: str, key_file: str, key_check: str, roots: list[str],
+                    filt: str) -> None:
+        for root in roots:
+            counts["roots"] += 1
+            if member_count(tracked, root, filt) > 0:
+                counts["resolving"] += 1
+                continue
+            key = (key_file, key_check, root)
+            if key in ledger:
+                hits.add(key)   # reported by `main` as a WARN line, never as a finding
+                continue
+            findings.append(
+                f"{site}: declared root {root!r} resolves to ZERO tracked files under "
+                f"filter {filt!r} — a population the gate declares but cannot examine is "
+                f"a population shortfall. Remove or repoint the root, or ledger it in "
+                f"POPULATION_RESIDUALS in the change that is removing it")
+
+    for name in sorted(sources):
+        for lineno, fields in parse_population(sources[name]):
+            counts["decls"] += 1
+            site = f"{name}:{lineno}"
+            malformed = declaration_findings(site, fields)
+            findings += malformed
+            if fields.get("roots", "").startswith("@"):
+                findings.append(f"{site}: `roots=@…` names a bash array, which a workflow "
+                                f"does not carry — list the roots literally")
+                continue
+            if malformed:
+                continue
+            roots = [r.strip() for r in fields["roots"].split(",") if r.strip()]
+            if not roots:
+                findings.append(f"{site}: `roots=` names no root")
+                continue
+            grade_roots(site, f".github/workflows/{name}", "", roots, fields["filter"])
+
+    for check_id, lineno, fields, region, _ in deploy_declarations(deploy_text):
+        counts["decls"] += 1
+        site = f"{DEPLOY_REL}:{lineno}"
+        if check_id is None:
+            findings.append(f"{site}: population declaration sits above every Check "
+                            f"header, so it binds to no check")
+            continue
+        declared_checks.add(check_id)
+        malformed = declaration_findings(site, fields)
+        findings += malformed
+        if malformed:
+            continue
+        filt = fields["filter"]
+        array = fields["roots"][1:] if fields["roots"].startswith("@") else None
+        if array is not None:
+            roots = array_literal(array, region)
+            if roots is None:
+                findings.append(f"{site}: Check {check_id} declares roots=@{array}, but "
+                                f"its region defines no `{array}=(…)` array — the "
+                                f"declaration cannot be resolved")
+                continue
+        else:
+            roots = [r.strip() for r in fields["roots"].split(",") if r.strip()]
+        if not _resolves(region, filt, array):
+            scanned = f'"${{{array}[@]}}" ' if array else ""
+            findings.append(f"{site}: Check {check_id} declares filter={filt!r}, but no "
+                            f"`_population_resolve` call in its region passes "
+                            f"{scanned}with that filter — the declared population is not "
+                            f"the scanned one")
+        if not any("_population_report" in ln for ln in _code(region)):
+            findings.append(f"{site}: Check {check_id} declares a population, but no "
+                            f"`_population_report` call in its region reports it — what "
+                            f"the check examined is never emitted at runtime")
+        if not roots:
+            findings.append(f"{site}: `roots=` names no root")
+            continue
+        grade_roots(site, DEPLOY_REL, check_id, roots, filt)
+
+    for key_file, check_id in sorted(WORKED_REFERENCE_POPULATIONS):
+        if key_file == DEPLOY_REL and check_id not in declared_checks:
+            findings.append(f"{key_file}: worked-reference Check {check_id} carries no "
+                            f"`#   population:` declaration — the standard's register names "
+                            f"it as the reference implementation")
+
+    return findings, hits, counts["decls"], counts["roots"], counts["resolving"]
+
+
+def population_ledger_audit(
+    hits: set[tuple[str, str, str]],
+    ledger: dict[tuple[str, str, str], str] | None = None,
+) -> list[str]:
+    """THE EXEMPTION AUDIT: every ledger entry must still reproduce — declared AND
+    zero-yield. An entry the run did not hit has outlived its premise (the root was
+    removed, repointed, or now resolves), and it is reported so retiring it is obligatory.
+
+    Run on the real tree from `main`, never inside `evaluate_population`: the harness runs
+    that function over MUTATED text, where a missing hit is the arm working. `ledger` is a
+    parameter for the same reason `evaluate_population` takes one (arm P6).
+    """
+    ledger = POPULATION_RESIDUALS if ledger is None else ledger
+    stale = []
+    for key in sorted(ledger):
+        if key in hits:
+            continue
+        where = f"{key[0]} Check {key[1]}" if key[1] else key[0]
+        stale.append(f"{where}: population-ledger entry for root {key[2]!r} no longer "
+                     f"reproduces — the root is gone, repointed or resolving, so the "
+                     f"exemption has outlived its premise and MUST be deleted from "
+                     f"POPULATION_RESIDUALS")
+    return stale
+
+
+def strip_population(text: str) -> str:
+    """Drop every `#   population:` line — arm P5's mutation, textual and in-memory only."""
+    kept = [ln for ln in text.splitlines() if not POPULATION_RE.match(ln)]
+    return "\n".join(kept) + "\n"
+
+
+def _synthetic_workflow(population_line: str) -> str:
+    """A minimal workflow text carrying one population declaration. Only
+    `evaluate_population` ever reads it, so it need not be valid YAML."""
+    return ('# gate-efficacy: posture=advisory  enforcement=ci-enforce:"zzz synthetic"  '
+            'always-reports=yes\n' + population_line + "\n")
+
+
+# Arm P6's fixture: a region in the shape of a deploy.sh check, declaring one resolving
+# root and one ledgered zero-yield root, with the calls the reach tests require.
+P6_ROOT = "zzz-synthetic-ledgered-root"
+P6_REGION = "\n".join([
+    "  # ─── Check 999: synthetic population-ledger fixture (harness arm P6) ──",
+    "  #   population: roots=@zzz_roots  filter=*.md  exempts=none",
+    "    local -a zzz_roots=(",
+    "      core/standards",
+    f"      {P6_ROOT}",
+    "    )",
+    "    _population_resolve '*.md' -- \"${zzz_roots[@]}\"",
+    "    _population_report zzz-synthetic 1 0",
+    "",
+])
+P6_KEY = (DEPLOY_REL, "999", P6_ROOT)
+
+
+def population_harness(sources: dict[str, str], deploy_text: str,
+                       tracked: list[str]) -> list[str]:
+    """Anti-vacuity for the population arm, on the doctrine of the three harnesses above:
+    an arm that cannot be BUILT is a reported NOSET rather than a skip, and each
+    sensitivity arm is paired with a specificity arm on the same non-empty input.
+
+    TWO KINDS OF ARM, KEPT APART DELIBERATELY. The arms that prove the DETECTOR
+    discriminates — the exemption-unit arms P3/P3b/P3c/P4, the ledger arm P6 and the
+    empty-glob arm P7 — run on SYNTHETIC declarations on every invocation. An arm built
+    from a live instance of a construct whose disappearance is the goal (a ledgered root,
+    a whole-file exemption) would turn reaching that goal into a harness failure. The
+    arms that prove a LIVE population exists and is wired — P1, P2, P5, P8, P8b, P9 — are
+    built from the worked reference at run time.
+    """
+    failures: list[str] = []
+    base, _, n_decls, _, _ = evaluate_population(sources, deploy_text, tracked)
+
+    def new_findings(extra: dict[str, str] | None = None,
+                     deploy: str | None = None) -> list[str]:
+        mutated = dict(sources)
+        mutated.update(extra or {})
+        found, _, _, _, _ = evaluate_population(
+            mutated, deploy_text if deploy is None else deploy, tracked)
+        return [f for f in found if f not in base]
+
+    # P5 — NOSET, and the parser reads declarations and nothing else.
+    if n_decls == 0:
+        failures.append("NOSET: no `#   population:` declaration exists in any workflow or "
+                        "in deploy.sh — a clean over an empty declaration set is not a "
+                        "clean (P5)")
+    _, _, n_stripped, _, _ = evaluate_population(
+        {n: strip_population(t) for n, t in sources.items()},
+        strip_population(deploy_text), tracked)
+    if n_stripped != 0:
+        failures.append(f"P5: with every population line removed the parser still counted "
+                        f"{n_stripped} declaration(s) — it reads something other than the "
+                        f"declarations")
+
+    # The live victim: a worked-reference check carrying exactly ONE `@<array>`
+    # declaration, located at run time from WORKED_REFERENCE_POPULATIONS.
+    by_check: dict[str, list[tuple[int, dict[str, str], list[str], int]]] = {}
+    for check_id, lineno, fields, region, start in deploy_declarations(deploy_text):
+        if check_id is not None:
+            by_check.setdefault(check_id, []).append((lineno, fields, region, start))
+    victim = None
+    for key_file, check_id in sorted(WORKED_REFERENCE_POPULATIONS):
+        group = by_check.get(check_id, [])
+        if key_file == DEPLOY_REL and len(group) == 1 \
+                and group[0][1].get("roots", "").startswith("@"):
+            victim = (check_id,) + group[0]
+            break
+
+    if victim is None:
+        failures.append("NOSET: no worked-reference check carries exactly one `@<array>` "
+                        "population declaration, so arms P1/P2/P8/P8b/P9 cannot be built "
+                        "— reported rather than skipped")
+    else:
+        v_id, v_line, v_fields, v_region, v_start = victim
+        v_site = f"{DEPLOY_REL}:{v_line}:"
+        v_array = v_fields["roots"][1:]
+        v_roots = array_literal(v_array, v_region) or []
+        lines = deploy_text.splitlines()
+
+        def region_mutated(edit) -> str:
+            mutated = list(lines)
+            end = v_start + len(v_region)
+            mutated[v_start:end] = edit(list(v_region))
+            return "\n".join(mutated) + "\n"
+
+        # P2 — SPECIFICITY on the live, unmutated declaration: non-empty, and clean.
+        if not v_roots:
+            failures.append(f"NOSET: Check {v_id}'s declared array {v_array!r} is empty "
+                            f"or unreadable, so arm P2 has no non-empty input")
+        elif any(f.startswith(v_site) for f in base):
+            failures.append(f"P2: Check {v_id}'s live population declaration is flagged "
+                            f"unmutated — the arm over-matches a conforming declaration")
+
+        # P1 — SENSITIVITY: a root that does not exist, appended to the live array.
+        p1 = re.sub(r"(\b" + re.escape(v_array) + r"=\()",
+                    r"\1 zzz-synthetic-missing-root ", deploy_text, count=1)
+        if p1 == deploy_text:
+            failures.append("P1-CTRL: could not append a root to the live array — the arm "
+                            "would assert against an unmutated input")
+        elif not any("zzz-synthetic-missing-root" in f for f in new_findings(deploy=p1)):
+            failures.append(f"P1: a root that does not exist, appended to Check {v_id}'s "
+                            f"declared array, was NOT flagged")
+
+        # P8 — REACH, report side: the live `_population_report` call removed.
+        p8 = region_mutated(lambda r: [ln for ln in r if not (
+            "_population_report" in ln and not ln.lstrip().startswith("#"))])
+        if p8 == deploy_text:
+            failures.append("P8-CTRL: the worked reference carries no `_population_report` "
+                            "call to remove")
+        elif not any(f.startswith(v_site) and "_population_report" in f
+                     for f in new_findings(deploy=p8)):
+            failures.append(f"P8: removing Check {v_id}'s `_population_report` call was NOT "
+                            f"flagged — a declared population could go unreported")
+
+        # P8b — REACH, resolve side: the call's filter no longer the declared one.
+        v_filter = v_fields.get("filter", "")
+        p8b = region_mutated(lambda r: [
+            ln.replace(f"'{v_filter}'", "'zzz-not-the-declared-filter'")
+            if "_population_resolve" in ln and not ln.lstrip().startswith("#") else ln
+            for ln in r])
+        if p8b == deploy_text:
+            failures.append("P8b-CTRL: the worked reference carries no `_population_resolve` "
+                            "call passing its declared filter literal")
+        elif not any(f.startswith(v_site) and "_population_resolve" in f
+                     for f in new_findings(deploy=p8b)):
+            failures.append(f"P8b: a `_population_resolve` call whose filter differs from "
+                            f"Check {v_id}'s declaration was NOT flagged — the declared "
+                            f"population could drift from the scanned one")
+
+        # P9 — the worked reference's declaration removed.
+        p9_lines = list(lines)
+        del p9_lines[v_line - 1]
+        if not any(f"worked-reference Check {v_id} " in f
+                   for f in new_findings(deploy="\n".join(p9_lines) + "\n")):
+            failures.append(f"P9: removing Check {v_id}'s population declaration was NOT "
+                            f"flagged — the worked reference could vanish silently")
+
+    # P3 / P3b / P3c — SENSITIVITY on the exemption unit, synthetic; P4 — SPECIFICITY.
+    good = ("#   population: roots=core/standards  filter=*.md  "
+            "exempts=file — a synthetic whole-file justification")
+    if new_findings({"zzz-synthetic-p3.yml": _synthetic_workflow(good)}):
+        failures.append("P3-CTRL: a well-formed synthetic declaration over a resolving root "
+                        "was flagged — the unit arms would have no clean baseline")
+    for arm, value in (("P3", "file"), ("P3b", "file/class"), ("P3c", "zzz-not-a-unit")):
+        line = f"#   population: roots=core/standards  filter=*.md  exempts={value}"
+        if len(new_findings({"zzz-synthetic-p3.yml": _synthetic_workflow(line)})) != 1:
+            failures.append(f"{arm}: `exempts={value}` (no justification) did not draw "
+                            f"exactly one finding")
+    line = "#   population: roots=core/standards  filter=*.md  exempts=line"
+    if new_findings({"zzz-synthetic-p3.yml": _synthetic_workflow(line)}):
+        failures.append("P4: `exempts=line` — a narrower unit that needs no justification — "
+                        "WAS flagged; the arm over-matches")
+
+    # P7 — the synthetic check over an empty glob, and its non-empty control.
+    empty = "#   population: roots=zzz-synthetic-empty-root  filter=*.md  exempts=none"
+    if len(new_findings({"zzz-synthetic-p7.yml": _synthetic_workflow(empty)})) != 1:
+        failures.append("P7: a synthetic declaration over an empty glob did not draw exactly "
+                        "one finding")
+    control = "#   population: roots=core/standards  filter=*.md  exempts=none"
+    if new_findings({"zzz-synthetic-p7.yml": _synthetic_workflow(control)}):
+        failures.append("P7 control: the same declaration over a resolving root WAS "
+                        "flagged — the arm over-matches")
+
+    # P6 — THE LEDGER BRANCH, on a SYNTHETIC ledger, every invocation.
+    p6_ledger = {P6_KEY: "synthetic fixture entry (harness arm P6)"}
+    found, hit, _, _, _ = evaluate_population({}, P6_REGION, tracked, ledger=p6_ledger)
+    if P6_KEY not in hit or any(P6_ROOT in f for f in found):
+        failures.append("P6: a ledgered zero-yield root was not recorded as a ledger hit, "
+                        "or was reported as a finding although ledgered")
+    if population_ledger_audit(hit, ledger=p6_ledger):
+        failures.append("P6: the audit reported a ledger entry that still reproduces")
+    found_bare, _, _, _, _ = evaluate_population({}, P6_REGION, tracked, ledger={})
+    if not any(P6_ROOT in f for f in found_bare):
+        failures.append("P6: with the ledger emptied, the zero-yield root was NOT reported "
+                        "— the ledger is not what suppressed it")
+    gone = P6_REGION.replace(f"      {P6_ROOT}\n", "")
+    _, hit_gone, _, _, _ = evaluate_population({}, gone, tracked, ledger=p6_ledger)
+    stale = population_ledger_audit(hit_gone, ledger=p6_ledger)
+    if gone == P6_REGION or len(stale) != 1 or P6_ROOT not in stale[0]:
+        failures.append("P6: removing the ledgered root did not make the audit report "
+                        "exactly its stale entry")
+
+    return failures
+
+
 def load(root: Path) -> dict[str, str]:
     workflows = sorted(
         p for p in (root / ".github" / "workflows").iterdir()
@@ -985,9 +1586,44 @@ def main() -> int:
           f"{len(POSTURE_RESIDUALS)} on the residual ledger "
           f"({len(residual_hits)} still reproducing)")
 
+    # THE FOURTH INVARIANT reads two inputs the other three do not: deploy.sh, whose
+    # checks carry population declarations, and the TRACKED TREE, which every declared
+    # root must resolve against. Either one unreadable is exit 2 — this arm cannot
+    # assert without them, and an unread input is not an empty one.
+    try:
+        deploy_text = (root / DEPLOY_REL).read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"FAIL: cannot read {DEPLOY_REL} ({exc}) — the population arm grades the "
+              f"declarations it carries, so it is reported rather than skipped",
+              file=sys.stderr)
+        return 2
+    try:
+        tracked = tracked_files(root)
+    except TrackedTreeError as exc:
+        print(f"FAIL: `git ls-files` failed ({exc}) — declared roots resolve against the "
+              f"TRACKED TREE, and without it the population arm cannot assert "
+              f"(fail-closed)", file=sys.stderr)
+        return 2
+    pop_findings, pop_hits, n_pop, n_pop_roots, n_pop_resolving = evaluate_population(
+        sources, deploy_text, tracked)
+    # The population exemption audit, on the real tree, for POSTURE_RESIDUALS' reason.
+    pop_findings += population_ledger_audit(pop_hits)
+    n_pop_files = (sum(1 for text in sources.values() if parse_population(text))
+                   + (1 if parse_population(deploy_text) else 0))
+    print(f"population reach: {n_pop} declaration(s) graded across {n_pop_files} "
+          f"file(s); {n_pop_roots} declared root(s), {n_pop_resolving} resolving; "
+          f"{len(POPULATION_RESIDUALS)} on the residual ledger "
+          f"({len(pop_hits)} still reproducing)")
+    for key in sorted(pop_hits):
+        where = f"{key[0]} Check {key[1]}" if key[1] else key[0]
+        print(f"WARN (ledgered residual): {where} declares root '{key[2]}', which resolves "
+              f"to zero tracked files — reported, not skipped; delete the ledger entry in "
+              f"the change that removes the root")
+
     harness_failures = harness(sources, filtered, filter_free)
     harness_failures += job_harness(sources)
     harness_failures += posture_harness(sources)
+    harness_failures += population_harness(sources, deploy_text, tracked)
     if harness_failures:
         print("FAIL (harness): the detector did not demonstrate it discriminates.",
               file=sys.stderr)
@@ -1002,14 +1638,32 @@ def main() -> int:
           "was renamed; B3 flagged a broken matrix leg, so `${{ matrix.* }}` is really "
           "expanded rather than exempted; specificity arm B2 stayed clean on a "
           "C1-class workflow whose posture is declared by containment")
+    # C5 runs only while POSTURE_RESIDUALS is non-empty — `posture_harness` gates it on
+    # exactly that condition, and a C5 that ran and failed has already exited 2 above.
+    # The clause below reads the SAME condition, so the line never claims an arm that did
+    # not run: an emptied ledger is the target state, and it must not read as a C5 pass.
+    c5_clause = ("C5 showed a conformed residual stops matching its ledger entry, so a "
+                 "stale exemption is detected" if POSTURE_RESIDUALS else
+                 "C5 did not run — the posture residual ledger is empty, so there is no "
+                 "exemption to audit")
     print("anti-vacuity (posture): C1 flagged a `required` declaration repointed at a "
           "non-blocking surface and C2 flagged an advisory one promoted to `required`, "
           "so BOTH graded fields are really read; specificity arms C3 (a QUALIFIED "
           "`required` still naming branch-protection) and C4 (an advisory declaration's "
-          "surface) stayed clean on the same non-empty input; C5 showed a conformed "
-          "residual stops matching its ledger entry, so a stale exemption is detected")
+          f"surface) stayed clean on the same non-empty input; {c5_clause}")
+    print("anti-vacuity (population): P1 flagged a missing root appended to the worked "
+          "reference's live array and P2 kept that declaration clean unmutated; P7 drew "
+          "exactly one finding from a synthetic declaration over an empty glob while its "
+          "non-empty control stayed clean; P3/P3b/P3c flagged `file` and `file/class` "
+          "without a justification and a unit outside the closed set, and specificity arm "
+          "P4 (a narrower unit) stayed clean; P6 ran on a SYNTHETIC ledger — a ledgered "
+          "zero-yield root was recorded, not reported, the same root was reported once the "
+          "ledger was emptied, and dropping it made the audit report exactly its stale "
+          "entry; P8 flagged a declared population no `_population_report` call reports and "
+          "P8b a resolve call whose filter is not the declared one; P9 flagged the worked "
+          "reference's declaration removed; P5 held the declaration set non-empty")
 
-    findings = findings + job_findings + posture_findings
+    findings = findings + job_findings + posture_findings + pop_findings
     if findings:
         print(f"FAIL: {len(findings)} declared-vs-actual mismatch(es).", file=sys.stderr)
         for finding in findings:
@@ -1019,18 +1673,22 @@ def main() -> int:
               "core/standards/gate-efficacy-standard.md Requirement (b). For a per-job "
               "finding, add a `gate-efficacy:` block naming that job's check-run and "
               "stating its ACTUAL posture — an advisory gate declaring `advisory` is "
-              "conforming; an undeclared one is not.",
+              "conforming; an undeclared one is not. For a population finding, declare "
+              "the roots the check actually scans (or remove the dead root), and keep the "
+              "`_population_resolve` / `_population_report` calls beside the declaration.",
               file=sys.stderr)
         return 1
 
     print(f"OK — {n_declarations}/{n_declarations} gate-efficacy declaration(s) across "
           f"{len(sources)} workflow file(s) agree with their triggers, "
           f"{n_jobs}/{n_jobs} named job(s) in check-run-naming workflows carry a "
-          f"declaration of their own, and "
+          f"declaration of their own, "
           f"{n_required - len(residual_hits)}/{n_required} `required` declaration(s) "
           f"name a blocking enforcement surface "
           f"({len(residual_hits)} ledgered residual(s) pending an operator posture "
-          f"decision).")
+          f"decision), and {n_pop}/{n_pop} population declaration(s) resolve root by "
+          f"root and are reported ({len(pop_hits)} ledgered residual root(s) pending the "
+          f"change that removes them).")
     return 0
 
 

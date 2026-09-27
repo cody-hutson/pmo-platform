@@ -11269,6 +11269,13 @@ sys.stdout.write("".join(out) + "|")
   # shakedown). Format mirrors .claude/skip-doc-link-check.txt (Check 14/15
   # sister-allowlist). The DC6 carve-out classes (Anthropic-owned URLs,
   # forward-binding provenance, authoritative-standard provenance) are seeded.
+  #
+  # gate-efficacy population (Requirement (b); reported per Requirement (c) § Population
+  # shortfall). The c23_ prefix on this block's locals is vestigial — this is Check 25.
+  # Both populations share one exemption mechanism, the allowlist above; the declarations
+  # state that list's actual state rather than its intended one.
+  #   population: roots=@c23_md_roots  filter=*.md  exempts=file — the allowlist exempts whole files, one entry per file with its rationale, because a teaching document carries its candidate signatures throughout and the universal-vs-localized-context standard adjudicates it per file; the list this check opens (.claude/skip-localized-context-check.txt, relative to the repository root) is written by no tracked installer path, which lays the tracked list down under the workspace root, and that tracked list's three entries are pre-restructure pmo-platform/ paths matching no file this check enumerates
+  #   population: roots=@c23_skill_roots  filter=SKILL.md|*/references/*.md  exempts=file — the same allowlist and the same state as the declaration above
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 25: Universal-vs-localized-context authoring guardrail (DC1-DC4 + DC6)"
     local c23_allowlist=".claude/skip-localized-context-check.txt"
@@ -11357,29 +11364,40 @@ sys.stdout.write("".join(out) + "|")
       return 1
     }
 
-    # Enumerate Layer-1 target files (5-surface set per D-TARGET-PATHS).
-    # 2>/dev/null tolerates missing skill subdirs (skill without references/).
-    local c23_files=()
-    local _f
-    while IFS= read -r -d '' _f; do
-      c23_is_allowlisted "$_f" || c23_files+=("$_f")
-    done < <(
-      /usr/bin/find \
-        core/governance \
-        release/governance \
-        core/disciplines \
-        core/schemas \
-        core/standards \
-        core/specs \
-        release/references \
-        release/schemas \
-        release/specs \
-        release/standards \
-        .claude/rules \
-        -type f -name '*.md' -print0 2>/dev/null
-      /usr/bin/find operations/skills release/skills core/skills \
-        -type f \( -name 'SKILL.md' -o -path '*/references/*.md' \) -print0 2>/dev/null
+    # Enumerate Layer-1 target files (5-surface set per D-TARGET-PATHS). These arrays ARE
+    # the declared population (the two declarations above name them): the resolver reports
+    # a root that yields zero files instead of swallowing it, as the find list this
+    # replaced did behind 2>/dev/null.
+    local -a c23_md_roots=(
+      core/governance
+      release/governance
+      core/disciplines
+      core/schemas
+      core/standards
+      core/specs
+      release/references
+      release/schemas
+      release/specs
+      release/standards
+      .claude/rules
     )
+    local -a c23_skill_roots=(
+      operations/skills
+      release/skills
+      core/skills
+    )
+    _population_resolve '*.md' -- "${c23_md_roots[@]}"
+    _population_resolve --append 'SKILL.md|*/references/*.md' -- "${c23_skill_roots[@]}"
+    local c23_files=() c23_exempted=0 c23_proceed=1
+    local _f
+    for _f in ${POP_FILES[@]+"${POP_FILES[@]}"}; do
+      if c23_is_allowlisted "$_f"; then
+        c23_exempted=$((c23_exempted + 1))
+      else
+        c23_files+=("$_f")
+      fi
+    done
+    _population_report universal-vs-localized-context "${#c23_files[@]}" "$c23_exempted" || c23_proceed=0
 
     # Per-file × per-DC grep — output rows in `<file>:<line>:<DC>:<text>` form.
     local c23_dc_specs=(
@@ -11393,7 +11411,10 @@ sys.stdout.write("".join(out) + "|")
     local c23_dc1_findings=0
     local c23_output=""
     local _file _spec _dc _pat _hits _line _lineno _text _nf_clean _pk_clean _pk_alt _pk_pat
-    for _file in "${c23_files[@]}"; do
+    # The three scans below expand c23_files empty-safe: on a not-run population it is
+    # empty, and bash 3.2 aborts a bare "${c23_files[@]}" under `set -u`, taking every later
+    # check with it.
+    for _file in ${c23_files[@]+"${c23_files[@]}"}; do
       for _spec in "${c23_dc_specs[@]}"; do
         _dc="${_spec%%:*}"
         _pat="${_spec#*:}"
@@ -11414,7 +11435,7 @@ sys.stdout.write("".join(out) + "|")
     # org-domain) via fixed-string match (no metachar escaping). Counts as DC1.
     _nf_clean=$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$c23_needles" 2>/dev/null) || _nf_clean=""
     if [[ -n "$_nf_clean" ]]; then
-      for _file in "${c23_files[@]}"; do
+      for _file in ${c23_files[@]+"${c23_files[@]}"}; do
         _hits=$(/usr/bin/grep -nFf <(printf '%s\n' "$_nf_clean") "$_file" 2>/dev/null) || _hits=""
         if [[ -n "$_hits" ]]; then
           while IFS= read -r _line; do
@@ -11443,7 +11464,7 @@ sys.stdout.write("".join(out) + "|")
       _pk_alt=$(printf '%s' "$_pk_clean" | /usr/bin/paste -sd '|' - 2>/dev/null || true)
       if [[ -n "$_pk_alt" ]]; then
         _pk_pat="\\b(${_pk_alt})([-_/]|[[:space:]])|(${_pk_alt})_FDD|R-(${_pk_alt})-[0-9]+"
-        for _file in "${c23_files[@]}"; do
+        for _file in ${c23_files[@]+"${c23_files[@]}"}; do
           _hits=$(/usr/bin/grep -nE "$_pk_pat" "$_file" 2>/dev/null) || _hits=""
           if [[ -n "$_hits" ]]; then
             while IFS= read -r _line; do
@@ -11457,7 +11478,11 @@ sys.stdout.write("".join(out) + "|")
     fi
 
     if [[ $c23_findings -eq 0 ]]; then
-      log "  OK:    no DC1-DC4 + DC6 candidate signatures in scope (${#c23_files[@]} file(s) scanned; signal-not-verdict)"
+      # The clean token needs an examined population: on not-run the NOT-EVAL line above
+      # stands in its place.
+      if [[ $c23_proceed -eq 1 ]]; then
+        log "  OK:    no DC1-DC4 + DC6 candidate signatures in scope (${#c23_files[@]} file(s) scanned; signal-not-verdict)${POP_MARKER:-}"
+      fi
     else
       # DC1 (organizational identity / PII) hard-enforces regardless of
       # deploy-check mode; DC2-DC6 stay signal-not-verdict (mode-driven warn)
@@ -11465,13 +11490,13 @@ sys.stdout.write("".join(out) + "|")
       # examples, accepted #N provenance refs per universal-vs-localized-context
       # §10.5.3). This is the DC1-only-enforce posture.
       if [[ ${c23_dc1_findings:-0} -gt 0 ]]; then
-        log "  FAIL:  universal-vs-localized-context — ${c23_dc1_findings} DC1 PII signature(s) (ENFORCED — organizational identity / PII must not enter the corpus)"
+        log "  FAIL:  universal-vs-localized-context — ${c23_dc1_findings} DC1 PII signature(s) (ENFORCED — organizational identity / PII must not enter the corpus)${POP_MARKER:-}"
         ISSUES=$((ISSUES + 1))
       fi
       local _c23_other=$((c23_findings - ${c23_dc1_findings:-0}))
       if [[ $_c23_other -gt 0 ]]; then
         flag_warn_or_issue "universal-vs-localized-context" \
-          "$_c23_other DC2-DC6 candidate signature(s) across ${#c23_files[@]} file(s) — signal-not-verdict; see core/standards/universal-vs-localized-context.md §7 + §10"
+          "$_c23_other DC2-DC6 candidate signature(s) across ${#c23_files[@]} file(s) — signal-not-verdict; see core/standards/universal-vs-localized-context.md §7 + §10${POP_MARKER:-}"
       fi
       { head -10 <<<"$c23_output" | sed 's/^/         /' ; } || true
       if [[ $c23_findings -gt 10 ]]; then
@@ -11918,6 +11943,13 @@ sys.stdout.write("".join(out) + "|")
   # through flag_warn_or_issue. Net-new saturation semantics: the snapshot count is
   # informational in warn-mode; CI gates added-line deltas. Honors the same path
   # allowlist + per-file override markers as the hook.
+  #
+  # gate-efficacy population (Requirement (b); reported per Requirement (c) § Population
+  # shortfall). Two exemption mechanisms, two units: the path allowlist removes a file from
+  # both classes, and a per-file override marker removes ONE class of a file that stays
+  # examined for the other — so the DENOM record carries one examined/exempted pair per
+  # class, and neither class's denominator is stated as the file count.
+  #   population: roots=@c31_globs  filter=*.md  exempts=file,file/class — the path allowlist exempts whole files, each entry stating its structural reason (a navigation map, frozen history), and a per-file override marker exempts one fragile-reference class of a file, because the reference-durability standard treats a legitimately construct-carrying file as a property of the whole file, class by class
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 31: Reference-durability saturation (durable-corpus fragile refs)"
     local c31_fixture="core/hooks/testdata/cutover-fixtures.txt"
@@ -11947,9 +11979,10 @@ sys.stdout.write("".join(out) + "|")
     # #4217: "release/standards", "release/specs" and "release/schemas" have never
     # existed — zero add/delete/rename events across the whole of repository
     # history, entering here at the initial public-release commit with their
-    # current wrong value. The loop below skips a missing root SILENTLY via
-    # `[[ -d ]] || continue`, so the check declared a ten-root scan surface and
-    # resolved seven, overstating its own denominator by 30%.
+    # current wrong value. The loop then skipped a missing root SILENTLY via a
+    # directory guard, so the check declared a ten-root scan surface and resolved
+    # seven, overstating its own denominator by 30%. A root that yields zero files is
+    # now reported NOT-EVALUATED by _population_report, never skipped.
     #
     # Removing them is behaviour-preserving, not a coverage cut: the intended
     # content is already walked recursively under "release/references", which
@@ -11960,11 +11993,12 @@ sys.stdout.write("".join(out) + "|")
       "core/rules" "core/standards" "core/specs" "core/disciplines" "core/schemas"
       "release/references" "release/governance"
     )
-    local c31_link_count=0 c31_version_count=0 c31_files_scanned=0
-    local _d _f
-    for _d in "${c31_globs[@]}"; do
-      [[ -d "$_d" ]] || continue
-      while IFS= read -r -d '' _f; do
+    local c31_link_count=0 c31_version_count=0 c31_files_scanned=0 c31_exempted=0
+    local c31_link_exempted=0 c31_version_exempted=0
+    local _f
+    _population_resolve '*.md' -- "${c31_globs[@]}"
+    if [[ ${#POP_FILES[@]} -gt 0 ]]; then
+      for _f in "${POP_FILES[@]}"; do
         # skip allowlisted directories (prefix match)
         local _skip=0
         if [[ -f "$c31_allowlist" ]]; then
@@ -11978,7 +12012,7 @@ sys.stdout.write("".join(out) + "|")
             esac
           done < "$c31_allowlist"
         fi
-        [[ $_skip -eq 1 ]] && continue
+        [[ $_skip -eq 1 ]] && { c31_exempted=$((c31_exempted + 1)); continue; }
         c31_files_scanned=$((c31_files_scanned + 1))
         # strip fenced code blocks before counting
         local _stripped
@@ -12014,21 +12048,32 @@ sys.stdout.write("".join(out) + "|")
           local _lc
           _lc=$(echo "$_stripped" | grep -cE "$c31_link_re" || true)
           c31_link_count=$((c31_link_count + _lc))
+        else
+          c31_link_exempted=$((c31_link_exempted + 1))
         fi
         if [[ $_allow_version -eq 0 ]]; then
           local _vc
           _vc=$(echo "$_stripped" | grep -cE "$c31_cutover_re" || true)
           c31_version_count=$((c31_version_count + _vc))
+        else
+          c31_version_exempted=$((c31_version_exempted + 1))
         fi
-      done < <(find "$_d" -type f -name '*.md' -print0 2>/dev/null)
-    done
+      done
+    fi
 
     local c31_total=$((c31_link_count + c31_version_count))
-    if [[ $c31_total -eq 0 ]]; then
-      log "  OK:    no fragile-reference saturation across $c31_files_scanned durable-corpus file(s)"
-    else
-      flag_warn_or_issue "reference-durability" \
-        "$c31_total fragile-reference saturation marker(s) across $c31_files_scanned durable-corpus file(s) (Class L: $c31_link_count, Class V: $c31_version_count) — pre-existing rot drains via the backfill counterpart; the CI delta gates net-new. See core/standards/reference-durability-standard.md"
+    # Each class's own denominator: a file carrying a class's override marker is examined
+    # for the other class only.
+    local c31_l_examined=$((c31_files_scanned - c31_link_exempted))
+    local c31_v_examined=$((c31_files_scanned - c31_version_exempted))
+    local c31_pairs="examined.class-L=${c31_l_examined} exempted.class-L=${c31_link_exempted} examined.class-V=${c31_v_examined} exempted.class-V=${c31_version_exempted}"
+    if _population_report reference-durability "$c31_files_scanned" "$c31_exempted" "$c31_pairs"; then
+      if [[ $c31_total -eq 0 ]]; then
+        log "  OK:    no fragile-reference saturation across $c31_files_scanned durable-corpus file(s) (Class L examined over ${c31_l_examined}, Class V over ${c31_v_examined})${POP_MARKER:-}"
+      else
+        flag_warn_or_issue "reference-durability" \
+          "$c31_total fragile-reference saturation marker(s) across $c31_files_scanned durable-corpus file(s) (Class L: $c31_link_count over ${c31_l_examined} examined, Class V: $c31_version_count over ${c31_v_examined} examined) — pre-existing rot drains via the backfill counterpart; the CI delta gates net-new. See core/standards/reference-durability-standard.md${POP_MARKER:-}"
+      fi
     fi
   fi
 
