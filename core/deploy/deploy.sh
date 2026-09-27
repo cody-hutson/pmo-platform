@@ -20015,6 +20015,84 @@ EOF
     /bin/rm -rf "$_dpt"
   fi
 
+  # ─── Assertion group BD — Check 47 verdict tail (release-body drift) ─────────
+  #
+  # Drives the REAL hoisted _c47_report — the verdict tail Check 47 calls — so there is no
+  # second copy here to drift from the shipped one (core/standards/gate-efficacy-standard.md
+  # § Exit-consumer and executor census: a row the drift engine did not evaluate never reads
+  # as a match). Output is captured by REDIRECT to a sandbox file; WARN_LOG and ISSUES are
+  # re-declared local so flag_not_evaluated writes its rows into the sandbox, never into the
+  # operator's warn log, and BD-5 reads a sentinel. The line helpers are group DP's.
+  #
+  # BD-1 / BD-2 are the discrimination pair: every enumerated row compared (the clean OK
+  # line, no NOT-EVAL line, no warn-log row) against two rows the engine could not compare
+  # (exactly one NOT-EVAL naming both by exit, and an OK line over the measured rows only,
+  # carrying the DEGRADED marker). BD-3 is the collapse this group exists for: every row
+  # returned exit 2 or 3 — the engine compared nothing — and the clean token must be
+  # withheld, where the pre-fix check printed that every row matched. BD-0 fails in one
+  # line when the helper is absent, so a missing definition reads as one countable failure
+  # rather than an abort under `set -e`.
+  #
+  # WHAT THIS GROUP CANNOT SEE: Check 47's loop — its row enumeration, its two declared
+  # exclusions and its per-row N/A lines — which is inline in cmd_check and reached only by
+  # a --check run. That path is recorded as a --check run, not asserted here.
+  echo "self-test: starting assertion group BD (Check 47 verdict tail, release-body drift)" >&2
+
+  if ! declare -F _c47_report >/dev/null; then
+    _dp_fail "BD-0 the hoisted _c47_report is not defined — every BD arm drives it"
+  else
+    local _bdt; _bdt="$(/usr/bin/mktemp -d -t bodydrift-selftest.XXXXXX)"
+    local WARN_LOG="$_bdt/warn.jsonl"
+    local ISSUES=0
+    local _bd_rc _bd_nl _bd_ok _bd_denom
+
+    # BD-1 — FETCHED (specificity): every enumerated row compared; one row of each declared
+    # exclusion, both counted.
+    _bd_rc=0; _c47_report 3 0 "" 0 "" 0 1 1 10 v9.00 > "$_bdt/bd1.out" 2>&1 || _bd_rc=$?
+    if [[ "$_bd_rc" -ne 0 ]]; then _dp_fail "BD-1 a fully compared population must return 0, got $_bd_rc"; fi
+    if [[ "$(_dp_count "$_bdt/bd1.out" 'NOT-EVAL:')" != "0" ]]; then _dp_fail "BD-1 a fully compared population must emit NO NOT-EVAL line"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"evaluated":false')" != "0" ]]; then _dp_fail "BD-1 a fully compared population must write NO warn-log row"; fi
+    _bd_denom="$(_dp_line "$_bdt/bd1.out" 'DENOM:')"
+    if [[ "$_bd_denom" != *"status=fetched enumerated=3 examined=3 exempted=2"* || "$_bd_denom" != *"1 version-less"* || "$_bd_denom" != *"1 unpublished by record"* ]]; then _dp_fail "BD-1 the DENOM record must read status=fetched enumerated=3 examined=3 exempted=2 and count both declared exclusions: $_bd_denom"; fi
+    _bd_ok="$(_dp_line "$_bdt/bd1.out" 'OK:')"
+    if [[ "$_bd_ok" != *"all 3 logged release(s)"* || "$_bd_ok" == *"DEGRADED"* ]]; then _dp_fail "BD-1 the OK line must claim all 3 compared rows and carry no DEGRADED marker: $_bd_ok"; fi
+
+    # BD-2 — DEGRADED (sensitivity): two of five rows not compared, one per not-evaluated exit.
+    _bd_rc=0; _c47_report 5 1 "v9.01" 1 "v9.02" 0 1 0 10 v9.00 > "$_bdt/bd2.out" 2>&1 || _bd_rc=$?
+    if [[ "$_bd_rc" -ne 0 ]]; then _dp_fail "BD-2 a partial read must return 0 (the verdict over the compared rows stands), got $_bd_rc"; fi
+    if [[ "$(_dp_count "$_bdt/bd2.out" 'NOT-EVAL: release-body-drift')" != "1" ]]; then _dp_fail "BD-2 a partial read must emit EXACTLY ONE NOT-EVAL line (fan-in)"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"evaluated":false')" != "1" ]]; then _dp_fail "BD-2 exactly one warn-log row must be written"; fi
+    _bd_nl="$(_dp_line "$_bdt/bd2.out" 'NOT-EVAL:')"
+    if [[ "$_bd_nl" != *"v9.01"* || "$_bd_nl" != *"v9.02"* || "$_bd_nl" != *"exit 2"* || "$_bd_nl" != *"exit 3"* || "$_bd_nl" != *"this is not a clean result"* ]]; then _dp_fail "BD-2 the NOT-EVAL line must name both rows under their exits and carry the not-clean clause: $_bd_nl"; fi
+    if [[ "$_bd_nl" == *"covers"* ]]; then _dp_fail "BD-2 the NOT-EVAL line must name ONLY the rows not compared — what the verdict covers belongs on the OK line's marker: $_bd_nl"; fi
+    _bd_ok="$(_dp_line "$_bdt/bd2.out" 'OK:')"
+    if [[ "$_bd_ok" != *"3 of 5"* || "$_bd_ok" != *"[DEGRADED"* || "$_bd_ok" != *"this is not a clean result"* ]]; then _dp_fail "BD-2 the OK line must cover 3 of 5 rows and carry the DEGRADED marker: $_bd_ok"; fi
+    if [[ "$(_dp_count "$_bdt/bd2.out" 'status=degraded enumerated=5 examined=3 exempted=1')" != "1" ]]; then _dp_fail "BD-2 the DENOM record must read status=degraded with counters for the compared rows"; fi
+
+    # BD-3 — NOT-RUN: every enumerated row returned 2 or 3. The collapse this group exists for.
+    _bd_rc=0; _c47_report 4 4 "v9.01 v9.02 v9.03 v9.04" 0 "" 0 0 0 4 v9.00 > "$_bdt/bd3.out" 2>&1 || _bd_rc=$?
+    if [[ "$_bd_rc" -ne 1 ]]; then _dp_fail "BD-3 nothing compared must return 1 so the clean token is withheld, got $_bd_rc"; fi
+    if [[ "$(_dp_count "$_bdt/bd3.out" 'OK:')" != "0" ]]; then _dp_fail "BD-3 nothing compared must print NO OK line — the pre-fix check printed that every row matched here"; fi
+    if [[ "$(_dp_count "$_bdt/bd3.out" 'NOT-EVAL: release-body-drift')" != "1" ]]; then _dp_fail "BD-3 nothing compared must emit one terminal NOT-EVAL line"; fi
+    _bd_denom="$(_dp_line "$_bdt/bd3.out" 'DENOM:')"
+    if [[ "$_bd_denom" != *"status=not-run"* || "$_bd_denom" == *"examined="* || "$_bd_denom" == *"exempted="* ]]; then _dp_fail "BD-3 the DENOM record must read status=not-run with examined/exempted ABSENT (PV-7b): $_bd_denom"; fi
+
+    # BD-3b — NOT-RUN, nothing in scope: a cutoff that hands the engine no versioned row.
+    _bd_rc=0; _c47_report 0 0 "" 0 "" 0 2 0 6 v9.00 > "$_bdt/bd3b.out" 2>&1 || _bd_rc=$?
+    if [[ "$_bd_rc" -ne 1 || "$(_dp_count "$_bdt/bd3b.out" 'OK:')" != "0" || "$(_dp_count "$_bdt/bd3b.out" 'NOT-EVAL: release-body-drift')" != "1" ]]; then _dp_fail "BD-3b a cutoff enumerating no versioned row must return 1 with one NOT-EVAL line and no OK line (rc $_bd_rc)"; fi
+
+    # BD-4 — FINDINGS beside a partial read: the NOT-EVAL still fans in, and no OK line prints.
+    _bd_rc=0; _c47_report 5 1 "v9.01" 0 "" 2 0 0 5 v9.00 > "$_bdt/bd4.out" 2>&1 || _bd_rc=$?
+    if [[ "$_bd_rc" -ne 0 ]]; then _dp_fail "BD-4 findings over compared rows must return 0 so the caller flags them, got $_bd_rc"; fi
+    if [[ "$(_dp_count "$_bdt/bd4.out" 'OK:')" != "0" ]]; then _dp_fail "BD-4 findings must print NO OK line"; fi
+    if [[ "$(_dp_count "$_bdt/bd4.out" 'NOT-EVAL: release-body-drift')" != "1" ]]; then _dp_fail "BD-4 the row not compared must still fan in to one NOT-EVAL line"; fi
+
+    # BD-5 — STRUCTURAL NON-ESCALATION: four NOT-EVALUATED emits moved nothing.
+    if [[ "$ISSUES" -ne 0 ]]; then _dp_fail "BD-5 a row not compared must never increment ISSUES, got $ISSUES"; fi
+
+    /bin/rm -rf "$_bdt"
+  fi
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failure(s))" >&2
     return 1
@@ -20047,6 +20125,8 @@ EOF
   echo "    EV-1 six-marker probe record PASSes with zero bracket tokens (the shape this card admits) / EV-2 the >=2 BOUNDARY holds at exactly two markers (turns red if the count is raised) / EV-3 no Evidence section FAILs / EV-4 DISCRIMINATION — all six marker words as running prose still FAIL, so prose ABOUT evidence is not evidence / EV-5 an evidence-free Evidence section FAILs (the falsification arm: the widened predicate is not a never-FAIL check) / EV-6 shape (a) bracket-only still PASSes (regression) / EV-7 a lone label-position marker FAILs, killing the >=1 mutant / EV-8 the SAME token as EV-6 placed OUTSIDE the Evidence section FAILs, killing the whole-body mutant. Every arm drives _g1_03_evaluate, the same function Check 22 calls — no parallel reimplementation to drift." >&2
   echo "  declared population validated (Checks 25/31, group DP):" >&2
   echo "    DP-0 the hoisted pair is defined / DP-1 a fully-resolving root set reads status=fetched with all four counters, no NOT-EVAL line, no warn-log row and an empty marker / DP-2 a missing root and a present root matching nothing read status=degraded with counters for the measured subset, EXACTLY ONE NOT-EVAL line naming both roots and nothing else, one warn-log row, and a DEGRADED marker saying what the verdict covers — DP-1/DP-2 is the discrimination pair / DP-3 the synthetic check over an empty glob returns 1 (the clean token withheld) with examined/exempted ABSENT / DP-4 a population the exemption mechanism emptied returns 1 and names that cause / DP-5 --append with a two-pattern filter yields SKILL.md and references/*.md, never other.md / DP-6 three shortfall emits leave ISSUES untouched / DP-7 the NOT-EVAL line is flag_not_evaluated's own / DP-8 per-predicate pairs ride a measuring record and are ABSENT on not-run / DP-9 an empty root list survives set -u under bash 3.2. Every arm drives the real pair the checks call." >&2
+  echo "  Check 47 verdict tail validated (release-body drift, group BD):" >&2
+  echo "    BD-0 the hoisted _c47_report is defined / BD-1 every enumerated row compared reads status=fetched with its row counters, both declared exclusions counted, the clean OK line with no DEGRADED marker, no NOT-EVAL line and no warn-log row / BD-2 two rows not compared (one exit 2, one exit 3) read status=degraded with counters for the compared rows, EXACTLY ONE NOT-EVAL line naming both under their exits and nothing about coverage, one warn-log row, and an OK line over 3 of 5 carrying the DEGRADED marker — BD-1/BD-2 is the discrimination pair / BD-3 every row not compared returns 1 with NO OK line (the pre-fix check printed that every row matched) and examined/exempted ABSENT / BD-3b a cutoff handing the engine no row returns 1 with no OK line / BD-4 findings beside a partial read still fan in and print no OK line / BD-5 four NOT-EVALUATED emits leave ISSUES untouched. Every arm drives the real _c47_report Check 47 calls." >&2
   return 0
 }
 
