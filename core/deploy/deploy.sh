@@ -7350,35 +7350,57 @@ _population_report() {
 # A status first, the member counters absent on not-run — over row counts. The state
 # vocabulary is review-discipline-principles.md § 8 PV-7a's, consumed, not restated.
 #
-# _c47_report <enumerated> <na2> <na2-rows> <na3> <na3-rows> <findings> <version-less> <unpublished> <total> <cutoff>
+# _c47_report <enumerated> <na2> <na2-rows> <na3> <na3-rows> <findings> <version-less> <unpublished> <total> <cutoff> [<undefined> <undefined-rows>]
 #   <enumerated>        versioned rows on/after the cutoff handed to the drift engine
 #   <na2> <na2-rows>    rows it returned exit 2 for — a capability it needs was absent
 #   <na3> <na3-rows>    rows it returned exit 3 for — no published Release or note to compare
-#   <findings>          rows it found drifted, or whose exit its contract does not define
+#   <findings>          rows it found drifted (exit 1)
 #   <version-less>      in-scope rows DECLARED EXCLUDED by class (no Release by construction)
 #   <unpublished>       in-scope rows DECLARED EXCLUDED by record (a versioned release that
 #                       published no Release)
 #   <total> <cutoff>    LOG data rows, and the cutoff token
-# The compared (measured) rows are <enumerated> minus the rows not evaluated.
+#   <undefined> <undefined-rows>
+#                       rows it returned an exit its 0/1/2/3 contract does not define for, each
+#                       written with its code, e.g. `v9.05 (exit 7)`. Optional: when omitted they
+#                       read 0 and empty, for a caller that enumerated no undefined exit.
+# The compared (measured) rows are <enumerated> minus the rows not evaluated: exits 2 and 3,
+# and every undefined exit.
 #     fetched   every enumerated row was compared: the DENOM record, then the verdict.
 #     degraded  some were not (a PARTIAL read): the DENOM record, its member counters
 #               describing ONLY the compared rows; EXACTLY ONE NOT-EVALUATED emit through
 #               flag_not_evaluated naming the rows not compared, under their exits, and
 #               nothing else (fan-in — no mode branch, no ISSUES increment); and, when there
-#               is no finding, the OK line over the compared rows with the inline DEGRADED
-#               marker — the marker, not the NOT-EVAL line, says what the verdict covers.
+#               is no finding and no undefined exit, the OK line over the compared rows with
+#               the inline DEGRADED marker — the marker, not the NOT-EVAL line, says what the
+#               verdict covers.
 #     not-run   nothing was compared — no row handed to the engine, or every row not
 #               evaluated: the DENOM record with the member counters ABSENT (PV-7b), one
 #               terminal NOT-EVALUATED emit, and return 1: the clean token is withheld.
+# AN UNDEFINED EXIT IS AN INSTRUMENT FAILURE, AND IT FAILS CLOSED (Q3 (B)). Exits 2 and 3 are
+# states the engine's contract defines — it could not compare — so their rows are not
+# evaluated and move nothing. An exit outside that contract means the instrument itself
+# failed. Its row is not evaluated either: it is named under the cause undefined-exit, with its
+# code, in the same ONE NOT-EVALUATED emit, and it is never counted as drift. An instrument
+# failure is not a pass, so the check fails closed: ONE issue through flag_release_body_drift,
+# Check 47's mode-driven emitter (FAIL under the shipped enforce posture, WARN when an
+# operator dials it down, silent under off), worded as an instrument failure, and the OK line
+# withheld in every state. It is the one class this tail lets move the exit status; exits 2
+# and 3 never do (self-test BD-5 and BD-6 are the escalation pair).
 #   Returns 0 when at least one row was compared — the caller flags any finding through its
-#   mode-driven emitter — and 1 when none was: the _population_report convention.
+#   mode-driven emitter — and 1 when none was: the _population_report convention. The issue
+#   for an undefined exit is emitted here, before either return.
 _c47_report() {
   local _t="$1" _n2="$2" _r2="$3" _n3="$4" _r3="$5" _f="$6" _xv="$7" _xu="$8" _tot="$9" _cut="${10}"
-  local _na=$((_n2 + _n3)) _m _rest _rows=""
+  local _nu="${11:-0}" _ru="${12-}" _ifail=""
+  local _na=$((_n2 + _n3 + _nu)) _m _rest _rows=""
   _m=$((_t - _na))
   _rest="$((_tot - _t - _xv - _xu)) row(s) not in scope (pre-cutoff) / ${_tot} total LOG data row(s)"
   if [[ "$_n2" -gt 0 ]]; then _rows="exit 2 (a capability the drift engine needs was absent): ${_r2}"; fi
   if [[ "$_n3" -gt 0 ]]; then _rows="${_rows:+${_rows}; }exit 3 (no published Release or note to compare): ${_r3}"; fi
+  if [[ "$_nu" -gt 0 ]]; then
+    _rows="${_rows:+${_rows}; }undefined-exit (an exit outside the drift engine's 0/1/2/3 contract — an instrument failure, never drift): ${_ru}"
+    _ifail="instrument failure — the drift engine returned an exit outside its 0/1/2/3 contract for ${_nu} of ${_t} enumerated row(s): ${_ru}; those rows were not evaluated, which is neither a pass nor a verdict on a published Release body — the check fails closed until the engine or its invocation is repaired"
+  fi
   if [[ "$_m" -le 0 ]]; then
     log "  DENOM: release-body-drift — status=not-run enumerated=${_t} (row counts over RELEASE_LOG rows on/after ${_cut}; nothing was compared, so the member counters are absent; declared excluded: ${_xv} version-less, ${_xu} unpublished by record; ${_rest})"
     if [[ "$_t" -eq 0 ]]; then
@@ -7386,6 +7408,7 @@ _c47_report() {
     else
       flag_not_evaluated "release-body-drift" "status=not-run — none of the ${_t} enumerated row(s) could be compared: ${_rows}; the clean token is withheld; this is not a clean result"
     fi
+    if [[ -n "$_ifail" ]]; then flag_release_body_drift "release-body-drift" "$_ifail"; fi
     return 1
   fi
   if [[ "$_na" -gt 0 ]]; then
@@ -7394,13 +7417,55 @@ _c47_report() {
   else
     log "  DENOM: release-body-drift — status=fetched enumerated=${_t} examined=${_m} exempted=$((_xv + _xu)) (row counts over RELEASE_LOG rows on/after ${_cut}: enumerated = versioned rows handed to the drift engine; examined = rows it compared; exempted = rows declared excluded — ${_xv} version-less, publishing no GitHub Release by construction, and ${_xu} unpublished by record; ${_rest})"
   fi
-  if [[ "$_f" -gt 0 ]]; then return 0; fi
+  if [[ -n "$_ifail" ]]; then flag_release_body_drift "release-body-drift" "$_ifail"; fi
+  if [[ "$_f" -gt 0 || -n "$_ifail" ]]; then return 0; fi
   if [[ "$_na" -gt 0 ]]; then
     log "  OK:    ${_m} of ${_t} logged release(s) on/after ${_cut} compared, each with a published Release body matching its in-repo note (§5.1 invariant holds for the compared rows; ${_xv} version-less and ${_xu} unpublished row(s) declared out of scope, not skipped) [DEGRADED — this verdict covers the ${_m} of ${_t} enumerated row(s) the drift engine compared, with ${_na} not evaluated; this is not a clean result]"
   else
     log "  OK:    all ${_m} logged release(s) on/after ${_cut} have a published Release body matching their in-repo note (§5.1 invariant holds; ${_xv} version-less and ${_xu} unpublished row(s) declared out of scope, not skipped)"
   fi
   return 0
+}
+
+# ─── flag_release_body_drift — Check 47's gating emit (TOP-LEVEL) ─────────────
+#
+# HOISTED TO TOP LEVEL for flag_not_evaluated's reason: _c47_report reports an instrument
+# failure through it, --self-test group BD drives _c47_report, and a definition inside
+# cmd_check() is registered only when execution reaches it. Its behavior moved unchanged, with
+# one hardening: the warn branch resolves WARN_LOG defensively, as flag_not_evaluated does,
+# because a hoisted emitter can be reached where cmd_check()'s `local WARN_LOG` is not in
+# scope, and an unguarded expansion under `set -u` would abort the run. Its callers
+# resolve $RELEASE_BODY_DRIFT_MODE before the first emit — Check 47 at its start, group BD by
+# declaring it.
+#
+# Identical semantics to flag_warn_or_issue, EXCEPT it switches on the check-specific
+# $RELEASE_BODY_DRIFT_MODE (resolved at Check 47 start via resolve_check_mode
+# "release-body-drift" with an ENFORCE default) rather than the shared
+# $DEPLOY_CHECK_MODE. In enforce-mode → FAIL (increments ISSUES); in warn-mode →
+# WARN + jsonl, no ISSUES increment; in off-mode → silent.
+#
+# Unlike flag_g1_enforcement (whose warn branch advertises a pending graduation),
+# this check ships ENFORCE. A warn here therefore means an operator deliberately
+# dialed it DOWN with a local release-body-drift.mode, or the shared cohort is
+# off — the message says so rather than pointing at a shakedown that is over.
+flag_release_body_drift() {
+  local check_id="$1"
+  local detail="$2"
+  case "$RELEASE_BODY_DRIFT_MODE" in
+    enforce)
+      log "  FAIL:  $check_id — $detail"
+      ISSUES=$((ISSUES + 1))
+      ;;
+    warn)
+      log "  WARN:  $check_id — $detail (warn-mode; this check ships ENFORCE — a local release-body-drift.mode dialed it down)"
+      local _ts
+      _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      json_escape_detail "$detail"
+      local _detail_escaped="$JSON_ESCAPED"
+      local _wl="${WARN_LOG:-$(warn_log_path)}"
+      printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$_wl" 2>/dev/null || true
+      ;;
+  esac
 }
 
 # ─── Check 16 population body — _c16_* (TOP-LEVEL) ───────────────────────────
@@ -8614,35 +8679,8 @@ cmd_check() {
     esac
   }
 
-  # flag_release_body_drift — Check 47 (release-body drift) gating emit. Identical
-  # semantics to flag_warn_or_issue, EXCEPT it switches on the check-specific
-  # $RELEASE_BODY_DRIFT_MODE (resolved at Check 47 start via resolve_check_mode
-  # "release-body-drift" with an ENFORCE default) rather than the shared
-  # $DEPLOY_CHECK_MODE. In enforce-mode → FAIL (increments ISSUES); in warn-mode →
-  # WARN + jsonl, no ISSUES increment; in off-mode → silent.
-  #
-  # Unlike flag_g1_enforcement (whose warn branch advertises a pending graduation),
-  # this check ships ENFORCE. A warn here therefore means an operator deliberately
-  # dialed it DOWN with a local release-body-drift.mode, or the shared cohort is
-  # off — the message says so rather than pointing at a shakedown that is over.
-  flag_release_body_drift() {
-    local check_id="$1"
-    local detail="$2"
-    case "$RELEASE_BODY_DRIFT_MODE" in
-      enforce)
-        log "  FAIL:  $check_id — $detail"
-        ISSUES=$((ISSUES + 1))
-        ;;
-      warn)
-        log "  WARN:  $check_id — $detail (warn-mode; this check ships ENFORCE — a local release-body-drift.mode dialed it down)"
-        local _ts
-        _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-        json_escape_detail "$detail"
-        local _detail_escaped="$JSON_ESCAPED"
-        printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$WARN_LOG" 2>/dev/null || true
-        ;;
-    esac
-  }
+  # flag_release_body_drift — Check 47's gating emit — is defined at top level, beside
+  # _c47_report, which calls it; --self-test group BD drives both.
 
   # recommend_g1_enforcement — Check 22 NON-GATING advisory emit for the four
   # judgment-class G1 criteria (G1-02/04/05b/08). NEVER increments ISSUES in any
@@ -12423,7 +12461,7 @@ sys.stdout.write("".join(out) + "|")
       local c47_findings=0
       local c47_excluded=0
       local c47_unpub=0
-      local c47_na2=0 c47_na2_rows="" c47_na3=0 c47_na3_rows="" _c47_rc=0
+      local c47_na2=0 c47_na2_rows="" c47_na3=0 c47_na3_rows="" c47_nau=0 c47_nau_rows="" _c47_rc=0
       local c47_output=""
       local _row47 _c47cls _v47 _c47key _c47ms _c47tag _c47state _d47_out _d47_exit
       while IFS= read -r _row47; do
@@ -12441,9 +12479,10 @@ sys.stdout.write("".join(out) + "|")
         # run. A version-less release publishes no GitHub Release by construction, so
         # handing its slug key to check-release-body-drift.sh would take an untested path
         # in a tool whose exit contract enumerates only 0/1/2/3 — and the `*)` arm below
-        # maps ANY unexpected exit to a finding. Gating before the tool is invoked removes
-        # that path rather than handling its output. Excluded rows are counted in the DENOM
-        # record and named in the OK line, so the exclusion is visible rather than silent.
+        # fails the check closed on ANY exit outside it, as an instrument failure. Gating
+        # before the tool is invoked removes that path rather than handling its output.
+        # Excluded rows are counted in the DENOM record and named in the OK line, so the
+        # exclusion is visible rather than silent.
         if [[ "$_c47cls" == "version-less" ]]; then
           c47_excluded=$((c47_excluded + 1))
           continue
@@ -12473,21 +12512,27 @@ sys.stdout.write("".join(out) + "|")
              # finding, and never the clean token.
              c47_na3=$((c47_na3 + 1)); c47_na3_rows="${c47_na3_rows:+$c47_na3_rows }${_v47}"
              log "  N/A:   ${_v47} has no published Release or note to compare (Surface 1 absent — Check 32 owns existence)" ;;
-          *) c47_output+="${_v47}: drift tool returned unexpected exit ${_d47_exit}"$'\n'; c47_findings=$((c47_findings + 1)) ;;
+          *) # An exit the engine's 0/1/2/3 contract does not define: an INSTRUMENT FAILURE,
+             # never drift (Q3 (B)). Counted as not evaluated, under its code, and fanned in with
+             # exits 2 and 3 to the ONE NOT-EVALUATED emit; _c47_report also fails the check
+             # closed on it and withholds the OK line.
+             c47_nau=$((c47_nau + 1)); c47_nau_rows="${c47_nau_rows:+$c47_nau_rows }${_v47} (exit ${_d47_exit})" ;;
         esac
       done <<<"$c47_rows"
 
       # VERDICT TAIL — hoisted to _c47_report so --self-test group BD drives it. The DENOM
       # record (enumerated + declared-excluded + not-in-scope == total) carries the Register
-      # A status; a row the engine did not evaluate (exit 2 or 3) is counted and fanned in to
-      # ONE NOT-EVALUATED emit, and the OK line states the compared count — withheld, with
-      # return 1, when nothing was compared. Findings keep their mode-driven emitter below.
+      # A status; a row the engine did not evaluate (exit 2 or 3, or an exit its contract does
+      # not define) is counted and fanned in to ONE NOT-EVALUATED emit, and the OK line states
+      # the compared count — withheld, with return 1, when nothing was compared. An undefined
+      # exit is an instrument failure: the tail also fails the check closed on it through the
+      # mode-driven emitter and withholds the OK line. Findings keep that emitter below.
       _c47_report "$c47_targets" "$c47_na2" "$c47_na2_rows" "$c47_na3" "$c47_na3_rows" \
         "$c47_findings" "$c47_excluded" "$c47_unpub" "$c47_rows_total" "$c47_cutoff" \
-        || _c47_rc=$?
+        "$c47_nau" "$c47_nau_rows" || _c47_rc=$?
       if [[ $_c47_rc -eq 0 && $c47_findings -gt 0 ]]; then
         flag_release_body_drift "release-body-drift" \
-          "$c47_findings §5.1 body-drift finding(s) across $((c47_targets - c47_na2 - c47_na3)) compared logged release(s) (of $c47_targets enumerated) — a published Release body diverged from its source-of-record note; re-emit per release-notes-standard.md §5.6"
+          "$c47_findings §5.1 body-drift finding(s) across $((c47_targets - c47_na2 - c47_na3 - c47_nau)) compared logged release(s) (of $c47_targets enumerated) — a published Release body diverged from its source-of-record note; re-emit per release-notes-standard.md §5.6"
         head -10 <<<"$c47_output" | sed 's/^/         /'
         if [[ $c47_findings -gt 10 ]]; then
           log "         ... ($((c47_findings - 10)) more)"
