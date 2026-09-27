@@ -17210,8 +17210,14 @@ STUB
   local _octt='**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 8/10 (0.80); carry-forward-closure 2/3 (0.67); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 12/13 (0.92); evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh'
   local _octtvac='**Close-Class-Telemetry:** retro-conformance N/A — no retro register found; lessons-population N/A — no lessons register found; carry-forward-closure N/A — gh unavailable; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence N/A — no retro register found; evidence-preservation N/A — gh unavailable; evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh'
   local _octtbad='**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); rollup-presence present; mechanism: compute-close-class-telemetry.sh'
+  # CIAC-4 control (#5586 x #5245): the caller-omission value is N/A-class to (l), never a
+  # ratio. This is the line compute-close-class-telemetry.sh emits when no --retro path was
+  # supplied and gh is unavailable — slots 1, 2 and 5 carry #5586's NOT-EVALUATED strings,
+  # slots 3 and 6 the tool's own gh-less renderings — so no slot carries a digit.
+  local _octtomit='**Close-Class-Telemetry:** retro-conformance NOT-EVALUATED — no --retro path was supplied, so no retro register was looked for — this is not a clean result; lessons-population NOT-EVALUATED — no --lessons or --retro path was supplied, so no lessons register was looked for — this is not a clean result; carry-forward-closure N/A — gh unavailable — carry-forward closure not computed; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence NOT-EVALUATED — no --retro path was supplied, so no retro register was looked for — this is not a clean result; evidence-preservation NOT-EVALUATED — gh unavailable, phase-evidence preservation not computed — this is not a clean result; evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh'
   local _orl99=$'#### Release Learnings v0.99\n\n**Synthesized at:** 2026-01-01T00:00:00Z\n**Source events:** 0 row(s)\n**Source-row anchors:** N/A\n\n**Surprise:** N/A\n**Would-change:** N/A\n**Watch-for:** N/A'
   local _orl98=$'#### Release Learnings v0.98\n\n**Synthesized at:** 2026-01-01T00:00:00Z\n**Source events:** 0 row(s)\n**Source-row anchors:** N/A\n\n**Surprise:** N/A\n**Would-change:** N/A\n**Watch-for:** N/A'
+  local _orl100=$'#### Release Learnings v1.00\n\n**Synthesized at:** 2026-01-01T00:00:00Z\n**Source events:** 0 row(s)\n**Source-row anchors:** N/A\n\n**Surprise:** N/A\n**Would-change:** N/A\n**Watch-for:** N/A'
 
   # The v0.98 sibling is the SPECIFICITY arm and is well-formed in EVERY fixture:
   # live-in-hot body, conformant field, learnings block in its N7 position. Any
@@ -17243,6 +17249,13 @@ STUB
       cctok)        /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n%s\n\n%s\n%s\n' "$_hdr" "$_ovel" "$_octt" "$_orl99" "$_sib" > "$_olog" ;;
       cctvac)       /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n%s\n\n%s\n%s\n' "$_hdr" "$_ovel" "$_octtvac" "$_orl99" "$_sib" > "$_olog" ;;
       cctbad)       /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n%s\n\n%s\n%s\n' "$_hdr" "$_ovel" "$_octtbad" "$_orl99" "$_sib" > "$_olog" ;;
+      cctomit)      /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n%s\n\n%s\n%s\n' "$_hdr" "$_ovel" "$_octtomit" "$_orl99" "$_sib" > "$_olog" ;;
+      # AC-4 (#5245): `cctok` plus a LATER sibling row v1.00 — a concurrent release that claimed
+      # the next slot — VERIFIED (cctsib) or mid-close (cctsibdep), with its own conformant block.
+      cctsib|cctsibdep)
+                    local _s3=VERIFIED; [[ "$1" == "cctsibdep" ]] && _s3=DEPLOYED
+                    /usr/bin/printf '%s\n| v1.00 | ms100 | #1 | #2 | `c` | `v1.00` | %s | 2026-01-01 |\n\n#### Deployment Log v1.00\n**Result:** SUCCESS\n%s\n%s\n\n%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n%s\n\n%s\n%s\n' \
+                      "$_hdr" "$_s3" "$_ovel" "$_octt" "$_orl100" "$_ovel" "$_octt" "$_orl99" "$_sib" > "$_olog" ;;
       # Split record: body archived to the segment, telemetry field left in the HOT
       # stub. Exits 0, passes a corpus-wide grep, passes the grammar limb.
       cctsplit)     /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n_Archived: [segment](RELEASE_LOG_ARCHIVE-v0.md)_\n%s\n\n%s\n%s\n' "$_hdr" "$_octt" "$_orl99" "$_sib" > "$_olog"
@@ -17394,6 +17407,15 @@ STUB
   _os_must     "17 vacuity"  'v0.99: **Close-Class-Telemetry:** field carries no computed ratio' "$_od"
   _os_must_not "17 grammar"  'v0.99: **Close-Class-Telemetry:** field fails the eight-slot grammar' "$_od"
 
+  # OS-17b CIAC-4 CONTROL — register-fed slots NOT-EVALUATED, the gh-fed ones degraded:
+  # still a vacuity (l-3a) finding, never a grammar one. OS-15 is its control.
+  _os_write cctomit;      _od="$(_os_detail v0.98 v0.99)"
+  _os_must     "17b vacuity"  'v0.99: **Close-Class-Telemetry:** field carries no computed ratio' "$_od"
+  _os_must_not "17b grammar"  'v0.99: **Close-Class-Telemetry:** field fails the eight-slot grammar' "$_od"
+  _os_must_not "17b presence" 'v0.99: missing **Close-Class-Telemetry:**' "$_od"
+  local _o17b; _o17b="$(/usr/bin/grep -c '^v0\.99: ' <<<"$_od" || true)"
+  [[ "$_o17b" == "1" ]] || { echo "FAIL: OS 17b count — the omission field must raise EXACTLY ONE finding (the l-3a vacuity line), got $_o17b: $(/usr/bin/printf '%s' "$_od" | /usr/bin/tr '\n' ';')"; failures=$((failures+1)); }
+
   # OS-18 CO-LOCATION (l-1) — the field in the hot stub while the body lives in the
   # segment. Exit code, corpus-wide grep and the grammar limb all read identical on
   # this input; only co-location separates it.
@@ -17420,6 +17442,30 @@ STUB
   # v0.98, pulling the sibling into scope. The WARNING is the only thing that says so.
   _os_write emitted;      _od="$(_os_detail v0.98 v0.9)"
   _os_must     "21 misarm"   'WARNING — Close-Class-Telemetry cutoff v0.9 armed at LOG row v0.98 (prefix match, not an exact row)' "$_od"
+
+  # OS-22 THE DENOMINATOR IS EMITTED (#5245 AC-3): an armed run names its row AND its count.
+  _os_write cctok;        _od="$(_os_detail v0.98 v0.99)"
+  _os_must     "22 denom"     'Close-Class-Telemetry sub-check (l) armed at LOG row v0.99; 1 VERIFIED row(s) asserted' "$_od"
+  # OS-23 A SIBLING'S CLAIM CANNOT MOVE A CLAIMED ANCHOR (#5245 AC-4): a later row leaves the
+  # armed row at v0.99 and grows the count only once it is VERIFIED.
+  _os_write cctsib;       _od="$(_os_detail v0.98 v0.99)"
+  _os_must     "23 stable"    'Close-Class-Telemetry sub-check (l) armed at LOG row v0.99; 2 VERIFIED row(s) asserted' "$_od"
+  _os_must_not "23 sibling"   'v1.00: missing **Close-Class-Telemetry:**' "$_od"
+  _os_write cctsibdep;    _od="$(_os_detail v0.98 v0.99)"
+  _os_must     "23 mid-close" 'Close-Class-Telemetry sub-check (l) armed at LOG row v0.99; 1 VERIFIED row(s) asserted' "$_od"
+  # OS-24 THE SHIPPED DEFAULT IS ARMED (#5245; ADR-135). Variable UNSET, so the committed
+  # default applies; it must not be the opt-out. Literal-free: the committed row is outside
+  # this fixture. RED on the pre-#5245 default, GREEN after — AC-1's durable sensitivity half.
+  _os_write emitted
+  _od="$( unset CLOSE_COMPLETENESS_TELEMETRY_CUTOFF
+          CC_LOG="$_olog" CC_INDEX="$_oidx" CC_DIGEST="$_odig" CC_CHANGELOG="$_ochg" \
+          CC_VERSIONFILE="$_over" CC_NOTES_DIR="$_onotes" CC_LINT="$_olint" CC_DRIFT="$_odrift" \
+          CC_ALLOWLIST="$_o/none.txt" \
+          CLOSE_COMPLETENESS_CHECK_CUTOFF="v0.98" CLOSE_COMPLETENESS_RELEASE_CUTOFF="__none__" \
+          CLOSE_COMPLETENESS_OUTPUTS_CUTOFF="v0.98" \
+          _cc_compute_verdict "lifecycle" 2>&1 >/dev/null )"
+  _os_must_not "24 armed"     'Close-Class-Telemetry sub-check (l) explicitly re-dormanted' "$_od"
+  _os_must     "24 armed"     'WARNING — Close-Class-Telemetry cutoff ' "$_od"
 
   /bin/rm -rf "$_o" 2>/dev/null || true
 
