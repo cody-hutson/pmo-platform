@@ -5510,7 +5510,7 @@ _reported_write_surfaces() {
   local _i _tok _seen="" _hot
   _hot="$(/usr/bin/basename "$RELEASE_LOG")"
   for ((_i=0; _i<${#PHASE_NAMES[@]}; _i++)); do
-    [[ "${PHASE_RESULTS[$_i]}" == "PASS" ]] || continue
+    [[ "${PHASE_RESULTS[$_i]}" == "PASS" || "${PHASE_RESULTS[$_i]}" == "WARN" ]] || continue
     for _tok in $(/usr/bin/printf '%s\n' "${PHASE_DETAILS[$_i]}" \
                     | /usr/bin/grep -oE '\([A-Za-z0-9._/-]+\.md\)' | /usr/bin/tr -d '()' || true); do
       _tok="$(/usr/bin/basename "$_tok")"
