@@ -128,6 +128,11 @@ name: Install tests
 # the standing verdict attributable as a single check. The test-run event
 # emission is suppressed here (PMO_REGRESSION_EMIT=0) because CI has no
 # operator-instance event log; the CI job-exit is the authoritative gate.
+# The job then runs the same suite a second time under the runtime-suite
+# selection map's § 3 row-5 recipe (a fresh HOME, with the Python user base
+# pinned first), plus a probe that the suite's R-8 proof catches a write to
+# the subject it watches: the CI observer for the HOME-override half of the
+# verdict.
 #
 # cross-platform — the #304 cross-platform install/QA regression matrix
 # (macos-latest + ubuntu-latest + windows-latest). Where the three jobs above
@@ -1063,6 +1068,72 @@ jobs:
             exit 1
           fi
           echo "Precision probe OK — broken fixture correctly failed the suite (exit $rc)."
+
+      - name: Run standing install/onboarding/update regression suite under the row-5 recipe (fresh HOME) — gating
+        # The HOME-override observer. The first gating step runs the suite under
+        # the runner account's real HOME; this one runs the SAME runner under the
+        # runtime-suite selection map's § 3 row-5 recipe: HOME a fresh
+        # `mktemp -d`, with the Python user base pinned BEFORE the override. This
+        # job exports no PYTHONPATH pin (that export belongs to the shell-tests
+        # job, and a $GITHUB_ENV write is job-scoped), so the pin is set here.
+        # Row 5's PyYAML consumer is /usr/bin/python3, which deploy.sh calls by
+        # absolute path, so the pin is computed with that interpreter.
+        #
+        # The pin control prints first and never gates: whether /usr/bin/python3
+        # imports yaml under the real HOME, under the pinned override and under a
+        # bare override, so a failure below can be read as a user-site
+        # resolution failure or as a HOME dependence. The runner is the final
+        # command, so its exit code gates the step. `!cancelled()` runs this
+        # observer even when an earlier step failed, so every commit records both
+        # verdicts; the steps above keep their own conditions.
+        if: ${{ !cancelled() }}
+        env:
+          PMO_REGRESSION_EMIT: '0'
+        run: |
+          USER_BASE="$(/usr/bin/python3 -c 'import site; print(site.USER_BASE)')"
+          override_home="$(mktemp -d)"
+          real_rc=0
+          /usr/bin/python3 -c 'import yaml' >/dev/null 2>&1 || real_rc=$?
+          pinned_rc=0
+          HOME="${override_home}" PYTHONUSERBASE="${USER_BASE}" /usr/bin/python3 -c 'import yaml' >/dev/null 2>&1 || pinned_rc=$?
+          bare_rc=0
+          HOME="${override_home}" /usr/bin/python3 -c 'import yaml' >/dev/null 2>&1 || bare_rc=$?
+          echo "Pin control (import yaml via /usr/bin/python3): real HOME exit ${real_rc}; pinned override exit ${pinned_rc}; bare override exit ${bare_rc}"
+          HOME="${override_home}" PYTHONUSERBASE="${USER_BASE}" bash core/deploy/tests/run-install-regression.sh
+
+      - name: Precision probe — R-8 MUST catch a write to the subject it watches (row-5 recipe)
+        # The durability member's R-8 live-install proof must be able to FAIL
+        # under the override. A fixture home holding one skill file stands in for
+        # the live install (PMO_REGRESSION_LIVE_HOME), the member runs under the
+        # row-5 recipe, and a background write lands mid-run. R-8 must FAIL, mark
+        # its subject as caller-set, and name the written file. A member that
+        # ignores the variable, or a proof that cannot fail, leaves this step
+        # red. Every path it writes is a fresh temp directory.
+        if: ${{ !cancelled() }}
+        env:
+          PMO_REGRESSION_EMIT: '0'
+        run: |
+          USER_BASE="$(/usr/bin/python3 -c 'import site; print(site.USER_BASE)')"
+          override_home="$(mktemp -d)"
+          fixture_home="$(mktemp -d)"
+          mkdir -p "${fixture_home}/.claude/skills/probe"
+          printf 'x\n' > "${fixture_home}/.claude/skills/probe/SKILL.md"
+          log="$(mktemp)"
+          ( sleep 20; printf 'drift\n' >> "${fixture_home}/.claude/skills/probe/SKILL.md" ) &
+          writer=$!
+          rc=0
+          HOME="${override_home}" PYTHONUSERBASE="${USER_BASE}" PMO_REGRESSION_LIVE_HOME="${fixture_home}" \
+            bash core/deploy/tests/test_upgrade_config_durability.sh > "${log}" 2>&1 || rc=$?
+          wait "${writer}" || true
+          r8_fail="$(grep -c -E '^  FAIL: R-8 .*\[r8: caller\]' "${log}" || true)"
+          named="$(grep -c -F 'changed under the live .claude/skills: probe/SKILL.md' "${log}" || true)"
+          echo "member exit ${rc}; R-8 FAIL line on a caller-set subject: ${r8_fail}; detail naming probe/SKILL.md: ${named}"
+          if [ "${rc}" -eq 0 ] || [ "${r8_fail}" != "1" ] || [ "${named}" != "1" ]; then
+            echo "::error::R-8 did not catch a mid-run write to the subject it watches (member exit ${rc}; R-8 FAIL line ${r8_fail}; named detail ${named})."
+            grep -n -F 'R-8' "${log}" || true
+            exit 1
+          fi
+          echo "R-8 precision probe OK — the proof failed on a mid-run write and named the file."
 
   cross-platform:
     name: Cross-platform install/QA (${{ matrix.os }})
