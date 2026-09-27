@@ -19733,6 +19733,145 @@ EOF
 
   /bin/rm -rf "$_uet"
 
+  # ─── Assertion group DP — declared population (Checks 25/31) ─────────────────
+  #
+  # Drives the REAL hoisted pair _population_resolve / _population_report — the code
+  # Checks 25 and 31 call — against a sandbox tree, so there is no second resolver here to
+  # drift from the shipped one (core/standards/gate-efficacy-standard.md Requirement (c)
+  # § Population shortfall). Router output is captured by REDIRECT to a sandbox file, never
+  # by command substitution: a subshell would discard the POP_* globals the arms read.
+  # WARN_LOG is declared local so flag_not_evaluated writes its rows into the sandbox, never
+  # into the operator's warn log, and ISSUES is a local sentinel for DP-6.
+  #
+  # DP-1 / DP-2 are the discrimination pair: the same routing over one fully-resolving root
+  # set (no NOT-EVAL line, no warn-log row) and over one carrying a missing root AND a
+  # present root that matches nothing (exactly one NOT-EVAL naming both, one row). DP-3 is
+  # the synthetic check over an empty glob: the clean token withheld and no examined=
+  # counter. DP-0 fails in one line when the pair is absent, so a missing definition reads
+  # as one countable failure rather than an abort under `set -e`.
+  #
+  # WHAT THIS GROUP CANNOT SEE: the callers' inline code after the pair returns — Check 25's
+  # scan loops over an empty population among it. That caller path is recorded as a
+  # --check run, not asserted here. This group's CI executor (decision-emission.yml, on
+  # ubuntu-latest) is NOT a bash 3.2 run; a local run on macOS's /bin/bash is.
+  echo "self-test: starting assertion group DP (declared population, Checks 25/31)" >&2
+
+  _dp_count() {
+    # $1 = file · $2 = fixed substring. Echoes how many lines carry it. Pure bash: no
+    # grep -c (which exits 1 on a zero count under set -e) and no pipe into a reader.
+    local _n=0 _l
+    if [[ -f "$1" ]]; then
+      while IFS= read -r _l || [[ -n "$_l" ]]; do
+        if [[ "$_l" == *"$2"* ]]; then _n=$((_n + 1)); fi
+      done < "$1"
+    fi
+    echo "$_n"
+  }
+
+  _dp_line() {
+    # $1 = file · $2 = fixed substring. Echoes the FIRST line carrying it, or nothing.
+    local _l
+    if [[ -f "$1" ]]; then
+      while IFS= read -r _l || [[ -n "$_l" ]]; do
+        if [[ "$_l" == *"$2"* ]]; then echo "$_l"; return 0; fi
+      done < "$1"
+    fi
+    return 0
+  }
+
+  _dp_fail() {
+    echo "FAIL: $1"
+    failures=$((failures+1))
+  }
+
+  if ! declare -F _population_resolve >/dev/null || ! declare -F _population_report >/dev/null; then
+    _dp_fail "DP-0 the hoisted pair _population_resolve / _population_report is not defined — every DP arm drives it"
+  else
+    local _dpt; _dpt="$(/usr/bin/mktemp -d -t population-selftest.XXXXXX)"
+    /bin/mkdir -p "$_dpt/a" "$_dpt/c" "$_dpt/s/k/references"
+    printf 'x\n' > "$_dpt/a/x.md"
+    printf 'z\n' > "$_dpt/c/z.txt"
+    printf 's\n' > "$_dpt/s/k/SKILL.md"
+    printf 'r\n' > "$_dpt/s/k/references/r.md"
+    printf 'o\n' > "$_dpt/s/k/other.md"
+    local WARN_LOG="$_dpt/warn.jsonl"
+    local ISSUES=0
+    local _dp_rc _dp_nl _dp_denom _dp_f _dp_other
+
+    # DP-1 — FETCHED (specificity): the one declared root yields a file.
+    _population_resolve '*.md' -- "$_dpt/a"
+    if [[ "$POP_RESOLVED/$POP_DECLARED/$POP_YIELDED" != "1/1/1" ]]; then
+      _dp_fail "DP-1 resolved/declared/yielded want 1/1/1, got $POP_RESOLVED/$POP_DECLARED/$POP_YIELDED"
+    fi
+    _dp_rc=0; _population_report dp-fixture 1 0 > "$_dpt/dp1.out" 2>&1 || _dp_rc=$?
+    if [[ "$_dp_rc" -ne 0 ]]; then _dp_fail "DP-1 a fetched population must return 0, got $_dp_rc"; fi
+    if [[ "$(_dp_count "$_dpt/dp1.out" 'NOT-EVAL:')" != "0" ]]; then _dp_fail "DP-1 a fetched population must emit NO NOT-EVAL line"; fi
+    if [[ "$(_dp_count "$_dpt/dp1.out" 'status=fetched declared=1 resolved=1 examined=1 exempted=0')" != "1" ]]; then _dp_fail "DP-1 the DENOM record must read status=fetched with all four counters"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"evaluated":false')" != "0" ]]; then _dp_fail "DP-1 a fetched population must write NO warn-log row"; fi
+    if [[ -n "$POP_MARKER" ]]; then _dp_fail "DP-1 POP_MARKER must be empty when fetched, got [$POP_MARKER]"; fi
+
+    # DP-2 — DEGRADED (sensitivity): a missing root, and a present root matching nothing.
+    _population_resolve '*.md' -- "$_dpt/a" "$_dpt/zzz-missing" "$_dpt/c"
+    if [[ "$POP_UNRESOLVED" != "$_dpt/zzz-missing $_dpt/c" ]]; then
+      _dp_fail "DP-2 POP_UNRESOLVED must name exactly the missing and the non-matching root, got [$POP_UNRESOLVED]"
+    fi
+    _dp_rc=0; _population_report dp-fixture 1 0 > "$_dpt/dp2.out" 2>&1 || _dp_rc=$?
+    if [[ "$_dp_rc" -ne 0 ]]; then _dp_fail "DP-2 a partial population must return 0 (the verdict still runs), got $_dp_rc"; fi
+    if [[ "$(_dp_count "$_dpt/dp2.out" 'NOT-EVAL:')" != "1" ]]; then _dp_fail "DP-2 a partial population must emit EXACTLY ONE NOT-EVAL line (fan-in)"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"evaluated":false')" != "1" ]]; then _dp_fail "DP-2 exactly one warn-log row must be written"; fi
+    _dp_nl="$(_dp_line "$_dpt/dp2.out" 'NOT-EVAL:')"
+    if [[ "$_dp_nl" != *"$_dpt/zzz-missing"* || "$_dp_nl" != *"$_dpt/c"* ]]; then _dp_fail "DP-2 the NOT-EVAL line must name both zero-yield roots: $_dp_nl"; fi
+    if [[ "$_dp_nl" == *"covers"* ]]; then _dp_fail "DP-2 the NOT-EVAL line must name ONLY the unevaluated roots — what the verdict covers belongs on the verdict line's marker: $_dp_nl"; fi
+    if [[ "$(_dp_count "$_dpt/dp2.out" 'status=degraded declared=3 resolved=1 examined=1 exempted=0')" != "1" ]]; then _dp_fail "DP-2 the DENOM record must read status=degraded with counters for the measured subset"; fi
+    if [[ "$POP_MARKER" != *"covers the 1 of 3"* || "$POP_MARKER" != *"this is not a clean result"* ]]; then _dp_fail "DP-2 POP_MARKER must say what the verdict covers and carry the not-clean clause, got [$POP_MARKER]"; fi
+
+    # DP-7 — EMITTER REUSE: the NOT-EVAL line is flag_not_evaluated's, fixed suffix and all.
+    if [[ "$_dp_nl" != *"withheld verdict, never a clean one"* ]]; then _dp_fail "DP-7 the NOT-EVAL line must come from flag_not_evaluated (its fixed suffix is missing): $_dp_nl"; fi
+
+    # DP-3 — NOT-RUN: every declared root is missing — the synthetic check over an empty glob.
+    _population_resolve '*.md' -- "$_dpt/zzz-missing-1" "$_dpt/zzz-missing-2"
+    _dp_rc=0; _population_report dp-fixture 0 0 > "$_dpt/dp3.out" 2>&1 || _dp_rc=$?
+    if [[ "$_dp_rc" -ne 1 ]]; then _dp_fail "DP-3 an empty population must return 1 so the caller withholds its clean token, got $_dp_rc"; fi
+    if [[ "$(_dp_count "$_dpt/dp3.out" 'NOT-EVAL:')" != "1" ]]; then _dp_fail "DP-3 an empty population must emit one terminal NOT-EVAL line"; fi
+    _dp_denom="$(_dp_line "$_dpt/dp3.out" 'DENOM:')"
+    if [[ "$_dp_denom" != *"status=not-run"* || "$_dp_denom" == *"examined="* || "$_dp_denom" == *"exempted="* ]]; then _dp_fail "DP-3 the DENOM record must read status=not-run with examined/exempted ABSENT (PV-7b): $_dp_denom"; fi
+
+    # DP-4 — EXEMPTION-EMPTIED: the root yields a file, but the caller exempted every one.
+    _population_resolve '*.md' -- "$_dpt/a"
+    _dp_rc=0; _population_report dp-fixture 0 1 > "$_dpt/dp4.out" 2>&1 || _dp_rc=$?
+    if [[ "$_dp_rc" -ne 1 ]]; then _dp_fail "DP-4 a population the exemption mechanism emptied must return 1, got $_dp_rc"; fi
+    if [[ "$(_dp_count "$_dpt/dp4.out" 'exemption mechanism removed every member')" != "1" ]]; then _dp_fail "DP-4 the NOT-EVAL line must name the exemption mechanism as the cause"; fi
+
+    # DP-6 — STRUCTURAL NON-ESCALATION: three shortfall emits moved nothing.
+    if [[ "$ISSUES" -ne 0 ]]; then _dp_fail "DP-6 a population shortfall must never increment ISSUES, got $ISSUES"; fi
+
+    # DP-5 — --append and a multi-pattern filter (in-filter specificity).
+    _population_resolve '*.md' -- "$_dpt/a"
+    _population_resolve --append 'SKILL.md|*/references/*.md' -- "$_dpt/s"
+    if [[ "$POP_DECLARED/$POP_RESOLVED/$POP_YIELDED" != "2/2/3" ]]; then
+      _dp_fail "DP-5 --append over two calls want declared/resolved/yielded 2/2/3, got $POP_DECLARED/$POP_RESOLVED/$POP_YIELDED"
+    fi
+    _dp_other=0
+    for _dp_f in ${POP_FILES[@]+"${POP_FILES[@]}"}; do
+      if [[ "$_dp_f" == */other.md ]]; then _dp_other=1; fi
+    done
+    if [[ "$_dp_other" -ne 0 ]]; then _dp_fail "DP-5 other.md matches neither SKILL.md nor */references/*.md and must not be yielded"; fi
+
+    # DP-8 — PER-PREDICATE PAIRS: carried on a measuring status, ABSENT on not-run (PV-7b).
+    _population_resolve '*.md' -- "$_dpt/a"
+    _dp_rc=0; _population_report dp-fixture 1 0 "examined.class-L=1 exempted.class-L=0" > "$_dpt/dp8.out" 2>&1 || _dp_rc=$?
+    if [[ "$(_dp_count "$_dpt/dp8.out" 'exempted=0 examined.class-L=1 exempted.class-L=0')" != "1" ]]; then _dp_fail "DP-8 the per-predicate pairs must follow the file counters on a measuring status"; fi
+    _population_resolve '*.md' -- "$_dpt/zzz-missing-3"
+    _dp_rc=0; _population_report dp-fixture 0 0 "examined.class-L=0 exempted.class-L=0" > "$_dpt/dp8b.out" 2>&1 || _dp_rc=$?
+    if [[ "$(_dp_count "$_dpt/dp8b.out" 'examined.class-L')" != "0" ]]; then _dp_fail "DP-8 the per-predicate pairs must be ABSENT on not-run (PV-7b)"; fi
+
+    # DP-9 — an EMPTY root list: bash 3.2 under `set -u` must survive the expansion.
+    _population_resolve '*.md' --
+    if [[ "$POP_DECLARED/$POP_RESOLVED/$POP_YIELDED" != "0/0/0" ]]; then _dp_fail "DP-9 an empty root list want 0/0/0, got $POP_DECLARED/$POP_RESOLVED/$POP_YIELDED"; fi
+
+    /bin/rm -rf "$_dpt"
+  fi
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failure(s))" >&2
     return 1
@@ -19763,6 +19902,8 @@ EOF
   echo "  operations-index purpose rendering validated (F-05, group RI):" >&2
   echo "    RI-1 a multi-sentence purpose survives whole — the arm that fires if the retired first-period truncation (cut -d . -f1) returns / RI-1b DISCRIMINATION, the truncated line must be absent as a WHOLE LINE (substring refutation would fire on the correct output, since the truncation is a strict prefix of it) / RI-2 NO-REGRESSION CONTROL — the one-sentence shape every live conduct member has renders byte-identically to the pre-fix body, so the fix is proved not to have moved live output / RI-3 SPECIFICITY — a source carrying no purpose: key renders the bare form with no em-dash, so the set is not matching anything / RI-4 the conduct/engineering class filter still excludes engineering rows / RI-5 trailing whitespace is stripped so exactly one period closes the line. Every arm drives the real _write_operations_rules_index the carrier calls, through a subshell-scoped mirror_pair_set override — no second renderer to drift." >&2
   echo "    EV-1 six-marker probe record PASSes with zero bracket tokens (the shape this card admits) / EV-2 the >=2 BOUNDARY holds at exactly two markers (turns red if the count is raised) / EV-3 no Evidence section FAILs / EV-4 DISCRIMINATION — all six marker words as running prose still FAIL, so prose ABOUT evidence is not evidence / EV-5 an evidence-free Evidence section FAILs (the falsification arm: the widened predicate is not a never-FAIL check) / EV-6 shape (a) bracket-only still PASSes (regression) / EV-7 a lone label-position marker FAILs, killing the >=1 mutant / EV-8 the SAME token as EV-6 placed OUTSIDE the Evidence section FAILs, killing the whole-body mutant. Every arm drives _g1_03_evaluate, the same function Check 22 calls — no parallel reimplementation to drift." >&2
+  echo "  declared population validated (Checks 25/31, group DP):" >&2
+  echo "    DP-0 the hoisted pair is defined / DP-1 a fully-resolving root set reads status=fetched with all four counters, no NOT-EVAL line, no warn-log row and an empty marker / DP-2 a missing root and a present root matching nothing read status=degraded with counters for the measured subset, EXACTLY ONE NOT-EVAL line naming both roots and nothing else, one warn-log row, and a DEGRADED marker saying what the verdict covers — DP-1/DP-2 is the discrimination pair / DP-3 the synthetic check over an empty glob returns 1 (the clean token withheld) with examined/exempted ABSENT / DP-4 a population the exemption mechanism emptied returns 1 and names that cause / DP-5 --append with a two-pattern filter yields SKILL.md and references/*.md, never other.md / DP-6 three shortfall emits leave ISSUES untouched / DP-7 the NOT-EVAL line is flag_not_evaluated's own / DP-8 per-predicate pairs ride a measuring record and are ABSENT on not-run / DP-9 an empty root list survives set -u under bash 3.2. Every arm drives the real pair the checks call." >&2
   return 0
 }
 
