@@ -547,8 +547,9 @@ validate_version_key() {
 # carry exactly one payload segment card-disposition:carried or
 # card-disposition:removed (stage-04-planning.md § 11, the per-card gate
 # disposition; pipeline-event-log-schema.md § 3). compute-front-cluster-telemetry.sh
-# drops a (release, card) pair recorded as removed; a removal written without the
-# segment would be scored as a surviving plan, and the log is append-only. A
+# reads the segment (a card removed at the first gate leaves that release's
+# population; one removed at a re-plan is scored broken); a removal written without
+# it would be scored as a surviving plan, and the log is append-only. A
 # segment opens at the payload start or after a ';', leading blanks ignored (the
 # grammar payload_labels reads); the value is trimmed and must be one of the two
 # words exactly. Milestone- and sub-task-grain d-class rows, and d-class rows at
