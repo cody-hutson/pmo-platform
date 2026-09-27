@@ -5463,9 +5463,9 @@ phase_rebuild_skill_packages() {
 
 # ─── The reported-write set — ONE producer, read from the PHASE RECORD ───────
 #
-# Emits one `<phase>\t<surface-basename>` line per surface a PASS-reporting phase
-# NAMED in its own detail. Deduped on the surface; the hot ledger is filtered out
-# because files=() names it unconditionally, so it can never be the dropped one.
+# Emits one `<phase>\t<surface-basename>` line per surface a PASS- or WARN-reporting
+# phase NAMED in its own detail. Deduped on the surface; the hot ledger is filtered
+# out because files=() names it unconditionally, so it can never be the dropped one.
 #
 # WHY THE KEY IS "A PHASE REPORTED A SURFACE" AND NOT A NAME PREFIX (#6258). Both
 # staging-completeness arms below keyed on `inject_*`, which is a PROXY for "is a
@@ -5476,7 +5476,7 @@ phase_rebuild_skill_packages() {
 # the prefix did not name. Widening the prefix to a second literal only moves the
 # blind spot to the next writer; keying on the REPORT removes it.
 #
-# THE `PASS` RESULT FILTER STAYS, AND IS LOAD-BEARING — for the reason MEASURED
+# THE `PASS`/`WARN` RESULT FILTER STAYS, AND IS LOAD-BEARING — for the reason MEASURED
 # below, not the one first written here. The first draft of this block claimed the
 # filter is what excludes phase_append_reversions' N/A line, "no re-version this
 # release (RELEASE_REVERSIONS.md untouched)". That was FALSE, and a mutation run
@@ -5487,12 +5487,20 @@ phase_rebuild_skill_packages() {
 # a hazard this code does not have.
 #
 # What the filter ACTUALLY excludes, enumerated over all 47 mark_phase sites: FOUR
-# non-PASS limbs whose detail DOES use the strict path-only form —
+# SKIPPED limbs whose detail DOES use the strict path-only form —
 # inject_outcome_field (SKIPPED, twice), append_release_learnings (SKIPPED) and
 # inject_close_class_telemetry_field (SKIPPED), each naming its resolved surface
 # as `($target_name)` / `($_log_name)`. A SKIPPED limb wrote nothing, so admitting
 # one would demand a commit for a file its own phase declined to touch — a guard
 # that FAILs a correct close. Arm PS-5 drives exactly that fixture.
+#   One limb in that form is ADMITTED beside PASS: the written-then-WARN limb of
+# inject_close_class_telemetry_field (WARN). When the Phase A7.2 learnings register
+# is absent or unresolvable, that limb still writes the field, then names the same
+# `($target_name)`, so a PASS-only filter hid a real write from this cross-check.
+# Arm TL/h drives exactly that fixture. It is the one WARN row phase 10 can read at
+# --apply: every other WARN limb sits under a dry-run branch, where phase 10 records
+# DRY-RUN and returns without reading this set, or belongs to a phase dispatched
+# after phase 10.
 #
 # The token grammar admits a repo-relative path as well as a bare basename and
 # reduces it with basename(1), so a writer may name its target in whichever form
@@ -5581,8 +5589,8 @@ phase_commit_chore_pr() {
     # which is exactly how the worse half of #4710 stayed silent: 6.5 and 6.6
     # reported an injected write and this branch then reported green "no-op"
     # directly beneath them, with no chore commit at all. An inject_* phase marked
-    # PASS wrote a field to disk (its SKIPPED/FAIL limbs write nothing), so an
-    # EMPTY staged set contradicts its own report.
+    # PASS or WARN wrote a field to disk (its SKIPPED/FAIL limbs write nothing), so
+    # an EMPTY staged set contradicts its own report.
     #   Reads the PHASE RECORD, not TOUCHED_ARCHIVE_SEGMENTS. A guard that consults
     # the same recorder whose omission IS the defect cannot catch that omission —
     # it would go vacuous the moment a future write site forgets to record, which
@@ -5636,12 +5644,12 @@ EOF
     #
     #   INDEPENDENCE (the binding Stage 5 constraint). The expected set is derived
     # from the PHASE RECORD — the surface each inject_* phase NAMED in its own PASS
-    # detail — never from TOUCHED_ARCHIVE_SEGMENTS. A guard that consults the same
-    # recorder whose omission IS the defect goes vacuous the instant a future write
-    # site forgets to call _record_touched_archive_segment, which is exactly the
-    # regression this exists to catch. Same property the empty-set guard above was
-    # built on, and it is what makes this arm fail on a MISSING recorder call rather
-    # than agree with it.
+    # or WARN detail — never from TOUCHED_ARCHIVE_SEGMENTS. A guard that consults
+    # the same recorder whose omission IS the defect goes vacuous the instant a
+    # future write site forgets to call _record_touched_archive_segment, which is
+    # exactly the regression this exists to catch. Same property the empty-set guard
+    # above was built on, and it is what makes this arm fail on a MISSING recorder
+    # call rather than agree with it.
     #
     #   Matched by basename against the committed path list, so a future surface
     # that lands in a different directory is still adjudicated instead of silently
