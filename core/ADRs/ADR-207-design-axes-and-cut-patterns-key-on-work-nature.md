@@ -184,7 +184,13 @@ Deliverable classes (registry concept 1) with delivered items in the pool: ⟦S6
 | V-04 | Data | completed | governance | `defect` (`data-structure-change`) | E2 | E2 | E2 · E3-P | E2 | none |
 | V-05 | Software | completed | software | fits no nature → matches `restructure` | E1 | E2 | E2 | E2 | none |
 | V-06 | Governance | not planned | — (marked) | `investigation` (`defect`, `data-structure-change`) | E1 | E1 | E1 | E1 | none |
-⟦S6: the remaining rows from V-07 in set order; State is completed, not planned or open; Concept-1 class marks inferred values; then a summary line — items coded, delivered items per class, per-nature counts, items fitting no nature, multi-nature items and the owed-set widening they cause, candidates admitted, axis co-occurrence⟧
+| V-07 | Data | open | — | `data-structure-change` | E1 | E0 | E1 | E1 | none |
+| V-08 | Software | not planned | — (marked) | `infrastructure-change` | E1 | E1 | E1 | E1 | none |
+| V-09 | Governance | completed | governance | `defect` | E2 | E2 | E2 | E2 | none |
+| V-10 | Data | open | — | `defect` | E1 | E1 | E1 | E1 | none |
+| V-11 | Software | open | — | fits no nature → matches `behaviour-change` | E1 | E1 | E1 | E1 | none |
+| V-12 | Governance | completed | governance (inferred) | `defect` | E2 | E2 | E2 | E2 | none |
+⟦S6: the remaining rows from V-13 in set order; State is completed, not planned or open; Concept-1 class marks inferred values; then a summary line — items coded, delivered items per class, per-nature counts, items fitting no nature, multi-nature items and the owed-set widening they cause, candidates admitted, axis co-occurrence⟧
 
 ### Applying the model to the measured instance
 
@@ -232,4 +238,10 @@ MODERATE — revised in place or reverted before ratification; after it, superse
 - V-04 — #5846 — mastered project health and the rollup contract's source mapping
 - V-05 — #3722 — DOM construction for the eval-review rows
 - V-06 — #5589 — the operator-instance home and the XDG read-path
-⟦S6: one line per remaining coded item from V-07 — "V-NN — #N — a noun phrase from its title"; one line per follow-up card the continuity table names⟧
+- V-07 — #5843 — one declared key scheme for the entity model
+- V-08 — #2344 — skill-to-module lookup in the deploy tools
+- V-09 — #6255 — the await-merge phase's terminal state for an already-merged pull request
+- V-10 — #5847 — the frozen entity model reconciled with what shipped
+- V-11 — #4228 — section-citation coverage and the near-miss store variable
+- V-12 — #5055 — the action-items template's restated enums
+⟦S6: one line per remaining coded item from V-13 — "V-NN — #N — a noun phrase from its title"; one line per follow-up card the continuity table names⟧
