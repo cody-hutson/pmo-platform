@@ -170,8 +170,10 @@ set -euo pipefail
 #        per-verb reader table (exit 1, operand, count, and whether exit 0 with no
 #        comparator is the claim); and the roll-up states the records its counters
 #        span, sets not-graded apart from could-not-evaluate, and shows every counted
-#        record in a table, a record with no issue value under (plan). Ten seeded
-#        failures, each proved to apply at exactly its sites.
+#        record in a table, a record with no issue value under (plan). A word spelled
+#        like a test primary is one only where a primary can stand, so a binary test
+#        names its operand (V6854-AC3 k). Eleven seeded failures, each proved to apply
+#        at exactly its sites.
 #  (G20) A DOCUMENTED-DECISION METHOD ON A PER-ISSUE ROW GRADES A NAMED SKIP
 #        (V6685-AC1..AC4) — a named read of a named surface, with no command this
 #        executor runs, is the declared-deferred SKIP when the method cell declares
@@ -192,8 +194,9 @@ set -euo pipefail
 #        while the grader misgrades them, and a real plan replays. A designated command
 #        carrying an unterminated quote reads ERROR naming the quote, where a genuine
 #        operator stays UNRUNNABLE, and a command inside a span no backtick closes runs
-#        on no route; the lint reads both the way the handlers do. Seven seeded
-#        failures, each proved to apply at exactly its sites.
+#        on no route, while a deferral written there is read, never hidden; the lint
+#        reads all three the way the handlers do. Eight seeded failures, each proved
+#        to apply at exactly its sites.
 #
 # Offline + deterministic: fixtures are committed under tests/fixtures/ and all
 # methods are fast local greps against the repo tree (no deploy.sh --check here —
@@ -3765,7 +3768,8 @@ rm -rf "$G18STUB" "$G18FAIL" "$MUTD45"
 # opens with a verb is a named read, never a command. ERROR is kept for a row the
 # executor tried to evaluate and could not, and what each allowlisted verb's result means
 # is read from one per-verb table: exit 1 is a zero only for grep and test; a command
-# naming no operand is refused before it runs; with no comparator, exit 0 is the claim
+# naming no operand is refused before it runs, and a word spelled like a test primary
+# names no operand only where a primary can stand; with no comparator, exit 0 is the claim
 # only for grep, test and an ls naming files; wc's count is its first field. The roll-up
 # states the records its counters span and the named split, and the markdown block
 # shows every record it counts, a record with no issue value under (plan).
@@ -3917,6 +3921,31 @@ fi
   && ok "V6854-AC3 j — the reader table: one row per allowlisted verb (exit 1, operand, count, and whether exit 0 with no comparator is the claim), every cell as documented, and no row for a verb outside the set" \
   || bad "V6854-AC3 j — the reader table reads '${G19_TBL:-<undefined>}' (every allowlisted verb covered: $G19_ALL)"
 
+# --- V6854-AC3 k: a word spelled like a test primary is one only where a primary can stand. ---
+# The operand rule refuses a primary with no operand: one opening the expression, or after
+# !, (, -a or -o. After a binary operator the same word is that operator's operand, so the
+# command names its operand and test decides the row -- in the per-issue handler, the
+# cross-issue handler and the authoring lint, which all read the one rule. Its own
+# fixture, so G19's counted population above is unchanged.
+FIX_TOP="release/tools/tests/fixtures/verify-plan-test-operand.md"
+vrp_run "$VERIFY" "$FIX_TOP"; J19K="$VRP_JSON"
+L19K="$("$VERIFY" --ciac-lint --root "$REPO_ROOT" "$REPO_ROOT/$FIX_TOP" 2>/dev/null || true)"
+[ "$(grep -c -F '| AC-' "$REPO_ROOT/$FIX_TOP" || true)" = "4" ] && [ "$(grep -c -F '**CIAC-' "$REPO_ROOT/$FIX_TOP" || true)" = "1" ] \
+   && [ "$(acs_of "$J19K")" = "4" ] && [ "$(ciacs_of "$J19K")" = "1" ] \
+  && ok "V6854-AC3 k-0 SENSITIVITY — the binary-test fixture declares and emits 4 rows and 1 CIAC (the arms below grade real records)" \
+  || bad "V6854-AC3 k-0 the binary-test fixture declares $(grep -c -F '| AC-' "$REPO_ROOT/$FIX_TOP" || true) rows and $(grep -c -F '**CIAC-' "$REPO_ROOT/$FIX_TOP" || true) CIACs, and emits $(acs_of "$J19K") and $(ciacs_of "$J19K") (expected 4 and 1)"
+[ "$(fv19 "$J19K" AC-1)" = per-issue/PASS ] && [ "$(g13_observed "$J19K" AC-1)" = command-succeeded ] \
+   && [ "$(fv19 "$J19K" AC-2)" = per-issue/FAIL ] && [ "$(g13_observed "$J19K" AC-2)" = command-exit-1 ] \
+  && ok "V6854-AC3 k — a binary test whose last word is spelled like a primary names its operand: test decides the row (AC-1 PASS, AC-2 FAIL command-exit-1), never ERROR no-operand:test" \
+  || bad "V6854-AC3 k — AC-1 $(fv19 "$J19K" AC-1) '$(g13_observed "$J19K" AC-1)'; AC-2 $(fv19 "$J19K" AC-2) '$(g13_observed "$J19K" AC-2)'"
+G19_K_LINT="$(awk -F'\t' '$1 == "CIAC-LINT" && $2 == "CIAC-1" { print $3 " " $4 }' <<<"$L19K")"
+[ "$(fv19 "$J19K" CIAC-1)" = integration/PASS ] && [ "$G19_K_LINT" = "CLEAN -" ] \
+  && ok "V6854-AC3 k — the same shape on the cross-issue route and to the authoring lint: CIAC-1 reads PASS and lints CLEAN, because every reader reads the one operand rule" \
+  || bad "V6854-AC3 k — CIAC-1 $(fv19 "$J19K" CIAC-1) '$(g13_observed "$J19K" CIAC-1)'; lint '$G19_K_LINT'"
+[ "$(fv19 "$J19K" AC-3)" = per-issue/PASS ] && [ "$(fv19 "$J19K" AC-4)" = per-issue/ERROR ] && g19_has "$J19K" AC-4 "no-operand:test" \
+  && ok "V6854-AC3 k CONTROL — a binary test whose last word is not spelled like a primary reads PASS (AC-3), and a primary after ! still names no operand and is refused (AC-4 ERROR no-operand:test)" \
+  || bad "V6854-AC3 k CONTROL — AC-3 $(fv19 "$J19K" AC-3); AC-4 $(fv19 "$J19K" AC-4) '$(g13_observed "$J19K" AC-4)'"
+
 # --- V6854-AC4: the roll-up separates not-my-runner from failed-to-evaluate, over its true population. ---
 [ "$(g19_line "$MD19")" = "$G19_LINE_WANT" ] \
   && ok "V6854-AC4 a — the markdown roll-up states the 27 records its counters span, the per-issue, cross-issue and always-on populations, and the named split: not graded by this run (SKIP by who decided it, and UNRUNNABLE) apart from could not evaluate (ERROR)" \
@@ -4042,6 +4071,16 @@ if [ "$MUT_TOOK" = 1 ]; then
     [ -n "$G19MD" ] && [ "$G19MD" = "$MD19C" ] \
       && ok "V6854-AC4 M8 CONTROL — on a plan with no unattributed record the bucket moves no byte: the canonical fixture's block is identical with and without it" \
       || bad "V6854-AC4 M8 CONTROL — the canonical fixture's block differs with the bucket removed"
+  fi
+fi
+# M9 — the operand rule's predecessor test removed: a word spelled like a primary is read as one anywhere.
+m19 "V6854-AC3 M9" g19-m9-primary-anywhere 1 's/^      if \[ "\$n" -gt 2 \]; then case .*$/      :/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_TOP"; JM19_9="$VRP_JSON"
+  if mutant_ran "V6854-AC3 M9"; then
+    [ "$(fv19 "$JM19_9" AC-1)" = per-issue/ERROR ] && g19_has "$JM19_9" AC-1 "no-operand:test" && [ "$(fv19 "$JM19_9" AC-3)" = per-issue/PASS ] \
+      && ok "V6854-AC3 M9 detected — without the predecessor test a binary test's last operand reads as a primary with none again (AC-1 ERROR no-operand:test), and the control is unmoved" \
+      || bad "V6854-AC3 M9 SURVIVED — AC-1 $(fv19 "$JM19_9" AC-1) '$(g13_observed "$JM19_9" AC-1)'; AC-3 $(fv19 "$JM19_9" AC-3)"
   fi
 fi
 rm -rf "$MUTD6854"
@@ -4326,7 +4365,10 @@ rm -rf "$MUTD6685"
 # not read, so it reads ERROR naming the quote and fails the run, while a genuine shell
 # operator stays UNRUNNABLE. And a command inside a span no backtick closes is prose, so it
 # runs on no route: the per-issue keyword and residual routes, the cross-issue route, and
-# the designated command of a method naming several. Every record is read by its issue and
+# the designated command of a method naming several. Because that piece is prose, a
+# declared deferral written in it is read by every deferral reader -- the classifier's
+# step 0, both handlers' guards and the lint -- never blanked as a command's pattern.
+# Every record is read by its issue and
 # its id from its own line (g20_line). Each seeded failure is proved to apply at exactly
 # its sites, and only a mutation that took is graded.
 # ===========================================================================
@@ -4518,6 +4560,28 @@ G21_C1="$(g20_fvo "$J21S" '#985' AC-4)"; G21_C2="$(g20_fv "$J21S" "$G20_CIAC" CI
   && ok "G21 D38 CLOSED SPAN CONTROL — the same commands, closed, run and pass on both routes" \
   || bad "G21 D38 CLOSED SPAN CONTROL — AC-4 '$G21_C1', CIAC-4 '$G21_C2' (want per-issue/PASS/command-succeeded and PASS)"
 
+# --- D38, the deferral readers: a span no backtick closes is prose to them too, so a deferral written there is read. ---
+FIX_SDEF="release/tools/tests/fixtures/verify-plan-span-deferral.md"
+vrp_run "$VERIFY" "$FIX_SDEF"; J21D="$VRP_JSON"; RC21D="$VRP_RC"
+lint_run "$VERIFY" "$FIX_SDEF"; LOUT_D="$LINT_OUT"; LRC_D="$LINT_RC"
+[ "$(grep -c -F '| AC-' "$REPO_ROOT/$FIX_SDEF" || true)" = "3" ] && [ "$(grep -c -F '**CIAC-' "$REPO_ROOT/$FIX_SDEF" || true)" = "3" ] \
+   && [ "$(acs_of "$J21D")" = "3" ] && [ "$(ciacs_of "$J21D")" = "3" ] \
+  && ok "G21 D38 DEFERRAL-0 SENSITIVITY — the span-deferral fixture declares and emits 3 rows and 3 CIACs (the arms below grade real records)" \
+  || bad "G21 D38 DEFERRAL-0 the span-deferral fixture declares $(grep -c -F '| AC-' "$REPO_ROOT/$FIX_SDEF" || true) rows and $(grep -c -F '**CIAC-' "$REPO_ROOT/$FIX_SDEF" || true) CIACs, and emits $(acs_of "$J21D") and $(ciacs_of "$J21D") (expected 3 and 3)"
+G21_D1="$(g20_fvo "$J21D" '#988' AC-1)"; G21_D2="$(g20_fvo "$J21D" '#988' AC-2)"
+[ "$G21_D1" = "deferred/SKIP/declared-deferred" ] && [ "$G21_D2" = "deferred/SKIP/declared-deferred" ] \
+  && ok "G21 D38 DEFERRAL READ — a deferral written in a span no backtick closes is read, never hidden: the only span unclosed (AC-1), and an unclosed piece led by a verb after a closed probe (AC-2), each read the declared-deferred SKIP, never the probe's PASS" \
+  || bad "G21 D38 DEFERRAL READ — AC-1 '$G21_D1', AC-2 '$G21_D2' (want deferred/SKIP/declared-deferred twice)"
+G21_E1="$(g20_fvo "$J21D" "$G20_CIAC" CIAC-1)"; G21_E2="$(g20_fvo "$J21D" "$G20_CIAC" CIAC-2)"
+[ "$G21_E1" = "integration/SKIP/declared-deferred" ] && [ "$G21_E2" = "integration/SKIP/declared-deferred" ] \
+   && [ "$(lint_of "$LOUT_D" CIAC-1)" = "DECLARED -" ] && [ "$(lint_of "$LOUT_D" CIAC-2)" = "DECLARED -" ] && [ "$LRC_D" -eq 0 ] \
+  && ok "G21 D38 DEFERRAL READ — on the cross-issue route the same two shapes read the declared-deferred SKIP, and the lint reads each DECLARED, naming its evidence, and exits 0: the lint and the handlers read the deferral where the one splitter says the spans are" \
+  || bad "G21 D38 DEFERRAL READ — CIAC-1 '$G21_E1', CIAC-2 '$G21_E2'; lint CIAC-1 '$(lint_of "$LOUT_D" CIAC-1)', CIAC-2 '$(lint_of "$LOUT_D" CIAC-2)', rc $LRC_D (want integration/SKIP/declared-deferred twice, DECLARED twice, rc 0)"
+[ "$(g20_fvo "$J21D" '#988' AC-3)" = "deferred/SKIP/declared-deferred" ] && [ "$(g20_fvo "$J21D" "$G20_CIAC" CIAC-3)" = "integration/SKIP/declared-deferred" ] \
+   && [ "$(lint_of "$LOUT_D" CIAC-3)" = "DECLARED -" ] && [ "$RC21D" -eq 0 ] \
+  && ok "G21 D38 DEFERRAL CONTROL — the same deferral in prose reads declared-deferred on both routes and lints DECLARED, and the fixture exits 0" \
+  || bad "G21 D38 DEFERRAL CONTROL — AC-3 '$(g20_fvo "$J21D" '#988' AC-3)', CIAC-3 '$(g20_fvo "$J21D" "$G20_CIAC" CIAC-3)', lint '$(lint_of "$LOUT_D" CIAC-3)', rc $RC21D"
+
 # --- SEEDED FAILURES. Each removes one rule and names the answer it must move to. ---
 # M1 — the lint's verb check off: a refused tool falls through to the command readers.
 m21 "V6236-AC1 M1" g21-m1-lint-verb-check-off 1 's/  if ! is_runnable_verb "\$lead"; then/  if false; then/'
@@ -4580,6 +4644,17 @@ if [ "$MUT_TOOK" = 1 ]; then
   [ "$(lint_of "$LINT_OUT" CIAC-21)" = "DECLARED -" ] \
     && ok "V6236-AC1 M7 detected — without the per-spanned-issue test one issue's criterion passes as the evidence for a CIAC over two" \
     || bad "V6236-AC1 M7 SURVIVED — CIAC-21 '$(lint_of "$LINT_OUT" CIAC-21)'"
+fi
+# M8 — the deferral readers blank an unclosed piece again: a deferral written there is hidden.
+m21 "G21 D38 M8" g21-m8-unclosed-piece-blanked 1 's/if \(i < n && w\[1\] != ""/if (w[1] != ""/'
+if [ "$MUT_TOOK" = 1 ]; then
+  vrp_run "$MUT_PATH" "$FIX_SDEF"; JM21_8="$VRP_JSON"
+  if mutant_ran "G21 D38 M8"; then
+    lint_run "$MUT_PATH" "$FIX_SDEF"
+    [ "$(g20_fv "$JM21_8" '#988' AC-2 verdict)" = PASS ] && [ "$(g20_fv "$JM21_8" "$G20_CIAC" CIAC-2 verdict)" = PASS ] && [ "$(lint_of "$LINT_OUT" CIAC-2)" = "CLEAN -" ] \
+      && ok "G21 D38 M8 detected — with the unclosed piece blanked again the deferral is hidden: AC-2 and CIAC-2 read their probe's PASS, and the lint reads CIAC-2 CLEAN" \
+      || bad "G21 D38 M8 SURVIVED — AC-2 '$(g20_fvo "$JM21_8" '#988' AC-2)', CIAC-2 '$(g20_fvo "$JM21_8" "$G20_CIAC" CIAC-2)', lint '$(lint_of "$LINT_OUT" CIAC-2)'"
+  fi
 fi
 rm -rf "$MUTD6236B"
 
