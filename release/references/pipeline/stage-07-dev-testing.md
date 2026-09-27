@@ -400,7 +400,7 @@ Stage 7's terminal report section is the **Handoff Payload** — a structured bl
 | Escape summary | Table: `Origin stage · Count` | Phase D | Stage 7 escape count + calibration |
 | Downstream attention | List of F-IDs flagged for Stage 8 scrutiny (may be `None`) | Phase E | Focuses Stage 8 review |
 | Cross-issue notes | Markdown bullets (may be `None`) | Phase E | Release-level context |
-| Test-results | Table: `Suite · Selected-by (map row #) · Result (PASS / FAIL / SKIP) · Pass/Fail counts · Env · Evidence (Actions URL or local) · pipeline-event ts` (single line `NONE — no runtime code path changed` when the map's no-match row fired) | Phase A8 | Confirms the runtime-code gate ran; carries the machine-readable outcome QA / downstream reads without opening Actions logs |
+| Test-results | Table: `Suite · Selected-by (map row #) · Result (PASS / FAIL / SKIP) · Pass/Fail counts · Env (vocabulary: the selection map's § 4 env values) · Evidence (Actions URL or local) · pipeline-event ts` (single line `NONE — no runtime code path changed` when the map's no-match row fired) | Phase A8 | Confirms the runtime-code gate ran; carries the machine-readable outcome QA / downstream reads without opening Actions logs |
 
 #### Format conventions
 
@@ -474,8 +474,8 @@ When the PR touches a runtime code path, the Test-results block renders one row 
 **Test-results:**
 | Suite | Selected-by | Result | Pass/Fail | Env | Evidence | Event ts |
 |---|---|---|---|---|---|---|
-| hook-suite | map row 3 | PASS | 268/0 | sandbox-home-tmp | actions-run:<url> | 2026-06-13T14:00:00Z |
-| deploy-suite | map row 2 | PASS | 24/0 | sandbox-home-tmp | actions-run:<url> | 2026-06-13T14:00:01Z |
+| hook-suite | map row 3 | PASS | 268/0 | home-account | actions-run:<url> | 2026-06-13T14:00:00Z |
+| deploy-suite | map row 2 | PASS | 24/0 | home-account | actions-run:<url> | 2026-06-13T14:00:01Z |
 ```
 
 #### Parse contract
