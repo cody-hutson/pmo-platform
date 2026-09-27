@@ -1080,19 +1080,37 @@ def _namespace_arms():
         check("V7494-AC2 snapshot keys the plan grades no row for are named, not dropped",
               unvisited == {("#2", "design"), ("#3", "issue")}, str(sorted(unvisited)))
 
+        # Each falsified mapping is read twice. On plan5 its finding row must be emitted
+        # although BASELINE-DRIFT heads the verdict (a masked finding is an invisible one);
+        # on plan6, where the plan limb binds, the design limb's finding must head the
+        # verdict with its exit code, or a dropped finding increment would read BOUND/0.
+        def headline(overrides):
+            code6, rows6, _err6 = design_run(overrides, plan_path=plan6_path)
+            head6 = _rows_of("VERDICT", rows6)
+            return code6, (head6[0][1] if head6 else None)
+
         _code, rows, _err = design_run({"AC-6": 2})
-        check("V7494-AC2 falsified: a design entry mis-declared onto AC-2 reads UNBOUND on ns:design>issue",
+        head = headline({"AC-6": 2})
+        check("V7494-AC2 falsified: a design entry mis-declared onto AC-2 reads UNBOUND on ns:design>issue, "
+              "and with the plan limb bound it heads the verdict (UNBOUND, exit 1)",
               any(r[1:3] == ["#1", "AC-6"] and r[-1] == "ns:design>issue"
-                  for r in _rows_of("UNBOUND", rows)), str(_rows_of("UNBOUND", rows)))
+                  for r in _rows_of("UNBOUND", rows)) and head == (1, "UNBOUND"),
+              "%s; plan6 exit/verdict %s" % (_rows_of("UNBOUND", rows), head))
         _code, rows, _err = design_run({"AC-6": 9})
-        check("V7494-AC2 falsified: a declared target past the issue list is an ORDINAL-GAP",
+        head = headline({"AC-6": 9})
+        check("V7494-AC2 falsified: a declared target past the issue list is an ORDINAL-GAP, "
+              "and with the plan limb bound it heads the verdict (ORDINAL-GAP, exit 1)",
               any(r[1:3] == ["#1", "out-of-range"] and r[-1] == "ns:design>issue"
-                  for r in _rows_of("ORDINAL-GAP", rows)), str(_rows_of("ORDINAL-GAP", rows)))
+                  for r in _rows_of("ORDINAL-GAP", rows)) and head == (1, "ORDINAL-GAP"),
+              "%s; plan6 exit/verdict %s" % (_rows_of("ORDINAL-GAP", rows), head))
         _code, rows, _err = design_run({"AC-6": _UNDECLARED})
-        check("V7494-AC2 falsified: a design entry declaring no target is UNDECLARED and an ORDINAL-GAP",
+        head = headline({"AC-6": _UNDECLARED})
+        check("V7494-AC2 falsified: a design entry declaring no target is UNDECLARED and an ORDINAL-GAP, "
+              "and with the plan limb bound it heads the verdict (ORDINAL-GAP, exit 1)",
               any(r[1:3] == ["#1", "AC-6"] and r[4] == "UNDECLARED" for r in _rows_of("MAP", rows))
-              and any(r[1:3] == ["#1", "undeclared"] for r in _rows_of("ORDINAL-GAP", rows)),
-              str(_rows_of("MAP", rows)))
+              and any(r[1:3] == ["#1", "undeclared"] for r in _rows_of("ORDINAL-GAP", rows))
+              and head == (1, "ORDINAL-GAP"),
+              "%s; plan6 exit/verdict %s" % (_rows_of("MAP", rows), head))
         code, rows, _err = design_run({"AC-7": None}, plan_path=plan6_path)
         verdict = _rows_of("VERDICT", rows)
         check("V7494-AC2 NONE and UNRESTATED are informational: a clean plan still reads BOUND",
