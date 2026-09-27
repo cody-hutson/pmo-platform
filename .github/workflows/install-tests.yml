@@ -97,7 +97,11 @@ name: Install tests
 #                                  deploy.sh check — names roots that resolve to
 #                                  at least one tracked file under its filter,
 #                                  and on deploy.sh is the population the check's
-#                                  resolver scans and reports.
+#                                  resolver scans and reports; and the standard's
+#                                  exit-consumer and executor census matches the
+#                                  drift-engine consumers, the binary-zero
+#                                  workflow consumers and the zero-executor suites
+#                                  it records, re-derived on every run.
 #                                  Lives in THIS job because the ratchet
 #                                  must not itself be path-filtered — a gate on
 #                                  trigger conformance that a trigger change can
@@ -920,6 +924,13 @@ jobs:
         # root already being removed sits on a self-auditing residual ledger, and every
         # entry must still reproduce.
         #
+        # AND A FIFTH: the census in the standard's § Exit-consumer and executor census
+        # still matches the populations it records — every drift-engine decision site and
+        # every workflow step that compares a captured exit status only against 0 has
+        # exactly one row, none names a member that is gone, and every listed zero-executor
+        # suite still has no executor (a NEW one is reported, not failed). A census
+        # nothing re-derives goes stale silently; this is what re-derives it.
+        #
         # NOT VACUOUS BY CONSTRUCTION, and the harness runs by DEFAULT rather than behind
         # a flag — a falsification harness nothing passes a flag to runs once, at
         # implementation, and certifies nothing thereafter. Every invocation mutates
@@ -934,8 +945,14 @@ jobs:
         # an advisory one to `required` without touching its enforcement), and on the
         # population invariant a missing-root arm, a synthetic empty-glob arm with its
         # non-empty control, exemption-unit arms, a synthetic-ledger arm and two reach
-        # arms, plus a specificity arm for each invariant, on the same non-empty input,
-        # that must stay clean. Arms that prove a live population exists are derived
+        # arms, and on the census a planted binary-zero consumer, a planted multi-state
+        # consumer and counter near-miss, a single-value `case`, a planted and a near-miss
+        # drift-engine run in a tool and a planted run in a workflow step, a deleted, a
+        # fabricated and a miscounted row, the executor pair, a step that only names the
+        # runners (constructed, and drawn from the live precision probe), a fabricated
+        # zero-executor row, an empty-population NOSET and an out-of-set token, plus a
+        # specificity arm for each invariant, on the same non-empty input, that must stay
+        # clean. Arms that prove a live population exists are derived
         # from it at run time, never from hardcoded workflow names, so a rename cannot
         # silently empty one, and a partition too small to build an arm is a reported
         # NOSET rather than a skip; the population arms that prove the detector
@@ -947,9 +964,11 @@ jobs:
         # read is STRUCTURAL, because a raw-text scan for 'paths:' over-counts comment
         # and run:-body occurrences. It exits 2 rather than guessing if yaml is missing.
         #
-        # Hermetic: reads the workflow files and core/deploy/deploy.sh, lists tracked
-        # paths with git ls-files, mutates only in-memory copies, writes nothing. No gh,
-        # no network. Consumes no workflow event input.
+        # Hermetic: reads the workflow files, core/deploy/deploy.sh,
+        # core/standards/gate-efficacy-standard.md, the install-regression runner and the
+        # tracked tools that name the drift engine; lists tracked paths with git ls-files;
+        # mutates only in-memory copies; writes nothing. No gh, no network. Consumes no
+        # workflow event input.
         run: /usr/bin/python3 core/deploy/tests/test_gate_efficacy_declarations.py
 
   hook-tests:
