@@ -5486,7 +5486,7 @@ phase_rebuild_skill_packages() {
 # it. Recorded because the wrong rationale would send the next reader hunting for
 # a hazard this code does not have.
 #
-# What the filter ACTUALLY excludes, enumerated over all 47 mark_phase sites: FOUR
+# What the filter ACTUALLY excludes: FOUR
 # SKIPPED limbs whose detail DOES use the strict path-only form —
 # inject_outcome_field (SKIPPED, twice), append_release_learnings (SKIPPED) and
 # inject_close_class_telemetry_field (SKIPPED), each naming its resolved surface
@@ -5588,9 +5588,9 @@ phase_commit_chore_pr() {
     # below runs only AFTER a commit exists, so this early-return escapes it —
     # which is exactly how the worse half of #4710 stayed silent: 6.5 and 6.6
     # reported an injected write and this branch then reported green "no-op"
-    # directly beneath them, with no chore commit at all. An inject_* phase marked
-    # PASS or WARN wrote a field to disk (its SKIPPED/FAIL limbs write nothing), so
-    # an EMPTY staged set contradicts its own report.
+    # directly beneath them, with no chore commit at all. A phase that named a
+    # surface in a PASS or WARN report wrote to that surface (its SKIPPED/FAIL limbs
+    # write nothing), so an EMPTY staged set contradicts its own report.
     #   Reads the PHASE RECORD, not TOUCHED_ARCHIVE_SEGMENTS. A guard that consults
     # the same recorder whose omission IS the defect cannot catch that omission —
     # it would go vacuous the moment a future write site forgets to record, which
@@ -5643,7 +5643,7 @@ EOF
     # commit while this phase still reported PASS.
     #
     #   INDEPENDENCE (the binding Stage 5 constraint). The expected set is derived
-    # from the PHASE RECORD — the surface each inject_* phase NAMED in its own PASS
+    # from the PHASE RECORD — the surface each phase NAMED in its own PASS
     # or WARN detail — never from TOUCHED_ARCHIVE_SEGMENTS. A guard that consults
     # the same recorder whose omission IS the defect goes vacuous the instant a
     # future write site forgets to call _record_touched_archive_segment, which is
@@ -5679,7 +5679,7 @@ EOF
       fi
     done
     if [[ -n "$_rmissing" ]]; then
-      mark_phase "commit_chore_pr" "FAIL" "staging-completeness: surface(s) an inject_* phase reported writing into are NOT in the chore commit — ${_rmissing% }; the write landed on disk but files=() does not name it, so a mandated output would be dropped from the chore PR while every phase reported green"
+      mark_phase "commit_chore_pr" "FAIL" "staging-completeness: surface(s) a phase reported writing into are NOT in the chore commit — ${_rmissing% }; the write landed on disk but files=() does not name it, so a mandated output would be dropped from the chore PR while every phase reported green"
       return 3
     fi
 
