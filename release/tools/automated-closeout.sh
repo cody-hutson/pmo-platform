@@ -6760,6 +6760,21 @@ phase_action_item_gate() {
   return 3
 }
 
+# The text for the chore PR's RECORDED state (#7465 Plan amendment 6). Prints its
+# first argument when phase 11 recorded the chore PR as already merged on this
+# resumed run (CHORE_PR_OUTCOME = resumed-already-merged), and its second on every
+# other outcome, so the ordinary text stays byte-identical. No host read: it reads
+# the value phase 12's --no-merge detail and the report's Deferred intro read.
+# Phases 13 and 14 call it INSIDE _nm_defer's detail argument, so the declared
+# deferral stays each phase's first statement (NM-5d). Deliberately NOT named phase_*.
+_chore_pr_state_text() {  # <resumed-and-merged text> <every-other-outcome text>
+  if [[ "${CHORE_PR_OUTCOME:-}" == "resumed-already-merged" ]]; then
+    /usr/bin/printf '%s' "$1"
+  else
+    /usr/bin/printf '%s' "$2"
+  fi
+}
+
 # ─── Phase 13: post_close_milestone (Hub Tier-1 mechanical) ──────────────────
 
 phase_post_close_milestone() {
@@ -6768,8 +6783,11 @@ phase_post_close_milestone() {
   # would record a false audit state (main still shows DEPLOYED). Defer per the
   # stage-13-close.md § Phase B sequencing invariant ("chore PR MUST land on main
   # BEFORE Phase C C1 Milestone close"); the operator re-runs --apply post-merge.
-  # Declared `defer` in NO_MERGE_PHASE_BEHAVIOUR.
-  _nm_defer "post_close_milestone" "chore PR #${CHORE_PR_NUMBER:-?} left open; milestone #${MILESTONE} close waits for it to land on main (re-run --apply after merge)" && return 0
+  # Declared `defer` in NO_MERGE_PHASE_BEHAVIOUR. The detail reads the outcome phase
+  # 11 recorded (#7465 Plan amendment 6): on a resumed run whose chore PR phase 11
+  # already found merged it says so, and the phase still defers, because the flag
+  # defers every post-merge phase whatever the chore PR's state.
+  _nm_defer "post_close_milestone" "$(_chore_pr_state_text "chore PR #${CHORE_PR_NUMBER:-?} is already merged (phase 11 resolved it on this resumed run); milestone #${MILESTONE} close waits for the follow-up --apply run without --no-merge" "chore PR #${CHORE_PR_NUMBER:-?} left open; milestone #${MILESTONE} close waits for it to land on main (re-run --apply after merge)")" && return 0
 
   if [[ "$STATE_MILESTONE_STATE" == "closed" ]]; then
     mark_phase "post_close_milestone" "SKIPPED" "milestone already closed"
@@ -6796,8 +6814,9 @@ phase_manual_close_release_issues() {
   # --no-merge (#2919): D-1 manual issue-close is part of the post-milestone-close
   # ceremony, which itself defers until the chore PR lands on main. Defer here too so
   # the operator's single follow-up --apply (post-merge) performs milestone close +
-  # issue close together. Declared `defer` in NO_MERGE_PHASE_BEHAVIOUR.
-  _nm_defer "manual_close_release_issues" "chore PR left open; D-1 issue close waits for milestone-close after merge (re-run --apply)" && return 0
+  # issue close together. Declared `defer` in NO_MERGE_PHASE_BEHAVIOUR. Its detail
+  # reads the recorded outcome the way phase 13's does (#7465 Plan amendment 6).
+  _nm_defer "manual_close_release_issues" "$(_chore_pr_state_text "chore PR #${CHORE_PR_NUMBER:-?} is already merged (phase 11 resolved it on this resumed run); D-1 issue close waits for milestone-close on the follow-up --apply run without --no-merge" "chore PR left open; D-1 issue close waits for milestone-close after merge (re-run --apply)")" && return 0
 
   if [[ "$OPEN_ISSUE_COUNT" -eq 0 ]]; then
     mark_phase "manual_close_release_issues" "SKIPPED" "no open release issues to manually close"
@@ -8374,7 +8393,13 @@ EOF
       echo "- \`${_nm_d}\` — $(_nm_consequence "$_nm_d")"
     done <<< "$(_nm_members defer)"
     echo
-    echo "**Follow-up — after the chore PR merges (CI-green):**"
+    # The follow-up heading reads the same recorded outcome (#7465 Plan amendment 6): a
+    # chore PR phase 11 found already merged is not a merge still to come.
+    if [[ "${CHORE_PR_OUTCOME:-}" == "resumed-already-merged" ]]; then
+      echo "**Follow-up — the chore PR is already merged, so run it now:**"
+    else
+      echo "**Follow-up — after the chore PR merges (CI-green):**"
+    fi
     echo
     echo '```'
     echo "automated-closeout.sh --pr ${PR_NUMBER} --version ${VERSION} --milestone ${MILESTONE} --apply${_excl_hint}"
