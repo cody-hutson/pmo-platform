@@ -1759,6 +1759,19 @@ resolves run 1's directory with run 1's leftovers still in it, reproducing the
 hazard while the namespacing looks present. The sub-task number supplies
 traceability, which a bare random directory does not.
 
+**One scoped exception: the hook-suite layout.** A spoke that runs the hook suites
+builds their layout at the layout helper's default site, its own worktree root:
+`bash core/hooks/tests/setup-ci-layout.sh`, then
+`bash .claude/hooks/tests/test-runner.sh`, both run from that root. The layout lands
+in the worktree's own `.claude/`, not in `$SPOKE_OUT`, and that is deliberate. The
+runner can be executed only from that site: a runner under a temporary run directory
+sits at an absolute temp path, which the script-execution guard refuses. The
+exception covers that one write at that one site, and nothing else. It never reaches
+the live workspace, `$HOME`, or another session's worktree, because the helper's own
+guard refuses a live Claude configuration directory, and the worktree's `.gitignore`
+keeps the layout out of every commit. Every other scratch artifact still goes in
+`$SPOKE_OUT`.
+
 **Honest scope — the read side is a convention, not an interlock.** The write
 side is mechanical: a directory that did not exist cannot be collided with. The
 read side is a prompt clause with **no enforcement path** — the `Read` matcher

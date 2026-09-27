@@ -960,10 +960,14 @@ jobs:
         # setup-ci-layout.sh materializes hooks + token-resolved allowlists +
         # sandbox .mode + the test files under a /tmp sandbox .claude/hooks/
         # (R-8: never touches the live ~/Claude/.claude/), and prints the
-        # sandbox tests dir on stdout. The runner is the final command, so its
-        # exit code gates the job.
+        # sandbox tests dir on stdout. The helper's default site is the checkout
+        # root, the agent-facing site, so this gate passes a fresh temp sandbox
+        # explicitly and its location stays what it has always been; the
+        # helper's own guard enforces R-8 either way. The runner is the final
+        # command, so its exit code gates the job.
         run: |
-          TESTS_DIR="$(bash core/hooks/tests/setup-ci-layout.sh)"
+          sandbox="$(mktemp -d -t hook-ci-layout.XXXXXX)"
+          TESTS_DIR="$(bash core/hooks/tests/setup-ci-layout.sh --sandbox "${sandbox}")"
           echo "Materialized hook test layout at: ${TESTS_DIR}"
           bash "${TESTS_DIR}/test-runner.sh"
 

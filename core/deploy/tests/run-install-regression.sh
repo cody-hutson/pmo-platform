@@ -11,11 +11,13 @@
 #      (the single source of truth for membership; see "Extending" below). Each
 #      member is a standalone core/deploy/tests/*.sh / *.py that prints
 #      "<name>: N passed, M failed" and exits non-zero on any FAIL.
-#   2. The HOOK-TEST FLOOR (#319) — the 8 core/hooks/tests/*.test.sh bypass-mode
-#      hook tests. These are NOT directly runnable as `bash *.test.sh`: the hooks
+#   2. The HOOK-TEST FLOOR (#319) — every core/hooks/tests/*.test.sh hook suite.
+#      These are NOT directly runnable as `bash *.test.sh`: the hooks
 #      resolve their allowlist + .mode from a DEPLOYED layout, so the floor runs
 #      via the two-step contract setup-ci-layout.sh (materialize) → test-runner.sh
-#      (aggregate). Included per the v1.12 Collective-Review scope-lock: the hook
+#      (aggregate), materializing into a fresh per-run sandbox this runner passes
+#      explicitly (the helper's default is the checkout root, the agent-facing
+#      site). Included per the v1.12 Collective-Review scope-lock: the hook
 #      tests are part of this suite's regression floor.
 #
 # VERDICT (deterministic, ALL-MUST-PASS — no pass-rate threshold; this family is
@@ -149,7 +151,14 @@ done
 # ── Hook-test floor (#319) — materialize the deployed layout, then run ──
 printf '\n----- member: hook-test floor (core/hooks/tests via setup-ci-layout.sh) -----\n'
 if [ -f "${HOOK_TESTS_DIR}/setup-ci-layout.sh" ] && [ -f "${HOOK_TESTS_DIR}/test-runner.sh" ]; then
-  hook_layout="$(bash "${HOOK_TESTS_DIR}/setup-ci-layout.sh" 2>/dev/null)"
+  # A fresh sandbox of this run's own, passed explicitly and never empty: the
+  # helper's default is the checkout root (the agent-facing site), which a
+  # programmatic run must not reuse. The helper's stdout stays the contract.
+  hook_sandbox="$(mktemp -d -t hook-ci-layout.XXXXXX 2>/dev/null)" || hook_sandbox=""
+  hook_layout=""
+  if [ -n "${hook_sandbox}" ]; then
+    hook_layout="$(bash "${HOOK_TESTS_DIR}/setup-ci-layout.sh" --sandbox "${hook_sandbox}" 2>/dev/null)"
+  fi
   if [ -n "${hook_layout}" ] && [ -d "${hook_layout}" ]; then
     hook_out="$(bash "${hook_layout}/test-runner.sh" 2>&1)"
     hook_rc=$?
