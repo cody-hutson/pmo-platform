@@ -9997,8 +9997,9 @@ EOF
   # staging-completeness arm filters to `inject_*` phases with a PASS result, and
   # neither marker site carries both (6.7 is not inject_*; this one is inject_* but
   # marks SKIPPED). The live path — archived block + producer unavailable + dormant
-  # cutover, today's default — wrote the marker to a segment, never staged the
-  # segment, dropped the marker at commit, and reported "Absence RECORDED".
+  # cutover, the committed default when this was found — wrote the marker to a
+  # segment, never staged the segment, dropped the marker at commit, and reported
+  # "Absence RECORDED".
   #
   # This arm drives the REAL production call site (not the writer directly) over the
   # archived fixture above and asserts the RECORD, because the record is the interface
@@ -15193,8 +15194,9 @@ EOF
   _os_oracle="$(/usr/bin/awk -F'CLOSE_COMPLETENESS_TELEMETRY_CUTOFF:-' '/^[[:space:]]*local cc_telemetry_cutoff=/ { v = $2; sub(/}".*$/, "", v); print v; exit }' "$CLOSE_COMPLETENESS_SOURCE" 2>/dev/null)"
   _st_arm m m1; [[ -n "$_os_oracle" ]] || { echo "FAIL: #5288 m1 anti-vacuity — the independent oracle read NOTHING from deploy.sh, so agreement with it would prove nothing"; failures=$((failures+1)); }
   [[ "$_os_read" == "$_os_oracle" ]] || { echo "FAIL: #5288 m1 — the shipped reader must return deploy.sh's OWN committed default; reader='$_os_read' independent-oracle='$_os_oracle'"; failures=$((failures+1)); }
-  # SENSITIVITY: point the seam at an ARMED fixture. A reader that hardcoded the
-  # shipped `__none__` passes m1 and fails here.
+  # SENSITIVITY: point the seam at an ARMED fixture whose value differs from the committed
+  # one. A reader that hardcoded any default — `__none__`, or the committed value itself —
+  # fails here.
   local _os_fake="$_os_tmp/deploy-armed.sh" _os_none="$_os_tmp/deploy-noline.sh" _os_dup="$_os_tmp/deploy-dup.sh"
   /usr/bin/printf '%s\n' '  local cc_telemetry_cutoff="${CLOSE_COMPLETENESS_TELEMETRY_CUTOFF:-v9.01}"' > "$_os_fake"
   /usr/bin/printf '%s\n' '  local something_else="nothing to see"' > "$_os_none"
@@ -15213,18 +15215,20 @@ EOF
   [[ "$_os_rc2" -ne 0 ]] || { echo "FAIL: #5288 m1 ambiguity — TWO cutoff assignments must resolve UNREADABLE, never a guess at which one is live"; failures=$((failures+1)); }
 
   # ── (m2) AN UNEVALUABLE PREDICATE BLOCKS. This is the arm that proves the
-  # `required-if` state is not a fail-open hole: both `required` members are
+  # `required-if` state is not a fail-open hole: EVERY manifest member is
   # PRESENT, so the ONLY thing wrong is that the membership test could not run.
-  _os_write "vel lrn"
+  _os_write "vel lrn cct"
   CLOSE_COMPLETENESS_SOURCE="$_os_none"
   local _os_r; _os_drive; _os_r="$(_os_verdict)"
   _st_arm m m2; [[ "$_os_r" == "3 FAIL" ]] || { echo "FAIL: #5288 m2 — an UNREADABLE membership predicate must BLOCK (expected '3 FAIL'), got '$_os_r'"; failures=$((failures+1)); }
   /usr/bin/grep -qF 'INDETERMINATE' <<<"$(get_phase assert_output_set)" || { echo "FAIL: #5288 m2 — the block must be reported as INDETERMINATE naming the missing element, got '$(get_phase assert_output_set)'"; failures=$((failures+1)); }
-  # CONTROL, same fixture, one variable changed: a READABLE dormant seam PASSes.
+  # CONTROL, same fixture, one variable changed: a READABLE seam PASSes. It reads the REAL
+  # committed seam — armed since #5245 — and the fixture carries every member, so the
+  # control holds under either committed state.
   # Without this the m2 block is indistinguishable from a gate that always fails.
   CLOSE_COMPLETENESS_SOURCE="$REPO_ROOT/core/deploy/deploy.sh"
   _os_drive; _os_r="$(_os_verdict)"
-  [[ "$_os_r" == "0 PASS" ]] || { echo "FAIL: #5288 m2 control — a READABLE dormant seam over a complete fixture must PASS (expected '0 PASS'), got '$_os_r'"; failures=$((failures+1)); }
+  [[ "$_os_r" == "0 PASS" ]] || { echo "FAIL: #5288 m2 control — a READABLE seam over a complete fixture must PASS (expected '0 PASS'), got '$_os_r'"; failures=$((failures+1)); }
 
   # ── (m3) AC-3: a required member ABSENT blocks; present passes (paired).
   _os_write "lrn"
@@ -15254,7 +15258,9 @@ EOF
   # Differential over ONE fixture: the learnings block is absent throughout, and
   # the only thing that changes between the two drives is that a real marker is
   # recorded. The verdict must NOT move.
-  _os_write "vel"
+  # The telemetry field is present in every m5 fixture, so the learnings block is the one
+  # absent member whatever the committed seam's state.
+  _os_write "vel cct"
   _os_drive; _os_r="$(_os_verdict)"
   _st_arm m m5; [[ "$_os_r" == "3 FAIL" ]] || { echo "FAIL: #5288 m5 pre-arm — the absent member must block BEFORE a marker exists, got '$_os_r'"; failures=$((failures+1)); }
   _write_not_produced_marker "learnings-block" "append_release_learnings" "self-test fixture" >/dev/null 2>&1 || true
@@ -15269,7 +15275,7 @@ EOF
   # stays present, yet the gate now passes — so the marker is inert in both
   # directions and the m5 block is caused by absence, not by the marker.
   local _os_saved_marker; _os_saved_marker="$(/usr/bin/grep -F '**Not-produced:** learnings-block' "$RELEASE_LOG" || true)"
-  _os_write "vel lrn"
+  _os_write "vel lrn cct"
   /usr/bin/printf '%s\n' "$_os_saved_marker" >> "$RELEASE_LOG"
   _os_drive; _os_r="$(_os_verdict)"
   [[ "$_os_r" == "0 PASS" ]] || { echo "FAIL: #5288 m5 specificity — with the member PRESENT the same marker must be inert and the gate must PASS, got '$_os_r'"; failures=$((failures+1)); }
@@ -15363,7 +15369,7 @@ EOF
   # ── (m10) READ-ONLY. The phase must not write or stage. Compared by content
   # hash, with an anti-vacuity arm proving the same instrument DOES move when a
   # byte changes — otherwise "unchanged" could mean "the hash never changes".
-  _os_write "vel lrn"
+  _os_write "vel lrn cct"
   local _os_h1 _os_h2 _os_h3
   _os_h1="$(/usr/bin/shasum "$RELEASE_LOG" | /usr/bin/cut -d' ' -f1)"
   _os_drive; _os_r="$(_os_verdict)"
@@ -15765,7 +15771,7 @@ EOF
   _st_claim t7-usage "  usage block extractable and not truncated, exit-2 dispatch set named in the render (#5762, Test 7 — this line ENUMERATES the arm's limbs and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this arm when the limbs leave no witness): HEAD anchor 'Usage:' / TAIL anchor the exit-codes block's '3 = ' entry, which is the last line usage() renders, replacing the '--self-test' needle that bound at render row 4 and therefore covered nothing below it / LIMB C the exit-2 dispatch set EXTRACTED from the guarded top-level dispatch and asserted present in the rendered exit-2 entry, with an anti-vacuity floor on the extracted set, a floor-30 exit-3 control proving the extractor works, and a non-empty check on the rendered entry so the naming loop cannot pass over nothing"
   echo "  corpus paths resolve (RELEASE_LOG/INDEX/DIGEST + notes dir)" >&2
   echo "  corpus append-ledger merge-immunity validated (#3108 AC1 — union two-branch append CLEAN + both rows kept / non-union control CONFLICTS / state-column union CORRUPTS → LOG+REVERSIONS exclusion)" >&2
-  _st_claim m "  phase_assert_output_set validated (#5288, group m — 11 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): m1 THE SEAM — the required-if cutoff is READ out of core/deploy/deploy.sh rather than copied, asserted against a SECOND INDEPENDENT extractor over the same file (awk, not the shipped sed) with an anti-vacuity floor on the oracle, plus a SENSITIVITY arm on an ARMED fixture that a hardcoded default fails, and two SPECIFICITY arms (no assignment / two assignments) that must both resolve UNREADABLE and never a silent default / m2 AN UNEVALUABLE PREDICATE BLOCKS: both required members PRESENT and the only fault is that the membership test could not run — the phase FAILs, returns 3, and reports INDETERMINATE, with a same-fixture one-variable CONTROL proving a readable dormant seam PASSes, so the block is attributable to the seam and not to a gate that always fails / m3 AC-3 a required member's absence blocks and NAMES itself, both members driven, with the present twin as the paired positive / m4 AC-5 membership vs outcome: the SAME absent telemetry field blocks under an ARMED cutover and resolves a REPORTED N-A under a dormant one, one variable apart / m5 THE MARKER IS EVIDENCE, NEVER AN EXEMPTION — differential over one fixture where the only change is that a real **Not-produced:** marker is recorded: the verdict must NOT move, with a SENSITIVITY arm proving the marker is genuinely present (else the arm passes vacuously), an assert that the gate REPORTED reading it (an invisible marker would prove nothing), and a converse SPECIFICITY arm where the member is supplied and the same marker is inert / m6 EMIT ON ABSENCE at the real producer site: a non-executable synthesizer still SKIPs but now records the absence as corpus bytes at its DECLARED anchor, the line immediately after **Result:**, with a working-producer control proving the marker tracks the capability condition and does not fire every run / m7 MODE: --dry-run returns 0 and marks WARN naming the condition that FAILS at --apply, anti-vacuity: the same fixture at --apply returns 3 and FAILs / m8 THE CLASSIFIER IS TOTAL AND FAILS CLOSED: an UNRECORDED producing phase (get_phase's not-found sentinel returns at exit 0, so it is a value and not an error) classifies INDETERMINATE and surfaces, with a PASS-record control proving real discrimination, and the ambiguous SKIPPED result shown to be resolved by the TREE — the identical result string classifies would-present over a present member and would-absent over an absent one, so the classifier is not row-pattern-matching detail prose / m9 the hand-maintained usage()/--help phase roster carries the 9.56 row, with the shipped 9.55 row as its interpretability control / m10 READ-ONLY by content hash across a PASSing run, with an anti-vacuity arm proving the same instrument DOES move on a known write / m11 EXACTLY ONE guarded top-level dispatch line, positioned AFTER assert_derived_surfaces and BEFORE commit_chore_pr (so the stamp cannot commit ahead of the assert), with vacuity floors on all three needles and a fabricated-name specificity control"
+  _st_claim m "  phase_assert_output_set validated (#5288, group m — 11 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): m1 THE SEAM — the required-if cutoff is READ out of core/deploy/deploy.sh rather than copied, asserted against a SECOND INDEPENDENT extractor over the same file (awk, not the shipped sed) with an anti-vacuity floor on the oracle, plus a SENSITIVITY arm on an ARMED fixture that a hardcoded default fails, and two SPECIFICITY arms (no assignment / two assignments) that must both resolve UNREADABLE and never a silent default / m2 AN UNEVALUABLE PREDICATE BLOCKS: every manifest member PRESENT and the only fault is that the membership test could not run — the phase FAILs, returns 3, and reports INDETERMINATE, with a same-fixture one-variable CONTROL proving a readable seam PASSes (every PASS-expecting fixture either carries all three members or pins the cutoff explicitly, so no arm depends on whether the committed seam is armed), so the block is attributable to the seam and not to a gate that always fails / m3 AC-3 a required member's absence blocks and NAMES itself, both members driven, with the present twin as the paired positive / m4 AC-5 membership vs outcome: the SAME absent telemetry field blocks under an ARMED cutover and resolves a REPORTED N-A under a dormant one, one variable apart / m5 THE MARKER IS EVIDENCE, NEVER AN EXEMPTION — differential over one fixture where the only change is that a real **Not-produced:** marker is recorded: the verdict must NOT move, with a SENSITIVITY arm proving the marker is genuinely present (else the arm passes vacuously), an assert that the gate REPORTED reading it (an invisible marker would prove nothing), and a converse SPECIFICITY arm where the member is supplied and the same marker is inert / m6 EMIT ON ABSENCE at the real producer site: a non-executable synthesizer still SKIPs but now records the absence as corpus bytes at its DECLARED anchor, the line immediately after **Result:**, with a working-producer control proving the marker tracks the capability condition and does not fire every run / m7 MODE: --dry-run returns 0 and marks WARN naming the condition that FAILS at --apply, anti-vacuity: the same fixture at --apply returns 3 and FAILs / m8 THE CLASSIFIER IS TOTAL AND FAILS CLOSED: an UNRECORDED producing phase (get_phase's not-found sentinel returns at exit 0, so it is a value and not an error) classifies INDETERMINATE and surfaces, with a PASS-record control proving real discrimination, and the ambiguous SKIPPED result shown to be resolved by the TREE — the identical result string classifies would-present over a present member and would-absent over an absent one, so the classifier is not row-pattern-matching detail prose / m9 the hand-maintained usage()/--help phase roster carries the 9.56 row, with the shipped 9.55 row as its interpretability control / m10 READ-ONLY by content hash across a PASSing run, with an anti-vacuity arm proving the same instrument DOES move on a known write / m11 EXACTLY ONE guarded top-level dispatch line, positioned AFTER assert_derived_surfaces and BEFORE commit_chore_pr (so the stamp cannot commit ahead of the assert), with vacuity floors on all three needles and a fabricated-name specificity control"
   echo "  phase_pattern_scan wiring validated (#3121 — default ON (source-parsed, not live-global) / --no-pattern-scan suppresses with the honest reason / --with-pattern-scan still accepted / NO /dev/null discard / phase detail carries the PARSED counts with a moved-control anti-vacuity arm / captured body reaches the close-out report, and the section is ABSENT when nothing was captured)" >&2
   _st_claim TK "  operator.toml key-read tolerance validated (#5649, group TK — 4 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): TK-1 the CLASS invariant over a WHOLE-FILE parse — every key read tolerates an ABSENT optional key, with an anti-vacuity floor of 4 and the offending line numbers named on failure; the whole-file scan is load-bearing rather than stylistic, because the arg-parse region and check_paths() sit 170 lines BELOW self_test()'s closing brace and a region-scoped parse reads healthy while blind to them / TK-2 CAPABILITY TO FAIL in both directions on a constructed call site: the tolerance filter must NOT count an unguarded specimen as tolerant, and the population parse MUST recognise the specimen at all, so neither an everything-matches nor a nothing-matches filter can satisfy TK-1 / TK-3 the head-pipe reintroduction guard, paired with a specimen the filter must match — the folded grep -m1 form is what keeps this class out of the repo-integrity sigpipe-idiom job, which scans the added-lines delta / TK-3b THE FIXTURE-EXCLUSION PROOF: a specimen held in a single-quoted assignment is asserted INVISIBLE to TK-1's parse, so 'fixtures excluded by construction' is a measurement rather than a claim and this group cannot inflate its own population / TK-4 THE BEHAVIOURAL DIFFERENTIAL, the only arm that fails on the unpatched file: the PRODUCTION line is EXTRACTED from this file rather than retyped and run against a hermetic operator.toml that EXISTS and omits the key, with the tolerance-stripped twin over the SAME fixture asserted to still abort — run in a SEPARATE bash process because '( set -e … ) || rc=\$?' provably does not observe a set -e abort on bash 3.2, which is why the nearby AI-F subshell harness is safe only for its explicit-exit subject"
   exit 0
