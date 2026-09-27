@@ -1983,7 +1983,13 @@ fi
 # --- R-8 guard (c): live ~/.claude/skills UNCHANGED across all invocations ---
 printf '\nR-8 safety proof: live ~/.claude/skills UNTOUCHED across all invocations\n'
 LIVE_AFTER=$(manifest_dir "${LIVE_SKILLS}")
-if [ "${LIVE_BEFORE}" = "${LIVE_AFTER}" ]; then
+if [ -z "${LIVE_BEFORE}" ] && [ -z "${LIVE_AFTER}" ]; then
+  # An empty manifest before and after is evidence of nothing: the byte-identity
+  # compare below would pass while asserting nothing. R-8 must never pass on an
+  # empty subject.
+  report "R-8 asserts over a subject that holds files (an empty manifest proves nothing)" 0 \
+    "the live .claude/skills held no files before or after the run, so the byte-identity compare asserted nothing"
+elif [ "${LIVE_BEFORE}" = "${LIVE_AFTER}" ]; then
   report "live ~/.claude/skills byte-identical before/after (R-8 proof)" 1
 else
   report "live ~/.claude/skills byte-identical before/after (R-8 proof)" 0 \
