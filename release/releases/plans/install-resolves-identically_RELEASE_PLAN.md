@@ -32,7 +32,7 @@ reversibility: MODERATE / Confidence HIGH — every row is a bounded edit to tra
 | **Bump Class** | minor — provisional display v4.70 (the Stage-4 provisional v4.69 was claimed by `egress-hook-batch`); binds at the Stage-12 atomic claim |
 | **Date Created** | 2026-09-24 (Thursday) — the Stage-4 plan of record; transcribed at Engineering Commit 0 on 2026-09-26 (Saturday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub Mode O) |
-| **Status** | In progress — Stage 6 Engineering; Commit 0 and slice 1 (#6896) landed, slice 2 (#4993) next |
+| **Status** | In progress — Stage 6 Engineering; Commit 0, slice 1 (#6896) and slice 2 (#4993) landed, slice 3 (#4994) next |
 | **Branch** | `release/install-resolves-identically`, created from `origin/main` `35dbf418` |
 | **PR** | Opened in **draft** at Commit 0 per the SINGLE topology; its number is recorded on #7766. It transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `install-resolves-identically` (#338) |
@@ -824,7 +824,7 @@ Authored per slice at Stage 6 C1.5; status at Commit 0.
 | Issue | Declared docs | Status |
 |---|---|---|
 | #6896 | the helper's header and USAGE; selection-map row 3; the allowlist and runner comments; the Spoke Template carve-out in `release/references/how-to/hub-spoke-bridge.md` | UPDATED — GREEN commit `26287b92` (the `AGENT-INVOCATION` markers first landed, around the old commands, in RED `04d9af7f`) |
-| #4993 | selection-map row 5, § 3 and § 4 (the stamp contract); `stage-08-qa-testing.md` `:161` and `:174`; `stage-07-dev-testing.md` `:403` and `:477-478`; `pipeline-event-log-schema.md` `:225-226` | PENDING (slice 2) |
+| #4993 | selection-map row 5, § 3 and § 4 (the stamp contract); `stage-08-qa-testing.md` `:161` and `:174`; `stage-07-dev-testing.md` `:403` and `:477-478`; `pipeline-event-log-schema.md` `:225-226` | UPDATED — GREEN docs commit `02a5f922`; the runner's and the member's headers in GREEN `624a2a72`; the workflow's header paragraph in B0 `2689970d` |
 | #4994 | `docs/INSTALL.md` § 5.5 (E66); the unattended-contract statements (usage, `install.sh`, INSTALL `:113` and `:139`) verify-only | PENDING (slice 3) |
 | #5265 | `core/standards/depersonalization-spec.md` `:44` and § 2; the allowlist token header; `docs/UPDATE.md` § 3.2 and the retitled § 6.1; the ADR | PENDING (slice 4) |
 | #6168 | the report line, documented by #5265's `docs/UPDATE.md` § 3.2 text | PENDING (slice 5) |
@@ -879,6 +879,45 @@ Authored per slice at Stage 6. Each slice names its commits, the prediction each
 9. **Armed-red-then-revert is scoped to AC-3's arms.** AC-3 is the card criterion whose arms grade behaviour that was already correct before the fix. The other arms that pass before the fix (`LAYOUT-DEFAULT-03`, `LAYOUT-GUARD-05`, `-07`, `-08`) are controls that make their paired RED arms discriminate.
 10. **FM-7 (a)'s hub-directive half is brief text, not a file** (transcription interpretation 1). The Spoke Template half is the edit in `release/references/how-to/hub-spoke-bridge.md` § Run-Directory Discipline.
 
+### Slice 2 — #4993 (regression verdict)
+
+**Commits** on `release/install-resolves-identically`, in order, from slice 1's head `30545c17`:
+
+| Step | Commit | Carries | Prediction stated in the commit, before its check runs |
+|---|---|---|---|
+| B0 | `2689970d` | PA-001's observer leg in the install-regression job: step (a), the runner under the row-5 recipe after a three-arm pin control, and step (b), the R-8 precision probe for AC-3 (ii); one header sentence; the plan's FCM, Contention, R18 and Deviation Log rows (ENG-4993-PA001, ENG-4993-REGIONS) | The real-HOME step is unchanged at `2201 passed, 0 failed — VERDICT PASS`. The pin control reads exit 1 on all three arms: nothing in this job installs PyYAML. **Step (a) FAILS**, with about 22 hook-floor arms: 15 in `block-fs-boundary.test.sh` and 7 in `block-rm-prefer-trash.test.sh`, near the card's filed 24 (a static model of the two hooks; see interpretation 2). The 15 deploy-test members read as in the real-HOME step. **Step (b) FAILS**: the pre-fix member ignores the subject variable. Step 0's classification is in interpretation 2 |
+| RED | `3bd48684` | The AC-2 arm: the pre-fix R-8 FAILs on a subject that holds no files, instead of passing | The job goes red in every step, because the runner account holds no live install. In the real-HOME step the durability member reads 122 passed, 1 failed, and the suite `2200 passed, 1 failed — VERDICT FAIL`. Step (a) shows the same FAIL plus B0's. Step (b) stays red. The existing precision probe is skipped |
+| GREEN | `624a2a72` | Changes 1 and 2: the pinned subject, SKIP on an empty subject, the single exit path, R-8c, the two R-8r arms, the `[r8: caller]` mark; the runner's stamp, skip count, `PMO_REGRESSION_LIVE_HOME` export and payload keys | The real-HOME step reads `2203 passed, 0 failed — VERDICT PASS [env: home-account; skipped: 1]`: the durability member reads 125 passed, 0 failed, 1 skipped (R-8 SKIPs; R-8c and both R-8r arms PASS). Step (a) is stamped `[env: home-override; skipped: 1]` and stays FAIL while B0's hook-floor failures stand. Step (b) goes green: R-8 FAILs on a caller-set subject and names `probe/SKILL.md` |
+| GREEN | `02a5f922` | Changes 3–5 and G3: the map (row 5, § 3, § 4), `stage-08-qa-testing.md` `:161` and `:174`, `stage-07-dev-testing.md` `:403` and `:477-478`, the schema's two `env:` examples | Every verdict as at `624a2a72`; no test reads these documents |
+| MUT | `a8d41b08` | Armed-red for R-8c and R-8r: `r8_classify` reports an empty pair as `pass 0`, and `r8_live_home` returns `$HOME` | The durability member reads 124 passed, 2 failed (R-8c and R-8r's resolver arm), and R-8 PASSes over 0 files. The real-HOME step reads `2202 passed, 2 failed — VERDICT FAIL [env: home-account; skipped: 0]`, and step (b) FAILs |
+| REV | `0607b81d` | The revert of MUT. Its tree `ed68cbbf` equals `02a5f922`'s, and MUT's tree `61e543ee` differs | Every verdict as at `02a5f922` |
+
+**Arms this slice adds or reshapes** in `core/deploy/tests/test_upgrade_config_durability.sh`:
+- **R-8**, in `r8_finish`:
+  - The subject is `PMO_REGRESSION_LIVE_HOME`, else the account home. It is never `$HOME`.
+  - An empty subject SKIPs with a reason, never PASS.
+  - A write FAILs and names up to five relative paths.
+  - A caller-set subject is marked `[r8: caller]`.
+- **R-8c:** the classifier discriminates on a fixture inside the sandbox.
+- **R-8r**, two arms:
+  - The resolver ignores `HOME` and lets a caller subject win, marked as caller.
+  - The runner carries the same account-home expression as this member.
+
+**Interpretations.** Where the Stage-5 design's text and the rendered decision differ, the decision governs.
+1. **The pin.** The brief said the job-wide `PYTHONPATH` export covers the new step. It does not: that export is the shell-harness job's, and a `$GITHUB_ENV` write is job-scoped. So step (a) sets `PYTHONUSERBASE` from `/usr/bin/python3` before the override, which is the plan's AC-1 and CIAC-2 wording. The map's § 3 now states the interpreter rule, and names both of the workflow's instances.
+2. **Step 0 (predicted in B0, graded by the hub from B0's check run).**
+   - **R (user-site resolution): none.** No step in the job installs PyYAML, so the pinned and bare overrides resolve Python as the real HOME does. The three-arm pin control records it.
+   - **S (a live-state subject resolved from `$HOME`): none that fails.** R-8's subject is empty in both steps, because the runner account holds no live install, so it passes vacuously in both. That is AC-2's defect, which this slice fixes.
+   - **I (a HOME dependence): every predicted failure.** A `mktemp -d` HOME sits in the temp area, reached through the `/var` → `/private/var` symlink and inside the temp roots the fs-boundary allowlist admits. Hook-floor arms whose expected verdict assumes HOME lies outside that area therefore flip.
+   - All of the I-class failures are in hook files outside #4993's File Change Matrix. They go to the hub as a Tier 2 [SCOPE CHANGE] candidate before any fix, and this slice fixes none of them.
+   - If B0's run confirms them, AC-1, AC-5, CIAC-2's override limb and the Success Indicator's clause 1 cannot read PASS on #4993's file set alone.
+   - This is plausibly what the card's filed "24 failed" measured.
+3. **AC-3 (ii)'s CI record is step (b).** The contract names AC-3 (ii) among the leg's records, and a runner-only step cannot produce it. The probe asserts three things: a non-zero exit, an R-8 FAIL line on a caller-set subject, and the detail naming `probe/SKILL.md`. Together they separate the pre-fix pass, RED's no-files FAIL and GREEN's drift FAIL.
+4. **AC-2 (i)'s `N > 0` is unreachable on the CI runner account,** which holds no live install. Its CI record reads `SKIP` with the no-live-install reason. That is the SKIP-never-PASS half. The `N > 0` half is observed on a host with a live install, under the real HOME in this slice's local C4 run. Step (b) also shows R-8 asserting over a non-empty caller-set subject under the override.
+5. **FM-1's `r8: caller` mark** appears on R-8's line and as a second bracket after the stamp (`… [env: E; skipped: S] [r8: caller]`), with `r8:caller` in the payload. The literal `[env: %s; skipped: %d]` that INT-1 (b) quotes is therefore kept intact in the format string. The map's § 4 documents the bracket.
+6. **Row 5's text is scoped by Q7.** The cell names only the durability member's R-8 as its detective. The Notes state, as current fact, that five other members take their subject from `$HOME`. The census is 6 files at GREEN, the five members and `test_instance_path_roundtrip.sh`, which is not a member, against 7 at RED.
+7. **stage-08 `:174` cites row 3 without quoting its runner** (FM-4 / FM-6). A sibling release edits row 3 again, so a quoted runner would drift a second time.
+
 ---
 
 ## Verification Evidence
@@ -913,6 +952,6 @@ Authored per slice at Stage 6. Each slice names its commits, the prediction each
 ## Issue References
 
 - **Members (transitioned to closed at Stage 13):** #6896 · #4993 · #4994 · #5265 · #6168 · #5274 · #7497 · #6440
-- **Planning and Stage 6:** #7684 (the Stage-4 plan and every decision record) · #7766 (Commit 0, and #6896's slice)
+- **Planning and Stage 6:** #7684 (the Stage-4 plan and every decision record) · #7766 (Commit 0, and #6896's slice) · #7768 (#4993's slice)
 - **Stage 5:** designs #7750 · #7752 · #7754 · #7756 · #7758 · #7760 · #7762 · #7764; reviews #7859 · #7860 · #7861 · #7862 · #7863 · #7864 · #7865 · #7866
 - **Related:** #6198 (co-discharge candidate) · #5633 (notice posted) · #5185 (ARCHIVE destination) · #4449 (AC2 residual, recorded at Stage 13) · #7638 (`egress-hook-batch`, merged) · #7839 · #7901 · #7895 · #7919 (in flight at Commit 0)
