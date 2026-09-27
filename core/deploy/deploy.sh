@@ -7240,6 +7240,104 @@ flag_not_evaluated() {
   printf '{"ts":"%s","check":"%s","evaluated":false,"detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$_wl" 2>/dev/null || true
 }
 
+# ─── _population_resolve / _population_report — declared-population pair (TOP-LEVEL) ───
+#
+# HOISTED TO TOP LEVEL for flag_not_evaluated's reason: a definition inside cmd_check() is
+# registered only when execution reaches it, and --self-test group DP drives THIS code,
+# never a copy. Contract: core/standards/gate-efficacy-standard.md Requirement (b) (the
+# `population:` declaration) and Requirement (c) § Population shortfall (the DENOM record);
+# the state vocabulary is review-discipline-principles.md § 8 PV-7a's Register A, whose
+# `degraded` names a partial read and whose `not-run` names a population that left no
+# member to examine.
+#
+# _population_resolve [--append] <filter> -- <root>...
+#   <filter> is the check's population declaration's filter= value verbatim: '|'-separated;
+#   a pattern containing '/' matches the path find reports (-path), any other the basename
+#   (-name). Sets globals — bash 3.2 has no nameref (the JSON_ESCAPED out-variable
+#   precedent): POP_FILES, POP_DECLARED, POP_RESOLVED (roots yielding >= 1 file),
+#   POP_YIELDED, POP_UNRESOLVED (zero-yield roots, space-joined). Pure: no log, no ISSUES,
+#   no warn-log row. --append accumulates across calls. An absent root and a present root
+#   matching nothing are the same state: it yields zero files, and it is never skipped.
+_population_resolve() {
+  local _append=0 _filter="" _rest _p _root _f _n
+  local -a _pred=()
+  if [[ "${1-}" == "--append" ]]; then _append=1; shift; fi
+  if [[ $# -gt 0 ]]; then _filter="$1"; shift; fi
+  if [[ "${1-}" == "--" ]]; then shift; fi
+  # Split on '|' by parameter expansion — never by unquoted word splitting, which would
+  # glob-expand a pattern such as *.md against the working directory.
+  _rest="$_filter"
+  while [[ -n "$_rest" ]]; do
+    _p="${_rest%%|*}"
+    if [[ "$_rest" == *"|"* ]]; then _rest="${_rest#*|}"; else _rest=""; fi
+    if [[ -z "$_p" ]]; then continue; fi
+    if [[ ${#_pred[@]} -gt 0 ]]; then _pred+=("-o"); fi
+    if [[ "$_p" == */* ]]; then _pred+=("-path" "$_p"); else _pred+=("-name" "$_p"); fi
+  done
+  if [[ $_append -eq 0 ]]; then
+    POP_FILES=(); POP_DECLARED=0; POP_RESOLVED=0; POP_YIELDED=0; POP_UNRESOLVED=""
+  fi
+  # ${1+"$@"}: an empty root list must not trip `set -u` under bash 3.2.
+  for _root in ${1+"$@"}; do
+    POP_DECLARED=$(( ${POP_DECLARED:-0} + 1 ))
+    _n=0
+    if [[ -e "$_root" && ${#_pred[@]} -gt 0 ]]; then
+      while IFS= read -r -d '' _f; do
+        POP_FILES+=("$_f"); _n=$((_n + 1))
+      done < <(/usr/bin/find "$_root" -type f \( "${_pred[@]}" \) -print0 2>/dev/null)
+    fi
+    if [[ $_n -gt 0 ]]; then
+      POP_RESOLVED=$(( ${POP_RESOLVED:-0} + 1 ))
+    else
+      POP_UNRESOLVED="${POP_UNRESOLVED:+$POP_UNRESOLVED }$_root"
+    fi
+    POP_YIELDED=$(( ${POP_YIELDED:-0} + _n ))
+  done
+}
+
+# _population_report <check-id> <examined> <exempted> [<per-predicate pairs>]
+#   Routes the state _population_resolve left, after the caller applied its exemptions,
+#   and emits the check's DENOM population record. <per-predicate pairs> is the
+#   multi-predicate extension — `examined.<predicate>=<m> exempted.<predicate>=<e> …` —
+#   appended verbatim on a measuring status and dropped on a non-measuring one (PV-7b).
+#     fetched   every declared root yielded a file and examined >= 1: the DENOM line only.
+#     degraded  a root yielded zero files and examined >= 1 (a PARTIAL read): the DENOM
+#               line, its counters describing ONLY the measured subset; EXACTLY ONE
+#               NOT-EVALUATED emit through flag_not_evaluated, naming the zero-yield roots
+#               and nothing else (fan-in — no mode branch, no ISSUES increment, so a
+#               shortfall never moves the exit code); and POP_MARKER, the inline DEGRADED
+#               annotation the caller appends to each verdict line — the marker, not the
+#               NOT-EVAL line, says what the verdict covers.
+#     not-run   examined is 0 — no root yielded a file, or the exemption mechanism removed
+#               every member: the DENOM line with examined/exempted ABSENT (PV-7b), one
+#               terminal NOT-EVALUATED emit, and return 1 — the caller MUST withhold its
+#               clean token.
+_population_report() {
+  local _id="$1" _ex="$2" _xm="$3" _pairs="${4-}"
+  local _dec="${POP_DECLARED:-0}" _res="${POP_RESOLVED:-0}" _unres="${POP_UNRESOLVED:-}"
+  local _zero _why
+  _zero=$((_dec - _res))
+  POP_MARKER=""
+  if [[ "$_ex" -eq 0 ]]; then
+    log "  DENOM: $_id — status=not-run declared=${_dec} resolved=${_res} (root counts; nothing was examined, so the member counters are absent)"
+    if [[ "$_res" -eq 0 ]]; then
+      _why="none of the ${_dec} declared root(s) yielded a file${_unres:+ (zero-yield: ${_unres})}"
+    else
+      _why="the exemption mechanism removed every member the ${_res} resolving root(s) yielded${_unres:+; zero-yield: ${_unres}}"
+    fi
+    flag_not_evaluated "$_id" "status=not-run — no member of the declared population was examined: ${_why}; the clean token is withheld; this is not a clean result"
+    return 1
+  fi
+  if [[ -n "$_unres" ]]; then
+    log "  DENOM: $_id — status=degraded declared=${_dec} resolved=${_res} examined=${_ex} exempted=${_xm}${_pairs:+ ${_pairs}} (root counts: declared/resolved; member counts: examined/exempted, of the measured subset only)"
+    flag_not_evaluated "$_id" "status=degraded — ${_zero} declared root(s) yielded zero files and were not evaluated: ${_unres}; this is not a clean result"
+    POP_MARKER=" [DEGRADED — this verdict covers the ${_res} of ${_dec} declared root(s) that resolved; ${_zero} were not evaluated; this is not a clean result]"
+    return 0
+  fi
+  log "  DENOM: $_id — status=fetched declared=${_dec} resolved=${_res} examined=${_ex} exempted=${_xm}${_pairs:+ ${_pairs}} (root counts: declared/resolved; member counts: examined/exempted)"
+  return 0
+}
+
 # ─── Check 16 population body — _c16_* (TOP-LEVEL) ───────────────────────────
 #
 # HOISTED TO TOP LEVEL DELIBERATELY; the placement is load-bearing, not stylistic,
