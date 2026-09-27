@@ -5514,19 +5514,11 @@ phase_rebuild_skill_packages() {
 # because a guard sourced from the recorder whose omission IS the defect goes
 # vacuous the instant a write site stops recording. That is what makes these arms
 # fail on a MISSING recorder call rather than agree with it.
-# S7-F armed-red mutation only: does the recorder hold the surface this detail names?
-_s7f_recorder_holds() {
-  local _e
-  for _e in "${TOUCHED_ARCHIVE_SEGMENTS[@]:-}"; do
-    [[ -n "$_e" && "$1" == *"(${_e##*/})"* ]] && return 0
-  done
-  return 1
-}
 _reported_write_surfaces() {
   local _i _tok _seen="" _hot
   _hot="$(/usr/bin/basename "$RELEASE_LOG")"
   for ((_i=0; _i<${#PHASE_NAMES[@]}; _i++)); do
-    [[ "${PHASE_RESULTS[$_i]}" == "PASS" ]] || { [[ "${PHASE_RESULTS[$_i]}" == "WARN" ]] && _s7f_recorder_holds "${PHASE_DETAILS[$_i]}"; } || continue
+    [[ "${PHASE_RESULTS[$_i]}" == "PASS" || "${PHASE_RESULTS[$_i]}" == "WARN" ]] || continue
     for _tok in $(/usr/bin/printf '%s\n' "${PHASE_DETAILS[$_i]}" \
                     | /usr/bin/grep -oE '\([A-Za-z0-9._/-]+\.md\)' | /usr/bin/tr -d '()' || true); do
       _tok="$(/usr/bin/basename "$_tok")"
