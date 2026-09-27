@@ -2,7 +2,7 @@
 title: Release Plan — install-resolves-identically (install, deploy and guard decisions resolve from the subject they govern)
 type: release-plan
 plan_type: release
-status: IN PROGRESS — Stage 6 Engineering (Commit 0)
+status: ACTIVE
 release: versioned (bump-class minor; provisional display v4.70; the concrete number binds at the Stage-12 atomic claim)
 milestone: install-resolves-identically
 release_class: cross-cutting
@@ -808,6 +808,7 @@ Transcribed from the milestone description as refreshed at the Collective Review
 | **REV-7865** | #7865 → #7497 (comment 5838822276). Minor: PR-2 · FM-3 · FM-4 · FM-5 · FM-6 · CD-1 · CD-2 | as above | PR-2 APPLIED (Q5 item 17) · FM-3 APPLIED (Q9 (a)) · FM-4 APPLIED (Q16) · FM-5 APPLIED (Q13) · FM-6 per Q12, outside this plan · CD-1 NOT TAKEN (Q9 = (a)) · CD-2 APPLIED (Q16) |
 | **REV-7866** | #7866 → #6440 (comment 5839203338). Minor, weighed up by the Collective Review: FM-3 | as above | FM-3 APPLIED (Q17 (b)). Its Majors are decided: FM-1 by Q3; FM-2 by Q2 and Q17 (INT-1 rewritten); CD-1 NOT TAKEN (Q17 = α); CD-2 APPLIED (Q17 (b)) |
 | **RES** | Residuals the designs record as accepted (routing register RR-38): #7754 G-4; #7764's card drift; #7758's note that the Arm 6 backstop is not the real instance directory | evidence record § 11.1, RR-38 | **ACCEPTED** as residual |
+| **ENG-B0** | [ADJUST] Tier-1 — the Commit-0 frontmatter `status:` is set to `ACTIVE`, the enum's authorship value. Commit 0 wrote `IN PROGRESS — Stage 6 Engineering (Commit 0)`, a value outside the closed enum (`ACTIVE` · `CLOSED` · `ABANDONED`), so the plan-identity lint reported `PLAN-STATUS-ENUM` and the pull request's close-out smoke check read red. `ACTIVE` is the value written at plan authorship, and the Stage-13 close-out moves `ACTIVE` to `CLOSED` and refuses any other value | `release/references/standards/release-corpus-schema.md` § Plan-status lifecycle; the hub's Decision Recorded, #7766 comment 5857460457 | **APPLIED** — the frontmatter `status:` line only; the first commit of #6896's slice, ahead of its RED commit |
 
 ---
 
