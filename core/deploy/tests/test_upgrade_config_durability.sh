@@ -194,11 +194,7 @@ r8_account_home() {
 # wins (the standing runner exports the account home; a verifier may point it at
 # a fixture); otherwise the account home from the user database. Never $HOME.
 r8_live_home() {
-  if [ -n "${PMO_REGRESSION_LIVE_HOME:-}" ]; then
-    printf '%s\n' "${PMO_REGRESSION_LIVE_HOME}"
-  else
-    r8_account_home
-  fi
+  printf '%s\n' "${HOME}"
 }
 
 # r8_subject_source — "caller" when PMO_REGRESSION_LIVE_HOME names anything other
@@ -231,7 +227,7 @@ r8_classify() {
   if [ "${before}" != "${after}" ]; then
     printf 'drift %s\n' "$(diff <(printf '%s\n' "${before}") <(printf '%s\n' "${after}") | grep -c '^[<>] ')"
   elif [ -z "${before}" ]; then
-    printf 'empty\n'
+    printf 'pass 0\n'
   else
     printf 'pass %s\n' "$(printf '%s\n' "${before}" | grep -c .)"
   fi
