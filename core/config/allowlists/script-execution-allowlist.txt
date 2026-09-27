@@ -106,10 +106,6 @@ core/deploy/deploy.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/.claude/hooks/tests/test-runner.sh
 ./.claude/hooks/tests/test-runner.sh
 .claude/hooks/tests/test-runner.sh
-# ARMED-RED MUTATION, reverted by the next commit: admits exactly the two AC-3 control
-# paths, so LAYOUT-SITE-01 and LAYOUT-DOC-03b must read red while it stands.
-.claude/hooks/tests/zz-unlisted-control.sh
-/tmp/hook-ci-layout.AbC123/.claude/hooks/tests/test-runner.sh
 
 # Per-hook test files (invoked by test-runner or directly during engineering)
 [CLAUDE_WORKSPACE_ROOT]/.claude/hooks/tests/*.test.sh
