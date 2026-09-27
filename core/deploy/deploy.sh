@@ -7338,6 +7338,71 @@ _population_report() {
   return 0
 }
 
+# ─── _c47_report — Check 47's verdict tail (TOP-LEVEL) ────────────────────────
+#
+# HOISTED TO TOP LEVEL for flag_not_evaluated's reason: a definition inside cmd_check() is
+# registered only when execution reaches it, and --self-test group BD drives THIS code,
+# never a copy. Contract: core/standards/gate-efficacy-standard.md § Exit-consumer and
+# executor census — a row the drift engine did not evaluate never reads as a match. Check
+# 47 claims over RELEASE_LOG ROWS, a population the standard's file-root declaration does
+# not reach (Requirement (c) § Population shortfall, the rows non-detection), so it
+# carries no `population:` line; its DENOM record keeps the shared grammar — the Register
+# A status first, the member counters absent on not-run — over row counts. The state
+# vocabulary is review-discipline-principles.md § 8 PV-7a's, consumed, not restated.
+#
+# _c47_report <enumerated> <na2> <na2-rows> <na3> <na3-rows> <findings> <version-less> <unpublished> <total> <cutoff>
+#   <enumerated>        versioned rows on/after the cutoff handed to the drift engine
+#   <na2> <na2-rows>    rows it returned exit 2 for — a capability it needs was absent
+#   <na3> <na3-rows>    rows it returned exit 3 for — no published Release or note to compare
+#   <findings>          rows it found drifted, or whose exit its contract does not define
+#   <version-less>      in-scope rows DECLARED EXCLUDED by class (no Release by construction)
+#   <unpublished>       in-scope rows DECLARED EXCLUDED by record (a versioned release that
+#                       published no Release)
+#   <total> <cutoff>    LOG data rows, and the cutoff token
+# The compared (measured) rows are <enumerated> minus the rows not evaluated.
+#     fetched   every enumerated row was compared: the DENOM record, then the verdict.
+#     degraded  some were not (a PARTIAL read): the DENOM record, its member counters
+#               describing ONLY the compared rows; EXACTLY ONE NOT-EVALUATED emit through
+#               flag_not_evaluated naming the rows not compared, under their exits, and
+#               nothing else (fan-in — no mode branch, no ISSUES increment); and, when there
+#               is no finding, the OK line over the compared rows with the inline DEGRADED
+#               marker — the marker, not the NOT-EVAL line, says what the verdict covers.
+#     not-run   nothing was compared — no row handed to the engine, or every row not
+#               evaluated: the DENOM record with the member counters ABSENT (PV-7b), one
+#               terminal NOT-EVALUATED emit, and return 1: the clean token is withheld.
+#   Returns 0 when at least one row was compared — the caller flags any finding through its
+#   mode-driven emitter — and 1 when none was: the _population_report convention.
+_c47_report() {
+  local _t="$1" _n2="$2" _r2="$3" _n3="$4" _r3="$5" _f="$6" _xv="$7" _xu="$8" _tot="$9" _cut="${10}"
+  local _na=$((_n2 + _n3)) _m _rest _rows=""
+  _m=$((_t - _na))
+  _rest="$((_tot - _t - _xv - _xu)) row(s) not in scope (pre-cutoff) / ${_tot} total LOG data row(s)"
+  if [[ "$_n2" -gt 0 ]]; then _rows="exit 2 (a capability the drift engine needs was absent): ${_r2}"; fi
+  if [[ "$_n3" -gt 0 ]]; then _rows="${_rows:+${_rows}; }exit 3 (no published Release or note to compare): ${_r3}"; fi
+  if [[ "$_m" -le 0 ]]; then
+    log "  DENOM: release-body-drift — status=not-run enumerated=${_t} (row counts over RELEASE_LOG rows on/after ${_cut}; nothing was compared, so the member counters are absent; declared excluded: ${_xv} version-less, ${_xu} unpublished by record; ${_rest})"
+    if [[ "$_t" -eq 0 ]]; then
+      flag_not_evaluated "release-body-drift" "status=not-run — no versioned row on or after ${_cut} was handed to the drift engine, so the §5.1 invariant was not evaluated; the clean token is withheld; this is not a clean result"
+    else
+      flag_not_evaluated "release-body-drift" "status=not-run — none of the ${_t} enumerated row(s) could be compared: ${_rows}; the clean token is withheld; this is not a clean result"
+    fi
+    return 1
+  fi
+  if [[ "$_na" -gt 0 ]]; then
+    log "  DENOM: release-body-drift — status=degraded enumerated=${_t} examined=${_m} exempted=$((_xv + _xu)) (row counts over RELEASE_LOG rows on/after ${_cut}: enumerated = versioned rows handed to the drift engine; examined = rows it compared, the measured subset only; exempted = rows declared excluded — ${_xv} version-less, publishing no GitHub Release by construction, and ${_xu} unpublished by record; ${_rest})"
+    flag_not_evaluated "release-body-drift" "status=degraded — ${_na} of ${_t} enumerated row(s) could not be compared: ${_rows}; this is not a clean result"
+  else
+    log "  DENOM: release-body-drift — status=fetched enumerated=${_t} examined=${_m} exempted=$((_xv + _xu)) (row counts over RELEASE_LOG rows on/after ${_cut}: enumerated = versioned rows handed to the drift engine; examined = rows it compared; exempted = rows declared excluded — ${_xv} version-less, publishing no GitHub Release by construction, and ${_xu} unpublished by record; ${_rest})"
+  fi
+  if [[ "$_f" -gt 0 ]]; then return 0; fi
+  if [[ "$_na" -gt 0 ]]; then
+    log "  OK:    ${_m} of ${_t} logged release(s) on/after ${_cut} compared, each with a published Release body matching its in-repo note (§5.1 invariant holds for the compared rows; ${_xv} version-less and ${_xu} unpublished row(s) declared out of scope, not skipped) [DEGRADED — this verdict covers the ${_m} of ${_t} enumerated row(s) the drift engine compared, with ${_na} not evaluated; this is not a clean result]"
+  else
+    log "  OK:    all ${_m} logged release(s) on/after ${_cut} have a published Release body matching their in-repo note (§5.1 invariant holds; ${_xv} version-less and ${_xu} unpublished row(s) declared out of scope, not skipped)"
+  fi
+  return 0
+}
+
 # ─── Check 16 population body — _c16_* (TOP-LEVEL) ───────────────────────────
 #
 # HOISTED TO TOP LEVEL DELIBERATELY; the placement is load-bearing, not stylistic,
@@ -12235,9 +12300,13 @@ sys.stdout.write("".join(out) + "|")
   #                  resolvable) and are structurally invisible to this check.
   #                  Exactly one unevaluable row (v3.65.1, no published Release —
   #                  Check 32 owns that) sits inside the suffix, giving 53 readable
-  #                  of 54 in-scope. Any lower value adds only exit-3 rows:
-  #                  coverage theater. This applies the selection rule already
-  #                  stated above to the REPAIRED corpus — it is not a new rule.
+  #                  of 54 in-scope. It is already DECLARED EXCLUDED below
+  #                  (c47_unpublished) and counted in the DENOM record, so the
+  #                  lowering hands the engine 53 rows and never turns that row
+  #                  into a standing NOT-EVALUATED. Any lower value adds only
+  #                  exit-3 rows: coverage theater. This applies the selection
+  #                  rule already stated above to the REPAIRED corpus — it is
+  #                  not a new rule.
   #   Apply WHEN:    after release/tools/reemit-release-bodies.sh --execute has run
   #                  and all eleven verify MATCH. Not before.
   #   Apply WHAT:    this literal AND the shared default in
@@ -12284,9 +12353,9 @@ sys.stdout.write("".join(out) + "|")
   # introducing release name a version that does not exist yet — and therefore scan
   # zero rows. The obligation is discharged by the EXIT-CODE CONTRACT below instead:
   # the mid-close states (Surface 1 not yet published; note not yet on origin/main)
-  # both return tool exit 3, which maps to N/A and NEVER to a finding. A release can
-  # fail its own close here only by publishing a genuinely drifted body — which is
-  # the gate working, not a loop.
+  # both return tool exit 3, which is counted as not evaluated — never a finding, and
+  # never the clean token. A release can fail its own close here only by publishing a
+  # genuinely drifted body — which is the gate working, not a loop.
   # CORRECTED (#3699): this block previously asserted that "both shipped emit paths
   # derive the body from the note by the same §5.1 transform, so that path is closed
   # by construction." That was FALSE and is the root cause this card fixed. Only
@@ -12319,6 +12388,14 @@ sys.stdout.write("".join(out) + "|")
     # a COMMITTED, complete version token (see the block comment above); exporting
     # the __none__ sentinel is the operator's explicit opt-OUT.
     local c47_cutoff="${RELEASE_BODY_DRIFT_CHECK_CUTOFF:-v3.78}"
+    # DECLARED EXCLUDED BY RECORD — versioned rows whose release published NO GitHub
+    # Release. The engine can only return exit 3 for such a row: a not-evaluated that would
+    # never clear, and a standing NOT-EVALUATED line trains a reader to skip the one a real
+    # outage produces. Whole version tokens, space-separated; counted in the DENOM record and
+    # never handed to the engine. The premise is Check 32's (Release existence), so an entry
+    # retires when its release gains a published Release. v3.65.1 sits before the committed
+    # cutoff today and enters scope with the PENDING CUTOFF LOWERING above.
+    local c47_unpublished="v3.65.1"
 
     if [[ "$c47_cutoff" == "__none__" ]]; then
       log "  N/A:   release-body drift check explicitly disabled by an operator override (RELEASE_BODY_DRIFT_CHECK_CUTOFF=__none__) — unset it to restore the committed cutoff"
@@ -12348,6 +12425,8 @@ sys.stdout.write("".join(out) + "|")
       local c47_targets=0
       local c47_findings=0
       local c47_excluded=0
+      local c47_unpub=0
+      local c47_na2=0 c47_na2_rows="" c47_na3=0 c47_na3_rows="" _c47_rc=0
       local c47_output=""
       local _row47 _c47cls _v47 _c47key _c47ms _c47tag _c47state _d47_out _d47_exit
       while IFS= read -r _row47; do
@@ -12366,10 +12445,15 @@ sys.stdout.write("".join(out) + "|")
         # handing its slug key to check-release-body-drift.sh would take an untested path
         # in a tool whose exit contract enumerates only 0/1/2/3 — and the `*)` arm below
         # maps ANY unexpected exit to a finding. Gating before the tool is invoked removes
-        # that path rather than handling its output. Excluded rows are counted and named
-        # in the OK line, so the exclusion is visible rather than silent.
+        # that path rather than handling its output. Excluded rows are counted in the DENOM
+        # record and named in the OK line, so the exclusion is visible rather than silent.
         if [[ "$_c47cls" == "version-less" ]]; then
           c47_excluded=$((c47_excluded + 1))
+          continue
+        fi
+        # The by-record exclusion declared at c47_unpublished: counted, never compared.
+        if [[ " ${c47_unpublished} " == *" ${_v47} "* ]]; then
+          c47_unpub=$((c47_unpub + 1))
           continue
         fi
         c47_targets=$((c47_targets + 1))
@@ -12384,21 +12468,29 @@ sys.stdout.write("".join(out) + "|")
             ;;
           2) # gh is confirmed up before this loop (gh-guard above), so exit 2 here
              # is a git capability absence (origin/main unresolvable / corrupt
-             # object), NOT gh. Name it from the tool's stderr; never FAIL.
+             # object), NOT gh. Name it from the tool's stderr; never FAIL. Counted as
+             # not evaluated and fanned in, with exit 3, to ONE NOT-EVALUATED emit below.
+             c47_na2=$((c47_na2 + 1)); c47_na2_rows="${c47_na2_rows:+$c47_na2_rows }${_v47}"
              log "  N/A:   ${_v47} drift sub-check N/A at tool layer — required capability unavailable (git/origin-main; gh already confirmed up). $(/usr/bin//usr/bin/head -1 <<<"$_d47_out")" ;;
-          3) log "  N/A:   ${_v47} has no published Release or note to compare (Surface 1 absent — Check 32 owns existence)" ;;
+          3) # No published Release or note to compare: counted as not evaluated — never a
+             # finding, and never the clean token.
+             c47_na3=$((c47_na3 + 1)); c47_na3_rows="${c47_na3_rows:+$c47_na3_rows }${_v47}"
+             log "  N/A:   ${_v47} has no published Release or note to compare (Surface 1 absent — Check 32 owns existence)" ;;
           *) c47_output+="${_v47}: drift tool returned unexpected exit ${_d47_exit}"$'\n'; c47_findings=$((c47_findings + 1)) ;;
         esac
       done <<<"$c47_rows"
 
-      # DENOMINATOR EMIT — enumerated + declared-excluded + not-in-scope == total.
-      log "  DENOM: release-body-drift — $c47_targets row(s) enumerated / $c47_excluded declared-excluded (version-less: publishes no GitHub Release by construction) / $((c47_rows_total - c47_targets - c47_excluded)) row(s) not in scope (pre-cutoff) / $c47_rows_total total LOG data row(s)"
-
-      if [[ $c47_findings -eq 0 ]]; then
-        log "  OK:    all $c47_targets logged release(s) on/after $c47_cutoff have a published Release body matching their in-repo note (§5.1 invariant holds; $c47_excluded version-less row(s) declared out of scope, not skipped)"
-      else
+      # VERDICT TAIL — hoisted to _c47_report so --self-test group BD drives it. The DENOM
+      # record (enumerated + declared-excluded + not-in-scope == total) carries the Register
+      # A status; a row the engine did not evaluate (exit 2 or 3) is counted and fanned in to
+      # ONE NOT-EVALUATED emit, and the OK line states the compared count — withheld, with
+      # return 1, when nothing was compared. Findings keep their mode-driven emitter below.
+      _c47_report "$c47_targets" "$c47_na2" "$c47_na2_rows" "$c47_na3" "$c47_na3_rows" \
+        "$c47_findings" "$c47_excluded" "$c47_unpub" "$c47_rows_total" "$c47_cutoff" \
+        || _c47_rc=$?
+      if [[ $_c47_rc -eq 0 && $c47_findings -gt 0 ]]; then
         flag_release_body_drift "release-body-drift" \
-          "$c47_findings §5.1 body-drift finding(s) across $c47_targets logged release(s) — a published Release body diverged from its source-of-record note; re-emit per release-notes-standard.md §5.6"
+          "$c47_findings §5.1 body-drift finding(s) across $((c47_targets - c47_na2 - c47_na3)) compared logged release(s) (of $c47_targets enumerated) — a published Release body diverged from its source-of-record note; re-emit per release-notes-standard.md §5.6"
         head -10 <<<"$c47_output" | sed 's/^/         /'
         if [[ $c47_findings -gt 10 ]]; then
           log "         ... ($((c47_findings - 10)) more)"
