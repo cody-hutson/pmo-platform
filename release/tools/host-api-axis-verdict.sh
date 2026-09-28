@@ -423,50 +423,177 @@ _emit_pool() {
 }
 
 # ─── the per-pool rule ────────────────────────────────────────────────────────────────
-# RED (the first commit of this tool): the rule as it stands before the anchored rule
-# replaces it — the first reading per pool; the 20 % floor on whatever reading is
-# present; a quota refusal is CONTRADICTED, recovered by the refusing response's reset
-# epoch when primary and by a backoff with no published anchor otherwise; anything else
-# UNSTATED. No anchor, no agreement, no re-probe, no counts, no --prior-refusals
-# arithmetic, and one grade for every figure. The self-test arms that need the anchored
-# rule fail against this body by design; the next commit replaces it.
+_anchor() {
+  local p="$1" k="$2" why=""
+  local d="${RD_DATE[$k]}" t="${RD_RESET[$k]}"
+  if [ "${RD_CLASS[$k]}" != answered ]; then why=not-answered
+  elif [ "${RD_COUNTER[$k]}" != 1 ]; then why=no-counter
+  elif [ "${RD_RESOURCE[$k]}" = "-" ]; then why=resource-absent
+  elif [ "${RD_RESOURCE[$k]}" != "$p" ]; then why=resource-mismatch
+  elif [ "${RD_LIMIT[$k]}" = "-" ] || [ "${RD_REMAINING[$k]}" = "-" ] \
+    || [ "${RD_USED[$k]}" = "-" ] || [ "$t" = "-" ]; then why=counter-incomplete
+  elif [ "${RD_USED[$k]}" -lt 1 ]; then why=used-zero
+  elif [ "${RD_REMAINING[$k]}" -ge "${RD_LIMIT[$k]}" ]; then why=remaining-full
+  elif [ "$d" = "-" ]; then why=no-date-header
+  elif [ "$t" -le $(( d - SKEW )) ] || [ "$t" -gt $(( d + WINDOW + SKEW )) ]; then
+    why=reset-out-of-window
+  fi
+  if [ -z "$why" ]; then RD_ANCHORED[$k]=1; RD_WHY[$k]=anchored; else RD_WHY[$k]="$why"; fi
+  return 0
+}
+
+# _read_and_judge POOL K — one read, its anchor and the used-zero tally. Returns 1 when
+# the read was refused on quota grounds, so the caller stops: the refusal dominates.
+_read_and_judge() {
+  _do_read "$1" "$2"
+  _anchor "$1" "$2"
+  if [ "${RD_CLASS[$2]}" = answered ] && [ "${RD_USED[$2]}" = 0 ]; then
+    case "${RD_RESOURCE[$2]}" in "$1"|-) P_USED_ZERO=$((P_USED_ZERO + 1)) ;; esac
+  fi
+  [ "${RD_CLASS[$2]}" != refused-quota ]
+}
+
+_agree() {
+  [ "${RD_ANCHORED[$1]:-0}" = 1 ] && [ "${RD_ANCHORED[$2]:-0}" = 1 ] || return 1
+  [ "${RD_RESET[$1]}" = "${RD_RESET[$2]}" ] || return 1
+  [ $(( RD_USED[$2] - RD_USED[$1] )) -ge 1 ]
+}
+
+_resets_differ() {
+  [ "${RD_RESET[$1]:--}" != "-" ] && [ "${RD_RESET[$2]:--}" != "-" ] \
+    && [ "${RD_RESET[$1]}" != "${RD_RESET[$2]}" ]
+}
+
+# The re-probe matched no earlier reset: read 3 carries one, at least one of reads 1 and 2
+# carries one, and read 3's equals none of them.
+_reprobe_unmatched() {
+  local t="${RD_RESET[3]:--}" k seen=0
+  [ "$t" != "-" ] || return 1
+  for k in 1 2; do
+    [ "${RD_RESET[$k]:--}" != "-" ] || continue
+    seen=1
+    [ "${RD_RESET[$k]}" != "$t" ] || return 1
+  done
+  [ "$seen" = 1 ]
+}
+
+_most_conservative() {
+  local k best=""
+  for k in 1 2 3; do
+    [ "$k" -le "$P_READS" ] || break
+    [ "${RD_ANCHORED[$k]:-0}" = 1 ] || continue
+    if [ -z "$best" ] \
+      || [ $(( RD_REMAINING[k] * RD_LIMIT[best] )) -le $(( RD_REMAINING[best] * RD_LIMIT[k] )) ]; then
+      best="$k"
+    fi
+  done
+  printf '%s' "$best"
+}
+
+_backoff() {
+  local n="$1" s="$BACKOFF_BASE"
+  while [ "$n" -gt 0 ] && [ "$s" -lt "$BACKOFF_CAP" ]; do s=$((s * 2)); n=$((n - 1)); done
+  if [ "$s" -gt "$BACKOFF_CAP" ]; then s="$BACKOFF_CAP"; fi
+  printf '%s' "$s"
+}
+
+_measured() {
+  local pool="$1" k="$2" agr="$3"
+  local r="${RD_REMAINING[$k]}" l="${RD_LIMIT[$k]}" u="${RD_USED[$k]}" t="${RD_RESET[$k]}"
+  local verdict grade label fields seg
+  verdict="$(_floor "$r" "$l")"
+  if [ "$pool" = core ]; then grade=SOURCE; label='[SOURCE]'
+  else grade=ASSUMPTION-CONFIRM; label='[ASSUMPTION – CONFIRM]'; fi
+  fields="grade=$grade remaining=$r limit=$l used=$u reset=$t used_zero=$P_USED_ZERO"
+  seg="$pool MEASURED $r/$l $label reset $(_clock "$t")"
+  if [ "$pool" = graphql ]; then
+    fields="$fields agreement=$agr reset_disagreements=$P_RESET_DIS"
+    case "$agr" in
+      pair) seg="$seg (2 reads agree)" ;;
+      reprobe) seg="$seg (the re-probe agrees)" ;;
+      unresolved) seg="$seg (unresolved: the most conservative of $P_READS readings)" ;;
+    esac
+  fi
+  if [ "$verdict" = DEFER ]; then seg="$seg — DEFER below the $FLOOR_PCT % floor until $(_clock "$t")"; fi
+  if [ "$P_USED_ZERO" -ge 1 ] || [ "$agr" = unresolved ]; then CAL_EVENT=1; fi
+  _emit_pool "$pool" MEASURED "$verdict" answered "$fields" anchored "$seg"
+}
+
+_contradicted() {
+  local pool="$1" k="$2" sub="${RD_SUB[$2]}" rec txt s
+  if [ "$sub" = primary ] && [ "${RD_RESET[$k]}" != "-" ]; then
+    rec="reset:${RD_RESET[$k]}"; txt="resume after $(_clock "${RD_RESET[$k]}")"
+  elif [ "$sub" = secondary ] && [ "${RD_RETRY[$k]}" != "-" ]; then
+    rec="retry-after:${RD_RETRY[$k]}"; txt="retry after ${RD_RETRY[$k]} s"
+  else
+    s="$(_backoff "$PRIOR")"
+    rec="backoff:$s"; txt="backoff ≥ $s s (refusal $((PRIOR + 1)) in a row)"
+  fi
+  _emit_pool "$pool" CONTRADICTED DEFER refused \
+    "class=refused-quota subclass=$sub status=${RD_STATUS[$k]} recovery=$rec" "${RD_REASON[$k]}" \
+    "$pool CONTRADICTED — refused on quota grounds ($sub); DEFER, $txt"
+}
+
+# No individually anchored reading: UNANCHORED when an answered read carried a counter,
+# otherwise UNSTATED with the last read's class.
+_no_anchor() {
+  local pool="$1" k j="" fields reason outcome
+  for k in 3 2 1; do
+    if [ "${RD_CLASS[$k]:-}" = answered ] && [ "${RD_COUNTER[$k]:-0}" = 1 ]; then j="$k"; break; fi
+  done
+  if [ -n "$j" ]; then
+    fields="reported_remaining=${RD_REMAINING[$j]} reported_limit=${RD_LIMIT[$j]}"
+    fields="$fields reported_used=${RD_USED[$j]} reported_reset=${RD_RESET[$j]} used_zero=$P_USED_ZERO"
+    if [ "$pool" = graphql ]; then fields="$fields agreement=- reset_disagreements=$P_RESET_DIS"; fi
+    if [ "$P_USED_ZERO" -ge 1 ]; then CAL_EVENT=1; fi
+    _emit_pool "$pool" UNANCHORED DEFER answered "$fields" "${RD_WHY[$j]}" \
+      "$pool UNANCHORED — the reading does not reflect the probe's own draw (${RD_WHY[$j]}); DEFER, re-run at the next routing turn"
+    return 0
+  fi
+  k="$P_READS"
+  if [ "${RD_CLASS[$k]}" = answered ]; then outcome=answered; reason=no-counter
+  else outcome=failed; reason="${RD_REASON[$k]}"; fi
+  _emit_pool "$pool" UNSTATED PROCEED "$outcome" "class=${RD_CLASS[$k]} status=${RD_STATUS[$k]}" \
+    "$reason" "$pool UNSTATED — $(_phrase "${RD_CLASS[$k]}")$(_status_note "${RD_STATUS[$k]}"): $reason; fails open"
+}
+
+_pool_core() {
+  if ! _read_and_judge core 1; then _contradicted core 1; return 0; fi
+  if [ "${RD_ANCHORED[1]}" = 1 ]; then _measured core 1 -; return 0; fi
+  if ! _read_and_judge core 2; then _contradicted core 2; return 0; fi
+  if [ "${RD_ANCHORED[2]}" = 1 ]; then _measured core 2 -; return 0; fi
+  _no_anchor core
+}
+
+_pool_graphql() {
+  local best
+  if ! _read_and_judge graphql 1; then _contradicted graphql 1; return 0; fi
+  if ! _read_and_judge graphql 2; then _contradicted graphql 2; return 0; fi
+  if _agree 1 2; then _measured graphql 2 pair; return 0; fi
+  if _resets_differ 1 2; then P_RESET_DIS=$((P_RESET_DIS + 1)); fi
+  if ! _read_and_judge graphql 3; then _contradicted graphql 3; return 0; fi
+  if _agree 2 3 || _agree 1 3; then _measured graphql 3 reprobe; return 0; fi
+  if _reprobe_unmatched; then P_RESET_DIS=$((P_RESET_DIS + 1)); fi
+  best="$(_most_conservative)"
+  if [ -n "$best" ]; then _measured graphql "$best" unresolved; return 0; fi
+  _no_anchor graphql
+}
+
+# pool_verdict POOL — the anchored rule (quota-budget-protocol.md § 4.3b).
 pool_verdict() {
-  local pool="$1" v
   _pool_begin
-  _do_read "$pool" 1
-  case "${RD_CLASS[1]}" in
-    refused-quota)
-      if [ "${RD_SUB[1]}" = primary ] && [ "${RD_RESET[1]}" != "-" ]; then
-        _emit_pool "$pool" CONTRADICTED DEFER refused \
-          "class=refused-quota subclass=${RD_SUB[1]} status=${RD_STATUS[1]} recovery=reset:${RD_RESET[1]}" \
-          "${RD_REASON[1]}" \
-          "$pool CONTRADICTED — refused on quota grounds (${RD_SUB[1]}); DEFER, resume after $(_clock "${RD_RESET[1]}")"
-      else
-        _emit_pool "$pool" CONTRADICTED DEFER refused \
-          "class=refused-quota subclass=${RD_SUB[1]} status=${RD_STATUS[1]} recovery=backoff" \
-          "${RD_REASON[1]}" \
-          "$pool CONTRADICTED — refused on quota grounds (${RD_SUB[1]}); DEFER, retry with backoff"
-      fi ;;
-    answered)
-      if [ "${RD_LIMIT[1]}" != "-" ] && [ "${RD_REMAINING[1]}" != "-" ]; then
-        v="$(_floor "${RD_REMAINING[1]}" "${RD_LIMIT[1]}")"
-        _emit_pool "$pool" MEASURED "$v" answered \
-          "grade=ASSUMPTION-CONFIRM remaining=${RD_REMAINING[1]} limit=${RD_LIMIT[1]} used=${RD_USED[1]} reset=${RD_RESET[1]}" \
-          "pool reading" \
-          "$pool MEASURED ${RD_REMAINING[1]}/${RD_LIMIT[1]} [ASSUMPTION – CONFIRM] reset $(_clock "${RD_RESET[1]}")"
-      else
-        _emit_pool "$pool" UNSTATED PROCEED answered "class=answered status=${RD_STATUS[1]}" no-counter \
-          "$pool UNSTATED — answered with no counter; fails open"
-      fi ;;
-    *)
-      _emit_pool "$pool" UNSTATED PROCEED failed "class=${RD_CLASS[1]} status=${RD_STATUS[1]}" "${RD_REASON[1]}" \
-        "$pool UNSTATED — $(_phrase "${RD_CLASS[1]}")$(_status_note "${RD_STATUS[1]}"): ${RD_REASON[1]}; fails open" ;;
+  case "$1" in
+    core) _pool_core ;;
+    graphql) _pool_graphql ;;
   esac
 }
 
-# axis_record VERDICT — the HOST-API record (RED: the verdict alone).
+# axis_record VERDICT — the HOST-API record.
 axis_record() {
-  printf 'HOST-API %s\n' "$1"
+  local k=0 c=no
+  if [ "$ANY_REFUSED" = 1 ]; then k=$((PRIOR + 1)); elif [ "$ANY_FAILED" = 1 ]; then k="$PRIOR"; fi
+  if [ "$CAL_EVENT" = 1 ]; then c=yes; fi
+  printf 'HOST-API %s refusals_in_a_row=%s calibration_event=%s\n' "$1" "$k" "$c"
 }
 
 # ─── selection ────────────────────────────────────────────────────────────────────────
