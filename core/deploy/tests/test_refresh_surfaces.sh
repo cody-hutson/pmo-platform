@@ -1224,6 +1224,11 @@ elif [ "${ARM8_READY}" -ne 1 ]; then
   report "Arm 10: the heal" 0 "not run: Arm 8's target set did not resolve (see its target-set line)"
 else
   rows="$(fx_py token-rows "${FX_W1}/${FX_TPL_REL}")"
+  # The stamp comes first. Every composed file carries its managed_at marker on line 4,
+  # below its installed_sha line; the poison drops that line, so a stamp taken after it
+  # finds no marker on the poisoned surface's line 4.
+  ok=1; detail=""
+  v="$(fx_py stamp "${SBX}/targets.tsv")"; [ "${v}" = "OK" ] || { ok=0; detail="stamp: ${v}"; }
   v="$(fx_py poison "${FX_ALLOW}" "${FX_W1}/${FX_TPL_REL}" "${FX_SCRATCH_P}")"
   p="$(fx_py root-probe "${FX_ALLOW}" "${FX_W1}/${FX_TPL_REL}" "${FX_PRIMARY_P}")"
   case "${v}|${p}" in
@@ -1239,14 +1244,16 @@ else
   else
     report "10: caller-path probe fires on the poisoned surface" 0 "hits ${h}, token rows ${rows}"
   fi
-  ok=1; detail=""
-  v="$(fx_py stamp "${SBX}/targets.tsv")"; [ "${v}" = "OK" ] || { ok=0; detail="stamp: ${v}"; }
   fx_update 10-w1 "${FX_W1}" --surfaces-only
   rc=$?
   [ "${rc}" -eq 0 ] || { ok=0; detail="${detail}; exit ${rc}"; }
   u="$(fx_py unstamped "${SBX}/targets.tsv")"
   [ "${u}" = "hook-script-execution-allowlist.txt" ] \
     || { ok=0; detail="${detail}; rewritten '${u}' (want the poisoned allowlist only)"; }
+  # The poisoned surface reads as unstamped whether or not this run rewrote it: the
+  # poison left no marker on its line 4. The snapshot's check needs one there, which
+  # only a composition write restores; with the check above, it is this run's write.
+  v="$(fx_py snapshot "${SBX}/targets.tsv" "${SNAP}/10-w1")"; [ "${v}" = "OK" ] || { ok=0; detail="${detail}; ${v}"; }
   report "10-w1: a plain refresh (no --force-regen) regenerates exactly the poisoned surface" "${ok}" "${detail}"
   v="$(fx_py root-probe "${FX_ALLOW}" "${FX_W1}/${FX_TPL_REL}" "${FX_PRIMARY_P}")"
   if [ "${v}" = "OK" ]; then
