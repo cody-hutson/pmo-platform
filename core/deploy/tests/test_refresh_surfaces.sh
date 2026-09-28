@@ -80,6 +80,10 @@
 #   Arm 10 THE HEAL. A surface re-rooted to an out-of-tree worktree, its hashes
 #          reset the way a pre-fix install leaves them, is healed by a PLAIN refresh
 #          that regenerates exactly that surface.
+#   Arm 11 THE BINDING IS REPORTED. Each refresh names the root it substituted, the
+#          tier that supplied it and the checkout its templates came from, read from
+#          the logs Arms 8-10 saved with the report key matched as a FIXED string.
+#          An absent or empty log FAILs.
 #   Arm 12 THE CONFIG ROOT IS NOT A FALLBACK. A full update given --config-root
 #          takes its hook-bundle snapshot there, and leaves the default config root
 #          (a byte copy standing in for the live one) byte-identical.
@@ -1268,6 +1272,86 @@ else
     report "10: after the heal, no line names the scratchpad worktree" 0 "${h} line(s)"
   fi
   printf '         diagnostic (not graded): %s\n' "$(fx_py segment-counts "${FX_ALLOW}" "${FX_SCRATCH_P}")"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Arm 11 — THE BINDING IS REPORTED. A caller reads the binding instead of inferring it.
+# Reads the stderr logs Arms 8-10 saved. An absent or empty log means the producing arm
+# did not run: that is a FAIL, never a pass. The report key is matched as a FIXED
+# string, by a prefix test: as a search pattern, "[PMO_PLATFORM_ROOT]" is a bracket
+# expression that misses the real line and matches an unrelated one.
+# ─────────────────────────────────────────────────────────────────────────────
+printf '\nArm 11: each refresh reports the root it resolved, the tier, and the template checkout\n'
+
+fx_report_check() {  # <log> <want-root> <want-source> <want-tree> -> "OK", or what is wrong
+  python3 - "$@" <<'PY'
+import os, sys
+path, want_root, want_source, want_tree = sys.argv[1:5]
+PREFIX, MID, TAIL = "INFO: Resolved [PMO_PLATFORM_ROOT] = ", " (source: ", "); templates are read from "
+try:
+    lines = open(path, encoding="utf-8").read().splitlines()
+except OSError:
+    print("log absent: the producing arm did not run"); sys.exit(0)
+if not lines:
+    print("log empty: the producing arm did not run"); sys.exit(0)
+hits = [l for l in lines if l.startswith(PREFIX)]
+if len(hits) != 1:
+    print(f"{len(hits)} report lines (want exactly 1)"); sys.exit(0)
+head, sep, templates = hits[0][len(PREFIX):].rpartition(TAIL)
+root, sep2, source = head.rpartition(MID)
+if not (sep and sep2):
+    print(f"unparseable report line: {hits[0]!r}"); sys.exit(0)
+problems = []
+if root != want_root:
+    problems.append(f"root {root!r} != {want_root!r}")
+if source != want_source:
+    problems.append(f"tier {source!r} != {want_source!r}")
+if os.path.realpath(templates) != os.path.realpath(want_tree):
+    problems.append(f"templates {templates!r} != {want_tree!r}")
+print("OK" if not problems else "; ".join(problems))
+PY
+}
+
+if [ "${FIXTURE_READY}" -ne 1 ]; then
+  fx_unavailable "Arm 11: the binding is reported"
+else
+  # Control: the parser counts the exact line and ignores a line that a pattern search
+  # for the key would take for it.
+  printf '%s\n' 'INFO: Resolved P = /x (source: cli); templates are read from /y' > "${LOGS}/11-bait.err"
+  printf '%s\n' 'INFO: Resolved P = /x (source: cli); templates are read from /y' \
+    "INFO: Resolved [PMO_PLATFORM_ROOT] = ${FX_PRIMARY_P} (source: install-record); templates are read from ${FX_W1}" \
+    > "${LOGS}/11-exact.err"
+  s="$(fx_report_check "${LOGS}/11-exact.err" "${FX_PRIMARY_P}" install-record "${FX_W1}")"
+  p="$(fx_report_check "${LOGS}/11-bait.err" "${FX_PRIMARY_P}" install-record "${FX_W1}")"
+  if [ "${s}" = "OK" ] && [ "${p}" = "0 report lines (want exactly 1)" ]; then
+    report "11: control — the report key is matched as a fixed string (the exact line counted, the bait ignored)" 1
+  else
+    report "11: control — the report key is matched as a fixed string" 0 "exact-line log: ${s}; bait-only log: ${p}"
+  fi
+
+  while IFS='|' read -r log want_source tree; do
+    [ -n "${log}" ] || continue
+    verdict="$(fx_report_check "${LOGS}/${log}.err" "${FX_PRIMARY_P}" "${want_source}" "${tree}")"
+    if [ "${verdict}" = "OK" ]; then
+      report "${log}: names the main checkout, tier ${want_source}, and its own template checkout" 1
+    else
+      report "${log}: reports the binding it used" 0 "${verdict}"
+    fi
+  done <<EOF
+8-primary|install-record|${FX_PRIMARY}
+8-w1|install-record|${FX_W1}
+8-scratch|install-record|${FX_SCRATCH}
+8c-wb|install-record|${FX_WB}
+9-w1|main-worktree|${FX_W1}
+10-w1|install-record|${FX_W1}
+EOF
+
+  if grep -q '^NOTE: install-record tier skipped:' "${LOGS}/9-w1.err" 2>/dev/null; then
+    report "9-w1: the skipped install-record tier is named, not only its result" 1
+  else
+    report "9-w1: the skipped install-record tier is named, not only its result" 0 \
+      "no 'NOTE: install-record tier skipped:' line on stderr"
+  fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
