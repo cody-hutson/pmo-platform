@@ -11750,6 +11750,246 @@ STUB
   GH="$_ms_saved_gh"; PR_NUMBER="$_ms_saved_pr"; REPO_SLUG="$_ms_saved_slug"; MERGE_SHA="$_ms_saved_mergesha"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # Test 4h.2: read_state's Cycle-Time carriage and the read-only field verdict
+  # (#6252, group CY) — offline, hermetic. read_state carries compute-cycle-time.sh's
+  # value, or the tool's OWN N/A reason verbatim, into the report, the JSON report and
+  # the chore-PR body, in four states that never share a member (a value · N/A with its
+  # reason · N/A — DEGRADED · NOT-EVALUATED), and reports read-only whether the
+  # Deployment Log **Cycle-Time:** field carries it. The producer is a stub everywhere
+  # except the SEAM arms (CY-6c, CY-7, CY-8, CY-13), which run the REAL tool against a
+  # fixture event log through EVALS_RESULTS_PATH, so a change to the tool's
+  # `Cycle-Time: N/A (` prefix, its exit-1 contract or its negative-interval WARNING
+  # reddens HERE instead of degrading a close silently. The RELEASE_LOG fixture sits in
+  # its OWN directory, because the block resolver globs RELEASE_LOG_ARCHIVE-*.md beside
+  # it. Arms read the verdict state through ${VAR:-}, so a read_state that does not set
+  # it reports named failures rather than a set -u abort.
+  local _cy_s_cct="$COMPUTE_CYCLE_TIME" _cy_s_gh="$GH" _cy_s_log="$RELEASE_LOG" _cy_s_ver="$VERSION"
+  local _cy_s_pr="$PR_NUMBER" _cy_s_slug="$REPO_SLUG" _cy_s_msha="$MERGE_SHA"
+  local _cy_s_mslug="$STATE_MILESTONE_SLUG" _cy_s_mstate="$STATE_MILESTONE_STATE"
+  local _cy_s_evals="${EVALS_RESULTS_PATH-__cy_unset__}" _cy_s_rlf="${RELEASE_LOG_FILE-__cy_unset__}"
+  local _cy_tmp _cy_body _cy_det _cy_want _cy_line _cy_rc _cy_h0 _cy_h1 _cy_h2
+  _cy_tmp="$(/usr/bin/mktemp -d -t cycletime-selftest.XXXXXX)"
+  /bin/mkdir -p "$_cy_tmp/log" "$_cy_tmp/evals" "$_cy_tmp/evals-empty" "$_cy_tmp/stub"
+  RELEASE_LOG="$_cy_tmp/log/RELEASE_LOG.md"; VERSION="v9.91"; PR_NUMBER="9191"; REPO_SLUG="x/y"
+  STATE_MILESTONE_SLUG="cy-selftest"
+  export EVALS_RESULTS_PATH="$_cy_tmp/evals" RELEASE_LOG_FILE="$RELEASE_LOG"
+  # $GH stub: the milestone state and the release PR's merge commit, nothing else.
+  /bin/cat > "$_cy_tmp/stub/gh.sh" <<'STUB'
+#!/bin/bash
+if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "c0ffeec0ffeec0ffeec0ffeec0ffeec0ffeec0ff"; exit 0; fi
+if [[ "$1" == "api" ]]; then echo "closed"; exit 0; fi
+exit 0
+STUB
+  # The producer stand-in: answers --iso with fixed anchors (what a DIVERGENT verdict
+  # quotes) and otherwise replays the case files _cy_case writes beside it.
+  /bin/cat > "$_cy_tmp/stub/producer.sh" <<'STUB'
+#!/bin/bash
+case " $* " in *" --iso "*) echo "T_GO=2026-01-05T10:00:00Z; T_DEPLOY=2026-01-05T10:48:00Z; delta=2880s"; exit 0 ;; esac
+d="$(/usr/bin/dirname "$0")"
+if [[ -s "$d/case.out" ]]; then /bin/cat "$d/case.out"; fi
+if [[ -s "$d/case.err" ]]; then /bin/cat "$d/case.err" >&2; fi
+exit "$(/bin/cat "$d/case.rc")"
+STUB
+  /bin/chmod +x "$_cy_tmp/stub/gh.sh" "$_cy_tmp/stub/producer.sh"
+  GH="$_cy_tmp/stub/gh.sh"; COMPUTE_CYCLE_TIME="$_cy_tmp/stub/producer.sh"
+  _cy_case() {  # <stdout> <stderr> <exit status> — one producer case
+    : > "$_cy_tmp/stub/case.out"; : > "$_cy_tmp/stub/case.err"
+    if [[ -n "$1" ]]; then /usr/bin/printf '%s\n' "$1" > "$_cy_tmp/stub/case.out"; fi
+    if [[ -n "$2" ]]; then /usr/bin/printf '%s\n' "$2" > "$_cy_tmp/stub/case.err"; fi
+    /usr/bin/printf '%s\n' "$3" > "$_cy_tmp/stub/case.rc"
+  }
+  _cy_log() {  # <the v9.91 block's **Cycle-Time:** line verbatim, or empty for none>
+    {
+      /usr/bin/printf '# Release Log\n\n| Version | Milestone |\n|---|---|\n| v9.90 | cy-older |\n\n#### Deployment Log v9.91\n**Files deployed:** none\n**Timestamp:** 2026-01-05 10:48\n'
+      if [[ -n "$1" ]]; then /usr/bin/printf '%s\n' "$1"; fi
+      /usr/bin/printf '**Result:** SUCCESS\n\n#### Deployment Log v9.90\n**Cycle-Time:** 1h0m\n**Result:** SUCCESS\n'
+    } > "$RELEASE_LOG"
+  }
+  _cy_evlog() {  # <data row>... — the fixture event log, in the query tool's layout
+    local _cy_r
+    {
+      /usr/bin/printf '| ts_iso | version | stage | event_type | event_subtype | actor | subject | reversibility | outcome | payload |\n|---|---|---|---|---|---|---|---|---|---|\n'
+      for _cy_r in "$@"; do /usr/bin/printf '%s\n' "$_cy_r"; done
+    } > "$_cy_tmp/evals/pipeline-event-log.md"
+  }
+  _cy_run() {  # read_state from a clean phase record and clean cycle-time state
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    STATE_CYCLE_TIME=""; STATE_CYCLE_TIME_NOTE=""; STATE_CYCLE_TIME_FIELD=""; STATE_CYCLE_TIME_FIELD_CLASS=""
+    _CY_RC=0; phase_read_state >/dev/null 2>&1 || _CY_RC=$?
+  }
+  local _cy_go_row='| 2026-01-05T10:05:00Z | v9.91 | 9 | gate-outcome | plan-review-go | operator | milestone:#1 | MODERATE | resolved | ms:#1; verdict:GO |'
+  local _cy_dep_row='| 2026-01-05T10:00:00Z | v9.91 | 12 | deployment-status | deploy-skill | hub | skill:release-hub | CHEAP | resolved | mech:deploy.sh --deploy |'
+  _cy_log '**Cycle-Time:** N/A (no gate-outcome/plan-review-go event for v9.91)'
+
+  # CY-1 SENSITIVITY — the missing-anchor fixture (#6252 AC-2). The tool prints N/A on
+  # stdout and its ONE reason line on stderr; the reason reaches every surface this run
+  # writes, byte for byte. RED on the capture that discarded stderr.
+  _cy_case 'N/A' 'Cycle-Time: N/A (no gate-outcome/plan-review-go event for v9.91)' 0
+  _cy_run
+  _st_arm CY CY-1; [[ "$STATE_CYCLE_TIME" == "N/A (no gate-outcome/plan-review-go event for v9.91)" ]] || { echo "FAIL: CY-1 — read_state must carry the tool's own N/A reason verbatim, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- 'N/A (no gate-outcome/plan-review-go event for v9.91)' <<<"$(build_chore_pr_body)" || { echo "FAIL: CY-1 — the chore-PR ## Cycle time block must carry the tool's reason line verbatim"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- '- Cycle time: N/A (no gate-outcome/plan-review-go event for v9.91)' <<<"$(generate_markdown_report 2>/dev/null)" || { echo "FAIL: CY-1 — the report's Cycle time line must carry the tool's reason verbatim"; failures=$((failures+1)); }
+  /usr/bin/grep -qF -- '"cycle_time": "N/A (no gate-outcome/plan-review-go event for v9.91)"' <<<"$(generate_json_report 2>/dev/null)" || { echo "FAIL: CY-1 — the JSON report's cycle_time must carry the tool's reason verbatim"; failures=$((failures+1)); }
+
+  # CY-2 CONTROL — a computed value is carried as itself, with no reason and no note.
+  _cy_case '48m' '' 0
+  _cy_run
+  _st_arm CY CY-2; [[ "$STATE_CYCLE_TIME" == "48m" && -z "${STATE_CYCLE_TIME_NOTE:-}" ]] || { echo "FAIL: CY-2 — a silent producer's value must be carried as itself with no note, got '$STATE_CYCLE_TIME' and note '${STATE_CYCLE_TIME_NOTE:-}'"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- '48m' <<<"$(build_chore_pr_body)" || { echo "FAIL: CY-2 — the chore-PR ## Cycle time block must carry the value line"; failures=$((failures+1)); }
+
+  # CY-3 — the reason names the anchor that is missing, never a stock phrase.
+  _cy_case 'N/A' 'Cycle-Time: N/A (no deployment-status event for v9.91)' 0
+  _cy_run
+  _st_arm CY CY-3; [[ "$STATE_CYCLE_TIME" == *"no deployment-status event for v9.91"* && "$STATE_CYCLE_TIME" != *"plan-review-go"* ]] || { echo "FAIL: CY-3 — a T_DEPLOY-only reason must name deployment-status and not plan-review-go, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+
+  # CY-4 NOT-EVALUATED — a producer failure is not a measured absence (PV-7). (a) exit 2
+  # with the producer's own error; (b) a producer that is not executable; (c) FM-4: a
+  # failure whose stderr carries an absolute path keeps it in the report form, and the
+  # PUBLIC chore-PR body carries only the class and the exit code.
+  _cy_case '' 'ERROR: ts_iso parse failure on (x, y)' 2
+  _cy_run
+  _st_arm CY CY-4; [[ "$STATE_CYCLE_TIME" == "NOT-EVALUATED — "* && "$STATE_CYCLE_TIME" == *"this is not a clean result" && "$STATE_CYCLE_TIME" == *"ts_iso parse failure"* ]] || { echo "FAIL: CY-4 (a) — an exit-2 producer must read NOT-EVALUATED carrying its own error, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  COMPUTE_CYCLE_TIME="$_cy_tmp/stub/absent.sh"
+  _cy_run
+  [[ "$STATE_CYCLE_TIME" == "NOT-EVALUATED — "* ]] || { echo "FAIL: CY-4 (b) — a non-executable producer must read NOT-EVALUATED, never an N/A, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  COMPUTE_CYCLE_TIME="$_cy_tmp/stub/producer.sh"
+  _cy_case '' 'ERROR: query-pipeline-event.sh missing or not executable at /opt/cy-selftest-root/release/tools/query-pipeline-event.sh' 1
+  _cy_run
+  [[ "$STATE_CYCLE_TIME" == *"/opt/cy-selftest-root/"* ]] || { echo "FAIL: CY-4 (c) ANTI-VACUITY — the report form must keep the producer's stderr, else the public-body limb compares over nothing, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  _cy_body="$(build_chore_pr_body)"
+  /usr/bin/grep -qxF -- 'NOT-EVALUATED — compute-cycle-time.sh exited 1 — this is not a clean result' <<<"$_cy_body" || { echo "FAIL: CY-4 (c) — the public chore-PR body must carry the NOT-EVALUATED class and the exit code"; failures=$((failures+1)); }
+  ! /usr/bin/grep -qF -- '/opt/cy-selftest-root/' <<<"$_cy_body" || { echo "FAIL: CY-4 (c) — the public chore-PR body carries the producer's stderr, including an absolute path (FM-4)"; failures=$((failures+1)); }
+
+  # CY-5 DEGRADED — N/A with no reason line is not an N/A with a reason.
+  _cy_case 'N/A' '' 0
+  _cy_run
+  _st_arm CY CY-5; [[ "$STATE_CYCLE_TIME" == "N/A — DEGRADED"* ]] || { echo "FAIL: CY-5 — N/A with no reason line on stderr must read N/A — DEGRADED, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+
+  # CY-6 A NEGATIVE INTERVAL IS NOT A CYCLE TIME (inverted at the scope-lock; review
+  # FM-1). It reads N/A — DEGRADED, a non-value member, with the tool's WARNING kept in
+  # the phase detail. (a) a signed value; (b) a sub-minute negative, which the tool's
+  # human format truncates toward zero and prints UNSIGNED as 0m — so the capture keys
+  # on the stderr WARNING, not on the sign; (c) the SEAM: the real tool on a fixture log
+  # whose T_GO is later than its T_DEPLOY.
+  _cy_case '-5m' 'WARNING: negative cycle-time (-300 s); T_DEPLOY=2026-01-05T10:00:00Z before T_GO=2026-01-05T10:05:00Z — pipeline-event-log integrity issue' 0
+  _cy_run
+  _cy_det="$(get_phase read_state)"
+  _st_arm CY CY-6; [[ "$STATE_CYCLE_TIME" == "N/A — DEGRADED"* && "$_cy_det" == *"WARNING: negative cycle-time"* ]] || { echo "FAIL: CY-6 (a) — a negative interval must read N/A — DEGRADED with the WARNING kept in the read_state detail, got '$STATE_CYCLE_TIME' and '$_cy_det'"; failures=$((failures+1)); }
+  _cy_case '0m' 'WARNING: negative cycle-time (-30 s); T_DEPLOY=2026-01-05T10:00:00Z before T_GO=2026-01-05T10:00:30Z — pipeline-event-log integrity issue' 0
+  _cy_run
+  [[ "$STATE_CYCLE_TIME" == "N/A — DEGRADED"* ]] || { echo "FAIL: CY-6 (b) — a sub-minute negative interval, printed unsigned as 0m, must still read N/A — DEGRADED, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  COMPUTE_CYCLE_TIME="$_cy_s_cct"
+  _cy_evlog "$_cy_go_row" "$_cy_dep_row"
+  _cy_run
+  [[ "$STATE_CYCLE_TIME" == "N/A — DEGRADED"* && "$(get_phase read_state)" == *"WARNING: negative cycle-time"* ]] || { echo "FAIL: CY-6 (c) SEAM — the real tool's negative interval must read N/A — DEGRADED with its WARNING in the detail, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+
+  # CY-7 SEAM — the REAL tool. (i) only a resolved deploy-skill row: the reason names the
+  # missing T_GO and not T_DEPLOY; (ii) only the Stage-9 operator GO row: the reverse.
+  # read_state carries each line exactly as the tool printed it — the expected text is
+  # the tool's own stderr, taken by running it directly — with no pipe character, and
+  # the chore-PR body stays parser-clean. CY-13 is its twin.
+  _cy_evlog "$_cy_dep_row"
+  "$_cy_s_cct" --version v9.91 >/dev/null 2>"$_cy_tmp/tool.err" || true
+  _cy_want="$(/usr/bin/grep -m1 '^Cycle-Time: N/A (' "$_cy_tmp/tool.err" || true)"; _cy_want="${_cy_want#Cycle-Time: }"
+  _cy_run
+  _st_arm CY CY-7; [[ -n "$_cy_want" && "$STATE_CYCLE_TIME" == "$_cy_want" ]] || { echo "FAIL: CY-7 (i) SEAM — read_state must carry the real tool's N/A line verbatim ('$_cy_want'), got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  [[ "$STATE_CYCLE_TIME" == *"plan-review-go"* && "$STATE_CYCLE_TIME" != *"deployment-status"* && "$STATE_CYCLE_TIME" != *"|"* ]] || { echo "FAIL: CY-7 (i) — a T_GO-only miss must name plan-review-go and not deployment-status, with no pipe, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  check_parser_clean "$(build_chore_pr_body)" || { echo "FAIL: CY-7 (i) — the chore-PR body carrying the tool's reason must stay parser-clean"; failures=$((failures+1)); }
+  _cy_evlog "$_cy_go_row"
+  "$_cy_s_cct" --version v9.91 >/dev/null 2>"$_cy_tmp/tool.err" || true
+  _cy_want="$(/usr/bin/grep -m1 '^Cycle-Time: N/A (' "$_cy_tmp/tool.err" || true)"; _cy_want="${_cy_want#Cycle-Time: }"
+  _cy_run
+  [[ -n "$_cy_want" && "$STATE_CYCLE_TIME" == "$_cy_want" ]] || { echo "FAIL: CY-7 (ii) SEAM — read_state must carry the real tool's N/A line verbatim ('$_cy_want'), got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  [[ "$STATE_CYCLE_TIME" == *"deployment-status"* && "$STATE_CYCLE_TIME" != *"plan-review-go"* && "$STATE_CYCLE_TIME" != *"|"* ]] || { echo "FAIL: CY-7 (ii) — a T_DEPLOY-only miss must name deployment-status and not plan-review-go, with no pipe, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  check_parser_clean "$(build_chore_pr_body)" || { echo "FAIL: CY-7 (ii) — the chore-PR body carrying the tool's reason must stay parser-clean"; failures=$((failures+1)); }
+
+  # CY-8 — the exit contract the capture relies on: the real tool exits 0 with stdout
+  # N/A when an anchor is missing (the reason travels on stderr only).
+  _cy_rc=0; _cy_line="$("$_cy_s_cct" --version v9.91 2>/dev/null)" || _cy_rc=$?
+  _st_arm CY CY-8; [[ "$_cy_rc" -eq 0 && "$_cy_line" == "N/A" ]] || { echo "FAIL: CY-8 — the real tool must exit 0 with stdout N/A on a missing anchor, got rc=$_cy_rc and '$_cy_line'"; failures=$((failures+1)); }
+
+  # CY-9 THE FIELD VERDICT, read-only, over the fixture block. (a) the verbatim line
+  # CONFORMS; (b) a hand-written cause DIVERGES, worded as a disagreement and carrying the
+  # tool's --iso anchors (review PR-1); (c) no field is ABSENT, and the sibling block's
+  # field is not borrowed; (d) a value followed by its anchor parenthetical CONFORMS;
+  # (e) 480m against 48m DIVERGES — the boundary; (f) a qualified key DIVERGES; (g) THE
+  # KEY PIN (review FM-3): the verbatim line produced under the milestone slug DIVERGES
+  # from the one produced under the RELEASE_LOG row's Version cell, (a) being its twin.
+  COMPUTE_CYCLE_TIME="$_cy_tmp/stub/producer.sh"
+  _cy_case 'N/A' 'Cycle-Time: N/A (no gate-outcome/plan-review-go event for v9.91)' 0
+  _cy_log '**Cycle-Time:** N/A (no gate-outcome/plan-review-go event for v9.91)'; _cy_run
+  _st_arm CY CY-9; [[ "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "CONFORMANT" ]] || { echo "FAIL: CY-9 (a) — the tool's verbatim line must read CONFORMANT, got '${STATE_CYCLE_TIME_FIELD_CLASS:-}'"; failures=$((failures+1)); }
+  _cy_log '**Cycle-Time:** N/A — (T_GO=none; T_DEPLOY=2026-01-05T10:48:00Z; mechanism: compute-cycle-time.sh) no GO was emitted'; _cy_run
+  [[ "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "DIVERGENT" && "${STATE_CYCLE_TIME_FIELD:-}" == *"disagree"* && "${STATE_CYCLE_TIME_FIELD:-}" == *"T_GO=2026-01-05T10:00:00Z; T_DEPLOY=2026-01-05T10:48:00Z"* ]] || { echo "FAIL: CY-9 (b) — a hand-written cause must read DIVERGENT, worded as a disagreement and carrying the tool's --iso anchors, got '${STATE_CYCLE_TIME_FIELD:-}'"; failures=$((failures+1)); }
+  _cy_log ''; _cy_run
+  [[ "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "ABSENT" ]] || { echo "FAIL: CY-9 (c) — a block with no **Cycle-Time:** field must read ABSENT, not the sibling block's field, got '${STATE_CYCLE_TIME_FIELD_CLASS:-}'"; failures=$((failures+1)); }
+  _cy_case '48m' '' 0
+  _cy_log '**Cycle-Time:** 48m  (T_GO=2026-01-05T10:00:00Z → T_DEPLOY=2026-01-05T10:48:00Z; mechanism: compute-cycle-time.sh)'; _cy_run
+  [[ "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "CONFORMANT" ]] || { echo "FAIL: CY-9 (d) — a value followed by its anchor parenthetical must read CONFORMANT, got '${STATE_CYCLE_TIME_FIELD_CLASS:-}'"; failures=$((failures+1)); }
+  _cy_log '**Cycle-Time:** 480m  (T_GO=2026-01-05T10:00:00Z → T_DEPLOY=2026-01-05T18:00:00Z; mechanism: compute-cycle-time.sh)'; _cy_run
+  [[ "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "DIVERGENT" ]] || { echo "FAIL: CY-9 (e) BOUNDARY — 480m against the tool's 48m must read DIVERGENT, got '${STATE_CYCLE_TIME_FIELD_CLASS:-}'"; failures=$((failures+1)); }
+  _cy_log '**Cycle-Time (Stage-12 read):** 48m'; _cy_run
+  [[ "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "DIVERGENT" && "${STATE_CYCLE_TIME_FIELD:-}" == *"QUALIFIED"* ]] || { echo "FAIL: CY-9 (f) — a qualified key must read DIVERGENT and name the key class, got '${STATE_CYCLE_TIME_FIELD:-}'"; failures=$((failures+1)); }
+  _cy_case 'N/A' 'Cycle-Time: N/A (no gate-outcome/plan-review-go event for v9.91)' 0
+  _cy_log '**Cycle-Time:** N/A (no gate-outcome/plan-review-go event for cy-selftest)'; _cy_run
+  [[ "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "DIVERGENT" ]] || { echo "FAIL: CY-9 (g) KEY PIN — the line produced under the milestone slug must read DIVERGENT against the Version-keyed tool line, got '${STATE_CYCLE_TIME_FIELD_CLASS:-}'"; failures=$((failures+1)); }
+
+  # CY-10 NO PHANTOM WRITE SURFACE. A DIVERGENT excerpt quoting a parenthesised .md path
+  # verbatim would be read as a surface this run wrote (_reported_write_surfaces) and
+  # FAIL the close at commit time, and a pipe would split the phase row. The excerpt
+  # reaches the detail neutralized. Anti-vacuity: the fixture line carries both hazards,
+  # the excerpt DID reach the detail, and the reader DOES lift an un-neutralized token.
+  _cy_case '48m' '' 0
+  _cy_line='**Cycle-Time:** 7h0m | see (fake-surface.md)'
+  _cy_log "$_cy_line"; _cy_run
+  _cy_det="$(get_phase read_state)"
+  _st_arm CY CY-10; ! /usr/bin/grep -qF 'fake-surface.md' <<<"$(_reported_write_surfaces)" || { echo "FAIL: CY-10 — a DIVERGENT excerpt became a phantom write surface"; failures=$((failures+1)); }
+  [[ "${_cy_det#*|}" != *"|"* && "$_cy_det" == *"[fake-surface.md]"* ]] || { echo "FAIL: CY-10 — the detail must carry the field excerpt with ( ) | neutralized, got '$_cy_det'"; failures=$((failures+1)); }
+  [[ "$_cy_line" == *"(fake-surface.md)"* && "$_cy_line" == *"|"* ]] || { echo "FAIL: CY-10 ANTI-VACUITY — the fixture line must carry both hazards"; failures=$((failures+1)); }
+  PHASE_NAMES=("zz_cy_control"); PHASE_RESULTS=("PASS"); PHASE_DETAILS=("wrote (fake-surface.md)")
+  /usr/bin/grep -qF 'fake-surface.md' <<<"$(_reported_write_surfaces)" || { echo "FAIL: CY-10 CAPABILITY — _reported_write_surfaces must lift an un-neutralized token, else the zero above is not a measurement"; failures=$((failures+1)); }
+
+  # CY-11 READ-ONLY — the verdict never writes the record it reads: the fixture's
+  # content hash is unchanged across read_state (the m10 instrument), and the same
+  # instrument moves on a known write.
+  _cy_log '**Cycle-Time:** N/A — hand-written'
+  _cy_h0="$(/usr/bin/shasum "$RELEASE_LOG" | /usr/bin/cut -d' ' -f1)"; _cy_run
+  _cy_h1="$(/usr/bin/shasum "$RELEASE_LOG" | /usr/bin/cut -d' ' -f1)"
+  _st_arm CY CY-11; [[ "$_cy_h0" == "$_cy_h1" ]] || { echo "FAIL: CY-11 — read_state wrote the Deployment Log it only reads"; failures=$((failures+1)); }
+  /usr/bin/printf 'x\n' >> "$RELEASE_LOG"; _cy_h2="$(/usr/bin/shasum "$RELEASE_LOG" | /usr/bin/cut -d' ' -f1)"
+  [[ "$_cy_h2" != "$_cy_h1" ]] || { echo "FAIL: CY-11 ANTI-VACUITY — the hash instrument did not move on a known write, so the unchanged result above is not a measurement"; failures=$((failures+1)); }
+
+  # CY-12 NON-BLOCKING — every verdict class returns 0 and marks read_state PASS, and the
+  # verdict under test is the one the fixture produces.
+  _cy_log '**Cycle-Time:** 480m'; _cy_run
+  _st_arm CY CY-12; [[ "$_CY_RC" -eq 0 && "$(get_phase read_state)" == PASS\|* && "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "DIVERGENT" ]] || { echo "FAIL: CY-12 — a DIVERGENT field must not block: rc=$_CY_RC, '$(get_phase read_state | /usr/bin/cut -d'|' -f1)', class '${STATE_CYCLE_TIME_FIELD_CLASS:-}'"; failures=$((failures+1)); }
+  _cy_log ''; _cy_run
+  [[ "$_CY_RC" -eq 0 && "$(get_phase read_state)" == PASS\|* && "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "ABSENT" ]] || { echo "FAIL: CY-12 — an ABSENT field must not block: rc=$_CY_RC, class '${STATE_CYCLE_TIME_FIELD_CLASS:-}'"; failures=$((failures+1)); }
+  _cy_case '' 'ERROR: stub failure' 1
+  _cy_log '**Cycle-Time:** 48m'; _cy_run
+  [[ "$_CY_RC" -eq 0 && "$(get_phase read_state)" == PASS\|* && "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "NOT-EVALUATED" ]] || { echo "FAIL: CY-12 — a NOT-EVALUATED verdict must not block: rc=$_CY_RC, class '${STATE_CYCLE_TIME_FIELD_CLASS:-}'"; failures=$((failures+1)); }
+
+  # CY-13 THE UNREADABLE LOG (INT-4; review FM-1) — the REAL tool against an empty evals
+  # directory exits 1, and read_state renders NOT-EVALUATED, never an N/A with a reason: a
+  # read that never happened is not a measured absence. The public body carries the class
+  # and the exit code. CY-7 is its twin.
+  export EVALS_RESULTS_PATH="$_cy_tmp/evals-empty"
+  COMPUTE_CYCLE_TIME="$_cy_s_cct"
+  _cy_run
+  _st_arm CY CY-13; [[ "$STATE_CYCLE_TIME" == "NOT-EVALUATED — compute-cycle-time.sh exited 1"* && "$STATE_CYCLE_TIME" != "N/A ("* ]] || { echo "FAIL: CY-13 — an unreadable event log must read NOT-EVALUATED with the tool's exit 1, never an N/A with a reason, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- 'NOT-EVALUATED — compute-cycle-time.sh exited 1 — this is not a clean result' <<<"$(build_chore_pr_body)" || { echo "FAIL: CY-13 — the public chore-PR body must carry the NOT-EVALUATED class and exit code"; failures=$((failures+1)); }
+  _st_witness CY 13
+
+  unset -f _cy_case _cy_log _cy_evlog _cy_run
+  /bin/rm -rf "$_cy_tmp" 2>/dev/null || true
+  COMPUTE_CYCLE_TIME="$_cy_s_cct"; GH="$_cy_s_gh"; RELEASE_LOG="$_cy_s_log"; VERSION="$_cy_s_ver"
+  PR_NUMBER="$_cy_s_pr"; REPO_SLUG="$_cy_s_slug"; MERGE_SHA="$_cy_s_msha"
+  STATE_MILESTONE_SLUG="$_cy_s_mslug"; STATE_MILESTONE_STATE="$_cy_s_mstate"
+  if [[ "$_cy_s_evals" == "__cy_unset__" ]]; then unset EVALS_RESULTS_PATH; else export EVALS_RESULTS_PATH="$_cy_s_evals"; fi
+  if [[ "$_cy_s_rlf" == "__cy_unset__" ]]; then unset RELEASE_LOG_FILE; else export RELEASE_LOG_FILE="$_cy_s_rlf"; fi
+  STATE_CYCLE_TIME=""; STATE_CYCLE_TIME_NOTE=""; STATE_CYCLE_TIME_FIELD=""; STATE_CYCLE_TIME_FIELD_CLASS=""
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # Test 5: check_parser_clean — must reject close-family + #N
   check_parser_clean "Safe summary text" || { echo "FAIL: parser-clean on safe text"; failures=$((failures+1)); }
   ! check_parser_clean "This closes #123" || { echo "FAIL: parser-clean should reject 'closes #123'"; failures=$((failures+1)); }
@@ -15763,6 +16003,7 @@ EOF
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  Surface-1 provenance token validated (#4732 — BOTH ARMS of the detection question, offline on fixtures: (e) CREATED on the State-0 create path / (f) NO-OP on a State-2 fixture whose body is extracted with the phase's OWN expression and asserted non-empty, so the no-op is genuine rather than a '' vs '' comparison / (g) EDITED on a State-1 differing-body fixture / (h) SPECIFICITY: neither found arm reports CREATED, without which a stub emitting CREATED unconditionally satisfies (e) and the suite is vacuous / (i) AGGREGATION NON-REGRESSION, the load-bearing arm: the create path keeps outcome token PASS, so a drift-tool exit 3 still reaches the WARN limb at :6224 and not the N/A limb at :6222 — this arm FAILS if anyone later promotes CREATED to its own mark_phase token and silently inverts :6221)" >&2
   _st_claim 4h-e-j "  §5.1 empty-body guard + conformance-fixture binding validated (#4912, group 4h-e..j — six arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): (e) an EMPTY strip aborts the EDIT path and marks publish FAIL, asserted on the STUB'S ARGV FILE — gh release edit must never have been INVOKED, because reporting after an irreversible overwrite is a report and not a guard, and GitHub keeps no Release-body history to revert / (f) the ANTI-VACUITY twin for (e) over the SAME stub and version with a well-formed note: the edit must be REACHED, the H1 must survive the strip and the frontmatter must NOT — without it (e) is satisfied by a stub that cannot invoke gh at all, and the raw-YAML-publish defect goes ungraded / (g) the CREATE path is the second call site and takes the same rule, asserted on its own argv file rather than on (e)'s / (h) the anti-vacuity twin for (g), same shape, so neither empty-body arm can pass by never reaching gh / (i) the sourced shell transform is bound to the SAME committed fixture that binds both Python mirrors, resolved from SCRIPT_DIR and never REPO_ROOT because the arms above reassign REPO_ROOT to a sandbox, behind a >=7-case iteration floor so a truncated or absent fixture cannot report clean by iterating zero times / (j) the TRANSFORM-PRESENT guard, graded on the DETAIL rather than on the verdict and that is the whole arm: with the guard removed an undefined function still yields an empty capture, so the empty-body backstop fires and all three verdict assertions pass on unguarded code — measured, not assumed — leaving the detail the only discriminator; the restore is then proven, else every later arm in the suite would be measuring an unset function / (k)(l)(m) THE TITLE DIMENSION, the arms that make AC-3's title-equality predicate an EXECUTED check rather than an echo inside a markdown fence: (k) SENSITIVITY — a canonical BODY with a stale posted title must still reach gh release edit carrying --title and the NOTE-DERIVED value, asserted on the stub's ARGV FILE because a phase can record any detail string it likes and only the argv shows what was sent; this is the exact input the pre-change no-op condition returned SKIPPED on, which is how a wrong title survived every close / (l) SPECIFICITY over the SAME fixture family with only the posted title changed to agree: the argv file must stay ABSENT and the token must stay SKIPPED — non-vacuous precisely because (k) proved this family CAN reach the edit, and pinning the token is what catches a withhold routed through _s1_outcome_override, which BOTH terminal mark_phase calls read and which would silently flip the no-op branch too / (m) WITHHOLD — a note with no usable H1 must still refresh the BODY while --title is ABSENT from the argv rather than empty (\`--title \"\"\` blanks the posted title, the one-way degradation the rule exists to prevent), and the outcome token must stay PASS: ADR-148 :91 forbids moving it, and phase 15.6 branches on pub_result != PASS, so a WARN here would report an edited Release as 'Surface 1 not emitted this run' and suppress the body-drift verdict on exactly the malformed-note input where it matters most. All three fixtures' view stubs are OPERAND-AWARE (--json body vs --json name); the undiscriminated shape they replaced returned the whole body as the posted title, which would have reddened (f) and graded (g)'s title dimension against a value no Release ever carries"
+  _st_claim CY "  phase_read_state Cycle-Time carriage and the read-only Deployment Log field verdict validated (#6252, group CY — 13 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): CY-1 SENSITIVITY the missing-anchor fixture — the tool's own N/A reason reaches the state, the chore-PR ## Cycle time block, the report line and the JSON field byte for byte, RED on the capture that discarded stderr / CY-2 CONTROL a computed value is carried as itself with no note / CY-3 the reason names the missing anchor, never a stock phrase / CY-4 NOT-EVALUATED for an exit-2 producer carrying its own error and for a non-executable one, never an N/A; FM-4: a failure whose stderr carries an absolute path keeps it in the report form and reaches the PUBLIC chore-PR body as its class and exit code only, with the report-form limb as the anti-vacuity control / CY-5 N/A with no reason line reads N/A — DEGRADED / CY-6 INVERTED at the scope-lock: a negative interval is not a cycle time and reads N/A — DEGRADED with the tool's WARNING kept in the phase detail, for a signed value, for a sub-minute negative the human format prints unsigned as 0m (so the WARNING, not the sign, is the key), and through the REAL tool on inverted fixture anchors / CY-7 SEAM the REAL tool on a fixture log: a T_GO-only miss and a T_DEPLOY-only miss each reach the state exactly as the tool printed them, naming their own anchor, with no pipe, and the body stays parser-clean / CY-8 the exit contract the capture relies on — N/A exits 0 with stdout N/A / CY-9 THE FIELD VERDICT, read-only: the verbatim line CONFORMS, a hand-written cause DIVERGES worded as a disagreement carrying the tool's --iso anchors, a missing field is ABSENT and the sibling block's field is not borrowed, a value followed by its anchor parenthetical CONFORMS, 480m against 48m DIVERGES at the boundary, a qualified key DIVERGES, and THE KEY PIN — the verbatim line produced under the milestone slug DIVERGES from the one produced under the RELEASE_LOG row's Version cell / CY-10 NO PHANTOM WRITE SURFACE: a DIVERGENT excerpt carrying a parenthesised .md path and a pipe reaches the detail neutralized, with anti-vacuity limbs on the fixture, on the excerpt's presence in the detail and on the reader's capability to lift an un-neutralized token / CY-11 READ-ONLY by content hash, the instrument shown to move on a known write / CY-12 NON-BLOCKING: DIVERGENT, ABSENT and NOT-EVALUATED each return 0 and mark read_state PASS / CY-13 INT-4: the REAL tool against an empty evals directory exits 1, and read_state renders NOT-EVALUATED, never an N/A with a reason, with the class and exit code in the public body"
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  close-out report phase set is RECORD-DERIVED validated (#4773 — every recorded phase renders against a denominator parsed from this file's own mark_phase subjects (pre-fix: 3 missing — inject_velocity_field / append_release_learnings / audit_epic_rollup) / a phase in NO enumeration still renders (AC-2) / an unmarked name does NOT render (anti-vacuity) / post_gate_passage_proof renders AND is asserted definition-less, so a definition-derived set cannot silently drop it / a double-marked name renders ONE row carrying the FIRST result / the halted marker fires on a FAIL-terminated run and is absent on a clean one / DISPATCH<->RECORD cross-check: every dispatched phase is a record subject, with vacuity floors on both parses plus sensitivity and specificity arms — the one invariant no seeded arm can reach / JSON twin carries the same de-duplicated set with pre-existing keys intact)" >&2
   echo "  Gate-Passage-Proof **Chore PR:** field renders ONCE on BOTH paths (#4322 — b1 POPULATED path, the path the pre-existing report arms never exercised: exactly one **Chore PR:** line carrying the number once, and the doubled form absent / b2 UNSET path, the previously-covered one, renders the fallback verbatim with no '#' / b3 SPECIFICITY on a NON-numeric fixture, because '#3697' contains '3697' so 'no bare number' is unfalsifiable on a numeric input: the value occurs exactly once on the line, counted in PURE BASH by length-delta rather than by grep_count -o, which counts LINES on this suite's BSD grep and so returns the PASS value on the doubled form — paired with the anti-vacuity control asserting the identical computation returns 2 over the pre-fix expansion / b4 EXECUTABLE SENSITIVITY: the pre-fix construct is expanded from a single-quoted source fixture and must BOTH reproduce the doubling AND be rejected by b1's matcher, without which b1's green result is uninformative / b5 REINTRODUCTION GUARD: the production region above self_test carries ZERO same-variable paired set/unset expansions on CHORE_PR_NUMBER, with an anti-vacuity control asserting the same matcher returns 1 on the known-bad source form, so the zero is a measurement rather than a broken probe / b6 the out-of-scope --no-merge deferral message's solitary set-arm is asserted unchanged in BOTH directions, so the fix did not generalize into a correct site / b7 AC-5: with the **Chore PR:** line stripped, two renders differing only in CHORE_PR_NUMBER are byte-identical, preceded by the anti-vacuity arm that the unstripped renders differ — b7 is invariant to a render-line revert BY DESIGN, so the executed mutation-kill set is b1/b3/b5)" >&2
