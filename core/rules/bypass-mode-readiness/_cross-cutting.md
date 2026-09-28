@@ -123,7 +123,7 @@ These eight are the allowlists the bypass-mode hooks consult. The broader worksp
 
 The helper validates that the target is one of the **9** allowlists it knows and that the entry has no control characters. All additions are logged to `.claude/hooks/allowlist-additions.log`.
 
-**Nine, not the eight in the table above — the two populations are different by design.** The table enumerates the allowlists the *bypass-mode hooks consult*; the helper's known set is those eight **plus** `.claude/skill-editor-exemption-list.txt`, which the boundary note above assigns to its own discipline doc rather than to this registry. Read the count as a property of the helper, not of this table.
+**Nine, not the eight in the table above — the two populations are different by design.** The table enumerates the allowlists the *bypass-mode hooks consult*; the helper's known set is those eight **plus** the operator-instance skill-editor exemption list (the path `pmo_skill_editor_exemption_list()` resolves), which the boundary note above assigns to its own discipline doc rather than to this registry. Read the count as a property of the helper, not of this table.
 
 **Where the entry lands, and why it matters.** A deployed allowlist is a composed file: the update path regenerates it and preserves only what sits between its `BEGIN`/`END OPERATOR ADDITIONS` markers. The helper therefore inserts the entry **inside that region**, immediately before the `END` marker, so the grant survives the next update. Two consequences worth knowing before you run it:
 

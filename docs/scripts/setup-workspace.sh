@@ -2579,8 +2579,11 @@ install_hooks() {
   # coworker/org/client-project needle scan); the source lib lives at core/deploy/
   # (shared with deploy.sh + git-pre-commit-pii.sh), which the deployed .claude/hooks/
   # cannot reach — so without this copy the hook's localized-needle class silently
-  # no-ops. It is a sourced lib, not a registered hook (no block-* name), so the
-  # hook-registry checks correctly ignore it. Mirrors the path-leak primitive co-deploy.
+  # no-ops. The Gate 2 skill-edit hook and allowlist-add.sh resolve the skill-editor
+  # exemption list through it too: without the copy the hook grants no exemption and the
+  # writer refuses the list. The list's seed path (the manifest row) is unchanged. It is
+  # a sourced lib, not a registered hook (no block-* name), so the hook-registry checks
+  # correctly ignore it. Mirrors the path-leak primitive co-deploy.
   local needlelib_src="${SOURCE_REPO}/core/deploy/lib-instance-path.sh"
   local needlelib_dst="${WORKSPACE_ROOT}/.claude/hooks/lib-instance-path.sh"
   if [ ! -r "${needlelib_src}" ]; then
