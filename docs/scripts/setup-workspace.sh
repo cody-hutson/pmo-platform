@@ -285,7 +285,8 @@ Idempotency:
   entry to determine routing:
     (a) ABSENT        → fresh-install (creates dirs, resolves tokens, installs hooks)
     (b) VALID         → re-bootstrap (reads cache, reconciles drift)
-    (c) CORRUPT       → guided recovery (prompts repair/backup/exit)
+    (c) CORRUPT       → guided recovery (prompts repair/backup/exit; under
+                        --non-interactive it prompts nothing and exits 66 unmodified)
 
   Per-file hook drift decisions cached in state to avoid re-prompting on
   unchanged inputs across re-runs.
@@ -2434,6 +2435,15 @@ install_hook_with_checksum() {
   warn "DRIFT: ${basename}"
   warn "  Source SHA: ${source_sha}"
   warn "  Target SHA: ${target_sha}"
+  # --non-interactive never prompts and never reads stdin: the deployed copy is left in
+  # place (the prompt's default, N). Nothing is recorded, deliberately. An
+  # operator_decision that no operator made would silently suppress this prompt on the
+  # next interactive run, and recording the deployed bytes as the baseline would let the
+  # next --refresh-hooks read an operator edit as an unedited platform copy.
+  if [ "${NON_INTERACTIVE}" -eq 1 ]; then
+    warn "PRESERVED (non-interactive): ${basename} — not overwritten and no decision recorded. Re-run without --non-interactive to decide, or take the source version with: docs/scripts/setup-workspace.sh --reconcile-hooks --workspace-root ${WORKSPACE_ROOT} --source-repo ${SOURCE_REPO}"
+    return 0
+  fi
   local response=""
   while true; do
     printf '  Overwrite? (y/N/diff): ' >&2
@@ -2856,7 +2866,15 @@ configure_hook_activation() {
     return 0
   fi
 
-  # Prompt — default OFF. Non-interactive / EOF → OFF (the public-safe default).
+  # --non-interactive: take the declared default (OFF) without prompting or reading
+  # stdin -- the same value a closed stdin reaches through the read fallback below.
+  if [ "${NON_INTERACTIVE}" -eq 1 ]; then
+    write_security_hooks_config "${cfg}" "false"
+    info "Hook activation set: [security_hooks].master_enabled = false (${cfg}) — non-interactive: declared default, no prompt"
+    return 0
+  fi
+
+  # Prompt — default OFF. EOF → OFF (the public-safe default); --non-interactive returned above.
   local response=""
   printf '\n' >&2
   printf 'Activate the pmo-platform WORKFLOW security hooks now?\n' >&2
@@ -3535,6 +3553,17 @@ guided_recovery() {
     INSTALL_COMPLETE=1   # mark as 'safe' — no mutation; cleanup will skip rollback
     SUPPRESS_VALIDATE_HINT=1
     return 0
+  fi
+
+  # --non-interactive: recovery needs an operator decision an unattended run cannot
+  # make. Take the documented no-mutation default (E) and exit 66 -- the code this
+  # script already uses when an unattended run cannot obtain a required operator
+  # input -- so a caller never reads success from a run that installed nothing.
+  if [ "${NON_INTERACTIVE}" -eq 1 ]; then
+    err "Non-interactive: guided recovery needs an operator decision; exiting without modification (exit 66)."
+    err "  Recovery is entered when the state file's schema_version is missing or is not ${STATE_SCHEMA_VERSION} (a platform upgrade that changes the schema does this to every existing install), or when its last run did not pass verification."
+    err "  Re-run without --non-interactive to choose, or move ${STATE_FILE} aside and re-run for a fresh install."
+    exit 66
   fi
 
   local response=""
@@ -4427,6 +4456,9 @@ reconcile_config_flow() {
 # code here. Answers are handed to the generator via S_ANSWERS; a declined answer
 # leaves the key absent.
 reconcile_prompt_missing() {
+  # Defensive and currently a no-op: the only caller exits 66 under --non-interactive
+  # before calling this. Local so the census (P-10) can verify the guard in place.
+  if [ "${NON_INTERACTIVE}" -eq 1 ]; then return 1; fi
   local pending
   pending=$(
     S_SCHEMA_FILE="$(operator_schema_file)" \

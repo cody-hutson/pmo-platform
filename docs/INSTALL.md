@@ -315,6 +315,8 @@ Recovery action (R/B/E):
 
 **Fix.** Choose **R** or **B** to restart fresh-install (both back up the existing state file with a `.bak.<timestamp>` suffix and re-run all install phases); choose **E** to exit without changes and investigate further. If you re-ran setup after a force-quit (Failure Mode 5.4 above), R/B both let you proceed without losing operator-customized files.
 
+Under `--non-interactive`, setup cannot pick an option for you: it prints the options above, modifies nothing, and exits **66**. The same stop happens when the state file's `schema_version` is missing or is not the version this setup expects, which a platform upgrade that changes the schema causes for every existing install, so an unattended re-run keeps exiting 66 until you choose. Re-run without the flag to choose, or move the state file aside to start a fresh install.
+
 If a specific hook is showing drift and you want to force re-install of that hook only without re-prompting, delete the target hook file and re-run setup — the hook install loop installs from source whenever the target is absent:
 
 ```bash
