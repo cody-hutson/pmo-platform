@@ -10589,6 +10589,119 @@ STUB
   COLLECTED_OPEN_ISSUES=""; EXCLUDED_DETAIL=""
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # ── PRT shared fixtures (#6871) ──────────────────────────────────────────────
+  # ONE response builder for every stub that answers a pull-request read over REST,
+  # so no group's fixtures can drift from another's. It writes the LIVE `gh api -i`
+  # byte layout — the status line ending LF, the headers ending CRLF, one CRLF CRLF,
+  # then the body — because the shared refusal-reason classifier reads a response
+  # only from a status line and splits it at the first blank line: a stub that
+  # echoed a bare JSON body would classify failed-other, and every "merged" arm
+  # would go red for the stub's reason rather than the code's. Every fixture also
+  # carries Access-Control-Expose-Headers, whose VALUE names Retry-After and
+  # X-RateLimit-Remaining exactly as a live response does: that is what makes the
+  # classifier's exact-header-NAME matching load-bearing in these arms.
+  #
+  # _prt_fx <dir> <name> <status> <remaining> <body> [<rc>] [<stderr>] writes
+  # <dir>/<name>.out, .body, .err and .rc. An empty <status> writes NO status line —
+  # a transport failure's shape: empty stdout, the client's error on stderr. rc
+  # defaults to 0 for a 2xx and to 1 otherwise, because gh exits 1 on an HTTP error.
+  _prt_fx() {
+    local _d="$1" _n="$2" _st="$3" _rem="$4" _body="$5" _rc="${6:-}" _err="${7:-}"
+    if [[ -n "$_st" ]]; then
+      /usr/bin/printf 'HTTP/2.0 %s\n%s\r\n%s\r\n%s\r\n%s\r\n\r\n%s' "$_st" \
+        'Access-Control-Expose-Headers: ETag, Link, Location, Retry-After, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Used, X-RateLimit-Resource, X-RateLimit-Reset' \
+        'Content-Type: application/json; charset=utf-8' 'X-Ratelimit-Limit: 5000' \
+        "X-Ratelimit-Remaining: ${_rem}" "$_body" > "$_d/$_n.out"
+      if [[ -z "$_rc" ]]; then
+        case "$_st" in 2*) _rc=0 ;; *) _rc=1 ;; esac
+      fi
+    else
+      : > "$_d/$_n.out"
+      [[ -n "$_rc" ]] || _rc=1
+    fi
+    /usr/bin/printf '%s' "$_body" > "$_d/$_n.body"
+    /usr/bin/printf '%s' "$_err" > "$_d/$_n.err"
+    /usr/bin/printf '%s' "$_rc" > "$_d/$_n.rc"
+  }
+  # _prt_use <dir> <slot> <fixture> — serve an existing fixture under a slot name
+  # the stub routes to (cand, files.<page>, files.all, pull.<number>).
+  _prt_use() {
+    local _x
+    for _x in out body err rc; do /bin/cp "$1/$3.$_x" "$1/$2.$_x"; done
+  }
+  # _prt_stub <dir> — write the DUAL-TRANSPORT stub to <dir>/gh-stub.sh. GraphQL is
+  # EXHAUSTED in every arm that uses it: each GraphQL-bound pull-request command
+  # (`pr view`, `pr list`) refuses with the host's rate-limit wording and exit 1,
+  # which is the issue's reproduction held constant. `api` answers from fixtures and
+  # logs every call to api.log, so an arm can read the request it was sent:
+  #   */milestones/*          -> the word "closed" (the read_state milestone read)
+  #   */pulls?…               -> cand
+  #   */pulls/<n>/files?…     -> files.<page>, else files.all
+  #   */pulls/<n>             -> pull.<n> when it exists, else the next name in
+  #                              pull.seq (the last one repeats; pull.ctr counts)
+  # Anything else answers nothing at exit 0, which classifies failed-other: visible,
+  # never silent. `pr create` counts itself in create.n and prints a URL-free line
+  # ending in the new number; `pr merge` appends its argv to merge.log. The stub
+  # defines no function and closes no brace at column 0, so this file's text keeps
+  # self_test()'s own closing brace as the first column-0 brace after its header.
+  _prt_stub() {
+    /bin/cat > "$1/gh-stub.sh" <<'STUB'
+#!/usr/bin/env bash
+d="$(/usr/bin/dirname "$0")"
+f=""
+case "${1:-} ${2:-}" in
+  "pr view"|"pr list")
+    echo "GraphQL: API rate limit already exceeded for user ID 0." >&2
+    exit 1 ;;
+  "pr create")
+    n="$(/bin/cat "$d/create.n" 2>/dev/null || echo 0)"
+    /usr/bin/printf '%s' "$((n+1))" > "$d/create.n"
+    echo "created pull 5150"
+    exit 0 ;;
+  "pr merge")
+    /usr/bin/printf '%s\n' "$*" >> "$d/merge.log"
+    exit "$(/bin/cat "$d/merge.rc" 2>/dev/null || echo 0)" ;;
+  "issue list"|"issue comment"|"pr comment")
+    exit 0 ;;
+esac
+[[ "${1:-}" == "api" ]] || exit 0
+/usr/bin/printf '%s\n' "$*" >> "$d/api.log"
+p=""
+for a in "$@"; do case "$a" in repos/*) p="$a" ;; esac; done
+case "$p" in
+  */milestones/*) echo closed; exit 0 ;;
+  */pulls\?*) f=cand ;;
+  */pulls/*/files\?*)
+    pg="${p##*page=}"; pg="${pg%%&*}"
+    if [[ -e "$d/files.$pg.out" ]]; then f="files.$pg"; else f=files.all; fi ;;
+  */pulls/*)
+    n="${p##*/pulls/}"
+    if [[ -e "$d/pull.$n.out" ]]; then
+      f="pull.$n"
+    else
+      c="$(/bin/cat "$d/pull.ctr" 2>/dev/null || echo 0)"; c=$((c+1))
+      /usr/bin/printf '%s' "$c" > "$d/pull.ctr"
+      f="$(/usr/bin/sed -n "${c}p" "$d/pull.seq")"
+      [[ -n "$f" ]] || f="$(/usr/bin/tail -n 1 "$d/pull.seq")"
+    fi ;;
+  *) exit 0 ;;
+esac
+/bin/cat "$d/$f.out" 2>/dev/null
+/bin/cat "$d/$f.err" >&2 2>/dev/null
+exit "$(/bin/cat "$d/$f.rc" 2>/dev/null || echo 0)"
+STUB
+    /bin/chmod +x "$1/gh-stub.sh"
+  }
+  # _prt_reset <dir> — clear one arm's logs and counters (the fixtures stay).
+  _prt_reset() {
+    : > "$1/api.log"; : > "$1/merge.log"
+    /usr/bin/printf '0' > "$1/pull.ctr"; /usr/bin/printf '0' > "$1/create.n"
+    /usr/bin/printf '0' > "$1/merge.rc"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  }
+  # _prt_reads <dir> — how many pull-request reads (REST pulls/<n>) the stub served.
+  _prt_reads() { grep_count -E '^api -i repos/x/y/pulls/[0-9]+$' "$1/api.log"; }
+
   # Test 4e: phase_await_merge_chore_pr budget + escape modes (#1705) — offline,
   # hermetic. Asserts: the zero-commit SKIP propagation (CHORE_PR_SKIPPED=1 →
   # await SKIPPED, un-stranding terminal phases); --no-merge → await SKIPPED;
@@ -10995,6 +11108,291 @@ EOF
   GH="$_td_saved_gh"; MODE="$_td_saved_mode"; STATE_LOG_ROW_STATE="$_td_saved_state"
   PR_NUMBER="$_td_saved_pr"; REPO_SLUG="$_td_saved_slug"; RELEASE_LOG="$_td_saved_log"
   STATE_MILESTONE_SLUG="$_td_saved_msslug"; VERSION="$_td_saved_version"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # Test 4k: group PRT (#6871) — the close-out's pull-request reads while the GraphQL
+  # pool is EXHAUSTED and the host's REST endpoint answers. Offline, hermetic, driven
+  # through the dual-transport stub above, so every arm reproduces the issue's
+  # condition. Every arm pins REPO_SLUG=x/y and PR_NUMBER=4242: the fallback slug CI
+  # resolves is not owner/name, and the reader refuses such a slug without a host
+  # call, so an unpinned arm would grade that refusal rather than the read.
+  #
+  # WHAT THE FIXTURES DISCRIMINATE. The REST pull-request object reports a
+  # merge-commit SHA for an UNMERGED pull request too — the host's test merge — so
+  # every not-merged fixture here carries a non-null SHA with merged=false: code that
+  # took the SHA as the merge fact passes a fixture without one and fails these. A
+  # read that did not answer (a quota refusal, a transport failure, a 404) must name
+  # its class and must never become a state verdict — "false-VERIFIED", "not merged",
+  # an absence — because an unread fact establishes nothing about its subject
+  # (quota-budget-protocol.md § 4.3b, Refusal-reason classifier). p9 puts quota
+  # wording INSIDE a successful body: that is data, never a refusal.
+  #
+  # CR-B6 (Collective Review): under --apply, read_state fails closed before any write
+  # unless the release PR is answered as merged into main (p2a, p3a); under --dry-run
+  # it records the fact and predicts (p2, p3). A DEFERRED outcome excepts only the
+  # answered not-merged branch, because its release PR is unmerged by definition
+  # (p2d) — never an unresolvable fact, which is not a fact about the PR at all (p3d).
+  local _pr_saved_gh="$GH" _pr_saved_mode="$MODE" _pr_saved_slug="$REPO_SLUG" _pr_saved_pr="$PR_NUMBER"
+  local _pr_saved_rowstate="$STATE_LOG_ROW_STATE" _pr_saved_sha="$MERGE_SHA" _pr_saved_outcome="$OUTCOME"
+  local _pr_saved_msslug="$STATE_MILESTONE_SLUG" _pr_saved_version="$VERSION" _pr_saved_milestone="$MILESTONE"
+  local _pr_saved_cct="$COMPUTE_CYCLE_TIME" _pr_saved_mstate="$STATE_MILESTONE_STATE" _pr_saved_cycle="$STATE_CYCLE_TIME"
+  local _pr_saved_root="$REPO_ROOT" _pr_saved_branch="$CHORE_BRANCH" _pr_saved_cpn="$CHORE_PR_NUMBER"
+  local _pr_saved_skipped="$CHORE_PR_SKIPPED" _pr_saved_nomerge="$NO_MERGE" _pr_saved_timeout="$MERGE_TIMEOUT"
+  local _pr_saved_step="$MERGE_POLL_STEP" _pr_saved_delay="$VERIFY_RECHECK_DELAY" _pr_saved_res="$VERIFICATION_RESULTS"
+  local _pr_saved_oic="$OPEN_ISSUE_COUNT" _pr_saved_oil="$OPEN_ISSUE_LIST"
+  local _pr_d; _pr_d="$(/usr/bin/mktemp -d -t prt-selftest.XXXXXX)"
+  local _pr_rc=0 _pr_ph="" _pr_row="" _pr_code="" _pr_ctl="" _pr_hits=""
+  local _pr_S="c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00" _pr_T="7e57ed0000000000000000000000000000000001"
+  local _pr_branch="chore/v9.93-stage-13-corpus-update"
+  local _pr_origin="$_pr_d/origin.git" _pr_work="$_pr_d/work"
+  _prt_stub "$_pr_d"
+  _prt_fx "$_pr_d" merged "200 OK" 4999 '{"number":4242,"state":"closed","merged":true,"merge_commit_sha":"'"$_pr_S"'","base":{"ref":"main"},"mergeable":null,"mergeable_state":"unknown","title":"release"}'
+  _prt_fx "$_pr_d" open "200 OK" 4999 '{"number":4242,"state":"open","merged":false,"merge_commit_sha":"'"$_pr_T"'","base":{"ref":"main"},"mergeable":true,"mergeable_state":"blocked","title":"release"}'
+  _prt_fx "$_pr_d" closed "200 OK" 4999 '{"number":4242,"state":"closed","merged":false,"merge_commit_sha":"'"$_pr_T"'","base":{"ref":"main"},"mergeable":true,"mergeable_state":"blocked","title":"release"}'
+  _prt_fx "$_pr_d" quoted "200 OK" 4999 '{"number":4242,"state":"closed","merged":true,"merge_commit_sha":"'"$_pr_S"'","base":{"ref":"main"},"mergeable":null,"mergeable_state":"unknown","title":"API rate limit exceeded for user ID 0.","body":"You have exceeded a secondary rate limit. x-ratelimit-remaining: 0"}'
+  _prt_fx "$_pr_d" other "200 OK" 4999 '{"number":4242,"state":"closed","merged":true,"merge_commit_sha":"'"$_pr_S"'","base":{"ref":"release/other"},"mergeable":null,"mergeable_state":"unknown","title":"release"}'
+  _prt_fx "$_pr_d" clean "200 OK" 4999 '{"number":7777,"state":"open","merged":false,"merge_commit_sha":"'"$_pr_T"'","base":{"ref":"main"},"mergeable":true,"mergeable_state":"clean","title":"chore"}'
+  _prt_fx "$_pr_d" quota "403 Forbidden" 0 '{"message":"API rate limit exceeded for user ID 0."}' 1 'gh: API rate limit exceeded for user ID 0. (HTTP 403)'
+  _prt_fx "$_pr_d" missing "404 Not Found" 4999 '{"message":"Not Found"}' 1 'gh: Not Found (HTTP 404)'
+  _prt_fx "$_pr_d" transport "" "" "" 1 'Get "https://api.github.com/repos/x/y/pulls/4242": dial tcp 127.0.0.1:1: connect: connection refused'
+  _prt_fx "$_pr_d" cand_one "200 OK" 4999 '[{"number":9191,"state":"open","merged_at":null,"head":{"label":"x:'"$_pr_branch"'","ref":"'"$_pr_branch"'"}}]'
+  _prt_fx "$_pr_d" cand_none "200 OK" 4999 '[]'
+  _prt_fx "$_pr_d" cand_foreign "200 OK" 4999 '[{"number":7331,"state":"open","merged_at":null,"head":{"label":"intruder:'"$_pr_branch"'","ref":"'"$_pr_branch"'"}}]'
+  GH="$_pr_d/gh-stub.sh"; REPO_SLUG="x/y"; PR_NUMBER="4242"; MILESTONE="9999"; VERSION="v9.93"; OUTCOME=""
+  STATE_MILESTONE_SLUG="88-some-milestone"; COMPUTE_CYCLE_TIME="$_pr_d/no-cycle-time-tool"
+
+  # ── read_state: AC-1, AC-2 and CR-B6 ─────────────────────────────────────────
+  # (p1) merged into main: MERGE_SHA is the merge commit, read over REST.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'merged\n' > "$_pr_d/pull.seq"; MODE="dry-run"; MERGE_SHA=""
+  _pr_rc=0; phase_read_state >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase read_state)"
+  _st_arm PRT p1; [[ "$MERGE_SHA" == "$_pr_S" ]] || { echo "FAIL: PRT p1 (AC-1) — read_state must capture the release-PR merge SHA over REST while GraphQL is exhausted, got MERGE_SHA='$MERGE_SHA' (record '$_pr_ph')"; failures=$((failures+1)); }
+  [[ "$_pr_rc" -eq 0 && "$_pr_ph" == PASS\|* ]] || { echo "FAIL: PRT p1 — a release PR merged into main must PASS read_state, got rc=$_pr_rc '$_pr_ph'"; failures=$((failures+1)); }
+
+  # (p2) OPEN and carrying a test-merge SHA: not merged. No MERGE_SHA is captured,
+  #      the record names the answered fact, and under --dry-run it is a
+  #      non-blocking WARN that predicts the --apply FAIL.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'open\n' > "$_pr_d/pull.seq"; MODE="dry-run"; MERGE_SHA=""
+  _pr_rc=0; phase_read_state >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase read_state)"
+  _st_arm PRT p2; [[ -z "$MERGE_SHA" ]] || { echo "FAIL: PRT p2 (AC-2) — an OPEN pull request's test-merge SHA must NOT be captured as its merge commit, got MERGE_SHA='$MERGE_SHA'"; failures=$((failures+1)); }
+  [[ "$_pr_ph" == *"not merged (state=OPEN"* ]] || { echo "FAIL: PRT p2 (AC-2) — the read_state record must name the answered not-merged fact, got '$_pr_ph'"; failures=$((failures+1)); }
+  [[ "$_pr_rc" -eq 0 && "$_pr_ph" == WARN\|*"this same condition FAILS the close at --apply"* ]] || { echo "FAIL: PRT p2 (CR-B6) — under --dry-run a not-merged fact is recorded as a non-blocking WARN that predicts the --apply FAIL, got rc=$_pr_rc '$_pr_ph'"; failures=$((failures+1)); }
+
+  # (p2a) the SAME fixture under --apply: read_state fails closed with rc 3, so the
+  #       run stops before phase 4 and before any write.
+  _prt_reset "$_pr_d"; MODE="apply"; MERGE_SHA=""
+  _pr_rc=0; phase_read_state >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase read_state)"
+  _st_arm PRT p2a; [[ "$_pr_rc" -eq 3 && "$_pr_ph" == FAIL\|* ]] || { echo "FAIL: PRT p2a (CR-B6) — under --apply a release PR answered as NOT merged must fail read_state closed with rc 3, before any write, got rc=$_pr_rc '$_pr_ph'"; failures=$((failures+1)); }
+  [[ "$_pr_ph" == *"not merged (state=OPEN"* ]] || { echo "FAIL: PRT p2a (CR-B6) — the FAIL must name the answered not-merged fact, got '$_pr_ph'"; failures=$((failures+1)); }
+
+  # (p2d) --outcome DEFERRED excepts the answered not-merged branch: Stage 12 halted
+  #       before merge, so an unmerged release PR is that outcome's definition.
+  _prt_reset "$_pr_d"; MODE="apply"; OUTCOME="DEFERRED"; MERGE_SHA=""
+  _pr_rc=0; phase_read_state >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase read_state)"
+  _st_arm PRT p2d; [[ "$_pr_rc" -eq 0 && "$_pr_ph" == PASS\|* ]] || { echo "FAIL: PRT p2d (CR-B6) — under --outcome DEFERRED an answered not-merged release PR is recorded, not gated, got rc=$_pr_rc '$_pr_ph'"; failures=$((failures+1)); }
+  [[ "$_pr_ph" == *"not merged (state=OPEN"*"DEFERRED"* ]] || { echo "FAIL: PRT p2d (CR-B6) — the record must name the not-merged fact AND the DEFERRED exception it rests on, got '$_pr_ph'"; failures=$((failures+1)); }
+  OUTCOME=""
+
+  # (p3) 403 with remaining 0: unresolvable, refused on quota grounds — never "not
+  #      merged"; under --dry-run a WARN that predicts the --apply FAIL.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'quota\n' > "$_pr_d/pull.seq"; MODE="dry-run"; MERGE_SHA=""
+  _pr_rc=0; phase_read_state >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase read_state)"
+  _st_arm PRT p3; [[ -z "$MERGE_SHA" ]] || { echo "FAIL: PRT p3 — a refused read must capture no merge SHA, got MERGE_SHA='$MERGE_SHA'"; failures=$((failures+1)); }
+  [[ "$_pr_ph" == *"unresolvable"*"refused on quota grounds"* ]] || { echo "FAIL: PRT p3 (AC-2, CIAC-5) — a quota refusal must be recorded as unresolvable, naming its class, got '$_pr_ph'"; failures=$((failures+1)); }
+  [[ "$_pr_ph" != *"not merged"* ]] || { echo "FAIL: PRT p3 (CIAC-5) — a quota refusal is never a state verdict, but the record says 'not merged': '$_pr_ph'"; failures=$((failures+1)); }
+  [[ "$_pr_rc" -eq 0 && "$_pr_ph" == WARN\|*"this same condition FAILS the close at --apply"* ]] || { echo "FAIL: PRT p3 (CR-B6) — under --dry-run an unresolvable fact is recorded as a non-blocking WARN that predicts the --apply FAIL, got rc=$_pr_rc '$_pr_ph'"; failures=$((failures+1)); }
+
+  # (p3a) the SAME refusal under --apply fails closed, naming the class.
+  _prt_reset "$_pr_d"; MODE="apply"; MERGE_SHA=""
+  _pr_rc=0; phase_read_state >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase read_state)"
+  _st_arm PRT p3a; [[ "$_pr_rc" -eq 3 && "$_pr_ph" == FAIL\|*"refused on quota grounds"* ]] || { echo "FAIL: PRT p3a (CR-B6) — under --apply an unresolvable merge fact must fail read_state closed with rc 3 and name the class, got rc=$_pr_rc '$_pr_ph'"; failures=$((failures+1)); }
+  [[ "$_pr_ph" != *"not merged"* ]] || { echo "FAIL: PRT p3a (CIAC-5) — the FAIL for a refused read must never say 'not merged': '$_pr_ph'"; failures=$((failures+1)); }
+
+  # (p3d) DEFERRED does NOT except an unresolvable fact: the exception is for an
+  #       unmerged release PR, and a read that did not answer is not one.
+  _prt_reset "$_pr_d"; MODE="apply"; OUTCOME="DEFERRED"; MERGE_SHA=""
+  _pr_rc=0; phase_read_state >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase read_state)"
+  _st_arm PRT p3d; [[ "$_pr_rc" -eq 3 && "$_pr_ph" == FAIL\|* ]] || { echo "FAIL: PRT p3d (CR-B6) — --outcome DEFERRED must not except an UNRESOLVABLE fact from the --apply fail-closed rule, got rc=$_pr_rc '$_pr_ph'"; failures=$((failures+1)); }
+  OUTCOME=""
+
+  # ── the #1681 guard (phase 6, a VERIFIED row, --apply): AC-1, AC-4, CIAC-5 ────
+  STATE_LOG_ROW_STATE="VERIFIED"; MODE="apply"
+  # (p4) THE ORDER-7 RED ARM. The release PR IS merged into main. Pre-fix, the
+  #      GraphQL-bound read came back empty under exhaustion and the guard reported
+  #      false-VERIFIED against a correct row — the v4.48 halt. The failure message
+  #      prints the observed record, so the RED run carries that text verbatim.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'merged\n' > "$_pr_d/pull.seq"
+  _pr_rc=0; phase_transition_release_log >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase transition_release_log)"
+  _st_arm PRT p4; [[ "$_pr_rc" -eq 0 && "$_pr_ph" == SKIPPED\|* ]] || { echo "FAIL: PRT p4 (AC-1) — a VERIFIED row over a release PR MERGED to main must SKIP-as-PASS while GraphQL is exhausted and REST answers, got rc=$_pr_rc '$_pr_ph'"; failures=$((failures+1)); }
+
+  # (p5) refused on quota grounds: FAIL rc 3, the class named, never false-VERIFIED.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'quota\n' > "$_pr_d/pull.seq"
+  _pr_rc=0; phase_transition_release_log >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase transition_release_log)"
+  _st_arm PRT p5; [[ "$_pr_rc" -eq 3 && "$_pr_ph" == FAIL\|*"refused on quota grounds"* ]] || { echo "FAIL: PRT p5 (CIAC-5) — a refused merge-fact read must FAIL the guard naming its class, got rc=$_pr_rc '$_pr_ph'"; failures=$((failures+1)); }
+  [[ "$_pr_ph" != *"false-VERIFIED"* ]] || { echo "FAIL: PRT p5 (CIAC-5) — an unread merge fact is an instrument failure, never a finding about the row, but the detail says false-VERIFIED: '$_pr_ph'"; failures=$((failures+1)); }
+
+  # (p6) failed in transport: named, never false-VERIFIED.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'transport\n' > "$_pr_d/pull.seq"
+  _pr_rc=0; phase_transition_release_log >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase transition_release_log)"
+  _st_arm PRT p6; [[ "$_pr_rc" -eq 3 && "$_pr_ph" == FAIL\|*"failed in transport"* ]] || { echo "FAIL: PRT p6 — a transport failure must FAIL the guard naming its class, got rc=$_pr_rc '$_pr_ph'"; failures=$((failures+1)); }
+  [[ "$_pr_ph" != *"false-VERIFIED"* ]] || { echo "FAIL: PRT p6 — a transport failure must never read as false-VERIFIED: '$_pr_ph'"; failures=$((failures+1)); }
+
+  # (p7) a 404: failed for another reason — never read as "no such PR, so not
+  #      merged", because the host answers 404 for a PR the credential cannot see too.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'missing\n' > "$_pr_d/pull.seq"
+  _pr_rc=0; phase_transition_release_log >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase transition_release_log)"
+  _st_arm PRT p7; [[ "$_pr_rc" -eq 3 && "$_pr_ph" == FAIL\|*"failed for another reason (404)"* ]] || { echo "FAIL: PRT p7 (D-3) — a 404 must FAIL the guard as failed for another reason, got rc=$_pr_rc '$_pr_ph'"; failures=$((failures+1)); }
+  [[ "$_pr_ph" != *"false-VERIFIED"* ]] || { echo "FAIL: PRT p7 (D-3) — a 404 must never read as false-VERIFIED: '$_pr_ph'"; failures=$((failures+1)); }
+
+  # (p8) AC-4, THE TRAP: closed WITHOUT merging, test-merge SHA present. The guard
+  #      must still catch the false-VERIFIED row and name the observed state.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'closed\n' > "$_pr_d/pull.seq"
+  _pr_rc=0; phase_transition_release_log >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase transition_release_log)"
+  _st_arm PRT p8; [[ "$_pr_rc" -eq 3 && "$_pr_ph" == FAIL\|*"false-VERIFIED"*  && "$_pr_ph" == *"state=CLOSED"* ]] || { echo "FAIL: PRT p8 (AC-4) — a VERIFIED row over a CLOSED-unmerged PR carrying a test-merge SHA must FAIL false-VERIFIED naming state=CLOSED, got rc=$_pr_rc '$_pr_ph'"; failures=$((failures+1)); }
+
+  # (p9) quota wording INSIDE a successful body is data: answered, merged → SKIPPED.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'quoted\n' > "$_pr_d/pull.seq"
+  _pr_rc=0; phase_transition_release_log >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase transition_release_log)"
+  _st_arm PRT p9; [[ "$_pr_rc" -eq 0 && "$_pr_ph" == SKIPPED\|* ]] || { echo "FAIL: PRT p9 (CIAC-5) — refusal wording quoted inside a SUCCESSFUL body is not a refusal; the merged PR must SKIP-as-PASS, got rc=$_pr_rc '$_pr_ph'"; failures=$((failures+1)); }
+
+  # (p10) merged into ANOTHER base: still false-VERIFIED, and the base is named.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'other\n' > "$_pr_d/pull.seq"
+  _pr_rc=0; phase_transition_release_log >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase transition_release_log)"
+  _st_arm PRT p10; [[ "$_pr_rc" -eq 3 && "$_pr_ph" == FAIL\|*"false-VERIFIED"* && "$_pr_ph" == *"release/other"* ]] || { echo "FAIL: PRT p10 — a PR merged into another base must FAIL false-VERIFIED naming that base, got rc=$_pr_rc '$_pr_ph'"; failures=$((failures+1)); }
+
+  # ── verification row 4 (phase 15, a VERIFIED row, --apply) ───────────────────
+  STATE_LOG_ROW_STATE="VERIFIED"; MODE="apply"; VERIFY_RECHECK_DELAY=0; OPEN_ISSUE_COUNT=0; OPEN_ISSUE_LIST=""
+  # (p11) merged into main → PASS.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'merged\n' > "$_pr_d/pull.seq"; VERIFICATION_RESULTS=""
+  _pr_rc=0; phase_run_verification >/dev/null 2>&1 || _pr_rc=$?
+  _pr_row="$(/usr/bin/grep -F '| 4 |' <<<"$VERIFICATION_RESULTS" || true)"
+  _st_arm PRT p11; [[ "$_pr_row" == *"| PASS |" ]] || { echo "FAIL: PRT p11 (AC-1) — verification row 4 must read PASS for a release PR merged into main while GraphQL is exhausted, got '$_pr_row'"; failures=$((failures+1)); }
+  # (p12) refused → UNVERIFIED naming the class; neither FALSE-VERIFIED nor PASS.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'quota\n' > "$_pr_d/pull.seq"; VERIFICATION_RESULTS=""
+  _pr_rc=0; phase_run_verification >/dev/null 2>&1 || _pr_rc=$?
+  _pr_row="$(/usr/bin/grep -F '| 4 |' <<<"$VERIFICATION_RESULTS" || true)"
+  _st_arm PRT p12; [[ "$_pr_row" == *"UNVERIFIED ("*"refused on quota grounds"* ]] || { echo "FAIL: PRT p12 (CIAC-5) — a refused merge-fact read must render row 4 UNVERIFIED naming the class, got '$_pr_row'"; failures=$((failures+1)); }
+  [[ "$_pr_row" != *"FALSE-VERIFIED"* && "$_pr_row" != *"| PASS |" ]] || { echo "FAIL: PRT p12 (CIAC-5) — an unread fact is neither a finding (FALSE-VERIFIED) nor a pass, got '$_pr_row'"; failures=$((failures+1)); }
+  # (p13) OPEN → FALSE-VERIFIED, naming the observed state and base.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'open\n' > "$_pr_d/pull.seq"; VERIFICATION_RESULTS=""
+  _pr_rc=0; phase_run_verification >/dev/null 2>&1 || _pr_rc=$?
+  _pr_row="$(/usr/bin/grep -F '| 4 |' <<<"$VERIFICATION_RESULTS" || true)"
+  _st_arm PRT p13; [[ "$_pr_row" == *"FALSE-VERIFIED (PR #4242=OPEN/main)"* ]] || { echo "FAIL: PRT p13 (AC-2) — an answered OPEN release PR must render row 4 FALSE-VERIFIED naming the observed state and base, got '$_pr_row'"; failures=$((failures+1)); }
+
+  # ── create_chore_pr: the idempotency lookup (D-5) and FM-1 ───────────────────
+  # A real local sandbox: a bare origin, and the chore branch one commit ahead of
+  # origin/main, so the zero-commit guard passes and the push resolves offline.
+  $GIT init --bare -q "$_pr_origin" 2>/dev/null || true
+  $GIT init -q -b main "$_pr_work" 2>/dev/null || { $GIT init -q "$_pr_work" 2>/dev/null; ( cd "$_pr_work" && $GIT checkout -q -b main 2>/dev/null ); } || true
+  ( cd "$_pr_work" \
+    && /usr/bin/printf 'base\n' > seed.txt \
+    && $GIT -c user.email=t@t -c user.name=t add -A >/dev/null 2>&1 \
+    && $GIT -c user.email=t@t -c user.name=t commit -qm base >/dev/null 2>&1 \
+    && $GIT remote add origin "$_pr_origin" >/dev/null 2>&1 \
+    && $GIT push -q origin main >/dev/null 2>&1 \
+    && $GIT fetch -q origin >/dev/null 2>&1 \
+    && $GIT checkout -q -b "$_pr_branch" >/dev/null 2>&1 \
+    && /usr/bin/printf 'chore\n' >> seed.txt \
+    && $GIT -c user.email=t@t -c user.name=t commit -qam chore >/dev/null 2>&1 ) || true
+  REPO_ROOT="$_pr_work"; CHORE_BRANCH="$_pr_branch"; MODE="apply"; STATE_CYCLE_TIME="N/A"
+  OPEN_ISSUE_COUNT=0; OPEN_ISSUE_LIST=""; NO_MERGE=0
+  # (p14) an open PR already on the branch is found over REST → SKIPPED, none created.
+  _prt_reset "$_pr_d"; _prt_use "$_pr_d" cand cand_one; CHORE_PR_NUMBER=""; CHORE_PR_SKIPPED=0
+  _pr_rc=0; phase_create_chore_pr >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase create_chore_pr)"
+  _st_arm PRT p14; [[ "$_pr_ph" == SKIPPED\|*"PR #9191 already exists"* && "$CHORE_PR_NUMBER" == "9191" ]] || { echo "FAIL: PRT p14 (D-5) — the open chore PR on the branch must be found over REST and bound, got CHORE_PR_NUMBER='$CHORE_PR_NUMBER' '$_pr_ph'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_pr_d/create.n")" -eq 0 ]] || { echo "FAIL: PRT p14 (D-5) — an existing chore PR must not be duplicated, got $(/bin/cat "$_pr_d/create.n") pr create call(s)"; failures=$((failures+1)); }
+  # (p15) the lookup refused on quota grounds → FAIL: a read that did not answer is
+  #       not an absence of a PR, so nothing is created.
+  _prt_reset "$_pr_d"; _prt_use "$_pr_d" cand quota; CHORE_PR_NUMBER=""; CHORE_PR_SKIPPED=0
+  _pr_rc=0; phase_create_chore_pr >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase create_chore_pr)"
+  _st_arm PRT p15; [[ "$_pr_rc" -eq 3 && "$_pr_ph" == FAIL\|*"unresolvable"*"refused on quota grounds"* ]] || { echo "FAIL: PRT p15 (D-5) — a refused chore-PR lookup must FAIL naming its class, got rc=$_pr_rc '$_pr_ph'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_pr_d/create.n")" -eq 0 ]] || { echo "FAIL: PRT p15 (D-5) — a refused lookup is not an absence; no chore PR may be created on its strength, got $(/bin/cat "$_pr_d/create.n") pr create call(s)"; failures=$((failures+1)); }
+  # (p16) CONTROL: an answered empty list creates exactly one PR, and binds it.
+  _prt_reset "$_pr_d"; _prt_use "$_pr_d" cand cand_none; CHORE_PR_NUMBER=""; CHORE_PR_SKIPPED=0
+  _pr_rc=0; phase_create_chore_pr >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase create_chore_pr)"
+  _st_arm PRT p16; [[ "$(/bin/cat "$_pr_d/create.n")" -eq 1 && "$_pr_ph" == PASS\|* && "$CHORE_PR_NUMBER" == "5150" ]] || { echo "FAIL: PRT p16 — CONTROL: with no open PR on the branch exactly one chore PR must be created and bound, got $(/bin/cat "$_pr_d/create.n") create call(s), CHORE_PR_NUMBER='$CHORE_PR_NUMBER' '$_pr_ph'"; failures=$((failures+1)); }
+  # (p17) the lookup's request shape (p16's run): state=open and the owner-qualified head.
+  _st_arm PRT p17; [[ "$(grep_count -F "pulls?state=open&head=x:${_pr_branch}&per_page=100" "$_pr_d/api.log")" -eq 1 ]] || { echo "FAIL: PRT p17 (D-5) — the chore-PR lookup must read REST pulls with state=open and the owner-qualified head x:${_pr_branch}, api.log: $(/usr/bin/tr '\n' ' ' < "$_pr_d/api.log")"; failures=$((failures+1)); }
+  # (fm1) FM-1: a candidate whose head label is NOT <owner>:<branch> — a fork's PR
+  #       from a same-named branch, or the unfiltered list a malformed head filter
+  #       makes the host return — must never be bound or merged. Its OWN pull
+  #       fixture reads OPEN/MERGEABLE/CLEAN, so code that trusted the request-side
+  #       filter would bind #7331 and merge it; on the correct path the PR this run
+  #       creates reads merged, and no merge is issued at all.
+  _prt_reset "$_pr_d"; _prt_use "$_pr_d" cand cand_foreign; _prt_use "$_pr_d" pull.7331 clean
+  /usr/bin/printf 'merged\n' > "$_pr_d/pull.seq"
+  CHORE_PR_NUMBER=""; CHORE_PR_SKIPPED=0; MERGE_TIMEOUT=2; MERGE_POLL_STEP=1
+  _pr_rc=0; phase_create_chore_pr >/dev/null 2>&1 || _pr_rc=$?
+  _pr_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _pr_rc=$?
+  _st_arm PRT fm1; [[ "$CHORE_PR_NUMBER" != "7331" && "$(/bin/cat "$_pr_d/create.n")" -eq 1 ]] || { echo "FAIL: PRT fm1 (FM-1) — a candidate whose head label is not x:${_pr_branch} must not be bound; this run must create its own PR, got CHORE_PR_NUMBER='$CHORE_PR_NUMBER' and $(/bin/cat "$_pr_d/create.n") create call(s)"; failures=$((failures+1)); }
+  [[ "$(grep_count -F 'pr merge 7331' "$_pr_d/merge.log")" -eq 0 ]] || { echo "FAIL: PRT fm1 (FM-1) — the foreign PR #7331 was MERGED: $(/usr/bin/tr '\n' ' ' < "$_pr_d/merge.log")"; failures=$((failures+1)); }
+  /bin/rm -f "$_pr_d/pull.7331.out" "$_pr_d/pull.7331.body" "$_pr_d/pull.7331.err" "$_pr_d/pull.7331.rc"
+
+  # ── await_merge_chore_pr: the poll under an unresolvable read (D-4) ──────────
+  CHORE_PR_NUMBER="7777"; CHORE_PR_SKIPPED=0; NO_MERGE=0; MODE="apply"; MERGE_TIMEOUT=2; MERGE_POLL_STEP=1
+  # (p18) merged → PASS on the FIRST read, and no merge.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'merged\n' > "$_pr_d/pull.seq"
+  _pr_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase await_merge_chore_pr)"
+  _st_arm PRT p18; [[ "$_pr_rc" -eq 0 && "$_pr_ph" == PASS\|*"ALREADY MERGED"* ]] || { echo "FAIL: PRT p18 (AC-1) — an already-merged chore PR must PASS on its first REST read while GraphQL is exhausted, got rc=$_pr_rc '$_pr_ph'"; failures=$((failures+1)); }
+  [[ "$(_prt_reads "$_pr_d")" -eq 1 && "$(grep_count . "$_pr_d/merge.log")" -eq 0 ]] || { echo "FAIL: PRT p18 — exactly one terminal-state read and no merge, got $(_prt_reads "$_pr_d") read(s) and $(grep_count . "$_pr_d/merge.log") merge(s)"; failures=$((failures+1)); }
+  # (p19) refused on EVERY read → FAIL after exactly ONE read, naming the class and
+  #       merging nothing: a quota refusal does not heal inside the poll budget, and
+  #       polling on would draw on an exhausted pool other releases also need.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'quota\n' > "$_pr_d/pull.seq"
+  _pr_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase await_merge_chore_pr)"
+  _st_arm PRT p19; [[ "$_pr_rc" -eq 3 && "$_pr_ph" == FAIL\|*"refused on quota grounds"* ]] || { echo "FAIL: PRT p19 (D-4) — a refused terminal-state read must FAIL the poll naming its class, got rc=$_pr_rc '$_pr_ph'"; failures=$((failures+1)); }
+  [[ "$(_prt_reads "$_pr_d")" -eq 1 && "$(grep_count . "$_pr_d/merge.log")" -eq 0 ]] || { echo "FAIL: PRT p19 (D-4) — the poll must stop after exactly ONE refused read and merge nothing, got $(_prt_reads "$_pr_d") read(s) and $(grep_count . "$_pr_d/merge.log") merge(s)"; failures=$((failures+1)); }
+  # (p20) a transport failure, then OPEN/MERGEABLE/CLEAN → re-polled, merged once.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'transport\nclean\n' > "$_pr_d/pull.seq"
+  _pr_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase await_merge_chore_pr)"
+  _st_arm PRT p20; [[ "$_pr_rc" -eq 0 && "$_pr_ph" == PASS\|* && "$(grep_count . "$_pr_d/merge.log")" -eq 1 ]] || { echo "FAIL: PRT p20 (D-4) — a transport failure is transient: the poll must read again and merge the CLEAN PR exactly once, got rc=$_pr_rc, $(grep_count . "$_pr_d/merge.log") merge(s), '$_pr_ph'"; failures=$((failures+1)); }
+  # (p21) a 404 → FAIL after exactly ONE read, as failed for another reason.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'missing\n' > "$_pr_d/pull.seq"
+  _pr_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase await_merge_chore_pr)"
+  _st_arm PRT p21; [[ "$_pr_rc" -eq 3 && "$_pr_ph" == FAIL\|*"failed for another reason"* && "$(_prt_reads "$_pr_d")" -eq 1 ]] || { echo "FAIL: PRT p21 (D-4) — a 404 must FAIL the poll after exactly one read as failed for another reason, got rc=$_pr_rc, $(_prt_reads "$_pr_d") read(s), '$_pr_ph'"; failures=$((failures+1)); }
+
+  # ── (p22) AC-3 over this file's own text ─────────────────────────────────────
+  # No non-comment line reads a pull request through a GraphQL-bound gh pr view or
+  # gh pr list --json call. The sensitivity line is CONSTRUCTED at run time, so the
+  # control's own text cannot satisfy or pollute the scan of this file.
+  _pr_code="$(/usr/bin/grep -vE '^[[:space:]]*#' "${BASH_SOURCE[0]}" || true)"
+  _pr_hits="$(grep_count -E '\$GH pr (view|list) .*--json' <<<"$_pr_code")"
+  _pr_ctl="$(/usr/bin/printf '%s pr %s 1 --repo r --json state' '$GH' 'view')"
+  _st_arm PRT p22; [[ "$(grep_count . <<<"$_pr_code")" -ge 1000 ]] || { echo "FAIL: PRT p22 anti-vacuity — the non-comment extraction of this file returned fewer than 1000 lines; the AC-3 scan below would read almost nothing"; failures=$((failures+1)); }
+  [[ "$_pr_hits" == "0" ]] || { echo "FAIL: PRT p22 (AC-3) — ${_pr_hits} non-comment line(s) of this file still read a pull request through a GraphQL-bound pull-request --json call"; failures=$((failures+1)); }
+  [[ "$(grep_count -E '\$GH pr (view|list) .*--json' <<<"$_pr_ctl")" == "1" ]] || { echo "FAIL: PRT p22 SENSITIVITY — the AC-3 needle does not match a constructed GraphQL-bound read, so its zero is a broken probe"; failures=$((failures+1)); }
+  _st_witness PRT 27
+
+  /bin/rm -rf "$_pr_d" 2>/dev/null || true
+  GH="$_pr_saved_gh"; MODE="$_pr_saved_mode"; REPO_SLUG="$_pr_saved_slug"; PR_NUMBER="$_pr_saved_pr"
+  STATE_LOG_ROW_STATE="$_pr_saved_rowstate"; MERGE_SHA="$_pr_saved_sha"; OUTCOME="$_pr_saved_outcome"
+  STATE_MILESTONE_SLUG="$_pr_saved_msslug"; VERSION="$_pr_saved_version"; MILESTONE="$_pr_saved_milestone"
+  COMPUTE_CYCLE_TIME="$_pr_saved_cct"; STATE_MILESTONE_STATE="$_pr_saved_mstate"; STATE_CYCLE_TIME="$_pr_saved_cycle"
+  REPO_ROOT="$_pr_saved_root"; CHORE_BRANCH="$_pr_saved_branch"; CHORE_PR_NUMBER="$_pr_saved_cpn"
+  CHORE_PR_SKIPPED="$_pr_saved_skipped"; NO_MERGE="$_pr_saved_nomerge"; MERGE_TIMEOUT="$_pr_saved_timeout"
+  MERGE_POLL_STEP="$_pr_saved_step"; VERIFY_RECHECK_DELAY="$_pr_saved_delay"; VERIFICATION_RESULTS="$_pr_saved_res"
+  OPEN_ISSUE_COUNT="$_pr_saved_oic"; OPEN_ISSUE_LIST="$_pr_saved_oil"
+  COLLECTED_OPEN_ISSUES=""; EXCLUDED_DETAIL=""
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # Test 4g: phase_ledger_guard + phase_reparse_ledgers (#1680) — offline,
@@ -12284,6 +12682,48 @@ PLAN-VERSION-UNKNOWN: release/releases/plans/v2/v2.98_RELEASE_PLAN.md declares v
     fi
     MODE="dry-run"
 
+    # (rb) GROUP PRT-rb (#6871) — the release-diff FALLBACK read over REST. MERGE_SHA
+    #      is empty, so the phase must read the release PR's file list itself, and
+    #      GraphQL is EXHAUSTED (the PRT dual-transport stub), so only the REST pages
+    #      can answer. rb1: one answered page. rb2: a FULL first page must fetch page 2
+    #      and stop at the short page. rb3: a refused page FAILs naming the refusal —
+    #      never "fallback empty". rb4 (FM-3): the host serves a pull request's files
+    #      30 pages of 100 at most, so a FULL thirtieth page is a truncation, not a
+    #      complete diff; staleness is then undeterminable and the phase FAILs naming
+    #      the cap rather than rebuild from a partial list.
+    local _rb_saved_gh="$GH" _rb_saved_slug="$REPO_SLUG" _rb_saved_pr="$PR_NUMBER" _rb_i=0 _rb_page="["
+    local _rb_d; _rb_d="$(/usr/bin/mktemp -d -t prtrb-selftest.XXXXXX)"
+    _prt_stub "$_rb_d"
+    for ((_rb_i = 1; _rb_i <= 100; _rb_i++)); do _rb_page="${_rb_page}{\"filename\":\"docs/rb-fixture-${_rb_i}.md\"},"; done
+    _rb_page="${_rb_page%,}]"
+    _prt_fx "$_rb_d" full "200 OK" 4999 "$_rb_page"
+    _prt_fx "$_rb_d" schema "200 OK" 4999 '[{"filename":"core/schemas/tracker-schemas.md"}]'
+    _prt_fx "$_rb_d" quota "403 Forbidden" 0 '{"message":"API rate limit exceeded for user ID 0."}' 1 'gh: API rate limit exceeded for user ID 0. (HTTP 403)'
+    GH="$_rb_d/gh-stub.sh"; REPO_SLUG="x/y"; PR_NUMBER="4242"; MODE="dry-run"
+    # (rb1) one answered page naming a canonical: the builder resolves tracker-manager.
+    _prt_reset "$_rb_d"; _prt_use "$_rb_d" files.1 schema; MERGE_SHA=""
+    _rp_rc=0; phase_rebuild_skill_packages >/dev/null 2>&1 || _rp_rc=$?
+    _st_arm PRT-rb rb1; [[ "$(get_phase rebuild_skill_packages)" == DRY-RUN*tracker-manager* ]] || { echo "FAIL: PRT-rb rb1 (AC-1) — with MERGE_SHA empty and GraphQL exhausted, the REST files fallback must supply the release diff (tracker-manager), got rc=$_rp_rc '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1)); }
+    # (rb2) a FULL first page fetches page 2, and the short page ends the loop.
+    _prt_reset "$_rb_d"; _prt_use "$_rb_d" files.1 full; _prt_use "$_rb_d" files.2 schema; MERGE_SHA=""
+    _rp_rc=0; phase_rebuild_skill_packages >/dev/null 2>&1 || _rp_rc=$?
+    _st_arm PRT-rb rb2; [[ "$(get_phase rebuild_skill_packages)" == DRY-RUN*tracker-manager* ]] || { echo "FAIL: PRT-rb rb2 — a canonical on page 2 must be found after a full page 1, got rc=$_rp_rc '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1)); }
+    [[ "$(grep_count -E '&page=2$' "$_rb_d/api.log")" -eq 1 && "$(grep_count -E '&page=3$' "$_rb_d/api.log")" -eq 0 ]] || { echo "FAIL: PRT-rb rb2 — the pager must read page 2 once and stop at the short page, api.log: $(/usr/bin/tr '\n' ' ' < "$_rb_d/api.log")"; failures=$((failures+1)); }
+    # (rb3) a refused page FAILs naming the refusal, never "fallback empty".
+    _prt_reset "$_rb_d"; /bin/rm -f "$_rb_d"/files.*; _prt_use "$_rb_d" files.1 quota; MERGE_SHA=""
+    _rp_rc=0; phase_rebuild_skill_packages >/dev/null 2>&1 || _rp_rc=$?
+    _st_arm PRT-rb rb3; [[ "$_rp_rc" -eq 3 && "$(get_phase rebuild_skill_packages)" == FAIL\|*"refused on quota grounds"* ]] || { echo "FAIL: PRT-rb rb3 (CIAC-5) — a refused files page must FAIL the rebuild naming the refusal, got rc=$_rp_rc '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1)); }
+    [[ "$(get_phase rebuild_skill_packages)" != *"fallback empty"* ]] || { echo "FAIL: PRT-rb rb3 — a refused read is not an empty fallback: '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1)); }
+    # (rb4) FM-3: thirty FULL pages are a truncation → FAIL naming the cap; no page 31.
+    _prt_reset "$_rb_d"; /bin/rm -f "$_rb_d"/files.*; _prt_use "$_rb_d" files.all full; MERGE_SHA=""
+    _rp_rc=0; phase_rebuild_skill_packages >/dev/null 2>&1 || _rp_rc=$?
+    _st_arm PRT-rb rb4; [[ "$_rp_rc" -eq 3 && "$(get_phase rebuild_skill_packages)" == FAIL\|*"truncated at the host's 3,000-file cap"* ]] || { echo "FAIL: PRT-rb rb4 (FM-3) — thirty full pages must FAIL the rebuild as truncated at the host's cap, got rc=$_rp_rc '$(get_phase rebuild_skill_packages)'"; failures=$((failures+1)); }
+    [[ "$(grep_count -E '&page=30$' "$_rb_d/api.log")" -eq 1 && "$(grep_count -E '&page=31$' "$_rb_d/api.log")" -eq 0 ]] || { echo "FAIL: PRT-rb rb4 (FM-3) — the pager must read page 30 and never page 31, got $(grep_count -E '&page=30$' "$_rb_d/api.log") page-30 and $(grep_count -E '&page=31$' "$_rb_d/api.log") page-31 read(s)"; failures=$((failures+1)); }
+    _st_witness PRT-rb 4
+    /bin/rm -rf "$_rb_d" 2>/dev/null || true
+    GH="$_rb_saved_gh"; REPO_SLUG="$_rb_saved_slug"; PR_NUMBER="$_rb_saved_pr"; MODE="dry-run"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
     # (b) C1 — the fail-loud guard's MODE SCOPING (#4765 convention: assert at
     #     --apply, predict at --dry-run). ONE fixture — the builder removed, so
     #     delegation cannot answer — driven in BOTH modes, so the mode is provably
@@ -12318,6 +12758,8 @@ PLAN-VERSION-UNKNOWN: release/releases/plans/v2/v2.98_RELEASE_PLAN.md declares v
   else
     echo "  (skipped #4722 rebuild-detection behavioural arms — git not executable at $GIT)" >&2
   fi
+  # The PRT shared fixtures end here: group PRT-rb above is their last user.
+  unset -f _prt_fx _prt_use _prt_stub _prt_reset _prt_reads
 
   # (c) STRUCTURAL anti-regression, asserted against the REAL function body. These
   #     pin the three regressions C2 named as leaving a delegated suite green:
@@ -15685,6 +16127,8 @@ EOF
   _st_claim AI "  phase_action_item_gate validated (#4439, group AI — 28 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): A and B are each other's control over ONE differential harness where only the ledger changes — a gate that never blocks fails A, one that always blocks fails B, one reading the wrong path resolves NOT-RECORDED for both and fails BOTH / B2 decoy: a terminal ledger carrying the literal words 'open' and 'in-flight' in trigger_detail still resolves RESOLVED, so the gate is column-addressed and not row-pattern-matched / all five verdict states drive distinct fixtures and are asserted on the STATE_AI_GATE global rather than the detail prose — UNRESOLVED (A) · RESOLVED (B, B2) · NOT-RECORDED (C unattested blocks, C2 attested passes WARN with the operator-actor attestation EMITTED carrying its cause and the spec subtype) · EMPTY-LEDGER (D unattested blocks, D2 attested round-trips the second cause) · UNCLASSIFIABLE (M blocks and NAMES the offending row and its raw value, with a specificity limb proving the enumerator selects the unreadable set and not the terminal one, and the all-terminal ledger re-driven on the same harness as its paired negative control) / E the two SURFACE states must resolve DISTINCT values, because comparing detail strings passes on any two different sentences / E2 an unlicensed attestation cause does NOT clear a SURFACE state / F EXECUTES the two dispatch lines lifted VERBATIM from this file's own text, refusing to pass unless each needle resolves to exactly one top-level line, under three mutually-controlling limbs — F1 blocking gate leaves the close UNFIRED at exit 3, F2 SENSITIVITY a passing gate does fire it (without which F1's clean result is meaningless), F3 NEGATIVE CONTROL a constructed '|| true' line must let the close through (without which a fail-closed gate is indistinguishable from a no-op one) — so capability-to-fail is re-demonstrated on EVERY run, not only under one-time mutation / F4 whole-block invariant: every top-level dispatch line carries the fail-closed guard, with an anti-vacuity floor on the parse and a specificity control proving the filter rejects an unguarded line / G doc<->code parity on the canonical Procedure 7a predicate across the fixture set, with an anti-vacuity floor on the extraction and a sensitivity arm requiring >=5 distinct STATEs over a fixture count DERIVED from the loop rather than restated in the message / M-N-O-Q-R-S-T MEMBERSHIP: the residue of the recognised set is its own BLOCKING state rather than the implicit else of a two-value comparison, which counted a typo, a case variant, a foreign vocabulary and an out-of-range field as RESOLVED — M an unadmitted value blocks and names itself, with the all-terminal ledger as its paired negative control / N case-folding NORMALISES rather than rejects, so an uppercase OPEN resolves UNRESOLVED and a fold-and-reject implementation cannot pass M / O the two section-2.1a status aliases stay ADMITTED, without which every legacy re-run blocks / Q the ARITY class in BOTH its mechanisms, the one witnessed live: at arity<=10 field 11 does not exist and reads EMPTY, at arity 11 the row-terminating pipe stays glued to the last field and reads 'open |' NON-empty, and the detail carries fields:N so a dropped column is distinguishable from a mistyped word / R an unreadable ledger cannot be attested away, the structural sibling of L / S row 6 renders the fifth state WITH its counts instead of falling to the default that asserts the gate did not run, with the still-reachable default as its control / T PRECEDENCE: a ledger carrying both classes renders UNRESOLVED and carries BOTH enumerations in one detail, because the state selects the operator's remedy and reversing it would drop the open enumeration from the ledgers that most need it / H --dry-run never returns non-zero yet still EVALUATES, and names the condition that would FAIL at --apply / I an idempotent re-run over an already-closed milestone, where an UNRESOLVED verdict is the close-before-verdict shape itself / J --no-merge still evaluates and records rather than blocks / K Verification row 6 reads the Phase-12.9 GLOBAL — unset renders UNVERIFIED never a green cell, mutating the global moves the cell, and phase_run_verification is asserted NOT to re-evaluate the predicate after the close / L an attestation does NOT clear an UNRESOLVED verdict — an open row is dispositioned, never attested away / P operator-instance path tokenisation, with a sensitivity arm proving the leak probe can match its own needle"
   _st_claim M "  phase_action_item_gate MEASURED recommended --attest-action-items cause validated (group M — 10 arms, one for each of the classifier's four refusal paths plus the six cause arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): every arm binds to the literal 'MEASURED RECOMMENDATION: ' prefix rather than to the whole detail, because the blocking FAIL text already names BOTH causes in its remediation sentence and a whole-detail search for either one therefore passes over an inverted classifier — the vacuous-arm shape, refused here by construction — M1 a commitment emitted with an empty ledger recommends emit-skipped and provably not the other cause / M2 its differential control, same fixture and mode with only the log counts changed, recommends no-commitments and provably not the other / M3 the residue gets its own outcome: decisions rendered with nothing emitted is the shape a swept-and-owed-nothing release and a never-swept release BOTH produce, so the classifier recommends NEITHER cause instead of guessing / M4 an unreadable probe is not a zero — a missing reader recommends nothing and NAMES the reader, without which a broken reader would silently recommend no-commitments on every close / M5 a measurement that DISAGREES with an attestation already given is recorded and still passes, with the specificity arm that an AGREEING measurement renders no disagreement notice / M6 THE SWEEP ZERO-STATE IS NOT A COMMITMENT: action-item-opened rows that all carry the sweep:none-owed payload token — what a release that swept every routing point and owed nothing emits — recommend NEITHER cause and never emit-skipped, and the basis NAMES the zero-state rows; red against a classifier that counts every action-item-opened row / M7 its specificity twin: ONE real commitment beside zero-state rows still recommends emit-skipped and renders the commitment count rather than the raw count, so an over-correction that stops counting whenever a zero-state row is present fails here, and a threshold drift to -ge 2 fails here as well as in M1 / M8 a zero-state count larger than the action-item-opened set it is a subset of is not a count — the classifier recommends nothing and NAMES the unusable probe rather than subtracting its way to a negative commitment count, without which the subset guard is unarmed / M9 A QUERY WITH NO RELEASE KEY IS NOT A ZERO — every other arm hands the classifier a key, so the first refusal path went undriven; the arm drives an unresolvable key against the M1 reader, the one that WOULD answer emit-skipped, so a disarmed guard prints a confident cause built from a query that names no release rather than simply printing nothing, and the detail must NAME the missing key / M10 A READER THAT DID NOT ANSWER WITH A COUNT HAS NOT COUNTED — M8 drives only the subset limb of the usable-count guard, leaving the non-integer limb unarmed; four limbs, because that limb is a DISJUNCTION over three separately-read counts and one fixture breaking all three is satisfied by any single guard surviving (measured: a mutant defaulting only the action-item-opened read to 0 left an all-queries-broken fixture still refusing), so limbs a-b-c each break exactly ONE query and leave the other two answering integers, giving every guard a fixture only it can refuse, while limb d breaks every query and is the only one that grades the READ rather than the guard — a bare integer on the first stdout line and an error carrying digits inside a non-numeric value on the last, so a first-line read or a contains-a-digit test reddens — and all four require the classifier to NAME the unusable probe instead of defaulting an unanswered count to 0 / M9 and M10 are the two arms this release adds, each measured RED against its own one-line mutant and GREEN unmutated, because before them the no-release-key guard could be replaced by an always-false test and the three non-integer guards defaulted to 0 with this suite still at exit 0 and zero FAIL lines / and every M arm re-asserts the verdict its fixture's attestation state already fixed — rc 3 with STATE_AI_GATE unchanged on the unattested M1-M4, M6-M8 and M10, rc 3 on M9 which reaches that same unattested state from an unresolvable directory, rc 0 on the attested M5 — so 'the recommendation decides nothing' is measured on each run rather than asserted once"
   _st_claim 4e-c-j "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT; #6255, arms c-j — this clause ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when the arms leave no witness: TERMINAL STATES — (e) an ALREADY-MERGED PR PASSes on the FIRST read with ZERO merge attempts and its detail carries the elapsed figure AC-4 is graded on, which no earlier version of this phase emitted at all / (f) a CLOSED-unmerged PR FAILs and its detail NAMES the closed-without-merging case, driven on the deliberately MERGEABLE-looking closed shape because the CONFLICTING one trips the pre-existing arm by accident, and asserted on the detail because a bare FAIL is satisfied by the PRE-FIX timeout path / (g) THE PER-ITERATION PIN: a merge landing MID-POLL is recognised on the SECOND read, so a pre-loop-only implementation passes (e) and fails here — budgeted at MERGE_TIMEOUT=2 because the bound admits ceil(TIMEOUT/STEP) iterations and a 1/1 arm would redden against a CORRECT implementation / RE-PROBE — (h) a failed gh pr merge over a PR that DID merge PASSes with the merge ATTEMPTED once and a detail naming the unobserved-merge case, (h2) its NEGATIVE CONTROL: the same failed merge over a STILL-OPEN PR must still FAIL, without which an implementation that PASSes on any merge failure satisfies (h) / (i) THE WIDTH PIN over the shipped text of the one shared reader, three-field --json list and three-field --jq template, behind an anti-vacuity floor on the extraction and TWO specificity controls on constructed FOUR-field lines that both needles must reject / BUDGET EXHAUSTION — (j) AC-2's timeout limb, which every arm above leaves ungraded: a PR BLOCKED on every read must spend the budget and then FAIL with a detail NAMING the timeout ('merge state still=') and ZERO merge attempts, asserted on the detail because a bare FAIL is satisfied by (f)'s CLOSED arm and by the CONFLICTING HALT, and on the merge counter because removing the post-loop guard falls straight through to gh pr merge and launders the spent budget into a PASS — measured: with that guard replaced by 'if false' the whole suite stayed at exit 0 / and every arm c-j counts BOTH pr view and pr merge, because post-fix a PASS is reachable through the terminal arm and no longer proves on its own that a merge was attempted)"
+  _st_claim PRT "  close-out pull-request reads validated (#6871, group PRT — 27 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness), every arm under an EXHAUSTED GraphQL pool with the host's REST endpoint answering, through ONE dual-transport stub whose fixtures carry the live gh api -i byte layout. read_state: p1 captures the merge SHA of a PR merged into main / p2 an OPEN PR carrying a test-merge SHA is recorded as not merged and captures no SHA, a non-blocking WARN under --dry-run that predicts the --apply FAIL / p2a the same fact FAILs read_state at --apply with rc 3, before any write (CR-B6) / p2d --outcome DEFERRED excepts that answered not-merged branch / p3 a quota refusal is recorded as unresolvable, naming its class, and never as not merged / p3a it FAILs at --apply / p3d DEFERRED does not except it. The #1681 guard: p4 SKIPs a VERIFIED row over a PR merged into main — the order-7 RED arm, where pre-fix the empty GraphQL read reported false-VERIFIED against a correct row / p5 p6 p7 a quota refusal, a transport failure and a 404 FAIL naming their class and never say false-VERIFIED / p8 a CLOSED-unmerged PR carrying a test-merge SHA is still caught as false-VERIFIED, naming its state / p9 quota wording inside a SUCCESSFUL body is data, not a refusal / p10 a PR merged into another base is still false-VERIFIED, naming the base. Verification row 4: p11 PASS / p12 UNVERIFIED naming the refusal, neither PASS nor FALSE-VERIFIED / p13 FALSE-VERIFIED naming the observed state. The chore-PR lookup: p14 binds an existing open PR found over REST and creates none / p15 a refused lookup FAILs and creates nothing, because a read that did not answer is not an absence / p16 CONTROL: an answered empty list creates and binds exactly one PR / p17 the request carries state=open and the owner-qualified head / fm1 a candidate whose head label is not owner:branch is never bound and never merged, though its own fixture reads mergeable. The await-merge poll: p18 PASSes an already-merged PR on its first read / p19 a quota refusal FAILs after exactly one read instead of polling an exhausted pool to the budget / p20 a transport failure is re-polled and the merge runs once / p21 a 404 FAILs after one read. p22 AC-3: no non-comment line of this file reads a pull request through a GraphQL-bound --json call, with a sensitivity line constructed at run time"
+  _st_claim PRT-rb "  rebuild_skill_packages release-diff fallback over REST validated (#6871, group PRT-rb — 4 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): MERGE_SHA is empty and GraphQL is exhausted, so only the REST files pages can answer — rb1 one answered page resolves tracker-manager / rb2 a full first page fetches page 2 and stops at the short page / rb3 a refused page FAILs naming the refusal, never 'fallback empty' / rb4 FM-3, the host's 3,000-file cap: thirty full pages are a truncation, so the phase FAILs naming the cap and never reads page 31"
   echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
