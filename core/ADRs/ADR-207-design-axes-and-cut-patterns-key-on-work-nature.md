@@ -202,7 +202,13 @@ Deliverable classes (registry concept 1) with delivered items in the pool: ⟦S6
 | V-22 | Software | open | — | fits no nature → matches `behaviour-change` (`infrastructure-change`) | E1 | E1 | E1 | E1 | none |
 | V-23 | Governance | completed | software | fits no nature → matches `behaviour-change` (`defect`) | E2 | E2 | E2 | E2 | none |
 | V-24 | Software | open | — | fits no nature → matches `behaviour-change` | E1 | E1 | E1 | E0 | none |
-⟦S6: the remaining rows from V-25 in set order; State is completed, not planned or open; Concept-1 class marks inferred values; then a summary line — items coded, delivered items per class, per-nature counts, items fitting no nature, multi-nature items and the owed-set widening they cause, candidates admitted, axis co-occurrence⟧
+| V-25 | Governance | open | — | `defect` | E1 | E1 | E1 | E1 | none |
+| V-26 | Software | open | — | `defect` | E1 | E1 | E1 | E1 | none |
+| V-27 | Governance | open | — | fits no nature → matches `restructure` | E1 | E1 | E1 | E1 | none |
+| V-28 | Software | open | — | `defect` | E1 | E1 | E1 | E0 | none |
+| V-29 | Governance | open | — | `defect` (`infrastructure-change`) | E1 | E1 | E1 | E1 | none |
+| V-30 | Software | open | — | fits no nature → matches `behaviour-change` | E1 | E1 | E1 | E0 | none |
+⟦S6: the remaining row, V-31; State is completed, not planned or open; Concept-1 class marks inferred values; then a summary line — items coded, delivered items per class, per-nature counts, items fitting no nature, multi-nature items and the owed-set widening they cause, candidates admitted, axis co-occurrence⟧
 
 ### Applying the model to the measured instance
 
@@ -268,4 +274,10 @@ MODERATE — revised in place or reverted before ratification; after it, superse
 - V-22 — #7418 — the install-tests timeout guard
 - V-23 — #5057 — declared-versus-live label attribute divergence
 - V-24 — #4207 — the FinOps estimator's confidence label on a bimodal set
-⟦S6: one line per remaining coded item from V-25 — "V-NN — #N — a noun phrase from its title"; one line per follow-up card the continuity table names⟧
+- V-25 — #5764 — an ungradeable cross-issue criterion retired for a runnable arm
+- V-26 — #7548 — heredoc bodies misread as unparseable by the egress rule
+- V-27 — #7403 — the posture of standing self-test arms with no blocking CI home
+- V-28 — #7552 — a hard-coded jq path the dependency-hardening check misses
+- V-29 — #6238 — a committed gate for the retired frontmatter-strip literal
+- V-30 — #7855 — the absolute checkout path in close-out report details
+⟦S6: one line per remaining coded item, V-31 — "V-NN — #N — a noun phrase from its title"; one line per follow-up card the continuity table names⟧
