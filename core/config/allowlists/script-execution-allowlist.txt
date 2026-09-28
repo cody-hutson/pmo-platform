@@ -47,11 +47,14 @@
 # Format:
 #   - One bash GLOB PATTERN per line (shell `case` pattern syntax, NOT regex)
 #   - Token-substituted at install time:
-#       [PMO_PLATFORM_ROOT]      → the pmo-platform repo root (where the deploy +
-#                                  release scripts live). Resolved at deploy time
-#                                  by core/deploy/compose.py via self-location, so
-#                                  it is correct for ANY clone directory name or
-#                                  location (no hardcoded dir-name assumption).
+#       [PMO_PLATFORM_ROOT]      → the canonical pmo-platform checkout root: the main
+#                                  working tree of the installed repository, never a
+#                                  linked worktree. Resolved at deploy time by
+#                                  core/deploy/compose.py from the install record, so it
+#                                  is identical whichever checkout or worktree a refresh
+#                                  runs from, and correct for ANY clone directory name or
+#                                  location (no hardcoded dir-name assumption). Forms 1-2
+#                                  of the convention below anchor there.
 #       [CLAUDE_WORKSPACE_ROOT]  → the Claude workspace root (default $HOME/Claude).
 #   - Comments start with # (first non-whitespace char)
 #   - Blank lines ignored
