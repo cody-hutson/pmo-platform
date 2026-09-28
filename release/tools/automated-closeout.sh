@@ -8549,7 +8549,7 @@ def _root(name):
     return r[:-1] if r.endswith("/") else r
 
 
-_roots = [(r, m) for r, m in ((_root("CLOSEOUT_REDACT_REPO"), "<repo>"), (_root("CLOSEOUT_REDACT_HOME"), "<home>")) if len(r) > 1]
+_roots = [(r, m) for r, m in ((_root("CLOSEOUT_REDACT_REPO"), "<repo>"), (_root("CLOSEOUT_REDACT_HOME"), "<home>"))]
 
 
 def _red(v):
