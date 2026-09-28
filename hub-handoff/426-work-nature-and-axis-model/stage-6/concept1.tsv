@@ -1,0 +1,112 @@
+1772	Governance	governance-declarations-match-enforcement	governance	resolved	R-C1 governance-declarations-match-enforcement_RELEASE_PLAN.md	governance-declarations-match-enforcement_RELEASE_PLAN.md=governance	agree
+1825	Governance	methodology-fields-and-statuses	governance	resolved	R-C1 v4/v4.16_RELEASE_PLAN.md	v4/v4.16_RELEASE_PLAN.md=governance	agree
+1883	Governance	99-rca-and-corpus-anchor-hygiene	governance	inferred	milestone released as v2.41 with no plan file; index theme 'Governance-hygiene — the root-cause-analysis method wired by citation'	NONE	n/a
+1918	Governance	99-rca-and-corpus-anchor-hygiene	governance	inferred	same milestone as 1883	NONE	n/a
+2021	Governance	structure-records-and-review-signals	governance	inferred	v3.86 plan FCM: 1 executable of 16 paths	v3.86_RELEASE_PLAN.md=NO-LABEL	agree
+2045	Governance	-	-	unresolved	no milestone and no commit citing the item	NONE	n/a
+2083	Governance	98-pipeline-freshness-and-spoke-safety	governance	resolved	R-C1 v3.70_RELEASE_PLAN.md	v3.70_RELEASE_PLAN.md=governance	agree
+2095	Governance	27-corpus-drift-reconciliation	governance	inferred	v2.29 plan (no FCM; Implementation Sequence): 1 executable of 10 paths	NONE	n/a
+2106	Governance	governance-ci-checks	software	inferred	governance-ci-checks plan FCM: 8 executable of 15 paths	governance-ci-checks_RELEASE_PLAN.md=NO-LABEL	agree
+2115	Governance	release-hub-orchestrator-skill	governance	inferred	commit b031b50d: SKILL.md + reference Markdown	NONE	n/a
+2120	Governance	91-release-notes-conformance	software	resolved	R-C1 v2/v2.37_RELEASE_PLAN.md	NONE	n/a
+2156	Governance	100-adr-and-frontmatter-schema	governance	inferred	v3.53 plan FCM: 5 executable of 16 paths	v3/v3.53_RELEASE_PLAN.md=NO-LABEL	agree
+2157	Governance	100-adr-and-frontmatter-schema	governance	inferred	v3.53 plan FCM: 5 executable of 16 paths	v3/v3.53_RELEASE_PLAN.md=NO-LABEL	agree
+2158	Governance	95-deploy-tooling-resolver-and-test-parity	software	resolved	R-C1 v3.79_RELEASE_PLAN.md	NONE	n/a
+2212	Governance	release-hub-orchestrator-skill	software	inferred	commit 8f16974d: 2 executable, 1 Markdown (packages/ build output excluded)	NONE	n/a
+2250	Governance	path-and-citation-reconciliation	governance	resolved	R-C1 v4/v4.27_RELEASE_PLAN.md	NONE	n/a
+2386	Governance	-	-	unresolved	no milestone and no commit citing the item	NONE	n/a
+2434	Governance	-	governance	inferred	commit 5eb9efd0: 1 executable, 1 Markdown (a tie resolves to governance, the internal-artifact default)	NONE	n/a
+2435	Governance	close-out-reliability-hardening	software	resolved	R-C1 v3.80-close-out-reliability-hardening_RELEASE_PLAN.md	NONE	n/a
+2456	Governance	path-and-citation-reconciliation	governance	resolved	R-C1 v4/v4.27_RELEASE_PLAN.md	v4/v4.27_RELEASE_PLAN.md=governance	agree
+2532	Governance	-	governance	inferred	commit b9fa1c2b: 1 executable, 1 Markdown (tie -> governance)	NONE	n/a
+2540	Governance	close-out-reliability-hardening	software	resolved	R-C1 v3.80-close-out-reliability-hardening_RELEASE_PLAN.md	NONE	n/a
+2548	Governance	release-identity-and-plan-naming	governance	inferred	v3.93 plan FCM: 5 executable of 23 paths	NONE	n/a
+2656	Governance	93-governance-ci-gates	governance	resolved	R-C1 governance-ci-gates_RELEASE_PLAN.md	governance-ci-gates_RELEASE_PLAN.md=governance	agree
+2682	Governance	governance-ci-checks	software	inferred	governance-ci-checks plan FCM: 8 executable of 15 paths	governance-ci-checks_RELEASE_PLAN.md=NO-LABEL	agree
+2685	Governance	governance-ci-checks	software	inferred	governance-ci-checks plan FCM: 8 executable of 15 paths	governance-ci-checks_RELEASE_PLAN.md=NO-LABEL	agree
+2805	Governance	governance-doc-reconciliation	governance	resolved	R-C1 v3.82-governance-doc-reconciliation_RELEASE_PLAN.md	NONE	n/a
+2854	Governance	governance-doc-reconciliation	governance	resolved	R-C1 v3.82-governance-doc-reconciliation_RELEASE_PLAN.md	NONE	n/a
+3009	Governance	governance-ci-checks	software	inferred	governance-ci-checks plan FCM: 8 executable of 15 paths	governance-ci-checks_RELEASE_PLAN.md=NO-LABEL	agree
+3112	Governance	-	software	inferred	commit 0495ea95: 1 workflow file	NONE	n/a
+3126	Governance	agent-edit-discipline-codification	governance	resolved	R-C1 v4/v4.09_RELEASE_PLAN.md	v4/v4.09_RELEASE_PLAN.md=governance	agree
+3127	Governance	agent-edit-discipline-codification	governance	resolved	R-C1 v4/v4.09_RELEASE_PLAN.md	v4/v4.09_RELEASE_PLAN.md=governance	agree
+3128	Governance	agent-edit-discipline-codification	governance	resolved	R-C1 v4/v4.09_RELEASE_PLAN.md	v4/v4.09_RELEASE_PLAN.md=governance	agree
+3196	Governance	governance-hardening	governance	resolved	R-C1 v4/v4.06_RELEASE_PLAN.md	v4/v4.06_RELEASE_PLAN.md=governance	agree
+3261	Governance	109-comment-trust-boundary	governance	resolved	R-C1 v3.65.1_RELEASE_PLAN.md	NONE	n/a
+3290	Governance	governance-hardening	governance	resolved	R-C1 v4/v4.06_RELEASE_PLAN.md	v4/v4.06_RELEASE_PLAN.md=governance	agree
+3303	Governance	intake-and-gate-protocol-hardening	governance	inferred	v3.94 plan FCM: 0 executable of 19 paths	v3.94-intake-and-gate-protocol-hardening_RELEASE_PLAN.md=NO-LABEL	agree
+3307	Governance	release-identity-and-plan-naming	governance	inferred	v3.93 plan FCM: 5 executable of 23 paths	NONE	n/a
+3382	Governance	operator-instance-home-and-install-scaffold	software	resolved	R-C1 v4/v4.38_RELEASE_PLAN.md	v4/v4.38_RELEASE_PLAN.md=software	agree
+3385	Governance	governance-doc-reconciliation	governance	resolved	R-C1 v3.82-governance-doc-reconciliation_RELEASE_PLAN.md	NONE	n/a
+3386	Governance	governance-doc-reconciliation	governance	resolved	R-C1 v3.82-governance-doc-reconciliation_RELEASE_PLAN.md	NONE	n/a
+3387	Governance	governance-hardening	governance	resolved	R-C1 v4/v4.06_RELEASE_PLAN.md	v4/v4.06_RELEASE_PLAN.md=governance	agree
+3581	Governance	release-bundle-and-sequence-gates	governance	resolved	R-C1 v4/v4.07_RELEASE_PLAN.md	v4/v4.07_RELEASE_PLAN.md=governance	agree
+3619	Governance	version-binding-lifecycle	governance	resolved	R-C1 v4/v4.08_RELEASE_PLAN.md	v4/v4.08_RELEASE_PLAN.md=governance	agree
+3653	Governance	path-and-citation-reconciliation	governance	resolved	R-C1 v4/v4.27_RELEASE_PLAN.md	v4/v4.27_RELEASE_PLAN.md=governance	agree
+3707	Governance	adr-corpus-conformance	governance	resolved	R-C1 v4/v4.11_RELEASE_PLAN.md	v4/v4.11_RELEASE_PLAN.md=governance	agree
+3708	Governance	adr-corpus-conformance	governance	resolved	R-C1 v4/v4.11_RELEASE_PLAN.md	v4/v4.11_RELEASE_PLAN.md=governance	agree
+3710	Governance	ci-selftest-and-check-hardening	governance	resolved	R-C1 v4/v4.13_RELEASE_PLAN.md	v4/v4.13_RELEASE_PLAN.md=governance	agree
+3711	Governance	release-check-enforcement-gates	governance	inferred	v4.14 plan FCM: 11 executable of 39 paths	v4/v4.14_RELEASE_PLAN.md=NO-LABEL	agree
+3722	Software	deploy-and-tooling-defect-cleanup	software	resolved	R-C1 v3.88-deploy-and-tooling-defect-cleanup_RELEASE_PLAN.md	v3.88-deploy-and-tooling-defect-cleanup_RELEASE_PLAN.md=software	agree
+3820	Governance	release-check-enforcement-gates	governance	inferred	v4.14 plan FCM: 11 executable of 39 paths	v4/v4.14_RELEASE_PLAN.md=NO-LABEL	agree
+3821	Governance	release-check-enforcement-gates	governance	inferred	v4.14 plan FCM: 11 executable of 39 paths	v4/v4.14_RELEASE_PLAN.md=NO-LABEL	agree
+3826	Governance	release-check-enforcement-gates	governance	inferred	v4.14 plan FCM: 11 executable of 39 paths	v4/v4.14_RELEASE_PLAN.md=NO-LABEL	agree
+3926	Governance	agent-edit-discipline-codification	governance	resolved	R-C1 v4/v4.09_RELEASE_PLAN.md	v4/v4.09_RELEASE_PLAN.md=governance	agree
+3927	Governance	agent-edit-discipline-codification	governance	resolved	R-C1 v4/v4.09_RELEASE_PLAN.md	v4/v4.09_RELEASE_PLAN.md=governance	agree
+3937	Governance	-	governance	inferred	commit 627b4776: 2 Markdown	NONE	n/a
+3939	Governance	corpus-integrity-lints-and-refs	governance	resolved	R-C1 v4/v4.05_RELEASE_PLAN.md	v4/v4.05_RELEASE_PLAN.md=governance	agree
+3993	Governance	release-identity-and-plan-naming	governance	inferred	v3.93 plan FCM: 5 executable of 23 paths	NONE	n/a
+4195	Governance	corpus-integrity-lints-and-refs	governance	resolved	R-C1 v4/v4.05_RELEASE_PLAN.md	v4/v4.05_RELEASE_PLAN.md=governance	agree
+4196	Governance	corpus-integrity-lints-and-refs	governance	resolved	R-C1 v4/v4.05_RELEASE_PLAN.md	v4/v4.05_RELEASE_PLAN.md=governance	agree
+4197	Software	corpus-integrity-lints-and-refs	governance	resolved	R-C1 v4/v4.05_RELEASE_PLAN.md	v4/v4.05_RELEASE_PLAN.md=governance	agree
+4198	Governance	corpus-integrity-lints-and-refs	governance	resolved	R-C1 v4/v4.05_RELEASE_PLAN.md	v4/v4.05_RELEASE_PLAN.md=governance	agree
+4199	Governance	version-binding-lifecycle	governance	resolved	R-C1 v4/v4.08_RELEASE_PLAN.md	v4/v4.08_RELEASE_PLAN.md=governance	agree
+4200	Governance	ci-stable-under-transient-conditions	governance	resolved	R-C1 v4/v4.42_RELEASE_PLAN.md	v4/v4.42_RELEASE_PLAN.md=governance	agree
+4208	Governance	check-enforcement-fidelity	software	resolved	R-C1 v4/v4.04_RELEASE_PLAN.md	v4/v4.04_RELEASE_PLAN.md=software	agree
+4214	Governance	warn-mode-gate-graduation	governance	resolved	R-C1 v4/v4.45_RELEASE_PLAN.md	v4/v4.45_RELEASE_PLAN.md=governance	agree
+4227	Governance	ci-stable-under-transient-conditions	governance	resolved	R-C1 v4/v4.42_RELEASE_PLAN.md	v4/v4.42_RELEASE_PLAN.md=governance	agree
+4232	Governance	corpus-tolerance-and-hygiene	governance	resolved	R-C1 v4/v4.26_RELEASE_PLAN.md	v4/v4.26_RELEASE_PLAN.md=governance	agree
+4738	Governance	rules-mirror-delivered	governance	resolved	R-C1 v4/v4.54_RELEASE_PLAN.md	v4/v4.54_RELEASE_PLAN.md=governance	agree
+4740	Governance	rules-mirror-delivered	governance	resolved	R-C1 v4/v4.54_RELEASE_PLAN.md	v4/v4.54_RELEASE_PLAN.md=governance	agree
+4750	Governance	skill-suite-conformance	software	resolved	R-C1 v4/v4.28_RELEASE_PLAN.md	NONE	n/a
+4751	Governance	warn-mode-gate-graduation	governance	resolved	R-C1 v4/v4.45_RELEASE_PLAN.md	v4/v4.45_RELEASE_PLAN.md=governance	agree
+4753	Governance	skill-suite-conformance	software	resolved	R-C1 v4/v4.28_RELEASE_PLAN.md	NONE	n/a
+4899	Governance	triage-and-backlog-instrumentation	governance	resolved	R-C1 v4/v4.24_RELEASE_PLAN.md	v4/v4.24_RELEASE_PLAN.md=governance	agree
+4900	Governance	reference-constant-integrity	governance	resolved	R-C1 v4/v4.25_RELEASE_PLAN.md	v4/v4.25_RELEASE_PLAN.md=governance	agree
+4902	Governance	reference-constant-integrity	governance	resolved	R-C1 v4/v4.25_RELEASE_PLAN.md	v4/v4.25_RELEASE_PLAN.md=governance	agree
+4908	Governance	check-fail-open-elimination	software	resolved	R-C1 v4/v4.29_RELEASE_PLAN.md	v4/v4.29_RELEASE_PLAN.md=software	agree
+4923	Governance	pipeline-spec-self-consistency	governance	resolved	R-C1 v4/v4.40_RELEASE_PLAN.md	v4/v4.40_RELEASE_PLAN.md=governance	agree
+4926	Governance	triage-and-backlog-instrumentation	governance	resolved	R-C1 v4/v4.24_RELEASE_PLAN.md	v4/v4.16_RELEASE_PLAN.md=governance; v4/v4.24_RELEASE_PLAN.md=governance	agree
+4995	Governance	adr-corpus-integrity	governance	resolved	R-C1 v4/v4.50_RELEASE_PLAN.md	v4/v4.50_RELEASE_PLAN.md=governance	agree
+5054	Governance	label-and-reference-integrity	software	resolved	R-C1 v4/v4.48_RELEASE_PLAN.md	v4/v4.48_RELEASE_PLAN.md=software	agree
+5055	Governance	-	governance	inferred	commit 0b9a339a (cited by the closing readiness sweep): 2 executable, 4 Markdown, 2 allowlists	NONE	n/a
+5056	Governance	skill-surface-sync	governance	resolved	R-C1 v4/v4.44_RELEASE_PLAN.md	v4/v4.44_RELEASE_PLAN.md=governance	agree
+5057	Governance	label-and-reference-integrity	software	resolved	R-C1 v4/v4.48_RELEASE_PLAN.md	v4/v4.48_RELEASE_PLAN.md=software	agree
+5058	Governance	label-and-reference-integrity	software	resolved	R-C1 v4/v4.48_RELEASE_PLAN.md	v4/v4.48_RELEASE_PLAN.md=software	agree
+5060	Governance	adr-corpus-integrity	governance	resolved	R-C1 v4/v4.50_RELEASE_PLAN.md	v4/v4.50_RELEASE_PLAN.md=governance	agree
+5063	Governance	plan-file-identity-adr-092	governance	resolved	R-C1 v4/v4.32_RELEASE_PLAN.md	v4/v4.32_RELEASE_PLAN.md=governance	agree
+5066	Governance	closeout-reports-what-shipped	software	resolved	R-C1 v4/v4.34_RELEASE_PLAN.md	NONE	n/a
+5189	Governance	-	governance	inferred	commits b4b96b29 + c8b45b16: 1 executable, 3 Markdown	NONE	n/a
+5232	Governance	hub-emits-state-gates-read	governance	resolved	R-C1 v4/v4.67_RELEASE_PLAN.md	v4/v4.67_RELEASE_PLAN.md=governance	agree
+5258	Governance	label-and-reference-integrity	software	resolved	R-C1 v4/v4.48_RELEASE_PLAN.md	v4/v4.48_RELEASE_PLAN.md=software	agree
+5282	Governance	hub-emits-state-gates-read	governance	resolved	R-C1 v4/v4.67_RELEASE_PLAN.md	v4/v4.67_RELEASE_PLAN.md=governance	agree
+5285	Governance	hooks-enforce-under-adversity	software	resolved	R-C1 v4/v4.31_RELEASE_PLAN.md	NONE	n/a
+5288	Governance	closeout-reports-what-shipped	software	resolved	R-C1 v4/v4.34_RELEASE_PLAN.md	NONE	n/a
+5292	Governance	hooks-enforce-under-adversity	software	resolved	R-C1 v4/v4.31_RELEASE_PLAN.md	NONE	n/a
+5293	Governance	hooks-block-their-declared-subject	software	resolved	R-C1 hooks-block-their-declared-subject_RELEASE_PLAN.md	hooks-block-their-declared-subject_RELEASE_PLAN.md=software	agree
+5505	Governance	hub-spoke-run-and-planning-discipline	governance	resolved	R-C1 _unversioned/hub-spoke-run-and-planning-discipline_RELEASE_PLAN.md	_unversioned/hub-spoke-run-and-planning-discipline_RELEASE_PLAN.md=governance; hooks-block-their-declared-subject_RELEASE_PLAN.md=software	DISAGREE
+5833	Governance	hub-spoke-run-and-planning-discipline	governance	resolved	R-C1 _unversioned/hub-spoke-run-and-planning-discipline_RELEASE_PLAN.md	_unversioned/hub-spoke-run-and-planning-discipline_RELEASE_PLAN.md=governance	agree
+5844	Data	one-system-of-record-per-element	governance	resolved	R-C1 _unversioned/one-system-of-record-per-element_RELEASE_PLAN.md	_unversioned/one-system-of-record-per-element_RELEASE_PLAN.md=governance	agree
+5846	Data	one-system-of-record-per-element	governance	resolved	R-C1 _unversioned/one-system-of-record-per-element_RELEASE_PLAN.md	_unversioned/one-system-of-record-per-element_RELEASE_PLAN.md=governance	agree
+5912	Governance	-	governance	inferred	commit eaab3e98: 2 executable, 4 Markdown	NONE	n/a
+6175	Governance	hooks-block-only-their-scope	software	resolved	R-C1 v4/v4.55_RELEASE_PLAN.md	NONE	n/a
+6241	Governance	governance-pointer-fixes	governance	resolved	R-C1 v4/v4.61_RELEASE_PLAN.md	v4/v4.61_RELEASE_PLAN.md=governance	agree
+6244	Governance	adr-corpus-integrity	governance	resolved	R-C1 v4/v4.50_RELEASE_PLAN.md	v4/v4.50_RELEASE_PLAN.md=governance	agree
+6255	Governance	closeout-correctness-batch	governance	resolved	R-C1 v4/v4.63_RELEASE_PLAN.md	v4/v4.63_RELEASE_PLAN.md=governance	agree
+6298	Governance	warn-mode-gate-graduation	governance	resolved	R-C1 v4/v4.45_RELEASE_PLAN.md	v4/v4.45_RELEASE_PLAN.md=governance	agree
+6383	Governance	warn-mode-gate-graduation	governance	resolved	R-C1 v4/v4.45_RELEASE_PLAN.md	v4/v4.45_RELEASE_PLAN.md=governance	agree
+6441	Governance	rules-mirror-delivered	governance	resolved	R-C1 v4/v4.54_RELEASE_PLAN.md	v4/v4.54_RELEASE_PLAN.md=governance	agree
+6598	Governance	hub-spoke-run-and-planning-discipline	governance	resolved	R-C1 _unversioned/hub-spoke-run-and-planning-discipline_RELEASE_PLAN.md	_unversioned/hub-spoke-run-and-planning-discipline_RELEASE_PLAN.md=governance	agree
+6599	Governance	hub-spoke-run-and-planning-discipline	governance	resolved	R-C1 _unversioned/hub-spoke-run-and-planning-discipline_RELEASE_PLAN.md	_unversioned/hub-spoke-run-and-planning-discipline_RELEASE_PLAN.md=governance	agree
+6904	Governance	external-seam-conduct-binds	governance	resolved	R-C1 v4/v4.57_RELEASE_PLAN.md	v4/v4.57_RELEASE_PLAN.md=governance	agree
+6995	Governance	-	-	unresolved	no milestone and no commit citing the item	NONE	n/a

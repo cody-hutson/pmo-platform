@@ -1,0 +1,5 @@
+Append to `<OPERATOR_INSTANCE_HUB_STATE_PATH>/work-nature-and-axis-model/action-items.md` (13 fields, hub-action-tracking.md § 2):
+
+| AI-007 | 2026-09-28T00:55:20Z | 6 | #7972 | decision-deferred | hub | Carry Stage-6 R1–R3 (DEV-11 examples, DEV-12 steps 7–8, widening #7963), with R4/R5 as context and the #7403 contention note, to the Stage-9 GO/NO-GO briefing | stage-boundary | Stage 9 | issue:#7975 | open | — | — |
+| AI-008 | 2026-09-28T00:55:20Z | 6 | #7972 | deferred-edit | operator | Replay the hub-staged event rows for Stages 6–9 into the operator-instance event log with PRE/POST and three-arm read-backs | stage-boundary | Stage 9, after the GO/NO-GO row is staged | file:<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md | open | — | — |
+| AI-009 | 2026-09-28T02:33:24Z | 7 | #7973 | decision-deferred | hub | Carry two follow-up-card questions to the Stage-9 GO/NO-GO briefing: the plan executor's dispatch gap for prose-method rows, and the domain_practice label placement drift (Stage 4 § 5.7 vs practice) | stage-boundary | Stage 9 | issue:#7975 | open | — | — |
