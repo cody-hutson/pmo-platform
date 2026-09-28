@@ -11,8 +11,16 @@ Run from repo root:
 
 from __future__ import annotations
 
+import json
+import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Optional
+
+import pytest
 
 # Make core/deploy/ importable without packaging the script.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -294,25 +302,63 @@ def test_roundtrip_preserves_operator_additions_through_multiple_writes(tmp_path
 
 
 # ----- [PMO_PLATFORM_ROOT] deploy-time token (repo-root resolution) -----------------------------
-# The token replaces the vestigial hardcoded `pmo-platform-v2` install-path segment
-# in script-execution-allowlist.txt. Install safety hinges on the self-location
-# fallback being unconditionally correct, so it is the most heavily asserted path.
+# The token anchors the absolute rows of script-execution-allowlist.txt, a security
+# control, so it must be the DURABLE root: the main working tree of the installed
+# repository, never the checkout a deploy happens to run from. The ladder is
+# explicit flag > environment > install record > declared source > the main working
+# tree of the repository enclosing the query origin > refuse. There is no
+# self-location tier: compose.py's own checkout is only where the last tier ASKS.
+#
+# The default-origin arms below read the checkout hosting this file, so they need it
+# to be a git work tree; the fixture arms further down build their own repositories.
 
 
-def test_resolve_repo_root_self_location_is_compose_parent2() -> None:
-    """With no CLI value and no env override, the repo root is compose.py's parents[2].
+def _git_env() -> dict:
+    """The environment for this file's own git calls: every GIT_* variable stripped
+    (an inherited GIT_DIR must never point a fixture at another repository), no
+    system or global config."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env["GIT_CONFIG_NOSYSTEM"] = "1"
+    env["GIT_CONFIG_GLOBAL"] = os.devnull
+    return env
 
-    This is the install-safety anchor: compose.py lives at
-    <repo>/core/deploy/compose.py and is never copied out of the repo, so this is
-    always the repo root being composed — meaning the token can never survive
-    unsubstituted into a deployed file.
-    """
-    expected = str(Path(compose.__file__).resolve().parents[2])
-    assert compose.resolve_repo_root() == expected
+
+def _host_main_worktree() -> Optional[Path]:
+    """The main working tree of the checkout hosting this file, derived from its
+    common git directory — a different reading from the resolver's own, so it can
+    serve as the oracle. None when the host is not a git work tree."""
+    host = Path(compose.__file__).resolve().parents[2]
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(host), "rev-parse", "--git-common-dir"],
+            capture_output=True, text=True, env=_git_env(), timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0 or not out.stdout.strip():
+        return None
+    common = Path(os.path.realpath(os.path.join(str(host), out.stdout.strip())))
+    return common.parent if common.name == ".git" else None
+
+
+_HOST_MAIN = _host_main_worktree()
+_NEEDS_HOST_GIT = pytest.mark.skipif(
+    _HOST_MAIN is None,
+    reason="the checkout hosting this file is not a git work tree with a .git common "
+           "directory, so its main working tree cannot be computed independently",
+)
+
+
+@_NEEDS_HOST_GIT
+def test_resolve_repo_root_default_origin_is_the_host_main_worktree(monkeypatch) -> None:
+    """With no explicit value and no record, the root is the main working tree of the
+    repository this compose.py belongs to — whichever worktree of it runs."""
+    monkeypatch.delenv("PMO_PLATFORM_ROOT", raising=False)
+    assert compose.resolve_repo_root() == str(_HOST_MAIN)
 
 
 def test_resolve_repo_root_cli_value_wins(monkeypatch) -> None:
-    # CLI value beats both env and self-location.
+    # CLI value beats env: tier 1 over tier 2.
     monkeypatch.setenv("PMO_PLATFORM_ROOT", "/env/repo")
     assert compose.resolve_repo_root("/cli/repo") == str(Path("/cli/repo").resolve())
 
@@ -322,16 +368,19 @@ def test_resolve_repo_root_env_used_when_no_cli(monkeypatch) -> None:
     assert compose.resolve_repo_root() == str(Path("/env/repo").resolve())
 
 
-def test_resolve_repo_root_self_location_when_cli_and_env_absent(monkeypatch) -> None:
+@_NEEDS_HOST_GIT
+def test_resolve_repo_root_default_origin_names_the_main_worktree_tier(monkeypatch) -> None:
     monkeypatch.delenv("PMO_PLATFORM_ROOT", raising=False)
-    assert compose.resolve_repo_root() == str(Path(compose.__file__).resolve().parents[2])
+    res = compose.resolve_repo_root_with_source()
+    assert (res.root, res.source) == (str(_HOST_MAIN), "main-worktree")
 
 
+@_NEEDS_HOST_GIT
 def test_resolve_tokens_includes_pmo_platform_root(monkeypatch) -> None:
     monkeypatch.delenv("PMO_PLATFORM_ROOT", raising=False)
     tokens = compose.resolve_tokens(Path("/nonexistent/operator.toml"))
     assert "[PMO_PLATFORM_ROOT]" in tokens
-    assert tokens["[PMO_PLATFORM_ROOT]"] == str(Path(compose.__file__).resolve().parents[2])
+    assert tokens["[PMO_PLATFORM_ROOT]"] == str(_HOST_MAIN)
 
 
 def test_resolve_tokens_pmo_platform_root_override_flows_through() -> None:
@@ -390,6 +439,258 @@ def test_cli_write_repo_root_flag_substitutes(tmp_path: Path) -> None:
     written = target.read_text()
     assert "/opt/pmo/release/tools/blast-radius.sh" in written
     assert "[PMO_PLATFORM_ROOT]" not in written
+
+
+# ----- the tier ladder on hermetic fixture repositories -----------------------------------------
+# Every repository below is built fresh under a temporary directory: a primary with a
+# nested and an out-of-tree linked worktree, a clone of it, a bare clone with its own
+# worktree, a plain tree that is no repository at all, and an unrelated repository. A
+# "platform checkout" is any tree carrying core/deploy/compose.py, the marker the
+# resolver checks for; the fixture writes a one-line stand-in, never the real file.
+
+_GIT_IDENTITY = [
+    "-c", "user.name=compose fixture", "-c", "user.email=fixture@example.invalid",
+    "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main",
+]
+
+
+def _git(*args: str) -> None:
+    subprocess.run(["git", *_GIT_IDENTITY, *args], capture_output=True, text=True,
+                   env=_git_env(), timeout=60, check=True)
+
+
+def _with_marker(tree: Path) -> Path:
+    marker = tree / "core" / "deploy" / "compose.py"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text("# fixture stand-in for the platform-checkout marker\n")
+    return tree
+
+
+def _commit_all(repo: Path, message: str) -> None:
+    _git("-C", str(repo), "add", "-A")
+    _git("-C", str(repo), "commit", "-q", "-m", message)
+
+
+@pytest.fixture(scope="module")
+def roots(tmp_path_factory):
+    if shutil.which("git") is None:
+        pytest.skip("git is not available, so the fixture repositories cannot be built")
+    base = Path(os.path.realpath(str(tmp_path_factory.mktemp("root-ladder"))))
+    primary = _with_marker(base / "primary")
+    _git("init", "-q", str(primary))
+    _commit_all(primary, "fixture: primary")
+    w1 = primary / ".claude" / "worktrees" / "w1"
+    wt = base / "scratch" / "wt"
+    # No `-q` on worktree add: older command-line-tools git lacks it.
+    _git("-C", str(primary), "worktree", "add", "--detach", str(w1))
+    _git("-C", str(primary), "worktree", "add", "--detach", str(wt))
+    other = base / "other"
+    _git("clone", "-q", str(primary), str(other))
+    bare = base / "bare.git"
+    _git("clone", "-q", "--bare", str(primary), str(bare))
+    bare_wt = base / "bare-wt"
+    _git("-C", str(bare), "worktree", "add", "--detach", str(bare_wt))
+    plain = _with_marker(base / "plain")
+    outer = base / "outer"
+    outer.mkdir()
+    (outer / "README").write_text("an unrelated repository\n")
+    _git("init", "-q", str(outer))
+    _commit_all(outer, "fixture: unrelated")
+    in_outer = _with_marker(outer / "nested")          # a platform tree inside an unrelated repo
+    in_primary = _with_marker(primary / "vendored" / "copy")   # and inside a platform checkout
+    return SimpleNamespace(base=base, primary=primary, w1=w1, wt=wt, other=other,
+                           bare_wt=bare_wt, plain=plain, in_outer=in_outer, in_primary=in_primary)
+
+
+@pytest.fixture
+def no_root_env(monkeypatch):
+    monkeypatch.delenv("PMO_PLATFORM_ROOT", raising=False)
+
+
+def _state_file(tmp_path: Path, payload) -> Path:
+    path = tmp_path / "workspace-setup.state"
+    path.write_text(payload if isinstance(payload, str) else json.dumps(payload))
+    return path
+
+
+def _resolve(**kwargs):
+    return compose.resolve_repo_root_with_source(**kwargs)
+
+
+# AC-1: tier 5 maps every checkout of one repository to the same root.
+@pytest.mark.parametrize("which", ["primary", "w1", "wt"])
+def test_tier5_maps_every_checkout_to_the_primary(roots, no_root_env, which) -> None:
+    res = _resolve(source_tree=str(getattr(roots, which)))
+    assert (res.root, res.source) == (str(roots.primary), "main-worktree")
+
+
+# AC-3: the ladder ends at a repository-canonical anchor, and otherwise refuses.
+def test_tier5_refuses_a_tree_outside_any_repository(roots, no_root_env) -> None:
+    with pytest.raises(compose.RepoRootUnresolvable):
+        _resolve(source_tree=str(roots.plain))
+
+
+def test_tier5_refuses_a_worktree_of_a_bare_repository(roots, no_root_env) -> None:
+    with pytest.raises(compose.RepoRootUnresolvable):
+        _resolve(source_tree=str(roots.bare_wt))
+
+
+# The install record (tier 3): a record carrying source_repo_path_source is honored.
+def test_tier3_provenanced_record_wins_over_the_origin(roots, no_root_env, tmp_path) -> None:
+    state = _state_file(tmp_path, {"source_repo_path": str(roots.other),
+                                   "source_repo_path_source": "declared-source"})
+    res = _resolve(install_state=str(state), source_tree=str(roots.w1))
+    assert (res.root, res.source) == (str(roots.other), "install-record")
+    assert any(n.startswith("NOTE:") and str(roots.primary) in n for n in res.notes)
+
+
+def test_tier3_record_naming_a_linked_worktree_is_canonicalized(roots, no_root_env, tmp_path) -> None:
+    state = _state_file(tmp_path, {"source_repo_path": str(roots.w1),
+                                   "source_repo_path_source": "declared-source"})
+    res = _resolve(install_state=str(state), source_tree=str(roots.w1))
+    assert (res.root, res.source) == (str(roots.primary), "install-record")
+    assert any(n.startswith("NOTE:") and str(roots.w1) in n for n in res.notes)
+
+
+# AC-4, the pre-record fallback: an unusable record never blocks, and never self-locates.
+@pytest.mark.parametrize("shape", ["dead", "relative", "malformed", "field-absent", "file-absent"])
+def test_tier3_unusable_record_falls_through_to_the_main_worktree(roots, no_root_env, tmp_path, shape) -> None:
+    payloads = {
+        "dead": {"source_repo_path": str(roots.base / "gone"), "source_repo_path_source": "declared-source"},
+        "relative": {"source_repo_path": "relative/checkout", "source_repo_path_source": "declared-source"},
+        "malformed": "{ this is not json",
+        "field-absent": {"install_mode": "fresh-install"},
+    }
+    state = tmp_path / "absent.state" if shape == "file-absent" else _state_file(tmp_path, payloads[shape])
+    res = _resolve(install_state=str(state), source_tree=str(roots.w1))
+    assert (res.root, res.source) == (str(roots.primary), "main-worktree")
+    assert res.notes, "the skipped or rejected tier must be named"
+
+
+# A legacy record (no source_repo_path_source) is advisory: used only when tier 5
+# cannot resolve or agrees with it; otherwise one WARN names both roots.
+def test_tier3_legacy_record_that_agrees_with_tier5_is_used(roots, no_root_env, tmp_path) -> None:
+    state = _state_file(tmp_path, {"source_repo_path": str(roots.primary)})
+    res = _resolve(install_state=str(state), source_tree=str(roots.w1))
+    assert (res.root, res.source) == (str(roots.primary), "install-record")
+
+
+def test_tier3_legacy_record_naming_another_clone_is_advisory(roots, no_root_env, tmp_path) -> None:
+    state = _state_file(tmp_path, {"source_repo_path": str(roots.other)})
+    res = _resolve(install_state=str(state), source_tree=str(roots.w1))
+    assert (res.root, res.source) == (str(roots.primary), "main-worktree")
+    warns = [n for n in res.notes if n.startswith("WARN:")]
+    assert len(warns) == 1 and str(roots.other) in warns[0] and str(roots.primary) in warns[0]
+    assert "--force-regen" in warns[0]
+
+
+def test_tier3_legacy_record_is_used_when_tier5_cannot_resolve(roots, no_root_env, tmp_path) -> None:
+    state = _state_file(tmp_path, {"source_repo_path": str(roots.other)})
+    res = _resolve(install_state=str(state), source_tree=str(roots.plain))
+    assert (res.root, res.source) == (str(roots.other), "install-record")
+
+
+# The declared source (tier 4, install time).
+def test_tier4_declared_linked_worktree_resolves_to_the_primary(roots, no_root_env) -> None:
+    res = _resolve(declared_source=str(roots.w1))
+    assert (res.root, res.source) == (str(roots.primary), "declared-source")
+
+
+def test_tier4_declared_plain_tree_resolves_to_itself(roots, no_root_env) -> None:
+    res = _resolve(declared_source=str(roots.plain))
+    assert (res.root, res.source) == (str(roots.plain), "declared-source")
+
+
+def test_tier4_declared_tree_without_the_marker_is_refused(roots, no_root_env) -> None:
+    with pytest.raises(compose.RepoRootUnresolvable):
+        _resolve(declared_source=str(roots.base / "scratch"))
+
+
+# Identity, not membership: a tree nested inside someone else's work tree is its own tree.
+@pytest.mark.parametrize("which", ["in_primary", "in_outer"])
+def test_tier4_nested_non_repository_tree_is_its_own_root(roots, no_root_env, which) -> None:
+    tree = getattr(roots, which)
+    res = _resolve(declared_source=str(tree))
+    assert (res.root, res.source) == (str(tree), "declared-source")
+
+
+# The refusal predicate: every tier refuses a value the allowlist's glob patterns
+# would misread, or that names a transient worktree.
+@pytest.mark.parametrize("via", ["cli", "env"])
+def test_explicit_value_with_a_worktree_segment_is_refused(roots, monkeypatch, via) -> None:
+    value = str(roots.primary / ".claude" / "worktrees" / "gone")
+    if via == "env":
+        monkeypatch.setenv("PMO_PLATFORM_ROOT", value)
+        call = {}
+    else:
+        monkeypatch.delenv("PMO_PLATFORM_ROOT", raising=False)
+        call = {"cli_value": value}
+    with pytest.raises(compose.RepoRootUnresolvable):
+        _resolve(**call)
+
+
+def test_explicit_value_naming_a_linked_worktree_is_refused(roots, no_root_env) -> None:
+    with pytest.raises(compose.RepoRootUnresolvable):
+        _resolve(cli_value=str(roots.wt))
+
+
+def test_explicit_value_with_a_glob_metacharacter_is_refused(no_root_env) -> None:
+    with pytest.raises(compose.RepoRootUnresolvable):
+        _resolve(cli_value="/opt/pmo*")
+
+
+@pytest.mark.skipif(os.sep != "/", reason="a backslash is the path separator here, not an escape")
+def test_explicit_value_with_a_backslash_is_refused_on_posix(no_root_env) -> None:
+    with pytest.raises(compose.RepoRootUnresolvable):
+        _resolve(cli_value="/opt/pm\\o")
+
+
+def test_git_environment_is_scrubbed(roots, no_root_env, monkeypatch) -> None:
+    monkeypatch.setenv("GIT_DIR", str(roots.other / ".git"))
+    res = _resolve(source_tree=str(roots.w1))
+    assert res.root == str(roots.primary)
+
+
+# Lazy resolution and the survival guard.
+def test_regen_of_a_token_free_template_never_resolves_the_root(tmp_path, monkeypatch) -> None:
+    def boom(*args, **kwargs):
+        raise AssertionError("the root was resolved for a template that does not carry the token")
+
+    monkeypatch.setattr(compose, "resolve_repo_root", boom)
+    source = tmp_path / "src.txt"
+    target = tmp_path / "tgt.txt"
+    _seed_source(source, "no platform-root token in here [OPERATOR_NAME]\n")
+    compose.regen_one_file(source, target, tmp_path / "absent.toml", None, "tokens", "sha")
+    assert "no platform-root token in here" in target.read_text()
+
+
+def test_write_refuses_to_leave_the_token_unsubstituted(tmp_path) -> None:
+    source = tmp_path / "src.txt"
+    target = tmp_path / "tgt.txt"
+    _seed_source(source, "[PMO_PLATFORM_ROOT]/release/tools/blast-radius.sh\n")
+    with pytest.raises(compose.RepoRootUnresolvable):
+        compose.write_managed_file(source, target, {}, "", "sha", "tokens")
+    assert not target.exists()
+
+
+# The resolve-root subcommand: the one interface update.sh and setup-workspace.sh call.
+def _resolve_root_cli(*args: str):
+    env = {k: v for k, v in os.environ.items() if k != "PMO_PLATFORM_ROOT"}
+    compose_py = Path(__file__).resolve().parent.parent / "compose.py"
+    return subprocess.run([sys.executable, str(compose_py), "resolve-root", *args],
+                          capture_output=True, text=True, env=env, timeout=60)
+
+
+def test_cli_resolve_root_prints_the_root_and_its_tier(roots) -> None:
+    out = _resolve_root_cli("--source-tree", str(roots.w1))
+    assert out.returncode == 0, out.stderr
+    assert out.stdout == f"{roots.primary}\tmain-worktree\n"
+
+
+def test_cli_resolve_root_exits_3_naming_the_reason(roots) -> None:
+    out = _resolve_root_cli("--source-tree", str(roots.plain))
+    assert out.returncode == 3
+    assert "ERROR: cannot resolve [PMO_PLATFORM_ROOT]" in out.stderr
 
 
 def test_roundtrip_with_token_substitution_does_not_affect_preserved_section(tmp_path: Path) -> None:
