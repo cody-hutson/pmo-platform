@@ -152,7 +152,7 @@ INPUT="$(cat)"
 if [ "${CLAUDE_HOOK_BYPASS:-}" = "1" ]; then
   ts="$($DATE -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
   if [ -n "$JQ" ]; then
-    btool="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty' 2>/dev/null || echo unknown)"
+    btool="$("$JQ" -r '.tool_name // empty' 2>/dev/null <<<"$INPUT" || echo unknown)"
     "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg tool "$btool" \
       '{ts:$ts, hook:$hook, tool:$tool, action:"bypass"}' \
       >> "$BYPASS_LOG" 2>/dev/null || true
@@ -225,6 +225,26 @@ if [ -r "$PATTERNS_LIB" ] && "${BASH:-/bin/bash}" -n "$PATTERNS_LIB" 2>/dev/null
     _patterns_ok=1
   fi
 fi
+# ERE COMPILE CANARY. A constant that is present, parses as bash and is non-empty can still
+# be unusable: grep exits 2 on a pattern it cannot compile, and each detector below would then
+# meet that failure on every write. Checking here reports it once, before any detector, through
+# the posture this gate already applies to an unusable primitive (fail closed in enforce, stand
+# down in warn/off) — rather than leaving it to a detector, where it used to read as "no
+# findings". The input is empty, so a pattern that compiles has no line to match and exits 1;
+# 0 is unreachable, and 2 is a compile error. ANY status other than 1 therefore marks the lib
+# unusable — deliberately stricter than "2 fails", because a status nothing here anticipates is
+# an instrument state too, never a pass. The two classifier constants are not in this loop: the
+# positional canary below runs them through the classifier itself.
+if [ "$_patterns_ok" -eq 1 ]; then
+  for _re in "$LINK_RE" "$CUTOVER_RE" "$URL_RE" "$REFBLOCK_RE"; do
+    _re_rc=0
+    "$GREP" -E -- "$_re" </dev/null >/dev/null 2>&1 || _re_rc=$?
+    if [ "$_re_rc" -ne 1 ]; then
+      _patterns_ok=0
+      break
+    fi
+  done
+fi
 if [ "$_patterns_ok" -eq 0 ]; then
   log_error "PRIMITIVE-MISSING-OR-INVALID: detector constants $PATTERNS_LIB unusable"
   if [ "$MODE" = "enforce" ]; then
@@ -239,13 +259,68 @@ fi
 readonly LINK_RE CUTOVER_RE URL_RE REFBLOCK_RE ISSUEREF_RE HEXCOLOR_RE MIN_SELFDESCRIBE_WORDS
 
 # --- VALIDATE INPUT ---
-if ! "$PRINTF" '%s' "$INPUT" | "$JQ" -e . >/dev/null 2>&1; then
-  log_error "INVALID-INPUT: malformed JSON on stdin"
-  "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-INVALID] BLOCKED: malformed hook input JSON.\n' "$HOOK_NAME" >&2
+# The payload reaches jq by HERE-STRING, never as an argument. An argument is capped per
+# string on Linux (MAX_ARG_STRLEN, 128 KiB) and in total on macOS (ARG_MAX, 1 MiB); the
+# former pinned-printf feed failed exec on a large VALID write, jq then read an empty input,
+# and this test reported the exec failure as malformed JSON. The same rule holds for every
+# payload-derived value below: it moves by here-string into a pinned consumer and is never an
+# argument, and the payload-size and instrument-failure arms in
+# tests/block-fragile-refs.test.sh fail if one returns to an argument.
+#
+# A HERE-STRING HAS A PREREQUISITE OF ITS OWN: a writable temp file. bash 3.2 (the macOS
+# /bin/bash) backs every here-string with one whatever its size, and bash 5.1+ does so above
+# the pipe capacity (~64 KiB). No usable temp directory, a full disk or quota, or a file-size
+# limit therefore leaves the validator with no input. This read runs BEFORE the tool and scope
+# gates, so that holds for every Write and Edit, including paths the hook never adjudicates:
+# the hook cannot know a path is out of scope without reading the input that names it.
+#
+# Outcomes, told apart by WHO produced the status:
+#   jq ran and rejected the payload (exit 1..125)          -> INPUT-INVALID
+#   the payload never reached jq, or jq did not complete  -> INPUT-NOT-EVALUATED, a failure
+#                                                             of this hook, not of the write
+# _jq_rc stays EMPTY when bash could not materialize the here-string (the group body never
+# ran); 126 and above is the shell's did-not-complete range (exec failure, signal). jq's own
+# codes are deliberately not enumerated: the resolver admits whatever jq the host provides,
+# so the branch must not depend on one release's codes. RESIDUAL: jq documents exit 2 as a
+# usage or system error and exit 3 as a program compile error — states of the instrument, not
+# verdicts about the payload — and this partition reports both as INPUT-INVALID. They are not
+# remapped, because older jq releases also exit 2 on an input parse error, which IS a verdict;
+# the INPUT-INVALID line prints jq's exit code instead, so a system error can be told apart
+# when it happens.
+#
+# Posture of INPUT-NOT-EVALUATED: mode-coupled per ADR-078, like the primitive gates above. In
+# ENFORCE an input the hook could not read fails CLOSED (exit 2); in warn the hook stands down
+# (exit 0) with a WARN notice, because a rule match there would not have blocked either. Making
+# it fail closed in every mode would have CHANGED warn mode's exit for this input class from 0
+# to 2: the pipe read this replaces needs no temp file, so under a temp-file fault a write
+# passed validation and went on to a warn-mode verdict (exit 0) or out through the scope gate
+# (exit 0). INPUT-INVALID stays fail-closed in every mode that reaches this line, as it was.
+# Pinned arms: S8 / S8b and the two out-of-scope arms in tests/block-fragile-refs.test.sh.
+_jq_rc=""
+{ "$JQ" -e . >/dev/null 2>&1; _jq_rc=$?; } <<<"$INPUT" || true
+if [ -z "$_jq_rc" ] || [ "$_jq_rc" -ge 126 ]; then
+  if [ -z "$_jq_rc" ]; then
+    _why="the input could not be handed to the validator"
+  else
+    _why="the validator did not complete (exit ${_jq_rc})"
+  fi
+  log_error "INPUT-NOT-EVALUATED: ${_why}"
+  if [ "$MODE" = "enforce" ]; then
+    "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-NOT-EVALUATED] BLOCKED (fail-closed): %s; this is not a clean result, and not a finding about the write: the hook could not evaluate its input. See %s.\n' \
+      "$HOOK_NAME" "$_why" "$ERROR_LOG" >&2
+    exit 2
+  fi
+  "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-NOT-EVALUATED] WARN (degraded, .mode=%s): %s; this is not a clean result, and not a finding about the write: the hook could not evaluate its input, so ALL reference-durability classes were skipped this run. See %s.\n' \
+    "$HOOK_NAME" "$MODE" "$_why" "$ERROR_LOG" >&2
+  exit 0
+fi
+if [ "$_jq_rc" -ne 0 ]; then
+  log_error "INVALID-INPUT: malformed JSON on stdin (jq exit ${_jq_rc})"
+  "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-INVALID] BLOCKED: malformed hook input JSON (jq exit %s).\n' "$HOOK_NAME" "$_jq_rc" >&2
   exit 2
 fi
 
-TOOL_NAME="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_name // empty')"
+TOOL_NAME="$("$JQ" -r '.tool_name // empty' <<<"$INPUT")"
 
 # Only handle Write and Edit (settings.json matchers constrain, but defense-in-depth)
 case "$TOOL_NAME" in
@@ -257,12 +332,12 @@ esac
 # BEFORE the .mode / rule path. Precedence: bypass -> master -> SCOPE -> .mode -> rule.
 # CWD is extracted here (this hook did not previously need it) purely to feed the guard.
 # Inverted fail direction on the cwd axis, NOT on the lib axis. See lib/scope-guard.sh. ---
-CWD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.cwd // empty')"
+CWD="$("$JQ" -r '.cwd // empty' <<<"$INPUT")"
 readonly SCOPE_GUARD_LIB="${HOOK_DIR}/lib/scope-guard.sh"
 if [ -r "$SCOPE_GUARD_LIB" ]; then . "$SCOPE_GUARD_LIB" 2>/dev/null || true; fi
 if command -v scope_guard_gate >/dev/null 2>&1; then scope_guard_gate "$CWD"; fi
 
-FILE_PATH="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.file_path // empty')"
+FILE_PATH="$("$JQ" -r '.tool_input.file_path // empty' <<<"$INPUT")"
 [ -z "$FILE_PATH" ] && exit 0
 
 # --- SCOPE CHECK — act ONLY on durable-corpus paths ---
@@ -366,7 +441,7 @@ fi
 
 # --- EXTRACT INCOMING CONTENT ---
 # Write carries .tool_input.content; Edit carries .tool_input.new_string.
-CONTENT="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.content // .tool_input.new_string // empty')"
+CONTENT="$("$JQ" -r '.tool_input.content // .tool_input.new_string // empty' <<<"$INPUT")"
 [ -z "$CONTENT" ] && exit 0
 
 # --- MARKER SOURCE (file-scoped by specification) ---------------------------
@@ -421,10 +496,10 @@ fi
 # the marker exempts itself from the gate that governs it. Strip fences first, with the
 # same awk the detectors use below, so one rule governs both reads. The CI marker read
 # strips identically — neither surface may change without the other.
-MARKER_SCAN="$("$PRINTF" '%s\n' "$MARKER_SRC" | "$AWK" '
+MARKER_SCAN="$("$AWK" '
   /^[[:space:]]*```/ { infence = !infence; next }
   !infence { gsub(/`[^`]*`/, ""); print }
-')"
+' <<<"$MARKER_SRC")"
 
 ALLOW_LINK=0
 ALLOW_VERSION=0
@@ -471,27 +546,32 @@ esac
 
 # --- FENCE STRIP — remove fenced code blocks (``` delimited) before scanning ---
 # Detectors must not fire on illustrative content inside code fences.
-STRIPPED="$("$PRINTF" '%s\n' "$CONTENT" | "$AWK" '
+STRIPPED="$("$AWK" '
   /^[[:space:]]*```/ { infence = !infence; next }
   !infence { print }
-')"
+' <<<"$CONTENT")"
 
 # --- DETECTORS ---
 # Each detector returns matched lines (line-numbered against the stripped content) or empty.
+# Each reads $STRIPPED by here-string, and only grep's no-match status (1) is taken as success:
+# `{ grep … || [ $? -eq 1 ]; }` keeps "no findings" for a clean payload, while a read that
+# failed — a here-string bash could not materialize, or any other status grep exits with —
+# reaches the ERR trap instead of reading as "no findings". A pattern that cannot compile never
+# gets this far: the ERE compile canary at the constants gate reports it first, mode-coupled.
 link_matches=""
 version_matches=""
 issueref_matches=""
 url_matches=""
 
 if [ "$ALLOW_LINK" -eq 0 ]; then
-  link_matches="$("$PRINTF" '%s\n' "$STRIPPED" | "$GREP" -nE "$LINK_RE" || true)"
+  link_matches="$( { "$GREP" -nE "$LINK_RE" || [ $? -eq 1 ]; } <<<"$STRIPPED" )"
 fi
 if [ "$ALLOW_VERSION" -eq 0 ]; then
-  version_matches="$("$PRINTF" '%s\n' "$STRIPPED" | "$GREP" -nE "$CUTOVER_RE" || true)"
+  version_matches="$( { "$GREP" -nE "$CUTOVER_RE" || [ $? -eq 1 ]; } <<<"$STRIPPED" )"
 fi
 # Class U — raw ledger URL. Suppressed by the allow-url marker OR by ledger-surface exemption.
 if [ "$ALLOW_URL" -eq 0 ] && [ "$LEDGER_EXEMPT" -eq 0 ]; then
-  url_matches="$("$PRINTF" '%s\n' "$STRIPPED" | "$GREP" -nE "$URL_RE" || true)"
+  url_matches="$( { "$GREP" -nE "$URL_RE" || [ $? -eq 1 ]; } <<<"$STRIPPED" )"
 fi
 
 # Positional issue-reference detector (always on; not governed by the link/version markers).
@@ -536,7 +616,7 @@ fi
 # escape the positional rule already documents. Do not "fix" this by unioning the disk.
 #
 # Pass 1: locate the FIRST reference-block header line number (0 = none present).
-refblock_line="$("$PRINTF" '%s\n' "$STRIPPED" | "$GREP" -nE "$REFBLOCK_RE" | /usr/bin/head -1 | /usr/bin/cut -d: -f1 || true)"
+refblock_line="$( { "$GREP" -m1 -nE "$REFBLOCK_RE" || [ $? -eq 1 ]; } <<<"$STRIPPED" | /usr/bin/cut -d: -f1 )"
 [ -z "$refblock_line" ] && refblock_line=0
 
 # Pass 2: classify each line via the SHARED positional classifier
@@ -564,12 +644,12 @@ if [ -f "$POSITIONAL_LIB" ]; then
   fi
 fi
 if [ "$_classifier_ok" -eq 1 ]; then
-  issueref_matches="$("$PRINTF" '%s\n' "$STRIPPED" | "$AWK" '{ printf "%d\t%s\n", NR, $0 }' \
+  issueref_matches="$("$AWK" '{ printf "%d\t%s\n", NR, $0 }' <<<"$STRIPPED" \
     | "$AWK" -f "$POSITIONAL_LIB" \
         -v refline="$refblock_line" \
         -v issuere="$ISSUEREF_RE" \
         -v hexcolor="$HEXCOLOR_RE" \
-        -v minwords="$MIN_SELFDESCRIBE_WORDS" || true)"
+        -v minwords="$MIN_SELFDESCRIBE_WORDS")"
 else
   # Classifier missing OR present-but-unusable (empty/truncated/corrupt) — a deploy defect
   # (setup-workspace.sh co-deploys it beside dep-resolve.sh) or tamper. Mode-gated posture
@@ -618,18 +698,28 @@ log_block() {
 }
 
 # Build a human-readable finding summary for stderr.
+# The match lists are content-derived, and one line can sit in three of them (Class L, Class U,
+# positional), so the report can outgrow the payload that carries it: a payload well inside the
+# argument budget can yield a report beyond it. Each list therefore leaves by here-string into the
+# pinned cat, never as a printf argument. `|| return 1` because bash does not stop a function on a
+# failed command inside command substitution; without it a failed section would leave a silently
+# partial report.
 build_report() {
   if [ -n "$link_matches" ]; then
-    "$PRINTF" '  [BLOCK-FRAGILE-REF-001] Class L (markdown link) on:\n%s\n' "$link_matches"
+    "$PRINTF" '  [BLOCK-FRAGILE-REF-001] Class L (markdown link) on:\n'
+    /bin/cat <<<"$link_matches" || return 1
   fi
   if [ -n "$version_matches" ]; then
-    "$PRINTF" '  [BLOCK-FRAGILE-REF-002] Class V (version-cutover apparatus) on:\n%s\n' "$version_matches"
+    "$PRINTF" '  [BLOCK-FRAGILE-REF-002] Class V (version-cutover apparatus) on:\n'
+    /bin/cat <<<"$version_matches" || return 1
   fi
   if [ -n "$issueref_matches" ]; then
-    "$PRINTF" '  [BLOCK-FRAGILE-REF-003] issue-reference placement on:\n%s\n' "$issueref_matches"
+    "$PRINTF" '  [BLOCK-FRAGILE-REF-003] issue-reference placement on:\n'
+    /bin/cat <<<"$issueref_matches" || return 1
   fi
   if [ -n "$url_matches" ]; then
-    "$PRINTF" '  [BLOCK-FRAGILE-REF-004] Class U (raw github.com/.../{issues,pull,milestone} URL) on:\n%s\n' "$url_matches"
+    "$PRINTF" '  [BLOCK-FRAGILE-REF-004] Class U (raw github.com/.../{issues,pull,milestone} URL) on:\n'
+    /bin/cat <<<"$url_matches" || return 1
   fi
 }
 
@@ -641,8 +731,10 @@ if [ "$MODE" = "warn" ]; then
   [ -n "$version_matches" ]  && log_warn "BLOCK-FRAGILE-REF-002" "Class V version-cutover apparatus in $FILE_PATH"
   [ -n "$issueref_matches" ] && log_warn "BLOCK-FRAGILE-REF-003" "issue-reference placement in $FILE_PATH"
   [ -n "$url_matches" ]      && log_warn "BLOCK-FRAGILE-REF-004" "Class U raw ledger URL in $FILE_PATH"
-  "$PRINTF" '[CLAUDE-HOOK:%s:RULE:WARN] fragile reference(s) in %s (warn-mode active — not blocking; would block in enforce-mode):\n%s\n%s\n' \
-    "$HOOK_NAME" "$FILE_PATH" "$REPORT" "$TEACH" >&2
+  "$PRINTF" '[CLAUDE-HOOK:%s:RULE:WARN] fragile reference(s) in %s (warn-mode active — not blocking; would block in enforce-mode):\n' \
+    "$HOOK_NAME" "$FILE_PATH" >&2
+  /bin/cat <<<"$REPORT" >&2
+  "$PRINTF" '%s\n' "$TEACH" >&2
   exit 0
 fi
 
@@ -651,6 +743,7 @@ fi
 [ -n "$version_matches" ]  && log_block "BLOCK-FRAGILE-REF-002"
 [ -n "$issueref_matches" ] && log_block "BLOCK-FRAGILE-REF-003"
 [ -n "$url_matches" ]      && log_block "BLOCK-FRAGILE-REF-004"
-"$PRINTF" '[CLAUDE-HOOK:%s:RULE] BLOCKED: fragile reference(s) in %s:\n%s\nOverride: %s\n' \
-  "$HOOK_NAME" "$FILE_PATH" "$REPORT" "$TEACH" >&2
+"$PRINTF" '[CLAUDE-HOOK:%s:RULE] BLOCKED: fragile reference(s) in %s:\n' "$HOOK_NAME" "$FILE_PATH" >&2
+/bin/cat <<<"$REPORT" >&2
+"$PRINTF" 'Override: %s\n' "$TEACH" >&2
 exit 2

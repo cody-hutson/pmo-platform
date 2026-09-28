@@ -523,7 +523,7 @@ fi
 #                     future edit makes another lib required, this arm fails LOUD — a fail-closed
 #                     hook returns 2 for every row and the CLEAN rows report FLAG.
 MARKER_FIXTURE="${SCRIPT_DIR}/testdata/marker-resolution-fixtures.txt"
-# SIZED INTO A TWO-SIDED WINDOW, both bounds MEASURED against the real hook rather than
+# SIZED ABOVE A MEASURED FLOOR, MEASURED against the real hook rather than
 # reasoned about. This constant is the arm's whole sensitivity, so it is stated here with the
 # numbers that chose it.
 #
@@ -533,16 +533,12 @@ MARKER_FIXTURE="${SCRIPT_DIR}/testdata/marker-resolution-fixtures.txt"
 #   size discards it too. So the floor is the ~64 KB pipe buffer, and anything at or under it
 #   makes this arm SILENTLY VACUOUS — it would pass against the broken gate.
 #
-#   UPPER BOUND — the row must not collide with an unrelated limit. Linux caps a single argv
-#   string at MAX_ARG_STRLEN (131,072 B); the hook passes its whole stdin JSON to an external
-#   printf when validating it, so a row whose JSON exceeds that cap makes the hook exit on
-#   "malformed hook input JSON" instead of adjudicating the marker. That is a real and
-#   separate hook defect (it is NOT this issue's six sites, and is reported rather than fixed
-#   here), but an arm that tripped it would fail for a reason other than the one it names —
-#   the opposite of the isolation the small/large row pair exists to provide.
+#   NO UPPER BOUND. The hook reads its whole input by here-string, never as an argument to an
+#   external program, so no argument-size cap bounds this row. (The runner's own transport is
+#   argument-free for its own reason — see THE BULK PAYLOAD NEVER TRAVELS AS AN ARGUMENT below.)
 #
 # 1200 lines puts the body at 98,537 B and its JSON at 99,867 B: ~33 KB clear of the firing
-# floor and ~31 KB clear of the argv ceiling. Verified in both directions at exactly this
+# floor. Verified in both directions at exactly this
 # size — pre-fix hook exits 2 (marker discarded), post-fix hook exits 0 (marker honoured).
 MARKER_BULK_LINES=1200
 # Inert by construction: no `](`, no bare issue reference, no raw ledger URL, no version-cutover
@@ -602,7 +598,7 @@ if [ -z "$mk_skip" ]; then
 
   # THE BULK PAYLOAD NEVER TRAVELS AS AN ARGUMENT. Linux caps a SINGLE argv string at
   # MAX_ARG_STRLEN (128 KiB, 32 pages) independently of the much larger total ARG_MAX, so
-  # handing a >64 KB payload to any EXTERNAL command as an argument fails with E2BIG
+  # handing a >128 KiB payload to any EXTERNAL command as an argument fails with E2BIG
   # ("Argument list too long"). macOS has no equivalent per-string cap, so this arm passed
   # locally and died on the CI runner — the same class of platform-dependent break as the
   # defect it pins. Everything large therefore moves by FILE or STDIN: awk writes the filler
