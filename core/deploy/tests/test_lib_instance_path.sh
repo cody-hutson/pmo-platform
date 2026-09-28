@@ -173,6 +173,53 @@ esac
      "needles=${needles} roster=${roster}"
 unset PMO_INSTANCE_PATH CLAUDE_WORKSPACE_ROOT 2>/dev/null || true
 
+printf '\nCase 7: the skill-editor exemption list has one resolver pair, at the instance tier\n'
+# Literal pins, per this file's doctrine: each arm compares a resolved value with the path
+# it must be, never with another resolver's answer. 7e is the row invariant — the target
+# the manifest row resolves to (the path the installer seeds and update.sh regenerates) is
+# the path every reader resolves. The row's tier is read from the manifest, not assumed,
+# so re-tiering the row turns 7e red.
+EXEMPT_AT_WS="/ws/pmo-instance/skill-editor-exemption-list.txt"
+# pin <name> <got> <want> [<detail>] — one arm: a resolved value against its literal.
+pin() {
+  if [ "$2" = "$3" ]; then report "$1" 1; else report "$1" 0 "${4:-got $2}"; fi
+}
+pin "7a: the explicit-root form lands under the given workspace root" \
+  "$(pmo_skill_editor_exemption_list_for /ws)" "${EXEMPT_AT_WS}"
+PMO_INSTANCE_PATH="/tmp/explicit-instance"
+pin "7b: PMO_INSTANCE_PATH relocates it, as it relocates every instance file" \
+  "$(pmo_skill_editor_exemption_list_for /ws)" "/tmp/explicit-instance/skill-editor-exemption-list.txt"
+unset PMO_INSTANCE_PATH
+CLAUDE_WORKSPACE_ROOT="/cw"
+pin "7c: the no-argument form builds from CLAUDE_WORKSPACE_ROOT" \
+  "$(pmo_skill_editor_exemption_list)" "/cw/pmo-instance/skill-editor-exemption-list.txt"
+unset CLAUDE_WORKSPACE_ROOT
+hook_read="$(pmo_hook_read_instance_files_for /ws)"
+hook_read_n=0
+while IFS= read -r _l; do
+  if [ -n "${_l}" ]; then hook_read_n=$((hook_read_n + 1)); fi
+done <<EOF
+${hook_read}
+EOF
+pin "7d: the hook-read instance set is exactly the exemption list, one line" \
+  "${hook_read_n}:${hook_read}" "1:${EXEMPT_AT_WS}" "lines=${hook_read_n} value=${hook_read}"
+row_target="$(
+  unset PMO_INSTANCE_PATH CLAUDE_WORKSPACE_ROOT
+  # shellcheck source=/dev/null
+  . "${REPO_ROOT}/core/deploy/lib-composition.sh" >/dev/null 2>&1 || exit 0
+  lib_compose_source_manifest "${REPO_ROOT}" >/dev/null 2>&1 || exit 0
+  for entry in "${COMPOSITION_SURFACE_FILES[@]}"; do
+    lib_compose_parse_entry "${entry}"
+    case "${LIB_COMPOSE_ENTRY_SRC}" in
+      */skill-editor-exemption-list.txt)
+        lib_compose_resolve_target skill-editor-exemption-list.txt "${LIB_COMPOSE_ENTRY_TIER}" /ws
+        exit 0 ;;
+    esac
+  done
+)"
+pin "7e: the manifest row resolves to the same path the readers resolve (the row invariant)" \
+  "${row_target}" "${EXEMPT_AT_WS}" "row resolves to '${row_target}'"
+
 printf '\n======================================================================\n'
 printf 'test_lib_instance_path.sh: %d passed, %d failed (bash %s)\n' "${PASS}" "${FAIL}" "${BASH_VERSION}"
 printf '======================================================================\n'
