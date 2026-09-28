@@ -12378,6 +12378,24 @@ EOF
   [[ -n "$_plx_md" && "$_plx_md" != *"$_plx_uhome"* && "$_plx_md" == *'<home>/z'* ]] || { echo "FAIL: PL-5 non-ASCII home, markdown — a home path carrying a non-ASCII character must render as <home>/z"; failures=$((failures+1)); }
   _plx_x="$(/usr/bin/python3 "$_plx_tmp/jcheck.py" "$_plx_tmp/uroots" '<home>/z' <<<"$_plx_js" 2>&1 || true)"
   [[ "$_plx_x" == "OK" ]] || { echo "FAIL: PL-5 non-ASCII home, JSON — json.dumps escapes non-ASCII, so only a pass over the decoded strings can redact this home path; got '$_plx_x'"; failures=$((failures+1)); }
+  # The degenerate root (Plan amendment 14; Stage-7 F-01). HOME=/ strips to the
+  # empty string, and the JSON sink's length guard is what skips it: without the
+  # guard, str.replace('', '<home>') puts the marker between every character of
+  # every string. So the JSON render under HOME=/ must add <home> to no decoded
+  # string, and the fixture detail must read unchanged. jcheck.py's first file
+  # names what must appear in no decoded string, here the marker itself. Only
+  # HOME is degenerate: the repository root keeps its fixture value. Sensitivity:
+  # the same record rendered under the fixture home must be redacted.
+  PHASE_NAMES=(plx_root1); PHASE_RESULTS=(PASS); PHASE_DETAILS=("wrote ${_plx_home}/other/y")
+  OUTPUT="json"; HOME="/"; REPO_ROOT="$_plx_repo"; _plx_js="$(generate_report 2>/dev/null)" || _plx_js=""
+  HOME="$_plx_home"; _plx_out="$(generate_report 2>/dev/null)" || _plx_out=""
+  HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"
+  /usr/bin/printf '%s\n' '<home>' > "$_plx_tmp/hmark"
+  _plx_x="$(/usr/bin/python3 "$_plx_tmp/jcheck.py" "$_plx_tmp/hmark" <<<"$_plx_js" 2>&1 || true)"
+  _plx_z="$(/usr/bin/python3 "$_plx_tmp/row.py" json plx_root1 <<<"$_plx_js" 2>/dev/null || true)"
+  [[ "$_plx_x" == "OK" && "$_plx_z" == "wrote ${_plx_home}/other/y" ]] || { echo "FAIL: PL-5 degenerate root, JSON — under HOME=/, which strips to the empty string, the JSON sink must skip the home redaction: no decoded string may gain <home>, and the fixture detail must read unchanged (Plan amendment 14); got '$_plx_x'"; failures=$((failures+1)); }
+  _plx_x="$(/usr/bin/python3 "$_plx_tmp/jcheck.py" "$_plx_tmp/roots" '<home>/other/y' <<<"$_plx_out" 2>&1 || true)"
+  [[ "$_plx_x" == "OK" ]] || { echo "FAIL: PL-5 degenerate root, sensitivity — the same record rendered under the fixture home must carry no raw root and name <home>/other/y, or the limb above passes on a sink that never redacts; got '$_plx_x'"; failures=$((failures+1)); }
   /bin/cat > "$_plx_stub" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$PLX_CALLS"
