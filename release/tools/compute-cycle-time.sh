@@ -34,12 +34,14 @@
 #                       incremental tag-diff path fills its package set from its own
 #                       packages/ diff, independently of skills. (Its full-roster and
 #                       named-skill paths couple packages to skills; that one does not.)
-#   deploy-rules-mirror the rules-mirror carrier writes one resolved row on EVERY
-#                       release-stamped deploy, changed or not, before any argument is
-#                       validated. Admitting it would make every stamped content-only
-#                       release compute, which the content-only exclusion forbids. The
-#                       cost is named, not hidden: a release whose change reached the
-#                       runtime only through the mirror reads N/A with that row named.
+#   deploy-rules-mirror the rules-mirror carrier writes one row on EVERY release-stamped
+#                       deploy, changed or not, before any argument is validated:
+#                       resolved when the mirror copy succeeds, escalated when it fails.
+#                       Admitting it would make every stamped content-only release whose
+#                       mirror copy succeeded compute, which the content-only exclusion
+#                       forbids. The cost is named, not hidden: a release whose change
+#                       reached the runtime only through the mirror reads N/A with that
+#                       row named.
 #   deploy-helper       producer-less and target-less: nothing emits it.
 # "The deploy ran and its targets did not succeed" is reserved for the one case where
 # it is true: skill/harness rows exist and none reached outcome=resolved.
