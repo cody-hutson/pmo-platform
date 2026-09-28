@@ -391,6 +391,11 @@ jobs:
         # ephemeral, the revert runs from a trap, and a revert that did not restore
         # the tree fails this step rather than leaking into a later one.
         #
+        # The open-stdin step at the end of this job is newly wired too. Its run:
+        # block names its suite below the run: line, so Arm 1 finds it by its step
+        # name; and it gates on a harness program rather than on the suite's own exit
+        # contract, so Arm 4 breaks that program instead of the suite.
+        #
         # Consumes no github.event.* input; operates on workspace files only.
         timeout-minutes: 5
         run: |
@@ -421,6 +426,9 @@ jobs:
                     "test_instance_path_roundtrip.sh",
                     "test_check19_event_log_integrity.sh",
                     "test_deploy_path_literals.sh"]
+          # A step whose run: block wraps its suite in a program names the suite on a
+          # later line, not on the run: line, so it is found by its step name instead.
+          NAMED_STEPS = ["Run refresh-hooks regression with stdin held open (test_refresh_hooks.sh, Case 12 observer)"]
           text = open(".github/workflows/install-tests.yml", errors="replace").read()
           # A step begins at exactly six spaces + "- "; everything up to the next
           # such line is that step's block.
@@ -440,12 +448,20 @@ jobs:
               for b in owning:
                   if not re.search(r"(?m)^        timeout-minutes:\s*\d+\s*$", b):
                       missing.append("%s: owning step carries no timeout-minutes" % s)
+          for n in NAMED_STEPS:
+              owning = [b for b in blocks
+                        if re.search(r"(?m)^      - name: " + re.escape(n) + r"\s*$", b)]
+              if len(owning) != 1:
+                  missing.append("%s: %d steps carry this name, want exactly 1" % (n, len(owning)))
+                  continue
+              if not re.search(r"(?m)^        timeout-minutes:\s*\d+\s*$", owning[0]):
+                  missing.append("%s: step carries no timeout-minutes" % n)
           if missing:
               for m in missing:
                   print("::error::timeout guard missing — %s" % m)
               sys.exit(1)
           print("Timeout guard OK — all %d newly-wired steps carry timeout-minutes "
-                "(parsed %d step blocks)." % (len(SUITES), len(blocks)))
+                "(parsed %d step blocks)." % (len(SUITES) + len(NAMED_STEPS), len(blocks)))
           PY
           then probe_fail=1; fi
 
@@ -505,6 +521,57 @@ jobs:
             git --no-pager diff --stat -- core/deploy/tests/
             probe_fail=1
           fi
+
+          # --- Arm 4: the open-stdin step's harness can go red -------------------
+          # That step gates on a program wrapped around its suite, not on the suite's
+          # own exit contract, so Arm 2's injected assertion does not reach what it
+          # adds. What it adds is the harness, so the harness is what is broken here.
+          # Its program is read out of the step itself, never from a copy that could
+          # drift, and run against three stubs: one that reads stdin must be held and
+          # then timed out (124 and the sentinel), one that fails must pass its status
+          # through, and one that passes must pass with no sentinel.
+          if ! python3 - <<'PY'
+          import re, subprocess, sys, tempfile, textwrap
+          NAME = "Run refresh-hooks regression with stdin held open (test_refresh_hooks.sh, Case 12 observer)"
+          text = open(".github/workflows/install-tests.yml", errors="replace").read()
+          starts = [m.start() for m in re.finditer(r"(?m)^      - ", text)]
+          starts.append(len(text))
+          blocks = [text[starts[i]:starts[i + 1]] for i in range(len(starts) - 1)]
+          owning = [b for b in blocks
+                    if re.search(r"(?m)^      - name: " + re.escape(NAME) + r"\s*$", b)]
+          if len(owning) != 1:
+              print("::error::%d steps carry the open-stdin step's name; the probe cannot find the harness it falsifies." % len(owning))
+              sys.exit(1)
+          lines = owning[0].split("\n")
+          opener = [i for i, l in enumerate(lines) if "<<'PY'" in l]
+          if len(opener) != 1:
+              print("::error::the open-stdin step carries %d heredoc openers, want exactly 1." % len(opener))
+              sys.exit(1)
+          close = [i for i in range(opener[0] + 1, len(lines)) if lines[i].strip() == "PY"]
+          if not close:
+              print("::error::the open-stdin step's harness program has no terminator line.")
+              sys.exit(1)
+          prog = textwrap.dedent("\n".join(lines[opener[0] + 1:close[0]])) + "\n"
+          with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as f:
+              f.write(prog)
+          bad = []
+          for stub, want_rc, want_sentinel in (("read -r _; exit 0", 124, True),
+                                               ("exit 3", 3, False),
+                                               ("exit 0", 0, False)):
+              p = subprocess.run([sys.executable, f.name, "3", "bash", "-c", stub],
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE, universal_newlines=True, timeout=120)
+              has = "OPEN-STDIN-HARNESS: TIMEOUT" in p.stderr
+              if p.returncode != want_rc or has != want_sentinel:
+                  bad.append("stub %r: exit %d, sentinel %s (want %d, %s)"
+                             % (stub, p.returncode, has, want_rc, want_sentinel))
+          if bad:
+              for b in bad:
+                  print("::error::open-stdin harness — %s" % b)
+              sys.exit(1)
+          print("Falsification OK — the open-stdin harness times out a held read (124), passes a failure through (3) and a pass through (0).")
+          PY
+          then probe_fail=1; fi
 
           exit "$probe_fail"
 
@@ -937,6 +1004,45 @@ jobs:
         # Hermetic: reads the workflow files, mutates only in-memory copies, writes
         # nothing. No gh, no network. Consumes no workflow event input.
         run: /usr/bin/python3 core/deploy/tests/test_gate_efficacy_declarations.py
+
+      - name: Run refresh-hooks regression with stdin held open (test_refresh_hooks.sh, Case 12 observer)
+        # The same suite as "Run refresh-hooks regression" above, run with its stdin
+        # held OPEN and silent instead of at end-of-file. A step's stdin reaches EOF at
+        # once, so a prompt that ignores --non-interactive takes its EOF default and
+        # the plain step passes; a caller whose stdin is a terminal or an inherited
+        # pipe blocks at that prompt instead. Case 12 is this suite's --non-interactive
+        # run, so this step is its record: a run held at a prompt is stopped after
+        # 600 s and exits 124 with the OPEN-STDIN-HARNESS sentinel, after the last case
+        # header it reached; an unheld run ends on the suite's own summary and status.
+        #
+        # The program is the open-stdin harness the durability suite's P-9 arms use,
+        # inline. python3, already a hard prerequisite of the installer, supplies the
+        # timeout, because coreutils timeout is not on this runner image. The 600 s
+        # budget is about five times the suite's measured run; timeout-minutes sits
+        # above it, so the harness rather than the runner reports a hang, by name. The
+        # falsification probe above finds this step by name for its timeout guard and
+        # runs this program against stubs, so the gating program is the falsified one.
+        #
+        # LAST in the job, under !cancelled(): a red run here skips no step above it,
+        # and a red step above does not skip this record.
+        #
+        # Consumes no github.event.* input; a static invocation on workspace files only.
+        if: ${{ !cancelled() }}
+        timeout-minutes: 15
+        run: |
+          rc=0
+          python3 - 600 bash core/deploy/tests/test_refresh_hooks.sh <<'PY' || rc=$?
+          import os, signal, subprocess, sys
+          proc = subprocess.Popen(sys.argv[2:], stdin=subprocess.PIPE, start_new_session=True)
+          try:
+              rc = proc.wait(timeout=float(sys.argv[1]))
+          except subprocess.TimeoutExpired:
+              os.killpg(proc.pid, signal.SIGKILL); proc.wait(); rc = 124
+              sys.stderr.write("OPEN-STDIN-HARNESS: TIMEOUT after %ss (process group terminated)\n" % sys.argv[1])
+          sys.exit(rc)
+          PY
+          echo "open-stdin harness exit ${rc}"
+          exit "${rc}"
 
   hook-tests:
     name: Hook test harness (macOS)
