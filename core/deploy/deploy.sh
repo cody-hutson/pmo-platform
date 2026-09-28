@@ -15017,7 +15017,7 @@ sys.stdout.write("".join(out) + "|")
         local _c61_n="${_c61_rest%% *}" _c61_m="${_c61_rest##* }"
         case "$DECISION_EMISSION_MODE" in
           enforce)
-            log "  FAIL:  decision-emission — $_c61_n missing class(es) across $_c61_m post-cutover VERIFIED release(s) (see stderr detail); the remedy is to emit the missing rows per orchestration-playbook.md Procedure 4a, never to waive the finding"
+            log "  FAIL:  decision-emission — $_c61_n missing class(es) across $_c61_m post-cutover VERIFIED release(s) (see stderr detail); the remedy is to emit the missing rows per orchestration-playbook.md Procedure 4a, never to waive the finding — except gate-outcome/plan-review-go, whose absence is recorded instead: T_GO is that row's own timestamp, so a row emitted now anchors cycle time on the close"
             ISSUES=$((ISSUES + 1))
             ;;
           warn)
@@ -19324,7 +19324,7 @@ cmd_check_decision_emission() {
       ;;
     INCOMPLETE)
       log "decision-emission: INCOMPLETE — ${verdict#INCOMPLETE } (missing-class count / checked-release count; see detail above)"
-      log "  A post-cutover release closed without emitting a MUST class. The remedy is to emit the missing row(s) per orchestration-playbook.md Procedure 4a — never to waive the finding."
+      log "  A post-cutover release closed without emitting a MUST class. The remedy is to emit the missing row(s) per orchestration-playbook.md Procedure 4a — never to waive the finding. For gate-outcome/plan-review-go, record the absence instead: T_GO is that row's own timestamp, so a row emitted now anchors cycle time on the close."
       if [[ "$de_enforce" == "enforce" ]]; then
         exit "$(_de_verdict_exit_code INCOMPLETE enforce)"
       fi
