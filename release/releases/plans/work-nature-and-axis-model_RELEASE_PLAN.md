@@ -459,7 +459,7 @@ The Stage-5 revision-2 Methodology-Design Handoff (#7971) is the design; this se
 | V12 | In-sample application: the four axes came from the measured instance | the record labels AC-5 an in-sample consistency check; the out-of-sample test is the calibration framings |
 | V13 | Template-forced and planned-refinement text inflates owed-ness | E2-T and E3-P never make an axis owed; the over-owed statistic |
 | V14 | Concept-1 label provenance: many plans carry no label | R-C2 marks inferred values; results resting on them say so |
-| **V15** | **The codebook was tuned on drawn items V-03, V-09 and V-12 (B5)** | their boundary examples were replaced with examples from outside the set (#5592, #6201); Stage 8 reports nature agreement as k of 9 (D5's floor applies) and as k′ of the 7 items left once V-03 and V-09 are set aside, and records its codes before opening the record, this plan or #7972 |
+| **V15** | **The codebook was tuned on drawn items V-03, V-09 and V-12 (B5)** | their boundary examples were replaced with examples from outside the set (#5592, #6201); Stage 8 reports nature agreement as k of 9 (D5's floor applies) and as k′ of the 7 items left once V-03 and V-09 are set aside, and records its codes before opening the record or this plan, #7959's thread, #7971 (where B5 was posted), #7972, #7973, #7991, #7997, PR #8004 or any other issue of milestone 426 |
 
 ---
 
@@ -492,7 +492,7 @@ The Stage-5 revision-2 Methodology-Design Handoff (#7971) is the design; this se
 | Change 2 — Row A content | Row A carries the three limbs, "Owner:", "Stage-13 close" and a framing-1 line with the concept-1 class field (B9) | all present |
 | AC-6 control | the AC-6 intersection with `story` appended | 1 |
 | Plan file | `claim-version.sh --verify-stamp work-nature-and-axis-model` exit 0; `check-release-links.py --plan-depth-lint` (workspace-rooted links only); the `verify-release-plan.sh` families `provenance-survival` and `fcm-delivery` | exit 0; PASS or recorded SKIP |
-| **D5 — blind re-code (Stage 8)** | before opening the record, this plan or #7972, re-code V-01..V-09 from the codebook sections pasted into the Stage-8 brief: C1 (per-criterion majority) and C2 (a grade per axis); report nature agreement k of 9 and k′ of the 7 items left once V-03 and V-09 are set aside, and grade agreement per axis; state the read order | k at least 7; if k is below 7 → NOT MET, returned to Engineering to set every row to hypothesis and record the figures |
+| **D5 — blind re-code (Stage 8)** | before opening the record or this plan, #7959's thread, #7971 (where B5 was posted), #7972, #7973, #7991, #7997, PR #8004 or any other issue of milestone 426, re-code V-01..V-09 from the codebook sections pasted into the Stage-8 brief: C1 (per-criterion majority) and C2 (a grade per axis); report nature agreement k of 9 and k′ of the 7 items left once V-03 and V-09 are set aside, and grade agreement per axis; state the read order | k at least 7; if k is below 7 → NOT MET, returned to Engineering to set every row to hypothesis and record the figures |
 | Check 58 | `deploy.sh --check` lists the record as Proposed with a flip promise | advisory and expected; G-CL9 settles it at Stage 13 |
 
 **ADR index:** N/A — this release adds no record under `release/ADRs/` (`core/ADRs/README.md` is curated and has no projector).
