@@ -282,6 +282,27 @@ ROWS
     die "self-test: CT-6 a population of only non-eligible rows must select nothing, got $RESULT"
   fi
 
+  # CR-10 — A READ THAT NEVER HAPPENED IS NOT A MEASURED ABSENCE. With the event log
+  #         missing, query-pipeline-event.sh exits 1. A tool that swallowed that status
+  #         published the None cause ("no deployment-status event") at exit 0: the same
+  #         text a release with no rows produces, for a fact nobody observed. The tool
+  #         runs as a child process against an empty evals directory, and must exit 1
+  #         (the header's "log file missing") with no Cycle-Time line.
+  _cr_evals="$(/usr/bin/mktemp -d)"
+  _cr_rc=0
+  _cr_out="$(EVALS_RESULTS_PATH="$_cr_evals" /bin/bash "${BASH_SOURCE[0]}" --version slug-x 2>&1)" || _cr_rc=$?
+  /bin/rmdir "$_cr_evals"
+  [[ "$_cr_rc" -eq 1 ]] || die "self-test: CR-10 with the event log missing the tool must exit 1 (log file missing), got $_cr_rc: '$_cr_out'"
+  [[ "$_cr_out" != *"Cycle-Time: N/A"* ]] || die "self-test: CR-10 a log that was never read was published as a Cycle-Time N/A: '$_cr_out'"
+
+  # U-1 — --help prints the WHOLE header: #4215 grew it by 14 lines past usage()'s fixed window,
+  #       so --help cut the premise mid-sentence. Whatever renders it, --help must end on the
+  #       header's last comment line, so a regression fails here, in its own commit.
+  _u_last="$(/usr/bin/awk 'NR > 1 && !/^#/ { print prev; exit } { prev = $0 }' "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//')"
+  RESULT="$(usage | /usr/bin/tail -1)"
+  [[ -n "$_u_last" && "$RESULT" == "$_u_last" ]] \
+    || die "self-test: U-1 --help must end on the header's last comment line ('$_u_last'), got '$RESULT': fix usage()"
+
   echo "self-test: PASS"
   echo "  ISO8601 delta arithmetic validated"
   echo "  human formatter validated (sub-hour, over-hour, exact-hour, zero)"
