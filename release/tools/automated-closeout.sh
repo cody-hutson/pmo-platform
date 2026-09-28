@@ -8584,7 +8584,6 @@ generate_report() {
       local _rep _rrc=0
       _rep="$(generate_markdown_report; _prc=$?; /usr/bin/printf 'X'; exit "$_prc")" || _rrc=$?
       _rep="${_rep%X}"
-      _rep="$(_redact_paths "$_rep"; /usr/bin/printf 'X')"; _rep="${_rep%X}"
       /usr/bin/printf '%s' "$_rep"
       return "$_rrc" ;;
     json) generate_json_report ;;
