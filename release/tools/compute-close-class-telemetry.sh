@@ -98,8 +98,8 @@
 #   0 = success, INCLUDING every degraded path. An absent register, an unavailable gh, or
 #       an unresolvable repo each set an N/A reason for the indicators they feed and the
 #       run still emits a fully conformant eight-slot line at exit 0.
-#   1 = argument validation ONLY — unknown flag, unexpected positional, missing <version>,
-#       missing --milestone, out-of-domain --close-gate.
+#   1 = argument validation ONLY — unknown flag, a value-taking flag with nothing after it,
+#       unexpected positional, missing <version>, missing --milestone, out-of-domain --close-gate.
 #   2 = a register that EXISTS but is UNREADABLE (an I/O / permission condition, not a
 #       content condition — no content-validity path exits non-zero), or a sub-task
 #       evidence payload that cannot be parsed. Source-integrity violation; escalate.
@@ -1091,6 +1091,31 @@ if [[ "${1:-}" == "--self-test" ]]; then
   # defect, and it must be refused rather than rendered as anything.
   ( register_slot_render retro unknown v9.99 ) >/dev/null 2>&1 && die "self-test: register-resolution(closed domain) rendered an unknown state instead of refusing it"
 
+  # Test 10: ARGUMENT PARSING — a value-taking flag passed LAST, with nothing after it, fails
+  #          LOUD. The parser consumes each value flag with `shift 2`; with nothing left to
+  #          shift, that shift fails under `set -e`, and the tool used to exit 1 with NOTHING
+  #          on stderr — a caller saw a bare exit 1 and no reason. The self-test is dispatched
+  #          before the parser runs, so each arm runs the tool as a child process. Every arm
+  #          dies in argument parsing, before any register read or gh call, so the group is
+  #          offline. SPECIFICITY: a flag that HAS a value passes the guard — the empty string
+  #          included, because `--retro ''` is a supplied-but-empty path that Indicators 1, 2
+  #          and 5 read as a caller omission, not a parse error — so a later unknown flag is
+  #          what fails, never the value guard.
+  for _vf in --milestone --retro --lessons --outcome-present --close-gate; do
+    if [[ "$_vf" == "--milestone" ]]; then _va=(v9.99 --milestone); else _va=(v9.99 --milestone 1 "$_vf"); fi
+    _vrc=0; /bin/bash "${BASH_SOURCE[0]}" "${_va[@]}" >/dev/null 2>"$TMPD/vf.err" || _vrc=$?
+    [[ "$_vrc" -eq 1 ]] || die "self-test: argument parsing — '$_vf' passed last must exit 1 (argument validation), got $_vrc"
+    /usr/bin/grep -qF -- "$_vf requires a value" "$TMPD/vf.err" \
+      || die "self-test: argument parsing — '$_vf' passed last with nothing after it exited 1 SILENTLY (stderr: '$(/bin/cat "$TMPD/vf.err")'); the refusal must name the flag"
+  done
+  for _vv in "" x; do
+    _vrc=0; /bin/bash "${BASH_SOURCE[0]}" v9.99 --milestone 1 --retro "$_vv" --bogus >/dev/null 2>"$TMPD/vf.err" || _vrc=$?
+    { [[ "$_vrc" -eq 1 ]] && /usr/bin/grep -qF -- 'Unknown flag: --bogus' "$TMPD/vf.err"; } \
+      || die "self-test: argument parsing — '--retro \"$_vv\"' carries a value and must pass the guard, so the later unknown flag is what fails; got rc $_vrc, stderr '$(/bin/cat "$TMPD/vf.err")'"
+    ! /usr/bin/grep -qF -- 'requires a value' "$TMPD/vf.err" \
+      || die "self-test: argument parsing — the value guard fired on '--retro \"$_vv\"', which carries a value"
+  done
+
   rm -rf "$TMPD"; trap - EXIT
   echo "self-test: PASS"
   echo "  ratio round-half-up validated (exact / below-half / at-half / above-half / zero-den)"
@@ -1107,6 +1132,7 @@ if [[ "${1:-}" == "--self-test" ]]; then
   echo "  Indicator 6 denominator-integrity partial-gap validated (a plausible rate over a wrong denominator degrades too: '$DP_STR')"
   echo "  Indicator 6 slot-6 state grammar validated ($SLOT_ROWS reachable renderings: 0 semicolons and an 8-slot field line each, the mandated clause on all $SLOT_TOKENED Register-B rows and on none of the $SLOT_CLEAN clean rows, tokens confined to NOT-EVALUATED|DEGRADED, all 5 Register-A members reachable)"
   echo "  Indicators 1/2/5 register-resolution validated (RO caller-omission and RA register-absent emit DIFFERENT states: '$RO_STR' vs '$RA_STR'; the clean absence keeps its spelling; $RG_ROWS reachable renderings: 0 semicolons and an 8-slot field line each, the mandated clause and no counter on all $RG_NE NOT-EVALUATED rows; an unknown state is refused)"
+  echo "  argument parsing validated (each of the 5 value-taking flags passed last with nothing after it exits 1 naming itself, never silently; a flag carrying a value, the empty string included, passes the guard)"
   exit 0
 fi
 
@@ -1120,17 +1146,24 @@ OUTCOME_PRESENT_SEEN=0  # DEPRECATED flag was passed (value ignored; notice emit
 CLOSE_GATE="na"       # Indicator 6 (pass|fail|na)
 OUTPUT_FORMAT="human" # human | json
 
+# need_value <flag> <remaining-arg-count> — a value-taking flag must have an argument after
+# it. Each value flag is consumed with `shift 2`; with nothing left to shift, that shift
+# fails under `set -e` and the tool exited 1 with nothing on stderr. The guard tests the
+# COUNT, never the value: an empty value (`--retro ''`) is a supplied value, which
+# Indicators 1, 2 and 5 read as a caller omission, not an argument error.
+need_value() { [[ "$2" -ge 2 ]] || die "$1 requires a value, and nothing followed it (it was the last argument)"; }
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --milestone) MILESTONE="${2:-}"; shift 2 ;;
-    --retro) RETRO_PATH="${2:-}"; shift 2 ;;
-    --lessons) LESSONS_PATH="${2:-}"; shift 2 ;;
+    --milestone) need_value "$1" "$#"; MILESTONE="${2:-}"; shift 2 ;;
+    --retro) need_value "$1" "$#"; RETRO_PATH="${2:-}"; shift 2 ;;
+    --lessons) need_value "$1" "$#"; LESSONS_PATH="${2:-}"; shift 2 ;;
     # DEPRECATED — accepted and ignored for one release so an existing caller does not
     # hard-fail on an unknown flag. The value is consumed positionally and discarded; it is
     # deliberately NOT domain-checked any more, because validating a value nothing reads
     # would keep asserting a contract this tool no longer honours.
-    --outcome-present) OUTCOME_PRESENT_SEEN=1; shift 2 ;;
-    --close-gate) CLOSE_GATE="${2:-}"; shift 2 ;;
+    --outcome-present) need_value "$1" "$#"; OUTCOME_PRESENT_SEEN=1; shift 2 ;;
+    --close-gate) need_value "$1" "$#"; CLOSE_GATE="${2:-}"; shift 2 ;;
     --json) OUTPUT_FORMAT="json"; shift ;;
     --help|-h) usage ;;
     -*) die "Unknown flag: $1" ;;
