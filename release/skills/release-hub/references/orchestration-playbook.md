@@ -44,7 +44,7 @@ After plan approval the hub creates the release's **stage sub-tasks** via `gh is
 
 The control-flow core. The hub:
 1. Lists sub-tasks; identifies the **dependency-met actionable subset** (never spawns an unmet-dependency sub-task).
-2. Runs the **Collective Review check** before any Stage-6 routing (fires when ≥2 issues have Solutioning active and all Stage-5 sub-tasks are closed → operator scope-lock GATE).
+2. Runs the **Collective Review check** before any Stage-6 routing (fires when ≥2 issues have Solutioning active and all Stage-5 sub-tasks are closed → operator scope-lock GATE). The lock is recorded as `decision`/`scope-lock` at stage `5` by `operator`. A change rendered after it is recorded as a `scope-change` row of its tier, never as a later-stage `scope-lock` row: the writer refuses `scope-lock` except at stage `4` or `5` by `operator`.
 3. Runs the action-item scan (`core/standards/hub-action-tracking.md`).
 4. Before **every** spawn: runs the **quota-budget gate** — wave *or* singleton, at every stage including the write-serialized 6/13 — and honors the **parallelism class**, which is the stage-scoped half of the pair ([`spoke-launch.md`](spoke-launch.md)). A wave renders the full four-value verdict; a singleton renders the reduced PROCEED/DEFER form. The verdict is rendered on every launch, PROCEED included — the gate emits no event, so an unrendered verdict is indistinguishable from a gate that never ran.
 5. **Per-wave concurrent-PR check (pre-spawn):** before spawning a build spoke for issue #N, query open PRs referencing that issue (`gh pr list --state open --search "#N"` or equivalent; N = the target issue number). If an open PR already references it, **surface to the operator — proceed / adopt / skip — BEFORE spawning**, never deferred to the Stage 7/8 coherence review. **Re-run every wave** (not once at Stage 4): the open-PR population changes mid-run, so a clean planning-time scan does not carry ([`spoke-launch.md`](spoke-launch.md)).
@@ -77,6 +77,10 @@ before routing continues. Neither alone is sufficient (`core/standards/hub-sessi
    is `core/disciplines/decision-discipline.md` § 3.1, which owns the merit test
    that decides whether the fork emits at all — routine template routing emits
    nothing, and that silence is correct.
+   For the per-card Stage-4 gate disposition (`decision`/`d-class`, one `issue:#N` row
+   per card at plan approval — the `plan-card-disposition` row of the contract below)
+   the mapping source is `release/references/pipeline/stage-04-planning.md` § 11, which
+   owns the card's `card-disposition:carried` or `card-disposition:removed` segment.
    For the recommendation-vs-choice delta (`decision`/`recommendation-choice-delta`)
    the trigger source is `core/standards/hub-action-tracking.md` § 4's choice-delta
    sweep, which owns the two-limb test that decides whether a row is owed — this is
@@ -220,9 +224,12 @@ before routing continues. Neither alone is sufficient (`core/standards/hub-sessi
    blocked party cannot satisfy is not a strict gate; it is a broken one, and the
    predictable outcome is that it gets waived by hand every time — which is how the rule
    was actually operated before it was scoped. Attribute by grouping the report's
-   `[VIOLATION] C4 <slug>:L<n>` rows by slug. Report every out-of-scope group with its
-   owning slug named, and carry it forward; do not attempt to reconcile another release's
-   ledger from inside this close.
+   `[VIOLATION] C4 <slug>:L<n>` rows by slug. A finding from C4's limb (c) — an action
+   item the log carries that the release's own ledger does not — is keyed
+   `<release>:<AI-id>` instead, and is reported, not blocking, until the close gate's
+   parser attributes a finding by its `<release>:` prefix. Report every out-of-scope
+   group with its owning slug named, and carry it forward; do not attempt to reconcile
+   another release's ledger from inside this close.
 
    **Report the whole-population denominator alongside the release-scoped count.**
    Filtering the report for a release slug returns zero BOTH for a release that is
@@ -356,7 +363,7 @@ blocks no release in flight.
 ## Procedure 5 — Gate handling (the `STOP`-disposition touchpoints)
 
 **Do NOT spawn a spoke — gates are operator decisions.** Which touchpoints stop here is read from the **Hub Gate Register** below — the rows whose `Disposition` is `STOP` or `STOP-IF` — not from a count restated in this heading. The hub reads the prior outputs, runs the action-item scan + (Stage-9 only) the Release Readiness Scan + the goal-conformance check, and presents:
-- **Stage 9 — Plan Review (GO / NO-GO):** the release-authorization decision. The hub assembles the evidence; the operator renders GO/NO-GO. **NEVER auto-crossed.**
+- **Stage 9 — Plan Review (GO / NO-GO):** the release-authorization decision. The hub assembles the evidence; the operator renders GO/NO-GO. **NEVER auto-crossed.** The verdict is recorded by the Stage 9 spec's own step — release/references/pipeline/stage-09-plan-review.md § 5 Phase C1, read from the repository — which writes the decision record and the verdict's `gate-outcome` row (stage `9`, actor `operator`) as one action and reads the row back, typed to its class, before the gate sub-task closes; Procedure 4a supplies the emit mechanics.
 - **Stage 12 — Execute:** merge + deploy authorization. **NEVER auto-crossed** — the operator renders the Execute decision (not a spoke). **Once authorized, the hub routes the Stage-12 *mechanics* through the spawned `pmo-release-manager` tail** — **B1** (merge) + **B3** (atomic version-claim / signed-tag via `claim-version.sh`) + **B5** (the DEPLOYED RELEASE_LOG-row chore PR), run via `release-executor` — **never a bare `gh pr merge` by the hub** (the orchestrator running stage mechanics directly is the ADR-019 fat-orchestrator anti-pattern; "No stage mechanics" per SKILL.md `## What This Skill Does NOT Do`). **Guard:** a merged release left with no DEPLOYED RELEASE_LOG row + no version tag **blocks / flags before close-out with a remediation prompt** (not a bare preflight FAIL) — this catches a Stage-12 that landed merge-only.
 
 Strict ordering at the close steps: post the gate-passage proof → close the sub-task → route.
@@ -390,7 +397,7 @@ and did — disagree:
 <!-- GATE-REGISTER:BEGIN -->
 | # | Touchpoint | Proc | Acting party | Disposition | Autonomy Tier | Gate-eligible | Emission key |
 |---|---|---|---|---|---|---|---|
-| 1 | Plan + Outcome Statement approval | 0 | operator | **STOP** | 0 — Manual | yes | `plan-approval` · `outcome-statement` |
+| 1 | Plan + Outcome Statement approval | 0 | operator | **STOP** | 0 — Manual | yes | `plan-approval` · `outcome-statement` · `plan-card-disposition` |
 | 2 | Scaffold completeness (Step 6.5) | 1 | **hub** | **EXECUTE-AND-REPORT** — escalate on deviation via row 6 | 2 — Bounded Auto | **no** | `scaffold-review` |
 | 3 | Collective Review scope-lock | 2 | operator | **STOP** | 0 — Manual | yes | `collective-review` |
 | 4 | Quota-budget non-PROCEED | 2 (5.5) | hub on `SERIALIZE` / `REDUCE` · operator on `DEFER` | **EXECUTE-AND-REPORT** on `SERIALIZE` / `REDUCE` · **STOP** on `DEFER` | 2 — Bounded Auto (`DEFER` escalates) | `DEFER` only | `quota-budget` |
@@ -455,6 +462,7 @@ when their gate fires.
 | stage-9-go | 5 | gate-outcome | plan-review-go | operator | MUST |
 | stage-12-execute | 5 | decision | d-class | operator | MUST |
 | outcome-statement | 0 | decision | outcome-statement-authored | operator | CONDITIONAL |
+| plan-card-disposition | 0 | decision | d-class | operator | CONDITIONAL |
 | d-version | 0 | decision | d-class | hub | CONDITIONAL |
 | scaffold-review | 1 | decision | d-class | hub | CONDITIONAL |
 | collective-review | 2 | decision | scope-lock | operator | CONDITIONAL |
@@ -486,6 +494,16 @@ borrowed emit fails its step-4 read-back (`POST == PRE`) instead of landing. The
 is downstream: the cycle-time tool anchors T_GO on the earliest `plan-review-go` row of
 that identity, and borrowed rows inflated measured GO→deploy durations without any check
 noticing.
+
+**Where the `stage-9-go` row's emit step lives.** The row indexes an obligation it does not
+carry: the step that writes the Stage 9 `gate-outcome`/`plan-review-go` row (stage `9`, actor
+`operator`) is bound at the stage that renders the verdict — the Stage 9 spec's Phase C1
+(release/references/pipeline/stage-09-plan-review.md, read from the repository), which
+writes it together with the decision record and reads it back typed to its class. The
+verdict's row is `gate-outcome`/`plan-review-go` or `plan-review-no-go`, never
+`decision`/`d-class`, although the verdict is rendered through a Decision Briefing. The row
+stays `MUST` because the gate that asserts GO presence reads it; a missing row is recorded
+at close, never backfilled, because T_GO is the row's own timestamp.
 
 **Why exactly three `MUST` rows.** The partition predicate is *structural guarantee in a
 completed release*, not observed frequency. Procedure 1 scaffolding is unreachable without
