@@ -1566,24 +1566,30 @@ span_invokes_tool() {
 # span_unrecognised_invocation <span> -- prints the lead of a span the catalog does not
 # name that is SHAPED AS AN INVOCATION, else nothing: the span carries an argument, and
 # its lead is a path (absolute, `./`, `~/` or word/word, never `..`) or a word followed
-# by an option (`-x`, `--x`). It is asked only about a CLOSED mention-class span, and
-# only by the limb reader (method_limbs, which command_list reads): beside a designated
-# command such a span is a command that did not run, "not a recognised command", so the
-# row never reads PASS. It names no tool, runs nothing and widens nothing -- the verb
-# set above stays the only set this executor runs, and neither method_spans nor the
-# designated pick reads it -- and a span alone stays a method with no command. A span it
-# does not name is prose: a heading, a field assignment, an unknown word with no option
-# or path. Its test line is KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G22 M6
-# blanks it by one substitution.
+# by an option (`-x`, `--x`). The tests read those words as written. A path's segments
+# may carry any character but `/` -- an `@`, a non-ASCII letter, a `$` -- where a led
+# path needs a character after its lead, and a word/word path a non-empty segment on
+# each side of every `/`, so a URL's `//` and a trailing `/` name none. A word is
+# looks_like_command's, `+` allowed (`g++`), and an option is `-` or `--` then a letter
+# or a digit (`-9`). A byte sequence the locale cannot decode matches no class under that
+# locale, so under UTF-8 a lead carrying one is prose. It is asked only about a CLOSED
+# mention-class span, and only by the limb reader (method_limbs, which command_list
+# reads): beside a designated command such a span is a command that did not run, "not a
+# recognised command", so the row never reads PASS. It names no tool, runs nothing and
+# widens nothing -- the verb set above stays the only set this executor runs, and neither
+# method_spans nor the designated pick reads it -- and a span alone stays a method with no
+# command. A span it does not name is prose: a heading, a field assignment, an unknown
+# word with no option or path. Its test line is KEPT ON ONE LINE ON PURPOSE: the suite's
+# mutation arm G22 M6 blanks it by one substitution.
 span_unrecognised_invocation() {
-  local t a pre='^(/|\./|~/)[A-Za-z0-9_./+-]+$' wre='^[A-Za-z0-9_.+-]+(/[A-Za-z0-9_.+-]+)+$' ore='^--?[A-Za-z]'
+  local t a pre='^(/|\./|~/).+$' wre='^[^/]+(/[^/]+)+$' ore='^--?[A-Za-z0-9]'
   local -a w=()
   read -r -a w <<< "$1" || true
   [ "${#w[@]}" -ge 2 ] || return 0
   t="${w[0]}"; a="${w[1]}"
   if is_runnable_verb "$t"; then return 0; fi
   case "$t" in *..*) return 0 ;; esac
-  if [[ "$t" =~ $pre ]] || [[ "$t" =~ $wre ]] || { looks_like_command "$t" && [[ "$a" =~ $ore ]]; }; then printf '%s' "$t"; fi
+  if [[ "$t" =~ $pre ]] || [[ "$t" =~ $wre ]] || { looks_like_command "${t//+/}" && [[ "$a" =~ $ore ]]; }; then printf '%s' "$t"; fi
   return 0
 }
 
