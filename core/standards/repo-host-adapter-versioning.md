@@ -73,6 +73,7 @@ The active `repo_host` adapter is selected by **user configuration**, at the sea
 - **Resolution:** the value is **cascade-resolved** per the Platform-Config Resolution Protocol — global → portfolio → program → project → individual — so an operator, program, or project may select a host adapter at the appropriate altitude, with the install-level default as the floor.
 - **Default:** `github`. A fresh install runs the capability end-to-end with no operator action, against the v1 GitHub/git adapter (§4).
 - **Adding a host:** a future host adapter (a) implements the four operations of §2 against its host, (b) adds its value to the `[adapters].repo_host` allowed set, and (c) ships under its own adapter ticket. The capability, the claim mechanism, and this interface are unchanged — only a new implementation is added behind the selector.
+- **Named gap — host-API budget probe.** The pre-launch gate's host-API axis (quota-budget protocol § 4.3b) reads each quota pool from a metered probe of this host and classifies the response by its refusal reason. Neither is one of the four operations in §2; both are named gaps of this interface, owned by the repository-host abstraction work. Until it declares them, `release/tools/host-api-axis-verdict.sh` performs them behind this selector, and its self-test requires an explicit arm — a probe, or a declared no-probe arm — for every allowed value of `[adapters].repo_host`, so a host added under this section fails that self-test until it is given one.
 
 This binding is faithful to the platform's config-home decisions:
 

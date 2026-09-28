@@ -6,6 +6,7 @@ date: 2026-08-27
 release: ci-stable-under-transient-conditions
 deciders: "Stage 5 Solutioning spoke (four-fork design exploration) + Collective Review (scope-lock; the governing skill's zero-tool-calls assertion was admitted into scope) + Stage 6 Engineering spoke (build, re-derivation)"
 tags: [quota-budget, checkpoint-b, host-api, rate-limit, graphql, evidence-grading, refuse-to-synthesize, fail-open, hub-spoke, ADR-026, ADR-102]
+superseded_by: ADR-208 in-part (the host-API instrument and its evidence grade; the unstarted-window residual)
 source_observations:
   - "Measured mid-release: the host's GraphQL pool sat at 0/5000 while its REST pool sat at 4966/5000. Every Issue-and-PR command failed while direct REST paths kept working, and the launch gate rendered PROCEED throughout — it was reading a different exhaustion surface entirely."
   - "CORRECTED at Stage 7 — the original observation was confounded. It read: repeated reads during one session left the REST pool's used counter at zero, THEREFORE the probe does not draw against the pools it reports. The inference does not follow. Re-measured: 12 reads inside 3.6 seconds returned 6 distinct reset epochs per pool, core remaining in {4981, 5000} and graphql remaining in {4882, 5000}, with a deterministic local control returning exactly 1 distinct value over the same 12 samples. 8 of the 12 reported an UNSTARTED window (a full pool, used = 0) interleaved with reads of the started window showing graphql used = 118. A read of an unstarted window reports used = 0 whether or not the probe draws, so the zero-used observation cannot distinguish the two. Whether the probe draws against the pools it reports is UNVERIFIED — neither asserted nor denied, and not available as evidence."
@@ -99,5 +100,6 @@ One residual is worth naming: the change also reaches a packaged skill's source 
 
 ## Related ADRs
 
+- **[ADR-208](ADR-208-checkpoint-b-host-api-axis-reads-its-own-probe-in-band.md)** — supersedes this record in part: the host-API instrument, its evidence grade, and the unstarted-window residual. This record's per-axis grading, its DEFER-dominant disjunction, its fail-open rule on a probe failure and its two-basis rendering stand.
 - **[ADR-102](ADR-102-quota-budget-successor-substrate-finops-cumulative-draw.md)** — fixes the substrate for the *usage-window* axis's per-spoke cost estimate. This ADR adds a different axis with a different instrument and does not disturb that choice; the two axes measure different quantities and neither substitutes for the other.
 - **[ADR-026](ADR-026-spoke-launch-quota-reservation-telemetry-event.md)** — defines the startup-reservation telemetry event that remains declared-but-unwired. This ADR does not wire it: the gate's audit surface stays the rendered verdict line, and adding a second axis widens what that line must name rather than changing what the gate emits.
