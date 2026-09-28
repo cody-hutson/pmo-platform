@@ -11645,6 +11645,706 @@ STUB
     /bin/rm -rf "$_cb_tmp" 2>/dev/null || true
   fi
 
+  # ── Test PL: report text renders no absolute path — the class (#7855; Plan
+  #    amendments 12 and 13). The close-out report and the gate-passage proof are
+  #    relayed to PUBLIC sub-tasks, so a path under the operator's home publishes the
+  #    OS username. Plan amendment 13 applies the sanctioned form at the SINKS: the
+  #    redact-only primitive runs over the whole markdown render, over every decoded
+  #    string of the JSON render and over the body phase 15 posts to GitHub, while a
+  #    captured diagnostic reaches report text only through the shared projection, at
+  #    its projection site. Five arms: PL-1 the primitive; PL-2 a static census of the
+  #    production region's captured streams; PL-3 phase 12.2 and PL-4 phase 6.6, driven
+  #    hermetically and read back through generate_report as markdown and JSON; PL-5
+  #    the sinks themselves, with the direct post (AC-8) as its last limb. The
+  #    fabricated home and repository roots sit under one temp directory,
+  #    canonicalised with `pwd -P` as group CB's is, so a symlinked temp root cannot
+  #    make a redaction limb miss for a reason unrelated to the code under test. PL-3
+  #    alone needs git: on a host without it that arm is skipped with the AC7 group's
+  #    notice and records no witness, which the per-arm gate then reports by name —
+  #    as it already does for groups CB, CR and 4h-e-j, which need git too.
+  local _plx_s_root="$REPO_ROOT" _plx_s_home="$HOME" _plx_s_mode="$MODE" _plx_s_out="$OUTPUT"
+  local _plx_s_ver="$VERSION" _plx_s_ms="$MILESTONE" _plx_s_sha="$MERGE_SHA" _plx_s_pr="$PR_NUMBER"
+  local _plx_s_slug="$STATE_MILESTONE_SLUG" _plx_s_log="$RELEASE_LOG" _plx_s_cv="$COMPUTE_VELOCITY"
+  local _plx_s_prim="${PRIMARY_CHECKOUT:-}" _plx_s_gh="$GH" _plx_s_res="$VERIFICATION_RESULTS"
+  local _plx_s_scan="$PATTERN_SCAN_REPORT" _plx_s_audit="$EPIC_AUDIT_REPORT" _plx_s_nm="$NO_MERGE"
+  local _plx_s_oic="$OPEN_ISSUE_COUNT" _plx_s_oil="$OPEN_ISSUE_LIST" _plx_s_cyc="$STATE_CYCLE_TIME"
+  local _plx_s_ts="$RUN_TS" _plx_s_cpn="$CHORE_PR_NUMBER" _plx_s_cpo="$CHORE_PR_OUTCOME"
+  local _plx_s_mst="$STATE_MILESTONE_STATE" _plx_s_lrs="$STATE_LOG_ROW_STATE" _plx_s_tag="$STATE_TAG_EXISTS"
+  local _plx_tmp _plx_home _plx_repo _plx_out _plx_x _plx_have=0 _plx_cen _plx_ns _plx_nsite
+  local _plx_md _plx_js _plx_raw _plx_uhome _plx_b1 _plx_b2 _plx_b3 _plx_stub
+  local _plx_bad_res="" _plx_bad_sens="" _plx_bad_md="" _plx_bad_js="" _plx_prim
+  local _plx_pay _plx_z _plx_cv_ok _plx_cv_e2 _plx_bad_res4="" _plx_bad_voc="" _plx_bad_len="" _plx_bad_note=""
+  _plx_tmp="$(cd "$(/usr/bin/mktemp -d -t pathleak-selftest.XXXXXX)" && pwd -P)"
+  _plx_home="$_plx_tmp/home"; _plx_repo="$_plx_home/work/repo"; _plx_prim="$_plx_home/primary"
+  _plx_cv_ok="$_plx_tmp/cv-ok.sh"; _plx_cv_e2="$_plx_tmp/cv-e2.sh"; _plx_stub="$_plx_tmp/gh-stub.sh"
+  /bin/mkdir -p "$_plx_repo"
+  # One report context for every render below, so no earlier group's globals leak in.
+  MILESTONE="9395"; NO_MERGE=0; OPEN_ISSUE_COUNT=0; OPEN_ISSUE_LIST=""; STATE_CYCLE_TIME="1d"
+  RUN_TS="2026-09-28T00:00:00Z"; CHORE_PR_NUMBER=""; CHORE_PR_OUTCOME=""; STATE_MILESTONE_STATE="open"
+  STATE_LOG_ROW_STATE=""; STATE_TAG_EXISTS=0; VERIFICATION_RESULTS=""; PATTERN_SCAN_REPORT=""; EPIC_AUDIT_REPORT=""
+  PR_NUMBER="8888"; STATE_MILESTONE_SLUG="plx-slug"; VERSION="v9.95"; MERGE_SHA=""
+  # The row reader: the detail of one named phase, from a markdown render or a JSON one.
+  /bin/cat > "$_plx_tmp/row.py" <<'PLXROW'
+import json
+import sys
+
+mode, name = sys.argv[1], sys.argv[2]
+text = sys.stdin.buffer.read().decode("utf-8", "replace")
+out = ""
+if mode == "json":
+    for p in json.loads(text)["phases"]:
+        if p["name"] == name:
+            out = p["detail"]
+            break
+else:
+    prefix = "| %s | " % name
+    for line in text.split("\n"):
+        if line.startswith(prefix):
+            rest = line[len(prefix):].split(" | ", 1)[-1]
+            out = rest[:-2] if rest.endswith(" |") else rest
+            break
+sys.stdout.buffer.write(out.encode("utf-8"))
+PLXROW
+  # The JSON reader: parses the render and tests every DECODED string — json.dumps
+  # escapes non-ASCII, so no text search over the serialised form can see such a root.
+  # Prints OK, or BAD with counts only, so no fixture root reaches the suite's output.
+  /bin/cat > "$_plx_tmp/jcheck.py" <<'PLXJS'
+import json
+import sys
+
+roots = [r for r in open(sys.argv[1], encoding="utf-8").read().split("\n") if r]
+need = sys.argv[2:]
+try:
+    doc = json.loads(sys.stdin.buffer.read().decode("utf-8"))
+except Exception as exc:
+    print("BAD the render does not parse as JSON: %s" % type(exc).__name__)
+    sys.exit(0)
+seen = []
+
+
+def walk(v):
+    if isinstance(v, str):
+        seen.append(v)
+    elif isinstance(v, list):
+        for x in v:
+            walk(x)
+    elif isinstance(v, dict):
+        for x in v.values():
+            walk(x)
+
+
+walk(doc)
+blob = "\n".join(seen)
+raw = sum(1 for r in roots if r in blob)
+miss = [m for m in need if m not in blob]
+print("OK" if not raw and not miss else "BAD raw-roots=%d missing=%s" % (raw, miss))
+PLXJS
+
+  # PL-1 — THE PRIMITIVE. _redact_paths rewrites the repository root to <repo> and then
+  #        HOME to <home>, literally, each root with one trailing slash stripped, and
+  #        skips a root of one character or less. Synthetic roots, so no real path is
+  #        involved. Controls: HOME redacted before the repository root leaves
+  #        <home>/work/x where <repo>/x belongs, and the predicate must reject that
+  #        shape (CB-10's control shape); root-free text, pipes, line breaks and a
+  #        trailing newline included, passes byte-identical, so no sink rewrites text
+  #        that names no root.
+  declare -F _redact_paths >/dev/null 2>&1 && _plx_have=1
+  _st_arm PL PL-1; [[ "$_plx_have" -eq 1 ]] || { echo "FAIL: PL-1 — the redact-only primitive _redact_paths is not defined, so no sink can apply the sanctioned path form (Plan amendment 13 item 1)"; failures=$((failures+1)); }
+  HOME="/plx1/h"; REPO_ROOT="/plx1/h/work"
+  _plx_out="$(_redact_paths "/plx1/h/work/x and /plx1/h/y" 2>/dev/null)" || _plx_out=""
+  [[ "$_plx_out" == "<repo>/x and <home>/y" ]] || { echo "FAIL: PL-1 — nested roots must redact the repository root first and then HOME, giving '<repo>/x and <home>/y'; got '$_plx_out'"; failures=$((failures+1)); }
+  _plx_x="/plx1/h/work/x and /plx1/h/y"; _plx_x="${_plx_x//"$HOME"/<home>}"; _plx_x="${_plx_x//"$REPO_ROOT"/<repo>}"
+  [[ "$_plx_x" == "<repo>/x and <home>/y" ]] && { echo "FAIL: PL-1 control — the predicate accepted HOME redacted before the repository root (<home>/work/x where <repo>/x belongs)"; failures=$((failures+1)); }
+  HOME="/plx1/h/"; REPO_ROOT="/plx1/r/"
+  _plx_out="$(_redact_paths "/plx1/h/y /plx1/r/z" 2>/dev/null)" || _plx_out=""
+  [[ "$_plx_out" == "<home>/y <repo>/z" ]] || { echo "FAIL: PL-1 — a root carrying a trailing slash must still redact and keep its separator, giving '<home>/y <repo>/z'; got '$_plx_out'"; failures=$((failures+1)); }
+  HOME="/"; REPO_ROOT="/"
+  _plx_out="$(_redact_paths "a/b/c" 2>/dev/null)" || _plx_out="<no output>"
+  [[ "$_plx_out" == "a/b/c" ]] || { echo "FAIL: PL-1 — a root of one character must be skipped, or every separator is rewritten; 'a/b/c' became '$_plx_out'"; failures=$((failures+1)); }
+  HOME="/plx1/h"; REPO_ROOT="/plx1/h/work"
+  _plx_x="line one | a/b"$'\n'"line two"$'\n'
+  _plx_out="$(_redact_paths "$_plx_x" 2>/dev/null; /usr/bin/printf 'X')" || _plx_out=""
+  [[ "${_plx_out%X}" == "$_plx_x" ]] || { echo "FAIL: PL-1 — root-free text must pass byte-identical, its pipe, its line breaks and its trailing newline included"; failures=$((failures+1)); }
+  HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"
+
+  # PL-2 — THE PROJECTION CENSUS (static). Every captured stream in the production
+  #        region — a 2>&1 capture, or a read of a 2> file, closed through plain
+  #        assignments and slices — must reach report text only through the shared
+  #        projection, in an admitted form: the whole capture, its first line, or a
+  #        raw window of at least 4096 bytes. Named per site: CAP-FIRST (cut by head -c,
+  #        a slice, cut -c or fold, at its assignment or at the site), HAND-ROLLED
+  #        (head, tr or sed in the projection's place) and RAW (interpolated whole into
+  #        a detail, a printed line or a composed string). Reducers (grep -c, wc) and
+  #        filters end a stream; stderr-bound lines and tests are not report text; a
+  #        line carrying a `# report-text: <reason>` marker is an adjudicated exemption
+  #        and propagates nothing; a finding is reported once, at its root. The
+  #        backslash continuations are joined and comments skipped. Controls on every
+  #        run: the anti-vacuity floor, and a constructed region whose findings must be
+  #        exactly its four defect shapes while its four sanctioned shapes pass.
+  /bin/cat > "$_plx_tmp/proj-census.py" <<'PLXCEN'
+import re
+import sys
+
+NAME = r"[A-Za-z_][A-Za-z0-9_]*"
+WHOLE = re.compile(r"\$" + NAME + r"|\$\{" + NAME + r"\}")
+FIRST = re.compile(r"\$\{" + NAME + r"%%\$'\\n'\*\}")
+WINDOW = re.compile(r"\$\(/usr/bin/head -c ([0-9]+) \"\$" + NAME + r"\"( 2>/dev/null)?\)")
+CAPCMD = re.compile(r"(^|[\s/])(head\s+-c\s*[0-9]+|cut\s+-c|fold)(\s|$)")
+HANDCMD = re.compile(r"(^|[\s/])(head|tr|sed)(\s|$)")
+REDUCER = re.compile(r"(^|[\s/])(grep\s+-[A-Za-z]*c[A-Za-z]*|wc\s+-[lc])(\s|$)")
+ECHOCMD = re.compile(r"^\s*(/usr/bin/)?(printf|echo)\s")
+ASSIGN = re.compile(r"(?:^|[\s;!(])(?:local\s+|export\s+)?(" + NAME + r")=")
+MARK = "# report-text:"
+
+
+def logical_lines(text):
+    raw = text.split("\n")
+    out = []
+    i = 0
+    while i < len(raw):
+        start = i + 1
+        cur = raw[i]
+        while cur.endswith("\\") and i + 1 < len(raw):
+            i += 1
+            cur = cur[:-1] + " " + raw[i].lstrip()
+        out.append((start, cur))
+        i += 1
+    return out
+
+
+def scopes(lines):
+    head = re.compile(r"^(" + NAME + r")\(\)\s*\{")
+    out = {"<top>": []}
+    cur = "<top>"
+    for ln, line in lines:
+        m = head.match(line)
+        if m:
+            cur = m.group(1)
+            out.setdefault(cur, [])
+            continue
+        if cur != "<top>" and line.startswith("}"):
+            cur = "<top>"
+            continue
+        out[cur].append((ln, line))
+    return out
+
+
+def close_of(line, k):
+    depth = 0
+    i = k
+    quote = False
+    while i < len(line):
+        c = line[i]
+        if quote:
+            if c == "'":
+                quote = False
+            i += 1
+            continue
+        if c == "\\":
+            i += 2
+            continue
+        if c == "'":
+            quote = True
+        elif c == "$" and i + 1 < len(line) and line[i + 1] == "(":
+            depth += 1
+            i += 2
+            continue
+        elif c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return len(line)
+
+
+def helper_args(line):
+    out = []
+    for m in re.finditer(r"_detail_one_line\b", line):
+        k = m.end()
+        if not line[k:].startswith(' "'):
+            out.append((m.start(), m.end(), False))
+            continue
+        k += 2
+        depth = 0
+        arg = ""
+        j = k
+        while j < len(line):
+            c = line[j]
+            if c == "$" and j + 1 < len(line) and line[j + 1] in "({":
+                depth += 1
+                arg += line[j:j + 2]
+                j += 2
+                continue
+            if c in ")}" and depth > 0:
+                depth -= 1
+            elif c == '"' and depth == 0:
+                break
+            arg += c
+            j += 1
+        ok = bool(WHOLE.fullmatch(arg) or FIRST.fullmatch(arg))
+        w = WINDOW.fullmatch(arg)
+        if w:
+            ok = int(w.group(1)) >= 4096
+        out.append((k, j, ok))
+    return out
+
+
+def stages_of(seg):
+    stages = []
+    i = 0
+    last = 0
+    quote = False
+    depth = 0
+    while i < len(seg):
+        c = seg[i]
+        if quote:
+            if c == "'":
+                quote = False
+        elif c == "'":
+            quote = True
+        elif c == "$" and i + 1 < len(seg) and seg[i + 1] == "(":
+            depth += 1
+            i += 1
+        elif c == ")" and depth > 0:
+            depth -= 1
+        elif c == "|" and depth == 0:
+            if i + 1 < len(seg) and seg[i + 1] == "|":
+                stages.append((last, i, "or"))
+                last = i + 2
+                i += 2
+                continue
+            stages.append((last, i, "pipe"))
+            last = i + 1
+        i += 1
+    stages.append((last, len(seg), "end"))
+    return stages
+
+
+def around(seg, pos):
+    st = stages_of(seg)
+    for n, (a, b, sep) in enumerate(st):
+        if a <= pos < b:
+            nxt = seg[st[n + 1][0]:st[n + 1][1]] if sep == "pipe" and n + 1 < len(st) else None
+            return seg[a:b], nxt
+    return seg, None
+
+
+def whole_rhs(line, p):
+    if line.startswith("${", p):
+        depth = 0
+        j = p + 1
+        while j < len(line):
+            if line[j] == "{":
+                depth += 1
+            elif line[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        j += 1
+    else:
+        m = re.match(r"\$" + NAME, line[p:])
+        j = p + (m.end() if m else 1)
+    if j < len(line) and line[j] == '"':
+        j += 1
+    return j >= len(line) or line[j] in " \t;"
+
+
+def census(text):
+    region = text.split("\nself_test() {", 1)[0]
+    res = {"streams": {}, "sites": 0, "flags": [], "downstream": []}
+    for scope, body in scopes(logical_lines(region)).items():
+        streams = {}
+        files = set()
+        flagged = set()
+        for ln, line in body:
+            if line.lstrip().startswith("#") or MARK in line:
+                continue
+            for fm in re.finditer(r"2>>?\s*\"\$\{?(" + NAME + r")\}?\"", line):
+                files.add(fm.group(1))
+            for am in ASSIGN.finditer(line):
+                name = am.group(1)
+                rhs = line[am.end():]
+                inner = rhs[1:] if rhs.startswith('"') else rhs
+                if inner.startswith("$("):
+                    sub = inner[:close_of(inner, 0)]
+                    if sub[2:].lstrip().startswith("_detail_one_line"):
+                        continue
+                    if "2>&1" in sub:
+                        streams.setdefault(name, ln)
+                        continue
+                    for f in files:
+                        for fm in re.finditer(r"\"\$\{?" + re.escape(f) + r"\}?\"", sub):
+                            if not sub[:fm.start()].rstrip().endswith(">"):
+                                streams.setdefault(name, ln)
+                    continue
+                em = re.match(r"\$\{?(" + NAME + r")", inner)
+                p0 = am.end() + (1 if rhs.startswith('"') else 0)
+                if em and em.group(1) in streams and whole_rhs(line, p0):
+                    streams.setdefault(name, ln)
+        res["streams"][scope] = sorted(streams)
+        for ln, line in body:
+            if line.lstrip().startswith("#") or MARK in line:
+                continue
+            spans = [(m.start(), close_of(line, m.start())) for m in re.finditer(r"\$\(", line)]
+            hargs = helper_args(line)
+            assigns = list(ASSIGN.finditer(line))
+            kinds = []
+            for v in list(streams) + sorted(files - set(streams)):
+                is_file = v in files and v not in streams
+                for m in re.finditer(r"\$\{?" + re.escape(v) + r"\b", line):
+                    p = m.start()
+                    pre = line[:p].rstrip().rstrip('"').rstrip()
+                    if is_file and pre.endswith(">"):
+                        continue
+                    inh = [h for h in hargs if h[0] <= p < h[1]]
+                    if inh:
+                        res["sites"] += 1
+                        if not inh[0][2]:
+                            kinds.append(("CAP-FIRST", v))
+                        continue
+                    if re.match(r"\$\{" + re.escape(v) + r":(?:[0-9]| +-?[0-9]|\(-?[0-9])", line[p:]):
+                        kinds.append(("CAP-FIRST", v))
+                        continue
+                    inner = [sp for sp in spans if sp[0] < p < sp[1]]
+                    if inner:
+                        sp = max(inner)
+                        seg_start, seg_end = sp[0] + 2, sp[1] - 1
+                    else:
+                        seg_start, seg_end = 0, len(line)
+                    seg = line[seg_start:seg_end]
+                    stage, nxt = around(seg, p - seg_start)
+                    to_stderr = re.search(r">&2(\s|;|$)", seg) is not None
+                    if is_file:
+                        if to_stderr:
+                            continue
+                        if CAPCMD.search(stage):
+                            kinds.append(("CAP-FIRST", v))
+                        elif HANDCMD.search(stage) or (nxt is not None and HANDCMD.search(nxt)):
+                            kinds.append(("HAND-ROLLED", v))
+                        continue
+                    consumer = stage if pre.endswith("<<<") else nxt
+                    if consumer is not None:
+                        if to_stderr or REDUCER.search(consumer):
+                            continue
+                        if CAPCMD.search(consumer):
+                            kinds.append(("CAP-FIRST", v))
+                        elif HANDCMD.search(consumer):
+                            kinds.append(("HAND-ROLLED", v))
+                        continue
+                    if inner and not ECHOCMD.match(stage):
+                        continue
+                    if to_stderr or ("[[" in line[:p] and "]]" in line[p:]):
+                        continue
+                    if re.search(r"\bcase\s+\"?\$\{?" + re.escape(v) + r"\b", line):
+                        continue
+                    if any((am.end() == p or (am.end() + 1 == p and line[am.end()] == '"'))
+                           and whole_rhs(line, p) for am in assigns):
+                        continue
+                    if (re.search(r"(^|[\s;])(mark_phase|(/usr/bin/)?printf|echo)\s", line)
+                            or any(am.end() < p for am in assigns)):
+                        if v in flagged:
+                            res["downstream"].append((ln, v))
+                            continue
+                        kinds.append(("RAW", v))
+            if kinds:
+                kind, v = kinds[0]
+                res["flags"].append((kind, ln, v))
+                for n, d in streams.items():
+                    if d == ln:
+                        flagged.add(n)
+    return res
+
+
+res = census(open(sys.argv[1], encoding="utf-8", errors="replace").read())
+print("STREAMS %d" % sum(len(v) for v in res["streams"].values()))
+print("SITES %d" % res["sites"])
+for kind, ln, v in res["flags"]:
+    print("FLAG %s L%d %s" % (kind, ln, v))
+for ln, v in res["downstream"]:
+    print("DOWNSTREAM L%d %s (reported at its root)" % (ln, v))
+
+# Capability to fail, on every run: four defect shapes (a) (b) (c) (f) flagged exactly,
+# four sanctioned shapes pass — (d) a first line and (e) a 4096-byte window into the
+# projection, (g) a site below its own self_test line, (h) a two-line capture, whose
+# stream must be seen at all for the continuation join to be proven.
+syn = "\n".join([
+    "a() {",
+    "  _x0=\"$(some_cmd 2>\"$_errf\")\"",
+    "  _e=\"$(/usr/bin/head -c 800 \"$_errf\")\"",
+    "  mark_phase \"a\" \"FAIL\" \"$(_detail_one_line \"$_e\")\"",
+    "  _o=\"$(other_cmd 2>&1)\"",
+    "  mark_phase \"b\" \"FAIL\" \"$(printf '%s' \"$_o\" | head -1)\"",  # sigpipe-idiom: allow — an inert fixture string for PL-2's HAND-ROLLED control, never executed
+    "  _x=\"${_o:0:800}\"",
+    "  mark_phase \"d\" \"FAIL\" \"$(_detail_one_line \"${_o%%$'\\n'*}\")\"",
+    "  mark_phase \"e\" \"FAIL\" \"$(_detail_one_line \"$(/usr/bin/head -c 4096 \"$_errf\" 2>/dev/null)\")\"",
+    "  mark_phase \"f\" \"FAIL\" \"$_o\"",
+    "  r=\"$($GH x \\",
+    "      2>&1)\"",
+    "  mark_phase \"h\" \"FAIL\" \"$(_detail_one_line \"$r\")\"",
+    "}",
+    "self_test() {",
+    "  mark_phase \"g\" \"FAIL\" \"$(/usr/bin/head -1 <<<\"$_o\")\"",
+    "}",
+])
+ctl = census(syn)
+got = [(k, ln) for k, ln, v in ctl["flags"]]
+want = [("CAP-FIRST", 3), ("HAND-ROLLED", 6), ("CAP-FIRST", 7), ("RAW", 10)]
+joined = "r" in ctl["streams"].get("a", [])
+print("CONTROL " + ("ok" if got == want and joined else "broken flags=%s joined=%s" % (got, joined)))
+PLXCEN
+  _plx_cen="$(/usr/bin/python3 "$_plx_tmp/proj-census.py" "${BASH_SOURCE[0]}" 2>&1 || true)"
+  _plx_ns="$(/usr/bin/sed -n 's/^STREAMS //p' <<<"$_plx_cen")"
+  _plx_nsite="$(/usr/bin/sed -n 's/^SITES //p' <<<"$_plx_cen")"
+  _st_arm PL PL-2; [[ "$_plx_ns" =~ ^[0-9]+$ && "$_plx_ns" -ge 1 && "$_plx_nsite" =~ ^[0-9]+$ && "$_plx_nsite" -ge 1 ]] || { echo "FAIL: PL-2 anti-vacuity — the census read ${_plx_ns:-no} captured stream(s) and ${_plx_nsite:-no} projection site(s) in the production region, so a clean reading would measure nothing: $(_detail_one_line "$_plx_cen")"; failures=$((failures+1)); }
+  [[ "$_plx_cen" != *"FLAG "* ]] || { echo "FAIL: PL-2 — a captured diagnostic reaches report text other than through the shared projection in an admitted form, so a path can be cut or shipped raw: $(_detail_one_line "$(/usr/bin/grep '^FLAG ' <<<"$_plx_cen" || true)")"; failures=$((failures+1)); }
+  [[ "$_plx_cen" == *"CONTROL ok"* ]] || { echo "FAIL: PL-2 capability-to-fail — the census cannot tell the four defect shapes from the four sanctioned ones, so its clean reading above measures nothing: $(_detail_one_line "$(/usr/bin/grep '^CONTROL' <<<"$_plx_cen" || true)")"; failures=$((failures+1)); }
+
+  # PL-3 — PHASE 12.2, HERMETIC. The primary checkout sits under the fabricated home
+  #        (a bare file-path origin and a clone, the AC7 group's fixture shape), and each
+  #        outcome the fixture can reach is run and read back through generate_report,
+  #        markdown and JSON: fast-forwarded, not fast-forwardable, not on main,
+  #        --dry-run, fetch failed and not resolvable. Each rendered row must carry no
+  #        fabricated-home prefix and must name the path as <home>/…. Each outcome must
+  #        land on its own result, so a fixture that stopped reaching a branch reads
+  #        red; the raw record carries the prefix (sensitivity); and the path-free
+  #        "resolved primary is this checkout" row renders byte-identical (specificity).
+  if [[ -x "$GIT" ]]; then
+    (
+      set +e
+      $GIT -c init.defaultBranch=main init -q --bare "$_plx_home/origin.git"
+      $GIT clone -q "$_plx_home/origin.git" "$_plx_home/seed"
+      $GIT -C "$_plx_home/seed" checkout -q -b main
+      /usr/bin/printf 'one\n' > "$_plx_home/seed/f.txt"
+      $GIT -C "$_plx_home/seed" add f.txt
+      $GIT -C "$_plx_home/seed" -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m c1
+      $GIT -C "$_plx_home/seed" push -q origin main
+      $GIT clone -q "$_plx_home/origin.git" "$_plx_prim"
+      /usr/bin/printf 'two\n' >> "$_plx_home/seed/f.txt"
+      $GIT -C "$_plx_home/seed" add f.txt
+      $GIT -C "$_plx_home/seed" -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m c2
+      $GIT -C "$_plx_home/seed" push -q origin main
+    ) >/dev/null 2>&1 || true
+    _plx_sync() {   # $1 = outcome label, $2 = the result it must land on
+      local _r _d _m _j
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      HOME="$_plx_home"; REPO_ROOT="$_plx_repo"
+      phase_sync_primary_checkout >/dev/null 2>&1 || true
+      _r="${PHASE_RESULTS[0]:-}"; _d="${PHASE_DETAILS[0]:-}"
+      OUTPUT="markdown"; _m="$(generate_report 2>/dev/null)" || _m=""
+      OUTPUT="json"; _j="$(generate_report 2>/dev/null)" || _j=""
+      HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"
+      _m="$(/usr/bin/python3 "$_plx_tmp/row.py" md sync_primary_checkout <<<"$_m" 2>/dev/null || true)"
+      _j="$(/usr/bin/python3 "$_plx_tmp/row.py" json sync_primary_checkout <<<"$_j" 2>/dev/null || true)"
+      [[ "$_r" == "$2" ]] || _plx_bad_res+=" $1:${_r:-none}"
+      [[ "$_d" == *"$_plx_home/"* ]] || _plx_bad_sens+=" $1"
+      [[ -n "$_m" && "$_m" != *"$_plx_home"* && "$_m" == *'<home>/'* ]] || _plx_bad_md+=" $1"
+      [[ -n "$_j" && "$_j" != *"$_plx_home"* && "$_j" == *'<home>/'* ]] || _plx_bad_js+=" $1"
+    }
+    MODE="apply"; PRIMARY_CHECKOUT="$_plx_prim"
+    _plx_sync fast-forwarded PASS
+    # Diverge: a local commit on the primary, and origin one commit further on.
+    (
+      set +e
+      /usr/bin/printf 'local\n' > "$_plx_prim/g.txt"
+      $GIT -C "$_plx_prim" add g.txt
+      $GIT -C "$_plx_prim" -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m local
+      /usr/bin/printf 'three\n' >> "$_plx_home/seed/f.txt"
+      $GIT -C "$_plx_home/seed" add f.txt
+      $GIT -C "$_plx_home/seed" -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m c3
+      $GIT -C "$_plx_home/seed" push -q origin main
+    ) >/dev/null 2>&1 || true
+    _plx_sync not-fast-forwardable SKIPPED
+    $GIT -C "$_plx_prim" checkout -q -b side >/dev/null 2>&1 || true
+    _plx_sync not-on-main SKIPPED
+    $GIT -C "$_plx_prim" checkout -q main >/dev/null 2>&1 || true
+    MODE="dry-run"
+    _plx_sync dry-run DRY-RUN
+    MODE="apply"
+    $GIT -C "$_plx_prim" remote set-url origin "$_plx_home/missing.git" >/dev/null 2>&1 || true
+    _plx_sync fetch-failed SKIPPED
+    PRIMARY_CHECKOUT="$_plx_home/no-such-primary"
+    _plx_sync not-resolvable SKIPPED
+    # Specificity: the path-free row, with the primary as this checkout.
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    PRIMARY_CHECKOUT="$_plx_prim"; HOME="$_plx_home"; REPO_ROOT="$_plx_prim"
+    phase_sync_primary_checkout >/dev/null 2>&1 || true
+    OUTPUT="markdown"; _plx_md="$(generate_report 2>/dev/null)" || _plx_md=""
+    OUTPUT="json"; _plx_js="$(generate_report 2>/dev/null)" || _plx_js=""
+    HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"
+    _plx_md="$(/usr/bin/python3 "$_plx_tmp/row.py" md sync_primary_checkout <<<"$_plx_md" 2>/dev/null || true)"
+    _plx_js="$(/usr/bin/python3 "$_plx_tmp/row.py" json sync_primary_checkout <<<"$_plx_js" 2>/dev/null || true)"
+    _plx_x="resolved primary is this checkout — close-out is not running in a linked worktree; no sync to perform"
+    _st_arm PL PL-3; [[ -z "$_plx_bad_res" ]] || { echo "FAIL: PL-3 — each phase-12.2 fixture outcome must land on its own result, or a limb below grades a branch the fixture no longer reaches; got:${_plx_bad_res}"; failures=$((failures+1)); }
+    [[ -z "$_plx_bad_sens" ]] || { echo "FAIL: PL-3 sensitivity — the raw phase-12.2 record must carry the fabricated-home path, or the render limbs pass without ever seeing one; missing for:${_plx_bad_sens}"; failures=$((failures+1)); }
+    [[ -z "$_plx_bad_md" ]] || { echo "FAIL: PL-3 markdown — the rendered sync_primary_checkout row must carry no fabricated-home prefix and must name the path as <home>/… (AC-1); failed for:${_plx_bad_md}"; failures=$((failures+1)); }
+    [[ -z "$_plx_bad_js" ]] || { echo "FAIL: PL-3 JSON — the sync_primary_checkout detail in the JSON report must carry no fabricated-home prefix and must name the path as <home>/… (AC-1); failed for:${_plx_bad_js}"; failures=$((failures+1)); }
+    [[ "$_plx_md" == "$_plx_x" && "$_plx_js" == "$_plx_x" ]] || { echo "FAIL: PL-3 specificity — the path-free 'resolved primary is this checkout' row must render byte-identical in both reports (AC-5); got '$_plx_md' / '$_plx_js'"; failures=$((failures+1)); }
+    unset -f _plx_sync
+  else
+    echo "  (skipped PL-3 phase-12.2 hermetic arm — git not executable at $GIT)" >&2
+  fi
+
+  # PL-4 — PHASE 6.6, HERMETIC. A producer stub writes to stderr the planned-recovery
+  #        NOTE group 4c.5b pins, a files-changed NOTE carrying the repository root
+  #        (compute-release-velocity.sh's shape) and a home path starting at byte 790.
+  #        It runs on the PASS path ([producer stderr: …]) and on the exit-2 path at
+  #        --apply (FAIL) and --dry-run (WARN), and each row is read back through
+  #        generate_report, markdown and JSON. A cap applied before the redaction cuts
+  #        that home path mid-string and ships the fragment raw, so each rendered
+  #        detail must carry <repo> and <home> and no fragment of either root (CB-10's
+  #        vocabulary shape); each projection stays within 800 characters; and the
+  #        planned-recovery NOTE still reaches the report.
+  _plx_pay="NOTE: Phase-A2 planned-recovery degraded (could not list issues carrying 'status: deferred')"$'\n'"NOTE: files-changed degraded to N/A - 'git diff --shortstat A..B' yielded no file count from repo root '${_plx_repo}'"$'\n'
+  _plx_z="$(/usr/bin/printf '%0900d' 0)"
+  _plx_pay="${_plx_pay}${_plx_z:0:$(( 790 - ${#_plx_pay} ))}${_plx_home}/plx4/y.log"$'\n'
+  /usr/bin/printf '%s' "$_plx_pay" > "$_plx_tmp/cv-payload.txt"
+  /bin/cat > "$_plx_cv_ok" <<'EOF'
+#!/bin/sh
+/bin/cat "$(/usr/bin/dirname "$0")/cv-payload.txt" >&2
+echo "planned 12 pts / delivered 12 pts (1.00); files-changed 9; allocation 0/12/0 pts (feature/debt/protocol-slack); class routine; mechanism: compute-release-velocity.sh"
+EOF
+  /bin/cat > "$_plx_cv_e2" <<'EOF'
+#!/bin/sh
+/bin/cat "$(/usr/bin/dirname "$0")/cv-payload.txt" >&2
+exit 2
+EOF
+  /bin/chmod +x "$_plx_cv_ok" "$_plx_cv_e2"
+  RELEASE_LOG="$_plx_tmp/RELEASE_LOG.md"
+  _plx_log() {
+    /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+
+#### Deployment Log v9.95
+**Mechanism:** git merge.
+**Cycle-Time:** 3d 4h; mechanism: compute-cycle-time.sh
+**Result:** SUCCESS — green CI.
+EOF
+  }
+  _plx_velo() {   # $1 = outcome label, $2 = mode, $3 = producer stub, $4 = the result it must land on
+    local _r _m _j _k _v _pp
+    _plx_log
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    MODE="$2"; COMPUTE_VELOCITY="$3"; HOME="$_plx_home"; REPO_ROOT="$_plx_repo"
+    phase_inject_velocity_field >/dev/null 2>&1 || true
+    _r="${PHASE_RESULTS[0]:-}"
+    OUTPUT="markdown"; _m="$(generate_report 2>/dev/null)" || _m=""
+    OUTPUT="json"; _j="$(generate_report 2>/dev/null)" || _j=""
+    HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"
+    [[ "$_r" == "$4" ]] || _plx_bad_res4+=" $1:${_r:-none}"
+    for _k in markdown json; do
+      if [[ "$_k" == markdown ]]; then
+        _v="$(/usr/bin/python3 "$_plx_tmp/row.py" md inject_velocity_field <<<"$_m" 2>/dev/null || true)"
+      else
+        _v="$(/usr/bin/python3 "$_plx_tmp/row.py" json inject_velocity_field <<<"$_j" 2>/dev/null || true)"
+      fi
+      _pp=""
+      case "$_v" in
+        *"[producer stderr: "*) _pp="${_v#*\[producer stderr: }"; _pp="${_pp%]}" ;;
+        *"**Velocity:** field: "*) _pp="${_v#*\*\*Velocity:\*\* field: }"; _pp="${_pp% — NOT blocking*}" ;;
+      esac
+      [[ -n "$_pp" && "$_v" == *'<repo>'* && "$_v" == *'<home>'* && "$_v" != *"${_plx_home:0:8}"* ]] || _plx_bad_voc+=" $1/$_k"
+      [[ -n "$_pp" && "${#_pp}" -le 800 ]] || _plx_bad_len+=" $1/$_k(${#_pp})"
+      [[ "$_v" == *'planned-recovery degraded'* ]] || _plx_bad_note+=" $1/$_k"
+    done
+  }
+  _plx_velo pass apply "$_plx_cv_ok" PASS
+  _plx_velo refused-apply apply "$_plx_cv_e2" FAIL
+  _plx_velo refused-dry-run dry-run "$_plx_cv_e2" WARN
+  _st_arm PL PL-4; [[ "${#_plx_pay}" -gt 800 && "${_plx_pay:790:${#_plx_home}}" == "$_plx_home" && -z "$_plx_bad_res4" ]] || { echo "FAIL: PL-4 fixture — the producer's stderr must carry the home path at byte 790 and each run must land on its own result (PASS, FAIL, WARN), or the limbs below grade nothing; got:${_plx_bad_res4:- payload ${#_plx_pay} bytes}"; failures=$((failures+1)); }
+  [[ -z "$_plx_bad_voc" ]] || { echo "FAIL: PL-4 — each rendered phase-6.6 detail must carry <repo> and <home> and no fragment of either root; a cap applied before the redaction cuts the home path and ships the fragment raw (AC-2); failed for:${_plx_bad_voc}"; failures=$((failures+1)); }
+  [[ -z "$_plx_bad_len" ]] || { echo "FAIL: PL-4 — each phase-6.6 projection must stay within 800 characters (AC-2); failed for:${_plx_bad_len}"; failures=$((failures+1)); }
+  [[ -z "$_plx_bad_note" ]] || { echo "FAIL: PL-4 — the planned-recovery NOTE group 4c.5b pins must still reach the report; failed for:${_plx_bad_note}"; failures=$((failures+1)); }
+
+  # PL-5 — THE SINKS. A record carrying a repository-root path, a home path, both, and
+  #        no path, with both captured report bodies multi-line and carrying both roots.
+  #        The render through generate_report — markdown, and JSON parsed back — must
+  #        carry no raw root and must name <repo>/release/tools/x.sh and
+  #        <home>/other/y; the path-free row must render byte-identical to the raw
+  #        render's; and the redaction must add or remove no line. Sensitivity: the raw
+  #        render carries both roots. A home path with a non-ASCII character is
+  #        redacted in both renders; the JSON sink works on decoded strings, because
+  #        json.dumps escapes non-ASCII and a text replace would never match. Last, the
+  #        direct post (AC-8; Plan amendment 13 item 3): phase 15 posts the gate-passage
+  #        proof with a path-bearing merge anchor through a gh stub, on rung 1 (the
+  #        Stage-13 sub-task) and rung 2 (the release PR). The body handed to the stub
+  #        must carry <repo> and <home> and no fragment of either root, and a path-free
+  #        anchor must reach the stub verbatim.
+  HOME="$_plx_home"; REPO_ROOT="$_plx_repo"
+  PHASE_NAMES=(plx_repo plx_home plx_both plx_free); PHASE_RESULTS=(PASS PASS PASS PASS)
+  PHASE_DETAILS=("would invoke: ${_plx_repo}/release/tools/x.sh" "wrote ${_plx_home}/other/y" "from ${_plx_repo}/a to ${_plx_home}/b" "resolved without a path")
+  PATTERN_SCAN_REPORT="scan line ${_plx_repo}/scan.md"$'\n'"scan line ${_plx_home}/notes"
+  EPIC_AUDIT_REPORT="| audit | ${_plx_home}/audit |"$'\n'"audit line ${_plx_repo}/x"
+  OUTPUT="markdown"; _plx_md="$(generate_report 2>/dev/null)" || _plx_md=""
+  OUTPUT="json"; _plx_js="$(generate_report 2>/dev/null)" || _plx_js=""
+  _plx_raw="$(generate_markdown_report 2>/dev/null)" || _plx_raw=""
+  HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"
+  /usr/bin/printf '%s\n%s\n' "$_plx_home" "$_plx_repo" > "$_plx_tmp/roots"
+  _st_arm PL PL-5; [[ "$_plx_raw" == *"$_plx_repo/release/tools/x.sh"* && "$_plx_raw" == *"$_plx_home/other/y"* ]] || { echo "FAIL: PL-5 sensitivity — the raw render must carry both fabricated roots, or the sink limbs below pass without ever seeing one"; failures=$((failures+1)); }
+  [[ -n "$_plx_md" && "$_plx_md" != *"$_plx_home"* && "$_plx_md" == *'<repo>/release/tools/x.sh'* && "$_plx_md" == *'<home>/other/y'* && "$_plx_md" == *'<repo>/scan.md'* && "$_plx_md" == *'<home>/audit'* ]] || { echo "FAIL: PL-5 markdown — the report rendered through generate_report must carry no raw root, in a detail or a captured report body, and must name <repo>/release/tools/x.sh, <home>/other/y and both bodies' paths in the sanctioned form (Plan amendment 13 item 1)"; failures=$((failures+1)); }
+  _plx_x="$(/usr/bin/python3 "$_plx_tmp/jcheck.py" "$_plx_tmp/roots" '<repo>/release/tools/x.sh' '<home>/other/y' <<<"$_plx_js" 2>&1 || true)"
+  [[ "$_plx_x" == "OK" ]] || { echo "FAIL: PL-5 JSON — the JSON report must parse, carry no raw root in any decoded string and name <repo>/release/tools/x.sh and <home>/other/y (Plan amendment 13 item 1); got '$_plx_x'"; failures=$((failures+1)); }
+  [[ -n "$(/usr/bin/grep -F '| plx_free |' <<<"$_plx_raw" || true)" && "$(/usr/bin/grep -F '| plx_free |' <<<"$_plx_raw" || true)" == "$(/usr/bin/grep -F '| plx_free |' <<<"$_plx_md" || true)" ]] || { echo "FAIL: PL-5 — the path-free row must render byte-identical to the raw render's (AC-5)"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/awk 'END { print NR }' <<<"$_plx_raw")" -eq "$(/usr/bin/awk 'END { print NR }' <<<"$_plx_md")" ]] || { echo "FAIL: PL-5 — the redaction must add or remove no line of the report"; failures=$((failures+1)); }
+  _plx_uhome="${_plx_tmp}/h"$'\xc3\xb6'"me"
+  HOME="$_plx_uhome"; REPO_ROOT="$_plx_repo"
+  PHASE_NAMES=(plx_uhome); PHASE_RESULTS=(PASS); PHASE_DETAILS=("wrote ${_plx_uhome}/z")
+  PATTERN_SCAN_REPORT=""; EPIC_AUDIT_REPORT=""
+  OUTPUT="markdown"; _plx_md="$(generate_report 2>/dev/null)" || _plx_md=""
+  OUTPUT="json"; _plx_js="$(generate_report 2>/dev/null)" || _plx_js=""
+  HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"
+  /usr/bin/printf '%s\n' "$_plx_uhome" > "$_plx_tmp/uroots"
+  [[ -n "$_plx_md" && "$_plx_md" != *"$_plx_uhome"* && "$_plx_md" == *'<home>/z'* ]] || { echo "FAIL: PL-5 non-ASCII home, markdown — a home path carrying a non-ASCII character must render as <home>/z"; failures=$((failures+1)); }
+  _plx_x="$(/usr/bin/python3 "$_plx_tmp/jcheck.py" "$_plx_tmp/uroots" '<home>/z' <<<"$_plx_js" 2>&1 || true)"
+  [[ "$_plx_x" == "OK" ]] || { echo "FAIL: PL-5 non-ASCII home, JSON — json.dumps escapes non-ASCII, so only a pass over the decoded strings can redact this home path; got '$_plx_x'"; failures=$((failures+1)); }
+  /bin/cat > "$_plx_stub" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$PLX_CALLS"
+case "$1 $2" in
+  "issue list")
+    [[ "$*" == *"--state all"* ]] || exit 0
+    [[ "$PLX_NO_SUBTASK" == "1" ]] && exit 0
+    printf '%s\t%s\t%s\t%s\n' 4700 "sub-task" "OPEN" "Stage 13 Close — plx-slug (release-scoped)"
+    exit 0 ;;
+  "issue comment"|"pr comment")
+    printf '%s' "${@: -1}" > "$PLX_BODY"
+    exit 0 ;;
+esac
+exit 0
+STUB
+  /bin/chmod +x "$_plx_stub"
+  export PLX_CALLS="$_plx_tmp/calls.log" PLX_BODY="$_plx_tmp/body.txt" PLX_NO_SUBTASK=0
+  _plx_post() {   # $1 = the merge anchor, $2 = 1 to make rung 1 unresolvable; prints the posted body
+    : > "$PLX_BODY"; PLX_NO_SUBTASK="$2"
+    GH="$_plx_stub"; MODE="apply"; MERGE_SHA="$1"; HOME="$_plx_home"; REPO_ROOT="$_plx_repo"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_run_verification >/dev/null 2>&1 || true
+    HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"
+    /bin/cat "$PLX_BODY" 2>/dev/null || true
+  }
+  _plx_b1="$(_plx_post "${_plx_repo}/anchor ${_plx_home}/note" 0)"
+  _plx_b2="$(_plx_post "${_plx_repo}/anchor ${_plx_home}/note" 1)"
+  _plx_b3="$(_plx_post "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" 0)"
+  [[ "$_plx_b1" == *'### Verification'* && "$_plx_b1" == *'<repo>/anchor'* && "$_plx_b1" == *'<home>/note'* && "$_plx_b1" != *"${_plx_home:0:8}"* ]] || { echo "FAIL: PL-5 direct post, rung 1 — the gate-passage proof phase 15 posts to the Stage-13 sub-task must reach the host with <repo> and <home> and no fragment of either root (AC-8; Plan amendment 13 item 3)"; failures=$((failures+1)); }
+  [[ "$_plx_b2" == *'_Fallback target (rung 2)'* && "$_plx_b2" == *'### Verification'* && "$_plx_b2" == *'<repo>/anchor'* && "$_plx_b2" == *'<home>/note'* && "$_plx_b2" != *"${_plx_home:0:8}"* ]] || { echo "FAIL: PL-5 direct post, rung 2 — the same proof posted to the release PR must reach the host redacted too (AC-8; Plan amendment 13 item 3)"; failures=$((failures+1)); }
+  [[ "$_plx_b3" == *'**Release-PR merge SHA:** deadbeefdeadbeefdeadbeefdeadbeefdeadbeef'* && "$_plx_b3" != *'<repo>'* && "$_plx_b3" != *'<home>'* ]] || { echo "FAIL: PL-5 direct post, specificity — a path-free anchor must reach the host verbatim, with no marker invented"; failures=$((failures+1)); }
+  _st_witness PL 5
+
+  unset -f _plx_log _plx_velo _plx_post
+  unset PLX_CALLS PLX_BODY PLX_NO_SUBTASK
+  /bin/rm -rf "$_plx_tmp" 2>/dev/null || true
+  REPO_ROOT="$_plx_s_root"; HOME="$_plx_s_home"; MODE="$_plx_s_mode"; OUTPUT="$_plx_s_out"
+  VERSION="$_plx_s_ver"; MILESTONE="$_plx_s_ms"; MERGE_SHA="$_plx_s_sha"; PR_NUMBER="$_plx_s_pr"
+  STATE_MILESTONE_SLUG="$_plx_s_slug"; RELEASE_LOG="$_plx_s_log"; COMPUTE_VELOCITY="$_plx_s_cv"
+  PRIMARY_CHECKOUT="$_plx_s_prim"; GH="$_plx_s_gh"; VERIFICATION_RESULTS="$_plx_s_res"
+  PATTERN_SCAN_REPORT="$_plx_s_scan"; EPIC_AUDIT_REPORT="$_plx_s_audit"; NO_MERGE="$_plx_s_nm"
+  OPEN_ISSUE_COUNT="$_plx_s_oic"; OPEN_ISSUE_LIST="$_plx_s_oil"; STATE_CYCLE_TIME="$_plx_s_cyc"
+  RUN_TS="$_plx_s_ts"; CHORE_PR_NUMBER="$_plx_s_cpn"; CHORE_PR_OUTCOME="$_plx_s_cpo"
+  STATE_MILESTONE_STATE="$_plx_s_mst"; STATE_LOG_ROW_STATE="$_plx_s_lrs"; STATE_TAG_EXISTS="$_plx_s_tag"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # ── Test CR: phase_create_chore_pr resumes over its own merged chore PR (#7436) —
   #    offline and hermetic: a bare file-path origin, and a gh stub that emulates the
   #    host from ONE table of pull requests, so phase 11's REST reader and phase 12's
@@ -18065,6 +18765,7 @@ EOF
   _st_claim M "  phase_action_item_gate MEASURED recommended --attest-action-items cause validated (group M — 10 arms, one for each of the classifier's four refusal paths plus the six cause arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): every arm binds to the literal 'MEASURED RECOMMENDATION: ' prefix rather than to the whole detail, because the blocking FAIL text already names BOTH causes in its remediation sentence and a whole-detail search for either one therefore passes over an inverted classifier — the vacuous-arm shape, refused here by construction — M1 a commitment emitted with an empty ledger recommends emit-skipped and provably not the other cause / M2 its differential control, same fixture and mode with only the log counts changed, recommends no-commitments and provably not the other / M3 the residue gets its own outcome: decisions rendered with nothing emitted is the shape a swept-and-owed-nothing release and a never-swept release BOTH produce, so the classifier recommends NEITHER cause instead of guessing / M4 an unreadable probe is not a zero — a missing reader recommends nothing and NAMES the reader, without which a broken reader would silently recommend no-commitments on every close / M5 a measurement that DISAGREES with an attestation already given is recorded and still passes, with the specificity arm that an AGREEING measurement renders no disagreement notice / M6 THE SWEEP ZERO-STATE IS NOT A COMMITMENT: action-item-opened rows that all carry the sweep:none-owed payload token — what a release that swept every routing point and owed nothing emits — recommend NEITHER cause and never emit-skipped, and the basis NAMES the zero-state rows; red against a classifier that counts every action-item-opened row / M7 its specificity twin: ONE real commitment beside zero-state rows still recommends emit-skipped and renders the commitment count rather than the raw count, so an over-correction that stops counting whenever a zero-state row is present fails here, and a threshold drift to -ge 2 fails here as well as in M1 / M8 a zero-state count larger than the action-item-opened set it is a subset of is not a count — the classifier recommends nothing and NAMES the unusable probe rather than subtracting its way to a negative commitment count, without which the subset guard is unarmed / M9 A QUERY WITH NO RELEASE KEY IS NOT A ZERO — every other arm hands the classifier a key, so the first refusal path went undriven; the arm drives an unresolvable key against the M1 reader, the one that WOULD answer emit-skipped, so a disarmed guard prints a confident cause built from a query that names no release rather than simply printing nothing, and the detail must NAME the missing key / M10 A READER THAT DID NOT ANSWER WITH A COUNT HAS NOT COUNTED — M8 drives only the subset limb of the usable-count guard, leaving the non-integer limb unarmed; four limbs, because that limb is a DISJUNCTION over three separately-read counts and one fixture breaking all three is satisfied by any single guard surviving (measured: a mutant defaulting only the action-item-opened read to 0 left an all-queries-broken fixture still refusing), so limbs a-b-c each break exactly ONE query and leave the other two answering integers, giving every guard a fixture only it can refuse, while limb d breaks every query and is the only one that grades the READ rather than the guard — a bare integer on the first stdout line and an error carrying digits inside a non-numeric value on the last, so a first-line read or a contains-a-digit test reddens — and all four require the classifier to NAME the unusable probe instead of defaulting an unanswered count to 0 / M9 and M10 are the two arms this release adds, each measured RED against its own one-line mutant and GREEN unmutated, because before them the no-release-key guard could be replaced by an always-false test and the three non-integer guards defaulted to 0 with this suite still at exit 0 and zero FAIL lines / and every M arm re-asserts the verdict its fixture's attestation state already fixed — rc 3 with STATE_AI_GATE unchanged on the unattested M1-M4, M6-M8 and M10, rc 3 on M9 which reaches that same unattested state from an unresolvable directory, rc 0 on the attested M5 — so 'the recommendation decides nothing' is measured on each run rather than asserted once"
   _st_claim 4e-c-j "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT; #6255, arms c-j — this clause ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when the arms leave no witness: TERMINAL STATES — (e) an ALREADY-MERGED PR PASSes on the FIRST read with ZERO merge attempts and its detail carries the elapsed figure AC-4 is graded on, which no earlier version of this phase emitted at all / (f) a CLOSED-unmerged PR FAILs and its detail NAMES the closed-without-merging case, driven on the deliberately MERGEABLE-looking closed shape because the CONFLICTING one trips the pre-existing arm by accident, and asserted on the detail because a bare FAIL is satisfied by the PRE-FIX timeout path / (g) THE PER-ITERATION PIN: a merge landing MID-POLL is recognised on the SECOND read, so a pre-loop-only implementation passes (e) and fails here — budgeted at MERGE_TIMEOUT=2 because the bound admits ceil(TIMEOUT/STEP) iterations and a 1/1 arm would redden against a CORRECT implementation / RE-PROBE — (h) a failed gh pr merge over a PR that DID merge PASSes with the merge ATTEMPTED once and a detail naming the unobserved-merge case, (h2) its NEGATIVE CONTROL: the same failed merge over a STILL-OPEN PR must still FAIL, without which an implementation that PASSes on any merge failure satisfies (h) / (i) THE WIDTH PIN over the shipped text of the one shared reader, three-field --json list and three-field --jq template, behind an anti-vacuity floor on the extraction and TWO specificity controls on constructed FOUR-field lines that both needles must reject / BUDGET EXHAUSTION — (j) AC-2's timeout limb, which every arm above leaves ungraded: a PR BLOCKED on every read must spend the budget and then FAIL with a detail NAMING the timeout ('merge state still=') and ZERO merge attempts, asserted on the detail because a bare FAIL is satisfied by (f)'s CLOSED arm and by the CONFLICTING HALT, and on the merge counter because removing the post-loop guard falls straight through to gh pr merge and launders the spent budget into a PASS — measured: with that guard replaced by 'if false' the whole suite stayed at exit 0 / and every arm c-j counts BOTH pr view and pr merge, because post-fix a PASS is reachable through the terminal arm and no longer proves on its own that a merge was attempted)"
   _st_claim CB "  phase_create_chore_branch fail-loud validated (#7182, group CB — 10 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): CB-1 create path PASS with HEAD read back / CB-2 a FREE existing branch SKIPPED with HEAD on it, the RED arm's control / CB-3 a same-worktree re-run converges, the header's phase-5 pin / CB-4 THE RED ARM: a branch HELD by a second worktree FAILs with rc 3 carrying git's refusal (holder named) and HEAD not moved / CB-5 that detail is one pipe-free line with a holder path under HOME rendered <home> / CB-6 the two SHIPPED dispatch lines, executed with the real phase: held → exit 3 and phase 6 never runs / CB-7 its sensitivity control: free → phase 6 runs / CB-8 AC-3: no '|| true' anywhere in the phase, with a pre-fix control / CB-9 class guard: zero success verdicts written before a swallowed git op across the production region, with sensitivity and specificity fixtures / CB-10 the shared projection's whole vocabulary on one input — CR and LF to spaces, '|' to '/', the repository root to <repo> and then HOME to <home> — redacted BEFORE the 800-character cap, so a home path straddling character 800 renders <home> and leaves no path fragment, with the arm's predicate shown on every run to reject a cap-first projection, a raw '|' and HOME redacted before the repository root"
+  _st_claim PL "  report text renders no absolute path validated (#7855, group PL — 5 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): PL-1 the redact-only primitive rewrites the repository root to <repo> and then HOME to <home>, keeps a trailing-slash root's separator, skips a one-character root and passes root-free text byte-identical, with HOME-first redaction rejected as its control / PL-2 a static census of every captured stream in the production region finds no cap-first, hand-rolled or raw projection into report text, with an anti-vacuity floor and a constructed region whose four defect shapes are flagged and four sanctioned shapes pass on every run / PL-3 phase 12.2 over a primary under a fabricated home renders all six reachable outcomes without the home prefix in markdown and JSON, with the raw record as sensitivity and the path-free row byte-identical / PL-4 phase 6.6's producer stderr, carrying the repository root and a home path at byte 790, renders redacted and uncut on the PASS, --apply FAIL and --dry-run WARN paths / PL-5 the report sinks redact the whole markdown render and every decoded JSON string, a non-ASCII home included, change no line and no path-free row, and the gate-passage proof phase 15 posts reaches the host redacted on both rungs (Plan amendments 12 and 13)"
   _st_claim CR "  phase_create_chore_pr resumes over its own merged chore PR (#7436, group CR — 16 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): CR-1 CIAC-3's runtime arm — a MERGED, branch-deleted PR with a STALE origin/main resolves to resumed-already-merged through the owner-qualified REST read (state=all) with no GraphQL call, no create and no branch re-creation, containment proven against the PR's own refs/pull head, and phase 12 then renders its MERGED terminal-PASS arm on the first read with zero merges (AC-2 reached, not present) / CR-2 the FRESH-ref path through the zero-commit guard reaches the SAME arm with no GraphQL call / CR-3 control: outputs on main with NO PR keep the idempotent skip / CR-4 AC-3 never-created reaches the create and fails loud / CR-5 AC-3 a merged PR on another version's head is invisible / CR-6 CLOSED-unmerged leads to a fresh create, never to done / CR-7 containment: a commit made after the merge is not in the merged PR's head, so it FAILs with nothing pushed or created / CR-8 an OPEN PR is reused unchanged / CR-9 CIAC-3 static: no head-keyed --state open chore-PR lookup in the production region, by regex so this file never carries the plan's literal needle, with a control fixture / CR-10 a failed push FAILs before any create / CR-11 an unreadable partition FAILs carrying the host's message, never reads as none / CR-12 a SQUASH merge, whose chore commit is not an ancestor of main, still resumes: containment is against the PR's own head / CR-13 SECURITY: a fork's same-named OPEN PR never binds, on the zero-commit path or the main path / CR-14 the zero-commit guard reuses an OPEN PR instead of reporting none needed / CR-15 a push rejected only because the remote head is AHEAD of the local tip is not a failure / CR-16 phase 11's REST reader and phase 12's reader agree on open, merged and closed-unmerged PRs"
   _st_claim HF "  the report header's chore-PR field renders every outcome phase 11 records (#5769, group HF — 9 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): HF-1 CIAC-2's runtime limb — each of the seven recorded states renders its own exact line, seven distinct lines, read through the real report / HF-2 AC-2 an idempotent skip on an --apply run reads as a success, never N/A, dry-run or FAILED / HF-3 AC-3 dry-run, not-yet-created and the idempotent skip are three distinct lines / HF-4 polarity over the partition: no success renders as N/A, FAILED or not created, and the failed outcome never renders as a skip / HF-5 the #7182 seam: a run halted at create_chore_branch names where it halted, never dry-run or N/A wording / HF-6 partition parity: every value the production region assigns to CHORE_PR_OUTCOME has an arm in the renderer, with an anti-vacuity floor of six and an extraction control / HF-7 an unknown value renders visibly unrecognised, never as a plausible state / HF-8 end to end on the real phase in --dry-run: the phase row, the recorded outcome and the header name the same outcome / HF-8b the JSON twin's chore_pr_outcome carries the same seven states, with chore_pr the number or null"
   _st_claim NM "  --no-merge membership declared once + phase 15.55's own-tag limb validated (#7465, group NM — 19 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): NM-1 AC-1 — the dispatch lines from 15.5 through 16.7, lifted verbatim and executed under --no-merge with the own Release unpublished, defer 15.55 and 15.6 and reach 16, 16.5 and 16.7 / NM-1c its control: the same text on a merge run halts at 15.55 with exit 3 and strands the phases after it, so the harness can observe stranding / NM-2a NM-2b AC-2 — a dry-run predicts the own-tag gap its own publish no-op produces, over a DEPLOYED and a VERIFIED row, and records the prediction / NM-3 AC-3 — a sibling gap still FAILs at --apply, and NM-3c the clean fixture PASSes naming the own tag's state / NM-4a AC-4 at the parity population — the own tag is partitioned out by VERSION, with a sibling-gap control on the same fixture / NM-4b no masking — the in-flight set cannot hide a genuine own gap at --apply, and a closing version with a Release and no annotated tag is reported under the own label only / NM-4c the prediction predicate, one negative per conjunct, and the own pair's four states / NM-4d without a 15.5 dry-run record the own gap is reported / NM-4e a predicted own gap does not mask a sibling gap / NM-CIAC3 --no-merge defers 15.55 and the resumed --apply asserts it for real / NM-5a AC-5 — every post-merge dispatched phase has a row, with sensitivity, specificity and no-pivot controls, every row names a post-merge phase, and every value is in the closed set / NM-5b both reports derive their deferred list from the table, a row appended to it renders with no renderer edit, and NO_MERGE=0 renders none / NM-5c every defer row shares a --help line with DEFERS under --no-merge, with a control the predicate rejects / NM-5d every defer phase OPENS with the declared deferral, checked structurally against a constructed hand guard, a mutated copy of phase 13 and a deferral naming another phase / NM-12 phase 12's --no-merge detail says a chore PR phase 11 found MERGED is merged, with the byte-identical left-open control / NM-13 NM-14 (#7465 Plan amendment 6) phases 13's and 14's --no-merge deferral details say a chore PR phase 11 recorded as MERGED is merged and name no merge still to come, each with its byte-identical left-open control"
