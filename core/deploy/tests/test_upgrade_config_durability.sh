@@ -41,7 +41,10 @@
 #     re-bootstrap round-trip with no table and no key dropped. Its four
 #     non-redundant deltas over Suite T, and the four things it deliberately
 #     does NOT assert, are stated inline at the suite (Stage 5b) — read that
-#     block before adding an assertion to it.
+#     block before adding an assertion to it. P-9 repeats the unattended install
+#     with stdin OPEN and silent, where no EOF ever arrives and the flag alone
+#     must keep every prompt from reading; P-10 reads every human-answer read
+#     in the installer and requires a guard in front of each.
 #
 #   AC-b2 (deployed-tree link integrity, partial — see LIMITATION below):
 #     the check-doc-links.py primitive is healthy (--self-test green) and the
@@ -979,6 +982,446 @@ if [ "${mut_anchor}" = "0" ] && [ "${mut_indented}" -ge 1 ]; then
 else
   report "P-8 negative control (b): the P-7 column-0 probe DOES report an indented key" 0 \
     "expected column-0 count 0 WITH the key present indented; got column-0=${mut_anchor}, indented=${mut_indented} — BROKEN PROBE (indented=0 means the mutation never applied)"
+fi
+
+# --- P-9 (stdin OPEN): --non-interactive never reads stdin, whatever stdin is ---
+# P-1..P-8 close the descriptor (0<&-). A closed descriptor delivers EOF, and every
+# prompt in the installer falls back to its default on EOF -- so a prompt that
+# ignores the flag still completes under 0<&-, yet blocks forever for a caller whose
+# stdin is a terminal or an inherited pipe. The flag promises "never read stdin";
+# only an arm whose stdin stays OPEN and silent can observe that promise broken, so
+# these arms run under run_open_stdin, and P-9a proves that harness's stdin really is
+# open before any install is judged by it. One install arm per guarded prompt site:
+# hook activation (fresh install), hook drift (re-bootstrap over an edited hook),
+# guided recovery (unverified state). Each install arm also proves it ran under the
+# harness (the START marker) and reached its own prompt site, so an arm that stops
+# using the harness, or never reaches its prompt, fails by name. P-9g checks the
+# other direction: without the flag, an install fed answers on a pipe is still
+# prompted.
+printf '\nStage 5b-open (Suite P, P-9): non-interactive install with stdin OPEN\n'
+# run_open_stdin BUDGET_S CMD [ARGS...] — run CMD with its stdin attached to a pipe
+# that this harness holds OPEN and never writes: a read on it blocks (no data, no
+# EOF), which is how a terminal nobody types into, or a pipe inherited from a CI
+# runner or an agent session, behaves. `0<&-`, `< /dev/null` and `< <(yes "")` all
+# deliver EOF or data, so no arm built on them can see a prompt that blocks.
+# stdout/stderr pass through, after an OPEN-STDIN-HARNESS START marker on stderr.
+# Returns CMD's exit status, or 124 when CMD is still running after BUDGET_S
+# seconds; its process group is then terminated (TERM, then KILL) and the
+# OPEN-STDIN-HARNESS TIMEOUT sentinel is written to stderr. python3 (already a hard
+# prerequisite of the installer under test) supplies the timeout, because coreutils
+# `timeout` is absent from the macOS runner and from a stock macOS host.
+OPEN_STDIN_BUDGET_S="${OPEN_STDIN_BUDGET_S:-300}"
+run_open_stdin() {
+  python3 - "$@" <<'PY'
+import os
+import signal
+import subprocess
+import sys
+
+budget = float(sys.argv[1])
+sys.stderr.write("OPEN-STDIN-HARNESS: START budget=%ss\n" % sys.argv[1])
+sys.stderr.flush()
+proc = subprocess.Popen(sys.argv[2:], stdin=subprocess.PIPE, start_new_session=True)
+try:
+    rc = proc.wait(timeout=budget)
+except subprocess.TimeoutExpired:
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(proc.pid, sig)
+        except ProcessLookupError:
+            break
+        try:
+            proc.wait(timeout=15)
+            break
+        except subprocess.TimeoutExpired:
+            continue
+    sys.stderr.write("OPEN-STDIN-HARNESS: TIMEOUT after %ss (process group terminated)\n" % sys.argv[1])
+    rc = 124
+finally:
+    proc.stdin.close()
+sys.exit(rc)
+PY
+}
+
+# nio_trace LOG NEEDLE — the harness evidence an install arm reports when it fails:
+# whether the run was under the harness, whether the harness timed it out, and how
+# many lines of the arm's own prompt the run printed. A timed-out run that printed
+# its own prompt was held AT that prompt.
+nio_trace() {
+  printf 'harness start=%s; timeout sentinel=%s; own-prompt lines=%s' \
+    "$(grep -c '^OPEN-STDIN-HARNESS: START' <<<"$1")" \
+    "$(grep -c 'OPEN-STDIN-HARNESS: TIMEOUT' <<<"$1")" \
+    "$(grep -cF "$2" <<<"$1")"
+}
+
+mkdir -p "${SBX}/nio-ws" "${SBX}/nio-config"
+NIO_STATE="${SBX}/nio-ws/.claude/.workspace-setup.state"
+NIO_ACT_NEEDLE='WORKFLOW security hooks now?'
+NIO_DRIFT_NEEDLE='Overwrite? (y/N/diff)'
+NIO_REC_NEEDLE='Recovery action (R/B/E)'
+NIO_SCHEMA_NEEDLE='schema_version is missing or is not'
+
+# Needle sensitivity: each prompt string must be present in the installer, or an
+# "absent from the run" assertion below passes vacuously.
+nio_needles_missing=""
+for nio_n in "${NIO_ACT_NEEDLE}" "${NIO_DRIFT_NEEDLE}" "${NIO_REC_NEEDLE}"; do
+  nio_c=$(grep -cF "${nio_n}" "${SETUP}" 2>/dev/null | tr -d ' ')
+  [ "${nio_c:-0}" -ge 1 ] || nio_needles_missing="${nio_needles_missing} [${nio_n}]"
+done
+if [ -z "${nio_needles_missing}" ]; then
+  report "P-9 precondition: the 3 prompt strings are present in the installer (absence checks can fail)" 1
+else
+  report "P-9 precondition: the 3 prompt strings are present in the installer (absence checks can fail)" 0 \
+    "not found:${nio_needles_missing} -- a prompt was reworded; move the needle with it"
+fi
+
+# P-9a / P-9b -- harness controls, before any install is judged by the harness.
+nio_sens_log=$(run_open_stdin 3 bash -c 'read -r _; exit 0' 2>&1)
+nio_sens_rc=$?
+if [ "${nio_sens_rc}" -eq 124 ] && grep -q 'OPEN-STDIN-HARNESS: TIMEOUT' <<<"${nio_sens_log}"; then
+  report "P-9a harness sensitivity: a stub that reads stdin is held, then timed out (stdin open and silent)" 1
+else
+  report "P-9a harness sensitivity: a stub that reads stdin is held, then timed out (stdin open and silent)" 0 \
+    "exit ${nio_sens_rc} (want 124) -- the harness stdin delivered EOF or data, so every P-9 install arm below is vacuous"
+fi
+nio_spec_log=$(run_open_stdin 3 bash -c 'exit 0' 2>&1)
+nio_spec_rc=$?
+if [ "${nio_spec_rc}" -eq 0 ] && grep -q '^OPEN-STDIN-HARNESS: START' <<<"${nio_spec_log}" \
+   && ! grep -q 'OPEN-STDIN-HARNESS: TIMEOUT' <<<"${nio_spec_log}"; then
+  report "P-9b harness specificity: a stub that exits is not reported as a timeout (START marker present)" 1
+else
+  report "P-9b harness specificity: a stub that exits is not reported as a timeout (START marker present)" 0 \
+    "exit ${nio_spec_rc} (want 0); START marker lines=$(grep -c '^OPEN-STDIN-HARNESS: START' <<<"${nio_spec_log}") (want 1); TIMEOUT sentinel lines=$(grep -c 'OPEN-STDIN-HARNESS: TIMEOUT' <<<"${nio_spec_log}") (want 0)"
+fi
+
+# P-9c (AC-1): fresh unattended install, stdin OPEN -- the P-1 shape with the stdin
+# shape as the only change. Same identity lever as P-1.
+nio_log=$(run_open_stdin "${OPEN_STDIN_BUDGET_S}" env GIT_CONFIG_GLOBAL="${SBX}/gitcfg/ok" "${SETUP}" \
+  --source-repo "${REPO_ROOT}" \
+  --workspace-root "${SBX}/nio-ws" \
+  --config-root "${SBX}/nio-config" \
+  --non-interactive 2>&1)
+nio_exit=$?
+nio_verified=$(jq -r '.verification_passed // false' "${NIO_STATE}" 2>/dev/null)
+if [ "${nio_exit}" -eq 0 ] && [ "${nio_verified}" = "true" ] \
+   && grep -q '^OPEN-STDIN-HARNESS: START' <<<"${nio_log}"; then
+  report "P-9c fresh non-interactive install completes with stdin OPEN (exit 0, verification_passed=true)" 1
+else
+  report "P-9c fresh non-interactive install completes with stdin OPEN (exit 0, verification_passed=true)" 0 \
+    "exit ${nio_exit} (124 = still waiting on stdin after ${OPEN_STDIN_BUDGET_S}s); verification_passed=${nio_verified:-unset}; $(nio_trace "${nio_log}" "${NIO_ACT_NEEDLE}"); $(printf '%s' "${nio_log}" | tail -4 | tr '\n' '|')"
+fi
+
+# P-9d (AC-3): hook activation takes its declared default with no prompt. The durable
+# key is the content assertion; the log is the conjunct.
+nio_master=$(grep -cxF 'master_enabled = false' "${SBX}/nio-config/platform-config.toml" 2>/dev/null | tr -d ' ')
+nio_act_prompt=$(grep -cF "${NIO_ACT_NEEDLE}" <<<"${nio_log}" | tr -d ' ')
+if [ "${nio_master:-0}" = "1" ] && [ "${nio_act_prompt:-0}" = "0" ]; then
+  report "P-9d hook activation writes master_enabled = false and prints no prompt" 1
+else
+  report "P-9d hook activation writes master_enabled = false and prints no prompt" 0 \
+    "master_enabled = false lines=${nio_master:-0} (want 1); prompt lines in the run=${nio_act_prompt:-0} (want 0)"
+fi
+
+# P-9e and P-9f reuse P-1's workspace (${SBX}/ni-ws, ${SBX}/ni-config): a closed-stdin
+# install that completes on a build with or without the guards, and whose config
+# already carries master_enabled. Each arm therefore reaches ITS OWN prompt first, so
+# a missing guard fails the arm named for that prompt rather than an earlier one.
+NIO_FIX_WS="${SBX}/ni-ws"
+NIO_FIX_CFG="${SBX}/ni-config"
+NIO_FIX_STATE="${NIO_FIX_WS}/.claude/.workspace-setup.state"
+
+# P-9e: hook DRIFT on a re-bootstrap, stdin OPEN. Edit one deployed hook so its bytes
+# differ from source, then re-run. Under the flag the deployed copy stays, nothing is
+# prompted or read, and nothing is recorded: the baseline keeps the source hash, and
+# no operator decision is written for a decision no operator made. The precondition
+# proves the run reached the drift branch (its DRIFT line prints before the prompt,
+# guarded or not); the pass proves the flag's branch took it.
+nio_hooks_src=("${REPO_ROOT}/core/hooks/"*.sh)
+nio_drift_name="$(basename "${nio_hooks_src[0]}")"
+nio_drift="${NIO_FIX_WS}/.claude/hooks/${nio_drift_name}"
+nio_fix_verified=$(jq -r '.verification_passed // false' "${NIO_FIX_STATE}" 2>/dev/null)
+nio_fix_master=$(grep -cE '^[[:space:]]*master_enabled[[:space:]]*=' "${NIO_FIX_CFG}/platform-config.toml" 2>/dev/null | tr -d ' ')
+nio_base_before=$(jq -r --arg h "${nio_drift_name}" '.hook_checksums[$h] // ""' "${NIO_FIX_STATE}" 2>/dev/null)
+printf '\n# drift probe: an operator edit\n' >> "${nio_drift}"
+nio_drift_hash=$(hash_file "${nio_drift}")
+nio_src_hash=$(hash_file "${nio_hooks_src[0]}")
+nio_drift_log=$(run_open_stdin "${OPEN_STDIN_BUDGET_S}" env GIT_CONFIG_GLOBAL="${SBX}/gitcfg/ok" "${SETUP}" \
+  --source-repo "${REPO_ROOT}" \
+  --workspace-root "${NIO_FIX_WS}" \
+  --config-root "${NIO_FIX_CFG}" \
+  --non-interactive 2>&1)
+nio_drift_exit=$?
+nio_base_after=$(jq -r --arg h "${nio_drift_name}" '.hook_checksums[$h] // ""' "${NIO_FIX_STATE}" 2>/dev/null)
+nio_decided=$(jq -r --arg h "${nio_drift_name}" '(.hook_drift_decisions // {}) | has($h)' "${NIO_FIX_STATE}" 2>/dev/null)
+nio_drift_prompt=$(grep -cF "${NIO_DRIFT_NEEDLE}" <<<"${nio_drift_log}" | tr -d ' ')
+nio_drift_kept=no
+[ "$(hash_file "${nio_drift}")" = "${nio_drift_hash}" ] && nio_drift_kept=yes
+if [ "${nio_fix_verified}" = "true" ] && [ "${nio_fix_master:-0}" = "1" ] && [ -n "${nio_base_before}" ] \
+   && [ "${nio_drift_hash}" != "${nio_src_hash}" ] && grep -q 'RE-BOOTSTRAP flow' <<<"${nio_drift_log}" \
+   && grep -qF "DRIFT: ${nio_drift_name}" <<<"${nio_drift_log}"; then
+  report "P-9e precondition: a real drift on a real re-bootstrap past hook activation (verified fixture, master_enabled set, baseline recorded, drift branch reached)" 1
+else
+  report "P-9e precondition: a real drift on a real re-bootstrap past hook activation (verified fixture, master_enabled set, baseline recorded, drift branch reached)" 0 \
+    "fixture verified=${nio_fix_verified:-unset}; master_enabled lines=${nio_fix_master:-0} (want 1); baseline='${nio_base_before}'; edited==source? $([ "${nio_drift_hash}" = "${nio_src_hash}" ] && echo yes || echo no); re-bootstrap lines=$(grep -c 'RE-BOOTSTRAP flow' <<<"${nio_drift_log}"); DRIFT lines=$(grep -cF "DRIFT: ${nio_drift_name}" <<<"${nio_drift_log}")"
+fi
+if [ "${nio_drift_exit}" -eq 0 ] && [ "${nio_drift_kept}" = "yes" ] \
+   && [ "${nio_base_after}" = "${nio_base_before}" ] && [ "${nio_decided}" = "false" ] \
+   && [ "${nio_drift_prompt:-0}" = "0" ] && grep -q '^OPEN-STDIN-HARNESS: START' <<<"${nio_drift_log}" \
+   && grep -qF "PRESERVED (non-interactive): ${nio_drift_name}" <<<"${nio_drift_log}"; then
+  report "P-9e drifted hook left in place under the flag: no prompt, no decision recorded, baseline unchanged" 1
+else
+  report "P-9e drifted hook left in place under the flag: no prompt, no decision recorded, baseline unchanged" 0 \
+    "exit ${nio_drift_exit} (want 0; 124 = waiting on stdin); kept=${nio_drift_kept}; baseline ${nio_base_before:0:12} -> ${nio_base_after:0:12}; decision recorded=${nio_decided:-unset}; PRESERVED (non-interactive) lines=$(grep -cF "PRESERVED (non-interactive): ${nio_drift_name}" <<<"${nio_drift_log}"); $(nio_trace "${nio_drift_log}" "${NIO_DRIFT_NEEDLE}")"
+fi
+
+# P-9f: guided RECOVERY, stdin OPEN. An unverified state routes to guided recovery;
+# under the flag nothing is prompted or read, nothing is modified, and the run exits
+# 66 -- the installer's code for an unattended run that cannot obtain a required
+# operator input -- so a caller never reads success from a run that installed nothing.
+# The refusal names the schema-mismatch trigger too: a state whose schema_version is
+# missing or stale routes here as well, so an upgrade that changes the schema stops
+# every unattended re-run at 66 until an operator chooses.
+jq '.verification_passed = false' "${NIO_FIX_STATE}" > "${NIO_FIX_STATE}.tmp" && mv "${NIO_FIX_STATE}.tmp" "${NIO_FIX_STATE}"
+nio_state_hash=$(hash_file "${NIO_FIX_STATE}")
+nio_rec_log=$(run_open_stdin "${OPEN_STDIN_BUDGET_S}" env GIT_CONFIG_GLOBAL="${SBX}/gitcfg/ok" "${SETUP}" \
+  --source-repo "${REPO_ROOT}" \
+  --workspace-root "${NIO_FIX_WS}" \
+  --config-root "${NIO_FIX_CFG}" \
+  --non-interactive 2>&1)
+nio_rec_exit=$?
+nio_bak=$(find "${NIO_FIX_WS}/.claude" -maxdepth 1 -name '.workspace-setup.state.bak.*' 2>/dev/null | wc -l | tr -d ' ')
+nio_rec_prompt=$(grep -cF "${NIO_REC_NEEDLE}" <<<"${nio_rec_log}" | tr -d ' ')
+nio_state_kept=no
+[ "$(hash_file "${NIO_FIX_STATE}")" = "${nio_state_hash}" ] && nio_state_kept=yes
+if grep -q 'routing to guided recovery' <<<"${nio_rec_log}" \
+   && [ "${nio_rec_exit}" -eq 66 ] && [ "${nio_state_kept}" = "yes" ] \
+   && [ "${nio_bak:-0}" = "0" ] && [ "${nio_rec_prompt:-0}" = "0" ] \
+   && grep -q '^OPEN-STDIN-HARNESS: START' <<<"${nio_rec_log}" \
+   && grep -qF "${NIO_SCHEMA_NEEDLE}" <<<"${nio_rec_log}"; then
+  report "P-9f guided recovery under the flag: routed, exits 66 naming the schema-mismatch trigger, no prompt, state unmodified, no backup" 1
+else
+  report "P-9f guided recovery under the flag: routed, exits 66 naming the schema-mismatch trigger, no prompt, state unmodified, no backup" 0 \
+    "exit ${nio_rec_exit} (want 66; 124 = waiting on stdin); routed=$(grep -c 'routing to guided recovery' <<<"${nio_rec_log}"); state kept=${nio_state_kept}; backups=${nio_bak:-0}; schema trigger named=$(grep -cF "${NIO_SCHEMA_NEEDLE}" <<<"${nio_rec_log}"); $(nio_trace "${nio_rec_log}" "${NIO_REC_NEEDLE}")"
+fi
+
+# P-9g: the interactive path is unchanged. Stage 1 installed WITHOUT the flag, answers
+# fed on a pipe (< <(yes "")) -- it must still have been prompted. A guard keyed on
+# "stdin is not a terminal" instead of on the flag would silence this prompt.
+nio_ia_prompt=$(grep -cF "${NIO_ACT_NEEDLE}" <<<"${install_log}" | tr -d ' ')
+if [ "${nio_ia_prompt:-0}" -ge 1 ]; then
+  report "P-9g without the flag, a piped-answer install is still prompted (interactive behavior unchanged)" 1
+else
+  report "P-9g without the flag, a piped-answer install is still prompted (interactive behavior unchanged)" 0 \
+    "hook-activation prompt lines in the Stage 1 run=${nio_ia_prompt:-0} (want >= 1)"
+fi
+
+# --- P-10 (static census): every human-answer read in the installer is guarded ---
+# A behavioral arm sees only the prompts on its own path; this census reads every
+# `read` in the installer. WHAT IT CHECKS, which is all it claims:
+#   * a `read` at command position -- line start, after a separator, after
+#     then/do/else/if [!], or after || or && -- optionally behind an IFS=
+#     assignment and a `builtin` or `command` prefix;
+#   * such a read is a DATA read, and is not counted, when its own line carries an
+#     input redirection from anything but the terminal (a heredoc, a here-string,
+#     a file, a process substitution): it reads that input, never stdin. Split an
+#     output that way freely -- never wrap such a read in a NON_INTERACTIVE branch,
+#     which would leave its variables empty under the flag;
+#   * a while/until loop whose condition is a read is a data loop only when a pipe
+#     leads into it or its condition or `done` carries an input redirection
+#     (`done` matched at the loop's own indentation); otherwise it reads stdin;
+#   * every other read waits for a human answer, and is guarded only when an
+#     earlier line of the same function opens `if [ "${NON_INTERACTIVE}" -eq 1 ]`
+#     (no && in the test, no else/elif), at no deeper indentation than the read,
+#     closed before it, with a block that ends in return or exit -- so that under
+#     the flag control never reaches the read.
+# Outside that boundary -- another spelling of the flag test, a read reached through
+# eval, a read in a sourced library or a child script -- the census does not look;
+# a guard it does not recognize reads as unguarded, so it fails closed. It first
+# runs over a fixture with known answers: a census that cannot tell a guarded read
+# from an unguarded one, that misses a stdin-reading loop, a `builtin read` or a
+# guard that does not stop control, or that counts a data loop, a heredoc-fed read
+# or heredoc prose, proves nothing about the installer.
+nio_census() {
+  python3 - "$1" <<'PY'
+import re
+import sys
+
+CMD_READ = re.compile(
+    r"(^\s*|[;&|!({]\s*|\bthen\s+|\bdo\s+|\belse\s+|\bif\s+!?\s*|\|\|\s*|&&\s*)"
+    r"(IFS=\S*\s+)?((builtin|command)\s+)?read(\s|$)")
+LOOP_READ = re.compile(r"\b(while|until)\s+(IFS=\S*\s+)?((builtin|command)\s+)?read\b")
+FUNC = re.compile(r"^[a-z_][a-z0-9_]*\(\)\s*\{")
+HEREDOC = re.compile(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?")
+GUARD = re.compile(r"^\s*if\s+\[\s*\"\$\{NON_INTERACTIVE\}\"\s+-eq\s+1\s*\]")
+EXITS = re.compile(r"^(return|exit)\b")
+IN_REDIR = re.compile(r"(?:^|(?<=[\s;|&]))\d*(<<<|<<-?|<&|<)(?!\()\s*(\S*)")
+TERMINAL = ("/dev/tty", "/dev/stdin", "/dev/fd/0")
+
+lines = open(sys.argv[1], encoding="utf-8", errors="replace").read().split("\n")
+n = len(lines)
+body = [False] * (n + 1)
+code = [""] * (n + 1)
+term = None
+for i, raw in enumerate(lines, 1):
+    if term is not None:
+        body[i] = True
+        if raw.strip() == term:
+            term = None
+        continue
+    code[i] = "" if raw.strip().startswith("#") else re.sub(r"\s#.*$", "", raw)
+    m = HEREDOC.search(code[i])
+    if m and "<<<" not in code[i]:
+        term = m.group(1)
+
+
+def indent(i):
+    return len(lines[i - 1]) - len(lines[i - 1].lstrip())
+
+
+def reads_data(text):
+    for m in IN_REDIR.finditer(text):
+        op, src = m.group(1), m.group(2).strip("'\"")
+        if (op == "<&" and src in ("0", "")) or (op == "<" and src in TERMINAL):
+            continue
+        return True
+    return False
+
+
+def piped(text):
+    s = text.rstrip().rstrip("\\").rstrip()
+    return s.endswith("|") and not s.endswith("||")
+
+
+def loop_is_fed(i):
+    text = code[i]
+    head = text[:LOOP_READ.search(text).start()]
+    if piped(head):
+        return True
+    if not head.strip():
+        for j in range(i - 1, 0, -1):
+            if body[j] or not code[j].strip():
+                continue
+            if piped(code[j]):
+                return True
+            break
+    parts = re.split(r"\bdo\b", text, maxsplit=1)
+    if reads_data(parts[0]):
+        return True
+    if len(parts) == 2 and re.search(r"\bdone\b", parts[1]):
+        return reads_data(re.split(r"\bdone\b", parts[1])[-1])
+    for k in range(i + 1, n + 1):
+        if not body[k] and indent(k) == indent(i) and re.match(r"\s*done\b", code[k]):
+            return reads_data(re.split(r"\bdone\b", code[k], maxsplit=1)[1])
+    return False
+
+
+def dominating_guard(j, i):
+    text = code[j]
+    if not GUARD.search(text) or indent(j) > indent(i):
+        return False
+    if "&&" in re.split(r"\bthen\b", text, maxsplit=1)[0]:
+        return False
+    if re.search(r"\bthen\b", text) and re.search(r"\bfi\s*;?\s*$", text):
+        inner = re.sub(r"\bfi\s*;?\s*$", "", re.split(r"\bthen\b", text, maxsplit=1)[1])
+        if re.search(r"\b(else|elif)\b", inner):
+            return False
+        stmts = [s.strip() for s in inner.split(";") if s.strip()]
+        return bool(stmts) and bool(EXITS.match(stmts[-1]))
+    last = None
+    for k in range(j + 1, i):
+        if body[k] or not code[k].strip():
+            continue
+        if indent(k) == indent(j):
+            if re.match(r"\s*(else|elif)\b", code[k]):
+                return False
+            if re.match(r"\s*fi\b", code[k]):
+                return last is not None and bool(EXITS.match(last))
+        last = code[k].strip()
+    return False
+
+
+func_start, human, unguarded = None, 0, []
+for i in range(1, n + 1):
+    if body[i]:
+        continue
+    if FUNC.match(lines[i - 1]):
+        func_start = i
+    text = code[i]
+    if not text.strip():
+        continue
+    if LOOP_READ.search(text):
+        if loop_is_fed(i):
+            continue
+    elif not CMD_READ.search(text) or reads_data(text):
+        continue
+    human += 1
+    if func_start is None or not any(dominating_guard(j, i) for j in range(func_start, i)):
+        unguarded.append(str(i))
+print("%d %d %s" % (human, human - len(unguarded), ",".join(unguarded) or "-"))
+PY
+}
+# The fixture's first five functions carry the census's original cases: one guarded
+# read, two unguarded (before and after a guard), two data loops, heredoc prose. The
+# last four carry the cases a narrower census got wrong: a loop that reads stdin, a
+# `builtin read`, a guard that does not stop control -- each must be flagged -- and a
+# heredoc-fed read, which must not be.
+cat > "${SBX}/nio-census-fixture.sh" <<'NIOFIX'
+guarded_prompt() {
+  if [ "${NON_INTERACTIVE}" -eq 1 ]; then
+    return 0
+  fi
+  if ! read -r answer; then answer="N"; fi
+}
+unguarded_prompt() {
+  if ! read -r answer; then answer="N"; fi
+}
+guard_after_read() {
+  read -r late || late=""
+  if [ "${NON_INTERACTIVE}" -eq 1 ]; then return 0; fi
+}
+data_loops() {
+  while IFS= read -r line; do :; done <<EOF
+x
+EOF
+  printf 'a\n' | while IFS= read -r k; do :; done
+}
+usage_text() {
+  cat <<USAGE
+           read stdin. (heredoc prose)
+USAGE
+}
+unfed_loop() {
+  while IFS= read -r line; do :; done
+}
+builtin_prompt() {
+  builtin read -r answer || answer="N"
+}
+guard_not_dominating() {
+  if [ "${NON_INTERACTIVE}" -eq 1 ]; then
+    printf 'unattended\n' >&2
+  fi
+  read -r answer || answer="N"
+}
+heredoc_fed() {
+  IFS=$'\t' read -r first second <<EOF
+a b
+EOF
+}
+NIOFIX
+nio_fix_census=$(nio_census "${SBX}/nio-census-fixture.sh")
+nio_inst_census=$(nio_census "${SETUP}")
+read -r nio_inst_human nio_inst_guarded nio_inst_unguarded <<<"${nio_inst_census}"
+if [ "${nio_fix_census}" = "6 1 8,11,26,29,35" ]; then
+  report "P-10 census control: on the fixture it finds 6 human reads, 1 guarded, and names the 5 unguarded lines (a heredoc-fed read not counted)" 1
+else
+  report "P-10 census control: on the fixture it finds 6 human reads, 1 guarded, and names the 5 unguarded lines (a heredoc-fed read not counted)" 0 \
+    "fixture census='${nio_fix_census}' (want '6 1 8,11,26,29,35') -- the census is broken; the installer result below proves nothing"
+fi
+if [ "${nio_inst_human:-0}" -ge 1 ] && [ "${nio_inst_guarded:-x}" = "${nio_inst_human}" ]; then
+  report "P-10 every human-answer read in the installer is NON_INTERACTIVE-guarded (${nio_inst_guarded} of ${nio_inst_human})" 1
+else
+  report "P-10 every human-answer read in the installer is NON_INTERACTIVE-guarded" 0 \
+    "guarded ${nio_inst_guarded} of ${nio_inst_human}; unguarded line(s): ${nio_inst_unguarded}"
 fi
 
 # --- Stage 5c (Suite C): CLAUDE.md workspace-root composition surface (ADR-122) ---
