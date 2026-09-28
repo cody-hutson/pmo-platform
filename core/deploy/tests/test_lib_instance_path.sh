@@ -203,20 +203,26 @@ ${hook_read}
 EOF
 pin "7d: the hook-read instance set is exactly the exemption list, one line" \
   "${hook_read_n}:${hook_read}" "1:${EXEMPT_AT_WS}" "lines=${hook_read_n} value=${hook_read}"
-row_target="$(
-  unset PMO_INSTANCE_PATH CLAUDE_WORKSPACE_ROOT
-  # shellcheck source=/dev/null
-  . "${REPO_ROOT}/core/deploy/lib-composition.sh" >/dev/null 2>&1 || exit 0
-  lib_compose_source_manifest "${REPO_ROOT}" >/dev/null 2>&1 || exit 0
-  for entry in "${COMPOSITION_SURFACE_FILES[@]}"; do
-    lib_compose_parse_entry "${entry}"
-    case "${LIB_COMPOSE_ENTRY_SRC}" in
-      */skill-editor-exemption-list.txt)
-        lib_compose_resolve_target skill-editor-exemption-list.txt "${LIB_COMPOSE_ENTRY_TIER}" /ws
-        exit 0 ;;
-    esac
-  done
-)"
+# row_target_for <workspace-root> — the manifest row's resolved target. A function whose
+# body is a subshell, called through $( ): bash 3.2 mis-reads a case arm's closing
+# parenthesis written directly inside $( ), and this file runs under bash 3.2 in CI.
+row_target_for() {
+  (
+    unset PMO_INSTANCE_PATH CLAUDE_WORKSPACE_ROOT
+    # shellcheck source=/dev/null
+    . "${REPO_ROOT}/core/deploy/lib-composition.sh" >/dev/null 2>&1 || exit 0
+    lib_compose_source_manifest "${REPO_ROOT}" >/dev/null 2>&1 || exit 0
+    for entry in "${COMPOSITION_SURFACE_FILES[@]}"; do
+      lib_compose_parse_entry "${entry}"
+      case "${LIB_COMPOSE_ENTRY_SRC}" in
+        */skill-editor-exemption-list.txt)
+          lib_compose_resolve_target skill-editor-exemption-list.txt "${LIB_COMPOSE_ENTRY_TIER}" "$1"
+          exit 0 ;;
+      esac
+    done
+  )
+}
+row_target="$(row_target_for /ws)"
 pin "7e: the manifest row resolves to the same path the readers resolve (the row invariant)" \
   "${row_target}" "${EXEMPT_AT_WS}" "row resolves to '${row_target}'"
 
