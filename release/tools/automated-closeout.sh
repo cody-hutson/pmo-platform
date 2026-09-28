@@ -1577,8 +1577,8 @@ check_parser_clean() {
 _redact_paths() {
   local _s="${1:-}" _r="${REPO_ROOT:-}" _h="${HOME:-}"
   _r="${_r%/}"; _h="${_h%/}"
-  [[ "${#_r}" -gt 1 ]] && _s="${_s//"$_r"/<repo>}"
-  [[ "${#_h}" -gt 1 ]] && _s="${_s//"$_h"/<home>}"
+  [[ "${#_r}" -gt 0 ]] && _s="${_s//"$_r"/<repo>}"
+  [[ "${#_h}" -gt 0 ]] && _s="${_s//"$_h"/<home>}"
   /usr/bin/printf '%s' "$_s"
 }
 
