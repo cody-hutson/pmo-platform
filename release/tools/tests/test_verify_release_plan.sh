@@ -198,6 +198,20 @@ set -euo pipefail
 #        on no route, while a deferral written there is read, never hidden; the lint
 #        reads all three the way the handlers do. Eight seeded failures, each proved
 #        to apply at exactly its sites.
+#  (G22) A LIMB THE VERIFIER DOES NOT GRADE NEVER LEAVES A ROW AT PLAIN PASS
+#        (V6837-AC4r, V6848-AC2u) — a declared reader-graded limb (the bracket
+#        marker in the spellings an author types, or the bare upper-case word) and a
+#        later span shaped as a command the tool catalog does not know are each named
+#        "did not run" on every route, so a row naming one never reads plain PASS; the
+#        grep and awk kin are catalogued. The designated command is graded on the
+#        comparator written after it on the one-command path too, and beside reader
+#        limbs only, a comparator written in a reader limb is ERROR. The lint flags a
+#        reader limb, and a second command however it is shaped. The originating
+#        shape's declared and undeclared twins, the malformed markers, and the prose
+#        shapes that must stay prose are pinned, with the declared deploy route in a
+#        temp stub root. Fourteen seeded failures, each proved to apply at exactly
+#        its sites. G16's M1 reads its false second command only, since the
+#        one-command window is a second defence for its null, which G22 pins.
 #
 # Offline + deterministic: fixtures are committed under tests/fixtures/ and all
 # methods are fast local greps against the repo tree (no deploy.sh --check here —
@@ -3119,13 +3133,17 @@ H16="$("$VERIFY" --help 2>&1 || true)"
   || bad "V6837-AC4 q — --help carries no MULTI-COMMAND METHODS section naming the designated command and 'did not run'"
 
 # --- SEEDED FAILURES. Each reverts one limb and names the answer it must move to. ---
+# M1's detection reads the false second command only. The violated null AC-8 has a second
+# defence since the one-command path reads the comparator written after its command
+# (designated_threshold): unhooked, AC-8 FAILs on its own 'expect 0'. G22 pins that
+# defence (V6837-AC4r k and M8), so it is not asserted twice.
 m16 "V6837-AC4 M1" g16-m1-unhooked 2 's/^  if limbs_are_multi "\$limbs"; then grade_limbs "\$limbs"; return; fi$/  :/'
 if [ "$MUT_TOOK" = 1 ]; then
   vrp_run "$MUT_PATH" "$FIX_LIMB"; JM16_1="$VRP_JSON"
   if mutant_ran "V6837-AC4 M1"; then
-    [ "$(verdict_of "$JM16_1" AC-2)" = PASS ] && [ "$(verdict_of "$JM16_1" AC-8)" = PASS ] && [ "$(verdict_of "$JM16_1" CIAC-2)" = PASS ] \
-      && ok "V6837-AC4 M1 detected — without the multi-command path the false second command PASSes again, and so does the violated null" \
-      || bad "V6837-AC4 M1 SURVIVED — AC-2 $(fv16 "$JM16_1" AC-2), AC-8 $(fv16 "$JM16_1" AC-8), CIAC-2 $(fv16 "$JM16_1" CIAC-2)"
+    [ "$(verdict_of "$JM16_1" AC-2)" = PASS ] && [ "$(verdict_of "$JM16_1" CIAC-2)" = PASS ] \
+      && ok "V6837-AC4 M1 detected — without the multi-command path the false second command PASSes again, in both loops (AC-2, CIAC-2)" \
+      || bad "V6837-AC4 M1 SURVIVED — AC-2 $(fv16 "$JM16_1" AC-2), CIAC-2 $(fv16 "$JM16_1" CIAC-2)"
   fi
 fi
 m16 "V6837-AC4 M2" g16-m2-whole-cell 1 's/cmp="\$\(limb_comparator "\$\{L_prose\[\$i\]\}"\)"/cmp="$(limb_comparator "$method")"/'
@@ -4659,6 +4677,393 @@ if [ "$MUT_TOOK" = 1 ]; then
   fi
 fi
 rm -rf "$MUTD6236B"
+
+# ===========================================================================
+# G22 — A LIMB THE VERIFIER DOES NOT GRADE NEVER LEAVES A ROW AT PLAIN PASS
+#       (V6837-AC4r, V6848-AC2u).
+#
+# Two populations reach the one rule. A limb no command grades is DECLARED in the
+# method -- `[READER-GRADED — <what a reader grades>]`, read by its opening token in
+# the spellings an author types, or the bare upper-case word READER-GRADED authors
+# already write -- and the verifier names it "reader-graded did not run (declared for a
+# reader)". A closed span the tool catalog does not name, but shaped as an invocation
+# (a path, or a word followed by an option), is named beside a designated command as a
+# command that did not run, "not a recognised command"; the grep and awk kin an author
+# writes for a count are catalogued. Either keeps the row off plain PASS: a FAIL or
+# ERROR from the designated command stands, and a designated PASS takes the can't-run
+# slot. The designated command's comparator is the one written after it, up to the next
+# limb, on the one-command path too; beside reader limbs only, a window stating none
+# reads the method with the reader text cut, and a comparator written only in a reader
+# limb is ERROR. Every route names the same limbs -- per-issue, cross-issue, scope and
+# the declared deploy check -- and the CIAC authoring lint reads a reader limb as the
+# flag reader-limb and a second command, catalogued or invocation-shaped, as
+# multi-limb. The rows the rule must not move are pinned beside the ones it must.
+#
+# The fixture's counts come from its own data section; a null whose pattern would match
+# its own cell reads the sibling multi-limb fixture, which G22-0 checks carries none of
+# those strings. Its scope rows run on a two-path seam, and the declared deploy route
+# runs in a temp stub root whose check exits 0 (G18's pattern). Every record is read by
+# issue and id together, since the three issues reuse AC ids, and every arm first
+# requires the record it grades. Each seeded failure is proved to apply at exactly its
+# sites, and only a mutation that took is graded.
+# ===========================================================================
+echo
+echo "G22 — #6837 and #6848: a limb the verifier does not grade never leaves a row at plain PASS (V6837-AC4r, V6848-AC2u)"
+MUTD22="$(mktemp -d -t verify-plan-d67-mut.XXXXXX)"
+SEAMD22="$(mktemp -d -t verify-plan-d67-seam.XXXXXX)"
+G22D="$(mktemp -d -t verify-plan-d67-deploy.XXXXXX)"
+FIX_READER="release/tools/tests/fixtures/verify-plan-reader-limb.md"
+G22_SIB="release/tools/tests/fixtures/verify-plan-multi-limb.md"
+printf 'M\trelease/tools/verify-release-plan.sh\nM\trelease/tools/tests/test_verify_release_plan.sh\n' > "$SEAMD22/clean.tsv"
+# The slot's value, derived from its one binding line (G16's derivation, restated so this
+# group stands on its own).
+G22_SLOT="$(sed -n 's/^readonly VERDICT_PARTIAL_SLOT="\$VERDICT_\([A-Z]*\)".*/\1/p' "$VERIFY")"
+# g22_fv <json> <issue> <id> — "family/verdict" of one issue-qualified record; "/" when absent.
+g22_fv() { printf '%s/%s' "$(g20_fv "$1" "$2" "$3" family)" "$(g20_fv "$1" "$2" "$3" verdict)"; }
+# g22_obs <json> <issue> <id> — the record's observed text.
+g22_obs() { g20_fv "$1" "$2" "$3" observed; }
+# g22_has <json> <issue> <id> <text> — TRUE only when the record's observed text carries <text>.
+g22_has() { case "$(g22_obs "$1" "$2" "$3")" in *"$4"*) return 0 ;; *) return 1 ;; esac; }
+# g22_slot <json> <issue> <id> — TRUE only when the record reads the derived slot, leading "partial-execution:".
+g22_slot() { [ -n "$G22_SLOT" ] && [ "$(g20_fv "$1" "$2" "$3" verdict)" = "$G22_SLOT" ] && case "$(g22_obs "$1" "$2" "$3")" in "partial-execution: limbs run 1 of "*) return 0 ;; *) return 1 ;; esac; }
+# g22_run <tool> — VRP_JSON + VRP_RC for the fixture over the two-path seam (g17_seam's contract).
+g22_run() { g17_seam "$1" "$FIX_READER" "$SEAMD22/clean.tsv"; }
+# m22 <label> <stem> <sites> <sed-expr>... — m16's contract: the mutant in MUT_PATH, and
+# MUT_TOOK only when it applied at exactly <sites> lines.
+m22() {
+  local label="$1" stem="$2" want="$3" dst n e
+  shift 3
+  dst="$MUTD22/$stem.sh"
+  cp "$VERIFY" "$dst"
+  for e in "$@"; do sed -i.bak -E "$e" "$dst"; done
+  rm -f "$dst.bak"
+  chmod +x "$dst"
+  MUT_PATH="$dst"
+  n="$(awk 'NR == FNR { a[FNR] = $0; next } a[FNR] != $0 { n++ } END { print n + 0 }' "$VERIFY" "$dst")"
+  if [ "$n" -eq "$want" ]; then
+    MUT_TOOK=1; ok "$label — mutation applied at exactly $want site(s): the mutant differs from the shipped tool in $n line(s)"
+  else
+    MUT_TOOK=0; bad "$label — mutation applied at $n site(s), expected exactly $want; its arm is not graded"
+  fi
+}
+L990='limb 2 reader-graded did not run (declared for a reader)'
+LTAIL='— a limb this verifier did not grade is not a pass'
+CTAIL='— a command that did not run is not a pass'
+
+g22_run "$VERIFY"; J22="$VRP_JSON"; RC22="$VRP_RC"
+lint_run "$VERIFY" "$FIX_READER"; L22="$LINT_OUT"
+
+# --- G22-0: DENOMINATOR FIRST — the fixture still plants, every row emits, and the sibling nulls are not vacuous. ---
+G22_ROWS="$(grep -c -F '| AC-' "$REPO_ROOT/$FIX_READER" || true)"
+G22_CIACS="$(grep -c -F '**CIAC-' "$REPO_ROOT/$FIX_READER" || true)"
+G22_DATA="$(grep -c -E '^(ALPHA|BETA)-TOKEN ' "$REPO_ROOT/$FIX_READER" || true)"
+[ "${G22_ROWS:-0}" -eq 53 ] && [ "${G22_CIACS:-0}" -eq 7 ] && [ "${G22_DATA:-0}" -eq 4 ] \
+   && [ "$(acs_of "$J22")" = "53" ] && [ "$(ciacs_of "$J22")" = "7" ] && [ "$RC22" -eq 3 ] \
+  && ok "G22-0 SENSITIVITY — the fixture declares and emits 53 rows and 7 CIACs, over a data section of 2 + 2 token lines, and its FAIL and ERROR rows reach the exit (3)" \
+  || bad "G22-0 declared rows=${G22_ROWS:-0} CIACs=${G22_CIACS:-0} data=${G22_DATA:-0}, emitted AC=$(acs_of "$J22") CIAC=$(ciacs_of "$J22"), rc=$RC22 (expected 53, 7, 4, 53, 7, 3)"
+G22_SIBOK=1
+for g22s in '[READER-GRADED — pattern' 'READER-GRADED' 'at least 9'; do
+  [ "$(grep -c -F "$g22s" "$REPO_ROOT/$G22_SIB" || true)" = "0" ] && [ "$(grep -c -F "$g22s" "$REPO_ROOT/$FIX_READER" || true)" -ge 1 ] || G22_SIBOK=0
+done
+[ "$G22_SIBOK" = 1 ] \
+  && ok "G22-0 CONTROL — each null that reads the sibling fixture looks for a string the sibling lacks and this fixture carries, so its zero is measured, not vacuous" \
+  || bad "G22-0 the sibling fixture carries a string a null row looks for, or this fixture no longer carries it"
+
+# --- V6837-AC4r: a declared reader-graded limb is named, never run, and never passed. ---
+g22_slot "$J22" '#990' AC-1 && g22_has "$J22" '#990' AC-1 "limb 1 grep PASS count=2 (== 2); $L990 $LTAIL" \
+  && ok "V6837-AC4r a — a true command beside a declared reader limb reads the slot, naming the limb it did not grade" \
+  || bad "V6837-AC4r a — #990 AC-1 $(g22_fv "$J22" '#990' AC-1) '$(g22_obs "$J22" '#990' AC-1)'"
+g22_slot "$J22" '#990' AC-2 && g22_has "$J22" '#990' AC-2 "$L990" \
+  && ok "V6837-AC4r b — the reader limb's content false: the verifier cannot grade it, so the row still reads the slot" \
+  || bad "V6837-AC4r b — #990 AC-2 $(g22_fv "$J22" '#990' AC-2) '$(g22_obs "$J22" '#990' AC-2)'"
+[ "$(g22_fv "$J22" '#990' AC-3)" = "per-issue/FAIL" ] && g22_has "$J22" '#990' AC-3 "limbs run 1 of 2: limb 1 grep FAIL count=2 (wanted == 3); $L990" \
+  && ok "V6837-AC4r c CONTROL — a false first limb FAILs, with the reader limb listed" \
+  || bad "V6837-AC4r c — #990 AC-3 $(g22_fv "$J22" '#990' AC-3) '$(g22_obs "$J22" '#990' AC-3)'"
+g22_slot "$J22" '#990' AC-16 && g22_has "$J22" '#990' AC-16 "limbs run 1 of 3: limb 1 grep PASS count=2 (== 2); $L990; limb 3 reader-graded did not run (declared for a reader)" \
+   && [ "$(g22_fv "$J22" '#990' AC-17)" = "per-issue/PASS" ] && [ "$(g22_obs "$J22" '#990' AC-17)" = "count=2 (== 2)" ] \
+  && ok "V6837-AC4r d — the originating shape, its structural and record limbs declared, reads the slot naming both (limbs run 1 of 3); its undeclared twin reads PASS: the rule keys on the declaration, not on prose" \
+  || bad "V6837-AC4r d — #990 AC-16 $(g22_fv "$J22" '#990' AC-16) '$(g22_obs "$J22" '#990' AC-16)'; AC-17 $(g22_fv "$J22" '#990' AC-17) '$(g22_obs "$J22" '#990' AC-17)'"
+g22_slot "$J22" '#990' AC-27 && g22_has "$J22" '#990' AC-27 "$L990" \
+   && [ "$(g22_fv "$J22" '#990' AC-28)" = "per-issue/SKIP" ] && [ "$(g22_obs "$J22" '#990' AC-28)" = "no-executable-command-in-method" ] \
+  && ok "V6837-AC4r d2 — the author's bare upper-case READER-GRADED declares the limb (the slot), and a declared row with no command keeps the no-command SKIP" \
+  || bad "V6837-AC4r d2 — #990 AC-27 $(g22_fv "$J22" '#990' AC-27) '$(g22_obs "$J22" '#990' AC-27)'; AC-28 $(g22_fv "$J22" '#990' AC-28) '$(g22_obs "$J22" '#990' AC-28)'"
+[ "$(g22_fv "$J22" '#990' AC-4)" = "per-issue/FAIL" ] && g22_has "$J22" '#990' AC-4 "limb 1 grep FAIL count=2 (wanted == 0); $L990" \
+  && ok "V6837-AC4r e — the window ends at the marker: a violated null beside a reader limb whose text says 'at least 1' FAILs (wanted == 0)" \
+  || bad "V6837-AC4r e — #990 AC-4 $(g22_fv "$J22" '#990' AC-4) '$(g22_obs "$J22" '#990' AC-4)'"
+[ "$(g22_fv "$J22" '#990' AC-11)" = "per-issue/PASS" ] && [ "$(g22_obs "$J22" '#990' AC-11)" = "count=0 (== 0)" ] \
+   && g22_slot "$J22" '#990' AC-6 && g22_has "$J22" '#990' AC-6 "limb 1 reader-graded did not run (declared for a reader); limb 2 grep PASS count=2 (== 2)" \
+  && ok "V6837-AC4r f — a marker inside a probe span is its pattern (PASS), and a marker before the command is limb 1" \
+  || bad "V6837-AC4r f — #990 AC-11 $(g22_fv "$J22" '#990' AC-11) '$(g22_obs "$J22" '#990' AC-11)'; AC-6 $(g22_fv "$J22" '#990' AC-6) '$(g22_obs "$J22" '#990' AC-6)'"
+g22_slot "$J22" '#990' AC-12 && g22_has "$J22" '#990' AC-12 "$L990; limb 3 grep did not run (only the designated command runs)" \
+   && g22_slot "$J22" '#990' AC-13 && g22_slot "$J22" '#990' AC-14 && g22_slot "$J22" '#990' AC-18 \
+  && ok "V6837-AC4r g — malformed markers are never PASS: a span inside the marker (named as a command of its own), lower case, an unclosed bracket, and a marker after a stray backtick each read the slot" \
+  || bad "V6837-AC4r g — #990 AC-12 $(g22_fv "$J22" '#990' AC-12) '$(g22_obs "$J22" '#990' AC-12)'; AC-13 $(g22_fv "$J22" '#990' AC-13); AC-14 $(g22_fv "$J22" '#990' AC-14); AC-18 $(g22_fv "$J22" '#990' AC-18)"
+g22_slot "$J22" '#990' AC-20 && g22_slot "$J22" '#990' AC-21 && g22_slot "$J22" '#990' AC-22 \
+  && ok "V6837-AC4r g2 — the spellings an author types declare too: a space or an en dash for the hyphen, and a truncated word, each read the slot" \
+  || bad "V6837-AC4r g2 — #990 AC-20 $(g22_fv "$J22" '#990' AC-20); AC-21 $(g22_fv "$J22" '#990' AC-21); AC-22 $(g22_fv "$J22" '#990' AC-22)"
+[ "$(g22_fv "$J22" '#990' AC-8)" = "per-issue/SKIP" ] && [ "$(g22_obs "$J22" '#990' AC-8)" = "no-executable-command-in-method" ] \
+   && [ "$(g22_fv "$J22" '#990' AC-9)" = "deferred/SKIP" ] \
+   && [ "$(g22_fv "$J22" '#990' AC-23)" = "per-issue/SKIP" ] && [ "$(g22_obs "$J22" '#990' AC-23)" = "declared-deferred" ] \
+  && ok "V6837-AC4r h — a marker alone reads the no-command SKIP; a declared deferral beside it still wins; and a reader limb whose text says DEFERRED defers the whole row, its false command never run (the reason stage-04 tells authors not to write it)" \
+  || bad "V6837-AC4r h — #990 AC-8 $(g22_fv "$J22" '#990' AC-8) '$(g22_obs "$J22" '#990' AC-8)'; AC-9 $(g22_fv "$J22" '#990' AC-9); AC-23 $(g22_fv "$J22" '#990' AC-23) '$(g22_obs "$J22" '#990' AC-23)'"
+g22_slot "$J22" "$G20_CIAC" CIAC-1 && g22_has "$J22" "$G20_CIAC" CIAC-1 "$L990" && [ "$(lint_of "$L22" CIAC-1)" = "FLAG reader-limb" ] \
+   && [ "$(g22_fv "$J22" "$G20_CIAC" CIAC-2)" = "integration/PASS" ] && [ "$(lint_of "$L22" CIAC-2)" = "CLEAN -" ] \
+  && ok "V6837-AC4r i — lint parity on the cross-issue route: a reader limb reads the slot and lints FLAG reader-limb; an undeclared one-command CIAC reads PASS and lints CLEAN" \
+  || bad "V6837-AC4r i — CIAC-1 $(g22_fv "$J22" "$G20_CIAC" CIAC-1) lint '$(lint_of "$L22" CIAC-1)'; CIAC-2 $(g22_fv "$J22" "$G20_CIAC" CIAC-2) lint '$(lint_of "$L22" CIAC-2)'"
+g22_slot "$J22" '#991' AC-10 && g22_has "$J22" '#991' AC-10 "limb 1 git PASS scope count=0 (== 0) over 2 changed path(s) in the release diff; $L990 $LTAIL" \
+   && g22_slot "$J22" "$G20_CIAC" CIAC-5 && [ "$(lint_of "$L22" CIAC-5)" = "FLAG reader-limb" ] \
+   && [ "$(g22_fv "$J22" '#991' AC-13)" = "unrunnable/UNRUNNABLE" ] && g22_has "$J22" '#991' AC-13 "tool-invocation-outside-executor-allowlist:git " \
+  && ok "V6837-AC4r j — a scope assertion beside a reader limb reads the slot naming it, not an ambiguous comparator (CIAC-5 lints reader-limb); one whose only comparator is the reader's keeps the tool decline, UNRUNNABLE naming git" \
+  || bad "V6837-AC4r j — #991 AC-10 $(g22_fv "$J22" '#991' AC-10) '$(g22_obs "$J22" '#991' AC-10)'; CIAC-5 $(g22_fv "$J22" "$G20_CIAC" CIAC-5) lint '$(lint_of "$L22" CIAC-5)'; AC-13 $(g22_fv "$J22" '#991' AC-13) '$(g22_obs "$J22" '#991' AC-13)'"
+G22_K=1
+for g22k in AC-1 AC-2; do
+  { [ "$(g22_fv "$J22" '#992' "$g22k")" = "per-issue/ERROR" ] && g22_has "$J22" '#992' "$g22k" "comparator-ambiguous"; } || G22_K=0
+done
+[ "$G22_K" = 1 ] && [ "$(g22_fv "$J22" '#992' AC-3)" = "per-issue/PASS" ] && [ "$(g22_obs "$J22" '#992' AC-3)" = "count=2 (== 2)" ] \
+   && [ "$(g22_fv "$J22" '#992' AC-4)" = "per-issue/PASS" ] && [ "$(g22_obs "$J22" '#992' AC-4)" = "count=0 (== 0)" ] \
+   && [ "$(g22_fv "$J22" '#992' AC-5)" = "per-issue/FAIL" ] && [ "$(g22_obs "$J22" '#992' AC-5)" = "count=2 (wanted == 3)" ] \
+  && ok "V6837-AC4r k — a one-command row is graded on the comparator written after its command: two that disagree read ERROR (never the violated null's PASS), one written before the command still grades it, and one inside the backticks is the pattern" \
+  || bad "V6837-AC4r k — #992 AC-1 $(g22_fv "$J22" '#992' AC-1) '$(g22_obs "$J22" '#992' AC-1)'; AC-2 $(g22_fv "$J22" '#992' AC-2); AC-3 '$(g22_obs "$J22" '#992' AC-3)'; AC-4 '$(g22_obs "$J22" '#992' AC-4)'; AC-5 '$(g22_obs "$J22" '#992' AC-5)'"
+[ "$(g22_fv "$J22" '#990' AC-15)" = "per-issue/ERROR" ] && g22_has "$J22" '#990' AC-15 "limb 1 grep ERROR comparator-in-reader-limb" \
+   && [ "$(g22_fv "$J22" '#990' AC-19)" = "per-issue/FAIL" ] && g22_has "$J22" '#990' AC-19 "limbs run 1 of 2: limb 1 grep FAIL count=2 (wanted == 3); $L990" \
+  && ok "V6837-AC4r k2 — beside reader limbs only, a comparator written only in the reader limb reads ERROR comparator-in-reader-limb (never the exit status's PASS), and one written before the command grades it: FAIL" \
+  || bad "V6837-AC4r k2 — #990 AC-15 $(g22_fv "$J22" '#990' AC-15) '$(g22_obs "$J22" '#990' AC-15)'; AC-19 $(g22_fv "$J22" '#990' AC-19) '$(g22_obs "$J22" '#990' AC-19)'"
+vrp_run "$VERIFY" "$G22_SIB"; J22L="$VRP_JSON"
+[ "$(observed_of "$J22L" AC-1)" = "partial-execution: limbs run 1 of 2: limb 1 grep PASS count=2 (== 2); limb 2 grep did not run (only the designated command runs) $CTAIL" ] \
+   && [ "$(observed_of "$J22L" CIAC-1)" = "partial-execution: limbs run 1 of 2: limb 1 grep PASS count=2 (== 2); limb 2 grep did not run (only the designated command runs) $CTAIL" ] \
+  && ok "V6837-AC4r l CONTROL — a command-only partial row keeps its observed text byte for byte (the multi-limb fixture's AC-1 and CIAC-1)" \
+  || bad "V6837-AC4r l — multi-limb AC-1 '$(observed_of "$J22L" AC-1)'; CIAC-1 '$(observed_of "$J22L" CIAC-1)'"
+g22_slot "$J22" '#990' AC-24 && g22_has "$J22" '#990' AC-24 "limb 1 reader-graded did not run (declared for a reader); limb 2 grep PASS command-succeeded; limb 3 grep did not run (only the designated command runs)" \
+   && g22_slot "$J22" '#990' AC-25 && [ "$(g22_fv "$J22" '#990' AC-26)" = "per-issue/PASS" ] && [ "$(g22_obs "$J22" '#990' AC-26)" = "count=0 (== 0)" ] \
+  && ok "V6837-AC4r m — a command quoted inside a marker is a command: it runs as the designated one and the author's false command does not, never a PASS; an unbackticked mention declares a limb, and a backticked one does not" \
+  || bad "V6837-AC4r m — #990 AC-24 $(g22_fv "$J22" '#990' AC-24) '$(g22_obs "$J22" '#990' AC-24)'; AC-25 $(g22_fv "$J22" '#990' AC-25); AC-26 $(g22_fv "$J22" '#990' AC-26) '$(g22_obs "$J22" '#990' AC-26)'"
+[ "$(g22_fv "$J22" '#990' AC-29)" = "per-issue/PASS" ] && [ "$(g22_obs "$J22" '#990' AC-29)" = "count=2 (== 2)" ] && g22_slot "$J22" '#990' AC-30 \
+  && ok "V6837-AC4r n — the bare word's stated boundary: mixed case is not read (PASS), and a negation still declares, the risk accepted with the decision (the slot)" \
+  || bad "V6837-AC4r n — #990 AC-29 $(g22_fv "$J22" '#990' AC-29) '$(g22_obs "$J22" '#990' AC-29)'; AC-30 $(g22_fv "$J22" '#990' AC-30)"
+H22="$("$VERIFY" --help 2>&1 || true)"
+[ "$(grep -c -F 'MULTI-COMMAND METHODS' <<<"$H22" || true)" = "1" ] && [ "$(grep -c -F 'READER-GRADED' <<<"$H22" || true)" -ge 2 ] \
+   && [ "$(grep -c -F 'reader-limb' <<<"$H22" || true)" -ge 1 ] && [ "$(grep -c -F 'not a recognised command' <<<"$H22" || true)" -ge 1 ] \
+  && ok "V6837-AC4r o — --help states the declared form, the unrecognised-command reason and the lint's reader-limb flag" \
+  || bad "V6837-AC4r o — --help lacks the READER-GRADED form, the 'not a recognised command' reason, or the reader-limb flag"
+
+# --- V6848-AC2u: a later span shaped as a command the catalog does not know is named, never passed. ---
+g22_slot "$J22" '#991' AC-1 && g22_has "$J22" '#991' AC-1 "limb 2 rg did not run (outside the verb set) $CTAIL" \
+   && g22_slot "$J22" '#991' AC-8 && g22_has "$J22" '#991' AC-8 "limb 2 rg did not run (outside the verb set)" \
+  && ok "V6848-AC2u a — rg beside a designated grep reads the slot, with or without an option: the grep and awk kin are catalogued" \
+  || bad "V6848-AC2u a — #991 AC-1 $(g22_fv "$J22" '#991' AC-1) '$(g22_obs "$J22" '#991' AC-1)'; AC-8 $(g22_fv "$J22" '#991' AC-8) '$(g22_obs "$J22" '#991' AC-8)'"
+g22_slot "$J22" '#991' AC-2 && g22_has "$J22" '#991' AC-2 "limb 2 /usr/bin/awk did not run (not a recognised command)" \
+   && g22_slot "$J22" '#991' AC-15 && g22_has "$J22" '#991' AC-15 "limb 2 ./release/tools/claim-version did not run (not a recognised command)" \
+   && g22_slot "$J22" '#991' AC-16 && g22_has "$J22" '#991' AC-16 "limb 2 /usr/bin/grep did not run (not a recognised command)" \
+   && g22_slot "$J22" '#991' AC-18 && g22_has "$J22" '#991' AC-18 "limb 2 fd did not run (not a recognised command)" \
+  && ok "V6848-AC2u b — a span shaped as an invocation the catalog does not know is named 'not a recognised command': an absolute path, a relative path with no script suffix, an absolute path to an allowlisted verb (never executed), and a word followed by an option" \
+  || bad "V6848-AC2u b — #991 AC-2 '$(g22_obs "$J22" '#991' AC-2)'; AC-15 '$(g22_obs "$J22" '#991' AC-15)'; AC-16 '$(g22_obs "$J22" '#991' AC-16)'; AC-18 '$(g22_obs "$J22" '#991' AC-18)'"
+g22_slot "$J22" "$G20_CIAC" CIAC-3 && g22_has "$J22" "$G20_CIAC" CIAC-3 "limb 2 rg did not run (outside the verb set)" && [ "$(lint_of "$L22" CIAC-3)" = "FLAG multi-limb" ] \
+   && g22_slot "$J22" "$G20_CIAC" CIAC-6 && g22_has "$J22" "$G20_CIAC" CIAC-6 "limb 2 /usr/bin/awk did not run (not a recognised command)" && [ "$(lint_of "$L22" CIAC-6)" = "FLAG multi-limb" ] \
+  && ok "V6848-AC2u c — the cross-issue route takes the same reading, and the lint flags both as multi-limb" \
+  || bad "V6848-AC2u c — CIAC-3 $(g22_fv "$J22" "$G20_CIAC" CIAC-3) lint '$(lint_of "$L22" CIAC-3)'; CIAC-6 $(g22_fv "$J22" "$G20_CIAC" CIAC-6) lint '$(lint_of "$L22" CIAC-6)'"
+g22_slot "$J22" '#991' AC-9 && g22_has "$J22" '#991' AC-9 "limb 1 git PASS scope count=0 (== 0) over 2 changed path(s) in the release diff; limb 2 rg did not run (outside the verb set)" \
+  && ok "V6848-AC2u d — a scope assertion beside rg reads the slot" \
+  || bad "V6848-AC2u d — #991 AC-9 $(g22_fv "$J22" '#991' AC-9) '$(g22_obs "$J22" '#991' AC-9)'"
+[ "$(g22_fv "$J22" '#991' AC-3)" = "per-issue/PASS" ] && [ "$(g22_obs "$J22" '#991' AC-3)" = "count=2 (== 2)" ] \
+   && [ "$(g22_fv "$J22" '#991' AC-4)" = "per-issue/PASS" ] && [ "$(g22_obs "$J22" '#991' AC-4)" = "count=2 (== 2)" ] \
+   && g22_slot "$J22" '#991' AC-6 && g22_has "$J22" '#991' AC-6 "limb 2 sed did not run (outside the verb set)" \
+  && ok "V6848-AC2u e — specificity: field assignments and a heading beside a probe stay prose (PASS), and the catalogued twin keeps 'outside the verb set'" \
+  || bad "V6848-AC2u e — #991 AC-3 $(g22_fv "$J22" '#991' AC-3); AC-4 $(g22_fv "$J22" '#991' AC-4); AC-6 '$(g22_obs "$J22" '#991' AC-6)'"
+g22_slot "$J22" '#991' AC-7 && g22_has "$J22" '#991' AC-7 "limb 2 deploy did not run (not a recognised command)" \
+  && ok "V6848-AC2u e2 — the stated boundary: a quoted output line shaped as a command is named, a false demotion and never a pass" \
+  || bad "V6848-AC2u e2 — #991 AC-7 $(g22_fv "$J22" '#991' AC-7) '$(g22_obs "$J22" '#991' AC-7)'"
+[ "$(g22_fv "$J22" '#991' AC-12)" = "per-issue/SKIP" ] && [ "$(g22_obs "$J22" '#991' AC-12)" = "no-executable-command-in-method" ] \
+  && ok "V6848-AC2u f — an unrecognised span alone stays a method with no command: the no-command SKIP" \
+  || bad "V6848-AC2u f — #991 AC-12 $(g22_fv "$J22" '#991' AC-12) '$(g22_obs "$J22" '#991' AC-12)'"
+[ "$(g22_fv "$J22" '#991' AC-5)" = "unrunnable/UNRUNNABLE" ] && g22_has "$J22" '#991' AC-5 "tool-invocation-outside-executor-allowlist:rg " \
+  && ok "V6848-AC2u f2 — a catalogued tool alone reads UNRUNNABLE naming it" \
+  || bad "V6848-AC2u f2 — #991 AC-5 $(g22_fv "$J22" '#991' AC-5) '$(g22_obs "$J22" '#991' AC-5)'"
+[ "$(g22_fv "$J22" '#991' AC-11)" = "per-issue/PASS" ] && [ "$(g22_obs "$J22" '#991' AC-11)" = "count=2 (== 2)" ] \
+  && ok "V6848-AC2u g — a span no backtick closes is prose: rg written there leaves the row at PASS" \
+  || bad "V6848-AC2u g — #991 AC-11 $(g22_fv "$J22" '#991' AC-11) '$(g22_obs "$J22" '#991' AC-11)'"
+g22_slot "$J22" "$G20_CIAC" CIAC-4 && [ "$(lint_of "$L22" CIAC-4)" = "FLAG multi-limb" ] \
+  && ok "V6848-AC2u h — a scope CIAC beside a catalogued tool lints FLAG multi-limb, as the grader reads it the slot" \
+  || bad "V6848-AC2u h — CIAC-4 $(g22_fv "$J22" "$G20_CIAC" CIAC-4) lint '$(lint_of "$L22" CIAC-4)'"
+g22_slot "$J22" '#991' AC-14 && g22_has "$J22" '#991' AC-14 "limb 1 /usr/bin/awk did not run (not a recognised command); limb 2 grep PASS count=2 (== 2)" \
+  && ok "V6848-AC2u j — written before the probe, the span is named first, never passed" \
+  || bad "V6848-AC2u j — #991 AC-14 $(g22_fv "$J22" '#991' AC-14) '$(g22_obs "$J22" '#991' AC-14)'"
+[ "$(g22_fv "$J22" '#991' AC-17)" = "per-issue/FAIL" ] && g22_has "$J22" '#991' AC-17 "limb 1 grep FAIL count=2 (wanted == 0); limb 2 /usr/bin/awk did not run (not a recognised command)" \
+  && ok "V6848-AC2u k — a violated null beside an unknown span carrying 'at least 1' FAILs: that comparator belongs to the span, not to the designated command" \
+  || bad "V6848-AC2u k — #991 AC-17 $(g22_fv "$J22" '#991' AC-17) '$(g22_obs "$J22" '#991' AC-17)'"
+[ "$(grep -c -F "RUNNABLE_VERBS='grep test ls head wc cat'" "$VERIFY" || true)" = "1" ] \
+  && ok "V6848-AC2u l — the catalog grew and the verb set did not: RUNNABLE_VERBS reads its literal exactly once" \
+  || bad "V6848-AC2u l — the RUNNABLE_VERBS literal no longer reads once"
+mkdir -p "$G22D/core/deploy" "$G22D/release/tools" "$G22D/plan"
+cp "$VERIFY" "$G22D/release/tools/"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$G22D/core/deploy/deploy.sh"; chmod +x "$G22D/core/deploy/deploy.sh"
+cat > "$G22D/plan/p.md" <<'EOF'
+# vTEST Release Plan — the declared deploy route names every limb it did not run (G22)
+
+## Verification Plan
+
+**#993 — the declared deploy check beside another limb**
+
+| AC | Verification method | Expected result |
+|---|---|---|
+| AC-1 | `bash core/deploy/deploy.sh --check` beside `/usr/bin/awk '/X/' plan/p.md` | the slot, naming the unrecognised span |
+| AC-2 | `bash core/deploy/deploy.sh --check` beside `rg -c X plan/p.md` | the slot, naming rg |
+| AC-3 | `/usr/bin/awk '/X/' plan/p.md` then `bash core/deploy/deploy.sh --check` | the span written first: the slot |
+| AC-4 | `bash core/deploy/deploy.sh --check` | control: the check alone PASSes |
+| AC-5 | `bash core/deploy/deploy.sh --check`. [READER-GRADED — the reader confirms the mirror section] | a reader limb beside the check: the slot |
+EOF
+set +e; J22D="$("$VERIFY" --format=json --root "$G22D" "$G22D/plan/p.md" 2>/dev/null)"; set -e
+g22_slot "$J22D" '#993' AC-1 && g22_has "$J22D" '#993' AC-1 "limb 1 bash PASS deploy --check clean (in-sync); limb 2 /usr/bin/awk did not run (not a recognised command)" \
+   && g22_slot "$J22D" '#993' AC-2 && g22_has "$J22D" '#993' AC-2 "limb 2 rg did not run (outside the verb set)" \
+   && g22_slot "$J22D" '#993' AC-3 && g22_has "$J22D" '#993' AC-3 "limb 1 /usr/bin/awk did not run (not a recognised command); limb 2 bash PASS deploy --check clean (in-sync)" \
+   && [ "$(g22_fv "$J22D" '#993' AC-4)" = "sync/PASS" ] \
+   && g22_slot "$J22D" '#993' AC-5 && g22_has "$J22D" '#993' AC-5 "limb 2 reader-graded did not run (declared for a reader) $LTAIL" \
+  && ok "V6848-AC2u i — the declared deploy route names every limb it did not run, in either order: an unrecognised span, rg, or a reader limb beside a check that passes reads the slot; the check alone PASSes" \
+  || bad "V6848-AC2u i — #993 AC-1 $(g22_fv "$J22D" '#993' AC-1) '$(g22_obs "$J22D" '#993' AC-1)'; AC-2 $(g22_fv "$J22D" '#993' AC-2); AC-3 $(g22_fv "$J22D" '#993' AC-3); AC-4 $(g22_fv "$J22D" '#993' AC-4); AC-5 $(g22_fv "$J22D" '#993' AC-5)"
+
+# --- SEEDED FAILURES. Each reverts one limb of the rule and names the answer it must move to. ---
+# M1 — the recognizer declares nothing: every declared row reads PASS on its command again.
+m22 "V6837-AC4r M1" g22-m1-no-recognizer 1 's/^reader_limb_split\(\) \{$/reader_limb_split() { printf "0\\t%s" "$1"; return 0/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g22_run "$MUT_PATH"; JM22_1="$VRP_JSON"
+  if mutant_ran "V6837-AC4r M1"; then
+    lint_run "$MUT_PATH" "$FIX_READER"
+    [ "$(g22_fv "$JM22_1" '#990' AC-1)" = "per-issue/PASS" ] && [ "$(g22_fv "$JM22_1" '#990' AC-16)" = "per-issue/PASS" ] \
+       && [ "$(g22_fv "$JM22_1" "$G20_CIAC" CIAC-1)" = "integration/PASS" ] && [ "$(lint_of "$LINT_OUT" CIAC-1)" = "CLEAN -" ] \
+      && ok "V6837-AC4r M1 detected — with no recognizer the declared rows (a), (d) and (i) read PASS on their command alone, and CIAC-1 lints CLEAN" \
+      || bad "V6837-AC4r M1 SURVIVED — #990 AC-1 $(g22_fv "$JM22_1" '#990' AC-1), AC-16 $(g22_fv "$JM22_1" '#990' AC-16), CIAC-1 $(g22_fv "$JM22_1" "$G20_CIAC" CIAC-1) lint '$(lint_of "$LINT_OUT" CIAC-1)'"
+  fi
+fi
+# M2 — the window no longer ends at the marker: the reader's 'at least 1' meets the null.
+m22 "V6837-AC4r M2" g22-m2-window-uncut 1 's/else L_prose\[\$last\]="\$head"; fi/else L_prose[$last]="$prose"; fi/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g22_run "$MUT_PATH"; JM22_2="$VRP_JSON"
+  if mutant_ran "V6837-AC4r M2"; then
+    [ "$(g22_fv "$JM22_2" '#990' AC-4)" = "per-issue/ERROR" ] && g22_has "$JM22_2" '#990' AC-4 "comparator-ambiguous" \
+      && ok "V6837-AC4r M2 detected — with the window running past the marker, (e) reads ERROR comparator-ambiguous, not its FAIL" \
+      || bad "V6837-AC4r M2 SURVIVED — #990 AC-4 $(g22_fv "$JM22_2" '#990' AC-4) '$(g22_obs "$JM22_2" '#990' AC-4)'"
+  fi
+fi
+# M3 — the reader arm leaves grade_limbs: the limb is named with the generic reason.
+m22 "V6837-AC4r M3" g22-m3-no-reader-arm 1 's/^      reader\) rd=/      reader-gone) rd=/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g22_run "$MUT_PATH"; JM22_3="$VRP_JSON"
+  if mutant_ran "V6837-AC4r M3"; then
+    g22_has "$JM22_3" '#990' AC-1 "limb 2 reader-graded did not run (only the designated command runs)" \
+      && ok "V6837-AC4r M3 detected — without the reader arm (a) loses 'declared for a reader'" \
+      || bad "V6837-AC4r M3 SURVIVED — #990 AC-1 '$(g22_obs "$JM22_3" '#990' AC-1)'"
+  fi
+fi
+# M4 — the lint's reader line removed: a reader limb is no longer the flag the lint names.
+m22 "V6837-AC4r M4" g22-m4-no-lint-reader-line 1 's/^  case "\$limbs" in \*"\$\{T\}reader\$\{T\}"\*\) _ciac_lint_say FLAG reader-limb; return 0 ;; esac$/  :/'
+if [ "$MUT_TOOK" = 1 ]; then
+  lint_run "$MUT_PATH" "$FIX_READER"
+  [ -n "$(lint_of "$LINT_OUT" CIAC-1)" ] && [ "$(lint_of "$LINT_OUT" CIAC-1)" != "FLAG reader-limb" ] \
+    && ok "V6837-AC4r M4 detected — without the lint's reader line CIAC-1 no longer reads reader-limb ('$(lint_of "$LINT_OUT" CIAC-1)')" \
+    || bad "V6837-AC4r M4 SURVIVED — CIAC-1 lint '$(lint_of "$LINT_OUT" CIAC-1)'"
+fi
+# M5 — command_list stops counting reader limbs: the scope route reads a plain PASS.
+m22 "V6837-AC4r M5" g22-m5-list-drops-readers 1 's/^    if \[ "\$role" = reader \]; then k=.*$/    if [ "$role" = reader ]; then continue; fi/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g22_run "$MUT_PATH"; JM22_5="$VRP_JSON"
+  if mutant_ran "V6837-AC4r M5"; then
+    [ "$(g22_fv "$JM22_5" '#991' AC-10)" = "scope/PASS" ] \
+      && ok "V6837-AC4r M5 detected — with command_list blind to reader limbs (j) reads a plain scope PASS" \
+      || bad "V6837-AC4r M5 SURVIVED — #991 AC-10 $(g22_fv "$JM22_5" '#991' AC-10) '$(g22_obs "$JM22_5" '#991' AC-10)'"
+  fi
+fi
+# M6 — the unrecognised-invocation test names nothing: such a span is prose again. A span
+# carrying no comparator of its own leaves the row at PASS; one carrying its own joins the
+# designated command's window, where the one-command reading meets two comparators.
+m22 "V6848-AC2u M6" g22-m6-no-unrecognised-test 1 's/^  if \[\[ "\$t" =~ \$pre \]\].*$/  :/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g22_run "$MUT_PATH"; JM22_6="$VRP_JSON"
+  if mutant_ran "V6848-AC2u M6"; then
+    [ "$(g22_fv "$JM22_6" '#991' AC-15)" = "per-issue/PASS" ] && [ "$(g22_fv "$JM22_6" '#991' AC-18)" = "per-issue/PASS" ] \
+       && [ "$(g22_fv "$JM22_6" '#991' AC-2)" = "per-issue/ERROR" ] && g22_has "$JM22_6" '#991' AC-2 "comparator-ambiguous" \
+      && ok "V6848-AC2u M6 detected — without the test (b)'s suffix-less path and option-led word read PASS beside the probe, and an absolute-path span carrying its own comparator falls to the one-command window's ERROR" \
+      || bad "V6848-AC2u M6 SURVIVED — #991 AC-15 $(g22_fv "$JM22_6" '#991' AC-15), AC-18 $(g22_fv "$JM22_6" '#991' AC-18), AC-2 $(g22_fv "$JM22_6" '#991' AC-2) '$(g22_obs "$JM22_6" '#991' AC-2)'"
+  fi
+fi
+# M7 — the closure guard removed: the piece after an odd final backtick is read as a span.
+m22 "V6848-AC2u M7" g22-m7-no-closure-guard 1 's/^  if \[ \$\(\( \$\{#ticks\} % 2 \)\) -eq 1 \] && .*uncl=.*$/  :/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g22_run "$MUT_PATH"; JM22_7="$VRP_JSON"
+  if mutant_ran "V6848-AC2u M7"; then
+    g22_slot "$JM22_7" '#991' AC-11 && [ "$(g22_fv "$JM22_7" '#990' AC-18)" = "per-issue/PASS" ] \
+      && ok "V6848-AC2u M7 detected — without the closure guard (g)'s unclosed rg is named as a command (the slot), and a marker written there is no longer read" \
+      || bad "V6848-AC2u M7 SURVIVED — #991 AC-11 $(g22_fv "$JM22_7" '#991' AC-11), #990 AC-18 $(g22_fv "$JM22_7" '#990' AC-18)"
+  fi
+fi
+# M8 — card 3's read reverted to the whole-cell reading on both one-command lines.
+m22 "V6837-AC4r M8" g22-m8-whole-cell-threshold 2 's/threshold="\$\(designated_threshold "\$method" "\$limbs"\)"/threshold="$(extract_threshold "$method")"/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g22_run "$MUT_PATH"; JM22_8="$VRP_JSON"
+  if mutant_ran "V6837-AC4r M8"; then
+    [ "$(g22_fv "$JM22_8" '#992' AC-1)" = "per-issue/PASS" ] && [ "$(g22_obs "$JM22_8" '#992' AC-1)" = "count=2 (>= 1)" ] \
+      && ok "V6837-AC4r M8 detected — read from the whole cell, (k)'s violated null PASSes on the control arm's 'at least 1'" \
+      || bad "V6837-AC4r M8 SURVIVED — #992 AC-1 $(g22_fv "$JM22_8" '#992' AC-1) '$(g22_obs "$JM22_8" '#992' AC-1)'"
+  fi
+fi
+# M9 — the lint's scope-branch limb count removed: a scope CIAC beside a tool lints CLEAN.
+m22 "V6848-AC2u M9" g22-m9-no-scope-limb-count 1 's/^      cl="\$\(command_list "\$method" "\$cmd" -\)"; if .*$/      :/'
+if [ "$MUT_TOOK" = 1 ]; then
+  lint_run "$MUT_PATH" "$FIX_READER"
+  [ "$(lint_of "$LINT_OUT" CIAC-4)" = "CLEAN -" ] \
+    && ok "V6848-AC2u M9 detected — without the scope branch's count (h) lints CLEAN while the grader reads the slot" \
+    || bad "V6848-AC2u M9 SURVIVED — CIAC-4 lint '$(lint_of "$LINT_OUT" CIAC-4)'"
+fi
+# M10 — the declared row's binding removed: the exit status grades a row whose comparator the reader holds.
+m22 "V6837-AC4r M10" g22-m10-no-declared-binding 1 's/^        if \[ "\$op" = .-. \] && \[ "\$nread" -gt 0 \].*$/        : ;;/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g22_run "$MUT_PATH"; JM22_10="$VRP_JSON"
+  if mutant_ran "V6837-AC4r M10"; then
+    g22_slot "$JM22_10" '#990' AC-15 && g22_has "$JM22_10" '#990' AC-15 "limb 1 grep PASS command-succeeded" && g22_slot "$JM22_10" '#990' AC-19 \
+      && ok "V6837-AC4r M10 detected — without the declared row's binding the exit status grades (k2): AC-15 lists 'grep PASS command-succeeded' for a count that fails its comparator, and AC-19's FAIL becomes the slot" \
+      || bad "V6837-AC4r M10 SURVIVED — #990 AC-15 $(g22_fv "$JM22_10" '#990' AC-15) '$(g22_obs "$JM22_10" '#990' AC-15)'; AC-19 $(g22_fv "$JM22_10" '#990' AC-19)"
+  fi
+fi
+# M11 — the grep and awk kin taken out of the catalog: rg with no option is prose again.
+m22 "V6848-AC2u M11" g22-m11-no-catalog-kin 1 's/ awk gawk mawk nawk sed / awk gawk sed /' "s/ rg ugrep egrep fgrep pcregrep'\$/'/"
+if [ "$MUT_TOOK" = 1 ]; then
+  g22_run "$MUT_PATH"; JM22_11="$VRP_JSON"
+  if mutant_ran "V6848-AC2u M11"; then
+    [ "$(g22_fv "$JM22_11" '#991' AC-8)" = "per-issue/PASS" ] && [ "$(g22_fv "$JM22_11" '#991' AC-5)" = "per-issue/SKIP" ] \
+      && ok "V6848-AC2u M11 detected — without the catalogued kin (a)'s option-less rg reads PASS beside the probe, and (f2)'s lone rg the no-command SKIP" \
+      || bad "V6848-AC2u M11 SURVIVED — #991 AC-8 $(g22_fv "$JM22_11" '#991' AC-8), AC-5 $(g22_fv "$JM22_11" '#991' AC-5)"
+  fi
+fi
+# M12 — the router reads the whole method again: the scope row routes on a comparator its handler is denied.
+m22 "V6837-AC4r M12" g22-m12-router-reads-reader-text 1 's/\[ -n "\$\(limb_comparator "\$\(reader_limb_strip "\$method"\)"\)" \] \|\| return 1/[ -n "$(limb_comparator "$method")" ] || return 1/'
+if [ "$MUT_TOOK" = 1 ]; then
+  g22_run "$MUT_PATH"; JM22_12="$VRP_JSON"
+  if mutant_ran "V6837-AC4r M12"; then
+    [ "$(g20_fv "$JM22_12" '#991' AC-13 family)" = "scope" ] && [ "$(g22_fv "$JM22_12" '#991' AC-13)" != "unrunnable/UNRUNNABLE" ] \
+      && ok "V6837-AC4r M12 detected — with the router reading the reader's comparator (j)'s last row routes to scope and is graded on nothing it states ($(g22_fv "$JM22_12" '#991' AC-13))" \
+      || bad "V6837-AC4r M12 SURVIVED — #991 AC-13 $(g22_fv "$JM22_12" '#991' AC-13) '$(g22_obs "$JM22_12" '#991' AC-13)'"
+  fi
+fi
+# M13 — the recognizer narrowed to the one exact spelling: the near-misses pass again.
+m22 "V6837-AC4r M13" g22-m13-exact-spelling-only 1 "s/^readonly READER_MARK_RE=.*\$/readonly READER_MARK_RE='\\\\[[Rr][Ee][Aa][Dd][Ee][Rr]-[Gg][Rr][Aa][Dd][Ee][Dd]'/"
+if [ "$MUT_TOOK" = 1 ]; then
+  g22_run "$MUT_PATH"; JM22_13="$VRP_JSON"
+  if mutant_ran "V6837-AC4r M13"; then
+    [ "$(g22_fv "$JM22_13" '#990' AC-20)" = "per-issue/PASS" ] && [ "$(g22_fv "$JM22_13" '#990' AC-21)" = "per-issue/PASS" ] \
+       && [ "$(g22_fv "$JM22_13" '#990' AC-22)" = "per-issue/PASS" ] && g22_slot "$JM22_13" '#990' AC-1 \
+      && ok "V6837-AC4r M13 detected — keyed on one exact spelling, (g2)'s near-misses read PASS while the exact marker still declares" \
+      || bad "V6837-AC4r M13 SURVIVED — #990 AC-20 $(g22_fv "$JM22_13" '#990' AC-20), AC-21 $(g22_fv "$JM22_13" '#990' AC-21), AC-22 $(g22_fv "$JM22_13" '#990' AC-22), AC-1 $(g22_fv "$JM22_13" '#990' AC-1)"
+  fi
+fi
+# M14 — the bare upper-case word no longer read: the author's own declaration is invisible again.
+m22 "V6837-AC4r M14" g22-m14-no-bare-word 1 "s/^readonly READER_MARK_ALIAS=.*\$/readonly READER_MARK_ALIAS='READER-GRADED-NOT-READ'/"
+if [ "$MUT_TOOK" = 1 ]; then
+  g22_run "$MUT_PATH"; JM22_14="$VRP_JSON"
+  if mutant_ran "V6837-AC4r M14"; then
+    [ "$(g22_fv "$JM22_14" '#990' AC-27)" = "per-issue/PASS" ] && g22_slot "$JM22_14" '#990' AC-1 \
+      && ok "V6837-AC4r M14 detected — without the bare word (d2)'s author-declared row reads PASS while the bracket form still declares" \
+      || bad "V6837-AC4r M14 SURVIVED — #990 AC-27 $(g22_fv "$JM22_14" '#990' AC-27), AC-1 $(g22_fv "$JM22_14" '#990' AC-1)"
+  fi
+fi
+rm -rf "$MUTD22" "$SEAMD22" "$G22D"
 
 # ---------------------------------------------------------------------------
 # Summary
