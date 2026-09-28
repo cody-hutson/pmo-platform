@@ -1403,6 +1403,91 @@ SL_ACCEPT
   esac
   echo "self-test: scope-lock identity rule OK (11 listed + 1 no-actor reject arms / 9 accept arms; write-path wiring: a stage-6 lock refused, the stage-5 operator lock reaches the append step)"
 
+  # ─── Row-identity rules — the Stage-9 verdict identity ───────────────────
+  # REJECT (sensitivity): every live off-identity shape of the two Stage-9 verdict
+  # subtypes, spoke- and skill-actored rows at stage 9, a zero-padded stage, and a call
+  # with no actor. ACCEPT (specificity): the legitimate shape of each subtype, and other
+  # subtypes and classes at the rejected shapes — the arm is keyed on the (type,
+  # subtype) pair, never on the stage or actor alone. Both counts are asserted.
+  _go_n=0
+  while IFS=' ' read -r _go_es _go_st _go_ac; do
+    [[ -n "$_go_es" ]] || continue
+    if ( validate_row_identity "$_go_st" gate-outcome "$_go_es" "milestone:#1" "$_go_ac" ) 2>/dev/null; then
+      die "self-test: Stage-9 verdict identity — gate-outcome/$_go_es at stage $_go_st by $_go_ac must be REJECTED"
+    fi
+    _go_n=$((_go_n + 1))
+  done <<'GO_REJECT'
+plan-review-go 4 operator
+plan-review-go 5 operator
+plan-review-go 5 hub
+plan-review-go 7 hub
+plan-review-go 8 hub
+plan-review-go 9 hub
+plan-review-go 12 operator
+plan-review-go 12 hub
+plan-review-go 13 operator
+plan-review-go 13 hub
+plan-review-go 9 spoke:#1
+plan-review-go 9 skill:release-hub
+plan-review-go 09 operator
+plan-review-no-go 8 hub
+plan-review-no-go 9 hub
+plan-review-no-go 12 operator
+GO_REJECT
+  [[ "$_go_n" -eq 16 ]] || die "self-test: Stage-9 verdict identity reject list ran $_go_n arms, expected 16"
+  for _go_es in plan-review-go plan-review-no-go; do
+    if ( validate_row_identity 9 gate-outcome "$_go_es" "milestone:#1" ) 2>/dev/null; then
+      die "self-test: Stage-9 verdict identity — a gate-outcome/$_go_es call with no actor must be REJECTED (the arm fails closed)"
+    fi
+  done
+  _go_n=0
+  while IFS=' ' read -r _go_st _go_et _go_es _go_ac; do
+    [[ -n "$_go_st" ]] || continue
+    ( validate_row_identity "$_go_st" "$_go_et" "$_go_es" "milestone:#1" "$_go_ac" ) 2>/dev/null \
+      || die "self-test: Stage-9 verdict identity — stage $_go_st $_go_et/$_go_es by $_go_ac must be ACCEPTED"
+    _go_n=$((_go_n + 1))
+  done <<'GO_ACCEPT'
+9 gate-outcome plan-review-go operator
+9 gate-outcome plan-review-no-go operator
+9 gate-outcome plan-review-readiness-scan hub
+9 gate-outcome goal-conformance hub
+7 gate-outcome dt-pass hub
+7 gate-outcome dt-conditional-pass spoke:#1
+7 gate-outcome dt-return hub
+8 gate-outcome qa-acceptance hub
+8 gate-outcome qa-rejection spoke:#1
+6 gate-outcome g1-g2 hub
+12 gate-outcome g3-release-readiness operator
+4 decision scope-lock operator
+5 decision scope-lock operator
+12 decision d-class operator
+13 decision action-item-resolved operator
+GO_ACCEPT
+  [[ "$_go_n" -eq 15 ]] || die "self-test: Stage-9 verdict identity accept list ran $_go_n arms, expected 15"
+  # Write-path wiring: the rule fires on the write path, not only in the function.
+  _go_e2e() { /bin/bash "${BASH_SOURCE[0]}" --dry-run --version selftest-sentinel-release \
+      --stage "$2" --event-type gate-outcome --event-subtype "$1" --actor "$3" \
+      --subject 'milestone:#1' --reversibility MODERATE --outcome resolved --payload 'ms:#1; verdict:self-test' 2>&1; }
+  for _go_case in 'plan-review-go 7 hub' 'plan-review-no-go 8 hub'; do
+    read -r _go_es _go_st _go_ac <<<"$_go_case"
+    if _go_out="$(_go_e2e "$_go_es" "$_go_st" "$_go_ac")"; then
+      die "self-test: Stage-9 verdict identity — a stage-$_go_st $_go_ac $_go_es dry-run exited 0; the rule is not wired"
+    fi
+    case "$_go_out" in
+      *"Row identity:"*) : ;;
+      *) die "self-test: Stage-9 verdict identity — the stage-$_go_st $_go_ac $_go_es emit failed on another rule: $_go_out" ;;
+    esac
+  done
+  for _go_es in plan-review-go plan-review-no-go; do
+    _go_out="$(_go_e2e "$_go_es" 9 operator)" \
+      || die "self-test: Stage-9 verdict identity — the stage-9 operator $_go_es was rejected (is the actor passed to validate_row_identity?): $_go_out"
+    case "$_go_out" in
+      *"[DRY-RUN] would append row:"*) : ;;
+      *) die "self-test: Stage-9 verdict identity — the stage-9 operator $_go_es did not reach the append step: $_go_out" ;;
+    esac
+  done
+  echo "self-test: Stage-9 verdict identity rule OK (16 listed + 2 no-actor reject arms / 15 accept arms; write-path wiring: a stage-7 hub GO and a stage-8 hub NO-GO refused, the stage-9 operator GO and NO-GO reach the append step)"
+
   # ─── Payload row-integrity: positive (multi-value) ───
   _pi_ok() { case "$1" in *$'\n'*|*$'\r'*) return 1;; esac
              case "$1 |" in *" | "*) return 1;; esac

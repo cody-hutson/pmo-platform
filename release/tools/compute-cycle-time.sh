@@ -144,6 +144,25 @@ print(int(delta.total_seconds()))
 PY
 }
 
+# ─── T_GO anchor selection ───────────────────────────────────────────────────
+# The full identity, never the subtype alone: gate-outcome / plan-review-go /
+# stage "9" (a STRING — the writer rejects 09 as octal) / actor operator.
+# go_anchor_ts keeps the earliest ts_iso (fixed-width UTC, string compare) in one
+# awk process. Factored out so group CG grades predicate AND reduction. Field map:
+# $3 stage, $4 event_type, $5 event_subtype, $6 actor.
+select_go_anchor_rows() {
+  /usr/bin/awk -F ' \\| ' '$5 == "plan-review-go" { print }'
+}
+
+go_anchor_ts() {
+  select_go_anchor_rows | /usr/bin/awk -F ' \\| ' '{ t = $1; sub(/^\| /, "", t); if (m == "" || t < m) m = t } END { if (m != "") print m }'
+}
+
+# t_go_na_reason <release> — the T_GO half of the N/A diagnostic.
+t_go_na_reason() {
+  /usr/bin/awk -v rel="$1" 'END { printf "no gate-outcome/plan-review-go event for %s", rel }'
+}
+
 # ─── T_DEPLOY anchor-row selection (#4215) ───────────────────────────────────
 #
 # Reads pipe-delimited event rows on stdin, echoes only those eligible to anchor
@@ -508,6 +527,108 @@ ROWS
   [[ -n "$_u_last" && "$RESULT" == "$_u_last" ]] \
     || die "self-test: U-1 --help must end on the header's last comment line ('$_u_last'), got '$RESULT': fix usage()"
 
+  # ─── Group CG — T_GO anchor identity ───────────────────────────────────────
+  # Predicate AND reduction via the main flow's go_anchor_ts, then the N/A reason and
+  # the read that feeds both. Each arm is paired with the mutation that must turn it
+  # red: deleting a term of the identity turns its arm red (CG-4 stage, CG-5 actor,
+  # CG-6 subtype) and CG-2 with it; MAX in place of MIN fails CG-2; a reason that
+  # collapses the identity miss into the no-rows cause fails CG-9, and one that
+  # rewords the no-rows cause fails CG-10; swallowing the query tool's failure at the
+  # T_GO read fails CG-11, and at either read fails CG-12.
+  CG_ROWS="$(/bin/cat <<'ROWS'
+| 2026-01-03T09:00:00Z | slug-g | 7 | gate-outcome | plan-review-go | hub | issue:#1 | CHEAP | resolved | p |
+| 2026-01-03T09:30:00Z | slug-g | 4 | gate-outcome | plan-review-go | operator | milestone:#1 | MODERATE | resolved | p |
+| 2026-01-03T09:45:00Z | slug-g | 9 | gate-outcome | plan-review-go | hub | milestone:#1 | CHEAP | resolved | p |
+| 2026-01-03T09:50:00Z | slug-g | 9 | gate-outcome | goal-conformance | operator | milestone:#1 | MODERATE | resolved | p |
+| 2026-01-03T10:00:00Z | slug-g | 9 | gate-outcome | plan-review-go | operator | milestone:#1 | MODERATE | resolved | p |
+| 2026-01-03T11:00:00Z | slug-g | 12 | gate-outcome | plan-review-go | operator | milestone:#1 | MODERATE | resolved | p |
+| 2026-01-03T12:00:00Z | slug-g | 9 | gate-outcome | plan-review-go | operator | milestone:#1 | MODERATE | resolved | p |
+ROWS
+)"
+  # CG-1 SENSITIVITY: exactly the 2 operator Stage-9 GO rows are kept.
+  RESULT="$(printf '%s\n' "$CG_ROWS" | select_go_anchor_rows | /usr/bin/grep -c . || true)"
+  [[ "$RESULT" == "2" ]] || die "self-test: CG-1 expected the 2 operator Stage-9 GO rows, got $RESULT"
+  # CG-2 THE DEFECT ARM: the earliest row OF THE IDENTITY (10:00) — not the earliest of
+  #      the subtype (09:00, a hub Stage-7 verdict), not the latest identity row (12:00).
+  RESULT="$(printf '%s\n' "$CG_ROWS" | go_anchor_ts)"
+  [[ "$RESULT" == "2026-01-03T10:00:00Z" ]] || die "self-test: CG-2 T_GO must be the earliest identity row (10:00:00Z), got '$RESULT'"
+  # CG-3 NEGATIVE CONTROL: a subtype-only selector DERIVED FROM THE SHIPPED SOURCE by an
+  #      asserted transform anchors on the hub Stage-7 row, so CG-2's value is the
+  #      identity biting. A transform that leaves the stage term in place ABORTS the arm.
+  _cg_src="$(declare -f select_go_anchor_rows)"
+  _cg_sub="$(/usr/bin/printf '%s\n' "$_cg_src" \
+    | /usr/bin/sed -e 's/select_go_anchor_rows/_cg_subtype_only_selector/' \
+                   -e 's/\$4 == "gate-outcome" && //' \
+                   -e 's/ && \$3 == "9" && \$6 == "operator"//')"
+  if [[ "$_cg_sub" == "$_cg_src" ]] || /usr/bin/grep -qF -- '$3 == "9"' <<<"$_cg_sub"; then
+    die "self-test: CG-3 transform did not bite the shipped source — repair the arm, never silence it"
+  fi
+  eval "$_cg_sub"
+  RESULT="$(printf '%s\n' "$CG_ROWS" | _cg_subtype_only_selector \
+            | /usr/bin/awk -F ' \\| ' '{ t = $1; sub(/^\| /, "", t); if (m == "" || t < m) m = t } END { print m }')"
+  [[ "$RESULT" == "2026-01-03T09:00:00Z" ]] || die "self-test: CG-3 NEGATIVE CONTROL a subtype-only selector must anchor on the hub Stage-7 row (09:00:00Z), got '$RESULT'"
+  unset -f _cg_subtype_only_selector
+  # CG-4 STAGE TERM: operator rows at stages 4 and 12 are not anchors.
+  RESULT="$(printf '%s\n' "$CG_ROWS" | select_go_anchor_rows | /usr/bin/grep -cF -e ' | 4 | gate-outcome ' -e ' | 12 | gate-outcome ' || true)"
+  [[ "$RESULT" == "0" ]] || die "self-test: CG-4 a non-stage-9 row anchored, got $RESULT"
+  # CG-5 ACTOR TERM: a hub row at stage 9 is not an anchor.
+  RESULT="$(printf '%s\n' "$CG_ROWS" | select_go_anchor_rows | /usr/bin/grep -cF ' | hub | ' || true)"
+  [[ "$RESULT" == "0" ]] || die "self-test: CG-5 a hub row anchored, got $RESULT"
+  # CG-6 SUBTYPE TERM: another gate-outcome at the same identity is not an anchor.
+  RESULT="$(printf '%s\n' "$CG_ROWS" | select_go_anchor_rows | /usr/bin/grep -cF 'goal-conformance' || true)"
+  [[ "$RESULT" == "0" ]] || die "self-test: CG-6 another subtype anchored, got $RESULT"
+  # CG-7 SPECIFICITY: no identity row -> no T_GO (the main flow then names its N/A).
+  RESULT="$(printf '%s\n' "$CG_ROWS" | /usr/bin/grep -vF '| 9 | gate-outcome | plan-review-go | operator |' | go_anchor_ts)"
+  [[ -z "$RESULT" ]] || die "self-test: CG-7 no identity row must yield no T_GO, got '$RESULT'"
+  # CG-8 CONTROL: a single-row release is unchanged.
+  RESULT="$(printf '%s\n' '| 2026-01-04T10:00:00Z | slug-h | 9 | gate-outcome | plan-review-go | operator | milestone:#2 | MODERATE | resolved | p |' | go_anchor_ts)"
+  [[ "$RESULT" == "2026-01-04T10:00:00Z" ]] || die "self-test: CG-8 single-row control changed, got '$RESULT'"
+  # CG-9 THE IDENTITY MISS HAS ITS OWN REASON: plan-review-go rows exist and none carries
+  #      the identity (CG-7's input, 4 GO rows). The reason names the count and the
+  #      identity, as observed under the join keys, and differs from the no-rows cause.
+  #      It carries neither "; " nor "|", which would split the caller's joined line.
+  RESULT="$(printf '%s\n' "$CG_ROWS" | /usr/bin/grep -vF '| 9 | gate-outcome | plan-review-go | operator |' | t_go_na_reason "slug-g")"
+  [[ "$RESULT" == "4 gate-outcome/plan-review-go row(s) exist for slug-g but NONE is the Stage-9 GO anchor (stage 9, actor operator)"* \
+     && "$RESULT" == *"under the join keys of this release"* ]] \
+    || die "self-test: CG-9 an identity miss must name its count and the Stage-9 GO identity, as observed under the join keys, got '$RESULT'"
+  [[ "$RESULT" != *"; "* && "$RESULT" != *"|"* && "$RESULT" != *"did not succeed"* ]] \
+    || die "self-test: CG-9 the identity-miss reason carries '; ', '|' or 'did not succeed': '$RESULT'"
+  # CG-10 THE NO-ROWS CAUSE IS KEPT BYTE-FOR-BYTE: gate-outcome rows of other subtypes
+  #       only, and then no rows at all, both read exactly as the reason always has.
+  RESULT="$(printf '%s\n' "$CG_ROWS" | /usr/bin/grep -F 'goal-conformance' | t_go_na_reason "slug-g")"
+  [[ "$RESULT" == "no gate-outcome/plan-review-go event for slug-g" ]] \
+    || die "self-test: CG-10 no plan-review-go row must read exactly 'no gate-outcome/plan-review-go event for slug-g', got '$RESULT'"
+  RESULT="$(/usr/bin/printf '' | t_go_na_reason "slug-g")"
+  [[ "$RESULT" == "no gate-outcome/plan-review-go event for slug-g" ]] \
+    || die "self-test: CG-10 no rows at all must read exactly 'no gate-outcome/plan-review-go event for slug-g', got '$RESULT'"
+  # CG-11 THE T_GO READ CHECKS THE QUERY TOOL'S OWN EXIT STATUS: with the event log
+  #       missing, the tool runs as a child process against an empty evals directory and
+  #       must exit 1 naming the gate-outcome read, with no Cycle-Time line. A read that
+  #       swallowed the failure would leave T_GO empty and die later, at the T_DEPLOY
+  #       read, naming that read instead.
+  _cg_evals="$(/usr/bin/mktemp -d)"
+  _cg_rc=0
+  _cg_out="$(EVALS_RESULTS_PATH="$_cg_evals" /bin/bash "${BASH_SOURCE[0]}" --version slug-g 2>&1)" || _cg_rc=$?
+  /bin/rmdir "$_cg_evals"
+  [[ "$_cg_rc" -eq 1 && "$_cg_out" == *"reading the gate-outcome rows"* && "$_cg_out" != *"Cycle-Time: N/A"* ]] \
+    || die "self-test: CG-11 with the event log missing the tool must exit 1 at the gate-outcome read, with no Cycle-Time line; got rc $_cg_rc: '$_cg_out'"
+  # CG-12 EVERY QUERY-TOOL READ CHECKS ITS EXIT STATUS, read from this file's source:
+  #       each main-flow read assignment is followed by the die that names the failure.
+  #       CG-11 and CR-10 exercise the reads end to end, but with one log both fail at the
+  #       first read, so the later read's check is visible only here. A count under 2
+  #       means the probe found neither read, which is a broken probe, not a pass.
+  _cg_reads="$(/usr/bin/awk '
+      /^[A-Z_]+="\$\("\$QUERY_TOOL" --release / { r++; pend = 1; next }
+      pend { if ($0 ~ /^  \|\| die "query-pipeline-event\.sh exited /) g++; pend = 0 }
+      END { printf "%d %d", r, g }' "${BASH_SOURCE[0]}")"
+  read -r _cg_r _cg_g <<<"$_cg_reads"
+  [[ "$_cg_r" -ge 2 ]] || die "self-test: CG-12 found $_cg_r query-tool read(s) in the main flow, expected at least 2 (T_GO and T_DEPLOY): the probe is broken, repair it"
+  [[ "$_cg_g" -eq "$_cg_r" ]] || die "self-test: CG-12 $((_cg_r - _cg_g)) of $_cg_r query-tool read(s) do not check the tool's own exit status: a read that never happened would publish as a measured absence"
+  # HELP-1: --help carries the T_GO identity contract. U-1 already asserts that --help
+  #         renders the whole header, so this arm asserts only the contract's content.
+  _help_out="$(usage)"
+  [[ "$_help_out" == *"Stage-9 GO rows"* ]] || die "self-test: HELP-1 --help does not carry the T_GO identity contract ('Stage-9 GO rows')"
+
   echo "self-test: PASS"
   echo "  ISO8601 delta arithmetic validated"
   echo "  human formatter validated (sub-hour, over-hour, exact-hour, zero)"
@@ -517,6 +638,7 @@ ROWS
   echo "    CT-1 SENSITIVITY the selector keeps 2 resolved target rows / CT-2 an escalated deploy row is NOT an anchor (the defect: a totally-failed deploy used to yield a measured duration) / CT-3 deploy-package is audit-only, never an anchor (declared narrowing) / CT-3b NEGATIVE CONTROL a selector widened to admit deploy-package — derived from the shipped source by an asserted transform, never transcribed — DOES keep that row, so CT-3's zero is the narrowing biting rather than an inert probe / CT-4 outcome=pending is excluded — the conjunct is an allowlist on resolved, not a denylist on escalated / CT-5 MAX is taken over the ELIGIBLE set, so a later ineligible row cannot move the anchor forward / CT-6 SPECIFICITY a non-eligible-only population selects nothing"
   echo "  T_DEPLOY N/A reason accounts for every row (#5553, group CR): CR-1..CR-6 package-only / skill-bearing control / rules-mirror-only / PRF-1 survives / no rows / totality, each non-anchor subtype named with its outcome and producer tally (deploy emitter or hand-written) and no reason carrying '; ' or '|'; CR-7 partition = selector; CR-8 partition = schema enum; CR-9 partition = the DORA read-model's anchor tuple; CR-10 an unreadable event log exits 1, never a published N/A"
   echo "  --help prints the whole header (U-1)"
+  echo "  T_GO anchor identity validated (group CG): CG-1 SENSITIVITY the 2 operator Stage-9 GO rows are kept / CG-2 T_GO = the earliest row OF THE IDENTITY / CG-3 NEGATIVE CONTROL a subtype-only selector derived from the shipped source anchors on the hub Stage-7 row / CG-4 stage / CG-5 actor / CG-6 subtype term / CG-7 SPECIFICITY no identity row, no T_GO / CG-8 CONTROL a single-row release is unchanged / CG-9 an identity miss names its count and the identity as observed under the join keys / CG-10 the no-rows reason is kept byte-for-byte / CG-11 an unreadable log exits 1 at the T_GO read / CG-12 every query-tool read checks the tool's own exit status; HELP-1 --help carries the T_GO identity contract"
   exit 0
 fi
 
