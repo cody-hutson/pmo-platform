@@ -9,10 +9,20 @@
 # Per the Stage 5 spec.
 #
 # Cycle time = T_DEPLOY - T_GO, where:
-#   T_GO     = MIN(ts_iso) of gate-outcome/plan-review-go events for the release
+#   T_GO     = MIN(ts_iso) of the release's Stage-9 GO rows: gate-outcome/
+#              plan-review-go events at stage 9 whose actor is operator
 #   T_DEPLOY = MAX(ts_iso) of deployment-status/deploy-skill or deploy-harness
 #              events for the release THAT CARRY outcome=resolved
 # Both anchors source the ts_iso field per pipeline-event-log-schema.md § 2.
+#
+# WHY T_GO IS SELECTED BY IDENTITY, NOT BY MIN OVER THE SUBTYPE. plan-review-go
+# was also written for outcomes that authorize nothing (Stage-7/8 verdicts, Stage-4
+# plan approvals, Stage-12 execute authorizations, stage-completion notes), and MIN
+# over the subtype anchored T_GO on the earliest: a positive, plausible duration
+# every check here passes. The authorization is identified by who rendered it and
+# where — actor operator, stage 9. No row of that identity -> N/A with its own
+# reason, never a subtype fallback. The writer refuses the subtype elsewhere; older
+# rows are historical and inert here.
 #
 # WHY T_DEPLOY REQUIRES outcome=resolved (#4215). A deploy in which every target
 # FAILED is not a deploy. Before this conjunct existed, a release whose deploy rows
@@ -64,8 +74,9 @@
 # The cutover release itself: exempt. This script does not gate by version — caller honors cutover.
 #
 # Exit codes:
-#   0 = success (rows may produce N/A — legitimate result for content-only releases
-#       or pre-instrumentation-fill state)
+#   0 = success — a value, or N/A with its reason on stderr: a legitimate result
+#       when an anchor cannot be resolved (deployment-cycle-time.md § 2.1 for T_GO,
+#       § 4 for T_DEPLOY)
 #   1 = invalid args / log file missing
 #   2 = malformed row (ts_iso parse failure — pipeline-event-log integrity violation,
 #       escalate)
@@ -151,7 +162,7 @@ PY
 # awk process. Factored out so group CG grades predicate AND reduction. Field map:
 # $3 stage, $4 event_type, $5 event_subtype, $6 actor.
 select_go_anchor_rows() {
-  /usr/bin/awk -F ' \\| ' '$5 == "plan-review-go" { print }'
+  /usr/bin/awk -F ' \\| ' '$4 == "gate-outcome" && $5 == "plan-review-go" && $3 == "9" && $6 == "operator" { print }'
 }
 
 go_anchor_ts() {
@@ -159,8 +170,25 @@ go_anchor_ts() {
 }
 
 # t_go_na_reason <release> — the T_GO half of the N/A diagnostic.
+#   Reads the release's gate-outcome rows on stdin (query-pipeline-event.sh layout)
+#   and echoes ONE reason, no trailing separator. Called only when go_anchor_ts found
+#   no row of the Stage-9 GO identity. Two causes, two distinct reasons:
+#     none      no plan-review-go row under this release's join keys: the reason this
+#               tool has always printed, kept byte-for-byte;
+#     identity  plan-review-go rows exist, and none carries stage 9 and actor operator.
+#   The identity miss is worded as what the tool observed under its join keys, never
+#   as a cause: a legacy release's Stage-9 GO can sit under a key the schema's § 2a
+#   ladder does not reach, so "no row found here carries the identity" is the fact,
+#   and "the GO was never rendered" might not be.
+#   A reason never contains "; " or a "|" — the caller joins the T_GO and T_DEPLOY
+#   halves with "; ", and the close-out carries the line verbatim.
 t_go_na_reason() {
-  /usr/bin/awk -v rel="$1" 'END { printf "no gate-outcome/plan-review-go event for %s", rel }'
+  /usr/bin/awk -F ' \\| ' -v rel="$1" '
+    /^\| [0-9]/ && $4 == "gate-outcome" && $5 == "plan-review-go" { n++ }
+    END {
+      if (n == 0) { printf "no gate-outcome/plan-review-go event for %s", rel; exit }
+      printf "%d gate-outcome/plan-review-go row(s) exist for %s but NONE is the Stage-9 GO anchor (stage 9, actor operator): of the rows found under the join keys of this release, none was written at stage 9 by operator. A row at another stage or under another actor authorizes no release, and this is NOT the same as no GO row having been emitted", n, rel
+    }'
 }
 
 # ─── T_DEPLOY anchor-row selection (#4215) ───────────────────────────────────
@@ -413,8 +441,10 @@ ROWS
   # widening the selector alone turns CR-7 red; a partition that differs from the schema's
   # enum turns CR-8 red; widening TD_ANCHOR_SUBTYPES alone turns CR-1 red first, through the
   # INTERNAL disagreement reason; a DORA anchor tuple that differs turns CR-9 red; swallowing
-  # the query tool's failure again turns CR-10 red. A reason that carried "; " or "|" would
-  # split the caller's joined line, so every reason arm asserts neither is present.
+  # the query tool's failure at both reads turns CR-10 red, and at either read alone CG-12
+  # (with one log both reads fail, so the first read's check is the one CR-10 observes). A
+  # reason that carried "; " or "|" would split the caller's joined line, so every reason
+  # arm asserts neither is present.
   _cr_row() { /usr/bin/printf '| 2026-01-03T09:00:%sZ | slug-x | 12 | deployment-status | %s | hub | x:y | CHEAP | %s | %s |' "$1" "$2" "$3" "${4:-p}"; }
   _cr_emit='target:x; module:core; mech:deploy.sh --deploy; result:SUCCESS; detail:none'
   CR_MIR="$(_cr_row 00 deploy-rules-mirror resolved "$_cr_emit")"; CR_SKL="$(_cr_row 10 deploy-skill resolved "$_cr_emit")"
@@ -649,9 +679,10 @@ fi
 # Query tool must exist
 [[ -x "$QUERY_TOOL" ]] || die "query-pipeline-event.sh missing or not executable at $QUERY_TOOL"
 
-# ─── Extract T_GO (earliest plan-review-go event for the release) ────────────
+# ─── Extract T_GO (the operator's Stage-9 GO: earliest row of that identity) ──
 
-# query-pipeline-event.sh filters event_type but not event_subtype; grep refines.
+# The query tool can filter the subtype, but the identity predicate stays in
+# go_anchor_ts so the self-test grades it.
 # Output schema (from query-pipeline-event.sh): header rows then data rows.
 # Data row: "| ts_iso | version | stage | event_type | event_subtype | ..."
 # --release, NOT --version. The release join key is the milestone SLUG
@@ -660,19 +691,21 @@ fi
 # then report N/A rather than erroring — a silent zero on the very metric the
 # tool exists to produce. --release resolves through the § 2a ladder and
 # accepts either form, so a legacy vX.Y argument still resolves.
-GATE_ROWS="$("$QUERY_TOOL" --release "$VERSION" --event-type gate-outcome 2>/dev/null | /usr/bin/grep -E '^\| [0-9]{4}-' || true)"
+# The query tool's OWN exit status is checked here as at the T_DEPLOY read below: a
+# read that never happened is not a measured absence, and publishing the no-rows
+# reason for it would state a fact nobody observed (exit 1 is the header's "log file
+# missing").
+GO_QUERY_OUT="$("$QUERY_TOOL" --release "$VERSION" --event-type gate-outcome 2>/dev/null)" \
+  || die "query-pipeline-event.sh exited $? reading the gate-outcome rows for $VERSION — the event log could not be read, so T_GO is not evaluated (run the query tool directly to see why)"
+GATE_ROWS="$(/usr/bin/printf '%s\n' "$GO_QUERY_OUT" | /usr/bin/grep -E '^\| [0-9]{4}-' || true)"
 T_GO=""
 if [[ -n "$GATE_ROWS" ]]; then
-  # Filter to plan-review-go subtype (field 5 in pipe-delimited row); take MIN(ts_iso)
-  PLAN_REVIEW_GO_ROWS="$(echo "$GATE_ROWS" | /usr/bin/awk -F ' \\| ' '$5 == "plan-review-go" { print }')"
-  if [[ -n "$PLAN_REVIEW_GO_ROWS" ]]; then
-    # ts_iso is $1, NOT $2. FS is " | " (space-pipe-space) and the row's leading
-    # "| " has no preceding space, so it is not a delimiter: $1 retains it and
-    # reads "| <ts_iso>", $2 is the VERSION column. Strip the leading "| " and
-    # take $1. (The $5 == subtype test above is already correct under this map.)
-    # Sort by ts_iso; take first (earliest).
-    T_GO="$(echo "$PLAN_REVIEW_GO_ROWS" | /usr/bin/awk -F ' \\| ' '{ t = $1; sub(/^\| /, "", t); print t }' | /usr/bin/sort | /usr/bin/head -1)"
-  fi
+  # ts_iso is $1, NOT $2. FS is " | " (space-pipe-space) and the row's leading
+  # "| " has no preceding space, so it is not a delimiter: $1 retains it and
+  # reads "| <ts_iso>", $2 is the VERSION column. Strip the leading "| " and
+  # take $1. (go_anchor_ts does both, and its identity terms read $3 to $6 under
+  # this map.)
+  T_GO="$(/usr/bin/printf '%s\n' "$GATE_ROWS" | go_anchor_ts)"
 fi
 
 # ─── Extract T_DEPLOY (latest deploy-skill OR deploy-harness event) ──────────
@@ -703,10 +736,13 @@ if [[ -z "$T_GO" || -z "$T_DEPLOY" ]]; then
   # Each N/A cause is a DIFFERENT FACT and is reported as such, in exactly one reason.
   # Collapsing any two would recreate, one layer up, an ambiguity already paid for:
   # "no deploy happened" vs "every deploy target failed" (#4215), and "every target
-  # failed" vs "the only rows are of subtypes that never anchor" (#5553). The T_DEPLOY
-  # causes live in t_deploy_na_reason, which accounts for every row it is handed.
+  # failed" vs "the only rows are of subtypes that never anchor" (#5553). The T_GO
+  # causes live in t_go_na_reason and the T_DEPLOY causes in t_deploy_na_reason, each
+  # accounting for every row it is handed.
   MISSING=""
-  [[ -z "$T_GO" ]] && MISSING="${MISSING}no gate-outcome/plan-review-go event for $VERSION; "
+  if [[ -z "$T_GO" ]]; then
+    MISSING="${MISSING}$(/usr/bin/printf '%s\n' "$GATE_ROWS" | t_go_na_reason "$VERSION"); "
+  fi
   if [[ -z "$T_DEPLOY" ]]; then
     MISSING="${MISSING}$(/usr/bin/printf '%s\n' "$DEPLOY_ROWS" | t_deploy_na_reason "$VERSION"); "
   fi

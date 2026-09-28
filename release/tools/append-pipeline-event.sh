@@ -575,6 +575,18 @@ validate_version_key() {
 # zero-padded form the stage check admits, and that reader reads a stage as its
 # integer value, so a lock written at 05 is the stage-5 lock to both. A call with
 # no actor is refused.
+#
+# Rule: a gate-outcome/plan-review-go or gate-outcome/plan-review-no-go row MUST
+# carry stage 9 and actor operator (pipeline-event-log-schema.md § 3, the Stage-9
+# verdict identity rule). Each records the operator's rendered Stage-9 verdict —
+# plan-review-go the GO, a GO WITH CONDITIONS included, and plan-review-no-go the
+# NO-GO — and compute-cycle-time.sh anchors T_GO on the earliest plan-review-go row
+# of that identity: borrowed rows inflated cycle time with no check noticing. The
+# stage is matched as ^9$ (the stage check refuses a zero-padded 09 as octal before
+# this runs), and a call with no actor is refused. The refusal opens with what the
+# subtype records, so a row that is not that verdict is re-typed rather than
+# relabelled with the passing stage and actor, and then names where each refused
+# class goes.
 validate_row_identity() {
   local stage="$1" event_type="$2" subtype="$3" subject="$4" actor="${5:-}" payload="${6:-}"
   case "$event_type/$subtype" in
@@ -614,6 +626,11 @@ validate_row_identity() {
     decision/scope-lock)
       if ! [[ "$stage" =~ ^0*[45]$ && "$actor" == "operator" ]]; then
         die "Row identity: a decision/scope-lock row records a gate's scope lock and must carry stage 4 (the plan approval) or stage 5 (the Collective Review) with actor operator; got stage '$stage', actor '$actor'. A change after the lock is written as a scope-change row (tier-1-adjust, tier-2-scope-change or tier-3-plan-rejection), not as a second lock (stage-04-planning.md § 11; stage-05-solutioning.md § 11)."
+      fi
+      ;;
+    gate-outcome/plan-review-go|gate-outcome/plan-review-no-go)
+      if ! [[ "$stage" =~ ^9$ && "$actor" == "operator" ]]; then
+        die "Row identity: gate-outcome/$subtype records only the operator's rendered Stage-9 verdict (plan-review-go the GO, a GO WITH CONDITIONS included; plan-review-no-go the NO-GO), written at stage 9 with actor operator; got stage '$stage', actor '$actor'. If this row is not that verdict, it is not this subtype at any stage or under any actor: do not re-emit it as stage 9 by operator. Where it goes instead: a Stage-7 Dev Testing verdict is dt-pass, dt-conditional-pass or dt-return; a Stage-8 QA verdict is qa-acceptance or qa-rejection; a Stage-4 plan approval or a Collective Review outcome is decision/scope-lock; a Stage-12 execute authorization is decision/d-class; a stage or milestone completion note is the sub-task comment alone, with no event row. Only the operator's own Stage-9 verdict, typed with another stage or actor, is re-emitted at stage 9 with actor operator (pipeline-event-log-schema.md § 3, the Stage-9 verdict identity rule)."
       fi
       ;;
   esac
@@ -1155,8 +1172,9 @@ if [[ "$SELF_TEST" == "true" ]]; then
   # not a failed test. Both counts are asserted, so an empty or truncated list
   # cannot pass vacuously. Fields are space-separated; the subject is the rest of
   # the line (one live subject is free text). Every call passes actor operator: the
-  # only arm that reads the actor is the scope-lock arm, whose one line here is the
-  # operator's Stage-4 plan approval; its own arms are in the scope-lock block below.
+  # arms that read the actor are the scope-lock arm, whose one line here is the
+  # operator's Stage-4 plan approval, and the Stage-9 verdict arm, which no line here
+  # reaches; their own arms are in the blocks below.
   _ri_n=0
   while IFS=' ' read -r _ri_st _ri_et _ri_es _ri_sj; do
     [[ -n "$_ri_st" ]] || continue
@@ -1566,6 +1584,7 @@ GO_ACCEPT
   echo "  § 2a release join key enforced: version-grammar values + unresolved tokens rejected, slugs accepted"
   echo "  row-identity rules enforced: a stage-4 decision/delegation row must carry a milestone:#N subject; a stage-4 decision/d-class row on a card must carry exactly one card-disposition:carried or card-disposition:removed segment"
   echo "  row-identity rules enforced: a decision/scope-lock row must carry stage 4 or 5 and actor operator"
+  echo "  row-identity rules enforced: a gate-outcome/plan-review-go or plan-review-no-go row must carry stage 9 and actor operator"
   echo "  positive + negative tests passed"
   echo "  append cycle confirmed on a private temp copy (log + write-log); live log never opened for write"
   exit 0
