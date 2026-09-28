@@ -256,6 +256,12 @@ EOF
     *) err "resolve-root returned a non-absolute root: '${CANONICAL_PLATFORM_ROOT}' (tier '${CANONICAL_PLATFORM_ROOT_SOURCE}')"; exit "${EX_NOCONFIG}" ;;
   esac
   readonly CANONICAL_PLATFORM_ROOT CANONICAL_PLATFORM_ROOT_SOURCE
+  # Report the binding, so a caller sees it rather than infers it. One line per run, on
+  # stderr, before any surface is written: the value any regenerated surface will carry
+  # for [PMO_PLATFORM_ROOT], the tier that supplied it, and the checkout whose TEMPLATES
+  # this run deploys. The value and the checkout differ by design when the run is
+  # invoked from a worktree.
+  info "Resolved [PMO_PLATFORM_ROOT] = ${CANONICAL_PLATFORM_ROOT} (source: ${CANONICAL_PLATFORM_ROOT_SOURCE}); templates are read from ${REPO_ROOT}"
 }
 
 # --- Phase 2: Schema migration ---
