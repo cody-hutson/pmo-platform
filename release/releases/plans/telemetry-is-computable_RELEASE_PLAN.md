@@ -548,6 +548,7 @@ So a Stage-9 G-PR8 read against the pin sees those commits as divergence that to
 
 - **Stage 4 (at the pin):** 1 open PR, #7638 (`egress-hook-batch`); its files ∩ this matrix = ∅ for every unconditional row.
 - **At Commit 0:** 2 open PRs (`gh pr list --state open --limit 500` → 2 rows), both release siblings — § In-Flight Release Roster. `egress-hook-batch` merged as `v4.69` (PR #7638, merge `40cec0c7`) with its Stage-12 and Stage-13 chores (#7867, #7888) — none of their files is a matrix path (probe above).
+- **At slice 7 (2026-09-28):** 6 open PRs, this one among them; `main` is still `35dbf418`. Four share a path with this branch — PR #7919, PR #7895, PR #7931 and PR #7839 — and PR #8004 shares none. An in-memory trial merge of the branch head with each of the four: three merge clean, and PR #7919 conflicts on four paths, each resolution named in § Contention Map.
 
 ### Structural sub-audit
 
@@ -1060,11 +1061,9 @@ The AFTER statement's residuals that this release does not cover (scope-lock dec
 
 ### Outcome
 
-**Every event-log telemetry value this release touches is now computed, or is an explicit N/A that names its own reason.** Before this release, several read-models collapsed different facts into one bare value. The close-class indicators read N/A on every release, whether the caller omitted the register or the register was genuinely absent. The cycle-time tool anchored its GO time on any `plan-review-go` row — a hub verdict at stage 7 as readily as the operator's Stage-9 GO — and dropped a package-only or rules-mirror-only deploy from its deploy time while calling the release a deploy that "did not succeed". The close-out then threw the tool's reason away and carried a bare N/A. Each of those is fixed at its source, and each new N/A says why.
+**Every event-log telemetry value this release touches is now computed, or is an explicit N/A that names its own reason.** The close-class indicators tell a caller's omission from an absent register; cycle time anchors its GO on the operator's Stage-9 GO alone and its deploy on resolved deploy rows alone, naming every excluded subtype; the close-out carries the tool's own reason instead of a bare N/A; the front-cluster indicators read the populations they name; and C4 joins action items on (release, id), so one release's `AI-001` no longer answers for another's.
 
-**The Stage-9 verdict that anchors cycle time is now written where it is rendered, and checked where it is written.** The Stage 9 spec gains Phase C1: the decision record and the verdict's `gate-outcome` row — stage 9, actor operator, `plan-review-go` for GO and GO WITH CONDITIONS and `plan-review-no-go` for NO-GO — are one action, and the row is read back, typed to its class, before the gate sub-task closes. The event writer refuses either subtype at any other stage or actor, so a borrowed verdict row fails its read-back instead of landing. A missing row is recorded, never backfilled, because its timestamp is the GO time; Check 61's remedy text now says so at all four sites in this release's write set.
-
-**The writer gates three more identities, and the front-cluster indicators read the population they name.** The plan-survival indicator counts only cards carrying a per-issue Stage-4 gate decision; the Collective Review indicators bind to the scope-lock's identity; and the writer refuses a stage-4 delegation on a sub-task subject, a card decision without its disposition, and a scope-lock anywhere but stage 4 or 5 by operator. The C4 integrity check joins action items on (release, id), so one release's `AI-001` no longer answers for another's. Check 48's Close-Class-Telemetry sub-check, which shipped inert, is armed at `v4.55`.
+**The Stage-9 verdict that anchors cycle time is written where it is rendered and checked where it is written.** Phase C1 makes the decision record and the verdict's `gate-outcome` row (stage 9, actor operator) one action with a typed read-back, the writer refuses either verdict subtype at any other stage or actor, and a missing row is recorded, never backfilled — which Check 61's remedy text now says at all four sites in this release's write set. Check 48's Close-Class-Telemetry sub-check, which shipped inert, is armed at `v4.55`.
 
 ### Issues resolved
 
@@ -1090,7 +1089,7 @@ The AFTER statement's residuals that this release does not cover (scope-lock dec
 
 ### Reversibility
 
-**MODERATE — HIGH confidence.** Every slice reverts CHEAP — read-models, writer-gate arms, one cutover value, a close-out read path, and stage and standard text — and `git revert -m 1` of the merge restores `main`. Three things outlive a revert: rows written under the new tools stay in the append-only event log; the armed `(l)` gate owes the Close-Class-Telemetry field on every close from the merge on; and a claimed version tag is retained and recorded, never deleted.
+**MODERATE — HIGH confidence:** every slice reverts CHEAP and `git revert -m 1` of the merge restores `main`, but three things outlive a revert — rows written under the new tools stay in the append-only event log, the armed `(l)` gate owes the Close-Class-Telemetry field on every close from the merge on, and a claimed version tag is retained and recorded, never deleted.
 
 ### Downstream impact
 
@@ -1100,6 +1099,13 @@ The AFTER statement's residuals that this release does not cover (scope-lock dec
 - **Two instruction sites outside this release still invite a backfill** — the decision-emission workflow's step summary and `hub-session-continuity.md` § 4.1 — and are relayed to the hub.
 - **Two readers resolve a release's rows differently.** Check 61's resolver reaches rows through the schema's § 2a rung 2 (subject `milestone:#N`); the cycle-time tool's reads, through the query tool's `--release`, do not. A release whose only Stage-9 GO row is reachable by that rung reads as an identity miss to the tool while Check 61 counts it; relayed to the hub.
 - **The limb-(c) keys `<release>:<AI-id>` are reported, not blocking,** until #6872's parser attributes a finding by its release prefix.
+
+### Cross-references
+
+- Release plan: this file — § Decision Record, § Verification Plan, § Deviation Log, § Contention Map.
+- Milestone: `telemetry-is-computable`.
+- Decision records: the Stage-4 and Collective Review records on #7681, and the #4219 delta scope-lock; no ADR — this release adds no record under `release/ADRs/`.
+- User-facing release notes: `release/releases/notes/vX.Y_RELEASE_NOTES.md`, authored at Stage 13 Close per `release/references/standards/release-notes-standard.md`.
 
 ---
 
