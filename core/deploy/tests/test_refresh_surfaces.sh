@@ -1244,7 +1244,7 @@ else
   else
     report "10: caller-path probe fires on the poisoned surface" 0 "hits ${h}, token rows ${rows}"
   fi
-  fx_update 10-w1 "${FX_W1}" --surfaces-only
+  fx_update 10-w1 "${FX_W1}" --surfaces-only --dry-run
   rc=$?
   [ "${rc}" -eq 0 ] || { ok=0; detail="${detail}; exit ${rc}"; }
   u="$(fx_py unstamped "${SBX}/targets.tsv")"
