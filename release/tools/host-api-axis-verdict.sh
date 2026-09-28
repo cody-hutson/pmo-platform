@@ -900,6 +900,13 @@ self_test() {
   _st_ok "core UNANCHORED" _st_basis core UNANCHORED
   _st_ok "core used_zero=2 (both reads)" _st_field_is core used_zero 2
   _st_ok "HOST-API DEFER" _st_line 'HOST-API DEFER*'
+  # (b) the remaining < limit clause on its own: a counter that shows a draw but a full
+  # pool is not a report of the probe that drew
+  d="$(_st_dir 03b)"
+  _fx_ok "$d" core 1 "$D0" 5000 5000 1 $((E0 + 3600)); _st_healthy_gql "$d"
+  _st_run --replay "$d"
+  _st_ok "(b) used 1 with a full pool -> UNANCHORED" _st_basis core UNANCHORED
+  _st_ok "(b) reason=remaining-full" _st_field_is core reason remaining-full
   _st_end
 
   _st_arm "04 NO-DECLARED-DRAW (live)"; d="$(_st_dir 04)"
@@ -1225,6 +1232,7 @@ self_test() {
   _st_run --replay "$d"
   _st_ok "core MEASURED" _st_basis core MEASURED
   _st_ok "core used_zero=1" _st_field_is core used_zero 1
+  _st_ok "a used-0 reading is not anchored, so core re-probes (reads=2)" _st_field_is core reads 2
   _st_ok "a calibration event" _st_line 'HOST-API * calibration_event=yes'
   _st_end
 
