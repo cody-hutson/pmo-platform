@@ -190,7 +190,13 @@ Deliverable classes (registry concept 1) with delivered items in the pool: ⟦S6
 | V-10 | Data | open | — | `defect` | E1 | E1 | E1 | E1 | none |
 | V-11 | Software | open | — | fits no nature → matches `behaviour-change` | E1 | E1 | E1 | E1 | none |
 | V-12 | Governance | completed | governance (inferred) | `defect` | E2 | E2 | E2 | E2 | none |
-⟦S6: the remaining rows from V-13 in set order; State is completed, not planned or open; Concept-1 class marks inferred values; then a summary line — items coded, delivered items per class, per-nature counts, items fitting no nature, multi-nature items and the owed-set widening they cause, candidates admitted, axis co-occurrence⟧
+| V-13 | Data | open | — | `data-structure-change` (`defect`) | E1 | E1 | E1 | E1 | none |
+| V-14 | Software | open | — | fits no nature → matches `behaviour-change` | E1 | E1 | E1 | E1 | none |
+| V-15 | Governance | completed | governance (inferred) | `defect` | E2 | E1 | E2 · E3-P | E1 | none |
+| V-16 | Data | open | — | `defect` (`data-structure-change`) | E1 | E1 | E1 | E1 | none |
+| V-17 | Software | open | — | fits no nature → matches `restructure` | E1 | E1 | E1 | E1 | none |
+| V-18 | Governance | completed | governance | `defect` | E2 | E2 | E2 · E3-P | E2 · E3-P | none |
+⟦S6: the remaining rows from V-19 in set order; State is completed, not planned or open; Concept-1 class marks inferred values; then a summary line — items coded, delivered items per class, per-nature counts, items fitting no nature, multi-nature items and the owed-set widening they cause, candidates admitted, axis co-occurrence⟧
 
 ### Applying the model to the measured instance
 
@@ -244,4 +250,10 @@ MODERATE — revised in place or reverted before ratification; after it, superse
 - V-10 — #5847 — the frozen entity model reconciled with what shipped
 - V-11 — #4228 — section-citation coverage and the near-miss store variable
 - V-12 — #5055 — the action-items template's restated enums
-⟦S6: one line per remaining coded item from V-13 — "V-NN — #N — a noun phrase from its title"; one line per follow-up card the continuity table names⟧
+- V-13 — #5850 — referential action per foreign-key class
+- V-14 — #7848 — rate-limit refusal handling converged on one classifier
+- V-15 — #2156 — a canonical ADR frontmatter schema
+- V-16 — #5845 — the document-index contract at three seams
+- V-17 — #7856 — a per-phase projectability declaration for the cleanup dry-run
+- V-18 — #5063 — the release-plan version token at Stage 12
+⟦S6: one line per remaining coded item from V-19 — "V-NN — #N — a noun phrase from its title"; one line per follow-up card the continuity table names⟧
