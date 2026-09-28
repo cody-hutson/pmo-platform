@@ -72,6 +72,21 @@
 | AC-16 | `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 2 and `/usr/bin/grep -c -F "NO-SUCH-TOKEN" release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 1 | an absolute path to an allowlisted verb: named, never executed |
 | AC-17 | `grep -c -E 'BETA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 0; then `/usr/bin/awk '/BETA/' release/tools/tests/fixtures/verify-plan-reader-limb.md` at least 1 | a violated null beside an unknown span with a comparator of its own: FAIL |
 | AC-18 | `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 2 and `fd -e md release/tools/tests/fixtures` | a word followed by an option: named, never passed |
+| AC-19 | `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 2 and `/opt/homebrew/opt/python@3.11/bin/python3 -c 'print(1)'` | an absolute path whose segment carries @, the Homebrew keg shape: named, never passed |
+| AC-20 | `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 2 and `/opt/homebrew/opt/python@3.11/bin/python3 release/tools/tests/fixtures/verify-plan-reader-limb.md` | the keg path with a path operand and no option: named, never passed |
+| AC-21 | `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 2 and `~/bin/qa@2 --count` | a home-relative path whose segment carries @: named, never passed |
+| AC-22 | `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 2 and `/opt/café/bin/qa-tool --count` | an absolute path whose segment carries a non-ASCII letter: named, never passed |
+| AC-23 | `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 2 and `~/outils/café/qa --count` | a home-relative path whose segment carries a non-ASCII letter: named, never passed |
+| AC-24 | `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 2 and `node_modules/@scope/tool/bin/tool --check` | a word/word path whose segment carries @: named, never passed |
+| AC-25 | `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 2 and `gzip -9 release/tools/tests/fixtures/verify-plan-reader-limb.md` | a word followed by a digit-led option: named, never passed |
+| AC-26 | `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 2 and `g++ -c probe.cpp` | a word carrying + followed by an option: named, never passed |
+| AC-27 | `g++ -c probe.cpp` then `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 2 | written before the probe: named first, never passed |
+| AC-28 | `git diff --name-only origin/main...HEAD -- core/skills/` expect 0 beside `/opt/homebrew/opt/python@3.11/bin/python3 -c 'print(1)'` | a scope assertion beside the keg path: the slot |
+| AC-29 | `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 2 beside `https://example.com/tool --check` | a URL is not a path, its segment after the scheme is empty: prose, PASS |
+| AC-30 | `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 2 beside `../x@1/bin/tool --flag` | a path led by .. names nothing, whatever its segments carry: prose, PASS |
+| AC-31 | `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 2 beside `left -- right` | a bare double dash is not an option: prose, PASS |
+| AC-32 | `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 2 beside `core/rules/ (all files)` | a directory mention with a trailing slash is prose: PASS |
+| AC-33 | `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 2 and `$HOME/bin/qa-tool --count` | a variable-led word/word path is a path: named, never passed |
 
 **#992 — a one-command row is graded on the comparator written after its command**
 
@@ -92,6 +107,8 @@
 - [ ] **CIAC-5 (#990 × #991 on `fixture`):** a scope assertion beside a reader limb. *Method:* `git diff --name-only origin/main...HEAD -- core/skills/` expect 0. [READER-GRADED — the reader confirms at most 2 skill files moved]
 - [ ] **CIAC-6 (#990 × #991 on `fixture`):** an absolute-path tool beside the probe. *Method:* `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` at least 1 and `/usr/bin/awk '/ALPHA/' release/tools/tests/fixtures/verify-plan-reader-limb.md` expect 2
 - [ ] **CIAC-7 (#990 × #991 on `fixture`):** control after the planted entries. *Method:* `test -f release/tools/tests/fixtures/verify-plan-reader-limb.md`
+- [ ] **CIAC-8 (#990 × #991 on `fixture`):** an absolute path carrying @ beside the probe. *Method:* `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` at least 1 and `/opt/homebrew/opt/python@3.11/bin/python3 -c 'print(1)'`
+- [ ] **CIAC-9 (#990 × #991 on `fixture`):** a word carrying + and an option beside the probe. *Method:* `grep -c -E 'ALPHA[-]TOKEN' release/tools/tests/fixtures/verify-plan-reader-limb.md` at least 1 and `g++ -c probe.cpp`
 
 ## Fixture data (read by the commands above; not a verification table)
 

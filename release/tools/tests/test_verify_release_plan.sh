@@ -4689,7 +4689,9 @@ rm -rf "$MUTD6236B"
 # reader)". A closed span the tool catalog does not name, but shaped as an invocation
 # (a path, or a word followed by an option), is named beside a designated command as a
 # command that did not run, "not a recognised command"; the grep and awk kin an author
-# writes for a count are catalogued. Either keeps the row off plain PASS: a FAIL or
+# writes for a count are catalogued. Those words are read as written (D70): a path's
+# segments may carry any character but /, never .., a word may carry +, and an option is
+# - or -- then a letter or a digit. Either keeps the row off plain PASS: a FAIL or
 # ERROR from the designated command stands, and a designated PASS takes the can't-run
 # slot. The designated command's comparator is the one written after it, up to the next
 # limb, on the one-command path too; beside reader limbs only, a window stating none
@@ -4757,10 +4759,10 @@ lint_run "$VERIFY" "$FIX_READER"; L22="$LINT_OUT"
 G22_ROWS="$(grep -c -F '| AC-' "$REPO_ROOT/$FIX_READER" || true)"
 G22_CIACS="$(grep -c -F '**CIAC-' "$REPO_ROOT/$FIX_READER" || true)"
 G22_DATA="$(grep -c -E '^(ALPHA|BETA)-TOKEN ' "$REPO_ROOT/$FIX_READER" || true)"
-[ "${G22_ROWS:-0}" -eq 53 ] && [ "${G22_CIACS:-0}" -eq 7 ] && [ "${G22_DATA:-0}" -eq 4 ] \
-   && [ "$(acs_of "$J22")" = "53" ] && [ "$(ciacs_of "$J22")" = "7" ] && [ "$RC22" -eq 3 ] \
-  && ok "G22-0 SENSITIVITY — the fixture declares and emits 53 rows and 7 CIACs, over a data section of 2 + 2 token lines, and its FAIL and ERROR rows reach the exit (3)" \
-  || bad "G22-0 declared rows=${G22_ROWS:-0} CIACs=${G22_CIACS:-0} data=${G22_DATA:-0}, emitted AC=$(acs_of "$J22") CIAC=$(ciacs_of "$J22"), rc=$RC22 (expected 53, 7, 4, 53, 7, 3)"
+[ "${G22_ROWS:-0}" -eq 68 ] && [ "${G22_CIACS:-0}" -eq 9 ] && [ "${G22_DATA:-0}" -eq 4 ] \
+   && [ "$(acs_of "$J22")" = "68" ] && [ "$(ciacs_of "$J22")" = "9" ] && [ "$RC22" -eq 3 ] \
+  && ok "G22-0 SENSITIVITY — the fixture declares and emits 68 rows and 9 CIACs, over a data section of 2 + 2 token lines, and its FAIL and ERROR rows reach the exit (3)" \
+  || bad "G22-0 declared rows=${G22_ROWS:-0} CIACs=${G22_CIACS:-0} data=${G22_DATA:-0}, emitted AC=$(acs_of "$J22") CIAC=$(ciacs_of "$J22"), rc=$RC22 (expected 68, 9, 4, 68, 9, 3)"
 G22_SIBOK=1
 for g22s in '[READER-GRADED — pattern' 'READER-GRADED' 'at least 9'; do
   [ "$(grep -c -F "$g22s" "$REPO_ROOT/$G22_SIB" || true)" = "0" ] && [ "$(grep -c -F "$g22s" "$REPO_ROOT/$FIX_READER" || true)" -ge 1 ] || G22_SIBOK=0
@@ -4893,6 +4895,43 @@ g22_slot "$J22" '#991' AC-14 && g22_has "$J22" '#991' AC-14 "limb 1 /usr/bin/awk
 [ "$(grep -c -F "RUNNABLE_VERBS='grep test ls head wc cat'" "$VERIFY" || true)" = "1" ] \
   && ok "V6848-AC2u l — the catalog grew and the verb set did not: RUNNABLE_VERBS reads its literal exactly once" \
   || bad "V6848-AC2u l — the RUNNABLE_VERBS literal no longer reads once"
+# --- V6848-AC2u m to s (D70): the test reads its own words. A path is led by /, ./, ~/ or a
+# word, and its segments may carry any character but / (never ..); a word may carry +, and an
+# option is - or -- then a letter or a digit. Every route names what those words reach. ---
+G22_KEG='/opt/homebrew/opt/python@3.11/bin/python3'
+G22_NR='did not run (not a recognised command)'
+G22_P2='limb 1 grep PASS count=2 (== 2)'
+# g22_named <json> <issue> <id> <lead> — TRUE only when the row reads the slot, its designated grep
+# passing as limb 1 and <lead> named as limb 2, "not a recognised command".
+g22_named() { g22_slot "$1" "$2" "$3" && g22_has "$1" "$2" "$3" "$G22_P2; limb 2 $4 $G22_NR $CTAIL"; }
+G22_M=1
+for g22m in "AC-19|$G22_KEG" "AC-20|$G22_KEG" 'AC-21|~/bin/qa@2' 'AC-22|/opt/café/bin/qa-tool' 'AC-23|~/outils/café/qa' 'AC-24|node_modules/@scope/tool/bin/tool'; do
+  g22_named "$J22" '#991' "${g22m%%|*}" "${g22m#*|}" || { G22_M=0; printf '       m %s: %s / %s\n' "${g22m%%|*}" "$(g22_fv "$J22" '#991' "${g22m%%|*}")" "$(g22_obs "$J22" '#991' "${g22m%%|*}")"; }
+done
+[ "$G22_M" = 1 ] \
+  && ok "V6848-AC2u m — a path whose segment carries @ or a non-ASCII letter is named 'not a recognised command' beside the probe: the Homebrew keg path with an option and with a path operand, a home-relative path, an absolute and a home-relative path carrying a non-ASCII letter, and a word/word path" \
+  || bad "V6848-AC2u m — a path lead outside the old character class still reads PASS beside the probe (rows above)"
+g22_named "$J22" '#991' AC-25 gzip && g22_named "$J22" '#991' AC-26 'g++' \
+   && g22_slot "$J22" '#991' AC-27 && g22_has "$J22" '#991' AC-27 "limb 1 g++ $G22_NR; limb 2 grep PASS count=2 (== 2)" \
+  && ok "V6848-AC2u n — a word followed by a digit-led option (gzip -9) and a word carrying + (g++ -c) are named beside the probe, and g++ written first is named limb 1" \
+  || bad "V6848-AC2u n — #991 AC-25 $(g22_fv "$J22" '#991' AC-25) '$(g22_obs "$J22" '#991' AC-25)'; AC-26 $(g22_fv "$J22" '#991' AC-26) '$(g22_obs "$J22" '#991' AC-26)'; AC-27 $(g22_fv "$J22" '#991' AC-27) '$(g22_obs "$J22" '#991' AC-27)'"
+g22_slot "$J22" "$G20_CIAC" CIAC-8 && g22_has "$J22" "$G20_CIAC" CIAC-8 "limb 2 $G22_KEG $G22_NR" && [ "$(lint_of "$L22" CIAC-8)" = "FLAG multi-limb" ] \
+   && g22_slot "$J22" "$G20_CIAC" CIAC-9 && g22_has "$J22" "$G20_CIAC" CIAC-9 "limb 2 g++ $G22_NR" && [ "$(lint_of "$L22" CIAC-9)" = "FLAG multi-limb" ] \
+  && ok "V6848-AC2u o — the cross-issue route names the keg path and g++ beside the probe, and the lint flags both as multi-limb" \
+  || bad "V6848-AC2u o — CIAC-8 $(g22_fv "$J22" "$G20_CIAC" CIAC-8) '$(g22_obs "$J22" "$G20_CIAC" CIAC-8)' lint '$(lint_of "$L22" CIAC-8)'; CIAC-9 $(g22_fv "$J22" "$G20_CIAC" CIAC-9) lint '$(lint_of "$L22" CIAC-9)'"
+g22_slot "$J22" '#991' AC-28 && g22_has "$J22" '#991' AC-28 "limb 1 git PASS scope count=0 (== 0) over 2 changed path(s) in the release diff; limb 2 $G22_KEG $G22_NR" \
+  && ok "V6848-AC2u p — a scope assertion beside the keg path reads the slot, naming it" \
+  || bad "V6848-AC2u p — #991 AC-28 $(g22_fv "$J22" '#991' AC-28) '$(g22_obs "$J22" '#991' AC-28)'"
+G22_R=1
+for g22r in AC-29 AC-30 AC-31 AC-32; do
+  { [ "$(g22_fv "$J22" '#991' "$g22r")" = "per-issue/PASS" ] && [ "$(g22_obs "$J22" '#991' "$g22r")" = "count=2 (== 2)" ]; } || { G22_R=0; printf '       r %s: %s / %s\n' "$g22r" "$(g22_fv "$J22" '#991' "$g22r")" "$(g22_obs "$J22" '#991' "$g22r")"; }
+done
+[ "$G22_R" = 1 ] \
+  && ok "V6848-AC2u r — specificity: a URL (its empty segment), a path led by .. whatever it carries, a bare double dash and a directory mention with a trailing slash stay prose beside the probe (PASS)" \
+  || bad "V6848-AC2u r — a span outside the words was named (rows above)"
+g22_named "$J22" '#991' AC-33 '$HOME/bin/qa-tool' \
+  && ok "V6848-AC2u s — a variable-led word/word path is a path: named beside the probe" \
+  || bad "V6848-AC2u s — #991 AC-33 $(g22_fv "$J22" '#991' AC-33) '$(g22_obs "$J22" '#991' AC-33)'"
 mkdir -p "$G22D/core/deploy" "$G22D/release/tools" "$G22D/plan"
 cp "$VERIFY" "$G22D/release/tools/"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$G22D/core/deploy/deploy.sh"; chmod +x "$G22D/core/deploy/deploy.sh"
@@ -4910,6 +4949,8 @@ cat > "$G22D/plan/p.md" <<'EOF'
 | AC-3 | `/usr/bin/awk '/X/' plan/p.md` then `bash core/deploy/deploy.sh --check` | the span written first: the slot |
 | AC-4 | `bash core/deploy/deploy.sh --check` | control: the check alone PASSes |
 | AC-5 | `bash core/deploy/deploy.sh --check`. [READER-GRADED — the reader confirms the mirror section] | a reader limb beside the check: the slot |
+| AC-6 | `bash core/deploy/deploy.sh --check` beside `/opt/homebrew/opt/python@3.11/bin/python3 -c 'print(1)'` | the slot, naming the keg path |
+| AC-7 | `bash core/deploy/deploy.sh --check` beside `gzip -9 plan/p.md` | the slot, naming gzip |
 EOF
 set +e; J22D="$("$VERIFY" --format=json --root "$G22D" "$G22D/plan/p.md" 2>/dev/null)"; set -e
 g22_slot "$J22D" '#993' AC-1 && g22_has "$J22D" '#993' AC-1 "limb 1 bash PASS deploy --check clean (in-sync); limb 2 /usr/bin/awk did not run (not a recognised command)" \
@@ -4919,6 +4960,10 @@ g22_slot "$J22D" '#993' AC-1 && g22_has "$J22D" '#993' AC-1 "limb 1 bash PASS de
    && g22_slot "$J22D" '#993' AC-5 && g22_has "$J22D" '#993' AC-5 "limb 2 reader-graded did not run (declared for a reader) $LTAIL" \
   && ok "V6848-AC2u i — the declared deploy route names every limb it did not run, in either order: an unrecognised span, rg, or a reader limb beside a check that passes reads the slot; the check alone PASSes" \
   || bad "V6848-AC2u i — #993 AC-1 $(g22_fv "$J22D" '#993' AC-1) '$(g22_obs "$J22D" '#993' AC-1)'; AC-2 $(g22_fv "$J22D" '#993' AC-2); AC-3 $(g22_fv "$J22D" '#993' AC-3); AC-4 $(g22_fv "$J22D" '#993' AC-4); AC-5 $(g22_fv "$J22D" '#993' AC-5)"
+g22_slot "$J22D" '#993' AC-6 && g22_has "$J22D" '#993' AC-6 "limb 1 bash PASS deploy --check clean (in-sync); limb 2 $G22_KEG $G22_NR" \
+   && g22_slot "$J22D" '#993' AC-7 && g22_has "$J22D" '#993' AC-7 "limb 1 bash PASS deploy --check clean (in-sync); limb 2 gzip $G22_NR" \
+  && ok "V6848-AC2u q — the declared deploy route names the keg path and gzip -9 beside a check that passes: the slot" \
+  || bad "V6848-AC2u q — #993 AC-6 $(g22_fv "$J22D" '#993' AC-6) '$(g22_obs "$J22D" '#993' AC-6)'; AC-7 $(g22_fv "$J22D" '#993' AC-7) '$(g22_obs "$J22D" '#993' AC-7)'"
 
 # --- SEEDED FAILURES. Each reverts one limb of the rule and names the answer it must move to. ---
 # M1 — the recognizer declares nothing: every declared row reads PASS on its command again.
@@ -5061,6 +5106,51 @@ if [ "$MUT_TOOK" = 1 ]; then
     [ "$(g22_fv "$JM22_14" '#990' AC-27)" = "per-issue/PASS" ] && g22_slot "$JM22_14" '#990' AC-1 \
       && ok "V6837-AC4r M14 detected — without the bare word (d2)'s author-declared row reads PASS while the bracket form still declares" \
       || bad "V6837-AC4r M14 SURVIVED — #990 AC-27 $(g22_fv "$JM22_14" '#990' AC-27), AC-1 $(g22_fv "$JM22_14" '#990' AC-1)"
+  fi
+fi
+# M15 to M18 (D70) each narrow one class of the unrecognised-invocation test back to the
+# character class it had before, and name the rows that class alone reaches. A home-relative
+# path is a path by two of the classes (led by ~/, and word/word), so no single narrowing moves it.
+# M15 — the led-path class narrowed: an absolute path carrying @ or a non-ASCII letter is prose again.
+m22 "V6848-AC2u M15" g22-m15-led-path-class 1 "s# pre='[^']*'# pre='^(/|\\\\./|~/)[A-Za-z0-9_./+-]+\$'#"
+if [ "$MUT_TOOK" = 1 ]; then
+  g22_run "$MUT_PATH"; JM22_15="$VRP_JSON"
+  if mutant_ran "V6848-AC2u M15"; then
+    [ "$(g22_fv "$JM22_15" '#991' AC-19)" = "per-issue/PASS" ] && [ "$(g22_fv "$JM22_15" '#991' AC-20)" = "per-issue/PASS" ] \
+       && [ "$(g22_fv "$JM22_15" '#991' AC-22)" = "per-issue/PASS" ] && g22_slot "$JM22_15" '#991' AC-24 \
+      && ok "V6848-AC2u M15 detected — with the led-path class narrowed, (m)'s absolute keg path and non-ASCII path read PASS beside the probe, while the word/word path is still named" \
+      || bad "V6848-AC2u M15 SURVIVED — #991 AC-19 $(g22_fv "$JM22_15" '#991' AC-19), AC-20 $(g22_fv "$JM22_15" '#991' AC-20), AC-22 $(g22_fv "$JM22_15" '#991' AC-22), AC-24 $(g22_fv "$JM22_15" '#991' AC-24)"
+  fi
+fi
+# M16 — the word/word class narrowed: a word/word path carrying @ or led by a variable is prose again.
+m22 "V6848-AC2u M16" g22-m16-word-path-class 1 "s# wre='[^']*'# wre='^[A-Za-z0-9_.+-]+(/[A-Za-z0-9_.+-]+)+\$'#"
+if [ "$MUT_TOOK" = 1 ]; then
+  g22_run "$MUT_PATH"; JM22_16="$VRP_JSON"
+  if mutant_ran "V6848-AC2u M16"; then
+    [ "$(g22_fv "$JM22_16" '#991' AC-24)" = "per-issue/PASS" ] && [ "$(g22_fv "$JM22_16" '#991' AC-33)" = "per-issue/PASS" ] \
+       && g22_slot "$JM22_16" '#991' AC-19 \
+      && ok "V6848-AC2u M16 detected — with the word/word class narrowed, (m)'s word/word path and (s)'s variable-led path read PASS beside the probe, while the absolute keg path is still named" \
+      || bad "V6848-AC2u M16 SURVIVED — #991 AC-24 $(g22_fv "$JM22_16" '#991' AC-24), AC-33 $(g22_fv "$JM22_16" '#991' AC-33), AC-19 $(g22_fv "$JM22_16" '#991' AC-19)"
+  fi
+fi
+# M17 — a word may no longer carry +: g++ -c is prose again.
+m22 "V6848-AC2u M17" g22-m17-no-plus-in-word 1 's#looks_like_command "\$\{t//\+/\}"#looks_like_command "$t"#'
+if [ "$MUT_TOOK" = 1 ]; then
+  g22_run "$MUT_PATH"; JM22_17="$VRP_JSON"
+  if mutant_ran "V6848-AC2u M17"; then
+    [ "$(g22_fv "$JM22_17" '#991' AC-26)" = "per-issue/PASS" ] && g22_slot "$JM22_17" '#991' AC-25 \
+      && ok "V6848-AC2u M17 detected — without + in a word (n)'s g++ -c reads PASS beside the probe, while gzip -9 is still named" \
+      || bad "V6848-AC2u M17 SURVIVED — #991 AC-26 $(g22_fv "$JM22_17" '#991' AC-26), AC-25 $(g22_fv "$JM22_17" '#991' AC-25)"
+  fi
+fi
+# M18 — an option led by a letter only: gzip -9 is prose again.
+m22 "V6848-AC2u M18" g22-m18-letter-led-option 1 "s#ore='\\^--\\?\\[A-Za-z0-9]'#ore='^--?[A-Za-z]'#"
+if [ "$MUT_TOOK" = 1 ]; then
+  g22_run "$MUT_PATH"; JM22_18="$VRP_JSON"
+  if mutant_ran "V6848-AC2u M18"; then
+    [ "$(g22_fv "$JM22_18" '#991' AC-25)" = "per-issue/PASS" ] && g22_slot "$JM22_18" '#991' AC-26 \
+      && ok "V6848-AC2u M18 detected — with an option led by a letter only, (n)'s gzip -9 reads PASS beside the probe, while g++ -c is still named" \
+      || bad "V6848-AC2u M18 SURVIVED — #991 AC-25 $(g22_fv "$JM22_18" '#991' AC-25), AC-26 $(g22_fv "$JM22_18" '#991' AC-26)"
   fi
 fi
 rm -rf "$MUTD22" "$SEAMD22" "$G22D"
