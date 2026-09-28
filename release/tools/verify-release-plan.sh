@@ -149,6 +149,10 @@ readonly CLI_VERSION="0.3.0"
 # can stand, or for reading a declared deferral written in a span no backtick closes: rows
 # move between EXISTING families and verdicts, and no record field, family value or verdict
 # value is added -- the counters becoming correct, by the precedents above.
+# NO BUMP IS OWED for naming a declared reader-graded limb, or an unrecognised
+# invocation-shaped span, as a limb that did not run, or for grading a designated command on
+# the comparator written after it: rows move between EXISTING verdicts and the reasons ride
+# the existing observed field -- the counters becoming correct, by the precedents above.
 readonly SCHEMA_VERSION="5"
 
 # ---------------------------------------------------------------------------
@@ -229,9 +233,9 @@ readonly REC_FS=$'\037'
 #
 # SCOPE -- every loop in this file whose fd 0 is redirected while its body runs,
 # whatever the form: here-string, here-document, or file. The two dispatch loops
-# take the rule, and so do the five loops that read a method's split spans or its
-# commands (extract_command, method_limbs, limbs_are_multi, grade_limbs and
-# command_list), the five that read a scope assertion's pathspecs or the
+# take the rule, and so do the six loops that read a method's split spans or its
+# limbs (extract_command, method_limbs, limbs_are_multi, grade_limbs, command_list
+# and designated_threshold), the five that read a scope assertion's pathspecs or the
 # release diff it grades (scope_path_selected, scope_pathspec_selects, and
 # handle_scope's three), and the CIAC authoring lint's two (ciac_lint's declared ids
 # and its parsed records): their bodies spawn no child that reads fd 0 today, and the
@@ -285,7 +289,8 @@ readonly EXIT_CHECK_FAILED=3
 #               in this executor -- a recognised tool outside RUNNABLE_VERBS, a
 #               designated command carrying a shell operator outside quotes, or a native
 #               scope assertion with nothing to grade here -- or its designated command ran
-#               while another command it names did not.
+#               while another limb it names did not: a command, or a declared
+#               reader-graded limb, which no command grades.
 #   ERROR       could not read or evaluate: input this parser cannot make sense of -- an
 #               unreadable row, or a designated command with an unterminated quote -- or
 #               a command that ran and produced no readable result.
@@ -323,8 +328,9 @@ readonly VERDICT_SKIP="SKIP"
 readonly VERDICT_UNRUNNABLE="UNRUNNABLE"
 readonly VERDICT_ERROR="ERROR"
 
-# VERDICT_PARTIAL_SLOT -- the verdict a row takes when its method names a command this
-# executor did not run and the command that did run passed: the can't-run-here slot of
+# VERDICT_PARTIAL_SLOT -- the verdict a row takes when its method names a limb this
+# executor did not run -- a command, or a declared reader-graded limb -- and the command
+# that did run passed: the can't-run-here slot of
 # the outcome partition, never PASS and never a value of its own. It is bound to
 # UNRUNNABLE, the value that slot carries in this file; a change that gives the slot
 # another value re-binds this one line and touches nothing else. KEPT ON ONE LINE ON
@@ -487,27 +493,37 @@ CHECK FAMILIES (dispatched from the Verification method cell alone: a declared d
 MULTI-COMMAND METHODS
   A method naming two or more commands is graded on its designated command:
   its first allowlisted command that carries an argument, read against the
-  comparator that follows that command (at least N, at most N, exactly N,
-  expect N; a null is expect 0). Every other command it names is reported as
-  did not run, with its reason, and a row with a command that did not run
-  never reads PASS: a FAIL or ERROR from the designated command stands, and a
-  designated PASS reads UNRUNNABLE. A bare tool name (grep alone) is prose,
-  never a command.
+  comparator that follows that command, up to the next command or
+  reader-graded limb (at least N, at most N, exactly N, expect N; a null is
+  expect 0). Every other command it names is reported as did not run, with
+  its reason -- a command being an allowlisted verb, a catalogued tool or
+  script, or a span shaped as a command the catalog does not know (a path,
+  or a word followed by an option), named "not a recognised command"; any
+  other span is prose -- and a row with a command that did not run never
+  reads PASS: a FAIL or ERROR from the designated command stands, and a
+  designated PASS reads UNRUNNABLE. A limb declared [READER-GRADED -- <text>]
+  is named reader-graded and never run, and keeps the row off PASS the same
+  way; beside such limbs only, a designated command stating no comparator
+  after it is graded on the method's with the reader text cut, and a
+  comparator written only in a reader limb reads ERROR. A bare tool name
+  (grep alone) is prose, never a command.
 
 VERDICTS
   PASS        the check ran, and what it asserts holds
   FAIL        the check ran, and what it asserts does not hold
   SKIP        not this runner's job (a declared deferral), or no command to
               run: a named read, a judge-rubric, or prose that merely opens
-              with a verb, whether or not a family claimed the row; its
-              criterion is graded where the method says
+              with a verb, whether or not a family claimed the row -- unless
+              an integration keyword routes the row to the cross-issue
+              reading, which runs a cross-issue method's verb-initial prose
+              as written; its criterion is graded where the method says
   UNRUNNABLE  can't run here: a command the method names is a tool outside
               the verb set, the designated command carries shell syntax (a
               pipe, a list, a redirect, a substitution), a scope assertion has
               nothing to grade here, or the designated command ran and another
-              command did not. Never executed, never a pass, and it does not
-              fail the run; the tool named is a tool the method invokes, never
-              a label or a file
+              limb did not (a command, or a declared reader-graded limb).
+              Never executed, never a pass, and it does not fail the run; the
+              tool named is a tool the method invokes, never a label or a file
   ERROR       could not read the row, or tried to evaluate it and could not:
               an unreadable table row, an empty method cell, a command with
               an unterminated quote, a probe whose input could not be read, a
@@ -553,7 +569,11 @@ CIAC AUTHORING LINT (--ciac-lint) - Stage 4, gate criterion G4-06
   CLEAN     graded as written: one command the executor runs, naming its
             input, with a comparator it reads, or none where the command's
             exit status is the claim (grep, test, an ls naming files); or a
-            scope assertion
+            scope assertion. A second command is one the executor names --
+            an allowlisted verb, a catalogued tool or script, or a span
+            shaped as a command the catalog does not know (a path, or a word
+            followed by an option); a span it does not name is prose to the
+            lint as to the grader
   DECLARED  written "declared, verification deferred to <evidence>", naming
             a surface: a repository path, a suite arm label, or a criterion
             for each spanned issue (#N AC-k, design #N AC-k or INT-k, plan #N
@@ -574,8 +594,13 @@ CIAC AUTHORING LINT (--ciac-lint) - Stage 4, gate criterion G4-06
                                a per-issue criterion is named for some spanned
                                issues only: name one for each, or a path or an
                                arm label, which cover the release
-    multi-limb                 the method names more than one command and only
-                               one runs: keep one; a control goes after *Graded*
+    reader-limb                the method declares a limb no command grades
+                               ([READER-GRADED -- ...]), and a CIAC carries
+                               none: write that claim as a CIAC of its own, in
+                               the declared form naming its evidence
+    multi-limb                 the method names more than one command (see
+                               CLEAN) and only one runs: keep one; a control
+                               goes after *Graded*
     no-runnable-command        nothing the executor runs (a span no backtick
                                closes is prose): write one command in
                                backticks, or declare it
@@ -1429,19 +1454,27 @@ compare_threshold() {
 # WHAT RUNS. The designated command -- the span extract_command picks: the first
 # allowlisted verb that carries an argument -- runs exactly as a one-command
 # method's does, and is graded on ITS OWN comparator: the one stated in the prose
-# after it, up to the next command, never inside backticks. A designated command
-# that states no comparator keeps the one-command path's exit-status reading, so a
-# null needs "expect 0" or "expect zero" (`grep -c` exits 1 on a zero count, which
-# that reading takes for a failure); one that states two comparators that disagree
-# is an ERROR. A bare verb (`grep` alone) names a tool in prose: it is never the
-# command and never a limb.
+# after it, up to the next command or reader-graded limb, never inside backticks. A
+# designated command that states no comparator keeps the one-command path's
+# exit-status reading, so a null needs "expect 0" or "expect zero" (`grep -c` exits 1
+# on a zero count, which that reading takes for a failure) -- except beside
+# reader-graded limbs only (READER-GRADED LIMBS below); one that states two
+# comparators that disagree is an ERROR. A bare verb (`grep` alone) names a tool in
+# prose: it is never the command and never a limb. The one-command path reads the
+# same window first (designated_threshold), so the two paths agree whenever a command
+# states its comparator after it.
 #
 # WHAT DOES NOT RUN. Every other command the method names is reported as "did not
 # run (<reason>)", naming the most basic reason: it could not run as written (a
 # reader with no input file reads "names no input"; one whose input is a device, or
 # an option the reader model does not know, names that refusal), it is a tool
-# outside the verb set, or else only the designated command runs. A row with a
-# command that did not run NEVER reads PASS. Running the further commands too was
+# outside the verb set, it is a span shaped as an invocation the catalog does not
+# know -- a path, or a word followed by an option (span_unrecognised_invocation) --
+# which reads "not a recognised command", or else only the designated command runs.
+# A command is a span this reader names; any other span is prose. A limb declared
+# for a reader is named too, "reader-graded did not run (declared for a reader)", and
+# a row with a limb that did not run -- a command or a reader limb -- NEVER reads
+# PASS. Running the further commands too was
 # measured over the 215-plan corpus and NOT TAKEN: it would fully grade 1 corpus
 # row, 5 of the 12 commands it would newly run cannot run correctly as written (an
 # elided operand; a comparator bound to the wrong command), and no sanctioned
@@ -1450,8 +1483,30 @@ compare_threshold() {
 #
 # THE VERDICT: FAIL if the designated command failed; else ERROR if it could not be
 # read; else the can't-run outcome VERDICT_PARTIAL_SLOT, the observed text naming
-# the command that ran and each command that did not. A method naming one command,
-# or none, never reaches this path: its grading is the one-command path's.
+# the command that ran and each limb that did not. A method naming one command and
+# no other limb, or none, never reaches this path: its grading is the one-command
+# path's.
+#
+# READER-GRADED LIMBS. A limb no command grades is DECLARED in the method, never
+# described: `[READER-GRADED — <what a reader grades>]`, in prose outside every closed
+# span. It is read by its opening token alone, in any case and in the spellings an
+# author types -- `[`, an optional space, `reader`, then a space, a hyphen, an en or em
+# dash or nothing, then `grad` -- and so is the bare upper-case word READER-GRADED that
+# authors already write for such a limb (reader_limb_split, the one recognizer). The
+# marker and everything after it, up to the next command, is that limb: the designated
+# command's window ends at the first marker, so a limb's text never grades a command.
+# Limbs are named in the order written, and a marker before the first command is limb
+# 1. Inside backticks a marker is a command's pattern or a mention and declares
+# nothing; a command quoted inside a marker is a command, a limb of its own. A marker
+# with no designated command beside it names nothing to run (the no-command SKIP); a
+# declared deferral anywhere outside a command span still defers the whole row, a
+# limb's text included; and a limb described in prose without the marker is invisible
+# here, so the row is graded on its command alone. The verifier runs nothing it
+# declares for a reader. Beside reader limbs only, a designated command whose window
+# states no comparator is graded on the method's with the reader text cut
+# (reader_limb_strip), and a comparator written only in a reader limb's text reads
+# ERROR comparator-in-reader-limb -- never the exit status, which would read a failing
+# count as a pass.
 #
 # FD-0: every limb that runs goes through the stdin-isolated dispatch. Only the
 # designated command runs, through eval_free_run inside the dispatch loop's body, so
@@ -1479,13 +1534,18 @@ compare_threshold() {
 # THE CATALOG IS CLOSED, AND ITS BOUNDARY IS STATED. Its words are RECOGNISED BY NAME
 # AND NEVER RUN -- RUNNABLE_VERBS stays the only set this executor executes, and a
 # name found here widens nothing. A real tool missing from it reads as a method with
-# no command until it is added: never a pass, never a failure, and fixed by one word.
+# no command until it is added, when it is the method's only command: never a pass,
+# never a failure, and fixed by one word. Beside a designated command, a span shaped
+# as its invocation -- a path, or a word followed by an option -- is named as a
+# command that did not run (span_unrecognised_invocation), so it never leaves the row
+# at PASS. The grep and awk kin an author writes for a count (rg, ugrep, egrep, fgrep,
+# pcregrep, mawk, nawk) are catalogued, so one written with no option is named too.
 # A lexical or PATH-based test was rejected: the first admits English words, and the
 # second would make a verdict depend on which tools the grading host has installed.
 span_invokes_tool() {
   local t n tools interp words re='^(\./)?([A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.(sh|bash|py|pl|rb|js|mjs|ts)$'
   local -a w=()
-  tools='bash sh zsh dash ksh python python3 perl ruby node source . eval exec env xargs for while until if case time cd export set unset exit return local read git gh awk gawk sed tr cut sort uniq comm diff cmp paste join find jq yq tee printf echo stat file du xxd od base64 tail shasum sha256sum md5 md5sum column realpath readlink basename dirname date curl wget make npm npx pytest shellcheck cp mv rm mkdir touch chmod ln claude sqlite3 openssl osascript'
+  tools='bash sh zsh dash ksh python python3 perl ruby node source . eval exec env xargs for while until if case time cd export set unset exit return local read git gh awk gawk mawk nawk sed tr cut sort uniq comm diff cmp paste join find jq yq tee printf echo stat file du xxd od base64 tail shasum sha256sum md5 md5sum column realpath readlink basename dirname date curl wget make npm npx pytest shellcheck cp mv rm mkdir touch chmod ln claude sqlite3 openssl osascript rg ugrep egrep fgrep pcregrep'
   interp='bash sh zsh dash ksh python python3 perl ruby node'
   words='source . eval exec for while until if case time cd export set unset exit return local read printf echo'
   read -r -a w <<< "$1" || true
@@ -1500,6 +1560,30 @@ span_invokes_tool() {
   esac
   case "$t" in *..*) return 0 ;; esac
   if [[ "$t" =~ $re ]] && { [ "$n" -ge 2 ] || [ -n "${2:-}" ]; }; then printf '%s' "${t##*/}"; fi
+  return 0
+}
+
+# span_unrecognised_invocation <span> -- prints the lead of a span the catalog does not
+# name that is SHAPED AS AN INVOCATION, else nothing: the span carries an argument, and
+# its lead is a path (absolute, `./`, `~/` or word/word, never `..`) or a word followed
+# by an option (`-x`, `--x`). It is asked only about a CLOSED mention-class span, and
+# only by the limb reader (method_limbs, which command_list reads): beside a designated
+# command such a span is a command that did not run, "not a recognised command", so the
+# row never reads PASS. It names no tool, runs nothing and widens nothing -- the verb
+# set above stays the only set this executor runs, and neither method_spans nor the
+# designated pick reads it -- and a span alone stays a method with no command. A span it
+# does not name is prose: a heading, a field assignment, an unknown word with no option
+# or path. Its test line is KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G22 M6
+# blanks it by one substitution.
+span_unrecognised_invocation() {
+  local t a pre='^(/|\./|~/)[A-Za-z0-9_./+-]+$' wre='^[A-Za-z0-9_.+-]+(/[A-Za-z0-9_.+-]+)+$' ore='^--?[A-Za-z]'
+  local -a w=()
+  read -r -a w <<< "$1" || true
+  [ "${#w[@]}" -ge 2 ] || return 0
+  t="${w[0]}"; a="${w[1]}"
+  if is_runnable_verb "$t"; then return 0; fi
+  case "$t" in *..*) return 0 ;; esac
+  if [[ "$t" =~ $pre ]] || [[ "$t" =~ $wre ]] || { looks_like_command "$t" && [[ "$a" =~ $ore ]]; }; then printf '%s' "$t"; fi
   return 0
 }
 
@@ -1575,57 +1659,157 @@ limb_comparator() {
   esac
 }
 
-# method_limbs <method> -- the per-command reading of a method, built on
-# method_spans. One record per COMMAND span -- a runnable span, or a tool
-# span_invokes_tool names -- in order:
+# READER_MARK_RE -- the bracket marker's opening token (READER-GRADED LIMBS above), as one
+# extended regular expression: `[`, any spaces, `reader` in any case, then any run of
+# spaces, hyphens, en or em dashes, then `grad` in any case. The dashes are alternation
+# literals and never sit inside a bracket expression, so the pattern reads the same under
+# any locale. READER_MARK_ALIAS is the bare upper-case word, read exactly as written.
+readonly READER_MARK_RE='\[[[:space:]]*[Rr][Ee][Aa][Dd][Ee][Rr]([[:space:]]|-|–|—)*[Gg][Rr][Aa][Dd]'
+readonly READER_MARK_ALIAS='READER-GRADED'
+
+# reader_limb_split <prose> -- "<count> TAB <head>" for one piece of prose: how many
+# reader-graded limbs it declares -- each bracket marker, and each bare alias outside
+# one -- and the text before the first. THE one recognizer: every reader of a limb asks
+# here, and it is only ever asked about prose, never about a closed span, so a marker
+# inside backticks declares nothing. Each bracket marker's opening token is replaced by
+# a byte no plan carries (0x01) before the alias is counted, so a marker counts once.
+# Its first line is KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G22 M1 makes
+# it declare nothing by one substitution.
+reader_limb_split() {
+  local work="$1" m pre n=0 head rest x=$'\001'
+  while [[ "$work" =~ $READER_MARK_RE ]]; do
+    m="${BASH_REMATCH[0]}"; pre="${work%%"$m"*}"; work="$pre$x${work#*"$m"}"; n=$((n + 1))
+  done
+  head="${work%%"$x"*}"; head="${head%%"$READER_MARK_ALIAS"*}"
+  rest="$work"
+  while :; do case "$rest" in *"$READER_MARK_ALIAS"*) rest="${rest#*"$READER_MARK_ALIAS"}"; n=$((n + 1)) ;; *) break ;; esac; done
+  printf '%s\t%s' "$n" "$head"
+}
+
+# reader_limb_strip <method> -- the method with every reader-graded limb's text cut out:
+# the text a comparator is read from wherever a reader limb's words must grade nothing
+# (the scope family's comparator, its route, and a designated command's whole-method
+# fallback). A method that declares no reader limb is returned byte for byte, and one
+# that carries no marker anywhere is not split at all.
+reader_limb_strip() {
+  if [[ "$1" =~ $READER_MARK_RE ]]; then method_limbs "$1" strip; return 0; fi
+  case "$1" in *"$READER_MARK_ALIAS"*) method_limbs "$1" strip ;; *) printf '%s' "$1" ;; esac
+}
+
+# method_limbs <method> [strip] -- the per-limb reading of a method, built on
+# method_spans. One record per LIMB, in the order written:
 #   <ordinal> TAB <class> TAB <role> TAB <op> TAB <n> TAB <span>
-# role -- runs: designated (the span extract_command picks); does not run: stdin (a
-# further reader reads_stdin_cmd refuses -- it names no input file, or one the
-# model cannot show is a file) · tool (a span span_invokes_tool names) · further
-# (any other command). <op> and <n> are the designated command's own comparator,
-# read from the prose after it up to the next command ("-" when it states none; "?"
-# when it states two that disagree), and "-" on every other record: a command that
-# does not run is not graded, so its comparator is not read. A bare verb and a
-# mention are prose, never a command: a mention's own text is never read, and the
-# prose after it still belongs to the command before it.
+# A limb is a command span -- a runnable span, a tool span_invokes_tool names, or a closed
+# mention span_unrecognised_invocation names -- or a reader-graded limb its prose
+# declares (reader_limb_split). role -- runs: designated (the span extract_command picks);
+# does not run: stdin (a further reader reads_stdin_cmd refuses -- it names no input
+# file, or one the model cannot show is a file) · tool (a span span_invokes_tool names) ·
+# unrecognised (a span shaped as an invocation the catalog does not know) · reader (a
+# declared reader-graded limb: class reader, ordinal "-", span "reader-graded", for its
+# own text is never echoed) · further (any other command). <op> and <n> are the
+# designated command's own comparator, read from the prose after it up to the next limb
+# ("-" when it states none; "?" when it states two that disagree; "!" when, beside
+# reader limbs only, neither it nor the method with the reader text cut states one and a
+# reader limb's text does), and "-" on every other record: a limb that does not run is
+# not graded, so its comparator is not read. A bare verb and a mention are prose, never
+# a command: a mention's own text is never read, and the prose after it still belongs to
+# the limb before it. The piece after an odd final backtick is prose too (ONLY A CLOSED
+# SPAN IS A COMMAND): it is read for markers and for nothing else. With "strip", it
+# prints the method with every reader limb's text cut out instead (reader_limb_strip).
 method_limbs() {
-  local method="$1" designated rec rest ord cls prose span role cmp op n dseen=0 k i T=$'\t'
-  local -a L_ord=() L_cls=() L_span=() L_prose=() L_des=()
+  local method="$1" mode="${2:-limbs}" designated rec rest ord cls prose span role cmp op n dseen=0 k i j T=$'\t'
+  local uncl=-1 open=0 last=-1 cnt head fb kind ticks kept="" rtext="" nread=0 others=0
+  local -a S_ord=() S_cls=() S_prose=() S_span=()
+  local -a L_ord=() L_cls=() L_span=() L_prose=() L_kind=()
   designated="$(extract_command "$method")"
   while IFS= read -r rec; do {
     [ -n "$rec" ] || continue
     ord="${rec%%"$T"*}"; rest="${rec#*"$T"}"
     cls="${rest%%"$T"*}"; rest="${rest#*"$T"}"
     rest="${rest#*"$T"}"
-    prose="${rest%%"$T"*}"; span="${rest#*"$T"}"
-    if [ "$dseen" -eq 0 ] && [ "$cls" = runnable ] && [ "$span" = "$designated" ]; then
-      dseen=1; k=${#L_ord[@]}; L_des[$k]=1
-    elif [ "$cls" = runnable ] || [ "$cls" = not-runnable ]; then
-      k=${#L_ord[@]}; L_des[$k]=0
-    else
-      if [ "${#L_ord[@]}" -gt 0 ]; then
-        k=$(( ${#L_ord[@]} - 1 )); L_prose[$k]="${L_prose[$k]} $prose"
-      fi
-      continue
-    fi
-    L_ord[$k]="$ord"; L_cls[$k]="$cls"; L_span[$k]="$span"; L_prose[$k]="$prose"
+    k=${#S_ord[@]}
+    S_ord[$k]="$ord"; S_cls[$k]="$cls"; S_prose[$k]="${rest%%"$T"*}"; S_span[$k]="${rest#*"$T"}"
   } </dev/null; done <<EOF_LIMBS
 $(method_spans "$method")
 EOF_LIMBS
+  # The unclosed piece: an odd backtick count with text after the last backtick means
+  # method_spans' last record is that piece, which is prose.
+  ticks="${method//[!\`]/}"
+  if [ $(( ${#ticks} % 2 )) -eq 1 ] && [ -n "${method##*\`}" ]; then uncl=$(( ${#S_ord[@]} - 1 )); fi
+  # One walk, in the order written: the prose before the first backtick, then each span
+  # and the prose after it. A command span starts a limb and closes any reader limb.
+  j=-1
+  while [ "$j" -lt "${#S_ord[@]}" ]; do
+    if [ "$j" -lt 0 ]; then
+      kind=lead; case "$method" in *'`'*) prose="${method%%\`*}" ;; *) prose="$method" ;; esac
+    elif [ "$j" -eq "$uncl" ]; then
+      kind=unclosed; prose="${S_span[$j]}"; [ "$open" -eq 1 ] || kept="$kept\`"
+    else
+      cls="${S_cls[$j]}"; span="${S_span[$j]}"; kind=text
+      if [ "$dseen" -eq 0 ] && [ "$cls" = runnable ] && [ "$span" = "$designated" ]; then dseen=1; kind=designated
+      elif [ "$cls" = runnable ] || [ "$cls" = not-runnable ]; then kind=command
+      elif [ "$cls" = mention ] && [ -n "$(span_unrecognised_invocation "$span")" ]; then kind=unrecognised
+      fi
+      if [ "$kind" != text ]; then
+        open=0; k=${#L_ord[@]}; last=$k
+        L_ord[$k]="${S_ord[$j]}"; L_cls[$k]="$cls"; L_span[$k]="$span"; L_prose[$k]=""; L_kind[$k]="$kind"
+      fi
+      [ "$open" -eq 1 ] || kept="$kept\`$span\`"
+      prose="${S_prose[$j]}"
+    fi
+    # One piece of prose: its markers open reader limbs; its text before them joins the
+    # window of the command before it, never across a reader limb (a lead or unclosed
+    # piece joins none); and a reader limb's text is kept apart from the method a
+    # comparator is read from.
+    rest="$(reader_limb_split "$prose")"; cnt="${rest%%"$T"*}"; head="${rest#*"$T"}"
+    if [ "$open" -eq 1 ]; then
+      rtext="$rtext $prose"
+    else
+      kept="$kept$head"
+      if [ "$last" -ge 0 ] && [ "$kind" != lead ] && [ "$kind" != unclosed ]; then
+        if [ "$kind" = text ]; then L_prose[$last]="${L_prose[$last]} $head"; else L_prose[$last]="$head"; fi
+      fi
+      [ "$cnt" -eq 0 ] || rtext="$rtext ${prose#"$head"}"
+    fi
+    while [ "$cnt" -gt 0 ]; do
+      k=${#L_ord[@]}; open=1; nread=$((nread + 1)); cnt=$((cnt - 1))
+      L_ord[$k]='-'; L_cls[$k]=reader; L_span[$k]=reader-graded; L_prose[$k]=''; L_kind[$k]=reader
+    done
+    j=$((j + 1))
+  done
+  if [ "$mode" = strip ]; then
+    if [ "$nread" -gt 0 ]; then printf '%s' "$kept"; else printf '%s' "$method"; fi
+    return 0
+  fi
+  i=0
+  while [ "$i" -lt "${#L_ord[@]}" ]; do
+    case "${L_kind[$i]}" in command|unrecognised) others=$((others + 1)) ;; esac
+    i=$((i + 1))
+  done
   i=0
   while [ "$i" -lt "${#L_ord[@]}" ]; do
     op='-'; n='-'
-    if [ "${L_des[$i]}" -eq 1 ]; then
-      role=designated
-      cmp="$(limb_comparator "${L_prose[$i]}")"
-      case "$cmp" in
-        '') : ;;
-        ambiguous) op='?' ;;
-        *) op="${cmp%%"$T"*}"; n="${cmp#*"$T"}" ;;
-      esac
-    elif [ "${L_cls[$i]}" = not-runnable ]; then role=tool
-    elif reads_stdin_cmd "${L_span[$i]}" >/dev/null; then role=stdin
-    else role=further; fi
+    case "${L_kind[$i]}" in
+      reader) role=reader ;;
+      unrecognised) role=unrecognised ;;
+      designated)
+        role=designated
+        cmp="$(limb_comparator "${L_prose[$i]}")"
+        case "$cmp" in
+          '') : ;;
+          ambiguous) op='?' ;;
+          *) op="${cmp%%"$T"*}"; n="${cmp#*"$T"}" ;;
+        esac
+        # Beside reader limbs only, a window stating no comparator reads the method with
+        # the reader text cut, and a comparator written only in reader text is ERROR,
+        # never the exit status. KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm
+        # G22 M10 removes it by one substitution.
+        if [ "$op" = '-' ] && [ "$nread" -gt 0 ] && [ "$others" -eq 0 ]; then fb="$(extract_threshold "$kept")"; if [ -n "$fb" ]; then op="${fb%%"$T"*}"; n="${fb#*"$T"}"; elif [ -n "$(comparator_phrases "$rtext")" ]; then op='!'; fi; fi ;;
+      *)
+        if [ "${L_cls[$i]}" = not-runnable ]; then role=tool
+        elif reads_stdin_cmd "${L_span[$i]}" >/dev/null; then role=stdin
+        else role=further; fi ;;
+    esac
     printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${L_ord[$i]}" "${L_cls[$i]}" "$role" "$op" "$n" "${L_span[$i]}"
     i=$((i + 1))
   done
@@ -1644,16 +1828,49 @@ limbs_are_multi() {
   [ "$n" -ge 2 ] && [ "$d" -eq 1 ]
 }
 
+# designated_threshold <method> <limbs> -- the comparator a one-command row's designated
+# command is graded on: the one written after it, up to the next limb -- its own window,
+# read as a method naming several commands reads it -- else, when that window states
+# none, the whole method's with any reader-graded text cut out, which is the reading the
+# row had before. So the one-command and multi-command paths agree whenever a command
+# states its comparator after it, and differ only in the stated fallback: the whole
+# method here, the exit status there. Prints "<op> TAB <n>", "?" when the window states
+# two that disagree, or nothing. Both handlers call it on one identical line, KEPT ON
+# ONE LINE ON PURPOSE: the suite's mutation arm G22 M8 reverts both to the whole-cell
+# reading by one substitution.
+designated_threshold() {
+  local rec rest op="" n="" T=$'\t'
+  while IFS= read -r rec; do {
+    rest="${rec#*"$T"}"; rest="${rest#*"$T"}"
+    case "$rest" in designated"$T"*) rest="${rest#*"$T"}"; op="${rest%%"$T"*}"; rest="${rest#*"$T"}"; n="${rest%%"$T"*}" ;; esac
+  } </dev/null; done <<< "$2"
+  case "$op" in
+    '?') printf '?'; return 0 ;;
+    ''|'-'|'!') : ;;
+    *) printf '%s\t%s' "$op" "$n"; return 0 ;;
+  esac
+  extract_threshold "$(reader_limb_strip "$1")"
+}
+
+# partial_tail <reader-limbs> -- the closing clause of the partially run outcome: a row
+# that names a reader-graded limb says a limb went ungraded, and every other row keeps
+# its text byte for byte.
+partial_tail() {
+  if [ "${1:-0}" -gt 0 ]; then printf '%s' 'a limb this verifier did not grade is not a pass'
+  else printf '%s' 'a command that did not run is not a pass'; fi
+}
+
 # grade_limbs <limbs> -- run the designated command through eval_free_run against its
-# own comparator, name every other command as not run with its reason, and reduce
+# own comparator, name every other limb as not run with its reason, and reduce
 # (METHOD LIMBS). Prints "<verdict> TAB <observed>". The observed text lists every
-# command in order after "limbs run 1 of <N>:" -- "limb <k> <verb> <verdict>
+# limb in order after "limbs run 1 of <N>:" -- "limb <k> <verb> <verdict>
 # <observed>" for the one that ran, "limb <k> <verb> did not run (<reason>)" for
-# each one that did not -- and a can't-run row leads with "partial-execution:". When
-# the handlers' refusal stops the designated command itself, the list reads "limbs run
-# 0 of <N>:", and the verdict is the refusal's (shell_syntax_refusal).
+# each command that did not, and "limb <k> reader-graded did not run (declared for a
+# reader)" for each reader limb -- and a can't-run row leads with "partial-execution:".
+# When the handlers' refusal stops the designated command itself, the list reads "limbs
+# run 0 of <N>:", and the verdict is the refusal's (shell_syntax_refusal).
 grade_limbs() {
-  local limbs="$1" rec rest span verb why sop ref lv="" lo="" list="" n=0 i out rc cres cstatus cval refused=0 T=$'\t'
+  local limbs="$1" rec rest span verb why sop ref lv="" lo="" list="" n=0 i out rc cres cstatus cval refused=0 rd=0 T=$'\t'
   local -a R_role=() R_op=() R_want=() R_span=()
   while IFS= read -r rec; do {
     [ -n "$rec" ] || continue
@@ -1672,6 +1889,8 @@ EOF_GRADE
       designated)
         if [ "${R_op[$i]}" = '?' ]; then
           lv="$VERDICT_ERROR"; lo="comparator-ambiguous (the prose after this command states comparators that disagree)"
+        elif [ "${R_op[$i]}" = '!' ]; then
+          lv="$VERDICT_ERROR"; lo="comparator-in-reader-limb (the only comparator is written in a reader-graded limb, whose text grades nothing: write it right after the command)"
         elif sop="$(span_shell_operator "$span")"; then
           # Shell syntax: the designated command is not run either (the handlers'
           # refusal, shell_syntax_refusal), so no command in the method ran.
@@ -1703,6 +1922,11 @@ EOF_GRADE
         list="${list:+$list; }limb $((i + 1)) $verb did not run ($why)" ;;
       tool)
         list="${list:+$list; }limb $((i + 1)) $verb did not run (outside the verb set)" ;;
+      unrecognised)
+        list="${list:+$list; }limb $((i + 1)) $verb did not run (not a recognised command)" ;;
+      # KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G22 M3 takes the reader arm
+      # out of this case by one substitution.
+      reader) rd=$((rd + 1)); list="${list:+$list; }limb $((i + 1)) reader-graded did not run (declared for a reader)" ;;
       *)
         list="${list:+$list; }limb $((i + 1)) $verb did not run (only the designated command runs)" ;;
     esac
@@ -1712,7 +1936,7 @@ EOF_GRADE
     printf '%s\t%s\n' "$VERDICT_ERROR" "multi-command-without-designated-command (internal inconsistency: limbs_are_multi admits only a method with one)"
   elif [ "$lv" = "$VERDICT_PASS" ]; then
     printf '%s\t%s\n' "$VERDICT_PARTIAL_SLOT" \
-      "partial-execution: limbs run 1 of $n: $list — a command that did not run is not a pass"
+      "partial-execution: limbs run 1 of $n: $list — $(partial_tail "$rd")"
   elif [ "$refused" -eq 1 ]; then
     printf '%s\t%s\n' "$lv" "limbs run 0 of $n: $list"
   else
@@ -1722,33 +1946,40 @@ EOF_GRADE
 
 # command_list <method> <designated> <designated-text> -- the partition's partial rule
 # for a family whose designated command is not an allowlisted verb (the scope family's
-# assertion; the deploy check). Lists the method's commands in order, as grade_limbs
-# names them -- "limb <k> <verb> <designated-text>" for the designated one and "limb
-# <k> <verb> did not run (<reason>)" for every other -- and prints "<N> TAB <list>",
-# N the number of commands. N below 2 means the row names no command beside the
-# designated one. A reason is the most basic one, as in grade_limbs: a tool outside
-# the verb set; a reader that names no input; else only the designated command runs.
+# assertion; the deploy check). Lists the method's limbs in order, as grade_limbs
+# names them -- "limb <k> <verb> <designated-text>" for the designated one, "limb <k>
+# <verb> did not run (<reason>)" for every other command and "limb <k> reader-graded
+# did not run (declared for a reader)" for each reader limb -- and prints "<N> TAB <R>
+# TAB <list>", N the number of limbs and R the reader limbs among them. N below 2 means
+# the row names no limb beside the designated one. It reads the limbs method_limbs
+# reads, so every route names the same limbs: a reason is the most basic one, as in
+# grade_limbs -- a tool outside the verb set; a span shaped as a command the catalog
+# does not know; a reader that names no input; else only the designated command runs.
+# The reader line is KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G22 M5 stops
+# it counting reader limbs by one substitution.
 command_list() {
-  local method="$1" designated="$2" dtext="$3" rec rest cls span verb why list="" k=0 dseen=0 T=$'\t'
+  local method="$1" designated="$2" dtext="$3" rec rest role span verb why list="" k=0 r=0 dseen=0 T=$'\t'
   while IFS= read -r rec; do {
     [ -n "$rec" ] || continue
-    rest="${rec#*"$T"}"; cls="${rest%%"$T"*}"
-    rest="${rest#*"$T"}"; rest="${rest#*"$T"}"; span="${rest#*"$T"}"
-    case "$cls" in runnable|not-runnable) ;; *) continue ;; esac
+    rest="${rec#*"$T"}"; rest="${rest#*"$T"}"; role="${rest%%"$T"*}"
+    rest="${rest#*"$T"}"; rest="${rest#*"$T"}"; rest="${rest#*"$T"}"; span="$rest"
+    if [ "$role" = reader ]; then k=$((k + 1)); r=$((r + 1)); list="${list:+$list; }limb $k reader-graded did not run (declared for a reader)"; continue; fi
     k=$((k + 1))
     verb="${span#"${span%%[![:space:]]*}"}"; verb="${verb%% *}"
     if [ "$dseen" -eq 0 ] && [ "$span" = "$designated" ]; then
       dseen=1; list="${list:+$list; }limb $k $verb $dtext"; continue
     fi
-    if [ "$cls" = not-runnable ]; then why="outside the verb set"
-    elif why="$(reads_stdin_cmd "$span")"; then
-      case "$why" in stdin-reader:*|'') why="names no input" ;; esac
-    else why="only the designated command runs"; fi
+    case "$role" in
+      tool) why="outside the verb set" ;;
+      unrecognised) why="not a recognised command" ;;
+      stdin) why="$(reads_stdin_cmd "$span" || true)"; case "$why" in stdin-reader:*|'') why="names no input" ;; esac ;;
+      *) why="only the designated command runs" ;;
+    esac
     list="${list:+$list; }limb $k $verb did not run ($why)"
   } </dev/null; done <<EOF_CMDS
-$(method_spans "$method")
+$(method_limbs "$method")
 EOF_CMDS
-  printf '%s\t%s' "$k" "$list"
+  printf '%s\t%s\t%s' "$k" "$r" "$list"
 }
 
 # per_issue_command <method> -- THE PER-ISSUE GUARD: the command the per-issue handler
@@ -1832,7 +2063,10 @@ handle_per_issue() {
   local sop
   if sop="$(span_shell_operator "$cmd")"; then shell_syntax_refusal "$sop"; return; fi
 
-  local threshold op want; threshold="$(extract_threshold "$method")"
+  # The comparator is the one written after the command, else the whole method's
+  # (designated_threshold): the same window a method naming several commands reads.
+  local threshold op want
+  threshold="$(designated_threshold "$method" "$limbs")"
   op="$(printf '%s' "$threshold" | cut -f1)"; want="$(printf '%s' "$threshold" | cut -f2)"
 
   # Run the embedded command from REPO_ROOT so relative paths resolve.
@@ -1855,6 +2089,7 @@ handle_per_issue() {
   fi
 
   if [ -n "$threshold" ]; then
+    if [ "$threshold" = '?' ]; then printf '%s\t%s\n' "$VERDICT_ERROR" "comparator-ambiguous (the prose after this command states comparators that disagree)"; return; fi
     count="$cval"
     if [ "$(compare_threshold "$count" "$op" "$want")" = PASS ]; then
       printf '%s\t%s\n' "$VERDICT_PASS" "count=$count ($op $want)"
@@ -2443,7 +2678,9 @@ handle_integration() {
   out="$( cd "$REPO_ROOT" && eval_free_run "$cmd" 2>/dev/null )"
   rc=$?
   set -e
-  threshold="$(extract_threshold "$method")"
+  # The comparator is the one written after the command, else the whole method's
+  # (designated_threshold): the same window a method naming several commands reads.
+  threshold="$(designated_threshold "$method" "$limbs")"
   op="$(printf '%s' "$threshold" | cut -f1)"; want="$(printf '%s' "$threshold" | cut -f2)"
   # Same shared reader, same unconditional exit-status guard as handle_per_issue.
   # These two handlers each carried their own copy of the count expression, which
@@ -2457,6 +2694,7 @@ handle_integration() {
     return
   fi
   if [ -n "$threshold" ]; then
+    if [ "$threshold" = '?' ]; then printf '%s\t%s\n' "$VERDICT_ERROR" "comparator-ambiguous (the prose after this command states comparators that disagree)"; return; fi
     count="$cval"
     if [ "$(compare_threshold "$count" "$op" "$want")" = PASS ]; then
       printf '%s\t%s\n' "$VERDICT_PASS" "co-occurrence count=$count ($op $want)"
@@ -2494,12 +2732,14 @@ deploy_check_exit_code() {
 # sync + regression: delegate to deploy --check (source<->deployed byte-diff), for a row
 # whose command IS deploy.sh --check (classify_family).
 # We do NOT re-implement diffing; the deploy check IS the sync/regression oracle.
-# A declared row that ALSO names another command follows the partition's partial rule
-# (command_list): when the check passes, the row reads the can't-run slot and names the
-# command that did not run; when it fails, FAIL stands and the list still names it.
+# A declared row that ALSO names another limb -- a command, a span shaped as a command the
+# catalog does not know, or a declared reader-graded limb -- follows the partition's
+# partial rule (command_list): when the check passes, the row reads the can't-run slot
+# and names the limb that did not run; when it fails, FAIL stands and the list still
+# names it.
 # $1 = family (sync | regression), $2 = method string.
 handle_deploy_check() {
-  local family="$1" method="${2:-}" rc verdict obs cmd cl n list T=$'\t'
+  local family="$1" method="${2:-}" rc verdict obs cmd cl n nr=0 list T=$'\t'
   if [ ! -x "$DEPLOY_CHECK" ] && [ ! -f "$DEPLOY_CHECK" ]; then
     printf '%s\t%s\n' "$VERDICT_ERROR" "deploy.sh --check not found at $DEPLOY_CHECK"; return 0
   fi
@@ -2514,13 +2754,13 @@ handle_deploy_check() {
   if [ -n "$method" ]; then
     cmd="$(extract_command "$method")"
     cl="$(command_list "$method" "$cmd" "$verdict $obs")"
-    n="${cl%%"$T"*}"; list="${cl#*"$T"}"
+    n="${cl%%"$T"*}"; list="${cl#*"$T"}"; nr="${list%%"$T"*}"; list="${list#*"$T"}"
   fi
   # KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm G18 M9 removes the partial
   # rule by one substitution.
   if [ -n "$method" ] && [ "$n" -ge 2 ]; then
     if [ "$verdict" = "$VERDICT_PASS" ]; then
-      printf '%s\t%s\n' "$VERDICT_PARTIAL_SLOT" "partial-execution: limbs run 1 of $n: $list — a command that did not run is not a pass"
+      printf '%s\t%s\n' "$VERDICT_PARTIAL_SLOT" "partial-execution: limbs run 1 of $n: $list — $(partial_tail "$nr")"
     else
       printf '%s\t%s\n' "$verdict" "limbs run 1 of $n: $list"
     fi
@@ -2893,11 +3133,14 @@ _ciac_lint_evidence() {
 
 # _ciac_lint_one <method> <entry> <issues> -- "<status> TAB <flag>" for one parsed CIAC:
 # CLEAN, DECLARED, or FLAG naming the first rule the grading path would meet. Each rule's
-# line reads the reader the grader reads. Three are KEPT ON ONE LINE ON PURPOSE: the
+# line reads the reader the grader reads. Five are KEPT ON ONE LINE ON PURPOSE: the
 # suite's mutation arms G21 M1 (the verb check), M3 (the deferral read) and M4 (the count
-# with no comparator) each reach one of them by one substitution.
+# with no comparator), and G22 M4 (a reader-graded limb) and M9 (the scope branch's limb
+# count), each reach one of them by one substitution. A CIAC carries no reader-graded
+# limb: the grader reads such a row as the partially run outcome, which QA Checkpoint
+# 3.5 reads NOT MET (unverified), so the claim a reader grades is its own declared CIAC.
 _ciac_lint_one() {
-  local method="$1" entry="$2" issues="$3" hz outside decl ev limbs cmd spans lead tool specs syn why p rs=0 NL=$'\n'
+  local method="$1" entry="$2" issues="$3" hz outside decl ev limbs cmd spans lead tool specs syn why p cl rs=0 NL=$'\n' T=$'\t'
   if [ -z "${method//[[:space:]]/}" ]; then _ciac_lint_say FLAG no-method; return 0; fi
   hz="$(_ciac_lint_entry "$entry")"
   if [ -n "$hz" ]; then _ciac_lint_say FLAG "$hz"; return 0; fi
@@ -2915,6 +3158,7 @@ _ciac_lint_one() {
       return 0 ;;
   esac
   limbs="$(method_limbs "$method")"
+  case "$limbs" in *"${T}reader${T}"*) _ciac_lint_say FLAG reader-limb; return 0 ;; esac
   if limbs_are_multi "$limbs"; then _ciac_lint_say FLAG multi-limb; return 0; fi
   cmd="$(extract_command "$method")"; spans="$(method_spans "$method")"
   if [ -z "$cmd" ]; then
@@ -2931,6 +3175,7 @@ _ciac_lint_one() {
     if specs="$(scope_spec_of "$cmd" "$method")"; then
       case "$NL$specs" in *"$NL?"*) p="$NL$specs"; p="${p#*"$NL?"}"; _ciac_lint_say FLAG "scope-pathspec-placeholder:${p%%"$NL"*}"; return 0 ;; esac
       if [ "$(limb_comparator "$method")" = ambiguous ]; then _ciac_lint_say FLAG multi-comparator; return 0; fi
+      cl="$(command_list "$method" "$cmd" -)"; if [ "${cl%%"$T"*}" -ge 2 ]; then _ciac_lint_say FLAG multi-limb; return 0; fi
       _ciac_lint_say CLEAN -; return 0
     fi
     tool="$(span_invokes_tool "$cmd" whole)"
@@ -3713,14 +3958,18 @@ handle_fcm_delivery() {
 # `==` or `<=` assertion, an included pathspec that selects no existing and no
 # delivered path -- a typo would otherwise make "nothing changed under X" true of a
 # path that does not exist. Every graded count carries its denominator, the size of
-# the diff it was read over. A method naming another command beside the assertion
-# follows the partition's partial rule (command_list): a PASS reads the can't-run
-# slot and names the command that did not run; a FAIL stands.
+# the diff it was read over. A method naming another limb beside the assertion -- a
+# command, or a declared reader-graded limb -- follows the partition's partial rule
+# (command_list): a PASS reads the can't-run slot and names the limb that did not run;
+# a FAIL stands.
 # ===========================================================================
 
 # scope_spec_of <cmd> <method> -- TRUE, printing the pathspecs one per line, when
-# <cmd> is a scope assertion in the closed grammar above and <method> states a
-# comparator. Each line is `+<pathspec>` (included), `-<pathspec>` (excluded) or
+# <cmd> is a scope assertion in the closed grammar above and <method>, with any
+# reader-graded limb's text cut out (reader_limb_strip), states a comparator: the router
+# and handle_scope read one value from one text, so a comparator written only in a
+# reader limb routes no row here and the row keeps the tool decline, UNRUNNABLE naming
+# git. Each line is `+<pathspec>` (included), `-<pathspec>` (excluded) or
 # `?<pathspec>` (a placeholder, which handle_scope refuses by name). The shell-syntax
 # test reads the span with each `<placeholder>` token replaced by a plain word, so an
 # author's `<base>` or `<skill-dir>` is not read as a redirect; the grammar then
@@ -3756,7 +4005,7 @@ scope_spec_of() {
     esac
   done
   [ -n "$range" ] || return 1
-  [ -n "$(limb_comparator "$method")" ] || return 1
+  [ -n "$(limb_comparator "$(reader_limb_strip "$method")")" ] || return 1
   printf '%s' "$out"
   return 0
 }
@@ -3845,10 +4094,14 @@ scope_delivered_set() {
 # scope: grade one scope assertion against the release diff (Component 6b).
 # $1 = method string. Prints "<verdict> TAB <observed>". Each guard's refusal and the
 # comparator read are KEPT ON ONE LINE ON PURPOSE: the suite's mutation arms G17
-# M6-M9 each reach one of them by a single anchored substitution.
+# M6-M9 each reach one of them by a single anchored substitution. A reader-graded
+# limb's text grades nothing, so the assertion is read from the method with that text
+# cut out (reader_limb_strip) -- the text scope_spec_of routed it on -- and the partial
+# rule reads the whole method (command_list), reader limbs included.
 handle_scope() {
-  local method="$1" cmd specs cmpr op want delivered st paths s p total=0 hits=0 shown="" verdict obs cl n list
+  local raw="$1" method cmd specs cmpr op want delivered st paths s p total=0 hits=0 shown="" verdict obs cl n nr list
   local T=$'\t' NL=$'\n'
+  method="$(reader_limb_strip "$raw")"
   cmd="$(extract_command "$method")"
   if ! specs="$(scope_spec_of "$cmd" "$method")"; then
     printf '%s\t%s\n' "$VERDICT_UNRUNNABLE" \
@@ -3915,11 +4168,11 @@ EOF_SCOPE_NOTHING
   if [ "$verdict" = PASS ]; then obs="scope count=$hits ($op $want) over $total changed path(s) in the release diff"
   else obs="scope count=$hits (wanted $op $want) over $total changed path(s) in the release diff"; fi
   if [ -n "$shown" ]; then obs="$obs: $shown"; fi
-  cl="$(command_list "$method" "$cmd" "$verdict $obs")"
-  n="${cl%%"$T"*}"; list="${cl#*"$T"}"
+  cl="$(command_list "$raw" "$cmd" "$verdict $obs")"
+  n="${cl%%"$T"*}"; list="${cl#*"$T"}"; nr="${list%%"$T"*}"; list="${list#*"$T"}"
   if [ "$n" -ge 2 ]; then
     if [ "$verdict" = PASS ]; then
-      printf '%s\t%s\n' "$VERDICT_PARTIAL_SLOT" "partial-execution: limbs run 1 of $n: $list — a command that did not run is not a pass"
+      printf '%s\t%s\n' "$VERDICT_PARTIAL_SLOT" "partial-execution: limbs run 1 of $n: $list — $(partial_tail "$nr")"
     else
       printf '%s\t%s\n' "$verdict" "limbs run 1 of $n: $list"
     fi
