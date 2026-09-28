@@ -132,8 +132,9 @@ Options:
                         Runs preflight, schema migration, the instance backup,
                         and managed-section regeneration — and nothing else.
                         Skips: needle/roster scaffolds, skill redeploy, the
-                        security-hook bundle refresh, the .version snapshot, and
-                        the .last-update state write. Use this to refresh a single
+                        security-hook bundle refresh, the legacy exemption-list
+                        reconcile, the .version snapshot, and the .last-update
+                        state write. Use this to refresh a single
                         stale allowlist or other composition surface without the
                         blast radius of a full update. Note: core/deploy/deploy.sh
                         --deploy CANNOT refresh a composition surface; this flag
@@ -1050,6 +1051,106 @@ refresh_hooks() {
   rm -f "${refresh_out}"
 }
 
+# --- Phase 5c1: Legacy exemption-list reconcile ----------------------------------------
+# Before the single resolver, the writer (allowlist-add.sh) could only write a copy of the
+# skill-editor exemption list at the hook tier, beside the other allowlists, and the Gate 2
+# hook read that copy. The refreshed hook reads the instance-tier list the manifest has
+# always registered. Every exemption that ever worked at the hook therefore lives in the
+# hook-tier copy, and this phase retires that copy — once, and only where nothing can be
+# lost:
+#
+#   - LOSSLESS (every entry is already an exact line of the instance-tier list): moved into
+#     this run's pre-update backup directory as hook-<basename>.legacy, and counted as a
+#     change.
+#   - NOT LOSSLESS: kept, and each extra entry is named once with the writer command that
+#     re-adds it at the instance tier. Re-affirming a policy entry goes through the governed
+#     writer, whose additions are logged; this phase never writes policy itself.
+#
+# An entry is what the hook could ever have matched: a line other than a blank one or a
+# comment, leading whitespace ignored for that test only.
+#
+# ORDERED AFTER THE HOOK REFRESH, AND NEVER A MEMBER OF --surfaces-only. Retiring the copy
+# is safe only once its reader has switched paths, so the phase requires the deployed Gate 2
+# hook to be byte-identical to source and the co-deployed resolver to be present — read here
+# from the deployed files, not inferred from the refresh's exit status. That comparison asks
+# one question of one hook, whether its reader has switched paths; it does not re-classify
+# the refresh, whose verdict stays the delegate's. A hook the refresh preserved or declined
+# leaves the copy in place. --surfaces-only refreshes no hook, so it cannot switch the
+# reader, and the copy stays until a full update.
+#
+# The hook-tier path is derived through the composition resolver, never spelled. This phase
+# is transitional: it and its tests retire once no install carries a hook-tier copy.
+LEGACY_EXEMPTION_RETIRED=0
+reconcile_legacy_exemption_list() {
+  info "Phase 5c1: Reconcile a legacy hook-tier copy of the skill-editor exemption list"
+  if ! command -v pmo_skill_editor_exemption_list_for >/dev/null 2>&1; then
+    warn "The exemption-list resolver is unavailable; the legacy reconcile is skipped."
+    return 0
+  fi
+  local canonical base legacy
+  canonical="$(pmo_skill_editor_exemption_list_for "${WORKSPACE_ROOT}")"
+  base="$(basename "${canonical}")"
+  if ! legacy="$(lib_compose_resolve_target "${base}" hook "${WORKSPACE_ROOT}")" || [ -z "${legacy}" ]; then
+    warn "The hook-tier path of ${base} could not be derived; the legacy reconcile is skipped."
+    return 0
+  fi
+  if [ ! -f "${legacy}" ]; then
+    info "No legacy hook-tier copy of ${base}; nothing to reconcile."
+    return 0
+  fi
+  if [ ! -f "${canonical}" ]; then
+    info "Legacy hook-tier copy kept: the instance-tier list is absent (${canonical})."
+    return 0
+  fi
+
+  local hooks_dir="${WORKSPACE_ROOT}/.claude/hooks"
+  local reader_current=1 writer_current=1
+  cmp -s "${hooks_dir}/block-skill-direct-edit.sh" "${REPO_ROOT}/core/hooks/block-skill-direct-edit.sh" || reader_current=0
+  [ -f "${hooks_dir}/lib-instance-path.sh" ] || reader_current=0
+  cmp -s "${hooks_dir}/allowlist-add.sh" "${REPO_ROOT}/core/hooks/allowlist-add.sh" || writer_current=0
+
+  # Extras: the legacy copy's entries that are not an exact line of the instance-tier list.
+  local line lead extras=0
+  while IFS= read -r line || [ -n "${line}" ]; do
+    lead="${line#"${line%%[![:space:]]*}"}"
+    case "${lead}" in ''|'#'*) continue ;; esac
+    if grep -Fxq -- "${line}" "${canonical}"; then continue; fi
+    extras=$((extras + 1))
+    if [ "${writer_current}" -eq 1 ]; then
+      warn "Legacy exemption entry '${line}' is not in ${canonical}; re-add it with: ${hooks_dir}/allowlist-add.sh '${canonical}' '${line}' --reason 'migrated from the legacy location'"
+    else
+      warn "Legacy exemption entry '${line}' is not in ${canonical}; run a full ./update.sh so the current allowlist-add.sh is deployed, then re-add the entry with it."
+    fi
+  done < "${legacy}"
+  if [ "${extras}" -gt 0 ]; then
+    warn "Kept the legacy hook-tier copy ${legacy}: ${extras} of its entries are not yet at the instance tier (named above)."
+    return 0
+  fi
+
+  if [ "${reader_current}" -eq 0 ]; then
+    if [ "${DRY_RUN}" -eq 1 ]; then
+      info "[dry-run] the legacy hook-tier copy ${legacy} is lossless; a real run retires it once the hook refresh has made the deployed Gate 2 hook and its co-deployed resolver current."
+    else
+      info "Legacy hook-tier copy kept: the deployed Gate 2 hook or its co-deployed resolver is not the merged version yet, so the hook may still read the copy."
+    fi
+    return 0
+  fi
+  if [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would retire the lossless legacy hook-tier copy ${legacy}"
+    LEGACY_EXEMPTION_RETIRED=1
+    return 0
+  fi
+  local backup_dir dst
+  backup_dir="${BACKUP_DIR_ROOT}-$(date -u +%Y%m%dT%H%M%SZ)"
+  dst="${backup_dir}/hook-${base}.legacy"
+  if mkdir -p "${backup_dir}" && mv "${legacy}" "${dst}"; then
+    LEGACY_EXEMPTION_RETIRED=1
+    info "Retired the lossless legacy hook-tier copy of ${base}; backup: ${dst}"
+  else
+    warn "Could not retire the legacy hook-tier copy ${legacy}; the hook no longer reads it, so it may be removed by hand."
+  fi
+}
+
 # --- Phase 5d: Refresh the managed settings.json (ADR-121) ---
 # Phase 5c above refreshes the hook SCRIPTS. Their REGISTRATIONS live in
 # <ws>/.claude/settings.json, and until this phase existed nothing refreshed that
@@ -1156,7 +1257,8 @@ refresh_version_snapshot() {
 # update.sh's regenerate_managed_sections, not there.
 #
 # It does NOT scaffold needles or the roster, redeploy skills, refresh the
-# security-hook bundle, restamp the .version snapshot, or write .last-update.
+# security-hook bundle, reconcile a legacy exemption-list copy, restamp the .version
+# snapshot, or write .last-update.
 #
 # The .last-update omission is deliberate and load-bearing, not an oversight.
 # write_last_update is the LAST member of the full sequence, so a .last-update
@@ -1202,6 +1304,10 @@ else
   # scripts, so the assertion is too late after it. Not a member of
   # surfaces_only_flow: that flow refreshes no hooks, so it can change no hook mode.
   assert_hooks_executable
+  # MUST follow refresh_hooks — see reconcile_legacy_exemption_list's header: a legacy
+  # copy is retired only once the deployed Gate 2 hook no longer reads it. Not a member
+  # of surfaces_only_flow: that flow refreshes no hook, so it cannot switch the reader.
+  reconcile_legacy_exemption_list
   # Phase 5d MUST follow Phase 5c: hook scripts land first, then the registrations that
   # name them. Reordering would wire events to scripts not yet on disk (ADR-121 §8).
   refresh_settings
@@ -1244,7 +1350,10 @@ if [ "${HOOK_REFRESH_DECLINED}" -eq 1 ]; then
   exit "${EX_INCOMPLETE}"
 fi
 
-if [ "${REGENERATED_COUNT}" -eq 0 ] && [ "${PHASE5_DEPLOYED}" -eq 0 ]; then
+# A retired legacy exemption-list copy is a change to the workspace in its own right, so a
+# run whose only change is that retirement returns EX_OK (its own flag, set by Phase 5c1).
+if [ "${REGENERATED_COUNT}" -eq 0 ] && [ "${PHASE5_DEPLOYED}" -eq 0 ] \
+   && [ "${LEGACY_EXEMPTION_RETIRED}" -eq 0 ]; then
   info "Update complete (no changes — composition surface already current)."
   exit "${EX_NOCHANGE}"
 fi
