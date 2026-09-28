@@ -11833,6 +11833,13 @@ PLXJS
   HOME="/"; REPO_ROOT="/"
   _plx_out="$(_redact_paths "a/b/c" 2>/dev/null)" || _plx_out="<no output>"
   [[ "$_plx_out" == "a/b/c" ]] || { echo "FAIL: PL-1 — a root of one character must be skipped, or every separator is rewritten; 'a/b/c' became '$_plx_out'"; failures=$((failures+1)); }
+  # A doubled slash strips to '/', a root of exactly one character, so this limb is
+  # the one that reads the guard's threshold: the '/' above strips to the empty
+  # string, which a guard admitting one character would still skip (Plan
+  # amendment 14; Stage-7 F-01).
+  HOME="//"; REPO_ROOT="//"
+  _plx_out="$(_redact_paths "a/b/c" 2>/dev/null)" || _plx_out="<no output>"
+  [[ "$_plx_out" == "a/b/c" && "$_plx_out" != *'<repo>'* && "$_plx_out" != *'<home>'* ]] || { echo "FAIL: PL-1 — a doubled-slash root strips to one character ('//' becomes '/') and must be skipped too: the text must pass byte-identical, with no <repo> or <home> inserted; 'a/b/c' became '$_plx_out'"; failures=$((failures+1)); }
   HOME="/plx1/h"; REPO_ROOT="/plx1/h/work"
   _plx_x="line one | a/b"$'\n'"line two"$'\n'
   _plx_out="$(_redact_paths "$_plx_x" 2>/dev/null; /usr/bin/printf 'X')" || _plx_out=""
