@@ -18,9 +18,10 @@
 # earlier layout there)
 #   0. Guard the sandbox (R-8) before anything is written, then clear this
 #      helper's earlier layout: refuse (exit 65) when <sandbox>/.claude is, or sits
-#      inside, a live Claude configuration directory, or when the sandbox already
-#      holds layout files this helper has no record of writing. A layout it did
-#      record is removed first — exactly its recorded files, nothing else.
+#      inside, a live Claude configuration directory, when a file step 4b writes
+#      would land outside the sandbox, or when the sandbox already holds layout
+#      files this helper has no record of writing. A layout it did record is
+#      removed first — exactly its recorded files, nothing else.
 #   1. Create <sandbox>/.claude/hooks/tests/ and write the ownership marker
 #      before anything is copied, so an interrupted build is still recognized as
 #      owned and still names everything it wrote.
@@ -35,6 +36,11 @@
 #                                                     assertions assume)
 #        [OPERATOR_HOMEDIR_PATH] -> ${HOME}
 #        [OPERATOR_GITHUB]       -> ${PMO_TEST_GITHUB_HANDLE:-pmo-test-handle}
+#   4b. Materialize, verbatim from its own manifest row, each instance-tier file a
+#      deployed security hook reads: the set lib-instance-path.sh declares, resolved
+#      for the sandbox with PMO_INSTANCE_PATH unset. Today that is the skill-editor
+#      exemption list, which the Gate 2 hook reads and allowlist-add.sh writes, at the
+#      path the layout's own hook resolves (step 3b in the body below).
 #   5. Write <sandbox>/.claude/hooks/.mode = enforce (the tests set their own
 #      per-case mode against the SANDBOX .mode; the live ~/Claude/.claude/
 #      hooks/.mode is NEVER touched — R-8 sandbox invariant).
@@ -50,8 +56,9 @@
 #   ACCOUNT home, read from the user database and never from ${HOME}: a caller that
 #   overrides HOME for a sandboxed run must not move what counts as live. They are
 #   compared by filesystem identity, not by path strings. This script writes
-#   nothing to ~/Claude/.claude/. The fs-boundary test's .mode mutation targets the
-#   sandbox copy. Resolving [CLAUDE_WORKSPACE_ROOT] to ${HOME}/Claude only sets
+#   nothing to ~/Claude/.claude/. It resolves the instance-tier files a hook reads
+#   with PMO_INSTANCE_PATH unset, so an exported value cannot aim a write at a real
+#   instance. The fs-boundary test's .mode mutation targets the sandbox copy. Resolving [CLAUDE_WORKSPACE_ROOT] to ${HOME}/Claude only sets
 #   the allowlist's prefix-match ROOT (a read-only boundary reference, realpath
 #   does not require it to exist); the tests never write under ${HOME}/Claude.
 #
@@ -430,6 +437,41 @@ HOOK_TIER_BASENAMES="$(awk '
     if (f[2] == "hook") { k = split(f[1], p, "/"); print p[k] }
   }' "${MANIFEST}")"
 
+# The instance-tier files a deployed security hook reads (step 3b), as sandbox-relative
+# paths. The set is declared once, in lib-instance-path.sh, and resolved here for this
+# sandbox by the resolver the hooks source, with PMO_INSTANCE_PATH unset so an exported
+# value cannot aim a write at a real instance. Each destination must be a plain path that
+# stays inside the sandbox, checked now so that a violation writes nothing (R-8).
+HOOK_READ_RELS=""
+INSTANCE_LIB="${REPO_ROOT}/core/deploy/lib-instance-path.sh"
+if [ -f "${INSTANCE_LIB}" ]; then
+  _hook_read="$(
+    unset PMO_INSTANCE_PATH
+    # shellcheck source=/dev/null
+    . "${INSTANCE_LIB}" >/dev/null 2>&1 || exit 0
+    command -v pmo_hook_read_instance_files_for >/dev/null 2>&1 || exit 0
+    pmo_hook_read_instance_files_for "${SANDBOX}"
+  )" || _hook_read=""
+  while IFS= read -r _p; do
+    [ -n "${_p}" ] || continue
+    _rel="${_p#"${SANDBOX}/"}"
+    if [ "${_rel}" = "${_p}" ] || ! layout_rel_ok "${_rel}"; then
+      layout_refuse "a file a security hook reads resolves outside the sandbox (${_p}). Nothing was written."
+    fi
+    if [ "${_rel%/*}" != "${_rel}" ]; then
+      _d="${SANDBOX}/${_rel%/*}"
+      if [ -e "${_d}" ] || [ -L "${_d}" ]; then
+        if [ ! -d "${_d}" ] || ! layout_inside "${_d}"; then
+          layout_refuse "${_d} is not a directory inside the sandbox (a file, or a link that leads out of it). Nothing was written."
+        fi
+      fi
+    fi
+    HOOK_READ_RELS="${HOOK_READ_RELS}${_rel}"$'\n'
+  done <<< "${_hook_read}"
+else
+  log "setup-ci-layout: WARNING resolver missing at ${INSTANCE_LIB}; no instance-tier file a hook reads can be materialized"
+fi
+
 # 0c) Ownership. The marker (step 1) is written before anything is copied; its
 #     presence is the proof of ownership, and the recorded footprint is what the purge
 #     removes. Without it, any layout file already in the sandbox belongs to someone
@@ -444,6 +486,9 @@ else
   for _b in ${HOOK_TIER_BASENAMES}; do
     if [ -e "${CLAUDE_DIR}/${_b}" ]; then _found="${_found} .claude/${_b}"; fi
   done
+  while IFS= read -r _rel; do
+    if [ -n "${_rel}" ] && { [ -e "${SANDBOX}/${_rel}" ] || [ -L "${SANDBOX}/${_rel}" ]; }; then _found="${_found} ${_rel}"; fi
+  done <<< "${HOOK_READ_RELS}"
   if [ -e "${CLAUDE_DIR}/rules/bypass-mode-readiness.md" ]; then _found="${_found} .claude/rules/bypass-mode-readiness.md"; fi
   if [ -e "${CLAUDE_DIR}/rules/bypass-mode-readiness" ]; then _found="${_found} .claude/rules/bypass-mode-readiness"; fi
   if [ -n "${_found}" ]; then
@@ -509,8 +554,11 @@ fi
 # 1b') Co-locate the shared operator-instance / needle resolver next to the hooks,
 #      mirroring the deployed posture (setup-workspace.sh co-deploys it to .claude/hooks/).
 #      block-scope-segregation.sh (#384) resolves it from ${HOOK_DIR}/lib-instance-path.sh
-#      for its CD-4 localized-needle scan; the source lives at core/deploy/, outside the
-#      hooks dir the loop above copies.
+#      for its CD-4 localized-needle scan. The Gate 2 hook (block-skill-direct-edit.sh)
+#      resolves the skill-editor exemption list through it, and allowlist-add.sh resolves
+#      the same list to admit it as a target; without it the hook grants no exemption and
+#      the writer refuses the list. The source lives at core/deploy/, outside the hooks
+#      dir the loop above copies.
 NEEDLELIB_SRC="${REPO_ROOT}/core/deploy/lib-instance-path.sh"
 if [ -f "${NEEDLELIB_SRC}" ]; then
   layout_put copy ".claude/hooks/lib-instance-path.sh" "core/deploy/lib-instance-path.sh"
@@ -717,6 +765,36 @@ if [ "${materialized}" -lt 1 ]; then
   exit 1
 fi
 log "setup-ci-layout: materialized ${materialized} hook-tier allowlist(s)"
+
+# 3b) Materialize the instance-tier files a deployed security hook reads — the set
+#     resolved and checked in step 0 — each copied verbatim from its own manifest row
+#     (the instance rows are raw) through the recorded write path, so the purge removes
+#     it on the next build. The Gate 2 hook reads the skill-editor exemption list here,
+#     at the path the layout's own hook resolves, and the hook suite's end-to-end arm
+#     grades that read. The row is found by tier and basename in one awk pass.
+hook_read_total=0
+hook_read_copied=0
+while IFS= read -r _rel; do
+  [ -n "${_rel}" ] || continue
+  hook_read_total=$((hook_read_total + 1))
+  _src="$(awk -v b="${_rel##*/}" '
+    /^[[:space:]]*"[^"]+\|[^"]+\|[^"]+"/ {
+      row = $0; sub(/^[[:space:]]*"/, "", row); sub(/".*$/, "", row)
+      split(row, f, "|"); k = split(f[1], p, "/")
+      if (f[2] == "instance" && p[k] == b) { print f[1]; exit }
+    }' "${MANIFEST}")"
+  if [ -z "${_src}" ] || [ ! -f "${REPO_ROOT}/${_src}" ]; then
+    log "setup-ci-layout: WARNING no instance-tier manifest source for ${_rel}; not materialized"
+    continue
+  fi
+  layout_put copy "${_rel}" "${_src}"
+  hook_read_copied=$((hook_read_copied + 1))
+done <<< "${HOOK_READ_RELS}"
+if [ "${hook_read_total}" -gt 0 ] && [ "${hook_read_copied}" -eq 0 ]; then
+  log "setup-ci-layout: ERROR none of the ${hook_read_total} instance-tier file(s) a security hook reads was materialized"
+  exit 1
+fi
+log "setup-ci-layout: materialized ${hook_read_copied} of ${hook_read_total} instance-tier file(s) a security hook reads"
 
 # 4) Sandbox .mode (enforce). The tests mutate THIS file per-case and restore
 #    it; the live ~/Claude/.claude/hooks/.mode is never touched (R-8).

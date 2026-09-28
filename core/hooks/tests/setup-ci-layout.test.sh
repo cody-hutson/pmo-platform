@@ -537,7 +537,11 @@ if [ -f "${_fp}" ]; then
   printf '%s\n' .claude/hooks/tests/.layout-owner .claude/hooks/tests/.layout-footprint .claude/hooks/tests/.layout-digest >> "${WORK}/fp.recorded"
 fi
 LC_ALL=C sort -u "${WORK}/fp.recorded" > "${WORK}/fp.recorded.sorted"
-find "${FIX}/.claude" -type f > "${WORK}/fp.found.raw" 2>/dev/null
+# The whole fixture root, not only its .claude/: a default-site build also writes the
+# instance-tier file a security hook reads beside .claude/, and a file written there
+# without a record must fail this arm too. The fixture's core/ holds only the links to
+# the source, which no build writes into, so it is pruned.
+find "${FIX}" -path "${FIX}/core" -prune -o -type f -print > "${WORK}/fp.found.raw" 2>/dev/null
 awk -v p="${FIX}/" 'index($0, p) == 1 { print substr($0, length(p) + 1) }' "${WORK}/fp.found.raw" > "${WORK}/fp.found"
 LC_ALL=C sort -u "${WORK}/fp.found" > "${WORK}/fp.found.sorted"
 _rec_n=0
