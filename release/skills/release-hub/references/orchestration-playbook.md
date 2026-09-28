@@ -158,10 +158,12 @@ before routing continues. Neither alone is sufficient (`core/standards/hub-sessi
    present a non-attributing delta as a content verification.
 
    **Why a surplus blocks, and why "emit the row" is not the reflex remedy.**
-   `gate-outcome/plan-review-go` is consumed downstream as the EARLIEST matching row
-   of the release, so a second row of it silently re-anchors the release's measured
-   GO→deploy duration. Writing another row to clear a false alarm converts a
-   reporting error into permanent corruption of an append-only log.
+   `gate-outcome/plan-review-go` is consumed downstream as the release's T_GO anchor —
+   the earliest row whose stage is `9` and whose actor is `operator` — so a spurious
+   row of that identity written before the real GO silently re-anchors the release's
+   measured GO→deploy duration, and any surplus row is a second GO decision an
+   append-only log can never retract. Writing another row to clear a false alarm
+   converts a reporting error into permanent corruption of that log.
 
    **State the reader's bound, so a zero is not over-read.** `--release` matches the
    milestone slug in the `version` column — rung 1 of the read ladder in
@@ -469,6 +471,21 @@ when their gate fires.
 | decision-supersession | 4a | decision | decision-superseded | hub | CONDITIONAL |
 | recommendation-choice | 4a | decision | recommendation-choice-delta | operator | CONDITIONAL |
 <!-- EMISSION-CONTRACT:END -->
+
+**`plan-review-go` belongs to the Stage-9 GO alone.** The `stage-9-go` row above is the
+only touchpoint that emits `gate-outcome`/`plan-review-go`: stage `9`, actor `operator`,
+one row per rendered GO — a GO WITH CONDITIONS is a GO. `plan-review-no-go` is bound the
+same way to the operator's Stage-9 NO-GO. A touchpoint with no row in this block does not
+borrow either subtype: every other outcome takes the class Procedure 4a step 2 resolves
+from `core/standards/hub-session-continuity.md` § 3.2 — the only mapping source, which
+this playbook does not restate — and a stage-completion note is not a gate outcome at
+all: it is recorded as the sub-task comment alone, with no event row. The rule is
+enforced where the row is written: `release/tools/append-pipeline-event.sh` refuses
+either subtype under any other stage or actor and names where the row goes instead, so a
+borrowed emit fails its step-4 read-back (`POST == PRE`) instead of landing. The reason
+is downstream: the cycle-time tool anchors T_GO on the earliest `plan-review-go` row of
+that identity, and borrowed rows inflated measured GO→deploy durations without any check
+noticing.
 
 **Why exactly three `MUST` rows.** The partition predicate is *structural guarantee in a
 completed release*, not observed frequency. Procedure 1 scaffolding is unreachable without
