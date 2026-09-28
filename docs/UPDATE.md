@@ -100,13 +100,13 @@ The root flags + env-var counterparts let integration tests sandbox cleanly with
 
 The validate script asserts: hooks installed, composition-surface files present, settings.json valid, CLAUDE.md tokens resolved.
 
-**Running this after an update is a required follow-up, not a suggestion.** `update.sh` regenerates only the composition surfaces that are already present; it never installs an absent one. When a surface is missing it says so — and for a **hook-tier** surface it stops with exit 75 rather than proceeding (see § 6.3), because installing an enforcement control whose allowlist is absent would leave the workspace more restrictive than intended. Run `./docs/scripts/setup-workspace.sh` to install the missing surface, then re-run `./update.sh`.
+**Running this after an update is a required follow-up, not a suggestion.** `update.sh` regenerates only the composition surfaces that are already present; it never installs an absent one. When a surface is missing it says so — and for a surface a **security hook reads** (every hook-tier allowlist, and the skill-editor exemption list at the instance tier) it stops with exit 75 rather than proceeding (see § 6.3), because installing an enforcement control whose escape surface is absent would leave the workspace more restrictive than intended. Run `./docs/scripts/setup-workspace.sh` to install the missing surface, then re-run `./update.sh`.
 
 ### 3.5 Blast radius of a full update, and when to use `--surfaces-only`
 
-A full `./update.sh` performs, in order: an operator-instance backup · a create-once needle + roster scaffold · composition-surface managed-section regeneration across **all 19** manifest entries (only drifted entries are rewritten; OPERATOR ADDITIONS are preserved) · a full skill redeploy via `deploy.sh --deploy` · a security-hook bundle refresh across **all 23** hooks plus the co-shipped primitives, installing any hook that is missing · a `.version` snapshot refresh · a `.last-update` state write.
+A full `./update.sh` performs, in order: an operator-instance backup · a create-once needle + roster scaffold · composition-surface managed-section regeneration across **every entry** of `core/deploy/composition-surface-manifest.sh` (only drifted entries are rewritten; OPERATOR ADDITIONS are preserved) · a full skill redeploy via `deploy.sh --deploy` · a security-hook bundle refresh across **every hook** under `core/hooks/` plus the co-shipped primitives, installing any hook that is missing · a `.version` snapshot refresh · a `.last-update` state write.
 
-**The two denominators — 19 composition surfaces and 23 security hooks — are stable; how many actually change on your instance is state-dependent. Run `./update.sh --dry-run` for the current magnitudes.** A full update is **not** a drop-in substitute for a targeted refresh: when all you need is to bring one composition surface current, use `./update.sh --surfaces-only`, which touches nothing else.
+**The two denominators — the manifest's entries and the shipped hooks — change only with a release; how many actually change on your instance is state-dependent. Run `./update.sh --dry-run` for the current magnitudes.** A full update is **not** a drop-in substitute for a targeted refresh: when all you need is to bring one composition surface current, use `./update.sh --surfaces-only`, which touches nothing else.
 
 **`core/deploy/deploy.sh --deploy` cannot refresh a composition surface.** It reads three change sets — skills, packages, and harness artifacts — and never sources the composition-surface manifest, so it exits 0 reporting that there is nothing to deploy while leaving a stale allowlist exactly as it was. If a document, issue, or runbook tells you to run `deploy.sh --deploy` to refresh an allowlist or other composition surface, that instruction is wrong; use `./update.sh --surfaces-only` (targeted) or a full `./update.sh` instead.
 
@@ -200,9 +200,9 @@ Check `~/Claude/.backup-pre-update-<timestamp>/` for the pre-attempt content. Re
 
 A deployed control is present but not operable. Two conditions produce this exit, and the output names the offending file either way.
 
-**6.3a — a hook-tier composition surface is absent.** An allowlist under `~/Claude/.claude/` is missing, so `update.sh` refused to refresh the security-hook bundle and stopped.
+**6.3a — a composition surface a security hook reads is absent.** An allowlist under `~/Claude/.claude/`, or the skill-editor exemption list under `~/Claude/pmo-instance/`, is missing, so `update.sh` refused to refresh the security-hook bundle and stopped.
 
-`update.sh` regenerates composition surfaces that already exist; it does **not** install absent ones. That is `setup-workspace.sh`'s job. Refreshing hooks while an allowlist is missing would install an enforcement control with no matching escape hatch, leaving the workspace strictly **more** restrictive than either tool intends — so the run stops before the refresh rather than after it, and nothing lands in that asymmetric state.
+`update.sh` regenerates composition surfaces that already exist; it does **not** install absent ones. That is `setup-workspace.sh`'s job. Refreshing hooks while an escape surface is missing would install an enforcement control with no matching escape hatch, leaving the workspace strictly **more** restrictive than either tool intends — so the run stops before the refresh rather than after it, and nothing lands in that asymmetric state.
 
 ```bash
 ./docs/scripts/setup-workspace.sh     # installs the missing surface(s)

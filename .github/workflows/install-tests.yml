@@ -1335,13 +1335,15 @@ jobs:
         # install-completeness gate started reporting an incomplete install as
         # incomplete. The gate is right; the fixture was not.
         #
-        # It seeds the HOOK-TIER composition surfaces specifically, because those are
-        # what the completeness gate is scoped to: a hook-tier surface is the escape
-        # half of a security control whose enforcement half Phase 5c installs, so an
-        # absent one is a real asymmetry. Instance-tier surfaces are operator data with
-        # no paired enforcement half and are correctly out of that scope. Seeding stays
-        # inside the portable tier this leg is declared to be — it does NOT run the
-        # macOS-only installer, which is the OS-portability work deferred to #342 / #44.
+        # It seeds the composition surfaces the completeness gate covers: every
+        # hook-tier surface, and every instance-tier surface a security hook reads —
+        # the set lib-instance-path.sh declares in pmo_hook_read_instance_files_for.
+        # Each is the escape half of a security control whose enforcement half Phase 5c
+        # installs, so an absent one is a real asymmetry. The other instance-tier
+        # surfaces are escape halves of deploy-time checks, with no hook refresh to
+        # guard, and stay out of that scope. Seeding stays inside the portable tier
+        # this leg is declared to be — it does NOT run the macOS-only installer, which
+        # is the OS-portability work deferred to #342 / #44.
         #
         # The seed is DERIVED FROM THE MANIFEST, never a copied list of filenames. The
         # manifest's own contract is that adding a surface costs one row and no other
@@ -1391,6 +1393,49 @@ jobs:
             exit 1
           fi
           echo "Seeded $seeded hook-tier composition surface(s) into the sandbox."
+          # Seed the instance-tier surfaces a security hook reads, at the path the
+          # single resolver gives for this sandbox. PMO_INSTANCE_PATH is unset for the
+          # resolution, so a runner-level export cannot aim a write outside the sandbox,
+          # and each destination is checked to lie inside it before anything is copied.
+          # The source is the member's own manifest row, matched by basename.
+          . "$GITHUB_WORKSPACE/core/deploy/lib-instance-path.sh"
+          if ! command -v pmo_hook_read_instance_files_for >/dev/null 2>&1; then
+            echo "::error::lib-instance-path.sh defines no pmo_hook_read_instance_files_for; cannot seed the instance-tier surfaces the completeness gate covers"
+            exit 1
+          fi
+          hook_read="$(unset PMO_INSTANCE_PATH; pmo_hook_read_instance_files_for "$sbx/ws")"
+          read_total=0
+          read_seeded=0
+          while IFS= read -r dst; do
+            [ -n "$dst" ] || continue
+            read_total=$((read_total + 1))
+            case "$dst" in
+              "$sbx"/*) ;;
+              *) echo "::error::hook-read surface $dst resolves outside the sandbox $sbx"; exit 1 ;;
+            esac
+            base="$(basename "$dst")"
+            src=""
+            for entry in "${COMPOSITION_SURFACE_FILES[@]}"; do
+              case "${entry%%|*}" in */"$base") src="${entry%%|*}"; break ;; esac
+            done
+            if [ -z "$src" ]; then
+              echo "::error::no manifest row names the hook-read surface $base"
+              exit 1
+            fi
+            mkdir -p "$(dirname "$dst")"
+            cp "$GITHUB_WORKSPACE/$src" "$dst" || {
+              echo "::error::could not seed the hook-read surface $src into the sandbox"
+              exit 1
+            }
+            read_seeded=$((read_seeded + 1))
+          done <<<"$hook_read"
+          # Anti-vacuity, as above: a declared set that seeded nothing would fail at the
+          # gate for a reason that looks like a product defect.
+          if [ "$read_total" -gt 0 ] && [ "$read_seeded" -eq 0 ]; then
+            echo "::error::the hook-read set names $read_total surface(s) and 0 were seeded"
+            exit 1
+          fi
+          echo "Seeded $read_seeded instance-tier surface(s) a security hook reads into the sandbox."
           cd "$sbx/nonrepo" || exit 1
           set +e
           out="$(bash "$GITHUB_WORKSPACE/update.sh" --dry-run --workspace-root "$sbx/ws" --config-root "$sbx/cfg" 2>&1)"

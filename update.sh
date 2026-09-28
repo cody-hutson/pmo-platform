@@ -76,11 +76,13 @@ CANONICAL_PLATFORM_ROOT_SOURCE=""
 # --- Phase 3 result (read by main to select the exit code; see EX_NOCHANGE) ---
 REGENERATED_COUNT=0
 
-# --- Phase 3 result: hook-tier composition surfaces found ABSENT (space-separated
-# basenames). A hook-tier surface is the "escape half" of a hook control; shipping a
-# hook refresh while one is missing puts the workspace in a strictly MORE restrictive
-# state than either tool intends. Consumed by assert_install_complete below (#4449).
-MISSING_HOOK_TIER_SURFACES=""
+# --- Phase 3 result: composition surfaces a security hook reads, found ABSENT
+# (space-separated basenames) — every hook-tier surface, plus the instance-tier files
+# lib-instance-path.sh declares in pmo_hook_read_instance_files_for. Each is the "escape
+# half" of a hook control; shipping a hook refresh while one is missing puts the
+# workspace in a strictly MORE restrictive state than either tool intends. Consumed by
+# assert_install_complete below (#4449).
+MISSING_HOOK_ESCAPE_SURFACES=""
 
 # --- Phase 5 result (read by main to select the exit code; see EX_NOCHANGE) ---
 # Set to 1 by redeploy_skills ONLY when Phase 5 actually deployed >=1 new/changed
@@ -153,11 +155,12 @@ Exit codes:
   66   Schema migration aborted (operator dismissed prompt)
   73   Regeneration failure (file write or verification error)
   75   Install incomplete — a deployed control is present but not operable.
-       Either a hook-tier composition surface is absent (the hook refresh was
-       refused before it could ship enforcement with no escape hatch), or a
-       deployed hook entrypoint is not executable after the refresh (a hook
-       without +x does not run, and does not say so). Both name the offending
-       file. Run docs/scripts/setup-workspace.sh, then re-run.
+       Either a composition surface a security hook reads is absent — a
+       hook-tier allowlist, or the skill-editor exemption list — and the hook
+       refresh was refused before it could ship enforcement with no escape
+       hatch; or a deployed hook entrypoint is not executable after the
+       refresh (a hook without +x does not run, and does not say so). Both
+       name the offending file. Run docs/scripts/setup-workspace.sh, then re-run.
   130  Interrupted (rollback applied)
 
 Prerequisites:
@@ -426,8 +429,8 @@ regenerate_managed_sections() {
 
     if [ ! -f "${target}" ]; then
       info "Target absent (${target_basename}, ${tier} tier); fresh install needed via setup-workspace.sh"
-      if [ "${tier}" = "hook" ]; then
-        MISSING_HOOK_TIER_SURFACES="${MISSING_HOOK_TIER_SURFACES:+${MISSING_HOOK_TIER_SURFACES} }${target_basename}"
+      if [ "${tier}" = "hook" ] || is_hook_read_instance_file "${target}"; then
+        MISSING_HOOK_ESCAPE_SURFACES="${MISSING_HOOK_ESCAPE_SURFACES:+${MISSING_HOOK_ESCAPE_SURFACES} }${target_basename}"
       fi
       continue
     fi
@@ -829,16 +832,19 @@ redeploy_skills() {
 
 # --- Phase 5b0: Install-completeness gate (#4449) -----------------------------
 # Runs immediately BEFORE the hook refresh, and the ordering is the whole point.
-# Phase 5c installs hook SCRIPTS (the enforcement half). A hook-tier composition
-# surface is its allowlist (the escape half). Refreshing hooks while a hook-tier
-# surface is absent leaves the workspace strictly MORE restrictive than either tool
-# intends — enforcement with no escape — and the run would otherwise report success
-# over it. Gating here (not at end-of-run) means the asymmetric state never lands.
+# Phase 5c installs hook SCRIPTS (the enforcement half). A composition surface a hook
+# reads is its escape half: every hook-tier allowlist, and the instance-tier files
+# lib-instance-path.sh declares in pmo_hook_read_instance_files_for (the skill-editor
+# exemption list the Gate 2 hook reads). Refreshing hooks while one is absent leaves the
+# workspace strictly MORE restrictive than either tool intends — enforcement with no
+# escape — and the run would otherwise report success over it. Gating here (not at
+# end-of-run) means the asymmetric state never lands.
 #
-# Scope is deliberately hook-tier ONLY: instance-tier surfaces are operator data
-# with no paired enforcement half, so their absence is not an asymmetry.
+# Scope is every surface a deployed hook reads, which is the property the tier used to
+# stand in for. The other instance-tier surfaces are escape halves of DEPLOY-TIME checks,
+# with no hook refresh to guard, so their absence is not this asymmetry and they stay out.
 #
-# This CANNOT fire on a healthy workspace (every hook-tier surface present), so it
+# This CANNOT fire on a healthy workspace (every such surface present), so it
 # does not stand between a healthy install and a hook security fix. On an unhealthy
 # one, the correct remedy is setup-workspace.sh, which lands BOTH halves.
 #
@@ -851,13 +857,29 @@ redeploy_skills() {
 # incomplete workspace stops here and does not preview Phases 5c through 4.
 #
 # It also leaves .last-update unwritten, which is correct: the run did not complete.
+#
+# is_hook_read_instance_file <target> — 0 when the target is one of the instance-tier
+# files a deployed hook reads. The set is declared once, in lib-instance-path.sh, resolved
+# for this run's workspace root, and compared by exact string with the target Phase 3
+# resolved through the same resolver. Only ever called in status form.
+is_hook_read_instance_file() {
+  local f
+  command -v pmo_hook_read_instance_files_for >/dev/null 2>&1 || return 1
+  while IFS= read -r f; do
+    if [ -n "${f}" ] && [ "${f}" = "$1" ]; then return 0; fi
+  done <<EOF
+$(pmo_hook_read_instance_files_for "${WORKSPACE_ROOT}")
+EOF
+  return 1
+}
+
 assert_install_complete() {
-  if [ -z "${MISSING_HOOK_TIER_SURFACES}" ]; then
+  if [ -z "${MISSING_HOOK_ESCAPE_SURFACES}" ]; then
     return 0
   fi
-  err "Install incomplete — hook-tier composition surface(s) absent: ${MISSING_HOOK_TIER_SURFACES}"
+  err "Install incomplete — composition surface(s) a security hook reads are absent: ${MISSING_HOOK_ESCAPE_SURFACES}"
   err "Refusing to refresh the security-hook bundle: installing an enforcement control"
-  err "whose allowlist is absent would leave this workspace MORE restrictive than intended."
+  err "whose escape surface is absent would leave this workspace MORE restrictive than intended."
   err "Run docs/scripts/setup-workspace.sh to install the missing surface(s), then re-run ./update.sh."
   exit "${EX_INCOMPLETE}"
 }
