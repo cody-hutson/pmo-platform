@@ -2924,7 +2924,7 @@ phase_inject_velocity_field() {
     local _err
     # A raw 4096-byte window through the shared projection, which redacts BEFORE it
     # caps, so a path in the producer's diagnostics is never cut mid-string (#7855).
-    _err="$(_detail_one_line "$(/usr/bin/head -c 4096 "$_errf" 2>/dev/null)")"
+    _err="$(/usr/bin/head -c 800 "$_errf" 2>/dev/null | /usr/bin/tr '\n' ' ' || true)"
     /bin/rm -f "$_errf" 2>/dev/null || true
 
     # Exit 2 is the producer's source-integrity / implausible-measurement
