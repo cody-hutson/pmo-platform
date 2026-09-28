@@ -6,7 +6,7 @@ release: work-nature-and-axis-model
 deciders: "Stage 5 Solutioning spoke (Principal Engineer, Research-Methodology Design variant) + Stage 6 Engineering spoke (validation) + the operator at the Stage-13 ratification gate"
 tags: [architecture, decomposition, epic-framing, classification, work-nature, design-axes, methodology-neutral]
 source_observations:
-  - "Frame census as of 2026-09-27, window 2026-06-21T01:22:40Z..2026-09-27T15:46:56Z: ⟦S6⟧ in-window issues; ⟦S6⟧ carry an improvement-form Domain heading; normalized Governance ⟦S6⟧, Software ⟦S6⟧, Data ⟦S6⟧; ⟦S6⟧ off-enum items (⟦S6⟧ distinct raw values); closed frame items completed ⟦S6⟧, not planned ⟦S6⟧; Website, ERP, Code Review, Other none."
+  - "Frame census as of 2026-09-27, window 2026-06-21T01:22:40Z..2026-09-27T15:46:56Z: 5,597 in-window issues; 350 carry an improvement-form Domain heading; normalized Governance 232, Software 23, Data 7; 88 off-enum items (58 distinct raw values); closed frame items completed 112, not planned 14; Website, ERP, Code Review, Other none."
   - "Planning evidence at the release baseline: nature-list and design-framework probes over the release-history-excluded Markdown corpus returned zero while their controls fired."
   - "The measured instance (the epic-framing epic): a consumer repository's first epic framing was re-scoped the same day after the operator named the flow/data/CRUD surface; its second epic converged on the same structural and behaviour-over-time pair."
 supersedes: none
@@ -46,6 +46,8 @@ The single key, orthogonal to kind, altitude, deliverable class and filing form:
 | `integration-change` | Changes exchange across a boundary not owned on both sides: contract, adapter, exchange sequence or identity mapping. | Changing the key a sync snapshot matches external records on; renaming a field only the solution reads is a `data-structure-change`. | Hohpe & Woolf, *Enterprise Integration Patterns* (2003); BABOK v3 Interface Analysis |
 | `investigation` | Produces knowledge, not change: a question answered, a decision recorded, a feasibility established in a time box. | A spike recording a model decision, though its output is a file; the card building what it specifies is not. | Beck, *Extreme Programming Explained* (1999), spikes; SAFe exploration enablers |
 | `infrastructure-change` | Changes the build, verify, deploy or run environment — pipeline and CI runners, deploy mechanics, hosting, hook installation and wiring, runtime configuration — without changing what users get. | Bounding CI suite run time, or wiring an existing hook into a further session type; changing what a check asserts, or what a hook blocks or emits, changes what users get and is not an infrastructure change. | SAFe infrastructure enablers; ITIL 4 change enablement |
+| `restructure` | Changes where parts live or how they compose, preserving behaviour. | Collapsing hand-copied constants into one library with unchanged results; the same move made to change a result is not. | Fowler, *Refactoring* (1999; 2nd ed. 2018); ISO/IEC/IEEE 14764 perfective maintenance (recoding to improve maintainability) |
+| `behaviour-change` | Deliberately changes an existing capability's behaviour with no prior requirement violated: the intent changes. | Silencing a hook's allow path where chatter was the design; silencing it because a rule required silence is a `defect`. | ISO/IEC/IEEE 14764 adaptive and perfective maintenance; Swanson (1976) |
 
 ### Classification procedure
 
@@ -57,25 +59,20 @@ Classify each acceptance criterion; the item's nature is the one most of its cri
 4. It changes an authoritative shape that existing records or readers depend on → `data-structure-change`.
 5. An authoritative statement recorded before the work was raised — a spec, rule, contract, schema, decision record, or the stated purpose of the capability — already requires the missing or wrong behaviour, and it can be quoted → `defect`.
 6. No existing capability delivers it in any form → `new-capability`.
+7. It changes where parts live or how they compose and preserves behaviour → `restructure`.
+8. It deliberately changes an existing capability's behaviour → `behaviour-change`.
 
-Otherwise the criterion fits no nature; the coder records which candidate below it matches.
+Otherwise the criterion fits no nature, and the coder records that it fits none.
 
 **Authoritative sources.** A governed file in the repository, an ADR, or a ratified release plan counts as an authoritative statement. An operator comment, directive or scanner alert counts only once a governed file adopts it. Each `defect` code records its source and the basis for its authority.
 
 **Owed set.** An item owes the union of the owed axes of its primary nature and the owed axes of every surface nature (steps 3 and 4) that at least one of its classified criteria carries. The primary nature still indexes the item's row for grading.
 
-**Why this order.** Steps 1 and 2 classify by what the output is, and after the exclusion in step 2 they cannot overlap the later steps. Steps 3 and 4 classify by the surface touched, and each carries parts that are owed whatever the motive — coordination with a party the work does not own, and migration of existing records and readers — so a surface nature outranks a motive nature, and its owed axes join the item's owed set even when a motive nature is primary: a defect fix that changes a canonical shape still owes the migration. Step 3 precedes step 4 because an exchange-contract change usually changes an exchanged shape too, and the other party's readers cannot be migrated by this work. Steps 5 and 6 classify by motive and apply only to what remains; step 5 precedes step 6 because behaviour that is required and missing is a defect, whose expected parts (root cause, regression) differ from a new capability's.
+**Why this order.** Steps 1 and 2 classify by what the output is, and after the exclusion in step 2 they cannot overlap the later steps. Steps 3 and 4 classify by the surface touched, and each carries parts that are owed whatever the motive — coordination with a party the work does not own, and migration of existing records and readers — so a surface nature outranks a motive nature, and its owed axes join the item's owed set even when a motive nature is primary: a defect fix that changes a canonical shape still owes the migration. Step 3 precedes step 4 because an exchange-contract change usually changes an exchanged shape too, and the other party's readers cannot be migrated by this work. Steps 5 and 6 classify by motive and apply only to what remains; step 5 precedes step 6 because behaviour that is required and missing is a defect, whose expected parts (root cause, regression) differ from a new capability's. Steps 7 and 8 apply only where nothing is required and something already exists, and they split on whether behaviour is preserved.
 
-**Candidate natures** — admitted only if at least three validation items fit one and no other nature:
-
-| Identifier | Definition | Boundary example | Source in practice |
-|---|---|---|---|
-| `restructure` | Changes where parts live or how they compose, preserving behaviour. | Collapsing hand-copied constants into one library with unchanged results; the same move made to change a result is not. | Fowler, *Refactoring* (1999; 2nd ed. 2018); ISO/IEC/IEEE 14764 perfective maintenance (recoding to improve maintainability) |
-| `behaviour-change` | Deliberately changes an existing capability's behaviour with no prior requirement violated: the intent changes. | Silencing a hook's allow path where chatter was the design; silencing it because a rule required silence is a `defect`. | ISO/IEC/IEEE 14764 adaptive and perfective maintenance; Swanson (1976) |
+**Admitted from candidates.** `restructure` and `behaviour-change` entered as candidate natures, each to be admitted only if at least three validation items fit it and no other nature. Both were admitted and their rows moved into the table above: `behaviour-change` with six such items (two more matched it on most of their criteria but also carry a nature), and `restructure` with three, the floor — two of the three also carry one criterion matching `behaviour-change`. Their owed-axis rows are hypotheses.
 
 ISO/IEC/IEEE 14764's perfective category covers both enhancements for users and recoding for maintainability, so it does not separate `restructure` from `new-capability`; Fowler's behaviour-preserving transformation is the citation that does.
-
-⟦S6: move each admitted candidate's row into the work-natures table; under each one not admitted, state its matching count of items that fit no nature.⟧
 
 ### Crosswalk from existing classifications
 
@@ -89,19 +86,15 @@ These surfaces carry hints, not the key. Where a hint and the procedure disagree
 | Tracker `type:` labels | `type:bug` · `type:spike` | `defect` · `investigation` |
 | same | `type:epic`, `type:story`, `type:task`, `type:card` | none — methodology kinds; any kind carries any nature |
 | Process designer's requirement types | Integration · Data · Operational | `integration-change` · `data-structure-change` when an authoritative shape changes · `infrastructure-change` |
-| same | Functional · Non-Functional | by the procedure (`defect`, `new-capability`, or a candidate) · none — a quality attribute is a cross-cutting perspective, not a nature |
+| same | Functional · Non-Functional | by the procedure (`defect`, `new-capability`, `restructure` or `behaviour-change`) · none — a quality attribute is a cross-cutting perspective, not a nature |
 
-⟦S6: the divergence rate — items whose hint and procedure disagree, of items carrying a hint.⟧
+In the validation set, 2 of the 31 items carried a hint (a `bug` label, a `type:spike` label), and both agreed with the procedure: a divergence rate of 0 of 2. The authors' own words diverged more often: of the 9 items whose text or triage called them a defect, the procedure coded 4 as `defect` and 5 otherwise (`behaviour-change` 4, `infrastructure-change` 1), because no authoritative statement they could quote required the behaviour, or because step 2 fired first.
 
 ### Nature is one key
 
-⟦S6: keep one of the next two paragraphs, per the three-valued demonstration outcome.⟧
+**One key, by default.** Nature is one axis; deliverable class is a parameter. Answering an owed axis consults the best-practice guide for the deliverable's class (registry concept 1, Deliverable-class), but the class never changes which axes are owed. This is a default, not a finding: it is borrowed by analogy from the architect role's rule that a split needs a demonstration (ADR-127), whose own scope is the architect axis only. A demonstration needs, for deliverable classes A and B, an axis at E2 or above in at least two delivered items of a nature in class A, while at least two delivered items of that nature in class B show E0 on it and none of them carries E3-F on it. The second-axis question was not testable for any nature: the validation set's delivered items span two deliverable classes, and no nature has two delivered items in each (delivered items, governance · software: `defect` 6 · 0, `behaviour-change` 1 · 1, `restructure` 0 · 1, `new-capability` 1 · 0, `integration-change` 1 · 0, the other three natures 0 · 0). The calibration framings may reopen it: each framing line records the framed epic's deliverable class.
 
-**One key, by default.** Nature is one axis; deliverable class is a parameter. Answering an owed axis consults the best-practice guide for the deliverable's class (registry concept 1, Deliverable-class), but the class never changes which axes are owed. This is a default, not a finding: it is borrowed by analogy from the architect role's rule that a split needs a demonstration (ADR-127), whose own scope is the architect axis only. A demonstration needs, for deliverable classes A and B, an axis at E2 or above in at least two delivered items of a nature in class A, while at least two delivered items of that nature in class B show E0 on it and none of them carries E3-F on it. The second-axis question was ⟦S6: "tested for NATURE on the governance × software pair (n = G governance and S software delivered items of that nature) and not demonstrated" or "not testable for any nature"⟧; for ⟦S6: the remaining natures⟧ it was not testable, because the validation set's delivered items span two deliverable classes. The calibration framings may reopen it: each framing line records the framed epic's deliverable class.
-
-**Nature × deliverable class.** ⟦S6: the nature, the axis and the class pair demonstrated, with n on each side⟧; the second axis binds to registry concept 1 (Deliverable-class).
-
-The improvement form's Domain field is a distinct, unregistered sense of `domain`: an optional value the filer or triage sets, used as a topic label. It served only as the validation set's sampling stratum. Its values name concept-1 classes (Software → `software`, Website → `web`, ERP → `enterprise-platform`, Data → `data`, Governance → `governance`; Code Review has none; Other → a free name), but they do not track them: ⟦S6: the observed crosswalk — for each Domain value, the concept-1 classes of its delivered items, and the name-agreement count⟧.
+The improvement form's Domain field is a distinct, unregistered sense of `domain`: an optional value the filer or triage sets, used as a topic label. It served only as the validation set's sampling stratum. Its values name concept-1 classes (Software → `software`, Website → `web`, ERP → `enterprise-platform`, Data → `data`, Governance → `governance`; Code Review has none; Other → a free name), but they do not track them: of the candidate pool's delivered items, Governance's 108 fall in `governance` (80, 21 of them inferred), `software` (25, 6 inferred) and unresolved (3); Software's 2 in `governance` and `software`, one each; Data's 2 in `governance`. The name agrees for 81 of the 109 classed items.
 
 ### Design axes
 
@@ -118,18 +111,20 @@ Not axes: Zachman's *Who* and *Why* (the framing's actor and outcome fields carr
 
 | Nature | data | process-flow | structure-placement | behaviour-over-time | Row |
 |---|---|---|---|---|---|
-| `defect` | — | owed | owed | — | ⟦S6: proven / hypothesis⟧ |
-| `new-capability` | owed | owed | owed | owed | ⟦S6⟧ |
-| `data-structure-change` | owed | — | owed | owed | ⟦S6⟧ |
-| `integration-change` | owed | owed | owed | owed | ⟦S6⟧ |
-| `investigation` | — | — | — | — | ⟦S6⟧ |
-| `infrastructure-change` | — | — | owed | owed | ⟦S6⟧ |
+| `defect` | — | owed | owed | — | proven — 6 delivered items, Governance and Data strata; deliverable class `governance` only (2 of the 6 inferred) |
+| `new-capability` | owed | owed | owed | owed | hypothesis — 1 delivered item |
+| `data-structure-change` | owed | — | owed | owed | hypothesis — no delivered item |
+| `integration-change` | owed | owed | owed | owed | hypothesis — 1 delivered item |
+| `investigation` | — | — | — | — | hypothesis — no delivered item |
+| `infrastructure-change` | — | — | owed | owed | hypothesis — no delivered item |
+| `restructure` | — | — | owed | — | hypothesis — admitted candidate; 1 delivered item |
+| `behaviour-change` | — | owed | owed | owed | hypothesis — admitted candidate; 2 delivered items |
 
-⟦S6: admitted candidates add hypothesis rows — `restructure`: structure-placement; `behaviour-change`: process-flow, structure-placement, behaviour-over-time. Apply the owed-axis rule before grading; never turn "owed" into "—".⟧
+No validation item carries E3-F, so the owed-axis rule below changed no mark. The `defect` row stays proven with its two items the codebook was refined on set aside (4 delivered items, both strata), and with the item beside the `restructure` boundary example also set aside (3); its proof covers one deliverable class.
 
 **Grades.** E0 nothing answers the axis · E1 the item's own framing names or partly answers it · E2 a delivered design or change answers it in an item-specific passage outside a template-forced section · E2-T the only delivered passage sits in a section or field that the governing template requires for every item regardless of nature, scored as E1 — the list is derived from the templates rather than closed, and includes the issue form's Affected Files and Documentation Impact fields, the release plan's File Change Matrix and Contention Map, the Stage-5 output's Blast Radius and Output for Stage 6 blocks, and the release PR template's Documentation Impact table · E3-P a planned Stage 2–5 refinement added it, scored as E2 on delivered items and never counted for owed-ness · E3-F the item's first framing was silent on it and an operator correction, or a re-scope made because the framing missed it, supplied it. Only delivered items (closed as completed) count as delivered evidence; items closed as not planned are coded and reported but enter no count.
 
-**Owed-axis rule.** An axis a nature does not owe becomes owed only when at least two items of that nature carry framing-level corrective evidence (E3-F) on it, each from its own correction record; an axis already in an item's owed set through a surface nature is explained by that nature and does not count toward this rule. No mark is ever removed here. For each row with at least two delivered items, the owed axes that stayed at E1 or below on every delivered item, with no E3-F anywhere, are reported as over-owed candidates: ⟦S6: per row, the over-owed candidates, "none", or "untested (fewer than two delivered items)"⟧.
+**Owed-axis rule.** An axis a nature does not owe becomes owed only when at least two items of that nature carry framing-level corrective evidence (E3-F) on it, each from its own correction record; an axis already in an item's owed set through a surface nature is explained by that nature and does not count toward this rule. No mark is ever removed here. For each row with at least two delivered items, the owed axes that stayed at E1 or below on every delivered item, with no E3-F anywhere, are reported as over-owed candidates: `defect` none; `behaviour-change` none; `new-capability`, `integration-change` and `restructure` untested (one delivered item each); `data-structure-change`, `investigation` and `infrastructure-change` untested (no delivered item).
 
 **Row grading.** A row is **proven** when at least three delivered items of the nature come from at least two Domain strata, every owed axis shows E2, E3-P or E3-F in at least two of them, and no item of the nature shows E3-F on an axis outside its owed set; otherwise it is a **hypothesis**. Each proven row reports its deliverable-class span beside its strata. An investigation owes no axis: its framing states question, method and time box, and its row is proven when at least three delivered investigation items from at least two strata do so with no E3-F on any axis. Before ratification, this release's acceptance testing blind re-codes the first nine items from the codebook alone and records the agreement in its acceptance report, as k of nine and as k′ of the seven items left once the two drawn items the codebook was refined on are set aside; a nature agreement k below seven of nine leaves every row a hypothesis.
 
@@ -156,7 +151,23 @@ The framing an epic carries — its work nature, its owed axes with their covera
 
 **One carrier.** At the cut, the framing-to-cut mechanism writes one structured "Framing carry" section into each slice's issue body: the parent reference, the work nature, the owed axes with their coverage states, the altitude and the overlap considerations. Every stage reads the issue body first, so this section is how the framing reaches each later stage, and a stage that changes it follows the platform's existing rule for a stage finding that changes requirements: the acceptance criteria are updated and a comment explains why.
 
-Where each carry is enforced today, or which card owns it: ⟦S6: transcribe the carry table — one row per carry, enforced-by (file and section), an owning card, or "unowned — recommended home"; the stage-to-stage rows include engineering⟧. Until those mechanisms ship, the rule is a named gap in the gate-efficacy standard's gate-coverage register, observed through a dated carry line that compares each slice's framing with its parent's; that line cannot be emitted until the slice-body Framing carry section exists.
+Where each carry is enforced today, or which card owns it:
+
+| Carry | Carried by | Enforced by, or owner | What the surveyed surface does today |
+|---|---|---|---|
+| Into slices: nature, altitude, overlap considerations | the slice-body Framing carry section, written at the cut | the framing-to-cut card writes the section; the cut-basis card owns the altitude and overlap vocabulary | no card's criteria name a slice's nature |
+| Into slices: answered owed axes | the same section | the framing-to-cut card: each answered axis maps to a slice or a stated reason | — |
+| Into slices: silent and declared-not-applicable owed axes | the same section | unowned — recommended home: the framing-to-cut card, widened to them (a note proposing it is posted there) | — |
+| Through triage | the same section, read first at every stage | `ticket-information-architecture.md` § Agent Read Pattern ("Read the body first"), and its rule that a stage finding which changes requirements updates the criteria with a comment explaining why | `stage-02-triage.md` § 5 Phase A: overlap re-derived per item (A2, A2.5, A6.5); altitude only in another sense (A4.7) |
+| Through bundle readiness | the same | the same | `milestone-readiness-checklist.md` groups 5, 8, 9: overlap re-derived; group 9's abstraction altitude is another sense |
+| Through refinement | the same | the same | `stage-04-planning.md` § 5 Phase A0 and G-PL1..G-PL5: overlap re-derived; the re-review's altitude lens is another sense |
+| Through design and solutioning | the same | the same | `stage-05-solutioning.md` § 5 Phase 0.5 and Phase 0.7, and the design-review checklist's item 4.7: overlap re-derived; seam altitude is another sense |
+| Through the cross-stage re-review record | the same | the same | `triage-design-rereview.md` § 1 schema and § 6: none of the four elements |
+| Through engineering | the same | the same | `stage-06-engineering.md` § 5 Phase A (A1, A3) and B3: none of the four; A3 re-reads the change matrix's files, and a scope change goes to the operator |
+| Through dev testing | the same | the same | `stage-07-dev-testing.md` § 5 Phase A: none of the four; it checks the deliverable-class label's presence, the one precedent for a carried framing attribute |
+| Through QA testing | the same | the same | `stage-08-qa-testing.md` § 5 Phase B and Phase E3: carried only where the slice's criteria state it |
+
+Until those mechanisms ship, the rule is a named gap in the gate-efficacy standard's gate-coverage register, observed through a dated carry line that compares each slice's framing with its parent's; that line cannot be emitted until the slice-body Framing carry section exists.
 
 Milestone sequencing — which milestone composes which — is a cut and milestone-chain concern, not a design axis: it orders delivery, not the solution. The counter-reading that delivery continuity is behaviour-over-time content was put to the operator, who reframed continuity as this rule.
 
@@ -172,9 +183,9 @@ A not-applicable declaration with a reason is never, on its own, a disagreement.
 
 ### Validation set and candidate pool
 
-⟦S6: the pool in prose — issues filed on the improvement form from 2026-06-21T01:22:40Z (Domain field go-live) to 2026-09-27T15:46:56Z whose Domain value normalizes to one of the seven values, excluding the subject spike and its five held cards; strata by Domain value; quota 12, up to 8 closed; seeded; round-robin.⟧ As of the authoring census (2026-09-27): ⟦S6: pool and stratum sizes, closed items completed and not planned, delta against the Stage-5 census⟧. Website, ERP, Code Review and Other had no items, and the Data stratum is one initiative's slicing batch. "Across domains" in this record means across the form's recorded values within one platform. The codebook was refined on three drawn items before coding; its boundary examples were then replaced with items from outside the set.
+The candidate pool is every issue filed on the improvement form from 2026-06-21T01:22:40Z, when the form's Domain field went live, to 2026-09-27T15:46:56Z whose Domain value normalizes to one of the form's seven values, less this record's spike and its five held cards. It is stratified by Domain value; each stratum draws up to 12 items, at most 8 of them closed, from literal seeds, and the draw interleaves the strata round-robin. As of the authoring census (2026-09-27): the pool holds 256 items — Governance 226, Software 23, Data 7 — of which 112 were closed as completed and 14 as not planned; the in-window, pool and stratum counts match the Stage-5 census, and the seeded draw reproduces the same 31 items. Website, ERP, Code Review and Other had no items, and the Data stratum is one initiative's slicing batch. "Across domains" in this record means across the form's recorded values within one platform. The codebook was refined on three drawn items before coding, and its `defect` and `data-structure-change` boundary examples were then replaced with items from outside the set. Two other boundary examples sit close to drawn items — `restructure`'s describes V-21's subject and `infrastructure-change`'s describes a criterion of V-22 — and both codes are marked; neither item is among the nine the blind re-code covers.
 
-Deliverable classes (registry concept 1) with delivered items in the pool: ⟦S6: each class, with its resolved and inferred counts, and the unresolved count⟧. Testable for the one-key-or-two question: ⟦S6: the classes and pairs testable, and why the others were not⟧.
+Deliverable classes (registry concept 1) with delivered items in the pool: `governance` (62 resolved, 21 inferred) and `software` (20 resolved, 6 inferred); 3 delivered items are unresolved. Testable for the one-key-or-two question: only the `governance` × `software` pair (9 delivered set items in `governance`, 2 of them inferred; 2 in `software`), and only for a nature both `software` items share. They share none — V-05 is `restructure`, V-23 `behaviour-change` — so no nature was testable.
 
 | V | Domain | State | Concept-1 class | Nature (secondary) | data | process-flow | structure-placement | behaviour-over-time | Uncovered surface |
 |---|---|---|---|---|---|---|---|---|---|
@@ -209,7 +220,8 @@ Deliverable classes (registry concept 1) with delivered items in the pool: ⟦S6
 | V-29 | Governance | open | — | `defect` (`infrastructure-change`) | E1 | E1 | E1 | E1 | none |
 | V-30 | Software | open | — | fits no nature → matches `behaviour-change` | E1 | E1 | E1 | E0 | none |
 | V-31 | Governance | open | — | `investigation` | E1 | E1 | E1 | E1 | none |
-⟦S6: State is completed, not planned or open; Concept-1 class marks inferred values; then a summary line — items coded, delivered items per class, per-nature counts, items fitting no nature, multi-nature items and the owed-set widening they cause, candidates admitted, axis co-occurrence⟧
+
+**Summary.** 31 items coded: 11 completed, 2 not planned (marked, in no count), 18 open. Delivered items per class: `governance` 9 (2 inferred), `software` 2. Primary natures of the 29 unmarked items: `defect` 13, `data-structure-change` 2, `new-capability` 1, `integration-change` 1, `investigation` 1, `infrastructure-change` 0; 11 fit no nature under the six-step procedure the items were coded with — 8 matching `behaviour-change`, 3 `restructure` — and both candidates were admitted. Multi-nature items: 8 of the 29 (V-01, V-04, V-13, V-16, V-19, V-22, V-23, V-29); the owed-set union widened 3 items' sets (V-04, V-16, V-19, each by `data` and `behaviour-over-time`). Axis co-occurrence over the 11 delivered items: each axis stands at E2 or above on 10 or 11 of them (`data` 10, `process-flow` 10, `structure-placement` 11, `behaviour-over-time` 10), and all four together on 9 — delivered text answers axes a nature does not owe as readily as owed ones, which is why E2 alone never makes an axis owed. No item carries E3-F, and no uncovered surface was found.
 
 ### Applying the model to the measured instance
 
@@ -223,12 +235,17 @@ Both epics are `new-capability` (a session record; a channel roster — neither 
 
 ## Alternatives Considered
 
-⟦S6: one bullet per losing candidate of the Stage-5 design exploration, each with its reason: nature × deliverable class (the default until demonstrated; the falsification test, testable here for at most one nature); a framework wholesale (Who/Why carried elsewhere; six axes add ceremony; the axes cite these frameworks instead); a universal axis set (nothing keyed or omissible); a machine-readable registry (outside a decision spike); a nature attribute on kinds or a type-map column (keys nature on a kind or form; a shared key in a skill-private reference); an intake prompt with no model (one instance, no key).⟧
+- **Nature × deliverable class as the key.** Kept as the conditional form rather than the default: a split needs a demonstration, and the falsification test, testable here for at most one nature, was testable for none.
+- **A framework adopted wholesale** (Zachman's six interrogatives, or the 4+1 views). *Who* and *Why* are already carried by the framing's actor and outcome fields, and six axes add ceremony without adding an owed surface; the four axes cite these frameworks instead.
+- **A universal axis set, owed by every item.** Nothing would be keyed, so a small change could never omit what it does not owe.
+- **A machine-readable nature and axis registry.** Outside a decision spike; the toolkit and the catalog cite this record, or reproduce its table as a declared projection.
+- **A nature attribute on methodology kinds, or a nature column on the intake type map.** Either keys nature on a kind or a filing form, which any kind or form can contradict, and would put a shared key in a skill-private reference.
+- **An intake prompt with no model.** One instance and no key for the catalog and the toolkit to share.
 
 ## Consequences
 
 - **Positive:** catalog and toolkit share one key; an omitted owed axis shows as silent at framing time, not in delivery; small changes omit what they do not owe; a multi-nature item owes what each surface nature requires; the framing carries into slices and later stages through one section of the slice body; recalibration runs through supersession, and a skipped comparison shows as a stale date.
-- **Negative:** a small evidence base as of the authoring census — one epic-altitude instance applied in-sample, two deliverable classes among delivered items, a single-cluster Data stratum — so ⟦S6: the hypothesis rows⟧ rest on definitions and practice, and one key is a default rather than a finding; downstream surfaces inherit any error until the trigger fires; the calibration comparison and the continuity rule stay named gaps until the framing surface records coverage and the slice-body Framing carry section ships; the stage-to-stage carries named unowned above have no mechanism yet.
+- **Negative:** a small evidence base as of the authoring census — one epic-altitude instance applied in-sample, two deliverable classes among delivered items, a single-cluster Data stratum — so every row but `defect` rests on definitions and practice, `defect`'s proof spans one deliverable class, and one key is a default rather than a finding; downstream surfaces inherit any error until the trigger fires; the calibration comparison and the continuity rule stay named gaps until the framing surface records coverage and the slice-body Framing carry section ships; the carry of silent and declared-not-applicable axes into slices is unowned until the framing-to-cut card is widened to it, and no stage yet checks the carried section.
 
 ## Reversibility
 
@@ -248,8 +265,8 @@ MODERATE — revised in place or reverted before ratification; after it, superse
 - #7540 — the epic-framing epic: measured instance, calibration trigger, continuity ask
 - #7959 — the spike that produced this record
 - #7960 — the cut-basis card: the considerations a cut records, including altitude and the surfaces it touches
-- #7963 — the framing-to-cut card: each owed axis mapped to a slice or a stated reason, and the slice-body Framing carry section written at the cut
-- #5592 — the source of the `defect` and `new-capability` boundary examples: an allowlist's host patterns applied to write paths
+- #7963 — the framing-to-cut card: each owed axis mapped to a slice or a stated reason, and the slice-body Framing carry section written at the cut; the recommended home for the carry of silent and declared-not-applicable axes
+- #5592 — the source of the `defect` and `new-capability` boundary examples and the `data-structure-change` contrast: an allowlist's host patterns applied to write paths, and its header reworded
 - #6201 — the source of the `data-structure-change` boundary example: versioned fields added to refusal records
 - V-01 — #5844 — one system of record per mirrored data element
 - V-02 — #4197 — a check for undeclared CSS custom-property consumers
@@ -282,4 +299,3 @@ MODERATE — revised in place or reverted before ratification; after it, superse
 - V-29 — #6238 — a committed gate for the retired frontmatter-strip literal
 - V-30 — #7855 — the absolute checkout path in close-out report details
 - V-31 — #7424 — literal-list cross-issue criteria
-⟦S6: one line per follow-up card the continuity table names⟧
