@@ -67,6 +67,12 @@ SURFACES_ONLY=0
 # default — keeping a no-flag update byte-identical to pre-#611 behavior.
 WORKSPACE_ROOT_EXPLICIT=0
 
+# --- Phase 1b result: the canonical [PMO_PLATFORM_ROOT] value and the tier that supplied
+# it, resolved once in pre-flight and passed to every composition write (see
+# resolve_platform_root). Empty until pre-flight runs.
+CANONICAL_PLATFORM_ROOT=""
+CANONICAL_PLATFORM_ROOT_SOURCE=""
+
 # --- Phase 3 result (read by main to select the exit code; see EX_NOCHANGE) ---
 REGENERATED_COUNT=0
 
@@ -143,7 +149,7 @@ Options:
 Exit codes:
   0    Update applied successfully (managed sections regenerated and/or skills redeployed)
   64   No update needed (no managed-section regeneration AND no skill redeploy)
-  65   operator.toml missing or malformed
+  65   operator.toml missing or malformed, or the canonical platform root cannot be resolved
   66   Schema migration aborted (operator dismissed prompt)
   73   Regeneration failure (file write or verification error)
   75   Install incomplete — a deployed control is present but not operable.
@@ -184,7 +190,9 @@ done
 OPERATOR_TOML="${CONFIG_ROOT}/operator.toml"
 LAST_UPDATE_FILE="${CONFIG_ROOT}/.last-update"
 BACKUP_DIR_ROOT="${WORKSPACE_ROOT}/.backup-pre-update"
-readonly OPERATOR_TOML LAST_UPDATE_FILE BACKUP_DIR_ROOT
+# The install record setup-workspace.sh writes (its STATE_FILE_NAME, under <ws>/.claude/).
+INSTALL_STATE_FILE="${WORKSPACE_ROOT}/.claude/.workspace-setup.state"
+readonly OPERATOR_TOML LAST_UPDATE_FILE BACKUP_DIR_ROOT INSTALL_STATE_FILE
 readonly CONFIG_ROOT WORKSPACE_ROOT
 
 # --- Phase 1: Pre-flight ---
@@ -218,7 +226,36 @@ preflight() {
     exit "${EX_NOCONFIG}"
   fi
 
+  resolve_platform_root
+
   info "Pre-flight passed (operator.toml + composition library + manifest present)."
+}
+
+# --- Phase 1b: the canonical platform root for [PMO_PLATFORM_ROOT] ---
+# REPO_ROOT stays self-located ON PURPOSE: it is the checkout whose templates, manifest
+# and library this run deploys, which may legitimately be a worktree carrying
+# branch-only rows. The VALUE substituted for [PMO_PLATFORM_ROOT] is a different thing:
+# the durable root baked into security allowlists. It is resolved ONCE — from the
+# install record, else the repository's main working tree — and passed explicitly to
+# every composition write. It is never this script's location.
+resolve_platform_root() {
+  local out="" rc=0
+  out="$(lib_compose_resolve_root --install-state "${INSTALL_STATE_FILE}")" || rc=$?
+  if [ "${rc}" -ne 0 ] || [ -z "${out}" ]; then
+    err "Cannot resolve the canonical platform root for [PMO_PLATFORM_ROOT] (resolve-root exit ${rc})."
+    err "Re-run docs/scripts/setup-workspace.sh from the platform's main checkout to record the"
+    err "install root (or set PMO_PLATFORM_ROOT to that checkout for one run), then re-run"
+    err "./update.sh --force-regen so every composed surface is rebuilt on the recorded root."
+    exit "${EX_NOCONFIG}"
+  fi
+  IFS=$'\t' read -r CANONICAL_PLATFORM_ROOT CANONICAL_PLATFORM_ROOT_SOURCE <<EOF
+${out}
+EOF
+  case "${CANONICAL_PLATFORM_ROOT}" in
+    /*) ;;
+    *) err "resolve-root returned a non-absolute root: '${CANONICAL_PLATFORM_ROOT}' (tier '${CANONICAL_PLATFORM_ROOT_SOURCE}')"; exit "${EX_NOCONFIG}" ;;
+  esac
+  readonly CANONICAL_PLATFORM_ROOT CANONICAL_PLATFORM_ROOT_SOURCE
 }
 
 # --- Phase 2: Schema migration ---
@@ -423,7 +460,7 @@ regenerate_managed_sections() {
       mkdir -p "${tamper_backup}"
       cp "${target}" "${tamper_backup}/${target_key}"
       warn "tamper detected in managed section of ${target_basename} (${tier} tier); backed up to ${tamper_backup}/${target_key}; regenerating from template."
-      if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "${dialect}"; then
+      if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "${dialect}" "${CANONICAL_PLATFORM_ROOT}"; then
         regenerated=$((regenerated + 1))
         info "Regenerated (tamper): ${target_basename}"
       else
@@ -470,7 +507,7 @@ regenerate_managed_sections() {
         ;;
     esac
 
-    if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "${dialect}"; then
+    if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "${dialect}" "${CANONICAL_PLATFORM_ROOT}"; then
       regenerated=$((regenerated + 1))
       info "Regenerated: ${target_basename} (${tier} tier; backup: ${backup_dir}/${target_key})"
     else
@@ -919,8 +956,12 @@ refresh_hooks() {
   if [ "${DRY_RUN}" -eq 1 ]; then dry_flag="--dry-run"; fi
   local refresh_out; refresh_out="$(mktemp -t update-phase5c.XXXXXX)"
   local rc=0
+  # --config-root is passed for the same reason Phase 5d passes it: without it the
+  # delegate falls back to the DEFAULT config root and takes its hook-bundle snapshot
+  # there, so an update sandboxed with --config-root would write outside its sandbox.
   # shellcheck disable=SC2086  # dry_flag is a single controlled token (empty or --dry-run)
-  bash "${setup}" --refresh-hooks --workspace-root "${WORKSPACE_ROOT}" --source-repo "${REPO_ROOT}" ${dry_flag} \
+  bash "${setup}" --refresh-hooks --workspace-root "${WORKSPACE_ROOT}" \
+    --config-root "${CONFIG_ROOT}" --source-repo "${REPO_ROOT}" ${dry_flag} \
     >"${refresh_out}" 2>&1 || rc=$?
   cat "${refresh_out}" >&2
   # Flip the "did something" flag only on a REFRESHED hook — a hook whose deployed content
