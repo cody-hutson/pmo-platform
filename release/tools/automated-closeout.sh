@@ -1565,6 +1565,23 @@ check_parser_clean() {
   return 0
 }
 
+# Redact-only projection of a path-bearing text for report and post output (#7855;
+# Plan amendment 13). "$REPO_ROOT" becomes <repo> and then "$HOME" becomes <home>
+# (REPO_ROOT first, because it normally sits under HOME), each root with one trailing
+# slash stripped first. The replace is a literal substring match, so hand it the
+# whole path — never a capped window, which can cut a path before this runs. A root
+# of one character or less is skipped: HOME=/ would otherwise rewrite every
+# separator in the text. It flattens nothing and caps nothing, so it is safe over a
+# multi-line render, which is how the report sink and phase 15's post use it
+# (self-test PL-1). Deliberately NOT named phase_* (the dispatchable namespace).
+_redact_paths() {
+  local _s="${1:-}" _r="${REPO_ROOT:-}" _h="${HOME:-}"
+  _r="${_r%/}"; _h="${_h%/}"
+  [[ "${#_r}" -gt 1 ]] && _s="${_s//"$_r"/<repo>}"
+  [[ "${#_h}" -gt 1 ]] && _s="${_s//"$_h"/<home>}"
+  /usr/bin/printf '%s' "$_s"
+}
+
 # One-line, table-safe, public-safe projection of a captured diagnostic for a
 # mark_phase detail (#7182). A detail is a `RESULT|detail` record AND a markdown
 # table row (header mode rule, constraint 2), and the close-out report is pasted
@@ -1578,7 +1595,8 @@ check_parser_clean() {
 # REDACT, THEN CAP — and the cap belongs to THIS function. The redaction is a
 # literal-substring replace, so a caller that truncates first can cut a path
 # mid-string, and the fragment, no longer containing "$HOME", ships raw. Hand it the
-# whole capture, or a raw window of at least 4096 bytes, never a pre-capped one.
+# whole capture, its first line, or a raw window of at least 4096 bytes — the three
+# forms self-test AI-X admits — never a pre-capped one.
 # Route a captured diagnostic through here rather than hand-rolling a projection, so
 # the report carries one vocabulary (self-test CB-5, CB-10).
 _detail_one_line() {
@@ -1586,11 +1604,14 @@ _detail_one_line() {
   _s="${_s//$'\r'/ }"
   _s="${_s//$'\n'/ }"
   _s="${_s//|//}"
-  [[ -n "${REPO_ROOT:-}" ]] && _s="${_s//"$REPO_ROOT"/<repo>}"
-  [[ -n "${HOME:-}" ]] && _s="${_s//"$HOME"/<home>}"
+  _s="$(_redact_paths "$_s")"
   /usr/bin/printf '%s' "${_s:0:800}"
 }
 
+# The record is RAW by design (#7855; Plan amendment 13): a detail keeps any path it
+# was handed, and the report sink in generate_report redacts "$REPO_ROOT" and "$HOME"
+# once, over the whole render. Never cut a path before it reaches the sink: a
+# captured diagnostic goes through _detail_one_line at its projection instead.
 mark_phase() {
   PHASE_NAMES+=("$1")
   PHASE_RESULTS+=("$2")
@@ -2065,9 +2086,10 @@ resolve_stage13_subtask() {
           --json number,title,labels,state \
           --jq '.[] | "\(.number)\t\(.labels|map(.name)|join(","))\t\(.state)\t\(.title)"' 2>&1)" || _rc=1
   if [[ "$_rc" -ne 0 ]]; then
-    # First line only, and strip tabs/pipes: this string reaches a mark_phase detail
-    # (pipe-delimited) and a Markdown table cell.
-    /usr/bin/printf '\t\t%s\n' "gh query failed: $(/usr/bin/printf '%s' "$raw" | /usr/bin/head -1 | /usr/bin/tr '\t|' '  ')"
+    # First line only, through the shared projection: this string reaches a mark_phase
+    # detail (pipe-delimited), a Markdown table cell and the rung-2 release-PR comment.
+    # A tab may stay in it, because the reason is this record's LAST field.
+    /usr/bin/printf '\t\t%s\n' "gh query failed: $(_detail_one_line "${raw%%$'\n'*}")"
     return 0
   fi
 
@@ -2900,7 +2922,9 @@ phase_inject_velocity_field() {
     _out="$("$COMPUTE_VELOCITY" "${_cv_args[@]}" 2>"$_errf"; _prc=$?; /usr/bin/printf 'X'; exit "$_prc")" || _rc=$?
     _out="${_out%X}"
     local _err
-    _err="$(/usr/bin/head -c 800 "$_errf" 2>/dev/null | /usr/bin/tr '\n' ' ' || true)"
+    # A raw 4096-byte window through the shared projection, which redacts BEFORE it
+    # caps, so a path in the producer's diagnostics is never cut mid-string (#7855).
+    _err="$(_detail_one_line "$(/usr/bin/head -c 4096 "$_errf" 2>/dev/null)")"
     /bin/rm -f "$_errf" 2>/dev/null || true
 
     # Exit 2 is the producer's source-integrity / implausible-measurement
@@ -4214,7 +4238,7 @@ phase_lint_release_notes() {
   out="$(/usr/bin/python3 "$lint_script" --check note-content 2>&1)" || exit_code=$?
 
   if [[ $exit_code -eq 3 ]]; then
-    mark_phase "lint_release_notes" "FAIL" "path-resolution failure (exit 3): $(echo "$out" | /usr/bin/head -1) — corpus unverifiable; close BLOCKED (fail-loud)"
+    mark_phase "lint_release_notes" "FAIL" "path-resolution failure (exit 3): $(_detail_one_line "${out%%$'\n'*}") — corpus unverifiable; close BLOCKED (fail-loud)"
     echo "$out" | /usr/bin/head -20 >&2
     return 1
   fi
@@ -4310,8 +4334,9 @@ phase_lint_plan_identity() {
   out="$(/usr/bin/python3 "$lint_script" --check plan-identity 2>&1)" || exit_code=$?
 
   if [[ $exit_code -eq 3 ]]; then
-    # Both slices read `$out` from a HERE-STRING rather than through a pipe.
-    # `writer | head` is the SIGPIPE idiom: `head` stops reading at its line
+    # The detail takes `$out`'s first line in pure bash, through the shared projection
+    # (#7855). The stderr slice reads `$out` from a HERE-STRING rather than through a
+    # pipe. `writer | head` is the SIGPIPE idiom: `head` stops reading at its line
     # budget, the writer's next write fails on the closed pipe, and `pipefail`
     # promotes THAT status to the pipeline's — so a successful slice can report
     # failure. Removing the pipe removes the hazard outright; this is the same
@@ -4319,7 +4344,7 @@ phase_lint_plan_identity() {
     # assertions, not a gate exemption. Effect is unchanged: `head` still slices
     # the same bytes, and a here-string is the safer writer besides (bash's
     # `echo` would mangle an `$out` beginning `-n`/`-e`).
-    mark_phase "lint_plan_identity" "FAIL" "path-resolution failure (exit 3): $(/usr/bin/head -1 <<<"$out") — plan corpus unverifiable; close BLOCKED (fail-loud)"
+    mark_phase "lint_plan_identity" "FAIL" "path-resolution failure (exit 3): $(_detail_one_line "${out%%$'\n'*}") — plan corpus unverifiable; close BLOCKED (fail-loud)"
     /usr/bin/head -20 <<<"$out" >&2
     return 1
   fi
@@ -7133,25 +7158,30 @@ ${VERIFICATION_RESULTS}
 EOF
 )"
 
+  # These two posts go straight to GitHub, never through the report sink, so each is
+  # redacted AT ITS POST SITE (#7855; Plan amendment 13 item 3): _redact_paths turns
+  # "$REPO_ROOT" into <repo> and "$HOME" into <home> over the whole body, and leaves a
+  # body that names no root byte-identical. Rung 2 posts the same proof to the
+  # fallback target, so it is redacted the same way.
   # Rung 1 — the Stage-13 sub-task, any state.
   if [[ -n "$_s13_num" ]]; then
-    if _post_err="$($GH issue comment "$_s13_num" --repo "$REPO_SLUG" --body "$_body" 2>&1)"; then
+    if _post_err="$($GH issue comment "$_s13_num" --repo "$REPO_SLUG" --body "$(_redact_paths "$_body")" 2>&1)"; then
       mark_phase "post_gate_passage_proof" "PASS" "posted to Stage 13 sub-task #${_s13_num}${_closed_note}"
       return 0
     fi
-    _s13_reason="post to #${_s13_num} failed: $(/usr/bin/printf '%s' "$_post_err" | /usr/bin/head -1 | /usr/bin/tr '\t|' '  ')"
+    _s13_reason="post to #${_s13_num} failed: $(_detail_one_line "${_post_err%%$'\n'*}")"
   fi
 
   # Rung 2 — the release PR, with the OBSERVED rung-1 reason recorded in the body.
   if [[ -n "$PR_NUMBER" ]]; then
     if _post_err="$($GH pr comment "$PR_NUMBER" --repo "$REPO_SLUG" \
-        --body "_Fallback target (rung 2): the Stage-13 sub-task ${_s13_reason}._
+        --body "$(_redact_paths "_Fallback target (rung 2): the Stage-13 sub-task ${_s13_reason}._
 
-${_body}" 2>&1)"; then
+${_body}")" 2>&1)"; then
       mark_phase "post_gate_passage_proof" "PASS" "Stage-13 sub-task ${_s13_reason}; posted to release PR #${PR_NUMBER} (fallback rung 2)"
       return 0
     fi
-    mark_phase "post_gate_passage_proof" "MANUAL" "both targets attempted and failed — Stage-13 sub-task: ${_s13_reason}; release PR #${PR_NUMBER}: $(/usr/bin/printf '%s' "$_post_err" | /usr/bin/head -1 | /usr/bin/tr '\t|' '  '); comment text emitted in final report"
+    mark_phase "post_gate_passage_proof" "MANUAL" "both targets attempted and failed — Stage-13 sub-task: ${_s13_reason}; release PR #${PR_NUMBER}: $(_detail_one_line "${_post_err%%$'\n'*}"); comment text emitted in final report"
     return 0
   fi
 
@@ -7259,7 +7289,7 @@ phase_lock_milestone_threads() {
   # open_issues + closed_issues, all three PR-inclusive.
   local _cnt _crc=0 _open _closed _count_ok=1 _count_note
   _cnt="$(_host_milestone_item_counts "$MILESTONE" 2>&1)" || _crc=$?
-  _open="${_cnt%% *}"; _closed="${_cnt##* }"
+  _open="${_cnt%% *}"; _closed="${_cnt##* }"  # report-text: both reach a detail only after the digits-only guard on the next line
   if [[ "$_crc" -ne 0 || ! "$_open" =~ ^[0-9]+$ || ! "$_closed" =~ ^[0-9]+$ ]]; then
     _count_ok=0; _count_note="count check UNVERIFIED (the milestone counters could not be read)"
   elif [[ "$_n_total" -eq $((_open + _closed)) ]]; then
@@ -8093,9 +8123,9 @@ phase_check_release_body_drift() {
       # deploy.sh Check 47 never disagree about the same version.
       if _drift_block_in_scope "$VERSION"; then
         drift_blocking=1
-        mark_phase "check_release_body_drift" "FAIL" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; close BLOCKED per stage-13-close.md Phase B5.6. Correct the canonical note first, then re-emit every surface from it per §5.6 (gh release edit) or release-executor Mode F. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+        mark_phase "check_release_body_drift" "FAIL" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; close BLOCKED per stage-13-close.md Phase B5.6. Correct the canonical note first, then re-emit every surface from it per §5.6 (gh release edit) or release-executor Mode F. $(_detail_one_line "${drift_out%%$'\n'*}")"
       else
-        mark_phase "check_release_body_drift" "WARN" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; re-emit per §5.6 (gh release edit) or release-executor Mode F. NOT blocking: $VERSION is outside the body-drift cutoff scope (cutoff $DRIFT_CHECK_CUTOFF), which deploy.sh Check 47 also exempts. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+        mark_phase "check_release_body_drift" "WARN" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; re-emit per §5.6 (gh release edit) or release-executor Mode F. NOT blocking: $VERSION is outside the body-drift cutoff scope (cutoff $DRIFT_CHECK_CUTOFF), which deploy.sh Check 47 also exempts. $(_detail_one_line "${drift_out%%$'\n'*}")"
       fi
       ;;
     2)
@@ -8103,7 +8133,7 @@ phase_check_release_body_drift() {
       # (offline/unauth) AND git (origin/main unresolvable / corrupt object): the
       # tool writes the failing subsystem to stderr unconditionally, and $drift_out
       # captured it (2>&1), so a git failure is NOT mis-reported as "gh offline".
-      mark_phase "check_release_body_drift" "N/A" "body-drift check N/A for $VERSION — a required capability is unavailable (gh or git); never FAIL. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+      mark_phase "check_release_body_drift" "N/A" "body-drift check N/A for $VERSION — a required capability is unavailable (gh or git); never FAIL. $(_detail_one_line "${drift_out%%$'\n'*}")"
       ;;
     3)
       # MISSING note or Release. If publish phase did not land Surface 1 this run,
@@ -8111,7 +8141,7 @@ phase_check_release_body_drift() {
       if [[ "$pub_result" != "PASS" ]]; then
         mark_phase "check_release_body_drift" "N/A" "no published Release / note to compare for $VERSION (Surface 1 not emitted this run: publish phase=$pub_result)"
       else
-        mark_phase "check_release_body_drift" "WARN" "post-emit body-drift check could not resolve note or Release for $VERSION (non-blocking: an artifact-missing state, not a drift finding — see the exit 2/3 rationale above). $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+        mark_phase "check_release_body_drift" "WARN" "post-emit body-drift check could not resolve note or Release for $VERSION (non-blocking: an artifact-missing state, not a drift finding — see the exit 2/3 rationale above). $(_detail_one_line "${drift_out%%$'\n'*}")"
       fi
       ;;
     *)
@@ -8473,6 +8503,7 @@ generate_json_report() {
     is_first_phase_occurrence "$_pj_i" || continue
     _pj_rec+=("${PHASE_NAMES[$_pj_i]}" "${PHASE_RESULTS[$_pj_i]}" "${PHASE_DETAILS[$_pj_i]}")
   done
+  CLOSEOUT_REDACT_REPO="${REPO_ROOT:-}" CLOSEOUT_REDACT_HOME="${HOME:-}" \
   CHORE_PR_OUTCOME_JSON="${CHORE_PR_OUTCOME:-not-yet-created}" NM_DEFERRED="$(_nm_members defer)" /usr/bin/python3 - "$RUN_TS" "$MODE" "$PR_NUMBER" "$VERSION" "$MILESTONE" "$slug" \
     "$STATE_LOG_ROW_STATE" "$STATE_MILESTONE_STATE" "$STATE_TAG_EXISTS" \
     "$STATE_CYCLE_TIME" "$OPEN_ISSUE_COUNT" "$CHORE_PR_NUMBER" "$OPEN_ISSUE_LIST" "$NO_MERGE" \
@@ -8508,13 +8539,54 @@ payload = {
     "deferred_under_no_merge": deferred,
     "phases": phases,
 }
-print(json.dumps(payload, indent=2))
+# THE JSON SINK (#7855; Plan amendment 13). Path values are redacted here, once, in
+# every DECODED string before serialisation: json.dumps escapes non-ASCII, so a
+# replace over the serialised text would miss a home path carrying one. Same order and
+# guard as the shell primitive: the repository root first, then HOME, each with one
+# trailing slash stripped, and a root of one character or less skipped.
+def _root(name):
+    r = os.environ.get(name, "")
+    return r[:-1] if r.endswith("/") else r
+
+
+_roots = [(r, m) for r, m in ((_root("CLOSEOUT_REDACT_REPO"), "<repo>"), (_root("CLOSEOUT_REDACT_HOME"), "<home>")) if len(r) > 1]
+
+
+def _red(v):
+    if isinstance(v, str):
+        for r, m in _roots:
+            v = v.replace(r, m)
+        return v
+    if isinstance(v, list):
+        return [_red(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _red(x) for k, x in v.items()}
+    return v
+
+
+print(json.dumps(_red(payload), indent=2))
 PY
 }
 
+# THE REPORT SINK (#7855; Plan amendment 13) — where path values are redacted, once.
+# The markdown render is redacted whole: _redact_paths rewrites "$REPO_ROOT" to
+# <repo> and then "$HOME" to <home> across every phase detail, both captured report
+# bodies, the header and any section added later, so no phase declares a path form of
+# its own. generate_json_report redacts every decoded string the same way. The
+# sentinel keeps the render's trailing newlines byte-for-byte, and the render's own
+# exit status is returned unchanged (the emit_derived_entry idiom). The one obligation
+# left at a phase: a captured diagnostic reaches a detail only through
+# _detail_one_line at its projection, because a hand-rolled cut can split a path
+# before this sink sees it (self-test group PL).
 generate_report() {
   case "$OUTPUT" in
-    markdown) generate_markdown_report ;;
+    markdown)
+      local _rep _rrc=0
+      _rep="$(generate_markdown_report; _prc=$?; /usr/bin/printf 'X'; exit "$_prc")" || _rrc=$?
+      _rep="${_rep%X}"
+      _rep="$(_redact_paths "$_rep"; /usr/bin/printf 'X')"; _rep="${_rep%X}"
+      /usr/bin/printf '%s' "$_rep"
+      return "$_rrc" ;;
     json) generate_json_report ;;
   esac
 }
