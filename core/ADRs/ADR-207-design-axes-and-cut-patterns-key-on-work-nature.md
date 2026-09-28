@@ -196,7 +196,13 @@ Deliverable classes (registry concept 1) with delivered items in the pool: ⟦S6
 | V-16 | Data | open | — | `defect` (`data-structure-change`) | E1 | E1 | E1 | E1 | none |
 | V-17 | Software | open | — | fits no nature → matches `restructure` | E1 | E1 | E1 | E1 | none |
 | V-18 | Governance | completed | governance | `defect` | E2 | E2 | E2 · E3-P | E2 · E3-P | none |
-⟦S6: the remaining rows from V-19 in set order; State is completed, not planned or open; Concept-1 class marks inferred values; then a summary line — items coded, delivered items per class, per-nature counts, items fitting no nature, multi-nature items and the owed-set widening they cause, candidates admitted, axis co-occurrence⟧
+| V-19 | Data | open | — | `defect` (`data-structure-change`) | E1 | E1 | E1 | E1 | none |
+| V-20 | Software | open | — | fits no nature → matches `behaviour-change` | E1 | E1 | E1 | E1 | none |
+| V-21 | Governance | completed | governance | `defect` | E2 | E2 | E2 | E2 | none |
+| V-22 | Software | open | — | fits no nature → matches `behaviour-change` (`infrastructure-change`) | E1 | E1 | E1 | E1 | none |
+| V-23 | Governance | completed | software | fits no nature → matches `behaviour-change` (`defect`) | E2 | E2 | E2 | E2 | none |
+| V-24 | Software | open | — | fits no nature → matches `behaviour-change` | E1 | E1 | E1 | E0 | none |
+⟦S6: the remaining rows from V-25 in set order; State is completed, not planned or open; Concept-1 class marks inferred values; then a summary line — items coded, delivered items per class, per-nature counts, items fitting no nature, multi-nature items and the owed-set widening they cause, candidates admitted, axis co-occurrence⟧
 
 ### Applying the model to the measured instance
 
@@ -256,4 +262,10 @@ MODERATE — revised in place or reverted before ratification; after it, superse
 - V-16 — #5845 — the document-index contract at three seams
 - V-17 — #7856 — a per-phase projectability declaration for the cleanup dry-run
 - V-18 — #5063 — the release-plan version token at Stage 12
-⟦S6: one line per remaining coded item from V-19 — "V-NN — #N — a noun phrase from its title"; one line per follow-up card the continuity table names⟧
+- V-19 — #5849 — tracker templates that carry the schema
+- V-20 — #7893 — the generated Stage-13 chore-PR body
+- V-21 — #4198 — detector constants hand-copied across three sites
+- V-22 — #7418 — the install-tests timeout guard
+- V-23 — #5057 — declared-versus-live label attribute divergence
+- V-24 — #4207 — the FinOps estimator's confidence label on a bimodal set
+⟦S6: one line per remaining coded item from V-25 — "V-NN — #N — a noun phrase from its title"; one line per follow-up card the continuity table names⟧
