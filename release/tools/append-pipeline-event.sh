@@ -540,8 +540,9 @@ validate_version_key() {
 # stage is matched as ^0*4$ because the stage check below admits a zero-padded
 # 04. A delegation row at any other stage keeps a free subject: issue, milestone,
 # sub-task and release scopes all occur live. The subject is matched as written,
-# untrimmed: a padded value is not reader-equivalent, because the awk-based
-# readers split on " | " and keep the padding.
+# untrimmed, so a padded subject is refused: compute-front-cluster-telemetry.sh
+# strips a subject, but the awk-based readers split on " | " and keep the
+# padding, so a padded row would read differently across readers.
 #
 # Rule: a stage-4 decision/d-class row on a card (issue:#N, or the bare #N) MUST
 # carry exactly one payload segment card-disposition:carried or
@@ -554,6 +555,15 @@ validate_version_key() {
 # grammar payload_labels reads); the value is trimmed and must be one of the two
 # words exactly. Milestone- and sub-task-grain d-class rows, and d-class rows at
 # any other stage, are not governed.
+# The rule RECOGNIZES a row the way that reader reads it, and ACCEPTS only the
+# canonical spelling. The card grain is tested on the trimmed subject (the reader
+# strips a subject), so padding cannot take a card row out of the rule; a padded
+# card subject is then refused, as the delegation rule refuses one, because the
+# awk-based readers keep the padding. A segment label is recognized in any letter
+# case (the reader matches it case-insensitively), so a case-variant segment
+# counts toward the one; the one segment must still be spelled in lowercase. The
+# stage is matched as ^0*4$, which the reader mirrors by reading a stage as its
+# integer value.
 #
 # Rule: a decision/scope-lock row MUST carry stage 4 or 5 and actor operator —
 # the two gates that render one, the Stage-4 plan approval (stage-04-planning.md
@@ -562,7 +572,9 @@ validate_version_key() {
 # stage; a lock at another stage or under another actor is off both emission
 # contracts, and compute-front-cluster-telemetry.sh I11/I15 select the Collective
 # Review lock by that identity. The stage is matched as ^0*[45]$ for the
-# zero-padded form the stage check admits. A call with no actor is refused.
+# zero-padded form the stage check admits, and that reader reads a stage as its
+# integer value, so a lock written at 05 is the stage-5 lock to both. A call with
+# no actor is refused.
 validate_row_identity() {
   local stage="$1" event_type="$2" subtype="$3" subject="$4" actor="${5:-}" payload="${6:-}"
   case "$event_type/$subtype" in
@@ -572,22 +584,30 @@ validate_row_identity() {
       fi
       ;;
     decision/d-class)
-      local _cd_card_re='^(issue:)?#[0-9]+$'
-      if [[ "$stage" =~ ^0*4$ ]] && [[ "$subject" =~ $_cd_card_re ]]; then
-        local _cd_nl=$'\n' _cd_seg _cd_n=0 _cd_v=""
+      local _cd_card_re='^(issue:)?#[0-9]+$' _cd_subj="$subject"
+      _cd_subj="${_cd_subj#"${_cd_subj%%[![:space:]]*}"}"
+      _cd_subj="${_cd_subj%"${_cd_subj##*[![:space:]]}"}"
+      if [[ "$stage" =~ ^0*4$ ]] && [[ "$_cd_subj" =~ $_cd_card_re ]]; then
+        if [[ "$subject" != "$_cd_subj" ]]; then
+          die "Row identity: a stage-4 decision/d-class row on a card must carry its subject without surrounding whitespace; got '$subject'. The plan-survival reader strips a subject, but the awk-based readers split on ' | ' and keep the padding, so a padded card row would read differently across readers: pass --subject '$_cd_subj' (stage-04-planning.md § 11, the per-card gate disposition)."
+        fi
+        local _cd_nl=$'\n' _cd_seg _cd_lab _cd_n=0 _cd_v="" _cd_spell=""
         while IFS= read -r _cd_seg; do
           _cd_seg="${_cd_seg#"${_cd_seg%%[![:space:]]*}"}"
-          case "$_cd_seg" in
-            card-disposition:*)
-              _cd_n=$((_cd_n + 1))
-              _cd_v="${_cd_seg#card-disposition:}"
-              _cd_v="${_cd_v#"${_cd_v%%[![:space:]]*}"}"
-              _cd_v="${_cd_v%"${_cd_v##*[![:space:]]}"}"
-              ;;
-          esac
+          # The label is RECOGNIZED case-insensitively, as the plan-survival reader matches
+          # it, so a case-variant segment counts toward the one. Bash 3.2 has no ${v,,}.
+          _cd_lab="$(/usr/bin/printf '%s' "${_cd_seg:0:17}" | /usr/bin/tr '[:upper:]' '[:lower:]')"
+          if [[ "$_cd_lab" == "card-disposition:" ]]; then
+            _cd_n=$((_cd_n + 1))
+            _cd_spell="${_cd_seg:0:17}"
+            _cd_v="${_cd_seg:17}"
+            _cd_v="${_cd_v#"${_cd_v%%[![:space:]]*}"}"
+            _cd_v="${_cd_v%"${_cd_v##*[![:space:]]}"}"
+          fi
         done <<< "${payload//;/$_cd_nl}"
-        if [[ "$_cd_n" -ne 1 ]] || { [[ "$_cd_v" != "carried" ]] && [[ "$_cd_v" != "removed" ]]; }; then
-          die "Row identity: a stage-4 decision/d-class row on a card records that card's gate disposition and must carry exactly one payload segment card-disposition:carried or card-disposition:removed; subject '$subject' carries ${_cd_n}${_cd_v:+ (last value '$_cd_v')}. carried = the approved plan keeps the card in this release; removed = it does not (deferred, withdrawn, closed, split out or moved). Add the segment to --payload (stage-04-planning.md § 11, the per-card gate disposition; pipeline-event-log-schema.md § 3)."
+        if [[ "$_cd_n" -ne 1 ]] || [[ "$_cd_spell" != "card-disposition:" ]] \
+            || { [[ "$_cd_v" != "carried" ]] && [[ "$_cd_v" != "removed" ]]; }; then
+          die "Row identity: a stage-4 decision/d-class row on a card records that card's gate disposition and must carry exactly one payload segment card-disposition:carried or card-disposition:removed, spelled in lowercase; subject '$subject' carries ${_cd_n}${_cd_spell:+ (last written '${_cd_spell}${_cd_v}')}. A label in any letter case counts toward the one, because the plan-survival reader matches it case-insensitively. carried = the approved plan keeps the card in this release; removed = it does not (deferred, withdrawn, closed, split out or moved). Add the segment to --payload (stage-04-planning.md § 11, the per-card gate disposition; pipeline-event-log-schema.md § 3)."
         fi
       fi
       ;;
@@ -1227,9 +1247,12 @@ RI_ACCEPT
 
   # ─── Row-identity rules — the stage-4 card disposition ───────────────────
   # REJECT (sensitivity): no segment, an unknown or wrong-case value, two segments,
-  # the token inside another label. ACCEPT (specificity): both values, any position
-  # and spacing, and d-class shapes the rule does not govern. The payload is the
-  # rest of the line. Both counts are asserted.
+  # a second segment whose label differs only in letter case (the plan-survival
+  # reader matches the label case-insensitively, so it counts toward the one), a
+  # lone segment with a wrong-case label, the token inside another label. ACCEPT
+  # (specificity): both values, any position and spacing, and d-class shapes the
+  # rule does not govern. The payload is the rest of the line. Both counts are
+  # asserted.
   _cd_n=0
   while IFS=' ' read -r _cd_st _cd_et _cd_es _cd_sj _cd_pl; do
     [[ -n "$_cd_st" ]] || continue
@@ -1244,9 +1267,11 @@ RI_ACCEPT
 4 decision d-class issue:#1 ms:#1; card-disposition:deferred
 4 decision d-class issue:#1 ms:#1; card-disposition:Carried
 4 decision d-class issue:#1 ms:#1; card-disposition:carried; card-disposition:removed
+4 decision d-class issue:#1 ms:#1; card-disposition:carried; Card-Disposition:removed
+4 decision d-class issue:#1 ms:#1; Card-Disposition:removed
 4 decision d-class issue:#1 ms:#1; note:card-disposition:carried was the proposal
 CD_REJECT
-  [[ "$_cd_n" -eq 7 ]] || die "self-test: card-disposition reject list ran $_cd_n arms, expected 7"
+  [[ "$_cd_n" -eq 9 ]] || die "self-test: card-disposition reject list ran $_cd_n arms, expected 9"
   _cd_n=0
   while IFS=' ' read -r _cd_st _cd_et _cd_es _cd_sj _cd_pl; do
     [[ -n "$_cd_st" ]] || continue
@@ -1266,6 +1291,22 @@ CD_REJECT
 4 decision recommendation-choice-delta issue:#1 ms:#1; rec:a; chose:a; delta:aligned; via:hub-d-gate
 CD_ACCEPT
   [[ "$_cd_n" -eq 10 ]] || die "self-test: card-disposition accept list ran $_cd_n arms, expected 10"
+  # Padded subjects are asserted outside the lists: a trailing space does not survive a
+  # heredoc line reliably. The card grain is recognized on the TRIMMED subject, the way
+  # the plan-survival reader reads a subject, so padding cannot take a card row out of
+  # the rule; the padded spelling is then refused, with or without a valid disposition,
+  # because the awk-based readers keep the padding. A padded NON-card subject is not a
+  # card on either side and stays ungoverned.
+  for _cd_sj in 'issue:#1 ' ' #1' $'issue:#1\t'; do
+    if ( validate_row_identity 4 decision d-class "$_cd_sj" operator 'ms:#1; d:Plan-Approval' ) 2>/dev/null; then
+      die "self-test: card-disposition — a padded card subject '$_cd_sj' with no disposition must be REJECTED (the card is recognized on the trimmed subject)"
+    fi
+    if ( validate_row_identity 4 decision d-class "$_cd_sj" operator 'ms:#1; card-disposition:carried' ) 2>/dev/null; then
+      die "self-test: card-disposition — a padded card subject '$_cd_sj' must be REJECTED even with a valid disposition (readers disagree on padding)"
+    fi
+  done
+  ( validate_row_identity 4 decision d-class 'sub-task:#1 ' operator 'ms:#1; d:process-decision' ) 2>/dev/null \
+    || die "self-test: card-disposition — a padded NON-card subject is not governed by this rule and must be ACCEPTED"
   _cd_e2e() { /bin/bash "${BASH_SOURCE[0]}" --dry-run --version selftest-sentinel-release \
       --stage 4 --event-type decision --event-subtype d-class --actor operator \
       --subject 'issue:#1' --reversibility CHEAP --outcome resolved --payload "$1" 2>&1; }
@@ -1282,7 +1323,17 @@ CD_ACCEPT
     *"[DRY-RUN] would append row:"*) : ;;
     *) die "self-test: card-disposition — the carried control did not reach the append step: $_cd_out" ;;
   esac
-  echo "self-test: card-disposition rule OK (7 reject / 10 accept arms; write-path wiring: a no-disposition card row refused, the carried control reaches the append step)"
+  # The padded-subject wiring arm: the shape a padded emit actually takes on the write path.
+  if _cd_out="$(/bin/bash "${BASH_SOURCE[0]}" --dry-run --version selftest-sentinel-release \
+      --stage 4 --event-type decision --event-subtype d-class --actor operator \
+      --subject 'issue:#1 ' --reversibility CHEAP --outcome resolved --payload 'ms:#1; d:Plan-Approval' 2>&1)"; then
+    die "self-test: card-disposition — a --dry-run emit of a stage-4 d-class row on a PADDED card subject with no disposition exited 0; the card must be recognized on the trimmed subject"
+  fi
+  case "$_cd_out" in
+    *"Row identity:"*) : ;;
+    *) die "self-test: card-disposition — the padded-subject emit failed, but not on the row-identity rule: $_cd_out" ;;
+  esac
+  echo "self-test: card-disposition rule OK (9 reject / 10 accept arms; 6 padded-card-subject reject arms and 1 padded non-card accept arm; write-path wiring: a no-disposition card row and a padded card row refused, the carried control reaches the append step)"
 
   # ─── Row-identity rules — the scope-lock identity ────────────────────────
   # REJECT (sensitivity): every off-contract live shape — a lock at a stage before

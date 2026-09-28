@@ -130,6 +130,15 @@ def rhu(num, den):
         return None
     return math.floor((num / den) * 100 + 0.5) / 100
 
+def norm_stage(s):
+    # A stage is read as its integer value, the way the row-identity rules in
+    # append-pipeline-event.sh match it (^0*4$, ^0*[45]$): the writer admits a zero-padded
+    # stage such as 05, and an exact string compare dropped that row from every stage-keyed
+    # selection below while the writer had judged it a stage-5 row. Normalized once, here,
+    # so every selection agrees. (This heredoc sits inside a command substitution, where
+    # bash 3.2 still scans quote characters: keep apostrophes out of it.)
+    return str(int(s)) if s.isdigit() else s
+
 rows = []
 for line in sys.stdin:
     line = line.rstrip("\n")
@@ -151,7 +160,7 @@ for line in sys.stdin:
         "ts": ts,
         "tsdt": tsdt,
         "version": parts[1].strip(),
-        "stage": parts[2].strip(),
+        "stage": norm_stage(parts[2].strip()),
         "etype": parts[3].strip(),
         "esub": parts[4].strip(),
         "actor": parts[5].strip(),
@@ -507,6 +516,10 @@ print("%s/%s %s" % (d["num"], d["den"], d["rate"]))' "$j"
   [[ "$I6R" == "2/3 0.67" ]] || die "self-test: I6 R4 — prose naming the token excluded a card ($I6R; want 2/3 0.67; the token is a segment, not a substring)"
   I6R="$(i6_arm '| 2026-03-04T11:35:00Z | v1.00 | 4 | decision | d-class | spoke:#11 | issue:#11 | CHEAP | resolved | ms:#M1; card-disposition:carried |' A1)"
   [[ "$I6R" == "1/2 0.5" ]] || die "self-test: I6 A1 — a spoke-actored gate row entered ($I6R; want 1/2 0.5; no actor term reads 2/3 0.67)"
+  # G2: the writer admits a zero-padded stage (its row-identity arms match ^0*4$), so a
+  # gate row written at stage 04 is a Stage-4 gate decision and must be read as one.
+  I6R="$(i6_arm '| 2026-03-04T11:40:00Z | v1.00 | 04 | decision | d-class | operator | issue:#19 | CHEAP | resolved | ms:#M1; d:Plan-Approval; card-disposition:carried |' G2)"
+  [[ "$I6R" == "2/3 0.67" ]] || die "self-test: I6 G2 — a gate row written at the zero-padded stage 04 the writer admits was dropped ($I6R; want 2/3 0.67; an exact string compare on the stage reads 1/2 0.5)"
   # The re-plan-aware removal rule and the one card key. v1.00's first stage >= 5
   # row is at 03-04T15:00, so R1-R3 and X2 remove at the first gate and X1 and X6
   # remove at a re-plan.
@@ -559,6 +572,10 @@ print("I11 %s/%s %s; I15 %s/%s %s" % (a["num"], a["den"], a["rate"], c["num"], c
   [[ "$LKR" == "I11 1/2 0.5; I15 1/2 0.5" ]] || die "self-test: I11/I15 SL4 — a hub-actored stage-5 scope-lock counted as a re-lock ($LKR; a stage-only term reads I15 0/2 0.0)"
   LKR="$(lock_arm '| 2026-03-12T12:00:00Z | v1.00 | 5 | decision | scope-lock | operator | issue:#12 | CHEAP | resolved | d:per-card-amendment |' SL5)"
   [[ "$LKR" == "I11 1/2 0.5; I15 1/2 0.5" ]] || die "self-test: I11/I15 SL5 — a card-grain stage-5 scope-lock entered as a Collective Review lock ($LKR; no release-grain subject term reads I11 2/3 0.67; I15 2/3 0.67)"
+  # SL6: the writer admits a zero-padded stage (its scope-lock arm matches ^0*[45]$), so a
+  # Collective Review lock written at stage 05 is a stage-5 lock and must be read as one.
+  LKR="$(lock_arm '| 2026-03-12T13:00:00Z | v1.00 | 05 | decision | scope-lock | operator | milestone:#M4 | MODERATE | resolved | d:collective-review-lock |' SL6)"
+  [[ "$LKR" == "I11 2/3 0.67; I15 2/3 0.67" ]] || die "self-test: I11/I15 SL6 — a Collective Review lock written at the zero-padded stage 05 the writer admits was dropped ($LKR; want I11 2/3 0.67; I15 2/3 0.67; an exact string compare on the stage reads I11 1/2 0.5; I15 1/2 0.5)"
 
   # N/A discipline: an empty stream yields N/A rates (not 0.00) for every BUILD rate.
   EMPTY_JSON="$(printf '' | "$PY" -c "$FRONT_AGG_PY" "NA" "")"
@@ -570,8 +587,8 @@ print("I11 %s/%s %s; I15 %s/%s %s" % (a["num"], a["den"], a["rate"], c["num"], c
   echo "  9 BUILD indicators validated (8 event-sourced rates/median + gauge-N/A path)"
   echo "  C3 class-token match validated (class:C1 prose mentioning C3 excluded; spaced 'class: C3' included)"
   echo "  temporal ordering validated on parsed datetimes (fractional-second stamp does not invert order)"
-  echo "  I6 gate-decision selection validated (a stage-4 delegation or action-item row, a sub-task process decision and a spoke-actored row stay out; a card removed at the first gate is dropped from that release only; a re-plan removal keeps the carried plan and scores it broken; #N and issue:#N are one card; the removal segment is matched as a segment, not a substring)"
-  echo "  I11/I15 Collective Review lock identity validated (a Stage-4 plan approval, an off-contract stage-7 scope-lock, a hub-actored stage-5 scope-lock and a card-grain stage-5 scope-lock stay inert)"
+  echo "  I6 gate-decision selection validated (a stage-4 delegation or action-item row, a sub-task process decision and a spoke-actored row stay out; a card removed at the first gate is dropped from that release only; a re-plan removal keeps the carried plan and scores it broken; #N and issue:#N are one card; the removal segment is matched as a segment, not a substring; a gate row at the zero-padded stage 04 the writer admits is read as stage 4)"
+  echo "  I11/I15 Collective Review lock identity validated (a Stage-4 plan approval, an off-contract stage-7 scope-lock, a hub-actored stage-5 scope-lock and a card-grain stage-5 scope-lock stay inert; a lock at the zero-padded stage 05 the writer admits is read as stage 5)"
   echo "  N/A discipline validated (empty population -> N/A, never synthesized 0.00)"
   echo "  query-pipeline-event.sh dependency validated"
   exit 0
