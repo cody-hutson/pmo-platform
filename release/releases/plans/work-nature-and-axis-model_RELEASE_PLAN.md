@@ -32,9 +32,9 @@ reversibility: CHEAP / Confidence HIGH before the Stage-13 ratification gate —
 | **Bump Class** | minor — provisional display v4.70 (recorded determination at the Stage-4 gate; re-verified at Commit 0); binds at the Stage-12 atomic claim |
 | **Date Created** | 2026-09-27 (Sunday) |
 | **Release Manager** | Agent-assisted (release-hub Mode O) |
-| **Status** | Engineering (Stage 6) — Commit 0 and the record scaffold with its register rows landed; the validation study follows in batches of at most six coded items |
+| **Status** | Engineering (Stage 6) complete — the record filled from the 31-item validation study and the C4 battery run on the artifact and on mutants; next, Stage 7 |
 | **Branch** | `release/work-nature-and-axis-model` |
-| **PR** | populated when the draft release PR opens (after the record and its register rows land) |
+| **PR** | #8004 (draft) |
 | **Milestone** | `work-nature-and-axis-model` (milestone 426) |
 
 `domain_practice: { source: N/A — pipeline-internal release, date: 2026-09-27, domain: governance }`
@@ -178,7 +178,7 @@ RETURN TO SOLUTIONING, with: **D2** the calibration comparison is registered as 
 | **B3** | `<record>` § Owed axes by nature → Grades (E2-T defined by function; derived list with the five named sections); `<plan>` § Validation Study Design → Rubric and "Templates read" |
 | **B4** | `<plan>` § Verification Plan → Release-Level Verification (Check 62's own pattern with the HSR-1 control; AC-3 scoped to the extracted § Calibration trigger with its mutant); every check run on the artifact and on a mutant (§ Verification Evidence) |
 | **B5** | `<record>` § Work natures (`defect` and `data-structure-change` boundary examples and the `new-capability` widening clause replaced, sources under `## References`); § Row grading (k of nine and k′ of seven); § Validation set (the tuning disclosure); `<plan>` § Validation Study Design → threat V15; § Verification Plan D5 row (k and k′; read order); the Stage-8 codebook hand-off in the Stage-6 output |
-| **B6** | `<record>` § Continuity rule → the carry table (filled by the study commits) |
+| **B6** | `<record>` § Continuity rule → the carry table: three rows into slices (the silent and not-applicable axes "unowned — recommended home: the framing-to-cut card") and eight stage rows carried by the Framing carry section, each cited section re-read at the fill commit `7496458c` |
 | **B7** | `<record>` § Owed axes by nature (over-owed candidates need at least two delivered items; proven rows report their deliverable-class span); § Calibration trigger (limb (a)); `<standard>` Row A limb (a) |
 | **B8** | `<plan>` § Validation Study Design → Concept-1 rules (R-C1 through the `milestone` field; `scopemap.py` a cross-check); `<record>` § Validation set (classes found) |
 | **B9** | `<record>` § Nature is one key (n on each side; the B-side excludes E3-F); `<standard>` Row A framing line (`<concept-1 class>` field; framing-1 line marked "unresolved") |
@@ -579,6 +579,11 @@ N/A — enumerated over skill trees, rules mirrors, hooks, templates, config, pa
 | DEV-7 | minor | Row B (the two-row Version History variant) gains one clause beyond the Stage-5 literal: the continuity line "compares each slice's framing with its parent's and is emitted only once the slice-body Framing carry section it reads ships". Without it Row B would say a skipped continuity check shows as a stale date, which Row C (a′) now states is not true before the carrier ships. | Round-2 D3 (Row C's comparing observable states it cannot emit until the carrier ships); the literal predates D3. |
 | DEV-8 | informational | The study's read-only passes 1, 1b and 1c (census, state reason, concept 1) ran before the record and rows were committed, and their results enter the record in the study commits. No file was written before the scaffold commit. | Order of work; reads only. |
 | DEV-9 | minor | Pass 1c located each milestone's plan through `release/releases/RELEASE_INDEX.md` (milestone → version → plan file), because most plans declare no milestone field; where a milestone had no plan file (v2.41) or no milestone (ten items), R-C2 read the delivering commit that cites the item (`git log --all --grep`) rather than a closing comment's citation. | B8 names the `milestone` field as the path; the index is the corpus's own version ↔ milestone projection. Each inferred basis is recorded. |
+| DEV-10 | minor | **Coding interpretations the codebook left open, applied uniformly to all 31 items.** (a) E2 chain read order: the commits citing an item were read first; where an axis lacked E2 there, the closing PR body, the milestone's release PR body and the Stage-5 output were read before settling a lower grade — the chain's sources, not its order, decide the grade. (b) A PR body's Summary is not template-forced (not E2-T); the Implementation, Documentation Impact and Verification Evidence tables and a release Outcome Statement's required fields are. (c) V-12 has no closing PR and no citing commit; the closure record names commit `0b9a339a` (dated before the item was filed) as the delivering change, and it was graded as such. (d) Per-criterion majority counts a criterion that fits no nature under the candidate it matches; an item whose majority is a candidate fits no nature, and it counts toward that candidate's admission only if none of its criteria carries a nature (V-22 and V-23 do not count; V-17 and V-27, whose one other criterion matches the other candidate, do). (e) A criterion that records a measurement of the existing state is a recorded baseline and is not classified (V-18 AC5, V-26 AC1); read as `investigation`, V-26's AC1 would tie with its `defect` criterion and make the item an `investigation` owing no axis. (f) An open item's body revised after the frame cutoff (V-25, revised 16:15:44Z) is graded on the sections the revision kept; the connector serves no edit history. | The codebook (record § Classification procedure, § Grades; plan § Validation Study Design) is silent on each; each reading is recorded per item in the run's codes log and repeated in the Stage-8 hand-off so the blind re-code applies the same reading. |
+| DEV-11 | minor | **Two boundary examples sit beside drawn items, beyond the three B5 names.** `restructure`'s ("Collapsing hand-copied constants into one library") describes V-21's subject (#4198), and `infrastructure-change`'s ("Bounding CI suite run time") describes V-22's AC2 (#7418). Both examples are unchanged from revision 1; neither item is in the D5 nine. Disclosed in the record's § Validation set; both codes marked. Under B1, V-21 codes `defect` (the duplicate-source rule, `core/standards/duplicate-source-discipline.md` § 1, binds inside `core/`), so the `restructure` example and step 5 collide wherever that rule binds. | Found while coding; changing a codebook example mid-coding would change the instrument, so it is disclosed rather than edited — an operator call for Stage 13 (keep, or replace from outside the set). |
+| DEV-12 | minor | **Candidate admission completed the procedure.** Both candidates met their pre-set admission rule, so their rows moved into the natures table (the slot's instruction) and the procedure gained steps 7 (`restructure`) and 8 (`behaviour-change`) plus one "Why this order" sentence, so the admitted natures are reachable by the procedure. The step text restates each definition; nothing else in the procedure moved. | The record's own admission rule and slot; the step text is beyond the slot's literal words, hence recorded. |
+| DEV-13 | informational | **Shallow clone.** The local history begins 2026-06-05 and omits commits on squash-merged release branches; commits named in a PR body but absent locally (V-09's `aae4e4eb`, `a5b701ce`) were read through the connector's `get_commit`. Local `git log --all --grep` found every other citing commit used. | Environment; recorded so Stage 7 can reproduce the reads. |
+| DEV-14 | informational | **Author-reading divergences and B1 probes.** Nine items' own text or triage called them a defect; the procedure coded four as `defect` and five otherwise. Each non-`defect` code records the probe that found no quotable authoritative statement: V-05 (fix-forward and scanner-alert policy searches over the governed trees), V-14 (the quota protocol's § 4.3b scope; the tool site at `35dbf418`), V-19 (Check 34's "opt-in by manifest presence" header), V-20 (`build_chore_pr_body` and `stage-13-close.md`), V-23 (the parity tool's header at `94296f35`), V-26 (the egress hook's stated premise, which did make AC2 a `defect`), V-30 (the depersonalization spec's scope). | B1 (each `defect` code records its source and authority basis); the probes stand as the zero-claims' evidence. |
 | DEV-6 | informational | A third sibling now claims ADR slot 207: #7919 (`controls-fail-loud`, head `7ff5a9cd`) adds a `core/ADRs/` record at slot 207 under its own slug, which the Stage-5 contention read (heads `99d36318`, `341c8c8`) did not show. The resolution is unchanged — author at the mainline next-free, renumber at merge. | Contention re-read at Commit 0 (hub brief: sibling heads re-read live). |
 
 ---
@@ -604,12 +609,55 @@ Populated at C4 self-verification (Stage 6), then re-run at Stage 7.
   - `bash core/deploy/tools/check-issue-ref-validity.sh --resolver fixture --fixture-map <map> --path <record>` → exit 0 (the map lists each `#N` the record carries as `valid`, each confirmed an issue in this repository by a connector `issue_read`; CI runs the real resolver). Mutant (an issue reference seeded into § Context) → exit 1, flagged at line 23. On `<standard>` the gate reports the file's own `allow-issue-ref` marker and skips it, so the rows are checked directly: 0 issue references in the three new rows.
   - Change 2: Check 62's own pattern over the three new rows → **0**; over the HSR-1 row → **1** (control). The superseded check `grep -cE 'runner-(def|src):'` would count **2** on the new rows (their "No `runner-def:` pointer is recorded" sentences) — the over-match B4 retired. Check 62's extraction (`_rr_compute_verdict`'s own `grep -o` patterns) over the standard at `origin/main` and on the branch → 31 `runner-def` + 3 `runner-src` declarations both times, byte-identical, so its count and verdict cannot move. Row A carries the three limbs, "Owner:", "Stage-13 close", the `<concept-1 class>` field and the framing-1 line.
 - **Plan links** — the plan carries no markdown link sequence (a count of the link-opening sequence over this file → 0), so the plan-depth lint has nothing to grade. `check-release-links.py --plan-depth-lint --files <this plan>` reported "0 files", a vacuous run, recorded as such rather than as a pass.
+- **Validation study (six batch commits `0d0089c8` … `eec5ddd8`, then the fill commit `7496458c`).** Each batch of at most six coded items was committed and pushed as it landed, the issue-reference gate and the durability lint re-run on the record before each commit (exit 0 · COUNT 0 every time). The per-item codes, quotes and sources are in the run's codes log (`${SCRATCH_BASE}/spoke-6-7972-qmCYrV/codes.md`); the record carries the table and its summary.
+- **Final C4 (after the fill commit; artifact and mutant, B4).** Mutants are copies of the filled record in fixture roots under the run directory, one seeded defect each.
+  - Slots: `grep -c '⟦' <record>` → **0**; mutant (one slot restored) → **1**.
+  - Numbering: `check-adr-numbers.py` → "PASS (207 ADRs, contiguous 001..207, no duplicates)", exit 0; `renumber-adr.py --detect` → ANCHOR 206 · NEXT-FREE 207 · CLAIMED-SET-BRANCH-ONLY 207,208,209,210 · this record's CLAIM ADR-207 BINDS BRANCH-CLAIM (renumbers at merge if a sibling lands 207 first).
+  - Durability: `check-adr-durability.py --files <record> --diff-base origin/main` → SCANNED 1 · COUNT 0; the clean fixture → COUNT 0; the `title:` mutant → R4 flagged, COUNT 1.
+  - Issue-reference gate with the fixture map (38 numbers, each confirmed an issue in this repository by a connector `issue_read`) → exit 0; the § Context mutant → exit 1, flagged at line 23 ("resolves but is placed outside a designated reference").
+  - AC probes on the record: AC-1 heading 1; AC-2 `ISO/IEC/IEEE 42010` 1; AC-3 inside the extracted § Calibration trigger — "supersedes this one" 1, "under-owed" 1, "unnamed axis" 1, "over-owed" 1, "revised in place" 1; the AC-3 mutant (over-owed limb and supersession sentence deleted) → 0 and 0, so the scoped check fails; AC-4 1; AC-5 "in-sample consistency check" 1, "E2 (reported, unverified)" 1, the carry table 11 rows with an engineering row, both cards under `## References`; AC-6 — the 12 identifiers against pack `kind_id`s {card, epic, story, task}, the `type:` kinds and the 12 `_common` category labels → intersection **0**; control with `story` appended → **1**.
+  - Change 2 (the standard is unchanged since the scaffold commit): Check 62's own pattern → 0 on the three new rows, 1 on the HSR-1 control row; its extraction over the standard → 31 `runner-def` + 3 `runner-src`, byte-identical to `origin/main` (`cmp` silent); Row A carries every required element.
+  - Plan: `claim-version.sh --verify-stamp work-nature-and-axis-model` → exit 0 ("verify-stamp OK … plan-only manifest"); exactly one braced version placeholder; the plan-depth lint again vacuous (0 link sequences).
 
 ---
 
 ## Change Description
 
-Authored at Phase C1 once the record and the validation study land; until then this section records the in-flight state. **Outcome so far:** Engineering Commit 0 — this plan, transcribed from the approved Stage-4 plan with the Stage-5 deltas and the round-2 decisions; then the record scaffold (`core/ADRs/ADR-207-design-axes-and-cut-patterns-key-on-work-nature.md`, `status: Proposed`) with B1–B10, D2, D3, D5 and D7 applied and its data slots open, and the three register rows in `core/standards/gate-efficacy-standard.md` (Rows A and C at the gate-coverage register tail, Row B at the Version History tail). The study passes 1, 1b and 1c ran and reproduced the Stage-5 frame, draw, state reasons and testability table with zero delta; their figures enter the record with the coded items.
+### Outcome
+
+The platform gains one decision record, `core/ADRs/ADR-207-design-axes-and-cut-patterns-key-on-work-nature.md` (`status: Proposed`, flipped at the Stage-13 ratification gate), that names eight work natures and the four design axes each owes, classifies work by a stated per-criterion procedure, and grades every owed-axis row against a 31-item validation set drawn from the improvement form's filings. Two named gaps and a Version History row in `core/standards/gate-efficacy-standard.md` make the calibration comparison and the continuity rule observable once their surfaces ship.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #7959 | The work natures (six, plus `restructure` and `behaviour-change` admitted from candidates), the four design axes with their sources in practice, the owed-axis table graded — `defect` proven within one deliverable class, every other row a hypothesis — the three coverage states, the continuity rule with its carry table, and the calibration trigger | DONE (pending Stage 8's blind re-code, D5: a nature agreement below seven of nine sets every row to hypothesis) |
+
+### Key decisions
+
+- **One key, by default** — the one-key-or-two question was not testable for any nature (no nature has two delivered items in both deliverable classes); the record keeps the conditional key sentence (B10).
+- **Both candidates admitted** — `behaviour-change` (six items fitting it and no other nature) and `restructure` (three, the floor); the procedure gains steps 7 and 8 (DEV-12).
+- **`defect` proven** — six delivered items across two strata, and still proven with its tuned items and the item beside the `restructure` example set aside; its proof spans `governance` only.
+- **No mark moved** — no item carries E3-F, so the owed-axis rule changed nothing; over-owed candidates are "none" for `defect` and `behaviour-change` and untested elsewhere.
+- **Carry table** — stage-to-stage carries ride the slice-body Framing carry section (D2); the carry of silent and not-applicable axes into slices is unowned, with the framing-to-cut card as its recommended home (B6).
+- Stage-5 round-2 decisions D1–D8 and amendments B1–B10: § Decision Record → Amendments applied.
+
+### Reversibility
+
+CHEAP / HIGH before the Stage-13 ratification gate — revert the record and Change 2 commits (or the single release merge); after ratification the record is immutable and a change takes a superseding record (MODERATE).
+
+### Downstream impact
+
+- The framing-to-cut and cut-basis cards (#7963, #7960) build on the key, the owed-axis table and the Framing carry section; the successor card #7966 composes the next milestone after ratification.
+- The design-axis toolkit and the cut-pattern catalog cite this table or reproduce it as a declared projection.
+- Carry-forward to the operator at Stage 13: whether to replace the two boundary examples that sit beside drawn items (DEV-11); whether to widen the framing-to-cut card to silent and not-applicable axes (B6).
+- Stage 8 re-codes V-01..V-09 blind from the codebook sections named in the Stage-6 output; the D5 floor decides whether `defect` stays proven.
+
+### Cross-references
+
+- Release plan: `release/releases/plans/work-nature-and-axis-model_RELEASE_PLAN.md` (this file; renamed to its versioned form at the Stage-12 claim).
+- Milestone: `work-nature-and-axis-model` (milestone 426), `https://github.com/cody-hutson/pmo-platform/milestone/426`.
+- Release PR: #8004. User-facing release notes: authored at Stage 13 under `release/releases/notes/`.
 
 ---
 
