@@ -5486,9 +5486,11 @@ phase_rebuild_skill_packages() {
 # it. Recorded because the wrong rationale would send the next reader hunting for
 # a hazard this code does not have.
 #
-# What the filter ACTUALLY excludes: FOUR
+# What the filter ACTUALLY excludes: FIVE
 # SKIPPED limbs whose detail DOES use the strict path-only form —
-# inject_outcome_field (SKIPPED, twice), append_release_learnings (SKIPPED) and
+# inject_outcome_field (SKIPPED, twice), inject_velocity_field (SKIPPED, its
+# detail assembled in a variable, so a read of the literal mark_phase lines
+# misses it), append_release_learnings (SKIPPED) and
 # inject_close_class_telemetry_field (SKIPPED), each naming its resolved surface
 # as `($target_name)` / `($_log_name)`. A SKIPPED limb wrote nothing, so admitting
 # one would demand a commit for a file its own phase declined to touch — a guard
@@ -14210,7 +14212,7 @@ CD1CCT
     echo "FAIL: PS-4 _reported_write_surfaces must NOT filter on an 'inject_*' name prefix — that prefix is a proxy for 'is a writer' and Phase 6.9 is a writer it does not name (#6258)"; failures=$((failures+1))
   fi
   if ! /usr/bin/grep -qF 'PHASE_RESULTS[$_i]}" == "PASS"' <<<"$_ps_body"; then
-    echo "FAIL: PS-4b _reported_write_surfaces must keep the PASS result filter — it is what excludes the four SKIPPED limbs that name a resolved surface in the strict path-only form despite writing nothing (see PS-5)"; failures=$((failures+1))
+    echo "FAIL: PS-4b _reported_write_surfaces must keep the PASS result filter — it is what excludes the five SKIPPED limbs that name a resolved surface in the strict path-only form despite writing nothing (see PS-5)"; failures=$((failures+1))
   fi
   # Independence, extended to the extracted producer: it must not consult the
   # recorder whose omission is the defect.
@@ -14223,8 +14225,8 @@ CD1CCT
   # re-version this release (RELEASE_REVERSIONS.md untouched)", and was VACUOUS: a
   # mutation dropping the PASS filter left it GREEN, because the token grammar
   # rejects that parenthetical on its trailing word, not on the phase result. The
-  # real hazard is a SKIPPED limb using the strict path-only form — four sites do
-  # (inject_outcome_field twice, append_release_learnings,
+  # real hazard is a SKIPPED limb using the strict path-only form — five sites do
+  # (inject_outcome_field twice, inject_velocity_field, append_release_learnings,
   # inject_close_class_telemetry_field). A SKIPPED limb wrote nothing, so admitting
   # one would demand a commit for a file its own phase declined to touch.
   PHASE_NAMES=("inject_outcome_field" "transition_plan_status")
