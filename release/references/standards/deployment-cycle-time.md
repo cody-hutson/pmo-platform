@@ -35,7 +35,7 @@ Both anchors source the `ts_iso` field (ISO8601 UTC timestamp; schema-locked per
 ### 2.1 Selection rule
 
 - **T_GO** = earliest (`MIN(ts_iso)`) `gate-outcome` event with `event_subtype=plan-review-go` for the release. There is normally exactly one — multi-PR releases coalesce to a single GO decision per [`release/governance/release-process.md`](../../governance/release-process.md) Stage 9.
-- **T_DEPLOY** = latest (`MAX(ts_iso)`) `deployment-status` event with `event_subtype=deploy-skill` OR `deploy-harness` for the release. Multi-skill releases emit one row per affected target per [`release/references/pipeline/stage-12-execute.md`](../pipeline/stage-12-execute.md) § Phase H; the LAST emission anchors Stage 12 completion.
+- **T_DEPLOY** = latest (`MAX(ts_iso)`) `deployment-status` event with `event_subtype=deploy-skill` OR `deploy-harness` **and `outcome=resolved`** for the release. Multi-skill releases emit one row per affected target per [`release/references/pipeline/stage-12-execute.md`](../pipeline/stage-12-execute.md) § Phase H; the LAST resolved emission anchors Stage 12 completion. The schema's other three `deployment-status` subtypes never anchor: a `deploy-package` row records a distribution-artifact copy, not runtime propagation; a `deploy-rules-mirror` row is written once per release-stamped deploy whether or not a rule changed; `deploy-helper` has no producer. § 4 names each of them in the N/A reason rather than dropping it. The mirror row is not admitted for a forward-looking reason: the rules-mirror carrier writes one resolved row on every release-stamped invocation, so admitting it would make every stamped content-only release compute, which § 4 excludes from the baseline. The cost is stated rather than hidden. A release whose change did reach the runtime, but whose only `deployment-status` rows are of excluded subtypes, reads `N/A` with those rows named: a false negative, never a wrong value. The known instances are `v4.54`, `v4.55`, `v4.58` and `one-system-of-record-per-element`.
 
 ### 2.2 Delta computation
 
@@ -74,7 +74,15 @@ Emit mechanism: Stage 12 spoke invokes [`compute-cycle-time.sh <version>`](../..
 
 ## 4. N/A semantics
 
-Releases that emit zero `deploy-skill` and zero `deploy-harness` events (content-only, governance-only, reference-doc-only) record `Cycle-Time: N/A`. They are explicitly excluded from baseline computation.
+Releases whose `T_DEPLOY` cannot be anchored — no resolved `deploy-skill` / `deploy-harness` event — record `Cycle-Time: N/A` and are explicitly excluded from baseline computation. `compute-cycle-time.sh` reports each such release under exactly ONE of three causes, in one reason:
+
+| Cause | The release's `deployment-status` rows | The reason says |
+|---|---|---|
+| **None** | none at all — a content-only release deployed without a release stamp, or not yet deployed, or a release whose change reached the runtime through a carrier that writes no `deployment-status` row (the hook tier and the composition surfaces, through `update.sh` or `setup-workspace.sh --refresh-hooks`) | `no deployment-status event for <release>` |
+| **Failed** | ≥1 `deploy-skill` / `deploy-harness` row, none `outcome=resolved` | the non-resolved outcomes, then *the deploy ran and its targets did not succeed* — the only cause that says so |
+| **Excluded** | rows exist, none of an anchor subtype | the anchor rule (§ 2.1), then each subtype present with its row count, its resolved / not-resolved tally and its producer — rows written by the deploy emitter, or hand-written — excluded by definition, not by target failure |
+
+A release-stamped deploy of a content-only release is the **Excluded** case, not **None**: the rules-mirror carrier runs on every invocation and writes its one `deploy-rules-mirror` row before any skill, package or harness target, even on a run that then stops on a bad artifact name. An event log the tool cannot read is none of the three: the tool exits `1` (§ 7) and names no cause, because a read that never happened is not a measured absence.
 
 **Rationale:** Cycle-time measures the operator-experienced latency of Stage 12 propagation for content that actually deploys. Content-only releases exercise a different latency profile (merge-only) that this metric is not designed to characterize. Conflating both classes would distort the baseline and produce misleading post-baseline comparisons.
 
@@ -84,9 +92,9 @@ Releases that emit zero `deploy-skill` and zero `deploy-harness` events (content
 
 ### 4.1 `Cycle-Time: N/A` is a known, documented state (not a data-quality defect)
 
-`Cycle-Time: N/A` in a Deployment Log block means the release's `T_DEPLOY` anchor could not be resolved because **no `deployment-status` event was emitted**. This is **structural, not intermittent**: the `deployment-status` event type and its five subtypes are defined in [`pipeline-event-log-schema.md`](pipeline-event-log-schema.md) § 3, and the per-target rows are declared in [`stage-12-execute.md`](../pipeline/stage-12-execute.md) § 11, but `core/deploy/deploy.sh` contains no emit call for them. The codification exists; the emitter does not. Until a deploy-event emitter ships, `N/A` is the CORRECT value for **every** release and MUST NOT be read as a missing measurement, backfilled, or estimated.
+`Cycle-Time: N/A` in a Deployment Log block means a cycle-time anchor could not be resolved, and its reason names which cause applies — the T_GO half and the T_DEPLOY half (§ 4) each carry their own. It is a real, final value, not a gap: the `deployment-status` emitter exists (`core/deploy/deploy.sh --deploy --release <slug>` writes one row per deployed target, plus the rules-mirror carrier's one row per invocation), so an N/A is no longer structural for every release. One carve-out stays structural: a release whose change reached the runtime only through a carrier that writes no `deployment-status` row — the hook tier and the composition surfaces — has no T_DEPLOY row to anchor on, and reads the **None** cause. An N/A MUST NOT be read as a missing measurement, backfilled, estimated, or re-anchored on a subtype § 2.1 excludes.
 
-The practical consequence: the § 5 baseline trigger cannot fire, because the count of non-`N/A` values is structurally zero rather than merely small. Reading a run of `N/A` values as a recent data-quality regression inverts cause and effect — there is no instrumented interval to have regressed from.
+The § 5 baseline counts non-N/A values only: an N/A release neither enters the rolling window nor shifts it.
 
 **Scope note.** The decision-telemetry join key ([`pipeline-event-log-schema.md`](pipeline-event-log-schema.md) § 2a) and the minimum-emission gate (`deploy.sh --check-decision-emission`, Check 61) do **NOT** address this. They govern **decision** events; the deploy-event emitter is separately tracked. `--check-decision-emission` deliberately does not assert `deployment-status` — it is not a `MUST` row of the orchestration playbook's `EMISSION-CONTRACT` block, and asserting a class the playbook never instructs is precisely what CIAC-3 forbids (mechanically enforced by `release/tools/check-emission-contract-subset.sh`). A gate that asserted `deployment-status` today could only ever fail, which is a different defect from the one it would appear to be fixing.
 

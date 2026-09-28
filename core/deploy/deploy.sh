@@ -6722,15 +6722,18 @@ cmd_deploy() {
         FAILURES+=("$pkg.skill")
       fi
 
-      # #4215 CS-2. `deploy-package` is emitted despite having NO consumer: it is an
-      # honest per-target audit row, and because both read-models filter their anchor
-      # set to deploy-skill|deploy-harness it provably cannot perturb T_DEPLOY or the
-      # DORA occasion set. That exclusion is a DECLARED narrowing, not an oversight —
-      # a package deploy is not evidence that the release's skills reached the install
-      # path, so anchoring cycle-time on one would overstate what was observed. The
-      # bounded consequence is that a package-ONLY deploy yields no T_DEPLOY; that is
-      # structurally near-impossible here, because CHANGED_PACKAGES is populated only
-      # alongside skills and is hard-reset to () when the manual skill list is empty.
+      # #4215 CS-2, restated by #5553. `deploy-package` is an honest per-target audit
+      # row that neither read-model anchors on: compute-cycle-time.sh (T_DEPLOY) and
+      # compute-dora-metrics.sh (DORA occasions) read deploy-skill|deploy-harness only,
+      # because a `.skill` package is a DISTRIBUTION artifact: the runtime copy is made
+      # from source by the skill loop above, never from the package. A package-ONLY
+      # deploy IS reachable. The full-roster path deploys every package with every
+      # skill; the named-skill path installs only the named skills' packages (and
+      # resets CHANGED_PACKAGES to () when none is named); but the incremental tag-diff
+      # path (detect_changed_skills) fills CHANGED_PACKAGES from its own packages/
+      # diff, independently of CHANGED_SKILLS. compute-cycle-time.sh reports such an
+      # occasion as N/A NAMING deploy-package, never as "targets did not succeed",
+      # which it reserves for skill/harness rows none of which resolved.
       local __pkg_outcome __pkg_detail="none"
       __pkg_outcome="$(_ds_outcome "$__pkg_fail_before" "${#FAILURES[@]}" "false")"
       [[ "$__pkg_outcome" == "resolved" ]] || __pkg_detail="package-copy-or-verify-failed"
@@ -6851,11 +6854,16 @@ cmd_deploy() {
   # ─── #4215: deliberate non-emission points (the complete inventory) ────────
   # Recorded so the absences read as decisions. NOTHING is emitted when:
   #   validate_workspace fails           — aborts before any target is known
+  # and NO skill, package or harness row is emitted when:
   #   die "Unknown artifact"             — argument validation; no deploy attempted
   #   die "Ambiguous artifact name"      — same
-  #   the E-02 "No changes" exit 0       — nothing was deployed. This is the mechanism
+  #   the E-02 "No changes" exit 0       — nothing was selected. This is the mechanism
   #                                        behind the HONEST N/A on a content-only
   #                                        release; it is not a defect.
+  # The rules-mirror carrier runs ABOVE all three of those, so on a release-stamped
+  # run each of them still leaves exactly one deploy-rules-mirror row, the two die
+  # points included. compute-cycle-time.sh names that row in its N/A reason instead
+  # of anchoring on it (#5553), which is what keeps these N/As honest.
   #   any `set -e` exit inside a loop    — NOT one of the die points above, and easy to
   #                                        miss. This script runs `set -euo pipefail`,
   #                                        so an unguarded non-zero (a bare mkdir -p, a
