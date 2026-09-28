@@ -51,7 +51,7 @@ The single key, orthogonal to kind, altitude, deliverable class and filing form:
 
 ### Classification procedure
 
-Classify each acceptance criterion; the item's nature is the one most of its criteria carry, ties going to the earlier step, and the others are recorded as secondary. An item with no acceptance criteria is classified on its proposed change as one unit. A criterion that verifies no change — a recorded baseline, a regression guard on existing behaviour — is not classified. For each criterion, the first yes wins:
+Classify each acceptance criterion; the item's nature is the nature most of its criteria carry, ties going to the earlier step, and the others are recorded as secondary. An item with no acceptance criteria is classified on its proposed change as one unit. A criterion that verifies no change — a recorded baseline, a regression guard on existing behaviour — is not classified. For each criterion, the first yes wins:
 
 1. Its output is knowledge and it changes nothing users rely on → `investigation`.
 2. It changes only the build, verify, deploy or run environment and nothing users get → `infrastructure-change`. What a check asserts, and what a hook blocks or emits, are not environment.
