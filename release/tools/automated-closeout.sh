@@ -732,6 +732,10 @@ STATE_LOG_ROW_STATE=""
 STATE_MILESTONE_STATE=""
 STATE_MILESTONE_SLUG=""
 STATE_CYCLE_TIME=""
+STATE_CYCLE_TIME_NOTE=""         # a value's own stderr, e.g. the tool's negative-interval
+                                 # WARNING; rides the read_state detail only (#6252)
+STATE_CYCLE_TIME_FIELD=""        # the read-only Deployment Log field verdict with its detail
+STATE_CYCLE_TIME_FIELD_CLASS=""  # CONFORMANT | DIVERGENT | ABSENT | NOT-EVALUATED
 STATE_TAG_EXISTS=0
 OPEN_ISSUE_LIST=""        # newline-separated list of issue numbers. PRE-CLOSE
                          # SNAPSHOT, taken once at Phase 4 (#3587): 6 of its 7
@@ -1741,6 +1745,157 @@ phase_preflight() {
 
 # ─── Phase 3: read_state ─────────────────────────────────────────────────────
 
+# _read_cycle_time_state — the value AND compute-cycle-time.sh's own N/A reason
+# (#6252). Sets STATE_CYCLE_TIME and STATE_CYCLE_TIME_NOTE; called directly, never
+# inside $( ). On N/A the tool prints `N/A` on stdout and ONE line
+# `Cycle-Time: N/A (<reason>)` on stderr, naming each missing anchor's cause
+# (deployment-cycle-time.md § 4). stderr is CAPTURED, never discarded: the reason is
+# the tool's to state, and every surface this run writes carries it verbatim, with no
+# hand-written phrase. Same sentinel + stderr-file idiom as phase_inject_velocity_field.
+# Four states that never share a member (review-discipline-principles.md § 8 PV-7): a
+# value; `N/A (<reason>)`; `N/A — DEGRADED` (N/A with no reason line, or a negative
+# interval, which is not a cycle time); `NOT-EVALUATED` (a non-zero exit, no value, or
+# no tool). The key is $VERSION, the RELEASE_LOG row's Version cell — the key
+# deployment-cycle-time.md § 3.1 pins for the field's author, so the two lines compare
+# byte for byte.
+#
+# Its only write is its own mktemp scratch file, removed before it returns. That is why
+# the capture lives here rather than inline in phase_read_state: group CA's lexical
+# write signature cannot tell a redirect into a scratch file from a record write, and
+# read_state is a read-only phase by behaviour, asserted by content hash in CY-11.
+_read_cycle_time_state() {
+  local _ct_out _ct_rc=0 _ct_errf _ct_line _ct_neg _ct_err
+  STATE_CYCLE_TIME_NOTE=""
+  if [[ ! -x "$COMPUTE_CYCLE_TIME" ]]; then
+    STATE_CYCLE_TIME="NOT-EVALUATED — compute-cycle-time.sh is not executable — this is not a clean result"
+    return 0
+  fi
+  _ct_errf="$(/usr/bin/mktemp -t cycletime-stderr.XXXXXX)"
+  _ct_out="$("$COMPUTE_CYCLE_TIME" --version "$VERSION" 2>"$_ct_errf"; _prc=$?; /usr/bin/printf 'X'; exit "$_prc")" || _ct_rc=$?
+  _ct_out="${_ct_out%X}"; _ct_out="${_ct_out%%$'\n'*}"
+  _ct_line="$(/usr/bin/grep -m1 '^Cycle-Time: N/A (' "$_ct_errf" 2>/dev/null || true)"
+  # The tool's human format truncates toward zero, so a sub-minute negative interval
+  # prints UNSIGNED as 0m: its stderr WARNING is the reliable signal, the sign a second.
+  _ct_neg="$(/usr/bin/grep -m1 '^WARNING: negative cycle-time' "$_ct_errf" 2>/dev/null || true)"
+  _ct_err="$(/usr/bin/grep -v '^Cycle-Time: N/A (' "$_ct_errf" 2>/dev/null || true)"
+  /bin/rm -f "$_ct_errf" 2>/dev/null || true
+  # ( ) | are neutralized before stderr can reach the phase detail: a parenthesised .md
+  # path would read as a written surface, and a pipe splits the phase row.
+  _ct_err="$(/usr/bin/printf '%s' "$_ct_err" | /usr/bin/tr '\n|()' ' /[]')"; _ct_err="${_ct_err:0:400}"
+  if [[ "$_ct_rc" -ne 0 ]]; then
+    STATE_CYCLE_TIME="NOT-EVALUATED — compute-cycle-time.sh exited ${_ct_rc}: ${_ct_err:-no stderr} — this is not a clean result"
+  elif [[ -z "${_ct_out//[[:space:]]/}" ]]; then
+    STATE_CYCLE_TIME="NOT-EVALUATED — compute-cycle-time.sh returned no value — this is not a clean result"
+  elif [[ "$_ct_out" == "N/A" ]]; then
+    if [[ -n "$_ct_line" ]]; then
+      STATE_CYCLE_TIME="${_ct_line#Cycle-Time: }"
+    else
+      STATE_CYCLE_TIME="N/A — DEGRADED: compute-cycle-time.sh returned N/A with no reason line on stderr"
+    fi
+  elif [[ -n "$_ct_neg" || "$_ct_out" == -* ]]; then
+    STATE_CYCLE_TIME="N/A — DEGRADED: compute-cycle-time.sh measured a negative interval — T_GO is later than T_DEPLOY, so its value ${_ct_out} is not a cycle time"
+    STATE_CYCLE_TIME_NOTE=" [compute-cycle-time.sh stderr: ${_ct_err:-none}]"
+  else
+    STATE_CYCLE_TIME="$_ct_out"
+    if [[ -n "$_ct_err" ]]; then STATE_CYCLE_TIME_NOTE=" [compute-cycle-time.sh stderr: ${_ct_err}]"; fi
+  fi
+  return 0
+}
+
+# _cycle_time_field_verdict — READ-ONLY (#6252). Does this version's Deployment Log
+# **Cycle-Time:** field carry the tool's value (deployment-cycle-time.md § 3.1)?
+# Sets STATE_CYCLE_TIME_FIELD_CLASS (CONFORMANT | DIVERGENT | ABSENT | NOT-EVALUATED)
+# and STATE_CYCLE_TIME_FIELD (the class and its detail). Never writes and never gates:
+# the Stage-12 author owns the field, and this close-out does not rewrite a field it
+# did not author. Called directly, never inside $( ), because it sets globals.
+#
+# DIVERGENT is a DISAGREEMENT, never a verdict on the field. The tool is re-run at
+# close and can itself be the wrong party — a hand-written release-level marker typed
+# as a deploy row can anchor it — so the verdict carries the tool's --iso anchors and
+# leaves the reader to judge which side is right. The key is $VERSION, the RELEASE_LOG
+# row's Version cell, which § 3.1 pins for the field's author too: a line produced
+# under the milestone slug differs in its key token and reads DIVERGENT. A quoted
+# excerpt has ( ) | neutralized, so it cannot name a phantom write surface
+# (_reported_write_surfaces) or split a phase row (get_phase).
+_cycle_time_field_verdict() {
+  local _tgt _kc _cls _pfx _val _want _iso
+  STATE_CYCLE_TIME_FIELD_CLASS="NOT-EVALUATED"
+  case "$STATE_CYCLE_TIME" in
+    NOT-EVALUATED*|"N/A — DEGRADED"*)
+      STATE_CYCLE_TIME_FIELD="NOT-EVALUATED — the tool produced no comparable value — this is not a clean result"
+      return 0 ;;
+  esac
+  _tgt="$(_resolve_deployment_log_target "$VERSION" || true)"
+  if [[ -z "$_tgt" ]]; then
+    STATE_CYCLE_TIME_FIELD="NOT-EVALUATED — no $VERSION Deployment Log block with a **Result:** line on any surface — this is not a clean result"
+    return 0
+  fi
+  _kc="$(_resolve_field_key_in_block "$_tgt" "$VERSION" 'Cycle-Time')"
+  _cls="${_kc%%$'\t'*}"; _pfx="${_kc#*$'\t'}"
+  case "$_cls" in
+    ABSENT)
+      STATE_CYCLE_TIME_FIELD_CLASS="ABSENT"
+      STATE_CYCLE_TIME_FIELD="ABSENT — the block carries no **Cycle-Time:** field"
+      return 0 ;;
+    UNREADABLE)
+      STATE_CYCLE_TIME_FIELD="NOT-EVALUATED — the surface could not be read — this is not a clean result"
+      return 0 ;;
+    CANONICAL) : ;;
+    *)
+      _iso="$(_cycle_time_iso_anchors)"
+      STATE_CYCLE_TIME_FIELD_CLASS="DIVERGENT"
+      STATE_CYCLE_TIME_FIELD="DIVERGENT — the field and the tool disagree on the key: it is ${_cls}, not the bare **Cycle-Time:**; the tool's anchors are ${_iso}"
+      return 0 ;;
+  esac
+  _val="$(/usr/bin/awk -v ver="$VERSION" -v pfx="$_pfx" '
+      { raw = $0; line = raw; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "#### Deployment Log " ver { inblk = 1; next }
+      inblk && line ~ /^#### / { inblk = 0 }
+      inblk && !done && index(raw, pfx) == 1 { print substr(raw, length(pfx) + 1); done = 1 }
+    ' "$_tgt" 2>/dev/null || true)"
+  _val="${_val#"${_val%%[![:space:]]*}"}"
+  _want="$STATE_CYCLE_TIME"
+  # CONFORMANT when the field IS the tool's value, or begins with it and the next
+  # character cannot extend it (48m followed by its anchor parenthetical conforms;
+  # 480m against 48m does not).
+  if [[ "$_val" == "$_want" || ( "${_val:0:${#_want}}" == "$_want" && ! "${_val:${#_want}:1}" =~ [A-Za-z0-9] ) ]]; then
+    STATE_CYCLE_TIME_FIELD_CLASS="CONFORMANT"
+    STATE_CYCLE_TIME_FIELD="CONFORMANT — the field begins with the tool's value"
+  else
+    _iso="$(_cycle_time_iso_anchors)"
+    _val="$(/usr/bin/printf '%s' "$_val" | /usr/bin/tr '()|' '[]/')"
+    STATE_CYCLE_TIME_FIELD_CLASS="DIVERGENT"
+    STATE_CYCLE_TIME_FIELD="DIVERGENT — the field and the tool's current value disagree; the tool's anchors are ${_iso}; the field reads: ${_val:0:160}"
+  fi
+  return 0
+}
+
+# The tool's --iso line (T_GO=…; T_DEPLOY=…; delta=…): the anchors a DIVERGENT verdict
+# carries, so a reader sees which rows the tool used. Read-only; first line only, with
+# ( ) | neutralized for the phase detail.
+_cycle_time_iso_anchors() {
+  local _o
+  _o="$("$COMPUTE_CYCLE_TIME" --version "$VERSION" --iso 2>/dev/null || true)"
+  _o="${_o%%$'\n'*}"
+  if [[ -z "$_o" ]]; then /usr/bin/printf 'unreadable\n'; return 0; fi
+  /usr/bin/printf '%s\n' "$_o" | /usr/bin/tr '()|' '[]/'
+}
+
+# The chore-PR form of a Cycle-Time state (#6252, review FM-4). The chore-PR body is
+# PUBLIC and is posted by `gh pr create`, which no path guard sees, so a NOT-EVALUATED
+# result reaches it as its class and exit code only; the producer's stderr, which can
+# carry an absolute install path, stays in the report and the JSON report. Every other
+# state is carried as itself, and none of them embeds stderr.
+_cycle_time_public_form() {
+  local _v="$1" _rc
+  case "$_v" in
+    "NOT-EVALUATED — compute-cycle-time.sh exited "*)
+      _rc="${_v#NOT-EVALUATED — compute-cycle-time.sh exited }"; _rc="${_rc%%[!0-9]*}"
+      /usr/bin/printf 'NOT-EVALUATED — compute-cycle-time.sh exited %s — this is not a clean result\n' "${_rc:-unknown}" ;;
+    *) /usr/bin/printf '%s\n' "$_v" ;;
+  esac
+}
+
 phase_read_state() {
   STATE_MILESTONE_STATE="$($GH api "repos/${REPO_SLUG}/milestones/${MILESTONE}" --jq '.state' 2>/dev/null || echo "unknown")"
 
@@ -1752,14 +1907,12 @@ phase_read_state() {
   # and #1682's publish consumer read this single global (no double-population).
   MERGE_SHA="$($GH pr view "$PR_NUMBER" --repo "$REPO_SLUG" --json mergeCommit --jq '.mergeCommit.oid // ""' 2>/dev/null || echo "")"
 
-  # Cycle time (read-only; may be N/A pre-instrumentation)
-  if [[ -x "$COMPUTE_CYCLE_TIME" ]]; then
-    STATE_CYCLE_TIME="$("$COMPUTE_CYCLE_TIME" --version "$VERSION" 2>/dev/null || echo "N/A")"
-  else
-    STATE_CYCLE_TIME="N/A (compute-cycle-time.sh not executable)"
-  fi
+  # Cycle time: the value AND compute-cycle-time.sh's own N/A reason, then the
+  # read-only verdict on the Deployment Log field (#6252). Both are helpers above.
+  _read_cycle_time_state
+  _cycle_time_field_verdict
 
-  mark_phase "read_state" "PASS" "milestone state=$STATE_MILESTONE_STATE; cycle_time=$STATE_CYCLE_TIME; release-PR merge SHA=${MERGE_SHA:-<unresolved>}"
+  mark_phase "read_state" "PASS" "milestone state=$STATE_MILESTONE_STATE; cycle_time=${STATE_CYCLE_TIME//|//}${STATE_CYCLE_TIME_NOTE}; deployment-log field: ${STATE_CYCLE_TIME_FIELD}; release-PR merge SHA=${MERGE_SHA:-<unresolved>}"
   return 0
 }
 
@@ -4901,6 +5054,13 @@ build_chore_pr_body() {
   # at emission is the only chance there is. Resolved before the heredoc for the
   # same reason as the note scaffold: a non-zero return inside it is invisible.
   local plan_ref; plan_ref="$(plan_ref_for_emit)" || true
+  # The Cycle-Time lines, resolved before the heredoc for the same reason (#6252): the
+  # PUBLIC form of the state (_cycle_time_public_form) and the read-only field verdict's
+  # CLASS only — never its detail, which can quote the field.
+  local cycle_public cycle_field
+  cycle_public="$(_cycle_time_public_form "$STATE_CYCLE_TIME")" || true
+  cycle_field="${STATE_CYCLE_TIME_FIELD_CLASS:-NOT-EVALUATED}"
+  [[ "$cycle_field" != "NOT-EVALUATED" ]] || cycle_field="NOT-EVALUATED — this is not a clean result"
 
   /bin/cat <<EOF
 ## Summary
@@ -4930,7 +5090,9 @@ ${deferred_summary}
 
 ## Cycle time
 
-${STATE_CYCLE_TIME}
+${cycle_public}
+
+Deployment Log \`**Cycle-Time:**\` field, compared read-only with the value above (deployment-cycle-time.md § 3.1): ${cycle_field}
 
 ## Cross-references
 
@@ -11765,13 +11927,13 @@ STUB
   # it reports named failures rather than a set -u abort.
   local _cy_s_cct="$COMPUTE_CYCLE_TIME" _cy_s_gh="$GH" _cy_s_log="$RELEASE_LOG" _cy_s_ver="$VERSION"
   local _cy_s_pr="$PR_NUMBER" _cy_s_slug="$REPO_SLUG" _cy_s_msha="$MERGE_SHA"
-  local _cy_s_mslug="$STATE_MILESTONE_SLUG" _cy_s_mstate="$STATE_MILESTONE_STATE"
+  local _cy_s_mslug="$STATE_MILESTONE_SLUG" _cy_s_mstate="$STATE_MILESTONE_STATE" _cy_s_ms="$MILESTONE"
   local _cy_s_evals="${EVALS_RESULTS_PATH-__cy_unset__}" _cy_s_rlf="${RELEASE_LOG_FILE-__cy_unset__}"
   local _cy_tmp _cy_body _cy_det _cy_want _cy_line _cy_rc _cy_h0 _cy_h1 _cy_h2
   _cy_tmp="$(/usr/bin/mktemp -d -t cycletime-selftest.XXXXXX)"
   /bin/mkdir -p "$_cy_tmp/log" "$_cy_tmp/evals" "$_cy_tmp/evals-empty" "$_cy_tmp/stub"
   RELEASE_LOG="$_cy_tmp/log/RELEASE_LOG.md"; VERSION="v9.91"; PR_NUMBER="9191"; REPO_SLUG="x/y"
-  STATE_MILESTONE_SLUG="cy-selftest"
+  STATE_MILESTONE_SLUG="cy-selftest"; MILESTONE="9191"   # numeric: the JSON report casts it
   export EVALS_RESULTS_PATH="$_cy_tmp/evals" RELEASE_LOG_FILE="$RELEASE_LOG"
   # $GH stub: the milestone state and the release PR's merge commit, nothing else.
   /bin/cat > "$_cy_tmp/stub/gh.sh" <<'STUB'
@@ -11829,7 +11991,8 @@ STUB
   _st_arm CY CY-1; [[ "$STATE_CYCLE_TIME" == "N/A (no gate-outcome/plan-review-go event for v9.91)" ]] || { echo "FAIL: CY-1 — read_state must carry the tool's own N/A reason verbatim, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
   /usr/bin/grep -qxF -- 'N/A (no gate-outcome/plan-review-go event for v9.91)' <<<"$(build_chore_pr_body)" || { echo "FAIL: CY-1 — the chore-PR ## Cycle time block must carry the tool's reason line verbatim"; failures=$((failures+1)); }
   /usr/bin/grep -qxF -- '- Cycle time: N/A (no gate-outcome/plan-review-go event for v9.91)' <<<"$(generate_markdown_report 2>/dev/null)" || { echo "FAIL: CY-1 — the report's Cycle time line must carry the tool's reason verbatim"; failures=$((failures+1)); }
-  /usr/bin/grep -qF -- '"cycle_time": "N/A (no gate-outcome/plan-review-go event for v9.91)"' <<<"$(generate_json_report 2>/dev/null)" || { echo "FAIL: CY-1 — the JSON report's cycle_time must carry the tool's reason verbatim"; failures=$((failures+1)); }
+  _cy_line="$(generate_json_report 2>&1 || true)"
+  /usr/bin/grep -qF -- '"cycle_time": "N/A (no gate-outcome/plan-review-go event for v9.91)"' <<<"$_cy_line" || { echo "FAIL: CY-1 — the JSON report's cycle_time must carry the tool's reason verbatim, got: ${_cy_line:0:240}"; failures=$((failures+1)); }
 
   # CY-2 CONTROL — a computed value is carried as itself, with no reason and no note.
   _cy_case '48m' '' 0
@@ -11984,7 +12147,7 @@ STUB
   /bin/rm -rf "$_cy_tmp" 2>/dev/null || true
   COMPUTE_CYCLE_TIME="$_cy_s_cct"; GH="$_cy_s_gh"; RELEASE_LOG="$_cy_s_log"; VERSION="$_cy_s_ver"
   PR_NUMBER="$_cy_s_pr"; REPO_SLUG="$_cy_s_slug"; MERGE_SHA="$_cy_s_msha"
-  STATE_MILESTONE_SLUG="$_cy_s_mslug"; STATE_MILESTONE_STATE="$_cy_s_mstate"
+  STATE_MILESTONE_SLUG="$_cy_s_mslug"; STATE_MILESTONE_STATE="$_cy_s_mstate"; MILESTONE="$_cy_s_ms"
   if [[ "$_cy_s_evals" == "__cy_unset__" ]]; then unset EVALS_RESULTS_PATH; else export EVALS_RESULTS_PATH="$_cy_s_evals"; fi
   if [[ "$_cy_s_rlf" == "__cy_unset__" ]]; then unset RELEASE_LOG_FILE; else export RELEASE_LOG_FILE="$_cy_s_rlf"; fi
   STATE_CYCLE_TIME=""; STATE_CYCLE_TIME_NOTE=""; STATE_CYCLE_TIME_FIELD=""; STATE_CYCLE_TIME_FIELD_CLASS=""
