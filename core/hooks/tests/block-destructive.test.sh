@@ -2875,29 +2875,30 @@ test_case "Edit CLAUDE.md with primary cwd blocks" \
   "$(edit_payload ''"$HOME"'/Claude/CLAUDE.md' ''"$HOME"'/Claude')" \
   2 "BLOCK-DESTRUCTIVE-019"
 
-# Layer 1 writes from REPO-ROOTED worktree cwd → allow (per AC: worktree context permits)
-# Worktrees live under the repo root (<workspace>/pmo-platform/.claude/worktrees/), NOT
-# directly under the workspace root — BLOCK-DESTRUCTIVE-019 exemption base mirrors the
-# :425 Layer-1 detection base (#1639).
-test_case "Write CLAUDE.md with REPO-ROOTED worktree cwd allows" \
+# A PRIMARY Layer-1 target written from a REPO-ROOTED worktree cwd → BLOCK. -019 is keyed
+# on the write target, never on the session's working directory, so a worktree-rooted
+# session no longer reaches the primary checkout through the Write/Edit path. This arm
+# allowed before the re-key; it is one of three deliberate inversions, and the tightening
+# is the point: the target is primary whatever the session's cwd.
+test_case "Write CLAUDE.md with REPO-ROOTED worktree cwd blocks (target-keyed; inverted from allow)" \
   "$(write_payload ''"$HOME"'/Claude/CLAUDE.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/foo')" \
-  0
+  2 "BLOCK-DESTRUCTIVE-019"
 
 # --- BLOCK-DESTRUCTIVE-019 worktree-exemption base correction (#1639) ---
-# Both-direction gate-teeth for the repo-rooted worktree exemption base. The
-# exemption base (:442) must mirror the :425 Layer-1 detection base
-# (${PRIMARY_ROOT}/pmo-platform/.claude/worktrees/), NOT the workspace root.
-# FWD: a real repo-rooted worktree cwd editing a Layer-1 path → EXEMPT (allow).
-# REV-a: the retired workspace-rooted base is no longer a valid exemption → BLOCK
-#        (proves the exemption did not over-widen; catches the OLD base). The
-#        workspace-rooted <workspace>/.claude/worktrees/ path does not exist on
-#        disk and was never a real worktree, so blocking it is strictly correct.
+# The base correction pinned the exemption base at the REPO root
+# (${PRIMARY_ROOT}/pmo-platform/.claude/worktrees/), NOT the workspace root. That intent
+# now lives on the TARGET axis: T7497-B1..B3 below pin the base there (a prefix is not a
+# segment, the base is anchored at the repo root, and a <name>/ segment is required).
+# FWD (inverted): a primary Layer-1 target from a repo-rooted worktree cwd → BLOCK, because
+#        the target is primary; the worktree cwd no longer exempts it.
+# REV-a: a primary target from the retired workspace-rooted 'worktrees' cwd → BLOCK, as
+#        before — its target is primary too.
 # REV-b: a non-worktree primary cwd → BLOCK (the core invariant stays green).
 
-# FWD — repo-rooted worktree cwd editing a pmo-platform Layer-1 path → allow
-test_case "Write pmo-platform/x.md with REPO-ROOTED worktree cwd allows" \
+# FWD (inverted) — a pmo-platform Layer-1 target from a repo-rooted worktree cwd → block
+test_case "Write pmo-platform/x.md with REPO-ROOTED worktree cwd blocks (target-keyed; inverted from allow)" \
   "$(write_payload ''"$HOME"'/Claude/pmo-platform/reference/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/foo')" \
-  0
+  2 "BLOCK-DESTRUCTIVE-019"
 
 # REV-a — workspace-rooted 'worktrees' cwd is NO LONGER a valid exemption → block
 test_case "Write CLAUDE.md with WORKSPACE-ROOTED worktrees cwd blocks (old base retired)" \
@@ -3019,6 +3020,154 @@ test_case "Write analysis/./README.md with primary cwd still blocks (tracked fil
   "$(write_payload ''"$HOME"'/Claude/pmo-platform/analysis/./README.md' ''"$HOME"'/Claude')" \
   2 "BLOCK-DESTRUCTIVE-019"
 
+# --- BLOCK-DESTRUCTIVE-019 keyed on the WRITE TARGET ---
+#
+# The exemptions read the target, never the session's working directory: a primary-rooted
+# session may write its own worktree, and a worktree-rooted session may not write the
+# primary. Every subject below is a `zz-7497-*` path that exists on no runner, so the
+# hook's normalizer takes the same branch everywhere (the carve-out block's convention).
+
+# S1c..S1f — a primary Layer-1 target OUTSIDE every exemption, from a REPO-ROOTED worktree
+# cwd → BLOCK. One arm per remaining class of the classification (CLAUDE.md is the first
+# inverted arm above). S1d also pins the block message: it names the refused TARGET.
+test_case "T7497-S1c: Edit pmo-platform/core/x.md with REPO-ROOTED worktree cwd blocks (target-keyed)" \
+  "$(edit_payload ''"$HOME"'/Claude/pmo-platform/core/zz-7497-probe/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-7497-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T7497-S1d: Write .claude/settings.json with REPO-ROOTED worktree cwd blocks, the message naming the target" \
+  "$(write_payload ''"$HOME"'/Claude/.claude/settings.json' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-7497-wt')" \
+  2 'BLOCK-DESTRUCTIVE-019.*target=[^ ]*/\.claude/settings\.json'
+
+test_case "T7497-S1e: Write .claude/hooks/x.sh with REPO-ROOTED worktree cwd blocks (target-keyed)" \
+  "$(write_payload ''"$HOME"'/Claude/.claude/hooks/zz-7497-probe.sh' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-7497-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T7497-S1f: Write .claude/rules/x.md with REPO-ROOTED worktree cwd blocks (target-keyed)" \
+  "$(write_payload ''"$HOME"'/Claude/.claude/rules/zz-7497-probe.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-7497-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+# P1a..P1c — a target INSIDE a repo-rooted worktree from a PRIMARY-rooted session → ALLOW.
+# This is the misfire the re-key removes: a session launched in the primary could not
+# write into its own worktree.
+test_case "T7497-P1a: Write worktree/core/x.md with primary cwd allows (the target is in a worktree)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-7497-wt/core/x.md' ''"$HOME"'/Claude')" \
+  0
+
+test_case "T7497-P1b: Edit worktree/core/x.md with primary cwd allows (Edit parity)" \
+  "$(edit_payload ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-7497-wt/core/x.md' ''"$HOME"'/Claude')" \
+  0
+
+test_case "T7497-P1c: Write worktree/core/x.md with a pmo-platform cwd allows (repo-rooted primary session)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-7497-wt/core/x.md' ''"$HOME"'/Claude/pmo-platform')" \
+  0
+
+# B1..B3 — the worktree home's base, on the target axis.
+test_case "T7497-B1: Write .claude/worktrees-old/zz/x.md with primary cwd blocks (a prefix is not a segment)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/.claude/worktrees-old/zz/x.md' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T7497-B2: Write release/.claude/worktrees/zz/x.md with primary cwd blocks (anchored at the repo root)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/release/.claude/worktrees/zz/x.md' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T7497-B3: Write worktrees/zz-7497-file.md with primary cwd blocks (a <name>/ segment is required)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-7497-file.md' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+# D1..D6 — the as-written dot-segment guard, ahead of the worktree arm. `..` escapes
+# textually; a single `.` fakes the <name>/ segment. D1 is the escape from a worktree-rooted
+# session, which allowed before the re-key. D2, D3 and D5 already block; they pin the guard
+# and the resolved view against a naive re-key that reads the as-written path alone. D6 is
+# the paired control: a dotfile carries `/.` but is not a dot segment.
+test_case "T7497-D1: Write worktree/../../../core/x.md with REPO-ROOTED worktree cwd blocks (dot-segment guard)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-7497-wt/../../../core/zz-nonexistent/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-7497-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T7497-D2: Write worktree/../../../core/x.md with primary cwd blocks (dot-segment guard)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-7497-wt/../../../core/zz-nonexistent/x.md' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T7497-D3: Write worktree/zz/.. with primary cwd blocks (trailing .. segment)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-7497-wt/zz/..' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T7497-D5: Write worktree/. with primary cwd blocks (a single dot fakes the <name>/ segment)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-7497-wt/.' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T7497-D6: Write worktree/.hidden.md with primary cwd allows (a dotfile is not a dot segment)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-7497-wt/.hidden.md' ''"$HOME"'/Claude')" \
+  0
+
+# R1..R8 — the roadmap-instance carve-out. Instances are git-ignored and flat under
+# pmo-platform/roadmaps/, writable from a primary-rooted and a worktree-rooted session; the
+# one tracked file there, README.md, stays blocked in any case spelling (the volume may fold
+# case, and realpath keeps the spelled case).
+test_case "T7497-R1: Write roadmaps/<name>.md with primary cwd allows (a roadmap instance)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/roadmaps/zz-7497-initiative.md' ''"$HOME"'/Claude')" \
+  0
+
+test_case "T7497-R2: Write roadmaps/<name>.md with REPO-ROOTED worktree cwd allows (non-regression)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/roadmaps/zz-7497-initiative.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-7497-wt')" \
+  0
+
+test_case "T7497-R3: Edit roadmaps/<name>.md with primary cwd allows (Edit parity)" \
+  "$(edit_payload ''"$HOME"'/Claude/pmo-platform/roadmaps/zz-7497-initiative.md' ''"$HOME"'/Claude')" \
+  0
+
+test_case "T7497-R4: Write roadmaps/README.md with primary cwd blocks (the tracked file)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/roadmaps/README.md' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T7497-R5: Write roadmaps/readme.md with primary cwd blocks (a case spelling of the tracked file)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/roadmaps/readme.md' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T7497-R6: Write roadmaps/../core/x.md with primary cwd blocks (dot-segment guard)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/roadmaps/../core/zz-nonexistent/x.md' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T7497-R7: Write roadmaps-notes/x.md with primary cwd blocks (a prefix is not a segment)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/roadmaps-notes/x.md' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T7497-R8: Write release/roadmaps/x.md with primary cwd blocks (anchored at the repo root)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/release/roadmaps/x.md' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+# FM4 — a dot-leading leaf of the flat roadmaps home is never exempt. git reads an ignore
+# file placed at the top of that home, and one could re-include the git-ignored instances.
+# The analysis home's subfolder segment rules that out (git never descends into an ignored
+# subfolder); a flat home has no such segment, so the carve-out refuses every dot-leaf.
+test_case "T7497-FM4: Write roadmaps/.gitignore with primary cwd blocks (a dot-leading leaf is never exempt)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/roadmaps/.gitignore' ''"$HOME"'/Claude')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+# CD2 — a worktree's `.git` leaf is never exempt, in any case spelling. In a linked worktree
+# `.git` is a pointer FILE, which the -016 `.git/config|hooks|info` arms do not reach, and
+# no Write/Edit workflow writes it. ONE arm, TWO payloads: it passes only when the exact
+# name AND a case variant both block, so the case claim is asserted rather than stated.
+t7497_cd2_ok=1
+t7497_cd2_detail=""
+for t7497_cd2_leaf in .git .GIT; do
+  t7497_cd2_err="$(/usr/bin/mktemp)"
+  t7497_cd2_rc=0
+  /usr/bin/printf '%s' "$(write_payload ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-7497-wt/'"$t7497_cd2_leaf" ''"$HOME"'/Claude')" \
+    | /bin/bash "$HOOK" 2>"$t7497_cd2_err" >/dev/null || t7497_cd2_rc="$?"
+  if [ "$t7497_cd2_rc" != 2 ] || ! /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-019' "$t7497_cd2_err"; then
+    t7497_cd2_ok=0
+    t7497_cd2_detail="${t7497_cd2_detail} ${t7497_cd2_leaf}:exit=${t7497_cd2_rc}"
+  fi
+  /bin/rm -f "$t7497_cd2_err"
+done
+if [ "$t7497_cd2_ok" = 1 ]; then
+  /usr/bin/printf 'PASS: %s\n' "T7497-CD2: Write worktree/.git and worktree/.GIT with primary cwd blocks (a .git leaf is never exempt)"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  expected_exit=2 BLOCK-DESTRUCTIVE-019 for both spellings; got%s\n' "T7497-CD2: Write worktree/.git and worktree/.GIT with primary cwd blocks (a .git leaf is never exempt)" "$t7497_cd2_detail"
+  FAIL=$((FAIL + 1))
+fi
+
 # Explicit allow: .claude/skills (deploy target)
 test_case "Write .claude/skills/SKILL.md allows (deploy target)" \
   "$(write_payload ''"$HOME"'/Claude/.claude/skills/skill-x/SKILL.md' ''"$HOME"'/Claude')" \
@@ -3052,9 +3201,12 @@ test_case "../-escape from .claude/hooks to CLAUDE.md (primary cwd) blocks" \
   "$(write_payload ''"$HOME"'/Claude/.claude/hooks/../../CLAUDE.md' ''"$HOME"'/Claude')" \
   2 "BLOCK-DESTRUCTIVE-019"
 
-test_case "../-escape from .claude/hooks to CLAUDE.md (REPO-ROOTED worktree cwd) allows" \
+# The same escape from a REPO-ROOTED worktree cwd → BLOCK. It allowed before the re-key,
+# because the cwd exempted it; keyed on the target it blocks like the primary-cwd arm above.
+# The third deliberate inversion.
+test_case "../-escape from .claude/hooks to CLAUDE.md (REPO-ROOTED worktree cwd) blocks (target-keyed; inverted from allow)" \
   "$(write_payload ''"$HOME"'/Claude/.claude/hooks/../../CLAUDE.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/foo')" \
-  0
+  2 "BLOCK-DESTRUCTIVE-019"
 
 # ----- BLOCK-AP-001..005: absolute-path invocation coverage -----
 #
@@ -3194,6 +3346,178 @@ sandbox_case "helper-missing: fails CLOSED (exit 2, LIB-MISSING)" \
   2 "LIB-MISSING"
 
 /bin/rm -rf "$DESTRUCTIVE_SANDBOX" "$DESTRUCTIVE_NOLIB"
+
+# ==========================================================================
+# BLOCK-DESTRUCTIVE-019 — the RESOLVED view (real symlinks) and subject parity
+# ==========================================================================
+#
+# -019 grants an exemption only when the target AS WRITTEN and its RESOLVED location sit in
+# the same home, and it resolves the target and the workspace root through the SAME
+# fail-closed resolver (python realpath, via script_realpath). These arms need real
+# symlinks, so they run in a sandbox workspace exported as CLAUDE_WORKSPACE_ROOT. The
+# sandbox root is made PHYSICAL first: macOS spells a mktemp path through /var ->
+# /private/var, and a symlink-spelled root is the shape the FM1 arms exercise on purpose,
+# not one the other arms should inherit by accident. They sit here, after sandbox_case().
+
+echo ""
+echo "BLOCK-DESTRUCTIVE-019 resolved view (sandbox) + subject parity"
+echo "---"
+
+T7497_SB="$(cd -P -- "$(/usr/bin/mktemp -d)" && pwd -P)"
+T7497_WT="${T7497_SB}/pmo-platform/.claude/worktrees/wt1"
+/bin/mkdir -p "${T7497_WT}/real" "${T7497_SB}/pmo-platform/core"
+/bin/ln -s "${T7497_SB}/pmo-platform/core" "${T7497_WT}/lnk"
+/bin/ln -s "${T7497_SB}/pmo-platform/core/zz-dang.md" "${T7497_WT}/dang.md"
+/bin/ln -s "${T7497_WT}/real" "${T7497_WT}/inlnk"
+/usr/bin/printf 'x\n' > "${T7497_WT}/real/zz-7497-existing.md"
+/usr/bin/printf 'x\n' > "${T7497_SB}/pmo-platform/core/zz-7497-target.md"
+/bin/ln -s "${T7497_SB}/pmo-platform/core/zz-7497-target.md" "${T7497_WT}/zz-7497-leaf.md"
+t7497_prev_cwr="${CLAUDE_WORKSPACE_ROOT-__t7497_unset__}"
+export CLAUDE_WORKSPACE_ROOT="$T7497_SB"
+
+# L2..L6 — a worktree-prefixed spelling whose resolved location leaves the worktree gets no
+# exemption: L2 through a symlinked ancestor over a missing tail, L3 through a dangling
+# leaf. The exemption is live in the same sandbox (L4, L5), and resolution does not
+# over-block an in-worktree symlink (L6).
+sandbox_case "T7497-L2: symlinked ancestor + missing tail resolving into the primary blocks" "$HOOK" \
+  "$(write_payload "${T7497_WT}/lnk/zz-new/x.md" "$T7497_SB")" 2 "BLOCK-DESTRUCTIVE-019"
+sandbox_case "T7497-L3: dangling leaf symlink into the primary blocks" "$HOOK" \
+  "$(write_payload "${T7497_WT}/dang.md" "$T7497_SB")" 2 "BLOCK-DESTRUCTIVE-019"
+sandbox_case "T7497-L4: real directory inside the worktree allows (the sandbox exemption is live)" "$HOOK" \
+  "$(write_payload "${T7497_WT}/real/x.md" "$T7497_SB")" 0
+sandbox_case "T7497-L5: new directory inside the worktree allows" "$HOOK" \
+  "$(write_payload "${T7497_WT}/zz-new/x.md" "$T7497_SB")" 0
+sandbox_case "T7497-L6: in-worktree symlink allows (resolution does not over-block)" "$HOOK" \
+  "$(write_payload "${T7497_WT}/inlnk/x.md" "$T7497_SB")" 0
+
+# FM2a..FM2c — the branches the arms above cannot reach. Every subject above is absent, so
+# each lands on the unresolved branch. An EXISTING target takes the resolved branch: every
+# real Edit inside a worktree takes it (FM2a), and it is the only branch an existing symlink
+# leaf into the primary can reach (FM2b). FM2c: with python unavailable neither the target
+# nor the root resolves, so no exemption is granted. Its hook is a copy with the python
+# path rewritten, placed beside the shipped hook so its libs resolve; a copy the rewrite
+# left byte-identical FAILs the arm rather than testing the shipped hook by accident.
+sandbox_case "T7497-FM2a: Edit an existing file inside the worktree allows (the resolved branch)" "$HOOK" \
+  "$(edit_payload "${T7497_WT}/real/zz-7497-existing.md" "$T7497_SB")" 0
+sandbox_case "T7497-FM2b: Write an existing symlink leaf into the primary blocks (the resolved branch)" "$HOOK" \
+  "$(write_payload "${T7497_WT}/zz-7497-leaf.md" "$T7497_SB")" 2 "BLOCK-DESTRUCTIVE-019"
+T7497_NOPY="$(dirname "$HOOK")/block-destructive.T7497-nopy-mutant.sh"
+/usr/bin/sed 's#^readonly PYTHON3="/usr/bin/python3"$#readonly PYTHON3="/nonexistent/t7497/python3"#' "$HOOK" > "$T7497_NOPY"
+if /usr/bin/cmp -s "$HOOK" "$T7497_NOPY"; then
+  /usr/bin/printf 'FAIL: T7497-FM2c: the python-unavailable rewrite is INERT (the copy is byte-identical to the shipped hook)\n'
+  FAIL=$((FAIL + 1))
+else
+  sandbox_case "T7497-FM2c: python unavailable, a worktree target gets no exemption (fails closed)" "$T7497_NOPY" \
+    "$(write_payload "${T7497_WT}/real/x.md" "$T7497_SB")" 2 "BLOCK-DESTRUCTIVE-019"
+fi
+/bin/rm -f "$T7497_NOPY"
+
+# FM1a, FM1b — the workspace root resolves through the SAME resolver as the target, and
+# fails closed. Here the root is spelled through a symlink to a directory that does not
+# exist yet: the shape a HOME=$(mktemp -d) regression run gives on macOS, where the new HOME
+# is spelled through /var -> /private/var and holds no workspace. A root resolved any other
+# way (a `cd -P` that falls back to the raw spelling when the directory is absent) never
+# agrees with the resolved target, and every exemption silently becomes a block. A fixture
+# precondition is folded into both arms, so a mis-built sandbox FAILs rather than reading
+# as a vacuous allow.
+T7497_SYM="$(cd -P -- "$(/usr/bin/mktemp -d)" && pwd -P)"
+/bin/ln -s "${T7497_SYM}/ws-not-yet" "${T7497_SYM}/ws"
+export CLAUDE_WORKSPACE_ROOT="${T7497_SYM}/ws"
+if [ -L "${T7497_SYM}/ws" ] && [ ! -e "${T7497_SYM}/ws" ]; then
+  sandbox_case "T7497-FM1a: symlink-spelled absent root, a worktree target allows (the root resolved like the target)" "$HOOK" \
+    "$(write_payload "${T7497_SYM}/ws/pmo-platform/.claude/worktrees/wt1/x.md" "${T7497_SYM}/ws")" 0
+  sandbox_case "T7497-FM1b: symlink-spelled absent root, an analysis target allows (the root resolved like the target)" "$HOOK" \
+    "$(write_payload "${T7497_SYM}/ws/pmo-platform/analysis/zz-7497-sub/x.md" "${T7497_SYM}/ws")" 0
+else
+  /usr/bin/printf 'FAIL: T7497-FM1a: fixture not built (the root link is not a dangling symlink)\n'
+  FAIL=$((FAIL + 1))
+  /usr/bin/printf 'FAIL: T7497-FM1b: fixture not built (the root link is not a dangling symlink)\n'
+  FAIL=$((FAIL + 1))
+fi
+
+if [ "$t7497_prev_cwr" = "__t7497_unset__" ]; then unset CLAUDE_WORKSPACE_ROOT; else export CLAUDE_WORKSPACE_ROOT="$t7497_prev_cwr"; fi
+/bin/rm -rf "$T7497_SB" "$T7497_SYM"
+
+# PAR-01..03 — subject parity, asserted rather than described. -019's exemptions must read
+# the TARGET: no non-comment line between the rule's header and its block call may read the
+# session's working directory, and the dot guard must precede the worktree arm, which must
+# precede the resolved view. ONE awk pass over the file, index() rather than regexes, no
+# pipeline, and its only `exit` statements inside END. It FAILS CLOSED: a marker that stops
+# matching reports MARKER-MISSING rather than reading as parity.
+t7497_par_check() {   # $1 = hook -> TARGET-KEYED | CWD-KEYED | GUARD-AFTER-ARM | MARKER-MISSING
+  /usr/bin/awk '
+    index($0, "# BLOCK-DESTRUCTIVE-019 ")        { if (hdr == 0) hdr = NR }
+    index($0, "block \"BLOCK-DESTRUCTIVE-019\"") { blk = NR }
+    index($0, "# M-019-DOTGUARD")                { if (grd == 0) grd = NR }
+    index($0, "# M-019-WORKTREE")                { if (wtr == 0) wtr = NR }
+    index($0, "# M-019-RESOLVE")                 { if (rsv == 0) rsv = NR }
+    { c = $0; sub(/^[ \t]+/, "", c)
+      if (substr(c, 1, 1) != "#" && (index(c, "$CWD") || index(c, "${CWD}"))) { n++; cl[n] = NR } }
+    END {
+      if (hdr == 0 || blk == 0 || blk < hdr) { printf "MARKER-MISSING"; exit }
+      for (i = 1; i <= n; i++) if (cl[i] > hdr && cl[i] <= blk + 2) { printf "CWD-KEYED"; exit }
+      if (grd == 0 || wtr == 0 || rsv == 0) { printf "MARKER-MISSING"; exit }
+      if (!(grd > hdr && wtr > grd && rsv > wtr && blk > rsv)) { printf "GUARD-AFTER-ARM"; exit }
+      printf "TARGET-KEYED"
+    }' "$1"
+}
+
+t7497_par_shipped="$(t7497_par_check "$HOOK")"
+if [ "$t7497_par_shipped" = "TARGET-KEYED" ]; then
+  /usr/bin/printf 'PASS: T7497-PAR-01 the shipped -019 exemptions read the target, the dot guard first\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: T7497-PAR-01 -019 subject parity\n  expected=TARGET-KEYED actual=%s\n' "$t7497_par_shipped"
+  FAIL=$((FAIL + 1))
+fi
+
+# PAR-02, PAR-03 — the checker's red-before controls. A checker that cannot fail proves
+# nothing, so it also reads two fixtures: one whose exemption reads the working directory
+# (it must report CWD-KEYED) and one whose worktree arm precedes the dot guard (it must
+# report GUARD-AFTER-ARM).
+T7497_PAR_CWD="$(/usr/bin/mktemp)"
+T7497_PAR_ORD="$(/usr/bin/mktemp)"
+# Each fixture line is literal hook source; nothing in it may expand.
+# shellcheck disable=SC2016
+/usr/bin/printf '%s\n' \
+  '    # BLOCK-DESTRUCTIVE-019 — fixture: the exemption reads the working directory' \
+  '      case "$FILE_PATH" in' \
+  '        *"/../"*) ;;   # M-019-DOTGUARD' \
+  '        "${PRIMARY_ROOT}/pmo-platform/.claude/worktrees/"*/*) exempt_home="worktree" ;;   # M-019-WORKTREE' \
+  '      esac' \
+  '      exempt_resolved="$abs_target"   # M-019-RESOLVE' \
+  '      case "$CWD" in' \
+  '        "${PRIMARY_ROOT}/pmo-platform/.claude/worktrees/"*) exit 0 ;;' \
+  '      esac' \
+  '      block "BLOCK-DESTRUCTIVE-019" "fixture" "fixture"' > "$T7497_PAR_CWD"
+# shellcheck disable=SC2016
+/usr/bin/printf '%s\n' \
+  '    # BLOCK-DESTRUCTIVE-019 — fixture: the worktree arm precedes the dot guard' \
+  '      case "$FILE_PATH" in' \
+  '        "${PRIMARY_ROOT}/pmo-platform/.claude/worktrees/"*/*) exempt_home="worktree" ;;   # M-019-WORKTREE' \
+  '        *"/../"*) ;;   # M-019-DOTGUARD' \
+  '      esac' \
+  '      exempt_resolved="$abs_target"   # M-019-RESOLVE' \
+  '      block "BLOCK-DESTRUCTIVE-019" "fixture" "fixture"' > "$T7497_PAR_ORD"
+
+t7497_par_cwd="$(t7497_par_check "$T7497_PAR_CWD")"
+if [ "$t7497_par_cwd" = "CWD-KEYED" ]; then
+  /usr/bin/printf 'PASS: T7497-PAR-02 the checker REPORTS an exemption keyed on the working directory\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: T7497-PAR-02 the checker did not report a cwd-keyed exemption\n  expected=CWD-KEYED actual=%s\n' "$t7497_par_cwd"
+  FAIL=$((FAIL + 1))
+fi
+
+t7497_par_ord="$(t7497_par_check "$T7497_PAR_ORD")"
+if [ "$t7497_par_ord" = "GUARD-AFTER-ARM" ]; then
+  /usr/bin/printf 'PASS: T7497-PAR-03 the checker REPORTS a worktree arm ahead of the dot guard\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: T7497-PAR-03 the checker did not report the misordered guard\n  expected=GUARD-AFTER-ARM actual=%s\n' "$t7497_par_ord"
+  FAIL=$((FAIL + 1))
+fi
+/bin/rm -f "$T7497_PAR_CWD" "$T7497_PAR_ORD"
 
 # ==========================================================================
 # PARSE-* — parse-only (noexec) exemption + the two admitted allowlist paths
@@ -3683,10 +4007,12 @@ sandbox_case "NOEXEC-ORD-03: hoisted mutant BLOCKS bash -n <unlisted>.sh (the ca
 # FAILS CLOSED. An unresolvable document reports DOC-MISSING and reddens; it never reads as
 # "nothing to check", which is the failure mode a documentation arm most easily acquires.
 #
-# ONE RESOLUTION EXPRESSION COVERS BOTH LAYOUTS. ${HOOK_DIR}/../rules/... is
-# <sandbox>/.claude/rules/... under setup-ci-layout.sh (which mirrors the corpus exactly as
-# deploy.sh's rules-mirror pair set does) and <repo>/core/rules/... in a source-tree run. The
-# repo-root form is kept as a second rung so an unfamiliar layout degrades to a resolved read.
+# ONE RESOLUTION EXPRESSION, TWO RUNGS. ${HOOK_DIR}/../rules/... is <sandbox>/.claude/rules/...
+# under an explicit setup-ci-layout.sh --sandbox, which copies the readiness corpus there for
+# these arms (deploy's rules mirror does not carry it), and <repo>/core/rules/... in a
+# source-tree run. At the helper's default site the sandbox IS the checkout, so the corpus is
+# not copied and the second rung, the repo-root form, reads core/rules/... in place. An
+# unfamiliar layout therefore degrades to a resolved read.
 #
 # NO PIPELINES ANYWHERE IN THIS BLOCK. The classifier is one awk pass using index() — literal
 # matching, so no marker needs escaping — and the behavioural probe feeds the hook from a FILE

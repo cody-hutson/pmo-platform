@@ -529,8 +529,8 @@ script_under_system_bin() {   # $1 = a path
   return 1
 }
 
-# Resolve a path the way this hook ALREADY resolves one, for the single decision
-# that needs a location rather than a token.
+# Resolve a path the way this hook ALREADY resolves one, for the decisions that
+# need a location rather than a token.
 #
 # SAME PRIMITIVE AS THE Write|Edit BRANCH: `$PYTHON3` + os.path.realpath, which
 # that branch documents as the portable stand-in for `realpath -m` (macOS ships no
@@ -542,7 +542,8 @@ script_under_system_bin() {   # $1 = a path
 # back to the raw path and keeps checking its boundary, which for a CHECK is the
 # safe direction. An EXEMPTION cannot borrow that: falling back to the raw path is
 # the exact defect being corrected here. So this wrapper fails CLOSED — non-zero
-# and no output — and its one caller reads that as "not exempt".
+# and no output — and each caller — the -022 exec arm's system-bin exemption and
+# the -019 exemptions — reads that as "not exempt".
 script_realpath() {
   local _p="$1" _r=""
   [ -x "$PYTHON3" ] || return 1
@@ -3034,9 +3035,20 @@ case "$TOOL_NAME" in
     # back to the original FILE_PATH string, which still catches absolute-path
     # cases via the existing prefix-match rules but misses the ../-escape
     # edge case.
+    #
+    # abs_resolved records whether python's realpath produced abs_target. The -019
+    # exemptions read it: a target realpath resolved is already their resolved view,
+    # and every other target is resolved there through the fail-closed script_realpath,
+    # never through this block's raw-path fallback. The values abs_target takes are
+    # unchanged; only the flag is new.
     abs_target=""
+    abs_resolved=0
     if [ -e "$FILE_PATH" ] && [ -x "$PYTHON3" ]; then
-      abs_target="$("$PYTHON3" -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$FILE_PATH" 2>/dev/null || echo "$FILE_PATH")"
+      if abs_target="$("$PYTHON3" -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$FILE_PATH" 2>/dev/null)" && [ -n "$abs_target" ]; then
+        abs_resolved=1
+      else
+        abs_target="$FILE_PATH"
+      fi
     elif [ -e "$FILE_PATH" ]; then
       # Python somehow unavailable — degrade gracefully to un-normalized path
       abs_target="$FILE_PATH"
@@ -3069,7 +3081,7 @@ case "$TOOL_NAME" in
         ;;
     esac
 
-    # BLOCK-DESTRUCTIVE-019 — Layer 1 primary writes when cwd is NOT under a worktree
+    # BLOCK-DESTRUCTIVE-019 — Write/Edit to a Layer 1 primary path, keyed on the WRITE TARGET
     is_layer1=""
     case "$abs_target" in
       "${PRIMARY_ROOT}/CLAUDE.md")
@@ -3090,47 +3102,57 @@ case "$TOOL_NAME" in
     esac
 
     if [ -n "$is_layer1" ]; then
-      # Cwd under a worktree allows the write (per AC — worktree context permits Layer 1 edits).
-      # Worktrees live under the REPO root (${PRIMARY_ROOT}/pmo-platform/.claude/worktrees/),
-      # NOT directly under the workspace root — this exemption base mirrors the :425 Layer-1
-      # detection base so the hook has exactly one repo-rooted worktree base (#1639,
-      # checkout-independent per ADR-017; PRIMARY_ROOT derives from CLAUDE_WORKSPACE_ROOT).
-      case "$CWD" in
-        "${PRIMARY_ROOT}/pmo-platform/.claude/worktrees/"*)
-          exit 0
-          ;;
-      esac
-
+      # THE EXEMPTIONS READ THE TARGET, never the session's working directory. The
+      # classification above reads the target, so the exemptions read the same subject:
+      # a session launched in the primary may write into its own worktree, and a session
+      # inside a worktree may not write the primary checkout. Reading the cwd got both
+      # wrong at once: it refused the first, and it let a worktree-rooted session's
+      # absolute primary target through, the gap the cross-cutting Known Limitations
+      # once recorded. This rule's REACH is still bounded one layer up: the scope gate
+      # keys on the cwd, so a session rooted outside the governed workspace root never
+      # gets here.
+      #
+      # TWO VIEWS, JOINED BY AND — the rule script_realpath states for -022.
+      #   View 1 is the target AS WRITTEN, and it is the entry gate. It must carry no
+      #   `.` or `..` segment and must sit inside a home, so it can only NARROW.
+      #   View 2 is the RESOLVED location, and it must sit in the SAME home. It comes
+      #   from script_realpath, which fails closed: there is no raw-path fallback, a
+      #   symlink leaf that did not resolve is withheld, and without python3 nothing is
+      #   exempt. The workspace root is resolved by that SAME resolver. A second
+      #   canonicalizer would disagree with it on a root that is absent and spelled
+      #   through a symlink (a sandboxed HOME on macOS is exactly that), and the
+      #   exemption would silently become a block. A root that does not resolve grants
+      #   nothing.
+      #
+      # THE DOT GUARD IS ONE ARM, AND IT IS FIRST, so it protects every home arm below.
+      #   The normalizer keeps the RAW, un-normalized FILE_PATH whenever the target and
+      #   its parent directory both do not exist, and a `case` glob matches across `/`.
+      #   `..` escapes textually: `<root>/pmo-platform/analysis/../core/x.md` matches a
+      #   home's pattern while naming a TRACKED Layer-1 file. A SINGLE `.` does not
+      #   traverse, but it fakes a segment: `<root>/pmo-platform/analysis/./README.md`
+      #   meets the analysis home's subfolder requirement, and `<worktree-base>/<name>/.`
+      #   meets the worktree home's <name>/ requirement. Rejecting `.` is therefore not
+      #   traversal defence; it keeps each home's segment predicate from being met by a
+      #   no-op segment. BOTH dot segments are rejected, each in a mid-path and a
+      #   trailing form. A dotfile (`…/<sub>/.hidden.md`) carries `/.` but is neither
+      #   `/./` nor a trailing `/.`, so it is unaffected and still admitted.
+      #
+      # FIRST -019 EXEMPTION — a repo-rooted worktree, `pmo-platform/.claude/worktrees/<name>/…`.
+      # Worktrees live under the REPO root, not directly under the workspace root, and the
+      # pattern requires a <name>/ segment. A `.git` leaf anywhere below the worktree base
+      # is excluded, in both views and in any case spelling (the volume may fold case, and
+      # realpath keeps the spelled case): in a linked worktree `.git` is a pointer file,
+      # which -016's `.git/config|hooks|info` arms do not reach, and no Write/Edit workflow
+      # writes one.
+      #
       # SECOND -019 EXEMPTION — the git-ignored analysis workspace (#6427).
       # core/standards/analysis-workspace-standard.md §1 designates the repo-root
       # analysis/ folder as the analysis home and §2 makes each analysis ONE dated
       # SUBFOLDER; .gitignore (`/analysis/*` + `!/analysis/README.md`) ignores every
       # such subfolder and tracks README.md alone. The sanctioned location and this
-      # control contradicted each other, and the session shape the standard
-      # anticipates is exactly the non-worktree one this rule denies.
+      # control contradicted each other: the whole of pmo-platform/** is Layer 1.
       #
-      # TWO ARMS, AND THE ORDER IS THE GUARD. `case` takes the FIRST match:
-      #
-      #   Arm 1 (dot segments) matches and does NOTHING, so control falls through
-      #   to `block`. It is NOT decoration. abs_target above is the RAW,
-      #   UN-NORMALIZED FILE_PATH whenever the target AND its parent directory
-      #   both do not exist (the else-branch of the normalizer) — and a `case`
-      #   glob matches across `/`, so `<root>/pmo-platform/analysis/../core/x.md`
-      #   matches arm 2's pattern while naming a TRACKED Layer-1 file. Today that
-      #   path is harmless because -019 denies the whole tree; the carve-out below
-      #   is what would make it an escape. The guard is required BY this change.
-      #
-      #   BOTH dot segments are rejected, each in a mid-path and a trailing form.
-      #   `..` is the escape above. A SINGLE `.` does not traverse, but it does
-      #   satisfy arm 2's `*/*` subfolder requirement on this same raw-path branch,
-      #   so `<root>/pmo-platform/analysis/./README.md` would reach arm 2 and admit
-      #   the one TRACKED file the subfolder segment exists to exclude. Rejecting
-      #   `.` is therefore not traversal defence — it is what keeps arm 2's
-      #   subfolder predicate from being satisfied by a no-op segment. A dotfile
-      #   (`…/analysis/<sub>/.hidden.md`) carries `/.` but is neither `/./` nor
-      #   trailing `/.`, so it is unaffected and still admitted.
-      #
-      #   Arm 2 requires a SUBFOLDER SEGMENT (`analysis/`*`/`*), not `analysis/`*.
+      #   The arm requires a SUBFOLDER SEGMENT (`analysis/`*`/`*), not `analysis/`*.
       #   analysis/README.md is the one TRACKED file under this folder and the bare
       #   prefix admits it. Keying on the subfolder is the standard's own §2
       #   convention, so the predicate tracks the sanctioned shape rather than a
@@ -3140,25 +3162,83 @@ case "$TOOL_NAME" in
       # `.claude/worktrees/*/analysis/…` do NOT match, so this admits exactly one
       # subtree and not every directory in the tree named `analysis`.
       #
-      # WHY THE PREDICATE IS STATIC, AND WHY THAT IS THE SECURITY PROPERTY. This
-      # pattern lives inside .claude/hooks/*, which -019 itself protects and
+      # THIRD -019 EXEMPTION — the git-ignored roadmap instances, `pmo-platform/roadmaps/<name>`.
+      # The roadmaps home is FLAT (one file per roadmap), so there is no subfolder segment
+      # to key on and its one TRACKED file is excluded by name: roadmaps/README.md, in any
+      # case spelling (the volume may fold case, and realpath keeps the spelled case). A
+      # dot-leading leaf is excluded too: git reads an ignore file at the top of a flat
+      # home, and one could re-include the ignored instances, which the analysis home's
+      # subfolder segment rules out. PREMISE: README.md is the only tracked file under
+      # roadmaps/ (`.gitignore`: `/roadmaps/*` + `!/roadmaps/README.md`) — re-check it
+      # whenever `.gitignore` changes there. The pattern is anchored at the repo root and
+      # does not follow a repointed roadmaps path: an instance home configured elsewhere
+      # is not exempt.
+      #
+      # WHY THE PREDICATES ARE STATIC, AND WHY THAT IS THE SECURITY PROPERTY. These
+      # patterns live inside .claude/hooks/*, which -019 itself protects and
       # BLOCK-AUTONOMY-001 always-blocks. An exemption authored in a surface the
       # rule's own subject can write is not an exemption, it is a widening
       # primitive: an allowlist file at .claude/<name>.txt is agent-appendable by
       # design, and `git check-ignore` answers from .gitignore / core.excludesFile,
       # which `git config --global` can re-point with no hook rule in the way.
       # Neither is admissible for the self-modification guard specifically.
-      case "$abs_target" in
-        *"/../"*|*/..|*"/./"*|*/.)
+      exempt_home=""
+      exempt_root=""
+      exempt_resolved=""
+      case "$FILE_PATH" in
+        *"/../"*|*/..|*"/./"*|*/.)   # M-019-DOTGUARD — first: a dot segment withholds every home
+          ;;
+        "${PRIMARY_ROOT}/pmo-platform/.claude/worktrees/"*/.[Gg][Ii][Tt])
+          ;;
+        "${PRIMARY_ROOT}/pmo-platform/.claude/worktrees/"*/*)   # M-019-WORKTREE
+          exempt_home="worktree"
           ;;
         "${PRIMARY_ROOT}/pmo-platform/analysis/"*/*)
-          exit 0
+          exempt_home="analysis"
+          ;;
+        "${PRIMARY_ROOT}/pmo-platform/roadmaps/"[Rr][Ee][Aa][Dd][Mm][Ee].[Mm][Dd])
+          ;;
+        "${PRIMARY_ROOT}/pmo-platform/roadmaps/".*)
+          ;;
+        "${PRIMARY_ROOT}/pmo-platform/roadmaps/"?*)
+          exempt_home="roadmaps"
           ;;
       esac
 
-      block "BLOCK-DESTRUCTIVE-019" \
-        "Write/Edit to Layer 1 primary path denied: ${is_layer1}. cwd=${CWD} is not under pmo-platform/.claude/worktrees/" \
-        "work from a git worktree (git worktree add), or set CLAUDE_HOOK_BYPASS=1"
+      if [ -n "$exempt_home" ]; then
+        if ! exempt_root="$(script_realpath "$PRIMARY_ROOT")"; then exempt_root=""; fi
+        if [ "$abs_resolved" = 1 ]; then exempt_resolved="$abs_target"; elif [ -L "$FILE_PATH" ]; then exempt_resolved=""; elif ! exempt_resolved="$(script_realpath "$FILE_PATH")"; then exempt_resolved=""; fi   # M-019-RESOLVE
+        # An EMPTY root must grant nothing: interpolated into the patterns below it would
+        # anchor them at the filesystem root instead of the workspace.
+        if [ -n "$exempt_root" ] && [ -n "$exempt_resolved" ]; then
+          case "${exempt_home}:${exempt_resolved}" in
+            "worktree:${exempt_root}/pmo-platform/.claude/worktrees/"*/.[Gg][Ii][Tt])
+              ;;
+            "worktree:${exempt_root}/pmo-platform/.claude/worktrees/"*/*)
+              exit 0
+              ;;
+            "analysis:${exempt_root}/pmo-platform/analysis/"*/*)
+              exit 0
+              ;;
+            "roadmaps:${exempt_root}/pmo-platform/roadmaps/"[Rr][Ee][Aa][Dd][Mm][Ee].[Mm][Dd])
+              ;;
+            "roadmaps:${exempt_root}/pmo-platform/roadmaps/".*)
+              ;;
+            "roadmaps:${exempt_root}/pmo-platform/roadmaps/"?*)
+              exit 0
+              ;;
+          esac
+        fi
+      fi
+
+      r019_reason="Write/Edit to Layer 1 primary path denied: ${is_layer1}. target=${abs_target} is not inside a worktree (pmo-platform/.claude/worktrees/<name>/)"
+      if [ -n "$exempt_home" ] && [ -z "$exempt_root" ]; then
+        r019_reason="${r019_reason}; it is spelled inside the ${exempt_home} exemption, but the workspace root did not resolve (python3 realpath unavailable), so no exemption applies"
+      elif [ -n "$exempt_home" ]; then
+        r019_reason="${r019_reason}; it is spelled inside the ${exempt_home} exemption, but its resolved location (${exempt_resolved:-unresolved: a symlink leaf, or python3 realpath unavailable}) is not one that exemption admits"
+      fi
+      block "BLOCK-DESTRUCTIVE-019" "$r019_reason" \
+        "write the file inside a worktree (pmo-platform/.claude/worktrees/<name>/...), or set CLAUDE_HOOK_BYPASS=1"
     fi
 
     # No Write/Edit rule matched — allow
