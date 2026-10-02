@@ -367,7 +367,7 @@ core/config/allowlists/script-execution-allowlist.txt                           
 core/deploy/tests/test_refresh_surfaces.sh                                        EDIT  (the merged Change 8: Arms 7-10, 8c and 9b with A-1..A-8, and PA-002's Arm 12; Arm 6 moved last)
 docs/UPDATE.md                                                                    EDIT  (section 3.2; section 6.1 retitled)
 core/deploy/qa/checks.py                                                          EDIT  (F4 docstring and remedy string, #7862 PR-4)
-core/ADRs/ADR-207-pmo-platform-root-resolves-from-install-record.md               ADD   (numbered literally at authorship against the mainline anchor 206, first of three, Q3)
+core/ADRs/ADR-211-pmo-platform-root-resolves-from-install-record.md               ADD   (numbered literally at authorship against the mainline anchor 206, first of three, Q3)
 core/deploy/tests/test_lib_composition.sh                                         EDIT  CONDITIONAL:OPTIONAL-LIB-ARM  (Change 11; resolved false at slice 4, NOT DELIVERED, row ND-6)
 
 # ── #6168 — composed allowlist is caller-independent (Q13) ──
