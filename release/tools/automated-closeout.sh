@@ -6912,7 +6912,7 @@ phase_manual_close_release_issues() {
     # body is, whole: the anomaly default, whose plan path is absolute when the
     # corpus is homed outside the tree, or a per-issue override. A comment that
     # names no root posts byte-identical.
-    if $GH issue close "$issue_n" --repo "$REPO_SLUG" --comment "$_c" >/dev/null 2>&1; then
+    if $GH issue close "$issue_n" --repo "$REPO_SLUG" --comment "$(_redact_paths "$_c")" >/dev/null 2>&1; then
       closed_count=$((closed_count + 1))
     fi
   done <<< "$OPEN_ISSUE_LIST"
