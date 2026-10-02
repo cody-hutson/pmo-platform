@@ -1148,8 +1148,11 @@ if [ "$G6257_BUILT" -eq 1 ] && [ -n "$G6257_C0" ]; then
   fi
 
   # (c) A BRANCH AHEAD OF MAIN: one commit past the merge, origin/main still at M. The
-  # head contains the merge and is not contained in origin/main -- the shape every
-  # chore branch, later release branch and worktree branch takes.
+  # head contains the merge and is not contained in origin/main -- the shape a later
+  # release branch or a worktree branch takes, and a close-out chore branch too until
+  # it renames the plan. From that rename to the chore branch's own merge the plan sits
+  # at a path the mainline does not yet hold, and neither source resolves from the
+  # branch: that window is not this limb's, and no arm here covers it.
   G6257_AHEAD=1
   {
     g6257_git checkout -q -b ahead \
