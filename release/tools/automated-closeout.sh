@@ -5953,7 +5953,7 @@ phase_create_chore_pr() {
   # over the whole body, and leaves a body that names no root byte-identical. Its
   # plan path is absolute when the corpus is homed outside the tree. The
   # parser-clean check above reads the body as built.
-  /usr/bin/printf '%s\n' "$(_redact_paths "$body")" > "$tmp_body"
+  /usr/bin/printf '%s\n' "$body" > "$tmp_body"
 
   local pr_url
   pr_url="$($GH pr create \
