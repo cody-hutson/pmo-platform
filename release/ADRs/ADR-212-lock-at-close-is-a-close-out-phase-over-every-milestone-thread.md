@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-208 — Lock-at-close is a close-out phase over every milestone thread"
+title: "ADR-212 — Lock-at-close is a close-out phase over every milestone thread"
 status: Proposed
 date: 2026-09-25
 release: closeout-verification-rows-consistent
@@ -13,13 +13,15 @@ source_observations:
   - "The integrative adversarial review found that the phase as first designed deferred under --no-merge through its own hand-written guard, recorded every row under a variable subject the dispatch-to-record cross-check cannot read, and built its diagnostics through a pipe into head that the repository's SIGPIPE-idiom gate rejects on added lines; the record's decisions were unaffected, and the phase conforms to the release's harness contracts instead."
 ---
 
-# ADR-208 — Lock-at-close is a close-out phase over every milestone thread
+# ADR-212 — Lock-at-close is a close-out phase over every milestone thread
 
 ## Status
 
 **Proposed.** Authored at Stage 6 Engineering for the `closeout-verification-rows-consistent` release. The Collective Review decided that this record is authored as `Proposed` and ratified by the operator at the release's Stage 13 close gate (Phase A13); the ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure.
 
 **Numbering provenance.** Claimed as **208** against an anchor of **206** on `origin/main`, read from the repository's own ADR-numbering tool at Engineering Commit 0: this release's two new records took the next two numbers in slice order, and this one is the second. A sibling release branch carries its own branch-local claims on this number, and branch-local claims do not bind. The number binds at the Stage-12 claim, and in-release prose cites this record by slug rather than by number.
+
+**Numbering provenance — `208 → 212`.** Held **ADR-208** branch-local; renumbered to **ADR-212** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 208. In-release citations that read "ADR-208" denote this record.
 
 ## Context
 

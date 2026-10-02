@@ -5,7 +5,7 @@ date: 2026-07-04
 release: 109-comment-trust-boundary (v3.65.1; bound at Stage 12)
 deciders: "operator (plan approval / Stage 9 gate) + Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment)"
 tags: [release-ops, security, prompt-injection, trust-boundary, comment-channel, stage-io, moderation, lock-at-close]
-superseded_by: ADR-208 in-part (Decision 3)
+superseded_by: ADR-212 in-part (Decision 3)
 source_observations:
   - "An external no-association account posted an unsolicited package-install recommendation inside an active stage sub-task thread during a live release run, positioned exactly where downstream stage readers consume stage output. No incorporation occurred (verified via history search + PR file-list); the comment was later removed — the benign outcome was positional luck, not a control, and the removal itself demonstrates the deletion-destroys-evidence risk this decision's moderation posture addresses. The recorded evidence text in the originating improvement issue's Evidence section is the durable fixture."
 ---
