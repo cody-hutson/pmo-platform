@@ -113,6 +113,7 @@ ADR-198 (`commitment-emission-forced-at-the-routing-point`) → **ADR-199** by `
 ADR-199 (`commitment-emission-forced-at-the-routing-point`) → **ADR-202** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 199; the record's Status section carries the provenance note.
 ADR-204 (`egress-allowlist-rows-declare-their-match-domain`) → **ADR-206** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 204; the record's Status section carries the provenance note.
 ADR-207 (`pmo-platform-root-resolves-from-install-record`) → **ADR-211** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 207; the record's Status section carries the provenance note.
+ADR-208 (`exemption-list-resolves-at-the-instance-tier-through-one-resolver`) → **ADR-212** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 208; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 

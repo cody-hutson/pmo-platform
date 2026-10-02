@@ -1,5 +1,5 @@
 ---
-title: "ADR-208 — The skill-editor exemption list resolves at the instance tier, through one resolver"
+title: "ADR-212 — The skill-editor exemption list resolves at the instance tier, through one resolver"
 status: Proposed
 date: 2026-09-28
 release: install-resolves-identically
@@ -15,13 +15,15 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-208 — The skill-editor exemption list resolves at the instance tier, through one resolver
+# ADR-212 — The skill-editor exemption list resolves at the instance tier, through one resolver
 
 ## Status
 
 **Proposed** — authored at Stage 6 Engineering of `install-resolves-identically`. The operator rendered the decision at the release's Stage-5 Collective Review scope-lock: the instance tier through one resolver, the gate predicate declared beside that resolver, and the legacy reconcile ordered after the hook refresh. The transition to Accepted belongs to the release's close.
 
 **Numbering provenance.** This record was claimed as **208** against an anchor of **206** on `origin/main`, read from the repository's ADR-numbering detector. It advances past one slot, which a sibling record on this same release branch already occupies. Sibling release branches hold numbers in the same range branch-only, which does not bind. This is the second of the release's three records, numbered in serial order at authorship. The number binds at the Stage-12 claim. If the mainline claims it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. Citations use the slug token `{{ADR:exemption-list-resolves-at-the-instance-tier-through-one-resolver}}`, which carries no number shape and resolves at the claim.
+
+**Numbering provenance — `208 → 212`.** Held **ADR-208** branch-local; renumbered to **ADR-212** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 208. In-release citations that read "ADR-208" denote this record.
 
 ## Context
 

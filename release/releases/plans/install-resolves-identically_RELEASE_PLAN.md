@@ -400,7 +400,7 @@ core/rules/bypass-mode-readiness.md                                             
 release/references/specs/release-personas.md                                      EDIT  (promoted on the reference cascade)
 core/standards/duplicate-source-discipline.md                                     EDIT  (promoted on the reference cascade)
 docs/UPDATE.md                                                                    EDIT  (section 6.3a heading and body; lines 103, 107 and 109)
-core/ADRs/ADR-208-exemption-list-resolves-at-the-instance-tier-through-one-resolver.md  ADD  (numbered literally at authorship against the mainline anchor 206, second of three, Q3)
+core/ADRs/ADR-212-exemption-list-resolves-at-the-instance-tier-through-one-resolver.md  ADD  (numbered literally at authorship against the mainline anchor 206, second of three, Q3)
 
 # ── #7497 — write guard keys on the target (Q9 a, Q16 a) ──
 core/hooks/block-destructive.sh                                                   EDIT  (target-keyed -019 exemption, two views; the message names the target; the -022 helper comment)
