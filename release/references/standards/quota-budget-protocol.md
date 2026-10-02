@@ -384,7 +384,7 @@ at `W_max = 2` are gated five times, each against a fresher basis.
 verdict — it is not separately announced. The line already names both axes' bases per § 4.3b's
 rendering-obligation extension; the width field joins it. For example:
 
-`Checkpoint B: PROCEED · W_max 2 · N=9 → 5 sub-waves, re-gated · usage-window basis UNSTATED — conservative default [ASSUMPTION – CONFIRM] · host-API basis MEASURED — anchored in-band: core 4966/5000 [SOURCE] (reset 01:22:49Z), graphql 4780/5000 [ASSUMPTION – CONFIRM] (reset 01:20:16Z, 2 reads agree)`
+`Checkpoint B: PROCEED · W_max 2 · N=9 → 5 sub-waves, re-gated · usage-window basis UNSTATED — conservative default [ASSUMPTION – CONFIRM] · host-API PROCEED · core MEASURED 4966/5000 [SOURCE] reset 01:22:49Z · graphql MEASURED 4780/5000 [ASSUMPTION – CONFIRM] reset 01:20:16Z (2 reads agree)`
 
 At `N = 1` width guidance is **structurally inert** — no wave is narrower than one — exactly as
 SERIALIZE is structurally meaningless at `N = 1` (§ 4.3a). Render `W_max n/a (N=1)`.
