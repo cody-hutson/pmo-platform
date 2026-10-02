@@ -2468,8 +2468,10 @@ _cc_compute_verdict() {
 #     SKIP is SENTINEL-AWARE — 3 under warn, 1 under enforce. It means the WHOLE gate was
 #       withheld: the tracked ledger is absent or unparseable, the gate was re-dormanted, the
 #       row cutoff matched no LOG row, or the allowlist named every VERIFIED row at/after the
-#       cutoff — a repository or configuration state a pull request
-#       can fix, so a green gate under enforce must mean the ledger was read and asserted.
+#       cutoff — a repository or configuration state a pull request can fix. So a green gate
+#       under enforce must mean the ledger was read, the row cutoff armed at one of its rows,
+#       and the allowlist did not empty the scope. It need not mean a row was asserted: a
+#       cutoff that arms while no row at/after it is VERIFIED yet is CLEAN 0 (contract table).
 #       It follows _c32_verdict_exit_code's SKIP, not _de_verdict_exit_code's
 #       (whose cause, a git-ignored event log, is structurally unreachable in CI).
 _cc_verdict_exit_code() {
@@ -20475,7 +20477,13 @@ EOF
 #   -------------   --------------   ----   ----------------------------------------------
 #   CLEAN           any              0      pass — every in-scope VERIFIED row carries its full
 #                                           Stage-13 output-set, the network leg measured wherever
-#                                           it is armed. SOLE OCCUPANT OF 0.
+#                                           it is armed. SOLE OCCUPANT OF 0. The scope may hold no
+#                                           row: a cutoff that arms while no row at/after it is
+#                                           VERIFIED yet (mid-close, nothing allowlisted) verdicts
+#                                           CLEAN 0, a complete scan of an empty set and not a
+#                                           withheld verdict. So 0 means the ledger was read, the
+#                                           cutoff armed and the allowlist did not empty the scope;
+#                                           it does not by itself mean a row was asserted.
 #   INCOMPLETE      != enforce       2      ADVISORY finding: MEASURED and incomplete, reported,
 #                                           not blocking. When the network leg was also unmeasured
 #                                           for some rows the log carries a DEGRADED rider.
@@ -20494,8 +20502,9 @@ EOF
 #                                           or its header unparseable, the row cutoff matched no
 #                                           LOG row, or the allowlist named every VERIFIED row
 #                                           at/after the cutoff. Nothing was asserted.
-#   SKIP            enforce          1      BLOCKING — a green gate must mean the ledger was READ
-#                                           and at least one row asserted. Using the __none__
+#   SKIP            enforce          1      BLOCKING — a green gate must mean the ledger was READ,
+#                                           the row cutoff armed at one of its rows, and the
+#                                           allowlist did not empty the scope. Using the __none__
 #                                           escape hatch in CI therefore needs the sentinel back
 #                                           at warn first.
 #   <other>         any              1      unexpected verdict — fail-closed, sentinel-agnostic
@@ -20605,7 +20614,7 @@ cmd_check_close_completeness() {
       log "close-completeness: SKIP — ${verdict#SKIP }"
       log "  NOT-EVALUATED — a WITHHELD verdict for the whole gate: nothing was asserted, so this is not a clean result; the cause is printed above."
       if [[ "$cc_enforce" == "enforce" ]]; then
-        log "  ENFORCE-MODE (sentinel '$cc_enforce_file' token == enforce): a green gate must mean the ledger was actually READ and asserted — exit 1."
+        log "  ENFORCE-MODE (sentinel '$cc_enforce_file' token == enforce): a green gate must mean the ledger was actually READ, the row cutoff armed at one of its rows, and the allowlist did not empty the scope — exit 1."
         _cc_exit_through_mapping SKIP enforce
       fi
       log "  WARN-MODE (sentinel '$cc_enforce_file' token != enforce): reporting the withheld verdict as ADVISORY — exit 3. The remedy differs from an INCOMPLETE finding: restore or repair release/releases/RELEASE_LOG.md, unset the __none__ re-dormant, set the row cutoff to a value a RELEASE_LOG row matches, or remove from the allowlist a row the gate should assert."
