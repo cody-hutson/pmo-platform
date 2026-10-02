@@ -18,8 +18,9 @@ name: Close-completeness (pre-merge Stage-13 output-set gate)
 #                  exit 3 under EVERY sentinel value and never blocking — never 0,
 #                  never a 'no published GitHub Release' finding. A complete
 #                  output-set -> CLEAN, the SOLE producer of exit 0; an explicitly
-#                  re-dormanted cutover, or a row cutoff that matches no RELEASE_LOG
-#                  row -> SKIP, exit 3 under warn and 1 under enforce.
+#                  re-dormanted cutover, a row cutoff that matches no RELEASE_LOG
+#                  row, or an allowlist that names every VERIFIED row at/after the
+#                  cutoff -> SKIP, exit 3 under warn and 1 under enforce.
 # Path-filtered, so ADVISORY by skip-semantics: absence on an unrelated PR MUST NOT
 # block. ARMED by default — CLOSE_COMPLETENESS_CHECK_CUTOFF ships as a committed
 # default in deploy.sh, so _cc_compute_verdict returns a real verdict on every run;
@@ -220,9 +221,9 @@ jobs:
                 echo "      and re-run; a failed lookup is never reported as a missing Release. This verdict"
                 echo "      exits 3 under every sentinel value and never blocks."
                 echo "  (b) the whole gate was withheld (SKIP): the cutoff was re-dormanted, the row cutoff"
-                echo "      matched no RELEASE_LOG row, or release/releases/RELEASE_LOG.md is absent or its"
-                echo "      header unparseable. Under the enforce sentinel this verdict exits 1 and this job"
-                echo "      is RED."
+                echo "      matched no RELEASE_LOG row, the allowlist named every VERIFIED row at/after the"
+                echo "      cutoff, or release/releases/RELEASE_LOG.md is absent or its header unparseable."
+                echo "      Under the enforce sentinel this verdict exits 1 and this job is RED."
               } | tee -a "$GITHUB_STEP_SUMMARY"
               echo "::warning::close-completeness: NOT-EVALUATED — a withheld verdict (network leg unmeasured, or gate skipped), so this is not a clean result"
               exit 0
@@ -241,7 +242,8 @@ jobs:
                 echo "Remedy for (a): backfill a missing output per release/references/pipeline/stage-13-close.md"
                 echo "Phase B, or re-emit a drifted body per release-notes-standard.md §5.6, before merge."
                 echo "Remedy for (b): restore or repair release/releases/RELEASE_LOG.md, unset the __none__ re-dormant,"
-                echo "or set the row cutoff to a value a RELEASE_LOG row matches."
+                echo "set the row cutoff to a value a RELEASE_LOG row matches, or remove from the allowlist a row the"
+                echo "gate should assert."
               } | tee -a "$GITHUB_STEP_SUMMARY"
               exit 1
               ;;

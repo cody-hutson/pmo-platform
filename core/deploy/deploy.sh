@@ -1968,7 +1968,8 @@ _cc_row_findings() {
 #   cutover (allowlist-filtered), aggregates _cc_row_findings, and echoes ONE
 #   protocol line on stdout (the CALLER maps it to a warn-emit OR an exit code):
 #     SKIP <reason>                  dormant (cutoff __none__) / LOG absent or unparseable / a
-#                                    row cutoff matching no LOG row — nothing was asserted
+#                                    row cutoff matching no LOG row / an allowlist naming every
+#                                    VERIFIED row at/after the cutoff — nothing was asserted
 #     CLEAN <n>                      n VERIFIED row(s) checked, full output-set present
 #     INCOMPLETE <n> <m>             n finding(s) across m checked row(s) — detail to stderr
 #     NOT-EVALUATED <k> <n> <cause>  the network leg was not measured for k of n network-
@@ -1976,9 +1977,10 @@ _cc_row_findings() {
 #                                    findings counter is ABSENT, not 0 (PV-7b: an unmeasured
 #                                    count is not a zero). <cause> is the one cause class the
 #                                    withheld rows share, or `mixed`.
-#   Precedence: SKIP (a row cutoff matching no LOG row, so no row reached a limb) > INCOMPLETE >
-#   NOT-EVALUATED > CLEAN. An outage never suppresses a finding and
-#   never raises the count; an INCOMPLETE run that also withheld rows carries a DEGRADED rider.
+#   Precedence: SKIP (no row reached a limb: the row cutoff matched no LOG row, or the allowlist
+#   named every VERIFIED row at/after it) > INCOMPLETE > NOT-EVALUATED > CLEAN. An outage never
+#   suppresses a finding and never raises the count; an INCOMPLETE run that also withheld rows
+#   carries a DEGRADED rider.
 #   $1 = surface — accepted for signature parity; the verdict is surface-invariant (the
 #   lifecycle Check 48 arm and the --check-close-completeness probe render it differently).
 _cc_compute_verdict() {
@@ -2136,6 +2138,10 @@ _cc_compute_verdict() {
 
   local cc_past_cutoff=false cc_targets=0 cc_findings=0 cc_detail="" _last_verified="" _cc_arm_row=""
   local cc_vl_targets=0
+  # VERIFIED rows at/after the cutoff that the allowlist removed. Counted so the verdict can
+  # tell a scope the allowlist EMPTIED (nothing asserted — SKIP) from one that never held a
+  # VERIFIED row (mid-close — a complete scan of an empty set, CLEAN 0).
+  local cc_allowlisted=0
   local cc_past_release_cutoff=false _cc_net_arm_row="" _cc_net_targets=0
   local cc_past_outputs_cutoff=false _cc_outputs_arm_row="" _cc_outputs_targets=0
   local cc_past_telemetry_cutoff=false _cc_telemetry_arm_row="" _cc_telemetry_targets=0
@@ -2198,7 +2204,7 @@ _cc_compute_verdict() {
     # VERIFIED-only (the completeness contract is VERIFIED-scoped; a DEPLOYED-not-
     # VERIFIED row is mid-close and correctly skipped).
     [[ "$_state" == "VERIFIED" ]] || continue
-    _cc_is_allowlisted "$_ver" && continue
+    if _cc_is_allowlisted "$_ver"; then cc_allowlisted=$((cc_allowlisted + 1)); continue; fi
     cc_targets=$((cc_targets + 1))
     [[ "$_cls" == "version-less" ]] && cc_vl_targets=$((cc_vl_targets + 1))
 
@@ -2362,6 +2368,14 @@ _cc_compute_verdict() {
       printf 'close-completeness: armed at LOG row %s; %s VERIFIED row(s) in scope\n' \
         "$_cc_arm_row" "$cc_targets" >&2
     fi
+    # The cutoff armed, and the allowlist then removed every VERIFIED row at/after it: no row
+    # reached a limb, so the verdict below is SKIP, never CLEAN 0. Anti-vacuity, as for the
+    # no-match cutoff: say so out loud. The line is this state's own, and it does not begin
+    # `WARNING — cutoff`, the prefix an exact-row cutoff must not emit (self-test arm (6)).
+    if [[ $cc_targets -eq 0 && $cc_allowlisted -gt 0 ]]; then
+      printf 'close-completeness: WARNING — the allowlist emptied the scope: %s names all %s VERIFIED row(s) at/after LOG row %s; zero rows asserted, so the verdict is withheld (SKIP), not a clean result.\n' \
+        "$cc_allowlist" "$cc_allowlisted" "$_cc_arm_row" >&2
+    fi
   else
     # A cutoff matching NO row asserts nothing, so the verdict below is SKIP — a withheld
     # verdict, never CLEAN 0, which would read as success. Anti-vacuity: say so out loud
@@ -2401,12 +2415,21 @@ _cc_compute_verdict() {
   # that matched no LOG row comes first: no row reached any limb, so there is nothing to count
   # and the verdict is withheld — the same SKIP the cutoff's own __none__ re-dormant returns
   # early, above. It is emitted HERE, after the DENOM line, so the zero enumerated rows are
-  # still printed beside it. Otherwise a measured finding always wins and
+  # still printed beside it. An allowlist that removed every VERIFIED row at/after an ARMED
+  # cutoff is the same withheld verdict under its own cause: an exemption emptied the scope,
+  # and that is not a clean result. It cannot hide a finding — a row the allowlist removed
+  # never reaches a limb, and the .version aggregate above reads only rows that did. A cutoff
+  # that armed while no row at/after it is VERIFIED, with nothing removed by the allowlist
+  # (mid-close), is NOT that state: it stays CLEAN 0, a complete scan of an empty set.
+  # Otherwise a measured finding always wins and
   # is reported with its true count; a withheld network leg beside it is named by the DEGRADED
   # rider, never folded into the count. Only when no limb found anything does a withheld leg
   # decide the verdict — and then the protocol line carries NO findings counter.
   if [[ -z "$_cc_arm_row" ]]; then
     printf 'SKIP close-completeness row cutoff %s matched NO LOG row — zero rows asserted, so the verdict is withheld, not a clean result; set CLOSE_COMPLETENESS_CHECK_CUTOFF to a value a RELEASE_LOG row matches, or unset it to restore the committed armed default\n' "$cc_cutoff"
+  elif [[ $cc_targets -eq 0 && $cc_allowlisted -gt 0 ]]; then
+    printf 'SKIP close-completeness allowlist emptied the scope — %s names all %s VERIFIED row(s) at/after LOG row %s, so zero rows were asserted and the verdict is withheld, not a clean result; remove from the allowlist a row the gate should assert\n' \
+      "$cc_allowlist" "$cc_allowlisted" "$_cc_arm_row"
   elif [[ $cc_findings -gt 0 ]]; then
     # Detail to stderr; the verdict line (stdout) carries the counts.
     printf '%s' "$cc_detail" | /usr/bin/sed '/^$/d' >&2
@@ -2443,8 +2466,9 @@ _cc_compute_verdict() {
 #       repair should escalate is decided AT THE ENFORCE FLIP, on the cause-to-class table on
 #       cmd_check_close_completeness — until then this function takes no class argument.
 #     SKIP is SENTINEL-AWARE — 3 under warn, 1 under enforce. It means the WHOLE gate was
-#       withheld: the tracked ledger is absent or unparseable, the gate was re-dormanted, or
-#       the row cutoff matched no LOG row — a repository or configuration state a pull request
+#       withheld: the tracked ledger is absent or unparseable, the gate was re-dormanted, the
+#       row cutoff matched no LOG row, or the allowlist named every VERIFIED row at/after the
+#       cutoff — a repository or configuration state a pull request
 #       can fix, so a green gate under enforce must mean the ledger was read and asserted.
 #       It follows _c32_verdict_exit_code's SKIP, not _de_verdict_exit_code's
 #       (whose cause, a git-ignored event log, is structurally unreachable in CI).
@@ -20467,8 +20491,9 @@ EOF
 #                                           is decided at the enforce flip — see the cause table.
 #   SKIP            != enforce       3      ADVISORY WITHHELD verdict for the whole gate: the cutoff
 #                                           was re-dormanted (__none__), RELEASE_LOG.md is absent
-#                                           or its header unparseable, or the row cutoff matched
-#                                           no LOG row. Nothing was asserted.
+#                                           or its header unparseable, the row cutoff matched no
+#                                           LOG row, or the allowlist named every VERIFIED row
+#                                           at/after the cutoff. Nothing was asserted.
 #   SKIP            enforce          1      BLOCKING — a green gate must mean the ledger was READ
 #                                           and at least one row asserted. Using the __none__
 #                                           escape hatch in CI therefore needs the sentinel back
@@ -20583,7 +20608,7 @@ cmd_check_close_completeness() {
         log "  ENFORCE-MODE (sentinel '$cc_enforce_file' token == enforce): a green gate must mean the ledger was actually READ and asserted — exit 1."
         _cc_exit_through_mapping SKIP enforce
       fi
-      log "  WARN-MODE (sentinel '$cc_enforce_file' token != enforce): reporting the withheld verdict as ADVISORY — exit 3. The remedy differs from an INCOMPLETE finding: restore or repair release/releases/RELEASE_LOG.md, unset the __none__ re-dormant, or set the row cutoff to a value a RELEASE_LOG row matches."
+      log "  WARN-MODE (sentinel '$cc_enforce_file' token != enforce): reporting the withheld verdict as ADVISORY — exit 3. The remedy differs from an INCOMPLETE finding: restore or repair release/releases/RELEASE_LOG.md, unset the __none__ re-dormant, set the row cutoff to a value a RELEASE_LOG row matches, or remove from the allowlist a row the gate should assert."
       _cc_exit_through_mapping SKIP warn
       ;;
     *)
@@ -21612,7 +21637,7 @@ main() {
       echo "  --check [--warn]             Validate platform health (--warn exits 0 even with issues)"
       echo "  --check-lifecycle            List retired/dormant checks + dispositions + reactivation anchors"
       echo "  --check-version-freeness     Pre-merge version-freeness probe (Check 41 only; exits 1 on a claimed/undecidable candidate) (#1677)"
-      echo "  --check-close-completeness   Close-completeness probe (Check 48 only; CLEAN=0 and NOTHING ELSE EVER EXITS 0, INCOMPLETE=2 advisory, NOT-EVALUATED=3 under every sentinel (network leg unmeasured — withheld, never a pass, never blocking), SKIP=3 (gate re-dormanted, RELEASE_LOG absent/unparseable, or a row cutoff matching no LOG row), INCOMPLETE/SKIP=1 when enforce, unexpected=1) (#1290)"
+      echo "  --check-close-completeness   Close-completeness probe (Check 48 only; CLEAN=0 and NOTHING ELSE EVER EXITS 0, INCOMPLETE=2 advisory, NOT-EVALUATED=3 under every sentinel (network leg unmeasured — withheld, never a pass, never blocking), SKIP=3 (gate re-dormanted, RELEASE_LOG absent/unparseable, a row cutoff matching no LOG row, or an allowlist naming every VERIFIED row at/after the cutoff), INCOMPLETE/SKIP=1 when enforce, unexpected=1) (#1290)"
       echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73, 77, 78); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; CLEAN=0 and NOTHING ELSE EVER EXITS 0, INCOMPLETE=2 advisory, SKIP=3 NOT-EVALUATED (RELEASE_LOG absent or unparseable — withheld, never a pass), INCOMPLETE/SKIP=1 when enforce, unexpected=1) (#1484)"
       echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; CLEAN=0 and NOTHING ELSE EVER EXITS 0, INCOMPLETE=2 advisory, SKIP=3 NOT-EVALUATED (withheld, never a pass), NOSET=4 advisory (gate asserted nothing — repo defect), INCOMPLETE/NOSET=1 when enforce, unexpected=1) (#4026)"
