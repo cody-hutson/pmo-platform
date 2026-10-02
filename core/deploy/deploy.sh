@@ -1762,9 +1762,11 @@ _cc_row_findings() {
         # (l) is reachable only when the OUTPUTS latch is ALSO armed, since that
         # is the branch it sits in. The telemetry latch is therefore necessary
         # but not sufficient. Benign while the telemetry cutover sits at or after
-        # the outputs cutoff, as its armed row does — but whoever re-anchors
-        # either cutover needs to know it, so it is written down rather than
-        # discovered.
+        # the outputs cutoff, as its armed row does — and that ordering is now
+        # ASSERTED rather than left for whoever re-anchors either cutover to
+        # know (#5245 QF-01): _cc_compute_verdict reads it when (l) arms, and a
+        # violation prints an ordering WARNING naming both cutoffs in place of
+        # (l)'s armed line, so the count never claims rows (l) did not check.
         if [[ "$_telemetry_in_scope" == "1" ]]; then
           local _cct_line
           _cct_line="$(/usr/bin/grep -m1 '^\*\*Close-Class-Telemetry:\*\*' <<<"$_body" || true)"
@@ -2058,6 +2060,7 @@ _cc_compute_verdict() {
   local cc_past_release_cutoff=false _cc_net_arm_row="" _cc_net_targets=0
   local cc_past_outputs_cutoff=false _cc_outputs_arm_row="" _cc_outputs_targets=0
   local cc_past_telemetry_cutoff=false _cc_telemetry_arm_row="" _cc_telemetry_targets=0
+  local _cc_telemetry_before_outputs=false   # QF-01: the ordering, read when (l) arms
   local _row _cls _ver _ckey _ms _tag _state _rf _net _outputs _telemetry
   while IFS= read -r _row; do
     [[ -n "$_row" ]] || continue
@@ -2105,6 +2108,12 @@ _cc_compute_verdict() {
           && "$_ver" == "$cc_telemetry_cutoff"* ]]; then
       cc_past_telemetry_cutoff=true
       _cc_telemetry_arm_row="$_ver"
+      # THE CUTOFF ORDERING (#5245 QF-01), read at the moment (l) arms. (l) sits inside
+      # (j)'s branch, so it needs the outputs latch armed at or before this row. That
+      # latch is evaluated earlier in this same iteration, so a shared row counts as
+      # "at"; an outputs cutoff that arms later, matches no row, or is re-dormanted
+      # leaves it unarmed here. The emit after the loop reports a violation.
+      [[ "$cc_past_outputs_cutoff" == "true" ]] || _cc_telemetry_before_outputs=true
     fi
 
     [[ "$cc_past_cutoff" == "true" ]] || continue
@@ -2192,21 +2201,39 @@ _cc_compute_verdict() {
       "$_cc_outputs_arm_row" "$_cc_outputs_targets" >&2
   fi
 
-  # Same assertion for the FOURTH (Close-Class-Telemetry) cutover (#4437). FOUR
-  # branches, not three — the third one is the prefix-mis-arm WARNING and it is not
-  # decorative: the latch is a string PREFIX match, so a truncated literal like
-  # `v4.2` silently arms at `v4.20` and the gate still verdicts clean because the
-  # shortened prefix lands on a range that happens to pass. Branch (iii) is the only
-  # thing that says so out loud. On the shipped (armed) configuration branch (iv) fires
-  # and names the armed row with its in-scope count — the denominator that keeps a
-  # zero-finding run distinguishable from an unarmed one; branch (i) fires only on the
-  # explicit `__none__` opt-out and names the variable to unset.
+  # Same assertion for the FOURTH (Close-Class-Telemetry) cutover (#4437). FIVE
+  # branches. Branch (iii) is the CUTOFF-ORDERING assertion (#5245 QF-01): (l) sits
+  # inside (j)'s branch, so a telemetry cutoff that arms before the outputs cutoff —
+  # or with the outputs cutoff matching no row or re-dormanted — admits rows (l) never
+  # checks, and its count would claim them. It names both cutoffs and WITHHOLDS the
+  # count rather than over-report it; the counter, (l)'s coverage and the verdict are
+  # unchanged, because an ordering error is a CONFIG error like the R8 mis-arm above,
+  # not a completeness finding. It precedes (iv), whose line also carries the count.
+  # Branch (iv) is the prefix-mis-arm WARNING and it is not decorative: the latch is a
+  # string PREFIX match, so a truncated literal like `v4.2` silently arms at `v4.20`
+  # and the gate still verdicts clean because the shortened prefix lands on a range
+  # that happens to pass. Branch (iv) is the only thing that says so out loud. On the
+  # shipped (armed) configuration branch (v) fires and names the armed row with its
+  # in-scope count — the denominator that keeps a zero-finding run distinguishable from
+  # an unarmed one; branch (i) fires only on the explicit `__none__` opt-out and names
+  # the variable to unset.
   # STDERR ONLY (the stdout protocol line is parsed by string surgery downstream).
   if [[ "$cc_telemetry_cutoff" == "__none__" ]]; then
     printf 'close-completeness: Close-Class-Telemetry sub-check (l) explicitly re-dormanted (CLOSE_COMPLETENESS_TELEMETRY_CUTOFF=__none__) — unset it to restore the committed armed default\n' >&2
   elif [[ -z "$_cc_telemetry_arm_row" ]]; then
     printf 'close-completeness: WARNING — Close-Class-Telemetry cutoff %s matched NO LOG row; sub-check (l) asserted NOTHING on this run.\n' \
       "$cc_telemetry_cutoff" >&2
+  elif [[ "$_cc_telemetry_before_outputs" == "true" ]]; then
+    local _cc_outputs_where
+    if [[ "$cc_outputs_cutoff" == "__none__" ]]; then
+      _cc_outputs_where="is explicitly re-dormanted"
+    elif [[ -z "$_cc_outputs_arm_row" ]]; then
+      _cc_outputs_where="matched NO LOG row"
+    else
+      _cc_outputs_where="armed only later, at LOG row ${_cc_outputs_arm_row}"
+    fi
+    printf 'close-completeness: WARNING — Close-Class-Telemetry cutoff %s armed at LOG row %s, but the outputs cutoff %s %s. Sub-check (l) runs only inside the outputs sub-check (j), so it needs the outputs cutoff at or before the telemetry cutoff in LOG order: any row (l) admits ahead of the outputs cutoff would be counted in its denominator without being checked, so that denominator is withheld on this run rather than over-reported. Re-anchor either cutover to restore the ordering.\n' \
+      "$cc_telemetry_cutoff" "$_cc_telemetry_arm_row" "$cc_outputs_cutoff" "$_cc_outputs_where" >&2
   elif [[ "$_cc_telemetry_arm_row" != "$cc_telemetry_cutoff" ]]; then
     printf 'close-completeness: WARNING — Close-Class-Telemetry cutoff %s armed at LOG row %s (prefix match, not an exact row). %s VERIFIED row(s) asserted; verify this is intended.\n' \
       "$cc_telemetry_cutoff" "$_cc_telemetry_arm_row" "$_cc_telemetry_targets" >&2
@@ -19142,7 +19169,7 @@ EOF
   echo "    mis-arm (5) prefix-shortened cutoff WARNs naming the armed row / (6) exact-row cutoff does NOT warn but still names it / (7) no-match cutoff WARNs vacuous (zero rows asserted)" >&2
   echo "  Stage-13 output-set sub-checks (j velocity + k learnings) validated (#4452, group OS):" >&2
   echo "    OS-1 suppressed -> BOTH findings / OS-2 emitted -> zero / OS-3 bolded numerals -> grammar finding / OS-4 explicit-N/A conformant / OS-5 archived+co-located -> zero / OS-6 T4 wrong-surface write -> split-record / OS-7 field on both surfaces -> split-record / OS-8 dangling segment pointer -> finding / OS-9 learnings mis-placed names the heading found / OS-10 short field-set / OS-11 duplicate heading / OS-12 no-match outputs cutoff WARNs vacuous / OS-13 __none__ re-dormants (j)+(k) only. Every arm graded on the FINDING LINE — exit code, corpus-wide grep and 'the field parses' are all identical on OS-4/OS-5 and OS-6.
-    Close-Class-Telemetry sub-check (l) (#4437): OS-14 GENUINE FAILURE — a row with velocity+learnings and no telemetry field fires (l) alone / OS-15 control — the same fixture with a measured field raises nothing / OS-16 slot-short field fails the ordered eight-slot grammar while presence passes / OS-17 ANTI-VACUITY — a byte-perfect all-N/A field is a finding, with OS-15 as its control / OS-17b CIAC-4 control — a NOT-EVALUATED caller-omission field is a vacuity finding, never a grammar one / OS-18 split record (field in the hot stub, body in the segment) / OS-19 __none__ re-dormants (l) and ONLY (l) — the explicit opt-out / OS-20 no-match telemetry cutoff WARNs vacuous in its own voice / OS-21 prefix mis-arm WARNs naming the row it actually armed at / OS-22 an armed run names its row and its count / OS-23 a later sibling row never moves the armed row, and grows the count once VERIFIED / OS-24 the SHIPPED default is armed." >&2
+    Close-Class-Telemetry sub-check (l) (#4437): OS-14 GENUINE FAILURE — a row with velocity+learnings and no telemetry field fires (l) alone / OS-15 control — the same fixture with a measured field raises nothing / OS-16 slot-short field fails the ordered eight-slot grammar while presence passes / OS-17 ANTI-VACUITY — a byte-perfect all-N/A field is a finding, with OS-15 as its control / OS-17b CIAC-4 control — a NOT-EVALUATED caller-omission field is a vacuity finding, never a grammar one / OS-18 split record (field in the hot stub, body in the segment) / OS-19 __none__ re-dormants (l) and ONLY (l) — the explicit opt-out / OS-20 no-match telemetry cutoff WARNs vacuous in its own voice / OS-21 prefix mis-arm WARNs naming the row it actually armed at / OS-22 an armed run names its row and its count / OS-23 a later sibling row never moves the armed row, and grows the count once VERIFIED / OS-24 the SHIPPED default is armed / OS-25 THE CUTOFF ORDERING (#5245 QF-01) — a telemetry cutoff arming ahead of the outputs cutoff (OS-25), or an outputs cutoff re-dormanted (25b) or matching no row (25c), WARNs naming both cutoffs and withholds the (l) count, with (l)'s coverage unchanged; the shipped ordering, one row below and on the same row, raises no ordering report and keeps its armed line." >&2
   echo "  decision-emission minimum set validated (#4026, group DE):" >&2
   echo "    DE-1 dormant SKIP / DE-2 seeded zero-emission INCOMPLETE / DE-3 complete CLEAN 1 / DE-4 partial-set INCOMPLETE / DE-4b sibling-typed omission INCOMPLETE (kills the subtype-conjunct mutant) / DE-5 legacy-key-only INCOMPLETE / DE-6+DE-7 pre-cutover + DEPLOYED rows excluded / DE-7b VERIFIED flip counted / DE-8 rung-2 resolution / DE-9 absent asserted-set NOSET / DE-10 THE EXIT-CODE SPACE (#4216) — all ten (verdict x sentinel) pairs map as contracted, with DE-10b proving the sentinel is actually read (warn and enforce must differ for INCOMPLETE and NOSET) and DE-10c asserting PV-7 as a POPULATION property: exactly two of the ten pairs produce exit 0 and both are CLEAN, so a degraded verdict collapsing onto the clean code is caught even if it is a verdict token this group does not yet name" >&2
   echo "  RELEASE_LOG row classes validated (#5234, group RC):" >&2
