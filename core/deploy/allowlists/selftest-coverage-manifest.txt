@@ -29,6 +29,7 @@ release/tools/compute-dora-metrics.sh
 release/tools/compute-front-cluster-telemetry.sh
 release/tools/compute-middle-cluster-telemetry.sh
 release/tools/compute-release-velocity.sh
+release/tools/host-api-axis-verdict.sh
 release/tools/produce-learnings-register.sh
 release/tools/reemit-release-bodies.sh
 release/tools/synthesize-release-learnings.sh

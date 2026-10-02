@@ -536,6 +536,44 @@ Empirical motivation: a Stage 13 chore PR (2026-05-16) is the canonical worked e
 
 **REST-preference annotation applies symmetrically:** The Stage 13 chore PR `gh pr create` invocation (canonical bash example above) is a GraphQL operation. When the Stage 12 chore-PRs (Phase B5 + Phase J.5 when applicable) and this Stage 13 chore PR all fire within the per-hour GraphQL budget window, the Stage 13 spoke SHOULD prefer REST endpoints (`gh api -X POST /repos/{REPO}/pulls --field title=... --field head=... --field base=main --field body=@/tmp/body.md`) over `gh pr create`. See the Phase B5 chore-PR creation — REST-preference annotation at [`pipeline/stage-12-execute.md`](stage-12-execute.md) for full evidence (a Stage 12+13 GraphQL exhaustion — 5026 units across 3 chore-PRs in single release) and cutover semantics. **Cutover:** The REST-preference annotation applies to all releases going forward.
 
+**Close-out tooling reads pull requests through one classified reader.** The automated close-out reads every pull request it depends on — the release PR and the Stage 13 chore PR — through a single reader, and a pull-request read added to close-out tooling goes through that reader rather than through a client command chosen per call. The host's API quotas are separate pools that deplete independently, and which pool each client operation draws on is recorded, not inferred, in [`quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 4.3b. On the GitHub binding the reader is the REST pull-request endpoint, never the GraphQL-bound pull-request commands; the section's [GitHub reference binding](../standards/quota-budget-protocol.md#github-reference-binding) carries the rows. Each read is classified by that section's [refusal-reason classifier](../standards/quota-budget-protocol.md#refusal-reason-classifier), implemented once in `release/tools/lib/host-refusal-class.sh`, which the tool sources rather than restates. Only an answered read yields a pull-request state, and merged is read from the host's merged indicator — never inferred from a merge-commit identifier, which a host can report before a pull request has merged. A read that is refused, fails in transport or fails for another reason leaves the fact unresolvable: the close-out names the class and fails closed, and never reports the pull request as not merged, absent or empty. Under `--apply` the close-out therefore stops at phase 3 (`read_state`), before its first write, unless the release PR is answered as merged into `main`; a `DEFERRED` outcome, whose release PR is unmerged by definition, has an answered not-merged fact recorded rather than stopped on, and an unresolvable fact stops it like any other. Under `--dry-run` the close-out records the fact and states what `--apply` would do.
+
+**Tier-A design artifact — close-out pull-request read classification (Mermaid per [`design-artifact-standard.md § 6`](../../../core/standards/design-artifact-standard.md)):**
+<!-- design-artifact: flow-class=decision-tree; name=close-out-pull-request-read-classification; depicts=release/tools/automated-closeout.sh,release/tools/lib/host-refusal-class.sh,release/references/standards/quota-budget-protocol.md -->
+
+```mermaid
+flowchart TD
+    subgraph TOOL[Close-out tool — one pull-request read]
+        read[Read the pull request through the one reader, response headers included]
+        cls{Refusal-reason classifier: the call's own status line, rate-limit headers and error payload}
+        mflag{Answered: does the merged indicator say merged?}
+        base{Merged into main?}
+        ok([Merge fact confirmed])
+        notm[Not merged: a state finding, reported as such]
+        unres[Unresolvable: class named, fails closed, never reported as not merged]
+    end
+    subgraph HOST[Repository host]
+        pool[(The quota pool the binding maps the read to)]
+    end
+    read --> pool --> cls
+    cls -->|answered| mflag
+    cls -->|refused on quota grounds| unres
+    cls -->|failed in transport| unres
+    cls -->|failed for another reason| unres
+    mflag -->|yes| base
+    mflag -->|no, whatever merge-commit identifier is reported| notm
+    base -->|yes| ok
+    base -->|no| notm
+    classDef automated fill:#D4EDDA,stroke:#28A745,color:#155724;
+    classDef gate fill:#FFF3CD,stroke:#FFC107,color:#856404;
+    classDef external fill:#E2E3E5,stroke:#6C757D,color:#383D41;
+    classDef risk fill:#F8D7DA,stroke:#DC3545,color:#721C24;
+    class read,ok automated;
+    class cls,mflag,base gate;
+    class pool external;
+    class notm,unres risk;
+```
+
 **Cutover discipline:** Applies to all releases going forward.
 
 **Phase C — Release Close-Out (Tier 1):**

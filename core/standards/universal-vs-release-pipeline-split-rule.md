@@ -114,8 +114,8 @@ When ≥2 universal protocols emerge: introduce `core/protocols/`. When ≥2 uni
 | `failure-mode-standard.md` | core/specs/ | 5-field template + 5-category tag for SKILL.md domain-specific failure modes; universal. CORRECT. |
 | `autonomy-tiers.md` | core/specs/ | 4-tier classification for ALL agent actions; universal. CORRECT. |
 | `reversibility-protocol.md` | core/specs/ | Universal CHEAP/MODERATE/EXPENSIVE/IRREVERSIBLE tier framework. CORRECT. |
-| `release-class-taxonomy.md` | release/specs/ | Release-pipeline-only classification. CORRECT. |
-| `methodology-archetype-matrix.md` | release/specs/ | Consumed by release-planner skill. CORRECT. |
+| `release-class-taxonomy.md` | release/references/specs/ | Release-pipeline-only classification. CORRECT. |
+| `methodology-archetype-matrix.md` | release/references/specs/ | Consumed by release-planner skill. CORRECT. |
 
 ### Full-population Q1-grep audit (per CD-1 absorption)
 

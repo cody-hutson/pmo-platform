@@ -451,6 +451,18 @@ release/tools/version-grammar.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/claim-version.sh
 ./release/tools/claim-version.sh
 release/tools/claim-version.sh
+# host-api-axis-verdict.sh — Checkpoint B's host-API axis evaluator (quota-budget
+# protocol § 4.3b). EXECUTED by the hub once per routing turn, from the repository
+# root, before every spoke launch; its --self-test and --replay forms are executed at
+# Stage 6 self-verification and Stage 7 Dev Testing. Canonical four; no exception form
+# is warranted, as the protocol and the bridge spell the invocation repository-relative.
+# Its classifier library, release/tools/lib/host-refusal-class.sh, is sourced and has
+# no CLI, so it carries no row (the zero-row precedent of the other release/tools/lib/
+# libraries). (CI runs no Claude hooks, so these rows are for the agent-side path.)
+[PMO_PLATFORM_ROOT]/release/tools/host-api-axis-verdict.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/host-api-axis-verdict.sh
+./release/tools/host-api-axis-verdict.sh
+release/tools/host-api-axis-verdict.sh
 # check-registry-currency.sh — Check 5(d) row-layer CI-mirror predicate (#2540).
 # Executed agent-side as `bash <path> --self-test` and as the AC-1 falsification
 # test (roster a skill without a registry row); all four forms allowlisted so

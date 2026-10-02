@@ -11,6 +11,10 @@
 # Plus: clean-inline pass-through, out-of-scope path pass-through, non-Write/Edit tool
 # skip, the per-file allow-link override marker, the CLAUDE_HOOK_BYPASS escape hatch,
 # and the warn / enforce / off mode infrastructure.
+# Plus payload-size independence — the same verdict at ~1 KB, ~200 KB and above ARG_MAX, a
+# findings report larger than ARG_MAX, the bypass audit read — and the instrument-failure arms:
+# an input the hook could not read reports INPUT-NOT-EVALUATED (fail-closed in enforce, a WARN
+# in warn), for an in-scope and an out-of-scope path alike, and never reports malformed JSON.
 #
 # Hermetic: runs the REAL hook at its deployed path so its co-located lib/ primitives
 # (dep-resolve.sh, positional-issueref.awk) and the reference-durability allowlist
@@ -276,6 +280,206 @@ BYP_TMP="$(/usr/bin/mktemp)"; BYP_RC=0
 /bin/rm -f "$BYP_TMP"
 if [ "$BYP_RC" = "0" ]; then echo "PASS: enforce: CLAUDE_HOOK_BYPASS=1 permits fragile write"; PASS=$((PASS+1));
 else echo "FAIL: enforce: CLAUDE_HOOK_BYPASS=1 permits fragile write (exit=$BYP_RC expected=0)"; FAIL=$((FAIL+1)); fi
+
+# ---------------------------------------------------------------------------
+# PAYLOAD-SIZE INDEPENDENCE + INSTRUMENT FAILURE
+# ---------------------------------------------------------------------------
+# The hook must give a well-formed payload the same verdict at any size, and must
+# report an input it could not read as its own failure, never as malformed JSON.
+#
+# NOTHING LARGE TRAVELS AS AN ARGUMENT IN THIS SECTION. That is the section's premise,
+# not a style choice: test_case above feeds its payload through /usr/bin/printf and
+# builds it through `jq --arg`, and both put the payload on an exec'd binary's argument
+# list, which is capped per string on Linux (128 KiB) and in total on macOS (ARG_MAX,
+# 1 MiB). An arm routed through test_case would fail for the harness's own reason,
+# before the fix and after it, and could never go green. Here bodies are written by
+# awk redirection, encoded by `jq --rawfile` (jq opens the file), fed to the hook by
+# stdin redirection, and the hook's stderr is grepped where it lands.
+#
+# EVERY FAIL EXCERPT IS BOUNDED (2 KiB). test-runner.sh re-prints this file's whole
+# output through /usr/bin/printf, so an unbounded excerpt of a large stderr would hit
+# the same argument limit there and turn a readable FAIL into "no summary line".
+SIZE_FP="core/standards/__size-independence-fixture__.md"
+SIZE_TAIL='See [the durability standard](../reference-durability-standard.md) for the rule.'
+SIZE_ARGMAX="$(/usr/bin/getconf ARG_MAX 2>/dev/null || true)"
+case "$SIZE_ARGMAX" in ''|*[!0-9]*) SIZE_ARGMAX="" ;; esac
+SIZE_DIR="${FIXTURE_ROOT}/size"
+/bin/mkdir -p "$SIZE_DIR"
+NOT_A_VERDICT='INPUT-INVALID|INPUT-NOT-EVALUATED|HOOK-ERROR'
+
+# size_body <out> <bytes> <clean|tail|amplify|marked> — an inert filler body of about
+# <bytes> bytes. `tail` appends one Class L link as the LAST line, past every size limit,
+# so a BLOCK verdict proves the detector read the whole payload. `amplify` repeats a line
+# three detectors report (Class L, Class U and a bare positional ref), so the findings
+# report outgrows the payload that carries it. `marked` opens with a valid file-scoped
+# allow-link marker and a link, so the link is exempt ONLY if the marker read succeeds.
+size_body() {
+  /usr/bin/awk -v n="$2" -v k="$3" -v t="$SIZE_TAIL" 'BEGIN {
+    pad = "Filler prose line carrying no fragile reference construct of any kind whatsoever."
+    amp = "See [the rule](github.com/example/repo/issues/42) as corrected in #42 during the release."
+    if (k == "marked") { print "<!-- reference-durability: allow-link -->"; print t; b = 120 }
+    line = (k == "amplify") ? amp : pad
+    while (b + length(line) + 1 <= n) { print line; b += length(line) + 1 }
+    if (k == "tail") print t
+  }' > "$1"
+}
+
+# size_payload <out> <Write|Edit> <file_path> <body_file> — jq reads the body as a FILE.
+size_payload() {
+  local key="content"
+  [ "$2" = "Edit" ] && key="new_string"
+  "$JQ" -n --arg tool "$2" --arg fp "$3" --arg k "$key" --rawfile c "$4" \
+    '{tool_name:$tool, tool_input:({file_path:$fp} + {($k):$c})}' > "$1"
+}
+
+# file_bytes <file> — measured, never computed from a line count.
+file_bytes() { /usr/bin/wc -c < "$1" | /usr/bin/tr -d ' '; }
+
+# test_case_file <name> <payload_file> <expected_exit> <must_ere|""> <must_not_ere|"">
+# stderr lands in one reused file under the fixture root (the EXIT trap removes the root),
+# so no arm creates or deletes a temp file of its own.
+test_case_file() {
+  local name="$1" pf="$2" expected_exit="$3" must="$4" mustnot="$5"
+  local errf="${SIZE_DIR}/last-stderr.txt" rc=0 ok=1
+  /bin/bash "$HOOK" < "$pf" > /dev/null 2> "$errf" || rc="$?"
+  [ "$rc" != "$expected_exit" ] && ok=0
+  if [ -n "$must" ] && ! /usr/bin/grep -qE "$must" "$errf"; then ok=0; fi
+  if [ -n "$mustnot" ] && /usr/bin/grep -qE "$mustnot" "$errf"; then ok=0; fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s\n' "$name"; PASS=$((PASS+1))
+  else
+    /usr/bin/printf 'FAIL: %s (expected_exit=%s actual=%s, payload %s bytes)\n  stderr (first 2 KiB):\n' \
+      "$name" "$expected_exit" "$rc" "$(file_bytes "$pf")"
+    /usr/bin/head -c 2048 "$errf"; /usr/bin/printf '\n'; FAIL=$((FAIL+1))
+  fi
+}
+
+# arm_invalid <name> <reason> — an arm that cannot establish its own sensitivity FAILS as
+# INDETERMINATE. It never passes and never skips: a skipped size arm reads like a pass.
+arm_invalid() { /usr/bin/printf 'FAIL: %s (INDETERMINATE: %s)\n' "$1" "$2"; FAIL=$((FAIL+1)); }
+
+# nf_arm <mode> <name> <payload_file> — run the hook with every temp-file write refused: a
+# file-size limit of 0 with SIGXFSZ ignored, so a write fails with EFBIG instead of killing
+# the process. The payload is larger than a pipe buffer, so bash 5.1+ also takes its
+# temp-file path for a here-string; bash 3.2 always does. The posture is mode-coupled
+# (ADR-078): enforce fails closed (exit 2, "BLOCKED (fail-closed)") and warn stands down
+# (exit 0, "WARN (degraded"). In both, the report names INPUT-NOT-EVALUATED and carries
+# PV-7a's clause, in its canonical lowercase form and matched case-sensitively, and nothing
+# in it reads as a verdict: not malformed input (INPUT-INVALID), not a finding about the
+# write (BLOCK-FRAGILE-REF-), and not a generic rule-evaluation error (HOOK-ERROR), which
+# would mean the failure reached the ERR trap instead of the branch that names it. stderr
+# travels through a pipe, because the limit would refuse a file.
+nf_arm() {
+  local m="$1" name="$2" pf="$3" rc=0 ok=1 err want_rc want_state
+  if [ "$m" = "enforce" ]; then want_rc=2; want_state='BLOCKED (fail-closed)'
+  else want_rc=0; want_state='WARN (degraded'; fi
+  set_mode "$m"
+  err="$( (trap '' XFSZ; ulimit -f 0; exec /bin/bash "$HOOK" 2>&1 >/dev/null) < "$pf" )" || rc="$?"
+  [ "$rc" = "$want_rc" ] || ok=0
+  /usr/bin/grep -qF 'INPUT-NOT-EVALUATED' <<<"$err" || ok=0
+  /usr/bin/grep -qF "$want_state" <<<"$err" || ok=0
+  /usr/bin/grep -qF 'this is not a clean result' <<<"$err" || ok=0
+  if /usr/bin/grep -qE 'INPUT-INVALID|HOOK-ERROR|BLOCK-FRAGILE-REF-' <<<"$err"; then ok=0; fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s\n' "$name"; PASS=$((PASS+1))
+  else
+    /usr/bin/printf 'FAIL: %s (expected_exit=%s actual=%s)\n  stderr (first 2 KiB): %s\n' \
+      "$name" "$want_rc" "$rc" "$(/usr/bin/head -c 2048 <<<"$err")"; FAIL=$((FAIL+1))
+  fi
+}
+
+if [ -z "$SIZE_ARGMAX" ] || [ "$SIZE_ARGMAX" -gt 67108864 ]; then
+  arm_invalid "size: all size arms" "getconf ARG_MAX unusable (${SIZE_ARGMAX:-empty}), so no arm can be sized past the argument budget"
+else
+  SIZE_LARGE=$(( SIZE_ARGMAX + 131072 ))
+  set_mode enforce
+
+  # S1-S3 — one body shape at three sizes, link on the LAST line; the verdict must not move.
+  size_body "${SIZE_DIR}/tail-small.md" 1024 tail
+  size_payload "${SIZE_DIR}/tail-small.json" Write "$SIZE_FP" "${SIZE_DIR}/tail-small.md"
+  test_case_file "size: ~1 KB write, link on the last line, BLOCKED on its own rule" \
+    "${SIZE_DIR}/tail-small.json" 2 'BLOCK-FRAGILE-REF-001' "$NOT_A_VERDICT"
+
+  size_body "${SIZE_DIR}/tail-mid.md" 204800 tail
+  size_payload "${SIZE_DIR}/tail-mid.json" Write "$SIZE_FP" "${SIZE_DIR}/tail-mid.md"
+  test_case_file "size: ~200 KB write (past the Linux per-argument cap), same verdict" \
+    "${SIZE_DIR}/tail-mid.json" 2 'BLOCK-FRAGILE-REF-001' "$NOT_A_VERDICT"
+
+  size_body "${SIZE_DIR}/tail-large.md" "$SIZE_LARGE" tail
+  size_payload "${SIZE_DIR}/tail-large.json" Write "$SIZE_FP" "${SIZE_DIR}/tail-large.md"
+  if [ "$(file_bytes "${SIZE_DIR}/tail-large.json")" -gt "$SIZE_ARGMAX" ]; then
+    test_case_file "size: write larger than ARG_MAX, same verdict (falsification arm)" \
+      "${SIZE_DIR}/tail-large.json" 2 'BLOCK-FRAGILE-REF-001' "$NOT_A_VERDICT"
+  else
+    arm_invalid "size: write larger than ARG_MAX" "payload $(file_bytes "${SIZE_DIR}/tail-large.json") B does not exceed ARG_MAX ${SIZE_ARGMAX} B"
+  fi
+
+  # S4 / S4b — ALLOW above ARG_MAX, in scope and out of scope. Validation runs before the
+  # tool and scope gates, so the pre-fix hook refused every large write, durable or not.
+  size_body "${SIZE_DIR}/clean-large.md" "$SIZE_LARGE" clean
+  size_payload "${SIZE_DIR}/clean-large.json" Write "$SIZE_FP" "${SIZE_DIR}/clean-large.md"
+  test_case_file "size: clean write larger than ARG_MAX ALLOWED" \
+    "${SIZE_DIR}/clean-large.json" 0 '' "$NOT_A_VERDICT"
+  size_payload "${SIZE_DIR}/clean-large-out.json" Write "$OUTSCOPE" "${SIZE_DIR}/clean-large.md"
+  test_case_file "size: out-of-scope write larger than ARG_MAX ALLOWED (validation precedes the scope gate)" \
+    "${SIZE_DIR}/clean-large-out.json" 0 '' "$NOT_A_VERDICT"
+
+  # S6 — an Edit fragment above ARG_MAX (the new_string branch of the content read).
+  size_payload "${SIZE_DIR}/tail-large-edit.json" Edit "$SIZE_FP" "${SIZE_DIR}/tail-large.md"
+  test_case_file "size: Edit fragment larger than ARG_MAX, same verdict" \
+    "${SIZE_DIR}/tail-large-edit.json" 2 'BLOCK-FRAGILE-REF-001' "$NOT_A_VERDICT"
+
+  # S7 — the bypass audit read above ARG_MAX. The pre-fix read failed and logged "unknown".
+  byp_log="${HOOK_DIR}/bypass-log.jsonl"
+  byp_before=0
+  [ -f "$byp_log" ] && byp_before="$("$JQ" -s 'length' "$byp_log" 2>/dev/null || echo 0)"
+  byp_rc=0
+  /usr/bin/env CLAUDE_HOOK_BYPASS=1 /bin/bash "$HOOK" < "${SIZE_DIR}/tail-large.json" > /dev/null 2>&1 || byp_rc="$?"
+  byp_after="$("$JQ" -s 'length' "$byp_log" 2>/dev/null || echo 0)"
+  byp_tool="$("$JQ" -rs 'last | .tool' "$byp_log" 2>/dev/null || echo unreadable)"
+  if [ "$byp_rc" = 0 ] && [ "$byp_after" -gt "$byp_before" ] && [ "$byp_tool" = "Write" ]; then
+    /usr/bin/printf 'PASS: %s\n' "size: bypass above ARG_MAX logs the real tool name"; PASS=$((PASS+1))
+  else
+    /usr/bin/printf 'FAIL: %s (rc=%s entries %s->%s tool=%s)\n' "size: bypass above ARG_MAX logs the real tool name" \
+      "$byp_rc" "$byp_before" "$byp_after" "$byp_tool"; FAIL=$((FAIL+1))
+  fi
+
+  # S5 — warn mode: the payload fits inside ARG_MAX, its findings report does not. This arm
+  # isolates the six report emits from the input reads: it stays RED if only the input
+  # reads are converted.
+  set_mode warn
+  size_body "${SIZE_DIR}/amp.md" $(( SIZE_ARGMAX * 55 / 100 )) amplify
+  size_payload "${SIZE_DIR}/amp.json" Write "$SIZE_FP" "${SIZE_DIR}/amp.md"
+  if [ "$(file_bytes "${SIZE_DIR}/amp.json")" -lt "$SIZE_ARGMAX" ] \
+     && [ $(( $(file_bytes "${SIZE_DIR}/amp.md") * 2 )) -gt "$SIZE_ARGMAX" ]; then
+    test_case_file "size: warn-mode findings report larger than ARG_MAX still WARNs (report emits)" \
+      "${SIZE_DIR}/amp.json" 0 'RULE:WARN' "$NOT_A_VERDICT"
+  else
+    arm_invalid "size: warn-mode report amplification" "payload must stay under ARG_MAX while its Class L + U lists alone exceed it"
+  fi
+
+  # S8 / S8b — instrument failure: bash cannot materialize the input for the validator. The
+  # body carries a VALID file-scoped marker and a link, so the pre-fix hook, whose marker
+  # read failed the same way, reported the link: an instrument failure rendered as a verdict
+  # about the write.
+  #
+  # S8-out — the same fault on a path OUTSIDE the durable corpus. Validation runs before the
+  # tool and scope gates, so the hook cannot yet know the path is out of scope, and this arm
+  # asserts that posture instead of leaving it incidental. The pre-fix hook validated through
+  # a pipe, read the path and exited 0 at its scope gate. The payload stays below ARG_MAX, so
+  # the argument limit cannot be what either arm observes.
+  size_body "${SIZE_DIR}/marked.md" 102400 marked
+  size_payload "${SIZE_DIR}/marked.json" Write "$SIZE_FP" "${SIZE_DIR}/marked.md"
+  size_payload "${SIZE_DIR}/marked-out.json" Write "$OUTSCOPE" "${SIZE_DIR}/marked.md"
+  nf_arm enforce "enforce: unreadable input reports INPUT-NOT-EVALUATED, fail-closed" \
+    "${SIZE_DIR}/marked.json"
+  nf_arm warn "warn: unreadable input reports INPUT-NOT-EVALUATED as a WARN and exits 0" \
+    "${SIZE_DIR}/marked.json"
+  nf_arm enforce "enforce: unreadable input on an OUT-OF-SCOPE path reports INPUT-NOT-EVALUATED, fail-closed" \
+    "${SIZE_DIR}/marked-out.json"
+  nf_arm warn "warn: unreadable input on an OUT-OF-SCOPE path reports INPUT-NOT-EVALUATED as a WARN and exits 0" \
+    "${SIZE_DIR}/marked-out.json"
+fi
 
 # ---------------------------------------------------------------------------
 # WARN mode — a fragile reference WARNs (exit 0 + WARN marker), does not block.
