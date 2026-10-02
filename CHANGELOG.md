@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.70] - 2026-10-02
+
+The release-plan check now tells a pass from a check it could not run, and a row can no longer pass on a keyword or drop out of the results.
+
+[Full notes](release/releases/notes/v4.70_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.70)
+
 ## [v4.69] - 2026-09-25
 
 Web-host allowlist entries can no longer approve a GitHub write, and refusals of unreadable commands now show whether they were right.
