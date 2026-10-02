@@ -37,6 +37,45 @@ From the runtime-suite contract: [`runtime-suite-selection-map.md`](../standards
 
 Set at Stage 8: per-criterion verdict, acceptance score, Stage 7 escape count, overall verdict (ACCEPT/CONDITIONAL ACCEPT/REJECT/HOLD).
 
+#### Criterion namespace
+<!-- design-artifact: flow-class=data-flow; name=criterion-namespace; depicts=release/references/pipeline/stage-08-qa-testing.md,release/references/pipeline/stage-07-dev-testing.md,release/tools/check-ac-binding.py,core/schemas/stage-io-contracts.md,operations/templates/qa-acceptance-report-template.md -->
+
+An acceptance-criterion ordinal is unique only inside the list that counts it, and three lists count a card's criteria independently. Every verdict that crosses a stage boundary therefore names the list its ordinal counts — its **criterion namespace**.
+
+| Namespace | The list its ordinals count | Produced at | Labels | Ordinal rule |
+|---|---|---|---|---|
+| `issue` | the issue body's criteria, under the acceptance-criteria heading vocabulary | intake; amended at Stage 4 | `AC-N` | document order, 1-based (the acceptance-assertion parse contract) |
+| `design` | the Stage-5 design comment's restated or refined criteria, and its integration criteria | Stage 5 | `AC-N`, `INT-N` | the design's own order |
+| `plan` | the release plan's per-issue verification rows and its cross-issue criteria | Stage 4 | `AC-N`, `CIAC-N`, `OBL-N` | an `AC-` row claims the issue ordinal (stage-04 AC-Binding, Limb 1); `CIAC-` and `OBL-` count within the plan |
+
+| Consumer | Reads | Joins another list through |
+|---|---|---|
+| Stage 7 | any of the three, per row | `Maps-to` on each non-`issue` `AC-` row |
+| Stage 8 | `issue` (`AC-N`) and `design` (`INT-N`) | a Stage-7 row's `Maps-to` |
+| Stage 9 | `plan` (`CIAC-N`, and the executor's `AC-` rows) and Stage 8's `INT-N` verdicts | `release/tools/check-ac-binding.py` (`ns:plan>issue`) |
+
+**The issue body is the namespace of record for `AC-` ordinals.** It is this stage's primary QA source, the acceptance-assertion contract assigns `AC-N` from it, and the plan's `AC-` rows are bound to it. Its list is read under that contract's heading vocabulary and item rule (its parse rules P1 and P2): a heading whose text starts `Acceptance Criteria` or `Completion condition (verifiable)`, at any level, opens the list, and `check-ac-binding.py` reads the same vocabulary. A label's identifier class (`AC`, `INT`, `CIAC`, `OBL`) is a separate axis — the "disjoint namespace" the acceptance-assertion contract and stage-04 name — and never says which list an ordinal counts.
+
+**Writing a reference.** A criterion is identified by namespace, issue and label; in a payload row, by its `Namespace` and `Issue #` cells beside the label. In prose:
+
+- `#N AC-k` is an issue criterion. The unqualified form **is** the `issue` qualification.
+- `design #N AC-k` and `design #N INT-k` are design criteria.
+- `plan #N AC-k` is a plan's per-issue row, or an executor verdict on one. It may be written unqualified only where `check-ac-binding.py` reads that issue BOUND at the cited head: a bound plan row and the issue criterion it claims are then the same criterion. A plan's cross-issue criterion is `plan CIAC-k`.
+
+**The mapping.** A payload row whose `AC-` ordinal counts the `design` or `plan` list names in `Maps-to` the issue ordinal of the same criterion, or `none` when the issue list has no such criterion. Two identically-labelled verdicts grade the same criterion exactly when namespace, issue and label are all equal, or when both resolve through `Maps-to` to one issue ordinal. A `none` row is a design-only obligation: Stage 7 grades it against the design, and it is not an acceptance criterion here.
+
+**Who checks the mapping.** `check-ac-binding.py` resolves the `plan` list to the `issue` list on every run. Given a design snapshot (`--design-file`: each entry's own label, its text, and the issue ordinal it declares), it also checks each declared `design` mapping, against the issue list read through its own reader (`--fetch`, or a `--criteria-file` snapshot). A `design` row in the Stage-7 AC map quotes that check's MAP row in its Evidence cell, so this stage sees that the declaration it consumes is the one that was checked.
+
+**Where each payload names it.** A Stage-7 row can count any of the three lists, so the Stage-7 AC map carries `Namespace` and `Maps-to` on every row. The two payloads this stage produces — the Acceptance Report's matrix with its machine block, and the QA-return Failed-AC table — are fixed by identifier class: `AC-N` counts the issue body, and `INT-N` the card's Stage-5 integration list. Each therefore declares that mapping once, as `ns:AC=issue,INT=design`, in place of a column on every row, and the matrix column set stays closed. The namespace fields identify a criterion; they add no value to any verdict enum.
+
+**The `ns:` grammar — one field, one meaning, on every surface that writes it.** Its value is a comma-separated list of terms, and every term names a criterion namespace:
+
+- a bare namespace (`plan`) — the list the line's ordinals count;
+- a resolution (`plan>issue`, `design>issue`) — the line joins an ordinal in the first list to the second;
+- a class declaration (`AC=issue`, `INT=design`) — every label of that identifier class counts that list.
+
+The binder writes the first two forms, one on every line it emits, and its VERDICT line lists the resolutions that ran; a Stage-8 payload's declaration writes the third.
+
 ## 5. Process
 **Phase A — Entry Validation (Tier 1):** 5 steps — verify Stage 7 verdict (PASS or CONDITIONAL PASS required), PR still mergeable, quality report present with conformant Handoff Payload (per [DT↔QA Handoff Protocol §Forward Handoff](stage-07-dev-testing.md#dtqa-handoff-protocol)), all AC extractable from issues, and PR gate-state clean per the required-gate + mergeability read below. Missing or malformed Handoff Payload → post [ADJUST] signal per the inter-stage feedback protocol Tier 1; DT amends in-place (no full re-review required for format-only corrections).
 
@@ -140,7 +179,7 @@ Stage 8 does NOT run test suites — execution is Stage 7's concern (Phase A8). 
 |---|---|
 | `PASS` | the runtime predicate is satisfied → the AC may be graded **MET** (the deliverable was exercised and passed); any remaining non-runtime facets of the same AC are still graded by the Phase B LLM-acceptance path |
 | `FAIL` | **NOT MET** (Blocker) → the deliverable does not work; routes Lane 2 → QA Return to Dev Testing per Phase C (the FAIL→NOT-MET→Blocker path Gate 8→9's "no unresolved Blocker" already carries — no new gate criterion) |
-| `SKIP` (map no-match row 6) OR no mapped suite for this AC's domain | **no runtime evidence available** → the behavioral AC is graded by the existing Phase B LLM-acceptance path against PR content, and the Acceptance Report records `runtime-evidence: none (suite-skip \| unmapped-domain)` so the absence is explicit, not silent |
+| `SKIP` (the map's no-match row) OR no mapped suite for this AC's domain | **no runtime evidence available** → the behavioral AC is graded by the existing Phase B LLM-acceptance path against PR content, and the Acceptance Report records `runtime-evidence: none (suite-skip \| unmapped-domain)` so the absence is explicit, not silent |
 
 This is **evidence consumption, not execution** — Stage 8 stays at acceptance altitude ("does the exercised deliverable meet the need?"), reading the run Stage 7 already performed. No suite is re-run at Stage 8. The domain→suite keying is owned by [`runtime-suite-selection-map.md`](../standards/runtime-suite-selection-map.md) (single dispatch source of truth, shared with the verification-execution executor); Stage 8 does not fork a second dispatch surface.
 
@@ -156,7 +195,7 @@ Two co-equal cases are worked below: an **unmapped** domain (web/component — t
 
 **Deliverable domain:** `web` / component (a UI component + its session-scoped dismiss-persistence behavior).
 
-*Step 1 — Stage 7 A8 suite selection (execution altitude).* Consult [`runtime-suite-selection-map.md`](../standards/runtime-suite-selection-map.md) §2 with the changed path (e.g. `web/components/Notification.tsx`). Evaluate rows top-to-bottom, most-specific-glob-wins. **No row matches a web/component path** (rows 1–5 target `core/deploy/**`, `core/hooks/**`, `core/deploy/tools/check-doc-links.py`, and the install/onboarding/update entrypoints; there is no web/component row) → the change falls to **row 6 (no match)** → A8 emits `test-run/suite-skip`, a no-op gate. The DT→QA Handoff Payload **Test-results** field carries the single line `NONE — no runtime code path changed`.
+*Step 1 — Stage 7 A8 suite selection (execution altitude).* Consult [`runtime-suite-selection-map.md`](../standards/runtime-suite-selection-map.md) §2 with the changed path (e.g. `web/components/Notification.tsx`), resolving it with the map's glob grammar and precedence rule. **No row matches a web/component path** — the map has no web/component row — so the change falls to the map's **no-match row** → A8 emits `test-run/suite-skip`, a no-op gate. The DT→QA Handoff Payload **Test-results** field carries the single line `NONE — no runtime code path changed`.
 
 > **Honest-gap note:** the absence of a web/component runtime suite is a REAL registry gap in the selection map, surfaced by this example — NOT a defect in this AC. Closing it (adding a `web/**` component-test row that runs the framework's own component test runner under the `/tmp` HOME-override) is out of this card's narrowed scope; it is the map's own extension path. Until then, a web/component behavioral AC has NO runtime-execution evidence at Stage 7, and Stage 8 must grade it honestly rather than fabricate a pass.
 
@@ -171,7 +210,7 @@ Two co-equal cases are worked below: an **unmapped** domain (web/component — t
 
 **Deliverable domain:** `hooks` (a `core/hooks/**` security hook + its block/allow runtime behavior).
 
-*Step 1 — Stage 7 A8 suite selection (execution altitude).* Consult the selection map §2 with the changed path (e.g. `core/hooks/block-dangerous-command.sh`). Evaluate rows top-to-bottom → the path matches **row 3** (`core/hooks/**` → hook suite, `bash core/hooks/tests/test-runner.sh`, self (per-runner)). A8 **runs** the hook suite under the `/tmp` HOME-override sandbox and records the outcome. The DT→QA Handoff Payload **Test-results** field carries a real row, e.g. `hook-suite | map row 3 | PASS | 268/0 | sandbox-home-tmp | actions-run:<url> | <ts>`.
+*Step 1 — Stage 7 A8 suite selection (execution altitude).* Consult the selection map §2 with the changed path (e.g. `core/hooks/block-dangerous-command.sh`). Resolve it with the map's glob grammar → the path matches only **row 3** (`core/hooks/**` → hook suite, `bash core/hooks/tests/test-runner.sh`, self (per-runner)). A8 **runs** the hook suite under the `/tmp` HOME-override sandbox and records the outcome. The DT→QA Handoff Payload **Test-results** field carries a real row, e.g. `hook-suite | map row 3 | PASS | 268/0 | sandbox-home-tmp | actions-run:<url> | <ts>`.
 
 *Step 2 — Stage 8 acceptance (acceptance altitude), per Runtime-Evidence Acceptance above.* The behavioral AC maps to a suite whose A8 Result is populated → the `PASS` / `FAIL` row fires (not the no-evidence row). Stage 8:
 (i) reads the Test-results Result for the AC's mapped suite (row 3, hook-suite);
@@ -182,7 +221,7 @@ This is the deliverable-exercising acceptance path the runtime-mapped case gets 
 
 ##### Doc-release no-op preservation
 
-Governance/doc/pipeline-internal releases pass Stage 8 unchanged. The Runtime-Evidence Acceptance rule is *conditional on a behavioral/runtime AC that maps to a suite*. A doc/governance/spec release: (1) touches no runtime-mapped path → its Stage-7 A8 already emits `test-run/suite-skip` (row 6); (2) carries no runtime/behavioral AC (its ACs are file-path+state / content predicates) → the rule has **nothing to key on** and does not fire; (3) therefore grades exactly as today via the existing Phase B LLM-acceptance path — **byte-for-byte unchanged verdict**. This is the explicit Stage-8 mirror of the Stage-7 A8 suite-skip no-op row (where Stage 7 says "no path matches → `suite-skip`, no-op gate, no ceremony", Stage 8 says "no runtime evidence / no runtime AC → grade on content as today, record `runtime-evidence: none`"). This card is itself the proof: it is a governance/pipeline-internal deliverable, so its own Stage-8 run takes the no-op path — and, per the cutover exemption above, grades against pre-change Stage-8 semantics regardless.
+Governance/doc/pipeline-internal releases pass Stage 8 unchanged. The Runtime-Evidence Acceptance rule is *conditional on a behavioral/runtime AC that maps to a suite*. A doc/governance/spec release: (1) touches no runtime-mapped path → its Stage-7 A8 already emits `test-run/suite-skip` (the map's no-match row); (2) carries no runtime/behavioral AC (its ACs are file-path+state / content predicates) → the rule has **nothing to key on** and does not fire; (3) therefore grades exactly as today via the existing Phase B LLM-acceptance path — **byte-for-byte unchanged verdict**. This is the explicit Stage-8 mirror of the Stage-7 A8 suite-skip no-op row (where Stage 7 says "no path matches → `suite-skip`, no-op gate, no ceremony", Stage 8 says "no runtime evidence / no runtime AC → grade on content as today, record `runtime-evidence: none`"). This card is itself the proof: it is a governance/pipeline-internal deliverable, so its own Stage-8 run takes the no-op path — and, per the cutover exemption above, grades against pre-change Stage-8 semantics regardless.
 
 #### Automated Eval Invocation (Stage-8 registration — EI-S8)
 
@@ -325,6 +364,8 @@ A Phase E REJECT/HOLD splits on whether the gap is an **implementation defect** 
 Acceptance Report: acceptance matrix (per-criterion verdict), acceptance score, fitness assessment, Stage 7 escape log, lane distribution, overall verdict. Downstream: to Stage 9 (acceptance report + PR + DT report) or to Stage 7 (Lane 2 findings emitted as QA Return to Dev Testing payload per [DT↔QA Handoff Protocol §Return Path](stage-07-dev-testing.md#dtqa-handoff-protocol)).
 
 The Acceptance Report is rendered from the canonical template at [`operations/templates/qa-acceptance-report-template.md`](../../../operations/templates/qa-acceptance-report-template.md) — three reader tiers (verdict / detail / evidence) carrying these six sections, with a machine-parseable acceptance-matrix block whose columns and all-drift-out score are the co-design contract with the `acceptance` assertion type ([`core/skills/eval-writer/references/acceptance-assertion-type.md`](../../../core/skills/eval-writer/references/acceptance-assertion-type.md)).
+
+The report declares its criterion namespace (§ 4, *Criterion namespace*) once — in Tier 1, and as `ns:AC=issue,INT=design` in the machine block header — and a QA-return Failed-AC table carries the same declaration. Phase B joins a Stage-7 AC-map row to the issue criterion its `Maps-to` names before using it as input; a `Maps-to: none` row is not input to any issue criterion's verdict.
 
 Stage 8 does NOT produce: quality scores (Stage 7), design decisions (Stage 5), deployment actions (Stage 12).
 
