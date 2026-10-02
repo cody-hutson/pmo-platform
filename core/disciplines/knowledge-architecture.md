@@ -297,9 +297,51 @@ RE-POINT      reconcile every SURVIVING memory that [[wikilink]]s the just-evict
               precedes drop — drop is the documented fallback, not the default.
 ```
 
+**How EVICT removes the file.** The Trash move EVICT names is performed as `trash '<absolute path to the entry>'`, one entry per operand, written as an explicit absolute path in plain characters — the deletion-containment hook refuses a variable, a relative path, a `..` component and any character the shell would expand or unescape. The hook admits that move for an entry of the store the operator declares (the `autoMemoryDirectory` value in the operator's user settings) when the entry is a direct `*.md` child other than the `MEMORY.md` index, which EVICT edits rather than removes, and it records each admission in its block log. Every other target outside the workspace root, and every permanent-deletion verb, stays refused. The full predicate is the hook's registry entry (`core/rules/bypass-mode-readiness/block-rm-prefer-trash.md` § Memory-store arm), and why this act is not an irreducible human task is recorded at `core/specs/autonomy-tiers.md` § Irreducible Human Tasks item 8a. An entry the hook does not admit — a store that is not the declared one, such as the runtime's default per-project location, or one declared only in project or local settings — is the case the charter's Hook-Blocked → User-Side Handoff governs: the operator runs the same command, and the post-state verification above applies unchanged. The path this takes is drawn below, under EVICT execution path.
+
 **Why encode-then-evict is mandatory.** A naive "issue CLOSED → delete memory" loses content when the close preceded the corpus write — a close-keyword can fire on a PR that did not actually carry the encoding. The VERIFY-CORPUS gate makes the corpus-presence check a precondition of eviction, so the ordering cannot invert; the ARCHIVE-first step makes even an erroneous eviction CHEAP-reversible.
 
 **Why RE-POINT closes the downstream gap.** Before this step, EVICT stopped at the file/index/ledger row, leaving surviving memories that `[[wikilink]]`ed the deleted file dangling — the convention permits dangling links (not an error) and the content lives in the corpus, so nothing breaks, but the links no longer navigate. RE-POINT is a zero-extra-discovery operation (the corpus home is already known from VERIFY-CORPUS) that restores navigability. It is an **operator-authorized Phase B-OPS executor action** (it edits the Layer-2 memory store under the same authorization envelope as EVICT; ARCHIVE already captured the pre-state) — never performed by a deploy check. The standing `deploy.sh --check` Check 36 only *detects* an un-re-pointed dangling link (the `dangling-wikilink-to-evicted-memory` class below); it never re-points. **Reversibility: CHEAP.**
+
+#### EVICT execution path {#evict-execution-path}
+<!-- design-artifact: flow-class=agent-process; name=evict-execution-path; depicts=core/disciplines/knowledge-architecture.md,core/hooks/block-rm-prefer-trash.sh -->
+
+The route the EVICT step takes from the executor's Trash command to its post-state check: the hook's admission is the gate, and an entry it does not admit goes to the operator through the handoff.
+
+```mermaid
+flowchart TD
+    subgraph EXEC[Executor — Phase B-OPS agent, operator-authorized]
+        e0([VERIFY-CORPUS passed]) --> e1[Issue trash with the entry's explicit absolute path]
+        e6[Hand the same trash command to the operator]
+        e4[Remove the MEMORY.md index line; retire the pointer or ledger row]
+        e5{Post-state: file, index line and pointer all absent?}
+    end
+    subgraph HOOK[block-rm-prefer-trash — memory-store arm]
+        h1{Direct .md entry of the declared store, not the index, not a directory?}
+        h2{One admission row written to the block log?}
+    end
+    subgraph OPS[Operator]
+        o1[[Run the handed-off trash command]]
+    end
+    e1 --> h1
+    h1 -->|admitted| h2
+    h1 -->|refused| e6
+    h2 -->|yes| t1[/Entry moved to Trash/]
+    h2 -->|no| e6
+    e6 --> o1
+    o1 --> t1
+    t1 --> e4
+    e4 --> e5
+    e5 -->|yes| done([EVICT complete — RE-POINT follows])
+    e5 -->|no| open([Eviction incomplete]):::risk
+    classDef automated fill:#D4EDDA,stroke:#28A745,color:#155724;
+    classDef human fill:#D1ECF1,stroke:#17A2B8,color:#0C5460;
+    classDef gate fill:#FFF3CD,stroke:#FFC107,color:#856404;
+    classDef risk fill:#F8D7DA,stroke:#DC3545,color:#721C24;
+    class e1,e4,e6 automated;
+    class o1 human;
+    class h1,h2,e5 gate;
+```
 
 ### Trigger + audit {#trigger-and-audit}
 
