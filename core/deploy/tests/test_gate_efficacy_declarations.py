@@ -85,7 +85,8 @@ oracle, the TRACKED TREE:
     every declared root resolves to at least one tracked file under the declared
     filter; on deploy.sh the declaration's `roots=@<array>` names the array its
     check's `_population_resolve` call passes, with the same filter, and a
-    `_population_report` call reports the result
+    `_population_report` call reports the result; and no later resolve call in that
+    check drops `--append` before the earlier population has been reported
 
 A root that yields nothing is a finding unless it sits on POPULATION_RESIDUALS, whose
 every entry must still reproduce, and the worked-reference declarations (Checks 25 and
@@ -114,7 +115,8 @@ EXIT CONTRACT
        publishing a check-run its workflow's headers do not name, a `required` posture
        naming a surface that cannot block, a stale residual-ledger entry, a malformed
        or zero-yield population declaration, a declared population the check never
-       resolves or reports, an absent worked-reference declaration, a stale
+       resolves or reports, a resolve call that resets a population no report has
+       examined, an absent worked-reference declaration, a stale
        population-ledger entry, a census row missing, stale or unclassified, or a census
        `examined:` that disagrees with its rows)
     2  the harness itself could not assert — an unreadable population, a partition too
@@ -1154,6 +1156,47 @@ def _code(region: list[str]) -> list[str]:
     return [ln for ln in region if ln.strip() and not ln.lstrip().startswith("#")]
 
 
+# A `_population_resolve` call, and the same call carrying `--append` as its FIRST
+# argument — the one position the function reads the flag from, so `--append` anywhere
+# later on the line is an operand and accumulates nothing.
+RESOLVE_CALL_RE = re.compile(r"(?:^|[\s;&|({])_population_resolve(?=\s|$)")
+APPEND_CALL_RE = re.compile(r"(?:^|[\s;&|({])_population_resolve\s+--append(?=\s|$)")
+# The phrase every resolve-order finding carries, and the one arm P10 counts by.
+RESOLVE_ORDER_MARK = "without `--append`"
+
+
+def resolve_order_findings(check_id: str, region: list[str], start: int) -> list[str]:
+    """Each `_population_resolve` call in a check's region that resets a population no
+    `_population_report` call has reported yet.
+
+    `_population_resolve` clears its globals unless `--append` is its first argument. In a
+    region that resolves more than one declaration, a later call without the flag
+    therefore discards the members the earlier call resolved before anything examines or
+    reports them. Each call still passes its own array and filter, so `_resolves` reads
+    every call clean, and every declared root still resolves against the tracked tree: the
+    defect is in the ORDER of the calls, which no per-call test can see. The region's code
+    lines are read in order; a `_population_report` call closes the population, after
+    which a fresh resolve without the flag is correct.
+    """
+    out: list[str] = []
+    pending = False
+    for offset, line in enumerate(region):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if RESOLVE_CALL_RE.search(line):
+            if pending and not APPEND_CALL_RE.search(line):
+                out.append(f"{DEPLOY_REL}:{start + offset + 1}: Check {check_id} calls "
+                           f"`_population_resolve` {RESOLVE_ORDER_MARK} after an earlier "
+                           f"resolve that no `_population_report` has reported — the call "
+                           f"resets the population, so the earlier declaration's roots are "
+                           f"never examined; pass `--append`, or report the earlier "
+                           f"population first")
+            pending = True
+        if "_population_report" in line:
+            pending = False
+    return out
+
+
 def _resolves(region: list[str], filt: str, array: str | None) -> bool:
     """A `_population_resolve` call in the region passes the declared filter literal and,
     for an `@<array>` declaration, that array — so the declared population is the scanned
@@ -1182,7 +1225,10 @@ def evaluate_population(
     file under its declared filter. On deploy.sh a `roots=@<array>` declaration names an
     array its check defines, a `_population_resolve` call passes that array with the same
     filter, and a `_population_report` call reports the result — so the declared
-    population IS the scanned one, and what was examined is emitted at runtime.
+    population IS the scanned one, and what was examined is emitted at runtime. Where a
+    check resolves more than one declaration, no resolve call after the first resets the
+    population before a `_population_report` call has reported it (`resolve_order_findings`,
+    read once per region): a per-call test passes each call alone and cannot see the order.
 
     A FOURTH ORACLE, AND SO A FOURTH FUNCTION. The other three grade a declaration against
     its file's trigger, a job against its file's declaration set, and a declaration
@@ -1237,7 +1283,8 @@ def evaluate_population(
                 continue
             grade_roots(site, f".github/workflows/{name}", "", roots, fields["filter"])
 
-    for check_id, lineno, fields, region, _ in deploy_declarations(deploy_text):
+    ordered: set[int] = set()
+    for check_id, lineno, fields, region, start in deploy_declarations(deploy_text):
         counts["decls"] += 1
         site = f"{DEPLOY_REL}:{lineno}"
         if check_id is None:
@@ -1245,6 +1292,11 @@ def evaluate_population(
                             f"header, so it binds to no check")
             continue
         declared_checks.add(check_id)
+        # Keyed on the REGION, not the declaration: a check resolving two declarations
+        # carries one call order, and draws an order finding once.
+        if start not in ordered:
+            ordered.add(start)
+            findings += resolve_order_findings(check_id, region, start)
         malformed = declaration_findings(site, fields)
         findings += malformed
         if malformed:
@@ -1345,7 +1397,6 @@ P6_KEY = (DEPLOY_REL, "999", P6_ROOT)
 # array and filter, so every per-call reach test reads clean. P10_APPENDED restores the
 # flag, and P10_REPORTED reports the first population before the second call; both are
 # conforming controls on the same non-empty input.
-RESOLVE_ORDER_MARK = "without `--append`"
 _P10_HEAD = [
     "  # ─── Check 998: synthetic resolve-order fixture (harness arm P10) ──",
     "  #   population: roots=@zzz_md_roots  filter=*.md  exempts=none",
@@ -1373,10 +1424,11 @@ def population_harness(sources: dict[str, str], deploy_text: str,
     sensitivity arm is paired with a specificity arm on the same non-empty input.
 
     TWO KINDS OF ARM, KEPT APART DELIBERATELY. The arms that prove the DETECTOR
-    discriminates — the exemption-unit arms P3/P3b/P3c/P4, the ledger arm P6 and the
-    empty-glob arm P7 — run on SYNTHETIC declarations on every invocation. An arm built
-    from a live instance of a construct whose disappearance is the goal (a ledgered root,
-    a whole-file exemption) would turn reaching that goal into a harness failure. The
+    discriminates — the exemption-unit arms P3/P3b/P3c/P4, the ledger arm P6, the
+    empty-glob arm P7 and the resolve-order arms P10/P10b/P10c — run on SYNTHETIC
+    declarations on every invocation. An arm built from a live instance of a construct
+    whose disappearance is the goal (a ledgered root, a whole-file exemption) would turn
+    reaching that goal into a harness failure. The
     arms that prove a LIVE population exists and is wired — P1, P2, P5, P8, P8b, P9 — are
     built from the worked reference at run time.
     """
@@ -2844,7 +2896,10 @@ def main() -> int:
           "ledger was emptied, and dropping it made the audit report exactly its stale "
           "entry; P8 flagged a declared population no `_population_report` call reports and "
           "P8b a resolve call whose filter is not the declared one; P9 flagged the worked "
-          "reference's declaration removed; P5 held the declaration set non-empty")
+          "reference's declaration removed; P10 drew exactly one order finding from a "
+          "synthetic region whose second resolve call drops `--append`, while P10b (the flag "
+          "restored) and P10c (a report between the calls) stayed clean; P5 held the "
+          "declaration set non-empty")
     census_note = "" if not census_notes else " (" + "; ".join(census_notes) + ")"
     print("anti-vacuity (census): CS-1 flagged exactly one planted binary-zero consumer and "
           "CS-2 no planted multi-state consumer or counter; CS-2b counted a single-value "
