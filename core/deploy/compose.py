@@ -206,7 +206,7 @@ _TRANSIENT_WORKTREE_SEGMENT = (".claude", "worktrees")
 # The value is substituted into bash `case` glob patterns, so a glob metacharacter or a
 # control character would change what the allowlist admits. On POSIX a backslash is the
 # pattern's escape character as well; on Windows it is the path separator, so it stays.
-_FORBIDDEN_ROOT_CHARS = frozenset("*?[\t\n\r" + ("\\" if os.sep == "/" else ""))
+_FORBIDDEN_ROOT_CHARS = frozenset("*[\t\n\r" + ("\\" if os.sep == "/" else ""))
 _GIT_ENV_SCRUB = frozenset({
     "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY",
     "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE", "GIT_PREFIX",
