@@ -3,8 +3,9 @@
 # This committed marker governs whether the close-completeness gate
 # (`deploy.sh --check-close-completeness`, i.e. Check 48's verdict) BLOCKS or merely
 # REPORTS on an INCOMPLETE verdict. The probe reads this file directly, so the
-# sentinel is load-bearing on its own; a thin CI workflow can additionally consume
-# the probe's exit code once wired.
+# sentinel is load-bearing on its own; the thin CI workflow
+# (.github/workflows/close-completeness.yml) consumes the probe's exit code and
+# never re-reads this file.
 #
 # The first non-comment, non-blank line is the mode token. The probe maps every verdict
 # through _cc_verdict_exit_code; exit 0 is CLEAN's alone under either token.

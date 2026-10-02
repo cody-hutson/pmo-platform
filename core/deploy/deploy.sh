@@ -1699,11 +1699,12 @@ _cc_row_findings() {
   # `version-less` is DECLARED EXCLUDED, for the same structural reason as (f): the
   # condition-(B) determination that produces a version-less release publishes no
   # GitHub Release, so there is no Surface-1 object to look up and no published body to
-  # diff. The gate is placed BEFORE the delegated tools rather than inside them so a
-  # slug key can never reach `gh release view` or check-release-body-drift.sh at all —
-  # that tool's exit contract enumerates 0/1/2/3, and an unexpected exit is mapped to a
-  # finding by its callers, so an untested code path there converts directly into a
-  # spurious finding. Excluded rows are counted in the caller's DENOM line.
+  # diff. The gate is placed BEFORE the delegated lookups rather than inside them so a
+  # slug key can never reach the published-set membership test (which would report it
+  # absent) or check-release-body-drift.sh at all — that tool's exit contract enumerates
+  # 0/1/2/3, and an exit outside it is withheld as NOT-EVALUATED (`body-drift-unexpected`),
+  # so a slug key reaching it would turn a declared exclusion into a reported outage.
+  # Excluded rows are counted in the caller's DENOM line.
   #
   # INSTRUMENT FAILURE IS WITHHELD, NEVER GUESSED (#4318). The instrument was resolved ONCE
   # per run by _cc_resolve_network_leg, before the first network-scoped row; this block reads
@@ -12607,7 +12608,7 @@ sys.stdout.write("".join(out) + "|")
         # shared flag_warn_or_issue mode — Check 48 graduates independently.
         case "$CLOSE_COMPLETENESS_MODE" in
           enforce)
-            log "  FAIL:  close-completeness — $_cc48_n finding(s) across $_cc48_m VERIFIED row(s): a close dropped a Stage-13 output (see stderr detail); a scaffold abbreviation never waives a codified Phase step — hub-spoke-bridge.md Procedure 1 / ADR-048"
+            log "  FAIL:  close-completeness — $_cc48_n finding(s) across $_cc48_m VERIFIED row(s): a close dropped a Stage-13 output, or a published Release body drifted from its note (see stderr detail). Backfill a dropped output per stage-13-close.md Phase B — a scaffold abbreviation never waives a codified Phase step (hub-spoke-bridge.md Procedure 1 / ADR-048); re-emit a drifted body from its note per release-notes-standard.md §5.6"
             ISSUES=$((ISSUES + 1))
             ;;
           warn)
