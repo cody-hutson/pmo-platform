@@ -5947,7 +5947,13 @@ phase_create_chore_pr() {
   # read as done here.
   local tmp_body
   tmp_body="$(/usr/bin/mktemp -t closeout-body.XXXXXX)"
-  /usr/bin/printf '%s\n' "$body" > "$tmp_body"
+  # This body goes straight to GitHub, never through the report sink, so it is
+  # redacted AT ITS POST SITE (#7855; Plan amendment 15 item 1), the write that hands
+  # it to gh: _redact_paths turns "$REPO_ROOT" into <repo> and "$HOME" into <home>
+  # over the whole body, and leaves a body that names no root byte-identical. Its
+  # plan path is absolute when the corpus is homed outside the tree. The
+  # parser-clean check above reads the body as built.
+  /usr/bin/printf '%s\n' "$(_redact_paths "$body")" > "$tmp_body"
 
   local pr_url
   pr_url="$($GH pr create \
@@ -6901,7 +6907,12 @@ phase_manual_close_release_issues() {
   while IFS= read -r issue_n; do
     [[ -z "$issue_n" ]] && continue
     local _c; _c="$(_comment_for "$issue_n")"
-    if $GH issue close "$issue_n" --repo "$REPO_SLUG" --comment "$_c" >/dev/null 2>&1; then
+    # The comment goes straight to GitHub, never through the report sink, so it is
+    # redacted AT ITS POST SITE (#7855; Plan amendment 15 item 1), as the chore-PR
+    # body is, whole: the anomaly default, whose plan path is absolute when the
+    # corpus is homed outside the tree, or a per-issue override. A comment that
+    # names no root posts byte-identical.
+    if $GH issue close "$issue_n" --repo "$REPO_SLUG" --comment "$(_redact_paths "$_c")" >/dev/null 2>&1; then
       closed_count=$((closed_count + 1))
     fi
   done <<< "$OPEN_ISSUE_LIST"
