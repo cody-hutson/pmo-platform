@@ -154,6 +154,8 @@ Reference implementation: [`release/tools/compute-cycle-time.sh`](../../tools/co
 - `1` — invalid args / log file missing
 - `2` — malformed row (ts_iso parse failure — pipeline-event-log integrity violation; escalate)
 
+**Release-indeterminate rows:** both reads reach the log through the query tool's `--release` ladder (`pipeline-event-log-schema.md` § 2a), whose third rung also matches the release's legacy `vX.Y` value — a value that can carry rows of more than one release. When the query tool reports the rows a read matched only by that value as release-INDETERMINATE, the tool repeats that notice on stderr, one line per read, opening `INDETERMINATE (T_GO read):` or `INDETERMINATE (T_DEPLOY read):` and carrying the query tool's own words. The tool selects its anchors over the rows as the query tool returned them, the reported rows included: only the query tool knows which rows a legacy value matched. A value, an `N/A` reason and the exit code therefore never depend on the notice, and the notice is the only sign that an anchor may rest on another release's row. The query tool's other notes — a best-effort legacy match, an in-flight release — are not repeated.
+
 ## 8. Consumers
 
 | Consumer | Today | Future |

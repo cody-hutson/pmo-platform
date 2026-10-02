@@ -56,6 +56,18 @@
 # "The deploy ran and its targets did not succeed" is reserved for the one case where
 # it is true: skill/harness rows exist and none reached outcome=resolved.
 #
+# WHY A RUNG-3 INDETERMINATE NOTICE IS REPEATED ON STDERR (#5467). Both reads go through
+# the query tool's --release, whose ladder (pipeline-event-log-schema.md § 2a) also
+# matches the release's legacy vX.Y value at rung 3, and one legacy value can carry rows
+# of more than one release. The query tool says so on its own stderr — INDETERMINATE:
+# ... do not bind them. A read that discarded that stream anchored on such rows without
+# a word, so each read repeats the notice on this tool's stderr as one line, labelled
+# T_GO or T_DEPLOY. The selection is not changed by it: the anchors are chosen over the
+# rows as the query tool returned them, these included, because only the query tool
+# knows which rows a legacy value matched. The notice is therefore the only sign that an
+# anchor may be another release's, and nothing on stdout depends on it. The query tool's
+# other notes — a best-effort legacy match, an in-flight release — are not repeated.
+#
 # Usage:
 #   ./compute-cycle-time.sh <release>           # human-readable: "47m" or "2h17m" or "N/A"
 #   ./compute-cycle-time.sh --version <release> # same as positional form
@@ -188,6 +200,24 @@ t_go_na_reason() {
     END {
       if (n == 0) { printf "no gate-outcome/plan-review-go event for %s", rel; exit }
       printf "%d gate-outcome/plan-review-go row(s) exist for %s but NONE is the Stage-9 GO anchor (stage 9, actor operator): of the rows found under the join keys of this release, none was written at stage 9 by operator. A row at another stage or under another actor authorizes no release, and this is NOT the same as no GO row having been emitted", n, rel
+    }'
+}
+
+# ─── Rung-3 INDETERMINATE notice (#5467) ─────────────────────────────────────
+# rung3_notice_lines <anchor> — the query tool's rung-3 INDETERMINATE notice for ONE read.
+#   Reads that read's query-tool output on stdin, stderr included, and echoes each
+#   INDETERMINATE notice in it as one line that names the read:
+#     INDETERMINATE (<anchor> read): <the query tool's words> <what this tool does with the rows>
+#   It echoes nothing when the query tool printed no such notice. Only that notice is
+#   repeated: the query tool's best-effort rung-3 NOTE and its in-flight NOTE would put a
+#   line on every legacy and every in-flight release. The closing clause is true whether
+#   or not an anchor is found, so the line never claims the anchor rests on the reported
+#   rows — only that they were not excluded. One function, so the two reads share one
+#   wording; group RI grades it end to end, through the real query tool.
+rung3_notice_lines() {
+  /usr/bin/awk -v anchor="$1" '
+    index($0, "INDETERMINATE: ") == 1 {
+      printf "INDETERMINATE (%s read): %s compute-cycle-time.sh selects %s over the rows as returned, these included.\n", anchor, substr($0, 16), anchor
     }'
 }
 
@@ -705,6 +735,7 @@ ROWS
     _ri_err="$(/bin/cat "$_ri_tmp/err")"
   }
   _ri_query() {  # <release> <event type> — what the query tool itself prints on stderr for one read
+    # shellcheck disable=SC2069  # deliberate order: stderr into the capture, stdout discarded
     EVALS_RESULTS_PATH="$_ri_tmp/evals" RELEASE_LOG_FILE="$_ri_tmp/RELEASE_LOG.md" "$QUERY_TOOL" --release "$1" --event-type "$2" 2>&1 >/dev/null || true
   }
   _ri_lines() {  # <text> <prefix> — counts the lines of <text> that begin with <prefix>; an empty prefix counts every non-empty line (no regex)
@@ -820,9 +851,14 @@ fi
 # read that never happened is not a measured absence, and publishing the no-rows
 # reason for it would state a fact nobody observed (exit 1 is the header's "log file
 # missing").
-GO_QUERY_OUT="$("$QUERY_TOOL" --release "$VERSION" --event-type gate-outcome 2>/dev/null)" \
+GO_QUERY_OUT="$("$QUERY_TOOL" --release "$VERSION" --event-type gate-outcome 2>&1)" \
   || die "query-pipeline-event.sh exited $? reading the gate-outcome rows for $VERSION — the event log could not be read, so T_GO is not evaluated (run the query tool directly to see why)"
 GATE_ROWS="$(/usr/bin/printf '%s\n' "$GO_QUERY_OUT" | /usr/bin/grep -E '^\| [0-9]{4}-' || true)"
+# The query tool's stderr is captured with its rows (2>&1), never discarded. The row
+# filter above keeps only lines shaped like a data row, so a notice never becomes a row;
+# a failed read still dies above with the same message; and a rung-3 INDETERMINATE notice
+# is repeated here, on this tool's stderr, naming the read (rung3_notice_lines).
+/usr/bin/printf '%s\n' "$GO_QUERY_OUT" | rung3_notice_lines T_GO >&2
 T_GO=""
 if [[ -n "$GATE_ROWS" ]]; then
   # ts_iso is $1, NOT $2. FS is " | " (space-pipe-space) and the row's leading
@@ -840,9 +876,11 @@ fi
 # not read the log. A read that never happened is not a measured absence, and reporting
 # it as "no deployment-status event" would state a fact nobody observed (exit 1 is the
 # header's "log file missing").
-DEPLOY_QUERY_OUT="$("$QUERY_TOOL" --release "$VERSION" --event-type deployment-status 2>/dev/null)" \
+DEPLOY_QUERY_OUT="$("$QUERY_TOOL" --release "$VERSION" --event-type deployment-status 2>&1)" \
   || die "query-pipeline-event.sh exited $? reading the deployment-status rows for $VERSION — the event log could not be read, so T_DEPLOY is not evaluated (run the query tool directly to see why)"
 DEPLOY_ROWS="$(/usr/bin/printf '%s\n' "$DEPLOY_QUERY_OUT" | /usr/bin/grep -E '^\| [0-9]{4}-' || true)"
+# This read's rung-3 INDETERMINATE notice, repeated as at the T_GO read above.
+/usr/bin/printf '%s\n' "$DEPLOY_QUERY_OUT" | rung3_notice_lines T_DEPLOY >&2
 T_DEPLOY=""
 DEPLOY_TARGET_ROWS=""
 if [[ -n "$DEPLOY_ROWS" ]]; then
