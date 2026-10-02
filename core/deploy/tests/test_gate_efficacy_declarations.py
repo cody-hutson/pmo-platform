@@ -1338,6 +1338,33 @@ P6_REGION = "\n".join([
 ])
 P6_KEY = (DEPLOY_REL, "999", P6_ROOT)
 
+# Arm P10's fixtures: regions in the shape of Check 25 — two declarations, two arrays and
+# two resolve calls, every root resolving. P10_REGION's second call drops `--append`, so it
+# resets the population the first call resolved before any `_population_report` reports
+# it: the first declaration's roots are never examined, yet each call still passes its own
+# array and filter, so every per-call reach test reads clean. P10_APPENDED restores the
+# flag, and P10_REPORTED reports the first population before the second call; both are
+# conforming controls on the same non-empty input.
+RESOLVE_ORDER_MARK = "without `--append`"
+_P10_HEAD = [
+    "  # ─── Check 998: synthetic resolve-order fixture (harness arm P10) ──",
+    "  #   population: roots=@zzz_md_roots  filter=*.md  exempts=none",
+    "  #   population: roots=@zzz_skill_roots  filter=SKILL.md  exempts=none",
+    "    local -a zzz_md_roots=(",
+    "      core/standards",
+    "    )",
+    "    local -a zzz_skill_roots=(",
+    "      core/skills",
+    "    )",
+    "    _population_resolve '*.md' -- \"${zzz_md_roots[@]}\"",
+]
+_P10_SECOND = "    _population_resolve 'SKILL.md' -- \"${zzz_skill_roots[@]}\""
+_P10_REPORT = "    _population_report zzz-synthetic-order 1 0"
+P10_REGION = _P10_HEAD + [_P10_SECOND, _P10_REPORT]
+P10_APPENDED = _P10_HEAD + [
+    "    _population_resolve --append 'SKILL.md' -- \"${zzz_skill_roots[@]}\"", _P10_REPORT]
+P10_REPORTED = _P10_HEAD + [_P10_REPORT, _P10_SECOND, _P10_REPORT]
+
 
 def population_harness(sources: dict[str, str], deploy_text: str,
                        tracked: list[str]) -> list[str]:
@@ -1504,6 +1531,31 @@ def population_harness(sources: dict[str, str], deploy_text: str,
     if gone == P6_REGION or len(stale) != 1 or P6_ROOT not in stale[0]:
         failures.append("P6: removing the ledgered root did not make the audit report "
                         "exactly its stale entry")
+
+    # P10 — RESOLVE ORDER, synthetic, every invocation. The region's findings are split
+    # into the order finding and everything else; the worked-reference findings a bare
+    # fixture always draws are not the fixture's, and are set aside.
+    def p10_findings(region: list[str]) -> tuple[list[str], list[str]]:
+        found, _, _, _, _ = evaluate_population(
+            {}, "\n".join(region) + "\n", tracked, ledger={})
+        own = [f for f in found if "worked-reference" not in f]
+        return ([f for f in own if RESOLVE_ORDER_MARK in f],
+                [f for f in own if RESOLVE_ORDER_MARK not in f])
+
+    order, other = p10_findings(P10_REGION)
+    if other:
+        failures.append("P10-CTRL: the resolve-order fixture draws a finding other than the "
+                        "order finding, so the arm would not isolate it: " + "; ".join(other))
+    elif len(order) != 1:
+        failures.append(f"P10: a second `_population_resolve` call without `--append`, ahead "
+                        f"of any `_population_report`, drew {len(order)} order finding(s), "
+                        f"not exactly one for its region — the call resets the population "
+                        f"the first call resolved, and the per-call reach tests cannot see it")
+    for arm, region in (("P10b", P10_APPENDED), ("P10c", P10_REPORTED)):
+        order_c, other_c = p10_findings(region)
+        if order_c or other_c:
+            failures.append(f"{arm}: a conforming resolve order WAS flagged, so the arm "
+                            f"over-matches: " + "; ".join(order_c + other_c))
 
     return failures
 
