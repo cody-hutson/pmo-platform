@@ -15,9 +15,10 @@ name: Reference durability
 # reports a result and never blocks a PR as required-but-absent. The job's internal
 # is_durable() predicate selects which changed files to scan, so a PR that changes no
 # durable-corpus file completes as a clean empty scan and passes; durable-corpus PRs
-# scan identically. A PR whose every in-scope file the path allowlist exempts (a
-# plan-only PR, for example) examined nothing, so it passes with a NOT-EVALUATED notice
-# in place of the clean line. Scans ONLY added lines (the net-new delta), so pre-existing corpus
+# scan identically. A PR that examines no file while the path allowlist exempts at least
+# one of its in-scope files (every in-scope file exempted, as in a plan-only PR, or some
+# exempted and the rest deleted) passes with a NOT-EVALUATED notice in place of the
+# clean line. Scans ONLY added lines (the net-new delta), so pre-existing corpus
 # rot does not fail an unrelated PR. Drops the `edited` trigger (a PR-body-only edit
 # never touches a durable file), avoiding the shared-release-PR double-run that the
 # parser-clean workflow incurs. Enforces the reference-durability standard: Class L
@@ -319,20 +320,21 @@ jobs:
           fi
 
           if [ "$FOUND" -eq 0 ]; then
-            # A change set whose every in-scope file the path allowlist exempted examined
-            # nothing, so the clean line over it would be a pass over no examined file. That is
+            # A change set that examined no file while the path allowlist exempted at least
+            # one in-scope file (every in-scope file exempted, or some exempted and the rest
+            # deleted) would print the clean line as a pass over no examined file. That is
             # the gate-efficacy standard's `not-run` state read for a diff-scoped gate: the
             # clean line is withheld and a not-evaluated notice printed in its place. The job
             # does not fail, because `not-run` never gates through the population record. An
             # empty in-scope set, or one of deletions only, is a complete scan of the delta and
             # keeps the clean line below.
-            if [ "$N_SCOPE" -gt 0 ] && [ "$N_EXEMPT" -eq "$N_SCOPE" ]; then
+            if [ "$N_EXAMINED" -eq 0 ] && [ "$N_EXEMPT" -gt 0 ]; then
               {
                 echo "## :grey_question: Reference durability — NOT-EVALUATED"
                 echo ""
-                echo "Every in-scope durable-corpus file in this change set (${N_EXEMPT} of ${N_SCOPE}) is exempted by the path allowlist, so no file was examined. This is not a clean result; it does not fail the job."
+                echo "No in-scope durable-corpus file in this change set was examined (${N_EXEMPT} of ${N_SCOPE} exempted by the path allowlist, ${N_DELETED} deleted). This is not a clean result; it does not fail the job."
               } | tee -a "$GITHUB_STEP_SUMMARY"
-              echo "::notice::reference-durability: NOT-EVALUATED — every in-scope durable-corpus file is exempted by the path allowlist (${N_EXEMPT} of ${N_SCOPE}), so no file was examined; this is not a clean result"
+              echo "::notice::reference-durability: NOT-EVALUATED — no in-scope durable-corpus file was examined (${N_EXEMPT} of ${N_SCOPE} exempted by the path allowlist, ${N_DELETED} deleted); this is not a clean result"
               exit 0
             fi
             echo ":white_check_mark: Reference durability — no net-new fragile references on the added lines of ${N_EXAMINED} examined durable-corpus file(s) (enforcing classes L/V/issue-ref)" | tee -a "$GITHUB_STEP_SUMMARY"
