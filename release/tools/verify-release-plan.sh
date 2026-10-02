@@ -3292,7 +3292,7 @@ ciac_lint() {
 
 # --- Extraction -------------------------------------------------------------
 #
-# _extract_section (:238) is FENCE-BLIND: its `/^#+ /` awk rule fires on any line
+# _extract_section is FENCE-BLIND: its `/^#+ /` awk rule fires on any line
 # beginning `#`+space, including a `# ── label ──` comment INSIDE a fenced block,
 # which terminates the section early. Measured over the 165-file plan corpus:
 # 26 of the 117 FCM-bearing plans truncate that way, losing every declaration row
@@ -3806,13 +3806,23 @@ fcm_plan_merge_commit() {
 # WHICH RANGE. An explicit --merge-base is taken as given. Otherwise the plan's own
 # merge is looked up, and the range is that merge -- <merge>^1..<merge> -- when, and
 # only when, it resolves AND the head being graded contains it. That is the run after
-# the release has merged, from the mainline or from any branch cut after it, and it is
-# the one case the default range cannot grade: merge-base(origin/main, <head>)..<head>
-# no longer spans the release. Every other head keeps the default range -- the release
-# branch before its merge, and a head older than the merge -- with its base taken
-# against <head>, not HEAD, so --head alone names a coherent range. The ancestor test
-# is KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm for it reaches it by one
-# substitution.
+# the release has merged, from the mainline or from a branch cut after the merge, where
+# the default range no longer spans the release: merge-base(origin/main, <head>)..<head>
+# is then empty, or holds only that branch's own commits. Every other head keeps the
+# default range -- the release branch before its merge, and a head older than the merge
+# -- with its base taken against <head>, not HEAD, so --head alone names a coherent
+# range.
+# WHAT THE DEFAULT RANGE STILL DOES NOT GRADE once a release has merged: three heads,
+# and only the first is marked. (1) A head on the mainline whose plan resolves no
+# merge: an EMPTY range, marked post-merge-unresolved. (2) The close-out branch, after
+# it renames the plan and before it merges: no merge record resolves, and the range is
+# that branch's own commits, labelled merge-base. (3) The merged release's own branch
+# tip, which does not contain the merge: an EMPTY range, <tip>..<tip>, labelled
+# merge-base, because a merge record did resolve. In all three a delivered file that
+# is in the tree reads not-in-range. Every row names the range it compared, and
+# --merge-base with --head names the one to grade.
+# The ancestor test is KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm for it
+# reaches it by one substitution.
 fcm_resolve_diff() {
   FCM_DIFF_STATUS="diff-unresolvable"
   FCM_RANGE_SPAN=""; FCM_RANGE_SOURCE=""; FCM_TREE_REF=""
