@@ -232,7 +232,7 @@ preflight() {
 
   resolve_platform_root
 
-  info "Pre-flight passed (operator.toml + composition library + manifest present)."
+  info "Pre-flight passed (operator.toml + composition library + manifest present; [PMO_PLATFORM_ROOT] resolved)."
 }
 
 # --- Phase 1b: the canonical platform root for [PMO_PLATFORM_ROOT] ---

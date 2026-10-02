@@ -2921,8 +2921,8 @@ test_case "Write pmo-platform/x.md with primary cwd blocks (base-correction inva
 # Environment-independence: `hookfix-2026-01-01` and `zz-nonexistent` are chosen
 # NOT to exist on any runner, so the hook's [ -e "$FILE_PATH" ] test takes the
 # raw/parent-fallback branch deterministically. These arms add no dependency on an
-# on-disk file, unlike the pre-existing ../-escape arms below which require
-# $HOME/Claude/CLAUDE.md to exist.
+# on-disk file, and neither do the ../-escape arms below: they block whether or
+# not $HOME/Claude/CLAUDE.md exists.
 
 # A1 — the defect itself. Non-worktree cwd, dated analysis subfolder → allow.
 test_case "Write analysis/<subfolder>/SUMMARY.md with primary cwd allows (carve-out)" \
@@ -3227,8 +3227,11 @@ test_case "Write ~/Documents/notes.md allows" \
 # /usr/bin/realpath which does not exist on macOS, so on this system the path
 # was un-normalized (fell through to FILE_PATH directly), and the ../-escape
 # evaded the prefix-match. Now: Python os.path.realpath handles this
-# portably on BSD/macOS and GNU/Linux alike. Requires CLAUDE.md to exist at
-# $HOME/Claude/CLAUDE.md so the [ -e "$FILE_PATH" ] branch fires.
+# portably on BSD/macOS and GNU/Linux alike. What the two arms below pin: a
+# ..-bearing spelling under a classified prefix is refused, from a primary cwd and
+# from a repo-rooted worktree cwd, whether or not $HOME/Claude/CLAUDE.md exists.
+# Each target as written already sits under a classified prefix, so neither arm
+# turns on the normalization itself.
 
 test_case "../-escape from .claude/hooks to CLAUDE.md (primary cwd) blocks" \
   "$(write_payload ''"$HOME"'/Claude/.claude/hooks/../../CLAUDE.md' ''"$HOME"'/Claude')" \

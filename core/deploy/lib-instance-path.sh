@@ -95,8 +95,9 @@
 #   setup-workspace.sh (the manifest row,  seed writer             its workspace root, through the
 #     lib_compose_resolve_target's                                 instance tier (pmo_instance_path_for)
 #     instance arm)
-#   update.sh Phase 3 and the Phase 5b0    managed-section writer; its workspace root; gate membership
-#     completeness gate                    completeness            through pmo_hook_read_instance_files_for
+#   update.sh Phase 3, the Phase 5b0       managed-section writer; its workspace root; gate membership
+#     completeness gate and the Phase 5c1  completeness; reader    through pmo_hook_read_instance_files_for
+#     legacy reconcile                     (legacy reconcile)
 #   core/hooks/allowlist-add.sh            operator-additions      $CLAUDE_WORKSPACE_ROOT, else the
 #                                          writer                  workspace it is deployed into;
 #                                                                  compared physically

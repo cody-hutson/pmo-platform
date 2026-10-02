@@ -810,7 +810,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="Print the canonical [PMO_PLATFORM_ROOT] value and the tier that supplied it, "
              "tab-separated; exit 3 when no tier yields a valid root",
     )
-    rrt.add_argument("--repo-root", default="", help="Explicit root (tier 1)")
+    rrt.add_argument("--repo-root", default="", help="Explicit root (tier 1); $PMO_PLATFORM_ROOT is tier 2")
     record = rrt.add_mutually_exclusive_group()
     record.add_argument("--install-state", default="", metavar="FILE",
                         help="Update time: the workspace's install state file (tier 3)")

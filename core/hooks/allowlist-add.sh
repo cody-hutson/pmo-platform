@@ -1,5 +1,5 @@
 #!/bin/bash
-# allowlist-add.sh — atomic marker-aware add helper for .claude/*-allowlist.txt files
+# allowlist-add.sh — atomic marker-aware add helper for the known, hook-managed allowlists
 #
 # Part of: the bypass-permissions-readiness hardening.
 #

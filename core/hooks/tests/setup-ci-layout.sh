@@ -18,33 +18,33 @@
 # earlier layout there)
 #   0. Guard the sandbox (R-8) before anything is written, then clear this
 #      helper's earlier layout: refuse (exit 65) when <sandbox>/.claude is, or sits
-#      inside, a live Claude configuration directory, when a file step 4b writes
+#      inside, a live Claude configuration directory, when a file step 3b writes
 #      would land outside the sandbox, or when the sandbox already holds layout
 #      files this helper has no record of writing. A layout it did record is
 #      removed first — exactly its recorded files, nothing else.
 #   1. Create <sandbox>/.claude/hooks/tests/ and write the ownership marker
 #      before anything is copied, so an interrupted build is still recognized as
-#      owned and still names everything it wrote.
-#   2. Copy every core/hooks/*.sh (the hooks) into <sandbox>/.claude/hooks/, and
-#      co-locate the libraries a deployed install carries beside them.
-#   3. Copy every core/hooks/tests/*.sh (the tests + runner) into
+#      owned and still names everything it wrote. Then copy every core/hooks/*.sh
+#      (the hooks) into <sandbox>/.claude/hooks/, and co-locate the libraries a
+#      deployed install carries beside them (1b to 1g in the body below).
+#   2. Copy every core/hooks/tests/*.sh (the tests + runner) into
 #      <sandbox>/.claude/hooks/tests/ — EXCEPT this script itself.
-#   4. Materialize the token-resolved allowlists at <sandbox>/.claude/ for the
+#   3. Materialize the token-resolved allowlists at <sandbox>/.claude/ for the
 #      "hook"-tier composition-surface files, resolving:
 #        [CLAUDE_WORKSPACE_ROOT] -> ${HOME}/Claude   (the boundary the
 #                                                     fs-boundary "allow"
 #                                                     assertions assume)
 #        [OPERATOR_HOMEDIR_PATH] -> ${HOME}
 #        [OPERATOR_GITHUB]       -> ${PMO_TEST_GITHUB_HANDLE:-pmo-test-handle}
-#   4b. Materialize, verbatim from its own manifest row, each instance-tier file a
+#   3b. Materialize, verbatim from its own manifest row, each instance-tier file a
 #      deployed security hook reads: the set lib-instance-path.sh declares, resolved
 #      for the sandbox with PMO_INSTANCE_PATH unset. Today that is the skill-editor
 #      exemption list, which the Gate 2 hook reads and allowlist-add.sh writes, at the
-#      path the layout's own hook resolves (step 3b in the body below).
-#   5. Write <sandbox>/.claude/hooks/.mode = enforce (the tests set their own
+#      path the layout's own hook resolves.
+#   4. Write <sandbox>/.claude/hooks/.mode = enforce (the tests set their own
 #      per-case mode against the SANDBOX .mode; the live ~/Claude/.claude/
 #      hooks/.mode is NEVER touched — R-8 sandbox invariant).
-#   6. Record the build digest beside the tests (step 5 in the body below).
+#   5. Record the build digest beside the tests.
 #
 # SANDBOX INVARIANT (R-8) — ENFORCED, NOT ASSUMED
 #   Everything is materialized under the sandbox, and step 0 enforces that before
@@ -58,9 +58,10 @@
 #   compared by filesystem identity, not by path strings. This script writes
 #   nothing to ~/Claude/.claude/. It resolves the instance-tier files a hook reads
 #   with PMO_INSTANCE_PATH unset, so an exported value cannot aim a write at a real
-#   instance. The fs-boundary test's .mode mutation targets the sandbox copy. Resolving [CLAUDE_WORKSPACE_ROOT] to ${HOME}/Claude only sets
-#   the allowlist's prefix-match ROOT (a read-only boundary reference, realpath
-#   does not require it to exist); the tests never write under ${HOME}/Claude.
+#   instance. The fs-boundary test's .mode mutation targets the sandbox copy.
+#   Resolving [CLAUDE_WORKSPACE_ROOT] to ${HOME}/Claude only sets the allowlist's
+#   prefix-match ROOT (a read-only boundary reference, realpath does not require it
+#   to exist); the tests never write under ${HOME}/Claude.
 #
 # USAGE
 #   setup-ci-layout.sh [--repo-root <dir>] [--sandbox <dir>]

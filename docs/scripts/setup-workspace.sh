@@ -55,7 +55,7 @@
 #   0   — success
 #   1   — generic failure (validation, operator-cancel)
 #   64  — EX_USAGE (invalid argv)
-#   66  — EX_NOINPUT (source repo missing, or its canonical root cannot be resolved)
+#   66  — EX_NOINPUT (a required input is unavailable and nothing was modified: the source repo, a template or a restore input is missing, its canonical root cannot be resolved, or an unattended run needs an operator's answer)
 #   69  — EX_UNAVAILABLE (missing prerequisite)
 #   73  — EX_CANTCREAT (mkdir/cp failed)
 #   74  — EX_IOERR (write failure)
@@ -2435,7 +2435,7 @@ install_hook_with_checksum() {
     # said "re-run setup-workspace.sh to reconcile", and a re-run provably does not -- it takes
     # this same branch and preserves again, which is what made the failure silent AND
     # self-perpetuating.
-    warn "PRESERVED (operator-edited): ${basename} — ${why}. Not overwritten. To force it back to source: docs/scripts/setup-workspace.sh --reconcile-hooks --workspace-root ${WORKSPACE_ROOT} --source-repo ${SOURCE_REPO}. A plain --refresh-hooks re-run will preserve it again."
+    warn "PRESERVED (operator-edited): ${basename} — ${why}. Not overwritten. To force it back to source: docs/scripts/setup-workspace.sh --reconcile-hooks --workspace-root ${WORKSPACE_ROOT} --config-root ${CONFIG_ROOT} --source-repo ${SOURCE_REPO}. A plain --refresh-hooks re-run will preserve it again."
     json_set "${CHECKSUMS_FILE}" "${basename}" "${target_sha}"
     note_hook_declined "${basename}"
     return 0
@@ -2477,7 +2477,7 @@ install_hook_with_checksum() {
   # next interactive run, and recording the deployed bytes as the baseline would let the
   # next --refresh-hooks read an operator edit as an unedited platform copy.
   if [ "${NON_INTERACTIVE}" -eq 1 ]; then
-    warn "PRESERVED (non-interactive): ${basename} — not overwritten and no decision recorded. Re-run without --non-interactive to decide, or take the source version with: docs/scripts/setup-workspace.sh --reconcile-hooks --workspace-root ${WORKSPACE_ROOT} --source-repo ${SOURCE_REPO}"
+    warn "PRESERVED (non-interactive): ${basename} — not overwritten and no decision recorded. Re-run without --non-interactive to decide, or take the source version with: docs/scripts/setup-workspace.sh --reconcile-hooks --workspace-root ${WORKSPACE_ROOT} --config-root ${CONFIG_ROOT} --source-repo ${SOURCE_REPO}"
     return 0
   fi
   local response=""
@@ -3375,7 +3375,7 @@ state = {
     # source_repo_path is the canonical root of the installed repository (never a
     # linked worktree); source_repo_path_source names the resolver tier that supplied
     # it, and is absent when the path was recorded as given; source_repo_sha is the
-    # HEAD of the tree actually installed from.
+    # HEAD of the tree installed from, or empty when that tree is a linked worktree.
     "source_repo_path": env["S_SOURCE_REPO"],
     "source_repo_path_source": env.get("S_SOURCE_REPO_SOURCE", ""),
     "source_repo_sha": env["S_SOURCE_SHA"],
