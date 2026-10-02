@@ -3168,6 +3168,39 @@ else
   FAIL=$((FAIL + 1))
 fi
 
+# MSG1 — a target the AS-WRITTEN view refuses is told why. Two causes, one payload each: a
+# dot segment (a dot-segment spelling of a path inside a worktree) and an excluded leaf (a
+# worktree's .git). Neither target is outside a worktree, so the block message must name its
+# as-written cause and must not tell the caller the target "is not inside a worktree". ONE
+# arm, TWO payloads: it passes only when both messages hold, and it asserts the message
+# alone — the verdict, the exit code and the rule ID are the other arms'.
+t7497_msg_ok=1
+t7497_msg_detail=""
+for t7497_msg_case in "zz-7497-wt/zz/./x.md|dot segment" "zz-7497-wt/.git|excluded leaf"; do
+  t7497_msg_rel="${t7497_msg_case%%|*}"
+  t7497_msg_cause="${t7497_msg_case#*|}"
+  t7497_msg_err="$(/usr/bin/mktemp)"
+  t7497_msg_rc=0
+  /usr/bin/printf '%s' "$(write_payload ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/'"$t7497_msg_rel" ''"$HOME"'/Claude')" \
+    | /bin/bash "$HOOK" 2>"$t7497_msg_err" >/dev/null || t7497_msg_rc="$?"
+  if [ "$t7497_msg_rc" != 2 ] \
+     || ! /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-019' "$t7497_msg_err" \
+     || ! /usr/bin/grep -qF 'is refused as written: ' "$t7497_msg_err" \
+     || ! /usr/bin/grep -qF "$t7497_msg_cause" "$t7497_msg_err" \
+     || /usr/bin/grep -qF 'is not inside a worktree' "$t7497_msg_err"; then
+    t7497_msg_ok=0
+    t7497_msg_detail="${t7497_msg_detail} [${t7497_msg_rel}: exit=${t7497_msg_rc}; $(/bin/cat "$t7497_msg_err")]"
+  fi
+  /bin/rm -f "$t7497_msg_err"
+done
+if [ "$t7497_msg_ok" = 1 ]; then
+  /usr/bin/printf 'PASS: %s\n' "T7497-MSG1: a target refused as written is told its cause (a dot segment; an excluded leaf), not that it is outside a worktree"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  expected exit 2, BLOCK-DESTRUCTIVE-019, the as-written cause named and no "is not inside a worktree"; got%s\n' "T7497-MSG1: a target refused as written is told its cause (a dot segment; an excluded leaf), not that it is outside a worktree" "$t7497_msg_detail"
+  FAIL=$((FAIL + 1))
+fi
+
 # Explicit allow: .claude/skills (deploy target)
 test_case "Write .claude/skills/SKILL.md allows (deploy target)" \
   "$(write_payload ''"$HOME"'/Claude/.claude/skills/skill-x/SKILL.md' ''"$HOME"'/Claude')" \

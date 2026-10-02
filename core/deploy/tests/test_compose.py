@@ -629,14 +629,58 @@ def test_explicit_value_with_a_worktree_segment_is_refused(roots, monkeypatch, v
         _resolve(**call)
 
 
-def test_explicit_value_naming_a_linked_worktree_is_refused(roots, no_root_env) -> None:
-    with pytest.raises(compose.RepoRootUnresolvable):
-        _resolve(cli_value=str(roots.wt))
+def _explicit(monkeypatch, via: str, value: str):
+    """Resolve `value` through one explicit tier: the flag (cli) or the variable (env)."""
+    if via == "env":
+        monkeypatch.setenv("PMO_PLATFORM_ROOT", value)
+        return _resolve()
+    monkeypatch.delenv("PMO_PLATFORM_ROOT", raising=False)
+    return _resolve(cli_value=value)
 
 
-def test_explicit_value_with_a_glob_metacharacter_is_refused(no_root_env) -> None:
-    with pytest.raises(compose.RepoRootUnresolvable):
-        _resolve(cli_value="/opt/pmo*")
+@pytest.mark.parametrize("via", ["cli", "env"])
+def test_explicit_value_naming_a_linked_worktree_is_refused(roots, monkeypatch, via) -> None:
+    with pytest.raises(compose.RepoRootUnresolvable, match="is a linked worktree"):
+        _explicit(monkeypatch, via, str(roots.wt))
+
+
+# The explicit-tier refusal tests membership: a value that lies inside a linked worktree,
+# at any depth below its top level, is refused as the worktree itself is. The worktree
+# here sits outside the primary checkout, where the .claude/worktrees segment rule above
+# does not reach, so only the membership test can refuse it.
+@pytest.mark.parametrize("via", ["cli", "env"])
+@pytest.mark.parametrize("below", [("core",), ("core", "deploy")], ids=["one-level", "two-levels"])
+def test_explicit_tier_refusal_tests_membership(roots, monkeypatch, via, below) -> None:
+    value = roots.wt.joinpath(*below)
+    assert value.is_dir(), "the fixture worktree must hold the directory this arm names"
+    with pytest.raises(compose.RepoRootUnresolvable, match="is a linked worktree"):
+        _explicit(monkeypatch, via, str(value))
+
+
+# Its controls: the worktree's own top level stays refused (the first arm above), and what
+# lies in no linked worktree keeps its verdict on both explicit tiers.
+@pytest.mark.parametrize("via", ["cli", "env"])
+@pytest.mark.parametrize("which", ["primary-checkout", "no-repository"])
+def test_explicit_tier_admits_what_lies_in_no_linked_worktree(roots, monkeypatch, via, which) -> None:
+    tree = roots.primary if which == "primary-checkout" else roots.plain
+    value = tree / "core" / "deploy"
+    assert value.is_dir(), "the fixture must hold the directory this arm names"
+    res = _explicit(monkeypatch, via, str(value))
+    assert (res.root, res.source) == (str(value), via)
+
+
+# The refusal set, stated here character by character rather than read from compose.py,
+# so a member dropped from the code's set turns its own arms red.
+_PORTABLE_FORBIDDEN = [("*", "star"), ("?", "question-mark"), ("[", "open-bracket"),
+                       ("\t", "tab"), ("\n", "newline"), ("\r", "carriage-return")]
+
+
+@pytest.mark.parametrize("via", ["cli", "env"])
+@pytest.mark.parametrize("ch", [c for c, _ in _PORTABLE_FORBIDDEN],
+                         ids=[n for _, n in _PORTABLE_FORBIDDEN])
+def test_explicit_value_with_a_glob_metacharacter_is_refused(monkeypatch, via, ch) -> None:
+    with pytest.raises(compose.RepoRootUnresolvable, match="glob metacharacter"):
+        _explicit(monkeypatch, via, f"/opt/pm{ch}o")
 
 
 @pytest.mark.skipif(os.sep != "/", reason="a backslash is the path separator here, not an escape")

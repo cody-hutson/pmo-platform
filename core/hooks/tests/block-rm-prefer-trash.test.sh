@@ -412,15 +412,18 @@ mem_home() {
   [ "$2" = "NONE" ] || /usr/bin/printf '%s\n' "$2" > "$h/.claude/settings.json"
 }
 
-# mem_run <hook> <home> <project-dir|""> <payload> — run one hook invocation; sets MEM_EXIT
-#   and writes the hook's stderr to MEM_ERR_FILE. An empty project dir clears
-#   CLAUDE_PROJECT_DIR for the run.
+# mem_run <hook> <home> <project-dir|""> <payload> [hook-cwd] — run one hook invocation; sets
+#   MEM_EXIT and writes the hook's stderr to MEM_ERR_FILE. An empty project dir clears
+#   CLAUDE_PROJECT_DIR for the run. [hook-cwd] is the hook PROCESS's working directory, the
+#   one the predicate's own relative lookups resolve against (the payload's cwd is another
+#   thing: the hook reads it only to classify a relative operand). Default: this suite's.
 mem_run() {
   MEM_EXIT=0
+  local mem_dir="${5:-.}"
   if [ -n "$3" ]; then
-    /usr/bin/printf '%s' "$4" | /usr/bin/env "HOME=$2" "CLAUDE_PROJECT_DIR=$3" /bin/bash "$1" 2>"$MEM_ERR_FILE" >/dev/null || MEM_EXIT="$?"
+    ( cd "$mem_dir" && /usr/bin/printf '%s' "$4" | /usr/bin/env "HOME=$2" "CLAUDE_PROJECT_DIR=$3" /bin/bash "$1" 2>"$MEM_ERR_FILE" >/dev/null ) || MEM_EXIT="$?"
   else
-    /usr/bin/printf '%s' "$4" | /usr/bin/env -u CLAUDE_PROJECT_DIR "HOME=$2" /bin/bash "$1" 2>"$MEM_ERR_FILE" >/dev/null || MEM_EXIT="$?"
+    ( cd "$mem_dir" && /usr/bin/printf '%s' "$4" | /usr/bin/env -u CLAUDE_PROJECT_DIR "HOME=$2" /bin/bash "$1" 2>"$MEM_ERR_FILE" >/dev/null ) || MEM_EXIT="$?"
   fi
 }
 
@@ -438,10 +441,11 @@ mem_report() {
   fi
 }
 
-# mem_case <name> <sandbox> <command> <exit> [pattern] [cwd] — one payload under one sandbox HOME
+# mem_case <name> <sandbox> <command> <exit> [pattern] [cwd] [hook-cwd] — one payload under one
+#   sandbox HOME; [cwd] is the payload's working directory, [hook-cwd] the hook process's
 mem_case() {
   local cwd="${6:-${MEM_ROOT}/$2/Claude/.claude/worktrees/planning}"
-  mem_run "$HOOK" "${MEM_ROOT}/$2" "" "$(bash_payload "$3" "$cwd")"
+  mem_run "$HOOK" "${MEM_ROOT}/$2" "" "$(bash_payload "$3" "$cwd")" "${7:-}"
   mem_report "$1" "$4" "${5:-}"
 }
 
@@ -510,17 +514,26 @@ else
   /usr/bin/printf '%s\n' '{"autoMemoryDirectory": "~/mem-store"}' > "${MEM_ROOT}/scoped/proj-local/.claude/settings.local.json"
   MB="${MEM_ROOT}/base"
 
-  # -- Admitted: a Trash-verb move of one direct *.md entry of the declared store (AC-1) --
+  # -- Admitted: a Trash-verb move of one direct *.md entry of the declared store (AC-1). The
+  #    arm admits an absolute operand only, bare or wholly quoted --
   mem_case "MEM-01 trash of a direct store entry is admitted" base \
     "trash ${MB}/mem-store/entry-alpha.md" 0
-  mem_case "MEM-02 a ~/-prefixed store entry is admitted (the hook expands ~)" base \
-    'trash ~/mem-store/entry-alpha.md' 0
   mem_case "MEM-03 a Finder delete of a store entry is admitted" base \
     "osascript -e 'tell application \"Finder\" to delete POSIX file \"${MB}/mem-store/entry-alpha.md\"'" 0
   mem_case "MEM-04 an absolute-path trash of a store entry is admitted" base \
     "/opt/homebrew/bin/trash ${MB}/mem-store/entry-alpha.md" 0
   mem_case "MEM-05 a store declared through a symlink admits its entry (both sides canonicalized)" link \
     "trash ${MEM_ROOT}/link/mem-store/entry-alpha.md" 0
+  mem_case "MEM-28 a single-quoted absolute store entry is admitted (the form the refusals suggest)" base \
+    "trash '${MB}/mem-store/entry-alpha.md'" 0
+
+  # -- Refused: a ~/ operand is not admitted, on the trash branch or the Finder branch. It
+  #    meets the refusal every operand the arm does not admit meets, outside the workspace --
+  mem_case "MEM-02 a ~/-prefixed store entry is refused (the arm admits an absolute operand only)" base \
+    'trash ~/mem-store/entry-alpha.md' 2 'BLOCK-TRASH-003] BLOCKED: deletion outside Claude/ is forbidden'
+  mem_case "MEM-29 a Finder delete given a ~/ path to a store entry is refused" base \
+    "osascript -e 'tell application \"Finder\" to delete POSIX file \"~/mem-store/entry-alpha.md\"'" 2 \
+    'BLOCK-TRASH-003] BLOCKED: deletion outside Claude/ is forbidden'
 
   # -- Refused: a permanent-deletion verb on an entry names the Trash move instead --
   mem_case "MEM-06 rm of a store entry is refused with the Trash move named" base \
@@ -569,8 +582,11 @@ else
     "trash ${MB}/mem-store/sub/../entry-alpha.md" 2 "BLOCK-TRASH-003"
   mem_case "MEM-16 a .. that leaves the store is refused" base \
     "trash ${MB}/mem-store/../elsewhere/note.md" 2 "BLOCK-TRASH-003"
+  # MEM-17 and MEM-24 run the hook PROCESS from the directory their rule's relative lookup
+  # would resolve against — the store, and the sandbox home — so each passes only while its
+  # own rule refuses, not because a relative name happens to find nothing.
   mem_case "MEM-17 a relative entry operand is refused" base \
-    "trash entry-alpha.md" 2 "BLOCK-TRASH-003" "${MB}/mem-store"
+    "trash entry-alpha.md" 2 "BLOCK-TRASH-003" "${MB}/mem-store" "${MB}/mem-store"
 
   # MEM-18: a symlink is never admitted as an entry, in either direction — one inside the
   # store that resolves out of it, and one outside the store that resolves into it (Trash
@@ -600,7 +616,7 @@ else
   mem_case "MEM-23 malformed user settings leave the inside-workspace Trash allow intact" badjson \
     "trash ${MEM_ROOT}/badjson/Claude/foo.txt" 0
   mem_case "MEM-24 a relative store value admits nothing" relval \
-    "trash ${MEM_ROOT}/relval/mem-store/entry-alpha.md" 2 "BLOCK-TRASH-003"
+    "trash ${MEM_ROOT}/relval/mem-store/entry-alpha.md" 2 "BLOCK-TRASH-003" "" "${MEM_ROOT}/relval"
   mem_case "MEM-25 a store equal to HOME admits nothing" homeval \
     "trash ${MEM_ROOT}/homeval/top.md" 2 "BLOCK-TRASH-003"
   mem_case "MEM-26 a store without its index admits nothing" noidx \

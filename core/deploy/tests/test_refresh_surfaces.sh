@@ -87,6 +87,9 @@
 #   Arm 12 THE CONFIG ROOT IS NOT A FALLBACK. A full update given --config-root
 #          takes its hook-bundle snapshot there, and leaves the default config root
 #          (a byte copy standing in for the live one) byte-identical.
+#   Arm 12b THE SCHEMA RECONCILE TAKES THE GIVEN ROOT. With both roots behind the
+#          declared schema by the same key, the update backfills the key in the given
+#          root's operator.toml, and the default root stays byte-identical.
 #   Arm 6  LEAKAGE BACKSTOP, LAST. The real home is byte-identical to the Arm-0
 #          baseline. It runs after every mutating arm, so their writes fall inside
 #          its compare. A backstop, not the control — Arm 0 is the control.
@@ -1390,6 +1393,57 @@ else
     report "12: the default config root is byte-identical after the run" 1
   else
     report "12: the default config root is byte-identical after the run" 0 "changed: ${d}"
+  fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Arm 12b — THE SCHEMA RECONCILE TAKES THE GIVEN CONFIG ROOT. Phase 2 probes the config
+# root's operator.toml against the declared schema and backfills a declared key that is
+# absent. Here BOTH of Arm 12's roots are put behind the schema by the same key — one
+# declared key that carries a default, removed from each operator.toml — so a phase that
+# probes or reconciles the default root instead of the given one shows on one side or the
+# other: the given root's file must carry the key after the update, and the default root
+# must be byte-identical. Arm 12's lines above, run with both roots in sync, are this
+# arm's control; it runs after them so it cannot disturb them.
+# ─────────────────────────────────────────────────────────────────────────────
+printf '\nArm 12b: a sandboxed update reconciles the config root it was given\n'
+PB_KEY="automation_level"                     # [automation], declared delivered with a default
+if [ ! -f "${PA_CFG}/operator.toml" ] || [ ! -f "${PA_DEFAULT}/operator.toml" ]; then
+  report "Arm 12b: the schema reconcile takes the given config root" 0 \
+    "precondition: Arm 12's two config roots do not both hold an operator.toml"
+else
+  pb_fixture=""
+  for pb_root in "${PA_CFG}" "${PA_DEFAULT}"; do
+    pb_before="$(grep -c "^${PB_KEY}[[:space:]]*=" "${pb_root}/operator.toml")"
+    grep -v "^${PB_KEY}[[:space:]]*=" "${pb_root}/operator.toml" > "${SBX}/pb-operator.toml"
+    cat "${SBX}/pb-operator.toml" > "${pb_root}/operator.toml"
+    pb_after="$(grep -c "^${PB_KEY}[[:space:]]*=" "${pb_root}/operator.toml")"
+    [ "${pb_before}" = "1" ] && [ "${pb_after}" = "0" ] \
+      || pb_fixture="${pb_fixture} ${pb_root##*/}: ${PB_KEY} lines ${pb_before} -> ${pb_after} (want 1 -> 0);"
+  done
+  if [ -n "${pb_fixture}" ]; then
+    report "Arm 12b: the schema reconcile takes the given config root" 0 \
+      "precondition: the fixture did not put both roots behind the schema:${pb_fixture}"
+  else
+    manifest_dir "${PA_DEFAULT}" > "${SBX}/pb-default.before"
+    ( cd "${REPO_ROOT}" && PMO_PLATFORM_CONFIG_ROOT="${PA_DEFAULT}" bash ./update.sh \
+        --config-root "${PA_CFG}" --workspace-root "${SBX}/ws" ) >"${LOGS}/12b-full.out" 2>"${LOGS}/12b-full.err"
+    rc=$?
+    manifest_dir "${PA_DEFAULT}" > "${SBX}/pb-default.after"
+    pb_given="$(grep -c "^${PB_KEY}[[:space:]]*=" "${PA_CFG}/operator.toml")"
+    if [ "${pb_given}" = "1" ]; then
+      report "12b: the given config root's operator.toml carries the declared key after the update" 1
+    else
+      report "12b: the given config root's operator.toml carries the declared key after the update" 0 \
+        "${PB_KEY} lines in the given root's operator.toml: ${pb_given} (want 1); update exit ${rc}"
+    fi
+    d="$(fx_py manifest-delta "${SBX}/pb-default.before" "${SBX}/pb-default.after")"
+    if [ -z "${d}" ]; then
+      report "12b: the default config root is byte-identical after the run, though it is behind the schema too" 1
+    else
+      report "12b: the default config root is byte-identical after the run, though it is behind the schema too" 0 \
+        "changed: ${d}; update exit ${rc}"
+    fi
   fi
 fi
 
