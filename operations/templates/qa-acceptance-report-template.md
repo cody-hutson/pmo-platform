@@ -11,7 +11,7 @@ generated_by: release-pipeline v4.06
 reviewer: N/A
 canon: PMBOK 7 §Quality + ISO/IEC/IEEE 29119-3 §Test Completion Report
 canon_compat: none
-version: "v4.06"
+version: "v4.70"
 supersedes: N/A
 superseded_by: N/A
 ---

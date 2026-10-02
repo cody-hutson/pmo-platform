@@ -11,7 +11,7 @@ description: >
   for arbitrary AI systems. Use whenever the user asks to write evals, audit
   evals, add eval coverage, calibrate a judge, build a rubric, write a judge
   prompt, or diagnose why a judge keeps passing broken outputs.
-version: v1.10
+version: v4.70
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
