@@ -12356,12 +12356,14 @@ EOF
   #        render's; and the redaction must add or remove no line. Sensitivity: the raw
   #        render carries both roots. A home path with a non-ASCII character is
   #        redacted in both renders; the JSON sink works on decoded strings, because
-  #        json.dumps escapes non-ASCII and a text replace would never match. Last, the
+  #        json.dumps escapes non-ASCII and a text replace would never match. Then the
   #        direct post (AC-8; Plan amendment 13 item 3): phase 15 posts the gate-passage
   #        proof with a path-bearing merge anchor through a gh stub, on rung 1 (the
   #        Stage-13 sub-task) and rung 2 (the release PR). The body handed to the stub
   #        must carry <repo> and <home> and no fragment of either root, and a path-free
-  #        anchor must reach the stub verbatim.
+  #        anchor must reach the stub verbatim. Last, the driver's two other direct
+  #        posts, the chore-PR body and the D-1 close comment, over a release corpus
+  #        homed out of tree (Plan amendment 15 item 2).
   HOME="$_plx_home"; REPO_ROOT="$_plx_repo"
   PHASE_NAMES=(plx_repo plx_home plx_both plx_free); PHASE_RESULTS=(PASS PASS PASS PASS)
   PHASE_DETAILS=("would invoke: ${_plx_repo}/release/tools/x.sh" "wrote ${_plx_home}/other/y" "from ${_plx_repo}/a to ${_plx_home}/b" "resolved without a path")
@@ -12419,6 +12421,21 @@ case "$1 $2" in
   "issue comment"|"pr comment")
     printf '%s' "${@: -1}" > "$PLX_BODY"
     exit 0 ;;
+  "pr create")
+    p=""
+    for a in "$@"; do
+      [[ "$p" == "--body-file" ]] && /bin/cat "$a" > "$PLX_BODY"
+      p="$a"
+    done
+    printf '%s\n' "https://github.com/x/y/pull/4710"
+    exit 0 ;;
+  "issue close")
+    p=""
+    for a in "$@"; do
+      [[ "$p" == "--comment" ]] && printf '%s' "$a" > "$PLX_BODY"
+      p="$a"
+    done
+    exit 0 ;;
 esac
 exit 0
 STUB
@@ -12438,6 +12455,60 @@ STUB
   [[ "$_plx_b1" == *'### Verification'* && "$_plx_b1" == *'<repo>/anchor'* && "$_plx_b1" == *'<home>/note'* && "$_plx_b1" != *"${_plx_home:0:8}"* ]] || { echo "FAIL: PL-5 direct post, rung 1 — the gate-passage proof phase 15 posts to the Stage-13 sub-task must reach the host with <repo> and <home> and no fragment of either root (AC-8; Plan amendment 13 item 3)"; failures=$((failures+1)); }
   [[ "$_plx_b2" == *'_Fallback target (rung 2)'* && "$_plx_b2" == *'### Verification'* && "$_plx_b2" == *'<repo>/anchor'* && "$_plx_b2" == *'<home>/note'* && "$_plx_b2" != *"${_plx_home:0:8}"* ]] || { echo "FAIL: PL-5 direct post, rung 2 — the same proof posted to the release PR must reach the host redacted too (AC-8; Plan amendment 13 item 3)"; failures=$((failures+1)); }
   [[ "$_plx_b3" == *'**Release-PR merge SHA:** deadbeefdeadbeefdeadbeefdeadbeefdeadbeef'* && "$_plx_b3" != *'<repo>'* && "$_plx_b3" != *'<home>'* ]] || { echo "FAIL: PL-5 direct post, specificity — a path-free anchor must reach the host verbatim, with no marker invented"; failures=$((failures+1)); }
+  # The driver's two other direct posts (Plan amendment 15 item 2; Stage-8 S8-01).
+  # Phase 11 hands the chore-PR body to `gh pr create` through a --body-file, and
+  # phase 14 hands each D-1 comment to `gh issue close --comment`. Both name the
+  # release plan's path, which plan_rel_path keeps repository-relative only while the
+  # corpus sits in the tree. With the corpus homed in the operator instance (CH-2)
+  # the path is absolute, and on a default install that instance sits under the home.
+  # The corpus home is resolved once, at load, by top-level code a self-test cannot
+  # re-run, so this fixture SETS the state that resolution reaches for a repository
+  # with no release/releases, and asserts the repository has none; the tolerance
+  # suite's fixture A is where the resolver itself is shown to reach it. The instance
+  # corpus sits under the fabricated home and holds this release's plan in its flat
+  # slug form. Each phase runs at --apply with gh stubbed, and a git stub answers the
+  # two git calls phase 11 makes on this path (a branch one commit ahead, a push that
+  # succeeds), so this limb needs no git. The body each stub receives must name
+  # <home>/ where the plan path was, carry no fragment of either root and otherwise
+  # reach the host as built. Sensitivity: the plan resolves to its absolute path, and
+  # the chore-PR body as built carries it.
+  local _plx_inst="$_plx_home/pmo-instance" _plx_pabs _plx_pred _plx_raw4 _plx_b4 _plx_b5 _plx_gstub="$_plx_tmp/git-stub.sh"
+  local _plx_s_pdir="$RELEASE_PLANS_DIR" _plx_s_ch="$CORPUS_HOME" _plx_s_chk="$CORPUS_HOME_KIND" _plx_s_che="$CORPUS_HOME_EFFECTIVE"
+  local _plx_s_br="$CHORE_BRANCH" _plx_s_rslug="$REPO_SLUG" _plx_s_git="$GIT" _plx_s_cps="$CHORE_PR_SKIPPED"
+  _plx_pabs="$_plx_inst/release/releases/plans/plx-slug_RELEASE_PLAN.md"
+  _plx_pred='<home>/pmo-instance/release/releases/plans/plx-slug_RELEASE_PLAN.md'
+  /bin/mkdir -p "$_plx_inst/release/releases/plans"
+  /usr/bin/printf '# plan\n' > "$_plx_pabs"
+  /bin/cat > "$_plx_gstub" <<'GITSTUB'
+#!/bin/sh
+for a in "$@"; do
+  case "$a" in
+    rev-list) echo 1; exit 0 ;;
+  esac
+done
+exit 0
+GITSTUB
+  /bin/chmod +x "$_plx_gstub"
+  CORPUS_HOME="$_plx_inst/release/releases"; CORPUS_HOME_KIND="instance"; CORPUS_HOME_EFFECTIVE="$CORPUS_HOME"
+  RELEASE_PLANS_DIR="$CORPUS_HOME_EFFECTIVE/plans"; HOME="$_plx_home"; REPO_ROOT="$_plx_repo"
+  _plx_x="$(plan_rel_path 2>/dev/null)" || _plx_x="<unresolved>"
+  _plx_raw4="$(build_chore_pr_body 2>/dev/null)" || _plx_raw4=""
+  : > "$PLX_BODY"; GH="$_plx_stub"; GIT="$_plx_gstub"; MODE="apply"; NO_MERGE=0
+  CHORE_BRANCH="chore/v9.95-stage-13-corpus-update"; REPO_SLUG="x/y"
+  CHORE_PR_NUMBER=""; CHORE_PR_OUTCOME=""; CHORE_PR_SKIPPED=0
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_create_chore_pr >/dev/null 2>&1 || true
+  _plx_b4="$(/bin/cat "$PLX_BODY" 2>/dev/null || true)"
+  : > "$PLX_BODY"; CLOSE_COMMENTS=(); OPEN_ISSUE_COUNT=1; OPEN_ISSUE_LIST="4711"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_manual_close_release_issues >/dev/null 2>&1 || true
+  _plx_b5="$(/bin/cat "$PLX_BODY" 2>/dev/null || true)"
+  HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"; GIT="$_plx_s_git"; RELEASE_PLANS_DIR="$_plx_s_pdir"
+  CORPUS_HOME="$_plx_s_ch"; CORPUS_HOME_KIND="$_plx_s_chk"; CORPUS_HOME_EFFECTIVE="$_plx_s_che"
+  CHORE_BRANCH="$_plx_s_br"; REPO_SLUG="$_plx_s_rslug"; CHORE_PR_SKIPPED="$_plx_s_cps"
+  [[ ! -e "$_plx_repo/release/releases" && "$_plx_x" == "$_plx_pabs" && "$_plx_raw4" == *"- Release plan: ${_plx_pabs}"* ]] || { echo "FAIL: PL-5 direct post, out-of-tree plan sensitivity — with no release/releases in the fixture repository and the plan in the instance corpus, plan_rel_path must resolve the plan's absolute path and the chore-PR body as built must carry it, or the two limbs below pass without ever seeing one"; failures=$((failures+1)); }
+  [[ "$_plx_b4" == *'## Cross-references'* && "$_plx_b4" == *"- Release plan: ${_plx_pred}"* && "$_plx_b4" != *"${_plx_home:0:8}"* && "$_plx_b4" == "${_plx_raw4//"$_plx_pabs"/<home>/pmo-instance/release/releases/plans/plx-slug_RELEASE_PLAN.md}" ]] || { echo "FAIL: PL-5 direct post, chore-PR body — the body phase 11 hands to gh pr create must name the plan as <home>/…, carry no fragment of either root and otherwise reach the host as built (Plan amendment 15 item 1)"; failures=$((failures+1)); }
+  [[ "$_plx_b5" == 'Manually closed at Stage 13 per D-1 '* && "$_plx_b5" == *"Per release plan ${_plx_pred}." && "$_plx_b5" != *"${_plx_home:0:8}"* ]] || { echo "FAIL: PL-5 direct post, D-1 close comment — the comment phase 14 hands to gh issue close must name the plan as <home>/… and carry no fragment of either root (Plan amendment 15 item 1)"; failures=$((failures+1)); }
   _st_witness PL 5
 
   unset -f _plx_log _plx_velo _plx_post
