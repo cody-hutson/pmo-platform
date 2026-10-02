@@ -17486,6 +17486,36 @@ STUB
           _cc_compute_verdict "lifecycle" 2>&1 >/dev/null )"
   _os_must_not "24 armed"     'Close-Class-Telemetry sub-check (l) explicitly re-dormanted' "$_od"
   _os_must     "24 armed"     'WARNING — Close-Class-Telemetry cutoff ' "$_od"
+  # OS-25 THE CUTOFF ORDERING IS ASSERTED (#5245 QF-01). (l) sits inside (j)'s branch, so a
+  # telemetry cutoff that arms BEFORE the outputs cutoff admits rows (l) never checks, and an
+  # armed line printed over them would claim rows nobody read. Here `v0.98` arms (l) one row
+  # ahead of the outputs cutoff `v0.99`: the count would read 2 while (l) reads only v0.99, and
+  # the v0.98 row, which carries no telemetry field, would escape unread. The violated ordering
+  # must say so, name both cutoffs, and withhold the count rather than over-report it. (l)'s
+  # coverage is unchanged — "25 unread" pins that the assertion is a report, not a scope change.
+  _os_write cctok;        _od="$(_os_detail v0.99 v0.98)"
+  _os_must     "25 ordering"  'WARNING — Close-Class-Telemetry cutoff v0.98 armed at LOG row v0.98, but the outputs cutoff v0.99 armed only later, at LOG row v0.99' "$_od"
+  _os_must     "25 withheld"  'so that denominator is withheld on this run rather than over-reported' "$_od"
+  _os_must_not "25 no-count"  'Close-Class-Telemetry sub-check (l) armed at LOG row' "$_od"
+  _os_must_not "25 unread"    'v0.98: missing **Close-Class-Telemetry:**' "$_od"
+  # OS-25b / OS-25c — an outputs cutoff that never arms is the limiting case: re-dormanted, or
+  # matching no row, it leaves (l) asserting nothing while an armed line would claim every row.
+  _os_write cctok;        _od="$(_os_detail __none__ v0.98)"
+  _os_must     "25b ordering" 'WARNING — Close-Class-Telemetry cutoff v0.98 armed at LOG row v0.98, but the outputs cutoff __none__ is explicitly re-dormanted' "$_od"
+  _os_must_not "25b no-count" 'Close-Class-Telemetry sub-check (l) armed at LOG row' "$_od"
+  _os_write cctok;        _od="$(_os_detail v7.77 v0.98)"
+  _os_must     "25c ordering" 'WARNING — Close-Class-Telemetry cutoff v0.98 armed at LOG row v0.98, but the outputs cutoff v7.77 matched NO LOG row' "$_od"
+  _os_must_not "25c no-count" 'Close-Class-Telemetry sub-check (l) armed at LOG row' "$_od"
+  # OS-25 CONTROLS — the shipped ordering raises no ordering report and keeps its armed line:
+  # the outputs cutoff one row below the telemetry cutoff, and the boundary, both on one row.
+  # The boundary arm is the one that fails if the ordering is read before the outputs latch
+  # has updated on the shared row.
+  _os_write cctok;        _od="$(_os_detail v0.98 v0.99)"
+  _os_must_not "25 ctl-below" 'so it needs the outputs cutoff at or before the telemetry cutoff' "$_od"
+  _os_must     "25 ctl-below" 'Close-Class-Telemetry sub-check (l) armed at LOG row v0.99; 1 VERIFIED row(s) asserted' "$_od"
+  _os_write cctok;        _od="$(_os_detail v0.99 v0.99)"
+  _os_must_not "25 ctl-equal" 'so it needs the outputs cutoff at or before the telemetry cutoff' "$_od"
+  _os_must     "25 ctl-equal" 'Close-Class-Telemetry sub-check (l) armed at LOG row v0.99; 1 VERIFIED row(s) asserted' "$_od"
 
   /bin/rm -rf "$_o" 2>/dev/null || true
 
