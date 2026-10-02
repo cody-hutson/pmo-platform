@@ -1243,22 +1243,14 @@ _vf_compute_verdict() {
 # wrong instrument for this corpus).
 #
 # A FOURTH cutover CLOSE_COMPLETENESS_TELEMETRY_CUTOFF gates ONLY sub-check (l), the
-# `**Close-Class-Telemetry:**` field. Unlike the other three it ships `__none__` —
-# INERT BY DESIGN, and that is a decision rather than an omission. Its arming row does
-# not exist yet: the field's first machine-produced emission is this release's own
-# output, and a Stage-5-authored version literal is not reliable at Stage 12 — the
-# literal for this very cutover went stale TWICE inside one design pass (v4.20 → v4.21
-# → v4.22, each time from a sibling release claiming the slot mid-flight). The
-# alternative anchor considered — "the first LOG row carrying the field" — was measured
-# and rejected: it resolves to v4.03 with 18 VERIFIED rows at or after v4.04 (control:
-# 3 at or below v4.03), which would raise ~17 standing findings against releases the
-# standard lawfully grandfathers with NO backfill. `__none__` is the governed escape,
-# and it emits the explicit re-dormanted line rather than an ARMED label over an empty
-# scope, so the gate advertises that it asserts nothing instead of concealing it.
-# An unowned `__none__` is how a gate stays dormant forever, so the arming obligation
-# is a build item with an owner: issue #5245 stamps this cutoff at the first release
-# whose row carries a machine-produced field, recording the arming baseline in the same
-# form the three shipped cutovers use.
+# `**Close-Class-Telemetry:**` field. It shipped `__none__` first, deliberately: no
+# machine-produced row existed yet, and a Stage-5 version literal for it went stale twice
+# inside one design pass (v4.20 → v4.21 → v4.22), each value naming a slot a sibling
+# release could still claim; the measured alternative, "the first LOG row carrying the
+# field" (v4.03), would have raised ~17 standing findings against rows the standard
+# grandfathers with NO backfill. It is now ARMED at an already-claimed row, chosen by the
+# same zero-standing-finding rule as the other three; the selection record and arming
+# baseline sit at the assignment inside _cc_compute_verdict.
 #
 # TWO SURFACE SETS, DELIBERATELY ASYMMETRIC — and it is governed, not a tidy-up
 # candidate. Sub-check (j) resolves the block's HOME SURFACE (hot ledger, or the
@@ -1769,10 +1761,12 @@ _cc_row_findings() {
         # THE COUPLING THIS SEATING CREATES, stated rather than left implicit:
         # (l) is reachable only when the OUTPUTS latch is ALSO armed, since that
         # is the branch it sits in. The telemetry latch is therefore necessary
-        # but not sufficient. Benign in practice — any row the telemetry cutover
-        # can lawfully arm at is at or after the outputs cutoff — but whoever
-        # arms this cutover under #5245 needs to know it, so it is written down
-        # rather than discovered.
+        # but not sufficient. Benign while the telemetry cutover sits at or after
+        # the outputs cutoff, as its armed row does — and that ordering is now
+        # ASSERTED rather than left for whoever re-anchors either cutover to
+        # know (#5245 QF-01): _cc_compute_verdict reads it when (l) arms, and a
+        # violation prints an ordering WARNING naming both cutoffs in place of
+        # (l)'s armed line, so the count never claims rows (l) did not check.
         if [[ "$_telemetry_in_scope" == "1" ]]; then
           local _cct_line
           _cct_line="$(/usr/bin/grep -m1 '^\*\*Close-Class-Telemetry:\*\*' <<<"$_body" || true)"
@@ -1817,13 +1811,13 @@ _cc_row_findings() {
             #
             # ITS NO-FALSE-POSITIVE PROPERTY IS CONDITIONAL ON THE ANCHOR, not
             # absolute, and the distinction is load-bearing: it holds only while
-            # the cutover admits no pre-mechanism row. Under the shipped
-            # `__none__` there is no scope at all, so the property is currently
-            # vacuously true; whoever arms this cutover under #5245 must
-            # re-establish it against the row they choose rather than inherit it.
+            # the cutover admits no pre-mechanism row. It was re-established when
+            # this cutover was armed — every field at or after the armed row
+            # carries a computed ratio (0 l-3a findings at arming) — and any
+            # re-anchoring must re-measure it rather than inherit it.
             local _re_measured='[0-9]+/[0-9]+ \([01]\.[0-9]{2}\)'
             if [[ ! "$_cct_line" =~ $_re_measured ]]; then
-              printf '%s: **Close-Class-Telemetry:** field carries no computed ratio — every rate slot resolved N/A, so the field records that no close-quality reading was taken rather than a reading: %s\n' \
+              printf '%s: **Close-Class-Telemetry:** field carries no computed ratio — every rate slot resolved N/A or NOT-EVALUATED, so the field records that no close-quality reading was taken rather than a reading: %s\n' \
                 "$_ver" "${_cct_line:0:120}"
             fi
           fi
@@ -1968,11 +1962,29 @@ _cc_compute_verdict() {
   # __none__ remains the explicit re-dormant escape hatch.
   local cc_outputs_cutoff="${CLOSE_COMPLETENESS_OUTPUTS_CUTOFF:-v4.03}"
 
-  # FOURTH cutover — sub-check (l), the `**Close-Class-Telemetry:**` field. Ships
-  # `__none__`: INERT BY DESIGN, for the reasons recorded in the header block above
-  # (no arming row exists yet; a Stage-5 version literal went stale twice mid-flight;
-  # the measured alternative anchor would raise ~17 findings against grandfathered
-  # rows). Arming is owned by #5245, not by a comment.
+  # FOURTH cutover — sub-check (l), the `**Close-Class-Telemetry:**` field — ARMED (#5245).
+  #   Why v4.55: the OLDEST cutoff with zero standing (l) findings — the selection rule the
+  #   three cutovers above record (ADR-135 clause 3). v4.22 (closeout-output-completeness,
+  #   the first close to produce the field) was measured and rejected: four version-less
+  #   releases closed between it and v4.55 while this cutover shipped `__none__`
+  #   (pda-decisions-and-conformance-baseline, governance-declarations-match-enforcement,
+  #   hub-spoke-run-and-planning-discipline, freshness-gate-measures-then-blocks). The
+  #   Stage-13 output set made the field `required-if telemetry-cutover armed`, so those
+  #   closes lawfully omitted it — three with a `**Not-produced:**` marker, one without — and
+  #   the ledger is never backfilled, so any anchor at or below v4.54 carries a permanent
+  #   finding.
+  #   Arming baseline: cutoff resolves to LOG row `v4.55`, 0 findings. At arming the count
+  #   is 16 VERIFIED rows (15 when the anchor was chosen; v4.69 closed VERIFIED, with a
+  #   measured field, in between). It grows by one per VERIFIED close while the armed row
+  #   stays `v4.55`, the first prefix match in file order, so a later `v4.55.x` row does not
+  #   move it.
+  #   A sibling's version claim cannot move it either: v4.55 is ALREADY CLAIMED — its signed
+  #   tag is host-protected and its LOG row is append-only. A concurrent release's claim
+  #   takes a slot above the latest one and appends a LATER row: the in-scope count grows,
+  #   the armed row never moves. The literal that went stale twice named a slot not yet
+  #   claimed.
+  #   Prefix-safe at arming: a complete row key that prefixes exactly one LOG row, its own.
+  #   `__none__` remains the explicit re-dormant escape hatch (the emit names the variable).
   #
   # CROSS-TOOL READ CONTRACT — this line is a PUBLISHED SEAM, not a private local.
   # `release/tools/automated-closeout.sh` resolves the SAME cutoff at close time, to
@@ -1991,7 +2003,7 @@ _cc_compute_verdict() {
   # "satisfied" because its membership test could not run. If this line must change
   # shape, change the reader in the same commit — `_resolve_telemetry_cutoff` there,
   # and the `Test 15 (m*)` self-test arms that assert the read against this file.
-  local cc_telemetry_cutoff="${CLOSE_COMPLETENESS_TELEMETRY_CUTOFF:-__none__}"
+  local cc_telemetry_cutoff="${CLOSE_COMPLETENESS_TELEMETRY_CUTOFF:-v4.55}"
 
   # Dormancy is now an EXPLICIT opt-out, not the default: the __none__ sentinel is the
   # escape hatch by which an operator or a CI job can re-dormant the gate (e.g. to honor
@@ -2048,6 +2060,7 @@ _cc_compute_verdict() {
   local cc_past_release_cutoff=false _cc_net_arm_row="" _cc_net_targets=0
   local cc_past_outputs_cutoff=false _cc_outputs_arm_row="" _cc_outputs_targets=0
   local cc_past_telemetry_cutoff=false _cc_telemetry_arm_row="" _cc_telemetry_targets=0
+  local _cc_telemetry_before_outputs=false   # QF-01: the ordering, read when (l) arms
   local _row _cls _ver _ckey _ms _tag _state _rf _net _outputs _telemetry
   while IFS= read -r _row; do
     [[ -n "$_row" ]] || continue
@@ -2086,15 +2099,21 @@ _cc_compute_verdict() {
     fi
 
     # FOURTH, INDEPENDENT latch on the SAME walk — the Close-Class-Telemetry
-    # cutover (#4437). Identical file-order semantics to the three above; latched
-    # BEFORE the row-cutover `continue` for the same reason. Ships `__none__`, so
-    # on the shipped configuration this condition is false on every row and the
-    # latch never arms — which is the intended state, announced by the l-4 emit
-    # rather than left to be inferred from an absence of findings.
+    # cutover (#4437; armed by #5245). Identical file-order semantics to the three
+    # above; latched BEFORE the row-cutover `continue` for the same reason. Under
+    # the explicit `__none__` opt-out this condition is false on every row and the
+    # latch never arms — announced by the l-4 emit rather than inferred from an
+    # absence of findings.
     if [[ "$cc_telemetry_cutoff" != "__none__" && "$cc_past_telemetry_cutoff" == "false" \
           && "$_ver" == "$cc_telemetry_cutoff"* ]]; then
       cc_past_telemetry_cutoff=true
       _cc_telemetry_arm_row="$_ver"
+      # THE CUTOFF ORDERING (#5245 QF-01), read at the moment (l) arms. (l) sits inside
+      # (j)'s branch, so it needs the outputs latch armed at or before this row. That
+      # latch is evaluated earlier in this same iteration, so a shared row counts as
+      # "at"; an outputs cutoff that arms later, matches no row, or is re-dormanted
+      # leaves it unarmed here. The emit after the loop reports a violation.
+      [[ "$cc_past_outputs_cutoff" == "true" ]] || _cc_telemetry_before_outputs=true
     fi
 
     [[ "$cc_past_cutoff" == "true" ]] || continue
@@ -2182,21 +2201,39 @@ _cc_compute_verdict() {
       "$_cc_outputs_arm_row" "$_cc_outputs_targets" >&2
   fi
 
-  # Same assertion for the FOURTH (Close-Class-Telemetry) cutover (#4437). FOUR
-  # branches, not three — the third one is the prefix-mis-arm WARNING and it is not
-  # decorative: the latch is a string PREFIX match, so a truncated literal like
-  # `v4.2` silently arms at `v4.20` and the gate still verdicts clean because the
-  # shortened prefix lands on a range that happens to pass. Branch (iii) is the only
-  # thing that says so out loud. On the shipped configuration branch (i) fires and
-  # self-explains, which is the correct outcome for a cutover whose arming row does
-  # not exist yet — no pre-excused warning is shipped, and the dormancy is announced
-  # rather than inferred from an absence of findings.
+  # Same assertion for the FOURTH (Close-Class-Telemetry) cutover (#4437). FIVE
+  # branches. Branch (iii) is the CUTOFF-ORDERING assertion (#5245 QF-01): (l) sits
+  # inside (j)'s branch, so a telemetry cutoff that arms before the outputs cutoff —
+  # or with the outputs cutoff matching no row or re-dormanted — admits rows (l) never
+  # checks, and its count would claim them. It names both cutoffs and WITHHOLDS the
+  # count rather than over-report it; the counter, (l)'s coverage and the verdict are
+  # unchanged, because an ordering error is a CONFIG error like the R8 mis-arm above,
+  # not a completeness finding. It precedes (iv), whose line also carries the count.
+  # Branch (iv) is the prefix-mis-arm WARNING and it is not decorative: the latch is a
+  # string PREFIX match, so a truncated literal like `v4.2` silently arms at `v4.20`
+  # and the gate still verdicts clean because the shortened prefix lands on a range
+  # that happens to pass. Branch (iv) is the only thing that says so out loud. On the
+  # shipped (armed) configuration branch (v) fires and names the armed row with its
+  # in-scope count — the denominator that keeps a zero-finding run distinguishable from
+  # an unarmed one; branch (i) fires only on the explicit `__none__` opt-out and names
+  # the variable to unset.
   # STDERR ONLY (the stdout protocol line is parsed by string surgery downstream).
   if [[ "$cc_telemetry_cutoff" == "__none__" ]]; then
-    printf 'close-completeness: Close-Class-Telemetry sub-check (l) explicitly re-dormanted (CLOSE_COMPLETENESS_TELEMETRY_CUTOFF=__none__) — INERT BY DESIGN pending its arming row; owned by #5245\n' >&2
+    printf 'close-completeness: Close-Class-Telemetry sub-check (l) explicitly re-dormanted (CLOSE_COMPLETENESS_TELEMETRY_CUTOFF=__none__) — unset it to restore the committed armed default\n' >&2
   elif [[ -z "$_cc_telemetry_arm_row" ]]; then
     printf 'close-completeness: WARNING — Close-Class-Telemetry cutoff %s matched NO LOG row; sub-check (l) asserted NOTHING on this run.\n' \
       "$cc_telemetry_cutoff" >&2
+  elif [[ "$_cc_telemetry_before_outputs" == "true" ]]; then
+    local _cc_outputs_where
+    if [[ "$cc_outputs_cutoff" == "__none__" ]]; then
+      _cc_outputs_where="is explicitly re-dormanted"
+    elif [[ -z "$_cc_outputs_arm_row" ]]; then
+      _cc_outputs_where="matched NO LOG row"
+    else
+      _cc_outputs_where="armed only later, at LOG row ${_cc_outputs_arm_row}"
+    fi
+    printf 'close-completeness: WARNING — Close-Class-Telemetry cutoff %s armed at LOG row %s, but the outputs cutoff %s %s. Sub-check (l) runs only inside the outputs sub-check (j), so it needs the outputs cutoff at or before the telemetry cutoff in LOG order: any row (l) admits ahead of the outputs cutoff would be counted in its denominator without being checked, so that denominator is withheld on this run rather than over-reported. Re-anchor either cutover to restore the ordering.\n' \
+      "$cc_telemetry_cutoff" "$_cc_telemetry_arm_row" "$cc_outputs_cutoff" "$_cc_outputs_where" >&2
   elif [[ "$_cc_telemetry_arm_row" != "$cc_telemetry_cutoff" ]]; then
     printf 'close-completeness: WARNING — Close-Class-Telemetry cutoff %s armed at LOG row %s (prefix match, not an exact row). %s VERIFIED row(s) asserted; verify this is intended.\n' \
       "$cc_telemetry_cutoff" "$_cc_telemetry_arm_row" "$_cc_telemetry_targets" >&2
@@ -6712,15 +6749,18 @@ cmd_deploy() {
         FAILURES+=("$pkg.skill")
       fi
 
-      # #4215 CS-2. `deploy-package` is emitted despite having NO consumer: it is an
-      # honest per-target audit row, and because both read-models filter their anchor
-      # set to deploy-skill|deploy-harness it provably cannot perturb T_DEPLOY or the
-      # DORA occasion set. That exclusion is a DECLARED narrowing, not an oversight —
-      # a package deploy is not evidence that the release's skills reached the install
-      # path, so anchoring cycle-time on one would overstate what was observed. The
-      # bounded consequence is that a package-ONLY deploy yields no T_DEPLOY; that is
-      # structurally near-impossible here, because CHANGED_PACKAGES is populated only
-      # alongside skills and is hard-reset to () when the manual skill list is empty.
+      # #4215 CS-2, restated by #5553. `deploy-package` is an honest per-target audit
+      # row that neither read-model anchors on: compute-cycle-time.sh (T_DEPLOY) and
+      # compute-dora-metrics.sh (DORA occasions) read deploy-skill|deploy-harness only,
+      # because a `.skill` package is a DISTRIBUTION artifact: the runtime copy is made
+      # from source by the skill loop above, never from the package. A package-ONLY
+      # deploy IS reachable. The full-roster path deploys every package with every
+      # skill; the named-skill path installs only the named skills' packages (and
+      # resets CHANGED_PACKAGES to () when none is named); but the incremental tag-diff
+      # path (detect_changed_skills) fills CHANGED_PACKAGES from its own packages/
+      # diff, independently of CHANGED_SKILLS. compute-cycle-time.sh reports such an
+      # occasion as N/A NAMING deploy-package, never as "targets did not succeed",
+      # which it reserves for skill/harness rows none of which resolved.
       local __pkg_outcome __pkg_detail="none"
       __pkg_outcome="$(_ds_outcome "$__pkg_fail_before" "${#FAILURES[@]}" "false")"
       [[ "$__pkg_outcome" == "resolved" ]] || __pkg_detail="package-copy-or-verify-failed"
@@ -6841,11 +6881,16 @@ cmd_deploy() {
   # ─── #4215: deliberate non-emission points (the complete inventory) ────────
   # Recorded so the absences read as decisions. NOTHING is emitted when:
   #   validate_workspace fails           — aborts before any target is known
+  # and NO skill, package or harness row is emitted when:
   #   die "Unknown artifact"             — argument validation; no deploy attempted
   #   die "Ambiguous artifact name"      — same
-  #   the E-02 "No changes" exit 0       — nothing was deployed. This is the mechanism
+  #   the E-02 "No changes" exit 0       — nothing was selected. This is the mechanism
   #                                        behind the HONEST N/A on a content-only
   #                                        release; it is not a defect.
+  # The rules-mirror carrier runs ABOVE all three of those, so on a release-stamped
+  # run each of them still leaves exactly one deploy-rules-mirror row, the two die
+  # points included. compute-cycle-time.sh names that row in its N/A reason instead
+  # of anchoring on it (#5553), which is what keeps these N/As honest.
   #   any `set -e` exit inside a loop    — NOT one of the die points above, and easy to
   #                                        miss. This script runs `set -euo pipefail`,
   #                                        so an unguarded non-zero (a bare mkdir -p, a
@@ -14999,7 +15044,7 @@ sys.stdout.write("".join(out) + "|")
         local _c61_n="${_c61_rest%% *}" _c61_m="${_c61_rest##* }"
         case "$DECISION_EMISSION_MODE" in
           enforce)
-            log "  FAIL:  decision-emission — $_c61_n missing class(es) across $_c61_m post-cutover VERIFIED release(s) (see stderr detail); the remedy is to emit the missing rows per orchestration-playbook.md Procedure 4a, never to waive the finding"
+            log "  FAIL:  decision-emission — $_c61_n missing class(es) across $_c61_m post-cutover VERIFIED release(s) (see stderr detail); the remedy is to emit the missing rows per orchestration-playbook.md Procedure 4a, never to waive the finding — except gate-outcome/plan-review-go, whose absence is recorded instead: T_GO is that row's own timestamp, so a row emitted now anchors cycle time on the close"
             ISSUES=$((ISSUES + 1))
             ;;
           warn)
@@ -17066,6 +17111,7 @@ EOF
     CC_ALLOWLIST="$_t/none.txt" \
     CLOSE_COMPLETENESS_CHECK_CUTOFF="$1" CLOSE_COMPLETENESS_RELEASE_CUTOFF="__none__" \
     CLOSE_COMPLETENESS_OUTPUTS_CUTOFF="__none__" \
+    CLOSE_COMPLETENESS_TELEMETRY_CUTOFF="__none__" \
     _cc_compute_verdict "lifecycle" 2>/dev/null
   }
 
@@ -17080,6 +17126,7 @@ EOF
     CC_ALLOWLIST="$_t/none.txt" \
     CLOSE_COMPLETENESS_CHECK_CUTOFF="$1" CLOSE_COMPLETENESS_RELEASE_CUTOFF="__none__" \
     CLOSE_COMPLETENESS_OUTPUTS_CUTOFF="__none__" \
+    CLOSE_COMPLETENESS_TELEMETRY_CUTOFF="__none__" \
     _cc_compute_verdict "lifecycle" 2>&1 >/dev/null
   }
 
@@ -17116,6 +17163,7 @@ EOF
         CC_ALLOWLIST="$_t/none.txt" \
         CLOSE_COMPLETENESS_CHECK_CUTOFF="v9.98" CLOSE_COMPLETENESS_RELEASE_CUTOFF="__none__" \
         CLOSE_COMPLETENESS_OUTPUTS_CUTOFF="__none__" \
+        CLOSE_COMPLETENESS_TELEMETRY_CUTOFF="__none__" \
         _cc_compute_verdict "lifecycle" 2>/dev/null)"; _tok="${_v%% *}"
   [[ "$_tok" == "INCOMPLETE" ]] || { echo "FAIL: a now-VERIFIED incomplete row (v9.98) must be caught once it is VERIFIED-scoped, got '$_v'"; failures=$((failures+1)); }
 
@@ -17147,10 +17195,10 @@ EOF
   #     clean. It must say so out loud. (Anti-vacuity: a gate that passes on zero
   #     assertions is indistinguishable from a gate that passes.)
   #     The needle is pinned to the ROW cutoff's own message, not the bare phrase
-  #     `matched NO LOG row`: all THREE cutoffs now emit that phrase, so a loose
+  #     `matched NO LOG row`: all FOUR cutoffs now emit that phrase, so a loose
   #     needle would let this assertion pass on a SIBLING cutoff's warning while the
   #     row cutoff's own warning had regressed away — cross-talk between anti-vacuity
-  #     emits is itself a vacuity, and the fixture pins the other two to __none__
+  #     emits is itself a vacuity, and the fixture pins the other three to __none__
   #     precisely so only one voice can answer here.
   _e="$(_cc_selftest_stderr "v0.01")"
   /usr/bin/grep -q 'WARNING — cutoff v0.01 matched NO LOG row' <<<"$_e" \
@@ -17210,8 +17258,14 @@ STUB
   local _octt='**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 8/10 (0.80); carry-forward-closure 2/3 (0.67); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 12/13 (0.92); evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh'
   local _octtvac='**Close-Class-Telemetry:** retro-conformance N/A — no retro register found; lessons-population N/A — no lessons register found; carry-forward-closure N/A — gh unavailable; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence N/A — no retro register found; evidence-preservation N/A — gh unavailable; evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh'
   local _octtbad='**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); rollup-presence present; mechanism: compute-close-class-telemetry.sh'
+  # CIAC-4 control (#5586 x #5245): the caller-omission value is N/A-class to (l), never a
+  # ratio. This is the line compute-close-class-telemetry.sh emits when no --retro path was
+  # supplied and gh is unavailable — slots 1, 2 and 5 carry #5586's NOT-EVALUATED strings,
+  # slots 3 and 6 the tool's own gh-less renderings — so no slot carries a digit.
+  local _octtomit='**Close-Class-Telemetry:** retro-conformance NOT-EVALUATED — no --retro path was supplied, so no retro register was looked for — this is not a clean result; lessons-population NOT-EVALUATED — no --lessons or --retro path was supplied, so no lessons register was looked for — this is not a clean result; carry-forward-closure N/A — gh unavailable — carry-forward closure not computed; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence NOT-EVALUATED — no --retro path was supplied, so no retro register was looked for — this is not a clean result; evidence-preservation NOT-EVALUATED — gh unavailable, phase-evidence preservation not computed — this is not a clean result; evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh'
   local _orl99=$'#### Release Learnings v0.99\n\n**Synthesized at:** 2026-01-01T00:00:00Z\n**Source events:** 0 row(s)\n**Source-row anchors:** N/A\n\n**Surprise:** N/A\n**Would-change:** N/A\n**Watch-for:** N/A'
   local _orl98=$'#### Release Learnings v0.98\n\n**Synthesized at:** 2026-01-01T00:00:00Z\n**Source events:** 0 row(s)\n**Source-row anchors:** N/A\n\n**Surprise:** N/A\n**Would-change:** N/A\n**Watch-for:** N/A'
+  local _orl100=$'#### Release Learnings v1.00\n\n**Synthesized at:** 2026-01-01T00:00:00Z\n**Source events:** 0 row(s)\n**Source-row anchors:** N/A\n\n**Surprise:** N/A\n**Would-change:** N/A\n**Watch-for:** N/A'
 
   # The v0.98 sibling is the SPECIFICITY arm and is well-formed in EVERY fixture:
   # live-in-hot body, conformant field, learnings block in its N7 position. Any
@@ -17243,6 +17297,13 @@ STUB
       cctok)        /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n%s\n\n%s\n%s\n' "$_hdr" "$_ovel" "$_octt" "$_orl99" "$_sib" > "$_olog" ;;
       cctvac)       /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n%s\n\n%s\n%s\n' "$_hdr" "$_ovel" "$_octtvac" "$_orl99" "$_sib" > "$_olog" ;;
       cctbad)       /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n%s\n\n%s\n%s\n' "$_hdr" "$_ovel" "$_octtbad" "$_orl99" "$_sib" > "$_olog" ;;
+      cctomit)      /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n%s\n\n%s\n%s\n' "$_hdr" "$_ovel" "$_octtomit" "$_orl99" "$_sib" > "$_olog" ;;
+      # AC-4 (#5245): `cctok` plus a LATER sibling row v1.00 — a concurrent release that claimed
+      # the next slot — VERIFIED (cctsib) or mid-close (cctsibdep), with its own conformant block.
+      cctsib|cctsibdep)
+                    local _s3=VERIFIED; [[ "$1" == "cctsibdep" ]] && _s3=DEPLOYED
+                    /usr/bin/printf '%s\n| v1.00 | ms100 | #1 | #2 | `c` | `v1.00` | %s | 2026-01-01 |\n\n#### Deployment Log v1.00\n**Result:** SUCCESS\n%s\n%s\n\n%s\n\n#### Deployment Log v0.99\n**Result:** SUCCESS\n%s\n%s\n\n%s\n%s\n' \
+                      "$_hdr" "$_s3" "$_ovel" "$_octt" "$_orl100" "$_ovel" "$_octt" "$_orl99" "$_sib" > "$_olog" ;;
       # Split record: body archived to the segment, telemetry field left in the HOT
       # stub. Exits 0, passes a corpus-wide grep, passes the grammar limb.
       cctsplit)     /usr/bin/printf '%s\n\n#### Deployment Log v0.99\n_Archived: [segment](RELEASE_LOG_ARCHIVE-v0.md)_\n%s\n\n%s\n%s\n' "$_hdr" "$_octt" "$_orl99" "$_sib" > "$_olog"
@@ -17252,9 +17313,9 @@ STUB
 
   # Per-row finding detail (the engine's stderr) for the fixture as written.
   # $2 = the Close-Class-Telemetry cutover, DEFAULTED to `__none__` so sub-check
-  # (l) is dormant for every arm that does not deliberately arm it — matching the
-  # shipped configuration and leaving the pre-existing OS arms measuring exactly
-  # what they were written to measure.
+  # (l) is dormant for every arm that does not deliberately arm it — the explicit
+  # opt-out, not the shipped default (armed since #5245; OS-24 pins it) — leaving the
+  # pre-existing OS arms measuring exactly what they were written to measure.
   _os_detail() {
     CC_LOG="$_olog" CC_INDEX="$_oidx" CC_DIGEST="$_odig" CC_CHANGELOG="$_ochg" \
     CC_VERSIONFILE="$_over" CC_NOTES_DIR="$_onotes" CC_LINT="$_olint" CC_DRIFT="$_odrift" \
@@ -17394,16 +17455,24 @@ STUB
   _os_must     "17 vacuity"  'v0.99: **Close-Class-Telemetry:** field carries no computed ratio' "$_od"
   _os_must_not "17 grammar"  'v0.99: **Close-Class-Telemetry:** field fails the eight-slot grammar' "$_od"
 
+  # OS-17b CIAC-4 CONTROL — register-fed slots NOT-EVALUATED, the gh-fed ones degraded:
+  # still a vacuity (l-3a) finding, never a grammar one. OS-15 is its control.
+  _os_write cctomit;      _od="$(_os_detail v0.98 v0.99)"
+  _os_must     "17b vacuity"  'v0.99: **Close-Class-Telemetry:** field carries no computed ratio' "$_od"
+  _os_must_not "17b grammar"  'v0.99: **Close-Class-Telemetry:** field fails the eight-slot grammar' "$_od"
+  _os_must_not "17b presence" 'v0.99: missing **Close-Class-Telemetry:**' "$_od"
+  local _o17b; _o17b="$(/usr/bin/grep -c '^v0\.99: ' <<<"$_od" || true)"
+  [[ "$_o17b" == "1" ]] || { echo "FAIL: OS 17b count — the omission field must raise EXACTLY ONE finding (the l-3a vacuity line), got $_o17b: $(/usr/bin/printf '%s' "$_od" | /usr/bin/tr '\n' ';')"; failures=$((failures+1)); }
+
   # OS-18 CO-LOCATION (l-1) — the field in the hot stub while the body lives in the
   # segment. Exit code, corpus-wide grep and the grammar limb all read identical on
   # this input; only co-location separates it.
   _os_write cctsplit;     _od="$(_os_detail v0.98 v0.99)"
   _os_must     "18 colocation" 'v0.99: **Close-Class-Telemetry:** field is NOT co-located with the block body' "$_od"
 
-  # OS-19 THE ESCAPE HATCH IS REAL, AND IT IS THE SHIPPED CONFIGURATION. `__none__`
-  # re-dormants (l) and ONLY (l): the same fixture that fires OS-14 raises nothing,
-  # while (j)/(k) stay armed. This is the arm that pins what this release actually
-  # ships — inert by design, announced rather than inferred.
+  # OS-19 THE ESCAPE HATCH IS REAL. `__none__` re-dormants (l) and ONLY (l): the same
+  # fixture that fires OS-14 raises nothing, while (j)/(k) stay armed. It is the explicit
+  # opt-out; the shipped default is armed (OS-24).
   _os_write emitted;      _od="$(_os_detail v0.98 __none__)"
   _os_must     "19 dormant"  'Close-Class-Telemetry sub-check (l) explicitly re-dormanted' "$_od"
   _os_must_not "19 gated"    'v0.99: missing **Close-Class-Telemetry:**' "$_od"
@@ -17420,6 +17489,69 @@ STUB
   # v0.98, pulling the sibling into scope. The WARNING is the only thing that says so.
   _os_write emitted;      _od="$(_os_detail v0.98 v0.9)"
   _os_must     "21 misarm"   'WARNING — Close-Class-Telemetry cutoff v0.9 armed at LOG row v0.98 (prefix match, not an exact row)' "$_od"
+
+  # OS-22 THE DENOMINATOR IS EMITTED (#5245 AC-3): an armed run names its row AND its count.
+  _os_write cctok;        _od="$(_os_detail v0.98 v0.99)"
+  _os_must     "22 denom"     'Close-Class-Telemetry sub-check (l) armed at LOG row v0.99; 1 VERIFIED row(s) asserted' "$_od"
+  # OS-23 A SIBLING'S CLAIM CANNOT MOVE A CLAIMED ANCHOR (#5245 AC-4): a later row leaves the
+  # armed row at v0.99 and grows the count only once it is VERIFIED.
+  _os_write cctsib;       _od="$(_os_detail v0.98 v0.99)"
+  _os_must     "23 stable"    'Close-Class-Telemetry sub-check (l) armed at LOG row v0.99; 2 VERIFIED row(s) asserted' "$_od"
+  _os_must_not "23 sibling"   'v1.00: missing **Close-Class-Telemetry:**' "$_od"
+  _os_write cctsibdep;    _od="$(_os_detail v0.98 v0.99)"
+  _os_must     "23 mid-close" 'Close-Class-Telemetry sub-check (l) armed at LOG row v0.99; 1 VERIFIED row(s) asserted' "$_od"
+  # OS-24 THE SHIPPED DEFAULT IS ARMED (#5245; ADR-135). Variable UNSET, so the committed
+  # default applies; it must not be the opt-out. Literal-free: the committed row is outside
+  # this fixture. RED on the pre-#5245 default, GREEN after — AC-1's durable sensitivity half.
+  _os_write emitted
+  _od="$( unset CLOSE_COMPLETENESS_TELEMETRY_CUTOFF
+          CC_LOG="$_olog" CC_INDEX="$_oidx" CC_DIGEST="$_odig" CC_CHANGELOG="$_ochg" \
+          CC_VERSIONFILE="$_over" CC_NOTES_DIR="$_onotes" CC_LINT="$_olint" CC_DRIFT="$_odrift" \
+          CC_ALLOWLIST="$_o/none.txt" \
+          CLOSE_COMPLETENESS_CHECK_CUTOFF="v0.98" CLOSE_COMPLETENESS_RELEASE_CUTOFF="__none__" \
+          CLOSE_COMPLETENESS_OUTPUTS_CUTOFF="v0.98" \
+          _cc_compute_verdict "lifecycle" 2>&1 >/dev/null )"
+  _os_must_not "24 armed"     'Close-Class-Telemetry sub-check (l) explicitly re-dormanted' "$_od"
+  _os_must     "24 armed"     'WARNING — Close-Class-Telemetry cutoff ' "$_od"
+  # OS-25 THE CUTOFF ORDERING IS ASSERTED (#5245 QF-01). (l) sits inside (j)'s branch, so a
+  # telemetry cutoff that arms BEFORE the outputs cutoff admits rows (l) never checks, and an
+  # armed line printed over them would claim rows nobody read. Here `v0.98` arms (l) one row
+  # ahead of the outputs cutoff `v0.99`: the count would read 2 while (l) reads only v0.99, and
+  # the v0.98 row, which carries no telemetry field, would escape unread. The violated ordering
+  # must say so, name both cutoffs, and withhold the count rather than over-report it. (l)'s
+  # coverage is unchanged — "25 unread" pins that the assertion is a report, not a scope change.
+  _os_write cctok;        _od="$(_os_detail v0.99 v0.98)"
+  _os_must     "25 ordering"  'WARNING — Close-Class-Telemetry cutoff v0.98 armed at LOG row v0.98, but the outputs cutoff v0.99 armed only later, at LOG row v0.99' "$_od"
+  _os_must     "25 withheld"  'so that denominator is withheld on this run rather than over-reported' "$_od"
+  _os_must_not "25 no-count"  'Close-Class-Telemetry sub-check (l) armed at LOG row' "$_od"
+  _os_must_not "25 unread"    'v0.98: missing **Close-Class-Telemetry:**' "$_od"
+  # OS-25b / OS-25c — an outputs cutoff that never arms is the limiting case: re-dormanted, or
+  # matching no row, it leaves (l) asserting nothing while an armed line would claim every row.
+  _os_write cctok;        _od="$(_os_detail __none__ v0.98)"
+  _os_must     "25b ordering" 'WARNING — Close-Class-Telemetry cutoff v0.98 armed at LOG row v0.98, but the outputs cutoff __none__ is explicitly re-dormanted' "$_od"
+  _os_must_not "25b no-count" 'Close-Class-Telemetry sub-check (l) armed at LOG row' "$_od"
+  _os_write cctok;        _od="$(_os_detail v7.77 v0.98)"
+  _os_must     "25c ordering" 'WARNING — Close-Class-Telemetry cutoff v0.98 armed at LOG row v0.98, but the outputs cutoff v7.77 matched NO LOG row' "$_od"
+  _os_must_not "25c no-count" 'Close-Class-Telemetry sub-check (l) armed at LOG row' "$_od"
+  # OS-25 CONTROLS — the shipped ordering raises no ordering report and keeps its armed line:
+  # the outputs cutoff one row below the telemetry cutoff, and the boundary, both on one row.
+  # The boundary arm is the one that fails if the ordering is read before the outputs latch
+  # has updated on the shared row.
+  _os_write cctok;        _od="$(_os_detail v0.98 v0.99)"
+  _os_must_not "25 ctl-below" 'so it needs the outputs cutoff at or before the telemetry cutoff' "$_od"
+  _os_must     "25 ctl-below" 'Close-Class-Telemetry sub-check (l) armed at LOG row v0.99; 1 VERIFIED row(s) asserted' "$_od"
+  _os_write cctok;        _od="$(_os_detail v0.99 v0.99)"
+  _os_must_not "25 ctl-equal" 'so it needs the outputs cutoff at or before the telemetry cutoff' "$_od"
+  _os_must     "25 ctl-equal" 'Close-Class-Telemetry sub-check (l) armed at LOG row v0.99; 1 VERIFIED row(s) asserted' "$_od"
+  # OS-26 THE ORDERING REPORT OUTRANKS THE PREFIX MIS-ARM REPORT (#5245 F-04). Both faults at
+  # once: `v0.9` prefix-arms (l) at v0.98, one row ahead of the outputs cutoff `v0.99`. The emit
+  # tests the ordering branch before the prefix mis-arm branch, and that order is load-bearing,
+  # because the prefix line carries (l)'s count: printed here it would claim two rows while (l)
+  # read one. This arm pins the order — the ordering WARNING, naming the row that actually armed,
+  # and no prefix line. OS-21 keeps the prefix line for a prefix-armed cutoff whose ordering holds.
+  _os_write cctok;        _od="$(_os_detail v0.99 v0.9)"
+  _os_must     "26 ordering"  'WARNING — Close-Class-Telemetry cutoff v0.9 armed at LOG row v0.98, but the outputs cutoff v0.99 armed only later, at LOG row v0.99' "$_od"
+  _os_must_not "26 no-misarm" '(prefix match, not an exact row)' "$_od"
 
   /bin/rm -rf "$_o" 2>/dev/null || true
 
@@ -19046,7 +19178,7 @@ EOF
   echo "    mis-arm (5) prefix-shortened cutoff WARNs naming the armed row / (6) exact-row cutoff does NOT warn but still names it / (7) no-match cutoff WARNs vacuous (zero rows asserted)" >&2
   echo "  Stage-13 output-set sub-checks (j velocity + k learnings) validated (#4452, group OS):" >&2
   echo "    OS-1 suppressed -> BOTH findings / OS-2 emitted -> zero / OS-3 bolded numerals -> grammar finding / OS-4 explicit-N/A conformant / OS-5 archived+co-located -> zero / OS-6 T4 wrong-surface write -> split-record / OS-7 field on both surfaces -> split-record / OS-8 dangling segment pointer -> finding / OS-9 learnings mis-placed names the heading found / OS-10 short field-set / OS-11 duplicate heading / OS-12 no-match outputs cutoff WARNs vacuous / OS-13 __none__ re-dormants (j)+(k) only. Every arm graded on the FINDING LINE — exit code, corpus-wide grep and 'the field parses' are all identical on OS-4/OS-5 and OS-6.
-    Close-Class-Telemetry sub-check (l) (#4437): OS-14 GENUINE FAILURE — a row with velocity+learnings and no telemetry field fires (l) alone / OS-15 control — the same fixture with a measured field raises nothing / OS-16 slot-short field fails the ordered eight-slot grammar while presence passes / OS-17 ANTI-VACUITY — a byte-perfect all-N/A field is a finding, with OS-15 as its control / OS-18 split record (field in the hot stub, body in the segment) / OS-19 __none__ re-dormants (l) and ONLY (l) — the SHIPPED configuration / OS-20 no-match telemetry cutoff WARNs vacuous in its own voice / OS-21 prefix mis-arm WARNs naming the row it actually armed at." >&2
+    Close-Class-Telemetry sub-check (l) (#4437): OS-14 GENUINE FAILURE — a row with velocity+learnings and no telemetry field fires (l) alone / OS-15 control — the same fixture with a measured field raises nothing / OS-16 slot-short field fails the ordered eight-slot grammar while presence passes / OS-17 ANTI-VACUITY — a byte-perfect all-N/A field is a finding, with OS-15 as its control / OS-17b CIAC-4 control — a NOT-EVALUATED caller-omission field is a vacuity finding, never a grammar one / OS-18 split record (field in the hot stub, body in the segment) / OS-19 __none__ re-dormants (l) and ONLY (l) — the explicit opt-out / OS-20 no-match telemetry cutoff WARNs vacuous in its own voice / OS-21 prefix mis-arm WARNs naming the row it actually armed at / OS-22 an armed run names its row and its count / OS-23 a later sibling row never moves the armed row, and grows the count once VERIFIED / OS-24 the SHIPPED default is armed / OS-25 THE CUTOFF ORDERING (#5245 QF-01) — a telemetry cutoff arming ahead of the outputs cutoff (OS-25), or an outputs cutoff re-dormanted (25b) or matching no row (25c), WARNs naming both cutoffs and withholds the (l) count, with (l)'s coverage unchanged; the shipped ordering, one row below and on the same row, raises no ordering report and keeps its armed line / OS-26 THE ORDERING REPORT OUTRANKS THE PREFIX MIS-ARM REPORT (#5245 F-04) — a prefix-armed telemetry cutoff whose ordering is also violated prints the ordering WARNING, naming the row it armed at, and never the prefix line, whose count would claim rows (l) never read." >&2
   echo "  decision-emission minimum set validated (#4026, group DE):" >&2
   echo "    DE-1 dormant SKIP / DE-2 seeded zero-emission INCOMPLETE / DE-3 complete CLEAN 1 / DE-4 partial-set INCOMPLETE / DE-4b sibling-typed omission INCOMPLETE (kills the subtype-conjunct mutant) / DE-5 legacy-key-only INCOMPLETE / DE-6+DE-7 pre-cutover + DEPLOYED rows excluded / DE-7b VERIFIED flip counted / DE-8 rung-2 resolution / DE-9 absent asserted-set NOSET / DE-10 THE EXIT-CODE SPACE (#4216) — all ten (verdict x sentinel) pairs map as contracted, with DE-10b proving the sentinel is actually read (warn and enforce must differ for INCOMPLETE and NOSET) and DE-10c asserting PV-7 as a POPULATION property: exactly two of the ten pairs produce exit 0 and both are CLEAN, so a degraded verdict collapsing onto the clean code is caught even if it is a verdict token this group does not yet name" >&2
   echo "  RELEASE_LOG row classes validated (#5234, group RC):" >&2
@@ -19258,7 +19390,7 @@ cmd_check_decision_emission() {
       ;;
     INCOMPLETE)
       log "decision-emission: INCOMPLETE — ${verdict#INCOMPLETE } (missing-class count / checked-release count; see detail above)"
-      log "  A post-cutover release closed without emitting a MUST class. The remedy is to emit the missing row(s) per orchestration-playbook.md Procedure 4a — never to waive the finding."
+      log "  A post-cutover release closed without emitting a MUST class. The remedy is to emit the missing row(s) per orchestration-playbook.md Procedure 4a — never to waive the finding. For gate-outcome/plan-review-go, record the absence instead: T_GO is that row's own timestamp, so a row emitted now anchors cycle time on the close."
       if [[ "$de_enforce" == "enforce" ]]; then
         exit "$(_de_verdict_exit_code INCOMPLETE enforce)"
       fi
