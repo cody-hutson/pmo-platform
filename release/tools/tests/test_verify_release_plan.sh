@@ -945,6 +945,17 @@ case "$(observed_of "$J_PRESENT" FCM-1)" in
   declared-add-delivered*) ok "A6257-2 CONTROL — a PASS row is unchanged: it carries no range suffix" ;;
   *) bad "A6257-2 control — A2's PASS row is absent or changed: '$(observed_of "$J_PRESENT" FCM-1)'" ;;
 esac
+# The range rule is stated where an operator meets it. A row can say only WHICH range it
+# was read over; --help says how a default range is chosen once the release has merged,
+# and what to do in the one case that still reads an empty range -- a head on the
+# mainline whose plan resolves no merge -- which each row marks by name.
+H6257="$("$VERIFY" --help 2>&1 || true)"
+if grep -q -F '<merge>^1..<merge>' <<<"$H6257" && grep -q -F 'post-merge-unresolved' <<<"$H6257" \
+   && grep -q -F 'name the range with --merge-base and --head' <<<"$H6257"; then
+  ok "A6257-2 AC-2 — --help states the range a run after the merge compares, and names the unresolved case with its remedy (an explicit range)"
+else
+  bad "A6257-2 AC-2 — --help does not state the post-merge range, the unresolved case (post-merge-unresolved), or its remedy"
+fi
 
 # --- M6257-2 / M6257-3: the tree probe is what separates the two strings, and it reads a FILE. ---
 M6257_2="$(mutate m6257-2-tree-probe-off 's/\[ "\$t" = "blob" \]/false/')"
