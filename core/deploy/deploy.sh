@@ -17530,6 +17530,12 @@ cmd_check_version_freeness() {
 #                      the row they armed at, or say that nothing was asserted (#4176); the
 #                      no-match cutoff (7) verdicts SKIP, exit 3 under warn and 1 under
 #                      enforce, never CLEAN 0.
+#   (7b)-(7d) scope  — an allowlist naming every VERIFIED row at/after the cutoff asserts
+#                      nothing either: (7b) verdicts SKIP with its own cause, exit 3 under
+#                      warn and 1 under enforce, never CLEAN 0. Controls: (7c) a cutoff that
+#                      arms while no row at/after it is VERIFIED (mid-close, nothing
+#                      allowlisted) keeps CLEAN 0; (7d) a scope the allowlist only partly
+#                      removes keeps its verdict over the rows that remain.
 #   (8)-(11) mapping — _cc_verdict_exit_code maps every (verdict x sentinel) pair as the
 #                      contract table says; the sentinel moves INCOMPLETE and SKIP and never
 #                      NOT-EVALUATED; exit 0 has exactly two producers (CLEAN x 2); and
@@ -17690,6 +17696,100 @@ EOF
   _e="$(_cc_selftest_stderr "v0.01")"
   /usr/bin/grep -q 'WARNING — cutoff v0.01 matched NO LOG row' <<<"$_e" \
     || { echo "FAIL: a no-match cutoff must WARN that zero rows were asserted, got '$_e'"; failures=$((failures+1)); }
+
+  # ─── The allowlist-emptied scope (#4318) — arms (7b)-(7d) ─────────────────────────
+  # Arm (7) closed one way an armed gate asserts nothing: a cutoff that matches no row. A
+  # second way stayed open: the cutoff arms at a row, and the allowlist then removes every
+  # VERIFIED row at/after it. No row reaches a limb, and the engine verdicted CLEAN 0 — a
+  # pass produced by an exemption. (7b) requires SKIP for that state: a withheld verdict
+  # with its OWN cause, exit 3 under warn and 1 under enforce.
+  # The control arms pin the states beside it, so the new branch cannot swallow them:
+  # (7c) a cutoff that arms while no row at/after it is VERIFIED — mid-close, nothing
+  # removed by the allowlist — keeps CLEAN 0, a complete scan of an empty set; and (7d) a
+  # scope the allowlist only PARTLY removes keeps its verdict over the rows that remain.
+  # (Fixture state after (4): v9.98 and v9.99 are both VERIFIED; v9.99's output-set is
+  # complete and v9.98's is absent.)
+  #
+  # _cc_selftest_al <log> <allowlist> <row-cutoff> <out|err>
+  #   The engine over <log> with <allowlist> as its allowlist: stdout = the protocol line
+  #   (out) or the engine's stderr (err). A sibling of the two helpers above, which pin
+  #   CC_ALLOWLIST to a file that does not exist; all four cutoffs are pinned here. Always
+  #   inside a command substitution at the call site, like its siblings.
+  _cc_selftest_al() {
+    if [[ "$4" == "err" ]]; then
+      CC_LOG="$1" CC_INDEX="$_index" CC_DIGEST="$_digest" CC_CHANGELOG="$_changelog" \
+      CC_VERSIONFILE="$_version" CC_NOTES_DIR="$_notes" CC_LINT="$_lint" CC_DRIFT="$_drift" \
+      CC_ALLOWLIST="$2" \
+      CLOSE_COMPLETENESS_CHECK_CUTOFF="$3" CLOSE_COMPLETENESS_RELEASE_CUTOFF="__none__" \
+      CLOSE_COMPLETENESS_OUTPUTS_CUTOFF="__none__" CLOSE_COMPLETENESS_TELEMETRY_CUTOFF="__none__" \
+      _cc_compute_verdict "lifecycle" 2>&1 >/dev/null
+    else
+      CC_LOG="$1" CC_INDEX="$_index" CC_DIGEST="$_digest" CC_CHANGELOG="$_changelog" \
+      CC_VERSIONFILE="$_version" CC_NOTES_DIR="$_notes" CC_LINT="$_lint" CC_DRIFT="$_drift" \
+      CC_ALLOWLIST="$2" \
+      CLOSE_COMPLETENESS_CHECK_CUTOFF="$3" CLOSE_COMPLETENESS_RELEASE_CUTOFF="__none__" \
+      CLOSE_COMPLETENESS_OUTPUTS_CUTOFF="__none__" CLOSE_COMPLETENESS_TELEMETRY_CUTOFF="__none__" \
+      _cc_compute_verdict "lifecycle" 2>/dev/null
+    fi
+  }
+  /usr/bin/printf 'v9.98\nv9.99\n' > "$_t/allow-all.txt"
+  /usr/bin/printf 'v9.98\n' > "$_t/allow-9998.txt"
+  /usr/bin/printf 'v9.99\n' > "$_t/allow-9999.txt"
+  # One VERIFIED row followed by a mid-close row, and a ledger whose only row is mid-close.
+  /bin/cat > "$_t/log-mixed.md" <<'EOF'
+# RELEASE_LOG (self-test fixture: one VERIFIED row, then a mid-close row)
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.98 | v9.98-selftest | #1 | #2 | `abc` | `v9.98` | VERIFIED | 2026-06-28 |
+| v9.99 | v9.99-midclose | #1 | #2 | `def` | `v9.99` | DEPLOYED | 2026-06-28 |
+EOF
+  /bin/cat > "$_t/log-midclose.md" <<'EOF'
+# RELEASE_LOG (self-test fixture: one row, mid-close)
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.98 | v9.98-midclose | #1 | #2 | `abc` | `v9.98` | DEPLOYED | 2026-06-28 |
+EOF
+
+  # (7b) the allowlist names every VERIFIED row at/after the cutoff ⇒ SKIP, never CLEAN 0.
+  _v="$(_cc_selftest_al "$_log" "$_t/allow-all.txt" "v9.98" out)"; _tok="${_v%% *}"
+  [[ "$_tok" == "SKIP" ]] \
+    || { echo "FAIL: (7b) an allowlist naming every VERIFIED row at/after the cutoff must verdict SKIP (a withheld verdict), never CLEAN, got '$_v'"; failures=$((failures+1)); }
+  [[ "$(_cc_verdict_exit_code "$_tok" warn)" == "3" && "$(_cc_verdict_exit_code "$_tok" enforce)" == "1" ]] \
+    || { echo "FAIL: (7b) an allowlist-emptied scope must exit 3 under warn and 1 under enforce, got $(_cc_verdict_exit_code "$_tok" warn) and $(_cc_verdict_exit_code "$_tok" enforce) for '$_v'"; failures=$((failures+1)); }
+  #      Its cause is its own: the SKIP line names the allowlist and is not the no-match
+  #      cutoff's line (arm (7)), because each cause has its own remedy.
+  [[ "$_v" == *"allowlist emptied the scope"* && "$_v" != *"matched NO LOG row"* ]] \
+    || { echo "FAIL: (7b) the allowlist-emptied SKIP must name its own cause, distinct from the no-match cutoff's, got '$_v'"; failures=$((failures+1)); }
+  _e="$(_cc_selftest_al "$_log" "$_t/allow-all.txt" "v9.98" err)"
+  /usr/bin/grep -q 'WARNING — the allowlist emptied the scope' <<<"$_e" \
+    || { echo "FAIL: (7b) an allowlist-emptied scope must WARN that zero rows were asserted, got '$_e'"; failures=$((failures+1)); }
+  #      The same state with a mid-close row after the allowlisted one: the allowlist still
+  #      removed every row that would have been asserted, so the verdict is still SKIP.
+  _v="$(_cc_selftest_al "$_t/log-mixed.md" "$_t/allow-9998.txt" "v9.98" out)"; _tok="${_v%% *}"
+  [[ "$_tok" == "SKIP" ]] \
+    || { echo "FAIL: (7b) an allowlisted VERIFIED row followed by a mid-close row is still an allowlist-emptied scope and must verdict SKIP, got '$_v'"; failures=$((failures+1)); }
+
+  # (7c) CONTROL — mid-close. The cutoff arms at a row, no row at/after it is VERIFIED yet
+  #      and the allowlist removed nothing ⇒ CLEAN 0 stays: a complete scan of an empty set.
+  #      The second run names the mid-close row in the allowlist; the VERIFIED filter runs
+  #      first, so the allowlist still removed nothing and the verdict does not move.
+  _v="$(_cc_selftest_al "$_t/log-midclose.md" "$_t/none.txt" "v9.98" out)"
+  [[ "$_v" == "CLEAN 0" ]] \
+    || { echo "FAIL: (7c) control — a cutoff that arms while no row at/after it is VERIFIED (mid-close, nothing allowlisted) must keep 'CLEAN 0', got '$_v'"; failures=$((failures+1)); }
+  _v="$(_cc_selftest_al "$_t/log-midclose.md" "$_t/allow-all.txt" "v9.98" out)"
+  [[ "$_v" == "CLEAN 0" ]] \
+    || { echo "FAIL: (7c) control — an allowlist entry naming a mid-close row removes nothing (the row is not VERIFIED), so the verdict must stay 'CLEAN 0', got '$_v'"; failures=$((failures+1)); }
+
+  # (7d) CONTROL — a scope the allowlist only PARTLY removes keeps its verdict over the rows
+  #      that remain. One ledger, opposite allowlists, opposite verdicts: naming the
+  #      incomplete row leaves the complete one (CLEAN 1); naming the complete row leaves
+  #      the incomplete one (INCOMPLETE over 1 row).
+  _v="$(_cc_selftest_al "$_log" "$_t/allow-9998.txt" "v9.98" out)"
+  [[ "$_v" == "CLEAN 1" ]] \
+    || { echo "FAIL: (7d) control — with the incomplete row allowlisted, the remaining complete row must verdict 'CLEAN 1', got '$_v'"; failures=$((failures+1)); }
+  _v="$(_cc_selftest_al "$_log" "$_t/allow-9999.txt" "v9.98" out)"; _tok="${_v%% *}"
+  [[ "$_tok" == "INCOMPLETE" && "${_v##* }" == "1" ]] \
+    || { echo "FAIL: (7d) control — with the complete row allowlisted, the remaining incomplete row must verdict INCOMPLETE over 1 row, got '$_v'"; failures=$((failures+1)); }
 
   # ─── The exit contract and the network-leg instrument (#4318) — arms (8)-(15) ─────
   # Arms (1)-(7) assert verdict TOKENS by calling _cc_compute_verdict directly, so this
@@ -20304,7 +20404,7 @@ EOF
   echo "    VF-1 DEPLOYED row extracted / VF-2 VERIFIED row excluded / VF-3 State is NOT the Tag column / VF-4 column-order shift survived (name-pinned, not ordinal) / VF-5 malformed header reported on stderr / VF-6 malformed header returns non-zero + VF-6b well-formed returns 0 (control) / VF-7 the CALLER fails closed to UNDECIDABLE(partial-by-failure) + VF-7b FREE control + VF-7c gate surface (DT-2: loud failure is observable, not merely emitted)" >&2
   echo "  close-completeness invariant validated (#1290 AC5; mis-arm group #4176):" >&2
   echo "    explicit-__none__ cutover SKIPs / abbreviated scaffold caught (INCOMPLETE) / complete set CLEAN / VERIFIED-scoped (DEPLOYED excluded, VERIFIED included)" >&2
-  echo "    mis-arm (5) prefix-shortened cutoff WARNs naming the armed row / (6) exact-row cutoff does NOT warn but still names it / (7) no-match cutoff WARNs that zero rows were asserted and verdicts SKIP (3 warn / 1 enforce), never CLEAN" >&2
+  echo "    mis-arm (5) prefix-shortened cutoff WARNs naming the armed row / (6) exact-row cutoff does NOT warn but still names it / (7) no-match cutoff WARNs that zero rows were asserted and verdicts SKIP (3 warn / 1 enforce), never CLEAN / (7b) an allowlist naming every VERIFIED row at/after the cutoff verdicts SKIP with its own cause (3 warn / 1 enforce), never CLEAN / (7c) control — a mid-close scope with nothing allowlisted keeps CLEAN 0 / (7d) control — a partly allowlisted scope keeps its verdict over the rows that remain" >&2
   echo "    exit contract + network leg (#4318): (8) all ten (verdict x sentinel) pairs map as contracted / (9) the sentinel moves INCOMPLETE and SKIP and never NOT-EVALUATED / (10) PV-7 as a population property, exit 0 with exactly two producers / (11) SENSITIVITY — the same predicate reports a violation on a collapsed map / (12) the probe body carries no exit statement, its one exit path prints the handshake (12b/12c control + specificity) / (13) the probe end to end per sentinel, handshake equal to the exit / (14a-14d) a failed instrument is NOT-EVALUATED on both surfaces, never 'absent' / (14e) a genuinely absent Release is still a finding / (14f-14i, 14l) present, drift, drift-N/A, empty set, drift-MISSING / (14j) fan-in to one line / (14k) a finding dominates an outage + no findings counter / (14m) the network-leg denominator balances / (15) the consumer dispatches on the integer with the handshake (15b/15c control + specificity)" >&2
   echo "  Stage-13 output-set sub-checks (j velocity + k learnings) validated (#4452, group OS):" >&2
   echo "    OS-1 suppressed -> BOTH findings / OS-2 emitted -> zero / OS-3 bolded numerals -> grammar finding / OS-4 explicit-N/A conformant / OS-5 archived+co-located -> zero / OS-6 T4 wrong-surface write -> split-record / OS-7 field on both surfaces -> split-record / OS-8 dangling segment pointer -> finding / OS-9 learnings mis-placed names the heading found / OS-10 short field-set / OS-11 duplicate heading / OS-12 no-match outputs cutoff WARNs vacuous / OS-13 __none__ re-dormants (j)+(k) only. Every arm graded on the FINDING LINE — exit code, corpus-wide grep and 'the field parses' are all identical on OS-4/OS-5 and OS-6.
