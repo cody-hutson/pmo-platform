@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.69] - 2026-09-25
+
+Web-host allowlist entries can no longer approve a GitHub write, and refusals of unreadable commands now show whether they were right.
+
+[Full notes](release/releases/notes/v4.69_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.69)
+
 ## [v4.68] - 2026-09-25
 
 Operations sessions can no longer write into a relocated platform working copy, and a shortcut path no longer changes the guard's answer.

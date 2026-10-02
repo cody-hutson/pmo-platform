@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: ADR-206 — Egress allowlist rows declare their match domain; a leading glob never grants a gh-api write
-status: Accepted — ratified at the egress-hook-batch Stage-5 Collective Review scope-lock
+status: Accepted — operator-ratified at the egress-hook-batch Stage 13 Close ratification beat, 2026-09-25; the design was locked at the release's Stage-5 Collective Review scope-lock
 date: 2026-09-24
 release: egress-hook-batch
 deciders: "Workspace owner (operator) — decision rendered at the release's Stage-5 Collective Review scope-lock, with the independent adversarial review's refinements folded in; design by the Stage 5 Solutioning spoke (eight-candidate design exploration, narrowed to two before scoring); authored by the Stage 6 Engineering spoke"
@@ -20,7 +20,7 @@ source_observations:
 
 ## Status
 
-**Accepted.** Ratified by the operator at the egress-hook-batch Stage-5 Collective Review scope-lock, which locked the design together with four refinements from the independent adversarial review; authored at Stage 6 Engineering after that lock.
+**Accepted** — operator-ratified at the egress-hook-batch Stage 13 Close ratification beat, 2026-09-25, as one record of a decision rendered per record. The design was locked by the operator at the release's Stage-5 Collective Review scope-lock, together with four refinements from the independent adversarial review, and this record was authored at Stage 6 Engineering after that lock. It was written `Accepted` at authoring, crediting the scope-lock rather than the Stage 13 gate that owns the transition; that earlier flip was outside the gate, and the release plan records it as a deviation. The decision this record documents shipped in **v4.69**.
 
 **Numbering provenance.** Claimed as **204** against an anchor of **203** on `origin/main`, read from the repository's own ADR-numbering detector rather than computed as one past the highest number visible on any branch. The number binds at the Stage-12 claim; should the mainline claim it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. In-release prose cites this record by its slug token, which carries no number shape and resolves at the claim.
 
