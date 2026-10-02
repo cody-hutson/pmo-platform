@@ -1,10 +1,10 @@
 #!/bin/bash
 # tests/block-rm-prefer-trash.test.sh — synthetic Bash-tool payload tests
-# for block-rm-prefer-trash.sh. Covers BLOCK-TRASH-001..003 ACs +
-# CLAUDE_HOOK_BYPASS bypass + edge/regression cases.
+# for block-rm-prefer-trash.sh. Covers BLOCK-TRASH-001..003 ACs, the
+# auto-memory Trash arm (MEM-*), CLAUDE_HOOK_BYPASS bypass + edge/regression cases.
 #
-# Coverage map: 28 cases — Pass 1 baseline (22) + 6 F1 chained-command
-# tokenizer cases (EXT-CH1..CH6).
+# Coverage map: grouped below by rule and case family; the Summary block prints the
+# live total (a hardcoded count here drifted before — do not reintroduce one).
 
 set -u
 
@@ -382,6 +382,308 @@ dep_gate_case() {
 
 dep_gate_case "missing jq fails CLOSED (enforce, exit 2)" \
   "$(bash_payload 'rm /tmp/foo')" 2 "DEPENDENCY-MISSING"
+
+# ----- MEMORY-STORE ARM: auto-memory entry eviction (MEM-*) -----
+#
+# Every MEM case runs the hook with HOME pointed at a throwaway sandbox (the
+# block-autonomy-ceiling.test.sh idiom) and CLAUDE_PROJECT_DIR cleared, unless a case sets
+# it, so neither the operator's real settings and store nor a caller's project is read.
+# Fixture names avoid the operator-memory-reference gate's patterns. MEM_ROOT is
+# canonicalized at creation: the hook compares a canonicalized target with a root spelled
+# from HOME as written (see HOME-FIXTURE-01), so a sandbox reached through a symlink would
+# misread in-workspace targets, and MEM-23 would test that instead of the arm.
+MEM_ROOT=""
+mem_root_raw="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-mem.XXXXXX" 2>/dev/null)" || mem_root_raw=""
+if [ -n "$mem_root_raw" ] && [ -d "$mem_root_raw" ]; then
+  MEM_ROOT="$(cd "$mem_root_raw" && /bin/pwd -P)" || MEM_ROOT=""
+fi
+MEM_ERR_FILE="${MEM_ROOT}/hook-stderr"
+
+# mem_home <name> <settings-json|NONE> [noindex] — build a sandbox HOME under MEM_ROOT
+mem_home() {
+  local h="${MEM_ROOT}/$1"
+  /bin/mkdir -p "$h/.claude" "$h/Claude" "$h/mem-store/sub" "$h/mem-store/dir-entry.md" "$h/elsewhere"
+  /usr/bin/touch "$h/mem-store/entry-alpha.md" "$h/mem-store/notes.txt" "$h/mem-store/.hidden.md" \
+    "$h/mem-store/sub/entry-beta.md" "$h/elsewhere/note.md" "$h/top.md"
+  [ "${3:-}" = "noindex" ] || /usr/bin/touch "$h/mem-store/MEMORY.md"
+  /bin/ln -s "$h/elsewhere/note.md" "$h/mem-store/link-out.md"
+  /bin/ln -s "$h/mem-store/entry-alpha.md" "$h/elsewhere/alias-in.md"
+  /bin/ln -s "$h/mem-store" "$h/link-store"
+  [ "$2" = "NONE" ] || /usr/bin/printf '%s\n' "$2" > "$h/.claude/settings.json"
+}
+
+# mem_run <hook> <home> <project-dir|""> <payload> — run one hook invocation; sets MEM_EXIT
+#   and writes the hook's stderr to MEM_ERR_FILE. An empty project dir clears
+#   CLAUDE_PROJECT_DIR for the run.
+mem_run() {
+  MEM_EXIT=0
+  if [ -n "$3" ]; then
+    /usr/bin/printf '%s' "$4" | /usr/bin/env "HOME=$2" "CLAUDE_PROJECT_DIR=$3" /bin/bash "$1" 2>"$MEM_ERR_FILE" >/dev/null || MEM_EXIT="$?"
+  else
+    /usr/bin/printf '%s' "$4" | /usr/bin/env -u CLAUDE_PROJECT_DIR "HOME=$2" /bin/bash "$1" 2>"$MEM_ERR_FILE" >/dev/null || MEM_EXIT="$?"
+  fi
+}
+
+# mem_report <name> <exit> [pattern] — test_case's assertion and PASS/FAIL reporting, read
+#   from the stderr file the last mem_run wrote.
+mem_report() {
+  local ok=1
+  [ "$MEM_EXIT" != "$2" ] && ok=0
+  if [ -n "${3:-}" ] && ! /usr/bin/grep -qE "$3" "$MEM_ERR_FILE"; then ok=0; fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s (exit=%s expected=%s)\n  stderr: %s\n' "$1" "$MEM_EXIT" "$2" "$(/bin/cat "$MEM_ERR_FILE")"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# mem_case <name> <sandbox> <command> <exit> [pattern] [cwd] — one payload under one sandbox HOME
+mem_case() {
+  local cwd="${6:-${MEM_ROOT}/$2/Claude/.claude/worktrees/planning}"
+  mem_run "$HOOK" "${MEM_ROOT}/$2" "" "$(bash_payload "$3" "$cwd")"
+  mem_report "$1" "$4" "${5:-}"
+}
+
+# mem_hook_copy — a sandbox copy of the hook with the two libraries it cannot run without
+#   (the dep_gate_case shape), so a case can change what the copy sees. Prints its directory.
+mem_hook_copy() {
+  local sbx
+  sbx="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-copy.XXXXXX" 2>/dev/null)" || return 1
+  /bin/mkdir -p "${sbx}/lib"
+  /bin/cp "$HOOK" "${sbx}/block-rm-prefer-trash.sh"
+  /bin/cp "${HOOK_DIR}/lib/dep-resolve.sh" "${HOOK_DIR}/lib/command-position.awk" "${sbx}/lib/"
+  /usr/bin/printf '%s' "$sbx"
+}
+
+# mem_drop_copy <dir> — remove a mem_hook_copy directory, and nothing that is not one
+mem_drop_copy() {
+  case "${1##*/}" in
+    rmt-copy.*) /bin/rm -rf "$1" ;;
+  esac
+}
+
+# mem_normalizer_case <name> <python3-path> <exit> [pattern] — MEM-01's payload, run by a
+#   sandbox copy whose pinned python3 is rewritten to the given path. FAILs if the copy does
+#   not carry exactly that path (anti-vacuous).
+mem_normalizer_case() {
+  local sbx
+  sbx="$(mem_hook_copy)" || sbx=""
+  if [ -z "$sbx" ]; then
+    /usr/bin/printf 'FAIL: %s (no sandbox copy of the hook)\n' "$1"; FAIL=$((FAIL + 1)); return
+  fi
+  /usr/bin/sed -e 's#^readonly PYTHON3="/usr/bin/python3"$#readonly PYTHON3="'"$2"'"#' \
+    "$HOOK" > "${sbx}/block-rm-prefer-trash.sh"
+  if [ "$(/usr/bin/grep -c -x -F "readonly PYTHON3=\"$2\"" "${sbx}/block-rm-prefer-trash.sh")" != 1 ]; then
+    /usr/bin/printf 'FAIL: %s (the sandbox copy does not pin python3 to %s)\n' "$1" "$2"; FAIL=$((FAIL + 1))
+    mem_drop_copy "$sbx"; return
+  fi
+  mem_run "${sbx}/block-rm-prefer-trash.sh" "${MEM_ROOT}/base" "" \
+    "$(bash_payload "trash ${MEM_ROOT}/base/mem-store/entry-alpha.md" "${MEM_ROOT}/base/Claude/.claude/worktrees/planning")"
+  mem_drop_copy "$sbx"
+  mem_report "$1" "$3" "${4:-}"
+}
+
+# mem_admit_rows <log> — how many memory-store admission rows a log holds (0 if absent)
+mem_admit_rows() {
+  local n
+  n="$(/usr/bin/grep -c -F '"action":"memory-evict-admit"' "$1" 2>/dev/null)" || n=0
+  /usr/bin/printf '%s' "${n:-0}"
+}
+
+if [ -z "$MEM_ROOT" ]; then
+  /usr/bin/printf 'FAIL: MEM sandbox root could not be created, so the MEM arms did not run\n'
+  FAIL=$((FAIL + 1))
+else
+  mem_home base    '{"autoMemoryDirectory": "~/mem-store"}'
+  mem_home link    NONE
+  /usr/bin/printf '{"autoMemoryDirectory": "%s/link-store"}\n' "${MEM_ROOT}/link" > "${MEM_ROOT}/link/.claude/settings.json"
+  mem_home nocfg   NONE
+  mem_home badjson '{not json'
+  mem_home relval  '{"autoMemoryDirectory": "mem-store"}'
+  mem_home homeval '{"autoMemoryDirectory": "~/"}'
+  /usr/bin/touch "${MEM_ROOT}/homeval/MEMORY.md"
+  mem_home noidx   '{"autoMemoryDirectory": "~/mem-store"}' noindex
+  mem_home scoped  NONE
+  /bin/mkdir -p "${MEM_ROOT}/scoped/proj-shared/.claude" "${MEM_ROOT}/scoped/proj-local/.claude"
+  /usr/bin/printf '%s\n' '{"autoMemoryDirectory": "~/mem-store"}' > "${MEM_ROOT}/scoped/proj-shared/.claude/settings.json"
+  /usr/bin/printf '%s\n' '{"autoMemoryDirectory": "~/mem-store"}' > "${MEM_ROOT}/scoped/proj-local/.claude/settings.local.json"
+  MB="${MEM_ROOT}/base"
+
+  # -- Admitted: a Trash-verb move of one direct *.md entry of the declared store (AC-1) --
+  mem_case "MEM-01 trash of a direct store entry is admitted" base \
+    "trash ${MB}/mem-store/entry-alpha.md" 0
+  mem_case "MEM-02 a ~/-prefixed store entry is admitted (the hook expands ~)" base \
+    'trash ~/mem-store/entry-alpha.md' 0
+  mem_case "MEM-03 a Finder delete of a store entry is admitted" base \
+    "osascript -e 'tell application \"Finder\" to delete POSIX file \"${MB}/mem-store/entry-alpha.md\"'" 0
+  mem_case "MEM-04 an absolute-path trash of a store entry is admitted" base \
+    "/opt/homebrew/bin/trash ${MB}/mem-store/entry-alpha.md" 0
+  mem_case "MEM-05 a store declared through a symlink admits its entry (both sides canonicalized)" link \
+    "trash ${MEM_ROOT}/link/mem-store/entry-alpha.md" 0
+
+  # -- Refused: a permanent-deletion verb on an entry names the Trash move instead --
+  mem_case "MEM-06 rm of a store entry is refused with the Trash move named" base \
+    "rm ${MB}/mem-store/entry-alpha.md" 2 'BLOCK-TRASH-001] BLOCKED: permanent deletion of an auto-memory entry'
+  mem_case "MEM-07 unlink of a store entry is refused with the Trash move named" base \
+    "unlink ${MB}/mem-store/entry-alpha.md" 2 'BLOCK-TRASH-001] BLOCKED: permanent deletion of an auto-memory entry'
+
+  # -- Refused: every target that is not a direct *.md entry of the declared store (AC-2) --
+  mem_case "MEM-08 an entry in a store subdirectory is refused" base \
+    "trash ${MB}/mem-store/sub/entry-beta.md" 2 "BLOCK-TRASH-003"
+  mem_case "MEM-09 a non-.md store file is refused" base \
+    "trash ${MB}/mem-store/notes.txt" 2 "BLOCK-TRASH-003"
+
+  # MEM-10: the index is never admitted — written as the hook reads it, or in a form the
+  # shell would expand or unescape into it. The arm passes only when every form is refused.
+  m10_fail=""
+  for m10_cmd in "trash ${MB}/mem-store/MEMORY.md" "trash ${MB}/mem-store/*.md" \
+                 "trash ${MB}/mem-store/{MEMORY,entry-alpha}.md" "trash ${MB}/mem-store/MEMORY\.md" \
+                 "trash ${MB}/mem-store/'MEMORY'.md"; do
+    mem_run "$HOOK" "$MB" "" "$(bash_payload "$m10_cmd" "${MB}/Claude/.claude/worktrees/planning")"
+    if [ "$MEM_EXIT" != 2 ] || ! /usr/bin/grep -qF "BLOCK-TRASH-003" "$MEM_ERR_FILE"; then
+      m10_fail="${m10_fail}  ${m10_cmd} -> exit=${MEM_EXIT}: $(/bin/cat "$MEM_ERR_FILE")"$'\n'
+    fi
+  done
+  if [ -z "$m10_fail" ]; then
+    /usr/bin/printf 'PASS: %s\n' "MEM-10 the store index is refused, as written and through shell expansion"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n%s' "MEM-10 the store index is refused, as written and through shell expansion" "$m10_fail"
+    FAIL=$((FAIL + 1))
+  fi
+
+  mem_case "MEM-11 the index in another case spelling is refused" base \
+    "trash ${MB}/mem-store/memory.md" 2 "BLOCK-TRASH-003"
+  mem_case "MEM-12 a directory named like an entry is refused" base \
+    "trash ${MB}/mem-store/dir-entry.md" 2 "BLOCK-TRASH-003"
+  mem_case "MEM-13 the store itself is refused" base \
+    "trash ${MB}/mem-store" 2 "BLOCK-TRASH-003"
+  mem_case "MEM-14 a dot-leading entry is refused" base \
+    "trash ${MB}/mem-store/.hidden.md" 2 "BLOCK-TRASH-003"
+  mem_case "MEM-15 a literal .. that resolves back inside the store is refused" base \
+    "trash ${MB}/mem-store/sub/../entry-alpha.md" 2 "BLOCK-TRASH-003"
+  mem_case "MEM-16 a .. that leaves the store is refused" base \
+    "trash ${MB}/mem-store/../elsewhere/note.md" 2 "BLOCK-TRASH-003"
+  mem_case "MEM-17 a relative entry operand is refused" base \
+    "trash entry-alpha.md" 2 "BLOCK-TRASH-003" "${MB}/mem-store"
+
+  # MEM-18: a symlink is never admitted as an entry, in either direction — one inside the
+  # store that resolves out of it, and one outside the store that resolves into it (Trash
+  # moves the link the operand names, not its referent). Both must be refused.
+  m18_fail=""
+  for m18_cmd in "trash ${MB}/mem-store/link-out.md" "trash ${MB}/elsewhere/alias-in.md"; do
+    mem_run "$HOOK" "$MB" "" "$(bash_payload "$m18_cmd" "${MB}/Claude/.claude/worktrees/planning")"
+    if [ "$MEM_EXIT" != 2 ] || ! /usr/bin/grep -qF "BLOCK-TRASH-003" "$MEM_ERR_FILE"; then
+      m18_fail="${m18_fail}  ${m18_cmd} -> exit=${MEM_EXIT}: $(/bin/cat "$MEM_ERR_FILE")"$'\n'
+    fi
+  done
+  if [ -z "$m18_fail" ]; then
+    /usr/bin/printf 'PASS: %s\n' "MEM-18 a symlink is refused, escaping the store or reaching into it"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n%s' "MEM-18 a symlink is refused, escaping the store or reaching into it" "$m18_fail"
+    FAIL=$((FAIL + 1))
+  fi
+
+  mem_case "MEM-19 an entry beside an outside target is refused as a whole" base \
+    "trash ${MB}/mem-store/entry-alpha.md /tmp/foo" 2 "BLOCK-TRASH-003"
+  mem_case "MEM-20 a target outside both roots is refused" base \
+    "trash ${MB}/elsewhere/note.md" 2 "BLOCK-TRASH-003"
+  mem_case "MEM-21 no user settings admits nothing" nocfg \
+    "trash ${MEM_ROOT}/nocfg/mem-store/entry-alpha.md" 2 "BLOCK-TRASH-003"
+  mem_case "MEM-22 malformed user settings admit nothing and are not a hook error" badjson \
+    "trash ${MEM_ROOT}/badjson/mem-store/entry-alpha.md" 2 "BLOCK-TRASH-003"
+  mem_case "MEM-23 malformed user settings leave the inside-workspace Trash allow intact" badjson \
+    "trash ${MEM_ROOT}/badjson/Claude/foo.txt" 0
+  mem_case "MEM-24 a relative store value admits nothing" relval \
+    "trash ${MEM_ROOT}/relval/mem-store/entry-alpha.md" 2 "BLOCK-TRASH-003"
+  mem_case "MEM-25 a store equal to HOME admits nothing" homeval \
+    "trash ${MEM_ROOT}/homeval/top.md" 2 "BLOCK-TRASH-003"
+  mem_case "MEM-26 a store without its index admits nothing" noidx \
+    "trash ${MEM_ROOT}/noidx/mem-store/entry-alpha.md" 2 "BLOCK-TRASH-003"
+  mem_normalizer_case "MEM-27a an unusable python3 admits nothing (fail closed)" /nonexistent/python3 2 "BLOCK-TRASH-003"
+  mem_normalizer_case "MEM-27b the normalizer sandbox admits with a usable python3 (control)" /usr/bin/python3 0
+
+  # MEM-CD2: one admission-log row per admission, and none for a refusal. (a) An admission
+  # adds exactly one compact row to the hook's block log, carrying the command's digest and
+  # the working directory and no rule. (b) A command refused as a whole adds none. (c) A
+  # sandbox copy admits while its log is writable (c1) and refuses once a row cannot be
+  # written (c2). Rows are counted as a delta: a reused layout keeps its log across runs.
+  cd2_fail=""
+  cd2_log="${HOOK_DIR}/block-log.jsonl"
+  cd2_cwd="${MB}/Claude/.claude/worktrees/planning"
+  cd2_cmd="trash ${MB}/mem-store/entry-alpha.md"
+  cd2_before="$(mem_admit_rows "$cd2_log")"
+  mem_run "$HOOK" "$MB" "" "$(bash_payload "$cd2_cmd" "$cd2_cwd")"
+  cd2_after="$(mem_admit_rows "$cd2_log")"
+  if [ "$MEM_EXIT" != 0 ] || [ "$((cd2_after - cd2_before))" != 1 ]; then
+    cd2_fail="${cd2_fail}  (a) admission: exit=${MEM_EXIT} (expected 0), rows ${cd2_before} -> ${cd2_after} (expected +1): $(/bin/cat "$MEM_ERR_FILE")"$'\n'
+  else
+    cd2_row="$(/usr/bin/grep -F '"action":"memory-evict-admit"' "$cd2_log")"
+    cd2_row="${cd2_row##*$'\n'}"
+    cd2_want="$(/usr/bin/printf '%s' "$cd2_cmd" | /usr/bin/shasum -a 256)"
+    cd2_want="${cd2_want%% *}"
+    cd2_got="$(/usr/bin/jq -r '[.hook, .tool, .input_digest, .cwd, (has("rule") | tostring)] | join("|")' <<< "$cd2_row" 2>/dev/null)" || cd2_got=""
+    if [ "$cd2_got" != "block-rm-prefer-trash|Bash|${cd2_want:0:16}|${cd2_cwd}|false" ]; then
+      cd2_fail="${cd2_fail}  (a) row fields: got '${cd2_got}', want 'block-rm-prefer-trash|Bash|${cd2_want:0:16}|${cd2_cwd}|false'"$'\n'
+    fi
+  fi
+  cd2_before="$(mem_admit_rows "$cd2_log")"
+  mem_run "$HOOK" "$MB" "" "$(bash_payload "${cd2_cmd} /tmp/foo" "$cd2_cwd")"
+  cd2_after="$(mem_admit_rows "$cd2_log")"
+  if [ "$MEM_EXIT" != 2 ] || [ "$cd2_after" != "$cd2_before" ]; then
+    cd2_fail="${cd2_fail}  (b) refused command: exit=${MEM_EXIT} (expected 2), rows ${cd2_before} -> ${cd2_after} (expected +0)"$'\n'
+  fi
+  cd2_sbx="$(mem_hook_copy)" || cd2_sbx=""
+  if [ -z "$cd2_sbx" ]; then
+    cd2_fail="${cd2_fail}  (c) no sandbox copy of the hook"$'\n'
+  else
+    mem_run "${cd2_sbx}/block-rm-prefer-trash.sh" "$MB" "" "$(bash_payload "$cd2_cmd" "$cd2_cwd")"
+    if [ "$MEM_EXIT" != 0 ] || [ "$(mem_admit_rows "${cd2_sbx}/block-log.jsonl")" != 1 ]; then
+      cd2_fail="${cd2_fail}  (c1) writable log: exit=${MEM_EXIT} (expected 0), rows $(mem_admit_rows "${cd2_sbx}/block-log.jsonl") (expected 1)"$'\n'
+    fi
+    /bin/rm -f "${cd2_sbx}/block-log.jsonl"
+    /bin/mkdir "${cd2_sbx}/block-log.jsonl"
+    mem_run "${cd2_sbx}/block-rm-prefer-trash.sh" "$MB" "" "$(bash_payload "$cd2_cmd" "$cd2_cwd")"
+    if [ "$MEM_EXIT" != 2 ] || ! /usr/bin/grep -qE 'BLOCK-TRASH-003] BLOCKED: the Trash move of an auto-memory entry could not be recorded' "$MEM_ERR_FILE"; then
+      cd2_fail="${cd2_fail}  (c2) unwritable log: exit=${MEM_EXIT} (expected 2, the could-not-be-recorded refusal): $(/bin/cat "$MEM_ERR_FILE")"$'\n'
+    fi
+    mem_drop_copy "$cd2_sbx"
+  fi
+  if [ -z "$cd2_fail" ]; then
+    /usr/bin/printf 'PASS: %s\n' "MEM-CD2 one admission-log row per admission, none for a refusal, and no admission without its row"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n%s' "MEM-CD2 one admission-log row per admission, none for a refusal, and no admission without its row" "$cd2_fail"
+    FAIL=$((FAIL + 1))
+  fi
+
+  # MEM-FM3: a store declared outside user scope gets the memory-specific refusal, not the
+  # generic cancel text — read from project scope through CLAUDE_PROJECT_DIR (i), and from
+  # local scope through the working directory when CLAUDE_PROJECT_DIR is unset (ii). Neither
+  # is ever admitted: project and local settings word the refusal, they never aim the arm.
+  fm3_fail=""
+  fm3_cmd="trash ${MEM_ROOT}/scoped/mem-store/entry-alpha.md"
+  for fm3_case in "i|${MEM_ROOT}/scoped/proj-shared|${MEM_ROOT}/scoped/proj-shared" \
+                  "ii||${MEM_ROOT}/scoped/proj-local"; do
+    fm3_tag="${fm3_case%%|*}"; fm3_rest="${fm3_case#*|}"
+    fm3_proj="${fm3_rest%%|*}"; fm3_cwd="${fm3_rest#*|}"
+    mem_run "$HOOK" "${MEM_ROOT}/scoped" "$fm3_proj" "$(bash_payload "$fm3_cmd" "$fm3_cwd")"
+    if [ "$MEM_EXIT" != 2 ] \
+       || ! /usr/bin/grep -qE 'BLOCK-TRASH-003] BLOCKED: auto-memory entry in a store declared outside user scope' "$MEM_ERR_FILE" \
+       || /usr/bin/grep -qF "cancel operation" "$MEM_ERR_FILE"; then
+      fm3_fail="${fm3_fail}  (${fm3_tag}) exit=${MEM_EXIT} (expected 2, the memory-specific refusal): $(/bin/cat "$MEM_ERR_FILE")"$'\n'
+    fi
+  done
+  if [ -z "$fm3_fail" ]; then
+    /usr/bin/printf 'PASS: %s\n' "MEM-FM3 a store declared outside user scope gets the memory-specific refusal"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n%s' "MEM-FM3 a store declared outside user scope gets the memory-specific refusal" "$fm3_fail"
+    FAIL=$((FAIL + 1))
+  fi
+
+  case "${MEM_ROOT##*/}" in
+    rmt-mem.*) /bin/rm -rf "$MEM_ROOT" ;;
+  esac
+fi
 
 # Summary
 echo ""
