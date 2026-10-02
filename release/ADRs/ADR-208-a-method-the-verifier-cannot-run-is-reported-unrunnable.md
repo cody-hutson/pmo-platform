@@ -38,7 +38,7 @@ source_observations:
 
 **Amends ADR-075 decision 5.** This record contests nothing ADR-075 decided. Decision 5 made the emitted evidence, its verdict enum included, a versioned contract, so that a change to it is a detectable schema bump rather than a silent break. This record is such a change: the enum gains UNRUNNABLE under the release's one `SCHEMA_VERSION` bump, and the exit rule counts UNRUNNABLE with PASS and SKIP.
 
-**Numbering provenance.** Claimed as **208** against an anchor of **206** on the mainline, read from the repository's own ADR-numbering tool at authoring, with **207** already held on this release's branch by the record {{ADR:a-rows-grading-route-is-declared-in-its-method-cell}}. The number binds at the Stage-12 claim, and in-release prose cites this record by its slug token.
+**Numbering provenance.** Claimed as **208** against an anchor of **206** on the mainline, read from the repository's own ADR-numbering tool at authoring, with **207** already held on this release's branch by the record ADR-207. The number binds at the Stage-12 claim, and in-release prose cites this record by its slug token.
 
 ## Context
 
@@ -81,7 +81,7 @@ Several of the release's cards each designed a part of one outcome vocabulary: t
    - A count is read as the table says: `grep`'s count flag, `wc`'s first field, otherwise the output's lines.
    - A seventh verb, or a flag that changes a verb's reading, is a row or a cell in that table, never a point rule in one reader.
 12. **A documented-decision method reads a named SKIP on a per-issue row as it does on a cross-issue criterion, named by the route it takes** (D31–D32). A named read of a named surface, with no command this executor runs:
-   - declared in its method cell, reads the declared-deferred SKIP, by the declaration form of the sibling record {{ADR:a-rows-grading-route-is-declared-in-its-method-cell}};
+   - declared in its method cell, reads the declared-deferred SKIP, by the declaration form of the sibling record ADR-207;
    - left undeclared on a per-issue row, reads the no-command SKIP, through the residual (Decision 9);
    - on a cross-issue criterion, keeps the documented-decision SKIP, byte-identical.
 
@@ -93,7 +93,7 @@ Several of the release's cards each designed a part of one outcome vocabulary: t
    - It is read at three points: by the hub at Gate 1, at Stage 6 entry on the committed plan, and at Stage 9 Phase A3.6 against the final head.
    - A criterion naming more than one command is flagged: only its designated command runs (Decision 8) — a command as Decision 18 names one, and a criterion declaring a reader-graded limb is flagged too, which Decision 18 states.
 14. **QA Checkpoint 3.5 reads every emitted outcome into the Stage-8 per-criterion enum through one table, and adds no verdict value to either enum** (D25, D37). The table in `release-process.md` is the single home of that reading; the Stage-4, Stage-9 and G-PR10 texts cite it and restate none of its rows. A declared criterion whose declaration names its evidence surface is *awaiting operator grade* at Phase A3.6; its evidence is presented at Phase B as an operator action, and G-PR10 is graded at Phase C over the emitted readings and the operator's recorded grades. An undeclared decline — the can't-run outcome, a partially run criterion included, and any other SKIP — reads NOT MET (unverified), and a DEGRADED run is re-emitted before any criterion in it is read.
-15. **A declaration names where its guarantee can be read, and one issue's criterion is not evidence for a predicate over several** (D25). The evidence surface is a repository path, a suite arm label, or a namespace-qualified criterion for each issue the criterion spans, in the reference forms of the sibling record {{ADR:acceptance-verdicts-name-their-criterion-namespace}}; a path or an arm label covers the release. A reason alone names no surface: a per-issue row may defer with its reason, but a cross-issue declaration that names no surface reads NOT MET.
+15. **A declaration names where its guarantee can be read, and one issue's criterion is not evidence for a predicate over several** (D25). The evidence surface is a repository path, a suite arm label, or a namespace-qualified criterion for each issue the criterion spans, in the reference forms of the sibling record ADR-210; a path or an arm label covers the release. A reason alone names no surface: a per-issue row may defer with its reason, but a cross-issue declaration that names no surface reads NOT MET.
 16. **A decline stays outside the exit-failing set, whatever it is named, and the single-runner rule and the closed verb set are retained** (D25). Renaming declined rows must not turn a plan's exit 0 into 3: a SKIP, an UNRUNNABLE and any later can't-run-here value is weighed at Stage 9, not at the exit. A family that newly executes a row it used to decline grades PASS or FAIL only where it can establish the evaluation context the method presumes, and otherwise emits the can't-run outcome. The executor remains the sole runner of every criterion; the lint and the operator's grade add no second runner.
 17. **An unterminated quote in a designated command reads ERROR, naming the quote, and fails the run** (D55). The command cannot be split into the words its author meant, which is input the executor could not read. A shell operator outside quotes — a pipe, a list, a redirect or a substitution — stays UNRUNNABLE, naming the operator, as Decision 3 states. The shared quote-aware predicate is unchanged: only the verdict the handlers give a quote it reports changes, on every route the refusal reaches — the per-issue handler, the cross-issue handler and the designated command of a method naming several — and the lint flags it by the same token.
 18. **A limb the verifier does not grade never leaves a row at PASS** (D67, for D64 and D66).
@@ -167,10 +167,10 @@ Decisions 13–16 are **MODERATE** (D25): a gate reading every release applies, 
 
 - ADR-075 — the plan-verification executor's shared contract. Amended: decision 5's verdict enum gains UNRUNNABLE under decision 5's own versioning rule, and the family registry gains the scope and unrunnable families.
 - ADR-073 — the cross-issue release-integration check at Stage 9. Its single-runner rule is unchanged; Stage 9 reads the emitted UNRUNNABLE as Decision 7 states, and every emitted outcome through the one table Decision 14 names. Its rejection of grading a release-scoped predicate per issue is what Decision 15 applies to evidence.
-- {{ADR:acceptance-verdicts-name-their-criterion-namespace}} — the sibling record in this release on criterion namespaces. Its reference forms are the ones a cross-issue declaration uses to name a per-issue criterion as evidence (Decision 15).
+- ADR-210 — the sibling record in this release on criterion namespaces. Its reference forms are the ones a cross-issue declaration uses to name a per-issue criterion as evidence (Decision 15).
 - ADR-168 — a verification claim is a named schema column. Untouched.
 - ADR-181 — ADR citations bind at the claim, not at authorship. In-release prose cites this record by its slug token.
-- {{ADR:a-rows-grading-route-is-declared-in-its-method-cell}} — the sibling record in this release, on how a method cell declares its grading route. Its declared deploy row that also names another command takes this partition's partially run outcome.
+- ADR-207 — the sibling record in this release, on how a method cell declares its grading route. Its declared deploy row that also names another command takes this partition's partially run outcome.
 
 ## References
 

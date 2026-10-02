@@ -780,7 +780,7 @@ _extract_section() {
 # `deploy.sh --check` span is graded by the probe: the deploy check does not run.
 # The deploy-check oracle itself is reached by declaration only: a row goes to it
 # only when its designated command IS the backticked invocation.
-# {{ADR:a-rows-grading-route-is-declared-in-its-method-cell}} records the first as its
+# ADR-207 records the first as its
 # Decision 6 and the second as its Decision 7.
 classify_family() {
   local raw_method="$1" method prose probe cmd

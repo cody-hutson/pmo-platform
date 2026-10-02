@@ -110,7 +110,7 @@ The decision was whether to wire the column into routing, or to remove the path 
 - ADR-173 — a declared kind is a residual feature signal. The kernel the residual-wire alternative followed.
 - ADR-062 — the substrate-versus-canonical precedent. The card's issue-body figures stay historical record.
 - ADR-181 — ADR citations bind at the claim, not at authorship. In-release prose cites this record by its slug token.
-- {{ADR:a-method-the-verifier-cannot-run-is-reported-unrunnable}} — the release's outcome partition. A declared deploy row that also names another command takes its partially run outcome, UNRUNNABLE (Decision 7).
+- ADR-208 — the release's outcome partition. A declared deploy row that also names another command takes its partially run outcome, UNRUNNABLE (Decision 7).
 
 ## References
 

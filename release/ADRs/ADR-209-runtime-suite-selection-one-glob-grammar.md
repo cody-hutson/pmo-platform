@@ -23,7 +23,7 @@ source_observations:
 
 **Accepted.** Rendered by the operator at the Stage-5 D-6876 gate as decisions D33 (option A, with the Phase A6.5 review's fixes) and D34 (the fallback cited by role, with the new rows numbered 6 and 7 and the fallback row 8). The Collective Review then adopted the design's reading of the map's outcomes in the release's outcome vocabulary (D37) and recorded the map's coupling to a sibling milestone's widening of the same globs (D43). Recorded at Stage 6 Engineering for the `verifier-grades-what-plans-declare` release, in the slice that lands the map change.
 
-**Numbering provenance.** Claimed as **209** against an anchor of **206** on the mainline, read from the repository's own ADR-numbering tool at authoring, with **207** and **208** already held on this release's branch by {{ADR:a-rows-grading-route-is-declared-in-its-method-cell}} and {{ADR:a-method-the-verifier-cannot-run-is-reported-unrunnable}}. The number binds at the Stage-12 claim, and in-release prose cites this record by its slug token.
+**Numbering provenance.** Claimed as **209** against an anchor of **206** on the mainline, read from the repository's own ADR-numbering tool at authoring, with **207** and **208** already held on this release's branch by ADR-207 and ADR-208. The number binds at the Stage-12 claim, and in-release prose cites this record by its slug token.
 
 ## Context
 
@@ -45,7 +45,7 @@ Its precedence rule — evaluate rows top-to-bottom, the most-specific glob wins
 3. **Rows for the suites the map exists to select.** Row 6 covers the tool test suites directly under `release/tools/tests/` and `core/deploy/tools/tests/`, `*.sh` and `*.py`, one level deep, and runs each matched suite by its own bare invocation. Its patterns are the `TEST_SUITE_GLOBS` of the self-test coverage engine's Arm D, verbatim, so a change to either is a visible decision on both (D43). Row 7 covers the skill scripts under `core/skills/*/scripts/`, and runs each through `--self-test`, only on a script that ADR-119's advertise predicate accepts; any other matched script is a named gap in the map, never an invocation. The provider usage connector gains an offline `--self-test`, so row 7's runner fits every current member.
 4. **Every selected runner runs with stdin on the null device**, and the per-path runner forms carry the redirect. A matched path the change deletes records `test-run/suite-skip` with a named reason rather than invoking a missing file. The Sandbox cell of rows 6 and 7 is a membership rule: a member must be hermetic or read-only, and one that is not gets a row of its own.
 5. **The last row is the explicit no-match fallback, and every consumer cites it by role** (D34): "the last row is the explicit no-match fallback". Rows 1–5 keep their ids; the new rows are 6 and 7 and the fallback is row 8. A path that carries runtime behaviour and still lands in the fallback is a gap in the map, not a no-op.
-6. **Each outcome of the map has one reading in the plan verifier's vocabulary** (D37): a suite that passes reads PASS; a suite that fails reads FAIL; a change that runs no suite — the no-match row, a deleted matched path, or a row-7 script with no self-test — reads a named SKIP, carrying its reason; and a runner error, where zero units executed, reads can't run here (UNRUNNABLE), in the vocabulary of {{ADR:a-method-the-verifier-cannot-run-is-reported-unrunnable}}.
+6. **Each outcome of the map has one reading in the plan verifier's vocabulary** (D37): a suite that passes reads PASS; a suite that fails reads FAIL; a change that runs no suite — the no-match row, a deleted matched path, or a row-7 script with no self-test — reads a named SKIP, carrying its reason; and a runner error, where zero units executed, reads can't run here (UNRUNNABLE), in the vocabulary of ADR-208.
 
 ## Alternatives Considered
 
@@ -86,7 +86,7 @@ Its precedence rule — evaluate rows top-to-bottom, the most-specific glob wins
 - ADR-075 — the plan-verification executor's shared contract. Its runtime-suite family emits a named SKIP and runs no suite, and is unchanged.
 - ADR-062 — the substrate-versus-canonical precedent. The card's issue-body figures stay historical record.
 - ADR-181 — ADR citations bind at the claim, not at authorship. In-release prose cites this record by its slug token.
-- {{ADR:a-method-the-verifier-cannot-run-is-reported-unrunnable}} — the release's outcome partition, whose vocabulary Decision 6 reads the map's outcomes in.
+- ADR-208 — the release's outcome partition, whose vocabulary Decision 6 reads the map's outcomes in.
 
 ## References
 

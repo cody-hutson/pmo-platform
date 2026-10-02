@@ -2618,7 +2618,7 @@ rm -rf "$MUTD6"
 # G14 — PREDICATE CLASS IS A READER ANNOTATION (V6180-AC5): a row is graded from
 #       its Verification method cell alone.
 #
-# {{ADR:a-rows-grading-route-is-declared-in-its-method-cell}} removed the
+# ADR-207 removed the
 # classifier's dormant class-hint path rather than wiring it: its only caller had
 # passed an empty class since the executor's first commit, so the column plans
 # author never shaped a verdict. A row is routed away from the executor only by a
