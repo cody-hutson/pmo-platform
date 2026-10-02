@@ -17658,15 +17658,22 @@ EOF
   /usr/bin/grep -q 'armed at LOG row v9.98' <<<"$_e" \
     || { echo "FAIL: an exact-row cutoff must still name the armed row, got '$_e'"; failures=$((failures+1)); }
 
-  # (7) a cutoff matching NO row asserts nothing and would report CLEAN 0 — vacuously
-  #     clean. It must say so out loud. (Anti-vacuity: a gate that passes on zero
-  #     assertions is indistinguishable from a gate that passes.)
-  #     The needle is pinned to the ROW cutoff's own message, not the bare phrase
-  #     `matched NO LOG row`: all THREE cutoffs now emit that phrase, so a loose
-  #     needle would let this assertion pass on a SIBLING cutoff's warning while the
-  #     row cutoff's own warning had regressed away — cross-talk between anti-vacuity
-  #     emits is itself a vacuity, and the fixture pins the other two to __none__
-  #     precisely so only one voice can answer here.
+  # (7) a ROW cutoff matching NO row asserts nothing. It verdicts SKIP — a withheld
+  #     verdict, exit 3 under warn and 1 under enforce, as the cutoff's own __none__
+  #     re-dormant does — never CLEAN 0, which would read as success. (Anti-vacuity: a
+  #     gate that passes on zero assertions is indistinguishable from a gate that
+  #     passes.) It also says so on stderr.
+  #     The stderr needle is pinned to the ROW cutoff's own message, not the bare phrase
+  #     `matched NO LOG row`: all FOUR cutoffs emit that phrase, so a loose needle would
+  #     let this assertion pass on a SIBLING cutoff's warning while the row cutoff's own
+  #     warning had regressed away — cross-talk between anti-vacuity emits is itself a
+  #     vacuity, and the fixture holds the other three at __none__ (two pinned, the
+  #     telemetry cutoff by its shipped default) precisely so only one voice can answer.
+  _v="$(_cc_selftest_verdict "v0.01")"; _tok="${_v%% *}"
+  [[ "$_tok" == "SKIP" ]] \
+    || { echo "FAIL: (7) a no-match row cutoff must verdict SKIP (a withheld verdict), never CLEAN, got '$_v'"; failures=$((failures+1)); }
+  [[ "$(_cc_verdict_exit_code "$_tok" warn)" == "3" && "$(_cc_verdict_exit_code "$_tok" enforce)" == "1" ]] \
+    || { echo "FAIL: (7) a no-match row cutoff must exit 3 under warn and 1 under enforce, got $(_cc_verdict_exit_code "$_tok" warn) and $(_cc_verdict_exit_code "$_tok" enforce) for '$_v'"; failures=$((failures+1)); }
   _e="$(_cc_selftest_stderr "v0.01")"
   /usr/bin/grep -q 'WARNING — cutoff v0.01 matched NO LOG row' <<<"$_e" \
     || { echo "FAIL: a no-match cutoff must WARN that zero rows were asserted, got '$_e'"; failures=$((failures+1)); }
