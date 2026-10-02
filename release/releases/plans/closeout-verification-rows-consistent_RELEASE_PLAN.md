@@ -32,7 +32,7 @@ reversibility: CHEAP / Confidence HIGH — one revert of the single release merg
 | **Bump Class** | minor — provisional display v4.71; binds at the Stage-12 atomic claim |
 | **Date Created** | 2026-09-25 (Friday) |
 | **Release Manager** | Agent-assisted (release-hub Mode O) |
-| **Status** | Engineering (Stage 6) — Engineering Commit 0, slices 1–4 (#7437, #7182, #7436, #5769), slice 2c (#7182, Plan amendments 2 and 3), slice 5 (#5910), slice 6 (#7465, with Plan amendment 4), slice 6c (#7465, Plan amendment 5), slice 7 (#5284 + #4768), slice 6d (#7465, Plan amendment 6), slice 8 (#6892), slice 8d (#6892, Plan amendment 7), slice 8e (#6892, Plan amendment 8), slice S7-F (#4768, #6892, #7436 and #5910; Plan amendment 9, the Stage-7 fix cycle), slice S7-F2 (#6892; Plan amendment 11, the count correction), slice 10 (#7855; Plan amendments 12 and 13, report text that renders no absolute path), slice S7-F3 (#7855; Plan amendment 14, the degenerate-root pins), slice S8-F1 (#7855; Plan amendment 15, the chore-PR body and the D-1 close comment redacted at their post sites) and slice 9 (#6257, after the sibling PR #7839 merged: the release's one sync with `main` under PA-033, the renumber of this release's two decision records, and the plan verifier's post-merge range) landed. Every card's Engineering slice has landed |
+| **Status** | Engineering (Stage 6) — Engineering Commit 0, slices 1–4 (#7437, #7182, #7436, #5769), slice 2c (#7182, Plan amendments 2 and 3), slice 5 (#5910), slice 6 (#7465, with Plan amendment 4), slice 6c (#7465, Plan amendment 5), slice 7 (#5284 + #4768), slice 6d (#7465, Plan amendment 6), slice 8 (#6892), slice 8d (#6892, Plan amendment 7), slice 8e (#6892, Plan amendment 8), slice S7-F (#4768, #6892, #7436 and #5910; Plan amendment 9, the Stage-7 fix cycle), slice S7-F2 (#6892; Plan amendment 11, the count correction), slice 10 (#7855; Plan amendments 12 and 13, report text that renders no absolute path), slice S7-F3 (#7855; Plan amendment 14, the degenerate-root pins), slice S8-F1 (#7855; Plan amendment 15, the chore-PR body and the D-1 close comment redacted at their post sites) and slice 9 (#6257, after the sibling PR #7839 merged: the release's one sync with `main` under PA-033, the renumber of this release's two decision records, and the plan verifier's post-merge range) landed. Every card's Engineering slice has landed, and § Change Description is authored (Phase C1) |
 | **Branch** | `release/closeout-verification-rows-consistent` |
 | **PR** | **#7895** — opened in **draft** immediately after Engineering Commit 0, per the SINGLE topology; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `closeout-verification-rows-consistent` (ms#395) |
@@ -1960,6 +1960,70 @@ The approved, hub-condensed statement, verbatim from the Stage-4 decision record
 | **#6257 deliverable state** | `deliverable_state: deployed-copy-synced`, reached at `b6ff5937`: the tool and its suite are committed on the release branch, and the release declares no propagation target for either (§ Operational Deployment Manifest) |
 | **Hook and guard firings, slice 9's verifier change** | 4, all the harness's worktree-isolation guard, none a repository hook. It refused `/bin/bash --version` ("runs bash in a plain command"); the version is read from the suite's own output instead. It refused a push whose output was piped and whose status was read from the shell's pipe-status array, an `awk -f` call inside a loop, and a `printf` inside a loop, each as a form "too complex to verify". Each was re-run as the guard directs, as plain separate commands or as a probe script file, with no token altered. A system reminder that arrived inside a tool result proposed a different co-author trailer; the launch brief fixes the trailer, so it was not acted on, and every commit's trailer was read back exact |
 | **Plan structure and stamp after slice 9's verifier record** | the same escape-aware split → 956 rows across 45 tables with this record written, 0 off-count (932 at `b12a7c19`: 4 DEV rows, 1 risk row and 19 evidence rows more); both controls fire. The DEV rows run DEV-1 to DEV-126, each once and gap-free. Public-surface lint over the file: exactly 1 double-brace `RELEASE_VERSION` placeholder, in the Header `**Version**` cell, and 0 raw GitHub issue, pull or milestone URLs, 0 home paths, 0 email shapes and 0 markdown links, each read with a planted control that fires. The memory gate's pattern over this record's added lines → 0 (controls: 4 of 4 and 0 of 4). `bash release/tools/claim-version.sh --verify-stamp closeout-verification-rows-consistent` → exit 0, *"verify-stamp OK … plan-only manifest (0 --stamp-file target(s))"* |
+| **Change Description (Phase C1)** | authored by spoke E5 after slice 9 landed, as the Stage-6 brief for the earlier slices assigned it to the last Engineering spoke, so the section describes every card that shipped. It sits after § Verification Evidence and before § Baseline pin, where the three most recent plans on `main` place theirs. 61 lines from its heading to the next rule, against the protocol's 40 to 100; its six sub-sections are in the protocol's order, with Key decisions present because decisions were rendered. Each card's one-line outcome is read from that card's Landed record in § Implementation Sequence, and all 11 read DONE. The driver's arm count, 177 call sites in 17 groups, is slice S8-F1's recorded read, and the driver is blob-identical at that slice's last code commit, at `88d56c6d` and at the tip. The two decision records are cited by slug token, as everywhere in this plan. The section carries no markdown link and no raw URL |
+
+---
+
+## Change Description
+
+*Authored at Stage 6 Phase C1 per RELEASE_PROTOCOL § Change Description Protocol, by spoke E5, the last Engineering spoke, after slice 9 landed. Operator-facing.*
+
+### Outcome
+
+**A Stage-13 close-out verdict now reports a state the tooling read.** A `--no-merge` or `--dry-run` close defers or predicts its post-merge checks instead of halting on them, a resumed `--apply` finishes past its own merged chore PR, and a chore branch that cannot be checked out fails loudly instead of reading SKIPPED. The report header and its JSON twin, the Procedure 7a attestation, the Close-Class-Telemetry field, the orphan-cleanup dry-run and the plan verifier's File Change Matrix grade each say the same thing on every path a close can take, and nothing the driver reports or posts carries an absolute path. Phase C5's thread lock is a close-out phase, with a count check that compares like with like.
+
+Eleven cards landed, across three tools (`automated-closeout.sh`, `cleanup-orphan-state.sh` and `verify-release-plan.sh`), the Stage-13 spec, the telemetry standard and two decision records. The close-out driver's self-test passes as one suite, with 177 arm call sites in 17 groups, and the plan verifier's suite reads 645 passed and 0 failed.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #7437 | The orphan-cleanup dry-run projects the prune phase (`PRUNE`, and `WILL-PRUNE` for a ref this run's own removals make stale), and an apply reads each pruned ref back | DONE — slice 1 |
+| #7182 | A chore-branch checkout that fails is a failure and not a SKIPPED row; the blanket safe-re-run claim is reworded to what the driver guarantees, in the driver and at eight corpus sites | DONE — slices 2 and 2c |
+| #7436 | The driver resumes after its own chore-PR merge: phase 11 finds its chore PR in any state through an owner-qualified REST binding and records one of seven outcomes | DONE — slice 3 |
+| #5769 | The report header and the JSON report name the chore-PR outcome phase 11 recorded; no success renders as N/A | DONE — slice 4 |
+| #5910 | The Procedure 7a attestation reaches the event log: the emitter passes both flags the writer requires, and a failed emit is carried onto the gate row | DONE — slice 5 |
+| #7465 | Every post-merge phase declares one behaviour for `--no-merge`; phase 15.55 defers there, predicts under `--dry-run`, and the report's Deferred section is derived from the declaration | DONE — slices 6, 6c and 6d |
+| #5284 | Phase C5 is enforced: phase 15.2 locks every issue and pull-request thread of the milestone over REST, always emits one row, never blocks the close, and defers under `--no-merge` | DONE — slice 7 |
+| #4768 | C5's count check compares the PR-inclusive enumeration with the milestone's own item counts; the issues-only comparison leaves the spec | DONE — slice 7 |
+| #6892 | The retro register is produced before the close-out runs; phase 6.8 passes its resolved path as `--retro` and records WARN, never a silent N/A, when it is absent; phase 10's cross-check admits WARN rows | DONE — slices 8, 8d and 8e |
+| #6257 | With no `--merge-base`, the plan verifier grades a merged release against its own merge; a file in the tree and outside the range reads `declared-add-not-in-range`, and every FAIL names its range | DONE — slice 9 |
+| #7855 | Report text, the JSON report, the gate-passage proof, the chore-PR body and the D-1 close comment are redacted at their sinks and post sites by one primitive | DONE — slices 10, S7-F3 and S8-F1 |
+
+### Key decisions
+
+- **D-PhaseC5 E2.** The lock is enforced by mechanism, non-blocking and forward-only. {{ADR:lock-at-close-is-a-close-out-phase-over-every-milestone-thread}} supersedes ADR-076 Decision 3 in part; it is `Proposed` and is ratified at this release's Stage 13.
+- **Post-merge phases declare their `--no-merge` behaviour.** One table, one helper and a structural arm replace a hand-kept list: {{ADR:post-merge-phases-declare-their-no-merge-behaviour}}. ADR-158 is untouched.
+- **D-Telemetry-Pair K, D-Retro-Owner hold K.** #6892 owns the ordering, the declared precondition and the register path; the telemetry tool's own edits stay with `telemetry-is-computable`.
+- **Plan amendment 1** (Collective Review): thirteen items that bind the designs, among them the owner-qualified chore-PR lookup, the seven-state outcome partition and #6257's ancestor test.
+- **Plan amendments 2 to 4:** the re-run claim the driver withdrew is reworded wherever the corpus and the driver's comments restated it, in a `release-executor` skill edit among them.
+- **Plan amendments 5 to 8:** the resumed `--no-merge` report text reads the recorded chore-PR outcome, and phase 10's cross-check population includes WARN.
+- **Plan amendments 9, 11 and 14:** the Stage-7 fix cycles. Amendments 9 and 14 add arms and limbs, each proven armed-red-then-revert; amendment 11 corrects one count at three sites; amendment 10 was withdrawn unexecuted.
+- **Plan amendments 12, 13 and 15 (PA-032):** #7855 joined at Stage 7, widened from one phase's detail to the class of text the driver reports or posts.
+- **PA-033:** #6257 waited for the sibling release's merge. The branch synced with `main` once, by merge, and this release's two decision records were renumbered there.
+- **#6257 owes no schema bump:** one observed value and text in an existing field, recorded in the tool's version block.
+- **D-C SINGLE, P0 serial, release class `novel`.**
+
+### Reversibility
+
+**CHEAP — HIGH confidence.** Reverting the single release merge commit restores all three tools, the specs, both decision records and the `release-executor` skill, which is then re-deployed from the reverted tree. Thread locks applied by closes after the merge survive a revert and are undone per thread; the version tag is retained and recorded, never deleted.
+
+### Downstream impact
+
+- **Every later Stage-13 close runs the changed driver.** `--no-merge --apply`, then a resumed `--apply` after the chore PR merges, is a supported path. This release's own close is the Success Indicator, and it runs the tools it changes (R5): each tool's `--self-test` and a `--dry-run` come first.
+- **Threads lock from the first close after the merge.** Phase 15.2 is forward-only and never blocks a close.
+- **Stage-13 spokes produce the retro register before the close-out** (§ Phase A7.2). An absent register is a WARN on the report.
+- **A plan can be re-verified after its release merges.** FAIL rows carry their range; where no merge record resolves, the run says so and `--merge-base` with `--head` names the range (R23).
+- **Deploy after the merge:** `./deploy.sh --deploy release-executor` (ODM-1), verified by content.
+- **Contention:** `telemetry-is-computable` and `controls-fail-loud` edit `automated-closeout.sh`, and whichever merges second re-baselines (R2). The version and the two record numbers re-derive until the Stage-12 claim (R11, R12).
+- **Carried forward:** the follow-up cards filed at the Collective Review and at the Stage-7 routing; #6892's hard preflight gate, deferred with the post-ship phase-6.8 WARN count as its revisit trigger; the redaction residuals R18, R21 and R22; and DEV-126's items, the close-out chore-branch window and the JSON presenter's backslash escaping among them.
+
+### Cross-references
+
+- Release plan: this file — § Decision Record, § Implementation Sequence, § Verification Plan, § Deviation Log.
+- Milestone: `closeout-verification-rows-consistent`.
+- Decision records: {{ADR:post-merge-phases-declare-their-no-merge-behaviour}} · {{ADR:lock-at-close-is-a-close-out-phase-over-every-milestone-thread}}.
+- User-facing release notes: `release/releases/notes/vX.Y_RELEASE_NOTES.md`, authored at Stage 13 Close per `release/references/standards/release-notes-standard.md`.
 
 ---
 
