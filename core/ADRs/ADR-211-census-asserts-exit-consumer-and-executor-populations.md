@@ -1,5 +1,5 @@
 ---
-title: ADR-207 — The exit-consumer and executor census is keyed on provenance and shape, and asserted on every run
+title: ADR-211 — The exit-consumer and executor census is keyed on provenance and shape, and asserted on every run
 status: Proposed — the design was locked at the controls-fail-loud Collective Review scope lock; the transition to Accepted belongs to the release's Stage 13 ratification beat
 date: 2026-09-27
 release: controls-fail-loud
@@ -15,13 +15,15 @@ source_observations:
   - "The independent adversarial review found the first executor-record text self-contradictory (its register recipe promised a FAIL its own measurement reported as zero findings), the shape rule reading the case keyword rather than the compared values, the executor predicate counting a mention as an execution, the drift record blind to workflow steps, and the ADR skip rationale not engaging the authoring guide's triggers."
 ---
 
-# ADR-207 — The exit-consumer and executor census is keyed on provenance and shape, and asserted on every run
+# ADR-211 — The exit-consumer and executor census is keyed on provenance and shape, and asserted on every run
 
 ## Status
 
 **Proposed.** The design was locked by the operator at the controls-fail-loud Collective Review scope lock, together with the adversarial review's findings routed there; the transition to Accepted belongs to the release's Stage 13 ratification beat, not to authoring.
 
 **Numbering provenance.** Claimed as **207** against a mainline anchor of **206**, read from the repository's ADR-numbering detector as its next-free number rather than computed as one past the highest number visible on any branch; another release's open branch carries 207 to 210 as a detection-only claim. The number binds at the Stage-12 claim; if the mainline claims it first, the renumbering tool moves this record at merge and appends a provenance note here.
+
+**Numbering provenance — `207 → 211`.** Held **ADR-207** branch-local; renumbered to **ADR-211** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 207. In-release citations that read "ADR-207" denote this record.
 
 ## Context
 
