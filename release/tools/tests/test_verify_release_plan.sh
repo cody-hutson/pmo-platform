@@ -947,8 +947,11 @@ case "$(observed_of "$J_PRESENT" FCM-1)" in
 esac
 # The range rule is stated where an operator meets it. A row can say only WHICH range it
 # was read over; --help says how a default range is chosen once the release has merged,
-# and what to do in the one case that still reads an empty range -- a head on the
-# mainline whose plan resolves no merge -- which each row marks by name.
+# and what to do at the one head whose rows are marked by name -- a head on the mainline
+# whose plan resolves no merge, which reads an empty range. It is not the only head the
+# default range does not grade: Stage 12's release-log chore branch, from its rename of
+# the plan to its merge, and the merged release's own branch tip read merge-base, and
+# neither is marked or named in --help.
 H6257="$("$VERIFY" --help 2>&1 || true)"
 if grep -q -F '<merge>^1..<merge>' <<<"$H6257" && grep -q -F 'post-merge-unresolved' <<<"$H6257" \
    && grep -q -F 'name the range with --merge-base and --head' <<<"$H6257"; then
@@ -1149,10 +1152,10 @@ if [ "$G6257_BUILT" -eq 1 ] && [ -n "$G6257_C0" ]; then
 
   # (c) A BRANCH AHEAD OF MAIN: one commit past the merge, origin/main still at M. The
   # head contains the merge and is not contained in origin/main -- the shape a later
-  # release branch or a worktree branch takes, and a close-out chore branch too until
-  # it renames the plan. From that rename to the chore branch's own merge the plan sits
-  # at a path the mainline does not yet hold, and neither source resolves from the
-  # branch: that window is not this limb's, and no arm here covers it.
+  # release branch or a worktree branch takes, and Stage 12's release-log chore branch
+  # too until it renames the plan. From that rename to that chore branch's own merge the
+  # plan sits at a path the mainline does not yet hold, and neither source resolves from
+  # the branch: that window is not this limb's, and no arm here covers it.
   G6257_AHEAD=1
   {
     g6257_git checkout -q -b ahead \

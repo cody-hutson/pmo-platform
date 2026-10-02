@@ -3738,12 +3738,12 @@ readonly FCM_RELEASE_LOG_REL="release/releases/RELEASE_LOG.md"
 # The plan's own merge commit, for a run after the release has merged. Two sources,
 # in order:
 #  (1) the plan's row in origin/main's RELEASE_LOG -- its Merge SHA. The row lands on
-#      the mainline with the close-out change that also renames the plan to its
-#      version, so reading origin/main (not the working tree) finds it from ANY
+#      the mainline with Stage 12's release-log chore, which also renames the plan to
+#      its version, so reading origin/main (not the working tree) finds it from ANY
 #      descendant, a branch tip included;
 #  (2) otherwise the newest first-parent mainline commit that ADDED the plan at its
-#      current path -- the release merge itself, in the window before that close-out
-#      change merges. A commit whose diff reports the plan as a RENAME moved it and did
+#      current path -- the release merge itself, in the window before that Stage-12
+#      chore merges. A commit whose diff reports the plan as a RENAME moved it and did
 #      not deliver the release, so it is refused.
 # KEY: a version-named plan (vX.Y[.Z]_RELEASE_PLAN.md) keys the Version column, any
 # other <key>_RELEASE_PLAN.md keys Milestone. The table is read by its HEADER, so
@@ -3814,13 +3814,13 @@ fcm_plan_merge_commit() {
 # range.
 # WHAT THE DEFAULT RANGE STILL DOES NOT GRADE once a release has merged: three heads,
 # and only the first is marked. (1) A head on the mainline whose plan resolves no
-# merge: an EMPTY range, marked post-merge-unresolved. (2) The close-out branch, after
-# it renames the plan and before it merges: no merge record resolves, and the range is
-# that branch's own commits, labelled merge-base. (3) The merged release's own branch
-# tip, which does not contain the merge: an EMPTY range, <tip>..<tip>, labelled
-# merge-base, because a merge record did resolve. In all three a delivered file that
-# is in the tree reads not-in-range. Every row names the range it compared, and
-# --merge-base with --head names the one to grade.
+# merge: an EMPTY range, marked post-merge-unresolved. (2) Stage 12's release-log chore
+# branch, after it renames the plan and before it merges: no merge record resolves, and
+# the range is that branch's own commits, labelled merge-base. (3) The merged release's
+# own branch tip, which does not contain the merge: an EMPTY range, <tip>..<tip>,
+# labelled merge-base, because a merge record did resolve. In all three a delivered
+# file that is in the tree reads not-in-range. Every row names the range it compared,
+# and --merge-base with --head names the one to grade.
 # The ancestor test is KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm for it
 # reaches it by one substitution.
 fcm_resolve_diff() {
