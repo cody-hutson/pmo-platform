@@ -124,7 +124,7 @@ G-PL5 Mode R cache-read MISS (no marker-bearing comment); PT-1..4 run fresh: 0 C
 
 | Source | Type | Target | Direction | Derived from |
 |---|---|---|---|---|
-| #7959 | GENERATES | `core/ADRs/ADR-207-design-axes-and-cut-patterns-key-on-work-nature.md` | #7959 → file | File Change Matrix (add) |
+| #7959 | GENERATES | `core/ADRs/ADR-211-design-axes-and-cut-patterns-key-on-work-nature.md` | #7959 → file | File Change Matrix (add) |
 | #7959 | GENERATES | two register rows and one Version History row in `core/standards/gate-efficacy-standard.md` | #7959 → file | File Change Matrix (edit; Stage-5 D2 and round-2 D3) |
 | #7959 | BLOCKS | #7960 · #7961 · #7962 · #7966 | #7959 → each | each dependent's body `Blocked by: #7959` (cross-milestone; dependents unmilestoned) |
 | #7961 | BLOCKS | #7962 | #7961 → #7962 | #7962's body (second-order) |
@@ -169,7 +169,7 @@ RETURN TO SOLUTIONING, with: **D2** the calibration comparison is registered as 
 
 ### Amendments applied (Stage 6)
 
-`<record>` = `core/ADRs/ADR-207-design-axes-and-cut-patterns-key-on-work-nature.md`; `<standard>` = `core/standards/gate-efficacy-standard.md`; `<plan>` = this file.
+`<record>` = `core/ADRs/ADR-211-design-axes-and-cut-patterns-key-on-work-nature.md`; `<standard>` = `core/standards/gate-efficacy-standard.md`; `<plan>` = this file.
 
 | Item | Landed in (file · section) |
 |---|---|
@@ -221,7 +221,7 @@ Controls read at `35dbf418` (#7969 Part 1 § Agent-Editability Read carries the 
 
 | Card | Write-set path | Tier-0 ∩ | Skill-gate ∩ | Path class | Card class | Execution path |
 |---|---|---|---|---|---|---|
-| #7959 | `core/ADRs/ADR-207-design-axes-and-cut-patterns-key-on-work-nature.md` | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
+| #7959 | `core/ADRs/ADR-211-design-axes-and-cut-patterns-key-on-work-nature.md` | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
 | #7959 | `core/standards/gate-efficacy-standard.md` | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
 | #7959 | `core/ADRs/README.md` (CONDITIONAL; `renumber-adr.py` R4 log append) | no | no | unconstrained | unconstrained | Stage-12 merge reconciliation |
 | release | `release/releases/plans/work-nature-and-axis-model_RELEASE_PLAN.md` | no | no | unconstrained | — | Engineering Commit 0 |
@@ -260,7 +260,7 @@ Skips: 0 · REDUCE: 2 · platform-satisfied: 2 · parallel-eligible spokes: Stag
 # ── Engineering Commit 0 (plan transcription) ──
 release/releases/plans/work-nature-and-axis-model_RELEASE_PLAN.md       add
 # ── #7959 — the decision record (placement core/ADRs/ per Stage 5; number = mainline next-free at authoring, reconciled at merge) ──
-core/ADRs/ADR-207-design-axes-and-cut-patterns-key-on-work-nature.md    add
+core/ADRs/ADR-211-design-axes-and-cut-patterns-key-on-work-nature.md    add
 # ── #7959 — Change 2: Rows A and C at the gate-coverage register tail, Row B at the Version History tail (Stage-5 round-1 D2; round-2 D3) ──
 core/standards/gate-efficacy-standard.md                                 edit
 
@@ -331,7 +331,7 @@ New-executable companion obligation: N/A — enumerated over the two `add` rows 
 
 | Surface | Siblings touching it (heads read live at Commit 0) | overlap_class (ADR-005) | Resolution |
 |---|---|---|---|
-| `core/ADRs/ADR-207-…md` (unconditional add) | none on this path | single-pr | — |
+| `core/ADRs/ADR-211-…md` (unconditional add) | none on this path | single-pr | — |
 | ADR number slot 207 (virtual) | #7839 (`release/ADRs/` 207–210), #7895 (`release/ADRs/` 207–208), **#7919 (`core/ADRs/`, slot 207 under its own slug, new since Stage 5)** | Tier-S serialization | author at the mainline next-free (207); the first to merge binds and later claimants renumber at merge (ADR-115); the R3 citation sweep and the `{{ADR:…}}` stamp carry the final number |
 | `core/standards/gate-efficacy-standard.md` register tail (after the row now at L310) | #7919 (+112 lines there), #7901 (+1 class-3-O row there) | append-pattern | **keep-both at merge (AI-005, widened)** |
 | `core/standards/gate-efficacy-standard.md` Version History tail (after L429) | #7919 (+2 lines there) | append-pattern | **keep-both at merge (AI-005)** |
@@ -465,17 +465,17 @@ The Stage-5 revision-2 Methodology-Design Handoff (#7971) is the design; this se
 
 ## Verification Plan
 
-`ac_baseline: { #7959: 6, read_at: 35dbf41847df2c1deab792d2944e46ac6ddd26fd }` (body revision **2026-09-27T23:01:38Z**). An amendment to any of the six criteria obliges an update to its row in the same change. Each AC row points at a heading of the record; `<record>` below is `core/ADRs/ADR-207-design-axes-and-cut-patterns-key-on-work-nature.md` (its number is reconciled at merge by `renumber-adr.py`, whose branch-scoped citation sweep rewrites this path).
+`ac_baseline: { #7959: 6, read_at: 35dbf41847df2c1deab792d2944e46ac6ddd26fd }` (body revision **2026-09-27T23:01:38Z**). An amendment to any of the six criteria obliges an update to its row in the same change. Each AC row points at a heading of the record; `<record>` below is `core/ADRs/ADR-211-design-axes-and-cut-patterns-key-on-work-nature.md` (its number is reconciled at merge by `renumber-adr.py`, whose branch-scoped citation sweep rewrites this path).
 
 ### Per-Issue Verification
 
 | Issue | AC | Verification Method | Expected Result |
 |---|---|---|---|
-| #7959 | AC-1 | Named read of the record's § Work natures, § Nature is one key and § Validation set and candidate pool; probe `grep -c '^### Validation set and candidate pool' core/ADRs/ADR-207-design-axes-and-cut-patterns-key-on-work-nature.md` expect 1; the table parse in § Release-Level Verification | every State is completed, not planned or open; every completed row's class is a concept-1 value or a free name, marked inferred where R-C2 applied; the pool-classes sentence names every class pass 1c found; the testable and not-testable sentence and the Domain-field paragraph are present |
-| #7959 | AC-2 | Named read of § Design axes and § Terms; probe `grep -c 'ISO/IEC/IEEE 42010' core/ADRs/ADR-207-design-axes-and-cut-patterns-key-on-work-nature.md` at least 1 | every axis Source cell names a work, author or body with a year or version; § Terms separates the four other senses (ADR-127's altitude axis, design exploration's distinctness axes, ADR-063's decision dimension, the workspace-layout guide's design principle) |
-| #7959 | AC-3 | Named read of § Owed axes by nature and § Calibration trigger; section-scoped probe (B4) `grep -c -z -E '### Calibration trigger([^#]\|[[:space:]])*over-owed([^#]\|[[:space:]])*supersedes this one' core/ADRs/ADR-207-design-axes-and-cut-patterns-key-on-work-nature.md` at least 1 — `-z` reads the file as one record, and each `([^#]\|[[:space:]])*` run crosses line ends but cannot cross a `#`, so it stops at the next heading and counts 1 only when the over-owed limb and the supersession sentence both sit inside § Calibration trigger (both phrases also occur outside it, in § Status and § Owed axes by nature). The `[[:space:]]` alternative carries the run across a line end under BSD grep, whose `[^#]` never matches a newline even with `-z`; under GNU grep, where `[^#]` already matches one, it adds nothing | every nature row reads proven or hypothesis; inside § Calibration trigger, "supersedes this one", "under-owed", "unnamed axis" and "over-owed" each at least 1, and the revised-in-place sentence present; a mutant deleting the over-owed limb and the supersession sentence fails the scoped check |
-| #7959 | AC-4 | Named read of § Coverage states; probe `grep -c 'omitted, not marked not applicable' core/ADRs/ADR-207-design-axes-and-cut-patterns-key-on-work-nature.md` expect 1 | three states defined; the answered test stated; not-owed axes stated as omitted |
-| #7959 | AC-5 | Named read of § Applying the model to the measured instance and § Continuity rule; probe `grep -c 'in-sample consistency check' core/ADRs/ADR-207-design-axes-and-cut-patterns-key-on-work-nature.md` at least 1 | "in-sample consistency check" and "E2 (reported, unverified)" present; § Continuity rule carries both directions and the stage list including engineering; the carry table has one row per carry naming an enforcing surface, an owning card, or "unowned — recommended home"; #7963 and #7960 under `## References`; the milestone-sequencing sentence present |
+| #7959 | AC-1 | Named read of the record's § Work natures, § Nature is one key and § Validation set and candidate pool; probe `grep -c '^### Validation set and candidate pool' core/ADRs/ADR-211-design-axes-and-cut-patterns-key-on-work-nature.md` expect 1; the table parse in § Release-Level Verification | every State is completed, not planned or open; every completed row's class is a concept-1 value or a free name, marked inferred where R-C2 applied; the pool-classes sentence names every class pass 1c found; the testable and not-testable sentence and the Domain-field paragraph are present |
+| #7959 | AC-2 | Named read of § Design axes and § Terms; probe `grep -c 'ISO/IEC/IEEE 42010' core/ADRs/ADR-211-design-axes-and-cut-patterns-key-on-work-nature.md` at least 1 | every axis Source cell names a work, author or body with a year or version; § Terms separates the four other senses (ADR-127's altitude axis, design exploration's distinctness axes, ADR-063's decision dimension, the workspace-layout guide's design principle) |
+| #7959 | AC-3 | Named read of § Owed axes by nature and § Calibration trigger; section-scoped probe (B4) `grep -c -z -E '### Calibration trigger([^#]\|[[:space:]])*over-owed([^#]\|[[:space:]])*supersedes this one' core/ADRs/ADR-211-design-axes-and-cut-patterns-key-on-work-nature.md` at least 1 — `-z` reads the file as one record, and each `([^#]\|[[:space:]])*` run crosses line ends but cannot cross a `#`, so it stops at the next heading and counts 1 only when the over-owed limb and the supersession sentence both sit inside § Calibration trigger (both phrases also occur outside it, in § Status and § Owed axes by nature). The `[[:space:]]` alternative carries the run across a line end under BSD grep, whose `[^#]` never matches a newline even with `-z`; under GNU grep, where `[^#]` already matches one, it adds nothing | every nature row reads proven or hypothesis; inside § Calibration trigger, "supersedes this one", "under-owed", "unnamed axis" and "over-owed" each at least 1, and the revised-in-place sentence present; a mutant deleting the over-owed limb and the supersession sentence fails the scoped check |
+| #7959 | AC-4 | Named read of § Coverage states; probe `grep -c 'omitted, not marked not applicable' core/ADRs/ADR-211-design-axes-and-cut-patterns-key-on-work-nature.md` expect 1 | three states defined; the answered test stated; not-owed axes stated as omitted |
+| #7959 | AC-5 | Named read of § Applying the model to the measured instance and § Continuity rule; probe `grep -c 'in-sample consistency check' core/ADRs/ADR-211-design-axes-and-cut-patterns-key-on-work-nature.md` at least 1 | "in-sample consistency check" and "E2 (reported, unverified)" present; § Continuity rule carries both directions and the stage list including engineering; the carry table has one row per carry naming an enforcing surface, an owning card, or "unowned — recommended home"; #7963 and #7960 under `## References`; the milestone-sequencing sentence present |
 | #7959 | AC-6 | `python3` intersection of the record's 12 identifiers with the reserved tokens (pack `kind_id`s in `core/packs/*/pack.toml`, the `type:` kind labels, the `_common` categories); named read of § How the catalog and the toolkit share the key | intersection expect 0 · control: the same check with `story` appended → 1; the key-sharing paragraph states the catalog and the toolkit share the nature key |
 
 ### Release-Level Verification (the Stage-7 REDUCE battery; Stage-6 C4 runs it first, on the artifact and on a mutant, B4)
@@ -646,7 +646,7 @@ Populated at C4 self-verification (Stage 6), then re-run at Stage 7.
 
 ### Outcome
 
-The platform gains one decision record, `core/ADRs/ADR-207-design-axes-and-cut-patterns-key-on-work-nature.md` (`status: Proposed`, flipped at the Stage-13 ratification gate), that names eight work natures and the four design axes each owes, classifies work by a stated per-criterion procedure, and grades every owed-axis row against a 31-item validation set drawn from the improvement form's filings. Two named gaps and a Version History row in `core/standards/gate-efficacy-standard.md` make the calibration comparison and the continuity rule observable once their surfaces ship.
+The platform gains one decision record, `core/ADRs/ADR-211-design-axes-and-cut-patterns-key-on-work-nature.md` (`status: Proposed`, flipped at the Stage-13 ratification gate), that names eight work natures and the four design axes each owes, classifies work by a stated per-criterion procedure, and grades every owed-axis row against a 31-item validation set drawn from the improvement form's filings. Two named gaps and a Version History row in `core/standards/gate-efficacy-standard.md` make the calibration comparison and the continuity rule observable once their surfaces ship.
 
 ### Issues resolved
 

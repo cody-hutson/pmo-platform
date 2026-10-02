@@ -1,5 +1,5 @@
 ---
-title: "ADR-207 — Design axes and cut patterns key on work nature: the natures the platform recognizes, the design axes each owes, and how a framing states coverage"
+title: "ADR-211 — Design axes and cut patterns key on work nature: the natures the platform recognizes, the design axes each owes, and how a framing states coverage"
 status: Proposed (flips to Accepted at the Stage-13 ratification gate)
 date: 2026-09-27
 release: work-nature-and-axis-model
@@ -12,11 +12,13 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-207 — Design axes and cut patterns key on work nature
+# ADR-211 — Design axes and cut patterns key on work nature
 
 ## Status
 
 Proposed; revised in place until the Stage-13 ratification gate flips it to Accepted. Once Accepted it is immutable: changing the natures, axes or table takes a record that supersedes this one.
+
+**Numbering provenance — `207 → 211`.** Held **ADR-207** branch-local; renumbered to **ADR-211** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 207. In-release citations that read "ADR-207" denote this record.
 
 ## Context
 
