@@ -322,7 +322,7 @@ schema_migrate() {
 
   # Compute the delta. 0 = in sync · 1 = keys missing · 3 = the probe could not run.
   local delta_out delta_rc=0
-  delta_out=$(bash "${probe}" --emit-delta 2>&1) || delta_rc=$?
+  delta_out=$(bash "${probe}" --emit-delta --config-root "${CONFIG_ROOT}" 2>&1) || delta_rc=$?
 
   case "${delta_rc}" in
     0)
@@ -357,7 +357,7 @@ schema_migrate() {
 
   info "Reconciling — backfilling declared defaults, preserving operator-set values."
   local rec_rc=0
-  bash "${setup}" --reconcile-config --source-repo "${REPO_ROOT}" || rec_rc=$?
+  bash "${setup}" --reconcile-config --source-repo "${REPO_ROOT}" --config-root "${CONFIG_ROOT}" || rec_rc=$?
 
   if [ "${rec_rc}" -eq 66 ]; then
     # The reserved code, finally emitted by something. A delivered key carries no

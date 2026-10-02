@@ -306,7 +306,11 @@ def _root_problem(p: Path, *, derived: bool) -> Optional[str]:
         if not p.joinpath(*_PLATFORM_MARKER).is_file():
             return "is not a pmo-platform checkout (core/deploy/compose.py absent)"
     elif p.is_dir():
-        main, kind = canonical_tree_root(p)
+        # Membership, not identity: an explicit value that is, or lies inside, a linked
+        # worktree is refused. The classifier reads identity, so it is asked about the top
+        # level of the work tree that holds the value.
+        top = _git_lines(p, "rev-parse", "--show-toplevel")
+        main, kind = canonical_tree_root(Path(top[0]) if top and top[0] else p)
         if kind == "linked":
             return f"is a linked worktree; pass its main working tree ({main}) instead"
     return None

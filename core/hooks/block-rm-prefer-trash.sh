@@ -353,11 +353,12 @@ resolve_and_classify() {
 # consumes resolve_and_classify's raw-path fallback — an allow path must not open when the
 # normalizer is missing. The operand is judged first, so a command whose operand cannot be
 # an entry never opens a settings file. Admits (ELIGIBLE) only when ALL hold:
-#   operand - written only in characters the shell passes through unchanged, absolute or
-#             unquoted ~/-prefixed, with no ".." component; its leaf ends ".md", has no
-#             leading dot and is not MEMORY.md (case-insensitive: realpath keeps the typed
-#             case on case-insensitive volumes); an existing regular file and not a
-#             symlink (Trash moves the link the operand names, not its referent)
+#   operand - written only in characters the shell passes through unchanged, absolute
+#             (bare or wholly quoted; a ~/-led operand is not admitted), with no ".."
+#             component; its leaf ends ".md", has no leading dot and is not MEMORY.md
+#             (case-insensitive: realpath keeps the typed case on case-insensitive
+#             volumes); an existing regular file and not a symlink (Trash moves the link
+#             the operand names, not its referent)
 #   store   - autoMemoryDirectory in the USER-scope file: absolute or ~/-prefixed, no
 #             control characters, a strict descendant of $HOME, holding a MEMORY.md
 #   place   - the operand's resolved parent IS the resolved store
@@ -394,10 +395,7 @@ try:
     quoted = len(tok) >= 2 and tok[0] == tok[-1] and tok[0] in ("\x22", "\x27")
     if quoted:
         tok = tok[1:-1]
-    rest = tok
-    if not quoted and tok.startswith("~/"):
-        rest, tok = tok[1:], home + tok[1:]
-    if not re.fullmatch("[A-Za-z0-9._/+@,:%=-]+", rest) or ".." in rest.split("/"):
+    if not re.fullmatch("[A-Za-z0-9._/+@,:%=-]+", tok) or ".." in tok.split("/"):
         sys.exit(0)
     if not tok.startswith("/"):
         sys.exit(0)

@@ -3185,10 +3185,19 @@ case "$TOOL_NAME" in
       exempt_home=""
       exempt_root=""
       exempt_resolved=""
+      # What the as-written view refused, when one of its arms refused: named in the block
+      # message below, so a caller can correct its own spelling. A worktree's .git leaf and
+      # a dot-segment spelling of a path inside a worktree are not outside a worktree.
+      exempt_withheld=""
+      r019_override="write the file inside a worktree (pmo-platform/.claude/worktrees/<name>/...), or set CLAUDE_HOOK_BYPASS=1"
       case "$FILE_PATH" in
         *"/../"*|*/..|*"/./"*|*/.)   # M-019-DOTGUARD — first: a dot segment withholds every home
+          exempt_withheld="the path as written carries a dot segment ('.' or '..'), which withholds every exemption"
+          r019_override="write the path with no '.' or '..' segment (each exemption reads the path as written), or set CLAUDE_HOOK_BYPASS=1"
           ;;
         "${PRIMARY_ROOT}/pmo-platform/.claude/worktrees/"*/.[Gg][Ii][Tt])
+          exempt_withheld="a worktree's .git is an excluded leaf, never exempt"
+          r019_override="no Write/Edit workflow writes a worktree's .git pointer; set CLAUDE_HOOK_BYPASS=1 only if that is the intent"
           ;;
         "${PRIMARY_ROOT}/pmo-platform/.claude/worktrees/"*/*)   # M-019-WORKTREE
           exempt_home="worktree"
@@ -3197,8 +3206,10 @@ case "$TOOL_NAME" in
           exempt_home="analysis"
           ;;
         "${PRIMARY_ROOT}/pmo-platform/roadmaps/"[Rr][Ee][Aa][Dd][Mm][Ee].[Mm][Dd])
+          exempt_withheld="roadmaps/README.md, the tracked file of the roadmaps home, is an excluded leaf"
           ;;
         "${PRIMARY_ROOT}/pmo-platform/roadmaps/".*)
+          exempt_withheld="a dot-leading leaf of the roadmaps home is an excluded leaf"
           ;;
         "${PRIMARY_ROOT}/pmo-platform/roadmaps/"?*)
           exempt_home="roadmaps"
@@ -3231,14 +3242,17 @@ case "$TOOL_NAME" in
         fi
       fi
 
-      r019_reason="Write/Edit to Layer 1 primary path denied: ${is_layer1}. target=${abs_target} is not inside a worktree (pmo-platform/.claude/worktrees/<name>/)"
-      if [ -n "$exempt_home" ] && [ -z "$exempt_root" ]; then
-        r019_reason="${r019_reason}; it is spelled inside the ${exempt_home} exemption, but the workspace root did not resolve (python3 realpath unavailable), so no exemption applies"
-      elif [ -n "$exempt_home" ]; then
-        r019_reason="${r019_reason}; it is spelled inside the ${exempt_home} exemption, but its resolved location (${exempt_resolved:-unresolved: a symlink leaf, or python3 realpath unavailable}) is not one that exemption admits"
+      if [ -n "$exempt_withheld" ]; then
+        r019_reason="Write/Edit to Layer 1 primary path denied: ${is_layer1}. target=${abs_target} is refused as written: ${exempt_withheld}"
+      else
+        r019_reason="Write/Edit to Layer 1 primary path denied: ${is_layer1}. target=${abs_target} is not inside a worktree (pmo-platform/.claude/worktrees/<name>/)"
+        if [ -n "$exempt_home" ] && [ -z "$exempt_root" ]; then
+          r019_reason="${r019_reason}; it is spelled inside the ${exempt_home} exemption, but the workspace root did not resolve (python3 realpath unavailable), so no exemption applies"
+        elif [ -n "$exempt_home" ]; then
+          r019_reason="${r019_reason}; it is spelled inside the ${exempt_home} exemption, but its resolved location (${exempt_resolved:-unresolved: a symlink leaf, or python3 realpath unavailable}) is not one that exemption admits"
+        fi
       fi
-      block "BLOCK-DESTRUCTIVE-019" "$r019_reason" \
-        "write the file inside a worktree (pmo-platform/.claude/worktrees/<name>/...), or set CLAUDE_HOOK_BYPASS=1"
+      block "BLOCK-DESTRUCTIVE-019" "$r019_reason" "$r019_override"
     fi
 
     # No Write/Edit rule matched — allow
