@@ -2907,7 +2907,7 @@ configure_hook_activation() {
 
   # --non-interactive: take the declared default (OFF) without prompting or reading
   # stdin -- the same value a closed stdin reaches through the read fallback below.
-  if [ "${NON_INTERACTIVE}" -eq 1 ] || [ ! -t 0 ]; then
+  if [ "${NON_INTERACTIVE}" -eq 1 ]; then
     write_security_hooks_config "${cfg}" "false"
     info "Hook activation set: [security_hooks].master_enabled = false (${cfg}) — non-interactive: declared default, no prompt"
     return 0
