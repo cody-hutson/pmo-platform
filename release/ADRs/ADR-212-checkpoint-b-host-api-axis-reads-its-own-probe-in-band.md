@@ -1,5 +1,5 @@
 ---
-title: ADR-208 — Checkpoint B's host-API axis reads its own probe, in-band
+title: ADR-212 — Checkpoint B's host-API axis reads its own probe, in-band
 status: Proposed — the design was locked at the controls-fail-loud Collective Review and at the short scope lock that followed its scoped re-design; the transition to Accepted belongs to the release's Stage 13 ratification beat
 date: 2026-09-27
 release: controls-fail-loud
@@ -16,13 +16,15 @@ source_observations:
 ---
 <!-- reference-durability: allow-link -->
 
-# ADR-208 — Checkpoint B's host-API axis reads its own probe, in-band
+# ADR-212 — Checkpoint B's host-API axis reads its own probe, in-band
 
 ## Status
 
 **Proposed.** The design was locked by the operator at the controls-fail-loud Collective Review, which returned it for a scoped re-design, and at the short scope lock that followed; the transition to Accepted belongs to the release's Stage 13 ratification beat, not to authoring.
 
 **Numbering provenance.** Claimed as **208** against a mainline anchor of **206** plus this release branch's own ADR-207, read from the repository's ADR-numbering detector as the next free number rather than computed as one past the highest number visible on any branch; other open release branches carry 207 to 210 as detection-only claims. The number binds at the Stage-12 claim; if the mainline claims it first, the renumbering tool moves this record at merge and appends a provenance note here.
+
+**Numbering provenance — `208 → 212`.** Held **ADR-208** branch-local; renumbered to **ADR-212** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 208. In-release citations that read "ADR-208" denote this record.
 
 ## Context
 
