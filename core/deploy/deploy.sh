@@ -1966,7 +1966,8 @@ _cc_row_findings() {
 #   THE SHARED ORCHESTRATOR. Iterates VERIFIED RELEASE_LOG rows at/after the
 #   cutover (allowlist-filtered), aggregates _cc_row_findings, and echoes ONE
 #   protocol line on stdout (the CALLER maps it to a warn-emit OR an exit code):
-#     SKIP <reason>                  dormant (cutoff __none__) / LOG absent — nothing to assert
+#     SKIP <reason>                  dormant (cutoff __none__) / LOG absent or unparseable / a
+#                                    row cutoff matching no LOG row — nothing was asserted
 #     CLEAN <n>                      n VERIFIED row(s) checked, full output-set present
 #     INCOMPLETE <n> <m>             n finding(s) across m checked row(s) — detail to stderr
 #     NOT-EVALUATED <k> <n> <cause>  the network leg was not measured for k of n network-
@@ -1974,7 +1975,8 @@ _cc_row_findings() {
 #                                    findings counter is ABSENT, not 0 (PV-7b: an unmeasured
 #                                    count is not a zero). <cause> is the one cause class the
 #                                    withheld rows share, or `mixed`.
-#   Precedence: INCOMPLETE > NOT-EVALUATED > CLEAN. An outage never suppresses a finding and
+#   Precedence: SKIP (a row cutoff matching no LOG row, so no row reached a limb) > INCOMPLETE >
+#   NOT-EVALUATED > CLEAN. An outage never suppresses a finding and
 #   never raises the count; an INCOMPLETE run that also withheld rows carries a DEGRADED rider.
 #   $1 = surface — accepted for signature parity; the verdict is surface-invariant (the
 #   lifecycle Check 48 arm and the --check-close-completeness probe render it differently).
@@ -2360,9 +2362,10 @@ _cc_compute_verdict() {
         "$_cc_arm_row" "$cc_targets" >&2
     fi
   else
-    # A cutoff matching NO row yields CLEAN 0 — a vacuous pass that READS as success.
-    # Anti-vacuity: say so out loud rather than letting zero assertions report OK.
-    printf 'close-completeness: WARNING — cutoff %s matched NO LOG row; zero rows asserted (the gate is vacuously clean).\n' \
+    # A cutoff matching NO row asserts nothing, so the verdict below is SKIP — a withheld
+    # verdict, never CLEAN 0, which would read as success. Anti-vacuity: say so out loud
+    # here as well, so the operator sees why nothing was asserted.
+    printf 'close-completeness: WARNING — cutoff %s matched NO LOG row; zero rows asserted, so the verdict is withheld (SKIP), not a clean result.\n' \
       "$cc_cutoff" >&2
   fi
 
@@ -2393,11 +2396,17 @@ _cc_compute_verdict() {
     fi
   fi
 
-  # THE VERDICT, by precedence INCOMPLETE > NOT-EVALUATED > CLEAN (#4318). A measured finding
-  # always wins and is reported with its true count; a withheld network leg beside it is named
-  # by the DEGRADED rider, never folded into the count. Only when no limb found anything does a
-  # withheld leg decide the verdict — and then the protocol line carries NO findings counter.
-  if [[ $cc_findings -gt 0 ]]; then
+  # THE VERDICT, by precedence SKIP > INCOMPLETE > NOT-EVALUATED > CLEAN (#4318). A row cutoff
+  # that matched no LOG row comes first: no row reached any limb, so there is nothing to count
+  # and the verdict is withheld — the same SKIP the cutoff's own __none__ re-dormant returns
+  # early, above. It is emitted HERE, after the DENOM line, so the zero enumerated rows are
+  # still printed beside it. Otherwise a measured finding always wins and
+  # is reported with its true count; a withheld network leg beside it is named by the DEGRADED
+  # rider, never folded into the count. Only when no limb found anything does a withheld leg
+  # decide the verdict — and then the protocol line carries NO findings counter.
+  if [[ -z "$_cc_arm_row" ]]; then
+    printf 'SKIP close-completeness row cutoff %s matched NO LOG row — zero rows asserted, so the verdict is withheld, not a clean result; set CLOSE_COMPLETENESS_CHECK_CUTOFF to a value a RELEASE_LOG row matches, or unset it to restore the committed armed default\n' "$cc_cutoff"
+  elif [[ $cc_findings -gt 0 ]]; then
     # Detail to stderr; the verdict line (stdout) carries the counts.
     printf '%s' "$cc_detail" | /usr/bin/sed '/^$/d' >&2
     if [[ $cc_ne_rows -gt 0 ]]; then
@@ -2433,9 +2442,10 @@ _cc_compute_verdict() {
 #       repair should escalate is decided AT THE ENFORCE FLIP, on the cause-to-class table on
 #       cmd_check_close_completeness — until then this function takes no class argument.
 #     SKIP is SENTINEL-AWARE — 3 under warn, 1 under enforce. It means the WHOLE gate was
-#       withheld: the tracked ledger is absent or unparseable, or the gate was re-dormanted —
-#       a repository state a pull request can fix, so a green gate under enforce must mean the
-#       ledger was read. It follows _c32_verdict_exit_code's SKIP, not _de_verdict_exit_code's
+#       withheld: the tracked ledger is absent or unparseable, the gate was re-dormanted, or
+#       the row cutoff matched no LOG row — a repository or configuration state a pull request
+#       can fix, so a green gate under enforce must mean the ledger was read and asserted.
+#       It follows _c32_verdict_exit_code's SKIP, not _de_verdict_exit_code's
 #       (whose cause, a git-ignored event log, is structurally unreachable in CI).
 _cc_verdict_exit_code() {
   local _cc_tok="${1:-}" _cc_enf="${2:-warn}"
@@ -17516,7 +17526,9 @@ cmd_check_version_freeness() {
 #   (4) state-scoped — a DEPLOYED-not-VERIFIED incomplete row ⇒ NOT counted (CLEAN);
 #                      the gate is VERIFIED-scoped (mid-close rows are skipped).
 #   (5)-(7) mis-arm  — a prefix-shortened, an exact-row and a no-match cutoff each name
-#                      the row they armed at, or say that nothing was asserted (#4176).
+#                      the row they armed at, or say that nothing was asserted (#4176); the
+#                      no-match cutoff (7) verdicts SKIP, exit 3 under warn and 1 under
+#                      enforce, never CLEAN 0.
 #   (8)-(11) mapping — _cc_verdict_exit_code maps every (verdict x sentinel) pair as the
 #                      contract table says; the sentinel moves INCOMPLETE and SKIP and never
 #                      NOT-EVALUATED; exit 0 has exactly two producers (CLEAN x 2); and
@@ -20291,7 +20303,7 @@ EOF
   echo "    VF-1 DEPLOYED row extracted / VF-2 VERIFIED row excluded / VF-3 State is NOT the Tag column / VF-4 column-order shift survived (name-pinned, not ordinal) / VF-5 malformed header reported on stderr / VF-6 malformed header returns non-zero + VF-6b well-formed returns 0 (control) / VF-7 the CALLER fails closed to UNDECIDABLE(partial-by-failure) + VF-7b FREE control + VF-7c gate surface (DT-2: loud failure is observable, not merely emitted)" >&2
   echo "  close-completeness invariant validated (#1290 AC5; mis-arm group #4176):" >&2
   echo "    explicit-__none__ cutover SKIPs / abbreviated scaffold caught (INCOMPLETE) / complete set CLEAN / VERIFIED-scoped (DEPLOYED excluded, VERIFIED included)" >&2
-  echo "    mis-arm (5) prefix-shortened cutoff WARNs naming the armed row / (6) exact-row cutoff does NOT warn but still names it / (7) no-match cutoff WARNs vacuous (zero rows asserted)" >&2
+  echo "    mis-arm (5) prefix-shortened cutoff WARNs naming the armed row / (6) exact-row cutoff does NOT warn but still names it / (7) no-match cutoff WARNs that zero rows were asserted and verdicts SKIP (3 warn / 1 enforce), never CLEAN" >&2
   echo "    exit contract + network leg (#4318): (8) all ten (verdict x sentinel) pairs map as contracted / (9) the sentinel moves INCOMPLETE and SKIP and never NOT-EVALUATED / (10) PV-7 as a population property, exit 0 with exactly two producers / (11) SENSITIVITY — the same predicate reports a violation on a collapsed map / (12) the probe body carries no exit statement, its one exit path prints the handshake (12b/12c control + specificity) / (13) the probe end to end per sentinel, handshake equal to the exit / (14a-14d) a failed instrument is NOT-EVALUATED on both surfaces, never 'absent' / (14e) a genuinely absent Release is still a finding / (14f-14i, 14l) present, drift, drift-N/A, empty set, drift-MISSING / (14j) fan-in to one line / (14k) a finding dominates an outage + no findings counter / (14m) the network-leg denominator balances / (15) the consumer dispatches on the integer with the handshake (15b/15c control + specificity)" >&2
   echo "  Stage-13 output-set sub-checks (j velocity + k learnings) validated (#4452, group OS):" >&2
   echo "    OS-1 suppressed -> BOTH findings / OS-2 emitted -> zero / OS-3 bolded numerals -> grammar finding / OS-4 explicit-N/A conformant / OS-5 archived+co-located -> zero / OS-6 T4 wrong-surface write -> split-record / OS-7 field on both surfaces -> split-record / OS-8 dangling segment pointer -> finding / OS-9 learnings mis-placed names the heading found / OS-10 short field-set / OS-11 duplicate heading / OS-12 no-match outputs cutoff WARNs vacuous / OS-13 __none__ re-dormants (j)+(k) only. Every arm graded on the FINDING LINE — exit code, corpus-wide grep and 'the field parses' are all identical on OS-4/OS-5 and OS-6.
@@ -20353,11 +20365,13 @@ EOF
 #                                           never gate (ADR-134 D3/D5; PV-7c). Escalating a cause
 #                                           is decided at the enforce flip — see the cause table.
 #   SKIP            != enforce       3      ADVISORY WITHHELD verdict for the whole gate: the cutoff
-#                                           was re-dormanted (__none__), or RELEASE_LOG.md is absent
-#                                           or its header unparseable. Nothing was asserted.
-#   SKIP            enforce          1      BLOCKING — a green gate must mean the ledger was READ.
-#                                           Using the __none__ escape hatch in CI therefore needs
-#                                           the sentinel back at warn first.
+#                                           was re-dormanted (__none__), RELEASE_LOG.md is absent
+#                                           or its header unparseable, or the row cutoff matched
+#                                           no LOG row. Nothing was asserted.
+#   SKIP            enforce          1      BLOCKING — a green gate must mean the ledger was READ
+#                                           and at least one row asserted. Using the __none__
+#                                           escape hatch in CI therefore needs the sentinel back
+#                                           at warn first.
 #   <other>         any              1      unexpected verdict — fail-closed, sentinel-agnostic
 #
 # NEITHER 2 NOR 3 IS A NEW CONVENTION: both follow cmd_check_package_freshness, the tree-wide
@@ -20465,10 +20479,10 @@ cmd_check_close_completeness() {
       log "close-completeness: SKIP — ${verdict#SKIP }"
       log "  NOT-EVALUATED — a WITHHELD verdict for the whole gate: nothing was asserted, so this is not a clean result; the cause is printed above."
       if [[ "$cc_enforce" == "enforce" ]]; then
-        log "  ENFORCE-MODE (sentinel '$cc_enforce_file' token == enforce): a green gate must mean the ledger was actually READ — exit 1."
+        log "  ENFORCE-MODE (sentinel '$cc_enforce_file' token == enforce): a green gate must mean the ledger was actually READ and asserted — exit 1."
         _cc_exit_through_mapping SKIP enforce
       fi
-      log "  WARN-MODE (sentinel '$cc_enforce_file' token != enforce): reporting the withheld verdict as ADVISORY — exit 3. The remedy differs from an INCOMPLETE finding: restore or repair release/releases/RELEASE_LOG.md, or unset the __none__ re-dormant."
+      log "  WARN-MODE (sentinel '$cc_enforce_file' token != enforce): reporting the withheld verdict as ADVISORY — exit 3. The remedy differs from an INCOMPLETE finding: restore or repair release/releases/RELEASE_LOG.md, unset the __none__ re-dormant, or set the row cutoff to a value a RELEASE_LOG row matches."
       _cc_exit_through_mapping SKIP warn
       ;;
     *)
@@ -21497,7 +21511,7 @@ main() {
       echo "  --check [--warn]             Validate platform health (--warn exits 0 even with issues)"
       echo "  --check-lifecycle            List retired/dormant checks + dispositions + reactivation anchors"
       echo "  --check-version-freeness     Pre-merge version-freeness probe (Check 41 only; exits 1 on a claimed/undecidable candidate) (#1677)"
-      echo "  --check-close-completeness   Close-completeness probe (Check 48 only; CLEAN=0 and NOTHING ELSE EVER EXITS 0, INCOMPLETE=2 advisory, NOT-EVALUATED=3 under every sentinel (network leg unmeasured — withheld, never a pass, never blocking), SKIP=3 (gate re-dormanted, or RELEASE_LOG absent/unparseable), INCOMPLETE/SKIP=1 when enforce, unexpected=1) (#1290)"
+      echo "  --check-close-completeness   Close-completeness probe (Check 48 only; CLEAN=0 and NOTHING ELSE EVER EXITS 0, INCOMPLETE=2 advisory, NOT-EVALUATED=3 under every sentinel (network leg unmeasured — withheld, never a pass, never blocking), SKIP=3 (gate re-dormanted, RELEASE_LOG absent/unparseable, or a row cutoff matching no LOG row), INCOMPLETE/SKIP=1 when enforce, unexpected=1) (#1290)"
       echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73, 77, 78); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; CLEAN=0 and NOTHING ELSE EVER EXITS 0, INCOMPLETE=2 advisory, SKIP=3 NOT-EVALUATED (RELEASE_LOG absent or unparseable — withheld, never a pass), INCOMPLETE/SKIP=1 when enforce, unexpected=1) (#1484)"
       echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; CLEAN=0 and NOTHING ELSE EVER EXITS 0, INCOMPLETE=2 advisory, SKIP=3 NOT-EVALUATED (withheld, never a pass), NOSET=4 advisory (gate asserted nothing — repo defect), INCOMPLETE/NOSET=1 when enforce, unexpected=1) (#4026)"
