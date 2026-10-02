@@ -88,10 +88,11 @@ The platform adopts one census, published as a section of the gate-efficacy stan
 
 - ADR-134 — the degraded-state emit contract that the census's classifications are read against: a not-evaluated member never shares the clean state's emit.
 - ADR-119 — self-test coverage discovered against a declared scope; this record leaves the executor merge gate with it.
-- ADR-193 — an emitter asserts only properties of its own emit; Check 47's conversion routes its not-evaluated rows through the structurally non-escalating emitter.
+- ADR-193 — an emitter asserts only properties of its own emit; Check 47's conversion routes its not-evaluated rows through the structurally non-escalating emitter. One not-evaluated class also escalates, by design: an exit outside the drift engine's contract fails Check 47 closed through its mode-driven emitter, as an instrument failure and never a drift finding — the operator's decision, whose record the References block names.
 
 ## References
 
 - #4917 — the never-FAIL class card whose census this record decides.
 - #7466 — the candidate list whose first criterion became the workflow record's population.
 - #6114 — the executor-coverage owner to which the zero-executor suite's disposition is routed.
+- #7810 — the work item recording the operator's decision that an exit outside the drift engine's contract fails Check 47 closed as an instrument failure, never as drift.

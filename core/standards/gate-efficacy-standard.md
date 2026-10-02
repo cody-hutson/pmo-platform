@@ -268,7 +268,7 @@ Shortfall is decided per declared unit, never by a threshold: any declared unit 
 | Label | Means | On a gate | In a census |
 |---|---|---|---|
 | `population:` | the declared surface and its member predicate | `#   population: roots=… filter=… exempts=…` | the member definition, with its roots and filter or its explicit enumeration |
-| `probe:` | the exact resolving invocation (PV-0) | the gate's own `_population_resolve` call | the command that enumerated the members, pinned to a commit |
+| `probe:` | the exact resolving invocation (PV-0) | the gate's own `_population_resolve` call | the command that enumerated the members, pinned to a commit; or, for a census the conformance suite re-derives on every run, the resolver it re-runs, whose observed arm counts are the runner's own output |
 | `examined:` | the members actually examined — PV-1's denominator | the runtime `examined=` counter, with any per-predicate `examined.<predicate>=` pairs | the count at the pin, and how it was counted |
 | `sensitivity:` | a member the probe must count (PV-2) | the gate's falsification test | a planted or known member, with its observed non-zero |
 | `specificity:` | a near-miss the probe must not count (PV-2c) | the gate's specificity test | the near-miss observed at zero, or `NOT TRIGGERED — <condition>` |
