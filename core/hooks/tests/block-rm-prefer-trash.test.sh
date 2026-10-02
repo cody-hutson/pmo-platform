@@ -536,6 +536,11 @@ else
 
   # MEM-10: the index is never admitted — written as the hook reads it, or in a form the
   # shell would expand or unescape into it. The arm passes only when every form is refused.
+  # Each expansion form also exists in the store as a literal file name, so the form names
+  # an existing regular file as the hook reads it and only the operand's character rule
+  # can refuse it — not a missing file.
+  /usr/bin/touch "${MB}/mem-store/*.md" "${MB}/mem-store/{MEMORY,entry-alpha}.md" \
+    "${MB}/mem-store/MEMORY\\.md" "${MB}/mem-store/'MEMORY'.md"
   m10_fail=""
   for m10_cmd in "trash ${MB}/mem-store/MEMORY.md" "trash ${MB}/mem-store/*.md" \
                  "trash ${MB}/mem-store/{MEMORY,entry-alpha}.md" "trash ${MB}/mem-store/MEMORY\.md" \
