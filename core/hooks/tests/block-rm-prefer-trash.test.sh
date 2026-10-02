@@ -50,6 +50,63 @@ echo "================================"
 echo "block-rm-prefer-trash.sh tests"
 echo "================================"
 
+# ----- HOME isolation: the fixture home (HOME-FIXTURE-01) -----
+#
+# The arms that pass "$RMT_HOME_ENV" assert INSIDE-workspace behaviour: an rm-family verb
+# on a workspace target is redirected to the Trash (BLOCK-TRASH-002), and a Trash verb on
+# one is allowed. The hook spells its default workspace root from HOME as written and
+# canonicalizes the target, so the premise holds only while HOME is itself a canonical
+# path. A caller that points HOME at a `mktemp -d` directory, as the install regression's
+# HOME-override step does, hands the hook a HOME under the per-user temp area, which
+# macOS reaches through the /var -> /private/var symlink: the target resolves to the
+# /private form, the root keeps the form HOME spelled, and every inside target reads as
+# outside. The arm then fails on a property of the caller, not of the rule it tests. The
+# hook's comparison is its own behaviour and is not changed here.
+#
+# The lever is the fixture pattern block-fs-boundary.test.sh uses: a per-invocation env
+# prefix on only the command that reads the HOME-derived input, here the hook, pointed at
+# a fixture home that is canonical by construction. The fixture is never created: the
+# hook classifies a path without requiring it to exist. Each pinned arm's payload and
+# working directory are spelled from the fixture, so the target and the root the hook
+# derives agree under any caller HOME. Every other arm keeps the caller's HOME.
+RMT_FIXTURE_HOME="/nonexistent/rm-trash-fixture-home"
+RMT_FIXTURE_OTHER_HOME="/nonexistent/rm-trash-other-home"
+RMT_FIXTURE_CWD="${RMT_FIXTURE_HOME}/Claude/.claude/worktrees/planning"
+RMT_HOME_ENV="HOME=${RMT_FIXTURE_HOME}"
+
+# Probe-validity precondition: prove the lever is live, with BOTH arms observed, before
+# any assertion depends on it. Sensitivity: under the fixture home, an rm of a target in
+# the fixture's workspace is redirected to the Trash and the message names the fixture
+# path, so the hook derived its root from the pinned HOME and the fixture is canonical.
+# Specificity: the same payload under a second home is refused as outside the workspace,
+# so the verdict follows HOME. The hook prefers CLAUDE_WORKSPACE_ROOT to HOME, so a caller
+# that exports it defeats the lever; this arm names that failure instead of leaving seven
+# unexplained ones.
+rmt_home_probe() {   # $1 = HOME for the hook -> sets RMT_PROBE_EXIT and RMT_PROBE_ERR
+  local rmt_payload; rmt_payload="$(bash_payload 'rm '"$RMT_FIXTURE_HOME"'/Claude/probe.txt' "$RMT_FIXTURE_CWD")"
+  RMT_PROBE_EXIT=0
+  RMT_PROBE_ERR="$(/usr/bin/printf '%s' "$rmt_payload" | /usr/bin/env "HOME=$1" /bin/bash "$HOOK" 2>&1 >/dev/null)" || RMT_PROBE_EXIT="$?"
+}
+rmt_home_probe "$RMT_FIXTURE_HOME"
+rmt_in_exit="$RMT_PROBE_EXIT"; rmt_in_err="$RMT_PROBE_ERR"
+rmt_home_probe "$RMT_FIXTURE_OTHER_HOME"
+rmt_out_exit="$RMT_PROBE_EXIT"; rmt_out_err="$RMT_PROBE_ERR"
+rmt_in_named=0
+case "$rmt_in_err" in
+  *"BLOCK-TRASH-002"*"${RMT_FIXTURE_HOME}/Claude/probe.txt"*) rmt_in_named=1 ;;
+esac
+rmt_out_named=0
+case "$rmt_out_err" in
+  *"BLOCK-TRASH-001"*) rmt_out_named=1 ;;
+esac
+if [ "$rmt_in_exit" = 2 ] && [ "$rmt_in_named" = 1 ] && [ "$rmt_out_exit" = 2 ] && [ "$rmt_out_named" = 1 ]; then
+  /usr/bin/printf 'PASS: HOME-FIXTURE-01 fixture-home isolation live (sensitivity + specificity arms both observed)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: HOME-FIXTURE-01 fixture-home isolation NOT live, so the HOME-pinned arms below cannot be trusted (an exported CLAUDE_WORKSPACE_ROOT overrides HOME)\n  fixture home: exit=%s (expected 2), BLOCK-TRASH-002 naming the fixture path=%s (expected 1)\n  second home: exit=%s (expected 2), BLOCK-TRASH-001=%s (expected 1)\n  stderr (fixture): %s\n  stderr (second): %s\n' \
+    "$rmt_in_exit" "$rmt_in_named" "$rmt_out_exit" "$rmt_out_named" "$rmt_in_err" "$rmt_out_err"
+  FAIL=$((FAIL + 1))
+fi
+
 # ----- BLOCK-TRASH-001: rm/rmdir/unlink outside workspace OR unresolvable -----
 
 test_case "rm /tmp path blocks outside-Claude" \
@@ -68,15 +125,17 @@ test_case "rm relative-dotdot escapes-workspace blocks" \
   "$(bash_payload 'rm ../outside/file' ''"$HOME"'/Claude')" 2 "BLOCK-TRASH-001"
 
 # ----- BLOCK-TRASH-002: rm inside workspace blocks with Trash suggestion -----
+# These three run under the fixture home (HOME-FIXTURE-01); their workspace is the
+# fixture's, so each payload and working directory is spelled from it.
 
 test_case "rm inside Claude blocks with Trash suggestion" \
-  "$(bash_payload 'rm foo.txt')" 2 "BLOCK-TRASH-002"
+  "$(bash_payload 'rm foo.txt' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-002" "$RMT_HOME_ENV"
 
 test_case "rm absolute inside Claude blocks-trash" \
-  "$(bash_payload 'rm '"$HOME"'/Claude/.claude/worktrees/foo/bar.txt')" 2 "BLOCK-TRASH-002"
+  "$(bash_payload 'rm '"$RMT_FIXTURE_HOME"'/Claude/.claude/worktrees/foo/bar.txt' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-002" "$RMT_HOME_ENV"
 
 test_case "rmdir inside Claude blocks-trash" \
-  "$(bash_payload 'rmdir '"$HOME"'/Claude/tmp/empty')" 2 "BLOCK-TRASH-002"
+  "$(bash_payload 'rmdir '"$RMT_FIXTURE_HOME"'/Claude/tmp/empty' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-002" "$RMT_HOME_ENV"
 
 # ----- Git subcommand exemption (Hub Decision 1: broad) -----
 
@@ -100,14 +159,16 @@ test_case "trash /tmp blocks" \
 test_case "trash tilde Downloads blocks" \
   "$(bash_payload 'trash ~/Downloads/file.pdf')" 2 "BLOCK-TRASH-003"
 
+# This arm and the osascript inside-allow arm below run under the fixture home
+# (HOME-FIXTURE-01).
 test_case "trash inside Claude allows" \
-  "$(bash_payload 'trash '"$HOME"'/Claude/foo.txt')" 0
+  "$(bash_payload 'trash '"$RMT_FIXTURE_HOME"'/Claude/foo.txt' "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
 
 test_case "osascript Trash-verb outside blocks" \
   "$(bash_payload 'osascript -e '"'"'tell application "Finder" to delete POSIX file "/tmp/foo"'"'"'')" 2 "BLOCK-TRASH-003"
 
 test_case "osascript Trash-verb inside allows" \
-  "$(bash_payload 'osascript -e '"'"'tell application "Finder" to delete POSIX file "'"$HOME"'/Claude/foo"'"'"'')" 0
+  "$(bash_payload 'osascript -e '"'"'tell application "Finder" to delete POSIX file "'"$RMT_FIXTURE_HOME"'/Claude/foo"'"'"'' "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
 
 test_case "osascript non-Trash-verb allows" \
   "$(bash_payload 'osascript -e '"'"'say "hello"'"'"'')" 0
@@ -154,11 +215,14 @@ test_case "EXT-CH6: && trash blocks (chained-AND, trash verb)" \
 test_case "AC-AP-011: /bin/rm /tmp/foo blocks (BLOCK-TRASH-001)" \
   "$(bash_payload '/bin/rm /tmp/foo')" 2 "BLOCK-TRASH-001"
 
+# AC-AP-012 and AC-AP-013 run under the fixture home (HOME-FIXTURE-01). AC-AP-013's name
+# still expands the caller's HOME, so its arm ID reads as it always has; its payload is
+# spelled from the fixture.
 test_case "AC-AP-012: /usr/bin/rm foo.txt (worktree cwd) blocks-trash (BLOCK-TRASH-002)" \
-  "$(bash_payload '/usr/bin/rm foo.txt')" 2 "BLOCK-TRASH-002"
+  "$(bash_payload '/usr/bin/rm foo.txt' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-002" "$RMT_HOME_ENV"
 
 test_case "AC-AP-013: /bin/unlink $HOME/Claude/foo blocks-trash (BLOCK-TRASH-002)" \
-  "$(bash_payload '/bin/unlink '"$HOME"'/Claude/foo')" 2 "BLOCK-TRASH-002"
+  "$(bash_payload '/bin/unlink '"$RMT_FIXTURE_HOME"'/Claude/foo' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-002" "$RMT_HOME_ENV"
 
 test_case "AC-AP-014: /opt/homebrew/bin/trash /tmp/foo blocks (BLOCK-TRASH-003)" \
   "$(bash_payload '/opt/homebrew/bin/trash /tmp/foo')" 2 "BLOCK-TRASH-003"
