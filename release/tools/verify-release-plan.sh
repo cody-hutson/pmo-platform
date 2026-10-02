@@ -448,7 +448,10 @@ OPTIONS
                     Merge SHA of the plan's row in origin/main's RELEASE_LOG,
                     else the first-parent mainline commit that added the plan
                     (a commit that only renamed it does not count). Every FCM
-                    FAIL row names the range and how it was chosen.
+                    FAIL row names the range and how it was chosen. A head on
+                    the mainline whose plan resolves no merge is graded on an
+                    EMPTY range, marked range_source=post-merge-unresolved:
+                    name the range with --merge-base and --head.
   --head REF        Head ref for the release diff range (default: HEAD)
   --fcm-diff-file P TEST-ONLY determinism seam: read the delivered set, for the
                     fcm-delivery and scope families, from a <status>TAB<path>
