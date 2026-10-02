@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.70 (2026-10-02) — The plan check now says what it ran, what it could not, and what it skipped
+
 ### v4.69 (2026-09-25) — Allowlist entries now apply only where they belong, and refusals can be audited
 
 ### v4.68 (2026-09-25) — Write protection for the platform repository now follows its working copies

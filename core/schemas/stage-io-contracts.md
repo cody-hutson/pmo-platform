@@ -221,7 +221,7 @@ Stage 7 (Dev Testing) produces the Quality Review Report, terminating in the str
 |----------|--------|----------|----------------|----------------|----------|------------|
 | Quality Review Report | Structured report (section scores + findings) | YES | Accept/override findings — Tier 3 (Phase E) | Detail | Stage 7 sub-task; terminates in `### Output for Stage 8` | Report present; section scores (1-5) + finding list with severity + escape rate |
 | Verdict | Enum: PASS / CONDITIONAL PASS / FAIL | YES | NO | Summary | First line of `### Output for Stage 8`: `**Verdict:** <enum> — <rationale>` | Phase A entry gate — only PASS / CONDITIONAL PASS advance to Stage 8 |
-| AC map | Table: `AC · Issue # · Verdict · Evidence` | YES | NO | Detail | Handoff Payload AC-map table | Primary input for Stage 8 Phase B acceptance review |
+| AC map | Table: `AC · Issue # · Namespace · Maps-to · Verdict · Evidence` | YES | NO | Detail | Handoff Payload AC-map table | Primary input for Stage 8 Phase B acceptance review; every row names its criterion namespace, and a non-`issue` `AC-` row its `Maps-to` (`stage-08-qa-testing.md` § Criterion namespace) |
 | Findings | Table: `F-ID · Severity · Dimension · Routing tier · Origin · Status · Evidence · Recommendation` | YES | NO | Detail | Handoff Payload findings table | 5-bucket severity vocabulary; F-IDs stable across iterations |
 | Escape summary | Table: `Origin stage · Count` | YES | NO | Summary | Handoff Payload escape table | Stage 7 escape count for calibration |
 | Test-results | Table: `Suite · Selected-by · Result · Pass/Fail · Env · Evidence · Event ts` | YES | NO | Evidence | Handoff Payload (Phase A8 runtime-gate outcome) | Confirms the runtime-code gate ran; single `NONE — no runtime code path changed` line when no code path changed |
@@ -249,7 +249,7 @@ Stage 8 (QA Testing) produces the Acceptance Report for Stage 9 (Plan Review) to
 | Artifact | Format | Required | Human Decision | Cognitive Load | Delivery | Validation |
 |----------|--------|----------|----------------|----------------|----------|------------|
 | Acceptance Report | Structured report | YES | Accept/override — Tier 3 | Detail | Stage 8 sub-task; downstream to Stage 9 | Report present; consumed by Gate 9 **G-PR2** (all upstream reports present — Stage 7 quality report + Stage 8 acceptance report + Stage 6 PR + Stage 4 release plan) |
-| Acceptance matrix | Table (per-criterion verdict) | YES | NO | Detail | Acceptance Report matrix section | Per-criterion verdict present for every AC |
+| Acceptance matrix | Table (per-criterion verdict) | YES | NO | Detail | Acceptance Report matrix section | Per-criterion verdict present for every AC; the report declares its criterion namespace by identifier class (`ns:AC=issue,INT=design`) |
 | Acceptance score | Numeric | YES | NO | Summary | Acceptance Report | Score present |
 | Fitness assessment | Structured assessment | YES | NO | Summary | Acceptance Report | Fitness-for-release stated |
 | Stage 7 escape log | Table | YES | NO | Summary | Acceptance Report | Stage 7 escapes carried forward (feeds Stage 9 escape/calibration) |
