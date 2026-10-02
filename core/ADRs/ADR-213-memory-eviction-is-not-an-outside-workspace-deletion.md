@@ -1,7 +1,7 @@
 ---
 title: "ADR-213 — Evicting an auto-memory entry is not an outside-workspace deletion"
 status: Proposed
-date: 2026-10-01
+date: 2026-10-02
 release: install-resolves-identically
 deciders: "Workspace owner (operator) — the decision rendered at the release's Stage-5 Collective Review scope-lock, with the independent adversarial review's admission log and scope refusal taken; design by the Stage 5 Solutioning spoke (Principal Engineer persona); authored by the Stage 6 Engineering spoke"
 tags: [hooks, block-rm-prefer-trash, autonomy-tiers, irreducible-human-tasks, tier-0, memory-architecture, encode-and-evict, security-control-scope, admission-log, fail-closed]
@@ -37,7 +37,7 @@ Three further facts shaped the decision:
 ## Decision
 
 1. **Item 8 is re-scoped.** A Trash move of one auto-memory entry leaves item 8's set as item 8a, at Tier 1. Every other outside-root target, and every permanent-deletion verb, stays at Tier 0 permanently.
-2. **The hook admits exactly that act and nothing wider.** It admits a Trash-verb move of one direct `*.md` entry of the declared store, and never the `MEMORY.md` index or a directory. The operand must be written in characters the shell passes through unchanged, as an absolute or unquoted `~/` path with no `..` component. Its leaf must be an existing regular file and not a symbolic link, and its resolved parent must be the resolved store. The predicate judges the operand before it opens any settings file, and admits only on an explicit success token, so every failure refuses.
+2. **The hook admits exactly that act and nothing wider.** It admits a Trash-verb move of one direct `*.md` entry of the declared store, and never the `MEMORY.md` index or a directory. The operand must be written in characters the shell passes through unchanged, as an absolute path, bare or wholly quoted, with no `..` component. Its leaf must be an existing regular file and not a symbolic link, and its resolved parent must be the resolved store. The predicate judges the operand before it opens any settings file, and admits only on an explicit success token, so every failure refuses.
 3. **The store's location is read from the operator's user-scope settings only**, with no environment override. Project and local settings never admit. They are read only to word a refusal: an entry whose store is declared there is refused with a message that says so, rather than with the generic cancel text.
 4. **Every admission leaves one row.** Once every operand of a command has been judged, each admission appends one compact row to the hook's block log, carrying the command's digest and never its text or the entry's path. A command refused as a whole leaves no row, and an admission whose row cannot be written is refused.
 5. **The mechanism is stated once**, in the memory↔corpus boundary's EVICT phase. This record, item 8a and the hook's registry entry cite it and do not restate it.
@@ -63,7 +63,7 @@ Tier-0 permanence attaches to a correctly-scoped item. Item 8 covered every dele
 - **+** An operator whose store is declared outside user scope is told why the arm does not apply, instead of meeting the generic refusal.
 - **−** The integrity of the user-scope settings file becomes load-bearing for a deletion control. An agent that could write that file mid-session could re-aim the arm. The damage is bounded by the predicate: Trash only, one directory level, `.md` files only, and only a store that holds an index. It is also dominated by what such a writer can already do, which is to unwire every guard.
 - **−** An operator whose setting lives in project or local scope gets no arm, and evicts through the handoff. The runtime's default per-project store is not admitted either.
-- **−** An entry whose name carries a character outside the admitted set cannot be evicted through the arm, and goes through the handoff.
+- **−** The arm admits no operand that carries a character outside the admitted set, so it cannot evict an entry whose name carries one, nor any entry of a store whose own path carries one. Such an operand meets a generic `BLOCK-TRASH-003` refusal, not the memory-specific one, and the eviction goes through the handoff.
 - **−** The drift audit keeps a second, hardcoded resolver of the store until it adopts the same resolution.
 - **−** The lifecycle still has no read-back of its own after an eviction. That residual is named and out of scope.
 

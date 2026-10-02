@@ -1766,11 +1766,12 @@ builds their layout at the layout helper's default site, its own worktree root:
 in the worktree's own `.claude/`, not in `$SPOKE_OUT`, and that is deliberate. The
 runner can be executed only from that site: a runner under a temporary run directory
 sits at an absolute temp path, which the script-execution guard refuses. The
-exception covers that one write at that one site, and nothing else. It never reaches
-the live workspace, `$HOME`, or another session's worktree, because the helper's own
-guard refuses a live Claude configuration directory, and the worktree's `.gitignore`
-keeps the layout out of every commit. Every other scratch artifact still goes in
-`$SPOKE_OUT`.
+exception covers that one write at that one site, and nothing else. It lands in the
+spoke's own worktree because the default site is the checkout the helper runs from.
+It never reaches the live workspace or the account home's configuration directory,
+because the helper's guard refuses a live Claude configuration directory; and the
+worktree's `.gitignore` keeps the layout out of every commit. Every other scratch
+artifact still goes in `$SPOKE_OUT`.
 
 **Honest scope — the read side is a convention, not an interlock.** The write
 side is mechanical: a directory that did not exist cannot be collided with. The

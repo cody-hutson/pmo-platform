@@ -332,7 +332,7 @@ NEW PMO skills MAY be authored via `anthropic-skills:skill-creator` (Anthropic b
 
 - **Gate 1 (spec-compliance, deploy-time):** `./deploy.sh --check` Checks 6-10 validate canonical structure, package freshness, canonical-session-path freshness, mirror-sync, editor audit-trail.
 - **Gate 2 (editor-invocation, edit-time):** `.claude/hooks/block-skill-direct-edit.sh` PreToolUse hook on Write/Edit matchers. Pattern matches `bypass-mode-readiness.md` hooks exactly.
-- **Exemption surface:** the operator-instance skill-editor exemption list that `pmo_skill_editor_exemption_list()` (`core/deploy/lib-instance-path.sh`) resolves — the one path the Gate 2 hook, `allowlist-add.sh`, the installer and Checks 6/10 all read (canary initially). Operator additions follow "No ungoverned changes" protocol.
+- **Exemption surface:** the operator-instance skill-editor exemption list that `pmo_skill_editor_exemption_list()` (`core/deploy/lib-instance-path.sh`) resolves — on the default root, or a root exported as `CLAUDE_WORKSPACE_ROOT`, the one path the Gate 2 hook, `allowlist-add.sh`, the installer and Checks 6/10 all read (canary initially). Operator additions follow "No ungoverned changes" protocol.
 - **Shakedown posture:** Initial deploy uses warn-mode for Checks 8-10 and the edit-time hook (per `.claude/hooks/.mode` and `.claude/hooks/deploy-check.mode`). After ≥3 days of warn-log review + false-positive allowlist additions, flip to `enforce` per [bypass-mode-readiness.md Shakedown → Enforce Transition Checklist](/core/rules/bypass-mode-readiness.md).
 
 ### Version field
