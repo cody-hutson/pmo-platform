@@ -1,6 +1,6 @@
 <!-- reference-durability: allow-link -->
 ---
-title: "ADR-211 — Post-merge phases declare their --no-merge behaviour once; the deferral, the reports and the tests derive from the declaration"
+title: "ADR-213 — Post-merge phases declare their --no-merge behaviour once; the deferral, the reports and the tests derive from the declaration"
 status: Accepted
 date: 2026-09-25
 release: closeout-verification-rows-consistent
@@ -14,7 +14,7 @@ source_observations:
   - "The tool's --help renders the header comment line by line, so a check that a deferred phase is annotated reads one rendered line at a time; the header's inventory rows already wrap onto continuation lines."
 ---
 
-# ADR-211 — Post-merge phases declare their --no-merge behaviour once; the deferral, the reports and the tests derive from the declaration
+# ADR-213 — Post-merge phases declare their --no-merge behaviour once; the deferral, the reports and the tests derive from the declaration
 
 ## Status
 
@@ -23,6 +23,8 @@ source_observations:
 **Numbering provenance.** Claimed as **207** against an anchor of **206** on `origin/main`, read from the repository's own ADR-numbering tool at Engineering Commit 0 rather than computed as one past the highest number visible on any branch. A sibling release branch carries its own branch-local claims on this number, and branch-local claims do not bind. The number binds at the Stage-12 claim, and in-release prose cites this record by slug rather than by number.
 
 **Numbering provenance — `207 → 211`.** Held **ADR-207** branch-local; renumbered to **ADR-211** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 207. In-release citations that read "ADR-207" denote this record.
+
+**Numbering provenance — `211 → 213`.** Held **ADR-211** branch-local; renumbered to **ADR-213** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 211. In-release citations that read "ADR-211" denote this record.
 
 ## Context
 

@@ -115,6 +115,7 @@ ADR-204 (`egress-allowlist-rows-declare-their-match-domain`) → **ADR-206** by 
 ADR-207 (`design-axes-and-cut-patterns-key-on-work-nature`) → **ADR-211** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 207; the record's Status section carries the provenance note.
 ADR-207 (`post-merge-phases-declare-their-no-merge-behaviour`) → **ADR-211** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 207; the record's Status section carries the provenance note.
 ADR-208 (`lock-at-close-is-a-close-out-phase-over-every-milestone-thread`) → **ADR-212** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 208; the record's Status section carries the provenance note.
+ADR-211 (`post-merge-phases-declare-their-no-merge-behaviour`) → **ADR-213** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 211; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 
