@@ -659,6 +659,130 @@ ROWS
   _help_out="$(usage)"
   [[ "$_help_out" == *"Stage-9 GO rows"* ]] || die "self-test: HELP-1 --help does not carry the T_GO identity contract ('Stage-9 GO rows')"
 
+  # ─── Group RI — the query tool's rung-3 INDETERMINATE notice is surfaced (#5467) ───
+  # Both reads go through query-pipeline-event.sh --release, whose § 2a rung 3 also
+  # matches the release's legacy vX.Y value. One legacy value can carry rows of more than
+  # one release, and the query tool says so on its own stderr: INDETERMINATE, do not bind
+  # them. A read that discards that stream anchors on such rows without a word. Every arm
+  # runs this tool as a child process over a hermetic fixture — an event log and a
+  # RELEASE_LOG binding of its own — and reads its stdout and stderr apart. Each arm is
+  # paired with the mutation that must turn it red: discarding the query tool's stderr at
+  # the T_GO read, or dropping that read's surfacing step, fails RI-1 and RI-6 and leaves
+  # RI-2 passing; the same at the T_DEPLOY read fails RI-2 alone; surfacing every line of
+  # the query tool's stderr fails RI-5; a notice folded into the reason line fails RI-6;
+  # and a selection that drops the reported rows fails RI-3.
+  #   slug-r  v9.93  both reads INDETERMINATE: two milestone subjects under the legacy key
+  #   slug-s  v9.94  slug-keyed rows only — no rung-3 match at all
+  #   slug-n  v9.95  legacy-keyed, ONE milestone subject — the query tool's best-effort NOTE
+  #   slug-q  v9.96  the T_GO read INDETERMINATE and no deploy row — an N/A release
+  _ri_tmp="$(/usr/bin/mktemp -d)"
+  /bin/mkdir "$_ri_tmp/evals"
+  /bin/cat > "$_ri_tmp/RELEASE_LOG.md" <<'RLOG'
+| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
+|---|---|---|---|---|---|---|---|
+| v9.93 | slug-r | n/a | n/a | n/a | v9.93 | VERIFIED | 2026-02-01 |
+| v9.94 | slug-s | n/a | n/a | n/a | v9.94 | VERIFIED | 2026-02-02 |
+| v9.95 | slug-n | n/a | n/a | n/a | v9.95 | VERIFIED | 2026-02-03 |
+| v9.96 | slug-q | n/a | n/a | n/a | v9.96 | VERIFIED | 2026-02-04 |
+RLOG
+  /bin/cat > "$_ri_tmp/evals/pipeline-event-log.md" <<'ROWS'
+| ts_iso | version | stage | event_type | event_subtype | actor | subject | reversibility | outcome | payload |
+|---|---|---|---|---|---|---|---|---|---|
+| 2026-02-01T09:00:00Z | v9.93 | 9 | gate-outcome | plan-review-go | operator | milestone:#11 | MODERATE | resolved | p |
+| 2026-02-01T10:00:00Z | v9.93 | 9 | gate-outcome | plan-review-go | operator | milestone:#12 | MODERATE | resolved | p |
+| 2026-02-01T12:00:00Z | v9.93 | 12 | deployment-status | deploy-skill | hub | milestone:#11 | CHEAP | resolved | p |
+| 2026-02-01T12:30:00Z | v9.93 | 12 | deployment-status | deploy-skill | hub | milestone:#12 | CHEAP | resolved | p |
+| 2026-02-02T09:00:00Z | slug-s | 9 | gate-outcome | plan-review-go | operator | milestone:#13 | MODERATE | resolved | p |
+| 2026-02-02T09:47:00Z | slug-s | 12 | deployment-status | deploy-skill | hub | skill:s | CHEAP | resolved | p |
+| 2026-02-03T09:00:00Z | v9.95 | 9 | gate-outcome | plan-review-go | operator | milestone:#14 | MODERATE | resolved | p |
+| 2026-02-03T10:00:00Z | v9.95 | 12 | deployment-status | deploy-skill | hub | milestone:#14 | CHEAP | resolved | p |
+| 2026-02-04T09:00:00Z | v9.96 | 9 | gate-outcome | plan-review-go | operator | milestone:#15 | MODERATE | resolved | p |
+| 2026-02-04T09:30:00Z | v9.96 | 9 | gate-outcome | plan-review-go | operator | milestone:#16 | MODERATE | resolved | p |
+ROWS
+  _ri_run() {  # <release> — this tool over the fixture; sets _ri_rc, _ri_out (stdout) and _ri_err (stderr)
+    _ri_rc=0
+    _ri_out="$(EVALS_RESULTS_PATH="$_ri_tmp/evals" RELEASE_LOG_FILE="$_ri_tmp/RELEASE_LOG.md" /bin/bash "${BASH_SOURCE[0]}" --version "$1" --iso 2>"$_ri_tmp/err")" || _ri_rc=$?
+    _ri_err="$(/bin/cat "$_ri_tmp/err")"
+  }
+  _ri_query() {  # <release> <event type> — what the query tool itself prints on stderr for one read
+    EVALS_RESULTS_PATH="$_ri_tmp/evals" RELEASE_LOG_FILE="$_ri_tmp/RELEASE_LOG.md" "$QUERY_TOOL" --release "$1" --event-type "$2" 2>&1 >/dev/null || true
+  }
+  _ri_lines() {  # <text> <prefix> — counts the lines of <text> that begin with <prefix>; an empty prefix counts every non-empty line (no regex)
+    /usr/bin/awk -v p="$2" '(p == "" && length($0) > 0) || (p != "" && index($0, p) == 1) { n++ } END { print n + 0 }' <<<"$1"
+  }
+  _ri_run slug-r; _ri_r_rc="$_ri_rc"; _ri_r_out="$_ri_out"; _ri_r_err="$_ri_err"
+  _ri_run slug-s; _ri_s_rc="$_ri_rc"; _ri_s_out="$_ri_out"; _ri_s_err="$_ri_err"
+  _ri_run slug-n; _ri_n_rc="$_ri_rc"; _ri_n_out="$_ri_out"; _ri_n_err="$_ri_err"
+  _ri_run slug-q; _ri_q_rc="$_ri_rc"; _ri_q_out="$_ri_out"; _ri_q_err="$_ri_err"
+  _ri_qt_r_go="$(_ri_query slug-r gate-outcome)";  _ri_qt_r_dep="$(_ri_query slug-r deployment-status)"
+  _ri_qt_s_go="$(_ri_query slug-s gate-outcome)";  _ri_qt_s_dep="$(_ri_query slug-s deployment-status)"
+  _ri_qt_n_go="$(_ri_query slug-n gate-outcome)";  _ri_qt_n_dep="$(_ri_query slug-n deployment-status)"
+  _ri_qt_q_go="$(_ri_query slug-q gate-outcome)";  _ri_qt_q_dep="$(_ri_query slug-q deployment-status)"
+  /bin/rm -f "$_ri_tmp/err" "$_ri_tmp/evals/pipeline-event-log.md" "$_ri_tmp/RELEASE_LOG.md"
+  /bin/rmdir "$_ri_tmp/evals" "$_ri_tmp"
+  unset -f _ri_run _ri_query
+
+  # RI-0 ANTI-VACUITY — the fixture is what the arms below take it to be, read from the
+  #      query tool itself: INDETERMINATE for both of slug-r's reads and for slug-q's
+  #      T_GO read; the best-effort NOTE, never INDETERMINATE, for both of slug-n's; and
+  #      nothing at all for slug-s's reads or for slug-q's T_DEPLOY read. A query tool
+  #      that stopped reporting any of these would leave the arms below passing or
+  #      failing for the wrong reason.
+  [[ "$_ri_qt_r_go" == "INDETERMINATE: "*"'v9.93'"*"'slug-r'"* && "$_ri_qt_r_dep" == "INDETERMINATE: "*"'v9.93'"*"'slug-r'"* && "$_ri_qt_q_go" == "INDETERMINATE: "*"'v9.96'"*"'slug-q'"* ]] \
+    || die "self-test: RI-0 the fixture must make the query tool report INDETERMINATE for slug-r's two reads and slug-q's T_GO read; got '$_ri_qt_r_go' / '$_ri_qt_r_dep' / '$_ri_qt_q_go'"
+  [[ "$_ri_qt_n_go" == "NOTE: "*"'v9.95'"* && "$_ri_qt_n_dep" == "NOTE: "*"'v9.95'"* && "$_ri_qt_n_go$_ri_qt_n_dep" != *"INDETERMINATE"* ]] \
+    || die "self-test: RI-0 the near-miss fixture must make the query tool print its best-effort NOTE, never INDETERMINATE, for slug-n's two reads; got '$_ri_qt_n_go' / '$_ri_qt_n_dep'"
+  [[ -z "$_ri_qt_s_go$_ri_qt_s_dep$_ri_qt_q_dep" ]] \
+    || die "self-test: RI-0 the query tool must print nothing on stderr for slug-s's reads or slug-q's T_DEPLOY read; got '$_ri_qt_s_go' / '$_ri_qt_s_dep' / '$_ri_qt_q_dep'"
+
+  # RI-1, RI-2, RI-6 SENSITIVITY — each release-INDETERMINATE read's notice reaches this
+  #      tool's stderr as ONE line that names the read and carries the query tool's own
+  #      words: RI-1 the T_GO read and RI-2 the T_DEPLOY read of slug-r, a release that
+  #      computes a value; RI-6 the T_GO read of slug-q, a release that reads N/A. The
+  #      three are graded together and reported by name, so one run shows every read
+  #      that stayed silent.
+  _ri_miss=""
+  [[ "$(_ri_lines "$_ri_r_err" 'INDETERMINATE (T_GO read): ')" == "1" && "$_ri_r_err" == *"INDETERMINATE (T_GO read): ${_ri_qt_r_go#INDETERMINATE: }"* ]] \
+    || _ri_miss="${_ri_miss} RI-1 (slug-r, the T_GO read)"
+  [[ "$(_ri_lines "$_ri_r_err" 'INDETERMINATE (T_DEPLOY read): ')" == "1" && "$_ri_r_err" == *"INDETERMINATE (T_DEPLOY read): ${_ri_qt_r_dep#INDETERMINATE: }"* ]] \
+    || _ri_miss="${_ri_miss} RI-2 (slug-r, the T_DEPLOY read)"
+  [[ "$(_ri_lines "$_ri_q_err" 'INDETERMINATE (T_GO read): ')" == "1" && "$_ri_q_err" == *"INDETERMINATE (T_GO read): ${_ri_qt_q_go#INDETERMINATE: }"* ]] \
+    || _ri_miss="${_ri_miss} RI-6 (slug-q, the T_GO read)"
+  [[ -z "$_ri_miss" ]] \
+    || die "self-test:${_ri_miss} — the query tool reported this read's rows release-INDETERMINATE and the notice did not reach stderr as one line naming the read: the rows were bound without a word. stderr was '$_ri_r_err' (slug-r) and '$_ri_q_err' (slug-q)"
+
+  # RI-3 NO VALUE MOVES — slug-r still computes, and on the same anchors: the notice is
+  #      reported beside the value, and the selection runs over the rows as returned.
+  #      stderr carries the two notice lines and nothing else.
+  [[ "$_ri_r_rc" -eq 0 && "$_ri_r_out" == "T_GO=2026-02-01T09:00:00Z; T_DEPLOY=2026-02-01T12:30:00Z; delta=12600s" ]] \
+    || die "self-test: RI-3 a release-INDETERMINATE read must not move the value: expected rc 0 and 'T_GO=2026-02-01T09:00:00Z; T_DEPLOY=2026-02-01T12:30:00Z; delta=12600s', got rc $_ri_r_rc and '$_ri_r_out'"
+  [[ "$(_ri_lines "$_ri_r_err" '')" == "2" ]] \
+    || die "self-test: RI-3 slug-r's stderr must carry its two notice lines and nothing else, got '$_ri_r_err'"
+
+  # RI-4 CONTROL — a slug-keyed release with no rung-3 match: the value, and a silent stderr.
+  [[ "$_ri_s_rc" -eq 0 && "$_ri_s_out" == "T_GO=2026-02-02T09:00:00Z; T_DEPLOY=2026-02-02T09:47:00Z; delta=2820s" && -z "$_ri_s_err" ]] \
+    || die "self-test: RI-4 CONTROL a slug-keyed release must print its value and nothing on stderr, got rc $_ri_s_rc, '$_ri_s_out' and '$_ri_s_err'"
+
+  # RI-5 SPECIFICITY — the near-miss. slug-n's rows are matched by the legacy value too,
+  #      but under ONE milestone subject, so the query tool prints its best-effort NOTE
+  #      (RI-0 shows it does). That line is not an INDETERMINATE notice and stays off
+  #      this tool's stderr: surfacing it would put a line on every legacy release.
+  [[ "$_ri_n_rc" -eq 0 && "$_ri_n_out" == "T_GO=2026-02-03T09:00:00Z; T_DEPLOY=2026-02-03T10:00:00Z; delta=3600s" && -z "$_ri_n_err" ]] \
+    || die "self-test: RI-5 SPECIFICITY the query tool's best-effort NOTE must not be surfaced: expected the value and a silent stderr, got rc $_ri_n_rc, '$_ri_n_out' and '$_ri_n_err'"
+
+  # RI-6 THE N/A SHAPE — the notice is its own line and never part of the reason. slug-q
+  #      reads N/A for its missing T_DEPLOY, in exactly one reason line that is
+  #      byte-for-byte the reason a release with no notice prints; the close-out lifts
+  #      that line by its prefix. No T_DEPLOY-read line appears, because that read
+  #      matched no legacy row.
+  [[ "$_ri_q_rc" -eq 0 && "$_ri_q_out" == "T_GO=2026-02-04T09:00:00Z; T_DEPLOY=N/A; delta=N/A" ]] \
+    || die "self-test: RI-6 slug-q must read N/A on its T_DEPLOY alone, got rc $_ri_q_rc and '$_ri_q_out'"
+  [[ "$(_ri_lines "$_ri_q_err" 'Cycle-Time: N/A (')" == "1" && "$_ri_q_err" == *$'\n'"Cycle-Time: N/A (no deployment-status event for slug-q)" ]] \
+    || die "self-test: RI-6 the N/A reason must stay one line, unchanged and last, beside the notice; got '$_ri_q_err'"
+  [[ "$(_ri_lines "$_ri_q_err" 'INDETERMINATE (T_DEPLOY read): ')" == "0" && "$(_ri_lines "$_ri_q_err" '')" == "2" ]] \
+    || die "self-test: RI-6 slug-q's T_DEPLOY read matched no legacy row, so its stderr is the T_GO notice and the reason line only; got '$_ri_q_err'"
+  unset -f _ri_lines
+
   echo "self-test: PASS"
   echo "  ISO8601 delta arithmetic validated"
   echo "  human formatter validated (sub-hour, over-hour, exact-hour, zero)"
@@ -669,6 +793,7 @@ ROWS
   echo "  T_DEPLOY N/A reason accounts for every row (#5553, group CR): CR-1..CR-6 package-only / skill-bearing control / rules-mirror-only / PRF-1 survives / no rows / totality, each non-anchor subtype named with its outcome and producer tally (deploy emitter or hand-written) and no reason carrying '; ' or '|'; CR-7 partition = selector; CR-8 partition = schema enum; CR-9 partition = the DORA read-model's anchor tuple; CR-10 an unreadable event log exits 1, never a published N/A"
   echo "  --help prints the whole header (U-1)"
   echo "  T_GO anchor identity validated (group CG): CG-1 SENSITIVITY the 2 operator Stage-9 GO rows are kept / CG-2 T_GO = the earliest row OF THE IDENTITY / CG-3 NEGATIVE CONTROL a subtype-only selector derived from the shipped source anchors on the hub Stage-7 row / CG-4 stage / CG-5 actor / CG-6 subtype term / CG-7 SPECIFICITY no identity row, no T_GO / CG-8 CONTROL a single-row release is unchanged / CG-9 an identity miss names its count and the identity as observed under the join keys / CG-10 the no-rows reason is kept byte-for-byte / CG-11 an unreadable log exits 1 at the T_GO read / CG-12 every query-tool read checks the tool's own exit status; HELP-1 --help carries the T_GO identity contract"
+  echo "  the query tool's rung-3 INDETERMINATE notice is surfaced (#5467, group RI): RI-0 ANTI-VACUITY the fixture makes the query tool itself report INDETERMINATE for three reads, its best-effort NOTE for two and nothing for three / RI-1 SENSITIVITY the T_GO read's notice reaches stderr as one line naming the read and carrying the query tool's words / RI-2 SENSITIVITY the T_DEPLOY read's notice does too / RI-3 no value moves: the release still computes on the same anchors, and stderr carries the two notice lines and nothing else / RI-4 CONTROL a slug-keyed release prints its value and a silent stderr / RI-5 SPECIFICITY the query tool's best-effort NOTE is not surfaced / RI-6 on an N/A release the notice is its own line beside one unchanged reason line, and a read that matched no legacy row surfaces nothing"
   exit 0
 fi
 
