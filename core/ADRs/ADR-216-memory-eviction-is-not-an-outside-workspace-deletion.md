@@ -1,5 +1,5 @@
 ---
-title: "ADR-213 — Evicting an auto-memory entry is not an outside-workspace deletion"
+title: "ADR-216 — Evicting an auto-memory entry is not an outside-workspace deletion"
 status: Proposed
 date: 2026-10-02
 release: install-resolves-identically
@@ -15,7 +15,7 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-213 — Evicting an auto-memory entry is not an outside-workspace deletion
+# ADR-216 — Evicting an auto-memory entry is not an outside-workspace deletion
 
 ## Status
 
@@ -24,6 +24,8 @@ supersedes: none
 **Numbering provenance.** This record was claimed as **209** against an anchor of **206** on `origin/main`, read from the repository's ADR-numbering detector. It advances past two slots, which the release's two earlier records on this same branch already occupy. Sibling release branches hold numbers in the same range branch-only, which does not bind. This is the third of the release's three records, numbered in serial order at authorship. The number binds at the Stage-12 claim. If the mainline claims it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. Citations use the slug token `{{ADR:memory-eviction-is-not-an-outside-workspace-deletion}}`, which carries no number shape and resolves at the claim.
 
 **Numbering provenance — `209 → 213`.** Held **ADR-209** branch-local; renumbered to **ADR-213** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 209. In-release citations that read "ADR-209" denote this record.
+
+**Numbering provenance — `213 → 216`.** Held **ADR-213** branch-local; renumbered to **ADR-216** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 213. In-release citations that read "ADR-213" denote this record.
 
 ## Context
 

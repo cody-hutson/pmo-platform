@@ -424,7 +424,7 @@ core/rules/bypass-mode-readiness/block-rm-prefer-trash.md                       
 core/rules/bypass-mode-readiness.md                                               EDIT  (generated index)
 core/disciplines/knowledge-architecture.md                                        EDIT  (the EVICT paragraph in section 7 and its Tier-A flowchart)
 core/specs/autonomy-tiers.md                                                      EDIT  (item 8 and the new item 8a)
-core/ADRs/ADR-213-memory-eviction-is-not-an-outside-workspace-deletion.md         ADD   (third of three, Q3: numbered 209 at authorship against the mainline anchor 206; moved to 213 by the renumber tool at the Stage 7 sync)
+core/ADRs/ADR-216-memory-eviction-is-not-an-outside-workspace-deletion.md         ADD   (third of three, Q3: numbered 209 at authorship against the mainline anchor 206; moved to 213 by the renumber tool at the Stage 7 sync)
 
 # ── CONDITIONAL — resolved FALSE at the Collective Review; NOT DELIVERED, see § Deviation Log ──
 CONDITIONAL:QA-ANTIPATTERN-NAMED             release/references/pipeline/stage-08-qa-testing.md       EDIT
