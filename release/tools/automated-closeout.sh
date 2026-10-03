@@ -7243,7 +7243,7 @@ _host_thread_lock() {
 # ─── Phase 15.2: lock_milestone_threads (Phase C5 lock-at-close) ─────────────
 #
 # Replaces the manual Phase C5 checklist step, per
-# {{ADR:lock-at-close-is-a-close-out-phase-over-every-milestone-thread}}. Locks EVERY
+# ADR-212. Locks EVERY
 # thread on the milestone (issues and pull requests, the release PR and the Stage 13
 # chore PR included) with lock_reason=resolved, through the three bindings above.
 # FORWARD-ONLY: it locks the closing milestone's threads; no earlier close is

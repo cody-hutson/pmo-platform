@@ -29,7 +29,7 @@ ADR-076 Decision 3 reads: "**Lock-at-close** ships as a manual Stage 13 checklis
 
 A manual, non-blocking step with no runner has no negative observable: a close that skips it records nothing, so a sweep that never ran is indistinguishable from a sweep that found nothing to lock. The step was inert on almost every close after its cutover (see `source_observations`). Its count check compared an issues-only listing with the milestone's closed-item counter, which counts pull requests too, so it could never pass on a release that milestones its own pull requests — and every release does. Its binding was the GraphQL-backed CLI verb, which the close-out cannot rely on, because the GraphQL budget is the one exhausted while a close runs. ADR-076 recorded an upgrade path — fold the step into the automated close-out tooling once the manual step proved reliable across two or more releases — and the step proved inert instead.
 
-The release that authors this record also made the close-out tool's post-merge phases declare their `--no-merge` behaviour once, in a table the deferral, the reports and the tests derive from ({{ADR:post-merge-phases-declare-their-no-merge-behaviour}}). A lock phase is a post-merge phase, so it joins that table rather than carrying its own guard.
+The release that authors this record also made the close-out tool's post-merge phases declare their `--no-merge` behaviour once, in a table the deferral, the reports and the tests derive from (ADR-213). A lock phase is a post-merge phase, so it joins that table rather than carrying its own guard.
 
 ## Decision
 
@@ -78,7 +78,7 @@ ADR-076 Decisions 1, 2, 4 and 5 stand unchanged.
 
 - [`ADR-076`](ADR-076-comment-author-association-trust-boundary.md) — superseded in part (Decision 3); its other decisions stand.
 - [`ADR-158`](ADR-158-dry-run-predicts-apply-asserts-mode-branch-placement.md) — dry-run predicts, apply asserts: the phase predicts statically at `--dry-run` and locks at `--apply`.
-- {{ADR:post-merge-phases-declare-their-no-merge-behaviour}} — post-merge phases declare their `--no-merge` behaviour once: the phase defers through that table's `defer` row, as its first statement. Cited by slug, because both records bind their numbers at this release's claim.
+- ADR-213 — post-merge phases declare their `--no-merge` behaviour once: the phase defers through that table's `defer` row, as its first statement. Cited by slug, because both records bind their numbers at this release's claim.
 
 ## References
 
