@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-212 — Lock-at-close is a close-out phase over every milestone thread"
-status: Proposed
+status: Accepted — operator-ratified at the closeout-verification-rows-consistent Stage 13 Close ratification beat, 2026-10-03
 date: 2026-09-25
 release: closeout-verification-rows-consistent
 deciders: "operator (Stage-4 D-PhaseC5 gate: option E2, forward-only; Collective Review scope-lock: this record authored as Proposed and ratified at the release's Stage 13) + Stage 5 Solutioning spoke (Principal Engineer — Architecture Assessment) + independent adversarial design review + Stage 6 Engineering spoke (build and hermetic arms)"
@@ -17,7 +17,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Stage 6 Engineering for the `closeout-verification-rows-consistent` release. The Collective Review decided that this record is authored as `Proposed` and ratified by the operator at the release's Stage 13 close gate (Phase A13); the ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure.
+**Accepted** — operator-ratified at the `closeout-verification-rows-consistent` Stage 13 Close ratification beat (Phase A13), 2026-10-03, as one record of a decision rendered per record. Authored at Stage 6 Engineering for that release as `Proposed`, because the Collective Review decided that the operator ratifies it at the release's Stage 13 close gate; the ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure. The decision this record documents shipped in **v4.72**.
 
 **Numbering provenance.** Claimed as **208** against an anchor of **206** on `origin/main`, read from the repository's own ADR-numbering tool at Engineering Commit 0: this release's two new records took the next two numbers in slice order, and this one is the second. A sibling release branch carries its own branch-local claims on this number, and branch-local claims do not bind. The number binds at the Stage-12 claim, and in-release prose cites this record by slug rather than by number.
 
