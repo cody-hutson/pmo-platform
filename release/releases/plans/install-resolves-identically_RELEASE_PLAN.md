@@ -406,7 +406,7 @@ core/rules/bypass-mode-readiness.md                                             
 release/references/specs/release-personas.md                                      EDIT  (promoted on the reference cascade)
 core/standards/duplicate-source-discipline.md                                     EDIT  (promoted on the reference cascade)
 docs/UPDATE.md                                                                    EDIT  (section 6.3a heading and body; lines 103, 107 and 109)
-core/ADRs/ADR-212-exemption-list-resolves-at-the-instance-tier-through-one-resolver.md  ADD  (second of three, Q3: numbered 208 at authorship against the mainline anchor 206; moved to 212 by the renumber tool at the Stage 7 sync)
+core/ADRs/ADR-215-exemption-list-resolves-at-the-instance-tier-through-one-resolver.md  ADD  (second of three, Q3: numbered 208 at authorship against the mainline anchor 206; moved to 212 by the renumber tool at the Stage 7 sync)
 release/references/pipeline/stage-04-planning.md                                  EDIT  (Tier 2 SCOPE CHANGE, PA-007: section 5.9 step 2's sentence on where the exemption list is read, F-23; the Stage 7 batched fix cycle, row ENG-BATCH-PA007)
 
 # ── #7497 — write guard keys on the target (Q9 a, Q16 a) ──

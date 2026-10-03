@@ -120,6 +120,7 @@ ADR-207 (`pmo-platform-root-resolves-from-install-record`) → **ADR-211** by `r
 ADR-208 (`exemption-list-resolves-at-the-instance-tier-through-one-resolver`) → **ADR-212** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 208; the record's Status section carries the provenance note.
 ADR-209 (`memory-eviction-is-not-an-outside-workspace-deletion`) → **ADR-213** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 209; the record's Status section carries the provenance note.
 ADR-211 (`pmo-platform-root-resolves-from-install-record`) → **ADR-214** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 211; the record's Status section carries the provenance note.
+ADR-212 (`exemption-list-resolves-at-the-instance-tier-through-one-resolver`) → **ADR-215** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 212; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 
