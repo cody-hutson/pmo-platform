@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-213 — Post-merge phases declare their --no-merge behaviour once; the deferral, the reports and the tests derive from the declaration"
-status: Accepted
+status: Accepted — ratified at the closeout-verification-rows-consistent Stage-5 Collective Review scope-lock; the ratification is also credited at the release's Stage 13 Close ratification beat, 2026-10-03
 date: 2026-09-25
 release: closeout-verification-rows-consistent
 deciders: "Stage 5 Solutioning spoke (six-candidate design exploration) + independent adversarial design review + operator decision at the Collective Review scope-lock (Plan amendment 1: this record authored, ADR-158 left untouched, the structural first-statement arm added) + Stage 6 Engineering spoke (build, paired arms, structural first-statement check)"
@@ -18,7 +18,7 @@ source_observations:
 
 ## Status
 
-**Accepted.** Authored at Stage 6 Engineering for the `closeout-verification-rows-consistent` release. The design set this record's status to Accepted on the ratification of its record decision, and the Collective Review's decision to author it was that ratification. The `Proposed` status that review named applies to the release's other new record, which supersedes an earlier decision in part and is ratified at the release's close; it does not apply here.
+**Accepted** — ratified at the `closeout-verification-rows-consistent` Stage-5 Collective Review scope-lock, and the ratification is also credited at the release's Stage 13 Close ratification beat (Phase A13), 2026-10-03, the gate that owns the `Proposed → Accepted` transition. Authored at Stage 6 Engineering for that release. The design set this record's status to Accepted on the ratification of its record decision, and the Collective Review's decision to author it was that ratification. It was written `Accepted` at authoring, crediting the scope-lock rather than the Stage 13 gate; the operator's Phase A13 decision kept the status and credited the ratification at that gate as well, and the release plan's Verification Evidence records the earlier, out-of-gate flip. The `Proposed` status that review named applied to the release's other new record (`lock-at-close-is-a-close-out-phase-over-every-milestone-thread`), which supersedes an earlier decision in part and was ratified at the release's close; it does not apply here. The decision this record documents shipped in **v4.72**.
 
 **Numbering provenance.** Claimed as **207** against an anchor of **206** on `origin/main`, read from the repository's own ADR-numbering tool at Engineering Commit 0 rather than computed as one past the highest number visible on any branch. A sibling release branch carries its own branch-local claims on this number, and branch-local claims do not bind. The number binds at the Stage-12 claim, and in-release prose cites this record by slug rather than by number.
 

@@ -19,7 +19,7 @@ source_observations:
 
 **Accepted** — operator-ratified at the `closeout-verification-rows-consistent` Stage 13 Close ratification beat (Phase A13), 2026-10-03, as one record of a decision rendered per record. Authored at Stage 6 Engineering for that release as `Proposed`, because the Collective Review decided that the operator ratifies it at the release's Stage 13 close gate; the ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure. The decision this record documents shipped in **v4.72**.
 
-**Numbering provenance.** Claimed as **208** against an anchor of **206** on `origin/main`, read from the repository's own ADR-numbering tool at Engineering Commit 0: this release's two new records took the next two numbers in slice order, and this one is the second. A sibling release branch carries its own branch-local claims on this number, and branch-local claims do not bind. The number binds at the Stage-12 claim, and in-release prose cites this record by slug rather than by number.
+**Numbering provenance.** Claimed as **208** against an anchor of **206** on `origin/main`, read from the repository's own ADR-numbering tool at Engineering Commit 0: this release's two new records took the next two numbers in slice order, and this one is the second. A sibling release branch carries its own branch-local claims on this number, and branch-local claims do not bind. The number bound at the release's Stage-12 claim, whose stamp resolved every in-release slug citation of this record (`lock-at-close-is-a-close-out-phase-over-every-milestone-thread`) to its number; the slug stays the record's stable anchor.
 
 **Numbering provenance — `208 → 212`.** Held **ADR-208** branch-local; renumbered to **ADR-212** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 208. In-release citations that read "ADR-208" denote this record.
 
@@ -78,7 +78,7 @@ ADR-076 Decisions 1, 2, 4 and 5 stand unchanged.
 
 - [`ADR-076`](ADR-076-comment-author-association-trust-boundary.md) — superseded in part (Decision 3); its other decisions stand.
 - [`ADR-158`](ADR-158-dry-run-predicts-apply-asserts-mode-branch-placement.md) — dry-run predicts, apply asserts: the phase predicts statically at `--dry-run` and locks at `--apply`.
-- ADR-213 — post-merge phases declare their `--no-merge` behaviour once: the phase defers through that table's `defer` row, as its first statement. Cited by slug, because both records bind their numbers at this release's claim.
+- ADR-213 (`post-merge-phases-declare-their-no-merge-behaviour`) — post-merge phases declare their `--no-merge` behaviour once: the phase defers through that table's `defer` row, as its first statement. Both records bound their numbers at this release's Stage-12 claim, whose stamp resolved the slug citations to numbers; the slug is kept beside the number as the record's stable anchor.
 
 ## References
 
