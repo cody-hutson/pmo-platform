@@ -88,7 +88,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-208](ADR-208-a-method-the-verifier-cannot-run-is-reported-unrunnable.md) | A method the plan verifier cannot run is reported UNRUNNABLE: a fifth verdict that does not fail the run, and the release's one outcome partition | Accepted | 2026-09-25 | verifier-grades-what-plans-declare |
 | [ADR-209](ADR-209-runtime-suite-selection-one-glob-grammar.md) | The runtime-suite selection map names one glob grammar and its reference resolver, and has rows for the suites it exists to select | Accepted | 2026-09-25 | verifier-grades-what-plans-declare |
 | [ADR-210](ADR-210-acceptance-verdicts-name-their-criterion-namespace.md) | An acceptance verdict names the criterion list its ordinal counts in; the issue body is the list of record | Accepted | 2026-09-26 | verifier-grades-what-plans-declare |
-| [ADR-212](ADR-212-lock-at-close-is-a-close-out-phase-over-every-milestone-thread.md) | Lock-at-close is a close-out phase over every milestone thread | Proposed | 2026-09-25 | closeout-verification-rows-consistent |
+| [ADR-212](ADR-212-lock-at-close-is-a-close-out-phase-over-every-milestone-thread.md) | Lock-at-close is a close-out phase over every milestone thread | Accepted | 2026-09-25 | closeout-verification-rows-consistent |
 | [ADR-213](ADR-213-post-merge-phases-declare-their-no-merge-behaviour.md) | Post-merge phases declare their --no-merge behaviour once; the deferral, the reports and the tests derive from the declaration | Accepted | 2026-09-25 | closeout-verification-rows-consistent |
 <!-- ADR-INDEX:END -->
 

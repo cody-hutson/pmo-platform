@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.72] - 2026-10-03
+
+A release close now finishes in two passes, reports only states its tools read, keeps local paths out of posts, and locks finished threads.
+
+[Full notes](release/releases/notes/v4.72_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.72)
+
 ## [v4.71] - 2026-10-02
 
 The platform now names eight kinds of work and the design questions each kind owes, so an epic framing can see what it has left unanswered.
