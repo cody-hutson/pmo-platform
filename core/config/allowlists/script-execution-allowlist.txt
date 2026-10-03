@@ -47,11 +47,14 @@
 # Format:
 #   - One bash GLOB PATTERN per line (shell `case` pattern syntax, NOT regex)
 #   - Token-substituted at install time:
-#       [PMO_PLATFORM_ROOT]      → the pmo-platform repo root (where the deploy +
-#                                  release scripts live). Resolved at deploy time
-#                                  by core/deploy/compose.py via self-location, so
-#                                  it is correct for ANY clone directory name or
-#                                  location (no hardcoded dir-name assumption).
+#       [PMO_PLATFORM_ROOT]      → the canonical pmo-platform checkout root: the main
+#                                  working tree of the installed repository, never a
+#                                  linked worktree. Resolved at deploy time by
+#                                  core/deploy/compose.py from the install record, so it
+#                                  is identical whichever checkout or worktree a refresh
+#                                  runs from, and correct for ANY clone directory name or
+#                                  location (no hardcoded dir-name assumption). Forms 1-2
+#                                  of the convention below anchor there.
 #       [CLAUDE_WORKSPACE_ROOT]  → the Claude workspace root (default $HOME/Claude).
 #   - Comments start with # (first non-whitespace char)
 #   - Blank lines ignored
@@ -116,11 +119,17 @@ core/deploy/deploy.sh
 # --- Hook test suites, SOURCE-TREE forms (core/hooks/tests/) ---
 #
 # The four `.claude/hooks/tests/...` rows immediately above address the DEPLOYED
-# layout. That layout is materialized only inside the CI sandbox by
-# core/hooks/tests/setup-ci-layout.sh: docs/scripts/setup-workspace.sh declares the
-# hooks `tests/` subdirectory OUT-OF-SCOPE for deployment (source-tree only; NOT
-# installed to the workspace `.claude/hooks/`), so `.claude/hooks/tests/` does not
-# exist on a workspace and those four rows resolve to nothing there.
+# layout. core/hooks/tests/setup-ci-layout.sh builds that layout: by default at the
+# root of the checkout it runs from, where the bare-relative
+# `.claude/hooks/tests/test-runner.sh` is the documented agent invocation, and in a
+# fresh sandbox when CI or a regression runner passes one explicitly. It is never a
+# deployed-workspace surface: docs/scripts/setup-workspace.sh declares the hooks
+# `tests/` subdirectory OUT-OF-SCOPE for deployment (source-tree only; NOT
+# installed to the workspace `.claude/hooks/`), so on a workspace those rows
+# resolve to nothing. Read the relative `.claude/hooks/tests/*.test.sh` rows for
+# what they admit: any `*.test.sh` placed under a checkout's `.claude/hooks/tests/`,
+# a directory the helper now populates routinely and that `.gitignore` keeps out
+# of `git status`.
 #
 # The suites actually live in the source tree, at core/hooks/tests/. Without the
 # rows below, `bash core/hooks/tests/<suite>.test.sh` from a repo checkout or a

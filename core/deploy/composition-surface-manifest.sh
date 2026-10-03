@@ -88,11 +88,13 @@ COMPOSITION_SURFACE_FILES=(
   # this surface is unreachable, so the hook must never be installed ahead of it.
   #
   # On the UPDATE path that is enforced: update.sh orders regenerate -> assert_install_complete
-  # -> refresh_hooks, and the assert covers hook-tier rows only, so a missing surface aborts
-  # the run before any hook is refreshed. Demoting this row to `instance` would silently
-  # re-open that window, because the assert would stop covering it. That is the reason for
-  # the tier, and it has been observed working: a run against a workspace missing this
-  # surface refused at the assert and left the old hook in place.
+  # -> refresh_hooks, and the assert covers hook-tier rows plus the instance-tier files a hook
+  # reads (pmo_hook_read_instance_files_for in lib-instance-path.sh), so a missing surface
+  # aborts the run before any hook is refreshed. Demoting this row to `instance` would
+  # silently re-open that window, because the assert would stop covering it unless the file
+  # also joined that declared set. That is the reason for the tier, and it has been observed
+  # working: a run against a workspace missing this surface refused at the assert and left
+  # the old hook in place.
   #
   # It is NOT enforced on the INSTALL path. setup-workspace.sh's rebootstrap orders
   # install_hooks BEFORE install_composition_surface_files, with no assert between them, so
@@ -107,6 +109,12 @@ COMPOSITION_SURFACE_FILES=(
 
   # Instance-tier (operator-scoped, <instance-base>/<basename>)
   # Token-free — operator extends per-instance over time
+  # The skill-editor exemption list is the one instance-tier row a security hook reads
+  # (the Gate 2 skill-edit hook). Its readers resolve it through lib-instance-path.sh's
+  # pmo_skill_editor_exemption_list[_for], and it is the member of
+  # pmo_hook_read_instance_files_for, so the update-time completeness gate covers it as it
+  # covers a hook-tier row. The other instance-tier rows are escape halves of deploy-time
+  # checks.
   "core/config/allowlists/skill-editor-exemption-list.txt|instance|raw"
   "core/config/allowlists/skip-doc-link-check.txt|instance|raw"
   "core/config/allowlists/agents-model-overrides.txt|instance|raw"

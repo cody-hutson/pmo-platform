@@ -222,8 +222,8 @@ Subtypes outside the lists above are **invalid** — `append-pipeline-event.sh` 
 **`test-run` payload convention.** A `test-run` row reuses the standard 10 columns (no new fields); the suite specifics live in `payload`, keyed `suite:` / `selected-by:` (the [`runtime-suite-selection-map.md`](runtime-suite-selection-map.md) row that matched) / `pass:` / `fail:` / `env:` / `sha:`. `stage` is `6` (author self-verification) or `7` (DT gate); `outcome` is `resolved` for pass/skip and `escalated` for a fail routed to Engineering. Examples (≤ 300 chars, escaped-pipe per § 4.3a):
 
 ```markdown
-| 2026-06-13T14:00:00Z | corpus-durability-enforcement | 7 | test-run | suite-pass | spoke:#N | #N | CHEAP | resolved | suite:hook-suite; selected-by:glob-3; pass:268; fail:0; env:sandbox-home-tmp; sha:abc1234 |
-| 2026-06-13T14:00:01Z | corpus-durability-enforcement | 7 | test-run | suite-fail | spoke:#N | #N | CHEAP | escalated | suite:deploy-suite; selected-by:glob-2; pass:24; fail:1; env:sandbox-home-tmp; sha:def5678 |
+| 2026-06-13T14:00:00Z | corpus-durability-enforcement | 7 | test-run | suite-pass | spoke:#N | #N | CHEAP | resolved | suite:hook-suite; selected-by:glob-3; pass:268; fail:0; env:home-account; sha:abc1234 |
+| 2026-06-13T14:00:01Z | corpus-durability-enforcement | 7 | test-run | suite-fail | spoke:#N | #N | CHEAP | escalated | suite:deploy-suite; selected-by:glob-2; pass:24; fail:1; env:home-account; sha:def5678 |
 | 2026-06-13T14:00:02Z | corpus-durability-enforcement | 6 | test-run | suite-skip | spoke:#N | #N | CHEAP | resolved | suite:NONE; selected-by:no-match; reason:doc-only-change; sha:9abcdef |
 ```
 

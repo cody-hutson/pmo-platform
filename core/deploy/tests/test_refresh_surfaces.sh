@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # test_refresh_surfaces.sh — regression for the targeted composition-surface refresh
-# (./update.sh --surfaces-only) and for deploy.sh's scope-honest no-op message.
+# (./update.sh --surfaces-only), for deploy.sh's scope-honest no-op message, for the
+# caller-independence of the composed surface set, and for a sandboxed update's
+# containment to the config root it is given.
 #
-# THE DEFECT THIS GUARDS
+# THE DEFECTS THIS GUARDS
 #   core/config/allowlists/script-execution-allowlist.txt is a COMPOSITION SURFACE.
 #   The composition-surface manifest is sourced only by setup-workspace.sh and
 #   update.sh; deploy.sh never sources it. So `deploy.sh --deploy` exits 0 reporting
@@ -10,14 +12,25 @@
 #   and for a long time that command was the recorded remediation for a stale
 #   allowlist. The remediation was never executable.
 #
+#   A second defect: the refresh substituted the path of whichever checkout ran it
+#   for [PMO_PLATFORM_ROOT], so a run from a worktree baked that worktree into a
+#   security allowlist, and nothing said so. The fixture arms guard the fix.
+#
+#   A third: a full update given --config-root delegated its hook refresh without
+#   it, so the refresh fell back to the default config root (the live one on an
+#   operator's machine) and wrote its hook-bundle snapshots there. Arm 12 guards
+#   the fix.
+#
 # WHAT THE ARMS PROVE, AND WHY EACH ONE EXISTS
 #   Arm 0  hermetic PRE-FLIGHT. Isolation is a PRECONDITION, not a postmortem: the
 #          suite REFUSES TO START unless HOME and both root overrides resolve inside
-#          the sandbox. deploy.sh's write targets reduce to two env vars
-#          (PMO_PLATFORM_DEPLOY_ROOT, PMO_PLATFORM_CONFIG_ROOT); ${var:-default}
+#          the sandbox and the two composition-root overrides (PMO_PLATFORM_ROOT,
+#          PMO_INSTANCE_PATH) are unset. deploy.sh's write targets reduce to two env
+#          vars (PMO_PLATFORM_DEPLOY_ROOT, PMO_PLATFORM_CONFIG_ROOT); ${var:-default}
 #          collapses an exported-but-EMPTY var back to $HOME, so emptiness is checked
-#          explicitly, not just presence. Baseline manifests of the REAL home are
-#          captured here and re-compared at Arm 6.
+#          explicitly, not just presence. Baselines of the REAL home (the skills tree,
+#          the deployed allowlist and the install record) are captured here and
+#          re-compared at Arm 6, which runs LAST.
 #   Arm 1  NEGATIVE CONTROL. Regress the sandbox allowlist so the probe token is
 #          absent. If the regression does not take, every later "the token is present"
 #          assertion is vacuous — so a failed Arm 1 makes the SUITE UNUSABLE and is
@@ -42,8 +55,44 @@
 #          a tested property, not a spec note: .last-update is the final member of the
 #          full sequence, so its timestamp is positive evidence that the WHOLE sequence
 #          ran. A targeted mode writing it would destroy that discriminator.
-#   Arm 6  LEAKAGE BACKSTOP. The real home is byte-identical to the Arm-0 baseline.
-#          A backstop, not the control — Arm 0 is the control.
+#   Arm 7  THE INSTALL RECORD. An unattended install from a nested linked worktree,
+#          with stdin held OPEN and silent, completes and records source_repo_path
+#          as the fixture primary's physical path (computed by this suite with
+#          pwd -P, never by the resolver under test) and source_repo_path_source as
+#          the tier that supplied it. The fixture is a fresh git repository built
+#          from a COPY of the working tree (never cp -R of the checkout), with a
+#          nested and an out-of-tree linked worktree. Without git, every fixture arm
+#          SKIPs with a reason; none passes.
+#   Arm 8  CALLER-INDEPENDENCE. Refreshes from the main checkout, a nested worktree
+#          and an out-of-tree worktree, each run from its own tree, compose one
+#          surface set: each run rewrites every manifest-resolved target (managed_at
+#          stamp); the sets are identical apart from managed_at; no target names the
+#          invoking checkout; every [PMO_PLATFORM_ROOT] row is bound to the main
+#          checkout (root probe). 8c, the CONTROL: a branch worktree carrying one
+#          branch-only tool block changes the set by exactly that block, bound to
+#          the main checkout.
+#   Arm 9  PRE-RECORD FALLBACK. With the record's root keys removed, a forced
+#          refresh from the nested worktree still binds every row to the main
+#          working tree. The record is then restored byte-for-byte.
+#   Arm 9b LEGACY RECORD. A record that names another existing clone and carries no
+#          source_repo_path_source is advisory: the refresh binds the main working
+#          tree, and one WARN names both roots. The record is then restored.
+#   Arm 10 THE HEAL. A surface re-rooted to an out-of-tree worktree, its hashes
+#          reset the way a pre-fix install leaves them, is healed by a PLAIN refresh
+#          that regenerates exactly that surface.
+#   Arm 11 THE BINDING IS REPORTED. Each refresh names the root it substituted, the
+#          tier that supplied it and the checkout its templates came from, read from
+#          the logs Arms 8-10 saved with the report key matched as a FIXED string.
+#          An absent or empty log FAILs.
+#   Arm 12 THE CONFIG ROOT IS NOT A FALLBACK. A full update given --config-root
+#          takes its hook-bundle snapshot there, and leaves the default config root
+#          (a byte copy standing in for the live one) byte-identical.
+#   Arm 12b THE SCHEMA RECONCILE TAKES THE GIVEN ROOT. With both roots behind the
+#          declared schema by the same key, the update backfills the key in the given
+#          root's operator.toml, and the default root stays byte-identical.
+#   Arm 6  LEAKAGE BACKSTOP, LAST. The real home is byte-identical to the Arm-0
+#          baseline. It runs after every mutating arm, so their writes fall inside
+#          its compare. A backstop, not the control — Arm 0 is the control.
 #
 # Run from anywhere (resolves repo root from its own location):
 #   bash core/deploy/tests/test_refresh_surfaces.sh
@@ -127,6 +176,7 @@ abort_preflight() {
 REAL_HOME="${HOME}"
 REAL_SKILLS="${REAL_HOME}/.claude/skills"
 REAL_ALLOWLIST="${REAL_HOME}/Claude/.claude/${SURFACE_BASENAME}"
+REAL_INSTALL_RECORD="${REAL_HOME}/Claude/.claude/.workspace-setup.state"
 
 SBX="$(mktemp -d -t refresh-surfaces.XXXXXX)" || abort_preflight "could not create sandbox"
 cleanup() { [ -n "${SBX:-}" ] && [ -d "${SBX}" ] && rm -rf "${SBX}"; }
@@ -138,6 +188,15 @@ mkdir -p "${SBX}/config" "${SBX}/ws" "${SBX}/home"
 export HOME="${SBX}/home"
 export PMO_PLATFORM_DEPLOY_ROOT="${SBX}/home"
 export PMO_PLATFORM_CONFIG_ROOT="${SBX}/config"
+
+# Composition-root overrides no arm may inherit. Unset here, verified below — the same
+# set-then-verify shape as the exports above.
+#   PMO_PLATFORM_ROOT  tier 2 of the [PMO_PLATFORM_ROOT] resolution ladder. Inherited, it
+#                      hands every refresh the same root, so an identity comparison cannot
+#                      fail and the install record the fixture arms assert is never read.
+#   PMO_INSTANCE_PATH  relocates the instance and hub-state composition targets. Inherited,
+#                      the sandbox install and every update write the REAL instance directory.
+unset PMO_PLATFORM_ROOT PMO_INSTANCE_PATH
 
 # Non-EMPTY check, not merely set: ${var:-default} collapses an exported-but-empty
 # override back to the real $HOME, which is the documented sandbox-escape trap.
@@ -153,10 +212,16 @@ case "${HOME}"                     in "${SBX}"*) ;; *) abort_preflight "HOME out
 [ "${PMO_PLATFORM_CONFIG_ROOT}" != "${REAL_HOME}" ] || abort_preflight "config root equals the real home"
 [ "${HOME}" != "${REAL_HOME}" ]                     || abort_preflight "HOME was not redirected"
 
+[ -z "${PMO_PLATFORM_ROOT+x}" ] || abort_preflight "PMO_PLATFORM_ROOT is still set (readonly?) — tier 2 would bind every refresh"
+[ -z "${PMO_INSTANCE_PATH+x}" ] || abort_preflight "PMO_INSTANCE_PATH is still set (readonly?) — instance-tier writes would leave the sandbox"
+report "composition-root overrides unset (PMO_PLATFORM_ROOT, PMO_INSTANCE_PATH)" 1
+
 # Baselines of the REAL home, captured BEFORE any invocation (re-compared at Arm 6).
 LIVE_SKILLS_BEFORE="$(manifest_dir "${REAL_SKILLS}")"
 LIVE_ALLOWLIST_BEFORE=""
 [ -f "${REAL_ALLOWLIST}" ] && LIVE_ALLOWLIST_BEFORE="$(sha "${REAL_ALLOWLIST}")"
+LIVE_RECORD_BEFORE=""
+[ -f "${REAL_INSTALL_RECORD}" ] && LIVE_RECORD_BEFORE="$(sha "${REAL_INSTALL_RECORD}")"
 
 report "sandbox roots resolve inside \$TMP, are non-empty, and differ from the real home" 1
 report "real-home baselines captured before any invocation" 1
@@ -462,7 +527,928 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Arm 6 — LEAKAGE BACKSTOP.
+# Fixture — shared by Arms 7-11. A fresh git repository built from a COPY of the
+# working tree, a nested and an out-of-tree linked worktree, and a second sandbox
+# workspace installed from the nested one (Arm 7). Never `cp -R` the checkout: a
+# linked worktree's .git entry names the real repository, and a worktree added
+# through it would be registered there. Every name a later arm expands is assigned
+# here, unconditionally, because this file runs under `set -u`.
+# ─────────────────────────────────────────────────────────────────────────────
+FIXTURE_READY=0
+FIXTURE_SKIP_REASON=""        # non-empty ONLY when git is unavailable
+ARM8_READY=0
+FX_PRIMARY="${SBX}/fixture/primary"
+FX_W1="${FX_PRIMARY}/.claude/worktrees/w1"
+FX_SCRATCH="${SBX}/fixture/scratch/wt"
+FX_WB="${SBX}/fixture/scratch/wb"
+FX_OTHER="${SBX}/fixture/other"
+FX_PRIMARY_P=""
+FX_SCRATCH_P=""
+FX_OTHER_P=""
+FX_TPL_REL="${SURFACE_SRC_REL}"
+FX_ALLOW=""
+ALL_KEYS=""
+FWS="${SBX}/fws"
+FCFG="${SBX}/fcfg"
+STATE="${FWS}/.claude/.workspace-setup.state"
+LOGS="${SBX}/logs"
+SNAP="${SBX}/snap"
+FX_LOG="${LOGS}/7-fixture.log"
+mkdir -p "${LOGS}" "${SNAP}" "${FWS}" "${FCFG}"
+
+# The log contract. Every fixture refresh writes ${LOGS}/<name>.out and <name>.err,
+# named 8-primary, 8-w1, 8-scratch, 8c-wb, 9-w1, 9b-w1 and 10-w1. Arm 11 reads the
+# stderr of six of them (all but 9b-w1); an absent or empty log is a FAIL there.
+
+# fx_git — git for the FIXTURE only: every GIT_* variable stripped (an inherited
+# GIT_DIR or GIT_WORK_TREE must never point it at the real repository), no system or
+# global config, a fixture identity, no signing.
+fx_git() (
+  for v in $(compgen -e); do case "${v}" in GIT_*) unset "${v}" ;; esac; done
+  export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+  exec git -c user.name='refresh-surfaces fixture' -c user.email=fixture@example.invalid \
+    -c commit.gpgsign=false -c init.defaultBranch=main "$@"
+)
+
+# fx_build — prints the step that failed; returns 0 with the fixture ready for Arm 7.
+fx_build() {
+  mkdir -p "${FX_PRIMARY}" "${SBX}/fixture/scratch" || { echo "mkdir"; return 1; }
+  fx_git -C "${REPO_ROOT}" ls-files -z --cached --others --exclude-standard \
+    >"${LOGS}/7-fixture.files" 2>>"${FX_LOG}" || { echo "ls-files"; return 1; }
+  python3 - "${REPO_ROOT}" "${FX_PRIMARY}" "${LOGS}/7-fixture.files" >>"${FX_LOG}" 2>&1 <<'PY' || { echo "copy"; return 1; }
+import os, shutil, sys
+src, dst, lst = sys.argv[1:4]
+copied = 0
+for raw in open(lst, "rb").read().split(b"\0"):
+    if not raw:
+        continue
+    rel = os.fsdecode(raw)
+    s = os.path.join(src, rel)
+    if not os.path.isfile(s):                  # listed, but deleted in the working tree
+        continue
+    d = os.path.join(dst, rel)
+    os.makedirs(os.path.dirname(d), exist_ok=True)
+    shutil.copy2(s, d)                         # contents and mode; the .git entry is never listed
+    copied += 1
+print(f"copied {copied} files")
+sys.exit(0 if copied else 1)
+PY
+  fx_git -C "${FX_PRIMARY}" init -q >>"${FX_LOG}" 2>&1 || { echo "init"; return 1; }
+  # A failed init must never let `add` walk up into an enclosing repository.
+  [ -d "${FX_PRIMARY}/.git" ] || { echo "init (no .git directory)"; return 1; }
+  fx_git -C "${FX_PRIMARY}" add -A >>"${FX_LOG}" 2>&1 || { echo "add"; return 1; }
+  fx_git -C "${FX_PRIMARY}" commit -q -m 'fixture: the working tree under test' >>"${FX_LOG}" 2>&1 \
+    || { echo "commit"; return 1; }
+  mkdir -p "${FX_PRIMARY}/.claude/worktrees" || { echo "mkdir worktrees"; return 1; }
+  # No `-q`: older command-line-tools git lacks `worktree add --quiet`.
+  fx_git -C "${FX_PRIMARY}" worktree add --detach "${FX_W1}" >>"${FX_LOG}" 2>&1 \
+    || { echo "worktree add (nested)"; return 1; }
+  fx_git -C "${FX_PRIMARY}" worktree add --detach "${FX_SCRATCH}" >>"${FX_LOG}" 2>&1 \
+    || { echo "worktree add (out-of-tree)"; return 1; }
+}
+
+fx_unavailable() {   # a fixture-dependent arm reports exactly one outcome when there is no fixture
+  if [ -n "${FIXTURE_SKIP_REASON:-}" ]; then skip_with_reason "$1" "${FIXTURE_SKIP_REASON}"
+  else report "$1" 0 "the fixture was not built (see Arm 7)"; fi
+}
+
+fx_targets() {       # ${SBX}/targets.tsv: "<tier>\t<target>" per manifest row, then "ROWS\t<n>"
+  (
+    # shellcheck disable=SC1090,SC1091
+    source "${FX_PRIMARY}/core/deploy/lib-composition.sh" || exit 1
+    lib_compose_source_manifest "${FX_PRIMARY}" || exit 1
+    lib_compose_assert_manifest_loaded || exit 1
+    for entry in "${COMPOSITION_SURFACE_FILES[@]}"; do
+      lib_compose_parse_entry "${entry}"
+      target="$(lib_compose_resolve_target "$(basename "${LIB_COMPOSE_ENTRY_SRC}")" \
+                "${LIB_COMPOSE_ENTRY_TIER}" "${FWS}")" || exit 1
+      printf '%s\t%s\n' "${LIB_COMPOSE_ENTRY_TIER}" "${target}"
+    done
+    printf 'ROWS\t%s\n' "${#COMPOSITION_SURFACE_FILES[@]}"
+  ) > "${SBX}/targets.tsv"
+}
+
+# fx_update <log-name> <tree> [update.sh flags...] — a refresh run FROM its own tree,
+# the operator's invocation shape, against the fixture workspace and config root.
+fx_update() {
+  local name="$1" tree="$2"; shift 2
+  ( cd "${tree}" && bash ./update.sh "$@" --config-root "${FCFG}" --workspace-root "${FWS}" ) \
+    >"${LOGS}/${name}.out" 2>"${LOGS}/${name}.err"
+}
+
+# run_open_stdin BUDGET_S CMD [ARGS...] — the same program as run_open_stdin in
+# test_upgrade_config_durability.sh; keep the two byte-identical. CMD's stdin is a pipe
+# this harness holds OPEN and never writes, so a prompt that ignores --non-interactive
+# blocks instead of reading EOF. Returns CMD's exit status, or 124 once BUDGET_S seconds
+# pass (the process group terminated, the OPEN-STDIN-HARNESS TIMEOUT sentinel on
+# stderr); an OPEN-STDIN-HARNESS START marker on stderr always comes first.
+OPEN_STDIN_BUDGET_S="${OPEN_STDIN_BUDGET_S:-300}"
+run_open_stdin() {
+  python3 - "$@" <<'PY'
+import os
+import signal
+import subprocess
+import sys
+
+budget = float(sys.argv[1])
+sys.stderr.write("OPEN-STDIN-HARNESS: START budget=%ss\n" % sys.argv[1])
+sys.stderr.flush()
+proc = subprocess.Popen(sys.argv[2:], stdin=subprocess.PIPE, start_new_session=True)
+try:
+    rc = proc.wait(timeout=budget)
+except subprocess.TimeoutExpired:
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(proc.pid, sig)
+        except ProcessLookupError:
+            break
+        try:
+            proc.wait(timeout=15)
+            break
+        except subprocess.TimeoutExpired:
+            continue
+    sys.stderr.write("OPEN-STDIN-HARNESS: TIMEOUT after %ss (process group terminated)\n" % sys.argv[1])
+    rc = 124
+finally:
+    proc.stdin.close()
+sys.exit(rc)
+PY
+}
+
+fx_py() {            # one inline program, never written to disk and executed
+  python3 - "$@" <<'PY'
+import collections, hashlib, json, os, re, sys
+STAMP = "1970-01-01T00:00:00Z"
+MARKER = re.compile(r"^(# |<!-- )managed_at: (\S+)( -->)?$")   # line 4 of every composed file
+TOKEN = "[PMO_PLATFORM_ROOT]"
+GLOB = "/.claude/worktrees/*/"                                  # the worktree-glob form's segment
+GEN = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[0-9]+$")               # a hook-bundle snapshot generation
+C = collections.Counter
+
+def targets(tsv):
+    out, rows = [], None
+    for line in open(tsv, encoding="utf-8").read().splitlines():
+        tier, _, path = line.partition("\t")
+        if tier == "ROWS":
+            rows = int(path)
+        elif tier:
+            out.append((f"{tier}-{os.path.basename(path)}", path))
+    return out, rows
+
+def lines(path):
+    return open(path, encoding="utf-8").read().split("\n")
+
+def marker(ls):
+    return MARKER.match(ls[3]) if len(ls) > 3 else None
+
+def sha(path):
+    return hashlib.sha256(open(path, "rb").read()).hexdigest()
+
+def token_rows(template):                     # non-comment template lines carrying the token
+    return [l for l in lines(template) if TOKEN in l and not l.lstrip().startswith("#")]
+
+def gens(root):                               # snapshot generations under <config-root>, sorted
+    d = os.path.join(root, "hook-bundle-backups")
+    return sorted(n for n in (os.listdir(d) if os.path.isdir(d) else []) if GEN.match(n))
+
+cmd, args, problems = sys.argv[1], sys.argv[2:], []
+
+if cmd == "check-targets":                    # <tsv> <sandbox> <required-basename>...
+    tset, rows = targets(args[0]); keys = [k for k, _ in tset]
+    if rows is None or rows != len(tset):
+        problems.append(f"{len(tset)} targets for {rows} manifest rows")
+    if len(set(keys)) != len(keys):
+        problems.append("tier-basename keys are not unique")
+    for k, p in tset:
+        if not p.startswith(args[1].rstrip("/") + "/"):
+            problems.append(f"{k} resolves outside the sandbox")
+        elif not os.path.isfile(p):
+            problems.append(f"{k} absent after the fixture install")
+    # A required member is matched on the TARGET's basename, never on the tier-qualified
+    # key: a member's tier is another decision's to make, and tier names carry hyphens,
+    # so the key cannot be split back apart.
+    bases = {os.path.basename(p) for _, p in tset}
+    problems += [f"required member missing: {r}" for r in args[2:] if r not in bases]
+elif cmd == "keys":                           # <tsv> -> every key, sorted
+    print(" ".join(sorted(k for k, _ in targets(args[0])[0]))); sys.exit(0)
+elif cmd == "token-rows":                     # <template> -> non-comment lines carrying the token
+    print(len(token_rows(args[0]))); sys.exit(0)
+elif cmd == "stamp":                          # <tsv>
+    for k, p in targets(args[0])[0]:
+        ls = lines(p); m = marker(ls)
+        if not m:
+            problems.append(f"{k}: line 4 is not a managed_at marker"); continue
+        ls[3] = f"{m.group(1)}managed_at: {STAMP}{m.group(3) or ''}"
+        open(p, "w", encoding="utf-8").write("\n".join(ls))
+elif cmd == "unstamped":                      # <tsv> -> keys rewritten since the stamp, sorted
+    print(" ".join(sorted(k for k, p in targets(args[0])[0]
+                          if not (marker(lines(p)) and marker(lines(p)).group(2) == STAMP)))); sys.exit(0)
+elif cmd == "snapshot":                       # <tsv> <outdir>: each target minus its managed_at line
+    os.makedirs(args[1], exist_ok=True)
+    for k, p in targets(args[0])[0]:
+        ls = lines(p)
+        if not marker(ls):
+            problems.append(f"{k}: line 4 is not a managed_at marker"); continue
+        norm = ls[:3] + ls[4:]
+        for key in ("managed_sha", "installed_sha"):      # kept: installed_sha moves with the root
+            if sum(1 for l in norm if re.match(rf"^(# |<!-- ){key}: ", l)) != 1:
+                problems.append(f"{k}: {key} not retained exactly once")
+        open(os.path.join(args[1], k), "w", encoding="utf-8").write("\n".join(norm))
+elif cmd == "caller-hits":                    # <tsv> <checkout> -> lines naming that checkout
+    needles = {args[1].rstrip("/") + "/", os.path.realpath(args[1]).rstrip("/") + "/"}
+    print(sum(1 for _, p in targets(args[0])[0] for l in lines(p) if any(n in l for n in needles))); sys.exit(0)
+elif cmd == "diffset":                        # <dirA> <dirB> -> keys whose contents differ, sorted
+    def read(d, n):
+        f = os.path.join(d, n)
+        return open(f, "rb").read() if os.path.isfile(f) else None
+    a, b = args
+    print(" ".join(n for n in sorted(set(os.listdir(a)) | set(os.listdir(b)))
+                   if read(a, n) is None or read(a, n) != read(b, n))); sys.exit(0)
+elif cmd == "allowlist-delta":                # <snapA> <snapB> <templateA> <templateB> <canonical-root>
+    sa, sb, ta, tb, canon = args
+    def body(t):
+        return open(t, encoding="utf-8").read().replace(TOKEN, canon).rstrip().split("\n")
+    exp_add, exp_del = C(body(tb)) - C(body(ta)), C(body(ta)) - C(body(tb))
+    if exp_del or sum(exp_add.values()) != 5 or \
+       sum(v for l, v in exp_add.items() if l.startswith(canon + "/")) != 2:
+        problems.append("fixture self-check: the branch block is not a pure 5-line addition with 2 absolute rows")
+    add, rem = C(lines(sb)) - C(lines(sa)), C(lines(sa)) - C(lines(sb))
+    for d, t, label in ((add, tb, "branch"), (rem, ta, "main-checkout")):
+        want = f"# managed_sha: {sha(t)}"
+        if d[want] != 1:
+            problems.append(f"managed_sha does not carry the {label} template's hash")
+        d[want] -= 1
+        inst = [l for l, v in d.items() if l.startswith("# installed_sha: ") and v > 0]
+        if len(inst) != 1:
+            problems.append(f"installed_sha did not change exactly once ({label} side)")
+        for l in inst:
+            d[l] -= 1
+    add, rem = +add, +rem
+    if add != exp_add:
+        problems.append("added lines are not the branch block bound to the main checkout: "
+                        f"{sorted((add - exp_add).elements())[:3]}")
+    if rem:
+        problems.append(f"unexpected removed lines: {sorted(rem.elements())[:3]}")
+elif cmd == "root-probe":                     # <deployed> <template> <root>: every token row of the
+    dep, tpl, root = args                     # template, token replaced by <root>, is present, and
+    want = [r.replace(TOKEN, root) for r in token_rows(tpl)]   # the worktree-glob rows' roots = {root}
+    have = lines(dep)
+    missing = sum((C(want) - C(have)).values())
+    roots = {m.group(1) for m in (re.match(r"^(/.+?)/\.claude/worktrees/\*/", l) for l in have) if m}
+    if not want:
+        problems.append("the template carries no token rows, so the probe cannot fail")
+    if missing:
+        problems.append(f"MISSING={missing} of {len(want)}")
+    if roots != {root}:
+        problems.append(f"worktree-glob roots {sorted(roots)} != {[root]}")
+elif cmd == "reroot-copy":                    # <srcdir> <dstdir> <key> <root> <alt-root>: copy a
+    src, dst, key, root, alt = args           # snapshot, re-rooting ONE form-1 token row of <key>
+    os.makedirs(dst, exist_ok=True)
+    done = False
+    for n in sorted(os.listdir(src)):
+        ls = lines(os.path.join(src, n))
+        if n == key:
+            for i, l in enumerate(ls):
+                if l.startswith(root + "/") and GLOB not in l:
+                    ls[i] = alt + l[len(root):]; done = True; break
+        open(os.path.join(dst, n), "w", encoding="utf-8").write("\n".join(ls))
+    if not done:
+        problems.append(f"no form-1 row rooted at {root} in {key}")
+elif cmd == "poison":                         # <deployed> <template> <new-root>: the shape a pre-fix
+    dep, tpl, new = args                      # install leaves: every token row on <new-root>, the
+    ls, cur = lines(dep), None                # managed_sha zeroed, the installed_sha line dropped
+    for r in token_rows(tpl):                 # the root the surface carries NOW, read off one
+        if r.startswith(TOKEN + "/") and GLOB not in r:        # form-1 row, whatever wrote it
+            tail = r[len(TOKEN):]
+            hits = [l for l in ls if l.startswith("/") and l.endswith(tail) and GLOB not in l]
+            if len(hits) == 1:
+                cur = hits[0][:-len(tail)]; break
+    if cur is None:
+        problems.append("could not identify the root the surface carries")
+    else:
+        out = []
+        for l in ls:
+            if l.startswith(cur + "/"):
+                l = new + l[len(cur):]
+            elif re.match(r"^(# |<!-- )managed_sha: ", l):
+                l = re.sub(r"managed_sha: \S+", "managed_sha: " + "0" * 64, l)
+            elif re.match(r"^(# |<!-- )installed_sha: ", l):
+                continue
+            out.append(l)
+        open(dep, "w", encoding="utf-8").write("\n".join(out))
+elif cmd == "segment-counts":                 # <file> <root>: a diagnostic, never graded
+    ls, needle = lines(args[0]), args[1].rstrip("/") + "/"
+    print(f"lines carrying /.claude/worktrees/: {sum(1 for l in ls if '/.claude/worktrees/' in l)}; "
+          f"lines naming {needle}: {sum(1 for l in ls if needle in l)}"); sys.exit(0)
+elif cmd == "record-field":                   # <state> <key> -> its value, or <absent> / <unreadable>
+    try:
+        data = json.load(open(args[0], encoding="utf-8"))
+    except (OSError, ValueError):
+        print("<unreadable>"); sys.exit(0)
+    v = data.get(args[1]) if isinstance(data, dict) else None
+    print("<absent>" if v is None else v); sys.exit(0)
+elif cmd == "record-edit":                    # <state> drop | legacy <root>
+    try:
+        data = json.load(open(args[0], encoding="utf-8"))
+    except (OSError, ValueError) as err:
+        print(f"record unreadable ({type(err).__name__})"); sys.exit(0)
+    if not isinstance(data, dict):
+        print("record is not a JSON object"); sys.exit(0)
+    for k in ("source_repo_path", "source_repo_path_source"):
+        data.pop(k, None)                     # drop: a pre-record install carries neither key
+    if args[1] == "legacy":                   # legacy: a root, and no provenance key
+        data["source_repo_path"] = args[2]
+    elif args[1] != "drop":
+        problems.append(f"unknown record edit {args[1]}")
+    open(args[0], "w", encoding="utf-8").write(json.dumps(data, indent=2) + "\n")
+elif cmd == "warn-names":                     # <log> <text>...: ONE WARN: line names every text
+    if not any(l.startswith("WARN:") and all(t in l for t in args[1:]) for l in lines(args[0])):
+        problems.append("no single WARN: line names " + " and ".join(args[1:]))
+elif cmd == "gens":                           # <config-root> -> its snapshot generations
+    print(" ".join(gens(args[0]))); sys.exit(0)
+elif cmd == "new-gens":                       # <config-root> <generations-before> -> the new ones
+    before = set(args[1].split())
+    print(" ".join(g for g in gens(args[0]) if g not in before)); sys.exit(0)
+elif cmd == "manifest-delta":                 # <before> <after>, manifest_dir output -> changed paths
+    def load(f):
+        m = {}
+        for l in open(f, encoding="utf-8").read().splitlines():
+            rel, sep, h = l.rpartition("  ")
+            if sep:
+                m[rel] = h
+        return m
+    a, b = load(args[0]), load(args[1])
+    d = ([f"+{k}" for k in sorted(set(b) - set(a))] + [f"-{k}" for k in sorted(set(a) - set(b))]
+         + [f"~{k}" for k in sorted(set(a) & set(b)) if a[k] != b[k]])
+    print(" ".join(d[:5]) + (f" (+{len(d) - 5} more)" if len(d) > 5 else "")); sys.exit(0)
+else:
+    problems.append(f"unknown subcommand {cmd}")
+print("OK" if not problems else "; ".join(problems))
+PY
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Arm 7 — THE INSTALL RECORD. The fixture, then an unattended install from its nested
+# worktree with stdin held OPEN. The recorded root is compared with the fixture
+# primary's physical path, which this suite computes itself: never with the output of
+# the resolver under test.
+# ─────────────────────────────────────────────────────────────────────────────
+printf '\nArm 7: an unattended install from a linked worktree records the canonical root\n'
+
+# Parity: the state file update.sh reads is the one setup-workspace.sh writes.
+if grep -qF '.claude/.workspace-setup.state' "${UPDATE}" \
+   && grep -qF 'STATE_FILE_NAME=".workspace-setup.state"' "${SETUP}"; then
+  report "7: parity — update.sh reads the state file setup-workspace.sh writes" 1
+else
+  report "7: parity — update.sh reads the state file setup-workspace.sh writes" 0 \
+    "update.sh must carry '.claude/.workspace-setup.state' and setup-workspace.sh 'STATE_FILE_NAME=\".workspace-setup.state\"'"
+fi
+
+if ! command -v git >/dev/null 2>&1; then
+  FIXTURE_SKIP_REASON="git is not available, so the fixture repository and its worktrees cannot be built"
+  skip_with_reason "Arm 7: the install record" "${FIXTURE_SKIP_REASON}"
+elif ! fx_step="$(fx_build)"; then
+  report "Arm 7: fixture built (a git repository from a copy of the working tree, two linked worktrees)" 0 \
+    "failed at: ${fx_step}; see ${FX_LOG}"
+else
+  FX_PRIMARY_P="$(cd "${FX_PRIMARY}" && pwd -P)"
+  FX_SCRATCH_P="$(cd "${FX_SCRATCH}" && pwd -P)"
+  report "fixture built: a git repository from a copy of the working tree, a nested and an out-of-tree worktree" 1
+
+  # Harness control: an install judged by this harness proves nothing about an open
+  # stdin unless a reader under it is really held.
+  hc_log="$(run_open_stdin 3 bash -c 'read -r _; exit 0' 2>&1)"
+  hc_rc=$?
+  if [ "${hc_rc}" -eq 124 ] && grep -qF 'OPEN-STDIN-HARNESS: TIMEOUT' <<<"${hc_log}"; then
+    report "7: harness control — a stub that reads stdin is held, then timed out (stdin open and silent)" 1
+  else
+    report "7: harness control — a stub that reads stdin is held, then timed out (stdin open and silent)" 0 \
+      "exit ${hc_rc} (want 124): the harness stdin delivered EOF or data, so the install below proves nothing about an open stdin"
+  fi
+
+  cat > "${FCFG}/operator.toml" <<TOML
+[meta]
+schema_version = 1
+managed_by = "pmo-platform"
+
+[identity]
+operator_name = "Test Operator"
+operator_email = "test@example.com"
+operator_git_email = "test@example.com"
+operator_github = "test-handle"
+operator_phone = ""
+operator_role_title = "Test Role"
+operator_organization = "Test Org"
+
+[paths]
+claude_workspace_root = "${FWS}"
+operator_homedir_path = "${SBX}/home"
+cowork_install_path = "${SBX}/cowork"
+pmo_platform_repo_name = "pmo-platform"
+
+[platform]
+work_board = "github"
+comms_platform = ""
+
+[trackers.work]
+id = "work"
+platform = "jira"
+identifier = "PROJ"
+scope = "private"
+
+[trackers.personal]
+id = "personal"
+platform = "github-issues"
+identifier = "owner/public-repo"
+scope = "public"
+TOML
+  chmod 600 "${FCFG}/operator.toml"
+
+  ( cd "${FX_W1}" && run_open_stdin "${OPEN_STDIN_BUDGET_S}" ./docs/scripts/setup-workspace.sh \
+      --source-repo "${FX_W1}" --workspace-root "${FWS}" --config-root "${FCFG}" --non-interactive ) \
+    >"${LOGS}/7-w1.log" 2>&1
+  fx_install_rc=$?
+  fx_start="$(grep -c '^OPEN-STDIN-HARNESS: START' "${LOGS}/7-w1.log" || true)"
+  fx_timeout="$(grep -cF 'OPEN-STDIN-HARNESS: TIMEOUT' "${LOGS}/7-w1.log" || true)"
+  if [ "${fx_install_rc}" -eq 0 ] && [ -f "${STATE}" ]; then FIXTURE_READY=1; fi
+  if [ "${FIXTURE_READY}" -eq 1 ] && [ "${fx_start}" = "1" ] && [ "${fx_timeout}" = "0" ]; then
+    report "7: the install from the nested worktree completes with stdin OPEN (exit 0, under the harness)" 1
+  else
+    report "7: the install from the nested worktree completes with stdin OPEN (exit 0, under the harness)" 0 \
+      "exit ${fx_install_rc} (124 = still waiting on stdin after ${OPEN_STDIN_BUDGET_S}s); harness start=${fx_start}; timeout sentinel=${fx_timeout}; last lines: $(tail -4 "${LOGS}/7-w1.log" | tr '\n' '|')"
+  fi
+
+  if [ -f "${STATE}" ]; then
+    rec_path="$(fx_py record-field "${STATE}" source_repo_path)"
+    rec_src="$(fx_py record-field "${STATE}" source_repo_path_source)"
+    case "${rec_path}" in
+      ''|'<absent>'|'<unreadable>')
+        report "7: source_repo_path is recorded, and is not empty" 0 "read '${rec_path}'" ;;
+      *)
+        report "7: source_repo_path is recorded, and is not empty" 1 ;;
+    esac
+    if [ "${rec_path}" = "${FX_PRIMARY_P}" ]; then
+      report "7: source_repo_path is the fixture primary's physical path (pwd -P, computed by this suite)" 1
+    else
+      report "7: source_repo_path is the fixture primary's physical path (pwd -P, computed by this suite)" 0 \
+        "recorded '${rec_path}', want '${FX_PRIMARY_P}'"
+    fi
+    if [ "${rec_src}" = "declared-source" ]; then
+      report "7: source_repo_path_source names the tier that supplied the root (declared-source)" 1
+    else
+      report "7: source_repo_path_source names the tier that supplied the root (declared-source)" 0 "read '${rec_src}'"
+    fi
+  fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Arm 8 — CALLER-INDEPENDENCE. Three refreshes, each run from its own tree, compose
+# one surface set, and every [PMO_PLATFORM_ROOT] row names the main checkout.
+# ─────────────────────────────────────────────────────────────────────────────
+printf '\nArm 8: caller-independence — refreshes from three checkouts compose one surface set\n'
+if [ "${FIXTURE_READY}" -ne 1 ]; then
+  fx_unavailable "Arm 8: caller-independence"
+else
+  if fx_targets; then
+    v="$(fx_py check-targets "${SBX}/targets.tsv" "${SBX}" \
+          script-execution-allowlist.txt skill-editor-exemption-list.txt)"
+  else
+    v="target resolution failed (lib or manifest did not load)"
+  fi
+  FX_ALLOW="$(awk -F'\t' '$1 == "hook" && $2 ~ /\/script-execution-allowlist\.txt$/ { print $2 }' "${SBX}/targets.tsv" 2>/dev/null)"
+  if [ "${v}" = "OK" ] && [ -n "${FX_ALLOW}" ] && [ -f "${FX_ALLOW}" ]; then
+    ARM8_READY=1
+    report "target set: every manifest row resolves inside the sandbox and exists (incl. the allowlist and the exemption list)" 1
+  else
+    report "target set resolves inside the sandbox and exists" 0 "${v}; allowlist target '${FX_ALLOW}'"
+  fi
+fi
+
+if [ "${ARM8_READY}" -eq 1 ]; then
+  awk -v s="${OPERATOR_SENTINEL}" -v m="${END_OPERATOR_MARKER}" '$0 == m { print s } { print }' \
+    "${FX_ALLOW}" > "${FX_ALLOW}.sentinel" && mv "${FX_ALLOW}.sentinel" "${FX_ALLOW}"
+  n="$(grep -cxF -- "${OPERATOR_SENTINEL}" "${FX_ALLOW}" || true)"
+  [ "${n}" = "1" ] || report "8: operator sentinel planted in the fixture allowlist" 0 "found ${n}"
+  ALL_KEYS="$(fx_py keys "${SBX}/targets.tsv")"
+  for spec in "primary|${FX_PRIMARY}" "w1|${FX_W1}" "scratch|${FX_SCRATCH}"; do
+    name="${spec%%|*}"; tree="${spec#*|}"; ok=1; detail=""
+    v="$(fx_py stamp "${SBX}/targets.tsv")"; [ "${v}" = "OK" ] || { ok=0; detail="stamp: ${v}"; }
+    fx_update "8-${name}" "${tree}" --surfaces-only --force-regen
+    rc=$?
+    [ "${rc}" -eq 0 ] || { ok=0; detail="${detail}; exit ${rc}"; }
+    [ "$(fx_py unstamped "${SBX}/targets.tsv")" = "${ALL_KEYS}" ] \
+      || { ok=0; detail="${detail}; not every target was rewritten by this run"; }
+    t="$(grep -c '^WARN: tamper detected' "${LOGS}/8-${name}.err" || true)"
+    [ "${t}" = "0" ] || { ok=0; detail="${detail}; ${t} tamper WARN(s) (the stamp must be inert)"; }
+    n="$(grep -cxF -- "${OPERATOR_SENTINEL}" "${FX_ALLOW}" || true)"
+    [ "${n}" = "1" ] || { ok=0; detail="${detail}; operator sentinel count ${n}"; }
+    v="$(fx_py snapshot "${SBX}/targets.tsv" "${SNAP}/8-${name}")"; [ "${v}" = "OK" ] || { ok=0; detail="${detail}; ${v}"; }
+    report "8-${name}: every target rewritten by this run; operator sentinel kept" "${ok}" "${detail}"
+    if [ "${name}" != "primary" ]; then     # the primary IS the canonical root, so it is named by design
+      h="$(fx_py caller-hits "${SBX}/targets.tsv" "${tree}")"
+      if [ "${h}" = "0" ]; then
+        report "8-${name}: no deployed line names the invoking checkout" 1
+      else
+        report "8-${name}: no deployed line names the invoking checkout" 0 "${h} line(s)"
+      fi
+    fi
+    v="$(fx_py root-probe "${FX_ALLOW}" "${tree}/${FX_TPL_REL}" "${FX_PRIMARY_P}")"
+    if [ "${v}" = "OK" ]; then
+      report "8-${name}: every [PMO_PLATFORM_ROOT] row is bound to the main checkout (root probe)" 1
+    else
+      report "8-${name}: every [PMO_PLATFORM_ROOT] row is bound to the main checkout (root probe)" 0 "${v}"
+    fi
+  done
+  for other in w1 scratch; do
+    d="$(fx_py diffset "${SNAP}/8-primary" "${SNAP}/8-${other}")"
+    if [ -z "${d}" ]; then
+      report "8: the ${other} refresh composes the main-checkout refresh's surface set (managed_at aside)" 1
+    else
+      report "8: the ${other} refresh composes the main-checkout refresh's surface set" 0 "differing: ${d}"
+    fi
+  done
+  # Instrument sensitivity. On a scratch COPY of the main-checkout snapshot, re-root
+  # exactly one token row: the comparison must name the allowlist, and the root probe
+  # must report exactly one row missing. Nothing deployed is touched.
+  rows="$(fx_py token-rows "${FX_PRIMARY}/${FX_TPL_REL}")"
+  v="$(fx_py reroot-copy "${SNAP}/8-primary" "${SNAP}/8-sens" hook-script-execution-allowlist.txt \
+        "${FX_PRIMARY_P}" "${FX_SCRATCH_P}")"
+  d="$(fx_py diffset "${SNAP}/8-primary" "${SNAP}/8-sens")"
+  p="$(fx_py root-probe "${SNAP}/8-sens/hook-script-execution-allowlist.txt" \
+        "${FX_PRIMARY}/${FX_TPL_REL}" "${FX_PRIMARY_P}")"
+  if [ "${v}" = "OK" ] && [ "${d}" = "hook-script-execution-allowlist.txt" ] && [ "${p}" = "MISSING=1 of ${rows}" ]; then
+    report "8: instrument sensitivity — one re-rooted row is seen by the comparison and by the root probe" 1
+  else
+    report "8: instrument sensitivity — one re-rooted row is seen by the comparison and by the root probe" 0 \
+      "copy: ${v}; comparison names '${d}' (want the allowlist); probe '${p}' (want MISSING=1 of ${rows})"
+  fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Arm 8c — the CONTROL: a branch worktree changes the set by exactly its rows.
+# ─────────────────────────────────────────────────────────────────────────────
+printf '\nArm 8c: control — a branch worktree changes the set by exactly its branch-only rows\n'
+if [ "${ARM8_READY}" -ne 1 ]; then
+  if [ "${FIXTURE_READY}" -ne 1 ]; then
+    fx_unavailable "Arm 8c: differing-source control"
+  else
+    report "Arm 8c: differing-source control" 0 "not run: Arm 8's target set did not resolve (see its target-set line)"
+  fi
+# No `-q` on this worktree add: older command-line-tools git lacks `worktree add --quiet`.
+elif ! fx_git -C "${FX_PRIMARY}" worktree add -b fx-branch-rows "${FX_WB}" >"${LOGS}/8c-setup.log" 2>&1; then
+  report "Arm 8c: differing-source control" 0 "the branch worktree could not be added; see ${LOGS}/8c-setup.log"
+else
+  printf '%s\n' \
+    '# fixture: branch-only rows (differing-source control)' \
+    '[PMO_PLATFORM_ROOT]/release/tools/fixture-branch-only.sh' \
+    '[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/fixture-branch-only.sh' \
+    './release/tools/fixture-branch-only.sh' \
+    'release/tools/fixture-branch-only.sh' \
+    >> "${FX_WB}/${FX_TPL_REL}"
+  fx_git -C "${FX_WB}" commit -q -am 'fixture: branch-only rows' >>"${LOGS}/8c-setup.log" 2>&1
+  ok=1; detail=""
+  v="$(fx_py stamp "${SBX}/targets.tsv")"; [ "${v}" = "OK" ] || { ok=0; detail="stamp: ${v}"; }
+  fx_update 8c-wb "${FX_WB}" --surfaces-only
+  rc=$?
+  [ "${rc}" -eq 0 ] || { ok=0; detail="${detail}; exit ${rc}"; }
+  u="$(fx_py unstamped "${SBX}/targets.tsv")"
+  [ "${u}" = "hook-script-execution-allowlist.txt" ] || { ok=0; detail="${detail}; rewritten '${u}' (want the allowlist only)"; }
+  t="$(grep -c '^WARN: tamper detected' "${LOGS}/8c-wb.err" || true)"
+  [ "${t}" = "0" ] || { ok=0; detail="${detail}; ${t} tamper WARN(s)"; }
+  h="$(fx_py caller-hits "${SBX}/targets.tsv" "${FX_WB}")"
+  [ "${h}" = "0" ] || { ok=0; detail="${detail}; ${h} line(s) name the branch worktree"; }
+  n="$(grep -cxF -- "${OPERATOR_SENTINEL}" "${FX_ALLOW}" || true)"
+  [ "${n}" = "1" ] || { ok=0; detail="${detail}; operator sentinel count ${n}"; }
+  v="$(fx_py snapshot "${SBX}/targets.tsv" "${SNAP}/8c-wb")"; [ "${v}" = "OK" ] || { ok=0; detail="${detail}; ${v}"; }
+  d="$(fx_py diffset "${SNAP}/8-primary" "${SNAP}/8c-wb")"
+  [ "${d}" = "hook-script-execution-allowlist.txt" ] || { ok=0; detail="${detail}; differing '${d}' (want the allowlist only)"; }
+  v="$(fx_py allowlist-delta "${SNAP}/8-primary/hook-script-execution-allowlist.txt" \
+        "${SNAP}/8c-wb/hook-script-execution-allowlist.txt" \
+        "${FX_PRIMARY}/${FX_TPL_REL}" "${FX_WB}/${FX_TPL_REL}" "${FX_PRIMARY_P}")"
+  [ "${v}" = "OK" ] || { ok=0; detail="${detail}; ${v}"; }
+  report "8c: the branch refresh adds exactly its branch-only block, bound to the main checkout" "${ok}" "${detail}"
+  v="$(fx_py root-probe "${FX_ALLOW}" "${FX_WB}/${FX_TPL_REL}" "${FX_PRIMARY_P}")"
+  if [ "${v}" = "OK" ]; then
+    report "8c: every token row, the two branch rows included, is bound to the main checkout (root probe)" 1
+  else
+    report "8c: every token row, the two branch rows included, is bound to the main checkout (root probe)" 0 "${v}"
+  fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Arm 9 — PRE-RECORD FALLBACK. The record's root keys removed (a pre-record install
+# carries neither), a forced refresh from the nested worktree still binds the main
+# working tree; the stamp proves this run rewrote what the probe reads.
+# ─────────────────────────────────────────────────────────────────────────────
+printf '\nArm 9: pre-record fallback — with no recorded root, a refresh binds the main working tree\n'
+if [ "${FIXTURE_READY}" -ne 1 ]; then
+  fx_unavailable "Arm 9: pre-record fallback"
+elif [ "${ARM8_READY}" -ne 1 ]; then
+  report "Arm 9: pre-record fallback" 0 "not run: Arm 8's target set did not resolve (see its target-set line)"
+else
+  cp "${STATE}" "${SBX}/state.before-arm9"
+  ok=1; detail=""
+  v="$(fx_py record-edit "${STATE}" drop)"; [ "${v}" = "OK" ] || { ok=0; detail="record edit: ${v}"; }
+  v="$(fx_py stamp "${SBX}/targets.tsv")"; [ "${v}" = "OK" ] || { ok=0; detail="${detail}; stamp: ${v}"; }
+  fx_update 9-w1 "${FX_W1}" --surfaces-only --force-regen
+  rc=$?
+  [ "${rc}" -eq 0 ] || { ok=0; detail="${detail}; exit ${rc}"; }
+  [ "$(fx_py unstamped "${SBX}/targets.tsv")" = "${ALL_KEYS}" ] \
+    || { ok=0; detail="${detail}; not every target was rewritten by this run"; }
+  report "9-w1: with no recorded root, every target is rewritten by this run" "${ok}" "${detail}"
+  v="$(fx_py root-probe "${FX_ALLOW}" "${FX_W1}/${FX_TPL_REL}" "${FX_PRIMARY_P}")"
+  if [ "${v}" = "OK" ]; then
+    report "9-w1: every token row is bound to the main working tree (root probe)" 1
+  else
+    report "9-w1: every token row is bound to the main working tree (root probe)" 0 "${v}"
+  fi
+  cp "${SBX}/state.before-arm9" "${STATE}"
+  if cmp -s "${SBX}/state.before-arm9" "${STATE}"; then
+    report "9: install record restored byte-identically for the arms that follow" 1
+  else
+    report "9: install record restored for the arms that follow" 0 "restore did not take"
+  fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Arm 9b — LEGACY RECORD. A record without source_repo_path_source that names another
+# existing clone is advisory: the refresh binds the main working tree, and one WARN
+# names both roots.
+# ─────────────────────────────────────────────────────────────────────────────
+printf '\nArm 9b: a legacy record naming another existing clone is advisory, not binding\n'
+if [ "${FIXTURE_READY}" -ne 1 ]; then
+  fx_unavailable "Arm 9b: legacy record"
+elif [ "${ARM8_READY}" -ne 1 ]; then
+  report "Arm 9b: legacy record" 0 "not run: Arm 8's target set did not resolve (see its target-set line)"
+elif ! fx_git clone -q "${FX_PRIMARY}" "${FX_OTHER}" >"${LOGS}/9b-setup.log" 2>&1; then
+  report "Arm 9b: legacy record" 0 "the second clone could not be made; see ${LOGS}/9b-setup.log"
+else
+  FX_OTHER_P="$(cd "${FX_OTHER}" && pwd -P)"
+  cp "${STATE}" "${SBX}/state.before-arm9b"
+  ok=1; detail=""
+  v="$(fx_py record-edit "${STATE}" legacy "${FX_OTHER_P}")"; [ "${v}" = "OK" ] || { ok=0; detail="record edit: ${v}"; }
+  v="$(fx_py stamp "${SBX}/targets.tsv")"; [ "${v}" = "OK" ] || { ok=0; detail="${detail}; stamp: ${v}"; }
+  fx_update 9b-w1 "${FX_W1}" --surfaces-only --force-regen
+  rc=$?
+  [ "${rc}" -eq 0 ] || { ok=0; detail="${detail}; exit ${rc}"; }
+  [ "$(fx_py unstamped "${SBX}/targets.tsv")" = "${ALL_KEYS}" ] \
+    || { ok=0; detail="${detail}; not every target was rewritten by this run"; }
+  report "9b-w1: with a legacy record, every target is rewritten by this run" "${ok}" "${detail}"
+  v="$(fx_py root-probe "${FX_ALLOW}" "${FX_W1}/${FX_TPL_REL}" "${FX_PRIMARY_P}")"
+  if [ "${v}" = "OK" ]; then
+    report "9b-w1: every token row is bound to the main working tree, not the recorded clone (root probe)" 1
+  else
+    report "9b-w1: every token row is bound to the main working tree, not the recorded clone (root probe)" 0 "${v}"
+  fi
+  h="$(fx_py caller-hits "${SBX}/targets.tsv" "${FX_OTHER}")"
+  if [ "${h}" = "0" ]; then
+    report "9b-w1: no deployed line names the recorded clone" 1
+  else
+    report "9b-w1: no deployed line names the recorded clone" 0 "${h} line(s)"
+  fi
+  v="$(fx_py warn-names "${LOGS}/9b-w1.err" "${FX_OTHER_P}" "${FX_PRIMARY_P}")"
+  if [ "${v}" = "OK" ]; then
+    report "9b-w1: one WARN names both roots (the recorded clone and the main working tree)" 1
+  else
+    report "9b-w1: one WARN names both roots (the recorded clone and the main working tree)" 0 "${v}"
+  fi
+  cp "${SBX}/state.before-arm9b" "${STATE}"
+  if cmp -s "${SBX}/state.before-arm9b" "${STATE}"; then
+    report "9b: install record restored byte-identically for the arms that follow" 1
+  else
+    report "9b: install record restored for the arms that follow" 0 "restore did not take"
+  fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Arm 10 — THE HEAL. The allowlist is re-rooted to the out-of-tree worktree with its
+# hashes reset the way a pre-fix install leaves them; a PLAIN refresh heals it.
+# ─────────────────────────────────────────────────────────────────────────────
+printf '\nArm 10: a poisoned install heals on a plain refresh\n'
+if [ "${FIXTURE_READY}" -ne 1 ]; then
+  fx_unavailable "Arm 10: the heal"
+elif [ "${ARM8_READY}" -ne 1 ]; then
+  report "Arm 10: the heal" 0 "not run: Arm 8's target set did not resolve (see its target-set line)"
+else
+  rows="$(fx_py token-rows "${FX_W1}/${FX_TPL_REL}")"
+  # The stamp comes first. Every composed file carries its managed_at marker on line 4,
+  # below its installed_sha line; the poison drops that line, so a stamp taken after it
+  # finds no marker on the poisoned surface's line 4.
+  ok=1; detail=""
+  v="$(fx_py stamp "${SBX}/targets.tsv")"; [ "${v}" = "OK" ] || { ok=0; detail="stamp: ${v}"; }
+  v="$(fx_py poison "${FX_ALLOW}" "${FX_W1}/${FX_TPL_REL}" "${FX_SCRATCH_P}")"
+  p="$(fx_py root-probe "${FX_ALLOW}" "${FX_W1}/${FX_TPL_REL}" "${FX_PRIMARY_P}")"
+  case "${v}|${p}" in
+    "OK|MISSING=${rows} of ${rows}"*)
+      report "10: sensitivity — on the poisoned surface the root probe reports every token row missing" 1 ;;
+    *)
+      report "10: sensitivity — on the poisoned surface the root probe reports every token row missing" 0 \
+        "poison: ${v}; probe: ${p}" ;;
+  esac
+  h="$(fx_py caller-hits "${SBX}/targets.tsv" "${FX_SCRATCH}")"
+  if [ "${rows}" -gt 0 ] && [ "${h}" -ge "${rows}" ]; then
+    report "10: caller-path probe fires on the poisoned surface (${h} >= ${rows} token rows)" 1
+  else
+    report "10: caller-path probe fires on the poisoned surface" 0 "hits ${h}, token rows ${rows}"
+  fi
+  fx_update 10-w1 "${FX_W1}" --surfaces-only
+  rc=$?
+  [ "${rc}" -eq 0 ] || { ok=0; detail="${detail}; exit ${rc}"; }
+  u="$(fx_py unstamped "${SBX}/targets.tsv")"
+  [ "${u}" = "hook-script-execution-allowlist.txt" ] \
+    || { ok=0; detail="${detail}; rewritten '${u}' (want the poisoned allowlist only)"; }
+  # The poisoned surface reads as unstamped whether or not this run rewrote it: the
+  # poison left no marker on its line 4. The snapshot's check needs one there, which
+  # only a composition write restores; with the check above, it is this run's write.
+  v="$(fx_py snapshot "${SBX}/targets.tsv" "${SNAP}/10-w1")"; [ "${v}" = "OK" ] || { ok=0; detail="${detail}; ${v}"; }
+  report "10-w1: a plain refresh (no --force-regen) regenerates exactly the poisoned surface" "${ok}" "${detail}"
+  v="$(fx_py root-probe "${FX_ALLOW}" "${FX_W1}/${FX_TPL_REL}" "${FX_PRIMARY_P}")"
+  if [ "${v}" = "OK" ]; then
+    report "10-w1: after the heal, every token row is bound to the main checkout (root probe)" 1
+  else
+    report "10-w1: after the heal, every token row is bound to the main checkout (root probe)" 0 "${v}"
+  fi
+  h="$(fx_py caller-hits "${SBX}/targets.tsv" "${FX_SCRATCH}")"
+  if [ "${h}" = "0" ]; then
+    report "10: after the heal, no line names the scratchpad worktree" 1
+  else
+    report "10: after the heal, no line names the scratchpad worktree" 0 "${h} line(s)"
+  fi
+  printf '         diagnostic (not graded): %s\n' "$(fx_py segment-counts "${FX_ALLOW}" "${FX_SCRATCH_P}")"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Arm 11 — THE BINDING IS REPORTED. A caller reads the binding instead of inferring it.
+# Reads the stderr logs Arms 8-10 saved. An absent or empty log means the producing arm
+# did not run: that is a FAIL, never a pass. The report key is matched as a FIXED
+# string, by a prefix test: as a search pattern, "[PMO_PLATFORM_ROOT]" is a bracket
+# expression that misses the real line and matches an unrelated one.
+# ─────────────────────────────────────────────────────────────────────────────
+printf '\nArm 11: each refresh reports the root it resolved, the tier, and the template checkout\n'
+
+fx_report_check() {  # <log> <want-root> <want-source> <want-tree> -> "OK", or what is wrong
+  python3 - "$@" <<'PY'
+import os, sys
+path, want_root, want_source, want_tree = sys.argv[1:5]
+PREFIX, MID, TAIL = "INFO: Resolved [PMO_PLATFORM_ROOT] = ", " (source: ", "); templates are read from "
+try:
+    lines = open(path, encoding="utf-8").read().splitlines()
+except OSError:
+    print("log absent: the producing arm did not run"); sys.exit(0)
+if not lines:
+    print("log empty: the producing arm did not run"); sys.exit(0)
+hits = [l for l in lines if l.startswith(PREFIX)]
+if len(hits) != 1:
+    print(f"{len(hits)} report lines (want exactly 1)"); sys.exit(0)
+head, sep, templates = hits[0][len(PREFIX):].rpartition(TAIL)
+root, sep2, source = head.rpartition(MID)
+if not (sep and sep2):
+    print(f"unparseable report line: {hits[0]!r}"); sys.exit(0)
+problems = []
+if root != want_root:
+    problems.append(f"root {root!r} != {want_root!r}")
+if source != want_source:
+    problems.append(f"tier {source!r} != {want_source!r}")
+if os.path.realpath(templates) != os.path.realpath(want_tree):
+    problems.append(f"templates {templates!r} != {want_tree!r}")
+print("OK" if not problems else "; ".join(problems))
+PY
+}
+
+if [ "${FIXTURE_READY}" -ne 1 ]; then
+  fx_unavailable "Arm 11: the binding is reported"
+else
+  # Control: the parser counts the exact line and ignores a line that a pattern search
+  # for the key would take for it.
+  printf '%s\n' 'INFO: Resolved P = /x (source: cli); templates are read from /y' > "${LOGS}/11-bait.err"
+  printf '%s\n' 'INFO: Resolved P = /x (source: cli); templates are read from /y' \
+    "INFO: Resolved [PMO_PLATFORM_ROOT] = ${FX_PRIMARY_P} (source: install-record); templates are read from ${FX_W1}" \
+    > "${LOGS}/11-exact.err"
+  s="$(fx_report_check "${LOGS}/11-exact.err" "${FX_PRIMARY_P}" install-record "${FX_W1}")"
+  p="$(fx_report_check "${LOGS}/11-bait.err" "${FX_PRIMARY_P}" install-record "${FX_W1}")"
+  if [ "${s}" = "OK" ] && [ "${p}" = "0 report lines (want exactly 1)" ]; then
+    report "11: control — the report key is matched as a fixed string (the exact line counted, the bait ignored)" 1
+  else
+    report "11: control — the report key is matched as a fixed string" 0 "exact-line log: ${s}; bait-only log: ${p}"
+  fi
+
+  while IFS='|' read -r log want_source tree; do
+    [ -n "${log}" ] || continue
+    verdict="$(fx_report_check "${LOGS}/${log}.err" "${FX_PRIMARY_P}" "${want_source}" "${tree}")"
+    if [ "${verdict}" = "OK" ]; then
+      report "${log}: names the main checkout, tier ${want_source}, and its own template checkout" 1
+    else
+      report "${log}: reports the binding it used" 0 "${verdict}"
+    fi
+  done <<EOF
+8-primary|install-record|${FX_PRIMARY}
+8-w1|install-record|${FX_W1}
+8-scratch|install-record|${FX_SCRATCH}
+8c-wb|install-record|${FX_WB}
+9-w1|main-worktree|${FX_W1}
+10-w1|install-record|${FX_W1}
+EOF
+
+  if grep -q '^NOTE: install-record tier skipped:' "${LOGS}/9-w1.err" 2>/dev/null; then
+    report "9-w1: the skipped install-record tier is named, not only its result" 1
+  else
+    report "9-w1: the skipped install-record tier is named, not only its result" 0 \
+      "no 'NOTE: install-record tier skipped:' line on stderr"
+  fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Arm 12 — THE CONFIG ROOT IS NOT A FALLBACK. A full update given --config-root must
+# write only there. A child it delegates to without that flag falls back to the
+# DEFAULT config root (PMO_PLATFORM_CONFIG_ROOT, else the operator's own). Here the
+# default is a byte copy of the given root, so such a write lands where this arm can
+# see it, and nothing outside the sandbox is ever at risk. The copy is in sync with
+# the declared schema, so a phase that only reads the default root reads the same
+# answers it would read from the given one.
+# ─────────────────────────────────────────────────────────────────────────────
+printf '\nArm 12: a sandboxed full update writes only the config root it was given\n'
+PA_CFG="${SBX}/config"
+PA_DEFAULT="${SBX}/default-config"
+if [ ! -d "${SBX}/ws/.claude/hooks" ] || [ -z "$(ls -A "${SBX}/ws/.claude/hooks" 2>/dev/null)" ]; then
+  report "Arm 12: the config root is not a fallback" 0 \
+    "precondition: no deployed hooks in the sandbox workspace, so the hook refresh would skip and this arm could not fail"
+elif ! cp -Rp "${PA_CFG}" "${PA_DEFAULT}"; then
+  report "Arm 12: the config root is not a fallback" 0 "could not copy the given config root to stand in for the default"
+else
+  pa_before="$(fx_py gens "${PA_CFG}")"
+  manifest_dir "${PA_DEFAULT}" > "${SBX}/pa-default.before"
+  ( cd "${REPO_ROOT}" && PMO_PLATFORM_CONFIG_ROOT="${PA_DEFAULT}" bash ./update.sh \
+      --config-root "${PA_CFG}" --workspace-root "${SBX}/ws" ) >"${LOGS}/12-full.out" 2>"${LOGS}/12-full.err"
+  rc=$?
+  manifest_dir "${PA_DEFAULT}" > "${SBX}/pa-default.after"
+  new="$(fx_py new-gens "${PA_CFG}" "${pa_before}")"
+  if [ -n "${new}" ] && [ "${new}" = "${new%% *}" ]; then
+    report "12: the hook refresh ran and took its snapshot in the given config root (1 new generation)" 1
+  else
+    report "12: the hook refresh ran and took its snapshot in the given config root (1 new generation)" 0 \
+      "new generations in the given root: '${new}' (want exactly one); update exit ${rc}"
+  fi
+  d="$(fx_py manifest-delta "${SBX}/pa-default.before" "${SBX}/pa-default.after")"
+  if [ -z "${d}" ]; then
+    report "12: the default config root is byte-identical after the run" 1
+  else
+    report "12: the default config root is byte-identical after the run" 0 "changed: ${d}"
+  fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Arm 12b — THE SCHEMA RECONCILE TAKES THE GIVEN CONFIG ROOT. Phase 2 probes the config
+# root's operator.toml against the declared schema and backfills a declared key that is
+# absent. Here BOTH of Arm 12's roots are put behind the schema by the same key — one
+# declared key that carries a default, removed from each operator.toml — so a phase that
+# probes or reconciles the default root instead of the given one shows on one side or the
+# other: the given root's file must carry the key after the update, and the default root
+# must be byte-identical. Arm 12's lines above, run with both roots in sync, are this
+# arm's control; it runs after them so it cannot disturb them.
+# ─────────────────────────────────────────────────────────────────────────────
+printf '\nArm 12b: a sandboxed update reconciles the config root it was given\n'
+PB_KEY="automation_level"                     # [automation], declared delivered with a default
+if [ ! -f "${PA_CFG}/operator.toml" ] || [ ! -f "${PA_DEFAULT}/operator.toml" ]; then
+  report "Arm 12b: the schema reconcile takes the given config root" 0 \
+    "precondition: Arm 12's two config roots do not both hold an operator.toml"
+else
+  pb_fixture=""
+  for pb_root in "${PA_CFG}" "${PA_DEFAULT}"; do
+    pb_before="$(grep -c "^${PB_KEY}[[:space:]]*=" "${pb_root}/operator.toml")"
+    grep -v "^${PB_KEY}[[:space:]]*=" "${pb_root}/operator.toml" > "${SBX}/pb-operator.toml"
+    cat "${SBX}/pb-operator.toml" > "${pb_root}/operator.toml"
+    pb_after="$(grep -c "^${PB_KEY}[[:space:]]*=" "${pb_root}/operator.toml")"
+    [ "${pb_before}" = "1" ] && [ "${pb_after}" = "0" ] \
+      || pb_fixture="${pb_fixture} ${pb_root##*/}: ${PB_KEY} lines ${pb_before} -> ${pb_after} (want 1 -> 0);"
+  done
+  if [ -n "${pb_fixture}" ]; then
+    report "Arm 12b: the schema reconcile takes the given config root" 0 \
+      "precondition: the fixture did not put both roots behind the schema:${pb_fixture}"
+  else
+    manifest_dir "${PA_DEFAULT}" > "${SBX}/pb-default.before"
+    ( cd "${REPO_ROOT}" && PMO_PLATFORM_CONFIG_ROOT="${PA_DEFAULT}" bash ./update.sh \
+        --config-root "${PA_CFG}" --workspace-root "${SBX}/ws" ) >"${LOGS}/12b-full.out" 2>"${LOGS}/12b-full.err"
+    rc=$?
+    manifest_dir "${PA_DEFAULT}" > "${SBX}/pb-default.after"
+    pb_given="$(grep -c "^${PB_KEY}[[:space:]]*=" "${PA_CFG}/operator.toml")"
+    if [ "${pb_given}" = "1" ]; then
+      report "12b: the given config root's operator.toml carries the declared key after the update" 1
+    else
+      report "12b: the given config root's operator.toml carries the declared key after the update" 0 \
+        "${PB_KEY} lines in the given root's operator.toml: ${pb_given} (want 1); update exit ${rc}"
+    fi
+    d="$(fx_py manifest-delta "${SBX}/pb-default.before" "${SBX}/pb-default.after")"
+    if [ -z "${d}" ]; then
+      report "12b: the default config root is byte-identical after the run, though it is behind the schema too" 1
+    else
+      report "12b: the default config root is byte-identical after the run, though it is behind the schema too" 0 \
+        "changed: ${d}; update exit ${rc}"
+    fi
+  fi
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Arm 6 — LEAKAGE BACKSTOP. LAST, so every mutating arm above falls inside its compare.
 # ─────────────────────────────────────────────────────────────────────────────
 printf '\nArm 6: leakage backstop — the real home is untouched\n'
 
@@ -476,6 +1462,14 @@ LIVE_ALLOWLIST_AFTER=""
 [ "${LIVE_ALLOWLIST_BEFORE}" = "${LIVE_ALLOWLIST_AFTER}" ] \
   && report "real deployed allowlist byte-identical to the Arm-0 baseline" 1 \
   || report "real deployed allowlist byte-identical to the Arm-0 baseline" 0 "an invocation escaped its sandbox"
+
+LIVE_RECORD_AFTER=""
+[ -f "${REAL_INSTALL_RECORD}" ] && LIVE_RECORD_AFTER="$(sha "${REAL_INSTALL_RECORD}")"
+if [ "${LIVE_RECORD_BEFORE}" = "${LIVE_RECORD_AFTER}" ]; then
+  report "real install record byte-identical to the Arm-0 baseline" 1
+else
+  report "real install record byte-identical to the Arm-0 baseline" 0 "an invocation escaped its sandbox"
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 printf '\ntest_refresh_surfaces.sh: %d passed, %d failed, %d skipped (bash %s)\n' \

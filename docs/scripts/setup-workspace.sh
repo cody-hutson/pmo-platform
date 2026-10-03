@@ -55,7 +55,7 @@
 #   0   — success
 #   1   — generic failure (validation, operator-cancel)
 #   64  — EX_USAGE (invalid argv)
-#   66  — EX_NOINPUT (source repo missing)
+#   66  — EX_NOINPUT (a required input is unavailable and nothing was modified: the source repo, a template or a restore input is missing, its canonical root cannot be resolved, or an unattended run needs an operator's answer)
 #   69  — EX_UNAVAILABLE (missing prerequisite)
 #   73  — EX_CANTCREAT (mkdir/cp failed)
 #   74  — EX_IOERR (write failure)
@@ -130,6 +130,10 @@ readonly SETTINGS_LOCAL_BASENAME="settings.local.json"
 # --- Section 2: Mutable state (scalars only; bash-3.2-compatible) ---
 WORKSPACE_ROOT=""
 SOURCE_REPO=""
+# The canonical root of the source repo and the resolver tier that supplied it, set once
+# per recording flow by resolve_canonical_source_root (Section 8b).
+CANONICAL_SOURCE_ROOT=""
+CANONICAL_SOURCE_ROOT_SOURCE=""
 INIT_ONLY_STATE=0
 REFRESH_HOOKS=0
 REHOME_HOOK_WIRING=0
@@ -285,7 +289,8 @@ Idempotency:
   entry to determine routing:
     (a) ABSENT        → fresh-install (creates dirs, resolves tokens, installs hooks)
     (b) VALID         → re-bootstrap (reads cache, reconciles drift)
-    (c) CORRUPT       → guided recovery (prompts repair/backup/exit)
+    (c) CORRUPT       → guided recovery (prompts repair/backup/exit; under
+                        --non-interactive it prompts nothing and exits 66 unmodified)
 
   Per-file hook drift decisions cached in state to avoid re-prompting on
   unchanged inputs across re-runs.
@@ -615,6 +620,38 @@ check_source_repo() {
   # both read_operator_toml and write_operator_toml exit non-zero with a named
   # message when the declaration is unreadable, and write_operator_toml additionally
   # refuses to write a truncated file when the declaration yields an empty key set.
+}
+
+# --- Section 8b: canonical source root (the install record) ---
+# Resolved ONCE per recording flow and used TWICE: substituted for [PMO_PLATFORM_ROOT] by
+# the composition install, and written to the state file as source_repo_path with the
+# tier that supplied it — one value, so what the install bakes and what it records cannot
+# differ for any surface this run writes. A source repo that is a linked worktree records
+# its repository's main working tree. Computed, never asked: it reads no answer from stdin.
+resolve_canonical_source_root() {
+  [ -z "${CANONICAL_SOURCE_ROOT}" ] || return 0
+  local lib="${SOURCE_REPO}/core/deploy/lib-composition.sh"
+  if [ ! -f "${lib}" ] || [ ! -f "${SOURCE_REPO}/core/deploy/compose.py" ]; then
+    warn "Composition library absent under ${SOURCE_REPO}; its canonical root cannot be resolved (see the state-file write)."
+    return 0
+  fi
+  if [ "${LIB_COMPOSITION_SOURCED}" -eq 0 ]; then
+    # shellcheck disable=SC1090
+    source "${lib}"
+    LIB_COMPOSITION_SOURCED=1
+  fi
+  local out="" rc=0
+  out="$(lib_compose_resolve_root --declare-source "${SOURCE_REPO}")" || rc=$?
+  if [ "${rc}" -ne 0 ] || [ -z "${out}" ]; then
+    err "Cannot resolve a canonical root for the source repo ${SOURCE_REPO} (resolve-root exit ${rc})."
+    err "Refusing to install; no install step has run. Install from the repository's main"
+    err "checkout, or set PMO_PLATFORM_ROOT to it, then re-run."
+    exit 66
+  fi
+  IFS=$'\t' read -r CANONICAL_SOURCE_ROOT CANONICAL_SOURCE_ROOT_SOURCE <<EOF
+${out}
+EOF
+  info "Canonical source root: ${CANONICAL_SOURCE_ROOT} (${CANONICAL_SOURCE_ROOT_SOURCE}); recorded as source_repo_path"
 }
 
 # --- Section 9: Active token set computation (FM-5 absorption) ---
@@ -2398,7 +2435,7 @@ install_hook_with_checksum() {
     # said "re-run setup-workspace.sh to reconcile", and a re-run provably does not -- it takes
     # this same branch and preserves again, which is what made the failure silent AND
     # self-perpetuating.
-    warn "PRESERVED (operator-edited): ${basename} — ${why}. Not overwritten. To force it back to source: docs/scripts/setup-workspace.sh --reconcile-hooks --workspace-root ${WORKSPACE_ROOT} --source-repo ${SOURCE_REPO}. A plain --refresh-hooks re-run will preserve it again."
+    warn "PRESERVED (operator-edited): ${basename} — ${why}. Not overwritten. To force it back to source: docs/scripts/setup-workspace.sh --reconcile-hooks --workspace-root ${WORKSPACE_ROOT} --config-root ${CONFIG_ROOT} --source-repo ${SOURCE_REPO}. A plain --refresh-hooks re-run will preserve it again."
     json_set "${CHECKSUMS_FILE}" "${basename}" "${target_sha}"
     note_hook_declined "${basename}"
     return 0
@@ -2434,6 +2471,15 @@ install_hook_with_checksum() {
   warn "DRIFT: ${basename}"
   warn "  Source SHA: ${source_sha}"
   warn "  Target SHA: ${target_sha}"
+  # --non-interactive never prompts and never reads stdin: the deployed copy is left in
+  # place (the prompt's default, N). Nothing is recorded, deliberately. An
+  # operator_decision that no operator made would silently suppress this prompt on the
+  # next interactive run, and recording the deployed bytes as the baseline would let the
+  # next --refresh-hooks read an operator edit as an unedited platform copy.
+  if [ "${NON_INTERACTIVE}" -eq 1 ]; then
+    warn "PRESERVED (non-interactive): ${basename} — not overwritten and no decision recorded. Re-run without --non-interactive to decide, or take the source version with: docs/scripts/setup-workspace.sh --reconcile-hooks --workspace-root ${WORKSPACE_ROOT} --config-root ${CONFIG_ROOT} --source-repo ${SOURCE_REPO}"
+    return 0
+  fi
   local response=""
   while true; do
     printf '  Overwrite? (y/N/diff): ' >&2
@@ -2533,8 +2579,11 @@ install_hooks() {
   # coworker/org/client-project needle scan); the source lib lives at core/deploy/
   # (shared with deploy.sh + git-pre-commit-pii.sh), which the deployed .claude/hooks/
   # cannot reach — so without this copy the hook's localized-needle class silently
-  # no-ops. It is a sourced lib, not a registered hook (no block-* name), so the
-  # hook-registry checks correctly ignore it. Mirrors the path-leak primitive co-deploy.
+  # no-ops. The Gate 2 skill-edit hook and allowlist-add.sh resolve the skill-editor
+  # exemption list through it too: without the copy the hook grants no exemption and the
+  # writer refuses the list. The list's seed path (the manifest row) is unchanged. It is
+  # a sourced lib, not a registered hook (no block-* name), so the hook-registry checks
+  # correctly ignore it. Mirrors the path-leak primitive co-deploy.
   local needlelib_src="${SOURCE_REPO}/core/deploy/lib-instance-path.sh"
   local needlelib_dst="${WORKSPACE_ROOT}/.claude/hooks/lib-instance-path.sh"
   if [ ! -r "${needlelib_src}" ]; then
@@ -2856,7 +2905,15 @@ configure_hook_activation() {
     return 0
   fi
 
-  # Prompt — default OFF. Non-interactive / EOF → OFF (the public-safe default).
+  # --non-interactive: take the declared default (OFF) without prompting or reading
+  # stdin -- the same value a closed stdin reaches through the read fallback below.
+  if [ "${NON_INTERACTIVE}" -eq 1 ]; then
+    write_security_hooks_config "${cfg}" "false"
+    info "Hook activation set: [security_hooks].master_enabled = false (${cfg}) — non-interactive: declared default, no prompt"
+    return 0
+  fi
+
+  # Prompt — default OFF. EOF → OFF (the public-safe default); --non-interactive returned above.
   local response=""
   printf '\n' >&2
   printf 'Activate the pmo-platform WORKFLOW security hooks now?\n' >&2
@@ -3002,7 +3059,7 @@ install_composition_surface_files() {
       continue
     fi
 
-    if lib_compose_write "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "" "${dialect}"; then
+    if lib_compose_write "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "" "${dialect}" "${CANONICAL_SOURCE_ROOT}"; then
       installed_count=$((installed_count + 1))
       info "INSTALLED: ${target_basename}"
       printf 'rm-file:%s\n' "${target}" >> "${ROLLBACK_OPS_FILE}"
@@ -3262,11 +3319,23 @@ write_state_file() {
     source_repo_sha=$(git -C "${SOURCE_REPO}" rev-parse HEAD 2>/dev/null || true)
   fi
 
+  # Never an empty source_repo_path. When the canonical root was not resolved (the
+  # source carries no composition library), record the --source-repo value as given
+  # and OMIT the provenance key: a later update then treats the record as advisory
+  # rather than honoring a value no resolver validated.
+  local recorded_root="${CANONICAL_SOURCE_ROOT}" recorded_source="${CANONICAL_SOURCE_ROOT_SOURCE}"
+  if [ -z "${recorded_root}" ]; then
+    recorded_root="${SOURCE_REPO}"
+    recorded_source=""
+    warn "Recording source_repo_path as given (${SOURCE_REPO}): its canonical root was not resolved, so the record carries no source_repo_path_source and update.sh treats it as advisory."
+  fi
+
   S_SCHEMA="${STATE_SCHEMA_VERSION}" \
   S_VERSION="${SCRIPT_VERSION}" \
   S_INSTALL_MODE="${INSTALL_MODE}" \
   S_VERIFICATION_PASSED="${verification_passed_value}" \
-  S_SOURCE_REPO="${SOURCE_REPO}" \
+  S_SOURCE_REPO="${recorded_root}" \
+  S_SOURCE_REPO_SOURCE="${recorded_source}" \
   S_SOURCE_SHA="${source_repo_sha}" \
   S_TOKENS_FILE="${TOKENS_FILE}" \
   S_CHECKSUMS_FILE="${CHECKSUMS_FILE}" \
@@ -3303,7 +3372,12 @@ state = {
     "setup_completed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "install_mode": env["S_INSTALL_MODE"],
     "verification_passed": (env["S_VERIFICATION_PASSED"] == "true"),
+    # source_repo_path is the canonical root of the installed repository (never a
+    # linked worktree); source_repo_path_source names the resolver tier that supplied
+    # it, and is absent when the path was recorded as given; source_repo_sha is the
+    # HEAD of the tree installed from, or empty when that tree is a linked worktree.
     "source_repo_path": env["S_SOURCE_REPO"],
+    "source_repo_path_source": env.get("S_SOURCE_REPO_SOURCE", ""),
     "source_repo_sha": env["S_SOURCE_SHA"],
     "resolved_tokens": tokens,
     "hook_checksums": checksums,
@@ -3318,6 +3392,8 @@ state = {
     "settings_template_sha": env.get("S_SETTINGS_TEMPLATE_SHA", ""),
     "settings_installed_sha": env.get("S_SETTINGS_INSTALLED_SHA", ""),
 }
+if not state["source_repo_path_source"]:
+    del state["source_repo_path_source"]
 
 out_path = env["S_OUT"]
 os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
@@ -3537,6 +3613,17 @@ guided_recovery() {
     return 0
   fi
 
+  # --non-interactive: recovery needs an operator decision an unattended run cannot
+  # make. Take the documented no-mutation default (E) and exit 66 -- the code this
+  # script already uses when an unattended run cannot obtain a required operator
+  # input -- so a caller never reads success from a run that installed nothing.
+  if [ "${NON_INTERACTIVE}" -eq 1 ]; then
+    err "Non-interactive: guided recovery needs an operator decision; exiting without modification (exit 66)."
+    err "  Recovery is entered when the state file's schema_version is missing or is not ${STATE_SCHEMA_VERSION} (a platform upgrade that changes the schema does this to every existing install), or when its last run did not pass verification."
+    err "  Re-run without --non-interactive to choose, or move ${STATE_FILE} aside and re-run for a fresh install."
+    exit 66
+  fi
+
   local response=""
   while true; do
     printf 'Recovery action (R/B/E): ' >&2
@@ -3567,6 +3654,8 @@ guided_recovery() {
 
 # --- Section 21: Fresh-install flow (branch a) ---
 fresh_install() {
+  # First, before any install step: a refusal here (exit 66) needs no rollback.
+  resolve_canonical_source_root
   INSTALL_MODE="fresh-install"
   info "FRESH-INSTALL flow"
   compute_active_tokens
@@ -3597,6 +3686,8 @@ fresh_install() {
 
 # --- Section 22: Re-bootstrap flow (branch b) ---
 rebootstrap() {
+  # First, before any install step: a refusal here (exit 66) needs no rollback.
+  resolve_canonical_source_root
   INSTALL_MODE="rebootstrapped"
   info "RE-BOOTSTRAP flow"
   read_existing_state
@@ -4427,6 +4518,9 @@ reconcile_config_flow() {
 # code here. Answers are handed to the generator via S_ANSWERS; a declined answer
 # leaves the key absent.
 reconcile_prompt_missing() {
+  # Defensive and currently a no-op: the only caller exits 66 under --non-interactive
+  # before calling this. Local so the census (P-10) can verify the guard in place.
+  if [ "${NON_INTERACTIVE}" -eq 1 ]; then return 1; fi
   local pending
   pending=$(
     S_SCHEMA_FILE="$(operator_schema_file)" \
@@ -4544,6 +4638,8 @@ refresh_settings_flow() {
 # --- Section 23: Init-only-state flow (FM-4 absorption) ---
 # Empirically verifies each artifact rather than asserting completion.
 init_only_state_flow() {
+  # First: this flow writes the state file, so it records the canonical root too.
+  resolve_canonical_source_root
   INSTALL_MODE="init-only-state"
   info "INIT-ONLY-STATE flow"
   compute_active_tokens

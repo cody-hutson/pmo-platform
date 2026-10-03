@@ -42,11 +42,9 @@ readonly BYPASS_LOG="${HOOK_DIR}/bypass-log.jsonl"
 readonly WARN_LOG="${HOOK_DIR}/skill-edit-warn-log.jsonl"
 readonly MODE_FILE="${HOOK_DIR}/.mode"
 readonly PRIMARY_ROOT="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"
-# EXEMPTION_LIST resolves relative to the hook's own directory (matches
-# block-destructive.sh's SCRIPT_ALLOWLIST pattern). This ensures the hook
-# finds the exemption list in whichever checkout it runs from — primary or
-# worktree — which matters during engineering before deployment to primary.
-readonly EXEMPTION_LIST="${HOOK_DIR}/../skill-editor-exemption-list.txt"
+# The exemption list is not resolved here: it is resolved lazily at the exemption check
+# below, through the single resolver every consumer of the list calls, rooted the way a
+# deployed hook finds its own workspace.
 readonly SENTINEL_TTL_SECONDS=1800  # 30 minutes
 
 # --- MODE DETECTION (shared harness .mode; warn|enforce|off) ---
@@ -240,7 +238,28 @@ if [ -z "$skill" ] || [ -z "$skill_dir" ]; then
 fi
 
 # --- EXEMPTION LIST check ---
-if [ -f "$EXEMPTION_LIST" ] && "$GREP" -Fxq "$skill" "$EXEMPTION_LIST" 2>/dev/null; then
+# One path for every consumer: pmo_skill_editor_exemption_list_for, the single resolver in
+# lib-instance-path.sh, which the installer co-deploys beside the hooks. It is rooted at the
+# declared workspace root when one is set, and otherwise at the workspace this hook is
+# deployed into — the directory that holds its .claude/ — because nothing exports a
+# workspace root to a deployed hook. The library is sourced inside a command substitution,
+# so all it can do is hand back a path: an absent, stale or corrupt copy — even one whose
+# top level runs `exit 0` — yields "" and therefore NO exemption. The check fails toward
+# enforcement.
+EXEMPTION_LIST="$(
+  lib="${HOOK_DIR}/lib-instance-path.sh"
+  [ -r "$lib" ] || lib="${HOOK_DIR}/../deploy/lib-instance-path.sh"
+  root="${CLAUDE_WORKSPACE_ROOT:-}"
+  [ -n "$root" ] || root="$(cd "${HOOK_DIR}/../.." 2>/dev/null && pwd -P)" || exit 0
+  [ -r "$lib" ] || exit 0
+  # shellcheck source=/dev/null
+  . "$lib" >/dev/null 2>&1 || exit 0
+  command -v pmo_skill_editor_exemption_list_for >/dev/null 2>&1 || exit 0
+  pmo_skill_editor_exemption_list_for "$root"
+)" || EXEMPTION_LIST=""
+if [ -z "$EXEMPTION_LIST" ]; then
+  log_error "EXEMPTION-RESOLVER-UNAVAILABLE: lib-instance-path.sh missing, stale or unreadable; no exemption applied"
+elif [ -f "$EXEMPTION_LIST" ] && "$GREP" -Fxq "$skill" "$EXEMPTION_LIST" 2>/dev/null; then
   exit 0  # canary or operator-exempted skill
 fi
 

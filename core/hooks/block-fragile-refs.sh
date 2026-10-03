@@ -54,8 +54,10 @@ readonly MODE_FILE="${HOOK_DIR}/.mode"
 # ALLOWLIST resolves at the workspace .claude/ root — ${HOOK_DIR}/.. — which is the
 # hook-tier composition-surface target and the pattern every sibling exemption list in
 # this cohort uses (block-destructive, block-egress x3, block-mcp-writes,
-# block-scope-segregation, block-shell-injection, block-skill-direct-edit, and
-# block-fs-boundary via its CLAUDE_DIR).
+# block-scope-segregation, block-shell-injection, and block-fs-boundary via its
+# CLAUDE_DIR). block-skill-direct-edit is not in that list: its exemption list is the
+# cohort's one escape surface homed at the instance tier, and it resolves it through
+# the co-deployed lib-instance-path.sh.
 #
 # It deliberately does NOT resolve beside the hook. At runtime $0 is the DEPLOYED copy,
 # so ${HOOK_DIR} is the deployed hooks directory and never a checkout — a hook-adjacent
