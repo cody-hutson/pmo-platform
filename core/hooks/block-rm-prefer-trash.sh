@@ -362,6 +362,9 @@ resolve_and_classify() {
 #   store   - autoMemoryDirectory in the USER-scope file: absolute or ~/-prefixed, no
 #             control characters, a strict descendant of $HOME, holding a MEMORY.md
 #   place   - the operand's resolved parent IS the resolved store
+# The verdict is reached once, when the hook judges; the command resolves the operand again
+# when it runs, so the path judged is the path moved only while the operand's directories
+# are unchanged between the two: the judgment-time class every path-resolving rule carries.
 # A store that only project or local settings declare is never admitted. The program then
 # prints OUTSIDE-USER-SCOPE, so the refusal can say why: the arm reads user scope only.
 readonly MEMORY_ARM_PY='
