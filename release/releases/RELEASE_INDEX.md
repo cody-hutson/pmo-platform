@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.72 | closeout-verification-rows-consistent | 2026-10-03 | — | #7895 | [notes/v4.72_RELEASE_NOTES.md](notes/v4.72_RELEASE_NOTES.md) |
 | v4.71 | work-nature-and-axis-model | 2026-10-02 | — | #8004 | [notes/v4.71_RELEASE_NOTES.md](notes/v4.71_RELEASE_NOTES.md) |
 | v4.70 | verifier-grades-what-plans-declare | 2026-10-02 | — | #7839 | [notes/v4.70_RELEASE_NOTES.md](notes/v4.70_RELEASE_NOTES.md) |
 | v4.69 | egress-hook-batch | 2026-09-25 | — | #7638 | [notes/v4.69_RELEASE_NOTES.md](notes/v4.69_RELEASE_NOTES.md) |
