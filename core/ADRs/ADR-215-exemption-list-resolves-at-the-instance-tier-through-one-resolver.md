@@ -21,7 +21,7 @@ supersedes: none
 
 **Proposed** — authored at Stage 6 Engineering of `install-resolves-identically`. The operator rendered the decision at the release's Stage-5 Collective Review scope-lock: the instance tier through one resolver, the gate predicate declared beside that resolver, and the legacy reconcile ordered after the hook refresh. The transition to Accepted belongs to the release's close.
 
-**Numbering provenance.** This record was claimed as **208** against an anchor of **206** on `origin/main`, read from the repository's ADR-numbering detector. It advances past one slot, which a sibling record on this same release branch already occupies. Sibling release branches hold numbers in the same range branch-only, which does not bind. This is the second of the release's three records, numbered in serial order at authorship. The number binds at the Stage-12 claim. If the mainline claims it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. Citations use the slug token `{{ADR:exemption-list-resolves-at-the-instance-tier-through-one-resolver}}`, which carries no number shape and resolves at the claim.
+**Numbering provenance.** This record was claimed as **208** against an anchor of **206** on `origin/main`, read from the repository's ADR-numbering detector. It advances past one slot, which a sibling record on this same release branch already occupies. Sibling release branches hold numbers in the same range branch-only, which does not bind. This is the second of the release's three records, numbered in serial order at authorship. The number binds at the Stage-12 claim. If the mainline claims it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. Citations use the slug token `ADR-215`, which carries no number shape and resolves at the claim.
 
 **Numbering provenance — `208 → 212`.** Held **ADR-208** branch-local; renumbered to **ADR-212** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 208. In-release citations that read "ADR-208" denote this record.
 
@@ -100,7 +100,7 @@ CHEAP — revert the change. No operator data is rewritten: the instance-tier li
 - ADR-094 — extend-before-create: the existing resolver library is extended rather than a new one created.
 - ADR-181 — citation binding: this record is cited by its slug token until the claim binds its number.
 - ADR-204 — the workspace-root order the hook and the writer bind, and the separate route for the hook's own non-self-locating root.
-- {{ADR:pmo-platform-root-resolves-from-install-record}} — this release's first record. It shares `update.sh`'s Phase-3 loop with this record's gate predicate, and neither edit reverts the other.
+- ADR-214 — this release's first record. It shares `update.sh`'s Phase-3 loop with this record's gate predicate, and neither edit reverts the other.
 
 ## References
 
