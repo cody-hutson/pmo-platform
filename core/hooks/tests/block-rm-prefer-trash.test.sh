@@ -581,6 +581,42 @@ else
     /usr/bin/printf 'FAIL: %s (%s)\n' "$m30_name" "$m30_fail"; FAIL=$((FAIL + 1))
   fi
 
+  # MEM-31: that refusal names the documented eviction command with the entry operand as
+  # it was typed (bare, wholly single-quoted or wholly double-quoted), its quotes stripped.
+  # FAILs if the store path the fixture types does not resolve to another directory
+  # (anti-vacuous).
+  m31_name="MEM-31 the memory refusal names the documented eviction command with the operand as typed"
+  m31_home="${MEM_ROOT}/typed"
+  mem_home typed NONE
+  /bin/mkdir -p "${m31_home}/mem store"
+  /usr/bin/touch "${m31_home}/mem store/MEMORY.md" "${m31_home}/mem store/entry-alpha.md"
+  /bin/ln -s "${m31_home}/mem store" "${m31_home}/store-link"
+  /usr/bin/printf '{"autoMemoryDirectory": "%s/store-link"}\n' "$m31_home" > "${m31_home}/.claude/settings.json"
+  m31_entry="${m31_home}/store-link/entry-alpha.md"
+  m31_fail=""
+  m31_real="$(cd "${m31_home}/store-link" 2>/dev/null && /bin/pwd -P)" || m31_real=""
+  if [ -z "$m31_real" ] || [ "$m31_real" = "${m31_home}/store-link" ]; then
+    m31_fail="  the store path the fixture types does not resolve to another directory"$'\n'
+  else
+    for m31_op in "$m31_entry" "'${m31_entry}'" "\"${m31_entry}\""; do
+      mem_run "$HOOK" "$m31_home" "" "$(bash_payload "rm ${m31_op}" "${m31_home}/Claude/.claude/worktrees/planning")"
+      m31_line="$(/usr/bin/grep -F 'BLOCK-TRASH-001] BLOCKED: permanent deletion of an auto-memory entry' "$MEM_ERR_FILE")"
+      if [ "$MEM_EXIT" != 2 ] || [ -z "$m31_line" ]; then
+        m31_fail="${m31_fail}  rm ${m31_op} -> exit=${MEM_EXIT} (expected 2, the memory refusal): $(/bin/cat "$MEM_ERR_FILE")"$'\n'
+      else
+        case "$m31_line" in
+          *"instead: trash '${m31_entry}'") ;;
+          *) m31_fail="${m31_fail}  rm ${m31_op} -> the memory refusal does not name the documented eviction command with the operand as typed"$'\n' ;;
+        esac
+      fi
+    done
+  fi
+  if [ -z "$m31_fail" ]; then
+    /usr/bin/printf 'PASS: %s\n' "$m31_name"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n%s' "$m31_name" "$m31_fail"; FAIL=$((FAIL + 1))
+  fi
+
   # -- Refused: every target that is not a direct *.md entry of the declared store (AC-2) --
   mem_case "MEM-08 an entry in a store subdirectory is refused" base \
     "trash ${MB}/mem-store/sub/entry-beta.md" 2 "BLOCK-TRASH-003"
