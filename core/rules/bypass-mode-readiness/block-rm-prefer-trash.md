@@ -33,7 +33,7 @@ For each target token after the matched verb (flag tokens skipped; bare shell st
 
 **Symlink-following posture (intentional):** `os.path.realpath` follows symlinks. A symlink inside `${HOME}/Claude/` pointing to a target outside the workspace will resolve to the outside target and be blocked. This matches the strict-policy requirement: "block any file deletion whose resolved path is outside `${HOME}/Claude/`."
 
-**Trash-command auto-detection (3-tier):** when emitting a Trash-move suggestion — BLOCK-TRASH-002's, and BLOCK-TRASH-001's refusal of a permanent-deletion verb on an auto-memory entry:
+**Trash-command auto-detection (3-tier):** when emitting BLOCK-TRASH-002's Trash-move suggestion (BLOCK-TRASH-001's refusal of a permanent-deletion verb on an auto-memory entry names instead the eviction command that `core/disciplines/knowledge-architecture.md` § Memory↔corpus boundary documents):
 
 1. `command -v trash` under pinned PATH → emit `trash '<abs_path>'`. On systems with a user-installed `/usr/bin/trash` (root-owned binary, present on the canonical workspace), this tier resolves successfully.
 2. `[ -x /opt/homebrew/opt/trash/bin/trash ]` → emit `/opt/homebrew/opt/trash/bin/trash '<abs_path>'`. Required when `trash` was installed keg-only via `brew install trash` (default Homebrew install is keg-only — `/opt/homebrew/bin/trash` is NOT created).

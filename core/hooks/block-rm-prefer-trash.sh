@@ -573,7 +573,7 @@ if matches "${ANCHOR_PREFIX_BASH}"'(rm|rmdir|unlink)([[:space:]]+|$)'; then
           # Outside workspace — blocked. An auto-memory entry (MEMORY-STORE ARM) is still
           # refused for a permanent-deletion verb, but the refusal names the Trash move.
           if [ "$(memory_arm_verdict "$token")" = "ELIGIBLE" ]; then
-            suggestion="$(suggest_trash_command "$resolved")"
+            suggestion="trash '$resolved'"
             block "BLOCK-TRASH-001" \
               "permanent deletion of an auto-memory entry is refused — evict it with a Trash move instead: $suggestion" \
               "eviction is a Trash move (core/disciplines/knowledge-architecture.md § Memory↔corpus boundary, EVICT); no bypass is needed"

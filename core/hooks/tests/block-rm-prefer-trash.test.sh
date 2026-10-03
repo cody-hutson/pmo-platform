@@ -541,6 +541,46 @@ else
   mem_case "MEM-07 unlink of a store entry is refused with the Trash move named" base \
     "unlink ${MB}/mem-store/entry-alpha.md" 2 'BLOCK-TRASH-001] BLOCKED: permanent deletion of an auto-memory entry'
 
+  # MEM-30: that refusal names exactly the eviction command the knowledge-architecture
+  # discipline's encode-and-evict procedure documents, for the entry. It runs a sandbox copy
+  # in the mem_normalizer_case shape, whose pinned tool path holds only the two tools the
+  # hook calls by bare name, and FAILs if the copy does not carry exactly that path
+  # (anti-vacuous).
+  m30_name="MEM-30 the memory refusal names exactly the documented eviction command for the entry"
+  m30_entry="${MB}/mem-store/entry-alpha.md"
+  m30_fail=""
+  m30_sbx="$(mem_hook_copy)" || m30_sbx=""
+  if [ -z "$m30_sbx" ]; then
+    m30_fail="no sandbox copy of the hook"
+  else
+    /bin/mkdir -p "${m30_sbx}/bin"
+    /bin/ln -s /usr/bin/dirname "${m30_sbx}/bin/dirname"
+    /bin/ln -s /bin/cat "${m30_sbx}/bin/cat"
+    /usr/bin/sed -e 's#^export PATH="/usr/bin:/bin"$#export PATH="'"${m30_sbx}/bin"'"#' \
+      "$HOOK" > "${m30_sbx}/block-rm-prefer-trash.sh"
+    if [ "$(/usr/bin/grep -c -x -F "export PATH=\"${m30_sbx}/bin\"" "${m30_sbx}/block-rm-prefer-trash.sh")" != 1 ]; then
+      m30_fail="the sandbox copy does not pin its tool path to ${m30_sbx}/bin"
+    else
+      mem_run "${m30_sbx}/block-rm-prefer-trash.sh" "$MB" "" \
+        "$(bash_payload "rm ${m30_entry}" "${MB}/Claude/.claude/worktrees/planning")"
+      m30_line="$(/usr/bin/grep -F 'BLOCK-TRASH-001] BLOCKED: permanent deletion of an auto-memory entry' "$MEM_ERR_FILE")"
+      if [ "$MEM_EXIT" != 2 ] || [ -z "$m30_line" ]; then
+        m30_fail="exit=${MEM_EXIT} (expected 2, the memory refusal): $(/bin/cat "$MEM_ERR_FILE")"
+      else
+        case "$m30_line" in
+          *"instead: trash '${m30_entry}'") ;;
+          *) m30_fail="the memory refusal does not name the documented eviction command for the entry" ;;
+        esac
+      fi
+    fi
+    mem_drop_copy "$m30_sbx"
+  fi
+  if [ -z "$m30_fail" ]; then
+    /usr/bin/printf 'PASS: %s\n' "$m30_name"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s (%s)\n' "$m30_name" "$m30_fail"; FAIL=$((FAIL + 1))
+  fi
+
   # -- Refused: every target that is not a direct *.md entry of the declared store (AC-2) --
   mem_case "MEM-08 an entry in a store subdirectory is refused" base \
     "trash ${MB}/mem-store/sub/entry-beta.md" 2 "BLOCK-TRASH-003"
