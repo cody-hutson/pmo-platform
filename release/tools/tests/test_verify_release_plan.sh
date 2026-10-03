@@ -42,6 +42,15 @@ set -euo pipefail
 #        mutation of the thing it claims to check is not a control — it is a
 #        control-shaped assertion, and this release exists because ten of those
 #        were found in one milestone.
+#
+#        #6257 — THE POST-MERGE RANGE (A6257-1..A6257-4, M6257-1..M6257-4, at
+#        the end of G6-M). With no --merge-base, a head that contains the plan's
+#        own merge is graded against that merge, so a plan grades the same
+#        before and after its release merges; every FAIL row names the range it
+#        compared; and a file that is in the tree but outside the range reads
+#        its own string, apart from a file absent from the tree. One replay of
+#        a real release, one hermetic repository built in a temp directory, and
+#        four mutations, each proved to take.
 #   (G9) MARKDOWN PIPE ESCAPE — field parity across both split sites, plus the
 #        boundary question of WHERE the escape may be resolved. A `\|` inside a
 #        table cell is markdown (the cell is split on pipes, so an author who
@@ -825,7 +834,377 @@ case "$(observed_of "$J_M15" FCM-1)" in
   *) bad "M15 NOT GRADEABLE — mutant emitted no operations/ row: '$(observed_of "$J_M15" FCM-1)'" ;;
 esac
 
-rm -rf "$MUTD"
+# ===========================================================================
+# G6 — #6257: THE POST-MERGE RANGE, ITS ATTRIBUTION, AND TREE PRESENCE
+#      (A6257-1..A6257-4 with M6257-1..M6257-4; the arms sit here, inside G6-M,
+#      because their mutations need `mutate` and its temp directory)
+#
+# WHY. The family's default range was merge-base(origin/main, HEAD)..HEAD. Once a
+# release has merged, that range no longer holds the release's own commits: on the
+# mainline it is empty, and on any later branch it is another release's diff. Every
+# file the release added then read `declared-add-not-delivered` -- a FAIL for a
+# delivered file, flipped by the range alone, with nothing in the row to say so.
+# Three properties are pinned:
+#   AC-1  the same plan grades the same before and after its release merges. With no
+#         --merge-base, a head that CONTAINS the plan's own merge is graded against
+#         that merge (<merge>^1..<merge>) -- found from the plan's RELEASE_LOG row on
+#         origin/main or, before that row exists, from the mainline commit that added
+#         the plan -- and every other head keeps the default range;
+#   AC-2  a FAIL names the range it compared and how that range was chosen;
+#   AC-3  "absent from the tree" and "outside the range" are different observations.
+#
+# Every fixture is built in a temp directory: no tracked fixture is added. A6257-3
+# replays real history and degrades to a stated skip where that history is
+# unreachable, as A11 does. A6257-4 is a hermetic repository built here, so its arms
+# and the two mutations graded on it need no history at all. Each mutation first
+# proves it took: a substitution that matched nothing leaves a byte-identical copy,
+# and the arm paired with it would pass on the shipped tool's own behaviour.
+# ===========================================================================
+echo "G6 — #6257: the post-merge range, its attribution and tree presence (A6257-1..4, M6257-1..4)"
+T6257="$(mktemp -d -t verify-plan-6257.XXXXXX)"
+
+# g6257_run <tool> <args...> — sets G6257_JSON and G6257_RC in the CURRENT shell, for
+# the reason fcm_run does. The three git location variables are cleared for the run:
+# a GIT_DIR inherited from a hook would point every git call the tool makes at that
+# repository, whatever --root says, and the hermetic arms would grade the wrong one.
+G6257_JSON=""
+G6257_RC=0
+g6257_run() {
+  local tool="$1"; shift
+  set +e
+  G6257_JSON="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE "$tool" --format=json "$@" 2>/dev/null)"
+  G6257_RC=$?
+  set -e
+}
+# g6257_has / g6257_starts <json> <id> <text> — the record's observed text carries
+# <text>, or opens with it. An absent record carries nothing, so both read false.
+g6257_has()    { case "$(observed_of "$1" "$2")" in *"$3"*) return 0 ;; *) return 1 ;; esac; }
+g6257_starts() { case "$(observed_of "$1" "$2")" in "$3"*)  return 0 ;; *) return 1 ;; esac; }
+# g6257_took <label> <mutant> — TRUE when the mutant's bytes differ from the shipped tool's.
+g6257_took() {
+  if cmp -s "$VERIFY" "$2"; then
+    bad "$1 — MUTATION DID NOT TAKE (the mutant is byte-identical to the shipped tool); its arm is not graded"
+    return 1
+  fi
+  ok "$1 — mutation applied (the mutant's bytes differ from the shipped tool's)"
+  return 0
+}
+
+# --- A6257-1 (AC-3): in the tree and outside the range is its own observation. ---
+# Row 1 declares a file every checkout that runs this suite carries, and the diff seam
+# does not list it: it is in the tree and outside the range. Row 2 declares a path
+# that is a DIRECTORY in the tree. A directory at the declared path is not the
+# declared file, so that row stays not-delivered; M6257-3 is what moves it.
+cat > "$T6257/fcm-declared-in-tree.md" <<'EOF'
+# fcm-declared-in-tree — a declared ADD present in the tree, outside the diff set
+
+## File Change Matrix
+
+```
+release/tools/tests/test_verify_release_plan.sh  ADD
+release/tools/tests  ADD
+```
+
+## Deviation Log
+
+| # | Deviation | Severity | Basis |
+|---|---|---|---|
+| — | none | — | — |
+EOF
+g6257_run "$VERIFY" --fcm-diff-file "$DIFF_ABSENT" "$T6257/fcm-declared-in-tree.md"; J6257_1="$G6257_JSON"; RC6257_1="$G6257_RC"
+O6257_1="$(observed_of "$J6257_1" FCM-1)"
+O6257_A1="$(observed_of "$J_ABSENT" FCM-1)"
+g6257_starts "$J6257_1" FCM-1 "declared-add-not-in-range:release/tools/tests/test_verify_release_plan.sh " \
+  && ok "A6257-1 AC-3 — a declared ADD that is in the tree and outside the range reads declared-add-not-in-range" \
+  || bad "A6257-1 AC-3 expected declared-add-not-in-range:release/tools/tests/test_verify_release_plan.sh, got '$O6257_1'"
+[ "$(verdict_of "$J6257_1" FCM-1)" = FAIL ] && [ "$RC6257_1" -eq 3 ] \
+  && ok "A6257-1 AC-3 — it is still a FAIL and the run still exits 3: a new observation, not a weaker verdict" \
+  || bad "A6257-1 AC-3 expected FAIL and exit 3, got '$(verdict_of "$J6257_1" FCM-1)' and exit $RC6257_1"
+[ -n "$O6257_A1" ] && [ -n "$O6257_1" ] && [ "${O6257_A1%%:*}" != "${O6257_1%%:*}" ] \
+  && ok "A6257-1 AC-3 — absent-from-the-tree (A1: ${O6257_A1%%:*}) and outside-the-range (${O6257_1%%:*}) are two distinct observed strings" \
+  || bad "A6257-1 AC-3 the two observations are not distinct: A1 '${O6257_A1%%:*}' vs in-tree '${O6257_1%%:*}'"
+case "$(observed_of "$J6257_1" FCM-2)" in
+  "declared-add-not-delivered:release/tools/tests"|"declared-add-not-delivered:release/tools/tests "*)
+    ok "A6257-1 CONTROL — a directory at the declared path is not the declared file: the row stays declared-add-not-delivered" ;;
+  *) bad "A6257-1 control expected declared-add-not-delivered:release/tools/tests, got '$(observed_of "$J6257_1" FCM-2)'" ;;
+esac
+[ "$(grep -c -F 'declared-add-not-in-range' "$VERIFY" || true)" -ge 1 ] \
+  && ok "A6257-1 AC-3 — the shipped tool carries the declared-add-not-in-range token (the plan's count predicate: at least 1)" \
+  || bad "A6257-1 AC-3 the shipped tool does not carry the declared-add-not-in-range token"
+
+# --- A6257-2 (AC-2): a FAIL names its range. In fixture mode the range is the diff seam. ---
+g6257_has "$J_ABSENT" FCM-1 "[range fcm-diff-file:fcm-diff-absent.tsv fixture]" \
+   && g6257_has "$J6257_1" FCM-1 "[range fcm-diff-file:fcm-diff-absent.tsv fixture; present at " \
+  && ok "A6257-2 AC-2 — each FAIL row names the range it compared and how it was chosen (here the diff seam), and a not-in-range row names the tree it was found in" \
+  || bad "A6257-2 AC-2 FAIL rows carry no range: A1 '$O6257_A1'; in-tree '$O6257_1'"
+g6257_has "$J_ABSENT" FCM-COVERAGE "range=fcm-diff-file:fcm-diff-absent.tsv range_source=fixture" \
+  && ok "A6257-2 AC-2 — the coverage record carries range= and range_source=, so every row of the run is attributed, PASS rows included" \
+  || bad "A6257-2 AC-2 the coverage record carries no range: '$(observed_of "$J_ABSENT" FCM-COVERAGE)'"
+case "$(observed_of "$J_PRESENT" FCM-1)" in
+  *"[range "*) bad "A6257-2 control — a PASS row gained a range suffix: '$(observed_of "$J_PRESENT" FCM-1)'" ;;
+  declared-add-delivered*) ok "A6257-2 CONTROL — a PASS row is unchanged: it carries no range suffix" ;;
+  *) bad "A6257-2 control — A2's PASS row is absent or changed: '$(observed_of "$J_PRESENT" FCM-1)'" ;;
+esac
+# The range rule is stated where an operator meets it. A row can say only WHICH range it
+# was read over; --help says how a default range is chosen once the release has merged,
+# and what to do at the one head whose rows are marked by name -- a head on the mainline
+# whose plan resolves no merge, which reads an empty range. It is not the only head the
+# default range does not grade: Stage 12's release-log chore branch, from its rename of
+# the plan to its merge, and the merged release's own branch tip read merge-base, and
+# neither is marked or named in --help.
+H6257="$("$VERIFY" --help 2>&1 || true)"
+if grep -q -F '<merge>^1..<merge>' <<<"$H6257" && grep -q -F 'post-merge-unresolved' <<<"$H6257" \
+   && grep -q -F 'name the range with --merge-base and --head' <<<"$H6257"; then
+  ok "A6257-2 AC-2 — --help states the range a run after the merge compares, and names the unresolved case with its remedy (an explicit range)"
+else
+  bad "A6257-2 AC-2 — --help does not state the post-merge range, the unresolved case (post-merge-unresolved), or its remedy"
+fi
+
+# --- M6257-2 / M6257-3: the tree probe is what separates the two strings, and it reads a FILE. ---
+M6257_2="$(mutate m6257-2-tree-probe-off 's/\[ "\$t" = "blob" \]/false/')"
+if g6257_took "M6257-2" "$M6257_2"; then
+  g6257_run "$M6257_2" --fcm-diff-file "$DIFF_ABSENT" "$T6257/fcm-declared-in-tree.md"
+  g6257_starts "$G6257_JSON" FCM-1 "declared-add-not-delivered:release/tools/tests/test_verify_release_plan.sh" \
+    && ok "M6257-2 detected — with the tree probe off, the in-tree file reads declared-add-not-delivered again: the probe is what separates the two strings" \
+    || bad "M6257-2 SURVIVED or is not gradeable — the in-tree row reads '$(observed_of "$G6257_JSON" FCM-1)' with the tree probe off"
+fi
+M6257_3="$(mutate m6257-3-blob-test-relaxed 's/\[ "\$t" = "blob" \]/[ -n "$t" ]/')"
+if g6257_took "M6257-3" "$M6257_3"; then
+  g6257_run "$M6257_3" --fcm-diff-file "$DIFF_ABSENT" "$T6257/fcm-declared-in-tree.md"
+  g6257_starts "$G6257_JSON" FCM-2 "declared-add-not-in-range:release/tools/tests " \
+     && g6257_starts "$G6257_JSON" FCM-1 "declared-add-not-in-range:release/tools/tests/test_verify_release_plan.sh " \
+    && ok "M6257-3 detected — with the probe admitting any object, the DIRECTORY row reads declared-add-not-in-range too: the file test is what the exact-path probe decides" \
+    || bad "M6257-3 SURVIVED or is not gradeable — directory row '$(observed_of "$G6257_JSON" FCM-2)', file row '$(observed_of "$G6257_JSON" FCM-1)'"
+fi
+
+# --- A6257-3 (AC-1): NON-SYNTHETIC replay — one plan, graded before and after its merge. ---
+# v4.68 declared three ADDs and its release merged at the commit below; its RELEASE_LOG
+# row and its plan's rename to the version landed LATER, with the Stage-12 chore. The
+# fixture plan carries those three rows and one that never shipped, under the release's
+# own filename, so the tool keys the real ledger row. It is graded twice: at the release
+# branch's tip (an explicit pre-merge range), and at origin/main with NO --merge-base --
+# a descendant of the merge, the run that used to read three delivered files as
+# not delivered. The control row must FAIL in both.
+V468_MERGE=25b2344272d60848407aa70dc24b0786f4fcd7ca
+G6257_LIVE=0
+P6257_3="$T6257/release/releases/plans/v4/v4.68_RELEASE_PLAN.md"
+g6257_pass3() { [ "$(verdict_of "$1" FCM-1)" = PASS ] && [ "$(verdict_of "$1" FCM-2)" = PASS ] && [ "$(verdict_of "$1" FCM-3)" = PASS ]; }
+g6257_v3() { printf '%s/%s/%s' "$(verdict_of "$1" FCM-1)" "$(verdict_of "$1" FCM-2)" "$(verdict_of "$1" FCM-3)"; }
+if git -C "$REPO_ROOT" cat-file -e "${V468_MERGE}^{commit}" 2>/dev/null \
+   && git -C "$REPO_ROOT" rev-parse --verify -q origin/main >/dev/null 2>&1; then
+  G6257_LIVE=1
+  mkdir -p "$T6257/release/releases/plans/v4"
+  cat > "$P6257_3" <<'EOF'
+# v4.68 replay — three ADDs a merged release delivered, and one that never shipped
+
+## File Change Matrix
+
+```
+release/releases/plans/autonomy-ceiling-domains-resolve-canonically_RELEASE_PLAN.md  ADD
+core/hooks/lib/platform-membership.sh  ADD
+core/ADRs/ADR-204-cross-domain-classification-is-repository-membership.md  ADD
+core/does-not-exist-6257.md  ADD
+```
+
+## Deviation Log
+
+| # | Deviation | Severity | Basis |
+|---|---|---|---|
+| — | none | — | — |
+EOF
+  G6257_MB="$(git -C "$REPO_ROOT" merge-base "${V468_MERGE}^1" "${V468_MERGE}^2")"
+  G6257_S_MB="$(git -C "$REPO_ROOT" rev-parse --short "$G6257_MB")"
+  G6257_S_TIP="$(git -C "$REPO_ROOT" rev-parse --short "${V468_MERGE}^2")"
+  G6257_S_P1="$(git -C "$REPO_ROOT" rev-parse --short "${V468_MERGE}^1")"
+  G6257_S_M="$(git -C "$REPO_ROOT" rev-parse --short "$V468_MERGE")"
+  g6257_run "$VERIFY" --root "$REPO_ROOT" --merge-base "$G6257_MB" --head "${V468_MERGE}^2" "$P6257_3"; J6257_PRE="$G6257_JSON"
+  g6257_run "$VERIFY" --root "$REPO_ROOT" --head origin/main "$P6257_3"; J6257_POST="$G6257_JSON"
+  # Print the replay's own denominators (the A11 discipline): what each run examined.
+  printf '       replay pre-merge:  %s\n       replay post-merge: %s\n' \
+    "$(observed_of "$J6257_PRE" FCM-COVERAGE)" "$(observed_of "$J6257_POST" FCM-COVERAGE)"
+  g6257_pass3 "$J6257_PRE" \
+    && ok "A6257-3 AC-1 CONTROL — at the release branch tip, over the explicit pre-merge range, the three delivered ADDs PASS" \
+    || bad "A6257-3 control — the pre-merge run reads $(g6257_v3 "$J6257_PRE") for the three delivered ADDs (expected PASS/PASS/PASS)"
+  g6257_pass3 "$J6257_POST" \
+    && ok "A6257-3 AC-1 — at a descendant of the merge, with no --merge-base, the same three ADDs PASS: the verdict does not flip at the merge" \
+    || bad "A6257-3 AC-1 the post-merge run reads $(g6257_v3 "$J6257_POST") for the three delivered ADDs (expected PASS/PASS/PASS): '$(observed_of "$J6257_POST" FCM-1)'"
+  [ "$(verdict_of "$J6257_PRE" FCM-4)" = FAIL ] && [ "$(verdict_of "$J6257_POST" FCM-4)" = FAIL ] \
+     && g6257_starts "$J6257_PRE" FCM-4 "declared-add-not-delivered:core/does-not-exist-6257.md" \
+     && g6257_starts "$J6257_POST" FCM-4 "declared-add-not-delivered:core/does-not-exist-6257.md" \
+    && ok "A6257-3 AC-1 CONTROL — the declared ADD that never shipped FAILs in both runs, absent from the tree: the range repair passes nothing it should not" \
+    || bad "A6257-3 control — the undelivered row reads '$(verdict_of "$J6257_PRE" FCM-4)' / '$(verdict_of "$J6257_POST" FCM-4)': '$(observed_of "$J6257_POST" FCM-4)'"
+  g6257_has "$J6257_POST" FCM-COVERAGE "range=${G6257_S_P1}..${G6257_S_M} range_source=release-log" \
+    && ok "A6257-3 AC-1 — the post-merge run graded the plan's own merge (${G6257_S_P1}..${G6257_S_M}), found from the ledger row on origin/main" \
+    || bad "A6257-3 AC-1 the post-merge run did not grade the plan's own merge from the ledger row: '$(observed_of "$J6257_POST" FCM-COVERAGE)'"
+  g6257_has "$J6257_POST" FCM-4 "[range ${G6257_S_P1}..${G6257_S_M} release-log]" \
+     && g6257_has "$J6257_PRE" FCM-4 "[range ${G6257_S_MB}..${G6257_S_TIP} explicit]" \
+    && ok "A6257-3 AC-2 — the FAIL row names the base and head it compared in both runs, so the verdict can be reproduced without guessing the invocation" \
+    || bad "A6257-3 AC-2 the FAIL row does not name its range: pre '$(observed_of "$J6257_PRE" FCM-4)'; post '$(observed_of "$J6257_POST" FCM-4)'"
+else
+  ok "A6257-3 SKIP — historical-commit-unreachable (a shallow clone, or no origin/main); degraded honestly, not passed"
+fi
+
+# --- A6257-4: the hermetic repository — the window, a branch ahead, an older head, a rename. ---
+# main:  c0 --------- M (merge of rel: the plan and core/new-6257.md) ---- N (the plan renamed)
+# rel:      \-- c1 --/                                    \-- X (branch `ahead`)
+# origin/main sits at M, then at N. There is no RELEASE_LOG, so only the plan-add
+# commit can name the merge: the window between a release's merge and the Stage-12
+# chore that writes its ledger row.
+R6257="$T6257/repo"
+g6257_git() {
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$R6257" \
+    -c user.name=vrp-selftest -c user.email=vrp-selftest -c commit.gpgsign=false \
+    -c core.hooksPath=/dev/null -c advice.detachedHead=false "$@"
+}
+cat > "$T6257/window-plan.md" <<'EOF'
+# window-6257 — a release merged to the mainline before any ledger row exists
+
+## File Change Matrix
+
+```
+core/new-6257.md  ADD
+core/absent-6257.md  ADD
+```
+
+## Deviation Log
+
+| # | Deviation | Severity | Basis |
+|---|---|---|---|
+| — | none | — | — |
+EOF
+P6257_W="$R6257/release/releases/plans/window-6257_RELEASE_PLAN.md"
+P6257_V="$R6257/release/releases/plans/v9/v9.99_RELEASE_PLAN.md"
+G6257_BUILT=1
+G6257_C0=""
+{
+  mkdir -p "$R6257" \
+  && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git init -q "$R6257" \
+  && g6257_git symbolic-ref HEAD refs/heads/main \
+  && printf 'fixture\n' > "$R6257/README.md" \
+  && g6257_git add README.md \
+  && g6257_git commit -q -m c0 \
+  && G6257_C0="$(g6257_git rev-parse HEAD)" \
+  && g6257_git checkout -q -b rel \
+  && mkdir -p "$R6257/release/releases/plans" "$R6257/core" \
+  && cp "$T6257/window-plan.md" "$P6257_W" \
+  && printf 'new\n' > "$R6257/core/new-6257.md" \
+  && g6257_git add -A \
+  && g6257_git commit -q -m c1 \
+  && g6257_git checkout -q main \
+  && g6257_git merge -q --no-ff rel -m merge \
+  && g6257_git update-ref refs/remotes/origin/main HEAD
+} >/dev/null 2>&1 || G6257_BUILT=0
+if [ "$G6257_BUILT" -eq 1 ] && [ -n "$G6257_C0" ]; then
+  ok "A6257-4 fixture — the hermetic repository is built: c0, a release branch, its merge M, and origin/main at M"
+
+  # (a) THE WINDOW: on the mainline at the merge, no ledger row, default flags.
+  g6257_run "$VERIFY" --root "$R6257" "$P6257_W"; J6257_W="$G6257_JSON"
+  [ "$(verdict_of "$J6257_W" FCM-1)" = PASS ] && g6257_has "$J6257_W" FCM-COVERAGE "range_source=plan-add-commit" \
+    && ok "A6257-4 a AC-1 — in the window before any ledger row, the delivered ADD PASSes: the merge is the mainline commit that added the plan (range_source=plan-add-commit)" \
+    || bad "A6257-4 a — the window run reads FCM-1 '$(verdict_of "$J6257_W" FCM-1)' / '$(observed_of "$J6257_W" FCM-1)'; coverage '$(observed_of "$J6257_W" FCM-COVERAGE)'"
+  [ "$(verdict_of "$J6257_W" FCM-2)" = FAIL ] && g6257_starts "$J6257_W" FCM-2 "declared-add-not-delivered:core/absent-6257.md" \
+    && ok "A6257-4 a CONTROL — the declared ADD the release never delivered still FAILs, absent from the tree" \
+    || bad "A6257-4 a control — the undelivered row reads '$(verdict_of "$J6257_W" FCM-2)' / '$(observed_of "$J6257_W" FCM-2)'"
+
+  # (b) AN OLDER HEAD: c0 is on the mainline and does NOT contain the merge. The merge
+  # record resolves, and it is not an ancestor of this head, so the head keeps the
+  # default range -- it is never graded against a merge it does not contain.
+  g6257_run "$VERIFY" --root "$R6257" --head "$G6257_C0" "$P6257_W"; J6257_OLD="$G6257_JSON"
+  [ "$(verdict_of "$J6257_OLD" FCM-1)" = FAIL ] && g6257_starts "$J6257_OLD" FCM-1 "declared-add-not-delivered:core/new-6257.md" \
+     && g6257_has "$J6257_OLD" FCM-COVERAGE "range_source=merge-base" \
+    && ok "A6257-4 b AC-1 CONTROL — a head that does not contain the plan's merge keeps the default range (range_source=merge-base): the file is absent from that tree and reads not-delivered" \
+    || bad "A6257-4 b — an older head reads FCM-1 '$(verdict_of "$J6257_OLD" FCM-1)' / '$(observed_of "$J6257_OLD" FCM-1)'; coverage '$(observed_of "$J6257_OLD" FCM-COVERAGE)'"
+
+  # M6257-4: remove the ancestor test. The older head is then graded against the later
+  # merge and the undelivered-at-that-head file reads delivered.
+  M6257_4="$(mutate m6257-4-ancestor-test-off 's/git merge-base --is-ancestor "\$FCM_MERGE_SHA" "\$head_sha"/true/')"
+  if g6257_took "M6257-4" "$M6257_4"; then
+    g6257_run "$M6257_4" --root "$R6257" --head "$G6257_C0" "$P6257_W"
+    [ "$(verdict_of "$G6257_JSON" FCM-1)" = PASS ] \
+      && ok "M6257-4 detected — without the ancestor test, a head that predates the merge is graded against it and the file reads delivered: (b) observes the test" \
+      || bad "M6257-4 SURVIVED or is not gradeable — the older head reads FCM-1 '$(verdict_of "$G6257_JSON" FCM-1)' / '$(observed_of "$G6257_JSON" FCM-1)' without the ancestor test"
+  fi
+
+  # M6257-1: disable the merge-record lookup. The window run stops passing.
+  M6257_1="$(mutate m6257-1-resolver-call-off 's/^( +)fcm_plan_merge_commit( +#.*)?$/\1:/')"
+  if g6257_took "M6257-1" "$M6257_1"; then
+    g6257_run "$M6257_1" --root "$R6257" "$P6257_W"
+    if [ -z "$(observed_of "$G6257_JSON" FCM-COVERAGE)" ]; then
+      bad "M6257-1 NOT GRADEABLE — the mutant emitted no coverage record on the hermetic repository"
+    elif [ "$(verdict_of "$G6257_JSON" FCM-1)" != PASS ]; then
+      ok "M6257-1 detected — with the merge-record lookup disabled, the window run stops passing its delivered ADD ('$(observed_of "$G6257_JSON" FCM-1)')"
+    else
+      bad "M6257-1 SURVIVED — the window run still PASSes its delivered ADD with the merge-record lookup disabled"
+    fi
+    if [ "$G6257_LIVE" -eq 1 ]; then
+      g6257_run "$M6257_1" --root "$REPO_ROOT" --head origin/main "$P6257_3"
+      if [ -z "$(observed_of "$G6257_JSON" FCM-COVERAGE)" ]; then
+        bad "M6257-1 NOT GRADEABLE — the mutant emitted no coverage record on the replay"
+      elif g6257_pass3 "$G6257_JSON"; then
+        bad "M6257-1 SURVIVED — the replay's post-merge run still PASSes all three delivered ADDs with the lookup disabled; A6257-3 does not measure the resolver"
+      else
+        ok "M6257-1 detected — with the lookup disabled, the replay's post-merge run reads $(g6257_v3 "$G6257_JSON") for the three delivered ADDs: A6257-3 measures the resolver"
+      fi
+    else
+      ok "M6257-1 SKIP (replay leg) — historical-commit-unreachable; the hermetic leg above graded the mutation"
+    fi
+  fi
+
+  # (c) A BRANCH AHEAD OF MAIN: one commit past the merge, origin/main still at M. The
+  # head contains the merge and is not contained in origin/main -- the shape a later
+  # release branch or a worktree branch takes, and Stage 12's release-log chore branch
+  # too until it renames the plan. From that rename to that chore branch's own merge the
+  # plan sits at a path the mainline does not yet hold, and neither source resolves from
+  # the branch: that window is not this limb's, and no arm here covers it.
+  G6257_AHEAD=1
+  {
+    g6257_git checkout -q -b ahead \
+    && mkdir -p "$R6257/docs" \
+    && printf 'later\n' > "$R6257/docs/later-6257.md" \
+    && g6257_git add -A \
+    && g6257_git commit -q -m x
+  } >/dev/null 2>&1 || G6257_AHEAD=0
+  if [ "$G6257_AHEAD" -eq 1 ]; then
+    g6257_run "$VERIFY" --root "$R6257" "$P6257_W"; J6257_AH="$G6257_JSON"
+    [ "$(verdict_of "$J6257_AH" FCM-1)" = PASS ] && g6257_has "$J6257_AH" FCM-COVERAGE "range_source=plan-add-commit" \
+      && ok "A6257-4 c AC-1 — on a branch ahead of main the delivered ADD PASSes: a head that contains the plan's merge is graded against it, whether or not origin/main contains the head" \
+      || bad "A6257-4 c — a branch ahead of main reads FCM-1 '$(verdict_of "$J6257_AH" FCM-1)' / '$(observed_of "$J6257_AH" FCM-1)'; coverage '$(observed_of "$J6257_AH" FCM-COVERAGE)'"
+  else
+    bad "A6257-4 c fixture — could not build the branch ahead of main; the arm is not graded"
+  fi
+
+  # (d) THE RENAME GUARD: the plan is renamed on the mainline, as the Stage-12 chore
+  # does, and there is still no ledger row. The newest commit that "added" the plan at
+  # its new path MOVED it and did not deliver the release, so it is refused; the merge
+  # record does not resolve, and the run says so instead of passing or reading absent.
+  G6257_RENAMED=1
+  {
+    g6257_git checkout -q main \
+    && mkdir -p "$R6257/release/releases/plans/v9" \
+    && g6257_git mv release/releases/plans/window-6257_RELEASE_PLAN.md release/releases/plans/v9/v9.99_RELEASE_PLAN.md \
+    && g6257_git commit -q -m n \
+    && g6257_git update-ref refs/remotes/origin/main HEAD
+  } >/dev/null 2>&1 || G6257_RENAMED=0
+  if [ "$G6257_RENAMED" -eq 1 ]; then
+    g6257_run "$VERIFY" --root "$R6257" "$P6257_V"; J6257_RN="$G6257_JSON"
+    g6257_has "$J6257_RN" FCM-COVERAGE "range_source=post-merge-unresolved" \
+      && ok "A6257-4 d — a commit that only RENAMED the plan is refused as its merge, and with no ledger row the run names the range unresolved (range_source=post-merge-unresolved)" \
+      || bad "A6257-4 d — after the rename the coverage record reads '$(observed_of "$J6257_RN" FCM-COVERAGE)'"
+    [ "$(verdict_of "$J6257_RN" FCM-1)" = FAIL ] && g6257_starts "$J6257_RN" FCM-1 "declared-add-not-in-range:core/new-6257.md " \
+       && g6257_has "$J6257_RN" FCM-1 " post-merge-unresolved; present at " \
+      && ok "A6257-4 d AC-3 — on a live run, a delivered file outside an unresolved range reads declared-add-not-in-range and names the tree it was found in: never not-delivered" \
+      || bad "A6257-4 d — the delivered file reads '$(verdict_of "$J6257_RN" FCM-1)' / '$(observed_of "$J6257_RN" FCM-1)'"
+    [ "$(verdict_of "$J6257_RN" FCM-2)" = FAIL ] && g6257_starts "$J6257_RN" FCM-2 "declared-add-not-delivered:core/absent-6257.md" \
+      && ok "A6257-4 d CONTROL — on the same run, the file absent from the tree reads declared-add-not-delivered: the two observations stay apart on a live run" \
+      || bad "A6257-4 d control — the absent file reads '$(verdict_of "$J6257_RN" FCM-2)' / '$(observed_of "$J6257_RN" FCM-2)'"
+  else
+    bad "A6257-4 d fixture — could not rename the plan in the hermetic repository; the arm is not graded"
+  fi
+else
+  bad "A6257-4 fixture — could not build the hermetic repository (git unavailable?); its arms and M6257-1 and M6257-4 are not graded"
+fi
+
+rm -rf "$MUTD" "$T6257"
 
 # ===========================================================================
 # G9 — MARKDOWN PIPE ESCAPE: field parity, and where the escape may be resolved

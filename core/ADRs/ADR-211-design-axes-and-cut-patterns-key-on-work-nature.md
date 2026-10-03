@@ -1,6 +1,6 @@
 ---
 title: "ADR-211 — Design axes and cut patterns key on work nature: the natures the platform recognizes, the design axes each owes, and how a framing states coverage"
-status: Proposed (flips to Accepted at the Stage-13 ratification gate)
+status: Accepted — operator-ratified at the work-nature-and-axis-model Stage 13 Close ratification gate, 2026-10-02
 date: 2026-09-27
 release: work-nature-and-axis-model
 deciders: "Stage 5 Solutioning spoke (Principal Engineer, Research-Methodology Design variant) + Stage 6 Engineering spoke (validation) + the operator at the Stage-13 ratification gate"
@@ -16,7 +16,7 @@ supersedes: none
 
 ## Status
 
-Proposed; revised in place until the Stage-13 ratification gate flips it to Accepted. Once Accepted it is immutable: changing the natures, axes or table takes a record that supersedes this one.
+Accepted — operator-ratified at the work-nature-and-axis-model Stage 13 Close ratification gate, 2026-10-02, by a decision rendered for this record alone. Once Accepted it is immutable: changing the natures, axes or table takes a record that supersedes this one.
 
 **Numbering provenance — `207 → 211`.** Held **ADR-207** branch-local; renumbered to **ADR-211** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 207. In-release citations that read "ADR-207" denote this record.
 

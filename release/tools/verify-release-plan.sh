@@ -153,6 +153,23 @@ readonly CLI_VERSION="0.3.0"
 # invocation-shaped span, as a limb that did not run, or for grading a designated command on
 # the comparator written after it: rows move between EXISTING verdicts and the reasons ride
 # the existing observed field -- the counters becoming correct, by the precedents above.
+# NO BUMP IS OWED for the post-merge range repair in the fcm-delivery family. It adds one
+# VALUE to that family's observed vocabulary, `declared-add-not-in-range` (the declared
+# file is in the tree and outside the range compared), ends every FCM FAIL observation
+# with `[range <base>..<head> <source>]`, and adds `range=` / `range_source=` to the text
+# of the FCM-COVERAGE observation. All three ride the existing observed field: no record
+# field, family value or verdict value is added. (`prose_led=` is NOT the precedent
+# claimed: it arrived inside 3 -> 4. The precedent is a value, or text, in an existing
+# field -- and the coverage text has no reader that takes it apart by key outside this
+# tool's own suite.) What CHANGES is the range a run with no --merge-base compares. A
+# head that contains the plan's own merge is graded against that merge, <merge>^1..<merge>,
+# where it used to be graded against merge-base(origin/main, HEAD)..HEAD -- a range that
+# is empty once the head is on the mainline, so every delivered ADD of a merged release
+# read as not delivered. A head that does not contain the plan's merge keeps the default
+# range, whose base is now taken against <head> rather than against HEAD, so --head alone
+# names a coherent range. The fcm-delivery and scope families read the ONE range
+# (fcm_resolve_diff), so both move together. Rows move between EXISTING verdicts: the
+# counters becoming correct, by the precedents above.
 readonly SCHEMA_VERSION="5"
 
 # ---------------------------------------------------------------------------
@@ -244,7 +261,8 @@ readonly REC_FS=$'\037'
 #   - count_from_output's two here-string loops: builtins only, no child at all.
 #   - fcm_match_adds' file-fed loop: builtins only.
 #   - handle_fcm_delivery's here-string loop: fixed commands whose input is bound
-#     explicitly -- grep on `<<<`, awk on a file operand, sed on a pipe.
+#     explicitly -- grep on `<<<`, awk on a file operand, sed on a pipe, and git
+#     on the null device.
 #   - emit_md's here-string loop: awk on a file operand or on a pipe.
 # A new loop -- or a new child in an exempt one -- that spawns a child with
 # unbound input takes the body form.
@@ -424,7 +442,16 @@ OPTIONS
                     no event log write)
   --merge-base REF  Base ref for the release diff range, which the fcm-delivery
                     and scope families both read
-                    Default: \$(git merge-base origin/main HEAD)
+                    Default: \$(git merge-base origin/main <head>). When <head>
+                    contains the plan's own merge (a run after the release has
+                    merged), the range is that merge, <merge>^1..<merge>: the
+                    Merge SHA of the plan's row in origin/main's RELEASE_LOG,
+                    else the first-parent mainline commit that added the plan
+                    (a commit that only renamed it does not count). Every FCM
+                    FAIL row names the range and how it was chosen. A head on
+                    the mainline whose plan resolves no merge is graded on an
+                    EMPTY range, marked range_source=post-merge-unresolved:
+                    name the range with --merge-base and --head.
   --head REF        Head ref for the release diff range (default: HEAD)
   --fcm-diff-file P TEST-ONLY determinism seam: read the delivered set, for the
                     fcm-delivery and scope families, from a <status>TAB<path>
@@ -3265,7 +3292,7 @@ ciac_lint() {
 
 # --- Extraction -------------------------------------------------------------
 #
-# _extract_section (:238) is FENCE-BLIND: its `/^#+ /` awk rule fires on any line
+# _extract_section is FENCE-BLIND: its `/^#+ /` awk rule fires on any line
 # beginning `#`+space, including a `# ── label ──` comment INSIDE a fenced block,
 # which terminates the section early. Measured over the 165-file plan corpus:
 # 26 of the 117 FCM-bearing plans truncate that way, losing every declaration row
@@ -3693,6 +3720,81 @@ FCM_ADDS_FILE=""
 FCM_ANY_FILE=""
 FCM_DIFF_STATUS=""
 
+# Range attribution, set by fcm_resolve_diff alongside FCM_DIFF_STATUS and read by the
+# emit arms: the span compared, how it was chosen, and the tree the presence arm
+# probes. FCM_MERGE_* is fcm_plan_merge_commit's two-value return (globals, direct
+# call). The sources: explicit (--merge-base was given) | merge-base (the default
+# range) | release-log | plan-add-commit (the plan's own merge, by its ledger row or
+# by the commit that added it) | post-merge-unresolved (the default range, EMPTY
+# because the head is on the mainline, with no merge record to grade instead) |
+# fixture (--fcm-diff-file).
+FCM_RANGE_SPAN=""
+FCM_RANGE_SOURCE=""
+FCM_TREE_REF=""
+FCM_MERGE_SHA=""
+FCM_MERGE_SOURCE=""
+readonly FCM_RELEASE_LOG_REL="release/releases/RELEASE_LOG.md"
+
+# The plan's own merge commit, for a run after the release has merged. Two sources,
+# in order:
+#  (1) the plan's row in origin/main's RELEASE_LOG -- its Merge SHA. The row lands on
+#      the mainline with Stage 12's release-log chore, which also renames the plan to
+#      its version, so reading origin/main (not the working tree) finds it from ANY
+#      descendant, a branch tip included;
+#  (2) otherwise the newest first-parent mainline commit that ADDED the plan at its
+#      current path -- the release merge itself, in the window before that Stage-12
+#      chore merges. A commit whose diff reports the plan as a RENAME moved it and did
+#      not deliver the release, so it is refused.
+# KEY: a version-named plan (vX.Y[.Z]_RELEASE_PLAN.md) keys the Version column, any
+# other <key>_RELEASE_PLAN.md keys Milestone. The table is read by its HEADER, so
+# column order does not matter, and exactly ONE matching row is accepted: a key two
+# rows carry names no merge. A Merge SHA is accepted only when it is a commit this
+# clone holds and origin/main contains.
+# WHAT IT DOES NOT DECIDE: whether the range is used. The caller uses it only when the
+# head being graded CONTAINS the commit named here (see fcm_resolve_diff).
+# Captures feed awk by here-string -- no pipe into an early-exiting reader -- and
+# every git call binds its input to the null device. Returns 0 on every path; the
+# answer is FCM_MERGE_SHA (empty = unresolved) and FCM_MERGE_SOURCE. Call it
+# DIRECTLY, for the reason fcm_resolve_diff is.
+#
+# EDITOR NOTE: both awk programs are SINGLE-QUOTED shell strings. Keep them
+# apostrophe-free, per the note at isconditional().
+fcm_plan_merge_commit() {
+  FCM_MERGE_SHA=""; FCM_MERGE_SOURCE=""
+  local bn key col log sha plan_rel c d st
+  local vre='^v[0-9]+\.[0-9]+(\.[0-9]+)?$'
+  bn="${PLAN_ABS##*/}"
+  case "$bn" in *_RELEASE_PLAN.md) : ;; *) return 0 ;; esac
+  key="${bn%_RELEASE_PLAN.md}"
+  [ -n "$key" ] || return 0
+  if [[ "$key" =~ $vre ]]; then col="Version"; else col="Milestone"; fi
+  log="$( cd "$REPO_ROOT" && git show "origin/main:${FCM_RELEASE_LOG_REL}" </dev/null 2>/dev/null )" || log=""
+  if [ -n "$log" ]; then
+    sha="$(awk -F'|' -v col="$col" -v key="$key" '
+      function trim(s) { gsub(/^[ \t`]+|[ \t`]+$/, "", s); return s }
+      !hdr && /^\|/ { ki = 0; si = 0
+                      for (i = 1; i <= NF; i++) { c = trim($i); if (c == col) ki = i; if (c == "Merge SHA") si = i }
+                      if (ki && si) { hdr = 1; K = ki; S = si }
+                      next }
+      hdr && /^\|/ { if (trim($K) == key) { n++; s = trim($S) } }
+      END { if (n == 1 && s ~ /^[0-9a-f]+$/ && length(s) == 40) print s }' <<<"$log")"
+    if [ -n "$sha" ] \
+       && ( cd "$REPO_ROOT" && git cat-file -e "${sha}^{commit}" ) </dev/null 2>/dev/null \
+       && ( cd "$REPO_ROOT" && git merge-base --is-ancestor "$sha" origin/main ) </dev/null 2>/dev/null; then
+      FCM_MERGE_SHA="$sha"; FCM_MERGE_SOURCE="release-log"; return 0
+    fi
+  fi
+  case "$PLAN_ABS" in "$REPO_ROOT"/*) plan_rel="${PLAN_ABS#"$REPO_ROOT"/}" ;; *) return 0 ;; esac
+  plan_rel="${plan_rel#./}"
+  c="$( cd "$REPO_ROOT" && git log --first-parent --diff-filter=A -n 1 --format=%H origin/main -- "$plan_rel" </dev/null 2>/dev/null )" || c=""
+  [ -n "$c" ] || return 0
+  d="$( cd "$REPO_ROOT" && git diff --find-renames --name-status "${c}^1" "$c" </dev/null 2>/dev/null )" || return 0
+  st="$(awk -F'\t' -v p="$plan_rel" '$NF == p { s = substr($1, 1, 1) } END { print s }' <<<"$d")"
+  [ "$st" = "A" ] || return 0
+  FCM_MERGE_SHA="$c"; FCM_MERGE_SOURCE="plan-add-commit"
+  return 0
+}
+
 # NOTE FOR THE NEXT EDITOR: this function sets GLOBALS and must be called
 # DIRECTLY, never as `x="$(fcm_resolve_diff)"`. A command substitution runs it in
 # a subshell, where the two path globals are assigned and then discarded — the
@@ -3700,25 +3802,68 @@ FCM_DIFF_STATUS=""
 # reports a clean-looking "not delivered" for files that were in fact delivered.
 # That failure is silent and it is the same defect class this family exists to
 # catch, so the status rides in a global too rather than on stdout.
+#
+# WHICH RANGE. An explicit --merge-base is taken as given. Otherwise the plan's own
+# merge is looked up, and the range is that merge -- <merge>^1..<merge> -- when, and
+# only when, it resolves AND the head being graded contains it. That is the run after
+# the release has merged, from the mainline or from a branch cut after the merge, where
+# the default range no longer spans the release: merge-base(origin/main, <head>)..<head>
+# is then empty, or holds only that branch's own commits. Every other head keeps the
+# default range -- the release branch before its merge, and a head older than the merge
+# -- with its base taken against <head>, not HEAD, so --head alone names a coherent
+# range.
+# WHAT THE DEFAULT RANGE STILL DOES NOT GRADE once a release has merged: three heads,
+# and only the first is marked. (1) A head on the mainline whose plan resolves no
+# merge: an EMPTY range, marked post-merge-unresolved. (2) Stage 12's release-log chore
+# branch, after it renames the plan and before it merges: no merge record resolves, and
+# the range is that branch's own commits, labelled merge-base. (3) The merged release's
+# own branch tip, which does not contain the merge: an EMPTY range, <tip>..<tip>,
+# labelled merge-base, because a merge record did resolve. In all three a delivered
+# file that is in the tree reads not-in-range. Every row names the range it compared,
+# and --merge-base with --head names the one to grade.
+# The ancestor test is KEPT ON ONE LINE ON PURPOSE: the suite's mutation arm for it
+# reaches it by one substitution.
 fcm_resolve_diff() {
   FCM_DIFF_STATUS="diff-unresolvable"
+  FCM_RANGE_SPAN=""; FCM_RANGE_SOURCE=""; FCM_TREE_REF=""
   FCM_ADDS_FILE="$(mktemp -t vrp-fcm-adds.XXXXXX)"
   FCM_ANY_FILE="$(mktemp -t vrp-fcm-any.XXXXXX)"
   if [ -n "$ARG_FCM_DIFF_FILE" ]; then
     if [ ! -f "$ARG_FCM_DIFF_FILE" ]; then return 0; fi
     awk -F'\t' 'NF>=2 { print $1 "\t" $2 }' "$ARG_FCM_DIFF_FILE" > "$FCM_ANY_FILE"
+    FCM_RANGE_SPAN="fcm-diff-file:${ARG_FCM_DIFF_FILE##*/}"; FCM_RANGE_SOURCE="fixture"
+    # The presence arm still reads a REAL tree in fixture mode -- <head>, default HEAD.
+    FCM_TREE_REF="$( cd "$REPO_ROOT" && git rev-parse --verify --quiet "${ARG_FCM_HEAD:-HEAD}^{commit}" </dev/null 2>/dev/null )" || FCM_TREE_REF=""
   else
-    local base head raw rc=0
+    local base="" head="" raw="" rc=0 head_sha="" b_s="" h_s=""
     head="${ARG_FCM_HEAD:-HEAD}"
-    if [ -n "$ARG_FCM_MERGE_BASE" ]; then base="$ARG_FCM_MERGE_BASE"
-    else base="$( cd "$REPO_ROOT" && git merge-base origin/main HEAD 2>/dev/null )" || base=""; fi
+    if [ -n "$ARG_FCM_MERGE_BASE" ]; then
+      base="$ARG_FCM_MERGE_BASE"; FCM_RANGE_SOURCE="explicit"
+    else
+      head_sha="$( cd "$REPO_ROOT" && git rev-parse --verify --quiet "${head}^{commit}" </dev/null 2>/dev/null )" || head_sha=""
+      fcm_plan_merge_commit                  # DIRECT call -- globals, never $(...)
+      if [ -n "$FCM_MERGE_SHA" ] && [ -n "$head_sha" ] && ( cd "$REPO_ROOT" && git merge-base --is-ancestor "$FCM_MERGE_SHA" "$head_sha" ) </dev/null 2>/dev/null; then
+        base="${FCM_MERGE_SHA}^1"; head="$FCM_MERGE_SHA"; FCM_RANGE_SOURCE="$FCM_MERGE_SOURCE"
+      else
+        base="$( cd "$REPO_ROOT" && git merge-base origin/main "$head" </dev/null 2>/dev/null )" || base=""
+        FCM_RANGE_SOURCE="merge-base"
+        # The default range is EMPTY BY CONSTRUCTION when the head is on the mainline.
+        # With no merge record to grade instead, say so in the source rather than
+        # leaving an empty range to read as an ordinary one.
+        if [ -z "$FCM_MERGE_SHA" ] && [ -n "$base" ] && [ "$base" = "$head_sha" ]; then FCM_RANGE_SOURCE="post-merge-unresolved"; fi
+      fi
+    fi
     if [ -z "$base" ]; then return 0; fi
     set +e
-    raw="$( cd "$REPO_ROOT" && git diff --name-status --no-renames "$base..$head" 2>/dev/null )"
+    raw="$( cd "$REPO_ROOT" && git diff --name-status --no-renames "$base..$head" </dev/null 2>/dev/null )"
     rc=$?
     set -e
     if [ "$rc" -ne 0 ]; then return 0; fi
     printf '%s\n' "$raw" > "$FCM_ANY_FILE"
+    b_s="$( cd "$REPO_ROOT" && git rev-parse --short "${base}^{commit}" </dev/null 2>/dev/null )" || b_s="$base"
+    h_s="$( cd "$REPO_ROOT" && git rev-parse --short "${head}^{commit}" </dev/null 2>/dev/null )" || h_s="$head"
+    FCM_RANGE_SPAN="${b_s}..${h_s}"
+    FCM_TREE_REF="$( cd "$REPO_ROOT" && git rev-parse --verify --quiet "${head}^{commit}" </dev/null 2>/dev/null )" || FCM_TREE_REF=""
   fi
   # An EMPTY diff is not the same fact as an unresolvable one, and neither is a
   # licence to pass: an empty delivered set with a non-empty obligation set FAILs
@@ -3766,6 +3911,22 @@ fcm_match_adds() {
 fcm_present_any() {
   local declared="$1"
   awk -F'\t' -v want="$declared" '$2 == want { f=1 } END { exit !f }' "$FCM_ANY_FILE"
+}
+
+# Tree presence, DISTINCT from fcm_present_any's diff membership: is <path> a FILE in
+# the tree the range was graded against? That tree is FCM_TREE_REF -- the RESOLVED
+# head, not HEAD: a plan renamed after its merge is absent at HEAD and present at its
+# merge. It is what separates "the file is not there" from "the file is there, and this
+# range did not add it", two findings the one not-delivered string used to carry. The
+# probe is by EXACT path and a directory at the path is not the declared file, so the
+# caller asks it for LITERAL paths only: a glob or a placeholder would find some
+# unrelated file that was already there. The test on the last line is KEPT ON ONE LINE
+# ON PURPOSE: the suite's mutation arms for the probe reach it by one substitution.
+fcm_present_in_tree() {
+  local declared="$1" t
+  [ -n "$FCM_TREE_REF" ] || return 1
+  t="$( cd "$REPO_ROOT" && git cat-file -t "${FCM_TREE_REF}:${declared}" </dev/null 2>/dev/null )" || t=""
+  [ "$t" = "blob" ]
 }
 
 # --- Handler ----------------------------------------------------------------
@@ -3881,7 +4042,7 @@ handle_fcm_delivery() {
     cov_verdict="$VERDICT_SKIP";  cov_note=" fcm-no-unconditional-adds (matrix fully interpreted; nothing for this family to assert)"
   fi
   emit_fcm "FCM-COVERAGE" "full row coverage" "$cov_verdict" \
-    "declared=$declared interpreted=$interpreted obligations=$obligations excluded=$excluded conditional=$conditional uninterpreted=$unknown pathless=$pathless prose_led=$prose_led${cov_note}"
+    "declared=$declared interpreted=$interpreted obligations=$obligations excluded=$excluded conditional=$conditional uninterpreted=$unknown pathless=$pathless prose_led=$prose_led range=${FCM_RANGE_SPAN} range_source=${FCM_RANGE_SOURCE}${cov_note}"
 
   # (5) One record per ADD row. Conditional and unconditional both reported.
   local n=0 path intent cond form _raw
@@ -3916,11 +4077,18 @@ handle_fcm_delivery() {
         emit_fcm "FCM-$n" "delivered as an addition" "$VERDICT_PASS" "declared-add-delivered:$path ($form)"
       elif [ "$recorded" -eq 1 ]; then
         emit_fcm "FCM-$n" "delivered or a Deviation-Log row" "$VERDICT_PASS" "deviation-recorded:$path"
+      # Every FAIL below names the range it was read over and how that range was
+      # chosen, so a reader can tell a wrong range from a missing file. The last arm's
+      # emission is KEPT ON ONE LINE ON PURPOSE: the suite's must-flag mutation arm
+      # reaches it by one substitution.
       elif fcm_present_any "$path"; then
         emit_fcm "FCM-$n" "delivered as an addition" "$VERDICT_FAIL" \
-          "declared-add-delivered-as-edit:$path (the file pre-existed; the ADD declaration was wrong)"
+          "declared-add-delivered-as-edit:$path (the file pre-existed; the ADD declaration was wrong) [range ${FCM_RANGE_SPAN} ${FCM_RANGE_SOURCE}]"
+      elif [ "$(fcm_path_form "$path")" = "literal" ] && fcm_present_in_tree "$path"; then
+        emit_fcm "FCM-$n" "delivered as an addition" "$VERDICT_FAIL" \
+          "declared-add-not-in-range:$path [range ${FCM_RANGE_SPAN} ${FCM_RANGE_SOURCE}; present at ${FCM_TREE_REF:0:12}]"
       else
-        emit_fcm "FCM-$n" "delivered as an addition" "$VERDICT_FAIL" "declared-add-not-delivered:$path"
+        emit_fcm "FCM-$n" "delivered as an addition" "$VERDICT_FAIL" "declared-add-not-delivered:$path [range ${FCM_RANGE_SPAN} ${FCM_RANGE_SOURCE}]"
       fi
     fi
   done <<< "$records"
