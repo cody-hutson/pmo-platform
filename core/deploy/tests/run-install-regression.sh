@@ -10,24 +10,43 @@
 #   1. REGRESSION_MEMBERS — the install/onboarding/update deploy-test subset
 #      (the single source of truth for membership; see "Extending" below). Each
 #      member is a standalone core/deploy/tests/*.sh / *.py that prints
-#      "<name>: N passed, M failed" and exits non-zero on any FAIL.
-#   2. The HOOK-TEST FLOOR (#319) — the 8 core/hooks/tests/*.test.sh bypass-mode
-#      hook tests. These are NOT directly runnable as `bash *.test.sh`: the hooks
+#      "<name>: N passed, M failed" (optionally ", K skipped") and exits
+#      non-zero on any FAIL.
+#   2. The HOOK-TEST FLOOR (#319) — every core/hooks/tests/*.test.sh hook suite.
+#      These are NOT directly runnable as `bash *.test.sh`: the hooks
 #      resolve their allowlist + .mode from a DEPLOYED layout, so the floor runs
 #      via the two-step contract setup-ci-layout.sh (materialize) → test-runner.sh
-#      (aggregate). Included per the v1.12 Collective-Review scope-lock: the hook
+#      (aggregate), materializing into a fresh per-run sandbox this runner passes
+#      explicitly (the helper's default is the checkout root, the agent-facing
+#      site). Included per the v1.12 Collective-Review scope-lock: the hook
 #      tests are part of this suite's regression floor.
 #
 # VERDICT (deterministic, ALL-MUST-PASS — no pass-rate threshold; this family is
 # deterministic, so any single failure is a real break, not judge non-determinism):
 #   Prints exactly one machine-greppable line:
-#     INSTALL-REGRESSION: <P> passed, <F> failed — VERDICT <PASS|FAIL>
-#   and exits 1 if ANY member (or the hook floor) fails, 0 otherwise.
+#     INSTALL-REGRESSION: <P> passed, <F> failed — VERDICT <PASS|FAIL> [env: <E>; skipped: <S>]
+#   and exits 1 if ANY member (or the hook floor) fails, 0 otherwise. The
+#   bracketed stamp never changes the verdict. <E> names the environment:
+#   home-account (HOME is the account's home in the user database), home-override
+#   (a caller redirected HOME), or home-unresolved (the user database could not be
+#   read) — so two runs of one tree can be told apart. <S> sums the arms members
+#   report as SKIP: arms that produced no evidence, which the PASS does not cover.
+#   When the caller set PMO_REGRESSION_LIVE_HOME to anything but the account
+#   home, a second bracket follows, [r8: caller]: the members' live-install
+#   proofs then watched the caller's subject, not the live install.
 #
-# SANDBOX (R-8, HARD): every member runs each install/update/deploy invocation
-# under a redirected root into a `mktemp -d` sandbox; the operator's live
-# ~/.claude/ is NEVER written. The members enforce this per-test; this runner
-# adds nothing that escapes a sandbox.
+# SANDBOX (R-8, HARD): each member redirects every install/update/deploy
+# invocation into a `mktemp -d` sandbox by passing redirected roots
+# (--workspace-root, --config-root; update.sh derives PMO_PLATFORM_DEPLOY_ROOT
+# from the former). That is the PREVENTIVE half, and it is a member-authoring
+# contract, not an interlock. The DETECTIVE half is a member's own before/after
+# manifest of the live install's .claude/skills. This runner exports
+# PMO_REGRESSION_LIVE_HOME — the account home, unless the caller already set it.
+# A member that pins its proof to that subject (test_upgrade_config_durability.sh's
+# R-8) keeps asserting under a caller-applied HOME override; a member whose proof
+# still derives its subject from $HOME compares an empty subject with itself
+# under such an override. This runner stays ONE self-contained file (it sources
+# nothing): the CI precision probe copies it alone into a stripped tree.
 #
 # test-run EVENT EMISSION (composition with #430): after the verdict, the runner
 # makes a BEST-EFFORT emission of one `test-run` pipeline event (suite-pass /
@@ -65,6 +84,41 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 HOOK_TESTS_DIR="${REPO_ROOT}/core/hooks/tests"
 APPEND_EVENT="${REPO_ROOT}/release/tools/append-pipeline-event.sh"
 
+# ── Environment + live-install subject (verdict honesty) ──
+# The account home is read from the user database, never from $HOME: a caller may
+# have redirected HOME, and the verdict-line stamp exists to say whether they did.
+# A missing interpreter or database entry degrades to home-unresolved. The
+# durability member resolves the account home with this same expression, and its
+# R-8r arm asserts the two stay identical.
+ACCOUNT_HOME=$(python3 -c 'import os, pwd; print(pwd.getpwuid(os.getuid()).pw_dir)' 2>/dev/null || true)
+_acct_phys=""
+_home_phys=""
+if [ -n "${ACCOUNT_HOME}" ]; then
+  _acct_phys=$(cd "${ACCOUNT_HOME}" 2>/dev/null && pwd -P)
+fi
+if [ -n "${HOME:-}" ]; then
+  _home_phys=$(cd "${HOME}" 2>/dev/null && pwd -P)
+fi
+if [ -z "${_acct_phys}" ]; then
+  ENV_TOKEN="home-unresolved"
+elif [ "${_acct_phys}" = "${_home_phys}" ]; then
+  ENV_TOKEN="home-account"
+else
+  ENV_TOKEN="home-override"
+fi
+# Members pin their R-8 live-install proof to this subject. A caller-set value
+# wins, so a verifier can point the proof at a fixture home, and the stamp then
+# says so: a fixture proof must never read like a live one.
+R8_STAMP=""
+if [ -n "${PMO_REGRESSION_LIVE_HOME:-}" ]; then
+  _live_phys=$(cd "${PMO_REGRESSION_LIVE_HOME}" 2>/dev/null && pwd -P)
+  if [ -z "${_acct_phys}" ] || [ "${_live_phys}" != "${_acct_phys}" ]; then
+    R8_STAMP=" [r8: caller]"
+  fi
+elif [ -n "${_acct_phys}" ]; then
+  export PMO_REGRESSION_LIVE_HOME="${ACCOUNT_HOME}"
+fi
+
 # ── REGRESSION_MEMBERS — single source of truth for the deploy-test subset ──
 # The install/onboarding/update family. Mirrors the HARNESS_LIST / *_SKILLS
 # array-as-single-source convention. Add a member here to enroll it.
@@ -88,6 +142,7 @@ REGRESSION_MEMBERS=(
 
 SUITE_PASS=0
 SUITE_FAIL=0
+SUITE_SKIP=0
 FAILED_MEMBERS=()
 
 printf '======================================================================\n'
@@ -127,11 +182,14 @@ run_member() {
 
   # Pull the member's own "N passed, M failed" tallies when present (for the
   # aggregate count); the gate decision is driven by the exit code regardless.
-  local p f
+  local p f s
   p="$(printf '%s\n' "${out}" | grep -oE '[0-9]+ passed' | tail -1 | grep -oE '[0-9]+')"
   f="$(printf '%s\n' "${out}" | grep -oE '[0-9]+ failed' | tail -1 | grep -oE '[0-9]+')"
+  # Arms a member reports as SKIP produced no evidence; surface them on the stamp.
+  s="$(printf '%s\n' "${out}" | grep -oE '[0-9]+ skipped' | tail -1 | grep -oE '[0-9]+')"
   [ -n "${p}" ] && SUITE_PASS=$((SUITE_PASS + p))
   [ -n "${f}" ] && SUITE_FAIL=$((SUITE_FAIL + f))
+  [ -n "${s}" ] && SUITE_SKIP=$((SUITE_SKIP + s))
 
   if [ "${rc}" -ne 0 ]; then
     # Exit non-zero but no parsed failures (e.g. crash before summary) → record 1.
@@ -149,7 +207,14 @@ done
 # ── Hook-test floor (#319) — materialize the deployed layout, then run ──
 printf '\n----- member: hook-test floor (core/hooks/tests via setup-ci-layout.sh) -----\n'
 if [ -f "${HOOK_TESTS_DIR}/setup-ci-layout.sh" ] && [ -f "${HOOK_TESTS_DIR}/test-runner.sh" ]; then
-  hook_layout="$(bash "${HOOK_TESTS_DIR}/setup-ci-layout.sh" 2>/dev/null)"
+  # A fresh sandbox of this run's own, passed explicitly and never empty: the
+  # helper's default is the checkout root (the agent-facing site), which a
+  # programmatic run must not reuse. The helper's stdout stays the contract.
+  hook_sandbox="$(mktemp -d -t hook-ci-layout.XXXXXX 2>/dev/null)" || hook_sandbox=""
+  hook_layout=""
+  if [ -n "${hook_sandbox}" ]; then
+    hook_layout="$(bash "${HOOK_TESTS_DIR}/setup-ci-layout.sh" --sandbox "${hook_sandbox}" 2>/dev/null)"
+  fi
   if [ -n "${hook_layout}" ] && [ -d "${hook_layout}" ]; then
     hook_out="$(bash "${hook_layout}/test-runner.sh" 2>&1)"
     hook_rc=$?
@@ -182,8 +247,8 @@ else
 fi
 
 printf '\n======================================================================\n'
-printf 'INSTALL-REGRESSION: %d passed, %d failed — VERDICT %s\n' \
-  "${SUITE_PASS}" "${SUITE_FAIL}" "${VERDICT}"
+printf 'INSTALL-REGRESSION: %d passed, %d failed — VERDICT %s [env: %s; skipped: %d]%s\n' \
+  "${SUITE_PASS}" "${SUITE_FAIL}" "${VERDICT}" "${ENV_TOKEN}" "${SUITE_SKIP}" "${R8_STAMP}"
 if [ "${#FAILED_MEMBERS[@]}" -gt 0 ]; then
   printf 'Failed members:\n'
   for m in "${FAILED_MEMBERS[@]}"; do printf '  - %s\n' "${m}"; done
@@ -209,7 +274,8 @@ if [ "${PMO_REGRESSION_EMIT:-1}" != "0" ] && [ -f "${APPEND_EVENT}" ]; then
   # is exactly what the reserved `(none)` sentinel is for.
   _version="(none)"
   # Payload kept < 300 chars and pipe-free (the writer rejects '|').
-  _payload="suite:install-onboarding-update; passed:${SUITE_PASS}; failed:${SUITE_FAIL}; runner:run-install-regression.sh"
+  _payload="suite:install-onboarding-update; passed:${SUITE_PASS}; failed:${SUITE_FAIL}; skipped:${SUITE_SKIP}; env:${ENV_TOKEN}; runner:run-install-regression.sh"
+  [ -n "${R8_STAMP}" ] && _payload="${_payload}; r8:caller"
   bash "${APPEND_EVENT}" \
     --version "${_version}" \
     --stage 6 \

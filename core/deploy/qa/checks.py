@@ -234,10 +234,14 @@ def check_f3_clone_location_preflight(root: Optional[Path] = None) -> CheckResul
 
 @check("F4", "token resolution self-heals the always-present tokens")
 def check_f4_token_resolution(root: Optional[Path] = None) -> CheckResult:
-    """compose.resolve_tokens must always populate the tokens that have no
-    operator.toml source (repo-root / workspace-root / homedir), even when
-    operator.toml is absent — the self-heal that guarantees these tokens can
-    never survive unsubstituted into a deployed file.
+    """compose.resolve_tokens must populate the tokens that have no operator.toml
+    source (repo-root / workspace-root / homedir) even when operator.toml is
+    absent. Workspace-root and homedir fall back to $HOME-derived defaults. The
+    repo root comes from compose's refusing resolver — here its last tier, the
+    main working tree of the repository this checkout belongs to — which raises
+    rather than return a value it cannot validate; together with the writer's
+    guard against a surviving token, that is what keeps these tokens from
+    reaching a deployed file unsubstituted.
     """
     fid, title = "F4", "token resolution self-heals the always-present tokens"
     required = ["[PMO_PLATFORM_ROOT]", "[CLAUDE_WORKSPACE_ROOT]", "[OPERATOR_HOMEDIR_PATH]"]
@@ -253,7 +257,8 @@ def check_f4_token_resolution(root: Optional[Path] = None) -> CheckResult:
                            "resolve_tokens populated " + ", ".join(required) + " with an absent operator.toml")
     return CheckResult(fid, title, FAIL,
                        "resolve_tokens left unresolved: " + ", ".join(unresolved),
-                       "restore the setdefault self-heal for repo-root/workspace-root/homedir in compose.resolve_tokens")
+                       "restore the workspace-root/homedir defaults and the repo-root resolution "
+                       "(resolve_repo_root, run when need_repo_root is set) in compose.resolve_tokens")
 
 
 # --------------------------------------------------------------------------- #

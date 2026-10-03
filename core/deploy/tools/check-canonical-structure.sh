@@ -57,7 +57,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 # Single resolver for the operator-instance path (sibling of deploy.sh). Used by
 # the exemption-list resolution below instead of the hardcoded instance default
-# (#1830). Mirrors deploy.sh Check 6.
+# (#1830): pmo_skill_editor_exemption_list is the one path every consumer of the
+# list reads. Mirrors deploy.sh Check 6.
 # shellcheck source=../lib-instance-path.sh disable=SC1091
 source "${SCRIPT_DIR}/../lib-instance-path.sh"
 
@@ -519,10 +520,10 @@ main() {
       exit $?
       ;;
     "")
-      # Default: scan the live roster. EXEMPTION_LIST mirrors deploy.sh Check 6:
-      # operator-instance path via the resolver, fallback to the legacy .claude path.
-      local exemption_list="$(pmo_instance_path)/skill-editor-exemption-list.txt"
-      [[ -f "$exemption_list" ]] || exemption_list="$REPO_ROOT/.claude/skill-editor-exemption-list.txt"
+      # Default: scan the live roster. EXEMPTION_LIST mirrors deploy.sh Check 6: the one
+      # path every consumer reads, from the single resolver — no checkout-relative fallback.
+      local exemption_list
+      exemption_list="$(pmo_skill_editor_exemption_list)"
       [[ -f "$exemption_list" ]] || exemption_list=""
       run_check "$REPO_ROOT" "$REPO_ROOT/core/deploy/deploy.sh" "$exemption_list"
       exit $?

@@ -7,6 +7,8 @@
 #   - Pattern C primitive wrappers (lib_compose_extract / _write / _regen)
 #     — invoke core/deploy/compose.py under the hood; the Python file is the
 #     single source of truth for the marker-fenced write contract.
+#   - The [PMO_PLATFORM_ROOT] resolver wrapper (lib_compose_resolve_root), whose
+#     printed root the write and regen wrappers take as a trailing argument.
 #   - Manifest sourcing + per-entry parsing (lib_compose_source_manifest,
 #     lib_compose_parse_entry, lib_compose_resolve_target)
 #
@@ -64,6 +66,14 @@ lib_compose_installed_body_sha() {
   python3 "${LIB_COMPOSE_PY}" installed-sha --target "${target}"
 }
 
+# Resolve the canonical [PMO_PLATFORM_ROOT] value (compose.py resolve-root).
+# Usage: lib_compose_resolve_root [--install-state <file> | --declare-source <dir>] [--repo-root <path>]
+# Prints "<root><TAB><source>" on stdout; NOTE:/WARN: lines on stderr; non-zero (3) when no
+# tier yields a valid root. Callers pass the printed root to lib_compose_write/_regen.
+lib_compose_resolve_root() {
+  python3 "${LIB_COMPOSE_PY}" resolve-root "$@"
+}
+
 # --- Pattern C primitive wrappers ---
 
 # Extract the OPERATOR ADDITIONS section from a target file, echo to stdout.
@@ -75,15 +85,17 @@ lib_compose_extract() {
 }
 
 # Write a managed file with provided preserved-additions content.
-# Usage: lib_compose_write <source> <target> <tokens-flag> <operator-toml> [<override-toml> [<preserved-file> [<dialect>]]]
+# Usage: lib_compose_write <source> <target> <tokens-flag> <operator-toml> [<override-toml> [<preserved-file> [<dialect> [<repo-root>]]]]
 #   tokens-flag: "tokens" | "raw"
 #   preserved-file: optional path to file containing OPERATOR ADDITIONS content
 #                   (if omitted or empty, the primitive uses the default placeholder comment)
 #   dialect: optional marker dialect ("plain" | "markdown"); omitted/empty → "plain"
-#            (ADR-122). Trailing-optional so existing 4-6 arg callers are unchanged.
+#            (ADR-122). Trailing-optional so existing 4-7 arg callers are unchanged.
+#   repo-root: optional [PMO_PLATFORM_ROOT] value, as lib_compose_resolve_root printed it;
+#              omitted/empty → compose.py resolves it only if the template carries the token.
 lib_compose_write() {
   local source="$1" target="$2" tokens_flag="$3" operator_toml="$4"
-  local override_toml="${5:-}" preserved_file="${6:-}" dialect="${7:-}"
+  local override_toml="${5:-}" preserved_file="${6:-}" dialect="${7:-}" repo_root="${8:-}"
   local source_sha; source_sha=$(lib_compose_sha_compute "${source}") || return 1
 
   local args=(
@@ -103,18 +115,22 @@ lib_compose_write() {
   if [ -n "${dialect}" ]; then
     args+=(--dialect "${dialect}")
   fi
+  if [ -n "${repo_root}" ]; then
+    args+=(--repo-root "${repo_root}")
+  fi
 
   python3 "${LIB_COMPOSE_PY}" "${args[@]}"
 }
 
 # Regenerate a target file in one shot: extract current OPERATOR ADDITIONS,
 # then write the target with managed-section refreshed and additions preserved.
-# Usage: lib_compose_regen <source> <target> <tokens-flag> <operator-toml> [<override-toml> [<dialect>]]
+# Usage: lib_compose_regen <source> <target> <tokens-flag> <operator-toml> [<override-toml> [<dialect> [<repo-root>]]]
 #   dialect: optional marker dialect ("plain" | "markdown"); omitted/empty → "plain"
-#            (ADR-122). Trailing-optional so existing 4-5 arg callers are unchanged.
+#            (ADR-122). Trailing-optional so existing 4-6 arg callers are unchanged.
+#   repo-root: optional [PMO_PLATFORM_ROOT] value, as for lib_compose_write.
 lib_compose_regen() {
   local source="$1" target="$2" tokens_flag="$3" operator_toml="$4"
-  local override_toml="${5:-}" dialect="${6:-}"
+  local override_toml="${5:-}" dialect="${6:-}" repo_root="${7:-}"
   local source_sha; source_sha=$(lib_compose_sha_compute "${source}") || return 1
 
   local args=(
@@ -130,6 +146,9 @@ lib_compose_regen() {
   fi
   if [ -n "${dialect}" ]; then
     args+=(--dialect "${dialect}")
+  fi
+  if [ -n "${repo_root}" ]; then
+    args+=(--repo-root "${repo_root}")
   fi
 
   python3 "${LIB_COMPOSE_PY}" "${args[@]}"

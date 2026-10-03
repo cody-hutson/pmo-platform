@@ -4,7 +4,8 @@
 # hook-owner: core/rules/bypass-mode-readiness/block-rm-prefer-trash.md
 #
 # Outside ${WORKSPACE_ROOT}/, file deletion via rm/rmdir/unlink/trash/osascript
-# Trash-verb is BLOCKED unconditionally. Inside the workspace, rm/rmdir/unlink is
+# Trash-verb is BLOCKED, with ONE admitted class: a Trash move of a single
+# auto-memory entry (see MEMORY-STORE ARM). Inside the workspace, rm/rmdir/unlink is
 # BLOCKED with a runtime-auto-detected Trash-equivalent suggestion (3-tier: trash in
 # PATH → /opt/homebrew/opt/trash/bin/trash → osascript Finder fallback). Git
 # subcommands are exempt (git history provides recoverability).
@@ -40,6 +41,16 @@ readonly ERROR_LOG="${HOOK_DIR}/hook-errors.log"
 readonly BLOCK_LOG="${HOOK_DIR}/block-log.jsonl"
 readonly BYPASS_LOG="${HOOK_DIR}/bypass-log.jsonl"
 readonly WORKSPACE_ROOT="${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"
+
+# --- MEMORY-STORE ARM: where the auto-memory store is declared ---
+# Read from the operator's USER-scope settings file only — the same file the installer
+# re-homes this hook's own PreToolUse wiring into — so the arm and the guard carrying it
+# share one trust root. Deliberately no environment override: Claude Code ignores
+# platform-only variables, so an override could re-point the arm while the hooks stay
+# wired, and BLOCK-DESTRUCTIVE-023 does not cover one. Project and local settings are
+# repository-supplied, so they never admit: they are read only to word a refusal (see
+# memory_arm_verdict). Tests sandbox HOME.
+readonly MEMORY_SETTINGS_FILE="${HOME:-}/.claude/settings.json"
 
 # --- SHARED DEPENDENCY RESOLVER (fail CLOSED if the helper is missing/invalid) ---
 # Two properties this guard must have that the prior shape did not (#5071, ADR-136):
@@ -333,6 +344,114 @@ resolve_and_classify() {
   esac
 }
 
+# --- MEMORY-STORE ARM: the one admitted class outside ${WORKSPACE_ROOT}/ ---
+# A Trash move of ONE auto-memory entry — the EVICT act of the memory<->corpus lifecycle
+# (core/disciplines/knowledge-architecture.md § Memory↔corpus boundary), re-scoped out of
+# Tier 0 by core/specs/autonomy-tiers.md § Irreducible Human Tasks item 8a. ONE python3
+# program with ONE admitting token: python3 unusable, settings absent or malformed, or any
+# exception prints nothing, and the caller falls through to its existing refusal. It never
+# consumes resolve_and_classify's raw-path fallback — an allow path must not open when the
+# normalizer is missing. The operand is judged first, so a command whose operand cannot be
+# an entry never opens a settings file. Admits (ELIGIBLE) only when ALL hold:
+#   operand - written only in characters the shell passes through unchanged, absolute
+#             (bare or wholly quoted; a ~/-led operand is not admitted), with no ".."
+#             component; its leaf ends ".md", has no leading dot and is not MEMORY.md
+#             (case-insensitive: realpath keeps the typed case on case-insensitive
+#             volumes); an existing regular file and not a symlink (Trash moves the link
+#             the operand names, not its referent)
+#   store   - autoMemoryDirectory in the USER-scope file: absolute or ~/-prefixed, no
+#             control characters, a strict descendant of $HOME, holding a MEMORY.md
+#   place   - the operand's resolved parent IS the resolved store
+# The verdict is reached once, when the hook judges; the command resolves the operand again
+# when it runs, so the path judged is the path moved only while the operand's directories
+# are unchanged between the two: the judgment-time class every path-resolving rule carries.
+# A store that only project or local settings declare is never admitted. The program then
+# prints OUTSIDE-USER-SCOPE, so the refusal can say why: the arm reads user scope only.
+readonly MEMORY_ARM_PY='
+import json, os, re, sys
+settings, home, tok, proj = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+
+def store_of(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            cfg = json.load(fh)
+    except Exception:
+        return None
+    val = cfg.get("autoMemoryDirectory") if isinstance(cfg, dict) else None
+    if not isinstance(val, str) or not val or any(ord(c) < 32 for c in val):
+        return None
+    if val.startswith("~/"):
+        val = home + val[1:]
+    elif not val.startswith("/"):
+        return None
+    h = os.path.realpath(home)
+    store = os.path.realpath(val)
+    if store == h or os.path.commonpath([store, h]) != h:
+        return None
+    if not os.path.isfile(os.path.join(store, "MEMORY.md")):
+        return None
+    return store
+
+try:
+    if not home.startswith("/"):
+        sys.exit(0)
+    quoted = len(tok) >= 2 and tok[0] == tok[-1] and tok[0] in ("\x22", "\x27")
+    if quoted:
+        tok = tok[1:-1]
+    if not re.fullmatch("[A-Za-z0-9._/+@,:%=-]+", tok) or ".." in tok.split("/"):
+        sys.exit(0)
+    if not tok.startswith("/"):
+        sys.exit(0)
+    leaf = os.path.basename(tok)
+    if leaf.startswith(".") or not leaf.endswith(".md") or leaf.casefold() == "memory.md":
+        sys.exit(0)
+    if os.path.islink(tok) or not os.path.isfile(tok):
+        sys.exit(0)
+    parent = os.path.realpath(os.path.dirname(tok))
+    if store_of(settings) == parent:
+        print("ELIGIBLE")
+        sys.exit(0)
+    if proj.startswith("/"):
+        user = os.path.realpath(settings)
+        for name in ("settings.json", "settings.local.json"):
+            cand = os.path.join(proj, ".claude", name)
+            if os.path.realpath(cand) != user and store_of(cand) == parent:
+                print("OUTSIDE-USER-SCOPE")
+                sys.exit(0)
+except Exception:
+    sys.exit(0)
+'
+
+# memory_arm_verdict(token) — print the MEMORY-STORE ARM's verdict on token: ELIGIBLE,
+#   OUTSIDE-USER-SCOPE, or nothing. Project and local settings are looked for under the
+#   project root Claude Code passes its hooks, else under the tool call's working
+#   directory. Always returns 0, so its output can be captured under set -e.
+memory_arm_verdict() {
+  [ -x "$PYTHON3" ] || return 0
+  "$PYTHON3" -c "$MEMORY_ARM_PY" "$MEMORY_SETTINGS_FILE" "${HOME:-}" "$1" "${CLAUDE_PROJECT_DIR:-$CWD}" 2>/dev/null || true
+}
+
+# record_memory_admissions — append one admission row per admitted operand to BLOCK_LOG:
+#   one compact JSON line each, carrying the command's digest and never its text or the
+#   entry's path, and no rule key (an admission is not a refusal). Returns non-zero when
+#   any row cannot be written, and the caller then refuses. Call ONLY as an `if` condition.
+record_memory_admissions() {
+  local ts digest i=0
+  ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  digest="$("$PRINTF" '%s' "$COMMAND" | "$SHASUM" -a 256 2>/dev/null)" || return 1
+  digest="${digest%% *}"
+  digest="${digest:0:16}"
+  [ "${#digest}" = 16 ] || return 1
+  while [ "$i" -lt "$MEMORY_ADMISSIONS" ]; do
+    # shellcheck disable=SC2016  # jq filter — single quotes intentional
+    "$JQ" -n -c --arg ts "$ts" --arg hook "$HOOK_NAME" --arg tool "$TOOL_NAME" \
+      --arg digest "$digest" --arg cwd "$CWD" \
+      '{ts:$ts, hook:$hook, action:"memory-evict-admit", tool:$tool, input_digest:$digest, cwd:$cwd}' \
+      2>/dev/null >> "$BLOCK_LOG" || return 1
+    i=$((i + 1))
+  done
+}
+
 # suggest_trash_command(abs_path)
 #   Emit a runtime-auto-detected Trash-equivalent command suggestion.
 #   3-tier: PATH trash → keg-only path → osascript fallback.
@@ -413,6 +532,9 @@ extract_target_tokens() {
 # RULE EVALUATION
 # ==========================================================================
 
+# Trash-verb operands the MEMORY-STORE ARM admitted; each leaves one row before the allow.
+MEMORY_ADMISSIONS=0
+
 # Step 1 — Broad git-subcommand exemption (Hub Decision 1)
 # Per requirement #6: "git rm and other git <verb> invocations are exempt"
 # Broader than the Stage 5 spoke's narrow allowlist — exempts ALL git subcommands.
@@ -448,7 +570,14 @@ if matches "${ANCHOR_PREFIX_BASH}"'(rm|rmdir|unlink)([[:space:]]+|$)'; then
             "use Trash instead: $suggestion (or set CLAUDE_HOOK_BYPASS=1 only if intentional)"
           ;;
         1)
-          # Outside workspace — block unconditionally
+          # Outside workspace — blocked. An auto-memory entry (MEMORY-STORE ARM) is still
+          # refused for a permanent-deletion verb, but the refusal names the Trash move.
+          if [ "$(memory_arm_verdict "$token")" = "ELIGIBLE" ]; then
+            case "$token" in \"*\"|\'*\') suggestion="trash '${token:1:${#token}-2}'" ;; *) suggestion="trash '$token'" ;; esac
+            block "BLOCK-TRASH-001" \
+              "permanent deletion of an auto-memory entry is refused — evict it with a Trash move instead: $suggestion" \
+              "eviction is a Trash move (core/disciplines/knowledge-architecture.md § Memory↔corpus boundary, EVICT); no bypass is needed"
+          fi
           block "BLOCK-TRASH-001" \
             "deletion outside Claude/ is forbidden — cancel operation. Path: $resolved" \
             "all deletions outside ${WORKSPACE_ROOT}/ are blocked; cancel the operation, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
@@ -485,9 +614,20 @@ if matches "${ANCHOR_PREFIX_BASH}"'trash([[:space:]]+|$)'; then
         :
         ;;
       1)
-        block "BLOCK-TRASH-003" \
-          "deletion outside Claude/ is forbidden — cancel operation. Path: $resolved" \
-          "all deletions outside ${WORKSPACE_ROOT}/ are blocked; cancel the operation, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+        memory_verdict="$(memory_arm_verdict "$token")"
+        if [ "$memory_verdict" = "ELIGIBLE" ]; then
+          # auto-memory entry — the EVICT Trash move (MEMORY-STORE ARM); its admission row
+          # is written below, once every operand has been judged
+          MEMORY_ADMISSIONS=$((MEMORY_ADMISSIONS + 1))
+        elif [ "$memory_verdict" = "OUTSIDE-USER-SCOPE" ]; then
+          block "BLOCK-TRASH-003" \
+            "auto-memory entry in a store declared outside user scope is not admitted — the memory-store arm reads autoMemoryDirectory from the operator's user-scope settings only. Path: $resolved" \
+            "evict it through the Hook-Blocked → User-Side Handoff (the operator runs the same command), or the operator declares the store in user-scope settings"
+        else
+          block "BLOCK-TRASH-003" \
+            "deletion outside Claude/ is forbidden — cancel operation. Path: $resolved" \
+            "all deletions outside ${WORKSPACE_ROOT}/ are blocked; cancel the operation, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+        fi
         ;;
       2)
         block "BLOCK-TRASH-003" \
@@ -515,9 +655,20 @@ if matches "${ANCHOR_PREFIX_BASH}"'osascript([[:space:]]+|$)'; then
           :
           ;;
         1)
-          block "BLOCK-TRASH-003" \
-            "deletion outside Claude/ is forbidden — cancel operation. Path: $resolved" \
-            "all deletions outside ${WORKSPACE_ROOT}/ are blocked; cancel the operation, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+          memory_verdict="$(memory_arm_verdict "$osa_path")"
+          if [ "$memory_verdict" = "ELIGIBLE" ]; then
+            # auto-memory entry — the EVICT Trash move (MEMORY-STORE ARM); its admission
+            # row is written below, once every operand has been judged
+            MEMORY_ADMISSIONS=$((MEMORY_ADMISSIONS + 1))
+          elif [ "$memory_verdict" = "OUTSIDE-USER-SCOPE" ]; then
+            block "BLOCK-TRASH-003" \
+              "auto-memory entry in a store declared outside user scope is not admitted — the memory-store arm reads autoMemoryDirectory from the operator's user-scope settings only. Path: $resolved" \
+              "evict it through the Hook-Blocked → User-Side Handoff (the operator runs the same command), or the operator declares the store in user-scope settings"
+          else
+            block "BLOCK-TRASH-003" \
+              "deletion outside Claude/ is forbidden — cancel operation. Path: $resolved" \
+              "all deletions outside ${WORKSPACE_ROOT}/ are blocked; cancel the operation, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+          fi
           ;;
         2)
           block "BLOCK-TRASH-003" \
@@ -527,6 +678,15 @@ if matches "${ANCHOR_PREFIX_BASH}"'osascript([[:space:]]+|$)'; then
       esac
     done < <("$PRINTF" '%s' "$COMMAND" | "$GREP" -oE 'POSIX[[:space:]]+file[[:space:]]+"[^"]*"' | "$GREP" -oE '"[^"]*"' | /usr/bin/sed 's/^"//; s/"$//')
   fi
+fi
+
+# --- MEMORY-STORE ARM: every admission leaves one row, before the call is allowed ---
+# Written here, after every operand has been judged, so a command refused as a whole leaves
+# no row. A row that cannot be written refuses the admission: the arm never admits silently.
+if [ "$MEMORY_ADMISSIONS" -gt 0 ] && ! record_memory_admissions; then
+  block "BLOCK-TRASH-003" \
+    "the Trash move of an auto-memory entry could not be recorded in the hook's admission log, so it is not admitted — every admission leaves one row" \
+    "restore write access to ${BLOCK_LOG}, or hand the command to the operator (the Hook-Blocked → User-Side Handoff)"
 fi
 
 # No matcher-verb detected — allow

@@ -123,7 +123,7 @@ These eight are the allowlists the bypass-mode hooks consult. The broader worksp
 
 The helper validates that the target is one of the **9** allowlists it knows and that the entry has no control characters. All additions are logged to `.claude/hooks/allowlist-additions.log`.
 
-**Nine, not the eight in the table above — the two populations are different by design.** The table enumerates the allowlists the *bypass-mode hooks consult*; the helper's known set is those eight **plus** `.claude/skill-editor-exemption-list.txt`, which the boundary note above assigns to its own discipline doc rather than to this registry. Read the count as a property of the helper, not of this table.
+**Nine, not the eight in the table above — the two populations are different by design.** The table enumerates the allowlists the *bypass-mode hooks consult*; the helper's known set is those eight **plus** the operator-instance skill-editor exemption list (the path `pmo_skill_editor_exemption_list()` resolves), which the boundary note above assigns to its own discipline doc rather than to this registry. Read the count as a property of the helper, not of this table.
 
 **Where the entry lands, and why it matters.** A deployed allowlist is a composed file: the update path regenerates it and preserves only what sits between its `BEGIN`/`END OPERATOR ADDITIONS` markers. The helper therefore inserts the entry **inside that region**, immediately before the `END` marker, so the grant survives the next update. Two consequences worth knowing before you run it:
 
@@ -132,7 +132,7 @@ The helper validates that the target is one of the **9** allowlists it knows and
 
 The helper never writes a marker fence itself; the composition tooling owns the fence and its dialect.
 
-**Allowlist files are explicitly excluded from the self-mod guard** (NEW-B BLOCK-DESTRUCTIVE-019) — Claude can append to them without bypass. The guard's protected set is `CLAUDE.md`, `pmo-platform/**`, `.claude/settings.json`, `.claude/hooks/*` and `.claude/rules/*`, less that rule's two exemptions (a repo-rooted worktree cwd, and the git-ignored `pmo-platform/analysis/<subfolder>/…` workspace).
+**Allowlist files are explicitly excluded from the self-mod guard** (NEW-B BLOCK-DESTRUCTIVE-019) — Claude can append to them without bypass. The guard's protected set is `CLAUDE.md`, `pmo-platform/**`, `.claude/settings.json`, `.claude/hooks/*` and `.claude/rules/*`, less that rule's three exemptions, each keyed on the write target (a target inside a repo-rooted worktree `pmo-platform/.claude/worktrees/<name>/…`, the git-ignored `pmo-platform/analysis/<subfolder>/…` workspace, and the git-ignored roadmap instances `pmo-platform/roadmaps/<name>`).
 
 ## Warn-Mode vs. Enforce-Mode
 
@@ -214,7 +214,7 @@ After the shakedown period:
 ## Known Limitations
 
 - **Log rotation deferred** — `block-log.jsonl`, `bypass-log.jsonl`, warn logs are append-only and grow unbounded. Follow-up release will add rotation.
-- **cwd detection** — Primary-write guard relies on the payload `cwd` field. If Claude-under-injection constructs an absolute-path target (`${HOME}/Claude/CLAUDE.md` while cwd=worktree), the guard allows the write per AC spec. This is a defense-in-depth gap; operator can tighten by changing the rule to deny any primary Layer 1 target regardless of cwd.
+- **Primary-write guard subject** — `BLOCK-DESTRUCTIVE-019` is keyed on the write target (both the as-written and the resolved view), not on the payload `cwd`: an absolute primary Layer-1 target is refused from a worktree-rooted session as from any other session inside the governed workspace root. A session rooted outside that root never reaches the rule, because the scope gate keys on the working directory (coverage condition 1). The remaining Write/Edit-vs-Bash residual is recorded on the rule's own registry entry.
 - **MCP tool UUID churn** — MCP server UUIDs (e.g., `mcp__8db9f365-...__`) can change on reinstall/reauth. Allowlist entries tied to specific UUIDs need re-add after changes. Future work: support wildcard `mcp__*__<tool_name>` patterns.
 - **BSD grep extensions** — Regex uses POSIX-ERE only. On macOS, certain GNU grep extensions (`\b` word boundaries) do not work consistently — we use `([[:space:]]|$)` terminators instead.
 - **Hook tamper via `/opt/homebrew/bin`** — PATH pinning is `/usr/bin:/bin` only; if a tool under `/opt/homebrew/bin` were compromised and the hook relied on it, tamper would succeed. We avoid this by using absolute paths for all critical tools (`/usr/bin/grep`, `/usr/bin/jq`, etc., all under `/usr/bin` which is root-owned).

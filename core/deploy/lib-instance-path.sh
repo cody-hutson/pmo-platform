@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # lib-instance-path.sh — single resolver for the operator-instance directory, the
 # operations-workspace root, the localized-context needle file, the people-roster
-# file, the evals-results directory (home of the pipeline event log), and the
+# file, the evals-results directory (home of the pipeline event log), the
 # three ambient-intake member directories (inbox drop-zone, Path-A intake-sweep
-# run-log dir, Path-B external-sync dir).
+# run-log dir, Path-B external-sync dir), the skill-editor exemption list, and the
+# set of instance-tier files a deployed security hook reads.
 #
 # Design rationale (applies existing ADRs — NO standalone ADR):
 #   - The default base CANONICALIZES on the ADR-032 idiom
@@ -32,6 +33,13 @@
 #                              (1 tier — no env or config tier; see the function)
 #   pmo_localized_needles()  → ${PMO_LOCALIZED_NEEDLES:-$(pmo_instance_path)/localized-context-needles.txt}
 #   pmo_people_roster()      → ${PMO_PEOPLE_ROSTER:-$(pmo_instance_path)/people-roster.yaml}
+#   pmo_skill_editor_exemption_list()
+#                            → $(pmo_instance_path)/skill-editor-exemption-list.txt
+#   pmo_skill_editor_exemption_list_for()
+#                            → $(pmo_instance_path_for <workspace-root>)/skill-editor-exemption-list.txt
+#   pmo_hook_read_instance_files_for()
+#                            → the instance-tier files a deployed hook reads, one
+#                              absolute path per line (derived; see the function)
 #   pmo_evals_results_path() → $EVALS_RESULTS_PATH, else the operator.toml key
 #                              operator_instance_evals_results_path, else
 #                              <workspace-root>/pmo-instance/evals/results
@@ -53,6 +61,13 @@
 #   pmo_operations_path_for() env: none                                     · toml: none
 #   pmo_localized_needles()   env: PMO_LOCALIZED_NEEDLES (+ pmo_instance_path's)
 #   pmo_people_roster*()      env: PMO_PEOPLE_ROSTER     (+ pmo_instance_path's)
+#   pmo_skill_editor_exemption_list()
+#                             env: PMO_INSTANCE_PATH, CLAUDE_WORKSPACE_ROOT · toml: none
+#   pmo_skill_editor_exemption_list_for()
+#                             env: PMO_INSTANCE_PATH                        · toml: none
+#   pmo_hook_read_instance_files_for()
+#                             derived: each member's own resolver (today one member,
+#                             the _for form above)
 #   pmo_evals_results_path()  env: EVALS_RESULTS_PATH, WORKSPACE_ROOT,
 #                                  CLAUDE_WORKSPACE_ROOT
 #                             toml: operator_instance_evals_results_path,
@@ -70,6 +85,37 @@
 #                                    $(pmo_instance_path_for <root>)/external-sync
 #                              (2 declared tiers each — see the block above them
 #                              for why there is no env tier)
+#
+# Exemption-surface resolution contract. The skill-editor exemption list is the escape
+# half of the Gate 2 skill-edit hook. The composition manifest registers it at the
+# `instance` tier, and every consumer resolves it through the pair above, so no
+# consumer spells its path. Who resolves it, in which role, from which root:
+#
+#   Actor                                  Role                    Root
+#   setup-workspace.sh (the manifest row,  seed writer             its workspace root, through the
+#     lib_compose_resolve_target's                                 instance tier (pmo_instance_path_for)
+#     instance arm)
+#   update.sh Phase 3, the Phase 5b0       managed-section writer; its workspace root; gate membership
+#     completeness gate and the Phase 5c1  completeness; reader    through pmo_hook_read_instance_files_for
+#     legacy reconcile                     (legacy reconcile)
+#   core/hooks/allowlist-add.sh            operator-additions      $CLAUDE_WORKSPACE_ROOT, else the
+#                                          writer                  workspace it is deployed into;
+#                                                                  compared physically
+#   core/hooks/block-skill-direct-edit.sh  reader (Gate 2)         the same root, resolved in isolation:
+#                                                                  a missing or broken resolver grants
+#                                                                  no exemption
+#   deploy.sh Checks 6 and 10;             readers                 the no-argument form ($CLAUDE_WORKSPACE_ROOT,
+#     check-canonical-structure.sh                                 else $HOME/Claude); no fallback path
+#     (and its CI mirror)
+#   core/hooks/tests/setup-ci-layout.sh;   fixture writers         pmo_hook_read_instance_files_for <layout
+#     the Linux install leg                                        root>, PMO_INSTANCE_PATH unset
+#
+# One resolver is not yet one resolved path everywhere: the deploy-side readers root at
+# the ambient default, so on an install whose workspace root is neither $HOME/Claude nor
+# exported as CLAUDE_WORKSPACE_ROOT they read another copy than the hook does; and a
+# PMO_INSTANCE_PATH exported to the shell that runs install and update but not to the
+# Claude Code process splits the writer and the hook the same way. Both residuals are
+# recorded with the decision. A consumer added to this surface is added to this table.
 #
 # All are pure stdout-echoing functions (no side effects, no mutation); safe to
 # call under `set -euo pipefail`. Sourceable AND idempotent: re-sourcing is a
@@ -176,6 +222,38 @@ pmo_people_roster() {
 pmo_people_roster_for() {
   local _base="$1"
   printf '%s\n' "${PMO_PEOPLE_ROSTER:-$(pmo_instance_path_for "${_base}")/people-roster.yaml}"
+}
+
+# Echo the absolute path to the skill-editor exemption list — the escape half of the
+# Gate 2 skill-edit hook (block-skill-direct-edit.sh), registered at the instance tier
+# by the composition manifest. This pair is the list's ONE resolution site: the hook,
+# the writer (allowlist-add.sh), update.sh and the deploy-time readers call it, and the
+# installer's seed lands on the same path through the manifest's instance tier (the
+# contract table in the header). No direct-path variable: a second variable would be a
+# second answer, which is the divergence this pair exists to close (ADR-032, "invent no
+# new variable").
+pmo_skill_editor_exemption_list() {
+  printf '%s\n' "$(pmo_instance_path)/skill-editor-exemption-list.txt"
+}
+
+# The explicit-root form, for callers that hold a workspace root and must keep it: the
+# hook and the writer (rooted at the workspace they are deployed into), the update and
+# install flows, and the test fixtures. Mirrors the pmo_people_roster pairing.
+# Usage: pmo_skill_editor_exemption_list_for <workspace-root>
+pmo_skill_editor_exemption_list_for() {
+  printf '%s\n' "$(pmo_instance_path_for "$1")/skill-editor-exemption-list.txt"
+}
+
+# Echo the instance-tier composition surfaces a deployed security hook reads, one
+# absolute path per line. Each is the escape half of a hook control whose enforcement
+# half update.sh's hook refresh installs, so the update-time completeness gate covers
+# it exactly as it covers a hook-tier allowlist, and the CI hook layout and the Linux
+# install leg materialize the same set. The other instance-tier surfaces are escape
+# halves of deploy-time checks, with no hook refresh to guard, and stay out.
+# A new hook-read instance surface is declared HERE, and only here.
+# Usage: pmo_hook_read_instance_files_for <workspace-root>
+pmo_hook_read_instance_files_for() {
+  pmo_skill_editor_exemption_list_for "$1"
 }
 
 # Echo the absolute path to the operator-instance evals-results directory (no

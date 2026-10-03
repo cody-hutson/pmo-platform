@@ -42,7 +42,10 @@ SETUP="${REPO_ROOT}/docs/scripts/setup-workspace.sh"
 UPDATE="${REPO_ROOT}/update.sh"
 # Resolve the instance-tier dir via the single resolver instead of inlining the
 # hardcoded leaf (#1830 AC1/AC5). PMO_INSTANCE_PATH is unset in this test, so
-# pmo_instance_path_for returns <workspace-root>/<instance-leaf>.
+# pmo_instance_path_for returns <workspace-root>/<instance-leaf>. It is unset here rather
+# than assumed: inherited from a runner, it would aim the sandbox install and every update
+# at a real instance directory.
+unset PMO_INSTANCE_PATH
 # shellcheck source=../lib-instance-path.sh disable=SC1091
 source "${SCRIPT_DIR}/../lib-instance-path.sh"
 
@@ -660,6 +663,163 @@ else
     report "healthy workspace: the executability gate does not fire (exit 0/64)" 0 \
       "exit ${recover_exit}; last: ${tail_out}"
   fi
+fi
+
+# --- Stages 4h, 4i and 4j: the instance-tier list a security hook reads ---
+# The skill-editor exemption list is the escape half of the Gate 2 skill-edit hook, and it
+# lives at the instance tier; lib-instance-path.sh declares it in the set of instance-tier
+# files a deployed hook reads. These labels are new; the arms are graded by their
+# messages, not by the labels.
+#   4h ABSENT — remove the list: a real update must refuse (75) before the hook refresh
+#      starts, and its ERROR line must name the list. The Phase 3 survey line names an
+#      absent target whether or not the gate covers it, so only the ERROR line tells the
+#      two apart.
+#   4i LOSSLESS LEGACY COPY — a copy at the hook tier whose every entry the instance-tier
+#      list already carries is retired by the reconcile phase, which runs after the hook
+#      refresh and never under --surfaces-only, and is backed up under its exact retired
+#      name in a backup directory of its own.
+#   4j LEGACY COPY WITH AN EXTRA ENTRY — kept, and the run names the entry together with
+#      the writer command that re-adds it at the instance tier.
+# The hook-tier path is derived through the composition resolver, never spelled. Each arm
+# restores its fixture, so the stages after these start from the workspace Stage 4b left.
+ex_surface="$(pmo_skill_editor_exemption_list_for "${SBX}/ws" 2>/dev/null || true)"
+ex_legacy=""
+if [ -n "${ex_surface}" ]; then
+  ex_legacy="$(
+    # shellcheck source=../lib-composition.sh disable=SC1091
+    . "${SCRIPT_DIR}/../lib-composition.sh" >/dev/null 2>&1 || exit 0
+    lib_compose_resolve_target "$(basename "${ex_surface}")" hook "${SBX}/ws"
+  )"
+fi
+ex_stash="${SBX}/gate-stash-skill-editor-exemption-list.txt"
+ex_sum() { shasum -a 256 "$1" 2>/dev/null | awk '{print $1}'; }
+
+printf '\nStage 4h: the completeness gate covers the instance-tier list a hook reads\n'
+if [ -z "${ex_surface}" ] || [ ! -f "${ex_surface}" ]; then
+  report "Stage 4h precondition: the instance-tier exemption list is present after install" 0 \
+    "absent or unresolved: ${ex_surface:-<resolver unavailable>}"
+else
+  report "Stage 4h precondition: the instance-tier exemption list is present after install" 1
+
+  mv "${ex_surface}" "${ex_stash}"
+  exg_out=$("${UPDATE}" \
+    --config-root "${SBX}/config" \
+    --workspace-root "${SBX}/ws" 2>&1)
+  exg_exit=$?
+  mv "${ex_stash}" "${ex_surface}"
+
+  if [ "${exg_exit}" -eq 75 ]; then
+    report "update.sh exits 75 (EX_INCOMPLETE) when the instance-tier exemption list is absent" 1
+  else
+    tail_out=$(printf '%s' "${exg_out}" | tail -4 | tr '\n' '|')
+    report "update.sh exits 75 (EX_INCOMPLETE) when the instance-tier exemption list is absent" 0 \
+      "exit ${exg_exit}; last: ${tail_out}"
+  fi
+
+  if ! grep -q 'Phase 5c' <<<"${exg_out}" && ! grep -q 'REFRESHED:' <<<"${exg_out}"; then
+    report "the gate fires BEFORE the hook refresh starts (no Phase 5c line, no REFRESHED)" 1
+  else
+    report "the gate fires BEFORE the hook refresh starts (no Phase 5c line, no REFRESHED)" 0 \
+      "the hook refresh started with the exemption list absent"
+  fi
+
+  if grep -qE '^ERROR: Install incomplete.*skill-editor-exemption-list\.txt' <<<"${exg_out}"; then
+    report "the gate's ERROR line NAMES the absent exemption list" 1
+  else
+    report "the gate's ERROR line NAMES the absent exemption list" 0 "no ERROR line names it"
+  fi
+fi
+
+printf '\nStage 4i: a lossless legacy copy is retired by the reconcile phase after the hook refresh\n'
+ex_entry=""
+if [ -f "${ex_surface}" ]; then
+  ex_entry="$(awk '!/^[[:space:]]*(#|$)/ { print; exit }' "${ex_surface}")"
+fi
+if [ -z "${ex_legacy}" ] || [ -z "${ex_entry}" ] || [ ! -f "${ex_surface}" ]; then
+  report "Stage 4i precondition: a lossless legacy copy planted at the derived hook-tier path" 0 \
+    "legacy=${ex_legacy:-<unresolved>} entry=${ex_entry:-<none>}"
+else
+  printf '%s\n%s\n' '# a legacy hook-tier copy (end-to-end fixture)' "${ex_entry}" > "${ex_legacy}"
+  ex_planted_sum="$(ex_sum "${ex_legacy}")"
+  ex_canon_sum="$(ex_sum "${ex_surface}")"
+  report "Stage 4i precondition: a lossless legacy copy planted at the derived hook-tier path" 1
+
+  # --surfaces-only first: the reconcile is not a member of that flow.
+  exs_out=$("${UPDATE}" \
+    --config-root "${SBX}/config" \
+    --workspace-root "${SBX}/ws" --surfaces-only 2>&1)
+  exs_exit=$?
+  if [ -f "${ex_legacy}" ] && [ "$(ex_sum "${ex_legacy}")" = "${ex_planted_sum}" ]; then
+    report "--surfaces-only leaves a lossless legacy copy in place (the reconcile is not a member of that flow)" 1
+  else
+    report "--surfaces-only leaves a lossless legacy copy in place (the reconcile is not a member of that flow)" 0 \
+      "exit ${exs_exit}; the legacy copy was removed or changed; last: $(printf '%s' "${exs_out}" | tail -3 | tr '\n' '|')"
+  fi
+
+  exr_out=$("${UPDATE}" \
+    --config-root "${SBX}/config" \
+    --workspace-root "${SBX}/ws" 2>&1)
+  exr_exit=$?
+  ex_l5c="$(grep -n -m1 'Phase 5c: ' <<<"${exr_out}" | cut -d: -f1)"
+  ex_lret="$(grep -n -m1 'Retired the lossless legacy' <<<"${exr_out}" | cut -d: -f1)"
+  if [ ! -e "${ex_legacy}" ] && [ -n "${ex_l5c}" ] && [ -n "${ex_lret}" ] && [ "${ex_l5c}" -lt "${ex_lret}" ]; then
+    report "a full update retires the lossless legacy copy, and only after the hook refresh" 1
+  else
+    report "a full update retires the lossless legacy copy, and only after the hook refresh" 0 \
+      "legacy present=$([ -e "${ex_legacy}" ] && echo yes || echo no); Phase 5c line ${ex_l5c:-none}, retirement line ${ex_lret:-none}"
+  fi
+
+  ex_backup=""
+  for ex_dir in "${SBX}/ws"/.backup-pre-update-*; do
+    [ -d "${ex_dir}" ] || continue
+    case "${ex_dir##*/}" in *-instance-*) continue ;; esac
+    if [ -f "${ex_dir}/hook-skill-editor-exemption-list.txt.legacy" ]; then
+      ex_backup="${ex_dir}/hook-skill-editor-exemption-list.txt.legacy"
+    fi
+  done
+  if [ -n "${ex_backup}" ] && [ "$(ex_sum "${ex_backup}")" = "${ex_planted_sum}" ]; then
+    report "the retired copy is backed up byte-for-byte as hook-skill-editor-exemption-list.txt.legacy (not in an -instance- backup)" 1
+  else
+    report "the retired copy is backed up byte-for-byte as hook-skill-editor-exemption-list.txt.legacy (not in an -instance- backup)" 0 \
+      "backup=${ex_backup:-<none>}"
+  fi
+
+  if [ "${exr_exit}" -eq 0 ]; then
+    report "a run whose only change is the retirement reports a change (exit 0, not EX_NOCHANGE)" 1
+  else
+    report "a run whose only change is the retirement reports a change (exit 0, not EX_NOCHANGE)" 0 \
+      "exit ${exr_exit}"
+  fi
+
+  if [ "$(ex_sum "${ex_surface}")" = "${ex_canon_sum}" ]; then
+    report "the instance-tier list is byte-unchanged by the reconcile" 1
+  else
+    report "the instance-tier list is byte-unchanged by the reconcile" 0 "the instance-tier list changed"
+  fi
+fi
+
+printf '\nStage 4j: a legacy copy with an entry the instance-tier list lacks is kept, and the entry named\n'
+if [ -n "${ex_legacy}" ] && [ -n "${ex_entry}" ]; then
+  printf '%s\n%s\n' "${ex_entry}" 'zz-legacy-only-entry' > "${ex_legacy}"
+  ex_extra_sum="$(ex_sum "${ex_legacy}")"
+  exx_out=$("${UPDATE}" \
+    --config-root "${SBX}/config" \
+    --workspace-root "${SBX}/ws" 2>&1)
+  exx_exit=$?
+  if [ -f "${ex_legacy}" ] && [ "$(ex_sum "${ex_legacy}")" = "${ex_extra_sum}" ]; then
+    report "a legacy copy carrying an entry the instance-tier list lacks is kept, byte-identical" 1
+  else
+    report "a legacy copy carrying an entry the instance-tier list lacks is kept, byte-identical" 0 \
+      "exit ${exx_exit}; the legacy copy was removed or changed"
+  fi
+  if awk '/^WARN: / && index($0, "zz-legacy-only-entry") && index($0, "allowlist-add.sh") { f = 1 }
+          END { exit !f }' <<<"${exx_out}"; then
+    report "the run WARNs naming the extra entry and the writer command that re-adds it" 1
+  else
+    report "the run WARNs naming the extra entry and the writer command that re-adds it" 0 \
+      "exit ${exx_exit}; no WARN line carries both the entry and the writer command"
+  fi
+  rm -f "${ex_legacy}"
 fi
 
 # --- Stage 5: ambient-intake provisioning, both directions ---
