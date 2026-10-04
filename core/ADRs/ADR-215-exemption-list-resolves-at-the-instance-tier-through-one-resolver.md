@@ -1,6 +1,6 @@
 ---
 title: "ADR-215 — The skill-editor exemption list resolves at the instance tier, through one resolver"
-status: Proposed
+status: Accepted — operator-ratified at the install-resolves-identically Stage 13 Close ratification beat, 2026-10-04
 date: 2026-09-28
 release: install-resolves-identically
 deciders: "Workspace owner (operator) — the decision rendered at the release's Stage-5 Collective Review scope-lock, with the independent adversarial review's refinements taken; design by the Stage 5 Solutioning spoke (Principal Engineer persona); authored by the Stage 6 Engineering spoke"
@@ -19,7 +19,7 @@ supersedes: none
 
 ## Status
 
-**Proposed** — authored at Stage 6 Engineering of `install-resolves-identically`. The operator rendered the decision at the release's Stage-5 Collective Review scope-lock: the instance tier through one resolver, the gate predicate declared beside that resolver, and the legacy reconcile ordered after the hook refresh. The transition to Accepted belongs to the release's close.
+**Accepted** — operator-ratified at the `install-resolves-identically` Stage 13 Close ratification beat (Phase A13), 2026-10-04, as one record of a decision rendered per record. Authored at Stage 6 Engineering of that release as `Proposed`. The operator rendered the decision at the release's Stage-5 Collective Review scope-lock: the instance tier through one resolver, the gate predicate declared beside that resolver, and the legacy reconcile ordered after the hook refresh. The ratification is recorded in this file's frontmatter `status:` field. The decision this record documents shipped in **v4.73**.
 
 **Numbering provenance.** This record was claimed as **208** against an anchor of **206** on `origin/main`, read from the repository's ADR-numbering detector. It advances past one slot, which a sibling record on this same release branch already occupies. Sibling release branches hold numbers in the same range branch-only, which does not bind. This is the second of the release's three records, numbered in serial order at authorship. The number binds at the Stage-12 claim. If the mainline claims it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. Citations use the slug token `ADR-215`, which carries no number shape and resolves at the claim.
 

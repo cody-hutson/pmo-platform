@@ -1,6 +1,6 @@
 ---
 title: "ADR-216 — Evicting an auto-memory entry is not an outside-workspace deletion"
-status: Proposed
+status: Accepted — operator-ratified at the install-resolves-identically Stage 13 Close ratification beat, 2026-10-04
 date: 2026-10-02
 release: install-resolves-identically
 deciders: "Workspace owner (operator) — the decision rendered at the release's Stage-5 Collective Review scope-lock, with the independent adversarial review's admission log and scope refusal taken; design by the Stage 5 Solutioning spoke (Principal Engineer persona); authored by the Stage 6 Engineering spoke"
@@ -19,7 +19,7 @@ supersedes: none
 
 ## Status
 
-**Proposed** — authored at Stage 6 Engineering of `install-resolves-identically`. The operator rendered the decision at the release's Stage-5 Collective Review scope-lock: a Trash-only arm with a Tier-0 re-scope, together with an admission row and a memory-specific refusal. The transition to Accepted belongs to the release's close.
+**Accepted** — operator-ratified at the `install-resolves-identically` Stage 13 Close ratification beat (Phase A13), 2026-10-04, as one record of a decision rendered per record. Authored at Stage 6 Engineering of that release as `Proposed`. The operator rendered the decision at the release's Stage-5 Collective Review scope-lock: a Trash-only arm with a Tier-0 re-scope, together with an admission row and a memory-specific refusal. The ratification is recorded in this file's frontmatter `status:` field. The decision this record documents shipped in **v4.73**.
 
 **Numbering provenance.** This record was claimed as **209** against an anchor of **206** on `origin/main`, read from the repository's ADR-numbering detector. It advances past two slots, which the release's two earlier records on this same branch already occupy. Sibling release branches hold numbers in the same range branch-only, which does not bind. This is the third of the release's three records, numbered in serial order at authorship. The number binds at the Stage-12 claim. If the mainline claims it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. Citations use the slug token `ADR-216`, which carries no number shape and resolves at the claim.
 

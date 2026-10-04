@@ -1,6 +1,6 @@
 ---
 title: "ADR-214 — [PMO_PLATFORM_ROOT] resolves from the install record, never from the invoking checkout"
-status: Proposed
+status: Accepted — operator-ratified at the install-resolves-identically Stage 13 Close ratification beat, 2026-10-04
 date: 2026-09-28
 release: install-resolves-identically
 deciders: "Workspace owner (operator) — the decision rendered at the release's Stage-5 Collective Review scope-lock, with the independent adversarial review's refinements taken; design by the Stage 5 Solutioning spoke (Principal Engineer persona); authored by the Stage 6 Engineering spoke"
@@ -19,7 +19,7 @@ supersedes: none
 
 ## Status
 
-**Proposed** — authored at Stage 6 Engineering of `install-resolves-identically`, after the operator rendered the decision at the release's Stage-5 Collective Review scope-lock (record-first resolution with a record-provenance key, and remedy texts that name the forced regeneration). The transition to Accepted belongs to the release's close.
+**Accepted** — operator-ratified at the `install-resolves-identically` Stage 13 Close ratification beat (Phase A13), 2026-10-04, as one record of a decision rendered per record. Authored at Stage 6 Engineering of that release as `Proposed`, after the operator rendered the decision at the release's Stage-5 Collective Review scope-lock (record-first resolution with a record-provenance key, and remedy texts that name the forced regeneration). The ratification is recorded in this file's frontmatter `status:` field. The decision this record documents shipped in **v4.73**.
 
 **Numbering provenance.** Claimed as **207** against an anchor of **206** on `origin/main`, read from the repository's ADR-numbering detector rather than computed from the numbers visible on any branch; sibling release branches hold 207 through 210 branch-only, which does not bind. This is the first of the release's three records, numbered in serial order at authorship. The number binds at the Stage-12 claim; should the mainline claim it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. In-release prose cites this record by its slug token.
 
