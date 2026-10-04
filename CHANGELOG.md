@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.73] - 2026-10-04
+
+Updates and installs now bind to your main checkout, and the safety guards judge the file being written, not where a session started.
+
+[Full notes](release/releases/notes/v4.73_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.73)
+
 ## [v4.72] - 2026-10-03
 
 A release close now finishes in two passes, reports only states its tools read, keeps local paths out of posts, and locks finished threads.

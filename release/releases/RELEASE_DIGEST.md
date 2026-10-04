@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.73 (2026-10-04) — Updates and safety guards now follow what they govern, not where they start
+
 ### v4.72 (2026-10-03) — A release close now finishes in two passes and reports what its tools read
 
 ### v4.71 (2026-10-02) — Each kind of work now names the design questions a framing of it must answer
