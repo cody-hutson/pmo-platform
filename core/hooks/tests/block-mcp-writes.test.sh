@@ -13,16 +13,28 @@ ALLOWLIST_HELPER="${HOOK_DIR}/allowlist-add.sh"
 
 if [ ! -x "$HOOK" ]; then echo "FAIL: hook not executable at $HOOK" >&2; exit 1; fi
 
-# Save + restore state
-ORIGINAL_MODE=""
-[ -f "$MODE_FILE" ] && ORIGINAL_MODE="$(cat "$MODE_FILE")"
-ORIGINAL_ALLOWLIST=""
-[ -f "$ALLOWLIST" ] && ORIGINAL_ALLOWLIST="$(cat "$ALLOWLIST")"
+# Save + restore state. Byte-exact backups, not `$(cat …)`: command substitution
+# strips trailing newlines, so a restore through it does not give back the file it
+# saved, and a reused layout keeps the difference from one run to the next.
+ORIGINAL_MODE_COPY=""
+if [ -f "$MODE_FILE" ]; then
+  ORIGINAL_MODE_COPY="$(/usr/bin/mktemp)"
+  /bin/cp "$MODE_FILE" "$ORIGINAL_MODE_COPY"
+fi
+ORIGINAL_ALLOWLIST_COPY=""
+if [ -f "$ALLOWLIST" ]; then
+  ORIGINAL_ALLOWLIST_COPY="$(/usr/bin/mktemp)"
+  /bin/cp "$ALLOWLIST" "$ORIGINAL_ALLOWLIST_COPY"
+fi
 
 restore_state() {
-  [ -n "$ORIGINAL_MODE" ] && /usr/bin/printf '%s' "$ORIGINAL_MODE" > "$MODE_FILE"
-  if [ -n "$ORIGINAL_ALLOWLIST" ]; then
-    /usr/bin/printf '%s' "$ORIGINAL_ALLOWLIST" > "$ALLOWLIST"
+  if [ -n "$ORIGINAL_MODE_COPY" ] && [ -f "$ORIGINAL_MODE_COPY" ]; then
+    /bin/cp "$ORIGINAL_MODE_COPY" "$MODE_FILE"
+    /bin/rm -f "$ORIGINAL_MODE_COPY"
+  fi
+  if [ -n "$ORIGINAL_ALLOWLIST_COPY" ] && [ -f "$ORIGINAL_ALLOWLIST_COPY" ]; then
+    /bin/cp "$ORIGINAL_ALLOWLIST_COPY" "$ALLOWLIST"
+    /bin/rm -f "$ORIGINAL_ALLOWLIST_COPY"
   fi
 }
 trap restore_state EXIT

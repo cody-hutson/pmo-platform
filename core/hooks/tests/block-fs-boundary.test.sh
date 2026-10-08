@@ -75,10 +75,61 @@ echo "================================"
 echo "block-fs-boundary.sh tests"
 echo "================================"
 
+# ----- HOME isolation: the fixture home (HOME-FIXTURE-01) -----
+#
+# The arms that pass "$FSB_HOME_ENV" assert that a target spelled from the operator's
+# home (`~/...` in the payload, or the home expanded into it) lies OUTSIDE every allowed
+# root. That premise holds only while HOME itself lies outside every allowed root, and
+# the allowlist admits the shared scratch roots: /tmp and the per-user temp area under
+# /var/folders. A caller that points HOME at a `mktemp -d` directory, as the install
+# regression's HOME-override step does, puts every such target inside an allowed root;
+# the hook then allows it, correctly, and the arm reads an allow. Neither the hook nor
+# the arm is wrong: the hook resolves `~` through HOME exactly as the shell that would
+# run the command does.
+#
+# The lever is the git-identity fixture pattern of the install durability suite
+# (core/deploy/tests/test_upgrade_config_durability.sh, its GIT_CONFIG_GLOBAL arms): a
+# per-invocation env prefix on only the command that reads the HOME-derived input, here
+# the hook, pointed at a fixture. The fixture home lies outside every allowed root by
+# construction and is never created: the hook classifies a path without requiring it to
+# exist. The arms that assert an ALLOW inside a HOME-derived root keep the caller's HOME,
+# because the layout helper materialized those allowlist rows from the caller's HOME.
+FSB_FIXTURE_HOME="/nonexistent/fs-boundary-fixture-home"
+FSB_FIXTURE_HOME_INSIDE="/tmp/fs-boundary-fixture-home"
+FSB_HOME_ENV="HOME=${FSB_FIXTURE_HOME}"
+
+# Probe-validity precondition: prove the lever is live, with BOTH arms observed, before
+# any assertion depends on it. Sensitivity: under the fixture home a `~` target blocks
+# and the message names the fixture path, so the hook resolved `~` through the pinned
+# HOME and not the caller's. Specificity: the same payload under a home inside an
+# allowed root is allowed, so the verdict follows HOME, which is the dependence the
+# pinned arms isolate. Without this, a prefix the hook silently ignored would surface as
+# a run of confusing arm failures rather than one named one.
+fsb_home_probe() {   # $1 = HOME for the hook -> sets FSB_PROBE_EXIT and FSB_PROBE_ERR
+  local fsb_payload; fsb_payload="$(bash_payload 'cat ~/Documents/file.txt')"
+  FSB_PROBE_EXIT=0
+  FSB_PROBE_ERR="$(/usr/bin/printf '%s' "$fsb_payload" | /usr/bin/env "HOME=$1" /bin/bash "$HOOK" 2>&1 >/dev/null)" || FSB_PROBE_EXIT="$?"
+}
+fsb_home_probe "$FSB_FIXTURE_HOME"
+fsb_out_exit="$FSB_PROBE_EXIT"; fsb_out_err="$FSB_PROBE_ERR"
+fsb_home_probe "$FSB_FIXTURE_HOME_INSIDE"
+fsb_in_exit="$FSB_PROBE_EXIT"; fsb_in_err="$FSB_PROBE_ERR"
+fsb_out_named=0
+case "$fsb_out_err" in
+  *"${FSB_FIXTURE_HOME}/Documents/file.txt"*) fsb_out_named=1 ;;
+esac
+if [ "$fsb_out_exit" = 2 ] && [ "$fsb_out_named" = 1 ] && [ "$fsb_in_exit" = 0 ]; then
+  /usr/bin/printf 'PASS: HOME-FIXTURE-01 fixture-home isolation live (sensitivity + specificity arms both observed)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: HOME-FIXTURE-01 fixture-home isolation NOT live, so the HOME-pinned arms below cannot be trusted\n  outside-root home: exit=%s (expected 2), fixture path named=%s (expected 1)\n  inside-root home: exit=%s (expected 0)\n  stderr (outside): %s\n  stderr (inside): %s\n' \
+    "$fsb_out_exit" "$fsb_out_named" "$fsb_in_exit" "$fsb_out_err" "$fsb_in_err"
+  FAIL=$((FAIL + 1))
+fi
+
 # ----- BLOCK-FS-BOUNDARY-001: file-read verbs outside allowed roots -----
 
 test_case "cat ~/Documents blocks" \
-  "$(bash_payload 'cat ~/Documents/file.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+  "$(bash_payload 'cat ~/Documents/file.txt')" 2 "BLOCK-FS-BOUNDARY-001" "$FSB_HOME_ENV"
 
 test_case "cat /Users/otheruser blocks" \
   "$(bash_payload 'cat /Users/otheruser/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
@@ -105,36 +156,38 @@ test_case "EXT-FP-F1: quoted outside-root path as message content allows" \
   "$(bash_payload 'git commit -m "cat /Users/otheruser/notes.txt was the bug"')" 0
 
 test_case "head ~/Desktop blocks" \
-  "$(bash_payload 'head ~/Desktop/foo.log')" 2 "BLOCK-FS-BOUNDARY-001"
+  "$(bash_payload 'head ~/Desktop/foo.log')" 2 "BLOCK-FS-BOUNDARY-001" "$FSB_HOME_ENV"
 
 test_case "tail ~/Library/Mail blocks" \
-  "$(bash_payload 'tail ~/Library/Mail/inbox')" 2 "BLOCK-FS-BOUNDARY-001"
+  "$(bash_payload 'tail ~/Library/Mail/inbox')" 2 "BLOCK-FS-BOUNDARY-001" "$FSB_HOME_ENV"
 
 test_case "base64 ~/Library/Cookies blocks" \
-  "$(bash_payload 'base64 ~/Library/Cookies/cookies.db')" 2 "BLOCK-FS-BOUNDARY-001"
+  "$(bash_payload 'base64 ~/Library/Cookies/cookies.db')" 2 "BLOCK-FS-BOUNDARY-001" "$FSB_HOME_ENV"
 
 test_case "xxd /Users/otheruser blocks" \
   "$(bash_payload 'xxd /Users/otheruser/.bash_history')" 2 "BLOCK-FS-BOUNDARY-001"
 
 test_case "less ~/Pictures blocks" \
-  "$(bash_payload 'less ~/Pictures/screenshot.png')" 2 "BLOCK-FS-BOUNDARY-001"
+  "$(bash_payload 'less ~/Pictures/screenshot.png')" 2 "BLOCK-FS-BOUNDARY-001" "$FSB_HOME_ENV"
 
 # ----- BLOCK-FS-BOUNDARY-002: file-write verbs outside allowed roots -----
 
 test_case "cp source outside Claude blocks" \
-  "$(bash_payload 'cp ~/Documents/foo /tmp/bar')" 2 "BLOCK-FS-BOUNDARY-002"
+  "$(bash_payload 'cp ~/Documents/foo /tmp/bar')" 2 "BLOCK-FS-BOUNDARY-002" "$FSB_HOME_ENV"
 
 test_case "cp target outside Claude blocks" \
-  "$(bash_payload 'cp /tmp/foo ~/Desktop/bar')" 2 "BLOCK-FS-BOUNDARY-002"
+  "$(bash_payload 'cp /tmp/foo ~/Desktop/bar')" 2 "BLOCK-FS-BOUNDARY-002" "$FSB_HOME_ENV"
 
 test_case "mv source outside Claude blocks" \
-  "$(bash_payload 'mv ~/Documents/old.txt /tmp/new.txt')" 2 "BLOCK-FS-BOUNDARY-002"
+  "$(bash_payload 'mv ~/Documents/old.txt /tmp/new.txt')" 2 "BLOCK-FS-BOUNDARY-002" "$FSB_HOME_ENV"
 
 test_case "tee ~/Desktop target blocks" \
-  "$(bash_payload 'tee ~/Desktop/test.txt')" 2 "BLOCK-FS-BOUNDARY-002"
+  "$(bash_payload 'tee ~/Desktop/test.txt')" 2 "BLOCK-FS-BOUNDARY-002" "$FSB_HOME_ENV"
 
+# The payload carries the home already expanded, as the shell would pass `of=` to dd,
+# so the fixture home is spelled into it rather than read from HOME by the hook.
 test_case "dd of=~/Desktop target blocks" \
-  "$(bash_payload 'dd if=/tmp/foo of='"$HOME"'/Desktop/bar.bin')" 2 "BLOCK-FS-BOUNDARY-002"
+  "$(bash_payload 'dd if=/tmp/foo of='"$FSB_FIXTURE_HOME"'/Desktop/bar.bin')" 2 "BLOCK-FS-BOUNDARY-002" "$FSB_HOME_ENV"
 
 # ----- BLOCK-FS-BOUNDARY-003: unresolvable strict-policy -----
 
@@ -526,8 +579,11 @@ test_case "cat ~/.claude config allowed" \
 # the internal `cp` calls happen inside the script's bash subprocess and
 # the hook never sees them. Direct unquoted cat of paths-with-spaces is
 # accepted v1 residual per bypass-mode-readiness.md § Known Limitations.
+# The arm runs under the fixture home (HOME-FIXTURE-01), whose install path no allowlist
+# row names, so it pins that the unquoted form blocks; it no longer tells the
+# tokenization apart from an unlisted home.
 test_case "Cowork install path quoted-form blocks (v1 limitation — unquoted whitespace path tokenizes)" \
-  "$(bash_payload 'cat '"$HOME"'/Library/Application Support/Claude/local-agent-mode-sessions/foo/skills/daily-status/SKILL.md')" 2 "BLOCK-FS-BOUNDARY-001"
+  "$(bash_payload 'cat '"$FSB_FIXTURE_HOME"'/Library/Application Support/Claude/local-agent-mode-sessions/foo/skills/daily-status/SKILL.md')" 2 "BLOCK-FS-BOUNDARY-001" "$FSB_HOME_ENV"
 
 # ----- Verbs that are NOT in v1 scope — should pass through (out-of-scope = allow) -----
 
@@ -559,27 +615,32 @@ test_case "bypass env var allows blocked cp" \
 # ----- Absolute-path-aware verb anchor -----
 
 test_case "/bin/cat outside Claude blocks (absolute-path-aware)" \
-  "$(bash_payload '/bin/cat ~/Documents/file.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+  "$(bash_payload '/bin/cat ~/Documents/file.txt')" 2 "BLOCK-FS-BOUNDARY-001" "$FSB_HOME_ENV"
 
 test_case "/usr/bin/cp outside Claude blocks (absolute-path-aware)" \
-  "$(bash_payload '/usr/bin/cp ~/Desktop/foo /tmp/bar')" 2 "BLOCK-FS-BOUNDARY-002"
+  "$(bash_payload '/usr/bin/cp ~/Desktop/foo /tmp/bar')" 2 "BLOCK-FS-BOUNDARY-002" "$FSB_HOME_ENV"
 
 # ----- Chained-command tokenizer (F1 split) -----
 
 test_case "ls && cat ~/Documents blocks (chained)" \
-  "$(bash_payload 'ls && cat ~/Documents/foo')" 2 "BLOCK-FS-BOUNDARY-001"
+  "$(bash_payload 'ls && cat ~/Documents/foo')" 2 "BLOCK-FS-BOUNDARY-001" "$FSB_HOME_ENV"
 
 test_case "echo hi; cat ~/Desktop blocks (chained)" \
-  "$(bash_payload 'echo hi; cat ~/Desktop/foo')" 2 "BLOCK-FS-BOUNDARY-001"
+  "$(bash_payload 'echo hi; cat ~/Desktop/foo')" 2 "BLOCK-FS-BOUNDARY-001" "$FSB_HOME_ENV"
 
 # ----- Warn-mode behavior (.mode = warn → exit 0 with WARN log) -----
 
 test_warn_case() {
   local name="$1"; local payload="$2"
+  local env_var="${3:-}"
   local tmp_stderr; tmp_stderr="$(/usr/bin/mktemp)"
   local actual_exit=0
   /usr/bin/printf 'warn' > "$MODE_FILE"
-  /usr/bin/printf '%s' "$payload" | /bin/bash "$HOOK" 2>"$tmp_stderr" >/dev/null || actual_exit="$?"
+  if [ -n "$env_var" ]; then
+    /usr/bin/printf '%s' "$payload" | /usr/bin/env "$env_var" /bin/bash "$HOOK" 2>"$tmp_stderr" >/dev/null || actual_exit="$?"
+  else
+    /usr/bin/printf '%s' "$payload" | /bin/bash "$HOOK" 2>"$tmp_stderr" >/dev/null || actual_exit="$?"
+  fi
   /usr/bin/printf 'enforce' > "$MODE_FILE"
   local actual_stderr; actual_stderr="$(/bin/cat "$tmp_stderr")"; /bin/rm -f "$tmp_stderr"
   local ok=1
@@ -594,10 +655,10 @@ test_warn_case() {
 }
 
 test_warn_case "warn-mode cat ~/Documents emits WARN exit 0" \
-  "$(bash_payload 'cat ~/Documents/foo')"
+  "$(bash_payload 'cat ~/Documents/foo')" "$FSB_HOME_ENV"
 
 test_warn_case "warn-mode cp source outside emits WARN exit 0" \
-  "$(bash_payload 'cp ~/Documents/foo /tmp/bar')"
+  "$(bash_payload 'cp ~/Documents/foo /tmp/bar')" "$FSB_HOME_ENV"
 
 # ----- Off-mode behavior (.mode = off → exit 0 silently) -----
 

@@ -7858,11 +7858,11 @@ cmd_check() {
   #   - Checks 8-10: warn/enforce/off via core/hooks/deploy-check.mode
   #     (default "warn" for initial shakedown per core/rules/bypass-mode-
   #     readiness.md)
-  # EXEMPTION_LIST adapts to an operator-instance path-via-env-var per
-  # Spec Surface 5.2 (C) — defaults to operator-instance path; falls back to
-  # legacy .claude/ location for compatibility.
-  local EXEMPTION_LIST="$(pmo_instance_path)/skill-editor-exemption-list.txt"
-  [[ -f "$EXEMPTION_LIST" ]] || EXEMPTION_LIST=".claude/skill-editor-exemption-list.txt"
+  # EXEMPTION_LIST is the one path every consumer of the skill-editor exemption list
+  # reads: pmo_skill_editor_exemption_list (lib-instance-path.sh, sourced above). No
+  # fallback — a second location is how the consumers came to disagree.
+  local EXEMPTION_LIST
+  EXEMPTION_LIST="$(pmo_skill_editor_exemption_list)"
 
   # Check 6 — Canonical-structure compliance (required; always-enforce; enforcement-surface: deploy-time + CI mirror)
   #
@@ -7894,7 +7894,7 @@ cmd_check() {
   # to the shared invokable that closes the run-context gap (#673).
   #
   # The script honors the same EXEMPTION_LIST (canary-by-design D-Refs exemption,
-  # frontmatter still enforced) via the operator-instance path / .claude fallback. We
+  # frontmatter still enforced) via the single resolver (no fallback). We
   # re-emit each per-skill line through log() and fold every FAIL into ISSUES so
   # the STRICT summary gate behaves exactly as before.
   log "Check 6: Canonical-structure compliance"

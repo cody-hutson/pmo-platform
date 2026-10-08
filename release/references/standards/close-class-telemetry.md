@@ -93,7 +93,7 @@ Worked example (a release whose retro fully conformed — all 10 canonical-form 
 **Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 8/10 (0.80); carry-forward-closure 2/3 (0.67); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation NOT-EVALUATED — denominator unmeasurable: 0 labelled rows against 29 unlabelled stage sub-task candidates — this is not a clean result; evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh
 ```
 
-Emit mechanism: the Stage 13 spoke invokes `compute-close-class-telemetry.sh <version> --milestone <N>` at the Stage 13 chore PR and embeds the returned value into the visible-H4 block. Per the chore-PR convention the field lands on main via the Stage 13 chore PR, never direct-to-main.
+Emit mechanism: close-out phase 6.8 (`automated-closeout.sh`) invokes `compute-close-class-telemetry.sh <version> --milestone <N> --retro <path>`, where `<path>` is the output of `produce-learnings-register.sh <version> --print-path`, and embeds the returned value into the visible-H4 block. The Stage 13 Phase A7.2 register is the field's **declared precondition**: it must exist before the close-out runs. When it does not, the field carries the § 5 absent reading and phase 6.8 records WARN naming the unmet precondition, so an absent register is never recorded as a clean emit. Per the chore-PR convention the field lands on main via the Stage 13 chore PR, never direct-to-main.
 
 ## 4. The six indicators (definitions + the anti-overfit dispositions)
 

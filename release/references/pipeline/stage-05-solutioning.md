@@ -200,7 +200,7 @@ Stage 5 spokes may include forecasts of how Stage 12 / 13 deploy actions will re
 
 **Forecast format for history-level findings.** A Stage 5 forecast addressing a history-level finding MUST forecast one of:
 1. **Resolves via subsequent `pmo-skill-editor` Mode A commit** carrying the required trailer at Stage 6 — when a code change is in scope and pmo-skill-editor invocation produces the trailer naturally.
-2. **Resolves via `core/config/allowlists/skill-editor-exemption-list.txt` addition** with operator-approved rationale — when the affected skill is genuinely exempt (e.g., documentation-only patches that do not change skill behavior).
+2. **Resolves via a skill-editor exemption-list addition** with operator-approved rationale — a package-level entry in `core/config/allowlists/skill-editor-exemption-list.txt`, which reaches the list Checks 6/10 read (`pmo_skill_editor_exemption_list()`) at the next composition refresh (`update.sh`) — when the affected skill is genuinely exempt (e.g., documentation-only patches that do not change skill behavior).
 
 A forecast asserting "resolves at Stage 12 via `core/deploy/deploy.sh --deploy <skill>`" for a history-level check is a **misforecast**. Misforecasts surface as Stage 12 Tier 1 deviations per [release-process.md § Inter-Stage Feedback Protocol](../../governance/release-process.md) and are tracked by Stage 7 DT.
 

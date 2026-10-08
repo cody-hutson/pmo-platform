@@ -173,7 +173,7 @@ Two distinct size conventions govern a SKILL.md, and they must not be conflated:
 
 ### Exemption
 
-Skills listed in `.claude/skill-editor-exemption-list.txt` are exempt from the threshold. Initial list contains `pmo-skill-refiner-selftest-canary` (canary-by-design; deliberately minimal). Operator additions follow the "No ungoverned changes" protocol (CLAUDE.md Guardrails) via a tracked GitHub Issue.
+Skills listed in the operator-instance skill-editor exemption list — resolved by `pmo_skill_editor_exemption_list()` in `core/deploy/lib-instance-path.sh` (default `${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}/pmo-instance/skill-editor-exemption-list.txt`), seeded at install from `core/config/allowlists/skill-editor-exemption-list.txt` — are exempt from the threshold. Initial list contains `pmo-skill-refiner-selftest-canary` (canary-by-design; deliberately minimal). Operator additions follow the "No ungoverned changes" protocol (CLAUDE.md Guardrails) via a tracked GitHub Issue.
 
 ### Worked examples (from the 2026-04-20 audit Finding 3)
 

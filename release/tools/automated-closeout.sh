@@ -13,7 +13,17 @@
 # commit mechanism + hub-spoke-bridge.md Procedure 7. Per the
 # Stage 5 spec (relayed; canonical content).
 #
-# Phases (sequenced; each idempotent — re-running is safe):
+# Phases (sequenced). Re-running after a halt is the supported recovery, but this
+# list does NOT assert that every phase is idempotent: that blanket claim was never
+# pinned by an arm and was falsified at phase 5 (#7182) and phase 11 (#7436). Re-run
+# behaviour that --self-test DOES pin:
+#   phase 5  — from the worktree already on the chore branch, a re-run converges
+#              (SKIPPED); while ANOTHER worktree holds the branch it FAILs with
+#              git's refusal, before phase 6 can commit (group CB)
+#   phase 11 — a resumed run whose chore PR already MERGED resolves it over the full
+#              OPEN/MERGED/CLOSED partition and SKIPs to phase 12, whose MERGED arm
+#              renders terminal PASS, whatever the age of the local origin/main ref
+#              and whatever the merge method (group CR)
 #   1  parse_args         CLI validation
 #   2  preflight          gh auth, clean tree, worktree cwd, DEPLOYED row + unique slug match, tag RECORDED (not gated), no scaffold residue in the note, Phase-A7 learnings-triple captured
 #   3  read_state         RELEASE_LOG row + visible-H4 Deployment Log + Milestone state + release-PR MERGE_SHA (#1682)
@@ -24,6 +34,9 @@
 #   6.6 inject_velocity_field **Velocity:** field after **Cycle-Time:** in that block (stage-13-close.md Phase B-velocity; surface-resolved)
 #   6.7 append_release_learnings  sibling H4 `#### Release Learnings v<X.Y>` after the Deployment Log block (stage-13-close.md Phase A7; hot ledger only)
 #   6.8 inject_close_class_telemetry_field  **Close-Class-Telemetry:** field after **Outcome rationale:**/**Outcome:** in that block (close-class-telemetry.md § 3.2; surface-resolved; anchor STRING resolved through the same shared field-key grammar as 6.5, #4222)
+#                          DECLARED PRECONDITION: the Phase A7.2 learnings register, produced BEFORE this run; the path comes from
+#                          produce-learnings-register.sh --print-path and is passed as --retro. Unmet -> the field is still written
+#                          with the telemetry tool's own reading and the row is WARN (never a silent PASS)
 #   6.9 transition_plan_status  release-plan frontmatter `status:` ACTIVE → CLOSED (release-corpus-schema.md § Plan-status lifecycle; comment-tolerant reader, bounded to the leading fence). ORDERED AFTER 6 and BEFORE 9.3 — 9.3 backstops the WRITE only; the COMMIT is asserted by the phase-10 staging-completeness arms (#6258), since 9.3 runs above phase 10 and reads the working tree
 #   7  append_release_index    new row in RELEASE_INDEX.md
 #   8  append_release_digest   new entry under v<MAJOR>.* H2 in RELEASE_DIGEST.md
@@ -38,7 +51,7 @@
 #   9.9 ledger_guard       pre-commit §220 I1/I2 read-modify-write guard on the 4 append-only ledgers (#1680)
 #   9.95 rebuild_skill_packages  rebuild changed skills' .skill packages into the chore commit (content-sidecar-gated; N/A when no skill source changed)
 #   10 commit_chore_pr     git add + git commit (parser-clean message)
-#   11 create_chore_pr     gh pr create with safe-phrasing body throughout
+#   11 create_chore_pr     resolve this repository's own PR for the chore branch over OPEN/MERGED/CLOSED first (REST, owner-qualified; #7436), else gh pr create with safe-phrasing body throughout
 #   12 await_merge_chore_pr poll state+mergeable+mergeStateStatus (#1705: CI-realistic budget, default 300s;
 #                          skipped by no-merge mode; BLOCKED/UNSTABLE keep-polling. #6255: MERGED = terminal
 #                          PASS, CLOSED = terminal FAIL, and a failed merge re-probes state before FAILing)
@@ -53,8 +66,13 @@
 #   13 post_close_milestone gh api -X PATCH state=closed (#2919: DEFERS under --no-merge)
 #   14 manual_close_release_issues operator-authorized D-1 with structured comment (#2919: DEFERS under --no-merge)
 #   15 run_verification + post_gate_passage_proof per the gate-passage-proof template
+#   15.2 lock_milestone_threads  Phase C5 lock-at-close over EVERY milestone thread, issues and PRs (#5284; DEFERS under --no-merge)
+#                          through the REST lock endpoint with lock_reason=resolved, never GraphQL. ALWAYS records one row:
+#                          PASS (the locked list) / SKIPPED (an explicit zero) / FAIL (per-thread errors, a re-read mismatch,
+#                          a count mismatch). NON-BLOCKING: returns 0 on every path. Count check: enumerated == open_issues +
+#                          closed_issues, all three PR-inclusive (#4768)
 #   15.5 publish_github_release gh release create | edit (Layer-1 dual-write Surface 1; #2919: DEFERS under --no-merge, as does 15.6 check_release_body_drift) — BACKSTOP for Stage 12 Phase B5.5, which owns the emit; the edit path converges BODY and TITLE; records SURFACE1-STATE=CREATED|EDITED|NO-OP and SURFACE1-TITLE=MATCH|CONVERGED|WITHHELD
-#   15.55 assert_anchor_hygiene  SET-based annotated-tag <-> published-Release parity + tagger identity (dated exemption sets)
+#   15.55 assert_anchor_hygiene  SET-based annotated-tag <-> published-Release parity + tagger identity (dated exemption sets) — the own tag is partitioned out by VERSION and asserted by its own limb (#2919 membership: DEFERS under --no-merge)
 #   15.6 check_release_body_drift  post-emit §5.1 published-body drift assert (gated genuine drift BLOCKS; #2919: DEFERS under --no-merge)
 #   16 invoke_orphan_cleanup cleanup-orphan-state.sh --release-close <slug> --dry-run
 #   16.5 pattern_scan      synthesize-release-learnings.sh --mode pattern-detect (ON by default;
@@ -153,12 +171,14 @@
 #     --merge-timeout <N>      Chore-PR await-merge poll budget, seconds (#1705;
 #                              default 300 — CI-realistic, not the old 30s cap)
 #     --no-merge               Create the chore PR but do NOT poll/merge it (#1705);
-#                              exit cleanly leaving the PR for the operator. The
-#                              post-merge-dependent phases — post_close_milestone,
-#                              manual_close_release_issues, publish_github_release,
-#                              check_release_body_drift — DEFER under this flag
-#                              (#2919); re-run --apply after the chore PR merges to
-#                              complete milestone close + Release publish.
+#                              exit cleanly leaving the PR for the operator. Every
+#                              post-merge phase declares its behaviour under this
+#                              flag in NO_MERGE_PHASE_BEHAVIOUR (run / skip /
+#                              record / defer); the deferred ones are listed in
+#                              the report's "Deferred Under --no-merge" section
+#                              with the follow-up command (#2919). Re-run --apply
+#                              after the chore PR merges to complete milestone
+#                              close + Release publish.
 #     --attest-action-items <c> Operator attestation clearing a Procedure 7a SURFACE
 #                              state (#4439). Closed enum: no-commitments (this
 #                              release genuinely recorded no action items) or
@@ -585,6 +605,7 @@ HUB_STATE_PATH="${HUB_STATE_PATH:-$(pmo_instance_path_for "$WORKSPACE_ROOT")/hub
 # above — a TOOL dependency guarded inline by its consuming phase, not a fifth
 # check_paths() row (that probe enumerates the four CORPUS paths).
 COMPUTE_CLOSE_CLASS_TELEMETRY="$SCRIPT_DIR/compute-close-class-telemetry.sh"
+PRODUCE_LEARNINGS_REGISTER="$SCRIPT_DIR/produce-learnings-register.sh"   # Phase 6.8's declared precondition: --print-path resolves the A7.2 register path (static; reads nothing)
 # Scaffold-residue token source (AC1 single-source seam). The token set has exactly
 # ONE definition — SCAFFOLD_RESIDUE_TOKENS in lint_release_corpus.py — and the shell
 # anchors read it from there via --print-scaffold-tokens. Retyping the literals in
@@ -664,6 +685,53 @@ MERGE_TIMEOUT=300        # --merge-timeout <N> (#1705). Await-merge poll budget 
                          # pending budget, not a CI-completion budget.
 NO_MERGE=0               # --no-merge (#1705). Create the chore PR but do NOT poll/merge
                          # it — exit cleanly leaving the PR for the operator to merge.
+
+# ─── --no-merge phase behaviour — THE declaration ────────────────────────────
+# Every phase dispatched AT OR AFTER phase_await_merge_chore_pr declares exactly
+# ONE behaviour under --no-merge. A phase dispatched before it cannot consume the
+# merge the flag suppresses, so it carries no row. This table is the single
+# source for: the deferral itself (_nm_defer, the FIRST statement of every `defer`
+# phase), the report's "Deferred Under --no-merge" bullets and the JSON
+# deferred_under_no_merge array (both derived here), and self-test group NM.
+# A post-merge phase dispatched WITHOUT a row fails group NM arm NM-5a.
+#
+# Values (closed set):
+#   run    — unaffected; runs exactly as on a merge run
+#   skip   — N/A by construction: its input is the merge this run did not perform;
+#            the phase records its own SKIPPED detail and nothing is owed
+#   record — evaluates and records; a verdict that would block at --apply is
+#            recorded non-blocking because the close it guards is deferred
+#   defer  — owed on the post-merge re-run; _nm_defer records the deferral and
+#            the report lists the phase with the consequence text on its row
+#
+# Row form: "<phase-record-name> <value> [consequence — defer rows only]". The name
+# is the dispatched function's name without phase_ (the key arm g already uses).
+# Consequence text carries no '|'; @MILESTONE@ renders as #<milestone number>.
+#
+# Two conventions every `defer` row owes, each checked by group NM:
+#   - its phase OPENS with `_nm_defer "<name>" "<detail>" && return 0` — a phase
+#     that defers through its own hand-written NO_MERGE guard records the same
+#     observable but fails NM-5d, because the table must stay the source;
+#   - its --help inventory row carries `DEFERS under --no-merge` ON THE LINE THAT
+#     NAMES THE PHASE — --help renders the header line by line, so a token on a
+#     continuation line is invisible to the per-line check, NM-5c.
+NO_MERGE_PHASE_BEHAVIOUR=(
+  "await_merge_chore_pr skip"
+  "sync_primary_checkout run"
+  "reparse_ledgers skip"
+  "action_item_gate record"
+  "post_close_milestone defer Milestone @MILESTONE@ left OPEN"
+  "manual_close_release_issues defer D-1 anomaly issue-close deferred"
+  "run_verification run"
+  "lock_milestone_threads defer Phase C5 thread locks not applied"
+  "publish_github_release defer Surface 1 (GitHub Release) not emitted"
+  "assert_anchor_hygiene defer release-anchor parity not asserted — its Surface-1 input is not yet published"
+  "check_release_body_drift defer no published Release to drift-check"
+  "invoke_orphan_cleanup run"
+  "pattern_scan run"
+  "audit_epic_rollup run"
+)
+
 CHORE_PR_SKIPPED=0       # set by phase_create_chore_pr's zero-commit guard so
                          # phase_await_merge_chore_pr SKIPs gracefully (un-strands the
                          # terminal phases on the idempotent already-up-to-date path).
@@ -756,6 +824,13 @@ EXCLUDED_DETAIL=""        # collect_open_release_issues side channel (#3587): th
                          # phase_run_verification ignores it.
 CHORE_BRANCH=""
 CHORE_PR_NUMBER=""
+CHORE_PR_OUTCOME=""       # set by phase_create_chore_pr at EVERY exit (#7436), one of:
+                          # created · existing-open · resumed-already-merged ·
+                          # skipped-as-idempotent · dry-run · failed. Empty = phase 11
+                          # never ran in this run (it halted earlier). It is the one
+                          # record of phase 11's outcome, so a consumer renders it rather
+                          # than re-deriving the outcome from CHORE_PR_NUMBER and
+                          # CHORE_PR_SKIPPED, which cannot tell the outcomes apart.
 VERIFICATION_RESULTS=""
 STATE_AI_GATE=""          # Procedure 7a verdict computed at Phase 12.9, BEFORE the
                           # milestone close. One of the gate's five states:
@@ -786,6 +861,12 @@ STATE_AI_EMIT="n/a"       # attestation-emission outcome: n/a | emitted | dry-ru
                           # EMITTED, not merely accepted; when the emit cannot land
                           # this value says so rather than leaving the close looking
                           # attested-and-recorded when only half of that is true.
+STATE_AI_EMIT_RC=""       # the event writer's exit status when STATE_AI_EMIT is
+                          # failed:writer-returned-nonzero (#5910)
+STATE_AI_EMIT_ERR=""      # the writer's own diagnostic — one line, no '|', repo/home
+                          # paths redacted, through _detail_one_line — or the
+                          # emitter's own reason for a failed:<reason> it decided
+                          # without calling the writer (#5910)
 MERGE_SHA=""              # release-PR merge commit (#1682). Captured ONCE at
                          # read-state from the RELEASE PR (not the chore PR — the
                          # release content merged via the release PR, and the
@@ -1488,6 +1569,53 @@ check_parser_clean() {
   return 0
 }
 
+# Redact-only projection of a path-bearing text for report and post output (#7855;
+# Plan amendment 13). "$REPO_ROOT" becomes <repo> and then "$HOME" becomes <home>
+# (REPO_ROOT first, because it normally sits under HOME), each root with one trailing
+# slash stripped first. The replace is a literal substring match, so hand it the
+# whole path — never a capped window, which can cut a path before this runs. A root
+# of one character or less is skipped: HOME=/ would otherwise rewrite every
+# separator in the text. It flattens nothing and caps nothing, so it is safe over a
+# multi-line render, which is how the report sink and phase 15's post use it
+# (self-test PL-1). Deliberately NOT named phase_* (the dispatchable namespace).
+_redact_paths() {
+  local _s="${1:-}" _r="${REPO_ROOT:-}" _h="${HOME:-}"
+  _r="${_r%/}"; _h="${_h%/}"
+  [[ "${#_r}" -gt 1 ]] && _s="${_s//"$_r"/<repo>}"
+  [[ "${#_h}" -gt 1 ]] && _s="${_s//"$_h"/<home>}"
+  /usr/bin/printf '%s' "$_s"
+}
+
+# One-line, table-safe, public-safe projection of a captured diagnostic for a
+# mark_phase detail (#7182). A detail is a `RESULT|detail` record AND a markdown
+# table row (header mode rule, constraint 2), and the close-out report is pasted
+# into a PUBLIC sub-task. So: CR and LF become spaces, '|' becomes '/', "$REPO_ROOT"
+# becomes <repo> and then "$HOME" becomes <home> (REPO_ROOT first, because it
+# normally sits under HOME), capped at 800 characters. The markers are deliberately
+# not '~': a tilde in a ${…//…/…} replacement is bash-version-dependent. The
+# patterns are quoted so they match literally. Deliberately NOT named phase_* (the
+# dispatchable namespace).
+#
+# REDACT, THEN CAP — and the cap belongs to THIS function. The redaction is a
+# literal-substring replace, so a caller that truncates first can cut a path
+# mid-string, and the fragment, no longer containing "$HOME", ships raw. Hand it the
+# whole capture, its first line, or a raw window of at least 4096 bytes — the three
+# forms self-test AI-X admits — never a pre-capped one.
+# Route a captured diagnostic through here rather than hand-rolling a projection, so
+# the report carries one vocabulary (self-test CB-5, CB-10).
+_detail_one_line() {
+  local _s="${1:-}"
+  _s="${_s//$'\r'/ }"
+  _s="${_s//$'\n'/ }"
+  _s="${_s//|//}"
+  _s="$(_redact_paths "$_s")"
+  /usr/bin/printf '%s' "${_s:0:800}"
+}
+
+# The record is RAW by design (#7855; Plan amendment 13): a detail keeps any path it
+# was handed, and the report sink in generate_report redacts "$REPO_ROOT" and "$HOME"
+# once, over the whole render. Never cut a path before it reaches the sink: a
+# captured diagnostic goes through _detail_one_line at its projection instead.
 mark_phase() {
   PHASE_NAMES+=("$1")
   PHASE_RESULTS+=("$2")
@@ -1505,6 +1633,65 @@ get_phase() {
     fi
   done
   /usr/bin/printf '—|—\n'
+}
+
+# ─── --no-merge behaviour readers — the ONLY readers of NO_MERGE_PHASE_BEHAVIOUR ─
+_nm_behaviour() {   # <phase-record-name> -> declared value, or UNDECLARED
+  local _row _n _b _c
+  for _row in "${NO_MERGE_PHASE_BEHAVIOUR[@]}"; do
+    read -r _n _b _c <<<"$_row"
+    if [[ "$_n" == "$1" ]]; then /usr/bin/printf '%s' "$_b"; return 0; fi
+  done
+  /usr/bin/printf 'UNDECLARED'
+}
+
+_nm_members() {     # <value> -> the names declared with it, one per line, table order
+  local _row _n _b _c
+  for _row in "${NO_MERGE_PHASE_BEHAVIOUR[@]}"; do
+    read -r _n _b _c <<<"$_row"
+    if [[ "$_b" == "$1" ]]; then /usr/bin/printf '%s\n' "$_n"; fi
+  done
+  return 0
+}
+
+_nm_consequence() { # <phase-record-name> -> a defer row's report text
+  local _row _n _b _c _ms="#${MILESTONE}"
+  for _row in "${NO_MERGE_PHASE_BEHAVIOUR[@]}"; do
+    read -r _n _b _c <<<"$_row"
+    if [[ "$_n" == "$1" ]]; then /usr/bin/printf '%s' "${_c//@MILESTONE@/$_ms}"; return 0; fi
+  done
+  return 0
+}
+
+# THE --no-merge deferral. The FIRST statement of every phase the table declares
+# `defer`, above every guard, so it fires before any network call. Records SKIPPED
+# "DEFERRED under --no-merge — <detail>" and returns 0 (caller returns) iff
+# --no-merge is set AND the table declares the phase `defer`; else returns 1.
+# The TABLE decides: a phase calling this while declared anything else proceeds.
+_nm_defer() {       # <phase-record-name> <detail>
+  [[ "$NO_MERGE" -eq 1 ]] || return 1
+  [[ "$(_nm_behaviour "$1")" == "defer" ]] || return 1
+  mark_phase "$1" "SKIPPED" "DEFERRED under --no-merge — $2"
+  return 0
+}
+
+# Post-merge dispatched phases (at or after the pivot, in dispatch order) with NO
+# row, one per line. The parse is arm g's own (^phase_[a-z0-9_]+ \|\|). Emits
+# NO-PIVOT when the pivot is absent, so a parse that read nothing cannot pass as
+# "all declared". The text is read from a HERE-STRING, never handed to an external
+# command as an argument: this whole file exceeds the platform's argument-size
+# limit, and an external printf fed it fails and leaves the parse reading nothing.
+_nm_undeclared() {  # <dispatch-text>
+  local _names _n _seen=0
+  _names="$(/usr/bin/grep -oE '^phase_[a-z0-9_]+ \|\|' <<<"$1" | /usr/bin/sed 's/^phase_//;s/ ||$//' || true)"
+  while IFS= read -r _n; do
+    if [[ -z "$_n" ]]; then continue; fi
+    if [[ "$_n" == "await_merge_chore_pr" ]]; then _seen=1; fi
+    if [[ "$_seen" -ne 1 ]]; then continue; fi
+    if [[ "$(_nm_behaviour "$_n")" == "UNDECLARED" ]]; then /usr/bin/printf '%s\n' "$_n"; fi
+  done <<<"$_names"
+  if [[ "$_seen" -ne 1 ]]; then /usr/bin/printf 'NO-PIVOT\n'; fi
+  return 0
 }
 
 # True when phase-record index $1 holds the FIRST occurrence of its phase name.
@@ -1680,7 +1867,7 @@ phase_preflight() {
   # unenumerated name shape that falls back to the Version (n=0), or a kebab-valued
   # column that shadows Milestone (n>=2) — is caught HERE, before any mutation, rather
   # than aborting 4 phases later at --apply or silently writing a bad INDEX cell. The
-  # state alternation is required because an idempotent re-run reads VERIFIED, not DEPLOYED.
+  # state alternation is required because a re-run reads VERIFIED, not DEPLOYED.
   local _slug_match_n
   _slug_match_n="$(log_row_match "$STATE_MILESTONE_SLUG" 'DEPLOYED|VERIFIED' count)"
   if [[ "$_slug_match_n" != "1" ]]; then
@@ -1950,7 +2137,7 @@ phase_read_state() {
 # uses it to EXCLUDE the sub-task from auto-close (a `--state open` query is
 # correct there — a closed sub-task cannot self-close), and `resolve_stage13_subtask`
 # uses it to FIND the sub-task as a comment target (a `--state open` query is WRONG
-# there — on an idempotent re-run or a `--no-merge` re-entry the sub-task may already
+# there — on a re-run or a `--no-merge` re-entry the sub-task may already
 # be closed, and a closed sub-task is still the correct durable home for the proof).
 # THE SHARED INVARIANT IS THE PREDICATE, NOT THE QUERY. Do not "unify" the two
 # callers onto one query state: that would either resurrect a closed sub-task into
@@ -2028,7 +2215,7 @@ collect_open_release_issues() {
 # `collect_open_release_issues` this queries `--state all` — see the boundary note
 # on `_is_stage13_close_subtask`: the shared invariant is the predicate, not the
 # query. `--state open` is load-bearing for the collector's auto-close purpose and
-# WRONG here, because a Stage-13 sub-task closed by an earlier pass of an idempotent
+# WRONG here, because a Stage-13 sub-task closed by an earlier pass of a
 # run is still the correct durable home for the proof.
 #
 # STDOUT (always exactly one TAB-separated line, so the caller needs no global and
@@ -2052,9 +2239,10 @@ resolve_stage13_subtask() {
           --json number,title,labels,state \
           --jq '.[] | "\(.number)\t\(.labels|map(.name)|join(","))\t\(.state)\t\(.title)"' 2>&1)" || _rc=1
   if [[ "$_rc" -ne 0 ]]; then
-    # First line only, and strip tabs/pipes: this string reaches a mark_phase detail
-    # (pipe-delimited) and a Markdown table cell.
-    /usr/bin/printf '\t\t%s\n' "gh query failed: $(/usr/bin/printf '%s' "$raw" | /usr/bin/head -1 | /usr/bin/tr '\t|' '  ')"
+    # First line only, through the shared projection: this string reaches a mark_phase
+    # detail (pipe-delimited), a Markdown table cell and the rung-2 release-PR comment.
+    # A tab may stay in it, because the reason is this record's LAST field.
+    /usr/bin/printf '\t\t%s\n' "gh query failed: $(_detail_one_line "${raw%%$'\n'*}")"
     return 0
   fi
 
@@ -2108,6 +2296,17 @@ phase_detect_open_issues() {
 }
 
 # ─── Phase 5: create_chore_branch ────────────────────────────────────────────
+#
+# RE-RUNNABLE, NOT EXISTENCE-IDEMPOTENT (#7182). The phase's contracted effect is a
+# STATE TRANSITION (HEAD on $CHORE_BRANCH), so its verdict is written from the
+# post-state, never from a precondition probe. rev-parse only SELECTS the git
+# operation: switch to an existing local branch, or create one from origin/main.
+# That operation's exit status decides FAIL, and a HEAD read-back decides success.
+# The defect this replaces marked SKIPPED on "branch exists" and then ran the
+# checkout with its failure discarded. A branch held by another worktree left HEAD
+# where it was, and every later phase committed onto the session's own branch. git's
+# refusal is now a FAIL carrying git's own words, and the dispatch guard aborts the
+# run before phase 6 writes anything.
 
 phase_create_chore_branch() {
   CHORE_BRANCH="chore/${VERSION}-stage-13-corpus-update"
@@ -2117,20 +2316,35 @@ phase_create_chore_branch() {
     return 0
   fi
 
-  # Idempotent: skip if branch already exists locally
-  if $GIT -C "$REPO_ROOT" rev-parse --verify "$CHORE_BRANCH" >/dev/null 2>&1; then
-    mark_phase "create_chore_branch" "SKIPPED" "branch $CHORE_BRANCH already exists locally"
-    $GIT -C "$REPO_ROOT" checkout "$CHORE_BRANCH" >/dev/null 2>&1 || true
-    return 0
+  local _ccb_existed=0 _ccb_op _ccb_out="" _ccb_rc=0 _ccb_head=""
+  if $GIT -C "$REPO_ROOT" rev-parse --verify --quiet "refs/heads/${CHORE_BRANCH}" >/dev/null 2>&1; then
+    _ccb_existed=1
+    _ccb_op="git checkout ${CHORE_BRANCH}"
+    _ccb_out="$($GIT -C "$REPO_ROOT" checkout "$CHORE_BRANCH" 2>&1)" || _ccb_rc=$?
+  else
+    # Branch from origin/main (Stage 13 chore PR per pipeline/stage-13-close.md)
+    _ccb_op="git checkout -b ${CHORE_BRANCH} origin/main"
+    _ccb_out="$($GIT -C "$REPO_ROOT" checkout -b "$CHORE_BRANCH" origin/main 2>&1)" || _ccb_rc=$?
+  fi
+  if [[ "$_ccb_rc" -ne 0 ]]; then
+    mark_phase "create_chore_branch" "FAIL" "${_ccb_op} exited ${_ccb_rc}: $(_detail_one_line "$_ccb_out") — HEAD was not moved; if another worktree holds the branch, free it (git worktree list names the holder) and re-run"
+    return 3
   fi
 
-  # Branch from origin/main (Stage 13 chore PR per pipeline/stage-13-close.md)
-  if $GIT -C "$REPO_ROOT" checkout -b "$CHORE_BRANCH" origin/main >/dev/null 2>&1; then
-    mark_phase "create_chore_branch" "PASS" "created $CHORE_BRANCH from origin/main"
-    return 0
+  # Post-state read-back: the verdict is about where HEAD IS, not about what the
+  # command was asked to do.
+  _ccb_head="$($GIT -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD 2>/dev/null)" || _ccb_head=""
+  if [[ "$_ccb_head" != "$CHORE_BRANCH" ]]; then
+    mark_phase "create_chore_branch" "FAIL" "${_ccb_op} exited 0 but HEAD reads '${_ccb_head:-<detached>}', not ${CHORE_BRANCH} — refusing to let phase 6 commit onto the wrong branch"
+    return 3
   fi
-  mark_phase "create_chore_branch" "FAIL" "git checkout -b failed"
-  return 3
+
+  if [[ "$_ccb_existed" -eq 1 ]]; then
+    mark_phase "create_chore_branch" "SKIPPED" "branch ${CHORE_BRANCH} already existed locally — checked out and read back as HEAD; creation skipped"
+  else
+    mark_phase "create_chore_branch" "PASS" "created ${CHORE_BRANCH} from origin/main; read back as HEAD"
+  fi
+  return 0
 }
 
 # ─── Phase 6: transition_release_log (DEPLOYED → VERIFIED) ───────────────────
@@ -2861,7 +3075,9 @@ phase_inject_velocity_field() {
     _out="$("$COMPUTE_VELOCITY" "${_cv_args[@]}" 2>"$_errf"; _prc=$?; /usr/bin/printf 'X'; exit "$_prc")" || _rc=$?
     _out="${_out%X}"
     local _err
-    _err="$(/usr/bin/head -c 800 "$_errf" 2>/dev/null | /usr/bin/tr '\n' ' ' || true)"
+    # A raw 4096-byte window through the shared projection, which redacts BEFORE it
+    # caps, so a path in the producer's diagnostics is never cut mid-string (#7855).
+    _err="$(_detail_one_line "$(/usr/bin/head -c 4096 "$_errf" 2>/dev/null)")"
     /bin/rm -f "$_errf" 2>/dev/null || true
 
     # Exit 2 is the producer's source-integrity / implausible-measurement
@@ -3292,6 +3508,24 @@ phase_inject_close_class_telemetry_field() {
   fi
 
   local _cct_args=( "$VERSION" --milestone "$MILESTONE" )
+  # DECLARED PRECONDITION (#6892): the Phase A7.2 learnings register. It is produced by the
+  # Stage 13 spoke BEFORE this run (stage-13-close.md § Phase A7.2), so it is a mode-INVARIANT
+  # input — no phase of THIS run writes it — and reading it above the dry-run test keeps the
+  # dry-run bytes identical to --apply (ADR-158). The state is classified with -f on the SAME
+  # path passed as --retro, never by grepping the tool's N/A wording (which #5586 changes).
+  # The detail NEVER prints the resolved instance path.
+  local _retro="" _pre_state="unresolved" _pre_note=""
+  if [[ -x "$PRODUCE_LEARNINGS_REGISTER" ]]; then
+    _retro="$("$PRODUCE_LEARNINGS_REGISTER" "$VERSION" --print-path 2>/dev/null || true)"
+  fi
+  if [[ -n "$_retro" ]]; then
+    _cct_args+=( --retro "$_retro" )
+    if [[ -f "$_retro" ]]; then _pre_state="met"; else _pre_state="absent"; fi
+  fi
+  case "$_pre_state" in
+    absent)     _pre_note=" — DECLARED PRECONDITION UNMET: no Phase A7.2 learnings register exists for $VERSION at the resolved operator-instance register path, so Indicators 1, 2 and 5 read N/A. Produce it before the close-out runs (produce-learnings-register.sh $VERSION --milestone $MILESTONE --apply); once this field is written, a re-run SKIPs it rather than recomputing it." ;;
+    unresolved) _pre_note=" — DECLARED PRECONDITION UNRESOLVABLE: produce-learnings-register.sh --print-path returned no path (the tool is absent or its resolver failed), so no --retro was passed, and Indicators 1, 2 and 5 carry the telemetry tool's reading for a caller that supplied no register path." ;;
+  esac
   # Sentinel-preserved capture with explicit status propagation — the
   # emit_derived_entry / 6.6 idiom, for the same two reasons: `$( )` strips
   # trailing newlines, and `$?` after a pipeline reports the wrong status.
@@ -3369,7 +3603,7 @@ phase_inject_close_class_telemetry_field() {
   fi
 
   if [[ "$MODE" == "dry-run" ]]; then
-    mark_phase "inject_close_class_telemetry_field" "DRY-RUN" "would insert '$_line' after **Outcome rationale:** in the $VERSION Deployment Log block ($target_name)${_vac}"
+    mark_phase "inject_close_class_telemetry_field" "DRY-RUN" "would insert '$_line' after **Outcome rationale:** in the $VERSION Deployment Log block ($target_name)${_pre_note:+ (--apply would record WARN)${_pre_note}}${_vac}"
     return 0
   fi
 
@@ -3431,7 +3665,11 @@ phase_inject_close_class_telemetry_field() {
   # subject to the same staging omission (#4710).
   _record_touched_archive_segment "$target_log"
 
-  mark_phase "inject_close_class_telemetry_field" "PASS" "injected the **Close-Class-Telemetry:** field $_anchor_desc in the $VERSION Deployment Log block ($target_name): '$_line'${_vac}"
+  if [[ "$_pre_state" == "met" ]]; then
+    mark_phase "inject_close_class_telemetry_field" "PASS" "injected the **Close-Class-Telemetry:** field $_anchor_desc in the $VERSION Deployment Log block ($target_name): '$_line'${_vac}"
+  else
+    mark_phase "inject_close_class_telemetry_field" "WARN" "injected the **Close-Class-Telemetry:** field $_anchor_desc in the $VERSION Deployment Log block ($target_name): '$_line'${_pre_note}${_vac}"
+  fi
   return 0
 }
 
@@ -4163,7 +4401,7 @@ phase_lint_release_notes() {
   out="$(/usr/bin/python3 "$lint_script" --check note-content 2>&1)" || exit_code=$?
 
   if [[ $exit_code -eq 3 ]]; then
-    mark_phase "lint_release_notes" "FAIL" "path-resolution failure (exit 3): $(echo "$out" | /usr/bin/head -1) — corpus unverifiable; close BLOCKED (fail-loud)"
+    mark_phase "lint_release_notes" "FAIL" "path-resolution failure (exit 3): $(_detail_one_line "${out%%$'\n'*}") — corpus unverifiable; close BLOCKED (fail-loud)"
     echo "$out" | /usr/bin/head -20 >&2
     return 1
   fi
@@ -4259,8 +4497,9 @@ phase_lint_plan_identity() {
   out="$(/usr/bin/python3 "$lint_script" --check plan-identity 2>&1)" || exit_code=$?
 
   if [[ $exit_code -eq 3 ]]; then
-    # Both slices read `$out` from a HERE-STRING rather than through a pipe.
-    # `writer | head` is the SIGPIPE idiom: `head` stops reading at its line
+    # The detail takes `$out`'s first line in pure bash, through the shared projection
+    # (#7855). The stderr slice reads `$out` from a HERE-STRING rather than through a
+    # pipe. `writer | head` is the SIGPIPE idiom: `head` stops reading at its line
     # budget, the writer's next write fails on the closed pipe, and `pipefail`
     # promotes THAT status to the pipeline's — so a successful slice can report
     # failure. Removing the pipe removes the hazard outright; this is the same
@@ -4268,7 +4507,7 @@ phase_lint_plan_identity() {
     # assertions, not a gate exemption. Effect is unchanged: `head` still slices
     # the same bytes, and a here-string is the safer writer besides (bash's
     # `echo` would mangle an `$out` beginning `-n`/`-e`).
-    mark_phase "lint_plan_identity" "FAIL" "path-resolution failure (exit 3): $(/usr/bin/head -1 <<<"$out") — plan corpus unverifiable; close BLOCKED (fail-loud)"
+    mark_phase "lint_plan_identity" "FAIL" "path-resolution failure (exit 3): $(_detail_one_line "${out%%$'\n'*}") — plan corpus unverifiable; close BLOCKED (fail-loud)"
     /usr/bin/head -20 <<<"$out" >&2
     return 1
   fi
@@ -4505,8 +4744,8 @@ phase_append_changelog() {
 # mode-blindness was the defect. So --dry-run PREDICTS the assertion and returns 0,
 # and --apply runs it byte-for-byte unchanged.
 #
-# Residual, accepted and named: --dry-run no longer PREVIEWS a residue finding on an
-# idempotent re-run (a close resumed after the entries already landed). The gate
+# Residual, accepted and named: --dry-run no longer PREVIEWS a residue finding on a
+# re-run (a close resumed after the entries already landed). The gate
 # itself loses nothing — the assertion still runs at --apply at 9.55, which is BEFORE
 # the chore commit at 9.95, so residue is still caught loud before anything is
 # committed, and Checks 32 + 48 remain the corpus-wide detector. What is lost is the
@@ -4754,7 +4993,7 @@ _block_field_present() {
 }
 
 # Tree-PRESENCE probe for ONE member. PRESENCE — not phase result — is the
-# --apply predicate deliberately: an idempotent re-run whose producing phase
+# --apply predicate deliberately: a re-run whose producing phase
 # SKIPPED *because the output was already there* must pass.
 _output_set_member_present() {
   case "$1" in
@@ -5253,8 +5492,8 @@ phase_ledger_guard() {
 # Staging: this phase WRITES + populates REBUILT_PACKAGES=(); it does not `git
 # add` (write/stage separation — commit_chore_pr stages via files=()).
 # --no-merge: pre-commit phase; does NOT defer (the chore PR is still created, so
-# the rebuild must ride its commit) — hence no NO_MERGE guard here and no entry
-# in either deferral list.
+# the rebuild must ride its commit) — hence no NO_MERGE guard here and no row in
+# NO_MERGE_PHASE_BEHAVIOUR, which covers only phases dispatched at or after the merge.
 
 phase_rebuild_skill_packages() {
   local builder="$REPO_ROOT/core/deploy/tools/build-skill-packages.sh"
@@ -5421,9 +5660,9 @@ phase_rebuild_skill_packages() {
 
 # ─── The reported-write set — ONE producer, read from the PHASE RECORD ───────
 #
-# Emits one `<phase>\t<surface-basename>` line per surface a PASS-reporting phase
-# NAMED in its own detail. Deduped on the surface; the hot ledger is filtered out
-# because files=() names it unconditionally, so it can never be the dropped one.
+# Emits one `<phase>\t<surface-basename>` line per surface a PASS- or WARN-reporting
+# phase NAMED in its own detail. Deduped on the surface; the hot ledger is filtered
+# out because files=() names it unconditionally, so it can never be the dropped one.
 #
 # WHY THE KEY IS "A PHASE REPORTED A SURFACE" AND NOT A NAME PREFIX (#6258). Both
 # staging-completeness arms below keyed on `inject_*`, which is a PROXY for "is a
@@ -5434,7 +5673,7 @@ phase_rebuild_skill_packages() {
 # the prefix did not name. Widening the prefix to a second literal only moves the
 # blind spot to the next writer; keying on the REPORT removes it.
 #
-# THE `PASS` RESULT FILTER STAYS, AND IS LOAD-BEARING — for the reason MEASURED
+# THE `PASS`/`WARN` RESULT FILTER STAYS, AND IS LOAD-BEARING — for the reason MEASURED
 # below, not the one first written here. The first draft of this block claimed the
 # filter is what excludes phase_append_reversions' N/A line, "no re-version this
 # release (RELEASE_REVERSIONS.md untouched)". That was FALSE, and a mutation run
@@ -5444,13 +5683,23 @@ phase_rebuild_skill_packages() {
 # it. Recorded because the wrong rationale would send the next reader hunting for
 # a hazard this code does not have.
 #
-# What the filter ACTUALLY excludes, enumerated over all 47 mark_phase sites: FOUR
-# non-PASS limbs whose detail DOES use the strict path-only form —
-# inject_outcome_field (SKIPPED, twice), append_release_learnings (SKIPPED) and
+# What the filter ACTUALLY excludes: FIVE
+# SKIPPED limbs whose detail DOES use the strict path-only form —
+# inject_outcome_field (SKIPPED, twice), inject_velocity_field (SKIPPED, its
+# detail assembled in a variable, so a read of the literal mark_phase lines
+# misses it), append_release_learnings (SKIPPED) and
 # inject_close_class_telemetry_field (SKIPPED), each naming its resolved surface
 # as `($target_name)` / `($_log_name)`. A SKIPPED limb wrote nothing, so admitting
 # one would demand a commit for a file its own phase declined to touch — a guard
 # that FAILs a correct close. Arm PS-5 drives exactly that fixture.
+#   One limb in that form is ADMITTED beside PASS: the written-then-WARN limb of
+# inject_close_class_telemetry_field (WARN). When the Phase A7.2 learnings register
+# is absent or unresolvable, that limb still writes the field, then names the same
+# `($target_name)`, so a PASS-only filter hid a real write from this cross-check.
+# Arm TL/h drives exactly that fixture. It is the one WARN row phase 10 can read at
+# --apply: every other WARN limb sits under a dry-run branch, where phase 10 records
+# DRY-RUN and returns without reading this set, or belongs to a phase dispatched
+# after phase 10.
 #
 # The token grammar admits a repo-relative path as well as a bare basename and
 # reduces it with basename(1), so a writer may name its target in whichever form
@@ -5468,7 +5717,7 @@ _reported_write_surfaces() {
   local _i _tok _seen="" _hot
   _hot="$(/usr/bin/basename "$RELEASE_LOG")"
   for ((_i=0; _i<${#PHASE_NAMES[@]}; _i++)); do
-    [[ "${PHASE_RESULTS[$_i]}" == "PASS" ]] || continue
+    [[ "${PHASE_RESULTS[$_i]}" == "PASS" || "${PHASE_RESULTS[$_i]}" == "WARN" ]] || continue
     for _tok in $(/usr/bin/printf '%s\n' "${PHASE_DETAILS[$_i]}" \
                     | /usr/bin/grep -oE '\([A-Za-z0-9._/-]+\.md\)' | /usr/bin/tr -d '()' || true); do
       _tok="$(/usr/bin/basename "$_tok")"
@@ -5538,9 +5787,9 @@ phase_commit_chore_pr() {
     # below runs only AFTER a commit exists, so this early-return escapes it —
     # which is exactly how the worse half of #4710 stayed silent: 6.5 and 6.6
     # reported an injected write and this branch then reported green "no-op"
-    # directly beneath them, with no chore commit at all. An inject_* phase marked
-    # PASS wrote a field to disk (its SKIPPED/FAIL limbs write nothing), so an
-    # EMPTY staged set contradicts its own report.
+    # directly beneath them, with no chore commit at all. A phase that named a
+    # surface in a PASS or WARN report wrote to that surface (its SKIPPED/FAIL limbs
+    # write nothing), so an EMPTY staged set contradicts its own report.
     #   Reads the PHASE RECORD, not TOUCHED_ARCHIVE_SEGMENTS. A guard that consults
     # the same recorder whose omission IS the defect cannot catch that omission —
     # it would go vacuous the moment a future write site forgets to record, which
@@ -5593,13 +5842,13 @@ EOF
     # commit while this phase still reported PASS.
     #
     #   INDEPENDENCE (the binding Stage 5 constraint). The expected set is derived
-    # from the PHASE RECORD — the surface each inject_* phase NAMED in its own PASS
-    # detail — never from TOUCHED_ARCHIVE_SEGMENTS. A guard that consults the same
-    # recorder whose omission IS the defect goes vacuous the instant a future write
-    # site forgets to call _record_touched_archive_segment, which is exactly the
-    # regression this exists to catch. Same property the empty-set guard above was
-    # built on, and it is what makes this arm fail on a MISSING recorder call rather
-    # than agree with it.
+    # from the PHASE RECORD — the surface each phase NAMED in its own PASS
+    # or WARN detail — never from TOUCHED_ARCHIVE_SEGMENTS. A guard that consults
+    # the same recorder whose omission IS the defect goes vacuous the instant a
+    # future write site forgets to call _record_touched_archive_segment, which is
+    # exactly the regression this exists to catch. Same property the empty-set guard
+    # above was built on, and it is what makes this arm fail on a MISSING recorder
+    # call rather than agree with it.
     #
     #   Matched by basename against the committed path list, so a future surface
     # that lands in a different directory is still adjudicated instead of silently
@@ -5629,7 +5878,7 @@ EOF
       fi
     done
     if [[ -n "$_rmissing" ]]; then
-      mark_phase "commit_chore_pr" "FAIL" "staging-completeness: surface(s) an inject_* phase reported writing into are NOT in the chore commit — ${_rmissing% }; the write landed on disk but files=() does not name it, so a mandated output would be dropped from the chore PR while every phase reported green"
+      mark_phase "commit_chore_pr" "FAIL" "staging-completeness: surface(s) a phase reported writing into are NOT in the chore commit — ${_rmissing% }; the write landed on disk but files=() does not name it, so a mandated output would be dropped from the chore PR while every phase reported green"
       return 3
     fi
 
@@ -5645,12 +5894,90 @@ EOF
   return 3
 }
 
+# ─── Repo-host binding: chore-PR candidates (#7436) ──────────────────────────
+#
+# THE SEAM. release/references/pipeline/stage-13-close.md § 1 ("Host-operation
+# adapter seam") says a new host-touching close-out step extends the repo-host
+# adapter seam rather than inlining a host tool as THE mechanism. A `_host_*`
+# function is this driver's binding for one such operation: it owns the transport
+# and the projection, and its caller owns the semantics. Every `_host_*` binding
+# keeps four conventions: REST through `$GH api` only (the GraphQL pool is the one
+# exhausted while close-out runs); a one-line output contract, stated below; the
+# caller reads its exit status; and it is deliberately NOT named phase_* (that is
+# the dispatchable namespace, and `grep '^phase_'` over this file is a live form).
+#
+# OWNER-QUALIFIED, and that is a SECURITY property, not a filter preference. This
+# repository is public and accepts pull requests from forks, and a fork can carry a
+# branch with this run's exact chore-branch name. `head=<owner>:<branch>` binds the
+# lookup to THIS repository's owner, so a fork's same-named branch never resolves as
+# this run's chore PR, which phase 12 would otherwise poll and merge. A slug that is
+# not owner/repo-shaped is refused, never degraded to an unqualified lookup.
+#
+# Output contract: one line per candidate, "<number> <state> <merged_at-or-dash>",
+# where state is REST's open or closed; exit non-zero, with the host's message on
+# stderr, when the candidate set could not be read.
+_host_chore_pr_candidates() {
+  local _branch="$1" _owner="${REPO_SLUG%%/*}" _name="${REPO_SLUG#*/}"
+  if [[ "$REPO_SLUG" != */* || -z "$_owner" || -z "$_name" || "$_name" == */* ]]; then
+    /usr/bin/printf "REPO_SLUG '%s' is not owner/repo-shaped, so the chore-PR lookup cannot be owner-qualified\n" "$REPO_SLUG" >&2
+    return 2
+  fi
+  $GH api --paginate "repos/${REPO_SLUG}/pulls?head=${_owner}:${_branch}&state=all&per_page=100" \
+    --jq '.[] | "\(.number) \(.state) \(.merged_at // "-")"'
+}
+
+# Resolve the chore PR for $CHORE_BRANCH over its FULL terminal partition (#7436).
+# Prints ONE line: "OPEN <n>" | "MERGED <n>" | "CLOSED <n>" | "NONE" | "ERROR <reason>".
+# The candidates come from the owner-qualified REST binding above, so the resolve
+# path makes no GraphQL call. REST's state is open or closed, and merged_at
+# separates a merged PR from a closed-unmerged one: the same OPEN / MERGED / CLOSED
+# partition phase 12 reads through _chore_pr_terminal_state, and self-test arm CR-16
+# drives both readers from one fixture and asserts they agree. Precedence: an OPEN
+# PR is live work and wins; else the most recent MERGED; else the most recent
+# CLOSED; else NONE. The pre-#7436 `--state open` probe answered "none" for a MERGED
+# PR too, so a resumed run aborted above the phase whose MERGED arm exists for it.
+_chore_pr_resolve() {
+  local _cands _err _line _n _st _ma _open="" _merged="" _closed=""
+  _err="$(/usr/bin/mktemp -t closeout-prlist.XXXXXX)"
+  if ! _cands="$(_host_chore_pr_candidates "$CHORE_BRANCH" 2>"$_err")"; then
+    /usr/bin/printf 'ERROR the chore-PR candidate lookup failed: %s' "$(_detail_one_line "$(/usr/bin/head -c 4096 "$_err" 2>/dev/null)")"
+    /bin/rm -f "$_err"; return 0
+  fi
+  /bin/rm -f "$_err"
+  while IFS= read -r _line; do
+    [[ -n "$_line" ]] || continue
+    _n=""; _st=""; _ma=""
+    read -r _n _st _ma <<<"$_line"
+    if ! [[ "$_n" =~ ^[0-9]+$ ]]; then
+      /usr/bin/printf 'ERROR the candidate lookup returned an unreadable entry: %s' "$(_detail_one_line "$_line")"; return 0
+    fi
+    case "$_st" in
+      open)
+        if [[ -z "$_open" || "$_n" -gt "$_open" ]]; then _open="$_n"; fi ;;
+      closed)
+        if [[ -n "$_ma" && "$_ma" != "-" && "$_ma" != "null" ]]; then
+          if [[ -z "$_merged" || "$_n" -gt "$_merged" ]]; then _merged="$_n"; fi
+        else
+          if [[ -z "$_closed" || "$_n" -gt "$_closed" ]]; then _closed="$_n"; fi
+        fi ;;
+      *)
+        /usr/bin/printf 'ERROR PR #%s state unreadable (%s)' "$_n" "$(_detail_one_line "$_line")"; return 0 ;;
+    esac
+  done <<<"$_cands"
+  if   [[ -n "$_open"   ]]; then /usr/bin/printf 'OPEN %s' "$_open"
+  elif [[ -n "$_merged" ]]; then /usr/bin/printf 'MERGED %s' "$_merged"
+  elif [[ -n "$_closed" ]]; then /usr/bin/printf 'CLOSED %s' "$_closed"
+  else /usr/bin/printf 'NONE'
+  fi
+}
+
 phase_create_chore_pr() {
   local body
   body="$(build_chore_pr_body)"
 
   # Pre-submit parser-clean check (D9 forcing function)
   if ! check_parser_clean "$body"; then
+    CHORE_PR_OUTCOME="failed"
     mark_phase "create_chore_pr" "FAIL" "chore PR body contains close-family verbs + #N — parser-clean discipline violated (D9)"
     return 3
   fi
@@ -5667,48 +5994,138 @@ phase_create_chore_pr() {
   #       loudly rather than skip into a broken publish (publish reads the NOTES
   #       file and would FAIL or publish an empty body).
   # The check only runs in --apply (dry-run never pushes/commits).
+  # A chore PR that already MERGED is the third zero-commit cause (#7436): a resumed
+  # run whose PR merged and whose local origin/main is FRESH lands here. Before
+  # calling it an idempotent SKIP, ask the resolver, over REST, so this path still
+  # makes no GraphQL call. commits_ahead=0 against origin/main already proves
+  # containment on this path, so no fetch is needed. An OPEN PR here is still live
+  # work for this branch: it is reused and left for phase 12, never reported as
+  # "none needed".
   if [[ "$MODE" != "dry-run" ]]; then
     local commits_ahead
     commits_ahead="$(git_net -C "$REPO_ROOT" rev-list --count "origin/main..${CHORE_BRANCH}" 2>/dev/null || echo 0)"
     if [[ "$commits_ahead" -eq 0 ]]; then
       # Corpus-presence-on-main gate: only SKIP benignly if the close outputs are
       # actually already on main (idempotent re-run), else FAIL loud.
-      local _dig_on_main _idx_on_main _notes_on_main _corpus_present=1
+      local _dig_on_main _idx_on_main _notes_on_main _corpus_present=1 _zr
       _dig_on_main="$(git_net -C "$REPO_ROOT" show "origin/main:release/releases/RELEASE_DIGEST.md" 2>/dev/null | /usr/bin/grep -cE "^### ${VERSION//./\\.}[[:space:](]" || true)"
       _idx_on_main="$(git_net -C "$REPO_ROOT" show "origin/main:release/releases/RELEASE_INDEX.md" 2>/dev/null | /usr/bin/grep -cE "^\|[[:space:]]*${VERSION//./\\.}[[:space:]]*\|" || true)"
       _notes_on_main="$(git_net -C "$REPO_ROOT" cat-file -e "origin/main:release/releases/$(notes_rel_path)" 2>/dev/null && echo 1 || echo 0)"
       [[ "${_dig_on_main:-0}" -ge 1 && "${_idx_on_main:-0}" -ge 1 && "${_notes_on_main:-0}" -ge 1 ]] || _corpus_present=0
       if [[ "$_corpus_present" -eq 1 ]]; then
-        CHORE_PR_SKIPPED=1
+        _zr="$(_chore_pr_resolve)"
+        case "$_zr" in
+          "MERGED "*)
+            CHORE_PR_NUMBER="${_zr#MERGED }"; CHORE_PR_OUTCOME="resumed-already-merged"
+            mark_phase "create_chore_pr" "SKIPPED" "chore PR #${CHORE_PR_NUMBER} already MERGED and ${CHORE_BRANCH} is contained in origin/main (0 commits ahead) — resumed run; nothing to create; phase 12 confirms the terminal state"
+            return 0 ;;
+          "OPEN "*)
+            CHORE_PR_NUMBER="${_zr#OPEN }"; CHORE_PR_OUTCOME="existing-open"
+            mark_phase "create_chore_pr" "SKIPPED" "PR #${CHORE_PR_NUMBER} already exists for branch and is still OPEN, although ${CHORE_BRANCH} is 0 commits ahead of origin/main and the close outputs are on main — reused; phase 12 resolves it"
+            return 0 ;;
+          "ERROR "*)
+            CHORE_PR_OUTCOME="failed"
+            mark_phase "create_chore_pr" "FAIL" "0 commits ahead and the close outputs are on main, but the chore PR could not be resolved over its terminal partition — ${_zr#ERROR } — refusing to report an idempotent skip for a PR whose state was not read"
+            return 3 ;;
+        esac
+        CHORE_PR_SKIPPED=1; CHORE_PR_OUTCOME="skipped-as-idempotent"
         mark_phase "create_chore_pr" "SKIPPED" "0 commits ahead of origin/main and the close outputs (DIGEST H3 + INDEX row + NOTES) are already present on main — idempotent re-run; terminal phases proceed"
         return 0
       fi
+      CHORE_PR_OUTCOME="failed"
       mark_phase "create_chore_pr" "FAIL" "0 commits ahead of origin/main but the close outputs are NOT on main (DIGEST=${_dig_on_main:-0}/INDEX=${_idx_on_main:-0}/NOTES=${_notes_on_main:-0}) — the scaffold/commit phases no-op'd on a FIRST run (a real bug); failing loud rather than skipping into a broken publish"
       return 3
     fi
   fi
 
   if [[ "$MODE" == "dry-run" ]]; then
+    CHORE_PR_OUTCOME="dry-run"
     mark_phase "create_chore_pr" "DRY-RUN" "body parser-clean PASS; would: gh pr create --title 'chore(${VERSION}): Stage 13 — INDEX + DIGEST + RELEASE_NOTES + CHANGELOG'"
     return 0
   fi
 
-  # Push branch (git_net layers the gh-backed credential helper so a locked
-  # Keychain degrades gracefully instead of hanging on credential resolution).
-  git_net -C "$REPO_ROOT" push -u origin "$CHORE_BRANCH" >/dev/null 2>&1 || true
+  # Resolve BEFORE any push or create (#7436). A resumed run whose chore PR already
+  # MERGED must neither re-create the branch phase 12's --delete-branch removed (the
+  # push used to run first) nor reach `gh pr create`, which can only fail and so
+  # aborted the run ABOVE the phase whose MERGED arm (#6255) exists for this case.
+  local _cr _cr_n _cr_fetch _cr_head _cr_anc _cr_extra
+  _cr="$(_chore_pr_resolve)"
+  case "$_cr" in
+    "ERROR "*)
+      CHORE_PR_OUTCOME="failed"
+      mark_phase "create_chore_pr" "FAIL" "cannot resolve the chore PR for ${CHORE_BRANCH} over its terminal partition — ${_cr#ERROR }"
+      return 3 ;;
+    "MERGED "*)
+      _cr_n="${_cr#MERGED }"
+      # CONTAINMENT, against the merged PR's OWN head. MERGED is complete only if the
+      # local chore tip reached the merged PR, and the host keeps that head at
+      # refs/pull/<n>/head after the branch is deleted. main is the wrong reference: a
+      # squash or rebase merge never makes the chore commits ancestors of main, while
+      # every merge method leaves the local tip an ancestor of the head it merged. A
+      # commit made after the merge is not, and FAILs.
+      if ! _cr_fetch="$(git_net -C "$REPO_ROOT" fetch --no-tags origin "refs/pull/${_cr_n}/head" 2>&1)"; then
+        CHORE_PR_OUTCOME="failed"
+        mark_phase "create_chore_pr" "FAIL" "chore PR #${_cr_n} is MERGED, but its head (refs/pull/${_cr_n}/head) could not be fetched to confirm ${CHORE_BRANCH} is contained in it: $(_detail_one_line "$_cr_fetch")"
+        return 3
+      fi
+      _cr_head="$($GIT -C "$REPO_ROOT" rev-parse --verify --quiet FETCH_HEAD 2>/dev/null)" || _cr_head=""
+      _cr_anc=128
+      if [[ -n "$_cr_head" ]]; then
+        _cr_anc=0; $GIT -C "$REPO_ROOT" merge-base --is-ancestor "refs/heads/${CHORE_BRANCH}" "$_cr_head" >/dev/null 2>&1 || _cr_anc=$?
+      fi
+      if [[ "$_cr_anc" -eq 0 ]]; then
+        CHORE_PR_NUMBER="$_cr_n"; CHORE_PR_OUTCOME="resumed-already-merged"
+        mark_phase "create_chore_pr" "SKIPPED" "chore PR #${_cr_n} already MERGED and ${CHORE_BRANCH} is contained in its head (refs/pull/${_cr_n}/head) — resumed run; nothing to create or push; phase 12 confirms the terminal state"
+        return 0
+      fi
+      if [[ "$_cr_anc" -eq 1 ]]; then
+        _cr_extra="$($GIT -C "$REPO_ROOT" rev-list --count "${_cr_head}..refs/heads/${CHORE_BRANCH}" 2>/dev/null)" || _cr_extra=""
+        CHORE_PR_OUTCOME="failed"
+        mark_phase "create_chore_pr" "FAIL" "chore PR #${_cr_n} is already MERGED, but ${CHORE_BRANCH} carries ${_cr_extra:-an uncounted number of} commit(s) its merged head does not — this run produced close outputs after that merge and they are NOT in it; open a follow-up PR by hand (this tool does not reopen a merged chore branch)"
+      else
+        CHORE_PR_OUTCOME="failed"
+        mark_phase "create_chore_pr" "FAIL" "chore PR #${_cr_n} is MERGED, but whether ${CHORE_BRANCH} is contained in its head could not be read (git merge-base exit ${_cr_anc})"
+      fi
+      return 3 ;;
+  esac
 
-  # Idempotency: skip if PR already exists for branch
-  local existing_pr
-  existing_pr="$($GH pr list --repo "$REPO_SLUG" --head "$CHORE_BRANCH" --state open --json number --jq '.[0].number // ""' 2>/dev/null || echo "")"
-  if [[ -n "$existing_pr" ]]; then
-    CHORE_PR_NUMBER="$existing_pr"
-    mark_phase "create_chore_pr" "SKIPPED" "PR #$existing_pr already exists for branch"
+  # The push's result is READ (Plan amendment 1 item 4). An OPEN PR reused over a
+  # failed push would be merged by phase 12 without this run's commits, all green.
+  # ANCESTRY REFINEMENT: a push rejected because the remote branch is merely AHEAD of
+  # the local tip (for example after the host's "Update branch") already carries
+  # every local commit, so it is not a failure. git_net layers the gh-backed
+  # credential helper, so a locked Keychain degrades instead of hanging.
+  local _cr_push _cr_prc=0 _cr_pnote=""
+  _cr_push="$(git_net -C "$REPO_ROOT" push -u origin "$CHORE_BRANCH" 2>&1)" || _cr_prc=$?
+  if [[ "$_cr_prc" -ne 0 ]]; then
+    if git_net -C "$REPO_ROOT" fetch --no-tags origin "refs/heads/${CHORE_BRANCH}" >/dev/null 2>&1 \
+      && $GIT -C "$REPO_ROOT" merge-base --is-ancestor "refs/heads/${CHORE_BRANCH}" FETCH_HEAD >/dev/null 2>&1; then
+      _cr_pnote=" (the push was rejected, but the remote branch already contains the local tip: it is ahead, for example after the host's Update branch)"
+    else
+      CHORE_PR_OUTCOME="failed"
+      mark_phase "create_chore_pr" "FAIL" "git push -u origin ${CHORE_BRANCH} failed: $(_detail_one_line "$_cr_push") — the chore PR's head would not carry this run's commits"
+      return 3
+    fi
+  fi
+
+  if [[ "$_cr" == "OPEN "* ]]; then
+    CHORE_PR_NUMBER="${_cr#OPEN }"; CHORE_PR_OUTCOME="existing-open"
+    mark_phase "create_chore_pr" "SKIPPED" "PR #${CHORE_PR_NUMBER} already exists for branch${_cr_pnote}"
     return 0
   fi
 
+  # NONE, or only CLOSED-unmerged PR(s): create a fresh one. A closed-unmerged PR is
+  # not a completed close (phase 12 treats CLOSED as terminal FAIL), so it is never
+  # read as done here.
   local tmp_body
   tmp_body="$(/usr/bin/mktemp -t closeout-body.XXXXXX)"
-  /usr/bin/printf '%s\n' "$body" > "$tmp_body"
+  # This body goes straight to GitHub, never through the report sink, so it is
+  # redacted AT ITS POST SITE (#7855; Plan amendment 15 item 1), the write that hands
+  # it to gh: _redact_paths turns "$REPO_ROOT" into <repo> and "$HOME" into <home>
+  # over the whole body, and leaves a body that names no root byte-identical. Its
+  # plan path is absolute when the corpus is homed outside the tree. The
+  # parser-clean check above reads the body as built.
+  /usr/bin/printf '%s\n' "$(_redact_paths "$body")" > "$tmp_body"
 
   local pr_url
   pr_url="$($GH pr create \
@@ -5718,12 +6135,14 @@ phase_create_chore_pr() {
     --milestone "${STATE_MILESTONE_SLUG}" \
     --assignee "@me" 2>&1)" || {
       /bin/rm -f "$tmp_body"
-      mark_phase "create_chore_pr" "FAIL" "gh pr create failed: $pr_url"
+      CHORE_PR_OUTCOME="failed"
+      mark_phase "create_chore_pr" "FAIL" "gh pr create failed: $(_detail_one_line "$pr_url")"
       return 3
     }
   /bin/rm -f "$tmp_body"
   CHORE_PR_NUMBER="$(/usr/bin/printf '%s' "$pr_url" | /usr/bin/grep -oE '[0-9]+$' | /usr/bin/tail -1)"
-  mark_phase "create_chore_pr" "PASS" "created PR #${CHORE_PR_NUMBER} ($pr_url)"
+  CHORE_PR_OUTCOME="created"
+  mark_phase "create_chore_pr" "PASS" "created PR #${CHORE_PR_NUMBER} ($(_detail_one_line "$pr_url"))${_cr_pnote}"
   return 0
 }
 
@@ -5732,6 +6151,12 @@ phase_create_chore_pr() {
 # drift apart — the same shared-predicate shape adopted elsewhere in this batch for
 # the same reason, and the opposite of the two verbatim copies of the
 # `state,baseRefName` read this file already carries.
+#
+# Phase 11 reads the same OPEN / MERGED / CLOSED partition through a SECOND reader,
+# _chore_pr_resolve over the REST binding _host_chore_pr_candidates (#7436), because
+# its resolve path must make no GraphQL call and must be owner-qualified. Two readers
+# of one fact is the drift this comment warns about, so self-test arm CR-16 drives
+# both from the same fixture rows and asserts they agree on every state.
 #
 # WHY `state` IS THE FIELD. `state` in {OPEN, CLOSED, MERGED} is a total, terminal
 # partition, and it is already how this file decides that a PR merged (`--json
@@ -5762,8 +6187,15 @@ phase_await_merge_chore_pr() {
   fi
 
   # --no-merge mode (#1705): create-only — leave the PR for the operator to merge.
+  # Declared `skip` in NO_MERGE_PHASE_BEHAVIOUR. The detail reads the outcome phase 11
+  # recorded, with no host read: on a resumed run whose chore PR phase 11 already
+  # found MERGED, "left open" would be false, so the detail says what is true.
   if [[ "$NO_MERGE" -eq 1 ]]; then
-    mark_phase "await_merge_chore_pr" "SKIPPED" "--no-merge: chore PR #${CHORE_PR_NUMBER:-?} left open for operator merge (no poll/merge)"
+    if [[ "${CHORE_PR_OUTCOME:-}" == "resumed-already-merged" ]]; then
+      mark_phase "await_merge_chore_pr" "SKIPPED" "--no-merge: chore PR #${CHORE_PR_NUMBER:-?} is already MERGED (phase 11 resolved it on this resumed run) — nothing to poll or merge; the phases after the merge still defer under this flag, so re-run --apply without it"
+    else
+      mark_phase "await_merge_chore_pr" "SKIPPED" "--no-merge: chore PR #${CHORE_PR_NUMBER:-?} left open for operator merge (no poll/merge)"
+    fi
     return 0
   fi
 
@@ -6087,8 +6519,10 @@ phase_reparse_ledgers() {
 #                carries the literal "would BLOCK at --apply" (the :3385 precedent).
 #   --no-merge   phase_post_close_milestone already DEFERS, so blocking would abort a
 #                run whose close was deferred anyway. The gate evaluates and records.
-#                It deliberately does NOT join the --no-merge deferred set — that set
-#                is hand-enumerated at five sites this file's own comment warns about.
+#                It is declared `record` in NO_MERGE_PHASE_BEHAVIOUR, deliberately not
+#                `defer`: the ledger verdict does not depend on the merge, so reading
+#                it on the --no-merge pass costs nothing and surfaces an unresolved
+#                ledger before the operator merges.
 #   already-closed  an idempotent re-run must not fail. It records instead — and when
 #                the recorded STATE is UNRESOLVED it NAMES that as the #304 shape,
 #                turning the re-run into a detector for the originating incident.
@@ -6200,29 +6634,81 @@ _ai_resolve_dir() {
   /usr/bin/printf '%s' "${_slugdir:-$_verdir}"
 }
 
-# Emit the operator attestation the SURFACE clause requires. Sets STATE_AI_EMIT.
-# Never aborts the run: an unwritable event log must not block a close the operator
-# has legitimately attested — but the outcome is RECORDED either way, so "attested
-# and durably traced" and "attested, trace failed" stay distinguishable outputs.
+# Emit the operator attestation the SURFACE clause requires. Sets STATE_AI_EMIT,
+# STATE_AI_EMIT_RC and STATE_AI_EMIT_ERR. Never aborts the run: an unwritable event
+# log must not block a close the operator has legitimately attested — but the
+# outcome is RECORDED either way, WITH the writer's own diagnostic, so "attested and
+# durably traced" and "attested, trace failed because <reason>" stay distinguishable.
+#
+# THE WRITER'S CONTRACT (append-pipeline-event.sh): --reversibility AND --outcome are
+# both required — it dies on the first, then on the second — and --version must be a
+# release JOIN KEY, the milestone slug, never a release version, which its § 2a gate
+# refuses. Self-test group AI arm U runs the REAL writer's --dry-run over this argv,
+# so a caller/writer drift fails the suite instead of the audit trail (#5910).
+#
+# CHEAP / resolved: the row records an operator attestation that cleared a SURFACE
+# state. Reversing it is a milestone reopen plus a re-run with the other cause, and
+# the SURFACE state is resolved by the attestation itself.
+#
+# The writer's diagnostic goes through _detail_one_line, which redacts and THEN caps,
+# handed a raw window of 4096 bytes and never a pre-capped one: a cap applied first
+# can cut a home path mid-string, and the fragment then ships raw into a report that
+# is pasted onto a public sub-task.
 _ai_emit_attestation() {
-  local _cause="$1" _slug="${STATE_MILESTONE_SLUG:-$VERSION}"
+  local _cause="$1" _slug="${STATE_MILESTONE_SLUG:-}"
+  STATE_AI_EMIT_RC=""; STATE_AI_EMIT_ERR=""
   if [[ ! -x "$AI_EVENT_WRITER" ]]; then
     STATE_AI_EMIT="failed:writer-not-executable"
+    STATE_AI_EMIT_ERR="the pipeline-event writer is not executable at its resolved path"
     return 0
   fi
   if [[ "$MODE" == "dry-run" ]]; then
     STATE_AI_EMIT="dry-run"
     return 0
   fi
-  if "$AI_EVENT_WRITER" --version "$_slug" --stage 13 \
+  # No slug, no row. The writer admits only the milestone slug as the release join
+  # key and refuses a release version by construction — so never hand it one.
+  if [[ -z "$_slug" ]]; then
+    STATE_AI_EMIT="failed:no-release-key"
+    STATE_AI_EMIT_ERR="no milestone slug was resolved for this close, and the event writer admits only the slug as the release join key (a release version is refused)"
+    return 0
+  fi
+  # stderr is CAPTURED, not discarded — the phase_inject_velocity_field idiom. The
+  # writer's message names the exact contract it refused; a token alone cannot. The
+  # writer's stdout ("appended: …" or "[DRY-RUN] …") is not a diagnostic.
+  local _errf _rc=0
+  _errf="$(/usr/bin/mktemp -t aiemit-stderr.XXXXXX 2>/dev/null)" || _errf="/dev/null"
+  "$AI_EVENT_WRITER" --version "$_slug" --stage 13 \
        --event-type decision --event-subtype empirical-verification-finding \
        --actor operator --subject "milestone:#${MILESTONE}" \
+       --reversibility CHEAP --outcome resolved \
        --payload "procedure-7a-attestation; state:${STATE_AI_GATE}; attested-cause:${_cause}" \
-       >/dev/null 2>&1; then
+       >/dev/null 2>"$_errf" || _rc=$?
+  if [[ "$_rc" -eq 0 ]]; then
     STATE_AI_EMIT="emitted"
   else
     STATE_AI_EMIT="failed:writer-returned-nonzero"
+    STATE_AI_EMIT_RC="$_rc"
+    STATE_AI_EMIT_ERR="$(_detail_one_line "$(/usr/bin/head -c 4096 "$_errf" 2>/dev/null)")"
+    [[ -n "$STATE_AI_EMIT_ERR" ]] || STATE_AI_EMIT_ERR="(no diagnostic was captured from the writer's stderr)"
   fi
+  [[ "$_errf" == "/dev/null" ]] || /bin/rm -f "$_errf" 2>/dev/null || true
+  return 0
+}
+
+# ONE projection of the emit outcome, read by BOTH the 12.9 detail and Verification
+# row 6, so the two surfaces cannot disagree about the trace. Empty on emitted /
+# dry-run / n/a. No I/O and no '|': STATE_AI_EMIT_ERR is already one line through
+# _detail_one_line, or a fixed reason the emitter wrote. Deliberately not phase_*.
+_ai_emit_tail() {   # full|short
+  case "$STATE_AI_EMIT" in
+    failed:*)
+      if [[ "${1:-full}" == "short" ]]; then
+        /usr/bin/printf ' — TRACE NOT CONFIRMED%s' "${STATE_AI_EMIT_RC:+, writer rc=${STATE_AI_EMIT_RC}}"
+      else
+        /usr/bin/printf ' — ATTESTATION TRACE NOT CONFIRMED%s: %s' "${STATE_AI_EMIT_RC:+, writer rc=${STATE_AI_EMIT_RC}}" "${STATE_AI_EMIT_ERR:-no diagnostic captured}"
+      fi ;;
+  esac
   return 0
 }
 
@@ -6338,7 +6824,7 @@ _ai_recommended_cause() {
 # evaluation inside phase_run_verification.
 _ai_verification_cell() {
   local _attest=" (attestation required)"
-  [[ -n "$ATTEST_ACTION_ITEMS" ]] && _attest=" (attested: ${ATTEST_ACTION_ITEMS}; emit=${STATE_AI_EMIT})"
+  [[ -n "$ATTEST_ACTION_ITEMS" ]] && _attest=" (attested: ${ATTEST_ACTION_ITEMS}; emit=${STATE_AI_EMIT}$(_ai_emit_tail short))"
   case "${STATE_AI_GATE:-}" in
     RESOLVED)      /usr/bin/printf 'RESOLVED (%s/%s)' "$STATE_AI_TOTAL" "$STATE_AI_TOTAL" ;;
     UNRESOLVED)    /usr/bin/printf 'BLOCKED (%s unresolved of %s)' "$STATE_AI_UNRES" "$STATE_AI_TOTAL" ;;
@@ -6366,7 +6852,7 @@ phase_action_item_gate() {
   STATE_AI_TOTAL="$_total"
   STATE_AI_UNRES="$_unres"
   STATE_AI_BAD="$_bad"
-  STATE_AI_EMIT="n/a"
+  STATE_AI_EMIT="n/a"; STATE_AI_EMIT_RC=""; STATE_AI_EMIT_ERR=""
 
   # TOKENISED, NEVER ABSOLUTE. The ledger lives under the operator-instance root, so
   # its absolute path embeds the operator's home directory — and this detail string
@@ -6468,7 +6954,7 @@ phase_action_item_gate() {
         if [[ -n "$_rec_cause" && "$_rec_cause" != "$ATTEST_ACTION_ITEMS" ]]; then
           _rec_agree=" THE MEASUREMENT DISAGREES WITH THE ATTESTATION — the attested cause stands and the close is not affected, but the disagreement is on the record."
         fi
-        mark_phase "action_item_gate" "WARN" "Procedure 7a: ${_state} — SURFACED, attested by operator as '${ATTEST_ACTION_ITEMS}' (attestation-emitted=${STATE_AI_EMIT}); ${_cause_text} ${_rec_text}${_rec_agree}"
+        mark_phase "action_item_gate" "WARN" "Procedure 7a: ${_state} — SURFACED, attested by operator as '${ATTEST_ACTION_ITEMS}' (attestation-emitted=${STATE_AI_EMIT}$(_ai_emit_tail full)); ${_cause_text} ${_rec_text}${_rec_agree}"
         return 0
       fi
       if [[ "$_blocking" -eq 1 ]]; then
@@ -6487,6 +6973,21 @@ phase_action_item_gate() {
   return 3
 }
 
+# The text for the chore PR's RECORDED state (#7465 Plan amendment 6). Prints its
+# first argument when phase 11 recorded the chore PR as already merged on this
+# resumed run (CHORE_PR_OUTCOME = resumed-already-merged), and its second on every
+# other outcome, so the ordinary text stays byte-identical. No host read: it reads
+# the value phase 12's --no-merge detail and the report's Deferred intro read.
+# Phases 13 and 14 call it INSIDE _nm_defer's detail argument, so the declared
+# deferral stays each phase's first statement (NM-5d). Deliberately NOT named phase_*.
+_chore_pr_state_text() {  # <resumed-and-merged text> <every-other-outcome text>
+  if [[ "${CHORE_PR_OUTCOME:-}" == "resumed-already-merged" ]]; then
+    /usr/bin/printf '%s' "$1"
+  else
+    /usr/bin/printf '%s' "$2"
+  fi
+}
+
 # ─── Phase 13: post_close_milestone (Hub Tier-1 mechanical) ──────────────────
 
 phase_post_close_milestone() {
@@ -6495,10 +6996,11 @@ phase_post_close_milestone() {
   # would record a false audit state (main still shows DEPLOYED). Defer per the
   # stage-13-close.md § Phase B sequencing invariant ("chore PR MUST land on main
   # BEFORE Phase C C1 Milestone close"); the operator re-runs --apply post-merge.
-  if [[ "$NO_MERGE" -eq 1 ]]; then
-    mark_phase "post_close_milestone" "SKIPPED" "DEFERRED under --no-merge — chore PR #${CHORE_PR_NUMBER:-?} left open; milestone #${MILESTONE} close waits for it to land on main (re-run --apply after merge)"
-    return 0
-  fi
+  # Declared `defer` in NO_MERGE_PHASE_BEHAVIOUR. The detail reads the outcome phase
+  # 11 recorded (#7465 Plan amendment 6): on a resumed run whose chore PR phase 11
+  # already found merged it says so, and the phase still defers, because the flag
+  # defers every post-merge phase whatever the chore PR's state.
+  _nm_defer "post_close_milestone" "$(_chore_pr_state_text "chore PR #${CHORE_PR_NUMBER:-?} is already merged (phase 11 resolved it on this resumed run); milestone #${MILESTONE} close waits for the follow-up --apply run without --no-merge" "chore PR #${CHORE_PR_NUMBER:-?} left open; milestone #${MILESTONE} close waits for it to land on main (re-run --apply after merge)")" && return 0
 
   if [[ "$STATE_MILESTONE_STATE" == "closed" ]]; then
     mark_phase "post_close_milestone" "SKIPPED" "milestone already closed"
@@ -6525,11 +7027,9 @@ phase_manual_close_release_issues() {
   # --no-merge (#2919): D-1 manual issue-close is part of the post-milestone-close
   # ceremony, which itself defers until the chore PR lands on main. Defer here too so
   # the operator's single follow-up --apply (post-merge) performs milestone close +
-  # issue close together.
-  if [[ "$NO_MERGE" -eq 1 ]]; then
-    mark_phase "manual_close_release_issues" "SKIPPED" "DEFERRED under --no-merge — chore PR left open; D-1 issue close waits for milestone-close after merge (re-run --apply)"
-    return 0
-  fi
+  # issue close together. Declared `defer` in NO_MERGE_PHASE_BEHAVIOUR. Its detail
+  # reads the recorded outcome the way phase 13's does (#7465 Plan amendment 6).
+  _nm_defer "manual_close_release_issues" "$(_chore_pr_state_text "chore PR #${CHORE_PR_NUMBER:-?} is already merged (phase 11 resolved it on this resumed run); D-1 issue close waits for milestone-close on the follow-up --apply run without --no-merge" "chore PR left open; D-1 issue close waits for milestone-close after merge (re-run --apply)")" && return 0
 
   if [[ "$OPEN_ISSUE_COUNT" -eq 0 ]]; then
     mark_phase "manual_close_release_issues" "SKIPPED" "no open release issues to manually close"
@@ -6579,7 +7079,12 @@ phase_manual_close_release_issues() {
   while IFS= read -r issue_n; do
     [[ -z "$issue_n" ]] && continue
     local _c; _c="$(_comment_for "$issue_n")"
-    if $GH issue close "$issue_n" --repo "$REPO_SLUG" --comment "$_c" >/dev/null 2>&1; then
+    # The comment goes straight to GitHub, never through the report sink, so it is
+    # redacted AT ITS POST SITE (#7855; Plan amendment 15 item 1), as the chore-PR
+    # body is, whole: the anomaly default, whose plan path is absolute when the
+    # corpus is homed outside the tree, or a per-issue override. A comment that
+    # names no root posts byte-identical.
+    if $GH issue close "$issue_n" --repo "$REPO_SLUG" --comment "$(_redact_paths "$_c")" >/dev/null 2>&1; then
       closed_count=$((closed_count + 1))
     fi
   done <<< "$OPEN_ISSUE_LIST"
@@ -6836,30 +7341,196 @@ ${VERIFICATION_RESULTS}
 EOF
 )"
 
+  # These two posts go straight to GitHub, never through the report sink, so each is
+  # redacted AT ITS POST SITE (#7855; Plan amendment 13 item 3): _redact_paths turns
+  # "$REPO_ROOT" into <repo> and "$HOME" into <home> over the whole body, and leaves a
+  # body that names no root byte-identical. Rung 2 posts the same proof to the
+  # fallback target, so it is redacted the same way.
   # Rung 1 — the Stage-13 sub-task, any state.
   if [[ -n "$_s13_num" ]]; then
-    if _post_err="$($GH issue comment "$_s13_num" --repo "$REPO_SLUG" --body "$_body" 2>&1)"; then
+    if _post_err="$($GH issue comment "$_s13_num" --repo "$REPO_SLUG" --body "$(_redact_paths "$_body")" 2>&1)"; then
       mark_phase "post_gate_passage_proof" "PASS" "posted to Stage 13 sub-task #${_s13_num}${_closed_note}"
       return 0
     fi
-    _s13_reason="post to #${_s13_num} failed: $(/usr/bin/printf '%s' "$_post_err" | /usr/bin/head -1 | /usr/bin/tr '\t|' '  ')"
+    _s13_reason="post to #${_s13_num} failed: $(_detail_one_line "${_post_err%%$'\n'*}")"
   fi
 
   # Rung 2 — the release PR, with the OBSERVED rung-1 reason recorded in the body.
   if [[ -n "$PR_NUMBER" ]]; then
     if _post_err="$($GH pr comment "$PR_NUMBER" --repo "$REPO_SLUG" \
-        --body "_Fallback target (rung 2): the Stage-13 sub-task ${_s13_reason}._
+        --body "$(_redact_paths "_Fallback target (rung 2): the Stage-13 sub-task ${_s13_reason}._
 
-${_body}" 2>&1)"; then
+${_body}")" 2>&1)"; then
       mark_phase "post_gate_passage_proof" "PASS" "Stage-13 sub-task ${_s13_reason}; posted to release PR #${PR_NUMBER} (fallback rung 2)"
       return 0
     fi
-    mark_phase "post_gate_passage_proof" "MANUAL" "both targets attempted and failed — Stage-13 sub-task: ${_s13_reason}; release PR #${PR_NUMBER}: $(/usr/bin/printf '%s' "$_post_err" | /usr/bin/head -1 | /usr/bin/tr '\t|' '  '); comment text emitted in final report"
+    mark_phase "post_gate_passage_proof" "MANUAL" "both targets attempted and failed — Stage-13 sub-task: ${_s13_reason}; release PR #${PR_NUMBER}: $(_detail_one_line "${_post_err%%$'\n'*}"); comment text emitted in final report"
     return 0
   fi
 
   # Rung 3 — terminal, reasoned: name both attempted targets and each observation.
   mark_phase "post_gate_passage_proof" "MANUAL" "both targets attempted — Stage-13 sub-task: ${_s13_reason}; release PR: number unresolved at read-state; comment text emitted in final report"
+  return 0
+}
+
+# ─── Repo-host bindings: Phase C5 thread lock (#5284) ────────────────────────
+#
+# THE SEAM, as for _host_chore_pr_candidates: stage-13-close.md § 1 says a new
+# host-touching close-out step extends the repo-host adapter seam rather than
+# inlining a host tool as THE mechanism. These three bind the abstract operations
+# Phase C5 names (threads-on-milestone, milestone item total, and thread-lock with a
+# resolution reason) to GitHub ONCE, so the phase body below carries no host syntax.
+# They keep the `_host_*` conventions: REST through `$GH api` only, because the
+# GraphQL pool is the one exhausted while close-out runs, so neither `gh issue lock`
+# nor `gh pr lock` is used; a one-line output contract, stated on each; the caller
+# reads the exit status; and deliberately NOT named phase_*.
+#
+# PR-INCLUSIVE ON BOTH SIDES. The host models a pull request as an issue, so the REST
+# issues listing returns issues AND pull requests, and the milestone's open_issues and
+# closed_issues counters count both. That is what makes the phase's count check like
+# with like. An issues-only listing (`gh issue list`) against these counters reads
+# the release's own pull requests as a phantom gap (#4768).
+
+# Output contract: one line per thread on milestone $1,
+# "<number><TAB><issue|pr><TAB><locked|unlocked>"; exit non-zero, with the host's
+# message on stderr, when the thread set could not be read.
+_host_threads_on_milestone() {
+  $GH api --paginate "repos/${REPO_SLUG}/issues?milestone=${1}&state=all&per_page=100" \
+    --jq '.[] | [(.number|tostring), (if .pull_request then "pr" else "issue" end), (if .locked then "locked" else "unlocked" end)] | @tsv'
+}
+
+# Output contract: one line, "<open_issues> <closed_issues>" for milestone $1, both
+# counters PR-inclusive; exit non-zero, with the host's message on stderr, when the
+# milestone could not be read.
+_host_milestone_item_counts() {
+  $GH api "repos/${REPO_SLUG}/milestones/${1}" --jq '"\(.open_issues) \(.closed_issues)"'
+}
+
+# Output contract: nothing on stdout; locks thread $1 (an issue or a pull request)
+# with lock reason $2; exit non-zero, with the host's message on stderr, on failure.
+_host_thread_lock() {
+  $GH api -X PUT "repos/${REPO_SLUG}/issues/${1}/lock" -f lock_reason="${2}" >/dev/null
+}
+
+# ─── Phase 15.2: lock_milestone_threads (Phase C5 lock-at-close) ─────────────
+#
+# Replaces the manual Phase C5 checklist step, per
+# ADR-212. Locks EVERY
+# thread on the milestone (issues and pull requests, the release PR and the Stage 13
+# chore PR included) with lock_reason=resolved, through the three bindings above.
+# FORWARD-ONLY: it locks the closing milestone's threads; no earlier close is
+# retrofitted.
+#
+# ALWAYS RECORDS ONE ROW, so a no-op reads differently from a phase that never ran
+# (an absent row): PASS with the locked list; SKIPPED with an explicit zero (no
+# threads, or every thread already locked); FAIL with the per-thread errors, a
+# thread the re-read still shows unlocked, or a count mismatch. Already-locked
+# threads are skipped by the enumeration's own locked field, so a repeat run makes
+# no lock call (LK/e).
+#
+# NON-BLOCKING: returns 0 on EVERY path, so its dispatch `||` limb is unreachable,
+# and Milestone close (phase 13) has already run. PLACEMENT IS LOAD-BEARING: it is
+# dispatched after phase 15, the driver's last comment-posting phase, and is never
+# the LAST phase, so generate_markdown_report's halted marker cannot read its FAIL
+# row as "Run halted" (self-test LK/n pins the order).
+#
+# MODE BRANCHES (ADR-158). Declared `defer` in NO_MERGE_PHASE_BEHAVIOUR, so the
+# deferral is the FIRST statement, above the mode test: under --no-merge the --apply
+# behaviour is to defer, so a prediction there would be false. The dry-run
+# prediction is STATIC and sits above the first host read.
+#
+# Diagnostics take the host message's first line in pure bash and hand it to
+# _detail_one_line, so a detail is one pipe-free, home-redacted line wherever the
+# report is relayed.
+phase_lock_milestone_threads() {
+  _nm_defer "lock_milestone_threads" "the threads of milestone #${MILESTONE} are locked by the follow-up --apply run without --no-merge" && return 0
+
+  if [[ "$MODE" == "dry-run" ]]; then
+    mark_phase "lock_milestone_threads" "DRY-RUN" "would enumerate every thread on milestone #${MILESTONE} (issues and pull requests, the REST issues listing, state=all), lock each unlocked one through PUT issues/<n>/lock with lock_reason=resolved, check the enumerated total against open_issues + closed_issues, and read the post-state back (non-blocking)"
+    return 0
+  fi
+
+  local _enum _rc=0
+  _enum="$(_host_threads_on_milestone "$MILESTONE" 2>&1)" || _rc=$?
+  if [[ "$_rc" -ne 0 ]]; then
+    mark_phase "lock_milestone_threads" "FAIL" "thread enumeration failed for milestone #${MILESTONE} (rc=${_rc}): $(_detail_one_line "${_enum%%$'\n'*}") — nothing locked; non-blocking, surface to the operator"
+    return 0
+  fi
+
+  # Only a well-formed thread line counts; anything else the host wrote is not a
+  # thread, and the count check below catches a thread that went missing.
+  local _n_total=0 _n_issue=0 _n_pr=0 _n_already=0 _num _kind _lst
+  local -a _targets=() _newly=() _errs=()
+  while IFS=$'\t' read -r _num _kind _lst; do
+    if [[ ! "$_num" =~ ^[0-9]+$ ]]; then continue; fi
+    _n_total=$((_n_total + 1))
+    if [[ "$_kind" == "pr" ]]; then _n_pr=$((_n_pr + 1)); else _n_issue=$((_n_issue + 1)); fi
+    if [[ "$_lst" == "locked" ]]; then _n_already=$((_n_already + 1)); else _targets+=("$_num"); fi
+  done <<< "$_enum"
+
+  # Count check, like with like: the enumerated total against the milestone's
+  # open_issues + closed_issues, all three PR-inclusive.
+  local _cnt _crc=0 _open _closed _count_ok=1 _count_note
+  _cnt="$(_host_milestone_item_counts "$MILESTONE" 2>&1)" || _crc=$?
+  _open="${_cnt%% *}"; _closed="${_cnt##* }"  # report-text: both reach a detail only after the digits-only guard on the next line
+  if [[ "$_crc" -ne 0 || ! "$_open" =~ ^[0-9]+$ || ! "$_closed" =~ ^[0-9]+$ ]]; then
+    _count_ok=0; _count_note="count check UNVERIFIED (the milestone counters could not be read)"
+  elif [[ "$_n_total" -eq $((_open + _closed)) ]]; then
+    _count_note="count check ${_n_total} == open_issues ${_open} + closed_issues ${_closed} (PR-inclusive on both sides)"
+  else
+    _count_ok=0; _count_note="count MISMATCH: enumerated ${_n_total} != open_issues ${_open} + closed_issues ${_closed}"
+  fi
+
+  if [[ "$_n_total" -eq 0 ]]; then
+    if [[ "$_count_ok" -eq 1 ]]; then
+      mark_phase "lock_milestone_threads" "SKIPPED" "0 threads to lock — milestone #${MILESTONE} enumerates 0 items (${_count_note})"
+    else
+      mark_phase "lock_milestone_threads" "FAIL" "0 threads enumerated, but ${_count_note}; nothing locked; non-blocking, surface to the operator"
+    fi
+    return 0
+  fi
+
+  local _i _err
+  for ((_i = 0; _i < ${#_targets[@]}; _i++)); do
+    if _err="$(_host_thread_lock "${_targets[$_i]}" "resolved" 2>&1)"; then
+      _newly+=("${_targets[$_i]}")
+    else
+      _errs+=("#${_targets[$_i]}: $(_detail_one_line "${_err%%$'\n'*}")")
+    fi
+  done
+
+  # Read the post-state back before any PASS (write first, speak second), with one
+  # bounded replication-lag retry through the existing VERIFY_RECHECK_DELAY knob.
+  local _still="" _pass _rb _rbrc _rb_unlocked
+  if [[ "${#_newly[@]}" -gt 0 ]]; then
+    for _pass in 1 2; do
+      _rbrc=0; _still=""; _rb_unlocked=" "
+      _rb="$(_host_threads_on_milestone "$MILESTONE" 2>&1)" || _rbrc=$?
+      if [[ "$_rbrc" -ne 0 ]]; then
+        _still=" (the re-read failed, rc=${_rbrc})"
+      else
+        while IFS=$'\t' read -r _num _kind _lst; do
+          if [[ "$_num" =~ ^[0-9]+$ && "$_lst" == "unlocked" ]]; then _rb_unlocked+="${_num} "; fi
+        done <<< "$_rb"
+        for ((_i = 0; _i < ${#_newly[@]}; _i++)); do
+          if [[ "$_rb_unlocked" == *" ${_newly[$_i]} "* ]]; then _still+=" #${_newly[$_i]}"; fi
+        done
+      fi
+      if [[ -z "$_still" ]]; then break; fi
+      if [[ "$_pass" -eq 1 ]]; then /bin/sleep "${VERIFY_RECHECK_DELAY}"; fi
+    done
+  fi
+
+  local _list="" _errtxt=""
+  for ((_i = 0; _i < ${#_newly[@]}; _i++)); do _list+="${_list:+, }#${_newly[$_i]}"; done
+  for ((_i = 0; _i < ${#_errs[@]}; _i++)); do _errtxt+="${_errtxt:+; }${_errs[$_i]}"; done
+  if [[ "${#_errs[@]}" -gt 0 || -n "$_still" || "$_count_ok" -eq 0 ]]; then
+    mark_phase "lock_milestone_threads" "FAIL" "${_errtxt:+lock FAILED on ${#_errs[@]} of ${#_targets[@]} unlocked thread(s) [${_errtxt}]; }${_still:+still unlocked after re-read:${_still}; }lock calls succeeded on ${#_newly[@]}, already locked ${_n_already} (${_n_issue} issues + ${_n_pr} PRs); ${_count_note}; non-blocking, surface to the operator"
+  elif [[ "${#_newly[@]}" -eq 0 ]]; then
+    mark_phase "lock_milestone_threads" "SKIPPED" "0 threads newly locked — all ${_n_total} threads on milestone #${MILESTONE} already locked (${_n_issue} issues + ${_n_pr} PRs); ${_count_note}"
+  else
+    mark_phase "lock_milestone_threads" "PASS" "locked ${#_newly[@]} thread(s), ${_n_already} already locked — all ${_n_total} threads on milestone #${MILESTONE} now locked (${_n_issue} issues + ${_n_pr} PRs); ${_count_note}; newly locked: ${_list}"
+  fi
   return 0
 }
 
@@ -6978,11 +7649,9 @@ phase_publish_github_release() {
   # Under --no-merge the note is still on the open chore branch, so publishing now
   # would bind a public Release to unmerged content. Defer BEFORE the tag/notes
   # preflights (avoids a needless network call) per the stage-13-close.md § Phase B
-  # sequencing invariant; the operator re-runs --apply post-merge.
-  if [[ "$NO_MERGE" -eq 1 ]]; then
-    mark_phase "publish_github_release" "SKIPPED" "DEFERRED under --no-merge — RELEASE_NOTES land on main only when the chore PR merges; Surface 1 publish waits (re-run --apply after merge)"
-    return 0
-  fi
+  # sequencing invariant; the operator re-runs --apply post-merge. Declared `defer`
+  # in NO_MERGE_PHASE_BEHAVIOUR.
+  _nm_defer "publish_github_release" "RELEASE_NOTES land on main only when the chore PR merges; Surface 1 publish waits (re-run --apply after merge)" && return 0
 
   # DRY-RUN branch — deliberately above all three aborting preflights, so the apply
   # path below is reached with exactly the control flow it had before. Detail carries
@@ -7279,10 +7948,17 @@ _drift_block_in_scope() {
 # It is expected ONLY for (a) a sibling release genuinely in flight inside that
 # Stage-12 window, or (b) a recorded historical exemption above. A MISSING-RELEASE on a
 # tag whose release has already closed is a real gap.
-# NOTE ON REACH: this phase runs AFTER phase 15.5, which converges Surface 1 for THIS
-# release — so this release's own tag can never appear here. This gate reports on
-# siblings and history; the current release's Surface-1 provenance is owned by
-# stage-13-close.md § Phase B5.6.
+# NOTE ON REACH: this release's own tag is PARTITIONED OUT of the sibling/history
+# population by construction — anchor_parity_violations skips the VERSION it is
+# handed — so it never appears in the sibling report, in any mode, rather than only
+# when phase 15.5 happened to publish first. The own tag is asserted by its own limb
+# (own_anchor_state + own_anchor_gap_is_this_close) under the mode rule at the top
+# of this file: for real at --apply, after 15.5 converges Surface 1; PREDICTED at
+# --dry-run only in the one state 15.5's own no-op produces; and, with the whole
+# phase, DEFERRED under --no-merge. Neither exclusion key masks a genuine own-tag
+# gap at --apply: the VERSION key removes the tag from the sibling population
+# only, and the #6857 in-flight set is consulted by the sibling population only.
+# The current release's Surface-1 provenance is owned by stage-13-close.md § Phase B5.6.
 ANCHOR_PARITY_EXEMPT_TAGS=(
   v3.31    # annotated tag, no published GitHub Release; Release-publication routed out of this card
   v3.65.1  # annotated tag, no published GitHub Release; Release-publication routed out of this card
@@ -7352,11 +8028,12 @@ inflight_release_tags() {
 }
 
 anchor_parity_violations() {
-  local ann_file="$1" rel_file="$2" inflight_file="${3:-}"
+  local ann_file="$1" rel_file="$2" inflight_file="${3:-}" own="${4:-}"
   local exempt; exempt="$(/usr/bin/printf '%s\n' "${ANCHOR_PARITY_EXEMPT_TAGS[@]}" | /usr/bin/sort -u)"
   local t
   while IFS= read -r t; do
     [[ -z "$t" ]] && continue
+    [[ -n "$own" && "$t" == "$own" ]] && continue   # the closing release's own tag never enters the sibling/history population (keyed on VERSION); its own limb asserts it
     if /usr/bin/printf '%s\n' "$exempt" | /usr/bin/grep -qxF "$t"; then continue; fi
     # #6857 — a sibling still inside its Stage-12/13 window is the expected benign
     # case, not drift. Scoped to THIS arm: a published Release on a lightweight tag
@@ -7367,9 +8044,38 @@ anchor_parity_violations() {
   done < <(/usr/bin/comm -23 "$ann_file" "$rel_file")
   while IFS= read -r t; do
     [[ -z "$t" ]] && continue
+    [[ -n "$own" && "$t" == "$own" ]] && continue   # the closing release's own tag never enters the sibling/history population (keyed on VERSION); its own limb asserts it
     if /usr/bin/printf '%s\n' "$exempt" | /usr/bin/grep -qxF "$t"; then continue; fi
     /usr/bin/printf 'MISSING-ANNOTATED-TAG %s (published GitHub Release with no annotated tag)\n' "$t"
   done < <(/usr/bin/comm -13 "$ann_file" "$rel_file")
+}
+
+# The closing release's own anchor pair: IN-STEP | MISSING-RELEASE |
+# MISSING-ANNOTATED-TAG | ABSENT. Files, not live probes, for the same offline-
+# testability reason as anchor_parity_violations.
+own_anchor_state() {   # <ann_file> <rel_file> <version>
+  local _a=0 _r=0
+  if /usr/bin/grep -qxF "$3" "$1" 2>/dev/null; then _a=1; fi
+  if /usr/bin/grep -qxF "$3" "$2" 2>/dev/null; then _r=1; fi
+  case "$_a$_r" in
+    11) /usr/bin/printf 'IN-STEP' ;;
+    10) /usr/bin/printf 'MISSING-RELEASE' ;;
+    01) /usr/bin/printf 'MISSING-ANNOTATED-TAG' ;;
+    *)  /usr/bin/printf 'ABSENT' ;;
+  esac
+}
+
+# The ONE bounded state in which the own tag's missing Release is this script's
+# own no-op and is PREDICTED rather than reported. Returns 0 to predict, 1 to
+# report. ADR-158 per-limb shape: a CONJUNCTION, never a mode-wide suppression.
+#   (1) the own pair is MISSING-RELEASE (annotated tag, no published Release)
+#   (2) MODE is dry-run
+#   (3) phase 15.5 recorded DRY-RUN this run — the no-op that produces the gap
+own_anchor_gap_is_this_close() {   # <own_state> <mode> <publish_record "RESULT|DETAIL">
+  [[ "$1" == "MISSING-RELEASE" ]] || return 1
+  [[ "$2" == "dry-run" ]] || return 1
+  [[ "${3%%|*}" == "DRY-RUN" ]] || return 1
+  return 0
 }
 
 # #5268 — the ONE bounded --dry-run state in which an INDEX/LOG version-row gap is
@@ -7420,6 +8126,9 @@ ledger_gap_is_this_close() {
 }
 
 phase_assert_anchor_hygiene() {
+  # Declared `defer` in NO_MERGE_PHASE_BEHAVIOUR: the FIRST statement, above the temp
+  # dir, so a deferral creates nothing and reaches no network call.
+  _nm_defer "assert_anchor_hygiene" "the tag<->Release parity it asserts reads the Surface 1 that phase 15.5 publishes, which --no-merge defers; siblings, history and this release's own tag are all asserted on the post-merge re-run (re-run --apply after merge)" && return 0
   local findings="" tmp
   tmp="$(/usr/bin/mktemp -d -t anchorhygiene.XXXXXX)"
 
@@ -7466,13 +8175,29 @@ phase_assert_anchor_hygiene() {
   # (3) AC4b — annotated-tag <-> published-Release set parity. NETWORK. A gh failure is
   # SKIPPED-with-a-loud-reason, never a silent pass: "could not check" and "checked and
   # clean" must never render the same.
-  local _net_note=""
+  local _net_note="" _own_txt="own tag ${VERSION}: not checked"
   annotated_tags_of "$REPO_ROOT" > "$tmp/ann"
   if $GH release list --limit 400 --json tagName -q '.[].tagName' 2>/dev/null | /usr/bin/sort > "$tmp/rel" \
      && [[ -s "$tmp/rel" ]]; then
     inflight_release_tags "$RELEASE_LOG" "$tmp/ann" > "$tmp/inflight" 2>/dev/null || : > "$tmp/inflight"
-    local _ap; _ap="$(anchor_parity_violations "$tmp/ann" "$tmp/rel" "$tmp/inflight")"
+    # (3a) siblings + history — the own tag is partitioned OUT by construction.
+    local _ap; _ap="$(anchor_parity_violations "$tmp/ann" "$tmp/rel" "$tmp/inflight" "$VERSION")"
     [[ -n "$_ap" ]] && findings="${findings}${_ap}"$'\n'
+    # (3b) the own tag — its own limb. Reads NEITHER exemption set: not the recorded
+    # exemptions, not the #6857 in-flight set. Assert at --apply; predict at
+    # --dry-run only in the bounded state; deferred with the phase under --no-merge.
+    local _own; _own="$(own_anchor_state "$tmp/ann" "$tmp/rel" "$VERSION")"
+    _own_txt="own tag ${VERSION}: ${_own}"
+    case "$_own" in
+      MISSING-RELEASE)
+        if own_anchor_gap_is_this_close "$_own" "$MODE" "$(get_phase publish_github_release)"; then
+          _own_txt="own tag ${VERSION}: OWN-TAG PREDICTED, not evaluated under --dry-run — its annotated tag has no published Release yet, and phase 15.5 converges Surface 1 for ${VERSION} at --apply while writing nothing here, so the gap is this script's own no-op; the own-tag assertion runs for real at --apply, after phase 15.5 publishes"
+        else
+          findings="${findings}OWN-TAG-MISSING-RELEASE ${VERSION} (this release's annotated tag has no published GitHub Release after phase 15.5)"$'\n'
+        fi ;;
+      MISSING-ANNOTATED-TAG)
+        findings="${findings}OWN-TAG-MISSING-ANNOTATED-TAG ${VERSION} (this release's published GitHub Release has no annotated tag)"$'\n' ;;
+    esac
   else
     _net_note="; tag<->Release set parity NOT CHECKED (gh release list unavailable — offline or credential-less)"
   fi
@@ -7494,9 +8219,9 @@ phase_assert_anchor_hygiene() {
   local _ledger_txt="INDEX ${_idx} == LOG ${_log} rows"
   [[ -n "$_parity_pred" ]] && _ledger_txt="INDEX ${_idx} vs LOG ${_log} rows${_parity_pred}"
   if [[ -n "$_net_note" ]]; then
-    mark_phase "assert_anchor_hygiene" "SKIPPED" "offline assertions clean (${_annn} annotated tags; ${_ledger_txt})${_net_note}"
+    mark_phase "assert_anchor_hygiene" "SKIPPED" "offline assertions clean (${_annn} annotated tags; ${_ledger_txt}; ${_own_txt})${_net_note}"
   else
-    mark_phase "assert_anchor_hygiene" "PASS" "release anchors in step (${_annn} annotated tags; tag<->Release sets equal modulo ${#ANCHOR_PARITY_EXEMPT_TAGS[@]} recorded exemptions; ${_ledger_txt})"
+    mark_phase "assert_anchor_hygiene" "PASS" "release anchors in step (${_annn} annotated tags; tag<->Release sets equal modulo ${#ANCHOR_PARITY_EXEMPT_TAGS[@]} recorded exemptions; ${_ledger_txt}; ${_own_txt})"
   fi
   return 0
 }
@@ -7543,11 +8268,9 @@ phase_check_release_body_drift() {
   # --no-merge (#2919): this detective phase compares the just-published Surface 1
   # Release body against the in-repo note. Under --no-merge publish_github_release
   # deferred, so there is no fresh Release to drift-check. Defer (avoids a needless
-  # network call); re-runs with the publish on the post-merge --apply.
-  if [[ "$NO_MERGE" -eq 1 ]]; then
-    mark_phase "check_release_body_drift" "SKIPPED" "DEFERRED under --no-merge — no Surface 1 published this run to drift-check (re-run --apply after merge)"
-    return 0
-  fi
+  # network call); re-runs with the publish on the post-merge --apply. Declared
+  # `defer` in NO_MERGE_PHASE_BEHAVIOUR.
+  _nm_defer "check_release_body_drift" "no Surface 1 published this run to drift-check (re-run --apply after merge)" && return 0
 
   if [[ ! -x "$DRIFT_CHECK_TOOL" ]]; then
     mark_phase "check_release_body_drift" "SKIPPED" "check-release-body-drift.sh not executable at $DRIFT_CHECK_TOOL"
@@ -7583,9 +8306,9 @@ phase_check_release_body_drift() {
       # deploy.sh Check 47 never disagree about the same version.
       if _drift_block_in_scope "$VERSION"; then
         drift_blocking=1
-        mark_phase "check_release_body_drift" "FAIL" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; close BLOCKED per stage-13-close.md Phase B5.6. Correct the canonical note first, then re-emit every surface from it per §5.6 (gh release edit) or release-executor Mode F. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+        mark_phase "check_release_body_drift" "FAIL" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; close BLOCKED per stage-13-close.md Phase B5.6. Correct the canonical note first, then re-emit every surface from it per §5.6 (gh release edit) or release-executor Mode F. $(_detail_one_line "${drift_out%%$'\n'*}")"
       else
-        mark_phase "check_release_body_drift" "WARN" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; re-emit per §5.6 (gh release edit) or release-executor Mode F. NOT blocking: $VERSION is outside the body-drift cutoff scope (cutoff $DRIFT_CHECK_CUTOFF), which deploy.sh Check 47 also exempts. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+        mark_phase "check_release_body_drift" "WARN" "DRIFT — published Release body != frontmatter-stripped in-repo note for $VERSION; re-emit per §5.6 (gh release edit) or release-executor Mode F. NOT blocking: $VERSION is outside the body-drift cutoff scope (cutoff $DRIFT_CHECK_CUTOFF), which deploy.sh Check 47 also exempts. $(_detail_one_line "${drift_out%%$'\n'*}")"
       fi
       ;;
     2)
@@ -7593,7 +8316,7 @@ phase_check_release_body_drift() {
       # (offline/unauth) AND git (origin/main unresolvable / corrupt object): the
       # tool writes the failing subsystem to stderr unconditionally, and $drift_out
       # captured it (2>&1), so a git failure is NOT mis-reported as "gh offline".
-      mark_phase "check_release_body_drift" "N/A" "body-drift check N/A for $VERSION — a required capability is unavailable (gh or git); never FAIL. $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+      mark_phase "check_release_body_drift" "N/A" "body-drift check N/A for $VERSION — a required capability is unavailable (gh or git); never FAIL. $(_detail_one_line "${drift_out%%$'\n'*}")"
       ;;
     3)
       # MISSING note or Release. If publish phase did not land Surface 1 this run,
@@ -7601,7 +8324,7 @@ phase_check_release_body_drift() {
       if [[ "$pub_result" != "PASS" ]]; then
         mark_phase "check_release_body_drift" "N/A" "no published Release / note to compare for $VERSION (Surface 1 not emitted this run: publish phase=$pub_result)"
       else
-        mark_phase "check_release_body_drift" "WARN" "post-emit body-drift check could not resolve note or Release for $VERSION (non-blocking: an artifact-missing state, not a drift finding — see the exit 2/3 rationale above). $(/usr/bin/printf '%s' "$drift_out" | /usr/bin/head -1)"
+        mark_phase "check_release_body_drift" "WARN" "post-emit body-drift check could not resolve note or Release for $VERSION (non-blocking: an artifact-missing state, not a drift finding — see the exit 2/3 rationale above). $(_detail_one_line "${drift_out%%$'\n'*}")"
       fi
       ;;
     *)
@@ -7639,9 +8362,11 @@ phase_invoke_orphan_cleanup() {
   # leaving a reader of a green close-out to look for one that does not exist. The
   # dry-run report is now relayable as the approval scope: it projects the resolve
   # pass, so a branch freed by this run's own worktree removals is reported as a
-  # predicted consequence instead of as skipped.
+  # predicted consequence instead of as skipped. It also projects the prune, so the
+  # stale remote-tracking refs the apply will prune are listed rather than reported
+  # as zero.
   if "$CLEANUP_TOOL" --release-close "$slug" --dry-run --markdown >/dev/null 2>&1; then
-    mark_phase "invoke_orphan_cleanup" "PASS" "cleanup dry-run report generated (projects the apply's resolve pass, so its totals are the approval scope). This driver has NO apply path — after operator approval the apply is a DIRECT cleanup-orphan-state.sh --release-close $slug --apply --markdown, not a re-run of this close-out"
+    mark_phase "invoke_orphan_cleanup" "PASS" "cleanup dry-run report generated (projects the apply's resolve pass and its stale-tracking-ref prune, so its totals are the approval scope). This driver has NO apply path — after operator approval the apply is a DIRECT cleanup-orphan-state.sh --release-close $slug --apply --markdown, not a re-run of this close-out"
     return 0
   fi
   mark_phase "invoke_orphan_cleanup" "FAIL" "cleanup-orphan-state.sh dry-run returned non-zero"
@@ -7738,6 +8463,35 @@ phase_audit_epic_rollup() {
 
 # ─── Phase 17/18: generate_report ────────────────────────────────────────────
 
+# The report header's chore-PR field (#5769). It RENDERS CHORE_PR_OUTCOME, the value
+# phase_create_chore_pr records at every exit (#7436), and derives nothing. The field
+# it replaces was a two-branch test on CHORE_PR_NUMBER alone, so an idempotent skip on
+# an --apply run rendered as a dry-run or a not-yet-created PR, neither of which it
+# was. One arm per recorded outcome: a success never renders as N/A, and a failure
+# never renders as a skip. A value this function does not know renders VISIBLY
+# unrecognised rather than as a plausible state; self-test group HF asserts that every
+# value phase 11 assigns has an arm here. Deliberately NOT named phase_*.
+_chore_pr_header_field() {
+  local _n="${CHORE_PR_NUMBER:-}" _last
+  case "${CHORE_PR_OUTCOME:-}" in
+    created)                echo "#${_n:-?} — created by this run" ;;
+    existing-open)          echo "#${_n:-?} — already open for this branch; reused" ;;
+    resumed-already-merged) echo "#${_n:-?} — already merged; resumed run" ;;
+    skipped-as-idempotent)  echo "none needed — skipped as idempotent; the close outputs were already on main" ;;
+    dry-run)                echo "not created — dry-run" ;;
+    failed)                 echo "FAILED at create_chore_pr — see Phase Outcomes" ;;
+    "")
+      # Phase 11 never ran: the run halted earlier. Name where, from the phase record.
+      _last=$(( ${#PHASE_NAMES[@]} - 1 ))
+      if [[ "$_last" -ge 0 && "${PHASE_RESULTS[$_last]}" == "FAIL" ]]; then
+        echo "not created — the run halted at ${PHASE_NAMES[$_last]} (FAIL) before create_chore_pr"
+      else
+        echo "not created — create_chore_pr did not run in this run"
+      fi ;;
+    *)                      echo "unrecognised outcome '${CHORE_PR_OUTCOME}' (see Phase Outcomes)" ;;
+  esac
+}
+
 generate_markdown_report() {
   local slug="$STATE_MILESTONE_SLUG"
   [[ -z "$slug" ]] && slug="$VERSION"
@@ -7749,7 +8503,7 @@ generate_markdown_report() {
 **Mode:** ${MODE}
 **Release PR:** #${PR_NUMBER}
 **Milestone:** ${slug} (#${MILESTONE})
-**Chore PR:** $([[ -n "$CHORE_PR_NUMBER" ]] && echo "#${CHORE_PR_NUMBER}" || echo "N/A — dry-run or not-yet-created")
+**Chore PR:** $(_chore_pr_header_field)
 
 ## State
 
@@ -7773,11 +8527,10 @@ EOF
   # audit_epic_rollup.
   #
   # SCOPE OF THAT CONTRACT — narrow on purpose. It holds for THIS table, not for
-  # the report as a whole. Two partial phase enumerations remain hardcoded and DO
-  # need hand-editing when a phase joins the --no-merge deferred set: the
-  # "Deferred Under --no-merge" bullets further down in this function, and the
-  # `deferred` literal in generate_json_report. Do NOT read this as "there is no
-  # report list to edit" — there is; it is simply not this one.
+  # the report as a whole. The --no-merge Deferred bullets further down, and the
+  # JSON twin's deferred_under_no_merge array, are DERIVED from
+  # NO_MERGE_PHASE_BEHAVIOUR. A phase joins the deferred set by its table row, and
+  # neither renderer is edited.
   #
   # WHY THE RECORD AND NOT THE phase_*() DEFINITIONS: the record is the only
   # in-file surface that observes EXECUTION rather than declaration. A definition
@@ -7807,7 +8560,7 @@ EOF
   echo
   echo "Rows are the phases this run executed, in execution order. A phase absent from the table did not run — the table is a record of execution, not a declaration of the planned sequence. The full declared sequence is in \`--help\`."
   # A halted run states the fact of truncation, not just the semantics of absence.
-  # 32 of the 33 in-run generate_report call sites are abort paths
+  # Every in-run generate_report call site except the final one is an abort path
   # (`phase_X || { generate_report; exit N; }`), so the truncated run is the
   # DOMINANT artifact a reader sees, and a derived table alone cannot separate
   # "did not run" from "does not exist". Derived purely from the record — no
@@ -7835,8 +8588,8 @@ EOF
     done <<< "$OPEN_ISSUE_LIST"
     echo
   fi
-  # --no-merge (#2919): the post-merge-dependent phases deferred (see the guard
-  # clauses in phases 13/14/15.5/15.6). Emit the deferred set + the exact idempotent
+  # --no-merge (#2919): the post-merge-dependent phases deferred (the rows
+  # NO_MERGE_PHASE_BEHAVIOUR declares `defer`). Emit the deferred set + the exact
   # follow-up command so the operator has a single unambiguous next step — the step
   # whose absence forced a manual milestone reopen/re-close on the v3.45 close.
   if [[ "$NO_MERGE" -eq 1 ]]; then
@@ -7847,20 +8600,37 @@ EOF
     done
     echo "## Deferred Under --no-merge"
     echo
-    echo "The Stage 13 chore PR${CHORE_PR_NUMBER:+ #${CHORE_PR_NUMBER}} was left open (\`--no-merge\`). Post-merge-dependent phases were deferred to preserve the Stage 13 sequencing invariant — the chore PR MUST land on main before milestone close / Release publish (release/references/pipeline/stage-13-close.md § Phase B):"
+    # The intro reads the outcome phase 11 RECORDED, with no host read (#7465 Plan
+    # amendment 5; the same source phase 12's --no-merge detail reads). On a resumed
+    # run whose chore PR phase 11 found already merged, "left open" would be false, so
+    # the intro says what is true. Every other outcome renders the sentence unchanged.
+    if [[ "${CHORE_PR_OUTCOME:-}" == "resumed-already-merged" ]]; then
+      echo "The Stage 13 chore PR${CHORE_PR_NUMBER:+ #${CHORE_PR_NUMBER}} is already merged — phase 11 resolved it on this resumed run. \`--no-merge\` defers the post-merge-dependent phases whatever the chore PR's state, so they did not run (release/references/pipeline/stage-13-close.md § Phase B):"
+    else
+      echo "The Stage 13 chore PR${CHORE_PR_NUMBER:+ #${CHORE_PR_NUMBER}} was left open (\`--no-merge\`). Post-merge-dependent phases were deferred to preserve the Stage 13 sequencing invariant — the chore PR MUST land on main before milestone close / Release publish (release/references/pipeline/stage-13-close.md § Phase B):"
+    fi
     echo
-    echo "- \`post_close_milestone\` — Milestone #${MILESTONE} left OPEN"
-    echo "- \`manual_close_release_issues\` — D-1 anomaly issue-close deferred"
-    echo "- \`publish_github_release\` — Surface 1 (GitHub Release) not emitted"
-    echo "- \`check_release_body_drift\` — no published Release to drift-check"
+    local _nm_d
+    while IFS= read -r _nm_d; do
+      [[ -z "$_nm_d" ]] && continue
+      echo "- \`${_nm_d}\` — $(_nm_consequence "$_nm_d")"
+    done <<< "$(_nm_members defer)"
     echo
-    echo "**Follow-up — after the chore PR merges (CI-green):**"
+    # The follow-up heading reads the same recorded outcome (#7465 Plan amendment 6): a
+    # chore PR phase 11 found already merged is not a merge still to come.
+    if [[ "${CHORE_PR_OUTCOME:-}" == "resumed-already-merged" ]]; then
+      echo "**Follow-up — the chore PR is already merged, so run it now:**"
+    else
+      echo "**Follow-up — after the chore PR merges (CI-green):**"
+    fi
     echo
     echo '```'
     echo "automated-closeout.sh --pr ${PR_NUMBER} --version ${VERSION} --milestone ${MILESTONE} --apply${_excl_hint}"
     echo '```'
     echo
-    echo "Re-run WITHOUT \`--no-merge\` (preserve any \`--outcome\` / \`--close-comment\` flags from this run). Idempotent: the already-landed corpus SKIPs, then milestone close + Release publish run."
+    echo "Re-run WITHOUT \`--no-merge\` (preserve any \`--outcome\` / \`--close-comment\` flags from this run): milestone close + Release publish then run. Re-running is the supported recovery, but this report does not assert that every phase is idempotent — the re-run behaviour \`--self-test\` pins is listed under \"Phases (sequenced)\" in \`--help\`."
+    echo
+    echo "The merge method is yours to choose — merge commit, squash or rebase: the resumed run matches the merged chore PR against that PR's own head, so each of them resumes."
     echo
   fi
   # Cross-release pattern scan (phase 16.5). The body is emitted here rather than
@@ -7916,11 +8686,12 @@ generate_json_report() {
     is_first_phase_occurrence "$_pj_i" || continue
     _pj_rec+=("${PHASE_NAMES[$_pj_i]}" "${PHASE_RESULTS[$_pj_i]}" "${PHASE_DETAILS[$_pj_i]}")
   done
-  /usr/bin/python3 - "$RUN_TS" "$MODE" "$PR_NUMBER" "$VERSION" "$MILESTONE" "$slug" \
+  CLOSEOUT_REDACT_REPO="${REPO_ROOT:-}" CLOSEOUT_REDACT_HOME="${HOME:-}" \
+  CHORE_PR_OUTCOME_JSON="${CHORE_PR_OUTCOME:-not-yet-created}" NM_DEFERRED="$(_nm_members defer)" /usr/bin/python3 - "$RUN_TS" "$MODE" "$PR_NUMBER" "$VERSION" "$MILESTONE" "$slug" \
     "$STATE_LOG_ROW_STATE" "$STATE_MILESTONE_STATE" "$STATE_TAG_EXISTS" \
     "$STATE_CYCLE_TIME" "$OPEN_ISSUE_COUNT" "$CHORE_PR_NUMBER" "$OPEN_ISSUE_LIST" "$NO_MERGE" \
     "${_pj_rec[@]}" <<'PY'
-import sys, json
+import sys, json, os
 ts, mode, pr, version, milestone, slug, log_state, ms_state, tag, cycle, open_n, chore_pr, open_list, no_merge = sys.argv[1:15]
 issues = [int(x) for x in open_list.split("\n") if x.strip()]
 # Phase outcomes: argv[15] is the triple count, then flat (name, result, detail)
@@ -7933,8 +8704,10 @@ if len(_pf) != 3 * _pn:
 phases = [{"name": _pf[i], "result": _pf[i + 1], "detail": _pf[i + 2]} for i in range(0, len(_pf), 3)]
 # --no-merge (#2919): the post-merge-dependent phases defer; surface which ones so a
 # JSON consumer sees the same deferral the markdown report's "Deferred Under --no-merge"
-# section shows. Empty list on the normal (merge) path.
-deferred = ["post_close_milestone", "manual_close_release_issues", "publish_github_release", "check_release_body_drift"] if no_merge == "1" else []
+# section shows. DERIVED from NO_MERGE_PHASE_BEHAVIOUR's `defer` rows (passed as
+# NM_DEFERRED, one name per line), never listed here. Empty list on the normal
+# (merge) path.
+deferred = [p for p in os.environ.get("NM_DEFERRED", "").split() if p] if no_merge == "1" else []
 payload = {
     "timestamp": ts,
     "mode": mode,
@@ -7944,17 +8717,59 @@ payload = {
     "release_log": {"row_state": log_state, "tag_present": bool(int(tag))},
     "cycle_time": cycle,
     "chore_pr": int(chore_pr) if chore_pr.isdigit() else None,
+    "chore_pr_outcome": os.environ.get("CHORE_PR_OUTCOME_JSON", "not-yet-created"),
     "d1_manual_close_candidates": {"count": int(open_n), "issues": issues},
     "deferred_under_no_merge": deferred,
     "phases": phases,
 }
-print(json.dumps(payload, indent=2))
+# THE JSON SINK (#7855; Plan amendment 13). Path values are redacted here, once, in
+# every DECODED string before serialisation: json.dumps escapes non-ASCII, so a
+# replace over the serialised text would miss a home path carrying one. Same order and
+# guard as the shell primitive: the repository root first, then HOME, each with one
+# trailing slash stripped, and a root of one character or less skipped.
+def _root(name):
+    r = os.environ.get(name, "")
+    return r[:-1] if r.endswith("/") else r
+
+
+_roots = [(r, m) for r, m in ((_root("CLOSEOUT_REDACT_REPO"), "<repo>"), (_root("CLOSEOUT_REDACT_HOME"), "<home>")) if len(r) > 1]
+
+
+def _red(v):
+    if isinstance(v, str):
+        for r, m in _roots:
+            v = v.replace(r, m)
+        return v
+    if isinstance(v, list):
+        return [_red(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _red(x) for k, x in v.items()}
+    return v
+
+
+print(json.dumps(_red(payload), indent=2))
 PY
 }
 
+# THE REPORT SINK (#7855; Plan amendment 13) — where path values are redacted, once.
+# The markdown render is redacted whole: _redact_paths rewrites "$REPO_ROOT" to
+# <repo> and then "$HOME" to <home> across every phase detail, both captured report
+# bodies, the header and any section added later, so no phase declares a path form of
+# its own. generate_json_report redacts every decoded string the same way. The
+# sentinel keeps the render's trailing newlines byte-for-byte, and the render's own
+# exit status is returned unchanged (the emit_derived_entry idiom). The one obligation
+# left at a phase: a captured diagnostic reaches a detail only through
+# _detail_one_line at its projection, because a hand-rolled cut can split a path
+# before this sink sees it (self-test group PL).
 generate_report() {
   case "$OUTPUT" in
-    markdown) generate_markdown_report ;;
+    markdown)
+      local _rep _rrc=0
+      _rep="$(generate_markdown_report; _prc=$?; /usr/bin/printf 'X'; exit "$_prc")" || _rrc=$?
+      _rep="${_rep%X}"
+      _rep="$(_redact_paths "$_rep"; /usr/bin/printf 'X')"; _rep="${_rep%X}"
+      /usr/bin/printf '%s' "$_rep"
+      return "$_rrc" ;;
     json) generate_json_report ;;
   esac
 }
@@ -8979,6 +9794,14 @@ echo "retro-conformance 10/10 (1.00); lessons-population 8/10 (0.80); carry-forw
 EOF
   /bin/chmod +x "$_ockg_cct"
   COMPUTE_CLOSE_CLASS_TELEMETRY="$_ockg_cct"
+  # Phase 6.8's declared precondition (#6892): the 6.8 arms below run over a MET
+  # register, so k3's PASS stays a PASS, and no arm resolves the operator's
+  # instance root through the real producer's --print-path.
+  local _ockg_saved_plr="${PRODUCE_LEARNINGS_REGISTER-}" _ockg_plr="$_ockg_tmp/plr.sh"
+  /usr/bin/printf '# fixture register\n' > "$_ockg_tmp/register.md"
+  /usr/bin/printf '#!/bin/sh\necho "%s"\n' "$_ockg_tmp/register.md" > "$_ockg_plr"
+  /bin/chmod +x "$_ockg_plr"
+  PRODUCE_LEARNINGS_REGISTER="$_ockg_plr"
 
   # (k1) AC-1 — A QUALIFIED KEY IS RECOGNIZED AND REJECTED, never injected past.
   # The block keeps exactly one Outcome-family line and the record is byte-identical.
@@ -9242,6 +10065,7 @@ EOF
   RELEASE_LOG="$_ockg_saved_log"; VERSION="$_ockg_saved_ver"; MODE="$_ockg_saved_mode"
   OUTCOME="$_ockg_saved_outcome"; OUTCOME_RATIONALE="$_ockg_saved_rat"
   COMPUTE_CLOSE_CLASS_TELEMETRY="$_ockg_saved_tool"; MILESTONE="$_ockg_saved_ms"
+  PRODUCE_LEARNINGS_REGISTER="$_ockg_saved_plr"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # ── Test 4c.5: phase_inject_velocity_field (6.6) + phase_append_release_learnings (6.7)
@@ -9895,6 +10719,15 @@ EOF
   local _cc_tmp; _cc_tmp="$(/usr/bin/mktemp -d -t closeclass-selftest.XXXXXX)"
   MODE="apply"; MILESTONE="999"
   RELEASE_LOG="$_cc_tmp/RELEASE_LOG.md"
+  # Phase 6.8's declared precondition (#6892): the arms below drive 6.8 over a MET
+  # register, so a PASS they pin stays a PASS. The stub prints the path of a fixture
+  # register that exists, so no arm resolves the operator's instance root through
+  # the real producer's --print-path. Group TL, at the end, exercises the real one.
+  local _cc_saved_plr="${PRODUCE_LEARNINGS_REGISTER-}" _cc_plr="$_cc_tmp/plr.sh"
+  /usr/bin/printf '# fixture register\n' > "$_cc_tmp/register.md"
+  /usr/bin/printf '#!/bin/sh\necho "%s"\n' "$_cc_tmp/register.md" > "$_cc_plr"
+  /bin/chmod +x "$_cc_plr"
+  PRODUCE_LEARNINGS_REGISTER="$_cc_plr"
 
   local _cc_ok="$_cc_tmp/cct-ok.sh" _cc_vac="$_cc_tmp/cct-vac.sh" _cc_bad="$_cc_tmp/cct-bad.sh"
   local _cc_empty="$_cc_tmp/cct-empty.sh" _cc_e2="$_cc_tmp/cct-e2.sh" _cc_noexec="$_cc_tmp/cct-noexec.sh"
@@ -10243,11 +11076,153 @@ EOF
   # can never fire, which is indistinguishable from a clean file.
   /usr/bin/grep -qF "$_np_sub" <<<'    _x="$(_write_not_produced_marker a b c)"' || { echo "FAIL: (j.2) capability-to-fail — the command-substitution matcher does not match a constructed bad call site, so its two clean readings above measure nothing"; failures=$((failures+1)); }
 
+  # ── Group TL (#6892): phase 6.8's DECLARED PRECONDITION, the Phase A7.2 register.
+  # The register is produced BEFORE the close-out driver runs; 6.8 resolves its path
+  # with produce-learnings-register.sh --print-path (static, reads nothing), passes it
+  # as --retro, and classifies the precondition with -f on that SAME path. Met ->
+  # PASS; absent or unresolvable -> the field is still written, carrying the honest
+  # absent reading, and the row is WARN naming the unmet precondition. Offline and
+  # hermetic: the REAL producer runs under an exported temporary PMO_INSTANCE_PATH,
+  # so no arm reads or writes the operator's instance; the telemetry tool is a stub,
+  # as in the arms above, because the real one reaches gh — it records its argv and
+  # emits the measured § 3.2 line only when the --retro path it was handed exists.
+  local _tl_saved_plr="${PRODUCE_LEARNINGS_REGISTER-}" _tl_saved_inst="${PMO_INSTANCE_PATH-__tl_unset__}"
+  local _tl_inst="$_cc_tmp/instance" _tl_cct="$_cc_tmp/tl-cct.sh" _tl_triple="$_cc_tmp/tl-triple.md"
+  local _tl_row _tl_rc _tl_path _tl_argv
+  /bin/cat > "$_tl_cct" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" > "$TL_ARGV"
+v="$1"; retro=""
+while [ $# -gt 0 ]; do
+  case "$1" in --retro) retro="$2"; shift 2 ;; *) shift ;; esac
+done
+if [ -n "$retro" ] && [ -f "$retro" ]; then
+  echo "retro-conformance 10/10 (1.00); lessons-population 8/10 (0.80); carry-forward-closure 2/3 (0.67); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 12/13 (0.92); evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh"
+else
+  echo "retro-conformance N/A — no retro register found for $v; lessons-population N/A — no lessons register found; carry-forward-closure 2/3 (0.67); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence N/A — no retro register found; evidence-preservation 12/13 (0.92); evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh"
+fi
+EOF
+  /bin/chmod +x "$_tl_cct"
+  /usr/bin/printf '#### Release Learnings v9.96\n\n**Surprise:** a fixture surprise.\n**Would-change:** a fixture change.\n**Watch-for:** a fixture watch item.\n' > "$_tl_triple"
+  export PMO_INSTANCE_PATH="$_tl_inst" TL_ARGV="$_cc_tmp/tl-argv"
+  RELEASE_LOG="$_cc_tmp/RELEASE_LOG.md"; MODE="apply"; MILESTONE="999"; VERSION="v9.96"
+  COMPUTE_CLOSE_CLASS_TELEMETRY="$_tl_cct"
+  PRODUCE_LEARNINGS_REGISTER="$SCRIPT_DIR/produce-learnings-register.sh"
+  _tl_drive() {  # run 6.8 once over a fresh fixture ledger: rc -> _tl_rc, row -> _tl_row
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    : > "$TL_ARGV"
+    _tl_rc=0
+    phase_inject_close_class_telemetry_field >/dev/null 2>&1 || _tl_rc=$?
+    _tl_row="$(get_phase inject_close_class_telemetry_field)"
+  }
+
+  # (a) MET: the REAL producer writes the register first; 6.8 then PASSes and the
+  #     field carries the computed readings the register makes possible. The path
+  #     is resolved BEFORE anything is written, and the write runs only when that
+  #     path lies under the temporary root, so a resolver that stopped honouring
+  #     PMO_INSTANCE_PATH could not reach the operator's instance from this arm.
+  /bin/rm -rf "$_tl_inst"; /bin/mkdir -p "$_tl_inst"
+  _tl_path="$("$PRODUCE_LEARNINGS_REGISTER" v9.96 --print-path 2>/dev/null || true)"
+  if [[ -n "$_tl_path" && "$_tl_path" == "$_tl_inst"/* ]]; then
+    "$PRODUCE_LEARNINGS_REGISTER" v9.96 --milestone 9999 --triple-file "$_tl_triple" --apply >/dev/null 2>&1 || true
+  fi
+  _cc_write; _tl_drive
+  _st_arm TL a-met-real; [[ -n "$_tl_path" && -f "$_tl_path" && "$_tl_path" == "$_tl_inst"/* ]] || { echo "FAIL: TL/a floor — the real producer must write the register under the temporary instance root; the met arm would grade nothing"; failures=$((failures+1)); }
+  [[ "$_tl_rc" -eq 0 && "$_tl_row" == PASS\|* && "$_tl_row" == *"retro-conformance 10/10 (1.00)"* && "$_tl_row" == *"lessons-population 8/10 (0.80)"* ]] || { echo "FAIL: TL/a (AC-1) — with the register produced before 6.8, the row must PASS and the field carry the computed readings, got rc ${_tl_rc}: '$_tl_row'"; failures=$((failures+1)); }
+
+  # (b) WIRING: the telemetry tool is handed --retro <exactly the --print-path value>.
+  _tl_argv="$(/bin/cat "$TL_ARGV")"
+  _st_arm TL b-argv; [[ " $_tl_argv " == *" --retro ${_tl_path} "* ]] || { echo "FAIL: TL/b — 6.8 must pass --retro with the producer's --print-path value, got argv '$(_detail_one_line "$_tl_argv")'"; failures=$((failures+1)); }
+
+  # (c) ABSENT (AC-2): no register produced. The field is STILL written, with the
+  #     honest absent reading, the row is WARN naming the unmet precondition, and the
+  #     phase returns 0. Control: (a) above, the same fixture with the register.
+  /bin/rm -rf "$_tl_inst"; /bin/mkdir -p "$_tl_inst"
+  _cc_write; _tl_drive
+  _st_arm TL c-absent; [[ "$_tl_rc" -eq 0 && "$_tl_row" == WARN\|* && "$_tl_row" == *"DECLARED PRECONDITION UNMET"* && "$_tl_row" == *"retro-conformance N/A — no retro register found for v9.96"* ]] || { echo "FAIL: TL/c (AC-2) — an absent register must record WARN naming the unmet precondition and write the absent reading, got rc ${_tl_rc}: '$_tl_row'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 1 ]] || { echo "FAIL: TL/c — the field must still be written on the absent path (9.56's presence assertion depends on it)"; failures=$((failures+1)); }
+
+  # (f) NO PATH LEAK: the WARN detail names the unmet precondition without printing
+  #     the resolved instance path — close-out rows reach public comments.
+  _st_arm TL f-no-path-leak; [[ "$_tl_row" == WARN\|* && "$_tl_row" != *"$_tl_inst"* && "$_tl_row" != *"RELEASE_LEARNINGS_REGISTER"* ]] || { echo "FAIL: TL/f — the WARN detail must name the unmet precondition without printing the resolved register path, got '$_tl_row'"; failures=$((failures+1)); }
+
+  # (d) UNRESOLVABLE: --print-path returns nothing, so no --retro is passed; WARN.
+  PRODUCE_LEARNINGS_REGISTER="/bin/false"
+  _cc_write; _tl_drive
+  _tl_argv="$(/bin/cat "$TL_ARGV")"
+  _st_arm TL d-unresolvable; [[ "$_tl_rc" -eq 0 && "$_tl_row" == WARN\|* && "$_tl_row" == *"UNRESOLVABLE"* && " $_tl_argv " != *" --retro "* ]] || { echo "FAIL: TL/d — an unresolvable register path must record WARN UNRESOLVABLE and pass no --retro, got rc ${_tl_rc}: '$_tl_row' / argv '$(_detail_one_line "$_tl_argv")'"; failures=$((failures+1)); }
+  PRODUCE_LEARNINGS_REGISTER="$SCRIPT_DIR/produce-learnings-register.sh"
+
+  # (e) DRY-RUN over an absent register: DRY-RUN, names what --apply would record,
+  #     carries no would-FAIL token, and writes nothing.
+  /bin/rm -rf "$_tl_inst"; /bin/mkdir -p "$_tl_inst"
+  _cc_write; MODE="dry-run"; _tl_drive; MODE="apply"
+  _st_arm TL e-dryrun; [[ "$_tl_rc" -eq 0 && "$_tl_row" == DRY-RUN\|* && "$_tl_row" == *"--apply would record WARN"* && "$_tl_row" != *"would FAIL"* ]] || { echo "FAIL: TL/e — the dry-run must predict the WARN without a would-FAIL token, got '$_tl_row'"; failures=$((failures+1)); }
+  [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 0 ]] || { echo "FAIL: TL/e — the dry-run must write nothing"; failures=$((failures+1)); }
+
+  # (g) IDEMPOTENT: with the precondition still unmet, the first run writes the field
+  #     and records WARN; the second finds the field present and SKIPs, writing nothing.
+  _cc_write; _tl_drive
+  _st_arm TL g-idempotent; [[ "$_tl_row" == WARN\|* ]] || { echo "FAIL: TL/g — the first run over an absent register must record WARN, got '$_tl_row'"; failures=$((failures+1)); }
+  _tl_drive
+  [[ "$_tl_row" == SKIPPED\|* && "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 1 ]] || { echo "FAIL: TL/g — a field already present must SKIP whatever the precondition state, and must not be written twice, got '$_tl_row'"; failures=$((failures+1)); }
+
+  # (h) PHASE 10'S CROSS-CHECK SEES A WRITE RECORDED AS WARN (Plan amendment 7, the
+  #     review's CD-1). _reported_write_surfaces is the independent population phase
+  #     10's staging-completeness arms check the chore commit against, and it skips the
+  #     hot ledger by design, so the v9.96 body is moved into an archive segment and
+  #     6.8's write lands there. (i) VISIBLE: with the register absent 6.8 writes the
+  #     field and records WARN, and the reader must name the segment from that WARN row.
+  #     (ii) STILL CAUGHT: the reader keys on the phase record, never on the recorder, so
+  #     a missing recorder call is still caught — with the register met 6.8 records PASS,
+  #     and the reader must name the segment identically with the recorder's entry present
+  #     and with it dropped (Test 11d drives phase 10 itself over such a drop). Each floor
+  #     pins its leg's input, so a failure below is the reader's and nothing else's.
+  local _tl_seg="$_cc_tmp/RELEASE_LOG_ARCHIVE-v9.md" _tl_want _tl_rws _tl_rws0 _tl_rec
+  _tl_want="inject_close_class_telemetry_field"$'\t'"RELEASE_LOG_ARCHIVE-v9.md"
+  _tl_arch() {  # the hot stub points at the segment, and the v9.96 body lives in the segment
+    /usr/bin/printf '# RELEASE_LOG\n\n#### Deployment Log v9.96\n_Archived: [segment](RELEASE_LOG_ARCHIVE-v9.md)_\n' > "$RELEASE_LOG"
+    /usr/bin/printf '# RELEASE_LOG_ARCHIVE-v9\n\n#### Deployment Log v9.96\n**Cycle-Time:** 5d 0h.\n**Result:** SUCCESS — archived body.\n**Outcome:** SUCCESS\n' > "$_tl_seg"
+  }
+  _tl_has() { [[ $'\n'"$1"$'\n' == *$'\n'"$_tl_want"$'\n'* ]]; }  # one whole reader line, in pure bash
+  # (i) the register absent: 6.8 writes the field into the segment and records WARN.
+  /bin/rm -rf "$_tl_inst"; /bin/mkdir -p "$_tl_inst"
+  _tl_arch; TOUCHED_ARCHIVE_SEGMENTS=(); _tl_drive
+  _tl_rws="$(_reported_write_surfaces)"
+  _st_arm TL h-warn-crosscheck; [[ "$_tl_rc" -eq 0 && "$_tl_row" == WARN\|* && "$_tl_row" == *"(RELEASE_LOG_ARCHIVE-v9.md)"* && "$(_cc_count "$_tl_seg" v9.96)" -eq 1 && "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 0 ]] || { echo "FAIL: TL/h (i) floor — with the register absent 6.8 must write the field into the archive segment and record WARN naming it, got rc ${_tl_rc}: '$_tl_row'"; failures=$((failures+1)); }
+  _tl_has "$_tl_rws" || { echo "FAIL: TL/h (i) — phase 10's cross-check must see a write 6.8 recorded as WARN: _reported_write_surfaces must name the archive segment from the WARN row, got '$(_detail_one_line "$_tl_rws")'"; failures=$((failures+1)); }
+  # (ii) the register met, produced as TL/a produces it: 6.8 records PASS.
+  /bin/rm -rf "$_tl_inst"; /bin/mkdir -p "$_tl_inst"
+  _tl_path="$("$PRODUCE_LEARNINGS_REGISTER" v9.96 --print-path 2>/dev/null || true)"
+  if [[ -n "$_tl_path" && "$_tl_path" == "$_tl_inst"/* ]]; then
+    "$PRODUCE_LEARNINGS_REGISTER" v9.96 --milestone 9999 --triple-file "$_tl_triple" --apply >/dev/null 2>&1 || true
+  fi
+  _tl_arch; TOUCHED_ARCHIVE_SEGMENTS=(); _tl_drive
+  _tl_rec="${TOUCHED_ARCHIVE_SEGMENTS[*]:-}"
+  _tl_rws="$(_reported_write_surfaces)"
+  TOUCHED_ARCHIVE_SEGMENTS=()  # the missing recorder call, as phase 10's files=() would see it
+  _tl_rws0="$(_reported_write_surfaces)"
+  [[ "$_tl_row" == PASS\|* && "$_tl_row" == *"(RELEASE_LOG_ARCHIVE-v9.md)"* && " $_tl_rec " == *" $_tl_seg "* ]] || { echo "FAIL: TL/h (ii) floor — with the register met 6.8 must write into the archive segment, record PASS naming it and record the segment, got '$_tl_row' / recorded '${_tl_rec:-<empty>}'"; failures=$((failures+1)); }
+  { _tl_has "$_tl_rws" && _tl_has "$_tl_rws0" && [[ "$_tl_rws" == "$_tl_rws0" ]]; } || { echo "FAIL: TL/h (ii) — a missing recorder call must still be caught: the reader must name the segment 6.8 wrote, identically with and without the recorder's entry, got '$(_detail_one_line "$_tl_rws")' then '$(_detail_one_line "$_tl_rws0")'"; failures=$((failures+1)); }
+  # capability-to-fail: the legs' predicate rejects the two defect shapes it exists to catch.
+  { ! _tl_has "" && ! _tl_has "inject_close_class_telemetry_field"$'\t'"RELEASE_LOG.md"; } || { echo "FAIL: TL/h capability-to-fail — the reader-line predicate accepts an empty set or a hot-ledger-only set, so its readings above measure nothing"; failures=$((failures+1)); }
+  /bin/rm -f "$_tl_seg"; TOUCHED_ARCHIVE_SEGMENTS=()
+  unset -f _tl_arch _tl_has 2>/dev/null || true
+  # Nine arms: TL/a to TL/h above, and TL/i, which runs inside Test 11d's git sandbox
+  # because it drives phase 10, which commits, and this group builds no git sandbox.
+  _st_witness TL 9
+
+  unset -f _tl_drive 2>/dev/null || true
+  unset TL_ARGV
+  if [[ "$_tl_saved_inst" == "__tl_unset__" ]]; then unset PMO_INSTANCE_PATH; else export PMO_INSTANCE_PATH="$_tl_saved_inst"; fi
+  PRODUCE_LEARNINGS_REGISTER="$_tl_saved_plr"
+
   /bin/rm -rf "$_cc_atmp" 2>/dev/null || true
   /bin/rm -rf "$_cc_tmp" 2>/dev/null || true
   unset -f _cc_write _cc_count _cc_seq
   RELEASE_LOG="$_cc_saved_log"; VERSION="$_cc_saved_ver"; MODE="$_cc_saved_mode"
   COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_saved_tool"; MILESTONE="$_cc_saved_ms"
+  PRODUCE_LEARNINGS_REGISTER="$_cc_saved_plr"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # Test 4d: phase_detect_open_issues exclude filter (#38, #3665) — offline, hermetic.
@@ -10687,7 +11662,7 @@ STUB
   # hermetic, credential-free. REFLEXIVITY NOTE: this is the phase that runs at the
   # close-out of the very release that introduced it, so the ladder is tested against
   # the shape that actually broke (#264: gate sub-task absent from the milestone) and
-  # against the shape an idempotent re-run produces (sub-task already CLOSED).
+  # against the shape a re-run produces (sub-task already CLOSED).
   #
   #   T-13  rung 1 resolves a CLOSED Stage-13 sub-task — the arm that fails if the
   #         resolver inherits the collector's `--state open` query. Asserts the phase
@@ -10806,6 +11781,1297 @@ STUB
   MERGE_SHA="$_gp_saved_sha"; STATE_MILESTONE_STATE="$_gp_saved_state"
   COLLECTED_OPEN_ISSUES=""; EXCLUDED_DETAIL=""
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # ── Test CB: phase_create_chore_branch fails loud on a checkout it could not
+  #    make (#7182) — offline and hermetic: a bare file-path origin, no gh, no
+  #    network. THE RED ARM is the chore branch HELD by a second worktree; its
+  #    controls are the branch absent (CB-1), free (CB-2) and already current
+  #    (CB-3). The fixture root is canonicalised with `pwd -P`: macOS /var is a
+  #    symlink to /private/var, and git names a worktree by its real path, so an
+  #    uncanonicalised root would make CB-5's <home> limb miss for a reason that has
+  #    nothing to do with the code under test.
+  if [[ -x "$GIT" ]]; then
+    local _cb_saved_root="$REPO_ROOT" _cb_saved_mode="$MODE" _cb_saved_version="$VERSION"
+    local _cb_saved_branch="$CHORE_BRANCH" _cb_saved_home="$HOME"
+    local _cb_tmp _cb_origin _cb_work _cb_held _cb_br _cb_rc _cb_det _cb_head _cb_setup=0
+    local _cb_br_ln _cb_log_ln _cb_br_txt _cb_log_txt _cb_dst _cb_fun _cb_n _cb_vbo _cb_pre _cb_post
+    local _cb_in _cb_out _cb_z
+    _cb_tmp="$(cd "$(/usr/bin/mktemp -d -t chorebranch-selftest.XXXXXX)" && pwd -P)"
+    _cb_origin="$_cb_tmp/origin.git"; _cb_work="$_cb_tmp/work"; _cb_held="$_cb_tmp/held-wt-cb7182"
+    _cb_br="chore/v9.82-stage-13-corpus-update"
+    (
+      set -e
+      $GIT init --bare -q "$_cb_origin"
+      $GIT init -q -b main "$_cb_work" 2>/dev/null || { $GIT init -q "$_cb_work"; $GIT -C "$_cb_work" checkout -q -b main; }
+      /usr/bin/printf 'baseline\n' > "$_cb_work/f.txt"
+      $GIT -C "$_cb_work" add f.txt
+      $GIT -C "$_cb_work" -c user.email=t@t -c user.name=t commit -qm baseline
+      $GIT -C "$_cb_work" remote add origin "$_cb_origin"
+      $GIT -C "$_cb_work" push -q origin main
+      $GIT -C "$_cb_work" fetch -q origin
+    ) >/dev/null 2>&1 || _cb_setup=$?
+    $GIT -C "$_cb_work" rev-parse --verify --quiet refs/remotes/origin/main >/dev/null 2>&1 || _cb_setup=1
+    if [[ "$_cb_setup" -ne 0 ]]; then
+      echo "FAIL: CB fixture — the hermetic origin/work repositories could not be built (rc=$_cb_setup); no CB arm can run, and the witness gate will name group CB"; failures=$((failures+1))
+    else
+      REPO_ROOT="$_cb_work"; MODE="apply"; VERSION="v9.82"
+
+      # CB-1 — CREATE path (control): branch absent → PASS, HEAD read back on it.
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      _cb_rc=0; phase_create_chore_branch >/dev/null 2>&1 || _cb_rc=$?
+      _cb_head="$($GIT -C "$_cb_work" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+      _st_arm CB CB-1; [[ "$_cb_rc" -eq 0 && "${PHASE_RESULTS[0]:-}" == "PASS" && "$_cb_head" == "$_cb_br" ]] || { echo "FAIL: CB-1 — an ABSENT chore branch must be created from origin/main (rc 0, PASS, HEAD on it); got rc=$_cb_rc result='${PHASE_RESULTS[0]:-}' HEAD='$_cb_head'"; failures=$((failures+1)); }
+
+      # CB-2 — FREE existing branch (the RED arm's control): HEAD elsewhere, branch free → SKIPPED, HEAD on it.
+      $GIT -C "$_cb_work" checkout -q main >/dev/null 2>&1 || true
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      _cb_rc=0; phase_create_chore_branch >/dev/null 2>&1 || _cb_rc=$?
+      _cb_head="$($GIT -C "$_cb_work" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+      _st_arm CB CB-2; [[ "$_cb_rc" -eq 0 && "${PHASE_RESULTS[0]:-}" == "SKIPPED" && "$_cb_head" == "$_cb_br" ]] || { echo "FAIL: CB-2 (the RED arm's control) — a FREE existing chore branch must be checked out (rc 0, SKIPPED, HEAD on it); got rc=$_cb_rc result='${PHASE_RESULTS[0]:-}' HEAD='$_cb_head'"; failures=$((failures+1)); }
+
+      # CB-3 — SAME-WORKTREE RE-RUN (the header's phase-5 pin): HEAD already on it → SKIPPED, HEAD unchanged.
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      _cb_rc=0; phase_create_chore_branch >/dev/null 2>&1 || _cb_rc=$?
+      _cb_head="$($GIT -C "$_cb_work" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+      _st_arm CB CB-3; [[ "$_cb_rc" -eq 0 && "${PHASE_RESULTS[0]:-}" == "SKIPPED" && "$_cb_head" == "$_cb_br" ]] || { echo "FAIL: CB-3 — a re-run from the worktree ALREADY on the chore branch must converge (rc 0, SKIPPED, HEAD unchanged); got rc=$_cb_rc result='${PHASE_RESULTS[0]:-}' HEAD='$_cb_head'"; failures=$((failures+1)); }
+
+      # CB-4 — THE RED ARM: the branch HELD by a second worktree → FAIL rc 3 carrying git's refusal; HEAD NOT moved.
+      $GIT -C "$_cb_work" checkout -q main >/dev/null 2>&1 || true
+      $GIT -C "$_cb_work" worktree add -q "$_cb_held" "$_cb_br" >/dev/null 2>&1 || true
+      _st_arm CB CB-4; /usr/bin/grep -qxF "branch refs/heads/$_cb_br" <<<"$($GIT -C "$_cb_work" worktree list --porcelain 2>/dev/null || true)" \
+        || { echo "FAIL: CB-4 fixture — no second worktree holds $_cb_br, so the RED arm cannot reach git's refusal"; failures=$((failures+1)); }
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      _cb_rc=0; phase_create_chore_branch >/dev/null 2>&1 || _cb_rc=$?
+      _cb_det="${PHASE_DETAILS[0]:-}"
+      _cb_head="$($GIT -C "$_cb_work" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+      [[ "$_cb_rc" -eq 3 && "${PHASE_RESULTS[0]:-}" == "FAIL" ]] || { echo "FAIL: CB-4 THE RED ARM — a chore branch HELD by a second worktree must FAIL with rc 3 (the pre-fix phase reported SKIPPED, rc 0); got rc=$_cb_rc result='${PHASE_RESULTS[0]:-}'"; failures=$((failures+1)); }
+      [[ "$_cb_det" == *held-wt-cb7182* ]] || { echo "FAIL: CB-4 — the FAIL detail must carry git's refusal, which names the holding worktree in both git's 'already checked out at' and 'already used by worktree at' wording; got '$_cb_det'"; failures=$((failures+1)); }
+      [[ "$_cb_head" == "main" ]] || { echo "FAIL: CB-4 — HEAD must stay where it was (main) when git refuses the checkout; got '$_cb_head'"; failures=$((failures+1)); }
+
+      # CB-5 — DETAIL HYGIENE: one line, no '|', and a holder path under HOME redacted to <home>.
+      #        Read PHASE_DETAILS directly, never via get_phase (its RESULT|DETAIL split mis-reads a pipe).
+      _st_arm CB CB-5; [[ -n "$_cb_det" && "$_cb_det" != *$'\n'* && "$_cb_det" != *$'\r'* && "$_cb_det" != *'|'* ]] || { echo "FAIL: CB-5 — git's refusal must be flattened to ONE pipe-free line (a detail is a RESULT|detail record and a markdown row); got '$_cb_det'"; failures=$((failures+1)); }
+      HOME="$_cb_tmp"
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      phase_create_chore_branch >/dev/null 2>&1 || true
+      HOME="$_cb_saved_home"
+      _cb_det="${PHASE_DETAILS[0]:-}"
+      [[ "$_cb_det" == *'<home>/held-wt-cb7182'* && "$_cb_det" != *"$_cb_tmp"* ]] || { echo "FAIL: CB-5 — a holder path under HOME must render as <home>/… and the raw path must not appear (the report reaches a PUBLIC sub-task); got '$_cb_det'"; failures=$((failures+1)); }
+
+      # CB-6 / CB-7 — THE ABORT IS WIRED (AC-2): execute the two SHIPPED dispatch lines, lifted verbatim,
+      #   with the REAL phase 5 and a witness stub for phase 6 (the AI-F harness shape).
+      _cb_br_ln="$(/usr/bin/grep -nE '^phase_create_chore_branch ' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 || true)"
+      _cb_log_ln="$(/usr/bin/grep -nE '^phase_transition_release_log ' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 || true)"
+      if ! [[ "$_cb_br_ln" =~ ^[0-9]+$ && "$_cb_log_ln" =~ ^[0-9]+$ ]]; then
+        echo "FAIL: CB-6 anti-vacuity — a dispatch needle did not resolve to exactly ONE top-level line (branch='$_cb_br_ln' log='$_cb_log_ln')"; failures=$((failures+1))
+      else
+        _cb_br_txt="$(/usr/bin/sed -n "${_cb_br_ln}p" "${BASH_SOURCE[0]}")"
+        _cb_log_txt="$(/usr/bin/sed -n "${_cb_log_ln}p" "${BASH_SOURCE[0]}")"
+        _cb_exec_dispatch() {   # $1 = witness path; prints the dispatch block's exit status
+          local _dw="$1" _dst=0
+          (
+            CB_DISPATCH_W="$_dw"
+            generate_report() { :; }
+            phase_transition_release_log() { /usr/bin/printf 'RAN\n' >> "$CB_DISPATCH_W"; return 0; }
+            eval "$_cb_br_txt"
+            eval "$_cb_log_txt"
+            exit 0
+          ) >/dev/null 2>&1 || _dst=$?
+          /usr/bin/printf '%s' "$_dst"
+        }
+        # CB-6: the branch is still HELD (from CB-4) → the shipped line halts with 3; phase 6 never runs.
+        _cb_dst="$(_cb_exec_dispatch "$_cb_tmp/w-held.txt")"
+        _st_arm CB CB-6; [[ "$_cb_dst" -eq 3 && ! -e "$_cb_tmp/w-held.txt" ]] || { echo "FAIL: CB-6 — with the chore branch held, the SHIPPED dispatch must exit 3 at create_chore_branch and phase 6 must NOT run; got exit=$_cb_dst"; failures=$((failures+1)); }
+        # CB-7: SENSITIVITY — free the branch (detach the holder); the same harness must now reach phase 6.
+        $GIT -C "$_cb_held" checkout -q --detach >/dev/null 2>&1 || true
+        $GIT -C "$_cb_work" checkout -q main >/dev/null 2>&1 || true
+        _cb_dst="$(_cb_exec_dispatch "$_cb_tmp/w-free.txt")"
+        _st_arm CB CB-7; { [[ "$_cb_dst" -eq 0 ]] && /usr/bin/grep -qF 'RAN' "$_cb_tmp/w-free.txt" 2>/dev/null; } || { echo "FAIL: CB-7 sensitivity — with the branch free the harness must run phase 6 and exit 0 (got exit=$_cb_dst); without this, CB-6's absent witness proves nothing"; failures=$((failures+1)); }
+      fi
+
+      # CB-8 — AC-3, STATIC, phase-scoped: no '|| true' anywhere in phase_create_chore_branch.
+      _cb_fun="$(/usr/bin/awk '/^phase_create_chore_branch\(\) \{$/{f=1} f{print} f&&/^\}$/{exit}' "${BASH_SOURCE[0]}")"
+      _st_arm CB CB-8; [[ "$(grep_count -F 'mark_phase "create_chore_branch" "FAIL"' <<<"$_cb_fun")" -ge 1 ]] || { echo "FAIL: CB-8 anti-vacuity — the extraction of phase_create_chore_branch found no FAIL mark; the zero below would be a broken probe"; failures=$((failures+1)); }
+      _cb_n="$(grep_count -F '|| true' <<<"$_cb_fun")"
+      [[ "$_cb_n" -eq 0 ]] || { echo "FAIL: CB-8 (AC-3) — phase_create_chore_branch carries ${_cb_n} '|| true'; a checkout failure must never be discarded in this phase"; failures=$((failures+1)); }
+      [[ "$(grep_count -F '|| true' <<<'    $GIT -C "$REPO_ROOT" checkout "$CHORE_BRANCH" >/dev/null 2>&1 || true')" -eq 1 ]] || { echo "FAIL: CB-8 control — the '|| true' matcher missed the pre-fix line; its zero above proves nothing"; failures=$((failures+1)); }
+
+      # CB-9 — CLASS GUARD, production-wide: no success verdict written BEFORE a swallowed git op
+      #        (the #7182 shape). ONE program serves the subject and both fixtures.
+      _cb_vbo='/^self_test\(\) \{/{exit} /^}/{a=0} /mark_phase "[^"]+" "(PASS|SKIPPED)"/{a=1; next} a && /^[[:space:]]*return([[:space:]]|;|$)/{a=0} a && /(\$GIT|git_net)[[:space:]]/ && /\|\|[[:space:]]*(true|echo|:)/{n++; a=0} END{print n+0}'
+      _cb_pre=$'f() {\n  mark_phase "x" "SKIPPED" "d"\n  $GIT -C "$R" checkout "$B" >/dev/null 2>&1 || true\n  return 0\n}'
+      _cb_post=$'f() {\n  if ! o="$($GIT -C "$R" checkout "$B" 2>&1)"; then\n    mark_phase "x" "FAIL" "$o"; return 3\n  fi\n  mark_phase "x" "PASS" "d"\n  return 0\n}'
+      _st_arm CB CB-9; [[ "$(/usr/bin/awk "$_cb_vbo" <<<"$_cb_pre")" -eq 1 ]] || { echo "FAIL: CB-9 control — the verdict-before-op matcher missed the known pre-fix shape; a zero below would be a broken probe"; failures=$((failures+1)); }
+      [[ "$(/usr/bin/awk "$_cb_vbo" <<<"$_cb_post")" -eq 0 ]] || { echo "FAIL: CB-9 specificity — the matcher flagged the op-THEN-verdict shape, which is the correct form"; failures=$((failures+1)); }
+      _cb_n="$(/usr/bin/awk "$_cb_vbo" "${BASH_SOURCE[0]}")"
+      [[ "$_cb_n" -eq 0 ]] || { echo "FAIL: CB-9 (class guard) — ${_cb_n} success verdict(s) in the production region are written BEFORE a swallowed git op (mark SKIPPED/PASS, then '|| true' on the op that would establish it)"; failures=$((failures+1)); }
+
+      # CB-10 — THE WHOLE VOCABULARY, AND REDACT BEFORE CAP. _detail_one_line is the release's
+      #         shared diagnostic projection, so ONE input carries every class it maps: a CR and an
+      #         LF, a '|', the repository root (under HOME, as it normally is) and a home path that
+      #         starts at character 790. The redaction is a literal-substring replace, so a cap applied
+      #         FIRST would cut that home path mid-string and ship the fragment raw to a PUBLIC
+      #         sub-task, and replacing HOME before REPO_ROOT would leave <home>/work/x where <repo>/x
+      #         belongs. The output must be ONE pipe-free line within 800 characters, carrying a/b,
+      #         <repo>/x and <home>, and no fragment of the raw temp root at all. CB-5's pipe limb
+      #         reads git's refusal, which carries no '|'; this is the arm that can see that mapping fail.
+      HOME="$_cb_tmp"
+      _cb_z="$(/usr/bin/printf '%0900d' 0)"
+      _cb_in="head"$'\r\n'"a|b ${_cb_work}/x "
+      _cb_in="${_cb_in}${_cb_z:0:$(( 789 - ${#_cb_in} ))}${HOME}${_cb_z:0:200}"
+      _cb_in="${_cb_in:0:900}"
+      _cb_out="$(_detail_one_line "$_cb_in" 2>/dev/null)" || _cb_out=""
+      HOME="$_cb_saved_home"
+      _cb_vocab_ok() {   # $1 = a projection of _cb_in; 0 when it carries the whole vocabulary
+        [[ "$1" == *'a/b '* && "$1" == *'<repo>/x '* && "$1" == *'<home>'* && "$1" != *'|'* && "$1" != *$'\n'* && "$1" != *$'\r'* && "$1" != *"${_cb_tmp:0:8}"* && "${#1}" -le 800 ]]
+      }
+      _st_arm CB CB-10; [[ "${#_cb_in}" -eq 900 && "${_cb_in:789:8}" == "${_cb_tmp:0:8}" && "$_cb_in" == *'|'* && "$_cb_in" == *$'\n'* && "$_cb_in" == *"${_cb_work}/x"* ]] || { echo "FAIL: CB-10 fixture — the input must be 900 characters carrying a pipe, a line break and the repository root, with the home path starting at character 790 (got ${#_cb_in} characters)"; failures=$((failures+1)); }
+      _cb_vocab_ok "$_cb_out" || { echo "FAIL: CB-10 — _detail_one_line must map CR and LF to spaces and '|' to '/', redact the repository root and then HOME, and only then cap at 800: the output needs a/b, <repo>/x and <home>, and no pipe, no line break and no raw temp-root fragment; got ${#_cb_out} characters"; failures=$((failures+1)); }
+      # The predicate's own controls, on every run: each defect shape, computed here from the SAME
+      # input, must be REJECTED — otherwise the pass above measures nothing. (1) the cap applied FIRST;
+      # (2) an unmapped '|'; (3) HOME redacted before the repository root.
+      _cb_z="${_cb_in:0:800}"; _cb_z="${_cb_z//$'\r'/ }"; _cb_z="${_cb_z//$'\n'/ }"; _cb_z="${_cb_z//|//}"
+      _cb_z="${_cb_z//"$_cb_work"/<repo>}"; _cb_z="${_cb_z//"$_cb_tmp"/<home>}"
+      _cb_vocab_ok "$_cb_z" && { echo "FAIL: CB-10 control — the predicate accepted a cap-FIRST projection, which leaves a raw home-path fragment"; failures=$((failures+1)); }
+      _cb_vocab_ok "${_cb_out}|" && { echo "FAIL: CB-10 control — the predicate accepted a projection carrying a raw '|'"; failures=$((failures+1)); }
+      _cb_z="${_cb_in//$'\r'/ }"; _cb_z="${_cb_z//$'\n'/ }"; _cb_z="${_cb_z//|//}"
+      _cb_z="${_cb_z//"$_cb_tmp"/<home>}"; _cb_z="${_cb_z//"$_cb_work"/<repo>}"; _cb_z="${_cb_z:0:800}"
+      _cb_vocab_ok "$_cb_z" && { echo "FAIL: CB-10 control — the predicate accepted HOME redacted before the repository root (<home>/work/x where <repo>/x belongs)"; failures=$((failures+1)); }
+
+      _st_witness CB 10
+    fi
+    REPO_ROOT="$_cb_saved_root"; MODE="$_cb_saved_mode"; VERSION="$_cb_saved_version"
+    CHORE_BRANCH="$_cb_saved_branch"; HOME="$_cb_saved_home"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    /bin/rm -rf "$_cb_tmp" 2>/dev/null || true
+  fi
+
+  # ── Test PL: report text renders no absolute path — the class (#7855; Plan
+  #    amendments 12 and 13). The close-out report and the gate-passage proof are
+  #    relayed to PUBLIC sub-tasks, so a path under the operator's home publishes the
+  #    OS username. Plan amendment 13 applies the sanctioned form at the SINKS: the
+  #    redact-only primitive runs over the whole markdown render, over every decoded
+  #    string of the JSON render and over the body phase 15 posts to GitHub, while a
+  #    captured diagnostic reaches report text only through the shared projection, at
+  #    its projection site. Five arms: PL-1 the primitive; PL-2 a static census of the
+  #    production region's captured streams; PL-3 phase 12.2 and PL-4 phase 6.6, driven
+  #    hermetically and read back through generate_report as markdown and JSON; PL-5
+  #    the sinks themselves, with the direct post (AC-8) as its last limb. The
+  #    fabricated home and repository roots sit under one temp directory,
+  #    canonicalised with `pwd -P` as group CB's is, so a symlinked temp root cannot
+  #    make a redaction limb miss for a reason unrelated to the code under test. PL-3
+  #    alone needs git: on a host without it that arm is skipped with the AC7 group's
+  #    notice and records no witness, which the per-arm gate then reports by name —
+  #    as it already does for groups CB, CR and 4h-e-j, which need git too.
+  local _plx_s_root="$REPO_ROOT" _plx_s_home="$HOME" _plx_s_mode="$MODE" _plx_s_out="$OUTPUT"
+  local _plx_s_ver="$VERSION" _plx_s_ms="$MILESTONE" _plx_s_sha="$MERGE_SHA" _plx_s_pr="$PR_NUMBER"
+  local _plx_s_slug="$STATE_MILESTONE_SLUG" _plx_s_log="$RELEASE_LOG" _plx_s_cv="$COMPUTE_VELOCITY"
+  local _plx_s_prim="${PRIMARY_CHECKOUT:-}" _plx_s_gh="$GH" _plx_s_res="$VERIFICATION_RESULTS"
+  local _plx_s_scan="$PATTERN_SCAN_REPORT" _plx_s_audit="$EPIC_AUDIT_REPORT" _plx_s_nm="$NO_MERGE"
+  local _plx_s_oic="$OPEN_ISSUE_COUNT" _plx_s_oil="$OPEN_ISSUE_LIST" _plx_s_cyc="$STATE_CYCLE_TIME"
+  local _plx_s_ts="$RUN_TS" _plx_s_cpn="$CHORE_PR_NUMBER" _plx_s_cpo="$CHORE_PR_OUTCOME"
+  local _plx_s_mst="$STATE_MILESTONE_STATE" _plx_s_lrs="$STATE_LOG_ROW_STATE" _plx_s_tag="$STATE_TAG_EXISTS"
+  local _plx_tmp _plx_home _plx_repo _plx_out _plx_x _plx_have=0 _plx_cen _plx_ns _plx_nsite
+  local _plx_md _plx_js _plx_raw _plx_uhome _plx_b1 _plx_b2 _plx_b3 _plx_stub
+  local _plx_bad_res="" _plx_bad_sens="" _plx_bad_md="" _plx_bad_js="" _plx_prim
+  local _plx_pay _plx_z _plx_cv_ok _plx_cv_e2 _plx_bad_res4="" _plx_bad_voc="" _plx_bad_len="" _plx_bad_note=""
+  _plx_tmp="$(cd "$(/usr/bin/mktemp -d -t pathleak-selftest.XXXXXX)" && pwd -P)"
+  _plx_home="$_plx_tmp/home"; _plx_repo="$_plx_home/work/repo"; _plx_prim="$_plx_home/primary"
+  _plx_cv_ok="$_plx_tmp/cv-ok.sh"; _plx_cv_e2="$_plx_tmp/cv-e2.sh"; _plx_stub="$_plx_tmp/gh-stub.sh"
+  /bin/mkdir -p "$_plx_repo"
+  # One report context for every render below, so no earlier group's globals leak in.
+  MILESTONE="9395"; NO_MERGE=0; OPEN_ISSUE_COUNT=0; OPEN_ISSUE_LIST=""; STATE_CYCLE_TIME="1d"
+  RUN_TS="2026-09-28T00:00:00Z"; CHORE_PR_NUMBER=""; CHORE_PR_OUTCOME=""; STATE_MILESTONE_STATE="open"
+  STATE_LOG_ROW_STATE=""; STATE_TAG_EXISTS=0; VERIFICATION_RESULTS=""; PATTERN_SCAN_REPORT=""; EPIC_AUDIT_REPORT=""
+  PR_NUMBER="8888"; STATE_MILESTONE_SLUG="plx-slug"; VERSION="v9.95"; MERGE_SHA=""
+  # The row reader: the detail of one named phase, from a markdown render or a JSON one.
+  /bin/cat > "$_plx_tmp/row.py" <<'PLXROW'
+import json
+import sys
+
+mode, name = sys.argv[1], sys.argv[2]
+text = sys.stdin.buffer.read().decode("utf-8", "replace")
+out = ""
+if mode == "json":
+    for p in json.loads(text)["phases"]:
+        if p["name"] == name:
+            out = p["detail"]
+            break
+else:
+    prefix = "| %s | " % name
+    for line in text.split("\n"):
+        if line.startswith(prefix):
+            rest = line[len(prefix):].split(" | ", 1)[-1]
+            out = rest[:-2] if rest.endswith(" |") else rest
+            break
+sys.stdout.buffer.write(out.encode("utf-8"))
+PLXROW
+  # The JSON reader: parses the render and tests every DECODED string — json.dumps
+  # escapes non-ASCII, so no text search over the serialised form can see such a root.
+  # Prints OK, or BAD with counts only, so no fixture root reaches the suite's output.
+  /bin/cat > "$_plx_tmp/jcheck.py" <<'PLXJS'
+import json
+import sys
+
+roots = [r for r in open(sys.argv[1], encoding="utf-8").read().split("\n") if r]
+need = sys.argv[2:]
+try:
+    doc = json.loads(sys.stdin.buffer.read().decode("utf-8"))
+except Exception as exc:
+    print("BAD the render does not parse as JSON: %s" % type(exc).__name__)
+    sys.exit(0)
+seen = []
+
+
+def walk(v):
+    if isinstance(v, str):
+        seen.append(v)
+    elif isinstance(v, list):
+        for x in v:
+            walk(x)
+    elif isinstance(v, dict):
+        for x in v.values():
+            walk(x)
+
+
+walk(doc)
+blob = "\n".join(seen)
+raw = sum(1 for r in roots if r in blob)
+miss = [m for m in need if m not in blob]
+print("OK" if not raw and not miss else "BAD raw-roots=%d missing=%s" % (raw, miss))
+PLXJS
+
+  # PL-1 — THE PRIMITIVE. _redact_paths rewrites the repository root to <repo> and then
+  #        HOME to <home>, literally, each root with one trailing slash stripped, and
+  #        skips a root of one character or less. Synthetic roots, so no real path is
+  #        involved. Controls: HOME redacted before the repository root leaves
+  #        <home>/work/x where <repo>/x belongs, and the predicate must reject that
+  #        shape (CB-10's control shape); root-free text, pipes, line breaks and a
+  #        trailing newline included, passes byte-identical, so no sink rewrites text
+  #        that names no root.
+  declare -F _redact_paths >/dev/null 2>&1 && _plx_have=1
+  _st_arm PL PL-1; [[ "$_plx_have" -eq 1 ]] || { echo "FAIL: PL-1 — the redact-only primitive _redact_paths is not defined, so no sink can apply the sanctioned path form (Plan amendment 13 item 1)"; failures=$((failures+1)); }
+  HOME="/plx1/h"; REPO_ROOT="/plx1/h/work"
+  _plx_out="$(_redact_paths "/plx1/h/work/x and /plx1/h/y" 2>/dev/null)" || _plx_out=""
+  [[ "$_plx_out" == "<repo>/x and <home>/y" ]] || { echo "FAIL: PL-1 — nested roots must redact the repository root first and then HOME, giving '<repo>/x and <home>/y'; got '$_plx_out'"; failures=$((failures+1)); }
+  _plx_x="/plx1/h/work/x and /plx1/h/y"; _plx_x="${_plx_x//"$HOME"/<home>}"; _plx_x="${_plx_x//"$REPO_ROOT"/<repo>}"
+  [[ "$_plx_x" == "<repo>/x and <home>/y" ]] && { echo "FAIL: PL-1 control — the predicate accepted HOME redacted before the repository root (<home>/work/x where <repo>/x belongs)"; failures=$((failures+1)); }
+  HOME="/plx1/h/"; REPO_ROOT="/plx1/r/"
+  _plx_out="$(_redact_paths "/plx1/h/y /plx1/r/z" 2>/dev/null)" || _plx_out=""
+  [[ "$_plx_out" == "<home>/y <repo>/z" ]] || { echo "FAIL: PL-1 — a root carrying a trailing slash must still redact and keep its separator, giving '<home>/y <repo>/z'; got '$_plx_out'"; failures=$((failures+1)); }
+  HOME="/"; REPO_ROOT="/"
+  _plx_out="$(_redact_paths "a/b/c" 2>/dev/null)" || _plx_out="<no output>"
+  [[ "$_plx_out" == "a/b/c" ]] || { echo "FAIL: PL-1 — a root of one character must be skipped, or every separator is rewritten; 'a/b/c' became '$_plx_out'"; failures=$((failures+1)); }
+  # A doubled slash strips to '/', a root of exactly one character, so this limb is
+  # the one that reads the guard's threshold: the '/' above strips to the empty
+  # string, which a guard admitting one character would still skip (Plan
+  # amendment 14; Stage-7 F-01).
+  HOME="//"; REPO_ROOT="//"
+  _plx_out="$(_redact_paths "a/b/c" 2>/dev/null)" || _plx_out="<no output>"
+  [[ "$_plx_out" == "a/b/c" && "$_plx_out" != *'<repo>'* && "$_plx_out" != *'<home>'* ]] || { echo "FAIL: PL-1 — a doubled-slash root strips to one character ('//' becomes '/') and must be skipped too: the text must pass byte-identical, with no <repo> or <home> inserted; 'a/b/c' became '$_plx_out'"; failures=$((failures+1)); }
+  HOME="/plx1/h"; REPO_ROOT="/plx1/h/work"
+  _plx_x="line one | a/b"$'\n'"line two"$'\n'
+  _plx_out="$(_redact_paths "$_plx_x" 2>/dev/null; /usr/bin/printf 'X')" || _plx_out=""
+  [[ "${_plx_out%X}" == "$_plx_x" ]] || { echo "FAIL: PL-1 — root-free text must pass byte-identical, its pipe, its line breaks and its trailing newline included"; failures=$((failures+1)); }
+  HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"
+
+  # PL-2 — THE PROJECTION CENSUS (static). Every captured stream in the production
+  #        region — a 2>&1 capture, or a read of a 2> file, closed through plain
+  #        assignments and slices — must reach report text only through the shared
+  #        projection, in an admitted form: the whole capture, its first line, or a
+  #        raw window of at least 4096 bytes. Named per site: CAP-FIRST (cut by head -c,
+  #        a slice, cut -c or fold, at its assignment or at the site), HAND-ROLLED
+  #        (head, tr or sed in the projection's place) and RAW (interpolated whole into
+  #        a detail, a printed line or a composed string). Reducers (grep -c, wc) and
+  #        filters end a stream; stderr-bound lines and tests are not report text; a
+  #        line carrying a `# report-text: <reason>` marker is an adjudicated exemption
+  #        and propagates nothing; a finding is reported once, at its root. The
+  #        backslash continuations are joined and comments skipped. Controls on every
+  #        run: the anti-vacuity floor, and a constructed region whose findings must be
+  #        exactly its four defect shapes while its four sanctioned shapes pass.
+  /bin/cat > "$_plx_tmp/proj-census.py" <<'PLXCEN'
+import re
+import sys
+
+NAME = r"[A-Za-z_][A-Za-z0-9_]*"
+WHOLE = re.compile(r"\$" + NAME + r"|\$\{" + NAME + r"\}")
+FIRST = re.compile(r"\$\{" + NAME + r"%%\$'\\n'\*\}")
+WINDOW = re.compile(r"\$\(/usr/bin/head -c ([0-9]+) \"\$" + NAME + r"\"( 2>/dev/null)?\)")
+CAPCMD = re.compile(r"(^|[\s/])(head\s+-c\s*[0-9]+|cut\s+-c|fold)(\s|$)")
+HANDCMD = re.compile(r"(^|[\s/])(head|tr|sed)(\s|$)")
+REDUCER = re.compile(r"(^|[\s/])(grep\s+-[A-Za-z]*c[A-Za-z]*|wc\s+-[lc])(\s|$)")
+ECHOCMD = re.compile(r"^\s*(/usr/bin/)?(printf|echo)\s")
+ASSIGN = re.compile(r"(?:^|[\s;!(])(?:local\s+|export\s+)?(" + NAME + r")=")
+MARK = "# report-text:"
+
+
+def logical_lines(text):
+    raw = text.split("\n")
+    out = []
+    i = 0
+    while i < len(raw):
+        start = i + 1
+        cur = raw[i]
+        while cur.endswith("\\") and i + 1 < len(raw):
+            i += 1
+            cur = cur[:-1] + " " + raw[i].lstrip()
+        out.append((start, cur))
+        i += 1
+    return out
+
+
+def scopes(lines):
+    head = re.compile(r"^(" + NAME + r")\(\)\s*\{")
+    out = {"<top>": []}
+    cur = "<top>"
+    for ln, line in lines:
+        m = head.match(line)
+        if m:
+            cur = m.group(1)
+            out.setdefault(cur, [])
+            continue
+        if cur != "<top>" and line.startswith("}"):
+            cur = "<top>"
+            continue
+        out[cur].append((ln, line))
+    return out
+
+
+def close_of(line, k):
+    depth = 0
+    i = k
+    quote = False
+    while i < len(line):
+        c = line[i]
+        if quote:
+            if c == "'":
+                quote = False
+            i += 1
+            continue
+        if c == "\\":
+            i += 2
+            continue
+        if c == "'":
+            quote = True
+        elif c == "$" and i + 1 < len(line) and line[i + 1] == "(":
+            depth += 1
+            i += 2
+            continue
+        elif c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return len(line)
+
+
+def helper_args(line):
+    out = []
+    for m in re.finditer(r"_detail_one_line\b", line):
+        k = m.end()
+        if not line[k:].startswith(' "'):
+            out.append((m.start(), m.end(), False))
+            continue
+        k += 2
+        depth = 0
+        arg = ""
+        j = k
+        while j < len(line):
+            c = line[j]
+            if c == "$" and j + 1 < len(line) and line[j + 1] in "({":
+                depth += 1
+                arg += line[j:j + 2]
+                j += 2
+                continue
+            if c in ")}" and depth > 0:
+                depth -= 1
+            elif c == '"' and depth == 0:
+                break
+            arg += c
+            j += 1
+        ok = bool(WHOLE.fullmatch(arg) or FIRST.fullmatch(arg))
+        w = WINDOW.fullmatch(arg)
+        if w:
+            ok = int(w.group(1)) >= 4096
+        out.append((k, j, ok))
+    return out
+
+
+def stages_of(seg):
+    stages = []
+    i = 0
+    last = 0
+    quote = False
+    depth = 0
+    while i < len(seg):
+        c = seg[i]
+        if quote:
+            if c == "'":
+                quote = False
+        elif c == "'":
+            quote = True
+        elif c == "$" and i + 1 < len(seg) and seg[i + 1] == "(":
+            depth += 1
+            i += 1
+        elif c == ")" and depth > 0:
+            depth -= 1
+        elif c == "|" and depth == 0:
+            if i + 1 < len(seg) and seg[i + 1] == "|":
+                stages.append((last, i, "or"))
+                last = i + 2
+                i += 2
+                continue
+            stages.append((last, i, "pipe"))
+            last = i + 1
+        i += 1
+    stages.append((last, len(seg), "end"))
+    return stages
+
+
+def around(seg, pos):
+    st = stages_of(seg)
+    for n, (a, b, sep) in enumerate(st):
+        if a <= pos < b:
+            nxt = seg[st[n + 1][0]:st[n + 1][1]] if sep == "pipe" and n + 1 < len(st) else None
+            return seg[a:b], nxt
+    return seg, None
+
+
+def whole_rhs(line, p):
+    if line.startswith("${", p):
+        depth = 0
+        j = p + 1
+        while j < len(line):
+            if line[j] == "{":
+                depth += 1
+            elif line[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        j += 1
+    else:
+        m = re.match(r"\$" + NAME, line[p:])
+        j = p + (m.end() if m else 1)
+    if j < len(line) and line[j] == '"':
+        j += 1
+    return j >= len(line) or line[j] in " \t;"
+
+
+def census(text):
+    region = text.split("\nself_test() {", 1)[0]
+    res = {"streams": {}, "sites": 0, "flags": [], "downstream": []}
+    for scope, body in scopes(logical_lines(region)).items():
+        streams = {}
+        files = set()
+        flagged = set()
+        for ln, line in body:
+            if line.lstrip().startswith("#") or MARK in line:
+                continue
+            for fm in re.finditer(r"2>>?\s*\"\$\{?(" + NAME + r")\}?\"", line):
+                files.add(fm.group(1))
+            for am in ASSIGN.finditer(line):
+                name = am.group(1)
+                rhs = line[am.end():]
+                inner = rhs[1:] if rhs.startswith('"') else rhs
+                if inner.startswith("$("):
+                    sub = inner[:close_of(inner, 0)]
+                    if sub[2:].lstrip().startswith("_detail_one_line"):
+                        continue
+                    if "2>&1" in sub:
+                        streams.setdefault(name, ln)
+                        continue
+                    for f in files:
+                        for fm in re.finditer(r"\"\$\{?" + re.escape(f) + r"\}?\"", sub):
+                            if not sub[:fm.start()].rstrip().endswith(">"):
+                                streams.setdefault(name, ln)
+                    continue
+                em = re.match(r"\$\{?(" + NAME + r")", inner)
+                p0 = am.end() + (1 if rhs.startswith('"') else 0)
+                if em and em.group(1) in streams and whole_rhs(line, p0):
+                    streams.setdefault(name, ln)
+        res["streams"][scope] = sorted(streams)
+        for ln, line in body:
+            if line.lstrip().startswith("#") or MARK in line:
+                continue
+            spans = [(m.start(), close_of(line, m.start())) for m in re.finditer(r"\$\(", line)]
+            hargs = helper_args(line)
+            assigns = list(ASSIGN.finditer(line))
+            kinds = []
+            for v in list(streams) + sorted(files - set(streams)):
+                is_file = v in files and v not in streams
+                for m in re.finditer(r"\$\{?" + re.escape(v) + r"\b", line):
+                    p = m.start()
+                    pre = line[:p].rstrip().rstrip('"').rstrip()
+                    if is_file and pre.endswith(">"):
+                        continue
+                    inh = [h for h in hargs if h[0] <= p < h[1]]
+                    if inh:
+                        res["sites"] += 1
+                        if not inh[0][2]:
+                            kinds.append(("CAP-FIRST", v))
+                        continue
+                    if re.match(r"\$\{" + re.escape(v) + r":(?:[0-9]| +-?[0-9]|\(-?[0-9])", line[p:]):
+                        kinds.append(("CAP-FIRST", v))
+                        continue
+                    inner = [sp for sp in spans if sp[0] < p < sp[1]]
+                    if inner:
+                        sp = max(inner)
+                        seg_start, seg_end = sp[0] + 2, sp[1] - 1
+                    else:
+                        seg_start, seg_end = 0, len(line)
+                    seg = line[seg_start:seg_end]
+                    stage, nxt = around(seg, p - seg_start)
+                    to_stderr = re.search(r">&2(\s|;|$)", seg) is not None
+                    if is_file:
+                        if to_stderr:
+                            continue
+                        if CAPCMD.search(stage):
+                            kinds.append(("CAP-FIRST", v))
+                        elif HANDCMD.search(stage) or (nxt is not None and HANDCMD.search(nxt)):
+                            kinds.append(("HAND-ROLLED", v))
+                        continue
+                    consumer = stage if pre.endswith("<<<") else nxt
+                    if consumer is not None:
+                        if to_stderr or REDUCER.search(consumer):
+                            continue
+                        if CAPCMD.search(consumer):
+                            kinds.append(("CAP-FIRST", v))
+                        elif HANDCMD.search(consumer):
+                            kinds.append(("HAND-ROLLED", v))
+                        continue
+                    if inner and not ECHOCMD.match(stage):
+                        continue
+                    if to_stderr or ("[[" in line[:p] and "]]" in line[p:]):
+                        continue
+                    if re.search(r"\bcase\s+\"?\$\{?" + re.escape(v) + r"\b", line):
+                        continue
+                    if any((am.end() == p or (am.end() + 1 == p and line[am.end()] == '"'))
+                           and whole_rhs(line, p) for am in assigns):
+                        continue
+                    if (re.search(r"(^|[\s;])(mark_phase|(/usr/bin/)?printf|echo)\s", line)
+                            or any(am.end() < p for am in assigns)):
+                        if v in flagged:
+                            res["downstream"].append((ln, v))
+                            continue
+                        kinds.append(("RAW", v))
+            if kinds:
+                kind, v = kinds[0]
+                res["flags"].append((kind, ln, v))
+                for n, d in streams.items():
+                    if d == ln:
+                        flagged.add(n)
+    return res
+
+
+res = census(open(sys.argv[1], encoding="utf-8", errors="replace").read())
+print("STREAMS %d" % sum(len(v) for v in res["streams"].values()))
+print("SITES %d" % res["sites"])
+for kind, ln, v in res["flags"]:
+    print("FLAG %s L%d %s" % (kind, ln, v))
+for ln, v in res["downstream"]:
+    print("DOWNSTREAM L%d %s (reported at its root)" % (ln, v))
+
+# Capability to fail, on every run: four defect shapes (a) (b) (c) (f) flagged exactly,
+# four sanctioned shapes pass — (d) a first line and (e) a 4096-byte window into the
+# projection, (g) a site below its own self_test line, (h) a two-line capture, whose
+# stream must be seen at all for the continuation join to be proven.
+syn = "\n".join([
+    "a() {",
+    "  _x0=\"$(some_cmd 2>\"$_errf\")\"",
+    "  _e=\"$(/usr/bin/head -c 800 \"$_errf\")\"",
+    "  mark_phase \"a\" \"FAIL\" \"$(_detail_one_line \"$_e\")\"",
+    "  _o=\"$(other_cmd 2>&1)\"",
+    "  mark_phase \"b\" \"FAIL\" \"$(printf '%s' \"$_o\" | head -1)\"",  # sigpipe-idiom: allow — an inert fixture string for PL-2's HAND-ROLLED control, never executed
+    "  _x=\"${_o:0:800}\"",
+    "  mark_phase \"d\" \"FAIL\" \"$(_detail_one_line \"${_o%%$'\\n'*}\")\"",
+    "  mark_phase \"e\" \"FAIL\" \"$(_detail_one_line \"$(/usr/bin/head -c 4096 \"$_errf\" 2>/dev/null)\")\"",
+    "  mark_phase \"f\" \"FAIL\" \"$_o\"",
+    "  r=\"$($GH x \\",
+    "      2>&1)\"",
+    "  mark_phase \"h\" \"FAIL\" \"$(_detail_one_line \"$r\")\"",
+    "}",
+    "self_test() {",
+    "  mark_phase \"g\" \"FAIL\" \"$(/usr/bin/head -1 <<<\"$_o\")\"",
+    "}",
+])
+ctl = census(syn)
+got = [(k, ln) for k, ln, v in ctl["flags"]]
+want = [("CAP-FIRST", 3), ("HAND-ROLLED", 6), ("CAP-FIRST", 7), ("RAW", 10)]
+joined = "r" in ctl["streams"].get("a", [])
+print("CONTROL " + ("ok" if got == want and joined else "broken flags=%s joined=%s" % (got, joined)))
+PLXCEN
+  _plx_cen="$(/usr/bin/python3 "$_plx_tmp/proj-census.py" "${BASH_SOURCE[0]}" 2>&1 || true)"
+  _plx_ns="$(/usr/bin/sed -n 's/^STREAMS //p' <<<"$_plx_cen")"
+  _plx_nsite="$(/usr/bin/sed -n 's/^SITES //p' <<<"$_plx_cen")"
+  _st_arm PL PL-2; [[ "$_plx_ns" =~ ^[0-9]+$ && "$_plx_ns" -ge 1 && "$_plx_nsite" =~ ^[0-9]+$ && "$_plx_nsite" -ge 1 ]] || { echo "FAIL: PL-2 anti-vacuity — the census read ${_plx_ns:-no} captured stream(s) and ${_plx_nsite:-no} projection site(s) in the production region, so a clean reading would measure nothing: $(_detail_one_line "$_plx_cen")"; failures=$((failures+1)); }
+  [[ "$_plx_cen" != *"FLAG "* ]] || { echo "FAIL: PL-2 — a captured diagnostic reaches report text other than through the shared projection in an admitted form, so a path can be cut or shipped raw: $(_detail_one_line "$(/usr/bin/grep '^FLAG ' <<<"$_plx_cen" || true)")"; failures=$((failures+1)); }
+  [[ "$_plx_cen" == *"CONTROL ok"* ]] || { echo "FAIL: PL-2 capability-to-fail — the census cannot tell the four defect shapes from the four sanctioned ones, so its clean reading above measures nothing: $(_detail_one_line "$(/usr/bin/grep '^CONTROL' <<<"$_plx_cen" || true)")"; failures=$((failures+1)); }
+
+  # PL-3 — PHASE 12.2, HERMETIC. The primary checkout sits under the fabricated home
+  #        (a bare file-path origin and a clone, the AC7 group's fixture shape), and each
+  #        outcome the fixture can reach is run and read back through generate_report,
+  #        markdown and JSON: fast-forwarded, not fast-forwardable, not on main,
+  #        --dry-run, fetch failed and not resolvable. Each rendered row must carry no
+  #        fabricated-home prefix and must name the path as <home>/…. Each outcome must
+  #        land on its own result, so a fixture that stopped reaching a branch reads
+  #        red; the raw record carries the prefix (sensitivity); and the path-free
+  #        "resolved primary is this checkout" row renders byte-identical (specificity).
+  if [[ -x "$GIT" ]]; then
+    (
+      set +e
+      $GIT -c init.defaultBranch=main init -q --bare "$_plx_home/origin.git"
+      $GIT clone -q "$_plx_home/origin.git" "$_plx_home/seed"
+      $GIT -C "$_plx_home/seed" checkout -q -b main
+      /usr/bin/printf 'one\n' > "$_plx_home/seed/f.txt"
+      $GIT -C "$_plx_home/seed" add f.txt
+      $GIT -C "$_plx_home/seed" -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m c1
+      $GIT -C "$_plx_home/seed" push -q origin main
+      $GIT clone -q "$_plx_home/origin.git" "$_plx_prim"
+      /usr/bin/printf 'two\n' >> "$_plx_home/seed/f.txt"
+      $GIT -C "$_plx_home/seed" add f.txt
+      $GIT -C "$_plx_home/seed" -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m c2
+      $GIT -C "$_plx_home/seed" push -q origin main
+    ) >/dev/null 2>&1 || true
+    _plx_sync() {   # $1 = outcome label, $2 = the result it must land on
+      local _r _d _m _j
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      HOME="$_plx_home"; REPO_ROOT="$_plx_repo"
+      phase_sync_primary_checkout >/dev/null 2>&1 || true
+      _r="${PHASE_RESULTS[0]:-}"; _d="${PHASE_DETAILS[0]:-}"
+      OUTPUT="markdown"; _m="$(generate_report 2>/dev/null)" || _m=""
+      OUTPUT="json"; _j="$(generate_report 2>/dev/null)" || _j=""
+      HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"
+      _m="$(/usr/bin/python3 "$_plx_tmp/row.py" md sync_primary_checkout <<<"$_m" 2>/dev/null || true)"
+      _j="$(/usr/bin/python3 "$_plx_tmp/row.py" json sync_primary_checkout <<<"$_j" 2>/dev/null || true)"
+      [[ "$_r" == "$2" ]] || _plx_bad_res+=" $1:${_r:-none}"
+      [[ "$_d" == *"$_plx_home/"* ]] || _plx_bad_sens+=" $1"
+      [[ -n "$_m" && "$_m" != *"$_plx_home"* && "$_m" == *'<home>/'* ]] || _plx_bad_md+=" $1"
+      [[ -n "$_j" && "$_j" != *"$_plx_home"* && "$_j" == *'<home>/'* ]] || _plx_bad_js+=" $1"
+    }
+    MODE="apply"; PRIMARY_CHECKOUT="$_plx_prim"
+    _plx_sync fast-forwarded PASS
+    # Diverge: a local commit on the primary, and origin one commit further on.
+    (
+      set +e
+      /usr/bin/printf 'local\n' > "$_plx_prim/g.txt"
+      $GIT -C "$_plx_prim" add g.txt
+      $GIT -C "$_plx_prim" -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m local
+      /usr/bin/printf 'three\n' >> "$_plx_home/seed/f.txt"
+      $GIT -C "$_plx_home/seed" add f.txt
+      $GIT -C "$_plx_home/seed" -c commit.gpgsign=false -c user.email=t@t -c user.name=t commit -q -m c3
+      $GIT -C "$_plx_home/seed" push -q origin main
+    ) >/dev/null 2>&1 || true
+    _plx_sync not-fast-forwardable SKIPPED
+    $GIT -C "$_plx_prim" checkout -q -b side >/dev/null 2>&1 || true
+    _plx_sync not-on-main SKIPPED
+    $GIT -C "$_plx_prim" checkout -q main >/dev/null 2>&1 || true
+    MODE="dry-run"
+    _plx_sync dry-run DRY-RUN
+    MODE="apply"
+    $GIT -C "$_plx_prim" remote set-url origin "$_plx_home/missing.git" >/dev/null 2>&1 || true
+    _plx_sync fetch-failed SKIPPED
+    PRIMARY_CHECKOUT="$_plx_home/no-such-primary"
+    _plx_sync not-resolvable SKIPPED
+    # Specificity: the path-free row, with the primary as this checkout.
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    PRIMARY_CHECKOUT="$_plx_prim"; HOME="$_plx_home"; REPO_ROOT="$_plx_prim"
+    phase_sync_primary_checkout >/dev/null 2>&1 || true
+    OUTPUT="markdown"; _plx_md="$(generate_report 2>/dev/null)" || _plx_md=""
+    OUTPUT="json"; _plx_js="$(generate_report 2>/dev/null)" || _plx_js=""
+    HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"
+    _plx_md="$(/usr/bin/python3 "$_plx_tmp/row.py" md sync_primary_checkout <<<"$_plx_md" 2>/dev/null || true)"
+    _plx_js="$(/usr/bin/python3 "$_plx_tmp/row.py" json sync_primary_checkout <<<"$_plx_js" 2>/dev/null || true)"
+    _plx_x="resolved primary is this checkout — close-out is not running in a linked worktree; no sync to perform"
+    _st_arm PL PL-3; [[ -z "$_plx_bad_res" ]] || { echo "FAIL: PL-3 — each phase-12.2 fixture outcome must land on its own result, or a limb below grades a branch the fixture no longer reaches; got:${_plx_bad_res}"; failures=$((failures+1)); }
+    [[ -z "$_plx_bad_sens" ]] || { echo "FAIL: PL-3 sensitivity — the raw phase-12.2 record must carry the fabricated-home path, or the render limbs pass without ever seeing one; missing for:${_plx_bad_sens}"; failures=$((failures+1)); }
+    [[ -z "$_plx_bad_md" ]] || { echo "FAIL: PL-3 markdown — the rendered sync_primary_checkout row must carry no fabricated-home prefix and must name the path as <home>/… (AC-1); failed for:${_plx_bad_md}"; failures=$((failures+1)); }
+    [[ -z "$_plx_bad_js" ]] || { echo "FAIL: PL-3 JSON — the sync_primary_checkout detail in the JSON report must carry no fabricated-home prefix and must name the path as <home>/… (AC-1); failed for:${_plx_bad_js}"; failures=$((failures+1)); }
+    [[ "$_plx_md" == "$_plx_x" && "$_plx_js" == "$_plx_x" ]] || { echo "FAIL: PL-3 specificity — the path-free 'resolved primary is this checkout' row must render byte-identical in both reports (AC-5); got '$_plx_md' / '$_plx_js'"; failures=$((failures+1)); }
+    unset -f _plx_sync
+  else
+    echo "  (skipped PL-3 phase-12.2 hermetic arm — git not executable at $GIT)" >&2
+  fi
+
+  # PL-4 — PHASE 6.6, HERMETIC. A producer stub writes to stderr the planned-recovery
+  #        NOTE group 4c.5b pins, a files-changed NOTE carrying the repository root
+  #        (compute-release-velocity.sh's shape) and a home path starting at byte 790.
+  #        It runs on the PASS path ([producer stderr: …]) and on the exit-2 path at
+  #        --apply (FAIL) and --dry-run (WARN), and each row is read back through
+  #        generate_report, markdown and JSON. A cap applied before the redaction cuts
+  #        that home path mid-string and ships the fragment raw, so each rendered
+  #        detail must carry <repo> and <home> and no fragment of either root (CB-10's
+  #        vocabulary shape); each projection stays within 800 characters; and the
+  #        planned-recovery NOTE still reaches the report.
+  _plx_pay="NOTE: Phase-A2 planned-recovery degraded (could not list issues carrying 'status: deferred')"$'\n'"NOTE: files-changed degraded to N/A - 'git diff --shortstat A..B' yielded no file count from repo root '${_plx_repo}'"$'\n'
+  _plx_z="$(/usr/bin/printf '%0900d' 0)"
+  _plx_pay="${_plx_pay}${_plx_z:0:$(( 790 - ${#_plx_pay} ))}${_plx_home}/plx4/y.log"$'\n'
+  /usr/bin/printf '%s' "$_plx_pay" > "$_plx_tmp/cv-payload.txt"
+  /bin/cat > "$_plx_cv_ok" <<'EOF'
+#!/bin/sh
+/bin/cat "$(/usr/bin/dirname "$0")/cv-payload.txt" >&2
+echo "planned 12 pts / delivered 12 pts (1.00); files-changed 9; allocation 0/12/0 pts (feature/debt/protocol-slack); class routine; mechanism: compute-release-velocity.sh"
+EOF
+  /bin/cat > "$_plx_cv_e2" <<'EOF'
+#!/bin/sh
+/bin/cat "$(/usr/bin/dirname "$0")/cv-payload.txt" >&2
+exit 2
+EOF
+  /bin/chmod +x "$_plx_cv_ok" "$_plx_cv_e2"
+  RELEASE_LOG="$_plx_tmp/RELEASE_LOG.md"
+  _plx_log() {
+    /bin/cat > "$RELEASE_LOG" <<'EOF'
+# RELEASE_LOG
+
+#### Deployment Log v9.95
+**Mechanism:** git merge.
+**Cycle-Time:** 3d 4h; mechanism: compute-cycle-time.sh
+**Result:** SUCCESS — green CI.
+EOF
+  }
+  _plx_velo() {   # $1 = outcome label, $2 = mode, $3 = producer stub, $4 = the result it must land on
+    local _r _m _j _k _v _pp
+    _plx_log
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    MODE="$2"; COMPUTE_VELOCITY="$3"; HOME="$_plx_home"; REPO_ROOT="$_plx_repo"
+    phase_inject_velocity_field >/dev/null 2>&1 || true
+    _r="${PHASE_RESULTS[0]:-}"
+    OUTPUT="markdown"; _m="$(generate_report 2>/dev/null)" || _m=""
+    OUTPUT="json"; _j="$(generate_report 2>/dev/null)" || _j=""
+    HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"
+    [[ "$_r" == "$4" ]] || _plx_bad_res4+=" $1:${_r:-none}"
+    for _k in markdown json; do
+      if [[ "$_k" == markdown ]]; then
+        _v="$(/usr/bin/python3 "$_plx_tmp/row.py" md inject_velocity_field <<<"$_m" 2>/dev/null || true)"
+      else
+        _v="$(/usr/bin/python3 "$_plx_tmp/row.py" json inject_velocity_field <<<"$_j" 2>/dev/null || true)"
+      fi
+      _pp=""
+      case "$_v" in
+        *"[producer stderr: "*) _pp="${_v#*\[producer stderr: }"; _pp="${_pp%]}" ;;
+        *"**Velocity:** field: "*) _pp="${_v#*\*\*Velocity:\*\* field: }"; _pp="${_pp% — NOT blocking*}" ;;
+      esac
+      [[ -n "$_pp" && "$_v" == *'<repo>'* && "$_v" == *'<home>'* && "$_v" != *"${_plx_home:0:8}"* ]] || _plx_bad_voc+=" $1/$_k"
+      [[ -n "$_pp" && "${#_pp}" -le 800 ]] || _plx_bad_len+=" $1/$_k(${#_pp})"
+      [[ "$_v" == *'planned-recovery degraded'* ]] || _plx_bad_note+=" $1/$_k"
+    done
+  }
+  _plx_velo pass apply "$_plx_cv_ok" PASS
+  _plx_velo refused-apply apply "$_plx_cv_e2" FAIL
+  _plx_velo refused-dry-run dry-run "$_plx_cv_e2" WARN
+  _st_arm PL PL-4; [[ "${#_plx_pay}" -gt 800 && "${_plx_pay:790:${#_plx_home}}" == "$_plx_home" && -z "$_plx_bad_res4" ]] || { echo "FAIL: PL-4 fixture — the producer's stderr must carry the home path at byte 790 and each run must land on its own result (PASS, FAIL, WARN), or the limbs below grade nothing; got:${_plx_bad_res4:- payload ${#_plx_pay} bytes}"; failures=$((failures+1)); }
+  [[ -z "$_plx_bad_voc" ]] || { echo "FAIL: PL-4 — each rendered phase-6.6 detail must carry <repo> and <home> and no fragment of either root; a cap applied before the redaction cuts the home path and ships the fragment raw (AC-2); failed for:${_plx_bad_voc}"; failures=$((failures+1)); }
+  [[ -z "$_plx_bad_len" ]] || { echo "FAIL: PL-4 — each phase-6.6 projection must stay within 800 characters (AC-2); failed for:${_plx_bad_len}"; failures=$((failures+1)); }
+  [[ -z "$_plx_bad_note" ]] || { echo "FAIL: PL-4 — the planned-recovery NOTE group 4c.5b pins must still reach the report; failed for:${_plx_bad_note}"; failures=$((failures+1)); }
+
+  # PL-5 — THE SINKS. A record carrying a repository-root path, a home path, both, and
+  #        no path, with both captured report bodies multi-line and carrying both roots.
+  #        The render through generate_report — markdown, and JSON parsed back — must
+  #        carry no raw root and must name <repo>/release/tools/x.sh and
+  #        <home>/other/y; the path-free row must render byte-identical to the raw
+  #        render's; and the redaction must add or remove no line. Sensitivity: the raw
+  #        render carries both roots. A home path with a non-ASCII character is
+  #        redacted in both renders; the JSON sink works on decoded strings, because
+  #        json.dumps escapes non-ASCII and a text replace would never match. Then the
+  #        direct post (AC-8; Plan amendment 13 item 3): phase 15 posts the gate-passage
+  #        proof with a path-bearing merge anchor through a gh stub, on rung 1 (the
+  #        Stage-13 sub-task) and rung 2 (the release PR). The body handed to the stub
+  #        must carry <repo> and <home> and no fragment of either root, and a path-free
+  #        anchor must reach the stub verbatim. Last, the driver's two other direct
+  #        posts, the chore-PR body and the D-1 close comment, over a release corpus
+  #        homed out of tree (Plan amendment 15 item 2).
+  HOME="$_plx_home"; REPO_ROOT="$_plx_repo"
+  PHASE_NAMES=(plx_repo plx_home plx_both plx_free); PHASE_RESULTS=(PASS PASS PASS PASS)
+  PHASE_DETAILS=("would invoke: ${_plx_repo}/release/tools/x.sh" "wrote ${_plx_home}/other/y" "from ${_plx_repo}/a to ${_plx_home}/b" "resolved without a path")
+  PATTERN_SCAN_REPORT="scan line ${_plx_repo}/scan.md"$'\n'"scan line ${_plx_home}/notes"
+  EPIC_AUDIT_REPORT="| audit | ${_plx_home}/audit |"$'\n'"audit line ${_plx_repo}/x"
+  OUTPUT="markdown"; _plx_md="$(generate_report 2>/dev/null)" || _plx_md=""
+  OUTPUT="json"; _plx_js="$(generate_report 2>/dev/null)" || _plx_js=""
+  _plx_raw="$(generate_markdown_report 2>/dev/null)" || _plx_raw=""
+  HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"
+  /usr/bin/printf '%s\n%s\n' "$_plx_home" "$_plx_repo" > "$_plx_tmp/roots"
+  _st_arm PL PL-5; [[ "$_plx_raw" == *"$_plx_repo/release/tools/x.sh"* && "$_plx_raw" == *"$_plx_home/other/y"* ]] || { echo "FAIL: PL-5 sensitivity — the raw render must carry both fabricated roots, or the sink limbs below pass without ever seeing one"; failures=$((failures+1)); }
+  [[ -n "$_plx_md" && "$_plx_md" != *"$_plx_home"* && "$_plx_md" == *'<repo>/release/tools/x.sh'* && "$_plx_md" == *'<home>/other/y'* && "$_plx_md" == *'<repo>/scan.md'* && "$_plx_md" == *'<home>/audit'* ]] || { echo "FAIL: PL-5 markdown — the report rendered through generate_report must carry no raw root, in a detail or a captured report body, and must name <repo>/release/tools/x.sh, <home>/other/y and both bodies' paths in the sanctioned form (Plan amendment 13 item 1)"; failures=$((failures+1)); }
+  _plx_x="$(/usr/bin/python3 "$_plx_tmp/jcheck.py" "$_plx_tmp/roots" '<repo>/release/tools/x.sh' '<home>/other/y' <<<"$_plx_js" 2>&1 || true)"
+  [[ "$_plx_x" == "OK" ]] || { echo "FAIL: PL-5 JSON — the JSON report must parse, carry no raw root in any decoded string and name <repo>/release/tools/x.sh and <home>/other/y (Plan amendment 13 item 1); got '$_plx_x'"; failures=$((failures+1)); }
+  [[ -n "$(/usr/bin/grep -F '| plx_free |' <<<"$_plx_raw" || true)" && "$(/usr/bin/grep -F '| plx_free |' <<<"$_plx_raw" || true)" == "$(/usr/bin/grep -F '| plx_free |' <<<"$_plx_md" || true)" ]] || { echo "FAIL: PL-5 — the path-free row must render byte-identical to the raw render's (AC-5)"; failures=$((failures+1)); }
+  [[ "$(/usr/bin/awk 'END { print NR }' <<<"$_plx_raw")" -eq "$(/usr/bin/awk 'END { print NR }' <<<"$_plx_md")" ]] || { echo "FAIL: PL-5 — the redaction must add or remove no line of the report"; failures=$((failures+1)); }
+  _plx_uhome="${_plx_tmp}/h"$'\xc3\xb6'"me"
+  HOME="$_plx_uhome"; REPO_ROOT="$_plx_repo"
+  PHASE_NAMES=(plx_uhome); PHASE_RESULTS=(PASS); PHASE_DETAILS=("wrote ${_plx_uhome}/z")
+  PATTERN_SCAN_REPORT=""; EPIC_AUDIT_REPORT=""
+  OUTPUT="markdown"; _plx_md="$(generate_report 2>/dev/null)" || _plx_md=""
+  OUTPUT="json"; _plx_js="$(generate_report 2>/dev/null)" || _plx_js=""
+  HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"
+  /usr/bin/printf '%s\n' "$_plx_uhome" > "$_plx_tmp/uroots"
+  [[ -n "$_plx_md" && "$_plx_md" != *"$_plx_uhome"* && "$_plx_md" == *'<home>/z'* ]] || { echo "FAIL: PL-5 non-ASCII home, markdown — a home path carrying a non-ASCII character must render as <home>/z"; failures=$((failures+1)); }
+  _plx_x="$(/usr/bin/python3 "$_plx_tmp/jcheck.py" "$_plx_tmp/uroots" '<home>/z' <<<"$_plx_js" 2>&1 || true)"
+  [[ "$_plx_x" == "OK" ]] || { echo "FAIL: PL-5 non-ASCII home, JSON — json.dumps escapes non-ASCII, so only a pass over the decoded strings can redact this home path; got '$_plx_x'"; failures=$((failures+1)); }
+  # The degenerate root (Plan amendment 14; Stage-7 F-01). HOME=/ strips to the
+  # empty string, and the JSON sink's length guard is what skips it: without the
+  # guard, str.replace('', '<home>') puts the marker between every character of
+  # every string. So the JSON render under HOME=/ must add <home> to no decoded
+  # string, and the fixture detail must read unchanged. jcheck.py's first file
+  # names what must appear in no decoded string, here the marker itself. Only
+  # HOME is degenerate: the repository root keeps its fixture value. Sensitivity:
+  # the same record rendered under the fixture home must be redacted.
+  PHASE_NAMES=(plx_root1); PHASE_RESULTS=(PASS); PHASE_DETAILS=("wrote ${_plx_home}/other/y")
+  OUTPUT="json"; HOME="/"; REPO_ROOT="$_plx_repo"; _plx_js="$(generate_report 2>/dev/null)" || _plx_js=""
+  HOME="$_plx_home"; _plx_out="$(generate_report 2>/dev/null)" || _plx_out=""
+  HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"
+  /usr/bin/printf '%s\n' '<home>' > "$_plx_tmp/hmark"
+  _plx_x="$(/usr/bin/python3 "$_plx_tmp/jcheck.py" "$_plx_tmp/hmark" <<<"$_plx_js" 2>&1 || true)"
+  _plx_z="$(/usr/bin/python3 "$_plx_tmp/row.py" json plx_root1 <<<"$_plx_js" 2>/dev/null || true)"
+  [[ "$_plx_x" == "OK" && "$_plx_z" == "wrote ${_plx_home}/other/y" ]] || { echo "FAIL: PL-5 degenerate root, JSON — under HOME=/, which strips to the empty string, the JSON sink must skip the home redaction: no decoded string may gain <home>, and the fixture detail must read unchanged (Plan amendment 14); got '$_plx_x'"; failures=$((failures+1)); }
+  _plx_x="$(/usr/bin/python3 "$_plx_tmp/jcheck.py" "$_plx_tmp/roots" '<home>/other/y' <<<"$_plx_out" 2>&1 || true)"
+  [[ "$_plx_x" == "OK" ]] || { echo "FAIL: PL-5 degenerate root, sensitivity — the same record rendered under the fixture home must carry no raw root and name <home>/other/y, or the limb above passes on a sink that never redacts; got '$_plx_x'"; failures=$((failures+1)); }
+  /bin/cat > "$_plx_stub" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$PLX_CALLS"
+case "$1 $2" in
+  "issue list")
+    [[ "$*" == *"--state all"* ]] || exit 0
+    [[ "$PLX_NO_SUBTASK" == "1" ]] && exit 0
+    printf '%s\t%s\t%s\t%s\n' 4700 "sub-task" "OPEN" "Stage 13 Close — plx-slug (release-scoped)"
+    exit 0 ;;
+  "issue comment"|"pr comment")
+    printf '%s' "${@: -1}" > "$PLX_BODY"
+    exit 0 ;;
+  "pr create")
+    p=""
+    for a in "$@"; do
+      [[ "$p" == "--body-file" ]] && /bin/cat "$a" > "$PLX_BODY"
+      p="$a"
+    done
+    printf '%s\n' "https://github.com/x/y/pull/4710"
+    exit 0 ;;
+  "issue close")
+    p=""
+    for a in "$@"; do
+      [[ "$p" == "--comment" ]] && printf '%s' "$a" > "$PLX_BODY"
+      p="$a"
+    done
+    exit 0 ;;
+esac
+exit 0
+STUB
+  /bin/chmod +x "$_plx_stub"
+  export PLX_CALLS="$_plx_tmp/calls.log" PLX_BODY="$_plx_tmp/body.txt" PLX_NO_SUBTASK=0
+  _plx_post() {   # $1 = the merge anchor, $2 = 1 to make rung 1 unresolvable; prints the posted body
+    : > "$PLX_BODY"; PLX_NO_SUBTASK="$2"
+    GH="$_plx_stub"; MODE="apply"; MERGE_SHA="$1"; HOME="$_plx_home"; REPO_ROOT="$_plx_repo"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    phase_run_verification >/dev/null 2>&1 || true
+    HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"
+    /bin/cat "$PLX_BODY" 2>/dev/null || true
+  }
+  _plx_b1="$(_plx_post "${_plx_repo}/anchor ${_plx_home}/note" 0)"
+  _plx_b2="$(_plx_post "${_plx_repo}/anchor ${_plx_home}/note" 1)"
+  _plx_b3="$(_plx_post "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" 0)"
+  [[ "$_plx_b1" == *'### Verification'* && "$_plx_b1" == *'<repo>/anchor'* && "$_plx_b1" == *'<home>/note'* && "$_plx_b1" != *"${_plx_home:0:8}"* ]] || { echo "FAIL: PL-5 direct post, rung 1 — the gate-passage proof phase 15 posts to the Stage-13 sub-task must reach the host with <repo> and <home> and no fragment of either root (AC-8; Plan amendment 13 item 3)"; failures=$((failures+1)); }
+  [[ "$_plx_b2" == *'_Fallback target (rung 2)'* && "$_plx_b2" == *'### Verification'* && "$_plx_b2" == *'<repo>/anchor'* && "$_plx_b2" == *'<home>/note'* && "$_plx_b2" != *"${_plx_home:0:8}"* ]] || { echo "FAIL: PL-5 direct post, rung 2 — the same proof posted to the release PR must reach the host redacted too (AC-8; Plan amendment 13 item 3)"; failures=$((failures+1)); }
+  [[ "$_plx_b3" == *'**Release-PR merge SHA:** deadbeefdeadbeefdeadbeefdeadbeefdeadbeef'* && "$_plx_b3" != *'<repo>'* && "$_plx_b3" != *'<home>'* ]] || { echo "FAIL: PL-5 direct post, specificity — a path-free anchor must reach the host verbatim, with no marker invented"; failures=$((failures+1)); }
+  # The driver's two other direct posts (Plan amendment 15 item 2; Stage-8 S8-01).
+  # Phase 11 hands the chore-PR body to `gh pr create` through a --body-file, and
+  # phase 14 hands each D-1 comment to `gh issue close --comment`. Both name the
+  # release plan's path, which plan_rel_path keeps repository-relative only while the
+  # corpus sits in the tree. With the corpus homed in the operator instance (CH-2)
+  # the path is absolute, and on a default install that instance sits under the home.
+  # The corpus home is resolved once, at load, by top-level code a self-test cannot
+  # re-run, so this fixture SETS the state that resolution reaches for a repository
+  # with no release/releases, and asserts the repository has none; the tolerance
+  # suite's fixture A is where the resolver itself is shown to reach it. The instance
+  # corpus sits under the fabricated home and holds this release's plan in its flat
+  # slug form. Each phase runs at --apply with gh stubbed, and a git stub answers the
+  # two git calls phase 11 makes on this path (a branch one commit ahead, a push that
+  # succeeds), so this limb needs no git. The body each stub receives must name
+  # <home>/ where the plan path was, carry no fragment of either root and otherwise
+  # reach the host as built. Sensitivity: the plan resolves to its absolute path, and
+  # the chore-PR body as built carries it.
+  local _plx_inst="$_plx_home/pmo-instance" _plx_pabs _plx_pred _plx_raw4 _plx_b4 _plx_b5 _plx_gstub="$_plx_tmp/git-stub.sh"
+  local _plx_s_pdir="$RELEASE_PLANS_DIR" _plx_s_ch="$CORPUS_HOME" _plx_s_chk="$CORPUS_HOME_KIND" _plx_s_che="$CORPUS_HOME_EFFECTIVE"
+  local _plx_s_br="$CHORE_BRANCH" _plx_s_rslug="$REPO_SLUG" _plx_s_git="$GIT" _plx_s_cps="$CHORE_PR_SKIPPED"
+  _plx_pabs="$_plx_inst/release/releases/plans/plx-slug_RELEASE_PLAN.md"
+  _plx_pred='<home>/pmo-instance/release/releases/plans/plx-slug_RELEASE_PLAN.md'
+  /bin/mkdir -p "$_plx_inst/release/releases/plans"
+  /usr/bin/printf '# plan\n' > "$_plx_pabs"
+  /bin/cat > "$_plx_gstub" <<'GITSTUB'
+#!/bin/sh
+for a in "$@"; do
+  case "$a" in
+    rev-list) echo 1; exit 0 ;;
+  esac
+done
+exit 0
+GITSTUB
+  /bin/chmod +x "$_plx_gstub"
+  CORPUS_HOME="$_plx_inst/release/releases"; CORPUS_HOME_KIND="instance"; CORPUS_HOME_EFFECTIVE="$CORPUS_HOME"
+  RELEASE_PLANS_DIR="$CORPUS_HOME_EFFECTIVE/plans"; HOME="$_plx_home"; REPO_ROOT="$_plx_repo"
+  _plx_x="$(plan_rel_path 2>/dev/null)" || _plx_x="<unresolved>"
+  _plx_raw4="$(build_chore_pr_body 2>/dev/null)" || _plx_raw4=""
+  : > "$PLX_BODY"; GH="$_plx_stub"; GIT="$_plx_gstub"; MODE="apply"; NO_MERGE=0
+  CHORE_BRANCH="chore/v9.95-stage-13-corpus-update"; REPO_SLUG="x/y"
+  CHORE_PR_NUMBER=""; CHORE_PR_OUTCOME=""; CHORE_PR_SKIPPED=0
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_create_chore_pr >/dev/null 2>&1 || true
+  _plx_b4="$(/bin/cat "$PLX_BODY" 2>/dev/null || true)"
+  : > "$PLX_BODY"; CLOSE_COMMENTS=(); OPEN_ISSUE_COUNT=1; OPEN_ISSUE_LIST="4711"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_manual_close_release_issues >/dev/null 2>&1 || true
+  _plx_b5="$(/bin/cat "$PLX_BODY" 2>/dev/null || true)"
+  HOME="$_plx_s_home"; REPO_ROOT="$_plx_s_root"; GIT="$_plx_s_git"; RELEASE_PLANS_DIR="$_plx_s_pdir"
+  CORPUS_HOME="$_plx_s_ch"; CORPUS_HOME_KIND="$_plx_s_chk"; CORPUS_HOME_EFFECTIVE="$_plx_s_che"
+  CHORE_BRANCH="$_plx_s_br"; REPO_SLUG="$_plx_s_rslug"; CHORE_PR_SKIPPED="$_plx_s_cps"
+  [[ ! -e "$_plx_repo/release/releases" && "$_plx_x" == "$_plx_pabs" && "$_plx_raw4" == *"- Release plan: ${_plx_pabs}"* ]] || { echo "FAIL: PL-5 direct post, out-of-tree plan sensitivity — with no release/releases in the fixture repository and the plan in the instance corpus, plan_rel_path must resolve the plan's absolute path and the chore-PR body as built must carry it, or the two limbs below pass without ever seeing one"; failures=$((failures+1)); }
+  [[ "$_plx_b4" == *'## Cross-references'* && "$_plx_b4" == *"- Release plan: ${_plx_pred}"* && "$_plx_b4" != *"${_plx_home:0:8}"* && "$_plx_b4" == "${_plx_raw4//"$_plx_pabs"/<home>/pmo-instance/release/releases/plans/plx-slug_RELEASE_PLAN.md}" ]] || { echo "FAIL: PL-5 direct post, chore-PR body — the body phase 11 hands to gh pr create must name the plan as <home>/…, carry no fragment of either root and otherwise reach the host as built (Plan amendment 15 item 1)"; failures=$((failures+1)); }
+  [[ "$_plx_b5" == 'Manually closed at Stage 13 per D-1 '* && "$_plx_b5" == *"Per release plan ${_plx_pred}." && "$_plx_b5" != *"${_plx_home:0:8}"* ]] || { echo "FAIL: PL-5 direct post, D-1 close comment — the comment phase 14 hands to gh issue close must name the plan as <home>/… and carry no fragment of either root (Plan amendment 15 item 1)"; failures=$((failures+1)); }
+  _st_witness PL 5
+
+  unset -f _plx_log _plx_velo _plx_post
+  unset PLX_CALLS PLX_BODY PLX_NO_SUBTASK
+  /bin/rm -rf "$_plx_tmp" 2>/dev/null || true
+  REPO_ROOT="$_plx_s_root"; HOME="$_plx_s_home"; MODE="$_plx_s_mode"; OUTPUT="$_plx_s_out"
+  VERSION="$_plx_s_ver"; MILESTONE="$_plx_s_ms"; MERGE_SHA="$_plx_s_sha"; PR_NUMBER="$_plx_s_pr"
+  STATE_MILESTONE_SLUG="$_plx_s_slug"; RELEASE_LOG="$_plx_s_log"; COMPUTE_VELOCITY="$_plx_s_cv"
+  PRIMARY_CHECKOUT="$_plx_s_prim"; GH="$_plx_s_gh"; VERIFICATION_RESULTS="$_plx_s_res"
+  PATTERN_SCAN_REPORT="$_plx_s_scan"; EPIC_AUDIT_REPORT="$_plx_s_audit"; NO_MERGE="$_plx_s_nm"
+  OPEN_ISSUE_COUNT="$_plx_s_oic"; OPEN_ISSUE_LIST="$_plx_s_oil"; STATE_CYCLE_TIME="$_plx_s_cyc"
+  RUN_TS="$_plx_s_ts"; CHORE_PR_NUMBER="$_plx_s_cpn"; CHORE_PR_OUTCOME="$_plx_s_cpo"
+  STATE_MILESTONE_STATE="$_plx_s_mst"; STATE_LOG_ROW_STATE="$_plx_s_lrs"; STATE_TAG_EXISTS="$_plx_s_tag"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # ── Test CR: phase_create_chore_pr resumes over its own merged chore PR (#7436) —
+  #    offline and hermetic: a bare file-path origin, and a gh stub that emulates the
+  #    host from ONE table of pull requests, so phase 11's REST reader and phase 12's
+  #    reader are driven by the same rows (CR-16 asserts they agree). The operator's
+  #    merge is made from a SEPARATE clone (a merge commit, the PR's head kept at
+  #    refs/pull/<n>/head, then the branch deleted, as the host does), so the work
+  #    clone's origin/main stays STALE until a phase fetches: the CIAC-3 state. CR-1
+  #    is CIAC-3's runtime arm for this card (#7465's NM-CIAC3 is the 15.55 half).
+  #    ARM ORDER IS LOAD-BEARING: CR-1 needs the stale ref before anything fetches;
+  #    CR-2, CR-3, CR-14 and CR-13's first limb need the fresh one; CR-13's second
+  #    limb re-stales it with update-ref; CR-5 must run after CR-4, whose failing
+  #    create stub it inherits, because _cr_reset resets the PR table and the counters
+  #    but not create-out and create-rc (reordered, CR-5 reddens rather than passes);
+  #    CR-15 must run before CR-7 adds its late commit; CR-12 builds its own
+  #    squash-merged branch last.
+  if [[ -x "$GIT" ]]; then
+    local _cr_s_gh="$GH" _cr_s_root="$REPO_ROOT" _cr_s_mode="$MODE" _cr_s_ver="$VERSION" _cr_s_br="$CHORE_BRANCH"
+    local _cr_s_num="$CHORE_PR_NUMBER" _cr_s_skip="$CHORE_PR_SKIPPED" _cr_s_out="${CHORE_PR_OUTCOME:-}" _cr_s_nm="$NO_MERGE"
+    local _cr_s_to="$MERGE_TIMEOUT" _cr_s_step="$MERGE_POLL_STEP" _cr_s_slug="$REPO_SLUG" _cr_s_ms="$STATE_MILESTONE_SLUG"
+    local _cr_s_oic="$OPEN_ISSUE_COUNT" _cr_s_pr="$PR_NUMBER" _cr_s_mil="$MILESTONE"
+    local _cr_tmp _cr_origin _cr_work _cr_merge _cr_br _cr_br84 _cr_stale _cr_setup=0 _cr_rc _cr_d _cr_rem0 _cr_rem1
+    local _cr_t1 _cr_t2 _cr_tok _cr_rd _cr_seen _cr_row _cr_n _cr_isanc
+    local _cr_m1='4401 x chore/v9.83-stage-13-corpus-update closed 2026-09-25T10:00:00Z MERGED/UNKNOWN/UNKNOWN'
+    local _cr_c2='4402 x chore/v9.83-stage-13-corpus-update closed - CLOSED/MERGEABLE/BLOCKED'
+    local _cr_o4='4404 x chore/v9.83-stage-13-corpus-update open - OPEN/MERGEABLE/CLEAN'
+    local _cr_f6='4406 forker chore/v9.83-stage-13-corpus-update open - OPEN/MERGEABLE/CLEAN'
+    _cr_tmp="$(cd "$(/usr/bin/mktemp -d -t chorepr-resume-selftest.XXXXXX)" && pwd -P)"
+    _cr_origin="$_cr_tmp/origin.git"; _cr_work="$_cr_tmp/work"; _cr_merge="$_cr_tmp/merge-side"
+    _cr_br="chore/v9.83-stage-13-corpus-update"; _cr_br84="chore/v9.84-stage-13-corpus-update"
+    (
+      set -e
+      $GIT init --bare -q "$_cr_origin"
+      $GIT init -q -b main "$_cr_work" 2>/dev/null || { $GIT init -q "$_cr_work"; $GIT -C "$_cr_work" checkout -q -b main; }
+      /bin/mkdir -p "$_cr_work/release/releases/notes"
+      /usr/bin/printf '# RELEASE_DIGEST\n\n## Knowledge Corpus\n\n' > "$_cr_work/release/releases/RELEASE_DIGEST.md"
+      /usr/bin/printf '# RELEASE_INDEX\n\n| Version | Milestone | Date | Theme | Release PR | Release Notes |\n|---|---|---|---|---|---|\n' > "$_cr_work/release/releases/RELEASE_INDEX.md"
+      $GIT -C "$_cr_work" add -A
+      $GIT -C "$_cr_work" -c user.email=t@t -c user.name=t commit -qm baseline
+      $GIT -C "$_cr_work" remote add origin "$_cr_origin"
+      $GIT -C "$_cr_work" push -q origin main
+      $GIT -C "$_cr_work" fetch -q origin
+      $GIT -C "$_cr_work" checkout -q -b "$_cr_br" origin/main
+      /usr/bin/printf '### v9.83 (2026-09-25) — cr fixture\n' >> "$_cr_work/release/releases/RELEASE_DIGEST.md"
+      /usr/bin/printf '| v9.83 | cr-fixture | 2026-09-25 | — | #1 | notes |\n' >> "$_cr_work/release/releases/RELEASE_INDEX.md"
+      /usr/bin/printf 'notes\n' > "$_cr_work/release/releases/notes/v9.83_RELEASE_NOTES.md"
+      $GIT -C "$_cr_work" add -A
+      $GIT -C "$_cr_work" -c user.email=t@t -c user.name=t commit -qm chore
+      $GIT -C "$_cr_work" push -q origin "$_cr_br"
+      $GIT -C "$_cr_work" push -q origin "$_cr_br:refs/pull/4401/head"
+      $GIT clone -q "$_cr_origin" "$_cr_merge"
+      $GIT -C "$_cr_merge" -c user.email=t@t -c user.name=t merge -q --no-ff "origin/$_cr_br" -m "merge chore"
+      $GIT -C "$_cr_merge" push -q origin main
+      $GIT -C "$_cr_merge" push -q origin --delete "$_cr_br"
+    ) >/dev/null 2>&1 || _cr_setup=$?
+    _cr_stale="$($GIT -C "$_cr_work" rev-parse --verify --quiet refs/remotes/origin/main 2>/dev/null || true)"
+    _cr_t1="$($GIT -C "$_cr_work" rev-parse --verify --quiet "refs/heads/$_cr_br" 2>/dev/null || true)"
+    [[ -n "$_cr_stale" && -n "$_cr_t1" ]] || _cr_setup=1
+    # The gh stub. ONE table, $_cr_tmp/prs, one row per pull request: number owner branch
+    # state merged_at composite. A REST `api …/pulls?head=H&state=S` read returns the rows
+    # whose owner:branch equals H; a head carrying NO owner matches the branch under ANY
+    # owner, which is exactly what an unqualified lookup gets, so a regression that drops
+    # the owner binds the fork row and CR-13 reddens. `pr list --head B`, the pre-#7436
+    # GraphQL lookup, matches the branch under any owner too, because gh cannot
+    # owner-qualify it. `pr view N` is phase 12's reader. Every GraphQL-backed call (pr
+    # list, pr view, api graphql) is counted, so an arm can assert the resolve path made none.
+    /bin/cat > "$_cr_tmp/gh-stub.sh" <<STUB
+#!/usr/bin/env bash
+d="$_cr_tmp"
+gq() { c="\$(/bin/cat "\$d/gql-ctr" 2>/dev/null || echo 0)"; /usr/bin/printf '%s' "\$((c+1))" > "\$d/gql-ctr"; }
+if [[ "\$1" == "api" ]]; then
+  u=""
+  for a in "\$@"; do
+    case "\$a" in
+      graphql) gq ;;
+      *pulls\?*) u="\$a" ;;
+    esac
+  done
+  [[ -n "\$u" ]] || exit 0
+  h=""; s=""; q="\${u#*\?}"
+  while [[ -n "\$q" ]]; do
+    p="\${q%%&*}"
+    case "\$p" in head=*) h="\${p#head=}" ;; state=*) s="\${p#state=}" ;; esac
+    if [[ "\$q" == *"&"* ]]; then q="\${q#*&}"; else q=""; fi
+  done
+  /usr/bin/printf 'api %s %s\n' "\$h" "\$s" >> "\$d/list-args"
+  if [[ -f "\$d/list-rc" ]]; then /usr/bin/printf 'stub REST failure: HTTP 502\n' >&2; exit "\$(/bin/cat "\$d/list-rc")"; fi
+  /usr/bin/awk -v h="\$h" -v s="\$s" '((\$2 ":" \$3) == h || (index(h, ":") == 0 && \$3 == h)) && (s == "all" || s == \$4) { print \$1, \$4, \$5 }' "\$d/prs"
+  exit 0
+fi
+if [[ "\$1" == "pr" && "\$2" == "list" ]]; then
+  gq
+  h=""; s=""; p=""
+  for a in "\$@"; do [[ "\$p" == "--head" ]] && h="\$a"; [[ "\$p" == "--state" ]] && s="\$a"; p="\$a"; done
+  /usr/bin/printf 'pr-list %s %s\n' "\$h" "\$s" >> "\$d/list-args"
+  if [[ -f "\$d/list-rc" ]]; then /usr/bin/printf 'stub list failure\n' >&2; exit "\$(/bin/cat "\$d/list-rc")"; fi
+  /usr/bin/awk -v h="\$h" -v s="\$s" '\$3 == h && (s == "all" || s == \$4) { print \$1 }' "\$d/prs"
+  exit 0
+fi
+if [[ "\$1" == "pr" && "\$2" == "view" ]]; then
+  gq
+  /usr/bin/awk -v n="\$3" '\$1 == n { print \$6; f = 1 } END { exit f ? 0 : 1 }' "\$d/prs"; exit \$?
+fi
+if [[ "\$1" == "pr" && "\$2" == "create" ]]; then
+  c="\$(/bin/cat "\$d/create-ctr" 2>/dev/null || echo 0)"; /usr/bin/printf '%s' "\$((c+1))" > "\$d/create-ctr"
+  /bin/cat "\$d/create-out" 2>/dev/null; exit "\$(/bin/cat "\$d/create-rc" 2>/dev/null || echo 0)"
+fi
+if [[ "\$1" == "pr" && "\$2" == "merge" ]]; then
+  m="\$(/bin/cat "\$d/merge-ctr" 2>/dev/null || echo 0)"; /usr/bin/printf '%s' "\$((m+1))" > "\$d/merge-ctr"; exit 0
+fi
+exit 0
+STUB
+    /bin/chmod +x "$_cr_tmp/gh-stub.sh"
+    if [[ "$_cr_setup" -ne 0 ]]; then
+      echo "FAIL: CR fixture — the hermetic origin/work/merge-side repositories could not be built (rc=$_cr_setup); no CR arm can run, and the witness gate will name group CR"; failures=$((failures+1))
+    else
+      GH="$_cr_tmp/gh-stub.sh"; REPO_ROOT="$_cr_work"; MODE="apply"; VERSION="v9.83"; CHORE_BRANCH="$_cr_br"
+      NO_MERGE=0; MERGE_TIMEOUT=2; MERGE_POLL_STEP=1; REPO_SLUG="x/y"; STATE_MILESTONE_SLUG="cr-fixture"
+      OPEN_ISSUE_COUNT=0; PR_NUMBER="1"; MILESTONE="1"
+      _cr_reset() {   # per-arm state; $1 = the PR table's rows (may be empty)
+        PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+        CHORE_PR_NUMBER=""; CHORE_PR_SKIPPED=0; CHORE_PR_OUTCOME=""
+        if [[ -n "${1:-}" ]]; then /usr/bin/printf '%s\n' "$1" > "$_cr_tmp/prs"; else : > "$_cr_tmp/prs"; fi
+        : > "$_cr_tmp/list-args"
+        /usr/bin/printf '0' > "$_cr_tmp/create-ctr"; /usr/bin/printf '0' > "$_cr_tmp/merge-ctr"; /usr/bin/printf '0' > "$_cr_tmp/gql-ctr"
+        /bin/rm -f "$_cr_tmp/list-rc"
+      }
+      _cr_run() { _cr_rc=0; phase_create_chore_pr >/dev/null 2>&1 || _cr_rc=$?; _cr_d="${PHASE_DETAILS[0]:-}"; }
+      _cr_ctr() { /bin/cat "$_cr_tmp/$1" 2>/dev/null || echo 0; }
+
+      # CR-1 — AC-1/AC-2 on a STALE ref, merge-commit merge (CIAC-3's runtime arm): a MERGED PR, its branch
+      #        deleted, origin/main predating the merge. Containment is proven against the PR's own head.
+      _cr_reset "$_cr_m1"
+      _st_arm CR CR-1; [[ "$($GIT -C "$_cr_work" rev-list --count "origin/main..$_cr_br" 2>/dev/null || echo 0)" -ge 1 ]] || { echo "FAIL: CR-1 fixture — origin/main is not stale (0 commits behind the chore branch), so this arm would test the fresh path twice"; failures=$((failures+1)); }
+      _cr_run
+      [[ "$_cr_rc" -eq 0 && "${PHASE_RESULTS[0]:-}" == "SKIPPED" && "$CHORE_PR_NUMBER" == "4401" && "$CHORE_PR_SKIPPED" -eq 0 ]] || { echo "FAIL: CR-1 — a resume over a MERGED chore PR with a STALE origin/main must resolve it (rc 0, SKIPPED, #4401, SKIPPED-flag 0); got rc=$_cr_rc result='${PHASE_RESULTS[0]:-}' pr='$CHORE_PR_NUMBER' skipped=$CHORE_PR_SKIPPED detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "resumed-already-merged" ]] || { echo "FAIL: CR-1 — the resume must record outcome resumed-already-merged; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+      [[ "$(_cr_ctr create-ctr)" -eq 0 ]] || { echo "FAIL: CR-1 — gh pr create was reached for an already-merged PR"; failures=$((failures+1)); }
+      [[ -z "$($GIT -C "$_cr_work" ls-remote --heads origin "$_cr_br" 2>/dev/null || true)" ]] || { echo "FAIL: CR-1 — the remote chore branch deleted by the merge was re-created (a push ran before resolution)"; failures=$((failures+1)); }
+      /usr/bin/grep -qxF "api x:$_cr_br all" "$_cr_tmp/list-args" || { echo "FAIL: CR-1 — the lookup must be the owner-qualified REST read of the exact head with state=all; saw '$(/bin/cat "$_cr_tmp/list-args")'"; failures=$((failures+1)); }
+      [[ "$(_cr_ctr gql-ctr)" -eq 0 ]] || { echo "FAIL: CR-1 — phase 11's resolve path made $(_cr_ctr gql-ctr) GraphQL call(s); it must read the partition over REST only"; failures=$((failures+1)); }
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      _cr_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _cr_rc=$?
+      [[ "$_cr_rc" -eq 0 && "$(get_phase await_merge_chore_pr)" == PASS\|*"was ALREADY MERGED — recognised after 0s"* && "$(_cr_ctr merge-ctr)" -eq 0 ]] || { echo "FAIL: CR-1 (AC-2, reached) — phase 12 must render its MERGED terminal-PASS arm on the first read with zero merges; got rc=$_cr_rc '$(get_phase await_merge_chore_pr)' merges=$(_cr_ctr merge-ctr)"; failures=$((failures+1)); }
+
+      # CR-2 — AC-1 on a FRESH ref: the zero-commit guard fires and must still reach the MERGED arm,
+      #        through the same REST resolver, with no GraphQL call on this idempotent path.
+      $GIT -C "$_cr_work" fetch -q origin >/dev/null 2>&1 || true
+      _cr_reset "$_cr_m1"
+      _st_arm CR CR-2; [[ "$($GIT -C "$_cr_work" rev-list --count "origin/main..$_cr_br" 2>/dev/null || echo 1)" -eq 0 ]] || { echo "FAIL: CR-2 fixture — origin/main is not fresh, so the zero-commit guard path is not exercised"; failures=$((failures+1)); }
+      _cr_run
+      [[ "$_cr_rc" -eq 0 && "$CHORE_PR_NUMBER" == "4401" && "$CHORE_PR_SKIPPED" -eq 0 && "$_cr_d" == *"0 commits ahead"* ]] || { echo "FAIL: CR-2 — with a FRESH ref the guard must consult the resolver and resume (#4401, SKIPPED-flag 0); got rc=$_cr_rc pr='$CHORE_PR_NUMBER' skipped=$CHORE_PR_SKIPPED detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "resumed-already-merged" ]] || { echo "FAIL: CR-2 — the fresh-ref resume must record outcome resumed-already-merged; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+      [[ "$(_cr_ctr gql-ctr)" -eq 0 ]] || { echo "FAIL: CR-2 — the idempotent path made $(_cr_ctr gql-ctr) GraphQL call(s); it must make none"; failures=$((failures+1)); }
+      PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+      _cr_rc=0; phase_await_merge_chore_pr >/dev/null 2>&1 || _cr_rc=$?
+      [[ "$_cr_rc" -eq 0 && "$(get_phase await_merge_chore_pr)" == PASS\|*"was ALREADY MERGED"* && "$(_cr_ctr merge-ctr)" -eq 0 ]] || { echo "FAIL: CR-2 — the fresh-ref path must render the SAME MERGED arm as CR-1; got '$(get_phase await_merge_chore_pr)'"; failures=$((failures+1)); }
+
+      # CR-3 — control: the genuine idempotent skip (outputs on main, NO PR for this branch) is preserved.
+      _cr_reset ""
+      _cr_run
+      _st_arm CR CR-3; [[ "$_cr_rc" -eq 0 && "${PHASE_RESULTS[0]:-}" == "SKIPPED" && "$CHORE_PR_SKIPPED" -eq 1 && -z "$CHORE_PR_NUMBER" ]] || { echo "FAIL: CR-3 — with no PR for the branch and the outputs on main, the idempotent skip must stand (rc 0, SKIPPED, SKIPPED-flag 1, no number); got rc=$_cr_rc result='${PHASE_RESULTS[0]:-}' skipped=$CHORE_PR_SKIPPED pr='$CHORE_PR_NUMBER'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "skipped-as-idempotent" ]] || { echo "FAIL: CR-3 — the idempotent skip must record outcome skipped-as-idempotent; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+
+      # CR-14 — the zero-commit guard's OPEN arm: zero commits ahead and the outputs on main, but an
+      #         OPEN PR for this branch. It is live work: reused and left for phase 12, never reported
+      #         as "none needed".
+      _cr_reset "$_cr_o4"
+      _cr_run
+      _st_arm CR CR-14; [[ "$_cr_rc" -eq 0 && "${PHASE_RESULTS[0]:-}" == "SKIPPED" && "$CHORE_PR_NUMBER" == "4404" && "$CHORE_PR_SKIPPED" -eq 0 && "$_cr_d" == *"already exists for branch"* && "$(_cr_ctr create-ctr)" -eq 0 ]] || { echo "FAIL: CR-14 — an OPEN PR on the zero-commit path must be reused (SKIPPED, #4404, SKIPPED-flag 0, no create), not skipped as idempotent; got rc=$_cr_rc pr='$CHORE_PR_NUMBER' skipped=$CHORE_PR_SKIPPED detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "existing-open" ]] || { echo "FAIL: CR-14 — the reuse must record outcome existing-open; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+      [[ "$(_cr_ctr gql-ctr)" -eq 0 ]] || { echo "FAIL: CR-14 — the zero-commit path made $(_cr_ctr gql-ctr) GraphQL call(s)"; failures=$((failures+1)); }
+
+      # CR-13 — OWNER QUALIFICATION (public-repository security): a FORK's pull request on a same-named
+      #         branch must never bind as this run's chore PR, on either path. (a) Fresh ref, zero-commit
+      #         guard: the fork's OPEN PR is invisible, so the idempotent skip stands. (b) Stale ref, main
+      #         path: the fork's OPEN PR is invisible, so this run creates its own. An unqualified lookup —
+      #         the pre-#7436 GraphQL one, or REST without the owner — binds #4406 in both, and phase 12
+      #         would then poll and merge the fork's PR with the operator's credentials.
+      _cr_reset "$_cr_f6"
+      _cr_run
+      _st_arm CR CR-13; [[ "$_cr_rc" -eq 0 && "$CHORE_PR_NUMBER" != "4406" && "$CHORE_PR_OUTCOME" == "skipped-as-idempotent" ]] || { echo "FAIL: CR-13 (a) SECURITY — a fork's same-named OPEN PR must not bind as this run's chore PR on the zero-commit path; got rc=$_cr_rc outcome='$CHORE_PR_OUTCOME' pr='$CHORE_PR_NUMBER'"; failures=$((failures+1)); }
+      /usr/bin/grep -qxF "api x:$_cr_br all" "$_cr_tmp/list-args" || { echo "FAIL: CR-13 (a) — the lookup must carry this repository's owner (head=x:<branch>); saw '$(/bin/cat "$_cr_tmp/list-args")'"; failures=$((failures+1)); }
+      $GIT -C "$_cr_work" update-ref refs/remotes/origin/main "$_cr_stale" >/dev/null 2>&1 || true
+      _cr_reset "$_cr_f6"
+      /usr/bin/printf 'https://github.com/x/y/pull/4407\n' > "$_cr_tmp/create-out"; /usr/bin/printf '0' > "$_cr_tmp/create-rc"
+      _cr_run
+      [[ "$_cr_rc" -eq 0 && "$CHORE_PR_NUMBER" == "4407" && "$CHORE_PR_OUTCOME" == "created" && "$(_cr_ctr create-ctr)" -eq 1 && "$_cr_d" != *4406* ]] || { echo "FAIL: CR-13 (b) SECURITY — with only a fork's same-named OPEN PR present, this run must create its OWN chore PR (created, #4407) and never reuse #4406; got rc=$_cr_rc outcome='$CHORE_PR_OUTCOME' pr='$CHORE_PR_NUMBER' creates=$(_cr_ctr create-ctr) detail='$_cr_d'"; failures=$((failures+1)); }
+
+      # CR-4 — AC-3 control, NEVER CREATED (stale ref, no PR anywhere): the create is attempted and its failure is LOUD.
+      _cr_reset ""
+      /usr/bin/printf 'no commits between main and the head branch\n' > "$_cr_tmp/create-out"; /usr/bin/printf '1' > "$_cr_tmp/create-rc"
+      _cr_run
+      _st_arm CR CR-4; [[ "$_cr_rc" -eq 3 && "${PHASE_RESULTS[0]:-}" == "FAIL" && -z "$CHORE_PR_NUMBER" && "$(_cr_ctr create-ctr)" -eq 1 && "$_cr_d" == *"gh pr create failed:"* ]] || { echo "FAIL: CR-4 (AC-3) — a genuinely absent PR must reach the create and fail LOUD (rc 3, FAIL, 1 create, the create's error in the detail); got rc=$_cr_rc result='${PHASE_RESULTS[0]:-}' creates=$(_cr_ctr create-ctr) detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "failed" ]] || { echo "FAIL: CR-4 — a failed create must record outcome failed; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+
+      # CR-5 — AC-3 control, WRONG SLUG: a MERGED PR exists only for ANOTHER version's head; it must be invisible.
+      _cr_reset "4401 x chore/v9.82-stage-13-corpus-update closed 2026-09-25T10:00:00Z MERGED/UNKNOWN/UNKNOWN"
+      _cr_run
+      _st_arm CR CR-5; [[ "$_cr_rc" -eq 3 && "$CHORE_PR_NUMBER" != "4401" && "$(_cr_ctr create-ctr)" -eq 1 ]] || { echo "FAIL: CR-5 (AC-3) — a merged PR on a DIFFERENT head must not be read as this run's (rc 3 through the failing create, never #4401); got rc=$_cr_rc pr='$CHORE_PR_NUMBER' creates=$(_cr_ctr create-ctr)"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "failed" ]] || { echo "FAIL: CR-5 — the failed create must record outcome failed; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+      /usr/bin/grep -qxF "api x:$_cr_br all" "$_cr_tmp/list-args" || { echo "FAIL: CR-5 — the lookup did not ask for THIS head, owner-qualified ($_cr_br); saw '$(/bin/cat "$_cr_tmp/list-args")'"; failures=$((failures+1)); }
+
+      # CR-6 — CLOSED is not MERGED at this site either: a closed-unmerged PR leads to a fresh create.
+      _cr_reset "$_cr_c2"
+      /usr/bin/printf 'https://github.com/x/y/pull/4403\n' > "$_cr_tmp/create-out"; /usr/bin/printf '0' > "$_cr_tmp/create-rc"
+      _cr_run
+      _st_arm CR CR-6; [[ "$_cr_rc" -eq 0 && "${PHASE_RESULTS[0]:-}" == "PASS" && "$CHORE_PR_NUMBER" == "4403" ]] || { echo "FAIL: CR-6 — only a CLOSED-unmerged PR must lead to a fresh create (PASS, #4403); got rc=$_cr_rc result='${PHASE_RESULTS[0]:-}' pr='$CHORE_PR_NUMBER' detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "created" ]] || { echo "FAIL: CR-6 — the fresh create must record outcome created; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+
+      # CR-8 — OPEN is preserved: an existing open PR is reused, never duplicated, and its detail is unchanged.
+      _cr_reset "$_cr_o4"
+      _cr_run
+      _st_arm CR CR-8; [[ "$_cr_rc" -eq 0 && "$CHORE_PR_NUMBER" == "4404" && "$(_cr_ctr create-ctr)" -eq 0 && "$_cr_d" == "PR #4404 already exists for branch" ]] || { echo "FAIL: CR-8 — an OPEN PR must be reused (#4404, 0 creates, detail unchanged); got rc=$_cr_rc pr='$CHORE_PR_NUMBER' creates=$(_cr_ctr create-ctr) detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "existing-open" ]] || { echo "FAIL: CR-8 — the reuse must record outcome existing-open; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+
+      # CR-16 — READER AGREEMENT: phase 11 reads the partition over REST, phase 12 through
+      #         _chore_pr_terminal_state. Driven from the SAME rows, the two must name the same state
+      #         for an open, a merged and a closed-unmerged PR — and those must be three distinct
+      #         states, or the comparison is vacuous.
+      _cr_seen=""
+      _st_arm CR CR-16; for _cr_row in "$_cr_o4" "$_cr_m1" "$_cr_c2"; do
+        _cr_reset "$_cr_row"
+        _cr_n="${_cr_row%% *}"
+        _cr_tok="$(_chore_pr_resolve 2>/dev/null || true)"
+        _cr_rd="$(_chore_pr_terminal_state "$_cr_n" 2>/dev/null || true)"
+        [[ -n "$_cr_tok" && "${_cr_tok%% *}" == "${_cr_rd%%/*}" && "${_cr_tok#* }" == "$_cr_n" ]] || { echo "FAIL: CR-16 — phase 11's REST reader ('$_cr_tok') and phase 12's reader ('$_cr_rd') disagree on PR #$_cr_n"; failures=$((failures+1)); }
+        _cr_seen="${_cr_seen} ${_cr_tok%% *}"
+      done
+      [[ "$_cr_seen" == " OPEN MERGED CLOSED" ]] || { echo "FAIL: CR-16 anti-vacuity — the rows must cover OPEN, MERGED and CLOSED; the REST reader named '$_cr_seen'"; failures=$((failures+1)); }
+
+      # CR-15 — the push's ANCESTRY REFINEMENT, the control the fail-loud push must not trip: the push is
+      #         REJECTED because the remote branch moved AHEAD of the local tip (the host's "Update
+      #         branch"), but that head already carries every local commit — reuse the open PR, never FAIL.
+      (
+        set -e
+        $GIT -C "$_cr_merge" fetch -q origin
+        $GIT -C "$_cr_merge" checkout -q -B cr-ahead "origin/$_cr_br"
+        /usr/bin/printf 'update-branch\n' > "$_cr_merge/ahead.txt"
+        $GIT -C "$_cr_merge" add ahead.txt
+        $GIT -C "$_cr_merge" -c user.email=t@t -c user.name=t commit -qm "update branch"
+        $GIT -C "$_cr_merge" push -q origin "cr-ahead:refs/heads/$_cr_br"
+      ) >/dev/null 2>&1 || true
+      _cr_isanc=0; $GIT -C "$_cr_merge" merge-base --is-ancestor "$_cr_t1" refs/heads/cr-ahead >/dev/null 2>&1 || _cr_isanc=$?
+      _cr_reset "$_cr_o4"
+      _cr_run
+      _st_arm CR CR-15; [[ "$_cr_isanc" -eq 0 && "$($GIT -C "$_cr_merge" rev-parse --verify --quiet refs/heads/cr-ahead 2>/dev/null || true)" != "$_cr_t1" ]] || { echo "FAIL: CR-15 fixture — the remote chore branch is not strictly AHEAD of the local tip, so the push is not rejected and the refinement is not exercised"; failures=$((failures+1)); }
+      [[ "$_cr_rc" -eq 0 && "$CHORE_PR_NUMBER" == "4404" && "$(_cr_ctr create-ctr)" -eq 0 && "$_cr_d" == *"already contains the local tip"* ]] || { echo "FAIL: CR-15 — a push rejected only because the remote head is AHEAD of the local tip must not FAIL: reuse #4404 with the refinement named in the detail; got rc=$_cr_rc pr='$CHORE_PR_NUMBER' creates=$(_cr_ctr create-ctr) detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "existing-open" ]] || { echo "FAIL: CR-15 — the reuse must record outcome existing-open; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+
+      # CR-7 — CONTAINMENT against the merged PR's OWN head: the PR MERGED, but the local branch gained a
+      #        commit afterwards, so the local tip is not an ancestor of refs/pull/4401/head -> FAIL, naming
+      #        the count, with nothing pushed and nothing created.
+      /usr/bin/printf 'late\n' > "$_cr_work/late.txt"
+      $GIT -C "$_cr_work" add late.txt >/dev/null 2>&1 || true
+      $GIT -C "$_cr_work" -c user.email=t@t -c user.name=t commit -qm late >/dev/null 2>&1 || true
+      _cr_rem0="$($GIT -C "$_cr_work" ls-remote --heads origin "$_cr_br" 2>/dev/null || true)"
+      _cr_reset "$_cr_m1"
+      _cr_run
+      _cr_rem1="$($GIT -C "$_cr_work" ls-remote --heads origin "$_cr_br" 2>/dev/null || true)"
+      _st_arm CR CR-7; [[ "$_cr_rc" -eq 3 && "${PHASE_RESULTS[0]:-}" == "FAIL" && "$_cr_d" == *"carries 1 commit(s) its merged head does not"* && "$(_cr_ctr create-ctr)" -eq 0 && "$_cr_rem0" == "$_cr_rem1" ]] || { echo "FAIL: CR-7 — a MERGED PR whose local branch gained a commit after the merge must FAIL naming it, with no push and no create; got rc=$_cr_rc detail='$_cr_d' remote-before='$_cr_rem0' after='$_cr_rem1'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "failed" ]] || { echo "FAIL: CR-7 — the containment failure must record outcome failed; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+
+      # CR-10 — the push FAILS LOUD: an unreachable origin makes the push fail, and its remote head
+      #         cannot be read either, so the phase FAILs before any create, with a one-line detail.
+      $GIT -C "$_cr_work" remote set-url origin "$_cr_tmp/no-such-origin.git" >/dev/null 2>&1 || true
+      _cr_reset ""
+      _cr_run
+      $GIT -C "$_cr_work" remote set-url origin "$_cr_origin" >/dev/null 2>&1 || true
+      _st_arm CR CR-10; [[ "$_cr_rc" -eq 3 && "$_cr_d" == *"git push -u origin"* && "$(_cr_ctr create-ctr)" -eq 0 && "$_cr_d" != *'|'* && "$_cr_d" != *$'\n'* ]] || { echo "FAIL: CR-10 — a failed push must FAIL loud before the create, with a one-line detail; got rc=$_cr_rc creates=$(_cr_ctr create-ctr) detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "failed" ]] || { echo "FAIL: CR-10 — the failed push must record outcome failed; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+
+      # CR-11 — an unreadable partition is a FAIL carrying the host's own message, never "none".
+      _cr_reset ""
+      /usr/bin/printf '1' > "$_cr_tmp/list-rc"
+      _cr_run
+      _st_arm CR CR-11; [[ "$_cr_rc" -eq 3 && "$_cr_d" == *"cannot resolve the chore PR"* && "$_cr_d" == *"stub REST failure: HTTP 502"* && "$(_cr_ctr create-ctr)" -eq 0 ]] || { echo "FAIL: CR-11 — a failed PR lookup must FAIL (rc 3) with the host's message and must not reach the create; got rc=$_cr_rc creates=$(_cr_ctr create-ctr) detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "failed" ]] || { echo "FAIL: CR-11 — the unreadable partition must record outcome failed; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+      /bin/rm -f "$_cr_tmp/list-rc"
+
+      # CR-12 — MERGE-METHOD AGNOSTIC: a SQUASH merge. main gains ONE new commit carrying the chore
+      #         branch's content, so the chore commit is NOT an ancestor of main — containment measured
+      #         against main would FAIL here even after refreshing origin/main — yet the local tip IS an
+      #         ancestor of the merged PR's own head, which is what containment tests. It must resume.
+      _cr_setup=0
+      (
+        set -e
+        $GIT -C "$_cr_work" fetch -q origin
+        $GIT -C "$_cr_work" checkout -q -b "$_cr_br84" origin/main
+        /usr/bin/printf '### v9.84 (2026-09-25) — cr squash fixture\n' >> "$_cr_work/release/releases/RELEASE_DIGEST.md"
+        $GIT -C "$_cr_work" add -A
+        $GIT -C "$_cr_work" -c user.email=t@t -c user.name=t commit -qm chore84
+        $GIT -C "$_cr_work" push -q origin "$_cr_br84"
+        $GIT -C "$_cr_work" push -q origin "$_cr_br84:refs/pull/4405/head"
+        $GIT -C "$_cr_merge" fetch -q origin
+        $GIT -C "$_cr_merge" checkout -q main
+        $GIT -C "$_cr_merge" merge -q --ff-only origin/main
+        $GIT -C "$_cr_merge" merge -q --squash "origin/$_cr_br84"
+        $GIT -C "$_cr_merge" -c user.email=t@t -c user.name=t commit -qm "squash chore84"
+        $GIT -C "$_cr_merge" push -q origin main
+        $GIT -C "$_cr_merge" push -q origin --delete "$_cr_br84"
+        $GIT -C "$_cr_work" fetch -q origin
+      ) >/dev/null 2>&1 || _cr_setup=$?
+      _cr_t2="$($GIT -C "$_cr_work" rev-parse --verify --quiet "refs/heads/$_cr_br84" 2>/dev/null || true)"
+      _cr_isanc=0; $GIT -C "$_cr_work" merge-base --is-ancestor "${_cr_t2:-HEAD}" refs/remotes/origin/main >/dev/null 2>&1 || _cr_isanc=$?
+      VERSION="v9.84"; CHORE_BRANCH="$_cr_br84"
+      _cr_reset "4405 x $_cr_br84 closed 2026-09-25T11:00:00Z MERGED/UNKNOWN/UNKNOWN"
+      _cr_run
+      _st_arm CR CR-12; [[ "$_cr_setup" -eq 0 && -n "$_cr_t2" && "$_cr_isanc" -eq 1 ]] || { echo "FAIL: CR-12 fixture — the squash merge was not built, or the chore tip IS an ancestor of the refreshed origin/main (setup rc=$_cr_setup, ancestry rc=$_cr_isanc), so this arm would not tell the merge methods apart"; failures=$((failures+1)); }
+      [[ "$_cr_rc" -eq 0 && "${PHASE_RESULTS[0]:-}" == "SKIPPED" && "$CHORE_PR_NUMBER" == "4405" && "$(_cr_ctr create-ctr)" -eq 0 && "$_cr_d" == *"refs/pull/4405/head"* ]] || { echo "FAIL: CR-12 — a SQUASH-merged chore PR must resume through containment against its own head (SKIPPED, #4405, no create); got rc=$_cr_rc result='${PHASE_RESULTS[0]:-}' pr='$CHORE_PR_NUMBER' detail='$_cr_d'"; failures=$((failures+1)); }
+      [[ "$CHORE_PR_OUTCOME" == "resumed-already-merged" ]] || { echo "FAIL: CR-12 — the squash resume must record outcome resumed-already-merged; got '$CHORE_PR_OUTCOME'"; failures=$((failures+1)); }
+      VERSION="v9.83"; CHORE_BRANCH="$_cr_br"
+
+      # CR-9 — CIAC-3, STATIC: the production region carries no head-keyed `--state open` chore-PR lookup.
+      #   A REGEX, not the plan's literal needle: this file must not contain that needle anywhere, or
+      #   CIAC-3's whole-file `grep -c -F` would count this arm instead of the code. The control
+      #   fixture likewise omits the `--repo` operand, so it matches the regex but not the needle.
+      local _cr_prod _cr_rx='pr list .*--head "\$CHORE_BRANCH" .*--state open'
+      _cr_prod="$(/usr/bin/sed -n '1,/^self_test() {/p' "${BASH_SOURCE[0]}" || true)"
+      _st_arm CR CR-9; [[ "$(grep_count -E "$_cr_rx" <<<"$_cr_prod")" -eq 0 ]] || { echo "FAIL: CR-9 (CIAC-3) — the production region still resolves the chore PR with --state open"; failures=$((failures+1)); }
+      [[ "$(grep_count -E "$_cr_rx" <<<'  x="$($GH pr list --head "$CHORE_BRANCH" --state open --json number)"')" -eq 1 ]] || { echo "FAIL: CR-9 control — the matcher missed a head-keyed --state open lookup; its zero above proves nothing"; failures=$((failures+1)); }
+
+      _st_witness CR 16
+    fi
+    GH="$_cr_s_gh"; REPO_ROOT="$_cr_s_root"; MODE="$_cr_s_mode"; VERSION="$_cr_s_ver"; CHORE_BRANCH="$_cr_s_br"
+    CHORE_PR_NUMBER="$_cr_s_num"; CHORE_PR_SKIPPED="$_cr_s_skip"; CHORE_PR_OUTCOME="$_cr_s_out"; NO_MERGE="$_cr_s_nm"
+    MERGE_TIMEOUT="$_cr_s_to"; MERGE_POLL_STEP="$_cr_s_step"; REPO_SLUG="$_cr_s_slug"; STATE_MILESTONE_SLUG="$_cr_s_ms"
+    OPEN_ISSUE_COUNT="$_cr_s_oic"; PR_NUMBER="$_cr_s_pr"; MILESTONE="$_cr_s_mil"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    /bin/rm -rf "$_cr_tmp" 2>/dev/null || true
+  fi
 
   # Test 4e: phase_await_merge_chore_pr budget + escape modes (#1705) — offline,
   # hermetic. Asserts: the zero-commit SKIP propagation (CHORE_PR_SKIPPED=1 →
@@ -11054,7 +13320,7 @@ STUB
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # Test 4e.2: --no-merge post-merge phase-gating (#2919) — offline, hermetic.
-  # Asserts the four post-merge-dependent phases DEFER (SKIP with a "no-merge" detail)
+  # Asserts every row the table declares `defer` DEFERS (SKIP with a "no-merge" detail)
   # under NO_MERGE=1 EVEN WHEN their normal precondition to act is met (open milestone,
   # open issues) — i.e. the guard is unconditional under --no-merge and fires before any
   # network preflight. Then a NO_MERGE=0 negative check (dry-run, hermetic) confirms the
@@ -11064,20 +13330,43 @@ STUB
   local _nm_saved_nomerge="$NO_MERGE" _nm_saved_mode="$MODE" _nm_saved_gh="$GH"
   local _nm_saved_mstate="$STATE_MILESTONE_STATE" _nm_saved_oic="$OPEN_ISSUE_COUNT"
   local _nm_saved_oil="$OPEN_ISSUE_LIST" _nm_saved_cpn="$CHORE_PR_NUMBER" _nm_saved_ms="$MILESTONE"
+  local _nm_saved_skip="$CHORE_PR_SKIPPED" _nm_saved_cpo="$CHORE_PR_OUTCOME"
   # A false GH proves the assertions never touch the network: a correct guard returns
   # before any $GH / git_net call, so a phase that reached one would error, not SKIP.
   GH="/bin/false"; CHORE_PR_NUMBER="8888"; MILESTONE="9999"; CLOSE_COMMENTS=()
 
-  # (a) NO_MERGE=1 → all four phases DEFER (SKIPPED + "no-merge" detail), even with an
-  #     OPEN milestone and OPEN issues (preconditions that would otherwise act).
+  # (a) NO_MERGE=1 → every row the table declares `defer` DEFERS (SKIPPED + "no-merge"
+  #     detail), even with an OPEN milestone and OPEN issues (preconditions that would
+  #     otherwise act). The population is READ from NO_MERGE_PHASE_BEHAVIOUR behind a
+  #     floor, so a member the table gains is driven here with no edit to this loop.
   NO_MERGE=1; MODE="apply"; STATE_MILESTONE_STATE="open"; OPEN_ISSUE_COUNT=2; OPEN_ISSUE_LIST=$'401\n402'
-  local _nm_ph
-  for _nm_ph in post_close_milestone manual_close_release_issues publish_github_release check_release_body_drift; do
+  local _nm_ph _nm_defer_rows _nm_skip_rows
+  _nm_defer_rows="$(_nm_members defer 2>/dev/null || true)"
+  [[ "$(grep_count . <<<"$_nm_defer_rows")" -ge 5 ]] || { echo "FAIL: 4e.2 — the table declares fewer than 5 defer rows; the defer loop would under-cover"; failures=$((failures+1)); }
+  while IFS= read -r _nm_ph; do
+    [[ -z "$_nm_ph" ]] && continue
     PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
     "phase_${_nm_ph}" >/dev/null 2>&1
     [[ "$(get_phase "$_nm_ph" | /usr/bin/cut -d'|' -f1)" == "SKIPPED" ]] || { echo "FAIL: $_nm_ph must SKIP (defer) under --no-merge, got '$(get_phase "$_nm_ph")'"; failures=$((failures+1)); }
     get_phase "$_nm_ph" | /usr/bin/grep -qiF 'no-merge' || { echo "FAIL: $_nm_ph defer detail must cite --no-merge, got '$(get_phase "$_nm_ph")'"; failures=$((failures+1)); }
-  done
+  done <<<"$_nm_defer_rows"
+
+  # (a.2) NO_MERGE=1 → every row the table declares `skip` SKIPs, citing the flag and
+  #       WITHOUT the deferral sentinel: its input is the merge this run did not
+  #       perform, so nothing is owed on the re-run and the report does not list it.
+  #       CHORE_PR_SKIPPED=0 keeps each phase off its zero-commit branch.
+  _nm_skip_rows="$(_nm_members skip 2>/dev/null || true)"
+  [[ "$(grep_count . <<<"$_nm_skip_rows")" -ge 2 ]] || { echo "FAIL: 4e.2 — the table declares fewer than 2 skip rows; the skip loop would under-cover"; failures=$((failures+1)); }
+  CHORE_PR_SKIPPED=0; CHORE_PR_OUTCOME="created"
+  while IFS= read -r _nm_ph; do
+    [[ -z "$_nm_ph" ]] && continue
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    "phase_${_nm_ph}" >/dev/null 2>&1 || true
+    [[ "$(get_phase "$_nm_ph")" == SKIPPED\|* ]] || { echo "FAIL: 4e.2 — $_nm_ph is declared skip and must SKIP under --no-merge, got '$(get_phase "$_nm_ph")'"; failures=$((failures+1)); }
+    [[ "$(get_phase "$_nm_ph")" == *"--no-merge"* ]] || { echo "FAIL: 4e.2 — $_nm_ph skip detail must cite --no-merge, got '$(get_phase "$_nm_ph")'"; failures=$((failures+1)); }
+    [[ "$(get_phase "$_nm_ph")" != *"DEFERRED under --no-merge"* ]] || { echo "FAIL: 4e.2 — $_nm_ph is declared skip, not defer, so it must not carry the deferral sentinel, got '$(get_phase "$_nm_ph")'"; failures=$((failures+1)); }
+  done <<<"$_nm_skip_rows"
+  CHORE_PR_SKIPPED="$_nm_saved_skip"; CHORE_PR_OUTCOME="$_nm_saved_cpo"
 
   # (b) NO_MERGE=0 negative check (dry-run, hermetic): post_close_milestone +
   #     manual_close_release_issues must NOT emit the defer sentinel on the normal path
@@ -11096,6 +13385,189 @@ STUB
   NO_MERGE="$_nm_saved_nomerge"; MODE="$_nm_saved_mode"; GH="$_nm_saved_gh"
   STATE_MILESTONE_STATE="$_nm_saved_mstate"; OPEN_ISSUE_COUNT="$_nm_saved_oic"
   OPEN_ISSUE_LIST="$_nm_saved_oil"; CHORE_PR_NUMBER="$_nm_saved_cpn"; MILESTONE="$_nm_saved_ms"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # Group LK (#5284 + #4768): phase 15.2 lock_milestone_threads, Phase C5 as a
+  # close-out phase. Offline and hermetic: every arm drives the phase through a gh
+  # stub (the T-13 pattern), and NO arm reaches the real host or locks a live thread.
+  # The stub serves the three `_host_*` REST bindings from files under LK_DIR:
+  #   fixture   one "<number><TAB><issue|pr>" line per thread on the milestone
+  #   locked    the numbers already locked; a successful lock call appends to it
+  #   counts    the milestone's "<open_issues> <closed_issues>"
+  #   put-fail  numbers whose lock call fails, with a message carrying a pipe and a HOME path
+  #   put-noop  numbers whose lock call reports success and locks nothing
+  #   enum-fail present = the thread listing fails, with the same message shape
+  # Every invocation is logged to LK_DIR/calls, so an arm can count lock calls and
+  # read the transport. The stub returns the listing already projected, the shape the
+  # binding's --jq produces; the jq programs themselves are read against the live
+  # host, read-only, in the slice's C4 record.
+  local _lk_saved_gh="$GH" _lk_saved_mode="$MODE" _lk_saved_nomerge="$NO_MERGE" _lk_saved_ms="$MILESTONE"
+  local _lk_saved_slug="$REPO_SLUG" _lk_saved_delay="$VERIFY_RECHECK_DELAY"
+  local _lk_tmp; _lk_tmp="$(/usr/bin/mktemp -d -t lock-selftest.XXXXXX)"
+  local _lk_stub="$_lk_tmp/gh-stub.sh" _lk_row="" _lk_rc=0 _lk_calls _lk_n _lk_puts _lk_line _lk_k _lk_i_rv _lk_i_lk _lk_disp
+  local _lk_five=$'101\tissue\n102\tissue\n103\tissue\n201\tpr\n202\tpr\n'
+  /bin/cat > "$_lk_stub" <<'STUB'
+#!/usr/bin/env bash
+d="$LK_DIR"
+/usr/bin/printf '%s\n' "$*" >> "$d/calls"
+[[ "$1" == "api" ]] || exit 0
+u=""
+for a in "$@"; do
+  case "$a" in repos/*) u="$a" ;; esac
+done
+case "$u" in
+  */issues\?milestone=*)
+    if [[ -f "$d/enum-fail" ]]; then /usr/bin/printf 'HTTP 502 | listing failed under %s/x\n' "$HOME" >&2; exit 1; fi
+    while IFS=$'\t' read -r n k; do
+      [[ -n "$n" ]] || continue
+      if /usr/bin/grep -qx -- "$n" "$d/locked" 2>/dev/null; then s=locked; else s=unlocked; fi
+      /usr/bin/printf '%s\t%s\t%s\n' "$n" "$k" "$s"
+    done < "$d/fixture"
+    exit 0 ;;
+  */milestones/*)
+    /bin/cat "$d/counts"; exit 0 ;;
+  */issues/*/lock)
+    n="${u%/lock}"; n="${n##*/}"
+    if /usr/bin/grep -qx -- "$n" "$d/put-fail" 2>/dev/null; then /usr/bin/printf 'HTTP 403 | lock refused for thread %s under %s/x\n' "$n" "$HOME" >&2; exit 1; fi
+    if /usr/bin/grep -qx -- "$n" "$d/put-noop" 2>/dev/null; then exit 0; fi
+    /usr/bin/printf '%s\n' "$n" >> "$d/locked"; exit 0 ;;
+esac
+exit 0
+STUB
+  /bin/chmod +x "$_lk_stub"
+  export LK_DIR="$_lk_tmp"
+  GH="$_lk_stub"; MODE="apply"; NO_MERGE=0; MILESTONE="9123"; REPO_SLUG="x/y"; VERIFY_RECHECK_DELAY=0
+  _lk_seed() {   # <fixture rows> <counts> <locked> <put-fail> <put-noop> <enum-fail 0|1>
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    /usr/bin/printf '%s' "$1" > "$LK_DIR/fixture"
+    /usr/bin/printf '%s\n' "$2" > "$LK_DIR/counts"
+    /usr/bin/printf '%s' "$3" > "$LK_DIR/locked"
+    /usr/bin/printf '%s' "$4" > "$LK_DIR/put-fail"
+    /usr/bin/printf '%s' "$5" > "$LK_DIR/put-noop"
+    /bin/rm -f "$LK_DIR/enum-fail"
+    if [[ "$6" == "1" ]]; then : > "$LK_DIR/enum-fail"; fi
+    : > "$LK_DIR/calls"
+  }
+  _lk_drive() {  # run the phase once: its return status lands in _lk_rc, its row in _lk_row
+    _lk_rc=0
+    phase_lock_milestone_threads >/dev/null 2>&1 || _lk_rc=$?
+    _lk_row="$(get_phase lock_milestone_threads)"
+  }
+
+  # (a) five unlocked threads, three issues and two pull requests: PASS, rc 0, and
+  #     the detail names every thread it locked and counts issues and PRs apart.
+  _lk_seed "$_lk_five" "0 5" "" "" "" 0; _lk_drive
+  _st_arm LK a-apply-pass; [[ "$_lk_rc" -eq 0 && "$_lk_row" == PASS\|* ]] || { echo "FAIL: LK/a — five unlocked threads (3 issues + 2 PRs) must PASS with rc 0, got rc ${_lk_rc}: '$_lk_row'"; failures=$((failures+1)); }
+  for _lk_n in 101 102 103 201 202; do
+    [[ "$_lk_row" == *"#${_lk_n}"* ]] || { echo "FAIL: LK/a — the PASS detail must name every newly locked thread; #${_lk_n} is missing: '$_lk_row'"; failures=$((failures+1)); }
+  done
+  [[ "$_lk_row" == *"(3 issues + 2 PRs)"* ]] || { echo "FAIL: LK/a — the detail must count issues and pull requests apart, got '$_lk_row'"; failures=$((failures+1)); }
+
+  # (b) PR-INCLUSIVE: one REST lock call per thread with lock_reason=resolved, the two
+  #     pull-request threads included (the same run as (a)).
+  _lk_calls="$(/bin/cat "$LK_DIR/calls")"
+  _lk_puts="$(grep_count -F 'api -X PUT ' "$LK_DIR/calls")"
+  _st_arm LK b-pr-inclusive; [[ "$_lk_puts" -eq 5 ]] || { echo "FAIL: LK/b — one lock call per thread, 5 expected, got ${_lk_puts}"; failures=$((failures+1)); }
+  for _lk_n in 101 102 103 201 202; do
+    [[ "$(grep_count -xF "api -X PUT repos/x/y/issues/${_lk_n}/lock -f lock_reason=resolved" "$LK_DIR/calls")" -eq 1 ]] || { echo "FAIL: LK/b — thread #${_lk_n} must be locked exactly once through the REST lock endpoint with lock_reason=resolved (201 and 202 are the pull-request threads)"; failures=$((failures+1)); }
+  done
+
+  # (c) REST ONLY: every call is `api`, and none is GraphQL or a lock verb. The
+  #     control shows the transport predicate matches a GraphQL-backed lock verb.
+  _st_arm LK c-rest-only; [[ -s "$LK_DIR/calls" ]] || { echo "FAIL: LK/c anti-vacuity — the stub logged no call, so the transport assertions below would read nothing"; failures=$((failures+1)); }
+  [[ "$(grep_count -v '^api ' "$LK_DIR/calls")" -eq 0 ]] || { echo "FAIL: LK/c — every host call must be a REST 'api' call, got: $(_detail_one_line "$_lk_calls")"; failures=$((failures+1)); }
+  [[ "$(grep_count -E 'graphql|issue lock|pr lock' "$LK_DIR/calls")" -eq 0 ]] || { echo "FAIL: LK/c — the lock path must make no GraphQL call and use no 'issue lock' or 'pr lock' verb"; failures=$((failures+1)); }
+  [[ "$(grep_count -E 'graphql|issue lock|pr lock' <<<"issue lock 101 --reason resolved")" -eq 1 ]] || { echo "FAIL: LK/c control — the transport predicate cannot see a GraphQL-backed lock verb, so its zero measures nothing"; failures=$((failures+1)); }
+
+  # (d) two threads already locked: skipped by the enumeration's own locked field, so
+  #     exactly three lock calls, none for the two already locked, and the detail counts them.
+  _lk_seed "$_lk_five" "0 5" $'101\n201\n' "" "" 0; _lk_drive
+  _lk_puts="$(grep_count -F 'api -X PUT ' "$LK_DIR/calls")"
+  _st_arm LK d-idempotent; [[ "$_lk_row" == PASS\|* && "$_lk_row" == *"2 already locked"* && "$_lk_puts" -eq 3 ]] || { echo "FAIL: LK/d — two pre-locked threads must be skipped: PASS, '2 already locked', 3 lock calls; got ${_lk_puts} calls: '$_lk_row'"; failures=$((failures+1)); }
+  [[ "$(grep_count -E '/issues/(101|201)/lock' "$LK_DIR/calls")" -eq 0 ]] || { echo "FAIL: LK/d — an already-locked thread must not be locked again"; failures=$((failures+1)); }
+
+  # (e) every thread already locked: SKIPPED with an explicit zero, and no lock call.
+  _lk_seed "$_lk_five" "0 5" $'101\n102\n103\n201\n202\n' "" "" 0; _lk_drive
+  _st_arm LK e-all-locked; [[ "$_lk_rc" -eq 0 && "$_lk_row" == SKIPPED\|* && "$_lk_row" == *"0 threads newly locked"* && "$(grep_count -F 'api -X PUT ' "$LK_DIR/calls")" -eq 0 ]] || { echo "FAIL: LK/e — five pre-locked threads must read SKIPPED '0 threads newly locked' with no lock call, got '$_lk_row'"; failures=$((failures+1)); }
+
+  # (f) an empty milestone: SKIPPED with an explicit zero, and no lock call.
+  _lk_seed "" "0 0" "" "" "" 0; _lk_drive
+  _st_arm LK f-empty; [[ "$_lk_rc" -eq 0 && "$_lk_row" == SKIPPED\|* && "$_lk_row" == *"0 threads to lock"* && "$(grep_count -F 'api -X PUT ' "$LK_DIR/calls")" -eq 0 ]] || { echo "FAIL: LK/f — an empty milestone must read SKIPPED '0 threads to lock' with no lock call, got '$_lk_row'"; failures=$((failures+1)); }
+
+  # (g) one failed lock call: FAIL naming that thread in a pipe-free, home-redacted
+  #     detail; the other four still lock; the phase still returns 0.
+  _lk_seed "$_lk_five" "0 5" "" $'102\n' "" 0; _lk_drive
+  _st_arm LK g-per-thread-fail; [[ "$_lk_rc" -eq 0 && "$_lk_row" == FAIL\|* && "$_lk_row" == *"#102"* ]] || { echo "FAIL: LK/g — a failed lock call on #102 must FAIL naming it and return 0, got rc ${_lk_rc}: '$_lk_row'"; failures=$((failures+1)); }
+  [[ "${_lk_row#*|}" != *"|"* && "$_lk_row" == *"<home>/x"* && "$_lk_row" != *"${HOME}/x"* ]] || { echo "FAIL: LK/g — the detail must carry the host's message pipe-free and home-redacted, got '$_lk_row'"; failures=$((failures+1)); }
+  [[ "$(grep_count -F 'api -X PUT ' "$LK_DIR/calls")" -eq 5 && "$(grep_count -xE '101|103|201|202' "$LK_DIR/locked")" -eq 4 ]] || { echo "FAIL: LK/g — the other four threads must still be locked after one lock call fails"; failures=$((failures+1)); }
+
+  # (h) #4768's FAIL arm: one issue missing from the enumeration against counters of
+  #     0 + 5 FAILs with the mismatch named, and the four enumerated threads still lock.
+  _lk_seed $'102\tissue\n103\tissue\n201\tpr\n202\tpr\n' "0 5" "" "" "" 0; _lk_drive
+  _st_arm LK h-count-mismatch; [[ "$_lk_rc" -eq 0 && "$_lk_row" == FAIL\|* && "$_lk_row" == *"count MISMATCH: enumerated 4 != open_issues 0 + closed_issues 5"* ]] || { echo "FAIL: LK/h — an enumeration one short of the PR-inclusive counters must FAIL naming both numbers and return 0, got '$_lk_row'"; failures=$((failures+1)); }
+  [[ "$(grep_count -F 'api -X PUT ' "$LK_DIR/calls")" -eq 4 ]] || { echo "FAIL: LK/h — the four enumerated threads must still be locked on a count mismatch"; failures=$((failures+1)); }
+
+  # (i) #4768's PASS arm: the like-with-like count reads 5 == 0 + 5. Control, from the
+  #     same fixture: its issues-only subset is 3, which is not 0 + 5, so an
+  #     issues-only enumeration against these counters would report a phantom gap.
+  _lk_seed "$_lk_five" "0 5" "" "" "" 0; _lk_drive
+  _st_arm LK i-like-with-like; [[ "$_lk_row" == PASS\|* && "$_lk_row" == *"count check 5 == open_issues 0 + closed_issues 5"* ]] || { echo "FAIL: LK/i — the PR-inclusive enumeration must equal open_issues + closed_issues (5 == 0 + 5), got '$_lk_row'"; failures=$((failures+1)); }
+  _lk_n="$(grep_count -E 'issue$' "$LK_DIR/fixture")"
+  [[ "$_lk_n" -eq 3 && "$_lk_n" -ne 5 ]] || { echo "FAIL: LK/i control — the fixture's issues-only subset must be 3, which an issues-only count would set against the counters' 5; got ${_lk_n}"; failures=$((failures+1)); }
+
+  # (j) --dry-run: a STATIC prediction, with no host call, no pipe and no would-FAIL token.
+  _lk_seed "$_lk_five" "0 5" "" "" "" 0; MODE="dry-run"; _lk_drive; MODE="apply"
+  _st_arm LK j-dryrun-static; [[ "$_lk_rc" -eq 0 && "$_lk_row" == DRY-RUN\|* && "${_lk_row#*|}" != *"|"* && "$_lk_row" != *"would FAIL"* ]] || { echo "FAIL: LK/j — the dry-run must record a DRY-RUN prediction with no pipe and no would-FAIL token, got '$_lk_row'"; failures=$((failures+1)); }
+  [[ ! -s "$LK_DIR/calls" ]] || { echo "FAIL: LK/j — the dry-run prediction is static and must make no host call, but the stub logged: $(_detail_one_line "$(/bin/cat "$LK_DIR/calls")")"; failures=$((failures+1)); }
+
+  # (k) --no-merge: the phase defers through the table's defer row, with no host call.
+  _lk_seed "$_lk_five" "0 5" "" "" "" 0; NO_MERGE=1; _lk_drive; NO_MERGE=0
+  _st_arm LK k-nomerge-defer; [[ "$_lk_rc" -eq 0 && "$_lk_row" == "SKIPPED|DEFERRED under --no-merge — "* ]] || { echo "FAIL: LK/k — under --no-merge the phase must defer through _nm_defer, got '$_lk_row'"; failures=$((failures+1)); }
+  [[ ! -s "$LK_DIR/calls" && "$(_nm_behaviour lock_milestone_threads)" == "defer" ]] || { echo "FAIL: LK/k — the deferral must come from a defer row in NO_MERGE_PHASE_BEHAVIOUR and make no host call"; failures=$((failures+1)); }
+
+  # (l) a failed enumeration: FAIL carrying the host's message redacted, nothing locked, rc 0.
+  _lk_seed "$_lk_five" "0 5" "" "" "" 1; _lk_drive
+  _st_arm LK l-enum-fail; [[ "$_lk_rc" -eq 0 && "$_lk_row" == FAIL\|* && "$_lk_row" == *"thread enumeration failed"* && "$(grep_count -F 'api -X PUT ' "$LK_DIR/calls")" -eq 0 ]] || { echo "FAIL: LK/l — a failed thread listing must FAIL with no lock call and return 0, got rc ${_lk_rc}: '$_lk_row'"; failures=$((failures+1)); }
+  [[ "${_lk_row#*|}" != *"|"* && "$_lk_row" == *"<home>/x"* && "$_lk_row" != *"${HOME}/x"* ]] || { echo "FAIL: LK/l — the enumeration failure must carry the host's message pipe-free and home-redacted, got '$_lk_row'"; failures=$((failures+1)); }
+
+  # (m) a lock call that reports success and locks nothing: the read-back catches it.
+  _lk_seed "$_lk_five" "0 5" "" "" $'103\n' 0; _lk_drive
+  _st_arm LK m-readback-mismatch; [[ "$_lk_rc" -eq 0 && "$_lk_row" == FAIL\|* && "$_lk_row" == *"still unlocked after re-read: #103"* ]] || { echo "FAIL: LK/m — a lock that did not take must FAIL on the read-back naming #103, got '$_lk_row'"; failures=$((failures+1)); }
+  [[ "$_lk_row" != *"re-read: #101"* && "$_lk_row" != *"#103 #"* ]] || { echo "FAIL: LK/m — only the thread the read-back still shows unlocked may be named, got '$_lk_row'"; failures=$((failures+1)); }
+
+  # (n) DISPATCH ORDER, read from this file's own dispatch text: after phase 15, and
+  #     before at least one other phase, so the halted marker, which reads only the
+  #     LAST row, can never read a non-blocking lock FAIL as "Run halted".
+  _lk_disp="$(/usr/bin/grep -oE '^phase_[a-z0-9_]+ \|\|' "${BASH_SOURCE[0]}" || true)"
+  _lk_k=0; _lk_i_rv=0; _lk_i_lk=0
+  while IFS= read -r _lk_line; do
+    [[ -n "$_lk_line" ]] || continue
+    _lk_k=$((_lk_k + 1))
+    if [[ "$_lk_line" == "phase_run_verification ||" ]]; then _lk_i_rv=$_lk_k; fi
+    if [[ "$_lk_line" == "phase_lock_milestone_threads ||" ]]; then _lk_i_lk=$_lk_k; fi
+  done <<<"$_lk_disp"
+  _st_arm LK n-dispatch-order; [[ "$_lk_k" -ge 25 && "$_lk_i_rv" -gt 0 && "$_lk_i_lk" -gt "$_lk_i_rv" && "$_lk_i_lk" -lt "$_lk_k" ]] || { echo "FAIL: LK/n — phase_lock_milestone_threads must be dispatched after phase_run_verification and before at least one other phase (dispatched ${_lk_k}; phase 15 at ${_lk_i_rv}; the lock phase at ${_lk_i_lk})"; failures=$((failures+1)); }
+
+  # (o) #4768's OPEN HALF (Plan amendment 9 item (a)). A real close runs phase 15.2 with
+  #     its own Stage-13 sub-task still open, so the milestone's counters carry a non-zero
+  #     open half. Every fixture above seeds an open half of 0, where the delivered
+  #     comparison and one against closed_issues alone agree, so neither pins the
+  #     open_issues term. Five threads against counters of 1 + 4 must PASS as 5 == 1 + 4;
+  #     a closed-only check reads 5 != 4 and FAILs every real close on a phantom gap.
+  #     Control, read from the fixture's own counters: the open half is non-zero and the
+  #     closed half alone is not the enumerated total, so the two comparisons disagree here.
+  local _lk_o="" _lk_c=""
+  _lk_seed "$_lk_five" "1 4" "" "" "" 0; _lk_drive
+  _st_arm LK o-open-half; [[ "$_lk_rc" -eq 0 && "$_lk_row" == PASS\|* && "$_lk_row" == *"count check 5 == open_issues 1 + closed_issues 4"* ]] || { echo "FAIL: LK/o — with the Stage-13 sub-task still open the milestone reads 1 open + 4 closed, and the PR-inclusive enumeration of 5 must equal open_issues + closed_issues (5 == 1 + 4), got rc ${_lk_rc}: '$_lk_row'"; failures=$((failures+1)); }
+  read -r _lk_o _lk_c < "$LK_DIR/counts" || true
+  [[ "$_lk_o" =~ ^[0-9]+$ && "$_lk_c" =~ ^[0-9]+$ && "$_lk_o" -ge 1 && "$_lk_c" -ne 5 && $((_lk_o + _lk_c)) -eq 5 ]] || { echo "FAIL: LK/o control — the fixture's counters must carry a non-zero open half whose closed half alone is not the enumerated 5, or this arm cannot tell the two comparisons apart; got open '${_lk_o}' closed '${_lk_c}'"; failures=$((failures+1)); }
+  _st_witness LK 15
+
+  unset -f _lk_seed _lk_drive 2>/dev/null || true
+  unset LK_DIR
+  /bin/rm -rf "$_lk_tmp" 2>/dev/null || true
+  GH="$_lk_saved_gh"; MODE="$_lk_saved_mode"; NO_MERGE="$_lk_saved_nomerge"; MILESTONE="$_lk_saved_ms"
+  REPO_SLUG="$_lk_saved_slug"; VERIFY_RECHECK_DELAY="$_lk_saved_delay"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # Test 4f: phase_transition_release_log VERIFIED re-derivation guard (#1681) —
@@ -12909,6 +15381,48 @@ PLAN-VERSION-UNKNOWN: release/releases/plans/v2/v2.98_RELEASE_PLAN.md declares v
     fi
   done
 
+  # TL/i — CD-1 END TO END (#6892; Plan amendment 9 item (b)). Group TL's ninth arm runs
+  # HERE because it needs this git sandbox: phase 10 commits, and group TL builds none.
+  # TL/h pins the reader, and the polarity loop above drives phase 10 over PASS rows only,
+  # so a gate that admitted a WARN row only while the recorder held its surface, with the
+  # recorder read hidden in a helper where PS-4c's read of the reader's text cannot see
+  # it, would pass them all. This leg drives the REAL phase 6.8 over an archived v9.96
+  # block with the register ABSENT, so 6.8 writes the field into the segment, records the
+  # segment and records WARN; drops the recorder's entry, which is a missing recorder call
+  # as files=() sees it; and runs the REAL phase 10, which must FAIL naming the segment.
+  # Hermetic: a stub producer that prints a register path which does not exist, and a stub
+  # telemetry tool. The floor refuses to reach phase 10 unless REPO_ROOT is this sandbox.
+  local _cd1_s_cct="$COMPUTE_CLOSE_CLASS_TELEMETRY" _cd1_s_plr="${PRODUCE_LEARNINGS_REGISTER-}" _cd1_s_ms="$MILESTONE"
+  local _cd1_cct="$_tsc_tmp/cd1-cct.sh" _cd1_plr="$_tsc_tmp/cd1-plr.sh" _cd1_row="" _cd1_rc=0 _cd1_detail=""
+  /bin/cat > "$_cd1_cct" <<'CD1CCT'
+#!/bin/sh
+r=""
+while [ $# -gt 0 ]; do case "$1" in --retro) r="$2"; shift 2 ;; *) shift ;; esac; done
+if [ -n "$r" ] && [ -f "$r" ]; then
+  echo "retro-conformance 10/10 (1.00); lessons-population 8/10 (0.80); carry-forward-closure 2/3 (0.67); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 12/13 (0.92); evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh"
+else
+  echo "retro-conformance N/A — no retro register found for v9.96; lessons-population N/A — no lessons register found; carry-forward-closure 2/3 (0.67); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence N/A — no retro register found; evidence-preservation 12/13 (0.92); evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh"
+fi
+CD1CCT
+  /usr/bin/printf '#!/bin/sh\necho "%s"\n' "$_tsc_tmp/cd1-no-register.md" > "$_cd1_plr"
+  /bin/chmod +x "$_cd1_cct" "$_cd1_plr"
+  /usr/bin/printf '# RELEASE_LOG\n\n#### Deployment Log v9.96\n_Archived: [segment](RELEASE_LOG_ARCHIVE-v9.md)_\n' > "$_tsc_ledger"
+  /usr/bin/printf '# RELEASE_LOG_ARCHIVE-v9\n\n#### Deployment Log v9.96\n**Cycle-Time:** 5d 0h.\n**Result:** SUCCESS — archived body.\n**Outcome:** SUCCESS\n' > "$_tsc_seg"
+  COMPUTE_CLOSE_CLASS_TELEMETRY="$_cd1_cct"; PRODUCE_LEARNINGS_REGISTER="$_cd1_plr"; MILESTONE="999"; VERSION="v9.96"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); REBUILT_PACKAGES=(); TOUCHED_ARCHIVE_SEGMENTS=()
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || _cd1_rc=$?
+  _cd1_row="$(get_phase inject_close_class_telemetry_field)"
+  _st_arm TL i-cd1-end-to-end; if [[ "$REPO_ROOT" != "$_tsc_tmp" || "$_cd1_rc" -ne 0 || "$_cd1_row" != WARN\|* || "$_cd1_row" != *"(RELEASE_LOG_ARCHIVE-v9.md)"* || "$(grep_count -E '^\*\*Close-Class-Telemetry:\*\*' "$_tsc_seg")" -ne 1 || "$(grep_count -E '^\*\*Close-Class-Telemetry:\*\*' "$_tsc_ledger")" -ne 0 || " ${TOUCHED_ARCHIVE_SEGMENTS[*]:-} " != *" release/releases/RELEASE_LOG_ARCHIVE-v9.md "* ]]; then
+    echo "FAIL: TL/i floor — in this sandbox, 6.8 over the archived v9.96 block with the register absent must write the field into the segment and not the hot stub, record the segment, and record WARN naming it; phase 10 was not reached, got rc ${_cd1_rc}: '$_cd1_row'"; failures=$((failures+1))
+  else
+    TOUCHED_ARCHIVE_SEGMENTS=()   # the missing recorder call, as phase 10's files=() sees it
+    _cd1_rc=0; phase_commit_chore_pr >/dev/null 2>&1 || _cd1_rc=$?
+    _cd1_detail="$(get_phase commit_chore_pr)"
+    [[ "$_cd1_rc" -eq 3 && "$_cd1_detail" == FAIL\|* && "$_cd1_detail" == *"RELEASE_LOG_ARCHIVE-v9.md"* ]] || { echo "FAIL: TL/i (CD-1) — phase 10 must FAIL naming the segment a WARN-recorded 6.8 write went into when the recorder call is missing, got rc=${_cd1_rc} ('$_cd1_detail')"; failures=$((failures+1)); }
+  fi
+  COMPUTE_CLOSE_CLASS_TELEMETRY="$_cd1_s_cct"; PRODUCE_LEARNINGS_REGISTER="$_cd1_s_plr"; MILESTONE="$_cd1_s_ms"; VERSION="v9.99"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=(); REBUILT_PACKAGES=(); TOUCHED_ARCHIVE_SEGMENTS=()
+
   # Independence guard: the assertion must NOT read TOUCHED_ARCHIVE_SEGMENTS to
   # decide what to expect. It reads the phase record for exactly the reason the
   # empty-staged-set guard does — a check sourced from the recorder whose omission
@@ -13036,7 +15550,7 @@ PLAN-VERSION-UNKNOWN: release/releases/plans/v2/v2.98_RELEASE_PLAN.md declares v
     echo "FAIL: PS-4 _reported_write_surfaces must NOT filter on an 'inject_*' name prefix — that prefix is a proxy for 'is a writer' and Phase 6.9 is a writer it does not name (#6258)"; failures=$((failures+1))
   fi
   if ! /usr/bin/grep -qF 'PHASE_RESULTS[$_i]}" == "PASS"' <<<"$_ps_body"; then
-    echo "FAIL: PS-4b _reported_write_surfaces must keep the PASS result filter — it is what excludes the four SKIPPED limbs that name a resolved surface in the strict path-only form despite writing nothing (see PS-5)"; failures=$((failures+1))
+    echo "FAIL: PS-4b _reported_write_surfaces must keep the PASS result filter — it is what excludes the five SKIPPED limbs that name a resolved surface in the strict path-only form despite writing nothing (see PS-5)"; failures=$((failures+1))
   fi
   # Independence, extended to the extracted producer: it must not consult the
   # recorder whose omission is the defect.
@@ -13049,8 +15563,8 @@ PLAN-VERSION-UNKNOWN: release/releases/plans/v2/v2.98_RELEASE_PLAN.md declares v
   # re-version this release (RELEASE_REVERSIONS.md untouched)", and was VACUOUS: a
   # mutation dropping the PASS filter left it GREEN, because the token grammar
   # rejects that parenthetical on its trailing word, not on the phase result. The
-  # real hazard is a SKIPPED limb using the strict path-only form — four sites do
-  # (inject_outcome_field twice, append_release_learnings,
+  # real hazard is a SKIPPED limb using the strict path-only form — five sites do
+  # (inject_outcome_field twice, inject_velocity_field, append_release_learnings,
   # inject_close_class_telemetry_field). A SKIPPED limb wrote nothing, so admitting
   # one would demand a commit for a file its own phase declined to touch.
   PHASE_NAMES=("inject_outcome_field" "transition_plan_status")
@@ -14133,6 +16647,399 @@ FOLOG
   /bin/rm -rf "$_ah_tmp" 2>/dev/null || true
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
+  # ── Test NM: --no-merge behaviour declared once, and phase 15.55's own-tag limb (#7465) ──
+  #
+  # WHAT THIS GROUP PROVES. Membership in the --no-merge deferred set used to be
+  # restated on eight surfaces, and phase 15.55 was the post-merge phase none of them
+  # listed: a --no-merge close halted there on a Release the publish phase had itself
+  # deferred, and a dry-run halted on a Release the dry-run had itself declined to
+  # publish. The membership now lives once, in NO_MERGE_PHASE_BEHAVIOUR, and every
+  # surface derives from it. The arms prove the deferral as the runner meets it
+  # (NM-1, with NM-1c showing the harness CAN observe a stranded run), 15.55's own-tag
+  # limb in each mode (NM-2a..NM-4e, NM-CIAC3), each derivation from the table
+  # (NM-5a..NM-5c), the first-statement contract structurally (NM-5d), and the
+  # --no-merge details of phases 12, 13 and 14 on a resumed run (NM-12, NM-13, NM-14).
+  #
+  # Hermetic: a local git fixture and a gh stub, no network and no credentials. Every
+  # fixture Release list carries v3.28, a RECORDED exemption (a published Release on a
+  # lightweight tag), so the list is never empty: an empty list takes the phase's
+  # "could not check" branch, which would let an arm pass without reaching its limb.
+  local _ng_s_root="$REPO_ROOT" _ng_s_gh="$GH" _ng_s_idx="$RELEASE_INDEX" _ng_s_log="$RELEASE_LOG"
+  local _ng_s_mode="$MODE" _ng_s_nomerge="$NO_MERGE" _ng_s_ver="$VERSION" _ng_s_ms="$MILESTONE"
+  local _ng_s_skip="$CHORE_PR_SKIPPED" _ng_s_out="$OUTPUT" _ng_s_cpo="$CHORE_PR_OUTCOME" _ng_s_cpn="$CHORE_PR_NUMBER"
+  local _ng_had_table=0
+  local -a _ng_s_table=()
+  if declare -p NO_MERGE_PHASE_BEHAVIOUR >/dev/null 2>&1; then
+    _ng_had_table=1; _ng_s_table=("${NO_MERGE_PHASE_BEHAVIOUR[@]}")
+  fi
+  local _ng_tmp; _ng_tmp="$(/usr/bin/mktemp -d -t nomerge-selftest.XXXXXX)"
+  local _ng_repo="$_ng_tmp/repo"
+  # Signing disabled on every fixture command, and the tagger identity is the same
+  # noreply fixture identity the AC5 arms above use, which the tagger limb admits.
+  local _ng_nosign=(-c tag.gpgsign=false -c commit.gpgsign=false)
+  local _ng_who=(-c user.email=a@users.noreply.github.com -c user.name=a)
+  # One commit, the sibling tag v9.70 and the closing release's own tag v9.71, both
+  # annotated. Built with no inherited git environment, so a GIT_DIR from a hook or
+  # another worktree cannot point a fixture command at the real repository.
+  (
+    set +e
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+    $GIT -c init.defaultBranch=main init -q "$_ng_repo"
+    /usr/bin/printf 'x\n' > "$_ng_repo/f.txt"
+    $GIT -C "$_ng_repo" add f.txt
+    $GIT -C "$_ng_repo" "${_ng_nosign[@]}" "${_ng_who[@]}" commit -q -m c1
+    $GIT -C "$_ng_repo" "${_ng_nosign[@]}" "${_ng_who[@]}" tag -a v9.70 -m t
+    $GIT -C "$_ng_repo" "${_ng_nosign[@]}" "${_ng_who[@]}" tag -a v9.71 -m t
+  ) >/dev/null 2>&1 || true
+  # FIXTURE PRECONDITIONS — a fixture that did not build FAILs the suite and is never
+  # skipped: every arm below would otherwise pass or fail for the wrong reason.
+  [[ -d "$_ng_repo/.git" && "$(annotated_tags_of "$_ng_repo" 2>/dev/null || true)" == $'v9.70\nv9.71' ]] || { echo "FAIL: NM fixture — the local repository must carry exactly the annotated tags v9.70 and v9.71; every arm below would be vacuous"; failures=$((failures+1)); }
+  [[ -z "$(tagger_hygiene_violations "$_ng_repo" 2>/dev/null || true)" ]] || { echo "FAIL: NM fixture — the fixture tags must pass the tagger-identity limb, or every arm reads that limb's finding instead of its own"; failures=$((failures+1)); }
+  # The gh stub answers `release list` from a file each arm writes, and nothing else.
+  /bin/cat > "$_ng_tmp/gh-stub" <<NGGH
+#!/bin/sh
+if [ "\$1" = "release" ] && [ "\$2" = "list" ]; then /bin/cat "$_ng_tmp/rel"; exit 0; fi
+exit 1
+NGGH
+  /bin/chmod +x "$_ng_tmp/gh-stub"
+  REPO_ROOT="$_ng_repo"; GH="$_ng_tmp/gh-stub"; VERSION="v9.71"; MILESTONE="9999"
+  RELEASE_INDEX="$_ng_tmp/IDX"; RELEASE_LOG="$_ng_tmp/LOG"
+
+  # Drive phase 15.55 once. $1 mode, $2 NO_MERGE, $3 the closing release's ledger
+  # state, $4 the published-Release list (newline-separated), $5 an optional phase
+  # 15.5 record "RESULT|DETAIL". The sibling v9.70 always reads VERIFIED, and INDEX and
+  # LOG carry the same two rows, so the ledger limb is clean in every arm.
+  _ng_drive() {
+    MODE="$1"; NO_MERGE="$2"
+    /usr/bin/printf '| v9.70 | nm-sibling | x | x | sha | v9.70 | VERIFIED | 2026-01-01 |\n| v9.71 | nm-own | x | x | sha | v9.71 | %s | 2026-01-02 |\n' "$3" > "$_ng_tmp/LOG"
+    /bin/cp "$_ng_tmp/LOG" "$_ng_tmp/IDX"
+    /usr/bin/printf '%s\n' "$4" > "$_ng_tmp/rel.u"; /usr/bin/sort -o "$_ng_tmp/rel" "$_ng_tmp/rel.u"
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    [[ -z "${5:-}" ]] || mark_phase "publish_github_release" "${5%%|*}" "${5#*|}"
+    _NG_RC=0; phase_assert_anchor_hygiene >/dev/null 2>&1 || _NG_RC=$?
+    _NG_REC="$(get_phase assert_anchor_hygiene)"
+  }
+  local _ng_dry15='DRY-RUN|would invoke the view-then-create-or-edit state machine'
+  local _ng_pass15='PASS|Surface 1 converged by this run'
+
+  # (NM-1, AC-1) THE RUNNER UNDER --no-merge. The dispatch lines from phase 15.5
+  # through 16.7 are lifted VERBATIM from this file's own text (each needle must
+  # resolve to exactly one line) and executed with the REAL 15.5, 15.55 and 15.6, a
+  # stubbed report, and witnesses on 16, 16.5 and 16.7. The closing release's row reads
+  # VERIFIED — the state phase 6 leaves it in on an --apply pass — and its Release is
+  # unpublished: the state #7465 halted on.
+  local _ng_l0 _ng_l1 _ng_block="" _ng_st _ng_w="$_ng_tmp/w1"
+  _ng_l0="$(/usr/bin/grep -nE '^phase_publish_github_release ' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 || true)"
+  _ng_l1="$(/usr/bin/grep -nE '^phase_audit_epic_rollup ' "${BASH_SOURCE[0]}" | /usr/bin/cut -d: -f1 || true)"
+  if [[ "$_ng_l0" =~ ^[0-9]+$ && "$_ng_l1" =~ ^[0-9]+$ && "$_ng_l0" -lt "$_ng_l1" ]]; then
+    _ng_block="$(/usr/bin/sed -n "${_ng_l0},${_ng_l1}p" "${BASH_SOURCE[0]}")"
+  fi
+  # Execute the lifted block. $1 NO_MERGE, $2 1 to stub phase 15.5 as a converged
+  # publish, $3 the witness directory. Emits the block's own exit status.
+  _ng_exec_block() {
+    local _st=0
+    /bin/mkdir -p "$3"
+    (
+      NO_MERGE="$1"; _NG_W="$3"
+      generate_report() { :; }
+      phase_invoke_orphan_cleanup() { /usr/bin/printf 'orphan\n' >> "$_NG_W/downstream"; return 0; }
+      phase_pattern_scan() { /usr/bin/printf 'pattern\n' >> "$_NG_W/downstream"; return 0; }
+      phase_audit_epic_rollup() { /usr/bin/printf 'epic\n' >> "$_NG_W/downstream"; return 0; }
+      if [[ "$2" -eq 1 ]]; then
+        phase_publish_github_release() { mark_phase "publish_github_release" "PASS" "Surface 1 converged by this run"; return 0; }
+      fi
+      eval "$_ng_block"
+      get_phase assert_anchor_hygiene > "$_NG_W/r1555"
+      get_phase check_release_body_drift > "$_NG_W/r156"
+      exit 0
+    ) >/dev/null 2>&1 || _st=$?
+    /usr/bin/printf '%s' "$_st"
+  }
+  MODE="apply"
+  /usr/bin/printf '| v9.70 | nm-sibling | x | x | sha | v9.70 | VERIFIED | 2026-01-01 |\n| v9.71 | nm-own | x | x | sha | v9.71 | VERIFIED | 2026-01-02 |\n' > "$_ng_tmp/LOG"
+  /bin/cp "$_ng_tmp/LOG" "$_ng_tmp/IDX"
+  /usr/bin/printf 'v3.28\nv9.70\n' > "$_ng_tmp/rel"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _ng_st="$(_ng_exec_block 1 0 "$_ng_w")"
+  _st_arm NM NM-1; [[ -n "$_ng_block" ]] || { echo "FAIL: NM-1 anti-vacuity — the dispatch lines from phase 15.5 through 16.7 did not lift as one range (start '$_ng_l0', end '$_ng_l1'); the arm would execute nothing"; failures=$((failures+1)); }
+  [[ "$_ng_st" == "0" ]] || { echo "FAIL: NM-1 (AC-1) — under --no-merge the run must pass phase 15.55 and reach Phase 16, got exit $_ng_st"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_ng_w/r1555" 2>/dev/null || true)" == "SKIPPED|DEFERRED under --no-merge"* ]] || { echo "FAIL: NM-1 (AC-1) — phase 15.55 must record a deferral, got '$(/bin/cat "$_ng_w/r1555" 2>/dev/null || true)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_ng_w/r156" 2>/dev/null || true)" == "SKIPPED|DEFERRED under --no-merge"* ]] || { echo "FAIL: NM-1 (AC-1) — phase 15.6 must record a deferral, got '$(/bin/cat "$_ng_w/r156" 2>/dev/null || true)'"; failures=$((failures+1)); }
+  [[ "$(/bin/cat "$_ng_w/downstream" 2>/dev/null || true)" == $'orphan\npattern\nepic' ]] || { echo "FAIL: NM-1 (AC-1) — phases 16, 16.5 and 16.7 must each run, got '$(/bin/cat "$_ng_w/downstream" 2>/dev/null || true)'"; failures=$((failures+1)); }
+
+  # (NM-1c) CONTROL: the same lifted text on a merge run, with the publish stubbed as
+  # converged and the own Release still unpublished, halts at 15.55 with exit 3 and
+  # the phases after it do NOT run — so NM-1's reach is the deferral's doing, not a
+  # harness that never strands.
+  _ng_w="$_ng_tmp/w1c"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _ng_st="$(_ng_exec_block 0 1 "$_ng_w")"
+  _st_arm NM NM-1c; [[ "$_ng_st" == "3" ]] || { echo "FAIL: NM-1c control — a merge run over an unpublished own Release must halt at 15.55 with exit 3, got exit $_ng_st"; failures=$((failures+1)); }
+  [[ ! -s "$_ng_w/downstream" ]] || { echo "FAIL: NM-1c control — the phases after a halted 15.55 ran; this harness cannot observe stranding, so NM-1 proves nothing"; failures=$((failures+1)); }
+
+  # (NM-2a / NM-2b, AC-2) --dry-run PREDICTS the own-tag gap in the one state the
+  # publish phase's own no-op produces, in BOTH ledger states: the row DEPLOYED (a first
+  # dry-run) and VERIFIED (a dry-run after an --apply pass flipped it).
+  _ng_drive dry-run 0 DEPLOYED $'v3.28\nv9.70' "$_ng_dry15"
+  _st_arm NM NM-2a; [[ "$_NG_RC" -eq 0 ]] || { echo "FAIL: NM-2a (AC-2) — a dry-run whose own Release gap is this script's own no-op must not halt, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+  [[ "$_NG_REC" == *"OWN-TAG PREDICTED"* && "$_NG_REC" != *"OWN-TAG-MISSING-RELEASE"* ]] || { echo "FAIL: NM-2a (AC-2) — the dry-run must RECORD the own-tag prediction, not pass silently or report it, got '$_NG_REC'"; failures=$((failures+1)); }
+  _ng_drive dry-run 0 VERIFIED $'v3.28\nv9.70' "$_ng_dry15"
+  _st_arm NM NM-2b; [[ "$_NG_RC" -eq 0 ]] || { echo "FAIL: NM-2b (AC-2) — the same dry-run over a VERIFIED row must not halt either, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+  [[ "$_NG_REC" == *"OWN-TAG PREDICTED"* ]] || { echo "FAIL: NM-2b (AC-2) — the dry-run must record the own-tag prediction, got '$_NG_REC'"; failures=$((failures+1)); }
+
+  # (NM-3 / NM-3c, AC-3) --apply still ASSERTS: a sibling gap FAILs (the sensitivity
+  # arm the criterion asks for), and the clean fixture PASSes naming the own tag's state.
+  _ng_drive apply 0 VERIFIED $'v3.28\nv9.71'
+  _st_arm NM NM-3; [[ "$_NG_RC" -ne 0 && "$_NG_REC" == FAIL\|* && "$_NG_REC" == *"MISSING-RELEASE v9.70"* ]] || { echo "FAIL: NM-3 (AC-3) — a sibling tag with no published Release must still FAIL at --apply, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+  _ng_drive apply 0 VERIFIED $'v3.28\nv9.70\nv9.71'
+  _st_arm NM NM-3c; [[ "$_NG_RC" -eq 0 && "$_NG_REC" == PASS\|* && "$_NG_REC" == *"own tag v9.71: IN-STEP"* ]] || { echo "FAIL: NM-3c — a clean fixture must PASS and name the own tag's state, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+
+  # (NM-4a, AC-4 — the plan's row, graded at the parity population) the own tag is
+  # partitioned out of the sibling population by its VERSION, so an unpublished own
+  # Release reads no finding there; the control on the same fixture is a sibling gap.
+  local _ng_ap
+  /usr/bin/printf 'v9.70\nv9.71\n' > "$_ng_tmp/ann4"
+  /usr/bin/printf 'v3.28\nv9.70\n' > "$_ng_tmp/rel4"
+  : > "$_ng_tmp/inflight4"
+  _ng_ap="$(anchor_parity_violations "$_ng_tmp/ann4" "$_ng_tmp/rel4" "$_ng_tmp/inflight4" "v9.71" 2>/dev/null || true)"
+  _st_arm NM NM-4a; [[ "$_ng_ap" != *"v9.71"* ]] || { echo "FAIL: NM-4a (AC-4) — the closing release's own tag must be partitioned out of the sibling population, got: $_ng_ap"; failures=$((failures+1)); }
+  /usr/bin/printf 'v3.28\n' > "$_ng_tmp/rel4"
+  _ng_ap="$(anchor_parity_violations "$_ng_tmp/ann4" "$_ng_tmp/rel4" "$_ng_tmp/inflight4" "v9.71" 2>/dev/null || true)"
+  [[ "$(grep_count . <<<"$_ng_ap")" == "1" && "$_ng_ap" == "MISSING-RELEASE v9.70 "* ]] || { echo "FAIL: NM-4a control — the same fixture with the sibling's Release removed must report exactly that one gap, got: $_ng_ap"; failures=$((failures+1)); }
+
+  # (NM-4b) NO MASKING at --apply. The own row reads DEPLOYED, so the in-flight set
+  # carries v9.71 — and the own limb reads NEITHER exemption set, so a genuine own gap
+  # after a converged publish still halts.
+  _ng_drive apply 0 DEPLOYED $'v3.28\nv9.70' "$_ng_pass15"
+  _st_arm NM NM-4b; [[ "$_NG_RC" -ne 0 && "$_NG_REC" == *"OWN-TAG-MISSING-RELEASE v9.71"* ]] || { echo "FAIL: NM-4b — an own tag with no Release after 15.5 must FAIL at --apply even while the in-flight set names it, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+  # ...and the own limb's second token: a published Release for the closing version with
+  # no annotated tag behind it is reported under the own label, and the sibling
+  # population no longer carries that version at all.
+  local _ng_bare
+  VERSION="v9.72"
+  _ng_drive apply 0 VERIFIED $'v3.28\nv9.70\nv9.71\nv9.72' "$_ng_pass15"
+  _ng_bare="${_NG_REC//OWN-TAG-MISSING-ANNOTATED-TAG v9.72/}"
+  [[ "$_NG_RC" -ne 0 && "$_NG_REC" == *"OWN-TAG-MISSING-ANNOTATED-TAG v9.72"* && "$_ng_bare" != *"MISSING-ANNOTATED-TAG v9.72"* ]] || { echo "FAIL: NM-4b — a closing version with a published Release and no annotated tag must FAIL under the own label only, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+  VERSION="v9.71"
+
+  # (NM-4c) THE PREDICATE, one positive against one negative per conjunct, plus the own
+  # pair's four states from the classifier the limb reads.
+  _st_arm NM NM-4c; own_anchor_gap_is_this_close "MISSING-RELEASE" "dry-run" "DRY-RUN|x" 2>/dev/null || { echo "FAIL: NM-4c — the bounded state (own Release missing, dry-run, 15.5 recorded DRY-RUN) must predict"; failures=$((failures+1)); }
+  if own_anchor_gap_is_this_close "IN-STEP" "dry-run" "DRY-RUN|x" 2>/dev/null; then echo "FAIL: NM-4c — conjunct (1): an own pair in step must never predict"; failures=$((failures+1)); fi
+  if own_anchor_gap_is_this_close "MISSING-RELEASE" "apply" "DRY-RUN|x" 2>/dev/null; then echo "FAIL: NM-4c — conjunct (2): --apply must never predict"; failures=$((failures+1)); fi
+  if own_anchor_gap_is_this_close "MISSING-RELEASE" "dry-run" "PASS|x" 2>/dev/null; then echo "FAIL: NM-4c — conjunct (3): a 15.5 that did not no-op must never be predicted over"; failures=$((failures+1)); fi
+  if own_anchor_gap_is_this_close "MISSING-RELEASE" "dry-run" "" 2>/dev/null; then echo "FAIL: NM-4c — conjunct (3): no 15.5 record at all must never predict"; failures=$((failures+1)); fi
+  /usr/bin/printf 'v9.71\n' > "$_ng_tmp/o1"; : > "$_ng_tmp/o0"
+  [[ "$(own_anchor_state "$_ng_tmp/o1" "$_ng_tmp/o1" v9.71 2>/dev/null || true)" == "IN-STEP" \
+     && "$(own_anchor_state "$_ng_tmp/o1" "$_ng_tmp/o0" v9.71 2>/dev/null || true)" == "MISSING-RELEASE" \
+     && "$(own_anchor_state "$_ng_tmp/o0" "$_ng_tmp/o1" v9.71 2>/dev/null || true)" == "MISSING-ANNOTATED-TAG" \
+     && "$(own_anchor_state "$_ng_tmp/o0" "$_ng_tmp/o0" v9.71 2>/dev/null || true)" == "ABSENT" ]] || { echo "FAIL: NM-4c — own_anchor_state must classify the own pair's four states IN-STEP / MISSING-RELEASE / MISSING-ANNOTATED-TAG / ABSENT"; failures=$((failures+1)); }
+
+  # (NM-4d) conjunct (3) in the phase: a dry-run with NO 15.5 record reports the own gap
+  # rather than predicting it — and the DEPLOYED row does not mask it either.
+  _ng_drive dry-run 0 DEPLOYED $'v3.28\nv9.70'
+  _st_arm NM NM-4d; [[ "$_NG_RC" -ne 0 && "$_NG_REC" == *"OWN-TAG-MISSING-RELEASE v9.71"* ]] || { echo "FAIL: NM-4d — without a 15.5 DRY-RUN record in this run the own gap is not this script's no-op and must be reported, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+
+  # (NM-4e) CO-TENANCY: a predicted own gap does not mask a genuine sibling gap in the
+  # same dry-run, and the finding names the sibling only.
+  _ng_drive dry-run 0 VERIFIED 'v3.28' "$_ng_dry15"
+  _st_arm NM NM-4e; [[ "$_NG_RC" -ne 0 && "$_NG_REC" == *"MISSING-RELEASE v9.70"* ]] || { echo "FAIL: NM-4e — a sibling gap must still FAIL beside a predicted own gap, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+  [[ "$_NG_REC" != *"v9.71"* ]] || { echo "FAIL: NM-4e — the finding must name the sibling only; the own tag is predicted, not reported, got '$_NG_REC'"; failures=$((failures+1)); }
+
+  # (NM-CIAC3) THE WORKFLOW'S TWO HALVES. Pass 1, --no-merge --apply with the own
+  # Release unpublished, defers 15.55. Pass 2, the resumed --apply after the merge and
+  # the publish, asserts it for real and passes; NM-3 is its sensitivity control.
+  _ng_drive apply 1 VERIFIED $'v3.28\nv9.70'
+  _st_arm NM NM-CIAC3; [[ "$_NG_RC" -eq 0 && "$_NG_REC" == "SKIPPED|DEFERRED under --no-merge"* ]] || { echo "FAIL: NM-CIAC3 pass 1 — --no-merge must defer 15.55, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+  _ng_drive apply 0 VERIFIED $'v3.28\nv9.70\nv9.71' "$_ng_pass15"
+  [[ "$_NG_RC" -eq 0 && "$_NG_REC" == PASS\|* && "$_NG_REC" == *"own tag v9.71: IN-STEP"* ]] || { echo "FAIL: NM-CIAC3 pass 2 — the resumed --apply must assert 15.55 for real and pass, got rc $_NG_RC: $_NG_REC"; failures=$((failures+1)); }
+
+  # (NM-5a, AC-5) COMPLETENESS, derived from this file's own dispatch text with the
+  # dispatch<->record arm's parse. A post-merge phase with no row fails; the controls
+  # prove the reader names a synthetic one, ignores one before the pivot, and refuses a
+  # text with no pivot rather than reading it as "all declared".
+  local _ng_src _ng_u _ng_names _ng_post="" _ng_seen=0 _ng_n _ng_row _ng_rn _ng_rb _ng_rc2
+  _ng_src="$(/bin/cat "${BASH_SOURCE[0]}")"
+  _ng_names="$(/usr/bin/grep -oE '^phase_[a-z0-9_]+ \|\|' <<<"$_ng_src" | /usr/bin/sed 's/^phase_//;s/ ||$//' || true)"
+  while IFS= read -r _ng_n; do
+    [[ -z "$_ng_n" ]] && continue
+    if [[ "$_ng_n" == "await_merge_chore_pr" ]]; then _ng_seen=1; fi
+    if [[ "$_ng_seen" -eq 1 ]]; then _ng_post="${_ng_post}${_ng_n}"$'\n'; fi
+  done <<<"$_ng_names"
+  _ng_u="$(_nm_undeclared "$_ng_src" 2>/dev/null || true)"
+  _st_arm NM NM-5a; [[ "$(grep_count . <<<"$_ng_post")" -ge 12 ]] || { echo "FAIL: NM-5a anti-vacuity — the dispatch parse found $(grep_count . <<<"$_ng_post") post-merge phases, below the floor of 12"; failures=$((failures+1)); }
+  [[ -z "$_ng_u" ]] || { echo "FAIL: NM-5a (AC-5) — post-merge phase(s) dispatched with NO row in NO_MERGE_PHASE_BEHAVIOUR: $_ng_u"; failures=$((failures+1)); }
+  _ng_u="$(_nm_undeclared "${_ng_src}"$'\nphase_zz_synthetic_post_merge || { generate_report; exit 3; }' 2>/dev/null || true)"
+  [[ "$_ng_u" == "zz_synthetic_post_merge" ]] || { echo "FAIL: NM-5a sensitivity — a synthetic post-merge phase with no row must be named, got '$_ng_u'"; failures=$((failures+1)); }
+  _ng_u="$(_nm_undeclared "$(/usr/bin/awk '/^phase_await_merge_chore_pr /{print "phase_zz_synthetic_pre_merge || { generate_report; exit 3; }"} {print}' <<<"$_ng_src")" 2>/dev/null || true)"
+  [[ -z "$_ng_u" ]] || { echo "FAIL: NM-5a specificity — a phase dispatched BEFORE the merge owes no row, got '$_ng_u'"; failures=$((failures+1)); }
+  _ng_u="$(_nm_undeclared "$(/usr/bin/grep -v '^phase_await_merge_chore_pr ' <<<"$_ng_src")" 2>/dev/null || true)"
+  [[ "$_ng_u" == "NO-PIVOT" ]] || { echo "FAIL: NM-5a — a dispatch text with no merge phase must read NO-PIVOT, never an empty (all-declared) answer, got '$_ng_u'"; failures=$((failures+1)); }
+  if declare -p NO_MERGE_PHASE_BEHAVIOUR >/dev/null 2>&1; then
+    for _ng_row in "${NO_MERGE_PHASE_BEHAVIOUR[@]}"; do
+      read -r _ng_rn _ng_rb _ng_rc2 <<<"$_ng_row"
+      /usr/bin/grep -qx -- "$_ng_rn" <<<"$_ng_post" || { echo "FAIL: NM-5a — row '$_ng_rn' names no phase dispatched at or after the merge"; failures=$((failures+1)); }
+      case "$_ng_rb" in run|skip|record|defer) ;; *) echo "FAIL: NM-5a — row '$_ng_rn' declares '$_ng_rb', outside the closed set run / skip / record / defer"; failures=$((failures+1)) ;; esac
+    done
+  else
+    echo "FAIL: NM-5a — NO_MERGE_PHASE_BEHAVIOUR is not declared; post-merge membership has no declaration to read"; failures=$((failures+1))
+  fi
+
+  # (NM-5b) BOTH REPORTS DERIVE THEIR DEFERRED LIST FROM THE TABLE: one markdown bullet
+  # per `defer` row and none for any other row, the pre-existing bullets byte-identical,
+  # and the JSON array equal to the table's `defer` rows. A row appended to the table
+  # appears in both renders with no renderer edit; at NO_MERGE=0 neither carries a list.
+  local _ng_md _ng_bul _ng_want _ng_js _ng_jd
+  NO_MERGE=1; MILESTONE="9999"; MODE="apply"; OUTPUT="markdown"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _ng_want="$(_nm_members defer 2>/dev/null || true)"
+  _ng_md="$(generate_markdown_report 2>/dev/null || true)"
+  _ng_bul="$(/usr/bin/awk '/^## Deferred Under --no-merge/{f=1;next} f&&/^\*\*Follow-up/{f=0} f&&/^- /{print}' <<<"$_ng_md")"
+  _st_arm NM NM-5b; [[ "$(grep_count . <<<"$_ng_want")" -ge 5 && "$(grep_count . <<<"$_ng_bul")" == "$(grep_count . <<<"$_ng_want")" ]] || { echo "FAIL: NM-5b — the Deferred section must carry exactly one bullet per defer row (rows: $(grep_count . <<<"$_ng_want"), bullets: $(grep_count . <<<"$_ng_bul"))"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- "- \`assert_anchor_hygiene\` — release-anchor parity not asserted — its Surface-1 input is not yet published" <<<"$_ng_bul" || { echo "FAIL: NM-5b — the Deferred section must list phase 15.55, got: $_ng_bul"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- "- \`post_close_milestone\` — Milestone #9999 left OPEN" <<<"$_ng_bul" || { echo "FAIL: NM-5b — the milestone bullet must stay byte-identical, got: $_ng_bul"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- "- \`manual_close_release_issues\` — D-1 anomaly issue-close deferred" <<<"$_ng_bul" || { echo "FAIL: NM-5b — the issue-close bullet must stay byte-identical"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- "- \`publish_github_release\` — Surface 1 (GitHub Release) not emitted" <<<"$_ng_bul" || { echo "FAIL: NM-5b — the publish bullet must stay byte-identical"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- "- \`check_release_body_drift\` — no published Release to drift-check" <<<"$_ng_bul" || { echo "FAIL: NM-5b — the drift bullet must stay byte-identical"; failures=$((failures+1)); }
+  [[ "$_ng_bul" != *"await_merge_chore_pr"* && "$_ng_bul" != *"run_verification"* && "$_ng_bul" != *"action_item_gate"* ]] || { echo "FAIL: NM-5b — a non-defer row was rendered as deferred: $_ng_bul"; failures=$((failures+1)); }
+  OUTPUT="json"
+  _ng_js="$(generate_json_report 2>/dev/null || true)"
+  _ng_jd="$(/usr/bin/python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin).get("deferred_under_no_merge", [])))' <<<"$_ng_js" 2>/dev/null || true)"
+  [[ -n "$_ng_want" && "$_ng_jd" == "$(/usr/bin/tr '\n' ' ' <<<"$_ng_want" | /usr/bin/sed 's/ *$//')" ]] || { echo "FAIL: NM-5b — the JSON deferred_under_no_merge array must equal the table's defer rows, got '$_ng_jd'"; failures=$((failures+1)); }
+  # Sensitivity: a row appended to the table is rendered by both, with no renderer edit.
+  NO_MERGE_PHASE_BEHAVIOUR+=("zz_probe defer probe text")
+  OUTPUT="markdown"; _ng_md="$(generate_markdown_report 2>/dev/null || true)"
+  OUTPUT="json"; _ng_js="$(generate_json_report 2>/dev/null || true)"
+  _ng_jd="$(/usr/bin/python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin).get("deferred_under_no_merge", [])))' <<<"$_ng_js" 2>/dev/null || true)"
+  /usr/bin/grep -qxF -- "- \`zz_probe\` — probe text" <<<"$_ng_md" || { echo "FAIL: NM-5b sensitivity — a row appended to the table must appear as a markdown bullet with no renderer edit"; failures=$((failures+1)); }
+  [[ " $_ng_jd " == *" zz_probe "* ]] || { echo "FAIL: NM-5b sensitivity — a row appended to the table must appear in the JSON array, got '$_ng_jd'"; failures=$((failures+1)); }
+  if [[ "$_ng_had_table" -eq 1 ]]; then NO_MERGE_PHASE_BEHAVIOUR=("${_ng_s_table[@]}"); else unset NO_MERGE_PHASE_BEHAVIOUR; fi
+  # Control: NO_MERGE=0 renders no deferred list in either report.
+  NO_MERGE=0; OUTPUT="markdown"; _ng_md="$(generate_markdown_report 2>/dev/null || true)"
+  OUTPUT="json"; _ng_js="$(generate_json_report 2>/dev/null || true)"
+  _ng_jd="$(/usr/bin/python3 -c 'import json,sys; print(len(json.load(sys.stdin).get("deferred_under_no_merge", ["x"])))' <<<"$_ng_js" 2>/dev/null || true)"
+  [[ "$_ng_md" != *"## Deferred Under --no-merge"* && "$_ng_jd" == "0" ]] || { echo "FAIL: NM-5b control — at NO_MERGE=0 neither report may carry a deferred list (JSON length '$_ng_jd')"; failures=$((failures+1)); }
+
+  # (NM-5c) HELP PARITY. Every `defer` row's phase name shares a --help line with
+  # `DEFERS under --no-merge` — the name-line convention the table's header comment
+  # states, because --help renders the header line by line. The control shows the
+  # predicate can answer no.
+  local _ng_help
+  _ng_help="$(usage 2>/dev/null || true)"
+  _ng_want="$(_nm_members defer 2>/dev/null || true)"
+  _ng_hit_of() {   # <name> -> 0 when one --help line carries both the name and the token
+    local _l
+    while IFS= read -r _l; do
+      if [[ "$_l" == *"$1"* && "$_l" == *"DEFERS under --no-merge"* ]]; then return 0; fi
+    done <<<"$_ng_help"
+    return 1
+  }
+  _st_arm NM NM-5c; [[ "$(grep_count . <<<"$_ng_want")" -ge 5 ]] || { echo "FAIL: NM-5c anti-vacuity — the table declares fewer than 5 defer rows; help parity would check almost nothing"; failures=$((failures+1)); }
+  while IFS= read -r _ng_n; do
+    [[ -z "$_ng_n" ]] && continue
+    _ng_hit_of "$_ng_n" || { echo "FAIL: NM-5c — no --help line carries both '$_ng_n' and 'DEFERS under --no-merge'; put the token on the row's phase-name line"; failures=$((failures+1)); }
+  done <<<"$_ng_want"
+  ! _ng_hit_of "zz_not_a_phase" || { echo "FAIL: NM-5c control — the help-parity predicate matched a name --help does not carry; it cannot fail"; failures=$((failures+1)); }
+
+  # (NM-5d) THE FIRST STATEMENT, checked structurally (Plan amendment 1 item 3). A
+  # `defer` phase that defers through its own hand-written NO_MERGE guard records the
+  # same observable as the declared deferral and passes every behavioural arm above,
+  # while the table stops being its source. So each `defer` row's phase must OPEN with
+  # `_nm_defer "<name>" "<detail>" && return 0`, read from `declare -f` (comments
+  # stripped, so prose can neither satisfy nor defeat it). Three controls on every run
+  # show the predicate can answer no: a constructed body opening with a hand guard, a
+  # MUTATED COPY of a real defer phase whose first statement is replaced by the pre-fix
+  # hand guard, and a deferral that names another phase.
+  _ng_first_ok() {   # <declare -f text> <phase-record-name> -> 0 when the first statement is the declared deferral
+    local _fs
+    _fs="$(/usr/bin/awk 'f && NF {print; exit} /^\{[[:space:]]*$/ {f=1}' <<<"$1")"
+    _fs="${_fs#"${_fs%%[![:space:]]*}"}"
+    case "$_fs" in
+      "_nm_defer \"$2\" \""*"\" && return 0"|"_nm_defer \"$2\" \""*"\" && return 0;") return 0 ;;
+    esac
+    return 1
+  }
+  local _ng_body _ng_mut
+  _ng_want="$(_nm_members defer 2>/dev/null || true)"
+  _st_arm NM NM-5d; [[ "$(grep_count . <<<"$_ng_want")" -ge 5 ]] || { echo "FAIL: NM-5d anti-vacuity — the table declares fewer than 5 defer rows; the structural check would read almost nothing"; failures=$((failures+1)); }
+  while IFS= read -r _ng_n; do
+    [[ -z "$_ng_n" ]] && continue
+    _ng_body="$(declare -f "phase_${_ng_n}" 2>/dev/null || true)"
+    _ng_first_ok "$_ng_body" "$_ng_n" || { echo "FAIL: NM-5d — phase_${_ng_n} is declared defer but does not OPEN with _nm_defer \"${_ng_n}\" … && return 0"; failures=$((failures+1)); }
+  done <<<"$_ng_want"
+  # Control 1 — a constructed body whose first statement is a hand guard. The record
+  # subject is written as a positional parameter so this text adds no phantom subject
+  # to the mark_phase census the #4773 arms parse out of this file.
+  _ng_body=$'phase_zz () \n{ \n    if [[ "$NO_MERGE" -eq 1 ]]; then\n        mark_phase "$1" "SKIPPED" "DEFERRED under --no-merge — x";\n        return 0;\n    fi;\n    _nm_defer "zz" "x" && return 0\n}'
+  ! _ng_first_ok "$_ng_body" "zz" || { echo "FAIL: NM-5d control — the check accepted a phase that opens with a hand-written NO_MERGE guard"; failures=$((failures+1)); }
+  # Control 2 — the MUTATED COPY: phase 13's real body with its first statement
+  # replaced by the pre-fix guard. It must differ from the original and be rejected.
+  _ng_body="$(declare -f phase_post_close_milestone 2>/dev/null || true)"
+  _ng_mut="$(/usr/bin/awk 'f==1 && NF {print "    if [[ \"$NO_MERGE\" -eq 1 ]]; then return 0; fi;"; f=2; next} /^\{[[:space:]]*$/ && f==0 {f=1} {print}' <<<"$_ng_body")"
+  [[ -n "$_ng_body" && "$_ng_mut" != "$_ng_body" ]] || { echo "FAIL: NM-5d control — the mutation did not change the copy of phase 13; the mutated-copy control would measure nothing"; failures=$((failures+1)); }
+  ! _ng_first_ok "$_ng_mut" "post_close_milestone" || { echo "FAIL: NM-5d control — the check accepted a mutated copy of phase 13 whose first statement is a hand-written guard"; failures=$((failures+1)); }
+  # Control 3 — a deferral whose first argument names a different phase.
+  _ng_body=$'phase_zz () \n{ \n    _nm_defer "other_phase" "x" && return 0;\n}'
+  ! _ng_first_ok "$_ng_body" "zz" || { echo "FAIL: NM-5d control — the check accepted a deferral that names another phase"; failures=$((failures+1)); }
+
+  # (NM-12) PHASE 12'S --no-merge DETAIL IS STATE-TRUE. On a resumed --no-merge run
+  # whose chore PR phase 11 already found MERGED, the skip detail says so, read from the
+  # outcome phase 11 recorded — no host read — instead of "left open for operator
+  # merge". Control: a PR this run created is still reported left open, byte for byte.
+  local _ng_r12
+  NO_MERGE=1; MODE="apply"; CHORE_PR_SKIPPED=0; CHORE_PR_NUMBER="8810"; CHORE_PR_OUTCOME="resumed-already-merged"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_await_merge_chore_pr >/dev/null 2>&1 || true
+  _ng_r12="$(get_phase await_merge_chore_pr)"
+  _st_arm NM NM-12; [[ "$_ng_r12" == SKIPPED\|* && "$_ng_r12" == *"already MERGED"* && "$_ng_r12" != *"left open"* ]] || { echo "FAIL: NM-12 — a resumed --no-merge run over a chore PR phase 11 found MERGED must say so, not 'left open', got '$_ng_r12'"; failures=$((failures+1)); }
+  [[ "$_ng_r12" == *"--no-merge"* && "$_ng_r12" != *"DEFERRED under --no-merge"* ]] || { echo "FAIL: NM-12 — the skip row still cites --no-merge and carries no deferral sentinel, got '$_ng_r12'"; failures=$((failures+1)); }
+  CHORE_PR_OUTCOME="created"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_await_merge_chore_pr >/dev/null 2>&1 || true
+  _ng_r12="$(get_phase await_merge_chore_pr)"
+  [[ "$_ng_r12" == "SKIPPED|--no-merge: chore PR #8810 left open for operator merge (no poll/merge)" ]] || { echo "FAIL: NM-12 control — a chore PR this run created is left open under --no-merge and must be reported so, byte for byte, got '$_ng_r12'"; failures=$((failures+1)); }
+
+  # (NM-13, NM-14) PHASES 13 AND 14'S --no-merge DEFERRAL DETAILS ARE STATE-TRUE
+  # (#7465 Plan amendment 6). On a resumed --no-merge run whose chore PR phase 11
+  # recorded as ALREADY MERGED, each deferral detail says so, read from the recorded
+  # outcome with no host read, instead of "left open" and a merge still to come. Each
+  # phase still DEFERS through its table row, whose first statement NM-5d reads.
+  # Control, in NM-12's shape: on an outcome this run created, each detail is the
+  # left-open text, byte for byte.
+  local _ng_r13 _ng_r14
+  NO_MERGE=1; MODE="apply"; CHORE_PR_NUMBER="8810"; CHORE_PR_OUTCOME="resumed-already-merged"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_post_close_milestone >/dev/null 2>&1 || true
+  _ng_r13="$(get_phase post_close_milestone)"
+  _st_arm NM NM-13; [[ "$_ng_r13" == "SKIPPED|DEFERRED under --no-merge — chore PR #8810 is already merged (phase 11 resolved it on this resumed run); milestone #9999 close waits for the follow-up --apply run without --no-merge" ]] || { echo "FAIL: NM-13 — a resumed --no-merge run over a chore PR phase 11 recorded as MERGED must defer phase 13 saying the PR is merged, got '$_ng_r13'"; failures=$((failures+1)); }
+  [[ "$_ng_r13" != *"left open"* && "$_ng_r13" != *"after merge"* ]] || { echo "FAIL: NM-13 — the resumed deferral must not say the chore PR was left open or that a merge is still to come, got '$_ng_r13'"; failures=$((failures+1)); }
+  CHORE_PR_OUTCOME="created"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_post_close_milestone >/dev/null 2>&1 || true
+  _ng_r13="$(get_phase post_close_milestone)"
+  [[ "$_ng_r13" == "SKIPPED|DEFERRED under --no-merge — chore PR #8810 left open; milestone #9999 close waits for it to land on main (re-run --apply after merge)" ]] || { echo "FAIL: NM-13 control — a chore PR this run created is left open under --no-merge, and phase 13's deferral must say so, byte for byte, got '$_ng_r13'"; failures=$((failures+1)); }
+  CHORE_PR_OUTCOME="resumed-already-merged"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_manual_close_release_issues >/dev/null 2>&1 || true
+  _ng_r14="$(get_phase manual_close_release_issues)"
+  _st_arm NM NM-14; [[ "$_ng_r14" == "SKIPPED|DEFERRED under --no-merge — chore PR #8810 is already merged (phase 11 resolved it on this resumed run); D-1 issue close waits for milestone-close on the follow-up --apply run without --no-merge" ]] || { echo "FAIL: NM-14 — a resumed --no-merge run over a chore PR phase 11 recorded as MERGED must defer phase 14 saying the PR is merged, got '$_ng_r14'"; failures=$((failures+1)); }
+  [[ "$_ng_r14" != *"left open"* && "$_ng_r14" != *"after merge"* ]] || { echo "FAIL: NM-14 — the resumed deferral must not say the chore PR was left open or that a merge is still to come, got '$_ng_r14'"; failures=$((failures+1)); }
+  CHORE_PR_OUTCOME="created"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  phase_manual_close_release_issues >/dev/null 2>&1 || true
+  _ng_r14="$(get_phase manual_close_release_issues)"
+  [[ "$_ng_r14" == "SKIPPED|DEFERRED under --no-merge — chore PR left open; D-1 issue close waits for milestone-close after merge (re-run --apply)" ]] || { echo "FAIL: NM-14 control — a chore PR this run created is left open under --no-merge, and phase 14's deferral must say so, byte for byte, got '$_ng_r14'"; failures=$((failures+1)); }
+  _st_witness NM 19
+
+  unset -f _ng_drive _ng_exec_block _ng_hit_of _ng_first_ok 2>/dev/null || true
+  unset _NG_RC _NG_REC 2>/dev/null || true
+  /bin/rm -rf "$_ng_tmp" 2>/dev/null || true
+  if [[ "$_ng_had_table" -eq 1 ]]; then NO_MERGE_PHASE_BEHAVIOUR=("${_ng_s_table[@]}"); else unset NO_MERGE_PHASE_BEHAVIOUR 2>/dev/null || true; fi
+  REPO_ROOT="$_ng_s_root"; GH="$_ng_s_gh"; RELEASE_INDEX="$_ng_s_idx"; RELEASE_LOG="$_ng_s_log"
+  MODE="$_ng_s_mode"; NO_MERGE="$_ng_s_nomerge"; VERSION="$_ng_s_ver"; MILESTONE="$_ng_s_ms"
+  CHORE_PR_SKIPPED="$_ng_s_skip"; OUTPUT="$_ng_s_out"; CHORE_PR_OUTCOME="$_ng_s_cpo"; CHORE_PR_NUMBER="$_ng_s_cpn"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
   # ── #3121: pattern_scan default + report capture ───────────────────────────
   # The phase was previously opt-in behind a flag NO executable caller passed, so
   # it always resolved N/A; and it piped its report to /dev/null and marked PASS on
@@ -14525,13 +17432,16 @@ PY
   # only (see the selftest-runner directive at the top of this file), where /usr/bin/grep
   # is BSD grep 2.6.0 and -P exits 2 — which, under grep_count's own `|| true` plus its
   # default-zero, renders exactly 0 and ships a broken probe INSIDE the test.
-  local _cp_saved_out="$OUTPUT" _cp_saved_pr="$CHORE_PR_NUMBER" _cp_saved_nm="$NO_MERGE"
+  local _cp_saved_out="$OUTPUT" _cp_saved_pr="$CHORE_PR_NUMBER" _cp_saved_nm="$NO_MERGE" _cp_saved_oc="$CHORE_PR_OUTCOME"
   local _cp_rep _cp_n _cp_line _cp_occ _cp_pre _cp_prod _cp_paired _cp_ctl _cp_a _cp_b _cp_as _cp_bs
   local _cp_tok _cp_rest _cp_dbl _cp_ctl_occ
   # The pre-fix construct as SOURCE text, single-quoted so it never expands here, and the
   # ONE fixture (b3), (b4) and (b5) all read — so the source form and the expanded form
   # cannot drift apart.
-  local _cp_src='**Chore PR:** ${CHORE_PR_NUMBER:+#${CHORE_PR_NUMBER}}${CHORE_PR_NUMBER:-N/A — dry-run or not-yet-created}'
+  # (#5769) The fallback limb's text is elided to N/A: no arm expands it (b3/b4 set the
+  # number; b5 reads the SOURCE form through a regex that stops before the fallback),
+  # and the retired collapsed string must count 0 across this file (CIAC-2).
+  local _cp_src='**Chore PR:** ${CHORE_PR_NUMBER:+#${CHORE_PR_NUMBER}}${CHORE_PR_NUMBER:-N/A}'
   local _cp_rx='\$\{CHORE_PR_NUMBER:\+.*\}\$\{CHORE_PR_NUMBER:-'
   OUTPUT="markdown"; NO_MERGE=0
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
@@ -14539,22 +17449,22 @@ PY
 
   # (b1) POPULATED path (AC-1) — THE PREVIOUSLY-UNCOVERED PATH. Exactly one
   #      **Chore PR:** line, and it carries the number exactly once.
-  CHORE_PR_NUMBER="3697"
+  CHORE_PR_OUTCOME="created"; CHORE_PR_NUMBER="3697"
   _cp_rep="$(generate_markdown_report 2>/dev/null)"
   _cp_n="$(grep_count -E '^\*\*Chore PR:\*\* ' <<< "$_cp_rep")"
   [[ "$_cp_n" -eq 1 ]] || { echo "FAIL: #4322 — the report must carry exactly ONE **Chore PR:** line, got ${_cp_n}"; failures=$((failures+1)); }
-  /usr/bin/grep -qxF '**Chore PR:** #3697' <<< "$_cp_rep" \
-    || { echo "FAIL: #4322 — populated path must render '**Chore PR:** #3697' exactly"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF '**Chore PR:** #3697 — created by this run' <<< "$_cp_rep" \
+    || { echo "FAIL: #4322 — populated path must render '**Chore PR:** #3697 — created by this run' exactly"; failures=$((failures+1)); }
   if /usr/bin/grep -qF '36973697' <<< "$_cp_rep"; then
     echo "FAIL: #4322 — the doubled rendering is back; the set-arm and unset-arm are both contributing"; failures=$((failures+1))
   fi
 
   # (b2) UNSET path (AC-2) — the previously-covered path. The fallback verbatim,
   #      with no '#' prefix and no bare number.
-  CHORE_PR_NUMBER=""
+  CHORE_PR_OUTCOME=""; CHORE_PR_NUMBER=""
   _cp_rep="$(generate_markdown_report 2>/dev/null)"
-  /usr/bin/grep -qxF '**Chore PR:** N/A — dry-run or not-yet-created' <<< "$_cp_rep" \
-    || { echo "FAIL: #4322 — unset path must render the fallback verbatim, with no '#' prefix"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF '**Chore PR:** not created — create_chore_pr did not run in this run' <<< "$_cp_rep" \
+    || { echo "FAIL: #4322 — unset path (phase 11 never ran, #5769) must render the not-yet-created state verbatim, with no '#' prefix"; failures=$((failures+1)); }
 
   # (b3) SPECIFICITY (AC-3) — a fabricated value matches exactly ONE arm, never both
   #      and never neither. A numeric fixture cannot show this: '#3697' contains '3697',
@@ -14569,9 +17479,9 @@ PY
   #      -o, and the helper's own contract comment describes a LINE count. The
   #      length-delta form below needs no external tool and no pipe, so neither the
   #      BSD/GNU divergence nor the SIGPIPE-idiom gate can reach it.
-  CHORE_PR_NUMBER="zz4322"
+  CHORE_PR_OUTCOME="created"; CHORE_PR_NUMBER="zz4322"
   _cp_rep="$(generate_markdown_report 2>/dev/null)"
-  /usr/bin/grep -qxF '**Chore PR:** #zz4322' <<< "$_cp_rep" \
+  /usr/bin/grep -qxF '**Chore PR:** #zz4322 — created by this run' <<< "$_cp_rep" \
     || { echo "FAIL: #4322 — specificity: a fabricated value must render under the prefixed arm, exactly"; failures=$((failures+1)); }
   _cp_tok='zz4322'
   _cp_line="$(/usr/bin/grep -E '^\*\*Chore PR:\*\* ' <<< "$_cp_rep" || true)"
@@ -14595,7 +17505,7 @@ PY
   _cp_pre="$(eval "printf %s \"$_cp_src\"")"
   /usr/bin/grep -qF '36973697' <<< "$_cp_pre" \
     || { echo "FAIL: #4322 sensitivity — the pre-fix fixture no longer reproduces the doubled rendering; this arm can no longer tell a fixed line from a broken one"; failures=$((failures+1)); }
-  if /usr/bin/grep -qxF '**Chore PR:** #3697' <<< "$_cp_pre"; then
+  if /usr/bin/grep -qxF '**Chore PR:** #3697 — created by this run' <<< "$_cp_pre"; then
     echo "FAIL: #4322 sensitivity — the (b1) matcher ACCEPTED the pre-fix rendering; (b1)'s green result is uninformative"; failures=$((failures+1))
   fi
 
@@ -14628,13 +17538,48 @@ PY
   _cp_rep="$(generate_markdown_report 2>/dev/null)"
   /usr/bin/grep -qF 'The Stage 13 chore PR was left open' <<< "$_cp_rep" \
     || { echo "FAIL: #4322 — the out-of-scope --no-merge message must carry NO number when unset"; failures=$((failures+1)); }
+  # (b6, second leg — #7465 Plan amendment 5) A RESUMED --no-merge run whose chore PR
+  #      phase 11 recorded as ALREADY MERGED. The two legs above are the ordinary
+  #      --no-merge path, where the chore PR really is open, and they stay as they were.
+  #      On the resumed path the intro reads the outcome phase 11 recorded, with no host
+  #      read, the way phase 12's detail does (NM-12): it states the merge and never says
+  #      the PR was left open. Control, in the NM-12 shape: back on an outcome this run
+  #      created, the ordinary intro renders byte for byte.
+  NO_MERGE=1; CHORE_PR_OUTCOME="resumed-already-merged"; CHORE_PR_NUMBER="3697"
+  _cp_rep="$(generate_markdown_report 2>/dev/null)"
+  if /usr/bin/grep -qF 'was left open' <<< "$_cp_rep"; then
+    echo "FAIL: #4322 b6 resumed — a resumed --no-merge run over a chore PR phase 11 recorded as MERGED must not say the PR was left open"; failures=$((failures+1))
+  fi
+  /usr/bin/grep -qF 'The Stage 13 chore PR #3697 is already merged — phase 11 resolved it on this resumed run.' <<< "$_cp_rep" \
+    || { echo "FAIL: #4322 b6 resumed — the intro must state the merged outcome phase 11 recorded, with the chore PR's number"; failures=$((failures+1)); }
+  CHORE_PR_OUTCOME="created"
+  _cp_rep="$(generate_markdown_report 2>/dev/null)"
+  /usr/bin/grep -qxF 'The Stage 13 chore PR #3697 was left open (`--no-merge`). Post-merge-dependent phases were deferred to preserve the Stage 13 sequencing invariant — the chore PR MUST land on main before milestone close / Release publish (release/references/pipeline/stage-13-close.md § Phase B):' <<< "$_cp_rep" \
+    || { echo "FAIL: #4322 b6 control — on an outcome this run created, the ordinary --no-merge intro must render byte for byte"; failures=$((failures+1)); }
+  # (b6, third leg — #7465 Plan amendment 6) THE FOLLOW-UP HEADING on the same resumed
+  #      --no-merge run. On the ordinary path "after the chore PR merges" is true; on a
+  #      run whose chore PR phase 11 recorded as ALREADY MERGED it names a merge still to
+  #      come that has already happened, so the heading states the recorded outcome
+  #      instead, read with no host read. Control, in the NM-12 shape: back on an outcome
+  #      this run created, the ordinary heading renders byte for byte.
+  NO_MERGE=1; CHORE_PR_OUTCOME="resumed-already-merged"; CHORE_PR_NUMBER="3697"
+  _cp_rep="$(generate_markdown_report 2>/dev/null)"
+  if /usr/bin/grep -qF 'after the chore PR merges' <<< "$_cp_rep"; then
+    echo "FAIL: #4322 b6 resumed heading — a resumed --no-merge run over a chore PR phase 11 recorded as MERGED must not head its follow-up with a merge still to come"; failures=$((failures+1))
+  fi
+  /usr/bin/grep -qxF '**Follow-up — the chore PR is already merged, so run it now:**' <<< "$_cp_rep" \
+    || { echo "FAIL: #4322 b6 resumed heading — the follow-up heading must state the merged outcome phase 11 recorded"; failures=$((failures+1)); }
+  CHORE_PR_OUTCOME="created"
+  _cp_rep="$(generate_markdown_report 2>/dev/null)"
+  /usr/bin/grep -qxF '**Follow-up — after the chore PR merges (CI-green):**' <<< "$_cp_rep" \
+    || { echo "FAIL: #4322 b6 heading control — on an outcome this run created, the ordinary follow-up heading must render byte for byte"; failures=$((failures+1)); }
 
   # (b7) NO COLLATERAL (AC-5) — at NO_MERGE=0 the ONLY line whose content depends on
   #      CHORE_PR_NUMBER is the **Chore PR:** line. Two renders on identical globals are
   #      byte-identical (the run timestamp is sampled once at load), so this is exact
   #      rather than approximate. The anti-vacuity arm comes FIRST: without it, "stripped
   #      remainders are equal" is satisfied by two identical renders.
-  NO_MERGE=0
+  NO_MERGE=0; CHORE_PR_OUTCOME="created"
   CHORE_PR_NUMBER="3697"; _cp_a="$(generate_markdown_report 2>/dev/null)"
   CHORE_PR_NUMBER="";     _cp_b="$(generate_markdown_report 2>/dev/null)"
   [[ "$_cp_a" != "$_cp_b" ]] \
@@ -14644,7 +17589,114 @@ PY
   [[ "$_cp_as" == "$_cp_bs" ]] \
     || { echo "FAIL: #4322 AC-5 — a field other than **Chore PR:** changed with CHORE_PR_NUMBER; the fix has collateral"; failures=$((failures+1)); }
 
-  OUTPUT="$_cp_saved_out"; CHORE_PR_NUMBER="$_cp_saved_pr"; NO_MERGE="$_cp_saved_nm"
+  OUTPUT="$_cp_saved_out"; CHORE_PR_NUMBER="$_cp_saved_pr"; NO_MERGE="$_cp_saved_nm"; CHORE_PR_OUTCOME="$_cp_saved_oc"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # ── Test HF: the header's chore-PR field renders EVERY outcome phase 11 records
+  #    (#5769, CIAC-2) — offline, no fixture repository: the field is a pure function
+  #    of CHORE_PR_OUTCOME, CHORE_PR_NUMBER and the phase record. Each arm reads the
+  #    line through the REAL report, not the helper alone, so a header line that
+  #    stopped calling the helper is caught too. HF-8b holds the JSON twin to the same
+  #    seven states (Plan amendment 1 items 7 and 11).
+  local _hf_s_out="$OUTPUT" _hf_s_pr="$CHORE_PR_NUMBER" _hf_s_oc="$CHORE_PR_OUTCOME" _hf_s_mode="$MODE" _hf_s_nm="$NO_MERGE"
+  local _hf_l _hf_all="" _hf_prod _hf_set _hf_arms _hf_v _hf_miss _hf_n _hf_json_bad=""
+  OUTPUT="markdown"; NO_MERGE=0; MODE="apply"
+  _hf_field() {   # $1 outcome, $2 number -> the rendered **Chore PR:** line
+    CHORE_PR_OUTCOME="$1"; CHORE_PR_NUMBER="$2"
+    /usr/bin/grep -E '^\*\*Chore PR:\*\* ' <<<"$(generate_markdown_report 2>/dev/null)" || true
+  }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  mark_phase "zz_hf_probe" "PASS" "seeded by group HF"
+
+  # HF-1 — the CIAC-2 runtime limb: all 7 recorded states render their OWN exact line, 7 distinct.
+  _hf_l="$(_hf_field created 5769)"
+  _st_arm HF HF-1; [[ "$_hf_l" == '**Chore PR:** #5769 — created by this run' ]] || { echo "FAIL: HF-1 created — got '$_hf_l'"; failures=$((failures+1)); }
+  _hf_all="${_hf_all}${_hf_l}"$'\n'
+  _hf_l="$(_hf_field existing-open 5769)"; _hf_all="${_hf_all}${_hf_l}"$'\n'
+  [[ "$_hf_l" == '**Chore PR:** #5769 — already open for this branch; reused' ]] || { echo "FAIL: HF-1 existing-open — got '$_hf_l'"; failures=$((failures+1)); }
+  _hf_l="$(_hf_field resumed-already-merged 5769)"; _hf_all="${_hf_all}${_hf_l}"$'\n'
+  [[ "$_hf_l" == '**Chore PR:** #5769 — already merged; resumed run' ]] || { echo "FAIL: HF-1 resumed-already-merged — got '$_hf_l'"; failures=$((failures+1)); }
+  _hf_l="$(_hf_field skipped-as-idempotent '')"; _hf_all="${_hf_all}${_hf_l}"$'\n'
+  [[ "$_hf_l" == '**Chore PR:** none needed — skipped as idempotent; the close outputs were already on main' ]] || { echo "FAIL: HF-1 skipped-as-idempotent — got '$_hf_l'"; failures=$((failures+1)); }
+  _hf_l="$(_hf_field dry-run '')"; _hf_all="${_hf_all}${_hf_l}"$'\n'
+  [[ "$_hf_l" == '**Chore PR:** not created — dry-run' ]] || { echo "FAIL: HF-1 dry-run — got '$_hf_l'"; failures=$((failures+1)); }
+  _hf_l="$(_hf_field failed '')"; _hf_all="${_hf_all}${_hf_l}"$'\n'
+  [[ "$_hf_l" == '**Chore PR:** FAILED at create_chore_pr — see Phase Outcomes' ]] || { echo "FAIL: HF-1 failed — got '$_hf_l'"; failures=$((failures+1)); }
+  _hf_l="$(_hf_field '' '')"; _hf_all="${_hf_all}${_hf_l}"$'\n'
+  [[ "$_hf_l" == '**Chore PR:** not created — create_chore_pr did not run in this run' ]] || { echo "FAIL: HF-1 not-yet-created — got '$_hf_l'"; failures=$((failures+1)); }
+  _hf_n="$(grep_count -E . <<<"$(/usr/bin/sort -u <<<"$_hf_all")")"
+  [[ "$_hf_n" -eq 7 ]] || { echo "FAIL: HF-1 — the 7 recorded states must render 7 DISTINCT lines, got ${_hf_n}"; failures=$((failures+1)); }
+
+  # HF-2 — AC-2: an idempotent skip on an --apply run reads as a SUCCESS (no N/A, no dry-run, no FAILED).
+  _hf_l="$(_hf_field skipped-as-idempotent '')"
+  _st_arm HF HF-2; [[ "$_hf_l" == *"none needed"* && "$_hf_l" != *"N/A"* && "$_hf_l" != *"dry-run"* && "$_hf_l" != *"FAILED"* ]] || { echo "FAIL: HF-2 (AC-2) — the idempotent skip must read as success; got '$_hf_l'"; failures=$((failures+1)); }
+
+  # HF-3 — AC-3 control: dry-run and not-yet-created stay distinct from each other AND from the skip.
+  _st_arm HF HF-3; [[ "$(_hf_field dry-run '')" != "$(_hf_field '' '')" && "$(_hf_field dry-run '')" != "$_hf_l" && "$(_hf_field '' '')" != "$_hf_l" ]] || { echo "FAIL: HF-3 (AC-3) — dry-run, not-yet-created and the idempotent skip must be three distinct lines"; failures=$((failures+1)); }
+
+  # HF-4 — CIAC-2 polarity over the whole partition: no success as N/A or failure; no failure as a skip.
+  _st_arm HF HF-4; for _hf_v in created existing-open resumed-already-merged skipped-as-idempotent; do
+    _hf_l="$(_hf_field "$_hf_v" 5769)"
+    [[ "$_hf_l" != *"N/A"* && "$_hf_l" != *"FAILED"* && "$_hf_l" != *"not created"* ]] || { echo "FAIL: HF-4 — success outcome '$_hf_v' renders as non-success: '$_hf_l'"; failures=$((failures+1)); }
+  done
+  _hf_l="$(_hf_field failed 5769)"
+  [[ "$_hf_l" == *"FAILED"* && "$_hf_l" != *"skipped"* && "$_hf_l" != *"none needed"* ]] || { echo "FAIL: HF-4 — the failed outcome must never read as a skip: '$_hf_l'"; failures=$((failures+1)); }
+
+  # HF-5 — the #7182 seam: a run halted at phase 5 names WHERE, and is never dry-run or N/A wording.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  mark_phase "create_chore_branch" "FAIL" "git checkout chore/v9.84-stage-13-corpus-update exited 128: refused"
+  _hf_l="$(_hf_field '' '')"
+  _st_arm HF HF-5; [[ "$_hf_l" == '**Chore PR:** not created — the run halted at create_chore_branch (FAIL) before create_chore_pr' ]] || { echo "FAIL: HF-5 — a run halted at create_chore_branch must say so in the header; got '$_hf_l'"; failures=$((failures+1)); }
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  mark_phase "zz_hf_probe" "PASS" "seeded by group HF"
+
+  # HF-6 — PARTITION PARITY (structural): every value the production region assigns to
+  #        CHORE_PR_OUTCOME has an arm in _chore_pr_header_field. A new phase-11 outcome
+  #        without a rendering fails here, naming itself.
+  _hf_prod="$(/usr/bin/sed -n '1,/^self_test() {/p' "${BASH_SOURCE[0]}" || true)"
+  _hf_set="$(/usr/bin/grep -oE 'CHORE_PR_OUTCOME="[a-z-]+"' <<<"$_hf_prod" | /usr/bin/sed -E 's/^CHORE_PR_OUTCOME="([a-z-]+)"$/\1/' | /usr/bin/sort -u || true)"
+  _hf_arms="$(/usr/bin/awk '/^_chore_pr_header_field\(\) \{$/{f=1} f{print} f&&/^\}$/{exit}' "${BASH_SOURCE[0]}" | /usr/bin/grep -oE '^[[:space:]]+[a-z-]+\)' | /usr/bin/tr -d ' )' | /usr/bin/sort -u || true)"
+  _st_arm HF HF-6; [[ "$(grep_count -E . <<<"$_hf_set")" -ge 6 ]] || { echo "FAIL: HF-6 anti-vacuity — found fewer than 6 CHORE_PR_OUTCOME assignments in the production region; the parity check would be vacuous"; failures=$((failures+1)); }
+  _hf_miss=""
+  for _hf_v in $_hf_set; do /usr/bin/grep -qxF "$_hf_v" <<<"$_hf_arms" || _hf_miss="${_hf_miss} ${_hf_v}"; done
+  [[ -z "$_hf_miss" ]] || { echo "FAIL: HF-6 — phase 11 can record outcome(s)${_hf_miss} that the header does not render"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF "zz-not-an-outcome" <<<"$_hf_arms" && { echo "FAIL: HF-6 control — the arm extraction matched a fabricated value; the parity check cannot detect a missing arm"; failures=$((failures+1)); }
+
+  # HF-7 — an unknown value renders VISIBLY unrecognised, never as a plausible state.
+  _hf_l="$(_hf_field zz-not-an-outcome 5769)"
+  _st_arm HF HF-7; [[ "$_hf_l" == "**Chore PR:** unrecognised outcome 'zz-not-an-outcome' (see Phase Outcomes)" ]] || { echo "FAIL: HF-7 — an unknown outcome must render as unrecognised; got '$_hf_l'"; failures=$((failures+1)); }
+
+  # HF-8 — END TO END on the one phase-11 path that needs no network: the REAL phase in
+  #        --dry-run records DRY-RUN and outcome dry-run, and the header then names the SAME outcome.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  MODE="dry-run"; CHORE_PR_OUTCOME=""; CHORE_PR_NUMBER=""
+  phase_create_chore_pr >/dev/null 2>&1 || true
+  _hf_l="$(/usr/bin/grep -E '^\*\*Chore PR:\*\* ' <<<"$(generate_markdown_report 2>/dev/null)" || true)"
+  _st_arm HF HF-8; [[ "$(get_phase create_chore_pr)" == DRY-RUN\|* && "$CHORE_PR_OUTCOME" == "dry-run" && "$_hf_l" == '**Chore PR:** not created — dry-run' ]] || { echo "FAIL: HF-8 — the dry-run phase row and the header must name the same outcome; got row='$(get_phase create_chore_pr)' outcome='$CHORE_PR_OUTCOME' header='$_hf_l'"; failures=$((failures+1)); }
+
+  # HF-8b — THE JSON TWIN carries the SAME partition (Plan amendment 1 items 7 and 11): for each of
+  #          the seven states, --json's chore_pr_outcome names the recorded outcome (empty renders
+  #          not-yet-created), and chore_pr stays the number or null. The skip carries no number, so
+  #          its chore_pr is null while its outcome still names a success.
+  _hf_json_bad=""
+  OUTPUT="json"
+  _st_arm HF HF-8b; for _hf_v in created existing-open resumed-already-merged skipped-as-idempotent dry-run failed ""; do
+    _hf_n=""; [[ "$_hf_v" == created || "$_hf_v" == existing-open || "$_hf_v" == resumed-already-merged ]] && _hf_n="5769"
+    CHORE_PR_OUTCOME="$_hf_v"; CHORE_PR_NUMBER="$_hf_n"
+    _hf_l="$(generate_json_report 2>/dev/null || true)"
+    /usr/bin/python3 - "$_hf_l" "${_hf_v:-not-yet-created}" "$_hf_n" <<'PY' >/dev/null 2>&1 || _hf_json_bad="${_hf_json_bad} ${_hf_v:-<empty>}"
+import sys, json
+d = json.loads(sys.argv[1])
+want_oc, want_pr = sys.argv[2], sys.argv[3]
+assert d.get("chore_pr_outcome") == want_oc, (d.get("chore_pr_outcome"), want_oc)
+assert d.get("chore_pr") == (int(want_pr) if want_pr else None), (d.get("chore_pr"), want_pr)
+PY
+  done
+  OUTPUT="markdown"
+  [[ -z "$_hf_json_bad" ]] || { echo "FAIL: HF-8b — the JSON twin's chore_pr_outcome does not carry the recorded outcome for:${_hf_json_bad}"; failures=$((failures+1)); }
+
+  _st_witness HF 9
+  OUTPUT="$_hf_s_out"; CHORE_PR_NUMBER="$_hf_s_pr"; CHORE_PR_OUTCOME="$_hf_s_oc"; MODE="$_hf_s_mode"; NO_MERGE="$_hf_s_nm"
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # ── Test AI: phase_action_item_gate (Procedure 7a HARD GATE, #4439) ─────────
@@ -14929,11 +17981,217 @@ READERSTUB
   /usr/bin/grep -qF 'empirical-verification-finding' "$_ai_witness" || { echo "FAIL: AI-C2 — the emitted row must carry the spec's subtype (decision / empirical-verification-finding), witness: $(/bin/cat "$_ai_witness")"; failures=$((failures+1)); }
   /usr/bin/grep -qF 'attested-cause:no-commitments' "$_ai_witness" || { echo "FAIL: AI-C2 — the emitted row must carry the ATTESTED CAUSE; the attestation IS the discriminator between 'no commitments' and 'emit skipped'"; failures=$((failures+1)); }
   /usr/bin/grep -qF -- '--actor operator' "$_ai_witness" || { echo "FAIL: AI-C2 — the attestation is the OPERATOR's, so actor must be operator"; failures=$((failures+1)); }
+  /usr/bin/grep -qF -- '--reversibility CHEAP' "$_ai_witness" || { echo "FAIL: AI-C2 — the emitted argv must pass --reversibility CHEAP; the event writer requires it and refuses the row without it ('Required: --reversibility', #5910), witness: $(/bin/cat "$_ai_witness")"; failures=$((failures+1)); }
+  /usr/bin/grep -qF -- '--outcome resolved' "$_ai_witness" || { echo "FAIL: AI-C2 — the emitted argv must pass --outcome resolved; the event writer requires it and refuses the row without it ('Required: --outcome', #5910), witness: $(/bin/cat "$_ai_witness")"; failures=$((failures+1)); }
   : > "$_ai_witness"
   ATTEST_ACTION_ITEMS="emit-skipped"
   _ai_drive ai-empty; _ai_rc="$_AI_RC"
   _st_arm AI AI-D2; [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-D2 — an ATTESTED EMPTY-LEDGER state must pass, got rc $_ai_rc"; failures=$((failures+1)); }
   /usr/bin/grep -qF 'attested-cause:emit-skipped' "$_ai_witness" || { echo "FAIL: AI-D2 — the second cause must round-trip into the emitted row, witness: $(/bin/cat "$_ai_witness")"; failures=$((failures+1)); }
+
+  # (U / U0 / V / W) THE WRITER'S CONTRACT AND THE FAILED-EMIT RENDER (#5910). Every
+  #     arm above points the emitter at a stub that accepts ANY argv, so the defect
+  #     #5910 records passed this whole group: the event writer refuses a row with no
+  #     --reversibility, then one with no --outcome, and the emitter threw the
+  #     writer's message away, so every real attested close lost its row while the
+  #     suite stayed green. (U) routes the emitter through the REAL writer's --dry-run
+  #     and (U0) is its control; (V) induces a writer failure and reads what the
+  #     report carries; (W) resolves no release key. None of them can append to the
+  #     live, append-only event log: the real writer only ever runs with --dry-run,
+  #     which validates and exits before it seeds or appends anything, and its log
+  #     path is pointed into this group's temp directory as well, so even a writer
+  #     that ignored --dry-run could only write there — which (U) then sees.
+  #
+  # The 12.9 detail is read from the phase RECORD, never through get_phase, whose
+  # RESULT|DETAIL join puts a '|' into every line it returns.
+  _ai_gate_detail() {
+    local _i
+    for ((_i=0; _i<${#PHASE_NAMES[@]}; _i++)); do
+      if [[ "${PHASE_NAMES[$_i]}" == "action_item_gate" ]]; then /usr/bin/printf '%s' "${PHASE_DETAILS[$_i]}"; return 0; fi
+    done
+    return 0
+  }
+  local _ai_sandbox="$_ai_tmp/evals-sandbox" _ai_det _ai_u0_rc
+
+  # (U) THE REAL WRITER ACCEPTS THE EMITTED ARGV, once per attested clear (AC-1, and
+  #     AC-2's one-invocation limb). The wrapper records the argv it is handed, then
+  #     execs the real writer with --dry-run in front of it.
+  /bin/cat > "$_ai_tmp/writer-realdry" <<AIREAL
+#!/bin/sh
+printf '%s\n' "\$*" >> "$_ai_witness"
+EVALS_RESULTS_PATH="$_ai_sandbox"
+export EVALS_RESULTS_PATH
+exec "$_ai_s_writer" --dry-run "\$@"
+AIREAL
+  /bin/chmod +x "$_ai_tmp/writer-realdry"
+  AI_EVENT_WRITER="$_ai_tmp/writer-realdry"
+  : > "$_ai_witness"
+  ATTEST_ACTION_ITEMS="emit-skipped"
+  _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"; _ai_det="$(_ai_gate_detail)"
+  _st_arm AI AI-U; [[ -x "$_ai_s_writer" ]] || { echo "FAIL: AI-U precondition — the real event writer is not executable at ${_ai_s_writer#"$REPO_ROOT"/}; this arm cannot prove the writer's contract, and it fails rather than skips"; failures=$((failures+1)); }
+  [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-U — an attested SURFACE clear must return 0, got rc $_ai_rc"; failures=$((failures+1)); }
+  [[ "$STATE_AI_EMIT" == "emitted" ]] || { echo "FAIL: AI-U — the REAL writer must accept the emitted argv through its --dry-run; STATE_AI_EMIT='$STATE_AI_EMIT', and the writer said: ${STATE_AI_EMIT_ERR:-<nothing captured>}"; failures=$((failures+1)); }
+  [[ -z "${STATE_AI_EMIT_ERR:-}" ]] || { echo "FAIL: AI-U — an accepted emit must carry no diagnostic, got '${STATE_AI_EMIT_ERR:-}'"; failures=$((failures+1)); }
+  [[ "$(grep_count . "$_ai_witness")" == "1" ]] || { echo "FAIL: AI-U — one attested clear must invoke the writer exactly ONCE, got $(grep_count . "$_ai_witness") invocation(s)"; failures=$((failures+1)); }
+  /usr/bin/grep -qF -- '--reversibility CHEAP' "$_ai_witness" || { echo "FAIL: AI-U — the argv must carry --reversibility CHEAP, witness: $(/bin/cat "$_ai_witness")"; failures=$((failures+1)); }
+  /usr/bin/grep -qF -- '--outcome resolved' "$_ai_witness" || { echo "FAIL: AI-U — the argv must carry --outcome resolved, witness: $(/bin/cat "$_ai_witness")"; failures=$((failures+1)); }
+  /usr/bin/grep -qF -- '--version ai-notrecorded' "$_ai_witness" || { echo "FAIL: AI-U — the argv must carry the milestone slug as the release join key, witness: $(/bin/cat "$_ai_witness")"; failures=$((failures+1)); }
+  [[ "$_ai_det" != *"ATTESTATION TRACE NOT CONFIRMED"* ]] || { echo "FAIL: AI-U — an emitted trace must not render the failure clause (AI-V's specificity), got '$_ai_det'"; failures=$((failures+1)); }
+  [[ ! -e "$_ai_sandbox" ]] || { echo "FAIL: AI-U — the writer's --dry-run created its log directory; it must validate and exit before it seeds or appends anything"; failures=$((failures+1)); }
+
+  # (U0) CONTROL FOR (U): the same real writer REFUSES the emitter's argv as it
+  #      shipped before #5910 — no --reversibility and no --outcome — so (U)'s
+  #      acceptance is a property of the argv the emitter builds now, and not of a
+  #      writer that accepts anything. --dry-run and the sandboxed log path again.
+  _ai_u0_rc=0
+  _st_arm AI AI-U0; EVALS_RESULTS_PATH="$_ai_sandbox" "$_ai_s_writer" --dry-run --version ai-notrecorded --stage 13 \
+      --event-type decision --event-subtype empirical-verification-finding \
+      --actor operator --subject "milestone:#${MILESTONE}" \
+      --payload 'procedure-7a-attestation; state:NOT-RECORDED; attested-cause:emit-skipped' \
+      >/dev/null 2>"$_ai_tmp/u0.err" || _ai_u0_rc=$?
+  [[ "$_ai_u0_rc" -ne 0 ]] || { echo "FAIL: AI-U0 control — the real writer ACCEPTED the pre-#5910 argv (no --reversibility, no --outcome), so AI-U's acceptance proves nothing about the emitter"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'Required: --reversibility' "$_ai_tmp/u0.err" || { echo "FAIL: AI-U0 control — the writer's refusal must name the missing required flag, got: $(/bin/cat "$_ai_tmp/u0.err")"; failures=$((failures+1)); }
+
+  # (V) AN INDUCED WRITER FAILURE IS SURFACED, NON-BLOCKING, WITH THE WRITER'S OWN
+  #     MESSAGE (AC-3, and AC-4's failure arm). The stub fails the way a real refusal
+  #     does — rc 1 and one ERROR line on stderr — and that line carries a '|' and a
+  #     path under HOME, the two things a report pasted onto a public sub-task must
+  #     not carry raw. HOME is expanded by the STUB at run time, so the arm reads the
+  #     same HOME the redaction reads.
+  /bin/cat > "$_ai_tmp/writer-fail" <<AIFAIL
+#!/bin/sh
+printf 'ERROR: induced writer failure | at %s/x\n' "\$HOME" >&2
+exit 1
+AIFAIL
+  /bin/chmod +x "$_ai_tmp/writer-fail"
+  AI_EVENT_WRITER="$_ai_tmp/writer-fail"
+  ATTEST_ACTION_ITEMS="emit-skipped"
+  _ai_drive ai-notrecorded; _ai_rc="$_AI_RC"; _ai_det="$(_ai_gate_detail)"
+  _st_arm AI AI-V; [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-V — a failed attestation emit must stay NON-blocking (the operator's attestation cleared the gate), got rc $_ai_rc"; failures=$((failures+1)); }
+  [[ "$(get_phase action_item_gate)" == WARN\|* ]] || { echo "FAIL: AI-V — the attested clear must still record WARN, got '$(get_phase action_item_gate)'"; failures=$((failures+1)); }
+  [[ "$STATE_AI_EMIT" == "failed:writer-returned-nonzero" ]] || { echo "FAIL: AI-V — STATE_AI_EMIT must read failed:writer-returned-nonzero, got '$STATE_AI_EMIT'"; failures=$((failures+1)); }
+  [[ "${STATE_AI_EMIT_RC:-}" == "1" ]] || { echo "FAIL: AI-V — the writer's exit status must be carried in STATE_AI_EMIT_RC, got '${STATE_AI_EMIT_RC:-}'"; failures=$((failures+1)); }
+  [[ "$_ai_det" == *"ATTESTATION TRACE NOT CONFIRMED, writer rc=1"* ]] || { echo "FAIL: AI-V — the 12.9 detail must say the trace was NOT confirmed and carry the writer's exit status, got '$_ai_det'"; failures=$((failures+1)); }
+  [[ "$_ai_det" == *"induced writer failure"* ]] || { echo "FAIL: AI-V — the 12.9 detail must carry the WRITER'S OWN message, got '$_ai_det'"; failures=$((failures+1)); }
+  [[ "$_ai_det" != *"|"* ]] || { echo "FAIL: AI-V — the detail must carry no '|' (a detail is a RESULT|detail record AND a markdown table row), got '$_ai_det'"; failures=$((failures+1)); }
+  [[ "$_ai_det" == *"<home>/x"* ]] || { echo "FAIL: AI-V — the writer's home path must render redacted as <home>/x, got '$_ai_det'"; failures=$((failures+1)); }
+  [[ "$_ai_det" != *"$HOME"* ]] || { echo "FAIL: AI-V — the detail carries the raw HOME path, and the report is pasted onto a PUBLIC sub-task"; failures=$((failures+1)); }
+  [[ "$(_ai_verification_cell)" == *"TRACE NOT CONFIRMED, writer rc=1"* ]] || { echo "FAIL: AI-V — Verification row 6 must carry the same unconfirmed trace, got '$(_ai_verification_cell)'"; failures=$((failures+1)); }
+
+  # (W) NO RELEASE KEY, NO WRITER CALL. The writer admits only the milestone slug as
+  #     the release join key and refuses a release version by construction, so the
+  #     old slug-else-VERSION fallback could only ever hand it an argv it refuses.
+  #     With no slug the emitter records failed:no-release-key and never calls the
+  #     writer, so the witness stub stays empty.
+  AI_EVENT_WRITER="$_ai_tmp/writer-stub"
+  : > "$_ai_witness"
+  ATTEST_ACTION_ITEMS="no-commitments"
+  _ai_drive ""; _ai_rc="$_AI_RC"; _ai_det="$(_ai_gate_detail)"
+  _st_arm AI AI-W; [[ "$_ai_rc" -eq 0 ]] || { echo "FAIL: AI-W — an unresolved release key must not block the attested clear, got rc $_ai_rc"; failures=$((failures+1)); }
+  [[ "$STATE_AI_EMIT" == "failed:no-release-key" ]] || { echo "FAIL: AI-W — no milestone slug must record failed:no-release-key, got '$STATE_AI_EMIT'"; failures=$((failures+1)); }
+  [[ ! -s "$_ai_witness" ]] || { echo "FAIL: AI-W — the writer must NOT be invoked without a release key, witness: $(/bin/cat "$_ai_witness")"; failures=$((failures+1)); }
+  [[ "$_ai_det" == *"ATTESTATION TRACE NOT CONFIRMED"* ]] || { echo "FAIL: AI-W — the 12.9 detail must say the trace was NOT confirmed, got '$_ai_det'"; failures=$((failures+1)); }
+  AI_EVENT_WRITER="$_ai_tmp/writer-stub"; ATTEST_ACTION_ITEMS=""
+
+  # (X) THE SHARED PROJECTION'S CALLER WINDOW (#5910; Plan amendment 9 item (e)).
+  #     _detail_one_line redacts and THEN caps, so a caller that truncates first can cut
+  #     a HOME path mid-string and ship the fragment raw. AI-V's induced message is short
+  #     and CB-10 drives the helper itself, so no arm pinned what its callers hand it,
+  #     the emitter's 4096-byte window above included. This arm reads every call site in
+  #     the production region, structurally, so a future caller is covered with no
+  #     fixture of its own. It admits three argument forms: the whole capture ("$var"),
+  #     its first line ("${var%%$'\n'*}", because a line cut cannot split a path), and a
+  #     raw file window of at least 4096 bytes. Anything else is named: a smaller window,
+  #     a slice, an unquoted or unparsed argument. Controls on every run: the classifier
+  #     sorts all five forms, and the census over a constructed region counts its two
+  #     callers, flags the pre-capped one and ignores a call below its self_test line.
+  /bin/cat > "$_ai_tmp/win-census.py" <<'AIWIN'
+import re
+import sys
+
+WHOLE = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*|\$\{[A-Za-z_][A-Za-z0-9_]*\}")
+FIRST = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*%%\$'\\n'\*\}")
+WINDOW = re.compile(r"\$\(/usr/bin/head -c ([0-9]+) \"\$[A-Za-z_][A-Za-z0-9_]*\"( 2>/dev/null)?\)")
+
+
+def argument(line, k):
+    depth = 0
+    out = ""
+    while k < len(line):
+        c = line[k]
+        if c == "$" and k + 1 < len(line) and line[k + 1] in "({":
+            depth += 1
+            out += line[k:k + 2]
+            k += 2
+            continue
+        if c in ")}" and depth > 0:
+            depth -= 1
+        elif c == "\"" and depth == 0:
+            return out
+        out += c
+        k += 1
+    return None
+
+
+def form(arg):
+    if arg is None:
+        return "UNPARSED"
+    if WHOLE.fullmatch(arg):
+        return "WHOLE"
+    if FIRST.fullmatch(arg):
+        return "FIRST-LINE"
+    m = WINDOW.fullmatch(arg)
+    if m:
+        return "WINDOW" if int(m.group(1)) >= 4096 else "PRE-CAPPED"
+    return "OTHER"
+
+
+def census(text):
+    region = text.split("\nself_test() {", 1)[0].split("\n")
+    n = 0
+    bad = []
+    for i, line in enumerate(region, 1):
+        if line.lstrip().startswith("#") or line.startswith("_detail_one_line() {"):
+            continue
+        for m in re.finditer(r"_detail_one_line\b", line):
+            n += 1
+            if not line[m.end():].startswith(" \""):
+                bad.append("L%d:UNQUOTED" % i)
+                continue
+            kind = form(argument(line, m.end() + 2))
+            if kind not in ("WHOLE", "FIRST-LINE", "WINDOW"):
+                bad.append("L%d:%s" % (i, kind))
+    return n, bad
+
+
+n, bad = census(open(sys.argv[1], encoding="utf-8", errors="replace").read())
+print("CENSUS %d" % n)
+for b in bad:
+    print("BAD " + b)
+ok = (form("$(/usr/bin/head -c 800 \"$_e\" 2>/dev/null)") == "PRE-CAPPED"
+      and form("${_x:0:800}") == "OTHER"
+      and form("$_x") == "WHOLE"
+      and form("${_x%%$'\\n'*}") == "FIRST-LINE"
+      and form("$(/usr/bin/head -c 4096 \"$_e\" 2>/dev/null)") == "WINDOW")
+syn = "\n".join([
+    "a() {",
+    "  x=\"$(_detail_one_line \"$(/usr/bin/head -c 800 \"$_e\" 2>/dev/null)\")\"",
+    "  y=\"$(_detail_one_line \"$_w\")\"",
+    "}",
+    "self_test() {",
+    "  z=\"$(_detail_one_line \"${_q:0:9}\")\"",
+    "}",
+])
+sn, sbad = census(syn)
+ok = ok and sn == 2 and sbad == ["L2:PRE-CAPPED"]
+print("CONTROL " + ("ok" if ok else "broken n=%d bad=%s" % (sn, sbad)))
+AIWIN
+  local _ai_win _ai_winn
+  _ai_win="$(/usr/bin/python3 "$_ai_tmp/win-census.py" "${BASH_SOURCE[0]}" 2>&1 || true)"
+  _ai_winn="$(/usr/bin/sed -n 's/^CENSUS //p' <<<"$_ai_win")"
+  _st_arm AI AI-X; [[ "$_ai_winn" =~ ^[0-9]+$ && "$_ai_winn" -ge 1 ]] || { echo "FAIL: AI-X anti-vacuity — the census found no _detail_one_line call site in the production region (${_ai_winn:-none}), so the window check reads nothing: $(_detail_one_line "$_ai_win")"; failures=$((failures+1)); }
+  [[ "$_ai_win" != *"BAD "* ]] || { echo "FAIL: AI-X — a _detail_one_line caller hands the projection something other than the whole capture, its first line or a raw window of at least 4096 bytes, so a HOME path can be cut before the redaction runs: $(_detail_one_line "$_ai_win")"; failures=$((failures+1)); }
+  [[ "$_ai_win" == *"CONTROL ok"* ]] || { echo "FAIL: AI-X capability-to-fail — the census cannot tell a pre-capped caller from a whole capture, so its clean reading above measures nothing: $(_detail_one_line "$_ai_win")"; failures=$((failures+1)); }
 
   # (P) PUBLIC-SURFACE PATH HYGIENE. This phase's detail lands in the close-out
   #     report, which is pasted into a sub-task comment on a PUBLIC repository, and
@@ -15509,9 +18767,9 @@ READERNONINT
     # worst possible moment.
     [[ "${_ai_distinct:-0}" -ge 5 ]] || { echo "FAIL: AI-G sensitivity — the canonical predicate returned only ${_ai_distinct} distinct STATEs across ${_ai_nfx} fixtures; it is not discriminating, so agreement with it is not evidence"; failures=$((failures+1)); }
   fi
-  _st_witness AI 28
+  _st_witness AI 33
 
-  unset -f _ai_drive _ai_exec_dispatch 2>/dev/null || true
+  unset -f _ai_drive _ai_exec_dispatch _ai_gate_detail 2>/dev/null || true
   unset _AI_RC 2>/dev/null || true
   /bin/rm -rf "$_ai_tmp" 2>/dev/null || true
   HUB_STATE_PATH="$_ai_s_hs"; MODE="$_ai_s_mode"; VERSION="$_ai_s_ver"
@@ -15520,7 +18778,7 @@ READERNONINT
   AI_EVENT_WRITER="$_ai_s_writer"; MILESTONE="$_ai_s_ms"
   AI_EVENT_READER="$_ai_s_reader"
   STATE_AI_GATE=""; STATE_AI_TOTAL=0; STATE_AI_UNRES=0; STATE_AI_BAD=0
-  STATE_AI_DIR=""; STATE_AI_EMIT="n/a"
+  STATE_AI_DIR=""; STATE_AI_EMIT="n/a"; STATE_AI_EMIT_RC=""; STATE_AI_EMIT_ERR=""
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # Test 15: phase_assert_output_set — pre-commit close-out output-set
@@ -16146,10 +19404,17 @@ EOF
   echo "  phase_inject_close_class_telemetry_field validated (#4437 — clean block PASSes with the field positioned after **Outcome rationale:** and no sibling leak / idempotent re-run SKIPs / fallback anchor lands after **Outcome:** and names which anchor it used / VACUITY PAIR: an all-N/A-but-conformant line is WRITTEN and carries the no-computed-ratio warning WITH the disposition read from the emitted line, measured-line control carries NO warning / OMISSION PAIR: a line whose register-fed slots are NOT-EVALUATED names the caller-omission disposition and not the absent-register one, on a vacuous line (d2, verdict-agnostic) and on a MEASURED one (d3), while the absent-register line names its own and not the omission's / a line missing § 3.2 slots FAILs writing nothing / an empty capture at exit 0 FAILs writing nothing / producer exit 2 escalates as a source-integrity condition writing nothing / a non-executable producer SKIPs rather than hand-composing a field that would fabricate its own mechanism claim / dry-run prints the RESOLVED bytes and writes nothing / CO-LOCATION: an archived block's field lands in the SEGMENT beside its own **Result:** with the hot stub at 0, and the cross-surface re-run SKIPs; #5288 AI-028 NOT-PRODUCED MARKER STAGING — j.1 drives the REAL 6.8 call site over an archived block with the producer unavailable and asserts the resolved SEGMENT reaches TOUCHED_ARCHIVE_SEGMENTS, the array files=() consumes, with a sensitivity floor proving the marker genuinely reached the segment (pre-fix the marker still lands on disk, so the differential isolates the LOST APPEND alone) and a HOT-LEDGER control proving the by-design skip is preserved and the recorder is not appending every target it is handed / j.2 STRUCTURAL over the shipped text of BOTH calling phases — neither may invoke the writer inside a command substitution, read from the FUNCTION BODIES so the needle cannot match itself, with per-site vacuity floors and a capability-to-fail arm matching a CONSTRUCTED bad call site so a clean reading is a measurement)" >&2
   _st_claim 4d-settle "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache); check-5 settle POLL validated (#4416, legs f-j PLUS the F-01 remediation leg i.2 — six arms, not five; this clause ENUMERATES the settle group's legs and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when legs f-j and i.2 leave no witness: f AC2 an injected 5-read search-index lag, longer than the pre-change single-retry window, still converges to PASS and RENDERS its settle figure in both the row and the phase detail — the v4.02 failure reproduced and closed / g AC3 THE NON-VACUITY CONTROL, same fixture with the budget shrunk BELOW the lag: exhaustion must read PARTIAL and NAME the budget, never PASS, so f is proven capable of failing / h AC1 structural self-parse behind an anti-vacuity floor — the attempt bound exists AND is a loop terminal AND the poll loop exists, with the pre-change 'Retry ONCE' form asserted ABSENT so no limb is satisfiable by the old code / i AC4 an out-of-scope straggler is still reported at once, asserted on the CHECK-5-SCOPED instrument ('check-5 settled at poll 0/15') because a PARTIAL row alone cannot distinguish reported-now from reported-after-the-whole-budget, and because the stub's own 'calls' counter is PHASE-scoped rather than check-5-scoped — the gate-passage-proof rung issues a third 'issue list' after check 5 has rendered — so that counter carries an independent CEILING arm (<= 3 = detect + check-5 + gate-passage-proof) stated as the bound it really is; leg (f)'s 'poll 5/15' is the moving control that makes the zero a real reading / i.2 THE F-01 REMEDIATION ARM, and the only one that discriminates the render guard: leg (i) grades the exhaustion suffix but can only ever exercise it at polls=0, where it is unreachable BY CONSTRUCTION under either guard, which is how '-gt 0' survived it. i.2 drives the one separating state — an out-of-scope straggler surfacing MID-POLL, in-scope #401 holding the poll open across a 3-read lag while #999 breaks the loop at 3 of 15 attempts with the budget never waited — behind an anti-vacuity floor on 'poll 3/15' whose moving controls are (f)'s 'poll 5/15' and (i)'s 'poll 0/15'. Twelve fixtures under both guards: 12/12 pass under the loop's own '-ge' terminal, exactly one fails under '-gt 0' / j AC5 the group stays hermetic and instant at DELAY=0, which only an ATTEMPT bound makes structurally possible)"
   echo "  post_gate_passage_proof three-rung target ladder validated (#3819 — T-13 rung 1 resolves a CLOSED Stage-13 sub-task via --state all and does NOT fall through to the PR / rung 2 posts to the release PR naming the OBSERVED rung-1 reason / rung 3 MANUAL names BOTH attempted targets; T-14 two collect_open_release_issues calls in one run keep EXCLUDED_DETAIL undoubled, COLLECTED_OPEN_ISSUES identical and resolve_stage13_subtask stable, with a non-empty-exclusion anti-vacuity control)" >&2
-  _st_claim AI "  phase_action_item_gate validated (#4439, group AI — 28 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): A and B are each other's control over ONE differential harness where only the ledger changes — a gate that never blocks fails A, one that always blocks fails B, one reading the wrong path resolves NOT-RECORDED for both and fails BOTH / B2 decoy: a terminal ledger carrying the literal words 'open' and 'in-flight' in trigger_detail still resolves RESOLVED, so the gate is column-addressed and not row-pattern-matched / all five verdict states drive distinct fixtures and are asserted on the STATE_AI_GATE global rather than the detail prose — UNRESOLVED (A) · RESOLVED (B, B2) · NOT-RECORDED (C unattested blocks, C2 attested passes WARN with the operator-actor attestation EMITTED carrying its cause and the spec subtype) · EMPTY-LEDGER (D unattested blocks, D2 attested round-trips the second cause) · UNCLASSIFIABLE (M blocks and NAMES the offending row and its raw value, with a specificity limb proving the enumerator selects the unreadable set and not the terminal one, and the all-terminal ledger re-driven on the same harness as its paired negative control) / E the two SURFACE states must resolve DISTINCT values, because comparing detail strings passes on any two different sentences / E2 an unlicensed attestation cause does NOT clear a SURFACE state / F EXECUTES the two dispatch lines lifted VERBATIM from this file's own text, refusing to pass unless each needle resolves to exactly one top-level line, under three mutually-controlling limbs — F1 blocking gate leaves the close UNFIRED at exit 3, F2 SENSITIVITY a passing gate does fire it (without which F1's clean result is meaningless), F3 NEGATIVE CONTROL a constructed '|| true' line must let the close through (without which a fail-closed gate is indistinguishable from a no-op one) — so capability-to-fail is re-demonstrated on EVERY run, not only under one-time mutation / F4 whole-block invariant: every top-level dispatch line carries the fail-closed guard, with an anti-vacuity floor on the parse and a specificity control proving the filter rejects an unguarded line / G doc<->code parity on the canonical Procedure 7a predicate across the fixture set, with an anti-vacuity floor on the extraction and a sensitivity arm requiring >=5 distinct STATEs over a fixture count DERIVED from the loop rather than restated in the message / M-N-O-Q-R-S-T MEMBERSHIP: the residue of the recognised set is its own BLOCKING state rather than the implicit else of a two-value comparison, which counted a typo, a case variant, a foreign vocabulary and an out-of-range field as RESOLVED — M an unadmitted value blocks and names itself, with the all-terminal ledger as its paired negative control / N case-folding NORMALISES rather than rejects, so an uppercase OPEN resolves UNRESOLVED and a fold-and-reject implementation cannot pass M / O the two section-2.1a status aliases stay ADMITTED, without which every legacy re-run blocks / Q the ARITY class in BOTH its mechanisms, the one witnessed live: at arity<=10 field 11 does not exist and reads EMPTY, at arity 11 the row-terminating pipe stays glued to the last field and reads 'open |' NON-empty, and the detail carries fields:N so a dropped column is distinguishable from a mistyped word / R an unreadable ledger cannot be attested away, the structural sibling of L / S row 6 renders the fifth state WITH its counts instead of falling to the default that asserts the gate did not run, with the still-reachable default as its control / T PRECEDENCE: a ledger carrying both classes renders UNRESOLVED and carries BOTH enumerations in one detail, because the state selects the operator's remedy and reversing it would drop the open enumeration from the ledgers that most need it / H --dry-run never returns non-zero yet still EVALUATES, and names the condition that would FAIL at --apply / I an idempotent re-run over an already-closed milestone, where an UNRESOLVED verdict is the close-before-verdict shape itself / J --no-merge still evaluates and records rather than blocks / K Verification row 6 reads the Phase-12.9 GLOBAL — unset renders UNVERIFIED never a green cell, mutating the global moves the cell, and phase_run_verification is asserted NOT to re-evaluate the predicate after the close / L an attestation does NOT clear an UNRESOLVED verdict — an open row is dispositioned, never attested away / P operator-instance path tokenisation, with a sensitivity arm proving the leak probe can match its own needle"
+  _st_claim AI "  phase_action_item_gate validated (#4439, group AI — 33 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): A and B are each other's control over ONE differential harness where only the ledger changes — a gate that never blocks fails A, one that always blocks fails B, one reading the wrong path resolves NOT-RECORDED for both and fails BOTH / B2 decoy: a terminal ledger carrying the literal words 'open' and 'in-flight' in trigger_detail still resolves RESOLVED, so the gate is column-addressed and not row-pattern-matched / all five verdict states drive distinct fixtures and are asserted on the STATE_AI_GATE global rather than the detail prose — UNRESOLVED (A) · RESOLVED (B, B2) · NOT-RECORDED (C unattested blocks, C2 attested passes WARN with the operator-actor attestation EMITTED carrying its cause and the spec subtype) · EMPTY-LEDGER (D unattested blocks, D2 attested round-trips the second cause) · UNCLASSIFIABLE (M blocks and NAMES the offending row and its raw value, with a specificity limb proving the enumerator selects the unreadable set and not the terminal one, and the all-terminal ledger re-driven on the same harness as its paired negative control) / E the two SURFACE states must resolve DISTINCT values, because comparing detail strings passes on any two different sentences / E2 an unlicensed attestation cause does NOT clear a SURFACE state / F EXECUTES the two dispatch lines lifted VERBATIM from this file's own text, refusing to pass unless each needle resolves to exactly one top-level line, under three mutually-controlling limbs — F1 blocking gate leaves the close UNFIRED at exit 3, F2 SENSITIVITY a passing gate does fire it (without which F1's clean result is meaningless), F3 NEGATIVE CONTROL a constructed '|| true' line must let the close through (without which a fail-closed gate is indistinguishable from a no-op one) — so capability-to-fail is re-demonstrated on EVERY run, not only under one-time mutation / F4 whole-block invariant: every top-level dispatch line carries the fail-closed guard, with an anti-vacuity floor on the parse and a specificity control proving the filter rejects an unguarded line / G doc<->code parity on the canonical Procedure 7a predicate across the fixture set, with an anti-vacuity floor on the extraction and a sensitivity arm requiring >=5 distinct STATEs over a fixture count DERIVED from the loop rather than restated in the message / M-N-O-Q-R-S-T MEMBERSHIP: the residue of the recognised set is its own BLOCKING state rather than the implicit else of a two-value comparison, which counted a typo, a case variant, a foreign vocabulary and an out-of-range field as RESOLVED — M an unadmitted value blocks and names itself, with the all-terminal ledger as its paired negative control / N case-folding NORMALISES rather than rejects, so an uppercase OPEN resolves UNRESOLVED and a fold-and-reject implementation cannot pass M / O the two section-2.1a status aliases stay ADMITTED, without which every legacy re-run blocks / Q the ARITY class in BOTH its mechanisms, the one witnessed live: at arity<=10 field 11 does not exist and reads EMPTY, at arity 11 the row-terminating pipe stays glued to the last field and reads 'open |' NON-empty, and the detail carries fields:N so a dropped column is distinguishable from a mistyped word / R an unreadable ledger cannot be attested away, the structural sibling of L / S row 6 renders the fifth state WITH its counts instead of falling to the default that asserts the gate did not run, with the still-reachable default as its control / T PRECEDENCE: a ledger carrying both classes renders UNRESOLVED and carries BOTH enumerations in one detail, because the state selects the operator's remedy and reversing it would drop the open enumeration from the ledgers that most need it / H --dry-run never returns non-zero yet still EVALUATES, and names the condition that would FAIL at --apply / I an idempotent re-run over an already-closed milestone, where an UNRESOLVED verdict is the close-before-verdict shape itself / J --no-merge still evaluates and records rather than blocks / K Verification row 6 reads the Phase-12.9 GLOBAL — unset renders UNVERIFIED never a green cell, mutating the global moves the cell, and phase_run_verification is asserted NOT to re-evaluate the predicate after the close / L an attestation does NOT clear an UNRESOLVED verdict — an open row is dispositioned, never attested away / P operator-instance path tokenisation, with a sensitivity arm proving the leak probe can match its own needle / U the REAL writer's argument contract accepts the emitted argv through its own --dry-run, which never appends and whose log path is sandboxed besides, with exactly one invocation per attested clear (#5910) / U0 the same writer refuses the pre-fix argv, so U reaches a real validator / V an induced writer failure stays non-blocking and is surfaced with the writer's own message — single-line, pipe-free, home-redacted — on the gate row and row 6 / W an unresolved release key never reaches the writer and is reported as failed:no-release-key / X the shared projection's caller window: every _detail_one_line call site in the production region hands it the whole capture, its first line or a raw file window of at least 4096 bytes, read structurally so a future caller is covered too, with controls that the classifier sorts all five forms and the census flags a pre-capped caller in a constructed region (Plan amendment 9)"
   _st_claim M "  phase_action_item_gate MEASURED recommended --attest-action-items cause validated (group M — 10 arms, one for each of the classifier's four refusal paths plus the six cause arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): every arm binds to the literal 'MEASURED RECOMMENDATION: ' prefix rather than to the whole detail, because the blocking FAIL text already names BOTH causes in its remediation sentence and a whole-detail search for either one therefore passes over an inverted classifier — the vacuous-arm shape, refused here by construction — M1 a commitment emitted with an empty ledger recommends emit-skipped and provably not the other cause / M2 its differential control, same fixture and mode with only the log counts changed, recommends no-commitments and provably not the other / M3 the residue gets its own outcome: decisions rendered with nothing emitted is the shape a swept-and-owed-nothing release and a never-swept release BOTH produce, so the classifier recommends NEITHER cause instead of guessing / M4 an unreadable probe is not a zero — a missing reader recommends nothing and NAMES the reader, without which a broken reader would silently recommend no-commitments on every close / M5 a measurement that DISAGREES with an attestation already given is recorded and still passes, with the specificity arm that an AGREEING measurement renders no disagreement notice / M6 THE SWEEP ZERO-STATE IS NOT A COMMITMENT: action-item-opened rows that all carry the sweep:none-owed payload token — what a release that swept every routing point and owed nothing emits — recommend NEITHER cause and never emit-skipped, and the basis NAMES the zero-state rows; red against a classifier that counts every action-item-opened row / M7 its specificity twin: ONE real commitment beside zero-state rows still recommends emit-skipped and renders the commitment count rather than the raw count, so an over-correction that stops counting whenever a zero-state row is present fails here, and a threshold drift to -ge 2 fails here as well as in M1 / M8 a zero-state count larger than the action-item-opened set it is a subset of is not a count — the classifier recommends nothing and NAMES the unusable probe rather than subtracting its way to a negative commitment count, without which the subset guard is unarmed / M9 A QUERY WITH NO RELEASE KEY IS NOT A ZERO — every other arm hands the classifier a key, so the first refusal path went undriven; the arm drives an unresolvable key against the M1 reader, the one that WOULD answer emit-skipped, so a disarmed guard prints a confident cause built from a query that names no release rather than simply printing nothing, and the detail must NAME the missing key / M10 A READER THAT DID NOT ANSWER WITH A COUNT HAS NOT COUNTED — M8 drives only the subset limb of the usable-count guard, leaving the non-integer limb unarmed; four limbs, because that limb is a DISJUNCTION over three separately-read counts and one fixture breaking all three is satisfied by any single guard surviving (measured: a mutant defaulting only the action-item-opened read to 0 left an all-queries-broken fixture still refusing), so limbs a-b-c each break exactly ONE query and leave the other two answering integers, giving every guard a fixture only it can refuse, while limb d breaks every query and is the only one that grades the READ rather than the guard — a bare integer on the first stdout line and an error carrying digits inside a non-numeric value on the last, so a first-line read or a contains-a-digit test reddens — and all four require the classifier to NAME the unusable probe instead of defaulting an unanswered count to 0 / M9 and M10 are the two arms this release adds, each measured RED against its own one-line mutant and GREEN unmutated, because before them the no-release-key guard could be replaced by an always-false test and the three non-integer guards defaulted to 0 with this suite still at exit 0 and zero FAIL lines / and every M arm re-asserts the verdict its fixture's attestation state already fixed — rc 3 with STATE_AI_GATE unchanged on the unattested M1-M4, M6-M8 and M10, rc 3 on M9 which reaches that same unattested state from an unresolvable directory, rc 0 on the attested M5 — so 'the recommendation decides nothing' is measured on each run rather than asserted once"
   _st_claim 4e-c-j "  phase_await_merge_chore_pr budget/escape validated (#1705 — zero-commit SKIP propagation / --no-merge SKIP / BLOCKED→CLEAN keep-poll merges / CONFLICTING HALT; #6255, arms c-j — this clause ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when the arms leave no witness: TERMINAL STATES — (e) an ALREADY-MERGED PR PASSes on the FIRST read with ZERO merge attempts and its detail carries the elapsed figure AC-4 is graded on, which no earlier version of this phase emitted at all / (f) a CLOSED-unmerged PR FAILs and its detail NAMES the closed-without-merging case, driven on the deliberately MERGEABLE-looking closed shape because the CONFLICTING one trips the pre-existing arm by accident, and asserted on the detail because a bare FAIL is satisfied by the PRE-FIX timeout path / (g) THE PER-ITERATION PIN: a merge landing MID-POLL is recognised on the SECOND read, so a pre-loop-only implementation passes (e) and fails here — budgeted at MERGE_TIMEOUT=2 because the bound admits ceil(TIMEOUT/STEP) iterations and a 1/1 arm would redden against a CORRECT implementation / RE-PROBE — (h) a failed gh pr merge over a PR that DID merge PASSes with the merge ATTEMPTED once and a detail naming the unobserved-merge case, (h2) its NEGATIVE CONTROL: the same failed merge over a STILL-OPEN PR must still FAIL, without which an implementation that PASSes on any merge failure satisfies (h) / (i) THE WIDTH PIN over the shipped text of the one shared reader, three-field --json list and three-field --jq template, behind an anti-vacuity floor on the extraction and TWO specificity controls on constructed FOUR-field lines that both needles must reject / BUDGET EXHAUSTION — (j) AC-2's timeout limb, which every arm above leaves ungraded: a PR BLOCKED on every read must spend the budget and then FAIL with a detail NAMING the timeout ('merge state still=') and ZERO merge attempts, asserted on the detail because a bare FAIL is satisfied by (f)'s CLOSED arm and by the CONFLICTING HALT, and on the merge counter because removing the post-loop guard falls straight through to gh pr merge and launders the spent budget into a PASS — measured: with that guard replaced by 'if false' the whole suite stayed at exit 0 / and every arm c-j counts BOTH pr view and pr merge, because post-fix a PASS is reachable through the terminal arm and no longer proves on its own that a merge was attempted)"
-  echo "  --no-merge post-merge phase-gating validated (#2919 — post_close_milestone / manual_close_release_issues / publish_github_release / check_release_body_drift DEFER under --no-merge, even with open milestone/issues; NO_MERGE=0 negative)" >&2
+  _st_claim CB "  phase_create_chore_branch fail-loud validated (#7182, group CB — 10 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): CB-1 create path PASS with HEAD read back / CB-2 a FREE existing branch SKIPPED with HEAD on it, the RED arm's control / CB-3 a same-worktree re-run converges, the header's phase-5 pin / CB-4 THE RED ARM: a branch HELD by a second worktree FAILs with rc 3 carrying git's refusal (holder named) and HEAD not moved / CB-5 that detail is one pipe-free line with a holder path under HOME rendered <home> / CB-6 the two SHIPPED dispatch lines, executed with the real phase: held → exit 3 and phase 6 never runs / CB-7 its sensitivity control: free → phase 6 runs / CB-8 AC-3: no '|| true' anywhere in the phase, with a pre-fix control / CB-9 class guard: zero success verdicts written before a swallowed git op across the production region, with sensitivity and specificity fixtures / CB-10 the shared projection's whole vocabulary on one input — CR and LF to spaces, '|' to '/', the repository root to <repo> and then HOME to <home> — redacted BEFORE the 800-character cap, so a home path straddling character 800 renders <home> and leaves no path fragment, with the arm's predicate shown on every run to reject a cap-first projection, a raw '|' and HOME redacted before the repository root"
+  _st_claim PL "  report text renders no absolute path validated (#7855, group PL — 5 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): PL-1 the redact-only primitive rewrites the repository root to <repo> and then HOME to <home>, keeps a trailing-slash root's separator, skips a one-character root and passes root-free text byte-identical, with HOME-first redaction rejected as its control / PL-2 a static census of every captured stream in the production region finds no cap-first, hand-rolled or raw projection into report text, with an anti-vacuity floor and a constructed region whose four defect shapes are flagged and four sanctioned shapes pass on every run / PL-3 phase 12.2 over a primary under a fabricated home renders all six reachable outcomes without the home prefix in markdown and JSON, with the raw record as sensitivity and the path-free row byte-identical / PL-4 phase 6.6's producer stderr, carrying the repository root and a home path at byte 790, renders redacted and uncut on the PASS, --apply FAIL and --dry-run WARN paths / PL-5 the report sinks redact the whole markdown render and every decoded JSON string, a non-ASCII home included, change no line and no path-free row, and the gate-passage proof phase 15 posts reaches the host redacted on both rungs (Plan amendments 12 and 13)"
+  _st_claim CR "  phase_create_chore_pr resumes over its own merged chore PR (#7436, group CR — 16 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): CR-1 CIAC-3's runtime arm — a MERGED, branch-deleted PR with a STALE origin/main resolves to resumed-already-merged through the owner-qualified REST read (state=all) with no GraphQL call, no create and no branch re-creation, containment proven against the PR's own refs/pull head, and phase 12 then renders its MERGED terminal-PASS arm on the first read with zero merges (AC-2 reached, not present) / CR-2 the FRESH-ref path through the zero-commit guard reaches the SAME arm with no GraphQL call / CR-3 control: outputs on main with NO PR keep the idempotent skip / CR-4 AC-3 never-created reaches the create and fails loud / CR-5 AC-3 a merged PR on another version's head is invisible / CR-6 CLOSED-unmerged leads to a fresh create, never to done / CR-7 containment: a commit made after the merge is not in the merged PR's head, so it FAILs with nothing pushed or created / CR-8 an OPEN PR is reused unchanged / CR-9 CIAC-3 static: no head-keyed --state open chore-PR lookup in the production region, by regex so this file never carries the plan's literal needle, with a control fixture / CR-10 a failed push FAILs before any create / CR-11 an unreadable partition FAILs carrying the host's message, never reads as none / CR-12 a SQUASH merge, whose chore commit is not an ancestor of main, still resumes: containment is against the PR's own head / CR-13 SECURITY: a fork's same-named OPEN PR never binds, on the zero-commit path or the main path / CR-14 the zero-commit guard reuses an OPEN PR instead of reporting none needed / CR-15 a push rejected only because the remote head is AHEAD of the local tip is not a failure / CR-16 phase 11's REST reader and phase 12's reader agree on open, merged and closed-unmerged PRs"
+  _st_claim HF "  the report header's chore-PR field renders every outcome phase 11 records (#5769, group HF — 9 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): HF-1 CIAC-2's runtime limb — each of the seven recorded states renders its own exact line, seven distinct lines, read through the real report / HF-2 AC-2 an idempotent skip on an --apply run reads as a success, never N/A, dry-run or FAILED / HF-3 AC-3 dry-run, not-yet-created and the idempotent skip are three distinct lines / HF-4 polarity over the partition: no success renders as N/A, FAILED or not created, and the failed outcome never renders as a skip / HF-5 the #7182 seam: a run halted at create_chore_branch names where it halted, never dry-run or N/A wording / HF-6 partition parity: every value the production region assigns to CHORE_PR_OUTCOME has an arm in the renderer, with an anti-vacuity floor of six and an extraction control / HF-7 an unknown value renders visibly unrecognised, never as a plausible state / HF-8 end to end on the real phase in --dry-run: the phase row, the recorded outcome and the header name the same outcome / HF-8b the JSON twin's chore_pr_outcome carries the same seven states, with chore_pr the number or null"
+  _st_claim NM "  --no-merge membership declared once + phase 15.55's own-tag limb validated (#7465, group NM — 19 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): NM-1 AC-1 — the dispatch lines from 15.5 through 16.7, lifted verbatim and executed under --no-merge with the own Release unpublished, defer 15.55 and 15.6 and reach 16, 16.5 and 16.7 / NM-1c its control: the same text on a merge run halts at 15.55 with exit 3 and strands the phases after it, so the harness can observe stranding / NM-2a NM-2b AC-2 — a dry-run predicts the own-tag gap its own publish no-op produces, over a DEPLOYED and a VERIFIED row, and records the prediction / NM-3 AC-3 — a sibling gap still FAILs at --apply, and NM-3c the clean fixture PASSes naming the own tag's state / NM-4a AC-4 at the parity population — the own tag is partitioned out by VERSION, with a sibling-gap control on the same fixture / NM-4b no masking — the in-flight set cannot hide a genuine own gap at --apply, and a closing version with a Release and no annotated tag is reported under the own label only / NM-4c the prediction predicate, one negative per conjunct, and the own pair's four states / NM-4d without a 15.5 dry-run record the own gap is reported / NM-4e a predicted own gap does not mask a sibling gap / NM-CIAC3 --no-merge defers 15.55 and the resumed --apply asserts it for real / NM-5a AC-5 — every post-merge dispatched phase has a row, with sensitivity, specificity and no-pivot controls, every row names a post-merge phase, and every value is in the closed set / NM-5b both reports derive their deferred list from the table, a row appended to it renders with no renderer edit, and NO_MERGE=0 renders none / NM-5c every defer row shares a --help line with DEFERS under --no-merge, with a control the predicate rejects / NM-5d every defer phase OPENS with the declared deferral, checked structurally against a constructed hand guard, a mutated copy of phase 13 and a deferral naming another phase / NM-12 phase 12's --no-merge detail says a chore PR phase 11 found MERGED is merged, with the byte-identical left-open control / NM-13 NM-14 (#7465 Plan amendment 6) phases 13's and 14's --no-merge deferral details say a chore PR phase 11 recorded as MERGED is merged and name no merge still to come, each with its byte-identical left-open control"
+  _st_claim LK "  phase_lock_milestone_threads validated (#5284 + #4768, group LK — 15 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): LK/a five unlocked threads, three issues and two pull requests, PASS with rc 0 and a detail that names every thread it locked / LK/b one REST lock call per thread with lock_reason=resolved, the two pull-request threads included / LK/c the lock path is REST only — every call an api call, none GraphQL and no issue-lock or pr-lock verb — with a control the transport predicate matches / LK/d two already-locked threads are skipped by the enumeration's own field, so three lock calls, and the detail counts them / LK/e every thread already locked reads SKIPPED with an explicit zero and makes no lock call / LK/f an empty milestone reads SKIPPED with an explicit zero / LK/g one failed lock call FAILs naming that thread in a pipe-free, home-redacted detail, the other four still lock, and the phase returns 0 / LK/h the count check's FAIL arm: an enumeration one issue short of the PR-inclusive counters FAILs naming both numbers, and the four enumerated threads still lock / LK/i its PASS arm: 5 == 0 + 5, with the control that the same fixture's issues-only subset (3) would read a phantom gap / LK/j --dry-run predicts statically, with no host call, no pipe and no would-FAIL token / LK/k --no-merge defers through the table's defer row with no host call / LK/l a failed enumeration FAILs with the host's message redacted, locks nothing and returns 0 / LK/m a lock call that reports success and locks nothing is caught by the read-back / LK/n the phase is dispatched after phase 15 and before at least one other phase, so the halted marker never reads its FAIL row as the last / LK/o the count check's open half: with the Stage-13 sub-task still open the counters read 1 + 4, and five enumerated threads PASS as 5 == 1 + 4 where a check against closed_issues alone would FAIL on a phantom gap, with the control that the fixture's open half is non-zero and its closed half alone is not the total"
+  _st_claim TL "  phase 6.8 declared register precondition validated (#6892, group TL — 9 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): TL/a the REAL register producer writes the Phase A7.2 register under a temporary instance root before 6.8 runs, and 6.8 PASSes with the computed readings the register makes possible / TL/b 6.8 hands the telemetry tool --retro with exactly the producer's --print-path value / TL/c with no register produced the field is still written with the honest absent reading, the row is WARN naming the unmet precondition, and the phase returns 0 / TL/d an unresolvable register path records WARN UNRESOLVABLE and passes no --retro / TL/e --dry-run over an absent register predicts the WARN with no would-FAIL token and writes nothing / TL/f the WARN detail never prints the resolved register path / TL/g with the precondition still unmet the first run writes the field and records WARN, and the re-run SKIPs without writing it twice / TL/h phase 10's cross-check sees 6.8's write when 6.8 records WARN: with the v9.96 block in an archive segment and the register absent, _reported_write_surfaces names the segment from the WARN row (Plan amendment 7), and with the register met it names the segment identically whether or not the recorder recorded it, so a missing recorder call is still caught / TL/i CD-1 end to end, run inside Test 11d's git sandbox: the REAL phase 6.8 over an archived v9.96 block with the register absent writes the field into the segment, records it and records WARN naming it, and with the recorder's entry dropped the REAL phase 10 FAILs naming the segment, so a gate that admits a WARN row only while the recorder holds its surface cannot pass, even with the recorder read hidden in a helper (Plan amendment 9)"
+  echo "  --no-merge post-merge behaviour validated (#2919 + NO_MERGE_PHASE_BEHAVIOUR — every defer row DEFERS under --no-merge even with an open milestone and issues, every skip row SKIPs citing the flag without the deferral sentinel; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
   echo "  phase_rebuild_skill_packages detection + files=() composition validated (#4722 — core/schemas sensitivity / core/standards control / rule-a direct-source / specificity negative / C1 dry-run WARN vs apply FAIL / delegation structure / P1 staging-array guard; #4755 — a5 _shared filter sensitivity (a non-skill dir under a skills/ root resolves NO candidate) / a6 _templates second-directory proving the filter is a roster-resolvability test and not a hardcoded _shared exclusion / a7 mixed set keeps the buildable candidate and drops the unbuildable one (anti-over-filtering) / d1 --apply anti-regression: a roster-resolvable skill that cannot build still returns 3, marks FAIL, and names ITSELF / d2 the converse in the same sandbox and mode: a filtered-out candidate reaches the N/A limb at rc 0 / c5 build-invocation shape — per-skill loop over \$candidates, --root passed on the BUILD call, failures accumulated by name in _rb_failed)" >&2
@@ -16169,7 +19434,7 @@ EOF
   _st_claim CY "  phase_read_state Cycle-Time carriage and the read-only Deployment Log field verdict validated (#6252, group CY — 13 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): CY-1 SENSITIVITY the missing-anchor fixture — the tool's own N/A reason reaches the state, the chore-PR ## Cycle time block, the report line and the JSON field byte for byte, RED on the capture that discarded stderr / CY-2 CONTROL a computed value is carried as itself with no note / CY-3 the reason names the missing anchor, never a stock phrase / CY-4 NOT-EVALUATED for an exit-2 producer carrying its own error and for a non-executable one, never an N/A; FM-4: a failure whose stderr carries an absolute path keeps it in the report form and reaches the PUBLIC chore-PR body as its class and exit code only, with the report-form limb as the anti-vacuity control / CY-5 N/A with no reason line reads N/A — DEGRADED / CY-6 INVERTED at the scope-lock: a negative interval is not a cycle time and reads N/A — DEGRADED with the tool's WARNING kept in the phase detail, for a signed value, for a sub-minute negative the human format prints unsigned as 0m (so the WARNING, not the sign, is the key), and through the REAL tool on inverted fixture anchors / CY-7 SEAM the REAL tool on a fixture log: a T_GO-only miss and a T_DEPLOY-only miss each reach the state exactly as the tool printed them, naming their own anchor, with no pipe, and the body stays parser-clean / CY-8 the exit contract the capture relies on — N/A exits 0 with stdout N/A / CY-9 THE FIELD VERDICT, read-only: the verbatim line CONFORMS, a hand-written cause DIVERGES worded as a disagreement carrying the tool's --iso anchors, a missing field is ABSENT and the sibling block's field is not borrowed, a value followed by its anchor parenthetical CONFORMS, 480m against 48m DIVERGES at the boundary, a qualified key DIVERGES, and THE KEY PIN — the verbatim line produced under the milestone slug DIVERGES from the one produced under the RELEASE_LOG row's Version cell / CY-10 NO PHANTOM WRITE SURFACE: a DIVERGENT excerpt carrying a parenthesised .md path and a pipe reaches the detail neutralized, with anti-vacuity limbs on the fixture, on the excerpt's presence in the detail and on the reader's capability to lift an un-neutralized token / CY-11 READ-ONLY by content hash, the instrument shown to move on a known write / CY-12 NON-BLOCKING: DIVERGENT, ABSENT and NOT-EVALUATED each return 0 and mark read_state PASS / CY-13 INT-4: the REAL tool against an empty evals directory exits 1, and read_state renders NOT-EVALUATED, never an N/A with a reason, with the class and exit code in the public body"
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  close-out report phase set is RECORD-DERIVED validated (#4773 — every recorded phase renders against a denominator parsed from this file's own mark_phase subjects (pre-fix: 3 missing — inject_velocity_field / append_release_learnings / audit_epic_rollup) / a phase in NO enumeration still renders (AC-2) / an unmarked name does NOT render (anti-vacuity) / post_gate_passage_proof renders AND is asserted definition-less, so a definition-derived set cannot silently drop it / a double-marked name renders ONE row carrying the FIRST result / the halted marker fires on a FAIL-terminated run and is absent on a clean one / DISPATCH<->RECORD cross-check: every dispatched phase is a record subject, with vacuity floors on both parses plus sensitivity and specificity arms — the one invariant no seeded arm can reach / JSON twin carries the same de-duplicated set with pre-existing keys intact)" >&2
-  echo "  Gate-Passage-Proof **Chore PR:** field renders ONCE on BOTH paths (#4322 — b1 POPULATED path, the path the pre-existing report arms never exercised: exactly one **Chore PR:** line carrying the number once, and the doubled form absent / b2 UNSET path, the previously-covered one, renders the fallback verbatim with no '#' / b3 SPECIFICITY on a NON-numeric fixture, because '#3697' contains '3697' so 'no bare number' is unfalsifiable on a numeric input: the value occurs exactly once on the line, counted in PURE BASH by length-delta rather than by grep_count -o, which counts LINES on this suite's BSD grep and so returns the PASS value on the doubled form — paired with the anti-vacuity control asserting the identical computation returns 2 over the pre-fix expansion / b4 EXECUTABLE SENSITIVITY: the pre-fix construct is expanded from a single-quoted source fixture and must BOTH reproduce the doubling AND be rejected by b1's matcher, without which b1's green result is uninformative / b5 REINTRODUCTION GUARD: the production region above self_test carries ZERO same-variable paired set/unset expansions on CHORE_PR_NUMBER, with an anti-vacuity control asserting the same matcher returns 1 on the known-bad source form, so the zero is a measurement rather than a broken probe / b6 the out-of-scope --no-merge deferral message's solitary set-arm is asserted unchanged in BOTH directions, so the fix did not generalize into a correct site / b7 AC-5: with the **Chore PR:** line stripped, two renders differing only in CHORE_PR_NUMBER are byte-identical, preceded by the anti-vacuity arm that the unstripped renders differ — b7 is invariant to a render-line revert BY DESIGN, so the executed mutation-kill set is b1/b3/b5)" >&2
+  echo "  Gate-Passage-Proof **Chore PR:** field renders ONCE on BOTH paths (#4322 — b1 POPULATED path, the path the pre-existing report arms never exercised: exactly one **Chore PR:** line carrying the number once, and the doubled form absent / b2 UNSET path (phase 11 never ran) renders the not-yet-created state verbatim with no '#' (#5769 retired the collapsed fallback) / b3 SPECIFICITY on a NON-numeric fixture, because '#3697' contains '3697' so 'no bare number' is unfalsifiable on a numeric input: the value occurs exactly once on the line, counted in PURE BASH by length-delta rather than by grep_count -o, which counts LINES on this suite's BSD grep and so returns the PASS value on the doubled form — paired with the anti-vacuity control asserting the identical computation returns 2 over the pre-fix expansion / b4 EXECUTABLE SENSITIVITY: the pre-fix construct is expanded from a single-quoted source fixture and must BOTH reproduce the doubling AND be rejected by b1's matcher, without which b1's green result is uninformative / b5 REINTRODUCTION GUARD: the production region above self_test carries ZERO same-variable paired set/unset expansions on CHORE_PR_NUMBER, with an anti-vacuity control asserting the same matcher returns 1 on the known-bad source form, so the zero is a measurement rather than a broken probe / b6 the out-of-scope --no-merge deferral message's solitary set-arm is asserted unchanged in BOTH directions, so the fix did not generalize into a correct site, and b6's second leg (#7465 Plan amendment 5): on a RESUMED --no-merge run whose chore PR phase 11 recorded as already merged, the intro states that merged outcome and never says the PR was left open, with the ordinary intro held byte for byte as its control, and b6's third leg (#7465 Plan amendment 6): on the same resumed run the follow-up heading states that merged outcome and never heads the follow-up with a merge still to come, with the ordinary heading held byte for byte as its control / b7 AC-5: with the **Chore PR:** line stripped, two renders differing only in CHORE_PR_NUMBER are byte-identical, preceded by the anti-vacuity arm that the unstripped renders differ — b7 is invariant to a render-line revert BY DESIGN, so the executed mutation-kill set is b1/b3/b5)" >&2
   echo "  chore-PR body builder is parser-clean (D9 self-check)" >&2
   echo "  JSON report renders valid JSON" >&2
   _st_claim t7-usage "  usage block extractable and not truncated, exit-2 dispatch set named in the render (#5762, Test 7 — this line ENUMERATES the arm's limbs and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this arm when the limbs leave no witness): HEAD anchor 'Usage:' / TAIL anchor the exit-codes block's '3 = ' entry, which is the last line usage() renders, replacing the '--self-test' needle that bound at render row 4 and therefore covered nothing below it / LIMB C the exit-2 dispatch set EXTRACTED from the guarded top-level dispatch and asserted present in the rendered exit-2 entry, with an anti-vacuity floor on the extracted set, a floor-30 exit-3 control proving the extractor works, and a non-empty check on the rendered entry so the naming loop cannot pass over nothing"
@@ -16341,8 +19606,9 @@ phase_action_item_gate || { generate_report; exit 3; }                # Phase 12
 phase_post_close_milestone || { generate_report; exit 3; }
 phase_manual_close_release_issues || { generate_report; exit 3; }
 phase_run_verification || { generate_report; exit 3; }
+phase_lock_milestone_threads || { generate_report; exit 3; }          # Phase 15.2 — Phase C5 lock-at-close over every milestone thread (issues + PRs, REST); NON-BLOCKING (returns 0 on every path) and never the last dispatched phase, so its FAIL row cannot trip the halted marker
 phase_publish_github_release || { generate_report; exit 3; }          # Phase 15.5 — Layer-1 dual-write Surface 1
-phase_assert_anchor_hygiene || { generate_report; exit 3; }           # Phase 15.55 — AC4/AC5: set-based tag<->Release parity + tagger identity (both anchors exist by now)
+phase_assert_anchor_hygiene || { generate_report; exit 3; }           # Phase 15.55 — AC4/AC5: set-based tag<->Release parity + tagger identity; the own tag is its own limb — asserted after 15.5 at --apply, predicted at --dry-run, deferred under --no-merge
 phase_check_release_body_drift || { generate_report; exit 3; }        # Phase 15.6 — post-emit §5.1 drift assert (genuine drift inside the cutoff scope BLOCKS; capability-absent / artifact-missing stay non-blocking)
 phase_invoke_orphan_cleanup || { generate_report; exit 3; }
 phase_pattern_scan || { generate_report; exit 3; }

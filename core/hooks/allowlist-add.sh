@@ -1,5 +1,5 @@
 #!/bin/bash
-# allowlist-add.sh — atomic marker-aware add helper for .claude/*-allowlist.txt files
+# allowlist-add.sh — atomic marker-aware add helper for the known, hook-managed allowlists
 #
 # Part of: the bypass-permissions-readiness hardening.
 #
@@ -55,14 +55,41 @@ readonly HOOK_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 readonly CLAUDE_DIR="$(cd "${HOOK_DIR}/.." && pwd -P)"
 readonly ADDITIONS_LOG="${HOOK_DIR}/allowlist-additions.log"
 
-# Known allowlists (relative to $CLAUDE_DIR). Prevents appending to arbitrary files.
+# The skill-editor exemption list is not a sibling of the allowlists below: it lives at the
+# operator-instance tier, and the single resolver in lib-instance-path.sh (co-deployed
+# beside this helper) is the only place that names it. It is rooted the way the Gate 2
+# hook roots it: the declared workspace root when one is set, else the workspace this
+# helper is deployed into. Resolved in a command substitution, so a missing or broken
+# library can only hand back an empty path — it can never end this helper early — and
+# printed physically, because ALLOWLIST_ABS below is physical and the two are compared as
+# strings.
+EXEMPTION_LIST_ABS="$(
+  lib="${HOOK_DIR}/lib-instance-path.sh"
+  [ -r "$lib" ] || lib="${HOOK_DIR}/../deploy/lib-instance-path.sh"
+  [ -r "$lib" ] || exit 0
+  root="${CLAUDE_WORKSPACE_ROOT:-}"
+  [ -n "$root" ] || root="$(cd "${CLAUDE_DIR}/.." 2>/dev/null && pwd -P)" || exit 0
+  # shellcheck source=/dev/null
+  . "$lib" >/dev/null 2>&1 || exit 0
+  command -v pmo_skill_editor_exemption_list_for >/dev/null 2>&1 || exit 0
+  p="$(pmo_skill_editor_exemption_list_for "$root")" || exit 0
+  [ -n "$p" ] || exit 0
+  if [ -d "$(dirname "$p")" ]; then p="$(cd "$(dirname "$p")" && pwd -P)/$(basename "$p")"; fi
+  printf '%s\n' "$p"
+)" || EXEMPTION_LIST_ABS=""
+readonly EXEMPTION_LIST_ABS
+
+# Known allowlists. Prevents appending to arbitrary files. Eight sit side by side in
+# $CLAUDE_DIR (the hook tier); the ninth is the exemption list resolved above. When that
+# cannot be resolved its entry is a label no absolute path can equal, so the list is
+# refused and the usage listing says why.
 readonly KNOWN_ALLOWLISTS=(
   "${CLAUDE_DIR}/mcp-write-allowlist.txt"
   "${CLAUDE_DIR}/egress-allowlist.txt"
   "${CLAUDE_DIR}/webfetch-allowlist.txt"
   "${CLAUDE_DIR}/ssh-allowlist.txt"
   "${CLAUDE_DIR}/script-execution-allowlist.txt"
-  "${CLAUDE_DIR}/skill-editor-exemption-list.txt"
+  "${EXEMPTION_LIST_ABS:-(skill-editor exemption list: resolver unavailable)}"
   "${CLAUDE_DIR}/shell-injection-allowlist.txt"
   "${CLAUDE_DIR}/fs-boundary-allowlist.txt"
   "${CLAUDE_DIR}/scope-segregation-allowlist.txt"

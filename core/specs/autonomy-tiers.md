@@ -186,9 +186,16 @@ The following actions are **never delegable to agents**, regardless of standing 
    - *Source rule:* `.claude/rules/operations-bridge.md` § Rules for Claude Code (rules 1, 2), which states the same directional qualification.
    - *Enforcement:* `block-autonomy-ceiling.sh` `BLOCK-AUTONOMY-004`, `apply_block`, mode-gated and evaluated below the master-activation and workspace-scope gates. Under the shipped master-OFF default it is inert. A target counts as `projects/` only when it is under the operations root **and** in no working tree of the platform repository — membership is evaluated first — which is what establishes that this direction cannot reach the tracked repository through any working tree of this checkout's repository; a separate clone of the platform remote is a different repository to git and is not covered.
 
-8. **Destructive operations outside `${HOME}/Claude/`** — `rm`/`rmdir`/`unlink`/`trash` targets resolved outside the workspace root.
-   - *Why irreducible:* Per `.claude/hooks/block-rm-prefer-trash.sh` BLOCK-TRASH-001 / BLOCK-TRASH-003: blocks at hook level; permanent. No bypass mechanism.
+8. **Destructive operations outside `${HOME}/Claude/`** — `rm`/`rmdir`/`unlink`/`trash` targets resolved outside the workspace root. A Trash move of one auto-memory entry is deliberately NOT a member of this set — see item 8a.
+   - *Why irreducible:* Per `.claude/hooks/block-rm-prefer-trash.sh` BLOCK-TRASH-001 / BLOCK-TRASH-003: blocks at hook level; permanent. No agent-reachable bypass: `CLAUDE_HOOK_BYPASS` is set by the operator before launch, and a mid-session assignment is refused by `BLOCK-DESTRUCTIVE-023`.
    - *Source rule:* `.claude/rules/bypass-mode-readiness.md` § block-rm-prefer-trash.sh BLOCK-TRASH-001/003.
+
+8a. **Memory-store eviction — a Trash move of one auto-memory entry out of the operator's declared store** — **not a member of item 8's set.** Governed by the encode-and-evict lifecycle under operator authorization. **Tier 1, not Tier 0.**
+   - *Why NOT irreducible:* Item 8's own rationale cites only its enforcement, so it never says what the item is scoped to. Judged against this document's Tier 0 observable indicators, this act meets none of them: a Trash move is recoverable, it touches only the operator's own store, the store is not governance state, and it is not a Prohibited Action. What item 8 protects is every other target outside the workspace root — files the platform does not govern and whose loss it cannot assess — and it keeps protecting them.
+   - *This is a scope correction, not a relaxed floor:* a permanent-deletion verb on a memory entry stays refused, the `MEMORY.md` index and any directory stay refused, and every other outside-root target stays in item 8. The re-scope is recorded in ADR-216, per the permanence rule above.
+   - *Still governed, at Tier 1:* the act belongs to the EVICT phase, which runs under operator authorization. The hook admits the act; it does not verify the authorization. For this act, as for every Tier 1 action today, the authorization is procedural. Each admission leaves one row in the hook's block log, so an admission can be reviewed after the fact.
+   - *Source rule:* `core/disciplines/knowledge-architecture.md` § Memory↔corpus boundary (its EVICT phase states the mechanism).
+   - *Enforcement:* `block-rm-prefer-trash.sh`, the memory-store arm of its outside-root refusal (`core/rules/bypass-mode-readiness/block-rm-prefer-trash.md` § Memory-store arm).
 
 ## Failure modes
 
