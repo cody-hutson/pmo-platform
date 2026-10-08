@@ -8,6 +8,12 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.73 (2026-10-04) — Updates and safety guards now follow what they govern, not where they start
+
+### v4.72 (2026-10-03) — A release close now finishes in two passes and reports what its tools read
+
+### v4.71 (2026-10-02) — Each kind of work now names the design questions a framing of it must answer
+
 ### v4.70 (2026-10-02) — The plan check now says what it ran, what it could not, and what it skipped
 
 ### v4.69 (2026-09-25) — Allowlist entries now apply only where they belong, and refusals can be audited

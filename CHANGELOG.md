@@ -20,6 +20,24 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.73] - 2026-10-04
+
+Updates and installs now bind to your main checkout, and the safety guards judge the file being written, not where a session started.
+
+[Full notes](release/releases/notes/v4.73_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.73)
+
+## [v4.72] - 2026-10-03
+
+A release close now finishes in two passes, reports only states its tools read, keeps local paths out of posts, and locks finished threads.
+
+[Full notes](release/releases/notes/v4.72_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.72)
+
+## [v4.71] - 2026-10-02
+
+The platform now names eight kinds of work and the design questions each kind owes, so an epic framing can see what it has left unanswered.
+
+[Full notes](release/releases/notes/v4.71_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.71)
+
 ## [v4.70] - 2026-10-02
 
 The release-plan check now tells a pass from a check it could not run, and a row can no longer pass on a keyword or drop out of the results.

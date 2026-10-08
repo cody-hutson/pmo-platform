@@ -67,14 +67,22 @@ SURFACES_ONLY=0
 # default — keeping a no-flag update byte-identical to pre-#611 behavior.
 WORKSPACE_ROOT_EXPLICIT=0
 
+# --- Phase 1b result: the canonical [PMO_PLATFORM_ROOT] value and the tier that supplied
+# it, resolved once in pre-flight and passed to every composition write (see
+# resolve_platform_root). Empty until pre-flight runs.
+CANONICAL_PLATFORM_ROOT=""
+CANONICAL_PLATFORM_ROOT_SOURCE=""
+
 # --- Phase 3 result (read by main to select the exit code; see EX_NOCHANGE) ---
 REGENERATED_COUNT=0
 
-# --- Phase 3 result: hook-tier composition surfaces found ABSENT (space-separated
-# basenames). A hook-tier surface is the "escape half" of a hook control; shipping a
-# hook refresh while one is missing puts the workspace in a strictly MORE restrictive
-# state than either tool intends. Consumed by assert_install_complete below (#4449).
-MISSING_HOOK_TIER_SURFACES=""
+# --- Phase 3 result: composition surfaces a security hook reads, found ABSENT
+# (space-separated basenames) — every hook-tier surface, plus the instance-tier files
+# lib-instance-path.sh declares in pmo_hook_read_instance_files_for. Each is the "escape
+# half" of a hook control; shipping a hook refresh while one is missing puts the
+# workspace in a strictly MORE restrictive state than either tool intends. Consumed by
+# assert_install_complete below (#4449).
+MISSING_HOOK_ESCAPE_SURFACES=""
 
 # --- Phase 5 result (read by main to select the exit code; see EX_NOCHANGE) ---
 # Set to 1 by redeploy_skills ONLY when Phase 5 actually deployed >=1 new/changed
@@ -124,8 +132,9 @@ Options:
                         Runs preflight, schema migration, the instance backup,
                         and managed-section regeneration — and nothing else.
                         Skips: needle/roster scaffolds, skill redeploy, the
-                        security-hook bundle refresh, the .version snapshot, and
-                        the .last-update state write. Use this to refresh a single
+                        security-hook bundle refresh, the legacy exemption-list
+                        reconcile, the .version snapshot, and the .last-update
+                        state write. Use this to refresh a single
                         stale allowlist or other composition surface without the
                         blast radius of a full update. Note: core/deploy/deploy.sh
                         --deploy CANNOT refresh a composition surface; this flag
@@ -143,15 +152,16 @@ Options:
 Exit codes:
   0    Update applied successfully (managed sections regenerated and/or skills redeployed)
   64   No update needed (no managed-section regeneration AND no skill redeploy)
-  65   operator.toml missing or malformed
+  65   operator.toml missing or malformed, or the canonical platform root cannot be resolved
   66   Schema migration aborted (operator dismissed prompt)
   73   Regeneration failure (file write or verification error)
   75   Install incomplete — a deployed control is present but not operable.
-       Either a hook-tier composition surface is absent (the hook refresh was
-       refused before it could ship enforcement with no escape hatch), or a
-       deployed hook entrypoint is not executable after the refresh (a hook
-       without +x does not run, and does not say so). Both name the offending
-       file. Run docs/scripts/setup-workspace.sh, then re-run.
+       Either a composition surface a security hook reads is absent — a
+       hook-tier allowlist, or the skill-editor exemption list — and the hook
+       refresh was refused before it could ship enforcement with no escape
+       hatch; or a deployed hook entrypoint is not executable after the
+       refresh (a hook without +x does not run, and does not say so). Both
+       name the offending file. Run docs/scripts/setup-workspace.sh, then re-run.
   130  Interrupted (rollback applied)
 
 Prerequisites:
@@ -184,7 +194,9 @@ done
 OPERATOR_TOML="${CONFIG_ROOT}/operator.toml"
 LAST_UPDATE_FILE="${CONFIG_ROOT}/.last-update"
 BACKUP_DIR_ROOT="${WORKSPACE_ROOT}/.backup-pre-update"
-readonly OPERATOR_TOML LAST_UPDATE_FILE BACKUP_DIR_ROOT
+# The install record setup-workspace.sh writes (its STATE_FILE_NAME, under <ws>/.claude/).
+INSTALL_STATE_FILE="${WORKSPACE_ROOT}/.claude/.workspace-setup.state"
+readonly OPERATOR_TOML LAST_UPDATE_FILE BACKUP_DIR_ROOT INSTALL_STATE_FILE
 readonly CONFIG_ROOT WORKSPACE_ROOT
 
 # --- Phase 1: Pre-flight ---
@@ -218,7 +230,42 @@ preflight() {
     exit "${EX_NOCONFIG}"
   fi
 
-  info "Pre-flight passed (operator.toml + composition library + manifest present)."
+  resolve_platform_root
+
+  info "Pre-flight passed (operator.toml + composition library + manifest present; [PMO_PLATFORM_ROOT] resolved)."
+}
+
+# --- Phase 1b: the canonical platform root for [PMO_PLATFORM_ROOT] ---
+# REPO_ROOT stays self-located ON PURPOSE: it is the checkout whose templates, manifest
+# and library this run deploys, which may legitimately be a worktree carrying
+# branch-only rows. The VALUE substituted for [PMO_PLATFORM_ROOT] is a different thing:
+# the durable root baked into security allowlists. It is resolved ONCE — from the
+# install record, else the repository's main working tree — and passed explicitly to
+# every composition write. It is never this script's location.
+resolve_platform_root() {
+  local out="" rc=0
+  out="$(lib_compose_resolve_root --install-state "${INSTALL_STATE_FILE}")" || rc=$?
+  if [ "${rc}" -ne 0 ] || [ -z "${out}" ]; then
+    err "Cannot resolve the canonical platform root for [PMO_PLATFORM_ROOT] (resolve-root exit ${rc})."
+    err "Re-run docs/scripts/setup-workspace.sh from the platform's main checkout to record the"
+    err "install root (or set PMO_PLATFORM_ROOT to that checkout for one run), then re-run"
+    err "./update.sh --force-regen so every composed surface is rebuilt on the recorded root."
+    exit "${EX_NOCONFIG}"
+  fi
+  IFS=$'\t' read -r CANONICAL_PLATFORM_ROOT CANONICAL_PLATFORM_ROOT_SOURCE <<EOF
+${out}
+EOF
+  case "${CANONICAL_PLATFORM_ROOT}" in
+    /*) ;;
+    *) err "resolve-root returned a non-absolute root: '${CANONICAL_PLATFORM_ROOT}' (tier '${CANONICAL_PLATFORM_ROOT_SOURCE}')"; exit "${EX_NOCONFIG}" ;;
+  esac
+  readonly CANONICAL_PLATFORM_ROOT CANONICAL_PLATFORM_ROOT_SOURCE
+  # Report the binding, so a caller sees it rather than infers it. One line per run, on
+  # stderr, before any surface is written: the value any regenerated surface will carry
+  # for [PMO_PLATFORM_ROOT], the tier that supplied it, and the checkout whose TEMPLATES
+  # this run deploys. The value and the checkout differ by design when the run is
+  # invoked from a worktree.
+  info "Resolved [PMO_PLATFORM_ROOT] = ${CANONICAL_PLATFORM_ROOT} (source: ${CANONICAL_PLATFORM_ROOT_SOURCE}); templates are read from ${REPO_ROOT}"
 }
 
 # --- Phase 2: Schema migration ---
@@ -275,7 +322,7 @@ schema_migrate() {
 
   # Compute the delta. 0 = in sync · 1 = keys missing · 3 = the probe could not run.
   local delta_out delta_rc=0
-  delta_out=$(bash "${probe}" --emit-delta 2>&1) || delta_rc=$?
+  delta_out=$(bash "${probe}" --emit-delta --config-root "${CONFIG_ROOT}" 2>&1) || delta_rc=$?
 
   case "${delta_rc}" in
     0)
@@ -310,7 +357,7 @@ schema_migrate() {
 
   info "Reconciling — backfilling declared defaults, preserving operator-set values."
   local rec_rc=0
-  bash "${setup}" --reconcile-config --source-repo "${REPO_ROOT}" || rec_rc=$?
+  bash "${setup}" --reconcile-config --source-repo "${REPO_ROOT}" --config-root "${CONFIG_ROOT}" || rec_rc=$?
 
   if [ "${rec_rc}" -eq 66 ]; then
     # The reserved code, finally emitted by something. A delivered key carries no
@@ -383,8 +430,8 @@ regenerate_managed_sections() {
 
     if [ ! -f "${target}" ]; then
       info "Target absent (${target_basename}, ${tier} tier); fresh install needed via setup-workspace.sh"
-      if [ "${tier}" = "hook" ]; then
-        MISSING_HOOK_TIER_SURFACES="${MISSING_HOOK_TIER_SURFACES:+${MISSING_HOOK_TIER_SURFACES} }${target_basename}"
+      if [ "${tier}" = "hook" ] || is_hook_read_instance_file "${target}"; then
+        MISSING_HOOK_ESCAPE_SURFACES="${MISSING_HOOK_ESCAPE_SURFACES:+${MISSING_HOOK_ESCAPE_SURFACES} }${target_basename}"
       fi
       continue
     fi
@@ -423,7 +470,7 @@ regenerate_managed_sections() {
       mkdir -p "${tamper_backup}"
       cp "${target}" "${tamper_backup}/${target_key}"
       warn "tamper detected in managed section of ${target_basename} (${tier} tier); backed up to ${tamper_backup}/${target_key}; regenerating from template."
-      if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "${dialect}"; then
+      if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "${dialect}" "${CANONICAL_PLATFORM_ROOT}"; then
         regenerated=$((regenerated + 1))
         info "Regenerated (tamper): ${target_basename}"
       else
@@ -470,7 +517,7 @@ regenerate_managed_sections() {
         ;;
     esac
 
-    if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "${dialect}"; then
+    if lib_compose_regen "${source_file}" "${target}" "${tokens_flag}" "${OPERATOR_TOML}" "${override_toml}" "${dialect}" "${CANONICAL_PLATFORM_ROOT}"; then
       regenerated=$((regenerated + 1))
       info "Regenerated: ${target_basename} (${tier} tier; backup: ${backup_dir}/${target_key})"
     else
@@ -786,16 +833,19 @@ redeploy_skills() {
 
 # --- Phase 5b0: Install-completeness gate (#4449) -----------------------------
 # Runs immediately BEFORE the hook refresh, and the ordering is the whole point.
-# Phase 5c installs hook SCRIPTS (the enforcement half). A hook-tier composition
-# surface is its allowlist (the escape half). Refreshing hooks while a hook-tier
-# surface is absent leaves the workspace strictly MORE restrictive than either tool
-# intends — enforcement with no escape — and the run would otherwise report success
-# over it. Gating here (not at end-of-run) means the asymmetric state never lands.
+# Phase 5c installs hook SCRIPTS (the enforcement half). A composition surface a hook
+# reads is its escape half: every hook-tier allowlist, and the instance-tier files
+# lib-instance-path.sh declares in pmo_hook_read_instance_files_for (the skill-editor
+# exemption list the Gate 2 hook reads). Refreshing hooks while one is absent leaves the
+# workspace strictly MORE restrictive than either tool intends — enforcement with no
+# escape — and the run would otherwise report success over it. Gating here (not at
+# end-of-run) means the asymmetric state never lands.
 #
-# Scope is deliberately hook-tier ONLY: instance-tier surfaces are operator data
-# with no paired enforcement half, so their absence is not an asymmetry.
+# Scope is every surface a deployed hook reads, which is the property the tier used to
+# stand in for. The other instance-tier surfaces are escape halves of DEPLOY-TIME checks,
+# with no hook refresh to guard, so their absence is not this asymmetry and they stay out.
 #
-# This CANNOT fire on a healthy workspace (every hook-tier surface present), so it
+# This CANNOT fire on a healthy workspace (every such surface present), so it
 # does not stand between a healthy install and a hook security fix. On an unhealthy
 # one, the correct remedy is setup-workspace.sh, which lands BOTH halves.
 #
@@ -808,13 +858,29 @@ redeploy_skills() {
 # incomplete workspace stops here and does not preview Phases 5c through 4.
 #
 # It also leaves .last-update unwritten, which is correct: the run did not complete.
+#
+# is_hook_read_instance_file <target> — 0 when the target is one of the instance-tier
+# files a deployed hook reads. The set is declared once, in lib-instance-path.sh, resolved
+# for this run's workspace root, and compared by exact string with the target Phase 3
+# resolved through the same resolver. Only ever called in status form.
+is_hook_read_instance_file() {
+  local f
+  command -v pmo_hook_read_instance_files_for >/dev/null 2>&1 || return 1
+  while IFS= read -r f; do
+    if [ -n "${f}" ] && [ "${f}" = "$1" ]; then return 0; fi
+  done <<EOF
+$(pmo_hook_read_instance_files_for "${WORKSPACE_ROOT}")
+EOF
+  return 1
+}
+
 assert_install_complete() {
-  if [ -z "${MISSING_HOOK_TIER_SURFACES}" ]; then
+  if [ -z "${MISSING_HOOK_ESCAPE_SURFACES}" ]; then
     return 0
   fi
-  err "Install incomplete — hook-tier composition surface(s) absent: ${MISSING_HOOK_TIER_SURFACES}"
+  err "Install incomplete — composition surface(s) a security hook reads are absent: ${MISSING_HOOK_ESCAPE_SURFACES}"
   err "Refusing to refresh the security-hook bundle: installing an enforcement control"
-  err "whose allowlist is absent would leave this workspace MORE restrictive than intended."
+  err "whose escape surface is absent would leave this workspace MORE restrictive than intended."
   err "Run docs/scripts/setup-workspace.sh to install the missing surface(s), then re-run ./update.sh."
   exit "${EX_INCOMPLETE}"
 }
@@ -919,8 +985,12 @@ refresh_hooks() {
   if [ "${DRY_RUN}" -eq 1 ]; then dry_flag="--dry-run"; fi
   local refresh_out; refresh_out="$(mktemp -t update-phase5c.XXXXXX)"
   local rc=0
+  # --config-root is passed for the same reason Phase 5d passes it: without it the
+  # delegate falls back to the DEFAULT config root and takes its hook-bundle snapshot
+  # there, so an update sandboxed with --config-root would write outside its sandbox.
   # shellcheck disable=SC2086  # dry_flag is a single controlled token (empty or --dry-run)
-  bash "${setup}" --refresh-hooks --workspace-root "${WORKSPACE_ROOT}" --source-repo "${REPO_ROOT}" ${dry_flag} \
+  bash "${setup}" --refresh-hooks --workspace-root "${WORKSPACE_ROOT}" \
+    --config-root "${CONFIG_ROOT}" --source-repo "${REPO_ROOT}" ${dry_flag} \
     >"${refresh_out}" 2>&1 || rc=$?
   cat "${refresh_out}" >&2
   # Flip the "did something" flag only on a REFRESHED hook — a hook whose deployed content
@@ -979,6 +1049,106 @@ refresh_hooks() {
     return 0
   fi
   rm -f "${refresh_out}"
+}
+
+# --- Phase 5c1: Legacy exemption-list reconcile ----------------------------------------
+# Before the single resolver, the writer (allowlist-add.sh) could only write a copy of the
+# skill-editor exemption list at the hook tier, beside the other allowlists, and the Gate 2
+# hook read that copy. The refreshed hook reads the instance-tier list the manifest has
+# always registered. Every exemption that ever worked at the hook therefore lives in the
+# hook-tier copy, and this phase retires that copy — once, and only where nothing can be
+# lost:
+#
+#   - LOSSLESS (every entry is already an exact line of the instance-tier list): moved into
+#     this run's pre-update backup directory as hook-<basename>.legacy, and counted as a
+#     change.
+#   - NOT LOSSLESS: kept, and each extra entry is named once with the writer command that
+#     re-adds it at the instance tier. Re-affirming a policy entry goes through the governed
+#     writer, whose additions are logged; this phase never writes policy itself.
+#
+# An entry is what the hook could ever have matched: a line other than a blank one or a
+# comment, leading whitespace ignored for that test only.
+#
+# ORDERED AFTER THE HOOK REFRESH, AND NEVER A MEMBER OF --surfaces-only. Retiring the copy
+# is safe only once its reader has switched paths, so the phase requires the deployed Gate 2
+# hook to be byte-identical to source and the co-deployed resolver to be present — read here
+# from the deployed files, not inferred from the refresh's exit status. That comparison asks
+# one question of one hook, whether its reader has switched paths; it does not re-classify
+# the refresh, whose verdict stays the delegate's. A hook the refresh preserved or declined
+# leaves the copy in place. --surfaces-only refreshes no hook, so it cannot switch the
+# reader, and the copy stays until a full update.
+#
+# The hook-tier path is derived through the composition resolver, never spelled. This phase
+# is transitional: it and its tests retire once no install carries a hook-tier copy.
+LEGACY_EXEMPTION_RETIRED=0
+reconcile_legacy_exemption_list() {
+  info "Phase 5c1: Reconcile a legacy hook-tier copy of the skill-editor exemption list"
+  if ! command -v pmo_skill_editor_exemption_list_for >/dev/null 2>&1; then
+    warn "The exemption-list resolver is unavailable; the legacy reconcile is skipped."
+    return 0
+  fi
+  local canonical base legacy
+  canonical="$(pmo_skill_editor_exemption_list_for "${WORKSPACE_ROOT}")"
+  base="$(basename "${canonical}")"
+  if ! legacy="$(lib_compose_resolve_target "${base}" hook "${WORKSPACE_ROOT}")" || [ -z "${legacy}" ]; then
+    warn "The hook-tier path of ${base} could not be derived; the legacy reconcile is skipped."
+    return 0
+  fi
+  if [ ! -f "${legacy}" ]; then
+    info "No legacy hook-tier copy of ${base}; nothing to reconcile."
+    return 0
+  fi
+  if [ ! -f "${canonical}" ]; then
+    info "Legacy hook-tier copy kept: the instance-tier list is absent (${canonical})."
+    return 0
+  fi
+
+  local hooks_dir="${WORKSPACE_ROOT}/.claude/hooks"
+  local reader_current=1 writer_current=1
+  cmp -s "${hooks_dir}/block-skill-direct-edit.sh" "${REPO_ROOT}/core/hooks/block-skill-direct-edit.sh" || reader_current=0
+  [ -f "${hooks_dir}/lib-instance-path.sh" ] || reader_current=0
+  cmp -s "${hooks_dir}/allowlist-add.sh" "${REPO_ROOT}/core/hooks/allowlist-add.sh" || writer_current=0
+
+  # Extras: the legacy copy's entries that are not an exact line of the instance-tier list.
+  local line lead extras=0
+  while IFS= read -r line || [ -n "${line}" ]; do
+    lead="${line#"${line%%[![:space:]]*}"}"
+    case "${lead}" in ''|'#'*) continue ;; esac
+    if grep -Fxq -- "${line}" "${canonical}"; then continue; fi
+    extras=$((extras + 1))
+    if [ "${writer_current}" -eq 1 ]; then
+      warn "Legacy exemption entry '${line}' is not in ${canonical}; re-add it with: ${hooks_dir}/allowlist-add.sh '${canonical}' '${line}' --reason 'migrated from the legacy location'"
+    else
+      warn "Legacy exemption entry '${line}' is not in ${canonical}; run a full ./update.sh so the current allowlist-add.sh is deployed, then re-add the entry with it."
+    fi
+  done < "${legacy}"
+  if [ "${extras}" -gt 0 ]; then
+    warn "Kept the legacy hook-tier copy ${legacy}: ${extras} of its entries are not yet at the instance tier (named above)."
+    return 0
+  fi
+
+  if [ "${reader_current}" -eq 0 ]; then
+    if [ "${DRY_RUN}" -eq 1 ]; then
+      info "[dry-run] the legacy hook-tier copy ${legacy} is lossless; a real run retires it once the hook refresh has made the deployed Gate 2 hook and its co-deployed resolver current."
+    else
+      info "Legacy hook-tier copy kept: the deployed Gate 2 hook or its co-deployed resolver is not the merged version yet, so the hook may still read the copy."
+    fi
+    return 0
+  fi
+  if [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would retire the lossless legacy hook-tier copy ${legacy}"
+    LEGACY_EXEMPTION_RETIRED=1
+    return 0
+  fi
+  local backup_dir dst
+  backup_dir="${BACKUP_DIR_ROOT}-$(date -u +%Y%m%dT%H%M%SZ)"
+  dst="${backup_dir}/hook-${base}.legacy"
+  if mkdir -p "${backup_dir}" && mv "${legacy}" "${dst}"; then
+    LEGACY_EXEMPTION_RETIRED=1
+    info "Retired the lossless legacy hook-tier copy of ${base}; backup: ${dst}"
+  else
+    warn "Could not retire the legacy hook-tier copy ${legacy}; the hook no longer reads it, so it may be removed by hand."
+  fi
 }
 
 # --- Phase 5d: Refresh the managed settings.json (ADR-121) ---
@@ -1087,7 +1257,8 @@ refresh_version_snapshot() {
 # update.sh's regenerate_managed_sections, not there.
 #
 # It does NOT scaffold needles or the roster, redeploy skills, refresh the
-# security-hook bundle, restamp the .version snapshot, or write .last-update.
+# security-hook bundle, reconcile a legacy exemption-list copy, restamp the .version
+# snapshot, or write .last-update.
 #
 # The .last-update omission is deliberate and load-bearing, not an oversight.
 # write_last_update is the LAST member of the full sequence, so a .last-update
@@ -1133,6 +1304,10 @@ else
   # scripts, so the assertion is too late after it. Not a member of
   # surfaces_only_flow: that flow refreshes no hooks, so it can change no hook mode.
   assert_hooks_executable
+  # MUST follow refresh_hooks — see reconcile_legacy_exemption_list's header: a legacy
+  # copy is retired only once the deployed Gate 2 hook no longer reads it. Not a member
+  # of surfaces_only_flow: that flow refreshes no hook, so it cannot switch the reader.
+  reconcile_legacy_exemption_list
   # Phase 5d MUST follow Phase 5c: hook scripts land first, then the registrations that
   # name them. Reordering would wire events to scripts not yet on disk (ADR-121 §8).
   refresh_settings
@@ -1175,7 +1350,10 @@ if [ "${HOOK_REFRESH_DECLINED}" -eq 1 ]; then
   exit "${EX_INCOMPLETE}"
 fi
 
-if [ "${REGENERATED_COUNT}" -eq 0 ] && [ "${PHASE5_DEPLOYED}" -eq 0 ]; then
+# A retired legacy exemption-list copy is a change to the workspace in its own right, so a
+# run whose only change is that retirement returns EX_OK (its own flag, set by Phase 5c1).
+if [ "${REGENERATED_COUNT}" -eq 0 ] && [ "${PHASE5_DEPLOYED}" -eq 0 ] \
+   && [ "${LEGACY_EXEMPTION_RETIRED}" -eq 0 ]; then
   info "Update complete (no changes — composition surface already current)."
   exit "${EX_NOCHANGE}"
 fi

@@ -107,6 +107,12 @@ memory/
 # posture stays tracked while the operator's setting does not.
 .claude/hooks/.*-mode
 .claude/hooks/.session-retro-state/
+# Hook-suite test layout materialized at a checkout root by
+# core/hooks/tests/setup-ci-layout.sh (its default sandbox is the checkout it runs
+# from). Every file it writes there is a copy of tracked source or a token-resolved
+# allowlist carrying the local home path, so none of it may ever be committed.
+.claude/hooks/
+.claude/*.txt
 # Source-tree hook runtime artifacts (produced when hooks run from the worktree
 # during engineering/testing). The committed source is the .sh + .mode.template;
 # the live .mode and the per-hook logs are runtime-only.
