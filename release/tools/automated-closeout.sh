@@ -2051,8 +2051,12 @@ _host_rest_get() {
 #               false → CONFLICTING, null → UNKNOWN; mergeable_state upper-cased,
 #               null → UNKNOWN
 #   files       one filename per line
-#   candidates  "<number><TAB><state><TAB><merged_at>" per item whose head label
-#               equals <head-label> exactly; an item for any other head is dropped
+#   candidates  line one is the number of items the reply carried; then one line,
+#               "<number> <state> <merged_at-or-dash>", per item whose head label
+#               equals <head-label> exactly — state is the host's open or closed,
+#               and a null merge time reads "-". An item for any other head is
+#               dropped from the lines and still counted on line one, which is how
+#               the binding tells a full page from a short one
 # STATE is MERGED only when merged is true, CLOSED when state is closed, else OPEN. A
 # body that lacks what a projection needs exits non-zero, so the read becomes
 # failed-other: a malformed answer is never a state.
@@ -2109,13 +2113,21 @@ def main(argv):
     elif proj == "candidates":
         if not isinstance(doc, list) or not want:
             raise ValueError("candidates")
+        out.append("%d" % len(doc))
         for c in doc:
             if not isinstance(c, dict) or not isinstance(c.get("number"), int):
                 raise ValueError("candidate")
             head = c.get("head") if isinstance(c.get("head"), dict) else {}
             if head.get("label") != want:
                 continue
-            out.append("%d\t%s\t%s" % (c["number"], c.get("state") or "", c.get("merged_at") or ""))
+            if c.get("state") not in ("open", "closed"):
+                raise ValueError("candidate state")
+            when = c.get("merged_at")
+            if when is None:
+                when = "-"
+            elif not isinstance(when, str) or not re.fullmatch(r"[0-9A-Za-z:.+-]+", when):
+                raise ValueError("candidate merge time")
+            out.append("%d %s %s" % (c["number"], c["state"], when))
     else:
         raise ValueError("projection")
     sys.stdout.write("\n".join(out))
@@ -2216,30 +2228,10 @@ _host_pr_files() {
   return 1
 }
 
-# _host_chore_pr_candidates <branch> <open|all> — this repository's pull requests
-# whose head is <owner>:<branch>, over REST, as "<number><TAB><state><TAB><merged_at>"
-# lines in HOST_READ_VALUE. The name and the owner-qualified head match the binding a
-# sibling release's approved plan gives the same lookup, so whichever release merges
-# second adapts by name rather than by rewrite. An empty branch or owner, or a branch
-# outside the URL-safe set, is refused as failed-other BEFORE any host call: an empty
-# or malformed head is exactly the value the host silently drops (#7884 FM-1).
-_host_chore_pr_candidates() {
-  local _owner="${REPO_SLUG%%/*}"
-  HOST_READ_CLASS="failed-other"; HOST_READ_SUB="-"; HOST_READ_STATUS="-"; HOST_READ_VALUE=""
-  if [[ -z "${1:-}" || -z "$_owner" || "$_owner" == "$REPO_SLUG" ]]; then
-    HOST_READ_REASON="chore branch or repository owner is empty"
-    return 1
-  fi
-  if [[ ! "$1" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-    HOST_READ_REASON="chore branch carries a character outside the URL-safe set"
-    return 1
-  fi
-  case "${2:-}" in
-    open|all) ;;
-    *) HOST_READ_REASON="candidate state must be open or all"; return 1 ;;
-  esac
-  _host_rest_get "repos/${REPO_SLUG}/pulls?state=${2}&head=${_owner}:${1}&per_page=100" candidates "${_owner}:${1}"
-}
+# The chore PR's candidate list is read by _host_chore_pr_candidates, which is defined
+# ONCE, beside its resolver, in the section "Repo-host binding: chore-PR candidates"
+# further down. It reads through _host_rest_get and the candidates projection above,
+# as every reader in this section does, and that section states its contract.
 
 # ─── Phase 3: read_state ─────────────────────────────────────────────────────
 
@@ -6081,7 +6073,7 @@ EOF
   return 3
 }
 
-# ─── Repo-host binding: chore-PR candidates (#7436) ──────────────────────────
+# ─── Repo-host binding: chore-PR candidates (#7436, #6871) ───────────────────
 #
 # THE SEAM. release/references/pipeline/stage-13-close.md § 1 ("Host-operation
 # adapter seam") says a new host-touching close-out step extends the repo-host
@@ -6089,9 +6081,12 @@ EOF
 # function is this driver's binding for one such operation: it owns the transport
 # and the projection, and its caller owns the semantics. Every `_host_*` binding
 # keeps four conventions: REST through `$GH api` only (the GraphQL pool is the one
-# exhausted while close-out runs); a one-line output contract, stated below; the
-# caller reads its exit status; and it is deliberately NOT named phase_* (that is
-# the dispatchable namespace, and `grep '^phase_'` over this file is a live form).
+# exhausted while close-out runs); an output contract, stated on each; a failure its
+# caller can read — a non-zero exit status, which the pull-request readers accompany
+# with the refusal class in the HOST_READ_* globals (one reader, _host_pr_merge_fact,
+# returns 0 by contract and reports through those globals alone); and it is
+# deliberately NOT named phase_* (that is the dispatchable namespace, and
+# `grep '^phase_'` over this file is a live form).
 #
 # OWNER-QUALIFIED, and that is a SECURITY property, not a filter preference. This
 # repository is public and accepts pull requests from forks, and a fork can carry a
@@ -6100,17 +6095,104 @@ EOF
 # this run's chore PR, which phase 12 would otherwise poll and merge. A slug that is
 # not owner/repo-shaped is refused, never degraded to an unqualified lookup.
 #
-# Output contract: one line per candidate, "<number> <state> <merged_at-or-dash>",
-# where state is REST's open or closed; exit non-zero, with the host's message on
-# stderr, when the candidate set could not be read.
+# RE-CHECKED ON THE RESPONSE SIDE (#7884 FM-1). The owner-qualified head is a
+# REQUEST-side filter, and the host silently drops a head it reads as malformed — an
+# empty branch, or a branch with no owner — and answers 200 with the unfiltered list.
+# So an empty branch, and a branch outside the URL-safe set, are refused here before
+# any host call, and the candidates projection keeps only the items whose head label
+# equals <owner>:<branch> exactly. A pull request for any other head is never
+# printed, so it can never be bound or merged.
+#
+# ONE CLASSIFIED READER, EVERY PAGE (#6871). The read goes through _host_rest_get, so
+# a reply that did not answer is CLASSIFIED — refused on quota grounds, failed in
+# transport, or failed for another reason — and is never an empty candidate set.
+# _host_rest_get makes ONE `gh api -i` call and reads one status line, so the pages
+# are walked here, 100 items a page, the way _host_pr_files walks its own: a page of
+# fewer than 100 items ends the walk. Two outcomes are refused rather than returned
+# as a set that may be incomplete. A FULL page carrying a pull request for another
+# head means the host did not apply the filter: its later pages cannot be trusted to
+# hold this head's pull requests, and walking them would read the repository's whole
+# pull-request population. And a full thirtieth page: the walk is bounded so that it
+# always ends, and three thousand pull requests for one head is not a candidate set.
+#
+# ONE DEFINITION. Two releases each gave this lookup this name, with different
+# contracts, and their merge was textually clean. The shell keeps the LATER of two
+# definitions for every caller, so the earlier one's callers silently received the
+# other contract. Self-test arm u20 requires exactly one definition in this file.
+#
+# Output contract: one line per candidate on stdout, "<number> <state>
+# <merged_at-or-dash>", where state is REST's open or closed, and the same lines in
+# HOST_READ_VALUE; exit 0 when every page answered. A caller inside a command
+# substitution reads stdout, stderr and the exit status, because the globals do not
+# leave its subshell; a direct caller discards stdout and reads the globals. When the
+# candidate set could not be read the exit is non-zero, stdout and HOST_READ_VALUE
+# are empty, HOST_READ_CLASS, _SUB, _STATUS and _REASON carry the class, and ONE line
+# on stderr carries the same reason: exit 2 for a lookup refused before any host
+# call, exit 1 for a read that did not answer or that was refused as incomplete.
 _host_chore_pr_candidates() {
-  local _branch="$1" _owner="${REPO_SLUG%%/*}" _name="${REPO_SLUG#*/}"
+  local _branch="${1:-}" _owner="${REPO_SLUG%%/*}" _name="${REPO_SLUG#*/}"
+  local _p=1 _raw="" _rows="" _n=0 _all="" _nl=$'\n' _why=""
+  HOST_READ_CLASS="failed-other"; HOST_READ_SUB="-"; HOST_READ_STATUS="-"; HOST_READ_REASON=""; HOST_READ_VALUE=""
   if [[ "$REPO_SLUG" != */* || -z "$_owner" || -z "$_name" || "$_name" == */* ]]; then
-    /usr/bin/printf "REPO_SLUG '%s' is not owner/repo-shaped, so the chore-PR lookup cannot be owner-qualified\n" "$REPO_SLUG" >&2
+    _why="REPO_SLUG '${REPO_SLUG}' is not owner/repo-shaped, so the chore-PR lookup cannot be owner-qualified"
+  elif [[ -z "$_branch" ]]; then
+    _why="the chore branch is empty, and the host drops an empty head filter, so the chore-PR lookup is not sent"
+  elif [[ ! "$_branch" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+    _why="the chore branch carries a character outside the URL-safe set, so the chore-PR lookup is not sent"
+  fi
+  if [[ -n "$_why" ]]; then
+    HOST_READ_REASON="$_why"
+    /usr/bin/printf '%s\n' "$_why" >&2
     return 2
   fi
-  $GH api --paginate "repos/${REPO_SLUG}/pulls?head=${_owner}:${_branch}&state=all&per_page=100" \
-    --jq '.[] | "\(.number) \(.state) \(.merged_at // "-")"'
+  while [[ "$_p" -le 30 ]]; do
+    if ! _host_rest_get "repos/${REPO_SLUG}/pulls?head=${_owner}:${_branch}&state=all&per_page=100&page=${_p}" candidates "${_owner}:${_branch}"; then
+      HOST_READ_VALUE=""
+      /usr/bin/printf 'unresolvable — %s (%s): %s\n' "$(_host_class_phrase)" "$HOST_READ_STATUS" "$HOST_READ_REASON" >&2
+      return 1
+    fi
+    # Line one is the page's item count; the candidate lines follow it.
+    _raw="${HOST_READ_VALUE%%${_nl}*}"
+    _rows=""
+    if [[ "$HOST_READ_VALUE" == *"${_nl}"* ]]; then _rows="${HOST_READ_VALUE#*${_nl}}"; fi
+    if [[ ! "$_raw" =~ ^[0-9]+$ ]]; then
+      _why="answered body unparseable for projection candidates"
+      break
+    fi
+    _n="$(grep_count . <<<"$_rows")"
+    if [[ -n "$_rows" ]]; then _all="${_all:+${_all}${_nl}}${_rows}"; fi
+    if [[ "$_raw" -lt 100 ]]; then
+      HOST_READ_VALUE="$_all"
+      if [[ -n "$_all" ]]; then /usr/bin/printf '%s\n' "$_all"; fi
+      return 0
+    fi
+    if [[ "$_n" -lt "$_raw" ]]; then
+      _why="page ${_p} is full and carries pull requests for other heads, so the host did not apply the head filter and the candidate set is not established"
+      break
+    fi
+    _p=$((_p + 1))
+  done
+  HOST_READ_CLASS="failed-other"; HOST_READ_SUB="-"; HOST_READ_VALUE=""
+  HOST_READ_REASON="${_why:-page 30 is full, so the candidate set is not established within the 3,000 pull requests this read walks}"
+  /usr/bin/printf 'unresolvable — %s (%s): %s\n' "$(_host_class_phrase)" "$HOST_READ_STATUS" "$HOST_READ_REASON" >&2
+  return 1
+}
+
+# _chore_pr_open_candidate <candidates> — from the binding's output above, the number
+# of the highest-numbered OPEN candidate, or nothing. It is how a direct caller takes
+# the open rows of a read that returns every state, and its precedence is
+# _chore_pr_resolve's own: an open pull request is live work, and the newest wins.
+_chore_pr_open_candidate() {
+  local _line _n _st _ma _open=""
+  while IFS= read -r _line; do
+    [[ -n "$_line" ]] || continue
+    _n=""; _st=""; _ma=""
+    read -r _n _st _ma <<<"$_line"
+    if [[ "$_st" == "open" && "$_n" =~ ^[0-9]+$ ]]; then
+      if [[ -z "$_open" || "$_n" -gt "$_open" ]]; then _open="$_n"; fi
+    fi
+  done <<<"${1:-}"
+  /usr/bin/printf '%s' "$_open"
 }
 
 # Resolve the chore PR for $CHORE_BRANCH over its FULL terminal partition (#7436).
@@ -6301,23 +6383,27 @@ phase_create_chore_pr() {
     return 0
   fi
 
-  # Idempotency: skip if PR already exists for branch. Read over REST with an
-  # owner-qualified head and state=open (#6871 D-5): the GraphQL-bound list this
-  # replaced had no owner filter, so a fork's PR from a same-named branch matched —
-  # and this phase would then have polled and MERGED it. A read that did not answer
-  # is not an absence of a PR, so it FAILs here instead of creating one: a create on
-  # its strength would fail on a duplicate, or on the same exhaustion, under the
-  # wrong cause. The candidates projection also re-checks each item's head label on
-  # the response side, because the host drops a malformed head filter (#7884 FM-1).
+  # Idempotency, read AGAIN immediately before a create (#6871 D-5). The resolver
+  # above read this partition BEFORE the push, and its OPEN arm has just returned for
+  # a pull request that was open then, so only a run it left with none to reuse
+  # reaches here. This is the same binding read once more, by a direct caller that
+  # keeps the refusal class. A read that does not answer NOW is not an absence of a
+  # PR, so it FAILs here instead of creating one: a create on its strength would fail
+  # on a duplicate, or on the same exhaustion, under the wrong cause. And a pull
+  # request opened on this branch since the resolve is reused, never duplicated. The
+  # binding is owner-qualified and re-checks each candidate's head label on the
+  # response side (#7884 FM-1). It returns every state, so the open rows are taken
+  # here, by the resolver's own precedence.
   local existing_pr=""
-  if ! _host_chore_pr_candidates "$CHORE_BRANCH" open; then
+  if ! _host_chore_pr_candidates "$CHORE_BRANCH" >/dev/null 2>&1; then
+    CHORE_PR_OUTCOME="failed"
     mark_phase "create_chore_pr" "FAIL" "chore-PR lookup for $CHORE_BRANCH is unresolvable — $(_host_class_phrase) (${HOST_READ_STATUS}): ${HOST_READ_REASON}; a read that did not answer is not an absence of a PR, so none is created; $(_host_class_remedy) (idempotent)"
     return 3
   fi
-  existing_pr="${HOST_READ_VALUE%%$'\t'*}"
+  existing_pr="$(_chore_pr_open_candidate "$HOST_READ_VALUE")"
   if [[ -n "$existing_pr" ]]; then
-    CHORE_PR_NUMBER="$existing_pr"
-    mark_phase "create_chore_pr" "SKIPPED" "PR #$existing_pr already exists for branch"
+    CHORE_PR_NUMBER="$existing_pr"; CHORE_PR_OUTCOME="existing-open"
+    mark_phase "create_chore_pr" "SKIPPED" "PR #$existing_pr already exists for branch${_cr_pnote}"
     return 0
   fi
 
@@ -6360,9 +6446,12 @@ phase_create_chore_pr() {
 #
 # Phase 11 reads the same OPEN / MERGED / CLOSED partition through a SECOND reader,
 # _chore_pr_resolve over the REST binding _host_chore_pr_candidates (#7436), because
-# its resolve path must make no GraphQL call and must be owner-qualified. Two readers
-# of one fact is the drift this comment warns about, so self-test arm CR-16 drives
-# both from the same fixture rows and asserts they agree on every state.
+# it must find the pull request by its owner-qualified head, before any number is
+# known, where this reader reads one pull request by its number. Both go through
+# _host_rest_get (#6871), so neither makes a GraphQL call and each classifies a read
+# that did not answer. Two readers of one fact is still the drift this comment warns
+# about, so self-test arm CR-16 drives both from the same fixture rows and asserts
+# they agree on every state.
 #
 # WHY `state` IS THE FIELD. A state in {OPEN, CLOSED, MERGED} is a total, terminal
 # partition, and it is how this file decides that a PR merged. It is NOT chosen
@@ -12031,7 +12120,11 @@ STUB
   # which is the issue's reproduction held constant. `api` answers from fixtures and
   # logs every call to api.log, so an arm can read the request it was sent:
   #   */milestones/*          -> the word "closed" (the read_state milestone read)
-  #   */pulls?…               -> cand
+  #   */pulls?…               -> the next name in cand.seq when that file exists (the
+  #                              last one repeats; cand.ctr counts), so two reads of
+  #                              one run can answer differently; else cand.<page>
+  #                              when it exists, so a walk over pages can be served;
+  #                              else cand
   #   */pulls/<n>/files?…     -> files.<page>, else files.all
   #   */pulls/<n>             -> pull.<n> when it exists, else the next name in
   #                              pull.seq (the last one repeats; pull.ctr counts)
@@ -12066,7 +12159,18 @@ p=""
 for a in "$@"; do case "$a" in repos/*) p="$a" ;; esac; done
 case "$p" in
   */milestones/*) echo closed; exit 0 ;;
-  */pulls\?*) f=cand ;;
+  */pulls\?*)
+    pg="${p##*page=}"; pg="${pg%%&*}"
+    if [[ -e "$d/cand.seq" ]]; then
+      c="$(/bin/cat "$d/cand.ctr" 2>/dev/null || echo 0)"; c=$((c+1))
+      /usr/bin/printf '%s' "$c" > "$d/cand.ctr"
+      f="$(/usr/bin/sed -n "${c}p" "$d/cand.seq")"
+      [[ -n "$f" ]] || f="$(/usr/bin/tail -n 1 "$d/cand.seq")"
+    elif [[ -e "$d/cand.$pg.out" ]]; then
+      f="cand.$pg"
+    else
+      f=cand
+    fi ;;
   */pulls/*/files\?*)
     pg="${p##*page=}"; pg="${pg%%&*}"
     if [[ -e "$d/files.$pg.out" ]]; then f="files.$pg"; else f=files.all; fi ;;
@@ -12088,11 +12192,13 @@ exit "$(/bin/cat "$d/$f.rc" 2>/dev/null || echo 0)"
 STUB
     /bin/chmod +x "$1/gh-stub.sh"
   }
-  # _prt_reset <dir> — clear one arm's logs and counters (the fixtures stay).
+  # _prt_reset <dir> — clear one arm's logs and counters, and the candidate sequence
+  # and per-page candidate slots an arm may have set (the named fixtures stay).
   _prt_reset() {
     : > "$1/api.log"; : > "$1/merge.log"
     /usr/bin/printf '0' > "$1/pull.ctr"; /usr/bin/printf '0' > "$1/create.n"
-    /usr/bin/printf '0' > "$1/merge.rc"
+    /usr/bin/printf '0' > "$1/merge.rc"; /usr/bin/printf '0' > "$1/cand.ctr"
+    /bin/rm -f "$1/cand.seq" "$1"/cand.[0-9]*.out "$1"/cand.[0-9]*.body "$1"/cand.[0-9]*.err "$1"/cand.[0-9]*.rc
     PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
   }
   # _prt_reads <dir> — how many pull-request reads (REST pulls/<n>) the stub served.
@@ -12969,6 +13075,13 @@ EOF
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$PLX_CALLS"
 case "$1 $2" in
+  "api -i")
+    # Phase 11 reads the chore PR's candidates through the classified reader, which
+    # takes a reply only from a status line. Answer that read as the host answers an
+    # empty list, so the phase finds no pull request and reaches the create whose
+    # body this limb captures.
+    case "$3" in *pulls\?*) printf 'HTTP/2.0 200 OK\nContent-Type: application/json; charset=utf-8\r\n\r\n[]' ;; esac
+    exit 0 ;;
   "issue list")
     [[ "$*" == *"--state all"* ]] || exit 0
     [[ "$PLX_NO_SUBTASK" == "1" ]] && exit 0
@@ -13141,7 +13254,11 @@ GITSTUB
     # state merged_at composite. A REST `api …/pulls?head=H&state=S` read returns the rows
     # whose owner:branch equals H; a head carrying NO owner matches the branch under ANY
     # owner, which is exactly what an unqualified lookup gets, so a regression that drops
-    # the owner binds the fork row and CR-13 reddens. `pr list --head B`, the pre-#7436
+    # the owner binds the fork row and CR-13 reddens. The rows are answered as the host
+    # answers them — a JSON list in the live `gh api -i` layout, each item carrying its
+    # number, state, merge time and head label — because the candidates binding reads
+    # through the classified reader, which takes a reply only from a status line; and a
+    # failed read is answered as a 502 in that layout. `pr list --head B`, the pre-#7436
     # GraphQL lookup, matches the branch under any owner too, because gh cannot
     # owner-qualify it. Phase 12's reader is the REST read `api …/pulls/<n>` (#6871): the
     # stub answers it from the same row, in the live `gh api -i` layout (the status line
@@ -13181,8 +13298,13 @@ if [[ "\$1" == "api" ]]; then
     if [[ "\$q" == *"&"* ]]; then q="\${q#*&}"; else q=""; fi
   done
   /usr/bin/printf 'api %s %s\n' "\$h" "\$s" >> "\$d/list-args"
-  if [[ -f "\$d/list-rc" ]]; then /usr/bin/printf 'stub REST failure: HTTP 502\n' >&2; exit "\$(/bin/cat "\$d/list-rc")"; fi
-  /usr/bin/awk -v h="\$h" -v s="\$s" '((\$2 ":" \$3) == h || (index(h, ":") == 0 && \$3 == h)) && (s == "all" || s == \$4) { print \$1, \$4, \$5 }' "\$d/prs"
+  if [[ -f "\$d/list-rc" ]]; then
+    /usr/bin/printf 'HTTP/2.0 502 Bad Gateway\nContent-Type: application/json; charset=utf-8\r\n\r\n{"message":"stub REST failure: HTTP 502"}'
+    /usr/bin/printf 'gh: stub REST failure: HTTP 502 (HTTP 502)\n' >&2; exit "\$(/bin/cat "\$d/list-rc")"
+  fi
+  /usr/bin/printf 'HTTP/2.0 200 OK\nContent-Type: application/json; charset=utf-8\r\n\r\n['
+  /usr/bin/awk -v h="\$h" -v s="\$s" '((\$2 ":" \$3) == h || (index(h, ":") == 0 && \$3 == h)) && (s == "all" || s == \$4) { printf "%s{\"number\":%s,\"state\":\"%s\",\"merged_at\":%s,\"head\":{\"label\":\"%s:%s\"}}", (k++ ? "," : ""), \$1, \$4, (\$5 == "-" ? "null" : "\"" \$5 "\""), \$2, \$3 }' "\$d/prs"
+  /usr/bin/printf ']'
   exit 0
 fi
 if [[ "\$1" == "pr" && "\$2" == "list" ]]; then
@@ -14090,7 +14212,7 @@ EOF
   local _pr_saved_msslug="$STATE_MILESTONE_SLUG" _pr_saved_version="$VERSION" _pr_saved_milestone="$MILESTONE"
   local _pr_saved_cct="$COMPUTE_CYCLE_TIME" _pr_saved_mstate="$STATE_MILESTONE_STATE" _pr_saved_cycle="$STATE_CYCLE_TIME"
   local _pr_saved_root="$REPO_ROOT" _pr_saved_branch="$CHORE_BRANCH" _pr_saved_cpn="$CHORE_PR_NUMBER"
-  local _pr_saved_skipped="$CHORE_PR_SKIPPED" _pr_saved_nomerge="$NO_MERGE" _pr_saved_timeout="$MERGE_TIMEOUT"
+  local _pr_saved_skipped="$CHORE_PR_SKIPPED" _pr_saved_nomerge="$NO_MERGE" _pr_saved_timeout="$MERGE_TIMEOUT" _pr_saved_cpo="${CHORE_PR_OUTCOME:-}"
   local _pr_saved_step="$MERGE_POLL_STEP" _pr_saved_delay="$VERIFY_RECHECK_DELAY" _pr_saved_res="$VERIFICATION_RESULTS"
   local _pr_saved_oic="$OPEN_ISSUE_COUNT" _pr_saved_oil="$OPEN_ISSUE_LIST"
   local _pr_d; _pr_d="$(/usr/bin/mktemp -d -t prt-selftest.XXXXXX)"
@@ -14111,6 +14233,16 @@ EOF
   _prt_fx "$_pr_d" cand_one "200 OK" 4999 '[{"number":9191,"state":"open","merged_at":null,"head":{"label":"x:'"$_pr_branch"'","ref":"'"$_pr_branch"'"}}]'
   _prt_fx "$_pr_d" cand_none "200 OK" 4999 '[]'
   _prt_fx "$_pr_d" cand_foreign "200 OK" 4999 '[{"number":7331,"state":"open","merged_at":null,"head":{"label":"intruder:'"$_pr_branch"'","ref":"'"$_pr_branch"'"}}]'
+  # The binding reads EVERY state, so its callers select: a merged, an open and a
+  # closed-unmerged pull request on this head; then the same list without the open one.
+  _prt_fx "$_pr_d" cand_mixed "200 OK" 4999 '[{"number":9190,"state":"closed","merged_at":"2026-09-25T10:00:00Z","head":{"label":"x:'"$_pr_branch"'"}},{"number":9191,"state":"open","merged_at":null,"head":{"label":"x:'"$_pr_branch"'"}},{"number":9189,"state":"closed","merged_at":null,"head":{"label":"x:'"$_pr_branch"'"}}]'
+  _prt_fx "$_pr_d" cand_closed "200 OK" 4999 '[{"number":9190,"state":"closed","merged_at":"2026-09-25T10:00:00Z","head":{"label":"x:'"$_pr_branch"'"}},{"number":9189,"state":"closed","merged_at":null,"head":{"label":"x:'"$_pr_branch"'"}}]'
+  # A FULL page of 100 candidates on this head, and the same page with its last item
+  # on another head: the two shapes that decide whether the walk goes on.
+  local _pr_i=0 _pr_page="["
+  for ((_pr_i = 1; _pr_i <= 99; _pr_i++)); do _pr_page="${_pr_page}{\"number\":$((8000 + _pr_i)),\"state\":\"closed\",\"merged_at\":null,\"head\":{\"label\":\"x:${_pr_branch}\"}},"; done
+  _prt_fx "$_pr_d" cand_full "200 OK" 4999 "${_pr_page}{\"number\":8100,\"state\":\"closed\",\"merged_at\":null,\"head\":{\"label\":\"x:${_pr_branch}\"}}]"
+  _prt_fx "$_pr_d" cand_full_foreign "200 OK" 4999 "${_pr_page}{\"number\":7331,\"state\":\"open\",\"merged_at\":null,\"head\":{\"label\":\"intruder:${_pr_branch}\"}}]"
   GH="$_pr_d/gh-stub.sh"; REPO_SLUG="x/y"; PR_NUMBER="4242"; MILESTONE="9999"; VERSION="v9.93"; OUTCOME=""
   STATE_MILESTONE_SLUG="88-some-milestone"; COMPUTE_CYCLE_TIME="$_pr_d/no-cycle-time-tool"
 
@@ -14280,8 +14412,24 @@ EOF
   _pr_rc=0; phase_create_chore_pr >/dev/null 2>&1 || _pr_rc=$?
   _pr_ph="$(get_phase create_chore_pr)"
   _st_arm PRT p16; [[ "$(/bin/cat "$_pr_d/create.n")" -eq 1 && "$_pr_ph" == PASS\|* && "$CHORE_PR_NUMBER" == "5150" ]] || { echo "FAIL: PRT p16 — CONTROL: with no open PR on the branch exactly one chore PR must be created and bound, got $(/bin/cat "$_pr_d/create.n") create call(s), CHORE_PR_NUMBER='$CHORE_PR_NUMBER' '$_pr_ph'"; failures=$((failures+1)); }
-  # (p17) the lookup's request shape (p16's run): state=open and the owner-qualified head.
-  _st_arm PRT p17; [[ "$(grep_count -F "pulls?state=open&head=x:${_pr_branch}&per_page=100" "$_pr_d/api.log")" -eq 1 ]] || { echo "FAIL: PRT p17 (D-5) — the chore-PR lookup must read REST pulls with state=open and the owner-qualified head x:${_pr_branch}, api.log: $(/usr/bin/tr '\n' ' ' < "$_pr_d/api.log")"; failures=$((failures+1)); }
+  # (p17) the lookup's request shape (p16's run): every candidates read carries the
+  #       owner-qualified head and state=all, and a create is preceded by exactly two
+  #       of them — the resolver's, before the push, and the read before the create.
+  _st_arm PRT p17; [[ "$(grep_count -F "pulls?head=x:${_pr_branch}&state=all&per_page=100&page=1" "$_pr_d/api.log")" -eq 2 && "$(grep_count -F 'pulls?' "$_pr_d/api.log")" -eq 2 ]] || { echo "FAIL: PRT p17 (D-5) — before a create the chore-PR candidates must be read exactly twice over REST, each read with the owner-qualified head x:${_pr_branch} and state=all, api.log: $(/usr/bin/tr '\n' ' ' < "$_pr_d/api.log")"; failures=$((failures+1)); }
+  # (p23) the read before the create does NOT answer, though the resolver's read
+  #       did: the phase FAILs there, naming the class, and creates nothing — the
+  #       resolver's "none" is not carried across a read that was refused.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'cand_none\nquota\n' > "$_pr_d/cand.seq"; CHORE_PR_NUMBER=""; CHORE_PR_SKIPPED=0; CHORE_PR_OUTCOME=""
+  _pr_rc=0; phase_create_chore_pr >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase create_chore_pr)"
+  _st_arm PRT p23; [[ "$_pr_rc" -eq 3 && "$_pr_ph" == FAIL\|"chore-PR lookup for ${_pr_branch} is unresolvable — refused on quota grounds"*"so none is created"* && "$(/bin/cat "$_pr_d/create.n")" -eq 0 && "$CHORE_PR_OUTCOME" == "failed" ]] || { echo "FAIL: PRT p23 (D-5) — a candidates read refused immediately before the create must FAIL the phase naming its class, record outcome failed and create nothing, got rc=$_pr_rc outcome='$CHORE_PR_OUTCOME' $(/bin/cat "$_pr_d/create.n") pr create call(s) '$_pr_ph'"; failures=$((failures+1)); }
+  # (p24) a pull request OPENED on this branch after the resolve is found by the read
+  #       before the create, and reused: bound, recorded as existing-open, none created.
+  _prt_reset "$_pr_d"; /usr/bin/printf 'cand_none\ncand_one\n' > "$_pr_d/cand.seq"; CHORE_PR_NUMBER=""; CHORE_PR_SKIPPED=0; CHORE_PR_OUTCOME=""
+  _pr_rc=0; phase_create_chore_pr >/dev/null 2>&1 || _pr_rc=$?
+  _pr_ph="$(get_phase create_chore_pr)"
+  _st_arm PRT p24; [[ "$_pr_rc" -eq 0 && "$_pr_ph" == SKIPPED\|*"PR #9191 already exists for branch"* && "$CHORE_PR_NUMBER" == "9191" && "$(/bin/cat "$_pr_d/create.n")" -eq 0 && "$CHORE_PR_OUTCOME" == "existing-open" ]] || { echo "FAIL: PRT p24 (D-5) — a pull request opened on the branch after the resolve must be reused by the read before the create, got rc=$_pr_rc CHORE_PR_NUMBER='$CHORE_PR_NUMBER' outcome='$CHORE_PR_OUTCOME' $(/bin/cat "$_pr_d/create.n") pr create call(s) '$_pr_ph'"; failures=$((failures+1)); }
+  _prt_reset "$_pr_d"; CHORE_PR_OUTCOME=""
   # (fm1) FM-1: a candidate whose head label is NOT <owner>:<branch> — a fork's PR
   #       from a same-named branch, or the unfiltered list a malformed head filter
   #       makes the host return — must never be bound or merged. Its OWN pull
@@ -14339,7 +14487,7 @@ EOF
   _st_arm PRT p22; [[ "$(grep_count . <<<"$_pr_code")" -ge 1000 ]] || { echo "FAIL: PRT p22 anti-vacuity — the non-comment extraction of this file's production region returned fewer than 1000 lines; the AC-3 scan below would read almost nothing"; failures=$((failures+1)); }
   [[ "$_pr_hits" == "0" ]] || { echo "FAIL: PRT p22 (AC-3) — ${_pr_hits} non-comment line(s) of this file's production region still read a pull request through a GraphQL-bound pull-request --json call"; failures=$((failures+1)); }
   [[ "$(grep_count -E '\$GH pr (view|list) .*--json' <<<"$_pr_ctl")" == "1" ]] || { echo "FAIL: PRT p22 SENSITIVITY — the AC-3 needle does not match a constructed GraphQL-bound read, so its zero is a broken probe"; failures=$((failures+1)); }
-  _st_witness PRT 27
+  _st_witness PRT 29
 
   # ── group PRT-u (#6871): the reader and its projections, unit by unit ────────
   # The same stub and fixtures, read through _host_rest_get directly, so a
@@ -14396,18 +14544,28 @@ EOF
   done
   _st_arm PRT-u u13; [[ "$_pr_w" -eq 4 ]] || { echo "FAIL: PRT-u u13 — only ${_pr_w} of 4 live-measured shapes projected to their exact three-field terminal composite"; failures=$((failures+1)); }
   [[ ! "OPEN/MERGEABLE/CLEAN/false" =~ ^[^/]+/[^/]+/[^/]+$ ]] || { echo "FAIL: PRT-u u13 SPECIFICITY — the width predicate accepts a four-field composite"; failures=$((failures+1)); }
-  # (u14) the candidates projection keeps only items whose head label is exactly
-  #       <owner>:<branch> (FM-1): the matching one, nothing for a foreign label, and
-  #       nothing for an empty list.
-  _prt_reset "$_pr_d"; _prt_use "$_pr_d" cand cand_one; _pr_want="$(/usr/bin/printf '9191\topen\t')"
-  _pr_rc=0; _host_chore_pr_candidates "$_pr_branch" open || _pr_rc=$?
-  _st_arm PRT-u u14; [[ "$_pr_rc" -eq 0 && "$HOST_READ_VALUE" == "$_pr_want" ]] || { echo "FAIL: PRT-u u14 — the matching candidate must project as '9191<TAB>open<TAB>', got rc=$_pr_rc value='$HOST_READ_VALUE'"; failures=$((failures+1)); }
+  # (u14) the candidates binding prints only the items whose head label is exactly
+  #       <owner>:<branch> (FM-1), as "<number> <state> <merged_at-or-dash>" lines, the
+  #       same on stdout and in HOST_READ_VALUE: the matching one, nothing for a
+  #       foreign label, and nothing for an empty list. It reads EVERY state, so a
+  #       direct caller takes the open row from its output: the open one among a
+  #       merged, an open and a closed-unmerged pull request, and none when none is open.
+  _prt_reset "$_pr_d"; _prt_use "$_pr_d" cand cand_one
+  _pr_rc=0; _host_chore_pr_candidates "$_pr_branch" >/dev/null 2>&1 || _pr_rc=$?
+  _pr_got="$(_host_chore_pr_candidates "$_pr_branch" 2>/dev/null || true)"
+  _st_arm PRT-u u14; [[ "$_pr_rc" -eq 0 && "$HOST_READ_VALUE" == "9191 open -" && "$_pr_got" == "9191 open -" && "$(_chore_pr_open_candidate "$HOST_READ_VALUE")" == "9191" ]] || { echo "FAIL: PRT-u u14 — the matching candidate must read '9191 open -' on stdout and in HOST_READ_VALUE alike, and be taken as the open candidate, got rc=$_pr_rc value='$HOST_READ_VALUE' stdout='$_pr_got'"; failures=$((failures+1)); }
   _prt_reset "$_pr_d"; _prt_use "$_pr_d" cand cand_foreign
-  _pr_rc=0; _host_chore_pr_candidates "$_pr_branch" open || _pr_rc=$?
+  _pr_rc=0; _host_chore_pr_candidates "$_pr_branch" >/dev/null 2>&1 || _pr_rc=$?
   [[ "$_pr_rc" -eq 0 && -z "$HOST_READ_VALUE" ]] || { echo "FAIL: PRT-u u14 (FM-1) — a candidate whose head label is not x:${_pr_branch} must be dropped, got rc=$_pr_rc value='$HOST_READ_VALUE'"; failures=$((failures+1)); }
   _prt_reset "$_pr_d"; _prt_use "$_pr_d" cand cand_none
-  _pr_rc=0; _host_chore_pr_candidates "$_pr_branch" open || _pr_rc=$?
-  [[ "$_pr_rc" -eq 0 && -z "$HOST_READ_VALUE" ]] || { echo "FAIL: PRT-u u14 — an answered empty list must project to nothing, got rc=$_pr_rc value='$HOST_READ_VALUE'"; failures=$((failures+1)); }
+  _pr_rc=0; _host_chore_pr_candidates "$_pr_branch" >/dev/null 2>&1 || _pr_rc=$?
+  [[ "$_pr_rc" -eq 0 && -z "$HOST_READ_VALUE" ]] || { echo "FAIL: PRT-u u14 — an answered empty list must print nothing, got rc=$_pr_rc value='$HOST_READ_VALUE'"; failures=$((failures+1)); }
+  _prt_reset "$_pr_d"; _prt_use "$_pr_d" cand cand_mixed; _pr_want="$(/usr/bin/printf '9190 closed 2026-09-25T10:00:00Z\n9191 open -\n9189 closed -')"
+  _pr_rc=0; _host_chore_pr_candidates "$_pr_branch" >/dev/null 2>&1 || _pr_rc=$?
+  [[ "$_pr_rc" -eq 0 && "$HOST_READ_VALUE" == "$_pr_want" && "$(_chore_pr_open_candidate "$HOST_READ_VALUE")" == "9191" ]] || { echo "FAIL: PRT-u u14 — a merged, an open and a closed-unmerged candidate must all be printed, in the host's order, and the open one taken, got rc=$_pr_rc value='$HOST_READ_VALUE' open='$(_chore_pr_open_candidate "$HOST_READ_VALUE")'"; failures=$((failures+1)); }
+  _prt_reset "$_pr_d"; _prt_use "$_pr_d" cand cand_closed
+  _pr_rc=0; _host_chore_pr_candidates "$_pr_branch" >/dev/null 2>&1 || _pr_rc=$?
+  [[ "$_pr_rc" -eq 0 && "$(grep_count . <<<"$HOST_READ_VALUE")" -eq 2 && -z "$(_chore_pr_open_candidate "$HOST_READ_VALUE")" ]] || { echo "FAIL: PRT-u u14 — with only closed candidates printed, none may be taken as open, got rc=$_pr_rc value='$HOST_READ_VALUE' open='$(_chore_pr_open_candidate "$HOST_READ_VALUE")'"; failures=$((failures+1)); }
   # (u15) a REPO_SLUG that is not owner/name → failed-other, with NO host call.
   _prt_reset "$_pr_d"; REPO_SLUG="pmo-platform"
   _pr_rc=0; _host_rest_get "repos/pmo-platform/pulls/4242" fact || _pr_rc=$?
@@ -14459,7 +14617,49 @@ EOF
   _pr_c="$(/usr/bin/printf '%s() {\n  :\n}\n%s() {\n  :\n}\n' '_host_chore_pr_candidates' '_host_chore_pr_candidates')"
   _st_arm PRT-u u20; [[ "$_pr_got" == "1" ]] || { echo "FAIL: PRT-u u20 — this file must define _host_chore_pr_candidates exactly once, found ${_pr_got} top-level definition(s); the shell runs the later one for every caller, so an earlier definition's callers receive the other contract"; failures=$((failures+1)); }
   [[ "$(grep_count -E '^_host_chore_pr_candidates\(\)[[:space:]]*\{' <<<"$_pr_c")" == "2" && "$(grep_count -E '^_host_chore_pr_candidates\(\)[[:space:]]*\{' <<<"${_pr_c%%\}*}")" == "1" ]] || { echo "FAIL: PRT-u u20 CONTROL — the definition counter must read 2 on a two-definition fixture and 1 on that fixture's first definition alone, so its reading of this file proves nothing"; failures=$((failures+1)); }
-  _st_witness PRT-u 16
+  # (u21) the lookup is refused BEFORE any host call when it cannot be owner-qualified,
+  #       or would send a head the host drops: a slug that is not owner/repo-shaped,
+  #       an empty branch, and a branch outside the URL-safe set. Each exits 2, reads
+  #       failed-other with its own reason, and writes that reason as ONE line on
+  #       stderr, which is where a caller inside a command substitution reads it.
+  local _pr_nl=$'\n'
+  _pr_w=0
+  _prt_reset "$_pr_d"; REPO_SLUG="pmo-platform"
+  _pr_rc=0; _host_chore_pr_candidates "$_pr_branch" >/dev/null 2>&1 || _pr_rc=$?
+  _pr_got="$( { _host_chore_pr_candidates "$_pr_branch" >/dev/null || true; } 2>&1 )"
+  if [[ "$_pr_rc" -eq 2 && "$HOST_READ_CLASS" == "failed-other" && "$HOST_READ_REASON" == *"is not owner/repo-shaped"* && "$_pr_got" == "$HOST_READ_REASON" && -z "$HOST_READ_VALUE" ]]; then _pr_w=$((_pr_w + 1)); fi
+  REPO_SLUG="x/y"
+  _pr_rc=0; _host_chore_pr_candidates "" >/dev/null 2>&1 || _pr_rc=$?
+  _pr_got="$( { _host_chore_pr_candidates "" >/dev/null || true; } 2>&1 )"
+  if [[ "$_pr_rc" -eq 2 && "$HOST_READ_CLASS" == "failed-other" && "$HOST_READ_REASON" == "the chore branch is empty"* && "$_pr_got" == "$HOST_READ_REASON" && -z "$HOST_READ_VALUE" ]]; then _pr_w=$((_pr_w + 1)); fi
+  _pr_rc=0; _host_chore_pr_candidates 'chore/a b' >/dev/null 2>&1 || _pr_rc=$?
+  _pr_got="$( { _host_chore_pr_candidates 'chore/a b' >/dev/null || true; } 2>&1 )"
+  if [[ "$_pr_rc" -eq 2 && "$HOST_READ_CLASS" == "failed-other" && "$HOST_READ_REASON" == *"outside the URL-safe set"* && "$_pr_got" == "$HOST_READ_REASON" && -z "$HOST_READ_VALUE" ]]; then _pr_w=$((_pr_w + 1)); fi
+  _st_arm PRT-u u21; [[ "$_pr_w" -eq 3 && "$(grep_count . "$_pr_d/api.log")" -eq 0 ]] || { echo "FAIL: PRT-u u21 — a slug that is not owner/repo-shaped, an empty branch and a branch outside the URL-safe set must each be refused with exit 2, failed-other, its own reason and that reason on stderr, before any host call; ${_pr_w} of 3 held, with $(grep_count . "$_pr_d/api.log") host call(s); last got rc=$_pr_rc reason='$HOST_READ_REASON' stderr='$_pr_got'"; failures=$((failures+1)); }
+  # (u22) EVERY page is read. The reader makes ONE host call and returns one page, so
+  #       the binding walks the pages itself: a FULL first page (100 candidates) is
+  #       followed by a read of page 2, and that short page ends the walk with all
+  #       101 candidates, the open one on page 2 among them.
+  _prt_reset "$_pr_d"; _prt_use "$_pr_d" cand.1 cand_full; _prt_use "$_pr_d" cand.2 cand_one
+  _pr_rc=0; _host_rest_get "repos/x/y/pulls?head=x:${_pr_branch}&state=all&per_page=100&page=1" candidates "x:${_pr_branch}" || _pr_rc=$?
+  _st_arm PRT-u u22; [[ "$_pr_rc" -eq 0 && "$(grep_count . "$_pr_d/api.log")" -eq 1 && "${HOST_READ_VALUE%%${_pr_nl}*}" == "100" && "$(grep_count . <<<"$HOST_READ_VALUE")" -eq 101 ]] || { echo "FAIL: PRT-u u22 — the reader must make exactly ONE host call for one page and return that page alone (its count line, 100, then its 100 candidates), got rc=$_pr_rc, $(grep_count . "$_pr_d/api.log") call(s), first line '${HOST_READ_VALUE%%${_pr_nl}*}', $(grep_count . <<<"$HOST_READ_VALUE") line(s)"; failures=$((failures+1)); }
+  : > "$_pr_d/api.log"
+  _pr_rc=0; _host_chore_pr_candidates "$_pr_branch" >/dev/null 2>&1 || _pr_rc=$?
+  [[ "$_pr_rc" -eq 0 && "$(grep_count . <<<"$HOST_READ_VALUE")" -eq 101 && "$(grep_count -E '&page=1$' "$_pr_d/api.log")" -eq 1 && "$(grep_count -E '&page=2$' "$_pr_d/api.log")" -eq 1 && "$(grep_count -E '&page=3$' "$_pr_d/api.log")" -eq 0 && "$(_chore_pr_open_candidate "$HOST_READ_VALUE")" == "9191" ]] || { echo "FAIL: PRT-u u22 — a full first page must be followed by page 2, and the short page must end the walk with all 101 candidates, got rc=$_pr_rc, $(grep_count . <<<"$HOST_READ_VALUE") candidate(s), open='$(_chore_pr_open_candidate "$HOST_READ_VALUE")', api.log: $(/usr/bin/tr '\n' ' ' < "$_pr_d/api.log")"; failures=$((failures+1)); }
+  # (u23) a candidate set that may be INCOMPLETE is refused, never returned. (a) A
+  #       FULL page carrying a pull request for another head: the host did not apply
+  #       the head filter, so the walk stops after that one read, with no candidate
+  #       on either channel. (b) Thirty full pages: the walk is bounded, and reaching
+  #       its bound is not a result.
+  _prt_reset "$_pr_d"; _prt_use "$_pr_d" cand cand_full_foreign
+  _pr_rc=0; _host_chore_pr_candidates "$_pr_branch" >/dev/null 2>&1 || _pr_rc=$?
+  _pr_got="$(_host_chore_pr_candidates "$_pr_branch" 2>/dev/null || true)"
+  _st_arm PRT-u u23; [[ "$_pr_rc" -eq 1 && "$HOST_READ_CLASS" == "failed-other" && "$HOST_READ_REASON" == *"pull requests for other heads"* && -z "$HOST_READ_VALUE" && -z "$_pr_got" && "$(grep_count -E '&page=1$' "$_pr_d/api.log")" -eq 2 && "$(grep_count -E '&page=2$' "$_pr_d/api.log")" -eq 0 ]] || { echo "FAIL: PRT-u u23 (FM-1) — a full page carrying a pull request for another head must be refused as failed-other after that one read, with no candidate on stdout or in HOST_READ_VALUE, got rc=$_pr_rc class='$HOST_READ_CLASS' reason='$HOST_READ_REASON' value-lines=$(grep_count . <<<"$HOST_READ_VALUE") stdout-lines=$(grep_count . <<<"$_pr_got"), api.log: $(/usr/bin/tr '\n' ' ' < "$_pr_d/api.log")"; failures=$((failures+1)); }
+  _prt_reset "$_pr_d"; _prt_use "$_pr_d" cand cand_full
+  _pr_rc=0; _host_chore_pr_candidates "$_pr_branch" >/dev/null 2>&1 || _pr_rc=$?
+  [[ "$_pr_rc" -eq 1 && "$HOST_READ_CLASS" == "failed-other" && "$HOST_READ_REASON" == "page 30 is full"* && -z "$HOST_READ_VALUE" && "$(grep_count . "$_pr_d/api.log")" -eq 30 ]] || { echo "FAIL: PRT-u u23 — thirty full pages must end the walk as failed-other naming the bound, after exactly 30 reads and with no candidate, got rc=$_pr_rc class='$HOST_READ_CLASS' reason='$HOST_READ_REASON' value-lines=$(grep_count . <<<"$HOST_READ_VALUE"), $(grep_count . "$_pr_d/api.log") read(s)"; failures=$((failures+1)); }
+  _prt_reset "$_pr_d"
+  _st_witness PRT-u 19
 
   /bin/rm -rf "$_pr_d" 2>/dev/null || true
   RELEASE_PR_MERGE_CLASS=""; RELEASE_PR_MERGE_STATE=""; RELEASE_PR_MERGE_BASE=""; RELEASE_PR_MERGE_SHA=""
@@ -14470,7 +14670,7 @@ EOF
   STATE_MILESTONE_SLUG="$_pr_saved_msslug"; VERSION="$_pr_saved_version"; MILESTONE="$_pr_saved_milestone"
   COMPUTE_CYCLE_TIME="$_pr_saved_cct"; STATE_MILESTONE_STATE="$_pr_saved_mstate"; STATE_CYCLE_TIME="$_pr_saved_cycle"
   REPO_ROOT="$_pr_saved_root"; CHORE_BRANCH="$_pr_saved_branch"; CHORE_PR_NUMBER="$_pr_saved_cpn"
-  CHORE_PR_SKIPPED="$_pr_saved_skipped"; NO_MERGE="$_pr_saved_nomerge"; MERGE_TIMEOUT="$_pr_saved_timeout"
+  CHORE_PR_SKIPPED="$_pr_saved_skipped"; NO_MERGE="$_pr_saved_nomerge"; MERGE_TIMEOUT="$_pr_saved_timeout"; CHORE_PR_OUTCOME="$_pr_saved_cpo"
   MERGE_POLL_STEP="$_pr_saved_step"; VERIFY_RECHECK_DELAY="$_pr_saved_delay"; VERIFICATION_RESULTS="$_pr_saved_res"
   OPEN_ISSUE_COUNT="$_pr_saved_oic"; OPEN_ISSUE_LIST="$_pr_saved_oil"
   COLLECTED_OPEN_ISSUES=""; EXCLUDED_DETAIL=""
@@ -20009,9 +20209,9 @@ EOF
   _st_claim NM "  --no-merge membership declared once + phase 15.55's own-tag limb validated (#7465, group NM — 19 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): NM-1 AC-1 — the dispatch lines from 15.5 through 16.7, lifted verbatim and executed under --no-merge with the own Release unpublished, defer 15.55 and 15.6 and reach 16, 16.5 and 16.7 / NM-1c its control: the same text on a merge run halts at 15.55 with exit 3 and strands the phases after it, so the harness can observe stranding / NM-2a NM-2b AC-2 — a dry-run predicts the own-tag gap its own publish no-op produces, over a DEPLOYED and a VERIFIED row, and records the prediction / NM-3 AC-3 — a sibling gap still FAILs at --apply, and NM-3c the clean fixture PASSes naming the own tag's state / NM-4a AC-4 at the parity population — the own tag is partitioned out by VERSION, with a sibling-gap control on the same fixture / NM-4b no masking — the in-flight set cannot hide a genuine own gap at --apply, and a closing version with a Release and no annotated tag is reported under the own label only / NM-4c the prediction predicate, one negative per conjunct, and the own pair's four states / NM-4d without a 15.5 dry-run record the own gap is reported / NM-4e a predicted own gap does not mask a sibling gap / NM-CIAC3 --no-merge defers 15.55 and the resumed --apply asserts it for real / NM-5a AC-5 — every post-merge dispatched phase has a row, with sensitivity, specificity and no-pivot controls, every row names a post-merge phase, and every value is in the closed set / NM-5b both reports derive their deferred list from the table, a row appended to it renders with no renderer edit, and NO_MERGE=0 renders none / NM-5c every defer row shares a --help line with DEFERS under --no-merge, with a control the predicate rejects / NM-5d every defer phase OPENS with the declared deferral, checked structurally against a constructed hand guard, a mutated copy of phase 13 and a deferral naming another phase / NM-12 phase 12's --no-merge detail says a chore PR phase 11 found MERGED is merged, with the byte-identical left-open control / NM-13 NM-14 (#7465 Plan amendment 6) phases 13's and 14's --no-merge deferral details say a chore PR phase 11 recorded as MERGED is merged and name no merge still to come, each with its byte-identical left-open control"
   _st_claim LK "  phase_lock_milestone_threads validated (#5284 + #4768, group LK — 15 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): LK/a five unlocked threads, three issues and two pull requests, PASS with rc 0 and a detail that names every thread it locked / LK/b one REST lock call per thread with lock_reason=resolved, the two pull-request threads included / LK/c the lock path is REST only — every call an api call, none GraphQL and no issue-lock or pr-lock verb — with a control the transport predicate matches / LK/d two already-locked threads are skipped by the enumeration's own field, so three lock calls, and the detail counts them / LK/e every thread already locked reads SKIPPED with an explicit zero and makes no lock call / LK/f an empty milestone reads SKIPPED with an explicit zero / LK/g one failed lock call FAILs naming that thread in a pipe-free, home-redacted detail, the other four still lock, and the phase returns 0 / LK/h the count check's FAIL arm: an enumeration one issue short of the PR-inclusive counters FAILs naming both numbers, and the four enumerated threads still lock / LK/i its PASS arm: 5 == 0 + 5, with the control that the same fixture's issues-only subset (3) would read a phantom gap / LK/j --dry-run predicts statically, with no host call, no pipe and no would-FAIL token / LK/k --no-merge defers through the table's defer row with no host call / LK/l a failed enumeration FAILs with the host's message redacted, locks nothing and returns 0 / LK/m a lock call that reports success and locks nothing is caught by the read-back / LK/n the phase is dispatched after phase 15 and before at least one other phase, so the halted marker never reads its FAIL row as the last / LK/o the count check's open half: with the Stage-13 sub-task still open the counters read 1 + 4, and five enumerated threads PASS as 5 == 1 + 4 where a check against closed_issues alone would FAIL on a phantom gap, with the control that the fixture's open half is non-zero and its closed half alone is not the total"
   _st_claim TL "  phase 6.8 declared register precondition validated (#6892, group TL — 9 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): TL/a the REAL register producer writes the Phase A7.2 register under a temporary instance root before 6.8 runs, and 6.8 PASSes with the computed readings the register makes possible / TL/b 6.8 hands the telemetry tool --retro with exactly the producer's --print-path value / TL/c with no register produced the field is still written with the honest absent reading, the row is WARN naming the unmet precondition, and the phase returns 0 / TL/d an unresolvable register path records WARN UNRESOLVABLE and passes no --retro / TL/e --dry-run over an absent register predicts the WARN with no would-FAIL token and writes nothing / TL/f the WARN detail never prints the resolved register path / TL/g with the precondition still unmet the first run writes the field and records WARN, and the re-run SKIPs without writing it twice / TL/h phase 10's cross-check sees 6.8's write when 6.8 records WARN: with the v9.96 block in an archive segment and the register absent, _reported_write_surfaces names the segment from the WARN row (Plan amendment 7), and with the register met it names the segment identically whether or not the recorder recorded it, so a missing recorder call is still caught / TL/i CD-1 end to end, run inside Test 11d's git sandbox: the REAL phase 6.8 over an archived v9.96 block with the register absent writes the field into the segment, records it and records WARN naming it, and with the recorder's entry dropped the REAL phase 10 FAILs naming the segment, so a gate that admits a WARN row only while the recorder holds its surface cannot pass, even with the recorder read hidden in a helper (Plan amendment 9)"
-  _st_claim PRT "  close-out pull-request reads validated (#6871, group PRT — 27 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness), every arm under an EXHAUSTED GraphQL pool with the host's REST endpoint answering, through ONE dual-transport stub whose fixtures carry the live gh api -i byte layout. read_state: p1 captures the merge SHA of a PR merged into main / p2 an OPEN PR carrying a test-merge SHA is recorded as not merged and captures no SHA, a non-blocking WARN under --dry-run that predicts the --apply FAIL / p2a the same fact FAILs read_state at --apply with rc 3, before any write (CR-B6) / p2d --outcome DEFERRED excepts that answered not-merged branch / p3 a quota refusal is recorded as unresolvable, naming its class, and never as not merged / p3a it FAILs at --apply / p3d DEFERRED does not except it. The #1681 guard: p4 SKIPs a VERIFIED row over a PR merged into main — the order-7 RED arm, where pre-fix the empty GraphQL read reported false-VERIFIED against a correct row / p5 p6 p7 a quota refusal, a transport failure and a 404 FAIL naming their class and never say false-VERIFIED / p8 a CLOSED-unmerged PR carrying a test-merge SHA is still caught as false-VERIFIED, naming its state / p9 quota wording inside a SUCCESSFUL body is data, not a refusal / p10 a PR merged into another base is still false-VERIFIED, naming the base. Verification row 4: p11 PASS / p12 UNVERIFIED naming the refusal, neither PASS nor FALSE-VERIFIED / p13 FALSE-VERIFIED naming the observed state. The chore-PR lookup: p14 binds an existing open PR found over REST and creates none / p15 a refused lookup FAILs and creates nothing, because a read that did not answer is not an absence / p16 CONTROL: an answered empty list creates and binds exactly one PR / p17 the request carries state=open and the owner-qualified head / fm1 a candidate whose head label is not owner:branch is never bound and never merged, though its own fixture reads mergeable. The await-merge poll: p18 PASSes an already-merged PR on its first read / p19 a quota refusal FAILs after exactly one read instead of polling an exhausted pool to the budget / p20 a transport failure is re-polled and the merge runs once / p21 a 404 FAILs after one read. p22 AC-3: no non-comment line of this file's production region reads a pull request through a GraphQL-bound --json call, with a sensitivity line constructed at run time"
+  _st_claim PRT "  close-out pull-request reads validated (#6871, group PRT — 29 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness), every arm under an EXHAUSTED GraphQL pool with the host's REST endpoint answering, through ONE dual-transport stub whose fixtures carry the live gh api -i byte layout. read_state: p1 captures the merge SHA of a PR merged into main / p2 an OPEN PR carrying a test-merge SHA is recorded as not merged and captures no SHA, a non-blocking WARN under --dry-run that predicts the --apply FAIL / p2a the same fact FAILs read_state at --apply with rc 3, before any write (CR-B6) / p2d --outcome DEFERRED excepts that answered not-merged branch / p3 a quota refusal is recorded as unresolvable, naming its class, and never as not merged / p3a it FAILs at --apply / p3d DEFERRED does not except it. The #1681 guard: p4 SKIPs a VERIFIED row over a PR merged into main — the order-7 RED arm, where pre-fix the empty GraphQL read reported false-VERIFIED against a correct row / p5 p6 p7 a quota refusal, a transport failure and a 404 FAIL naming their class and never say false-VERIFIED / p8 a CLOSED-unmerged PR carrying a test-merge SHA is still caught as false-VERIFIED, naming its state / p9 quota wording inside a SUCCESSFUL body is data, not a refusal / p10 a PR merged into another base is still false-VERIFIED, naming the base. Verification row 4: p11 PASS / p12 UNVERIFIED naming the refusal, neither PASS nor FALSE-VERIFIED / p13 FALSE-VERIFIED naming the observed state. The chore-PR lookup: p14 binds an existing open PR found over REST and creates none / p15 a refused lookup FAILs and creates nothing, because a read that did not answer is not an absence / p16 CONTROL: an answered empty list creates and binds exactly one PR / p17 every candidates read carries the owner-qualified head and state=all, and a create follows exactly two of them, the resolver's and the read before the create / p23 a candidates read refused immediately before the create FAILs there, names its class and creates nothing / p24 a pull request opened on the branch after the resolve is reused by that read / fm1 a candidate whose head label is not owner:branch is never bound and never merged, though its own fixture reads mergeable. The await-merge poll: p18 PASSes an already-merged PR on its first read / p19 a quota refusal FAILs after exactly one read instead of polling an exhausted pool to the budget / p20 a transport failure is re-polled and the merge runs once / p21 a 404 FAILs after one read. p22 AC-3: no non-comment line of this file's production region reads a pull request through a GraphQL-bound --json call, with a sensitivity line constructed at run time"
   _st_claim PRT-rb "  rebuild_skill_packages release-diff fallback over REST validated (#6871, group PRT-rb — 4 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): MERGE_SHA is empty and GraphQL is exhausted, so only the REST files pages can answer — rb1 one answered page resolves tracker-manager / rb2 a full first page fetches page 2 and stops at the short page / rb3 a refused page FAILs naming the refusal, never 'fallback empty' / rb4 FM-3, the host's 3,000-file cap: thirty full pages are a truncation, so the phase FAILs naming the cap and never reads page 31"
-  _st_claim PRT-u "  the REST pull-request reader and its projections validated (#6871, group PRT-u — 16 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness), read through _host_rest_get directly so a defect is named at its unit: u1 a merged PR answers with the fact MERGED, main and its SHA / u2 u3 an OPEN and a CLOSED-unmerged PR carrying a test-merge SHA project NO SHA / u4 refusal wording quoted in a 2xx body is answered / u5 a 403 with remaining 0 is refused-quota primary with no value, never the error body / u9 a 404 whose expose-headers VALUE names Retry-After is failed-other, because header NAMES match exactly / u11 a transport failure is failed-transport, its reason naming neither the URL nor the repository / u12 exit 0 with no status line is failed-other / u13 the terminal projection of the four live-measured shapes is exactly their three-field composites, with a four-field specificity control / u14 the candidates projection keeps only an exact owner:branch head label (FM-1), and an empty list projects nothing / u15 a slug that is not owner/name is refused before any host call / u16 an unavailable classifier is failed-other, never answered, and the library survives the arm / u17 a classifier that exits non-zero or prints an empty line is failed-other, naming that it could not run / u18 a class token outside the classifier's four, even one beginning with a real class, is failed-other naming that, with no sub-class or status / u19 an answered body neither the fact nor the candidates projection can read is failed-other naming the projection, and through the chore-PR lookup it FAILs as unresolvable and creates no pull request — u16 to u19 each assert their exact reason, so a disabled branch cannot pass by falling through to the next / u20 this file defines the chore-PR candidates binding exactly once, because the shell keeps the later of two definitions for every caller; the counter reads 2 on a two-definition fixture built at run time"
+  _st_claim PRT-u "  the REST pull-request reader and its projections validated (#6871, group PRT-u — 19 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness), read through _host_rest_get directly so a defect is named at its unit: u1 a merged PR answers with the fact MERGED, main and its SHA / u2 u3 an OPEN and a CLOSED-unmerged PR carrying a test-merge SHA project NO SHA / u4 refusal wording quoted in a 2xx body is answered / u5 a 403 with remaining 0 is refused-quota primary with no value, never the error body / u9 a 404 whose expose-headers VALUE names Retry-After is failed-other, because header NAMES match exactly / u11 a transport failure is failed-transport, its reason naming neither the URL nor the repository / u12 exit 0 with no status line is failed-other / u13 the terminal projection of the four live-measured shapes is exactly their three-field composites, with a four-field specificity control / u14 the candidates binding prints only an exact owner:branch head label (FM-1), the same lines on stdout and in HOST_READ_VALUE, prints nothing for an empty list, and a direct caller takes the open row from every state it returns / u15 a slug that is not owner/name is refused before any host call / u16 an unavailable classifier is failed-other, never answered, and the library survives the arm / u17 a classifier that exits non-zero or prints an empty line is failed-other, naming that it could not run / u18 a class token outside the classifier's four, even one beginning with a real class, is failed-other naming that, with no sub-class or status / u19 an answered body neither the fact nor the candidates projection can read is failed-other naming the projection, and through the chore-PR lookup it FAILs as unresolvable and creates no pull request — u16 to u19 each assert their exact reason, so a disabled branch cannot pass by falling through to the next / u20 this file defines the chore-PR candidates binding exactly once, because the shell keeps the later of two definitions for every caller; the counter reads 2 on a two-definition fixture built at run time / u21 a slug that is not owner/repo-shaped, an empty branch and a branch outside the URL-safe set are each refused with exit 2 and their reason on stderr before any host call / u22 the reader makes one host call per page, so the binding walks: a full first page is followed by page 2 and the short page ends the walk / u23 a full page carrying a pull request for another head, and a full thirtieth page, are refused as failed-other rather than returned as a set that may be incomplete"
   echo "  --no-merge post-merge behaviour validated (#2919 + NO_MERGE_PHASE_BEHAVIOUR — every defer row DEFERS under --no-merge even with an open milestone and issues, every skip row SKIPs citing the flag without the deferral sentinel; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
