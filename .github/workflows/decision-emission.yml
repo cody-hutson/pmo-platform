@@ -6,8 +6,8 @@ name: Decision-emission (split-predicate gate mirror)
 #              cutover verdicts SKIP, and the two anti-vacuity arms hold. This is the
 #              TREE-RESIDENT half of the gate's predicate and is asserted pre-merge by
 #              running deploy.sh --self-test, whose assertion group DE owns exactly
-#              those arms. The runner is the WHOLE self-test suite (ten hermetic
-#              assertion groups, of which DE is Check 61's), which until this workflow
+#              those arms. The runner is the WHOLE self-test suite (every hermetic
+#              assertion group, of which DE is Check 61's), which until this workflow
 #              had ZERO CI executors anywhere in this tree — so a red run here is
 #              attributable to the group named in its own output, not only to Check 61.
 #   falsification: mutate one assertion in self-test group DE so it must fail -> this job
