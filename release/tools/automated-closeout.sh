@@ -1951,7 +1951,7 @@ phase_preflight() {
 # write signature cannot tell a redirect into a scratch file from a record write, and
 # read_state is a read-only phase by behaviour, asserted by content hash in CY-11.
 _read_cycle_time_state() {
-  local _ct_out _ct_rc=0 _ct_errf _ct_line _ct_neg _ct_err
+  local _ct_out _ct_rc=0 _ct_errf _ct_line _ct_neg _ct_err _ct_proj
   STATE_CYCLE_TIME_NOTE=""
   if [[ ! -x "$COMPUTE_CYCLE_TIME" ]]; then
     STATE_CYCLE_TIME="NOT-EVALUATED — compute-cycle-time.sh is not executable — this is not a clean result"
@@ -1966,11 +1966,16 @@ _read_cycle_time_state() {
   _ct_neg="$(/usr/bin/grep -m1 '^WARNING: negative cycle-time' "$_ct_errf" 2>/dev/null || true)"
   _ct_err="$(/usr/bin/grep -v '^Cycle-Time: N/A (' "$_ct_errf" 2>/dev/null || true)"
   /bin/rm -f "$_ct_errf" 2>/dev/null || true
-  # ( ) | are neutralized before stderr can reach the phase detail: a parenthesised .md
-  # path would read as a written surface, and a pipe splits the phase row.
-  _ct_err="$(/usr/bin/printf '%s' "$_ct_err" | /usr/bin/tr '\n|()' ' /[]')"; _ct_err="${_ct_err:0:400}"
+  # The rest of stderr reaches the phase detail and the report only through the shared
+  # projection, handed the WHOLE capture (self-tests PL-2 and AI-X): _detail_one_line maps
+  # CR, LF and the pipe that would split the phase row, redacts the repository and home
+  # roots and only THEN caps, so no path is cut before it is redacted. The cap is its own.
+  # ( ) are neutralized after it, on the projected value: the shared projection leaves
+  # them, and a parenthesised .md path in a phase detail would read as a written surface.
+  _ct_proj="$(_detail_one_line "$_ct_err")"
+  _ct_proj="$(/usr/bin/printf '%s' "$_ct_proj" | /usr/bin/tr '()' '[]')"
   if [[ "$_ct_rc" -ne 0 ]]; then
-    STATE_CYCLE_TIME="NOT-EVALUATED — compute-cycle-time.sh exited ${_ct_rc}: ${_ct_err:-no stderr} — this is not a clean result"
+    STATE_CYCLE_TIME="NOT-EVALUATED — compute-cycle-time.sh exited ${_ct_rc}: ${_ct_proj:-no stderr} — this is not a clean result"
   elif [[ -z "${_ct_out//[[:space:]]/}" ]]; then
     STATE_CYCLE_TIME="NOT-EVALUATED — compute-cycle-time.sh returned no value — this is not a clean result"
   elif [[ "$_ct_out" == "N/A" ]]; then
@@ -1981,10 +1986,10 @@ _read_cycle_time_state() {
     fi
   elif [[ -n "$_ct_neg" || "$_ct_out" == -* ]]; then
     STATE_CYCLE_TIME="N/A — DEGRADED: compute-cycle-time.sh measured a negative interval — T_GO is later than T_DEPLOY, so its value ${_ct_out} is not a cycle time"
-    STATE_CYCLE_TIME_NOTE=" [compute-cycle-time.sh stderr: ${_ct_err:-none}]"
+    STATE_CYCLE_TIME_NOTE=" [compute-cycle-time.sh stderr: ${_ct_proj:-none}]"
   else
     STATE_CYCLE_TIME="$_ct_out"
-    if [[ -n "$_ct_err" ]]; then STATE_CYCLE_TIME_NOTE=" [compute-cycle-time.sh stderr: ${_ct_err}]"; fi
+    if [[ -n "$_ct_proj" ]]; then STATE_CYCLE_TIME_NOTE=" [compute-cycle-time.sh stderr: ${_ct_proj}]"; fi
   fi
   return 0
 }
